@@ -126,7 +126,7 @@ describe('DynamoDB Utils', () => {
             >,
         )
 
-        attest.instantiations([2026, 'instantiations'])
+        attest.instantiations([2010, 'instantiations'])
     })
 
     it('CompositeKeyBuilder', () => {
@@ -259,7 +259,7 @@ describe('DynamoDB Utils', () => {
             >,
         )
 
-        attest.instantiations([5678, 'instantiations'])
+        attest.instantiations([5662, 'instantiations'])
     })
 
     it('tableEntry', () => {
@@ -425,7 +425,7 @@ describe('DynamoDB Utils', () => {
             ),
         ).toBe(1)
 
-        attest.instantiations([7743, 'instantiations'])
+        attest.instantiations([7826, 'instantiations'])
     })
 
     test('path from infer then toString', () => {
@@ -461,7 +461,7 @@ describe('DynamoDB Utils', () => {
         )
         expect(testTableEntry.path().PK.toString()).toBe('PK')
 
-        attest.instantiations([1424, 'instantiations'])
+        attest.instantiations([1505, 'instantiations'])
     })
 
     test('table Entry with transform and discriminator ', () => {
@@ -751,7 +751,7 @@ describe('DynamoDB Utils', () => {
             }),
         ).toBeUndefined()
 
-        attest.instantiations([11931, 'instantiations'])
+        attest.instantiations([13308, 'instantiations'])
     })
 
     test('real world example', () => {
@@ -963,7 +963,7 @@ describe('DynamoDB Utils', () => {
             { depth: 2 },
         ) satisfies 'TAG#A#ID2#yolo'
 
-        attest.instantiations([32307, 'instantiations'])
+        attest.instantiations([32508, 'instantiations'])
     })
 
     test('schema allows for nullish values if has transform', () => {
@@ -1279,7 +1279,7 @@ describe('DynamoDB Utils', () => {
             a: { x: 'x1' },
         })
 
-        attest.instantiations([6396, 'instantiations'])
+        attest.instantiations([6982, 'instantiations'])
     })
 
     test('NeedsValidation detects 3-tuples in mixed arrays', () => {
