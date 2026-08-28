@@ -15,6 +15,7 @@ definition it touches.
 | `Calculus/Denote.lean`      | —           | `denote : Nat → Term → Codec`, pure dispatch into the combinators                                                                                                                                                                                                     |
 | `Calculus/Typing.lean`      | §3–§5       | The judgement (syntactic premises)                                                                                                                                                                                                                                    |
 | `Calculus/Soundness.lean`   | §5          | `Obligations` (semantic premises, fueled), `UAtCan := UniqueAdmission ∘ semsOf`, `MPOk` (legacy exemption), theorem statements                                                                                                                                        |
+| `Calculus/Discharge.lean`   | §5          | The machinery of (K): `Kind`, `κ`, `ident` as structural recursions, `κ_sound`, and `uAtCan_of_disjoint` — the disjointness dischargers of (U), proved                                                                                                              |
 
 **The mechanization is complete: the project builds with zero `sorry`.** Both halves
 of §5's soundness theorem are machine-checked — `soundness` (all four laws, (MP) with
@@ -41,15 +42,18 @@ the doc's `(lazy)` rule demands.
   `(legacy)`/`(nullable)`/`(fallback)`/`(custom)` side conditions mention `e`/`p`, which
   are fuel-indexed here, so the premises are too. Same premises, fueled form.
 - **(U) is a premise, not a conclusion** (`UAtCan`), matching the doc's theorem residue.
-  (D), (K) and `ident` are its decidable dischargers — the next milestone below.
+  Its disjointness dischargers are proved (`Calculus/Discharge.lean`): pairwise-disjoint
+  `κ` settles the value side, pairwise-distinct named members the attribute side — the
+  member index standing in for (D)'s held sets until the `T` index lands.
 
 ## What remains (sharpenings, not gaps)
 
 The theorem is proved; these tighten the model's fidelity to the doc, none affect
-soundness: unanimous-μ for `(union)` in `Typed` (the model already computes it);
-`held`'s iso restricted to the carriers; reinstating the held-set index `T` on the
-judgement and stating (D); κ/`ident` as recursive functions with the
-(K)-discharges-`UniqueAdmission` lemmas.
+soundness: reinstating the held-set index `T` on the judgement and stating (D) in its
+held-set form; the `ident` exemption's discharge lemmas (per admissible set — a
+`literal`'s values, a `dunion`'s tags), `ident` itself being defined; deriving the
+remaining `LawfulCore` composites (`tuple`, `set`, `object`) and their full-law
+counterparts from one another, as the wrappers and uniform products now are.
 
 ## Building
 
