@@ -6,7 +6,9 @@ equations between terms.
 
 This document is normative for the semantics and deliberately mentions no TypeScript. Where the
 implementation is named at all it is to record that a rule here is checked _somewhere_ — never to
-define the rule.
+define the rule. The calculus is also mechanized in Lean (`formal/`), and where a remark below cites
+"the mechanized proof" it reports something that machine-checking forced or exhibited; the doc
+remains the normative statement.
 
 ---
 
@@ -259,11 +261,17 @@ Demanding **(R)** alone would under-demand, deriving a `⊤` term free to change
 exact term §2's argument for `opaque` says cannot exist. (**(W)** is vacuous at `⊤`, so the three
 named are the whole obligation.)
 
-`opaque` is the custom-class term the calculus ships. `Uν` is _defined_ as the values whose member is
-recoverable from the value alone under the policy `ν`, so **(R)** holds by construction; what `ν`
-decides is `N`, the one member a bare value cannot answer for. Under `refuse`, `N ∉ dom(p)` and no
-number is in `Uν` — nothing is guessed. Under `lossy`, `number ⇄ N`: the member survives every
-read-modify-write, and the digits survive only while they fit a double.
+`opaque` is the custom-class term the calculus ships, and it is primitive only in presentation: the
+mechanized model exhibits it as the **union of everything self-identifying, closed under the
+containers** — a fixpoint of shape
+`union(string, boolean, binary, ⟨NULL⟩, number?, set(opaque), array(opaque), record(opaque))` —
+whose **(U)** holds because the options' kinds and members are pairwise disjoint. `Uν` is _defined_
+as the values whose member is recoverable from the value alone, so **(R)** holds by construction;
+what `ν` decides is `N`, the one member a bare value cannot answer for, and the fixpoint reading
+gives the policy its sharpest statement: **`refuse` is the absence of the `number` option.** Nothing
+is guessed, because there is nothing present to guess with. Under `lossy` the option is present and
+`number ⇄ N`: the member survives every read-modify-write, and the digits survive only while they
+fit a double.
 
 `held` and `refine` are the same shape at different strengths: an **iso** and a **prism**. The
 literature collapses them — invertible syntax descriptions [2] builds everything from an algebra of
@@ -289,6 +297,14 @@ another member onto `null`, lets the outer `NULL` branch shadow a real value, fa
 direction and **(MP)** in the other. Every term of this calculus is null-honest except what `custom`
 or an ill-chosen `held` iso can build — and `nullable` itself is, which is what makes the
 idempotence of §6 lawful rather than lucky.
+
+Null-honesty is not a new kind of condition. `nullable(c)` is structurally the two-option union
+`union(c, ⟨NULL⟩-point)`, and the two premises are exactly that pair's §5 side conditions —
+write-honesty is uniqueness of admission on the way in, read-honesty on the way out. The mechanized
+proof closes the `nullable` case on precisely those premises and nothing else. The term stays
+primitive only because it resolves the `NULL` reading by precedence where a union demands
+disjointness — and under honesty the two semantics coincide, which is why the precedence is
+harmless.
 
 ---
 
@@ -326,7 +342,11 @@ something whose judgement has a `⊗`.
 Here `n :^opt T` is a binding the record may omit, `n :^req T` one it may not, and `R(ρ)` is the open
 part: `∅` for `drop` and `refuse`, and `Name ⇀fin T` for a rest codec holding `T`. The two string
 policies differ only in what `p` does with an undeclared name — drop it, or fail — which is a
-difference in `dom(p)` and not in `T`.
+difference in `dom(p)` and not in `T`. And `drop` is a **filter, never a traversal mode**: the
+discard is decided by the name alone, before anything is decoded, so it cannot depend on a value and
+the round trip through the declared names is untouched by what was discarded. That is the quotient
+of §2 again — an item is `≈c` itself minus its undeclared names — the same class of loss as a set's
+reordering.
 
 ### The stratification does work
 
@@ -350,11 +370,45 @@ and then _required_ the value on the way back. Both spellings mean `fallback(c, 
 
 ## §5 Choice, and its side conditions
 
-The two rules a grammar cannot state, because they relate siblings rather than a term to its
-subterms.
+The rules a grammar cannot state, because they relate siblings rather than a term to its subterms —
+and, before them, the one semantic condition even the judgement cannot decide, which everything else
+in this section exists to approximate.
 
-First, two auxiliary functions, defined by structural recursion so that **(K)** is decidable rather
-than judged. Both are total over the terms of §3–§4.
+### Unique admission
+
+A union's pair is defined by **unique admission**. Each option answers, per input and per side,
+whether the input could be its — an attribute on the way out, a value on the way in — and the union
+acts through the option that answers alone:
+
+|       |                                        |                                                                    |
+| ----- | -------------------------------------- | ------------------------------------------------------------------ |
+| **U** | `∀ input. ∣{ i : cᵢ admits it }∣ = 1`  | Per value and per attribute. Ambiguity is a failure, never a rank. |
+
+Declaration order is never consulted — which is what puts commutativity in §6, and why `legacy`'s
+coherence premise (§3) matters beyond `legacy`: a precedence between readings anywhere in the
+calculus would be a union resolved by rank, exactly what **(U)** refuses.
+
+**(U)** quantifies over inputs, so it is not decidable at the declaration in general. The rest of
+this section is its **dischargers** — decidable conditions, each sufficient for **(U)** on the
+unions it covers:
+
+| Discharger                           | Decides                                             | From                       |
+| ------------------------------------ | --------------------------------------------------- | -------------------------- |
+| **(D)** — incomparable held sets     | the readable side, where the types differ           | the judgement's `T` index  |
+| **(K)** — disjoint kinds, or `ident` | the writable side, where the runtime shapes differ  | `κ` and `ident`, below     |
+| tag disjointness                     | `(dunion)`, outright — both sides                   | the discriminator literals |
+| kind disjointness                    | `opaque`'s fixpoint (§3), outright                  | one option per kind of §1  |
+
+What no discharger covers stays an obligation the semantics enforces per input by failing — safe for
+every law except **(R)** at a canonical attribute, and that residue is exactly what the theorem
+below names. A `⊤` option is exempt from **(K)** for the same reason it cannot be checked: it could
+be anything, refusing it against everything would refuse unions that work, and **(U)** still guards
+each value it is actually given.
+
+### The machinery of (K)
+
+Two auxiliary functions, defined by structural recursion so that **(K)** is decidable rather than
+judged. Both are total over the terms of §3–§4.
 
 `κ(c) ∈ ℘(Kind) ∪ {⊤}` is the kinds of _value_ a term accepts — a coarse partition of `Value` by
 runtime shape, and the mirror of `μ` on the other side of the pair:
@@ -386,6 +440,12 @@ held — `held(set(string), …)` takes an array where `set(string)` takes a set
 the caller's, so there is nothing to read an answer from. `lazy` again cannot be asked without
 forcing.
 
+`⊤` covers two situations the check treats alike and the semantics does not: **unknown** — `held`,
+`lazy`, `custom`, whose answer exists but cannot be read — and **everything** — `opaque`, which
+accepts every kind by design. Both are exempt from **(K)** and fall to **(U)** per input. The
+difference resurfaces only inside `opaque`'s own derivation, where "everything" is precisely what
+makes its fixpoint's options pairwise kind-disjoint (§3).
+
 `ident(c)` holds when a term decides its own membership — when "this option accepted the value" is
 evidence, because the term checks the value against its own admissible set in **both** directions:
 
@@ -415,6 +475,11 @@ decide alone.
 ⊢ discriminatedUnion(d, o₁ … oₙ) : ⋃ Tᵢ ⇝ M
 ```
 
+Note that `(dunion)`'s premise asks `sᵢ(d)` to _be_ the literal — an attribute term, hence a `req`
+field. A `fallback` around it has no derivation, and the proof says why rather than leaving it to
+taste: a row omitting the discriminator would read to the fallback's stand-in, an arbitrary value
+the tag sets never vouched for, and **(C)** would then re-encode a variant no tag selects.
+
 |       |                                                      |                                                                                                                                 |
 | ----- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | **D** | `∀ i ≠ j. ¬(Tᵢ ⊆ Tⱼ) ∧ ¬(Tⱼ ⊆ Tᵢ)`                   | Readable: no stored attribute belongs to two options. Decidable from the held sets alone, hence checkable before anything runs. |
@@ -436,22 +501,6 @@ information about whether the value was meant for it. Only a term that knows its
 answers a real question when attempted — which is why `union(literal("A"), literal("B"))` is well
 formed under **(K)** although both accept a string.
 
-### Resolution, and what (D) and (K) are for
-
-A union's own pair is defined by **unique admission**. On either side the options are filtered — by
-`κ` and name sets on the way in, by member and name sets on the way out — and where one survives it
-is the answer; where several survive, each is attempted and exactly one must succeed:
-
-|       |                                              |                                                                    |
-| ----- | -------------------------------------------- | ------------------------------------------------------------------ |
-| **U** | `∀ input. ∣{ i : cᵢ admits it }∣ = 1`        | Per value and per attribute. Ambiguity is a failure, never a rank. |
-
-Declaration order is never consulted, which is what puts commutativity in §6. **(D)** and **(K)** are
-the _decidable approximations_ of **(U)**: what can be refused at the declaration is refused there,
-and the remainder is carried to **(U)**, per input. A `⊤` option is exempt from **(K)** for exactly
-this reason — it could be anything, so refusing it against everything would refuse unions that work,
-and **(U)** still guards each value it is actually given.
-
 **(D)** as written is _incomparability_, not disjointness. Two object options `⟨a : String⟩` and
 `⟨b : String⟩` are incomparable yet share the inhabitant `⟨a ↦ "1", b ↦ "2"⟩` — so **(D)** admits
 them, and resolution falls to the name-set device above. Stating **(D)** as genuine disjointness
@@ -464,8 +513,8 @@ Every derivable `⊢ c : T ⇝ μ`, and every `⊢ f : T ⊗ π ⇝ μ`, denotes
 **(C)**, **(W)**, and **(MP)** in the strong form `e(p(a)) ≼ a` defined below — with two residues,
 both named exactly: **(MP)** is off on the attributes a `legacy` in the derivation rereads, and
 every `(union)` in the derivation carries **(U)** _at its canonical inputs_ as an obligation, which
-**(D)**, **(K)** and `ident` discharge at the declaration wherever they decide a pair and which
-`(dunion)` discharges outright.
+the dischargers of this section settle at the declaration wherever they decide a pair — `(dunion)`
+and `opaque` outright.
 
 Four premises in §3–§4 — `ran(r) ⊆ dom(e)` and coherence on `(legacy)`, null-honesty on
 `(nullable)`, `v(∗) ∈ dom(e)` on `(fallback)` — exist because this proof failed without them. That
@@ -488,12 +537,22 @@ and it implies **(MP)** as stated.
 **Lemma (injectivity).** **(R)** makes `e` injective on `dom(e)`: if `e(t) = e(t′)` then
 `t = p(e(t)) = p(e(t′)) = t′`. ∎
 
+**Lemma (traversal).** One proof shape serves every product. Let a _step_ be an entrywise pair
+between the entries of two lists, and lift it entrywise — defined where every entry is, positions
+preserved. If the step satisfies a law pointwise, the lift satisfies it listwise: **(R)** because
+positions re-read in place, **(C)** because each entry re-encodes, `≼` because a shared position
+decodes and re-encodes through the same step, and lengths survive both directions. Keyed lists add
+one clause: entries are dispatched and compared _by name_, first occurrence first, so the lookup
+form of `≼`'s `M` clause follows from the pointwise one. Proved once; every product case below is
+an instantiation. ∎
+
 **Proof.** By induction on the derivation, with one refinement recorded at `(lazy)`. Each case
 first says what the pair _is_ — the denotation is part of the rule, not of any implementation —
-then discharges the laws. Cases that inherit everything by delegation are batched.
+then discharges the laws. The grouping is the mechanization's module structure, so the prose proof
+and the machine proof can be audited against each other case for case.
 
-**Ground terms.** Each writes one member, totally on its held set, and reads exactly that member
-back into the held set. **(W)** and **(C)** are immediate, `≼` is member equality with no
+**Points.** Each ground term writes one member, totally on its held set, and reads exactly that
+member back into the held set. **(W)** and **(C)** are immediate, `≼` is member equality with no
 substructure, and **(R)** is the carrier's round trip: identity for `string`, `boolean`, `binary`
 and `decimal` (a numeral is stored as written, so `Can(decimal)` is all of `N`), shortest-text for
 `number` and `literal‑N` — the §3 argument that every finite double survives. `numeric(T)`: the
@@ -501,29 +560,15 @@ normative reading is `number`'s restricted to attributes landing in `T`, and eve
 with it; the implementation elides the restriction, which is §3's unchecked precondition — off it,
 **(C)** and **(R)** are the implementation's to lose, not the term's.
 
-**set.** The premise gives `e_c(x) = ⟨μ, w(x)⟩`; put `e(X) = ⟨μS, w[X]⟩` and
-`p(⟨μS, V⟩) = { p_c(⟨μ, v⟩) : v ∈ V }`, each defined when every element is. **(R)**: `w` is
-injective by the Lemma (member fixed, `e_c` injective), so `w[X]` holds one payload per element and
-each reads back by the premise's **(R)**; non-emptiness survives both directions. **(C)**:
-elementwise. `p` need _not_ be injective — two payloads reading to one value shrink the set, which
-is the quotient again and touches **(R)** nowhere, since canonical payloads are `w`-images.
-**(W)**: `μS`, always. `≼`: member equality, and a set has no interior members — the container
-fixes its elements' member, which is why the element's own **(MP)** is never even invoked inside
-one.
+**Wrappers.**
 
-**array, tuple, tuple‑tail, record.** The pair is pointwise under a fixed top member (`L` or `M`),
-positions and names preserved in both directions by construction. Every law reduces to the same law
-of the subterm at each position or name; for `≼`, a shared position decodes and re-encodes through
-the same subterm, whose induction hypothesis is exactly the pointwise clause. A `legacy` element is
-where the **(MP)** exemption propagates — pointwise, on the positions it rereads, per §2.
-
-**held.** `e = e_c ∘ f`, `p = g ∘ p_c`. **(R)**: `g(p_c(e_c(f t))) = g(f t) = t`. **(C)**:
+_held._ `e = e_c ∘ f`, `p = g ∘ p_c`. **(R)**: `g(p_c(e_c(f t))) = g(f t) = t`. **(C)**:
 `e(p(a))` asks `f(g(p_c a)) = p_c a ∈ dom(e_c)`, the premise's **(C)**. `≼`:
 `e(p(a)) = e_c(p_c(a))`, the premise's hypothesis. **(W)**: the member is untouched.
 
-**refine.** `e = e_c` on `q`; `dom(p) = p_c⁻¹(q)`. All four laws restrict.
+_refine._ `e = e_c` on `q`; `dom(p) = p_c⁻¹(q)`. All four laws restrict.
 
-**legacy.** `e = e_c`; `p = p_c ∪ r`, a function _because_ of coherence — without that premise the
+_legacy._ `e = e_c`; `p = p_c ∪ r`, a function _because_ of coherence — without that premise the
 definition needs a precedence between the two readings, and a precedence is a union with a
 privileged write path, the resolution order **(U)** exists to refuse. **(R)**: `e_c(t) ∈ dom(p_c)`
 by the premise's **(R)**, and coherence makes any overlap with `dom(r)` agree, so the composite
@@ -534,7 +579,7 @@ is licensed to break, and no further — `e(r(a))` is canonical, so the breach d
 own round trip, which is the precise sense in which a migrated row behaves like a current one from
 the first rewrite on.
 
-**nullable.** `e`: `null ↦ ⟨NULL, ∗⟩`, else `e_c`; `p`: `⟨NULL, ∗⟩ ↦ null`, else `p_c`. The two
+_nullable._ `e`: `null ↦ ⟨NULL, ∗⟩`, else `e_c`; `p`: `⟨NULL, ∗⟩ ↦ null`, else `p_c`. The two
 honesty premises are one per direction. **(R)** at `null` is immediate; at `t ≠ null`,
 `e_c(t) ≠ ⟨NULL, ∗⟩` by write-honesty, so the outer `NULL` branch cannot shadow the reading — drop
 the premise and `nullable(held(nullable(string), f, g))`, with `f` moving a sentinel onto `null`,
@@ -546,19 +591,14 @@ read-honesty is what rules out a non-`NULL` attribute reading to `null` and re-e
 `nullable(c)` itself, so `nullable(nullable(c))` is derivable and §6's idempotence is an equation
 rather than an accident.
 
-**lazy.** The pair of `γ(∗)`. The induction needs a word, since `γ(∗)`'s derivation may contain
+_custom._ The laws are the premises, verbatim; **(W)** is vacuous at `⊤`.
+
+_lazy._ The pair of `γ(∗)`. The induction needs a word, since `γ(∗)`'s derivation may contain
 `lazy(γ)` again: induct on the pair (input size, derivation size), lexicographically. Containers
 strictly shrink the input; the wrappers shrink the derivation and never grow the input; and a
 `lazy` that re-enters itself without passing a container defines nothing at that input — the laws
 quantify over `dom`, and hold over an empty one. Partiality is doing the termination argument's
 work.
-
-**custom, opaque.** For `custom` the laws are the premises, verbatim; **(W)** is vacuous at `⊤`.
-For `opaque(ν)`, `Uν` is defined as the set on which value shape and member determine each other
-under `ν`, and `e`, `p` are the two directions of that correspondence — so **(R)** and **(C)** hold
-by construction, and `≼` because the correspondence is member-functional both ways: under `refuse`,
-`N` is on neither side; under `lossy`, `N ⇄ number` and the member survives even where digits do
-not.
 
 **Fields.** A field denotes a pair over presence-extended domains — `e♭ : T ⇀ 𝔸 ∪ {ε}`,
 `p♭ : (𝔸 ∪ {ε}) ⇀ T`, `ε` the absent binding — with `member(ε)` undefined and the laws read over
@@ -569,15 +609,34 @@ construction. `(fallback)` adds `p♭(ε) = v(∗)`, and **(C)** at `ε` _is_ th
 `≼` quantifies over `𝔸`, so `ε` asks nothing — that the canonizer materialises the attribute is
 quotient, not member change.
 
-**object.** `e` maps each declared binding through its field (an `ε` is an omitted name); `p` maps
-each declared name through its field (`ε` for an absent one) and the undeclared names by `ρ` —
-discarded, refused, or read by the rest codec. **(R)**, **(C)**: namewise, the fields' laws plus
-`ρ`'s; a `drop` value has no undeclared names to lose (its type is the closed record), and a rest
-codec writes back what it read. **(W)**: `M`. `≼`: pointwise on shared names via the fields'
-hypotheses; the names `drop` discards are absent from `e(p(a))` and `≼` compares shared names only
-— the same quotient as the set's reordering.
+**Products** — each an instantiation of the traversal Lemma.
 
-**union.** Admission, per side: option `i` admits attribute `a` when the member/name filter passes
+_array, tuple, tuple‑tail, record._ The step is the subterm's pair at each position or name — a
+tuple first aligns positions with their codecs, head positionally and tail uniformly, length
+mismatches refusing. The Lemma gives all four laws from the induction hypotheses; a `legacy`
+element is where the **(MP)** exemption propagates — pointwise, on the positions it rereads, per
+§2.
+
+_object._ The step dispatches each entry by its name: a declared name through its field, with the
+`ε`-handling of the Fields case; an undeclared name by `ρ`. `drop` is a filter _before_ the step
+(§4), so it needs no traversal mode of its own; the presence guards — every `req` name demanded in
+both directions, every non-`opt` binding demanded of a value — are what keep the step total where
+the Lemma needs it, and `(fallback)`'s stand-ins appear only for names a row omits, so a canonical
+item adds none. **(W)**: `M`. `≼`: the Lemma's keyed clause; the names `drop` discards and the
+stand-ins `fallback` materialises are each on one side only, and `≼` compares shared names — the
+quotient again.
+
+_set._ The premise gives `e_c(x) = ⟨μ, w(x)⟩`; the step is `w` outward and `p_c(⟨μ, ·⟩)` back, and
+the wire set is the lifted list. **(R)**: `w` is injective by the injectivity Lemma (member fixed,
+`e_c` injective), so the written set holds one payload per element and the traversal Lemma reads
+each back; non-emptiness survives both directions. **(C)**: entrywise, and the re-encoded elements
+keep their member by `≼`, so the same payload projection re-succeeds. `p` need _not_ be injective —
+two payloads reading to one value shrink the set, which is the quotient again and touches **(R)**
+nowhere, since canonical payloads are `w`-images. **(W)**: `μS`, always. `≼`: member equality, and
+a set has no interior members — the container fixes its elements' member, which is why the
+element's own **(MP)** is never even invoked inside one.
+
+**Sums.** Admission, per side: option `i` admits attribute `a` when the member/name filter passes
 and `pᵢ(a)` is defined, and admits value `t` when the `κ`/name filter passes and `eᵢ(t)` is
 defined. `p(a) = pᵢ(a)` for the unique admitting `i`, else undefined; `e(t)` dually — **(U)** as
 semantics rather than aspiration. The laws, and where each needs **(U)**:
@@ -592,19 +651,22 @@ semantics rather than aspiration. The laws, and where each needs **(U)**:
   `pᵢ(a)`, so `e` goes through `i` — and the premise's hypothesis closes it.
 - **(W)**: when every `μᵢ = μ`, whichever option answers writes `⟨μ, _⟩`.
 
-**(D)**, **(K)** and `ident` discharge the residue at the declaration wherever they decide a pair;
-what they cannot see — the `⊤` options, the structural overlaps above — stays an obligation,
-enforced per input by the semantics failing and checked per term by the law suite.
+The dischargers close the residue where they apply:
 
-**dunion.** The one union whose **(U)** is a theorem, which is what the term is _for_. A canonical
-item of option `i` carries the discriminator with a tag in `Lᵢ`; option `j ≠ i` either does not
-admit the name set or its literal refuses the tag, `Lⱼ` being disjoint from `Lᵢ` — so admission is
-unique on both sides, and the union case closes with no residue. ∎
+_dunion._ A canonical item of option `i` carries the discriminator with a tag in `Lᵢ`; option
+`j ≠ i` either does not admit the name set or its literal refuses the tag, `Lⱼ` being disjoint from
+`Lᵢ` — so admission is unique on both sides, and the sum case closes with no residue. The one union
+whose **(U)** is a theorem, which is what the term is _for_.
+
+_opaque._ The fixpoint of §3: one option per kind, each self-identifying by construction — kinds
+partition the values and members partition the attributes — so admission is unique on both sides at
+every depth of the fixpoint, and the sum case closes with no residue here either. ∎
 
 What remains outside the theorem is exactly what §3 already names: `(custom)`'s premises are the
 caller's to keep, `(number)` and `(numeric)` carry unchecked preconditions, and each `(union)`'s
-residual **(U)**. Each law is checked per term in the implementation's law suite, which is the
-sense of the preamble's "checked _somewhere_".
+residual **(U)**. Each law is checked per term in the implementation's law suite, and the proof's
+grouping above is the mechanization's file structure — the preamble's "checked _somewhere_", twice
+over.
 
 ---
 
@@ -655,10 +717,16 @@ rather than a production. And the judgement in turn says nothing about what a te
 
 Which places the calculus: **§1** a universal domain, **§2** types as quotient retracts of it,
 **§3–§5** a two-index typing relation with side conditions, tied back to §2 by soundness, **§6** the
-equational theory. The rules with more than one subterm are the products — `object`, `tuple` — and
-the coproducts — `union`, and `(dunion)` as its name-resolved special case; every other rule is a
-wrapper on one subterm. That is the same skeleton as the divisible / decidable [4] presentation of
-serialisation, read invariantly because both directions are present at once.
+equational theory. And the terms are generated by a small algebra, which the soundness proof's
+grouping makes official: **points** (the ground terms); one **partial iso** (`held`, with `refine`
+its prism); one **agreeing read-extension** (`legacy`); three **products** — positional (`array`,
+`tuple`), keyed (`record`, `object`), quotiented (`set`) — all instances of one traversal argument;
+one **sum** (`union`), resolved by unique admission, with `(dunion)` and `opaque` the two whose (U)
+is a theorem; and a **fixpoint** (`lazy`, and `opaque` again). Fields are the keyed product's
+presence decoration, and `nullable` is a sum in precedence clothing (§3). That is the divisible /
+decidable [4] skeleton, read invariantly because both directions are present at once — and it is
+also the mechanization's module structure, which is what keeps the prose proof and the machine
+proof auditable against each other.
 
 ---
 

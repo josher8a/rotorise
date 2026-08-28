@@ -1,0 +1,6 @@
+name = "calculus"
+version = "0.1.0"
+defaultTargets = ["Calculus"]
+
+[[lean_lib]]
+name = "Calculus"
