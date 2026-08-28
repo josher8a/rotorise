@@ -1,0 +1,222 @@
+/**
+ * Attributes a spec does not declare.
+ *
+ * Some entity types are genuinely open — `{ vendorId } & { [Key in string]?: string | number |
+ * boolean }` — so their extra keys are the domain rather than a surprise, and a codec that dropped
+ * them would be wrong about what the entity *is*. It is the one thing total coverage cannot say.
+ */
+import { describe, expect, it } from 'vitest'
+import { CodecError, literal, object, opaque, refine, string } from './codec'
+import { tableEntry } from './Rotorise'
+import { checkMembersStable, checkRoundTrip } from './testing'
+
+type VendorMeta = {
+    readonly vendorId: 'ACME' | 'GLOBEX'
+} & { [key: string]: string | number | boolean | undefined }
+
+/**
+ * The provider's own keys, whatever they are — numbers included, so `lossy` is stated.
+ *
+ * Refined rather than passed straight through, and the `as never` this replaces was hiding why.
+ * `opaque` decodes to `unknown`, and this entity says its extra values are scalars — so the codec
+ * cannot claim to produce what the index signature promises. An {@link AttributeCodec} carries its
+ * value type in `encode`'s parameter *and* `decode`'s result, which makes it invariant, so the
+ * mismatch is real rather than a variance technicality. Where an entity is honestly open —
+ * `{ [key: string]: unknown }` — `opaque('lossy')` fits with nothing around it.
+ */
+const scalar = refine(
+    opaque('lossy'),
+    (value): value is string | number | boolean | undefined =>
+        value === undefined ||
+        typeof value === 'string' ||
+        typeof value === 'number' ||
+        typeof value === 'boolean',
+    {
+        describe: 'a string, number or boolean',
+        // `opaque` also generates lists, maps and sets, which this rejects; saying what one looks
+        // like keeps the property run the size it claims to be
+        arbitrary: (rng) =>
+            [undefined, 'a', '', 0, 1, -1, 1.5, true, false][
+                Math.floor(rng() * 9)
+            ] as string | number | boolean | undefined,
+    },
+)
+
+const Meta = object({ vendorId: literal('ACME', 'GLOBEX') }, scalar).item
+
+describe('an open type', () => {
+    const meta: VendorMeta = {
+        vendorId: 'ACME',
+        holdId: 'lock-1',
+        expiresIn: 30,
+        renewable: true,
+    }
+
+    it('carries the keys the spec does not name', () => {
+        const item = Meta.unsafeEncode(meta)
+        expect(item.vendorId).toEqual({ S: 'ACME' })
+        expect(item.holdId).toEqual({ S: 'lock-1' })
+        expect(item.expiresIn).toEqual({ N: '30' })
+        expect(item.renewable).toEqual({ BOOL: true })
+    })
+
+    it('round-trips them', () => {
+        expect(Meta.unsafeDecode(Meta.unsafeEncode(meta))).toEqual(meta)
+    })
+
+    it('keeps them across a read-modify-write', () => {
+        expect(() =>
+            checkMembersStable(Meta, [Meta.unsafeEncode(meta)]),
+        ).not.toThrow()
+    })
+
+    it('decodes an attribute no version of the code has ever seen', () => {
+        const fromTheFuture = {
+            ...Meta.unsafeEncode(meta),
+            addedLastWeek: { S: 'by another service' },
+        }
+        expect(Meta.unsafeDecode(fromTheFuture).addedLastWeek).toBe(
+            'by another service',
+        )
+    })
+})
+
+describe("what 'drop' means, said out loud", () => {
+    const Closed = object({ id: string }).item
+
+    it('ignores an undeclared attribute on the way in', () => {
+        expect(
+            Closed.unsafeDecode({ id: { S: 'w1' }, retired: { S: 'x' } }),
+        ).toEqual({
+            id: 'w1',
+        })
+    })
+
+    it('leaves it out of a PutItem, which replaces the item anyway', () => {
+        const stored = { id: { S: 'w1' }, retired: { S: 'x' } }
+        expect(Closed.unsafeEncode(Closed.unsafeDecode(stored))).toEqual({
+            id: { S: 'w1' },
+        })
+    })
+
+    it('never mentions it in a patch, so an UpdateItem cannot touch it', () => {
+        expect(Closed.unsafeEncodePartial({ id: 'w2' })).toEqual({
+            id: { S: 'w2' },
+        })
+    })
+
+    it('is what the member law is told, rather than left to infer', () => {
+        // the attribute is gone from the re-encode, and under 'drop' that is correct
+        expect(() =>
+            checkMembersStable(Closed, [
+                { id: { S: 'w1' }, retired: { S: 'x' } },
+            ]),
+        ).not.toThrow()
+        // but a codec that does *not* drop is held to keeping it
+        expect(() =>
+            checkMembersStable({ ...Closed, rest: 'refuse' }, [
+                { id: { S: 'w1' }, retired: { S: 'x' } },
+            ]),
+        ).toThrow()
+    })
+})
+
+describe("'refuse', for a service that owns its table", () => {
+    const Strict = object({ id: string }, 'refuse').item
+
+    it('reports drift instead of ignoring it', () => {
+        expect(() =>
+            Strict.unsafeDecode({ id: { S: 'w1' }, addedLastWeek: { S: 'x' } }),
+        ).toThrow(CodecError)
+        expect(() =>
+            Strict.unsafeDecode({ id: { S: 'w1' }, addedLastWeek: { S: 'x' } }),
+        ).toThrow(/the schema and the data have drifted apart/)
+    })
+
+    it('is untroubled by an item that carries exactly what it declares', () => {
+        expect(Strict.unsafeDecode({ id: { S: 'w1' } })).toEqual({ id: 'w1' })
+        checkRoundTrip(Strict, { count: 50, seed: 1 })
+    })
+})
+
+/**
+ * Reaching a rest policy from `tableEntry`.
+ *
+ * `tableEntry` used to take a spec and build the codec itself, with every option at its default —
+ * so the policy an open type needs could not be reached from the entry point a repository uses. It
+ * takes a built codec now, which carries its own options and needs no signature change here for
+ * whatever `item` grows next.
+ */
+describe('a built codec passed to tableEntry', () => {
+    /**
+     * The closed part, named on its own so the key schema can be checked against it.
+     *
+     * An entity with a string index signature states no attribute name `keyof` can find, so a
+     * schema checked against `Meta` is checked against nothing — `['nonsense']` would be as valid
+     * as `['id']`. `MetaKeys` is the type `Meta` was built from, so naming it costs nothing.
+     */
+    type MetaKeys = { TAG: 'META'; id: string }
+    type Meta = MetaKeys & { [key: string]: unknown }
+
+    const Attributes = object(
+        { TAG: literal('META'), id: string },
+        opaque('lossy'),
+    ).item
+    it('round-trips the attributes the spec does not name', () => {
+        // generation reaches the rest policy now, so this exercises the open part and not only the
+        // closed one — which is what the definition recording `rest` bought
+        checkRoundTrip(Attributes, { count: 200, seed: 20260828 })
+    })
+
+    const Entry = tableEntry<Meta, never, MetaKeys>()(
+        { PK: ['id'], SK: ['TAG'] },
+        { codec: Attributes },
+    )
+
+    it('checks a key component against the attributes the entity states', () => {
+        const _typo = () =>
+            tableEntry<Meta, never, MetaKeys>()(
+                // @ts-expect-error there is no `nonsense` attribute to build a key from
+                { PK: ['nonsense'] },
+                { codec: Attributes },
+            )
+        expect(typeof _typo).toBe('function')
+    })
+    const meta = { TAG: 'META', id: 'b', extra: 'kept', n: 3 } as Meta
+
+    it('carries the policy the spec form could not express', () => {
+        const item = Entry.unsafeToItem(meta)
+        expect(item.extra).toEqual({ S: 'kept' })
+        expect(item.n).toEqual({ N: '3' })
+    })
+
+    it('still computes the keys', () => {
+        const item = Entry.unsafeToItem(meta)
+        expect(item.PK).toEqual({ S: 'ID#b' })
+        expect(item.SK).toEqual({ S: 'TAG#META' })
+    })
+
+    it('keeps the computed keys out of the entity', () => {
+        // a rest policy sweeps up what the spec does not declare, and the keys are not declared —
+        // so they are removed before decoding rather than left to be swept in
+        const back = Entry.unsafeFromItem(Entry.unsafeToItem(meta))
+        expect(back).toEqual(meta)
+        expect(back).not.toHaveProperty('PK')
+        expect(back).not.toHaveProperty('SK')
+    })
+
+    it('takes a plain spec too, which is the short form', () => {
+        type Closed = { id: string; name: string }
+        const Short = tableEntry<Closed>()(
+            { PK: ['id'] },
+            {
+                codec: { id: string, name: string },
+            },
+        )
+        expect(Short.unsafeToItem({ id: 'a', name: 'n' })).toEqual({
+            id: { S: 'a' },
+            name: { S: 'n' },
+            PK: { S: 'ID#a' },
+        })
+    })
+})

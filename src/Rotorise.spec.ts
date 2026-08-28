@@ -391,8 +391,8 @@ describe('DynamoDB Utils', () => {
 
         expect(keyDefaults).toBe('A-a1-B-1-C-true')
 
-        // infer should be accesible at runtime
-        expect(testTableEntry.path().PK.length).toBeDefined()
+        // paths are accessible at runtime, and stringify to the document path
+        expect(testTableEntry.path().PK.toString()).toBe('PK')
 
         expect(
             testTableEntry.key(
@@ -461,7 +461,12 @@ describe('DynamoDB Utils', () => {
         )
         expect(testTableEntry.path().PK.toString()).toBe('PK')
 
-        attest.instantiations([1505, 'instantiations'])
+        // 1505 -> 1869: `path()` is typed as a path rather than as the entity, which strips
+        // optionality at every level so no hop needs a non-null assertion, and carries what lives
+        // there so `item.at` can recover it. Both cost one more type per level.
+        // 1869 -> 2235: `keyUpdates` asks the codec which components it already decides, which
+        // walks the codec spec once per key
+        attest.instantiations([2235, 'instantiations'])
     })
 
     test('table Entry with transform and discriminator ', () => {
@@ -571,9 +576,8 @@ describe('DynamoDB Utils', () => {
                           }
                       }
                 >,
-                separator?: string | undefined,
             ]
-        >(null as any as Parameters<typeof base>)
+        >(null as any as [Parameters<typeof base>[0]])
 
         const testTableEntry = base(
             {
@@ -751,7 +755,9 @@ describe('DynamoDB Utils', () => {
             }),
         ).toBeUndefined()
 
-        attest.instantiations([13308, 'instantiations'])
+        // 13308 -> 15421: same cause as the `path()` baseline above — `keyUpdates` now reads
+        // `ConstantAttributes` off the codec spec for every key in the schema
+        attest.instantiations([15421, 'instantiations'])
     })
 
     test('real world example', () => {
@@ -1098,9 +1104,8 @@ describe('DynamoDB Utils', () => {
                           }
                       }
                 >,
-                separator?: string | undefined,
             ]
-        >(null as any as Parameters<typeof base>)
+        >(null as any as [Parameters<typeof base>[0]])
     })
 
     test('optional object property with narrowed transform accepts partial default', () => {
