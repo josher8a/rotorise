@@ -88,4 +88,18 @@ theorem Lawful.e_injective {c : Codec} (h : Lawful c) {t t' a}
 theorem Lawful.empty : Lawful Codec.empty := by
   constructor <;> intros <;> simp_all [Codec.empty]
 
+/-- §3 types the pair *on the held set*: `e : T ⇀ 𝔸` and `p : 𝔸 ⇀ T`. `Lawful` never
+    mentions `T` — the four laws relate `e` and `p` to each other, not to the index — so
+    this is the separate claim that the index is honest, and it is what makes `T` a
+    checked part of the judgement rather than a decoration. -/
+structure Carrier (c : Codec) : Prop where
+  /-- `e : T ⇀ 𝔸` — nothing outside the held set is written. -/
+  domE : ∀ {v a}, c.e v = some a → c.T v
+  /-- `p : 𝔸 ⇀ T` — nothing outside the held set is read. -/
+  ranP : ∀ {a v}, c.p a = some v → c.T v
+
+/-- The empty codec is on its (empty) carrier, vacuously. -/
+theorem Carrier.empty : Carrier Codec.empty := by
+  refine ⟨?_, ?_⟩ <;> intro _ _ h <;> exact nomatch h
+
 end Calculus

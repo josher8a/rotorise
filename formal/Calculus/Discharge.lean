@@ -182,24 +182,6 @@ theorem κList_mem : ∀ {ts : List Term} {ks}, κList ts = some ks →
           · obtain ⟨ks₁, hκ₁, hsub⟩ := κList_mem hks t ht'
             exact ⟨ks₁, hκ₁, fun k hk => List.mem_append.mpr (Or.inr (hsub k hk))⟩
 
-/-- A sum's encode routes through an admitting option. -/
-theorem altCodec_e_admits {os : List OptionSem} {μA : Option Member} {v a}
-    (he : (altCodec os μA).e v = some a) :
-    ∃ o ∈ os, o.admitV v = true ∧ o.c.e v = some a := by
-  replace he : (match os.filter (·.admitV v) with
-    | [o] => o.c.e v | _ => none) = some a := he
-  cases hf : os.filter (·.admitV v) with
-  | nil => rw [hf] at he; exact nomatch he
-  | cons o tl =>
-    cases tl with
-    | cons _ _ => rw [hf] at he; exact nomatch he
-    | nil =>
-      rw [hf] at he
-      have hom : o ∈ os.filter (·.admitV v) := by
-        rw [hf]; exact List.mem_cons_self o []
-      have hmem := List.mem_filter.mp hom
-      exact ⟨o, hmem.1, hmem.2, he⟩
-
 /-- Encoding lands in `κ`: a term's writable values have the kinds its `κ` names.
     (Where `κ` answers `⊤` there is nothing to say — the table's point.) -/
 theorem κ_sound : ∀ (fuel : Nat) (t : Term) {ks : List Kind} {v a},
@@ -340,25 +322,6 @@ theorem κ_sound : ∀ (fuel : Nat) (t : Term) {ks : List Kind} {v a},
     | opaq lossy => exact nomatch hκ
 
 /-! ## `adm` is sound for the denotation -/
-
-/-- A sum's decode routes through an admitting option — the mirror of
-    `altCodec_e_admits`. -/
-theorem altCodec_p_admits {os : List OptionSem} {μA : Option Member} {a v}
-    (hp : (altCodec os μA).p a = some v) :
-    ∃ o ∈ os, o.admitA a = true ∧ o.c.p a = some v := by
-  replace hp : (match os.filter (·.admitA a) with
-    | [o] => o.c.p a | _ => none) = some v := hp
-  cases hf : os.filter (·.admitA a) with
-  | nil => rw [hf] at hp; exact nomatch hp
-  | cons o tl =>
-    cases tl with
-    | cons _ _ => rw [hf] at hp; exact nomatch hp
-    | nil =>
-      rw [hf] at hp
-      have hom : o ∈ os.filter (·.admitA a) := by
-        rw [hf]; exact List.mem_cons_self o []
-      have hmem := List.mem_filter.mp hom
-      exact ⟨o, hmem.1, hmem.2, hp⟩
 
 /-- Writing lands in `adm`: whatever a term encodes is in the set it checks against.
     (Where `adm` is `true` there is nothing to say — the point of "no information".) -/

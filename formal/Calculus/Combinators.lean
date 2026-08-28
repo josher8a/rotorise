@@ -409,7 +409,7 @@ def setCodec (c : Codec) : Codec :=
       | _ => none }
 
 def arrayCodec (c : Codec) : Codec :=
-  { T := fun v => match v with | .arr _ => True | _ => False
+  { T := fun v => match v with | .arr vs => ∀ x ∈ vs, c.T x | _ => False
     μ := some .L
     e := fun v => match v with
       | .arr vs => (traverse c.e vs).map Attr.l
@@ -430,7 +430,9 @@ def align {α : Type} : List Codec → Option Codec → List α → Option (List
   | c :: cs, tail, x :: xs => (align cs tail xs).map ((c, x) :: ·)
 
 def tupleCodec (cs : List Codec) (tail : Option Codec) : Codec :=
-  { T := fun v => match v with | .arr _ => True | _ => False
+  { T := fun v => match v with
+      | .arr vs => ∃ ps, align cs tail vs = some ps ∧ ∀ p ∈ ps, p.1.T p.2
+      | _ => False
     μ := some .L
     e := fun v => match v with
       | .arr vs => ((align cs tail vs).bind
@@ -450,7 +452,7 @@ def decPair (c : Codec) : Name × Attr → Option (Name × Value) :=
   fun kv => (c.p kv.2).map ((kv.1, ·))
 
 def recordCodec (c : Codec) : Codec :=
-  { T := fun v => match v with | .map _ => True | _ => False
+  { T := fun v => match v with | .map kvs => ∀ kv ∈ kvs, c.T kv.2 | _ => False
     μ := some .M
     e := fun v => match v with
       | .map kvs => (traverse (encPair c) kvs).map Attr.m
@@ -538,7 +540,13 @@ def keepB (rest : RestSem) (sems : List (Name × FieldSem)) : Name → Bool :=
 
 def objectCodecCore (sems : List (Name × FieldSem)) (rc? : Option Codec)
     (kn : Name → Bool) : Codec :=
-  { T := fun v => match v with | .map _ => True | _ => False
+  { T := fun v => match v with
+      | .map kvs =>
+        valPresentB sems (kvs.map (·.1)) = true ∧
+        ∀ kv ∈ kvs, match sems.lookup kv.1 with
+          | some fs => fs.codec.T kv.2
+          | none => ∃ rc, rc? = some rc ∧ rc.T kv.2
+      | _ => False
     μ := some .M
     e := fun v => match v with
       | .map kvs =>
@@ -655,6 +663,569 @@ def opaqCodec : Nat → Bool → Codec
        .byAttempt (arrayCodec (opaqCodec fuel lossy)),
        .byAttempt (recordCodec (opaqCodec fuel lossy))]
       none
+
+/-! ## Carriers — the pair is on `T` (§3 `e : T ⇀ 𝔸`, `p : 𝔸 ⇀ T`)
+
+    One `Carrier` lemma per combinator, mirroring the lawfulness lemmas below. Together
+    with `typed_TSub` (Soundness.lean) these make the judgement's held-set index a
+    checked claim: what a derivable term writes and reads lies in the `T` it names. -/
+
+/-- The dual of `traverse_mem`: every *input* of a successful traversal satisfies what
+    its own success gives. -/
+theorem traverse_mem_input {α β : Type} {f : α → Option β} {P : α → Prop}
+    (hP : ∀ x y, f x = some y → P x) :
+    ∀ {xs : List α} {ys}, traverse f xs = some ys → ∀ x ∈ xs, P x
+  | [], _, _, x, hx => absurd hx (by simp)
+  | x₀ :: xs, ys, h, x, hx => by
+      simp only [traverse] at h
+      cases hfx : f x₀ with
+      | none => rw [hfx] at h; exact nomatch h
+      | some y₀ =>
+        rw [hfx] at h
+        cases hxs : traverse f xs with
+        | none => rw [hxs] at h; exact nomatch h
+        | some ys' =>
+          rcases List.mem_cons.mp hx with rfl | hx'
+          · exact hP x y₀ hfx
+          · exact traverse_mem_input hP hxs x hx'
+
+theorem carrier_stringCodec : Carrier stringCodec := by
+  refine ⟨?_, ?_⟩
+  · intro v a h; cases v <;> first | exact ⟨_, rfl⟩ | exact nomatch h
+  · intro a v h; cases a <;> first | (cases h; exact ⟨_, rfl⟩) | exact nomatch h
+
+theorem carrier_decimalCodec : Carrier decimalCodec := by
+  refine ⟨?_, ?_⟩
+  · intro v a h; cases v <;> first | exact ⟨_, rfl⟩ | exact nomatch h
+  · intro a v h; cases a <;> first | (cases h; exact ⟨_, rfl⟩) | exact nomatch h
+
+theorem carrier_booleanCodec : Carrier booleanCodec := by
+  refine ⟨?_, ?_⟩
+  · intro v a h; cases v <;> first | exact ⟨_, rfl⟩ | exact nomatch h
+  · intro a v h; cases a <;> first | (cases h; exact ⟨_, rfl⟩) | exact nomatch h
+
+theorem carrier_binaryCodec : Carrier binaryCodec := by
+  refine ⟨?_, ?_⟩
+  · intro v a h; cases v <;> first | exact ⟨_, rfl⟩ | exact nomatch h
+  · intro a v h; cases a <;> first | (cases h; exact ⟨_, rfl⟩) | exact nomatch h
+
+theorem carrier_nullCodec : Carrier nullCodec := by
+  refine ⟨?_, ?_⟩
+  · intro v a h; cases v <;> first | rfl | exact nomatch h
+  · intro a v h; cases a <;> first | (cases h; rfl) | exact nomatch h
+
+theorem carrier_numberCodec : Carrier numberCodec := by
+  refine ⟨?_, ?_⟩
+  · intro v a h; cases v <;> first | exact ⟨_, rfl⟩ | exact nomatch h
+  · intro a v h
+    cases a
+    case n x =>
+      replace h : ((Double.ofDec x).map Value.num) = some v := h
+      cases hd : Double.ofDec x with
+      | none => rw [hd] at h; exact nomatch h
+      | some d => rw [hd] at h; replace h : some (Value.num d) = some v := h
+                  cases h; exact ⟨_, rfl⟩
+    all_goals exact nomatch h
+
+theorem carrier_numericCodec (q : Double → Bool) : Carrier (numericCodec q) := by
+  refine ⟨?_, ?_⟩
+  · intro v a h
+    cases v
+    case num d =>
+      replace h : (if q d then some (Attr.n d.toDec) else none) = some a := h
+      split at h
+      next hq => exact ⟨d, hq, rfl⟩
+      next => exact nomatch h
+    all_goals exact nomatch h
+  · intro a v h
+    cases a
+    case n x =>
+      replace h : ((Double.ofDec x).bind
+        fun d => if q d then some (Value.num d) else none) = some v := h
+      cases hd : Double.ofDec x with
+      | none => rw [hd] at h; exact nomatch h
+      | some d =>
+        rw [hd] at h
+        replace h : (if q d then some (Value.num d) else none) = some v := h
+        split at h
+        next hq => cases h; exact ⟨d, hq, rfl⟩
+        next => exact nomatch h
+    all_goals exact nomatch h
+
+theorem carrier_literalSCodec (ls : List String) : Carrier (literalSCodec ls) := by
+  refine ⟨?_, ?_⟩
+  · intro v a h
+    cases v
+    case str s =>
+      replace h : (if s ∈ ls then some (Attr.s s) else none) = some a := h
+      split at h
+      next hm => exact ⟨s, hm, rfl⟩
+      next => exact nomatch h
+    all_goals exact nomatch h
+  · intro a v h
+    cases a
+    case s s =>
+      replace h : (if s ∈ ls then some (Value.str s) else none) = some v := h
+      split at h
+      next hm => cases h; exact ⟨s, hm, rfl⟩
+      next => exact nomatch h
+    all_goals exact nomatch h
+
+theorem carrier_literalNCodec (ls : List Double) : Carrier (literalNCodec ls) := by
+  refine ⟨?_, ?_⟩
+  · intro v a h
+    cases v
+    case num d =>
+      replace h : (if d ∈ ls then some (Attr.n d.toDec) else none) = some a := h
+      split at h
+      next hm => exact ⟨d, hm, rfl⟩
+      next => exact nomatch h
+    all_goals exact nomatch h
+  · intro a v h
+    cases a
+    case n x =>
+      replace h : ((Double.ofDec x).bind
+        fun d => if d ∈ ls then some (Value.num d) else none) = some v := h
+      cases hd : Double.ofDec x with
+      | none => rw [hd] at h; exact nomatch h
+      | some d =>
+        rw [hd] at h
+        replace h : (if d ∈ ls then some (Value.num d) else none) = some v := h
+        split at h
+        next hm => cases h; exact ⟨d, hm, rfl⟩
+        next => exact nomatch h
+    all_goals exact nomatch h
+
+/-! ### Sums -/
+
+/-- A sum's encode routes through an admitting option. -/
+theorem altCodec_e_admits {os : List OptionSem} {μA : Option Member} {v a}
+    (he : (altCodec os μA).e v = some a) :
+    ∃ o ∈ os, o.admitV v = true ∧ o.c.e v = some a := by
+  replace he : (match os.filter (·.admitV v) with
+    | [o] => o.c.e v | _ => none) = some a := he
+  cases hf : os.filter (·.admitV v) with
+  | nil => rw [hf] at he; exact nomatch he
+  | cons o tl =>
+    cases tl with
+    | cons _ _ => rw [hf] at he; exact nomatch he
+    | nil =>
+      rw [hf] at he
+      have hom : o ∈ os.filter (·.admitV v) := by
+        rw [hf]; exact List.mem_cons_self o []
+      have hmem := List.mem_filter.mp hom
+      exact ⟨o, hmem.1, hmem.2, he⟩
+
+/-- A sum's decode routes through an admitting option — the mirror of
+    `altCodec_e_admits`. -/
+theorem altCodec_p_admits {os : List OptionSem} {μA : Option Member} {a v}
+    (hp : (altCodec os μA).p a = some v) :
+    ∃ o ∈ os, o.admitA a = true ∧ o.c.p a = some v := by
+  replace hp : (match os.filter (·.admitA a) with
+    | [o] => o.c.p a | _ => none) = some v := hp
+  cases hf : os.filter (·.admitA a) with
+  | nil => rw [hf] at hp; exact nomatch hp
+  | cons o tl =>
+    cases tl with
+    | cons _ _ => rw [hf] at hp; exact nomatch hp
+    | nil =>
+      rw [hf] at hp
+      have hom : o ∈ os.filter (·.admitA a) := by
+        rw [hf]; exact List.mem_cons_self o []
+      have hmem := List.mem_filter.mp hom
+      exact ⟨o, hmem.1, hmem.2, hp⟩
+
+/-! ### Wrappers -/
+
+/-- `held`: the reading half needs the iso to cancel where `e` is defined — §3's
+    `f ∘ g = id_I`, in the carrier-restricted form `Obligations` carries. -/
+theorem carrier_through {c : Codec} {f g : Value → Value} (hc : Carrier c)
+    (hlaw : LawfulCore c) (hfg : ∀ v, (c.e v).isSome → f (g v) = v) :
+    Carrier (c.through f g) := by
+  refine ⟨fun h => hc.domE h, ?_⟩
+  intro a v h
+  replace h : ((c.p a).map g) = some v := h
+  cases hp : c.p a with
+  | none => rw [hp] at h; exact nomatch h
+  | some v' =>
+    rw [hp] at h
+    replace h : some (g v') = some v := h
+    cases h
+    show c.T (f (g v'))
+    rw [hfg v' (hlaw.canon hp)]
+    exact hc.ranP hp
+
+theorem carrier_restrict {c : Codec} (hc : Carrier c) (q : Value → Bool) :
+    Carrier (c.restrict q) := by
+  refine ⟨?_, ?_⟩
+  · intro v a h
+    replace h : (if q v then c.e v else none) = some a := h
+    split at h
+    next hq => exact ⟨hc.domE h, hq⟩
+    next => exact nomatch h
+  · intro a v h
+    replace h : ((c.p a).bind fun v' => if q v' then some v' else none) = some v := h
+    cases hp : c.p a with
+    | none => rw [hp] at h; exact nomatch h
+    | some v' =>
+      rw [hp] at h
+      replace h : (if q v' then some v' else none) = some v := h
+      split at h
+      next hq => cases h; exact ⟨hc.ranP hp, hq⟩
+      next => exact nomatch h
+
+/-- `legacy`: the migration lands in `T` because §3's `ran(r) ⊆ dom(e)` puts it in
+    `dom(e)`, and `e`'s domain is `T`. The doc writes `r : 𝔸 ⇀ T` directly; this is the
+    same premise arrived at through the one the proof already needs. -/
+theorem carrier_extendRead {c : Codec} {r : Attr → Option Value} (hc : Carrier c)
+    (hran : ∀ a v, r a = some v → (c.e v).isSome) :
+    Carrier (c.extendRead r) := by
+  refine ⟨fun h => hc.domE h, ?_⟩
+  intro a v h
+  replace h : (match c.p a with | some v' => some v' | none => r a) = some v := h
+  cases hp : c.p a with
+  | some v' => rw [hp] at h; replace h : some v' = some v := h; cases h; exact hc.ranP hp
+  | none =>
+    rw [hp] at h
+    obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp (hran a v h)
+    exact hc.domE ha'
+
+theorem carrier_orNull {c : Codec} (hc : Carrier c) : Carrier c.orNull := by
+  refine ⟨?_, ?_⟩
+  · intro v a h
+    cases v
+    case null => exact Or.inr rfl
+    all_goals exact Or.inl (hc.domE h)
+  · intro a v h
+    cases a
+    case null =>
+      replace h : some Value.null = some v := h
+      cases h; exact Or.inr rfl
+    all_goals exact Or.inl (hc.ranP h)
+
+/-! ### Containers -/
+
+theorem traverse_mem {α β : Type} {f : α → Option β} {P : β → Prop}
+    (hP : ∀ x y, f x = some y → P y) :
+    ∀ {xs ys}, traverse f xs = some ys → ∀ y ∈ ys, P y
+  | [], ys, ht => by
+      replace ht : some [] = some ys := ht
+      cases ht
+      intro y hy
+      exact absurd hy (by simp)
+  | x :: xs, ys, ht => by
+      simp only [traverse] at ht
+      cases hfx : f x with
+      | none => rw [hfx] at ht; exact nomatch ht
+      | some y₀ =>
+        rw [hfx] at ht
+        cases hxs : traverse f xs with
+        | none => rw [hxs] at ht; exact nomatch ht
+        | some ys' =>
+          rw [hxs] at ht
+          replace ht : some (y₀ :: ys') = some ys := ht
+          cases ht
+          intro y hy
+          rcases List.mem_cons.mp hy with rfl | hy'
+          · exact hP x y hfx
+          · exact traverse_mem hP hxs y hy'
+
+
+theorem encPair_dom {c : Codec} (hc : Carrier c) :
+    ∀ kv y, encPair c kv = some y → c.T kv.2 := by
+  intro kv y h
+  cases he : c.e kv.2 with
+  | none => rw [encPair, he] at h; exact nomatch h
+  | some a => exact hc.domE he
+
+theorem decPair_ran {c : Codec} (hc : Carrier c) :
+    ∀ kv y, decPair c kv = some y → c.T y.2 := by
+  intro kv y h
+  cases hp : c.p kv.2 with
+  | none => rw [decPair, hp] at h; exact nomatch h
+  | some v =>
+    rw [decPair, hp] at h
+    replace h : some (kv.1, v) = some y := h
+    cases h
+    exact hc.ranP hp
+
+theorem carrier_arrayCodec {c : Codec} (hc : Carrier c) : Carrier (arrayCodec c) := by
+  refine ⟨?_, ?_⟩
+  · intro v a h
+    cases v
+    case arr vs =>
+      replace h : ((traverse c.e vs).map Attr.l) = some a := h
+      cases htr : traverse c.e vs with
+      | none => rw [htr] at h; exact nomatch h
+      | some as => exact traverse_mem_input (fun _ _ hxy => hc.domE hxy) htr
+    all_goals exact nomatch h
+  · intro a v h
+    cases a
+    case l as =>
+      replace h : ((traverse c.p as).map Value.arr) = some v := h
+      cases htr : traverse c.p as with
+      | none => rw [htr] at h; exact nomatch h
+      | some vs =>
+        rw [htr] at h
+        replace h : some (Value.arr vs) = some v := h
+        cases h
+        exact traverse_mem (fun _ _ hxy => hc.ranP hxy) htr
+    all_goals exact nomatch h
+
+theorem carrier_recordCodec {c : Codec} (hc : Carrier c) : Carrier (recordCodec c) := by
+  refine ⟨?_, ?_⟩
+  · intro v a h
+    cases v
+    case map kvs =>
+      replace h : ((traverse (encPair c) kvs).map Attr.m) = some a := h
+      cases htr : traverse (encPair c) kvs with
+      | none => rw [htr] at h; exact nomatch h
+      | some ds => exact traverse_mem_input (encPair_dom hc) htr
+    all_goals exact nomatch h
+  · intro a v h
+    cases a
+    case m kvs =>
+      replace h : ((traverse (decPair c) kvs).map Value.map) = some v := h
+      cases htr : traverse (decPair c) kvs with
+      | none => rw [htr] at h; exact nomatch h
+      | some ds =>
+        rw [htr] at h
+        replace h : some (Value.map ds) = some v := h
+        cases h
+        exact traverse_mem (decPair_ran hc) htr
+    all_goals exact nomatch h
+
+/-- `set`: nonemptiness comes from the wire, on both sides — `asWireSet` refuses the
+    empty list going out, and `p` refuses an empty wire set coming in. §3's `℘⁺fin`. -/
+theorem carrier_setCodec {c : Codec} (hc : Carrier c) : Carrier (setCodec c) := by
+  refine ⟨?_, ?_⟩
+  · intro v a h
+    cases v
+    case set vs =>
+      replace h : ((traverse c.e vs).bind asWireSet) = some a := h
+      cases htr : traverse c.e vs with
+      | none => rw [htr] at h; exact nomatch h
+      | some as =>
+        rw [htr] at h
+        refine ⟨?_, traverse_mem_input (fun _ _ hxy => hc.domE hxy) htr⟩
+        intro hnil
+        subst hnil
+        replace htr : some [] = some as := htr
+        cases htr
+        exact nomatch h
+    all_goals exact nomatch h
+  · intro a v h
+    -- three wire-set members, one argument each
+    have key : ∀ {β : Type} (ws : List β) (f : β → Option Value),
+        (∀ x y, f x = some y → c.T y) →
+        (if ws.isEmpty then none else (traverse f ws).map Value.set) = some v →
+        (setCodec c).T v := by
+      intro β ws f hf hw
+      cases hemp : ws.isEmpty with
+      | true => rw [hemp] at hw; exact nomatch hw
+      | false =>
+        rw [hemp] at hw
+        cases htr : traverse f ws with
+        | none => rw [htr] at hw; exact nomatch hw
+        | some vs =>
+          rw [htr] at hw
+          replace hw : some (Value.set vs) = some v := hw
+          cases hw
+          refine ⟨?_, traverse_mem hf htr⟩
+          intro hnil
+          subst hnil
+          have := traverse_length ws [] htr
+          cases ws with
+          | nil => exact nomatch hemp
+          | cons _ _ => exact nomatch this
+    cases a
+    case ss ws => exact key ws _ (fun _ _ hxy => hc.ranP hxy) h
+    case ns ws => exact key ws _ (fun _ _ hxy => hc.ranP hxy) h
+    case bs ws => exact key ws _ (fun _ _ hxy => hc.ranP hxy) h
+    all_goals exact nomatch h
+
+/-- Every codec `align` pairs with a position is one it was given. -/
+theorem align_mem {α : Type} :
+    ∀ {cs : List Codec} {tail : Option Codec} {xs : List α} {ps},
+      align cs tail xs = some ps → ∀ p ∈ ps, p.1 ∈ cs ∨ tail = some p.1
+  | [], _, [], ps, h, p, hp => by
+      replace h : some [] = some ps := h
+      cases h
+      exact absurd hp (by simp)
+  | [], tail, x :: xs, ps, h, p, hp => by
+      cases htl : tail with
+      | none => rw [htl] at h; exact nomatch h
+      | some c =>
+        rw [htl] at h
+        replace h : ((align [] (some c) xs).map ((c, x) :: ·)) = some ps := h
+        cases hal : align ([] : List Codec) (some c) xs with
+        | none => rw [hal] at h; exact nomatch h
+        | some ps' =>
+          rw [hal] at h
+          replace h : some ((c, x) :: ps') = some ps := h
+          cases h
+          rcases List.mem_cons.mp hp with rfl | hp'
+          · exact Or.inr rfl
+          · rcases align_mem hal p hp' with hm | ht
+            · exact Or.inl hm
+            · exact Or.inr ht
+  | _ :: _, _, [], _, h, _, _ => nomatch h
+  | c :: cs, tail, x :: xs, ps, h, p, hp => by
+      replace h : ((align cs tail xs).map ((c, x) :: ·)) = some ps := h
+      cases hal : align cs tail xs with
+      | none => rw [hal] at h; exact nomatch h
+      | some ps' =>
+        rw [hal] at h
+        replace h : some ((c, x) :: ps') = some ps := h
+        cases h
+        rcases List.mem_cons.mp hp with rfl | hp'
+        · exact Or.inl (List.mem_cons_self _ _)
+        · rcases align_mem hal p hp' with hm | ht
+          · exact Or.inl (List.mem_cons_of_mem _ hm)
+          · exact Or.inr ht
+
+/-- Re-aligning a decoded tuple: what `p` produced position by position is what the
+    same `align` pairs with the same codecs, and each entry is on its carrier. -/
+theorem align_ranP :
+    ∀ (cs : List Codec) (tail : Option Codec),
+      (∀ c ∈ cs, Carrier c) → (∀ c ∈ tail, Carrier c) →
+      ∀ (as : List Attr) (cas : List (Codec × Attr)) (vs : List Value),
+        align cs tail as = some cas →
+        traverse (fun ca => ca.1.p ca.2) cas = some vs →
+        ∃ cvs, align cs tail vs = some cvs ∧ ∀ p ∈ cvs, p.1.T p.2
+  | [], _, _, _, [], cas, vs, hal, htr => by
+      replace hal : some [] = some cas := hal
+      cases hal
+      replace htr : some [] = some vs := htr
+      cases htr
+      exact ⟨[], rfl, fun p hp => absurd hp (by simp)⟩
+  | [], tail, _, htl, a :: as, cas, vs, hal, htr => by
+      cases hc : tail with
+      | none => rw [hc] at hal; exact nomatch hal
+      | some c =>
+        rw [hc] at hal
+        replace hal : ((align [] (some c) as).map ((c, a) :: ·)) = some cas := hal
+        cases hal' : align ([] : List Codec) (some c) as with
+        | none => rw [hal'] at hal; exact nomatch hal
+        | some cas' =>
+          rw [hal'] at hal
+          replace hal : some ((c, a) :: cas') = some cas := hal
+          cases hal
+          simp only [traverse] at htr
+          cases hpa : c.p a with
+          | none => rw [hpa] at htr; exact nomatch htr
+          | some v =>
+            rw [hpa] at htr
+            cases htr' : traverse (fun ca => ca.1.p ca.2) cas' with
+            | none => rw [htr'] at htr; exact nomatch htr
+            | some vs' =>
+              rw [htr'] at htr
+              replace htr : some (v :: vs') = some vs := htr
+              cases htr
+              have hcc : Carrier c := htl c hc
+              obtain ⟨cvs', hal2, hmem⟩ :=
+                align_ranP [] (some c) (by simp) (fun c' h => by
+                  replace h : some c = some c' := h; cases h; exact hcc)
+                  as cas' vs' hal' htr'
+              refine ⟨(c, v) :: cvs', ?_, ?_⟩
+              · show ((align [] (some c) vs').map ((c, v) :: ·)) = _
+                rw [hal2]
+                rfl
+              · intro p hp
+                rcases List.mem_cons.mp hp with rfl | hp'
+                · exact hcc.ranP hpa
+                · exact hmem p hp'
+  | _ :: _, _, _, _, [], _, _, hal, _ => nomatch hal
+  | c :: cs, tail, hcs, htl, a :: as, cas, vs, hal, htr => by
+      replace hal : ((align cs tail as).map ((c, a) :: ·)) = some cas := hal
+      cases hal' : align cs tail as with
+      | none => rw [hal'] at hal; exact nomatch hal
+      | some cas' =>
+        rw [hal'] at hal
+        replace hal : some ((c, a) :: cas') = some cas := hal
+        cases hal
+        simp only [traverse] at htr
+        cases hpa : c.p a with
+        | none => rw [hpa] at htr; exact nomatch htr
+        | some v =>
+          rw [hpa] at htr
+          cases htr' : traverse (fun ca => ca.1.p ca.2) cas' with
+          | none => rw [htr'] at htr; exact nomatch htr
+          | some vs' =>
+            rw [htr'] at htr
+            replace htr : some (v :: vs') = some vs := htr
+            cases htr
+            have hcc : Carrier c := hcs c (List.mem_cons_self _ _)
+            obtain ⟨cvs', hal2, hmem⟩ :=
+              align_ranP cs tail (fun c' h => hcs c' (List.mem_cons_of_mem _ h)) htl
+                as cas' vs' hal' htr'
+            refine ⟨(c, v) :: cvs', ?_, ?_⟩
+            · show ((align cs tail vs').map ((c, v) :: ·)) = _
+              rw [hal2]
+              rfl
+            · intro p hp
+              rcases List.mem_cons.mp hp with rfl | hp'
+              · exact hcc.ranP hpa
+              · exact hmem p hp'
+
+theorem carrier_tupleCodec {cs : List Codec} {tail : Option Codec}
+    (hcs : ∀ c ∈ cs, Carrier c) (htl : ∀ c ∈ tail, Carrier c) :
+    Carrier (tupleCodec cs tail) := by
+  have carrierOf : ∀ c : Codec, (c ∈ cs ∨ tail = some c) → Carrier c := by
+    intro c hm
+    rcases hm with hm | ht
+    · exact hcs c hm
+    · exact htl c ht
+  refine ⟨?_, ?_⟩
+  · intro v a h
+    cases v
+    case arr vs =>
+      replace h : ((((align cs tail vs).bind
+        (traverse fun cv => cv.1.e cv.2))).map Attr.l) = some a := h
+      cases hal : align cs tail vs with
+      | none => rw [hal] at h; exact nomatch h
+      | some ps =>
+        rw [hal] at h
+        replace h : ((traverse (fun cv => cv.1.e cv.2) ps).map Attr.l) = some a := h
+        cases htr : traverse (fun cv => cv.1.e cv.2) ps with
+        | none => rw [htr] at h; exact nomatch h
+        | some as =>
+          refine ⟨ps, hal, ?_⟩
+          have key := traverse_mem_input
+            (P := fun cv : Codec × Value => (cv.1 ∈ cs ∨ tail = some cv.1) → cv.1.T cv.2)
+            (fun _ _ hxy hmem => (carrierOf _ hmem).domE hxy) htr
+          exact fun p hp => key p hp (align_mem hal p hp)
+    all_goals exact nomatch h
+  · intro a v h
+    cases a
+    case l as =>
+      replace h : ((((align cs tail as).bind
+        (traverse fun ca => ca.1.p ca.2))).map Value.arr) = some v := h
+      cases hal : align cs tail as with
+      | none => rw [hal] at h; exact nomatch h
+      | some cas =>
+        rw [hal] at h
+        replace h : ((traverse (fun ca => ca.1.p ca.2) cas).map Value.arr) = some v := h
+        cases htr : traverse (fun ca => ca.1.p ca.2) cas with
+        | none => rw [htr] at h; exact nomatch h
+        | some vs =>
+          rw [htr] at h
+          replace h : some (Value.arr vs) = some v := h
+          cases h
+          exact align_ranP cs tail hcs htl as cas vs hal htr
+    all_goals exact nomatch h
+
+/-! ### Sums -/
+
+theorem carrier_altCodec {os : List OptionSem} {μA : Option Member}
+    (h : ∀ o ∈ os, Carrier o.c) : Carrier (altCodec os μA) := by
+  refine ⟨?_, ?_⟩
+  · intro v a he
+    obtain ⟨o, ho, -, hoe⟩ := altCodec_e_admits he
+    exact ⟨o, ho, (h o ho).domE hoe⟩
+  · intro a v hp
+    obtain ⟨o, ho, -, hop⟩ := altCodec_p_admits hp
+    exact ⟨o, ho, (h o ho).ranP hop⟩
 
 /-! ## Lawfulness — proved -/
 
@@ -1199,31 +1770,6 @@ theorem traverse_map {α β γ : Type} {g : α → β} {f : β → Option γ} :
   | x :: l => by
       simp only [List.map, traverse]
       rw [traverse_map l]
-
-theorem traverse_mem {α β : Type} {f : α → Option β} {P : β → Prop}
-    (hP : ∀ x y, f x = some y → P y) :
-    ∀ {xs ys}, traverse f xs = some ys → ∀ y ∈ ys, P y
-  | [], ys, ht => by
-      replace ht : some [] = some ys := ht
-      cases ht
-      intro y hy
-      exact absurd hy (by simp)
-  | x :: xs, ys, ht => by
-      simp only [traverse] at ht
-      cases hfx : f x with
-      | none => rw [hfx] at ht; exact nomatch ht
-      | some y₀ =>
-        rw [hfx] at ht
-        cases hxs : traverse f xs with
-        | none => rw [hxs] at ht; exact nomatch ht
-        | some ys' =>
-          rw [hxs] at ht
-          replace ht : some (y₀ :: ys') = some ys := ht
-          cases ht
-          intro y hy
-          rcases List.mem_cons.mp hy with rfl | hy'
-          · exact hP x y hfx
-          · exact traverse_mem hP hxs y hy'
 
 theorem mem_zip_left {α β : Type} :
     ∀ (l₁ : List α) (l₂ : List β), l₁.length = l₂.length →
