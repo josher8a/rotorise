@@ -3,16 +3,21 @@ import Calculus.Soundness
 /-!
 # §5 — The decidable dischargers of (U)
 
-The machinery of (K): `Kind`, `κ` and `ident` as total structural recursions over the
-term language, exactly as §5's tables state them, plus the theorem that puts them to
-work — `uAtCan_of_disjoint`, discharging `(union)`'s residual (U) at the declaration.
+The machinery of (K): `Kind`, `κ`, `ident` and `adm` as total structural recursions over
+the term language, exactly as §5's tables state them, plus the theorem that puts them to
+work — `uAtCan_of_separated`, discharging `(union)`'s residual (U) at the declaration.
 
-The discharger proved here is the disjointness route, on both sides of the pair:
-pairwise-disjoint `κ` (no `⊤`) settles the value side, and pairwise-distinct named
-members settle the attribute side — the member index standing in for §5 (D), whose
-held-set form waits on the `T` index (README). Open object options are excluded, as
-§5 demands: an undeclared name disqualifies the option even where its rest codec would
-hold it, so an open object never admits its own canonical pairs.
+Separation is asked of each side of the pair. On the writable side: disjoint `κ`
+(no `⊤`), or disjoint `adm`. On the readable side: distinct named members, or disjoint
+`admA`. Open object options are excluded, since an undeclared name disqualifies the
+option even where its rest codec would hold it — so an open object never admits its own
+canonical pairs.
+
+§5's (D) is *not* among these, and `not_uAtCan_literal_held` is why: held sets are sets
+of values, (U)'s readable side quantifies over attributes, and `held`'s adapter relabels
+between them. Two options can hold disjoint sets and read one attribute. (D) stays a
+well-formedness condition on the `T` index; the readable side is decided on stored
+attributes.
 
 The `ident` exemption is here in its repaired form. An earlier §5 stated (K) as
 `κ(cᵢ) ∩ κ(cⱼ) = ∅ ∨ ident(cᵢ) ∨ ident(cⱼ)` and called it sufficient for (U); it is
@@ -971,5 +976,86 @@ theorem not_uAtCan_array_literals :
 example : ident (.literalS ["A"]) = true := rfl
 example : ident (.array (.literalS ["A"])) = true := rfl
 example : ident (.array (.literalS ["B"])) = true := rfl
+
+/-! ## Why (D) does not discharge the readable side either
+
+    §5 lists **(D)** — incomparable held sets — as a discharger of (U)'s readable side,
+    and says in prose that stating it as genuine *disjointness* "would be sound and
+    would reject unions that work". The first half of that is false: held sets are sets
+    of **values**, (U)'s readable side quantifies over **attributes**, and `held` is
+    exactly the term that separates the two. Its adapter relabels, so two options can
+    hold disjoint sets of values and still read one attribute — each to its own value.
+
+    The witness below is `union(literal("A"), held(literal("A"), f, g))` with `f` and
+    `g` swapping `"B"` for `"A"`. Its held sets are `{"A"}` and `{"B"}` — disjoint, so
+    (D) passes in the strongest form §5 proposes — and both options read the attribute
+    `S "A"`, the first to `"A"` and the second to `"B"`. What decides the readable side
+    is a condition on stored attributes: distinct members, or disjoint `admA`. -/
+
+/-- (D) in its held-set form, as the disjointness §5 proposes: no value is held by two
+    options. Stated so the counterexample below can be about it. -/
+def DDisj (Tx Ty : Held) : Prop := ∀ v, Tx v → ¬ Ty v
+
+/-- The relabelling adapter: `"B"` on the outside is `"A"` on the inside. -/
+def fRel : Value → Value := fun v => match v with | .str "B" => .str "A" | _ => .null
+
+/-- Its inverse on the carriers. -/
+def gRel : Value → Value := fun v => match v with | .str "A" => .str "B" | _ => .null
+
+/-- `held(literal("A"), fRel, gRel)` — holds `{"B"}`, stores it as `S "A"`. -/
+def tRel : Term := .held (.literalS ["A"]) fRel gRel
+
+/-- The attribute-side twin of `not_uAtCan_pair`. -/
+theorem not_uAtCan_pair_A {fuel : Nat} {t₁ t₂ : Term} {v w : Value} {a : Attr}
+    (he : (denote fuel t₁).e v = some a)
+    (h₂ : (optionSemOf (denote fuel t₂) (specOf t₂)).admitA a = true)
+    (hne : (optionSemOf (denote fuel t₁) (specOf t₁)).admitV w ≠
+      (optionSemOf (denote fuel t₂) (specOf t₂)).admitV w) :
+    ¬ UAtCan fuel [t₁, t₂] := by
+  intro h
+  have ho : optionSemOf (denote fuel t₁) (specOf t₁) ∈ semsOf fuel [t₁, t₂] :=
+    List.mem_cons_self _ _
+  have hfilt := (h _ ho v a (by rw [optionSemOf_c]; exact he)).1
+  have hmem : optionSemOf (denote fuel t₂) (specOf t₂) ∈
+      [optionSemOf (denote fuel t₁) (specOf t₁)] := by
+    rw [← hfilt]
+    exact List.mem_filter.mpr
+      ⟨List.mem_cons_of_mem _ (List.mem_cons_self _ _), h₂⟩
+  rcases List.mem_cons.mp hmem with heq | hnil
+  · exact hne (congrArg (fun o => OptionSem.admitV o w) heq.symm)
+  · exact absurd hnil (by simp)
+
+/-- Both options are derivable, and their held sets are disjoint — so this really is a
+    union (D) admits, in the disjointness form §5 calls sound. -/
+theorem typed_tRel :
+    Typed tRel (fun v => ∃ s, s ∈ ["A"] ∧ fRel v = .str s) (some .S) := by
+  refine Typed.held (I := fun w => ∃ s, s ∈ ["A"] ∧ w = .str s) ?_ (fun _ => Iff.rfl)
+  exact Typed.literalS ["A"] (by simp) (by simp)
+
+theorem dDisj_tRel :
+    DDisj (fun v => ∃ s, s ∈ ["A"] ∧ v = .str s)
+      (fun v => ∃ s, s ∈ ["A"] ∧ fRel v = .str s) := by
+  rintro v ⟨s, hs, rfl⟩ ⟨s', hs', hf⟩
+  -- `v = "A"`, so `fRel v = null`, which is no string
+  have : s = "A" := by simpa using hs
+  subst this
+  exact nomatch hf
+
+/-- **(D) does not discharge the readable side.** Disjoint held sets, and both options
+    admit the attribute `S "A"` — the first reading it to `"A"`, the second to `"B"`. -/
+theorem not_uAtCan_literal_held :
+    ¬ UAtCan 2 [Term.literalS ["A"], tRel] := by
+  have hA : (denote 2 (Term.literalS ["A"])).e (Value.str "A") = some (Attr.s "A") := by
+    show (if "A" ∈ ["A"] then some (Attr.s "A") else none) = some (Attr.s "A")
+    rw [if_pos (List.mem_cons_self _ _)]
+  refine not_uAtCan_pair_A (v := .str "A") (a := Attr.s "A") (w := .str "A") hA ?_ ?_
+  · show (((if "A" ∈ ["A"] then some (Value.str "A") else none).map gRel)).isSome = true
+    rw [if_pos (List.mem_cons_self _ _)]
+    rfl
+  · show ((denote 2 (Term.literalS ["A"])).e (Value.str "A")).isSome ≠
+      ((denote 1 (Term.literalS ["A"])).e (fRel (Value.str "A"))).isSome
+    rw [hA]
+    show true ≠ ((denote 1 (Term.literalS ["A"])).e Value.null).isSome
+    exact fun h => nomatch h
 
 end Calculus

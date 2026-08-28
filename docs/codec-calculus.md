@@ -394,7 +394,7 @@ unions it covers:
 
 | Discharger                           | Decides                                             | From                       |
 | ------------------------------------ | --------------------------------------------------- | -------------------------- |
-| **(D)** — incomparable held sets     | the readable side, where the types differ           | the judgement's `T` index  |
+| distinct members, or disjoint `adm`  | the readable side, where the stored attributes differ | `μ`, and `adm` below       |
 | **(K)** — disjoint kinds, or disjoint `ident` sets | the writable side, where the runtime shapes differ  | `κ`, `ident` and `adm`, below |
 | tag disjointness                     | `(dunion)`, outright — both sides                   | the discriminator literals |
 | kind disjointness                    | `opaque`'s fixpoint (§3), outright                  | one option per kind of §1  |
@@ -482,10 +482,10 @@ the tag sets never vouched for, and **(C)** would then re-encode a variant no ta
 
 |       |                                                      |                                                                                                                                 |
 | ----- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| **D** | `∀ i ≠ j. ¬(Tᵢ ⊆ Tⱼ) ∧ ¬(Tⱼ ⊆ Tᵢ)`                   | Readable: no stored attribute belongs to two options. Decidable from the held sets alone, hence checkable before anything runs. |
+| **D** | `∀ i ≠ j. ¬(Tᵢ ⊆ Tⱼ) ∧ ¬(Tⱼ ⊆ Tᵢ)`                   | Well-formedness: no option's held set subsumes another's. Decidable from the held sets alone. It does **not** discharge the readable side — see below.                    |
 | **K** | `∀ i ≠ j. κ(cᵢ) ∩ κ(cⱼ) = ∅ ∨ (ident(cᵢ) ∧ ident(cⱼ) ∧ adm(cᵢ) ∩ adm(cⱼ) = ∅)` | Writable: no value belongs to two options. Needs `κ`, which the held sets do not determine.                                     |
 
-**(D)** and **(K)** are the same requirement asked of the two sides of the pair, and neither implies
+**(D)** and **(K)** ask the same kind of question of the two sides of the pair, and neither implies
 the other. `union(array(string), array(number))` satisfies **(D)** — the held sets are incomparable —
 and violates **(K)**: both accept a sequence, and neither is `ident`.
 `union(set(string), set(number))` is the same story with a twist worth naming: its options write
@@ -527,9 +527,22 @@ latter being the tag-disjointness row of the discharger table, arrived at from t
 
 **(D)** as written is _incomparability_, not disjointness. Two object options `⟨a : String⟩` and
 `⟨b : String⟩` are incomparable yet share the inhabitant `⟨a ↦ "1", b ↦ "2"⟩` — so **(D)** admits
-them, and resolution falls to the name-set device above. Stating **(D)** as genuine disjointness
-would be sound and would reject unions that work. The gap between the two is exactly the set of
-unions resolved structurally rather than by type — and **(U)** is what fills it.
+them, and resolution falls to the name-set device above. The gap between the two is exactly the set
+of unions resolved structurally rather than by type — and **(U)** is what fills it.
+
+An earlier version of this section went on to claim that stating **(D)** as genuine _disjointness_
+would be sound. It would not, and the reason is worth keeping, because it is the same confusion
+twice: **held sets are sets of values, and (U)'s readable side quantifies over attributes.** `held`
+is precisely the term that separates the two — its adapter relabels — so two options can hold
+disjoint sets of values and still read one attribute, each to its own value.
+`union(literal("A"), held(literal("A"), f, g))` with `f` and `g` swapping `"B"` for `"A"` holds
+`{"A"}` and `{"B"}`, which are disjoint on the nose, and both options read `S "A"` — the first to
+`"A"`, the second to `"B"`. Machine-checked as `not_uAtCan_literal_held`.
+
+So **(D)** is a well-formedness condition on the judgement's `T` index and not a discharger of
+**(U)**: no condition on held sets can be one. What decides the readable side is a condition on
+_stored attributes_ — distinct members `μᵢ ≠ μⱼ`, or disjoint `adm` — which is what the mechanized
+discharger takes.
 
 ### Theorem (soundness)
 
