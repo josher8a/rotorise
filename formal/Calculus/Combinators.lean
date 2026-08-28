@@ -829,15 +829,15 @@ theorem lawful_literalNCodec (ls : List Double) : Lawful (literalNCodec ls) := b
     subst_vars
     exact .n ..
 
-/-- `held` preserves the laws: the iso cancels on both paths. The cancellation is
+/-- `held` keeps the core laws: the iso cancels on both paths. The cancellation is
     asked only on the carriers — `g ∘ f = id` where `f` lands writable, `f ∘ g = id`
     on the writable values themselves — which is the doc's `T ≃ I`, not an iso of all
     of `Value`. -/
-theorem Lawful.through {c : Codec} (h : Lawful c) {f g : Value → Value}
+theorem LawfulCore.through {c : Codec} (h : LawfulCore c) {f g : Value → Value}
     (hgf : ∀ v, (c.e (f v)).isSome → g (f v) = v)
     (hfg : ∀ v, (c.e v).isSome → f (g v) = v) :
-    Lawful (c.through f g) := by
-  refine ⟨?_, ?_, ?_, ?_⟩
+    LawfulCore (c.through f g) := by
+  refine ⟨?_, ?_, ?_⟩
   · intro t a he
     replace he : c.e (f t) = some a := he
     show (c.p a).map g = some t
@@ -857,21 +857,29 @@ theorem Lawful.through {c : Codec} (h : Lawful c) {f g : Value → Value}
       exact h.canon hpc
   · intro μ hμ t a he
     exact h.writes hμ he
-  · intro a t a' hp he
-    simp only [Codec.through] at hp he
-    cases hpc : c.p a with
-    | none => rw [hpc] at hp; simp at hp
-    | some v =>
-      rw [hpc] at hp
-      simp at hp
-      subst hp
-      rw [hfg v (h.canon hpc)] at he
-      exact h.agree hpc he
+
+/-- `held` preserves the full laws: the core lemma, plus `≼` through the iso. -/
+theorem Lawful.through {c : Codec} (h : Lawful c) {f g : Value → Value}
+    (hgf : ∀ v, (c.e (f v)).isSome → g (f v) = v)
+    (hfg : ∀ v, (c.e v).isSome → f (g v) = v) :
+    Lawful (c.through f g) := by
+  have core := LawfulCore.through h.core hgf hfg
+  refine ⟨core.retract, core.canon, core.writes, ?_⟩
+  intro a t a' hp he
+  simp only [Codec.through] at hp he
+  cases hpc : c.p a with
+  | none => rw [hpc] at hp; simp at hp
+  | some v =>
+    rw [hpc] at hp
+    simp at hp
+    subst hp
+    rw [hfg v (h.canon hpc)] at he
+    exact h.agree hpc he
 
 /-- `refine` preserves the laws: everything restricts. -/
-theorem Lawful.restrict {c : Codec} (h : Lawful c) (q : Value → Bool) :
-    Lawful (c.restrict q) := by
-  refine ⟨?_, ?_, ?_, ?_⟩
+theorem LawfulCore.restrict {c : Codec} (h : LawfulCore c) (q : Value → Bool) :
+    LawfulCore (c.restrict q) := by
+  refine ⟨?_, ?_, ?_⟩
   · intro t a he
     simp only [Codec.restrict] at he ⊢
     split at he
@@ -896,19 +904,24 @@ theorem Lawful.restrict {c : Codec} (h : Lawful c) (q : Value → Bool) :
     split at he
     · exact h.writes hμ he
     · exact nomatch he
-  · intro a t a' hp he
-    simp only [Codec.restrict] at hp he
-    cases hpc : c.p a with
-    | none => rw [hpc] at hp; simp at hp
-    | some v =>
-      rw [hpc] at hp
-      replace hp : (if q v then some v else none) = some t := hp
-      split at hp
-      · cases hp
-        rename_i hq
-        rw [if_pos hq] at he
-        exact h.agree hpc he
-      · exact nomatch hp
+
+theorem Lawful.restrict {c : Codec} (h : Lawful c) (q : Value → Bool) :
+    Lawful (c.restrict q) := by
+  have core := LawfulCore.restrict h.core q
+  refine ⟨core.retract, core.canon, core.writes, ?_⟩
+  intro a t a' hp he
+  simp only [Codec.restrict] at hp he
+  cases hpc : c.p a with
+  | none => rw [hpc] at hp; simp at hp
+  | some v =>
+    rw [hpc] at hp
+    replace hp : (if q v then some v else none) = some t := hp
+    split at hp
+    · cases hp
+      rename_i hq
+      rw [if_pos hq] at he
+      exact h.agree hpc he
+    · exact nomatch hp
 
 /-- `legacy` keeps the core laws. `ran(r) ⊆ dom(e)` is (C)'s premise; (MP) is the
     sanctioned breach and has no lemma here, by design. -/
@@ -932,13 +945,13 @@ theorem LawfulCore.extendRead {c : Codec} (h : LawfulCore c) {r : Attr → Optio
   · intro μ hμ t a he
     exact h.writes hμ he
 
-/-- `nullable` preserves the laws under null-honesty. Structurally this is the sum
+/-- `nullable` keeps the core laws under null-honesty. Structurally this is the sum
     `alt [c, null-point]`; the honesty premises are its (U), specialised. -/
-theorem Lawful.orNull {c : Codec} (h : Lawful c)
+theorem LawfulCore.orNull {c : Codec} (h : LawfulCore c)
     (hw : ∀ v a, c.e v = some a → a = .null → v = .null)
     (hr : ∀ a v, c.p a = some v → v = .null → a = .null) :
-    Lawful c.orNull := by
-  refine ⟨?_, ?_, ?_, ?_⟩
+    LawfulCore c.orNull := by
+  refine ⟨?_, ?_, ?_⟩
   · intro t a he
     cases t <;>
       first
@@ -957,18 +970,28 @@ theorem Lawful.orNull {c : Codec} (h : Lawful c)
               | exact h.canon hp)
   · intro μ hμ t a he
     exact nomatch hμ
-  · intro a t a' hp he
-    cases a <;>
-      first
-        | (cases hp; cases he; exact .null)
-        | (cases t <;>
-            first
-              | exact nomatch (hr _ _ hp rfl)
-              | exact h.agree hp he)
 
-/-- `array`: the toolkit, verbatim. -/
-theorem lawful_arrayCodec {c : Codec} (h : Lawful c) : Lawful (arrayCodec c) := by
-  refine ⟨?_, ?_, ?_, ?_⟩
+/-- `nullable` preserves the full laws: the core lemma, plus `≼` — read-honesty is
+    what keeps a non-`NULL` attribute from re-encoding as `⟨NULL, ∗⟩`. -/
+theorem Lawful.orNull {c : Codec} (h : Lawful c)
+    (hw : ∀ v a, c.e v = some a → a = .null → v = .null)
+    (hr : ∀ a v, c.p a = some v → v = .null → a = .null) :
+    Lawful c.orNull := by
+  have core := LawfulCore.orNull h.core hw hr
+  refine ⟨core.retract, core.canon, core.writes, ?_⟩
+  intro a t a' hp he
+  cases a <;>
+    first
+      | (cases hp; cases he; exact .null)
+      | (cases t <;>
+          first
+            | exact nomatch (hr _ _ hp rfl)
+            | exact h.agree hp he)
+
+/-- `array` keeps the core laws: the toolkit, verbatim. -/
+theorem lawfulCore_arrayCodec {c : Codec} (h : LawfulCore c) :
+    LawfulCore (arrayCodec c) := by
+  refine ⟨?_, ?_, ?_⟩
   · intro t a he
     cases t
     case arr vs =>
@@ -1013,30 +1036,36 @@ theorem lawful_arrayCodec {c : Codec} (h : Lawful c) : Lawful (arrayCodec c) := 
         cases he
         rfl
     all_goals exact nomatch he
-  · intro a t a' hp he
-    cases a
-    case l as =>
-      replace hp : (traverse c.p as).map Value.arr = some t := hp
-      cases has : traverse c.p as with
-      | none => rw [has] at hp; exact nomatch hp
-      | some vs =>
-        rw [has] at hp
-        replace hp : some (Value.arr vs) = some t := hp
-        cases hp
-        replace he : (traverse c.e vs).map Attr.l = some a' := he
-        cases hvs : traverse c.e vs with
-        | none => rw [hvs] at he; exact nomatch he
-        | some as' =>
-          rw [hvs] at he
-          replace he : some (Attr.l as') = some a' := he
-          cases he
-          exact .l as' as
-            (traverse_rel (R := Agree) (fun _ _ _ hg hf => h.agree hg hf)
-              as vs as' has hvs)
-    all_goals exact nomatch hp
 
-/-- `record`: the toolkit over the keyed steps. -/
-theorem lawful_recordCodec {c : Codec} (h : Lawful c) : Lawful (recordCodec c) := by
+/-- `array` preserves the full laws: the core lemma, plus `≼` pointwise. -/
+theorem lawful_arrayCodec {c : Codec} (h : Lawful c) : Lawful (arrayCodec c) := by
+  have core := lawfulCore_arrayCodec h.core
+  refine ⟨core.retract, core.canon, core.writes, ?_⟩
+  intro a t a' hp he
+  cases a
+  case l as =>
+    replace hp : (traverse c.p as).map Value.arr = some t := hp
+    cases has : traverse c.p as with
+    | none => rw [has] at hp; exact nomatch hp
+    | some vs =>
+      rw [has] at hp
+      replace hp : some (Value.arr vs) = some t := hp
+      cases hp
+      replace he : (traverse c.e vs).map Attr.l = some a' := he
+      cases hvs : traverse c.e vs with
+      | none => rw [hvs] at he; exact nomatch he
+      | some as' =>
+        rw [hvs] at he
+        replace he : some (Attr.l as') = some a' := he
+        cases he
+        exact .l as' as
+          (traverse_rel (R := Agree) (fun _ _ _ hg hf => h.agree hg hf)
+            as vs as' has hvs)
+  all_goals exact nomatch hp
+
+/-- `record` keeps the core laws: the toolkit over the keyed steps. -/
+theorem lawfulCore_recordCodec {c : Codec} (h : LawfulCore c) :
+    LawfulCore (recordCodec c) := by
   have hrt : ∀ kv ka, encPair c kv = some ka → decPair c ka = some kv := by
     intro ⟨k, v⟩ ka hkv
     simp only [encPair] at hkv
@@ -1062,25 +1091,7 @@ theorem lawful_recordCodec {c : Codec} (h : Lawful c) : Lawful (recordCodec c) :
       obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp (h.canon hpa)
       rw [ha']
       rfl
-  have hag : ∀ ka kv ka', decPair c ka = some kv → encPair c kv = some ka' →
-      ka'.1 = ka.1 ∧ Agree ka'.2 ka.2 := by
-    intro ⟨k, a⟩ kv ka' hka hkv
-    simp only [decPair] at hka
-    cases hpa : c.p a with
-    | none => rw [hpa] at hka; exact nomatch hka
-    | some v₀ =>
-      rw [hpa] at hka
-      replace hka : some (k, v₀) = some kv := hka
-      cases hka
-      simp only [encPair] at hkv
-      cases hev : c.e v₀ with
-      | none => rw [hev] at hkv; exact nomatch hkv
-      | some a₀ =>
-        rw [hev] at hkv
-        replace hkv : some (k, a₀) = some ka' := hkv
-        cases hkv
-        exact ⟨rfl, h.agree hpa hev⟩
-  refine ⟨?_, ?_, ?_, ?_⟩
+  refine ⟨?_, ?_, ?_⟩
   · intro t a he
     cases t
     case map kvs =>
@@ -1125,29 +1136,52 @@ theorem lawful_recordCodec {c : Codec} (h : Lawful c) : Lawful (recordCodec c) :
         cases he
         rfl
     all_goals exact nomatch he
-  · intro a t a' hp he
-    cases a
-    case m ds =>
-      replace hp : (traverse (decPair c) ds).map Value.map = some t := hp
-      cases hds : traverse (decPair c) ds with
-      | none => rw [hds] at hp; exact nomatch hp
-      | some kvs =>
-        rw [hds] at hp
-        replace hp : some (Value.map kvs) = some t := hp
-        cases hp
-        replace he : (traverse (encPair c) kvs).map Attr.m = some a' := he
-        cases hkvs : traverse (encPair c) kvs with
-        | none => rw [hkvs] at he; exact nomatch he
-        | some ds' =>
-          rw [hkvs] at he
-          replace he : some (Attr.m ds') = some a' := he
-          cases he
-          refine .m ds' ds ?_
-          have hzip := traverse_rel hag ds kvs ds' hds hkvs
-          have hlen : ds'.length = ds.length := by
-            rw [← traverse_length kvs ds' hkvs, traverse_length ds kvs hds]
-          exact lookup_rel ds' ds hlen (fun q hq => hzip q hq)
-    all_goals exact nomatch hp
+
+/-- `record` preserves the full laws: the core lemma, plus the keyed `≼` clause. -/
+theorem lawful_recordCodec {c : Codec} (h : Lawful c) : Lawful (recordCodec c) := by
+  have hag : ∀ ka kv ka', decPair c ka = some kv → encPair c kv = some ka' →
+      ka'.1 = ka.1 ∧ Agree ka'.2 ka.2 := by
+    intro ⟨k, a⟩ kv ka' hka hkv
+    simp only [decPair] at hka
+    cases hpa : c.p a with
+    | none => rw [hpa] at hka; exact nomatch hka
+    | some v₀ =>
+      rw [hpa] at hka
+      replace hka : some (k, v₀) = some kv := hka
+      cases hka
+      simp only [encPair] at hkv
+      cases hev : c.e v₀ with
+      | none => rw [hev] at hkv; exact nomatch hkv
+      | some a₀ =>
+        rw [hev] at hkv
+        replace hkv : some (k, a₀) = some ka' := hkv
+        cases hkv
+        exact ⟨rfl, h.agree hpa hev⟩
+  have core := lawfulCore_recordCodec h.core
+  refine ⟨core.retract, core.canon, core.writes, ?_⟩
+  intro a t a' hp he
+  cases a
+  case m ds =>
+    replace hp : (traverse (decPair c) ds).map Value.map = some t := hp
+    cases hds : traverse (decPair c) ds with
+    | none => rw [hds] at hp; exact nomatch hp
+    | some kvs =>
+      rw [hds] at hp
+      replace hp : some (Value.map kvs) = some t := hp
+      cases hp
+      replace he : (traverse (encPair c) kvs).map Attr.m = some a' := he
+      cases hkvs : traverse (encPair c) kvs with
+      | none => rw [hkvs] at he; exact nomatch he
+      | some ds' =>
+        rw [hkvs] at he
+        replace he : some (Attr.m ds') = some a' := he
+        cases he
+        refine .m ds' ds ?_
+        have hzip := traverse_rel hag ds kvs ds' hds hkvs
+        have hlen : ds'.length = ds.length := by
+          rw [← traverse_length kvs ds' hkvs, traverse_length ds kvs hds]
+        exact lookup_rel ds' ds hlen (fun q hq => hzip q hq)
+  all_goals exact nomatch hp
 
 /-! ## Lawfulness — the open frontier (README roadmap) -/
 
@@ -2870,54 +2904,64 @@ private theorem lawful_objectCore
                     (fun q hq => hzip q hq) k x y h₁k hflt
     all_goals exact nomatch hp
 
+/-- A property of the rest policy's codec, from one per `rest = .codec c`. -/
+theorem rcOf_forall {P : Codec → Prop} {rest : RestSem}
+    (h : ∀ c, rest = .codec c → P c) : ∀ c ∈ rcOf rest, P c := by
+  intro c hc
+  cases rest with
+  | codec c' =>
+    replace hc : some c' = some c := hc
+    cases hc
+    exact h c rfl
+  | drop => exact nomatch hc
+  | refuse => exact nomatch hc
+
+/-- What object-encode produces, `keepB` keeps: under `drop` an encoded entry's name
+    is declared, and the other policies keep everything. -/
+theorem keepB_of_encEntry {sems : List (Name × FieldSem)} {rest : RestSem} :
+    ∀ kv ka, encEntry (fun k => sems.lookup k) ((rcOf rest).map (·.e)) kv = some ka →
+      keepB rest sems ka.1 = true := by
+  intro kv ka h
+  cases rest with
+  | drop =>
+    simp only [encEntry] at h
+    cases hsp : sems.lookup kv.1 with
+    | none =>
+      rw [hsp] at h
+      exact nomatch h
+    | some fs =>
+      rw [hsp] at h
+      replace h : (fs.codec.e kv.2).map ((kv.1, ·)) = some ka := h
+      cases hev : fs.codec.e kv.2 with
+      | none => rw [hev] at h; exact nomatch h
+      | some a₀ =>
+        rw [hev] at h
+        replace h : some (kv.1, a₀) = some ka := h
+        cases h
+        show (sems.lookup kv.1).isSome = true
+        rw [hsp]
+        rfl
+  | refuse => rfl
+  | codec rc => rfl
+
+/-- Declared names pass every keep filter. -/
+theorem keepB_of_declared {sems : List (Name × FieldSem)} {rest : RestSem} :
+    ∀ k, (sems.lookup k).isSome = true → keepB rest sems k = true := by
+  intro k h
+  cases rest with
+  | drop => exact h
+  | refuse => rfl
+  | codec rc => rfl
+
 /-- The keyed product — the doc's `object`. `hfb` is §4's `v(∗) ∈ dom(e)`. -/
 theorem lawful_objectCodec {sems : List (Name × FieldSem)} {rest : RestSem}
     (hf : ∀ kf ∈ sems, Lawful kf.2.codec)
     (hfb : ∀ kf ∈ sems, ∀ c v, kf.2 = .fb c v → (c.e v).isSome)
     (hnd : (sems.map (·.1)).Nodup)
     (hrest : ∀ c, rest = .codec c → Lawful c) :
-    Lawful (objectCodec sems rest) := by
-  have hrc : ∀ c ∈ rcOf rest, Lawful c := by
-    intro c hc
-    cases rest with
-    | codec c' =>
-      replace hc : some c' = some c := hc
-      cases hc
-      exact hrest c rfl
-    | drop => exact nomatch hc
-    | refuse => exact nomatch hc
-  have hknE : ∀ kv ka,
-      encEntry (fun k => sems.lookup k) ((rcOf rest).map (·.e)) kv = some ka →
-      keepB rest sems ka.1 = true := by
-    intro kv ka h
-    cases rest with
-    | drop =>
-      simp only [encEntry] at h
-      cases hsp : sems.lookup kv.1 with
-      | none =>
-        rw [hsp] at h
-        exact nomatch h
-      | some fs =>
-        rw [hsp] at h
-        replace h : (fs.codec.e kv.2).map ((kv.1, ·)) = some ka := h
-        cases hev : fs.codec.e kv.2 with
-        | none => rw [hev] at h; exact nomatch h
-        | some a₀ =>
-          rw [hev] at h
-          replace h : some (kv.1, a₀) = some ka := h
-          cases h
-          show (sems.lookup kv.1).isSome = true
-          rw [hsp]
-          rfl
-    | refuse => rfl
-    | codec rc => rfl
-  have hknDecl : ∀ k, (sems.lookup k).isSome = true → keepB rest sems k = true := by
-    intro k h
-    cases rest with
-    | drop => exact h
-    | refuse => rfl
-    | codec rc => rfl
-  exact lawful_objectCore sems (rcOf rest) (keepB rest sems) hf hfb hnd hrc hknE hknDecl
+    Lawful (objectCodec sems rest) :=
+  lawful_objectCore sems (rcOf rest) (keepB rest sems) hf hfb hnd
+    (rcOf_forall hrest) keepB_of_encEntry keepB_of_declared
 
 /-- The sum, from (U): both directions route through the same option. -/
 theorem lawfulCore_altCodec {os : List OptionSem} {μA : Option Member}
@@ -3301,205 +3345,12 @@ theorem lawful_opaqCodec : ∀ (fuel : Nat) (lossy : Bool), Lawful (opaqCodec fu
                 binaryCodec, nullCodec, setCodec, arrayCodec, hnev, hetotal]
         all_goals exact nomatch he
       · exact absurd hmem (by simp)
-/-! ## Core variants: (R), (C), (W) through `legacy`-containing subterms -/
 
-theorem LawfulCore.through {c : Codec} (h : LawfulCore c) {f g : Value → Value}
-    (hgf : ∀ v, (c.e (f v)).isSome → g (f v) = v)
-    (hfg : ∀ v, (c.e v).isSome → f (g v) = v) :
-    LawfulCore (c.through f g) := by
-  refine ⟨?_, ?_, ?_⟩
-  · intro t a he
-    replace he : c.e (f t) = some a := he
-    show (c.p a).map g = some t
-    rw [h.retract he]
-    show some (g (f t)) = some t
-    rw [hgf t (by rw [he]; rfl)]
-  · intro a t hp
-    simp only [Codec.through] at hp
-    cases hpc : c.p a with
-    | none => rw [hpc] at hp; simp at hp
-    | some v =>
-      rw [hpc] at hp
-      simp at hp
-      subst hp
-      show (c.e (f (g v))).isSome
-      rw [hfg v (h.canon hpc)]
-      exact h.canon hpc
-  · intro μ hμ t a he
-    exact h.writes hμ he
+/-! ## Core variants: (R), (C), (W) through `legacy`-containing subterms
 
-theorem LawfulCore.restrict {c : Codec} (h : LawfulCore c) (q : Value → Bool) :
-    LawfulCore (c.restrict q) := by
-  refine ⟨?_, ?_, ?_⟩
-  · intro t a he
-    simp only [Codec.restrict] at he ⊢
-    split at he
-    · rw [h.retract he]
-      simp [*]
-    · exact nomatch he
-  · intro a t hp
-    simp only [Codec.restrict] at hp ⊢
-    cases hpc : c.p a with
-    | none => rw [hpc] at hp; simp at hp
-    | some v =>
-      rw [hpc] at hp
-      replace hp : (if q v then some v else none) = some t := hp
-      split at hp
-      · cases hp
-        rename_i hq
-        rw [if_pos hq]
-        exact h.canon hpc
-      · exact nomatch hp
-  · intro μ hμ t a he
-    simp only [Codec.restrict] at he
-    split at he
-    · exact h.writes hμ he
-    · exact nomatch he
-
-theorem LawfulCore.orNull {c : Codec} (h : LawfulCore c)
-    (hw : ∀ v a, c.e v = some a → a = .null → v = .null)
-    (hr : ∀ a v, c.p a = some v → v = .null → a = .null) :
-    LawfulCore c.orNull := by
-  refine ⟨?_, ?_, ?_⟩
-  · intro t a he
-    cases t <;>
-      first
-        | (cases he; rfl)
-        | (cases a <;>
-            first
-              | exact h.retract he
-              | exact nomatch (hw _ _ he rfl))
-  · intro a t hp
-    cases a <;>
-      first
-        | (cases hp; rfl)
-        | (cases t <;>
-            first
-              | exact nomatch (hr _ _ hp rfl)
-              | exact h.canon hp)
-  · intro μ hμ t a he
-    exact nomatch hμ
-
-theorem lawfulCore_arrayCodec {c : Codec} (h : LawfulCore c) :
-    LawfulCore (arrayCodec c) := by
-  refine ⟨?_, ?_, ?_⟩
-  · intro t a he
-    cases t
-    case arr vs =>
-      replace he : (traverse c.e vs).map Attr.l = some a := he
-      cases hvs : traverse c.e vs with
-      | none => rw [hvs] at he; exact nomatch he
-      | some as =>
-        rw [hvs] at he
-        replace he : some (Attr.l as) = some a := he
-        cases he
-        show (traverse c.p as).map Value.arr = some (.arr vs)
-        rw [traverse_roundTrip (fun _ _ hxy => h.retract hxy) vs as hvs]
-        rfl
-    all_goals exact nomatch he
-  · intro a t hp
-    cases a
-    case l as =>
-      replace hp : (traverse c.p as).map Value.arr = some t := hp
-      cases has : traverse c.p as with
-      | none => rw [has] at hp; exact nomatch hp
-      | some vs =>
-        rw [has] at hp
-        replace hp : some (Value.arr vs) = some t := hp
-        cases hp
-        show ((traverse c.e vs).map Attr.l).isSome
-        obtain ⟨as', has'⟩ := Option.isSome_iff_exists.mp
-          (traverse_isSome (fun _ _ hyx => h.canon hyx) as vs has)
-        rw [has']
-        rfl
-    all_goals exact nomatch hp
-  · intro μ hμ t a he
-    replace hμ : some Member.L = some μ := hμ
-    cases hμ
-    cases t
-    case arr vs =>
-      replace he : (traverse c.e vs).map Attr.l = some a := he
-      cases hvs : traverse c.e vs with
-      | none => rw [hvs] at he; exact nomatch he
-      | some as =>
-        rw [hvs] at he
-        replace he : some (Attr.l as) = some a := he
-        cases he
-        rfl
-    all_goals exact nomatch he
-
-theorem lawfulCore_recordCodec {c : Codec} (h : LawfulCore c) :
-    LawfulCore (recordCodec c) := by
-  have hrt : ∀ kv ka, encPair c kv = some ka → decPair c ka = some kv := by
-    intro ⟨k, v⟩ ka hkv
-    simp only [encPair] at hkv
-    cases hev : c.e v with
-    | none => rw [hev] at hkv; exact nomatch hkv
-    | some a₀ =>
-      rw [hev] at hkv
-      replace hkv : some (k, a₀) = some ka := hkv
-      cases hkv
-      show (c.p a₀).map _ = _
-      rw [h.retract hev]
-      rfl
-  have hcn : ∀ ka kv, decPair c ka = some kv → (encPair c kv).isSome := by
-    intro ⟨k, a⟩ kv hka
-    simp only [decPair] at hka
-    cases hpa : c.p a with
-    | none => rw [hpa] at hka; exact nomatch hka
-    | some v₀ =>
-      rw [hpa] at hka
-      replace hka : some (k, v₀) = some kv := hka
-      cases hka
-      show ((c.e v₀).map _).isSome
-      obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp (h.canon hpa)
-      rw [ha']
-      rfl
-  refine ⟨?_, ?_, ?_⟩
-  · intro t a he
-    cases t
-    case map kvs =>
-      replace he : (traverse (encPair c) kvs).map Attr.m = some a := he
-      cases hkvs : traverse (encPair c) kvs with
-      | none => rw [hkvs] at he; exact nomatch he
-      | some ds =>
-        rw [hkvs] at he
-        replace he : some (Attr.m ds) = some a := he
-        cases he
-        show (traverse (decPair c) ds).map Value.map = some (.map kvs)
-        rw [traverse_roundTrip hrt kvs ds hkvs]
-        rfl
-    all_goals exact nomatch he
-  · intro a t hp
-    cases a
-    case m ds =>
-      replace hp : (traverse (decPair c) ds).map Value.map = some t := hp
-      cases hds : traverse (decPair c) ds with
-      | none => rw [hds] at hp; exact nomatch hp
-      | some kvs =>
-        rw [hds] at hp
-        replace hp : some (Value.map kvs) = some t := hp
-        cases hp
-        show ((traverse (encPair c) kvs).map Attr.m).isSome
-        obtain ⟨ds', hds'⟩ := Option.isSome_iff_exists.mp
-          (traverse_isSome hcn ds kvs hds)
-        rw [hds']
-        rfl
-    all_goals exact nomatch hp
-  · intro μ hμ t a he
-    replace hμ : some Member.M = some μ := hμ
-    cases hμ
-    cases t
-    case map kvs =>
-      replace he : (traverse (encPair c) kvs).map Attr.m = some a := he
-      cases hkvs : traverse (encPair c) kvs with
-      | none => rw [hkvs] at he; exact nomatch he
-      | some ds =>
-        rw [hkvs] at he
-        replace he : some (Attr.m ds) = some a := he
-        cases he
-        rfl
-    all_goals exact nomatch he
+The wrappers' and uniform products' core lemmas live beside their full counterparts
+above; what remains here are the composites whose core statements need their own
+scaffolding. -/
 
 /-- Canon-only cousin of `alignTraverse_master` — no member agreement demanded. -/
 theorem alignTraverse_canon :
@@ -3977,48 +3828,9 @@ theorem lawfulCore_objectCodec {sems : List (Name × FieldSem)} {rest : RestSem}
     (hfb : ∀ kf ∈ sems, ∀ c v, kf.2 = .fb c v → (c.e v).isSome)
     (hnd : (sems.map (·.1)).Nodup)
     (hrest : ∀ c, rest = .codec c → LawfulCore c) :
-    LawfulCore (objectCodec sems rest) := by
-  have hrc : ∀ c ∈ rcOf rest, LawfulCore c := by
-    intro c hc
-    cases rest with
-    | codec c' =>
-      replace hc : some c' = some c := hc
-      cases hc
-      exact hrest c rfl
-    | drop => exact nomatch hc
-    | refuse => exact nomatch hc
-  have hknE : ∀ kv ka,
-      encEntry (fun k => sems.lookup k) ((rcOf rest).map (·.e)) kv = some ka →
-      keepB rest sems ka.1 = true := by
-    intro kv ka h
-    cases rest with
-    | drop =>
-      simp only [encEntry] at h
-      cases hsp : sems.lookup kv.1 with
-      | none =>
-        rw [hsp] at h
-        exact nomatch h
-      | some fs =>
-        rw [hsp] at h
-        replace h : (fs.codec.e kv.2).map ((kv.1, ·)) = some ka := h
-        cases hev : fs.codec.e kv.2 with
-        | none => rw [hev] at h; exact nomatch h
-        | some a₀ =>
-          rw [hev] at h
-          replace h : some (kv.1, a₀) = some ka := h
-          cases h
-          show (sems.lookup kv.1).isSome = true
-          rw [hsp]
-          rfl
-    | refuse => rfl
-    | codec rc => rfl
-  have hknDecl : ∀ k, (sems.lookup k).isSome = true → keepB rest sems k = true := by
-    intro k h
-    cases rest with
-    | drop => exact h
-    | refuse => rfl
-    | codec rc => rfl
-  exact lawfulCore_objectCore sems (rcOf rest) (keepB rest sems) hf hfb hnd hrc hknE hknDecl
+    LawfulCore (objectCodec sems rest) :=
+  lawfulCore_objectCore sems (rcOf rest) (keepB rest sems) hf hfb hnd
+    (rcOf_forall hrest) keepB_of_encEntry keepB_of_declared
 
 /-- Core `(dunion)`: the same corollary, with core options. -/
 theorem lawfulCore_dunionCodec {d : Name} {os : List (List String × Codec)}
