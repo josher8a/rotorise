@@ -15,6 +15,7 @@ definition it touches.
 | `Calculus/Denote.lean`      | —           | `denote : Nat → Term → Codec`, pure dispatch into the combinators                                                                                                                                                                                                     |
 | `Calculus/Typing.lean`      | §3–§5       | The judgement `⊢ c : T ⇝ μ`, both indices, with the held-set formers (`HSet`, `HStar`, `HProd`, `HMap`, `HNull`, `HObject`, `HUnion`, `HOpaque`); syntactic premises only                                                                                             |
 | `Calculus/Soundness.lean`   | §5          | `Obligations` (semantic premises, fueled), `UAtCan := UniqueAdmission ∘ semsOf`, `MPOk` (legacy exemption), theorem statements, and the held-set bridge `carrier_denote`/`typed_TSub`/`typed_e_mem`/`typed_p_mem`                                                    |
+| `Calculus/Equations.lean`   | §6          | `Codec.Equiv` (§6's `≡`), `nullable`'s idempotence and `union`'s commutativity — the two rows other sections rely on                                                                                                                                                    |
 | `Calculus/Discharge.lean`   | §5          | The machinery of (K): `Kind`, `κ`, `ident`, `adm`/`admA` as structural recursions, `κ_sound`/`adm_sound`/`admA_sound`, and `uAtCan_of_separated` — the dischargers of (U), proved, with witnesses and the two counterexamples that repaired (K)                       |
 
 **The mechanization is complete: the project builds with zero `sorry`.** Both halves
@@ -73,10 +74,10 @@ and the judgement to it), and `lazy` concludes `⊤` in the model exactly as the
 ## What remains (sharpenings, not gaps)
 
 The theorem is proved; these tighten the model's fidelity to the doc, none affect
-soundness: mechanizing §6's equations, of which none are yet formalized — `≡` itself
-("the same `T`, the same `μ`, and `e` and `p` agreeing everywhere both are defined") has
-no Lean definition, and two rows are cited elsewhere as load-bearing (`nullable`'s
-idempotence in §3, `union`'s commutativity in §5); widening `admA` past `literalS`/`dunion` (a numeric literal's read side
+soundness: the remaining eighteen rows of §6 (`≡` is defined and the two rows other
+sections rely on — `nullable`'s idempotence, `union`'s commutativity — are proved;
+`union`'s commutativity is proved for the adjacent transposition, which generates every
+permutation, and lifting it to `List.Perm` is the obvious next step); widening `admA` past `literalS`/`dunion` (a numeric literal's read side
 goes through the axiomatized `Double.ofDec`, so no syntactic set bounds it, and those
 pairs still fall to (U) per input); a soundness lemma tying the judgement's `T` to the
 denotation (`e`'s domain and `p`'s range land in `T`), which the `T` index now makes
