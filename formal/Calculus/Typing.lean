@@ -15,7 +15,8 @@ Mechanization choices, and where they diverge from the doc (each is routine to s
   (Soundness.lean), consumed by the theorem. Same premises, fueled form.
 * Premises over lists are auxiliary judgements (`TypedList`, …): the kernel refuses
   recursive occurrences nested under `∃`/`∀ ∈` binders.
-* `(union)` concludes `⊤` here; the doc's unanimous-μ sharpening is a TODO.
+* `(union)` concludes the doc's unanimous μ, computed by `unanimous` from the option
+  judgements (`TypedListμ` keeps their members).
 * `held`'s iso is stated on all of `Value` — stronger than the doc's `T ≃ I`; TODO
   restrict to the carriers.
 -/
@@ -53,7 +54,7 @@ inductive Typed : Term → Option Member → Prop where
   | object {fields rest} (hf : TypedFields fields)
       (hnd : (fields.map (·.1)).Nodup) (hr : TypedRest rest) :
       Typed (.object fields rest) (some .M)
-  | union {opts} (h : TypedList opts) : Typed (.union opts) none
+  | union {opts μs} (h : TypedListμ opts μs) : Typed (.union opts) (unanimous μs)
   | dunion {d opts} (h : TypedListM opts)
       (htags : ∀ t' ∈ opts, tagsOf d t' ≠ [])
       (hdisj : List.Pairwise (fun a b => ∀ tag ∈ tagsOf d a, tag ∉ tagsOf d b) opts) :
@@ -62,6 +63,13 @@ inductive Typed : Term → Option Member → Prop where
 inductive TypedList : List Term → Prop where
   | nil : TypedList []
   | cons {t ts μ} (h : Typed t μ) (hs : TypedList ts) : TypedList (t :: ts)
+
+/-- The option judgements of a `(union)`, members kept: the rule's conclusion is
+    computed from them (`unanimous`), as in the doc. -/
+inductive TypedListμ : List Term → List (Option Member) → Prop where
+  | nil : TypedListμ [] []
+  | cons {t ts μ μs} (h : Typed t μ) (hs : TypedListμ ts μs) :
+      TypedListμ (t :: ts) (μ :: μs)
 
 inductive TypedListM : List Term → Prop where
   | nil : TypedListM []
