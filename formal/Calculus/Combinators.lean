@@ -829,15 +829,21 @@ theorem lawful_literalNCodec (ls : List Double) : Lawful (literalNCodec ls) := b
     subst_vars
     exact .n ..
 
-/-- `held` preserves the laws: the iso cancels on both paths. -/
+/-- `held` preserves the laws: the iso cancels on both paths. The cancellation is
+    asked only on the carriers — `g ∘ f = id` where `f` lands writable, `f ∘ g = id`
+    on the writable values themselves — which is the doc's `T ≃ I`, not an iso of all
+    of `Value`. -/
 theorem Lawful.through {c : Codec} (h : Lawful c) {f g : Value → Value}
-    (hgf : ∀ v, g (f v) = v) (hfg : ∀ v, f (g v) = v) :
+    (hgf : ∀ v, (c.e (f v)).isSome → g (f v) = v)
+    (hfg : ∀ v, (c.e v).isSome → f (g v) = v) :
     Lawful (c.through f g) := by
   refine ⟨?_, ?_, ?_, ?_⟩
   · intro t a he
+    replace he : c.e (f t) = some a := he
     show (c.p a).map g = some t
     rw [h.retract he]
-    simp [hgf]
+    show some (g (f t)) = some t
+    rw [hgf t (by rw [he]; rfl)]
   · intro a t hp
     simp only [Codec.through] at hp
     cases hpc : c.p a with
@@ -847,7 +853,7 @@ theorem Lawful.through {c : Codec} (h : Lawful c) {f g : Value → Value}
       simp at hp
       subst hp
       show (c.e (f (g v))).isSome
-      rw [hfg]
+      rw [hfg v (h.canon hpc)]
       exact h.canon hpc
   · intro μ hμ t a he
     exact h.writes hμ he
@@ -859,7 +865,7 @@ theorem Lawful.through {c : Codec} (h : Lawful c) {f g : Value → Value}
       rw [hpc] at hp
       simp at hp
       subst hp
-      rw [hfg] at he
+      rw [hfg v (h.canon hpc)] at he
       exact h.agree hpc he
 
 /-- `refine` preserves the laws: everything restricts. -/
@@ -3298,13 +3304,16 @@ theorem lawful_opaqCodec : ∀ (fuel : Nat) (lossy : Bool), Lawful (opaqCodec fu
 /-! ## Core variants: (R), (C), (W) through `legacy`-containing subterms -/
 
 theorem LawfulCore.through {c : Codec} (h : LawfulCore c) {f g : Value → Value}
-    (hgf : ∀ v, g (f v) = v) (hfg : ∀ v, f (g v) = v) :
+    (hgf : ∀ v, (c.e (f v)).isSome → g (f v) = v)
+    (hfg : ∀ v, (c.e v).isSome → f (g v) = v) :
     LawfulCore (c.through f g) := by
   refine ⟨?_, ?_, ?_⟩
   · intro t a he
+    replace he : c.e (f t) = some a := he
     show (c.p a).map g = some t
     rw [h.retract he]
-    simp [hgf]
+    show some (g (f t)) = some t
+    rw [hgf t (by rw [he]; rfl)]
   · intro a t hp
     simp only [Codec.through] at hp
     cases hpc : c.p a with
@@ -3314,7 +3323,7 @@ theorem LawfulCore.through {c : Codec} (h : LawfulCore c) {f g : Value → Value
       simp at hp
       subst hp
       show (c.e (f (g v))).isSome
-      rw [hfg]
+      rw [hfg v (h.canon hpc)]
       exact h.canon hpc
   · intro μ hμ t a he
     exact h.writes hμ he

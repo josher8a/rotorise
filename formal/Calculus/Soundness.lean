@@ -43,7 +43,12 @@ def Obligations : Nat → Term → Prop
     | .set t' | .array t' | .record t' | .refine t' _ => Obligations fuel t'
     | .tuple ts tail =>
       (∀ t' ∈ ts, Obligations fuel t') ∧ (∀ t' ∈ tail, Obligations fuel t')
-    | .held t' _ _ => Obligations fuel t'
+    | .held t' f g =>
+      Obligations fuel t' ∧
+      -- the iso cancels on the carriers (§3 (held), T ≃ I): g ∘ f = id where f lands
+      -- writable, f ∘ g = id on the writable values themselves
+      (∀ v, ((denote fuel t').e (f v)).isSome → g (f v) = v) ∧
+      (∀ v, ((denote fuel t').e v).isSome → f (g v) = v)
     | .legacy t' r =>
       Obligations fuel t' ∧
       -- ran(r) ⊆ dom(e): a migration lands on writable values
@@ -295,7 +300,7 @@ theorem typed_μSyn : ∀ {t μ}, Typed t μ → μSyn t = μ
   | _, _, .array _ => rfl
   | _, _, .tuple _ _ => rfl
   | _, _, .record _ => rfl
-  | _, _, .held h' _ _ => by have ih := typed_μSyn h'; exact ih
+  | _, _, .held h' => by have ih := typed_μSyn h'; exact ih
   | _, _, .refine h' => by have ih := typed_μSyn h'; exact ih
   | _, _, .legacy h' => by have ih := typed_μSyn h'; exact ih
   | _, _, .nullable _ => rfl
@@ -506,13 +511,15 @@ theorem soundness_both : ∀ (fuel : Nat) {t μ}, Typed t μ → Obligations fue
             replace hc : some (denote fuel t') = some c := hc
             cases hc
             exact (iht t' rfl).2 (hmp.2 t' rfl)
-    | @held t' μ' f g h' hgf hfg =>
+    | @held t' μ' f g h' =>
       simp only [denote]
-      replace hob : Obligations fuel t' := hob
-      have ih := soundness_both fuel h' hob
-      refine ⟨LawfulCore.through ih.1 hgf hfg, fun hmp => ?_⟩
+      replace hob : Obligations fuel t' ∧
+        (∀ v, ((denote fuel t').e (f v)).isSome → g (f v) = v) ∧
+        (∀ v, ((denote fuel t').e v).isSome → f (g v) = v) := hob
+      have ih := soundness_both fuel h' hob.1
+      refine ⟨LawfulCore.through ih.1 hob.2.1 hob.2.2, fun hmp => ?_⟩
       replace hmp : MPOk fuel t' := hmp
-      exact Lawful.through (ih.2 hmp) hgf hfg
+      exact Lawful.through (ih.2 hmp) hob.2.1 hob.2.2
     | @refine t' μ' q h' =>
       simp only [denote]
       replace hob : Obligations fuel t' := hob

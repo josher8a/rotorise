@@ -8,17 +8,18 @@ Mechanization choices, and where they diverge from the doc (each is routine to s
 * The held-set index `T` is elided: `Lawful` never reads it, and the denotation carries
   its own `T` for §5 (D). Reinstating the two-index form is mechanical.
 * `Typed` keeps only the *syntactic and fuel-free* premises (set member, literal
-  side conditions, `held`'s iso, `(dunion)` tag disjointness, object name distinctness).
-  The doc's *semantic* premises — `(legacy)`'s `ran(r) ⊆ dom(e)` and coherence,
-  `(nullable)`'s null-honesty, `(fallback)`'s `v(∗) ∈ dom(e)`, `(custom)`'s laws, and
-  `(union)`'s residual (U) — are fuel-indexed and live in `Obligations`
-  (Soundness.lean), consumed by the theorem. Same premises, fueled form.
+  side conditions, `(dunion)` tag disjointness, object name distinctness).
+  The doc's *semantic* premises — `(held)`'s carrier-restricted iso, `(legacy)`'s
+  `ran(r) ⊆ dom(e)` and coherence, `(nullable)`'s null-honesty, `(fallback)`'s
+  `v(∗) ∈ dom(e)`, `(custom)`'s laws, and `(union)`'s residual (U) — are fuel-indexed
+  and live in `Obligations` (Soundness.lean), consumed by the theorem. Same premises,
+  fueled form.
 * Premises over lists are auxiliary judgements (`TypedList`, …): the kernel refuses
   recursive occurrences nested under `∃`/`∀ ∈` binders.
 * `(union)` concludes the doc's unanimous μ, computed by `unanimous` from the option
   judgements (`TypedListμ` keeps their members).
-* `held`'s iso is stated on all of `Value` — stronger than the doc's `T ≃ I`; TODO
-  restrict to the carriers.
+* `held`'s iso premises are carrier-restricted (`T ≃ I`, not `Value ≃ Value`) and so
+  mention `e` — fuel-indexed, hence in `Obligations` with the other semantic premises.
 -/
 
 namespace Calculus
@@ -42,9 +43,7 @@ inductive Typed : Term → Option Member → Prop where
   | tuple {ts tail} (h : TypedList ts) (ht : TypedOpt tail) :
       Typed (.tuple ts tail) (some .L)
   | record {t μ} (h : Typed t μ) : Typed (.record t) (some .M)
-  | held {t μ f g} (h : Typed t μ)
-      (hgf : ∀ v, g (f v) = v) (hfg : ∀ v, f (g v) = v) :
-      Typed (.held t f g) μ
+  | held {t μ f g} (h : Typed t μ) : Typed (.held t f g) μ
   | refine {t μ q} (h : Typed t μ) : Typed (.refine t q) μ
   | legacy {t μ r} (h : Typed t μ) : Typed (.legacy t r) μ
   | nullable {t μ} (h : Typed t μ) : Typed (.nullable t) none
