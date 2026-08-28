@@ -137,6 +137,13 @@ theorem TypedList.forall : ∀ {ts}, TypedList ts → ∀ t ∈ ts, ∃ μ, Type
       · exact ⟨_, h⟩
       · exact TypedList.forall hs t ht'
 
+theorem TypedListμ.forall : ∀ {ts μs}, TypedListμ ts μs → ∀ t ∈ ts, ∃ μ, Typed t μ
+  | _, _, .nil, t, ht => absurd ht (by simp)
+  | _, _, .cons h hs, t, ht => by
+      rcases List.mem_cons.mp ht with rfl | ht'
+      · exact ⟨_, h⟩
+      · exact TypedListμ.forall hs t ht'
+
 theorem TypedListM.forall : ∀ {ts}, TypedListM ts → ∀ t ∈ ts, Typed t (some .M)
   | _, .nil, t, ht => absurd ht (by simp)
   | _, .cons h hs, t, ht => by
@@ -269,34 +276,45 @@ termination_by fuel opts => (fuel, opts.length + 1)
 
 end
 
-/-- Typing's `some`-side member agrees with the syntactic member. -/
-theorem typed_μSyn : ∀ {t μ'}, Typed t μ' → ∀ {μ}, μ' = some μ → μSyn t = some μ
-  | _, _, .string, _, heq => by cases heq; rfl
-  | _, _, .number, _, heq => by cases heq; rfl
-  | _, _, .decimal, _, heq => by cases heq; rfl
-  | _, _, .boolean, _, heq => by cases heq; rfl
-  | _, _, .binary, _, heq => by cases heq; rfl
-  | _, _, .numeric q, _, heq => by cases heq; rfl
-  | _, _, .literalS ls hne hnd, _, heq => by cases heq; rfl
-  | _, _, .literalN ls hne hnd, _, heq => by cases heq; rfl
-  | _, _, .set h' hs, _, heq => by
-      cases heq
+mutual
+
+/-- Typing's member index is the syntactic one — exactly, both sides. -/
+theorem typed_μSyn : ∀ {t μ}, Typed t μ → μSyn t = μ
+  | _, _, .string => rfl
+  | _, _, .number => rfl
+  | _, _, .decimal => rfl
+  | _, _, .boolean => rfl
+  | _, _, .binary => rfl
+  | _, _, .numeric _ => rfl
+  | _, _, .literalS _ _ _ => rfl
+  | _, _, .literalN _ _ _ => rfl
+  | _, _, .set h' hs => by
       show (μSyn _).bind setMember = _
-      rw [typed_μSyn h' rfl]
+      rw [typed_μSyn h']
       exact hs
-  | _, _, .array h', _, heq => by cases heq; rfl
-  | _, _, .tuple hl ho, _, heq => by cases heq; rfl
-  | _, _, .record h', _, heq => by cases heq; rfl
-  | _, _, .held h' hgf hfg, _, heq => typed_μSyn h' heq
-  | _, _, .refine h', _, heq => typed_μSyn h' heq
-  | _, _, .legacy h', _, heq => typed_μSyn h' heq
-  | _, _, .nullable h', _, heq => nomatch heq
-  | _, _, .lazy h', _, heq => nomatch heq
-  | _, _, .custom ce cp, _, heq => nomatch heq
-  | _, _, .opaq lossy, _, heq => nomatch heq
-  | _, _, .object hf hnd hr, _, heq => by cases heq; rfl
-  | _, _, .union hl, _, heq => nomatch heq
-  | _, _, .dunion hl htags hdisj, _, heq => by cases heq; rfl
+  | _, _, .array _ => rfl
+  | _, _, .tuple _ _ => rfl
+  | _, _, .record _ => rfl
+  | _, _, .held h' _ _ => by have ih := typed_μSyn h'; exact ih
+  | _, _, .refine h' => by have ih := typed_μSyn h'; exact ih
+  | _, _, .legacy h' => by have ih := typed_μSyn h'; exact ih
+  | _, _, .nullable _ => rfl
+  | _, _, .lazy _ => rfl
+  | _, _, .custom _ _ => rfl
+  | _, _, .opaq _ => rfl
+  | _, _, .object _ _ _ => rfl
+  | _, _, .union h => by
+      show unanimous (μSynList _) = unanimous _
+      rw [typedListμ_μSyn h]
+  | _, _, .dunion _ _ _ => rfl
+
+theorem typedListμ_μSyn : ∀ {ts μs}, TypedListμ ts μs → μSynList ts = μs
+  | _, _, .nil => rfl
+  | _, _, .cons h hs => by
+      show μSyn _ :: μSynList _ = _
+      rw [typed_μSyn h, typedListμ_μSyn hs]
+
+end
 
 /-! ## The `(dunion)` stamp -/
 
@@ -424,7 +442,7 @@ theorem soundness_both : ∀ (fuel : Nat) {t μ}, Typed t μ → Obligations fue
       constructor
       · refine lawfulCore_setCodec ih.1 ?_ hs
         rw [denote_μ]
-        exact typed_μSyn h' rfl
+        exact typed_μSyn h'
       · intro hmp
         replace hmp : MPOk fuel t' := hmp
         exact lawful_setCodec (ih.2 hmp)
@@ -611,13 +629,13 @@ theorem soundness_both : ∀ (fuel : Nat) {t μ}, Typed t μ → Obligations fue
           exact (ihf k f hmem).2 (hmp.1 (k, f) hmem)
         · intro c hcr
           exact (ihr c hcr).2 hmp
-    | @union opts hlist =>
+    | @union opts μs hlist =>
       simp only [denote]
       replace hob : (∀ t' ∈ opts, Obligations fuel t') ∧ UAtCan fuel opts := hob
       have ihs : ∀ t' ∈ opts,
           LawfulCore (denote fuel t') ∧ (MPOk fuel t' → Lawful (denote fuel t')) :=
         fun t' ht' => by
-          obtain ⟨μ', hμ'⟩ := TypedList.forall hlist t' ht'
+          obtain ⟨μ', hμ'⟩ := TypedListμ.forall hlist t' ht'
           exact soundness_both fuel hμ' (hob.1 t' ht')
       have hU : UniqueAdmission
           (opts.map fun t' => optionSemOf (denote fuel t') (specOf t')) := hob.2
