@@ -14,12 +14,14 @@ held-set form waits on the `T` index (README). Open object options are excluded,
 §5 demands: an undeclared name disqualifies the option even where its rest codec would
 hold it, so an open object never admits its own canonical pairs.
 
-`ident` is defined, per §5's table, but is deliberately *not* consumed as an exemption
-from κ-disjointness. §5 states (K) as `κ(cᵢ) ∩ κ(cⱼ) = ∅ ∨ ident(cᵢ) ∨ ident(cⱼ)` and
-calls it sufficient for (U); it is not, on either disjunct, and the two counterexamples
-at the foot of this file are machine-checked. A repaired exemption needs `ident` on
-*both* sides *and* disjoint admissible sets — which is what §5's own worked example,
-`union(literal("A"), literal("B"))`, actually has.
+The `ident` exemption is here in its repaired form. An earlier §5 stated (K) as
+`κ(cᵢ) ∩ κ(cⱼ) = ∅ ∨ ident(cᵢ) ∨ ident(cⱼ)` and called it sufficient for (U); it is
+not, on either disjunct, and the two counterexamples at the foot of this file are
+machine-checked. What carries the exemption is `adm` — the set an `ident` term checks
+against — disjoint on *both* sides, which is what §5's worked example,
+`union(literal("A"), literal("B"))`, actually has and what `uAtCan_literal_literal`
+now discharges. `uAtCan_of_separated` is the combined theorem; `uAtCan_of_disjoint`
+is its kind/member half.
 -/
 
 namespace Calculus
@@ -90,6 +92,67 @@ def identList : List Term → Bool
   | t :: ts => ident t && identList ts
 
 end
+
+/-! ## `adm` — the sets an `ident` term checks against
+
+    §5's third auxiliary. `ident` says a term decides its own membership; `adm` says
+    *against what*. Only two terms carry a real set — a `literal`'s values and a
+    `discriminatedUnion`'s tags — and `refine`/`legacy` pass one through. Everywhere
+    else `adm` is `true`: **no information**, which is what makes two such options
+    never separable this way.
+
+    In particular `adm` does *not* propagate through the containers, though `ident`
+    does. `adm(array(c))` would have to contain the empty array whatever `c` is, so
+    propagating it would claim a separation that is false — see
+    `not_uAtCan_array_literals` below. -/
+
+/-- The tags a `(dunion)`'s options answer to, pooled. Spelled out rather than a
+    `flatMap` so the membership lemma is one induction. -/
+def allTags (d : Name) : List Term → List String
+  | [] => []
+  | t :: ts => tagsOf d t ++ allTags d ts
+
+theorem mem_allTags {d : Name} {ts : List Term} {t tag} (ht : t ∈ ts)
+    (htag : tag ∈ tagsOf d t) : tag ∈ allTags d ts := by
+  induction ts with
+  | nil => exact absurd ht (by simp)
+  | cons t₀ ts ih =>
+    rcases List.mem_cons.mp ht with rfl | ht'
+    · exact List.mem_append.mpr (Or.inl htag)
+    · exact List.mem_append.mpr (Or.inr (ih ht'))
+
+/-- `adm`, value side. `noncomputable` only because `literalN` compares `Double`s, whose
+    `DecidableEq` is axiomatized (§1) — the recursion itself is structural. -/
+noncomputable def adm : Term → Value → Bool
+  | .literalS ls => fun v => match v with | .str s => s ∈ ls | _ => false
+  | .literalN ls => fun v => match v with | .num d => d ∈ ls | _ => false
+  | .dunion d opts => fun v =>
+    match v with
+    | .map kvs =>
+      match kvs.lookup d with
+      | some (.str tag) => (allTags d opts).contains tag
+      | _ => false
+    | _ => false
+  | .refine t _ => adm t
+  | .legacy t _ => adm t
+  | _ => fun _ => true
+
+/-- `adm`, attribute side. `legacy` is **not** transparent here: `extendRead` widens `p`
+    past the subterm's admissible set, which is exactly the direction `adm` claims to
+    bound. `literalN` is `true` — the read side goes through `Double.ofDec`, which is
+    axiomatized, so no syntactic set bounds it; numeric literals fall to (U) per input
+    on the attribute side. -/
+def admA : Term → Attr → Bool
+  | .literalS ls => fun a => match a with | .s s => s ∈ ls | _ => false
+  | .dunion d opts => fun a =>
+    match a with
+    | .m kvs =>
+      match kvs.lookup d with
+      | some (.s tag) => (allTags d opts).contains tag
+      | _ => false
+    | _ => false
+  | .refine t _ => admA t
+  | _ => fun _ => true
 
 /-! ## κ is sound for the denotation -/
 
@@ -270,6 +333,137 @@ theorem κ_sound : ∀ (fuel : Nat) (t : Term) {ks : List Kind} {v a},
     | lazy γ => exact nomatch hκ
     | custom ce cp => exact nomatch hκ
     | opaq lossy => exact nomatch hκ
+
+/-! ## `adm` is sound for the denotation -/
+
+/-- A sum's decode routes through an admitting option — the mirror of
+    `altCodec_e_admits`. -/
+theorem altCodec_p_admits {os : List OptionSem} {μA : Option Member} {a v}
+    (hp : (altCodec os μA).p a = some v) :
+    ∃ o ∈ os, o.admitA a = true ∧ o.c.p a = some v := by
+  replace hp : (match os.filter (·.admitA a) with
+    | [o] => o.c.p a | _ => none) = some v := hp
+  cases hf : os.filter (·.admitA a) with
+  | nil => rw [hf] at hp; exact nomatch hp
+  | cons o tl =>
+    cases tl with
+    | cons _ _ => rw [hf] at hp; exact nomatch hp
+    | nil =>
+      rw [hf] at hp
+      have hom : o ∈ os.filter (·.admitA a) := by
+        rw [hf]; exact List.mem_cons_self o []
+      have hmem := List.mem_filter.mp hom
+      exact ⟨o, hmem.1, hmem.2, hp⟩
+
+/-- Writing lands in `adm`: whatever a term encodes is in the set it checks against.
+    (Where `adm` is `true` there is nothing to say — the point of "no information".) -/
+theorem adm_sound : ∀ (fuel : Nat) (t : Term) {v a},
+    (denote fuel t).e v = some a → adm t v = true
+  | 0, _, _, _, he => nomatch he
+  | fuel+1, t, v, a, he => by
+    cases t
+    case literalS ls =>
+      cases v
+      case str s =>
+        replace he : (if s ∈ ls then some (Attr.s s) else none) = some a := he
+        show decide (s ∈ ls) = true
+        split at he
+        next h => exact decide_eq_true h
+        next => exact nomatch he
+      all_goals exact nomatch he
+    case literalN ls =>
+      cases v
+      case num d =>
+        replace he : (if d ∈ ls then some (Attr.n d.toDec) else none) = some a := he
+        show decide (d ∈ ls) = true
+        split at he
+        next h => exact decide_eq_true h
+        next => exact nomatch he
+      all_goals exact nomatch he
+    case dunion d opts =>
+      replace he : (altCodec ((opts.map fun t' => (tagsOf d t', denote fuel t')).map
+        fun o => .byTag d o.1 o.2) (some .M)).e v = some a := he
+      obtain ⟨o, ho, hadm, -⟩ := altCodec_e_admits he
+      simp only [List.mem_map] at ho
+      obtain ⟨-, ⟨tx, htx, rfl⟩, rfl⟩ := ho
+      -- the admitting option's tag check is exactly `adm`'s, at one option
+      cases v
+      case map kvs =>
+        replace hadm : (match kvs.lookup d with
+          | some (.str tag) => (tagsOf d tx).contains tag
+          | _ => false) = true := hadm
+        show (match kvs.lookup d with
+          | some (.str tag) => (allTags d opts).contains tag
+          | _ => false) = true
+        cases hlk : kvs.lookup d
+        case none => rw [hlk] at hadm; exact nomatch hadm
+        case some x =>
+          cases x
+          case str tag =>
+            rw [hlk] at hadm
+            exact List.elem_eq_true_of_mem
+              (mem_allTags htx (List.mem_of_elem_eq_true hadm))
+          all_goals rw [hlk] at hadm; exact nomatch hadm
+      all_goals exact nomatch hadm
+    case refine t' q =>
+      replace he : (if q v then (denote fuel t').e v else none) = some a := he
+      show adm t' v = true
+      split at he
+      · exact adm_sound fuel t' he
+      · exact nomatch he
+    case legacy t' r =>
+      replace he : (denote fuel t').e v = some a := he
+      show adm t' v = true
+      exact adm_sound fuel t' he
+    all_goals rfl
+
+/-- Reading lands in `admA`. -/
+theorem admA_sound : ∀ (fuel : Nat) (t : Term) {a v},
+    (denote fuel t).p a = some v → admA t a = true
+  | 0, _, _, _, hp => nomatch hp
+  | fuel+1, t, a, v, hp => by
+    cases t
+    case literalS ls =>
+      cases a
+      case s s =>
+        replace hp : (if s ∈ ls then some (Value.str s) else none) = some v := hp
+        show decide (s ∈ ls) = true
+        split at hp
+        next h => exact decide_eq_true h
+        next => exact nomatch hp
+      all_goals exact nomatch hp
+    case dunion d opts =>
+      replace hp : (altCodec ((opts.map fun t' => (tagsOf d t', denote fuel t')).map
+        fun o => .byTag d o.1 o.2) (some .M)).p a = some v := hp
+      obtain ⟨o, ho, hadm, -⟩ := altCodec_p_admits hp
+      simp only [List.mem_map] at ho
+      obtain ⟨-, ⟨tx, htx, rfl⟩, rfl⟩ := ho
+      cases a
+      case m kvs =>
+        replace hadm : (match kvs.lookup d with
+          | some (.s tag) => (tagsOf d tx).contains tag
+          | _ => false) = true := hadm
+        show (match kvs.lookup d with
+          | some (.s tag) => (allTags d opts).contains tag
+          | _ => false) = true
+        cases hlk : kvs.lookup d
+        case none => rw [hlk] at hadm; exact nomatch hadm
+        case some x =>
+          cases x
+          case s tag =>
+            rw [hlk] at hadm
+            exact List.elem_eq_true_of_mem
+              (mem_allTags htx (List.mem_of_elem_eq_true hadm))
+          all_goals rw [hlk] at hadm; exact nomatch hadm
+      all_goals exact nomatch hadm
+    case refine t' q =>
+      replace hp : ((denote fuel t').p a).bind
+        (fun v' => if q v' then some v' else none) = some v := hp
+      show admA t' a = true
+      cases hi : (denote fuel t').p a
+      case none => rw [hi] at hp; exact nomatch hp
+      case some v' => exact admA_sound fuel t' hi
+    all_goals rfl
 
 /-! ## Admission is guarded -/
 
@@ -461,6 +655,34 @@ theorem optionSem_self_admit (fuel : Nat) (t : Term)
         exact keysOk_of_encode hval htr
     all_goals exact nomatch hs
 
+/-- Any option's value admission is `adm`-guarded. -/
+theorem admitV_adm (fuel : Nat) (t : Term) {v}
+    (h : (optionSemOf (denote fuel t) (specOf t)).admitV v = true) : adm t v = true := by
+  cases hs : specOf t with
+  | none =>
+    rw [hs] at h
+    replace h : ((denote fuel t).e v).isSome = true := h
+    obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp h
+    exact adm_sound fuel t ha
+  | some spec =>
+    cases t
+    case object fields rest => rfl
+    all_goals exact nomatch hs
+
+/-- Any option's attribute admission is `admA`-guarded. -/
+theorem admitA_admA (fuel : Nat) (t : Term) {a}
+    (h : (optionSemOf (denote fuel t) (specOf t)).admitA a = true) : admA t a = true := by
+  cases hs : specOf t with
+  | none =>
+    rw [hs] at h
+    replace h : ((denote fuel t).p a).isSome = true := h
+    obtain ⟨v, hv⟩ := Option.isSome_iff_exists.mp h
+    exact admA_sound fuel t hv
+  | some spec =>
+    cases t
+    case object fields rest => rfl
+    all_goals exact nomatch hs
+
 /-! ## The discharger -/
 
 /-- `Pairwise`, upgraded with membership. -/
@@ -495,11 +717,85 @@ theorem filter_map_singleton {α β : Type} (f : α → β) (P : β → Bool) :
         simp only [List.map, List.filter, hny]
         exact filter_map_singleton f P l htail x hx' hPx
 
-/-- §5's disjointness dischargers, combined: pairwise-disjoint `κ` (no `⊤`) settles
-    the value side of (U), pairwise-distinct named members settle the attribute side,
-    and closed options admit their own canonicals — so admission is unique at every
-    canonical input, which is exactly the theorem's residue `UAtCan`. Every premise
-    is decidable from the syntax except lawfulness, which soundness supplies. -/
+/-- §5 (K), repaired and decidable: two options are separated on the writable side by
+    disjoint kinds, **or** by disjoint admissible sets. The second disjunct is the
+    honest form of the doc's `ident` exemption — see the counterexamples below for why
+    `ident` on one side, or even on both, is not it. -/
+def SepV (x y : Term) : Prop :=
+  (∃ kx ky, κ x = some kx ∧ κ y = some ky ∧ ∀ k ∈ kx, k ∉ ky) ∨
+  (∀ v, adm x v = true → adm y v = false)
+
+/-- §5 (D)'s stand-in, likewise widened: two options are separated on the readable side
+    by distinct named members, **or** by disjoint admissible sets. The `adm` disjunct is
+    what carries `union(literal("A"), literal("B"))`, whose options share `⇝ S`. -/
+def SepA (x y : Term) : Prop :=
+  (∃ μx μy, μSyn x = some μx ∧ μSyn y = some μy ∧ μx ≠ μy) ∨
+  (∀ a, admA x a = true → admA y a = false)
+
+/-- §5's dischargers, combined: pairwise separation on each side of the pair, and
+    closed options admitting their own canonicals — so admission is unique at every
+    canonical input, which is exactly the theorem's residue `UAtCan`. Every premise is
+    decidable from the syntax except lawfulness, which soundness supplies. -/
+theorem uAtCan_of_separated (fuel : Nat) {opts : List Term}
+    (hlaw : ∀ t ∈ opts, Lawful (denote fuel t))
+    (hcl : ∀ t ∈ opts, ∀ fields tr, t ≠ .object fields (.codec tr))
+    (hV : List.Pairwise SepV opts)
+    (hA : List.Pairwise SepA opts) :
+    UAtCan fuel opts := by
+  intro o ho t a he
+  simp only [semsOf, List.mem_map] at ho
+  obtain ⟨tx, htx, rfl⟩ := ho
+  rw [optionSemOf_c] at he
+  obtain ⟨hVx, hAx⟩ := optionSem_self_admit fuel tx (hcl tx htx) (hlaw tx htx) he
+  constructor
+  · show ((opts.map fun t' => optionSemOf (denote fuel t') (specOf t')).filter
+      (·.admitA a)) = [optionSemOf (denote fuel tx) (specOf tx)]
+    refine filter_map_singleton _ _ opts ?_ tx htx hAx
+    refine pairwise_imp_mem ?_ hA
+    intro x hx y hy hxy
+    -- one exclusion argument, used in both directions
+    have key : ∀ u v, SepA u v → u ∈ opts → v ∈ opts →
+        (optionSemOf (denote fuel u) (specOf u)).admitA a = true →
+        (optionSemOf (denote fuel v) (specOf v)).admitA a = false := by
+      intro u v hs hu hv hau
+      cases hav : (optionSemOf (denote fuel v) (specOf v)).admitA a with
+      | false => rfl
+      | true =>
+        rcases hs with ⟨μu, μv, hμu, hμv, hne⟩ | hdisj
+        · exact absurd ((admitA_member fuel u hμu (hlaw u hu) hau).symm.trans
+            (admitA_member fuel v hμv (hlaw v hv) hav)) hne
+        · have hav' := admitA_admA fuel v hav
+          rw [hdisj a (admitA_admA fuel u hau)] at hav'
+          exact nomatch hav'
+    refine ⟨key x y hxy hx hy, fun hay => ?_⟩
+    cases hax : (optionSemOf (denote fuel x) (specOf x)).admitA a with
+    | false => rfl
+    | true => rw [key x y hxy hx hy hax] at hay; exact nomatch hay
+  · show ((opts.map fun t' => optionSemOf (denote fuel t') (specOf t')).filter
+      (·.admitV t)) = [optionSemOf (denote fuel tx) (specOf tx)]
+    refine filter_map_singleton _ _ opts ?_ tx htx hVx
+    refine pairwise_imp_mem ?_ hV
+    intro x hx y hy hxy
+    have key : ∀ u v, SepV u v →
+        (optionSemOf (denote fuel u) (specOf u)).admitV t = true →
+        (optionSemOf (denote fuel v) (specOf v)).admitV t = false := by
+      intro u v hs hvu
+      cases hvv : (optionSemOf (denote fuel v) (specOf v)).admitV t with
+      | false => rfl
+      | true =>
+        rcases hs with ⟨ku, kv, hku, hkv, hne⟩ | hdisj
+        · exact absurd (admitV_kind fuel v hkv hvv)
+            (hne _ (admitV_kind fuel u hku hvu))
+        · have hvv' := admitV_adm fuel v hvv
+          rw [hdisj t (admitV_adm fuel u hvu)] at hvv'
+          exact nomatch hvv'
+    refine ⟨key x y hxy, fun hvy => ?_⟩
+    cases hvx : (optionSemOf (denote fuel x) (specOf x)).admitV t with
+    | false => rfl
+    | true => rw [key x y hxy hvx] at hvy; exact nomatch hvy
+
+/-- The kind/member half on its own — the original disjointness discharger, now a
+    corollary of `uAtCan_of_separated`. -/
 theorem uAtCan_of_disjoint (fuel : Nat) {opts : List Term}
     (hlaw : ∀ t ∈ opts, Lawful (denote fuel t))
     (hcl : ∀ t ∈ opts, ∀ fields tr, t ≠ .object fields (.codec tr))
@@ -509,57 +805,16 @@ theorem uAtCan_of_disjoint (fuel : Nat) {opts : List Term}
       ∀ k ∈ kx, k ∉ ky) opts)
     (hμd : List.Pairwise (fun x y => μSyn x ≠ μSyn y) opts) :
     UAtCan fuel opts := by
-  intro o ho t a he
-  simp only [semsOf, List.mem_map] at ho
-  obtain ⟨tx, htx, rfl⟩ := ho
-  rw [optionSemOf_c] at he
-  obtain ⟨hV, hA⟩ := optionSem_self_admit fuel tx (hcl tx htx) (hlaw tx htx) he
-  constructor
-  · show ((opts.map fun t' => optionSemOf (denote fuel t') (specOf t')).filter
-      (·.admitA a)) = [optionSemOf (denote fuel tx) (specOf tx)]
-    refine filter_map_singleton _ _ opts ?_ tx htx hA
-    refine pairwise_imp_mem ?_ hμd
-    intro x hx y hy hxy
-    obtain ⟨μx, hμx⟩ := Option.isSome_iff_exists.mp (hμ x hx)
-    obtain ⟨μy, hμy⟩ := Option.isSome_iff_exists.mp (hμ y hy)
-    have hne : μx ≠ μy := fun h => hxy (by rw [hμx, hμy, h])
-    constructor
-    · intro hax
-      cases hay : (optionSemOf (denote fuel y) (specOf y)).admitA a with
-      | false => rfl
-      | true =>
-        have h1 := admitA_member fuel x hμx (hlaw x hx) hax
-        have h2 := admitA_member fuel y hμy (hlaw y hy) hay
-        exact (hne (h1.symm.trans h2)).elim
-    · intro hay
-      cases hax : (optionSemOf (denote fuel x) (specOf x)).admitA a with
-      | false => rfl
-      | true =>
-        have h1 := admitA_member fuel x hμx (hlaw x hx) hax
-        have h2 := admitA_member fuel y hμy (hlaw y hy) hay
-        exact (hne (h1.symm.trans h2)).elim
-  · show ((opts.map fun t' => optionSemOf (denote fuel t') (specOf t')).filter
-      (·.admitV t)) = [optionSemOf (denote fuel tx) (specOf tx)]
-    refine filter_map_singleton _ _ opts ?_ tx htx hV
-    refine pairwise_imp_mem ?_ hκd
-    intro x hx y hy hxy
+  refine uAtCan_of_separated fuel hlaw hcl (pairwise_imp_mem ?_ hκd)
+    (pairwise_imp_mem ?_ hμd)
+  · intro x hx y hy hxy
     obtain ⟨kx, hkx⟩ := Option.isSome_iff_exists.mp (hκ x hx)
     obtain ⟨ky, hky⟩ := Option.isSome_iff_exists.mp (hκ y hy)
-    constructor
-    · intro hvx
-      cases hvy : (optionSemOf (denote fuel y) (specOf y)).admitV t with
-      | false => rfl
-      | true =>
-        have h1 := admitV_kind fuel x hkx hvx
-        have h2 := admitV_kind fuel y hky hvy
-        exact absurd h2 (hxy kx ky hkx hky _ h1)
-    · intro hvy
-      cases hvx : (optionSemOf (denote fuel x) (specOf x)).admitV t with
-      | false => rfl
-      | true =>
-        have h1 := admitV_kind fuel x hkx hvx
-        have h2 := admitV_kind fuel y hky hvy
-        exact absurd h2 (hxy kx ky hkx hky _ h1)
+    exact Or.inl ⟨kx, ky, hkx, hky, hxy kx ky hkx hky⟩
+  · intro x hx y hy hxy
+    obtain ⟨μx, hμx⟩ := Option.isSome_iff_exists.mp (hμ x hx)
+    obtain ⟨μy, hμy⟩ := Option.isSome_iff_exists.mp (hμ y hy)
+    exact Or.inl ⟨μx, μy, hμx, hμy, fun h => hxy (by rw [hμx, hμy, h])⟩
 
 /-! ## The premises are jointly inhabited
 
@@ -568,31 +823,34 @@ theorem uAtCan_of_disjoint (fuel : Nat) {opts : List Term}
     disjoint kinds, distinct members, closed, lawful — so the discharger really does
     decide unions. -/
 
+/-- A premise of the form `∀ t ∈ [x, y], P t`, checked at the two options. -/
+theorem forall_mem_pair {α : Type} {P : α → Prop} {x y : α} (hx : P x) (hy : P y) :
+    ∀ z ∈ [x, y], P z := by
+  intro z hz
+  rcases List.mem_cons.mp hz with rfl | hz
+  · exact hx
+  · rcases List.mem_cons.mp hz with rfl | hz
+    · exact hy
+    · exact absurd hz (by simp)
+
+/-- A pairwise premise over two options, checked at the single unordered pair. -/
+theorem pairwise_pair {α : Type} {R : α → α → Prop} {x y : α} (h : R x y) :
+    List.Pairwise R [x, y] := by
+  refine List.Pairwise.cons ?_ (List.Pairwise.cons (by simp) List.Pairwise.nil)
+  intro z hz
+  rcases List.mem_cons.mp hz with rfl | hz
+  · exact h
+  · exact absurd hz (by simp)
+
 /-- Satisfiability witness for `uAtCan_of_disjoint`: `union(string, boolean)` is
     discharged at the declaration, at every fuel. -/
 theorem uAtCan_string_boolean (fuel : Nat) :
     UAtCan fuel [Term.string, Term.boolean] := by
-  -- Each premise is checked at the two options and refuted past them.
-  have two : ∀ {P : Term → Prop}, P .string → P .boolean →
-      ∀ t ∈ [Term.string, Term.boolean], P t := by
-    intro P hs hb t ht
-    rcases List.mem_cons.mp ht with rfl | ht
-    · exact hs
-    · rcases List.mem_cons.mp ht with rfl | ht
-      · exact hb
-      · exact absurd ht (by simp)
-  -- and each pairwise premise at the single unordered pair.
-  have pair : ∀ {R : Term → Term → Prop}, R .string .boolean →
-      List.Pairwise R [Term.string, Term.boolean] := by
-    intro R h
-    refine List.Pairwise.cons ?_ (List.Pairwise.cons (by simp) List.Pairwise.nil)
-    intro y hy
-    rcases List.mem_cons.mp hy with rfl | hy
-    · exact h
-    · exact absurd hy (by simp)
-  refine uAtCan_of_disjoint fuel (two (lawful_string fuel) (lawful_boolean fuel))
-    (two (fun _ _ h => nomatch h) (fun _ _ h => nomatch h))
-    (two rfl rfl) (two rfl rfl) (pair ?_) (pair ?_)
+  refine uAtCan_of_disjoint fuel
+    (forall_mem_pair (lawful_string fuel) (lawful_boolean fuel))
+    (forall_mem_pair (fun _ _ h => nomatch h) (fun _ _ h => nomatch h))
+    (forall_mem_pair rfl rfl) (forall_mem_pair rfl rfl)
+    (pairwise_pair ?_) (pairwise_pair ?_)
   · intro kx ky hx hy k hk
     replace hx : some [Kind.string] = some kx := hx
     replace hy : some [Kind.boolean] = some ky := hy
@@ -603,6 +861,35 @@ theorem uAtCan_string_boolean (fuel : Nat) :
   · intro h
     replace h : some Member.S = some Member.BOOL := h
     exact nomatch h
+
+/-- §5's worked example, discharged — and out of reach of `uAtCan_of_disjoint`. The two
+    options share `κ = {string}` *and* share `⇝ S`, so neither kinds nor members
+    separate them; the `adm` disjunct on both sides is what carries it. This is the
+    pair §5 claims for `ident`, and `adm` is what makes the claim good. -/
+theorem uAtCan_literal_literal (fuel : Nat) :
+    UAtCan fuel [Term.literalS ["A"], Term.literalS ["B"]] := by
+  refine uAtCan_of_separated fuel
+    (forall_mem_pair (lawful_literalS _ fuel) (lawful_literalS _ fuel))
+    (forall_mem_pair (fun _ _ h => nomatch h) (fun _ _ h => nomatch h))
+    (pairwise_pair (Or.inr ?_)) (pairwise_pair (Or.inr ?_))
+  · intro v hv
+    cases v
+    case str s =>
+      replace hv : decide (s ∈ ["A"]) = true := hv
+      show decide (s ∈ ["B"]) = false
+      have : s = "A" := by simpa using of_decide_eq_true hv
+      subst this
+      simp
+    all_goals exact nomatch hv
+  · intro a ha
+    cases a
+    case s s =>
+      replace ha : decide (s ∈ ["A"]) = true := ha
+      show decide (s ∈ ["B"]) = false
+      have : s = "A" := by simpa using of_decide_eq_true ha
+      subst this
+      simp
+    all_goals exact nomatch ha
 
 /-! ## Why `ident` is *not* an exemption from (K), as §5 states it
 

@@ -15,7 +15,7 @@ definition it touches.
 | `Calculus/Denote.lean`      | —           | `denote : Nat → Term → Codec`, pure dispatch into the combinators                                                                                                                                                                                                     |
 | `Calculus/Typing.lean`      | §3–§5       | The judgement (syntactic premises)                                                                                                                                                                                                                                    |
 | `Calculus/Soundness.lean`   | §5          | `Obligations` (semantic premises, fueled), `UAtCan := UniqueAdmission ∘ semsOf`, `MPOk` (legacy exemption), theorem statements                                                                                                                                        |
-| `Calculus/Discharge.lean`   | §5          | The machinery of (K): `Kind`, `κ`, `ident` as structural recursions, `κ_sound`, and `uAtCan_of_disjoint` — the disjointness dischargers of (U), proved                                                                                                              |
+| `Calculus/Discharge.lean`   | §5          | The machinery of (K): `Kind`, `κ`, `ident`, `adm`/`admA` as structural recursions, `κ_sound`/`adm_sound`/`admA_sound`, and `uAtCan_of_separated` — the dischargers of (U), proved, with witnesses and the two counterexamples that repaired (K)                       |
 
 **The mechanization is complete: the project builds with zero `sorry`.** Both halves
 of §5's soundness theorem are machine-checked — `soundness` (all four laws, (MP) with
@@ -46,23 +46,26 @@ the doc's `(lazy)` rule demands.
   `κ` settles the value side, pairwise-distinct named members the attribute side — the
   member index standing in for (D)'s held sets until the `T` index lands.
   `uAtCan_string_boolean` witnesses that the six premises are jointly satisfiable.
-- **§5's `ident` half of (K) is unsound as stated, and the mechanization corrects it.**
-  The doc writes (K) as `κ(cᵢ) ∩ κ(cⱼ) = ∅ ∨ ident(cᵢ) ∨ ident(cⱼ)` and calls it
-  sufficient for (U). Neither disjunct carries it, and both counterexamples are proved
-  in `Discharge.lean`: `not_uAtCan_literal_string` (one-sided `ident` —
-  `union(literal("A"), string)` passes (K), and both options admit `"A"`) and
+- **§5's `ident` half of (K) was unsound as stated; the mechanization found it and the
+  doc is fixed.** §5 used to write (K) as `κ(cᵢ) ∩ κ(cⱼ) = ∅ ∨ ident(cᵢ) ∨ ident(cⱼ)`
+  and call it sufficient for (U). Neither disjunct carries it, and both counterexamples
+  are proved in `Discharge.lean`: `not_uAtCan_literal_string` (one-sided `ident` —
+  `union(literal("A"), string)` passed (K), and both options admit `"A"`) and
   `not_uAtCan_array_literals` (two-sided `ident` — `ident` propagates through `array`,
-  but disjointness of the admissible sets does not, and both options admit `[]`). A
-  sound `ident` exemption needs `ident` on both sides *and* disjoint admissible sets.
-  **This wants a decision on the doc side before the discharger is written.**
+  but disjointness of the admissible sets does not, and both options admit `[]`). §5 now
+  states (K) with `adm`, the set an `ident` term checks against, disjoint on both sides;
+  `adm`/`admA` and the combined `uAtCan_of_separated` mechanize it, with
+  `uAtCan_of_disjoint` its kind/member half and `uAtCan_literal_literal` discharging
+  §5's own worked example — a pair that shares both `κ` and `⇝`, so only `adm` reaches
+  it.
 
 ## What remains (sharpenings, not gaps)
 
 The theorem is proved; these tighten the model's fidelity to the doc, none affect
 soundness: reinstating the held-set index `T` on the judgement and stating (D) in its
-held-set form; the `ident` exemption's discharge lemmas — **blocked on the doc**, since
-(K)'s `ident` disjunct is refuted above and the repaired condition (both sides `ident`,
-admissible sets disjoint) is a change to §5, not to the mechanization; deriving the
+held-set form; widening `admA` past `literalS`/`dunion` (a numeric literal's read side
+goes through the axiomatized `Double.ofDec`, so no syntactic set bounds it, and those
+pairs still fall to (U) per input); deriving the
 remaining `LawfulCore` composites (`tuple`, `set`, `object`) and their full-law
 counterparts from one another, as the wrappers and uniform products now are.
 
