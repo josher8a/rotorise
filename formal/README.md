@@ -13,7 +13,7 @@ definition it touches.
 | `Calculus/Combinators.lean` | §3–§5       | The certified combinator algebra: ground codecs, `through`/`restrict` (iso/prism), `extendRead` (legacy), `orNull` (nullable), `seq`/`keyed`/quotiented products, `altCodec`+`UniqueAdmission` and `dunionCodec` (sums), `opaqCodec` — with one lawfulness lemma each |
 | `Calculus/Term.lean`        | §3–§4       | Deep-embedded terms, fields, rest policies                                                                                                                                                                                                                            |
 | `Calculus/Denote.lean`      | —           | `denote : Nat → Term → Codec`, pure dispatch into the combinators                                                                                                                                                                                                     |
-| `Calculus/Typing.lean`      | §3–§5       | The judgement (syntactic premises)                                                                                                                                                                                                                                    |
+| `Calculus/Typing.lean`      | §3–§5       | The judgement `⊢ c : T ⇝ μ`, both indices, with the held-set formers (`HSet`, `HStar`, `HProd`, `HMap`, `HNull`, `HObject`, `HUnion`, `HOpaque`); syntactic premises only                                                                                             |
 | `Calculus/Soundness.lean`   | §5          | `Obligations` (semantic premises, fueled), `UAtCan := UniqueAdmission ∘ semsOf`, `MPOk` (legacy exemption), theorem statements                                                                                                                                        |
 | `Calculus/Discharge.lean`   | §5          | The machinery of (K): `Kind`, `κ`, `ident`, `adm`/`admA` as structural recursions, `κ_sound`/`adm_sound`/`admA_sound`, and `uAtCan_of_separated` — the dischargers of (U), proved, with witnesses and the two counterexamples that repaired (K)                       |
 
@@ -23,9 +23,10 @@ the legacy exemption as the `MPOk` hypothesis) and `soundness_core` ((R), (C), (
 through `legacy`-containing derivations) — by induction on the judgement, dispatching
 each case to its certified combinator lemma, with the `(dunion)` stamps derived from
 typing and (U) discharged by `uniqueAdmission_byTag` / `uniqueAdmission_of_disjoint`.
-The member index is fuel-free (`μSyn`, with `denote_μ` and `typed_μSyn` tying the
-denotation and the judgement to it), and `lazy` concludes `⊤` in the model exactly as
-the doc's `(lazy)` rule demands.
+The judgement carries both of §3's indices — the held set `T` and the member `μ`. The
+member index is fuel-free (`μSyn`, with `denote_μ` and `typed_μSyn` tying the denotation
+and the judgement to it), and `lazy` concludes `⊤` in the model exactly as the doc's
+`(lazy)` rule demands.
 
 ## Modelling decisions
 
@@ -43,9 +44,15 @@ the doc's `(lazy)` rule demands.
   are fuel-indexed here, so the premises are too. Same premises, fueled form.
 - **(U) is a premise, not a conclusion** (`UAtCan`), matching the doc's theorem residue.
   Its disjointness dischargers are proved (`Calculus/Discharge.lean`): pairwise-disjoint
-  `κ` settles the value side, pairwise-distinct named members the attribute side — the
-  member index standing in for (D)'s held sets until the `T` index lands.
+  `κ` settles the value side, pairwise-distinct named members the attribute side.
   `uAtCan_string_boolean` witnesses that the six premises are jointly satisfiable.
+- **§5's (D) is not a discharger of (U), and the doc is fixed.** (D) is a condition on
+  held sets — sets of *values* — while (U)'s readable side quantifies over *attributes*,
+  and `held`'s adapter relabels between them. `not_uAtCan_literal_held` exhibits
+  `union(literal("A"), held(literal("A"), f, g))`: held sets `{"A"}` and `{"B"}`,
+  disjoint on the nose, both options reading `S "A"`. §5 used to say that stating (D) as
+  disjointness "would be sound"; it now says (D) is well-formedness on the `T` index, and
+  the readable side is decided on stored attributes (distinct `μ`, or disjoint `adm`).
 - **§5's `ident` half of (K) was unsound as stated; the mechanization found it and the
   doc is fixed.** §5 used to write (K) as `κ(cᵢ) ∩ κ(cⱼ) = ∅ ∨ ident(cᵢ) ∨ ident(cⱼ)`
   and call it sufficient for (U). Neither disjunct carries it, and both counterexamples
@@ -62,11 +69,11 @@ the doc's `(lazy)` rule demands.
 ## What remains (sharpenings, not gaps)
 
 The theorem is proved; these tighten the model's fidelity to the doc, none affect
-soundness: reinstating the held-set index `T` on the judgement and stating (D) in its
-held-set form; widening `admA` past `literalS`/`dunion` (a numeric literal's read side
+soundness: widening `admA` past `literalS`/`dunion` (a numeric literal's read side
 goes through the axiomatized `Double.ofDec`, so no syntactic set bounds it, and those
-pairs still fall to (U) per input); deriving the
-remaining `LawfulCore` composites (`tuple`, `set`, `object`) and their full-law
+pairs still fall to (U) per input); a soundness lemma tying the judgement's `T` to the
+denotation (`e`'s domain and `p`'s range land in `T`), which the `T` index now makes
+statable; deriving the remaining `LawfulCore` composites (`tuple`, `set`, `object`) and their full-law
 counterparts from one another, as the wrappers and uniform products now are.
 
 ## Building
