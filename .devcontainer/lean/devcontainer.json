@@ -1,0 +1,22 @@
+// Lean 4 devcontainer for the codec-calculus mechanization in formal/.
+// Pick "Lean 4 — codec calculus" in the devcontainer chooser; the TypeScript
+// container at .devcontainer/devcontainer.json is untouched.
+{
+	"name": "Lean 4 — codec calculus",
+	"image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
+	"workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}/formal",
+	// elan manages the toolchain; formal/lean-toolchain pins the version, which
+	// downloads on first `lake build` (or when the extension starts the server).
+	"onCreateCommand": "curl -sSf https://elan.lean-lang.org/elan-init.sh | sh -s -- -y --default-toolchain none",
+	"postCreateCommand": "~/.elan/bin/lake build || true",
+	"remoteEnv": {
+		"PATH": "/home/vscode/.elan/bin:${containerEnv:PATH}"
+	},
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"leanprover.lean4"
+			]
+		}
+	}
+}
