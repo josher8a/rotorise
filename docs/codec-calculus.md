@@ -395,7 +395,7 @@ unions it covers:
 | Discharger                           | Decides                                             | From                       |
 | ------------------------------------ | --------------------------------------------------- | -------------------------- |
 | **(D)** — incomparable held sets     | the readable side, where the types differ           | the judgement's `T` index  |
-| **(K)** — disjoint kinds, or `ident` | the writable side, where the runtime shapes differ  | `κ` and `ident`, below     |
+| **(K)** — disjoint kinds, or disjoint `ident` sets | the writable side, where the runtime shapes differ  | `κ`, `ident` and `adm`, below |
 | tag disjointness                     | `(dunion)`, outright — both sides                   | the discriminator literals |
 | kind disjointness                    | `opaque`'s fixpoint (§3), outright                  | one option per kind of §1  |
 
@@ -407,8 +407,8 @@ each value it is actually given.
 
 ### The machinery of (K)
 
-Two auxiliary functions, defined by structural recursion so that **(K)** is decidable rather than
-judged. Both are total over the terms of §3–§4.
+Three auxiliary functions, defined by structural recursion so that **(K)** is decidable rather than
+judged. All are total over the terms of §3–§4.
 
 `κ(c) ∈ ℘(Kind) ∪ {⊤}` is the kinds of _value_ a term accepts — a coarse partition of `Value` by
 runtime shape, and the mirror of `μ` on the other side of the pair:
@@ -483,7 +483,7 @@ the tag sets never vouched for, and **(C)** would then re-encode a variant no ta
 |       |                                                      |                                                                                                                                 |
 | ----- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | **D** | `∀ i ≠ j. ¬(Tᵢ ⊆ Tⱼ) ∧ ¬(Tⱼ ⊆ Tᵢ)`                   | Readable: no stored attribute belongs to two options. Decidable from the held sets alone, hence checkable before anything runs. |
-| **K** | `∀ i ≠ j. κ(cᵢ) ∩ κ(cⱼ) = ∅ ∨ ident(cᵢ) ∨ ident(cⱼ)` | Writable: no value belongs to two options. Needs `κ`, which the held sets do not determine.                                     |
+| **K** | `∀ i ≠ j. κ(cᵢ) ∩ κ(cⱼ) = ∅ ∨ (ident(cᵢ) ∧ ident(cⱼ) ∧ adm(cᵢ) ∩ adm(cⱼ) = ∅)` | Writable: no value belongs to two options. Needs `κ`, which the held sets do not determine.                                     |
 
 **(D)** and **(K)** are the same requirement asked of the two sides of the pair, and neither implies
 the other. `union(array(string), array(number))` satisfies **(D)** — the held sets are incomparable —
@@ -500,6 +500,30 @@ defined on `T` and does whatever it does off it, so "this option encoded the val
 information about whether the value was meant for it. Only a term that knows its own membership
 answers a real question when attempted — which is why `union(literal("A"), literal("B"))` is well
 formed under **(K)** although both accept a string.
+
+But `ident` is only half of that exemption, and an earlier statement of **(K)** —
+`κ(cᵢ) ∩ κ(cⱼ) = ∅ ∨ ident(cᵢ) ∨ ident(cⱼ)` — was wrong to stop there. Two counterexamples,
+both machine-checked (`Calculus/Discharge.lean`):
+
+- **One side is not enough.** `union(literal("A"), string)` has `ident` on the left, so the disjunction
+  is satisfied — and both options admit `"A"`. A real answer from one option does not resolve a pair;
+  the other option is still answering, and still meaninglessly.
+- **Two sides are not enough either.** `ident` propagates through `array`, so
+  `union(array(literal("A")), array(literal("B")))` has it on both — and both admit `[]`. Propagating
+  `ident` through a container does not propagate _disjointness_ of what the options accept: every
+  container admits its empty case, which no element ever sees.
+
+What the exemption actually needs is what the worked example above quietly has: `ident` on **both**
+sides, and admissible sets that do not meet. So `adm(c)`, the third auxiliary, is the set a term
+checks against when `ident(c)` holds — a `literal`'s values, a `discriminatedUnion`'s tags. It is
+compared only between two `ident` terms, and it is deliberately _not_ propagated through the
+containers: `adm(array(c))` would have to contain the empty array whatever `c` is, so container
+options are never separated this way and the second counterexample stays refused. `refine`,
+`optional`, `fallback` and `legacy` pass `adm` through, as they pass `ident` through.
+
+The residue of the old rule is the honest one: the pairs `ident` genuinely resolves are the pairs of
+`literal`s with disjoint values, and the pairs of `discriminatedUnion`s with disjoint tags — the
+latter being the tag-disjointness row of the discharger table, arrived at from the other direction.
 
 **(D)** as written is _incomparability_, not disjointness. Two object options `⟨a : String⟩` and
 `⟨b : String⟩` are incomparable yet share the inhabitant `⟨a ↦ "1", b ↦ "2"⟩` — so **(D)** admits
