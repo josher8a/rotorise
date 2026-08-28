@@ -6,13 +6,35 @@
   "types": "dist/Rotorise.d.ts",
   "module": "dist/Rotorise.js",
   "exports": {
-    "import": {
-      "types": "./dist/Rotorise.d.ts",
-      "import": "./dist/Rotorise.js"
+    ".": {
+      "import": {
+        "types": "./dist/Rotorise.d.ts",
+        "import": "./dist/Rotorise.js"
+      },
+      "require": {
+        "types": "./dist/Rotorise.d.cts",
+        "require": "./dist/Rotorise.cjs"
+      }
     },
-    "require": {
-      "types": "./dist/Rotorise.d.cts",
-      "require": "./dist/Rotorise.cjs"
+    "./testing": {
+      "import": {
+        "types": "./dist/testing.d.ts",
+        "import": "./dist/testing.js"
+      },
+      "require": {
+        "types": "./dist/testing.d.cts",
+        "require": "./dist/testing.cjs"
+      }
+    },
+    "./native": {
+      "import": {
+        "types": "./dist/native.d.ts",
+        "import": "./dist/native.js"
+      },
+      "require": {
+        "types": "./dist/native.d.cts",
+        "require": "./dist/native.cjs"
+      }
     }
   },
   "files": [
@@ -48,10 +70,19 @@
   "license": "Apache-2.0",
   "devDependencies": {
     "@ark/attest": "^0.34.0",
+    "@aws-sdk/util-dynamodb": "^3.981.0",
     "@biomejs/biome": "2.0.0",
     "@types/node": "^18.19.34",
     "tsup": "^8.5.1",
     "typescript": "^5.4.5",
     "vitest": "^2.1.8"
+  },
+  "peerDependencies": {
+    "@aws-sdk/util-dynamodb": "^3.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@aws-sdk/util-dynamodb": {
+      "optional": true
+    }
   }
 }
