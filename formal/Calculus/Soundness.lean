@@ -703,6 +703,244 @@ theorem soundness_both : ∀ (fuel : Nat) {t T μ}, Typed t T μ → Obligations
         obtain ⟨tx, htx, rfl⟩ := ho
         exact (ihs tx htx).2 (hmp tx htx)
 
+/-! ## The denotation's held set is the judgement's
+
+    `Carrier` bounds `e` and `p` by the *codec's* `T`. `typed_TSub` bounds the codec's
+    `T` by the *judgement's*, which is what makes §3's `⊢ c : T ⇝ μ` a claim about the
+    denotation rather than a decoration. The two compose into `typed_e_mem` and
+    `typed_p_mem` below.
+
+    Each rule's held set is built by the same former the combinator's `T` field uses, so
+    most cases are pointwise. Three are not: `tuple` (positional through `align`),
+    `object` (name-dispatched) and `opaque` (a fixpoint), and each gets a helper. -/
+
+/-- The uniform tail of a `(tuple-tail)`: every trailing position is the tail's. -/
+theorem alignTail_TSub {c : Codec} {T' : Held} (ih : ∀ v, c.T v → T' v) :
+    ∀ {vs ps}, align [] (some c) vs = some ps → (∀ p ∈ ps, p.1.T p.2) → ∀ x ∈ vs, T' x
+  | [], _, _, _, x, hx => absurd hx (by simp)
+  | v :: vs, ps, hal, hall, x, hx => by
+      replace hal : ((align [] (some c) vs).map ((c, v) :: ·)) = some ps := hal
+      cases hal' : align ([] : List Codec) (some c) vs with
+      | none => rw [hal'] at hal; exact nomatch hal
+      | some ps' =>
+        rw [hal'] at hal
+        replace hal : some ((c, v) :: ps') = some ps := hal
+        cases hal
+        rcases List.mem_cons.mp hx with rfl | hx'
+        · exact ih x (hall (c, x) (List.mem_cons_self _ _))
+        · exact alignTail_TSub ih hal'
+            (fun p hp => hall p (List.mem_cons_of_mem _ hp)) x hx'
+
+/-- `align`'s positional pairing is §3's `T₁ × … × Tₙ`, one position at a time. -/
+theorem align_TSub {fuel : Nat}
+    (ih : ∀ {t' : Term} {T' μ'}, Typed t' T' μ' → ∀ v, (denote fuel t').T v → T' v)
+    {tail Tt} (hopt : TypedOpt tail Tt) :
+    ∀ {ts Ts}, TypedList ts Ts → ∀ {vs ps},
+      align (ts.map (denote fuel)) (tail.map (denote fuel)) vs = some ps →
+      (∀ p ∈ ps, p.1.T p.2) → HTuple Ts Tt vs
+  | _, _, .nil, vs, ps, hal, hall => by
+      cases hopt with
+      | none =>
+        show HTuple [] none vs
+        cases vs with
+        | nil => rfl
+        | cons _ _ => exact nomatch hal
+      | @some t' T' μ' hty =>
+        show HTuple [] (some T') vs
+        exact alignTail_TSub (ih hty) hal hall
+  | _, _, .cons hty hs, vs, ps, hal, hall => by
+      cases vs with
+      | nil => exact nomatch hal
+      | cons v vs' =>
+        replace hal : (((align _ (tail.map (denote fuel)) vs')).map
+          ((denote fuel _, v) :: ·)) = some ps := hal
+        cases hal' : align _ (tail.map (denote fuel)) vs' with
+        | none => rw [hal'] at hal; exact nomatch hal
+        | some ps' =>
+          rw [hal'] at hal
+          replace hal : some ((denote fuel _, v) :: ps') = some ps := hal
+          cases hal
+          refine ⟨ih hty v (hall _ (List.mem_cons_self _ _)), ?_⟩
+          exact align_TSub ih hopt hs hal'
+            (fun p hp => hall p (List.mem_cons_of_mem _ hp))
+
+/-- A field's binding is looked up where its semantics is. -/
+theorem TypedFields.lookup_bind : ∀ {fields binds}, TypedFields fields binds →
+    ∀ k, (fields.lookup k).isSome = (binds.lookup k).isSome ∧
+      ∀ f, fields.lookup k = some f →
+        ∃ T π μ, binds.lookup k = some (π, T) ∧ TypedField f T π μ
+  | _, _, .nil, _ => ⟨rfl, fun _ h => nomatch h⟩
+  | _, _, @TypedFields.cons k₁ f₁ fs binds T₁ π₁ μ₁ hf hs, k => by
+      simp only [List.lookup]
+      cases hbe : (k == k₁) with
+      | true => exact ⟨rfl, fun f h => by cases h; exact ⟨T₁, π₁, μ₁, rfl, hf⟩⟩
+      | false => exact TypedFields.lookup_bind hs k
+
+/-- `opaque`'s fixpoint carries §3's `Uν` at every fuel. -/
+theorem opaq_TSub : ∀ (fuel : Nat) (lossy : Bool) (v : Value),
+    (opaqCodec fuel lossy).T v → HOpaque lossy v
+  | 0, _, _, h => nomatch h
+  | fuel+1, lossy, v, h => by
+    obtain ⟨o, ho, hT⟩ := h
+    have ih := opaq_TSub fuel lossy
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at ho
+    rcases ho with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl
+    · obtain ⟨s, rfl⟩ := hT; exact .str s
+    · obtain ⟨b, rfl⟩ := hT; exact .bool b
+    · obtain ⟨b, rfl⟩ := hT; exact .bin b
+    · cases hT; exact .null
+    · cases hl : lossy with
+      | false => rw [hl] at hT; exact nomatch hT
+      | true =>
+        rw [hl] at hT
+        obtain ⟨d, rfl⟩ := hT
+        exact .num d rfl
+    · cases v <;> first
+        | (obtain ⟨-, hall⟩ := hT; exact .set _ fun x hx => ih x (hall x hx))
+        | exact nomatch hT
+    · cases v <;> first
+        | exact .arr _ fun x hx => ih x (hT x hx)
+        | exact nomatch hT
+    · cases v <;> first
+        | exact .map _ fun kv hkv => ih kv.2 (hT kv hkv)
+        | exact nomatch hT
+
+/-- A union option's held set is one of the rule's. -/
+theorem TypedListμ.mem : ∀ {ts Ts μs}, TypedListμ ts Ts μs →
+    ∀ t ∈ ts, ∃ T ∈ Ts, ∃ μ, Typed t T μ
+  | _, _, _, .nil, t, ht => absurd ht (by simp)
+  | _, _, _, .cons h hs, t, ht => by
+      rcases List.mem_cons.mp ht with rfl | ht'
+      · exact ⟨_, List.mem_cons_self _ _, _, h⟩
+      · obtain ⟨T', hT', μ', hty⟩ := TypedListμ.mem hs t ht'
+        exact ⟨T', List.mem_cons_of_mem _ hT', μ', hty⟩
+
+theorem TypedListM.mem : ∀ {ts Ts}, TypedListM ts Ts →
+    ∀ t ∈ ts, ∃ T ∈ Ts, Typed t T (some .M)
+  | _, _, .nil, t, ht => absurd ht (by simp)
+  | _, _, .cons h hs, t, ht => by
+      rcases List.mem_cons.mp ht with rfl | ht'
+      · exact ⟨_, List.mem_cons_self _ _, h⟩
+      · obtain ⟨T', hT', hty⟩ := TypedListM.mem hs t ht'
+        exact ⟨T', List.mem_cons_of_mem _ hT', hty⟩
+
+/-- Every binding comes from a field, with its presence and held set. -/
+theorem TypedFields.mem_bind : ∀ {fields binds}, TypedFields fields binds →
+    ∀ nb ∈ binds, ∃ f, (nb.1, f) ∈ fields ∧ ∃ μ, TypedField f nb.2.2 nb.2.1 μ
+  | _, _, .nil, nb, h => absurd h (by simp)
+  | _, _, @TypedFields.cons k₁ f₁ fs binds T₁ π₁ μ₁ hf hs, nb, h => by
+      rcases List.mem_cons.mp h with rfl | h'
+      · exact ⟨f₁, List.mem_cons_self _ _, μ₁, hf⟩
+      · obtain ⟨f, hmem, μ, hty⟩ := TypedFields.mem_bind hs nb h'
+        exact ⟨f, List.mem_cons_of_mem _ hmem, μ, hty⟩
+
+/-- The denotation's held set is inside the judgement's, at every fuel. -/
+theorem typed_TSub : ∀ (fuel : Nat) {t T μ}, Typed t T μ →
+    ∀ v, (denote fuel t).T v → T v
+  | 0, _, _, _, _, _, h => nomatch h
+  | fuel+1, t, T, μ, h, v, hv => by
+    cases h with
+    | string | number | decimal | boolean | binary | numeric _ => exact hv
+    | literalS _ _ _ | literalN _ _ _ => exact hv
+    | custom _ _ => exact hv
+    | opaq lossy => exact opaq_TSub (fuel+1) lossy v hv
+    | @set t' T' μ₀ μS h' hs =>
+      cases v <;> first
+        | (obtain ⟨hne, hall⟩ := hv
+           exact ⟨_, rfl, hne, fun x hx => typed_TSub fuel h' x (hall x hx)⟩)
+        | exact nomatch hv
+    | @array t' T' μ' h' =>
+      cases v <;> first
+        | exact ⟨_, rfl, fun x hx => typed_TSub fuel h' x (hv x hx)⟩
+        | exact nomatch hv
+    | @record t' T' μ' h' =>
+      cases v <;> first
+        | exact ⟨_, rfl, fun kv hkv => typed_TSub fuel h' kv.2 (hv kv hkv)⟩
+        | exact nomatch hv
+    | @tuple ts Ts tail Tt hlist hopt =>
+      cases v <;> first
+        | (obtain ⟨ps, hal, hall⟩ := hv
+           exact ⟨_, rfl, align_TSub (fun hty => typed_TSub fuel hty) hopt
+             hlist hal hall⟩)
+        | exact nomatch hv
+    | @held t' I' T' μ' f g h' hT =>
+      exact (hT v).mpr (typed_TSub fuel h' (f v) hv)
+    | @refine t' T' μ' q h' => exact ⟨typed_TSub fuel h' v hv.1, hv.2⟩
+    | @legacy t' T' μ' r h' => exact typed_TSub fuel h' v hv
+    | @nullable t' T' μ' h' =>
+      rcases hv with hv' | rfl
+      · exact Or.inl (typed_TSub fuel h' v hv')
+      · exact Or.inr rfl
+    | @lazy γ T' μ' h' => exact typed_TSub fuel h' v hv
+    | @object fields binds rest R hfields hnd hrest =>
+      cases v
+      case map kvs =>
+        obtain ⟨hval, hall⟩ := hv
+        refine ⟨kvs, rfl, ?_, ?_⟩
+        · -- every required binding's name is present, because its field is not `opt`
+          intro nb hnb hreq
+          obtain ⟨nk, nπ, nT⟩ := nb
+          obtain ⟨f, hmem, μf, hty⟩ := TypedFields.mem_bind hfields (nk, nπ, nT) hnb
+          have hsem : (nk, fieldSemOf (denote fuel) f) ∈
+              fields.map fun kf => (kf.1, fieldSemOf (denote fuel) kf.2) :=
+            List.mem_map.mpr ⟨(nk, f), hmem, rfl⟩
+          have hno : ∀ c, fieldSemOf (denote fuel) f ≠ FieldSem.opt c := by
+            intro c hc
+            cases hty with
+            | req _ => exact nomatch hc
+            | fallback _ => exact nomatch hc
+            | optional _ => exact nomatch hreq
+          exact lookup_isSome_of_mem_fst
+            (mem_of_contains (valPresentB_spec hval hsem hno))
+        · -- and every present name holds what its binding, or the open part, says
+          intro k x hlk
+          have hentry := hall (k, x) (mem_of_lookup hlk)
+          have hsl : (fields.map fun kf =>
+              (kf.1, fieldSemOf (denote fuel) kf.2)).lookup k =
+              (fields.lookup k).map (fieldSemOf (denote fuel)) :=
+            lookup_map _ fields k
+          cases hf : fields.lookup k with
+          | some f =>
+            obtain ⟨T', π', μ', hbl, htyf⟩ :=
+              (TypedFields.lookup_bind hfields k).2 f hf
+            rw [hbl]
+            simp only [objEntryT, hsl, hf, Option.map] at hentry
+            cases htyf with
+            | req hty' => exact typed_TSub fuel hty' x hentry
+            | optional hty' => exact typed_TSub fuel hty' x hentry
+            | fallback hty' => exact typed_TSub fuel hty' x hentry
+          | none =>
+            have hbn : binds.lookup k = none := by
+              have := (TypedFields.lookup_bind hfields k).1
+              rw [hf] at this
+              cases hb : binds.lookup k with
+              | none => rfl
+              | some b => rw [hb] at this; exact nomatch this
+            rw [hbn]
+            simp only [objEntryT, hsl, hf, Option.map] at hentry
+            obtain ⟨rc, hrc, hrcT⟩ := hentry
+            cases hrest with
+            | drop => exact nomatch hrc
+            | refuse => exact nomatch hrc
+            | @codec t' T'' μ'' hty' =>
+              replace hrc : some (denote fuel t') = some rc := hrc
+              cases hrc
+              exact ⟨T'', rfl, typed_TSub fuel hty' x hrcT⟩
+      all_goals exact nomatch hv
+    | @union opts Ts μs hlist =>
+      obtain ⟨o, ho, hT⟩ := hv
+      simp only [List.mem_map] at ho
+      obtain ⟨tx, htx, rfl⟩ := ho
+      obtain ⟨T', hT', μ', hty⟩ := TypedListμ.mem hlist tx htx
+      rw [optionSemOf_c] at hT
+      exact ⟨T', hT', typed_TSub fuel hty v hT⟩
+    | @dunion d opts Ts hlistM htags hdisj =>
+      obtain ⟨o, ho, hT⟩ := hv
+      simp only [List.mem_map] at ho
+      obtain ⟨-, ⟨tx, htx, rfl⟩, rfl⟩ := ho
+      obtain ⟨T', hT', hty⟩ := TypedListM.mem hlistM tx htx
+      exact ⟨T', hT', typed_TSub fuel hty v hT⟩
+
 /-- Every derivable term denotes a pair **on its carrier** — §3's `e : T ⇀ 𝔸`,
     `p : 𝔸 ⇀ T`. One walk of the derivation, dispatching to the `Carrier` lemmas, with
     `soundness_both` supplying the lawfulness the `held` and `custom` cases need. -/
@@ -862,6 +1100,18 @@ theorem carrier_denote : ∀ (fuel : Nat) {t T μ}, Typed t T μ → Obligations
       obtain ⟨-, ⟨t', ht', rfl⟩, rfl⟩ := ho
       obtain ⟨T', hty⟩ := TypedListM.forall hlistM t' ht'
       exact carrier_denote fuel hty (hob t' ht')
+
+/-- §3's `e : T ⇀ 𝔸`, at the judgement's own index: a derivable term writes only
+    values of the held set it names. -/
+theorem typed_e_mem (fuel : Nat) {t T μ} (h : Typed t T μ) (hob : Obligations fuel t)
+    {v a} (he : (denote fuel t).e v = some a) : T v :=
+  typed_TSub fuel h v ((carrier_denote fuel h hob).domE he)
+
+/-- §3's `p : 𝔸 ⇀ T`, at the judgement's own index: a derivable term reads only into
+    the held set it names. -/
+theorem typed_p_mem (fuel : Nat) {t T μ} (h : Typed t T μ) (hob : Obligations fuel t)
+    {a v} (hp : (denote fuel t).p a = some v) : T v :=
+  typed_TSub fuel h v ((carrier_denote fuel h hob).ranP hp)
 
 /-- §5 Theorem (soundness), core half: (R), (C), (W) for every derivable term — the
     `legacy` case included, which is exactly where this differs from `soundness`. -/

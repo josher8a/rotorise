@@ -14,7 +14,7 @@ definition it touches.
 | `Calculus/Term.lean`        | §3–§4       | Deep-embedded terms, fields, rest policies                                                                                                                                                                                                                            |
 | `Calculus/Denote.lean`      | —           | `denote : Nat → Term → Codec`, pure dispatch into the combinators                                                                                                                                                                                                     |
 | `Calculus/Typing.lean`      | §3–§5       | The judgement `⊢ c : T ⇝ μ`, both indices, with the held-set formers (`HSet`, `HStar`, `HProd`, `HMap`, `HNull`, `HObject`, `HUnion`, `HOpaque`); syntactic premises only                                                                                             |
-| `Calculus/Soundness.lean`   | §5          | `Obligations` (semantic premises, fueled), `UAtCan := UniqueAdmission ∘ semsOf`, `MPOk` (legacy exemption), theorem statements                                                                                                                                        |
+| `Calculus/Soundness.lean`   | §5          | `Obligations` (semantic premises, fueled), `UAtCan := UniqueAdmission ∘ semsOf`, `MPOk` (legacy exemption), theorem statements, and the held-set bridge `carrier_denote`/`typed_TSub`/`typed_e_mem`/`typed_p_mem`                                                    |
 | `Calculus/Discharge.lean`   | §5          | The machinery of (K): `Kind`, `κ`, `ident`, `adm`/`admA` as structural recursions, `κ_sound`/`adm_sound`/`admA_sound`, and `uAtCan_of_separated` — the dischargers of (U), proved, with witnesses and the two counterexamples that repaired (K)                       |
 
 **The mechanization is complete: the project builds with zero `sorry`.** Both halves
@@ -23,7 +23,11 @@ the legacy exemption as the `MPOk` hypothesis) and `soundness_core` ((R), (C), (
 through `legacy`-containing derivations) — by induction on the judgement, dispatching
 each case to its certified combinator lemma, with the `(dunion)` stamps derived from
 typing and (U) discharged by `uniqueAdmission_byTag` / `uniqueAdmission_of_disjoint`.
-The judgement carries both of §3's indices — the held set `T` and the member `μ`. The
+The judgement carries both of §3's indices, and both are checked against the
+denotation. `typed_e_mem` and `typed_p_mem` are §3's `e : T ⇀ 𝔸` and `p : 𝔸 ⇀ T` at the
+judgement's own index — a derivable term writes and reads only values of the held set it
+names — factored through `Carrier` (per combinator) and `typed_TSub` (the denotation's
+held set is inside the judgement's). The
 member index is fuel-free (`μSyn`, with `denote_μ` and `typed_μSyn` tying the denotation
 and the judgement to it), and `lazy` concludes `⊤` in the model exactly as the doc's
 `(lazy)` rule demands.
@@ -69,7 +73,10 @@ and the judgement to it), and `lazy` concludes `⊤` in the model exactly as the
 ## What remains (sharpenings, not gaps)
 
 The theorem is proved; these tighten the model's fidelity to the doc, none affect
-soundness: widening `admA` past `literalS`/`dunion` (a numeric literal's read side
+soundness: mechanizing §6's equations, of which none are yet formalized — `≡` itself
+("the same `T`, the same `μ`, and `e` and `p` agreeing everywhere both are defined") has
+no Lean definition, and two rows are cited elsewhere as load-bearing (`nullable`'s
+idempotence in §3, `union`'s commutativity in §5); widening `admA` past `literalS`/`dunion` (a numeric literal's read side
 goes through the axiomatized `Double.ofDec`, so no syntactic set bounds it, and those
 pairs still fall to (U) per input); a soundness lemma tying the judgement's `T` to the
 denotation (`e`'s domain and `p`'s range land in `T`), which the `T` index now makes
