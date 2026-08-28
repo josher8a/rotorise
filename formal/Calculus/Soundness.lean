@@ -135,32 +135,35 @@ theorem lawful_literalN (ls : List Double) : ∀ fuel, Lawful (denote fuel (.lit
 
 /-! ## Inversion and dispatch helpers -/
 
-theorem TypedList.forall : ∀ {ts}, TypedList ts → ∀ t ∈ ts, ∃ μ, Typed t μ
-  | _, .nil, t, ht => absurd ht (by simp)
-  | _, .cons h hs, t, ht => by
+theorem TypedList.forall : ∀ {ts Ts}, TypedList ts Ts → ∀ t ∈ ts, ∃ T μ, Typed t T μ
+  | _, _, .nil, t, ht => absurd ht (by simp)
+  | _, _, .cons h hs, t, ht => by
       rcases List.mem_cons.mp ht with rfl | ht'
-      · exact ⟨_, h⟩
+      · exact ⟨_, _, h⟩
       · exact TypedList.forall hs t ht'
 
-theorem TypedListμ.forall : ∀ {ts μs}, TypedListμ ts μs → ∀ t ∈ ts, ∃ μ, Typed t μ
+theorem TypedListμ.forall : ∀ {ts Ts μs}, TypedListμ ts Ts μs →
+    ∀ t ∈ ts, ∃ T μ, Typed t T μ
+  | _, _, _, .nil, t, ht => absurd ht (by simp)
+  | _, _, _, .cons h hs, t, ht => by
+      rcases List.mem_cons.mp ht with rfl | ht'
+      · exact ⟨_, _, h⟩
+      · exact TypedListμ.forall hs t ht'
+
+theorem TypedListM.forall : ∀ {ts Ts}, TypedListM ts Ts →
+    ∀ t ∈ ts, ∃ T, Typed t T (some .M)
   | _, _, .nil, t, ht => absurd ht (by simp)
   | _, _, .cons h hs, t, ht => by
       rcases List.mem_cons.mp ht with rfl | ht'
       · exact ⟨_, h⟩
-      · exact TypedListμ.forall hs t ht'
-
-theorem TypedListM.forall : ∀ {ts}, TypedListM ts → ∀ t ∈ ts, Typed t (some .M)
-  | _, .nil, t, ht => absurd ht (by simp)
-  | _, .cons h hs, t, ht => by
-      rcases List.mem_cons.mp ht with rfl | ht'
-      · exact h
       · exact TypedListM.forall hs t ht'
 
-theorem TypedFields.forall : ∀ {fs}, TypedFields fs → ∀ kf ∈ fs, ∃ μ, TypedField kf.2 μ
-  | _, .nil, kf, h => absurd h (by simp)
-  | _, .cons hf hs, kf, h => by
+theorem TypedFields.forall : ∀ {fs binds}, TypedFields fs binds →
+    ∀ kf ∈ fs, ∃ T π μ, TypedField kf.2 T π μ
+  | _, _, .nil, kf, h => absurd h (by simp)
+  | _, _, .cons hf hs, kf, h => by
       rcases List.mem_cons.mp h with rfl | h'
-      · exact ⟨_, hf⟩
+      · exact ⟨_, _, _, hf⟩
       · exact TypedFields.forall hs kf h'
 
 theorem unanimous_spec : ∀ {l : List (Option Member)} {m},
@@ -284,38 +287,38 @@ end
 mutual
 
 /-- Typing's member index is the syntactic one — exactly, both sides. -/
-theorem typed_μSyn : ∀ {t μ}, Typed t μ → μSyn t = μ
-  | _, _, .string => rfl
-  | _, _, .number => rfl
-  | _, _, .decimal => rfl
-  | _, _, .boolean => rfl
-  | _, _, .binary => rfl
-  | _, _, .numeric _ => rfl
-  | _, _, .literalS _ _ _ => rfl
-  | _, _, .literalN _ _ _ => rfl
-  | _, _, .set h' hs => by
+theorem typed_μSyn : ∀ {t T μ}, Typed t T μ → μSyn t = μ
+  | _, _, _, .string => rfl
+  | _, _, _, .number => rfl
+  | _, _, _, .decimal => rfl
+  | _, _, _, .boolean => rfl
+  | _, _, _, .binary => rfl
+  | _, _, _, .numeric _ => rfl
+  | _, _, _, .literalS _ _ _ => rfl
+  | _, _, _, .literalN _ _ _ => rfl
+  | _, _, _, .set h' hs => by
       show (μSyn _).bind setMember = _
       rw [typed_μSyn h']
       exact hs
-  | _, _, .array _ => rfl
-  | _, _, .tuple _ _ => rfl
-  | _, _, .record _ => rfl
-  | _, _, .held h' => by have ih := typed_μSyn h'; exact ih
-  | _, _, .refine h' => by have ih := typed_μSyn h'; exact ih
-  | _, _, .legacy h' => by have ih := typed_μSyn h'; exact ih
-  | _, _, .nullable _ => rfl
-  | _, _, .lazy _ => rfl
-  | _, _, .custom _ _ => rfl
-  | _, _, .opaq _ => rfl
-  | _, _, .object _ _ _ => rfl
-  | _, _, .union h => by
+  | _, _, _, .array _ => rfl
+  | _, _, _, .tuple _ _ => rfl
+  | _, _, _, .record _ => rfl
+  | _, _, _, .held h' _ => by have ih := typed_μSyn h'; exact ih
+  | _, _, _, .refine h' => by have ih := typed_μSyn h'; exact ih
+  | _, _, _, .legacy h' => by have ih := typed_μSyn h'; exact ih
+  | _, _, _, .nullable _ => rfl
+  | _, _, _, .lazy _ => rfl
+  | _, _, _, .custom _ _ => rfl
+  | _, _, _, .opaq _ => rfl
+  | _, _, _, .object _ _ _ => rfl
+  | _, _, _, .union h => by
       show unanimous (μSynList _) = unanimous _
       rw [typedListμ_μSyn h]
-  | _, _, .dunion _ _ _ => rfl
+  | _, _, _, .dunion _ _ _ => rfl
 
-theorem typedListμ_μSyn : ∀ {ts μs}, TypedListμ ts μs → μSynList ts = μs
-  | _, _, .nil => rfl
-  | _, _, .cons h hs => by
+theorem typedListμ_μSyn : ∀ {ts Ts μs}, TypedListμ ts Ts μs → μSynList ts = μs
+  | _, _, _, .nil => rfl
+  | _, _, _, .cons h hs => by
       show μSyn _ :: μSynList _ = _
       rw [typed_μSyn h, typedListμ_μSyn hs]
 
@@ -416,10 +419,10 @@ theorem dunion_stamp (fuel : Nat) {d : Name} {opts : List Term}
     all four where the derivation is legacy-free. One walk of the derivation, one
     unpacking of the obligations; each case dispatches to its two combinator lemmas.
     The public statements are the projections below. -/
-theorem soundness_both : ∀ (fuel : Nat) {t μ}, Typed t μ → Obligations fuel t →
+theorem soundness_both : ∀ (fuel : Nat) {t T μ}, Typed t T μ → Obligations fuel t →
     LawfulCore (denote fuel t) ∧ (MPOk fuel t → Lawful (denote fuel t))
-  | 0, _, _, _, _ => ⟨lawful_dead.core, fun _ => lawful_dead⟩
-  | fuel+1, t, μ, h, hob => by
+  | 0, _, _, _, _, _ => ⟨lawful_dead.core, fun _ => lawful_dead⟩
+  | fuel+1, t, T, μ, h, hob => by
     cases h with
     | string =>
       simp only [denote]; exact ⟨lawful_stringCodec.core, fun _ => lawful_stringCodec⟩
@@ -440,7 +443,7 @@ theorem soundness_both : ∀ (fuel : Nat) {t μ}, Typed t μ → Obligations fue
     | literalN ls hne hnd =>
       simp only [denote]
       exact ⟨(lawful_literalNCodec ls).core, fun _ => lawful_literalNCodec ls⟩
-    | @set t' μ₀ μS h' hs =>
+    | @set t' T' μ₀ μS h' hs =>
       simp only [denote]
       replace hob : Obligations fuel t' := hob
       have ih := soundness_both fuel h' hob
@@ -451,28 +454,28 @@ theorem soundness_both : ∀ (fuel : Nat) {t μ}, Typed t μ → Obligations fue
       · intro hmp
         replace hmp : MPOk fuel t' := hmp
         exact lawful_setCodec (ih.2 hmp)
-    | @array t' μ' h' =>
+    | @array t' T' μ' h' =>
       simp only [denote]
       replace hob : Obligations fuel t' := hob
       have ih := soundness_both fuel h' hob
       refine ⟨lawfulCore_arrayCodec ih.1, fun hmp => ?_⟩
       replace hmp : MPOk fuel t' := hmp
       exact lawful_arrayCodec (ih.2 hmp)
-    | @record t' μ' h' =>
+    | @record t' T' μ' h' =>
       simp only [denote]
       replace hob : Obligations fuel t' := hob
       have ih := soundness_both fuel h' hob
       refine ⟨lawfulCore_recordCodec ih.1, fun hmp => ?_⟩
       replace hmp : MPOk fuel t' := hmp
       exact lawful_recordCodec (ih.2 hmp)
-    | @tuple ts tail hlist hopt =>
+    | @tuple ts Ts tail Tt hlist hopt =>
       simp only [denote]
       replace hob : (∀ t' ∈ ts, Obligations fuel t') ∧
         (∀ t' ∈ tail, Obligations fuel t') := hob
       have ihs : ∀ t' ∈ ts,
           LawfulCore (denote fuel t') ∧ (MPOk fuel t' → Lawful (denote fuel t')) :=
         fun t' ht' => by
-          obtain ⟨μ', hμ'⟩ := TypedList.forall hlist t' ht'
+          obtain ⟨T', μ', hμ'⟩ := TypedList.forall hlist t' ht'
           exact soundness_both fuel hμ' (hob.1 t' ht')
       have iht : ∀ t' ∈ tail,
           LawfulCore (denote fuel t') ∧ (MPOk fuel t' → Lawful (denote fuel t')) :=
@@ -511,7 +514,7 @@ theorem soundness_both : ∀ (fuel : Nat) {t μ}, Typed t μ → Obligations fue
             replace hc : some (denote fuel t') = some c := hc
             cases hc
             exact (iht t' rfl).2 (hmp.2 t' rfl)
-    | @held t' μ' f g h' =>
+    | @held t' I' T' μ' f g h' hT =>
       simp only [denote]
       replace hob : Obligations fuel t' ∧
         (∀ v, ((denote fuel t').e (f v)).isSome → g (f v) = v) ∧
@@ -520,14 +523,14 @@ theorem soundness_both : ∀ (fuel : Nat) {t μ}, Typed t μ → Obligations fue
       refine ⟨LawfulCore.through ih.1 hob.2.1 hob.2.2, fun hmp => ?_⟩
       replace hmp : MPOk fuel t' := hmp
       exact Lawful.through (ih.2 hmp) hob.2.1 hob.2.2
-    | @refine t' μ' q h' =>
+    | @refine t' T' μ' q h' =>
       simp only [denote]
       replace hob : Obligations fuel t' := hob
       have ih := soundness_both fuel h' hob
       refine ⟨LawfulCore.restrict ih.1 q, fun hmp => ?_⟩
       replace hmp : MPOk fuel t' := hmp
       exact Lawful.restrict (ih.2 hmp) q
-    | @legacy t' μ' r h' =>
+    | @legacy t' T' μ' r h' =>
       simp only [denote]
       replace hob : Obligations fuel t' ∧
         (∀ a v, r a = some v → ((denote fuel t').e v).isSome) ∧
@@ -536,7 +539,7 @@ theorem soundness_both : ∀ (fuel : Nat) {t μ}, Typed t μ → Obligations fue
         fun hmp => ?_⟩
       replace hmp : False := hmp
       exact hmp.elim
-    | @nullable t' μ' h' =>
+    | @nullable t' T' μ' h' =>
       simp only [denote]
       replace hob : Obligations fuel t' ∧
         (∀ v a, (denote fuel t').e v = some a → a = .null → v = .null) ∧
@@ -545,7 +548,7 @@ theorem soundness_both : ∀ (fuel : Nat) {t μ}, Typed t μ → Obligations fue
       refine ⟨LawfulCore.orNull ih.1 hob.2.1 hob.2.2, fun hmp => ?_⟩
       replace hmp : MPOk fuel t' := hmp
       exact Lawful.orNull (ih.2 hmp) hob.2.1 hob.2.2
-    | @lazy γ μ' h' =>
+    | @lazy γ T' μ' h' =>
       simp only [denote]
       replace hob : Obligations fuel (γ ()) := hob
       have ih := soundness_both fuel h' hob
@@ -560,7 +563,7 @@ theorem soundness_both : ∀ (fuel : Nat) {t μ}, Typed t μ → Obligations fue
     | opaq lossy =>
       simp only [denote]
       exact ⟨(lawful_opaqCodec (fuel+1) lossy).core, fun _ => lawful_opaqCodec (fuel+1) lossy⟩
-    | @object fields rest hfields hndf hrest =>
+    | @object fields binds rest R hfields hndf hrest =>
       simp only [denote]
       have ihf : ∀ k f, (k, f) ∈ fields →
           LawfulCore (fieldSemOf (denote fuel) f).codec ∧
@@ -570,7 +573,7 @@ theorem soundness_both : ∀ (fuel : Nat) {t μ}, Typed t μ → Obligations fue
             | .fallback t' _ => MPOk fuel t') →
             Lawful (fieldSemOf (denote fuel) f).codec) := by
         intro k f hmem
-        obtain ⟨μ', hμ'⟩ := TypedFields.forall hfields (k, f) hmem
+        obtain ⟨T', π', μ', hμ'⟩ := TypedFields.forall hfields (k, f) hmem
         have hobf := hob.1 (k, f) hmem
         cases f with
         | req t' =>
@@ -612,7 +615,7 @@ theorem soundness_both : ∀ (fuel : Nat) {t μ}, Typed t μ → Obligations fue
         cases hrest with
         | drop => exact nomatch hcr
         | refuse => exact nomatch hcr
-        | @codec t' μ' hty =>
+        | @codec t' T' μ' hty =>
           replace hcr : RestSem.codec (denote fuel t') = RestSem.codec c := hcr
           cases hcr
           replace hob2 : Obligations fuel t' := hob.2
@@ -636,13 +639,13 @@ theorem soundness_both : ∀ (fuel : Nat) {t μ}, Typed t μ → Obligations fue
           exact (ihf k f hmem).2 (hmp.1 (k, f) hmem)
         · intro c hcr
           exact (ihr c hcr).2 hmp
-    | @union opts μs hlist =>
+    | @union opts Ts μs hlist =>
       simp only [denote]
       replace hob : (∀ t' ∈ opts, Obligations fuel t') ∧ UAtCan fuel opts := hob
       have ihs : ∀ t' ∈ opts,
           LawfulCore (denote fuel t') ∧ (MPOk fuel t' → Lawful (denote fuel t')) :=
         fun t' ht' => by
-          obtain ⟨μ', hμ'⟩ := TypedListμ.forall hlist t' ht'
+          obtain ⟨T', μ', hμ'⟩ := TypedListμ.forall hlist t' ht'
           exact soundness_both fuel hμ' (hob.1 t' ht')
       have hU : UniqueAdmission
           (opts.map fun t' => optionSemOf (denote fuel t') (specOf t')) := hob.2
@@ -674,13 +677,14 @@ theorem soundness_both : ∀ (fuel : Nat) {t μ}, Typed t μ → Obligations fue
         show Lawful (optionSemOf (denote fuel t') (specOf t')).c
         rw [optionSemOf_c]
         exact (ihs t' ht').2 (hmp t' ht')
-    | @dunion d opts hlistM htags hdisj =>
+    | @dunion d opts Ts hlistM htags hdisj =>
       simp only [denote]
       replace hob : ∀ t' ∈ opts, Obligations fuel t' := hob
       have ihs : ∀ t' ∈ opts,
           LawfulCore (denote fuel t') ∧ (MPOk fuel t' → Lawful (denote fuel t')) :=
-        fun t' ht' =>
-          soundness_both fuel (TypedListM.forall hlistM t' ht') (hob t' ht')
+        fun t' ht' => by
+          obtain ⟨T', hty⟩ := TypedListM.forall hlistM t' ht'
+          exact soundness_both fuel hty (hob t' ht')
       have hstamp := dunion_stamp fuel htags
       have hdisj' : List.Pairwise (fun x y => ∀ tag ∈ x.1, tag ∉ y.1)
           (opts.map fun t' => (tagsOf d t', denote fuel t')) :=
@@ -701,14 +705,14 @@ theorem soundness_both : ∀ (fuel : Nat) {t μ}, Typed t μ → Obligations fue
 
 /-- §5 Theorem (soundness), core half: (R), (C), (W) for every derivable term — the
     `legacy` case included, which is exactly where this differs from `soundness`. -/
-theorem soundness_core (fuel : Nat) {t μ} (h : Typed t μ)
+theorem soundness_core (fuel : Nat) {t T μ} (h : Typed t T μ)
     (hob : Obligations fuel t) : LawfulCore (denote fuel t) :=
   (soundness_both fuel h hob).1
 
 /-- §5 Theorem (soundness), full: all four laws where the derivation is legacy-free —
     the doc's (MP) exemption, made a hypothesis. Each case dispatches to its
     combinator lemma; the grouping is the doc's proof, machine-checked. -/
-theorem soundness (fuel : Nat) {t μ} (h : Typed t μ)
+theorem soundness (fuel : Nat) {t T μ} (h : Typed t T μ)
     (hob : Obligations fuel t) (hmp : MPOk fuel t) : Lawful (denote fuel t) :=
   (soundness_both fuel h hob).2 hmp
 
