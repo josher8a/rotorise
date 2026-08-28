@@ -27,8 +27,8 @@ noncomputable def semsOf (fuel : Nat) (opts : List Term) : List OptionSem :=
   opts.map fun t' => optionSemOf (denote fuel t') (specOf t')
 
 /-- §5 (U) at canonical inputs: every canonical attribute of an option is admitted by
-    that option alone, on both sides. The theorem's residue; (D), (K) and `ident` are
-    its decidable dischargers (TODO lemmas, see README). -/
+    that option alone, on both sides. The theorem's residue; the disjointness
+    dischargers are proved in `Calculus.Discharge` (`uAtCan_of_disjoint`). -/
 def UAtCan (fuel : Nat) (opts : List Term) : Prop :=
   UniqueAdmission (semsOf fuel opts)
 
