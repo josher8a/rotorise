@@ -12,9 +12,14 @@ pairwise-disjoint `κ` (no `⊤`) settles the value side, and pairwise-distinct 
 members settle the attribute side — the member index standing in for §5 (D), whose
 held-set form waits on the `T` index (README). Open object options are excluded, as
 §5 demands: an undeclared name disqualifies the option even where its rest codec would
-hold it, so an open object never admits its own canonical pairs. The `ident` exemption
-is defined but not yet consumed — its discharge argues per admissible set (a
-`literal`'s values, a `dunion`'s tags), the next sharpening.
+hold it, so an open object never admits its own canonical pairs.
+
+`ident` is defined, per §5's table, but is deliberately *not* consumed as an exemption
+from κ-disjointness. §5 states (K) as `κ(cᵢ) ∩ κ(cⱼ) = ∅ ∨ ident(cᵢ) ∨ ident(cⱼ)` and
+calls it sufficient for (U); it is not, on either disjunct, and the two counterexamples
+at the foot of this file are machine-checked. A repaired exemption needs `ident` on
+*both* sides *and* disjoint admissible sets — which is what §5's own worked example,
+`union(literal("A"), literal("B"))`, actually has.
 -/
 
 namespace Calculus
@@ -555,5 +560,129 @@ theorem uAtCan_of_disjoint (fuel : Nat) {opts : List Term}
         have h1 := admitV_kind fuel x hkx hvx
         have h2 := admitV_kind fuel y hky hvy
         exact absurd h2 (hxy kx ky hkx hky _ h1)
+
+/-! ## The premises are jointly inhabited
+
+    `uAtCan_of_disjoint` takes six premises, and a theorem whose premises cannot all
+    hold discharges nothing. `union(string, boolean)` satisfies every one of them —
+    disjoint kinds, distinct members, closed, lawful — so the discharger really does
+    decide unions. -/
+
+/-- Satisfiability witness for `uAtCan_of_disjoint`: `union(string, boolean)` is
+    discharged at the declaration, at every fuel. -/
+theorem uAtCan_string_boolean (fuel : Nat) :
+    UAtCan fuel [Term.string, Term.boolean] := by
+  -- Each premise is checked at the two options and refuted past them.
+  have two : ∀ {P : Term → Prop}, P .string → P .boolean →
+      ∀ t ∈ [Term.string, Term.boolean], P t := by
+    intro P hs hb t ht
+    rcases List.mem_cons.mp ht with rfl | ht
+    · exact hs
+    · rcases List.mem_cons.mp ht with rfl | ht
+      · exact hb
+      · exact absurd ht (by simp)
+  -- and each pairwise premise at the single unordered pair.
+  have pair : ∀ {R : Term → Term → Prop}, R .string .boolean →
+      List.Pairwise R [Term.string, Term.boolean] := by
+    intro R h
+    refine List.Pairwise.cons ?_ (List.Pairwise.cons (by simp) List.Pairwise.nil)
+    intro y hy
+    rcases List.mem_cons.mp hy with rfl | hy
+    · exact h
+    · exact absurd hy (by simp)
+  refine uAtCan_of_disjoint fuel (two (lawful_string fuel) (lawful_boolean fuel))
+    (two (fun _ _ h => nomatch h) (fun _ _ h => nomatch h))
+    (two rfl rfl) (two rfl rfl) (pair ?_) (pair ?_)
+  · intro kx ky hx hy k hk
+    replace hx : some [Kind.string] = some kx := hx
+    replace hy : some [Kind.boolean] = some ky := hy
+    cases hx; cases hy
+    simp only [List.mem_singleton] at hk
+    subst hk
+    simp
+  · intro h
+    replace h : some Member.S = some Member.BOOL := h
+    exact nomatch h
+
+/-! ## Why `ident` is *not* an exemption from (K), as §5 states it
+
+    §5 states **(K)** as `∀ i ≠ j. κ(cᵢ) ∩ κ(cⱼ) = ∅ ∨ ident(cᵢ) ∨ ident(cⱼ)`, and
+    calls it a discharger — decidable and *sufficient* for (U). It is not sufficient,
+    and the two counterexamples below are the reason the `ident` half of (K) is absent
+    from `uAtCan_of_disjoint`. This is a correction of the doc, not a gap in the
+    mechanization.
+
+    The prose is right about what `ident` buys: attempted admission on a `literal` is
+    evidence, where attempted admission on `string` is not. What the rule as written
+    drops is that evidence only *resolves* a pair when it is available on **both**
+    sides and the two admissible sets are **disjoint**. §5's own worked example,
+    `union(literal("A"), literal("B"))`, has both; the rule it is offered in support of
+    demands neither. -/
+
+/-- A helper: two options of a two-element union that both admit one value refute (U).
+    `hne` separates the options at some other value, so the singleton filter fails. -/
+theorem not_uAtCan_pair {fuel : Nat} {t₁ t₂ : Term} {v w : Value} {a : Attr}
+    (he : (denote fuel t₁).e v = some a)
+    (h₂ : (optionSemOf (denote fuel t₂) (specOf t₂)).admitV v = true)
+    (hne : (optionSemOf (denote fuel t₁) (specOf t₁)).admitV w ≠
+      (optionSemOf (denote fuel t₂) (specOf t₂)).admitV w) :
+    ¬ UAtCan fuel [t₁, t₂] := by
+  intro h
+  have ho : optionSemOf (denote fuel t₁) (specOf t₁) ∈ semsOf fuel [t₁, t₂] :=
+    List.mem_cons_self _ _
+  have hfilt := (h _ ho v a (by rw [optionSemOf_c]; exact he)).2
+  -- the second option survives the filter too, so the filter cannot be `[o₁]`
+  have hmem : optionSemOf (denote fuel t₂) (specOf t₂) ∈
+      [optionSemOf (denote fuel t₁) (specOf t₁)] := by
+    rw [← hfilt]
+    exact List.mem_filter.mpr
+      ⟨List.mem_cons_of_mem _ (List.mem_cons_self _ _), h₂⟩
+  rcases List.mem_cons.mp hmem with heq | hnil
+  · exact hne (congrArg (fun o => OptionSem.admitV o w) heq.symm)
+  · exact absurd hnil (by simp)
+
+/-- **One-sided `ident` does not discharge (K).** `union(literal("A"), string)` passes
+    §5's (K) — `ident(literal("A"))` holds — and violates (U) at the value `"A"`, which
+    both options admit. `literal`'s attempt *is* evidence; `string`'s is not, and one
+    honest answer does not resolve a pair. -/
+theorem not_uAtCan_literal_string :
+    ¬ UAtCan 1 [Term.literalS ["A"], Term.string] := by
+  have hA : (denote 1 (Term.literalS ["A"])).e (Value.str "A") = some (Attr.s "A") := by
+    show (if "A" ∈ ["A"] then some (Attr.s "A") else none) = some (Attr.s "A")
+    rw [if_pos (List.mem_cons_self _ _)]
+  have hB : (denote 1 (Term.literalS ["A"])).e (Value.str "B") = none := by
+    show (if "B" ∈ ["A"] then some (Attr.s "B") else none) = none
+    rw [if_neg (by simp)]
+  refine not_uAtCan_pair (v := .str "A") (a := Attr.s "A") (w := .str "B") hA rfl ?_
+  · show ((denote 1 (Term.literalS ["A"])).e (Value.str "B")).isSome ≠
+      ((denote 1 Term.string).e (Value.str "B")).isSome
+    rw [hB]
+    exact fun h => nomatch h
+
+/-- **Two-sided `ident` does not discharge (K) either.** `ident` propagates through
+    `array` (§5's table), so `union(array(literal("A")), array(literal("B")))` has it on
+    both sides — and both options admit the empty array, which neither literal ever
+    sees. Propagating `ident` through a container does not propagate disjointness of
+    the admissible sets: every container admits its empty case. -/
+theorem not_uAtCan_array_literals :
+    ¬ UAtCan 2 [Term.array (.literalS ["A"]), Term.array (.literalS ["B"])] := by
+  refine not_uAtCan_pair (v := .arr []) (a := Attr.l []) (w := .arr [.str "A"])
+    rfl rfl ?_
+  -- separated one fuel down, where the element codecs are live: `["A"]` is written by
+  -- the first option and refused by the second
+  show ((match (if "A" ∈ ["A"] then some (Attr.s "A") else none),
+      some ([] : List Attr) with
+      | some y, some ys => some (y :: ys) | _, _ => none).map Attr.l).isSome ≠
+    ((match (if "A" ∈ ["B"] then some (Attr.s "A") else none),
+      some ([] : List Attr) with
+      | some y, some ys => some (y :: ys) | _, _ => none).map Attr.l).isSome
+  rw [if_pos (List.mem_cons_self _ _), if_neg (by simp)]
+  exact fun h => nomatch h
+
+/-- Both counterexamples are `ident` on the side(s) §5's (K) appeals to — so they are
+    admitted by the rule as stated, not excluded by a side condition it carries. -/
+example : ident (.literalS ["A"]) = true := rfl
+example : ident (.array (.literalS ["A"])) = true := rfl
+example : ident (.array (.literalS ["B"])) = true := rfl
 
 end Calculus

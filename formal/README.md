@@ -45,13 +45,24 @@ the doc's `(lazy)` rule demands.
   Its disjointness dischargers are proved (`Calculus/Discharge.lean`): pairwise-disjoint
   `κ` settles the value side, pairwise-distinct named members the attribute side — the
   member index standing in for (D)'s held sets until the `T` index lands.
+  `uAtCan_string_boolean` witnesses that the six premises are jointly satisfiable.
+- **§5's `ident` half of (K) is unsound as stated, and the mechanization corrects it.**
+  The doc writes (K) as `κ(cᵢ) ∩ κ(cⱼ) = ∅ ∨ ident(cᵢ) ∨ ident(cⱼ)` and calls it
+  sufficient for (U). Neither disjunct carries it, and both counterexamples are proved
+  in `Discharge.lean`: `not_uAtCan_literal_string` (one-sided `ident` —
+  `union(literal("A"), string)` passes (K), and both options admit `"A"`) and
+  `not_uAtCan_array_literals` (two-sided `ident` — `ident` propagates through `array`,
+  but disjointness of the admissible sets does not, and both options admit `[]`). A
+  sound `ident` exemption needs `ident` on both sides *and* disjoint admissible sets.
+  **This wants a decision on the doc side before the discharger is written.**
 
 ## What remains (sharpenings, not gaps)
 
 The theorem is proved; these tighten the model's fidelity to the doc, none affect
 soundness: reinstating the held-set index `T` on the judgement and stating (D) in its
-held-set form; the `ident` exemption's discharge lemmas (per admissible set — a
-`literal`'s values, a `dunion`'s tags), `ident` itself being defined; deriving the
+held-set form; the `ident` exemption's discharge lemmas — **blocked on the doc**, since
+(K)'s `ident` disjunct is refuted above and the repaired condition (both sides `ident`,
+admissible sets disjoint) is a change to §5, not to the mechanization; deriving the
 remaining `LawfulCore` composites (`tuple`, `set`, `object`) and their full-law
 counterparts from one another, as the wrappers and uniform products now are.
 
