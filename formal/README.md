@@ -23,7 +23,7 @@ of §5's soundness theorem are machine-checked — `soundness` (all four laws, (
 the legacy exemption as the `MPOk` hypothesis) and `soundness_core` ((R), (C), (W)
 through `legacy`-containing derivations) — by induction on the judgement, dispatching
 each case to its certified combinator lemma, with the `(dunion)` stamps derived from
-typing and (U) discharged by `uniqueAdmission_byTag` / `uniqueAdmission_of_disjoint`.
+typing and (U) discharged by `uniqueAdmission_byTag`, and `opaque`'s inside `lawful_opaqCodec`.
 The judgement carries both of §3's indices, and both are checked against the
 denotation. `typed_e_mem` and `typed_p_mem` are §3's `e : T ⇀ 𝔸` and `p : 𝔸 ⇀ T` at the
 judgement's own index — a derivable term writes and reads only values of the held set it
