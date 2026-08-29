@@ -36,6 +36,11 @@ The traffic is not one-way. Two of §4's entries are defects the model found in 
 rather than in the document: a `numeric` that narrowed a read without checking it, and a decoder that
 returned a value its own encoder refuses. Both had shipped.
 
+And it keeps flowing. §4's last entry is a defect found by a *harness written from the model* — (U)
+stated as a property test, over inputs no value-driven test can produce — in a union the library
+accepts, decodes from, and cannot encode into. The model does not have to observe the runtime to
+find things in it; it only has to say what to look for.
+
 ## §2 What the formalization is not
 
 **It is not a test suite for the TypeScript.** Nothing in `formal/` observes the shipping
@@ -339,6 +344,47 @@ decoration, and `(numeric)` was a rule for saying `T` while asking not to be hel
 candid that this was a precondition rather than a check; what it did not notice is that the
 calculus has no room for the distinction.
 
+### One that only (U) could see, and only from the write side
+
+**A union this library builds, decodes from, and cannot encode into.** `union([held(decimal,
+dateAdapter), string])` — a timestamp or a raw string — is accepted at the declaration, reads
+back correctly from both `N` and `S`, and throws on **every** `Date` handed to `encode`:
+
+```
+union.encode(new Date(0))
+  → CodecError: held and string both admit this value; these options cannot be told apart
+```
+
+Found by `checkUniqueAdmission` on its first pass over the shapes the library supports, and then
+measured directly rather than argued: `union.decode({N:'0'})` is a `Date`, `union.decode({S:'hi'})`
+is `'hi'`, and no value of the first option can be written.
+
+The cause is one asymmetry in `κ`. `writes(held(decimal, …))` is `'N'` — a `held`'s stored member
+is its **inner** codec's, so the read side has a `κ` and the two options separate. `carries(held(
+decimal, …))` is `undefined`, because the adapter's carrier is a caller's type and §1's `Value` has
+no point for a `Date`; `shapeOf(new Date())` is `undefined` for the same reason, so the filter
+cannot even be applied to the value. With no `κ` on the write side, admission falls back to the
+attempt — and `string.encode(new Date())` **succeeds**, because encoding does not validate. Two
+options admit, and the union correctly reports ambiguity rather than choosing.
+
+**Neither of this library's two guards is wrong, and that is the finding.** The declaration-time
+scan refuses `array(string)` beside `array(number)` because they share a `carries`; it skips an
+option whose `carries` is unknown, and it must, or it would refuse `union([held(…), object({…})])`,
+which works, because names decide there. The run-time filter exempts exactly the same options for
+exactly the same reason. So the two guards are complementary everywhere except on the options where
+both are vacuous, and there nothing is left to notice.
+
+Why no other harness could reach it: the failing input is a value of the *first* option, and every
+value-driven property test round-trips values the union already accepted. `checkRoundTrip` never
+sees it because the union refuses to encode; `checkDecodesAreWritable` never sees it because it
+starts from an item `encode` produced. (U) is the only law stated over an input a *single option*
+can write, which is why it is the one that reaches here.
+
+**Recorded, not repaired.** The fix is a choice between two normative positions — refuse the
+declaration where two options are both `κ`-free, or give `held` a write-side `κ` by embedding its
+carrier — and §1's `Value` is what would have to change for the second. `codec.uniqueadmission.spec.ts`
+carries the measurement as four assertions.
+
 ## §5 Certifying an implementation
 
 The calculus is portable by design: nothing in it is TypeScript, and nothing is Rotorise. An
@@ -527,10 +573,20 @@ checking finds real defects in this domain:
 | **C**  | `p a = some v  ⟹  e v` is defined                                        |
 | **W**  | `μ = some m ∧ e v = some a  ⟹  member a = m`                             |
 | **MP** | `p a = some v ∧ e v = some a'  ⟹  a' ≼ a` (skip where `legacy` is in scope) |
-| **U**  | for each union input: exactly one option admits it, per side              |
+| **U**  | for each union input: exactly one option admits it, per side — `checkUniqueAdmission` |
 
 This is a weaker certificate — it checks the terms you generate, not all of them — but it is the
 right first move, and it is where the §4 defects would have surfaced fastest.
+
+**(U) needs a generator of neither.** Its inputs are **canonical pairs** — a value one option can
+write, and the attribute it writes it to — so it generates per *option* and asks the other options
+what they make of the result. `checkUniqueAdmission` in `src/testing.ts` does that for every union
+reachable from a codec, reading admission off the **definition** and never off the union's own
+matcher: a test that asked `union` which option it picked would be checking the implementation
+against itself. Admission is `κ` **and** the attempt, as `codec-calculus.md` §5 states it and as
+`FIDELITY.md` D1 records the model's `OptionSem.byAttempt` failing to — and the difference is not
+cosmetic, because `union([string, number])` violates (U) under the model's reading and satisfies it
+under the specification's. It found the defect §4's last entry records on its first pass.
 
 **One warning from doing it.** The obvious harness generates *values* and round-trips them, which
 tests **(R)** and nothing else. `decode` then only ever sees attributes `encode` produced, and the

@@ -46,7 +46,16 @@ differs.** The model's reading is the defensible one — it is what makes the na
 decidable at the declaration — so the Sums clause needs the exception written into it.
 
 Sharpened by the second audit: `κ` is **never consulted by the denotation** anywhere. It
-lives only in `Discharge.lean` as a declaration-time discharger. And the loss is *why*
+lives only in `Discharge.lean` as a declaration-time discharger. Sharpened again, from a third
+direction the audits had no access to: **the implementation follows the specification's reading
+and not the model's.** `union`'s matcher filters by `κ` — `carries` on the value side, `writes` on
+the stored side — and only then attempts the survivors, which is §5's "the `κ`/name filter passes
+**and** `eᵢ(t)` is defined" exactly. Under `byAttempt`, `union([string, number])` **violates (U)**,
+because `number.encode('-1')` succeeds — encoding does not validate, so definedness alone separates
+almost no two ground options. So `byAttempt` is not merely missing a conjunct the discharger
+re-derives; it is the reading under which a union this library ships and recommends is unsound.
+`checkUniqueAdmission` (`src/testing.ts`) states admission the specification's way for that reason,
+and `codec-formalization.md` §4 records what it found once it did. And the loss is *why*
 `uAtCan_of_separated` needs a lawfulness premise it would otherwise not — the discharger
 re-derives by read-side (W) what the missing member filter would have given free.
 
@@ -247,7 +256,7 @@ group would cost if it leaked: the three devices that pin §5's declaration-time
 the denotation, the three ω-twins that all travel along `denoteω_eq`, and the `opaque`
 and numeral rows. The guard went green first try, which is the expected result — the
 point was never to find a leak, it was to stop the eleven hand-checks from having to be
-redone by the next reader. Coverage 17 → **28 of 99**, and 35 of 112 after items 3–5 and 8 added theorems of their own.
+redone by the next reader. Coverage 17 → **28 of 99**, and 35 of 113 after items 3–5 and 8 added theorems of their own.
 
 A measurement artefact worth naming, since this file's own rule is that the script wins:
 `fidelity_audit.py` reads `FIDELITY.md` as one of its document sources, so *citing* a
@@ -299,25 +308,25 @@ table had drifted by a few lines per block and is re-synced to the script.
 python3 scripts/fidelity_audit.py          # --names to list the offenders
 ```
 
-At HEAD: 650 declarations, 469 theorems, 181 definitions.
+At HEAD: 687 declarations, 496 theorems, 191 definitions.
 
 | | |
 | --- | ---: |
-| theorem names the documents cite as results | 112 |
+| theorem names the documents cite as results | 113 |
 | …put through `#assert_axioms` | **35** |
-| §-tag coverage (declarations naming a spec section) | **18%** |
-| docstring coverage, theorems | 53% |
-| docstring coverage, definitions | 69% |
-| **theorem statements naming an undocumented definition** | **60%** |
-| …and themselves undocumented | 136 |
+| §-tag coverage (declarations naming a spec section) | **19%** |
+| docstring coverage, theorems | 55% |
+| docstring coverage, definitions | 71% |
+| **theorem statements naming an undocumented definition** | **59%** |
+| …and themselves undocumented | 133 |
 
 The last row is the one that matters. A statement naming an undocumented definition
 cannot be read against the specification without a detour — and this counts the
 *statement*, never the proof. A reviewer is entitled to skip a proof; they are not
 entitled to skip a statement.
 
-Per-module §-tags are worst exactly where the volume is: `Combinators.lean` 9%,
-`Opaque.lean` 1%, `Term.lean` 0%. The 57 undocumented definitions include `Typed`,
+Per-module §-tags are worst exactly where the volume is: `Combinators.lean` 10%,
+`Opaque.lean` 1%, `Term.lean` 0%. The 56 undocumented definitions include `Typed`,
 `Term`, `denote`, `setCodec`, `arrayCodec`, `objectCodec`. **No line of source says which
 §3 rule `setCodec` denotes** — that mapping exists only in `README.md` prose.
 
