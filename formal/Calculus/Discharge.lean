@@ -31,23 +31,11 @@ is its kind/member half.
 
 namespace Calculus
 
-/-! ## Kinds -/
+/-! ## `κ` — the kinds a term accepts
 
-/-- §5's runtime shapes: the coarse partition of `Value` mirroring `μ` on the other
-    side of the pair. -/
-inductive Kind where
-  | string | number | boolean | binary | set | array | map | null
-deriving DecidableEq, Repr
-
-def kindOf : Value → Kind
-  | .str _ => .string
-  | .num _ => .number
-  | .bool _ => .boolean
-  | .bin _ => .binary
-  | .null => .null
-  | .set _ => .set
-  | .arr _ => .array
-  | .map _ => .map
+    `Kind` itself is §1 vocabulary and lives in `Domain.lean`, on both sides of the
+    pair (`Value.kind`, `Attr.kind`). What is §5's is `κ`: which of those kinds a
+    *term* accepts. -/
 
 mutual
 
@@ -185,7 +173,7 @@ theorem κList_mem : ∀ {ts : List Term} {ks}, κList ts = some ks →
 /-- Encoding lands in `κ`: a term's writable values have the kinds its `κ` names.
     (Where `κ` answers `⊤` there is nothing to say — the table's point.) -/
 theorem κ_sound : ∀ (fuel : Nat) (t : Term) {ks : List Kind} {v a},
-    κ t = some ks → (denote fuel t).e v = some a → kindOf v ∈ ks
+    κ t = some ks → (denote fuel t).e v = some a → Value.kind v ∈ ks
   | 0, _, _, _, _, _, he => nomatch he
   | fuel+1, t, ks, v, a, hκ, he => by
     cases t with
@@ -440,7 +428,7 @@ theorem admA_sound : ∀ (fuel : Nat) (t : Term) {a v},
 theorem admitV_kind (fuel : Nat) (t : Term) {ks : List Kind} {v}
     (hκ : κ t = some ks)
     (h : (optionSemOf (denote fuel t) (specOf t)).admitV v = true) :
-    kindOf v ∈ ks := by
+    Value.kind v ∈ ks := by
   cases hs : specOf t with
   | none =>
     rw [hs] at h

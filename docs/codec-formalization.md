@@ -91,7 +91,7 @@ Decidable conditions, each sufficient for (U) on the unions it covers, all prove
 | disjoint kinds, or disjoint `adm` | `uAtCan_of_separated` | the writable side             |
 | distinct members, or disjoint `admA` | `uAtCan_of_separated` | the readable side          |
 | tag disjointness              | `uniqueAdmission_byTag`  | `discriminatedUnion`, outright |
-| kind disjointness             | inside `lawful_opaqCodec` | `opaque`'s fixpoint, outright |
+| kind disjointness             | `uniqueAdmission_of_kinds` | `opaque`'s fixpoint, outright |
 
 with `κ_sound`, `adm_sound`, `admA_sound` connecting the syntactic functions to the denotation, and
 `uAtCan_string_boolean` / `uAtCan_literal_literal` witnessing that the premises are jointly
