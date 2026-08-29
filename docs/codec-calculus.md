@@ -301,10 +301,20 @@ idempotence of §6 lawful rather than lucky.
 Null-honesty is not a new kind of condition. `nullable(c)` is structurally the two-option union
 `union(c, ⟨NULL⟩-point)`, and the two premises are exactly that pair's §5 side conditions —
 write-honesty is uniqueness of admission on the way in, read-honesty on the way out. The mechanized
-proof closes the `nullable` case on precisely those premises and nothing else. The term stays
-primitive only because it resolves the `NULL` reading by precedence where a union demands
-disjointness — and under honesty the two semantics coincide, which is why the precedence is
-harmless.
+proof closes the `nullable` case on precisely those premises and nothing else.
+
+The term stays primitive because it resolves the `NULL` reading by **precedence** where a union
+demands disjointness, and that precedence is not a convenience — it is load-bearing. The two
+constructions are **equivalent** in the sense of §6, with no side condition whatsoever
+(`equiv_orNull_altCodec`): `≡` compares the pairs where both are defined, and the only place they
+differ is where the union is *un*defined. They are the same *codec* only when `c` does not touch
+the null point at all — `e_c(null)` and `p_c(⟨NULL, ∗⟩)` both undefined (`orNull_eq_altCodec`),
+which is strictly stronger than honesty, since honesty constrains which attribute a value is
+written to and says nothing about whether `c` writes `null` at all. Where the base does handle
+null, the wrapper answers and the union refuses, because both options admit. The witness is not
+exotic: it is `nullable(nullable(c))`, the term whose idempotence §6 records
+(`orNull_ne_altCodec`). Desugaring `nullable` into `union` would therefore not preserve that row —
+it would make `nullable(nullable(c))` undefined at `null`.
 
 ---
 

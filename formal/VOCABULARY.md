@@ -149,9 +149,12 @@ prose and never cashes:
 - *"`pointCodec` is the degenerate case, where the payload passes through untouched."*
   → `pointCodec_eq : pointCodec V A μ₀ = carriedCodec V A μ₀ _ some some`, which would
   hand inversion to all ten ground codecs at once.
-- *"`orNull` — `nullable`, whose honesty premises are (U) for a two-option sum,
-  specialised."* → `orNull_eq`, after which the densest block in the table inherits the
-  union's vocabulary.
+- ~~*"`orNull` — `nullable`, whose honesty premises are (U) for a two-option sum,
+  specialised."*~~ — **cashed, and it corrected the specification.** `nullable(c)` and
+  `union(c, ⟨NULL⟩-point)` are `≡` with *no* premise (`equiv_orNull_altCodec`), and the
+  same codec only when the base does not touch the null point (`orNull_eq_altCodec`) —
+  strictly stronger than honesty, which §3 had claimed was enough. The witness is
+  `nullable(nullable(c))`. See `docs/codec-formalization.md` §4.
 - `dunionCodec` is already *defined* as `altCodec`, so it comes free once the union has
   an iff.
 

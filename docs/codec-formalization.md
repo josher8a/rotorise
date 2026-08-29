@@ -112,6 +112,24 @@ The shared error is worth stating once, because it will recur in any port: **hel
 values; (U)'s readable side quantifies over attributes; `held` relabels between them.** No condition
 on held sets alone can decide the readable side.
 
+### A fourth, about an identity rather than a discharger
+
+§3's paragraph on null-honesty said `nullable(c)` and `union(c, ⟨NULL⟩-point)` "coincide under
+honesty, which is why the precedence is harmless". Mechanizing it showed the sentence wrong in
+**both** directions, and the correction is sharper than the claim:
+
+| | was claimed | holds |
+| --- | --- | --- |
+| `≡` (§6) | under null-honesty | **with no premise at all** — `equiv_orNull_altCodec` |
+| `=` (same codec) | under null-honesty | only when the base does not touch the null point — `orNull_eq_altCodec` |
+
+Honesty constrains which *attribute* a value is written to; it says nothing about whether `c`
+writes `null` at all. Where the base does handle null both options admit, (U) fails, and the union
+is undefined exactly where the wrapper answers. The witness is `nullable(nullable(c))` —
+the term §6's idempotence row is about (`orNull_ne_altCodec`). So the precedence is not harmless
+but **load-bearing**: it is what keeps `nullable(nullable(c))` total, and desugaring `nullable`
+into `union` would turn that §6 row from a theorem into a falsehood. §3 now says this.
+
 ### One that ran the other way
 
 A fourth defect turned up while closing §6's `T` row, and it is worth separating because the arrow
