@@ -48,7 +48,12 @@ actually needs is an engineering judgement, argued in `codec-calculus.md` §2 an
 
 Everything below is machine-checked, `sorry`-free, on `propext`, `Quot.sound`, and the `Double`
 axioms of §1 — no `Classical.choice`, no `sorryAx`. `#print axioms` on any named theorem shows the
-whole trusted base.
+whole trusted base, and `formal/Calculus/Axioms.lean` makes that sentence a **build error rather
+than a claim**: `#assert_axioms` collects what each headline theorem actually depends on and fails
+on anything unsanctioned. This matters more since mathlib arrived, because mathlib proves a great
+deal classically — a single `by_contra`, or an appeal to a lemma such as `List.filter_eq_nil_iff`,
+silently widens the base of everything downstream. Both leaks happened while the guard was being
+written, which is the argument for having it.
 
 ### The theorem
 
@@ -309,7 +314,7 @@ tolerates a shrinking domain but never a differing `T`, so that is where the che
 
 | Option              | Assessment                                                                                             |
 | ------------------- | ------------------------------------------------------------------------------------------------------ |
-| **Lean + mathlib**  | Chosen, and now **adopted**. It retired the plumbing as predicted; it did not remove the fuel encoding, but nothing does — see above. |
+| **Lean + mathlib**  | Chosen, and now **adopted**. It retired the plumbing as predicted; it did not remove the fuel encoding, but nothing does — see above. The one cost not anticipated: mathlib's classical proofs make the §3 axiom base easy to widen by accident, which is why `Calculus/Axioms.lean` now guards it. |
 | **Isabelle/HOL**    | `sledgehammer` is the real and un-rebutted win: `Combinators.lean` is 4,620 lines of first-order list/option reasoning, which is exactly its diet. The other two claims do not survive. `partial_function` does **not** remove fuel here — it fails its `mono` obligation at `union`. And `nitpick` is weakest where it is most needed: `Term` carries function-typed fields (`held`'s `f`/`g`, `custom`'s pair, `refine`'s `q`), finite model finding degrades badly on those, and the §6 rows most in need of one sat precisely on `held`/`custom`/`refine` (they are now refuted by hand — see `Refutations.lean` — which is the outcome that would have tested the claim). A switch would also forfeit §3's axiom-base claim — Isabelle/HOL is classical with Hilbert choice, unconditionally. |
 | **Rocq/Coq**        | No clear win over Lean. Same dependent-pattern-match friction, same partiality problem.                |
 | **Agda**            | Better sized types, worse automation. Net loss here.                                                   |

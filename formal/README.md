@@ -23,6 +23,7 @@ definition it touches.
 | `Calculus/HeldSet.lean`     | §1, §3, §6  | `T` as an identity: `opaq_T_identity` (`Uν` *is* `opaque`'s held set), `set_nil_outside_opaque` (the witness for the non-emptiness premise `HOpaque` was missing), and the numeral-domain report — `decimal_writes_wf`/`decimal_reads_wf` with worked boundary cases |
 | `Calculus/Continuity.lean`  | §5, §7      | Why fuel is not removable by a fixpoint: `Codec.Approx` (the information order any ccpo must extend), `altCodec_not_monotone` (unique admission is anti-monotone in the options) and `denote_not_fuel_monotone` (the fuel stages are not a chain) |
 | `Calculus/Refutations.lean` | §6          | §6's "Do not hold" table, all nine settled: `not_equiv_lazy` (the row where `≡`'s member index matters), `not_equiv_union_array`, `not_equiv_union_extend`, the two `tuple`-tail rows, `not_equiv_refine_held`, `legacy_breaks_MP`, `e_comp_p_ne_id`, `not_typed_set_union` — plus `optional` nesting, which the syntax rules out |
+| `Calculus/Axioms.lean`      | §3          | `#assert_axioms`, and the headline theorems run through it — the advertised axiom base (`propext`, `Quot.sound`, the `Double` axioms; **no `Classical.choice`**) as a build error rather than a claim in prose |
 | `Calculus/Discharge.lean`   | §5          | The machinery of (K): `Kind`, `κ`, `ident`, `adm`/`admA` as structural recursions, `κ_sound`/`adm_sound`/`admA_sound`, and `uAtCan_of_separated` — the dischargers of (U), proved, with witnesses and the two counterexamples that repaired (K)                       |
 
 **The mechanization is complete: the project builds with zero `sorry`.** Both halves
@@ -49,6 +50,11 @@ and the judgement to it), and `lazy` concludes `⊤` in the model exactly as the
   facts mathlib genuinely lacks, or states in a shape the use sites cannot consume — is
   `Calculus/Lists.lean`, and citing a name from there is the signal that a step is plumbing
   rather than content.
+- **The axiom base is checked, not asserted.** mathlib proves a great deal classically, so
+  a single `by_contra`, or an appeal to a lemma like `List.filter_eq_nil_iff`, silently
+  widens the base of everything downstream. `Calculus/Axioms.lean` collects the axioms each
+  headline theorem actually depends on and fails the build on anything unsanctioned. Both
+  of those leaks happened while the module was being written, which is why it exists.
 - **Fuel-primary denotation, now with a fuel-free twin.** `denote` still takes fuel and
   every proof about it is unchanged; `denoteω` (Denoteω.lean) is structural and takes
   none. `denoteω_eq` makes them *equal* at `termDepth t`, so the §5 statements transport
@@ -123,4 +129,4 @@ lake build
 
 First build downloads the pinned toolchain (`lean-toolchain`) and, on a cold cache, builds
 mathlib. The build is `sorry`-free and **warning-free**; any warning or error is a
-regression.
+regression, and so is an `#assert_axioms` failure in `Calculus/Axioms.lean`.
