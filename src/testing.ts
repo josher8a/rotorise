@@ -56,7 +56,7 @@ import type {
     RestPolicy,
     Rng,
 } from './codec'
-import { CodecError, failed, opaque, writes } from './codec'
+import { carries, CodecError, failed, opaque, shapeOf, writes } from './codec'
 
 /** mulberry32 — small, fast, and good enough to search a value space. */
 export const rngFrom = (seed: number): Rng => {
@@ -1522,4 +1522,360 @@ export const checkIso = <C extends AnyCodec, T>(
             )
         }
     }
+}
+
+// ── (U): exactly one option admits each input, per side ──────────────
+
+/**
+ * **(U), the last row of the conformance table.**
+ *
+ * `docs/codec-formalization.md` §5 states it as *for each union input: exactly one option admits it,
+ * per side*, and `Calculus.UniqueAdmission` is that sentence in the model:
+ *
+ * ```
+ * ∀ o ∈ os, ∀ t a, o.e t = some a → os.filter (·.admitA a) = [o] ∧ os.filter (·.admitV t) = [o]
+ * ```
+ *
+ * So the inputs are not arbitrary: they are **canonical pairs** — a value one option can write, and
+ * the attribute it writes it to. That is what makes the property checkable at all, and it is why
+ * this generates per *option* rather than per union.
+ *
+ * **Admission is read off the definition, never off the union's own matcher.** A test that asked
+ * `union` which option it picked would be checking the implementation against itself. What is asked
+ * here is what the model asks:
+ *
+ * - an **object** option admits by *names* — every name present declared, every required name
+ *   present (`keysOk`, `OptionSem.byNames`). It is never tried, because `object({ a })` will happily
+ *   encode `{ a, b }` and lose `b`, so "it encoded" is not evidence.
+ * - a **tagged** option admits by its discriminator's stored value (`OptionSem.byTag`).
+ * - anything else admits by *being defined* on the input (`OptionSem.byAttempt`) — not by the kind
+ *   filter the implementation uses first. Where the two differ, this reports it, and that difference
+ *   is the whole reason to run it.
+ *
+ * Every union reachable from the subject is checked, not only the outermost one: (U) is a condition
+ * on a union node, and the interesting ones are nested inside an entity.
+ *
+ * A failure to *encode* is never reported — an option that declines a value it generated has simply
+ * produced no canonical pair. What is reported is a pair that two options claim, or none, or one
+ * that is not the option that wrote it.
+ */
+export const checkUniqueAdmission = (
+    subject: AnyCodec,
+    {
+        count = 50,
+        seed = 0x5eed,
+        size = 4,
+    }: Pick<CheckOptions, 'count' | 'seed' | 'size'> = {},
+): void => {
+    const sites = unionsIn(subject)
+    if (sites.length === 0) {
+        throw new CodecError(
+            '(U) is a condition on a union, and this codec has none — nothing was checked, which is not the same as passing',
+        )
+    }
+    const rng = rngFrom(seed)
+    for (const site of sites) {
+        for (const option of site.options) {
+            for (let i = 0; i < count; i++) {
+                let value: unknown
+                try {
+                    value = arbitraryOf(option.codec, rng, size)
+                } catch {
+                    break // an option that cannot generate says nothing about (U)
+                }
+                const attribute = written(option.codec, value)
+                if (!attribute) continue // no canonical pair, nothing to say
+
+                const claim = (
+                    side: string,
+                    admitted: readonly UnionOption[],
+                ) => {
+                    if (
+                        admitted.length === 1 &&
+                        (admitted[0] as UnionOption).codec === option.codec
+                    ) {
+                        return
+                    }
+                    throw new CodecError(
+                        `(U) fails on the ${side} side of ${site.describe}: ` +
+                            (admitted.length === 0
+                                ? 'no option admits a pair its own option wrote.'
+                                : admitted.length > 1
+                                  ? `${admitted.length} options admit it — ${admitted.map((o) => o.describe).join(' and ')}.`
+                                  : `the option that admits it is ${(admitted[0] as UnionOption).describe}, which is not the one that wrote it.`) +
+                            `\n  wrote by  = ${option.describe}` +
+                            `\n  seed      = ${seed}, case ${i}` +
+                            `\n  value     = ${show(value)}` +
+                            `\n  attribute = ${show(attribute)}` +
+                            `\n  options   = ${site.options.map((o) => o.describe).join(' | ')}`,
+                    )
+                }
+
+                claim(
+                    'write',
+                    site.options.filter((o) => o.admitsValue(value)),
+                )
+                claim(
+                    'read',
+                    site.options.filter((o) => o.admitsAttribute(attribute)),
+                )
+            }
+        }
+    }
+}
+
+/** One union node, and its options as the model's `OptionSem`s. */
+type UnionSite = {
+    readonly describe: string
+    readonly options: readonly UnionOption[]
+}
+
+/** An option's two admission functions and the pair they belong to — `OptionSem`. */
+type UnionOption = {
+    readonly codec: AnyCodec
+    readonly describe: string
+    readonly admitsValue: (value: unknown) => boolean
+    readonly admitsAttribute: (attribute: AttributeValue) => boolean
+}
+
+/** The attribute a codec writes for a value, or nothing — `e v = some a`, as a partial function. */
+const written = (
+    codec: AnyCodec,
+    value: unknown,
+): AttributeValue | undefined => {
+    try {
+        const out = codec.encode(value as never)
+        return failed(out) ? undefined : (out as AttributeValue)
+    } catch {
+        return undefined
+    }
+}
+
+/** Whether a codec reads an attribute at all — `p a` is defined. */
+const reads = (codec: AnyCodec, attribute: AttributeValue): boolean => {
+    try {
+        return !failed(codec.decode(attribute))
+    } catch {
+        return false
+    }
+}
+
+/** A value read as a bare record of names, as the object matcher reads one. */
+const recordOf = (value: unknown): Record<string, unknown> | undefined => {
+    if (typeof value !== 'object' || value === null) return undefined
+    const proto = Object.getPrototypeOf(value) as object | null
+    return proto === Object.prototype || proto === null
+        ? (value as Record<string, unknown>)
+        : undefined
+}
+
+/** The map an attribute carries, where it carries one. */
+const mapOf = (attribute: AttributeValue): AttributeMap | undefined =>
+    memberOf(attribute) === 'M'
+        ? ((attribute as { readonly M: AttributeMap }).M ?? {})
+        : undefined
+
+/** `keysOk`: every name present is declared, and every required name is present. */
+const keysOk = (
+    names: readonly string[],
+    declares: ReadonlySet<string>,
+    requires: readonly string[],
+): boolean =>
+    names.every((name) => declares.has(name)) &&
+    requires.every((name) => names.includes(name))
+
+/** An object option's spec, as the pair `keysOk` needs. */
+const declaration = (of: Record<string, AnyCodec>) => {
+    const declares = new Set<string>()
+    const requires: string[] = []
+    for (const name in of) {
+        declares.add(name)
+        if (of[name]?.def?.kind !== 'optional') requires.push(name)
+    }
+    return { declares, requires }
+}
+
+/** `OptionSem.byNames` — an object option decides by names, never by being attempted. */
+const byNames = (codec: AnyCodec, of: Record<string, AnyCodec>): UnionOption => {
+    const { declares, requires } = declaration(of)
+    return {
+        codec,
+        describe: `{ ${[...declares]
+            .map((name) => (requires.includes(name) ? name : `${name}?`))
+            .join(', ')} }`,
+        admitsValue: (value) => {
+            const held = recordOf(value)
+            return (
+                !!held &&
+                keysOk(
+                    Object.keys(held).filter((k) => held[k] !== undefined),
+                    declares,
+                    requires,
+                )
+            )
+        },
+        admitsAttribute: (attribute) => {
+            const map = mapOf(attribute)
+            return !!map && keysOk(Object.keys(map), declares, requires)
+        },
+    }
+}
+
+/** `OptionSem.byTag` — a `(dunion)` option is admitted by its discriminator. */
+const byTag = (
+    codec: AnyCodec,
+    discriminator: string,
+    tags: readonly string[],
+): UnionOption => ({
+    codec,
+    describe: `'${discriminator}' of ${tags.map((t) => `'${t}'`).join(' | ')}`,
+    admitsValue: (value) => {
+        const held = recordOf(value)
+        const tag = held?.[discriminator]
+        return (
+            (typeof tag === 'string' || typeof tag === 'number') &&
+            tags.includes(String(tag))
+        )
+    },
+    admitsAttribute: (attribute) => {
+        /**
+         * A `(dunion)` option is an **item** codec: it writes an item, not an `M` attribute, so the
+         * discriminator sits at the top of what `e` produced rather than under an `M`. That is the
+         * one place a union's options are read at a different level from the value they carry, and
+         * reading it through `mapOf` said no option admitted a pair its own option had just written.
+         */
+        const carried = (attribute as unknown as AttributeMap)[discriminator]
+        if (!carried) return false
+        const member = memberOf(carried)
+        if (member !== 'S' && member !== 'N') return false
+        return tags.includes(String((carried as Record<string, unknown>)[member]))
+    },
+})
+
+/**
+ * A ground option: the `κ` filter, and then the attempt.
+ *
+ * `codec-calculus.md` §5 is explicit that an option admits `t` when "the `κ`/name filter passes
+ * **and** `eᵢ(t)` is defined", and that is what this reads. The model's `OptionSem.byAttempt` drops
+ * the first conjunct — `FIDELITY.md` D1 records that `κ` is never consulted by the denotation — and
+ * the difference is not cosmetic: **`union([string, number])` violates (U) under the model's
+ * reading and satisfies it under the specification's**, because `number.encode('-1')` succeeds.
+ * Encoding does not validate, so definedness alone tells almost no two ground options apart.
+ *
+ * `κ` is read off the definition, which is where it lives: {@link carries} is the kinds of value a
+ * term takes and {@link writes} the member it stores them in, both computed from the term and
+ * neither from the union's matcher. Where a term answers neither, the filter is `⊤` and admission
+ * is the attempt alone — which is the honest answer for a `custom` and is how one gets caught.
+ */
+const byKindThenAttempt = (codec: AnyCodec): UnionOption => {
+    const takes = carries(codec)
+    const member = writes(codec)
+    return {
+        codec,
+        describe: codec.def?.kind ?? 'a codec',
+        admitsValue: (value) => {
+            const shape = shapeOf(value)
+            if (takes && shape && !takes.includes(shape)) return false
+            return !!written(codec, value)
+        },
+        admitsAttribute: (attribute) => {
+            const carried = memberOf(attribute)
+            if (member && carried && member !== carried) return false
+            return reads(codec, attribute)
+        },
+    }
+}
+
+/** `optionSemOf`: an object option decides by names, anything else by attempt. */
+const optionOfDef = (codec: AnyCodec): UnionOption => {
+    const def = codec.def
+    return def?.kind === 'attributes'
+        ? byNames(codec, def.of as Record<string, AnyCodec>)
+        : byKindThenAttempt(codec)
+}
+
+/**
+ * Every union reachable from a codec, outermost first.
+ *
+ * Keyed on the *definition* rather than the codec, which is what stops a `lazy` cycle: a recursive
+ * entity hands back the codec it already walked, and its def is the same object.
+ */
+const unionsIn = (subject: AnyCodec): readonly UnionSite[] => {
+    const out: UnionSite[] = []
+    const seen = new Set<object>()
+
+    const walk = (codec: AnyCodec | undefined, depth: number): void => {
+        const def = codec?.def
+        if (!def || depth < 0 || seen.has(def)) return
+        seen.add(def)
+        const inner = (child: AnyCodec | undefined) => walk(child, depth - 1)
+        switch (def.kind) {
+            case 'untagged':
+                out.push({
+                    describe: `union(${def.variants
+                        .map((v) => v.def?.kind ?? 'a codec')
+                        .join(', ')})`,
+                    options: def.variants.map(optionOfDef),
+                })
+                def.variants.forEach(inner)
+                return
+            case 'tagged': {
+                const entries = Object.entries(
+                    def.variants as Record<string, AnyCodec>,
+                )
+                /**
+                 * One option per *variant*, carrying every tag it answers to.
+                 *
+                 * `dunionCodec`'s options are `(List String × Codec)` — a tag *set* per option, not
+                 * one tag — and this library relies on it: `carrierId: literal('ACME', 'GLOBEX')`
+                 * is one variant registered under two keys. Split per key it would be two options
+                 * over one codec, and a value one of them generated would be admitted by the other,
+                 * which is a fact about the index and not about the union.
+                 */
+                const variants = new Map<AnyCodec, string[]>()
+                for (const [tag, variant] of entries) {
+                    const tags = variants.get(variant)
+                    if (tags) tags.push(tag)
+                    else variants.set(variant, [tag])
+                }
+                out.push({
+                    describe: `discriminatedUnion('${def.discriminator}', ${entries
+                        .map(([tag]) => `'${tag}'`)
+                        .join(', ')})`,
+                    options: [...variants].map(([variant, tags]) =>
+                        byTag(variant, def.discriminator, tags),
+                    ),
+                })
+                entries.forEach(([, variant]) => inner(variant))
+                return
+            }
+            case 'set':
+            case 'array':
+                return inner(def.element)
+            case 'record':
+                return inner(def.value)
+            case 'tuple':
+                def.elements.forEach(inner)
+                return inner(def.tail)
+            case 'attributes':
+                Object.values(def.of as Record<string, AnyCodec>).forEach(inner)
+                return inner(def.rest)
+            case 'refine':
+            case 'optional':
+            case 'nullable':
+            case 'fallback':
+            case 'held':
+            case 'restOf':
+                return inner(def.inner)
+            case 'legacy':
+                return inner(def.current)
+            case 'lazy':
+                return inner(def.get())
+            default:
+                return
+        }
+    }
+
+    walk(subject, 12)
+    return out
 }
