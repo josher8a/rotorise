@@ -574,10 +574,13 @@ to any system and any port.
 
 1. **Mechanize conformance** (§6, row 1) — C1–C3 for the TypeScript. The largest gap between "the
    calculus is sound" and "what ships is correct".
-2. ~~**Refute §6's "do not hold" table**~~ — **done**, and the "Hold" table with it. §6 is
-   complete, twenty of twenty.
-3. ~~**Tighten §1's numeral domain**~~ — **done** (§6). `decimal` now holds `Numerals`, not
-   every string.
+2. ~~**Refute §6's "do not hold" table**~~ — **done**, and the "Hold" table with it: twenty of
+   twenty, with commutativity proved for the adjacent transposition and the `List.Perm` lift not
+   written down, and with `≡` itself shown non-transitive (`not_equiv_trans`), which bounds what a
+   table of rewrites licenses. See §6's row.
+3. ~~**Tighten §1's numeral domain**~~ — **done** (§6), then tightened again: `decimal` holds
+   `Numeral.Stored`, the form the store hands back, and not §1's `Numerals`, which is what it
+   accepts. The two differ, and the difference was a round trip failing across storage.
 4. ~~**De-fuel the denotation**~~ — **done** (§7), and with it `T` **as an identity** for
    `opaque`. What remains of that row is the other constructors, where the honest answer differs by
    rule: containers and wrappers should go through much as `opaque` did, but `union` needs (U) in
