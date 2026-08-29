@@ -63,6 +63,10 @@ For every derivable judgement `⊢ c : T ⇝ μ`, the denoted pair satisfies §2
 
 Both indices of `⊢ c : T ⇝ μ` are therefore claims about the denotation, not decoration.
 
+Each has a fuel-free twin on `denoteω` — `soundnessω`, `soundness_coreω`, `typed_e_memω`,
+`typed_p_memω`, `typed_μSynω` (`Calculus/Soundnessω.lean`). Same content, no `fuel` in the
+statement; see §7 for why that took a change to the model rather than a change of tool.
+
 ### Two named residues
 
 The theorem is honest about where it stops, and both stopping points are in the specification:
@@ -102,6 +106,23 @@ Three claims in §5's discharger tables were unsound as written. Each is now cor
 The shared error is worth stating once, because it will recur in any port: **held sets are sets of
 values; (U)'s readable side quantifies over attributes; `held` relabels between them.** No condition
 on held sets alone can decide the readable side.
+
+### One that ran the other way
+
+A fourth defect turned up while closing §6's `T` row, and it is worth separating because the arrow
+points the opposite direction: the **model** was wrong and the specification was right.
+`HOpaque`'s `set` clause had been transcribed without `vs ≠ []`, so `Uν` admitted the empty set.
+All three of the specification's readings exclude it — §1's `SS`/`NS`/`BS` are `℘⁺fin`; §3's
+fixpoint `union(…, set(opaque), …)` inherits `(set)`'s non-emptiness; and §3's prose ("the values
+whose member is recoverable from the value alone") excludes it for the sharpest reason of all, since
+an empty set has no payloads and so `SS`, `NS` and `BS` are indistinguishable. `Typing.lean` now
+carries the premise, and `set_nil_outside_opaque` is the witness: no fuel ever held `set []` and
+none ever wrote it.
+
+The direction matters for how much it cost. `typed_TSub` proves *denotation ⊆ judgement*, so the
+surplus sat on the judgement's side, no law depended on it, and `soundness` was never affected —
+only the advertised precision of the `: T` index. Which is exactly the claim §6 could not check
+while fuel was in the way.
 
 ## §5 Certifying an implementation
 
@@ -196,11 +217,12 @@ Stated plainly, because a certificate that hides its edges is worth less than on
 | -------------------------------------- | -------------------------------------------------------------------------------------------- |
 | **Implementation conformance**          | Not mechanized. C1–C3 above are currently a paper obligation for every port, this repo included. The largest remaining risk. |
 | **(U) in general**                      | A premise. The dischargers cover the decidable cases; the rest fails per input at runtime.  |
+| **Recursive `union`**                   | Unmodelled — and not for convenience. `union`'s unique admission is *anti-monotone* in its options, so a union whose options are genuinely recursive has no fixpoint semantics at all (§7, `Continuity.lean`). `Term.lazy` carries `Unit → Term`, which defeats the termination checker without adding a single term, so every term in the model is finite. `lazy` under `union` is therefore not merely awkward to model; it is outside the model, and (U) is why. |
 | **(MP) under `legacy`**                 | Off, by design, on re-read attributes.                                                      |
-| **`T` as an identity**                  | Proved as an upper bound — the pair writes and reads *no more* than `T`. That it holds *all* of `T` is unproved, and unprovable in the fuel encoding without a "fuel exceeds depth" hypothesis the model lacks. Bites hardest at `opaque`, where §3 says `Uν` *is* the held set. |
+| **`T` as an identity**                  | **Closed for `opaque`** — `opaq_T_identity` proves `(opaqCodecω ν).T = Uν` exactly, the case this row said bites hardest. Still open for the other constructors, and *false* for `union` without full (U): `T` is the union of the options' sets, but `e` refuses wherever two of them admit, so the surplus is real. The general blocker is gone — the "fuel exceeds depth" hypothesis is now `Value.depth`/`termDepth`. |
 | **§1's numeral domain**                 | `Numeral := String`; grammar, 38 digits and magnitude unmodelled. So `decimal` currently holds every string. Now checkable: tighten the predicate and `typed_e_mem` reports whether the codec respects it. |
 | **`(numeric)`'s `T ≠ ∅`**               | Dropped. `T ⊆ D` is vacuous while `D` is unmodelled, and the specification calls it an unchecked precondition; `T ≠ ∅` is simply absent. |
-| **§6's equations**                      | Two of twenty proved — `nullable`'s idempotence and `union`'s commutativity, the rows other sections rely on. The nine "do not hold" rows are **unrefuted**, which given §4 is the most suspicious remaining surface. |
+| **§6's equations**                      | The "do not hold" table is **settled — all nine** (`Refutations.lean`): eight machine-checked, and `optional(optional(c))` enforced by the syntax itself, since no `Field` constructor takes a `Field`. Of the "Hold" table, two of eleven are proved — `nullable`'s idempotence and `union`'s commutativity, the rows other sections rely on. That table is now the open one. |
 | **`Double`**                            | Axiomatized with exactly the shortest-text round trip `(number)` consumes. IEEE-754 facts are not this calculus's theorems. |
 | **Set-ness**                            | Wire sets and maps are lists; the quotient lives in `ker p`, where §2 puts it, not in the carrier. |
 
@@ -217,6 +239,37 @@ partiality is encoded as fuel and fuel then infects every statement, every oblig
 identity of §6. **Genuinely hard content** — the object codec's name dispatch, `opt` widening,
 fallback stand-ins and drop filter are intricate in any system.
 
+### Fuel is not the assistant's fault
+
+This was recorded here for a while as a Lean tax, with Isabelle/HOL's `partial_function` as the
+escape. That is wrong, and `formal/Calculus/Continuity.lean` proves it.
+
+Every least-fixpoint construction — `partial_function`, HOLCF, a hand-rolled `⨆` over the fuel
+stages — is a fixpoint over a ccpo, and it discharges a **monotonicity obligation on the
+functional**: unfolding one more step may only add information. `union` does not satisfy it.
+`altCodec` resolves a union by *unique* admission, and `OptionSem.byAttempt` derives admission from
+`(c.e v).isSome` — definedness of the option's own encoder. So as the recursive results grow,
+admission grows, the filtered option list grows from `[o]` to `[o, o']`, and the union's answer
+collapses from `some` to `none`. (U) quantifies over the *other* options: it is a negative
+condition, anti-monotone in exactly the argument a fixpoint must grow.
+
+Two theorems:
+
+| Theorem                     | Content                                                                                   |
+| --------------------------- | ------------------------------------------------------------------------------------------- |
+| `altCodec_not_monotone`     | The cause, on the combinator alone: one option grows in the information order (`Codec.Approx`, the minimal requirement *any* ccpo must meet) and the union's `e` shrinks. This is the `mono` obligation a `partial_function` denotation would have to discharge, and it is false. |
+| `denote_not_fuel_monotone`  | The bite, on a closed term: `union(literal("A"), lazy(string))` encodes `"A"` at fuel 2 and nothing at fuel 3. The fuel stages are not a chain, so `⨆ fuel, denote fuel t` is not a definition either. |
+
+Note the direction of failure: the low-fuel answer is **over**-defined, not under-defined. Fuel 2
+answers `some` because it has not yet seen the second option — it is not a sound approximation of
+the truth from below, it is a different and wrong one. The relational route closes the same way:
+`¬∃ another option admits` is a negative recursive occurrence, so admission is not (co)inductively
+definable either.
+
+The obstruction is therefore in the calculus, not in the proof assistant. Porting to Isabelle/HOL
+would replace the fuel parameter with a failed `mono` proof at the `union` case. What fuel is
+actually standing in for is the finiteness of `Term` — which suggests the cheaper repair, below.
+
 ### The observation that matters
 
 All three defects of §4 are **finite counterexamples**: a handful of concrete values each. None
@@ -224,30 +277,69 @@ needed a proof assistant. Bounded exhaustive checking over the existing implemen
 found all three quickly. The proof assistant earned its keep on the *positive* theorem — soundness
 of the algebra — which is what cannot be established by testing at all.
 
-The corollary for planning: the remaining work is mostly §6's tables, and nine of those twenty rows
-are refutations. **Reach for a counterexample finder before a proof, on any new side condition.**
+The corollary for planning held up: the nine refutations went quickly once `≡` and `denoteω` were in
+place, and every one turned on a *held-set* separation rather than an `e`/`p` disagreement — `≡`
+tolerates a shrinking domain but never a differing `T`, so that is where the cheap witness lives.
+**Reach for a counterexample finder before a proof, on any new side condition.**
 
 ### Which assistant
 
 | Option              | Assessment                                                                                             |
 | ------------------- | ------------------------------------------------------------------------------------------------------ |
-| **Lean + mathlib**  | Chosen. Retires the plumbing; does not remove the fuel encoding. Best speedup per unit of disruption.  |
-| **Isabelle/HOL**    | The strongest case for a switch. `sledgehammer` closes most leaf goals; codatatypes and `partial_function` remove fuel entirely; `nitpick`/`quickcheck` are counterexample finders in the same tool, which is what the remaining work needs. Rejected only because it means rewriting ~7,500 `sorry`-free lines. |
+| **Lean + mathlib**  | Chosen. Retires the plumbing; does not remove the fuel encoding, but nothing does — see above. Best speedup per unit of disruption. |
+| **Isabelle/HOL**    | `sledgehammer` is the real and un-rebutted win: `Combinators.lean` is 4,620 lines of first-order list/option reasoning, which is exactly its diet. The other two claims do not survive. `partial_function` does **not** remove fuel here — it fails its `mono` obligation at `union`. And `nitpick` is weakest where it is most needed: `Term` carries function-typed fields (`held`'s `f`/`g`, `custom`'s pair, `refine`'s `q`), finite model finding degrades badly on those, and the §6 rows most in need of one sat precisely on `held`/`custom`/`refine` (they are now refuted by hand — see `Refutations.lean` — which is the outcome that would have tested the claim). A switch would also forfeit §3's axiom-base claim — Isabelle/HOL is classical with Hilbert choice, unconditionally. |
 | **Rocq/Coq**        | No clear win over Lean. Same dependent-pattern-match friction, same partiality problem.                |
 | **Agda**            | Better sized types, worse automation. Net loss here.                                                   |
 
-Honest conclusion: **starting today, knowing the calculus is partial and the payoff is one soundness
-theorem plus many counterexamples, Isabelle/HOL would be the better default.** That is a reason to
-choose differently on a future formalization, not to discard this one.
+Honest conclusion: **stay.** The premise that made Isabelle/HOL look like the better default was
+that it would buy a fuel-free denotation; it would not, and no system would. What is left is
+`sledgehammer` against a finished, `sorry`-free development — not enough, and it is bought partly
+with the axiom base.
+
+The cheaper repair was in the model, and it is **done** — in Lean, in three steps:
+
+1. **`Term.lazy` is finite** — `lazy (t : Term)`, not `lazy (γ : Unit → Term)`. The thunk added no
+   constructible term and existed only to defeat the termination checker.
+2. **`opaque` budgets each input by its own depth** (`Calculus/Opaque.lean`). `opaqCodec` was the
+   one case whose regress is not on the term — it rebuilds itself under `set`/`array`/`record` —
+   and it is also the one union that *is* continuous, because its eight options are kind-disjoint
+   so at most one ever admits. `opaqCodecω` supplies `Value.depth v` writing and `Attr.depth a`
+   reading; `opaq_e_agree`/`opaq_p_agree` prove the answer never changes past those budgets, and
+   `opaq_e_depth`/`opaq_p_depth` license the transport between them that `retract` and `canon`
+   need. `lawful_opaqCodecω` and `carrier_opaqCodecω` follow.
+3. **`denoteω : Term → Codec`** (`Calculus/Denoteω.lean`) is structural — no fuel parameter at
+   all. With `denote`'s `opaq` case now fuel-independent too, `denote` *stabilizes*, and
+   `denoteω_eq : termDepth t ≤ n → denoteω t = denote n t` makes the two denotations equal (as
+   codecs, not merely pointwise) at sufficient fuel.
+
+So the fuel-free statements are transports, not reproofs — the existing ~7,500 `sorry`-free lines
+were not rewritten. `Calculus/Soundnessω.lean` states the theorem the way §5 always meant it:
+
+```
+soundnessω : Typed t T μ → Obligationsω t → MPOkω t → Lawful (denoteω t)
+```
+
+with `soundness_coreω`, `carrier_denoteω`, `typed_e_memω`, `typed_p_memω` and `typed_μSynω`
+alongside. Axiom base unchanged throughout: `propext`, `Quot.sound`, and the `Double` axioms of
+§1 — no `Classical.choice`.
+
+Worth noting which constructors this leaves alone: `dunion` never consults the recursive result to
+decide admission, and `opaque`'s options are kind-disjoint, so both look continuous and could carry
+a genuine fixpoint semantics if recursive codecs were ever wanted. Neither is proved here. It is the
+*general* `union`, whose options may overlap, that is not — and that is a fact about (U), portable
+to any system and any port.
 
 ## §8 Priorities
 
 1. **Mechanize conformance** (§6, row 1) — C1–C3 for the TypeScript. The largest gap between "the
    calculus is sound" and "what ships is correct".
-2. **Refute §6's "do not hold" table** — nine claims, no new machinery needed; `Codec.Equiv` and the
-   counterexample idiom of `Discharge.lean` are in place.
+2. ~~**Refute §6's "do not hold" table**~~ — **done**, all nine (`Refutations.lean`). The open half
+   of §6 is now the "Hold" table: nine of its eleven rows are unproved.
 3. **Tighten §1's numeral domain**, now that `typed_e_mem` can check it.
-4. **`T` as an identity**, which needs a depth measure alongside fuel.
+4. ~~**De-fuel the denotation**~~ — **done** (§7), and with it `T` **as an identity** for
+   `opaque`. What remains of that row is the other constructors, where the honest answer differs by
+   rule: containers and wrappers should go through much as `opaque` did, but `union` needs (U) in
+   full, not merely at canonical inputs, and is false without it.
 5. **The remaining §6 equations.**
 
 ---
