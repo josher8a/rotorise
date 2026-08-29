@@ -119,9 +119,11 @@ describe('a definition generates what the codec generated', () => {
         },
     )
 
+    // 18 since `numeric` was removed: it was `number` with an unchecked cast, and the two call
+    // sites here are now `number` and `literal(0, 1, 2)`, whose kinds were already covered
     it('covers every kind a codec can be', () => {
         const kinds = new Set(codecs.map(([, c]) => c.def?.kind))
-        expect(kinds.size).toBe(19)
+        expect(kinds.size).toBe(18)
         expect([...kinds].every(Boolean)).toBe(true)
     })
 })
