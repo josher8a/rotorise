@@ -223,7 +223,10 @@ describe('composing with the rest', () => {
      */
     it('cannot be told apart from a list of another element', () => {
         const Either = union([tags, array(number)])
-        expect(() => Either.unsafeEncode(['a'])).toThrow(
+        // `'1'` and not `'a'`: since `number` gates on what DynamoDB stores, `'a'` is refused by
+        // the array option and the union resolves. The ambiguity is real for numeric text, which
+        // is the sharper witness anyway — both options genuinely admit it
+        expect(() => Either.unsafeEncode(['1'])).toThrow(
             /held and array both admit this value/,
         )
         // and reading is fine, because `SS` and `L` say which

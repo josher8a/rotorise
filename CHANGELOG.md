@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+### Changed
+
+- **`decimal` accepts only the form DynamoDB stores.** It normalises every `N` it takes — `'1.50'`
+  is stored and returned as `'1.5'`, `'007'` as `'7'`, `'1e5'` as `'100000'`, `'-0'` as `'0'` — and
+  `decimal.decode` is the identity on the digits, so a denormalised numeral was written as one
+  string and read back as another. A round trip broken *across storage*, where neither the types nor
+  an in-memory law suite can see it. `encode` now rejects it rather than rewriting it, and `decode`
+  rejects it too, since checking only the write is the one configuration that breaks the codec's
+  own laws.
+
+  **`'10.50'` is not a price this library will write; `'1.5'` is the same money.** If you format
+  money for display, do it at the edge — the store does not keep the trailing zero either way. Where
+  trailing zeros carry meaning, use `string`.
+
+- **`number` refuses what DynamoDB refuses.** `NaN` and `Infinity` encoded to `{ N: 'NaN' }` and
+  `{ N: 'Infinity' }`, which the service rejects on arrival; `Number('abc')` decoded to `NaN` with
+  no error at all. Both halves now gate on §1's numeral bounds — at most 38 significant digits,
+  magnitude `1e-130` to `9.9…e125` — and `decode` checks the value it read back rather than only the
+  stored digits, because `'9.9999999999999999999999999999999999999E+125'` rounds *up* past the
+  maximum.
+
+- **`set` and `opaque` refuse an empty set on read**, as their `encode` always has.
+
 ### Removed
 
 - **`numeric()`** — removed, with no deprecation period, because it was unsound rather than

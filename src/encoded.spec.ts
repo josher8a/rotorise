@@ -93,7 +93,7 @@ const Pet = object(spec).item satisfies ItemCodec<Pet> satisfies Writes<PetItem>
 const pet: Pet = {
     TAG: 'PET',
     id: 'p1',
-    price: '10.50',
+    price: '10.5',
     weight: 4,
     adopted: true,
     photo: Uint8Array.from([1]),
@@ -223,7 +223,7 @@ describe('an item codec types what it writes', () => {
         // the member each attribute carries is known, so reading the right one needs no cast
         const price: string = written.price.N
         const tags: readonly string[] = written.tags.SS
-        expect([price, tags]).toEqual(['10.50', ['a', 'b']])
+        expect([price, tags]).toEqual(['10.5', ['a', 'b']])
 
         // ...and the wrong one is `never`, which is what makes `N` and `S` distinguishable
         // @ts-expect-error `price` is stored as N, so it never carries S
@@ -312,7 +312,7 @@ describe('an entry types the row it writes', () => {
         const pk: string = row.PK.S
         const gsi: string = row.GSI1PK.S
         const price: string = row.price.N
-        expect([pk, gsi, price]).toEqual(['ID#p1', 'TAG#PET', '10.50'])
+        expect([pk, gsi, price]).toEqual(['ID#p1', 'TAG#PET', '10.5'])
     })
 
     it('is still the wide map a request holds', () => {

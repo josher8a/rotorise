@@ -823,16 +823,65 @@ export function literal<const T extends string | number>(
 }
 
 /**
+ * What DynamoDB **accepts** in an `N`: optional sign, digits, optional point, optional exponent;
+ * at most 38 significant digits; magnitude zero or `1e-130 … 9.9…e125`. §1's `Numerals`, and the
+ * same predicate as `Numeral.WF` in `formal/Calculus/Domain.lean`.
+ */
+const NUMERAL = /^[+-]?(\d+)(?:\.(\d+))?(?:[eE]([+-]?\d+))?$/
+
+const isNumeral = (s: string): boolean => {
+    const m = NUMERAL.exec(s)
+    if (!m) return false
+    const int = m[1] as string
+    const frac = m[2] ?? ''
+    const mantissa = int + frac
+    const lead = mantissa.length - mantissa.replace(/^0+/, '').length
+    const significant = mantissa.replace(/^0+/, '').replace(/0+$/, '')
+    if (significant.length > 38) return false
+    if (significant.length === 0) return true // zero, however it is spelled
+    const exponent = int.length - 1 - lead + Number(m[3] ?? '0')
+    return exponent >= -130 && exponent <= 125
+}
+
+/**
+ * What DynamoDB **hands back**, which is a smaller set: it normalises every `N` it accepts —
+ * trimming leading and trailing zeros, dropping `+`, expanding exponents, and keeping one spelling
+ * of zero. Measured, not assumed: `codec.dynamodb.spec.ts` puts each form into a real table and reads it
+ * back, and `Numeral.Stored` in `formal/Calculus/Domain.lean` is the same set.
+ */
+const isStoredNumeral = (s: string): boolean =>
+    s !== '-0' && /^-?(?:0|[1-9]\d*)(?:\.\d*[1-9])?$/.test(s) && isNumeral(s)
+
+/**
  * A decimal held as a string, stored as `N`. The codec for money — nothing becomes a JS number, so
  * nothing rounds.
  *
- * DynamoDB still normalises the digits (`'1.50'` → `'1.5'`), so `decode ∘ encode` is identity only
- * in normal form. Where exact digits matter more than numeric ordering, use {@link string}.
+ * **Only the form DynamoDB stores.** It normalises what it accepts — `'1.50'` becomes `'1.5'`,
+ * `'007'` becomes `'7'`, `'1e5'` becomes `'100000'` — and this codec's `decode` is the identity on
+ * the digits, so anything else would come back as a different string from the one written. That is
+ * a round trip failing across the database, where neither the type nor the law suite can see it, so
+ * it is refused at the point where it is still local: `encode` rejects a denormal numeral rather
+ * than quietly rewriting it, because rewriting is how you lose track of which value was meant.
+ *
+ * `'1.50'` is not a price this codec will write. `'1.5'` is. Where exact digits matter more than
+ * numeric ordering — trailing zeros that mean something — use {@link string}.
  */
 export const decimal: AttributeCodec<string, Attribute<'N'>> = codec({
     def: { kind: 'decimal' },
-    encode: (value) => carrying('N', value),
-    decode: (attribute) => expect('N', attribute),
+    encode: (value) =>
+        isStoredNumeral(value)
+            ? carrying('N', value)
+            : new CodecError(
+                  `'${value}' is not a numeral DynamoDB stores unchanged; it accepts at most 38 significant digits, magnitude 1e-130 to 9.9e125, and returns the normalised form (no leading or trailing zeros, no exponent, no '+')`,
+              ),
+    decode: (attribute) =>
+        andThen(expect('N', attribute), (carried) =>
+            isStoredNumeral(carried)
+                ? carried
+                : new CodecError(
+                      `'${carried}' is not a numeral in the form DynamoDB stores, so this attribute was not written by it`,
+                  ),
+        ),
 })
 
 /**
@@ -841,8 +890,32 @@ export const decimal: AttributeCodec<string, Attribute<'N'>> = codec({
  */
 export const number: AttributeCodec<number, Attribute<'N'>> = codec({
     def: { kind: 'number' },
-    encode: (value) => carrying('N', value.toString()),
-    decode: (attribute) => andThen(expect('N', attribute), Number),
+    encode: (value) =>
+        isNumeral(value.toString())
+            ? carrying('N', value.toString())
+            : new CodecError(
+                  `${value} is not a number DynamoDB stores: it takes at most 38 significant digits and magnitude 1e-130 to 9.9e125, and has no NaN or Infinity`,
+              ),
+    /**
+     * Both gates, and the second is not redundant. `Number('9.9999999999999999999999999999999999999E+125')`
+     * rounds *up* to `1e126`, which is past the maximum — so a numeral DynamoDB stores can read
+     * back as a number this codec cannot write. Checking only the stored digits would leave `decode`
+     * accepting a value `encode` refuses, which is `(C)` failing.
+     */
+    decode: (attribute) =>
+        andThen(expect('N', attribute), (carried) => {
+            if (!isNumeral(carried)) {
+                return new CodecError(
+                    `'${carried}' is not a numeral, so this attribute was not written by DynamoDB`,
+                )
+            }
+            const read = Number(carried)
+            return isNumeral(read.toString())
+                ? read
+                : new CodecError(
+                      `'${carried}' reads back as ${read}, which is outside the range DynamoDB stores`,
+                  )
+        }),
 })
 
 /** A boolean, as `BOOL`. */

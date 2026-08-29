@@ -184,13 +184,13 @@ def numberCodec : Codec :=
     side has to check as well — an ill-formed numeral admitted by `p` would name a value
     `e` then refuses, and that is **(C)** failing. -/
 def decimalCodec : Codec :=
-  { T := fun v => ∃ s, v = .str s ∧ Numeral.WF s = true
+  { T := fun v => ∃ s, v = .str s ∧ Numeral.Stored s = true
     μ := some .N
     e := fun v => match v with
-      | .str s => if Numeral.WF s then some (.n s) else none
+      | .str s => if Numeral.Stored s then some (.n s) else none
       | _ => none
     p := fun a => match a with
-      | .n x => if Numeral.WF x then some (.str x) else none
+      | .n x => if Numeral.Stored x then some (.str x) else none
       | _ => none }
 
 def booleanCodec : Codec :=
@@ -1397,16 +1397,16 @@ theorem carrier_decimalCodec : Carrier decimalCodec := by
   · intro v a h
     cases v with
     | str s =>
-      replace h : (if Numeral.WF s = true then some (Attr.n s) else none) = some a := h
-      by_cases hw : Numeral.WF s = true
+      replace h : (if Numeral.Stored s = true then some (Attr.n s) else none) = some a := h
+      by_cases hw : Numeral.Stored s = true
       · exact ⟨s, rfl, hw⟩
       · rw [if_neg hw] at h; exact nomatch h
     | _ => exact nomatch h
   · intro a v h
     cases a with
     | n x =>
-      replace h : (if Numeral.WF x = true then some (Value.str x) else none) = some v := h
-      by_cases hw : Numeral.WF x = true
+      replace h : (if Numeral.Stored x = true then some (Value.str x) else none) = some v := h
+      by_cases hw : Numeral.Stored x = true
       · rw [if_pos hw] at h; cases h; exact ⟨x, rfl, hw⟩
       · rw [if_neg hw] at h; exact nomatch h
     | _ => exact nomatch h
@@ -1665,10 +1665,10 @@ theorem lawful_nullCodec : Lawful nullCodec :=
 /-- `e` and `p` gate on the *same* predicate applied to the *same* text, so each law
     reduces to that one decision. -/
 theorem decimalCodec_e_str (s : String) :
-    decimalCodec.e (.str s) = if Numeral.WF s then some (.n s) else none := rfl
+    decimalCodec.e (.str s) = if Numeral.Stored s then some (.n s) else none := rfl
 
 theorem decimalCodec_p_n (x : Numeral) :
-    decimalCodec.p (.n x) = if Numeral.WF x then some (.str x) else none := rfl
+    decimalCodec.p (.n x) = if Numeral.Stored x then some (.str x) else none := rfl
 
 theorem lawful_decimalCodec : Lawful decimalCodec := by
   refine ⟨?_, ?_, ?_, ?_⟩
@@ -1676,7 +1676,7 @@ theorem lawful_decimalCodec : Lawful decimalCodec := by
     cases t with
     | str s =>
       rw [decimalCodec_e_str] at he
-      by_cases hw : Numeral.WF s = true
+      by_cases hw : Numeral.Stored s = true
       · rw [if_pos hw] at he; cases he; rw [decimalCodec_p_n, if_pos hw]
       · rw [if_neg hw] at he; exact nomatch he
     | _ => exact nomatch he
@@ -1684,7 +1684,7 @@ theorem lawful_decimalCodec : Lawful decimalCodec := by
     cases a with
     | n x =>
       rw [decimalCodec_p_n] at hp
-      by_cases hw : Numeral.WF x = true
+      by_cases hw : Numeral.Stored x = true
       · rw [if_pos hw] at hp; cases hp; rw [decimalCodec_e_str, if_pos hw]; rfl
       · rw [if_neg hw] at hp; exact nomatch hp
     | _ => exact nomatch hp
@@ -1692,7 +1692,7 @@ theorem lawful_decimalCodec : Lawful decimalCodec := by
     cases t with
     | str s =>
       rw [decimalCodec_e_str] at he
-      by_cases hw : Numeral.WF s = true
+      by_cases hw : Numeral.Stored s = true
       · rw [if_pos hw] at he; cases he; cases hμ; rfl
       · rw [if_neg hw] at he; exact nomatch he
     | _ => exact nomatch he
@@ -1700,7 +1700,7 @@ theorem lawful_decimalCodec : Lawful decimalCodec := by
     cases a with
     | n x =>
       rw [decimalCodec_p_n] at hp
-      by_cases hw : Numeral.WF x = true
+      by_cases hw : Numeral.Stored x = true
       · rw [if_pos hw] at hp
         cases hp
         rw [decimalCodec_e_str, if_pos hw] at he
