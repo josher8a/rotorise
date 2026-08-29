@@ -125,6 +125,19 @@ and the judgement to it), and `lazy` concludes `⊤` in the model exactly as the
   §5's own worked example — a pair that shares both `κ` and `⇝`, so only `adm` reaches
   it.
 
+## How the proofs are meant to read
+
+[`VOCABULARY.md`](./VOCABULARY.md) is the convention — a definition is unfolded once, in
+its own inversion lemma, and every proof downstream cites the lemma — together with the
+naming scheme, a measured audit of where the vocabulary is still incomplete, and the
+ranked plan for closing it. The numbers regenerate: `python3 scripts/vocab_audit.py`.
+
+The short version: the *obligation* half of the vocabulary is done (23/24 carriers,
+22/24 lawfulness lemmas); the *observation* half — `X_e`/`X_p`, what a construction
+writes and reads — is 6 of 48. Six of every ten remaining hand-unfoldings are `Option`
+algebra rather than anything about codecs, and the blocks that have inversion carry
+0–3 such sites per hundred lines against 6–9 for the blocks that do not.
+
 ## What remains (sharpenings, not gaps)
 
 The theorem is proved; these tighten the model's fidelity to the doc, none affect
