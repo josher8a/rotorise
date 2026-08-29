@@ -2130,138 +2130,185 @@ theorem setCodec_agree_of {α : Type} {c : Codec} (h : Lawful c)
     cases he
     exact agree_of_member_flat (by rw [hwm, ha]) (by rw [hwm]; exact hL) (by rw [hwm]; exact hM)
 
+/-! #### (R) and (W), argued once for both strengths
+
+These two clauses read the same whether the element codec is `Lawful` or only
+`LawfulCore` — (MP) contributes nothing to either — so they are stated once and both
+`lawfulCore_setCodec` and `lawful_setCodec` cite them. What the two strengths really
+differ on is (C): with (MP) the element's member comes from agreement, without it the
+`(set)` rule's own premise supplies it. -/
+
+/-- What `set` writes: a `set` value whose elements all write, gathered by `asWireSet`. -/
+theorem setCodec_e_eq {c : Codec} {v : Value} {a : Attr} :
+    (setCodec c).e v = some a ↔
+      ∃ vs as, v = .set vs ∧ traverse c.e vs = some as ∧ asWireSet as = some a := by
+  cases v <;> simp [setCodec, Option.bind_eq_some]
+
+/-- (R) per family: a wire set reads back by the same traversal, through the same prism
+    the payload projection put it in. -/
+theorem setCodec_retract_of {α : Type} {c : Codec} (h : LawfulCore c) (elem : Ctor α Attr)
+    {vs : List Value} {x : α} {xs : List α}
+    (htr : traverse c.e vs = some ((x :: xs).map elem.into)) :
+    (traverse (fun y => c.p (elem.into y)) (x :: xs)).map Value.set = some (.set vs) := by
+  have h1 := traverse_roundTrip (fun _ _ hxy => h.retract hxy) vs _ htr
+  rw [traverse_map] at h1
+  rw [h1]
+  rfl
+
+theorem set_retract {c : Codec} (h : LawfulCore c) :
+    ∀ {t a}, (setCodec c).e t = some a → (setCodec c).p a = some t := by
+  intro t a he
+  obtain ⟨vs, as, rfl, htr, hw⟩ := setCodec_e_eq.mp he
+  obtain ⟨hne, hcase⟩ := asWireSet_cases hw
+  rcases hcase with ⟨ss, rfl, rfl⟩ | ⟨ns, rfl, rfl⟩ | ⟨bs, rfl, rfl⟩
+  · cases ss with
+    | nil => exact absurd rfl hne
+    | cons _ _ => exact setCodec_retract_of h sC htr
+  · cases ns with
+    | nil => exact absurd rfl hne
+    | cons _ _ => exact setCodec_retract_of h nC htr
+  · cases bs with
+    | nil => exact absurd rfl hne
+    | cons _ _ => exact setCodec_retract_of h bC htr
+
+/-- (W) per family: the wire member is `setMember` of the element member, and the first
+    element is enough to name the latter. -/
+theorem setCodec_writes_of {α : Type} {elem : Ctor α Attr} {μE μS μ₀ μ : Member}
+    (hm : ∀ x, (elem.into x).member = μE) (hsm : setMember μE = some μS)
+    {x : α} {xs : List α} (hmem : ∀ y ∈ (x :: xs).map elem.into, y.member = μ₀)
+    (hμ : setMember μ₀ = some μ) : μS = μ := by
+  have hx := hmem _ (List.mem_cons_self _ _)
+  rw [hm] at hx
+  subst hx
+  rw [hsm] at hμ
+  exact Option.some.inj hμ
+
+theorem set_writes {c : Codec} (h : LawfulCore c) :
+    ∀ {μ}, (setCodec c).μ = some μ → ∀ {t a}, (setCodec c).e t = some a →
+      a.member = μ := by
+  intro μ hμ t a he
+  obtain ⟨vs, as, rfl, htr, hw⟩ := setCodec_e_eq.mp he
+  replace hμ : c.μ.bind setMember = some μ := hμ
+  cases hc : c.μ with
+  | none => rw [hc] at hμ; exact nomatch hμ
+  | some μ₀ =>
+    rw [hc] at hμ
+    replace hμ : setMember μ₀ = some μ := hμ
+    have hmem := traverse_mem (P := fun y => y.member = μ₀)
+      (fun _ y hxy => h.writes hc hxy) htr
+    obtain ⟨hne, hcase⟩ := asWireSet_cases hw
+    rcases hcase with ⟨ss, rfl, rfl⟩ | ⟨ns, rfl, rfl⟩ | ⟨bs, rfl, rfl⟩
+    · cases ss with
+      | nil => exact absurd rfl hne
+      | cons _ _ => exact setCodec_writes_of (elem := sC) (fun _ => rfl) rfl hmem hμ
+    · cases ns with
+      | nil => exact absurd rfl hne
+      | cons _ _ => exact setCodec_writes_of (elem := nC) (fun _ => rfl) rfl hmem hμ
+    · cases bs with
+      | nil => exact absurd rfl hne
+      | cons _ _ => exact setCodec_writes_of (elem := bC) (fun _ => rfl) rfl hmem hμ
+
+/-- Core set: the member-uniformity that (MP) supplied comes from (W) instead, so the
+    element's named member is a hypothesis — exactly the `(set)` rule's premise. -/
+theorem lawfulCore_setCodec {c : Codec} {μ₀ μS : Member} (h : LawfulCore c)
+    (hμ : c.μ = some μ₀) (hsm : setMember μ₀ = some μS) :
+    LawfulCore (setCodec c) := by
+  refine ⟨set_retract h, ?_, set_writes h⟩
+  have hbranch : ∀ (ws : List Value), ∀ as', traverse c.e ws = some as' → ws ≠ [] →
+      ((traverse c.e ws).bind asWireSet).isSome = true := by
+    intro ws as' has' hws
+    have hmem : ∀ x ∈ as', x.member = μ₀ :=
+      traverse_mem (fun _ y hxy => h.writes hμ hxy) has'
+    have hne' : as' ≠ [] := by
+      intro h0
+      have hlen := traverse_length ws as' has'
+      rw [h0] at hlen
+      exact hws (List.length_eq_zero.mp hlen)
+    rw [has']
+    show (asWireSet as').isSome = true
+    cases as' with
+    | nil => exact absurd rfl hne'
+    | cons x r =>
+      have hx := hmem x (List.mem_cons_self x r)
+      cases μ₀
+      case S =>
+        obtain ⟨ss', hss'⟩ := strPayloads_isSome hmem
+        simp only [asWireSet]; rw [hss']; rfl
+      case N =>
+        obtain ⟨ns', hns'⟩ := numPayloads_isSome hmem
+        cases x
+        case n v => simp only [asWireSet, strPayloads]; rw [hns']; rfl
+        all_goals exact nomatch hx
+      case B =>
+        obtain ⟨bs', hbs'⟩ := binPayloads_isSome hmem
+        cases x
+        case b v => simp only [asWireSet, strPayloads, numPayloads]; rw [hbs']; rfl
+        all_goals exact nomatch hx
+      all_goals exact nomatch hsm
+  have branch : ∀ {α : Type} (elem : Ctor α Attr) (x : α) (r : List α) (t : Value),
+      (traverse (fun y => c.p (elem.into y)) (x :: r)).map Value.set = some t →
+      ((setCodec c).e t).isSome = true := by
+    intro α elem x r t hp
+    obtain ⟨ws, htr, rfl⟩ := Option.map_eq_some'.mp hp
+    show ((traverse c.e ws).bind asWireSet).isSome = true
+    obtain ⟨as', has'⟩ := Option.isSome_iff_exists.mp
+      (traverse_isSome (f := c.e) (fun _ _ hyx => h.canon hyx) (x :: r) ws htr)
+    refine hbranch ws as' has' ?_
+    intro h0
+    have hlen := traverse_length (x :: r) ws htr
+    rw [h0] at hlen
+    exact nomatch hlen
+  intro a t hp
+  cases a
+  case ss vs' => cases vs' with
+    | nil => exact nomatch hp
+    | cons _ _ => exact branch sC _ _ t hp
+  case ns vs' => cases vs' with
+    | nil => exact nomatch hp
+    | cons _ _ => exact branch nC _ _ t hp
+  case bs vs' => cases vs' with
+    | nil => exact nomatch hp
+    | cons _ _ => exact branch bC _ _ t hp
+  all_goals exact nomatch hp
+
 /-- The quotiented product; `p` need not be injective — the shrink is the quotient. -/
 theorem lawful_setCodec {c : Codec} (h : Lawful c) : Lawful (setCodec c) := by
-  refine ⟨?_, ?_, ?_, ?_⟩
-  · intro t a he
-    cases t
-    case set vs =>
-      replace he : (traverse c.e vs).bind asWireSet = some a := he
-      cases htr : traverse c.e vs with
-      | none => rw [htr] at he; exact nomatch he
-      | some as =>
-        rw [htr] at he
-        replace he : asWireSet as = some a := he
-        obtain ⟨hne, hcase⟩ := asWireSet_cases he
-        rcases hcase with ⟨ss, rfl, rfl⟩ | ⟨ns, rfl, rfl⟩ | ⟨bs, rfl, rfl⟩
-        · have h1 := traverse_roundTrip (fun _ _ hxy => h.retract hxy)
-            vs (ss.map Attr.s) htr
-          rw [traverse_map] at h1
-          cases ss with
-          | nil => exact absurd rfl hne
-          | cons s ss' =>
-            show (traverse (fun s => c.p (.s s)) (s :: ss')).map Value.set =
-              some (.set vs)
-            rw [h1]
-            rfl
-        · have h1 := traverse_roundTrip (fun _ _ hxy => h.retract hxy)
-            vs (ns.map Attr.n) htr
-          rw [traverse_map] at h1
-          cases ns with
-          | nil => exact absurd rfl hne
-          | cons n ns' =>
-            show (traverse (fun x => c.p (.n x)) (n :: ns')).map Value.set =
-              some (.set vs)
-            rw [h1]
-            rfl
-        · have h1 := traverse_roundTrip (fun _ _ hxy => h.retract hxy)
-            vs (bs.map Attr.b) htr
-          rw [traverse_map] at h1
-          cases bs with
-          | nil => exact absurd rfl hne
-          | cons b bs' =>
-            show (traverse (fun x => c.p (.b x)) (b :: bs')).map Value.set =
-              some (.set vs)
-            rw [h1]
-            rfl
-    all_goals exact nomatch he
+  refine ⟨set_retract h.core, ?_, set_writes h.core, ?_⟩
   · intro a t hp
     cases a
-    case ss vs' =>
-      cases vs' with
+    case ss vs' => cases vs' with
       | nil => exact nomatch hp
-      | cons x r =>
+      | cons _ _ =>
         exact setCodec_canon_of h sC .S .SS (fun _ => rfl)
           (fun _ hne hmem => asWireSet_of_S hne hmem) (by simp) hp
-    case ns vs' =>
-      cases vs' with
+    case ns vs' => cases vs' with
       | nil => exact nomatch hp
-      | cons x r =>
+      | cons _ _ =>
         exact setCodec_canon_of h nC .N .NS (fun _ => rfl)
           (fun _ hne hmem => asWireSet_of_N hne hmem) (by simp) hp
-    case bs vs' =>
-      cases vs' with
+    case bs vs' => cases vs' with
       | nil => exact nomatch hp
-      | cons x r =>
+      | cons _ _ =>
         exact setCodec_canon_of h bC .B .BS (fun _ => rfl)
           (fun _ hne hmem => asWireSet_of_B hne hmem) (by simp) hp
     all_goals exact nomatch hp
-  · intro μ hμ t a he
-    simp only [setCodec] at hμ
-    cases hc : c.μ with
-    | none => rw [hc] at hμ; exact nomatch hμ
-    | some μ₀ =>
-      rw [hc] at hμ
-      cases t
-      case set vs =>
-        replace he : (traverse c.e vs).bind asWireSet = some a := he
-        cases htr : traverse c.e vs with
-        | none => rw [htr] at he; exact nomatch he
-        | some as =>
-          rw [htr] at he
-          replace he : asWireSet as = some a := he
-          obtain ⟨hne, hcase⟩ := asWireSet_cases he
-          have hmem := traverse_mem (P := fun y => y.member = μ₀)
-            (fun _ y hxy => h.writes hc hxy) htr
-          rcases hcase with ⟨ss, rfl, rfl⟩ | ⟨ns, rfl, rfl⟩ | ⟨bs, rfl, rfl⟩
-          · cases ss with
-            | nil => exact absurd rfl hne
-            | cons s ss' =>
-              have hm := hmem (Attr.s s) (List.mem_cons_self _ _)
-              replace hm : Member.S = μ₀ := hm
-              cases hm
-              replace hμ : some Member.SS = some μ := hμ
-              cases hμ
-              rfl
-          · cases ns with
-            | nil => exact absurd rfl hne
-            | cons n ns' =>
-              have hm := hmem (Attr.n n) (List.mem_cons_self _ _)
-              replace hm : Member.N = μ₀ := hm
-              cases hm
-              replace hμ : some Member.NS = some μ := hμ
-              cases hμ
-              rfl
-          · cases bs with
-            | nil => exact absurd rfl hne
-            | cons b bs' =>
-              have hm := hmem (Attr.b b) (List.mem_cons_self _ _)
-              replace hm : Member.B = μ₀ := hm
-              cases hm
-              replace hμ : some Member.BS = some μ := hμ
-              cases hμ
-              rfl
-      all_goals exact nomatch he
   · intro a t a' hp he
     cases a
-    case ss vs' =>
-      cases vs' with
+    case ss vs' => cases vs' with
       | nil => exact nomatch hp
-      | cons x r =>
+      | cons _ _ =>
         exact setCodec_agree_of h sC .S .SS (fun _ => rfl)
           (fun _ hne hmem => asWireSet_of_S hne hmem) (by decide) (by decide)
           (by simp) rfl hp he
-    case ns vs' =>
-      cases vs' with
+    case ns vs' => cases vs' with
       | nil => exact nomatch hp
-      | cons x r =>
+      | cons _ _ =>
         exact setCodec_agree_of h nC .N .NS (fun _ => rfl)
           (fun _ hne hmem => asWireSet_of_N hne hmem) (by decide) (by decide)
           (by simp) rfl hp he
-    case bs vs' =>
-      cases vs' with
+    case bs vs' => cases vs' with
       | nil => exact nomatch hp
-      | cons x r =>
+      | cons _ _ =>
         exact setCodec_agree_of h bC .B .BS (fun _ => rfl)
           (fun _ hne hmem => asWireSet_of_B hne hmem) (by decide) (by decide)
           (by simp) rfl hp he
@@ -2820,6 +2867,15 @@ theorem lawful_objectCodec {sems : List (Name × FieldSem)} {rest : RestSem}
   lawful_objectCore sems (rcOf rest) (keepB rest sems) hf hfb hnd
     (rcOf_forall hrest) keepB_of_encEntry keepB_of_declared
 
+theorem lawfulCore_objectCodec {sems : List (Name × FieldSem)} {rest : RestSem}
+    (hf : ∀ kf ∈ sems, LawfulCore kf.2.codec)
+    (hfb : ∀ kf ∈ sems, ∀ c v, kf.2 = .fb c v → (c.e v).isSome)
+    (hnd : (sems.map (·.1)).Nodup)
+    (hrest : ∀ c, rest = .codec c → LawfulCore c) :
+    LawfulCore (objectCodec sems rest) :=
+  lawfulCore_objectCore sems (rcOf rest) (keepB rest sems) hf hfb hnd
+    (rcOf_forall hrest) keepB_of_encEntry keepB_of_declared
+
 /-- The sum, from (U): both directions route through the same option. -/
 theorem lawfulCore_altCodec {os : List OptionSem} {μA : Option Member}
     (h : ∀ o ∈ os, LawfulCore o.c) (hU : UniqueAdmission os)
@@ -2972,6 +3028,27 @@ theorem lawful_dunionCodec {d : Name} {os : List (List String × Codec)}
     (hdisj : List.Pairwise (fun x y => ∀ tag ∈ x.1, tag ∉ y.1) os) :
     Lawful (dunionCodec d os) := by
   refine lawful_altCodec ?_ (uniqueAdmission_byTag hstamp hdisj) ?_
+  · intro o ho
+    simp only [List.mem_map] at ho
+    obtain ⟨x, hx, rfl⟩ := ho
+    exact h x hx
+  · intro m hm o ho t a he
+    cases hm
+    simp only [List.mem_map] at ho
+    obtain ⟨x, hx, rfl⟩ := ho
+    replace he : x.2.e t = some a := he
+    obtain ⟨tag, htag, ⟨kvs, rfl, hlook⟩, -⟩ := hstamp x hx t a he
+    rfl
+
+/-- Core `(dunion)`: the same corollary, with core options. -/
+theorem lawfulCore_dunionCodec {d : Name} {os : List (List String × Codec)}
+    (h : ∀ o ∈ os, LawfulCore o.2)
+    (hstamp : ∀ o ∈ os, ∀ t a, o.2.e t = some a →
+      ∃ tag ∈ o.1, (∃ kvs, a = .m kvs ∧ kvs.lookup d = some (.s tag)) ∧
+        (∃ kvs, t = .map kvs ∧ kvs.lookup d = some (.str tag)))
+    (hdisj : List.Pairwise (fun x y => ∀ tag ∈ x.1, tag ∉ y.1) os) :
+    LawfulCore (dunionCodec d os) := by
+  refine lawfulCore_altCodec ?_ (uniqueAdmission_byTag hstamp hdisj) ?_
   · intro o ho
     simp only [List.mem_map] at ho
     obtain ⟨x, hx, rfl⟩ := ho
@@ -3191,242 +3268,6 @@ theorem lawful_opaqCodec : ∀ (fuel : Nat) (lossy : Bool), Lawful (opaqCodec fu
                 binaryCodec, nullCodec, setCodec, arrayCodec, hnev, hetotal]
         all_goals exact nomatch he
       · exact absurd hmem (by simp)
-
-/-! ## Core variants: (R), (C), (W) through `legacy`-containing subterms
-
-Every construction's core lemma now lives beside its full counterpart above, sharing
-the same clauses — all except `set`, whose core statement replaces (MP)'s
-member-uniformity with a hypothesis and so has genuinely different content. -/
-
-
-/-- Core set: the member-uniformity that (MP) supplied comes from (W) instead, so the
-    element's named member is a hypothesis — exactly the `(set)` rule's premise. -/
-theorem lawfulCore_setCodec {c : Codec} {μ₀ μS : Member} (h : LawfulCore c)
-    (hμ : c.μ = some μ₀) (hsm : setMember μ₀ = some μS) :
-    LawfulCore (setCodec c) := by
-  refine ⟨?_, ?_, ?_⟩
-  · intro t a he
-    cases t
-    case set vs =>
-      replace he : (traverse c.e vs).bind asWireSet = some a := he
-      cases htr : traverse c.e vs with
-      | none => rw [htr] at he; exact nomatch he
-      | some as =>
-        rw [htr] at he
-        replace he : asWireSet as = some a := he
-        obtain ⟨hne, hcase⟩ := asWireSet_cases he
-        rcases hcase with ⟨ss, rfl, rfl⟩ | ⟨ns, rfl, rfl⟩ | ⟨bs, rfl, rfl⟩
-        · have h1 := traverse_roundTrip (fun _ _ hxy => h.retract hxy)
-            vs (ss.map Attr.s) htr
-          rw [traverse_map] at h1
-          cases ss with
-          | nil => exact absurd rfl hne
-          | cons s ss' =>
-            show (traverse (fun s => c.p (.s s)) (s :: ss')).map Value.set =
-              some (.set vs)
-            rw [h1]
-            rfl
-        · have h1 := traverse_roundTrip (fun _ _ hxy => h.retract hxy)
-            vs (ns.map Attr.n) htr
-          rw [traverse_map] at h1
-          cases ns with
-          | nil => exact absurd rfl hne
-          | cons n ns' =>
-            show (traverse (fun x => c.p (.n x)) (n :: ns')).map Value.set =
-              some (.set vs)
-            rw [h1]
-            rfl
-        · have h1 := traverse_roundTrip (fun _ _ hxy => h.retract hxy)
-            vs (bs.map Attr.b) htr
-          rw [traverse_map] at h1
-          cases bs with
-          | nil => exact absurd rfl hne
-          | cons b bs' =>
-            show (traverse (fun x => c.p (.b x)) (b :: bs')).map Value.set =
-              some (.set vs)
-            rw [h1]
-            rfl
-    all_goals exact nomatch he
-  · intro a t hp
-    have hbranch : ∀ (ws : List Value), traverse c.e ws ≠ none →
-        ∀ as', traverse c.e ws = some as' → ws ≠ [] →
-        ((traverse c.e ws).bind asWireSet).isSome = true := by
-      intro ws _ as' has' hws
-      have hmem : ∀ x ∈ as', x.member = μ₀ :=
-        traverse_mem (fun _ y hxy => h.writes hμ hxy) has'
-      have hne' : as' ≠ [] := by
-        intro h0
-        have hlen := traverse_length ws as' has'
-        rw [h0] at hlen
-        exact hws (List.length_eq_zero.mp hlen)
-      rw [has']
-      show (asWireSet as').isSome = true
-      cases as' with
-      | nil => exact absurd rfl hne'
-      | cons x r =>
-        have hx := hmem x (List.mem_cons_self x r)
-        cases μ₀
-        case S =>
-          obtain ⟨ss', hss'⟩ := strPayloads_isSome hmem
-          simp only [asWireSet]
-          rw [hss']
-          rfl
-        case N =>
-          obtain ⟨ns', hns'⟩ := numPayloads_isSome hmem
-          cases x
-          case n v =>
-            simp only [asWireSet, strPayloads]
-            rw [hns']
-            rfl
-          all_goals exact nomatch hx
-        case B =>
-          obtain ⟨bs', hbs'⟩ := binPayloads_isSome hmem
-          cases x
-          case b v =>
-            simp only [asWireSet, strPayloads, numPayloads]
-            rw [hbs']
-            rfl
-          all_goals exact nomatch hx
-        all_goals exact nomatch hsm
-    cases a
-    case ss vs' =>
-      cases vs' with
-      | nil => exact nomatch hp
-      | cons s rest =>
-        replace hp : (traverse (fun s => c.p (.s s)) (s :: rest)).map Value.set =
-          some t := hp
-        cases htr : traverse (fun s => c.p (Attr.s s)) (s :: rest) with
-        | none => rw [htr] at hp; exact nomatch hp
-        | some ws =>
-          rw [htr] at hp
-          replace hp : some (Value.set ws) = some t := hp
-          cases hp
-          obtain ⟨as', has'⟩ := Option.isSome_iff_exists.mp
-            (traverse_isSome (f := c.e) (fun _ _ hyx => h.canon hyx)
-              (s :: rest) ws htr)
-          have hws : ws ≠ [] := by
-            intro h0
-            have hlen := traverse_length (s :: rest) ws htr
-            rw [h0] at hlen
-            exact nomatch hlen
-          exact hbranch ws (by rw [has']; exact nofun) as' has' hws
-    case ns vs' =>
-      cases vs' with
-      | nil => exact nomatch hp
-      | cons n rest =>
-        replace hp : (traverse (fun x => c.p (.n x)) (n :: rest)).map Value.set =
-          some t := hp
-        cases htr : traverse (fun x => c.p (Attr.n x)) (n :: rest) with
-        | none => rw [htr] at hp; exact nomatch hp
-        | some ws =>
-          rw [htr] at hp
-          replace hp : some (Value.set ws) = some t := hp
-          cases hp
-          obtain ⟨as', has'⟩ := Option.isSome_iff_exists.mp
-            (traverse_isSome (f := c.e) (fun _ _ hyx => h.canon hyx)
-              (n :: rest) ws htr)
-          have hws : ws ≠ [] := by
-            intro h0
-            have hlen := traverse_length (n :: rest) ws htr
-            rw [h0] at hlen
-            exact nomatch hlen
-          exact hbranch ws (by rw [has']; exact nofun) as' has' hws
-    case bs vs' =>
-      cases vs' with
-      | nil => exact nomatch hp
-      | cons b rest =>
-        replace hp : (traverse (fun x => c.p (.b x)) (b :: rest)).map Value.set =
-          some t := hp
-        cases htr : traverse (fun x => c.p (Attr.b x)) (b :: rest) with
-        | none => rw [htr] at hp; exact nomatch hp
-        | some ws =>
-          rw [htr] at hp
-          replace hp : some (Value.set ws) = some t := hp
-          cases hp
-          obtain ⟨as', has'⟩ := Option.isSome_iff_exists.mp
-            (traverse_isSome (f := c.e) (fun _ _ hyx => h.canon hyx)
-              (b :: rest) ws htr)
-          have hws : ws ≠ [] := by
-            intro h0
-            have hlen := traverse_length (b :: rest) ws htr
-            rw [h0] at hlen
-            exact nomatch hlen
-          exact hbranch ws (by rw [has']; exact nofun) as' has' hws
-    all_goals exact nomatch hp
-  · intro μ hμ' t a he
-    replace hμ' : (c.μ.bind setMember) = some μ := hμ'
-    rw [hμ] at hμ'
-    replace hμ' : setMember μ₀ = some μ := hμ'
-    cases t
-    case set vs =>
-      replace he : (traverse c.e vs).bind asWireSet = some a := he
-      cases htr : traverse c.e vs with
-      | none => rw [htr] at he; exact nomatch he
-      | some as =>
-        rw [htr] at he
-        replace he : asWireSet as = some a := he
-        obtain ⟨hne, hcase⟩ := asWireSet_cases he
-        have hmem := traverse_mem (P := fun y => y.member = μ₀)
-          (fun _ y hxy => h.writes hμ hxy) htr
-        rcases hcase with ⟨ss, rfl, rfl⟩ | ⟨ns, rfl, rfl⟩ | ⟨bs, rfl, rfl⟩
-        · cases ss with
-          | nil => exact absurd rfl hne
-          | cons s ss' =>
-            have hm := hmem (Attr.s s) (List.mem_cons_self _ _)
-            replace hm : Member.S = μ₀ := hm
-            cases hm
-            replace hμ' : some Member.SS = some μ := hμ'
-            cases hμ'
-            rfl
-        · cases ns with
-          | nil => exact absurd rfl hne
-          | cons n ns' =>
-            have hm := hmem (Attr.n n) (List.mem_cons_self _ _)
-            replace hm : Member.N = μ₀ := hm
-            cases hm
-            replace hμ' : some Member.NS = some μ := hμ'
-            cases hμ'
-            rfl
-        · cases bs with
-          | nil => exact absurd rfl hne
-          | cons b bs' =>
-            have hm := hmem (Attr.b b) (List.mem_cons_self _ _)
-            replace hm : Member.B = μ₀ := hm
-            cases hm
-            replace hμ' : some Member.BS = some μ := hμ'
-            cases hμ'
-            rfl
-    all_goals exact nomatch he
-
-theorem lawfulCore_objectCodec {sems : List (Name × FieldSem)} {rest : RestSem}
-    (hf : ∀ kf ∈ sems, LawfulCore kf.2.codec)
-    (hfb : ∀ kf ∈ sems, ∀ c v, kf.2 = .fb c v → (c.e v).isSome)
-    (hnd : (sems.map (·.1)).Nodup)
-    (hrest : ∀ c, rest = .codec c → LawfulCore c) :
-    LawfulCore (objectCodec sems rest) :=
-  lawfulCore_objectCore sems (rcOf rest) (keepB rest sems) hf hfb hnd
-    (rcOf_forall hrest) keepB_of_encEntry keepB_of_declared
-
-/-- Core `(dunion)`: the same corollary, with core options. -/
-theorem lawfulCore_dunionCodec {d : Name} {os : List (List String × Codec)}
-    (h : ∀ o ∈ os, LawfulCore o.2)
-    (hstamp : ∀ o ∈ os, ∀ t a, o.2.e t = some a →
-      ∃ tag ∈ o.1, (∃ kvs, a = .m kvs ∧ kvs.lookup d = some (.s tag)) ∧
-        (∃ kvs, t = .map kvs ∧ kvs.lookup d = some (.str tag)))
-    (hdisj : List.Pairwise (fun x y => ∀ tag ∈ x.1, tag ∉ y.1) os) :
-    LawfulCore (dunionCodec d os) := by
-  refine lawfulCore_altCodec ?_ (uniqueAdmission_byTag hstamp hdisj) ?_
-  · intro o ho
-    simp only [List.mem_map] at ho
-    obtain ⟨x, hx, rfl⟩ := ho
-    exact h x hx
-  · intro m hm o ho t a he
-    cases hm
-    simp only [List.mem_map] at ho
-    obtain ⟨x, hx, rfl⟩ := ho
-    replace he : x.2.e t = some a := he
-    obtain ⟨tag, htag, ⟨kvs, rfl, hlook⟩, -⟩ := hstamp x hx t a he
-    rfl
 
 end
 

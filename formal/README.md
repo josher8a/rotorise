@@ -115,8 +115,8 @@ permutation, and lifting it to `List.Perm` is the obvious next step); widening `
 goes through the axiomatized `Double.ofDec`, so no syntactic set bounds it, and those
 pairs still fall to (U) per input); a soundness lemma tying the judgement's `T` to the
 denotation (`e`'s domain and `p`'s range land in `T`), which the `T` index now makes
-statable; deriving `set`'s `LawfulCore` composite and its full-law counterpart from one another, as
-every other construction now is.
+statable; every `LawfulCore` composite now shares its clauses with the full-law counterpart, `set`
+included — what differs there is (C), and only (C).
 
 ## Building
 
