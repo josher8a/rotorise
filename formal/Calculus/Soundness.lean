@@ -326,6 +326,28 @@ end
 
 /-! ## The `(dunion)` stamp -/
 
+/-- Typing's nonempty-tags premise **is** a shape constraint: `tagsOf` is empty for
+    everything except an object whose `d` field is a `req literalS`, so a term with tags
+    is one, and its tags are that literal's set. Stated once, it replaces the outer case
+    analysis in `dunion_stamp` below. -/
+theorem tagsOf_ne_nil {d : Name} {t : Term} (h : tagsOf d t ≠ []) :
+    ∃ fields rest ls, t = .object fields rest ∧
+      fields.lookup d = some (.req (.literalS ls)) ∧ tagsOf d t = ls := by
+  cases t
+  case object fields rest =>
+    cases hlk : fields.lookup d with
+    | none => exact absurd (by simp only [tagsOf]; rw [hlk]) h
+    | some fd =>
+      cases fd with
+      | optional _ => exact absurd (by simp only [tagsOf]; rw [hlk]) h
+      | fallback _ _ => exact absurd (by simp only [tagsOf]; rw [hlk]) h
+      | req tlit =>
+        cases tlit
+        case literalS ls => exact ⟨fields, rest, ls, rfl, hlk, by
+          simp only [tagsOf]; rw [hlk]⟩
+        all_goals exact absurd (by simp only [tagsOf]; rw [hlk]) h
+  all_goals exact absurd rfl h
+
 /-- Typing's nonempty-tags premise forces each `(dunion)` option to be an object whose
     discriminator is a `req literalS`, and object-encode then stamps the tag on both
     sides of every canonical pair — exactly the `hstamp` the sum lemmas consume.
@@ -335,83 +357,47 @@ theorem dunion_stamp (fuel : Nat) {d : Name} {opts : List Term}
     ∀ o ∈ opts.map fun t' => (tagsOf d t', denote fuel t'), ∀ t' a, o.2.e t' = some a →
       ∃ tag ∈ o.1, (∃ kvs, a = .m kvs ∧ kvs.lookup d = some (.s tag)) ∧
         (∃ kvs, t' = .map kvs ∧ kvs.lookup d = some (.str tag)) := by
-  intro o ho t' a he'
-  simp only [List.mem_map] at ho
-  obtain ⟨tx, htx, rfl⟩ := ho
+  refine forall_mem_map fun tx htx t' a he' => ?_
   replace he' : (denote fuel tx).e t' = some a := he'
-  have htag := htags tx htx
-  cases tx
-  case object fields rest =>
-    cases hlk : fields.lookup d with
-    | none =>
-      refine absurd ?_ htag
-      simp only [tagsOf]
-      rw [hlk]
-    | some fd =>
-      cases fd
-      case optional tf =>
-        refine absurd ?_ htag
-        simp only [tagsOf]
-        rw [hlk]
-      case fallback tf vf =>
-        refine absurd ?_ htag
-        simp only [tagsOf]
-        rw [hlk]
-      case req tlit =>
-        cases tlit
-        case literalS ls =>
-          have htagsls : tagsOf d (Term.object fields rest) = ls := by
-            simp only [tagsOf]
-            rw [hlk]
-          cases fuel with
-          | zero => exact nomatch he'
-          | succ f =>
-            replace he' : (objectCodec
-                (fields.map fun kf => (kf.1, fieldSemOf (denote f) kf.2))
-                (restSemOf (denote f) rest)).e t' = some a := he'
-            obtain ⟨kvs, ds, rfl, rfl, hval, htr⟩ := objectCodecCore_e_inv he'
-            have hslk : ((fields.map fun kf =>
-                (kf.1, fieldSemOf (denote f) kf.2)).lookup d) =
-                some (FieldSem.req (denote f (Term.literalS ls))) := by
-              rw [lookup_map (fieldSemOf (denote f)) fields d, hlk]
-              rfl
-            have hcd : (kvs.map (·.1)).contains d = true :=
-              valPresentB_spec hval (mem_of_lookup hslk)
-                (fun _ h' => nomatch h')
-            obtain ⟨vd, hvd⟩ := Option.isSome_iff_exists.mp
-              (lookup_isSome_of_mem_fst (mem_of_contains hcd))
-            obtain ⟨b, hbds, hbenc⟩ := traverse_lookup encEntry_fst htr d vd hvd
-            simp only [encEntry] at hbenc
-            rw [hslk] at hbenc
-            replace hbenc : ((denote f (Term.literalS ls)).e vd).map
-              ((d, ·)) = some (d, b) := hbenc
-            cases f with
-            | zero =>
-              replace hbenc : (Option.map ((d, ·)) (none : Option Attr)) =
-                some (d, b) := hbenc
-              exact nomatch hbenc
-            | succ f' =>
-              replace hbenc : ((literalSCodec ls).e vd).map ((d, ·)) =
-                some (d, b) := hbenc
-              cases vd
-              case str tagv =>
-                replace hbenc : ((if tagv ∈ ls then some (Attr.s tagv)
-                  else none)).map ((d, ·)) = some (d, b) := hbenc
-                split at hbenc
-                · replace hbenc : some (d, Attr.s tagv) = some (d, b) := hbenc
-                  cases hbenc
-                  rename_i hin
-                  refine ⟨tagv, ?_, ⟨ds, rfl, hbds⟩, ⟨kvs, rfl, hvd⟩⟩
-                  show tagv ∈ tagsOf d (Term.object fields rest)
-                  rw [htagsls]
-                  exact hin
-                · exact nomatch hbenc
-              all_goals exact nomatch hbenc
-        all_goals
-          refine absurd ?_ htag
-          simp only [tagsOf]
-          rw [hlk]
-  all_goals exact absurd rfl htag
+  obtain ⟨fields, rest, ls, rfl, hlk, htagsls⟩ := tagsOf_ne_nil (htags tx htx)
+  cases fuel with
+  | zero => exact nomatch he'
+  | succ f =>
+    replace he' : (objectCodec
+        (fields.map fun kf => (kf.1, fieldSemOf (denote f) kf.2))
+        (restSemOf (denote f) rest)).e t' = some a := he'
+    obtain ⟨kvs, ds, rfl, rfl, hval, htr⟩ := objectCodecCore_e_inv he'
+    -- the discriminator is declared and non-`opt`, so the row carries it…
+    have hslk : ((fields.map fun kf => (kf.1, fieldSemOf (denote f) kf.2)).lookup d) =
+        some (FieldSem.req (denote f (Term.literalS ls))) := by
+      rw [lookup_map (fieldSemOf (denote f)) fields d, hlk]
+      rfl
+    obtain ⟨vd, hvd⟩ := Option.isSome_iff_exists.mp (lookup_isSome_of_mem_fst
+      (mem_of_contains (valPresentB_spec hval (mem_of_lookup hslk)
+        (fun _ h' => nomatch h'))))
+    -- …and `literal` writes it verbatim, which is the stamp on both sides
+    obtain ⟨b, hbds, hbenc⟩ := traverse_lookup encEntry_fst htr d vd hvd
+    simp only [encEntry] at hbenc
+    rw [hslk] at hbenc
+    replace hbenc : ((denote f (Term.literalS ls)).e vd).map ((d, ·)) = some (d, b) :=
+      hbenc
+    cases f with
+    | zero =>
+      replace hbenc : (Option.map ((d, ·)) (none : Option Attr)) = some (d, b) := hbenc
+      exact nomatch hbenc
+    | succ f' =>
+      replace hbenc : ((literalSCodec ls).e vd).map ((d, ·)) = some (d, b) := hbenc
+      cases vd
+      case str tagv =>
+        replace hbenc : ((if tagv ∈ ls then some (Attr.s tagv)
+          else none)).map ((d, ·)) = some (d, b) := hbenc
+        split at hbenc
+        · replace hbenc : some (d, Attr.s tagv) = some (d, b) := hbenc
+          cases hbenc
+          rename_i hin
+          exact ⟨tagv, htagsls ▸ hin, ⟨ds, rfl, hbds⟩, ⟨kvs, rfl, hvd⟩⟩
+        · exact nomatch hbenc
+      all_goals exact nomatch hbenc
 
 /-! ## The theorem
 

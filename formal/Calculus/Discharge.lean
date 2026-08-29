@@ -170,149 +170,74 @@ theorem κList_mem : ∀ {ts : List Term} {ks}, κList ts = some ks →
           · obtain ⟨ks₁, hκ₁, hsub⟩ := κList_mem hks t ht'
             exact ⟨ks₁, hκ₁, fun k hk => List.mem_append.mpr (Or.inr (hsub k hk))⟩
 
+/-- Fourteen of `κ`'s rules name a **single kind**, and are settled by the same two
+    moves: `κ` reduces to that singleton, and the codec's own `e` refuses every value of
+    another kind. Written out that is five lines fourteen times; here it is once. -/
+local macro "single_kind" hk:ident hv:ident he:ident : tactic =>
+  `(tactic| (cases $hk:ident
+             cases $hv:ident <;> first
+               | exact List.mem_cons_self _ _
+               | exact nomatch $he:ident))
+
 /-- Encoding lands in `κ`: a term's writable values have the kinds its `κ` names.
-    (Where `κ` answers `⊤` there is nothing to say — the table's point.) -/
+    (Where `κ` answers `⊤` there is nothing to say — the table's point.)
+
+    The rules that are not `single_kind` are exactly the ones where `κ` is *computed*
+    from a subterm's: the two transparent wrappers, `nullable`'s `∪`, `union`'s `⋃`,
+    and `dunion`, whose kind comes from the option that admitted rather than from its
+    own syntax. Four more answer `⊤`, where the hypothesis is unsatisfiable. -/
 theorem κ_sound : ∀ (fuel : Nat) (t : Term) {ks : List Kind} {v a},
     κ t = some ks → (denote fuel t).e v = some a → Value.kind v ∈ ks
   | 0, _, _, _, _, _, he => nomatch he
   | fuel+1, t, ks, v, a, hκ, he => by
     cases t with
-    | string =>
-      replace hκ : some [Kind.string] = some ks := hκ
-      cases hκ
-      cases v <;> first
-        | exact List.mem_cons_self _ _
-        | exact nomatch he
-    | decimal =>
-      replace hκ : some [Kind.string] = some ks := hκ
-      cases hκ
-      cases v <;> first
-        | exact List.mem_cons_self _ _
-        | exact nomatch he
-    | literalS ls =>
-      replace hκ : some [Kind.string] = some ks := hκ
-      cases hκ
-      cases v <;> first
-        | exact List.mem_cons_self _ _
-        | exact nomatch he
-    | number =>
-      replace hκ : some [Kind.number] = some ks := hκ
-      cases hκ
-      cases v <;> first
-        | exact List.mem_cons_self _ _
-        | exact nomatch he
-    | numeric q =>
-      replace hκ : some [Kind.number] = some ks := hκ
-      cases hκ
-      cases v <;> first
-        | exact List.mem_cons_self _ _
-        | exact nomatch he
-    | literalN ls =>
-      replace hκ : some [Kind.number] = some ks := hκ
-      cases hκ
-      cases v <;> first
-        | exact List.mem_cons_self _ _
-        | exact nomatch he
-    | boolean =>
-      replace hκ : some [Kind.boolean] = some ks := hκ
-      cases hκ
-      cases v <;> first
-        | exact List.mem_cons_self _ _
-        | exact nomatch he
-    | binary =>
-      replace hκ : some [Kind.binary] = some ks := hκ
-      cases hκ
-      cases v <;> first
-        | exact List.mem_cons_self _ _
-        | exact nomatch he
-    | set t' =>
-      replace hκ : some [Kind.set] = some ks := hκ
-      cases hκ
-      cases v <;> first
-        | exact List.mem_cons_self _ _
-        | exact nomatch he
-    | array t' =>
-      replace hκ : some [Kind.array] = some ks := hκ
-      cases hκ
-      cases v <;> first
-        | exact List.mem_cons_self _ _
-        | exact nomatch he
-    | tuple ts tail =>
-      replace hκ : some [Kind.array] = some ks := hκ
-      cases hκ
-      cases v <;> first
-        | exact List.mem_cons_self _ _
-        | exact nomatch he
-    | record t' =>
-      replace hκ : some [Kind.map] = some ks := hκ
-      cases hκ
-      cases v <;> first
-        | exact List.mem_cons_self _ _
-        | exact nomatch he
-    | object fields rest =>
-      replace hκ : some [Kind.map] = some ks := hκ
-      cases hκ
-      cases v <;> first
-        | exact List.mem_cons_self _ _
-        | exact nomatch he
+    | string => single_kind hκ v he
+    | decimal => single_kind hκ v he
+    | literalS ls => single_kind hκ v he
+    | number => single_kind hκ v he
+    | numeric q => single_kind hκ v he
+    | literalN ls => single_kind hκ v he
+    | boolean => single_kind hκ v he
+    | binary => single_kind hκ v he
+    | set t' => single_kind hκ v he
+    | array t' => single_kind hκ v he
+    | tuple ts tail => single_kind hκ v he
+    | record t' => single_kind hκ v he
+    | object fields rest => single_kind hκ v he
     | dunion d opts =>
-      replace hκ : some [Kind.map] = some ks := hκ
+      -- a stamped option writes a `map`, so the kind is `map` however it was reached
       cases hκ
-      replace he : (dunionCodec d
-        (opts.map fun t' => (tagsOf d t', denote fuel t'))).e v = some a := he
       obtain ⟨o, ho, hadm, -⟩ := altCodec_e_admits he
-      simp only [List.mem_map] at ho
-      obtain ⟨x, hx, rfl⟩ := ho
+      obtain ⟨x, hx, rfl⟩ := List.mem_map.mp ho
       cases v <;> first
         | exact List.mem_cons_self _ _
         | exact nomatch hadm
     | refine t' q =>
-      replace hκ : κ t' = some ks := hκ
       replace he : (if q v then (denote fuel t').e v else none) = some a := he
       split at he
       · exact κ_sound fuel t' hκ he
       · exact nomatch he
-    | legacy t' r =>
-      replace hκ : κ t' = some ks := hκ
-      replace he : (denote fuel t').e v = some a := he
-      exact κ_sound fuel t' hκ he
+    | legacy t' r => exact κ_sound fuel t' hκ he
     | nullable t' =>
+      -- `nullable`'s `∪`: `null` is the wrapper's own kind, everything else the
+      -- subterm's, and `orNull` sends every non-`null` value straight to it
       replace hκ : (κ t').map (Kind.null :: ·) = some ks := hκ
-      cases hκt : κ t' with
-      | none => rw [hκt] at hκ; exact nomatch hκ
-      | some ks' =>
-        rw [hκt] at hκ
-        replace hκ : some (Kind.null :: ks') = some ks := hκ
-        cases hκ
-        cases v with
-        | null => exact List.mem_cons_self _ _
-        | str s => exact List.mem_cons_of_mem _ (κ_sound fuel t' hκt he)
-        | num d => exact List.mem_cons_of_mem _ (κ_sound fuel t' hκt he)
-        | bool b => exact List.mem_cons_of_mem _ (κ_sound fuel t' hκt he)
-        | bin b => exact List.mem_cons_of_mem _ (κ_sound fuel t' hκt he)
-        | set vs => exact List.mem_cons_of_mem _ (κ_sound fuel t' hκt he)
-        | arr vs => exact List.mem_cons_of_mem _ (κ_sound fuel t' hκt he)
-        | map kvs => exact List.mem_cons_of_mem _ (κ_sound fuel t' hκt he)
+      obtain ⟨ks', hκt, rfl⟩ := Option.map_eq_some'.mp hκ
+      cases v
+      case null => exact List.mem_cons_self _ _
+      all_goals exact List.mem_cons_of_mem _ (κ_sound fuel t' hκt he)
     | union opts =>
-      replace hκ : κList opts = some ks := hκ
-      replace he : (altCodec
-        (opts.map fun t' => optionSemOf (denote fuel t') (specOf t'))
-        (unanimous (opts.map fun t' => (denote fuel t').μ))).e v = some a := he
+      -- `union`'s `⋃`: the kind is the admitting option's, and `κList` contains it
       obtain ⟨o, ho, -, hoe⟩ := altCodec_e_admits he
-      simp only [List.mem_map] at ho
-      obtain ⟨tx, htx, rfl⟩ := ho
+      obtain ⟨tx, htx, rfl⟩ := List.mem_map.mp ho
       rw [optionSemOf_c] at hoe
       obtain ⟨ksx, hκx, hsub⟩ := κList_mem hκ tx htx
       exact hsub _ (κ_sound fuel tx hκx hoe)
+    -- `κ` is `⊤` here: nothing is claimed, and the hypothesis is unsatisfiable
     | held t' f g => exact nomatch hκ
     | lazy γ => exact nomatch hκ
     | custom ce cp => exact nomatch hκ
     | opaq lossy => exact nomatch hκ
-
-/-! ## `adm` is sound for the denotation -/
-
-/-- Writing lands in `adm`: whatever a term encodes is in the set it checks against.
-    (Where `adm` is `true` there is nothing to say — the point of "no information".) -/
 theorem adm_sound : ∀ (fuel : Nat) (t : Term) {v a},
     (denote fuel t).e v = some a → adm t v = true
   | 0, _, _, _, he => nomatch he
