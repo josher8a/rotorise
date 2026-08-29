@@ -584,6 +584,82 @@ def SepV (x y : Term) : Prop :=
   (∃ kx ky, κ x = some kx ∧ κ y = some ky ∧ ∀ k ∈ kx, k ∉ ky) ∨
   (∀ v, adm x v = true → adm y v = false)
 
+/-! ### Why `SepV` may drop §5's two `ident` conjuncts
+
+    §5 states (K)'s second disjunct as `ident(cᵢ) ∧ ident(cⱼ) ∧ adm(cᵢ) ∩ adm(cⱼ) = ∅`;
+    `SepV` keeps only the `adm` clause. Dropping a conjunct from a premise *weakens* the
+    discharger, so `uAtCan_of_separated` is the stronger theorem either way — but it
+    leaves `ident` asserting nothing, which is how a faithful transcription becomes an
+    unlocatable claim. Here is the argument that the two conjuncts are redundant, which
+    until now lived only in prose.
+
+    It turns on `adm`'s default: every term that is not a `literal`, a
+    `discriminatedUnion`, or a transparent wrapper over one answers `true` everywhere,
+    and those are exactly the terms `ident` holds of at the leaves. So a term whose `adm`
+    ever *refuses* is `ident` — and two options with disjoint `adm` must each refuse
+    somewhere, provided each also admits somewhere. -/
+
+/-- **`adm` is informative only where `ident` holds.** If `adm` refuses a single value,
+    the term is `ident`. This is the pinning `ident` otherwise lacks: `κ`, `adm` and
+    `admA` each have a soundness lemma tying them to the denotation, and `ident` has no
+    denotational content to tie — what it has is this relation to `adm`, which is what
+    §5 actually uses it for. -/
+theorem ident_of_adm : ∀ {t : Term} {v : Value}, adm t v = false → ident t = true
+  | .literalS _, _, _ => rfl
+  | .literalN _, _, _ => rfl
+  | .dunion _ _, _, _ => rfl
+  | .refine t _, v, h => ident_of_adm (t := t) (v := v) h
+  | .legacy t _, v, h => ident_of_adm (t := t) (v := v) h
+  | .string, _, h | .number, _, h | .decimal, _, h | .boolean, _, h | .binary, _, h
+  | .null, _, h | .numeric _, _, h | .set _, _, h | .array _, _, h | .tuple _ _, _, h
+  | .record _, _, h | .held _ _ _, _, h | .nullable _, _, h | .lazy _, _, h
+  | .custom _ _, _, h | .opaq _, _, h | .object _ _, _, h | .union _, _, h => nomatch h
+
+/-- **§5's (K), recovered from `SepV`'s second disjunct.** Disjoint `adm` implies both
+    `ident` conjuncts, so `SepV` is not weaker than the doc's condition where the doc's
+    condition means anything — the two side conditions ask that each option admit *some*
+    value, which is what stops an option with an empty admissible set from separating
+    itself from everything.
+
+    Both side conditions are needed, and the witness is not exotic: `dunion(d)` with no
+    options is derivable (`Typed.dunion` quantifies its premises over the option list)
+    and its `adm` is `false` everywhere, so it is trivially `adm`-disjoint from `string`,
+    which is not `ident`. -/
+theorem admDisj_ident {x y : Term} (hdisj : ∀ v, adm x v = true → adm y v = false)
+    (hx : ∃ v, adm x v = true) (hy : ∃ v, adm y v = true) :
+    ident x = true ∧ ident y = true := by
+  obtain ⟨vx, hvx⟩ := hx
+  obtain ⟨vy, hvy⟩ := hy
+  refine ⟨ident_of_adm (v := vy) ?_, ident_of_adm (v := vx) (hdisj vx hvx)⟩
+  by_contra hc
+  exact absurd (hdisj vy (by simpa using hc)) (by simp [hvy])
+
+/-! ### The gap that remains, exhibited
+
+    `admDisj_ident`'s two side conditions are not bookkeeping. A term whose admissible
+    set is *empty* is `adm`-disjoint from everything, so it separates itself from options
+    §5's (K) would refuse — and one such term is derivable. -/
+
+/-- A `discriminatedUnion` with no options refuses every value: `allTags` is empty. -/
+theorem adm_dunion_nil (d : Name) (v : Value) : adm (.dunion d []) v = false := by
+  cases v <;> simp only [adm, allTags]
+  split <;> rfl
+
+/-- And it is derivable — `(dunion)`'s premises are quantified over the option list. -/
+theorem typed_dunion_nil (d : Name) : Typed (.dunion d []) (HUnion []) (some .M) :=
+  .dunion .nil (by simp) (by simp)
+
+/-- **`SepV` is strictly weaker than §5's (K)**, at a derivable pair. `string` is not
+    `ident`, so (K) refuses this pair on both of its disjuncts; `SepV` accepts it,
+    because `dunion(d)` admits nothing to collide with. Weaker is the safe direction —
+    `uAtCan_of_separated` takes `SepV` as a premise, so it discharges strictly more —
+    but it means `SepV` and (K) are not the same condition, and the difference is here
+    rather than in prose. -/
+theorem sepV_string_dunion_nil (d : Name) : SepV .string (.dunion d []) :=
+  Or.inr fun v _ => adm_dunion_nil d v
+
+theorem not_ident_string : ident .string = false := rfl
+
 /-- §5 (D)'s stand-in, likewise widened: two options are separated on the readable side
     by distinct named members, **or** by disjoint admissible sets. The `adm` disjunct is
     what carries `union(literal("A"), literal("B"))`, whose options share `⇝ S`. -/
