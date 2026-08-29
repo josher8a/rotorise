@@ -355,7 +355,7 @@ theorem typed_μSyn : ∀ {t T μ}, Typed t T μ → μSyn t = μ
   | _, _, _, .custom _ _ => rfl
   | _, _, _, .opaq _ => rfl
   | _, _, _, .object _ _ _ => rfl
-  | _, _, _, .union h => by
+  | _, _, _, .union h _ => by
       show unanimous (μSynList _) = unanimous _
       rw [typedListμ_μSyn h]
   | _, _, _, .dunion _ _ _ => rfl
@@ -597,7 +597,7 @@ theorem soundness_both : ∀ (fuel : Nat) {t T μ}, Typed t T μ → Obligations
         fun hmp => lawful_objectCodec
           (forall_mem_map fun kf hkf => (ihf kf hkf).2 (hmp.1 kf hkf))
           hfb hnd' (fun c hcr => (ihr c hcr).2 hmp)⟩
-    | @union opts Ts μs hlist =>
+    | @union opts Ts μs hlist _ =>
       have ihs : ∀ t' ∈ opts, Sound fuel t' := fun t' ht' => by
         obtain ⟨T', μ', hμ'⟩ := TypedListμ.forall hlist t' ht'
         exact ih hμ' (hob.1 t' ht')
@@ -860,7 +860,7 @@ theorem typed_TSub : ∀ (fuel : Nat) {t T μ}, Typed t T μ →
               cases hrc
               exact ⟨T'', rfl, typed_TSub fuel hty' x hrcT⟩
       all_goals exact nomatch hv
-    | @union opts Ts μs hlist =>
+    | @union opts Ts μs hlist _ =>
       obtain ⟨o, ho, hT⟩ := hv
       simp only [List.mem_map] at ho
       obtain ⟨tx, htx, rfl⟩ := ho
@@ -976,7 +976,7 @@ theorem carrier_denote : ∀ (fuel : Nat) {t T μ}, Typed t T μ → Obligations
         | refuse => rfl
         | codec _ => rfl
       exact carrier_objectCodecCore hsems hrc hfb hnd' hkeep
-    | @union opts Ts μs hlist =>
+    | @union opts Ts μs hlist _ =>
       refine carrier_altCodec (forall_mem_map fun t' ht' => ?_)
       obtain ⟨T', μ', hty⟩ := TypedListμ.forall hlist t' ht'
       exact (optionSemOf_c _ _) ▸ carrier_denote fuel hty (hob.1 t' ht')

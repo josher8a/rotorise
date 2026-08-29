@@ -870,7 +870,12 @@ example : ident (.array (.literalS ["B"])) = true := rfl
     is a condition on stored attributes: distinct members, or disjoint `admA`. -/
 
 /-- (D) in its held-set form, as the disjointness §5 proposes: no value is held by two
-    options. Stated so the counterexample below can be about it. -/
+    options. Stated so the counterexample below can be about it.
+
+    This is *not* the rule's premise: `(union)` carries `DIncomp` (`Typing.lean`), §5's
+    incomparability. `DDisj` is the strictly stronger reading §5 considered and withdrew,
+    and it is here only to be refuted — the witness below satisfies it and still fails
+    (U). -/
 def DDisj (Tx Ty : Held) : Prop := ∀ v, Tx v → ¬ Ty v
 
 /-- The relabelling adapter: `"B"` on the outside is `"A"` on the inside. -/
