@@ -1074,6 +1074,120 @@ def objectCodecCore (sems : List (Name × FieldSem)) (rc? : Option Codec)
 def objectCodec (sems : List (Name × FieldSem)) (rest : RestSem) : Codec :=
   objectCodecCore sems (rcOf rest) (keepB rest sems)
 
+/-! ### The object, taken apart
+
+Three namings, and everything §4 asks becomes short. **`entryCodec`** is the codec one
+entry goes through — the field its name declares, or else the rest policy's — which is
+the only thing `encEntry`/`decEntry` do with a name, so every per-entry law is one appeal
+to `entryCodec_of`. **`objWrite`/`objRead`** are the payload pair: the guard and the
+steps going out, the guard, the `drop` filter, the steps and the fallback stand-ins
+coming back. **`objectCodecCore_eq`** then makes the object `carriedCodec` between `map`
+and `M`, so §2's prism halves are the ones already discharged. -/
+
+/-- The per-name half of §4's held set: a declared name holds its field's set, an
+    undeclared one falls to the open part `R(ρ)`. -/
+def objEntryT (sems : List (Name × FieldSem)) (rc? : Option Codec) :
+    Name × Value → Prop := fun kv =>
+  match sems.lookup kv.1 with
+  | some fs => fs.codec.T kv.2
+  | none => ∃ rc, rc? = some rc ∧ rc.T kv.2
+
+/-- The codec one entry goes through: the field its name declares, or else the rest
+    policy's. `none` is an undeclared name under `refuse`. -/
+def entryCodec (sems : List (Name × FieldSem)) (rc? : Option Codec) (k : Name) :
+    Option Codec :=
+  match sems.lookup k with
+  | some fs => some fs.codec
+  | none => rc?
+
+section Object
+variable {sems : List (Name × FieldSem)} {rc? : Option Codec} {kn : Name → Bool}
+
+/-- A property of every field and of the rest codec is a property of every entry's
+    codec — which is how the object's per-entry laws are discharged, once each. -/
+theorem entryCodec_of {Q : Codec → Prop} (hf : ∀ kf ∈ sems, Q kf.2.codec)
+    (hrc : ∀ c ∈ rc?, Q c) {k c} (h : entryCodec sems rc? k = some c) : Q c := by
+  simp only [entryCodec] at h
+  cases hsp : sems.lookup k with
+  | some fs => rw [hsp] at h; cases h; exact hf _ (mem_of_lookup hsp)
+  | none => rw [hsp] at h; exact hrc c h
+
+theorem encEntry_eq {kv ka} :
+    encEntry (fun k => sems.lookup k) (rc?.map (·.e)) kv = some ka ↔
+      ∃ c a, entryCodec sems rc? kv.1 = some c ∧ c.e kv.2 = some a ∧ ka = (kv.1, a) := by
+  simp only [encEntry, entryCodec]
+  cases sems.lookup kv.1 <;> cases rc? <;> simp [Option.map_eq_some', eq_comm (a := ka)]
+
+theorem decEntry_eq {ka kv} :
+    decEntry (fun k => sems.lookup k) (rc?.map (·.p)) ka = some kv ↔
+      ∃ c v, entryCodec sems rc? ka.1 = some c ∧ c.p ka.2 = some v ∧ kv = (ka.1, v) := by
+  simp only [decEntry, entryCodec]
+  cases sems.lookup ka.1 <;> cases rc? <;> simp [Option.map_eq_some', eq_comm (a := kv)]
+
+/-- §4's held set, per entry, in the same vocabulary. -/
+theorem objEntryT_eq {kv} :
+    objEntryT sems rc? kv ↔ ∃ c, entryCodec sems rc? kv.1 = some c ∧ c.T kv.2 := by
+  simp only [objEntryT, entryCodec]
+  cases sems.lookup kv.1 <;> simp
+
+/-- The object's payload pair, going out: the value-side presence guard, then the
+    name-dispatched steps. -/
+def objWrite (sems : List (Name × FieldSem)) (rc? : Option Codec) :
+    List (Name × Value) → Option (List (Name × Attr)) := fun kvs =>
+  if valPresentB sems (kvs.map (·.1)) = true then
+    traverse (encEntry (fun k => sems.lookup k) (rc?.map (·.e))) kvs
+  else none
+
+/-- …and coming back: the stored-side guard, the `drop` filter, the steps, and the
+    stand-ins for the fallback names the row omits. -/
+def objRead (sems : List (Name × FieldSem)) (rc? : Option Codec) (kn : Name → Bool) :
+    List (Name × Attr) → Option (List (Name × Value)) := fun kas =>
+  if reqPresentB sems (kas.map (·.1)) = true then
+    (traverse (decEntry (fun k => sems.lookup k) (rc?.map (·.p)))
+      (kas.filter fun ka => kn ka.1)).map (· ++ fbDefaults (kas.map (·.1)) sems)
+  else none
+
+theorem objWrite_eq {kvs kas} :
+    objWrite sems rc? kvs = some kas ↔
+      valPresentB sems (kvs.map (·.1)) = true ∧
+        traverse (encEntry (fun k => sems.lookup k) (rc?.map (·.e))) kvs = some kas := by
+  simp only [objWrite]; split <;> simp_all
+
+theorem objRead_eq {kas kvs} :
+    objRead sems rc? kn kas = some kvs ↔
+      ∃ ds, reqPresentB sems (kas.map (·.1)) = true ∧
+        traverse (decEntry (fun k => sems.lookup k) (rc?.map (·.p)))
+          (kas.filter fun ka => kn ka.1) = some ds ∧
+        kvs = ds ++ fbDefaults (kas.map (·.1)) sems := by
+  simp only [objRead]; split <;> simp_all [Option.map_eq_some', eq_comm (a := kvs)]
+
+/-- The object is `carriedCodec` between `map` and `M`, at that pair. -/
+theorem objectCodecCore_eq :
+    objectCodecCore sems rc? kn =
+      carriedCodec mapV mA .M
+        (fun kvs => valPresentB sems (kvs.map (·.1)) = true ∧
+          ∀ kv ∈ kvs, objEntryT sems rc? kv)
+        (objWrite sems rc?) (objRead sems rc? kn) := by
+  refine Codec.ext ?_ rfl ?_ ?_ <;> funext v <;> cases v <;>
+    simp only [objectCodecCore, carriedCodec, objWrite, objRead, objEntryT, mapV, mA,
+      Ctor.into, Ctor.out, Option.bind_some, Option.bind_none, Option.map_none'] <;>
+    first
+      | rfl
+      | (split_ifs with hg <;> simp [hg, Option.map_map, Function.comp_def])
+      | simp
+
+/-- Inversion of an object-encode success: the value is a map, the guard held, and the
+    written item is the entrywise traversal. -/
+theorem objectCodecCore_e_inv {t a} (he : (objectCodecCore sems rc? kn).e t = some a) :
+    ∃ kvs ds, t = Value.map kvs ∧ a = Attr.m ds ∧
+      valPresentB sems (kvs.map (·.1)) = true ∧
+      traverse (encEntry (fun k => sems.lookup k) (rc?.map (·.e))) kvs = some ds := by
+  obtain ⟨kvs, kas, hv, hw, rfl⟩ := carried_e.mp (objectCodecCore_eq ▸ he)
+  obtain ⟨hval, htr⟩ := objWrite_eq.mp hw
+  exact ⟨kvs, kas, mapV.into_out hv, rfl, hval, htr⟩
+
+end Object
+
 /-! ## Sums (§5): admission as data -/
 
 /-- One union option: its admission functions and its pair. The doc's `κ`/`ident`/name
@@ -2365,14 +2479,6 @@ theorem decEntry_fst {sems : List (Name × FieldSem)} {rc? : Option Codec} :
 
     Placed here, after the name-dispatch helpers `p` needs. -/
 
-/-- The per-name half of §4's held set: a declared name holds its field's set, an
-    undeclared one falls to the open part `R(ρ)`. -/
-def objEntryT (sems : List (Name × FieldSem)) (rc? : Option Codec) :
-    Name × Value → Prop := fun kv =>
-  match sems.lookup kv.1 with
-  | some fs => fs.codec.T kv.2
-  | none => ∃ rc, rc? = some rc ∧ rc.T kv.2
-
 /-- The converse of `fbDefaults_spec`: an absent `fb` name does get its stand-in. -/
 theorem fbDefaults_mem :
     ∀ {sems : List (Name × FieldSem)} {names k c v},
@@ -2418,10 +2524,33 @@ theorem mem_decoded_names {kvs : List (Name × Attr)} {kn : Name → Bool}
   obtain ⟨kv, hkv, rfl⟩ := List.mem_map.mp hk
   exact List.mem_map.mpr ⟨kv, List.mem_filter.mpr ⟨hkv, hkeep⟩, rfl⟩
 
+/-- Every entry lands on the set its name declares — the write side. -/
+theorem entry_domE {sems : List (Name × FieldSem)} {rc? : Option Codec}
+    (hs : ∀ kf ∈ sems, Carrier kf.2.codec) (hrc : ∀ c ∈ rc?, Carrier c) :
+    ∀ kv ka, encEntry (fun k => sems.lookup k) (rc?.map (·.e)) kv = some ka →
+      objEntryT sems rc? kv := by
+  rintro kv ka h
+  obtain ⟨c, a, hc, he, rfl⟩ := encEntry_eq.mp h
+  exact objEntryT_eq.mpr ⟨c, hc, (entryCodec_of hs hrc hc).domE he⟩
+
+/-- …and the read side. -/
+theorem entry_ranP {sems : List (Name × FieldSem)} {rc? : Option Codec}
+    (hs : ∀ kf ∈ sems, Carrier kf.2.codec) (hrc : ∀ c ∈ rc?, Carrier c) :
+    ∀ ka kv, decEntry (fun k => sems.lookup k) (rc?.map (·.p)) ka = some kv →
+      objEntryT sems rc? kv := by
+  rintro ka kv h
+  obtain ⟨c, v, hc, hp, rfl⟩ := decEntry_eq.mp h
+  exact objEntryT_eq.mpr ⟨c, hc, (entryCodec_of hs hrc hc).ranP hp⟩
+
 /-- §4's held set, both ways. The two premises past lawfulness are the doc's own:
     `hfb` is `(fallback)`'s `v(∗) ∈ dom(e)`, which with `domE` gives §4's `v : 𝟙 → T`;
     `hkeep` says the name filter never discards a declared name, which is what all
-    three rest policies do. -/
+    three rest policies do.
+
+    Writing is immediate. Reading has to account for the stand-ins: every non-`opt`
+    name is present in the result — a `req` from the row it was stored in, an `fb`
+    from the row or else from its stand-in — and every entry is on its set, the kept
+    ones by `entry_ranP`, the stand-ins by `hfb`. -/
 theorem carrier_objectCodecCore {sems : List (Name × FieldSem)} {rc? : Option Codec}
     {kn : Name → Bool}
     (hsems : ∀ kf ∈ sems, Carrier kf.2.codec)
@@ -2430,288 +2559,192 @@ theorem carrier_objectCodecCore {sems : List (Name × FieldSem)} {rc? : Option C
     (hnd : (sems.map (·.1)).Nodup)
     (hkeep : ∀ k, (sems.lookup k).isSome → kn k = true) :
     Carrier (objectCodecCore sems rc? kn) := by
-  have entry_e : ∀ kv y,
-      encEntry (fun k => sems.lookup k) (rc?.map (·.e)) kv = some y →
-      objEntryT sems rc? kv := by
-    intro kv y hy
-    simp only [encEntry] at hy
-    cases hsp : sems.lookup kv.1 with
-    | some fs =>
-      rw [hsp] at hy
-      replace hy : ((fs.codec.e kv.2).map ((kv.1, ·))) = some y := hy
-      cases he : fs.codec.e kv.2 with
-      | none => rw [he] at hy; exact nomatch hy
-      | some a' =>
-        simp only [objEntryT, hsp]
-        exact (hsems (kv.1, fs) (mem_of_lookup hsp)).domE he
-    | none =>
-      rw [hsp] at hy
-      simp only [objEntryT, hsp]
-      cases hr : rc? with
-      | none => rw [hr] at hy; exact nomatch hy
-      | some rc =>
-        rw [hr] at hy
-        replace hy : ((rc.e kv.2).map ((kv.1, ·))) = some y := hy
-        cases he : rc.e kv.2 with
-        | none => rw [he] at hy; exact nomatch hy
-        | some a' => exact ⟨rc, rfl, (hrc rc hr).domE he⟩
-  have entry_p : ∀ ka kv,
-      decEntry (fun k => sems.lookup k) (rc?.map (·.p)) ka = some kv →
-      objEntryT sems rc? kv := by
-    intro ka kv hy
-    simp only [decEntry] at hy
-    cases hsp : sems.lookup ka.1 with
-    | some fs =>
-      rw [hsp] at hy
-      replace hy : ((fs.codec.p ka.2).map ((ka.1, ·))) = some kv := hy
-      cases hp : fs.codec.p ka.2 with
-      | none => rw [hp] at hy; exact nomatch hy
-      | some v' =>
-        rw [hp] at hy
-        replace hy : some (ka.1, v') = some kv := hy
-        cases hy
-        simp only [objEntryT, hsp]
-        exact (hsems (ka.1, fs) (mem_of_lookup hsp)).ranP hp
-    | none =>
-      rw [hsp] at hy
-      cases hr : rc? with
-      | none => rw [hr] at hy; exact nomatch hy
-      | some rc =>
-        rw [hr] at hy
-        replace hy : ((rc.p ka.2).map ((ka.1, ·))) = some kv := hy
-        cases hp : rc.p ka.2 with
-        | none => rw [hp] at hy; exact nomatch hy
-        | some v' =>
-          rw [hp] at hy
-          replace hy : some (ka.1, v') = some kv := hy
-          cases hy
-          simp only [objEntryT, hsp]
-          exact ⟨rc, rfl, (hrc rc hr).ranP hp⟩
-  refine ⟨?_, ?_⟩
-  · intro v a h
-    cases v
-    case map kvs =>
-      replace h : (if valPresentB sems (kvs.map (·.1)) = true then
-        (traverse (encEntry (fun k => sems.lookup k) (rc?.map (·.e))) kvs).map Attr.m
-        else none) = some a := h
-      split at h
-      next hval =>
-        cases htr : traverse (encEntry (fun k => sems.lookup k) (rc?.map (·.e))) kvs with
-        | none => rw [htr] at h; exact nomatch h
-        | some ds => exact ⟨hval, traverse_mem_input entry_e htr⟩
-      next => exact nomatch h
-    all_goals exact nomatch h
-  · intro a v h
-    cases a
-    case m kvs =>
-      replace h : (if reqPresentB sems (kvs.map (·.1)) = true then
-        (traverse (decEntry (fun k => sems.lookup k) (rc?.map (·.p)))
-          (kvs.filter fun kv => kn kv.1)).map (fun ds =>
-            Value.map (ds ++ fbDefaults (kvs.map (·.1)) sems)) else none) = some v := h
-      split at h
-      next hreq =>
-        cases htr : traverse (decEntry (fun k => sems.lookup k) (rc?.map (·.p)))
-            (kvs.filter fun kv => kn kv.1) with
-        | none => rw [htr] at h; exact nomatch h
-        | some ds =>
-          rw [htr] at h
-          replace h : some (Value.map (ds ++ fbDefaults (kvs.map (·.1)) sems))
-            = some v := h
-          cases h
-          -- every non-`opt` name is written: `req` from the row, `fb` from the row or
-          -- else from its stand-in
-          have hpresent : ∀ k fs, (k, fs) ∈ sems → (∀ c, fs ≠ FieldSem.opt c) →
-              ((ds ++ fbDefaults (kvs.map (·.1)) sems).map (·.1)).contains k = true := by
-            intro k fs hm hno
-            have hlk : sems.lookup k = some fs := lookup_eq_of_mem_nodup hnd hm
-            have hkn : kn k = true := hkeep k (by rw [hlk]; rfl)
-            rw [List.map_append]
-            refine List.elem_eq_true_of_mem (List.mem_append.mpr ?_)
-            cases fs with
-            | opt c => exact absurd rfl (hno c)
-            | req c =>
-              have hpres := List.all_eq_true.mp hreq (k, .req c) hm
-              exact Or.inl (mem_decoded_names htr (mem_of_contains hpres) hkn)
-            | fb c v₀ =>
-              cases hc : (kvs.map (·.1)).contains k with
-              | true => exact Or.inl (mem_decoded_names htr (mem_of_contains hc) hkn)
-              | false =>
-                exact Or.inr (List.mem_map.mpr ⟨(k, v₀), fbDefaults_mem hm hc, rfl⟩)
-          refine ⟨valPresentB_of hpresent, ?_⟩
-          intro kv hkv
-          rcases List.mem_append.mp hkv with hd | hf
-          · exact traverse_mem entry_p htr kv hd
-          · obtain ⟨c, hmem, hc⟩ := fbDefaults_spec hf
-            have hlk : sems.lookup kv.1 = some (FieldSem.fb c kv.2) :=
-              lookup_eq_of_mem_nodup hnd hmem
-            simp only [objEntryT, hlk]
-            obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp
-              (hfb (kv.1, .fb c kv.2) hmem c kv.2 rfl)
-            exact (hsems (kv.1, .fb c kv.2) hmem).domE ha'
-      next => exact nomatch h
-    all_goals exact nomatch h
+  refine objectCodecCore_eq ▸ carrier_carried ?_ ?_
+  · intro kvs kas h
+    obtain ⟨hval, htr⟩ := objWrite_eq.mp h
+    exact ⟨hval, traverse_mem_input (entry_domE hsems hrc) htr⟩
+  · intro kas kvs h
+    obtain ⟨ds, hreq, htr, rfl⟩ := objRead_eq.mp h
+    refine ⟨valPresentB_of fun k fs hm hno => ?_, ?_⟩
+    · have hkn : kn k = true := hkeep k (by rw [lookup_eq_of_mem_nodup hnd hm]; rfl)
+      rw [List.map_append]
+      refine List.elem_eq_true_of_mem (List.mem_append.mpr ?_)
+      cases fs with
+      | opt c => exact absurd rfl (hno c)
+      | req c =>
+        exact Or.inl (mem_decoded_names htr
+          (mem_of_contains (List.all_eq_true.mp hreq (k, .req c) hm)) hkn)
+      | fb c v₀ =>
+        cases hc : (kas.map (·.1)).contains k with
+        | true => exact Or.inl (mem_decoded_names htr (mem_of_contains hc) hkn)
+        | false => exact Or.inr (List.mem_map.mpr ⟨(k, v₀), fbDefaults_mem hm hc, rfl⟩)
+    · intro kv hkv
+      rcases List.mem_append.mp hkv with hd | hfd
+      · exact traverse_mem (entry_ranP hsems hrc) htr kv hd
+      · obtain ⟨c, hmem, hc⟩ := fbDefaults_spec hfd
+        obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp
+          (hfb (kv.1, .fb c kv.2) hmem c kv.2 rfl)
+        exact objEntryT_eq.mpr ⟨c, by
+          simp [entryCodec, lookup_eq_of_mem_nodup hnd hmem, FieldSem.codec],
+          (hsems (kv.1, .fb c kv.2) hmem).domE ha'⟩
 
 private theorem objStep_rt {sems : List (Name × FieldSem)} {rc? : Option Codec}
     (hf : ∀ kf ∈ sems, LawfulCore kf.2.codec) (hrc : ∀ c ∈ rc?, LawfulCore c) :
     ∀ kv ka, encEntry (fun k => sems.lookup k) (rc?.map (·.e)) kv = some ka →
       decEntry (fun k => sems.lookup k) (rc?.map (·.p)) ka = some kv := by
-  intro ⟨k, v⟩ ka hkv
-  simp only [encEntry] at hkv
-  cases hsp : sems.lookup k with
-  | some fs =>
-    rw [hsp] at hkv
-    replace hkv : (fs.codec.e v).map ((k, ·)) = some ka := hkv
-    cases hev : fs.codec.e v with
-    | none => rw [hev] at hkv; exact nomatch hkv
-    | some a₀ =>
-      rw [hev] at hkv
-      replace hkv : some (k, a₀) = some ka := hkv
-      cases hkv
-      simp only [decEntry]
-      rw [hsp]
-      show (fs.codec.p a₀).map ((k, ·)) = some (k, v)
-      rw [(hf (k, fs) (mem_of_lookup hsp)).retract hev]
-      rfl
-  | none =>
-    rw [hsp] at hkv
-    cases rc? with
-    | none => exact nomatch hkv
-    | some rc =>
-      replace hkv : (rc.e v).map ((k, ·)) = some ka := hkv
-      cases hev : rc.e v with
-      | none => rw [hev] at hkv; exact nomatch hkv
-      | some a₀ =>
-        rw [hev] at hkv
-        replace hkv : some (k, a₀) = some ka := hkv
-        cases hkv
-        simp only [decEntry]
-        rw [hsp]
-        show (rc.p a₀).map ((k, ·)) = some (k, v)
-        rw [(hrc rc rfl).retract hev]
-        rfl
+  rintro ⟨k, v⟩ ka h
+  obtain ⟨c, a, hc, he, rfl⟩ := encEntry_eq.mp h
+  exact decEntry_eq.mpr ⟨c, v, hc, (entryCodec_of hf hrc hc).retract he, rfl⟩
 
 private theorem objStep_canon {sems : List (Name × FieldSem)} {rc? : Option Codec}
     (hf : ∀ kf ∈ sems, LawfulCore kf.2.codec) (hrc : ∀ c ∈ rc?, LawfulCore c) :
     ∀ ka kv, decEntry (fun k => sems.lookup k) (rc?.map (·.p)) ka = some kv →
       (encEntry (fun k => sems.lookup k) (rc?.map (·.e)) kv).isSome = true := by
-  intro ⟨k, a⟩ kv hka
-  simp only [decEntry] at hka
-  cases hsp : sems.lookup k with
-  | some fs =>
-    rw [hsp] at hka
-    replace hka : (fs.codec.p a).map ((k, ·)) = some kv := hka
-    cases hpa : fs.codec.p a with
-    | none => rw [hpa] at hka; exact nomatch hka
-    | some v₀ =>
-      rw [hpa] at hka
-      replace hka : some (k, v₀) = some kv := hka
-      cases hka
-      simp only [encEntry]
-      rw [hsp]
-      show ((fs.codec.e v₀).map ((k, ·))).isSome = true
-      obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp
-        ((hf (k, fs) (mem_of_lookup hsp)).canon hpa)
-      rw [ha']
-      rfl
-  | none =>
-    rw [hsp] at hka
-    cases rc? with
-    | none => exact nomatch hka
-    | some rc =>
-      replace hka : (rc.p a).map ((k, ·)) = some kv := hka
-      cases hpa : rc.p a with
-      | none => rw [hpa] at hka; exact nomatch hka
-      | some v₀ =>
-        rw [hpa] at hka
-        replace hka : some (k, v₀) = some kv := hka
-        cases hka
-        simp only [encEntry]
-        rw [hsp]
-        show ((rc.e v₀).map ((k, ·))).isSome = true
-        obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp ((hrc rc rfl).canon hpa)
-        rw [ha']
-        rfl
+  rintro ⟨k, a⟩ kv h
+  obtain ⟨c, v, hc, hp, rfl⟩ := decEntry_eq.mp h
+  obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp ((entryCodec_of hf hrc hc).canon hp)
+  exact Option.isSome_iff_exists.mpr ⟨_, encEntry_eq.mpr ⟨c, a', hc, ha', rfl⟩⟩
 
 private theorem objStep_agree {sems : List (Name × FieldSem)} {rc? : Option Codec}
     (hf : ∀ kf ∈ sems, Lawful kf.2.codec) (hrc : ∀ c ∈ rc?, Lawful c) :
     ∀ ka kv ka', decEntry (fun k => sems.lookup k) (rc?.map (·.p)) ka = some kv →
       encEntry (fun k => sems.lookup k) (rc?.map (·.e)) kv = some ka' →
       ka'.1 = ka.1 ∧ Agree ka'.2 ka.2 := by
-  intro ⟨k, a⟩ kv ka' hka hkv
-  simp only [decEntry] at hka
-  cases hsp : sems.lookup k with
-  | some fs =>
-    rw [hsp] at hka
-    replace hka : (fs.codec.p a).map ((k, ·)) = some kv := hka
-    cases hpa : fs.codec.p a with
-    | none => rw [hpa] at hka; exact nomatch hka
-    | some v₀ =>
-      rw [hpa] at hka
-      replace hka : some (k, v₀) = some kv := hka
-      cases hka
-      simp only [encEntry] at hkv
-      rw [hsp] at hkv
-      replace hkv : (fs.codec.e v₀).map ((k, ·)) = some ka' := hkv
-      cases hev : fs.codec.e v₀ with
-      | none => rw [hev] at hkv; exact nomatch hkv
-      | some a₀ =>
-        rw [hev] at hkv
-        replace hkv : some (k, a₀) = some ka' := hkv
-        cases hkv
-        exact ⟨rfl, (hf (k, fs) (mem_of_lookup hsp)).agree hpa hev⟩
-  | none =>
-    rw [hsp] at hka
-    cases rc? with
-    | none => exact nomatch hka
-    | some rc =>
-      replace hka : (rc.p a).map ((k, ·)) = some kv := hka
-      cases hpa : rc.p a with
-      | none => rw [hpa] at hka; exact nomatch hka
-      | some v₀ =>
-        rw [hpa] at hka
-        replace hka : some (k, v₀) = some kv := hka
-        cases hka
-        simp only [encEntry] at hkv
-        rw [hsp] at hkv
-        replace hkv : (rc.e v₀).map ((k, ·)) = some ka' := hkv
-        cases hev : rc.e v₀ with
-        | none => rw [hev] at hkv; exact nomatch hkv
-        | some a₀ =>
-          rw [hev] at hkv
-          replace hkv : some (k, a₀) = some ka' := hkv
-          cases hkv
-          exact ⟨rfl, (hrc rc rfl).agree hpa hev⟩
+  rintro ⟨k, a⟩ kv ka' h h'
+  obtain ⟨c, v, hc, hp, rfl⟩ := decEntry_eq.mp h
+  obtain ⟨c', a', hc', he, rfl⟩ := encEntry_eq.mp h'
+  cases hc'.symm.trans hc
+  exact ⟨rfl, (entryCodec_of hf hrc hc).agree hp he⟩
 
-/-- Inversion of an object-encode success: the value is a map, the guard held, and the
-    written item is the entrywise traversal. -/
-theorem objectCodecCore_e_inv {sems : List (Name × FieldSem)} {rc? : Option Codec}
-    {kn : Name → Bool} {t a}
-    (he : (objectCodecCore sems rc? kn).e t = some a) :
-    ∃ kvs ds, t = Value.map kvs ∧ a = Attr.m ds ∧
-      valPresentB sems (kvs.map (·.1)) = true ∧
-      traverse (encEntry (fun k => sems.lookup k) (rc?.map (·.e))) kvs = some ds := by
-  cases t
-  case map kvs =>
-    replace he : (if valPresentB sems (kvs.map (·.1)) = true then
-        (traverse (encEntry (fun k => sems.lookup k) (rc?.map (·.e))) kvs).map Attr.m
-      else none) = some a := he
-    cases hval : valPresentB sems (kvs.map (·.1)) with
-    | false => rw [hval] at he; exact nomatch he
+
+/-! #### §2's clauses for the object's payload pair
+
+Each is proved once, from core children, and both `lawfulCore_objectCore` and
+`lawful_objectCore` consume them. -/
+
+section ObjectLaws
+variable {sems : List (Name × FieldSem)} {rc? : Option Codec} {kn : Name → Bool}
+
+/-- (R): a written row is complete — every declared name present, none filtered out, no
+    stand-in owed — so reading it back is the entrywise round trip and nothing else. -/
+theorem object_retract (hf : ∀ kf ∈ sems, LawfulCore kf.2.codec)
+    (hrc : ∀ c ∈ rc?, LawfulCore c)
+    (hknE : ∀ kv ka, encEntry (fun k => sems.lookup k) (rc?.map (·.e)) kv = some ka →
+      kn ka.1 = true) :
+    ∀ kvs kas, objWrite sems rc? kvs = some kas → objRead sems rc? kn kas = some kvs := by
+  intro kvs kas h
+  obtain ⟨hval, htr⟩ := objWrite_eq.mp h
+  have hnames : kas.map (·.1) = kvs.map (·.1) := traverse_fst encEntry_fst htr
+  refine objRead_eq.mpr ⟨kvs, ?_, ?_, ?_⟩
+  · rw [hnames]
+    exact reqPresentB_of fun k c hm => valPresentB_spec hval hm (fun _ h' => nomatch h')
+  · rw [filter_eq_self_of_all fun d hd => by
+      obtain ⟨kv, _, hkv⟩ := traverse_mem₂ htr d hd
+      exact hknE kv d hkv]
+    exact traverse_roundTrip (objStep_rt hf hrc) kvs kas htr
+  · rw [hnames, fbDefaults_nil fun k c v hm =>
+      valPresentB_spec hval hm (fun _ h' => nomatch h'), List.append_nil]
+
+/-- (C): what was read is writable again — the kept entries by (C) one level down, the
+    stand-ins by `(fallback)`'s own premise `v(∗) ∈ dom(e)`. -/
+theorem object_canon (hf : ∀ kf ∈ sems, LawfulCore kf.2.codec)
+    (hrc : ∀ c ∈ rc?, LawfulCore c)
+    (hfb : ∀ kf ∈ sems, ∀ c v, kf.2 = .fb c v → (c.e v).isSome = true)
+    (hnd : (sems.map (·.1)).Nodup)
+    (hknDecl : ∀ k, (sems.lookup k).isSome = true → kn k = true) :
+    ∀ kas kvs, objRead sems rc? kn kas = some kvs →
+      (objWrite sems rc? kvs).isSome = true := by
+  intro kas kvs h
+  obtain ⟨ds, hreq, htr, rfl⟩ := objRead_eq.mp h
+  obtain ⟨es₁, hes₁⟩ := Option.isSome_iff_exists.mp
+    (traverse_isSome (f := encEntry (fun k => sems.lookup k) (rc?.map (·.e)))
+      (objStep_canon hf hrc) (kas.filter fun ka => kn ka.1) ds htr)
+  have hdefs : ∀ x ∈ fbDefaults (kas.map (·.1)) sems,
+      ((encEntry (fun k => sems.lookup k) (rc?.map (·.e))) x).isSome = true := by
+    rintro ⟨k', v'⟩ hx
+    obtain ⟨c, hmem, hcf⟩ := fbDefaults_spec hx
+    obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp (hfb (k', .fb c v') hmem c v' rfl)
+    exact Option.isSome_iff_exists.mpr ⟨(k', a'), encEntry_eq.mpr ⟨c, a',
+      by simp [entryCodec, lookup_eq_of_mem_nodup hnd hmem, FieldSem.codec], ha', rfl⟩⟩
+  obtain ⟨es₂, hes₂⟩ := Option.isSome_iff_exists.mp (traverse_isSome_of_all hdefs)
+  have hnames : ds.map (·.1) = (kas.filter fun ka => kn ka.1).map (·.1) :=
+    traverse_fst decEntry_fst htr
+  refine Option.isSome_iff_exists.mpr ⟨_, objWrite_eq.mpr ⟨?_, traverse_append hes₁ hes₂⟩⟩
+  refine valPresentB_of fun k fs hm hno => ?_
+  rw [List.map_append]
+  cases hck : (kas.map (·.1)).contains k with
+  | true =>
+    obtain ⟨ax, haxm⟩ := exists_of_mem_fst (mem_of_contains hck)
+    have hknk : kn k = true := hknDecl k (lookup_isSome_of_mem_fst
+      (List.mem_map.mpr ⟨(k, fs), hm, rfl⟩))
+    have hkfl : k ∈ (kas.filter fun ka => kn ka.1).map (·.1) :=
+      List.mem_map.mpr ⟨(k, ax), List.mem_filter.mpr ⟨haxm, hknk⟩, rfl⟩
+    rw [← hnames] at hkfl
+    exact contains_of_mem (List.mem_append.mpr (Or.inl hkfl))
+  | false =>
+    cases fs with
+    | opt c => exact absurd rfl (hno c)
+    | req c => rw [reqPresentB_spec hreq hm] at hck; exact nomatch hck
+    | fb c v =>
+      exact contains_of_mem (List.mem_append.mpr (Or.inr
+        (List.mem_map.mpr ⟨(k, v), mem_fbDefaults hm hck, rfl⟩)))
+
+/-- (MP): the stand-ins have no stored counterpart to disagree with — they are exactly
+    the names the row omitted — so `≼` is decided on the kept entries, by name. -/
+theorem object_agree (hf : ∀ kf ∈ sems, Lawful kf.2.codec) (hrc : ∀ c ∈ rc?, Lawful c) :
+    ∀ kas kvs kas', objRead sems rc? kn kas = some kvs →
+      objWrite sems rc? kvs = some kas' → Agree (mA.into kas') (mA.into kas) := by
+  intro kas kvs kas' hD hE
+  obtain ⟨ds, hreq, htr, rfl⟩ := objRead_eq.mp hD
+  obtain ⟨hval, hall⟩ := objWrite_eq.mp hE
+  obtain ⟨es₁, es₂, rfl, h₁, h₂⟩ := traverse_append_inv hall
+  refine .m (es₁ ++ es₂) kas ?_
+  intro k x y hxk hyk
+  have hnodef : k ∉ (fbDefaults (kas.map (·.1)) sems).map (·.1) :=
+    fbDefaults_not_mem (contains_of_mem (mem_fst_of_lookup hyk))
+  have hnoes₂ : es₂.lookup k = none :=
+    lookup_none_of_not_mem_fst (by rw [traverse_fst encEntry_fst h₂]; exact hnodef)
+  rw [lookup_append es₁ es₂ k] at hxk
+  cases h₁k : es₁.lookup k with
+  | none => rw [h₁k, hnoes₂] at hxk; exact nomatch hxk
+  | some x' =>
+    rw [h₁k] at hxk
+    replace hxk : some x' = some x := hxk
+    cases hxk
+    cases hknk : kn k with
+    | false =>
+      rw [lookup_none_of_not_mem_fst (by
+        rw [traverse_fst encEntry_fst h₁, traverse_fst decEntry_fst htr]
+        intro hmm
+        have h1 := lookup_isSome_of_mem_fst hmm
+        rw [lookup_filter_neg hknk kas] at h1
+        exact nomatch h1)] at h₁k
+      exact nomatch h₁k
     | true =>
-      rw [hval] at he
-      replace he : (traverse (encEntry (fun k => sems.lookup k) (rc?.map (·.e)))
-        kvs).map Attr.m = some a := he
-      cases htr : traverse (encEntry (fun k => sems.lookup k) (rc?.map (·.e))) kvs with
-      | none => rw [htr] at he; exact nomatch he
-      | some ds =>
-        rw [htr] at he
-        replace he : some (Attr.m ds) = some a := he
-        cases he
-        exact ⟨kvs, ds, rfl, rfl, hval, htr⟩
-  all_goals exact nomatch he
+      refine lookup_rel es₁ (kas.filter fun ka => kn ka.1) ?_ ?_ k x y h₁k ?_
+      · have l1 := traverse_length (kas.filter fun ka => kn ka.1) ds htr
+        have l2 := traverse_length ds es₁ h₁
+        omega
+      · exact traverse_rel (objStep_agree hf hrc) _ _ _ htr h₁
+      · rw [lookup_filter_pos hknk kas]; exact hyk
 
-/-- The keyed product, parametrically: the toolkit over the name-dispatched steps, plus
-    the presence guards and the fallback stand-ins. -/
+end ObjectLaws
+
+/-- Core keyed product: (R), (C), (W) with only core children. -/
+private theorem lawfulCore_objectCore
+    (sems : List (Name × FieldSem)) (rc? : Option Codec) (kn : Name → Bool)
+    (hf : ∀ kf ∈ sems, LawfulCore kf.2.codec)
+    (hfb : ∀ kf ∈ sems, ∀ c v, kf.2 = .fb c v → (c.e v).isSome = true)
+    (hnd : (sems.map (·.1)).Nodup)
+    (hrc : ∀ c ∈ rc?, LawfulCore c)
+    (hknE : ∀ kv ka, encEntry (fun k => sems.lookup k) (rc?.map (·.e)) kv = some ka →
+      kn ka.1 = true)
+    (hknDecl : ∀ k, (sems.lookup k).isSome = true → kn k = true) :
+    LawfulCore (objectCodecCore sems rc? kn) :=
+  objectCodecCore_eq ▸ lawfulCore_carried (fun _ => rfl)
+    (object_retract hf hrc hknE) (object_canon hf hrc hfb hnd hknDecl)
+
+/-- The keyed product, parametrically: the same three clauses, plus (MP). -/
 private theorem lawful_objectCore
     (sems : List (Name × FieldSem)) (rc? : Option Codec) (kn : Name → Bool)
     (hf : ∀ kf ∈ sems, Lawful kf.2.codec)
@@ -2721,246 +2754,12 @@ private theorem lawful_objectCore
     (hknE : ∀ kv ka, encEntry (fun k => sems.lookup k) (rc?.map (·.e)) kv = some ka →
       kn ka.1 = true)
     (hknDecl : ∀ k, (sems.lookup k).isSome = true → kn k = true) :
-    Lawful (objectCodecCore sems rc? kn) := by
-  refine ⟨?_, ?_, ?_, ?_⟩
-  · intro t a he
-    cases t
-    case map kvs =>
-      replace he : (if valPresentB sems (kvs.map (·.1)) = true then
-          (traverse (encEntry (fun k => sems.lookup k) (rc?.map (·.e))) kvs).map Attr.m
-        else none) = some a := he
-      cases hval : valPresentB sems (kvs.map (·.1)) with
-      | false => rw [hval] at he; exact nomatch he
-      | true =>
-        rw [hval] at he
-        replace he : (traverse (encEntry (fun k => sems.lookup k) (rc?.map (·.e)))
-          kvs).map Attr.m = some a := he
-        cases htr : traverse (encEntry (fun k => sems.lookup k) (rc?.map (·.e))) kvs with
-        | none => rw [htr] at he; exact nomatch he
-        | some ds =>
-          rw [htr] at he
-          replace he : some (Attr.m ds) = some a := he
-          cases he
-          have hnames : ds.map (·.1) = kvs.map (·.1) := traverse_fst encEntry_fst htr
-          have hreq : reqPresentB sems (ds.map (·.1)) = true := by
-            rw [hnames]
-            exact reqPresentB_of fun k c hm =>
-              valPresentB_spec hval hm (fun _ h' => nomatch h')
-          have hkeep : ds.filter (fun kv => kn kv.1) = ds :=
-            filter_eq_self_of_all fun d hd => by
-              obtain ⟨kv, _, hkv⟩ := traverse_mem₂ htr d hd
-              exact hknE kv d hkv
-          have hfbnil : fbDefaults (ds.map (·.1)) sems = [] := by
-            rw [hnames]
-            exact fbDefaults_nil fun k c v hm =>
-              valPresentB_spec hval hm (fun _ h' => nomatch h')
-          have hdec := traverse_roundTrip
-            (objStep_rt (fun kf hkf => (hf kf hkf).core) (fun c hc => (hrc c hc).core))
-            kvs ds htr
-          show (if reqPresentB sems (ds.map (·.1)) = true then
-              (traverse (decEntry (fun k => sems.lookup k) (rc?.map (·.p)))
-                (ds.filter fun kv => kn kv.1)).map fun ds' =>
-                  Value.map (ds' ++ fbDefaults (ds.map (·.1)) sems)
-            else none) = some (.map kvs)
-          rw [hreq, hkeep, hdec, hfbnil]
-          simp only [List.append_nil]
-          rfl
-    all_goals exact nomatch he
-  · intro a t hp
-    cases a
-    case m kvs =>
-      replace hp : (if reqPresentB sems (kvs.map (·.1)) = true then
-          (traverse (decEntry (fun k => sems.lookup k) (rc?.map (·.p)))
-            (kvs.filter fun kv => kn kv.1)).map fun ds =>
-              Value.map (ds ++ fbDefaults (kvs.map (·.1)) sems)
-        else none) = some t := hp
-      cases hreq : reqPresentB sems (kvs.map (·.1)) with
-      | false => rw [hreq] at hp; exact nomatch hp
-      | true =>
-        rw [hreq] at hp
-        replace hp : (traverse (decEntry (fun k => sems.lookup k) (rc?.map (·.p)))
-            (kvs.filter fun kv => kn kv.1)).map (fun ds =>
-              Value.map (ds ++ fbDefaults (kvs.map (·.1)) sems)) = some t := hp
-        cases htr : traverse (decEntry (fun k => sems.lookup k) (rc?.map (·.p)))
-            (kvs.filter fun kv => kn kv.1) with
-        | none => rw [htr] at hp; exact nomatch hp
-        | some ds =>
-          rw [htr] at hp
-          replace hp : some (Value.map (ds ++ fbDefaults (kvs.map (·.1)) sems)) =
-            some t := hp
-          cases hp
-          have hds := traverse_isSome
-            (f := encEntry (fun k => sems.lookup k) (rc?.map (·.e)))
-            (objStep_canon (fun kf hkf => (hf kf hkf).core) (fun c hc => (hrc c hc).core))
-            (kvs.filter fun kv => kn kv.1) ds htr
-          obtain ⟨es₁, hes₁⟩ := Option.isSome_iff_exists.mp hds
-          have hdefs : ∀ x ∈ fbDefaults (kvs.map (·.1)) sems,
-              ((encEntry (fun k => sems.lookup k) (rc?.map (·.e))) x).isSome = true := by
-            intro ⟨k', v'⟩ hx
-            obtain ⟨c, hmem, hcf⟩ := fbDefaults_spec hx
-            have hlk : sems.lookup k' = some (.fb c v') := lookup_eq_of_mem_nodup hnd hmem
-            simp only [encEntry]
-            rw [hlk]
-            show ((c.e v').map ((k', ·))).isSome = true
-            obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp
-              (hfb (k', .fb c v') hmem c v' rfl)
-            rw [ha']
-            rfl
-          obtain ⟨es₂, hes₂⟩ := Option.isSome_iff_exists.mp
-            (traverse_isSome_of_all hdefs)
-          have hall := traverse_append hes₁ hes₂
-          have hnames : ds.map (·.1) = (kvs.filter fun kv => kn kv.1).map (·.1) :=
-            traverse_fst decEntry_fst htr
-          have hval : valPresentB sems
-              ((ds ++ fbDefaults (kvs.map (·.1)) sems).map (·.1)) = true := by
-            refine valPresentB_of fun k fs hm hno => ?_
-            rw [List.map_append]
-            cases hck : (kvs.map (·.1)).contains k with
-            | true =>
-              have hkmem : k ∈ kvs.map (·.1) := mem_of_contains hck
-              obtain ⟨ax, haxm⟩ := exists_of_mem_fst hkmem
-              have hknk : kn k = true := hknDecl k (lookup_isSome_of_mem_fst
-                (List.mem_map.mpr ⟨(k, fs), hm, rfl⟩))
-              have hkeepm : (k, ax) ∈ kvs.filter fun kv => kn kv.1 :=
-                List.mem_filter.mpr ⟨haxm, hknk⟩
-              have hkfl : k ∈ (kvs.filter fun kv => kn kv.1).map (·.1) :=
-                List.mem_map.mpr ⟨(k, ax), hkeepm, rfl⟩
-              rw [← hnames] at hkfl
-              exact contains_of_mem (List.mem_append.mpr (Or.inl hkfl))
-            | false =>
-              cases fs with
-              | opt c => exact absurd rfl (hno c)
-              | req c => rw [reqPresentB_spec hreq hm] at hck; exact nomatch hck
-              | fb c v =>
-                have hin := mem_fbDefaults hm hck
-                exact contains_of_mem (List.mem_append.mpr (Or.inr
-                  (List.mem_map.mpr ⟨(k, v), hin, rfl⟩)))
-          show (if valPresentB sems
-              ((ds ++ fbDefaults (kvs.map (·.1)) sems).map (·.1)) = true then
-              (traverse (encEntry (fun k => sems.lookup k) (rc?.map (·.e)))
-                (ds ++ fbDefaults (kvs.map (·.1)) sems)).map Attr.m
-            else none).isSome = true
-          rw [hval, hall]
-          rfl
-    all_goals exact nomatch hp
-  · intro μ hμ t a he
-    replace hμ : some Member.M = some μ := hμ
-    cases hμ
-    cases t
-    case map kvs =>
-      replace he : (if valPresentB sems (kvs.map (·.1)) = true then
-          (traverse (encEntry (fun k => sems.lookup k) (rc?.map (·.e))) kvs).map Attr.m
-        else none) = some a := he
-      cases hval : valPresentB sems (kvs.map (·.1)) with
-      | false => rw [hval] at he; exact nomatch he
-      | true =>
-        rw [hval] at he
-        replace he : (traverse (encEntry (fun k => sems.lookup k) (rc?.map (·.e)))
-          kvs).map Attr.m = some a := he
-        cases htr : traverse (encEntry (fun k => sems.lookup k) (rc?.map (·.e))) kvs with
-        | none => rw [htr] at he; exact nomatch he
-        | some ds =>
-          rw [htr] at he
-          replace he : some (Attr.m ds) = some a := he
-          cases he
-          rfl
-    all_goals exact nomatch he
-  · intro a t a' hp he
-    cases a
-    case m kvs =>
-      replace hp : (if reqPresentB sems (kvs.map (·.1)) = true then
-          (traverse (decEntry (fun k => sems.lookup k) (rc?.map (·.p)))
-            (kvs.filter fun kv => kn kv.1)).map fun ds =>
-              Value.map (ds ++ fbDefaults (kvs.map (·.1)) sems)
-        else none) = some t := hp
-      cases hreq : reqPresentB sems (kvs.map (·.1)) with
-      | false => rw [hreq] at hp; exact nomatch hp
-      | true =>
-        rw [hreq] at hp
-        replace hp : (traverse (decEntry (fun k => sems.lookup k) (rc?.map (·.p)))
-            (kvs.filter fun kv => kn kv.1)).map (fun ds =>
-              Value.map (ds ++ fbDefaults (kvs.map (·.1)) sems)) = some t := hp
-        cases htr : traverse (decEntry (fun k => sems.lookup k) (rc?.map (·.p)))
-            (kvs.filter fun kv => kn kv.1) with
-        | none => rw [htr] at hp; exact nomatch hp
-        | some ds =>
-          rw [htr] at hp
-          replace hp : some (Value.map (ds ++ fbDefaults (kvs.map (·.1)) sems)) =
-            some t := hp
-          cases hp
-          replace he : (if valPresentB sems
-              ((ds ++ fbDefaults (kvs.map (·.1)) sems).map (·.1)) = true then
-              (traverse (encEntry (fun k => sems.lookup k) (rc?.map (·.e)))
-                (ds ++ fbDefaults (kvs.map (·.1)) sems)).map Attr.m
-            else none) = some a' := he
-          cases hval : valPresentB sems
-              ((ds ++ fbDefaults (kvs.map (·.1)) sems).map (·.1)) with
-          | false => rw [hval] at he; exact nomatch he
-          | true =>
-            rw [hval] at he
-            replace he : (traverse (encEntry (fun k => sems.lookup k) (rc?.map (·.e)))
-              (ds ++ fbDefaults (kvs.map (·.1)) sems)).map Attr.m = some a' := he
-            cases hall : traverse (encEntry (fun k => sems.lookup k) (rc?.map (·.e)))
-                (ds ++ fbDefaults (kvs.map (·.1)) sems) with
-            | none => rw [hall] at he; exact nomatch he
-            | some es =>
-              rw [hall] at he
-              replace he : some (Attr.m es) = some a' := he
-              cases he
-              obtain ⟨es₁, es₂, rfl, h₁, h₂⟩ := traverse_append_inv hall
-              refine .m (es₁ ++ es₂) kvs ?_
-              intro k x y hxk hyk
-              have hkkvs : k ∈ kvs.map (·.1) := mem_fst_of_lookup hyk
-              have hckvs : (kvs.map (·.1)).contains k = true := contains_of_mem hkkvs
-              have hnodef : k ∉ (fbDefaults (kvs.map (·.1)) sems).map (·.1) :=
-                fbDefaults_not_mem hckvs
-              have hfst₂ : es₂.map (·.1) =
-                  (fbDefaults (kvs.map (·.1)) sems).map (·.1) :=
-                traverse_fst encEntry_fst h₂
-              have hnoes₂ : es₂.lookup k = none :=
-                lookup_none_of_not_mem_fst (by rw [hfst₂]; exact hnodef)
-              rw [lookup_append es₁ es₂ k] at hxk
-              cases h₁k : es₁.lookup k with
-              | none =>
-                rw [h₁k, hnoes₂] at hxk
-                exact nomatch hxk
-              | some x' =>
-                rw [h₁k] at hxk
-                replace hxk : some x' = some x := hxk
-                cases hxk
-                cases hknk : kn k with
-                | false =>
-                  have hfst₁ : es₁.map (·.1) = ds.map (·.1) :=
-                    traverse_fst encEntry_fst h₁
-                  have hdsf : ds.map (·.1) =
-                      (kvs.filter fun kv => kn kv.1).map (·.1) :=
-                    traverse_fst decEntry_fst htr
-                  have hnone : es₁.lookup k = none := by
-                    refine lookup_none_of_not_mem_fst ?_
-                    rw [hfst₁, hdsf]
-                    intro hmm
-                    have h1 := lookup_isSome_of_mem_fst hmm
-                    rw [lookup_filter_neg hknk kvs] at h1
-                    exact nomatch h1
-                  rw [hnone] at h₁k
-                  exact nomatch h₁k
-                | true =>
-                  have hflt : (kvs.filter fun kv => kn kv.1).lookup k = some y := by
-                    rw [lookup_filter_pos hknk kvs]
-                    exact hyk
-                  have hzip := traverse_rel
-                    (g := decEntry (fun k => sems.lookup k) (rc?.map (·.p)))
-                    (f := encEntry (fun k => sems.lookup k) (rc?.map (·.e)))
-                    (R := fun q r => q.1 = r.1 ∧ Agree q.2 r.2)
-                    (fun y' x' z' hg hf' => objStep_agree hf hrc y' x' z' hg hf')
-                    (kvs.filter fun kv => kn kv.1) ds es₁ htr h₁
-                  have hlen : es₁.length = (kvs.filter fun kv => kn kv.1).length := by
-                    have l1 := traverse_length (kvs.filter fun kv => kn kv.1) ds htr
-                    have l2 := traverse_length ds es₁ h₁
-                    omega
-                  exact lookup_rel es₁ (kvs.filter fun kv => kn kv.1) hlen
-                    (fun q hq => hzip q hq) k x y h₁k hflt
-    all_goals exact nomatch hp
+    Lawful (objectCodecCore sems rc? kn) :=
+  let hf' := fun kf hkf => (hf kf hkf).core
+  let hrc' := fun c hc => (hrc c hc).core
+  objectCodecCore_eq ▸ lawful_carried (fun _ => rfl)
+    (object_retract hf' hrc' hknE) (object_canon hf' hrc' hfb hnd hknDecl)
+    (object_agree hf hrc)
 
 /-- A property of the rest policy's codec, from one per `rest = .codec c`. -/
 theorem rcOf_forall {P : Codec → Prop} {rest : RestSem}
@@ -3395,9 +3194,9 @@ theorem lawful_opaqCodec : ∀ (fuel : Nat) (lossy : Bool), Lawful (opaqCodec fu
 
 /-! ## Core variants: (R), (C), (W) through `legacy`-containing subterms
 
-The wrappers' and uniform products' core lemmas live beside their full counterparts
-above; what remains here are the composites whose core statements need their own
-scaffolding. -/
+Every construction's core lemma now lives beside its full counterpart above, sharing
+the same clauses — all except `set`, whose core statement replaces (MP)'s
+member-uniformity with a hypothesis and so has genuinely different content. -/
 
 
 /-- Core set: the member-uniformity that (MP) supplied comes from (W) instead, so the
@@ -3598,124 +3397,6 @@ theorem lawfulCore_setCodec {c : Codec} {μ₀ μS : Member} (h : LawfulCore c)
             cases hμ'
             rfl
     all_goals exact nomatch he
-
-/-- Core keyed product: (R), (C), (W) with only core children. -/
-private theorem lawfulCore_objectCore
-    (sems : List (Name × FieldSem)) (rc? : Option Codec) (kn : Name → Bool)
-    (hf : ∀ kf ∈ sems, LawfulCore kf.2.codec)
-    (hfb : ∀ kf ∈ sems, ∀ c v, kf.2 = .fb c v → (c.e v).isSome = true)
-    (hnd : (sems.map (·.1)).Nodup)
-    (hrc : ∀ c ∈ rc?, LawfulCore c)
-    (hknE : ∀ kv ka, encEntry (fun k => sems.lookup k) (rc?.map (·.e)) kv = some ka →
-      kn ka.1 = true)
-    (hknDecl : ∀ k, (sems.lookup k).isSome = true → kn k = true) :
-    LawfulCore (objectCodecCore sems rc? kn) := by
-  refine ⟨?_, ?_, ?_⟩
-  · intro t a he
-    obtain ⟨kvs, ds, rfl, rfl, hval, htr⟩ := objectCodecCore_e_inv he
-    have hnames : ds.map (·.1) = kvs.map (·.1) := traverse_fst encEntry_fst htr
-    have hreq : reqPresentB sems (ds.map (·.1)) = true := by
-      rw [hnames]
-      exact reqPresentB_of fun k c hm =>
-        valPresentB_spec hval hm (fun _ h' => nomatch h')
-    have hkeep : ds.filter (fun kv => kn kv.1) = ds :=
-      filter_eq_self_of_all fun d hd => by
-        obtain ⟨kv, _, hkv⟩ := traverse_mem₂ htr d hd
-        exact hknE kv d hkv
-    have hfbnil : fbDefaults (ds.map (·.1)) sems = [] := by
-      rw [hnames]
-      exact fbDefaults_nil fun k c v hm =>
-        valPresentB_spec hval hm (fun _ h' => nomatch h')
-    have hdec := traverse_roundTrip (objStep_rt hf hrc) kvs ds htr
-    show (if reqPresentB sems (ds.map (·.1)) = true then
-        (traverse (decEntry (fun k => sems.lookup k) (rc?.map (·.p)))
-          (ds.filter fun kv => kn kv.1)).map fun ds' =>
-            Value.map (ds' ++ fbDefaults (ds.map (·.1)) sems)
-      else none) = some (.map kvs)
-    rw [hreq, hkeep, hdec, hfbnil]
-    simp only [List.append_nil]
-    rfl
-  · intro a t hp
-    cases a
-    case m kvs =>
-      replace hp : (if reqPresentB sems (kvs.map (·.1)) = true then
-          (traverse (decEntry (fun k => sems.lookup k) (rc?.map (·.p)))
-            (kvs.filter fun kv => kn kv.1)).map fun ds =>
-              Value.map (ds ++ fbDefaults (kvs.map (·.1)) sems)
-        else none) = some t := hp
-      cases hreq : reqPresentB sems (kvs.map (·.1)) with
-      | false => rw [hreq] at hp; exact nomatch hp
-      | true =>
-        rw [hreq] at hp
-        replace hp : (traverse (decEntry (fun k => sems.lookup k) (rc?.map (·.p)))
-            (kvs.filter fun kv => kn kv.1)).map (fun ds =>
-              Value.map (ds ++ fbDefaults (kvs.map (·.1)) sems)) = some t := hp
-        cases htr : traverse (decEntry (fun k => sems.lookup k) (rc?.map (·.p)))
-            (kvs.filter fun kv => kn kv.1) with
-        | none => rw [htr] at hp; exact nomatch hp
-        | some ds =>
-          rw [htr] at hp
-          replace hp : some (Value.map (ds ++ fbDefaults (kvs.map (·.1)) sems)) =
-            some t := hp
-          cases hp
-          have hds := traverse_isSome
-            (f := encEntry (fun k => sems.lookup k) (rc?.map (·.e)))
-            (objStep_canon hf hrc) (kvs.filter fun kv => kn kv.1) ds htr
-          obtain ⟨es₁, hes₁⟩ := Option.isSome_iff_exists.mp hds
-          have hdefs : ∀ x ∈ fbDefaults (kvs.map (·.1)) sems,
-              ((encEntry (fun k => sems.lookup k) (rc?.map (·.e))) x).isSome = true := by
-            intro ⟨k', v'⟩ hx
-            obtain ⟨c, hmem, hcf⟩ := fbDefaults_spec hx
-            have hlk : sems.lookup k' = some (.fb c v') := lookup_eq_of_mem_nodup hnd hmem
-            simp only [encEntry]
-            rw [hlk]
-            show ((c.e v').map ((k', ·))).isSome = true
-            obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp
-              (hfb (k', .fb c v') hmem c v' rfl)
-            rw [ha']
-            rfl
-          obtain ⟨es₂, hes₂⟩ := Option.isSome_iff_exists.mp
-            (traverse_isSome_of_all hdefs)
-          have hall := traverse_append hes₁ hes₂
-          have hnames : ds.map (·.1) = (kvs.filter fun kv => kn kv.1).map (·.1) :=
-            traverse_fst decEntry_fst htr
-          have hval : valPresentB sems
-              ((ds ++ fbDefaults (kvs.map (·.1)) sems).map (·.1)) = true := by
-            refine valPresentB_of fun k fs hm hno => ?_
-            rw [List.map_append]
-            cases hck : (kvs.map (·.1)).contains k with
-            | true =>
-              have hkmem : k ∈ kvs.map (·.1) := mem_of_contains hck
-              obtain ⟨ax, haxm⟩ := exists_of_mem_fst hkmem
-              have hknk : kn k = true := hknDecl k (lookup_isSome_of_mem_fst
-                (List.mem_map.mpr ⟨(k, fs), hm, rfl⟩))
-              have hkeepm : (k, ax) ∈ kvs.filter fun kv => kn kv.1 :=
-                List.mem_filter.mpr ⟨haxm, hknk⟩
-              have hkfl : k ∈ (kvs.filter fun kv => kn kv.1).map (·.1) :=
-                List.mem_map.mpr ⟨(k, ax), hkeepm, rfl⟩
-              rw [← hnames] at hkfl
-              exact contains_of_mem (List.mem_append.mpr (Or.inl hkfl))
-            | false =>
-              cases fs with
-              | opt c => exact absurd rfl (hno c)
-              | req c => rw [reqPresentB_spec hreq hm] at hck; exact nomatch hck
-              | fb c v =>
-                have hin := mem_fbDefaults hm hck
-                exact contains_of_mem (List.mem_append.mpr (Or.inr
-                  (List.mem_map.mpr ⟨(k, v), hin, rfl⟩)))
-          show (if valPresentB sems
-              ((ds ++ fbDefaults (kvs.map (·.1)) sems).map (·.1)) = true then
-              (traverse (encEntry (fun k => sems.lookup k) (rc?.map (·.e)))
-                (ds ++ fbDefaults (kvs.map (·.1)) sems)).map Attr.m
-            else none).isSome = true
-          rw [hval, hall]
-          rfl
-    all_goals exact nomatch hp
-  · intro μ hμ t a he
-    replace hμ : some Member.M = some μ := hμ
-    cases hμ
-    obtain ⟨kvs, ds, rfl, rfl, hval, htr⟩ := objectCodecCore_e_inv he
-    rfl
 
 theorem lawfulCore_objectCodec {sems : List (Name × FieldSem)} {rest : RestSem}
     (hf : ∀ kf ∈ sems, LawfulCore kf.2.codec)
