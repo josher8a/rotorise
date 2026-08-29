@@ -77,6 +77,46 @@ theorem Value.depth_pos (v : Value) : 0 < Value.depth v := by
 theorem Attr.depth_pos (a : Attr) : 0 < Attr.depth a := by
   cases a <;> simp [Attr.depth]
 
+/-! ### The four depth measures are one shape
+
+`Value.depthL`, `Value.depthP`, `Attr.depthL` and `Attr.depthP` are the same fold — the
+largest entry measure, or 1 for the empty list. Naming it lets the four depth-preservation
+companions cite one traversal fact instead of writing the same cons-unfolding out four
+times. -/
+
+/-- The largest entry measure, or 1 for the empty list. -/
+def maxOf {α : Type} (m : α → Nat) : List α → Nat
+  | [] => 1
+  | x :: xs => max (m x) (maxOf m xs)
+
+theorem Value.depthL_eq (vs : List Value) : Value.depthL vs = maxOf Value.depth vs := by
+  induction vs <;> simp_all [Value.depthL, maxOf]
+
+theorem Value.depthP_eq (kvs : List (Name × Value)) :
+    Value.depthP kvs = maxOf (fun kv => Value.depth kv.2) kvs := by
+  induction kvs <;> simp_all [Value.depthP, maxOf]
+
+theorem Attr.depthL_eq (as : List Attr) : Attr.depthL as = maxOf Attr.depth as := by
+  induction as <;> simp_all [Attr.depthL, maxOf]
+
+theorem Attr.depthP_eq (kvs : List (Name × Attr)) :
+    Attr.depthP kvs = maxOf (fun kv => Attr.depth kv.2) kvs := by
+  induction kvs <;> simp_all [Attr.depthP, maxOf]
+
+/-- A traversal whose entry step does not increase the measure does not increase the
+    list's maximum. -/
+theorem traverse_maxOf_le {α β : Type} {f : α → Option β} {mα : α → Nat} {mβ : β → Nat}
+    (h : ∀ x y, f x = some y → mβ y ≤ mα x) :
+    ∀ (xs : List α) (ys : List β), traverse f xs = some ys → maxOf mβ ys ≤ maxOf mα xs
+  | [], ys, htr => by cases (by simpa using htr : [] = ys); simp [maxOf]
+  | x :: xs, ys, htr => by
+      rw [traverse_cons] at htr
+      obtain ⟨y, hy, hrest⟩ := Option.bind_eq_some.mp htr
+      obtain ⟨ys', hys', rfl⟩ := Option.map_eq_some'.mp hrest
+      have := h x y hy
+      have := traverse_maxOf_le h xs ys' hys'
+      simp only [maxOf]; omega
+
 /-! ## Traverse congruence
 
 Missing from `Combinators.lean`, and needed everywhere below: the element function is
@@ -176,47 +216,33 @@ mutual
 theorem opaq_e_agree (lossy : Bool) :
     ∀ (v : Value) (n m : Nat), Value.depth v ≤ n → Value.depth v ≤ m →
       (opaqCodec n lossy).e v = (opaqCodec m lossy).e v
-  | .str _, n, m, hn, hm => by
-      cases n with | zero => simp [Value.depth] at hn | succ n' =>
-      cases m with | zero => simp [Value.depth] at hm | succ m' =>
+  | v, 0, _, hn, _ => absurd hn (by simpa using Nat.not_le.mpr (Value.depth_pos v))
+  | v, _+1, 0, _, hm => absurd hm (by simpa using Nat.not_le.mpr (Value.depth_pos v))
+  | .str _, n'+1, m'+1, hn, hm => by
       rw [opaqCodec_e_str, opaqCodec_e_str]
-  | .bool _, n, m, hn, hm => by
-      cases n with | zero => simp [Value.depth] at hn | succ n' =>
-      cases m with | zero => simp [Value.depth] at hm | succ m' =>
+  | .bool _, n'+1, m'+1, hn, hm => by
       rw [opaqCodec_e_bool, opaqCodec_e_bool]
-  | .bin _, n, m, hn, hm => by
-      cases n with | zero => simp [Value.depth] at hn | succ n' =>
-      cases m with | zero => simp [Value.depth] at hm | succ m' =>
+  | .bin _, n'+1, m'+1, hn, hm => by
       rw [opaqCodec_e_bin, opaqCodec_e_bin]
-  | .null, n, m, hn, hm => by
-      cases n with | zero => simp [Value.depth] at hn | succ n' =>
-      cases m with | zero => simp [Value.depth] at hm | succ m' =>
+  | .null, n'+1, m'+1, hn, hm => by
       rw [opaqCodec_e_null, opaqCodec_e_null]
-  | .num _, n, m, hn, hm => by
-      cases n with | zero => simp [Value.depth] at hn | succ n' =>
-      cases m with | zero => simp [Value.depth] at hm | succ m' =>
+  | .num _, n'+1, m'+1, hn, hm => by
       rw [opaqCodec_e_num, opaqCodec_e_num]
-  | .set vs, n, m, hn, hm => by
-      cases n with | zero => simp [Value.depth] at hn | succ n' =>
-      cases m with | zero => simp [Value.depth] at hm | succ m' =>
+  | .set vs, n'+1, m'+1, hn, hm => by
       have hn' : Value.depthL vs <= n' := by simp only [Value.depth] at hn; omega
       have hm' : Value.depthL vs <= m' := by simp only [Value.depth] at hm; omega
       rw [opaqCodec_e_set, opaqCodec_e_set]
       show (traverse (opaqCodec n' lossy).e vs).bind asWireSet
          = (traverse (opaqCodec m' lossy).e vs).bind asWireSet
       rw [opaq_e_agreeL lossy vs n' m' hn' hm']
-  | .arr vs, n, m, hn, hm => by
-      cases n with | zero => simp [Value.depth] at hn | succ n' =>
-      cases m with | zero => simp [Value.depth] at hm | succ m' =>
+  | .arr vs, n'+1, m'+1, hn, hm => by
       have hn' : Value.depthL vs <= n' := by simp only [Value.depth] at hn; omega
       have hm' : Value.depthL vs <= m' := by simp only [Value.depth] at hm; omega
       rw [opaqCodec_e_arr, opaqCodec_e_arr]
       show (traverse (opaqCodec n' lossy).e vs).map Attr.l
          = (traverse (opaqCodec m' lossy).e vs).map Attr.l
       rw [opaq_e_agreeL lossy vs n' m' hn' hm']
-  | .map kvs, n, m, hn, hm => by
-      cases n with | zero => simp [Value.depth] at hn | succ n' =>
-      cases m with | zero => simp [Value.depth] at hm | succ m' =>
+  | .map kvs, n'+1, m'+1, hn, hm => by
       have hn' : Value.depthP kvs <= n' := by simp only [Value.depth] at hn; omega
       have hm' : Value.depthP kvs <= m' := by simp only [Value.depth] at hm; omega
       rw [opaqCodec_e_map, opaqCodec_e_map]
@@ -349,29 +375,19 @@ mutual
 theorem opaq_p_agree (lossy : Bool) :
     ∀ (a : Attr) (n m : Nat), Attr.depth a <= n -> Attr.depth a <= m ->
       (opaqCodec n lossy).p a = (opaqCodec m lossy).p a
-  | .s _, n, m, hn, hm => by
-      cases n with | zero => simp [Attr.depth] at hn | succ n' =>
-      cases m with | zero => simp [Attr.depth] at hm | succ m' =>
+  | a, 0, _, hn, _ => absurd hn (by simpa using Nat.not_le.mpr (Attr.depth_pos a))
+  | a, _+1, 0, _, hm => absurd hm (by simpa using Nat.not_le.mpr (Attr.depth_pos a))
+  | .s _, n'+1, m'+1, hn, hm => by
       rw [opaqCodec_p_s, opaqCodec_p_s]
-  | .bool _, n, m, hn, hm => by
-      cases n with | zero => simp [Attr.depth] at hn | succ n' =>
-      cases m with | zero => simp [Attr.depth] at hm | succ m' =>
+  | .bool _, n'+1, m'+1, hn, hm => by
       rw [opaqCodec_p_bool, opaqCodec_p_bool]
-  | .b _, n, m, hn, hm => by
-      cases n with | zero => simp [Attr.depth] at hn | succ n' =>
-      cases m with | zero => simp [Attr.depth] at hm | succ m' =>
+  | .b _, n'+1, m'+1, hn, hm => by
       rw [opaqCodec_p_b, opaqCodec_p_b]
-  | .null, n, m, hn, hm => by
-      cases n with | zero => simp [Attr.depth] at hn | succ n' =>
-      cases m with | zero => simp [Attr.depth] at hm | succ m' =>
+  | .null, n'+1, m'+1, hn, hm => by
       rw [opaqCodec_p_null, opaqCodec_p_null]
-  | .n _, n, m, hn, hm => by
-      cases n with | zero => simp [Attr.depth] at hn | succ n' =>
-      cases m with | zero => simp [Attr.depth] at hm | succ m' =>
+  | .n _, n'+1, m'+1, hn, hm => by
       rw [opaqCodec_p_n, opaqCodec_p_n]
-  | .ss vs, n, m, hn, hm => by
-      cases n with | zero => simp [Attr.depth] at hn | succ n' =>
-      cases m with | zero => simp [Attr.depth] at hm | succ m' =>
+  | .ss vs, n'+1, m'+1, hn, hm => by
       have hn' : 1 <= n' := by simp only [Attr.depth] at hn; omega
       have hm' : 1 <= m' := by simp only [Attr.depth] at hm; omega
       rw [opaqCodec_p_ss, opaqCodec_p_ss]
@@ -380,9 +396,7 @@ theorem opaq_p_agree (lossy : Bool) :
          = (if vs.isEmpty then none
             else (traverse (fun s => (opaqCodec m' lossy).p (.s s)) vs).map Value.set)
       rw [traverse_congr vs (fun s _ => opaq_p_s_agree lossy s n' m' hn' hm')]
-  | .ns vs, n, m, hn, hm => by
-      cases n with | zero => simp [Attr.depth] at hn | succ n' =>
-      cases m with | zero => simp [Attr.depth] at hm | succ m' =>
+  | .ns vs, n'+1, m'+1, hn, hm => by
       have hn' : 1 <= n' := by simp only [Attr.depth] at hn; omega
       have hm' : 1 <= m' := by simp only [Attr.depth] at hm; omega
       rw [opaqCodec_p_ns, opaqCodec_p_ns]
@@ -391,9 +405,7 @@ theorem opaq_p_agree (lossy : Bool) :
          = (if vs.isEmpty then none
             else (traverse (fun x => (opaqCodec m' lossy).p (.n x)) vs).map Value.set)
       rw [traverse_congr vs (fun x _ => opaq_p_n_agree lossy x n' m' hn' hm')]
-  | .bs vs, n, m, hn, hm => by
-      cases n with | zero => simp [Attr.depth] at hn | succ n' =>
-      cases m with | zero => simp [Attr.depth] at hm | succ m' =>
+  | .bs vs, n'+1, m'+1, hn, hm => by
       have hn' : 1 <= n' := by simp only [Attr.depth] at hn; omega
       have hm' : 1 <= m' := by simp only [Attr.depth] at hm; omega
       rw [opaqCodec_p_bs, opaqCodec_p_bs]
@@ -402,18 +414,14 @@ theorem opaq_p_agree (lossy : Bool) :
          = (if vs.isEmpty then none
             else (traverse (fun b => (opaqCodec m' lossy).p (.b b)) vs).map Value.set)
       rw [traverse_congr vs (fun b _ => opaq_p_b_agree lossy b n' m' hn' hm')]
-  | .l as, n, m, hn, hm => by
-      cases n with | zero => simp [Attr.depth] at hn | succ n' =>
-      cases m with | zero => simp [Attr.depth] at hm | succ m' =>
+  | .l as, n'+1, m'+1, hn, hm => by
       have hn' : Attr.depthL as <= n' := by simp only [Attr.depth] at hn; omega
       have hm' : Attr.depthL as <= m' := by simp only [Attr.depth] at hm; omega
       rw [opaqCodec_p_l, opaqCodec_p_l]
       show (traverse (opaqCodec n' lossy).p as).map Value.arr
          = (traverse (opaqCodec m' lossy).p as).map Value.arr
       rw [opaq_p_agreeL lossy as n' m' hn' hm']
-  | .m kvs, n, m, hn, hm => by
-      cases n with | zero => simp [Attr.depth] at hn | succ n' =>
-      cases m with | zero => simp [Attr.depth] at hm | succ m' =>
+  | .m kvs, n'+1, m'+1, hn, hm => by
       have hn' : Attr.depthP kvs <= n' := by simp only [Attr.depth] at hn; omega
       have hm' : Attr.depthP kvs <= m' := by simp only [Attr.depth] at hm; omega
       rw [opaqCodec_p_m, opaqCodec_p_m]
@@ -498,30 +506,25 @@ mutual
 theorem opaq_e_depth (lossy : Bool) :
     ∀ (v : Value) (n : Nat) (a : Attr), (opaqCodec n lossy).e v = some a ->
       Attr.depth a <= Value.depth v
-  | .str _, n, a, he => by
-      cases n with | zero => exact nomatch he | succ n' =>
+  | _, 0, _, he => nomatch he
+  | .str _, n'+1, a, he => by
       rw [opaqCodec_e_str] at he
       simp only [stringCodec] at he; cases he; simp [Attr.depth, Value.depth]
-  | .bool _, n, a, he => by
-      cases n with | zero => exact nomatch he | succ n' =>
+  | .bool _, n'+1, a, he => by
       rw [opaqCodec_e_bool] at he
       simp only [booleanCodec] at he; cases he; simp [Attr.depth, Value.depth]
-  | .bin _, n, a, he => by
-      cases n with | zero => exact nomatch he | succ n' =>
+  | .bin _, n'+1, a, he => by
       rw [opaqCodec_e_bin] at he
       simp only [binaryCodec] at he; cases he; simp [Attr.depth, Value.depth]
-  | .null, n, a, he => by
-      cases n with | zero => exact nomatch he | succ n' =>
+  | .null, n'+1, a, he => by
       rw [opaqCodec_e_null] at he
       simp only [nullCodec] at he; cases he; simp [Attr.depth, Value.depth]
-  | .num _, n, a, he => by
-      cases n with | zero => exact nomatch he | succ n' =>
+  | .num _, n'+1, a, he => by
       rw [opaqCodec_e_num] at he
       cases lossy <;> simp only [numberCodec, Codec.empty] at he
       · exact nomatch he
       · cases he; simp [Attr.depth, Value.depth]
-  | .set vs, n, a, he => by
-      cases n with | zero => exact nomatch he | succ n' =>
+  | .set vs, n'+1, a, he => by
       rw [opaqCodec_e_set] at he
       replace he : (traverse (opaqCodec n' lossy).e vs).bind asWireSet = some a := he
       cases htr : traverse (opaqCodec n' lossy).e vs with
@@ -532,8 +535,7 @@ theorem opaq_e_depth (lossy : Bool) :
         simp only [Value.depth]
         have := Value.depthL_pos vs
         omega
-  | .arr vs, n, a, he => by
-      cases n with | zero => exact nomatch he | succ n' =>
+  | .arr vs, n'+1, a, he => by
       rw [opaqCodec_e_arr] at he
       replace he : (traverse (opaqCodec n' lossy).e vs).map Attr.l = some a := he
       cases htr : traverse (opaqCodec n' lossy).e vs with
@@ -545,8 +547,7 @@ theorem opaq_e_depth (lossy : Bool) :
         simp only [Attr.depth, Value.depth]
         have := opaq_e_depthL lossy vs n' as htr
         omega
-  | .map kvs, n, a, he => by
-      cases n with | zero => exact nomatch he | succ n' =>
+  | .map kvs, n'+1, a, he => by
       rw [opaqCodec_e_map] at he
       replace he : (traverse (encPair (opaqCodec n' lossy)) kvs).map Attr.m = some a := he
       cases htr : traverse (encPair (opaqCodec n' lossy)) kvs with
@@ -563,53 +564,19 @@ theorem opaq_e_depthL (lossy : Bool) :
     ∀ (vs : List Value) (n : Nat) (as : List Attr),
       traverse (opaqCodec n lossy).e vs = some as ->
       Attr.depthL as <= Value.depthL vs
-  | [], _, as, htr => by
-      replace htr : some [] = some as := htr
-      cases htr; simp [Attr.depthL, Value.depthL]
-  | v :: vs, n, as, htr => by
-      simp only [traverse] at htr
-      cases hv : (opaqCodec n lossy).e v with
-      | none => rw [hv] at htr; exact nomatch htr
-      | some a =>
-        rw [hv] at htr
-        cases hvs : traverse (opaqCodec n lossy).e vs with
-        | none => rw [hvs] at htr; exact nomatch htr
-        | some as' =>
-          rw [hvs] at htr
-          replace htr : some (a :: as') = some as := htr
-          cases htr
-          have h1 := opaq_e_depth lossy v n a hv
-          have h2 := opaq_e_depthL lossy vs n as' hvs
-          simp only [Attr.depthL, Value.depthL]
-          omega
+  | vs, n, as, htr => by
+      rw [Attr.depthL_eq, Value.depthL_eq]
+      exact traverse_maxOf_le (fun v a hv => opaq_e_depth lossy v n a hv) vs as htr
 
 theorem opaq_e_depthP (lossy : Bool) :
     ∀ (kvs : List (Name × Value)) (n : Nat) (kas : List (Name × Attr)),
       traverse (encPair (opaqCodec n lossy)) kvs = some kas ->
       Attr.depthP kas <= Value.depthP kvs
-  | [], _, kas, htr => by
-      replace htr : some [] = some kas := htr
-      cases htr; simp [Attr.depthP, Value.depthP]
-  | kv :: kvs, n, kas, htr => by
-      simp only [traverse] at htr
-      cases hea : (opaqCodec n lossy).e kv.2 with
-      | none =>
-        have hnone : encPair (opaqCodec n lossy) kv = none := by simp [encPair, hea]
-        rw [hnone] at htr; exact nomatch htr
-      | some a =>
-        have hka : encPair (opaqCodec n lossy) kv = some (kv.1, a) := by
-          simp [encPair, hea]
-        rw [hka] at htr
-        cases hvs : traverse (encPair (opaqCodec n lossy)) kvs with
-        | none => rw [hvs] at htr; exact nomatch htr
-        | some kas' =>
-          rw [hvs] at htr
-          replace htr : some ((kv.1, a) :: kas') = some kas := htr
-          cases htr
-          have h1 := opaq_e_depth lossy kv.2 n a hea
-          have h2 := opaq_e_depthP lossy kvs n kas' hvs
-          simp only [Attr.depthP, Value.depthP]
-          omega
+  | kvs, n, kas, htr => by
+      rw [Attr.depthP_eq, Value.depthP_eq]
+      refine traverse_maxOf_le (fun kv ka hkv => ?_) kvs kas htr
+      obtain ⟨a, ha, rfl⟩ := Option.map_eq_some'.mp hkv
+      exact opaq_e_depth lossy kv.2 n a ha
 
 end
 
@@ -708,45 +675,38 @@ mutual
 theorem opaq_p_depth (lossy : Bool) :
     ∀ (a : Attr) (n : Nat) (v : Value), (opaqCodec n lossy).p a = some v ->
       Value.depth v <= Attr.depth a
-  | .s _, n, v, hp => by
-      cases n with | zero => exact nomatch hp | succ n' =>
+  | _, 0, _, hp => nomatch hp
+  | .s _, n'+1, v, hp => by
       rw [opaqCodec_p_s] at hp
       simp only [stringCodec] at hp; cases hp; simp [Attr.depth, Value.depth]
-  | .bool _, n, v, hp => by
-      cases n with | zero => exact nomatch hp | succ n' =>
+  | .bool _, n'+1, v, hp => by
       rw [opaqCodec_p_bool] at hp
       simp only [booleanCodec] at hp; cases hp; simp [Attr.depth, Value.depth]
-  | .b _, n, v, hp => by
-      cases n with | zero => exact nomatch hp | succ n' =>
+  | .b _, n'+1, v, hp => by
       rw [opaqCodec_p_b] at hp
       simp only [binaryCodec] at hp; cases hp; simp [Attr.depth, Value.depth]
-  | .null, n, v, hp => by
-      cases n with | zero => exact nomatch hp | succ n' =>
+  | .null, n'+1, v, hp => by
       rw [opaqCodec_p_null] at hp
       simp only [nullCodec] at hp; cases hp; simp [Attr.depth, Value.depth]
-  | .n x, n, v, hp => by
-      have := opaq_p_n_depth lossy x n v hp
+  | .n x, n'+1, v, hp => by
+      have := opaq_p_n_depth lossy x (n'+1) v hp
       simp only [Attr.depth]; omega
-  | .ss ss, n, v, hp => by
-      cases n with | zero => exact nomatch hp | succ n' =>
+  | .ss ss, n'+1, v, hp => by
       rw [opaqCodec_p_ss] at hp
       have := opaq_p_wire_depth Attr.s lossy n'
         (fun x w h => opaq_p_s_depth lossy x n' w h) hp
       simp only [Attr.depth]; omega
-  | .ns xs, n, v, hp => by
-      cases n with | zero => exact nomatch hp | succ n' =>
+  | .ns xs, n'+1, v, hp => by
       rw [opaqCodec_p_ns] at hp
       have := opaq_p_wire_depth Attr.n lossy n'
         (fun x w h => opaq_p_n_depth lossy x n' w h) hp
       simp only [Attr.depth]; omega
-  | .bs bs, n, v, hp => by
-      cases n with | zero => exact nomatch hp | succ n' =>
+  | .bs bs, n'+1, v, hp => by
       rw [opaqCodec_p_bs] at hp
       have := opaq_p_wire_depth Attr.b lossy n'
         (fun x w h => opaq_p_b_depth lossy x n' w h) hp
       simp only [Attr.depth]; omega
-  | .l as, n, v, hp => by
-      cases n with | zero => exact nomatch hp | succ n' =>
+  | .l as, n'+1, v, hp => by
       rw [opaqCodec_p_l] at hp
       replace hp : (traverse (opaqCodec n' lossy).p as).map Value.arr = some v := hp
       cases htr : traverse (opaqCodec n' lossy).p as with
@@ -757,8 +717,7 @@ theorem opaq_p_depth (lossy : Bool) :
         subst hp
         have := opaq_p_depthL lossy as n' vs htr
         simp only [Attr.depth, Value.depth]; omega
-  | .m kvs, n, v, hp => by
-      cases n with | zero => exact nomatch hp | succ n' =>
+  | .m kvs, n'+1, v, hp => by
       rw [opaqCodec_p_m] at hp
       replace hp : (traverse (decPair (opaqCodec n' lossy)) kvs).map Value.map = some v := hp
       cases htr : traverse (decPair (opaqCodec n' lossy)) kvs with
@@ -774,51 +733,19 @@ theorem opaq_p_depthL (lossy : Bool) :
     ∀ (as : List Attr) (n : Nat) (vs : List Value),
       traverse (opaqCodec n lossy).p as = some vs ->
       Value.depthL vs <= Attr.depthL as
-  | [], _, vs, htr => by
-      replace htr : some [] = some vs := htr
-      cases htr; simp [Attr.depthL, Value.depthL]
-  | a :: as, n, vs, htr => by
-      simp only [traverse] at htr
-      cases ha : (opaqCodec n lossy).p a with
-      | none => rw [ha] at htr; exact nomatch htr
-      | some v =>
-        rw [ha] at htr
-        cases has : traverse (opaqCodec n lossy).p as with
-        | none => rw [has] at htr; exact nomatch htr
-        | some vs' =>
-          rw [has] at htr
-          replace htr : some (v :: vs') = some vs := htr
-          cases htr
-          have h1 := opaq_p_depth lossy a n v ha
-          have h2 := opaq_p_depthL lossy as n vs' has
-          simp only [Attr.depthL, Value.depthL]; omega
+  | as, n, vs, htr => by
+      rw [Value.depthL_eq, Attr.depthL_eq]
+      exact traverse_maxOf_le (fun a v ha => opaq_p_depth lossy a n v ha) as vs htr
 
 theorem opaq_p_depthP (lossy : Bool) :
     ∀ (kvs : List (Name × Attr)) (n : Nat) (kvs' : List (Name × Value)),
       traverse (decPair (opaqCodec n lossy)) kvs = some kvs' ->
       Value.depthP kvs' <= Attr.depthP kvs
-  | [], _, kvs', htr => by
-      replace htr : some [] = some kvs' := htr
-      cases htr; simp [Attr.depthP, Value.depthP]
-  | kv :: kvs, n, kvs', htr => by
-      simp only [traverse] at htr
-      cases hpa : (opaqCodec n lossy).p kv.2 with
-      | none =>
-        have hnone : decPair (opaqCodec n lossy) kv = none := by simp [decPair, hpa]
-        rw [hnone] at htr; exact nomatch htr
-      | some v =>
-        have hkv : decPair (opaqCodec n lossy) kv = some (kv.1, v) := by
-          simp [decPair, hpa]
-        rw [hkv] at htr
-        cases hks : traverse (decPair (opaqCodec n lossy)) kvs with
-        | none => rw [hks] at htr; exact nomatch htr
-        | some kvs'' =>
-          rw [hks] at htr
-          replace htr : some ((kv.1, v) :: kvs'') = some kvs' := htr
-          cases htr
-          have h1 := opaq_p_depth lossy kv.2 n v hpa
-          have h2 := opaq_p_depthP lossy kvs n kvs'' hks
-          simp only [Attr.depthP, Value.depthP]; omega
+  | kvs, n, kvs', htr => by
+      rw [Value.depthP_eq, Attr.depthP_eq]
+      refine traverse_maxOf_le (fun ka kv hka => ?_) kvs kvs' htr
+      obtain ⟨v, hv, rfl⟩ := Option.map_eq_some'.mp hka
+      exact opaq_p_depth lossy ka.2 n v hv
 
 end
 

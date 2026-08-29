@@ -41,8 +41,15 @@ It says nothing about codecs. It was written a few hundred times.
 
 **The signal.** `replace h : … := h`, `show …` and `cases h… :` are the three ways a
 proof takes a definition apart by hand. Their count is the trend to watch — not a
-verdict (a few are irreducible), but a reliable one: it fell 437 → 186 across the three
-passes that introduced the vocabulary below.
+verdict, but a reliable one: it fell 437 → 154 across the passes that introduced the
+vocabulary below.
+
+Two known failure modes, both seen in practice. It **under-counts** boilerplate that is
+not one of the three forms — `Opaque.lean` shed 113 lines of `cases n with | zero => …`
+openings without the count moving, so the *density* column got worse while the file got
+better. And it **over-counts** the irreducible: the two `altCodec` inversion proofs are
+sites by construction, because unfolding the definition once is exactly their job. Read
+it as a trend on a block, never as a score.
 
 A companion rule already stated in `Calculus/Lists.lean` and worth repeating: **citing a
 name from `Lists.lean` is the signal that a step is plumbing rather than content.**
@@ -77,7 +84,7 @@ Two further conventions the passes settled on, both load-bearing:
 
 ## §3 The audit
 
-Measured at `HEAD` (2026-08-29), 8721 lines across `Calculus/`. Regenerate with:
+Measured at `HEAD` (2026-08-29), 8648 lines across `Calculus/`. Regenerate with:
 
 ```sh
 python3 scripts/vocab_audit.py          # add --sites to list them for triage
@@ -100,9 +107,9 @@ measurable residue.
 
 | what is being unfolded | sites | concentrated in |
 | --- | --- | --- |
-| **raw `Option` algebra** | **158** | Combinators 52, Discharge 50, Soundness 30 |
-| `traverse` / list base cases | 37 | Opaque 27 |
-| a named codec's `e`/`p` | 31 | Opaque 19 |
+| **raw `Option` algebra** | **154** | Combinators 52, Discharge 50, Soundness 30 |
+| `traverse` / list base cases | 29 | Opaque 19 |
+| a named codec's `e`/`p` | 27 | Opaque 15 |
 | judgement premises (`Obligations`/`MPOk`) | 26 | Soundness 26 |
 | association-list `lookup` | 21 | Discharge 8 |
 | union resolution (`altCodec`'s filter) | 18 | Equations 8, Discharge 6, Combinators 4 |
@@ -123,7 +130,7 @@ Density per block, against how complete that block's inversion vocabulary is:
 | set | complete | 569 | 23 | 4.0 |
 | object | complete | 652 | 26 | 4.0 |
 | union | complete | 700 | 31 | 4.4 |
-| **opaque** | **none** | 952 | 57 | **6.0** |
+| opaque | none | 839 | 41 | 4.9 |
 | ground | none | 454 | 16 | 3.5 |
 
 Monotone with one honest outlier. **`ground` is 3.5 with no inversion** — because
@@ -219,7 +226,7 @@ through it; the rows that need `List.Perm` are the next probe.
 | ~~4~~ | ~~Complete the two partials~~ — **done**: `setCodec_p_eq`, and `fbDefaults` as the `filterMap` it is | set 5.0 → 4.0, object 6.5 → 4.0; four hand-rolled recursions and one duplicate retired |
 | 3 | Cash the last identity: `pointCodec = carriedCodec` | the ten ground codecs inherit inversion (`nullable`'s was cashed and became a dichotomy — §4) |
 | 5 | `Obligations`/`MPOk` per-rule inversion | 26 sites, all in `Soundness.lean` |
-| 6 | `opaqCodec` inversion — now the only block with none and a real residue | 57 sites, 6.0 per 100 lines |
+| ~~6~~ | ~~`opaque`~~ — **done**, and not by inversion: `maxOf` names the four depth measures as one fold, and the budget-is-a-successor opening collapses to one clause | 952 → 839 lines, 57 → 41 sites |
 
 ## §7 Making it mechanical
 
