@@ -110,6 +110,32 @@ def literalNCodec (ls : List Double) : Codec :=
       | .n x => (Double.ofDec x).bind fun d => if d ∈ ls then some (.num d) else none
       | _ => none }
 
+/-! ### The gated ground codecs are refinements
+
+`literal` and `numeric` are not new constructions: they are `string` and `number` with a
+prism laid over them, which is exactly what §7 means by "an iso and a prism". Naming the
+predicates makes that visible, and lets all six of their laws come from `Lawful.restrict`
+and `carrier_restrict` instead of six bespoke inductions.
+
+`decimal` is deliberately *not* here. It moves the member (`str` values to an `N`
+attribute), so it is not a refinement of `string` and keeps its own proofs. -/
+
+/-- `literal(ℓ)`'s predicate on the string side. -/
+def inLS (ls : List String) : Value → Bool
+  | .str s => decide (s ∈ ls)
+  | _ => false
+
+/-- `literal(ℓ)`'s predicate on the numeric side. -/
+def inLN (ls : List Double) : Value → Bool
+  | .num d => decide (d ∈ ls)
+  | _ => false
+
+/-- `numeric(q)`'s predicate, lifted from doubles to values. -/
+def onNum (q : Double → Bool) : Value → Bool
+  | .num d => q d
+  | _ => false
+
+
 /-! ## Wrappers -/
 
 /-- `held`: an iso on the value side; the stored side is untouched. -/
@@ -325,6 +351,26 @@ theorem lawful_dead {m? : Option Member} :
   · intro _ _ h; exact nomatch h
   · intro _ _ _ _ h; exact nomatch h
   · intro _ _ _ h _; exact nomatch h
+
+
+/-- Lawfulness sees only the pair and the member, so it transfers to any codec agreeing on
+    those three. This is how a ground codec inherits from the wrapper it turns out to be,
+    without disturbing its definition — which matters, since the definitions are unfolded
+    all over the development. -/
+theorem Lawful.congr {c d : Codec} (he : c.e = d.e) (hp : c.p = d.p) (hμ : c.μ = d.μ)
+    (h : Lawful d) : Lawful c := by
+  refine ⟨?_, ?_, ?_, ?_⟩
+  · intro t a hx; rw [he] at hx; rw [hp]; exact h.retract hx
+  · intro a t hx; rw [hp] at hx; rw [he]; exact h.canon hx
+  · intro μ hm t a hx; rw [hμ] at hm; rw [he] at hx; exact h.writes hm hx
+  · intro a t a' h1 h2; rw [hp] at h1; rw [he] at h2; exact h.agree h1 h2
+
+/-- The carrier transfers too, given the held set is no smaller. -/
+theorem Carrier.congr {c d : Codec} (he : c.e = d.e) (hp : c.p = d.p)
+    (hT : ∀ v, d.T v → c.T v) (h : Carrier d) : Carrier c := by
+  refine ⟨?_, ?_⟩
+  · intro v a hx; rw [he] at hx; exact hT v (h.domE hx)
+  · intro a v hx; rw [hp] at hx; exact hT v (h.ranP hx)
 
 /-- Forgetting the member index preserves the laws — `(lazy)` concludes `⊤`. -/
 theorem Lawful.μNone {c : Codec} (h : Lawful c) : Lawful { c with μ := none } := by
@@ -812,75 +858,6 @@ theorem carrier_numberCodec : Carrier numberCodec := by
                   cases h; exact ⟨_, rfl⟩
     all_goals exact nomatch h
 
-theorem carrier_numericCodec (q : Double → Bool) : Carrier (numericCodec q) := by
-  refine ⟨?_, ?_⟩
-  · intro v a h
-    cases v
-    case num d =>
-      replace h : (if q d then some (Attr.n d.toDec) else none) = some a := h
-      split at h
-      next hq => exact ⟨d, hq, rfl⟩
-      next => exact nomatch h
-    all_goals exact nomatch h
-  · intro a v h
-    cases a
-    case n x =>
-      replace h : ((Double.ofDec x).bind
-        fun d => if q d then some (Value.num d) else none) = some v := h
-      cases hd : Double.ofDec x with
-      | none => rw [hd] at h; exact nomatch h
-      | some d =>
-        rw [hd] at h
-        replace h : (if q d then some (Value.num d) else none) = some v := h
-        split at h
-        next hq => cases h; exact ⟨d, hq, rfl⟩
-        next => exact nomatch h
-    all_goals exact nomatch h
-
-theorem carrier_literalSCodec (ls : List String) : Carrier (literalSCodec ls) := by
-  refine ⟨?_, ?_⟩
-  · intro v a h
-    cases v
-    case str s =>
-      replace h : (if s ∈ ls then some (Attr.s s) else none) = some a := h
-      split at h
-      next hm => exact ⟨s, hm, rfl⟩
-      next => exact nomatch h
-    all_goals exact nomatch h
-  · intro a v h
-    cases a
-    case s s =>
-      replace h : (if s ∈ ls then some (Value.str s) else none) = some v := h
-      split at h
-      next hm => cases h; exact ⟨s, hm, rfl⟩
-      next => exact nomatch h
-    all_goals exact nomatch h
-
-theorem carrier_literalNCodec (ls : List Double) : Carrier (literalNCodec ls) := by
-  refine ⟨?_, ?_⟩
-  · intro v a h
-    cases v
-    case num d =>
-      replace h : (if d ∈ ls then some (Attr.n d.toDec) else none) = some a := h
-      split at h
-      next hm => exact ⟨d, hm, rfl⟩
-      next => exact nomatch h
-    all_goals exact nomatch h
-  · intro a v h
-    cases a
-    case n x =>
-      replace h : ((Double.ofDec x).bind
-        fun d => if d ∈ ls then some (Value.num d) else none) = some v := h
-      cases hd : Double.ofDec x with
-      | none => rw [hd] at h; exact nomatch h
-      | some d =>
-        rw [hd] at h
-        replace h : (if d ∈ ls then some (Value.num d) else none) = some v := h
-        split at h
-        next hm => cases h; exact ⟨d, hm, rfl⟩
-        next => exact nomatch h
-    all_goals exact nomatch h
-
 /-! ### Sums -/
 
 /-- A sum's encode routes through an admitting option. -/
@@ -958,6 +935,37 @@ theorem carrier_restrict {c : Codec} (hc : Carrier c) (q : Value → Bool) :
       split at h
       next hq => cases h; exact ⟨hc.ranP hp, hq⟩
       next => exact nomatch h
+
+
+/-! ### The refinement ground codecs, on their carriers -/
+
+theorem carrier_literalSCodec (ls : List String) : Carrier (literalSCodec ls) :=
+  Carrier.congr (by funext v; cases v <;> simp [literalSCodec, Codec.restrict, stringCodec, inLS])
+    (by funext a; cases a <;> simp [literalSCodec, Codec.restrict, stringCodec, inLS])
+    (by rintro v ⟨⟨s, rfl⟩, hq⟩; exact ⟨s, by simpa [inLS] using hq, rfl⟩)
+    (carrier_restrict carrier_stringCodec (inLS ls))
+
+theorem carrier_numericCodec (q : Double → Bool) : Carrier (numericCodec q) := by
+  refine Carrier.congr ?_ ?_ ?_ (carrier_restrict carrier_numberCodec (onNum q))
+  · funext v; cases v <;> simp [numericCodec, Codec.restrict, numberCodec, onNum]
+  · funext a
+    cases a
+    case n x =>
+      cases hd : Double.ofDec x <;>
+        simp [numericCodec, Codec.restrict, numberCodec, onNum, hd]
+    all_goals simp [numericCodec, Codec.restrict, numberCodec]
+  · rintro v ⟨⟨d, rfl⟩, hq⟩; exact ⟨d, by simpa [onNum] using hq, rfl⟩
+
+theorem carrier_literalNCodec (ls : List Double) : Carrier (literalNCodec ls) := by
+  refine Carrier.congr ?_ ?_ ?_ (carrier_restrict carrier_numberCodec (inLN ls))
+  · funext v; cases v <;> simp [literalNCodec, Codec.restrict, numberCodec, inLN]
+  · funext a
+    cases a
+    case n x =>
+      cases hd : Double.ofDec x <;>
+        simp [literalNCodec, Codec.restrict, numberCodec, inLN, hd]
+    all_goals simp [literalNCodec, Codec.restrict, numberCodec]
+  · rintro v ⟨⟨d, rfl⟩, hq⟩; exact ⟨d, by simpa [inLN] using hq, rfl⟩
 
 /-- `legacy`: the migration lands in `T` because §3's `ran(r) ⊆ dom(e)` puts it in
     `dom(e)`, and `e`'s domain is `T`. The doc writes `r : 𝔸 ⇀ T` directly; this is the
@@ -1469,80 +1477,6 @@ theorem lawful_numberCodec : Lawful numberCodec := by
     subst_vars
     exact .n ..
 
-theorem lawful_literalSCodec (ls : List String) : Lawful (literalSCodec ls) := by
-  refine ⟨?_, ?_, ?_, ?_⟩
-  · intro t a he
-    cases t <;> simp_all [literalSCodec]
-    obtain ⟨hin, rfl⟩ := he
-    simp [hin]
-  · intro a t hp
-    cases a <;> simp_all [literalSCodec]
-    obtain ⟨hin, rfl⟩ := hp
-    simp [hin]
-  · intro μ hμ t a he
-    cases t <;> simp_all [literalSCodec, Attr.member]
-    obtain ⟨-, rfl⟩ := he
-    subst_vars
-    rfl
-  · intro a t a' hp he
-    cases a <;> simp_all [literalSCodec]
-    obtain ⟨hin, rfl⟩ := hp
-    simp [literalSCodec, hin] at he
-    subst_vars
-    exact .s ..
-
-theorem lawful_numericCodec (q : Double → Bool) : Lawful (numericCodec q) := by
-  refine ⟨?_, ?_, ?_, ?_⟩
-  · intro t a he
-    cases t <;> simp_all [numericCodec]
-    obtain ⟨hq, rfl⟩ := he
-    simp [Double.roundtrip, hq]
-  · intro a t hp
-    cases a <;> simp_all [numericCodec]
-    rename_i x
-    cases hx : Double.ofDec x <;> rw [hx] at hp <;> simp_all [numericCodec]
-    obtain ⟨hq, rfl⟩ := hp
-    simp [hq]
-  · intro μ hμ t a he
-    cases t <;> simp_all [numericCodec, Attr.member]
-    obtain ⟨-, rfl⟩ := he
-    subst_vars
-    rfl
-  · intro a t a' hp he
-    cases a <;> simp_all [numericCodec]
-    rename_i x
-    cases hx : Double.ofDec x <;> rw [hx] at hp <;> simp_all [numericCodec]
-    obtain ⟨hq, rfl⟩ := hp
-    simp [numericCodec, hq] at he
-    subst_vars
-    exact .n ..
-
-theorem lawful_literalNCodec (ls : List Double) : Lawful (literalNCodec ls) := by
-  refine ⟨?_, ?_, ?_, ?_⟩
-  · intro t a he
-    cases t <;> simp_all [literalNCodec]
-    obtain ⟨hin, rfl⟩ := he
-    simp [Double.roundtrip, hin]
-  · intro a t hp
-    cases a <;> simp_all [literalNCodec]
-    rename_i x
-    cases hx : Double.ofDec x <;> rw [hx] at hp <;> simp_all [literalNCodec]
-    obtain ⟨hin, rfl⟩ := hp
-    simp [hin]
-  · intro μ hμ t a he
-    cases t <;> simp_all [literalNCodec, Attr.member]
-    obtain ⟨-, rfl⟩ := he
-    subst_vars
-    rfl
-  · intro a t a' hp he
-    cases a <;> simp_all [literalNCodec]
-    rename_i x
-    cases hx : Double.ofDec x <;> rw [hx] at hp <;> simp_all [literalNCodec]
-    obtain ⟨hin, rfl⟩ := hp
-    simp [literalNCodec, hin] at he
-    subst_vars
-    exact .n ..
-
 /-- `held` keeps the core laws: the iso cancels on both paths. The cancellation is
     asked only on the carriers — `g ∘ f = id` where `f` lands writable, `f ∘ g = id`
     on the writable values themselves — which is the doc's `T ≃ I`, not an iso of all
@@ -1636,6 +1570,41 @@ theorem Lawful.restrict {c : Codec} (h : Lawful c) (q : Value → Bool) :
       rw [if_pos hq] at he
       exact h.agree hpc he
     · exact nomatch hp
+
+
+/-! ### The refinement ground codecs are lawful because their bases are
+
+`literal` and `numeric` add a prism and nothing else, so all four laws come from
+`Lawful.restrict`. What used to be three inductions is now three statements of which
+codec is being refined by which predicate. -/
+
+theorem lawful_literalSCodec (ls : List String) : Lawful (literalSCodec ls) := by
+  refine Lawful.congr ?_ ?_ ?_ (Lawful.restrict lawful_stringCodec (inLS ls))
+  · funext v; cases v <;> simp [literalSCodec, Codec.restrict, stringCodec, inLS]
+  · funext a; cases a <;> simp [literalSCodec, Codec.restrict, stringCodec, inLS]
+  · rfl
+
+theorem lawful_numericCodec (q : Double → Bool) : Lawful (numericCodec q) := by
+  refine Lawful.congr ?_ ?_ ?_ (Lawful.restrict lawful_numberCodec (onNum q))
+  · funext v; cases v <;> simp [numericCodec, Codec.restrict, numberCodec, onNum]
+  · funext a
+    cases a
+    case n x =>
+      cases hd : Double.ofDec x <;>
+        simp [numericCodec, Codec.restrict, numberCodec, onNum, hd]
+    all_goals simp [numericCodec, Codec.restrict, numberCodec]
+  · rfl
+
+theorem lawful_literalNCodec (ls : List Double) : Lawful (literalNCodec ls) := by
+  refine Lawful.congr ?_ ?_ ?_ (Lawful.restrict lawful_numberCodec (inLN ls))
+  · funext v; cases v <;> simp [literalNCodec, Codec.restrict, numberCodec, inLN]
+  · funext a
+    cases a
+    case n x =>
+      cases hd : Double.ofDec x <;>
+        simp [literalNCodec, Codec.restrict, numberCodec, inLN, hd]
+    all_goals simp [literalNCodec, Codec.restrict, numberCodec]
+  · rfl
 
 /-- `legacy` keeps the core laws. `ran(r) ⊆ dom(e)` is (C)'s premise; (MP) is the
     sanctioned breach and has no lemma here, by design. -/
