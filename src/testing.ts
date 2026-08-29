@@ -961,6 +961,8 @@ export const arbitraryOf = (
             return pickFrom(rng, [0, 1, -1, 42, 1000, -7])
         case 'boolean':
             return rng() < 0.5
+        case 'null':
+            return null
         case 'binary':
             return Uint8Array.from(
                 Array.from({ length: Math.floor(rng() * 4) }, () =>
@@ -1133,6 +1135,9 @@ export const shrinkOf = (
             return shrinkNumber(value as number)
         case 'boolean':
             return value ? [false] : []
+        // one value, so nothing smaller
+        case 'null':
+            return []
         case 'binary': {
             const bytes = value as Uint8Array
             return bytes.length === 0

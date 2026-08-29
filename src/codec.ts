@@ -218,6 +218,7 @@ export type Decoded<C> = C extends {
  * ⟨attr:S⟩    ::= string | literal(⟨text⟩ +) | ⟨wrap S⟩
  * ⟨attr:N⟩    ::= decimal | number | ⟨wrap N⟩
  * ⟨attr:BOOL⟩ ::= boolean | ⟨wrap BOOL⟩
+ * ⟨attr:NULL⟩ ::= nullValue | ⟨wrap NULL⟩
  * ⟨attr:B⟩    ::= binary | ⟨wrap B⟩
  * ⟨attr:kS⟩   ::= set(⟨attr:k⟩)                       for k ∈ { S, N, B }
  * ⟨attr:L⟩    ::= array(⟨attr⟩) | tuple(⟨attr⟩ *) | ⟨wrap L⟩
@@ -266,6 +267,7 @@ export type CodecDef =
     | { readonly kind: 'number' }
     | { readonly kind: 'boolean' }
     | { readonly kind: 'binary' }
+    | { readonly kind: 'null' }
     | { readonly kind: 'opaque'; readonly numbers: opaque.Numbers }
     | { readonly kind: 'set'; readonly element: AnyCodec }
     | { readonly kind: 'array'; readonly element: AnyCodec }
@@ -410,6 +412,7 @@ const writtenBy: { readonly [K in CodecDef['kind']]?: AttributeName } = {
     number: 'N',
     boolean: 'BOOL',
     binary: 'B',
+    null: 'NULL',
     array: 'L',
     tuple: 'L',
     record: 'M',
@@ -493,6 +496,7 @@ const carriedBy: { readonly [K in CodecDef['kind']]?: Shape } = {
     number: 'number',
     boolean: 'boolean',
     binary: 'binary',
+    null: 'null',
     set: 'set',
     array: 'array',
     tuple: 'array',
@@ -951,6 +955,35 @@ export const boolean: AttributeCodec<boolean, Attribute<'BOOL'>> = codec({
     def: { kind: 'boolean' },
     encode: (value) => carrying('BOOL', value),
     decode: (attribute) => expect('BOOL', attribute),
+})
+
+/**
+ * The `NULL` point: the one value `null`, stored as `⟨NULL, ∗⟩`.
+ *
+ * Named `nullValue` because `null` is a keyword and `NULL` is already the attribute type. It says
+ * what it holds, which is the whole of it — one value.
+ *
+ * What it is for: a tombstone, and a payload-free option of a discriminated union. Before it, a
+ * schema could say "this attribute is a string" or "this attribute is optional", and could not say
+ * "this attribute is exactly `NULL`" — the value language had `null` and the attribute domain had
+ * `NULL`, and no codec denoted either. That gap was found by asking whether `nullable(c)` could be
+ * written as `union(c, nullValue)`; it could not, because the right-hand side was not expressible.
+ *
+ * Distinct from {@link nullable}, which *adds* `null` to another codec's held set. This holds
+ * nothing else.
+ */
+export const nullValue: AttributeCodec<null, Attribute<'NULL'>> = codec({
+    def: { kind: 'null' },
+    // checked, though the type already says so: the admissible set is one value and this library
+    // owns it, so an unchecked `encode` would write `NULL` for anything that reached it — a pair
+    // whose `e` is defined outside its own held set. {@link literal} checks for the same reason
+    encode: (value) =>
+        value === null
+            ? carrying('NULL', true)
+            : new CodecError(
+                  `${JSON.stringify(value)} is not null, and this codec holds nothing else`,
+              ),
+    decode: (attribute) => andThen(expect('NULL', attribute), () => null),
 })
 
 /** Binary, as `B`. */
