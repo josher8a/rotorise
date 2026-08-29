@@ -371,6 +371,19 @@ theorem filter_map_comm (f : α → β) (p : β → Bool) (l : List α) :
 theorem ne_nil_of_isEmpty_false {l : List α} (h : l.isEmpty = false) : l ≠ [] := by
   simpa using h
 
+/-- A property of every image is a property of every member of the mapped list — the
+    step every case over a list of subterms begins with. -/
+theorem forall_mem_map {α β : Type} {xs : List α} {g : α → β} {P : β → Prop}
+    (h : ∀ x ∈ xs, P (g x)) : ∀ y ∈ xs.map g, P y := by
+  rintro y hy
+  obtain ⟨x, hx, rfl⟩ := List.mem_map.mp hy
+  exact h x hx
+
+/-- …and the same for `Option.map`, which is how a uniform tail is carried. -/
+theorem forall_mem_map_option {α β : Type} {x? : Option α} {g : α → β} {P : β → Prop}
+    (h : ∀ x ∈ x?, P (g x)) : ∀ y ∈ x?.map g, P y := by
+  cases x? <;> simp_all
+
 theorem mem_zip_left :
     ∀ (l₁ : List α) (l₂ : List β), l₁.length = l₂.length →
       ∀ x, x ∈ l₁ → ∃ y, (x, y) ∈ l₁.zip l₂

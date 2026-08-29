@@ -2991,9 +2991,7 @@ theorem uniqueAdmission_byTag {d : Name} {os : List (List String × Codec)}
         (∃ kvs, t = .map kvs ∧ kvs.lookup d = some (.str tag)))
     (hdisj : List.Pairwise (fun x y => ∀ tag ∈ x.1, tag ∉ y.1) os) :
     UniqueAdmission (os.map fun o => .byTag d o.1 o.2) := by
-  intro o' ho' t a he
-  simp only [List.mem_map] at ho'
-  obtain ⟨x, hx, rfl⟩ := ho'
+  refine forall_mem_map fun x hx t a he => ?_
   replace he : x.2.e t = some a := he
   obtain ⟨tag, htag, ⟨kvsA, rfl, hlookA⟩, ⟨kvsV, rfl, hlookV⟩⟩ := hstamp x hx t a he
   have hsel := tag_filter_singleton (tag := tag) os hdisj x hx htag
@@ -3017,6 +3015,22 @@ theorem uniqueAdmission_byTag {d : Name} {os : List (List String × Codec)}
     rw [hpred, hsel]
     rfl
 
+/-- Every option of a `(dunion)` writes an `M` — the stamp says so, and the stamp is
+    all either strength consults. -/
+private theorem dunion_writes {d : Name} {os : List (List String × Codec)}
+    (hstamp : ∀ o ∈ os, ∀ t a, o.2.e t = some a →
+      ∃ tag ∈ o.1, (∃ kvs, a = .m kvs ∧ kvs.lookup d = some (.s tag)) ∧
+        (∃ kvs, t = .map kvs ∧ kvs.lookup d = some (.str tag))) :
+    ∀ m, some Member.M = some m →
+      ∀ o ∈ os.map fun o => OptionSem.byTag d o.1 o.2,
+        ∀ t a, o.c.e t = some a → a.member = m := by
+  rintro m hm
+  cases hm
+  refine forall_mem_map fun x hx t a he => ?_
+  replace he : x.2.e t = some a := he
+  obtain ⟨tag, htag, ⟨kvs, rfl, hlook⟩, -⟩ := hstamp x hx t a he
+  rfl
+
 /-- `(dunion)` soundness is a corollary: the sum lemma composed with its (U) theorem;
     the member law comes from the stamp itself — a stamped canonical attribute is an
     `M`. -/
@@ -3026,19 +3040,9 @@ theorem lawful_dunionCodec {d : Name} {os : List (List String × Codec)}
       ∃ tag ∈ o.1, (∃ kvs, a = .m kvs ∧ kvs.lookup d = some (.s tag)) ∧
         (∃ kvs, t = .map kvs ∧ kvs.lookup d = some (.str tag)))
     (hdisj : List.Pairwise (fun x y => ∀ tag ∈ x.1, tag ∉ y.1) os) :
-    Lawful (dunionCodec d os) := by
-  refine lawful_altCodec ?_ (uniqueAdmission_byTag hstamp hdisj) ?_
-  · intro o ho
-    simp only [List.mem_map] at ho
-    obtain ⟨x, hx, rfl⟩ := ho
-    exact h x hx
-  · intro m hm o ho t a he
-    cases hm
-    simp only [List.mem_map] at ho
-    obtain ⟨x, hx, rfl⟩ := ho
-    replace he : x.2.e t = some a := he
-    obtain ⟨tag, htag, ⟨kvs, rfl, hlook⟩, -⟩ := hstamp x hx t a he
-    rfl
+    Lawful (dunionCodec d os) :=
+  lawful_altCodec (forall_mem_map h) (uniqueAdmission_byTag hstamp hdisj)
+    (dunion_writes hstamp)
 
 /-- Core `(dunion)`: the same corollary, with core options. -/
 theorem lawfulCore_dunionCodec {d : Name} {os : List (List String × Codec)}
@@ -3047,19 +3051,9 @@ theorem lawfulCore_dunionCodec {d : Name} {os : List (List String × Codec)}
       ∃ tag ∈ o.1, (∃ kvs, a = .m kvs ∧ kvs.lookup d = some (.s tag)) ∧
         (∃ kvs, t = .map kvs ∧ kvs.lookup d = some (.str tag)))
     (hdisj : List.Pairwise (fun x y => ∀ tag ∈ x.1, tag ∉ y.1) os) :
-    LawfulCore (dunionCodec d os) := by
-  refine lawfulCore_altCodec ?_ (uniqueAdmission_byTag hstamp hdisj) ?_
-  · intro o ho
-    simp only [List.mem_map] at ho
-    obtain ⟨x, hx, rfl⟩ := ho
-    exact h x hx
-  · intro m hm o ho t a he
-    cases hm
-    simp only [List.mem_map] at ho
-    obtain ⟨x, hx, rfl⟩ := ho
-    replace he : x.2.e t = some a := he
-    obtain ⟨tag, htag, ⟨kvs, rfl, hlook⟩, -⟩ := hstamp x hx t a he
-    rfl
+    LawfulCore (dunionCodec d os) :=
+  lawfulCore_altCodec (forall_mem_map h) (uniqueAdmission_byTag hstamp hdisj)
+    (dunion_writes hstamp)
 
 /-- `opaque` closes with no bespoke induction: the sum lemma, its options' lemmas, and
     shape-computed unique admission — kinds partition the values, members the

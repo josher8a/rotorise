@@ -440,18 +440,34 @@ theorem sound_wrap {fuel : Nat} {t : Term} {c : Codec} (ih : Sound fuel t)
     LawfulCore c ∧ (MPOk fuel t → Lawful c) :=
   ⟨core ih.1, fun hmp => full (ih.2 hmp)⟩
 
-/-- Reading a per-subterm hypothesis off the list the denotation maps over — the step
-    every product and sum case begins with. -/
-theorem forall_mem_map {α β : Type} {xs : List α} {g : α → β} {P : β → Prop}
-    (h : ∀ x ∈ xs, P (g x)) : ∀ y ∈ xs.map g, P y := by
-  rintro y hy
-  obtain ⟨x, hx, rfl⟩ := List.mem_map.mp hy
-  exact h x hx
+/-- `(fallback)`'s premise `v(∗) ∈ dom(e)`, transported to the denoted field list —
+    which is the shape `object`'s two lemmas ask for. Both walks of the derivation
+    need it, so it is stated here rather than twice inside them. -/
+theorem fieldSems_fb {fuel : Nat} {fields : List (Name × Field)}
+    (hob : ∀ kf ∈ fields, match kf.2 with
+      | .req t' => Obligations fuel t'
+      | .optional t' => Obligations fuel t'
+      | .fallback t' v => Obligations fuel t' ∧ ((denote fuel t').e v).isSome) :
+    ∀ kf ∈ fields.map fun kf => (kf.1, fieldSemOf (denote fuel) kf.2),
+      ∀ c v, kf.2 = .fb c v → (c.e v).isSome := by
+  refine forall_mem_map ?_
+  rintro ⟨k, f⟩ hmem c v hcv
+  have hobf := hob (k, f) hmem
+  cases f with
+  | req t' => exact nomatch hcv
+  | optional t' => exact nomatch hcv
+  | fallback t' v₀ =>
+    replace hobf : Obligations fuel t' ∧ ((denote fuel t').e v₀).isSome := hobf
+    replace hcv : FieldSem.fb (denote fuel t') v₀ = FieldSem.fb c v := hcv
+    cases hcv
+    exact hobf.2
 
-/-- …and off the optional one, for a `tuple`'s uniform tail. -/
-theorem forall_mem_map_option {α β : Type} {x? : Option α} {g : α → β} {P : β → Prop}
-    (h : ∀ x ∈ x?, P (g x)) : ∀ y ∈ x?.map g, P y := by
-  cases x? <;> simp_all
+/-- Denoting the fields does not touch their names, so `(object)`'s distinctness
+    premise transports too. -/
+theorem fieldSems_nodup {fuel : Nat} {fields : List (Name × Field)}
+    (hnd : (fields.map (·.1)).Nodup) :
+    (((fields.map fun kf => (kf.1, fieldSemOf (denote fuel) kf.2)).map (·.1))).Nodup := by
+  rw [List.map_map]; exact hnd
 
 /-- Both halves of §5's theorem in one induction: the core laws unconditionally, and
     all four where the derivation is legacy-free. One walk of the derivation, one
@@ -545,21 +561,8 @@ theorem soundness_both : ∀ (fuel : Nat) {t T μ}, Typed t T μ → Obligations
           | fallback hty =>
             replace hobf : Obligations fuel t' ∧ ((denote fuel t').e v).isSome := hobf
             exact ih hty hobf.1
-      have hfb : ∀ kf ∈ fields.map fun kf => (kf.1, fieldSemOf (denote fuel) kf.2),
-          ∀ c v, kf.2 = .fb c v → (c.e v).isSome := by
-        refine forall_mem_map ?_
-        rintro ⟨k, f⟩ hmem c v hcv
-        have hobf := hob.1 (k, f) hmem
-        cases f with
-        | req t' => exact nomatch hcv
-        | optional t' => exact nomatch hcv
-        | fallback t' v₀ =>
-          replace hobf : Obligations fuel t' ∧ ((denote fuel t').e v₀).isSome := hobf
-          replace hcv : FieldSem.fb (denote fuel t') v₀ = FieldSem.fb c v := hcv
-          cases hcv
-          exact hobf.2
-      have hnd' : (((fields.map fun kf => (kf.1, fieldSemOf (denote fuel) kf.2)).map
-          (·.1))).Nodup := by rw [List.map_map]; exact hndf
+      have hfb := fieldSems_fb hob.1
+      have hnd' := fieldSems_nodup (fuel := fuel) hndf
       have ihr : ∀ c, restSemOf (denote fuel) rest = .codec c →
           LawfulCore c ∧ (MPOk (fuel+1) (.object fields rest) → Lawful c) := by
         intro c hcr
@@ -884,18 +887,16 @@ theorem carrier_denote : ∀ (fuel : Nat) {t T μ}, Typed t T μ → Obligations
     | @tuple ts Ts tail Tt hlist hopt =>
       replace hob : (∀ t' ∈ ts, Obligations fuel t') ∧
         (∀ t' ∈ tail, Obligations fuel t') := hob
-      refine carrier_tupleCodec ?_ ?_
-      · intro c hc
-        simp only [List.mem_map] at hc
-        obtain ⟨t', ht', rfl⟩ := hc
+      refine carrier_tupleCodec (forall_mem_map ?_) (forall_mem_map_option ?_)
+      · intro t' ht'
         obtain ⟨T', μ', hty⟩ := TypedList.forall hlist t' ht'
         exact carrier_denote fuel hty (hob.1 t' ht')
-      · intro c hc
+      · intro t' ht'
         cases tail with
-        | none => exact nomatch hc
-        | some t' =>
-          replace hc : some (denote fuel t') = some c := hc
-          cases hc
+        | none => exact nomatch ht'
+        | some tx =>
+          replace ht' : some tx = some t' := ht'
+          cases ht'
           cases hopt with
           | some hty => exact carrier_denote fuel hty (hob.2 t' rfl)
     | @held t' I' T' μ' f g h' hT =>
@@ -937,9 +938,8 @@ theorem carrier_denote : ∀ (fuel : Nat) {t T μ}, Typed t T μ → Obligations
     | @object fields binds rest R hfields hndf hrest =>
       have hsems : ∀ kf ∈ fields.map fun kf => (kf.1, fieldSemOf (denote fuel) kf.2),
           Carrier kf.2.codec := by
-        intro kf hkf
-        simp only [List.mem_map] at hkf
-        obtain ⟨⟨k, f⟩, hmem, rfl⟩ := hkf
+        refine forall_mem_map ?_
+        rintro ⟨k, f⟩ hmem
         obtain ⟨T', π', μ', hty⟩ := TypedFields.forall hfields (k, f) hmem
         have hobf := hob.1 (k, f) hmem
         cases f with
@@ -958,24 +958,8 @@ theorem carrier_denote : ∀ (fuel : Nat) {t T μ}, Typed t T μ → Obligations
           | fallback hty' =>
             replace hobf : Obligations fuel t' ∧ ((denote fuel t').e v).isSome := hobf
             exact carrier_denote fuel hty' hobf.1
-      have hfb : ∀ kf ∈ fields.map fun kf => (kf.1, fieldSemOf (denote fuel) kf.2),
-          ∀ c v, kf.2 = .fb c v → (c.e v).isSome := by
-        intro kf hkf c v hcv
-        simp only [List.mem_map] at hkf
-        obtain ⟨⟨k, f⟩, hmem, rfl⟩ := hkf
-        have hobf := hob.1 (k, f) hmem
-        cases f with
-        | req t' => exact nomatch hcv
-        | optional t' => exact nomatch hcv
-        | fallback t' v₀ =>
-          replace hobf : Obligations fuel t' ∧ ((denote fuel t').e v₀).isSome := hobf
-          replace hcv : FieldSem.fb (denote fuel t') v₀ = FieldSem.fb c v := hcv
-          cases hcv
-          exact hobf.2
-      have hnd' : (((fields.map fun kf => (kf.1, fieldSemOf (denote fuel) kf.2)).map
-          (·.1))).Nodup := by
-        rw [List.map_map]
-        exact hndf
+      have hfb := fieldSems_fb hob.1
+      have hnd' := fieldSems_nodup (fuel := fuel) hndf
       have hrc : ∀ rc, rcOf (restSemOf (denote fuel) rest) = some rc → Carrier rc := by
         intro rc hcr
         cases hrest with
@@ -999,20 +983,12 @@ theorem carrier_denote : ∀ (fuel : Nat) {t T μ}, Typed t T μ → Obligations
       exact carrier_objectCodecCore hsems hrc hfb hnd' hkeep
     | @union opts Ts μs hlist =>
       replace hob : (∀ t' ∈ opts, Obligations fuel t') ∧ UAtCan fuel opts := hob
-      refine carrier_altCodec ?_
-      intro o ho
-      simp only [List.mem_map] at ho
-      obtain ⟨t', ht', rfl⟩ := ho
+      refine carrier_altCodec (forall_mem_map fun t' ht' => ?_)
       obtain ⟨T', μ', hty⟩ := TypedListμ.forall hlist t' ht'
-      show Carrier (optionSemOf (denote fuel t') (specOf t')).c
-      rw [optionSemOf_c]
-      exact carrier_denote fuel hty (hob.1 t' ht')
+      exact (optionSemOf_c _ _) ▸ carrier_denote fuel hty (hob.1 t' ht')
     | @dunion d opts Ts hlistM htags hdisj =>
       replace hob : ∀ t' ∈ opts, Obligations fuel t' := hob
-      refine carrier_altCodec ?_
-      intro o ho
-      simp only [List.mem_map] at ho
-      obtain ⟨-, ⟨t', ht', rfl⟩, rfl⟩ := ho
+      refine carrier_altCodec (forall_mem_map (forall_mem_map fun t' ht' => ?_))
       obtain ⟨T', hty⟩ := TypedListM.forall hlistM t' ht'
       exact carrier_denote fuel hty (hob t' ht')
 
