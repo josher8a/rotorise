@@ -371,6 +371,40 @@ theorem filter_map_comm (f : α → β) (p : β → Bool) (l : List α) :
 theorem ne_nil_of_isEmpty_false {l : List α} (h : l.isEmpty = false) : l ≠ [] := by
   simpa using h
 
+/-- **Separation.** Suppose a predicate family `adm` pins each list entry to a key: an
+    entry admits `x` only when `key x` is that entry's key. If the keys are pairwise
+    distinct, then whatever one entry admits, no other does — so filtering by admission
+    leaves exactly that entry. This is the shape every disjointness discharger has. -/
+theorem filter_eq_singleton_of_keys {β α ι : Type} [DecidableEq ι]
+    {adm : β → α → Bool} {key : α → ι} {x : α} :
+    ∀ {os : List β} {ks : List ι},
+      List.Forall₂ (fun o k => ∀ y, adm o y = true → key y = k) os ks → ks.Nodup →
+      ∀ o ∈ os, adm o x = true → os.filter (adm · x) = [o]
+  | [], _, .nil, _, _, ho, _ => nomatch ho
+  | o₀ :: os', k₀ :: ks', .cons h₀ hz, hnd, o, ho, hx => by
+    have hnd' := List.nodup_cons.mp hnd
+    by_cases h0 : adm o₀ x = true
+    · have hk : key x = k₀ := h₀ x h0
+      have hnone : ∀ o' ∈ os', adm o' x = false := by
+        intro o' ho'
+        cases hq : adm o' x with
+        | false => rfl
+        | true =>
+          obtain ⟨k', hk', hrel⟩ := hz.mem_left ho'
+          exact absurd (hk ▸ hrel x hq ▸ hk') (by
+            intro hmem; exact hnd'.1 (by simpa [hk, hrel x hq] using hmem))
+      obtain rfl : o = o₀ := by
+        rcases List.mem_cons.mp ho with rfl | ho'
+        · rfl
+        · exact absurd hx (by rw [hnone o ho']; exact Bool.noConfusion)
+      rw [List.filter_cons_of_pos (p := (adm · x)) h0, filter_nil_of hnone]
+    · have ho' : o ∈ os' := by
+        rcases List.mem_cons.mp ho with rfl | h
+        · exact absurd hx (by simp_all)
+        · exact h
+      rw [List.filter_cons_of_neg (p := (adm · x)) (by simpa using h0)]
+      exact filter_eq_singleton_of_keys hz hnd'.2 o ho' hx
+
 /-- A property of every image is a property of every member of the mapped list — the
     step every case over a list of subterms begins with. -/
 theorem forall_mem_map {α β : Type} {xs : List α} {g : α → β} {P : β → Prop}

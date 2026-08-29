@@ -144,6 +144,15 @@ axiom Double.decEq : DecidableEq Double
 
 attribute [instance] Double.decEq
 
+/-- **Kinds.** The eight shapes the value language is partitioned into — and the eight
+    the attribute domain collapses onto, since the three wire sets are one kind and the
+    ten members are eight. A value and the attribute it is written to have the same
+    kind: that is what "self-identifying" means in §3's `(opaque)`, and it is the
+    disjointness §5's `κ` table is stated in. -/
+inductive Kind where
+  | string | number | boolean | binary | set | array | map | null
+deriving DecidableEq, Repr
+
 /-- The ten members of the coproduct (§1). -/
 inductive Member where
   | S | N | B | BOOL | NULL | SS | NS | BS | L | M
@@ -175,6 +184,17 @@ def Attr.member : Attr → Member
   | .l _    => .L
   | .m _    => .M
 
+/-- The kind an attribute is of: its member, with `SS`/`NS`/`BS` identified. -/
+def Attr.kind : Attr → Kind
+  | .s _    => .string
+  | .n _    => .number
+  | .b _    => .binary
+  | .bool _ => .boolean
+  | .null   => .null
+  | .ss _ | .ns _ | .bs _ => .set
+  | .l _    => .array
+  | .m _    => .map
+
 /-- An item: an `M` without its wrapper (§1). -/
 abbrev Item := List (Name × Attr)
 
@@ -189,5 +209,16 @@ inductive Value where
   | set  (v : List Value)
   | arr  (v : List Value)
   | map  (v : List (Name × Value))
+
+/-- The kind a value is of — §5's `κ` reads this. -/
+def Value.kind : Value → Kind
+  | .str _  => .string
+  | .num _  => .number
+  | .bool _ => .boolean
+  | .bin _  => .binary
+  | .null   => .null
+  | .set _  => .set
+  | .arr _  => .array
+  | .map _  => .map
 
 end Calculus

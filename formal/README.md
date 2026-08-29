@@ -17,7 +17,7 @@ definition it touches.
 | `Calculus/Typing.lean`      | §3–§5       | The judgement `⊢ c : T ⇝ μ`, both indices, with the held-set formers (`HSet`, `HStar`, `HProd`, `HMap`, `HNull`, `HObject`, `HUnion`, `HOpaque`); syntactic premises only                                                                                             |
 | `Calculus/Soundness.lean`   | §5          | `Obligations` (semantic premises, fueled), `UAtCan := UniqueAdmission ∘ semsOf`, `MPOk` (legacy exemption), theorem statements, and the held-set bridge `carrier_denote`/`typed_TSub`/`typed_e_mem`/`typed_p_mem`                                                    |
 | `Calculus/Equations.lean`   | §6          | `Codec.Equiv` (§6's `≡`), `Can`, and all eleven of §6's "Hold" rows — `held`'s identity and composition, `refine`'s meet and full case, `legacy` with its own reading and `≈` on `Can(c)`, `union` of one, its commutativity and its associativity (which needs none of §6's stated conditions), `nullable`'s idempotence, wrapper member preservation |
-| `Calculus/Opaque.lean`      | §3, §7      | `opaque` without fuel: `Value.depth`/`Attr.depth`, the ten kind-disjoint unfoldings, `opaq_e_agree`/`opaq_p_agree` (stabilization), `opaq_e_depth`/`opaq_p_depth` (depth preservation), and `opaqCodecω` with `lawful_opaqCodecω`/`carrier_opaqCodecω` |
+| `Calculus/Opaque.lean`      | §3, §7      | `opaque` without fuel: `Value.depth`/`Attr.depth`, the eighteen kind-disjoint unfoldings (one `simp` set for the section, one line each), `opaq_e_agree`/`opaq_p_agree` (stabilization), `opaq_e_depth`/`opaq_p_depth` (depth preservation), and `opaqCodecω` with `lawful_opaqCodecω`/`carrier_opaqCodecω` |
 | `Calculus/Denoteω.lean`     | —           | `denoteω : Term → Codec` — structural, no fuel — with `termDepth` and `denoteω_eq : termDepth t ≤ n → denoteω t = denote n t` |
 | `Calculus/Soundnessω.lean`  | §5          | §5 restated fuel-free: `soundnessω`, `soundness_coreω`, `carrier_denoteω`, `typed_e_memω`, `typed_p_memω`, `typed_μSynω` — transports, not reproofs |
 | `Calculus/HeldSet.lean`     | §1, §3, §6  | `T` as an identity: `opaq_T_identity` (`Uν` *is* `opaque`'s held set), `set_nil_outside_opaque` (the witness for the non-emptiness premise `HOpaque` was missing), and the numeral-domain report — `decimal_writes_wf`/`decimal_reads_wf` with worked boundary cases |
@@ -31,7 +31,8 @@ of §5's soundness theorem are machine-checked — `soundness` (all four laws, (
 the legacy exemption as the `MPOk` hypothesis) and `soundness_core` ((R), (C), (W)
 through `legacy`-containing derivations) — by induction on the judgement, dispatching
 each case to its certified combinator lemma, with the `(dunion)` stamps derived from
-typing and (U) discharged by `uniqueAdmission_byTag`, and `opaque`'s inside `lawful_opaqCodec`.
+typing and (U) discharged by `uniqueAdmission_byTag`, and `opaque`'s by
+`uniqueAdmission_of_kinds`.
 The judgement carries both of §3's indices, and both are checked against the
 denotation. `typed_e_mem` and `typed_p_mem` are §3's `e : T ⇀ 𝔸` and `p : 𝔸 ⇀ T` at the
 judgement's own index — a derivable term writes and reads only values of the held set it
@@ -87,6 +88,14 @@ and the judgement to it), and `lazy` concludes `⊤` in the model exactly as the
   `object` are all instances, so §2's prism halves are discharged once for all of them.
   `set` is the one product that is not, and the reason is stated where it is argued:
   its attribute side is a choice among three wire sets, not one constructor.
+- **`opaque`'s (U) is computed from kinds, not argued per option.** `Kind` is §1
+  vocabulary now (`Domain.lean`), on both sides of the pair — `Value.kind` and
+  `Attr.kind`, the ten members collapsing onto eight. An option is *pinned to a kind*
+  when it admits only values and attributes of that kind (`OptionSem.OnKind`), and
+  `uniqueAdmission_of_kinds` turns pinned options with distinct kinds into (U). Each of
+  `opaque`'s eight is pinned in one line, and `onKind_set`/`onKind_array`/`onKind_record`
+  hold for *any* element codec — which is why the fixpoint's unique admission needs
+  nothing from the recursive call, and why `opaque` is not a special construction.
 - **`Double` is axiomatized** with exactly the shortest-text round trip §3's `(number)`
   consumes. IEEE-754 facts are not this calculus's theorems.
 - **Semantic rule premises live in `Obligations fuel t`**, not in `Typed`: the doc's

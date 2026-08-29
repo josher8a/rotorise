@@ -29,7 +29,7 @@ irreducible structure; everything else wraps one subterm):
   `UniqueAdmission` ((U) as a premise). `dunionCodec` is `altCodec` over
   tag-admission options — "the one union whose (U) is a theorem" (doc §5) is
   literally `uniqueAdmission_byTag`. `opaqCodec` is `altCodec`'s fueled fixpoint
-  over everything self-identifying — its (U) is `uniqueAdmission_of_disjoint`, and
+  over everything self-identifying — its (U) is `uniqueAdmission_of_kinds`, and
   the `refuse` policy is the absence of the number option.
 -/
 
@@ -2978,6 +2978,36 @@ theorem tag_filter_singleton {tag : String} :
         simp only [List.filter, contains_eq_false_of_not_mem hny]
         exact tag_filter_singleton os htail x hx' htag
 
+/-! ### (U) by kind, and `opaque`'s fixpoint
+
+    §5's other disjointness discharger, and the one `(opaque)` needs. An option is
+    *pinned to a kind* when it admits only values and attributes of that kind — which is
+    precisely what §3 means by calling `opaque`'s options "self-identifying". Pin each
+    option and keep the kinds distinct, and (U) follows with nothing said about what the
+    options contain: `onKind_set` and its two neighbours hold for *any* element codec,
+    which is why the fixpoint's unique admission needs nothing from the recursive call. -/
+
+/-- An option pinned to a kind: it admits only values and attributes of that kind. -/
+def OptionSem.OnKind (o : OptionSem) (k : Kind) : Prop :=
+  (∀ v, o.admitV v = true → v.kind = k) ∧ (∀ a, o.admitA a = true → a.kind = k)
+
+/-- **(U) by kind-separation.** Pinned options with pairwise-distinct kinds can never
+    both admit, on either side of the pair. -/
+theorem uniqueAdmission_of_kinds {os : List OptionSem} {ks : List Kind}
+    (hz : List.Forall₂ OptionSem.OnKind os ks) (hnd : ks.Nodup)
+    (hw : ∀ o ∈ os, ∀ t a, o.c.e t = some a →
+      o.admitV t = true ∧ o.admitA a = true) :
+    UniqueAdmission os := fun o ho t a he =>
+  let ⟨hv, ha⟩ := hw o ho t a he
+  ⟨filter_eq_singleton_of_keys (key := Attr.kind) (hz.imp fun _ _ h => h.2) hnd o ho ha,
+   filter_eq_singleton_of_keys (key := Value.kind) (hz.imp fun _ _ h => h.1) hnd o ho hv⟩
+
+/-- An option that decides by attempting admits what it writes, on both sides — the
+    read side by (R), which is the only thing `hw` above ever needs. -/
+theorem byAttempt_write {c : Codec} (h : Lawful c) {t a} (he : c.e t = some a) :
+    (OptionSem.byAttempt c).admitV t = true ∧ (OptionSem.byAttempt c).admitA a = true :=
+  ⟨by simp [OptionSem.byAttempt, he], by simp [OptionSem.byAttempt, h.retract he]⟩
+
 /-- §5's "the one union whose (U) is a theorem", literally: disjoint tags on stamped
     options give unique admission. `hstamp` is what object-encode of a `req literalS`
     discriminator provides — the tag on the attribute side and the same tag on the
@@ -3055,213 +3085,96 @@ theorem lawfulCore_dunionCodec {d : Name} {os : List (List String × Codec)}
   lawfulCore_altCodec (forall_mem_map h) (uniqueAdmission_byTag hstamp hdisj)
     (dunion_writes hstamp)
 
+/-! ### `opaque`'s options, each pinned to its kind -/
+
+theorem onKind_string : OptionSem.OnKind (.byAttempt stringCodec) .string := by
+  constructor <;> intro x hx <;> cases x <;>
+    simp_all [OptionSem.byAttempt, stringCodec, Value.kind, Attr.kind]
+
+theorem onKind_boolean : OptionSem.OnKind (.byAttempt booleanCodec) .boolean := by
+  constructor <;> intro x hx <;> cases x <;>
+    simp_all [OptionSem.byAttempt, booleanCodec, Value.kind, Attr.kind]
+
+theorem onKind_binary : OptionSem.OnKind (.byAttempt binaryCodec) .binary := by
+  constructor <;> intro x hx <;> cases x <;>
+    simp_all [OptionSem.byAttempt, binaryCodec, Value.kind, Attr.kind]
+
+theorem onKind_null : OptionSem.OnKind (.byAttempt nullCodec) .null := by
+  constructor <;> intro x hx <;> cases x <;>
+    simp_all [OptionSem.byAttempt, nullCodec, Value.kind, Attr.kind]
+
+/-- The `Numbers` policy: `lossy` offers the number option, `refuse` offers the empty
+    one — which admits nothing, so the pinning holds either way. -/
+theorem onKind_number (lossy : Bool) :
+    OptionSem.OnKind (.byAttempt (if lossy then numberCodec else Codec.empty)) .number := by
+  cases lossy <;> constructor <;> intro x hx <;> cases x <;>
+    simp_all [OptionSem.byAttempt, numberCodec, Codec.empty, Value.kind, Attr.kind]
+
+/-- A container option is pinned by its own constructor, whatever it contains. This is
+    why the fixpoint's (U) needs nothing from the recursive call — and why `opaque` is
+    not a special construction. -/
+theorem onKind_set (c : Codec) : OptionSem.OnKind (.byAttempt (setCodec c)) .set := by
+  constructor <;> intro x hx <;> cases x <;>
+    simp_all [OptionSem.byAttempt, setCodec, Value.kind, Attr.kind]
+
+theorem onKind_array (c : Codec) :
+    OptionSem.OnKind (.byAttempt (arrayCodec c)) .array := by
+  constructor <;> intro x hx <;> cases x <;>
+    simp_all [OptionSem.byAttempt, arrayCodec, Value.kind, Attr.kind]
+
+theorem onKind_record (c : Codec) :
+    OptionSem.OnKind (.byAttempt (recordCodec c)) .map := by
+  constructor <;> intro x hx <;> cases x <;>
+    simp_all [OptionSem.byAttempt, recordCodec, Value.kind, Attr.kind]
+
+/-- The kinds `opaque`'s options are pinned to, in the order they are offered. -/
+def opaqKinds : List Kind :=
+  [.string, .boolean, .binary, .null, .number, .set, .array, .map]
+
+/-- "The recursive union of everything self-identifying" (§3), spelled out: the eight
+    options and the eight kinds that identify them. -/
+theorem opaq_onKinds (fuel : Nat) (lossy : Bool) :
+    List.Forall₂ OptionSem.OnKind
+      [.byAttempt stringCodec, .byAttempt booleanCodec, .byAttempt binaryCodec,
+       .byAttempt nullCodec,
+       .byAttempt (if lossy then numberCodec else Codec.empty),
+       .byAttempt (setCodec (opaqCodec fuel lossy)),
+       .byAttempt (arrayCodec (opaqCodec fuel lossy)),
+       .byAttempt (recordCodec (opaqCodec fuel lossy))]
+      opaqKinds :=
+  .cons onKind_string (.cons onKind_boolean (.cons onKind_binary (.cons onKind_null
+    (.cons (onKind_number lossy) (.cons (onKind_set _) (.cons (onKind_array _)
+      (.cons (onKind_record _) .nil)))))))
+
 /-- `opaque` closes with no bespoke induction: the sum lemma, its options' lemmas, and
-    shape-computed unique admission — kinds partition the values, members the
-    attributes. -/
+    unique admission computed from the shapes — kinds partition the values, and the same
+    kinds partition the attributes. -/
 theorem lawful_opaqCodec : ∀ (fuel : Nat) (lossy : Bool), Lawful (opaqCodec fuel lossy)
   | 0, _ => Lawful.empty
   | fuel+1, lossy => by
     have hop : Lawful (opaqCodec fuel lossy) := lawful_opaqCodec fuel lossy
-    have hset : Lawful (setCodec (opaqCodec fuel lossy)) := lawful_setCodec hop
-    have harr : Lawful (arrayCodec (opaqCodec fuel lossy)) := lawful_arrayCodec hop
-    have hrec : Lawful (recordCodec (opaqCodec fuel lossy)) := lawful_recordCodec hop
+    have hnum : Lawful (if lossy then numberCodec else Codec.empty) := by
+      cases lossy
+      · exact Lawful.empty
+      · exact lawful_numberCodec
+    -- `μ` is `⊤`: the options name eight different members, so `unanimous` is `none`
     refine lawful_altCodec ?_ ?_ (fun m hm => nomatch hm)
     · intro o ho
       simp only [List.mem_cons] at ho
       rcases ho with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | h
-      · exact lawful_stringCodec
-      · exact lawful_booleanCodec
-      · exact lawful_binaryCodec
-      · exact lawful_nullCodec
-      · cases lossy with
-        | true => exact lawful_numberCodec
-        | false => exact Lawful.empty
-      · exact hset
-      · exact harr
-      · exact hrec
-      · exact absurd h (by simp)
-    · intro o ho t a he
+      exacts [lawful_stringCodec, lawful_booleanCodec, lawful_binaryCodec,
+        lawful_nullCodec, hnum, lawful_setCodec hop, lawful_arrayCodec hop,
+        lawful_recordCodec hop, absurd h (by simp)]
+    · refine uniqueAdmission_of_kinds (opaq_onKinds fuel lossy) (by decide) ?_
+      intro o ho t a he
       simp only [List.mem_cons] at ho
-      rcases ho with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | hmem
-      -- string
-      · replace he : stringCodec.e t = some a := he
-        cases t
-        case str s =>
-          replace he : some (Attr.s s) = some a := he
-          cases he
-          have hnp : (if lossy then numberCodec else Codec.empty).p (Attr.s s) = none := by
-            cases lossy <;> rfl
-          have hne : (if lossy then numberCodec else Codec.empty).e (Value.str s) = none := by
-            cases lossy <;> rfl
-          constructor
-          · simp [OptionSem.byAttempt, List.filter, stringCodec, booleanCodec,
-              binaryCodec, nullCodec, setCodec, arrayCodec, recordCodec, hnp]
-          · simp [OptionSem.byAttempt, List.filter, stringCodec, booleanCodec,
-              binaryCodec, nullCodec, setCodec, arrayCodec, recordCodec, hne]
-        all_goals exact nomatch he
-      -- boolean
-      · replace he : booleanCodec.e t = some a := he
-        cases t
-        case bool b =>
-          replace he : some (Attr.bool b) = some a := he
-          cases he
-          have hnp : (if lossy then numberCodec else Codec.empty).p (Attr.bool b) = none := by
-            cases lossy <;> rfl
-          have hne : (if lossy then numberCodec else Codec.empty).e (Value.bool b) = none := by
-            cases lossy <;> rfl
-          constructor
-          · simp [OptionSem.byAttempt, List.filter, stringCodec, booleanCodec,
-              binaryCodec, nullCodec, setCodec, arrayCodec, recordCodec, hnp]
-          · simp [OptionSem.byAttempt, List.filter, stringCodec, booleanCodec,
-              binaryCodec, nullCodec, setCodec, arrayCodec, recordCodec, hne]
-        all_goals exact nomatch he
-      -- binary
-      · replace he : binaryCodec.e t = some a := he
-        cases t
-        case bin b =>
-          replace he : some (Attr.b b) = some a := he
-          cases he
-          have hnp : (if lossy then numberCodec else Codec.empty).p (Attr.b b) = none := by
-            cases lossy <;> rfl
-          have hne : (if lossy then numberCodec else Codec.empty).e (Value.bin b) = none := by
-            cases lossy <;> rfl
-          constructor
-          · simp [OptionSem.byAttempt, List.filter, stringCodec, booleanCodec,
-              binaryCodec, nullCodec, setCodec, arrayCodec, recordCodec, hnp]
-          · simp [OptionSem.byAttempt, List.filter, stringCodec, booleanCodec,
-              binaryCodec, nullCodec, setCodec, arrayCodec, recordCodec, hne]
-        all_goals exact nomatch he
-      -- null
-      · replace he : nullCodec.e t = some a := he
-        cases t
-        case null =>
-          replace he : some Attr.null = some a := he
-          cases he
-          have hnp : (if lossy then numberCodec else Codec.empty).p Attr.null = none := by
-            cases lossy <;> rfl
-          have hne : (if lossy then numberCodec else Codec.empty).e Value.null = none := by
-            cases lossy <;> rfl
-          constructor
-          · simp [OptionSem.byAttempt, List.filter, stringCodec, booleanCodec,
-              binaryCodec, nullCodec, setCodec, arrayCodec, recordCodec, hnp]
-          · simp [OptionSem.byAttempt, List.filter, stringCodec, booleanCodec,
-              binaryCodec, nullCodec, setCodec, arrayCodec, recordCodec, hne]
-        all_goals exact nomatch he
-      -- the number option
-      · cases lossy with
-        | false => exact nomatch he
-        | true =>
-          replace he : numberCodec.e t = some a := he
-          cases t
-          case num d =>
-            replace he : some (Attr.n d.toDec) = some a := he
-            cases he
-            constructor
-            · simp [OptionSem.byAttempt, List.filter, stringCodec, booleanCodec,
-                binaryCodec, nullCodec, numberCodec, setCodec, arrayCodec,
-                recordCodec, Double.roundtrip]
-            · simp [OptionSem.byAttempt, List.filter, stringCodec, booleanCodec,
-                binaryCodec, nullCodec, numberCodec, setCodec, arrayCodec,
-                recordCodec]
-          all_goals exact nomatch he
-      -- set
-      · replace he : (setCodec (opaqCodec fuel lossy)).e t = some a := he
-        cases t
-        case set vs =>
-          replace he : (traverse (opaqCodec fuel lossy).e vs).bind asWireSet = some a := he
-          cases htr : traverse (opaqCodec fuel lossy).e vs with
-          | none => rw [htr] at he; exact nomatch he
-          | some as =>
-            rw [htr] at he
-            replace he : asWireSet as = some a := he
-            have hetotal : (setCodec (opaqCodec fuel lossy)).e (Value.set vs) = some a := by
-              show (traverse (opaqCodec fuel lossy).e vs).bind asWireSet = some a
-              rw [htr]
-              exact he
-            have hpa := hset.retract hetotal
-            obtain ⟨hne', hcase⟩ := asWireSet_cases he
-            have hnev : (if lossy then numberCodec else Codec.empty).e (Value.set vs) = none := by
-              cases lossy <;> rfl
-            rcases hcase with ⟨ss, rfl, rfl⟩ | ⟨ns, rfl, rfl⟩ | ⟨bs, rfl, rfl⟩
-            · have hnp : (if lossy then numberCodec else Codec.empty).p (Attr.ss ss) = none := by
-                cases lossy <;> rfl
-              constructor
-              · simp [OptionSem.byAttempt, List.filter, stringCodec, booleanCodec,
-                  binaryCodec, nullCodec, arrayCodec, recordCodec, hnp, hpa]
-              · simp [OptionSem.byAttempt, List.filter, stringCodec, booleanCodec,
-                  binaryCodec, nullCodec, arrayCodec, recordCodec, hnev, hetotal]
-            · have hnp : (if lossy then numberCodec else Codec.empty).p (Attr.ns ns) = none := by
-                cases lossy <;> rfl
-              constructor
-              · simp [OptionSem.byAttempt, List.filter, stringCodec, booleanCodec,
-                  binaryCodec, nullCodec, arrayCodec, recordCodec, hnp, hpa]
-              · simp [OptionSem.byAttempt, List.filter, stringCodec, booleanCodec,
-                  binaryCodec, nullCodec, arrayCodec, recordCodec, hnev, hetotal]
-            · have hnp : (if lossy then numberCodec else Codec.empty).p (Attr.bs bs) = none := by
-                cases lossy <;> rfl
-              constructor
-              · simp [OptionSem.byAttempt, List.filter, stringCodec, booleanCodec,
-                  binaryCodec, nullCodec, arrayCodec, recordCodec, hnp, hpa]
-              · simp [OptionSem.byAttempt, List.filter, stringCodec, booleanCodec,
-                  binaryCodec, nullCodec, arrayCodec, recordCodec, hnev, hetotal]
-        all_goals exact nomatch he
-      -- array
-      · replace he : (arrayCodec (opaqCodec fuel lossy)).e t = some a := he
-        cases t
-        case arr vs =>
-          replace he : (traverse (opaqCodec fuel lossy).e vs).map Attr.l = some a := he
-          cases htr : traverse (opaqCodec fuel lossy).e vs with
-          | none => rw [htr] at he; exact nomatch he
-          | some as =>
-            rw [htr] at he
-            replace he : some (Attr.l as) = some a := he
-            cases he
-            have hetotal : (arrayCodec (opaqCodec fuel lossy)).e (Value.arr vs) =
-                some (Attr.l as) := by
-              show (traverse (opaqCodec fuel lossy).e vs).map Attr.l = some (Attr.l as)
-              rw [htr]
-              rfl
-            have hpa := harr.retract hetotal
-            have hnp : (if lossy then numberCodec else Codec.empty).p (Attr.l as) = none := by
-              cases lossy <;> rfl
-            have hnev : (if lossy then numberCodec else Codec.empty).e (Value.arr vs) = none := by
-              cases lossy <;> rfl
-            constructor
-            · simp [OptionSem.byAttempt, List.filter, stringCodec, booleanCodec,
-                binaryCodec, nullCodec, setCodec, recordCodec, hnp, hpa]
-            · simp [OptionSem.byAttempt, List.filter, stringCodec, booleanCodec,
-                binaryCodec, nullCodec, setCodec, recordCodec, hnev, hetotal]
-        all_goals exact nomatch he
-      -- record
-      · replace he : (recordCodec (opaqCodec fuel lossy)).e t = some a := he
-        cases t
-        case map kvs =>
-          replace he : (traverse (encPair (opaqCodec fuel lossy)) kvs).map Attr.m =
-            some a := he
-          cases htr : traverse (encPair (opaqCodec fuel lossy)) kvs with
-          | none => rw [htr] at he; exact nomatch he
-          | some ds =>
-            rw [htr] at he
-            replace he : some (Attr.m ds) = some a := he
-            cases he
-            have hetotal : (recordCodec (opaqCodec fuel lossy)).e (Value.map kvs) =
-                some (Attr.m ds) := by
-              show (traverse (encPair (opaqCodec fuel lossy)) kvs).map Attr.m =
-                some (Attr.m ds)
-              rw [htr]
-              rfl
-            have hpa := hrec.retract hetotal
-            have hnp : (if lossy then numberCodec else Codec.empty).p (Attr.m ds) = none := by
-              cases lossy <;> rfl
-            have hnev : (if lossy then numberCodec else Codec.empty).e (Value.map kvs) = none := by
-              cases lossy <;> rfl
-            constructor
-            · simp [OptionSem.byAttempt, List.filter, stringCodec, booleanCodec,
-                binaryCodec, nullCodec, setCodec, arrayCodec, hnp, hpa]
-            · simp [OptionSem.byAttempt, List.filter, stringCodec, booleanCodec,
-                binaryCodec, nullCodec, setCodec, arrayCodec, hnev, hetotal]
-        all_goals exact nomatch he
-      · exact absurd hmem (by simp)
+      rcases ho with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | h
+      exacts [byAttempt_write lawful_stringCodec he,
+        byAttempt_write lawful_booleanCodec he, byAttempt_write lawful_binaryCodec he,
+        byAttempt_write lawful_nullCodec he, byAttempt_write hnum he,
+        byAttempt_write (lawful_setCodec hop) he,
+        byAttempt_write (lawful_arrayCodec hop) he,
+        byAttempt_write (lawful_recordCodec hop) he, absurd h (by simp)]
 
 end
 

@@ -92,14 +92,17 @@ theorem traverse_congr {α β : Type} {f g : α → Option β} :
         traverse_congr xs (fun y hy => h y (by simp [hy]))
       simp only [traverse, hx, hxs]
 
-/-! ## The eight unfoldings
+/-! ## The unfoldings
 
 Each says: at this value's kind, `altCodec`'s filter collapses to exactly one option, so
 the union's answer *is* that option's. This is kind-disjointness cashed — the property
-`union` in general does not have, and the reason `opaque` escapes `Continuity.lean`.
+`union` in general does not have (`onKind_*` is what `opaque` has and `union` does not),
+and the reason `opaque` escapes `Continuity.lean`.
 
 Stated against the option's own codec rather than its literal encoding, so they stay
-true if a primitive's shape changes. -/
+true if a primitive's shape changes. Every one of them computes through the same eleven
+definitions, so those are a local `simp` set for the section rather than eighteen copies
+of one list: what is left in each proof is the case split it actually needs. -/
 
 private theorem opaq_unfold (lossy : Bool) (n : Nat) :
     opaqCodec (n+1) lossy =
@@ -112,68 +115,51 @@ private theorem opaq_unfold (lossy : Bool) (n : Nat) :
          .byAttempt (recordCodec (opaqCodec n lossy))]
         none := rfl
 
+-- Every unfolding computes through the same eleven definitions.
+section Unfoldings
+attribute [local simp] opaq_unfold altCodec OptionSem.byAttempt stringCodec booleanCodec
+  binaryCodec nullCodec numberCodec setCodec arrayCodec recordCodec Codec.empty
+
 theorem opaqCodec_e_str (lossy : Bool) (n : Nat) (s : String) :
     (opaqCodec (n+1) lossy).e (.str s) = stringCodec.e (.str s) := by
-  cases lossy <;>
-    simp [opaq_unfold, altCodec, OptionSem.byAttempt, stringCodec, booleanCodec,
-          binaryCodec, nullCodec, numberCodec, setCodec, arrayCodec, recordCodec,
-          Codec.empty]
+  cases lossy <;> simp
 
 theorem opaqCodec_e_bool (lossy : Bool) (n : Nat) (b : Bool) :
     (opaqCodec (n+1) lossy).e (.bool b) = booleanCodec.e (.bool b) := by
-  cases lossy <;>
-    simp [opaq_unfold, altCodec, OptionSem.byAttempt, stringCodec, booleanCodec,
-          binaryCodec, nullCodec, numberCodec, setCodec, arrayCodec, recordCodec,
-          Codec.empty]
+  cases lossy <;> simp
 
 theorem opaqCodec_e_bin (lossy : Bool) (n : Nat) (b : Bytes) :
     (opaqCodec (n+1) lossy).e (.bin b) = binaryCodec.e (.bin b) := by
-  cases lossy <;>
-    simp [opaq_unfold, altCodec, OptionSem.byAttempt, stringCodec, booleanCodec,
-          binaryCodec, nullCodec, numberCodec, setCodec, arrayCodec, recordCodec,
-          Codec.empty]
+  cases lossy <;> simp
 
 theorem opaqCodec_e_null (lossy : Bool) (n : Nat) :
     (opaqCodec (n+1) lossy).e .null = nullCodec.e .null := by
-  cases lossy <;>
-    simp [opaq_unfold, altCodec, OptionSem.byAttempt, stringCodec, booleanCodec,
-          binaryCodec, nullCodec, numberCodec, setCodec, arrayCodec, recordCodec,
-          Codec.empty]
+  cases lossy <;> simp
 
 theorem opaqCodec_e_num (lossy : Bool) (n : Nat) (d : Double) :
     (opaqCodec (n+1) lossy).e (.num d)
       = (if lossy then numberCodec else Codec.empty).e (.num d) := by
-  cases lossy <;>
-    simp [opaq_unfold, altCodec, OptionSem.byAttempt, stringCodec, booleanCodec,
-          binaryCodec, nullCodec, numberCodec, setCodec, arrayCodec, recordCodec,
-          Codec.empty]
+  cases lossy <;> simp
 
 theorem opaqCodec_e_set (lossy : Bool) (n : Nat) (vs : List Value) :
     (opaqCodec (n+1) lossy).e (.set vs)
       = (setCodec (opaqCodec n lossy)).e (.set vs) := by
   cases he : (setCodec (opaqCodec n lossy)).e (.set vs) <;>
-    cases lossy <;>
-      simp [opaq_unfold, altCodec, OptionSem.byAttempt, stringCodec, booleanCodec,
-            binaryCodec, nullCodec, numberCodec, arrayCodec, recordCodec,
-            Codec.empty, he]
+    cases lossy <;> simp [-setCodec, he]
 
 theorem opaqCodec_e_arr (lossy : Bool) (n : Nat) (vs : List Value) :
     (opaqCodec (n+1) lossy).e (.arr vs)
       = (arrayCodec (opaqCodec n lossy)).e (.arr vs) := by
   cases he : (arrayCodec (opaqCodec n lossy)).e (.arr vs) <;>
-    cases lossy <;>
-      simp [opaq_unfold, altCodec, OptionSem.byAttempt, stringCodec, booleanCodec,
-            binaryCodec, nullCodec, numberCodec, setCodec, recordCodec,
-            Codec.empty, he]
+    cases lossy <;> simp [-arrayCodec, he]
 
 theorem opaqCodec_e_map (lossy : Bool) (n : Nat) (kvs : List (Name × Value)) :
     (opaqCodec (n+1) lossy).e (.map kvs)
       = (recordCodec (opaqCodec n lossy)).e (.map kvs) := by
   cases he : (recordCodec (opaqCodec n lossy)).e (.map kvs) <;>
-    cases lossy <;>
-      simp [opaq_unfold, altCodec, OptionSem.byAttempt, stringCodec, booleanCodec,
-            binaryCodec, nullCodec, numberCodec, setCodec, arrayCodec,
-            Codec.empty, he]
+    cases lossy <;> simp [-recordCodec, he]
+
+end Unfoldings
 
 /-! ## Stabilization
 
@@ -274,82 +260,57 @@ Ten unfoldings rather than eight: wire sets split into `SS`/`NS`/`BS`, all three
 by the `set` option. Kind-disjointness is the same argument — each attribute constructor
 is accepted by at most one of the eight. -/
 
+section UnfoldingsA
+attribute [local simp] opaq_unfold altCodec OptionSem.byAttempt stringCodec booleanCodec
+  binaryCodec nullCodec numberCodec setCodec arrayCodec recordCodec Codec.empty
+
 theorem opaqCodec_p_s (lossy : Bool) (n : Nat) (s : String) :
     (opaqCodec (n+1) lossy).p (.s s) = stringCodec.p (.s s) := by
-  cases lossy <;>
-    simp [opaq_unfold, altCodec, OptionSem.byAttempt, stringCodec, booleanCodec,
-          binaryCodec, nullCodec, numberCodec, setCodec, arrayCodec, recordCodec,
-          Codec.empty]
+  cases lossy <;> simp
 
 theorem opaqCodec_p_bool (lossy : Bool) (n : Nat) (b : Bool) :
     (opaqCodec (n+1) lossy).p (.bool b) = booleanCodec.p (.bool b) := by
-  cases lossy <;>
-    simp [opaq_unfold, altCodec, OptionSem.byAttempt, stringCodec, booleanCodec,
-          binaryCodec, nullCodec, numberCodec, setCodec, arrayCodec, recordCodec,
-          Codec.empty]
+  cases lossy <;> simp
 
 theorem opaqCodec_p_b (lossy : Bool) (n : Nat) (b : Bytes) :
     (opaqCodec (n+1) lossy).p (.b b) = binaryCodec.p (.b b) := by
-  cases lossy <;>
-    simp [opaq_unfold, altCodec, OptionSem.byAttempt, stringCodec, booleanCodec,
-          binaryCodec, nullCodec, numberCodec, setCodec, arrayCodec, recordCodec,
-          Codec.empty]
+  cases lossy <;> simp
 
 theorem opaqCodec_p_null (lossy : Bool) (n : Nat) :
     (opaqCodec (n+1) lossy).p .null = nullCodec.p .null := by
-  cases lossy <;>
-    simp [opaq_unfold, altCodec, OptionSem.byAttempt, stringCodec, booleanCodec,
-          binaryCodec, nullCodec, numberCodec, setCodec, arrayCodec, recordCodec,
-          Codec.empty]
+  cases lossy <;> simp
 
 theorem opaqCodec_p_n (lossy : Bool) (n : Nat) (x : Numeral) :
     (opaqCodec (n+1) lossy).p (.n x)
       = (if lossy then numberCodec else Codec.empty).p (.n x) := by
-  cases hd : Double.ofDec x <;>
-    cases lossy <;>
-      simp [opaq_unfold, altCodec, OptionSem.byAttempt, stringCodec, booleanCodec,
-            binaryCodec, nullCodec, numberCodec, setCodec, arrayCodec, recordCodec,
-            Codec.empty, hd]
+  cases hd : Double.ofDec x <;> cases lossy <;> simp [hd]
 
 theorem opaqCodec_p_ss (lossy : Bool) (n : Nat) (vs : List String) :
     (opaqCodec (n+1) lossy).p (.ss vs) = (setCodec (opaqCodec n lossy)).p (.ss vs) := by
   cases hp : (setCodec (opaqCodec n lossy)).p (.ss vs) <;>
-    cases lossy <;>
-      simp [opaq_unfold, altCodec, OptionSem.byAttempt, stringCodec, booleanCodec,
-            binaryCodec, nullCodec, numberCodec, arrayCodec, recordCodec,
-            Codec.empty, hp]
+    cases lossy <;> simp [-setCodec, hp]
 
 theorem opaqCodec_p_ns (lossy : Bool) (n : Nat) (vs : List Numeral) :
     (opaqCodec (n+1) lossy).p (.ns vs) = (setCodec (opaqCodec n lossy)).p (.ns vs) := by
   cases hp : (setCodec (opaqCodec n lossy)).p (.ns vs) <;>
-    cases lossy <;>
-      simp [opaq_unfold, altCodec, OptionSem.byAttempt, stringCodec, booleanCodec,
-            binaryCodec, nullCodec, numberCodec, arrayCodec, recordCodec,
-            Codec.empty, hp]
+    cases lossy <;> simp [-setCodec, hp]
 
 theorem opaqCodec_p_bs (lossy : Bool) (n : Nat) (vs : List Bytes) :
     (opaqCodec (n+1) lossy).p (.bs vs) = (setCodec (opaqCodec n lossy)).p (.bs vs) := by
   cases hp : (setCodec (opaqCodec n lossy)).p (.bs vs) <;>
-    cases lossy <;>
-      simp [opaq_unfold, altCodec, OptionSem.byAttempt, stringCodec, booleanCodec,
-            binaryCodec, nullCodec, numberCodec, arrayCodec, recordCodec,
-            Codec.empty, hp]
+    cases lossy <;> simp [-setCodec, hp]
 
 theorem opaqCodec_p_l (lossy : Bool) (n : Nat) (as : List Attr) :
     (opaqCodec (n+1) lossy).p (.l as) = (arrayCodec (opaqCodec n lossy)).p (.l as) := by
   cases hp : (arrayCodec (opaqCodec n lossy)).p (.l as) <;>
-    cases lossy <;>
-      simp [opaq_unfold, altCodec, OptionSem.byAttempt, stringCodec, booleanCodec,
-            binaryCodec, nullCodec, numberCodec, setCodec, recordCodec,
-            Codec.empty, hp]
+    cases lossy <;> simp [-arrayCodec, hp]
 
 theorem opaqCodec_p_m (lossy : Bool) (n : Nat) (kvs : List (Name × Attr)) :
     (opaqCodec (n+1) lossy).p (.m kvs) = (recordCodec (opaqCodec n lossy)).p (.m kvs) := by
   cases hp : (recordCodec (opaqCodec n lossy)).p (.m kvs) <;>
-    cases lossy <;>
-      simp [opaq_unfold, altCodec, OptionSem.byAttempt, stringCodec, booleanCodec,
-            binaryCodec, nullCodec, numberCodec, setCodec, arrayCodec,
-            Codec.empty, hp]
+    cases lossy <;> simp [-recordCodec, hp]
+
+end UnfoldingsA
 
 /-! ### Leaf agreement
 
@@ -688,74 +649,59 @@ theorem opaq_p_b_depth (lossy : Bool) (b : Bytes) :
       rw [opaqCodec_p_b] at hp
       simp only [binaryCodec] at hp; cases hp; simp [Value.depth]
 
-theorem opaq_p_ssL (lossy : Bool) (n : Nat) :
-    ∀ (ss : List String) (vs : List Value),
-      traverse (fun s => (opaqCodec n lossy).p (.s s)) ss = some vs ->
-      Value.depthL vs <= 1
-  | [], vs, htr => by
-      replace htr : some [] = some vs := htr
-      cases htr; simp [Value.depthL]
-  | s :: ss, vs, htr => by
-      simp only [traverse] at htr
-      cases hs : (opaqCodec n lossy).p (.s s) with
-      | none => rw [hs] at htr; exact nomatch htr
-      | some v =>
-        rw [hs] at htr
-        cases hss : traverse (fun s => (opaqCodec n lossy).p (.s s)) ss with
-        | none => rw [hss] at htr; exact nomatch htr
-        | some vs' =>
-          rw [hss] at htr
-          replace htr : some (v :: vs') = some vs := htr
-          cases htr
-          have h1 := opaq_p_s_depth lossy s n v hs
-          have h2 := opaq_p_ssL lossy n ss vs' hss
-          simp only [Value.depthL]; omega
-
-theorem opaq_p_nsL (lossy : Bool) (n : Nat) :
-    ∀ (xs : List Numeral) (vs : List Value),
-      traverse (fun x => (opaqCodec n lossy).p (.n x)) xs = some vs ->
+/-- **The wire sets, once.** A wire set's elements are leaf attributes, and a leaf reads
+    to depth 1, so the list it reads to has list-depth 1 — whichever of `SS`/`NS`/`BS`
+    it is. The three families differ only in which prism the payload sits in, and the
+    argument consults nothing else. -/
+theorem opaq_p_leafL {α : Type} (elem : α → Attr) (lossy : Bool) (n : Nat)
+    (hleaf : ∀ (x : α) (v : Value), (opaqCodec n lossy).p (elem x) = some v →
+      Value.depth v <= 1) :
+    ∀ (xs : List α) (vs : List Value),
+      traverse (fun x => (opaqCodec n lossy).p (elem x)) xs = some vs ->
       Value.depthL vs <= 1
   | [], vs, htr => by
       replace htr : some [] = some vs := htr
       cases htr; simp [Value.depthL]
   | x :: xs, vs, htr => by
-      simp only [traverse] at htr
-      cases hx : (opaqCodec n lossy).p (.n x) with
-      | none => rw [hx] at htr; exact nomatch htr
-      | some v =>
-        rw [hx] at htr
-        cases hxs : traverse (fun x => (opaqCodec n lossy).p (.n x)) xs with
-        | none => rw [hxs] at htr; exact nomatch htr
-        | some vs' =>
-          rw [hxs] at htr
-          replace htr : some (v :: vs') = some vs := htr
-          cases htr
-          have h1 := opaq_p_n_depth lossy x n v hx
-          have h2 := opaq_p_nsL lossy n xs vs' hxs
-          simp only [Value.depthL]; omega
+      rw [traverse_cons] at htr
+      obtain ⟨v, hv, hrest⟩ := Option.bind_eq_some.mp htr
+      obtain ⟨vs', hvs', rfl⟩ := Option.map_eq_some'.mp hrest
+      have h1 := hleaf x v hv
+      have h2 := opaq_p_leafL elem lossy n hleaf xs vs' hvs'
+      simp only [Value.depthL]; omega
+
+/-- …and the wire set itself is one level above its leaves. `p` refuses the empty run,
+    which is where §1's `℘⁺fin` shows up in the depth argument. -/
+theorem opaq_p_wire_depth {α : Type} (elem : α → Attr) (lossy : Bool) (n : Nat)
+    (hleaf : ∀ (x : α) (v : Value), (opaqCodec n lossy).p (elem x) = some v →
+      Value.depth v <= 1)
+    {xs : List α} {v : Value}
+    (hp : (if xs.isEmpty then none
+            else (traverse (fun x => (opaqCodec n lossy).p (elem x)) xs).map Value.set)
+          = some v) : Value.depth v <= 2 := by
+  split at hp
+  · exact nomatch hp
+  · obtain ⟨vs, htr, rfl⟩ := Option.map_eq_some'.mp hp
+    have := opaq_p_leafL elem lossy n hleaf xs vs htr
+    simp only [Value.depth]; omega
+
+theorem opaq_p_ssL (lossy : Bool) (n : Nat) :
+    ∀ (ss : List String) (vs : List Value),
+      traverse (fun s => (opaqCodec n lossy).p (.s s)) ss = some vs ->
+      Value.depthL vs <= 1 :=
+  opaq_p_leafL Attr.s lossy n fun s v h => opaq_p_s_depth lossy s n v h
+
+theorem opaq_p_nsL (lossy : Bool) (n : Nat) :
+    ∀ (xs : List Numeral) (vs : List Value),
+      traverse (fun x => (opaqCodec n lossy).p (.n x)) xs = some vs ->
+      Value.depthL vs <= 1 :=
+  opaq_p_leafL Attr.n lossy n fun x v h => opaq_p_n_depth lossy x n v h
 
 theorem opaq_p_bsL (lossy : Bool) (n : Nat) :
     ∀ (bs : List Bytes) (vs : List Value),
       traverse (fun b => (opaqCodec n lossy).p (.b b)) bs = some vs ->
-      Value.depthL vs <= 1
-  | [], vs, htr => by
-      replace htr : some [] = some vs := htr
-      cases htr; simp [Value.depthL]
-  | b :: bs, vs, htr => by
-      simp only [traverse] at htr
-      cases hb : (opaqCodec n lossy).p (.b b) with
-      | none => rw [hb] at htr; exact nomatch htr
-      | some v =>
-        rw [hb] at htr
-        cases hbs : traverse (fun b => (opaqCodec n lossy).p (.b b)) bs with
-        | none => rw [hbs] at htr; exact nomatch htr
-        | some vs' =>
-          rw [hbs] at htr
-          replace htr : some (v :: vs') = some vs := htr
-          cases htr
-          have h1 := opaq_p_b_depth lossy b n v hb
-          have h2 := opaq_p_bsL lossy n bs vs' hbs
-          simp only [Value.depthL]; omega
+      Value.depthL vs <= 1 :=
+  opaq_p_leafL Attr.b lossy n fun b v h => opaq_p_b_depth lossy b n v h
 
 mutual
 
@@ -784,51 +730,21 @@ theorem opaq_p_depth (lossy : Bool) :
   | .ss ss, n, v, hp => by
       cases n with | zero => exact nomatch hp | succ n' =>
       rw [opaqCodec_p_ss] at hp
-      replace hp : (if ss.isEmpty then none
-        else (traverse (fun s => (opaqCodec n' lossy).p (.s s)) ss).map Value.set)
-          = some v := hp
-      split at hp
-      · exact nomatch hp
-      · cases htr : traverse (fun s => (opaqCodec n' lossy).p (.s s)) ss with
-        | none => rw [htr] at hp; exact nomatch hp
-        | some vs =>
-          rw [htr] at hp
-          replace hp : Value.set vs = v := by simpa using hp
-          subst hp
-          have := opaq_p_ssL lossy n' ss vs htr
-          simp only [Attr.depth, Value.depth]; omega
+      have := opaq_p_wire_depth Attr.s lossy n'
+        (fun x w h => opaq_p_s_depth lossy x n' w h) hp
+      simp only [Attr.depth]; omega
   | .ns xs, n, v, hp => by
       cases n with | zero => exact nomatch hp | succ n' =>
       rw [opaqCodec_p_ns] at hp
-      replace hp : (if xs.isEmpty then none
-        else (traverse (fun x => (opaqCodec n' lossy).p (.n x)) xs).map Value.set)
-          = some v := hp
-      split at hp
-      · exact nomatch hp
-      · cases htr : traverse (fun x => (opaqCodec n' lossy).p (.n x)) xs with
-        | none => rw [htr] at hp; exact nomatch hp
-        | some vs =>
-          rw [htr] at hp
-          replace hp : Value.set vs = v := by simpa using hp
-          subst hp
-          have := opaq_p_nsL lossy n' xs vs htr
-          simp only [Attr.depth, Value.depth]; omega
+      have := opaq_p_wire_depth Attr.n lossy n'
+        (fun x w h => opaq_p_n_depth lossy x n' w h) hp
+      simp only [Attr.depth]; omega
   | .bs bs, n, v, hp => by
       cases n with | zero => exact nomatch hp | succ n' =>
       rw [opaqCodec_p_bs] at hp
-      replace hp : (if bs.isEmpty then none
-        else (traverse (fun b => (opaqCodec n' lossy).p (.b b)) bs).map Value.set)
-          = some v := hp
-      split at hp
-      · exact nomatch hp
-      · cases htr : traverse (fun b => (opaqCodec n' lossy).p (.b b)) bs with
-        | none => rw [htr] at hp; exact nomatch hp
-        | some vs =>
-          rw [htr] at hp
-          replace hp : Value.set vs = v := by simpa using hp
-          subst hp
-          have := opaq_p_bsL lossy n' bs vs htr
-          simp only [Attr.depth, Value.depth]; omega
+      have := opaq_p_wire_depth Attr.b lossy n'
+        (fun x w h => opaq_p_b_depth lossy x n' w h) hp
+      simp only [Attr.depth]; omega
   | .l as, n, v, hp => by
       cases n with | zero => exact nomatch hp | succ n' =>
       rw [opaqCodec_p_l] at hp
