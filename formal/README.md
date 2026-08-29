@@ -16,6 +16,12 @@ definition it touches.
 | `Calculus/Typing.lean`      | §3–§5       | The judgement `⊢ c : T ⇝ μ`, both indices, with the held-set formers (`HSet`, `HStar`, `HProd`, `HMap`, `HNull`, `HObject`, `HUnion`, `HOpaque`); syntactic premises only                                                                                             |
 | `Calculus/Soundness.lean`   | §5          | `Obligations` (semantic premises, fueled), `UAtCan := UniqueAdmission ∘ semsOf`, `MPOk` (legacy exemption), theorem statements, and the held-set bridge `carrier_denote`/`typed_TSub`/`typed_e_mem`/`typed_p_mem`                                                    |
 | `Calculus/Equations.lean`   | §6          | `Codec.Equiv` (§6's `≡`), `nullable`'s idempotence and `union`'s commutativity — the two rows other sections rely on                                                                                                                                                    |
+| `Calculus/Opaque.lean`      | §3, §7      | `opaque` without fuel: `Value.depth`/`Attr.depth`, the ten kind-disjoint unfoldings, `opaq_e_agree`/`opaq_p_agree` (stabilization), `opaq_e_depth`/`opaq_p_depth` (depth preservation), and `opaqCodecω` with `lawful_opaqCodecω`/`carrier_opaqCodecω` |
+| `Calculus/Denoteω.lean`     | —           | `denoteω : Term → Codec` — structural, no fuel — with `termDepth` and `denoteω_eq : termDepth t ≤ n → denoteω t = denote n t` |
+| `Calculus/Soundnessω.lean`  | §5          | §5 restated fuel-free: `soundnessω`, `soundness_coreω`, `carrier_denoteω`, `typed_e_memω`, `typed_p_memω`, `typed_μSynω` — transports, not reproofs |
+| `Calculus/HeldSet.lean`     | §3, §6      | `T` as an identity: `opaq_T_identity` (`Uν` *is* `opaque`'s held set), and `set_nil_outside_opaque` — the witness for the non-emptiness premise `HOpaque` was missing |
+| `Calculus/Continuity.lean`  | §5, §7      | Why fuel is not removable by a fixpoint: `Codec.Approx` (the information order any ccpo must extend), `altCodec_not_monotone` (unique admission is anti-monotone in the options) and `denote_not_fuel_monotone` (the fuel stages are not a chain) |
+| `Calculus/Refutations.lean` | §6          | §6's "Do not hold" table, all nine settled: `not_equiv_lazy` (the row where `≡`'s member index matters), `not_equiv_union_array`, `not_equiv_union_extend`, the two `tuple`-tail rows, `not_equiv_refine_held`, `legacy_breaks_MP`, `e_comp_p_ne_id`, `not_typed_set_union` — plus `optional` nesting, which the syntax rules out |
 | `Calculus/Discharge.lean`   | §5          | The machinery of (K): `Kind`, `κ`, `ident`, `adm`/`admA` as structural recursions, `κ_sound`/`adm_sound`/`admA_sound`, and `uAtCan_of_separated` — the dischargers of (U), proved, with witnesses and the two counterexamples that repaired (K)                       |
 
 **The mechanization is complete: the project builds with zero `sorry`.** Both halves
@@ -38,10 +44,27 @@ and the judgement to it), and `lazy` concludes `⊤` in the model exactly as the
 - **No mathlib yet.** The definitions don't need it; wire sets/maps are lists (a quotient
   cannot sit recursively inside an inductive), and set-ness lives where the doc puts it —
   in `ker p`. Revisit when attacking `lawful_objectCodec` (roadmap item 6).
-- **Fuel-primary denotation.** Every recursive call decrements fuel; `lazy` is free and
-  termination is structural on `Nat`. Fuel 0 denotes `Codec.empty` (laws vacuous) — the
-  doc's "partiality is doing the termination argument's work", literally. Laws are
-  stated `∀ fuel`.
+- **Fuel-primary denotation, now with a fuel-free twin.** `denote` still takes fuel and
+  every proof about it is unchanged; `denoteω` (Denoteω.lean) is structural and takes
+  none. `denoteω_eq` makes them *equal* at `termDepth t`, so the §5 statements transport
+  to the fuel-free form (Soundnessω.lean) without reproving anything. Fuel 0 still
+  denotes `Codec.empty` (laws vacuous). Both blockers that forced fuel are gone: `lazy`
+  carries a `Term`, and `opaq` denotes `opaqCodecω`.
+- **Fuel is not removable by a fixpoint, and that is a fact about (U), not about Lean.**
+  `Continuity.lean` proves it: `altCodec` resolves a union by *unique* admission, and
+  `OptionSem.byAttempt` derives admission from `(c.e v).isSome`, so growing the recursive
+  result grows admission, grows the filtered list from `[o]` to `[o, o']`, and collapses
+  the union's answer from `some` to `none`. Unique admission quantifies over the *other*
+  options — a negative condition, anti-monotone in exactly the argument a fixpoint must
+  grow. `altCodec_not_monotone` is the `mono` obligation any ccpo construction
+  (Isabelle's `partial_function`, HOLCF, a hand-rolled `⨆`) would have to discharge and
+  cannot; `denote_not_fuel_monotone` shows the fuel stages themselves are not a chain,
+  on `union(literal("A"), lazy(string))` — §5's own counterexample pair, staggered.
+  Note the direction: the low-fuel answer is *over*-defined, not under-defined.
+  What fuel actually stands in for is the finiteness of `Term` — `lazy` carries
+  `Unit → Term`, which defeats the termination checker without adding a single
+  constructible term. The repair is therefore in the model, not in the tool: see the
+  three steps in `docs/codec-formalization.md` §7.
 - **`Double` is axiomatized** with exactly the shortest-text round trip §3's `(number)`
   consumes. IEEE-754 facts are not this calculus's theorems.
 - **Semantic rule premises live in `Obligations fuel t`**, not in `Typed`: the doc's
