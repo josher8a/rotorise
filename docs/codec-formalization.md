@@ -365,6 +365,72 @@ Watch the stratification here (§4 of the specification). `optional` and `fallba
 not codecs. If your library lets `optional(c)` appear where a codec is expected, C3 fails at that
 constructor and the fix is in your library, not in the mapping.
 
+#### The mapping, for this repository
+
+C3 asks for the `Term` each constructor denotes, and for the constructors that have none to be named
+rather than assumed. Here it is, and the shape of the table is the answer to a question that had not
+been asked: **a definition language for codecs has three levels in it, because §4 does.**
+
+`CodecDef['kind']` is flat — twenty-four names in one union — while §4 puts a **codec**, a **field**
+and a **rest policy** at three different levels and is normative about it. This library did enforce
+the separation, with branded markers and a `NotAboutAbsence` guard at each site that could go wrong,
+but the level a kind belongs to was written down nowhere, so the flat list read as twenty-four
+constructors of which three had no term. They are not missing terms. They are not codecs.
+
+**§3's terms** — twenty-one kinds, denoting twenty-two `Term` constructors:
+
+| `CodecDef['kind']` | `Term` | | `CodecDef['kind']` | `Term` |
+| --- | --- | --- | --- | --- |
+| `string` | `.string` | | `attributes` | `.object` |
+| `decimal` | `.decimal` | | `tagged` | `.dunion` |
+| `number` | `.number` | | `untagged` | `.union` |
+| `boolean` | `.boolean` | | `refine` | `.refine` |
+| `binary` | `.binary` | | `nullable` | `.nullable` |
+| `null` | `.null` | | `legacy` | `.legacy` |
+| `literal` | `.literalS` / `.literalN`, by the values | | `held` | `.held` |
+| `set` | `.set` | | `lazy` | `.lazy` |
+| `array` | `.array` | | `opaque` | `.opaq` |
+| `tuple` | `.tuple` (with `tail`) | | `custom` | `.custom` |
+| `record` | `.record` | | | |
+
+**§4's fields** — a *position* in an item, not a codec:
+
+| `CodecDef['kind']` | denotes |
+| --- | --- |
+| `optional` | `Field.optional` |
+| `fallback` | `Field.fallback` |
+
+**§4's rest policy** — likewise a position:
+
+| `CodecDef['kind']` | denotes |
+| --- | --- |
+| `restOf` | `Rest.codec` |
+
+`Rest.drop` and `Rest.refuse` have no `CodecDef` and want none: they are the *absence* of a rest
+codec, which the definition records by having no `rest` entry.
+
+**The mapping is total in both directions.** Every kind denotes something, and every `Term`
+constructor has a codec. It was not total until recently, and both gaps are worth naming because
+they were the same mistake pointing opposite ways:
+
+- `branch` was a kind with no term, because it was not a construction — a pseudo-codec manufactured
+  while walking a path, whose `encode` and `decode` both threw. Removed; the walk carries the
+  disagreement now.
+- `null` was a term with no kind. §1 gives the value language a `null` and the attribute domain a
+  `NULL`, §3's `(opaque)` dispatches on the `NULL` point, and no constructor denoted it, so a schema
+  could not say "this attribute is exactly `NULL`". Added as `nullValue`.
+
+The three strata are now named in the source (`TermDef`, `FieldDef`, `RestDef`), and a type-level
+assertion fails the build if a kind is added that no stratum claims. That is `#assert_axioms`'s move
+in a different language: a classification the specification makes normatively, turned into a build
+error rather than something a reader is asked to re-derive. It was checked by adding an unclassified
+kind and watching the build stop.
+
+**What this table is not.** Naming the term is C3's first half; showing the pairs agree is the
+second, and that is still a paper obligation — there is no `Codec.Equiv` check between a codec and
+its term's denotation, because there is no denotation in TypeScript to check against. Until there
+is, this table says the mapping exists and is total, not that it is correct.
+
 #### A worked case: what C3 establishes for `refine`, and what it does not
 
 `(refine)` carries no premise. `restrict` gates **both** halves — `e v = if q v then c.e v else none`,

@@ -335,6 +335,81 @@ export type CodecDef =
      */
     | { readonly kind: 'custom' }
 
+/* ── §4's stratification, as three named strata over a flat `kind` ─────────────────── */
+
+/**
+ * `CodecDef['kind']` is flat, and the calculus is not.
+ *
+ * §4 of `docs/codec-calculus.md` puts three different things at three different levels — a **codec**
+ * denotes a `Term`, a **field** denotes a `Field`, and a **rest policy** denotes a `Rest` — and says
+ * so normatively: "`optional` and `fallback` are fields, not codecs. If your library lets
+ * `optional(c)` appear where a codec is expected, C3 fails at that constructor." This library does
+ * enforce that, but with branded markers and `NotAboutAbsence` guards at each site that could go
+ * wrong, so the level a kind belongs to was never written down anywhere.
+ *
+ * These are that, written down. They are also what C3's mapping is stated over: a `TermDef` has a
+ * `Term`, a `FieldDef` and a `RestDef` deliberately do not, and reporting the last two as "no
+ * corresponding term" would be reporting the stratification as a gap.
+ */
+
+/** §3's terms: the kinds that denote a codec. */
+type TermKind =
+    | 'string'
+    | 'literal'
+    | 'decimal'
+    | 'number'
+    | 'boolean'
+    | 'binary'
+    | 'null'
+    | 'set'
+    | 'array'
+    | 'tuple'
+    | 'record'
+    | 'attributes'
+    | 'tagged'
+    | 'untagged'
+    | 'refine'
+    | 'nullable'
+    | 'legacy'
+    | 'held'
+    | 'lazy'
+    | 'opaque'
+    | 'custom'
+
+/** §4's fields: a *position* in an item — whether a name may be absent — and not a codec. */
+type FieldKind = 'optional' | 'fallback'
+
+/** §4's rest policy: what a tuple's tail is, which is likewise a position and not a codec. */
+type RestKind = 'restOf'
+
+/**
+ * Every kind is classified, and the lists above are written out rather than derived so that adding
+ * one is a decision rather than a default.
+ *
+ * A new `CodecDef` member that no stratum claims stops the build here. That is the same move as
+ * `#assert_axioms` in the formalization: a fact the documents assert, turned into a build error
+ * instead of something a reader is asked to re-derive.
+ */
+type Classified<Whole, Parts> = [Whole] extends [Parts]
+    ? [Parts] extends [Whole]
+        ? true
+        : never
+    : never
+const _everyKindHasALevel: Classified<
+    CodecDef['kind'],
+    TermKind | FieldKind | RestKind
+> = true
+void _everyKindHasALevel
+
+/** A definition that denotes a §3 `Term`. */
+export type TermDef = Extract<CodecDef, { readonly kind: TermKind }>
+
+/** A definition that denotes a §4 `Field`. */
+export type FieldDef = Extract<CodecDef, { readonly kind: FieldKind }>
+
+/** A definition that denotes a §4 `Rest`. */
+export type RestDef = Extract<CodecDef, { readonly kind: RestKind }>
+
 /**
  * The member this codec writes, when it writes exactly one.
  *
@@ -406,7 +481,7 @@ export const writes = (codec: AnyCodec): AttributeName | undefined => {
 }
 
 /** Which member each kind of codec puts a value in, where the kind alone decides. */
-const writtenBy: { readonly [K in CodecDef['kind']]?: AttributeName } = {
+const writtenBy: { readonly [K in TermKind]?: AttributeName } = {
     string: 'S',
     decimal: 'N',
     number: 'N',
@@ -489,7 +564,7 @@ export type Shape =
     | 'null'
 
 /** Which kind of value each kind of codec takes, where the kind alone decides. */
-const carriedBy: { readonly [K in CodecDef['kind']]?: Shape } = {
+const carriedBy: { readonly [K in TermKind]?: Shape } = {
     string: 'string',
     // a decimal is stored as `N` and *held* as a string, which is the whole point of it
     decimal: 'string',
