@@ -6,7 +6,7 @@ import Calculus.Soundness
 Which rewrites preserve the pair. `≡` is §6's own reading: the same held set, the same
 member, and `e` and `p` agreeing everywhere both are defined.
 
-Ten of §6's eleven "Hold" rows are proved here. Two of them are cited elsewhere as
+All eleven of §6's "Hold" rows are proved here. Two of them are cited elsewhere as
 load-bearing and came first:
 
 * `nullable(nullable(c)) ≡ nullable(c)` — §6 gives the reason the proof uses, that the
@@ -22,15 +22,11 @@ The remaining rows: `held`'s identity and composition, `refine`'s meet and its f
 `legacy` with its own reading (and `≈` on `Can(c)`), `union` of one, and the member
 preservation of the three codec wrappers.
 
-One row is open — `union(c₁, union(c₂, c₃)) ≡ union(c₁, c₂, c₃)`. It is the only
-*conditional* row in the table, and §6 states the condition honestly: both sides must
-satisfy (D) and (K), and it holds only on inputs satisfying (U), because an ambiguity
-inside the nested option fails locally on the left — where the outer union may still
-resolve — and globally on the right. Refuting or proving it needs the (U) premise
-threaded through both nestings; `Continuity.lean` is the reason to expect that to be
-delicate rather than routine.
+The last row, `union` associativity, is the table's only *conditional* one — and it turns
+out not to need its conditions. See the section below for why, and
+`Refutations.not_eq_altCodec_assoc` for the behavioural difference `≡` is blind to.
 
-The "Do not hold" table is settled in `Refutations.lean`.
+The "Do not hold" table is settled in `Refutations.lean`. §6 is complete.
 -/
 
 namespace Calculus
@@ -332,5 +328,197 @@ theorem restrict_μ (c : Codec) (q : Value → Bool) : (c.restrict q).μ = c.μ 
 
 theorem extendRead_μ (c : Codec) (r : Attr → Option Value) :
     (c.extendRead r).μ = c.μ := rfl
+
+/-! ## `union` is associative
+
+§6's last row, and the only conditional one in the table: "associative, where both sides
+satisfy (D) and (K) — and only on inputs satisfying (U): an ambiguity *inside* the nested
+option fails locally on the left, where the outer union may still resolve, and globally on
+the right."
+
+The behaviour is exactly as described. What the mechanization adds is that under §6's own
+`≡` the conditions are **not needed** — the row holds outright. The reason is the clause
+`≡` is defined with: `e` and `p` agree *where both are defined*. In precisely the case the
+hedge describes the right side is undefined, so the obligation is vacuous and the two sides
+cannot disagree.
+
+That cuts both ways, and both halves are on the record: the row is stronger than §6 claims,
+and `≡` is weaker than the hedge's prose suggests. `Refutations.not_eq_altCodec_assoc`
+exhibits the difference `≡` cannot see. -/
+
+/-- The member index nests the same way it flattens. Both sides conclude the head member
+    or `⊤`, so the content is entirely in whether the condition agrees. -/
+theorem unanimous_pair_assoc (a b c : Option Member) :
+    unanimous [a, unanimous [b, c]] = unanimous [a, b, c] := by
+  show (if ([unanimous [b, c]].all (· == a)) = true then a else none)
+      = (if ([b, c].all (· == a)) = true then a else none)
+  simp only [List.all_cons, List.all_nil, Bool.and_true]
+  by_cases hcb : (c == b) = true
+  · have hu : unanimous [b, c] = b := by
+      show (if ([c].all (· == b)) = true then b else none) = b
+      simp only [List.all_cons, List.all_nil, Bool.and_true, if_pos hcb]
+    rw [hu, eq_of_beq hcb, Bool.and_self]
+  · have hu : unanimous [b, c] = none := by
+      show (if ([c].all (· == b)) = true then b else none) = none
+      simp only [List.all_cons, List.all_nil, Bool.and_true, if_neg hcb]
+    rw [hu]
+    cases a with
+    | none => simp
+    | some x =>
+      have hne : ((b == some x) && (c == some x)) = false := by
+        cases hbx : (b == some x) with
+        | false => simp
+        | true =>
+          cases hcx : (c == some x) with
+          | false => simp
+          | true =>
+            exact absurd (by rw [eq_of_beq hbx, eq_of_beq hcx]; simp) hcb
+      simp [hne]
+
+/-! ### Closed forms
+
+`altCodec` reads its option list only through "exactly one admits", so at two and three
+options its pair has a small closed form. Associativity is then a comparison of two such
+forms, case by case on which options admit. -/
+
+theorem altCodec_pair_e (o₂ o₃ : OptionSem) (μ' : Option Member) (v : Value) :
+    (altCodec [o₂, o₃] μ').e v =
+      (match o₂.admitV v, o₃.admitV v with
+       | true, false => o₂.c.e v
+       | false, true => o₃.c.e v
+       | _, _ => none) := by
+  cases hB : o₂.admitV v <;> cases hC : o₃.admitV v <;>
+    simp [altCodec, List.filter, hB, hC]
+
+theorem altCodec_pair_p (o₂ o₃ : OptionSem) (μ' : Option Member) (a : Attr) :
+    (altCodec [o₂, o₃] μ').p a =
+      (match o₂.admitA a, o₃.admitA a with
+       | true, false => o₂.c.p a
+       | false, true => o₃.c.p a
+       | _, _ => none) := by
+  cases hB : o₂.admitA a <;> cases hC : o₃.admitA a <;>
+    simp [altCodec, List.filter, hB, hC]
+
+theorem altCodec_triple_e (o₁ o₂ o₃ : OptionSem) (μ : Option Member) (v : Value) :
+    (altCodec [o₁, o₂, o₃] μ).e v =
+      (match o₁.admitV v, o₂.admitV v, o₃.admitV v with
+       | true, false, false => o₁.c.e v
+       | false, true, false => o₂.c.e v
+       | false, false, true => o₃.c.e v
+       | _, _, _ => none) := by
+  cases hA : o₁.admitV v <;> cases hB : o₂.admitV v <;> cases hC : o₃.admitV v <;>
+    simp [altCodec, List.filter, hA, hB, hC]
+
+theorem altCodec_triple_p (o₁ o₂ o₃ : OptionSem) (μ : Option Member) (a : Attr) :
+    (altCodec [o₁, o₂, o₃] μ).p a =
+      (match o₁.admitA a, o₂.admitA a, o₃.admitA a with
+       | true, false, false => o₁.c.p a
+       | false, true, false => o₂.c.p a
+       | false, false, true => o₃.c.p a
+       | _, _, _ => none) := by
+  cases hA : o₁.admitA a <;> cases hB : o₂.admitA a <;> cases hC : o₃.admitA a <;>
+    simp [altCodec, List.filter, hA, hB, hC]
+
+/-- The nested form. The head resolves only when the *inner union* is undefined — which is
+    §6's "the outer union may still resolve" — and the inner one only when the head does
+    not admit. -/
+theorem altCodec_nest_e (o₁ o₂ o₃ : OptionSem) (μ μ' : Option Member) (v : Value) :
+    (altCodec [o₁, .byAttempt (altCodec [o₂, o₃] μ')] μ).e v =
+      (match o₁.admitV v, (altCodec [o₂, o₃] μ').e v with
+       | true, none => o₁.c.e v
+       | false, some b => some b
+       | _, _ => none) := by
+  have key : (OptionSem.byAttempt (altCodec [o₂, o₃] μ')).admitV v
+      = ((altCodec [o₂, o₃] μ').e v).isSome := rfl
+  have hc : (OptionSem.byAttempt (altCodec [o₂, o₃] μ')).c = altCodec [o₂, o₃] μ' := rfl
+  show (match [o₁, OptionSem.byAttempt (altCodec [o₂, o₃] μ')].filter (·.admitV v) with
+        | [o] => o.c.e v | _ => none) = _
+  cases hA : o₁.admitV v <;> cases hI : (altCodec [o₂, o₃] μ').e v <;>
+    simp only [List.filter, hA, key, hI, hc, Option.isSome] <;> rfl
+
+theorem altCodec_nest_p (o₁ o₂ o₃ : OptionSem) (μ μ' : Option Member) (a : Attr) :
+    (altCodec [o₁, .byAttempt (altCodec [o₂, o₃] μ')] μ).p a =
+      (match o₁.admitA a, (altCodec [o₂, o₃] μ').p a with
+       | true, none => o₁.c.p a
+       | false, some w => some w
+       | _, _ => none) := by
+  have key : (OptionSem.byAttempt (altCodec [o₂, o₃] μ')).admitA a
+      = ((altCodec [o₂, o₃] μ').p a).isSome := rfl
+  have hc : (OptionSem.byAttempt (altCodec [o₂, o₃] μ')).c = altCodec [o₂, o₃] μ' := rfl
+  show (match [o₁, OptionSem.byAttempt (altCodec [o₂, o₃] μ')].filter (·.admitA a) with
+        | [o] => o.c.p a | _ => none) = _
+  cases hA : o₁.admitA a <;> cases hI : (altCodec [o₂, o₃] μ').p a <;>
+    simp only [List.filter, hA, key, hI, hc, Option.isSome] <;> rfl
+
+/-- §6: `union(c₁, union(c₂, c₃)) ≡ union(c₁, c₂, c₃)` — with no side condition. -/
+theorem equiv_altCodec_assoc (o₁ o₂ o₃ : OptionSem) :
+    Codec.Equiv
+      (altCodec [o₁, .byAttempt (altCodec [o₂, o₃] (unanimous [o₂.c.μ, o₃.c.μ]))]
+        (unanimous [o₁.c.μ, unanimous [o₂.c.μ, o₃.c.μ]]))
+      (altCodec [o₁, o₂, o₃] (unanimous [o₁.c.μ, o₂.c.μ, o₃.c.μ])) := by
+  refine ⟨?_, unanimous_pair_assoc _ _ _, ?_, ?_⟩
+  · intro v
+    constructor
+    · rintro ⟨x, hx, hT⟩
+      rcases List.mem_cons.mp hx with rfl | hx'
+      · exact ⟨x, List.mem_cons_self _ _, hT⟩
+      · rcases List.mem_cons.mp hx' with rfl | hx''
+        · obtain ⟨y, hy, hTy⟩ := hT
+          exact ⟨y, List.mem_cons_of_mem _ hy, hTy⟩
+        · exact absurd hx'' (by simp)
+    · rintro ⟨x, hx, hT⟩
+      rcases List.mem_cons.mp hx with rfl | hx'
+      · exact ⟨x, List.mem_cons_self _ _, hT⟩
+      · exact ⟨_, List.mem_cons_of_mem _ (List.mem_cons_self _ _), ⟨x, hx', hT⟩⟩
+  · intro v a a' h h'
+    rw [altCodec_nest_e, altCodec_pair_e] at h
+    rw [altCodec_triple_e] at h'
+    cases hA : o₁.admitV v <;> cases hB : o₂.admitV v <;> cases hC : o₃.admitV v <;>
+      simp only [hA, hB, hC] at h h'
+    · exact nomatch h
+    · cases hE : o₃.c.e v with
+      | none => rw [hE] at h; exact nomatch h
+      | some b =>
+        rw [hE] at h h'
+        exact (Option.some.inj h).symm.trans (Option.some.inj h')
+    · cases hE : o₂.c.e v with
+      | none => rw [hE] at h; exact nomatch h
+      | some b =>
+        rw [hE] at h h'
+        exact (Option.some.inj h).symm.trans (Option.some.inj h')
+    · exact nomatch h
+    · exact Option.some.inj (h.symm.trans h')
+    · cases hE : o₃.c.e v with
+      | none => rw [hE] at h; exact nomatch h'
+      | some b => rw [hE] at h; exact nomatch h
+    · cases hE : o₂.c.e v with
+      | none => rw [hE] at h; exact nomatch h'
+      | some b => rw [hE] at h; exact nomatch h
+    · exact nomatch h'
+  · intro a v v' h h'
+    rw [altCodec_nest_p, altCodec_pair_p] at h
+    rw [altCodec_triple_p] at h'
+    cases hA : o₁.admitA a <;> cases hB : o₂.admitA a <;> cases hC : o₃.admitA a <;>
+      simp only [hA, hB, hC] at h h'
+    · exact nomatch h
+    · cases hE : o₃.c.p a with
+      | none => rw [hE] at h; exact nomatch h
+      | some w =>
+        rw [hE] at h h'
+        exact (Option.some.inj h).symm.trans (Option.some.inj h')
+    · cases hE : o₂.c.p a with
+      | none => rw [hE] at h; exact nomatch h
+      | some w =>
+        rw [hE] at h h'
+        exact (Option.some.inj h).symm.trans (Option.some.inj h')
+    · exact nomatch h
+    · exact Option.some.inj (h.symm.trans h')
+    · cases hE : o₃.c.p a with
+      | none => rw [hE] at h; exact nomatch h'
+      | some w => rw [hE] at h; exact nomatch h
+    · cases hE : o₂.c.p a with
+      | none => rw [hE] at h; exact nomatch h'
+      | some w => rw [hE] at h; exact nomatch h
+    · exact nomatch h'
 
 end Calculus
