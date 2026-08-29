@@ -238,4 +238,104 @@ theorem not_eq_altCodec_assoc :
    .union [.string, .literalS ["A"], .literalS ["A"]],
    .str "A", .s "A", assoc_left_e, assoc_right_e⟩
 
+/-! ## `≡` is not transitive
+
+Not a row of §6 — a property of §6 itself. `Codec.Equiv.refl` and `Codec.Equiv.symm` are
+proved in `Equations.lean`; `trans` is absent, and this is why. §6 is presented as an
+equational theory and `docs/codec-formalization.md`'s conformance standard asks a port to
+exhibit `Codec.Equiv`, so a reader is entitled to assume the relation chains. It does not,
+and nothing said so.
+
+The mechanism is the tolerance the header above describes: `≡` compares `e` and `p` only
+*where both are defined*, so a codec whose `e` is nowhere defined agrees with everything.
+Put one in the middle and it relates two codecs that disagree outright.
+
+The witness is at `Codec` level, which is the level §6's relation lives at — `Equations.lean`
+states all thirty-six of its rows about combinators, never about `denote`. What keeps it
+from being a degenerate artifact is that **all three codecs are `Lawful` and on their
+`Carrier`**, and the held set is not empty: the failure survives every hypothesis §2
+imposes on a pair. It uses only the licence §2 grants explicitly — a term's `e` does
+whatever it likes off `T` — and the fact that `Carrier` bounds `dom(e)` by `T` without
+requiring the converse.
+
+What is *not* settled here: whether `≡` chains when both ends are `denoteω` of derivable
+terms. The middle codec below holds `null` and writes nothing, and no derivable term does
+that, so this refutation does not decide the restricted question. -/
+
+/-- Writes `null` as an `S`, and nothing else — lawful, and on its carrier. -/
+def cA : Codec :=
+  { T := fun v => v = .null, μ := none,
+    e := fun v => match v with | .null => some (.s "A") | _ => none,
+    p := fun a => match a with | .s _ => some .null | _ => none }
+
+/-- The same, writing `S "B"`. It disagrees with `cA` on the one value both write. -/
+def cB : Codec :=
+  { T := fun v => v = .null, μ := none,
+    e := fun v => match v with | .null => some (.s "B") | _ => none,
+    p := fun a => match a with | .s _ => some .null | _ => none }
+
+/-- The middle: the same held set, and no `e` or `p` anywhere. Every law of §2 is vacuous
+    on it, which is exactly what makes it `≡` to both of the others. -/
+def cMid : Codec :=
+  { T := fun v => v = .null, μ := none, e := fun _ => none, p := fun _ => none }
+
+theorem lawful_cA : Lawful cA where
+  retract := by intro t a he; cases t <;> simp_all [cA]; subst_vars; rfl
+  canon := by intro a t hp; cases a <;> simp_all [cA]; subst_vars; rfl
+  writes := by intro μ hμ; exact nomatch hμ
+  agree := by
+    intro a t a' hp he
+    cases a
+    case s v =>
+      obtain rfl : t = .null := by simpa [cA] using hp.symm
+      obtain rfl : a' = .s "A" := by simpa [cA] using he.symm
+      exact .s _ _
+    all_goals simp [cA] at hp
+
+theorem lawful_cB : Lawful cB where
+  retract := by intro t a he; cases t <;> simp_all [cB]; subst_vars; rfl
+  canon := by intro a t hp; cases a <;> simp_all [cB]; subst_vars; rfl
+  writes := by intro μ hμ; exact nomatch hμ
+  agree := by
+    intro a t a' hp he
+    cases a
+    case s v =>
+      obtain rfl : t = .null := by simpa [cB] using hp.symm
+      obtain rfl : a' = .s "B" := by simpa [cB] using he.symm
+      exact .s _ _
+    all_goals simp [cB] at hp
+
+theorem lawful_cMid : Lawful cMid := by
+  refine ⟨?_, ?_, ?_, ?_⟩ <;> intros <;> simp_all [cMid]
+
+theorem carrier_cA : Carrier cA where
+  domE := by intro v a he; cases v <;> simp_all [cA]
+  ranP := by intro a v hp; cases a <;> simp_all [cA]
+
+theorem carrier_cB : Carrier cB where
+  domE := by intro v a he; cases v <;> simp_all [cB]
+  ranP := by intro a v hp; cases a <;> simp_all [cB]
+
+theorem carrier_cMid : Carrier cMid := by
+  refine ⟨?_, ?_⟩ <;> intros <;> simp_all [cMid]
+
+/-- The two hops. Both hold because `cMid` never writes and never reads, so the two
+    agreement clauses of `≡` have no input to disagree on. -/
+theorem equiv_cA_cMid : Codec.Equiv cA cMid := by
+  refine ⟨fun _ => Iff.rfl, rfl, ?_, ?_⟩ <;> intros <;> simp_all [cMid]
+
+theorem equiv_cMid_cB : Codec.Equiv cMid cB := by
+  refine ⟨fun _ => Iff.rfl, rfl, ?_, ?_⟩ <;> intros <;> simp_all [cMid]
+
+/-- And the composite fails: both write `null`, to different attributes. -/
+theorem not_equiv_cA_cB : ¬ Codec.Equiv cA cB := by
+  intro h
+  have hab : (Attr.s "A") = Attr.s "B" := h.writes (v := .null) rfl rfl
+  simp at hab
+
+/-- **§6's `≡` is not transitive**, and the counterexample is lawful throughout. -/
+theorem not_equiv_trans :
+    ¬ ∀ c d e, Codec.Equiv c d → Codec.Equiv d e → Codec.Equiv c e :=
+  fun h => not_equiv_cA_cB (h _ _ _ equiv_cA_cMid equiv_cMid_cB)
+
 end Calculus

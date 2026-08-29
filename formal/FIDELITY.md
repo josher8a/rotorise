@@ -128,12 +128,24 @@ checking the table changes vocabulary halfway across it, and `(dunion)`'s (U) is
 only *inside* `lawful_dunionCodec`. Also a dangling reference: `Combinators.lean:1361`
 cites `uniqueAdmission_of_disjoint`, which does not exist.
 
-**U3 — `≡` is not transitive, and nothing says so. [checked]**
+**U3 — `≡` is not transitive, and nothing says so. [checked] [fixed]**
 `Codec.Equiv` (`Equations.lean:36`) is faithful to §6 — agreeing everywhere both are
 defined. `Equiv.refl` and `Equiv.symm` are proved; **`trans` is absent and false**: take
 three codecs agreeing on `T` and `μ` where the middle one's `e` is nowhere defined.
 §6 is presented as an equational theory, and `codec-formalization.md`'s conformance
 standard asks a port to exhibit `Codec.Equiv` — a relation that does not chain.
+
+**Now said, three places** (§5 item 3): `not_equiv_trans` in `Refutations.lean`, a
+docstring where a reader looks for `trans` (beside `Codec.Equiv.symm`), and a sentence in
+C3 telling a port not to certify through an intermediate. The witness came out stronger
+than the sketch above: all three codecs are `Lawful` **and** on their `Carrier`, and the
+held set is nonempty, so the failure survives every hypothesis §2 imposes on a pair. It
+needs only the licence §2 grants out loud — `e` does what it likes off `T` — plus the
+fact that `Carrier` bounds `dom(e)` by `T` and not the converse.
+
+Left open, and said so in the source: whether `≡` chains when both ends are `denoteω` of
+*derivable* terms. The middle codec holds `null` and writes nothing, which no derivable
+term does, so this refutation does not decide the restricted question.
 
 **U4 — §6's "Hold" table is advertised complete; two of eleven rows are not. [reported]**
 Commutativity is proved for the adjacent transposition only (`equiv_altCodec_swap`);
@@ -244,7 +256,7 @@ for, and it now has three independent confirmations.
 | --- | --- | --- |
 | 1 | ~~The eleven `#assert_axioms` lines — the hand-checks of U5, made mechanical~~ **done**: 28 of 99 guarded, green first try | cheapest, and it is the guard's own principle; `opaq_T_identity` guards seven `omega` calls behind a row the docs call closed |
 | 2 | ~~`(D)` into `Typed.union`, or name the divergence in `Typing.lean`'s list~~ **done**: `DIncomp`, into the rule | the difference between "`Typed` is §3–§5's judgement" being true and false; the list records five smaller divergences and omits this one |
-| 3 | Attempt `Equiv.trans`, fail, record `not_equiv_trans` | three lines; a non-transitive `≡` presented as an equational theory is exactly the species §4's log is made of |
+| 3 | ~~Attempt `Equiv.trans`, fail, record `not_equiv_trans`~~ **done**, lawful and on-carrier throughout | three lines; a non-transitive `≡` presented as an equational theory is exactly the species §4's log is made of |
 | 4 | `ident_sound`, or delete `ident` and say `adm` carries the exemption | a normative table transcribed and unconstrained is the definition of an unlocatable claim |
 | 5 | `uAtCan_dunion`, `uAtCan_opaque` — the four discharger rows in one vocabulary | two one-line theorems; converts two unlocatable rows to checkable, and retires the dangling reference |
 | 6 | A §-tag ratchet in `fidelity_audit.py`, failing the build when coverage drops | 18% today, 1% in `Opaque.lean`; `Axioms.lean`'s principle applied to traceability |

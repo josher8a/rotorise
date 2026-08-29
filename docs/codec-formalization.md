@@ -224,6 +224,10 @@ show the two pairs agree: `Codec.Equiv (yourCodec …) (denote fuel t)` for suff
 `≡`, so agreement is required only where both are defined. Constructors with no corresponding
 `Term` are outside the certificate; say so explicitly rather than assuming they inherit anything.
 
+Show it for *your* codec against the term, not through an intermediate: `≡` is reflexive and
+symmetric but **not transitive** (`Calculus.not_equiv_trans`), because a pair that is nowhere
+defined agrees with everything. Two hops through a partial codec certify nothing.
+
 Watch the stratification here (§4 of the specification). `optional` and `fallback` are **fields**,
 not codecs. If your library lets `optional(c)` appear where a codec is expected, C3 fails at that
 constructor and the fix is in your library, not in the mapping.

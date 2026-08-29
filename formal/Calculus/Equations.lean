@@ -47,6 +47,12 @@ theorem Codec.Equiv.refl (c : Codec) : Codec.Equiv c c :=
   ⟨fun _ => Iff.rfl, rfl, fun h h' => Option.some.inj (h.symm.trans h'),
     fun h h' => Option.some.inj (h.symm.trans h')⟩
 
+/-- There is no `Codec.Equiv.trans`, and the omission is not an oversight: `≡` compares
+    `e` and `p` only *where both are defined*, so a codec that writes and reads nowhere is
+    `≡` to everything and chains two codecs that disagree outright. Refuted as
+    `Refutations.not_equiv_trans`, with all three codecs `Lawful` and on their `Carrier`.
+    §6 is a table of rewrites, each proved on its own; it is not a congruence to reason
+    in transitively. -/
 theorem Codec.Equiv.symm {c d : Codec} (h : Codec.Equiv c d) : Codec.Equiv d c :=
   ⟨fun v => (h.heldSet v).symm, h.member.symm,
     fun hd hc => (h.writes hc hd).symm, fun hd hc => (h.reads hc hd).symm⟩
