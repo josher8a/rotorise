@@ -112,6 +112,22 @@ The shared error is worth stating once, because it will recur in any port: **hel
 values; (U)'s readable side quantifies over attributes; `held` relabels between them.** No condition
 on held sets alone can decide the readable side.
 
+### A fifth: a term the domain had and the calculus did not
+
+§1 gives the value language a `null` and the attribute domain a `NULL` member; §3's
+`(opaque)` lists the `NULL` point among the eight options it dispatches on. But **no term
+denoted it** — the calculus could describe a value that is `null` and an attribute that is
+`⟨NULL, ∗⟩`, and could not describe a codec for them. A schema could say "this attribute is
+a string" or "this attribute is optional", and could not say "this attribute is exactly
+`NULL`" — a tombstone, or a payload-free option of a discriminated union.
+
+`(null)` is now a ground rule, `⊢ null : {null} ⇝ NULL`, mechanized like the other points
+and discharged like them: `κ(null) = {null}` is disjoint from every other ground kind and
+`NULL` is a member no other ground term names, so `uAtCan_string_null` settles
+`union(string, null)` at the declaration. The omission was found by asking whether
+`nullable(c)` could be written as `union(c, null)` — it could not, because the right-hand
+side was not a term.
+
 ### A fourth, about an identity rather than a discharger
 
 §3's paragraph on null-honesty said `nullable(c)` and `union(c, ⟨NULL⟩-point)` "coincide under

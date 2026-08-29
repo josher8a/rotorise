@@ -45,6 +45,7 @@ def κ : Term → Option (List Kind)
   | .string | .decimal | .literalS _ => some [.string]
   | .number | .numeric _ | .literalN _ => some [.number]
   | .boolean => some [.boolean]
+  | .null => some [.null]
   | .binary => some [.binary]
   | .set _ => some [.set]
   | .array _ | .tuple _ _ => some [.array]
@@ -198,6 +199,7 @@ theorem κ_sound : ∀ (fuel : Nat) (t : Term) {ks : List Kind} {v a},
     | numeric q => single_kind hκ v he
     | literalN ls => single_kind hκ v he
     | boolean => single_kind hκ v he
+    | null => single_kind hκ v he
     | binary => single_kind hκ v he
     | set t' => single_kind hκ v he
     | array t' => single_kind hκ v he
@@ -722,6 +724,29 @@ theorem pairwise_pair {α : Type} {R : α → α → Prop} {x y : α} (h : R x y
   rcases List.mem_cons.mp hz with rfl | hz
   · exact h
   · exact absurd hz (by simp)
+
+/-- Satisfiability witness for `uAtCan_of_disjoint` at the new ground term:
+    `union(string, null)` — the explicit spelling of a nullable string, and the one
+    §3's `(null)` rule exists for. Kinds settle it at the declaration: `κ(null)` is
+    `{null}`, disjoint from every other ground kind, and `NULL` is a member no other
+    ground term names. -/
+theorem uAtCan_string_null (fuel : Nat) :
+    UAtCan fuel [Term.string, Term.null] := by
+  refine uAtCan_of_disjoint fuel
+    (forall_mem_pair (lawful_string fuel) (lawful_null fuel))
+    (forall_mem_pair (fun _ _ h => nomatch h) (fun _ _ h => nomatch h))
+    (forall_mem_pair rfl rfl) (forall_mem_pair rfl rfl)
+    (pairwise_pair ?_) (pairwise_pair ?_)
+  · intro kx ky hx hy k hk
+    replace hx : some [Kind.string] = some kx := hx
+    replace hy : some [Kind.null] = some ky := hy
+    cases hx; cases hy
+    simp only [List.mem_singleton] at hk
+    subst hk
+    simp
+  · intro h
+    replace h : some Member.S = some Member.NULL := h
+    exact nomatch h
 
 /-- Satisfiability witness for `uAtCan_of_disjoint`: `union(string, boolean)` is
     discharged at the declaration, at every fuel. -/

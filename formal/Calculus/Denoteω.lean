@@ -32,6 +32,7 @@ def denoteω : Term → Codec
   | .number => numberCodec
   | .decimal => decimalCodec
   | .boolean => booleanCodec
+  | .null => nullCodec
   | .binary => binaryCodec
   | .numeric q => numericCodec q
   | .literalS ls => literalSCodec ls
@@ -127,7 +128,7 @@ mutual
 /-- `denoteω`'s member index is the syntactic one — `μSyn`, exactly as `denote_μ` says of
     the fueled denotation, but with no fuel hypothesis to carry. -/
 theorem denoteω_μ : ∀ t : Term, (denoteω t).μ = μSyn t
-  | .string | .number | .decimal | .boolean | .binary
+  | .string | .number | .decimal | .boolean | .binary | .null
   | .numeric _ | .literalS _ | .literalN _ => rfl
   | .set elem => by
       simp only [denoteω, μSyn, setCodec, denoteω_μ elem]
@@ -167,7 +168,7 @@ transport. -/
 mutual
 
 def termDepth : Term → Nat
-  | .string | .number | .decimal | .boolean | .binary
+  | .string | .number | .decimal | .boolean | .binary | .null
   | .numeric _ | .literalS _ | .literalN _ | .custom _ _ | .opaq _ => 1
   | .set t | .array t | .record t | .nullable t | .lazy t => termDepth t + 1
   | .held t _ _ => termDepth t + 1
@@ -221,6 +222,7 @@ theorem denoteω_eq : ∀ (t : Term) (n : Nat), termDepth t <= n -> denoteω t =
   | .number, _+1, _ => rfl
   | .decimal, _+1, _ => rfl
   | .boolean, _+1, _ => rfl
+  | .null, _+1, _ => rfl
   | .binary, _+1, _ => rfl
   | .numeric _, _+1, _ => rfl
   | .literalS _, _+1, _ => rfl

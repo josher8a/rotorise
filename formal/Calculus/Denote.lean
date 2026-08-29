@@ -47,6 +47,7 @@ def μSyn : Term → Option Member
   | .numeric _ => some .N
   | .literalN _ => some .N
   | .boolean => some .BOOL
+  | .null => some .NULL
   | .binary => some .B
   | .set t => (μSyn t).bind setMember
   | .array _ => some .L
@@ -92,6 +93,7 @@ def denote : Nat → Term → Codec
     | .number => numberCodec
     | .decimal => decimalCodec
     | .boolean => booleanCodec
+    | .null => nullCodec
     | .binary => binaryCodec
     | .numeric q => numericCodec q
     | .literalS ls => literalSCodec ls
