@@ -112,6 +112,21 @@ describe('what a set cannot hold', () => {
         expect(() => set(number).unsafeEncode(new Set())).toThrow(/no empty NS/)
     })
 
+    /**
+     * The read side of the same refusal, and the one that can actually be reached: DynamoDB never
+     * stores an empty `SS`, so an item carrying one came from somewhere else — a migration, a
+     * hand-built fixture, another writer. Decoding it used to hand back a `Set` that this codec's
+     * own `encode` refuses, so an item could be read and not written back.
+     */
+    it('refuses to read an empty one, which its own encode would refuse', () => {
+        expect(() => set(string).unsafeDecode({ SS: [] })).toThrow(
+            /no empty SS/,
+        )
+        expect(() => set(number).unsafeDecode({ NS: [] })).toThrow(
+            /no empty NS/,
+        )
+    })
+
     it('reads back a set, whatever order it arrives in', () => {
         expect(set(string).unsafeDecode({ SS: ['b', 'a'] })).toEqual(
             new Set(['a', 'b']),

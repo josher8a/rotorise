@@ -32,6 +32,10 @@ That last one is not hypothetical. Mechanizing §5 refuted **three** of the disc
 specification made (§4 below). Each was a small concrete counterexample, and each had been read by
 humans and believed. That is the return on this work.
 
+The traffic is not one-way. Two of §4's entries are defects the model found in the **implementation**
+rather than in the document: a `numeric` that narrowed a read without checking it, and a decoder that
+returned a value its own encoder refuses. Both had shipped.
+
 ## §2 What the formalization is not
 
 **It is not a test suite for the TypeScript.** Nothing in `formal/` observes the shipping
@@ -189,6 +193,26 @@ The behaviour §6 describes is real; `≡` simply cannot see it.
 needed for **interchangeability**, and not for `≡`. Any port that rewrites across the two forms
 is relying on the former, which the calculus does not give it.
 
+### One the model found in the implementation
+
+The empty set, and it is the plainest kind of defect the exercise can find: a law the model proves,
+failing in the code.
+
+`HSet` carries `vs ≠ []` — §1's `SS`/`NS`/`BS` are `℘⁺fin`, and `set_nil_outside_opaque` says no fuel
+ever held `set []` — so `carrier_setCodec` and `(C)` hold: whatever `p` returns, `e` can write.
+`set`'s implementation refused the empty set on **encode**, with a good message, and returned it on
+**decode**: `every([])` is `[]`, and `new Set([])` is a value the same codec will not write.
+`opaque`'s `SS`/`NS`/`BS` case did the same.
+
+So an item carrying an empty `SS` could be read and not written back — the failure lands in a
+read-modify-write, some distance from the decode that caused it. DynamoDB never stores an empty set,
+so the item did not come from DynamoDB; it came from a migration, another writer, or a fixture, which
+is exactly the traffic a decoder exists to be suspicious of.
+
+Both directions now refuse it. The general form is worth naming, since it is cheap to check across a
+port: **a codec whose `e` and `p` disagree about what it holds has no `T`.** `(C)` is the law that
+says so, and it is the one an encoder-side-only validation always breaks.
+
 ### One the specification says twice, two different ways
 
 §5's auxiliary tables give the calculus one `adm` — the set an `ident` term checks against —
@@ -283,9 +307,47 @@ Watch the stratification here (§4 of the specification). `optional` and `fallba
 not codecs. If your library lets `optional(c)` appear where a codec is expected, C3 fails at that
 constructor and the fix is in your library, not in the mapping.
 
+#### A worked case: what C3 establishes for `refine`, and what it does not
+
+`(refine)` carries no premise. `restrict` gates **both** halves — `e v = if q v then c.e v else none`,
+`p a = (c.p a).bind (if q · then · else none)` — and is lawful for any decidable `q`, which is why
+`Obligations` has no `refine` case at all. It is a total, law-preserving construction.
+
+This library's `refine` gates only the read. `encode` is `inner.encode`, unchecked, because its
+argument is already typed `Narrow` and TypeScript is what says so; `decode` runs the predicate,
+because a stored value was never type-checked. The two codecs therefore differ in **definedness**:
+the implementation's `e` is defined on values `restrict` refuses.
+
+**C3 passes anyway**, and it is worth being precise about why. `≡` requires `e` and `p` to agree
+only where both are defined, and the place they differ is exactly where `restrict`'s gate is shut —
+so the agreement clause has no input to disagree on. `Codec.Equiv (refine …) (restrict c q)` holds.
+
+That is `≡`'s tolerance doing the work, not the implementation's correctness. The same tolerance
+makes §6's associativity row hold unconditionally while the two forms are not interchangeable
+(`not_eq_altCodec_assoc`), and it is what `not_equiv_trans` bounds. **`≡` cannot see a domain
+difference, and here the domain difference is the obligation.** So C3 is passed and something is
+still owed:
+
+> `refine` is sound **iff** `is` honestly decides `Narrow`. Given that, TypeScript discharges the
+> write gate at every call site; nothing discharges the read gate, because stored data is outside
+> the type system.
+
+That obligation belongs on the C4 list, beside `held`'s iso and `custom`'s laws — it is a condition
+on a component the library does not own. What it is *not* is a premise for `(refine)` in the
+calculus: the rule is sound without one, so adding it would be adding a premise that discharges
+nothing, which is the defect §4 already records twice — for `(D)` and for `ident`.
+
+The general shape is worth keeping, because any port will meet it. **An unchecked direction is
+sound exactly as far as something outside the codec enforces it.** For `refine`'s encode that
+something is the type system, which is real but is not the calculus. For `literal` there is no such
+enforcement — a union widens the field's type — so `literal` checks both directions, and its
+admissible set is data this library owns, which gives the check an authority a caller's predicate
+cannot have.
+
 **C4 — Discharge the side conditions.** `Obligations fuel t` collects the specification's semantic
 premises — `legacy`'s `ran(r) ⊆ dom(e)` and coherence, `nullable`'s null-honesty, `fallback`'s
-writable stand-in, `held`'s iso on the carriers, `custom`'s laws. These are obligations on *your*
+writable stand-in, `held`'s iso on the carriers, `custom`'s laws — together with any obligation
+your *own* constructors add on top of the term they denote, in the shape of `refine`'s above. These are obligations on *your*
 values, and they are the four premises the proof failed without. A port that skips them has not
 weakened the certificate; it has voided it.
 
