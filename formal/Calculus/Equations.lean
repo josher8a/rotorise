@@ -375,150 +375,156 @@ theorem unanimous_pair_assoc (a b c : Option Member) :
             exact absurd (by rw [eq_of_beq hbx, eq_of_beq hcx]; simp) hcb
       simp [hne]
 
-/-! ### Closed forms
+/-! ### Resolution, named
 
 `altCodec` reads its option list only through "exactly one admits", so at two and three
-options its pair has a small closed form. Associativity is then a comparison of two such
-forms, case by case on which options admit. -/
+options its pair has a small closed form. Naming those forms is what lets the
+associativity argument be stated about *resolution* rather than about codecs. -/
+
+/-- Resolving two options: the one that admits, or nothing. -/
+def resolve₂ {β : Type} (B C : Bool) (E₂ E₃ : Option β) : Option β :=
+  match B, C with
+  | true, false => E₂
+  | false, true => E₃
+  | _, _ => none
+
+/-- Resolving a *nested* union: the inner pair resolves first, and the head is consulted
+    only where the inner failed. This asymmetry is the whole of §6's hedge. -/
+def resolveNested {β : Type} (A : Bool) (inner E₁ : Option β) : Option β :=
+  match A, inner with
+  | true, none => E₁
+  | false, some b => some b
+  | _, _ => none
+
+/-- Resolving three options *flat*: all three compete at once. -/
+def resolve₃ {β : Type} (A B C : Bool) (E₁ E₂ E₃ : Option β) : Option β :=
+  match A, B, C with
+  | true, false, false => E₁
+  | false, true, false => E₂
+  | false, false, true => E₃
+  | _, _, _ => none
 
 theorem altCodec_pair_e (o₂ o₃ : OptionSem) (μ' : Option Member) (v : Value) :
     (altCodec [o₂, o₃] μ').e v =
-      (match o₂.admitV v, o₃.admitV v with
-       | true, false => o₂.c.e v
-       | false, true => o₃.c.e v
-       | _, _ => none) := by
+      resolve₂ (o₂.admitV v) (o₃.admitV v) (o₂.c.e v) (o₃.c.e v) := by
   cases hB : o₂.admitV v <;> cases hC : o₃.admitV v <;>
-    simp [altCodec, List.filter, hB, hC]
+    simp [altCodec, List.filter, resolve₂, hB, hC]
 
 theorem altCodec_pair_p (o₂ o₃ : OptionSem) (μ' : Option Member) (a : Attr) :
     (altCodec [o₂, o₃] μ').p a =
-      (match o₂.admitA a, o₃.admitA a with
-       | true, false => o₂.c.p a
-       | false, true => o₃.c.p a
-       | _, _ => none) := by
+      resolve₂ (o₂.admitA a) (o₃.admitA a) (o₂.c.p a) (o₃.c.p a) := by
   cases hB : o₂.admitA a <;> cases hC : o₃.admitA a <;>
-    simp [altCodec, List.filter, hB, hC]
+    simp [altCodec, List.filter, resolve₂, hB, hC]
 
 theorem altCodec_triple_e (o₁ o₂ o₃ : OptionSem) (μ : Option Member) (v : Value) :
     (altCodec [o₁, o₂, o₃] μ).e v =
-      (match o₁.admitV v, o₂.admitV v, o₃.admitV v with
-       | true, false, false => o₁.c.e v
-       | false, true, false => o₂.c.e v
-       | false, false, true => o₃.c.e v
-       | _, _, _ => none) := by
+      resolve₃ (o₁.admitV v) (o₂.admitV v) (o₃.admitV v)
+        (o₁.c.e v) (o₂.c.e v) (o₃.c.e v) := by
   cases hA : o₁.admitV v <;> cases hB : o₂.admitV v <;> cases hC : o₃.admitV v <;>
-    simp [altCodec, List.filter, hA, hB, hC]
+    simp [altCodec, List.filter, resolve₃, hA, hB, hC]
 
 theorem altCodec_triple_p (o₁ o₂ o₃ : OptionSem) (μ : Option Member) (a : Attr) :
     (altCodec [o₁, o₂, o₃] μ).p a =
-      (match o₁.admitA a, o₂.admitA a, o₃.admitA a with
-       | true, false, false => o₁.c.p a
-       | false, true, false => o₂.c.p a
-       | false, false, true => o₃.c.p a
-       | _, _, _ => none) := by
+      resolve₃ (o₁.admitA a) (o₂.admitA a) (o₃.admitA a)
+        (o₁.c.p a) (o₂.c.p a) (o₃.c.p a) := by
   cases hA : o₁.admitA a <;> cases hB : o₂.admitA a <;> cases hC : o₃.admitA a <;>
-    simp [altCodec, List.filter, hA, hB, hC]
+    simp [altCodec, List.filter, resolve₃, hA, hB, hC]
 
-/-- The nested form. The head resolves only when the *inner union* is undefined — which is
-    §6's "the outer union may still resolve" — and the inner one only when the head does
-    not admit. -/
 theorem altCodec_nest_e (o₁ o₂ o₃ : OptionSem) (μ μ' : Option Member) (v : Value) :
     (altCodec [o₁, .byAttempt (altCodec [o₂, o₃] μ')] μ).e v =
-      (match o₁.admitV v, (altCodec [o₂, o₃] μ').e v with
-       | true, none => o₁.c.e v
-       | false, some b => some b
-       | _, _ => none) := by
+      resolveNested (o₁.admitV v) ((altCodec [o₂, o₃] μ').e v) (o₁.c.e v) := by
   have key : (OptionSem.byAttempt (altCodec [o₂, o₃] μ')).admitV v
       = ((altCodec [o₂, o₃] μ').e v).isSome := rfl
   have hc : (OptionSem.byAttempt (altCodec [o₂, o₃] μ')).c = altCodec [o₂, o₃] μ' := rfl
   show (match [o₁, OptionSem.byAttempt (altCodec [o₂, o₃] μ')].filter (·.admitV v) with
         | [o] => o.c.e v | _ => none) = _
   cases hA : o₁.admitV v <;> cases hI : (altCodec [o₂, o₃] μ').e v <;>
-    simp only [List.filter, hA, key, hI, hc, Option.isSome] <;> rfl
+    simp only [List.filter, hA, key, hI, hc, Option.isSome, resolveNested] <;> rfl
 
 theorem altCodec_nest_p (o₁ o₂ o₃ : OptionSem) (μ μ' : Option Member) (a : Attr) :
     (altCodec [o₁, .byAttempt (altCodec [o₂, o₃] μ')] μ).p a =
-      (match o₁.admitA a, (altCodec [o₂, o₃] μ').p a with
-       | true, none => o₁.c.p a
-       | false, some w => some w
-       | _, _ => none) := by
+      resolveNested (o₁.admitA a) ((altCodec [o₂, o₃] μ').p a) (o₁.c.p a) := by
   have key : (OptionSem.byAttempt (altCodec [o₂, o₃] μ')).admitA a
       = ((altCodec [o₂, o₃] μ').p a).isSome := rfl
   have hc : (OptionSem.byAttempt (altCodec [o₂, o₃] μ')).c = altCodec [o₂, o₃] μ' := rfl
   show (match [o₁, OptionSem.byAttempt (altCodec [o₂, o₃] μ')].filter (·.admitA a) with
         | [o] => o.c.p a | _ => none) = _
   cases hA : o₁.admitA a <;> cases hI : (altCodec [o₂, o₃] μ').p a <;>
-    simp only [List.filter, hA, key, hI, hc, Option.isSome] <;> rfl
+    simp only [List.filter, hA, key, hI, hc, Option.isSome, resolveNested] <;> rfl
 
-/-- §6: `union(c₁, union(c₂, c₃)) ≡ union(c₁, c₂, c₃)` — with no side condition. -/
+/-- The held sets coincide. Nesting a union changes how it *resolves*, never what it
+    holds — which is why this half needs no side condition at all. -/
+theorem altCodec_assoc_heldSet (o₁ o₂ o₃ : OptionSem) (μa μb : Option Member) (v : Value) :
+    (altCodec [o₁, .byAttempt (altCodec [o₂, o₃] μb)] μa).T v
+      ↔ (altCodec [o₁, o₂, o₃] μa).T v := by
+  constructor
+  · rintro ⟨x, hx, hT⟩
+    rcases List.mem_cons.mp hx with rfl | hx'
+    · exact ⟨x, List.mem_cons_self _ _, hT⟩
+    · rcases List.mem_cons.mp hx' with rfl | hx''
+      · obtain ⟨y, hy, hTy⟩ := hT
+        exact ⟨y, List.mem_cons_of_mem _ hy, hTy⟩
+      · exact absurd hx'' (by simp)
+  · rintro ⟨x, hx, hT⟩
+    rcases List.mem_cons.mp hx with rfl | hx'
+    · exact ⟨x, List.mem_cons_self _ _, hT⟩
+    · exact ⟨_, List.mem_cons_of_mem _ (List.mem_cons_self _ _), ⟨x, hx', hT⟩⟩
+
+/-- **Associativity, with the codecs abstracted away.** Three admission flags, three
+    per-option results, and the two ways of resolving them. Whenever both resolve, they
+    resolve alike.
+
+    Reading down the eight cases — `A`, `B`, `C` being which option admits — is reading
+    §6's hedge:
+
+    * `f f f`, `f t t` — neither side resolves; the inner pair is empty or ambiguous.
+    * `f f t`, `f t f`, `t f f` — exactly one option admits; both sides return it.
+    * `t f t`, `t t f` — the head and one inner option both claim it; both sides refuse.
+    * `t t t` — **§6's row.** The head admits and the inner pair is ambiguous, so the
+      nested form's inner union fails and its outer union resolves to the head, while the
+      flat form sees three claimants and refuses. One side defined, the other not, which
+      is exactly why `≡` cannot see the difference and why the row needs no conditions.
+      `Refutations.not_eq_altCodec_assoc` exhibits it concretely. -/
+theorem nest_flat_resolve {β : Type} (A B C : Bool) (E₁ E₂ E₃ : Option β) {x y : β}
+    (hn : resolveNested A (resolve₂ B C E₂ E₃) E₁ = some x)
+    (hf : resolve₃ A B C E₁ E₂ E₃ = some y) : x = y := by
+  cases A <;> cases B <;> cases C
+  · exact nomatch hn
+  · cases E₃ with
+    | none => exact nomatch hn
+    | some b => exact (Option.some.inj hn).symm.trans (Option.some.inj hf)
+  · cases E₂ with
+    | none => exact nomatch hn
+    | some b => exact (Option.some.inj hn).symm.trans (Option.some.inj hf)
+  · exact nomatch hn
+  · exact Option.some.inj (hn.symm.trans hf)
+  · cases E₃ with
+    | none => exact nomatch hf
+    | some b => exact nomatch hn
+  · cases E₂ with
+    | none => exact nomatch hf
+    | some b => exact nomatch hn
+  · exact nomatch hf
+
+/-- §6: `union(c₁, union(c₂, c₃)) ≡ union(c₁, c₂, c₃)` — with no side condition.
+
+    Each half is three steps: put both sides in closed form, then appeal to
+    `nest_flat_resolve`. The write and read halves differ only in `e` versus `p`. -/
 theorem equiv_altCodec_assoc (o₁ o₂ o₃ : OptionSem) :
     Codec.Equiv
       (altCodec [o₁, .byAttempt (altCodec [o₂, o₃] (unanimous [o₂.c.μ, o₃.c.μ]))]
         (unanimous [o₁.c.μ, unanimous [o₂.c.μ, o₃.c.μ]]))
       (altCodec [o₁, o₂, o₃] (unanimous [o₁.c.μ, o₂.c.μ, o₃.c.μ])) := by
-  refine ⟨?_, unanimous_pair_assoc _ _ _, ?_, ?_⟩
-  · intro v
-    constructor
-    · rintro ⟨x, hx, hT⟩
-      rcases List.mem_cons.mp hx with rfl | hx'
-      · exact ⟨x, List.mem_cons_self _ _, hT⟩
-      · rcases List.mem_cons.mp hx' with rfl | hx''
-        · obtain ⟨y, hy, hTy⟩ := hT
-          exact ⟨y, List.mem_cons_of_mem _ hy, hTy⟩
-        · exact absurd hx'' (by simp)
-    · rintro ⟨x, hx, hT⟩
-      rcases List.mem_cons.mp hx with rfl | hx'
-      · exact ⟨x, List.mem_cons_self _ _, hT⟩
-      · exact ⟨_, List.mem_cons_of_mem _ (List.mem_cons_self _ _), ⟨x, hx', hT⟩⟩
-  · intro v a a' h h'
-    rw [altCodec_nest_e, altCodec_pair_e] at h
-    rw [altCodec_triple_e] at h'
-    cases hA : o₁.admitV v <;> cases hB : o₂.admitV v <;> cases hC : o₃.admitV v <;>
-      simp only [hA, hB, hC] at h h'
-    · exact nomatch h
-    · cases hE : o₃.c.e v with
-      | none => rw [hE] at h; exact nomatch h
-      | some b =>
-        rw [hE] at h h'
-        exact (Option.some.inj h).symm.trans (Option.some.inj h')
-    · cases hE : o₂.c.e v with
-      | none => rw [hE] at h; exact nomatch h
-      | some b =>
-        rw [hE] at h h'
-        exact (Option.some.inj h).symm.trans (Option.some.inj h')
-    · exact nomatch h
-    · exact Option.some.inj (h.symm.trans h')
-    · cases hE : o₃.c.e v with
-      | none => rw [hE] at h; exact nomatch h'
-      | some b => rw [hE] at h; exact nomatch h
-    · cases hE : o₂.c.e v with
-      | none => rw [hE] at h; exact nomatch h'
-      | some b => rw [hE] at h; exact nomatch h
-    · exact nomatch h'
-  · intro a v v' h h'
-    rw [altCodec_nest_p, altCodec_pair_p] at h
-    rw [altCodec_triple_p] at h'
-    cases hA : o₁.admitA a <;> cases hB : o₂.admitA a <;> cases hC : o₃.admitA a <;>
-      simp only [hA, hB, hC] at h h'
-    · exact nomatch h
-    · cases hE : o₃.c.p a with
-      | none => rw [hE] at h; exact nomatch h
-      | some w =>
-        rw [hE] at h h'
-        exact (Option.some.inj h).symm.trans (Option.some.inj h')
-    · cases hE : o₂.c.p a with
-      | none => rw [hE] at h; exact nomatch h
-      | some w =>
-        rw [hE] at h h'
-        exact (Option.some.inj h).symm.trans (Option.some.inj h')
-    · exact nomatch h
-    · exact Option.some.inj (h.symm.trans h')
-    · cases hE : o₃.c.p a with
-      | none => rw [hE] at h; exact nomatch h'
-      | some w => rw [hE] at h; exact nomatch h
-    · cases hE : o₂.c.p a with
-      | none => rw [hE] at h; exact nomatch h'
-      | some w => rw [hE] at h; exact nomatch h
-    · exact nomatch h'
+  refine ⟨altCodec_assoc_heldSet o₁ o₂ o₃ _ _, unanimous_pair_assoc _ _ _, ?_, ?_⟩
+  · intro v a a' hn hf
+    rw [altCodec_nest_e, altCodec_pair_e] at hn
+    rw [altCodec_triple_e] at hf
+    exact nest_flat_resolve (o₁.admitV v) (o₂.admitV v) (o₃.admitV v)
+      (o₁.c.e v) (o₂.c.e v) (o₃.c.e v) hn hf
+  · intro a v v' hn hf
+    rw [altCodec_nest_p, altCodec_pair_p] at hn
+    rw [altCodec_triple_p] at hf
+    exact nest_flat_resolve (o₁.admitA a) (o₂.admitA a) (o₃.admitA a)
+      (o₁.c.p a) (o₂.c.p a) (o₃.c.p a) hn hf
 
 end Calculus
