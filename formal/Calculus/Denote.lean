@@ -1,5 +1,6 @@
 import Calculus.Term
 import Calculus.Combinators
+import Calculus.Opaque
 
 /-!
 # Denotation
@@ -104,12 +105,13 @@ def denote : Nat → Term → Codec
     | .refine inner q => (denote fuel inner).restrict q
     | .legacy inner r => (denote fuel inner).extendRead r
     | .nullable inner => (denote fuel inner).orNull
-    | .lazy γ =>
+    | .lazy inner =>
         -- `(lazy)` concludes `⊤`: the pair is the thunk's, the member is not.
-        { denote fuel (γ ()) with μ := none }
+        { denote fuel inner with μ := none }
     | .custom ce cp =>
         { T := fun v => (ce v).isSome, μ := none, e := ce, p := cp }
-    | .opaq lossy => opaqCodec (fuel+1) lossy
+    -- Fuel-free: `opaqCodecω` budgets each input by its own depth (Opaque.lean).
+    | .opaq lossy => opaqCodecω lossy
     | .object fields rest =>
         objectCodec (fields.map fun kf => (kf.1, fieldSemOf (denote fuel) kf.2))
           (restSemOf (denote fuel) rest)

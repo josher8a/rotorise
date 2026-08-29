@@ -4,3 +4,10 @@ defaultTargets = ["Calculus"]
 
 [[lean_lib]]
 name = "Calculus"
+
+# mathlib, pinned to the tag matching lean-toolchain (v4.15.0). Adding it retires the
+# hand-rolled list/option plumbing in Combinators.lean — see docs/codec-formalization.md.
+[[require]]
+name = "mathlib"
+scope = "leanprover-community"
+version = "git#v4.15.0"

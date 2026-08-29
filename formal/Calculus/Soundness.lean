@@ -61,7 +61,7 @@ def Obligations : Nat → Term → Prop
       (∀ v a, (denote fuel t').e v = some a → a = .null → v = .null) ∧
       -- read-honesty: null is read from NULL alone
       (∀ a v, (denote fuel t').p a = some v → v = .null → a = .null)
-    | .lazy γ => Obligations fuel (γ ())
+    | .lazy t' => Obligations fuel t'
     | .custom ce cp =>
       Lawful { T := fun v => (ce v).isSome, μ := none, e := ce, p := cp }
     | .object fields rest =>
@@ -88,7 +88,7 @@ def MPOk : Nat → Term → Prop
     | .held t' _ _ => MPOk fuel t'
     | .tuple ts tail =>
       (∀ t' ∈ ts, MPOk fuel t') ∧ (∀ t' ∈ tail, MPOk fuel t')
-    | .lazy γ => MPOk fuel (γ ())
+    | .lazy t' => MPOk fuel t'
     | .object fields rest =>
       (∀ kf ∈ fields,
         match kf.2 with
@@ -550,10 +550,10 @@ theorem soundness_both : ∀ (fuel : Nat) {t T μ}, Typed t T μ → Obligations
       exact Lawful.orNull (ih.2 hmp) hob.2.1 hob.2.2
     | @lazy γ T' μ' h' =>
       simp only [denote]
-      replace hob : Obligations fuel (γ ()) := hob
+      replace hob : Obligations fuel γ := hob
       have ih := soundness_both fuel h' hob
       refine ⟨ih.1.μNone, fun hmp => ?_⟩
-      replace hmp : MPOk fuel (γ ()) := hmp
+      replace hmp : MPOk fuel γ := hmp
       exact (ih.2 hmp).μNone
     | custom ce cp =>
       simp only [denote]
@@ -562,7 +562,7 @@ theorem soundness_both : ∀ (fuel : Nat) {t T μ}, Typed t T μ → Obligations
       exact ⟨hob.core, fun _ => hob⟩
     | opaq lossy =>
       simp only [denote]
-      exact ⟨(lawful_opaqCodec (fuel+1) lossy).core, fun _ => lawful_opaqCodec (fuel+1) lossy⟩
+      exact ⟨(lawful_opaqCodecω lossy).core, fun _ => lawful_opaqCodecω lossy⟩
     | @object fields binds rest R hfields hndf hrest =>
       simp only [denote]
       have ihf : ∀ k f, (k, f) ∈ fields →
@@ -796,7 +796,7 @@ theorem opaq_TSub : ∀ (fuel : Nat) (lossy : Bool) (v : Value),
         obtain ⟨d, rfl⟩ := hT
         exact .num d rfl
     · cases v <;> first
-        | (obtain ⟨-, hall⟩ := hT; exact .set _ fun x hx => ih x (hall x hx))
+        | (obtain ⟨hne, hall⟩ := hT; exact .set _ hne fun x hx => ih x (hall x hx))
         | exact nomatch hT
     · cases v <;> first
         | exact .arr _ fun x hx => ih x (hT x hx)
@@ -804,6 +804,13 @@ theorem opaq_TSub : ∀ (fuel : Nat) (lossy : Bool) (v : Value),
     · cases v <;> first
         | exact .map _ fun kv hkv => ih kv.2 (hT kv hkv)
         | exact nomatch hT
+
+/-- `opaqCodecω`'s held set — the union over all fuels — still lands in §3's `Uν`. -/
+theorem opaq_TSubω (lossy : Bool) (v : Value) :
+    (opaqCodecω lossy).T v → HOpaque lossy v := by
+  intro h
+  obtain ⟨n, hn⟩ := h
+  exact opaq_TSub n lossy v hn
 
 /-- A union option's held set is one of the rule's. -/
 theorem TypedListμ.mem : ∀ {ts Ts μs}, TypedListμ ts Ts μs →
@@ -843,7 +850,7 @@ theorem typed_TSub : ∀ (fuel : Nat) {t T μ}, Typed t T μ →
     | string | number | decimal | boolean | binary | numeric _ => exact hv
     | literalS _ _ _ | literalN _ _ _ => exact hv
     | custom _ _ => exact hv
-    | opaq lossy => exact opaq_TSub (fuel+1) lossy v hv
+    | opaq lossy => exact opaq_TSubω lossy v hv
     | @set t' T' μ₀ μS h' hs =>
       cases v <;> first
         | (obtain ⟨hne, hall⟩ := hv
@@ -1003,7 +1010,7 @@ theorem carrier_denote : ∀ (fuel : Nat) {t T μ}, Typed t T μ → Obligations
         (∀ a v, (denote fuel t').p a = some v → v = .null → a = .null) := hob
       exact carrier_orNull (carrier_denote fuel h' hob.1)
     | @lazy γ T' μ' h' =>
-      replace hob : Obligations fuel (γ ()) := hob
+      replace hob : Obligations fuel γ := hob
       have ih := carrier_denote fuel h' hob
       exact ⟨fun he => ih.domE he, fun hp => ih.ranP hp⟩
     | custom ce cp =>
@@ -1018,7 +1025,7 @@ theorem carrier_denote : ∀ (fuel : Nat) {t T μ}, Typed t T μ → Obligations
       · intro a v hp
         replace hp : cp a = some v := hp
         exact hob.canon hp
-    | opaq lossy => exact carrier_opaqCodec (fuel+1) lossy
+    | opaq lossy => exact carrier_opaqCodecω lossy
     | @object fields binds rest R hfields hndf hrest =>
       have hsems : ∀ kf ∈ fields.map fun kf => (kf.1, fieldSemOf (denote fuel) kf.2),
           Carrier kf.2.codec := by

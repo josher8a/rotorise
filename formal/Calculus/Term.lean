@@ -33,7 +33,12 @@ inductive Term where
   | refine   (inner : Term) (q : Value → Bool)
   | legacy   (inner : Term) (r : Attr → Option Value)
   | nullable (inner : Term)
-  | lazy     (γ : Unit → Term)
+  /-- §3 `(lazy)`. The thunk is *not* `Unit → Term`: a closure adds no constructible
+      term (every `Term` is finite either way) and only defeats the termination
+      checker. Recursive codecs are not modelled, and cannot be — see
+      `Continuity.lean`: `union`'s admission is anti-monotone, so a genuinely
+      recursive union has no fixpoint semantics in any system. -/
+  | lazy     (inner : Term)
   | custom   (ce : Value → Option Attr) (cp : Attr → Option Value)
   /-- §3 `(opaque)`: `lossy = false` is the `refuse` policy. -/
   | opaq     (lossy : Bool)

@@ -94,7 +94,12 @@ inductive HOpaque (lossy : Bool) : Value → Prop where
   | bin  (b)  : HOpaque lossy (.bin b)
   | null      : HOpaque lossy .null
   | num  (d) (h : lossy = true) : HOpaque lossy (.num d)
-  | set  (vs) (h : ∀ x ∈ vs, HOpaque lossy x) : HOpaque lossy (.set vs)
+  /-- Non-emptiness is not decoration: §1's `SS`/`NS`/`BS` are `℘⁺fin`, so there is no
+      empty wire set to write, and an empty set's member is not recoverable from the
+      value anyway — you cannot tell `SS` from `NS`. Both readings §3 gives of `Uν` (the
+      prose one, and the fixpoint `union(…, set(opaque), …)` whose `(set)` rule carries
+      `vs ≠ []`) exclude it. `HeldSet.lean` has the witness. -/
+  | set  (vs) (hne : vs ≠ []) (h : ∀ x ∈ vs, HOpaque lossy x) : HOpaque lossy (.set vs)
   | arr  (vs) (h : ∀ x ∈ vs, HOpaque lossy x) : HOpaque lossy (.arr vs)
   | map  (kvs) (h : ∀ kv ∈ kvs, HOpaque lossy kv.2) : HOpaque lossy (.map kvs)
 
@@ -128,7 +133,7 @@ inductive Typed : Term → Held → Option Member → Prop where
       Typed (.refine t q) (fun v => T v ∧ q v) μ
   | legacy {t T μ r} (h : Typed t T μ) : Typed (.legacy t r) T μ
   | nullable {t T μ} (h : Typed t T μ) : Typed (.nullable t) (HNull T) none
-  | lazy {γ T μ} (h : Typed (γ ()) T μ) : Typed (.lazy γ) T none
+  | lazy {t T μ} (h : Typed t T μ) : Typed (.lazy t) T none
   | custom (ce cp) : Typed (.custom ce cp) (fun v => (ce v).isSome = true) none
   | opaq (lossy) : Typed (.opaq lossy) (HOpaque lossy) none
   | object {fields binds rest R} (hf : TypedFields fields binds)
