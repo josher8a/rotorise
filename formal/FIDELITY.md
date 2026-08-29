@@ -132,8 +132,8 @@ first; `codec-formalization.md:287` ("Complete — twenty of twenty") is not. Th
 audit adds that the remaining two are not merely unproved but **unstatable** in the
 current model: `FieldSem` carries no `μ` field, while §4 insists a field carries a member.
 
-**U5 — the guard covers a fraction of what the documents advertise. [checked, and settled]**
-`Calculus/Axioms.lean` puts 17 constants through `#assert_axioms`; the documents cite 93
+**U5 — the guard covers a fraction of what the documents advertise. [checked, settled, and now closed]**
+`Calculus/Axioms.lean` put 17 constants through `#assert_axioms`; the documents cite 99
 theorem names as results. Unguarded and doc-claimed: every §6 row, six of nine
 refutations, all four ω-twins, two of the four dischargers, `κ_sound`/`adm_sound`/
 `admA_sound`, `denoteω_eq`, and **`opaq_T_identity`** — the one row
@@ -145,6 +145,19 @@ ten other unguarded doc-claimed results: **all clean** — `propext`, `Quot.soun
 `Double` axioms, no `Classical.choice`. So there is no leak today. There is also no
 process: that was eleven hand-checks standing in for a build error, which is exactly the
 gap `Axioms.lean` was written to close.
+
+**Closed.** Those eleven are now `#assert_axioms` lines (§5 item 1), grouped by what each
+group would cost if it leaked: the three devices that pin §5's declaration-time table to
+the denotation, the three ω-twins that all travel along `denoteω_eq`, and the `opaque`
+and numeral rows. The guard went green first try, which is the expected result — the
+point was never to find a leak, it was to stop the eleven hand-checks from having to be
+redone by the next reader. Coverage 17 → **28 of 99**.
+
+A measurement artefact worth naming, since this file's own rule is that the script wins:
+`fidelity_audit.py` reads `FIDELITY.md` as one of its document sources, so *citing* a
+theorem here marks it cited. Writing this audit raised the denominator from 93 to 99 by
+itself. The ratio is honest — a name this file holds up as a result is a name the
+documents advertise — but the denominator is not independent of the auditor.
 
 ### Corrections to this project's own artifacts
 
@@ -178,8 +191,8 @@ At HEAD: 650 declarations, 469 theorems, 181 definitions.
 
 | | |
 | --- | ---: |
-| theorem names the documents cite as results | 93 |
-| …put through `#assert_axioms` | **17** |
+| theorem names the documents cite as results | 99 |
+| …put through `#assert_axioms` | **28** |
 | §-tag coverage (declarations naming a spec section) | **18%** |
 | docstring coverage, theorems | 53% |
 | docstring coverage, definitions | 69% |
@@ -219,7 +232,7 @@ for, and it now has three independent confirmations.
 
 | # | item | why it is first |
 | --- | --- | --- |
-| 1 | The eleven `#assert_axioms` lines — the hand-checks of U5, made mechanical | cheapest, and it is the guard's own principle; `opaq_T_identity` guards seven `omega` calls behind a row the docs call closed |
+| 1 | ~~The eleven `#assert_axioms` lines — the hand-checks of U5, made mechanical~~ **done**: 28 of 99 guarded, green first try | cheapest, and it is the guard's own principle; `opaq_T_identity` guards seven `omega` calls behind a row the docs call closed |
 | 2 | `(D)` into `Typed.union`, or name the divergence in `Typing.lean`'s list | the difference between "`Typed` is §3–§5's judgement" being true and false; the list records five smaller divergences and omits this one |
 | 3 | Attempt `Equiv.trans`, fail, record `not_equiv_trans` | three lines; a non-transitive `≡` presented as an equational theory is exactly the species §4's log is made of |
 | 4 | `ident_sound`, or delete `ident` and say `adm` carries the exemption | a normative table transcribed and unconstrained is the definition of an unlocatable claim |
