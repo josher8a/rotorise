@@ -9,6 +9,7 @@ import {
     boolean,
     CodecError,
     decimal,
+    nullValue,
     object,
     optional,
     string,
@@ -144,5 +145,47 @@ describe('untagged', () => {
 describe('the law, over generated values', () => {
     it('decode ∘ encode = id for Leg', () => {
         checkRoundTrip(Leg, { count: 300, seed: 20260826 })
+    })
+})
+
+/**
+ * The `NULL` point as an option.
+ *
+ * The gap this closed was found by asking whether `nullable(c)` could be written as
+ * `union(c, nullValue)`. It could not, because the right-hand side was not a term: the value
+ * language had `null` and the attribute domain had `NULL`, and no codec denoted either. So a schema
+ * could say "this attribute is a string" or "this attribute is optional", and could not say "this
+ * attribute is exactly `NULL`" — a tombstone, or a payload-free option of a union.
+ *
+ * The union resolves by member, which is why it needs no discrimination: `NULL` is a member no
+ * other ground codec writes.
+ */
+describe('the NULL point', () => {
+    it('writes and reads the one value it holds', () => {
+        expect(nullValue.unsafeEncode(null)).toEqual({ NULL: true })
+        expect(nullValue.unsafeDecode({ NULL: true })).toBeNull()
+    })
+
+    it('holds nothing else', () => {
+        expect(() => nullValue.unsafeDecode({ S: 'x' })).toThrow(CodecError)
+    })
+
+    it('is a tombstone beside a real value, resolved by member alone', () => {
+        const Deleted = union([string, nullValue])
+        expect(Deleted.unsafeEncode('alive')).toEqual({ S: 'alive' })
+        expect(Deleted.unsafeEncode(null)).toEqual({ NULL: true })
+        expect(Deleted.unsafeDecode({ NULL: true })).toBeNull()
+        expect(Deleted.unsafeDecode({ S: 'alive' })).toBe('alive')
+    })
+
+    it('round-trips as an option, over generated values', () => {
+        const Pet = object({ id: string, deletedAt: union([string, nullValue]) })
+            .item
+        checkRoundTrip(Pet, { count: 100, seed: 20260829 })
+    })
+
+    /** Distinct from `nullable`, which *adds* `null` to another codec's held set. */
+    it('is not `nullable`, which holds its subject too', () => {
+        expect(() => nullValue.unsafeEncode('x' as never)).toThrow(CodecError)
     })
 })

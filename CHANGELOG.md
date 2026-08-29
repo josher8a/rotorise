@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Added
+
+- **`nullValue`** — the `NULL` point: the one value `null`, stored as `{ NULL: true }`. A schema
+  could say "this attribute is a string" or "this attribute is optional", and could not say "this
+  attribute is exactly `NULL`" — a tombstone, or a payload-free option of a union. The gap was found
+  in the formalization by asking whether `nullable(c)` could be written as `union(c, nullValue)`; it
+  could not, because the right-hand side was not expressible.
+
+  Distinct from `nullable`, which *adds* `null` to another codec's held set. `nullValue` holds
+  nothing else. Named for what it holds because `null` is a keyword and `NULL` is already the
+  attribute type.
+
 ### Changed
 
 - **`decimal` accepts only the form DynamoDB stores.** It normalises every `N` it takes — `'1.50'`

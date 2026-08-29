@@ -21,6 +21,7 @@ import {
     legacy,
     literal,
     nullable,
+    nullValue,
     number,
     object,
     opaque,
@@ -50,6 +51,7 @@ const codecs: readonly (readonly [string, AnyCodec])[] = [
     ['number', number],
     ['literal(N)', literal(0, 1, 2)],
     ['boolean', boolean],
+    ['null', nullValue],
     ['binary', binary],
     ['opaque', opaque],
     ['set', set(string)],
@@ -119,11 +121,12 @@ describe('a definition generates what the codec generated', () => {
         },
     )
 
-    // 18 since `numeric` was removed: it was `number` with an unchecked cast, and the two call
-    // sites here are now `number` and `literal(0, 1, 2)`, whose kinds were already covered
+    // 19: `numeric` was removed (it was `number` with an unchecked cast, and its two call sites
+    // here are now `number` and `literal(0, 1, 2)`, whose kinds were already covered), and
+    // `nullValue` was added, giving the `NULL` point a codec for the first time
     it('covers every kind a codec can be', () => {
         const kinds = new Set(codecs.map(([, c]) => c.def?.kind))
-        expect(kinds.size).toBe(18)
+        expect(kinds.size).toBe(19)
         expect([...kinds].every(Boolean)).toBe(true)
     })
 })
