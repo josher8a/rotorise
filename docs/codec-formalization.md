@@ -247,9 +247,29 @@ Three things worth keeping from this one:
 `number` is closed in the implementation, which now refuses `NaN`, `Infinity` and anything outside
 `D`, on both halves. **It is not closed in the model**, where `numberCodec` still holds every
 double and `⊢ number : D ⇝ N` claims a bound no law enforces — the `numeric` defect, one term over.
-The route is known and needs no new axiom: gate `e` on `Numeral.WF (toDec d)`, and gate `p` on the
-*round-tripped* value rather than the stored digits, since `Number("9.9…E+125")` rounds up past the
-maximum and would otherwise read back a value `e` refuses. The implementation already does both.
+
+The route was attempted and then reverted, and what it cost is worth recording, because the first
+estimate of it was wrong. Gating is right and needs no new axiom — `e` on `Numeral.WF (toDec d)`,
+and `p` on the **round-tripped** value rather than the stored digits, since `ofDec` of a numeral at
+the top of the range can round *up* past it and would otherwise read back a double `e` refuses.
+That much was written, the four laws reproved explicitly, and `Combinators.lean` went green on the
+first third of the change. The `Double` interface needed nothing added, which was the open question.
+
+What the estimate missed is that the bound does not stay in `(number)`. It is forced outward twice,
+and both steps are *correct* rather than incidental:
+
+1. **`(literal-N)`.** `literalNCodec`'s laws are proved as a prism over `number`, so a literal
+   outside `D` would be writable where `number` is not. §3's rule needs `ℓ ⊆ D`: `literal(1e999)`
+   should not be derivable, and today it is.
+2. **§3's `Uν`.** `opaque`'s number option *is* `numberCodec`, so `HOpaque.num` must carry the same
+   premise — a double `opaque` cannot write is not one of "the values whose type is recoverable from
+   the value alone". That is the same species as `HOpaque.set`'s `vs ≠ []` above, and it reaches
+   `Opaque.lean`'s depth machinery and `opaq_T_identity` with it.
+
+So this is not "gate `number`". It is a joint change to `(number)`, `(literal-N)` and `Uν`, and the
+right size for its own pass rather than the tail of another. The direction is settled; the estimate
+of it was not, and an estimate that only turns out wrong once the proofs are open is exactly the
+kind this document exists to record.
 
 ### One the model found in the implementation
 
