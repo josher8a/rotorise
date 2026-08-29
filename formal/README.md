@@ -134,7 +134,7 @@ ranked plan for closing it. The numbers regenerate: `python3 scripts/vocab_audit
 
 The short version: the *obligation* half of the vocabulary is done (23/24 carriers,
 22/24 lawfulness lemmas); the *observation* half — `X_e`/`X_p`, what a construction
-writes and reads — is 6 of 48. Six of every ten remaining hand-unfoldings are `Option`
+writes and reads — is 8 of 48. Six of every ten remaining hand-unfoldings are `Option`
 algebra rather than anything about codecs, and the blocks that have inversion carry
 0–3 such sites per hundred lines against 6–9 for the blocks that do not.
 
