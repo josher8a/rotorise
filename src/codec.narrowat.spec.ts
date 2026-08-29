@@ -18,6 +18,7 @@ import {
     number,
     object,
     string,
+    writes,
 } from './codec'
 
 type Op =
@@ -51,6 +52,19 @@ describe('where the variants disagree', () => {
         expect(asString.unsafeEncode('1.5')).toEqual({ S: '1.5' })
         // relative, because the variant codec does not know where it was reached from
         expect(asNumber.path()).toBe('amount')
+    })
+
+    /**
+     * And it says nothing about *what* is there, because there is no single thing. This used to be
+     * a `CodecDef` kind — a definition, in a language of codec definitions, for something that was
+     * not a codec — so every reader of a definition had to carry a case for it.
+     */
+    it('carries no definition, because there is no one codec to describe', () => {
+        const ambiguous = Entity.at((p) => p.op.amount)
+        expect(ambiguous.def).toBeUndefined()
+        expect(writes(ambiguous)).toBeUndefined()
+        // the path half is untouched, which is what `at` is most often for
+        expect(ambiguous.path()).toBe('op.amount')
     })
 
     it('is not settled by narrowing the path, and does not pretend to be', () => {

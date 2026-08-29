@@ -321,7 +321,6 @@ export type CodecDef =
           }
       }
     | { readonly kind: 'lazy'; readonly get: () => AnyCodec }
-    | { readonly kind: 'branch'; readonly candidates: readonly AnyCodec[] }
     /**
      * A codec written by hand, saying so.
      *
@@ -553,60 +552,89 @@ export const deeper = (
     codec: AnyCodec,
     segment: string | number,
 ): AnyCodec | undefined => {
+    const [only, ...rest] = childrenOf(codec, segment)
+    // a segment several variants declare *differently* is not one codec, and there is no honest
+    // single answer to give for it. `ItemCodec.at` carries the disagreement along instead, because
+    // a path may pass through such a segment and arrive somewhere the variants agree
+    return rest.length === 0 ? only : undefined
+}
+
+/**
+ * Every codec a segment can reach, which is more than one exactly where a union's variants
+ * disagree about it.
+ *
+ * A union is the only definition that branches, and what it branches into is a *set of codecs* —
+ * not a codec. This used to be a `CodecDef` kind, a pseudo-codec whose `encode` and `decode` both
+ * threw, which meant every reader of a definition had to know about a definition that was not one.
+ * The disagreement belongs to the walk, so it is the walk that carries it.
+ */
+const childrenOf = (
+    codec: AnyCodec,
+    segment: string | number,
+): readonly AnyCodec[] => {
     const def = codec.def
-    if (!def) return undefined
+    if (!def) return []
+    const one = (child: AnyCodec | undefined) => (child ? [child] : [])
     switch (def.kind) {
         case 'attributes':
-            return def.of[String(segment)]
+            return one(def.of[String(segment)])
         case 'record':
-            return def.value
+            return one(def.value)
         case 'array':
-            return def.element
+            return one(def.element)
         // a set is unordered, so no document path addresses a member of one — `set` never offered
         // a child either, and refusing here is what keeps a meaningless path from compiling
         case 'tuple':
             // a position past the fixed part is a tail element, where there is a tail
-            return def.elements[Number(segment)] ?? def.tail
+            return one(def.elements[Number(segment)] ?? def.tail)
         case 'tagged':
-            return branchOf(Object.values(def.variants), segment)
+            return acrossVariants(Object.values(def.variants), segment)
         case 'untagged':
-            return branchOf(def.variants, segment)
+            return acrossVariants(def.variants, segment)
         case 'refine':
         case 'optional':
         case 'fallback':
         case 'nullable':
-            return deeper(def.inner, segment)
+            return childrenOf(def.inner, segment)
         case 'legacy':
-            return deeper(def.current, segment)
+            return childrenOf(def.current, segment)
         case 'lazy':
-            return deeper(def.get(), segment)
-        case 'branch':
-            return branchOf(def.candidates, segment)
+            return childrenOf(def.get(), segment)
         default:
-            return undefined
+            return []
     }
 }
 
-/**
- * One codec if the candidates agree one segment down, a branch if they do not.
- *
- * A path may pass through segments the variants declare differently and still arrive where they
- * agree — `legs` is a one-tuple in `SINGLE_LEG` and a two-tuple in `MULTI_LEG`, but indexing either
- * reaches the same leg codec. So disagreement is carried along in a {@link branch} and reported only
- * if it survives to the end, where using it would mean encoding with a codec nobody declared.
- */
-const branchOf = (
-    candidates: readonly AnyCodec[],
+/** What the variants reach, deduplicated — `Set` keeps insertion order, so the first declared wins. */
+const acrossVariants = (
+    variants: readonly AnyCodec[],
     segment: string | number,
-): AnyCodec | undefined => {
-    const found = new Set<AnyCodec>()
-    for (const candidate of candidates) {
-        const child = deeper(candidate, segment)
-        if (child) found.add(child)
+): readonly AnyCodec[] => [
+    ...new Set(variants.flatMap((variant) => childrenOf(variant, segment))),
+]
+
+/**
+ * A path several variants declare differently, which is still a path.
+ *
+ * `path()` and `segments` are as well defined here as anywhere — knowing where an attribute lives
+ * does not require knowing what writes it, and that is what `at` is most often for. Only the codec
+ * half is missing, so only the codec half fails.
+ *
+ * It carries **no definition**, and that is the whole of the fix: this used to be a `CodecDef` kind
+ * called `branch`, so a definition language for codecs contained an entry that was not a codec, and
+ * every reader of a definition had to know about it. Now `writes`, `carries` and `deeper` are asked
+ * what this is and give the honest answer, which is nothing.
+ */
+const unresolvedAt = (path: string): AnyCodec => {
+    const unresolved = () => {
+        throw new CodecError(
+            `'${path}' is declared differently in different variants, so this path cannot say which codec to encode with. Reach for the variant you mean — \`variant(...)\` is an item codec with its own \`at\` — or narrow the entity so only one variant declares it.`,
+        )
     }
-    // `Set` iteration order is insertion order, so the one survivor is the first declared
-    const [first] = found
-    return found.size > 1 ? branch([...found], segment) : first
+    return codec<never, AttributeValue>({
+        encode: unresolved,
+        decode: unresolved,
+    })
 }
 
 /** A map of attribute name to codec — what `item`, `map` and each `tagged` variant hold. */
@@ -2501,18 +2529,30 @@ export const object = <
             const segments = segmentsOf(select(pathBuilder<T>()))
             const path = asPath(segments)
 
-            // the walk starts at the item itself, which knows its own attributes, and every
-            // step either finds a codec or throws — so there is never a `here` to guard
-            let here: AnyCodec = self as unknown as AnyCodec
+            /**
+             * The walk carries a *set* of codecs, not one.
+             *
+             * A path may pass through a segment the variants declare differently and still arrive
+             * where they agree — `legs` is a one-tuple in `SINGLE_LEG` and a two-tuple in
+             * `MULTI_LEG`, but indexing either reaches the same leg codec. So the disagreement is
+             * carried along and reported only if it survives to the end, where using it would mean
+             * encoding with a codec nobody declared.
+             */
+            let frontier: readonly AnyCodec[] = [self as unknown as AnyCodec]
             for (const segment of segments) {
-                const next = deeper(here, segment)
-                if (!next) {
+                const next = [
+                    ...new Set(frontier.flatMap((c) => childrenOf(c, segment))),
+                ]
+                if (next.length === 0) {
                     throw new CodecError(
                         `no attribute is declared at '${path}'`,
                     )
                 }
-                here = next
+                frontier = next
             }
+            const [first, ...ambiguous] = frontier as [AnyCodec, ...AnyCodec[]]
+            const here =
+                ambiguous.length === 0 ? first : unresolvedAt(String(path))
 
             return {
                 ...(here as AttributeCodec<X>),
@@ -2986,22 +3026,6 @@ const tagged = <T extends Record<string, unknown>>(
         def: nested.def,
         item: self as Tagged<T, string, Record<string, unknown>>,
     }
-}
-
-const branch = (
-    candidates: readonly AnyCodec[],
-    segment: string | number,
-): AnyCodec => {
-    const ambiguous = () => {
-        throw new CodecError(
-            `'${segment}' is declared differently in different variants, so this path cannot say which codec to encode with. Reach for the variant you mean — \`variant(...)\` is an item codec with its own \`at\` — or narrow the entity so only one variant declares it.`,
-        )
-    }
-    return codec<never, AttributeValue>({
-        encode: ambiguous,
-        decode: ambiguous,
-        def: { kind: 'branch', candidates },
-    })
 }
 
 // ── unions with no discriminator ────────────────────────────────────

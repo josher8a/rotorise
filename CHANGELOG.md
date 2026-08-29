@@ -27,6 +27,18 @@
 
 ### Removed
 
+- **`CodecDef`'s `branch` kind.** A definition language for codecs had an entry that was not a
+  codec: `branch` was manufactured while walking a path, its `encode` and `decode` both threw, and
+  it existed only to carry "several variants declare this segment differently" along the walk. Every
+  reader of a definition — `writes`, `carries`, `deeper`, a generator, a conformance check — had to
+  carry a case for it.
+
+  Nothing about paths changes. `at` still resolves a segment the variants agree on, still walks
+  *through* a disagreement to somewhere they agree, and still defers the complaint to encode time so
+  `path()` keeps working on an ambiguous path. What changed is that the unresolved terminal now
+  carries **no definition** rather than a fictional one, so `def` and `writes` answer `undefined` —
+  which is the truth. Only code exhaustively switching on `CodecDef['kind']` is affected.
+
 - **`numeric()`** — removed, with no deprecation period, because it was unsound rather than
   merely redundant. It decoded with `Number(ok) as T`: a type assertion, no check, so a stored
   `7` came back typed as `0 | 1`. The calculus's `(numeric)` rule is gone with it, and the
