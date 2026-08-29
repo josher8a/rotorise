@@ -137,12 +137,31 @@ premise of `uAtCan_of_separated`, so the theorem discharges strictly more — bu
 conditions are not the same condition, which is exactly the kind of thing that should
 not have been living in prose.
 
-**U2 — §5's discharger table speaks two languages. [checked]**
+**U2 — §5's discharger table speaks two languages. [checked] [fixed]**
 Two rows are about `UAtCan fuel opts` (`uAtCan_of_separated`, `uAtCan_of_disjoint`), two
 about `List OptionSem` (`uniqueAdmission_byTag`, `uniqueAdmission_of_kinds`). A reviewer
 checking the table changes vocabulary halfway across it, and `(dunion)`'s (U) is visible
 only *inside* `lawful_dunionCodec`. Also a dangling reference: `Combinators.lean:1361`
 cites `uniqueAdmission_of_disjoint`, which does not exist.
+
+**Three of the four now speak one language** (§5 item 5), and the fourth has a reason
+rather than an excuse. `(dunion)`'s row is `uAtCan_dunion`, at term level, with
+`denote_dunion` — an `rfl` — pinning its option list to the one the denotation is
+actually built from; its premises are exactly `Typed.dunion`'s two side conditions, and
+`Obligations.dunion` says the obligation list has no (U) entry to receive them.
+
+`(opaque)`'s row cannot follow, and the audit had not noticed why: `denote` gives
+`opaque` the **fuel-free** `opaqCodecω`, which budgets each input by its own depth and
+is not `altCodec` over any single list of options. There is no term-level list to state
+`UniqueAdmission` about. So `uAtCan_opaque` is about `opaqCodec` at a fuel — premise-free,
+since `lawful_opaqCodec` discharges the one hypothesis — and says so where it is stated.
+That is a fact about `opaque`, not a gap in the table.
+
+Two things came out of writing it. The eight-option list `opaque` sums was spelled twice
+(`opaqCodec` and `opaq_onKinds`) and about to be spelled a third time; it is now
+`opaqOptions`, taking the recursive codec as an argument, so `opaqCodec` is one line and
+the three statements about the list cite it. And the dangling reference is gone —
+`uniqueAdmission_opaque` is what it should have said.
 
 **U3 — `≡` is not transitive, and nothing says so. [checked] [fixed]**
 `Codec.Equiv` (`Equations.lean:36`) is faithful to §6 — agreeing everywhere both are
@@ -189,7 +208,7 @@ group would cost if it leaked: the three devices that pin §5's declaration-time
 the denotation, the three ω-twins that all travel along `denoteω_eq`, and the `opaque`
 and numeral rows. The guard went green first try, which is the expected result — the
 point was never to find a leak, it was to stop the eleven hand-checks from having to be
-redone by the next reader. Coverage 17 → **28 of 99**, and 32 of 104 after items 3 and 4 added theorems of their own.
+redone by the next reader. Coverage 17 → **28 of 99**, and 34 of 106 after items 3–5 added theorems of their own.
 
 A measurement artefact worth naming, since this file's own rule is that the script wins:
 `fidelity_audit.py` reads `FIDELITY.md` as one of its document sources, so *citing* a
@@ -229,8 +248,8 @@ At HEAD: 650 declarations, 469 theorems, 181 definitions.
 
 | | |
 | --- | ---: |
-| theorem names the documents cite as results | 104 |
-| …put through `#assert_axioms` | **32** |
+| theorem names the documents cite as results | 106 |
+| …put through `#assert_axioms` | **34** |
 | §-tag coverage (declarations naming a spec section) | **18%** |
 | docstring coverage, theorems | 53% |
 | docstring coverage, definitions | 69% |
@@ -274,7 +293,7 @@ for, and it now has three independent confirmations.
 | 2 | ~~`(D)` into `Typed.union`, or name the divergence in `Typing.lean`'s list~~ **done**: `DIncomp`, into the rule | the difference between "`Typed` is §3–§5's judgement" being true and false; the list records five smaller divergences and omits this one |
 | 3 | ~~Attempt `Equiv.trans`, fail, record `not_equiv_trans`~~ **done**, lawful and on-carrier throughout | three lines; a non-transitive `≡` presented as an equational theory is exactly the species §4's log is made of |
 | 4 | ~~`ident_sound`, or delete `ident` and say `adm` carries the exemption~~ **done**: `ident_of_adm` / `admDisj_ident`, plus the derivable pair where `SepV` and (K) part | a normative table transcribed and unconstrained is the definition of an unlocatable claim |
-| 5 | `uAtCan_dunion`, `uAtCan_opaque` — the four discharger rows in one vocabulary | two one-line theorems; converts two unlocatable rows to checkable, and retires the dangling reference |
+| 5 | ~~`uAtCan_dunion`, `uAtCan_opaque` — the four discharger rows in one vocabulary~~ **done**: three in one vocabulary, and `opaque` has a reason | two one-line theorems; converts two unlocatable rows to checkable, and retires the dangling reference |
 | 6 | A §-tag ratchet in `fidelity_audit.py`, failing the build when coverage drops | 18% today, 1% in `Opaque.lean`; `Axioms.lean`'s principle applied to traceability |
 | 7 | Restate §6's eleven "Hold" rows at term level | retires the unwritten translation table and makes both halves of §6 one language |
 | 8 | The documentation corrections: D3, D5, U4, C2's eight stale comments | cheap, and D3 is the only defect of the seven with no machine-checked witness |

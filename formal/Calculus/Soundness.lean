@@ -709,7 +709,7 @@ theorem opaq_TSub : ∀ (fuel : Nat) (lossy : Bool) (v : Value),
   | fuel+1, lossy, v, h => by
     obtain ⟨o, ho, hT⟩ := h
     have ih := opaq_TSub fuel lossy
-    simp only [List.mem_cons, List.not_mem_nil, or_false] at ho
+    simp only [opaqOptions, List.mem_cons, List.not_mem_nil, or_false] at ho
     rcases ho with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl
     · obtain ⟨s, rfl⟩ := hT; exact .str s
     · obtain ⟨b, rfl⟩ := hT; exact .bool b

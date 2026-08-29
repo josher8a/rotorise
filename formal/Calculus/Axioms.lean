@@ -70,6 +70,8 @@ constructive and the guard records that. -/
 #assert_axioms uAtCan_of_disjoint
 #assert_axioms uniqueAdmission_byTag
 #assert_axioms uniqueAdmission_of_kinds
+#assert_axioms uAtCan_dunion
+#assert_axioms uAtCan_opaque
 #assert_axioms not_uAtCan_literal_string
 #assert_axioms not_uAtCan_array_literals
 #assert_axioms not_uAtCan_literal_held
