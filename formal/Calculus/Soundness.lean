@@ -413,189 +413,142 @@ theorem dunion_stamp (fuel : Nat) {d : Name} {opts : List Term}
           rw [hlk]
   all_goals exact absurd rfl htag
 
-/-! ## The theorem -/
+/-! ## The theorem
+
+Both halves in one induction. `Sound` names what a case has to deliver, and three
+helpers name the three shapes a case comes in: a ground pair, lawful outright; one
+subterm, whose two combinator lemmas are applied to the two halves of the induction
+hypothesis; and a list of subterms, where the hypothesis is read off the mapped list.
+What is left in each case is the combinator lemmas it cites — which is the content. -/
+
+/-- What one derivation has to deliver: the core laws unconditionally, and all four
+    where it is legacy-free. -/
+abbrev Sound (fuel : Nat) (t : Term) : Prop :=
+  LawfulCore (denote fuel t) ∧ (MPOk fuel t → Lawful (denote fuel t))
+
+/-- A ground case: the pair is lawful outright, so both halves are the same lemma. -/
+theorem sound_ground {P : Prop} {c : Codec} (h : Lawful c) :
+    LawfulCore c ∧ (P → Lawful c) :=
+  ⟨h.core, fun _ => h⟩
+
+/-- A one-subterm case: the subterm's core lemma and its full one, applied to the two
+    halves of the induction hypothesis. (MP) passes through unchanged — every wrapper
+    but `legacy` is transparent to it. -/
+theorem sound_wrap {fuel : Nat} {t : Term} {c : Codec} (ih : Sound fuel t)
+    (core : LawfulCore (denote fuel t) → LawfulCore c)
+    (full : Lawful (denote fuel t) → Lawful c) :
+    LawfulCore c ∧ (MPOk fuel t → Lawful c) :=
+  ⟨core ih.1, fun hmp => full (ih.2 hmp)⟩
+
+/-- Reading a per-subterm hypothesis off the list the denotation maps over — the step
+    every product and sum case begins with. -/
+theorem forall_mem_map {α β : Type} {xs : List α} {g : α → β} {P : β → Prop}
+    (h : ∀ x ∈ xs, P (g x)) : ∀ y ∈ xs.map g, P y := by
+  rintro y hy
+  obtain ⟨x, hx, rfl⟩ := List.mem_map.mp hy
+  exact h x hx
+
+/-- …and off the optional one, for a `tuple`'s uniform tail. -/
+theorem forall_mem_map_option {α β : Type} {x? : Option α} {g : α → β} {P : β → Prop}
+    (h : ∀ x ∈ x?, P (g x)) : ∀ y ∈ x?.map g, P y := by
+  cases x? <;> simp_all
 
 /-- Both halves of §5's theorem in one induction: the core laws unconditionally, and
     all four where the derivation is legacy-free. One walk of the derivation, one
     unpacking of the obligations; each case dispatches to its two combinator lemmas.
     The public statements are the projections below. -/
 theorem soundness_both : ∀ (fuel : Nat) {t T μ}, Typed t T μ → Obligations fuel t →
-    LawfulCore (denote fuel t) ∧ (MPOk fuel t → Lawful (denote fuel t))
+    Sound fuel t
   | 0, _, _, _, _, _ => ⟨lawful_dead.core, fun _ => lawful_dead⟩
   | fuel+1, t, T, μ, h, hob => by
+    have ih : ∀ {t' : Term} {T' μ'}, Typed t' T' μ' → Obligations fuel t' → Sound fuel t' :=
+      fun h' hob' => soundness_both fuel h' hob'
     cases h with
-    | string =>
-      simp only [denote]; exact ⟨lawful_stringCodec.core, fun _ => lawful_stringCodec⟩
-    | number =>
-      simp only [denote]; exact ⟨lawful_numberCodec.core, fun _ => lawful_numberCodec⟩
-    | decimal =>
-      simp only [denote]; exact ⟨lawful_decimalCodec.core, fun _ => lawful_decimalCodec⟩
-    | boolean =>
-      simp only [denote]; exact ⟨lawful_booleanCodec.core, fun _ => lawful_booleanCodec⟩
-    | binary =>
-      simp only [denote]; exact ⟨lawful_binaryCodec.core, fun _ => lawful_binaryCodec⟩
-    | numeric q =>
-      simp only [denote]
-      exact ⟨(lawful_numericCodec q).core, fun _ => lawful_numericCodec q⟩
-    | literalS ls hne hnd =>
-      simp only [denote]
-      exact ⟨(lawful_literalSCodec ls).core, fun _ => lawful_literalSCodec ls⟩
-    | literalN ls hne hnd =>
-      simp only [denote]
-      exact ⟨(lawful_literalNCodec ls).core, fun _ => lawful_literalNCodec ls⟩
+    | string => exact sound_ground lawful_stringCodec
+    | number => exact sound_ground lawful_numberCodec
+    | decimal => exact sound_ground lawful_decimalCodec
+    | boolean => exact sound_ground lawful_booleanCodec
+    | binary => exact sound_ground lawful_binaryCodec
+    | numeric q => exact sound_ground (lawful_numericCodec q)
+    | literalS ls hne hnd => exact sound_ground (lawful_literalSCodec ls)
+    | literalN ls hne hnd => exact sound_ground (lawful_literalNCodec ls)
+    | opaq lossy => exact sound_ground (lawful_opaqCodecω lossy)
+    | custom ce cp =>
+      replace hob : Lawful { T := fun v => (ce v).isSome, μ := none, e := ce, p := cp } :=
+        hob
+      exact sound_ground hob
     | @set t' T' μ₀ μS h' hs =>
-      simp only [denote]
-      replace hob : Obligations fuel t' := hob
-      have ih := soundness_both fuel h' hob
-      constructor
-      · refine lawfulCore_setCodec ih.1 ?_ hs
-        rw [denote_μ]
-        exact typed_μSyn h'
-      · intro hmp
-        replace hmp : MPOk fuel t' := hmp
-        exact lawful_setCodec (ih.2 hmp)
+      have hμ : (denote fuel t').μ = some μ₀ := by rw [denote_μ]; exact typed_μSyn h'
+      exact sound_wrap (t := t') (ih h' hob) (lawfulCore_setCodec · hμ hs) lawful_setCodec
     | @array t' T' μ' h' =>
-      simp only [denote]
-      replace hob : Obligations fuel t' := hob
-      have ih := soundness_both fuel h' hob
-      refine ⟨lawfulCore_arrayCodec ih.1, fun hmp => ?_⟩
-      replace hmp : MPOk fuel t' := hmp
-      exact lawful_arrayCodec (ih.2 hmp)
+      exact sound_wrap (t := t') (ih h' hob) lawfulCore_arrayCodec lawful_arrayCodec
     | @record t' T' μ' h' =>
-      simp only [denote]
-      replace hob : Obligations fuel t' := hob
-      have ih := soundness_both fuel h' hob
-      refine ⟨lawfulCore_recordCodec ih.1, fun hmp => ?_⟩
-      replace hmp : MPOk fuel t' := hmp
-      exact lawful_recordCodec (ih.2 hmp)
-    | @tuple ts Ts tail Tt hlist hopt =>
-      simp only [denote]
-      replace hob : (∀ t' ∈ ts, Obligations fuel t') ∧
-        (∀ t' ∈ tail, Obligations fuel t') := hob
-      have ihs : ∀ t' ∈ ts,
-          LawfulCore (denote fuel t') ∧ (MPOk fuel t' → Lawful (denote fuel t')) :=
-        fun t' ht' => by
-          obtain ⟨T', μ', hμ'⟩ := TypedList.forall hlist t' ht'
-          exact soundness_both fuel hμ' (hob.1 t' ht')
-      have iht : ∀ t' ∈ tail,
-          LawfulCore (denote fuel t') ∧ (MPOk fuel t' → Lawful (denote fuel t')) :=
-        fun t' ht' => by
-          cases tail with
-          | none => exact nomatch ht'
-          | some tx =>
-            replace ht' : some tx = some t' := ht'
-            cases ht'
-            cases hopt with
-            | some hμ' => exact soundness_both fuel hμ' (hob.2 t' rfl)
-      constructor
-      · refine lawfulCore_tupleCodec ?_ ?_
-        · intro c hc
-          simp only [List.mem_map] at hc
-          obtain ⟨t', ht', rfl⟩ := hc
-          exact (ihs t' ht').1
-        · intro c hc
-          cases tail with
-          | none => exact nomatch hc
-          | some t' =>
-            replace hc : some (denote fuel t') = some c := hc
-            cases hc
-            exact (iht t' rfl).1
-      · intro hmp
-        replace hmp : (∀ t' ∈ ts, MPOk fuel t') ∧ (∀ t' ∈ tail, MPOk fuel t') := hmp
-        refine lawful_tupleCodec ?_ ?_
-        · intro c hc
-          simp only [List.mem_map] at hc
-          obtain ⟨t', ht', rfl⟩ := hc
-          exact (ihs t' ht').2 (hmp.1 t' ht')
-        · intro c hc
-          cases tail with
-          | none => exact nomatch hc
-          | some t' =>
-            replace hc : some (denote fuel t') = some c := hc
-            cases hc
-            exact (iht t' rfl).2 (hmp.2 t' rfl)
+      exact sound_wrap (t := t') (ih h' hob) lawfulCore_recordCodec lawful_recordCodec
+    | @refine t' T' μ' q h' =>
+      exact sound_wrap (t := t') (ih h' hob) (LawfulCore.restrict · q) (Lawful.restrict · q)
+    | @lazy γ T' μ' h' =>
+      exact sound_wrap (t := γ) (ih h' hob) LawfulCore.μNone Lawful.μNone
     | @held t' I' T' μ' f g h' hT =>
-      simp only [denote]
       replace hob : Obligations fuel t' ∧
         (∀ v, ((denote fuel t').e (f v)).isSome → g (f v) = v) ∧
         (∀ v, ((denote fuel t').e v).isSome → f (g v) = v) := hob
-      have ih := soundness_both fuel h' hob.1
-      refine ⟨LawfulCore.through ih.1 hob.2.1 hob.2.2, fun hmp => ?_⟩
-      replace hmp : MPOk fuel t' := hmp
-      exact Lawful.through (ih.2 hmp) hob.2.1 hob.2.2
-    | @refine t' T' μ' q h' =>
-      simp only [denote]
-      replace hob : Obligations fuel t' := hob
-      have ih := soundness_both fuel h' hob
-      refine ⟨LawfulCore.restrict ih.1 q, fun hmp => ?_⟩
-      replace hmp : MPOk fuel t' := hmp
-      exact Lawful.restrict (ih.2 hmp) q
-    | @legacy t' T' μ' r h' =>
-      simp only [denote]
-      replace hob : Obligations fuel t' ∧
-        (∀ a v, r a = some v → ((denote fuel t').e v).isSome) ∧
-        (∀ a v, r a = some v → ∀ v', (denote fuel t').p a = some v' → v = v') := hob
-      refine ⟨LawfulCore.extendRead (soundness_both fuel h' hob.1).1 hob.2.1,
-        fun hmp => ?_⟩
-      replace hmp : False := hmp
-      exact hmp.elim
+      exact sound_wrap (t := t') (ih h' hob.1) (LawfulCore.through · hob.2.1 hob.2.2)
+        (Lawful.through · hob.2.1 hob.2.2)
     | @nullable t' T' μ' h' =>
-      simp only [denote]
       replace hob : Obligations fuel t' ∧
         (∀ v a, (denote fuel t').e v = some a → a = .null → v = .null) ∧
         (∀ a v, (denote fuel t').p a = some v → v = .null → a = .null) := hob
-      have ih := soundness_both fuel h' hob.1
-      refine ⟨LawfulCore.orNull ih.1 hob.2.1 hob.2.2, fun hmp => ?_⟩
-      replace hmp : MPOk fuel t' := hmp
-      exact Lawful.orNull (ih.2 hmp) hob.2.1 hob.2.2
-    | @lazy γ T' μ' h' =>
-      simp only [denote]
-      replace hob : Obligations fuel γ := hob
-      have ih := soundness_both fuel h' hob
-      refine ⟨ih.1.μNone, fun hmp => ?_⟩
-      replace hmp : MPOk fuel γ := hmp
-      exact (ih.2 hmp).μNone
-    | custom ce cp =>
-      simp only [denote]
-      replace hob : Lawful { T := fun v => (ce v).isSome, μ := none, e := ce, p := cp } :=
-        hob
-      exact ⟨hob.core, fun _ => hob⟩
-    | opaq lossy =>
-      simp only [denote]
-      exact ⟨(lawful_opaqCodecω lossy).core, fun _ => lawful_opaqCodecω lossy⟩
+      exact sound_wrap (t := t') (ih h' hob.1) (LawfulCore.orNull · hob.2.1 hob.2.2)
+        (Lawful.orNull · hob.2.1 hob.2.2)
+    | @legacy t' T' μ' r h' =>
+      -- (MP) is off here by design: `MPOk` is `False` at a `legacy`, so the second
+      -- half is vacuous and only the core laws survive. §5's first residue.
+      replace hob : Obligations fuel t' ∧
+        (∀ a v, r a = some v → ((denote fuel t').e v).isSome) ∧
+        (∀ a v, r a = some v → ∀ v', (denote fuel t').p a = some v' → v = v') := hob
+      exact ⟨LawfulCore.extendRead (ih h' hob.1).1 hob.2.1, fun hmp => hmp.elim⟩
+    | @tuple ts Ts tail Tt hlist hopt =>
+      replace hob : (∀ t' ∈ ts, Obligations fuel t') ∧
+        (∀ t' ∈ tail, Obligations fuel t') := hob
+      have ihs : ∀ t' ∈ ts, Sound fuel t' := fun t' ht' => by
+        obtain ⟨T', μ', hμ'⟩ := TypedList.forall hlist t' ht'
+        exact ih hμ' (hob.1 t' ht')
+      have iht : ∀ t' ∈ tail, Sound fuel t' := fun t' ht' => by
+        cases tail with
+        | none => exact nomatch ht'
+        | some tx =>
+          replace ht' : some tx = some t' := ht'
+          cases ht'
+          cases hopt with
+          | some hμ' => exact ih hμ' (hob.2 t' rfl)
+      exact ⟨lawfulCore_tupleCodec (forall_mem_map fun t' ht' => (ihs t' ht').1)
+          (forall_mem_map_option fun t' ht' => (iht t' ht').1),
+        fun hmp => lawful_tupleCodec
+          (forall_mem_map fun t' ht' => (ihs t' ht').2 (hmp.1 t' ht'))
+          (forall_mem_map_option fun t' ht' => (iht t' ht').2 (hmp.2 t' ht'))⟩
     | @object fields binds rest R hfields hndf hrest =>
-      simp only [denote]
-      have ihf : ∀ k f, (k, f) ∈ fields →
-          LawfulCore (fieldSemOf (denote fuel) f).codec ∧
-          ((match f with
-            | .req t' => MPOk fuel t'
-            | .optional t' => MPOk fuel t'
-            | .fallback t' _ => MPOk fuel t') →
-            Lawful (fieldSemOf (denote fuel) f).codec) := by
-        intro k f hmem
+      -- a field's codec is its term's denotation, and (MP) reaches it unchanged
+      have ihf : ∀ kf ∈ fields,
+          LawfulCore (fieldSemOf (denote fuel) kf.2).codec ∧
+          ((match kf.2 with
+            | .req t' | .optional t' | .fallback t' _ => MPOk fuel t') →
+            Lawful (fieldSemOf (denote fuel) kf.2).codec) := by
+        rintro ⟨k, f⟩ hmem
         obtain ⟨T', π', μ', hμ'⟩ := TypedFields.forall hfields (k, f) hmem
         have hobf := hob.1 (k, f) hmem
         cases f with
-        | req t' =>
-          cases hμ' with
-          | req hty =>
-            replace hobf : Obligations fuel t' := hobf
-            exact soundness_both fuel hty hobf
-        | optional t' =>
-          cases hμ' with
-          | optional hty =>
-            replace hobf : Obligations fuel t' := hobf
-            exact soundness_both fuel hty hobf
-        | fallback t' v =>
-          cases hμ' with
+        | req t' => cases hμ' with
+          | req hty => exact ih hty hobf
+        | optional t' => cases hμ' with
+          | optional hty => exact ih hty hobf
+        | fallback t' v => cases hμ' with
           | fallback hty =>
             replace hobf : Obligations fuel t' ∧ ((denote fuel t').e v).isSome := hobf
-            exact soundness_both fuel hty hobf.1
+            exact ih hty hobf.1
       have hfb : ∀ kf ∈ fields.map fun kf => (kf.1, fieldSemOf (denote fuel) kf.2),
           ∀ c v, kf.2 = .fb c v → (c.e v).isSome := by
-        intro kf hkf c v hcv
-        simp only [List.mem_map] at hkf
-        obtain ⟨⟨k, f⟩, hmem, rfl⟩ := hkf
+        refine forall_mem_map ?_
+        rintro ⟨k, f⟩ hmem c v hcv
         have hobf := hob.1 (k, f) hmem
         cases f with
         | req t' => exact nomatch hcv
@@ -606,9 +559,7 @@ theorem soundness_both : ∀ (fuel : Nat) {t T μ}, Typed t T μ → Obligations
           cases hcv
           exact hobf.2
       have hnd' : (((fields.map fun kf => (kf.1, fieldSemOf (denote fuel) kf.2)).map
-          (·.1))).Nodup := by
-        rw [List.map_map]
-        exact hndf
+          (·.1))).Nodup := by rw [List.map_map]; exact hndf
       have ihr : ∀ c, restSemOf (denote fuel) rest = .codec c →
           LawfulCore c ∧ (MPOk (fuel+1) (.object fields rest) → Lawful c) := by
         intro c hcr
@@ -619,89 +570,46 @@ theorem soundness_both : ∀ (fuel : Nat) {t T μ}, Typed t T μ → Obligations
           replace hcr : RestSem.codec (denote fuel t') = RestSem.codec c := hcr
           cases hcr
           replace hob2 : Obligations fuel t' := hob.2
-          have ih := soundness_both fuel hty hob2
-          refine ⟨ih.1, fun hmp => ?_⟩
-          replace hmp2 : MPOk fuel t' := hmp.2
-          exact ih.2 hmp2
-      constructor
-      · refine lawfulCore_objectCodec ?_ hfb hnd' ?_
-        · intro kf hkf
-          simp only [List.mem_map] at hkf
-          obtain ⟨⟨k, f⟩, hmem, rfl⟩ := hkf
-          exact (ihf k f hmem).1
-        · intro c hcr
-          exact (ihr c hcr).1
-      · intro hmp
-        refine lawful_objectCodec ?_ hfb hnd' ?_
-        · intro kf hkf
-          simp only [List.mem_map] at hkf
-          obtain ⟨⟨k, f⟩, hmem, rfl⟩ := hkf
-          exact (ihf k f hmem).2 (hmp.1 (k, f) hmem)
-        · intro c hcr
-          exact (ihr c hcr).2 hmp
+          exact ⟨(ih hty hob2).1, fun hmp => (ih hty hob2).2 hmp.2⟩
+      exact ⟨lawfulCore_objectCodec
+          (forall_mem_map fun kf hkf => (ihf kf hkf).1)
+          hfb hnd' (fun c hcr => (ihr c hcr).1),
+        fun hmp => lawful_objectCodec
+          (forall_mem_map fun kf hkf => (ihf kf hkf).2 (hmp.1 kf hkf))
+          hfb hnd' (fun c hcr => (ihr c hcr).2 hmp)⟩
     | @union opts Ts μs hlist =>
-      simp only [denote]
       replace hob : (∀ t' ∈ opts, Obligations fuel t') ∧ UAtCan fuel opts := hob
-      have ihs : ∀ t' ∈ opts,
-          LawfulCore (denote fuel t') ∧ (MPOk fuel t' → Lawful (denote fuel t')) :=
-        fun t' ht' => by
-          obtain ⟨T', μ', hμ'⟩ := TypedListμ.forall hlist t' ht'
-          exact soundness_both fuel hμ' (hob.1 t' ht')
+      have ihs : ∀ t' ∈ opts, Sound fuel t' := fun t' ht' => by
+        obtain ⟨T', μ', hμ'⟩ := TypedListμ.forall hlist t' ht'
+        exact ih hμ' (hob.1 t' ht')
       have hU : UniqueAdmission
           (opts.map fun t' => optionSemOf (denote fuel t') (specOf t')) := hob.2
       have hW : ∀ m, unanimous (opts.map fun t' => (denote fuel t').μ) = some m →
           ∀ o ∈ opts.map fun t' => optionSemOf (denote fuel t') (specOf t'),
             ∀ t' a, o.c.e t' = some a → a.member = m := by
-        intro m hm o ho t' a he'
-        simp only [List.mem_map] at ho
-        obtain ⟨tx, htx, rfl⟩ := ho
+        intro m hm
+        refine forall_mem_map fun tx htx t' a he' => ?_
         rw [optionSemOf_c] at he'
-        have hmem : (denote fuel tx).μ ∈ opts.map (fun t'' => (denote fuel t'').μ) :=
-          List.mem_map.mpr ⟨tx, htx, rfl⟩
-        have hμx := unanimous_spec hm _ hmem
-        exact (ihs tx htx).1.writes hμx he'
-      constructor
-      · refine lawfulCore_altCodec ?_ hU hW
-        intro o ho
-        simp only [List.mem_map] at ho
-        obtain ⟨t', ht', rfl⟩ := ho
-        show LawfulCore (optionSemOf (denote fuel t') (specOf t')).c
-        rw [optionSemOf_c]
-        exact (ihs t' ht').1
-      · intro hmp
-        replace hmp : ∀ t' ∈ opts, MPOk fuel t' := hmp
-        refine lawful_altCodec ?_ hU hW
-        intro o ho
-        simp only [List.mem_map] at ho
-        obtain ⟨t', ht', rfl⟩ := ho
-        show Lawful (optionSemOf (denote fuel t') (specOf t')).c
-        rw [optionSemOf_c]
-        exact (ihs t' ht').2 (hmp t' ht')
+        exact (ihs tx htx).1.writes
+          (unanimous_spec hm _ (List.mem_map.mpr ⟨tx, htx, rfl⟩)) he'
+      exact ⟨lawfulCore_altCodec
+          (forall_mem_map fun t' ht' => (optionSemOf_c _ _) ▸ (ihs t' ht').1) hU hW,
+        fun hmp => lawful_altCodec
+          (forall_mem_map fun t' ht' => (optionSemOf_c _ _) ▸ (ihs t' ht').2 (hmp t' ht'))
+          hU hW⟩
     | @dunion d opts Ts hlistM htags hdisj =>
-      simp only [denote]
       replace hob : ∀ t' ∈ opts, Obligations fuel t' := hob
-      have ihs : ∀ t' ∈ opts,
-          LawfulCore (denote fuel t') ∧ (MPOk fuel t' → Lawful (denote fuel t')) :=
-        fun t' ht' => by
-          obtain ⟨T', hty⟩ := TypedListM.forall hlistM t' ht'
-          exact soundness_both fuel hty (hob t' ht')
+      have ihs : ∀ t' ∈ opts, Sound fuel t' := fun t' ht' => by
+        obtain ⟨T', hty⟩ := TypedListM.forall hlistM t' ht'
+        exact ih hty (hob t' ht')
       have hstamp := dunion_stamp fuel htags
       have hdisj' : List.Pairwise (fun x y => ∀ tag ∈ x.1, tag ∉ y.1)
           (opts.map fun t' => (tagsOf d t', denote fuel t')) :=
         List.pairwise_map.mpr hdisj
-      constructor
-      · refine lawfulCore_dunionCodec ?_ hstamp hdisj'
-        intro o ho
-        simp only [List.mem_map] at ho
-        obtain ⟨tx, htx, rfl⟩ := ho
-        exact (ihs tx htx).1
-      · intro hmp
-        replace hmp : ∀ t' ∈ opts, MPOk fuel t' := hmp
-        refine lawful_dunionCodec ?_ hstamp hdisj'
-        intro o ho
-        simp only [List.mem_map] at ho
-        obtain ⟨tx, htx, rfl⟩ := ho
-        exact (ihs tx htx).2 (hmp tx htx)
+      exact ⟨lawfulCore_dunionCodec
+          (forall_mem_map fun t' ht' => (ihs t' ht').1) hstamp hdisj',
+        fun hmp => lawful_dunionCodec
+          (forall_mem_map fun t' ht' => (ihs t' ht').2 (hmp t' ht')) hstamp hdisj'⟩
 
 /-! ## The denotation's held set is the judgement's
 
