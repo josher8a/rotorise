@@ -446,13 +446,26 @@ checking finds real defects in this domain:
 This is a weaker certificate — it checks the terms you generate, not all of them — but it is the
 right first move, and it is where the §4 defects would have surfaced fastest.
 
+**One warning from doing it.** The obvious harness generates *values* and round-trips them, which
+tests **(R)** and nothing else. `decode` then only ever sees attributes `encode` produced, and the
+attribute that breaks **(C)** is by definition one `encode` would never make. All three defects §4
+records against this implementation lived in that gap, and none was reachable from a generated
+value: the empty set, the denormalised numeral, the unchecked narrowing.
+
+So (C) needs a generator of *attributes*. `checkDecodesAreWritable` in `src/testing.ts` builds one
+by taking each encoded item and applying one **named** deviation at a time at every position in it —
+an empty set, a denormalised `N`, an `N` past the magnitude, a member swapped for another, an
+absent attribute. The names matter: a counterexample says which shape found it, and each shape is a
+class of defect this project has actually had rather than a random perturbation. The harness is
+itself checked against planted versions of two of the three, so that passing means something.
+
 ## §6 Scope: what is not proved
 
 Stated plainly, because a certificate that hides its edges is worth less than one that names them.
 
 | Gap                                    | Status                                                                                      |
 | -------------------------------------- | -------------------------------------------------------------------------------------------- |
-| **Implementation conformance**          | Not mechanized. C1–C3 above are currently a paper obligation for every port, this repo included. The largest remaining risk. |
+| **Implementation conformance**          | Partly mechanized. **(C)** is a property test over generated *attributes* (`checkDecodesAreWritable`), which is where all three of §4's implementation defects lived; **(R)** and the member laws are `checkRoundTrip` and `checkMembersStable`. C1–C3 themselves — the embedding, the pair, and the `Term` each constructor denotes — remain a paper obligation, and **(U)** is unchecked. Still the largest remaining risk. |
 | **(U) in general**                      | A premise. The dischargers cover the decidable cases; the rest fails per input at runtime.  |
 | **Recursive `union`**                   | Unmodelled — and not for convenience. `union`'s unique admission is *anti-monotone* in its options, so a union whose options are genuinely recursive has no fixpoint semantics at all (§7, `Continuity.lean`). `Term.lazy` carries `Unit → Term`, which defeats the termination checker without adding a single term, so every term in the model is finite. `lazy` under `union` is therefore not merely awkward to model; it is outside the model, and (U) is why. |
 | **(MP) under `legacy`**                 | Off, by design, on re-read attributes.                                                      |
