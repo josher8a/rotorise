@@ -74,6 +74,11 @@ constructive and the guard records that. -/
 #assert_axioms not_uAtCan_array_literals
 #assert_axioms not_uAtCan_literal_held
 
+/-! §6's `≡` is not transitive — the one refutation that is about the equational theory
+rather than about a row of it. -/
+
+#assert_axioms not_equiv_trans
+
 /-! The three lemmas that pin §5's declaration-time devices to the denotation. Without
 these, `κ`, `adm` and `admA` are transcriptions of a table rather than claims about the
 model, so their axiom base is part of what the soundness statements rest on. -/
