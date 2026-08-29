@@ -4,6 +4,15 @@
 
 ### Added
 
+- **`TermDef`, `FieldDef`, `RestDef`** — §4's three levels, named. `CodecDef['kind']` is a flat union
+  of twenty-four names while the calculus puts a **codec**, a **field** (`optional`, `fallback`) and
+  a **rest policy** (`restOf`) at three different levels. The separation was already enforced, by
+  branded markers and guards at each site that could go wrong, but the level a kind belongs to was
+  written down nowhere — so the flat list read as three constructors that were missing something.
+  They are not missing anything; they are not codecs.
+
+  A type-level assertion now fails the build if a kind is added that no stratum claims.
+
 - **`nullValue`** — the `NULL` point: the one value `null`, stored as `{ NULL: true }`. A schema
   could say "this attribute is a string" or "this attribute is optional", and could not say "this
   attribute is exactly `NULL`" — a tombstone, or a payload-free option of a union. The gap was found
