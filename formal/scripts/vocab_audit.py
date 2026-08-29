@@ -27,7 +27,7 @@ SITE = re.compile(r'\breplace \w+ :|^\s*(?:show|cases h\w* :)')
 CONSTRUCTIONS = [
     ("pointCodec", "pointCodec"), ("stringCodec", "stringCodec"),
     ("numberCodec", "numberCodec"), ("decimalCodec", "decimalCodec"),
-    ("numericCodec", "numericCodec"), ("booleanCodec", "booleanCodec"),
+    ("booleanCodec", "booleanCodec"),
     ("binaryCodec", "binaryCodec"), ("nullCodec", "nullCodec"),
     ("literalSCodec", "literalSCodec"), ("literalNCodec", "literalNCodec"),
     ("through", "through"), ("restrict", "restrict"),
@@ -66,7 +66,7 @@ BLOCKS = [
     ("union",  ["altCodec", "OptionSem", "uniqueAdmission", "unanimous",
                 "optionSemOf", "dunion", "tag_filter"], "complete"),
     ("wrappers", ["through", "restrict", "extendRead", "orNull"], "complete"),
-    ("ground", ["stringCodec", "numberCodec", "decimalCodec", "numericCodec",
+    ("ground", ["stringCodec", "numberCodec", "decimalCodec",
                 "booleanCodec", "binaryCodec", "nullCodec", "literalS", "literalN",
                 "pointCodec", "decimal_", "numeral"], "none"),
 ]

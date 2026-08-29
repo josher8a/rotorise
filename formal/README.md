@@ -135,7 +135,7 @@ are true but unlocatable, two corrections to this package's own artifacts, and a
 review surface. Regenerate the measurements with `python3 scripts/fidelity_audit.py`.
 
 The headline: the guard puts 35 constants through `#assert_axioms` while the documents
-cite 112 as results, §-tag coverage is 18%, and **60% of theorem statements name a
+cite 113 as results, §-tag coverage is 18%, and **60% of theorem statements name a
 definition that is documented nowhere** — a statement a reviewer cannot read against the
 specification without a detour. (The guard's count was 17 when the audit was written;
 items 1–5 of its plan closed the gap it measured, and its §5 records which.)
@@ -147,8 +147,8 @@ its own inversion lemma, and every proof downstream cites the lemma — together
 naming scheme, a measured audit of where the vocabulary is still incomplete, and the
 ranked plan for closing it. The numbers regenerate: `python3 scripts/vocab_audit.py`.
 
-The short version: the *obligation* half of the vocabulary is done (23/24 carriers,
-22/24 lawfulness lemmas); the *observation* half — `X_e`/`X_p`, what a construction
+The short version: the *obligation* half of the vocabulary is done (22/23 carriers,
+21/23 lawfulness lemmas); the *observation* half — `X_e`/`X_p`, what a construction
 writes and reads — is 25 of 48. Six of every ten remaining hand-unfoldings are `Option`
 algebra rather than anything about codecs. The controlled comparison is the four blocks
 that *gained* inversion during the arc, same content before and after: 7.2 → 5.0 and

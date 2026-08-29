@@ -44,7 +44,7 @@ mutual
     absorbs — `nullable`'s `∪` and `union`'s `⋃` answer `⊤` whenever a subterm does. -/
 def κ : Term → Option (List Kind)
   | .string | .decimal | .literalS _ => some [.string]
-  | .number | .numeric _ | .literalN _ => some [.number]
+  | .number | .literalN _ => some [.number]
   | .boolean => some [.boolean]
   | .null => some [.null]
   | .binary => some [.binary]
@@ -246,7 +246,6 @@ theorem κ_sound : ∀ (fuel : Nat) (t : Term) {ks : List Kind} {v a},
     | decimal => single_kind hκ v he
     | literalS ls => single_kind hκ v he
     | number => single_kind hκ v he
-    | numeric q => single_kind hκ v he
     | literalN ls => single_kind hκ v he
     | boolean => single_kind hκ v he
     | null => single_kind hκ v he
@@ -648,7 +647,7 @@ theorem ident_of_adm : ∀ {t : Term} {v : Value}, adm t v = false → ident t =
   | .refine t _, v, h => ident_of_adm (t := t) (v := v) h
   | .legacy t _, v, h => ident_of_adm (t := t) (v := v) h
   | .string, _, h | .number, _, h | .decimal, _, h | .boolean, _, h | .binary, _, h
-  | .null, _, h | .numeric _, _, h | .set _, _, h | .array _, _, h | .tuple _ _, _, h
+  | .null, _, h | .set _, _, h | .array _, _, h | .tuple _ _, _, h
   | .record _, _, h | .held _ _ _, _, h | .nullable _, _, h | .lazy _, _, h
   | .custom _ _, _, h | .opaq _, _, h | .object _ _, _, h | .union _, _, h => nomatch h
 

@@ -10,7 +10,7 @@ The inventory mirrors the doc's own analysis (§7: products and coproducts are t
 irreducible structure; everything else wraps one subterm):
 
 * ground codecs — one per §3 ground term — **proved**;
-* `through` / `restrict` — the iso/prism pair (`held`, `refine`/`numeric`), the
+* `through` / `restrict` — the iso/prism pair (`held`, `refine`), the
   invertible-syntax-descriptions combinator the doc cites — **proved**;
 * `extendRead` — the agreeing extension of the reading (`legacy`) — core laws
   **proved**; (MP) is the sanctioned breach and has no lemma, by design;
@@ -193,16 +193,6 @@ def decimalCodec : Codec :=
       | .n x => if Numeral.WF x then some (.str x) else none
       | _ => none }
 
-def numericCodec (q : Double → Bool) : Codec :=
-  { T := fun v => ∃ d, q d ∧ v = .num d
-    μ := some .N
-    e := fun v => match v with
-      | .num d => if q d then some (.n d.toDec) else none
-      | _ => none
-    p := fun a => match a with
-      | .n x => (Double.ofDec x).bind fun d => if q d then some (.num d) else none
-      | _ => none }
-
 def booleanCodec : Codec :=
   { T := fun v => ∃ b, v = .bool b
     μ := some .BOOL
@@ -244,10 +234,10 @@ def literalNCodec (ls : List Double) : Codec :=
 
 /-! ### The gated ground codecs are refinements
 
-`literal` and `numeric` are not new constructions: they are `string` and `number` with a
-prism laid over them, which is exactly what §7 means by "an iso and a prism". Naming the
-predicates makes that visible, and lets all six of their laws come from `Lawful.restrict`
-and `carrier_restrict` instead of six bespoke inductions.
+`literal` is not a new construction: it is `string` and `number` with a prism laid over
+them, which is exactly what §7 means by "an iso and a prism". Naming the predicates makes
+that visible, and lets all four of its laws come from `Lawful.restrict` and
+`carrier_restrict` instead of four bespoke inductions.
 
 `decimal` is deliberately *not* here. It moves the member (`str` values to an `N`
 attribute), so it is not a refinement of `string` and keeps its own proofs. -/
@@ -260,11 +250,6 @@ def inLS (ls : List String) : Value → Bool
 /-- `literal(ℓ)`'s predicate on the numeric side. -/
 def inLN (ls : List Double) : Value → Bool
   | .num d => decide (d ∈ ls)
-  | _ => false
-
-/-- `numeric(q)`'s predicate, lifted from doubles to values. -/
-def onNum (q : Double → Bool) : Value → Bool
-  | .num d => q d
   | _ => false
 
 
@@ -1525,17 +1510,6 @@ theorem carrier_literalSCodec (ls : List String) : Carrier (literalSCodec ls) :=
     (by rintro v ⟨⟨s, rfl⟩, hq⟩; exact ⟨s, by simpa [inLS] using hq, rfl⟩)
     (carrier_restrict carrier_stringCodec (inLS ls))
 
-theorem carrier_numericCodec (q : Double → Bool) : Carrier (numericCodec q) := by
-  refine Carrier.congr ?_ ?_ ?_ (carrier_restrict carrier_numberCodec (onNum q))
-  · funext v; cases v <;> simp [numericCodec, Codec.restrict, numberCodec, onNum]
-  · funext a
-    cases a
-    case n x =>
-      cases hd : Double.ofDec x <;>
-        simp [numericCodec, Codec.restrict, numberCodec, onNum, hd]
-    all_goals simp [numericCodec, Codec.restrict, numberCodec]
-  · rintro v ⟨⟨d, rfl⟩, hq⟩; exact ⟨d, by simpa [onNum] using hq, rfl⟩
-
 theorem carrier_literalNCodec (ls : List Double) : Carrier (literalNCodec ls) := by
   refine Carrier.congr ?_ ?_ ?_ (carrier_restrict carrier_numberCodec (inLN ls))
   · funext v; cases v <;> simp [literalNCodec, Codec.restrict, numberCodec, inLN]
@@ -1805,25 +1779,14 @@ theorem Lawful.restrict {c : Codec} (h : Lawful c) (q : Value → Bool) :
 
 /-! ### The refinement ground codecs are lawful because their bases are
 
-`literal` and `numeric` add a prism and nothing else, so all four laws come from
-`Lawful.restrict`. What used to be three inductions is now three statements of which
-codec is being refined by which predicate. -/
+`literal` adds a prism and nothing else, so all four laws come from `Lawful.restrict`.
+What used to be two inductions is now two statements of which codec is being refined by
+which predicate. -/
 
 theorem lawful_literalSCodec (ls : List String) : Lawful (literalSCodec ls) := by
   refine Lawful.congr ?_ ?_ ?_ (Lawful.restrict lawful_stringCodec (inLS ls))
   · funext v; cases v <;> simp [literalSCodec, Codec.restrict, stringCodec, inLS]
   · funext a; cases a <;> simp [literalSCodec, Codec.restrict, stringCodec, inLS]
-  · rfl
-
-theorem lawful_numericCodec (q : Double → Bool) : Lawful (numericCodec q) := by
-  refine Lawful.congr ?_ ?_ ?_ (Lawful.restrict lawful_numberCodec (onNum q))
-  · funext v; cases v <;> simp [numericCodec, Codec.restrict, numberCodec, onNum]
-  · funext a
-    cases a
-    case n x =>
-      cases hd : Double.ofDec x <;>
-        simp [numericCodec, Codec.restrict, numberCodec, onNum, hd]
-    all_goals simp [numericCodec, Codec.restrict, numberCodec]
   · rfl
 
 theorem lawful_literalNCodec (ls : List Double) : Lawful (literalNCodec ls) := by

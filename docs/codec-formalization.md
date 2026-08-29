@@ -208,24 +208,34 @@ axiomatized `Double.ofDec`, so no syntactic set bounds it and `admA(literal‑N)
 §5 should split its `adm` row into a value side and an attribute side and say where each
 stops — the model's `adm`/`admA` is the shape it wants.
 
-### One where §3 and §5 disagree about the same term
+### One where §3 and §5 disagreed, and the term did not survive it
 
-§3 says of `numeric(T)` that `p` "returns the double it read and **does not verify membership
+§3 said of `numeric(T)` that `p` "returns the double it read and **does not verify membership
 in `T`**", that `refine(number, T)` is "the same held set *with* the check", and that "a claim
-and a check are different terms". §5's soundness proof says the opposite in the same breath:
+and a check are different terms". §5's soundness proof said the opposite in the same breath:
 "the normative reading is `number`'s restricted to attributes landing in `T`, and every law
 restricts with it; the implementation elides the restriction."
 
-`numericCodec` gates `q` on both halves — §5's reading — and it has to. Under §3's reading `p`
-could return a value outside `T`, which is `Carrier.ranP` failing, and with it `typed_p_mem`
-and the honesty of the `: T` index. So this is not a choice the mechanization made; it is the
-only reading under which the judgement's index means anything, and `carrier_numericCodec` is
-the standing witness.
+Only one of those readings is available. Under §3's, `p` returns values outside `T`, which is
+`Carrier.ranP` failing and with it `typed_p_mem` and any claim the `: T` index makes. So the
+model took §5's reading, and `numericCodec` gated on both halves.
 
-§3's paragraph is the one to amend. Its underlying point — that the subset is an unchecked
-precondition *for the implementation*, like `D`'s magnitude range — survives; what does not is
-the claim that `numeric(T)` and `refine(number, T)` are different terms. In this calculus they
-denote the same codec.
+Then the third side turned up, in the implementation. `numeric<T>()` in `src/codec.ts` decoded
+with `Number(ok) as T` — **no check at all**, a type assertion over `number`. So the TypeScript
+and the mechanized codec were never the same construction, and C3 conformance would have failed
+on it. Three artifacts, three readings, of a term whose whole purpose was to be a fourth thing.
+
+**`(numeric)` is removed** — from the rule figure, from `Term`, and from the implementation.
+The certificate came first: `numericCodec_eq_restrict` (commit `eb3fac9`) proved `numeric(q)`
+and `refine(number, q)` equal on all four fields, so nothing expressible was lost, and
+`denote_numeric_eq` said it at term level. What replaces it is what always did the work: a
+narrowing that checks is `refine`, and a narrowing that is the caller's business is `held`.
+
+The general lesson is worth more than the term. **An unchecked read cast cannot be a term of a
+calculus whose judgement carries a held set.** `: T` is either a claim the laws enforce or it is
+decoration, and `(numeric)` was a rule for saying `T` while asking not to be held to it. §3 was
+candid that this was a precondition rather than a check; what it did not notice is that the
+calculus has no room for the distinction.
 
 ## §5 Certifying an implementation
 
@@ -328,7 +338,6 @@ Stated plainly, because a certificate that hides its edges is worth less than on
 | **(MP) under `legacy`**                 | Off, by design, on re-read attributes.                                                      |
 | **`T` as an identity**                  | **Closed for `opaque`** — `opaq_T_identity` proves `(opaqCodecω ν).T = Uν` exactly, the case this row said bites hardest. Still open for the other constructors, and *false* for `union` without full (U): `T` is the union of the options' sets, but `e` refuses wherever two of them admit, so the surplus is real. The general blocker is gone — the "fuel exceeds depth" hypothesis is now `Value.depth`/`termDepth`. |
 | **§1's numeral domain**                 | **Modelled.** `Numeral.WF` (Domain.lean) carries §1's three clauses — grammar, ≤ 38 significant digits, magnitude `0` or `1e-130 … 9.9…e125` — and `decimal` gates on it, so it no longer holds every string. `decimal_writes_wf`/`decimal_reads_wf` are the report. The *carrier* is still unrestricted (`Attr.n "abc"` remains representable), which is the honest split: §1 says which strings DynamoDB accepts in an `N`, and the calculus's job is that its codecs write only those. Two narrowings are noted at the definition: a bare integer part is required, and significance is counted between first and last nonzero digit. |
-| **`(numeric)`'s `T ≠ ∅`**               | Dropped. `T ⊆ D` is vacuous while `D` is unmodelled, and the specification calls it an unchecked precondition; `T ≠ ∅` is simply absent. |
 | **§6's equations**                      | **Twenty of twenty, with one row narrower than the table reads.** The "do not hold" table is settled: eight machine-checked, and `optional(optional(c))` enforced by the syntax, since no `Field` constructor takes a `Field`. All eleven "Hold" rows are proved, but `union`'s commutativity is proved for the **adjacent transposition** (`equiv_altCodec_swap`), which generates every permutation without the lift to `List.Perm` being written down. Wrapper member preservation is five of five — three codec wrappers, and the two field wrappers through `FieldSem.codec`, which §4 of the specification says is where a field's member lives. `union` associativity, the table's only *conditional* row, holds **without** its conditions — see §4. And `≡` itself is reflexive and symmetric but **not transitive** (`not_equiv_trans`), which bounds what a table of rewrites licenses. |
 | **`Double`**                            | Axiomatized with exactly the shortest-text round trip `(number)` consumes. IEEE-754 facts are not this calculus's theorems. |
 | **Set-ness**                            | Wire sets and maps are lists; the quotient lives in `ker p`, where §2 puts it, not in the carrier. |

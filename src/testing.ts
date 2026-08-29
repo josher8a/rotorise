@@ -772,8 +772,6 @@ export const arbitraryOf = (
             return someDecimal(rng)
         case 'number':
             return pickFrom(rng, [0, 1, -1, 42, 1000, -7])
-        case 'numeric':
-            return pickFrom(rng, [0, 1, 2, 3])
         case 'boolean':
             return rng() < 0.5
         case 'binary':
@@ -945,7 +943,6 @@ export const shrinkOf = (
         case 'decimal':
             return shrinkDecimal(value as string)
         case 'number':
-        case 'numeric':
             return shrinkNumber(value as number)
         case 'boolean':
             return value ? [false] : []

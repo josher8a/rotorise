@@ -45,7 +45,8 @@ fallback that scored ✓ where §2's naming scheme was not followed, and a failu
 recognise `opaqCodec`'s eighteen per-constructor unfoldings as inversion. So this file's
 earlier headline — "the observation half is 12% done … `opaque` is the only block with a
 measurable residue" — was measuring a *naming* gap for its own largest cited offender.
-Both are fixed; the corrected figure is 25/48. See `FIDELITY.md` §2 C1. A measurement
+Both are fixed; the corrected figure is 25/48 (of 46 after `(numeric)`'s removal — the
+same numerator, one construction fewer to cover). See `FIDELITY.md` §2 C1. A measurement
 that flatters the thing it measures is worse than no measurement, and this one did.
 
 **The signal.** `replace h : … := h`, `show …` and `cases h… :` are the three ways a

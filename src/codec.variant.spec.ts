@@ -9,7 +9,7 @@ import {
     decimal,
     discriminatedUnion,
     literal,
-    numeric,
+    number,
     object,
     optional,
     string,
@@ -44,7 +44,7 @@ const Account = discriminatedUnion('type', [
         userId: string,
         profileId: string,
         branchId: string,
-        weight: numeric<number>(),
+        weight: number,
         note: optional(string),
     }),
 ]).item

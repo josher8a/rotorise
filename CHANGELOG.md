@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+### Removed
+
+- **`numeric()`** — removed, with no deprecation period, because it was unsound rather than
+  merely redundant. It decoded with `Number(ok) as T`: a type assertion, no check, so a stored
+  `7` came back typed as `0 | 1`. The calculus's `(numeric)` rule is gone with it, and the
+  formalization proved before removing that `numeric(q)` and `refine(number, q)` denote the same
+  codec on all four fields (`numericCodec_eq_restrict`), so nothing expressible is lost.
+
+  Migrating:
+  - `numeric<0 | 1 | 2>()` → `literal(0, 1, 2)` — an enum indexed by number, stored as `N`,
+    with the admissible set checked in **both** directions. This is what `numeric()` claimed.
+  - `numeric<number>()` → `number`. The type parameter was doing nothing.
+  - an arbitrary subset → `refine(number, is)`, which checks it.
+  - a narrowing that is genuinely the caller's to guarantee → `held`, where the caller's own
+    functions belong.
+
 ## 0.3.6 — 2026-07-31
 
 ### Fixed
