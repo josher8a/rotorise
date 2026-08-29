@@ -92,13 +92,24 @@ the false row. A defect of the same species as the six logged, and the only one 
 unwitnessed by a theorem. Second half: the doc has one `adm`, the model needs two, and
 they genuinely disagree at `legacy` and at `literalN`. §5 should split it.
 
-**Witnessed and logged** (§5 item 8). `not_admA_legacy`: `legacy(literal("A"), r)` with
-`r` reading an `N` reads `⟨N, "1"⟩` to `"A"`, and `admA(literal("A"))` refuses it — so a
-passthrough `admA` makes `admA_sound` false. `codec-formalization.md` §4 now carries the
-entry, including the `literalN` half. **The amendment to `codec-calculus.md` §5 is not
-made** — splitting the `adm` row into a value side and an attribute side changes the
-normative document, which is not this arc's to do unasked. The §4 entry says what the
-amendment should be.
+**Witnessed, logged, and now amended** (§5 items 8 and 10). `not_admA_legacy`:
+`legacy(literal("A"), r)` with `r` reading an `N` reads `⟨N, "1"⟩` to `"A"`, and
+`admA(literal("A"))` refuses it — so a passthrough `admA` makes `admA_sound` false.
+`codec-formalization.md` §4 carries the entry, including the `literalN` half.
+
+**`codec-calculus.md` §5 now states the two functions**, at the user's call, as a table over
+`Term` with both partings argued: `legacy` passes `adm` and not `admA` because a migration
+exists to accept attributes the current codec refuses, and a numeric `literal` has no `admA`
+because distinct numerals read to the same double. The readable-side discharger row and the
+`(D)` paragraph's closing sentence now say `admA`.
+
+Writing the table found a third thing neither audit had, and neither had this finding: the old
+passthrough list was `refine`, `optional`, `fallback` and `legacy`, and **two of those are not
+terms**. `optional` and `fallback` are §4's fields; `adm : Term → …` cannot have a case for
+them. It is the C3 stratification error again, this time inside the specification's own
+auxiliary table, and what exposed it was writing the table out against `Term`'s constructors —
+where a case for a field cannot be written down. **A prose table has no arity to violate**,
+which is exactly why transcribing one into a total function is worth the trouble.
 
 **D4 — §2's (MP) exemption is localized in the doc and global in the model. [checked]**
 `codec-calculus.md:78`: a term *containing* a `legacy` inherits the exemption "on exactly
@@ -362,6 +373,7 @@ for, and it now has three independent confirmations.
 | 7 | Restate §6's eleven "Hold" rows at term level | retires the unwritten translation table and makes both halves of §6 one language |
 | 8 | ~~The documentation corrections: D3, D5, U4, C2's eight stale comments~~ **done**; U4's second half was wrong and the row is five of five | cheap, and D3 is the only defect of the seven with no machine-checked witness |
 | 9 | ~~`Codec.Ker` and `Can` in `Codec.lean`~~ **done**: and `η ⊆ ker p` with them | `≈c` is §2's central device and had no name; `Can` sat in §6's file where §2 and §5 could not cite it |
+| 10 | ~~D3's amendment to `codec-calculus.md` §5~~ **done**: the `adm`/`admA` split, and a stratification error found while writing it | normative, so it waited for the call; the model had been right and unrecorded since `admA` was written |
 
 Item 9 turned out to carry more than its description. Naming `≈c` was three lines and an
 `Equivalence`; what it unlocked was §1's store concession, which had been prose in

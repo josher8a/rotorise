@@ -430,7 +430,7 @@ unions it covers:
 
 | Discharger                                         | Decides                                               | From                          |
 | -------------------------------------------------- | ----------------------------------------------------- | ----------------------------- |
-| distinct members, or disjoint `adm`                | the readable side, where the stored attributes differ | `μ`, and `adm` below          |
+| distinct members, or disjoint `admA`               | the readable side, where the stored attributes differ | `μ`, and `admA` below         |
 | **(K)** — disjoint kinds, or disjoint `ident` sets | the writable side, where the runtime shapes differ    | `κ`, `ident` and `adm`, below |
 | tag disjointness                                   | `(dunion)`, outright — both sides                     | the discriminator literals    |
 | kind disjointness                                  | `opaque`'s fixpoint (§3), outright                    | one option per kind of §1     |
@@ -551,12 +551,51 @@ both machine-checked (`Calculus/Discharge.lean`):
   container admits its empty case, which no element ever sees.
 
 What the exemption actually needs is what the worked example above quietly has: `ident` on **both**
-sides, and admissible sets that do not meet. So `adm(c)`, the third auxiliary, is the set a term
-checks against when `ident(c)` holds — a `literal`'s values, a `discriminatedUnion`'s tags. It is
-compared only between two `ident` terms, and it is deliberately _not_ propagated through the
-containers: `adm(array(c))` would have to contain the empty array whatever `c` is, so container
-options are never separated this way and the second counterexample stays refused. `refine`,
-`optional`, `fallback` and `legacy` pass `adm` through, as they pass `ident` through.
+sides, and admissible sets that do not meet. So the third auxiliary is the set a term checks against
+when `ident(c)` holds — a `literal`'s values, a `discriminatedUnion`'s tags. It is deliberately _not_
+propagated through the containers: it would have to contain the empty array whatever the element is,
+so container options are never separated this way and the second counterexample stays refused.
+
+**It is two functions, not one.** A codec is a pair, and a term's admissible set is a claim about one
+half of it at a time: `adm(c) ⊆ Value` is what `e` will accept, `admA(c) ⊆ 𝔸` is what `p` will
+accept.
+They agree on most terms and they genuinely part on two, which is why stating one of them was stating
+something false about the other.
+
+| term                        | `adm` — value side   | `admA` — attribute side           |
+| --------------------------- | -------------------- | --------------------------------- |
+| `literal(ℓ)`, `ℓ ⊆ String`  | `ℓ`                  | `ℓ`, as stored `S`                |
+| `literal(ℓ)`, `ℓ ⊆ D`       | `ℓ`                  | **`⊤`**                           |
+| `discriminatedUnion(d, o…)` | the pooled tags of the `oᵢ`, found by looking `d` up | the same, in the stored item |
+| `refine(c, q)`              | `adm(c)`             | `admA(c)`                         |
+| `legacy(c, r)`              | `adm(c)`             | **`⊤`**                           |
+| anything else               | `⊤`                  | `⊤`                               |
+
+Both partings are forced, and neither is a limitation of the mechanization:
+
+- **`legacy(c, r)`.** The whole content of `legacy` is that `p` reads attributes `c` does not, so a
+  passthrough `admA` would claim a bound on exactly the direction `r` widens. `legacy(literal("A"), r)`
+  with `r` reading `⟨N, "1"⟩` to `"A"` reads an attribute `admA(literal("A"))` refuses, so the
+  passthrough is not merely coarse, it is **unsound** — machine-checked as `not_admA_legacy`. The
+  value side is untouched: `legacy` adds no way to *write*, which is why `adm` passes through and is
+  the asymmetry to remember.
+- **A numeric `literal`.** Its read side goes through the numeral-to-double reading of §1, which is
+  not a membership test on the stored text: distinct numerals read to the same double, and a
+  syntactic set of values bounds no set of attributes. So `admA` has nothing to say and numeric
+  literals fall to **(U)** per input on the attribute side, while their value side separates exactly
+  as a string literal's does.
+
+Two notes on what is _not_ in the table. `optional` and `fallback` are **fields** (§4) and not terms,
+so nothing passes through them — an earlier version of this section listed them beside `refine` and
+`legacy`, which is the level confusion §4 exists to rule out. And the `⊤` default is what makes the
+`ident` conjuncts of **(K)** mostly redundant rather than decorative: two terms whose sets are both
+`⊤` can never be disjoint, so disjointness already implies each side carries a real set, which is
+what `ident` says (`ident_of_adm`, `admDisj_ident`). The conjuncts are kept because the recovery
+needs a side condition — it holds only where each option admits *something* — and there is a
+derivable term that admits nothing: `discriminatedUnion(d)` with no options, whose set is empty and
+which is therefore disjoint from every term, including the ones carrying no set at all
+(`sepV_string_dunion_nil`). A rule with a stated premise is easier to check than one with a
+recovered one.
 
 The residue of the old rule is the honest one: the pairs `ident` genuinely resolves are the pairs of
 `literal`s with disjoint values, and the pairs of `discriminatedUnion`s with disjoint tags — the
@@ -578,8 +617,9 @@ disjoint sets of values and still read one attribute, each to its own value.
 
 So **(D)** is a well-formedness condition on the judgement's `T` index and not a discharger of
 **(U)**: no condition on held sets can be one. What decides the readable side is a condition on
-_stored attributes_ — distinct members `μᵢ ≠ μⱼ`, or disjoint `adm` — which is what the mechanized
-discharger takes.
+_stored attributes_ — distinct members `μᵢ ≠ μⱼ`, or disjoint `admA` — which is what the mechanized
+discharger takes, and the `admA` rather than `adm` is the point: a condition on values cannot decide
+a question about attributes, which is the same confusion this paragraph has just refused twice.
 
 ### Theorem (soundness)
 

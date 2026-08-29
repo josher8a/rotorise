@@ -362,8 +362,28 @@ make `admA_sound` false.
 
 The two also part at `literalN`, for a different reason: the read side goes through the
 axiomatized `Double.ofDec`, so no syntactic set bounds it and `admA(literal‑N)` is `⊤`.
-§5 should split its `adm` row into a value side and an attribute side and say where each
-stops — the model's `adm`/`admA` is the shape it wants.
+
+**The amendment is made.** §5 now carries the two functions as a table, term by term, with both
+partings argued rather than asserted — `legacy` because a passthrough `admA` is *unsound* and not
+merely coarse, `literal-N` because distinct numerals read to the same double so no set of values
+bounds a set of attributes. The readable-side discharger row and the closing sentence of the `(D)`
+discussion say `admA` where they used to say `adm`; a condition on values cannot decide a question
+about attributes, which is the confusion that paragraph refuses twice already.
+
+**A third correction came with it, and it was not in the finding.** The old passthrough list was
+`refine`, `optional`, `fallback` and `legacy`. Two of those four are not terms at all: `optional`
+and `fallback` are **fields** (§4), and `adm` is a function on terms, so nothing can pass through
+them. That is the same level confusion the C3 mapping found in `CodecDef['kind']` — a flat list
+read as one stratum when the specification is normative that there are three — arriving this time
+inside the specification's own auxiliary table. It went unnoticed by two audits and by the finding
+that opened this entry, and what exposed it was writing the table out against `Term`'s
+constructors, where a case for a field cannot be written down.
+
+The `⊤` default earned a remark too, since §5 states **(K)** with two `ident` conjuncts the model's
+`SepV` drops. Disjointness of two `⊤` sets is unsatisfiable, so it already implies each side carries
+a real set — `ident_of_adm` and `admDisj_ident` — but only where each option admits *something*, and
+`discriminatedUnion(d)` with no options is derivable and admits nothing (`sepV_string_dunion_nil`).
+§5 keeps the conjuncts and now says why: a stated premise is easier to check than a recovered one.
 
 ### One where §3 and §5 disagreed, and the term did not survive it
 
