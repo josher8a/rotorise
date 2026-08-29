@@ -12,7 +12,8 @@ Mechanization choices, and where they diverge from the doc (each is routine to s
   syntax-directed judgement should be; it is an index rather than a function so the rules
   read as §3 writes them.
 * `Typed` keeps only the *syntactic and fuel-free* premises (set member, literal
-  side conditions, `(dunion)` tag disjointness, object name distinctness).
+  side conditions, `(union)`'s **(D)**, `(dunion)` tag disjointness, object name
+  distinctness).
   The doc's *semantic* premises — `(held)`'s carrier-restricted iso, `(legacy)`'s
   `ran(r) ⊆ dom(e)` and coherence, `(nullable)`'s null-honesty, `(fallback)`'s
   `v(∗) ∈ dom(e)`, `(custom)`'s laws, and `(union)`'s residual (U) — are fuel-indexed
@@ -72,6 +73,20 @@ def HNull (T : Held) : Held :=
 /-- `⋃ Tᵢ` (§5 `(union)`, `(dunion)`). -/
 def HUnion (Ts : List Held) : Held :=
   fun v => ∃ T ∈ Ts, T v
+
+/-- §5's **(D)**, `(union)`'s well-formedness side condition: `∀ i ≠ j. ¬(Tᵢ ⊆ Tⱼ) ∧
+    ¬(Tⱼ ⊆ Tᵢ)`, pairwise over the options' held sets.
+
+    It is *incomparability*, not disjointness — §5 is explicit that demanding
+    disjointness would reject working unions, and `not_uAtCan_literal_held` is the
+    counterexample. It is also not a discharger of (U): "no condition on held sets can
+    be one", which is why no theorem consumes it. What it constrains is the judgement's
+    `T` index, and that is reason enough for it to be a premise of the rule rather than
+    an obligation — it is fuel-free and reads off the index the rule already computes.
+    Contrast `DDisj` (`Discharge.lean`), which is the strengthening §5 considered and
+    withdrew. -/
+def DIncomp (Ts : List Held) : Prop :=
+  Ts.Pairwise fun Tx Ty => ¬ (∀ v, Tx v → Ty v) ∧ ¬ (∀ v, Ty v → Tx v)
 
 /-- `⟨n₁ :^π₁ T₁ … nₙ :^πₙ Tₙ⟩ ⊕ R(ρ)` (§4 `(object)`). A binding is `(name, required?,
     held set)`; `R` is the open part — `none` for `drop`/`refuse`, the rest codec's held
@@ -142,7 +157,8 @@ inductive Typed : Term → Held → Option Member → Prop where
   | object {fields binds rest R} (hf : TypedFields fields binds)
       (hnd : (fields.map (·.1)).Nodup) (hr : TypedRest rest R) :
       Typed (.object fields rest) (HObject binds R) (some .M)
-  | union {opts Ts μs} (h : TypedListμ opts Ts μs) :
+  /-- `(union)`: the option judgements, and §5's **(D)** on their held sets. -/
+  | union {opts Ts μs} (h : TypedListμ opts Ts μs) (hD : DIncomp Ts) :
       Typed (.union opts) (HUnion Ts) (unanimous μs)
   | dunion {d opts Ts} (h : TypedListM opts Ts)
       (htags : ∀ t' ∈ opts, tagsOf d t' ≠ [])

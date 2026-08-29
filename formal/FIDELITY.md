@@ -50,7 +50,7 @@ lives only in `Discharge.lean` as a declaration-time discharger. And the loss is
 `uAtCan_of_separated` needs a lawfulness premise it would otherwise not — the discharger
 re-derives by read-side (W) what the missing member filter would have given free.
 
-**D2 — `(D)` is a premise of `(union)` that nothing checks. [both] [checked]**
+**D2 — `(D)` is a premise of `(union)` that nothing checks. [both] [checked] [fixed]**
 The rule figure at `codec-calculus.md:490` carries `(D)` and `(K)`. `Typed.union`
 (`Typing.lean:145`) carries only `TypedListμ`. `(K)`'s relocation to `Obligations`' `UAtCan`
 is deliberate and documented; **`(D)` is simply absent**, and `DDisj` (`Discharge.lean:874`)
@@ -63,6 +63,16 @@ identity `Typed = ⊢` asserted at `Typing.lean:8` — which every §6/§7 row l
 false as stated. Since §5 itself concludes (D) discharges nothing, the honest resolutions
 are to demote it to a remark or to add it to the rule. Normative in the doc, absent in the
 model, unremarked in the defect log is the worst of the three.
+
+**Resolved by adding it to the rule** (§5 item 2). `DIncomp` (`Typing.lean`) is §5's
+incomparability, pairwise over the option held sets, and `Typed.union` now carries it.
+Two things made this the cheaper of the two resolutions than it looked: the rule had
+exactly **one** construction site in the whole development (`typed_union_string_boolean`)
+and five inversion sites, and (D) is fuel-free and reads off the index the rule already
+computes — so it fits `Typing.lean`'s stated syntactic/fuel-free policy without argument.
+No theorem consumes it, which is correct and is now stated where a reviewer will look:
+§5 says no condition on held sets can discharge (U), and `DDisj` next to
+`not_uAtCan_literal_held` is why. `Typed = ⊢` is now true as asserted.
 
 **D3 — §5's `adm` cannot pass through `legacy` on the read side. [checked]**
 `codec-calculus.md:514` says `legacy` passes `adm` through. It cannot: `extendRead`
@@ -233,7 +243,7 @@ for, and it now has three independent confirmations.
 | # | item | why it is first |
 | --- | --- | --- |
 | 1 | ~~The eleven `#assert_axioms` lines — the hand-checks of U5, made mechanical~~ **done**: 28 of 99 guarded, green first try | cheapest, and it is the guard's own principle; `opaq_T_identity` guards seven `omega` calls behind a row the docs call closed |
-| 2 | `(D)` into `Typed.union`, or name the divergence in `Typing.lean`'s list | the difference between "`Typed` is §3–§5's judgement" being true and false; the list records five smaller divergences and omits this one |
+| 2 | ~~`(D)` into `Typed.union`, or name the divergence in `Typing.lean`'s list~~ **done**: `DIncomp`, into the rule | the difference between "`Typed` is §3–§5's judgement" being true and false; the list records five smaller divergences and omits this one |
 | 3 | Attempt `Equiv.trans`, fail, record `not_equiv_trans` | three lines; a non-transitive `≡` presented as an equational theory is exactly the species §4's log is made of |
 | 4 | `ident_sound`, or delete `ident` and say `adm` carries the exemption | a normative table transcribed and unconstrained is the definition of an unlocatable claim |
 | 5 | `uAtCan_dunion`, `uAtCan_opaque` — the four discharger rows in one vocabulary | two one-line theorems; converts two unlocatable rows to checkable, and retires the dangling reference |

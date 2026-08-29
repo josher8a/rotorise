@@ -189,7 +189,14 @@ theorem not_typed_set_union :
 theorem typed_union_string_boolean :
     Typed (.union [.string, .boolean])
       (HUnion [fun v => ∃ s, v = .str s, fun v => ∃ b, v = .bool b]) none :=
-  .union (.cons .string (.cons .boolean .nil))
+  .union (.cons .string (.cons .boolean .nil)) <| by
+    -- (D): neither held set contains the other — a string is never a boolean.
+    rw [DIncomp, List.pairwise_cons]
+    refine ⟨fun T hT => ?_, List.pairwise_singleton _ _⟩
+    rw [List.mem_singleton] at hT; subst hT
+    refine ⟨fun h => ?_, fun h => ?_⟩
+    · obtain ⟨b, hb⟩ := h (.str "") ⟨"", rfl⟩; exact nomatch hb
+    · obtain ⟨s, hs⟩ := h (.bool true) ⟨true, rfl⟩; exact nomatch hs
 
 /-! ## What `≡` cannot see about associativity
 
