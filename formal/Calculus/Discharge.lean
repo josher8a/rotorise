@@ -148,6 +148,55 @@ def admA : Term → Attr → Bool
   | .refine t _ => admA t
   | _ => fun _ => true
 
+/-! ### Tag admission, on both sides
+
+`(dunion)`'s admission and `adm`/`admA` at a `dunion` are the same shape — a lookup of the
+discriminator, and a membership test on the tag it carries. Stating that shape once is
+what lets the `dunion` cases below say the one thing they are about: the tag the
+admitting option matched is one of the union's tags. -/
+
+/-- A tag option admits exactly the items whose discriminator carries one of its tags. -/
+theorem byTag_admitA {d : Name} {tags : List String} {c : Codec} {a : Attr} :
+    (OptionSem.byTag d tags c).admitA a = true ↔
+      ∃ kvs tag, a = .m kvs ∧ kvs.lookup d = some (.s tag) ∧ tags.contains tag = true := by
+  cases a <;> simp only [OptionSem.byTag] <;> try simp
+  case m kvs =>
+    cases hlk : kvs.lookup d with
+    | none => simp [hlk]
+    | some x => cases x <;> simp [hlk]
+
+/-- …and the values whose discriminator carries one, on the way in. -/
+theorem byTag_admitV {d : Name} {tags : List String} {c : Codec} {v : Value} :
+    (OptionSem.byTag d tags c).admitV v = true ↔
+      ∃ kvs tag, v = .map kvs ∧ kvs.lookup d = some (.str tag) ∧ tags.contains tag = true := by
+  cases v <;> simp only [OptionSem.byTag] <;> try simp
+  case map kvs =>
+    cases hlk : kvs.lookup d with
+    | none => simp [hlk]
+    | some x => cases x <;> simp [hlk]
+
+/-- `adm` at a `dunion` is the same test, against the union's whole tag set. -/
+theorem adm_dunion {d : Name} {opts : List Term} {v : Value} :
+    adm (.dunion d opts) v = true ↔
+      ∃ kvs tag, v = .map kvs ∧ kvs.lookup d = some (.str tag) ∧
+        (allTags d opts).contains tag = true := by
+  cases v <;> simp only [adm] <;> try simp
+  case map kvs =>
+    cases hlk : kvs.lookup d with
+    | none => simp [hlk]
+    | some x => cases x <;> simp [hlk]
+
+/-- …and `admA` likewise. -/
+theorem admA_dunion {d : Name} {opts : List Term} {a : Attr} :
+    admA (.dunion d opts) a = true ↔
+      ∃ kvs tag, a = .m kvs ∧ kvs.lookup d = some (.s tag) ∧
+        (allTags d opts).contains tag = true := by
+  cases a <;> simp only [admA] <;> try simp
+  case m kvs =>
+    cases hlk : kvs.lookup d with
+    | none => simp [hlk]
+    | some x => cases x <;> simp [hlk]
+
 /-! ## κ is sound for the denotation -/
 
 /-- Every option of a `⋃` is a sublist of it. -/
@@ -214,11 +263,7 @@ theorem κ_sound : ∀ (fuel : Nat) (t : Term) {ks : List Kind} {v a},
       cases v <;> first
         | exact List.mem_cons_self _ _
         | exact nomatch hadm
-    | refine t' q =>
-      replace he : (if q v then (denote fuel t').e v else none) = some a := he
-      split at he
-      · exact κ_sound fuel t' hκ he
-      · exact nomatch he
+    | refine t' q => exact κ_sound fuel t' hκ (restrict_e.mp he).2
     | legacy t' r => exact κ_sound fuel t' hκ he
     | nullable t' =>
       -- `nullable`'s `∪`: `null` is the wrapper's own kind, everything else the
@@ -246,58 +291,19 @@ theorem adm_sound : ∀ (fuel : Nat) (t : Term) {v a},
   | fuel+1, t, v, a, he => by
     cases t
     case literalS ls =>
-      cases v
-      case str s =>
-        replace he : (if s ∈ ls then some (Attr.s s) else none) = some a := he
-        show decide (s ∈ ls) = true
-        split at he
-        next h => exact decide_eq_true h
-        next => exact nomatch he
-      all_goals exact nomatch he
+      cases v <;> simp_all [denote, literalSCodec, adm]
     case literalN ls =>
-      cases v
-      case num d =>
-        replace he : (if d ∈ ls then some (Attr.n d.toDec) else none) = some a := he
-        show decide (d ∈ ls) = true
-        split at he
-        next h => exact decide_eq_true h
-        next => exact nomatch he
-      all_goals exact nomatch he
+      cases v <;> simp_all [denote, literalNCodec, adm]
     case dunion d opts =>
-      replace he : (altCodec ((opts.map fun t' => (tagsOf d t', denote fuel t')).map
-        fun o => .byTag d o.1 o.2) (some .M)).e v = some a := he
+      -- the admitting option's tag check is exactly `adm`'s, at one option
       obtain ⟨o, ho, hadm, -⟩ := altCodec_e_admits he
       simp only [List.mem_map] at ho
       obtain ⟨-, ⟨tx, htx, rfl⟩, rfl⟩ := ho
-      -- the admitting option's tag check is exactly `adm`'s, at one option
-      cases v
-      case map kvs =>
-        replace hadm : (match kvs.lookup d with
-          | some (.str tag) => (tagsOf d tx).contains tag
-          | _ => false) = true := hadm
-        show (match kvs.lookup d with
-          | some (.str tag) => (allTags d opts).contains tag
-          | _ => false) = true
-        cases hlk : kvs.lookup d
-        case none => rw [hlk] at hadm; exact nomatch hadm
-        case some x =>
-          cases x
-          case str tag =>
-            rw [hlk] at hadm
-            exact List.elem_eq_true_of_mem
-              (mem_allTags htx (List.mem_of_elem_eq_true hadm))
-          all_goals rw [hlk] at hadm; exact nomatch hadm
-      all_goals exact nomatch hadm
-    case refine t' q =>
-      replace he : (if q v then (denote fuel t').e v else none) = some a := he
-      show adm t' v = true
-      split at he
-      · exact adm_sound fuel t' he
-      · exact nomatch he
-    case legacy t' r =>
-      replace he : (denote fuel t').e v = some a := he
-      show adm t' v = true
-      exact adm_sound fuel t' he
+      obtain ⟨kvs, tag, rfl, hlk, htag⟩ := byTag_admitV.mp hadm
+      exact adm_dunion.mpr ⟨kvs, tag, rfl, hlk,
+        contains_of_mem (mem_allTags htx (mem_of_contains htag))⟩
+    case refine t' q => exact adm_sound fuel t' (restrict_e.mp he).2
+    case legacy t' r => exact adm_sound fuel t' (extendRead_e.mp he)
     all_goals rfl
 
 /-- Reading lands in `admA`. -/
@@ -307,45 +313,15 @@ theorem admA_sound : ∀ (fuel : Nat) (t : Term) {a v},
   | fuel+1, t, a, v, hp => by
     cases t
     case literalS ls =>
-      cases a
-      case s s =>
-        replace hp : (if s ∈ ls then some (Value.str s) else none) = some v := hp
-        show decide (s ∈ ls) = true
-        split at hp
-        next h => exact decide_eq_true h
-        next => exact nomatch hp
-      all_goals exact nomatch hp
+      cases a <;> simp_all [denote, literalSCodec, admA]
     case dunion d opts =>
-      replace hp : (altCodec ((opts.map fun t' => (tagsOf d t', denote fuel t')).map
-        fun o => .byTag d o.1 o.2) (some .M)).p a = some v := hp
       obtain ⟨o, ho, hadm, -⟩ := altCodec_p_admits hp
       simp only [List.mem_map] at ho
       obtain ⟨-, ⟨tx, htx, rfl⟩, rfl⟩ := ho
-      cases a
-      case m kvs =>
-        replace hadm : (match kvs.lookup d with
-          | some (.s tag) => (tagsOf d tx).contains tag
-          | _ => false) = true := hadm
-        show (match kvs.lookup d with
-          | some (.s tag) => (allTags d opts).contains tag
-          | _ => false) = true
-        cases hlk : kvs.lookup d
-        case none => rw [hlk] at hadm; exact nomatch hadm
-        case some x =>
-          cases x
-          case s tag =>
-            rw [hlk] at hadm
-            exact List.elem_eq_true_of_mem
-              (mem_allTags htx (List.mem_of_elem_eq_true hadm))
-          all_goals rw [hlk] at hadm; exact nomatch hadm
-      all_goals exact nomatch hadm
-    case refine t' q =>
-      replace hp : ((denote fuel t').p a).bind
-        (fun v' => if q v' then some v' else none) = some v := hp
-      show admA t' a = true
-      cases hi : (denote fuel t').p a
-      case none => rw [hi] at hp; exact nomatch hp
-      case some v' => exact admA_sound fuel t' hi
+      obtain ⟨kvs, tag, rfl, hlk, htag⟩ := byTag_admitA.mp hadm
+      exact admA_dunion.mpr ⟨kvs, tag, rfl, hlk,
+        contains_of_mem (mem_allTags htx (mem_of_contains htag))⟩
+    case refine t' q => exact admA_sound fuel t' (restrict_p.mp hp).1
     all_goals rfl
 
 /-! ## Admission is guarded -/
