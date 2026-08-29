@@ -43,24 +43,9 @@ def Obligations : Nat → Term → Prop
     | .set t' | .array t' | .record t' | .refine t' _ => Obligations fuel t'
     | .tuple ts tail =>
       (∀ t' ∈ ts, Obligations fuel t') ∧ (∀ t' ∈ tail, Obligations fuel t')
-    | .held t' f g =>
-      Obligations fuel t' ∧
-      -- the iso cancels on the carriers (§3 (held), T ≃ I): g ∘ f = id where f lands
-      -- writable, f ∘ g = id on the writable values themselves
-      (∀ v, ((denote fuel t').e (f v)).isSome → g (f v) = v) ∧
-      (∀ v, ((denote fuel t').e v).isSome → f (g v) = v)
-    | .legacy t' r =>
-      Obligations fuel t' ∧
-      -- ran(r) ⊆ dom(e): a migration lands on writable values
-      (∀ a v, r a = some v → ((denote fuel t').e v).isSome) ∧
-      -- coherence: the legacy reading agrees with the current one on the overlap
-      (∀ a v, r a = some v → ∀ v', (denote fuel t').p a = some v' → v = v')
-    | .nullable t' =>
-      Obligations fuel t' ∧
-      -- write-honesty: NULL is written for null alone
-      (∀ v a, (denote fuel t').e v = some a → a = .null → v = .null) ∧
-      -- read-honesty: null is read from NULL alone
-      (∀ a v, (denote fuel t').p a = some v → v = .null → a = .null)
+    | .held t' f g => Obligations fuel t' ∧ IsoCancels (denote fuel t') f g
+    | .legacy t' r => Obligations fuel t' ∧ ReadsCoherently (denote fuel t') r
+    | .nullable t' => Obligations fuel t' ∧ NullHonest (denote fuel t')
     | .lazy t' => Obligations fuel t'
     | .custom ce cp =>
       Lawful { T := fun v => (ce v).isSome, μ := none, e := ce, p := cp }
@@ -98,6 +83,59 @@ def MPOk : Nat → Term → Prop
       (match rest with | .codec t' => MPOk fuel t' | _ => True)
     | .union opts => ∀ t' ∈ opts, MPOk fuel t'
     | .dunion _ opts => ∀ t' ∈ opts, MPOk fuel t'
+
+/-! ### The premises, per rule
+
+`Obligations` is a recursion over the term, so at each rule it *is* the proposition that
+rule's premises make — but only up to unfolding, and every case of the two inductions
+below was re-stating that proposition to name it. These are that unfolding, once per
+rule, and they read as the rule they belong to. Each is `:= h`. -/
+
+namespace Obligations
+
+theorem set {fuel t} (h : Obligations (fuel+1) (.set t)) : Obligations fuel t := h
+theorem array {fuel t} (h : Obligations (fuel+1) (.array t)) : Obligations fuel t := h
+theorem record {fuel t} (h : Obligations (fuel+1) (.record t)) : Obligations fuel t := h
+theorem refine {fuel t q} (h : Obligations (fuel+1) (.refine t q)) : Obligations fuel t := h
+theorem lazy {fuel t} (h : Obligations (fuel+1) (.lazy t)) : Obligations fuel t := h
+
+theorem tuple {fuel ts tail} (h : Obligations (fuel+1) (.tuple ts tail)) :
+    (∀ t ∈ ts, Obligations fuel t) ∧ (∀ t ∈ tail, Obligations fuel t) := h
+
+/-- §3 `(held)`: the subterm's premises, and the iso cancelling on the carriers. -/
+theorem held {fuel t f g} (h : Obligations (fuel+1) (.held t f g)) :
+    Obligations fuel t ∧ IsoCancels (denote fuel t) f g := h
+
+/-- §3 `(legacy)`: the subterm's premises, and the migration landing on writable values
+    and agreeing with the current reading. -/
+theorem legacy {fuel t r} (h : Obligations (fuel+1) (.legacy t r)) :
+    Obligations fuel t ∧ ReadsCoherently (denote fuel t) r := h
+
+/-- §3 `(nullable)`: the subterm's premises, and null-honesty in both directions. -/
+theorem nullable {fuel t} (h : Obligations (fuel+1) (.nullable t)) :
+    Obligations fuel t ∧ NullHonest (denote fuel t) := h
+
+/-- §3 `(custom)`: the escape hatch proves §2's laws for itself. -/
+theorem custom {fuel ce cp} (h : Obligations (fuel+1) (.custom ce cp)) :
+    Lawful { T := fun v => (ce v).isSome, μ := none, e := ce, p := cp } := h
+
+/-- §5 `(union)`: one premise per option, and (U) at canonical inputs. -/
+theorem union {fuel opts} (h : Obligations (fuel+1) (.union opts)) :
+    (∀ t ∈ opts, Obligations fuel t) ∧ UAtCan fuel opts := h
+
+/-- §5 `(dunion)`: one premise per option; (U) is a theorem here, not a premise. -/
+theorem dunion {fuel d opts} (h : Obligations (fuel+1) (.dunion d opts)) :
+    ∀ t ∈ opts, Obligations fuel t := h
+
+/-- The `fallback` field's own premise, `v(∗) ∈ dom(e)`. -/
+theorem fallback {fuel t v}
+    (h : match Field.fallback t v with
+      | .req t => Obligations fuel t
+      | .optional t => Obligations fuel t
+      | .fallback t v => Obligations fuel t ∧ ((denote fuel t).e v).isSome) :
+    Obligations fuel t ∧ ((denote fuel t).e v).isSome := h
+
+end Obligations
 
 /-! ## Ground-term lemmas -/
 
@@ -449,7 +487,7 @@ theorem fieldSems_fb {fuel : Nat} {fields : List (Name × Field)}
   | req t' => exact nomatch hcv
   | optional t' => exact nomatch hcv
   | fallback t' v₀ =>
-    replace hobf : Obligations fuel t' ∧ ((denote fuel t').e v₀).isSome := hobf
+    replace hobf := Obligations.fallback hobf
     replace hcv : FieldSem.fb (denote fuel t') v₀ = FieldSem.fb c v := hcv
     cases hcv
     exact hobf.2
@@ -483,9 +521,7 @@ theorem soundness_both : ∀ (fuel : Nat) {t T μ}, Typed t T μ → Obligations
     | literalN ls hne hnd => exact sound_ground (lawful_literalNCodec ls)
     | opaq lossy => exact sound_ground (lawful_opaqCodecω lossy)
     | custom ce cp =>
-      replace hob : Lawful { T := fun v => (ce v).isSome, μ := none, e := ce, p := cp } :=
-        hob
-      exact sound_ground hob
+      exact sound_ground hob.custom
     | @set t' T' μ₀ μS h' hs =>
       have hμ : (denote fuel t').μ = some μ₀ := by rw [denote_μ]; exact typed_μSyn h'
       exact sound_wrap (t := t') (ih h' hob) (lawfulCore_setCodec · hμ hs) lawful_setCodec
@@ -498,27 +534,16 @@ theorem soundness_both : ∀ (fuel : Nat) {t T μ}, Typed t T μ → Obligations
     | @lazy γ T' μ' h' =>
       exact sound_wrap (t := γ) (ih h' hob) LawfulCore.μNone Lawful.μNone
     | @held t' I' T' μ' f g h' hT =>
-      replace hob : Obligations fuel t' ∧
-        (∀ v, ((denote fuel t').e (f v)).isSome → g (f v) = v) ∧
-        (∀ v, ((denote fuel t').e v).isSome → f (g v) = v) := hob
-      exact sound_wrap (t := t') (ih h' hob.1) (LawfulCore.through · hob.2.1 hob.2.2)
-        (Lawful.through · hob.2.1 hob.2.2)
+      exact sound_wrap (t := t') (ih h' hob.1) (LawfulCore.through · hob.2)
+        (Lawful.through · hob.2)
     | @nullable t' T' μ' h' =>
-      replace hob : Obligations fuel t' ∧
-        (∀ v a, (denote fuel t').e v = some a → a = .null → v = .null) ∧
-        (∀ a v, (denote fuel t').p a = some v → v = .null → a = .null) := hob
-      exact sound_wrap (t := t') (ih h' hob.1) (LawfulCore.orNull · hob.2.1 hob.2.2)
-        (Lawful.orNull · hob.2.1 hob.2.2)
+      exact sound_wrap (t := t') (ih h' hob.1) (LawfulCore.orNull · hob.2)
+        (Lawful.orNull · hob.2)
     | @legacy t' T' μ' r h' =>
       -- (MP) is off here by design: `MPOk` is `False` at a `legacy`, so the second
       -- half is vacuous and only the core laws survive. §5's first residue.
-      replace hob : Obligations fuel t' ∧
-        (∀ a v, r a = some v → ((denote fuel t').e v).isSome) ∧
-        (∀ a v, r a = some v → ∀ v', (denote fuel t').p a = some v' → v = v') := hob
       exact ⟨LawfulCore.extendRead (ih h' hob.1).1 hob.2.1, fun hmp => hmp.elim⟩
     | @tuple ts Ts tail Tt hlist hopt =>
-      replace hob : (∀ t' ∈ ts, Obligations fuel t') ∧
-        (∀ t' ∈ tail, Obligations fuel t') := hob
       have ihs : ∀ t' ∈ ts, Sound fuel t' := fun t' ht' => by
         obtain ⟨T', μ', hμ'⟩ := TypedList.forall hlist t' ht'
         exact ih hμ' (hob.1 t' ht')
@@ -552,7 +577,7 @@ theorem soundness_both : ∀ (fuel : Nat) {t T μ}, Typed t T μ → Obligations
           | optional hty => exact ih hty hobf
         | fallback t' v => cases hμ' with
           | fallback hty =>
-            replace hobf : Obligations fuel t' ∧ ((denote fuel t').e v).isSome := hobf
+            replace hobf := Obligations.fallback hobf
             exact ih hty hobf.1
       have hfb := fieldSems_fb hob.1
       have hnd' := fieldSems_nodup (fuel := fuel) hndf
@@ -565,8 +590,7 @@ theorem soundness_both : ∀ (fuel : Nat) {t T μ}, Typed t T μ → Obligations
         | @codec t' T' μ' hty =>
           replace hcr : RestSem.codec (denote fuel t') = RestSem.codec c := hcr
           cases hcr
-          replace hob2 : Obligations fuel t' := hob.2
-          exact ⟨(ih hty hob2).1, fun hmp => (ih hty hob2).2 hmp.2⟩
+          exact ⟨(ih hty hob.2).1, fun hmp => (ih hty hob.2).2 hmp.2⟩
       exact ⟨lawfulCore_objectCodec
           (forall_mem_map fun kf hkf => (ihf kf hkf).1)
           hfb hnd' (fun c hcr => (ihr c hcr).1),
@@ -574,7 +598,6 @@ theorem soundness_both : ∀ (fuel : Nat) {t T μ}, Typed t T μ → Obligations
           (forall_mem_map fun kf hkf => (ihf kf hkf).2 (hmp.1 kf hkf))
           hfb hnd' (fun c hcr => (ihr c hcr).2 hmp)⟩
     | @union opts Ts μs hlist =>
-      replace hob : (∀ t' ∈ opts, Obligations fuel t') ∧ UAtCan fuel opts := hob
       have ihs : ∀ t' ∈ opts, Sound fuel t' := fun t' ht' => by
         obtain ⟨T', μ', hμ'⟩ := TypedListμ.forall hlist t' ht'
         exact ih hμ' (hob.1 t' ht')
@@ -594,7 +617,6 @@ theorem soundness_both : ∀ (fuel : Nat) {t T μ}, Typed t T μ → Obligations
           (forall_mem_map fun t' ht' => (optionSemOf_c _ _) ▸ (ihs t' ht').2 (hmp t' ht'))
           hU hW⟩
     | @dunion d opts Ts hlistM htags hdisj =>
-      replace hob : ∀ t' ∈ opts, Obligations fuel t' := hob
       have ihs : ∀ t' ∈ opts, Sound fuel t' := fun t' ht' => by
         obtain ⟨T', hty⟩ := TypedListM.forall hlistM t' ht'
         exact ih hty (hob t' ht')
@@ -870,17 +892,12 @@ theorem carrier_denote : ∀ (fuel : Nat) {t T μ}, Typed t T μ → Obligations
     | literalS ls _ _ => exact carrier_literalSCodec ls
     | literalN ls _ _ => exact carrier_literalNCodec ls
     | @set t' T' μ₀ μS h' hs =>
-      replace hob : Obligations fuel t' := hob
-      exact carrier_setCodec (carrier_denote fuel h' hob)
+      exact carrier_setCodec (carrier_denote fuel h' hob.set)
     | @array t' T' μ' h' =>
-      replace hob : Obligations fuel t' := hob
-      exact carrier_arrayCodec (carrier_denote fuel h' hob)
+      exact carrier_arrayCodec (carrier_denote fuel h' hob.array)
     | @record t' T' μ' h' =>
-      replace hob : Obligations fuel t' := hob
-      exact carrier_recordCodec (carrier_denote fuel h' hob)
+      exact carrier_recordCodec (carrier_denote fuel h' hob.record)
     | @tuple ts Ts tail Tt hlist hopt =>
-      replace hob : (∀ t' ∈ ts, Obligations fuel t') ∧
-        (∀ t' ∈ tail, Obligations fuel t') := hob
       refine carrier_tupleCodec (forall_mem_map ?_) (forall_mem_map_option ?_)
       · intro t' ht'
         obtain ⟨T', μ', hty⟩ := TypedList.forall hlist t' ht'
@@ -894,31 +911,18 @@ theorem carrier_denote : ∀ (fuel : Nat) {t T μ}, Typed t T μ → Obligations
           cases hopt with
           | some hty => exact carrier_denote fuel hty (hob.2 t' rfl)
     | @held t' I' T' μ' f g h' hT =>
-      replace hob : Obligations fuel t' ∧
-        (∀ v, ((denote fuel t').e (f v)).isSome → g (f v) = v) ∧
-        (∀ v, ((denote fuel t').e v).isSome → f (g v) = v) := hob
       exact carrier_through (carrier_denote fuel h' hob.1)
         (soundness_both fuel h' hob.1).1 hob.2.2
     | @refine t' T' μ' q h' =>
-      replace hob : Obligations fuel t' := hob
-      exact carrier_restrict (carrier_denote fuel h' hob) q
+      exact carrier_restrict (carrier_denote fuel h' hob.refine) q
     | @legacy t' T' μ' r h' =>
-      replace hob : Obligations fuel t' ∧
-        (∀ a v, r a = some v → ((denote fuel t').e v).isSome) ∧
-        (∀ a v, r a = some v → ∀ v', (denote fuel t').p a = some v' → v = v') := hob
       exact carrier_extendRead (carrier_denote fuel h' hob.1) hob.2.1
     | @nullable t' T' μ' h' =>
-      replace hob : Obligations fuel t' ∧
-        (∀ v a, (denote fuel t').e v = some a → a = .null → v = .null) ∧
-        (∀ a v, (denote fuel t').p a = some v → v = .null → a = .null) := hob
       exact carrier_orNull (carrier_denote fuel h' hob.1)
     | @lazy γ T' μ' h' =>
-      replace hob : Obligations fuel γ := hob
-      have ih := carrier_denote fuel h' hob
+      have ih := carrier_denote fuel h' hob.lazy
       exact ⟨fun he => ih.domE he, fun hp => ih.ranP hp⟩
     | custom ce cp =>
-      replace hob : Lawful
-        { T := fun v => (ce v).isSome, μ := none, e := ce, p := cp } := hob
       refine ⟨?_, ?_⟩
       · intro v a he
         replace he : ce v = some a := he
@@ -940,17 +944,15 @@ theorem carrier_denote : ∀ (fuel : Nat) {t T μ}, Typed t T μ → Obligations
         | req t' =>
           cases hty with
           | req hty' =>
-            replace hobf : Obligations fuel t' := hobf
             exact carrier_denote fuel hty' hobf
         | optional t' =>
           cases hty with
           | optional hty' =>
-            replace hobf : Obligations fuel t' := hobf
             exact carrier_denote fuel hty' hobf
         | fallback t' v =>
           cases hty with
           | fallback hty' =>
-            replace hobf : Obligations fuel t' ∧ ((denote fuel t').e v).isSome := hobf
+            replace hobf := Obligations.fallback hobf
             exact carrier_denote fuel hty' hobf.1
       have hfb := fieldSems_fb hob.1
       have hnd' := fieldSems_nodup (fuel := fuel) hndf
@@ -962,8 +964,7 @@ theorem carrier_denote : ∀ (fuel : Nat) {t T μ}, Typed t T μ → Obligations
         | @codec t' T' μ' hty =>
           replace hcr : some (denote fuel t') = some rc := hcr
           cases hcr
-          replace hob2 : Obligations fuel t' := hob.2
-          exact carrier_denote fuel hty hob2
+          exact carrier_denote fuel hty hob.2
       -- the name filter never discards a declared name, under any rest policy
       have hkeep : ∀ k, ((fields.map fun kf =>
           (kf.1, fieldSemOf (denote fuel) kf.2)).lookup k).isSome →
@@ -976,12 +977,10 @@ theorem carrier_denote : ∀ (fuel : Nat) {t T μ}, Typed t T μ → Obligations
         | codec _ => rfl
       exact carrier_objectCodecCore hsems hrc hfb hnd' hkeep
     | @union opts Ts μs hlist =>
-      replace hob : (∀ t' ∈ opts, Obligations fuel t') ∧ UAtCan fuel opts := hob
       refine carrier_altCodec (forall_mem_map fun t' ht' => ?_)
       obtain ⟨T', μ', hty⟩ := TypedListμ.forall hlist t' ht'
       exact (optionSemOf_c _ _) ▸ carrier_denote fuel hty (hob.1 t' ht')
     | @dunion d opts Ts hlistM htags hdisj =>
-      replace hob : ∀ t' ∈ opts, Obligations fuel t' := hob
       refine carrier_altCodec (forall_mem_map (forall_mem_map fun t' ht' => ?_))
       obtain ⟨T', hty⟩ := TypedListM.forall hlistM t' ht'
       exact carrier_denote fuel hty (hob t' ht')

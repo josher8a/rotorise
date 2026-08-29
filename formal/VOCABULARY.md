@@ -84,7 +84,7 @@ Two further conventions the passes settled on, both load-bearing:
 
 ## §3 The audit
 
-Measured at `HEAD` (2026-08-29), 8648 lines across `Calculus/`. Regenerate with:
+Measured at `HEAD` (2026-08-29), 8668 lines across `Calculus/`. Regenerate with:
 
 ```sh
 python3 scripts/vocab_audit.py          # add --sites to list them for triage
@@ -107,12 +107,12 @@ measurable residue.
 
 | what is being unfolded | sites | concentrated in |
 | --- | --- | --- |
-| **raw `Option` algebra** | **154** | Combinators 52, Discharge 50, Soundness 30 |
+| **raw `Option` algebra** | **154** | Combinators 52, **Discharge 50**, Soundness 30 |
 | `traverse` / list base cases | 29 | Opaque 19 |
 | a named codec's `e`/`p` | 27 | Opaque 15 |
-| judgement premises (`Obligations`/`MPOk`) | 26 | Soundness 26 |
 | association-list `lookup` | 21 | Discharge 8 |
 | union resolution (`altCodec`'s filter) | 18 | Equations 8, Discharge 6, Combinators 4 |
+| judgement premises (`Obligations`/`MPOk`) | 3 | Soundness 3 |
 
 **Six sites in ten are not about codecs at all.** That is the finding, and it reframes
 the gap: what is missing is not a *concept* but the place where each construction's
@@ -225,7 +225,8 @@ through it; the rows that need `List.Perm` are the next probe.
 | ~~2~~ | ~~Wrapper inversion~~ — **done**; §6's wrapper rows now go through it too | 43 → 6 sites; 8.9 → 1.5 per 100 lines |
 | ~~4~~ | ~~Complete the two partials~~ — **done**: `setCodec_p_eq`, and `fbDefaults` as the `filterMap` it is | set 5.0 → 4.0, object 6.5 → 4.0; four hand-rolled recursions and one duplicate retired |
 | 3 | Cash the last identity: `pointCodec = carriedCodec` | the ten ground codecs inherit inversion (`nullable`'s was cashed and became a dichotomy — §4) |
-| 5 | `Obligations`/`MPOk` per-rule inversion | 26 sites, all in `Soundness.lean` |
+| 7 | **`Discharge.lean`** — now the largest single concentration, and not a codec block: `κ`, `ident`, `adm`, `admA` are structural recursions with no inversion vocabulary of their own | 50 of the 154 `Option` sites |
+| ~~5~~ | ~~`Obligations` per-rule~~ — **done**: §3's three side conditions named (`IsoCancels`, `ReadsCoherently`, `NullHonest`), and one accessor per rule | 26 → 3 sites |
 | ~~6~~ | ~~`opaque`~~ — **done**, and not by inversion: `maxOf` names the four depth measures as one fold, and the budget-is-a-successor opening collapses to one clause | 952 → 839 lines, 57 → 41 sites |
 
 ## §7 Making it mechanical

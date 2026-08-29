@@ -89,6 +89,33 @@ theorem Lawful.e_injective {c : Codec} (h : Lawful c) {t t' a}
 theorem Lawful.empty : Lawful Codec.empty := by
   constructor <;> intros <;> simp_all [Codec.empty]
 
+/-! ## §3's side conditions, named
+
+Three rules carry premises about the pair rather than about the index, and §3 names each
+of them in prose. Naming them here too is what keeps `Obligations` readable and stops
+every use site restating the proposition: a case that consumes one of these says which
+condition it is consuming. -/
+
+/-- §3 `(held)`: the iso cancels **on the carriers** — `T ≃ I`, in the domain-restricted
+    form the laws actually need. `g ∘ f = id` where `f` lands writable, `f ∘ g = id` on
+    the writable values themselves. -/
+def IsoCancels (c : Codec) (f g : Value → Value) : Prop :=
+  (∀ v, (c.e (f v)).isSome → g (f v) = v) ∧
+  (∀ v, (c.e v).isSome → f (g v) = v)
+
+/-- §3 `(legacy)`: `ran(r) ⊆ dom(e)` — a migration lands on writable values — and
+    coherence, the legacy reading agreeing with the current one on their overlap. -/
+def ReadsCoherently (c : Codec) (r : Attr → Option Value) : Prop :=
+  (∀ a v, r a = some v → (c.e v).isSome) ∧
+  (∀ a v, r a = some v → ∀ v', c.p a = some v' → v = v')
+
+/-- §3 `(nullable)`: `c` speaks of `NULL` only for `null`, in both directions —
+    write-honesty then read-honesty. §5 records that these are (U) for the two-option
+    sum `union(c, ⟨NULL⟩-point)`, specialised. -/
+def NullHonest (c : Codec) : Prop :=
+  (∀ v a, c.e v = some a → a = .null → v = .null) ∧
+  (∀ a v, c.p a = some v → v = .null → a = .null)
+
 /-- §3 types the pair *on the held set*: `e : T ⇀ 𝔸` and `p : 𝔸 ⇀ T`. `Lawful` never
     mentions `T` — the four laws relate `e` and `p` to each other, not to the index — so
     this is the separate claim that the index is honest, and it is what makes `T` a

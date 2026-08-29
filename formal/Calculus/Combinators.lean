@@ -1755,28 +1755,26 @@ theorem lawful_numberCodec : Lawful numberCodec := by
     exact .n ..
 
 theorem LawfulCore.through {c : Codec} (h : LawfulCore c) {f g : Value → Value}
-    (hgf : ∀ v, (c.e (f v)).isSome → g (f v) = v)
-    (hfg : ∀ v, (c.e v).isSome → f (g v) = v) :
+    (hiso : IsoCancels c f g) :
     LawfulCore (c.through f g) where
   retract he := through_p.mpr ⟨_, h.retract (through_e.mp he),
-    (hgf _ (by rw [through_e.mp he]; rfl)).symm⟩
+    (hiso.1 _ (by rw [through_e.mp he]; rfl)).symm⟩
   canon hp := by
     obtain ⟨w, hw, rfl⟩ := through_p.mp hp
     show (c.e (f (g w))).isSome
-    rw [hfg w (h.canon hw)]
+    rw [hiso.2 w (h.canon hw)]
     exact h.canon hw
   writes := by intro μ hμ t a he; exact h.writes hμ (through_e.mp he)
 
 /-- `held` preserves the full laws: the core lemma, plus `≼` through the iso. -/
 theorem Lawful.through {c : Codec} (h : Lawful c) {f g : Value → Value}
-    (hgf : ∀ v, (c.e (f v)).isSome → g (f v) = v)
-    (hfg : ∀ v, (c.e v).isSome → f (g v) = v) :
+    (hiso : IsoCancels c f g) :
     Lawful (c.through f g) :=
-  { LawfulCore.through h.core hgf hfg with
+  { LawfulCore.through h.core hiso with
     agree := by
       intro a t a' hp he
       obtain ⟨w, hw, rfl⟩ := through_p.mp hp
-      rw [through_e, hfg w (h.canon hw)] at he
+      rw [through_e, hiso.2 w (h.canon hw)] at he
       exact h.agree hw he }
 
 /-- `refine` preserves the laws: everything restricts. -/
@@ -1843,29 +1841,25 @@ theorem LawfulCore.extendRead {c : Codec} (h : LawfulCore c) {r : Attr → Optio
     `alt [c, null-point]`; the honesty premises are its (U), specialised — and they are
     used in exactly one place each, to rule out the wrapper's own point colliding with
     the base's. -/
-theorem LawfulCore.orNull {c : Codec} (h : LawfulCore c)
-    (hw : ∀ v a, c.e v = some a → a = .null → v = .null)
-    (hr : ∀ a v, c.p a = some v → v = .null → a = .null) :
+theorem LawfulCore.orNull {c : Codec} (h : LawfulCore c) (hn : NullHonest c) :
     LawfulCore c.orNull where
   retract he := by
     rcases orNull_e.mp he with ⟨rfl, rfl⟩ | ⟨hv, hc⟩
     · exact orNull_p.mpr (.inl ⟨rfl, rfl⟩)
-    · exact orNull_p.mpr (.inr ⟨fun hn => hv (hw _ _ hc hn), h.retract hc⟩)
+    · exact orNull_p.mpr (.inr ⟨fun hz => hv (hn.1 _ _ hc hz), h.retract hc⟩)
   canon hp := by
     rcases orNull_p.mp hp with ⟨rfl, rfl⟩ | ⟨ha, hc⟩
     · exact Option.isSome_iff_exists.mpr ⟨.null, orNull_e.mpr (.inl ⟨rfl, rfl⟩)⟩
     · obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp (h.canon hc)
       exact Option.isSome_iff_exists.mpr
-        ⟨a', orNull_e.mpr (.inr ⟨fun hn => ha (hr _ _ hc hn), ha'⟩)⟩
+        ⟨a', orNull_e.mpr (.inr ⟨fun hz => ha (hn.2 _ _ hc hz), ha'⟩)⟩
   writes := by intro μ hμ; exact nomatch hμ
 
 /-- `nullable` preserves the full laws: the core lemma, plus `≼` — read-honesty is
     what keeps a non-`NULL` attribute from re-encoding as `⟨NULL, ∗⟩`. -/
-theorem Lawful.orNull {c : Codec} (h : Lawful c)
-    (hw : ∀ v a, c.e v = some a → a = .null → v = .null)
-    (hr : ∀ a v, c.p a = some v → v = .null → a = .null) :
+theorem Lawful.orNull {c : Codec} (h : Lawful c) (hn : NullHonest c) :
     Lawful c.orNull :=
-  { LawfulCore.orNull h.core hw hr with
+  { LawfulCore.orNull h.core hn with
     agree := by
       intro a t a' hp he
       rcases orNull_p.mp hp with ⟨rfl, rfl⟩ | ⟨ha, hc⟩
@@ -1873,7 +1867,7 @@ theorem Lawful.orNull {c : Codec} (h : Lawful c)
         · exact .null
         · exact absurd rfl hv
       · rcases orNull_e.mp he with ⟨rfl, -⟩ | ⟨-, hc'⟩
-        · exact absurd (hr _ _ hc rfl) ha
+        · exact absurd (hn.2 _ _ hc rfl) ha
         · exact h.agree hc hc' }
 
 /-! ## Lawfulness — the open frontier (README roadmap) -/
