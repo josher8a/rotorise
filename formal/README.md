@@ -76,6 +76,17 @@ and the judgement to it), and `lazy` concludes `⊤` in the model exactly as the
   `Unit → Term`, which defeats the termination checker without adding a single
   constructible term. The repair is therefore in the model, not in the tool: see the
   three steps in `docs/codec-formalization.md` §7.
+- **One construction, one place — and one proof per law.** Each construction's
+  definition, its two inversion lemmas, its carrier and both strengths of its
+  lawfulness now sit together, and the core lemma is no longer a second copy of the
+  full one: they share their clauses (`tuple_retract`/`tuple_canon`,
+  `object_retract`/`object_canon`, `set_retract`/`set_writes`), differing only where
+  the content differs — `set`'s (C), where (MP)'s member-uniformity is replaced by the
+  `(set)` rule's own premise. The shape underneath is `carriedCodec`, a payload pair
+  between two prisms; `pointCodec`, `entrywise` (hence `array`, `record`), `tuple` and
+  `object` are all instances, so §2's prism halves are discharged once for all of them.
+  `set` is the one product that is not, and the reason is stated where it is argued:
+  its attribute side is a choice among three wire sets, not one constructor.
 - **`Double` is axiomatized** with exactly the shortest-text round trip §3's `(number)`
   consumes. IEEE-754 facts are not this calculus's theorems.
 - **Semantic rule premises live in `Obligations fuel t`**, not in `Typed`: the doc's
@@ -115,8 +126,7 @@ permutation, and lifting it to `List.Perm` is the obvious next step); widening `
 goes through the axiomatized `Double.ofDec`, so no syntactic set bounds it, and those
 pairs still fall to (U) per input); a soundness lemma tying the judgement's `T` to the
 denotation (`e`'s domain and `p`'s range land in `T`), which the `T` index now makes
-statable; every `LawfulCore` composite now shares its clauses with the full-law counterpart, `set`
-included — what differs there is (C), and only (C).
+statable.
 
 ## Building
 
