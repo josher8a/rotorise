@@ -143,7 +143,13 @@ inductive Typed : Term → Held → Option Member → Prop where
   | binary  : Typed .binary  (fun v => ∃ b, v = .bin b) (some .B)
   | literalS (ls : List String) (hne : ls ≠ []) (hnd : ls.Nodup) :
       Typed (.literalS ls) (fun v => ∃ s, s ∈ ls ∧ v = .str s) (some .S)
-  | literalN (ls : List Double) (hne : ls ≠ []) (hnd : ls.Nodup) :
+  /-- `ℓ ⊆ D` — §3's premise, and the last place the `(number)` gate is forced outward.
+      A `literal` writes its values' own text, so a double outside §1's numeral domain would
+      be written to an attribute `𝔸` has no point for. It sits beside `hne` and `hnd` because
+      it is the same kind of thing: a decidable fact about data the term owns, checked once at
+      the declaration. -/
+  | literalN (ls : List Double) (hne : ls ≠ []) (hnd : ls.Nodup)
+      (hD : ∀ d ∈ ls, Numeral.WF d.toDec = true) :
       Typed (.literalN ls) (fun v => ∃ d, d ∈ ls ∧ v = .num d) (some .N)
   | set {t T μ μS} (h : Typed t T (some μ)) (hs : setMember μ = some μS) :
       Typed (.set t) (HSet T) (some μS)

@@ -214,3 +214,59 @@ describe('what mixing kinds would ask for', () => {
         expect(either.unsafeDecode({ N: '0' })).toBe(0)
     })
 })
+
+describe('the admissible set is what DynamoDB stores', () => {
+    /**
+     * §3's `(literal-N)` premise `ℓ ⊆ D`, and the defect that made it more than bookkeeping.
+     *
+     * `number` has refused `NaN`, `Infinity` and anything outside `D` on both halves since the
+     * numeral domain was tightened. `literal` had not, and it is the other term that writes `N`:
+     * `literal(NaN)` produced `{ N: 'NaN' }` and `literal(1e400)` produced `{ N: 'Infinity' }`,
+     * both reachable with no cast, `tsc` clean, and both rejected by the service. An attribute
+     * outside §1's `Numerals` is the one thing a term may never write.
+     *
+     * Refused at the declaration rather than per encode, because that is where the premise lives —
+     * `ℓ` is data this library owns, so the check is decidable when the codec is built.
+     */
+    it('refuses NaN and Infinity, which is where the defect was', () => {
+        expect(() => literal(NaN)).toThrow(/has no NaN or Infinity/)
+        expect(() => literal(1e400)).toThrow(/has no NaN or Infinity/)
+        expect(() => literal(-1e400)).toThrow(/has no NaN or Infinity/)
+    })
+
+    it('refuses one bad value among good ones, and names it', () => {
+        expect(() => literal(0, 1, NaN)).toThrow(/NaN is not a number/)
+    })
+
+    it('names all of them when several are outside', () => {
+        expect(() => literal(NaN, 1e400)).toThrow(/NaN, Infinity are not numbers/)
+    })
+
+    /** The magnitude range is DynamoDB's, not JavaScript's — `1e200` is a fine double. */
+    it('refuses a magnitude past what an N holds', () => {
+        expect(() => literal(1e200)).toThrow(/magnitude 1e-130 to 9.9e125/)
+        expect(() => literal(1e-200)).toThrow(/magnitude 1e-130 to 9.9e125/)
+    })
+
+    /**
+     * `5e-324` is the specification's own example of the precondition going unchecked — "the
+     * implementation writes whatever `String` produces, so `5e-324` is written and the service
+     * rejects it on arrival". Both terms that write an `N` from a double now refuse it here,
+     * which is where it is still local.
+     */
+    it('refuses the denormal the specification named as the unchecked case', () => {
+        expect(() => literal(5e-324)).toThrow(/magnitude 1e-130 to 9.9e125/)
+        expect(() => number.unsafeEncode(5e-324)).toThrow(
+            /magnitude 1e-130 to 9.9e125/,
+        )
+    })
+
+    it('admits the range that is actually stored, including the ends', () => {
+        expect(writes(literal(0, 1, -1, 1e125, 1e-130))).toBe('N')
+    })
+
+    /** A string literal is unaffected: `S` carries any text, and the premise is `(literal-N)`'s. */
+    it('says nothing about a string literal', () => {
+        expect(writes(literal('NaN', 'Infinity'))).toBe('S')
+    })
+})

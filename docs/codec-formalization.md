@@ -305,19 +305,41 @@ test, which is what the prism was carrying second-hand), but nothing said so unt
 removed. **A proof route is not a proof, and the two are easiest to confuse where the route has
 always worked.**
 
-`ℓ ⊆ D` is left open, because adding a premise to a rule changes the specification. What the model
-now carries instead is the cost, stated: `literalN_sub_number` (with the premise, `literal-N`
-refines `number` again — the premise is the whole of what the prism needed),
-`not_literalN_sub_number` and `literalN_writes_off_numerals` (without it, a derivable term writes an
-attribute outside §1's `Numerals` at a value `number` refuses), and `typed_literalN_any` (the
-derivation that would be refused, with no hypothesis on `d` at all).
+`ℓ ⊆ D` was left open, because adding a premise to a rule changes the specification. The model
+carried the cost instead — `literalN_sub_number`, `not_literalN_sub_number`,
+`literalN_writes_off_numerals` — all **conditional on a double outside `D` existing**, deliberately,
+since `Double` is axiomatized with the shortest-text round trip and nothing else and asserting an
+IEEE-754 fact would widen the trusted base to settle a question the specification can answer for
+itself.
 
-Those three are **conditional on a double outside `D` existing**, and deliberately so. `Double` is
-axiomatized with the shortest-text round trip and nothing else; whether IEEE-754 has a value
-DynamoDB will not store is a fact about IEEE, and asserting it would widen the trusted base to
-settle a question the specification can answer for itself. So the refutations read: *if* there is
-such a double, this is what the missing premise costs — and if there is not, the premise costs
-nothing to add. That is the whole decision, and it is a one-line change to §3 either way.
+**The implementation answered it.** Asked whether normalizing `literal-N` would simplify anything,
+the first thing measured was what the shipped constructor does with the ends of the range:
+
+```
+literal(NaN).encode(NaN)     → { N: 'NaN' }
+literal(1e400).encode(1e400) → { N: 'Infinity' }
+```
+
+Both reachable with no cast, `tsc` clean, and both rejected by DynamoDB on arrival. So the
+conditional was not hypothetical, and the term that had no premise was writing attributes outside
+§1's `𝔸` in the field. `number` had refused all of this since the numeral domain was tightened;
+`literal` is the other term that writes an `N` from a double and it had been left behind — the
+`(number)` pass predicted exactly this and could not close it alone.
+
+**`ℓ ⊆ D` is now §3's premise**, at the user's call, and the set is the one `(number)` already gates
+on: what DynamoDB *accepts*. `Typed.literalN` carries `hD` beside `hne` and `hnd`, which is where it
+belongs — a decidable fact about data the term owns, checked once at the declaration. The
+implementation refuses at the constructor for the same reason and in the same place as the
+mixed-kind refusal. `typed_literalN_sub_number` is what it buys back: **every derivable numeric
+literal refines `number` again**, which is the containment the gate had broken.
+
+Two things are worth keeping from how the decision was reached. The rule figure had said
+`ℓ₁ … ℓₙ ∈ D` **all along** — the amendment was not to the rule but to the paragraph under it, which
+called `D` "an unchecked precondition" and gave `5e-324` as the example of it going unchecked. A
+premise stated in a rule and disowned in the prose beneath it is worth less than no premise at all,
+because it reads as checked to everyone who stops at the figure. And the read side needed no gate:
+membership in `ℓ` is already checked in both directions, and `ℓ ⊆ D` is exactly what makes that
+check sufficient — the premise discharges the half it does not mention.
 
 One thing fell out that neither estimate anticipated. §1 says `number` satisfies `η ⊆ ker p` "for
 free" because `p "1.500"` and `p "1.5"` are the same double, and with `Codec.Ker` in the model that
@@ -807,9 +829,9 @@ to any system and any port.
    `Numeral.Stored`, the form the store hands back, and not §1's `Numerals`, which is what it
    accepts. The two differ, and the difference was a round trip failing across storage. And
    again, at the other end: `number` now holds `D` rather than every double, `Uν` carries the
-   same premise, and `η ⊆ ker p` is `SurvivesStore` rather than prose. **One thing is left and
-   it is not a proof:** whether §3's `(literal-N)` gains `ℓ ⊆ D`. The cost of not adding it is
-   stated in `Refutations.lean` and in §4; the decision is normative.
+   same premise, `(literal-N)` carries it as `hD`, and `η ⊆ ker p` is `SurvivesStore` rather
+   than prose. `D` is checked everywhere an `N` is written from a double, which it had never
+   been — the last gap was `literal(NaN)` writing `{ N: 'NaN' }` in the shipped library.
 4. ~~**De-fuel the denotation**~~ — **done** (§7), and with it `T` **as an identity** for
    `opaque`. What remains of that row is the other constructors, where the honest answer differs by
    rule: containers and wrappers should go through much as `opaque` did, but `union` needs (U) in

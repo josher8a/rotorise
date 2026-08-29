@@ -338,23 +338,25 @@ theorem not_equiv_trans :
     ¬ ∀ c d e, Codec.Equiv c d → Codec.Equiv d e → Codec.Equiv c e :=
   fun h => not_equiv_cA_cB (h _ _ _ equiv_cA_cMid equiv_cMid_cB)
 
-/-! ## `(literal-N)` without `ℓ ⊆ D`
+/-! ## `(literal-N)`'s `ℓ ⊆ D`, and what it refuses
 
-`(number)` now gates on §1's numeral domain, which is what the rule always claimed. §3's
-`(literal-N)` carries no such premise, so `literal(ℓ)` is derivable for **any** list of
-doubles — including ones `number` refuses. `codec-formalization.md` §4 predicted this as one
-of the two places the bound is forced outward; it is the one that is not this arc's to close,
-because adding `ℓ ⊆ D` to a rule changes the specification.
+`(number)` gates on §1's numeral domain, which is what the rule always claimed. `(literal-N)`
+now carries the same bound as a premise — the second and last of the two places
+`codec-formalization.md` §4 predicted it would be forced outward, and the one that needed the
+specification amended rather than the model corrected.
 
-What follows is the cost, stated rather than decided. The premise is exactly what restores
-the prism `lawful_literalNCodec` used to be proved through, and without it a derivable term
-writes an attribute outside §1's `Numerals`.
+It is the same set on both rules: **what DynamoDB accepts**, `Numeral.WF` of the text the
+value is written as. `literal` writes its values' own digits, so a double outside that domain
+would be written to an attribute `𝔸` has no point for, which is the one thing a term may
+never do. The premise sits beside `hne` and `hnd` because it is the same kind of fact: data
+the term owns, decidable at the declaration.
 
-`Double` is axiomatized with the shortest-text round trip and nothing else, so the model
-cannot *exhibit* a double outside `D` — that is a fact about IEEE-754 it deliberately does
-not assert, and no axiom is added to make it available. The refutations are therefore
-conditional on such a double, which is the honest form: if IEEE has one, this is what the
-missing premise costs, and if it has none the premise costs nothing to add. -/
+What follows is what it buys and what it refuses. The refutations are conditional on a double
+outside `D` existing: `Double` is axiomatized with the shortest-text round trip and nothing
+else, and whether IEEE-754 has a value DynamoDB will not store is a fact about IEEE that the
+model deliberately does not assert. It was not a hypothetical — the shipped `literal(NaN)`
+wrote `⟨N, "NaN"⟩` and `literal(1e400)` wrote `⟨N, "Infinity"⟩`, both reachable with no cast,
+which is what settled the question the conditional leaves open. -/
 
 /-- **With `ℓ ⊆ D`, `literal-N` is a refinement of `number` again.** The premise is not
     decoration for the proof's sake: it is the whole of what the prism needed. -/
@@ -384,11 +386,28 @@ theorem literalN_writes_off_numerals {d : Double} (hw : Numeral.WF d.toDec = fal
   · rw [literalNCodec_e_num, if_pos (by simp : d ∈ [d])]
   · rw [numberCodec_e_num, if_neg (by rw [hw]; exact Bool.noConfusion)]
 
-/-- The rule admits it today, unconditionally — no hypothesis about `d` at all. This is the
-    derivation `ℓ ⊆ D` would refuse. -/
-theorem typed_literalN_any (d : Double) :
-    Typed (.literalN [d]) (fun v => ∃ d', d' ∈ [d] ∧ v = .num d') (some .N) :=
-  .literalN [d] (by simp) (by simp)
+/-- The premise, read back off any derivation — this is what makes the two theorems above
+    about *derivable* terms rather than about `literalNCodec` in isolation. -/
+theorem typed_literalN_D {ls : List Double} {T μ} (h : Typed (.literalN ls) T μ) :
+    ∀ d ∈ ls, Numeral.WF d.toDec = true := by
+  cases h with | literalN _ _ _ hD => exact hD
+
+/-- **Every derivable numeric literal refines `number` again.** The prism
+    `lawful_literalNCodec` was once proved through is not restored as a proof route — the two
+    codecs still differ, since one gates and the other tests membership — but the containment
+    it stood for is a theorem once more, and it is `ℓ ⊆ D` that makes it one. -/
+theorem typed_literalN_sub_number {ls : List Double} {T μ} (h : Typed (.literalN ls) T μ) :
+    ∀ v, (literalNCodec ls).T v → numberCodec.T v :=
+  literalN_sub_number ls (typed_literalN_D h)
+
+/-- And the derivation the premise refuses. Before it, this held for **any** `d` with no
+    hypothesis at all, which is what `literal(NaN)` was in the shipped library. -/
+theorem not_typed_literalN_nonD {d : Double} (hw : Numeral.WF d.toDec = false) :
+    ¬ ∃ T μ, Typed (.literalN [d]) T μ := by
+  rintro ⟨T, μ, h⟩
+  have hd := typed_literalN_D h d (by simp)
+  rw [hw] at hd
+  exact nomatch hd
 
 /-! ## `decimal` before its held set was narrowed
 

@@ -134,8 +134,8 @@ seven specification defects (three found by both readings independently), five c
 are true but unlocatable, two corrections to this package's own artifacts, and a measured
 review surface. Regenerate the measurements with `python3 scripts/fidelity_audit.py`.
 
-The headline: the guard puts 49 constants through `#assert_axioms` while the documents
-cite 123 as results, §-tag coverage is 20%, and **58% of theorem statements name a
+The headline: the guard puts 52 constants through `#assert_axioms` while the documents
+cite 123 as results, §-tag coverage is 20%, and **59% of theorem statements name a
 definition that is documented nowhere** — a statement a reviewer cannot read against the
 specification without a detour. (The guard's count was 17 when the audit was written;
 items 1–5, 8 and 9 of its plan closed the gap it measured, and its §5 records which.)
@@ -164,9 +164,10 @@ soundness. `union`'s commutativity is proved for the adjacent transposition, whi
 generates every permutation, and lifting it to `List.Perm` is the obvious next step.
 `admA` stops at `literalS`/`dunion`: a numeric literal's read side goes through the
 axiomatized `Double.ofDec`, so no syntactic set bounds it, and those pairs still fall to
-(U) per input. `(literal-N)` has no `ℓ ⊆ D` premise while `(number)` gates on `D`, so a
-literal outside the store's numeral domain is derivable and writable; the cost is stated
-in `Refutations.lean` and the premise is the specification's to add. Two entries that used to sit here are done — §6's rows are all proved
+(U) per input. `(literal-N)` carries `ℓ ⊆ D` as of §3's amendment, so
+`admA`'s silence there is about the *store* and not about the premise: a literal's stored
+texts are known at the declaration, but `10²¹` is written `1e+21` and handed back
+normalised, so a syntactic `admA` would refuse a row the codec itself wrote. Two entries that used to sit here are done — §6's rows are all proved
 (see `FIDELITY.md` for what "all" is worth on the commutativity row), and `typed_TSub`
 ties the judgement's `T` to the denotation, `typed_e_mem` and `typed_p_mem` being the
 statements a reviewer wants.

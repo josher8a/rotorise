@@ -166,9 +166,25 @@ D = { x ∈ Double : x = 0 ∨ 1e-130 ≤ |x| ≤ 9.9…e125 }
 `number` is **not** restricted to integers, and not to `2⁵³`. Every finite double satisfies **(R)**,
 because `String` on a double is by definition the shortest text reading back as that same double — so
 `1.5` round-trips, and so does `2⁵³ + 1`, which _is_ `2⁵³` and round-trips as that. What bounds `D` is
-DynamoDB's magnitude range, and `D` is an **unchecked precondition**: the implementation writes
-whatever `String` produces, so `5e-324` is written and the service rejects it on arrival. Recorded
-here rather than in the type, because that is where it is.
+DynamoDB's magnitude range: at most 38 significant digits, and magnitude zero or `1e-130 … 9.9…e125`.
+
+`D` is **checked**. It was an unchecked precondition and this section used to say so — "the
+implementation writes whatever `String` produces, so `5e-324` is written and the service rejects it
+on arrival" — which is a defect and not a design. A term that writes an attribute outside §1's `𝔸`
+has stopped being a term of this calculus, and recording the gap here only guaranteed the failure
+would land at the service rather than at the call.
+
+The two rules check it in the two different places their admissible sets live. `(number)` gates
+**both halves**: `e` on the text the double is written as, and `p` on the double the text reads
+back to, which is not redundant — a numeral the store holds can read back as a double past the
+maximum, and gating only the write is the configuration that breaks **(C)**. `(literal-N)` gates at
+the **declaration**, alongside `n ≥ 1` and pairwise distinctness, because `ℓ` is data the term owns
+and a premise on data is decidable when the codec is built. Its read side needs no gate of its own:
+membership in `ℓ` is checked already, and `ℓ ⊆ D` is what makes that check sufficient.
+
+Machine-checked — `Typed.literalN`'s `hD`, `not_typed_literalN_nonD`, and
+`typed_literalN_sub_number`, which is the containment `(literal-N)` had lost — and measured, in
+`src/codec.numericliteral.spec.ts`, `5e-324` included.
 
 A subset of `D` chosen by the caller — a numeric enum member — is `refine(number, T)` and has no
 rule of its own. There used to be one, `(numeric)`, described as "the claim without the check": `p`
@@ -580,10 +596,17 @@ Both partings are forced, and neither is a limitation of the mechanization:
   value side is untouched: `legacy` adds no way to *write*, which is why `adm` passes through and is
   the asymmetry to remember.
 - **A numeric `literal`.** Its read side goes through the numeral-to-double reading of §1, which is
-  not a membership test on the stored text: distinct numerals read to the same double, and a
-  syntactic set of values bounds no set of attributes. So `admA` has nothing to say and numeric
-  literals fall to **(U)** per input on the attribute side, while their value side separates exactly
-  as a string literal's does.
+  not a membership test on the stored text: distinct numerals read to the same double, so a
+  syntactic set of values bounds no set of attributes.
+
+  It is worth being precise that this is **forced by the store and not by the reading being
+  opaque**, because the shape of `ℓ` invites the opposite conclusion. A literal's stored texts are
+  known at the declaration, so `admA` could be `{ ⟨N, text(ℓᵢ)⟩ }` — and that would be wrong.
+  `literal(10²¹)` is written `⟨N, "1e+21"⟩`, the store normalises it to `⟨N, "1000000000000000000000"⟩`,
+  and only the numeral-to-double read gets it back; a syntactic `admA` would refuse a row the codec
+  itself had written. That is `ker p` shrinking below `η` — §1's condition, failing the way `decimal`
+  failed it. The tolerant read is load-bearing, so numeric literals fall to **(U)** per input on the
+  attribute side, while their value side separates exactly as a string literal's does.
 
 Two notes on what is _not_ in the table. `optional` and `fallback` are **fields** (§4) and not terms,
 so nothing passes through them — an earlier version of this section listed them beside `refine` and
@@ -776,8 +799,9 @@ partition the values and members partition the attributes — so admission is un
 every depth of the fixpoint, and the sum case closes with no residue here either. ∎
 
 What remains outside the theorem is exactly what §3 already names: `(custom)`'s premises are the
-caller's to keep, `(number)` carries an unchecked precondition, and each `(union)`'s
-residual **(U)**. Each law is checked per term in the implementation's law suite, and the proof's
+caller's to keep, and each `(union)`'s residual **(U)**. `(number)`'s `D` used to be listed here as
+an unchecked precondition; it is now a gate on both halves of `(number)` and a premise of
+`(literal-N)`, so it is inside the theorem rather than beside it. Each law is checked per term in the implementation's law suite, and the proof's
 grouping above is the mechanization's file structure — the preamble's "checked _somewhere_", twice
 over.
 
