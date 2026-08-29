@@ -72,10 +72,10 @@ def Attr.depthP : List (Name × Attr) → Nat
 end
 
 theorem Value.depth_pos (v : Value) : 0 < Value.depth v := by
-  cases v <;> simp [Value.depth] <;> omega
+  cases v <;> simp [Value.depth]
 
 theorem Attr.depth_pos (a : Attr) : 0 < Attr.depth a := by
-  cases a <;> simp [Attr.depth] <;> omega
+  cases a <;> simp [Attr.depth]
 
 /-! ## Traverse congruence
 

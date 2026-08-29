@@ -1,3 +1,4 @@
+import Calculus.Lists
 import Calculus.Domain
 import Calculus.Codec
 import Calculus.Combinators

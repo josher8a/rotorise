@@ -439,7 +439,7 @@ theorem altCodec_nest_e (o₁ o₂ o₃ : OptionSem) (μ μ' : Option Member) (v
   show (match [o₁, OptionSem.byAttempt (altCodec [o₂, o₃] μ')].filter (·.admitV v) with
         | [o] => o.c.e v | _ => none) = _
   cases hA : o₁.admitV v <;> cases hI : (altCodec [o₂, o₃] μ').e v <;>
-    simp only [List.filter, hA, key, hI, hc, Option.isSome, resolveNested] <;> rfl
+    simp only [List.filter, hA, key, hI, hc, Option.isSome, resolveNested]
 
 theorem altCodec_nest_p (o₁ o₂ o₃ : OptionSem) (μ μ' : Option Member) (a : Attr) :
     (altCodec [o₁, .byAttempt (altCodec [o₂, o₃] μ')] μ).p a =
@@ -450,7 +450,7 @@ theorem altCodec_nest_p (o₁ o₂ o₃ : OptionSem) (μ μ' : Option Member) (a
   show (match [o₁, OptionSem.byAttempt (altCodec [o₂, o₃] μ')].filter (·.admitA a) with
         | [o] => o.c.p a | _ => none) = _
   cases hA : o₁.admitA a <;> cases hI : (altCodec [o₂, o₃] μ').p a <;>
-    simp only [List.filter, hA, key, hI, hc, Option.isSome, resolveNested] <;> rfl
+    simp only [List.filter, hA, key, hI, hc, Option.isSome, resolveNested]
 
 /-- The held sets coincide. Nesting a union changes how it *resolves*, never what it
     holds — which is why this half needs no side condition at all. -/

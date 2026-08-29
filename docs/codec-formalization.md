@@ -250,8 +250,13 @@ Recorded because the choice shapes what the model can say, and because the next 
 
 ### Where the cost went
 
-Three buckets. **No mathlib** — roughly 1,300 of `Combinators.lean`'s 4,620 lines are traversal,
-lookup and filter machinery, a large part of which a library supplies; this is being retired. **Fuel** — the calculus
+Three buckets. **The plumbing** — roughly 1,300 of `Combinators.lean`'s 4,620 lines were
+traversal, lookup and filter machinery. This is now **retired**: mathlib supplies most of it, and
+the residue it does not supply lives in `Calculus/Lists.lean`, apart from the codec content. The
+traversal toolkit in particular collapsed onto one observation — a successful traversal *is* the
+pointwise relation `List.Forall₂ (f · = some ·)` (`traverse_eq_some`) — after which each of its
+laws is that relation reversed, forgotten or composed, and mathlib's `Forall₂` API does the work
+that four twenty-line `Option` case analyses used to. **Fuel** — the calculus
 is partial by design (`lazy` exists to break recursion), Lean 4 wants structural recursion, so
 partiality is encoded as fuel and fuel then infects every statement, every obligation, and the `T`
 identity of §6. **Genuinely hard content** — the object codec's name dispatch, `opt` widening,
@@ -304,7 +309,7 @@ tolerates a shrinking domain but never a differing `T`, so that is where the che
 
 | Option              | Assessment                                                                                             |
 | ------------------- | ------------------------------------------------------------------------------------------------------ |
-| **Lean + mathlib**  | Chosen. Retires the plumbing; does not remove the fuel encoding, but nothing does — see above. Best speedup per unit of disruption. |
+| **Lean + mathlib**  | Chosen, and now **adopted**. It retired the plumbing as predicted; it did not remove the fuel encoding, but nothing does — see above. |
 | **Isabelle/HOL**    | `sledgehammer` is the real and un-rebutted win: `Combinators.lean` is 4,620 lines of first-order list/option reasoning, which is exactly its diet. The other two claims do not survive. `partial_function` does **not** remove fuel here — it fails its `mono` obligation at `union`. And `nitpick` is weakest where it is most needed: `Term` carries function-typed fields (`held`'s `f`/`g`, `custom`'s pair, `refine`'s `q`), finite model finding degrades badly on those, and the §6 rows most in need of one sat precisely on `held`/`custom`/`refine` (they are now refuted by hand — see `Refutations.lean` — which is the outcome that would have tested the claim). A switch would also forfeit §3's axiom-base claim — Isabelle/HOL is classical with Hilbert choice, unconditionally. |
 | **Rocq/Coq**        | No clear win over Lean. Same dependent-pattern-match friction, same partiality problem.                |
 | **Agda**            | Better sized types, worse automation. Net loss here.                                                   |

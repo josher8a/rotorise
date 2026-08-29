@@ -8,9 +8,10 @@ definition it touches.
 
 | Module                      | Doc section | Content                                                                                                                                                                                                                                                               |
 | --------------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Calculus/Lists.lean`       | —           | The list plumbing: `traverse` and its laws off the pivot `traverse_eq_some` (a successful traversal *is* `List.Forall₂ (f · = some ·)`), `List.lookup` on association lists, and the `filter`/`zip` facts mathlib states in the wrong shape — everything with no codec in it, kept apart so `Combinators.lean` reads as codec vocabulary |
 | `Calculus/Domain.lean`      | §1          | `Member`, `Attr`, `Item`, the value language, `Double` axioms, and `Numeral.WF` — §1's numeral grammar, 38 significant digits and magnitude range, as a decidable predicate                                                                                            |
 | `Calculus/Codec.lean`       | §2, §5      | `Codec`, `Agree` (`≼`), `Lawful`/`LawfulCore`, corollaries (Q, read-side W), injectivity lemma — **proved**                                                                                                                                                           |
-| `Calculus/Combinators.lean` | §3–§5       | The certified combinator algebra: ground codecs, `through`/`restrict` (iso/prism), `extendRead` (legacy), `orNull` (nullable), `seq`/`keyed`/quotiented products, `altCodec`+`UniqueAdmission` and `dunionCodec` (sums), `opaqCodec` — with one lawfulness lemma each |
+| `Calculus/Combinators.lean` | §3–§5       | The certified combinator algebra, opening with `Ctor` — a constructor as a partial iso onto its image, the prism §7 names. The point ground codecs (`string`, `boolean`, `binary`, `null`) are `pointCodec` at four pairs of prisms and share one lawfulness proof; the wire-set payload projections are the same shape again. Then `through`/`restrict` (iso/prism), `extendRead` (legacy), `orNull` (nullable), `seq`/`keyed`/quotiented products, `altCodec`+`UniqueAdmission` and `dunionCodec` (sums), `opaqCodec` — with one lawfulness lemma each |
 | `Calculus/Term.lean`        | §3–§4       | Deep-embedded terms, fields, rest policies                                                                                                                                                                                                                            |
 | `Calculus/Denote.lean`      | —           | `denote : Nat → Term → Codec`, pure dispatch into the combinators                                                                                                                                                                                                     |
 | `Calculus/Typing.lean`      | §3–§5       | The judgement `⊢ c : T ⇝ μ`, both indices, with the held-set formers (`HSet`, `HStar`, `HProd`, `HMap`, `HNull`, `HObject`, `HUnion`, `HOpaque`); syntactic premises only                                                                                             |
@@ -41,9 +42,13 @@ and the judgement to it), and `lazy` concludes `⊤` in the model exactly as the
 
 ## Modelling decisions
 
-- **No mathlib yet.** The definitions don't need it; wire sets/maps are lists (a quotient
-  cannot sit recursively inside an inductive), and set-ness lives where the doc puts it —
-  in `ker p`. Revisit when attacking `lawful_objectCodec` (roadmap item 6).
+- **mathlib, for the plumbing only.** The *definitions* still don't need it: wire sets and
+  maps are lists (a quotient cannot sit recursively inside an inductive), and set-ness lives
+  where the doc puts it — in `ker p`. What mathlib retired is the hand-rolled list and
+  option machinery, which had grown to roughly a third of `Combinators.lean`. The residue —
+  facts mathlib genuinely lacks, or states in a shape the use sites cannot consume — is
+  `Calculus/Lists.lean`, and citing a name from there is the signal that a step is plumbing
+  rather than content.
 - **Fuel-primary denotation, now with a fuel-free twin.** `denote` still takes fuel and
   every proof about it is unchanged; `denoteω` (Denoteω.lean) is structural and takes
   none. `denoteω_eq` makes them *equal* at `termDepth t`, so the §5 statements transport
@@ -116,5 +121,6 @@ Open the repo in the **Lean 4 — codec calculus** devcontainer
 lake build
 ```
 
-First build downloads the pinned toolchain (`lean-toolchain`). The build is
-`sorry`-free; any warning or error is a regression.
+First build downloads the pinned toolchain (`lean-toolchain`) and, on a cold cache, builds
+mathlib. The build is `sorry`-free and **warning-free**; any warning or error is a
+regression.

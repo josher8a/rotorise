@@ -1,3 +1,4 @@
+import Calculus.Lists
 import Calculus.Codec
 
 /-!
@@ -32,6 +33,103 @@ irreducible structure; everything else wraps one subterm):
 namespace Calculus
 
 noncomputable section
+
+/-! ## Constructors as prisms
+
+The shape this file is built out of. A constructor viewed as a partial iso onto its image
+is the prism §7 of the specification already names when it calls `held` and `refine` "the
+same shape at different strengths". Two families turn out to be instances, and each was
+written out once per constructor before it was named:
+
+* the **point ground codecs** (`pointCodec` below) — `string`, `boolean`, `binary` and
+  `null` are a payload carried between a value constructor and an attribute constructor,
+  differing in nothing but which pair;
+* the **wire-set payload projections** (`sC`/`nC`/`bC`, under Products) — the same
+  traversal three times.
+
+Naming the shape once is what lets §2's four laws be discharged once for each family
+rather than once per constructor. -/
+
+/-- A constructor, as a partial iso onto its image. -/
+structure Ctor (α β : Type) where
+  /-- Build. -/
+  into : α → β
+  /-- Match, partially. -/
+  out : β → Option α
+  /-- Matching what was built returns it. -/
+  out_into : ∀ x, out (into x) = some x
+  /-- Anything that matches was built. -/
+  into_out : ∀ {b x}, out b = some x → b = into x
+
+/-! ### The prisms, value side and attribute side -/
+
+/-- `str` values. -/ def strV : Ctor String Value where
+  into := Value.str
+  out := fun v => match v with | .str s => some s | _ => none
+  out_into _ := rfl
+  into_out {b x} h := by cases b <;> first | (cases h; rfl) | exact nomatch h
+
+/-- `bool` values. -/ def boolV : Ctor Bool Value where
+  into := Value.bool
+  out := fun v => match v with | .bool b => some b | _ => none
+  out_into _ := rfl
+  into_out {b x} h := by cases b <;> first | (cases h; rfl) | exact nomatch h
+
+/-- `bin` values. -/ def binV : Ctor Bytes Value where
+  into := Value.bin
+  out := fun v => match v with | .bin b => some b | _ => none
+  out_into _ := rfl
+  into_out {b x} h := by cases b <;> first | (cases h; rfl) | exact nomatch h
+
+/-- The `null` *point*: a prism with a trivial payload, which is what makes `null` an
+    instance of the same shape as the three that carry data. -/
+def nullV : Ctor Unit Value where
+  into := fun _ => .null
+  out := fun v => match v with | .null => some () | _ => none
+  out_into _ := rfl
+  into_out {b x} h := by cases b <;> first | (cases h; rfl) | exact nomatch h
+
+/-- `S`'s payload. -/ def sC : Ctor String Attr where
+  into := Attr.s
+  out := fun a => match a with | .s v => some v | _ => none
+  out_into _ := rfl
+  into_out {b x} h := by cases b <;> first | (cases h; rfl) | exact nomatch h
+
+/-- `N`'s payload. -/ def nC : Ctor Numeral Attr where
+  into := Attr.n
+  out := fun a => match a with | .n v => some v | _ => none
+  out_into _ := rfl
+  into_out {b x} h := by cases b <;> first | (cases h; rfl) | exact nomatch h
+
+/-- `B`'s payload. -/ def bC : Ctor Bytes Attr where
+  into := Attr.b
+  out := fun a => match a with | .b v => some v | _ => none
+  out_into _ := rfl
+  into_out {b x} h := by cases b <;> first | (cases h; rfl) | exact nomatch h
+
+/-- `BOOL`'s payload. -/ def boolA : Ctor Bool Attr where
+  into := Attr.bool
+  out := fun a => match a with | .bool v => some v | _ => none
+  out_into _ := rfl
+  into_out {b x} h := by cases b <;> first | (cases h; rfl) | exact nomatch h
+
+/-- `NULL`'s point. -/ def nullA : Ctor Unit Attr where
+  into := fun _ => .null
+  out := fun a => match a with | .null => some () | _ => none
+  out_into _ := rfl
+  into_out {b x} h := by cases b <;> first | (cases h; rfl) | exact nomatch h
+
+/-- **The point ground codecs of §3**, as one construction: a payload carried between a
+    value constructor and an attribute constructor, both prisms.
+
+    The prism laws are exactly §2's laws in disguise — `out_into` is the round trip **(R)**
+    and `into_out` is canonizability **(C)** — which is why `lawful_pointCodec` needs no
+    hypothesis about either side beyond the member it stamps. -/
+def pointCodec {α : Type} (V : Ctor α Value) (A : Ctor α Attr) (μ₀ : Member) : Codec :=
+  { T := fun v => ∃ x, v = V.into x
+    μ := some μ₀
+    e := fun v => (V.out v).map A.into
+    p := fun a => (A.out a).map V.into }
 
 /-! ## Ground codecs (§3) -/
 
@@ -171,177 +269,21 @@ def Codec.orNull (c : Codec) : Codec :=
 
 One proof shape, proved once: a list traversed by an entrywise partial function, with
 the laws lifting pointwise. `drop`'s skipping is not a traversal mode: it filters by
-name first, then traverses — so every product consumes these same lemmas. -/
+name first, then traverses — so every product consumes these same lemmas.
 
-def traverse {α β : Type} (f : α → Option β) : List α → Option (List β)
-  | [] => some []
-  | x :: xs =>
-    match f x, traverse f xs with
-    | some y, some ys => some (y :: ys)
-    | _, _ => none
+The whole toolkit rests on one observation, `traverse_eq_some`: **a successful traversal
+*is* the pointwise relation**, `List.Forall₂ (f · = some ·)`. Every law below is then that
+relation being pushed around — reversed for (R), forgotten for (C), composed for (MP) —
+and mathlib's `Forall₂` API does the pushing. What used to be four twenty-line case
+analyses on `Option` are four appeals to the pivot. -/
 
-theorem traverse_length {α β : Type} {f : α → Option β} :
-    ∀ (xs : List α) (ys : List β), traverse f xs = some ys → xs.length = ys.length
-  | [], ys, ht => by
-      replace ht : some [] = some ys := ht
-      cases ht
-      rfl
-  | x :: xs, ys, ht => by
-      simp only [traverse] at ht
-      cases hfx : f x with
-      | none => rw [hfx] at ht; exact nomatch ht
-      | some y =>
-        rw [hfx] at ht
-        cases hxs : traverse f xs with
-        | none => rw [hxs] at ht; exact nomatch ht
-        | some ys' =>
-          rw [hxs] at ht
-          replace ht : some (y :: ys') = some ys := ht
-          cases ht
-          simp [traverse_length xs ys' hxs]
 
-/-- Pointwise (R) lifts to the traversal. -/
-theorem traverse_roundTrip {α β : Type} {f : α → Option β} {g : β → Option α}
-    (h : ∀ x y, f x = some y → g y = some x) :
-    ∀ (xs : List α) (ys : List β), traverse f xs = some ys → traverse g ys = some xs
-  | [], ys, ht => by
-      replace ht : some [] = some ys := ht
-      cases ht
-      rfl
-  | x :: xs, ys, ht => by
-      simp only [traverse] at ht
-      cases hfx : f x with
-      | none => rw [hfx] at ht; exact nomatch ht
-      | some y =>
-        rw [hfx] at ht
-        cases hxs : traverse f xs with
-        | none => rw [hxs] at ht; exact nomatch ht
-        | some ys' =>
-          rw [hxs] at ht
-          replace ht : some (y :: ys') = some ys := ht
-          cases ht
-          simp only [traverse]
-          rw [h x y hfx, traverse_roundTrip h xs ys' hxs]
+section Traverse
+variable {α β γ : Type} {f : α → Option β} {g : β → Option α}
 
-/-- Pointwise (C) lifts to the traversal. -/
-theorem traverse_isSome {α β γ : Type} {f : α → Option γ} {g : β → Option α}
-    (h : ∀ y x, g y = some x → (f x).isSome) :
-    ∀ (ys : List β) (xs : List α), traverse g ys = some xs → (traverse f xs).isSome
-  | [], xs, ht => by
-      replace ht : some [] = some xs := ht
-      cases ht
-      rfl
-  | y :: ys, xs, ht => by
-      simp only [traverse] at ht
-      cases hgy : g y with
-      | none => rw [hgy] at ht; exact nomatch ht
-      | some x =>
-        rw [hgy] at ht
-        cases hys : traverse g ys with
-        | none => rw [hys] at ht; exact nomatch ht
-        | some xs' =>
-          rw [hys] at ht
-          replace ht : some (x :: xs') = some xs := ht
-          cases ht
-          obtain ⟨z, hz⟩ := Option.isSome_iff_exists.mp (h y x hgy)
-          obtain ⟨zs, hzs⟩ :=
-            Option.isSome_iff_exists.mp (traverse_isSome h ys xs' hys)
-          simp only [traverse]
-          rw [hz, hzs]
-          rfl
 
-/-- A pointwise relation on the read-then-rewrite pair lifts to the zip — the shape of
-    every product's (MP). -/
-theorem traverse_rel {α β γ : Type} {g : β → Option α} {f : α → Option γ}
-    {R : γ → β → Prop}
-    (h : ∀ y x z, g y = some x → f x = some z → R z y) :
-    ∀ (ys : List β) (xs : List α) (zs : List γ),
-      traverse g ys = some xs → traverse f xs = some zs →
-      ∀ q ∈ zs.zip ys, R q.1 q.2
-  | [], xs, zs, hg, hf, q, hq => by
-      replace hg : some [] = some xs := hg
-      cases hg
-      replace hf : some [] = some zs := hf
-      cases hf
-      exact absurd hq (by simp)
-  | y :: ys, xs, zs, hg, hf, q, hq => by
-      simp only [traverse] at hg
-      cases hgy : g y with
-      | none => rw [hgy] at hg; exact nomatch hg
-      | some x =>
-        rw [hgy] at hg
-        cases hys : traverse g ys with
-        | none => rw [hys] at hg; exact nomatch hg
-        | some xs' =>
-          rw [hys] at hg
-          replace hg : some (x :: xs') = some xs := hg
-          cases hg
-          simp only [traverse] at hf
-          cases hfx : f x with
-          | none => rw [hfx] at hf; exact nomatch hf
-          | some z =>
-            rw [hfx] at hf
-            cases hxs : traverse f xs' with
-            | none => rw [hxs] at hf; exact nomatch hf
-            | some zs' =>
-              rw [hxs] at hf
-              replace hf : some (z :: zs') = some zs := hf
-              cases hf
-              simp only [List.zip_cons_cons, List.mem_cons] at hq
-              rcases hq with rfl | hq
-              · exact h y x z hgy hfx
-              · exact traverse_rel h ys xs' zs' hys hxs q hq
+end Traverse
 
-/-- A pointwise-related pair of keyed lists relates their lookups — what `Agree.m`
-    consumes. -/
-theorem lookup_rel {α β : Type} {R : α → β → Prop} :
-    ∀ (l₁ : List (Name × α)) (l₂ : List (Name × β)),
-      l₁.length = l₂.length →
-      (∀ q ∈ l₁.zip l₂, q.1.1 = q.2.1 ∧ R q.1.2 q.2.2) →
-      ∀ k a b, l₁.lookup k = some a → l₂.lookup k = some b → R a b
-  | [], [], _, _, _, _, _, h1, _ => nomatch h1
-  | [], _ :: _, hlen, _, _, _, _, _, _ => nomatch hlen
-  | _ :: _, [], hlen, _, _, _, _, _, _ => nomatch hlen
-  | (k₁, a₁) :: l₁, (k₂, b₁) :: l₂, hlen, hzip, k, a, b, h1, h2 => by
-      obtain ⟨hk, hR⟩ := hzip ((k₁, a₁), (k₂, b₁)) (List.mem_cons_self _ _)
-      simp only at hk
-      subst hk
-      simp only [List.lookup] at h1 h2
-      cases hbe : (k == k₁) with
-      | true =>
-        rw [hbe] at h1 h2
-        replace h1 : some a₁ = some a := h1
-        replace h2 : some b₁ = some b := h2
-        cases h1; cases h2; exact hR
-      | false =>
-        rw [hbe] at h1 h2
-        replace h1 : l₁.lookup k = some a := h1
-        replace h2 : l₂.lookup k = some b := h2
-        exact lookup_rel l₁ l₂ (by simpa using hlen)
-          (fun q hq => hzip q (List.mem_cons_of_mem _ hq)) k a b h1 h2
-
-/-- Membership gives `contains`, and back. -/
-theorem contains_of_mem : ∀ {l : List String} {s : String}, s ∈ l → l.contains s = true
-  | a :: l, s, h => by
-      rcases List.mem_cons.mp h with rfl | h'
-      · show List.elem s (s :: l) = true
-        simp [List.elem]
-      · show List.elem s (a :: l) = true
-        simp only [List.elem]
-        cases hbe : s == a with
-        | true => rfl
-        | false => exact contains_of_mem h'
-
-theorem contains_eq_false_of_not_mem :
-    ∀ {l : List String} {s : String}, s ∉ l → l.contains s = false
-  | [], _, _ => rfl
-  | a :: l, s, h => by
-      show List.elem s (a :: l) = false
-      simp only [List.elem]
-      cases hbe : s == a with
-      | true => exact absurd (List.mem_cons.mpr (Or.inl (eq_of_beq hbe))) h
-      | false =>
-        exact contains_eq_false_of_not_mem fun h' => h (List.mem_cons_of_mem a h')
 
 /-- A dead pair — nothing readable, nothing writable — is lawful whatever its `μ`. -/
 theorem lawful_dead {m? : Option Member} :
@@ -386,74 +328,13 @@ theorem LawfulCore.μNone {c : Codec} (h : LawfulCore c) :
 
 /-! ## Filter facts (the sum proofs consume these) -/
 
-theorem filter_nil_of {α : Type} {p : α → Bool} :
-    ∀ {l : List α}, (∀ y ∈ l, p y = false) → l.filter p = []
-  | [], _ => rfl
-  | a :: l, h => by
-      have ha := h a (List.mem_cons_self a l)
-      simp only [List.filter, ha]
-      exact filter_nil_of fun y hy => h y (List.mem_cons_of_mem a hy)
-
-theorem filter_singleton_of {α : Type} {p : α → Bool} :
-    ∀ {l : List α} {x : α}, l.Nodup → x ∈ l → p x = true →
-      (∀ y ∈ l, y ≠ x → p y = false) → l.filter p = [x]
-  | [], x, _, hx, _, _ => nomatch hx
-  | a :: l, x, hnd, hx, hpx, hout => by
-      have hnd' := List.nodup_cons.mp hnd
-      rcases List.mem_cons.mp hx with rfl | hx'
-      · have hnil : l.filter p = [] :=
-          filter_nil_of fun y hy =>
-            hout y (List.mem_cons_of_mem x hy) (fun h => hnd'.1 (h ▸ hy))
-        simp only [List.filter, hpx, hnil]
-      · have hax : a ≠ x := fun h => hnd'.1 (h ▸ hx')
-        have hpa := hout a (List.mem_cons_self a l) hax
-        simp only [List.filter, hpa]
-        exact filter_singleton_of hnd'.2 hx' hpx
-          (fun y hy hyx => hout y (List.mem_cons_of_mem a hy) hyx)
 
 /-! ## Products -/
 
-/-! ### Constructors as prisms
+/-! ### The wire-set payload projections
 
-The three wire-set payload projections are the *same function* three times, and their
-lemmas were the same proof three times. What they have in common is a constructor viewed
-as a partial iso onto its image — the prism §7 of the specification already names when it
-calls `held` and `refine` "the same shape at different strengths".
-
-Naming that shape once collapses the triplication: each payload projection is `traverse`
-of a prism's inverse, and each of its two lemmas is an instance of one general fact. -/
-
-/-- A constructor, as a partial iso onto its image. -/
-structure Ctor (α β : Type) where
-  /-- Build. -/
-  into : α → β
-  /-- Match, partially. -/
-  out : β → Option α
-  /-- Matching what was built returns it. -/
-  out_into : ∀ x, out (into x) = some x
-  /-- Anything that matches was built. -/
-  into_out : ∀ {b x}, out b = some x → b = into x
-
-/-- `S`'s payload. -/
-def sC : Ctor String Attr where
-  into := Attr.s
-  out := fun a => match a with | .s v => some v | _ => none
-  out_into _ := rfl
-  into_out {b x} h := by cases b <;> first | (cases h; rfl) | exact nomatch h
-
-/-- `N`'s payload. -/
-def nC : Ctor Numeral Attr where
-  into := Attr.n
-  out := fun a => match a with | .n v => some v | _ => none
-  out_into _ := rfl
-  into_out {b x} h := by cases b <;> first | (cases h; rfl) | exact nomatch h
-
-/-- `B`'s payload. -/
-def bC : Ctor Bytes Attr where
-  into := Attr.b
-  out := fun a => match a with | .b v => some v | _ => none
-  out_into _ := rfl
-  into_out {b x} h := by cases b <;> first | (cases h; rfl) | exact nomatch h
+Each is `traverse` of one of the attribute prisms' inverses, and each of its two lemmas is
+an instance of one general fact. -/
 
 /-- A traversal through a prism recovers its input exactly. -/
 theorem traverse_ctor_eq {α : Type} (c : Ctor α Attr) :
@@ -787,29 +668,26 @@ def opaqCodec : Nat → Bool → Codec
     with `typed_TSub` (Soundness.lean) these make the judgement's held-set index a
     checked claim: what a derivable term writes and reads lies in the `T` it names. -/
 
-/-- The dual of `traverse_mem`: every *input* of a successful traversal satisfies what
-    its own success gives. -/
-theorem traverse_mem_input {α β : Type} {f : α → Option β} {P : α → Prop}
-    (hP : ∀ x y, f x = some y → P x) :
-    ∀ {xs : List α} {ys}, traverse f xs = some ys → ∀ x ∈ xs, P x
-  | [], _, _, x, hx => absurd hx (by simp)
-  | x₀ :: xs, ys, h, x, hx => by
-      simp only [traverse] at h
-      cases hfx : f x₀ with
-      | none => rw [hfx] at h; exact nomatch h
-      | some y₀ =>
-        rw [hfx] at h
-        cases hxs : traverse f xs with
-        | none => rw [hxs] at h; exact nomatch h
-        | some ys' =>
-          rcases List.mem_cons.mp hx with rfl | hx'
-          · exact hP x y₀ hfx
-          · exact traverse_mem_input hP hxs x hx'
 
-theorem carrier_stringCodec : Carrier stringCodec := by
+/-- The carrier, likewise: `e` only writes what `V` matched, `p` only reads what `V`
+    built. -/
+theorem carrier_pointCodec {α : Type} {V : Ctor α Value} {A : Ctor α Attr} {μ₀ : Member} :
+    Carrier (pointCodec V A μ₀) := by
   refine ⟨?_, ?_⟩
-  · intro v a h; cases v <;> first | exact ⟨_, rfl⟩ | exact nomatch h
-  · intro a v h; cases a <;> first | (cases h; exact ⟨_, rfl⟩) | exact nomatch h
+  · intro v a h
+    obtain ⟨x, hx, _⟩ := Option.map_eq_some'.mp h
+    exact ⟨x, V.into_out hx⟩
+  · intro a v h
+    obtain ⟨x, _, rfl⟩ := Option.map_eq_some'.mp h
+    exact ⟨x, rfl⟩
+
+/-- The four point ground codecs are on their carriers for one reason, the same one that
+    made them lawful: `e` only writes what the value prism matched, and `p` only reads what
+    it built. See `carrier_pointCodec`. -/
+theorem carrier_stringCodec : Carrier stringCodec :=
+  Carrier.congr (d := pointCodec strV sC .S)
+    (by funext v; cases v <;> rfl) (by funext a; cases a <;> rfl)
+    (fun _ h => h) carrier_pointCodec
 
 theorem carrier_decimalCodec : Carrier decimalCodec := by
   refine ⟨?_, ?_⟩
@@ -830,20 +708,20 @@ theorem carrier_decimalCodec : Carrier decimalCodec := by
       · rw [if_neg hw] at h; exact nomatch h
     | _ => exact nomatch h
 
-theorem carrier_booleanCodec : Carrier booleanCodec := by
-  refine ⟨?_, ?_⟩
-  · intro v a h; cases v <;> first | exact ⟨_, rfl⟩ | exact nomatch h
-  · intro a v h; cases a <;> first | (cases h; exact ⟨_, rfl⟩) | exact nomatch h
+theorem carrier_booleanCodec : Carrier booleanCodec :=
+  Carrier.congr (d := pointCodec boolV boolA .BOOL)
+    (by funext v; cases v <;> rfl) (by funext a; cases a <;> rfl)
+    (fun _ h => h) carrier_pointCodec
 
-theorem carrier_binaryCodec : Carrier binaryCodec := by
-  refine ⟨?_, ?_⟩
-  · intro v a h; cases v <;> first | exact ⟨_, rfl⟩ | exact nomatch h
-  · intro a v h; cases a <;> first | (cases h; exact ⟨_, rfl⟩) | exact nomatch h
+theorem carrier_binaryCodec : Carrier binaryCodec :=
+  Carrier.congr (d := pointCodec binV bC .B)
+    (by funext v; cases v <;> rfl) (by funext a; cases a <;> rfl)
+    (fun _ h => h) carrier_pointCodec
 
-theorem carrier_nullCodec : Carrier nullCodec := by
-  refine ⟨?_, ?_⟩
-  · intro v a h; cases v <;> first | rfl | exact nomatch h
-  · intro a v h; cases a <;> first | (cases h; rfl) | exact nomatch h
+theorem carrier_nullCodec : Carrier nullCodec :=
+  Carrier.congr (d := pointCodec nullV nullA .NULL)
+    (by funext v; cases v <;> rfl) (by funext a; cases a <;> rfl)
+    (fun _ h => h.elim fun _ hh => hh) carrier_pointCodec
 
 theorem carrier_numberCodec : Carrier numberCodec := by
   refine ⟨?_, ?_⟩
@@ -998,30 +876,6 @@ theorem carrier_orNull {c : Codec} (hc : Carrier c) : Carrier c.orNull := by
 
 /-! ### Containers -/
 
-theorem traverse_mem {α β : Type} {f : α → Option β} {P : β → Prop}
-    (hP : ∀ x y, f x = some y → P y) :
-    ∀ {xs ys}, traverse f xs = some ys → ∀ y ∈ ys, P y
-  | [], ys, ht => by
-      replace ht : some [] = some ys := ht
-      cases ht
-      intro y hy
-      exact absurd hy (by simp)
-  | x :: xs, ys, ht => by
-      simp only [traverse] at ht
-      cases hfx : f x with
-      | none => rw [hfx] at ht; exact nomatch ht
-      | some y₀ =>
-        rw [hfx] at ht
-        cases hxs : traverse f xs with
-        | none => rw [hxs] at ht; exact nomatch ht
-        | some ys' =>
-          rw [hxs] at ht
-          replace ht : some (y₀ :: ys') = some ys := ht
-          cases ht
-          intro y hy
-          rcases List.mem_cons.mp hy with rfl | hy'
-          · exact hP x y hfx
-          · exact traverse_mem hP hxs y hy'
 
 
 theorem encPair_dom {c : Codec} (hc : Carrier c) :
@@ -1348,65 +1202,59 @@ theorem carrier_opaqCodec : ∀ (fuel : Nat) (lossy : Bool), Carrier (opaqCodec 
 
 /-! ## Lawfulness — proved -/
 
-theorem lawful_stringCodec : Lawful stringCodec := by
-  refine ⟨?_, ?_, ?_, ?_⟩
-  · intro t a he
-    cases t <;> simp_all [stringCodec] <;> subst_vars <;> rfl
-  · intro a t hp
-    cases a <;> simp_all [stringCodec] <;> subst_vars <;> rfl
-  · intro μ hμ t a he
-    cases t <;> simp_all [stringCodec, Attr.member] <;> subst_vars <;> rfl
-  · intro a t a' hp he
-    cases a <;> simp_all [stringCodec]
-    subst_vars
-    try simp_all [stringCodec]
-    subst_vars
-    exact .s ..
+/-! ### The point ground codecs, argued once
 
-theorem lawful_booleanCodec : Lawful booleanCodec := by
-  refine ⟨?_, ?_, ?_, ?_⟩
-  · intro t a he
-    cases t <;> simp_all [booleanCodec] <;> subst_vars <;> rfl
-  · intro a t hp
-    cases a <;> simp_all [booleanCodec] <;> subst_vars <;> rfl
-  · intro μ hμ t a he
-    cases t <;> simp_all [booleanCodec, Attr.member] <;> subst_vars <;> rfl
-  · intro a t a' hp he
-    cases a <;> simp_all [booleanCodec]
-    subst_vars
-    try simp_all [booleanCodec]
-    subst_vars
-    exact .bool ..
+`string`, `boolean`, `binary` and `null` are `pointCodec` at four different pairs of
+prisms. Below, each of the four is that one lemma transported across the definitional
+equality by `Lawful.congr`, which is what lets the definitions stay in the unfolded form
+the rest of the development `simp`s with. -/
 
-theorem lawful_binaryCodec : Lawful binaryCodec := by
+/-- §2's four laws for any pair of prisms. The two premises are the only things a prism
+    pair does not already supply: which member the attribute side stamps, and that `≼` is
+    reflexive on its image. Everything else is `out_into` and `into_out`. -/
+theorem lawful_pointCodec {α : Type} {V : Ctor α Value} {A : Ctor α Attr} {μ₀ : Member}
+    (hμ : ∀ x, (A.into x).member = μ₀) (hrefl : ∀ x, Agree (A.into x) (A.into x)) :
+    Lawful (pointCodec V A μ₀) := by
   refine ⟨?_, ?_, ?_, ?_⟩
-  · intro t a he
-    cases t <;> simp_all [binaryCodec] <;> subst_vars <;> rfl
-  · intro a t hp
-    cases a <;> simp_all [binaryCodec] <;> subst_vars <;> rfl
-  · intro μ hμ t a he
-    cases t <;> simp_all [binaryCodec, Attr.member] <;> subst_vars <;> rfl
-  · intro a t a' hp he
-    cases a <;> simp_all [binaryCodec]
-    subst_vars
-    try simp_all [binaryCodec]
-    subst_vars
-    exact .b ..
+  · -- (R): match, rebuild, match again — `out_into` on each side.
+    intro t a he
+    obtain ⟨x, hx, rfl⟩ := Option.map_eq_some'.mp he
+    simp [pointCodec, A.out_into, ← V.into_out hx]
+  · -- (C): what `p` produced was built by `V`, so `V.out` matches it.
+    intro a t hp
+    obtain ⟨x, _, rfl⟩ := Option.map_eq_some'.mp hp
+    simp [pointCodec, V.out_into]
+  · -- (W): everything written is `A.into` of something.
+    intro μ hm t a he
+    obtain ⟨x, _, rfl⟩ := Option.map_eq_some'.mp he
+    cases hm; exact hμ x
+  · -- (MP): the re-encoding is the attribute itself, not merely an agreeing one.
+    intro a t a' hp he
+    obtain ⟨x, hx, rfl⟩ := Option.map_eq_some'.mp hp
+    simp only [pointCodec, V.out_into, Option.map_some'] at he
+    cases he
+    rw [A.into_out hx]
+    exact hrefl x
 
-theorem lawful_nullCodec : Lawful nullCodec := by
-  refine ⟨?_, ?_, ?_, ?_⟩
-  · intro t a he
-    cases t <;> simp_all [nullCodec] <;> subst_vars <;> rfl
-  · intro a t hp
-    cases a <;> simp_all [nullCodec] <;> subst_vars <;> rfl
-  · intro μ hμ t a he
-    cases t <;> simp_all [nullCodec, Attr.member] <;> subst_vars <;> rfl
-  · intro a t a' hp he
-    cases a <;> simp_all [nullCodec]
-    subst_vars
-    try simp_all [nullCodec]
-    subst_vars
-    exact .null
+theorem lawful_stringCodec : Lawful stringCodec :=
+  Lawful.congr (d := pointCodec strV sC .S)
+    (by funext v; cases v <;> rfl) (by funext a; cases a <;> rfl) rfl
+    (lawful_pointCodec (fun _ => rfl) (fun _ => .s ..))
+
+theorem lawful_booleanCodec : Lawful booleanCodec :=
+  Lawful.congr (d := pointCodec boolV boolA .BOOL)
+    (by funext v; cases v <;> rfl) (by funext a; cases a <;> rfl) rfl
+    (lawful_pointCodec (fun _ => rfl) (fun _ => .bool ..))
+
+theorem lawful_binaryCodec : Lawful binaryCodec :=
+  Lawful.congr (d := pointCodec binV bC .B)
+    (by funext v; cases v <;> rfl) (by funext a; cases a <;> rfl) rfl
+    (lawful_pointCodec (fun _ => rfl) (fun _ => .b ..))
+
+theorem lawful_nullCodec : Lawful nullCodec :=
+  Lawful.congr (d := pointCodec nullV nullA .NULL)
+    (by funext v; cases v <;> rfl) (by funext a; cases a <;> rfl) rfl
+    (lawful_pointCodec (fun _ => rfl) (fun _ => .null))
 
 /-- `e` and `p` gate on the *same* predicate applied to the *same* text, so each law
     reduces to that one decision. -/
@@ -1459,15 +1307,19 @@ theorem lawful_decimalCodec : Lawful decimalCodec := by
 theorem lawful_numberCodec : Lawful numberCodec := by
   refine ⟨?_, ?_, ?_, ?_⟩
   · intro t a he
-    cases t <;> simp_all [numberCodec] <;> subst_vars <;>
-      simp [numberCodec, Double.roundtrip]
+    cases t <;> simp_all [numberCodec]
+    subst_vars
+    simp [numberCodec, Double.roundtrip]
   · intro a t hp
     cases a <;> simp_all [numberCodec]
     rename_i x
-    cases hx : Double.ofDec x <;> rw [hx] at hp <;> simp_all [numberCodec] <;>
-      subst_vars <;> rfl
+    cases hx : Double.ofDec x <;> rw [hx] at hp <;> simp_all [numberCodec]
+    subst_vars
+    rfl
   · intro μ hμ t a he
-    cases t <;> simp_all [numberCodec, Attr.member] <;> subst_vars <;> rfl
+    cases t <;> simp_all [numberCodec, Attr.member]
+    subst_vars
+    rfl
   · intro a t a' hp he
     cases a <;> simp_all [numberCodec]
     rename_i x
@@ -1870,29 +1722,6 @@ theorem lawful_recordCodec {c : Codec} (h : Lawful c) : Lawful (recordCodec c) :
 
 /-! ### Payload facts for the quotiented product -/
 
-theorem ne_nil_of_isEmpty_false {α : Type} {l : List α} (h : l.isEmpty = false) :
-    l ≠ [] := by
-  cases l with
-  | nil => exact nomatch h
-  | cons _ _ => exact fun h' => nomatch h'
-
-theorem traverse_map {α β γ : Type} {g : α → β} {f : β → Option γ} :
-    ∀ l : List α, traverse f (l.map g) = traverse (fun x => f (g x)) l
-  | [] => rfl
-  | x :: l => by
-      simp only [List.map, traverse]
-      rw [traverse_map l]
-
-theorem mem_zip_left {α β : Type} :
-    ∀ (l₁ : List α) (l₂ : List β), l₁.length = l₂.length →
-      ∀ x, x ∈ l₁ → ∃ y, (x, y) ∈ l₁.zip l₂
-  | [], _, _, _, hx => nomatch hx
-  | _ :: _, [], hlen, _, _ => nomatch hlen
-  | a :: l₁, b :: l₂, hlen, x, hx => by
-      rcases List.mem_cons.mp hx with rfl | hx'
-      · exact ⟨b, List.mem_cons_self _ _⟩
-      · obtain ⟨y, hy⟩ := mem_zip_left l₁ l₂ (by simpa using hlen) x hx'
-        exact ⟨y, List.mem_cons_of_mem _ hy⟩
 
 theorem strPayloads_eq {as : List Attr} {ss} (h : strPayloads as = some ss) :
     as = ss.map Attr.s := traverse_ctor_eq sC h
@@ -2525,239 +2354,6 @@ theorem lawful_tupleCodec {cs : List Codec} {tail : Option Codec}
 
 /-! ### Keyed lookup and traversal facts (the keyed product consumes these) -/
 
-theorem mem_of_lookup {α : Type} :
-    ∀ {l : List (Name × α)} {k v}, l.lookup k = some v → (k, v) ∈ l
-  | [], _, _, h => nomatch h
-  | (k₁, v₁) :: l, k, v, h => by
-      simp only [List.lookup] at h
-      cases hbe : (k == k₁) with
-      | true =>
-        rw [hbe] at h
-        replace h : some v₁ = some v := h
-        cases h
-        have hk : k = k₁ := eq_of_beq hbe
-        subst hk
-        exact List.mem_cons_self _ _
-      | false =>
-        rw [hbe] at h
-        replace h : List.lookup k l = some v := h
-        exact List.mem_cons_of_mem _ (mem_of_lookup h)
-
-theorem lookup_isSome_of_mem_fst {α : Type} :
-    ∀ {l : List (Name × α)} {k}, k ∈ l.map (·.1) → (l.lookup k).isSome = true
-  | [], _, h => absurd h (by simp)
-  | (k₁, v₁) :: l, k, h => by
-      simp only [List.map, List.mem_cons] at h
-      simp only [List.lookup]
-      cases hbe : (k == k₁) with
-      | true => rfl
-      | false =>
-        rcases h with rfl | h'
-        · exact absurd hbe (by simp)
-        · exact lookup_isSome_of_mem_fst h'
-
-theorem lookup_eq_of_mem_nodup {α : Type} :
-    ∀ {l : List (Name × α)} {k v}, (l.map (·.1)).Nodup → (k, v) ∈ l →
-      l.lookup k = some v
-  | [], _, _, _, hm => nomatch hm
-  | (k₁, v₁) :: l, k, v, hnd, hm => by
-      obtain ⟨hnotin, hnd'⟩ := List.nodup_cons.mp hnd
-      simp only [List.lookup]
-      rcases List.mem_cons.mp hm with heq | hm'
-      · cases heq
-        simp
-      · cases hbe : (k == k₁) with
-        | true =>
-          have hk : k = k₁ := eq_of_beq hbe
-          subst hk
-          exact absurd (List.mem_map.mpr ⟨(k, v), hm', rfl⟩) hnotin
-        | false => exact lookup_eq_of_mem_nodup hnd' hm'
-
-theorem lookup_none_of_not_mem_fst {α : Type} :
-    ∀ {l : List (Name × α)} {k}, k ∉ l.map (·.1) → l.lookup k = none
-  | [], _, _ => rfl
-  | (k₁, v₁) :: l, k, h => by
-      simp only [List.lookup]
-      cases hbe : (k == k₁) with
-      | true =>
-        have hk : k = k₁ := eq_of_beq hbe
-        subst hk
-        exact absurd (by simp) h
-      | false =>
-        exact lookup_none_of_not_mem_fst fun h' =>
-          h (by simp only [List.map, List.mem_cons]; exact Or.inr (by simpa using h'))
-
-theorem mem_fst_of_lookup {α : Type} {l : List (Name × α)} {k v}
-    (h : l.lookup k = some v) : k ∈ l.map (·.1) :=
-  List.mem_map.mpr ⟨(k, v), mem_of_lookup h, rfl⟩
-
-theorem traverse_fst {α β : Type} {f : Name × α → Option (Name × β)}
-    (hf : ∀ kv kb, f kv = some kb → kb.1 = kv.1) :
-    ∀ {kvs : List (Name × α)} {ds}, traverse f kvs = some ds →
-      ds.map (·.1) = kvs.map (·.1)
-  | [], ds, h => by
-      replace h : some [] = some ds := h
-      cases h
-      rfl
-  | kv :: kvs, ds, h => by
-      simp only [traverse] at h
-      cases hkv : f kv with
-      | none => rw [hkv] at h; exact nomatch h
-      | some kb =>
-        rw [hkv] at h
-        cases hks : traverse f kvs with
-        | none => rw [hks] at h; exact nomatch h
-        | some ds' =>
-          rw [hks] at h
-          replace h : some (kb :: ds') = some ds := h
-          cases h
-          simp only [List.map]
-          rw [hf kv kb hkv, traverse_fst hf hks]
-
-theorem traverse_mem₂ {α β : Type} {f : α → Option β} :
-    ∀ {xs : List α} {ys}, traverse f xs = some ys →
-      ∀ y ∈ ys, ∃ x ∈ xs, f x = some y
-  | [], ys, h => by
-      replace h : some [] = some ys := h
-      cases h
-      intro y hy
-      exact absurd hy (by simp)
-  | x :: xs, ys, h => by
-      simp only [traverse] at h
-      cases hfx : f x with
-      | none => rw [hfx] at h; exact nomatch h
-      | some y₀ =>
-        rw [hfx] at h
-        cases hxs : traverse f xs with
-        | none => rw [hxs] at h; exact nomatch h
-        | some ys' =>
-          rw [hxs] at h
-          replace h : some (y₀ :: ys') = some ys := h
-          cases h
-          intro y hy
-          rcases List.mem_cons.mp hy with rfl | hy'
-          · exact ⟨x, List.mem_cons_self _ _, hfx⟩
-          · obtain ⟨x', hx', hfx'⟩ := traverse_mem₂ hxs y hy'
-            exact ⟨x', List.mem_cons_of_mem _ hx', hfx'⟩
-
-theorem traverse_append {α β : Type} {f : α → Option β} :
-    ∀ {l₁ l₂ : List α} {r₁ r₂}, traverse f l₁ = some r₁ → traverse f l₂ = some r₂ →
-      traverse f (l₁ ++ l₂) = some (r₁ ++ r₂)
-  | [], l₂, r₁, r₂, h₁, h₂ => by
-      replace h₁ : some [] = some r₁ := h₁
-      cases h₁
-      exact h₂
-  | x :: l₁, l₂, r₁, r₂, h₁, h₂ => by
-      simp only [traverse] at h₁
-      cases hfx : f x with
-      | none => rw [hfx] at h₁; exact nomatch h₁
-      | some y =>
-        rw [hfx] at h₁
-        cases hl : traverse f l₁ with
-        | none => rw [hl] at h₁; exact nomatch h₁
-        | some r₁' =>
-          rw [hl] at h₁
-          replace h₁ : some (y :: r₁') = some r₁ := h₁
-          cases h₁
-          show traverse f (x :: (l₁ ++ l₂)) = some ((y :: r₁') ++ r₂)
-          simp only [traverse]
-          rw [hfx, traverse_append hl h₂]
-          rfl
-
-theorem traverse_append_inv {α β : Type} {f : α → Option β} :
-    ∀ {l₁ l₂ : List α} {r}, traverse f (l₁ ++ l₂) = some r →
-      ∃ r₁ r₂, r = r₁ ++ r₂ ∧ traverse f l₁ = some r₁ ∧ traverse f l₂ = some r₂
-  | [], l₂, r, h => ⟨[], r, rfl, rfl, h⟩
-  | x :: l₁, l₂, r, h => by
-      replace h : traverse f (x :: (l₁ ++ l₂)) = some r := h
-      simp only [traverse] at h
-      cases hfx : f x with
-      | none => rw [hfx] at h; exact nomatch h
-      | some y =>
-        rw [hfx] at h
-        cases hl : traverse f (l₁ ++ l₂) with
-        | none => rw [hl] at h; exact nomatch h
-        | some r' =>
-          rw [hl] at h
-          replace h : some (y :: r') = some r := h
-          cases h
-          obtain ⟨r₁, r₂, rfl, h₁, h₂⟩ := traverse_append_inv hl
-          refine ⟨y :: r₁, r₂, rfl, ?_, h₂⟩
-          simp only [traverse]
-          rw [hfx, h₁]
-
-theorem traverse_isSome_of_all {α β : Type} {f : α → Option β} :
-    ∀ {l : List α}, (∀ x ∈ l, (f x).isSome = true) → (traverse f l).isSome = true
-  | [], _ => rfl
-  | x :: l, h => by
-      obtain ⟨y, hy⟩ := Option.isSome_iff_exists.mp (h x (List.mem_cons_self _ _))
-      obtain ⟨ys, hys⟩ := Option.isSome_iff_exists.mp
-        (traverse_isSome_of_all fun z hz => h z (List.mem_cons_of_mem _ hz))
-      simp only [traverse]
-      rw [hy, hys]
-      rfl
-
-theorem filter_eq_self_of_all {α : Type} {p : α → Bool} :
-    ∀ {l : List α}, (∀ x ∈ l, p x = true) → l.filter p = l
-  | [], _ => rfl
-  | x :: l, h => by
-      have hx := h x (List.mem_cons_self _ _)
-      simp only [List.filter, hx]
-      rw [filter_eq_self_of_all fun z hz => h z (List.mem_cons_of_mem _ hz)]
-
-theorem lookup_filter_pos {α : Type} {kn : Name → Bool} {k : Name} (hk : kn k = true) :
-    ∀ (l : List (Name × α)),
-      (l.filter fun kv => kn kv.1).lookup k = l.lookup k
-  | [] => rfl
-  | (k₁, v₁) :: l => by
-      simp only [List.filter]
-      cases hkn₁ : kn k₁ with
-      | true =>
-        simp only [List.lookup]
-        cases hbe : (k == k₁) with
-        | true => rfl
-        | false => exact lookup_filter_pos hk l
-      | false =>
-        simp only [List.lookup]
-        cases hbe : (k == k₁) with
-        | true =>
-          have hkk : k = k₁ := eq_of_beq hbe
-          subst hkk
-          rw [hk] at hkn₁
-          exact nomatch hkn₁
-        | false => exact lookup_filter_pos hk l
-
-theorem lookup_filter_neg {α : Type} {kn : Name → Bool} {k : Name} (hk : kn k = false) :
-    ∀ (l : List (Name × α)),
-      (l.filter fun kv => kn kv.1).lookup k = none
-  | [] => rfl
-  | (k₁, v₁) :: l => by
-      simp only [List.filter]
-      cases hkn₁ : kn k₁ with
-      | true =>
-        simp only [List.lookup]
-        cases hbe : (k == k₁) with
-        | true =>
-          have hkk : k = k₁ := eq_of_beq hbe
-          subst hkk
-          rw [hk] at hkn₁
-          exact nomatch hkn₁
-        | false => exact lookup_filter_neg hk l
-      | false => exact lookup_filter_neg hk l
-
-theorem lookup_append {α : Type} :
-    ∀ (l₁ l₂ : List (Name × α)) (k : Name),
-      (l₁ ++ l₂).lookup k =
-        match l₁.lookup k with
-        | some v => some v
-        | none => l₂.lookup k
-  | [], _, _ => rfl
-  | (k₁, v₁) :: l₁, l₂, k => by
-      show ((k₁, v₁) :: (l₁ ++ l₂)).lookup k = _
-      simp only [List.lookup]
-      cases hbe : (k == k₁) with
-      | true => rfl
-      | false => exact lookup_append l₁ l₂ k
 
 theorem fbDefaults_nil :
     ∀ {sems : List (Name × FieldSem)} {names : List Name},
@@ -2900,23 +2496,6 @@ theorem reqPresentB_of {sems : List (Name × FieldSem)} {names : List Name}
   | opt c => rfl
   | fb c v => rfl
 
-theorem mem_of_contains {l : List String} {s : String} (h : l.contains s = true) :
-    s ∈ l := by
-  induction l with
-  | nil => exact nomatch h
-  | cons a l ih =>
-    replace h : List.elem s (a :: l) = true := h
-    simp only [List.elem] at h
-    cases hbe : (s == a) with
-    | true => exact List.mem_cons.mpr (Or.inl (eq_of_beq hbe))
-    | false =>
-      rw [hbe] at h
-      exact List.mem_cons_of_mem _ (ih h)
-
-theorem exists_of_mem_fst {α : Type} {l : List (Name × α)} {k}
-    (h : k ∈ l.map (·.1)) : ∃ x, (k, x) ∈ l := by
-  obtain ⟨p, hp, hp1⟩ := List.mem_map.mp h
-  exact ⟨p.2, by rw [← hp1]; exact hp⟩
 
 /-! ### The keyed steps: round trip, definedness, agreement, and name preservation -/
 
@@ -3721,17 +3300,6 @@ theorem lawful_altCodec {os : List OptionSem} {μA : Option Member}
       replace he : o.c.e t = some a' := he
       exact (h o ho).agree hp he
 
-theorem filter_map_comm {α β : Type} (f : α → β) (p : β → Bool) :
-    ∀ l : List α, (l.map f).filter p = (l.filter fun x => p (f x)).map f
-  | [] => rfl
-  | x :: l => by
-      cases hp : p (f x) with
-      | true =>
-        simp only [List.map, List.filter, hp]
-        rw [filter_map_comm f p l]
-      | false =>
-        simp only [List.map, List.filter, hp]
-        exact filter_map_comm f p l
 
 /-- Disjoint tag lists select at most one option, and a member tag selects exactly it —
     duplicates are impossible because a pair would be self-disjoint with a nonempty tag
