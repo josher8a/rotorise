@@ -15,9 +15,10 @@ canonical pairs.
 
 §5's (D) is *not* among these, and `not_uAtCan_literal_held` is why: held sets are sets
 of values, (U)'s readable side quantifies over attributes, and `held`'s adapter relabels
-between them. Two options can hold disjoint sets and read one attribute. (D) stays a
-well-formedness condition on the `T` index; the readable side is decided on stored
-attributes.
+between them. Two options can hold disjoint sets and read one attribute. (D) is a
+well-formedness condition on the `T` index and lives there — `DIncomp`, a premise of
+`Typed.union` (Typing.lean); the readable side is decided on stored attributes. `DDisj`
+below is the *stronger* reading §5 considered and withdrew, kept only to be refuted.
 
 The `ident` exemption is here in its repaired form. An earlier §5 stated (K) as
 `κ(cᵢ) ∩ κ(cⱼ) = ∅ ∨ ident(cᵢ) ∨ ident(cⱼ)` and called it sufficient for (U); it is
@@ -323,6 +324,42 @@ theorem admA_sound : ∀ (fuel : Nat) (t : Term) {a v},
         contains_of_mem (mem_allTags htx (mem_of_contains htag))⟩
     case refine t' q => exact admA_sound fuel t' (restrict_p.mp hp).1
     all_goals rfl
+
+/-! ### Why `admA` has no `legacy` case
+
+    §5 lists `refine`, `optional`, `fallback` and `legacy` as passing `adm` through, on
+    one `adm`. The value side can: `adm` above does have a `legacy` case. The attribute
+    side cannot, and the reason is what `legacy` is for — `extendRead` widens `p` by `r`,
+    which is exactly the direction `admA` bounds.
+
+    `admA_sound` is what would break. The witness below reads an `N` attribute out of a
+    `legacy` over a string literal, so a passthrough `admA` would claim the read is
+    inside `literal("A")`'s admissible set when the whole point of the migration is that
+    it is not. This is the specification defect with no other machine-checked witness;
+    `docs/codec-formalization.md` §4 records it. -/
+
+/-- A migration that reads a numeral into the literal's value — the shape `legacy` exists
+    for, and the shape no syntactic set over the subterm can bound. -/
+def rNumeral : Attr → Option Value
+  | .n _ => some (.str "A")
+  | _ => none
+
+/-- The read really does land outside the subterm's `admA`. -/
+theorem legacy_p_outside_admA (fuel : Nat) :
+    (denote (fuel+2) (.legacy (.literalS ["A"]) rNumeral)).p (.n "1") = some (.str "A") ∧
+      admA (.literalS ["A"]) (.n "1") = false := ⟨rfl, rfl⟩
+
+/-- **§5's `adm` cannot pass through `legacy` on the read side.** Stated as the row's
+    refutation rather than as an omission, so the divergence between the document's one
+    `adm` and the model's two is a theorem rather than a comment. -/
+theorem not_admA_legacy :
+    ¬ ∀ (t : Term) (r : Attr → Option Value) (fuel : Nat) (a : Attr) (v : Value),
+      (denote fuel (.legacy t r)).p a = some v → admA t a = true := by
+  intro h
+  have hbad := h (.literalS ["A"]) rNumeral 2 (.n "1") (.str "A")
+    (legacy_p_outside_admA 0).1
+  rw [(legacy_p_outside_admA 0).2] at hbad
+  exact nomatch hbad
 
 /-! ## Admission is guarded -/
 

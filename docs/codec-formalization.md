@@ -101,6 +101,9 @@ satisfiable — a discharger whose premises cannot all hold discharges nothing.
 
 Three claims in §5's discharger tables were unsound as written. Each is now corrected in
 `codec-calculus.md`, with the counterexample machine-checked in `formal/Calculus/Discharge.lean`.
+Five further findings follow the table — five defects and one correction that ran the other way,
+into the model. The last two are open against `codec-calculus.md`: the text has not been changed
+yet, and the entries say what the amendment should be.
 
 | Was claimed                                            | Counterexample                                                        | Now |
 | ------------------------------------------------------ | --------------------------------------------------------------------- | --- |
@@ -112,7 +115,7 @@ The shared error is worth stating once, because it will recur in any port: **hel
 values; (U)'s readable side quantifies over attributes; `held` relabels between them.** No condition
 on held sets alone can decide the readable side.
 
-### A fifth: a term the domain had and the calculus did not
+### One the domain had and the calculus did not
 
 §1 gives the value language a `null` and the attribute domain a `NULL` member; §3's
 `(opaque)` lists the `NULL` point among the eight options it dispatches on. But **no term
@@ -128,7 +131,7 @@ and discharged like them: `κ(null) = {null}` is disjoint from every other groun
 `nullable(c)` could be written as `union(c, null)` — it could not, because the right-hand
 side was not a term.
 
-### A fourth, about an identity rather than a discharger
+### One about an identity rather than a discharger
 
 §3's paragraph on null-honesty said `nullable(c)` and `union(c, ⟨NULL⟩-point)` "coincide under
 honesty, which is why the precedence is harmless". Mechanizing it showed the sentence wrong in
@@ -153,7 +156,7 @@ as surface syntax rather than as expressiveness.
 
 ### One that ran the other way
 
-A fourth defect turned up while closing §6's `T` row, and it is worth separating because the arrow
+This one turned up while closing §6's `T` row, and it is worth separating because the arrow
 points the opposite direction: the **model** was wrong and the specification was right.
 `HOpaque`'s `set` clause had been transcribed without `vs ≠ []`, so `Uν` admitted the empty set.
 All three of the specification's readings exclude it — §1's `SS`/`NS`/`BS` are `℘⁺fin`; §3's
@@ -185,6 +188,44 @@ The behaviour §6 describes is real; `≡` simply cannot see it.
 `literal("A")` nested inside, the left encodes and the right refuses. So the conditions are
 needed for **interchangeability**, and not for `≡`. Any port that rewrites across the two forms
 is relying on the former, which the calculus does not give it.
+
+### One the specification says twice, two different ways
+
+§5's auxiliary tables give the calculus one `adm` — the set an `ident` term checks against —
+and list `refine`, `optional`, `fallback` and `legacy` as passing it through. The value side
+can. **The attribute side cannot, and `legacy` is the term that makes it impossible.**
+`extendRead` widens `p` by the migration `r`, which is exactly the direction `adm` bounds:
+a migration exists to accept attributes the current codec would refuse.
+
+The model has always had two auxiliaries, `adm` and `admA`, and `admA` has no `legacy` case —
+so the model was already right and the document was already wrong, with nothing recording it.
+`not_admA_legacy` is now the witness: `legacy(literal("A"), r)` with `r` reading an `N` reads
+`⟨N, "1"⟩` to `"A"`, and `admA(literal("A"))` refuses `⟨N, "1"⟩`. A passthrough `admA` would
+make `admA_sound` false.
+
+The two also part at `literalN`, for a different reason: the read side goes through the
+axiomatized `Double.ofDec`, so no syntactic set bounds it and `admA(literal‑N)` is `⊤`.
+§5 should split its `adm` row into a value side and an attribute side and say where each
+stops — the model's `adm`/`admA` is the shape it wants.
+
+### One where §3 and §5 disagree about the same term
+
+§3 says of `numeric(T)` that `p` "returns the double it read and **does not verify membership
+in `T`**", that `refine(number, T)` is "the same held set *with* the check", and that "a claim
+and a check are different terms". §5's soundness proof says the opposite in the same breath:
+"the normative reading is `number`'s restricted to attributes landing in `T`, and every law
+restricts with it; the implementation elides the restriction."
+
+`numericCodec` gates `q` on both halves — §5's reading — and it has to. Under §3's reading `p`
+could return a value outside `T`, which is `Carrier.ranP` failing, and with it `typed_p_mem`
+and the honesty of the `: T` index. So this is not a choice the mechanization made; it is the
+only reading under which the judgement's index means anything, and `carrier_numericCodec` is
+the standing witness.
+
+§3's paragraph is the one to amend. Its underlying point — that the subset is an unchecked
+precondition *for the implementation*, like `D`'s magnitude range — survives; what does not is
+the claim that `numeric(T)` and `refine(number, T)` are different terms. In this calculus they
+denote the same codec.
 
 ## §5 Certifying an implementation
 
@@ -288,7 +329,7 @@ Stated plainly, because a certificate that hides its edges is worth less than on
 | **`T` as an identity**                  | **Closed for `opaque`** — `opaq_T_identity` proves `(opaqCodecω ν).T = Uν` exactly, the case this row said bites hardest. Still open for the other constructors, and *false* for `union` without full (U): `T` is the union of the options' sets, but `e` refuses wherever two of them admit, so the surplus is real. The general blocker is gone — the "fuel exceeds depth" hypothesis is now `Value.depth`/`termDepth`. |
 | **§1's numeral domain**                 | **Modelled.** `Numeral.WF` (Domain.lean) carries §1's three clauses — grammar, ≤ 38 significant digits, magnitude `0` or `1e-130 … 9.9…e125` — and `decimal` gates on it, so it no longer holds every string. `decimal_writes_wf`/`decimal_reads_wf` are the report. The *carrier* is still unrestricted (`Attr.n "abc"` remains representable), which is the honest split: §1 says which strings DynamoDB accepts in an `N`, and the calculus's job is that its codecs write only those. Two narrowings are noted at the definition: a bare integer part is required, and significance is counted between first and last nonzero digit. |
 | **`(numeric)`'s `T ≠ ∅`**               | Dropped. `T ⊆ D` is vacuous while `D` is unmodelled, and the specification calls it an unchecked precondition; `T ≠ ∅` is simply absent. |
-| **§6's equations**                      | **Complete — twenty of twenty.** The "do not hold" table is settled: eight machine-checked, and `optional(optional(c))` enforced by the syntax, since no `Field` constructor takes a `Field`. All eleven "Hold" rows are proved. `union` associativity, the table's only *conditional* row, holds **without** its conditions — see §4. |
+| **§6's equations**                      | **Twenty of twenty, with one row narrower than the table reads.** The "do not hold" table is settled: eight machine-checked, and `optional(optional(c))` enforced by the syntax, since no `Field` constructor takes a `Field`. All eleven "Hold" rows are proved, but `union`'s commutativity is proved for the **adjacent transposition** (`equiv_altCodec_swap`), which generates every permutation without the lift to `List.Perm` being written down. Wrapper member preservation is five of five — three codec wrappers, and the two field wrappers through `FieldSem.codec`, which §4 of the specification says is where a field's member lives. `union` associativity, the table's only *conditional* row, holds **without** its conditions — see §4. And `≡` itself is reflexive and symmetric but **not transitive** (`not_equiv_trans`), which bounds what a table of rewrites licenses. |
 | **`Double`**                            | Axiomatized with exactly the shortest-text round trip `(number)` consumes. IEEE-754 facts are not this calculus's theorems. |
 | **Set-ness**                            | Wire sets and maps are lists; the quotient lives in `ker p`, where §2 puts it, not in the carrier. |
 
@@ -343,7 +384,7 @@ actually standing in for is the finiteness of `Term` — which suggests the chea
 
 ### The observation that matters
 
-All three defects of §4 are **finite counterexamples**: a handful of concrete values each. None
+All three of §4's discharger refutations are **finite counterexamples**: a handful of concrete values each. None
 needed a proof assistant. Bounded exhaustive checking over the existing implementation would have
 found all three quickly. The proof assistant earned its keep on the *positive* theorem — soundness
 of the algebra — which is what cannot be established by testing at all.

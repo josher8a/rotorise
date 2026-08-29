@@ -134,14 +134,14 @@ Density per block, against how complete that block's inversion vocabulary is:
 
 | block | inversion | lines | sites | **per 100 lines** |
 | --- | --- | ---: | ---: | ---: |
-| array + record | complete | 249 | 0 | **0.0** |
+| array + record | complete | 256 | 0 | **0.0** |
 | tuple | complete | 331 | 10 | **3.0** |
-| wrappers | complete | 404 | 6 | **1.5** |
+| wrappers | complete | 381 | 6 | **1.6** |
 | set | complete | 569 | 23 | 4.0 |
 | object | complete | 652 | 26 | 4.0 |
-| union | complete | 700 | 31 | 4.4 |
-| opaque | none | 839 | 41 | 4.9 |
-| ground | none | 454 | 16 | 3.5 |
+| union | complete | 811 | 33 | 4.1 |
+| opaque | none | 803 | 41 | 5.1 |
+| ground | none | 464 | 16 | 3.4 |
 
 Monotone with one honest outlier. **`ground` is 3.5 with no inversion** — because
 `pointCodec` already gives four of the ground codecs one shared proof. That argues *for*

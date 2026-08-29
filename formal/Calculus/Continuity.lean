@@ -48,7 +48,8 @@ namespace Calculus
 
 Any ccpo supporting a fixpoint definition of `denote` must at least let a codec's `e`
 and `p` grow from undefined — that is what "unfolding adds information" means, and
-`Codec.empty` (what `denote` returns at fuel `0`) is its bottom. `Approx` is that
+`Codec.empty` (the pair `denote` has at fuel `0`; the index there is `μSyn t`) is its
+bottom. `Approx` is that
 minimal requirement, stated positively so the refutation below does not depend on which
 ccpo one picks. -/
 structure Codec.Approx (c c' : Codec) : Prop where
@@ -60,8 +61,8 @@ structure Codec.Approx (c c' : Codec) : Prop where
 theorem Codec.Approx.refl (c : Codec) : Codec.Approx c c :=
   ⟨fun h => h, fun h => h⟩
 
-/-- `Codec.empty` is below everything: the bottom of any such order, and the value
-    `denote` takes at fuel `0`. -/
+/-- `Codec.empty` is below everything: the bottom of any such order, and the pair
+    `denote` has at fuel `0`. -/
 theorem Codec.Approx.empty_le (c : Codec) : Codec.Approx Codec.empty c := by
   refine ⟨?_, ?_⟩ <;> intro _ _ h <;> exact nomatch h
 

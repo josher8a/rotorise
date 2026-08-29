@@ -17,7 +17,8 @@ sit under `List`, and structural recursion wants them spelled out rather than hi
 `List.map`.
 
 This is additive: the fueled `denote` and everything proved about it are untouched.
-`Equivω.lean` will connect the two, and the fuel-free soundness statement follows.
+`denoteω_eq` below connects the two — `denoteω t = denote n t` once `n` covers the term's
+depth — and `Soundnessω.lean` carries the fuel-free statement across it.
 -/
 
 namespace Calculus

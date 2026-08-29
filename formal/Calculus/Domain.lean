@@ -17,8 +17,10 @@ namespace Calculus
 /-- Attribute names. -/
 abbrev Name := String
 
-/-- Wire numerals (§1 `Numerals`). Well-formedness (grammar, 38 digits, magnitude) is
-    an unmodelled predicate for now. -/
+/-- Wire numerals (§1 `Numerals`). The *carrier* is every string — `Attr.n "abc"` stays
+    representable, because §1 describes what DynamoDB accepts, not what Lean can build.
+    Well-formedness (grammar, 38 digits, magnitude) is `Numeral.WF` below, and
+    `decimalCodec` gates on it. -/
 abbrev Numeral := String
 
 /-- Byte strings. -/
