@@ -1269,6 +1269,10 @@ def OptionSem.byAttempt (c : Codec) : OptionSem :=
     admitV := fun v => (c.e v).isSome
     c := c }
 
+/-- The `⟨NULL⟩` point as a union option — §3's second half of `nullable(c)` read as
+    `union(c, ⟨NULL⟩-point)`. It decides by attempting, like any ground option. -/
+abbrev nullOption : OptionSem := .byAttempt nullCodec
+
 /-- A `(dunion)` option is admitted by its discriminator tag. -/
 def OptionSem.byTag (d : Name) (tags : List String) (c : Codec) : OptionSem :=
   { admitA := fun a =>

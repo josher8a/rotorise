@@ -80,6 +80,120 @@ theorem equiv_orNull_idem (c : Codec) : Codec.Equiv c.orNull.orNull c.orNull := 
     rw [orNull_p_idem] at h
     exact Option.some.inj (h.symm.trans h')
 
+private theorem filterV_null {c : Codec} :
+    [OptionSem.byAttempt c, nullOption].filter (·.admitV .null)
+      = (if (c.e .null).isSome then [OptionSem.byAttempt c, nullOption] else [nullOption]) := by
+  cases hc : (c.e Value.null) <;> simp [OptionSem.byAttempt, nullCodec, hc, List.filter]
+
+private theorem filterV_ne {c : Codec} {v : Value} (hv : v ≠ .null) :
+    [OptionSem.byAttempt c, nullOption].filter (·.admitV v)
+      = (if (c.e v).isSome then [OptionSem.byAttempt c] else []) := by
+  cases v <;> cases hc : c.e _ <;> simp_all [OptionSem.byAttempt, nullCodec, List.filter]
+
+private theorem filterA_null {c : Codec} :
+    [OptionSem.byAttempt c, nullOption].filter (·.admitA .null)
+      = (if (c.p .null).isSome then [OptionSem.byAttempt c, nullOption] else [nullOption]) := by
+  cases hc : (c.p Attr.null) <;> simp [OptionSem.byAttempt, nullCodec, hc, List.filter]
+
+private theorem filterA_ne {c : Codec} {a : Attr} (ha : a ≠ .null) :
+    [OptionSem.byAttempt c, nullOption].filter (·.admitA a)
+      = (if (c.p a).isSome then [OptionSem.byAttempt c] else []) := by
+  cases a <;> cases hc : c.p _ <;> simp_all [OptionSem.byAttempt, nullCodec, List.filter]
+
+/-! ## `nullable` *is* `union` with the null point — at `≡`, and only at `≡`
+
+§3 of the specification calls `nullable(c)` "structurally the two-option union
+`union(c, ⟨NULL⟩-point)`", and says the term stays primitive only because it resolves
+`NULL` by precedence where a union demands disjointness — "and under honesty the two
+semantics coincide, which is why the precedence is harmless."
+
+Mechanizing that sentence shows it is wrong in both directions, and the correction is
+sharper than the claim:
+
+* the **equivalence needs no premise at all** — not honesty, not lawfulness
+  (`equiv_orNull_altCodec`). `≡` compares the pairs where both are defined, and the only
+  place the two disagree is where the union is *un*defined;
+* the **equality needs more than honesty**: the base must not touch the null point at
+  all (`orNull_eq_altCodec`). Honesty does not give that, and the witness is not exotic —
+  it is `nullable(nullable(c))`, the very term §6's idempotence row is about, where both
+  options admit `null` and the union therefore refuses (`orNull_ne_altCodec`).
+
+So the precedence is not "harmless": it is **load-bearing**. It is what keeps
+`nullable(nullable(c))` total, and desugaring `nullable` into `union` would make §6's
+idempotence row false rather than provable. -/
+
+/-- The equivalence, unconditionally. -/
+theorem equiv_orNull_altCodec (c : Codec) :
+    Codec.Equiv c.orNull (altCodec [.byAttempt c, nullOption] none) := by
+  refine ⟨?_, rfl, ?_, ?_⟩
+  · intro v
+    refine ⟨?_, ?_⟩
+    · rintro (hT | rfl)
+      · exact ⟨.byAttempt c, List.mem_cons_self _ _, hT⟩
+      · exact ⟨nullOption, by simp, rfl⟩
+    · rintro ⟨o, ho, hT⟩
+      rcases List.mem_cons.mp ho with rfl | ho'
+      · exact .inl hT
+      · rcases List.mem_cons.mp ho' with rfl | h
+        · exact .inr hT
+        · exact absurd h (by simp)
+  · intro v a a' h h'
+    obtain ⟨o, hf, hoe⟩ := altCodec_e.mp h'
+    rcases orNull_e.mp h with ⟨rfl, rfl⟩ | ⟨hv, hce⟩
+    · rw [filterV_null] at hf
+      split at hf
+      · exact nomatch hf
+      · cases hf; exact Option.some.inj hoe
+    · rw [filterV_ne hv, if_pos (by rw [hce]; rfl)] at hf
+      cases hf
+      exact Option.some.inj (hce.symm.trans hoe)
+  · intro a v v' h h'
+    obtain ⟨o, hf, hop⟩ := altCodec_p.mp h'
+    rcases orNull_p.mp h with ⟨rfl, rfl⟩ | ⟨ha, hcp⟩
+    · rw [filterA_null] at hf
+      split at hf
+      · exact nomatch hf
+      · cases hf; exact Option.some.inj hop
+    · rw [filterA_ne ha, if_pos (by rw [hcp]; rfl)] at hf
+      cases hf
+      exact Option.some.inj (hcp.symm.trans hop)
+
+/-- The equality, and the premise it really needs: the base does not touch the null
+    point. Strictly stronger than null-honesty — honesty constrains which *attribute* a
+    value writes to, and says nothing about whether `c` writes `null` at all. -/
+theorem orNull_eq_altCodec {c : Codec} (he : c.e .null = none) (hp : c.p .null = none) :
+    c.orNull = altCodec [.byAttempt c, nullOption] none := by
+  refine Codec.ext ?_ rfl ?_ ?_
+  · funext v
+    refine propext ⟨?_, ?_⟩
+    · rintro (hT | rfl)
+      · exact ⟨.byAttempt c, List.mem_cons_self _ _, hT⟩
+      · exact ⟨nullOption, by simp, rfl⟩
+    · rintro ⟨o, ho, hT⟩
+      rcases List.mem_cons.mp ho with rfl | ho'
+      · exact .inl hT
+      · rcases List.mem_cons.mp ho' with rfl | h
+        · exact .inr hT
+        · exact absurd h (by simp)
+  · funext v
+    cases v <;> simp [Codec.orNull, altCodec, OptionSem.byAttempt, nullCodec, he,
+      List.filter] <;> cases hc : c.e _ <;> simp_all
+  · funext a
+    cases a <;> simp [Codec.orNull, altCodec, OptionSem.byAttempt, nullCodec, hp,
+      List.filter] <;> cases hc : c.p _ <;> simp_all
+
+/-- …and null-honesty is not enough for it. `nullable(string)` is lawful and honest in
+    both directions, and `nullable` of it answers at `null` where the union refuses —
+    both options admit, so (U) fails there and `altCodec` is undefined. -/
+theorem orNull_ne_altCodec :
+    (stringCodec.orNull).orNull.e .null = some .null ∧
+    (altCodec [.byAttempt stringCodec.orNull, nullOption] none).e .null = none ∧
+    (stringCodec.orNull).orNull ≠ altCodec [.byAttempt stringCodec.orNull, nullOption] none :=
+  ⟨rfl, rfl, fun h => by
+    have : (stringCodec.orNull).orNull.e .null
+        = (altCodec [.byAttempt stringCodec.orNull, nullOption] none).e .null := by rw [h]
+    exact nomatch this⟩
+
 /-! ## `union` is commutative
 
     Resolution is unique admission, never declaration order (§5) — so swapping two
