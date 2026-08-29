@@ -191,4 +191,44 @@ theorem typed_union_string_boolean :
       (HUnion [fun v => ∃ s, v = .str s, fun v => ∃ b, v = .bool b]) none :=
   .union (.cons .string (.cons .boolean .nil))
 
+/-! ## What `≡` cannot see about associativity
+
+`Equations.equiv_altCodec_assoc` proves §6's associativity row *unconditionally* — no (D),
+no (K), no (U). That is not a contradiction of §6's hedge; it is a fact about `≡`.
+
+`≡` requires `e` and `p` to agree only where **both** are defined. At an input where the
+nested option is ambiguous, the left side's inner union fails and the outer one resolves
+anyway, while the right side sees three admitting options and refuses. One side defined,
+the other not — so `≡` asks nothing, and the row holds.
+
+The behavioural difference is real all the same, and it is exactly what §6's prose
+describes. Here it is, so that the unconditional row is not mistaken for a licence to
+rewrite across the two forms freely: at `"A"`, with `string` outside and two copies of
+`literal("A")` nested inside, the left encodes and the right refuses.
+
+Both terms violate (U), which is the point — §6 conditions the row on precisely that, and
+the model shows the condition is needed for *interchangeability*, not for `≡`. -/
+
+/-- Left: the outer union resolves, because the inner one has already failed. -/
+theorem assoc_left_e :
+    (denoteω (.union [.string, .union [.literalS ["A"], .literalS ["A"]]])).e (.str "A")
+      = some (.s "A") := by
+  simp [denoteω, denoteωOpts, denoteωMems, optionSemOf, specOf, OptionSem.byAttempt,
+        altCodec, stringCodec, literalSCodec]
+
+/-- Right: three options admit, so the union refuses globally. -/
+theorem assoc_right_e :
+    (denoteω (.union [.string, .literalS ["A"], .literalS ["A"]])).e (.str "A") = none := by
+  simp [denoteω, denoteωOpts, denoteωMems, optionSemOf, specOf, OptionSem.byAttempt,
+        altCodec, stringCodec, literalSCodec]
+
+/-- The two associativity forms are `≡` but not interchangeable: one writes where the
+    other refuses. §6's (D)/(K)/(U) hedge is about this, not about `≡`. -/
+theorem not_eq_altCodec_assoc :
+    ∃ (l r : Term) (v : Value) (a : Attr),
+      (denoteω l).e v = some a ∧ (denoteω r).e v = none :=
+  ⟨.union [.string, .union [.literalS ["A"], .literalS ["A"]]],
+   .union [.string, .literalS ["A"], .literalS ["A"]],
+   .str "A", .s "A", assoc_left_e, assoc_right_e⟩
+
 end Calculus

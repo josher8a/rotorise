@@ -124,6 +124,24 @@ surplus sat on the judgement's side, no law depended on it, and `soundness` was 
 only the advertised precision of the `: T` index. Which is exactly the claim §6 could not check
 while fuel was in the way.
 
+### One where the hedge was about the wrong thing
+
+`union` associativity is the only conditional row in §6's "Hold" table: it is stated to hold
+"where both sides satisfy (D) and (K) — and only on inputs satisfying (U)". Mechanizing it shows
+the row needs **none** of those conditions. `equiv_altCodec_assoc` proves it outright.
+
+This is not a defect in either document, but it is worth recording, because the reason is a
+property of `≡` that is easy to lose sight of. `≡` requires `e` and `p` to agree only *where both
+are defined*. At exactly the input §6 warns about, the nested option is ambiguous: the left side's
+inner union fails and its outer union resolves anyway, while the right side sees three admitting
+options and refuses. One side defined, the other not — so `≡` asks nothing.
+
+The behaviour §6 describes is real; `≡` simply cannot see it.
+`not_eq_altCodec_assoc` exhibits it — at `"A"`, with `string` outside and two copies of
+`literal("A")` nested inside, the left encodes and the right refuses. So the conditions are
+needed for **interchangeability**, and not for `≡`. Any port that rewrites across the two forms
+is relying on the former, which the calculus does not give it.
+
 ## §5 Certifying an implementation
 
 The calculus is portable by design: nothing in it is TypeScript, and nothing is Rotorise. An
@@ -222,7 +240,7 @@ Stated plainly, because a certificate that hides its edges is worth less than on
 | **`T` as an identity**                  | **Closed for `opaque`** — `opaq_T_identity` proves `(opaqCodecω ν).T = Uν` exactly, the case this row said bites hardest. Still open for the other constructors, and *false* for `union` without full (U): `T` is the union of the options' sets, but `e` refuses wherever two of them admit, so the surplus is real. The general blocker is gone — the "fuel exceeds depth" hypothesis is now `Value.depth`/`termDepth`. |
 | **§1's numeral domain**                 | `Numeral := String`; grammar, 38 digits and magnitude unmodelled. So `decimal` currently holds every string. Now checkable: tighten the predicate and `typed_e_mem` reports whether the codec respects it. |
 | **`(numeric)`'s `T ≠ ∅`**               | Dropped. `T ⊆ D` is vacuous while `D` is unmodelled, and the specification calls it an unchecked precondition; `T ≠ ∅` is simply absent. |
-| **§6's equations**                      | **Nineteen of twenty settled.** The "do not hold" table is complete — eight machine-checked, and `optional(optional(c))` enforced by the syntax, since no `Field` constructor takes a `Field`. Ten of the eleven "Hold" rows are proved. The one open row is `union` associativity, the table's only *conditional* one: §6 requires (D) and (K) on both sides and holds it only on inputs satisfying (U), since an ambiguity inside the nested option fails locally on the left and globally on the right. |
+| **§6's equations**                      | **Complete — twenty of twenty.** The "do not hold" table is settled: eight machine-checked, and `optional(optional(c))` enforced by the syntax, since no `Field` constructor takes a `Field`. All eleven "Hold" rows are proved. `union` associativity, the table's only *conditional* row, holds **without** its conditions — see §4. |
 | **`Double`**                            | Axiomatized with exactly the shortest-text round trip `(number)` consumes. IEEE-754 facts are not this calculus's theorems. |
 | **Set-ness**                            | Wire sets and maps are lists; the quotient lives in `ker p`, where §2 puts it, not in the carrier. |
 
@@ -333,9 +351,8 @@ to any system and any port.
 
 1. **Mechanize conformance** (§6, row 1) — C1–C3 for the TypeScript. The largest gap between "the
    calculus is sound" and "what ships is correct".
-2. ~~**Refute §6's "do not hold" table**~~ — **done**, all nine (`Refutations.lean`), and the
-   "Hold" table with it, ten of eleven. What is left of §6 is `union` associativity alone, which
-   needs (U) threaded through both nestings.
+2. ~~**Refute §6's "do not hold" table**~~ — **done**, and the "Hold" table with it. §6 is
+   complete, twenty of twenty.
 3. **Tighten §1's numeral domain**, now that `typed_e_mem` can check it.
 4. ~~**De-fuel the denotation**~~ — **done** (§7), and with it `T` **as an identity** for
    `opaque`. What remains of that row is the other constructors, where the honest answer differs by
