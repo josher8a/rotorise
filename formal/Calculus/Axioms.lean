@@ -67,10 +67,36 @@ build stops here rather than in a reader's `#print axioms`. -/
 constructive and the guard records that. -/
 
 #assert_axioms uAtCan_of_separated
+#assert_axioms uAtCan_of_disjoint
 #assert_axioms uniqueAdmission_byTag
+#assert_axioms uniqueAdmission_of_kinds
 #assert_axioms not_uAtCan_literal_string
 #assert_axioms not_uAtCan_array_literals
 #assert_axioms not_uAtCan_literal_held
+
+/-! The three lemmas that pin §5's declaration-time devices to the denotation. Without
+these, `κ`, `adm` and `admA` are transcriptions of a table rather than claims about the
+model, so their axiom base is part of what the soundness statements rest on. -/
+
+#assert_axioms κ_sound
+#assert_axioms adm_sound
+#assert_axioms admA_sound
+
+/-! The fuel-free twins. `denoteω_eq` is the transport every ω-result travels along, so an
+axiom acquired here would reach all of them at once. -/
+
+#assert_axioms denoteω_eq
+#assert_axioms carrier_denoteω
+#assert_axioms typed_μSynω
+
+/-! §3's `Uν` for `opaque`, and §1's numeral domain. `opaq_T_identity` is the row
+`docs/codec-formalization.md` calls closed for `opaque`; its proof sits behind seven
+`omega` calls in `HeldSet.lean`, and `omega` is a known `Classical.choice` route — which
+makes it the single constant in this file with the most to lose from going unguarded. -/
+
+#assert_axioms opaq_T_identity
+#assert_axioms decimal_writes_wf
+#assert_axioms decimal_reads_wf
 
 /-! §7's continuity results — why fuel is not removable by a fixpoint. -/
 
