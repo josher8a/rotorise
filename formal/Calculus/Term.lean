@@ -20,6 +20,10 @@ mutual
 
 inductive Term where
   | string | number | decimal | boolean | binary
+  /-- §3 `(null)`: the `NULL` point. `Value.null` and `⟨NULL, ∗⟩` are in §1 and
+      `nullCodec` is one of `opaque`'s options, but until now no *term* denoted it —
+      so a schema could not say "this attribute is exactly NULL". -/
+  | null
   /-- §3 `(numeric)`: a caller-chosen subset of doubles, stored as `N`. -/
   | numeric  (q : Double → Bool)
   | literalS (ls : List String)

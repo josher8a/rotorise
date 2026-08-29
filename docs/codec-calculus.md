@@ -155,6 +155,9 @@ T ⊆ D,  T ≠ ∅
 ──────────────────────────────
 ⊢ binary : Bytes ⇝ B       (binary)
 
+──────────────────────────────
+⊢ null : {null} ⇝ NULL     (null)
+
 ℓ₁ … ℓₙ ∈ String,  n ≥ 1,  pairwise distinct
 ────────────────────────────────────────────── (literal-S)
 ⊢ literal(ℓ₁ … ℓₙ) : {ℓ₁ … ℓₙ} ⇝ S
@@ -303,9 +306,15 @@ Null-honesty is not a new kind of condition. `nullable(c)` is structurally the t
 write-honesty is uniqueness of admission on the way in, read-honesty on the way out. The mechanized
 proof closes the `nullable` case on precisely those premises and nothing else.
 
-The term stays primitive because it resolves the `NULL` reading by **precedence** where a union
-demands disjointness, and that precedence is not a convenience — it is load-bearing. The two
-constructions are **equivalent** in the sense of §6, with no side condition whatsoever
+Both spellings are available: `(null)` above makes `union(c, null)` a term, so a schema may write
+either. They are not interchangeable, and the difference is precedence. `nullable` resolves the
+`NULL` reading by **precedence**; the union demands disjointness. Concretely, `nullable` accepts a
+base that already handles `null` — `nullable(nullable(c))`, `nullable(opaque)` — and the union
+rejects it, because both options admit and (U) fails, the same way the member algebra rejects
+`set(set(c))`. Prefer the union when you want that rejection; prefer `nullable` when the base may
+itself be null-aware.
+
+The two constructions are **equivalent** in the sense of §6, with no side condition whatsoever
 (`equiv_orNull_altCodec`): `≡` compares the pairs where both are defined, and the only place they
 differ is where the union is *un*defined. They are the same *codec* only when `c` does not touch
 the null point at all — `e_c(null)` and `p_c(⟨NULL, ∗⟩)` both undefined (`orNull_eq_altCodec`),
@@ -313,8 +322,8 @@ which is strictly stronger than honesty, since honesty constrains which attribut
 written to and says nothing about whether `c` writes `null` at all. Where the base does handle
 null, the wrapper answers and the union refuses, because both options admit. The witness is not
 exotic: it is `nullable(nullable(c))`, the term whose idempotence §6 records
-(`orNull_ne_altCodec`). Desugaring `nullable` into `union` would therefore not preserve that row —
-it would make `nullable(nullable(c))` undefined at `null`.
+(`orNull_ne_altCodec`). So `nullable` is not sugar for the union: desugaring it would not preserve
+that row, and would make `nullable(nullable(c))` undefined at `null`.
 
 ---
 
@@ -436,6 +445,7 @@ k ∈ Kind ::= string | number | boolean | binary | set | array | map | null
 | `set(c)`                                          | `{set}`                                      |
 | `array(c)`, `tuple(…)`                            | `{array}`                                    |
 | `record(c)`, `object(…)`, `discriminatedUnion(…)` | `{map}`                                      |
+| `null`                                            | `{null}`                                     |
 | `nullable(c)`                                     | `κ(c) ∪ {null}`                              |
 | `refine`, `optional`, `fallback`, `legacy`        | of the subterm                               |
 | `union(c₁ … cₙ)`                                  | `⋃ κ(cᵢ)`                                    |
@@ -600,8 +610,8 @@ and the machine proof can be audited against each other case for case.
 
 **Points.** Each ground term writes one member, totally on its held set, and reads exactly that
 member back into the held set. **(W)** and **(C)** are immediate, `≼` is member equality with no
-substructure, and **(R)** is the carrier's round trip: identity for `string`, `boolean`, `binary`
-and `decimal` (a numeral is stored as written, so `Can(decimal)` is all of `N`), shortest-text for
+substructure, and **(R)** is the carrier's round trip: identity for `string`, `boolean`, `binary`,
+`null` (whose held set is the single value `null` and whose payload is `∗`) and `decimal` (a numeral is stored as written, so `Can(decimal)` is all of `N`), shortest-text for
 `number` and `literal‑N` — the §3 argument that every finite double survives. `numeric(T)`: the
 normative reading is `number`'s restricted to attributes landing in `T`, and every law restricts
 with it; the implementation elides the restriction, which is §3's unchecked precondition — off it,

@@ -114,6 +114,8 @@ inductive Typed : Term → Held → Option Member → Prop where
       grammar, not every string. -/
   | decimal : Typed .decimal (fun v => ∃ s, v = .str s ∧ Numeral.WF s = true) (some .N)
   | boolean : Typed .boolean (fun v => ∃ b, v = .bool b) (some .BOOL)
+  /-- §3 `(null)`: the point held set `{null}`, stored as `⟨NULL, ∗⟩`. -/
+  | null : Typed .null (fun v => v = .null) (some .NULL)
   | binary  : Typed .binary  (fun v => ∃ b, v = .bin b) (some .B)
   | numeric (q) : Typed (.numeric q) (fun v => ∃ d, q d ∧ v = .num d) (some .N)
   | literalS (ls : List String) (hne : ls ≠ []) (hnd : ls.Nodup) :
