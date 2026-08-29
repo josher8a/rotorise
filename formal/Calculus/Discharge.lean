@@ -90,8 +90,10 @@ end
 
 /-! ## `adm` — the sets an `ident` term checks against
 
-    §5's third auxiliary. `ident` says a term decides its own membership; `adm` says
-    *against what*. Only two terms carry a real set — a `literal`'s values and a
+    §5's third auxiliary, and the specification now states it as the two functions below
+    rather than as one: its table is term-by-term and matches these definitions clause for
+    clause, so a reviewer can read the two side by side. `ident` says a term decides its own
+    membership; `adm` says *against what*. Only two terms carry a real set — a `literal`'s values and a
     `discriminatedUnion`'s tags — and `refine`/`legacy` pass one through. Everywhere
     else `adm` is `true`: **no information**, which is what makes two such options
     never separable this way.
