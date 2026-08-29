@@ -23,6 +23,47 @@ structure Codec where
 def Codec.empty : Codec :=
   { T := fun _ => False, μ := none, e := fun _ => none, p := fun _ => none }
 
+/-! ## §2's two derived sets
+
+`≈c` and `Can(c)` are §2's own vocabulary and both were unavailable to it: the kernel had no
+name at all, and `Can` lived in `Equations.lean`, where §2 and §5 could not cite it. They are
+here for the same reason `Lawful` is — a §2 device belongs in §2's file. -/
+
+/-- §2's `≈c`: `a ≈c a′ ⟺ p(a) = p(a′)` — the kernel of the reading.
+
+    §2 is emphatic that this is not a parameter a programmer chooses. `e ∘ p` is a canonizer,
+    and the equivalence it works modulo "is forced by the reading itself": a set has no order
+    to preserve and digits have a normal form, so `e ∘ p = id` is false and must be. Naming
+    the relation is what lets (Q), §6's `e ∘ p ≢ id` row and §1's store concession cite one
+    thing rather than three spellings of the same equation.
+
+    **Not to be confused with `Codec.Equiv`,** which relates two *codecs* and is not
+    transitive (`not_equiv_trans`) — agreement-where-both-defined is not a kernel, and a pair
+    that is nowhere defined agrees with everything. `Ker` is the kernel of a function and is
+    an equivalence for exactly that reason (`ker_equivalence`). The two relations are one
+    symbol apart in the prose and behave differently, which is why they are stated together. -/
+def Codec.Ker (c : Codec) (a a' : Attr) : Prop := c.p a = c.p a'
+
+theorem Codec.Ker.refl (c : Codec) (a : Attr) : c.Ker a a := rfl
+
+theorem Codec.Ker.symm {c : Codec} {a a' : Attr} (h : c.Ker a a') : c.Ker a' a :=
+  Eq.symm h
+
+theorem Codec.Ker.trans {c : Codec} {a a' a'' : Attr}
+    (h : c.Ker a a') (h' : c.Ker a' a'') : c.Ker a a'' :=
+  Eq.trans h h'
+
+/-- `≈c` is an equivalence — because it is the kernel of a function, and for no other
+    reason. The contrast with `Codec.Equiv` is the whole content of the remark on `Ker`. -/
+theorem Codec.ker_equivalence (c : Codec) : Equivalence c.Ker :=
+  ⟨Codec.Ker.refl c, Codec.Ker.symm, Codec.Ker.trans⟩
+
+/-- §2's `Can(c) = e[T]`: the attributes some value actually writes. `e ∘ p` is total on this
+    set and merely partial on `𝔸` — "the precise sense in which a table is more permissive
+    than the schema describing it" — and §6's `≈` rows are the ones stated on it rather than
+    on all of `𝔸`. -/
+def Can (c : Codec) (a : Attr) : Prop := ∃ v, c.e v = some a
+
 /-- §5's `≼`: recursive member agreement. `L` compares pointwise on shared positions,
     `M` pointwise on shared names, sets no deeper than the member (payloads carry no
     member to disagree on). -/
@@ -64,10 +105,16 @@ structure LawfulCore (c : Codec) : Prop where
 theorem Lawful.core {c : Codec} (h : Lawful c) : LawfulCore c :=
   ⟨h.retract, h.canon, h.writes⟩
 
-/-- §2 Corollary (Q — stability): `e (p a) ≈c a`, i.e. the re-encoding reads back to the
-    same value — `ker p` relates the canonical attribute to the one read. -/
+/-- §2 Corollary (Q — stability): `∀ a ∈ dom(p). e(p(a)) ≈c a`.
+
+    Stated in `Ker` rather than as the bare equation, because `≈c` is what §2's proof of it
+    concludes and the previous spelling made a reviewer re-derive that the two are the same
+    sentence. Stability is retraction asked at a different *source of values*: **(R)** at
+    values a generator produced, **(Q)** at values a table returned, and what (Q) adds to (R)
+    is exactly **(C)**. -/
 theorem Lawful.stable {c : Codec} (h : Lawful c) {a t a'}
-    (hp : c.p a = some t) (he : c.e t = some a') : c.p a' = c.p a := by
+    (hp : c.p a = some t) (he : c.e t = some a') : c.Ker a' a := by
+  show c.p a' = c.p a
   rw [h.retract he, hp]
 
 /-- §2 Corollary (read-side W): a member-naming codec accepts only its member. -/
@@ -129,5 +176,40 @@ structure Carrier (c : Codec) : Prop where
 /-- The empty codec is on its (empty) carrier, vacuously. -/
 theorem Carrier.empty : Carrier Codec.empty := by
   refine ⟨?_, ?_⟩ <;> intro _ _ h <;> exact nomatch h
+
+/-- `Can(c)` is `e[T]`, as §2 writes it — and it takes `Carrier` to say so. Without `domE` a
+    codec could write an attribute from a value it does not claim to hold, and `Can` would be
+    strictly larger than the image of the held set. The two are the same set exactly when the
+    index is honest, which is what `Carrier` asserts. -/
+theorem can_iff_image {c : Codec} (h : Carrier c) {a : Attr} :
+    Can c a ↔ ∃ v, c.T v ∧ c.e v = some a := by
+  constructor
+  · rintro ⟨v, hv⟩; exact ⟨v, h.domE hv, hv⟩
+  · rintro ⟨v, -, hv⟩; exact ⟨v, hv⟩
+
+/-! ## §1's store, as a premise
+
+§2 composes `e` and `p` directly. In use there is a store between them and it is not the
+identity on attributes, which `Domain.lean` states in prose and answers with
+`Numeral.Stored`. This is the premise itself. -/
+
+/-- **`η ⊆ ker p`** — §1's concession, as a proposition.
+
+    Quantified over `Can(c)`, because those are the only attributes a store is ever handed:
+    `η` acts on what `e` wrote, never on all of `𝔸`. The unrestricted reading implies this
+    one and is strictly stronger than anything the round trip needs.
+
+    What it buys is `retract_through_store`: **(R)** with the store in the middle, which is
+    the law production actually runs and the one `decimal` broke. -/
+def SurvivesStore (c : Codec) (η : Attr → Attr) : Prop :=
+  ∀ a, Can c a → c.Ker (η a) a
+
+/-- **(R), through the store.** `η ⊆ ker p` is exactly what makes a codec survive a round
+    trip that passes through DynamoDB rather than through `Option` — and it is all it takes,
+    which is why §1 could answer the whole problem by narrowing one held set. -/
+theorem Lawful.retract_through_store {c : Codec} (h : Lawful c) {η : Attr → Attr}
+    (hη : SurvivesStore c η) {t a} (he : c.e t = some a) : c.p (η a) = some t := by
+  have hk : c.p (η a) = c.p a := hη a ⟨t, he⟩
+  rw [hk, h.retract he]
 
 end Calculus

@@ -1709,6 +1709,51 @@ theorem lawful_decimalCodec : Lawful decimalCodec := by
       · rw [if_neg hw] at hp; exact nomatch hp
     | _ => exact nomatch hp
 
+/-! ### `decimal` against the store (§1)
+
+`SurvivesStore` is the premise; these two are `decimal`'s answer to it, and together they say
+that narrowing the held set to `Numeral.Stored` was not merely *a* fix but the whole of one. -/
+
+/-- **`decimal`'s `ker p` is equality.** Its `p` is the identity on the digits, so two `N`
+    attributes read to the same value only when they are the same text. That is the fact §1
+    reasons from, and it is why `η ⊆ ker p` forces `η` to be the identity wherever `decimal`
+    can be handed an attribute. -/
+theorem ker_decimalCodec {x y : Numeral} (h : decimalCodec.Ker (.n x) (.n y))
+    (hx : Numeral.Stored x = true) : x = y := by
+  have h' : decimalCodec.p (.n x) = decimalCodec.p (.n y) := h
+  rw [decimalCodec_p_n, decimalCodec_p_n, if_pos hx] at h'
+  by_cases hy : Numeral.Stored y = true
+  · rw [if_pos hy] at h'
+    exact Value.str.inj (Option.some.inj h')
+  · rw [if_neg hy] at h'; exact nomatch h'
+
+/-- **The certificate for `Numeral.Stored`.** `decimal` survives the store exactly when `η`
+    fixes every numeral `decimal` can write — and since `Can(decimal)` is the *normal* forms
+    and a normalisation fixes its own normal forms, the narrowed held set discharges the
+    premise outright.
+
+    Read with `ker_decimalCodec`, this is both halves: the kernel is equality, so nothing
+    weaker than "η fixes it" would do, and `Stored` makes "η fixes it" true. The codec before
+    the narrowing is refuted in `Refutations.lean` (`not_survivesStore_decimalWF`).
+
+    Nothing here is claimed for `number`. §1 says it satisfies `η ⊆ ker p` for free because
+    `p "1.500"` and `p "1.5"` are the same double; that is a statement about `Double.ofDec`
+    and belongs with the axioms that pin it, not here. -/
+theorem survivesStore_decimalCodec {η : Attr → Attr}
+    (hη : ∀ s, Numeral.Stored s = true → η (.n s) = .n s) :
+    SurvivesStore decimalCodec η := by
+  rintro a ⟨v, hv⟩
+  cases v with
+  | str s =>
+    rw [decimalCodec_e_str] at hv
+    by_cases hs : Numeral.Stored s = true
+    · rw [if_pos hs] at hv
+      cases hv
+      show decimalCodec.p (η (.n s)) = decimalCodec.p (.n s)
+      rw [hη s hs]
+    · rw [if_neg hs] at hv; exact nomatch hv
+  | _ => exact nomatch hv
+
 /-- The `(number)` case — the one consuming the shortest-text axiom. -/
 theorem lawful_numberCodec : Lawful numberCodec := by
   refine ⟨?_, ?_, ?_, ?_⟩

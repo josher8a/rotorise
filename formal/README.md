@@ -134,11 +134,11 @@ seven specification defects (three found by both readings independently), five c
 are true but unlocatable, two corrections to this package's own artifacts, and a measured
 review surface. Regenerate the measurements with `python3 scripts/fidelity_audit.py`.
 
-The headline: the guard puts 35 constants through `#assert_axioms` while the documents
-cite 113 as results, §-tag coverage is 18%, and **60% of theorem statements name a
+The headline: the guard puts 42 constants through `#assert_axioms` while the documents
+cite 117 as results, §-tag coverage is 19%, and **59% of theorem statements name a
 definition that is documented nowhere** — a statement a reviewer cannot read against the
 specification without a detour. (The guard's count was 17 when the audit was written;
-items 1–5 of its plan closed the gap it measured, and its §5 records which.)
+items 1–5, 8 and 9 of its plan closed the gap it measured, and its §5 records which.)
 
 ## How the proofs are meant to read
 

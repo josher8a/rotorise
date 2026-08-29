@@ -91,6 +91,25 @@ The theorem is honest about where it stops, and both stopping points are in the 
 - **(U) — unique admission — is a premise at canonical inputs** (`UAtCan`), not a conclusion. It
   quantifies over all inputs and is undecidable at the declaration in general.
 
+### One law the specification states and the model can now run
+
+**(R), with the store in the middle.** §2 composes `e` and `p` directly; in use there is a
+DynamoDB between them, and it is not the identity on attributes. §1 answers that by narrowing
+`decimal`'s held set to `Numeral.Stored`, and the argument for the narrowing was prose: a codec
+survives the round trip exactly when the store's normalisation `η` **lies inside `ker p`**.
+
+`Codec.Ker` is that relation — §2's `≈c`, which had no name in the model — `SurvivesStore` is the
+inclusion, and `Lawful.retract_through_store` is what they buy. `decimal` now has both halves:
+`survivesStore_decimalCodec` (the narrowed held set discharges the premise, because a
+normalisation fixes its own normal forms) and `not_survivesStore_decimalWF` (the codec that
+gated on `WF` instead does not, and `"1.500"` is the witness). `ker_decimalCodec` is why the
+question is that sharp: `decimal`'s kernel is equality, so `η` must be the identity wherever the
+codec can be handed an attribute at all.
+
+This is the one place the calculus reaches past itself, and it is worth saying which direction
+the evidence ran. The defect was found by putting values in a real table (§4); the narrowing was
+the fix; this is the certificate that the fix is not merely sufficient but forced.
+
 ### The dischargers of (U)
 
 Decidable conditions, each sufficient for (U) on the unions it covers, all proved:

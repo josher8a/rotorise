@@ -352,10 +352,6 @@ theorem equiv_extendRead_self (c : Codec) : Codec.Equiv (c.extendRead c.p) c := 
     rw [extendRead_self_p] at h
     exact Option.some.inj (h.symm.trans h')
 
-/-- §2's `Can(c)`: the attributes some value actually writes. §6's `≈` rows are the ones
-    stated on this set rather than on all of `𝔸`. -/
-def Can (c : Codec) (a : Attr) : Prop := ∃ v, c.e v = some a
-
 /-- §6: `legacy(c, r) ≈ c` on `Can(c)`. A migration differs from the current encoding only
     *off* the canonical set — on it, `(R)` has already made `c.p` succeed, so `r` is never
     consulted. The premise is exactly `(R)`, which is why this row is about lawful codecs
