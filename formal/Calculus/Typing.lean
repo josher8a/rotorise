@@ -110,8 +110,9 @@ mutual
 inductive Typed : Term → Held → Option Member → Prop where
   | string  : Typed .string  (fun v => ∃ s, v = .str s) (some .S)
   | number  : Typed .number  (fun v => ∃ d, v = .num d) (some .N)
-  /-- `decimal` holds `Numerals`, carried as `str` values (§1). -/
-  | decimal : Typed .decimal (fun v => ∃ s, v = .str s) (some .N)
+  /-- `decimal` holds `Numerals`, carried as `str` values (§1) — and `Numerals` is §1's
+      grammar, not every string. -/
+  | decimal : Typed .decimal (fun v => ∃ s, v = .str s ∧ Numeral.WF s = true) (some .N)
   | boolean : Typed .boolean (fun v => ∃ b, v = .bool b) (some .BOOL)
   | binary  : Typed .binary  (fun v => ∃ b, v = .bin b) (some .B)
   | numeric (q) : Typed (.numeric q) (fun v => ∃ d, q d ∧ v = .num d) (some .N)
