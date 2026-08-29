@@ -299,6 +299,193 @@ export const checkStable = <T>(
 }
 
 /**
+ * **(C), the law nothing else here checks.**
+ *
+ * `p a = some v ⟹ e v is defined` — whatever a codec reads, it can write back. Everything else in
+ * this module generates *values* and round-trips them, so `decode` only ever sees attributes that
+ * `encode` produced. That is the wrong direction for (C): the attribute that breaks it is by
+ * definition one `encode` would never make.
+ *
+ * Three defects lived in that gap and all three shipped. `set` refused the empty set on the way in
+ * and returned it on the way out. `decimal` accepted `'1.50'`, which DynamoDB stores as `'1.5'`, so
+ * an item could be read and not written back. `numeric` cast a read without checking it. None was
+ * reachable from a generated value; each needed an attribute nobody would write, which is what this
+ * builds.
+ *
+ * The corpus is every encoded item, plus one **named mutation** at a time at every position in it.
+ * The names are the point: a counterexample says which shape found it, and each shape is a class of
+ * defect this project has actually had rather than a random perturbation.
+ *
+ * A failure to *decode* is never reported — refusing a mutated attribute is exactly right, and is
+ * what most of these do. What is reported is a mutation that decodes and then cannot be encoded.
+ */
+export const checkDecodesAreWritable = <T>(
+    subject: Checkable<T>,
+    {
+        count = 100,
+        seed = 0x5eed,
+        size = 4,
+        refine,
+        filter,
+    }: CheckOptions<T> = {},
+): void => {
+    const rng = rngFrom(seed)
+    for (let i = 0; i < count; i++) {
+        const raw = arbitraryOf(subject as never, rng, size) as T
+        const value = refine ? refine(raw) : raw
+        if (filter && !filter(value)) continue
+
+        let encoded: AttributeMap
+        try {
+            encoded = subject.unsafeEncode(value)
+        } catch {
+            continue // a value the codec declines to write says nothing about (C)
+        }
+
+        for (const { what, item } of mutations(encoded)) {
+            let read: T
+            try {
+                read = subject.unsafeDecode(item)
+            } catch {
+                continue // refusing it is the correct answer, and the common one
+            }
+            try {
+                subject.unsafeEncode(read)
+            } catch (error) {
+                throw new CodecError(
+                    `(C) fails: this attribute decodes and the value it yields cannot be encoded.\n` +
+                        `  mutation = ${what}\n` +
+                        `  seed     = ${seed}, case ${i}\n` +
+                        `  item     = ${JSON.stringify(item)}\n` +
+                        `  decoded  = ${JSON.stringify(read)}\n` +
+                        `  encoding it again said: ${(error as Error).message}`,
+                )
+            }
+        }
+    }
+}
+
+/** One mutated attribute, and the name of the shape that made it. */
+type Mutation = { readonly what: string; readonly item: AttributeMap }
+
+/**
+ * The shapes worth trying, each a class of defect rather than a random perturbation.
+ *
+ * Applied one at a time and one position at a time: a corpus of single-shape deviations from a
+ * real item, so a counterexample is as close to a working item as it can be while still being
+ * wrong. Nothing here is a shape DynamoDB itself produces — that is the point, since an item that
+ * came from somewhere else is exactly what a decoder exists to be suspicious of.
+ */
+const SHAPES: readonly {
+    readonly what: string
+    readonly to: (value: AttributeValue) => AttributeValue | undefined
+}[] = [
+    {
+        // `set`'s encode refused this and its decode returned it for as long as both existed
+        what: 'an empty set',
+        to: (v) => {
+            const m = memberOf(v)
+            if (m === 'SS') return { SS: [] }
+            if (m === 'NS') return { NS: [] }
+            if (m === 'BS') return { BS: [] }
+            return undefined
+        },
+    },
+    {
+        // the form DynamoDB normalises away, which `decimal` was writing and reading
+        what: 'a denormalised N',
+        to: (v) => (memberOf(v) === 'N' ? { N: `${v.N as string}0` } : undefined),
+    },
+    {
+        what: 'an N with a leading zero',
+        to: (v) => (memberOf(v) === 'N' ? { N: `0${v.N as string}` } : undefined),
+    },
+    {
+        what: 'an N past the magnitude DynamoDB stores',
+        to: (v) => (memberOf(v) === 'N' ? { N: '1e126' } : undefined),
+    },
+    {
+        what: 'an N that is not a number at all',
+        to: (v) => (memberOf(v) === 'N' ? { N: 'NaN' } : undefined),
+    },
+    {
+        what: 'an empty list',
+        to: (v) => (memberOf(v) === 'L' ? { L: [] } : undefined),
+    },
+    {
+        what: 'an empty map',
+        to: (v) => (memberOf(v) === 'M' ? { M: {} } : undefined),
+    },
+    {
+        what: 'a string where a number was stored',
+        to: (v) => (memberOf(v) === 'N' ? { S: v.N as string } : undefined),
+    },
+]
+
+/** Every position in an attribute, as a function that rebuilds the whole with one replaced. */
+const positions = (
+    value: AttributeValue,
+): readonly {
+    readonly at: AttributeValue
+    readonly rebuild: (replacement: AttributeValue) => AttributeValue
+}[] => {
+    const here = [{ at: value, rebuild: (r: AttributeValue) => r }]
+    const member = memberOf(value)
+    if (member === 'L') {
+        const items = value.L ?? []
+        return here.concat(
+            items.flatMap((child, index) =>
+                positions(child).map(({ at, rebuild }) => ({
+                    at,
+                    rebuild: (r: AttributeValue) => ({
+                        L: items.map((x, j) => (j === index ? rebuild(r) : x)),
+                    }),
+                })),
+            ),
+        )
+    }
+    if (member === 'M') {
+        const entries = Object.entries(value.M ?? {})
+        return here.concat(
+            entries.flatMap(([key, child]) =>
+                positions(child).map(({ at, rebuild }) => ({
+                    at,
+                    rebuild: (r: AttributeValue) => ({
+                        M: Object.fromEntries(
+                            entries.map(([k, x]) => [
+                                k,
+                                k === key ? rebuild(r) : x,
+                            ]),
+                        ),
+                    }),
+                })),
+            ),
+        )
+    }
+    return here
+}
+
+const mutations = (item: AttributeMap): readonly Mutation[] => {
+    const out: Mutation[] = []
+    for (const [key, attribute] of Object.entries(item)) {
+        for (const { at, rebuild } of positions(attribute)) {
+            for (const { what, to } of SHAPES) {
+                const replaced = to(at)
+                if (!replaced) continue
+                out.push({
+                    what: `${what}, at '${key}'`,
+                    item: { ...item, [key]: rebuild(replaced) },
+                })
+            }
+        }
+        // and the attribute missing altogether, which `optional` and `fallback` must survive
+        const { [key]: _dropped, ...without } = item
+        out.push({ what: `'${key}' absent`, item: without })
+    }
+    return out
+}
+
+/**
  * The member each attribute carries, recursively — the shape of an item without its values.
  */
 const membersOf = (value: AttributeValue): unknown => {

@@ -29,6 +29,7 @@ import {
 } from './codec'
 import {
     arbitraryOf,
+    checkDecodesAreWritable,
     checkEncodePaths,
     checkMembersStable,
     checkRoundTrip,
@@ -384,6 +385,15 @@ describe('the law', () => {
 
     it('holds for every generated listing', () => {
         checkRoundTrip(Listing, { count: 300, seed: 20260826, refine })
+    })
+
+    /** (C), against attributes nobody would write — see `codec.laws.spec.ts`. */
+    it('and everything it reads, it can write back', () => {
+        checkDecodesAreWritable(Listing, {
+            count: 60,
+            seed: 20260829,
+            refine,
+        })
     })
 
     it('and the three encode paths agree with each other', () => {

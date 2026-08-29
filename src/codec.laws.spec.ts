@@ -17,6 +17,8 @@ import {
     array,
     binary,
     boolean,
+    CodecError,
+    custom,
     decimal,
     fallback,
     held,
@@ -34,7 +36,11 @@ import {
     union,
     writes,
 } from './codec'
-import { checkEquivalent, checkIso } from './testing'
+import {
+    checkDecodesAreWritable,
+    checkEquivalent,
+    checkIso,
+} from './testing'
 
 const seed = 20260828
 
@@ -416,5 +422,90 @@ describe('the laws that do NOT hold', () => {
     it('a set is not an array', () => {
         expect(writes(set(string))).toBe('SS')
         expect(writes(array(string))).toBe('L')
+    })
+})
+
+/**
+ * **(C), against attributes nobody would write.**
+ *
+ * Everything above generates values. `checkDecodesAreWritable` generates *attributes* — every
+ * encoded item, plus one named deviation at a time — and asks the question the other direction
+ * cannot: is everything this codec reads something it can write back?
+ *
+ * Three shipped defects lived exactly there. The regression tests below are the shapes, planted
+ * deliberately, so the harness is checked against the class of bug it exists for rather than only
+ * against code that is already correct.
+ */
+describe('(C): what a codec reads, it can write', () => {
+    const Pet = object({
+        id: string,
+        price: decimal,
+        count: number,
+        tags: set(string),
+        steps: array(string),
+        note: optional(string),
+        nick: fallback(string, () => 'anon'),
+    }).item
+
+    it('holds for a wide entity, over every mutation of every attribute', () => {
+        checkDecodesAreWritable(Pet, { count: 40, seed: 20260829 })
+    })
+
+    it('holds for the ground codecs, each in its own attribute', () => {
+        const Ground = object({
+            s: string,
+            d: decimal,
+            n: number,
+            b: boolean,
+            bin: binary,
+            lit: literal('A', 'B'),
+            litN: literal(0, 1),
+            nul: nullable(string),
+        }).item
+        checkDecodesAreWritable(Ground, { count: 40, seed: 20260829 })
+    })
+
+    /**
+     * The `set` defect, planted: encode refuses the empty set, decode returns it. This is what the
+     * library did until the read side was closed, and no value-driven generator could reach it.
+     */
+    it('catches a decode that accepts what encode refuses', () => {
+        const leaky = custom<ReadonlySet<string>>({
+            encode: (value) =>
+                value.size === 0
+                    ? new CodecError('no empty SS')
+                    : ({ SS: [...value].sort() } as never),
+            decode: (attribute) =>
+                new Set((attribute as { SS?: readonly string[] }).SS ?? []),
+            arbitrary: () => new Set(['a']),
+        })
+        const Leaky = object({ id: string, tags: leaky }).item
+
+        expect(() =>
+            checkDecodesAreWritable(Leaky, { count: 5, seed: 1 }),
+        ).toThrow(/\(C\) fails/)
+        expect(() =>
+            checkDecodesAreWritable(Leaky, { count: 5, seed: 1 }),
+        ).toThrow(/an empty set/)
+    })
+
+    /**
+     * The `decimal` defect, planted: a codec that writes only normalised numerals and reads any of
+     * them. The mutation that finds it is the one DynamoDB itself performs in reverse.
+     */
+    it('catches a decode that accepts a form its encode will not produce', () => {
+        const loose = custom<string>({
+            encode: (value) =>
+                /^-?(0|[1-9]\d*)(\.\d*[1-9])?$/.test(value)
+                    ? ({ N: value } as never)
+                    : new CodecError('not normalised'),
+            decode: (attribute) => (attribute as { N: string }).N,
+            arbitrary: () => '1.5',
+        })
+        const Loose = object({ id: string, amount: loose }).item
+
+        expect(() =>
+            checkDecodesAreWritable(Loose, { count: 5, seed: 1 }),
+        ).toThrow(/\(C\) fails/)
     })
 })
