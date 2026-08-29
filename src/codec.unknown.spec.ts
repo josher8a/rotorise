@@ -97,6 +97,11 @@ describe('what it refuses, and what it tells you instead', () => {
         expect(() => opaque.unsafeEncode(new Set())).toThrow(/no empty set/)
     })
 
+    it('refuses to read one back, for the same reason', () => {
+        expect(() => opaque.unsafeDecode({ SS: [] })).toThrow(/no empty SS/)
+        expect(() => opaque.unsafeDecode({ NS: [] })).toThrow(/no empty NS/)
+    })
+
     it('refuses a bigint nested deep, not just at the top', () => {
         expect(() => opaque.unsafeEncode({ a: [{ b: 1n }] })).toThrow(
             CodecError,

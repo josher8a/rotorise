@@ -913,12 +913,20 @@ export const set = <const C extends AnyCodec>(
                               [...new Set(written)].sort() as never,
                           ) as SetOf<C>,
                   ),
+        // the empty set is refused in *both* directions, and the read side is the one that
+        // matters: DynamoDB never stores an empty `SS`, so an item carrying one was written by
+        // something else. Decoding it would hand back a value this codec's own `encode` refuses —
+        // the pair's two halves disagreeing about what it holds, which is (C) failing
         decode: (attribute) =>
             andThen(
                 andThen(expect(setMember, attribute), (members) =>
-                    every(members as readonly unknown[], (raw) =>
-                        inner.decode(carrying(member, raw as never)),
-                    ),
+                    (members as readonly unknown[]).length === 0
+                        ? new CodecError(
+                              `DynamoDB has no empty ${setMember}, so this attribute was not written by it; a set this codec would refuse to write is not one it can read`,
+                          )
+                        : every(members as readonly unknown[], (raw) =>
+                              inner.decode(carrying(member, raw as never)),
+                          ),
                 ),
                 (read) => new Set(read) as ReadonlySet<T>,
             ),
@@ -1176,6 +1184,22 @@ export const record = <const C extends AnyCodec>(
  * })
  * const petId = refine(string, isPetId)
  * ```
+ *
+ * **The obligation is `is`, and it is yours.** Like `held`'s pair and `custom`'s two functions,
+ * `refine` is sound *iff* the predicate honestly decides `Narrow` — nothing here can check that,
+ * because `Narrow` is a type and `is` is a claim about it. What follows from the claim is why the
+ * two directions are checked differently:
+ *
+ * - **`decode` runs `is`.** A stored value was never type-checked — a row is data somebody else
+ *   wrote — so the predicate is the only thing between the database and `Narrow`.
+ * - **`encode` does not.** Its argument is already a `Narrow`, and TypeScript is what says so.
+ *   Re-running `is` would assert nothing the call site had not already asserted.
+ *
+ * The asymmetry tracks how far the type system's guarantee reaches. Past that edge — `unsafeEncode`
+ * still runs `encode`, but an `as` upstream of it is not checked by anything — `refine` will write
+ * a value it would refuse to read. {@link literal} checks both directions for exactly that reason:
+ * a union can widen a field's type, so the guarantee is not available, and its admissible set is
+ * data this library owns, which gives the check an authority a caller's predicate cannot have.
  */
 export const refine = <Wide, Narrow extends Wide, A extends AttributeValue>(
     inner: AttributeCodec<Wide, A>,
@@ -1901,8 +1925,15 @@ const decodeUnknown = (
             return attribute[member]
         case 'SS':
         case 'NS':
-        case 'BS':
-            return new Set(attribute[member] as readonly unknown[])
+        case 'BS': {
+            // as in `set`: encode has no empty set to offer, so decode has none to return
+            const members = attribute[member] as readonly unknown[]
+            return members.length === 0
+                ? new CodecError(
+                      `DynamoDB has no empty ${member}, so this attribute was not written by it`,
+                  )
+                : new Set(members)
+        }
         case 'L':
             return every(attribute.L ?? [], (x) => decodeUnknown(x, numbers))
         case 'M':
