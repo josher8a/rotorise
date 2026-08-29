@@ -238,7 +238,7 @@ Stated plainly, because a certificate that hides its edges is worth less than on
 | **Recursive `union`**                   | Unmodelled — and not for convenience. `union`'s unique admission is *anti-monotone* in its options, so a union whose options are genuinely recursive has no fixpoint semantics at all (§7, `Continuity.lean`). `Term.lazy` carries `Unit → Term`, which defeats the termination checker without adding a single term, so every term in the model is finite. `lazy` under `union` is therefore not merely awkward to model; it is outside the model, and (U) is why. |
 | **(MP) under `legacy`**                 | Off, by design, on re-read attributes.                                                      |
 | **`T` as an identity**                  | **Closed for `opaque`** — `opaq_T_identity` proves `(opaqCodecω ν).T = Uν` exactly, the case this row said bites hardest. Still open for the other constructors, and *false* for `union` without full (U): `T` is the union of the options' sets, but `e` refuses wherever two of them admit, so the surplus is real. The general blocker is gone — the "fuel exceeds depth" hypothesis is now `Value.depth`/`termDepth`. |
-| **§1's numeral domain**                 | `Numeral := String`; grammar, 38 digits and magnitude unmodelled. So `decimal` currently holds every string. Now checkable: tighten the predicate and `typed_e_mem` reports whether the codec respects it. |
+| **§1's numeral domain**                 | **Modelled.** `Numeral.WF` (Domain.lean) carries §1's three clauses — grammar, ≤ 38 significant digits, magnitude `0` or `1e-130 … 9.9…e125` — and `decimal` gates on it, so it no longer holds every string. `decimal_writes_wf`/`decimal_reads_wf` are the report. The *carrier* is still unrestricted (`Attr.n "abc"` remains representable), which is the honest split: §1 says which strings DynamoDB accepts in an `N`, and the calculus's job is that its codecs write only those. Two narrowings are noted at the definition: a bare integer part is required, and significance is counted between first and last nonzero digit. |
 | **`(numeric)`'s `T ≠ ∅`**               | Dropped. `T ⊆ D` is vacuous while `D` is unmodelled, and the specification calls it an unchecked precondition; `T ≠ ∅` is simply absent. |
 | **§6's equations**                      | **Complete — twenty of twenty.** The "do not hold" table is settled: eight machine-checked, and `optional(optional(c))` enforced by the syntax, since no `Field` constructor takes a `Field`. All eleven "Hold" rows are proved. `union` associativity, the table's only *conditional* row, holds **without** its conditions — see §4. |
 | **`Double`**                            | Axiomatized with exactly the shortest-text round trip `(number)` consumes. IEEE-754 facts are not this calculus's theorems. |
@@ -353,7 +353,8 @@ to any system and any port.
    calculus is sound" and "what ships is correct".
 2. ~~**Refute §6's "do not hold" table**~~ — **done**, and the "Hold" table with it. §6 is
    complete, twenty of twenty.
-3. **Tighten §1's numeral domain**, now that `typed_e_mem` can check it.
+3. ~~**Tighten §1's numeral domain**~~ — **done** (§6). `decimal` now holds `Numerals`, not
+   every string.
 4. ~~**De-fuel the denotation**~~ — **done** (§7), and with it `T` **as an identity** for
    `opaque`. What remains of that row is the other constructors, where the honest answer differs by
    rule: containers and wrappers should go through much as `opaque` did, but `union` needs (U) in

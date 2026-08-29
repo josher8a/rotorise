@@ -47,11 +47,19 @@ def numberCodec : Codec :=
     e := fun v => match v with | .num d => some (.n d.toDec) | _ => none
     p := fun a => match a with | .n x => (Double.ofDec x).map Value.num | _ => none }
 
+/-- §3 `(decimal)`. The held set is §1's `Numerals`, not every string: the grammar, the
+    38 significant digits and the magnitude range are checked on both halves. The read
+    side has to check as well — an ill-formed numeral admitted by `p` would name a value
+    `e` then refuses, and that is **(C)** failing. -/
 def decimalCodec : Codec :=
-  { T := fun v => ∃ s, v = .str s
+  { T := fun v => ∃ s, v = .str s ∧ Numeral.WF s = true
     μ := some .N
-    e := fun v => match v with | .str s => some (.n s) | _ => none
-    p := fun a => match a with | .n x => some (.str x) | _ => none }
+    e := fun v => match v with
+      | .str s => if Numeral.WF s then some (.n s) else none
+      | _ => none
+    p := fun a => match a with
+      | .n x => if Numeral.WF x then some (.str x) else none
+      | _ => none }
 
 def numericCodec (q : Double → Bool) : Codec :=
   { T := fun v => ∃ d, q d ∧ v = .num d
@@ -696,8 +704,22 @@ theorem carrier_stringCodec : Carrier stringCodec := by
 
 theorem carrier_decimalCodec : Carrier decimalCodec := by
   refine ⟨?_, ?_⟩
-  · intro v a h; cases v <;> first | exact ⟨_, rfl⟩ | exact nomatch h
-  · intro a v h; cases a <;> first | (cases h; exact ⟨_, rfl⟩) | exact nomatch h
+  · intro v a h
+    cases v with
+    | str s =>
+      replace h : (if Numeral.WF s = true then some (Attr.n s) else none) = some a := h
+      by_cases hw : Numeral.WF s = true
+      · exact ⟨s, rfl, hw⟩
+      · rw [if_neg hw] at h; exact nomatch h
+    | _ => exact nomatch h
+  · intro a v h
+    cases a with
+    | n x =>
+      replace h : (if Numeral.WF x = true then some (Value.str x) else none) = some v := h
+      by_cases hw : Numeral.WF x = true
+      · rw [if_pos hw] at h; cases h; exact ⟨x, rfl, hw⟩
+      · rw [if_neg hw] at h; exact nomatch h
+    | _ => exact nomatch h
 
 theorem carrier_booleanCodec : Carrier booleanCodec := by
   refine ⟨?_, ?_⟩
@@ -1315,20 +1337,52 @@ theorem lawful_nullCodec : Lawful nullCodec := by
     subst_vars
     exact .null
 
+/-- `e` and `p` gate on the *same* predicate applied to the *same* text, so each law
+    reduces to that one decision. -/
+theorem decimalCodec_e_str (s : String) :
+    decimalCodec.e (.str s) = if Numeral.WF s then some (.n s) else none := rfl
+
+theorem decimalCodec_p_n (x : Numeral) :
+    decimalCodec.p (.n x) = if Numeral.WF x then some (.str x) else none := rfl
+
 theorem lawful_decimalCodec : Lawful decimalCodec := by
   refine ⟨?_, ?_, ?_, ?_⟩
   · intro t a he
-    cases t <;> simp_all [decimalCodec] <;> subst_vars <;> rfl
+    cases t with
+    | str s =>
+      rw [decimalCodec_e_str] at he
+      by_cases hw : Numeral.WF s = true
+      · rw [if_pos hw] at he; cases he; rw [decimalCodec_p_n, if_pos hw]
+      · rw [if_neg hw] at he; exact nomatch he
+    | _ => exact nomatch he
   · intro a t hp
-    cases a <;> simp_all [decimalCodec] <;> subst_vars <;> rfl
+    cases a with
+    | n x =>
+      rw [decimalCodec_p_n] at hp
+      by_cases hw : Numeral.WF x = true
+      · rw [if_pos hw] at hp; cases hp; rw [decimalCodec_e_str, if_pos hw]; rfl
+      · rw [if_neg hw] at hp; exact nomatch hp
+    | _ => exact nomatch hp
   · intro μ hμ t a he
-    cases t <;> simp_all [decimalCodec, Attr.member] <;> subst_vars <;> rfl
+    cases t with
+    | str s =>
+      rw [decimalCodec_e_str] at he
+      by_cases hw : Numeral.WF s = true
+      · rw [if_pos hw] at he; cases he; cases hμ; rfl
+      · rw [if_neg hw] at he; exact nomatch he
+    | _ => exact nomatch he
   · intro a t a' hp he
-    cases a <;> simp_all [decimalCodec]
-    subst_vars
-    try simp_all [decimalCodec]
-    subst_vars
-    exact .n ..
+    cases a with
+    | n x =>
+      rw [decimalCodec_p_n] at hp
+      by_cases hw : Numeral.WF x = true
+      · rw [if_pos hw] at hp
+        cases hp
+        rw [decimalCodec_e_str, if_pos hw] at he
+        cases he
+        exact .n ..
+      · rw [if_neg hw] at hp; exact nomatch hp
+    | _ => exact nomatch hp
 
 /-- The `(number)` case — the one consuming the shortest-text axiom. -/
 theorem lawful_numberCodec : Lawful numberCodec := by

@@ -172,4 +172,73 @@ theorem opaq_T_identity (lossy : Bool) (v : Value) :
   · intro h
     exact ⟨Value.depth v, hopaque_T lossy v (Value.depth v) h (Nat.le_refl _)⟩
 
+/-! ## §1's numeral domain, checked
+
+`docs/codec-formalization.md` §6 listed `Numeral := String` as a gap: the grammar, the 38
+significant digits and the magnitude range were unmodelled, "so `decimal` currently holds
+every string", with the note that once the predicate is tightened `typed_e_mem` reports
+whether the codec respects it. `Domain.lean` now carries §1's predicate and
+`decimalCodec` gates on it, so here is that report.
+
+The carrier is deliberately *not* restricted — `Attr.n "abc"` is still representable,
+because §1 describes which strings DynamoDB accepts in an `N`, and the calculus's job is
+that its codecs write only those. What changed is that the claim is now checkable. -/
+
+/-- `decimal`'s held set is exactly §1's `Numerals`. -/
+theorem decimal_T (v : Value) :
+    (denoteω .decimal).T v ↔ ∃ s, v = .str s ∧ Numeral.WF s = true := Iff.rfl
+
+/-- **The report.** A derivable `decimal` writes only well-formed numerals — the tightened
+    `: T` index, cashed on the attribute side. -/
+theorem decimal_writes_wf {v : Value} {a : Attr}
+    (he : (denoteω .decimal).e v = some a) :
+    ∃ x, a = .n x ∧ Numeral.WF x = true := by
+  cases v with
+  | str s =>
+    replace he : (if Numeral.WF s = true then some (Attr.n s) else none) = some a := he
+    by_cases hw : Numeral.WF s = true
+    · rw [if_pos hw] at he; cases he; exact ⟨s, rfl, hw⟩
+    · rw [if_neg hw] at he; exact nomatch he
+  | _ =>
+    replace he : (none : Option Attr) = some a := he
+    exact nomatch he
+
+/-- Dually, it reads only well-formed numerals — which is not a nicety: a `p` accepting an
+    ill-formed `N` would name a value `e` then refuses, and that is **(C)** failing. -/
+theorem decimal_reads_wf {a : Attr} {v : Value}
+    (hp : (denoteω .decimal).p a = some v) :
+    ∃ x, a = .n x ∧ Numeral.WF x = true := by
+  cases a with
+  | n x =>
+    replace hp : (if Numeral.WF x = true then some (Value.str x) else none) = some v := hp
+    by_cases hw : Numeral.WF x = true
+    · exact ⟨x, rfl, hw⟩
+    · rw [if_neg hw] at hp; exact nomatch hp
+  | _ =>
+    replace hp : (none : Option Value) = some v := hp
+    exact nomatch hp
+
+/-! ### The gap that closed
+
+Before the tightening, `decimal` wrote an `N` for every string. It no longer does, and §1's
+own worked example still goes through — the doc is explicit that `"1e+21"` is well formed
+and "not a defect", the bound that bites being magnitude rather than notation. -/
+
+theorem decimal_refuses_nonNumeral : (denoteω .decimal).e (.str "abc") = none := rfl
+
+theorem decimal_refuses_overMagnitude : (denoteω .decimal).e (.str "1e130") = none := rfl
+
+theorem decimal_refuses_39_digits :
+    (denoteω .decimal).e (.str "123456789012345678901234567890123456789") = none := rfl
+
+/-- §1's own example: an exponent is notation, not a magnitude violation. -/
+theorem decimal_accepts_exponent :
+    (denoteω .decimal).e (.str "1e+21") = some (.n "1e+21") := rfl
+
+/-- Both magnitude boundaries are inside the domain. -/
+theorem decimal_accepts_min : (denoteω .decimal).e (.str "1e-130") = some (.n "1e-130") :=
+  rfl
+
+theorem decimal_accepts_max : (denoteω .decimal).e (.str "9e125") = some (.n "9e125") := rfl
+
 end Calculus
