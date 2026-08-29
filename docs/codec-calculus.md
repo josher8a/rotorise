@@ -306,24 +306,26 @@ Null-honesty is not a new kind of condition. `nullable(c)` is structurally the t
 write-honesty is uniqueness of admission on the way in, read-honesty on the way out. The mechanized
 proof closes the `nullable` case on precisely those premises and nothing else.
 
-Both spellings are available: `(null)` above makes `union(c, null)` a term, so a schema may write
-either. They are not interchangeable, and the difference is precedence. `nullable` resolves the
-`NULL` reading by **precedence**; the union demands disjointness. Concretely, `nullable` accepts a
-base that already handles `null` — `nullable(nullable(c))`, `nullable(opaque)` — and the union
-rejects it, because both options admit and (U) fails, the same way the member algebra rejects
-`set(set(c))`. Prefer the union when you want that rejection; prefer `nullable` when the base may
-itself be null-aware.
+`(null)` above makes `union(c, null)` a term, so both spellings exist — and mechanizing the
+relation between them gives a **dichotomy**, not a trade-off:
 
-The two constructions are **equivalent** in the sense of §6, with no side condition whatsoever
-(`equiv_orNull_altCodec`): `≡` compares the pairs where both are defined, and the only place they
-differ is where the union is *un*defined. They are the same *codec* only when `c` does not touch
-the null point at all — `e_c(null)` and `p_c(⟨NULL, ∗⟩)` both undefined (`orNull_eq_altCodec`),
-which is strictly stronger than honesty, since honesty constrains which attribute a value is
-written to and says nothing about whether `c` writes `null` at all. Where the base does handle
-null, the wrapper answers and the union refuses, because both options admit. The witness is not
-exotic: it is `nullable(nullable(c))`, the term whose idempotence §6 records
-(`orNull_ne_altCodec`). So `nullable` is not sugar for the union: desugaring it would not preserve
-that row, and would make `nullable(nullable(c))` undefined at `null`.
+- where `c` does not touch the null point — `e_c(null)` and `p_c(⟨NULL, ∗⟩)` both undefined —
+  `nullable(c)` and `union(c, null)` are the **same codec** (`orNull_eq_altCodec`);
+- where `c` does touch it, `nullable(c)` is **equal to `c`** (`orNull_eq_self`): the wrapper adds
+  nothing. `nullable(opaque) = opaque`, `nullable(nullable(c)) = nullable(c)` — §6's idempotence
+  row as an equation — and `nullable(union(…, null)) = union(…, null)`.
+
+So `nullable` is either the union or the identity, and the precedence that distinguishes it buys
+nothing a schema would want. (The two are also `≡` unconditionally, `equiv_orNull_altCodec`; they
+differ as codecs only in definedness, and only where the wrapper is redundant. The single term
+outside both readings is `nullable(null)` — member `⊤` over the `NULL` point, of no use.)
+
+This is recorded because it bears on whether `nullable` should be a term at all. It earns its
+place as **surface syntax**, and the honesty premises it carries are the price of *not* going
+through `(U)` — where `union(c, null)` is discharged at the declaration by kind disjointness for
+every `c` whose `κ` is not `⊤`, `nullable(c)`'s two premises have no discharger. The argument for
+keeping it primitive is compatibility and the `κ = ⊤` cases (`held`, `custom`, `lazy`), not
+expressiveness: it expresses nothing new.
 
 ---
 

@@ -141,10 +141,15 @@ honesty, which is why the precedence is harmless". Mechanizing it showed the sen
 
 Honesty constrains which *attribute* a value is written to; it says nothing about whether `c`
 writes `null` at all. Where the base does handle null both options admit, (U) fails, and the union
-is undefined exactly where the wrapper answers. The witness is `nullable(nullable(c))` —
-the term §6's idempotence row is about (`orNull_ne_altCodec`). So the precedence is not harmless
-but **load-bearing**: it is what keeps `nullable(nullable(c))` total, and desugaring `nullable`
-into `union` would turn that §6 row from a theorem into a falsehood. §3 now says this.
+is undefined exactly where the wrapper answers (`orNull_ne_altCodec`, at `nullable(nullable(c))`).
+
+The first reading of that was that the precedence is therefore **load-bearing**. It is not, and
+the correction is worth recording as its own step, because it was reached by someone pushing back
+on the justification rather than by the proof assistant. `orNull_eq_self` closes the dichotomy:
+where the base *does* handle null, `nullable(c) = c`. So `nullable` is either the union or the
+identity — `nullable(opaque) = opaque`, `nullable(nullable(c)) = nullable(c)` — and the precedence
+buys nothing a schema would want. §3 now states the dichotomy, and says `nullable` earns its place
+as surface syntax rather than as expressiveness.
 
 ### One that ran the other way
 

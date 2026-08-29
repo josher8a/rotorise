@@ -118,9 +118,12 @@ sharper than the claim:
   it is `nullable(nullable(c))`, the very term §6's idempotence row is about, where both
   options admit `null` and the union therefore refuses (`orNull_ne_altCodec`).
 
-So the precedence is not "harmless": it is **load-bearing**. It is what keeps
-`nullable(nullable(c))` total, and desugaring `nullable` into `union` would make §6's
-idempotence row false rather than provable. -/
+What the precedence buys, however, is nothing. `orNull_eq_self` below closes the
+dichotomy: where `nullable(c)` differs from `union(c, ⟨NULL⟩-point)` — that is, where the
+base already handles null — the wrapper is *equal to its own base*. So the two
+constructions never disagree on a codec anyone would write: either `nullable` is the
+union, or it is the identity. The only term outside both is `nullable(null)`, member `⊤`
+over the `NULL` point, which is of no use. -/
 
 /-- The equivalence, unconditionally. -/
 theorem equiv_orNull_altCodec (c : Codec) :
@@ -193,6 +196,36 @@ theorem orNull_ne_altCodec :
     have : (stringCodec.orNull).orNull.e .null
         = (altCodec [.byAttempt stringCodec.orNull, nullOption] none).e .null := by rw [h]
     exact nomatch this⟩
+
+/-- **`nullable` is either the union or the identity.** If the base already handles the
+    null point, the wrapper adds nothing at all — not `≡`, *equal*. Together with
+    `orNull_eq_altCodec` (the base does not handle it: the wrapper *is* the union) this
+    is a dichotomy, and it is what makes `nullable` redundant wherever it differs from
+    `union(c, null)`:
+
+    * `nullable(opaque) = opaque` — `opaque` offers the `NULL` point among its options;
+    * `nullable(nullable(c)) = nullable(c)` — §6's idempotence row, as an equation
+      rather than an equivalence;
+    * `nullable(union(…, null)) = union(…, null)`.
+
+    The `μ = none` premise is what the wrapper itself always satisfies, so the dichotomy
+    is closed under nesting. The one term it does not reach is `nullable(null)` — member
+    `⊤` over the `NULL` point, distinct from both `null` and any union, and of no use. -/
+theorem orNull_eq_self {c : Codec} (hl : Lawful c) (hc : Carrier c)
+    (hr : ∀ a v, c.p a = some v → v = .null → a = .null)
+    (hn : (c.e .null).isSome) (hμ : c.μ = none) : c.orNull = c := by
+  obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp hn
+  obtain rfl : a = .null := hr a .null (hl.retract ha) rfl
+  have hp : c.p .null = some .null := hl.retract ha
+  refine Codec.ext ?_ hμ.symm ?_ ?_
+  · funext v
+    refine propext ⟨?_, ?_⟩
+    · rintro (h | rfl)
+      · exact h
+      · exact hc.domE ha
+    · exact .inl
+  · funext v; cases v <;> simp [Codec.orNull, ha]
+  · funext x; cases x <;> simp [Codec.orNull, hp]
 
 /-! ## `union` is commutative
 
