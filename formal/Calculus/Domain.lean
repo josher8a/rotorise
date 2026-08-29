@@ -41,9 +41,15 @@ Note the read side has to check too, not merely the write side. If `p` accepted 
 ill-formed numeral it would return a value `e` then refuses, breaking **(C)** — so the
 grammar is forced onto both halves by the laws, not by taste.
 
-Two simplifications, both narrowing rather than widening: a bare integer part is required
-(`".5"` and `"1."` are rejected, as DynamoDB rejects them), and significance is counted
-between the first and last nonzero digit, which is the trimming DynamoDB documents. -/
+One simplification, narrowing rather than widening: a bare integer part is required, so
+`".5"` and `"1."` are rejected. The reason first given for that was wrong — DynamoDB
+*accepts* both and normalises them to `"0.5"` and `"1"` (`src/codec.dynamodb.spec.ts`). The
+narrowing stands, because `Stored` below rejects them anyway, but it is a narrowing of §1
+rather than a transcription of it. Significance is counted between the first and last
+nonzero digit, which is the trimming DynamoDB documents.
+
+**`WF` is what DynamoDB accepts; `Stored` is what it hands back.** They are different
+sets, and the difference is not cosmetic — see below. -/
 
 namespace Numeral
 
@@ -119,13 +125,81 @@ def decExp (p : Parsed) : Int :=
   let leading := m.length - (dropLeadingZeros m).length
   (p.intDigits.length : Int) - 1 - (leading : Int) + p.exp
 
-/-- §1's `Numerals`: the grammar, 38 significant digits, and DynamoDB's magnitude range. -/
+/-- §1's `Numerals`: the grammar, 38 significant digits, and DynamoDB's magnitude range —
+    what the service **accepts** in an `N`. -/
 def WF (s : Numeral) : Bool :=
   match parse s with
   | none => false
   | some p =>
     decide ((significand p).length ≤ 38) &&
       (isZero p || (decide (-130 ≤ decExp p) && decide (decExp p ≤ 125)))
+
+/-! ### What the store hands back
+
+§2 composes a codec's `e` and `p` directly. In use there is a **store** between them, and
+it is not the identity on attributes: DynamoDB normalises every `N` it accepts — trimming
+leading and trailing zeros, dropping `+`, expanding exponents, and keeping one spelling of
+zero. Measured rather than assumed: `src/codec.dynamodb.spec.ts` puts each of these forms into a
+real table and reads it back, and the two theorems below are that measurement.
+
+Write `η` for the store's normalisation. A codec survives the round trip through the store
+exactly when **`η` lies inside `ker p`** — §2's `≈c`, the relation that already exists for
+"a different attribute that reads to the same value". `number` satisfies it for free:
+`p "1.500"` and `p "1.5"` are the same double. `decimal` cannot, because its `p` is the
+identity on the digits, so `ker p` is equality and `η` would have to be too.
+
+So `decimal`'s held set is not `Numerals`. It is the numerals the store returns unchanged,
+and that is what this predicate is. -/
+
+/-- Digits with no leading zero — or exactly `"0"`. -/
+def normalInt : List Char → Bool
+  | [] => false
+  | ['0'] => true
+  | '0' :: _ :: _ => false
+  | ds => ds.all Char.isDigit
+
+/-- Fraction digits: at least one, all digits, and the last one not a zero. -/
+def normalFrac (ds : List Char) : Bool :=
+  match ds.getLast? with
+  | none => false
+  | some d => ds.all Char.isDigit && d != '0'
+
+/-- A magnitude in the form the store returns: no exponent, no leading zeros, no trailing
+    fractional zeros. -/
+def normalMag (cs : List Char) : Bool :=
+  let (ip, r) := spanDigits cs
+  normalInt ip &&
+    match r with
+    | [] => true
+    | '.' :: fp => normalFrac fp
+    | _ => false
+
+/-- **What DynamoDB stores.** `WF` says the service accepts the string; this says it hands
+    the same string back. The sign is refused on zero, because `"-0"` comes back `"0"`. -/
+def Normal (s : Numeral) : Bool :=
+  match s.data with
+  | '-' :: cs => normalMag cs && !(cs == ['0'])
+  | cs => normalMag cs
+
+/-- `decimal`'s held set: accepted *and* returned unchanged. -/
+def Stored (s : Numeral) : Bool := WF s && Normal s
+
+/-- The measured table's left column — written, and returned as something else. Every row
+    that changed is a row `Stored` must reject. -/
+theorem stored_rejects_denormal :
+    (Stored "1.500" = false) ∧ (Stored "007" = false) ∧ (Stored "+1" = false) ∧
+      (Stored "1e5" = false) ∧ (Stored "-0" = false) ∧ (Stored "0.0" = false) ∧
+      (Stored "1.0" = false) ∧ (Stored ".5" = false) ∧ (Stored "1." = false) ∧
+      (Stored "01" = false) := by decide
+
+/-- And the rows that came back as written. -/
+theorem stored_accepts_normal :
+    (Stored "0" = true) ∧ (Stored "1.5" = true) ∧ (Stored "0.5" = true) ∧
+      (Stored "10" = true) ∧ (Stored "100" = true) ∧ (Stored "-1.5" = true) ∧
+      (Stored "0.0000001" = true) ∧ (Stored "1000000000000000000000" = true) := by decide
+
+/-- The two sets really do differ: the service accepts strings it will not hand back. -/
+theorem stored_lt_wf : ∃ s, WF s = true ∧ Stored s = false := ⟨"1.500", by decide⟩
 
 end Numeral
 

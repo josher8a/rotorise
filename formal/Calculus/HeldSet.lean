@@ -186,17 +186,17 @@ that its codecs write only those. What changed is that the claim is now checkabl
 
 /-- `decimal`'s held set is exactly §1's `Numerals`. -/
 theorem decimal_T (v : Value) :
-    (denoteω .decimal).T v ↔ ∃ s, v = .str s ∧ Numeral.WF s = true := Iff.rfl
+    (denoteω .decimal).T v ↔ ∃ s, v = .str s ∧ Numeral.Stored s = true := Iff.rfl
 
 /-- **The report.** A derivable `decimal` writes only well-formed numerals — the tightened
     `: T` index, cashed on the attribute side. -/
-theorem decimal_writes_wf {v : Value} {a : Attr}
+theorem decimal_writes_stored {v : Value} {a : Attr}
     (he : (denoteω .decimal).e v = some a) :
-    ∃ x, a = .n x ∧ Numeral.WF x = true := by
+    ∃ x, a = .n x ∧ Numeral.Stored x = true := by
   cases v with
   | str s =>
-    replace he : (if Numeral.WF s = true then some (Attr.n s) else none) = some a := he
-    by_cases hw : Numeral.WF s = true
+    replace he : (if Numeral.Stored s = true then some (Attr.n s) else none) = some a := he
+    by_cases hw : Numeral.Stored s = true
     · rw [if_pos hw] at he; cases he; exact ⟨s, rfl, hw⟩
     · rw [if_neg hw] at he; exact nomatch he
   | _ =>
@@ -205,40 +205,53 @@ theorem decimal_writes_wf {v : Value} {a : Attr}
 
 /-- Dually, it reads only well-formed numerals — which is not a nicety: a `p` accepting an
     ill-formed `N` would name a value `e` then refuses, and that is **(C)** failing. -/
-theorem decimal_reads_wf {a : Attr} {v : Value}
+theorem decimal_reads_stored {a : Attr} {v : Value}
     (hp : (denoteω .decimal).p a = some v) :
-    ∃ x, a = .n x ∧ Numeral.WF x = true := by
+    ∃ x, a = .n x ∧ Numeral.Stored x = true := by
   cases a with
   | n x =>
-    replace hp : (if Numeral.WF x = true then some (Value.str x) else none) = some v := hp
-    by_cases hw : Numeral.WF x = true
+    replace hp : (if Numeral.Stored x = true then some (Value.str x) else none) = some v := hp
+    by_cases hw : Numeral.Stored x = true
     · exact ⟨x, rfl, hw⟩
     · rw [if_neg hw] at hp; exact nomatch hp
   | _ =>
     replace hp : (none : Option Value) = some v := hp
     exact nomatch hp
 
-/-! ### The gap that closed
+/-! ### The gap that closed, and the one behind it
 
-Before the tightening, `decimal` wrote an `N` for every string. It no longer does, and §1's
-own worked example still goes through — the doc is explicit that `"1e+21"` is well formed
-and "not a defect", the bound that bites being magnitude rather than notation. -/
+Before the tightening, `decimal` wrote an `N` for every string. It no longer does — and the
+second tightening is the one no reading of the specification could have produced, because
+it is a fact about the **store** rather than about the calculus.
+
+§1's worked example says `"1e+21"` is well formed and that treating it as out of range
+would be a defect, "the bound that bites being magnitude rather than notation". That is
+still true of `Numeral.WF`, which is what DynamoDB *accepts*. It is not true of `decimal`,
+because DynamoDB hands `1e+21` back as `1000000000000000000000`, and `decimal`'s `p` is the
+identity on the digits — so the round trip fails at the one point §2 cannot see, between
+`e` and `p`. `Numeral.Stored` is that set, and the measurements it is read off are in
+`src/codec.dynamodb.spec.ts`. -/
 
 theorem decimal_refuses_nonNumeral : (denoteω .decimal).e (.str "abc") = none := rfl
 
-theorem decimal_refuses_overMagnitude : (denoteω .decimal).e (.str "1e130") = none := rfl
+/-- Magnitude, isolated at the `WF` level, where notation is not also in play. -/
+theorem wf_refuses_overMagnitude : Numeral.WF "1e130" = false := by decide
+
+theorem wf_refuses_39_digits :
+    Numeral.WF "123456789012345678901234567890123456789" = false := by decide
 
 theorem decimal_refuses_39_digits :
     (denoteω .decimal).e (.str "123456789012345678901234567890123456789") = none := rfl
 
-/-- §1's own example: an exponent is notation, not a magnitude violation. -/
-theorem decimal_accepts_exponent :
-    (denoteω .decimal).e (.str "1e+21") = some (.n "1e+21") := rfl
+/-- §1's own example, at the level it was written about: the service accepts an exponent. -/
+theorem wf_accepts_exponent : Numeral.WF "1e+21" = true := by decide
 
-/-- Both magnitude boundaries are inside the domain. -/
-theorem decimal_accepts_min : (denoteω .decimal).e (.str "1e-130") = some (.n "1e-130") :=
-  rfl
+/-- `decimal` does not, and the reason is the store rather than the grammar. -/
+theorem decimal_refuses_exponent : (denoteω .decimal).e (.str "1e+21") = none := rfl
 
-theorem decimal_accepts_max : (denoteω .decimal).e (.str "9e125") = some (.n "9e125") := rfl
+/-- The same number, spelled the way it comes back. -/
+theorem decimal_accepts_expanded :
+    (denoteω .decimal).e (.str "1000000000000000000000")
+      = some (.n "1000000000000000000000") := rfl
 
 end Calculus

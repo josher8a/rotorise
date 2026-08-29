@@ -391,11 +391,11 @@ describe('the law', () => {
     })
 
     it('and a read-modify-write leaves every attribute in its member', () => {
-        // the denormalised forms are where a member flip would actually happen
+        // a reordered set is still worth pushing through; the denormalised `N` that used to sit
+        // here is no longer a stored form the codec will read, which is the point of the test below
         const encoded = Listing.unsafeEncode(listing)
         checkMembersStable(Listing, [
             encoded,
-            { ...encoded, localPriceRate: { N: '1.50' } },
             { ...encoded, acceptedTenders: { SS: ['b', 'a'] } },
         ])
     })
@@ -412,22 +412,33 @@ describe('the law', () => {
         }
     })
 
-    it('does NOT hold for a denormalised decimal — DynamoDB trims the digits', () => {
-        // `1.50` is stored and returned as `1.5`. The codec cannot prevent this;
-        // it is the service normalising `N`. Store with S for an exact round-trip.
+    /**
+     * This used to assert the opposite, and the comment beside it read "the codec cannot prevent
+     * this; it is the service normalising `N`". It can, and the way it prevents it is by never
+     * handing the service something to normalise: `'1.50'` is not a form DynamoDB gives back, so
+     * `decimal` refuses to write it.
+     *
+     * The failure it used to pin was a round trip broken *across storage*, where neither the types
+     * nor the in-memory law suite can see it — `encode` succeeded, `decode` succeeded, and the
+     * value came back different. Refusing at the write is what moves that failure to where it is
+     * still local, and `'1.5'` is the same price.
+     */
+    it('refuses a denormalised decimal, rather than losing the digits in storage', () => {
         const denormalised = { ...listing, localPriceRate: '1.50' }
-        const encoded = Listing.unsafeEncode(denormalised)
-        expect(encoded.localPriceRate).toEqual({ N: '1.50' })
-        // what DynamoDB actually hands back:
-        const asStored: AttributeMap = {
-            ...encoded,
-            localPriceRate: { N: '1.5' },
-        }
-        expect(Listing.unsafeDecode(asStored).localPriceRate).toBe('1.5')
-        expect(Listing.unsafeDecode(asStored)).not.toEqual(denormalised)
+        expect(() => Listing.unsafeEncode(denormalised)).toThrow(
+            /not a numeral DynamoDB stores unchanged/,
+        )
 
-        // ...but the weaker law does: one pass through storage is a fixed point
-        expect(() => checkStable(Listing, [asStored])).not.toThrow()
+        // and the normalised price is the same money, written the way it comes back
+        const normalised = { ...listing, localPriceRate: '1.5' }
+        const encoded = Listing.unsafeEncode(normalised)
+        expect(encoded.localPriceRate).toEqual({ N: '1.5' })
+        expect(Listing.unsafeDecode(encoded as AttributeMap)).toEqual(
+            normalised,
+        )
+        expect(() =>
+            checkStable(Listing, [encoded as AttributeMap]),
+        ).not.toThrow()
     })
 
     it('does NOT hold for set ordering — a set is unordered', () => {

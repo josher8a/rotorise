@@ -30,6 +30,7 @@ import {
     array,
     binary,
     decimal,
+    failed,
     literal,
     number,
     object,
@@ -184,20 +185,77 @@ suite('the law, against DynamoDB', () => {
         }
     }, 120_000)
 
-    it('confirms what the in-memory tests only assume about N', async () => {
-        // the fixture in codec.listing.spec.ts hard-codes this behaviour; here it is measured
-        const returned = await throughDynamo({
-            pk: 'normalisation',
-            amount: '1.50',
-            count: 1,
-            kind: 'A',
-            tags: new Set(['x']),
-            steps: [],
-            blob: Uint8Array.from([1, 2, 3]),
-            extra: null,
-        })
-        expect(returned.amount).toBe('1.5')
-    }, 30_000)
+    /**
+     * The measurement `decimal`'s held set is read off, and it has to bypass the codec now: a
+     * denormalised numeral is exactly what `decimal` refuses to write, so the only way to put one
+     * in the table is by hand. What comes back is the normal form, which is why the refusal exists.
+     */
+    it('normalises every N it accepts, which is why `decimal` refuses the rest', async () => {
+        const written = [
+            ['1.500', '1.5'],
+            ['007', '7'],
+            ['+1', '1'],
+            ['1e5', '100000'],
+            ['-0', '0'],
+            ['0.0', '0'],
+            ['1.0', '1'],
+            ['.5', '0.5'],
+            ['1.', '1'],
+            ['01', '1'],
+        ] as const
+
+        for (const [put, expected] of written) {
+            const pk = `normalisation-${put}`
+            await call('PutItem', {
+                TableName: TABLE,
+                Item: { pk: { S: pk }, n: { N: put } },
+            })
+            const { Item } = (await call('GetItem', {
+                TableName: TABLE,
+                Key: { pk: { S: pk } },
+                ConsistentRead: true,
+            })) as { Item?: AttributeMap }
+            expect([put, (Item?.n as { N: string }).N]).toEqual([put, expected])
+            // and every one of them is a form `decimal` declines to produce
+            expect(failed(decimal.encode(put))).toBe(true)
+        }
+    }, 60_000)
+
+    /** The other half: what it does hand back, `decimal` writes and reads. */
+    it('hands back exactly what `decimal` wrote, for the forms it accepts', async () => {
+        for (const amount of ['0', '1.5', '10', '100', '-1.5', '0.0000001']) {
+            const returned = await throughDynamo({
+                pk: `normal-${amount}`,
+                amount,
+                count: 1,
+                kind: 'A',
+                tags: new Set(['x']),
+                steps: [],
+                blob: Uint8Array.from([1, 2, 3]),
+                extra: null,
+            })
+            expect(returned.amount).toBe(amount)
+        }
+    }, 60_000)
+
+    /** Precision and magnitude are hard errors from the service, not silent truncation. */
+    it('rejects what `decimal` and `number` reject, rather than rounding it', async () => {
+        const refused = [
+            '123456789012345678901234567890123456789',
+            '1E+126',
+            '1E-131',
+            'NaN',
+        ] as const
+        for (const n of refused) {
+            expect(failed(decimal.encode(n))).toBe(true)
+            await expect(
+                call('PutItem', {
+                    TableName: TABLE,
+                    Item: { pk: { S: `refused-${n}` }, n: { N: n } },
+                }),
+            ).rejects.toThrow()
+        }
+    }, 60_000)
 
     it('confirms a set loses the order it was written in', async () => {
         const returned = await throughDynamo({

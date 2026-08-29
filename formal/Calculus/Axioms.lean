@@ -115,8 +115,8 @@ axiom acquired here would reach all of them at once. -/
 makes it the single constant in this file with the most to lose from going unguarded. -/
 
 #assert_axioms opaq_T_identity
-#assert_axioms decimal_writes_wf
-#assert_axioms decimal_reads_wf
+#assert_axioms decimal_writes_stored
+#assert_axioms decimal_reads_stored
 
 /-! §7's continuity results — why fuel is not removable by a fixpoint. -/
 

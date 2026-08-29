@@ -139,7 +139,7 @@ Both are needed, and neither determines the other.
 
 ```
 ──────────────────────────────           ──────────────────────────────
-⊢ string : String ⇝ S      (string)      ⊢ decimal : Numerals ⇝ N (decimal)
+⊢ string : String ⇝ S      (string)      ⊢ decimal : Stored ⇝ N (decimal)
 
 D = { x ∈ Double : x = 0 ∨ 1e-130 ≤ |x| ≤ 9.9…e125 }
 ────────────────────────────────────────────────────── (number)
@@ -180,9 +180,24 @@ is allowed: a `p` returning values outside `T` breaks `(C)`, and with it the cla
 anything. An unchecked narrowing of a read is a cast, and a cast belongs to `refine` — which does
 the check — or to `held`, which is where the caller's own functions live.
 
-`decimal` holds `Numerals`, not a machine number. That is the one ground term whose held set is chosen
+`decimal` holds numerals, not a machine number. That is the one ground term whose held set is chosen
 against the grain of the host language, and the reason is in the table in §1: `N` carries 38
 significant digits and a double carries 15.
+
+Its held set is `Stored`, and not §1's `Numerals`, because those are **different sets**. `Numerals`
+is what the store *accepts*; `Stored` is what it *hands back*. DynamoDB normalises every `N` it
+takes — `1.500` becomes `1.5`, `007` becomes `7`, `1e5` becomes `100000`, `-0` becomes `0` — and
+`decimal`'s `p` is the identity on the digits, so anything outside the normal form is written as one
+string and read as another.
+
+This is the calculus's one concession to something it does not model. §2 composes `e` and `p`
+directly; in use there is a store between them, and it is not the identity on attributes. Writing
+`η` for the store's normalisation, a codec survives the round trip through it exactly when **`η`
+lies inside `ker p`** — `≈c` of §2, the relation that already exists for "a different attribute
+reading to the same value". `number` satisfies that for free, since `p(1.500)` and `p(1.5)` are the
+same double; `decimal` cannot, because its `ker p` is equality. So the held set is narrowed to the
+fixed points of `η`, which is what `Stored` is. Measured, not assumed: `src/codec.dynamodb.spec.ts`
+puts each form into a real table and reads it back.
 
 `literal` is the one ground term with **two** rules, because it is the only one whose member follows
 from its _values_ rather than from its name. There is deliberately no rule admitting a mixed set: a
@@ -613,8 +628,10 @@ and the machine proof can be audited against each other case for case.
 **Points.** Each ground term writes one member, totally on its held set, and reads exactly that
 member back into the held set. **(W)** and **(C)** are immediate, `≼` is member equality with no
 substructure, and **(R)** is the carrier's round trip: identity for `string`, `boolean`, `binary`,
-`null` (whose held set is the single value `null` and whose payload is `∗`) and `decimal` (a numeral is stored as written, so `Can(decimal)` is all of `N`), shortest-text for
-`number` and `literal‑N` — the §3 argument that every finite double survives.
+`null` (whose held set is the single value `null` and whose payload is `∗`) and `decimal` (a numeral
+in `Stored` is returned as written, which is what `Stored` is chosen to make true, so `Can(decimal)`
+is the normalised part of `N`), shortest-text for `number` and `literal‑N` — the §3 argument that
+every finite double survives.
 
 **Wrappers.**
 

@@ -127,7 +127,7 @@ inductive Typed : Term → Held → Option Member → Prop where
   | number  : Typed .number  (fun v => ∃ d, v = .num d) (some .N)
   /-- `decimal` holds `Numerals`, carried as `str` values (§1) — and `Numerals` is §1's
       grammar, not every string. -/
-  | decimal : Typed .decimal (fun v => ∃ s, v = .str s ∧ Numeral.WF s = true) (some .N)
+  | decimal : Typed .decimal (fun v => ∃ s, v = .str s ∧ Numeral.Stored s = true) (some .N)
   | boolean : Typed .boolean (fun v => ∃ b, v = .bool b) (some .BOOL)
   /-- §3 `(null)`: the point held set `{null}`, stored as `⟨NULL, ∗⟩`. -/
   | null : Typed .null (fun v => v = .null) (some .NULL)

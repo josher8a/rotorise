@@ -193,6 +193,64 @@ The behaviour §6 describes is real; `≡` simply cannot see it.
 needed for **interchangeability**, and not for `≡`. Any port that rewrites across the two forms
 is relying on the former, which the calculus does not give it.
 
+### One neither document could have found, because it is about the store
+
+§2 composes a codec's `e` and `p` directly. In use there is a **store** between them, and it is not
+the identity on attributes. DynamoDB normalises every `N` it accepts — measured against a real
+table in `src/codec.dynamodb.spec.ts`, not assumed:
+
+| written | returned | | written | returned |
+| --- | --- | --- | --- | --- |
+| `1.500` | `1.5` | | `-0` | `0` |
+| `007` | `7` | | `0.0` | `0` |
+| `+1` | `1` | | `1.0` | `1` |
+| `1e5` | `100000` | | `.5` | `0.5` |
+| `1E+2` | `100` | | `1.` | `1` |
+
+It **trims but does not round**: 39 significant digits, magnitude past `9.9…e125` or below
+`1e-130`, `NaN` and `Infinity` are all hard `ValidationException`s. Nothing is silently truncated.
+What is silent is the normalisation, and that is the half that costs correctness.
+
+Write `η` for the store's normalisation. A codec survives the round trip through the store exactly
+when **`η` lies inside `ker p`** — `≈c` of §2, the relation the calculus already has for "a
+different attribute that reads to the same value". So:
+
+- `number` satisfies it for free. `p "1.500"` and `p "1.5"` are the same double, and `η` is
+  invisible to it.
+- `decimal` cannot. Its `p` is the identity on the digits, so `ker p` is equality, and `η` would
+  have to be the identity too.
+
+`decimal` is the codec for money, and money is conventionally written `'10.50'`. That string was
+being written, stored as `10.5`, and read back as `10.5` — a round trip failing **across storage**,
+where neither the type system nor an in-memory law suite can see it. The implementation knew: its
+docstring said "`decode ∘ encode` is identity only in normal form", and a test in
+`codec.listing.spec.ts` pinned the failure as expected behaviour, with the comment "the codec cannot
+prevent this; it is the service normalising `N`".
+
+It can. It prevents it by never handing the service something to normalise. §1's `Numerals` stays
+what the service accepts; `Numeral.Stored` is what it returns unchanged, and `(decimal)` now
+concludes `⊢ decimal : Stored ⇝ N`. `decimal` rejects a denormalised numeral on write rather than
+rewriting it, because rewriting is how you lose track of which value was meant — and it rejects on
+read too, since gating only the write is the one configuration that breaks **(C)**.
+
+Three things worth keeping from this one:
+
+1. **A pinned defect is still a defect.** The expectation had been written down, tested, and
+   documented, which made it look settled. What made it moveable was asking which law it broke.
+2. **The calculus was not wrong, it was silent.** `lawful_decimalCodec` is true, and so is the
+   docstring saying the round trip fails. They are about different compositions, and nothing in
+   either document named the thing between them.
+3. **`ker p` was already the right vocabulary.** §2 had `≈c` for exactly this shape of question —
+   an attribute that differs but reads the same — and it turned out to state the store's condition
+   without needing anything new.
+
+`number` is closed in the implementation, which now refuses `NaN`, `Infinity` and anything outside
+`D`, on both halves. **It is not closed in the model**, where `numberCodec` still holds every
+double and `⊢ number : D ⇝ N` claims a bound no law enforces — the `numeric` defect, one term over.
+The route is known and needs no new axiom: gate `e` on `Numeral.WF (toDec d)`, and gate `p` on the
+*round-tripped* value rather than the stored digits, since `Number("9.9…E+125")` rounds up past the
+maximum and would otherwise read back a value `e` refuses. The implementation already does both.
+
 ### One the model found in the implementation
 
 The empty set, and it is the plainest kind of defect the exercise can find: a law the model proves,
