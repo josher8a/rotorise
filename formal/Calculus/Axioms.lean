@@ -118,6 +118,20 @@ makes it the single constant in this file with the most to lose from going ungua
 #assert_axioms decimal_writes_stored
 #assert_axioms decimal_reads_stored
 
+/-! §3's `(number)` gate and the two places the bound is forced outward. `opaq_T_identity`
+above is guarded for `Uν` *after* `HOpaque.num` gained its premise, which is the half of this
+change that reaches the depth machinery. The `literalN` rows are the half that does not:
+they say what §3's `(literal-N)` costs without `ℓ ⊆ D`, which is a normative question and
+not a theorem. -/
+
+#assert_axioms lawful_numberCodec
+#assert_axioms carrier_numberCodec
+#assert_axioms lawful_literalNCodec
+#assert_axioms survivesStore_numberCodec
+#assert_axioms literalN_sub_number
+#assert_axioms not_literalN_sub_number
+#assert_axioms literalN_writes_off_numerals
+
 /-! §2's kernel and §1's store. `retract_through_store` is **(R)** with DynamoDB in the
 middle — the law production actually runs — and the two `decimal` rows are what makes
 `Numeral.Stored` the right held set rather than a cautious one: `η ⊆ ker p` holds after the

@@ -108,7 +108,13 @@ inductive HOpaque (lossy : Bool) : Value → Prop where
   | bool (b)  : HOpaque lossy (.bool b)
   | bin  (b)  : HOpaque lossy (.bin b)
   | null      : HOpaque lossy .null
-  | num  (d) (h : lossy = true) : HOpaque lossy (.num d)
+  /-- The `D` premise, for the same reason as `set`'s non-emptiness above: a double
+      `opaque` cannot **write** is not one of "the values whose type is recoverable from
+      the value alone" — there is no `N` for it to be recoverable from. It arrived when
+      `(number)` grew its gate, and `codec-formalization.md` §4 had predicted this exact
+      step: the bound does not stay in `(number)`, and this is one of the two places it is
+      forced outward to. -/
+  | num  (d) (h : lossy = true) (hw : Numeral.WF d.toDec = true) : HOpaque lossy (.num d)
   /-- Non-emptiness is not decoration: §1's `SS`/`NS`/`BS` are `℘⁺fin`, so there is no
       empty wire set to write, and an empty set's member is not recoverable from the
       value anyway — you cannot tell `SS` from `NS`. Both readings §3 gives of `Uν` (the
@@ -124,7 +130,10 @@ mutual
 
 inductive Typed : Term → Held → Option Member → Prop where
   | string  : Typed .string  (fun v => ∃ s, v = .str s) (some .S)
-  | number  : Typed .number  (fun v => ∃ d, v = .num d) (some .N)
+  /-- `number` holds `D` — §1's numeral domain — and not every double. The rule always
+      concluded `⊢ number : D ⇝ N`; until `numberCodec` gated, the model's judgement said
+      something weaker than the rule it was transcribing. -/
+  | number  : Typed .number (fun v => ∃ d, v = .num d ∧ Numeral.WF d.toDec = true) (some .N)
   /-- `decimal` holds `Numerals`, carried as `str` values (§1) — and `Numerals` is §1's
       grammar, not every string. -/
   | decimal : Typed .decimal (fun v => ∃ s, v = .str s ∧ Numeral.Stored s = true) (some .N)

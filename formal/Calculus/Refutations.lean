@@ -338,6 +338,58 @@ theorem not_equiv_trans :
     ¬ ∀ c d e, Codec.Equiv c d → Codec.Equiv d e → Codec.Equiv c e :=
   fun h => not_equiv_cA_cB (h _ _ _ equiv_cA_cMid equiv_cMid_cB)
 
+/-! ## `(literal-N)` without `ℓ ⊆ D`
+
+`(number)` now gates on §1's numeral domain, which is what the rule always claimed. §3's
+`(literal-N)` carries no such premise, so `literal(ℓ)` is derivable for **any** list of
+doubles — including ones `number` refuses. `codec-formalization.md` §4 predicted this as one
+of the two places the bound is forced outward; it is the one that is not this arc's to close,
+because adding `ℓ ⊆ D` to a rule changes the specification.
+
+What follows is the cost, stated rather than decided. The premise is exactly what restores
+the prism `lawful_literalNCodec` used to be proved through, and without it a derivable term
+writes an attribute outside §1's `Numerals`.
+
+`Double` is axiomatized with the shortest-text round trip and nothing else, so the model
+cannot *exhibit* a double outside `D` — that is a fact about IEEE-754 it deliberately does
+not assert, and no axiom is added to make it available. The refutations are therefore
+conditional on such a double, which is the honest form: if IEEE has one, this is what the
+missing premise costs, and if it has none the premise costs nothing to add. -/
+
+/-- **With `ℓ ⊆ D`, `literal-N` is a refinement of `number` again.** The premise is not
+    decoration for the proof's sake: it is the whole of what the prism needed. -/
+theorem literalN_sub_number (ls : List Double)
+    (hD : ∀ d ∈ ls, Numeral.WF d.toDec = true) :
+    ∀ v, (literalNCodec ls).T v → numberCodec.T v := by
+  rintro v ⟨d, hd, rfl⟩
+  exact ⟨d, rfl, hD d hd⟩
+
+/-- **Without it, it is not.** A literal outside `D` is held by `literal-N` and not by
+    `number`, so the two rules disagree about a value one of them claims to hold. -/
+theorem not_literalN_sub_number {d : Double} (hw : Numeral.WF d.toDec = false) :
+    ¬ ∀ v, (literalNCodec [d]).T v → numberCodec.T v := by
+  intro h
+  obtain ⟨d', hd', hwd⟩ := h (.num d) ⟨d, by simp, rfl⟩
+  cases Value.num.inj hd'
+  rw [hw] at hwd
+  exact nomatch hwd
+
+/-- And the consequence is not confined to the held sets: the term **writes** an attribute
+    whose numeral is outside §1's `Numerals`, at a value `number` refuses outright. That is
+    the sentence `(literal-N)` would need `ℓ ⊆ D` to stop being able to say. -/
+theorem literalN_writes_off_numerals {d : Double} (hw : Numeral.WF d.toDec = false) :
+    (literalNCodec [d]).e (.num d) = some (.n d.toDec) ∧
+      numberCodec.e (.num d) = none := by
+  refine ⟨?_, ?_⟩
+  · rw [literalNCodec_e_num, if_pos (by simp : d ∈ [d])]
+  · rw [numberCodec_e_num, if_neg (by rw [hw]; exact Bool.noConfusion)]
+
+/-- The rule admits it today, unconditionally — no hypothesis about `d` at all. This is the
+    derivation `ℓ ⊆ D` would refuse. -/
+theorem typed_literalN_any (d : Double) :
+    Typed (.literalN [d]) (fun v => ∃ d', d' ∈ [d] ∧ v = .num d') (some .N) :=
+  .literalN [d] (by simp) (by simp)
+
 /-! ## `decimal` before its held set was narrowed
 
 `survivesStore_decimalCodec` shows that gating on `Numeral.Stored` discharges `η ⊆ ker p`.

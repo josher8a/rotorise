@@ -712,8 +712,8 @@ theorem opaq_TSub : ∀ (fuel : Nat) (lossy : Bool) (v : Value),
       | false => rw [hl] at hT; exact nomatch hT
       | true =>
         rw [hl] at hT
-        obtain ⟨d, rfl⟩ := hT
-        exact .num d rfl
+        obtain ⟨d, rfl, hw⟩ := hT
+        exact .num d rfl hw
     · cases v <;> first
         | (obtain ⟨hne, hall⟩ := hT; exact .set _ hne fun x hx => ih x (hall x hx))
         | exact nomatch hT
