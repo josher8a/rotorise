@@ -18,7 +18,8 @@ proved here:
   never consulted". Proved in its generating case, the adjacent transposition, since
   those generate every permutation.
 
-The rest of §6's twenty rows are not yet mechanized (README).
+The "Do not hold" table is settled in `Refutations.lean`; the rest of the "Hold" table is not
+yet mechanized (README).
 -/
 
 namespace Calculus
