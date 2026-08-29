@@ -367,20 +367,83 @@ theorem filter_singleton_of {α : Type} {p : α → Bool} :
 
 /-! ## Products -/
 
-def strPayloads : List Attr → Option (List String)
-  | [] => some []
-  | .s v :: as => (strPayloads as).map (v :: ·)
-  | _ => none
+/-! ### Constructors as prisms
 
-def numPayloads : List Attr → Option (List Numeral)
-  | [] => some []
-  | .n v :: as => (numPayloads as).map (v :: ·)
-  | _ => none
+The three wire-set payload projections are the *same function* three times, and their
+lemmas were the same proof three times. What they have in common is a constructor viewed
+as a partial iso onto its image — the prism §7 of the specification already names when it
+calls `held` and `refine` "the same shape at different strengths".
 
-def binPayloads : List Attr → Option (List Bytes)
-  | [] => some []
-  | .b v :: as => (binPayloads as).map (v :: ·)
-  | _ => none
+Naming that shape once collapses the triplication: each payload projection is `traverse`
+of a prism's inverse, and each of its two lemmas is an instance of one general fact. -/
+
+/-- A constructor, as a partial iso onto its image. -/
+structure Ctor (α β : Type) where
+  /-- Build. -/
+  into : α → β
+  /-- Match, partially. -/
+  out : β → Option α
+  /-- Matching what was built returns it. -/
+  out_into : ∀ x, out (into x) = some x
+  /-- Anything that matches was built. -/
+  into_out : ∀ {b x}, out b = some x → b = into x
+
+/-- `S`'s payload. -/
+def sC : Ctor String Attr where
+  into := Attr.s
+  out := fun a => match a with | .s v => some v | _ => none
+  out_into _ := rfl
+  into_out {b x} h := by cases b <;> first | (cases h; rfl) | exact nomatch h
+
+/-- `N`'s payload. -/
+def nC : Ctor Numeral Attr where
+  into := Attr.n
+  out := fun a => match a with | .n v => some v | _ => none
+  out_into _ := rfl
+  into_out {b x} h := by cases b <;> first | (cases h; rfl) | exact nomatch h
+
+/-- `B`'s payload. -/
+def bC : Ctor Bytes Attr where
+  into := Attr.b
+  out := fun a => match a with | .b v => some v | _ => none
+  out_into _ := rfl
+  into_out {b x} h := by cases b <;> first | (cases h; rfl) | exact nomatch h
+
+/-- A traversal through a prism recovers its input exactly. -/
+theorem traverse_ctor_eq {α : Type} (c : Ctor α Attr) :
+    ∀ {as : List Attr} {xs}, traverse c.out as = some xs → as = xs.map c.into
+  | [], xs, h => by
+      replace h : some [] = some xs := h
+      cases h; rfl
+  | a :: as, xs, h => by
+      simp only [traverse] at h
+      cases hu : c.out a with
+      | none => rw [hu] at h; exact nomatch h
+      | some x =>
+        rw [hu] at h
+        cases ht : traverse c.out as with
+        | none => rw [ht] at h; exact nomatch h
+        | some xs' =>
+          rw [ht] at h
+          replace h : some (x :: xs') = some xs := h
+          cases h
+          simp only [List.map]
+          rw [← c.into_out hu, ← traverse_ctor_eq c ht]
+
+/-- And it succeeds exactly when every element matches. -/
+theorem traverse_ctor_isSome {α : Type} (c : Ctor α Attr) :
+    ∀ {as : List Attr}, (∀ a ∈ as, (c.out a).isSome) → ∃ xs, traverse c.out as = some xs
+  | [], _ => ⟨[], rfl⟩
+  | a :: as, h => by
+      obtain ⟨x, hx⟩ := Option.isSome_iff_exists.mp (h a (List.mem_cons_self a as))
+      obtain ⟨xs, hxs⟩ := traverse_ctor_isSome c fun y hy => h y (List.mem_cons_of_mem _ hy)
+      exact ⟨x :: xs, by simp only [traverse, hx, hxs]⟩
+
+def strPayloads (as : List Attr) : Option (List String) := traverse sC.out as
+
+def numPayloads (as : List Attr) : Option (List Numeral) := traverse nC.out as
+
+def binPayloads (as : List Attr) : Option (List Bytes) := traverse bC.out as
 
 /-- Encode a list of element attributes as the wire set their member selects. -/
 def asWireSet (as : List Attr) : Option Attr :=
@@ -1862,128 +1925,38 @@ theorem mem_zip_left {α β : Type} :
       · obtain ⟨y, hy⟩ := mem_zip_left l₁ l₂ (by simpa using hlen) x hx'
         exact ⟨y, List.mem_cons_of_mem _ hy⟩
 
-theorem strPayloads_eq : ∀ {as : List Attr} {ss}, strPayloads as = some ss →
-    as = ss.map Attr.s
-  | [], ss, h => by
-      replace h : some [] = some ss := h
-      cases h
-      rfl
-  | .s v :: as, ss, h => by
-      replace h : (strPayloads as).map (v :: ·) = some ss := h
-      cases hs : strPayloads as with
-      | none => rw [hs] at h; exact nomatch h
-      | some ss' =>
-        rw [hs] at h
-        replace h : some (v :: ss') = some ss := h
-        cases h
-        rw [strPayloads_eq hs]
-        rfl
-  | .n _ :: _, _, h => nomatch h
-  | .b _ :: _, _, h => nomatch h
-  | .bool _ :: _, _, h => nomatch h
-  | .null :: _, _, h => nomatch h
-  | .ss _ :: _, _, h => nomatch h
-  | .ns _ :: _, _, h => nomatch h
-  | .bs _ :: _, _, h => nomatch h
-  | .l _ :: _, _, h => nomatch h
-  | .m _ :: _, _, h => nomatch h
+theorem strPayloads_eq {as : List Attr} {ss} (h : strPayloads as = some ss) :
+    as = ss.map Attr.s := traverse_ctor_eq sC h
 
-theorem numPayloads_eq : ∀ {as : List Attr} {ns}, numPayloads as = some ns →
-    as = ns.map Attr.n
-  | [], ns, h => by
-      replace h : some [] = some ns := h
-      cases h
-      rfl
-  | .n v :: as, ns, h => by
-      replace h : (numPayloads as).map (v :: ·) = some ns := h
-      cases hs : numPayloads as with
-      | none => rw [hs] at h; exact nomatch h
-      | some ns' =>
-        rw [hs] at h
-        replace h : some (v :: ns') = some ns := h
-        cases h
-        rw [numPayloads_eq hs]
-        rfl
-  | .s _ :: _, _, h => nomatch h
-  | .b _ :: _, _, h => nomatch h
-  | .bool _ :: _, _, h => nomatch h
-  | .null :: _, _, h => nomatch h
-  | .ss _ :: _, _, h => nomatch h
-  | .ns _ :: _, _, h => nomatch h
-  | .bs _ :: _, _, h => nomatch h
-  | .l _ :: _, _, h => nomatch h
-  | .m _ :: _, _, h => nomatch h
+theorem numPayloads_eq {as : List Attr} {ns} (h : numPayloads as = some ns) :
+    as = ns.map Attr.n := traverse_ctor_eq nC h
 
-theorem binPayloads_eq : ∀ {as : List Attr} {bs}, binPayloads as = some bs →
-    as = bs.map Attr.b
-  | [], bs, h => by
-      replace h : some [] = some bs := h
-      cases h
-      rfl
-  | .b v :: as, bs, h => by
-      replace h : (binPayloads as).map (v :: ·) = some bs := h
-      cases hs : binPayloads as with
-      | none => rw [hs] at h; exact nomatch h
-      | some bs' =>
-        rw [hs] at h
-        replace h : some (v :: bs') = some bs := h
-        cases h
-        rw [binPayloads_eq hs]
-        rfl
-  | .s _ :: _, _, h => nomatch h
-  | .n _ :: _, _, h => nomatch h
-  | .bool _ :: _, _, h => nomatch h
-  | .null :: _, _, h => nomatch h
-  | .ss _ :: _, _, h => nomatch h
-  | .ns _ :: _, _, h => nomatch h
-  | .bs _ :: _, _, h => nomatch h
-  | .l _ :: _, _, h => nomatch h
-  | .m _ :: _, _, h => nomatch h
+theorem binPayloads_eq {as : List Attr} {bs} (h : binPayloads as = some bs) :
+    as = bs.map Attr.b := traverse_ctor_eq bC h
 
-theorem strPayloads_isSome : ∀ {as : List Attr}, (∀ x ∈ as, x.member = .S) →
-    ∃ ss, strPayloads as = some ss
-  | [], _ => ⟨[], rfl⟩
-  | x :: as, h => by
-      have hx := h x (List.mem_cons_self x as)
-      cases x
-      case s v =>
-        obtain ⟨ss, hss⟩ :=
-          strPayloads_isSome fun y hy => h y (List.mem_cons_of_mem _ hy)
-        refine ⟨v :: ss, ?_⟩
-        show (strPayloads as).map (v :: ·) = some (v :: ss)
-        rw [hss]
-        rfl
-      all_goals exact nomatch hx
+theorem strPayloads_isSome {as : List Attr} (h : ∀ x ∈ as, x.member = .S) :
+    ∃ ss, strPayloads as = some ss :=
+  traverse_ctor_isSome sC fun a ha => by
+    have hm := h a ha
+    cases a
+    case s v => rfl
+    all_goals exact nomatch hm
 
-theorem numPayloads_isSome : ∀ {as : List Attr}, (∀ x ∈ as, x.member = .N) →
-    ∃ ns, numPayloads as = some ns
-  | [], _ => ⟨[], rfl⟩
-  | x :: as, h => by
-      have hx := h x (List.mem_cons_self x as)
-      cases x
-      case n v =>
-        obtain ⟨ns, hns⟩ :=
-          numPayloads_isSome fun y hy => h y (List.mem_cons_of_mem _ hy)
-        refine ⟨v :: ns, ?_⟩
-        show (numPayloads as).map (v :: ·) = some (v :: ns)
-        rw [hns]
-        rfl
-      all_goals exact nomatch hx
+theorem numPayloads_isSome {as : List Attr} (h : ∀ x ∈ as, x.member = .N) :
+    ∃ ns, numPayloads as = some ns :=
+  traverse_ctor_isSome nC fun a ha => by
+    have hm := h a ha
+    cases a
+    case n v => rfl
+    all_goals exact nomatch hm
 
-theorem binPayloads_isSome : ∀ {as : List Attr}, (∀ x ∈ as, x.member = .B) →
-    ∃ bs, binPayloads as = some bs
-  | [], _ => ⟨[], rfl⟩
-  | x :: as, h => by
-      have hx := h x (List.mem_cons_self x as)
-      cases x
-      case b v =>
-        obtain ⟨bs, hbs⟩ :=
-          binPayloads_isSome fun y hy => h y (List.mem_cons_of_mem _ hy)
-        refine ⟨v :: bs, ?_⟩
-        show (binPayloads as).map (v :: ·) = some (v :: bs)
-        rw [hbs]
-        rfl
-      all_goals exact nomatch hx
+theorem binPayloads_isSome {as : List Attr} (h : ∀ x ∈ as, x.member = .B) :
+    ∃ bs, binPayloads as = some bs :=
+  traverse_ctor_isSome bC fun a ha => by
+    have hm := h a ha
+    cases a
+    case b v => rfl
+    all_goals exact nomatch hm
 
 /-- What a written wire set can be: one member family, uniformly. -/
 theorem asWireSet_cases {as : List Attr} {a} (h : asWireSet as = some a) :
