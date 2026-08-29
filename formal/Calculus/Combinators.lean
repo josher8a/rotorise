@@ -20,8 +20,9 @@ irreducible structure; everything else wraps one subterm):
   pointwise-relation lemmas — **proved**): the one proof shape shared by every
   product. `drop` is a *filter*, not a traversal mode, and `tuple` is `align` +
   `traverse` — so nothing needs a second toolkit;
-* products — `arrayCodec`, `recordCodec` **proved** from the toolkit; `tupleCodec`,
-  `setCodec`, `objectCodec` open;
+* products — `entrywise`, the entrywise product named once, with `arrayCodec` and
+  `recordCodec` its two instances **proved** from the toolkit; `tupleCodec`,
+  `setCodec`, `objectCodec` carry their own scaffolding;
 * sums — `altCodec` over `OptionSem`s that carry their *admission as data*, with
   `UniqueAdmission` ((U) as a premise). `dunionCodec` is `altCodec` over
   tag-admission options — "the one union whose (U) is a theorem" (doc §5) is
@@ -116,6 +117,37 @@ def nullV : Ctor Unit Value where
 /-- `NULL`'s point. -/ def nullA : Ctor Unit Attr where
   into := fun _ => .null
   out := fun a => match a with | .null => some () | _ => none
+  out_into _ := rfl
+  into_out {b x} h := by cases b <;> first | (cases h; rfl) | exact nomatch h
+
+/-! ### The container prisms
+
+The same shape one level up: a constructor whose payload is a *list* of entries. `L` and
+`M` are the two §1 provides on the attribute side, `arr` and `map` the two §3 writes into
+them. Naming them is what lets `array` and `record` be one construction (`entrywise`,
+under Products) rather than two. -/
+
+/-- `arr` values. -/ def arrV : Ctor (List Value) Value where
+  into := Value.arr
+  out := fun v => match v with | .arr xs => some xs | _ => none
+  out_into _ := rfl
+  into_out {b x} h := by cases b <;> first | (cases h; rfl) | exact nomatch h
+
+/-- `map` values. -/ def mapV : Ctor (List (Name × Value)) Value where
+  into := Value.map
+  out := fun v => match v with | .map xs => some xs | _ => none
+  out_into _ := rfl
+  into_out {b x} h := by cases b <;> first | (cases h; rfl) | exact nomatch h
+
+/-- `L`'s payload. -/ def lA : Ctor (List Attr) Attr where
+  into := Attr.l
+  out := fun a => match a with | .l xs => some xs | _ => none
+  out_into _ := rfl
+  into_out {b x} h := by cases b <;> first | (cases h; rfl) | exact nomatch h
+
+/-- `M`'s payload. -/ def mA : Ctor (List (Name × Attr)) Attr where
+  into := Attr.m
+  out := fun a => match a with | .m xs => some xs | _ => none
   out_into _ := rfl
   into_out {b x} h := by cases b <;> first | (cases h; rfl) | exact nomatch h
 
@@ -406,6 +438,99 @@ def setCodec (c : Codec) : Codec :=
         else (traverse (fun b => c.p (.b b)) vs).map Value.set
       | _ => none }
 
+/-! ### The entrywise product, named once
+
+`array` and `record` differ in nothing but which prisms they run between: a value
+constructor holding a list of entries, an attribute constructor holding a list of wire
+entries, and one entry pair carried between them. Named once, §2's laws are discharged
+once — and each instance is left with only the part that is genuinely its own, the shape
+of `≼` at its attribute constructor (`Agree.l` compares by position, `Agree.m` by name).
+
+`set` is deliberately *not* an instance: its attribute side is a choice among three wire
+sets, not one prism, and it gates on non-emptiness. `tuple` is not one either — it pairs
+each position with its own codec first (`align`). Both are treated below on their own. -/
+
+/-- **The entrywise product.** `P` is the held set's condition on the entries; the pair is
+    the entry function and its partial inverse. -/
+def entrywise {α β : Type} (V : Ctor (List α) Value) (A : Ctor (List β) Attr)
+    (μ₀ : Member) (P : List α → Prop) (f : α → Option β) (g : β → Option α) : Codec :=
+  { T := fun v => ∃ xs, v = V.into xs ∧ P xs
+    μ := some μ₀
+    e := fun v => ((V.out v).bind (traverse f)).map A.into
+    p := fun a => ((A.out a).bind (traverse g)).map V.into }
+
+section Entrywise
+variable {α β : Type} {V : Ctor (List α) Value} {A : Ctor (List β) Attr}
+  {μ₀ : Member} {P : List α → Prop} {f : α → Option β} {g : β → Option α}
+
+/-- What it writes: only a value the prism matches, and only when every entry writes. -/
+theorem entrywise_e {v a} :
+    (entrywise V A μ₀ P f g).e v = some a ↔
+      ∃ xs ys, V.out v = some xs ∧ traverse f xs = some ys ∧ a = A.into ys := by
+  simp [entrywise, Option.bind_eq_some, Option.map_eq_some', eq_comm (a := a)]
+
+/-- What it reads: the mirror. -/
+theorem entrywise_p {a v} :
+    (entrywise V A μ₀ P f g).p a = some v ↔
+      ∃ ys xs, A.out a = some ys ∧ traverse g ys = some xs ∧ v = V.into xs := by
+  simp [entrywise, Option.bind_eq_some, Option.map_eq_some', eq_comm (a := v)]
+
+/-- (R), (C), (W) lift entrywise: the round trip reverses the traversal, definedness
+    forgets it, and the member is the one the attribute constructor stamps. -/
+theorem lawfulCore_entrywise (hμ : ∀ ys, (A.into ys).member = μ₀)
+    (hr : ∀ x y, f x = some y → g y = some x)
+    (hc : ∀ y x, g y = some x → (f x).isSome) :
+    LawfulCore (entrywise V A μ₀ P f g) where
+  retract he := by
+    obtain ⟨xs, ys, hv, hxs, rfl⟩ := entrywise_e.mp he
+    exact entrywise_p.mpr
+      ⟨ys, xs, A.out_into ys, traverse_roundTrip hr xs ys hxs, V.into_out hv⟩
+  canon hp := by
+    obtain ⟨ys, xs, _, hys, rfl⟩ := entrywise_p.mp hp
+    obtain ⟨ys', h'⟩ := Option.isSome_iff_exists.mp (traverse_isSome hc ys xs hys)
+    exact Option.isSome_iff_exists.mpr ⟨_, entrywise_e.mpr ⟨xs, ys', V.out_into xs, h', rfl⟩⟩
+  writes := by
+    intro μ hμ' t a he
+    obtain ⟨_, ys, _, _, rfl⟩ := entrywise_e.mp he
+    exact (hμ ys).trans (Option.some.inj hμ')
+
+/-- (MP) lifts too, but only as far as the attribute constructor: `R` is the entry-level
+    agreement, and `hA` is how that constructor turns a pointwise `R` into `≼`. This is
+    the one clause `array` and `record` do not share. -/
+theorem lawful_entrywise {R : β → β → Prop} (hμ : ∀ ys, (A.into ys).member = μ₀)
+    (hr : ∀ x y, f x = some y → g y = some x)
+    (hc : ∀ y x, g y = some x → (f x).isSome)
+    (hag : ∀ y x y', g y = some x → f x = some y' → R y' y)
+    (hA : ∀ {ys ys' : List β}, ys'.length = ys.length →
+            (∀ q ∈ ys'.zip ys, R q.1 q.2) → Agree (A.into ys') (A.into ys)) :
+    Lawful (entrywise V A μ₀ P f g) :=
+  { lawfulCore_entrywise hμ hr hc with
+    agree := by
+      intro a t a' hp he
+      obtain ⟨ys, xs, ha, hys, rfl⟩ := entrywise_p.mp hp
+      obtain ⟨xs', ys', hv, hxs, rfl⟩ := entrywise_e.mp he
+      obtain rfl : xs' = xs := Option.some.inj ((V.out_into xs).symm.trans hv).symm
+      rw [A.into_out ha]
+      exact hA ((traverse_length _ _ hys).trans (traverse_length _ _ hxs)).symm
+        (traverse_rel hag _ _ _ hys hxs) }
+
+/-- `e : T ⇀ 𝔸` and `p : 𝔸 ⇀ T`, given the entry condition holds of any list the
+    traversal accepts on either side. -/
+theorem carrier_entrywise
+    (hdom : ∀ {xs ys}, traverse f xs = some ys → P xs)
+    (hran : ∀ {ys xs}, traverse g ys = some xs → P xs) :
+    Carrier (entrywise V A μ₀ P f g) where
+  domE he := by
+    obtain ⟨xs, ys, hv, hxs, _⟩ := entrywise_e.mp he
+    exact ⟨xs, V.into_out hv, hdom hxs⟩
+  ranP hp := by
+    obtain ⟨ys, xs, _, hys, rfl⟩ := entrywise_p.mp hp
+    exact ⟨xs, rfl, hran hys⟩
+
+end Entrywise
+
+/-! ### `array` (§3) — entrywise between `arr` and `L` -/
+
 def arrayCodec (c : Codec) : Codec :=
   { T := fun v => match v with | .arr vs => ∀ x ∈ vs, c.T x | _ => False
     μ := some .L
@@ -415,6 +540,107 @@ def arrayCodec (c : Codec) : Codec :=
     p := fun a => match a with
       | .l as => (traverse c.p as).map Value.arr
       | _ => none }
+
+/-- `array` *is* the entrywise product at `arr`/`L`, on the nose. The definition above is
+    left in its unfolded form because the `opaque` fixpoint reduces through it; this
+    equation is what carries the three lemmas across. -/
+theorem arrayCodec_eq {c : Codec} :
+    arrayCodec c = entrywise arrV lA .L (fun vs => ∀ x ∈ vs, c.T x) c.e c.p := by
+  ext v <;> cases v <;> simp_all [arrayCodec, entrywise, arrV, lA, Ctor.into, Ctor.out]
+
+/-- (R), (C), (W) — `L` is the member every `arr` writes. -/
+theorem lawfulCore_arrayCodec {c : Codec} (h : LawfulCore c) :
+    LawfulCore (arrayCodec c) :=
+  arrayCodec_eq ▸ lawfulCore_entrywise (fun _ => rfl) (fun _ _ => h.retract)
+    (fun _ _ => h.canon)
+
+/-- `≼` at `L` is positional: `Agree.l` reads the zip the traversal already provides. -/
+theorem lawful_arrayCodec {c : Codec} (h : Lawful c) : Lawful (arrayCodec c) :=
+  arrayCodec_eq ▸ lawful_entrywise (R := Agree) (fun _ => rfl) (fun _ _ => h.retract)
+    (fun _ _ => h.canon) (fun _ _ _ => h.agree) (fun _ hz => .l _ _ hz)
+
+theorem carrier_arrayCodec {c : Codec} (hc : Carrier c) : Carrier (arrayCodec c) :=
+  arrayCodec_eq ▸ carrier_entrywise
+    (fun h => traverse_mem_input (fun _ _ => hc.domE) h)
+    (fun h => traverse_mem (fun _ _ => hc.ranP) h)
+
+/-! ### `record` (§3) — entrywise between `map` and `M` -/
+
+/-- The keyed entry steps: `record` is their uniform instance, `object` their
+    name-dispatched one. -/
+def encPair (c : Codec) : Name × Value → Option (Name × Attr) :=
+  fun kv => (c.e kv.2).map ((kv.1, ·))
+
+def decPair (c : Codec) : Name × Attr → Option (Name × Value) :=
+  fun kv => (c.p kv.2).map ((kv.1, ·))
+
+/-- The entry steps invert each other, keep the name, and agree — §2's four laws one
+    level down, which is all `entrywise` asks of them. -/
+theorem encPair_decPair {c : Codec} (h : LawfulCore c) :
+    ∀ kv ka, encPair c kv = some ka → decPair c ka = some kv := by
+  rintro ⟨k, v⟩ ka hkv
+  obtain ⟨a, he, rfl⟩ := Option.map_eq_some'.mp hkv
+  exact Option.map_eq_some'.mpr ⟨v, h.retract he, rfl⟩
+
+theorem decPair_encPair {c : Codec} (h : LawfulCore c) :
+    ∀ ka kv, decPair c ka = some kv → (encPair c kv).isSome := by
+  rintro ⟨k, a⟩ kv hka
+  obtain ⟨v, hp, rfl⟩ := Option.map_eq_some'.mp hka
+  simpa [encPair] using h.canon hp
+
+theorem encPair_agree {c : Codec} (h : Lawful c) :
+    ∀ ka kv ka', decPair c ka = some kv → encPair c kv = some ka' →
+      ka'.1 = ka.1 ∧ Agree ka'.2 ka.2 := by
+  rintro ⟨k, a⟩ kv ka' hka hkv
+  obtain ⟨v, hp, rfl⟩ := Option.map_eq_some'.mp hka
+  obtain ⟨a', he, rfl⟩ := Option.map_eq_some'.mp hkv
+  exact ⟨rfl, h.agree hp he⟩
+
+theorem encPair_dom {c : Codec} (hc : Carrier c) :
+    ∀ kv ka, encPair c kv = some ka → c.T kv.2 := by
+  rintro ⟨k, v⟩ ka hkv
+  obtain ⟨a, he, _⟩ := Option.map_eq_some'.mp hkv
+  exact hc.domE he
+
+theorem decPair_ran {c : Codec} (hc : Carrier c) :
+    ∀ ka kv, decPair c ka = some kv → c.T kv.2 := by
+  rintro ⟨k, a⟩ kv hka
+  obtain ⟨v, hp, rfl⟩ := Option.map_eq_some'.mp hka
+  exact hc.ranP hp
+
+def recordCodec (c : Codec) : Codec :=
+  { T := fun v => match v with | .map kvs => ∀ kv ∈ kvs, c.T kv.2 | _ => False
+    μ := some .M
+    e := fun v => match v with
+      | .map kvs => (traverse (encPair c) kvs).map Attr.m
+      | _ => none
+    p := fun a => match a with
+      | .m kvs => (traverse (decPair c) kvs).map Value.map
+      | _ => none }
+
+/-- `record` is the same product at `map`/`M`, with the entry pair carrying the name. -/
+theorem recordCodec_eq {c : Codec} :
+    recordCodec c = entrywise mapV mA .M (fun kvs => ∀ kv ∈ kvs, c.T kv.2)
+      (encPair c) (decPair c) := by
+  ext v <;> cases v <;> simp_all [recordCodec, entrywise, mapV, mA, Ctor.into, Ctor.out]
+
+/-- (R), (C), (W) — `M` is the member every `map` writes. -/
+theorem lawfulCore_recordCodec {c : Codec} (h : LawfulCore c) :
+    LawfulCore (recordCodec c) :=
+  recordCodec_eq ▸ lawfulCore_entrywise (fun _ => rfl) (encPair_decPair h)
+    (decPair_encPair h)
+
+/-- `≼` at `M` is by name, not by position — the entries agree pointwise *and* keep their
+    names, and `lookup_rel` turns that into `Agree.m`. -/
+theorem lawful_recordCodec {c : Codec} (h : Lawful c) : Lawful (recordCodec c) :=
+  recordCodec_eq ▸ lawful_entrywise (fun _ => rfl) (encPair_decPair h.core)
+    (decPair_encPair h.core) (encPair_agree h)
+    (fun hlen hz => .m _ _ (lookup_rel _ _ hlen hz))
+
+theorem carrier_recordCodec {c : Codec} (hc : Carrier c) : Carrier (recordCodec c) :=
+  recordCodec_eq ▸ carrier_entrywise
+    (fun h => traverse_mem_input (encPair_dom hc) h)
+    (fun h => traverse_mem (decPair_ran hc) h)
 
 /-- Pair each position with its codec: the fixed head positionally, the tail
     uniformly; length mismatches refuse. `tuple` is then `align` + `traverse`. -/
@@ -439,24 +665,6 @@ def tupleCodec (cs : List Codec) (tail : Option Codec) : Codec :=
     p := fun a => match a with
       | .l as => ((align cs tail as).bind
           (traverse fun ca => ca.1.p ca.2)).map Value.arr
-      | _ => none }
-
-/-- The keyed entry steps: `record` is their uniform instance, `object` their
-    name-dispatched one. -/
-def encPair (c : Codec) : Name × Value → Option (Name × Attr) :=
-  fun kv => (c.e kv.2).map ((kv.1, ·))
-
-def decPair (c : Codec) : Name × Attr → Option (Name × Value) :=
-  fun kv => (c.p kv.2).map ((kv.1, ·))
-
-def recordCodec (c : Codec) : Codec :=
-  { T := fun v => match v with | .map kvs => ∀ kv ∈ kvs, c.T kv.2 | _ => False
-    μ := some .M
-    e := fun v => match v with
-      | .map kvs => (traverse (encPair c) kvs).map Attr.m
-      | _ => none
-    p := fun a => match a with
-      | .m kvs => (traverse (decPair c) kvs).map Value.map
       | _ => none }
 
 /-! ## Objects (§4) -/
@@ -876,71 +1084,6 @@ theorem carrier_orNull {c : Codec} (hc : Carrier c) : Carrier c.orNull := by
 
 /-! ### Containers -/
 
-
-
-theorem encPair_dom {c : Codec} (hc : Carrier c) :
-    ∀ kv y, encPair c kv = some y → c.T kv.2 := by
-  intro kv y h
-  cases he : c.e kv.2 with
-  | none => rw [encPair, he] at h; exact nomatch h
-  | some a => exact hc.domE he
-
-theorem decPair_ran {c : Codec} (hc : Carrier c) :
-    ∀ kv y, decPair c kv = some y → c.T y.2 := by
-  intro kv y h
-  cases hp : c.p kv.2 with
-  | none => rw [decPair, hp] at h; exact nomatch h
-  | some v =>
-    rw [decPair, hp] at h
-    replace h : some (kv.1, v) = some y := h
-    cases h
-    exact hc.ranP hp
-
-theorem carrier_arrayCodec {c : Codec} (hc : Carrier c) : Carrier (arrayCodec c) := by
-  refine ⟨?_, ?_⟩
-  · intro v a h
-    cases v
-    case arr vs =>
-      replace h : ((traverse c.e vs).map Attr.l) = some a := h
-      cases htr : traverse c.e vs with
-      | none => rw [htr] at h; exact nomatch h
-      | some as => exact traverse_mem_input (fun _ _ hxy => hc.domE hxy) htr
-    all_goals exact nomatch h
-  · intro a v h
-    cases a
-    case l as =>
-      replace h : ((traverse c.p as).map Value.arr) = some v := h
-      cases htr : traverse c.p as with
-      | none => rw [htr] at h; exact nomatch h
-      | some vs =>
-        rw [htr] at h
-        replace h : some (Value.arr vs) = some v := h
-        cases h
-        exact traverse_mem (fun _ _ hxy => hc.ranP hxy) htr
-    all_goals exact nomatch h
-
-theorem carrier_recordCodec {c : Codec} (hc : Carrier c) : Carrier (recordCodec c) := by
-  refine ⟨?_, ?_⟩
-  · intro v a h
-    cases v
-    case map kvs =>
-      replace h : ((traverse (encPair c) kvs).map Attr.m) = some a := h
-      cases htr : traverse (encPair c) kvs with
-      | none => rw [htr] at h; exact nomatch h
-      | some ds => exact traverse_mem_input (encPair_dom hc) htr
-    all_goals exact nomatch h
-  · intro a v h
-    cases a
-    case m kvs =>
-      replace h : ((traverse (decPair c) kvs).map Value.map) = some v := h
-      cases htr : traverse (decPair c) kvs with
-      | none => rw [htr] at h; exact nomatch h
-      | some ds =>
-        rw [htr] at h
-        replace h : some (Value.map ds) = some v := h
-        cases h
-        exact traverse_mem (decPair_ran hc) htr
-    all_goals exact nomatch h
 
 /-- `set`: nonemptiness comes from the wire, on both sides — `asWireSet` refuses the
     empty list going out, and `p` refuses an empty wire set coming in. §3's `℘⁺fin`. -/
@@ -1523,200 +1666,6 @@ theorem Lawful.orNull {c : Codec} (h : Lawful c)
             | exact nomatch (hr _ _ hp rfl)
             | exact h.agree hp he)
 
-/-- `array` keeps the core laws: the toolkit, verbatim. -/
-theorem lawfulCore_arrayCodec {c : Codec} (h : LawfulCore c) :
-    LawfulCore (arrayCodec c) := by
-  refine ⟨?_, ?_, ?_⟩
-  · intro t a he
-    cases t
-    case arr vs =>
-      replace he : (traverse c.e vs).map Attr.l = some a := he
-      cases hvs : traverse c.e vs with
-      | none => rw [hvs] at he; exact nomatch he
-      | some as =>
-        rw [hvs] at he
-        replace he : some (Attr.l as) = some a := he
-        cases he
-        show (traverse c.p as).map Value.arr = some (.arr vs)
-        rw [traverse_roundTrip (fun _ _ hxy => h.retract hxy) vs as hvs]
-        rfl
-    all_goals exact nomatch he
-  · intro a t hp
-    cases a
-    case l as =>
-      replace hp : (traverse c.p as).map Value.arr = some t := hp
-      cases has : traverse c.p as with
-      | none => rw [has] at hp; exact nomatch hp
-      | some vs =>
-        rw [has] at hp
-        replace hp : some (Value.arr vs) = some t := hp
-        cases hp
-        show ((traverse c.e vs).map Attr.l).isSome
-        obtain ⟨as', has'⟩ := Option.isSome_iff_exists.mp
-          (traverse_isSome (fun _ _ hyx => h.canon hyx) as vs has)
-        rw [has']
-        rfl
-    all_goals exact nomatch hp
-  · intro μ hμ t a he
-    replace hμ : some Member.L = some μ := hμ
-    cases hμ
-    cases t
-    case arr vs =>
-      replace he : (traverse c.e vs).map Attr.l = some a := he
-      cases hvs : traverse c.e vs with
-      | none => rw [hvs] at he; exact nomatch he
-      | some as =>
-        rw [hvs] at he
-        replace he : some (Attr.l as) = some a := he
-        cases he
-        rfl
-    all_goals exact nomatch he
-
-/-- `array` preserves the full laws: the core lemma, plus `≼` pointwise. -/
-theorem lawful_arrayCodec {c : Codec} (h : Lawful c) : Lawful (arrayCodec c) := by
-  have core := lawfulCore_arrayCodec h.core
-  refine ⟨core.retract, core.canon, core.writes, ?_⟩
-  intro a t a' hp he
-  cases a
-  case l as =>
-    replace hp : (traverse c.p as).map Value.arr = some t := hp
-    cases has : traverse c.p as with
-    | none => rw [has] at hp; exact nomatch hp
-    | some vs =>
-      rw [has] at hp
-      replace hp : some (Value.arr vs) = some t := hp
-      cases hp
-      replace he : (traverse c.e vs).map Attr.l = some a' := he
-      cases hvs : traverse c.e vs with
-      | none => rw [hvs] at he; exact nomatch he
-      | some as' =>
-        rw [hvs] at he
-        replace he : some (Attr.l as') = some a' := he
-        cases he
-        exact .l as' as
-          (traverse_rel (R := Agree) (fun _ _ _ hg hf => h.agree hg hf)
-            as vs as' has hvs)
-  all_goals exact nomatch hp
-
-/-- `record` keeps the core laws: the toolkit over the keyed steps. -/
-theorem lawfulCore_recordCodec {c : Codec} (h : LawfulCore c) :
-    LawfulCore (recordCodec c) := by
-  have hrt : ∀ kv ka, encPair c kv = some ka → decPair c ka = some kv := by
-    intro ⟨k, v⟩ ka hkv
-    simp only [encPair] at hkv
-    cases hev : c.e v with
-    | none => rw [hev] at hkv; exact nomatch hkv
-    | some a₀ =>
-      rw [hev] at hkv
-      replace hkv : some (k, a₀) = some ka := hkv
-      cases hkv
-      show (c.p a₀).map _ = _
-      rw [h.retract hev]
-      rfl
-  have hcn : ∀ ka kv, decPair c ka = some kv → (encPair c kv).isSome := by
-    intro ⟨k, a⟩ kv hka
-    simp only [decPair] at hka
-    cases hpa : c.p a with
-    | none => rw [hpa] at hka; exact nomatch hka
-    | some v₀ =>
-      rw [hpa] at hka
-      replace hka : some (k, v₀) = some kv := hka
-      cases hka
-      show ((c.e v₀).map _).isSome
-      obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp (h.canon hpa)
-      rw [ha']
-      rfl
-  refine ⟨?_, ?_, ?_⟩
-  · intro t a he
-    cases t
-    case map kvs =>
-      replace he : (traverse (encPair c) kvs).map Attr.m = some a := he
-      cases hkvs : traverse (encPair c) kvs with
-      | none => rw [hkvs] at he; exact nomatch he
-      | some ds =>
-        rw [hkvs] at he
-        replace he : some (Attr.m ds) = some a := he
-        cases he
-        show (traverse (decPair c) ds).map Value.map = some (.map kvs)
-        rw [traverse_roundTrip hrt kvs ds hkvs]
-        rfl
-    all_goals exact nomatch he
-  · intro a t hp
-    cases a
-    case m ds =>
-      replace hp : (traverse (decPair c) ds).map Value.map = some t := hp
-      cases hds : traverse (decPair c) ds with
-      | none => rw [hds] at hp; exact nomatch hp
-      | some kvs =>
-        rw [hds] at hp
-        replace hp : some (Value.map kvs) = some t := hp
-        cases hp
-        show ((traverse (encPair c) kvs).map Attr.m).isSome
-        obtain ⟨ds', hds'⟩ := Option.isSome_iff_exists.mp
-          (traverse_isSome hcn ds kvs hds)
-        rw [hds']
-        rfl
-    all_goals exact nomatch hp
-  · intro μ hμ t a he
-    replace hμ : some Member.M = some μ := hμ
-    cases hμ
-    cases t
-    case map kvs =>
-      replace he : (traverse (encPair c) kvs).map Attr.m = some a := he
-      cases hkvs : traverse (encPair c) kvs with
-      | none => rw [hkvs] at he; exact nomatch he
-      | some ds =>
-        rw [hkvs] at he
-        replace he : some (Attr.m ds) = some a := he
-        cases he
-        rfl
-    all_goals exact nomatch he
-
-/-- `record` preserves the full laws: the core lemma, plus the keyed `≼` clause. -/
-theorem lawful_recordCodec {c : Codec} (h : Lawful c) : Lawful (recordCodec c) := by
-  have hag : ∀ ka kv ka', decPair c ka = some kv → encPair c kv = some ka' →
-      ka'.1 = ka.1 ∧ Agree ka'.2 ka.2 := by
-    intro ⟨k, a⟩ kv ka' hka hkv
-    simp only [decPair] at hka
-    cases hpa : c.p a with
-    | none => rw [hpa] at hka; exact nomatch hka
-    | some v₀ =>
-      rw [hpa] at hka
-      replace hka : some (k, v₀) = some kv := hka
-      cases hka
-      simp only [encPair] at hkv
-      cases hev : c.e v₀ with
-      | none => rw [hev] at hkv; exact nomatch hkv
-      | some a₀ =>
-        rw [hev] at hkv
-        replace hkv : some (k, a₀) = some ka' := hkv
-        cases hkv
-        exact ⟨rfl, h.agree hpa hev⟩
-  have core := lawfulCore_recordCodec h.core
-  refine ⟨core.retract, core.canon, core.writes, ?_⟩
-  intro a t a' hp he
-  cases a
-  case m ds =>
-    replace hp : (traverse (decPair c) ds).map Value.map = some t := hp
-    cases hds : traverse (decPair c) ds with
-    | none => rw [hds] at hp; exact nomatch hp
-    | some kvs =>
-      rw [hds] at hp
-      replace hp : some (Value.map kvs) = some t := hp
-      cases hp
-      replace he : (traverse (encPair c) kvs).map Attr.m = some a' := he
-      cases hkvs : traverse (encPair c) kvs with
-      | none => rw [hkvs] at he; exact nomatch he
-      | some ds' =>
-        rw [hkvs] at he
-        replace he : some (Attr.m ds') = some a' := he
-        cases he
-        refine .m ds' ds ?_
-        have hzip := traverse_rel hag ds kvs ds' hds hkvs
-        have hlen : ds'.length = ds.length := by
-          rw [← traverse_length kvs ds' hkvs, traverse_length ds kvs hds]
-        exact lookup_rel ds' ds hlen (fun q hq => hzip q hq)
-  all_goals exact nomatch hp
 
 /-! ## Lawfulness — the open frontier (README roadmap) -/
 

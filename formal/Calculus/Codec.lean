@@ -11,6 +11,7 @@ The two §2 corollaries — (Q) and read-side (W) — are proved here, exactly a
 namespace Calculus
 
 /-- §2: `c = (T, μ, e, p)`. -/
+@[ext]
 structure Codec where
   T : Value → Prop
   μ : Option Member
