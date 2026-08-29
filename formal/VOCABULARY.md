@@ -39,6 +39,15 @@ cases htr : traverse c.e vs with                              -- split the chain
 
 It says nothing about codecs. It was written a few hundred times.
 
+**A correction, recorded rather than quietly fixed.** Two independent fidelity audits
+found that `scripts/vocab_audit.py` had two blind spots, both flattering: a silent
+fallback that scored ✓ where §2's naming scheme was not followed, and a failure to
+recognise `opaqCodec`'s eighteen per-constructor unfoldings as inversion. So this file's
+earlier headline — "the observation half is 12% done … `opaque` is the only block with a
+measurable residue" — was measuring a *naming* gap for its own largest cited offender.
+Both are fixed; the corrected figure is 25/48. See `FIDELITY.md` §2 C1. A measurement
+that flatters the thing it measures is worse than no measurement, and this one did.
+
 **The signal.** `replace h : … := h`, `show …` and `cases h… :` are the three ways a
 proof takes a definition apart by hand. Their count is the trend to watch — not a
 verdict, but a reliable one: it fell 437 → 154 across the passes that introduced the
@@ -65,6 +74,7 @@ Consistent today; normative from here, so the next proof inherits it.
 | `X_e` / `X_p` | inversion — what `X` writes, what `X` reads |
 | `X_eq` | `X` **is** an instance of a named construction, on the nose |
 | `lawfulCore_X` / `lawful_X` / `carrier_X` | the three obligations, in that order |
+| `Lawful.X` / `LawfulCore.X` | the same, where the construction is itself namespaced (`Codec.through`, `Codec.orNull`): `Lawful.through` reads "`through` preserves `Lawful`", which is the better name. Both forms are sanctioned; `scripts/vocab_audit.py` prints the split rather than absorbing it |
 | `f_sound` | a syntactic function agrees with the denotation (`κ_sound`, `adm_sound`) |
 | `equiv_X` | a §6 row |
 | `not_X` | a refutation — a "Do not hold" row, or a repaired discharger |
@@ -96,7 +106,7 @@ python3 scripts/vocab_audit.py          # add --sites to list them for triage
 | --- | --- | --- |
 | `carrier_X` — §3's `e : T ⇀ 𝔸`, `p : 𝔸 ⇀ T` | **23 / 24** | |
 | `lawfulCore_X` / `lawful_X` — §2's laws | **22 / 24** | `extendRead` exempt: (MP) is the sanctioned breach |
-| `X_e` / `X_p` — **what it writes, what it reads** | **21 / 48** | counting an `X_eq` that carries inversion across |
+| `X_e` / `X_p` — **what it writes, what it reads** | **25 / 48** | counting an `X_eq` that carries inversion across, and a per-constructor *family* (`opaqCodec_e_str`, …) as inversion |
 
 The obligation half of the vocabulary is done. **The observation half is 12% done.**
 Every product, the union and all four wrappers now have both. The ten ground codecs,

@@ -125,6 +125,20 @@ and the judgement to it), and `lazy` concludes `⊤` in the model exactly as the
   §5's own worked example — a pair that shares both `κ` and `⇝`, so only `adm` reaches
   it.
 
+## Is the model the specification?
+
+[`FIDELITY.md`](./FIDELITY.md) is the representation audit — two independent readings, in
+opposite directions, of whether every normative element of `docs/codec-calculus.md` has an
+exact counterpart here and whether a reviewer could check one in isolation. It records
+seven specification defects (three found by both readings independently), five claims that
+are true but unlocatable, two corrections to this package's own artifacts, and a measured
+review surface. Regenerate the measurements with `python3 scripts/fidelity_audit.py`.
+
+The headline: the guard puts 17 constants through `#assert_axioms` while the documents
+cite 93 as results, §-tag coverage is 18%, and **60% of theorem statements name a
+definition that is documented nowhere** — a statement a reviewer cannot read against the
+specification without a detour.
+
 ## How the proofs are meant to read
 
 [`VOCABULARY.md`](./VOCABULARY.md) is the convention — a definition is unfolded once, in

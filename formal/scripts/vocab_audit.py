@@ -87,14 +87,18 @@ def declarations(lines):
 
 def matrix(names):
     has = lambda *c: any(x in names for x in c)
+    # some constructions carry inversion as a *family* of per-constructor unfoldings
+    # rather than one iff; count the family
+    fam = lambda s, side: any(n.startswith(f"{s}_{side}_") for n in names)
     print("── 1. completeness matrix ─────────────────────────────────────────────\n")
     print(f"{'construction':18s} {'e-inv':>6s}{'p-inv':>7s}{'_eq':>6s}{'core':>7s}{'lawful':>8s}{'carrier':>9s}")
     print("─" * 62)
     filled = collections.Counter(); total = collections.Counter()
     for d, s in CONSTRUCTIONS:
         slots = {
-            "e-inv":   has(f"{s}_e", f"{s}_e_eq", f"{s}_e_inv", f"{s}_e_iff", f"{s}_eq"),
-            "p-inv":   has(f"{s}_p", f"{s}_p_eq", f"{s}_p_inv", f"{s}_p_iff", "objRead_eq" if s=="objWrite" else f"{s}_p"),
+            "e-inv":   has(f"{s}_e", f"{s}_e_eq", f"{s}_e_inv", f"{s}_e_iff", f"{s}_eq") or fam(s, "e"),
+            "p-inv":   (has(f"{s}_p", f"{s}_p_eq", f"{s}_p_inv", f"{s}_p_iff",
+                             "objRead_eq" if s == "objWrite" else f"{s}_p") or fam(s, "p")),
             "_eq":     has(f"{s}_eq", f"{d}_eq"),
             "core":    has(f"lawfulCore_{d}", f"lawfulCore_{s}", f"LawfulCore.{s}"),
             "lawful":  has(f"lawful_{d}", f"lawful_{s}", f"Lawful.{s}"),
@@ -112,7 +116,15 @@ def matrix(names):
         f"{f'{filled[k]}/{total[k]}':>{7 if k != 'e-inv' else 6}s}" for k in total))
     for (d, k), why in EXEMPT.items():
         print(f"\n  – {d}/{k}: {why}")
-    print("\n  Name-based: a lemma proved under a different name reads as missing.")
+    print("\n  Name-based: a lemma proved under a different name reads as missing —")
+    print("  which is the point. The scheme of VOCABULARY.md §2 is what makes the")
+    print("  matrix meaningful, so a violation must show as a gap, not be absorbed.")
+    dot = sorted(n for n in names
+                 if re.match(r'(Lawful|LawfulCore|Carrier)\.(through|restrict|extendRead|orNull)$', n))
+    if dot:
+        print(f"\n  in dot form ({len(dot)}) — sanctioned by §2 for the namespaced wrappers,")
+        print("  listed so the split stays visible rather than absorbed:")
+        print("      " + ", ".join(dot))
 
 def sites(files, show=False):
     by_kind = collections.Counter(); by_file = collections.defaultdict(collections.Counter)
