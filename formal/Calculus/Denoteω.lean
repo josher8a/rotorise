@@ -211,68 +211,52 @@ theorem mapCongrω {α β : Type} {f g : α → β} :
 
 mutual
 
-/-- The two denotations agree once the fuel covers the term. -/
+/-- `denoteω` is `denote` at any sufficient budget. Every term has positive depth, so a
+    sufficient budget is a successor — that is the whole of the `0` case, once, rather
+    than at each of the twenty-two rules. The ground terms are then `rfl`, and the rest
+    is the recursion pushed under whichever combinator the rule denotes. -/
 theorem denoteω_eq : ∀ (t : Term) (n : Nat), termDepth t <= n -> denoteω t = denote n t
-  | .string, n, h => by
-      cases n with | zero => exact absurd h (by simp [termDepth]) | succ n' => rfl
-  | .number, n, h => by
-      cases n with | zero => exact absurd h (by simp [termDepth]) | succ n' => rfl
-  | .decimal, n, h => by
-      cases n with | zero => exact absurd h (by simp [termDepth]) | succ n' => rfl
-  | .boolean, n, h => by
-      cases n with | zero => exact absurd h (by simp [termDepth]) | succ n' => rfl
-  | .binary, n, h => by
-      cases n with | zero => exact absurd h (by simp [termDepth]) | succ n' => rfl
-  | .numeric _, n, h => by
-      cases n with | zero => exact absurd h (by simp [termDepth]) | succ n' => rfl
-  | .literalS _, n, h => by
-      cases n with | zero => exact absurd h (by simp [termDepth]) | succ n' => rfl
-  | .literalN _, n, h => by
-      cases n with | zero => exact absurd h (by simp [termDepth]) | succ n' => rfl
-  | .custom _ _, n, h => by
-      cases n with | zero => exact absurd h (by simp [termDepth]) | succ n' => rfl
-  | .opaq _, n, h => by
-      cases n with | zero => exact absurd h (by simp [termDepth]) | succ n' => rfl
-  | .set t, n, h => by
-      cases n with | zero => exact absurd h (by simp [termDepth]) | succ n' =>
-      have hn : termDepth t <= n' := by simp only [termDepth] at h; omega
-      simp only [denoteω, denote, denoteω_eq t n' hn]
-  | .array t, n, h => by
-      cases n with | zero => exact absurd h (by simp [termDepth]) | succ n' =>
-      have hn : termDepth t <= n' := by simp only [termDepth] at h; omega
-      simp only [denoteω, denote, denoteω_eq t n' hn]
-  | .record t, n, h => by
-      cases n with | zero => exact absurd h (by simp [termDepth]) | succ n' =>
-      have hn : termDepth t <= n' := by simp only [termDepth] at h; omega
-      simp only [denoteω, denote, denoteω_eq t n' hn]
-  | .nullable t, n, h => by
-      cases n with | zero => exact absurd h (by simp [termDepth]) | succ n' =>
-      have hn : termDepth t <= n' := by simp only [termDepth] at h; omega
-      simp only [denoteω, denote, denoteω_eq t n' hn]
-  | .lazy t, n, h => by
-      cases n with | zero => exact absurd h (by simp [termDepth]) | succ n' =>
-      have hn : termDepth t <= n' := by simp only [termDepth] at h; omega
-      simp only [denoteω, denote, denoteω_eq t n' hn]
-  | .held t f g, n, h => by
-      cases n with | zero => exact absurd h (by simp [termDepth]) | succ n' =>
-      have hn : termDepth t <= n' := by simp only [termDepth] at h; omega
-      simp only [denoteω, denote, denoteω_eq t n' hn]
-  | .refine t q, n, h => by
-      cases n with | zero => exact absurd h (by simp [termDepth]) | succ n' =>
-      have hn : termDepth t <= n' := by simp only [termDepth] at h; omega
-      simp only [denoteω, denote, denoteω_eq t n' hn]
-  | .legacy t r, n, h => by
-      cases n with | zero => exact absurd h (by simp [termDepth]) | succ n' =>
-      have hn : termDepth t <= n' := by simp only [termDepth] at h; omega
-      simp only [denoteω, denote, denoteω_eq t n' hn]
-  | .tuple ts tail, n, h => by
-      cases n with | zero => exact absurd h (by simp [termDepth]) | succ n' =>
+  | t, 0, h => absurd h (by cases t <;> simp [termDepth])
+  | .string, _+1, _ => rfl
+  | .number, _+1, _ => rfl
+  | .decimal, _+1, _ => rfl
+  | .boolean, _+1, _ => rfl
+  | .binary, _+1, _ => rfl
+  | .numeric _, _+1, _ => rfl
+  | .literalS _, _+1, _ => rfl
+  | .literalN _, _+1, _ => rfl
+  | .custom _ _, _+1, _ => rfl
+  | .opaq _, _+1, _ => rfl
+  | .set t, n'+1, h => by
+      simp only [denoteω, denote,
+        denoteω_eq t n' (by simp only [termDepth] at h; omega)]
+  | .array t, n'+1, h => by
+      simp only [denoteω, denote,
+        denoteω_eq t n' (by simp only [termDepth] at h; omega)]
+  | .record t, n'+1, h => by
+      simp only [denoteω, denote,
+        denoteω_eq t n' (by simp only [termDepth] at h; omega)]
+  | .nullable t, n'+1, h => by
+      simp only [denoteω, denote,
+        denoteω_eq t n' (by simp only [termDepth] at h; omega)]
+  | .lazy t, n'+1, h => by
+      simp only [denoteω, denote,
+        denoteω_eq t n' (by simp only [termDepth] at h; omega)]
+  | .held t f g, n'+1, h => by
+      simp only [denoteω, denote,
+        denoteω_eq t n' (by simp only [termDepth] at h; omega)]
+  | .refine t q, n'+1, h => by
+      simp only [denoteω, denote,
+        denoteω_eq t n' (by simp only [termDepth] at h; omega)]
+  | .legacy t r, n'+1, h => by
+      simp only [denoteω, denote,
+        denoteω_eq t n' (by simp only [termDepth] at h; omega)]
+  | .tuple ts tail, n'+1, h => by
       have hL : termDepthL ts <= n' := by simp only [termDepth] at h; omega
       have hO : termDepthO tail <= n' := by simp only [termDepth] at h; omega
       simp only [denoteω, denote, denoteωL_eq]
       rw [mapCongrω ts (denoteω_eqPt ts n' hL), denoteω_eqO tail n' hO]
-  | .object fields rest, n, h => by
-      cases n with | zero => exact absurd h (by simp [termDepth]) | succ n' =>
+  | .object fields rest, n'+1, h => by
       have hF : termDepthF fields <= n' := by simp only [termDepth] at h; omega
       have hR : termDepthR rest <= n' := by simp only [termDepth] at h; omega
       simp only [denoteω, denote, denoteωF_eq]
@@ -280,20 +264,16 @@ theorem denoteω_eq : ∀ (t : Term) (n : Nat), termDepth t <= n -> denoteω t =
           mapCongrω (f := fun kf => (kf.1, denoteωField kf.2))
             (g := fun kf => (kf.1, fieldSemOf (denote n') kf.2))
             fields (denoteω_eqFPt fields n' hF)]
-  | .union opts, n, h => by
-      cases n with | zero => exact absurd h (by simp [termDepth]) | succ n' =>
-      have hL : termDepthL opts <= n' := by simp only [termDepth] at h; omega
-      have hpt := denoteω_eqPt opts n' hL
+  | .union opts, n'+1, h => by
+      have hpt := denoteω_eqPt opts n' (by simp only [termDepth] at h; omega)
       simp only [denoteω, denote, denoteωOpts_eq, denoteωMems_eq]
       rw [mapCongrω (f := fun t => optionSemOf (denoteω t) (specOf t))
             (g := fun t => optionSemOf (denote n' t) (specOf t))
             opts (fun t ht => by simp only [hpt t ht]),
           mapCongrω (f := fun t => (denoteω t).μ) (g := fun t => (denote n' t).μ)
             opts (fun t ht => by simp only [hpt t ht])]
-  | .dunion d opts, n, h => by
-      cases n with | zero => exact absurd h (by simp [termDepth]) | succ n' =>
-      have hL : termDepthL opts <= n' := by simp only [termDepth] at h; omega
-      have hpt := denoteω_eqPt opts n' hL
+  | .dunion d opts, n'+1, h => by
+      have hpt := denoteω_eqPt opts n' (by simp only [termDepth] at h; omega)
       simp only [denoteω, denote, denoteωTags_eq]
       rw [mapCongrω (f := fun t => (tagsOf d t, denoteω t))
             (g := fun t => (tagsOf d t, denote n' t))
