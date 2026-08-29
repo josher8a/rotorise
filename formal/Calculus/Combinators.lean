@@ -20,9 +20,11 @@ irreducible structure; everything else wraps one subterm):
   pointwise-relation lemmas — **proved**): the one proof shape shared by every
   product. `drop` is a *filter*, not a traversal mode, and `tuple` is `align` +
   `traverse` — so nothing needs a second toolkit;
-* products — `entrywise`, the entrywise product named once, with `arrayCodec` and
-  `recordCodec` its two instances **proved** from the toolkit; `tupleCodec`,
-  `setCodec`, `objectCodec` carry their own scaffolding;
+* products — `carriedCodec`, a payload pair carried between two prisms, is the shape
+  underneath all of them; `entrywise` is it at a traversal (hence `arrayCodec` and
+  `recordCodec`), `tupleCodec` it at `align` + a traversal, where the one fact worth
+  proving is that alignment depends on a row's *length* alone (`slots`, `align_eq_some`).
+  `setCodec` and `objectCodec` are argued on their own;
 * sums — `altCodec` over `OptionSem`s that carry their *admission as data*, with
   `UniqueAdmission` ((U) as a premise). `dunionCodec` is `altCodec` over
   tag-admission options — "the one union whose (U) is a theorem" (doc §5) is
@@ -438,65 +440,131 @@ def setCodec (c : Codec) : Codec :=
         else (traverse (fun b => c.p (.b b)) vs).map Value.set
       | _ => none }
 
+/-! ### A codec carried between two prisms
+
+The shape underneath every product in §3–§4. A pair works on *payloads* — lists of
+entries, mostly — and two prisms say which value and which attribute constructor hold
+them. §2's four laws split cleanly along that seam: the prism halves are discharged once,
+here, and each construction is left with only its payload pair's own round trip,
+definedness and agreement.
+
+`pointCodec` above is the degenerate case, where the payload passes through untouched.
+The three below are the products: `entrywise` (a traversal, hence `array` and `record`),
+`tuple` (`align`, then a traversal) and `object` (a guard, a filter, then a traversal).
+
+`set` is the one product that is *not* an instance, and for a reason worth stating: its
+attribute side is a choice among three wire sets, not one constructor. It is argued on
+its own below. -/
+
+/-- **A codec between two prisms.** `P` is the held set's condition on the payload;
+    `E`/`D` are the payload pair. -/
+def carriedCodec {γ δ : Type} (V : Ctor γ Value) (A : Ctor δ Attr) (μ₀ : Member)
+    (P : γ → Prop) (E : γ → Option δ) (D : δ → Option γ) : Codec :=
+  { T := fun v => ∃ x, v = V.into x ∧ P x
+    μ := some μ₀
+    e := fun v => ((V.out v).bind E).map A.into
+    p := fun a => ((A.out a).bind D).map V.into }
+
+section Carried
+variable {γ δ : Type} {V : Ctor γ Value} {A : Ctor δ Attr} {μ₀ : Member}
+  {P : γ → Prop} {E : γ → Option δ} {D : δ → Option γ}
+
+/-- What it writes: only a value the prism matches, and only what `E` accepts. -/
+theorem carried_e {v a} :
+    (carriedCodec V A μ₀ P E D).e v = some a ↔
+      ∃ x y, V.out v = some x ∧ E x = some y ∧ a = A.into y := by
+  simp [carriedCodec, Option.bind_eq_some, Option.map_eq_some', eq_comm (a := a)]
+
+/-- What it reads: the mirror. -/
+theorem carried_p {a v} :
+    (carriedCodec V A μ₀ P E D).p a = some v ↔
+      ∃ y x, A.out a = some y ∧ D y = some x ∧ v = V.into x := by
+  simp [carriedCodec, Option.bind_eq_some, Option.map_eq_some', eq_comm (a := v)]
+
+/-- (R), (C) and (W) are the payload pair's own, plus the member the attribute
+    constructor stamps. The prisms contribute nothing but their two laws. -/
+theorem lawfulCore_carried (hμ : ∀ y, (A.into y).member = μ₀)
+    (hr : ∀ x y, E x = some y → D y = some x)
+    (hc : ∀ y x, D y = some x → (E x).isSome) :
+    LawfulCore (carriedCodec V A μ₀ P E D) where
+  retract he := by
+    obtain ⟨x, y, hv, hx, rfl⟩ := carried_e.mp he
+    exact carried_p.mpr ⟨y, x, A.out_into y, hr x y hx, V.into_out hv⟩
+  canon hp := by
+    obtain ⟨y, x, _, hy, rfl⟩ := carried_p.mp hp
+    obtain ⟨y', h'⟩ := Option.isSome_iff_exists.mp (hc y x hy)
+    exact Option.isSome_iff_exists.mpr ⟨_, carried_e.mpr ⟨x, y', V.out_into x, h', rfl⟩⟩
+  writes := by
+    intro μ hμ' t a he
+    obtain ⟨_, y, _, _, rfl⟩ := carried_e.mp he
+    exact (hμ y).trans (Option.some.inj hμ')
+
+/-- (MP) is the payload pair's own too, stated where it has to be — at the attribute
+    constructor, since that is where `≼` is defined. -/
+theorem lawful_carried (hμ : ∀ y, (A.into y).member = μ₀)
+    (hr : ∀ x y, E x = some y → D y = some x)
+    (hc : ∀ y x, D y = some x → (E x).isSome)
+    (hag : ∀ y x y', D y = some x → E x = some y' → Agree (A.into y') (A.into y)) :
+    Lawful (carriedCodec V A μ₀ P E D) :=
+  { lawfulCore_carried hμ hr hc with
+    agree := by
+      intro a t a' hp he
+      obtain ⟨y, x, ha, hy, rfl⟩ := carried_p.mp hp
+      obtain ⟨x', y', hv, hx, rfl⟩ := carried_e.mp he
+      obtain rfl : x' = x := Option.some.inj ((V.out_into x).symm.trans hv).symm
+      exact A.into_out ha ▸ hag _ _ _ hy hx }
+
+/-- `e : T ⇀ 𝔸` and `p : 𝔸 ⇀ T`: the held set's condition has to hold of whatever
+    payload either half of the pair accepts. -/
+theorem carrier_carried
+    (hdom : ∀ {x y}, E x = some y → P x)
+    (hran : ∀ {y x}, D y = some x → P x) :
+    Carrier (carriedCodec V A μ₀ P E D) where
+  domE he := by
+    obtain ⟨x, y, hv, hx, _⟩ := carried_e.mp he
+    exact ⟨x, V.into_out hv, hdom hx⟩
+  ranP hp := by
+    obtain ⟨y, x, _, hy, rfl⟩ := carried_p.mp hp
+    exact ⟨x, rfl, hran hy⟩
+
+end Carried
+
 /-! ### The entrywise product, named once
 
-`array` and `record` differ in nothing but which prisms they run between: a value
-constructor holding a list of entries, an attribute constructor holding a list of wire
-entries, and one entry pair carried between them. Named once, §2's laws are discharged
-once — and each instance is left with only the part that is genuinely its own, the shape
-of `≼` at its attribute constructor (`Agree.l` compares by position, `Agree.m` by name).
+`array` and `record` are `carriedCodec` where the payload pair is one entry function
+traversed: a value constructor holding a list of entries, an attribute constructor
+holding a list of wire entries. Named once, §2's laws are discharged once — and each
+instance is left with only the part that is genuinely its own, the shape of `≼` at its
+attribute constructor (`Agree.l` compares by position, `Agree.m` by name). -/
 
-`set` is deliberately *not* an instance: its attribute side is a choice among three wire
-sets, not one prism, and it gates on non-emptiness. `tuple` is not one either — it pairs
-each position with its own codec first (`align`). Both are treated below on their own. -/
-
-/-- **The entrywise product.** `P` is the held set's condition on the entries; the pair is
-    the entry function and its partial inverse. -/
+/-- **The entrywise product**: `carriedCodec` at a traversal. -/
 def entrywise {α β : Type} (V : Ctor (List α) Value) (A : Ctor (List β) Attr)
     (μ₀ : Member) (P : List α → Prop) (f : α → Option β) (g : β → Option α) : Codec :=
-  { T := fun v => ∃ xs, v = V.into xs ∧ P xs
-    μ := some μ₀
-    e := fun v => ((V.out v).bind (traverse f)).map A.into
-    p := fun a => ((A.out a).bind (traverse g)).map V.into }
+  carriedCodec V A μ₀ P (traverse f) (traverse g)
 
 section Entrywise
 variable {α β : Type} {V : Ctor (List α) Value} {A : Ctor (List β) Attr}
   {μ₀ : Member} {P : List α → Prop} {f : α → Option β} {g : β → Option α}
 
-/-- What it writes: only a value the prism matches, and only when every entry writes. -/
 theorem entrywise_e {v a} :
     (entrywise V A μ₀ P f g).e v = some a ↔
-      ∃ xs ys, V.out v = some xs ∧ traverse f xs = some ys ∧ a = A.into ys := by
-  simp [entrywise, Option.bind_eq_some, Option.map_eq_some', eq_comm (a := a)]
+      ∃ xs ys, V.out v = some xs ∧ traverse f xs = some ys ∧ a = A.into ys := carried_e
 
-/-- What it reads: the mirror. -/
 theorem entrywise_p {a v} :
     (entrywise V A μ₀ P f g).p a = some v ↔
-      ∃ ys xs, A.out a = some ys ∧ traverse g ys = some xs ∧ v = V.into xs := by
-  simp [entrywise, Option.bind_eq_some, Option.map_eq_some', eq_comm (a := v)]
+      ∃ ys xs, A.out a = some ys ∧ traverse g ys = some xs ∧ v = V.into xs := carried_p
 
-/-- (R), (C), (W) lift entrywise: the round trip reverses the traversal, definedness
-    forgets it, and the member is the one the attribute constructor stamps. -/
+/-- The traversal toolkit is exactly what the payload pair's three clauses ask for:
+    the round trip reversed, definedness forgotten. -/
 theorem lawfulCore_entrywise (hμ : ∀ ys, (A.into ys).member = μ₀)
     (hr : ∀ x y, f x = some y → g y = some x)
     (hc : ∀ y x, g y = some x → (f x).isSome) :
-    LawfulCore (entrywise V A μ₀ P f g) where
-  retract he := by
-    obtain ⟨xs, ys, hv, hxs, rfl⟩ := entrywise_e.mp he
-    exact entrywise_p.mpr
-      ⟨ys, xs, A.out_into ys, traverse_roundTrip hr xs ys hxs, V.into_out hv⟩
-  canon hp := by
-    obtain ⟨ys, xs, _, hys, rfl⟩ := entrywise_p.mp hp
-    obtain ⟨ys', h'⟩ := Option.isSome_iff_exists.mp (traverse_isSome hc ys xs hys)
-    exact Option.isSome_iff_exists.mpr ⟨_, entrywise_e.mpr ⟨xs, ys', V.out_into xs, h', rfl⟩⟩
-  writes := by
-    intro μ hμ' t a he
-    obtain ⟨_, ys, _, _, rfl⟩ := entrywise_e.mp he
-    exact (hμ ys).trans (Option.some.inj hμ')
+    LawfulCore (entrywise V A μ₀ P f g) :=
+  lawfulCore_carried hμ (traverse_roundTrip hr) (traverse_isSome hc)
 
-/-- (MP) lifts too, but only as far as the attribute constructor: `R` is the entry-level
-    agreement, and `hA` is how that constructor turns a pointwise `R` into `≼`. This is
-    the one clause `array` and `record` do not share. -/
+/-- (MP) is the one clause `array` and `record` do not share: `R` is the entry-level
+    agreement the pair delivers, and `hA` is how the attribute constructor turns a
+    pointwise `R` into `≼`. -/
 theorem lawful_entrywise {R : β → β → Prop} (hμ : ∀ ys, (A.into ys).member = μ₀)
     (hr : ∀ x y, f x = some y → g y = some x)
     (hc : ∀ y x, g y = some x → (f x).isSome)
@@ -504,28 +572,15 @@ theorem lawful_entrywise {R : β → β → Prop} (hμ : ∀ ys, (A.into ys).mem
     (hA : ∀ {ys ys' : List β}, ys'.length = ys.length →
             (∀ q ∈ ys'.zip ys, R q.1 q.2) → Agree (A.into ys') (A.into ys)) :
     Lawful (entrywise V A μ₀ P f g) :=
-  { lawfulCore_entrywise hμ hr hc with
-    agree := by
-      intro a t a' hp he
-      obtain ⟨ys, xs, ha, hys, rfl⟩ := entrywise_p.mp hp
-      obtain ⟨xs', ys', hv, hxs, rfl⟩ := entrywise_e.mp he
-      obtain rfl : xs' = xs := Option.some.inj ((V.out_into xs).symm.trans hv).symm
-      rw [A.into_out ha]
-      exact hA ((traverse_length _ _ hys).trans (traverse_length _ _ hxs)).symm
-        (traverse_rel hag _ _ _ hys hxs) }
+  lawful_carried hμ (traverse_roundTrip hr) (traverse_isSome hc)
+    fun _ _ _ hy hx => hA ((traverse_length _ _ hy).trans (traverse_length _ _ hx)).symm
+      (traverse_rel hag _ _ _ hy hx)
 
-/-- `e : T ⇀ 𝔸` and `p : 𝔸 ⇀ T`, given the entry condition holds of any list the
-    traversal accepts on either side. -/
 theorem carrier_entrywise
     (hdom : ∀ {xs ys}, traverse f xs = some ys → P xs)
     (hran : ∀ {ys xs}, traverse g ys = some xs → P xs) :
-    Carrier (entrywise V A μ₀ P f g) where
-  domE he := by
-    obtain ⟨xs, ys, hv, hxs, _⟩ := entrywise_e.mp he
-    exact ⟨xs, V.into_out hv, hdom hxs⟩
-  ranP hp := by
-    obtain ⟨ys, xs, _, hys, rfl⟩ := entrywise_p.mp hp
-    exact ⟨xs, rfl, hran hys⟩
+    Carrier (entrywise V A μ₀ P f g) :=
+  carrier_carried hdom hran
 
 end Entrywise
 
@@ -546,7 +601,7 @@ def arrayCodec (c : Codec) : Codec :=
     equation is what carries the three lemmas across. -/
 theorem arrayCodec_eq {c : Codec} :
     arrayCodec c = entrywise arrV lA .L (fun vs => ∀ x ∈ vs, c.T x) c.e c.p := by
-  ext v <;> cases v <;> simp_all [arrayCodec, entrywise, arrV, lA, Ctor.into, Ctor.out]
+  ext v <;> cases v <;> simp_all [arrayCodec, entrywise, carriedCodec, arrV, lA, Ctor.into, Ctor.out]
 
 /-- (R), (C), (W) — `L` is the member every `arr` writes. -/
 theorem lawfulCore_arrayCodec {c : Codec} (h : LawfulCore c) :
@@ -622,7 +677,7 @@ def recordCodec (c : Codec) : Codec :=
 theorem recordCodec_eq {c : Codec} :
     recordCodec c = entrywise mapV mA .M (fun kvs => ∀ kv ∈ kvs, c.T kv.2)
       (encPair c) (decPair c) := by
-  ext v <;> cases v <;> simp_all [recordCodec, entrywise, mapV, mA, Ctor.into, Ctor.out]
+  ext v <;> cases v <;> simp_all [recordCodec, entrywise, carriedCodec, mapV, mA, Ctor.into, Ctor.out]
 
 /-- (R), (C), (W) — `M` is the member every `map` writes. -/
 theorem lawfulCore_recordCodec {c : Codec} (h : LawfulCore c) :
@@ -641,6 +696,18 @@ theorem carrier_recordCodec {c : Codec} (hc : Carrier c) : Carrier (recordCodec 
   recordCodec_eq ▸ carrier_entrywise
     (fun h => traverse_mem_input (encPair_dom hc) h)
     (fun h => traverse_mem (decPair_ran hc) h)
+
+/-! ### `tuple` (§3) — the positional product
+
+`tuple` is `carriedCodec` between the same two prisms as `array`, with a payload pair
+that pairs each position with its own codec before traversing. Everything specific to it
+is therefore a fact about that pairing, and there is only one worth stating: **which
+codec a position gets depends on the position alone, never on what stands there.** Name
+the codec row a shape assigns to a row of `n` positions (`slots`) and the pairing is a
+`zip` with it (`align_eq_some`) — after which a row and its image under the pair, having
+the same length, provably align against the *same* codecs. That is the whole of the
+tuple's asymmetry between reading and writing, and the four clauses of §2 then run
+position by position over the codec row, exactly as they do for `array`. -/
 
 /-- Pair each position with its codec: the fixed head positionally, the tail
     uniformly; length mismatches refuse. `tuple` is then `align` + `traverse`. -/
@@ -666,6 +733,241 @@ def tupleCodec (cs : List Codec) (tail : Option Codec) : Codec :=
       | .l as => ((align cs tail as).bind
           (traverse fun ca => ca.1.p ca.2)).map Value.arr
       | _ => none }
+
+/-! #### The codec row a shape assigns -/
+
+/-- The codec row for a row of `n` positions: the fixed head, then the tail codec as
+    often as needed. `none` is the length mismatch `align` refuses on. -/
+def slots : List Codec → Option Codec → Nat → Option (List Codec)
+  | [], _, 0 => some []
+  | [], none, _ + 1 => none
+  | [], some c, n + 1 => (slots [] (some c) n).map (c :: ·)
+  | _ :: _, _, 0 => none
+  | c :: cs, tail, n + 1 => (slots cs tail n).map (c :: ·)
+
+theorem align_eq_zip {α : Type} : ∀ (cs : List Codec) (tail : Option Codec) (xs : List α),
+    align cs tail xs = (slots cs tail xs.length).map (·.zip xs)
+  | [], tail, [] => by cases tail <;> rfl
+  | [], none, _ :: _ => rfl
+  | [], some c, x :: xs => by
+      show (align [] (some c) xs).map ((c, x) :: ·) = _
+      rw [align_eq_zip [] (some c) xs]
+      cases hs : slots [] (some c) xs.length <;> simp [slots, hs, List.zip]
+  | _ :: _, tail, [] => by cases tail <;> rfl
+  | c :: cs, tail, x :: xs => by
+      show (align cs tail xs).map ((c, x) :: ·) = _
+      rw [align_eq_zip cs tail xs]
+      cases hs : slots cs tail xs.length <;> simp [slots, hs, List.zip]
+
+theorem slots_length : ∀ (cs : List Codec) (tail : Option Codec) (n : Nat) (ds),
+    slots cs tail n = some ds → ds.length = n
+  | [], tail, 0, _, h => by cases tail <;> (simp [slots] at h; simp [← h])
+  | [], some c, n + 1, ds, h => by
+      obtain ⟨ds', h', rfl⟩ := Option.map_eq_some'.mp h
+      simp [slots_length [] (some c) n ds' h']
+  | c :: cs, tail, n + 1, ds, h => by
+      obtain ⟨ds', h', rfl⟩ := Option.map_eq_some'.mp h
+      simp [slots_length cs tail n ds' h']
+
+/-- Every codec in the row is one the shape declared. -/
+theorem slots_mem : ∀ (cs : List Codec) (tail : Option Codec) (n : Nat) (ds),
+    slots cs tail n = some ds → ∀ c ∈ ds, c ∈ cs ∨ tail = some c
+  | [], tail, 0, _, h, _, hm => by
+      cases tail <;> (simp [slots] at h; subst h; exact nomatch hm)
+  | [], some c, n + 1, ds, h, d, hm => by
+      obtain ⟨ds', h', rfl⟩ := Option.map_eq_some'.mp h
+      rcases List.mem_cons.mp hm with rfl | hm'
+      · exact .inr rfl
+      · exact slots_mem [] (some c) n ds' h' d hm'
+  | c :: cs, tail, n + 1, ds, h, d, hm => by
+      obtain ⟨ds', h', rfl⟩ := Option.map_eq_some'.mp h
+      rcases List.mem_cons.mp hm with rfl | hm'
+      · exact .inl (List.mem_cons_self _ _)
+      · exact (slots_mem cs tail n ds' h' d hm').imp (List.mem_cons_of_mem _) id
+
+/-- A property of the shape's codecs is a property of every codec in every row. -/
+theorem slots_all {Q : Codec → Prop} {cs : List Codec} {tail : Option Codec}
+    (hcs : ∀ c ∈ cs, Q c) (htl : ∀ c ∈ tail, Q c) {n ds}
+    (hs : slots cs tail n = some ds) : ∀ c ∈ ds, Q c := fun c hc =>
+  (slots_mem cs tail n ds hs c hc).elim (hcs c) (htl c)
+
+/-- **The pivot for `align`.** An alignment is the codec row zipped with the row: which
+    codec a position gets depends on the position alone, never on what stands there. -/
+theorem align_eq_some {α : Type} {cs : List Codec} {tail : Option Codec}
+    {xs : List α} {ps} :
+    align cs tail xs = some ps ↔
+      ∃ ds, slots cs tail xs.length = some ds ∧ ds.length = xs.length ∧ ps = ds.zip xs := by
+  rw [align_eq_zip]
+  constructor
+  · intro h
+    obtain ⟨ds, h', rfl⟩ := Option.map_eq_some'.mp h
+    exact ⟨ds, h', slots_length _ _ _ _ h', rfl⟩
+  · rintro ⟨ds, h', _, rfl⟩
+    rw [h']; rfl
+
+/-- …so any row of the same length aligns against the same codecs. -/
+theorem align_of_slots {α : Type} {cs : List Codec} {tail : Option Codec} {n ds}
+    (h : slots cs tail n = some ds) {xs : List α} (hn : xs.length = n) :
+    align cs tail xs = some (ds.zip xs) := by
+  rw [align_eq_zip, hn, h]; rfl
+
+/-! #### §2's clauses, position by position over the codec row -/
+
+theorem zip_roundTrip : ∀ (ds : List Codec) (vs : List Value) (as : List Attr),
+    (∀ c ∈ ds, LawfulCore c) → ds.length = vs.length →
+    traverse (fun cv : Codec × Value => cv.1.e cv.2) (ds.zip vs) = some as →
+    traverse (fun ca : Codec × Attr => ca.1.p ca.2) (ds.zip as) = some vs
+  | [], vs, as, _, hlen, h => by simp_all [List.eq_nil_of_length_eq_zero hlen.symm]
+  | _ :: _, [], as, _, hlen, h => by simp_all
+  | d :: ds, v :: vs, as, hd, hlen, h => by
+      rw [List.zip_cons_cons, traverse_cons] at h
+      obtain ⟨a, ha, has⟩ := Option.bind_eq_some.mp h
+      obtain ⟨as', has', rfl⟩ := Option.map_eq_some'.mp has
+      rw [List.zip_cons_cons, traverse_cons, (hd d (by simp)).retract ha,
+        zip_roundTrip ds vs as' (fun c hc => hd c (by simp [hc])) (by simpa using hlen) has']
+      rfl
+
+theorem zip_canon : ∀ (ds : List Codec) (as : List Attr) (vs : List Value),
+    (∀ c ∈ ds, LawfulCore c) →
+    traverse (fun ca : Codec × Attr => ca.1.p ca.2) (ds.zip as) = some vs →
+    (traverse (fun cv : Codec × Value => cv.1.e cv.2) (ds.zip vs)).isSome
+  | [], as, vs, _, h => by simp_all
+  | _ :: _, [], vs, _, h => by simp_all
+  | d :: ds, a :: as, vs, hd, h => by
+      rw [List.zip_cons_cons, traverse_cons] at h
+      obtain ⟨v, hv, hvs⟩ := Option.bind_eq_some.mp h
+      obtain ⟨vs', hvs', rfl⟩ := Option.map_eq_some'.mp hvs
+      obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp ((hd d (by simp)).canon hv)
+      obtain ⟨as', has'⟩ := Option.isSome_iff_exists.mp
+        (zip_canon ds as vs' (fun c hc => hd c (by simp [hc])) hvs')
+      simp [List.zip_cons_cons, traverse_cons, ha', has']
+
+theorem zip_agree : ∀ (ds : List Codec) (as : List Attr) (vs : List Value) (as' : List Attr),
+    (∀ c ∈ ds, Lawful c) →
+    traverse (fun ca : Codec × Attr => ca.1.p ca.2) (ds.zip as) = some vs →
+    traverse (fun cv : Codec × Value => cv.1.e cv.2) (ds.zip vs) = some as' →
+    ∀ q ∈ as'.zip as, Agree q.1 q.2
+  | [], as, vs, as', _, h, h' => by simp_all
+  | _ :: _, [], vs, as', _, h, h' => by simp_all
+  | d :: ds, a :: as, vs, as', hd, h, h' => by
+      rw [List.zip_cons_cons, traverse_cons] at h
+      obtain ⟨v, hv, hvs⟩ := Option.bind_eq_some.mp h
+      obtain ⟨vs', hvs', rfl⟩ := Option.map_eq_some'.mp hvs
+      rw [List.zip_cons_cons, traverse_cons] at h'
+      obtain ⟨a₁, ha₁, has⟩ := Option.bind_eq_some.mp h'
+      obtain ⟨as₁, has₁, rfl⟩ := Option.map_eq_some'.mp has
+      intro q hq
+      rcases List.mem_cons.mp (by simpa using hq) with rfl | hq'
+      · exact (hd d (by simp)).agree hv ha₁
+      · exact zip_agree ds as vs' as₁ (fun c hc => hd c (by simp [hc])) hvs' has₁ q hq'
+
+/-- Writing a row puts every position on its own carrier… -/
+theorem zip_domE : ∀ (ds : List Codec) (vs : List Value) (as : List Attr),
+    (∀ c ∈ ds, Carrier c) →
+    traverse (fun cv : Codec × Value => cv.1.e cv.2) (ds.zip vs) = some as →
+    ∀ q ∈ ds.zip vs, q.1.T q.2
+  | [], vs, as, _, h => by simp_all
+  | _ :: _, [], as, _, h => by simp_all
+  | d :: ds, v :: vs, as, hd, h => by
+      rw [List.zip_cons_cons, traverse_cons] at h
+      obtain ⟨a, ha, has⟩ := Option.bind_eq_some.mp h
+      obtain ⟨as', has', rfl⟩ := Option.map_eq_some'.mp has
+      intro q hq
+      rcases List.mem_cons.mp (by simpa using hq) with rfl | hq'
+      · exact (hd d (by simp)).domE ha
+      · exact zip_domE ds vs as' (fun c hc => hd c (by simp [hc])) has' q hq'
+
+/-- …and so does reading one. -/
+theorem zip_ranP : ∀ (ds : List Codec) (as : List Attr) (vs : List Value),
+    (∀ c ∈ ds, Carrier c) →
+    traverse (fun ca : Codec × Attr => ca.1.p ca.2) (ds.zip as) = some vs →
+    ∀ q ∈ ds.zip vs, q.1.T q.2
+  | [], as, vs, _, h => by simp_all
+  | _ :: _, [], vs, _, h => by simp_all
+  | d :: ds, a :: as, vs, hd, h => by
+      rw [List.zip_cons_cons, traverse_cons] at h
+      obtain ⟨v, hv, hvs⟩ := Option.bind_eq_some.mp h
+      obtain ⟨vs', hvs', rfl⟩ := Option.map_eq_some'.mp hvs
+      intro q hq
+      rcases List.mem_cons.mp (by simpa using hq) with rfl | hq'
+      · exact (hd d (by simp)).ranP hv
+      · exact zip_ranP ds as vs' (fun c hc => hd c (by simp [hc])) hvs' q hq'
+
+/-! #### `tuple` is `carriedCodec` at that pair -/
+
+section Tuple
+variable {cs : List Codec} {tail : Option Codec}
+
+theorem tupleCodec_eq :
+    tupleCodec cs tail = carriedCodec arrV lA .L
+      (fun vs => ∃ ps, align cs tail vs = some ps ∧ ∀ p ∈ ps, p.1.T p.2)
+      (fun vs => (align cs tail vs).bind (traverse fun cv => cv.1.e cv.2))
+      (fun as => (align cs tail as).bind (traverse fun ca => ca.1.p ca.2)) := by
+  refine Codec.ext ?_ rfl ?_ ?_ <;> funext v <;> cases v <;>
+    simp [tupleCodec, carriedCodec, arrV, lA, Ctor.into, Ctor.out]
+
+/-- (R) for the payload pair: realign the written row against the same codecs, then
+    read back position by position. -/
+theorem tuple_retract (hd : ∀ c ∈ cs, LawfulCore c) (htl : ∀ c ∈ tail, LawfulCore c) :
+    ∀ vs as, (align cs tail vs).bind (traverse fun cv => cv.1.e cv.2) = some as →
+      (align cs tail as).bind (traverse fun ca => ca.1.p ca.2) = some vs := by
+  intro vs as hE
+  obtain ⟨ps, hal, htr⟩ := Option.bind_eq_some.mp hE
+  obtain ⟨ds, hs, hlen, rfl⟩ := align_eq_some.mp hal
+  have hn : as.length = vs.length := by
+    rw [← traverse_length _ _ htr, List.length_zip, hlen, Nat.min_self]
+  exact Option.bind_eq_some.mpr ⟨_, align_of_slots hs hn,
+    zip_roundTrip ds vs as (slots_all hd htl hs) hlen htr⟩
+
+/-- (C) for the payload pair, the same way round. -/
+theorem tuple_canon (hd : ∀ c ∈ cs, LawfulCore c) (htl : ∀ c ∈ tail, LawfulCore c) :
+    ∀ as vs, (align cs tail as).bind (traverse fun ca => ca.1.p ca.2) = some vs →
+      ((align cs tail vs).bind (traverse fun cv => cv.1.e cv.2)).isSome := by
+  intro as vs hD
+  obtain ⟨ps, hal, htr⟩ := Option.bind_eq_some.mp hD
+  obtain ⟨ds, hs, hlen, rfl⟩ := align_eq_some.mp hal
+  have hn : vs.length = as.length := by
+    rw [← traverse_length _ _ htr, List.length_zip, hlen, Nat.min_self]
+  rw [align_of_slots hs hn]
+  exact zip_canon ds as vs (slots_all hd htl hs) htr
+
+theorem lawfulCore_tupleCodec (hcs : ∀ c ∈ cs, LawfulCore c)
+    (htl : ∀ c ∈ tail, LawfulCore c) : LawfulCore (tupleCodec cs tail) :=
+  tupleCodec_eq ▸ lawfulCore_carried (fun _ => rfl) (tuple_retract hcs htl)
+    (tuple_canon hcs htl)
+
+/-- `≼` at `L` is positional, and so is the alignment — which is why the re-encoded row
+    lands on the same codecs and agrees with the stored one entry for entry. -/
+theorem lawful_tupleCodec (hcs : ∀ c ∈ cs, Lawful c) (htl : ∀ c ∈ tail, Lawful c) :
+    Lawful (tupleCodec cs tail) := by
+  refine tupleCodec_eq ▸ lawful_carried (fun _ => rfl)
+    (tuple_retract (fun c h => (hcs c h).core) (fun c h => (htl c h).core))
+    (tuple_canon (fun c h => (hcs c h).core) (fun c h => (htl c h).core)) ?_
+  intro as vs as' hD hE
+  obtain ⟨ps, hal, htr⟩ := Option.bind_eq_some.mp hD
+  obtain ⟨ds, hs, hlen, rfl⟩ := align_eq_some.mp hal
+  have hn : vs.length = as.length := by
+    rw [← traverse_length _ _ htr, List.length_zip, hlen, Nat.min_self]
+  obtain ⟨ps', hal', htr'⟩ := Option.bind_eq_some.mp hE
+  rw [align_of_slots hs hn] at hal'
+  cases hal'
+  exact .l as' as (zip_agree ds as vs as' (slots_all hcs htl hs) htr htr')
+
+theorem carrier_tupleCodec (hcs : ∀ c ∈ cs, Carrier c) (htl : ∀ c ∈ tail, Carrier c) :
+    Carrier (tupleCodec cs tail) := by
+  refine tupleCodec_eq ▸ carrier_carried ?_ ?_
+  · intro vs as hE
+    obtain ⟨ps, hal, htr⟩ := Option.bind_eq_some.mp hE
+    obtain ⟨ds, hs, hlen, rfl⟩ := align_eq_some.mp hal
+    exact ⟨_, hal, zip_domE ds vs as (slots_all hcs htl hs) htr⟩
+  · intro as vs hD
+    obtain ⟨ps, hal, htr⟩ := Option.bind_eq_some.mp hD
+    obtain ⟨ds, hs, hlen, rfl⟩ := align_eq_some.mp hal
+    have hn : vs.length = as.length := by
+      rw [← traverse_length _ _ htr, List.length_zip, hlen, Nat.min_self]
+    exact ⟨_, align_of_slots hs hn, zip_ranP ds as vs (slots_all hcs htl hs) htr⟩
+
+end Tuple
 
 /-! ## Objects (§4) -/
 
@@ -1134,176 +1436,6 @@ theorem carrier_setCodec {c : Codec} (hc : Carrier c) : Carrier (setCodec c) := 
     case bs ws => exact key ws _ (fun _ _ hxy => hc.ranP hxy) h
     all_goals exact nomatch h
 
-/-- Every codec `align` pairs with a position is one it was given. -/
-theorem align_mem {α : Type} :
-    ∀ {cs : List Codec} {tail : Option Codec} {xs : List α} {ps},
-      align cs tail xs = some ps → ∀ p ∈ ps, p.1 ∈ cs ∨ tail = some p.1
-  | [], _, [], ps, h, p, hp => by
-      replace h : some [] = some ps := h
-      cases h
-      exact absurd hp (by simp)
-  | [], tail, x :: xs, ps, h, p, hp => by
-      cases htl : tail with
-      | none => rw [htl] at h; exact nomatch h
-      | some c =>
-        rw [htl] at h
-        replace h : ((align [] (some c) xs).map ((c, x) :: ·)) = some ps := h
-        cases hal : align ([] : List Codec) (some c) xs with
-        | none => rw [hal] at h; exact nomatch h
-        | some ps' =>
-          rw [hal] at h
-          replace h : some ((c, x) :: ps') = some ps := h
-          cases h
-          rcases List.mem_cons.mp hp with rfl | hp'
-          · exact Or.inr rfl
-          · rcases align_mem hal p hp' with hm | ht
-            · exact Or.inl hm
-            · exact Or.inr ht
-  | _ :: _, _, [], _, h, _, _ => nomatch h
-  | c :: cs, tail, x :: xs, ps, h, p, hp => by
-      replace h : ((align cs tail xs).map ((c, x) :: ·)) = some ps := h
-      cases hal : align cs tail xs with
-      | none => rw [hal] at h; exact nomatch h
-      | some ps' =>
-        rw [hal] at h
-        replace h : some ((c, x) :: ps') = some ps := h
-        cases h
-        rcases List.mem_cons.mp hp with rfl | hp'
-        · exact Or.inl (List.mem_cons_self _ _)
-        · rcases align_mem hal p hp' with hm | ht
-          · exact Or.inl (List.mem_cons_of_mem _ hm)
-          · exact Or.inr ht
-
-/-- Re-aligning a decoded tuple: what `p` produced position by position is what the
-    same `align` pairs with the same codecs, and each entry is on its carrier. -/
-theorem align_ranP :
-    ∀ (cs : List Codec) (tail : Option Codec),
-      (∀ c ∈ cs, Carrier c) → (∀ c ∈ tail, Carrier c) →
-      ∀ (as : List Attr) (cas : List (Codec × Attr)) (vs : List Value),
-        align cs tail as = some cas →
-        traverse (fun ca => ca.1.p ca.2) cas = some vs →
-        ∃ cvs, align cs tail vs = some cvs ∧ ∀ p ∈ cvs, p.1.T p.2
-  | [], _, _, _, [], cas, vs, hal, htr => by
-      replace hal : some [] = some cas := hal
-      cases hal
-      replace htr : some [] = some vs := htr
-      cases htr
-      exact ⟨[], rfl, fun p hp => absurd hp (by simp)⟩
-  | [], tail, _, htl, a :: as, cas, vs, hal, htr => by
-      cases hc : tail with
-      | none => rw [hc] at hal; exact nomatch hal
-      | some c =>
-        rw [hc] at hal
-        replace hal : ((align [] (some c) as).map ((c, a) :: ·)) = some cas := hal
-        cases hal' : align ([] : List Codec) (some c) as with
-        | none => rw [hal'] at hal; exact nomatch hal
-        | some cas' =>
-          rw [hal'] at hal
-          replace hal : some ((c, a) :: cas') = some cas := hal
-          cases hal
-          simp only [traverse] at htr
-          cases hpa : c.p a with
-          | none => rw [hpa] at htr; exact nomatch htr
-          | some v =>
-            rw [hpa] at htr
-            cases htr' : traverse (fun ca => ca.1.p ca.2) cas' with
-            | none => rw [htr'] at htr; exact nomatch htr
-            | some vs' =>
-              rw [htr'] at htr
-              replace htr : some (v :: vs') = some vs := htr
-              cases htr
-              have hcc : Carrier c := htl c hc
-              obtain ⟨cvs', hal2, hmem⟩ :=
-                align_ranP [] (some c) (by simp) (fun c' h => by
-                  replace h : some c = some c' := h; cases h; exact hcc)
-                  as cas' vs' hal' htr'
-              refine ⟨(c, v) :: cvs', ?_, ?_⟩
-              · show ((align [] (some c) vs').map ((c, v) :: ·)) = _
-                rw [hal2]
-                rfl
-              · intro p hp
-                rcases List.mem_cons.mp hp with rfl | hp'
-                · exact hcc.ranP hpa
-                · exact hmem p hp'
-  | _ :: _, _, _, _, [], _, _, hal, _ => nomatch hal
-  | c :: cs, tail, hcs, htl, a :: as, cas, vs, hal, htr => by
-      replace hal : ((align cs tail as).map ((c, a) :: ·)) = some cas := hal
-      cases hal' : align cs tail as with
-      | none => rw [hal'] at hal; exact nomatch hal
-      | some cas' =>
-        rw [hal'] at hal
-        replace hal : some ((c, a) :: cas') = some cas := hal
-        cases hal
-        simp only [traverse] at htr
-        cases hpa : c.p a with
-        | none => rw [hpa] at htr; exact nomatch htr
-        | some v =>
-          rw [hpa] at htr
-          cases htr' : traverse (fun ca => ca.1.p ca.2) cas' with
-          | none => rw [htr'] at htr; exact nomatch htr
-          | some vs' =>
-            rw [htr'] at htr
-            replace htr : some (v :: vs') = some vs := htr
-            cases htr
-            have hcc : Carrier c := hcs c (List.mem_cons_self _ _)
-            obtain ⟨cvs', hal2, hmem⟩ :=
-              align_ranP cs tail (fun c' h => hcs c' (List.mem_cons_of_mem _ h)) htl
-                as cas' vs' hal' htr'
-            refine ⟨(c, v) :: cvs', ?_, ?_⟩
-            · show ((align cs tail vs').map ((c, v) :: ·)) = _
-              rw [hal2]
-              rfl
-            · intro p hp
-              rcases List.mem_cons.mp hp with rfl | hp'
-              · exact hcc.ranP hpa
-              · exact hmem p hp'
-
-theorem carrier_tupleCodec {cs : List Codec} {tail : Option Codec}
-    (hcs : ∀ c ∈ cs, Carrier c) (htl : ∀ c ∈ tail, Carrier c) :
-    Carrier (tupleCodec cs tail) := by
-  have carrierOf : ∀ c : Codec, (c ∈ cs ∨ tail = some c) → Carrier c := by
-    intro c hm
-    rcases hm with hm | ht
-    · exact hcs c hm
-    · exact htl c ht
-  refine ⟨?_, ?_⟩
-  · intro v a h
-    cases v
-    case arr vs =>
-      replace h : ((((align cs tail vs).bind
-        (traverse fun cv => cv.1.e cv.2))).map Attr.l) = some a := h
-      cases hal : align cs tail vs with
-      | none => rw [hal] at h; exact nomatch h
-      | some ps =>
-        rw [hal] at h
-        replace h : ((traverse (fun cv => cv.1.e cv.2) ps).map Attr.l) = some a := h
-        cases htr : traverse (fun cv => cv.1.e cv.2) ps with
-        | none => rw [htr] at h; exact nomatch h
-        | some as =>
-          refine ⟨ps, hal, ?_⟩
-          have key := traverse_mem_input
-            (P := fun cv : Codec × Value => (cv.1 ∈ cs ∨ tail = some cv.1) → cv.1.T cv.2)
-            (fun _ _ hxy hmem => (carrierOf _ hmem).domE hxy) htr
-          exact fun p hp => key p hp (align_mem hal p hp)
-    all_goals exact nomatch h
-  · intro a v h
-    cases a
-    case l as =>
-      replace h : ((((align cs tail as).bind
-        (traverse fun ca => ca.1.p ca.2))).map Value.arr) = some v := h
-      cases hal : align cs tail as with
-      | none => rw [hal] at h; exact nomatch h
-      | some cas =>
-        rw [hal] at h
-        replace h : ((traverse (fun ca => ca.1.p ca.2) cas).map Value.arr) = some v := h
-        cases htr : traverse (fun ca => ca.1.p ca.2) cas with
-        | none => rw [htr] at h; exact nomatch h
-        | some vs =>
-          rw [htr] at h
-          replace h : some (Value.arr vs) = some v := h
-          cases h
-          exact align_ranP cs tail hcs htl as cas vs hal htr
-    all_goals exact nomatch h
 
 /-! ### Sums -/
 
@@ -2020,286 +2152,7 @@ theorem lawful_setCodec {c : Codec} (h : Lawful c) : Lawful (setCodec c) := by
           (fun _ hne hmem => asWireSet_of_B hne hmem) (by decide) (by decide)
           (by simp) rfl hp he
     all_goals exact nomatch hp
-/-- Writing a tuple then reading realigns to the same codecs, position for position. -/
-theorem alignTraverse_roundTrip :
-    ∀ (cs : List Codec) (tail : Option Codec),
-      (∀ c ∈ cs, LawfulCore c) → (∀ c ∈ tail, LawfulCore c) →
-      ∀ (vs : List Value) (cvs : List (Codec × Value)) (as : List Attr),
-        align cs tail vs = some cvs →
-        traverse (fun cv => cv.1.e cv.2) cvs = some as →
-        (align cs tail as).bind (traverse fun ca => ca.1.p ca.2) = some vs
-  | [], _, _, _, [], cvs, as, hal, htr => by
-      replace hal : some [] = some cvs := hal
-      cases hal
-      replace htr : some [] = some as := htr
-      cases htr
-      rfl
-  | [], tail, h, ht, v :: vs, cvs, as, hal, htr => by
-      cases tail with
-      | none => exact nomatch hal
-      | some c =>
-        replace hal : (align [] (some c) vs).map ((c, v) :: ·) = some cvs := hal
-        cases hvs : align [] (some c) vs with
-        | none => rw [hvs] at hal; exact nomatch hal
-        | some cvs' =>
-          rw [hvs] at hal
-          replace hal : some ((c, v) :: cvs') = some cvs := hal
-          cases hal
-          simp only [traverse] at htr
-          cases hev : c.e v with
-          | none => rw [hev] at htr; exact nomatch htr
-          | some a₀ =>
-            rw [hev] at htr
-            cases htr' : traverse (fun cv : Codec × Value => cv.1.e cv.2) cvs' with
-            | none => rw [htr'] at htr; exact nomatch htr
-            | some as' =>
-              rw [htr'] at htr
-              replace htr : some (a₀ :: as') = some as := htr
-              cases htr
-              have hc : LawfulCore c := ht c rfl
-              have ih := alignTraverse_roundTrip [] (some c) h ht vs cvs' as' hvs htr'
-              show ((align [] (some c) as').map ((c, a₀) :: ·)).bind
-                (traverse fun ca => ca.1.p ca.2) = some (v :: vs)
-              cases has : align [] (some c) as' with
-              | none => rw [has] at ih; exact nomatch ih
-              | some cas' =>
-                rw [has] at ih
-                replace ih :
-                    traverse (fun ca : Codec × Attr => ca.1.p ca.2) cas' = some vs := ih
-                show traverse (fun ca : Codec × Attr => ca.1.p ca.2)
-                  ((c, a₀) :: cas') = some (v :: vs)
-                simp only [traverse]
-                rw [hc.retract hev, ih]
-  | _ :: _, _, _, _, [], _, _, hal, _ => nomatch hal
-  | c :: cs, tail, h, ht, v :: vs, cvs, as, hal, htr => by
-      replace hal : (align cs tail vs).map ((c, v) :: ·) = some cvs := hal
-      cases hvs : align cs tail vs with
-      | none => rw [hvs] at hal; exact nomatch hal
-      | some cvs' =>
-        rw [hvs] at hal
-        replace hal : some ((c, v) :: cvs') = some cvs := hal
-        cases hal
-        simp only [traverse] at htr
-        cases hev : c.e v with
-        | none => rw [hev] at htr; exact nomatch htr
-        | some a₀ =>
-          rw [hev] at htr
-          cases htr' : traverse (fun cv : Codec × Value => cv.1.e cv.2) cvs' with
-          | none => rw [htr'] at htr; exact nomatch htr
-          | some as' =>
-            rw [htr'] at htr
-            replace htr : some (a₀ :: as') = some as := htr
-            cases htr
-            have hc : LawfulCore c := h c (List.mem_cons_self c cs)
-            have ih := alignTraverse_roundTrip cs tail
-              (fun c' hc' => h c' (List.mem_cons_of_mem c hc')) ht vs cvs' as' hvs htr'
-            show ((align cs tail as').map ((c, a₀) :: ·)).bind
-              (traverse fun ca => ca.1.p ca.2) = some (v :: vs)
-            cases has : align cs tail as' with
-            | none => rw [has] at ih; exact nomatch ih
-            | some cas' =>
-              rw [has] at ih
-              replace ih :
-                  traverse (fun ca : Codec × Attr => ca.1.p ca.2) cas' = some vs := ih
-              show traverse (fun ca : Codec × Attr => ca.1.p ca.2)
-                ((c, a₀) :: cas') = some (v :: vs)
-              simp only [traverse]
-              rw [hc.retract hev, ih]
 
-/-- Reading a tuple then rewriting realigns, re-encodes, and member-agrees pointwise. -/
-theorem alignTraverse_master :
-    ∀ (cs : List Codec) (tail : Option Codec),
-      (∀ c ∈ cs, Lawful c) → (∀ c ∈ tail, Lawful c) →
-      ∀ (as : List Attr) (cas : List (Codec × Attr)) (vs : List Value),
-        align cs tail as = some cas →
-        traverse (fun ca => ca.1.p ca.2) cas = some vs →
-        ∃ cvs as', align cs tail vs = some cvs ∧
-          traverse (fun cv => cv.1.e cv.2) cvs = some as' ∧
-          ∀ q ∈ as'.zip as, Agree q.1 q.2
-  | [], _, _, _, [], cas, vs, hal, htr => by
-      replace hal : some [] = some cas := hal
-      cases hal
-      replace htr : some [] = some vs := htr
-      cases htr
-      exact ⟨[], [], rfl, rfl, fun q hq => absurd hq (by simp)⟩
-  | [], tail, h, ht, a :: as, cas, vs, hal, htr => by
-      cases tail with
-      | none => exact nomatch hal
-      | some c =>
-        replace hal : (align [] (some c) as).map ((c, a) :: ·) = some cas := hal
-        cases has : align [] (some c) as with
-        | none => rw [has] at hal; exact nomatch hal
-        | some cas' =>
-          rw [has] at hal
-          replace hal : some ((c, a) :: cas') = some cas := hal
-          cases hal
-          simp only [traverse] at htr
-          cases hpa : c.p a with
-          | none => rw [hpa] at htr; exact nomatch htr
-          | some v =>
-            rw [hpa] at htr
-            cases htr' : traverse (fun ca : Codec × Attr => ca.1.p ca.2) cas' with
-            | none => rw [htr'] at htr; exact nomatch htr
-            | some vs' =>
-              rw [htr'] at htr
-              replace htr : some (v :: vs') = some vs := htr
-              cases htr
-              have hc : Lawful c := ht c rfl
-              obtain ⟨a₀, ha₀⟩ := Option.isSome_iff_exists.mp (hc.canon hpa)
-              obtain ⟨cvs', as'', hal', htr'', hzip⟩ :=
-                alignTraverse_master [] (some c) h ht as cas' vs' has htr'
-              refine ⟨(c, v) :: cvs', a₀ :: as'', ?_, ?_, ?_⟩
-              · show (align [] (some c) vs').map ((c, v) :: ·) = _
-                rw [hal']
-                rfl
-              · simp only [traverse]
-                rw [ha₀, htr'']
-              · intro q hq
-                simp only [List.zip_cons_cons, List.mem_cons] at hq
-                rcases hq with rfl | hq
-                · exact hc.agree hpa ha₀
-                · exact hzip q hq
-  | _ :: _, _, _, _, [], _, _, hal, _ => nomatch hal
-  | c :: cs, tail, h, ht, a :: as, cas, vs, hal, htr => by
-      replace hal : (align cs tail as).map ((c, a) :: ·) = some cas := hal
-      cases has : align cs tail as with
-      | none => rw [has] at hal; exact nomatch hal
-      | some cas' =>
-        rw [has] at hal
-        replace hal : some ((c, a) :: cas') = some cas := hal
-        cases hal
-        simp only [traverse] at htr
-        cases hpa : c.p a with
-        | none => rw [hpa] at htr; exact nomatch htr
-        | some v =>
-          rw [hpa] at htr
-          cases htr' : traverse (fun ca : Codec × Attr => ca.1.p ca.2) cas' with
-          | none => rw [htr'] at htr; exact nomatch htr
-          | some vs' =>
-            rw [htr'] at htr
-            replace htr : some (v :: vs') = some vs := htr
-            cases htr
-            have hc : Lawful c := h c (List.mem_cons_self c cs)
-            obtain ⟨a₀, ha₀⟩ := Option.isSome_iff_exists.mp (hc.canon hpa)
-            obtain ⟨cvs', as'', hal', htr'', hzip⟩ :=
-              alignTraverse_master cs tail
-                (fun c' hc' => h c' (List.mem_cons_of_mem c hc')) ht as cas' vs' has htr'
-            refine ⟨(c, v) :: cvs', a₀ :: as'', ?_, ?_, ?_⟩
-            · show (align cs tail vs').map ((c, v) :: ·) = _
-              rw [hal']
-              rfl
-            · simp only [traverse]
-              rw [ha₀, htr'']
-            · intro q hq
-              simp only [List.zip_cons_cons, List.mem_cons] at hq
-              rcases hq with rfl | hq
-              · exact hc.agree hpa ha₀
-              · exact hzip q hq
-
-theorem lawful_tupleCodec {cs : List Codec} {tail : Option Codec}
-    (hcs : ∀ c ∈ cs, Lawful c) (ht : ∀ c ∈ tail, Lawful c) :
-    Lawful (tupleCodec cs tail) := by
-  refine ⟨?_, ?_, ?_, ?_⟩
-  · intro t a he
-    cases t
-    case arr vs =>
-      replace he : ((align cs tail vs).bind
-        (traverse fun cv => cv.1.e cv.2)).map Attr.l = some a := he
-      cases hal : align cs tail vs with
-      | none => rw [hal] at he; exact nomatch he
-      | some cvs =>
-        rw [hal] at he
-        replace he : (traverse (fun cv : Codec × Value => cv.1.e cv.2) cvs).map
-          Attr.l = some a := he
-        cases htr : traverse (fun cv : Codec × Value => cv.1.e cv.2) cvs with
-        | none => rw [htr] at he; exact nomatch he
-        | some as =>
-          rw [htr] at he
-          replace he : some (Attr.l as) = some a := he
-          cases he
-          show ((align cs tail as).bind
-            (traverse fun ca => ca.1.p ca.2)).map Value.arr = some (.arr vs)
-          rw [alignTraverse_roundTrip cs tail (fun c hc => (hcs c hc).core)
-            (fun c hc => (ht c hc).core) vs cvs as hal htr]
-          rfl
-    all_goals exact nomatch he
-  · intro a t hp
-    cases a
-    case l as =>
-      replace hp : ((align cs tail as).bind
-        (traverse fun ca => ca.1.p ca.2)).map Value.arr = some t := hp
-      cases hal : align cs tail as with
-      | none => rw [hal] at hp; exact nomatch hp
-      | some cas =>
-        rw [hal] at hp
-        replace hp : (traverse (fun ca : Codec × Attr => ca.1.p ca.2) cas).map
-          Value.arr = some t := hp
-        cases htr : traverse (fun ca : Codec × Attr => ca.1.p ca.2) cas with
-        | none => rw [htr] at hp; exact nomatch hp
-        | some vs =>
-          rw [htr] at hp
-          replace hp : some (Value.arr vs) = some t := hp
-          cases hp
-          obtain ⟨cvs, as', hal', htr', -⟩ :=
-            alignTraverse_master cs tail hcs ht as cas vs hal htr
-          show (((align cs tail vs).bind
-            (traverse fun cv => cv.1.e cv.2)).map Attr.l).isSome
-          rw [hal']
-          show ((traverse (fun cv : Codec × Value => cv.1.e cv.2) cvs).map
-            Attr.l).isSome
-          rw [htr']
-          rfl
-    all_goals exact nomatch hp
-  · intro μ hμ t a he
-    replace hμ : some Member.L = some μ := hμ
-    cases hμ
-    cases t
-    case arr vs =>
-      replace he : ((align cs tail vs).bind
-        (traverse fun cv => cv.1.e cv.2)).map Attr.l = some a := he
-      cases hal : align cs tail vs with
-      | none => rw [hal] at he; exact nomatch he
-      | some cvs =>
-        rw [hal] at he
-        replace he : (traverse (fun cv : Codec × Value => cv.1.e cv.2) cvs).map
-          Attr.l = some a := he
-        cases htr : traverse (fun cv : Codec × Value => cv.1.e cv.2) cvs with
-        | none => rw [htr] at he; exact nomatch he
-        | some as =>
-          rw [htr] at he
-          replace he : some (Attr.l as) = some a := he
-          cases he
-          rfl
-    all_goals exact nomatch he
-  · intro a t a' hp he
-    cases a
-    case l as =>
-      replace hp : ((align cs tail as).bind
-        (traverse fun ca => ca.1.p ca.2)).map Value.arr = some t := hp
-      cases hal : align cs tail as with
-      | none => rw [hal] at hp; exact nomatch hp
-      | some cas =>
-        rw [hal] at hp
-        replace hp : (traverse (fun ca : Codec × Attr => ca.1.p ca.2) cas).map
-          Value.arr = some t := hp
-        cases htr : traverse (fun ca : Codec × Attr => ca.1.p ca.2) cas with
-        | none => rw [htr] at hp; exact nomatch hp
-        | some vs =>
-          rw [htr] at hp
-          replace hp : some (Value.arr vs) = some t := hp
-          cases hp
-          obtain ⟨cvs, as', hal', htr', hzip⟩ :=
-            alignTraverse_master cs tail hcs ht as cas vs hal htr
-          replace he : ((align cs tail vs).bind
-            (traverse fun cv => cv.1.e cv.2)).map Attr.l = some a' := he
-          rw [hal'] at he
-          replace he : (traverse (fun cv : Codec × Value => cv.1.e cv.2) cvs).map
-            Attr.l = some a' := he
-          rw [htr'] at he
-          replace he : some (Attr.l as') = some a' := he
-          cases he
-          exact .l as' as hzip
-    all_goals exact nomatch hp
 
 /-! ### Keyed lookup and traversal facts (the keyed product consumes these) -/
 
@@ -3546,159 +3399,6 @@ The wrappers' and uniform products' core lemmas live beside their full counterpa
 above; what remains here are the composites whose core statements need their own
 scaffolding. -/
 
-/-- Canon-only cousin of `alignTraverse_master` — no member agreement demanded. -/
-theorem alignTraverse_canon :
-    ∀ (cs : List Codec) (tail : Option Codec),
-      (∀ c ∈ cs, LawfulCore c) → (∀ c ∈ tail, LawfulCore c) →
-      ∀ (as : List Attr) (cas : List (Codec × Attr)) (vs : List Value),
-        align cs tail as = some cas →
-        traverse (fun ca => ca.1.p ca.2) cas = some vs →
-        ∃ cvs as', align cs tail vs = some cvs ∧
-          traverse (fun cv => cv.1.e cv.2) cvs = some as'
-  | [], _, _, _, [], cas, vs, hal, htr => by
-      replace hal : some [] = some cas := hal
-      cases hal
-      replace htr : some [] = some vs := htr
-      cases htr
-      exact ⟨[], [], rfl, rfl⟩
-  | [], tail, h, ht, a :: as, cas, vs, hal, htr => by
-      cases tail with
-      | none => exact nomatch hal
-      | some c =>
-        replace hal : (align [] (some c) as).map ((c, a) :: ·) = some cas := hal
-        cases has : align [] (some c) as with
-        | none => rw [has] at hal; exact nomatch hal
-        | some cas' =>
-          rw [has] at hal
-          replace hal : some ((c, a) :: cas') = some cas := hal
-          cases hal
-          simp only [traverse] at htr
-          cases hpa : c.p a with
-          | none => rw [hpa] at htr; exact nomatch htr
-          | some v =>
-            rw [hpa] at htr
-            cases htr' : traverse (fun ca : Codec × Attr => ca.1.p ca.2) cas' with
-            | none => rw [htr'] at htr; exact nomatch htr
-            | some vs' =>
-              rw [htr'] at htr
-              replace htr : some (v :: vs') = some vs := htr
-              cases htr
-              have hc : LawfulCore c := ht c rfl
-              obtain ⟨a₀, ha₀⟩ := Option.isSome_iff_exists.mp (hc.canon hpa)
-              obtain ⟨cvs', as'', hal', htr''⟩ :=
-                alignTraverse_canon [] (some c) h ht as cas' vs' has htr'
-              refine ⟨(c, v) :: cvs', a₀ :: as'', ?_, ?_⟩
-              · show (align [] (some c) vs').map ((c, v) :: ·) = _
-                rw [hal']
-                rfl
-              · simp only [traverse]
-                rw [ha₀, htr'']
-  | _ :: _, _, _, _, [], _, _, hal, _ => nomatch hal
-  | c :: cs, tail, h, ht, a :: as, cas, vs, hal, htr => by
-      replace hal : (align cs tail as).map ((c, a) :: ·) = some cas := hal
-      cases has : align cs tail as with
-      | none => rw [has] at hal; exact nomatch hal
-      | some cas' =>
-        rw [has] at hal
-        replace hal : some ((c, a) :: cas') = some cas := hal
-        cases hal
-        simp only [traverse] at htr
-        cases hpa : c.p a with
-        | none => rw [hpa] at htr; exact nomatch htr
-        | some v =>
-          rw [hpa] at htr
-          cases htr' : traverse (fun ca : Codec × Attr => ca.1.p ca.2) cas' with
-          | none => rw [htr'] at htr; exact nomatch htr
-          | some vs' =>
-            rw [htr'] at htr
-            replace htr : some (v :: vs') = some vs := htr
-            cases htr
-            have hc : LawfulCore c := h c (List.mem_cons_self c cs)
-            obtain ⟨a₀, ha₀⟩ := Option.isSome_iff_exists.mp (hc.canon hpa)
-            obtain ⟨cvs', as'', hal', htr''⟩ :=
-              alignTraverse_canon cs tail
-                (fun c' hc' => h c' (List.mem_cons_of_mem c hc')) ht as cas' vs' has htr'
-            refine ⟨(c, v) :: cvs', a₀ :: as'', ?_, ?_⟩
-            · show (align cs tail vs').map ((c, v) :: ·) = _
-              rw [hal']
-              rfl
-            · simp only [traverse]
-              rw [ha₀, htr'']
-
-theorem lawfulCore_tupleCodec {cs : List Codec} {tail : Option Codec}
-    (hcs : ∀ c ∈ cs, LawfulCore c) (ht : ∀ c ∈ tail, LawfulCore c) :
-    LawfulCore (tupleCodec cs tail) := by
-  refine ⟨?_, ?_, ?_⟩
-  · intro t a he
-    cases t
-    case arr vs =>
-      replace he : ((align cs tail vs).bind
-        (traverse fun cv => cv.1.e cv.2)).map Attr.l = some a := he
-      cases hal : align cs tail vs with
-      | none => rw [hal] at he; exact nomatch he
-      | some cvs =>
-        rw [hal] at he
-        replace he : (traverse (fun cv : Codec × Value => cv.1.e cv.2) cvs).map
-          Attr.l = some a := he
-        cases htr : traverse (fun cv : Codec × Value => cv.1.e cv.2) cvs with
-        | none => rw [htr] at he; exact nomatch he
-        | some as =>
-          rw [htr] at he
-          replace he : some (Attr.l as) = some a := he
-          cases he
-          show ((align cs tail as).bind
-            (traverse fun ca => ca.1.p ca.2)).map Value.arr = some (.arr vs)
-          rw [alignTraverse_roundTrip cs tail hcs ht vs cvs as hal htr]
-          rfl
-    all_goals exact nomatch he
-  · intro a t hp
-    cases a
-    case l as =>
-      replace hp : ((align cs tail as).bind
-        (traverse fun ca => ca.1.p ca.2)).map Value.arr = some t := hp
-      cases hal : align cs tail as with
-      | none => rw [hal] at hp; exact nomatch hp
-      | some cas =>
-        rw [hal] at hp
-        replace hp : (traverse (fun ca : Codec × Attr => ca.1.p ca.2) cas).map
-          Value.arr = some t := hp
-        cases htr : traverse (fun ca : Codec × Attr => ca.1.p ca.2) cas with
-        | none => rw [htr] at hp; exact nomatch hp
-        | some vs =>
-          rw [htr] at hp
-          replace hp : some (Value.arr vs) = some t := hp
-          cases hp
-          obtain ⟨cvs, as', hal', htr'⟩ :=
-            alignTraverse_canon cs tail hcs ht as cas vs hal htr
-          show (((align cs tail vs).bind
-            (traverse fun cv => cv.1.e cv.2)).map Attr.l).isSome
-          rw [hal']
-          show ((traverse (fun cv : Codec × Value => cv.1.e cv.2) cvs).map
-            Attr.l).isSome
-          rw [htr']
-          rfl
-    all_goals exact nomatch hp
-  · intro μ hμ t a he
-    replace hμ : some Member.L = some μ := hμ
-    cases hμ
-    cases t
-    case arr vs =>
-      replace he : ((align cs tail vs).bind
-        (traverse fun cv => cv.1.e cv.2)).map Attr.l = some a := he
-      cases hal : align cs tail vs with
-      | none => rw [hal] at he; exact nomatch he
-      | some cvs =>
-        rw [hal] at he
-        replace he : (traverse (fun cv : Codec × Value => cv.1.e cv.2) cvs).map
-          Attr.l = some a := he
-        cases htr : traverse (fun cv : Codec × Value => cv.1.e cv.2) cvs with
-        | none => rw [htr] at he; exact nomatch he
-        | some as =>
-          rw [htr] at he
-          replace he : some (Attr.l as) = some a := he
-          cases he
-          rfl
-    all_goals exact nomatch he
 
 /-- Core set: the member-uniformity that (MP) supplied comes from (W) instead, so the
     element's named member is a hypothesis — exactly the `(set)` rule's premise. -/
