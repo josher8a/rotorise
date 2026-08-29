@@ -899,6 +899,32 @@ export function literal<const T extends string | number>(
     const member = numeric ? 'N' : 'S'
 
     /**
+     * **`ℓ ⊆ D`** — §3's premise on `(literal-N)`, checked where the rule checks it.
+     *
+     * `number` refuses `NaN`, `Infinity` and anything past 38 significant digits or the magnitude
+     * range; `literal` was writing all of them. `literal(NaN)` produced `{ N: 'NaN' }` and
+     * `literal(1e400)` produced `{ N: 'Infinity' }`, both reachable with no cast and both rejected
+     * by DynamoDB — an attribute outside §1's `Numerals`, which is the one thing a term is never
+     * allowed to write.
+     *
+     * At the declaration and not per encode, because that is what the premise is: a fact about the
+     * admissible set, which this library owns, decidable when the codec is built. The same place
+     * the mixed-kind refusal above lives, and for the same reason.
+     */
+    if (numeric) {
+        const outside = (allowed as readonly number[]).filter(
+            (one) => !isNumeral(String(one)),
+        )
+        if (outside.length) {
+            throw new CodecError(
+                `a numeric literal is stored as 'N', and ${outside
+                    .map(named)
+                    .join(', ')} ${outside.length === 1 ? 'is not a number' : 'are not numbers'} DynamoDB stores: it takes at most 38 significant digits and magnitude 1e-130 to 9.9e125, and has no NaN or Infinity`,
+            )
+        }
+    }
+
+    /**
      * Checked both ways. An unchecked `encode` makes {@link ConstantCodec.constant} a lie — claim
      * one value, write another — which the type misses where the entity is a union and the codec
      * describes one variant of it.

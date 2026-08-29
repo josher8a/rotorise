@@ -121,8 +121,8 @@ makes it the single constant in this file with the most to lose from going ungua
 /-! §3's `(number)` gate and the two places the bound is forced outward. `opaq_T_identity`
 above is guarded for `Uν` *after* `HOpaque.num` gained its premise, which is the half of this
 change that reaches the depth machinery. The `literalN` rows are the half that does not:
-they say what §3's `(literal-N)` costs without `ℓ ⊆ D`, which is a normative question and
-not a theorem. -/
+they are `(literal-N)`'s `ℓ ⊆ D`, added to §3 once the shipped `literal(NaN)` settled the
+question the conditional refutations leave open. -/
 
 #assert_axioms lawful_numberCodec
 #assert_axioms carrier_numberCodec
@@ -131,6 +131,9 @@ not a theorem. -/
 #assert_axioms literalN_sub_number
 #assert_axioms not_literalN_sub_number
 #assert_axioms literalN_writes_off_numerals
+#assert_axioms typed_literalN_D
+#assert_axioms typed_literalN_sub_number
+#assert_axioms not_typed_literalN_nonD
 
 /-! §2's kernel and §1's store. `retract_through_store` is **(R)** with DynamoDB in the
 middle — the law production actually runs — and the two `decimal` rows are what makes

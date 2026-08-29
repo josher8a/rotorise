@@ -333,7 +333,7 @@ theorem typed_μSyn : ∀ {t T μ}, Typed t T μ → μSyn t = μ
   | _, _, _, .null => rfl
   | _, _, _, .binary => rfl
   | _, _, _, .literalS _ _ _ => rfl
-  | _, _, _, .literalN _ _ _ => rfl
+  | _, _, _, .literalN _ _ _ _ => rfl
   | _, _, _, .set h' hs => by
       show (μSyn _).bind setMember = _
       rw [typed_μSyn h']
@@ -511,7 +511,7 @@ theorem soundness_both : ∀ (fuel : Nat) {t T μ}, Typed t T μ → Obligations
     | null => exact sound_ground lawful_nullCodec
     | binary => exact sound_ground lawful_binaryCodec
     | literalS ls hne hnd => exact sound_ground (lawful_literalSCodec ls)
-    | literalN ls hne hnd => exact sound_ground (lawful_literalNCodec ls)
+    | literalN ls hne hnd hD => exact sound_ground (lawful_literalNCodec ls)
     | opaq lossy => exact sound_ground (lawful_opaqCodecω lossy)
     | custom ce cp =>
       exact sound_ground hob.custom
@@ -767,7 +767,7 @@ theorem typed_TSub : ∀ (fuel : Nat) {t T μ}, Typed t T μ →
   | fuel+1, t, T, μ, h, v, hv => by
     cases h with
     | string | number | decimal | boolean | binary | null => exact hv
-    | literalS _ _ _ | literalN _ _ _ => exact hv
+    | literalS _ _ _ | literalN _ _ _ _ => exact hv
     | custom _ _ => exact hv
     | opaq lossy => exact opaq_TSubω lossy v hv
     | @set t' T' μ₀ μS h' hs =>

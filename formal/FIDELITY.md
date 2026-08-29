@@ -267,7 +267,7 @@ group would cost if it leaked: the three devices that pin §5's declaration-time
 the denotation, the three ω-twins that all travel along `denoteω_eq`, and the `opaque`
 and numeral rows. The guard went green first try, which is the expected result — the
 point was never to find a leak, it was to stop the eleven hand-checks from having to be
-redone by the next reader. Coverage 17 → **28 of 99**, and 49 of 123 once items 3–5, 8 and 9 and the `(number)` gate added theorems of their own.
+redone by the next reader. Coverage 17 → **28 of 99**, and 52 of 123 once items 3–5 and 8–11 and the `(number)` gate added theorems of their own.
 
 A measurement artefact worth naming, since this file's own rule is that the script wins:
 `fidelity_audit.py` reads `FIDELITY.md` as one of its document sources, so *citing* a
@@ -319,16 +319,16 @@ table had drifted by a few lines per block and is re-synced to the script.
 python3 scripts/fidelity_audit.py          # --names to list the offenders
 ```
 
-At HEAD: 712 declarations, 518 theorems, 194 definitions.
+At HEAD: 714 declarations, 520 theorems, 194 definitions.
 
 | | |
 | --- | ---: |
 | theorem names the documents cite as results | 123 |
-| …put through `#assert_axioms` | **49** |
+| …put through `#assert_axioms` | **52** |
 | §-tag coverage (declarations naming a spec section) | **20%** |
 | docstring coverage, theorems | 56% |
 | docstring coverage, definitions | 72% |
-| **theorem statements naming an undocumented definition** | **58%** |
+| **theorem statements naming an undocumented definition** | **59%** |
 | …and themselves undocumented | 134 |
 
 The last row is the one that matters. A statement naming an undocumented definition
@@ -374,6 +374,7 @@ for, and it now has three independent confirmations.
 | 8 | ~~The documentation corrections: D3, D5, U4, C2's eight stale comments~~ **done**; U4's second half was wrong and the row is five of five | cheap, and D3 is the only defect of the seven with no machine-checked witness |
 | 9 | ~~`Codec.Ker` and `Can` in `Codec.lean`~~ **done**: and `η ⊆ ker p` with them | `≈c` is §2's central device and had no name; `Can` sat in §6's file where §2 and §5 could not cite it |
 | 10 | ~~D3's amendment to `codec-calculus.md` §5~~ **done**: the `adm`/`admA` split, and a stratification error found while writing it | normative, so it waited for the call; the model had been right and unrecorded since `admA` was written |
+| 11 | ~~`(literal-N)`'s `ℓ ⊆ D`~~ **done**: §3's premise, `Typed.literalN`'s `hD`, and the shipped `literal(NaN)` that settled it | the rule figure had said `∈ D` all along and the paragraph under it called `D` unchecked — the worst of the three states a premise can be in |
 
 Item 9 turned out to carry more than its description. Naming `≈c` was three lines and an
 `Equivalence`; what it unlocked was §1's store concession, which had been prose in
@@ -385,6 +386,18 @@ its answer: `survivesStore_decimalCodec` says the narrowed held set discharges t
 why the question is that sharp (its kernel is equality, so `η` has to be the identity where
 it can be handed anything). The narrowing was a fix with a measurement behind it; it is now a
 fix with a certificate behind it too.
+
+Item 11 is the one to reread if the arc is ever summarised. The premise was **already in the rule
+figure** — `ℓ₁ … ℓₙ ∈ D`, written down, normative, and printed above the line. What was wrong was
+the paragraph beneath it, which called `D` "an unchecked precondition" and named `5e-324` as the
+example of it going unchecked. Neither audit flagged it, because both were reading the figure. A
+premise stated in a rule and disowned in the prose underneath is worth less than no premise at all:
+it reads as checked to everyone who stops at the figure, and as optional to everyone who does not.
+
+What found it was not a proof either. It was a design question — *would normalizing `literal-N` be
+simpler?* — and the first move was to ask the shipped constructor what it did at the ends of the
+range. It wrote `{ N: 'NaN' }`. The answer to the question turned out to matter less than the
+measurement taken on the way to it.
 
 Also worth recording, since it is the pairing that made the docstring: `Ker` is an
 equivalence and `Codec.Equiv` is not (`not_equiv_trans`, item 3). They are one symbol apart
