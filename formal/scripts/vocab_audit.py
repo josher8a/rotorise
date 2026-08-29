@@ -65,7 +65,7 @@ BLOCKS = [
     ("opaque", ["opaqCodec", "opaq_", "onKind", "opaqKinds"], "none"),
     ("union",  ["altCodec", "OptionSem", "uniqueAdmission", "unanimous",
                 "optionSemOf", "dunion", "tag_filter"], "complete"),
-    ("wrappers", ["through", "restrict", "extendRead", "orNull"], "none"),
+    ("wrappers", ["through", "restrict", "extendRead", "orNull"], "complete"),
     ("ground", ["stringCodec", "numberCodec", "decimalCodec", "numericCodec",
                 "booleanCodec", "binaryCodec", "nullCodec", "literalS", "literalN",
                 "pointCodec", "decimal_", "numeral"], "none"),

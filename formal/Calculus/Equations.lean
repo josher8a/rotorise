@@ -133,34 +133,23 @@ compose in the order written and the reading halves compose *reversed*, which is
 /-- §6: `held(c, id, id) ≡ c`. -/
 theorem equiv_through_id (c : Codec) : Codec.Equiv (c.through id id) c := by
   refine ⟨fun _ => Iff.rfl, rfl, ?_, ?_⟩
-  · intro v a a' h h'
-    exact Option.some.inj (h.symm.trans h')
+  · exact fun h h' => Option.some.inj ((through_e.mp h).symm.trans h')
   · intro a v v' h h'
-    replace h : (c.p a).map id = some v := h
-    cases hp : c.p a with
-    | none => rw [hp] at h; exact nomatch h
-    | some x =>
-      rw [hp] at h
-      replace h : x = v := by simpa using h
-      rw [hp] at h'
-      exact h.symm.trans (Option.some.inj h')
+    obtain ⟨w, hw, rfl⟩ := through_p.mp h
+    exact Option.some.inj (hw.symm.trans h')
 
 /-- §6: `held(held(c, f, g), f′, g′) ≡ held(c, f ∘ f′, g′ ∘ g)`. -/
 theorem equiv_through_comp (c : Codec) (f g f' g' : Value → Value) :
     Codec.Equiv ((c.through f g).through f' g') (c.through (f ∘ f') (g' ∘ g)) := by
   refine ⟨fun _ => Iff.rfl, rfl, ?_, ?_⟩
-  · intro v a a' h h'
-    exact Option.some.inj (h.symm.trans h')
+  · exact fun h h' => Option.some.inj (h.symm.trans h')
   · intro a v v' h h'
-    replace h : ((c.p a).map g).map g' = some v := h
-    replace h' : (c.p a).map (g' ∘ g) = some v' := h'
-    cases hp : c.p a with
-    | none => rw [hp] at h; exact nomatch h
-    | some x =>
-      rw [hp] at h h'
-      replace h : g' (g x) = v := by simpa using h
-      replace h' : g' (g x) = v' := by simpa using h'
-      exact h.symm.trans h'
+    obtain ⟨w, hw, rfl⟩ := through_p.mp h
+    obtain ⟨x, hx, rfl⟩ := through_p.mp hw
+    obtain ⟨y, hy, rfl⟩ := through_p.mp h'
+    rw [hx] at hy
+    cases hy
+    rfl
 
 /-! ## `refine` — prisms meet, and a full one is no refinement -/
 
@@ -176,40 +165,11 @@ theorem equiv_restrict_meet (c : Codec) (q q' : Value → Bool) :
       simp only [Bool.and_eq_true] at hqq
       exact ⟨⟨hT, hqq.1⟩, hqq.2⟩
   · intro v a a' h h'
-    replace h : (if q' v = true then (if q v = true then c.e v else none) else none)
-        = some a := h
-    replace h' : (if (q v && q' v) = true then c.e v else none) = some a' := h'
-    by_cases hq' : q' v = true
-    · rw [if_pos hq'] at h
-      by_cases hq : q v = true
-      · rw [if_pos hq] at h
-        rw [if_pos (by simp [hq, hq'])] at h'
-        exact Option.some.inj (h.symm.trans h')
-      · rw [if_neg hq] at h; exact nomatch h
-    · rw [if_neg hq'] at h; exact nomatch h
+    obtain ⟨-, hin⟩ := restrict_e.mp h
+    exact Option.some.inj ((restrict_e.mp hin).2.symm.trans (restrict_e.mp h').2)
   · intro a v v' h h'
-    replace h : ((c.p a).bind fun x => if q x = true then some x else none).bind
-        (fun x => if q' x = true then some x else none) = some v := h
-    replace h' : (c.p a).bind (fun x => if (q x && q' x) = true then some x else none)
-        = some v' := h'
-    cases hp : c.p a with
-    | none => rw [hp] at h; exact nomatch h
-    | some x =>
-      rw [hp] at h h'
-      replace h : (if q x = true then some x else none).bind
-          (fun y => if q' y = true then some y else none) = some v := h
-      replace h' : (if (q x && q' x) = true then some x else none) = some v' := h'
-      by_cases hq : q x = true
-      · rw [if_pos hq] at h
-        replace h : (if q' x = true then some x else none) = some v := h
-        by_cases hq' : q' x = true
-        · rw [if_pos hq'] at h
-          rw [if_pos (by simp [hq, hq'])] at h'
-          exact (Option.some.inj h).symm.trans (Option.some.inj h')
-        · rw [if_neg hq'] at h; exact nomatch h
-      · rw [if_neg hq] at h
-        replace h : (none : Option Value) = some v := h
-        exact nomatch h
+    obtain ⟨hin, -⟩ := restrict_p.mp h
+    exact Option.some.inj ((restrict_p.mp hin).1.symm.trans (restrict_p.mp h').1)
 
 /-- §6: `refine(c, T) ≡ c` for `⊢ c : T ⇝ μ`. A refinement admitting everything the codec
     holds is no refinement — and note the premise needed is only that `q` agrees with `T`,
@@ -217,25 +177,9 @@ theorem equiv_restrict_meet (c : Codec) (q q' : Value → Bool) :
     so a `q` that rejects something outside `T` costs nothing. -/
 theorem equiv_restrict_full (c : Codec) (q : Value → Bool)
     (hq : ∀ v, c.T v ↔ q v = true) : Codec.Equiv (c.restrict q) c := by
-  refine ⟨?_, rfl, ?_, ?_⟩
-  · intro v
-    exact ⟨fun h => h.1, fun h => ⟨h, (hq v).mp h⟩⟩
-  · intro v a a' h h'
-    replace h : (if q v = true then c.e v else none) = some a := h
-    cases hqv : q v <;> simp only [hqv] at h
-    · exact nomatch h
-    · exact Option.some.inj (h.symm.trans h')
-  · intro a v v' h h'
-    replace h : (c.p a).bind (fun x => if q x = true then some x else none) = some v := h
-    cases hp : c.p a with
-    | none => rw [hp] at h; exact nomatch h
-    | some x =>
-      rw [hp] at h h'
-      replace h : (if q x = true then some x else none) = some v := h
-      by_cases hqx : q x = true
-      · rw [if_pos hqx] at h
-        exact (Option.some.inj h).symm.trans (Option.some.inj h')
-      · rw [if_neg hqx] at h; exact nomatch h
+  refine ⟨fun v => ⟨fun h => h.1, fun h => ⟨h, (hq v).mp h⟩⟩, rfl, ?_, ?_⟩
+  · exact fun h h' => Option.some.inj ((restrict_e.mp h).2.symm.trans h')
+  · exact fun h h' => Option.some.inj ((restrict_p.mp h).1.symm.trans h')
 
 /-! ## `legacy` with its own reading -/
 
