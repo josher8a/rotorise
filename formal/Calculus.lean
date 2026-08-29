@@ -7,3 +7,8 @@ import Calculus.Typing
 import Calculus.Soundness
 import Calculus.Discharge
 import Calculus.Equations
+import Calculus.Continuity
+import Calculus.Opaque
+import Calculus.Denoteω
+import Calculus.Soundnessω
+import Calculus.HeldSet
