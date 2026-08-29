@@ -176,10 +176,15 @@ theorem opaqCodec_e_null (lossy : Bool) (n : Nat) :
     (opaqCodec (n+1) lossy).e .null = nullCodec.e .null := by
   cases lossy <;> simp
 
+/-- The `N` option after `(number)` grew its `D` gate: still an equality, and no longer a
+    `simp`. A double outside `D` is refused by `numberCodec` and therefore admitted by no
+    option, so `opaque` writes nothing for it — which is the same answer the right-hand side
+    gives, and is why `Uν` has to carry the premise (`HOpaque.num`). -/
 theorem opaqCodec_e_num (lossy : Bool) (n : Nat) (d : Double) :
     (opaqCodec (n+1) lossy).e (.num d)
       = (if lossy then numberCodec else Codec.empty).e (.num d) := by
-  cases lossy <;> simp
+  by_cases hw : Numeral.WF d.toDec = true <;> cases lossy <;>
+    simp [numberCodec_e_num, hw]
 
 theorem opaqCodec_e_set (lossy : Bool) (n : Nat) (vs : List Value) :
     (opaqCodec (n+1) lossy).e (.set vs)
@@ -309,7 +314,11 @@ theorem opaqCodec_p_null (lossy : Bool) (n : Nat) :
 theorem opaqCodec_p_n (lossy : Bool) (n : Nat) (x : Numeral) :
     (opaqCodec (n+1) lossy).p (.n x)
       = (if lossy then numberCodec else Codec.empty).p (.n x) := by
-  cases hd : Double.ofDec x <;> cases lossy <;> simp [hd]
+  cases hd : Double.ofDec x with
+  | none => cases lossy <;> simp [numberCodec_p_n, hd]
+  | some d =>
+    by_cases hw : Numeral.WF d.toDec = true <;> cases lossy <;>
+      simp [numberCodec_p_n, hd, hw]
 
 theorem opaqCodec_p_ss (lossy : Bool) (n : Nat) (vs : List String) :
     (opaqCodec (n+1) lossy).p (.ss vs) = (setCodec (opaqCodec n lossy)).p (.ss vs) := by
@@ -519,11 +528,16 @@ theorem opaq_e_depth (lossy : Bool) :
   | .null, n'+1, a, he => by
       rw [opaqCodec_e_null] at he
       simp only [nullCodec] at he; cases he; simp [Attr.depth, Value.depth]
-  | .num _, n'+1, a, he => by
+  | .num d, n'+1, a, he => by
       rw [opaqCodec_e_num] at he
-      cases lossy <;> simp only [numberCodec, Codec.empty] at he
-      · exact nomatch he
-      · cases he; simp [Attr.depth, Value.depth]
+      cases lossy with
+      | false => simp only [Codec.empty] at he; exact nomatch he
+      | true =>
+        replace he : numberCodec.e (.num d) = some a := he
+        rw [numberCodec_e_num] at he
+        by_cases hw : Numeral.WF d.toDec = true
+        · rw [if_pos hw] at he; cases he; simp [Attr.depth, Value.depth]
+        · rw [if_neg hw] at he; exact nomatch he
   | .set vs, n'+1, a, he => by
       rw [opaqCodec_e_set] at he
       replace he : (traverse (opaqCodec n' lossy).e vs).bind asWireSet = some a := he
@@ -600,14 +614,16 @@ theorem opaq_p_n_depth (lossy : Bool) (x : Numeral) :
       cases lossy with
       | false => simp [Codec.empty] at hp
       | true =>
-        replace hp : (Double.ofDec x).map Value.num = some v := by
-          simpa [numberCodec] using hp
+        replace hp : numberCodec.p (.n x) = some v := hp
+        rw [numberCodec_p_n] at hp
         cases hd : Double.ofDec x with
         | none => rw [hd] at hp; exact nomatch hp
         | some d =>
           rw [hd] at hp
-          replace hp : Value.num d = v := by simpa using hp
-          subst hp; simp [Value.depth]
+          replace hp : (if Numeral.WF d.toDec then some (Value.num d) else none) = some v := hp
+          by_cases hw : Numeral.WF d.toDec = true
+          · rw [if_pos hw] at hp; cases hp; simp [Value.depth]
+          · rw [if_neg hw] at hp; exact nomatch hp
 
 theorem opaq_p_b_depth (lossy : Bool) (b : Bytes) :
     ∀ (n : Nat) (v : Value), (opaqCodec n lossy).p (.b b) = some v -> Value.depth v <= 1

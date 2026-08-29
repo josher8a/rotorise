@@ -113,9 +113,10 @@ theorem hopaque_T (lossy : Bool) :
   | .num d, n, h, hd => by
       cases n with | zero => exact absurd hd (by simp [Value.depth]) | succ n' =>
       cases h with
-      | num _ hl =>
+      | num _ hl hw =>
         subst hl
-        exact ⟨.byAttempt (if true then numberCodec else Codec.empty), by simp [opaqOptions], ⟨d, rfl⟩⟩
+        exact ⟨.byAttempt (if true then numberCodec else Codec.empty), by simp [opaqOptions],
+               ⟨d, rfl, hw⟩⟩
   | .set vs, n, h, hd => by
       cases n with | zero => exact absurd hd (by simp [Value.depth]) | succ n' =>
       cases h with

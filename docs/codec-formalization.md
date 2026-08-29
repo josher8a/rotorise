@@ -268,32 +268,63 @@ Three things worth keeping from this one:
    an attribute that differs but reads the same — and it turned out to state the store's condition
    without needing anything new.
 
-`number` is closed in the implementation, which now refuses `NaN`, `Infinity` and anything outside
-`D`, on both halves. **It is not closed in the model**, where `numberCodec` still holds every
-double and `⊢ number : D ⇝ N` claims a bound no law enforces — the `numeric` defect, one term over.
+`number` is closed in the implementation, which refuses `NaN`, `Infinity` and anything outside
+`D`, on both halves. **It is now closed in the model too**, and the route there is worth recording
+in full, because two estimates of it were made and both were wrong in different directions.
 
-The route was attempted and then reverted, and what it cost is worth recording, because the first
-estimate of it was wrong. Gating is right and needs no new axiom — `e` on `Numeral.WF (toDec d)`,
-and `p` on the **round-tripped** value rather than the stored digits, since `ofDec` of a numeral at
-the top of the range can round *up* past it and would otherwise read back a double `e` refuses.
-That much was written, the four laws reproved explicitly, and `Combinators.lean` went green on the
-first third of the change. The `Double` interface needed nothing added, which was the open question.
+The gate is what the first attempt said it was, and it needed no new axiom: `e` on
+`Numeral.WF (toDec d)`, and `p` on the **round-tripped** value rather than the stored digits, since
+`ofDec` of a numeral at the top of the range can round *up* past it and would otherwise read back a
+double `e` refuses. `Typed.number` concludes the same set, so the judgement now says `D` where the
+rule always did.
 
-What the estimate missed is that the bound does not stay in `(number)`. It is forced outward twice,
-and both steps are *correct* rather than incidental:
+**What the second estimate got right.** The bound does not stay in `(number)`. It is forced outward
+twice, and both steps are *correct* rather than incidental:
 
-1. **`(literal-N)`.** `literalNCodec`'s laws are proved as a prism over `number`, so a literal
-   outside `D` would be writable where `number` is not. §3's rule needs `ℓ ⊆ D`: `literal(1e999)`
-   should not be derivable, and today it is.
-2. **§3's `Uν`.** `opaque`'s number option *is* `numberCodec`, so `HOpaque.num` must carry the same
+1. **§3's `Uν`.** `opaque`'s number option *is* `numberCodec`, so `HOpaque.num` carries the same
    premise — a double `opaque` cannot write is not one of "the values whose type is recoverable from
-   the value alone". That is the same species as `HOpaque.set`'s `vs ≠ []` above, and it reaches
-   `Opaque.lean`'s depth machinery and `opaq_T_identity` with it.
+   the value alone", because there is no `N` for it to be recoverable from. The same species as
+   `HOpaque.set`'s `vs ≠ []` above, and it is now in the rule.
+2. **`(literal-N)`.** `literalNCodec`'s laws were proved as a prism over `number`, so a literal
+   outside `D` is writable where `number` is not. §3's rule wants `ℓ ⊆ D`: `literal(1e999)` should
+   not be derivable, and still is.
 
-So this is not "gate `number`". It is a joint change to `(number)`, `(literal-N)` and `Uν`, and the
-right size for its own pass rather than the tail of another. The direction is settled; the estimate
-of it was not, and an estimate that only turns out wrong once the proofs are open is exactly the
-kind this document exists to record.
+**What it got wrong, and this is the correction.** It read `Uν` as the expensive half — "reaches
+`Opaque.lean`'s depth machinery and `opaq_T_identity` with it". It reaches them and they do not
+move: four local proof repairs in `Opaque.lean` (two unfoldings that stopped being `simp`, two
+depth cases that needed the gate split), one line in `HeldSet.lean`, one in `Soundness.lean`.
+`opaq_T_identity` is unchanged and still green under `#assert_axioms`. Adding a premise to an
+inductive that every proof already destructs is cheap; the estimate priced it as a rework.
+
+The cost it did not see at all was in the half it called simple. **`literalNCodec` had to be
+reproved from scratch**, both `Lawful` and `Carrier`, because the prism over `number` is not
+weakened by the gate — it is gone. `restrict numberCodec (inLN ls)` and `literalNCodec ls` are
+different codecs the moment `number` gates and `literal-N` does not, so `Lawful.congr` has nothing
+to transport. The laws never needed the prism (**(R)** here is `Double.roundtrip` and a membership
+test, which is what the prism was carrying second-hand), but nothing said so until the route was
+removed. **A proof route is not a proof, and the two are easiest to confuse where the route has
+always worked.**
+
+`ℓ ⊆ D` is left open, because adding a premise to a rule changes the specification. What the model
+now carries instead is the cost, stated: `literalN_sub_number` (with the premise, `literal-N`
+refines `number` again — the premise is the whole of what the prism needed),
+`not_literalN_sub_number` and `literalN_writes_off_numerals` (without it, a derivable term writes an
+attribute outside §1's `Numerals` at a value `number` refuses), and `typed_literalN_any` (the
+derivation that would be refused, with no hypothesis on `d` at all).
+
+Those three are **conditional on a double outside `D` existing**, and deliberately so. `Double` is
+axiomatized with the shortest-text round trip and nothing else; whether IEEE-754 has a value
+DynamoDB will not store is a fact about IEEE, and asserting it would widen the trusted base to
+settle a question the specification can answer for itself. So the refutations read: *if* there is
+such a double, this is what the missing premise costs — and if there is not, the premise costs
+nothing to add. That is the whole decision, and it is a one-line change to §3 either way.
+
+One thing fell out that neither estimate anticipated. §1 says `number` satisfies `η ⊆ ker p` "for
+free" because `p "1.500"` and `p "1.5"` are the same double, and with `Codec.Ker` in the model that
+sentence is now `survivesStore_numberCodec`: `number`'s `p` factors through `Double.ofDec`, so any
+normalisation preserving the double a numeral reads to lies inside its kernel. Set against
+`ker_decimalCodec` — whose kernel is *equality*, so the same inclusion forces `η` to be the identity
+— the two theorems are §1's entire argument for narrowing one held set and leaving the other alone.
 
 ### One the model found in the implementation
 
@@ -754,7 +785,11 @@ to any system and any port.
    table of rewrites licenses. See §6's row.
 3. ~~**Tighten §1's numeral domain**~~ — **done** (§6), then tightened again: `decimal` holds
    `Numeral.Stored`, the form the store hands back, and not §1's `Numerals`, which is what it
-   accepts. The two differ, and the difference was a round trip failing across storage.
+   accepts. The two differ, and the difference was a round trip failing across storage. And
+   again, at the other end: `number` now holds `D` rather than every double, `Uν` carries the
+   same premise, and `η ⊆ ker p` is `SurvivesStore` rather than prose. **One thing is left and
+   it is not a proof:** whether §3's `(literal-N)` gains `ℓ ⊆ D`. The cost of not adding it is
+   stated in `Refutations.lean` and in §4; the decision is normative.
 4. ~~**De-fuel the denotation**~~ — **done** (§7), and with it `T` **as an identity** for
    `opaque`. What remains of that row is the other constructors, where the honest answer differs by
    rule: containers and wrappers should go through much as `opaque` did, but `union` needs (U) in

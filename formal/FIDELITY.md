@@ -256,7 +256,7 @@ group would cost if it leaked: the three devices that pin §5's declaration-time
 the denotation, the three ω-twins that all travel along `denoteω_eq`, and the `opaque`
 and numeral rows. The guard went green first try, which is the expected result — the
 point was never to find a leak, it was to stop the eleven hand-checks from having to be
-redone by the next reader. Coverage 17 → **28 of 99**, and 42 of 117 after items 3–5, 8 and 9 added theorems of their own.
+redone by the next reader. Coverage 17 → **28 of 99**, and 49 of 123 once items 3–5, 8 and 9 and the `(number)` gate added theorems of their own.
 
 A measurement artefact worth naming, since this file's own rule is that the script wins:
 `fidelity_audit.py` reads `FIDELITY.md` as one of its document sources, so *citing* a
@@ -308,17 +308,17 @@ table had drifted by a few lines per block and is re-synced to the script.
 python3 scripts/fidelity_audit.py          # --names to list the offenders
 ```
 
-At HEAD: 703 declarations, 509 theorems, 194 definitions.
+At HEAD: 712 declarations, 518 theorems, 194 definitions.
 
 | | |
 | --- | ---: |
-| theorem names the documents cite as results | 117 |
-| …put through `#assert_axioms` | **42** |
-| §-tag coverage (declarations naming a spec section) | **19%** |
-| docstring coverage, theorems | 55% |
-| docstring coverage, definitions | 71% |
-| **theorem statements naming an undocumented definition** | **59%** |
-| …and themselves undocumented | 136 |
+| theorem names the documents cite as results | 123 |
+| …put through `#assert_axioms` | **49** |
+| §-tag coverage (declarations naming a spec section) | **20%** |
+| docstring coverage, theorems | 56% |
+| docstring coverage, definitions | 72% |
+| **theorem statements naming an undocumented definition** | **58%** |
+| …and themselves undocumented | 134 |
 
 The last row is the one that matters. A statement naming an undocumented definition
 cannot be read against the specification without a detour — and this counts the
@@ -326,7 +326,7 @@ cannot be read against the specification without a detour — and this counts th
 entitled to skip a statement.
 
 Per-module §-tags are worst exactly where the volume is: `Combinators.lean` 10%,
-`Opaque.lean` 1%, `Term.lean` 0%. The 56 undocumented definitions include `Typed`,
+`Opaque.lean` 1%, `Term.lean` 0%. The 55 undocumented definitions include `Typed`,
 `Term`, `denote`, `setCodec`, `arrayCodec`, `objectCodec`. **No line of source says which
 §3 rule `setCodec` denotes** — that mapping exists only in `README.md` prose.
 
