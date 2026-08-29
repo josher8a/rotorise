@@ -751,6 +751,57 @@ theorem uAtCan_of_disjoint (fuel : Nat) {opts : List Term}
     obtain ⟨μy, hμy⟩ := Option.isSome_iff_exists.mp (hμ y hy)
     exact Or.inl ⟨μx, μy, hμx, hμy, fun h => hxy (by rw [hμx, hμy, h])⟩
 
+/-! ## The other two rows of §5's table
+
+    §5's discharger table has four rows, and until now a reviewer checking it changed
+    vocabulary halfway across: two rows are about `UAtCan fuel opts` — a list of
+    **terms** — and two are about `UniqueAdmission os`, a list of `OptionSem`. Worse,
+    `(dunion)`'s row was never stated at all: it appeared only inside
+    `lawful_dunionCodec`, where it is an argument rather than a claim.
+
+    `(dunion)`'s row moves to term level here, so three of the four are one vocabulary.
+    The fourth cannot follow, and the reason is worth stating rather than working
+    around: `denote` gives `(opaque)` the **fuel-free** `opaqCodecω`, which budgets each
+    input by its own depth and is not `altCodec` over any one list of options. Its (U)
+    is therefore a statement about `opaqCodec` at a fuel, one level below the term
+    language. That is a fact about `opaque`, not a gap in the table. -/
+
+/-- The options of a `(dunion)`, exactly as `denote`'s dunion case builds them: tag
+    admission on `d`, where `(union)`'s `semsOf` uses name admission. -/
+noncomputable def semsOfD (fuel : Nat) (d : Name) (opts : List Term) : List OptionSem :=
+  (opts.map fun t' => (tagsOf d t', denote fuel t')).map fun o => .byTag d o.1 o.2
+
+/-- And it really is the denotation's option list — the `rfl` that keeps `semsOfD` from
+    drifting away from `denote`. -/
+theorem denote_dunion (fuel : Nat) (d : Name) (opts : List Term) :
+    denote (fuel+1) (.dunion d opts) = altCodec (semsOfD fuel d opts) (some .M) := rfl
+
+/-- §5 (U) for a `(dunion)`, in `UAtCan`'s vocabulary. -/
+def UAtCanD (fuel : Nat) (d : Name) (opts : List Term) : Prop :=
+  UniqueAdmission (semsOfD fuel d opts)
+
+/-- **Row three: `(dunion)`'s (U) is a theorem, not a premise** — §5's "the one union
+    whose (U) is discharged by the rule itself". The premises are exactly `Typed.dunion`'s
+    two syntactic side conditions, so a derivable `discriminatedUnion` never carries an
+    obligation — `Obligations.dunion` is the other half of that claim, and says the
+    rule's obligation list has no (U) entry to begin with. Stated here because inside
+    `lawful_dunionCodec` it is an argument to a lemma, and a reviewer checking §5's table
+    has nothing to point at. -/
+theorem uAtCan_dunion (fuel : Nat) {d : Name} {opts : List Term}
+    (htags : ∀ t' ∈ opts, tagsOf d t' ≠ [])
+    (hdisj : List.Pairwise (fun a b => ∀ tag ∈ tagsOf d a, tag ∉ tagsOf d b) opts) :
+    UAtCanD fuel d opts :=
+  uniqueAdmission_byTag (dunion_stamp fuel htags) (List.pairwise_map.mpr hdisj)
+
+/-- **Row four: `(opaque)`'s (U), unconditionally.** `uniqueAdmission_opaque` asks for the
+    recursive option's lawfulness; `lawful_opaqCodec` supplies it, so the row has no
+    premises at all. It is stated about `opaqCodec` at a fuel rather than about the term
+    `opaque` for the reason given above — `denoteω` of `opaque` is not a sum over one
+    list. -/
+theorem uAtCan_opaque (fuel : Nat) (lossy : Bool) :
+    UniqueAdmission (opaqOptions lossy (opaqCodec fuel lossy)) :=
+  uniqueAdmission_opaque fuel lossy (lawful_opaqCodec fuel lossy)
+
 /-! ## The premises are jointly inhabited
 
     `uAtCan_of_disjoint` takes six premises, and a theorem whose premises cannot all

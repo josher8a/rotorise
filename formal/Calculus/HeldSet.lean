@@ -55,7 +55,7 @@ theorem opaqCodec_T_set_nil (lossy : Bool) :
   | zero => exact hn
   | succ n' =>
     obtain ⟨o, ho, hT⟩ := hn
-    simp only [List.mem_cons, List.not_mem_nil, or_false] at ho
+    simp only [opaqOptions, List.mem_cons, List.not_mem_nil, or_false] at ho
     cases lossy <;>
       rcases ho with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;>
         simp_all [OptionSem.byAttempt, stringCodec, booleanCodec, binaryCodec, nullCodec,
@@ -100,42 +100,42 @@ theorem hopaque_T (lossy : Bool) :
       (opaqCodec n lossy).T v
   | .str s, n, _, hd => by
       cases n with | zero => exact absurd hd (by simp [Value.depth]) | succ n' =>
-      exact ⟨.byAttempt stringCodec, by simp, ⟨s, rfl⟩⟩
+      exact ⟨.byAttempt stringCodec, by simp [opaqOptions], ⟨s, rfl⟩⟩
   | .bool b, n, _, hd => by
       cases n with | zero => exact absurd hd (by simp [Value.depth]) | succ n' =>
-      exact ⟨.byAttempt booleanCodec, by simp, ⟨b, rfl⟩⟩
+      exact ⟨.byAttempt booleanCodec, by simp [opaqOptions], ⟨b, rfl⟩⟩
   | .bin b, n, _, hd => by
       cases n with | zero => exact absurd hd (by simp [Value.depth]) | succ n' =>
-      exact ⟨.byAttempt binaryCodec, by simp, ⟨b, rfl⟩⟩
+      exact ⟨.byAttempt binaryCodec, by simp [opaqOptions], ⟨b, rfl⟩⟩
   | .null, n, _, hd => by
       cases n with | zero => exact absurd hd (by simp [Value.depth]) | succ n' =>
-      exact ⟨.byAttempt nullCodec, by simp, rfl⟩
+      exact ⟨.byAttempt nullCodec, by simp [opaqOptions], rfl⟩
   | .num d, n, h, hd => by
       cases n with | zero => exact absurd hd (by simp [Value.depth]) | succ n' =>
       cases h with
       | num _ hl =>
         subst hl
-        exact ⟨.byAttempt (if true then numberCodec else Codec.empty), by simp, ⟨d, rfl⟩⟩
+        exact ⟨.byAttempt (if true then numberCodec else Codec.empty), by simp [opaqOptions], ⟨d, rfl⟩⟩
   | .set vs, n, h, hd => by
       cases n with | zero => exact absurd hd (by simp [Value.depth]) | succ n' =>
       cases h with
       | set _ hne hall =>
         have hL : Value.depthL vs <= n' := by simp only [Value.depth] at hd; omega
-        exact ⟨.byAttempt (setCodec (opaqCodec n' lossy)), by simp,
+        exact ⟨.byAttempt (setCodec (opaqCodec n' lossy)), by simp [opaqOptions],
                ⟨hne, hopaque_TL lossy vs n' hall hL⟩⟩
   | .arr vs, n, h, hd => by
       cases n with | zero => exact absurd hd (by simp [Value.depth]) | succ n' =>
       cases h with
       | arr _ hall =>
         have hL : Value.depthL vs <= n' := by simp only [Value.depth] at hd; omega
-        exact ⟨.byAttempt (arrayCodec (opaqCodec n' lossy)), by simp,
+        exact ⟨.byAttempt (arrayCodec (opaqCodec n' lossy)), by simp [opaqOptions],
                hopaque_TL lossy vs n' hall hL⟩
   | .map kvs, n, h, hd => by
       cases n with | zero => exact absurd hd (by simp [Value.depth]) | succ n' =>
       cases h with
       | map _ hall =>
         have hP : Value.depthP kvs <= n' := by simp only [Value.depth] at hd; omega
-        exact ⟨.byAttempt (recordCodec (opaqCodec n' lossy)), by simp,
+        exact ⟨.byAttempt (recordCodec (opaqCodec n' lossy)), by simp [opaqOptions],
                hopaque_TP lossy kvs n' hall hP⟩
 
 theorem hopaque_TL (lossy : Bool) :
