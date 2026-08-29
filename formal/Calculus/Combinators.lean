@@ -640,6 +640,35 @@ end Entrywise
 
 /-! ### `array` (§3) — entrywise between `arr` and `L` -/
 
+/-! ### What `set` writes and reads
+
+    The attribute side of `set` is a choice among three wire constructors rather than
+    one prism, which is why it is not an `entrywise` product and why its read-side
+    inversion names all three families. -/
+
+/-- What `set` writes: a `set` value whose elements all write, gathered by `asWireSet`. -/
+theorem setCodec_e_eq {c : Codec} {v : Value} {a : Attr} :
+    (setCodec c).e v = some a ↔
+      ∃ vs as, v = .set vs ∧ traverse c.e vs = some as ∧ asWireSet as = some a := by
+  cases v <;> simp [setCodec, Option.bind_eq_some]
+
+/-- What `set` reads: a nonempty wire set of one of the three families, its payloads
+    each read through the matching element prism. The read-side mirror of
+    `setCodec_e_eq`, and the reason the three families have to be spelled out — the
+    attribute side of `set` is a choice among three constructors, not one prism. -/
+theorem setCodec_p_eq {c : Codec} {a : Attr} {v : Value} :
+    (setCodec c).p a = some v ↔
+      ∃ vs : List Value, v = .set vs ∧
+        ((∃ ss : List String, a = .ss ss ∧ ss ≠ [] ∧
+            traverse (fun s => c.p (.s s)) ss = some vs)
+         ∨ (∃ ns : List Numeral, a = .ns ns ∧ ns ≠ [] ∧
+            traverse (fun x => c.p (.n x)) ns = some vs)
+         ∨ (∃ bs : List Bytes, a = .bs bs ∧ bs ≠ [] ∧
+            traverse (fun b => c.p (.b b)) bs = some vs)) := by
+  cases a <;>
+    simp [setCodec, Option.map_eq_some', eq_comm (a := v), List.isEmpty_iff] <;>
+    tauto
+
 def arrayCodec (c : Codec) : Codec :=
   { T := fun v => match v with | .arr vs => ∀ x ∈ vs, c.T x | _ => False
     μ := some .L
@@ -1538,53 +1567,24 @@ theorem carrier_orNull {c : Codec} (hc : Carrier c) : Carrier c.orNull where
 
 
 /-- `set`: nonemptiness comes from the wire, on both sides — `asWireSet` refuses the
-    empty list going out, and `p` refuses an empty wire set coming in. §3's `℘⁺fin`. -/
-theorem carrier_setCodec {c : Codec} (hc : Carrier c) : Carrier (setCodec c) := by
-  refine ⟨?_, ?_⟩
-  · intro v a h
-    cases v
-    case set vs =>
-      replace h : ((traverse c.e vs).bind asWireSet) = some a := h
-      cases htr : traverse c.e vs with
-      | none => rw [htr] at h; exact nomatch h
-      | some as =>
-        rw [htr] at h
-        refine ⟨?_, traverse_mem_input (fun _ _ hxy => hc.domE hxy) htr⟩
-        intro hnil
-        subst hnil
-        replace htr : some [] = some as := htr
-        cases htr
-        exact nomatch h
-    all_goals exact nomatch h
-  · intro a v h
-    -- three wire-set members, one argument each
-    have key : ∀ {β : Type} (ws : List β) (f : β → Option Value),
-        (∀ x y, f x = some y → c.T y) →
-        (if ws.isEmpty then none else (traverse f ws).map Value.set) = some v →
-        (setCodec c).T v := by
-      intro β ws f hf hw
-      cases hemp : ws.isEmpty with
-      | true => rw [hemp] at hw; exact nomatch hw
-      | false =>
-        rw [hemp] at hw
-        cases htr : traverse f ws with
-        | none => rw [htr] at hw; exact nomatch hw
-        | some vs =>
-          rw [htr] at hw
-          replace hw : some (Value.set vs) = some v := hw
-          cases hw
-          refine ⟨?_, traverse_mem hf htr⟩
-          intro hnil
-          subst hnil
-          have := traverse_length ws [] htr
-          cases ws with
-          | nil => exact nomatch hemp
-          | cons _ _ => exact nomatch this
-    cases a
-    case ss ws => exact key ws _ (fun _ _ hxy => hc.ranP hxy) h
-    case ns ws => exact key ws _ (fun _ _ hxy => hc.ranP hxy) h
-    case bs ws => exact key ws _ (fun _ _ hxy => hc.ranP hxy) h
-    all_goals exact nomatch h
+    empty list going out, and `p` refuses an empty wire set coming in. §3's `℘⁺fin`.
+    The three read-side families differ only in which prism the payloads sit in, so the
+    argument is the traversal fact applied three times to the same shape. -/
+theorem carrier_setCodec {c : Codec} (hc : Carrier c) : Carrier (setCodec c) where
+  domE he := by
+    obtain ⟨vs, as, rfl, htr, hw⟩ := setCodec_e_eq.mp he
+    refine ⟨?_, traverse_mem_input (fun _ _ hxy => hc.domE hxy) htr⟩
+    rintro rfl
+    cases (by simpa using htr : as = [])
+    exact nomatch hw
+  ranP hp := by
+    obtain ⟨vs, rfl, hcase⟩ := setCodec_p_eq.mp hp
+    have nonempty : ∀ {β : Type} (ws : List β) (f : β → Option Value),
+        ws ≠ [] → traverse f ws = some vs → vs ≠ [] := by
+      rintro β ws f hws htr rfl
+      exact hws (List.eq_nil_of_length_eq_zero (traverse_length ws [] htr))
+    rcases hcase with ⟨ss, -, hne, htr⟩ | ⟨ns, -, hne, htr⟩ | ⟨bs, -, hne, htr⟩ <;>
+      exact ⟨nonempty _ _ hne htr, traverse_mem (fun _ _ hxy => hc.ranP hxy) htr⟩
 
 
 /-! ### Sums -/
@@ -2101,12 +2101,6 @@ These two clauses read the same whether the element codec is `Lawful` or only
 differ on is (C): with (MP) the element's member comes from agreement, without it the
 `(set)` rule's own premise supplies it. -/
 
-/-- What `set` writes: a `set` value whose elements all write, gathered by `asWireSet`. -/
-theorem setCodec_e_eq {c : Codec} {v : Value} {a : Attr} :
-    (setCodec c).e v = some a ↔
-      ∃ vs as, v = .set vs ∧ traverse c.e vs = some as ∧ asWireSet as = some a := by
-  cases v <;> simp [setCodec, Option.bind_eq_some]
-
 /-- (R) per family: a wire set reads back by the same traversal, through the same prism
     the payload projection put it in. -/
 theorem setCodec_retract_of {α : Type} {c : Codec} (h : LawfulCore c) (elem : Ctor α Attr)
@@ -2281,111 +2275,63 @@ theorem lawful_setCodec {c : Codec} (h : Lawful c) : Lawful (setCodec c) := by
 /-! ### Keyed lookup and traversal facts (the keyed product consumes these) -/
 
 
-theorem fbDefaults_nil :
-    ∀ {sems : List (Name × FieldSem)} {names : List Name},
-      (∀ k c v, (k, FieldSem.fb c v) ∈ sems → names.contains k = true) →
-      fbDefaults names sems = []
-  | [], _, _ => rfl
-  | (k, fs) :: sems, names, h => by
-      have hrest := fbDefaults_nil fun k' c v hm =>
-        h k' c v (List.mem_cons_of_mem _ hm)
-      cases fs with
-      | fb c v =>
-        have hc := h k c v (List.mem_cons_self _ _)
-        simp only [fbDefaults, hc]
-        exact hrest
-      | req c =>
-        show fbDefaults names sems = []
-        exact hrest
-      | opt c =>
-        show fbDefaults names sems = []
-        exact hrest
+/-- `fbDefaults` is a `filterMap`: the `fb` fields whose name the row omits, paired with
+    their stand-ins. Stating it that way retires four hand-rolled recursions in favour of
+    mathlib's `mem_filterMap`. -/
+theorem fbDefaults_eq (names : List Name) (sems : List (Name × FieldSem)) :
+    fbDefaults names sems
+      = sems.filterMap fun kf =>
+          match kf.2 with
+          | .fb _ v => if names.contains kf.1 then none else some (kf.1, v)
+          | _ => none := by
+  induction sems with
+  | nil => rfl
+  | cons kf sems ih =>
+    obtain ⟨k, f⟩ := kf
+    cases f <;> simp [fbDefaults, List.filterMap, ih]
+    split <;> simp_all [fbDefaults]
 
-theorem mem_fbDefaults :
-    ∀ {sems : List (Name × FieldSem)} {names k c v},
-      (k, FieldSem.fb c v) ∈ sems → names.contains k = false →
-      (k, v) ∈ fbDefaults names sems
-  | [], _, _, _, _, hm, _ => nomatch hm
-  | (k₁, fs₁) :: sems, names, k, c, v, hm, hc => by
-      rcases List.mem_cons.mp hm with heq | hm'
-      · cases heq
-        simp only [fbDefaults, hc]
-        exact List.mem_cons_self _ _
-      · cases fs₁ with
-        | fb c₁ v₁ =>
-          show (k, v) ∈ (if names.contains k₁ then fbDefaults names sems
-            else (k₁, v₁) :: fbDefaults names sems)
-          cases hc₁ : names.contains k₁ with
-          | true =>
-            show (k, v) ∈ fbDefaults names sems
-            exact mem_fbDefaults hm' hc
-          | false =>
-            exact List.mem_cons_of_mem _ (mem_fbDefaults hm' hc)
-        | req c₁ =>
-          show (k, v) ∈ fbDefaults names sems
-          exact mem_fbDefaults hm' hc
-        | opt c₁ =>
-          show (k, v) ∈ fbDefaults names sems
-          exact mem_fbDefaults hm' hc
+theorem fbDefaults_mem {sems : List (Name × FieldSem)} {names k c v}
+    (hm : (k, FieldSem.fb c v) ∈ sems) (hc : names.contains k = false) :
+    (k, v) ∈ fbDefaults names sems := by
+  rw [fbDefaults_eq]
+  exact List.mem_filterMap.mpr ⟨(k, .fb c v), hm, by
+    simp only []
+    rw [if_neg (by simpa using hc)]⟩
 
-theorem fbDefaults_not_mem :
-    ∀ {sems : List (Name × FieldSem)} {names k}, names.contains k = true →
-      k ∉ (fbDefaults names sems).map (·.1)
-  | [], _, _, _ => by simp [fbDefaults]
-  | (k₁, fs₁) :: sems, names, k, hc => by
-      cases fs₁ with
-      | fb c₁ v₁ =>
-        show k ∉ ((if names.contains k₁ then fbDefaults names sems
-          else (k₁, v₁) :: fbDefaults names sems)).map (·.1)
-        cases hc₁ : names.contains k₁ with
-        | true =>
-          show k ∉ (fbDefaults names sems).map (·.1)
-          exact fbDefaults_not_mem hc
-        | false =>
-          intro hmem
-          simp only [List.map, List.mem_cons] at hmem
-          rcases hmem with rfl | hmem'
-          · rw [hc] at hc₁; exact nomatch hc₁
-          · exact fbDefaults_not_mem hc hmem'
-      | req c₁ =>
-        show k ∉ (fbDefaults names sems).map (·.1)
-        exact fbDefaults_not_mem hc
-      | opt c₁ =>
-        show k ∉ (fbDefaults names sems).map (·.1)
-        exact fbDefaults_not_mem hc
+theorem fbDefaults_spec {sems : List (Name × FieldSem)} {names k v}
+    (hm : (k, v) ∈ fbDefaults names sems) :
+    ∃ c, (k, FieldSem.fb c v) ∈ sems ∧ names.contains k = false := by
+  rw [fbDefaults_eq] at hm
+  obtain ⟨⟨k', f⟩, hmem, hg⟩ := List.mem_filterMap.mp hm
+  cases f with
+  | req _ => exact nomatch hg
+  | opt _ => exact nomatch hg
+  | fb c v' =>
+    simp only [] at hg
+    split at hg
+    · exact nomatch hg
+    · obtain ⟨rfl, rfl⟩ := by simpa using hg
+      exact ⟨c, hmem, by simpa using ‹¬names.contains k' = true›⟩
 
-theorem fbDefaults_spec :
-    ∀ {sems : List (Name × FieldSem)} {names k v},
-      (k, v) ∈ fbDefaults names sems →
-      ∃ c, (k, FieldSem.fb c v) ∈ sems ∧ names.contains k = false
-  | [], _, _, _, hm => nomatch hm
-  | (k₁, fs₁) :: sems, names, k, v, hm => by
-      cases fs₁ with
-      | fb c₁ v₁ =>
-        replace hm : (k, v) ∈ (if names.contains k₁ then fbDefaults names sems
-          else (k₁, v₁) :: fbDefaults names sems) := hm
-        cases hc₁ : names.contains k₁ with
-        | true =>
-          rw [hc₁] at hm
-          replace hm : (k, v) ∈ fbDefaults names sems := hm
-          obtain ⟨c, hmem, hc⟩ := fbDefaults_spec hm
-          exact ⟨c, List.mem_cons_of_mem _ hmem, hc⟩
-        | false =>
-          rw [hc₁] at hm
-          replace hm : (k, v) ∈ (k₁, v₁) :: fbDefaults names sems := hm
-          rcases List.mem_cons.mp hm with heq | hm'
-          · cases heq
-            exact ⟨c₁, List.mem_cons_self _ _, hc₁⟩
-          · obtain ⟨c, hmem, hc⟩ := fbDefaults_spec hm'
-            exact ⟨c, List.mem_cons_of_mem _ hmem, hc⟩
-      | req c₁ =>
-        replace hm : (k, v) ∈ fbDefaults names sems := hm
-        obtain ⟨c, hmem, hc⟩ := fbDefaults_spec hm
-        exact ⟨c, List.mem_cons_of_mem _ hmem, hc⟩
-      | opt c₁ =>
-        replace hm : (k, v) ∈ fbDefaults names sems := hm
-        obtain ⟨c, hmem, hc⟩ := fbDefaults_spec hm
-        exact ⟨c, List.mem_cons_of_mem _ hmem, hc⟩
+theorem fbDefaults_nil {sems : List (Name × FieldSem)} {names}
+    (h : ∀ k c v, (k, FieldSem.fb c v) ∈ sems → names.contains k = true) :
+    fbDefaults names sems = [] := by
+  cases h' : fbDefaults names sems with
+  | nil => rfl
+  | cons x xs =>
+    obtain ⟨k, v⟩ := x
+    obtain ⟨c, hmem, hc⟩ := fbDefaults_spec (by rw [h']; exact List.mem_cons_self _ _)
+    rw [h k c v hmem] at hc
+    exact nomatch hc
+
+theorem fbDefaults_not_mem {sems : List (Name × FieldSem)} {names k}
+    (hc : names.contains k = true) : k ∉ (fbDefaults names sems).map (·.1) := by
+  intro hm
+  obtain ⟨⟨k', v⟩, hmem, rfl⟩ := List.mem_map.mp hm
+  obtain ⟨-, -, hc'⟩ := fbDefaults_spec hmem
+  rw [hc] at hc'
+  exact nomatch hc'
 
 /-- The guard characterizations, via `List.all`. -/
 theorem valPresentB_spec {sems : List (Name × FieldSem)} {names : List Name}
@@ -2488,41 +2434,6 @@ theorem decEntry_fst {sems : List (Name × FieldSem)} {rc? : Option Codec} :
 /-! ### Carriers, continued: objects
 
     Placed here, after the name-dispatch helpers `p` needs. -/
-
-/-- The converse of `fbDefaults_spec`: an absent `fb` name does get its stand-in. -/
-theorem fbDefaults_mem :
-    ∀ {sems : List (Name × FieldSem)} {names k c v},
-      (k, FieldSem.fb c v) ∈ sems → names.contains k = false →
-      (k, v) ∈ fbDefaults names sems
-  | [], _, _, _, _, hm, _ => nomatch hm
-  | (k₁, fs₁) :: sems, names, k, c, v, hm, hc => by
-      cases fs₁ with
-      | req c₁ =>
-        show (k, v) ∈ fbDefaults names sems
-        rcases List.mem_cons.mp hm with heq | hm'
-        · exact nomatch (congrArg Prod.snd heq)
-        · exact fbDefaults_mem hm' hc
-      | opt c₁ =>
-        show (k, v) ∈ fbDefaults names sems
-        rcases List.mem_cons.mp hm with heq | hm'
-        · exact nomatch (congrArg Prod.snd heq)
-        · exact fbDefaults_mem hm' hc
-      | fb c₁ v₁ =>
-        show (k, v) ∈ (if names.contains k₁ then fbDefaults names sems
-          else (k₁, v₁) :: fbDefaults names sems)
-        rcases List.mem_cons.mp hm with heq | hm'
-        · have h1 : k = k₁ := congrArg Prod.fst heq
-          have h2 : v = v₁ := by
-            have hs := congrArg Prod.snd heq
-            injection hs
-          subst h1
-          subst h2
-          rw [hc]
-          exact List.mem_cons_self _ _
-        · have ih := fbDefaults_mem hm' hc
-          cases hc₁ : names.contains k₁ with
-          | true => exact ih
-          | false => exact List.mem_cons_of_mem _ ih
 
 /-- An entry survives `p`'s name filter and so appears among its outputs. -/
 theorem mem_decoded_names {kvs : List (Name × Attr)} {kn : Name → Bool}
@@ -2697,7 +2608,7 @@ theorem object_canon (hf : ∀ kf ∈ sems, LawfulCore kf.2.codec)
     | req c => rw [reqPresentB_spec hreq hm] at hck; exact nomatch hck
     | fb c v =>
       exact contains_of_mem (List.mem_append.mpr (Or.inr
-        (List.mem_map.mpr ⟨(k, v), mem_fbDefaults hm hck, rfl⟩)))
+        (List.mem_map.mpr ⟨(k, v), fbDefaults_mem hm hck, rfl⟩)))
 
 /-- (MP): the stand-ins have no stored counterpart to disagree with — they are exactly
     the names the row omitted — so `≼` is decided on the kept entries, by name. -/

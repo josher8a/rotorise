@@ -35,7 +35,7 @@ CONSTRUCTIONS = [
     ("carriedCodec", "carried"), ("entrywise", "entrywise"),
     ("setCodec", "setCodec"), ("arrayCodec", "arrayCodec"),
     ("recordCodec", "recordCodec"), ("tupleCodec", "tupleCodec"),
-    ("objectCodecCore", "objectCodecCore"), ("altCodec", "altCodec"),
+    ("objectCodecCore", "objWrite"), ("altCodec", "altCodec"),
     ("dunionCodec", "dunionCodec"), ("opaqCodec", "opaqCodec"),
 ]
 # constructions whose slot is deliberately empty, with the reason
@@ -58,10 +58,10 @@ BLOCKS = [
     ("array + record", ["arrayCodec", "recordCodec", "encPair", "decPair",
                         "entrywise", "carried"], "complete"),
     ("tuple",  ["tupleCodec", "align", "slots", "zip_", "tuple_"], "complete"),
-    ("set",    ["setCodec", "asWireSet", "Payloads", "set_", "agree_of_member"], "e only"),
+    ("set",    ["setCodec", "asWireSet", "Payloads", "set_", "agree_of_member"], "complete"),
     ("object", ["objectCodec", "entryCodec", "encEntry", "decEntry", "objWrite",
                 "objRead", "object_", "fbDefaults", "valPresent", "reqPresent",
-                "keepB", "rcOf", "mem_decoded", "objEntryT", "objStep", "entry_"], "e only"),
+                "keepB", "rcOf", "mem_decoded", "objEntryT", "objStep", "entry_"], "complete"),
     ("opaque", ["opaqCodec", "opaq_", "onKind", "opaqKinds"], "none"),
     ("union",  ["altCodec", "OptionSem", "uniqueAdmission", "unanimous",
                 "optionSemOf", "dunion", "tag_filter"], "complete"),
@@ -93,8 +93,8 @@ def matrix(names):
     filled = collections.Counter(); total = collections.Counter()
     for d, s in CONSTRUCTIONS:
         slots = {
-            "e-inv":   has(f"{s}_e", f"{s}_e_eq", f"{s}_e_inv", f"{s}_e_iff"),
-            "p-inv":   has(f"{s}_p", f"{s}_p_eq", f"{s}_p_inv", f"{s}_p_iff"),
+            "e-inv":   has(f"{s}_e", f"{s}_e_eq", f"{s}_e_inv", f"{s}_e_iff", f"{s}_eq"),
+            "p-inv":   has(f"{s}_p", f"{s}_p_eq", f"{s}_p_inv", f"{s}_p_iff", "objRead_eq" if s=="objWrite" else f"{s}_p"),
             "_eq":     has(f"{s}_eq", f"{d}_eq"),
             "core":    has(f"lawfulCore_{d}", f"lawfulCore_{s}", f"LawfulCore.{s}"),
             "lawful":  has(f"lawful_{d}", f"lawful_{s}", f"Lawful.{s}"),

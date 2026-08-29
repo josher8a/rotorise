@@ -77,7 +77,7 @@ Two further conventions the passes settled on, both load-bearing:
 
 ## §3 The audit
 
-Measured at `HEAD` (2026-08-29), 8616 lines across `Calculus/`. Regenerate with:
+Measured at `HEAD` (2026-08-29), 8721 lines across `Calculus/`. Regenerate with:
 
 ```sh
 python3 scripts/vocab_audit.py          # add --sites to list them for triage
@@ -89,20 +89,20 @@ python3 scripts/vocab_audit.py          # add --sites to list them for triage
 | --- | --- | --- |
 | `carrier_X` — §3's `e : T ⇀ 𝔸`, `p : 𝔸 ⇀ T` | **23 / 24** | |
 | `lawfulCore_X` / `lawful_X` — §2's laws | **22 / 24** | `extendRead` exempt: (MP) is the sanctioned breach |
-| `X_e` / `X_p` — **what it writes, what it reads** | **16 / 48** | |
+| `X_e` / `X_p` — **what it writes, what it reads** | **21 / 48** | counting an `X_eq` that carries inversion across |
 
 The obligation half of the vocabulary is done. **The observation half is 12% done.**
-`carriedCodec`, `entrywise`, `altCodec` and all four wrappers have both; `setCodec` and
-`objectCodecCore` have `_e` only; the ten ground codecs, `dunionCodec` and `opaqCodec`
-have neither.
+Every product, the union and all four wrappers now have both. The ten ground codecs,
+`dunionCodec` and `opaqCodec` have neither — and of those, only `opaqCodec` carries a
+measurable residue.
 
 ### What the remaining hand-unfolding is actually about
 
 | what is being unfolded | sites | concentrated in |
 | --- | --- | --- |
-| **raw `Option` algebra** | **179** | Combinators 76, Discharge 47, Soundness 30 |
-| `traverse` / list base cases | 41 | Opaque 27 |
-| a named codec's `e`/`p` | 29 | Opaque 19 |
+| **raw `Option` algebra** | **158** | Combinators 52, Discharge 50, Soundness 30 |
+| `traverse` / list base cases | 37 | Opaque 27 |
+| a named codec's `e`/`p` | 31 | Opaque 19 |
 | judgement premises (`Obligations`/`MPOk`) | 26 | Soundness 26 |
 | association-list `lookup` | 21 | Discharge 8 |
 | union resolution (`altCodec`'s filter) | 18 | Equations 8, Discharge 6, Combinators 4 |
@@ -119,11 +119,11 @@ Density per block, against how complete that block's inversion vocabulary is:
 | --- | --- | ---: | ---: | ---: |
 | array + record | complete | 249 | 0 | **0.0** |
 | tuple | complete | 331 | 10 | **3.0** |
-| wrappers | complete | 386 | 6 | **1.6** |
-| union | complete | 614 | 31 | 5.0 |
-| set | `_e` only | 581 | 29 | 5.0 |
-| object | `_e` only | 738 | 48 | 6.5 |
-| opaque | none | 952 | 57 | 6.0 |
+| wrappers | complete | 404 | 6 | **1.5** |
+| set | complete | 569 | 23 | 4.0 |
+| object | complete | 652 | 26 | 4.0 |
+| union | complete | 700 | 31 | 4.4 |
+| **opaque** | **none** | 952 | 57 | **6.0** |
 | ground | none | 454 | 16 | 3.5 |
 
 Monotone with one honest outlier. **`ground` is 3.5 with no inversion** — because
@@ -215,10 +215,11 @@ through it; the rows that need `List.Perm` are the next probe.
 | # | item | payoff |
 | --- | --- | --- |
 | ~~1~~ | ~~`altCodec_e`/`_p` as an iff~~ — **done**; the arity lemmas stayed, see §5 | 31 sites; 7.2 → 5.0 per 100 lines |
-| ~~2~~ | ~~Wrapper inversion~~ — **done**; §6's wrapper rows now go through it too | 43 → 6 sites; 8.9 → 1.6 per 100 lines |
-| 3 | Cash the three identities of §4 | ground and `nullable` inherit everything |
-| 4 | `setCodec_p`, `objRead` inversion — complete the two partials | 77 sites |
+| ~~2~~ | ~~Wrapper inversion~~ — **done**; §6's wrapper rows now go through it too | 43 → 6 sites; 8.9 → 1.5 per 100 lines |
+| ~~4~~ | ~~Complete the two partials~~ — **done**: `setCodec_p_eq`, and `fbDefaults` as the `filterMap` it is | set 5.0 → 4.0, object 6.5 → 4.0; four hand-rolled recursions and one duplicate retired |
+| 3 | Cash the last identity: `pointCodec = carriedCodec` | the ten ground codecs inherit inversion (`nullable`'s was cashed and became a dichotomy — §4) |
 | 5 | `Obligations`/`MPOk` per-rule inversion | 26 sites, all in `Soundness.lean` |
+| 6 | `opaqCodec` inversion — now the only block with none and a real residue | 57 sites, 6.0 per 100 lines |
 
 ## §7 Making it mechanical
 
