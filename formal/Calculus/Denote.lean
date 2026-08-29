@@ -7,9 +7,11 @@ import Calculus.Opaque
 
 `denote fuel t` dispatches each term to its certified combinator (Combinators.lean).
 Fuel is primary: every recursive call decrements it, so termination is structural on
-`Nat` and `lazy` costs nothing special — at fuel 0 every term denotes `Codec.empty`,
-whose laws hold vacuously. The doc's `lazy` case ("partiality is doing the termination
-argument's work") is this, literally. Laws are stated for all fuel (Soundness.lean).
+`Nat` and `lazy` costs nothing special — at fuel 0 every term's pair is empty and its
+laws hold vacuously. The **index is not**: `denote 0 t` keeps `μ := μSyn t`, which is the
+whole content of `denote_μ` and the reason the `⇝` column stays truthful at every depth.
+The doc's `lazy` case ("partiality is doing the termination argument's work") is this,
+literally. Laws are stated for all fuel (Soundness.lean).
 -/
 
 namespace Calculus

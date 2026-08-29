@@ -109,12 +109,12 @@ private theorem filterA_ne {c : Codec} {a : Attr} (ha : a ≠ .null) :
 /-! ## `nullable` *is* `union` with the null point — at `≡`, and only at `≡`
 
 §3 of the specification calls `nullable(c)` "structurally the two-option union
-`union(c, ⟨NULL⟩-point)`", and says the term stays primitive only because it resolves
-`NULL` by precedence where a union demands disjointness — "and under honesty the two
-semantics coincide, which is why the precedence is harmless."
+`union(c, ⟨NULL⟩-point)`" — that sentence is still there. What used to follow it is not:
+§3 said the two "coincide under honesty, which is why the precedence is harmless."
 
-Mechanizing that sentence shows it is wrong in both directions, and the correction is
-sharper than the claim:
+Mechanizing that sentence showed it wrong in both directions, and the correction is
+sharper than the claim, so §3 now states the dichotomy instead ("`nullable` is either the
+union or the identity"). This section is what changed it:
 
 * the **equivalence needs no premise at all** — not honesty, not lawfulness
   (`equiv_orNull_altCodec`). `≡` compares the pairs where both are defined, and the only
@@ -394,10 +394,15 @@ theorem equiv_altCodec_single (o : OptionSem) :
 
 /-! ## Wrappers preserve the member
 
-§6's last "Hold" row, and §4's reason index keys stay stable under refactoring: none of
-`held`, `refine` or `legacy` touches `μ`. The field wrappers `optional` and `fallback` are
-`FieldSem`s rather than codecs, so their half of the row is the stratification of §4 and
-not a statement about `Codec.μ` at all. -/
+§6's last "Hold" row, `μ(w(c)) = μ(c)` for `w ∈ {held, refine, legacy, optional,
+fallback}`, and §4's reason index keys stay stable under refactoring.
+
+Three of the five are codec wrappers. The other two are **fields**, and this file used to
+say their half of the row was "the stratification of §4 and not a statement about
+`Codec.μ` at all". That was an evasion: §4 says in as many words that *a field carries a
+member like anything else*, and `FieldSem.codec` is where the model puts it. Stated
+through that accessor the two rows are `rfl` — which is the honest form of the claim
+rather than a reason to skip it, and it is what makes the row five of five. -/
 
 theorem through_μ (c : Codec) (f g : Value → Value) : (c.through f g).μ = c.μ := rfl
 
@@ -405,6 +410,16 @@ theorem restrict_μ (c : Codec) (q : Value → Bool) : (c.restrict q).μ = c.μ 
 
 theorem extendRead_μ (c : Codec) (r : Attr → Option Value) :
     (c.extendRead r).μ = c.μ := rfl
+
+/-- §4 `(opt)`: an optional attribute is still stored somewhere, and where is the
+    subterm's member. -/
+theorem optional_μ (den : Term → Codec) (t : Term) :
+    (fieldSemOf den (.optional t)).codec.μ = (den t).μ := rfl
+
+/-- §4 `(fallback)`: the stand-in is written through the same codec, so the member is
+    the subterm's too. -/
+theorem fallback_μ (den : Term → Codec) (t : Term) (v : Value) :
+    (fieldSemOf den (.fallback t v)).codec.μ = (den t).μ := rfl
 
 /-! ## `union` is associative
 

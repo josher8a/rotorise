@@ -134,10 +134,11 @@ seven specification defects (three found by both readings independently), five c
 are true but unlocatable, two corrections to this package's own artifacts, and a measured
 review surface. Regenerate the measurements with `python3 scripts/fidelity_audit.py`.
 
-The headline: the guard puts 17 constants through `#assert_axioms` while the documents
-cite 93 as results, §-tag coverage is 18%, and **60% of theorem statements name a
+The headline: the guard puts 35 constants through `#assert_axioms` while the documents
+cite 112 as results, §-tag coverage is 18%, and **60% of theorem statements name a
 definition that is documented nowhere** — a statement a reviewer cannot read against the
-specification without a detour.
+specification without a detour. (The guard's count was 17 when the audit was written;
+items 1–5 of its plan closed the gap it measured, and its §5 records which.)
 
 ## How the proofs are meant to read
 
@@ -148,21 +149,25 @@ ranked plan for closing it. The numbers regenerate: `python3 scripts/vocab_audit
 
 The short version: the *obligation* half of the vocabulary is done (23/24 carriers,
 22/24 lawfulness lemmas); the *observation* half — `X_e`/`X_p`, what a construction
-writes and reads — is 16 of 48. Six of every ten remaining hand-unfoldings are `Option`
-algebra rather than anything about codecs, and the blocks that have inversion carry
-0–3 such sites per hundred lines against 6–9 for the blocks that do not.
+writes and reads — is 25 of 48. Six of every ten remaining hand-unfoldings are `Option`
+algebra rather than anything about codecs. The controlled comparison is the four blocks
+that *gained* inversion during the arc, same content before and after: 7.2 → 5.0 and
+8.9 → 1.5 sites per hundred lines, with `array + record` at 0.0 and `tuple` at 3.0.
+Across all blocks the spread is now 0.0–5.1, so the separation is real but narrower than
+a first reading of the table suggests — `ground` sits at 3.5 with no inversion at all,
+because `pointCodec` gives four of the ground codecs one shared proof.
 
 ## What remains (sharpenings, not gaps)
 
 The theorem is proved; these tighten the model's fidelity to the doc, none affect
-soundness: the remaining eighteen rows of §6 (`≡` is defined and the two rows other
-sections rely on — `nullable`'s idempotence, `union`'s commutativity — are proved;
-`union`'s commutativity is proved for the adjacent transposition, which generates every
-permutation, and lifting it to `List.Perm` is the obvious next step); widening `admA` past `literalS`/`dunion` (a numeric literal's read side
-goes through the axiomatized `Double.ofDec`, so no syntactic set bounds it, and those
-pairs still fall to (U) per input); a soundness lemma tying the judgement's `T` to the
-denotation (`e`'s domain and `p`'s range land in `T`), which the `T` index now makes
-statable.
+soundness. `union`'s commutativity is proved for the adjacent transposition, which
+generates every permutation, and lifting it to `List.Perm` is the obvious next step.
+`admA` stops at `literalS`/`dunion`: a numeric literal's read side goes through the
+axiomatized `Double.ofDec`, so no syntactic set bounds it, and those pairs still fall to
+(U) per input. Two entries that used to sit here are done — §6's rows are all proved
+(see `FIDELITY.md` for what "all" is worth on the commutativity row), and `typed_TSub`
+ties the judgement's `T` to the denotation, `typed_e_mem` and `typed_p_mem` being the
+statements a reviewer wants.
 
 ## Building
 

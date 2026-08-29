@@ -74,7 +74,7 @@ No theorem consumes it, which is correct and is now stated where a reviewer will
 §5 says no condition on held sets can discharge (U), and `DDisj` next to
 `not_uAtCan_literal_held` is why. `Typed = ⊢` is now true as asserted.
 
-**D3 — §5's `adm` cannot pass through `legacy` on the read side. [checked]**
+**D3 — §5's `adm` cannot pass through `legacy` on the read side. [checked] [witnessed, logged]**
 `codec-calculus.md:514` says `legacy` passes `adm` through. It cannot: `extendRead`
 (`Combinators.lean:289`) widens `p` by `r`, which is exactly the direction `adm` bounds.
 **The model already corrects this** — `admA` (`Discharge.lean:139`) has no `legacy` case —
@@ -83,17 +83,35 @@ the false row. A defect of the same species as the six logged, and the only one 
 unwitnessed by a theorem. Second half: the doc has one `adm`, the model needs two, and
 they genuinely disagree at `legacy` and at `literalN`. §5 should split it.
 
+**Witnessed and logged** (§5 item 8). `not_admA_legacy`: `legacy(literal("A"), r)` with
+`r` reading an `N` reads `⟨N, "1"⟩` to `"A"`, and `admA(literal("A"))` refuses it — so a
+passthrough `admA` makes `admA_sound` false. `codec-formalization.md` §4 now carries the
+entry, including the `literalN` half. **The amendment to `codec-calculus.md` §5 is not
+made** — splitting the `adm` row into a value side and an attribute side changes the
+normative document, which is not this arc's to do unasked. The §4 entry says what the
+amendment should be.
+
 **D4 — §2's (MP) exemption is localized in the doc and global in the model. [checked]**
 `codec-calculus.md:78`: a term *containing* a `legacy` inherits the exemption "on exactly
 the attributes the migration rereads, **and on no others**". `MPOk` (`Soundness.lean:65`)
 is `False` at any `legacy`, so `soundness` delivers no (MP) claim at all for such a term.
 The sentence that makes `legacy` a migration rather than a licence has no counterpart.
 
-**D5 — `numeric(T)` denotes `refine(number, T)`, which §3 says is a different term. [reported]**
+**D5 — `numeric(T)` denotes `refine(number, T)`, which §3 says is a different term. [reported, now checked] [logged]**
 `codec-calculus.md:178`: "`p` … **does not verify membership in `T`** … a claim and a check
 are different terms." `numericCodec` (`Combinators.lean:196`) gates `q` on both halves.
 This is a spec self-contradiction — `:617` calls the checked reading normative — resolved
 in §5's favour silently.
+
+**Re-derived, and sharper than reported.** §5's reading is not merely the one the model
+picked; it is the only one available. Under §3's reading `p` returns values outside `T`,
+which is `Carrier.ranP` failing and with it `typed_p_mem` and the honesty of the `: T`
+index — so `carrier_numericCodec` is already the standing witness and no new theorem was
+needed. §3's underlying point survives (the subset is an unchecked precondition *for the
+implementation*, like `D`'s magnitude range); what does not is "a claim and a check are
+different terms". In this calculus they denote the same codec. Logged in
+`codec-formalization.md` §4; the §3 amendment is left for the author of the normative
+document.
 
 **D6 — `(held)`'s iso premise is stronger than the proof consumes. [reported]**
 The doc demands total cancellation on the carriers; `IsoCancels` (`Codec.lean:102`)
@@ -182,12 +200,25 @@ Left open, and said so in the source: whether `≡` chains when both ends are `d
 *derivable* terms. The middle codec holds `null` and writes nothing, which no derivable
 term does, so this refutation does not decide the restricted question.
 
-**U4 — §6's "Hold" table is advertised complete; two of eleven rows are not. [reported]**
+**U4 — §6's "Hold" table is advertised complete; two of eleven rows are not. [reported — half of it wrong]**
 Commutativity is proved for the adjacent transposition only (`equiv_altCodec_swap`);
 wrapper member preservation for three of five wrappers. `README.md` is honest about the
 first; `codec-formalization.md:287` ("Complete — twenty of twenty") is not. The second
 audit adds that the remaining two are not merely unproved but **unstatable** in the
 current model: `FieldSem` carries no `μ` field, while §4 insists a field carries a member.
+
+**That second half is wrong, and checking it was worth more than the finding.**
+`FieldSem` has `FieldSem.codec`, which is exactly where the model puts a field's member,
+so both rows are statable and are now stated — `optional_μ` and `fallback_μ`, each `rfl`.
+The row is five of five. What the audit had actually found was `Equations.lean` saying
+their half of the row was "the stratification of §4 and not a statement about `Codec.μ`
+at all" — an evasion, since §4 says in as many words that a field carries a member like
+anything else. The docstring now says so and proves the rows.
+
+The first half stands and is now stated honestly in `codec-formalization.md`:
+commutativity is the adjacent transposition, which generates every permutation without
+the `List.Perm` lift being written down. That row also carries the `≡`-is-not-transitive
+caveat from U3, which bounds what a table of rewrites licenses at all.
 
 **U5 — the guard covers a fraction of what the documents advertise. [checked, settled, and now closed]**
 `Calculus/Axioms.lean` put 17 constants through `#assert_axioms`; the documents cite 99
@@ -208,7 +239,7 @@ group would cost if it leaked: the three devices that pin §5's declaration-time
 the denotation, the three ω-twins that all travel along `denoteω_eq`, and the `opaque`
 and numeral rows. The guard went green first try, which is the expected result — the
 point was never to find a leak, it was to stop the eleven hand-checks from having to be
-redone by the next reader. Coverage 17 → **28 of 99**, and 34 of 106 after items 3–5 added theorems of their own.
+redone by the next reader. Coverage 17 → **28 of 99**, and 35 of 112 after items 3–5 and 8 added theorems of their own.
 
 A measurement artefact worth naming, since this file's own rule is that the script wins:
 `fidelity_audit.py` reads `FIDELITY.md` as one of its document sources, so *citing* a
@@ -231,12 +262,28 @@ than absorbing them. The convention turned out to be wrong rather than the code 
 namespaced construction — so `VOCABULARY.md` §2 now sanctions both forms and says when
 each applies. Corrected coverage: **25/48**, not the 21/48 previously claimed.
 
-**C2 — stale prose, some of it mine. [checked]**
+**C2 — stale prose, some of it mine. [checked] [fixed]**
 `Equations.lean:105` quotes a specification sentence **deleted in this arc's own
 `nullable` commit**. `Denote.lean:10` says "at fuel 0 every term denotes `Codec.empty`";
 `denote 0 t` sets `μ := μSyn t` (`Denote.lean:89`), which is the entire point of
 `denote_μ`. `Denoteω.lean:20` names a file that does not exist. Five more at
 `Continuity.lean:50,64`, `Domain.lean:20`, `Discharge.lean:22`, `README.md:144`.
+
+**All eight fixed**, and two of the eight were not quite what the audit said:
+
+- `Equations.lean`'s quotation is half live. §3 *does* still call `nullable(c)`
+  "structurally the two-option union" — that sentence was not deleted. What was deleted
+  is what followed it, the "coincide under honesty" clause the section refutes. The
+  prose now quotes the live half as live and the dead half as former.
+- `Discharge.lean:22` was accurate when the audit was written and is stale now, because
+  §5 item 2 moved (D) into `Typed.union` this session. It points at `DIncomp` and at
+  `DDisj`'s role as the withdrawn strengthening.
+
+`README.md` had four stale numbers rather than one — the guard's 17, the observation
+half's "16 of 48" (C1's own correction had not reached it), the "0–3 against 6–9"
+density claim, and two entries in "What remains" that are done (§6's rows, and
+`typed_TSub` tying the judgement's `T` to the denotation). `VOCABULARY.md`'s density
+table had drifted by a few lines per block and is re-synced to the script.
 
 ## §3 The review surface, measured
 
@@ -248,8 +295,8 @@ At HEAD: 650 declarations, 469 theorems, 181 definitions.
 
 | | |
 | --- | ---: |
-| theorem names the documents cite as results | 106 |
-| …put through `#assert_axioms` | **34** |
+| theorem names the documents cite as results | 112 |
+| …put through `#assert_axioms` | **35** |
 | §-tag coverage (declarations naming a spec section) | **18%** |
 | docstring coverage, theorems | 53% |
 | docstring coverage, definitions | 69% |
@@ -296,7 +343,7 @@ for, and it now has three independent confirmations.
 | 5 | ~~`uAtCan_dunion`, `uAtCan_opaque` — the four discharger rows in one vocabulary~~ **done**: three in one vocabulary, and `opaque` has a reason | two one-line theorems; converts two unlocatable rows to checkable, and retires the dangling reference |
 | 6 | A §-tag ratchet in `fidelity_audit.py`, failing the build when coverage drops | 18% today, 1% in `Opaque.lean`; `Axioms.lean`'s principle applied to traceability |
 | 7 | Restate §6's eleven "Hold" rows at term level | retires the unwritten translation table and makes both halves of §6 one language |
-| 8 | The documentation corrections: D3, D5, U4, C2's eight stale comments | cheap, and D3 is the only defect of the seven with no machine-checked witness |
+| 8 | ~~The documentation corrections: D3, D5, U4, C2's eight stale comments~~ **done**; U4's second half was wrong and the row is five of five | cheap, and D3 is the only defect of the seven with no machine-checked witness |
 | 9 | `Codec.Ker` and `Can` in `Codec.lean` | `≈c` is §2's central device and has no name; `Can` sits in §6's file where §2 and §5 cannot cite it |
 
 Item 3 of `VOCABULARY.md`'s plan — `pointCodec = carriedCodec`, which would hand inversion

@@ -76,6 +76,11 @@ constructive and the guard records that. -/
 #assert_axioms not_uAtCan_array_literals
 #assert_axioms not_uAtCan_literal_held
 
+/-! §5's `adm` cannot pass through `legacy` on the read side — the specification defect
+that had no witness until it had this one. -/
+
+#assert_axioms not_admA_legacy
+
 /-! §6's `≡` is not transitive — the one refutation that is about the equational theory
 rather than about a row of it. -/
 
