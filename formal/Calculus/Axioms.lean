@@ -118,6 +118,19 @@ makes it the single constant in this file with the most to lose from going ungua
 #assert_axioms decimal_writes_stored
 #assert_axioms decimal_reads_stored
 
+/-! §2's kernel and §1's store. `retract_through_store` is **(R)** with DynamoDB in the
+middle — the law production actually runs — and the two `decimal` rows are what makes
+`Numeral.Stored` the right held set rather than a cautious one: `η ⊆ ker p` holds after the
+narrowing and fails before it. -/
+
+#assert_axioms Codec.ker_equivalence
+#assert_axioms Lawful.stable
+#assert_axioms Lawful.retract_through_store
+#assert_axioms can_iff_image
+#assert_axioms ker_decimalCodec
+#assert_axioms survivesStore_decimalCodec
+#assert_axioms not_survivesStore_decimalWF
+
 /-! §7's continuity results — why fuel is not removable by a fixpoint. -/
 
 #assert_axioms altCodec_not_monotone

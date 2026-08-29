@@ -149,7 +149,16 @@ exactly when **`η` lies inside `ker p`** — §2's `≈c`, the relation that al
 identity on the digits, so `ker p` is equality and `η` would have to be too.
 
 So `decimal`'s held set is not `Numerals`. It is the numerals the store returns unchanged,
-and that is what this predicate is. -/
+and that is what this predicate is.
+
+`η ⊆ ker p` is no longer only prose. `Codec.Ker` names §2's `≈c` and `SurvivesStore` names
+the inclusion, both in `Codec.lean`; `Lawful.retract_through_store` is what they buy, which
+is **(R)** with the store in the middle. The two halves for `decimal` are
+`survivesStore_decimalCodec` — the narrowing discharges the premise, because a normalisation
+fixes its own normal forms — and `not_survivesStore_decimalWF` in `Refutations.lean`, which
+is the codec that gated on `WF` instead, failing on `"1.500"`. `ker_decimalCodec` is the fact
+both turn on: `decimal`'s kernel is equality, so nothing weaker than "η fixes it" would
+serve. -/
 
 /-- Digits with no leading zero — or exactly `"0"`. -/
 def normalInt : List Char → Bool

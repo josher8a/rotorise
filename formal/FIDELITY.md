@@ -256,7 +256,7 @@ group would cost if it leaked: the three devices that pin §5's declaration-time
 the denotation, the three ω-twins that all travel along `denoteω_eq`, and the `opaque`
 and numeral rows. The guard went green first try, which is the expected result — the
 point was never to find a leak, it was to stop the eleven hand-checks from having to be
-redone by the next reader. Coverage 17 → **28 of 99**, and 35 of 113 after items 3–5 and 8 added theorems of their own.
+redone by the next reader. Coverage 17 → **28 of 99**, and 42 of 117 after items 3–5, 8 and 9 added theorems of their own.
 
 A measurement artefact worth naming, since this file's own rule is that the script wins:
 `fidelity_audit.py` reads `FIDELITY.md` as one of its document sources, so *citing* a
@@ -308,17 +308,17 @@ table had drifted by a few lines per block and is re-synced to the script.
 python3 scripts/fidelity_audit.py          # --names to list the offenders
 ```
 
-At HEAD: 687 declarations, 496 theorems, 191 definitions.
+At HEAD: 703 declarations, 509 theorems, 194 definitions.
 
 | | |
 | --- | ---: |
-| theorem names the documents cite as results | 113 |
-| …put through `#assert_axioms` | **35** |
+| theorem names the documents cite as results | 117 |
+| …put through `#assert_axioms` | **42** |
 | §-tag coverage (declarations naming a spec section) | **19%** |
 | docstring coverage, theorems | 55% |
 | docstring coverage, definitions | 71% |
 | **theorem statements naming an undocumented definition** | **59%** |
-| …and themselves undocumented | 133 |
+| …and themselves undocumented | 136 |
 
 The last row is the one that matters. A statement naming an undocumented definition
 cannot be read against the specification without a detour — and this counts the
@@ -361,7 +361,23 @@ for, and it now has three independent confirmations.
 | 6 | A §-tag ratchet in `fidelity_audit.py`, failing the build when coverage drops | 18% today, 1% in `Opaque.lean`; `Axioms.lean`'s principle applied to traceability |
 | 7 | Restate §6's eleven "Hold" rows at term level | retires the unwritten translation table and makes both halves of §6 one language |
 | 8 | ~~The documentation corrections: D3, D5, U4, C2's eight stale comments~~ **done**; U4's second half was wrong and the row is five of five | cheap, and D3 is the only defect of the seven with no machine-checked witness |
-| 9 | `Codec.Ker` and `Can` in `Codec.lean` | `≈c` is §2's central device and has no name; `Can` sits in §6's file where §2 and §5 cannot cite it |
+| 9 | ~~`Codec.Ker` and `Can` in `Codec.lean`~~ **done**: and `η ⊆ ker p` with them | `≈c` is §2's central device and had no name; `Can` sat in §6's file where §2 and §5 could not cite it |
+
+Item 9 turned out to carry more than its description. Naming `≈c` was three lines and an
+`Equivalence`; what it unlocked was §1's store concession, which had been prose in
+`Domain.lean` since `Numeral.Stored` was written. `SurvivesStore c η` is `η ⊆ ker p`,
+`Lawful.retract_through_store` is **(R)** with the store in the middle — the law production
+actually runs, and the one the shipped `decimal` broke — and `decimal` now has both halves of
+its answer: `survivesStore_decimalCodec` says the narrowed held set discharges the premise,
+`not_survivesStore_decimalWF` says the un-narrowed one cannot, and `ker_decimalCodec` says
+why the question is that sharp (its kernel is equality, so `η` has to be the identity where
+it can be handed anything). The narrowing was a fix with a measurement behind it; it is now a
+fix with a certificate behind it too.
+
+Also worth recording, since it is the pairing that made the docstring: `Ker` is an
+equivalence and `Codec.Equiv` is not (`not_equiv_trans`, item 3). They are one symbol apart
+in the specification's prose and they differ exactly where a reviewer would assume they do
+not. Stating them in the same file is cheaper than the remark that would otherwise be owed.
 
 Item 3 of `VOCABULARY.md`'s plan — `pointCodec = carriedCodec`, which would hand inversion
 to the ten ground codecs — remains open and is now ranked below all of these. It is

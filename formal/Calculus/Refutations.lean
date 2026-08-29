@@ -338,4 +338,60 @@ theorem not_equiv_trans :
     ¬ ∀ c d e, Codec.Equiv c d → Codec.Equiv d e → Codec.Equiv c e :=
   fun h => not_equiv_cA_cB (h _ _ _ equiv_cA_cMid equiv_cMid_cB)
 
+/-! ## `decimal` before its held set was narrowed
+
+`survivesStore_decimalCodec` shows that gating on `Numeral.Stored` discharges `η ⊆ ker p`.
+This is the other half: the codec that gated on `Numeral.WF` instead — §1's *whole* numeral
+grammar, which is what the implementation shipped — does not, and the witness is a form
+DynamoDB was measured to normalise.
+
+Without this the narrowing reads as a precaution. With it, it is the only option: `WF` admits
+`"1.500"`, the store returns `"1.5"`, `decimal`'s `ker p` is equality (`ker_decimalCodec`),
+and (R) through the store fails on a value the codec claimed to hold. -/
+
+/-- `decimal`, gated on §1's grammar rather than on what the store hands back. -/
+def decimalWF : Codec :=
+  { T := fun v => ∃ s, v = .str s ∧ Numeral.WF s = true
+    μ := some .N
+    e := fun v => match v with
+      | .str s => if Numeral.WF s then some (.n s) else none
+      | _ => none
+    p := fun a => match a with
+      | .n x => if Numeral.WF x then some (.str x) else none
+      | _ => none }
+
+theorem decimalWF_e_str (s : String) :
+    decimalWF.e (.str s) = if Numeral.WF s then some (.n s) else none := rfl
+
+theorem decimalWF_p_n (x : Numeral) :
+    decimalWF.p (.n x) = if Numeral.WF x then some (.str x) else none := rfl
+
+/-- `"1.500"` is one of the forms `stored_rejects_denormal` records the store rewriting, and
+    the un-narrowed codec claims to hold it. -/
+theorem can_decimalWF_denormal : Can decimalWF (.n "1.500") :=
+  ⟨.str "1.500", by rw [decimalWF_e_str, if_pos (by decide : Numeral.WF "1.500" = true)]⟩
+
+/-- **The un-narrowed `decimal` does not survive the store.** Any `η` that normalises
+    `"1.500"` — which is what DynamoDB was measured to do — falls outside its `ker p`. -/
+theorem not_survivesStore_decimalWF {η : Attr → Attr}
+    (hη : η (.n "1.500") = .n "1.5") : ¬ SurvivesStore decimalWF η := by
+  intro h
+  have hk : decimalWF.p (η (.n "1.500")) = decimalWF.p (.n "1.500") :=
+    h _ can_decimalWF_denormal
+  rw [hη, decimalWF_p_n, decimalWF_p_n,
+    if_pos (by decide : Numeral.WF "1.5" = true),
+    if_pos (by decide : Numeral.WF "1.500" = true)] at hk
+  exact absurd (Value.str.inj (Option.some.inj hk)) (by decide)
+
+/-- And (R) through the store fails outright: the value is written, the store rewrites the
+    attribute, and the codec reads back something else — the shape of the shipped defect. -/
+theorem not_retract_through_store_decimalWF {η : Attr → Attr}
+    (hη : η (.n "1.500") = .n "1.5") :
+    decimalWF.e (.str "1.500") = some (.n "1.500") ∧
+      decimalWF.p (η (.n "1.500")) ≠ some (.str "1.500") := by
+  refine ⟨by rw [decimalWF_e_str, if_pos (by decide : Numeral.WF "1.500" = true)], ?_⟩
+  rw [hη, decimalWF_p_n, if_pos (by decide : Numeral.WF "1.5" = true)]
+  intro hk
+  exact absurd (Value.str.inj (Option.some.inj hk)) (by decide)
+
 end Calculus
