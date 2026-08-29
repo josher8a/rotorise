@@ -1968,6 +1968,144 @@ theorem asWireSet_cases {as : List Attr} {a} (h : asWireSet as = some a) :
           cases h
           exact Or.inr (Or.inr ⟨bs, binPayloads_eq hb, rfl⟩)
 
+/-! ### `setCodec`'s three payload families, once
+
+`lawful_setCodec` proved `canon` and `agree` three times over — once for `SS`, once for
+`NS`, once for `BS` — with the branches textually identical apart from which prism the
+payload sits in. What actually varies is two facts, and they are the only two the
+argument consults: which member the element attributes name, and that `asWireSet` accepts
+a nonempty run of them. Both are stated below, per family, and the argument itself is
+stated once.
+
+This is the payload triplication of the wire sets, the same shape `Ctor` already retired
+for `strPayloads`/`numPayloads`/`binPayloads`. -/
+
+/-- On the flat members — everything but `L` and `M` — `≼` is just equality of member.
+    The wire sets are flat, which is why the agreement half never inspects payloads. -/
+theorem agree_of_member_flat {x y : Attr} (hm : x.member = y.member)
+    (hL : x.member ≠ .L) (hM : x.member ≠ .M) : Agree x y := by
+  cases x <;> cases y <;>
+    simp_all [Attr.member] <;> constructor
+
+/-- A nonempty run of one member is a wire set of the matching wire member. One proof per
+    family, and each is only about `asWireSet`'s dispatch order. -/
+theorem asWireSet_of_S {as : List Attr} (hne : as ≠ [])
+    (hm : ∀ y ∈ as, y.member = .S) :
+    ∃ a', asWireSet as = some a' ∧ a'.member = .SS := by
+  obtain ⟨ss, hss⟩ := strPayloads_isSome hm
+  refine ⟨.ss ss, ?_, rfl⟩
+  cases as with
+  | nil => exact absurd rfl hne
+  | cons x r => simp only [asWireSet]; rw [hss]; rfl
+
+theorem asWireSet_of_N {as : List Attr} (hne : as ≠ [])
+    (hm : ∀ y ∈ as, y.member = .N) :
+    ∃ a', asWireSet as = some a' ∧ a'.member = .NS := by
+  obtain ⟨ns, hns⟩ := numPayloads_isSome hm
+  refine ⟨.ns ns, ?_, rfl⟩
+  cases as with
+  | nil => exact absurd rfl hne
+  | cons x r =>
+    have hs : strPayloads (x :: r) = none := by
+      have hx := hm x (List.mem_cons_self _ _)
+      cases x <;> simp_all [Attr.member, strPayloads, traverse, sC]
+    simp only [asWireSet]; rw [hs, hns]; rfl
+
+theorem asWireSet_of_B {as : List Attr} (hne : as ≠ [])
+    (hm : ∀ y ∈ as, y.member = .B) :
+    ∃ a', asWireSet as = some a' ∧ a'.member = .BS := by
+  obtain ⟨bs, hbs⟩ := binPayloads_isSome hm
+  refine ⟨.bs bs, ?_, rfl⟩
+  cases as with
+  | nil => exact absurd rfl hne
+  | cons x r =>
+    have hx := hm x (List.mem_cons_self _ _)
+    have hs : strPayloads (x :: r) = none := by
+      cases x <;> simp_all [Attr.member, strPayloads, traverse, sC]
+    have hn : numPayloads (x :: r) = none := by
+      cases x <;> simp_all [Attr.member, numPayloads, traverse, nC]
+    simp only [asWireSet]; rw [hs, hn, hbs]; rfl
+
+/-- The shared core of `setCodec`'s read-side laws: whatever a wire set decodes to,
+    re-encoding it yields a nonempty run of that family's member. Both `canon` and `agree`
+    consult exactly this and then differ only in what they do with it. -/
+theorem setCodec_reencode_of {α : Type} {c : Codec} (h : Lawful c)
+    (elem : Ctor α Attr) (m : Member) (hm : ∀ x, (elem.into x).member = m)
+    {xs : List α} {ws : List Value} (hxs : xs ≠ [])
+    (htr : traverse (fun x => c.p (elem.into x)) xs = some ws) :
+    ∃ as', traverse c.e ws = some as' ∧ as' ≠ [] ∧ ∀ y ∈ as', y.member = m := by
+  obtain ⟨as', has'⟩ := Option.isSome_iff_exists.mp
+    (traverse_isSome (f := c.e) (fun _ _ hyx => h.canon hyx) xs ws htr)
+  have hmem : ∀ y ∈ as', y.member = m := by
+    have hz := traverse_rel (g := fun x => c.p (elem.into x)) (f := c.e)
+      (R := fun z (_ : α) => z.member = m)
+      (fun x0 _ z hg hf => by
+        show z.member = m
+        rw [(h.agree hg hf).member_eq, hm x0])
+      xs ws as' htr has'
+    intro y hy
+    have hlen1 := traverse_length xs ws htr
+    have hlen2 := traverse_length ws as' has'
+    obtain ⟨y2, hy2⟩ := mem_zip_left as' xs (by omega) y hy
+    exact hz (y, y2) hy2
+  refine ⟨as', has', ?_, hmem⟩
+  intro h0
+  have hlen1 := traverse_length xs ws htr
+  have hlen2 := traverse_length ws as' has'
+  rw [h0] at hlen2
+  cases xs with
+  | nil => exact absurd rfl hxs
+  | cons _ _ => simp only [List.length_cons, List.length_nil] at hlen1 hlen2; omega
+
+/-- `setCodec`'s `canon`, stated once. The payload family enters only through `elem` and
+    the two facts about the member it names. -/
+theorem setCodec_canon_of {α : Type} {c : Codec} (h : Lawful c)
+    (elem : Ctor α Attr) (m wm : Member) (hm : ∀ x, (elem.into x).member = m)
+    (hwire : ∀ as : List Attr, as ≠ [] → (∀ y ∈ as, y.member = m) →
+      ∃ a', asWireSet as = some a' ∧ a'.member = wm)
+    {xs : List α} {t : Value} (hxs : xs ≠ [])
+    (hp : (traverse (fun x => c.p (elem.into x)) xs).map Value.set = some t) :
+    ((setCodec c).e t).isSome := by
+  cases htr : traverse (fun x => c.p (elem.into x)) xs with
+  | none => rw [htr] at hp; exact nomatch hp
+  | some ws =>
+    rw [htr] at hp
+    replace hp : some (Value.set ws) = some t := hp
+    cases hp
+    obtain ⟨as', has', hne', hmem⟩ := setCodec_reencode_of h elem m hm hxs htr
+    obtain ⟨a', ha', -⟩ := hwire as' hne' hmem
+    show ((traverse c.e ws).bind asWireSet).isSome
+    rw [has']
+    show (asWireSet as').isSome
+    rw [ha']
+    rfl
+
+/-- `setCodec`'s `agree`, stated once. Wire sets are flat, so the whole content is that
+    the re-encoding lands on the same wire member — no payload is ever inspected. -/
+theorem setCodec_agree_of {α : Type} {c : Codec} (h : Lawful c)
+    (elem : Ctor α Attr) (m wm : Member) (hm : ∀ x, (elem.into x).member = m)
+    (hwire : ∀ as : List Attr, as ≠ [] → (∀ y ∈ as, y.member = m) →
+      ∃ a', asWireSet as = some a' ∧ a'.member = wm)
+    (hL : wm ≠ .L) (hM : wm ≠ .M)
+    {xs : List α} {t : Value} {a a' : Attr} (hxs : xs ≠ [])
+    (ha : a.member = wm)
+    (hp : (traverse (fun x => c.p (elem.into x)) xs).map Value.set = some t)
+    (he : (setCodec c).e t = some a') : Agree a' a := by
+  cases htr : traverse (fun x => c.p (elem.into x)) xs with
+  | none => rw [htr] at hp; exact nomatch hp
+  | some ws =>
+    rw [htr] at hp
+    replace hp : some (Value.set ws) = some t := hp
+    cases hp
+    obtain ⟨as', has', hne', hmem⟩ := setCodec_reencode_of h elem m hm hxs htr
+    replace he : (traverse c.e ws).bind asWireSet = some a' := he
+    rw [has'] at he
+    replace he : asWireSet as' = some a' := he
+    obtain ⟨a'', ha'', hwm⟩ := hwire as' hne' hmem
+    rw [ha''] at he
+    cases he
+    exact agree_of_member_flat (by rw [hwm, ha]) (by rw [hwm]; exact hL) (by rw [hwm]; exact hM)
+
 /-- The quotiented product; `p` need not be injective — the shrink is the quotient. -/
 theorem lawful_setCodec {c : Codec} (h : Lawful c) : Lawful (setCodec c) := by
   refine ⟨?_, ?_, ?_, ?_⟩
@@ -2018,137 +2156,21 @@ theorem lawful_setCodec {c : Codec} (h : Lawful c) : Lawful (setCodec c) := by
     case ss vs' =>
       cases vs' with
       | nil => exact nomatch hp
-      | cons s rest =>
-        replace hp : (traverse (fun s => c.p (.s s)) (s :: rest)).map Value.set =
-          some t := hp
-        cases htr : traverse (fun s => c.p (Attr.s s)) (s :: rest) with
-        | none => rw [htr] at hp; exact nomatch hp
-        | some ws =>
-          rw [htr] at hp
-          replace hp : some (Value.set ws) = some t := hp
-          cases hp
-          obtain ⟨as', has'⟩ := Option.isSome_iff_exists.mp
-            (traverse_isSome (f := c.e) (fun _ _ hyx => h.canon hyx)
-              (s :: rest) ws htr)
-          have hmem : ∀ x ∈ as', x.member = Member.S := by
-            have hz := traverse_rel (g := fun s => c.p (Attr.s s)) (f := c.e)
-              (R := fun z _ => z.member = Member.S)
-              (fun _ _ _ hg hf => (h.agree hg hf).member_eq)
-              (s :: rest) ws as' htr has'
-            intro x hx
-            have hlen1 := traverse_length (s :: rest) ws htr
-            have hlen2 := traverse_length ws as' has'
-            obtain ⟨y, hy⟩ := mem_zip_left as' (s :: rest) (by omega) x hx
-            exact hz (x, y) hy
-          have hne' : as' ≠ [] := by
-            intro h0
-            have hlen1 := traverse_length (s :: rest) ws htr
-            have hlen2 := traverse_length ws as' has'
-            rw [h0] at hlen2
-            simp only [List.length_cons, List.length_nil] at hlen1 hlen2
-            omega
-          obtain ⟨ss', hss'⟩ := strPayloads_isSome hmem
-          show ((traverse c.e ws).bind asWireSet).isSome
-          rw [has']
-          show (asWireSet as').isSome
-          cases as' with
-          | nil => exact absurd rfl hne'
-          | cons x r =>
-            simp only [asWireSet]
-            rw [hss']
-            rfl
+      | cons x r =>
+        exact setCodec_canon_of h sC .S .SS (fun _ => rfl)
+          (fun _ hne hmem => asWireSet_of_S hne hmem) (by simp) hp
     case ns vs' =>
       cases vs' with
       | nil => exact nomatch hp
-      | cons n rest =>
-        replace hp : (traverse (fun x => c.p (.n x)) (n :: rest)).map Value.set =
-          some t := hp
-        cases htr : traverse (fun x => c.p (Attr.n x)) (n :: rest) with
-        | none => rw [htr] at hp; exact nomatch hp
-        | some ws =>
-          rw [htr] at hp
-          replace hp : some (Value.set ws) = some t := hp
-          cases hp
-          obtain ⟨as', has'⟩ := Option.isSome_iff_exists.mp
-            (traverse_isSome (f := c.e) (fun _ _ hyx => h.canon hyx)
-              (n :: rest) ws htr)
-          have hmem : ∀ x ∈ as', x.member = Member.N := by
-            have hz := traverse_rel (g := fun x => c.p (Attr.n x)) (f := c.e)
-              (R := fun z _ => z.member = Member.N)
-              (fun _ _ _ hg hf => (h.agree hg hf).member_eq)
-              (n :: rest) ws as' htr has'
-            intro x hx
-            have hlen1 := traverse_length (n :: rest) ws htr
-            have hlen2 := traverse_length ws as' has'
-            obtain ⟨y, hy⟩ := mem_zip_left as' (n :: rest) (by omega) x hx
-            exact hz (x, y) hy
-          have hne' : as' ≠ [] := by
-            intro h0
-            have hlen1 := traverse_length (n :: rest) ws htr
-            have hlen2 := traverse_length ws as' has'
-            rw [h0] at hlen2
-            simp only [List.length_cons, List.length_nil] at hlen1 hlen2
-            omega
-          obtain ⟨ns', hns'⟩ := numPayloads_isSome hmem
-          show ((traverse c.e ws).bind asWireSet).isSome
-          rw [has']
-          show (asWireSet as').isSome
-          cases as' with
-          | nil => exact absurd rfl hne'
-          | cons x r =>
-            have hx := hmem x (List.mem_cons_self x r)
-            cases x
-            case n v =>
-              simp only [asWireSet, strPayloads]
-              rw [hns']
-              rfl
-            all_goals exact nomatch hx
+      | cons x r =>
+        exact setCodec_canon_of h nC .N .NS (fun _ => rfl)
+          (fun _ hne hmem => asWireSet_of_N hne hmem) (by simp) hp
     case bs vs' =>
       cases vs' with
       | nil => exact nomatch hp
-      | cons b rest =>
-        replace hp : (traverse (fun x => c.p (.b x)) (b :: rest)).map Value.set =
-          some t := hp
-        cases htr : traverse (fun x => c.p (Attr.b x)) (b :: rest) with
-        | none => rw [htr] at hp; exact nomatch hp
-        | some ws =>
-          rw [htr] at hp
-          replace hp : some (Value.set ws) = some t := hp
-          cases hp
-          obtain ⟨as', has'⟩ := Option.isSome_iff_exists.mp
-            (traverse_isSome (f := c.e) (fun _ _ hyx => h.canon hyx)
-              (b :: rest) ws htr)
-          have hmem : ∀ x ∈ as', x.member = Member.B := by
-            have hz := traverse_rel (g := fun x => c.p (Attr.b x)) (f := c.e)
-              (R := fun z _ => z.member = Member.B)
-              (fun _ _ _ hg hf => (h.agree hg hf).member_eq)
-              (b :: rest) ws as' htr has'
-            intro x hx
-            have hlen1 := traverse_length (b :: rest) ws htr
-            have hlen2 := traverse_length ws as' has'
-            obtain ⟨y, hy⟩ := mem_zip_left as' (b :: rest) (by omega) x hx
-            exact hz (x, y) hy
-          have hne' : as' ≠ [] := by
-            intro h0
-            have hlen1 := traverse_length (b :: rest) ws htr
-            have hlen2 := traverse_length ws as' has'
-            rw [h0] at hlen2
-            simp only [List.length_cons, List.length_nil] at hlen1 hlen2
-            omega
-          obtain ⟨bs', hbs'⟩ := binPayloads_isSome hmem
-          show ((traverse c.e ws).bind asWireSet).isSome
-          rw [has']
-          show (asWireSet as').isSome
-          cases as' with
-          | nil => exact absurd rfl hne'
-          | cons x r =>
-            have hx := hmem x (List.mem_cons_self x r)
-            cases x
-            case b v =>
-              simp only [asWireSet, strPayloads, numPayloads]
-              rw [hbs']
-              rfl
-            all_goals exact nomatch hx
+      | cons x r =>
+        exact setCodec_canon_of h bC .B .BS (fun _ => rfl)
+          (fun _ hne hmem => asWireSet_of_B hne hmem) (by simp) hp
     all_goals exact nomatch hp
   · intro μ hμ t a he
     simp only [setCodec] at hμ
@@ -2201,128 +2223,25 @@ theorem lawful_setCodec {c : Codec} (h : Lawful c) : Lawful (setCodec c) := by
     case ss vs' =>
       cases vs' with
       | nil => exact nomatch hp
-      | cons s rest =>
-        replace hp : (traverse (fun s => c.p (.s s)) (s :: rest)).map Value.set =
-          some t := hp
-        cases htr : traverse (fun s => c.p (Attr.s s)) (s :: rest) with
-        | none => rw [htr] at hp; exact nomatch hp
-        | some ws =>
-          rw [htr] at hp
-          replace hp : some (Value.set ws) = some t := hp
-          cases hp
-          replace he : (traverse c.e ws).bind asWireSet = some a' := he
-          cases has' : traverse c.e ws with
-          | none => rw [has'] at he; exact nomatch he
-          | some as' =>
-            rw [has'] at he
-            replace he : asWireSet as' = some a' := he
-            have hmem : ∀ x ∈ as', x.member = Member.S := by
-              have hz := traverse_rel (g := fun s => c.p (Attr.s s)) (f := c.e)
-                (R := fun z _ => z.member = Member.S)
-                (fun _ _ _ hg hf => (h.agree hg hf).member_eq)
-                (s :: rest) ws as' htr has'
-              intro x hx
-              have hlen1 := traverse_length (s :: rest) ws htr
-              have hlen2 := traverse_length ws as' has'
-              obtain ⟨y, hy⟩ := mem_zip_left as' (s :: rest) (by omega) x hx
-              exact hz (x, y) hy
-            obtain ⟨hne', hcase⟩ := asWireSet_cases he
-            rcases hcase with ⟨ss', rfl, rfl⟩ | ⟨ns', heq, rfl⟩ | ⟨bs', heq, rfl⟩
-            · exact .ss ..
-            · cases ns' with
-              | nil => exact absurd heq hne'
-              | cons n r =>
-                have := hmem (Attr.n n) (by rw [heq]; exact List.mem_cons_self _ _)
-                exact nomatch this
-            · cases bs' with
-              | nil => exact absurd heq hne'
-              | cons b r =>
-                have := hmem (Attr.b b) (by rw [heq]; exact List.mem_cons_self _ _)
-                exact nomatch this
+      | cons x r =>
+        exact setCodec_agree_of h sC .S .SS (fun _ => rfl)
+          (fun _ hne hmem => asWireSet_of_S hne hmem) (by decide) (by decide)
+          (by simp) rfl hp he
     case ns vs' =>
       cases vs' with
       | nil => exact nomatch hp
-      | cons n rest =>
-        replace hp : (traverse (fun x => c.p (.n x)) (n :: rest)).map Value.set =
-          some t := hp
-        cases htr : traverse (fun x => c.p (Attr.n x)) (n :: rest) with
-        | none => rw [htr] at hp; exact nomatch hp
-        | some ws =>
-          rw [htr] at hp
-          replace hp : some (Value.set ws) = some t := hp
-          cases hp
-          replace he : (traverse c.e ws).bind asWireSet = some a' := he
-          cases has' : traverse c.e ws with
-          | none => rw [has'] at he; exact nomatch he
-          | some as' =>
-            rw [has'] at he
-            replace he : asWireSet as' = some a' := he
-            have hmem : ∀ x ∈ as', x.member = Member.N := by
-              have hz := traverse_rel (g := fun x => c.p (Attr.n x)) (f := c.e)
-                (R := fun z _ => z.member = Member.N)
-                (fun _ _ _ hg hf => (h.agree hg hf).member_eq)
-                (n :: rest) ws as' htr has'
-              intro x hx
-              have hlen1 := traverse_length (n :: rest) ws htr
-              have hlen2 := traverse_length ws as' has'
-              obtain ⟨y, hy⟩ := mem_zip_left as' (n :: rest) (by omega) x hx
-              exact hz (x, y) hy
-            obtain ⟨hne', hcase⟩ := asWireSet_cases he
-            rcases hcase with ⟨ss', heq, rfl⟩ | ⟨ns', rfl, rfl⟩ | ⟨bs', heq, rfl⟩
-            · cases ss' with
-              | nil => exact absurd heq hne'
-              | cons x r =>
-                have := hmem (Attr.s x) (by rw [heq]; exact List.mem_cons_self _ _)
-                exact nomatch this
-            · exact .ns ..
-            · cases bs' with
-              | nil => exact absurd heq hne'
-              | cons b r =>
-                have := hmem (Attr.b b) (by rw [heq]; exact List.mem_cons_self _ _)
-                exact nomatch this
+      | cons x r =>
+        exact setCodec_agree_of h nC .N .NS (fun _ => rfl)
+          (fun _ hne hmem => asWireSet_of_N hne hmem) (by decide) (by decide)
+          (by simp) rfl hp he
     case bs vs' =>
       cases vs' with
       | nil => exact nomatch hp
-      | cons b rest =>
-        replace hp : (traverse (fun x => c.p (.b x)) (b :: rest)).map Value.set =
-          some t := hp
-        cases htr : traverse (fun x => c.p (Attr.b x)) (b :: rest) with
-        | none => rw [htr] at hp; exact nomatch hp
-        | some ws =>
-          rw [htr] at hp
-          replace hp : some (Value.set ws) = some t := hp
-          cases hp
-          replace he : (traverse c.e ws).bind asWireSet = some a' := he
-          cases has' : traverse c.e ws with
-          | none => rw [has'] at he; exact nomatch he
-          | some as' =>
-            rw [has'] at he
-            replace he : asWireSet as' = some a' := he
-            have hmem : ∀ x ∈ as', x.member = Member.B := by
-              have hz := traverse_rel (g := fun x => c.p (Attr.b x)) (f := c.e)
-                (R := fun z _ => z.member = Member.B)
-                (fun _ _ _ hg hf => (h.agree hg hf).member_eq)
-                (b :: rest) ws as' htr has'
-              intro x hx
-              have hlen1 := traverse_length (b :: rest) ws htr
-              have hlen2 := traverse_length ws as' has'
-              obtain ⟨y, hy⟩ := mem_zip_left as' (b :: rest) (by omega) x hx
-              exact hz (x, y) hy
-            obtain ⟨hne', hcase⟩ := asWireSet_cases he
-            rcases hcase with ⟨ss', heq, rfl⟩ | ⟨ns', heq, rfl⟩ | ⟨bs', rfl, rfl⟩
-            · cases ss' with
-              | nil => exact absurd heq hne'
-              | cons x r =>
-                have := hmem (Attr.s x) (by rw [heq]; exact List.mem_cons_self _ _)
-                exact nomatch this
-            · cases ns' with
-              | nil => exact absurd heq hne'
-              | cons x r =>
-                have := hmem (Attr.n x) (by rw [heq]; exact List.mem_cons_self _ _)
-                exact nomatch this
-            · exact .bs ..
+      | cons x r =>
+        exact setCodec_agree_of h bC .B .BS (fun _ => rfl)
+          (fun _ hne hmem => asWireSet_of_B hne hmem) (by decide) (by decide)
+          (by simp) rfl hp he
     all_goals exact nomatch hp
-
 /-- Writing a tuple then reading realigns to the same codecs, position for position. -/
 theorem alignTraverse_roundTrip :
     ∀ (cs : List Codec) (tail : Option Codec),
