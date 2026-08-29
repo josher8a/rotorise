@@ -79,6 +79,14 @@ rather than about a row of it. -/
 
 #assert_axioms not_equiv_trans
 
+/-! `ident` has no denotational content to pin — what it has is its relation to `adm`,
+which is what §5 uses it for, and `SepV`'s right to drop §5's two `ident` conjuncts
+rests on it. -/
+
+#assert_axioms ident_of_adm
+#assert_axioms admDisj_ident
+#assert_axioms sepV_string_dunion_nil
+
 /-! The three lemmas that pin §5's declaration-time devices to the denotation. Without
 these, `κ`, `adm` and `admA` are transcriptions of a table rather than claims about the
 model, so their axiom base is part of what the soundness statements rest on. -/

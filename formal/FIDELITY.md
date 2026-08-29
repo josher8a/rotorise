@@ -111,7 +111,7 @@ for this class of error once (`HeldSet.lean:14`, `HOpaque` admitting `set []`).
 
 ### Claims that are true but unlocatable
 
-**U1 — `ident` is mechanized, faithful, and dead. [both] [checked]**
+**U1 — `ident` is mechanized, faithful, and dead. [both] [checked] [fixed]**
 `ident`/`identList` (`Discharge.lean:74`) reproduce §5's table row for row and appear in
 **no theorem statement and no proof** — only three `example`s. `κ`, `adm` and `admA` each
 have a soundness lemma pinning them to the denotation; `ident` has none, so **nothing
@@ -120,6 +120,22 @@ forces the model's `ident` to be §5's `ident`.** Worse: §5's (K) is
 `κ disjoint ∨ adm disjoint` — both `ident` conjuncts dropped. It is sound because `adm`
 defaults to `true`, so `adm`-disjointness is unsatisfiable between non-`ident` terms —
 and that argument appears nowhere in the model.
+
+**That argument is now in the model** (§5 item 4), and `ident` is used rather than
+deleted. `ident_of_adm`: if `adm` refuses a single value, the term is `ident` — the
+pinning `ident` can have, since unlike `κ`/`adm`/`admA` it has no denotational content
+to tie. `admDisj_ident` then recovers §5's two dropped conjuncts from `SepV`'s `adm`
+clause, given that each option admits *something*.
+
+Writing it turned up a finding neither audit had: **that side condition cannot be
+dropped, and the witness is derivable.** `dunion(d)` with no options is derivable —
+`(dunion)`'s premises are quantified over the option list, so an empty list satisfies
+them vacuously — and its `adm` is `false` everywhere, so it is `adm`-disjoint from
+`string`, which is not `ident`. So `SepV` is **strictly weaker** than §5's (K) at a
+derivable pair (`sepV_string_dunion_nil`). Weaker is the safe direction — `SepV` is a
+premise of `uAtCan_of_separated`, so the theorem discharges strictly more — but the two
+conditions are not the same condition, which is exactly the kind of thing that should
+not have been living in prose.
 
 **U2 — §5's discharger table speaks two languages. [checked]**
 Two rows are about `UAtCan fuel opts` (`uAtCan_of_separated`, `uAtCan_of_disjoint`), two
@@ -173,7 +189,7 @@ group would cost if it leaked: the three devices that pin §5's declaration-time
 the denotation, the three ω-twins that all travel along `denoteω_eq`, and the `opaque`
 and numeral rows. The guard went green first try, which is the expected result — the
 point was never to find a leak, it was to stop the eleven hand-checks from having to be
-redone by the next reader. Coverage 17 → **28 of 99**.
+redone by the next reader. Coverage 17 → **28 of 99**, and 32 of 104 after items 3 and 4 added theorems of their own.
 
 A measurement artefact worth naming, since this file's own rule is that the script wins:
 `fidelity_audit.py` reads `FIDELITY.md` as one of its document sources, so *citing* a
@@ -213,8 +229,8 @@ At HEAD: 650 declarations, 469 theorems, 181 definitions.
 
 | | |
 | --- | ---: |
-| theorem names the documents cite as results | 99 |
-| …put through `#assert_axioms` | **28** |
+| theorem names the documents cite as results | 104 |
+| …put through `#assert_axioms` | **32** |
 | §-tag coverage (declarations naming a spec section) | **18%** |
 | docstring coverage, theorems | 53% |
 | docstring coverage, definitions | 69% |
@@ -257,7 +273,7 @@ for, and it now has three independent confirmations.
 | 1 | ~~The eleven `#assert_axioms` lines — the hand-checks of U5, made mechanical~~ **done**: 28 of 99 guarded, green first try | cheapest, and it is the guard's own principle; `opaq_T_identity` guards seven `omega` calls behind a row the docs call closed |
 | 2 | ~~`(D)` into `Typed.union`, or name the divergence in `Typing.lean`'s list~~ **done**: `DIncomp`, into the rule | the difference between "`Typed` is §3–§5's judgement" being true and false; the list records five smaller divergences and omits this one |
 | 3 | ~~Attempt `Equiv.trans`, fail, record `not_equiv_trans`~~ **done**, lawful and on-carrier throughout | three lines; a non-transitive `≡` presented as an equational theory is exactly the species §4's log is made of |
-| 4 | `ident_sound`, or delete `ident` and say `adm` carries the exemption | a normative table transcribed and unconstrained is the definition of an unlocatable claim |
+| 4 | ~~`ident_sound`, or delete `ident` and say `adm` carries the exemption~~ **done**: `ident_of_adm` / `admDisj_ident`, plus the derivable pair where `SepV` and (K) part | a normative table transcribed and unconstrained is the definition of an unlocatable claim |
 | 5 | `uAtCan_dunion`, `uAtCan_opaque` — the four discharger rows in one vocabulary | two one-line theorems; converts two unlocatable rows to checkable, and retires the dangling reference |
 | 6 | A §-tag ratchet in `fidelity_audit.py`, failing the build when coverage drops | 18% today, 1% in `Opaque.lean`; `Axioms.lean`'s principle applied to traceability |
 | 7 | Restate §6's eleven "Hold" rows at term level | retires the unwritten translation table and makes both halves of §6 one language |
