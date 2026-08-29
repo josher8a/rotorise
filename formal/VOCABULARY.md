@@ -77,7 +77,7 @@ Two further conventions the passes settled on, both load-bearing:
 
 ## §3 The audit
 
-Measured at `fa2a561` (2026-08-29), 8768 lines across `Calculus/`. Regenerate with:
+Measured at `HEAD` (2026-08-29), 8719 lines across `Calculus/`. Regenerate with:
 
 ```sh
 python3 scripts/vocab_audit.py          # add --sites to list them for triage
@@ -89,23 +89,23 @@ python3 scripts/vocab_audit.py          # add --sites to list them for triage
 | --- | --- | --- |
 | `carrier_X` — §3's `e : T ⇀ 𝔸`, `p : 𝔸 ⇀ T` | **23 / 24** | |
 | `lawfulCore_X` / `lawful_X` — §2's laws | **22 / 24** | `extendRead` exempt: (MP) is the sanctioned breach |
-| `X_e` / `X_p` — **what it writes, what it reads** | **6 / 48** | |
+| `X_e` / `X_p` — **what it writes, what it reads** | **8 / 48** | |
 
 The obligation half of the vocabulary is done. **The observation half is 12% done.**
-`carriedCodec` and `entrywise` have both; `setCodec` and `objectCodecCore` have `_e`
-only; the ten ground codecs, all four wrappers, `altCodec`, `dunionCodec` and
-`opaqCodec` have neither.
+`carriedCodec`, `entrywise` and `altCodec` have both; `setCodec` and `objectCodecCore`
+have `_e` only; the ten ground codecs, all four wrappers, `dunionCodec` and `opaqCodec`
+have neither.
 
 ### What the remaining hand-unfolding is actually about
 
 | what is being unfolded | sites | concentrated in |
 | --- | --- | --- |
-| **raw `Option` algebra** | **219** | Combinators 99, Discharge 47, Soundness 30 |
+| **raw `Option` algebra** | **217** | Combinators 97, Discharge 47, Soundness 30 |
 | `traverse` / list base cases | 41 | Opaque 27 |
-| union resolution (`altCodec`'s filter) | 34 | Equations 16, Combinators 12 |
 | a named codec's `e`/`p` | 28 | Opaque 19 |
 | judgement premises (`Obligations`/`MPOk`) | 26 | Soundness 26 |
 | association-list `lookup` | 21 | Discharge 8 |
+| union resolution (`altCodec`'s filter) | 18 | Equations 8, Discharge 6, Combinators 4 |
 
 **Six sites in ten are not about codecs at all.** That is the finding, and it reframes
 the gap: what is missing is not a *concept* but the place where each construction's
@@ -119,19 +119,19 @@ Density per block, against how complete that block's inversion vocabulary is:
 | --- | --- | ---: | ---: | ---: |
 | array + record | complete | 249 | 0 | **0.0** |
 | tuple | complete | 331 | 10 | **3.0** |
+| union | complete | 616 | 31 | 5.0 |
 | set | `_e` only | 581 | 29 | 5.0 |
 | object | `_e` only | 736 | 48 | 6.5 |
 | opaque | none | 952 | 57 | 6.0 |
-| union | none | 680 | 49 | **7.2** |
 | wrappers | none | 481 | 43 | **8.9** |
-| ground | none | 453 | 16 | 3.5 |
+| ground | none | 460 | 16 | 3.5 |
 
 Monotone with one honest outlier. **`ground` is 3.5 with no inversion** — because
 `pointCodec` already gives four of the ground codecs one shared proof. That argues *for*
 the thesis rather than against it: shared construction, fewer sites. And the top of the
-table is a controlled comparison — `array + record` and `tuple` are the blocks that
-gained inversion during the passes, same content before and after, and their sites went
-to zero and three.
+table is a controlled comparison — `array + record`, `tuple` and now `union` are the
+blocks that gained inversion, same content before and after, and their sites went to
+zero, three, and 7.2 → 5.0 per hundred lines.
 
 ## §4 What the evidence does *not* say
 
@@ -156,35 +156,60 @@ prose and never cashes:
 Prose that names an identity but does not cash it is the same residue this convention
 exists to remove.
 
-## §5 The one item with the highest payoff
+## §5 The union, done — and one claim that did not survive
 
-`altCodec_e` / `altCodec_p`, **as an iff**:
+`altCodec_e` / `altCodec_p` are now stated as **iffs**, and they are the only place
+`altCodec`'s definition is unfolded:
 
 ```lean
 theorem altCodec_e {os μA v a} :
     (altCodec os μA).e v = some a ↔ ∃ o, os.filter (·.admitV v) = [o] ∧ o.c.e v = some a
 ```
 
-`altCodec_e_admits` exists but is one-directional and lossy — it drops the uniqueness and
-has no `.mpr`, so it can *open* a union proof and never *close* one. Three pieces of
-evidence that this is the gap:
+Nine and ten lines respectively; `altCodec_e_admits`/`_p_admits` survive as the weaker,
+one-directional corollaries for the places that do not need the uniqueness. What it
+bought:
 
-1. It is cited 9 times; the other 49 union sites hand-roll the filter case split.
-2. `Equations.lean` invented six bespoke replacements — `altCodec_pair_e`/`_p`,
-   `altCodec_triple_e`/`_p`, `altCodec_nest_e`/`_p`, plus `nest_flat_resolve`.
-   Special-casing the **arity** is the classic symptom of a missing general lemma.
-3. `filter_swap_singleton` is already sitting in `Equations.lean`, waiting for the iff
-   that would let `union`'s commutativity cite it directly.
+| | before | after |
+| --- | ---: | ---: |
+| `lawfulCore_altCodec` | 55 | **21** |
+| `lawful_altCodec` | 25 | **20** |
+| `equiv_altCodec_swap` | 45 | **31** |
+| union block, sites per 100 lines | 7.2 | **5.0** |
+| union block, sites | 49 | **18** |
 
-It is also the one item where readability and *content* payoff coincide: §6's remaining
-rows are largely union rows, and with the iff a union theorem becomes a statement about
-`List.filter` — plumbing, which `Lists.lean` can own.
+**The claim that did not survive.** This section previously argued that
+`Equations.lean`'s six arity lemmas — `altCodec_pair_e`/`_p`, `altCodec_triple_e`/`_p`,
+`altCodec_nest_e`/`_p` — were "special-casing the arity, the classic symptom of a
+missing general lemma", and predicted the iff would retire them. **It does not, and they
+should stay.** Two reasons, both visible only on attempting it:
+
+1. The iff characterises `= some a`. The arity lemmas are *equations*, covering the
+   `none` case too, which is what the associativity argument needs — it reasons about
+   where each side is *undefined*, not only where they agree.
+2. They are not a workaround; they are a deliberate normal form. `resolve₂`,
+   `resolve₃` and `resolveNested` turn a question about codecs into a question about
+   booleans, which is what lets `nest_flat_resolve` do the case algebra once and lets
+   §6's associativity be stated about *resolution* rather than about `Codec`.
+
+Recorded here rather than quietly deleted, because the audit is only worth keeping if it
+says what the attempt showed. The generalisable lesson: **arity-specific lemmas are a
+smell only when they duplicate an argument, not when they name a normal form.**
+
+Of the 18 union sites left, all are legitimate: 4 are the two iff proofs themselves —
+the one place the definition is unfolded, by design — 8 are the arity lemmas computing
+the filter at literal lists, and 6 are in `Discharge.lean` at the *admission* level
+(`optionSemOf … .admitA`), below where the iff reaches.
+
+What remains untested is the other half of the prediction: whether the iff makes §6's
+open rows fall out. `equiv_altCodec_swap` and `equiv_altCodec_single` are now stated
+through it; the rows that need `List.Perm` are the next probe.
 
 ## §6 The plan, ranked
 
 | # | item | payoff |
 | --- | --- | --- |
-| 1 | `altCodec_e`/`_p` as an iff; retire the six arity lemmas | 49 sites; unblocks §6's open rows |
+| ~~1~~ | ~~`altCodec_e`/`_p` as an iff~~ — **done**; the arity lemmas stayed, see §5 | 31 sites; 7.2 → 5.0 per 100 lines |
 | 2 | Wrapper inversion (`through`, `restrict`, `extendRead`, `orNull`) | 43 sites — the densest block, and four one-line definitions |
 | 3 | Cash the three identities of §4 | ground and `nullable` inherit everything |
 | 4 | `setCodec_p`, `objRead` inversion — complete the two partials | 77 sites |

@@ -112,33 +112,17 @@ theorem equiv_altCodec_swap (o₁ o₂ : OptionSem) (os : List OptionSem)
           · exact ⟨o, List.mem_cons_self _ _, hT⟩
           · exact ⟨o, List.mem_cons_of_mem _ (List.mem_cons_of_mem _ ho''), hT⟩
   · intro v a a' h h'
-    replace h : (match (o₁ :: o₂ :: os).filter (·.admitV v) with
-      | [o] => o.c.e v | _ => none) = some a := h
-    cases hf : (o₁ :: o₂ :: os).filter (·.admitV v) with
-    | nil => rw [hf] at h; exact nomatch h
-    | cons o tl =>
-      cases tl with
-      | cons _ _ => rw [hf] at h; exact nomatch h
-      | nil =>
-        rw [hf] at h
-        replace h' : (match (o₂ :: o₁ :: os).filter (·.admitV v) with
-          | [o] => o.c.e v | _ => none) = some a' := h'
-        rw [filter_swap_singleton _ _ _ _ hf] at h'
-        exact Option.some.inj (h.symm.trans h')
+    obtain ⟨o, hf, hoe⟩ := altCodec_e.mp h
+    obtain ⟨o', hf', hoe'⟩ := altCodec_e.mp h'
+    rw [filter_swap_singleton _ _ _ _ hf] at hf'
+    obtain rfl : o = o' := by simpa using hf'
+    exact Option.some.inj (hoe.symm.trans hoe')
   · intro a v v' h h'
-    replace h : (match (o₁ :: o₂ :: os).filter (·.admitA a) with
-      | [o] => o.c.p a | _ => none) = some v := h
-    cases hf : (o₁ :: o₂ :: os).filter (·.admitA a) with
-    | nil => rw [hf] at h; exact nomatch h
-    | cons o tl =>
-      cases tl with
-      | cons _ _ => rw [hf] at h; exact nomatch h
-      | nil =>
-        rw [hf] at h
-        replace h' : (match (o₂ :: o₁ :: os).filter (·.admitA a) with
-          | [o] => o.c.p a | _ => none) = some v' := h'
-        rw [filter_swap_singleton _ _ _ _ hf] at h'
-        exact Option.some.inj (h.symm.trans h')
+    obtain ⟨o, hf, hop⟩ := altCodec_p.mp h
+    obtain ⟨o', hf', hop'⟩ := altCodec_p.mp h'
+    rw [filter_swap_singleton _ _ _ _ hf] at hf'
+    obtain rfl : o = o' := by simpa using hf'
+    exact Option.some.inj (hop.symm.trans hop')
 
 /-! ## `held` is an identity, and composes
 
@@ -303,17 +287,13 @@ theorem equiv_altCodec_single (o : OptionSem) :
       · exact absurd hx' (by simp)
     · exact fun h => ⟨o, List.mem_cons_self _ _, h⟩
   · intro v a a' h h'
-    replace h : (match [o].filter (·.admitV v) with | [x] => x.c.e v | _ => none)
-        = some a := h
-    cases hp : o.admitV v <;> simp only [List.filter, hp] at h
-    · exact nomatch h
-    · exact Option.some.inj (h.symm.trans h')
+    obtain ⟨x, hf, hxe⟩ := altCodec_e.mp h
+    obtain rfl : x = o := by simpa using (mem_of_filter_eq_singleton hf).1
+    exact Option.some.inj (hxe.symm.trans h')
   · intro a v v' h h'
-    replace h : (match [o].filter (·.admitA a) with | [x] => x.c.p a | _ => none)
-        = some v := h
-    cases hp : o.admitA a <;> simp only [List.filter, hp] at h
-    · exact nomatch h
-    · exact Option.some.inj (h.symm.trans h')
+    obtain ⟨x, hf, hxp⟩ := altCodec_p.mp h
+    obtain rfl : x = o := by simpa using (mem_of_filter_eq_singleton hf).1
+    exact Option.some.inj (hxp.symm.trans h')
 
 /-! ## Wrappers preserve the member
 

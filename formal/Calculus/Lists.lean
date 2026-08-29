@@ -405,6 +405,12 @@ theorem filter_eq_singleton_of_keys {β α ι : Type} [DecidableEq ι]
       rw [List.filter_cons_of_neg (p := (adm · x)) (by simpa using h0)]
       exact filter_eq_singleton_of_keys hz hnd'.2 o ho' hx
 
+/-- Filtering to a singleton names an element of the list that satisfies the
+    predicate — how a resolved choice is read back. -/
+theorem mem_of_filter_eq_singleton {α : Type} {l : List α} {p : α → Bool} {x : α}
+    (h : l.filter p = [x]) : x ∈ l ∧ p x = true :=
+  List.mem_filter.mp (h ▸ List.mem_cons_self x [])
+
 /-- A property of every image is a property of every member of the mapped list — the
     step every case over a list of subterms begins with. -/
 theorem forall_mem_map {α β : Type} {xs : List α} {g : α → β} {P : β → Prop}

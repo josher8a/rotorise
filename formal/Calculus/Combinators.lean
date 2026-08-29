@@ -1362,42 +1362,48 @@ theorem carrier_numberCodec : Carrier numberCodec := by
 
 /-! ### Sums -/
 
-/-- A sum's encode routes through an admitting option. -/
+/-! ### How a union resolves
+
+`altCodec`'s two halves are the same shape: filter the options by admission, and answer
+if and only if exactly one survives. Stated as an `iff`, that is the whole of the union
+— every theorem about `union` below, and every row of §6 that mentions one, is a
+statement about `os.filter` and nothing else. -/
+
+/-- **What a union writes**: exactly one option admitted the value, and it wrote. -/
+theorem altCodec_e {os : List OptionSem} {μA : Option Member} {v a} :
+    (altCodec os μA).e v = some a ↔
+      ∃ o, os.filter (·.admitV v) = [o] ∧ o.c.e v = some a := by
+  show (match os.filter (·.admitV v) with | [o] => o.c.e v | _ => none) = some a ↔ _
+  cases hf : os.filter (·.admitV v) with
+  | nil => simp
+  | cons o tl => cases tl <;> simp
+
+/-- **What a union reads**: the mirror, on the attribute side. -/
+theorem altCodec_p {os : List OptionSem} {μA : Option Member} {a v} :
+    (altCodec os μA).p a = some v ↔
+      ∃ o, os.filter (·.admitA a) = [o] ∧ o.c.p a = some v := by
+  show (match os.filter (·.admitA a) with | [o] => o.c.p a | _ => none) = some v ↔ _
+  cases hf : os.filter (·.admitA a) with
+  | nil => simp
+  | cons o tl => cases tl <;> simp
+
+/-- A sum's encode routes through an admitting option — the weaker form, which forgets
+    that the option was the *only* one. Enough where the uniqueness is not needed. -/
 theorem altCodec_e_admits {os : List OptionSem} {μA : Option Member} {v a}
     (he : (altCodec os μA).e v = some a) :
     ∃ o ∈ os, o.admitV v = true ∧ o.c.e v = some a := by
-  replace he : (match os.filter (·.admitV v) with
-    | [o] => o.c.e v | _ => none) = some a := he
-  cases hf : os.filter (·.admitV v) with
-  | nil => rw [hf] at he; exact nomatch he
-  | cons o tl =>
-    cases tl with
-    | cons _ _ => rw [hf] at he; exact nomatch he
-    | nil =>
-      rw [hf] at he
-      have hom : o ∈ os.filter (·.admitV v) := by
-        rw [hf]; exact List.mem_cons_self o []
-      have hmem := List.mem_filter.mp hom
-      exact ⟨o, hmem.1, hmem.2, he⟩
+  obtain ⟨o, hf, hoe⟩ := altCodec_e.mp he
+  obtain ⟨ho, hadm⟩ := mem_of_filter_eq_singleton hf
+  exact ⟨o, ho, hadm, hoe⟩
 
 /-- A sum's decode routes through an admitting option — the mirror of
     `altCodec_e_admits`. -/
 theorem altCodec_p_admits {os : List OptionSem} {μA : Option Member} {a v}
     (hp : (altCodec os μA).p a = some v) :
     ∃ o ∈ os, o.admitA a = true ∧ o.c.p a = some v := by
-  replace hp : (match os.filter (·.admitA a) with
-    | [o] => o.c.p a | _ => none) = some v := hp
-  cases hf : os.filter (·.admitA a) with
-  | nil => rw [hf] at hp; exact nomatch hp
-  | cons o tl =>
-    cases tl with
-    | cons _ _ => rw [hf] at hp; exact nomatch hp
-    | nil =>
-      rw [hf] at hp
-      have hom : o ∈ os.filter (·.admitA a) := by
-        rw [hf]; exact List.mem_cons_self o []
-      have hmem := List.mem_filter.mp hom
-      exact ⟨o, hmem.1, hmem.2, hp⟩
+  obtain ⟨o, hf, hop⟩ := altCodec_p.mp hp
+  obtain ⟨ho, hadm⟩ := mem_of_filter_eq_singleton hf
+  exact ⟨o, ho, hadm, hop⟩
 
 /-! ### Wrappers -/
 
@@ -2876,86 +2882,45 @@ theorem lawfulCore_objectCodec {sems : List (Name × FieldSem)} {rest : RestSem}
   lawfulCore_objectCore sems (rcOf rest) (keepB rest sems) hf hfb hnd
     (rcOf_forall hrest) keepB_of_encEntry keepB_of_declared
 
-/-- The sum, from (U): both directions route through the same option. -/
+/-- The sum's core laws. (U) is what makes them hold: it says the option that wrote is
+    the only one admitting either side of the pair, so the round trip comes back through
+    the same option it went out through. -/
 theorem lawfulCore_altCodec {os : List OptionSem} {μA : Option Member}
     (h : ∀ o ∈ os, LawfulCore o.c) (hU : UniqueAdmission os)
     (hW : ∀ m, μA = some m → ∀ o ∈ os, ∀ t a, o.c.e t = some a → a.member = m) :
-    LawfulCore (altCodec os μA) := by
-  refine ⟨?_, ?_, ?_⟩
-  · intro t a he
-    simp only [altCodec] at he ⊢
-    cases hf : os.filter (·.admitV t) with
-    | nil => rw [hf] at he; exact nomatch he
-    | cons o tl =>
-      cases tl with
-      | cons _ _ => rw [hf] at he; exact nomatch he
-      | nil =>
-        rw [hf] at he
-        replace he : o.c.e t = some a := he
-        have hom : o ∈ os.filter (·.admitV t) := by
-          rw [hf]; exact List.mem_cons_self o []
-        have ho : o ∈ os := (List.mem_filter.mp hom).1
-        obtain ⟨hA, hV⟩ := hU o ho t a he
-        rw [hA]
-        exact (h o ho).retract he
-  · intro a t hp
-    simp only [altCodec] at hp ⊢
-    cases hf : os.filter (·.admitA a) with
-    | nil => rw [hf] at hp; exact nomatch hp
-    | cons o tl =>
-      cases tl with
-      | cons _ _ => rw [hf] at hp; exact nomatch hp
-      | nil =>
-        rw [hf] at hp
-        replace hp : o.c.p a = some t := hp
-        have hom : o ∈ os.filter (·.admitA a) := by
-          rw [hf]; exact List.mem_cons_self o []
-        have ho : o ∈ os := (List.mem_filter.mp hom).1
-        obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp ((h o ho).canon hp)
-        obtain ⟨hA, hV⟩ := hU o ho t a' ha'
-        rw [hV]
-        show (o.c.e t).isSome
-        rw [ha']
-        rfl
-  · intro μ hμ t a he
-    simp only [altCodec] at hμ he
-    cases hf : os.filter (·.admitV t) with
-    | nil => rw [hf] at he; exact nomatch he
-    | cons o tl =>
-      cases tl with
-      | cons _ _ => rw [hf] at he; exact nomatch he
-      | nil =>
-        rw [hf] at he
-        replace he : o.c.e t = some a := he
-        have hom : o ∈ os.filter (·.admitV t) := by
-          rw [hf]; exact List.mem_cons_self o []
-        have ho : o ∈ os := (List.mem_filter.mp hom).1
-        exact hW μ hμ o ho t a he
+    LawfulCore (altCodec os μA) where
+  retract he := by
+    obtain ⟨o, hf, hoe⟩ := altCodec_e.mp he
+    have ho := (mem_of_filter_eq_singleton hf).1
+    exact altCodec_p.mpr ⟨o, (hU o ho _ _ hoe).1, (h o ho).retract hoe⟩
+  canon hp := by
+    obtain ⟨o, hf, hop⟩ := altCodec_p.mp hp
+    have ho := (mem_of_filter_eq_singleton hf).1
+    obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp ((h o ho).canon hop)
+    exact Option.isSome_iff_exists.mpr
+      ⟨a', altCodec_e.mpr ⟨o, (hU o ho _ _ ha').2, ha'⟩⟩
+  writes := by
+    intro μ hμ t a he
+    obtain ⟨o, hf, hoe⟩ := altCodec_e.mp he
+    exact hW μ hμ o (mem_of_filter_eq_singleton hf).1 t a hoe
 
+/-- …and (MP) with them: the option that read is the option that re-writes, again by
+    (U), so `≼` at the union is `≼` at that one option. -/
 theorem lawful_altCodec {os : List OptionSem} {μA : Option Member}
     (h : ∀ o ∈ os, Lawful o.c) (hU : UniqueAdmission os)
     (hW : ∀ m, μA = some m → ∀ o ∈ os, ∀ t a, o.c.e t = some a → a.member = m) :
-    Lawful (altCodec os μA) := by
-  have hcore := lawfulCore_altCodec (fun o ho => (h o ho).core) hU hW
-  refine ⟨hcore.retract, hcore.canon, hcore.writes, ?_⟩
-  intro a t a' hp he
-  simp only [altCodec] at hp he
-  cases hf : os.filter (·.admitA a) with
-  | nil => rw [hf] at hp; exact nomatch hp
-  | cons o tl =>
-    cases tl with
-    | cons _ _ => rw [hf] at hp; exact nomatch hp
-    | nil =>
-      rw [hf] at hp
-      replace hp : o.c.p a = some t := hp
-      have hom : o ∈ os.filter (·.admitA a) := by
-        rw [hf]; exact List.mem_cons_self o []
-      have ho : o ∈ os := (List.mem_filter.mp hom).1
-      obtain ⟨a'', ha''⟩ := Option.isSome_iff_exists.mp ((h o ho).canon hp)
-      obtain ⟨hA, hV⟩ := hU o ho t a'' ha''
-      rw [hV] at he
-      replace he : o.c.e t = some a' := he
-      exact (h o ho).agree hp he
+    Lawful (altCodec os μA) :=
+  { lawfulCore_altCodec (fun o ho => (h o ho).core) hU hW with
+    agree := by
+      intro a t a' hp he
+      obtain ⟨o, hf, hop⟩ := altCodec_p.mp hp
+      have ho := (mem_of_filter_eq_singleton hf).1
+      obtain ⟨a'', ha''⟩ := Option.isSome_iff_exists.mp ((h o ho).canon hop)
+      obtain ⟨-, hV⟩ := hU o ho t a'' ha''
+      obtain ⟨o', hf', hoe⟩ := altCodec_e.mp he
+      have hoo : o' = o := by simpa using hf'.symm.trans hV
+      subst hoo
+      exact (h _ ho).agree hop hoe }
 
 
 /-- Disjoint tag lists select at most one option, and a member tag selects exactly it —
