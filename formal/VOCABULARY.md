@@ -77,7 +77,7 @@ Two further conventions the passes settled on, both load-bearing:
 
 ## §3 The audit
 
-Measured at `HEAD` (2026-08-29), 8719 lines across `Calculus/`. Regenerate with:
+Measured at `HEAD` (2026-08-29), 8616 lines across `Calculus/`. Regenerate with:
 
 ```sh
 python3 scripts/vocab_audit.py          # add --sites to list them for triage
@@ -89,20 +89,20 @@ python3 scripts/vocab_audit.py          # add --sites to list them for triage
 | --- | --- | --- |
 | `carrier_X` — §3's `e : T ⇀ 𝔸`, `p : 𝔸 ⇀ T` | **23 / 24** | |
 | `lawfulCore_X` / `lawful_X` — §2's laws | **22 / 24** | `extendRead` exempt: (MP) is the sanctioned breach |
-| `X_e` / `X_p` — **what it writes, what it reads** | **8 / 48** | |
+| `X_e` / `X_p` — **what it writes, what it reads** | **16 / 48** | |
 
 The obligation half of the vocabulary is done. **The observation half is 12% done.**
-`carriedCodec`, `entrywise` and `altCodec` have both; `setCodec` and `objectCodecCore`
-have `_e` only; the ten ground codecs, all four wrappers, `dunionCodec` and `opaqCodec`
+`carriedCodec`, `entrywise`, `altCodec` and all four wrappers have both; `setCodec` and
+`objectCodecCore` have `_e` only; the ten ground codecs, `dunionCodec` and `opaqCodec`
 have neither.
 
 ### What the remaining hand-unfolding is actually about
 
 | what is being unfolded | sites | concentrated in |
 | --- | --- | --- |
-| **raw `Option` algebra** | **217** | Combinators 97, Discharge 47, Soundness 30 |
+| **raw `Option` algebra** | **179** | Combinators 76, Discharge 47, Soundness 30 |
 | `traverse` / list base cases | 41 | Opaque 27 |
-| a named codec's `e`/`p` | 28 | Opaque 19 |
+| a named codec's `e`/`p` | 29 | Opaque 19 |
 | judgement premises (`Obligations`/`MPOk`) | 26 | Soundness 26 |
 | association-list `lookup` | 21 | Discharge 8 |
 | union resolution (`altCodec`'s filter) | 18 | Equations 8, Discharge 6, Combinators 4 |
@@ -119,19 +119,21 @@ Density per block, against how complete that block's inversion vocabulary is:
 | --- | --- | ---: | ---: | ---: |
 | array + record | complete | 249 | 0 | **0.0** |
 | tuple | complete | 331 | 10 | **3.0** |
-| union | complete | 616 | 31 | 5.0 |
+| wrappers | complete | 386 | 6 | **1.6** |
+| union | complete | 614 | 31 | 5.0 |
 | set | `_e` only | 581 | 29 | 5.0 |
-| object | `_e` only | 736 | 48 | 6.5 |
+| object | `_e` only | 738 | 48 | 6.5 |
 | opaque | none | 952 | 57 | 6.0 |
-| wrappers | none | 481 | 43 | **8.9** |
-| ground | none | 460 | 16 | 3.5 |
+| ground | none | 454 | 16 | 3.5 |
 
 Monotone with one honest outlier. **`ground` is 3.5 with no inversion** — because
 `pointCodec` already gives four of the ground codecs one shared proof. That argues *for*
 the thesis rather than against it: shared construction, fewer sites. And the top of the
-table is a controlled comparison — `array + record`, `tuple` and now `union` are the
-blocks that gained inversion, same content before and after, and their sites went to
-zero, three, and 7.2 → 5.0 per hundred lines.
+table is a controlled comparison — `array + record`, `tuple`, `union` and `wrappers` are
+the blocks that gained inversion, same content before and after: 0.0, 3.0, 7.2 → 5.0,
+and 8.9 → **1.6**. Where the whole block goes through its inversion lemmas the residue
+is nearly nothing; where only half of it does (`set`, `object`, `_e` but no `_p`) it
+sits at 5–6.5.
 
 ## §4 What the evidence does *not* say
 
@@ -210,7 +212,7 @@ through it; the rows that need `List.Perm` are the next probe.
 | # | item | payoff |
 | --- | --- | --- |
 | ~~1~~ | ~~`altCodec_e`/`_p` as an iff~~ — **done**; the arity lemmas stayed, see §5 | 31 sites; 7.2 → 5.0 per 100 lines |
-| 2 | Wrapper inversion (`through`, `restrict`, `extendRead`, `orNull`) | 43 sites — the densest block, and four one-line definitions |
+| ~~2~~ | ~~Wrapper inversion~~ — **done**; §6's wrapper rows now go through it too | 43 → 6 sites; 8.9 → 1.6 per 100 lines |
 | 3 | Cash the three identities of §4 | ground and `nullable` inherit everything |
 | 4 | `setCodec_p`, `objRead` inversion — complete the two partials | 77 sites |
 | 5 | `Obligations`/`MPOk` per-rule inversion | 26 sites, all in `Soundness.lean` |

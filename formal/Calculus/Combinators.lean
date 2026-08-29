@@ -299,6 +299,60 @@ def Codec.orNull (c : Codec) : Codec :=
     e := fun v => match v with | .null => some .null | _ => c.e v
     p := fun a => match a with | .null => some .null | _ => c.p a }
 
+/-! ### What the wrappers write and read
+
+Each wrapper is one line of definition and touches exactly one half of the pair; stating
+that as an `iff` is what keeps the proofs below — and §6's wrapper rows — from unfolding
+the definitions again. `held` and `legacy` are transparent on the side they do not
+touch, which is why two of the eight are `Iff.rfl`. -/
+
+section WrapperInversion
+variable {c : Codec}
+
+/-- `held` writes what its base writes, at the transported value. -/
+theorem through_e {f g : Value → Value} {v a} :
+    (c.through f g).e v = some a ↔ c.e (f v) = some a := Iff.rfl
+
+/-- …and reads what its base reads, transported back. -/
+theorem through_p {f g : Value → Value} {a v} :
+    (c.through f g).p a = some v ↔ ∃ w, c.p a = some w ∧ v = g w := by
+  simp [Codec.through, Option.map_eq_some', eq_comm (a := v)]
+
+/-- `refine` writes only what passes the prism… -/
+theorem restrict_e {q : Value → Bool} {v a} :
+    (c.restrict q).e v = some a ↔ q v = true ∧ c.e v = some a := by
+  simp only [Codec.restrict]; split <;> simp_all
+
+/-- …and reads only into it. -/
+theorem restrict_p {q : Value → Bool} {a v} :
+    (c.restrict q).p a = some v ↔ c.p a = some v ∧ q v = true := by
+  simp only [Codec.restrict, Option.bind_eq_some]
+  constructor
+  · rintro ⟨w, hw, h⟩; split at h <;> simp_all
+  · rintro ⟨h, hq⟩; exact ⟨v, h, by simp [hq]⟩
+
+/-- `legacy` does not touch the writing at all — §5's whole point. -/
+theorem extendRead_e {r : Attr → Option Value} {v a} :
+    (c.extendRead r).e v = some a ↔ c.e v = some a := Iff.rfl
+
+/-- It reads through the base where the base reads, and through the migration exactly
+    where the base does not. That "exactly" is where (MP) goes. -/
+theorem extendRead_p {r : Attr → Option Value} {a v} :
+    (c.extendRead r).p a = some v ↔ c.p a = some v ∨ (c.p a = none ∧ r a = some v) := by
+  show (match c.p a with | some w => some w | none => r a) = some v ↔ _
+  cases hp : c.p a <;> simp
+
+/-- `nullable` adds the `null` point and passes everything else through. -/
+theorem orNull_e {v a} :
+    c.orNull.e v = some a ↔ (v = .null ∧ a = .null) ∨ (v ≠ .null ∧ c.e v = some a) := by
+  cases v <;> simp [Codec.orNull, eq_comm (a := a)]
+
+theorem orNull_p {a v} :
+    c.orNull.p a = some v ↔ (a = .null ∧ v = .null) ∨ (a ≠ .null ∧ c.p a = some v) := by
+  cases a <;> simp [Codec.orNull, eq_comm (a := v)]
+
+end WrapperInversion
+
 /-! ## The traversal toolkit
 
 One proof shape, proved once: a list traversed by an entrywise partial function, with
@@ -1407,42 +1461,20 @@ theorem altCodec_p_admits {os : List OptionSem} {μA : Option Member} {a v}
 
 /-! ### Wrappers -/
 
-/-- `held`: the reading half needs the iso to cancel where `e` is defined — §3's
-    `f ∘ g = id_I`, in the carrier-restricted form `Obligations` carries. -/
 theorem carrier_through {c : Codec} {f g : Value → Value} (hc : Carrier c)
     (hlaw : LawfulCore c) (hfg : ∀ v, (c.e v).isSome → f (g v) = v) :
-    Carrier (c.through f g) := by
-  refine ⟨fun h => hc.domE h, ?_⟩
-  intro a v h
-  replace h : ((c.p a).map g) = some v := h
-  cases hp : c.p a with
-  | none => rw [hp] at h; exact nomatch h
-  | some v' =>
-    rw [hp] at h
-    replace h : some (g v') = some v := h
-    cases h
-    show c.T (f (g v'))
-    rw [hfg v' (hlaw.canon hp)]
-    exact hc.ranP hp
+    Carrier (c.through f g) where
+  domE he := hc.domE (through_e.mp he)
+  ranP hp := by
+    obtain ⟨w, hw, rfl⟩ := through_p.mp hp
+    show c.T (f (g w))
+    rw [hfg w (hlaw.canon hw)]
+    exact hc.ranP hw
 
 theorem carrier_restrict {c : Codec} (hc : Carrier c) (q : Value → Bool) :
-    Carrier (c.restrict q) := by
-  refine ⟨?_, ?_⟩
-  · intro v a h
-    replace h : (if q v then c.e v else none) = some a := h
-    split at h
-    next hq => exact ⟨hc.domE h, hq⟩
-    next => exact nomatch h
-  · intro a v h
-    replace h : ((c.p a).bind fun v' => if q v' then some v' else none) = some v := h
-    cases hp : c.p a with
-    | none => rw [hp] at h; exact nomatch h
-    | some v' =>
-      rw [hp] at h
-      replace h : (if q v' then some v' else none) = some v := h
-      split at h
-      next hq => cases h; exact ⟨hc.ranP hp, hq⟩
-      next => exact nomatch h
+    Carrier (c.restrict q) where
+  domE he := let ⟨hq, hcv⟩ := restrict_e.mp he; ⟨hc.domE hcv, hq⟩
+  ranP hp := let ⟨hcv, hq⟩ := restrict_p.mp hp; ⟨hc.ranP hcv, hq⟩
 
 
 /-! ### The refinement ground codecs, on their carriers -/
@@ -1480,29 +1512,23 @@ theorem carrier_literalNCodec (ls : List Double) : Carrier (literalNCodec ls) :=
     same premise arrived at through the one the proof already needs. -/
 theorem carrier_extendRead {c : Codec} {r : Attr → Option Value} (hc : Carrier c)
     (hran : ∀ a v, r a = some v → (c.e v).isSome) :
-    Carrier (c.extendRead r) := by
-  refine ⟨fun h => hc.domE h, ?_⟩
-  intro a v h
-  replace h : (match c.p a with | some v' => some v' | none => r a) = some v := h
-  cases hp : c.p a with
-  | some v' => rw [hp] at h; replace h : some v' = some v := h; cases h; exact hc.ranP hp
-  | none =>
-    rw [hp] at h
-    obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp (hran a v h)
-    exact hc.domE ha'
+    Carrier (c.extendRead r) where
+  domE he := hc.domE (extendRead_e.mp he)
+  ranP hp := by
+    rcases extendRead_p.mp hp with hcv | ⟨-, hrv⟩
+    · exact hc.ranP hcv
+    · obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp (hran _ _ hrv)
+      exact hc.domE ha'
 
-theorem carrier_orNull {c : Codec} (hc : Carrier c) : Carrier c.orNull := by
-  refine ⟨?_, ?_⟩
-  · intro v a h
-    cases v
-    case null => exact Or.inr rfl
-    all_goals exact Or.inl (hc.domE h)
-  · intro a v h
-    cases a
-    case null =>
-      replace h : some Value.null = some v := h
-      cases h; exact Or.inr rfl
-    all_goals exact Or.inl (hc.ranP h)
+theorem carrier_orNull {c : Codec} (hc : Carrier c) : Carrier c.orNull where
+  domE he := by
+    rcases orNull_e.mp he with ⟨hv, -⟩ | ⟨-, hcv⟩
+    · exact .inr hv
+    · exact .inl (hc.domE hcv)
+  ranP hp := by
+    rcases orNull_p.mp hp with ⟨-, hv⟩ | ⟨-, hcv⟩
+    · exact .inr hv
+    · exact .inl (hc.ranP hcv)
 
 /-! ### Containers -/
 
@@ -1724,99 +1750,48 @@ theorem lawful_numberCodec : Lawful numberCodec := by
     subst_vars
     exact .n ..
 
-/-- `held` keeps the core laws: the iso cancels on both paths. The cancellation is
-    asked only on the carriers — `g ∘ f = id` where `f` lands writable, `f ∘ g = id`
-    on the writable values themselves — which is the doc's `T ≃ I`, not an iso of all
-    of `Value`. -/
 theorem LawfulCore.through {c : Codec} (h : LawfulCore c) {f g : Value → Value}
     (hgf : ∀ v, (c.e (f v)).isSome → g (f v) = v)
     (hfg : ∀ v, (c.e v).isSome → f (g v) = v) :
-    LawfulCore (c.through f g) := by
-  refine ⟨?_, ?_, ?_⟩
-  · intro t a he
-    replace he : c.e (f t) = some a := he
-    show (c.p a).map g = some t
-    rw [h.retract he]
-    show some (g (f t)) = some t
-    rw [hgf t (by rw [he]; rfl)]
-  · intro a t hp
-    simp only [Codec.through] at hp
-    cases hpc : c.p a with
-    | none => rw [hpc] at hp; simp at hp
-    | some v =>
-      rw [hpc] at hp
-      simp at hp
-      subst hp
-      show (c.e (f (g v))).isSome
-      rw [hfg v (h.canon hpc)]
-      exact h.canon hpc
-  · intro μ hμ t a he
-    exact h.writes hμ he
+    LawfulCore (c.through f g) where
+  retract he := through_p.mpr ⟨_, h.retract (through_e.mp he),
+    (hgf _ (by rw [through_e.mp he]; rfl)).symm⟩
+  canon hp := by
+    obtain ⟨w, hw, rfl⟩ := through_p.mp hp
+    show (c.e (f (g w))).isSome
+    rw [hfg w (h.canon hw)]
+    exact h.canon hw
+  writes := by intro μ hμ t a he; exact h.writes hμ (through_e.mp he)
 
 /-- `held` preserves the full laws: the core lemma, plus `≼` through the iso. -/
 theorem Lawful.through {c : Codec} (h : Lawful c) {f g : Value → Value}
     (hgf : ∀ v, (c.e (f v)).isSome → g (f v) = v)
     (hfg : ∀ v, (c.e v).isSome → f (g v) = v) :
-    Lawful (c.through f g) := by
-  have core := LawfulCore.through h.core hgf hfg
-  refine ⟨core.retract, core.canon, core.writes, ?_⟩
-  intro a t a' hp he
-  simp only [Codec.through] at hp he
-  cases hpc : c.p a with
-  | none => rw [hpc] at hp; simp at hp
-  | some v =>
-    rw [hpc] at hp
-    simp at hp
-    subst hp
-    rw [hfg v (h.canon hpc)] at he
-    exact h.agree hpc he
+    Lawful (c.through f g) :=
+  { LawfulCore.through h.core hgf hfg with
+    agree := by
+      intro a t a' hp he
+      obtain ⟨w, hw, rfl⟩ := through_p.mp hp
+      rw [through_e, hfg w (h.canon hw)] at he
+      exact h.agree hw he }
 
 /-- `refine` preserves the laws: everything restricts. -/
 theorem LawfulCore.restrict {c : Codec} (h : LawfulCore c) (q : Value → Bool) :
-    LawfulCore (c.restrict q) := by
-  refine ⟨?_, ?_, ?_⟩
-  · intro t a he
-    simp only [Codec.restrict] at he ⊢
-    split at he
-    · rw [h.retract he]
-      simp [*]
-    · exact nomatch he
-  · intro a t hp
-    simp only [Codec.restrict] at hp ⊢
-    cases hpc : c.p a with
-    | none => rw [hpc] at hp; simp at hp
-    | some v =>
-      rw [hpc] at hp
-      replace hp : (if q v then some v else none) = some t := hp
-      split at hp
-      · cases hp
-        rename_i hq
-        rw [if_pos hq]
-        exact h.canon hpc
-      · exact nomatch hp
-  · intro μ hμ t a he
-    simp only [Codec.restrict] at he
-    split at he
-    · exact h.writes hμ he
-    · exact nomatch he
+    LawfulCore (c.restrict q) where
+  retract he :=
+    let ⟨hq, hc⟩ := restrict_e.mp he
+    restrict_p.mpr ⟨h.retract hc, hq⟩
+  canon hp :=
+    let ⟨hc, hq⟩ := restrict_p.mp hp
+    Option.isSome_iff_exists.mpr
+      (let ⟨a, ha⟩ := Option.isSome_iff_exists.mp (h.canon hc)
+       ⟨a, restrict_e.mpr ⟨hq, ha⟩⟩)
+  writes := by intro μ hμ t a he; exact h.writes hμ (restrict_e.mp he).2
 
 theorem Lawful.restrict {c : Codec} (h : Lawful c) (q : Value → Bool) :
-    Lawful (c.restrict q) := by
-  have core := LawfulCore.restrict h.core q
-  refine ⟨core.retract, core.canon, core.writes, ?_⟩
-  intro a t a' hp he
-  simp only [Codec.restrict] at hp he
-  cases hpc : c.p a with
-  | none => rw [hpc] at hp; simp at hp
-  | some v =>
-    rw [hpc] at hp
-    replace hp : (if q v then some v else none) = some t := hp
-    split at hp
-    · cases hp
-      rename_i hq
-      rw [if_pos hq] at he
-      exact h.agree hpc he
-    · exact nomatch hp
+    Lawful (c.restrict q) :=
+  { LawfulCore.restrict h.core q with
+    agree := fun hp he => h.agree (restrict_p.mp hp).1 (restrict_e.mp he).2 }
 
 
 /-! ### The refinement ground codecs are lawful because their bases are
@@ -1853,71 +1828,49 @@ theorem lawful_literalNCodec (ls : List Double) : Lawful (literalNCodec ls) := b
     all_goals simp [literalNCodec, Codec.restrict, numberCodec]
   · rfl
 
-/-- `legacy` keeps the core laws. `ran(r) ⊆ dom(e)` is (C)'s premise; (MP) is the
-    sanctioned breach and has no lemma here, by design. -/
 theorem LawfulCore.extendRead {c : Codec} (h : LawfulCore c) {r : Attr → Option Value}
     (hran : ∀ a v, r a = some v → (c.e v).isSome) :
-    LawfulCore (c.extendRead r) := by
-  refine ⟨?_, ?_, ?_⟩
-  · intro t a he
-    show (match c.p a with | some v => some v | none => r a) = some t
-    rw [h.retract he]
-  · intro a t hp
-    simp only [Codec.extendRead] at hp
-    cases hpc : c.p a with
-    | some v =>
-      rw [hpc] at hp
-      cases hp
-      exact h.canon hpc
-    | none =>
-      rw [hpc] at hp
-      exact hran a t hp
-  · intro μ hμ t a he
-    exact h.writes hμ he
+    LawfulCore (c.extendRead r) where
+  retract he := extendRead_p.mpr (.inl (h.retract (extendRead_e.mp he)))
+  canon hp := (extendRead_p.mp hp).elim h.canon fun ⟨_, hr⟩ => hran _ _ hr
+  writes := by intro μ hμ t a he; exact h.writes hμ (extendRead_e.mp he)
 
 /-- `nullable` keeps the core laws under null-honesty. Structurally this is the sum
-    `alt [c, null-point]`; the honesty premises are its (U), specialised. -/
+    `alt [c, null-point]`; the honesty premises are its (U), specialised — and they are
+    used in exactly one place each, to rule out the wrapper's own point colliding with
+    the base's. -/
 theorem LawfulCore.orNull {c : Codec} (h : LawfulCore c)
     (hw : ∀ v a, c.e v = some a → a = .null → v = .null)
     (hr : ∀ a v, c.p a = some v → v = .null → a = .null) :
-    LawfulCore c.orNull := by
-  refine ⟨?_, ?_, ?_⟩
-  · intro t a he
-    cases t <;>
-      first
-        | (cases he; rfl)
-        | (cases a <;>
-            first
-              | exact h.retract he
-              | exact nomatch (hw _ _ he rfl))
-  · intro a t hp
-    cases a <;>
-      first
-        | (cases hp; rfl)
-        | (cases t <;>
-            first
-              | exact nomatch (hr _ _ hp rfl)
-              | exact h.canon hp)
-  · intro μ hμ t a he
-    exact nomatch hμ
+    LawfulCore c.orNull where
+  retract he := by
+    rcases orNull_e.mp he with ⟨rfl, rfl⟩ | ⟨hv, hc⟩
+    · exact orNull_p.mpr (.inl ⟨rfl, rfl⟩)
+    · exact orNull_p.mpr (.inr ⟨fun hn => hv (hw _ _ hc hn), h.retract hc⟩)
+  canon hp := by
+    rcases orNull_p.mp hp with ⟨rfl, rfl⟩ | ⟨ha, hc⟩
+    · exact Option.isSome_iff_exists.mpr ⟨.null, orNull_e.mpr (.inl ⟨rfl, rfl⟩)⟩
+    · obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp (h.canon hc)
+      exact Option.isSome_iff_exists.mpr
+        ⟨a', orNull_e.mpr (.inr ⟨fun hn => ha (hr _ _ hc hn), ha'⟩)⟩
+  writes := by intro μ hμ; exact nomatch hμ
 
 /-- `nullable` preserves the full laws: the core lemma, plus `≼` — read-honesty is
     what keeps a non-`NULL` attribute from re-encoding as `⟨NULL, ∗⟩`. -/
 theorem Lawful.orNull {c : Codec} (h : Lawful c)
     (hw : ∀ v a, c.e v = some a → a = .null → v = .null)
     (hr : ∀ a v, c.p a = some v → v = .null → a = .null) :
-    Lawful c.orNull := by
-  have core := LawfulCore.orNull h.core hw hr
-  refine ⟨core.retract, core.canon, core.writes, ?_⟩
-  intro a t a' hp he
-  cases a <;>
-    first
-      | (cases hp; cases he; exact .null)
-      | (cases t <;>
-          first
-            | exact nomatch (hr _ _ hp rfl)
-            | exact h.agree hp he)
-
+    Lawful c.orNull :=
+  { LawfulCore.orNull h.core hw hr with
+    agree := by
+      intro a t a' hp he
+      rcases orNull_p.mp hp with ⟨rfl, rfl⟩ | ⟨ha, hc⟩
+      · rcases orNull_e.mp he with ⟨-, rfl⟩ | ⟨hv, -⟩
+        · exact .null
+        · exact absurd rfl hv
+      · rcases orNull_e.mp he with ⟨rfl, -⟩ | ⟨-, hc'⟩
+        · exact absurd (hr _ _ hc rfl) ha
+        · exact h.agree hc hc' }
 
 /-! ## Lawfulness — the open frontier (README roadmap) -/
 
