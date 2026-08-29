@@ -167,6 +167,16 @@ describe('what is one segment deeper', () => {
         expect(deeper(Visits, 'nope')).toBeUndefined()
     })
 
+    it('gives no answer where the variants disagree, rather than a fabricated one', () => {
+        const Ops = discriminatedUnion('type', [
+            object({ type: literal('A'), amount: number }),
+            object({ type: literal('B'), amount: string }),
+        ])
+        // two codecs are one segment down and neither is *the* one, so there is nothing to return.
+        // `ItemCodec.at` carries the disagreement instead, and reports it if the path ends on it
+        expect(deeper(Ops, 'amount')).toBeUndefined()
+    })
+
     it('reaches a member-specific attribute of an untagged union', () => {
         type Line = { petId: string } | { petIds: readonly string[] }
         const Lines = union([
