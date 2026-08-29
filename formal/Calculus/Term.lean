@@ -5,7 +5,7 @@ import Calculus.Codec
 
 Deep embedding. Notes:
 
-* Predicates carried by terms (`numeric`, `refine`) are `Bool`-valued so the denotation
+* Predicates carried by terms (`refine`) are `Bool`-valued so the denotation
   needs no classical choice; the doc's subsets are their coercions.
 * `custom` carries its pair as data; its *laws* are premises of the typing rule (§3),
   exactly as in the doc.
@@ -24,8 +24,6 @@ inductive Term where
       `nullCodec` is one of `opaque`'s options, but until now no *term* denoted it —
       so a schema could not say "this attribute is exactly NULL". -/
   | null
-  /-- §3 `(numeric)`: a caller-chosen subset of doubles, stored as `N`. -/
-  | numeric  (q : Double → Bool)
   | literalS (ls : List String)
   | literalN (ls : List Double)
   | set      (elem : Term)

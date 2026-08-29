@@ -421,39 +421,6 @@ theorem optional_μ (den : Term → Codec) (t : Term) :
 theorem fallback_μ (den : Term → Codec) (t : Term) (v : Value) :
     (fieldSemOf den (.fallback t v)).codec.μ = (den t).μ := rfl
 
-/-! ## `numeric` is `refine(number, ·)` — the retirement certificate
-
-Not a row of §6. §3 says `numeric(T)` and `refine(number, T)` are different terms — "a
-claim and a check are different terms" — and §5's proof says the opposite, that the
-normative reading of `numeric` is the restricted one. `numericCodec` follows §5, and has
-to: under §3's reading `p` returns values outside `T`, which is `Carrier.ranP` failing.
-
-Under §5's reading the two are not different terms at all. They are the same codec, on
-the nose. This is what makes `(numeric)` removable rather than merely redundant: nothing
-expressible with it becomes inexpressible, and the equation says so before the rule is
-deleted. -/
-
-/-- The value-side predicate a `refine` needs in order to say what `numeric` said. -/
-def numV (q : Double → Bool) : Value → Bool
-  | .num d => q d
-  | _ => false
-
-/-- **`numeric(q)` and `refine(number, q)` denote the same codec** — all four fields. -/
-theorem numericCodec_eq_restrict (q : Double → Bool) :
-    numericCodec q = numberCodec.restrict (numV q) := by
-  simp only [numericCodec, numberCodec, Codec.restrict, Codec.mk.injEq]
-  refine ⟨?_, trivial, ?_, ?_⟩
-  · funext v; cases v <;> simp [numV]
-  · funext v; cases v <;> simp [numV]
-  · funext a; cases a <;> simp [numV, Option.bind_map]
-
-/-- The same, at term level: `(numeric)` is a derived rule. Two fuel, because the
-    `refine` spends one reaching `number` where `numeric` is a leaf; `denoteω_eq` carries
-    it to the fuel-free denotation. -/
-theorem denote_numeric_eq (fuel : Nat) (q : Double → Bool) :
-    denote (fuel+2) (.numeric q) = denote (fuel+2) (.refine .number (numV q)) :=
-  numericCodec_eq_restrict q
-
 /-! ## `union` is associative
 
 §6's last row, and the only conditional one in the table: "associative, where both sides

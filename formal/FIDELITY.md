@@ -106,12 +106,20 @@ in §5's favour silently.
 **Re-derived, and sharper than reported.** §5's reading is not merely the one the model
 picked; it is the only one available. Under §3's reading `p` returns values outside `T`,
 which is `Carrier.ranP` failing and with it `typed_p_mem` and the honesty of the `: T`
-index — so `carrier_numericCodec` is already the standing witness and no new theorem was
-needed. §3's underlying point survives (the subset is an unchecked precondition *for the
-implementation*, like `D`'s magnitude range); what does not is "a claim and a check are
-different terms". In this calculus they denote the same codec. Logged in
-`codec-formalization.md` §4; the §3 amendment is left for the author of the normative
-document.
+index.
+
+**And there was a third side the audit never looked at: the implementation.**
+`numeric<T>()` in `src/codec.ts` decoded with `Number(ok) as T` — no check at all, a type
+assertion over `number`. Three artifacts, three readings, of a term whose stated purpose
+was to be a fourth thing.
+
+**Resolved by removing `(numeric)`**, at the user's call, from the rule figure, from
+`Term`, and from the implementation. `numericCodec_eq_restrict` (commit `eb3fac9`) was
+proved first: `numeric(q)` and `refine(number, q)` are the same codec on all four fields,
+so nothing expressible was lost. Enumerated members go to `literal(0, 1, …)`, which is
+`literal‑N` and checks both directions; an arbitrary subset goes to `refine`; a caller's
+own narrowing goes to `held`. The general lesson is in `codec-formalization.md` §4: an
+unchecked read cast cannot be a term of a calculus whose judgement carries a held set.
 
 **D6 — `(held)`'s iso premise is stronger than the proof consumes. [reported]**
 The doc demands total cancellation on the carriers; `IsoCancels` (`Codec.lean:102`)

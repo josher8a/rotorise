@@ -132,7 +132,6 @@ inductive Typed : Term → Held → Option Member → Prop where
   /-- §3 `(null)`: the point held set `{null}`, stored as `⟨NULL, ∗⟩`. -/
   | null : Typed .null (fun v => v = .null) (some .NULL)
   | binary  : Typed .binary  (fun v => ∃ b, v = .bin b) (some .B)
-  | numeric (q) : Typed (.numeric q) (fun v => ∃ d, q d ∧ v = .num d) (some .N)
   | literalS (ls : List String) (hne : ls ≠ []) (hnd : ls.Nodup) :
       Typed (.literalS ls) (fun v => ∃ s, s ∈ ls ∧ v = .str s) (some .S)
   | literalN (ls : List Double) (hne : ls ≠ []) (hnd : ls.Nodup) :

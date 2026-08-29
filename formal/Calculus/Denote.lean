@@ -46,7 +46,6 @@ def μSyn : Term → Option Member
   | .literalS _ => some .S
   | .number => some .N
   | .decimal => some .N
-  | .numeric _ => some .N
   | .literalN _ => some .N
   | .boolean => some .BOOL
   | .null => some .NULL
@@ -97,7 +96,6 @@ def denote : Nat → Term → Codec
     | .boolean => booleanCodec
     | .null => nullCodec
     | .binary => binaryCodec
-    | .numeric q => numericCodec q
     | .literalS ls => literalSCodec ls
     | .literalN ls => literalNCodec ls
     | .set elem => setCodec (denote fuel elem)

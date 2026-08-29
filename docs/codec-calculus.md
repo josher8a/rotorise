@@ -67,12 +67,12 @@ undetermined is settled in §3.
 
 ### Laws
 
-|        |                                             |                                                                       |
-| ------ | ------------------------------------------- | --------------------------------------------------------------------- |
-| **R**  | `∀ t ∈ dom(e). p(e(t)) = t`                 | Retraction. Writing then reading returns the value written, exactly.  |
-| **C**  | `∀ a ∈ dom(p). p(a) ∈ dom(e)`               | Canonizability. Whatever was read can be written back.                |
-| **W**  | `μ ≠ ⊤ ⟹ ∀ t ∈ dom(e). e(t) = ⟨μ, _⟩`       | A term that names its member writes that member and no other.         |
-| **MP** | `∀ a ∈ dom(p). member(e(p(a))) = member(a)` | Reading and writing back never changes a stored member.               |
+|        |                                             |                                                                      |
+| ------ | ------------------------------------------- | -------------------------------------------------------------------- |
+| **R**  | `∀ t ∈ dom(e). p(e(t)) = t`                 | Retraction. Writing then reading returns the value written, exactly. |
+| **C**  | `∀ a ∈ dom(p). p(a) ∈ dom(e)`               | Canonizability. Whatever was read can be written back.               |
+| **W**  | `μ ≠ ⊤ ⟹ ∀ t ∈ dom(e). e(t) = ⟨μ, _⟩`       | A term that names its member writes that member and no other.        |
+| **MP** | `∀ a ∈ dom(p). member(e(p(a))) = member(a)` | Reading and writing back never changes a stored member.              |
 
 The four are independent, and **(MP)** is well defined only because **(C)** holds — `e(p(a))` is an
 attribute at all because everything readable re-encodes. One term is exempt from **(MP)** and only
@@ -145,10 +145,6 @@ D = { x ∈ Double : x = 0 ∨ 1e-130 ≤ |x| ≤ 9.9…e125 }
 ────────────────────────────────────────────────────── (number)
 ⊢ number : D ⇝ N
 
-T ⊆ D,  T ≠ ∅
-────────────────────────────── (numeric)
-⊢ numeric(T) : T ⇝ N
-
 ──────────────────────────────
 ⊢ boolean : Bool ⇝ BOOL    (boolean)
 
@@ -174,11 +170,15 @@ DynamoDB's magnitude range, and `D` is an **unchecked precondition**: the implem
 whatever `String` produces, so `5e-324` is written and the service rejects it on arrival. Recorded
 here rather than in the type, because that is where it is.
 
-`numeric` is `number` with the held set chosen by the caller — the term for a numeric enum member.
-The subset is the same kind of **unchecked precondition** as `D`, on the other side of the pair: `p`
-returns the double it read and does not verify membership in `T`. `refine(number, T)` is the same
-held set _with_ the check; `numeric(T)` is the claim without it, and a claim and a check are
-different terms.
+A subset of `D` chosen by the caller — a numeric enum member — is `refine(number, T)` and has no
+rule of its own. There used to be one, `(numeric)`, described as "the claim without the check": `p`
+was to return the double it read and not verify membership in `T`. **It is gone**, for two reasons
+the mechanization made plain. It was not a different term — under §5's reading, the only reading
+under which the `: T` index is honest, `numeric(T)` and `refine(number, T)` denote the same codec on
+all four fields. And the reading that _would_ have made it different is one no term of this calculus
+is allowed: a `p` returning values outside `T` breaks `(C)`, and with it the claim that `: T` says
+anything. An unchecked narrowing of a read is a cast, and a cast belongs to `refine` — which does
+the check — or to `held`, which is where the caller's own functions live.
 
 `decimal` holds `Numerals`, not a machine number. That is the one ground term whose held set is chosen
 against the grain of the host language, and the reason is in the table in §1: `N` carries 38
@@ -321,7 +321,7 @@ differ as codecs only in definedness, and only where the wrapper is redundant. T
 outside both readings is `nullable(null)` — member `⊤` over the `NULL` point, of no use.)
 
 This is recorded because it bears on whether `nullable` should be a term at all. It earns its
-place as **surface syntax**, and the honesty premises it carries are the price of *not* going
+place as **surface syntax**, and the honesty premises it carries are the price of _not_ going
 through `(U)` — where `union(c, null)` is discharged at the declaration by kind disjointness for
 every `c` whose `κ` is not `⊤`, `nullable(c)`'s two premises have no discharger. The argument for
 keeping it primitive is compatibility and the `κ = ⊤` cases (`held`, `custom`, `lazy`), not
@@ -401,9 +401,9 @@ A union's pair is defined by **unique admission**. Each option answers, per inpu
 whether the input could be its — an attribute on the way out, a value on the way in — and the union
 acts through the option that answers alone:
 
-|       |                                        |                                                                    |
-| ----- | -------------------------------------- | ------------------------------------------------------------------ |
-| **U** | `∀ input. ∣{ i : cᵢ admits it }∣ = 1`  | Per value and per attribute. Ambiguity is a failure, never a rank. |
+|       |                                       |                                                                    |
+| ----- | ------------------------------------- | ------------------------------------------------------------------ |
+| **U** | `∀ input. ∣{ i : cᵢ admits it }∣ = 1` | Per value and per attribute. Ambiguity is a failure, never a rank. |
 
 Declaration order is never consulted — which is what puts commutativity in §6, and why `legacy`'s
 coherence premise (§3) matters beyond `legacy`: a precedence between readings anywhere in the
@@ -413,12 +413,12 @@ calculus would be a union resolved by rank, exactly what **(U)** refuses.
 this section is its **dischargers** — decidable conditions, each sufficient for **(U)** on the
 unions it covers:
 
-| Discharger                           | Decides                                             | From                       |
-| ------------------------------------ | --------------------------------------------------- | -------------------------- |
-| distinct members, or disjoint `adm`  | the readable side, where the stored attributes differ | `μ`, and `adm` below       |
-| **(K)** — disjoint kinds, or disjoint `ident` sets | the writable side, where the runtime shapes differ  | `κ`, `ident` and `adm`, below |
-| tag disjointness                     | `(dunion)`, outright — both sides                   | the discriminator literals |
-| kind disjointness                    | `opaque`'s fixpoint (§3), outright                  | one option per kind of §1  |
+| Discharger                                         | Decides                                               | From                          |
+| -------------------------------------------------- | ----------------------------------------------------- | ----------------------------- |
+| distinct members, or disjoint `adm`                | the readable side, where the stored attributes differ | `μ`, and `adm` below          |
+| **(K)** — disjoint kinds, or disjoint `ident` sets | the writable side, where the runtime shapes differ    | `κ`, `ident` and `adm`, below |
+| tag disjointness                                   | `(dunion)`, outright — both sides                     | the discriminator literals    |
+| kind disjointness                                  | `opaque`'s fixpoint (§3), outright                    | one option per kind of §1     |
 
 What no discharger covers stays an obligation the semantics enforces per input by failing — safe for
 every law except **(R)** at a canonical attribute, and that residue is exactly what the theorem
@@ -441,7 +441,7 @@ k ∈ Kind ::= string | number | boolean | binary | set | array | map | null
 | `c`                                               | `κ(c)`                                       |
 | ------------------------------------------------- | -------------------------------------------- |
 | `string`, `decimal`                               | `{string}` — a decimal is _held_ as a string |
-| `number`, `numeric(T)`                            | `{number}`                                   |
+| `number`                                          | `{number}`                                   |
 | `boolean` / `binary`                              | `{boolean}` / `{binary}`                     |
 | `literal(ℓ₁ … ℓₙ)`                                | `{string}` or `{number}`, by the values      |
 | `set(c)`                                          | `{set}`                                      |
@@ -502,10 +502,10 @@ field. A `fallback` around it has no derivation, and the proof says why rather t
 taste: a row omitting the discriminator would read to the fallback's stand-in, an arbitrary value
 the tag sets never vouched for, and **(C)** would then re-encode a variant no tag selects.
 
-|       |                                                      |                                                                                                                                 |
-| ----- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| **D** | `∀ i ≠ j. ¬(Tᵢ ⊆ Tⱼ) ∧ ¬(Tⱼ ⊆ Tᵢ)`                   | Well-formedness: no option's held set subsumes another's. Decidable from the held sets alone. It does **not** discharge the readable side — see below.                    |
-| **K** | `∀ i ≠ j. κ(cᵢ) ∩ κ(cⱼ) = ∅ ∨ (ident(cᵢ) ∧ ident(cⱼ) ∧ adm(cᵢ) ∩ adm(cⱼ) = ∅)` | Writable: no value belongs to two options. Needs `κ`, which the held sets do not determine.                                     |
+|       |                                                                                |                                                                                                                                                        |
+| ----- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **D** | `∀ i ≠ j. ¬(Tᵢ ⊆ Tⱼ) ∧ ¬(Tⱼ ⊆ Tᵢ)`                                             | Well-formedness: no option's held set subsumes another's. Decidable from the held sets alone. It does **not** discharge the readable side — see below. |
+| **K** | `∀ i ≠ j. κ(cᵢ) ∩ κ(cⱼ) = ∅ ∨ (ident(cᵢ) ∧ ident(cⱼ) ∧ adm(cᵢ) ∩ adm(cⱼ) = ∅)` | Writable: no value belongs to two options. Needs `κ`, which the held sets do not determine.                                                            |
 
 **(D)** and **(K)** ask the same kind of question of the two sides of the pair, and neither implies
 the other. `union(array(string), array(number))` satisfies **(D)** — the held sets are incomparable —
@@ -614,10 +614,7 @@ and the machine proof can be audited against each other case for case.
 member back into the held set. **(W)** and **(C)** are immediate, `≼` is member equality with no
 substructure, and **(R)** is the carrier's round trip: identity for `string`, `boolean`, `binary`,
 `null` (whose held set is the single value `null` and whose payload is `∗`) and `decimal` (a numeral is stored as written, so `Can(decimal)` is all of `N`), shortest-text for
-`number` and `literal‑N` — the §3 argument that every finite double survives. `numeric(T)`: the
-normative reading is `number`'s restricted to attributes landing in `T`, and every law restricts
-with it; the implementation elides the restriction, which is §3's unchecked precondition — off it,
-**(C)** and **(R)** are the implementation's to lose, not the term's.
+`number` and `literal‑N` — the §3 argument that every finite double survives.
 
 **Wrappers.**
 
@@ -722,7 +719,7 @@ partition the values and members partition the attributes — so admission is un
 every depth of the fixpoint, and the sum case closes with no residue here either. ∎
 
 What remains outside the theorem is exactly what §3 already names: `(custom)`'s premises are the
-caller's to keep, `(number)` and `(numeric)` carry unchecked preconditions, and each `(union)`'s
+caller's to keep, `(number)` carries an unchecked precondition, and each `(union)`'s
 residual **(U)**. Each law is checked per term in the implementation's law suite, and the proof's
 grouping above is the mechanization's file structure — the preamble's "checked _somewhere_", twice
 over.
@@ -736,33 +733,33 @@ everywhere both are defined.
 
 ### Hold
 
-| Equation                                                              |                                                                                           |
-| --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `held(c, id, id) ≡ c`                                                 | Identity.                                                                                 |
-| `held(held(c, f, g), f′, g′) ≡ held(c, f ∘ f′, g′ ∘ g)`               | Isos compose; note the reversal on the reading half.                                      |
-| `refine(refine(c, q), q′) ≡ refine(c, q ∩ q′)`                        | Prisms meet.                                                                              |
-| `refine(c, T) ≡ c` for `⊢ c : T ⇝ μ`                                  | A refinement admitting everything is no refinement.                                       |
-| `legacy(c, p_c) ≡ c`                                                  | An older reading that is the current one adds nothing.                                    |
-| `legacy(c, r) ≈ c` on `Can(c)`                                        | A migration differs from its current encoding only off the canonical set.                 |
-| `union(c) ≡ c`                                                        | Choice of one.                                                                            |
+| Equation                                                              |                                                                                                                                                                                                                               |
+| --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `held(c, id, id) ≡ c`                                                 | Identity.                                                                                                                                                                                                                     |
+| `held(held(c, f, g), f′, g′) ≡ held(c, f ∘ f′, g′ ∘ g)`               | Isos compose; note the reversal on the reading half.                                                                                                                                                                          |
+| `refine(refine(c, q), q′) ≡ refine(c, q ∩ q′)`                        | Prisms meet.                                                                                                                                                                                                                  |
+| `refine(c, T) ≡ c` for `⊢ c : T ⇝ μ`                                  | A refinement admitting everything is no refinement.                                                                                                                                                                           |
+| `legacy(c, p_c) ≡ c`                                                  | An older reading that is the current one adds nothing.                                                                                                                                                                        |
+| `legacy(c, r) ≈ c` on `Can(c)`                                        | A migration differs from its current encoding only off the canonical set.                                                                                                                                                     |
+| `union(c) ≡ c`                                                        | Choice of one.                                                                                                                                                                                                                |
 | `union(c₁, union(c₂, c₃)) ≡ union(c₁, c₂, c₃)`                        | Associative, where both sides satisfy (D) and (K) — and only on inputs satisfying (U): an ambiguity _inside_ the nested option fails locally on the left, where the outer union may still resolve, and globally on the right. |
-| `union(c₁ … cₙ) ≡ union(c_σ(1) … c_σ(n))` for any permutation `σ`     | Commutative: resolution is unique admission (§5), never declaration order.                |
-| `nullable(nullable(c)) ≡ nullable(c)`                                 | Idempotent: the value language has one null, so the outer `𝟙` is the only one ever written or read — lawful because `nullable` is itself null-honest (§3). |
-| `μ(w(c)) = μ(c)` for `w ∈ {held, refine, legacy, optional, fallback}` | Wrappers preserve the member — a field's member is its attribute's (§4). What keeps a key's attribute type stable under refactoring. |
+| `union(c₁ … cₙ) ≡ union(c_σ(1) … c_σ(n))` for any permutation `σ`     | Commutative: resolution is unique admission (§5), never declaration order.                                                                                                                                                    |
+| `nullable(nullable(c)) ≡ nullable(c)`                                 | Idempotent: the value language has one null, so the outer `𝟙` is the only one ever written or read — lawful because `nullable` is itself null-honest (§3).                                                                    |
+| `μ(w(c)) = μ(c)` for `w ∈ {held, refine, legacy, optional, fallback}` | Wrappers preserve the member — a field's member is its attribute's (§4). What keeps a key's attribute type stable under refactoring.                                                                                          |
 
 ### Do not hold
 
-| Equation                                                            |                                                                                                                                                         |
-| ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `union(array(c₁), array(c₂)) ≢ array(union(c₁, c₂))`                | Left: a sequence homogeneous in one option. Right: a sequence of either, elementwise. Different held sets, and only the right is well formed under (K). |
-| `tuple(c₁ … cₙ, rest(c)) ≢ tuple(c₁ … cₙ) ` and `≢ array(union(…))` | A fixed head with a repeating tail is neither: a tuple has no tail and an array has no head.                                                            |
-| `set(union(c₁, c₂))` — not derivable                                | The premise on `set` demands a member, and a union of options writing different members has none.                                                       |
-| `refine(held(c, f, g), q) ≢ held(refine(c, q), f, g)`               | The refinement applies on opposite sides of the iso, so `q` is a subset of different sets. Two different terms, both meaningful.                        |
-| `union(c₁ … cₙ) ≢ union(c₁ … cₙ, c)`                                | Not closed under extension: a further option can violate (D) or (K) and make the term ill formed.                                                       |
-| `optional(optional(c))` — not derivable                             | A marker marks once, and nesting read only the outermost. `optional(fallback(c, v))` and `fallback(optional(c), v)` likewise.                           |
-| `lazy(γ) ≢ γ(∗)`                                                    | The pair is the same and the μ is not: `lazy` concludes `⊤` where `γ(∗)` may name its member, so `set(lazy(γ))` has no derivation. `≡` compares the index too, and this is the row where that matters. |
+| Equation                                                            |                                                                                                                                                                                                                                   |
+| ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `union(array(c₁), array(c₂)) ≢ array(union(c₁, c₂))`                | Left: a sequence homogeneous in one option. Right: a sequence of either, elementwise. Different held sets, and only the right is well formed under (K).                                                                           |
+| `tuple(c₁ … cₙ, rest(c)) ≢ tuple(c₁ … cₙ) ` and `≢ array(union(…))` | A fixed head with a repeating tail is neither: a tuple has no tail and an array has no head.                                                                                                                                      |
+| `set(union(c₁, c₂))` — not derivable                                | The premise on `set` demands a member, and a union of options writing different members has none.                                                                                                                                 |
+| `refine(held(c, f, g), q) ≢ held(refine(c, q), f, g)`               | The refinement applies on opposite sides of the iso, so `q` is a subset of different sets. Two different terms, both meaningful.                                                                                                  |
+| `union(c₁ … cₙ) ≢ union(c₁ … cₙ, c)`                                | Not closed under extension: a further option can violate (D) or (K) and make the term ill formed.                                                                                                                                 |
+| `optional(optional(c))` — not derivable                             | A marker marks once, and nesting read only the outermost. `optional(fallback(c, v))` and `fallback(optional(c), v)` likewise.                                                                                                     |
+| `lazy(γ) ≢ γ(∗)`                                                    | The pair is the same and the μ is not: `lazy` concludes `⊤` where `γ(∗)` may name its member, so `set(lazy(γ))` has no derivation. `≡` compares the index too, and this is the row where that matters.                            |
 | `legacy(c, r)` breaks **(MP)**                                      | On purpose, and it is the only term licensed to: changing what is stored _is_ the migration, and §2's read-side corollary falls with it. So a `legacy` attribute cannot be an index key, which is the price and is worth stating. |
-| `e ∘ p ≢ id`                                                        | The quotient, from §2. Equality holds only on `Can(c)`.                                                                                                 |
+| `e ∘ p ≢ id`                                                        | The quotient, from §2. Equality holds only on `Can(c)`.                                                                                                                                                                           |
 
 ---
 

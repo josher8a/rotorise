@@ -39,7 +39,7 @@ def Obligations : Nat → Term → Prop
   | fuel+1, t =>
     match t with
     | .string | .number | .decimal | .boolean | .binary | .null
-    | .numeric _ | .literalS _ | .literalN _ | .opaq _ => True
+    | .literalS _ | .literalN _ | .opaq _ => True
     | .set t' | .array t' | .record t' | .refine t' _ => Obligations fuel t'
     | .tuple ts tail =>
       (∀ t' ∈ ts, Obligations fuel t') ∧ (∀ t' ∈ tail, Obligations fuel t')
@@ -68,7 +68,7 @@ def MPOk : Nat → Term → Prop
     match t with
     | .legacy _ _ => False
     | .string | .number | .decimal | .boolean | .binary | .null
-    | .numeric _ | .literalS _ | .literalN _ | .opaq _ | .custom _ _ => True
+    | .literalS _ | .literalN _ | .opaq _ | .custom _ _ => True
     | .set t' | .array t' | .record t' | .refine t' _ | .nullable t'
     | .held t' _ _ => MPOk fuel t'
     | .tuple ts tail =>
@@ -162,10 +162,6 @@ theorem lawful_decimal : ∀ fuel, Lawful (denote fuel .decimal)
 theorem lawful_number : ∀ fuel, Lawful (denote fuel .number)
   | 0 => lawful_dead
   | _+1 => by simp only [denote]; exact lawful_numberCodec
-
-theorem lawful_numeric (q : Double → Bool) : ∀ fuel, Lawful (denote fuel (.numeric q))
-  | 0 => lawful_dead
-  | _+1 => by simp only [denote]; exact lawful_numericCodec q
 
 theorem lawful_literalS (ls : List String) : ∀ fuel, Lawful (denote fuel (.literalS ls))
   | 0 => lawful_dead
@@ -294,7 +290,6 @@ theorem denote_μ : ∀ (fuel : Nat) (t : Term), (denote fuel t).μ = μSyn t
     | boolean => rfl
     | binary => rfl
     | null => rfl
-    | numeric q => rfl
     | literalS ls => rfl
     | literalN ls => rfl
     | set t' =>
@@ -337,7 +332,6 @@ theorem typed_μSyn : ∀ {t T μ}, Typed t T μ → μSyn t = μ
   | _, _, _, .boolean => rfl
   | _, _, _, .null => rfl
   | _, _, _, .binary => rfl
-  | _, _, _, .numeric _ => rfl
   | _, _, _, .literalS _ _ _ => rfl
   | _, _, _, .literalN _ _ _ => rfl
   | _, _, _, .set h' hs => by
@@ -516,7 +510,6 @@ theorem soundness_both : ∀ (fuel : Nat) {t T μ}, Typed t T μ → Obligations
     | boolean => exact sound_ground lawful_booleanCodec
     | null => exact sound_ground lawful_nullCodec
     | binary => exact sound_ground lawful_binaryCodec
-    | numeric q => exact sound_ground (lawful_numericCodec q)
     | literalS ls hne hnd => exact sound_ground (lawful_literalSCodec ls)
     | literalN ls hne hnd => exact sound_ground (lawful_literalNCodec ls)
     | opaq lossy => exact sound_ground (lawful_opaqCodecω lossy)
@@ -773,7 +766,7 @@ theorem typed_TSub : ∀ (fuel : Nat) {t T μ}, Typed t T μ →
   | 0, _, _, _, _, _, h => nomatch h
   | fuel+1, t, T, μ, h, v, hv => by
     cases h with
-    | string | number | decimal | boolean | binary | numeric _ | null => exact hv
+    | string | number | decimal | boolean | binary | null => exact hv
     | literalS _ _ _ | literalN _ _ _ => exact hv
     | custom _ _ => exact hv
     | opaq lossy => exact opaq_TSubω lossy v hv
@@ -888,7 +881,6 @@ theorem carrier_denote : ∀ (fuel : Nat) {t T μ}, Typed t T μ → Obligations
     | boolean => exact carrier_booleanCodec
     | null => exact carrier_nullCodec
     | binary => exact carrier_binaryCodec
-    | numeric q => exact carrier_numericCodec q
     | literalS ls _ _ => exact carrier_literalSCodec ls
     | literalN ls _ _ => exact carrier_literalNCodec ls
     | @set t' T' μ₀ μS h' hs =>

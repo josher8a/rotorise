@@ -216,7 +216,7 @@ export type Decoded<C> = C extends {
  *              | ⟨attr:L⟩  | ⟨attr:M⟩  | ⟨attr:?⟩
  *
  * ⟨attr:S⟩    ::= string | literal(⟨text⟩ +) | ⟨wrap S⟩
- * ⟨attr:N⟩    ::= decimal | number | numeric | ⟨wrap N⟩
+ * ⟨attr:N⟩    ::= decimal | number | ⟨wrap N⟩
  * ⟨attr:BOOL⟩ ::= boolean | ⟨wrap BOOL⟩
  * ⟨attr:B⟩    ::= binary | ⟨wrap B⟩
  * ⟨attr:kS⟩   ::= set(⟨attr:k⟩)                       for k ∈ { S, N, B }
@@ -264,7 +264,6 @@ export type CodecDef =
       }
     | { readonly kind: 'decimal' }
     | { readonly kind: 'number' }
-    | { readonly kind: 'numeric' }
     | { readonly kind: 'boolean' }
     | { readonly kind: 'binary' }
     | { readonly kind: 'opaque'; readonly numbers: opaque.Numbers }
@@ -410,7 +409,6 @@ const writtenBy: { readonly [K in CodecDef['kind']]?: AttributeName } = {
     string: 'S',
     decimal: 'N',
     number: 'N',
-    numeric: 'N',
     boolean: 'BOOL',
     binary: 'B',
     array: 'L',
@@ -494,7 +492,6 @@ const carriedBy: { readonly [K in CodecDef['kind']]?: Shape } = {
     // a decimal is stored as `N` and *held* as a string, which is the whole point of it
     decimal: 'string',
     number: 'number',
-    numeric: 'number',
     boolean: 'boolean',
     binary: 'binary',
     set: 'set',
@@ -847,18 +844,6 @@ export const number: AttributeCodec<number, Attribute<'N'>> = codec({
     encode: (value) => carrying('N', value.toString()),
     decode: (attribute) => andThen(expect('N', attribute), Number),
 })
-
-/** A numeric enum member, stored as `N`. */
-export const numeric = <const T extends number>(): AttributeCodec<
-    T,
-    Attribute<'N'>
-> =>
-    codec({
-        def: { kind: 'numeric' },
-        encode: (value) => carrying('N', value.toString()),
-        decode: (attribute) =>
-            andThen(expect('N', attribute), (ok) => Number(ok) as T),
-    })
 
 /** A boolean, as `BOOL`. */
 export const boolean: AttributeCodec<boolean, Attribute<'BOOL'>> = codec({
@@ -1644,7 +1629,7 @@ export namespace opaque {
                   : T extends number
                     ? Of extends 'lossy'
                         ? N
-                        : ErrorMessage<"[opaque] a number is undecidable without a schema: as a `number` it rounds, and as a `string` it re-encodes as `S`. Declare it with `number`, `numeric()` or `decimal`, or opt in with `opaque('lossy')`">
+                        : ErrorMessage<"[opaque] a number is undecidable without a schema: as a `number` it rounds, and as a `string` it re-encodes as `S`. Declare it with `number` or `decimal`, or opt in with `opaque('lossy')`">
                     : T extends bigint
                       ? ErrorMessage<'[opaque] a bigint shares `N` with `number` and decodes as one, so `1n` would come back as `1`. Use `decimal` and pass `value.toString()`'>
                       : T extends ReadonlySet<infer Member>
@@ -1740,7 +1725,7 @@ export namespace opaque {
             : A extends N
               ? Of extends 'lossy'
                   ? number
-                  : ErrorMessage<"[opaque] a stored number is undecidable without a schema: as a `number` it rounds, and as a `string` it re-encodes as `S`. Declare the attribute with `number`, `numeric()` or `decimal`, or opt in with `opaque('lossy')`">
+                  : ErrorMessage<"[opaque] a stored number is undecidable without a schema: as a `number` it rounds, and as a `string` it re-encodes as `S`. Declare the attribute with `number` or `decimal`, or opt in with `opaque('lossy')`">
               : A extends S
                 ? string
                 : A extends B
@@ -1815,7 +1800,7 @@ const encodeUnknown = (
         if (numbers === 'refuse') {
             return unrecoverable(
                 'a number',
-                "Reading it back is undecidable without a schema: as a `number` it rounds, and as a `string` it re-encodes as `S`, changing the attribute's stored type. Declare the attribute with `number`, `numeric()` or `decimal`, or opt in with `opaque('lossy')`.",
+                "Reading it back is undecidable without a schema: as a `number` it rounds, and as a `string` it re-encodes as `S`, changing the attribute's stored type. Declare the attribute with `number` or `decimal`, or opt in with `opaque('lossy')`.",
             )
         }
         return carrying('N', String(value))
@@ -1906,7 +1891,7 @@ const decodeUnknown = (
             if (numbers === 'refuse') {
                 return unrecoverable(
                     `the stored number '${carried}'`,
-                    "Declare the attribute with `number`, `numeric()` or `decimal`, or opt in with `opaque('lossy')`.",
+                    "Declare the attribute with `number` or `decimal`, or opt in with `opaque('lossy')`.",
                 )
             }
             return Number(carried)

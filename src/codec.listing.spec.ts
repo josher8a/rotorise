@@ -19,7 +19,7 @@ import {
     CodecError,
     decimal,
     literal,
-    numeric,
+    number,
     object,
     opaque,
     optional,
@@ -154,9 +154,17 @@ const Listing = object({
     status_reason: optional(string),
     visibility: literal('PUBLIC', 'PRIVATE'),
 
-    // stored as `N`, and the original's `{ N: value.toString() }`
-    type: numeric<ListingType>(),
-    status: numeric<ListingStatus>(),
+    // stored as `N`, and the original's `{ N: value.toString() }` — a numeric literal,
+    // so the enum's members are checked on the way in *and* on the way out
+    type: literal(ListingType.ADOPTION, ListingType.SALE),
+    status: literal(
+        ListingStatus.DRAFT,
+        ListingStatus.LISTED,
+        ListingStatus.RESERVED,
+        ListingStatus.SOLD,
+        ListingStatus.DEPLETED,
+        ListingStatus.WITHDRAWN,
+    ),
     // `string` in, `string` out, `N` in the table — no float ever touches it
     localPriceRate: decimal,
 
@@ -170,10 +178,10 @@ const Listing = object({
     breed: object({
         species: object({
             id: string,
-            type: numeric<number>(),
+            type: number,
             coat: optional(string), // present only when the entity has it
         }),
-        registry: object({ id: string, type: numeric<number>() }),
+        registry: object({ id: string, type: number }),
     }),
     sizeLimits: object({
         litterSize: string,
