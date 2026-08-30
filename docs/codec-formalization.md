@@ -596,6 +596,41 @@ declaration where two options are both `κ`-free, or give `held` a write-side `�
 carrier — and §1's `Value` is what would have to change for the second. `codec.uniqueadmission.spec.ts`
 carries the measurement as four assertions.
 
+### One where a term was nearly removed for a reason that was not true
+
+The user proposed deleting `(refine)`, on the grounds that it cannot state stability across a
+round trip through an altered attribute. Two checks, both against the model:
+
+- `Lawful.restrict` proves all four laws of `refine` from its base's.
+- `refine`'s `p` factors through `c.p`, so `SurvivesStore c η → SurvivesStore (c.restrict q) η`
+  — every alteration the base tolerates, the refinement tolerates identically. It cannot fail
+  there without the base failing first.
+
+So the stated reason does not hold. But the instinct behind it did, and it was one table row away:
+**§5 sent `refine` straight through on both admissible sets**, so `q` narrowed the held set and was
+invisible to every discharger. `union(refine(number, positive), refine(number, negative))` has `κ`
+`{number}` on both sides and `adm` `⊤` on both — nothing separates it, and it falls to (U) per
+input despite the two predicates being disjoint by construction.
+
+`adm (refine(c, q)) = adm c ∩ q` fixes it, and is sound for the reason the passthrough was too
+weak: `refine`'s `e` is defined only where `q` holds. `admA` cannot follow — `q` tests the value a
+read *produces*, and no syntactic set of attributes bounds that — which makes this the mirror of
+the `held` row, one-sided the other way. `sepV_refine_disjoint` is the witness.
+
+**One consequence, and it is a correction to §5's `ident` table rather than a side effect.**
+`ident_of_adm` says a term whose `adm` ever refuses is `ident`. With `q` in `adm`, a refinement over
+a non-`ident` base refuses — so `refine` must *hold* `ident` rather than propagate it. That is also
+the truth of the matter: `refine` checks `q` on the way in and on the way out, which is what
+deciding your own membership means, and §3 already argues exactly this when it says a `p` returning
+the value it read without verifying `q` would break (C).
+
+**A correction of my own, recorded because it shaped the recommendation.** I argued that removing
+`refine` would leave narrowing with nowhere to go but `custom`. That is false, and the user said so:
+`e` and `p` are *partial*, so refusal is the error channel, and any constructor can use it — which
+is what C4 already tells a port to do, "in the shape of `refine`'s". `refine` is not the only way to
+refuse; it is the calculus giving refusal a rule so the caller does not have to discharge the laws
+by hand.
+
 ### One the specification could state and never did
 
 Asked what an *ideal* codec is — the guess being a bijection, with prisms as the exception — §2

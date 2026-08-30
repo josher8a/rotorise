@@ -76,7 +76,11 @@ def ident : Term → Bool
   | .literalS _ | .literalN _ => true
   | .dunion _ _ => true
   | .set t | .array t | .record t => ident t
-  | .refine t _ | .legacy t _ => ident t
+  -- `refine` *holds* it rather than propagating: `q` is checked on the way in and on the
+  -- way out, which is what deciding your own membership means. §3 argues the same — a `p`
+  -- returning the value it read without verifying `q` would break (C).
+  | .refine _ _ => true
+  | .legacy t _ => ident t
   | .tuple ts tail =>
     identList ts && (match tail with | some t => ident t | none => true)
   | .union opts => identList opts
@@ -130,7 +134,12 @@ noncomputable def adm : Term → Value → Bool
       | some (.str tag) => (allTags d opts).contains tag
       | _ => false
     | _ => false
-  | .refine t _ => adm t
+  -- `q` is a predicate on *values*, so it tightens this side and only this side.
+  -- `refine`'s `e` is defined only where `q` holds, so `adm t ∩ q` is a sound bound and a
+  -- strictly better one than the passthrough. `admA` cannot follow: `q` tests the value a
+  -- read *produces*, and no syntactic set of attributes bounds that — `held` one-sided the
+  -- other way.
+  | .refine t q => fun v => adm t v && q v
   | .legacy t _ => adm t
   | _ => fun _ => true
 
@@ -306,7 +315,9 @@ theorem adm_sound : ∀ (fuel : Nat) (t : Term) {v a},
       obtain ⟨kvs, tag, rfl, hlk, htag⟩ := byTag_admitV.mp hadm
       exact adm_dunion.mpr ⟨kvs, tag, rfl, hlk,
         contains_of_mem (mem_allTags htx (mem_of_contains htag))⟩
-    case refine t' q => exact adm_sound fuel t' (restrict_e.mp he).2
+    case refine t' q =>
+      obtain ⟨hq, hc⟩ := restrict_e.mp he
+      simp only [adm, adm_sound fuel t' hc, hq, Bool.and_self]
     case legacy t' r => exact adm_sound fuel t' (extendRead_e.mp he)
     all_goals rfl
 
@@ -651,7 +662,7 @@ theorem ident_of_adm : ∀ {t : Term} {v : Value}, adm t v = false → ident t =
   | .literalS _, _, _ => rfl
   | .literalN _, _, _ => rfl
   | .dunion _ _, _, _ => rfl
-  | .refine t _, v, h => ident_of_adm (t := t) (v := v) h
+  | .refine _ _, _, _ => rfl
   | .legacy t _, v, h => ident_of_adm (t := t) (v := v) h
   | .string, _, h | .number, _, h | .decimal, _, h | .boolean, _, h | .binary, _, h
   | .null, _, h | .set _, _, h | .array _, _, h | .tuple _ _, _, h
@@ -697,6 +708,16 @@ theorem sepV_string_dunion_nil (d : Name) : SepV .string (.dunion d []) :=
   Or.inr fun v _ => adm_dunion_nil d v
 
 theorem not_ident_string : ident .string = false := rfl
+
+/-- **What `q` in `adm` buys.** Two refinements of one base with disjoint predicates are
+    separated on the writable side by `SepV`'s `adm` disjunct — which the passthrough
+    could never satisfy, both sides having been `⊤`. The `κ` disjunct is no help here:
+    both options are `{string}`. -/
+theorem sepV_refine_disjoint {q q' : Value → Bool} (h : ∀ v, q v = true → q' v = false) :
+    SepV (.refine .string q) (.refine .string q') :=
+  Or.inr fun v hv => by
+    simp only [adm, Bool.true_and] at hv ⊢
+    exact h v hv
 
 /-- §5 (D)'s stand-in, likewise widened: two options are separated on the readable side
     by distinct named members, **or** by disjoint admissible sets. The `adm` disjunct is
