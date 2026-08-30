@@ -116,6 +116,14 @@ combinator, and the pair agrees on the nose. -/
 #assert_axioms restrict_e_adapt
 #assert_axioms restrict_p_adapt
 
+/-! §1's two number gates, as instances of the same combinator. `restrict` gates both
+halves by construction, which is what §3 argues an ad-hoc gate forgets. -/
+
+#assert_axioms numberCodec_e_restrict
+#assert_axioms numberCodec_p_restrict
+#assert_axioms decimalCodec_e_restrict
+#assert_axioms decimalCodec_p_restrict
+
 #assert_axioms sepV_refine_disjoint
 #assert_axioms uAtCan_of_refine_disjoint
 #assert_axioms Lawful.restrict

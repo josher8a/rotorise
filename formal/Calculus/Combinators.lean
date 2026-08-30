@@ -340,6 +340,58 @@ theorem restrict_p_adapt {c : Codec} (q : Value → Bool) :
     (c.restrict q).p = (c.adapt (partialId q) (partialId q)).p := by
   funext a; simp only [Codec.restrict, Codec.adapt, partialId]
 
+/-! ### §1's number gates are that combinator too
+
+    `(number)` and `(decimal)` each carry a predicate checked on **both** halves —
+    `Numeral.WF` on the double a text reads back to, `Numeral.Stored` on the numeral a
+    string is written as. §3 argues at length that gating only the write breaks (C), which
+    is exactly the shape `restrict` has and an ad-hoc `if` does not.
+
+    So the gates are not bespoke. Each of the two codecs is `refine` over an *ungated*
+    base, and the four theorems below say so on the pair. `Numeral` is `String` with the
+    carrier unrestricted (`Domain.lean`) — `Attr.n "abc"` stays typeable and is what the
+    gates refuse — so the ungated bases are honest objects rather than a convenient
+    fiction. -/
+
+/-- §1's `D`, as a predicate on values. -/
+noncomputable def inD : Value → Bool :=
+  fun v => match v with | .num d => Numeral.WF d.toDec | _ => false
+
+/-- §1's `Stored`, likewise. -/
+def isStored : Value → Bool :=
+  fun v => match v with | .str s => Numeral.Stored s | _ => false
+
+/-- `number` before §1's gate: every finite double, written as its shortest text. -/
+noncomputable def rawNumberCodec : Codec :=
+  { T := fun v => ∃ d, v = .num d
+    μ := some .N
+    e := fun v => match v with | .num d => some (.n d.toDec) | _ => none
+    p := fun a => match a with | .n x => (Double.ofDec x).map Value.num | _ => none }
+
+/-- `decimal` before it: every string, held as the numeral it spells. -/
+def rawDecimalCodec : Codec :=
+  { T := fun v => ∃ s, v = .str s
+    μ := some .N
+    e := fun v => match v with | .str s => some (.n s) | _ => none
+    p := fun a => match a with | .n x => some (.str x) | _ => none }
+
+/-- **§3's `(number)` gate is `refine`**, on the writing half… -/
+theorem numberCodec_e_restrict : numberCodec.e = (rawNumberCodec.restrict inD).e := by
+  funext v; cases v <;> simp [numberCodec, rawNumberCodec, Codec.restrict, inD]
+
+/-- …and on the reading half, which is the half §3 says an ad-hoc gate forgets. -/
+theorem numberCodec_p_restrict : numberCodec.p = (rawNumberCodec.restrict inD).p := by
+  funext a; cases a <;> simp [numberCodec, rawNumberCodec, Codec.restrict, inD]
+  cases Double.ofDec _ <;> simp
+
+/-- **§3's `(decimal)` gate is `refine`** at `Stored`, on the writing half… -/
+theorem decimalCodec_e_restrict : decimalCodec.e = (rawDecimalCodec.restrict isStored).e := by
+  funext v; cases v <;> simp [decimalCodec, rawDecimalCodec, Codec.restrict, isStored]
+
+/-- …and on the reading half. -/
+theorem decimalCodec_p_restrict : decimalCodec.p = (rawDecimalCodec.restrict isStored).p := by
+  funext a; cases a <;> simp [decimalCodec, rawDecimalCodec, Codec.restrict, isStored]
+
 /-- `legacy`: extend the reading. With §3's coherence premise this presentation equals
     the order-free `p ∪ r`. -/
 def Codec.extendRead (c : Codec) (r : Attr → Option Value) : Codec :=
