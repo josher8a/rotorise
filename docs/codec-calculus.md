@@ -270,8 +270,8 @@ subterm's member this way.
 ──────────────────────────────────────────────────────────────────────────────────── (legacy)
 ⊢ legacy(c, r) : T ⇝ μ
 
-⊢ c : T ⇝ μ    e(t) = ⟨NULL, ∗⟩ ⟹ t = null    p(a) = null ⟹ member(a) = NULL
-──────────────────────────────────────────────────────────────────────────────── (nullable)
+⊢ c : T ⇝ μ
+──────────────────────── (nullable)
 ⊢ nullable(c) : T + 𝟙 ⇝ ⊤
 
 γ : 𝟙 → Codec    ⊢ γ(∗) : T ⇝ μ
@@ -326,20 +326,35 @@ path, resolved by a precedence between its two readings, which is precisely the 
 and a migrated row behaves _by law_ like a current one at the surface — how the migration achieves
 that is the migration's duty, but that it must is the calculus's.
 
-`nullable`'s two side premises are **null-honesty** — `c` speaks of `NULL` only for `null`, in both
-directions. They too were forced by the proof: a subterm moving `null` onto another member, or
-another member onto `null`, lets the outer `NULL` branch shadow a real value, failing **(R)** in one
-direction and **(MP)** in the other. Every term of this calculus is null-honest except what `custom`
-or an ill-chosen `held` iso can build — and `nullable` itself is, which is what makes the
-idempotence of §6 lawful rather than lucky.
+`nullable` carries **no side premise**, and that is worth stating because it once carried two. The
+danger is real — a subterm moving `null` onto another member, or another member onto `null`, would
+let the wrapper's `NULL` branch shadow a real value, failing **(R)** in one direction and **(MP)**
+in the other — and the fix is not a premise but the wrapper's own definition. `nullable(c)` adds the
+null point **unless `c` already owns it**, asked of both halves at once:
 
-Null-honesty is not a new kind of condition. `nullable(c)` is structurally the two-option union
-`union(c, ⟨NULL⟩-point)`, and the two premises are exactly that pair's §5 side conditions —
-write-honesty is uniqueness of admission on the way in, read-honesty on the way out. The soundness
-proof of §5 closes the `nullable` case on precisely those premises and nothing else.
+```
+owns(c)  ⟺  null ∈ dom(e_c)  ∨  ⟨NULL, ∗⟩ ∈ dom(p_c)
+```
+
+Where `owns(c)`, the pair is `c`'s untouched. Where it does not, `c` reaches neither end of the null
+point, and then **null-honesty is a theorem rather than an assumption**: if `e_c` wrote
+`⟨NULL, ∗⟩`, **(R)** would make `p_c` read it straight back, and `owns(c)` would hold; if `p_c` read
+some attribute to `null`, **(C)** would make `e_c` write the point, and `owns(c)` would hold again.
+Both hypotheses are refuted, not required.
+
+The guard must be **joint**. Asked per side, `c` could decline to write `null` while still reading
+`⟨NULL, ∗⟩` — the null point's two ends would belong to different options, the round trip would go
+out through one and back through the other, and **(R)** would break with nothing looking ambiguous
+on either side taken alone.
+
+None of this is a new kind of condition. `nullable(c)` is structurally the two-option union
+`union(c, ⟨NULL⟩-point)`, the honesty conditions were exactly that pair's §5 side conditions —
+uniqueness of admission on the way in, on the way out — and the guard is what makes them hold
+instead of demanding that they do.
 
 `(null)` above makes `union(c, null)` a term, so both spellings exist — and the relation between
-them is a **dichotomy**, not a trade-off:
+them is a **dichotomy**, not a trade-off. It is now the wrapper's definition rather than a result
+about it:
 
 - where `c` does not touch the null point — `e_c(null)` and `p_c(⟨NULL, ∗⟩)` both undefined —
   `nullable(c)` and `union(c, null)` are the **same codec**;
@@ -352,12 +367,16 @@ nothing a schema would want. (The two are also `≡` unconditionally; they
 differ as codecs only in definedness, and only where the wrapper is redundant. The single term
 outside both readings is `nullable(null)` — member `⊤` over the `NULL` point, of no use.)
 
-This is recorded because it bears on whether `nullable` should be a term at all. It earns its
-place as **surface syntax**, and the honesty premises it carries are the price of _not_ going
-through `(U)` — where `union(c, null)` is discharged at the declaration by kind disjointness for
-every `c` whose `κ` is not `⊤`, `nullable(c)`'s two premises have no discharger. The argument for
-keeping it primitive is compatibility and the `κ = ⊤` cases (`held`, `custom`, `lazy`), not
-expressiveness: it expresses nothing new.
+Which settles what `nullable` is: **sugar** — idempotent insertion of the null option into a pair
+that may already have it. It expresses nothing new, it costs no premise, and its idempotence is a
+property of insertion rather than a fact about `𝟙`. The one term outside both branches of the
+dichotomy is `nullable(null)`, which under the guard is simply `null`.
+
+It is kept as a term for compatibility, and no longer for the reason once given here. That reason
+was the `κ = ⊤` cases — `held`, `custom`, `lazy` — where `union(c, null)` has no discharger and
+`nullable(c)` had explicit premises instead. But no discharger means an **obligation**, not a
+refusal (§5): `union(c, null)` is derivable for a `κ = ⊤` subterm and carries **(U)** per input,
+which is what the honesty premises were doing by hand.
 
 ---
 
@@ -682,9 +701,12 @@ every `(union)` in the derivation carries **(U)** _where the union acts_ as an o
 the dischargers of this section settle at the declaration wherever they decide a pair — `(dunion)`
 and `opaque` outright.
 
-Four premises in §3–§4 — `ran(r) ⊆ dom(e)` and coherence on `(legacy)`, null-honesty on
-`(nullable)`, `v(∗) ∈ dom(e)` on `(fallback)` — exist because this proof failed without them. That
-is the theorem earning its keep: each names a term the calculus used to derive and the laws refuse.
+Three premises in §3–§4 — `ran(r) ⊆ dom(e)` and coherence on `(legacy)`, `v(∗) ∈ dom(e)` on
+`(fallback)` — exist because this proof failed without them. That is the theorem earning its keep:
+each names a term the calculus used to derive and the laws refuse. A fourth, null-honesty on
+`(nullable)`, was one of them until the wrapper's guard (§3) made it a consequence of lawfulness;
+that is the better outcome, and the only one of the four available, since the other three constrain
+functions the caller supplies.
 
 **Member agreement, recursively.** §2 states **(MP)** per attribute "and recursively"; the proof
 needs that as a relation. Define `a ≼ a′` by recursion on `a`:
@@ -743,17 +765,25 @@ is licensed to break, and no further — `e(r(a))` is canonical, so the breach d
 own round trip, which is the precise sense in which a migrated row behaves like a current one from
 the first rewrite on.
 
-_nullable._ `e`: `null ↦ ⟨NULL, ∗⟩`, else `e_c`; `p`: `⟨NULL, ∗⟩ ↦ null`, else `p_c`. The two
-honesty premises are one per direction. **(R)** at `null` is immediate; at `t ≠ null`,
-`e_c(t) ≠ ⟨NULL, ∗⟩` by write-honesty, so the outer `NULL` branch cannot shadow the reading — drop
-the premise and `nullable(held(nullable(string), f, g))`, with `f` moving a sentinel onto `null`,
-encodes the sentinel as `⟨NULL, ∗⟩` and reads back `null`. **(C)**: `⟨NULL, ∗⟩` round-trips; else
-`p_c(a) ≠ null` by read-honesty (`a`'s member is not `NULL`), so the `e_c` branch answers, defined
-by the premise's **(C)**. `≼` at `⟨NULL, ∗⟩` is exact; elsewhere it is the hypothesis —
-read-honesty is what rules out a non-`NULL` attribute reading to `null` and re-encoding as
-`⟨NULL, ∗⟩`, the member change **(MP)** exists to refuse. Both honesty conditions hold _of_
-`nullable(c)` itself, so `nullable(nullable(c))` is derivable and §6's idempotence is an equation
-rather than an accident.
+_nullable._ Two cases, by the guard of §3, and neither carries a premise.
+
+Where `owns(c)`, the pair _is_ `c`'s — `e = e_c`, `p = p_c` — and all four laws are the
+hypothesis, restated at a `⊤` index where **(W)** is vacuous.
+
+Where it does not, `e`: `null ↦ ⟨NULL, ∗⟩`, else `e_c`; `p`: `⟨NULL, ∗⟩ ↦ null`, else `p_c` — and
+what were the honesty premises are now available as facts. **(R)** at `null` is immediate; at
+`t ≠ null`, `e_c(t) ≠ ⟨NULL, ∗⟩`, because if it were, the hypothesis's **(R)** would give
+`p_c(⟨NULL, ∗⟩) = t` and `owns(c)` would hold. So the `NULL` branch cannot shadow the reading —
+without the guard, `nullable(held(nullable(string), f, g))` with `f` moving a sentinel onto `null`
+would encode the sentinel as `⟨NULL, ∗⟩` and read back `null`; with it, the inner `nullable` owns
+the point and the outer one adds nothing. **(C)**: `⟨NULL, ∗⟩` round-trips; else `p_c(a) ≠ null`,
+because if it were, the hypothesis's **(C)** would put `null` in `dom(e_c)` and `owns(c)` would
+hold, so the `e_c` branch answers. `≼` at `⟨NULL, ∗⟩` is exact; elsewhere it is the hypothesis, and
+what rules out a non-`NULL` attribute reading to `null` and re-encoding as `⟨NULL, ∗⟩` — the member
+change **(MP)** exists to refuse — is the same fact.
+
+`owns(nullable(c))` always, so the second case never nests: §6's idempotence is the construction,
+not an equation the proof has to earn.
 
 _custom._ The laws are the premises, verbatim; **(W)** is vacuous at `⊤`.
 
@@ -852,7 +882,7 @@ everywhere both are defined.
 | `union(c) ≡ c`                                                        | Choice of one.                                                                                                                                                                                                                |
 | `union(c₁, union(c₂, c₃)) ≡ union(c₁, c₂, c₃)`                        | Associative, where both sides satisfy (D) — and only on inputs satisfying (U): an ambiguity _inside_ the nested option fails locally on the left, where the outer union may still resolve, and globally on the right. |
 | `union(c₁ … cₙ) ≡ union(c_σ(1) … c_σ(n))` for any permutation `σ`     | Commutative: resolution is unique admission (§5), never declaration order.                                                                                                                                                    |
-| `nullable(nullable(c)) ≡ nullable(c)`                                 | Idempotent: the value language has one null, so the outer `𝟙` is the only one ever written or read — lawful because `nullable` is itself null-honest (§3).                                                                    |
+| `nullable(nullable(c)) ≡ nullable(c)`                                 | Idempotent, by construction: `nullable` inserts the null option unless the pair has it, and after one insertion it has it. The value language has one null, so there is nothing for a second `𝟙` to be.                       |
 | `μ(w(c)) = μ(c)` for `w ∈ {held, refine, legacy, optional, fallback}` | Wrappers preserve the member — a field's member is its attribute's (§4). What keeps a key's attribute type stable under refactoring.                                                                                          |
 
 ### Do not hold
@@ -889,7 +919,7 @@ its prism); one **agreeing read-extension** (`legacy`); three **products** — p
 `tuple`), keyed (`record`, `object`), quotiented (`set`) — all instances of one traversal argument;
 one **sum** (`union`), resolved by unique admission, with `(dunion)` and `opaque` the two whose (U)
 is a theorem; and a **fixpoint** (`lazy`, and `opaque` again). Fields are the keyed product's
-presence decoration, and `nullable` is a sum in precedence clothing (§3). That is the divisible /
+presence decoration, and `nullable` is that sum's guarded insertion (§3) rather than a term of its own. That is the divisible /
 decidable [4] skeleton, read invariantly because both directions are present at once.
 
 ---

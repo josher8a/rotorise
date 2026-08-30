@@ -106,7 +106,7 @@ def denote : Nat → Term → Codec
     | .held inner f g => (denote fuel inner).through f g
     | .refine inner q => (denote fuel inner).restrict q
     | .legacy inner r => (denote fuel inner).extendRead r
-    | .nullable inner => (denote fuel inner).orNull
+    | .nullable inner => (denote fuel inner).withNull
     | .lazy inner =>
         -- `(lazy)` concludes `⊤`: the pair is the thunk's, the member is not.
         { denote fuel inner with μ := none }

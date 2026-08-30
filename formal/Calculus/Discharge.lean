@@ -285,9 +285,18 @@ theorem κ_sound : ∀ (fuel : Nat) (t : Term) {ks : List Kind} {v a},
       -- subterm's, and `orNull` sends every non-`null` value straight to it
       replace hκ : (κ t').map (Kind.null :: ·) = some ks := hκ
       obtain ⟨ks', hκt, rfl⟩ := Option.map_eq_some'.mp hκ
-      cases v
-      case null => exact List.mem_cons_self _ _
-      all_goals exact List.mem_cons_of_mem _ (κ_sound fuel t' hκt he)
+      cases hw : (denote fuel t').ownsNull with
+      | true =>
+        -- the guard declined: the wrapper writes exactly what the subterm writes
+        rw [show (denote (fuel+1) (.nullable t')).e = (denote fuel t').e from
+          withNull_e_of_owns hw] at he
+        exact List.mem_cons_of_mem _ (κ_sound fuel t' hκt he)
+      | false =>
+        rw [show denote (fuel+1) (.nullable t') = (denote fuel t').withNull from rfl,
+          withNull_eq_orNull hw] at he
+        cases v
+        case null => exact List.mem_cons_self _ _
+        all_goals exact List.mem_cons_of_mem _ (κ_sound fuel t' hκt he)
     | union opts =>
       -- `union`'s `⋃`: the kind is the admitting option's, and `κList` contains it
       obtain ⟨o, ho, -, hoe⟩ := altCodec_e_admits he

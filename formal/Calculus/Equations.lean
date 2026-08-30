@@ -86,8 +86,8 @@ theorem denoteω_refine (t : Term) (q : Value → Bool) :
 theorem denoteω_legacy (t : Term) (r : Attr → Option Value) :
     denoteω (.legacy t r) = (denoteω t).extendRead r := rfl
 
-/-- `nullable` denotes `orNull`. -/
-theorem denoteω_nullable (t : Term) : denoteω (.nullable t) = (denoteω t).orNull := rfl
+/-- `nullable` denotes `withNull` — `orNull` behind §3's guard. -/
+theorem denoteω_nullable (t : Term) : denoteω (.nullable t) = (denoteω t).withNull := rfl
 
 /-- `union` denotes `altCodec`, over the options' semantics and their unanimous member. -/
 theorem denoteω_union (opts : List Term) :
@@ -135,6 +135,23 @@ theorem equiv_orNull_idem (c : Codec) : Codec.Equiv c.orNull.orNull c.orNull := 
     exact Option.some.inj (h.symm.trans h')
   · intro a v v' h h'
     rw [orNull_p_idem] at h
+    exact Option.some.inj (h.symm.trans h')
+
+/-- §6's idempotence, for the guarded wrapper. `withNull_idem_e`/`_p` are the pair
+    equalities behind it, and they hold *by construction* rather than by null-honesty. -/
+theorem equiv_withNull_idem (c : Codec) : Codec.Equiv c.withNull.withNull c.withNull := by
+  refine ⟨?_, rfl, ?_, ?_⟩
+  · intro v
+    constructor
+    · rintro (h | h)
+      · exact h
+      · exact Or.inr h
+    · exact Or.inl
+  · intro v a a' h h'
+    rw [withNull_idem_e] at h
+    exact Option.some.inj (h.symm.trans h')
+  · intro a v v' h h'
+    rw [withNull_idem_p] at h
     exact Option.some.inj (h.symm.trans h')
 
 private theorem filterV_null {c : Codec} :
@@ -709,7 +726,7 @@ theorem denoteω_legacy_eq_on_can (t : Term) (r : Attr → Option Value)
 /-- §6: `nullable(nullable(c)) ≡ nullable(c)`. -/
 theorem equiv_denoteω_nullable_idem (t : Term) :
     Codec.Equiv (denoteω (.nullable (.nullable t))) (denoteω (.nullable t)) :=
-  equiv_orNull_idem _
+  equiv_withNull_idem _
 
 /-- §6: `μ(w(c)) = μ(c)` for the three codec wrappers. The two field wrappers are
     `optional_μ` and `fallback_μ`, which are already stated over a denotation. -/

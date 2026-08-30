@@ -2057,6 +2057,108 @@ theorem Lawful.orNull {c : Codec} (h : Lawful c) (hn : NullHonest c) :
         · exact absurd (hn.2 _ _ hc rfl) ha
         · exact h.agree hc hc' }
 
+/-! ### `nullable`, as the sugar it is
+
+§3 gives `nullable(c)` a dichotomy: where `c` does not touch the null point it *is*
+`union(c, ⟨NULL⟩-point)`, and where `c` does touch it the wrapper adds nothing at all.
+`withNull` makes that the *definition* — add the point unless it is already there — and
+the two honesty premises stop being premises. They were doing (U)'s job for a
+two-option sum by hand; the guard lets lawfulness do it instead. -/
+
+/-- Where `c` does not own the null point, neither half can reach it. -/
+theorem ownsNull_false {c : Codec} (hn : c.ownsNull = false) :
+    c.e .null = none ∧ c.p .null = none := by
+  simp only [Codec.ownsNull, Bool.or_eq_false_iff] at hn
+  constructor
+  · cases h : c.e .null with
+    | none => rfl
+    | some _ => rw [h] at hn; exact nomatch hn.1
+  · cases h : c.p .null with
+    | none => rfl
+    | some _ => rw [h] at hn; exact nomatch hn.2
+
+/-- **§3's null-honesty is a consequence, not a premise.** Under the guard, a lawful `c`
+    cannot write `⟨NULL, ∗⟩` — (R) would make it read the point straight back — and
+    cannot read to `null` — (C) would make it write the point. Both hypotheses are
+    refuted rather than assumed. -/
+theorem nullHonest_of_not_ownsNull {c : Codec} (h : LawfulCore c)
+    (hn : c.ownsNull = false) : NullHonest c := by
+  obtain ⟨he, hp⟩ := ownsNull_false hn
+  refine ⟨fun v a hv hz => ?_, fun a v hv hz => ?_⟩
+  · subst hz; rw [h.retract hv] at hp; exact nomatch hp
+  · subst hz
+    have hc := h.canon hv
+    rw [he] at hc; exact nomatch hc
+
+/-- §3 `(nullable)`: add the null point unless `c` already owns it. `T` and `μ` do not
+    depend on the guard — the rule concludes `T + 𝟙 ⇝ ⊤` either way; only the pair moves. -/
+def Codec.withNull (c : Codec) : Codec :=
+  { T := fun v => c.T v ∨ v = .null
+    μ := none
+    e := if c.ownsNull then c.e else fun v => match v with | .null => some .null | _ => c.e v
+    p := if c.ownsNull then c.p else fun a => match a with | .null => some .null | _ => c.p a }
+
+/-- Where `c` does not own the point, the wrapper *is* `orNull` — §3's first branch. -/
+theorem withNull_eq_orNull {c : Codec} (h : c.ownsNull = false) : c.withNull = c.orNull := by
+  simp only [Codec.withNull, Codec.orNull, h, if_false, Bool.false_eq_true]
+
+/-- …and where it does, the wrapper adds nothing to the pair — §3's second branch,
+    `orNull_eq_self` made definitional. -/
+theorem withNull_e_of_owns {c : Codec} (h : c.ownsNull = true) : c.withNull.e = c.e := by
+  simp only [Codec.withNull, h, if_true]
+
+theorem withNull_p_of_owns {c : Codec} (h : c.ownsNull = true) : c.withNull.p = c.p := by
+  simp only [Codec.withNull, h, if_true]
+
+/-- §3 `(nullable)` keeps the core laws, with **no** honesty premise. -/
+theorem lawfulCore_withNull {c : Codec} (h : LawfulCore c) :
+    LawfulCore c.withNull := by
+  cases hw : c.ownsNull with
+  | false => exact withNull_eq_orNull hw ▸ h.orNull (nullHonest_of_not_ownsNull h hw)
+  | true =>
+    exact { retract := fun he => by
+              rw [withNull_p_of_owns hw]; rw [withNull_e_of_owns hw] at he; exact h.retract he
+            canon := fun hp => by
+              rw [withNull_e_of_owns hw]; rw [withNull_p_of_owns hw] at hp; exact h.canon hp
+            writes := fun hμ => nomatch hμ }
+
+/-- …and the full laws, likewise premise-free. -/
+theorem lawful_withNull {c : Codec} (h : Lawful c) : Lawful c.withNull := by
+  cases hw : c.ownsNull with
+  | false =>
+    exact withNull_eq_orNull hw ▸ h.orNull (nullHonest_of_not_ownsNull h.core hw)
+  | true =>
+    exact { lawfulCore_withNull h.core with
+            agree := fun hp he => by
+              rw [withNull_p_of_owns hw] at hp; rw [withNull_e_of_owns hw] at he
+              exact h.agree hp he }
+
+/-- The carrier survives the guard: the held set gains the null point in both branches. -/
+theorem carrier_withNull {c : Codec} (h : Carrier c) : Carrier c.withNull := by
+  cases hw : c.ownsNull with
+  | false => exact withNull_eq_orNull hw ▸ carrier_orNull h
+  | true =>
+    exact { domE := fun he => by rw [withNull_e_of_owns hw] at he; exact Or.inl (h.domE he)
+            ranP := fun hp => by rw [withNull_p_of_owns hw] at hp; exact Or.inl (h.ranP hp) }
+
+/-- §6's idempotence row, **by construction**: the wrapper's own point makes the second
+    insertion find it present, so the pair is untouched. It needed null-honesty to be
+    lawful; now it needs nothing. -/
+theorem withNull_ownsNull {c : Codec} : c.withNull.ownsNull = true := by
+  cases hw : c.ownsNull with
+  | false =>
+    have he : c.withNull.e .null = some .null := by simp [Codec.withNull, hw]
+    simp [Codec.ownsNull, he]
+  | true =>
+    rw [Codec.ownsNull, withNull_e_of_owns hw, withNull_p_of_owns hw]
+    exact hw
+
+theorem withNull_idem_e {c : Codec} : c.withNull.withNull.e = c.withNull.e :=
+  withNull_e_of_owns withNull_ownsNull
+
+theorem withNull_idem_p {c : Codec} : c.withNull.withNull.p = c.withNull.p :=
+  withNull_p_of_owns withNull_ownsNull
+
 /-! ## Lawfulness — the open frontier (README roadmap) -/
 
 /-! ### Payload facts for the quotiented product -/

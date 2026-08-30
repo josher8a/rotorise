@@ -63,7 +63,7 @@ def Obligations : Nat → Term → Prop
       (∀ t' ∈ ts, Obligations fuel t') ∧ (∀ t' ∈ tail, Obligations fuel t')
     | .held t' f g => Obligations fuel t' ∧ IsoCancels (denote fuel t') f g
     | .legacy t' r => Obligations fuel t' ∧ ReadsCoherently (denote fuel t') r
-    | .nullable t' => Obligations fuel t' ∧ NullHonest (denote fuel t')
+    | .nullable t' => Obligations fuel t'
     | .lazy t' => Obligations fuel t'
     | .custom ce cp =>
       Lawful { T := fun v => (ce v).isSome, μ := none, e := ce, p := cp }
@@ -129,9 +129,12 @@ theorem held {fuel t f g} (h : Obligations (fuel+1) (.held t f g)) :
 theorem legacy {fuel t r} (h : Obligations (fuel+1) (.legacy t r)) :
     Obligations fuel t ∧ ReadsCoherently (denote fuel t) r := h
 
-/-- §3 `(nullable)`: the subterm's premises, and null-honesty in both directions. -/
+/-- §3 `(nullable)`: the subterm's premises, and **nothing else**. Null-honesty was the
+    other half of this until the wrapper's guard made it derivable
+    (`nullHonest_of_not_ownsNull`) — one of the four premises §5's theorem levied, now
+    paid by lawfulness instead. -/
 theorem nullable {fuel t} (h : Obligations (fuel+1) (.nullable t)) :
-    Obligations fuel t ∧ NullHonest (denote fuel t) := h
+    Obligations fuel t := h
 
 /-- §3 `(custom)`: the escape hatch proves §2's laws for itself. -/
 theorem custom {fuel ce cp} (h : Obligations (fuel+1) (.custom ce cp)) :
@@ -548,8 +551,7 @@ theorem soundness_both : ∀ (fuel : Nat) {t T μ}, Typed t T μ → Obligations
       exact sound_wrap (t := t') (ih h' hob.1) (LawfulCore.through · hob.2)
         (Lawful.through · hob.2)
     | @nullable t' T' μ' h' =>
-      exact sound_wrap (t := t') (ih h' hob.1) (LawfulCore.orNull · hob.2)
-        (Lawful.orNull · hob.2)
+      exact sound_wrap (t := t') (ih h' hob) lawfulCore_withNull lawful_withNull
     | @legacy t' T' μ' r h' =>
       -- (MP) is off here by design: `MPOk` is `False` at a `legacy`, so the second
       -- half is vacuous and only the core laws survive. §5's first residue.
@@ -928,7 +930,7 @@ theorem carrier_denote : ∀ (fuel : Nat) {t T μ}, Typed t T μ → Obligations
     | @legacy t' T' μ' r h' =>
       exact carrier_extendRead (carrier_denote fuel h' hob.1) hob.2.1
     | @nullable t' T' μ' h' =>
-      exact carrier_orNull (carrier_denote fuel h' hob.1)
+      exact carrier_withNull (carrier_denote fuel h' hob)
     | @lazy γ T' μ' h' =>
       have ih := carrier_denote fuel h' hob.lazy
       exact ⟨fun he => ih.domE he, fun hp => ih.ranP hp⟩

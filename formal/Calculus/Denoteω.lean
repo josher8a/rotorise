@@ -44,7 +44,7 @@ def denoteω : Term → Codec
   | .held inner f g => (denoteω inner).through f g
   | .refine inner q => (denoteω inner).restrict q
   | .legacy inner r => (denoteω inner).extendRead r
-  | .nullable inner => (denoteω inner).orNull
+  | .nullable inner => (denoteω inner).withNull
   -- `(lazy)` concludes `⊤`: the pair is the thunk's, the member is not.
   | .lazy inner => { denoteω inner with μ := none }
   | .custom ce cp => { T := fun v => (ce v).isSome, μ := none, e := ce, p := cp }
