@@ -98,6 +98,15 @@ rests on it. -/
 input, keep the options' label sets disjoint. `uniqueAdmission_of_kinds` and
 `uniqueAdmission_byTag` are its two instances. -/
 
+#assert_axioms uniqueAdmission_of_disjoint
+#assert_axioms filter_eq_singleton_of_disjoint
+#assert_axioms admitV_kind
+#assert_axioms admitV_adm
+#assert_axioms admitA_member
+#assert_axioms admitA_admA
+#assert_axioms SVof_disjoint
+#assert_axioms SAof_disjoint
+#assert_axioms uAtCan_of_separated
 #assert_axioms uniqueAdmission_of_labels
 #assert_axioms uniqueAdmission_of_kinds
 #assert_axioms uniqueAdmission_byTag

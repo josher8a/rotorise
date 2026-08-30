@@ -488,23 +488,22 @@ a stored member, a runtime kind, a discriminator's tag — and give each option 
 answers to. Where those sets are pairwise disjoint, no input can reach two options, because the
 label is a property of the _input_ and lands in at most one set. That is the whole argument.
 
-There are **six** such projections in the table, not four, because the first two rows each offer a
-choice: `μ` or `admA` on the readable side, `κ` or `adm` on the writable one. The choice is made per
-_pair_, and a different pair may make it differently — which is not a weakening of the scheme but an
-instance of it, taken at the **product** of the two projections. Disjointness in a product is
-disjointness in either factor:
+Said more directly, without projections at all: **each option gets one set of values it may write
+and one set of attributes it may read, and separation is disjointness of those two families.** A
+projection is a way of _building_ such a set — `κ` gives the values whose kind it allows, `μ` the
+attributes whose member it allows, a discriminator's tag the items carrying one of its tags — and
+`adm`/`admA` are the sets themselves, the finest the table has.
 
-```
-(S₁ × T₁) ∩ (S₂ × T₂)  =  (S₁ ∩ S₂) × (T₁ ∩ T₂)     empty  ⟺  either factor's is
-```
+Read that way the first two rows stop offering a _choice_. "Disjoint kinds **or** disjoint `adm`" is
+a pairwise question; asked per option instead, the two constraints simply **intersect** — an option
+may write `v` only if `κ` allows its kind _and_ `adm` allows the value. Disjointness of the
+intersections follows from disjointness in either constraint, so the disjunction is what makes the
+families disjoint, not a second mechanism. The two families are also independent, which is the point
+the pairwise reading obscures: the writable side may be separated by a kind while the readable side
+is separated by a member, and nothing has to reconcile the two.
 
-so "distinct members _or_ disjoint `admA`" is exactly disjointness of the `(μ, admA)` labelling, and
-the disjunction is bookkeeping rather than a second mechanism.
-
-Note also that `adm` and `admA` are the projections taken at the **identity** — an input's label is
-the input — which is why they are the finest the table has and why nothing separates a pair they
-cannot. What is left to distinguish the rows is one thing only: whether the projection is defined on
-_both_ sides of the pair. `μ` and `admA` label attributes; `κ` and `adm` label values; only a
+What is left to distinguish the rows is one thing only: whether a row constrains _both_ families or
+one. `μ` and `admA` label attributes; `κ` and `adm` label values; only a
 discriminator's tag and §1's kind label both — which is exactly why only those two settle **(U)**
 outright and the first two have to be combined.
 

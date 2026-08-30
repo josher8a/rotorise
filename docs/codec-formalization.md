@@ -596,6 +596,42 @@ declaration where two options are both `κ`-free, or give `held` a write-side `�
 carrier — and §1's `Value` is what would have to change for the second. `codec.uniqueadmission.spec.ts`
 carries the measurement as four assertions.
 
+### One where the abstraction was still one level too high
+
+The entry below unified §5's two *outright* dischargers as one theorem at two projections. The user
+read the leftover friction as evidence the abstraction was wrong rather than incomplete, and it was:
+three things kept not fitting, and all three had the same cause.
+
+**The projection did not belong in the lemma.** `filter_eq_singleton_of_labels` took a projection
+`key : α → Option ι` and label sets `Ss : List (ι → Prop)`. Strip both and what remains is the
+actual content — *disjoint subsets of the carrier*:
+
+    filter_eq_singleton_of_disjoint
+      Forall₂ (fun o S => ∀ y, adm o y = true → S y) os Ss →
+      Pairwise (fun S T => ∀ y, S y → ¬ T y) Ss → …
+
+The label form is now this plus a pullback, which is a *construction*, not a condition.
+
+**One label type for two sides was the second mistake.** `OptionSem.Labelled` shares an `L` between
+the value side and the attribute side. Tags share one (`String`), kinds share one (`Kind`) — but
+`κ`/`μ` do not, and that mismatch is exactly why §5's first two rows resisted every attempt to join
+them, and why the previous entry had to reach for a *product of projections* to make them fit.
+`uniqueAdmission_of_disjoint` takes the two families separately, and the mismatch disappears.
+
+**The pairwise disjunction was the third.** `SepV` offers a disjoint kind *or* a disjoint admissible
+set, per pair. Asked per option, the two constraints just intersect: `SVof t v` is "`κ` allows the
+kind and `adm` allows the value". Disjointness of intersections follows from disjointness in either
+factor, so `SepV`/`SepA` are precisely what makes the families pairwise disjoint.
+
+**What it bought.** `uAtCan_of_separated` was sixty lines containing the same fourteen-line exclusion
+argument twice — once through `admitV_kind`/`admitV_adm`, once through
+`admitA_member`/`admitA_admA`. It is now a single appeal to `uniqueAdmission_of_disjoint` with five
+short goals, and neither side has an argument of its own. Unfolding tics 259 → 255.
+
+The methodological point is worth keeping. The refactor before this one worked and left friction;
+the friction was not the cost of abstracting, it was the abstraction naming the wrong things. A
+projection and a shared label type are *presentations* of separation. Disjoint sets are separation.
+
 ### One where four dischargers were one theorem
 
 §5's discharger table lists four conditions, and the two marked *outright* — tag disjointness for

@@ -725,67 +725,75 @@ theorem not_sepA_literal_heldLiteral (f g : Value → Value) :
   · cases hx; cases hy; exact hne rfl
   · exact absurd (hdisj (.s "A") rfl) (by simp [admA])
 
-/-- §5's dischargers, combined: pairwise separation on each side of the pair, and
-    closed options admitting their own canonicals — so admission is unique at every
-    canonical input, which is exactly the theorem's residue `UAtCan`. Every premise is
-    decidable from the syntax except lawfulness, which soundness supplies. -/
+/-! ### Separation, as one set per option per side
+
+    `SepV` and `SepA` each offer a *choice* — a disjoint kind or a disjoint admissible
+    set, a distinct member or a disjoint `admA` — and the choice is made per pair. That
+    shape is an artifact of asking the question pairwise. Asked per *option*, the two
+    sources of constraint simply **intersect**: an option admits a value only if `κ`
+    allows its kind and `adm` allows the value. Disjointness of the intersections is
+    implied by disjointness in either factor, so `SepV` and `SepA` are exactly what makes
+    these families pairwise disjoint — and `uniqueAdmission_of_disjoint` finishes it,
+    once, for both sides. -/
+
+/-- What `κ` and `adm` between them allow an option to write. -/
+def SVof (t : Term) : Value → Prop :=
+  fun v => (∀ ks, κ t = some ks → Value.kind v ∈ ks) ∧ adm t v = true
+
+/-- What `μ` and `admA` between them allow an option to read. -/
+def SAof (t : Term) : Attr → Prop :=
+  fun a => (∀ μ, μSyn t = some μ → a.member = μ) ∧ admA t a = true
+
+/-- Admission lands in the value family — `κ` and `adm`'s soundness lemmas, together. -/
+theorem admitV_SVof (fuel : Nat) (t : Term) {v}
+    (h : (optionSemOf (denote fuel t) (specOf t)).admitV v = true) : SVof t v :=
+  ⟨fun _ hκ => admitV_kind fuel t hκ h, admitV_adm fuel t h⟩
+
+/-- …and in the attribute family. Lawfulness is what `μ`'s bridge needs. -/
+theorem admitA_SAof (fuel : Nat) (t : Term) (hlaw : Lawful (denote fuel t)) {a}
+    (h : (optionSemOf (denote fuel t) (specOf t)).admitA a = true) : SAof t a :=
+  ⟨fun _ hμ => admitA_member fuel t hμ hlaw h, admitA_admA fuel t h⟩
+
+/-- **§5's `SepV` is disjointness of the value families.** Either disjunct gives it,
+    because a disjoint factor makes the intersection disjoint. -/
+theorem SVof_disjoint {x y : Term} (h : SepV x y) : ∀ v, SVof x v → ¬ SVof y v := by
+  rintro v ⟨hkx, hax⟩ ⟨hky, hay⟩
+  rcases h with ⟨kx, ky, hkxe, hkye, hne⟩ | hdisj
+  · exact hne _ (hkx kx hkxe) (hky ky hkye)
+  · rw [hdisj v hax] at hay; exact nomatch hay
+
+/-- …and `SepA` of the attribute families. -/
+theorem SAof_disjoint {x y : Term} (h : SepA x y) : ∀ a, SAof x a → ¬ SAof y a := by
+  rintro a ⟨hmx, hax⟩ ⟨hmy, hay⟩
+  rcases h with ⟨μx, μy, hμx, hμy, hne⟩ | hdisj
+  · exact hne ((hmx μx hμx).symm.trans (hmy μy hμy))
+  · rw [hdisj a hax] at hay; exact nomatch hay
+
+/-- §5's dischargers, combined: pairwise separation on each side of the pair, and closed
+    options admitting their own canonicals — so admission is unique at every canonical
+    input, which is exactly the theorem's residue `UAtCan`. Every premise is decidable
+    from the syntax except lawfulness, which soundness supplies.
+
+    The proof is now one appeal to `uniqueAdmission_of_disjoint`: the two families are
+    `SVof`/`SAof`, their disjointness is what `SepV`/`SepA` say, and neither side needs an
+    argument of its own. -/
 theorem uAtCan_of_separated (fuel : Nat) {opts : List Term}
     (hlaw : ∀ t ∈ opts, Lawful (denote fuel t))
     (hcl : ∀ t ∈ opts, ∀ fields tr, t ≠ .object fields (.codec tr))
     (hV : List.Pairwise SepV opts)
     (hA : List.Pairwise SepA opts) :
     UAtCan fuel opts := by
-  intro o ho t a he
-  simp only [semsOf, List.mem_map] at ho
-  obtain ⟨tx, htx, rfl⟩ := ho
-  rw [optionSemOf_c] at he
-  obtain ⟨hVx, hAx⟩ := optionSem_self_admit fuel tx (hcl tx htx) (hlaw tx htx) he
-  constructor
-  · show ((opts.map fun t' => optionSemOf (denote fuel t') (specOf t')).filter
-      (·.admitA a)) = [optionSemOf (denote fuel tx) (specOf tx)]
-    refine filter_map_singleton _ _ opts ?_ tx htx hAx
-    refine pairwise_imp_mem ?_ hA
-    intro x hx y hy hxy
-    -- one exclusion argument, used in both directions
-    have key : ∀ u v, SepA u v → u ∈ opts → v ∈ opts →
-        (optionSemOf (denote fuel u) (specOf u)).admitA a = true →
-        (optionSemOf (denote fuel v) (specOf v)).admitA a = false := by
-      intro u v hs hu hv hau
-      cases hav : (optionSemOf (denote fuel v) (specOf v)).admitA a with
-      | false => rfl
-      | true =>
-        rcases hs with ⟨μu, μv, hμu, hμv, hne⟩ | hdisj
-        · exact absurd ((admitA_member fuel u hμu (hlaw u hu) hau).symm.trans
-            (admitA_member fuel v hμv (hlaw v hv) hav)) hne
-        · have hav' := admitA_admA fuel v hav
-          rw [hdisj a (admitA_admA fuel u hau)] at hav'
-          exact nomatch hav'
-    refine ⟨key x y hxy hx hy, fun hay => ?_⟩
-    cases hax : (optionSemOf (denote fuel x) (specOf x)).admitA a with
-    | false => rfl
-    | true => rw [key x y hxy hx hy hax] at hay; exact nomatch hay
-  · show ((opts.map fun t' => optionSemOf (denote fuel t') (specOf t')).filter
-      (·.admitV t)) = [optionSemOf (denote fuel tx) (specOf tx)]
-    refine filter_map_singleton _ _ opts ?_ tx htx hVx
-    refine pairwise_imp_mem ?_ hV
-    intro x hx y hy hxy
-    have key : ∀ u v, SepV u v →
-        (optionSemOf (denote fuel u) (specOf u)).admitV t = true →
-        (optionSemOf (denote fuel v) (specOf v)).admitV t = false := by
-      intro u v hs hvu
-      cases hvv : (optionSemOf (denote fuel v) (specOf v)).admitV t with
-      | false => rfl
-      | true =>
-        rcases hs with ⟨ku, kv, hku, hkv, hne⟩ | hdisj
-        · exact absurd (admitV_kind fuel v hkv hvv)
-            (hne _ (admitV_kind fuel u hku hvu))
-        · have hvv' := admitV_adm fuel v hvv
-          rw [hdisj t (admitV_adm fuel u hvu)] at hvv'
-          exact nomatch hvv'
-    refine ⟨key x y hxy, fun hvy => ?_⟩
-    cases hvx : (optionSemOf (denote fuel x) (specOf x)).admitV t with
-    | false => rfl
-    | true => rw [key x y hxy hvx] at hvy; exact nomatch hvy
+  refine uniqueAdmission_of_disjoint
+    (SVs := opts.map SVof) (SAs := opts.map SAof) ?_ ?_ ?_ ?_ ?_
+  · rw [semsOf, List.forall₂_map_left_iff, List.forall₂_map_right_iff]
+    exact List.forall₂_same.mpr fun t _ v hv => admitV_SVof fuel t hv
+  · rw [semsOf, List.forall₂_map_left_iff, List.forall₂_map_right_iff]
+    exact List.forall₂_same.mpr fun t ht a ha => admitA_SAof fuel t (hlaw t ht) ha
+  · rw [List.pairwise_map]; exact hV.imp SVof_disjoint
+  · rw [List.pairwise_map]; exact hA.imp SAof_disjoint
+  · refine forall_mem_map fun t ht v a he => ?_
+    rw [optionSemOf_c] at he
+    exact optionSem_self_admit fuel t (hcl t ht) (hlaw t ht) he
 
 /-- The kind/member half on its own — the original disjointness discharger, now a
     corollary of `uAtCan_of_separated`. -/
