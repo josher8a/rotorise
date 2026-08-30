@@ -790,6 +790,33 @@ theorem uAtCan_of_refine_disjoint (fuel : Nat) {base : Term} {qs : List (Value �
         restrict_p.mpr ⟨hlaw.retract hb, hq⟩]
       rfl
 
+/-! ### Literals over a primitive §3 gives no `literal` rule for
+
+    §3 names two `literal` rules, at `S` and at `N`. Nothing makes those two special: a
+    literal over any ground term is `refine(base, ∈ ℓ)`, which is derivable already, and
+    since `adm` now carries `q` and refinements of one base separate on both sides, such a
+    union discharges exactly as a string literal's does. The two rules are the two someone
+    bothered to name, not the two that are possible. -/
+
+/-- A boolean "literal", as the refinement it is. -/
+def isTrueV : Value → Bool := fun v => match v with | .bool b => b | _ => false
+
+/-- …and its complement. -/
+def isFalseV : Value → Bool := fun v => match v with | .bool b => !b | _ => false
+
+/-- It is derivable, with the member the base names — no rule of its own. -/
+theorem typed_boolLiteral : ∃ T, Typed (.refine .boolean isTrueV) T (some .BOOL) :=
+  ⟨_, Typed.refine Typed.boolean⟩
+
+/-- And a union of two discharges on **both** sides, by the same shared-base argument that
+    settles numeric literals — a primitive §3 never wrote a `literal` rule for. -/
+theorem uAtCan_boolLiterals (fuel : Nat) :
+    UAtCan (fuel+2) [Term.refine .boolean isTrueV, Term.refine .boolean isFalseV] := by
+  have h : ∀ v, isTrueV v = true → isFalseV v = false := by
+    intro v hv; cases v <;> simp_all [isTrueV, isFalseV]
+  exact uAtCan_of_refine_disjoint (fuel+1) (qs := [isTrueV, isFalseV])
+    lawful_booleanCodec.core (by simpa using h)
+
 /-- **Where the two literal rules part.** A string literal's stored text *is* its value, so
     `q` is visible on both sides and `admA` carries `ℓ` outright — §5's table separates such
     a union with no help. A numeric literal's is not, so `admA` is `⊤` and the shared base
