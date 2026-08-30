@@ -550,6 +550,7 @@ unions it covers:
 | distinct members, or disjoint `admA`               | the readable side, where the stored attributes differ | `μ`, and `admA` below         |
 | **(K)** — disjoint kinds, or disjoint `ident` sets | the writable side, where the runtime shapes differ    | `κ`, `ident` and `adm`, below |
 | tag disjointness                                   | `(dunion)`, outright — both sides                     | the discriminator literals    |
+| disjoint predicates over one base                  | refinements of a common `c`, outright — both sides    | the predicates `q`            |
 | kind disjointness                                  | `opaque`'s fixpoint (§3), outright                    | one option per kind of §1     |
 
 **Every row is one condition at a different projection.** Fix a partial map from inputs to labels —
@@ -755,6 +756,13 @@ All four partings are forced:
   This is also why `refine` _holds_ `ident` rather than propagating it: a term that checks its own
   set in both directions is the definition of deciding its own membership, and §3 already argues
   the point — a `p` returning the value it read without verifying `q` would break **(C)**.
+
+  The readable side is not lost, though it cannot be recovered from this table. Two refinements of
+  **one base** read an attribute to the _same_ value, so at most one predicate accepts it, and the
+  readable side separates for exactly the reason the writable side does. That is a condition on a
+  _pair sharing a base_ rather than on either option's admissible set, which is why it appears in
+  the discharger table above and not here: `adm` and `admA` answer about one term at a time, and
+  this answer is about two.
 - **`held(c, f, g)`**, and this one parts the other way — the only row where `admA` sees further
   than `adm`. An adapter is opaque on the side its functions gate, and they gate one side only: `f`
   sits in front of `e`, so what the term will *write* is unknowable and `adm` is `⊤`; `g` sits
