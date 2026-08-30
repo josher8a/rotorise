@@ -1151,6 +1151,38 @@ of a declared shape, in a file a reviewer reads — and make the strong choice c
 rows already carry their proof. That is the honest limit, and it is the argument for spending the
 effort on exactness rather than on ceremony around soundness.
 
+### Why the migration is not a rename
+
+With `Adm` proved exact on sixteen rows and sound on all twenty-three, the obvious next step is to
+retire `κ`, `ident`, `adm` and `admA` in its favour. That is **not** a mechanical substitution, and
+the three reasons are worth stating because each is a real gap rather than an inconvenience.
+
+**There was no attribute side.** `Adm` is the value half. `admA` has 63 call sites and `SepA` is
+defined on it, and nothing existed to migrate them onto. `AdmA` now supplies the definition and
+`AdmA_sound` the soundness, so the half exists — but it carries one obligation where `Adm` carries
+two: **exactness for the attribute rows is still unproved.** Until it is, the pair is not
+interchangeable with the tables it would replace.
+
+The mirror is not symmetric either, and the asymmetries are §1's. `number`, `literalN` and a numeric
+`literal` reach their domains through `Double.ofDec`; the row can *call* it, so these are sharper
+than §5's `⊤`, at the cost of being noncomputable. `refine` cannot narrow a read at all — `q` tests
+the value a read produces and no syntactic set of attributes bounds that. `legacy` is `⊤` because
+`extendRead` widens `p` past the subterm's set. Three rows differing in kind, not degree.
+
+**`SepV` uses `κ` structurally, not as a predicate.** Its first disjunct is
+`∃ kx ky, κ x = some kx ∧ κ y = some ky ∧ ∀ k ∈ kx, k ∉ ky` — it needs the *kind list*, and `Adm`
+folds the kind gate in and discards it. The disjunct is arguably subsumed (disjoint kinds give
+disjoint `Adm` wherever the rows are exact), but subsumption is a theorem about the hatch rows too,
+not a substitution.
+
+**`ident` has no counterpart.** `ident_of_adm` is what pins `ident` to anything at all, and with an
+exact `Adm` the notion may well be derivable or unnecessary — but "may well be" is the work, not the
+result.
+
+So the sequence is: exactness for `AdmA`, then `SepV`/`SepA` re-derived on the pair, then the call
+sites. The last of those is mechanical. The first two are not, and doing them in the other order
+would replace four checked recursions with two unchecked ones.
+
 ## §5 Certifying an implementation
 
 The calculus is portable by design: nothing in it is TypeScript, and nothing is Rotorise. An
