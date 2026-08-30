@@ -1335,5 +1335,70 @@ theorem admitA_of_sepJA {x y : Term} (h : ∀ a, AdmA x a = true → AdmA y a = 
   | none => rfl
   | some w => exact absurd (AdmA_sound y hy) (by simp [hAy])
 
+/-! ### `ident`, pinned from below
+
+The section above concluded that `ident` cannot be recovered from the pair and should
+therefore be left alone. That was the wrong conclusion from a correct observation. `ident`
+is a table like the other three, it had never been pinned from below either, and the reason
+it resists the pair is not that it carries something the pair lacks — it is that it carries
+something **nothing** justifies.
+
+`Decides` below is the semantic notion §5's prose describes: two values of the same kind,
+one written and one refused, so that the kind does not settle admission and an admission is
+therefore evidence. Against it, `ident` is neither an over- nor an under-approximation:
+
+* **Too generous.** `refine(string, ⊤)` is `ident` and decides nothing — `q` is checked on
+  both halves and always passes. `ident` cannot see this, because it never looks at `q`.
+* **Too stingy.** `object` with a required field refuses the empty map and writes a
+  populated one, which is deciding by any reading, and `ident` calls it `false`.
+
+And the `refine` row is not an oversight but an artifact: `ident (refine t q) = true`
+unconditionally is what makes `ident_of_adm` go through, since `adm (refine t q)` can refuse
+on `q` alone while `ident t` is `false`. The row exists to satisfy the pinning lemma, not
+because refinements decide.
+
+`ident` cannot be made exact — whether an arbitrary `q : Value → Bool` narrows anything is
+not a syntactic question. What it can be is *honest about which side it errs on*, and at
+present it errs on both. Nothing live depends on it: no `uAtCan_*` consumes it, and
+`admDisj_ident` derives it rather than assuming it. -/
+
+/-- **What "decides its own membership" actually says.** Two values of the *same kind*, one
+    written and one refused: the kind does not settle admission, so an admission is
+    evidence. This is the content §5's `ident` gestures at, stated on the denotation. -/
+def Decides (t : Term) : Prop :=
+  ∃ v w, ((denoteω t).e v).isSome = true ∧ v.kind = w.kind ∧ ((denoteω t).e w).isSome = false
+
+/-- `literalS` decides, as §5 says. -/
+theorem decides_literalS : Decides (.literalS ["A"]) :=
+  ⟨.str "A", .str "B", by simp [denoteω, literalSCodec], rfl,
+   by simp [denoteω, literalSCodec]⟩
+
+/-- `string` does not, as §5 also says. -/
+theorem not_decides_string : ¬ Decides .string := by
+  rintro ⟨v, w, hv, hk, hw⟩
+  cases v <;> cases w <;> simp_all [denoteω, stringCodec, Value.kind]
+
+/-- **`ident` is too generous.** A refinement by the trivially-true predicate is `ident`,
+    and decides nothing: `q` is checked on both halves and always passes, so admission is
+    no evidence at all. `ident` cannot see this, because it does not look at `q`. -/
+theorem ident_refine_top : ident (.refine .string qTop) = true := rfl
+
+theorem not_decides_refine_top : ¬ Decides (.refine .string qTop) := by
+  rintro ⟨v, w, hv, hk, hw⟩
+  cases v <;> cases w <;>
+    simp_all [denoteω, Codec.restrict, stringCodec, qTop, Value.kind]
+
+/-- **And too stingy.** An object with a required field refuses the empty map and writes a
+    populated one — two `map`s differing in admission — while `ident` calls it `false`. -/
+theorem decides_object :
+    Decides (.object [("k", .req .string)] .refuse) := by
+  refine ⟨.map [("k", .str "a")], .map [], ?_, rfl, ?_⟩
+  · simp [denoteω, denoteωF, denoteωR, objectCodec, objectCodecCore, stringCodec,
+          valPresentB, encEntry, denoteωField, rcOf, traverse, FieldSem.codec]
+  · simp [denoteω, denoteωF, denoteωR, objectCodec, objectCodecCore, stringCodec,
+          valPresentB, encEntry, denoteωField, rcOf, traverse, FieldSem.codec]
+
+theorem ident_object : ident (.object [("k", .req .string)] .refuse) = false := rfl
+
 end
 end Calculus

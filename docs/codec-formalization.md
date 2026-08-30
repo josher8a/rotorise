@@ -1231,11 +1231,30 @@ rather than asserted. `SepJV` is a *weaker* statement than `SepV` — the joint 
 so disjointness is easier to satisfy — but `Adm_sound` connects it straight to the denotation: where
 `x` writes, `y` refuses. The discharge never needed the extra strength.
 
-**So the migration is not a rename, and should not be one.** The pair supersedes `κ`/`adm`/`admA`
-*for the discharge*. It does not supersede the transcription of §5, and deleting that would delete
-the record of what §5 got wrong — the seventeen refutations, `ident`'s pinning, and the two
-counterexamples that retired (K). `Adm`/`AdmA` are the analysis; `κ`/`adm`/`admA`/`ident` are the
-specification's own account of itself, checked against it. Both belong.
+**So the migration is not a rename.** The pair supersedes `κ`/`adm`/`admA` *for the discharge*, and
+the seventeen refutations plus the two counterexamples that retired (K) are the record of what §5
+got wrong; deleting those would delete the record.
+
+That much stands. What did **not** stand was the next sentence, which said `ident` should be left
+alone because it carries something the pair lacks. It carries something *nothing* justifies, and the
+only reason to think otherwise was that it had never been asked.
+
+`Decides` is the semantic notion §5's prose describes: two values of the same kind, one written and
+one refused, so the kind does not settle admission and an admission is evidence. Against it, `ident`
+errs in **both** directions. `refine(string, ⊤)` is `ident` and decides nothing — `q` is checked on
+both halves and always passes, and `ident` never looks at `q`. An `object` with a required field
+refuses the empty map and writes a populated one, which is deciding by any reading, and `ident`
+calls it `false`.
+
+Worse, the `refine` row is an artifact rather than a claim: `ident (refine t q) = true`
+unconditionally is exactly what makes `ident_of_adm` go through, because `adm (refine t q)` can
+refuse on `q` alone while `ident t` is `false`. The row exists to satisfy the pinning lemma.
+
+`ident` cannot be made exact — whether an arbitrary `q : Value → Bool` narrows anything is not a
+syntactic question — but it can be honest about which side it errs on, and it is not. Nothing live
+depends on it: no `uAtCan_*` consumes it and `admDisj_ident` derives it rather than assuming it. The
+lesson is the one every other entry in this log records, applied to the one table that had been
+exempted from it: a row nobody can fail is a row nobody has checked.
 
 ## §5 Certifying an implementation
 
