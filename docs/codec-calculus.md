@@ -483,11 +483,27 @@ unions it covers:
 | tag disjointness                                   | `(dunion)`, outright — both sides                     | the discriminator literals    |
 | kind disjointness                                  | `opaque`'s fixpoint (§3), outright                    | one option per kind of §1     |
 
-**The four rows are one condition at four projections.** Fix a partial map from inputs to labels —
+**Every row is one condition at a different projection.** Fix a partial map from inputs to labels —
 a stored member, a runtime kind, a discriminator's tag — and give each option the set of labels it
 answers to. Where those sets are pairwise disjoint, no input can reach two options, because the
-label is a property of the _input_ and lands in at most one set. That is the whole argument, and it
-is why the rows differ only in two ways: which projection, and whether the projection is defined on
+label is a property of the _input_ and lands in at most one set. That is the whole argument.
+
+There are **six** such projections in the table, not four, because the first two rows each offer a
+choice: `μ` or `admA` on the readable side, `κ` or `adm` on the writable one. The choice is made per
+_pair_, and a different pair may make it differently — which is not a weakening of the scheme but an
+instance of it, taken at the **product** of the two projections. Disjointness in a product is
+disjointness in either factor:
+
+```
+(S₁ × T₁) ∩ (S₂ × T₂)  =  (S₁ ∩ S₂) × (T₁ ∩ T₂)     empty  ⟺  either factor's is
+```
+
+so "distinct members _or_ disjoint `admA`" is exactly disjointness of the `(μ, admA)` labelling, and
+the disjunction is bookkeeping rather than a second mechanism.
+
+Note also that `adm` and `admA` are the projections taken at the **identity** — an input's label is
+the input — which is why they are the finest the table has and why nothing separates a pair they
+cannot. What is left to distinguish the rows is one thing only: whether the projection is defined on
 _both_ sides of the pair. `μ` and `admA` label attributes; `κ` and `adm` label values; only a
 discriminator's tag and §1's kind label both — which is exactly why only those two settle **(U)**
 outright and the first two have to be combined.
