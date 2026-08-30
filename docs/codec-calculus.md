@@ -291,6 +291,35 @@ same double; `decimal` cannot, because its `ker p` is equality. So the held set 
 fixed points of `η`, which is what `Stored` is. `η` is observed, not stipulated: it is the store's
 behaviour, and the calculus can only be arranged around it.
 
+### A ground term either takes its member whole, or it is a refinement
+
+Read the ground terms together and they fall into two kinds, with nothing in between. `string`,
+`boolean`, `binary` and `null` take their member's carrier **whole** — every string is a `String`,
+every bool a `Bool` — and there is nothing for them to check. The other four want a _subset_ of what
+the store will hold at that member, and each is `refine` over one of those bases at the predicate
+that names the subset:
+
+| term         | base      | predicate       |
+| ------------ | --------- | --------------- |
+| `number`     | doubles   | `D` (§1)        |
+| `decimal`    | numerals  | `Stored` (§1)   |
+| `literal(ℓ)` | `string`  | `∈ ℓ`           |
+| `literal(ℓ)` | doubles   | `∈ ℓ`           |
+
+This is not a resemblance. A predicate wanted on **both** halves _is_ `refine`, because `e` and `p`
+are partial and refusing is what the error channel does; a rule that gates one half and not the
+other is the shape §3 spends a paragraph refusing at `(number)`. So a gate is never a rule's private
+business, and its predicate belongs in `adm` — which is why the table in §5 now carries `D` and
+`Stored` beside a literal's `ℓ`, and why `number` and `decimal` are `ident`: gating both ways is
+deciding your own membership.
+
+**Containers are the other kind, and they are not refinements.** `set`, `array`, `tuple`, `record`
+and `object` narrow by their _subterms_ and their _names_, never by a predicate on the whole value,
+so there is no `q` for `adm` to carry. §5 records the same fact from the other side: `adm` does not
+propagate through a container, because it would have to contain the empty array whatever the element
+is. Scalars are refined by predicates; containers are refined structurally, and only the first kind
+has a gate to record.
+
 `literal` is the one ground term with **two** rules, because it is the only one whose member follows
 from its _values_ rather than from its name. There is deliberately no rule admitting a mixed set: a
 codec writes one member, so `literal(ℓ, k)` with `ℓ ∈ String` and `k ∈ D` has no derivation. That is
@@ -656,9 +685,9 @@ evidence, because the term checks the value against its own admissible set in **
 
 |            |                                                                                                                                                                                                            |
 | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| holds      | `literal` — the admissible set is checked; `discriminatedUnion` — a tag lookup fails honestly; `refine` — `q` is checked on the way in _and_ on the way out, which is what deciding your own membership is |
+| holds      | `literal` — the admissible set is checked; `discriminatedUnion` — a tag lookup fails honestly; `refine` — `q` is checked on the way in _and_ on the way out, which is what deciding your own membership is; `number` and `decimal`, for the same reason: each gates §1's bound on both halves |
 | propagates | `set`, `array`, `record` through the element; `tuple` and `union` when _every_ subterm has it; `optional`, `fallback`, `legacy` through the subterm                                                        |
-| never      | everything else — the ground scalars, `custom`, `opaque`, `lazy`; `held`, whose functions are the caller's; and `nullable`, deliberately: two nullable options both admit the null neither subterm decides |
+| never      | everything else — the _ungated_ ground scalars, `custom`, `opaque`, `lazy`; `held`, whose functions are the caller's; and `nullable`, deliberately: two nullable options both admit the null neither subterm decides |
 
 `object` is the other self-deciding term, and it decides by a different device: **names, not
 attempts**. A name set `N` admits `object(s, ρ)` when every name in `N` is one `s` declares and every
@@ -744,6 +773,8 @@ accept. They agree on most terms and part on four — and the partings go both w
 | `literal(ℓ)`, `ℓ ⊆ String`  | `ℓ`                  | `ℓ`, as stored `S`                |
 | `literal(ℓ)`, `ℓ ⊆ D`       | `ℓ`                  | **`⊤`**                           |
 | `discriminatedUnion(d, o…)` | the pooled tags of the `oᵢ`, found by looking `d` up | the same, in the stored item |
+| `number`                    | `D`                  | **`⊤`**                           |
+| `decimal`                   | `Stored`             | `Stored`, as stored `N`           |
 | `refine(c, q)`              | `adm(c) ∩ q`         | `admA(c)`                         |
 | `legacy(c, r)`              | `adm(c)`             | **`⊤`**                           |
 | `held(c, f, g)`             | **`⊤`**              | `admA(c)`                         |

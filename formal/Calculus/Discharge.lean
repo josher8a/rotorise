@@ -75,6 +75,10 @@ mutual
 def ident : Term → Bool
   | .literalS _ | .literalN _ => true
   | .dunion _ _ => true
+  -- `number` and `decimal` decide their own membership: each checks §1's gate on the way
+  -- in and on the way out (§3 `(number)` "gates both halves"). The other four ground
+  -- scalars accept their whole carrier and so decide nothing.
+  | .number | .decimal => true
   | .set t | .array t | .record t => ident t
   -- `refine` *holds* it rather than propagating: `q` is checked on the way in and on the
   -- way out, which is what deciding your own membership means. §3 argues the same — a `p`
@@ -141,6 +145,11 @@ noncomputable def adm : Term → Value → Bool
   -- other way.
   | .refine t q => fun v => adm t v && q v
   | .legacy t _ => adm t
+  -- §1's two number gates, recorded for the same reason a literal's set is: each is a
+  -- `refine` over an ungated base (`numberCodec_e_restrict`, `decimalCodec_e_restrict`),
+  -- and a gate the term owns is exactly what `adm` is for.
+  | .number => inD
+  | .decimal => isStored
   | _ => fun _ => true
 
 /-- `adm`, attribute side. The two wrappers that are `⊤` for `adm` part company here,
@@ -171,6 +180,10 @@ def admA : Term → Attr → Bool
     | _ => false
   | .refine t _ => admA t
   | .held t _ _ => admA t
+  -- `decimal` is to `number` as `literal-S` is to `literal-N`: it holds numerals *as
+  -- their text*, so its gate is a test on the stored attribute and both sides see it.
+  -- `number`'s is not — the numeral goes through `Double.ofDec` — so it stays `⊤`.
+  | .decimal => fun a => match a with | .n x => Numeral.Stored x | _ => false
   | _ => fun _ => true
 
 /-! ### Tag admission, on both sides
@@ -318,6 +331,8 @@ theorem adm_sound : ∀ (fuel : Nat) (t : Term) {v a},
     case refine t' q =>
       obtain ⟨hq, hc⟩ := restrict_e.mp he
       simp only [adm, adm_sound fuel t' hc, hq, Bool.and_self]
+    case number => cases v <;> simp_all [denote, numberCodec, inD, adm]
+    case decimal => cases v <;> simp_all [denote, decimalCodec, isStored, adm]
     case legacy t' r => exact adm_sound fuel t' (extendRead_e.mp he)
     all_goals rfl
 
@@ -337,6 +352,7 @@ theorem admA_sound : ∀ (fuel : Nat) (t : Term) {a v},
       exact admA_dunion.mpr ⟨kvs, tag, rfl, hlk,
         contains_of_mem (mem_allTags htx (mem_of_contains htag))⟩
     case refine t' q => exact admA_sound fuel t' (restrict_p.mp hp).1
+    case decimal => cases a <;> simp_all [denote, decimalCodec, admA]
     case held t' f g =>
       obtain ⟨w, hw, -⟩ := through_p.mp hp
       exact admA_sound fuel t' hw
@@ -663,8 +679,10 @@ theorem ident_of_adm : ∀ {t : Term} {v : Value}, adm t v = false → ident t =
   | .literalN _, _, _ => rfl
   | .dunion _ _, _, _ => rfl
   | .refine _ _, _, _ => rfl
+  | .number, _, _ => rfl
+  | .decimal, _, _ => rfl
   | .legacy t _, v, h => ident_of_adm (t := t) (v := v) h
-  | .string, _, h | .number, _, h | .decimal, _, h | .boolean, _, h | .binary, _, h
+  | .string, _, h | .boolean, _, h | .binary, _, h
   | .null, _, h | .set _, _, h | .array _, _, h | .tuple _ _, _, h
   | .record _, _, h | .held _ _ _, _, h | .nullable _, _, h | .lazy _, _, h
   | .custom _ _, _, h | .opaq _, _, h | .object _ _, _, h | .union _, _, h => nomatch h
