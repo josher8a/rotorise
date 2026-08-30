@@ -324,7 +324,7 @@ At HEAD: 739 declarations, 543 theorems, 196 definitions.
 | | |
 | --- | ---: |
 | theorem names the documents cite as results | 133 |
-| …put through `#assert_axioms` | **61** |
+| …put through `#assert_axioms` | **63** |
 | §-tag coverage (declarations naming a spec section) | **24%** |
 | docstring coverage, theorems | 60% |
 | docstring coverage, definitions | 72% |

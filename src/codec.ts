@@ -1994,9 +1994,12 @@ export namespace opaque {
      * `decodeUnknown` is a different function from the SDK's in three places, and each is a reason
      * this type has to exist rather than the SDK's being reused:
      *
-     * - `NS` reads back as `Set<string>`, not a set of numbers. Its members are decimal strings and
-     *   nothing without a schema can say which of them a JS number holds faithfully. `native.Decode`
-     *   answers `Set<number | bigint>`, which is the guess this refuses to make.
+     * - `NS` is a **refusal**, where the SDK's answers `Set<number | bigint>`. Its members are
+     *   decimal strings and nothing without a schema can say which of them a JS number holds
+     *   faithfully — so this codec will not *write* a set of numbers, and a member it cannot
+     *   write is one it cannot read. It read back as `Set<string>` until that was noticed:
+     *   re-encoding turned an `NS` into an `SS`, changing the attribute's stored type on a
+     *   read-modify-write. See `Calculus.Lawful.no_read_without_write`.
      * - `N` under the default policy is a *refusal*, where the SDK's always reads a number.
      * - `L` and `M` carry a refused member out with them, the way {@link opaque.Encode} does, so a
      *   list of `N` under `'refuse'` is the refusal itself rather than a list of nothing.
@@ -2021,8 +2024,11 @@ export namespace opaque {
                   : A extends SS
                     ? Set<string>
                     : A extends NS
-                      ? // the members are decimal strings, and a set of them stays strings
-                        Set<string>
+                      ? // a member this codec cannot write is a member it cannot read: `NS`
+                        // has no write path here, so reading one would re-encode as `SS` and
+                        // change the attribute's stored type — (MP), which `μ = ⊤` leaves as
+                        // the only law watching
+                        ErrorMessage<'[opaque] a stored set of numbers has no counterpart this codec can write, so reading it would re-encode as `SS`. Declare the attribute with `set(number)` or `set(decimal)`'>
                       : A extends BS
                         ? Set<Uint8Array>
                         : A extends L<infer Element>
@@ -2197,13 +2203,53 @@ const decodeUnknown = (
                     "Declare the attribute with `number` or `decimal`, or opt in with `opaque('lossy')`.",
                 )
             }
-            return Number(carried)
+            /**
+             * The same two gates `number` reads through, and the second is not redundant for
+             * the same reason: `Number('9.9…E+125')` rounds *up* past the maximum, so a numeral
+             * the store holds can read back as a value nothing here can write.
+             *
+             * Without them this decoded `{ N: 'abc' }` to `NaN` and `{ N: '1e400' }` to
+             * `Infinity` — values its own `encode` refuses, which is **(C)** failing. `Number`
+             * reads far more than an `N` carries: `''` and whitespace are `0`, `'0x10'` is `16`.
+             */
+            if (!isNumeral(carried)) {
+                return new CodecError(
+                    `'${carried}' is not a numeral, so this attribute was not written by DynamoDB`,
+                )
+            }
+            const read = Number(carried)
+            return isNumeral(String(read))
+                ? read
+                : new CodecError(
+                      `'${carried}' reads back as ${read}, which is outside what DynamoDB stores, so it cannot be written again`,
+                  )
         }
         case 'B':
         case 'BOOL':
             return attribute[member]
-        case 'SS':
+
+        /**
+         * **A member this codec cannot write is a member it cannot read.**
+         *
+         * `opaque` has no `NS` write path at all — a numeric `Set` is refused, because reading
+         * one back is undecidable without a schema. Reading `NS` anyway produced a
+         * `Set<string>`, and re-encoding that wrote `SS`: a numeric set attribute silently
+         * becoming a string one on a read-modify-write, which is **(MP)** — the law `opaque`'s
+         * `N` refusal already exists to protect, one member over.
+         *
+         * The general form is a corollary of §2 and is proved in the model
+         * (`Calculus.Lawful.no_read_without_write`): a codec is a *pair*, and (MP) holds the
+         * halves together, so if `e` never produces a member then no attribute carrying it can
+         * be in `dom(p)`. Note which law does the work — (C) is satisfied here, the value
+         * round-trips, and only the stored type changes. `μ = ⊤` is exactly where (MP) is the
+         * only law left watching.
+         */
         case 'NS':
+            return unrecoverable(
+                'a stored set of numbers',
+                "`NS` has no counterpart this codec can write — a set of numbers is refused on the way in, because nothing without a schema says which of its members a JS number holds faithfully. Reading it would mean re-encoding it as `SS` and changing the attribute's stored type. Declare the attribute with `set(number)` or `set(decimal)`.",
+            )
+        case 'SS':
         case 'BS': {
             // as in `set`: encode has no empty set to offer, so decode has none to return
             const members = attribute[member] as readonly unknown[]

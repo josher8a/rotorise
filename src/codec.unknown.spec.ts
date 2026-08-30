@@ -11,6 +11,7 @@ import type { AttributeValue } from './attribute'
 import type { AttributeCodec } from './codec'
 import { CodecError, opaque } from './codec'
 import {
+    checkDecodesAreWritable,
     type Checkable,
     checkMembersStable,
     checkRoundTrip,
@@ -99,7 +100,22 @@ describe('what it refuses, and what it tells you instead', () => {
 
     it('refuses to read one back, for the same reason', () => {
         expect(() => opaque.unsafeDecode({ SS: [] })).toThrow(/no empty SS/)
-        expect(() => opaque.unsafeDecode({ NS: [] })).toThrow(/no empty NS/)
+        expect(() => opaque.unsafeDecode({ BS: [] })).toThrow(/no empty BS/)
+    })
+
+    /**
+     * `NS` is refused before emptiness is even asked, and by a stronger rule: this codec has
+     * no `NS` **write** path at all, so reading one would re-encode as `SS` and change the
+     * attribute's stored type. A member a codec cannot write is a member it cannot read —
+     * `Calculus.Lawful.no_read_without_write`.
+     */
+    it('refuses NS outright, empty or not, because it cannot write one', () => {
+        expect(() => opaque.unsafeDecode({ NS: [] })).toThrow(
+            /no counterpart this codec can write/,
+        )
+        expect(() => opaque.unsafeDecode({ NS: ['1', '2'] })).toThrow(
+            /no counterpart this codec can write/,
+        )
     })
 
     it('refuses a bigint nested deep, not just at the top', () => {
@@ -144,6 +160,16 @@ describe('reading an N somebody else wrote', () => {
     })
 })
 
+describe('with numbers refused', () => {
+    /** The same law, on the policy that refuses `N` outright. */
+    it('decodes only what it can write back', () => {
+        checkDecodesAreWritable(holderFor(opaque()), {
+            count: 80,
+            seed: 20260829,
+        })
+    })
+})
+
 describe('with numbers opted into as lossy', () => {
     const lossy = opaque('lossy')
 
@@ -159,6 +185,23 @@ describe('with numbers opted into as lossy', () => {
                 { v: { N: '0' } },
             ]),
         ).not.toThrow()
+    })
+
+    /**
+     * **(C) for `opaque`, which nobody had ever asked.**
+     *
+     * `checkDecodesAreWritable` exists for exactly this — it generates *attributes* rather
+     * than values, because the attribute that breaks (C) is by definition one `encode` would
+     * never make. It had been pointed at `Pet`, at `Listing`, at planted counterexamples, and
+     * never at `opaque`, which is the term with the widest read of any in the library.
+     *
+     * It fails on the pre-fix codec at case 21 of this seed, on the mutation "an N with a
+     * leading zero": `{ v: { N: '0-1' } }` decoded to `NaN`, and `NaN` cannot be encoded.
+     * `Number` reads far more than an `N` carries, so the read had to gate on the numeral
+     * grammar the way `number`'s does.
+     */
+    it('decodes only what it can write back', () => {
+        checkDecodesAreWritable(holderFor(lossy), { count: 80, seed: 20260829 })
     })
 
     it('loses digits a float cannot hold — which is what lossy means', () => {
