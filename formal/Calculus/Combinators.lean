@@ -139,6 +139,16 @@ under Products) rather than two. -/
     list of pairs, because that is what `M` is — see `Attr.m`. -/
 abbrev MapOf (α : Type) := Σ keys : Finset Name, {k // k ∈ keys} → α
 
+/-- Two map payloads are equal when their name sets are and their values agree on them.
+    The dependent pair needs this said once; the list representation got it from
+    `List.ext`. -/
+theorem MapOf.ext {α : Type} {p q : MapOf α} (hk : p.1 = q.1)
+    (hf : ∀ k (h₁ : k ∈ p.1) (h₂ : k ∈ q.1), p.2 ⟨k, h₁⟩ = q.2 ⟨k, h₂⟩) : p = q := by
+  obtain ⟨kp, fp⟩ := p
+  obtain ⟨kq, fq⟩ := q
+  cases hk
+  exact congrArg (Sigma.mk kp) (funext fun k => hf k.1 k.2 k.2)
+
 /-- `map` values. -/ def mapV : Ctor (MapOf Value) Value where
   into := fun p => Value.map p.1 p.2
   out := fun v => match v with | .map keys f => some ⟨keys, f⟩ | _ => none
@@ -3518,21 +3528,32 @@ variable {sems : List (Name × FieldSem)} {rc? : Option Codec} {kn : Name → Bo
     stand-in owed — so reading it back is the entrywise round trip and nothing else. -/
 theorem object_retract (hf : ∀ kf ∈ sems, LawfulCore kf.2.codec)
     (hrc : ∀ c ∈ rc?, LawfulCore c)
-    (hknE : ∀ kv ka, encEntry (fun k => sems.lookup k) (rc?.map (·.e)) kv = some ka →
-      kn ka.1 = true) :
-    ∀ kvs kas, objWrite sems rc? kvs = some kas → objRead sems rc? kn kas = some kvs := by
-  intro kvs kas h
-  obtain ⟨hval, htr⟩ := objWrite_eq.mp h
-  have hnames : kas.map (·.1) = kvs.map (·.1) := traverse_fst encEntry_fst htr
-  refine objRead_eq.mpr ⟨kvs, ?_, ?_, ?_⟩
-  · rw [hnames]
-    exact reqPresentB_of fun k c hm => valPresentB_spec hval hm (fun _ h' => nomatch h')
-  · rw [filter_eq_self_of_all fun d hd => by
-      obtain ⟨kv, _, hkv⟩ := traverse_mem₂ htr d hd
-      exact hknE kv d hkv]
-    exact traverse_roundTrip (objStep_rt hf hrc) kvs kas htr
-  · rw [hnames, fbDefaults_nil fun k c v hm =>
-      valPresentB_spec hval hm (fun _ h' => nomatch h'), List.append_nil]
+    (hknE : ∀ k v a, (entryCodec sems rc? k).bind (fun c => c.e v) = some a → kn k = true) :
+    ∀ p q, objWrite sems rc? p = some q → objRead sems rc? kn q = some p := by
+  rintro p q h
+  obtain ⟨hval, g, hg, rfl⟩ := objWrite_eq.mp h
+  -- every name of a writable map is kept, so the `drop` filter is the identity
+  have hfilter : p.1.filter (kn ·) = p.1 :=
+    Finset.filter_eq_self.mpr fun k hk => by
+      simpa using hknE k (p.2 ⟨k, hk⟩) _ (funImage_some hg ⟨k, hk⟩)
+  -- and no fallback name is missing, so nothing is adjoined
+  have hfb0 : fbNames p.1 sems = ∅ :=
+    fbNames_empty fun k c v hm => valPresentB_spec hval hm (fun _ h' => nomatch h')
+  refine objRead_eq.mpr ⟨reqPresentB_of fun k c hm =>
+    valPresentB_spec hval hm (fun _ h' => nomatch h'), ?_⟩
+  refine ⟨fun k => p.2 ⟨k.1, (Finset.mem_filter.mp k.2).1⟩, funImage_eq fun k => ?_, ?_⟩
+  · have hw := funImage_some hg ⟨k.1, (Finset.mem_filter.mp k.2).1⟩
+    cases hc : entryCodec sems rc? k.1 with
+    | none => rw [hc] at hw; exact nomatch hw
+    | some c =>
+      rw [hc] at hw ⊢
+      simp only [Option.bind_some] at hw ⊢
+      exact (entryCodec_of hf hrc hc).retract hw
+  · refine MapOf.ext ?_ ?_
+    · simp [hfilter, hfb0]
+    · intro k h₁ h₂
+      have hk1 : k ∈ p.1.filter (kn ·) := by rw [hfilter]; exact h₂
+      simp only [dif_pos hk1]
 
 /-- (C): what was read is writable again — the kept entries by (C) one level down, the
     stand-ins by `(fallback)`'s own premise `v(∗) ∈ dom(e)`. -/
