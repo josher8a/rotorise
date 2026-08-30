@@ -3869,10 +3869,10 @@ theorem uniqueAdmission_of_kinds {os : List OptionSem} {ks : List Kind}
 theorem labelled_byTag {d : Name} {tags : List String} {c : Codec} :
     OptionSem.Labelled (tagOfV d) (tagOfA d) (.byTag d tags c) (· ∈ tags) := by
   refine ⟨fun v hv => ?_, fun a ha => ?_⟩
-  · obtain ⟨kvs, tag, rfl, hlk, htag⟩ := byTag_admitV.mp hv
-    exact ⟨tag, by simp only [tagOfV, hlk], mem_of_contains htag⟩
-  · obtain ⟨kvs, tag, rfl, hlk, htag⟩ := byTag_admitA.mp ha
-    exact ⟨tag, by simp only [tagOfA, hlk], mem_of_contains htag⟩
+  · obtain ⟨tag, htv, htag⟩ := byTag_admitV.mp hv
+    exact ⟨tag, htv, mem_of_contains htag⟩
+  · obtain ⟨tag, hta, htag⟩ := byTag_admitA.mp ha
+    exact ⟨tag, hta, mem_of_contains htag⟩
 
 /-- An option that decides by attempting admits what it writes, on both sides — the
     read side by (R), which is the only thing `hw` above ever needs. -/
@@ -3889,8 +3889,7 @@ theorem byAttempt_write {c : Codec} (h : Lawful c) {t a} (he : c.e t = some a) :
     supplies it without assuming (R).) -/
 theorem uniqueAdmission_byTag {d : Name} {os : List (List String × Codec)}
     (hstamp : ∀ o ∈ os, ∀ t a, o.2.e t = some a →
-      ∃ tag ∈ o.1, (∃ kvs, a = .m kvs ∧ kvs.lookup d = some (.s tag)) ∧
-        (∃ kvs, t = .map kvs ∧ kvs.lookup d = some (.str tag)))
+      ∃ tag ∈ o.1, tagOfA d a = some tag ∧ tagOfV d t = some tag)
     (hdisj : List.Pairwise (fun x y => ∀ tag ∈ x.1, tag ∉ y.1) os) :
     UniqueAdmission (os.map fun o => .byTag d o.1 o.2) := by
   refine uniqueAdmission_of_labels (πV := tagOfV d) (πA := tagOfA d)
@@ -3909,8 +3908,7 @@ theorem uniqueAdmission_byTag {d : Name} {os : List (List String × Codec)}
     all either strength consults. -/
 private theorem dunion_writes {d : Name} {os : List (List String × Codec)}
     (hstamp : ∀ o ∈ os, ∀ t a, o.2.e t = some a →
-      ∃ tag ∈ o.1, (∃ kvs, a = .m kvs ∧ kvs.lookup d = some (.s tag)) ∧
-        (∃ kvs, t = .map kvs ∧ kvs.lookup d = some (.str tag))) :
+      ∃ tag ∈ o.1, tagOfA d a = some tag ∧ tagOfV d t = some tag) :
     ∀ m, some Member.M = some m →
       ∀ o ∈ os.map fun o => OptionSem.byTag d o.1 o.2,
         ∀ t a, o.c.e t = some a → a.member = m := by
@@ -3927,8 +3925,7 @@ private theorem dunion_writes {d : Name} {os : List (List String × Codec)}
 theorem lawful_dunionCodec {d : Name} {os : List (List String × Codec)}
     (h : ∀ o ∈ os, Lawful o.2)
     (hstamp : ∀ o ∈ os, ∀ t a, o.2.e t = some a →
-      ∃ tag ∈ o.1, (∃ kvs, a = .m kvs ∧ kvs.lookup d = some (.s tag)) ∧
-        (∃ kvs, t = .map kvs ∧ kvs.lookup d = some (.str tag)))
+      ∃ tag ∈ o.1, tagOfA d a = some tag ∧ tagOfV d t = some tag)
     (hdisj : List.Pairwise (fun x y => ∀ tag ∈ x.1, tag ∉ y.1) os) :
     Lawful (dunionCodec d os) :=
   lawful_altCodec (forall_mem_map h)
@@ -3939,8 +3936,7 @@ theorem lawful_dunionCodec {d : Name} {os : List (List String × Codec)}
 theorem lawfulCore_dunionCodec {d : Name} {os : List (List String × Codec)}
     (h : ∀ o ∈ os, LawfulCore o.2)
     (hstamp : ∀ o ∈ os, ∀ t a, o.2.e t = some a →
-      ∃ tag ∈ o.1, (∃ kvs, a = .m kvs ∧ kvs.lookup d = some (.s tag)) ∧
-        (∃ kvs, t = .map kvs ∧ kvs.lookup d = some (.str tag)))
+      ∃ tag ∈ o.1, tagOfA d a = some tag ∧ tagOfV d t = some tag)
     (hdisj : List.Pairwise (fun x y => ∀ tag ∈ x.1, tag ∉ y.1) os) :
     LawfulCore (dunionCodec d os) :=
   lawfulCore_altCodec (forall_mem_map h)
