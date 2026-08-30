@@ -122,6 +122,9 @@ halves by construction, which is what §3 argues an ad-hoc gate forgets. -/
 #assert_axioms lawfulCore_rawNumberCodec
 #assert_axioms literalSCodec_e_restrict
 #assert_axioms literalSCodec_p_restrict
+#assert_axioms admList_of_mem
+#assert_axioms admAList_of_mem
+#assert_axioms identList_of_admList
 #assert_axioms uAtCan_boolLiterals
 #assert_axioms admA_literalS_sees
 #assert_axioms admA_literalN_blind
