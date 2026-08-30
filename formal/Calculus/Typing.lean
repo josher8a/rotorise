@@ -19,6 +19,15 @@ Mechanization choices, and where they diverge from the doc (each is routine to s
   `v(∗) ∈ dom(e)`, `(custom)`'s laws, and `(union)`'s residual (U) — are fuel-indexed
   and live in `Obligations` (Soundness.lean), consumed by the theorem. Same premises,
   fueled form.
+* **`literal` is one rule in §3 and two constructors here**, and the metalanguage is the
+  reason. §3's `(literal)` reads its member off a base — `ℓ` lies in some ground term's held
+  set, and the literal stores what that term stores — which needs `ℓ : List Value` plus a
+  premise that the values share a kind. `literalS (ls : List String)` and
+  `literalN (ls : List Double)` get that premise from the *type*, so homogeneity is checked
+  by Lean rather than carried through every rule and every witness. The two constructors
+  are §3's rule at its two commonest bases; the others (`boolean`, `binary`, `null`) are
+  written `refine` here, and `uAtCan_of_refine_disjoint_of_typed` shows they discharge
+  identically — so nothing §3 admits is unreachable, only differently spelled.
 * **§5's (K) is in neither list, and that is the rule.** `(union)`'s premises are the
   option judgements and (D); (K) is a *discharger* of the (U) obligation, and lives with
   `κ`/`ident`/`adm` in `Discharge.lean` — downstream of this file, which is why it could

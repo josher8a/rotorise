@@ -596,6 +596,39 @@ declaration where two options are both `κ`-free, or give `held` a write-side `�
 carrier — and §1's `Value` is what would have to change for the second. `codec.uniqueadmission.spec.ts`
 carries the measurement as four assertions.
 
+### One rule where §3 had been writing two
+
+`(literal-S)` and `(literal-N)` differed in exactly one thing: which set `ℓ` had to lie in, and
+therefore which member the term stored. Everything else — `n ≥ 1`, pairwise distinctness, the held
+set, the shape of the pair — was written twice. §3 said so itself, that `literal` "is the one ground
+term with two rules, because it is the only one whose member follows from its values rather than
+from its name," and then did not take the next step.
+
+The unified rule reads both off a base:
+
+    ⊢ g : T ⇝ μ,  g ground    ℓ₁ … ℓₙ ∈ T,  n ≥ 1,  pairwise distinct
+    ───────────────────────────────────────────────────────────────── (literal)
+    ⊢ literal(ℓ₁ … ℓₙ) : {ℓ₁ … ℓₙ} ⇝ μ
+
+which covers `S` and `N` as before and covers `BOOL`, `B` and `NULL` with nothing added. `ℓ ⊆ D` is
+no longer a premise anyone states: a numeric literal's base *is* `number`, and `ℓ ⊆ T` is the rule.
+The base is fixed by `ℓ`'s kind, `string` being the base for strings — `decimal` is what to write
+when strings are wanted stored as `N`, and it is not reachable as a literal base, which matches what
+`(literal-S)` always did.
+
+**The model keeps two constructors, and the metalanguage is the reason.** One constructor needs
+`ℓ : List Value` plus a premise that the values share a kind; `literalS (ls : List String)` and
+`literalN (ls : List Double)` get that premise from the *type*, so homogeneity is Lean's to check
+rather than something carried through every rule, every `cases`, and every witness — 270 sites.
+That is a mechanization choice of the same kind `Typing.lean` already documents for the list
+judgements, and it is recorded there.
+
+Nothing §3 admits is unreachable in the model, only differently spelled: a boolean literal is
+`refine(boolean, ∈ ℓ)`, and `uAtCan_of_refine_disjoint_of_typed` shows such unions discharge
+identically. The factorizations proved a commit earlier —
+`literalSCodec = restrict stringCodec (inLS ls)`, `literalNCodec = restrict rawNumberCodec (inLN
+ls)` — are what make the two constructors visibly the one rule at two bases.
+
 ### One where a term was nearly removed for a reason that was not true
 
 The user proposed deleting `(refine)`, on the grounds that it cannot state stability across a

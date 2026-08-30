@@ -227,13 +227,9 @@ D = { x ∈ Double : x = 0 ∨ 1e-130 ≤ |x| ≤ 9.9…e125 }
 ──────────────────────────────
 ⊢ null : {null} ⇝ NULL     (null)
 
-ℓ₁ … ℓₙ ∈ String,  n ≥ 1,  pairwise distinct
-────────────────────────────────────────────── (literal-S)
-⊢ literal(ℓ₁ … ℓₙ) : {ℓ₁ … ℓₙ} ⇝ S
-
-ℓ₁ … ℓₙ ∈ D,  n ≥ 1,  pairwise distinct
-────────────────────────────────────────────────────── (literal-N)
-⊢ literal(ℓ₁ … ℓₙ) : {ℓ₁ … ℓₙ} ⇝ N
+⊢ g : T ⇝ μ,  g ground    ℓ₁ … ℓₙ ∈ T,  n ≥ 1,  pairwise distinct
+───────────────────────────────────────────────────────────────── (literal)
+⊢ literal(ℓ₁ … ℓₙ) : {ℓ₁ … ℓₙ} ⇝ μ
 ```
 
 `number` is **not** restricted to integers, and not to `2⁵³`. Every finite double satisfies **(R)**,
@@ -253,17 +249,18 @@ maximum, and gating only the write is the configuration that breaks **(C)**.
 Both-halves gating is not an extra duty these rules carry; it is what a gate _is_ in this calculus.
 A predicate checked on the way in and on the way out is `refine`, and both number rules are `refine`
 over an ungated base — `number` at `D`, `decimal` at `Stored`. Nothing about them is bespoke, and
-the shape is the argument: an ad-hoc `if` can gate one half and a `refine` cannot. `(literal-N)` gates at
-the **declaration**, alongside `n ≥ 1` and pairwise distinctness, because `ℓ` is data the term owns
-and a premise on data is decidable when the codec is built.
+the shape is the argument: an ad-hoc `if` can gate one half and a `refine` cannot. `(literal)` gates
+at the **declaration**, alongside `n ≥ 1` and pairwise distinctness, because `ℓ` is data the term
+owns and a premise on data is decidable when the codec is built.
 
 That premise discharges the **write** side and only the write side: `ℓ` is fixed when the codec is
 built, so every value `e` will ever accept has been checked already. It discharges nothing on the
 read side. Reading an `N` as a value is wider than membership in `ℓ`, so an attribute that is not a
 numeral at all can land on a value the set contains, and the check passes on something §1 has no
 point for. **A premise bounds the values a term owns, and a stored attribute is not one of them.**
-So `(literal-N)` reads through the same gate as `(number)`: the stored text must be a numeral before
-it is read as a value.
+So a numeric `literal` reads through the same gate as `(number)`, and gets it from the same place:
+its base **is** `number`, and `ℓ ⊆ T` is the rule's premise, so the stored text must be a numeral
+before it is read as a value.
 
 A subset of `D` chosen by the caller — a numeric enum member — is `refine(number, T)`, and has no
 rule of its own because it needs none. A term whose `p` returned the double it read *without*
@@ -320,23 +317,28 @@ propagate through a container, because it would have to contain the empty array 
 is. Scalars are refined by predicates; containers are refined structurally, and only the first kind
 has a gate to record.
 
-`literal` is the one ground term with **two** rules, because it is the only one whose member follows
-from its _values_ rather than from its name. Those two are the ones worth naming, not the only ones
-possible, and the general fact is one statement rather than a rule per member:
+`literal` is the one ground term whose member follows from its _values_ rather than from its name,
+and the rule says so by reading both off a base: `ℓ` must lie in some ground term's held set, and
+what that term stores is what the literal stores. One rule covers `S` and `N`, and covers `BOOL`,
+`B` and `NULL` with nothing added — a boolean literal is `literal(true)`, at base `boolean`. The
+base is determined by `ℓ`'s kind, `string` being the base for strings; `decimal` is what to write
+when strings are wanted stored as `N`.
+
+The rule is also not doing anything `refine` does not, and it is worth seeing why so that `literal`
+reads as the abbreviation it is. `literal(ℓ)` is `refine(g, ∈ ℓ)`, and the general fact behind every
+literal union is one statement rather than a rule per member:
 
 > For **any derivable base**, a union of refinements with pairwise disjoint predicates admits
 > uniquely on both sides.
 
-`(literal-S)` and `(literal-N)` are two instantiations, at `string` and at the ungated double codec.
-A boolean or binary literal is two more, and needs no rule because it gets none from anywhere else
-either. And the base need not be ground: two disjoint refinements of one `array(string)` separate by
-the same argument. "Literal" was never the operative word — _one base, disjoint predicates_ was, and
-that is why §3 stops at two rules without leaving anything out. `(literal-S)` and `(literal-N)` are
-written down because their member follows from the values and a reader needs to see which; nothing
-else about them is special.
+`literal` at `string` and at `number` are two instantiations; `boolean` and `binary` are two more;
+and the base need not be ground at all — two disjoint refinements of one `array(string)` separate by
+the same argument. "Literal" was never the operative word — _one base, disjoint predicates_ was.
+What `literal` adds over writing `refine` is that `ℓ` is data the term owns, so `adm` and `admA`
+carry it (§5) and a reader sees the enumeration.
 
-There is deliberately no rule admitting a mixed set: a codec writes one member, so `literal(ℓ, k)`
-with `ℓ ∈ String` and `k ∈ D` has no derivation. That is **(W)** and not an omission, and it is not
+There is deliberately no derivation for a mixed set: a codec writes one member, and one `g` cannot
+hold both a string and a double, so `literal(ℓ, k)` with `ℓ ∈ String` and `k ∈ D` has none. That is **(W)** and not an omission, and it is not
 a limitation either — the spelling is `union(literal(ℓ), literal(k))`, whose options separate on
 both sides for free, by distinct members on the readable one and disjoint kinds on the writable.
 What the union concludes is `⊤`, which is the honest index for a term that writes two members. That is
@@ -787,8 +789,8 @@ accept. They agree on most terms and part on four — and the partings go both w
 
 | term                        | `adm` — value side   | `admA` — attribute side           |
 | --------------------------- | -------------------- | --------------------------------- |
-| `literal(ℓ)`, `ℓ ⊆ String`  | `ℓ`                  | `ℓ`, as stored `S`                |
-| `literal(ℓ)`, `ℓ ⊆ D`       | `ℓ`                  | **`⊤`**                           |
+| `literal(ℓ)` at base `string` | `ℓ`                | `ℓ`, as stored `S`                |
+| `literal(ℓ)` at base `number` | `ℓ`                | **`⊤`**                           |
 | `discriminatedUnion(d, o…)` | the pooled tags of the `oᵢ`, found by looking `d` up | the same, in the stored item |
 | `number`                    | `D`                  | **`⊤`**                           |
 | `decimal`                   | `Stored`             | `Stored`, as stored `N`           |
@@ -950,7 +952,7 @@ member back into the held set. **(W)** and **(C)** are immediate, `≼` is membe
 substructure, and **(R)** is the carrier's round trip: identity for `string`, `boolean`, `binary`,
 `null` (whose held set is the single value `null` and whose payload is `∗`) and `decimal` (a numeral
 in `Stored` is returned as written, which is what `Stored` is chosen to make true, so `Can(decimal)`
-is the normalised part of `N`), shortest-text for `number` and `literal‑N` — the §3 argument that
+is the normalised part of `N`), shortest-text for `number` and a numeric `literal` — the §3 argument that
 every finite double survives.
 
 **Wrappers.**
@@ -1067,7 +1069,7 @@ every depth of the fixpoint, and the sum case closes with no residue here either
 
 What remains outside the theorem is exactly what §3 already names: `(custom)`'s premises are the
 caller's to keep, and each `(union)`'s residual **(U)**. `D` is not among them — it is a gate on
-both halves of `(number)` and a premise of `(literal-N)`, so it is inside the theorem.
+both halves of `(number)`, and a numeric `literal`'s base *is* `number`, so it is inside the theorem.
 
 ---
 
