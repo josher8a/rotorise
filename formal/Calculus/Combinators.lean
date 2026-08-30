@@ -1367,17 +1367,11 @@ def dunionCodec (d : Name) (os : List (List String × Codec)) : Codec :=
 
 /-! ## Unknown values (§3 `(opaque)`) -/
 
-/-- `opaque`'s options, over the codec that handles one level down — the eight
-    self-identifying constructions, in the order they are offered. `rec` is where the
-    recursion goes; everything else is ground.
+/-- §3 `(opaque)`'s eight self-identifying options; `rec` is where the recursion goes.
 
-    Named rather than written inline because three separate statements are about this
-    list — the codec that sums it (`opaqCodec`), the kinds it is pinned to
-    (`opaq_onKinds`), and its (U) (`uniqueAdmission_opaque`) — and a list spelled three
-    times is a list that can drift twice.
-
-    The `Numbers` policy is the `if lossy` and nothing else: **`refuse` is the absence
-    of an option**, spelled here as the option whose codec is empty. -/
+    Named because three statements cite it — `opaqCodec`, `opaq_onKinds`,
+    `uniqueAdmission_opaque` — and a list spelled three times can drift twice. **`refuse` is
+    the absence of an option**, spelled here as the empty codec. -/
 def opaqOptions (lossy : Bool) (rec : Codec) : List OptionSem :=
   [.byAttempt stringCodec, .byAttempt booleanCodec, .byAttempt binaryCodec,
    .byAttempt nullCodec,
@@ -1770,15 +1764,8 @@ theorem lawful_decimalCodec : Lawful decimalCodec := by
 The other side of `decimal`'s answer, and the reason §1 states the condition as an inclusion
 rather than as an equality. -/
 
-/-- **`number` survives the store for free**, in the precise sense §1 means: its `p` factors
-    through `Double.ofDec`, so any normalisation that preserves the double a numeral reads to
-    lies inside `ker p`. Nothing about the *digits* is required — `η` may rewrite `"1.500"` to
-    `"1.5"` freely, which is exactly what `decimal` cannot afford.
-
-    Read against `ker_decimalCodec`, this is the whole contrast in two theorems: `decimal`'s
-    kernel is equality, so `η ⊆ ker p` forces `η` to be the identity; `number`'s kernel is
-    `ofDec`-agreement, so the same inclusion asks only that the store not change the value.
-    §1 narrowed one held set and left the other alone, and this is why. -/
+/-- §1: `number` survives the store for free. Its `p` factors through `ofDec`, so the digits
+    may be rewritten freely — the contrast with `ker_decimalCodec`, whose kernel is equality. -/
 theorem survivesStore_numberCodec {η : Attr → Attr}
     (hη : ∀ x, ∃ y, η (.n x) = .n y ∧ Double.ofDec y = Double.ofDec x) :
     SurvivesStore numberCodec η := by
@@ -1800,10 +1787,7 @@ theorem survivesStore_numberCodec {η : Attr → Attr}
 `SurvivesStore` is the premise; these two are `decimal`'s answer to it, and together they say
 that narrowing the held set to `Numeral.Stored` was not merely *a* fix but the whole of one. -/
 
-/-- **`decimal`'s `ker p` is equality.** Its `p` is the identity on the digits, so two `N`
-    attributes read to the same value only when they are the same text. That is the fact §1
-    reasons from, and it is why `η ⊆ ker p` forces `η` to be the identity wherever `decimal`
-    can be handed an attribute. -/
+/-- §1: `decimal`'s `ker p` is equality — its `p` is the identity on the digits. -/
 theorem ker_decimalCodec {x y : Numeral} (h : decimalCodec.Ker (.n x) (.n y))
     (hx : Numeral.Stored x = true) : x = y := by
   have h' : decimalCodec.p (.n x) = decimalCodec.p (.n y) := h
@@ -1813,11 +1797,8 @@ theorem ker_decimalCodec {x y : Numeral} (h : decimalCodec.Ker (.n x) (.n y))
     exact Value.str.inj (Option.some.inj h')
   · rw [if_neg hy] at h'; exact nomatch h'
 
-/-- **The certificate for `Numeral.Stored`.** `Can(decimal)` is the normal forms, and a
-    normalisation fixes its own — so the narrowed held set discharges `η ⊆ ker p` outright.
-
-    With `ker_decimalCodec` (the kernel is equality, so nothing weaker would do) and
-    `not_survivesStore_decimalWF`, that is sufficiency and necessity. -/
+/-- §1: `Can(decimal)` is the normal forms and a normalisation fixes its own, so `Stored`
+    discharges `η ⊆ ker p`. Necessity is `not_survivesStore_decimalWF`. -/
 theorem survivesStore_decimalCodec {η : Attr → Attr}
     (hη : ∀ s, Numeral.Stored s = true → η (.n s) = .n s) :
     SurvivesStore decimalCodec η := by

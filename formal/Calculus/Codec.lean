@@ -50,10 +50,8 @@ theorem Codec.Ker.trans {c : Codec} {a a' a'' : Attr}
 theorem Codec.ker_equivalence (c : Codec) : Equivalence c.Ker :=
   ⟨Codec.Ker.refl c, Codec.Ker.symm, Codec.Ker.trans⟩
 
-/-- §2's `Can(c) = e[T]`: the attributes some value actually writes. `e ∘ p` is total on this
-    set and merely partial on `𝔸` — "the precise sense in which a table is more permissive
-    than the schema describing it" — and §6's `≈` rows are the ones stated on it rather than
-    on all of `𝔸`. -/
+/-- §2's `Can(c) = e[T]`: the attributes some value actually writes. `e ∘ p` is total here
+    and merely partial on `𝔸`; §6's `≈` rows are stated on it. -/
 def Can (c : Codec) (a : Attr) : Prop := ∃ v, c.e v = some a
 
 /-- §5's `≼`: recursive member agreement. `L` compares pointwise on shared positions,
@@ -97,13 +95,8 @@ structure LawfulCore (c : Codec) : Prop where
 theorem Lawful.core {c : Codec} (h : Lawful c) : LawfulCore c :=
   ⟨h.retract, h.canon, h.writes⟩
 
-/-- §2 Corollary (Q — stability): `∀ a ∈ dom(p). e(p(a)) ≈c a`.
-
-    Stated in `Ker` rather than as the bare equation, because `≈c` is what §2's proof of it
-    concludes and the previous spelling made a reviewer re-derive that the two are the same
-    sentence. Stability is retraction asked at a different *source of values*: **(R)** at
-    values a generator produced, **(Q)** at values a table returned, and what (Q) adds to (R)
-    is exactly **(C)**. -/
+/-- §2 Corollary (Q — stability): `∀ a ∈ dom(p). e(p(a)) ≈c a`. Retraction asked at values a
+    *table* returned rather than a generator produced; what it adds to (R) is (C). -/
 theorem Lawful.stable {c : Codec} (h : Lawful c) {a t a'}
     (hp : c.p a = some t) (he : c.e t = some a') : c.Ker a' a := by
   show c.p a' = c.p a
@@ -189,10 +182,8 @@ structure Carrier (c : Codec) : Prop where
 theorem Carrier.empty : Carrier Codec.empty := by
   refine ⟨?_, ?_⟩ <;> intro _ _ h <;> exact nomatch h
 
-/-- `Can(c)` is `e[T]`, as §2 writes it — and it takes `Carrier` to say so. Without `domE` a
-    codec could write an attribute from a value it does not claim to hold, and `Can` would be
-    strictly larger than the image of the held set. The two are the same set exactly when the
-    index is honest, which is what `Carrier` asserts. -/
+/-- `Can(c)` is §2's `e[T]` — and it takes `Carrier` to say so: without `domE` a codec could
+    write from a value it does not hold, making `Can` larger than the image. -/
 theorem can_iff_image {c : Codec} (h : Carrier c) {a : Attr} :
     Can c a ↔ ∃ v, c.T v ∧ c.e v = some a := by
   constructor

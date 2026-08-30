@@ -100,9 +100,18 @@ Move out: how a finding was made, what it cost, which audit missed it, and any a
 documents already state — point at them instead. And prefer a name that makes the sentence
 unnecessary: `unionLiteralString` needed no gloss where `cLitStr` did.
 
-Applied once, this removed 113 lines with **no change** to §-tag coverage, docstring coverage,
-or the guard. That is the test of whether prose was carrying its weight: if trimming it moves
-none of the three numbers the audit tracks, it was not.
+Applied across `Calculus/`, this removed **163 lines** and rewrote 24 docstrings, with **no
+change** to §-tag coverage, docstring coverage, or the guard. That is the test of whether prose
+was carrying its weight: if trimming it moves none of the three numbers the audit tracks, it
+was not. Ratio 0.38 → 0.35; docstrings of seven lines or more, 14 → 8.
+
+The eight that remain earn it, and the two longest are the pattern to copy: `nest_flat_resolve`
+tabulates eight admission cases a reader cannot derive from the statement, and `orNull_eq_self`
+lists the three terms its dichotomy closes over. Both are *content*, not commentary.
+
+Inline `--` comments were left alone — 26 across 6,200 lines, nearly all proof waypoints of the
+form "the second option survives the filter too, so the filter cannot be `[o₁]`". Those are
+navigation in a long tactic block, which is the one thing a name cannot supply.
 
 Two further conventions the passes settled on, both load-bearing:
 

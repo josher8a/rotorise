@@ -191,10 +191,8 @@ theorem opaqCodec_e_null (lossy : Bool) (n : Nat) :
     (opaqCodec (n+1) lossy).e .null = nullCodec.e .null := by
   cases lossy <;> simp
 
-/-- The `N` option after `(number)` grew its `D` gate: still an equality, and no longer a
-    `simp`. A double outside `D` is refused by `numberCodec` and therefore admitted by no
-    option, so `opaque` writes nothing for it — which is the same answer the right-hand side
-    gives, and is why `Uν` has to carry the premise (`HOpaque.num`). -/
+/-- §3 `(opaque)`, write side at kind `number`. A double outside `D` is admitted by no
+    option, so both sides are `none` — which is why `Uν` carries `HOpaque.num`. -/
 theorem opaqCodec_e_num (lossy : Bool) (n : Nat) (d : Double) :
     (opaqCodec (n+1) lossy).e (.num d)
       = (if lossy then numberCodec else Codec.empty).e (.num d) := by
