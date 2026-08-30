@@ -975,7 +975,7 @@ not. So this is not a defect in the specification's reasoning but in its bookkee
 withdrawn and four conclusions drawn from it stayed.
 
 **What it costs.** Every discharge through a `lazy`. `sep_lazy_literal` and `sepA_lazy_literal`
-separate a `lazy` literal from a plain one on both sides; `κ_lazy_lazy` reaches a doubly-nested
+separate a `lazy` literal from a plain one on both sides; `kappa_lazy_lazy` reaches a doubly-nested
 scalar; `ident_lazy` makes a `lazy` option `adm`-informative at all. While the row was `⊤`, wrapping
 any option in `lazy` silently destroyed its separability — and because a `⊤` is sound, nothing ever
 failed.
@@ -992,6 +992,44 @@ This one could not have been noticed by re-reading the tables, because the table
 was coherent; it was wrong only against a constructor definition three files away. That is the case
 for the rows being exhaustive and the reasons being written down next to them — which they now are,
 and which is what made this entry findable at all.
+
+### One where "unanalysable" turned out to be three different things
+
+The entry above repaired `lazy`. The question that followed it — whether `held` is really
+unanalysable, and whether its iso obligation would buy the analysis if it were — dissolved the
+category. **Only `opaq` was ever unanalysable.**
+
+`held` and `custom` were on the list because they carry Lean functions, and a function is not
+something a reader can look inside. But `adm` is not a reader. It is a function with the term in
+hand, and the term carries `f`, `ce` and `cp` *as data*. It can apply them.
+
+- `held`: `(c.through f g).e v = c.e (f v)` by `Iff.rfl`. The writable set is the subterm's pulled
+  back along `f`, exactly. No iso obligation is needed — that premise is about `T` and
+  roundtripping, not about the domain, so the analysis was available for free and the obligation
+  did not have to be spent.
+- `custom`: `denote` sets `e := ce` and `p := cp`. Both rows are `isSome` of the function the term
+  carries, and `custom`'s `T` is *defined* as `dom(ce)`. These are the only rows in either table
+  that are exact against the denotation in both directions (`adm_custom_exact`).
+- `opaq`: genuinely unanalysable, and for a reason none of the others shared. `opaqCodecω`'s domain
+  is a recursion over the *input's* depth, so there is no set the syntax names.
+
+Three senses had been running together under one word: (i) the term does not carry the information
+— true of nothing; (ii) the domain cannot be computed without running the codec — true only of
+`opaq`; (iii) a reader cannot see through it — true of `held` and `custom`, and not a property of
+the calculus at all. §5's table was built on (iii), which is a fact about tables rather than terms.
+
+**What it costs.** `held`'s writable side, entirely. `sepV_literal_heldLiteral` separates a `held`
+literal from a plain one whenever `f` does not send the one value to the other, and
+`not_sepV_literal_heldLiteral` is its exact converse — separation fails precisely when the adapter
+relabels. That "precisely" is new: the old row could not distinguish an adapter that relabels from
+one that does not, because it had discarded `f` unexamined.
+
+**And it settles a design question.** These three rows are why bundling each row with a *soundness*
+proof — the obvious construction, and the one first proposed — cannot work. `⊤` is sound for every
+term, so `admV := fun _ => true` discharges a soundness obligation with `rfl`. Every one of the
+seven gaps in this log was an imprecision, not an unsoundness; not one of them would have been
+caught. What catches them is the converse direction, which is what `adm_custom_exact` states and
+what the remaining rows should be measured against.
 
 ## §5 Certifying an implementation
 
