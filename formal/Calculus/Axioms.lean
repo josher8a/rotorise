@@ -36,6 +36,7 @@ def sanctionedAxioms : List Lean.Name :=
     `Calculus.sanctionedAxioms`. -/
 syntax (name := assertAxioms) "#assert_axioms " ident : command
 
+/-- Elaborator for `#assert_axioms`: one named constant, checked against the base. -/
 @[command_elab assertAxioms]
 def elabAssertAxioms : CommandElab := fun stx => do
   let name ← liftCoreM <| realizeGlobalConstNoOverload stx[1]
@@ -56,6 +57,8 @@ def elabAssertAxioms : CommandElab := fun stx => do
     guarded by existing. -/
 syntax (name := assertAxiomsAll) "#assert_axioms_all" : command
 
+/-- Elaborator for `#assert_axioms_all`: every theorem in the namespace, found by walking
+    the environment, so coverage cannot drift from the list nobody is keeping. -/
 @[command_elab assertAxiomsAll]
 def elabAssertAxiomsAll : CommandElab := fun _ => do
   let env ← getEnv
