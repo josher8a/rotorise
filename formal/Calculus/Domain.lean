@@ -1,3 +1,5 @@
+import Mathlib.Data.Finset.Basic
+import Mathlib.Data.Finset.Card
 /-!
 # §1 — The attribute domain
 
@@ -250,9 +252,12 @@ inductive Attr where
   | b    (v : Bytes)
   | bool (v : Bool)
   | null
-  | ss   (v : List String)
-  | ns   (v : List Numeral)
-  | bs   (v : List Bytes)
+  /-- §1's `℘⁺fin(String)`. A `Finset` and not a list: the reference says the order of a
+      set's values is not preserved and each value is unique, and the store dedups on
+      insert. Both facts are properties of the *type*, not obligations on a codec. -/
+  | ss   (v : Finset String)
+  | ns   (v : Finset Numeral)
+  | bs   (v : Finset Bytes)
   | l    (v : List Attr)
   | m    (v : List (Name × Attr))
 
@@ -291,7 +296,11 @@ inductive Value where
   | bool (v : Bool)
   | bin  (v : Bytes)
   | null
-  | set  (v : List Value)
+  /-- The reference: "The set types are string set, number set, and binary set." Three
+      concrete element types, so each is a genuine `Finset`. -/
+  | strSet (v : Finset String)
+  | numSet (v : Finset Double)
+  | binSet (v : Finset Bytes)
   | arr  (v : List Value)
   | map  (v : List (Name × Value))
 
@@ -302,7 +311,9 @@ def Value.kind : Value → Kind
   | .bool _ => .boolean
   | .bin _  => .binary
   | .null   => .null
-  | .set _  => .set
+  | .strSet _ => .set
+  | .numSet _ => .set
+  | .binSet _ => .set
   | .arr _  => .array
   | .map _  => .map
 

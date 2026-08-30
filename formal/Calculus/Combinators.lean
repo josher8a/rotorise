@@ -636,14 +636,88 @@ def numPayloads (as : List Attr) : Option (List Numeral) := traverse nC.out as
 
 def binPayloads (as : List Attr) : Option (List Bytes) := traverse bC.out as
 
-/-- Encode a list of element attributes as the wire set their member selects. -/
-def asWireSet (as : List Attr) : Option Attr :=
-  if as.isEmpty then none
-  else match strPayloads as with
-    | some ss => some (Attr.ss ss)
-    | none => match numPayloads as with
-      | some ns => some (Attr.ns ns)
-      | none => (binPayloads as).map Attr.bs
+/-- **The set image.** Map a finite set through a partial function, refusing if an element
+    fails *or if two elements collide*.
+
+    Not `Finset.image`, for two reasons. It dedups, which is the wrong answer here — (R)
+    needs the element map injective, and collapsing two elements makes `p (e v) = v`
+    unsatisfiable — so a collision must be refused, not absorbed. And its API is classical:
+    `Finset.mem_image` and `Multiset.mem_dedup` depend on `Classical.choice`, which §3's
+    axiom base does not admit. A `Nodup`-guarded `Multiset.map` needs neither. -/
+noncomputable def setImage {α β : Type} [DecidableEq β]
+    (f : α → Option β) (S : Finset α) : Option (Finset β) :=
+  if h : ∀ x ∈ S, (f x).isSome then
+    if hn : (S.attach.val.map (fun x => (f x.1).get (h x.1 x.2))).Nodup then
+      some ⟨_, hn⟩
+    else none
+  else none
+
+/-- Every element of the source maps. -/
+theorem setImage_some {α β : Type} [DecidableEq β] {f : α → Option β} {S : Finset α}
+    {T : Finset β} (h : setImage f S = some T) : ∀ x ∈ S, (f x).isSome := by
+  unfold setImage at h
+  split at h
+  · next hall => exact hall
+  · exact nomatch h
+
+/-- …and the image contains exactly the elements' images. -/
+theorem mem_setImage {α β : Type} [DecidableEq β] {f : α → Option β} {S : Finset α}
+    {T : Finset β} (h : setImage f S = some T) (y : β) :
+    y ∈ T ↔ ∃ x ∈ S, f x = some y := by
+  unfold setImage at h
+  split at h
+  · next hall =>
+    split at h
+    · next hn =>
+      injection h with h
+      subst h
+      constructor
+      · intro hy
+        simp only [Finset.mem_mk, Multiset.mem_map] at hy
+        obtain ⟨x, -, hxy⟩ := hy
+        exact ⟨x.1, x.2, by rw [← hxy]; exact (Option.some_get (hall x.1 x.2)).symm⟩
+      · rintro ⟨x, hx, hfx⟩
+        simp only [Finset.mem_mk, Multiset.mem_map]
+        refine ⟨⟨x, hx⟩, Multiset.mem_attach _ _, ?_⟩
+        rw [Option.get_of_mem (hall x hx) hfx]
+    · exact nomatch h
+  · exact nomatch h
+
+/-- A non-empty set has a non-empty image. -/
+theorem setImage_nonempty {α β : Type} [DecidableEq β] {f : α → Option β} {S : Finset α}
+    {T : Finset β} (h : setImage f S = some T) (hs : S.Nonempty) : T.Nonempty := by
+  obtain ⟨x, hx⟩ := hs
+  obtain ⟨y, hy⟩ := Option.isSome_iff_exists.mp (setImage_some h x hx)
+  exact ⟨y, (mem_setImage h y).mpr ⟨x, hx, hy⟩⟩
+
+/-- A successful `bind` needs a successful left. -/
+theorem bind_isSome_left {α β : Type} {o : Option α} {f : α → Option β}
+    (h : (o.bind f).isSome = true) : o.isSome = true := by
+  cases o <;> simp_all
+
+/-- Reading a value's scalar payload, the mirror of `sC`/`nC`/`bC` on the value side. -/
+def vStr : Value → Option String := fun v => match v with | .str s => some s | _ => none
+def vNum : Value → Option Double := fun v => match v with | .num d => some d | _ => none
+def vBin : Value → Option Bytes  := fun v => match v with | .bin b => some b | _ => none
+
+/-- A `bind` through a value projection pins the value. -/
+theorem bind_vStr {o : Option Value} {y : String} (h : o.bind vStr = some y) :
+    o = some (.str y) := by
+  cases o with
+  | none => exact nomatch h
+  | some w => cases w <;> simp_all [vStr]
+
+theorem bind_vNum {o : Option Value} {y : Double} (h : o.bind vNum = some y) :
+    o = some (.num y) := by
+  cases o with
+  | none => exact nomatch h
+  | some w => cases w <;> simp_all [vNum]
+
+theorem bind_vBin {o : Option Value} {y : Bytes} (h : o.bind vBin = some y) :
+    o = some (.bin y) := by
+  cases o with
+  | none => exact nomatch h
+  | some w => cases w <;> simp_all [vBin]
 
 /-- The member a set stores, computed from its element's (§3 `(set)`). -/
 def setMember : Member → Option Member
@@ -652,22 +726,121 @@ def setMember : Member → Option Member
   | .B => some .BS
   | _ => none
 
-def setCodec (c : Codec) : Codec :=
-  { T := fun v => match v with | .set vs => vs ≠ [] ∧ ∀ x ∈ vs, c.T x | _ => False
+/-- Encode a value-set's payloads into the wire set their member selects. -/
+noncomputable def encSet {α : Type} (c : Codec) (inj : α → Value) (S : Finset α) :
+    Option Attr :=
+  if S.card = 0 then none
+  else match setImage (fun x => (c.e (inj x)).bind sC.out) S with
+    | some T => some (.ss T)
+    | none => match setImage (fun x => (c.e (inj x)).bind nC.out) S with
+      | some T => some (.ns T)
+      | none => (setImage (fun x => (c.e (inj x)).bind bC.out) S).map Attr.bs
+
+/-- …and back: decode a wire set's payloads into the value set their kind selects. -/
+noncomputable def decSet {α : Type} (c : Codec) (inj : α → Attr) (S : Finset α) :
+    Option Value :=
+  if S.card = 0 then none
+  else match setImage (fun x => (c.p (inj x)).bind vStr) S with
+    | some T => some (.strSet T)
+    | none => match setImage (fun x => (c.p (inj x)).bind vNum) S with
+      | some T => some (.numSet T)
+      | none => (setImage (fun x => (c.p (inj x)).bind vBin) S).map Value.binSet
+
+/-- Writing a set needs a non-empty one… -/
+theorem encSet_nonempty {α : Type} {c : Codec} {inj : α → Value} {S : Finset α} {a : Attr}
+    (h : encSet c inj S = some a) : S.Nonempty := by
+  unfold encSet at h
+  split at h
+  · exact nomatch h
+  · next hcard => exact Finset.card_pos.mp (Nat.pos_of_ne_zero hcard)
+
+/-- …and every element to write. -/
+theorem encSet_elem {α : Type} {c : Codec} {inj : α → Value} {S : Finset α} {a : Attr}
+    (h : encSet c inj S = some a) : ∀ x ∈ S, (c.e (inj x)).isSome = true := by
+  unfold encSet at h
+  split at h
+  · exact nomatch h
+  · split at h
+    · next T hT => exact fun x hx => bind_isSome_left (setImage_some hT x hx)
+    · split at h
+      · next T hT => exact fun x hx => bind_isSome_left (setImage_some hT x hx)
+      · next =>
+        obtain ⟨T, hT, -⟩ := Option.map_eq_some'.mp h
+        exact fun x hx => bind_isSome_left (setImage_some hT x hx)
+
+/-- Reading a set needs a non-empty one… -/
+theorem decSet_nonempty {α : Type} {c : Codec} {inj : α → Attr} {S : Finset α} {v : Value}
+    (h : decSet c inj S = some v) : S.Nonempty := by
+  unfold decSet at h
+  split at h
+  · exact nomatch h
+  · next hcard => exact Finset.card_pos.mp (Nat.pos_of_ne_zero hcard)
+
+/-- …and every element to read. -/
+theorem decSet_elem {α : Type} {c : Codec} {inj : α → Attr} {S : Finset α} {v : Value}
+    (h : decSet c inj S = some v) : ∀ x ∈ S, (c.p (inj x)).isSome = true := by
+  unfold decSet at h
+  split at h
+  · exact nomatch h
+  · split at h
+    · next T hT => exact fun x hx => bind_isSome_left (setImage_some hT x hx)
+    · split at h
+      · next T hT => exact fun x hx => bind_isSome_left (setImage_some hT x hx)
+      · next =>
+        obtain ⟨T, hT, -⟩ := Option.map_eq_some'.mp h
+        exact fun x hx => bind_isSome_left (setImage_some hT x hx)
+
+/-- What a read produces: one of the three value sets, each element read from an element
+    of the wire set. -/
+theorem decSet_mem {α : Type} {c : Codec} {inj : α → Attr} {S : Finset α} {v : Value}
+    (h : decSet c inj S = some v) :
+    (∃ T : Finset String, v = .strSet T ∧ T.Nonempty ∧
+        ∀ y ∈ T, ∃ x ∈ S, c.p (inj x) = some (.str y))
+  ∨ (∃ T : Finset Double, v = .numSet T ∧ T.Nonempty ∧
+        ∀ y ∈ T, ∃ x ∈ S, c.p (inj x) = some (.num y))
+  ∨ (∃ T : Finset Bytes, v = .binSet T ∧ T.Nonempty ∧
+        ∀ y ∈ T, ∃ x ∈ S, c.p (inj x) = some (.bin y)) := by
+  have hS : S.Nonempty := decSet_nonempty h
+  unfold decSet at h
+  split at h
+  · exact nomatch h
+  · split at h
+    · next T hT =>
+      injection h with h
+      refine Or.inl ⟨T, h.symm, setImage_nonempty hT hS, fun y hy => ?_⟩
+      obtain ⟨x, hx, hxy⟩ := (mem_setImage hT y).mp hy
+      exact ⟨x, hx, bind_vStr hxy⟩
+    · split at h
+      · next T hT =>
+        injection h with h
+        refine Or.inr (Or.inl ⟨T, h.symm, setImage_nonempty hT hS, fun y hy => ?_⟩)
+        obtain ⟨x, hx, hxy⟩ := (mem_setImage hT y).mp hy
+        exact ⟨x, hx, bind_vNum hxy⟩
+      · next =>
+        obtain ⟨T, hT, hv⟩ := Option.map_eq_some'.mp h
+        refine Or.inr (Or.inr ⟨T, hv.symm, setImage_nonempty hT hS, fun y hy => ?_⟩)
+        obtain ⟨x, hx, hxy⟩ := (mem_setImage hT y).mp hy
+        exact ⟨x, hx, bind_vBin hxy⟩
+
+/-- §3 `(set)`. Non-emptiness, uniqueness and homogeneity are all carried by the **types**
+    now: a `Finset` has no repeats and no order, and the three constructors are the three
+    element types the reference names. What is left for the codec is the element map. -/
+noncomputable def setCodec (c : Codec) : Codec :=
+  { T := fun v => match v with
+      | .strSet S => S.Nonempty ∧ ∀ s ∈ S, c.T (.str s)
+      | .numSet S => S.Nonempty ∧ ∀ d ∈ S, c.T (.num d)
+      | .binSet S => S.Nonempty ∧ ∀ b ∈ S, c.T (.bin b)
+      | _ => False
     μ := c.μ.bind setMember
     e := fun v => match v with
-      | .set vs => (traverse c.e vs).bind asWireSet
+      | .strSet S => encSet c Value.str S
+      | .numSet S => encSet c Value.num S
+      | .binSet S => encSet c Value.bin S
       | _ => none
     p := fun a => match a with
-      | .ss vs =>
-        if vs.isEmpty then none
-        else (traverse (fun s => c.p (.s s)) vs).map Value.set
-      | .ns vs =>
-        if vs.isEmpty then none
-        else (traverse (fun x => c.p (.n x)) vs).map Value.set
-      | .bs vs =>
-        if vs.isEmpty then none
-        else (traverse (fun b => c.p (.b b)) vs).map Value.set
+      | .ss S => decSet c Attr.s S
+      | .ns S => decSet c Attr.n S
+      | .bs S => decSet c Attr.b S
       | _ => none }
 
 /-! ### A codec carried between two prisms
@@ -822,28 +995,22 @@ end Entrywise
     one prism, which is why it is not an `entrywise` product and why its read-side
     inversion names all three families. -/
 
-/-- What `set` writes: a `set` value whose elements all write, gathered by `asWireSet`. -/
+/-- What `set` writes: one of the three value-set constructors, its payloads imaged
+    through the element codec. -/
 theorem setCodec_e_eq {c : Codec} {v : Value} {a : Attr} :
     (setCodec c).e v = some a ↔
-      ∃ vs as, v = .set vs ∧ traverse c.e vs = some as ∧ asWireSet as = some a := by
-  cases v <;> simp [setCodec, Option.bind_eq_some]
+      (∃ S : Finset String, v = .strSet S ∧ encSet c Value.str S = some a)
+      ∨ (∃ S : Finset Double, v = .numSet S ∧ encSet c Value.num S = some a)
+      ∨ (∃ S : Finset Bytes, v = .binSet S ∧ encSet c Value.bin S = some a) := by
+  cases v <;> simp [setCodec]
 
-/-- What `set` reads: a nonempty wire set of one of the three families, its payloads
-    each read through the matching element prism. The read-side mirror of
-    `setCodec_e_eq`, and the reason the three families have to be spelled out — the
-    attribute side of `set` is a choice among three constructors, not one prism. -/
+/-- …and what it reads: one of the three wire sets, imaged back. -/
 theorem setCodec_p_eq {c : Codec} {a : Attr} {v : Value} :
     (setCodec c).p a = some v ↔
-      ∃ vs : List Value, v = .set vs ∧
-        ((∃ ss : List String, a = .ss ss ∧ ss ≠ [] ∧
-            traverse (fun s => c.p (.s s)) ss = some vs)
-         ∨ (∃ ns : List Numeral, a = .ns ns ∧ ns ≠ [] ∧
-            traverse (fun x => c.p (.n x)) ns = some vs)
-         ∨ (∃ bs : List Bytes, a = .bs bs ∧ bs ≠ [] ∧
-            traverse (fun b => c.p (.b b)) bs = some vs)) := by
-  cases a <;>
-    simp [setCodec, Option.map_eq_some', eq_comm (a := v), List.isEmpty_iff] <;>
-    tauto
+      (∃ S : Finset String, a = .ss S ∧ decSet c Attr.s S = some v)
+      ∨ (∃ S : Finset Numeral, a = .ns S ∧ decSet c Attr.n S = some v)
+      ∨ (∃ S : Finset Bytes, a = .bs S ∧ decSet c Attr.b S = some v) := by
+  cases a <;> simp [setCodec]
 
 def arrayCodec (c : Codec) : Codec :=
   { T := fun v => match v with | .arr vs => ∀ x ∈ vs, c.T x | _ => False
@@ -1842,26 +2009,21 @@ theorem carrier_orNull {c : Codec} (hc : Carrier c) : Carrier c.orNull where
 /-! ### Containers -/
 
 
-/-- `set`: nonemptiness comes from the wire, on both sides — `asWireSet` refuses the
-    empty list going out, and `p` refuses an empty wire set coming in. §3's `℘⁺fin`.
-    The three read-side families differ only in which prism the payloads sit in, so the
-    argument is the traversal fact applied three times to the same shape. -/
+/-- `set`: non-emptiness comes from the codec refusing an empty set on both sides, and
+    membership in the held set from the element codec's own carrier. Uniqueness and order
+    are no longer conditions at all — the `Finset` carries them. -/
 theorem carrier_setCodec {c : Codec} (hc : Carrier c) : Carrier (setCodec c) where
   domE he := by
-    obtain ⟨vs, as, rfl, htr, hw⟩ := setCodec_e_eq.mp he
-    refine ⟨?_, traverse_mem_input (fun _ _ hxy => hc.domE hxy) htr⟩
-    rintro rfl
-    cases (by simpa using htr : as = [])
-    exact nomatch hw
+    rcases setCodec_e_eq.mp he with ⟨S, rfl, hE⟩ | ⟨S, rfl, hE⟩ | ⟨S, rfl, hE⟩ <;>
+      refine ⟨encSet_nonempty hE, fun x hx => ?_⟩ <;>
+      · obtain ⟨b, hb⟩ := Option.isSome_iff_exists.mp (encSet_elem hE x hx)
+        exact hc.domE hb
   ranP hp := by
-    obtain ⟨vs, rfl, hcase⟩ := setCodec_p_eq.mp hp
-    have nonempty : ∀ {β : Type} (ws : List β) (f : β → Option Value),
-        ws ≠ [] → traverse f ws = some vs → vs ≠ [] := by
-      rintro β ws f hws htr rfl
-      exact hws (List.eq_nil_of_length_eq_zero (traverse_length ws [] htr))
-    rcases hcase with ⟨ss, -, hne, htr⟩ | ⟨ns, -, hne, htr⟩ | ⟨bs, -, hne, htr⟩ <;>
-      exact ⟨nonempty _ _ hne htr, traverse_mem (fun _ _ hxy => hc.ranP hxy) htr⟩
-
+    rcases setCodec_p_eq.mp hp with ⟨S, rfl, hD⟩ | ⟨S, rfl, hD⟩ | ⟨S, rfl, hD⟩ <;>
+      · rcases decSet_mem hD with ⟨T, rfl, hne, hm⟩ | ⟨T, rfl, hne, hm⟩ | ⟨T, rfl, hne, hm⟩ <;>
+        · refine ⟨hne, fun y hy => ?_⟩
+          obtain ⟨x, -, hx⟩ := hm y hy
+          exact hc.ranP hx
 
 /-! ### Sums -/
 

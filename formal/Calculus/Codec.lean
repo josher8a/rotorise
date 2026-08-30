@@ -63,9 +63,9 @@ inductive Agree : Attr → Attr → Prop where
   | b    (x y : Bytes)   : Agree (.b x) (.b y)
   | bool (x y : Bool)    : Agree (.bool x) (.bool y)
   | null                 : Agree .null .null
-  | ss   (x y : List String)  : Agree (.ss x) (.ss y)
-  | ns   (x y : List Numeral) : Agree (.ns x) (.ns y)
-  | bs   (x y : List Bytes)   : Agree (.bs x) (.bs y)
+  | ss   (x y : Finset String)  : Agree (.ss x) (.ss y)
+  | ns   (x y : Finset Numeral) : Agree (.ns x) (.ns y)
+  | bs   (x y : Finset Bytes)   : Agree (.bs x) (.bs y)
   | l    (xs ys : List Attr)
          (h : ∀ q ∈ List.zip xs ys, Agree q.1 q.2) : Agree (.l xs) (.l ys)
   | m    (xs ys : List (Name × Attr))
