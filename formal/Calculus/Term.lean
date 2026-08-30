@@ -24,6 +24,9 @@ inductive Term where
       `nullCodec` is one of `opaque`'s options, but until now no *term* denoted it —
       so a schema could not say "this attribute is exactly NULL". -/
   | null
+  /-- §3 `(literal)` at arity one: a single value, whose base — and so whose member — is
+      fixed by its kind. The n-ary form is surface syntax for the union of these. -/
+  | literal (v : Value)
   | literalS (ls : List String)
   | literalN (ls : List Double)
   | set      (elem : Term)

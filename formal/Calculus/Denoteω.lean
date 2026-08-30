@@ -29,6 +29,7 @@ mutual
 
 /-- §3–§4, denoted. Same dispatch as `denote`, no fuel. -/
 def denoteω : Term → Codec
+  | .literal v => literalCodec v
   | .string => stringCodec
   | .number => numberCodec
   | .decimal => decimalCodec
@@ -130,6 +131,7 @@ mutual
 theorem denoteω_μ : ∀ t : Term, (denoteω t).μ = μSyn t
   | .string | .number | .decimal | .boolean | .binary | .null
   | .literalS _ | .literalN _ => rfl
+  | .literal v => literalCodec_μ v
   | .set elem => by
       simp only [denoteω, μSyn, setCodec, denoteω_μ elem]
   | .array _ | .tuple _ _ | .record _ => rfl
@@ -169,7 +171,7 @@ mutual
 
 def termDepth : Term → Nat
   | .string | .number | .decimal | .boolean | .binary | .null
-  | .literalS _ | .literalN _ | .custom _ _ | .opaq _ => 1
+  | .literal _ | .literalS _ | .literalN _ | .custom _ _ | .opaq _ => 1
   | .set t | .array t | .record t | .nullable t | .lazy t => termDepth t + 1
   | .held t _ _ => termDepth t + 1
   | .refine t _ => termDepth t + 1
@@ -218,6 +220,7 @@ mutual
     is the recursion pushed under whichever combinator the rule denotes. -/
 theorem denoteω_eq : ∀ (t : Term) (n : Nat), termDepth t <= n -> denoteω t = denote n t
   | t, 0, h => absurd h (by cases t <;> simp [termDepth])
+  | .literal _, _+1, _ => rfl
   | .string, _+1, _ => rfl
   | .number, _+1, _ => rfl
   | .decimal, _+1, _ => rfl

@@ -36,6 +36,21 @@ def tagsOf (d : Name) : Term → List String
     | _ => []
   | _ => []
 
+/-- §3 `(literal)`'s member: the one its value's kind stores as. A container kind has no
+    ground base and so no member, which is the rule's `g ground` premise as a function. -/
+def literalMember : Value → Option Member
+  | .str _  => some .S
+  | .num _  => some .N
+  | .bool _ => some .BOOL
+  | .bin _  => some .B
+  | .null   => some .NULL
+  | _       => none
+
+/-- `(literal)`'s member is its base's — the dispatch in `literalCodec` and the one in
+    `literalMember` agree case for case. -/
+theorem literalCodec_μ (v : Value) : (literalCodec v).μ = literalMember v := by
+  cases v <;> rfl
+
 mutual
 
 /-- The member a term stores, syntactically — the `⇝` index computed from the term.
@@ -43,6 +58,7 @@ mutual
     forced. -/
 def μSyn : Term → Option Member
   | .string => some .S
+  | .literal v => literalMember v
   | .literalS _ => some .S
   | .number => some .N
   | .decimal => some .N
@@ -96,6 +112,7 @@ def denote : Nat → Term → Codec
     | .boolean => booleanCodec
     | .null => nullCodec
     | .binary => binaryCodec
+    | .literal v => literalCodec v
     | .literalS ls => literalSCodec ls
     | .literalN ls => literalNCodec ls
     | .set elem => setCodec (denote fuel elem)
