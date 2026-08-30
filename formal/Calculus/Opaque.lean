@@ -372,19 +372,19 @@ theorem opaqCodec_p_n (lossy : Bool) (n : Nat) (x : Numeral) :
       simp [numberCodec_p_n, hd, hw]
 
 /-- §3 `(opaque)`, read side at member `SS` — one of the three members routing to the single `set` option, which is the ten-versus-eight asymmetry in the header. -/
-theorem opaqCodec_p_ss (lossy : Bool) (n : Nat) (vs : List String) :
+theorem opaqCodec_p_ss (lossy : Bool) (n : Nat) (vs : Finset String) :
     (opaqCodec (n+1) lossy).p (.ss vs) = (setCodec (opaqCodec n lossy)).p (.ss vs) := by
   cases hp : (setCodec (opaqCodec n lossy)).p (.ss vs) <;>
     cases lossy <;> simp [-setCodec, hp]
 
 /-- §3 `(opaque)`, read side at member `NS`. -/
-theorem opaqCodec_p_ns (lossy : Bool) (n : Nat) (vs : List Numeral) :
+theorem opaqCodec_p_ns (lossy : Bool) (n : Nat) (vs : Finset Numeral) :
     (opaqCodec (n+1) lossy).p (.ns vs) = (setCodec (opaqCodec n lossy)).p (.ns vs) := by
   cases hp : (setCodec (opaqCodec n lossy)).p (.ns vs) <;>
     cases lossy <;> simp [-setCodec, hp]
 
 /-- §3 `(opaque)`, read side at member `BS`. -/
-theorem opaqCodec_p_bs (lossy : Bool) (n : Nat) (vs : List Bytes) :
+theorem opaqCodec_p_bs (lossy : Bool) (n : Nat) (vs : Finset Bytes) :
     (opaqCodec (n+1) lossy).p (.bs vs) = (setCodec (opaqCodec n lossy)).p (.bs vs) := by
   cases hp : (setCodec (opaqCodec n lossy)).p (.bs vs) <;>
     cases lossy <;> simp [-setCodec, hp]
@@ -456,29 +456,26 @@ theorem opaq_p_agree (lossy : Bool) :
       have hn' : 1 <= n' := by simp only [Attr.depth] at hn; omega
       have hm' : 1 <= m' := by simp only [Attr.depth] at hm; omega
       rw [opaqCodec_p_ss, opaqCodec_p_ss]
-      show (if vs.isEmpty then none
-            else (traverse (fun s => (opaqCodec n' lossy).p (.s s)) vs).map Value.set)
-         = (if vs.isEmpty then none
-            else (traverse (fun s => (opaqCodec m' lossy).p (.s s)) vs).map Value.set)
-      rw [traverse_congr vs (fun s _ => opaq_p_s_agree lossy s n' m' hn' hm')]
+      simp only [setCodec, decSet,
+        show ∀ x : String, (opaqCodec n' lossy).p (Attr.s x)
+             = (opaqCodec m' lossy).p (Attr.s x) from
+          fun x => opaq_p_s_agree lossy x n' m' hn' hm']
   | .ns vs, n'+1, m'+1, hn, hm => by
       have hn' : 1 <= n' := by simp only [Attr.depth] at hn; omega
       have hm' : 1 <= m' := by simp only [Attr.depth] at hm; omega
       rw [opaqCodec_p_ns, opaqCodec_p_ns]
-      show (if vs.isEmpty then none
-            else (traverse (fun x => (opaqCodec n' lossy).p (.n x)) vs).map Value.set)
-         = (if vs.isEmpty then none
-            else (traverse (fun x => (opaqCodec m' lossy).p (.n x)) vs).map Value.set)
-      rw [traverse_congr vs (fun x _ => opaq_p_n_agree lossy x n' m' hn' hm')]
+      simp only [setCodec, decSet,
+        show ∀ x : Numeral, (opaqCodec n' lossy).p (Attr.n x)
+             = (opaqCodec m' lossy).p (Attr.n x) from
+          fun x => opaq_p_n_agree lossy x n' m' hn' hm']
   | .bs vs, n'+1, m'+1, hn, hm => by
       have hn' : 1 <= n' := by simp only [Attr.depth] at hn; omega
       have hm' : 1 <= m' := by simp only [Attr.depth] at hm; omega
       rw [opaqCodec_p_bs, opaqCodec_p_bs]
-      show (if vs.isEmpty then none
-            else (traverse (fun b => (opaqCodec n' lossy).p (.b b)) vs).map Value.set)
-         = (if vs.isEmpty then none
-            else (traverse (fun b => (opaqCodec m' lossy).p (.b b)) vs).map Value.set)
-      rw [traverse_congr vs (fun b _ => opaq_p_b_agree lossy b n' m' hn' hm')]
+      simp only [setCodec, decSet,
+        show ∀ x : Bytes, (opaqCodec n' lossy).p (Attr.b x)
+             = (opaqCodec m' lossy).p (Attr.b x) from
+          fun x => opaq_p_b_agree lossy x n' m' hn' hm']
   | .l as, n'+1, m'+1, hn, hm => by
       have hn' : Attr.depthL as <= n' := by simp only [Attr.depth] at hn; omega
       have hm' : Attr.depthL as <= m' := by simp only [Attr.depth] at hm; omega
