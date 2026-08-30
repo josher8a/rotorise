@@ -189,6 +189,13 @@ theorem funImage_isSome {β : Type} {keys : Finset Name} {g : {k // k ∈ keys} 
     (hall : ∀ k, (g k).isSome = true) : (funImage g).isSome = true := by
   unfold funImage; rw [dif_pos hall]; rfl
 
+theorem funImage_map_isSome {β γ : Type} {keys : Finset Name}
+    {g : {k // k ∈ keys} → Option β} (h : (funImage g).isSome = true)
+    (f : ({k // k ∈ keys} → β) → γ) : ((funImage g).map f).isSome = true := by
+  cases hh : funImage g with
+  | none => rw [hh] at h; exact absurd h (by simp)
+  | some x => simp
+
 theorem funImage_eq {β : Type} {keys : Finset Name} {g : {k // k ∈ keys} → Option β}
     {f : {k // k ∈ keys} → β} (h : ∀ k, g k = some (f k)) : funImage g = some f := by
   unfold funImage
@@ -3561,45 +3568,42 @@ theorem object_canon (hf : ∀ kf ∈ sems, LawfulCore kf.2.codec)
     (hfb : ∀ kf ∈ sems, ∀ c v, kf.2 = .fb c v → (c.e v).isSome = true)
     (hnd : (sems.map (·.1)).Nodup)
     (hknDecl : ∀ k, (sems.lookup k).isSome = true → kn k = true) :
-    ∀ kas kvs, objRead sems rc? kn kas = some kvs →
-      (objWrite sems rc? kvs).isSome = true := by
-  intro kas kvs h
-  obtain ⟨ds, hreq, htr, rfl⟩ := objRead_eq.mp h
-  obtain ⟨es₁, hes₁⟩ := Option.isSome_iff_exists.mp
-    (traverse_isSome (f := encEntry (fun k => sems.lookup k) (rc?.map (·.e)))
-      (objStep_canon hf hrc) (kas.filter fun ka => kn ka.1) ds htr)
-  have hdefs : ∀ x ∈ fbDefaults (kas.map (·.1)) sems,
-      ((encEntry (fun k => sems.lookup k) (rc?.map (·.e))) x).isSome = true := by
-    rintro ⟨k', v'⟩ hx
-    obtain ⟨c, hmem, hcf⟩ := fbDefaults_spec hx
-    obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp (hfb (k', .fb c v') hmem c v' rfl)
-    exact Option.isSome_iff_exists.mpr ⟨(k', a'), encEntry_eq.mpr ⟨c, a',
-      by simp [entryCodec, lookup_eq_of_mem_nodup hnd hmem, FieldSem.codec], ha', rfl⟩⟩
-  obtain ⟨es₂, hes₂⟩ := Option.isSome_iff_exists.mp (traverse_isSome_of_all hdefs)
-  have hnames : ds.map (·.1) = (kas.filter fun ka => kn ka.1).map (·.1) :=
-    traverse_fst decEntry_fst htr
-  refine Option.isSome_iff_exists.mpr ⟨_, objWrite_eq.mpr ⟨?_, traverse_append hes₁ hes₂⟩⟩
-  refine valPresentB_of fun k fs hm hno => ?_
-  rw [List.map_append]
-  cases hck : (kas.map (·.1)).contains k with
-  | true =>
-    obtain ⟨ax, haxm⟩ := exists_of_mem_fst (mem_of_contains hck)
-    have hknk : kn k = true := hknDecl k (lookup_isSome_of_mem_fst
-      (List.mem_map.mpr ⟨(k, fs), hm, rfl⟩))
-    have hkfl : k ∈ (kas.filter fun ka => kn ka.1).map (·.1) :=
-      List.mem_map.mpr ⟨(k, ax), List.mem_filter.mpr ⟨haxm, hknk⟩, rfl⟩
-    rw [← hnames] at hkfl
-    exact contains_of_mem (List.mem_append.mpr (Or.inl hkfl))
-  | false =>
-    cases fs with
-    | opt c => exact absurd rfl (hno c)
-    | req c => rw [reqPresentB_spec hreq hm] at hck; exact nomatch hck
-    | fb c v =>
-      exact contains_of_mem (List.mem_append.mpr (Or.inr
-        (List.mem_map.mpr ⟨(k, v), fbDefaults_mem hm hck, rfl⟩)))
+    ∀ q p, objRead sems rc? kn q = some p → (objWrite sems rc? p).isSome = true := by
+  rintro q p h
+  obtain ⟨hreq, d, hd, rfl⟩ := objRead_eq.mp h
+  have hval : valPresentB sems (q.1.filter (kn ·) ∪ fbNames q.1 sems) = true := by
+    refine valPresentB_of fun k fs hm hno => ?_
+    have hknk : kn k = true := hknDecl k (by rw [lookup_eq_of_mem_nodup hnd hm]; rfl)
+    rw [Finset.mem_union]
+    by_cases hk : k ∈ q.1
+    · exact Or.inl (Finset.mem_filter.mpr ⟨hk, by simpa using hknk⟩)
+    · cases fs with
+      | opt c => exact absurd rfl (hno c)
+      | req c => exact absurd (reqPresentB_spec hreq hm) hk
+      | fb c v => exact Or.inr (fbNames_mem hm hk)
+  have hstep : ∀ k : {k // k ∈ q.1.filter (kn ·) ∪ fbNames q.1 sems},
+      ((entryCodec sems rc? k.1).bind (fun c => c.e
+        (if h : k.1 ∈ q.1.filter (kn ·) then d ⟨k.1, h⟩
+         else (fbValue sems k.1).getD .null))).isSome = true := by
+    intro k
+    by_cases hk : k.1 ∈ q.1.filter (kn ·)
+    · simp only [dif_pos hk]
+      have hp := funImage_some hd ⟨k.1, hk⟩
+      cases hc : entryCodec sems rc? k.1 with
+      | none => rw [hc] at hp; exact nomatch hp
+      | some c =>
+        simp only [hc, Option.bind_some] at hp ⊢
+        exact (entryCodec_of hf hrc hc).canon hp
+    · simp only [dif_neg hk]
+      obtain ⟨⟨c, v₀, hm⟩, -⟩ :=
+        mem_fbNames.mp ((Finset.mem_union.mp k.2).resolve_left hk)
+      have hc : entryCodec sems rc? k.1 = some c := by
+        simp [entryCodec, lookup_eq_of_mem_nodup hnd hm, FieldSem.codec]
+      simp only [fbValue_of hnd hm, hc, Option.bind_some, Option.getD_some]
+      exact hfb (k.1, .fb c v₀) hm c v₀ rfl
+  simp only [objWrite, if_pos hval]
+  exact funImage_map_isSome (funImage_isSome hstep) _
 
-/-- (MP): the stand-ins have no stored counterpart to disagree with — they are exactly
-    the names the row omitted — so `≼` is decided on the kept entries, by name. -/
 theorem object_agree (hf : ∀ kf ∈ sems, Lawful kf.2.codec) (hrc : ∀ c ∈ rc?, Lawful c) :
     ∀ kas kvs kas', objRead sems rc? kn kas = some kvs →
       objWrite sems rc? kvs = some kas' → Agree (mA.into kas') (mA.into kas) := by
