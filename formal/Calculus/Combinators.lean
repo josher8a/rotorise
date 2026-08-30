@@ -1620,26 +1620,31 @@ def decEntry (spec : Name → Option FieldSem) (restP : Option (Attr → Option 
 
 /-- `fb`'s absent case, `p♭(ε) = v(∗)`: the stand-ins for the fallback names a row
     omits. Empty on canonical items, where every `fb` name is present. -/
-def fbDefaults (names : List Name) : List (Name × FieldSem) → List (Name × Value)
-  | [] => []
-  | (k, .fb _ v) :: sems =>
-    if names.contains k then fbDefaults names sems
-    else (k, v) :: fbDefaults names sems
-  | _ :: sems => fbDefaults names sems
+def fbNames (names : Finset Name) : List (Name × FieldSem) → Finset Name
+  | [] => ∅
+  | (k, .fb _ _) :: sems =>
+    if k ∈ names then fbNames names sems else insert k (fbNames names sems)
+  | _ :: sems => fbNames names sems
+
+/-- …and the stand-in each of them reads to. -/
+def fbValue (sems : List (Name × FieldSem)) (k : Name) : Option Value :=
+  match sems.lookup k with
+  | some (.fb _ v) => some v
+  | _ => none
 
 /-- Every non-`opt` binding present — the value-side guard (§4: `fallback` concludes
     `req`). -/
-def valPresentB (sems : List (Name × FieldSem)) (names : List Name) : Bool :=
+def valPresentB (sems : List (Name × FieldSem)) (names : Finset Name) : Bool :=
   sems.all fun kf =>
     match kf.2 with
     | .opt _ => true
-    | _ => names.contains kf.1
+    | _ => decide (kf.1 ∈ names)
 
 /-- Every `req` name present — the stored-side guard; `fb` reads to its stand-in. -/
-def reqPresentB (sems : List (Name × FieldSem)) (names : List Name) : Bool :=
+def reqPresentB (sems : List (Name × FieldSem)) (names : Finset Name) : Bool :=
   sems.all fun kf =>
     match kf.2 with
-    | .req _ => names.contains kf.1
+    | .req _ => decide (kf.1 ∈ names)
     | _ => true
 
 /-- The rest policy's codec, where it has one. -/
@@ -1653,34 +1658,6 @@ def keepB (rest : RestSem) (sems : List (Name × FieldSem)) : Name → Bool :=
   match rest with
   | .drop => fun k => (sems.lookup k).isSome
   | _ => fun _ => true
-
-def objectCodecCore (sems : List (Name × FieldSem)) (rc? : Option Codec)
-    (kn : Name → Bool) : Codec :=
-  { T := fun v => match v with
-      | .map kvs =>
-        valPresentB sems (kvs.map (·.1)) = true ∧
-        ∀ kv ∈ kvs, match sems.lookup kv.1 with
-          | some fs => fs.codec.T kv.2
-          | none => ∃ rc, rc? = some rc ∧ rc.T kv.2
-      | _ => False
-    μ := some .M
-    e := fun v => match v with
-      | .map kvs =>
-        if valPresentB sems (kvs.map (·.1)) = true then
-          (traverse (encEntry (fun k => sems.lookup k) (rc?.map (·.e))) kvs).map Attr.m
-        else none
-      | _ => none
-    p := fun a => match a with
-      | .m kvs =>
-        if reqPresentB sems (kvs.map (·.1)) = true then
-          (traverse (decEntry (fun k => sems.lookup k) (rc?.map (·.p)))
-            (kvs.filter fun kv => kn kv.1)).map fun ds =>
-              Value.map (ds ++ fbDefaults (kvs.map (·.1)) sems)
-        else none
-      | _ => none }
-
-def objectCodec (sems : List (Name × FieldSem)) (rest : RestSem) : Codec :=
-  objectCodecCore sems (rcOf rest) (keepB rest sems)
 
 /-! ### The object, taken apart
 
@@ -1740,49 +1717,65 @@ theorem objEntryT_eq {kv} :
 
 /-- The object's payload pair, going out: the value-side presence guard, then the
     name-dispatched steps. -/
-def objWrite (sems : List (Name × FieldSem)) (rc? : Option Codec) :
-    List (Name × Value) → Option (List (Name × Attr)) := fun kvs =>
-  if valPresentB sems (kvs.map (·.1)) = true then
-    traverse (encEntry (fun k => sems.lookup k) (rc?.map (·.e))) kvs
+noncomputable def objWrite (sems : List (Name × FieldSem)) (rc? : Option Codec) :
+    MapOf Value → Option (MapOf Attr) := fun p =>
+  if valPresentB sems p.1 = true then
+    (funImage (fun k => (entryCodec sems rc? k.1).bind (fun c => c.e (p.2 k)))).map
+      (fun g => ⟨p.1, g⟩)
   else none
 
 /-- …and coming back: the stored-side guard, the `drop` filter, the steps, and the
     stand-ins for the fallback names the row omits. -/
-def objRead (sems : List (Name × FieldSem)) (rc? : Option Codec) (kn : Name → Bool) :
-    List (Name × Attr) → Option (List (Name × Value)) := fun kas =>
-  if reqPresentB sems (kas.map (·.1)) = true then
-    (traverse (decEntry (fun k => sems.lookup k) (rc?.map (·.p)))
-      (kas.filter fun ka => kn ka.1)).map (· ++ fbDefaults (kas.map (·.1)) sems)
+noncomputable def objRead (sems : List (Name × FieldSem)) (rc? : Option Codec)
+    (kn : Name → Bool) : MapOf Attr → Option (MapOf Value) := fun p =>
+  if reqPresentB sems p.1 = true then
+    (funImage (fun k : {k // k ∈ p.1.filter (kn ·)} =>
+        (entryCodec sems rc? k.1).bind
+          (fun c => c.p (p.2 ⟨k.1, (Finset.mem_filter.mp k.2).1⟩)))).map
+      (fun d => ⟨p.1.filter (kn ·) ∪ fbNames p.1 sems, fun k =>
+        if h : k.1 ∈ p.1.filter (kn ·) then d ⟨k.1, h⟩
+        else (fbValue sems k.1).getD .null⟩)
   else none
 
-theorem objWrite_eq {kvs kas} :
-    objWrite sems rc? kvs = some kas ↔
-      valPresentB sems (kvs.map (·.1)) = true ∧
-        traverse (encEntry (fun k => sems.lookup k) (rc?.map (·.e))) kvs = some kas := by
-  simp only [objWrite]; split <;> simp_all
+theorem objWrite_eq {p : MapOf Value} {q : MapOf Attr} :
+    objWrite sems rc? p = some q ↔
+      valPresentB sems p.1 = true ∧ ∃ g,
+        funImage (fun k => (entryCodec sems rc? k.1).bind (fun c => c.e (p.2 k))) = some g ∧
+        q = ⟨p.1, g⟩ := by
+  simp only [objWrite]
+  split
+  · next hg => simp [hg, Option.map_eq_some', eq_comm (a := q)]
+  · next hg => simp [hg]
 
-theorem objRead_eq {kas kvs} :
-    objRead sems rc? kn kas = some kvs ↔
-      ∃ ds, reqPresentB sems (kas.map (·.1)) = true ∧
-        traverse (decEntry (fun k => sems.lookup k) (rc?.map (·.p)))
-          (kas.filter fun ka => kn ka.1) = some ds ∧
-        kvs = ds ++ fbDefaults (kas.map (·.1)) sems := by
-  simp only [objRead]; split <;> simp_all [Option.map_eq_some', eq_comm (a := kvs)]
+theorem objRead_eq {q : MapOf Attr} {p : MapOf Value} :
+    objRead sems rc? kn q = some p ↔
+      reqPresentB sems q.1 = true ∧ ∃ d,
+        funImage (fun k : {k // k ∈ q.1.filter (kn ·)} =>
+            (entryCodec sems rc? k.1).bind
+              (fun c => c.p (q.2 ⟨k.1, (Finset.mem_filter.mp k.2).1⟩))) = some d ∧
+        p = ⟨q.1.filter (kn ·) ∪ fbNames q.1 sems, fun k =>
+              if h : k.1 ∈ q.1.filter (kn ·) then d ⟨k.1, h⟩
+              else (fbValue sems k.1).getD .null⟩ := by
+  simp only [objRead]
+  split
+  · next hg => simp [hg, Option.map_eq_some', eq_comm (a := p)]
+  · next hg => simp [hg]
 
 /-- The object is `carriedCodec` between `map` and `M`, at that pair. -/
+noncomputable def objectCodecCore (sems : List (Name × FieldSem)) (rc? : Option Codec)
+    (kn : Name → Bool) : Codec :=
+  carriedCodec mapV mA .M
+    (fun p => valPresentB sems p.1 = true ∧ ∀ k, objEntryT sems rc? (k.1, p.2 k))
+    (objWrite sems rc?) (objRead sems rc? kn)
+
+noncomputable def objectCodec (sems : List (Name × FieldSem)) (rest : RestSem) : Codec :=
+  objectCodecCore sems (rcOf rest) (keepB rest sems)
+
 theorem objectCodecCore_eq :
     objectCodecCore sems rc? kn =
       carriedCodec mapV mA .M
-        (fun kvs => valPresentB sems (kvs.map (·.1)) = true ∧
-          ∀ kv ∈ kvs, objEntryT sems rc? kv)
-        (objWrite sems rc?) (objRead sems rc? kn) := by
-  refine Codec.ext ?_ rfl ?_ ?_ <;> funext v <;> cases v <;>
-    simp only [objectCodecCore, carriedCodec, objWrite, objRead, objEntryT, mapV, mA,
-      Ctor.into, Ctor.out, Option.bind_some, Option.bind_none, Option.map_none'] <;>
-    first
-      | rfl
-      | (split_ifs with hg <;> simp [hg, Option.map_map, Function.comp_def])
-      | simp
+        (fun p => valPresentB sems p.1 = true ∧ ∀ k, objEntryT sems rc? (k.1, p.2 k))
+        (objWrite sems rc?) (objRead sems rc? kn) := rfl
 
 /-- Inversion of an object-encode success: the value is a map, the guard held, and the
     written item is the entrywise traversal. -/
