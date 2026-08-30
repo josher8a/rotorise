@@ -948,7 +948,27 @@ its prism); one **agreeing read-extension** (`legacy`); three **products** — p
 `tuple`), keyed (`record`, `object`), quotiented (`set`) — all instances of one traversal argument;
 one **sum** (`union`), resolved by unique admission, with `(dunion)` and `opaque` the two whose (U)
 is a theorem; and a **fixpoint** (`lazy`, and `opaque` again). Fields are the keyed product's
-presence decoration, and `nullable` is that sum's guarded insertion (§3) rather than a term of its own. That is the divisible /
+presence decoration, and `nullable` is that sum's guarded insertion (§3) rather than a term of its own.
+
+One more thing the algebra makes visible, and it is worth stating because it is not obvious from
+the rules. **The two halves of the pair are the same construction at two carriers, everywhere the
+calculus builds something itself.** A sum filters by the admission _that side_ reads and acts
+through the option answering alone — the same sentence for `e` and for `p`, with `κ`-admission
+swapped for member-admission. Adjoining the null point is the same construction on values and on
+attributes. A product traverses. Reading a discriminator's tag is one lookup, spelled once per
+carrier.
+
+Exactly three terms break it, and they are the same three every time: `held`, `refine` and
+`legacy` — the wrappers carrying a **caller's function that is not itself a codec**. `held`'s `f`
+gates the writing while `g` only post-processes the reading, which is why `admA` sees through it and
+`adm` cannot (§5). `legacy`'s `r` widens the reading and touches the writing not at all. `refine`'s
+`q` is a predicate on _values_, so it gates one carrier directly and the other only after a read.
+`custom` is the degenerate case: both halves are the caller's, so there is no shared construction to
+be symmetric about.
+
+So the asymmetry in this calculus is not a property of encoding-versus-decoding. It is the mark of
+where a caller's function enters, and it stays local to the four terms that admit one.
+ That is the divisible /
 decidable [4] skeleton, read invariantly because both directions are present at once.
 
 ---
