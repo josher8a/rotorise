@@ -3605,43 +3605,24 @@ theorem object_canon (hf : ∀ kf ∈ sems, LawfulCore kf.2.codec)
   exact funImage_map_isSome (funImage_isSome hstep) _
 
 theorem object_agree (hf : ∀ kf ∈ sems, Lawful kf.2.codec) (hrc : ∀ c ∈ rc?, Lawful c) :
-    ∀ kas kvs kas', objRead sems rc? kn kas = some kvs →
-      objWrite sems rc? kvs = some kas' → Agree (mA.into kas') (mA.into kas) := by
-  intro kas kvs kas' hD hE
-  obtain ⟨ds, hreq, htr, rfl⟩ := objRead_eq.mp hD
-  obtain ⟨hval, hall⟩ := objWrite_eq.mp hE
-  obtain ⟨es₁, es₂, rfl, h₁, h₂⟩ := traverse_append_inv hall
-  refine .m (es₁ ++ es₂) kas ?_
-  intro k x y hxk hyk
-  have hnodef : k ∉ (fbDefaults (kas.map (·.1)) sems).map (·.1) :=
-    fbDefaults_not_mem (contains_of_mem (mem_fst_of_lookup hyk))
-  have hnoes₂ : es₂.lookup k = none :=
-    lookup_none_of_not_mem_fst (by rw [traverse_fst encEntry_fst h₂]; exact hnodef)
-  rw [lookup_append es₁ es₂ k] at hxk
-  cases h₁k : es₁.lookup k with
-  | none => rw [h₁k, hnoes₂] at hxk; exact nomatch hxk
-  | some x' =>
-    rw [h₁k] at hxk
-    replace hxk : some x' = some x := hxk
-    cases hxk
-    cases hknk : kn k with
-    | false =>
-      rw [lookup_none_of_not_mem_fst (by
-        rw [traverse_fst encEntry_fst h₁, traverse_fst decEntry_fst htr]
-        intro hmm
-        have h1 := lookup_isSome_of_mem_fst hmm
-        rw [lookup_filter_neg hknk kas] at h1
-        exact nomatch h1)] at h₁k
-      exact nomatch h₁k
-    | true =>
-      refine lookup_rel es₁ (kas.filter fun ka => kn ka.1) ?_ ?_ k x y h₁k ?_
-      · have l1 := traverse_length (kas.filter fun ka => kn ka.1) ds htr
-        have l2 := traverse_length ds es₁ h₁
-        omega
-      · exact traverse_rel (objStep_agree hf hrc) _ _ _ htr h₁
-      · rw [lookup_filter_pos hknk kas]; exact hyk
-
-end ObjectLaws
+    ∀ q p q', objRead sems rc? kn q = some p →
+      objWrite sems rc? p = some q' → Agree (mA.into q') (mA.into q) := by
+  rintro q p q' hD hE
+  obtain ⟨hreq, d, hd, rfl⟩ := objRead_eq.mp hD
+  obtain ⟨hval, g, hg, rfl⟩ := objWrite_eq.mp hE
+  refine Agree.m _ _ _ _ fun k hx hy => ?_
+  -- a name the stored item carries cannot be one the row omits, so the `fb` half of the
+  -- union is unreachable here and only the kept entries have to agree
+  have hkf : k ∈ q.1.filter (kn ·) :=
+    (Finset.mem_union.mp hx).resolve_right fun h => (mem_fbNames.mp h).2 hy
+  have hp := funImage_some hd ⟨k, hkf⟩
+  have hw := funImage_some hg ⟨k, hx⟩
+  cases hc : entryCodec sems rc? k with
+  | none => rw [hc] at hp; exact nomatch hp
+  | some c =>
+    simp only [hc, Option.bind_some] at hp hw
+    simp only [dif_pos hkf] at hw
+    exact (entryCodec_of hf hrc hc).agree hp hw
 
 /-- Core keyed product: (R), (C), (W) with only core children. -/
 private theorem lawfulCore_objectCore
