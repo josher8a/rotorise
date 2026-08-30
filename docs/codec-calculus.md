@@ -705,8 +705,8 @@ evidence, because the term checks the value against its own admissible set in **
 |            |                                                                                                                                                                                                            |
 | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | holds      | `literal` — the admissible set is checked; `discriminatedUnion` — a tag lookup fails honestly; `refine` — `q` is checked on the way in _and_ on the way out, which is what deciding your own membership is; `number` and `decimal`, for the same reason: each gates §1's bound on both halves |
-| propagates | `set`, `array`, `record` through the element; `tuple` and `union` when _every_ subterm has it; `optional`, `fallback`, `legacy` through the subterm                                                        |
-| never      | everything else — the _ungated_ ground scalars, `custom`, `opaque`, `lazy`; `held`, whose functions are the caller's; and `nullable`, deliberately: two nullable options both admit the null neither subterm decides |
+| propagates | `set`, `array`, `record` through the element; `tuple` and `union` when _every_ subterm has it; `optional`, `fallback`, `legacy`, `nullable` through the subterm                                            |
+| never      | everything else — the _ungated_ ground scalars, `custom`, `opaque`, `lazy`; and `held`, whose functions are the caller's                                                                                                |
 
 `object` is the other self-deciding term, and it decides by a different device: **names, not
 attempts**. A name set `N` admits `object(s, ρ)` when every name in `N` is one `s` declares and every
@@ -797,6 +797,7 @@ accept. They agree on most terms and part on four — and the partings go both w
 | `refine(c, q)`              | `adm(c) ∩ q`         | `admA(c)`                         |
 | `legacy(c, r)`              | `adm(c)`             | **`⊤`**                           |
 | `union(c₁ … cₙ)`            | `⋃ adm(cᵢ)`          | `⋃ admA(cᵢ)`                      |
+| `nullable(c)`               | `adm(c) ∪ {null}`    | `admA(c) ∪ {⟨NULL, ∗⟩}`           |
 | `held(c, f, g)`             | **`⊤`**              | `admA(c)`                         |
 | anything else               | `⊤`                  | `⊤`                               |
 

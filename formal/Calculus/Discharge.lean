@@ -84,6 +84,10 @@ def ident : Term → Bool
   -- `(literal)` checks its one value on both halves — the definition of deciding your
   -- own membership, and the reason the constructor is worth having over `refine`.
   | .literal _ => true
+  -- `nullable` propagates rather than refusing. §5 made it refuse outright, to stop two
+  -- nullable options separating on a null neither subterm decides — but with `adm` precise
+  -- that refusal is carried by the sets *overlapping at null*, which is the honest reason.
+  | .nullable t => ident t
   | .set t | .array t | .record t => ident t
   -- `refine` *holds* it rather than propagating: `q` is checked on the way in and on the
   -- way out, which is what deciding your own membership means. §3 argues the same — a `p`
@@ -155,6 +159,7 @@ noncomputable def adm : Term → Value → Bool
   -- §1's two number gates, recorded for the same reason a literal's set is: each is a
   -- `refine` over an ungated base (`numberCodec_e_restrict`, `decimalCodec_e_restrict`),
   -- and a gate the term owns is exactly what `adm` is for.
+  | .nullable t => fun v => adm t v || (match v with | .null => true | _ => false)
   | .literal v => fun w =>
       match v, w with
       | .str s, .str s'   => decide (s' = s)
@@ -213,6 +218,7 @@ def admA : Term → Attr → Bool
   -- `decimal` is to `number` as `literal-S` is to `literal-N`: it holds numerals *as
   -- their text*, so its gate is a test on the stored attribute and both sides see it.
   -- `number`'s is not — the numeral goes through `Double.ofDec` — so it stays `⊤`.
+  | .nullable t => fun a => admA t a || (match a with | .null => true | _ => false)
   | .decimal => fun a => match a with | .n x => Numeral.Stored x | _ => false
   -- The payoff over `refine`: for every base but `number` the stored attribute *is* the
   -- value, so `ℓ` bounds the readable side too. At `number` it cannot — the numeral goes
@@ -406,6 +412,18 @@ theorem adm_sound : ∀ (fuel : Nat) (t : Term) {v a},
       cases w <;> cases v <;>
         simp_all [denote, literalCodec, Codec.restrict, stringCodec, rawNumberCodec,
                   booleanCodec, binaryCodec, nullCodec, Codec.empty, adm]
+    case nullable t' =>
+      cases hw : (denote fuel t').ownsNull with
+      | true =>
+        rw [show (denote (fuel+1) (.nullable t')).e = (denote fuel t').e from
+          withNull_e_of_owns hw] at he
+        simp [adm, adm_sound fuel t' he]
+      | false =>
+        rw [show denote (fuel+1) (.nullable t') = (denote fuel t').orNull from
+          withNull_eq_orNull hw] at he
+        rcases orNull_e.mp he with ⟨rfl, -⟩ | ⟨-, hc⟩
+        · simp [adm]
+        · simp [adm, adm_sound fuel t' hc]
     case number => cases v <;> simp_all [denote, numberCodec, inD, adm]
     case decimal => cases v <;> simp_all [denote, decimalCodec, isStored, adm]
     case legacy t' r => exact adm_sound fuel t' (extendRead_e.mp he)
@@ -437,6 +455,18 @@ theorem admA_sound : ∀ (fuel : Nat) (t : Term) {a v},
       cases w <;> cases a <;>
         simp_all [denote, literalCodec, Codec.restrict, stringCodec, rawNumberCodec,
                   booleanCodec, binaryCodec, nullCodec, Codec.empty, admA]
+    case nullable t' =>
+      cases hw : (denote fuel t').ownsNull with
+      | true =>
+        rw [show (denote (fuel+1) (.nullable t')).p = (denote fuel t').p from
+          withNull_p_of_owns hw] at hp
+        simp [admA, admA_sound fuel t' hp]
+      | false =>
+        rw [show denote (fuel+1) (.nullable t') = (denote fuel t').orNull from
+          withNull_eq_orNull hw] at hp
+        rcases orNull_p.mp hp with ⟨rfl, -⟩ | ⟨-, hc⟩
+        · simp [admA]
+        · simp [admA, admA_sound fuel t' hc]
     case decimal => cases a <;> simp_all [denote, decimalCodec, admA]
     case held t' f g =>
       obtain ⟨w, hw, -⟩ := through_p.mp hp
@@ -777,9 +807,11 @@ theorem ident_of_adm : ∀ {t : Term} {v : Value}, adm t v = false → ident t =
   | .decimal, _, _ => rfl
   | .legacy t _, v, h => ident_of_adm (t := t) (v := v) h
   | .union opts, v, h => identList_of_admList (opts := opts) (v := v) h
+  | .nullable t, v, h => ident_of_adm (t := t) (v := v) (by
+      simp only [adm, Bool.or_eq_false_iff] at h; exact h.1)
   | .string, _, h | .boolean, _, h | .binary, _, h
   | .null, _, h | .set _, _, h | .array _, _, h | .tuple _ _, _, h
-  | .record _, _, h | .held _ _ _, _, h | .nullable _, _, h | .lazy _, _, h
+  | .record _, _, h | .held _ _ _, _, h | .lazy _, _, h
   | .custom _ _, _, h | .opaq _, _, h | .object _ _, _, h => nomatch h
 
 /-- A union all of whose options refuse a value is one all of whose options decide their
@@ -948,6 +980,26 @@ theorem uAtCan_boolLiterals (fuel : Nat) :
     intro v hv; cases v <;> simp_all [isTrueV, isFalseV]
   exact uAtCan_of_refine_disjoint (fuel+1) (qs := [isTrueV, isFalseV])
     lawful_booleanCodec.core (by simpa using h)
+
+/-! ### `nullable`, and a refusal that stopped being stipulated
+
+    §5 makes `nullable` *never* `ident`, deliberately — "two nullable options both admit the
+    null neither subterm decides". That was `adm` being `⊤` doing the work. With `adm`
+    precise the same pair is still refused, but for the reason that was always the true
+    one: their admissible sets **overlap at null**. So `ident` can propagate, and the
+    refusal is derived rather than stipulated. -/
+
+/-- Two nullable options still fail to separate — and now because their sets meet. -/
+theorem not_sep_nullable_pair :
+    ¬ (∀ v, adm (.nullable (.literalS ["A"])) v = true →
+            adm (.nullable (.literalS ["B"])) v = false) := by
+  intro h; exact absurd (h .null rfl) (by decide)
+
+/-- But a nullable option separates from a plain one, which it could not while `adm` said
+    `⊤` — the whole of what the row buys. -/
+theorem sep_nullable_plain (v : Value) :
+    adm (.nullable (.literalS ["A"])) v = true → adm (Term.literalS ["C"]) v = false := by
+  cases v <;> simp_all [adm]
 
 /-! ### What the unified `literal` carries
 

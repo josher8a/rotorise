@@ -128,6 +128,8 @@ halves by construction, which is what §3 argues an ad-hoc gate forgets. -/
 #assert_axioms uAtCan_of_refine_disjoint_of_typed
 #assert_axioms uAtCan_refine_container
 #assert_axioms uAtCan_boolLiterals
+#assert_axioms not_sep_nullable_pair
+#assert_axioms sep_nullable_plain
 #assert_axioms admA_literal_str
 #assert_axioms admA_literal_bool
 #assert_axioms admA_literal_num_blind
