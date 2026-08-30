@@ -596,6 +596,30 @@ declaration where two options are both `κ`-free, or give `held` a write-side `�
 carrier — and §1's `Value` is what would have to change for the second. `codec.uniqueadmission.spec.ts`
 carries the measurement as four assertions.
 
+### One the specification could state and never did
+
+Asked what an *ideal* codec is — the guess being a bijection, with prisms as the exception — §2
+turned out to have every piece of the answer and never to have assembled it.
+
+`Can(c)`, `Ker`, `Lawful.e_injective` and `retract` were all present. What was missing is five
+lines: `Lawful.can_roundTrip`, the statement that `e ∘ p = id` **on `Can(c)`**. With `retract` it
+says `e` and `p` are mutually inverse between `dom(e)` and `Can(c)` — a bijection on the nose, no
+quotient, no partiality.
+
+Which relocates the whole of §2. The four laws are not four constraints on a pair; they are a
+bijection plus **two extensions of it**, in the only two directions a bijection can be extended:
+`dom(p)` grows past `Can(c)` (the quotient, governed by (C) and `≈c`), and `dom(e)`/`dom(p)` fall
+short of `T`/`𝔸` (the partiality). `e ∘ p ≠ id` — the sentence §2 leads with — is the first
+extension seen from outside, not a weakening of the iso, because on `Can(c)` the equation holds.
+
+The guess was half right and the half it missed is the interesting one. Partiality is the prism,
+and §2 always named it. The quotient is the other extension, it is the one `Quotient Lenses` is
+cited for, and it is the reason neither reference alone is the right one for this calculus.
+
+Worth recording as method, not just as content: the gap was invisible from inside the formalization
+because nothing *needed* the theorem — every proof that could have used it used `retract` directly.
+It took a question about what the object ideally is.
+
 ### One where the abstraction was still one level too high
 
 The entry below unified §5's two *outright* dischargers as one theorem at two projections. The user

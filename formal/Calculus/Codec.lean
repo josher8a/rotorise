@@ -198,6 +198,25 @@ theorem can_iff_image {c : Codec} (h : Carrier c) {a : Attr} :
   · rintro ⟨v, hv⟩; exact ⟨v, h.domE hv, hv⟩
   · rintro ⟨v, -, hv⟩; exact ⟨v, hv⟩
 
+/-- **The ideal a codec is a deviation from**, stated so the deviation can be located.
+    `(R)` gives `p ∘ e = id` on `dom(e)`; this gives `e ∘ p = id` on `Can(c)`. Together
+    with `e_injective` they say that between the values a codec writes and the attributes
+    it does write, `e` and `p` are **mutually inverse** — a bijection, on the nose, with
+    no quotient and no partiality anywhere in sight.
+
+    So §2's `e ∘ p ≠ id` is not a failure of the pair; it is a statement about the two
+    places the bijection is *extended*. Off `Can(c)` but inside `dom(p)`, `e ∘ p` is the
+    canonizer and the equivalence is `Ker` — the quotient half. Off `dom(e)` inside `T`,
+    there is simply nothing to write — the partial half. Every law in §2 beyond `(R)` is
+    about one of those two extensions, and nothing is about the bijection, because there
+    is nothing to say about it. -/
+theorem Lawful.can_roundTrip {c : Codec} (h : Lawful c) {a : Attr} {t : Value}
+    (ha : Can c a) (hp : c.p a = some t) : c.e t = some a := by
+  obtain ⟨t', ht'⟩ := ha
+  rw [h.retract ht'] at hp
+  cases hp
+  exact ht'
+
 /-! ## §1's store, as a premise
 
 §2 composes `e` and `p` directly. In use there is a store between them and it is not the

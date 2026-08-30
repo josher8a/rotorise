@@ -94,6 +94,12 @@ rests on it. -/
 #assert_axioms admDisj_ident
 #assert_axioms sepV_string_dunion_nil
 
+/-! §2's ideal: `e` and `p` are mutually inverse between `dom(e)` and `Can(c)`. `retract`
+is one half and this is the other, so the bijection is a theorem rather than a reading. -/
+
+#assert_axioms Lawful.can_roundTrip
+#assert_axioms Lawful.e_injective
+
 /-! §5's two outright dischargers, as one theorem: label each side by a projection of the
 input, keep the options' label sets disjoint. `uniqueAdmission_of_kinds` and
 `uniqueAdmission_byTag` are its two instances. -/
