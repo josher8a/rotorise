@@ -633,8 +633,8 @@ evidence, because the term checks the value against its own admissible set in **
 
 |            |                                                                                                                                                                                                            |
 | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| holds      | `literal` — the admissible set is checked; `discriminatedUnion` — a tag lookup fails honestly                                                                                                              |
-| propagates | `set`, `array`, `record` through the element; `tuple` and `union` when _every_ subterm has it; `refine`, `optional`, `fallback`, `legacy` through the subterm                                              |
+| holds      | `literal` — the admissible set is checked; `discriminatedUnion` — a tag lookup fails honestly; `refine` — `q` is checked on the way in _and_ on the way out, which is what deciding your own membership is |
+| propagates | `set`, `array`, `record` through the element; `tuple` and `union` when _every_ subterm has it; `optional`, `fallback`, `legacy` through the subterm                                                        |
 | never      | everything else — the ground scalars, `custom`, `opaque`, `lazy`; `held`, whose functions are the caller's; and `nullable`, deliberately: two nullable options both admit the null neither subterm decides |
 
 `object` is the other self-deciding term, and it decides by a different device: **names, not
@@ -714,19 +714,19 @@ so container options are never separated this way and the second counterexample 
 
 **It is two functions, not one.** A codec is a pair, and a term's admissible set is a claim about one
 half of it at a time: `adm(c) ⊆ Value` is what `e` will accept, `admA(c) ⊆ 𝔸` is what `p` will
-accept. They agree on most terms and part on three — and the partings go both ways.
+accept. They agree on most terms and part on four — and the partings go both ways.
 
 | term                        | `adm` — value side   | `admA` — attribute side           |
 | --------------------------- | -------------------- | --------------------------------- |
 | `literal(ℓ)`, `ℓ ⊆ String`  | `ℓ`                  | `ℓ`, as stored `S`                |
 | `literal(ℓ)`, `ℓ ⊆ D`       | `ℓ`                  | **`⊤`**                           |
 | `discriminatedUnion(d, o…)` | the pooled tags of the `oᵢ`, found by looking `d` up | the same, in the stored item |
-| `refine(c, q)`              | `adm(c)`             | `admA(c)`                         |
+| `refine(c, q)`              | `adm(c) ∩ q`         | `admA(c)`                         |
 | `legacy(c, r)`              | `adm(c)`             | **`⊤`**                           |
 | `held(c, f, g)`             | **`⊤`**              | `admA(c)`                         |
 | anything else               | `⊤`                  | `⊤`                               |
 
-All three partings are forced:
+All four partings are forced:
 
 - **`legacy(c, r)`.** The whole content of `legacy` is that `p` reads attributes `c` does not, so a
   passthrough `admA` would claim a bound on exactly the direction `r` widens. `legacy(literal("A"), r)`
@@ -743,6 +743,18 @@ All three partings are forced:
   would refuse a row the codec itself wrote — `ker p` shrinking below `η`. So numeric literals fall
   to **(U)** per input on the attribute side, while their value side separates as a string
   literal's does.
+- **`refine(c, q)`**, which parts because `q` is a predicate on **values**. It tightens what the
+  term will write — `e` is defined only where `q` holds, so `adm(c) ∩ q` is a sound bound and a
+  strictly better one than passing `adm(c)` through. The reading side cannot follow: `q` tests the
+  value a read _produces_, and no syntactic set of attributes bounds that. Without the intersection
+  a refinement's predicate is invisible to every discharger, and two refinements of one base with
+  disjoint predicates — `refine(number, positive)` against `refine(number, negative)` — fall to
+  **(U)** per input despite being disjoint by construction. With it they separate on the writable
+  side, which is the only side `q` can speak for.
+
+  This is also why `refine` _holds_ `ident` rather than propagating it: a term that checks its own
+  set in both directions is the definition of deciding its own membership, and §3 already argues
+  the point — a `p` returning the value it read without verifying `q` would break **(C)**.
 - **`held(c, f, g)`**, and this one parts the other way — the only row where `admA` sees further
   than `adm`. An adapter is opaque on the side its functions gate, and they gate one side only: `f`
   sits in front of `e`, so what the term will *write* is unknowable and `adm` is `⊤`; `g` sits

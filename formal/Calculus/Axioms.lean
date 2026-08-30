@@ -108,6 +108,7 @@ input, keep the options' label sets disjoint. `uniqueAdmission_of_kinds` and
 
 #assert_axioms uniqueAdmission_of_disjoint
 #assert_axioms filter_eq_singleton_of_disjoint
+#assert_axioms sepV_refine_disjoint
 #assert_axioms admitV_kind
 #assert_axioms admitV_adm
 #assert_axioms admitA_member
