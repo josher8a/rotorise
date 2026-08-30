@@ -1263,5 +1263,77 @@ theorem sepJA_needs_member :
   intro h
   exact absurd (h (.ns []) (by simp [AdmA])) (by simp [AdmA])
 
+/-! ## `ident`, and why the pair does not replace it
+
+`ident` is §5's third auxiliary: *the term decides its own membership*. The question the
+migration has to answer is whether the joint predicate subsumes it. It does not, and the
+reason is worth stating precisely, because it is the one place where `Adm` carries **less**
+than the three functions it replaces.
+
+`ident` is not a function of `Adm` — nor of `adm`. `string` and `refine(string, ⊤)` denote
+the same pair, have the same `Adm` and the same `adm`, and differ in `ident`, which is
+`false` for the bare base and `true` for any `refine`. `ident` is a fact about *how a term
+is written*, not about which values it admits, and no predicate on values can recover it.
+
+That is not a gap, because nothing consumes it. `ident` appears in no discharge: none of the
+seventeen `uAtCan_*` theorems mentions it. What it does is carry §5's **(K)** — the rule
+that was stated as `κ(cᵢ) ∩ κ(cⱼ) = ∅ ∨ ident(cᵢ) ∨ ident(cⱼ)`, found unsound, and replaced
+by `SepV`. `ident_of_adm` pins it, `admDisj_ident` recovers the repaired form, and
+`not_uAtCan_literal_string` / the two-sided refutation record why the withdrawn form was
+wrong.
+
+So `ident` stays where it is, defined on `adm`, and `adm` stays with it. The pair supersedes
+`κ`/`adm`/`admA` **for the discharge**; it does not supersede the transcription of §5, and
+deleting that would delete the record of what §5 got wrong. -/
+
+/-- A refinement by the trivially-true predicate: same pair, same `Adm`, different `ident`. -/
+def qTop : Value → Bool := fun _ => true
+
+/-- The two terms agree on the joint predicate… -/
+theorem Adm_string_eq_refine : Adm .string = Adm (.refine .string qTop) := by
+  funext v; simp [Adm, qTop]
+
+/-- …and disagree on `ident`. -/
+theorem ident_string_ne_refine :
+    ident .string ≠ ident (.refine .string qTop) := by
+  simp [ident]
+
+/-- **`ident` is not a function of `Adm`.** Two terms with the *same* joint predicate and
+    different `ident`, so no definition on the pair can recover it. -/
+theorem ident_not_determined_by_Adm :
+    ∃ x y : Term, Adm x = Adm y ∧ ident x ≠ ident y :=
+  ⟨.string, .refine .string qTop, Adm_string_eq_refine, ident_string_ne_refine⟩
+
+/-- They agree on `adm` too, so this is not an artefact of folding in the kind gate. -/
+theorem adm_string_eq_refine : adm .string = adm (.refine .string qTop) := by
+  funext v; simp [adm, qTop]
+
+/-- …so `ident` is not a function of `adm` either, by the same pair. -/
+theorem ident_not_determined_by_adm :
+    ∃ x y : Term, adm x = adm y ∧ ident x ≠ ident y :=
+  ⟨.string, .refine .string qTop, adm_string_eq_refine, ident_string_ne_refine⟩
+
+/-- **`SepJV` suffices for the discharge.** This is what "nothing is lost" means: the joint
+    predicate is tighter than the rows it replaces, so `SepJV` is a *weaker* statement — but
+    `Adm_sound` connects it straight to the denotation, and that is all the discharge needs.
+    Where `x` writes, `y` refuses. -/
+theorem admitV_of_sepJV {x y : Term} (h : SepJV x y) (v : Value) (a : Attr)
+    (hx : (denoteω x).e v = some a) : ((denoteω y).e v).isSome = false := by
+  have hAx : Adm x v = true := Adm_sound x hx
+  have hAy : Adm y v = false := h v hAx
+  cases hy : (denoteω y).e v with
+  | none => rfl
+  | some b => exact absurd (Adm_sound y hy) (by simp [hAy])
+
+/-- …and on the attribute side, from `SepJA`'s second disjunct. -/
+theorem admitA_of_sepJA {x y : Term} (h : ∀ a, AdmA x a = true → AdmA y a = false)
+    (a : Attr) (v : Value) (hx : (denoteω x).p a = some v) :
+    ((denoteω y).p a).isSome = false := by
+  have hAx : AdmA x a = true := AdmA_sound x hx
+  have hAy : AdmA y a = false := h a hAx
+  cases hy : (denoteω y).p a with
+  | none => rfl
+  | some w => exact absurd (AdmA_sound y hy) (by simp [hAy])
+
 end
 end Calculus

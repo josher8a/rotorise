@@ -1213,7 +1213,29 @@ all three whatever its element term is. `set(string)` and `set(number)` differ i
 indistinguishable to `AdmA` — `sepJA_needs_member` is that pair.
 
 So §5's two-disjunct shape was right on one side and redundant on the other, and nothing in the
-tables could have said which. What remains is the rename.
+tables could have said which.
+
+**Step three answers `ident`, and the answer changes what the migration is.** `ident` is **not** a
+function of `Adm` — nor of `adm`. `string` and `refine(string, ⊤)` denote the same pair, have the
+same `Adm`, the same `adm`, and differ in `ident`. It is a fact about how a term is *written*, not
+about which values it admits, and no predicate on values recovers it
+(`ident_not_determined_by_Adm`).
+
+That is not a gap, because nothing consumes it: none of the seventeen `uAtCan_*` theorems mentions
+`ident` in its statement. What it carries is §5's **(K)** — stated as
+`κ(cᵢ) ∩ κ(cⱼ) = ∅ ∨ ident(cᵢ) ∨ ident(cⱼ)`, found unsound, replaced by `SepV`. `ident_of_adm` pins
+it and the two refutations record why the withdrawn form was wrong.
+
+And `admitV_of_sepJV` / `admitA_of_sepJA` are what "nothing is lost" actually means, now proved
+rather than asserted. `SepJV` is a *weaker* statement than `SepV` — the joint predicate is tighter,
+so disjointness is easier to satisfy — but `Adm_sound` connects it straight to the denotation: where
+`x` writes, `y` refuses. The discharge never needed the extra strength.
+
+**So the migration is not a rename, and should not be one.** The pair supersedes `κ`/`adm`/`admA`
+*for the discharge*. It does not supersede the transcription of §5, and deleting that would delete
+the record of what §5 got wrong — the seventeen refutations, `ident`'s pinning, and the two
+counterexamples that retired (K). `Adm`/`AdmA` are the analysis; `κ`/`adm`/`admA`/`ident` are the
+specification's own account of itself, checked against it. Both belong.
 
 ## §5 Certifying an implementation
 
