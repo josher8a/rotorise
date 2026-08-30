@@ -1829,56 +1829,43 @@ def OptionSem.byAttempt (c : Codec) : OptionSem :=
     `union(c, ⟨NULL⟩-point)`. It decides by attempting, like any ground option. -/
 abbrev nullOption : OptionSem := .byAttempt nullCodec
 
+/-- §5's discriminator projection: the tag an item carries at `d`, where it carries one.
+    A membership decision and a function application, where the list representation needed
+    a `lookup`. -/
+def tagOfV (d : Name) : Value → Option String
+  | .map keys f =>
+    if h : d ∈ keys then (match f ⟨d, h⟩ with | .str s => some s | _ => none) else none
+  | _ => none
+
+/-- …and on the stored side. -/
+def tagOfA (d : Name) : Attr → Option String
+  | .m keys g =>
+    if h : d ∈ keys then (match g ⟨d, h⟩ with | .s s => some s | _ => none) else none
+  | _ => none
+
 /-- A `(dunion)` option is admitted by its discriminator tag. -/
 def OptionSem.byTag (d : Name) (tags : List String) (c : Codec) : OptionSem :=
-  { admitA := fun a =>
-      match a with
-      | .m keys g =>
-        if h : d ∈ keys then
-          match g ⟨d, h⟩ with | .s tag => tags.contains tag | _ => false
-        else false
-      | _ => false
-    admitV := fun v =>
-      match v with
-      | .map keys f =>
-        if h : d ∈ keys then
-          match f ⟨d, h⟩ with | .str tag => tags.contains tag | _ => false
-        else false
-      | _ => false
+  { admitA := fun a => match tagOfA d a with | some tag => tags.contains tag | none => false
+    admitV := fun v => match tagOfV d v with | some tag => tags.contains tag | none => false
     c := c }
 
 /-- A tag option admits exactly the items whose discriminator carries one of its tags. -/
 theorem byTag_admitA {d : Name} {tags : List String} {c : Codec} {a : Attr} :
     (OptionSem.byTag d tags c).admitA a = true ↔
-      ∃ kvs tag, a = .m kvs ∧ kvs.lookup d = some (.s tag) ∧ tags.contains tag = true := by
-  cases a <;> simp only [OptionSem.byTag] <;> try simp
-  case m kvs =>
-    cases hlk : kvs.lookup d with
-    | none => simp [hlk]
-    | some x => cases x <;> simp [hlk]
+      ∃ tag, tagOfA d a = some tag ∧ tags.contains tag = true := by
+  simp only [OptionSem.byTag]
+  cases h : tagOfA d a with
+  | none => simp
+  | some tag => simp
 
 /-- …and the values whose discriminator carries one, on the way in. -/
 theorem byTag_admitV {d : Name} {tags : List String} {c : Codec} {v : Value} :
     (OptionSem.byTag d tags c).admitV v = true ↔
-      ∃ kvs tag, v = .map kvs ∧ kvs.lookup d = some (.str tag) ∧ tags.contains tag = true := by
-  cases v <;> simp only [OptionSem.byTag] <;> try simp
-  case map kvs =>
-    cases hlk : kvs.lookup d with
-    | none => simp [hlk]
-    | some x => cases x <;> simp [hlk]
-
-/-- §5's discriminator projection, on each side of the pair: the tag an item carries at
-    `d`, where it carries one. This is what `(dunion)` separates options by, and it is
-    the same *kind* of thing `Value.kind`/`Attr.kind` are for `opaque` — a partial
-    labelling of the input, read off before any codec is attempted. -/
-def tagOfV (d : Name) : Value → Option String
-  | .map kvs => match kvs.lookup d with | some (.str s) => some s | _ => none
-  | _ => none
-
-/-- …and on the stored side. -/
-def tagOfA (d : Name) : Attr → Option String
-  | .m kvs => match kvs.lookup d with | some (.s s) => some s | _ => none
-  | _ => none
+      ∃ tag, tagOfV d v = some tag ∧ tags.contains tag = true := by
+  simp only [OptionSem.byTag]
+  cases h : tagOfV d v with
+  | none => simp
+  | some tag => simp
 
 /-- The builder `denote` uses for a union option. -/
 def optionSemOf (c : Codec) : Option (List (Name × Bool)) → OptionSem
