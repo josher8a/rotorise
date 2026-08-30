@@ -1341,10 +1341,9 @@ preserved on both halves (`set_p_order_sensitive`, `set_e_order_sensitive`) and 
 contain).
 
 Nothing is unsound: the laws hold of the model as written. What is false is §2's stated *reason* for
-the quotient. Two orderings read to two values, so `ker p` **is** equality at `setCodec`, and the
-collapse §2 attributes to sets does not occur. Either §1's `℘⁺fin` needs a well-formedness predicate
-on `Value.set` the way `Numeral.WF` gates `N`, or §2 should not cite sets among the three reasons.
-The other two — `η` normalising `N`, and `drop` discarding names — are unaffected.
+the quotient — and, as the entry below establishes, the reason is not merely unsupported but
+inverted. §2 should not cite sets among the three. The other two — `η` normalising `N`, and `drop`
+discarding names — are unaffected.
 
 ### One where the type was wrong, and only half of it can be fixed
 
@@ -1380,6 +1379,36 @@ So the asymmetry is not a modelling preference; it is where the language stops. 
 This is a change to `Attr`, which is foundational — `Agree`, `Attr.member`, `Attr.depth`,
 `asWireSet`, the three payload projections, `setCodec`'s read side and the `opaque` fixpoint all
 pattern-match on it. It is the right change and it is not a small one.
+
+### One where §2 attributes to the domain what belongs to JSON
+
+The entries above treat set orderings as something the model should quotient. The DynamoDB
+documentation says otherwise, and it inverts §2's claim rather than merely contradicting the model:
+
+> Each value within a set must be unique. **The order of the values within a set is not preserved.**
+> Therefore, your applications must not rely on any particular order of elements within the set.
+> DynamoDB does not support empty sets, however, empty string and binary values are allowed within a
+> set.
+
+§2 lists set orderings first among three reasons `ker p` is not equality, and says: *"Two orderings
+of one set are distinct attributes reading to one value. This is a fact about the domain, not about
+how it is written down; any medium that can store a set has it."*
+
+**That is backwards.** The ordering is precisely about how it is written down — JSON has no set
+literal, so the wire spells a set as an array — and the store does not preserve it. There are no
+"two orderings of one set" in the domain to collapse. Once `Attr`'s wire-set members are `Finset`,
+which the kernel permits, two orderings are *the same attribute*, `ker p` at `setCodec` is equality,
+and that is correct rather than a defect.
+
+So §2 should drop sets from its three reasons, and the remaining two are the honest list: `η`
+normalising `N`, and `drop` discarding names. Both are genuinely about the medium or the schema.
+
+The spec also settles what the value-side gate must enforce, and it is not a modelling preference:
+**uniqueness** and **non-emptiness** are required, homogeneity is required (`asWireSet` already has
+it), and empty strings *are* permitted as elements, which the model correctly does not forbid. What
+remains a modelling artefact is only the canonical *ordering* of `Value.set`'s list — forced by the
+kernel refusing `Finset Value`, and to be documented as a representation choice rather than a claim
+about sets.
 
 ## §5 Certifying an implementation
 
