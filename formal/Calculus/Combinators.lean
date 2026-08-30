@@ -3900,9 +3900,9 @@ theorem uniqueAdmission_byTag {d : Name} {os : List (List String × Codec)}
     exact hdisj.imp fun h l hl => h l hl
   · refine forall_mem_map fun o ho t a he => ?_
     replace he : o.2.e t = some a := he
-    obtain ⟨tag, htag, ⟨kvsA, rfl, hlkA⟩, ⟨kvsV, rfl, hlkV⟩⟩ := hstamp o ho t a he
-    exact ⟨byTag_admitV.mpr ⟨kvsV, tag, rfl, hlkV, contains_of_mem htag⟩,
-           byTag_admitA.mpr ⟨kvsA, tag, rfl, hlkA, contains_of_mem htag⟩⟩
+    obtain ⟨tag, htag, hA, hV⟩ := hstamp o ho t a he
+    exact ⟨byTag_admitV.mpr ⟨tag, hV, contains_of_mem htag⟩,
+           byTag_admitA.mpr ⟨tag, hA, contains_of_mem htag⟩⟩
 
 /-- Every option of a `(dunion)` writes an `M` — the stamp says so, and the stamp is
     all either strength consults. -/
@@ -3916,8 +3916,9 @@ private theorem dunion_writes {d : Name} {os : List (List String × Codec)}
   cases hm
   refine forall_mem_map fun x hx t a he => ?_
   replace he : x.2.e t = some a := he
-  obtain ⟨tag, htag, ⟨kvs, rfl, hlook⟩, -⟩ := hstamp x hx t a he
-  rfl
+  obtain ⟨tag, htag, hA, -⟩ := hstamp x hx t a he
+  -- only an `M` carries a tag at all, so the stamp fixes the member
+  cases a <;> simp only [tagOfA] at hA <;> first | rfl | exact nomatch hA
 
 /-- `(dunion)` soundness is a corollary: the sum lemma composed with its (U) theorem;
     the member law comes from the stamp itself — a stamped canonical attribute is an
