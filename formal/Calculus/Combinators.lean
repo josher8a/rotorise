@@ -304,12 +304,19 @@ def Codec.extendRead (c : Codec) (r : Attr → Option Value) : Codec :=
     e := c.e
     p := fun a => match c.p a with | some v => some v | none => r a }
 
+/-- **Adjoining a point**, on either side. `nullable` does this twice — the null value to
+    the writing half, the `⟨NULL, ∗⟩` attribute to the reading half — and the two are the
+    same construction at two carriers. Stating it once is what makes `orNull_e` and
+    `orNull_p` one theorem rather than a theorem and its mirror. -/
+def addPoint {A B : Type} (isPt : A → Bool) (pt : B) (f : A → Option B) : A → Option B :=
+  fun x => if isPt x then some pt else f x
+
 /-- `nullable`. -/
 def Codec.orNull (c : Codec) : Codec :=
   { T := fun v => c.T v ∨ v = .null
     μ := none
-    e := fun v => match v with | .null => some .null | _ => c.e v
-    p := fun a => match a with | .null => some .null | _ => c.p a }
+    e := addPoint (· matches .null) .null c.e
+    p := addPoint (· matches .null) .null c.p }
 
 /-! ### What the wrappers write and read
 
@@ -354,14 +361,16 @@ theorem extendRead_p {r : Attr → Option Value} {a v} :
   show (match c.p a with | some w => some w | none => r a) = some v ↔ _
   cases hp : c.p a <;> simp
 
-/-- `nullable` adds the `null` point and passes everything else through. -/
+/-- `nullable` adds the `null` point and passes everything else through — `addPoint` at
+    the value carrier. -/
 theorem orNull_e {v a} :
     c.orNull.e v = some a ↔ (v = .null ∧ a = .null) ∨ (v ≠ .null ∧ c.e v = some a) := by
-  cases v <;> simp [Codec.orNull, eq_comm (a := a)]
+  cases v <;> simp [Codec.orNull, addPoint, eq_comm (a := a)]
 
+/-- …and the same construction at the attribute carrier. -/
 theorem orNull_p {a v} :
     c.orNull.p a = some v ↔ (a = .null ∧ v = .null) ∨ (a ≠ .null ∧ c.p a = some v) := by
-  cases a <;> simp [Codec.orNull, eq_comm (a := v)]
+  cases a <;> simp [Codec.orNull, addPoint, eq_comm (a := v)]
 
 end WrapperInversion
 
@@ -2136,8 +2145,8 @@ theorem nullHonest_of_not_ownsNull {c : Codec} (h : LawfulCore c)
 def Codec.withNull (c : Codec) : Codec :=
   { T := fun v => c.T v ∨ v = .null
     μ := none
-    e := if c.ownsNull then c.e else fun v => match v with | .null => some .null | _ => c.e v
-    p := if c.ownsNull then c.p else fun a => match a with | .null => some .null | _ => c.p a }
+    e := if c.ownsNull then c.e else addPoint (· matches .null) .null c.e
+    p := if c.ownsNull then c.p else addPoint (· matches .null) .null c.p }
 
 /-- Where `c` does not own the point, the wrapper *is* `orNull` — §3's first branch. -/
 theorem withNull_eq_orNull {c : Codec} (h : c.ownsNull = false) : c.withNull = c.orNull := by
@@ -2188,7 +2197,7 @@ theorem carrier_withNull {c : Codec} (h : Carrier c) : Carrier c.withNull := by
 theorem withNull_ownsNull {c : Codec} : c.withNull.ownsNull = true := by
   cases hw : c.ownsNull with
   | false =>
-    have he : c.withNull.e .null = some .null := by simp [Codec.withNull, hw]
+    have he : c.withNull.e .null = some .null := by simp [Codec.withNull, addPoint, hw]
     simp [Codec.ownsNull, he]
   | true =>
     rw [Codec.ownsNull, withNull_e_of_owns hw, withNull_p_of_owns hw]

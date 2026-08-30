@@ -253,10 +253,10 @@ theorem orNull_eq_altCodec {c : Codec} (he : c.e .null = none) (hp : c.p .null =
         · exact .inr hT
         · exact absurd h (by simp)
   · funext v
-    cases v <;> simp [Codec.orNull, altCodec, select, OptionSem.byAttempt, nullCodec, he,
+    cases v <;> simp [Codec.orNull, addPoint, altCodec, select, OptionSem.byAttempt, nullCodec, he,
       List.filter] <;> cases hc : c.e _ <;> simp_all
   · funext a
-    cases a <;> simp [Codec.orNull, altCodec, select, OptionSem.byAttempt, nullCodec, hp,
+    cases a <;> simp [Codec.orNull, addPoint, altCodec, select, OptionSem.byAttempt, nullCodec, hp,
       List.filter] <;> cases hc : c.p _ <;> simp_all
 
 /-- …and null-honesty is not enough for it. `nullable(string)` is lawful and honest in
@@ -298,8 +298,8 @@ theorem orNull_eq_self {c : Codec} (hl : Lawful c) (hc : Carrier c)
       · exact h
       · exact hc.domE ha
     · exact .inl
-  · funext v; cases v <;> simp [Codec.orNull, ha]
-  · funext x; cases x <;> simp [Codec.orNull, hp]
+  · funext v; cases v <;> simp [Codec.orNull, addPoint, ha]
+  · funext x; cases x <;> simp [Codec.orNull, addPoint, hp]
 
 /-! ## `union` is commutative
 
