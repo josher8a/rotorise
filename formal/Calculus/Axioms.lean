@@ -4,6 +4,7 @@ import Calculus.Continuity
 import Calculus.Refutations
 import Calculus.HeldSet
 import Calculus.Exactness
+import Calculus.WireOrder
 import Lean
 
 /-!
