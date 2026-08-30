@@ -248,5 +248,95 @@ theorem not_ExactV_nullable : ¬ ExactV (.nullable (.legacy .string rNull)) := b
   simp [denoteω, Codec.withNull, Codec.ownsNull, Codec.extendRead, stringCodec, rNull] at this
 
 
+/-! ## The hatch, made expensive
+
+`Analysable`'s `false` rows are the last place a vague row can hide. The three exhaustive
+recursions above already force a *row* per constructor, so a new `Term` constructor cannot
+be added silently. What they do not force is a **reason**: the seven `false` rows could be
+eight, and the eighth would cost one identifier and a docstring nobody has to write.
+
+So the excuses are a type. `Excuse.covers` says which term shapes each one may be invoked
+for, and `analysable_excused` — exhaustive over `Term` — says every `Analysable`-false term
+has one. Filing `array` under `opaqueDepth` is then a type error, and adding a row to the
+hatch means naming which of these five things is true of it, in the open, where a reviewer
+reads the reason rather than trusting that one existed.
+
+`covers`' catch-all is the one place a catch-all is right, and the polarity is why: it
+answers **`false`** — *no excuse covers this* — so a new `Term` constructor lands in "no
+excuse available" and `analysable_excused` forces `Analysable` to call it analysable, which
+forces `Adm_exact` to prove it. The failure mode of every other catch-all in this
+development was that it silently said yes. -/
+
+/-- The five reasons a row may decline to be exact. There is no `other`, deliberately. -/
+inductive Excuse where
+  /-- The domain recurses on the *input's* own depth, so no syntactic set names it. -/
+  | opaqueDepth
+  /-- `select` admits only where **exactly one** option does, so `⋁` is exact precisely
+      under (U) — a semantic obligation rather than a syntactic row. -/
+  | uniqueAdmission
+  /-- `asWireSet` demands payload homogeneity: a fact about attributes, not values. -/
+  | payloadShape
+  /-- Name admission and alignment, which are about the shape of the container's spec. -/
+  | nameAdmission
+  /-- `ownsNull` is a disjunction over **both** halves, so a read that reaches the null
+      point suppresses the wrapper while the write still refuses it. -/
+  | nullOwnership
+  deriving DecidableEq
+
+/-- Which term shapes each excuse may be invoked for. The catch-all answers `false`, so a
+    new constructor is *not* excusable by default — see the note above. -/
+def Excuse.covers : Excuse → Term → Bool
+  | .opaqueDepth,     .opaq _      => true
+  | .uniqueAdmission, .union _     => true
+  | .uniqueAdmission, .dunion _ _  => true
+  | .payloadShape,    .set _       => true
+  | .nameAdmission,   .object _ _  => true
+  | .nameAdmission,   .tuple _ _   => true
+  | .nullOwnership,   .nullable _  => true
+  | _, _ => false
+
+/-- The subterm a propagating row inherits its answer from. The catch-all is `none` —
+    "does not inherit" — so a new constructor must justify itself at the root rather than
+    quietly borrowing a subterm's excuse. -/
+def inheritsFrom : Term → Option Term
+  | .array c | .record c | .refine c _ | .legacy c _ | .lazy c | .held c _ _ => some c
+  | _ => none
+
+/-- **Every row that declines exactness either names a reason of the right shape, or
+    inherits the refusal from a subterm.** Exhaustive over `Term`, so growing the hatch
+    means either producing an `Excuse` that covers the new shape — which requires extending
+    `covers`, a visible act — or leaving this proof unclosed. There is no third branch and
+    no `other` constructor to reach for. -/
+theorem analysable_excused : ∀ (t : Term), Analysable t = false →
+    (∃ e : Excuse, e.covers t = true) ∨ (∃ c, inheritsFrom t = some c ∧ Analysable c = false)
+  | .opaq _, _      => .inl ⟨.opaqueDepth, rfl⟩
+  | .union _, _     => .inl ⟨.uniqueAdmission, rfl⟩
+  | .dunion _ _, _  => .inl ⟨.uniqueAdmission, rfl⟩
+  | .set _, _       => .inl ⟨.payloadShape, rfl⟩
+  | .object _ _, _  => .inl ⟨.nameAdmission, rfl⟩
+  | .tuple _ _, _   => .inl ⟨.nameAdmission, rfl⟩
+  | .nullable _, _  => .inl ⟨.nullOwnership, rfl⟩
+  -- The propagating wrappers decline only by inheritance, and say so.
+  | .array c, h | .record c, h | .refine c _, h | .legacy c _, h | .lazy c, h
+  | .held c _ _, h => .inr ⟨c, rfl, by simpa [Analysable] using h⟩
+  -- The exact rows: the hypothesis refutes them, which is the point — a term cannot both
+  -- carry an exactness proof and claim an excuse.
+  | .string, h | .boolean, h | .binary, h | .null, h | .number, h | .decimal, h
+  | .literalS _, h | .literalN _, h | .literal _, h | .custom _ _, h => nomatch h
+
+/-- **No excuse names an exact row.** The hatch cannot be used as a shortcut past an
+    obligation that is provable: a covered shape really does decline. -/
+theorem excuse_shapes (e : Excuse) (t : Term) (h : e.covers t = true) :
+    Analysable t = false := by
+  cases e <;> cases t <;> simp_all [Excuse.covers, Analysable]
+
+/-- …stated the way a reviewer wants it: an exact row has no excuse available to it, so
+    the two halves of `analysable_excused` are exclusive as well as exhaustive. -/
+theorem not_excused_of_analysable {t : Term} (h : Analysable t = true) :
+    ¬ ∃ e : Excuse, e.covers t = true := by
+  rintro ⟨e, he⟩
+  rw [excuse_shapes e t he] at h
+  exact absurd h (by simp)
+
 end
 end Calculus
