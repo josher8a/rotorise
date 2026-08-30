@@ -81,6 +81,29 @@ Consistent today; normative from here, so the next proof inherits it.
 | `not_X` | a refutation — a "Do not hold" row, or a repaired discharger |
 | `onKind_X` | `X` is pinned to a kind (§3's "self-identifying") |
 
+### What a docstring is for
+
+Measured, because this arc drifted: prose-to-code across `Calculus/` was 0.38, and six of the
+eight longest docstrings were narrative added while *closing* findings rather than while
+writing the code. `Continuity.lean` carried 84 lines of prose over 20 of code, restating
+`codec-formalization.md` §7 almost sentence for sentence.
+
+**The source explains the code; the documents carry the arc.** In a docstring, keep:
+
+- the **§ tag** — which rule or clause this is, which is what `fidelity_audit.py` counts and
+  what lets a reviewer check a theorem in isolation;
+- the **forced choice** — why the definition could not have been the obvious other one
+  (`number`'s `p` gating on the round-tripped value, not the stored digits);
+- what a **refutation is a refutation of**.
+
+Move out: how a finding was made, what it cost, which audit missed it, and any argument the
+documents already state — point at them instead. And prefer a name that makes the sentence
+unnecessary: `unionLiteralString` needed no gloss where `cLitStr` did.
+
+Applied once, this removed 113 lines with **no change** to §-tag coverage, docstring coverage,
+or the guard. That is the test of whether prose was carrying its weight: if trimming it moves
+none of the three numbers the audit tracks, it was not.
+
 Two further conventions the passes settled on, both load-bearing:
 
 - **The core lemma is not a second proof.** `lawfulCore_X` and `lawful_X` share their
