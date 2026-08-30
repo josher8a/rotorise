@@ -97,7 +97,15 @@ def ident : Term → Bool
   | .tuple ts tail =>
     identList ts && (match tail with | some t => ident t | none => true)
   | .union opts => identList opts
-  | _ => false
+  -- The remaining rows are `false`, and are written out because a row that decides
+  -- nothing is a claim like any other. The four ground scalars accept their whole
+  -- carrier, so an admission is no evidence about which term admitted.
+  | .string | .boolean | .binary | .null => false
+  -- `object` is the one container that does not propagate: its admission tests *names*,
+  -- and the field terms' own sets are not what the option checks a value against.
+  | .object _ _ => false
+  -- Unanalysable by construction (§5): `held`'s `f`, and the three opaque terms.
+  | .held _ _ _ | .lazy _ | .custom _ _ | .opaq _ => false
 
 def identList : List Term → Bool
   | [] => true
@@ -175,7 +183,23 @@ noncomputable def adm : Term → Value → Bool
   -- them, which would make `union(literal a, literal b)` strictly weaker than
   -- `literal(a, b)` for no reason the semantics gives.
   | .union opts => fun v => admList opts v
-  | _ => fun _ => true
+  -- Everything below is `⊤` — **no information** — and each row says why, so that a `⊤`
+  -- is a recorded decision rather than the residue of a catch-all.
+  --
+  -- The four ground scalars whose codec accepts the whole carrier of their kind. (`number`
+  -- and `decimal` are the two that do not, and they are rows above.)
+  | .string | .boolean | .binary | .null => fun _ => true
+  -- The containers. `adm (array c)` would have to contain the empty array whatever `c`
+  -- is, so propagating the element's set would claim a separation that is false —
+  -- `not_uAtCan_array_literals` is the witness. Same argument for the other four.
+  | .set _ | .array _ | .tuple _ _ | .record _ | .object _ _ => fun _ => true
+  -- `held`'s opacity is one-sided and this is the opaque side: `f` gates the write and is
+  -- an arbitrary function, so no syntactic set bounds it. `admA` *does* see through
+  -- `held` — see the row there and `through_p`.
+  | .held _ _ _ => fun _ => true
+  -- The three terms §5 declares unanalysable: `lazy`'s subterm is not entered, `custom`
+  -- carries its pair as data, `opaq` has no subterm at all.
+  | .lazy _ | .custom _ _ | .opaq _ => fun _ => true
 
 /-- `adm`'s union row, as the list recursion the kernel needs. -/
 noncomputable def admList : List Term → Value → Bool
@@ -231,7 +255,23 @@ def admA : Term → Attr → Bool
       | .null, .null    => true
       | .num _, _       => true
       | _, _            => false
-  | _ => fun _ => true
+  -- As on the value side, the `⊤` rows are written out with their reasons.
+  --
+  -- Ground scalars accepting their whole carrier. `number` joins them here and does not
+  -- above: the stored numeral goes through `Double.ofDec`, so no syntactic set of
+  -- attributes bounds the read even though `inD` bounds the write.
+  | .string | .boolean | .binary | .null | .number => fun _ => true
+  -- `literalN` for the same reason, one rule down: this is §5's `literal-S`/`literal-N`
+  -- split, and `admA_literalN_blind` is the witness that the set really is lost.
+  | .literalN _ => fun _ => true
+  -- The containers, by the empty-container argument on the value side.
+  | .set _ | .array _ | .tuple _ _ | .record _ | .object _ _ => fun _ => true
+  -- `legacy` is the row that is `⊤` here and a passthrough above, and the asymmetry is
+  -- what `legacy` is for: `extendRead` widens `p` past the subterm's admissible set,
+  -- which is the direction `admA` bounds. `not_admA_legacy` is the witness.
+  | .legacy _ _ => fun _ => true
+  -- Unanalysable by construction (§5).
+  | .lazy _ | .custom _ _ | .opaq _ => fun _ => true
 
 /-- …and on the attribute side. -/
 def admAList : List Term → Attr → Bool
