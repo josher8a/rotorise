@@ -71,9 +71,9 @@ noncomputable def Adm : Term → Value → Bool
   -- three constructors, so an element's kind is fixed by which one it is.
   | .set c      => fun v =>
       match v with
-      | .strSet S => !S.card.beq 0 && decide (∀ s ∈ S, Adm c (.str s) = true)
-      | .numSet S => !S.card.beq 0 && decide (∀ d ∈ S, Adm c (.num d) = true)
-      | .binSet S => !S.card.beq 0 && decide (∀ b ∈ S, Adm c (.bin b) = true)
+      | .strSet S => decide (S.card ≠ 0) && decide (∀ s ∈ S, Adm c (.str s) = true)
+      | .numSet S => decide (S.card ≠ 0) && decide (∀ d ∈ S, Adm c (.num d) = true)
+      | .binSet S => decide (S.card ≠ 0) && decide (∀ b ∈ S, Adm c (.bin b) = true)
       | _ => false
   | .tuple _ _  => fun v => match v with | .arr _ => true | _ => false
   | .object _ _ => fun v => match v with | .map _ => true | _ => false
@@ -409,19 +409,30 @@ theorem Adm_sound_fueled : ∀ (fuel : Nat) (t : Term) {v a},
     case opaq lossy => simp [Adm]
     case set c =>
       cases v
-      case set vs =>
+      case strSet S =>
         simp only [denote, setCodec] at he
-        cases htr : traverse (denote fuel c).e vs with
-        | none => rw [htr] at he; exact nomatch he
-        | some as =>
-          rw [htr] at he
-          have hne : vs ≠ [] := by
-            rintro rfl
-            simp only [traverse, Option.some.injEq] at htr
-            subst htr
-            simp [asWireSet] at he
-          simp only [Adm, Bool.and_eq_true, Bool.not_eq_true', List.isEmpty_eq_false]
-          exact ⟨hne, AdmAll_sound_aux (fun {v a} h => Adm_sound_fueled fuel c h) htr⟩
+        obtain ⟨x, hx⟩ := encSet_nonempty he
+        have hall := encSet_elem he
+        simp only [Adm, Bool.and_eq_true, decide_eq_true_eq]
+        refine ⟨Finset.card_ne_zero_of_mem hx, fun y hy => ?_⟩
+        obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp (hall y hy)
+        exact Adm_sound_fueled fuel c ha'
+      case numSet S =>
+        simp only [denote, setCodec] at he
+        obtain ⟨x, hx⟩ := encSet_nonempty he
+        have hall := encSet_elem he
+        simp only [Adm, Bool.and_eq_true, decide_eq_true_eq]
+        refine ⟨Finset.card_ne_zero_of_mem hx, fun y hy => ?_⟩
+        obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp (hall y hy)
+        exact Adm_sound_fueled fuel c ha'
+      case binSet S =>
+        simp only [denote, setCodec] at he
+        obtain ⟨x, hx⟩ := encSet_nonempty he
+        have hall := encSet_elem he
+        simp only [Adm, Bool.and_eq_true, decide_eq_true_eq]
+        refine ⟨Finset.card_ne_zero_of_mem hx, fun y hy => ?_⟩
+        obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp (hall y hy)
+        exact Adm_sound_fueled fuel c ha'
       all_goals (simp only [denote, setCodec] at he; exact nomatch he)
     case tuple ts tl => cases v <;> simp_all [Adm, denote, tupleCodec]
     case object fs r => cases v <;> simp_all [Adm, denote, objectCodec, objectCodecCore]
