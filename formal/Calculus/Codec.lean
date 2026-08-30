@@ -29,19 +29,11 @@ def Codec.empty : Codec :=
 name at all, and `Can` lived in `Equations.lean`, where §2 and §5 could not cite it. They are
 here for the same reason `Lawful` is — a §2 device belongs in §2's file. -/
 
-/-- §2's `≈c`: `a ≈c a′ ⟺ p(a) = p(a′)` — the kernel of the reading.
+/-- §2's `≈c`: the kernel of the reading, `a ≈c a′ ⟺ p(a) = p(a′)`. The equivalence `e ∘ p`
+    canonizes modulo — forced by `p`, not chosen.
 
-    §2 is emphatic that this is not a parameter a programmer chooses. `e ∘ p` is a canonizer,
-    and the equivalence it works modulo "is forced by the reading itself": a set has no order
-    to preserve and digits have a normal form, so `e ∘ p = id` is false and must be. Naming
-    the relation is what lets (Q), §6's `e ∘ p ≢ id` row and §1's store concession cite one
-    thing rather than three spellings of the same equation.
-
-    **Not to be confused with `Codec.Equiv`,** which relates two *codecs* and is not
-    transitive (`not_equiv_trans`) — agreement-where-both-defined is not a kernel, and a pair
-    that is nowhere defined agrees with everything. `Ker` is the kernel of a function and is
-    an equivalence for exactly that reason (`ker_equivalence`). The two relations are one
-    symbol apart in the prose and behave differently, which is why they are stated together. -/
+    Not `Codec.Equiv`, which relates two *codecs* and is not transitive (`not_equiv_trans`).
+    A kernel is; see `ker_equivalence`. -/
 def Codec.Ker (c : Codec) (a a' : Attr) : Prop := c.p a = c.p a'
 
 theorem Codec.Ker.refl (c : Codec) (a : Attr) : c.Ker a a := rfl
@@ -124,23 +116,11 @@ theorem Lawful.reads {c : Codec} (h : Lawful c) {μ a t}
   have hm := (h.agree hp he).member_eq
   rw [← hm, h.writes hμ he]
 
-/-- §2 Corollary: **a member a codec cannot write is a member it cannot read.**
+/-- §2 Corollary: **a member a codec cannot write is one it cannot read.** (MP) holds the
+    pair's halves together, so a member absent from `ran(e)` is absent from `dom(p)`.
 
-    A codec is a *pair*, and the two halves are held together by **(MP)**: whatever `p`
-    accepts, `e` must write back to an attribute of the same member. So if `e` never produces
-    member `m` at all, then no attribute carrying `m` can be in `dom(p)` — reading one would
-    guarantee the member change (MP) exists to refuse.
-
-    Stated because a pair can be built that violates it and still satisfies (R) and (C): the
-    value survives the round trip, and only the *stored type* changes. `opaque` reading an
-    `NS` it has no way to write is exactly that shape, and re-encoding turned it into an `SS`
-    — a numeric index silently becoming a string one. This corollary is why the answer is to
-    stop reading it rather than to tolerate the asymmetry.
-
-    Note which law does the work. It is not (C): `e (p a)` is perfectly *defined* in the
-    failing case, it just lands on a different member. (W) does not reach it either — `opaque`
-    has `μ = ⊤`, so (W) says nothing. **(MP) is the only law that sees it**, which is the
-    sharpest illustration of §2's remark that (MP) binds hardest exactly where `μ = ⊤`. -/
+    Only (MP) sees this: in the failing case `e (p a)` is defined and the value survives —
+    just at a different member — and a `⊤`-membered term has no (W) to appeal to. -/
 theorem Lawful.no_read_without_write {c : Codec} (h : Lawful c) {m : Member}
     (hw : ∀ {v a}, c.e v = some a → a.member ≠ m) {a v} (hm : a.member = m) :
     c.p a ≠ some v := by
@@ -225,14 +205,8 @@ theorem can_iff_image {c : Codec} (h : Carrier c) {a : Attr} :
 identity on attributes, which `Domain.lean` states in prose and answers with
 `Numeral.Stored`. This is the premise itself. -/
 
-/-- **`η ⊆ ker p`** — §1's concession, as a proposition.
-
-    Quantified over `Can(c)`, because those are the only attributes a store is ever handed:
-    `η` acts on what `e` wrote, never on all of `𝔸`. The unrestricted reading implies this
-    one and is strictly stronger than anything the round trip needs.
-
-    What it buys is `retract_through_store`: **(R)** with the store in the middle, which is
-    the law production actually runs and the one `decimal` broke. -/
+/-- **`η ⊆ ker p`** — §1's concession, as a proposition. Quantified over `Can(c)` because
+    `η` only ever sees what `e` wrote. Buys `retract_through_store`: (R) through the store. -/
 def SurvivesStore (c : Codec) (η : Attr → Attr) : Prop :=
   ∀ a, Can c a → c.Ker (η a) a
 

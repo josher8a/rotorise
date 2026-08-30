@@ -116,7 +116,7 @@ makes it the single constant in this file with the most to lose from going ungua
 
 #assert_axioms opaq_T_identity
 #assert_axioms altCodec_T
-#assert_axioms not_TIsDomE_cLitStr
+#assert_axioms not_TIsDomE_unionLiteralString
 #assert_axioms decimal_writes_stored
 #assert_axioms decimal_reads_stored
 

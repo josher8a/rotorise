@@ -60,18 +60,13 @@ theorem Codec.Equiv.symm {c d : Codec} (h : Codec.Equiv c d) : Codec.Equiv d c :
 
 /-! ## §6 at term level — the translation table, written down
 
-`FIDELITY.md` §3 records a level mismatch inside §6: the **Hold** rows are stated here about
-*combinators* (`through`, `restrict`, `extendRead`, `orNull`, `altCodec`, …) while the
-**Do not hold** rows in `Refutations.lean` are stated about *terms*. Checking a Hold row
-against the specification therefore needed an eight-entry translation, five of whose entries
-share no substring with the term they translate, and that table was written down nowhere.
+§6's **Hold** rows are stated here about *combinators*; its **Do not hold** rows
+(`Refutations.lean`) are stated about *terms*. Reading a Hold row against the specification
+needed an eight-entry translation, five entries of which share no substring with the term
+they translate, written down nowhere.
 
-Here it is, as theorems. Each is `rfl` — `denoteω` dispatches straight onto the combinator —
-so nothing is proved by these except the correspondence itself, which is the point: a
-reviewer holding §6's table can now land on the combinator without knowing the codebase.
-
-The term-level twins of the Hold rows follow each row's combinator statement, so both halves
-of §6 can be read in one language. -/
+Here it is, as `rfl` theorems — `denoteω` dispatches straight onto the combinator, so these
+prove nothing but the correspondence. Term-level twins of each row follow at the end. -/
 
 section Bridge
 

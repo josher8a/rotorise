@@ -173,27 +173,13 @@ def stringCodec : Codec :=
     e := fun v => match v with | .str s => some (.s s) | _ => none
     p := fun a => match a with | .s s => some (.str s) | _ => none }
 
-/-- §3 `(number)`. The held set is `D` — §1's numeral domain — and not every double.
+/-- §3 `(number)`. The held set is `D` — §1's numeral domain — not every double.
 
-    The rule has always concluded `⊢ number : D ⇝ N`; the model held every double, so the
-    bound was a claim no law enforced. That is the `(numeric)` defect one term over, and
-    `codec-formalization.md` §4 records it as such.
+    `p` gates on the **round-tripped** value rather than on the stored digits: `ofDec` rounds,
+    and a numeral at the top of the range can round *up* past it, so gating on `x` would admit
+    a double `e` then refuses — **(C)** failing.
 
-    Two asymmetries in the gate, and both are forced:
-
-    - `e` gates on `WF (toDec d)` — the text this double would be written as, not the double.
-      A double outside the store's magnitude has no `N` to be written to, so refusing is the
-      only answer that keeps the attribute inside §1's `Numerals`.
-    - `p` gates on the **round-tripped** value, `WF (toDec d)` for the `d` that `ofDec x`
-      produced, rather than on the stored digits `x`. `ofDec` rounds, and a numeral at the
-      top of the range can round *up* past it — so gating on `x` would admit a double that
-      `e` then refuses, which is **(C)** failing.
-
-    What the model does not decide is whether any double is outside `D`. `Double` is
-    axiomatized with the shortest-text round trip and nothing else, and no axiom is added
-    here: whether IEEE-754 has a value that DynamoDB will not store is a fact about IEEE
-    that the model deliberately does not assert. The gate is still the bound the rule
-    claims, and it is now enforced rather than announced. -/
+    Whether any double is outside `D` is an IEEE-754 fact the model declines to assert. -/
 def numberCodec : Codec :=
   { T := fun v => ∃ d, v = .num d ∧ Numeral.WF d.toDec = true
     μ := some .N
@@ -1827,18 +1813,11 @@ theorem ker_decimalCodec {x y : Numeral} (h : decimalCodec.Ker (.n x) (.n y))
     exact Value.str.inj (Option.some.inj h')
   · rw [if_neg hy] at h'; exact nomatch h'
 
-/-- **The certificate for `Numeral.Stored`.** `decimal` survives the store exactly when `η`
-    fixes every numeral `decimal` can write — and since `Can(decimal)` is the *normal* forms
-    and a normalisation fixes its own normal forms, the narrowed held set discharges the
-    premise outright.
+/-- **The certificate for `Numeral.Stored`.** `Can(decimal)` is the normal forms, and a
+    normalisation fixes its own — so the narrowed held set discharges `η ⊆ ker p` outright.
 
-    Read with `ker_decimalCodec`, this is both halves: the kernel is equality, so nothing
-    weaker than "η fixes it" would do, and `Stored` makes "η fixes it" true. The codec before
-    the narrowing is refuted in `Refutations.lean` (`not_survivesStore_decimalWF`).
-
-    Nothing here is claimed for `number`. §1 says it satisfies `η ⊆ ker p` for free because
-    `p "1.500"` and `p "1.5"` are the same double; that is a statement about `Double.ofDec`
-    and belongs with the axioms that pin it, not here. -/
+    With `ker_decimalCodec` (the kernel is equality, so nothing weaker would do) and
+    `not_survivesStore_decimalWF`, that is sufficiency and necessity. -/
 theorem survivesStore_decimalCodec {η : Attr → Attr}
     (hη : ∀ s, Numeral.Stored s = true → η (.n s) = .n s) :
     SurvivesStore decimalCodec η := by

@@ -455,7 +455,7 @@ theorem it cites, it is **two claims wearing one name**:
 The row asserted (A) and then explained why it is "*false* for `union` without full (U)" — and
 that explanation is about (B). (A) is not false at `union`; it is **definitional** there, since
 both sides are the same union of the options' sets (`altCodec_T`, `Iff.rfl`). (B) is the one
-that fails, and now has its witness: `not_TIsDomE_cLitStr`, in `union(literal("A"), string)`,
+that fails, and now has its witness: `not_TIsDomE_unionLiteralString`, in `union(literal("A"), string)`,
 where `"A"` is held and nothing is written because both options admit.
 
 The row is now two rows. What kept the conflation alive is worth naming, because it is the

@@ -68,10 +68,8 @@ namespace Calculus
 
 /-! ## Traversal — §5's Lemma, clause by clause
 
-This section **is** the specification's Lemma (traversal), and nothing in the file said so.
-§5 states it once and then says "every product case below is an instantiation", so five
-rules — `array`, `tuple`, `record`, `object`, `set` — rest on a paragraph of prose whose
-mechanization was spread across nine theorems with no stated correspondence. Here it is.
+This section **is** §5's Lemma (traversal), which five rules — `array`, `tuple`, `record`,
+`object`, `set` — are instantiations of. The correspondence was stated nowhere.
 
 > *Let a step be an entrywise pair between the entries of two lists, and lift it entrywise —
 > defined where every entry is, positions preserved. If the step satisfies a law pointwise,
@@ -96,15 +94,9 @@ And the keyed refinement, which §5 adds in one sentence:
 | names survive the traversal | `traverse_fst` |
 | dispatched and compared by name, **first occurrence first** | `lookup_rel`, in the Lookup section below |
 
-`lookup_rel` is where "first occurrence first" is actually earned, and it is worth saying how,
-because the obvious reading is that it needs duplicate-free keys and it does not. It recurses
-on the two lists in lockstep and demands only that the names agree at each position, so the
-first occurrence of a name is at the same index in both — which is exactly why duplicates are
-harmless rather than excluded. §1's `M` and `Item` do admit duplicate keys (see `FIDELITY.md`
-D7), so this is load-bearing and not a convenience.
-
-Read the other way, this table is the answer to "which of these nine theorems may I skip".
-None of them: each is one clause of a Lemma five typing rules consume. -/
+`lookup_rel` earns "first occurrence first" without a `Nodup`: it recurses in lockstep and
+demands only that names agree at each position. §1's `M` admits duplicate keys, so that is
+load-bearing rather than a convenience. -/
 
 /-- A list traversed by an entrywise partial function: all-or-nothing. -/
 def traverse {α β : Type} (f : α → Option β) : List α → Option (List β)
@@ -294,13 +286,8 @@ theorem lookup_none_of_not_mem_fst :
       · exact lookup_none_of_not_mem_fst fun h' => h (by simp [h'])
 
 /-- §5, Lemma (traversal), keyed clause: **"dispatched and compared by name, first
-    occurrence first"** — pointwise-related keyed lists have pointwise-related lookups, which
-    is what `Agree.m` consumes on the object codec.
-
-    No `Nodup` premise, and that is the content rather than an omission. The recursion walks
-    both lists in lockstep and demands only that the names agree at each position, so the
-    first occurrence of a name sits at the same index in both. §1's `M` admits duplicate keys
-    (`FIDELITY.md` D7), so a version needing distinctness would not cover the domain. -/
+    occurrence first"** — what `Agree.m` consumes on the object codec. No `Nodup`: see the
+    section header for why that is the content. -/
 theorem lookup_rel {R : α → β → Prop} :
     ∀ (l₁ : List (Name × α)) (l₂ : List (Name × β)),
       l₁.length = l₂.length →
