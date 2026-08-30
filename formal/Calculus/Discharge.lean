@@ -112,8 +112,14 @@ def ident : Term → Bool
   | .object _ _ => false
   -- `lazy` propagates, for the reason given at `κ`: its pair *is* the subterm's.
   | .lazy t => ident t
-  -- Unanalysable by construction: `held`'s `f`, and the two opaque terms.
-  | .held _ _ _ | .custom _ _ | .opaq _ => false
+  -- `held` propagates: `adm` applies `f` and asks the subterm, so the subterm is what
+  -- decides, exactly as it does under `refine`.
+  | .held t _ _ => ident t
+  -- `custom` decides its own membership outright — its `T` *is* `dom(ce)`.
+  | .custom _ _ => true
+  -- `opaq` is the one term left that decides nothing: its domain is a recursive traversal
+  -- of the input (`opaqCodecω`), not a set the term names.
+  | .opaq _ => false
 
 def identList : List Term → Bool
   | [] => true
@@ -201,15 +207,20 @@ noncomputable def adm : Term → Value → Bool
   -- is, so propagating the element's set would claim a separation that is false —
   -- `not_uAtCan_array_literals` is the witness. Same argument for the other four.
   | .set _ | .array _ | .tuple _ _ | .record _ | .object _ _ => fun _ => true
-  -- `held`'s opacity is one-sided and this is the opaque side: `f` gates the write and is
-  -- an arbitrary function, so no syntactic set bounds it. `admA` *does* see through
-  -- `held` — see the row there and `through_p`.
-  | .held _ _ _ => fun _ => true
+  -- `held` is transparent here too, and `f` is what makes it so rather than what blocks
+  -- it: `(c.through f g).e v = c.e (f v)` by `Iff.rfl`, so the writable set is the
+  -- subterm's pulled back along `f`. `f` is *data the term carries*, and `adm` is a
+  -- function that can apply it — nothing here needs `held`'s iso obligation.
+  | .held t f _ => fun v => adm t (f v)
   -- `lazy` propagates, for the reason given at `κ`.
   | .lazy t => adm t
-  -- The two terms that really are unanalysable: `custom` carries its pair as data, and
-  -- `opaq` has no subterm at all.
-  | .custom _ _ | .opaq _ => fun _ => true
+  -- `custom` carries its pair as data, which is the reason it is *analysable*, not the
+  -- reason it is not: `denote`'s `custom` row sets `e := ce`, so `dom(e)` is `ce`'s and
+  -- this row is exact.
+  | .custom ce _ => fun v => (ce v).isSome
+  -- `opaq` is the only genuinely unanalysable term: `opaqCodecω`'s domain is a recursion
+  -- over the input's own depth, not a set the syntax bounds.
+  | .opaq _ => fun _ => true
 
 /-- `adm`'s union row, as the list recursion the kernel needs. -/
 noncomputable def admList : List Term → Value → Bool
@@ -231,8 +242,13 @@ mutual
     `through`'s `g` post-processes a read and is total, so `dom(p)` is the subterm's
     *exactly* (`through_p`) — the adapter changes which value comes out, never which
     attributes go in. Only `f` is opaque, and `f` gates the write, which is why `adm`
-    stays `⊤` here. §5's table gave `held` a single `⊤` row on both sides; its opacity
-    is one-sided, and `sepA_literal_heldLiteral` is a pair this separates.
+    stays `⊤` here. §5's table gave `held` a single `⊤` row on both sides;
+    `sepA_literal_heldLiteral` is a pair this separates.
+
+    Both sides now see through `held`, by different routes: this one because `g` is total
+    and post-processes, the value side because `f` is *applied* rather than guessed at.
+    What stays asymmetric is the shape of the answer — `admA` passes the subterm's set
+    through unchanged, `adm` pulls it back along `f`.
 
     `literalN` is `true` — the read side goes through `Double.ofDec`, which is
     axiomatized, so no syntactic set bounds it; numeric literals fall to (U) per input
@@ -282,8 +298,10 @@ def admA : Term → Attr → Bool
   | .legacy _ _ => fun _ => true
   -- `lazy` propagates here too, and for the same reason: `p` is the subterm's.
   | .lazy t => admA t
-  -- Unanalysable by construction.
-  | .custom _ _ | .opaq _ => fun _ => true
+  -- `custom`'s read side, exact for the same reason: `p := cp`.
+  | .custom _ cp => fun a => (cp a).isSome
+  -- `opaq`, the one term left.
+  | .opaq _ => fun _ => true
 
 /-- …and on the attribute side. -/
 def admAList : List Term → Attr → Bool
@@ -480,6 +498,8 @@ theorem adm_sound : ∀ (fuel : Nat) (t : Term) {v a},
     case decimal => cases v <;> simp_all [denote, decimalCodec, isStored, adm]
     case legacy t' r => exact adm_sound fuel t' (extendRead_e.mp he)
     case lazy t' => exact adm_sound fuel t' he
+    case held t' f g => exact adm_sound fuel t' he
+    case custom ce cp => simp_all [adm, denote]
     case union opts =>
       obtain ⟨o, ho, -, hoe⟩ := altCodec_e_admits he
       simp only [List.mem_map] at ho
@@ -525,6 +545,7 @@ theorem admA_sound : ∀ (fuel : Nat) (t : Term) {a v},
       obtain ⟨w, hw, -⟩ := through_p.mp hp
       exact admA_sound fuel t' hw
     case lazy t' => exact admA_sound fuel t' hp
+    case custom ce cp => simp_all [admA, denote]
     case union opts =>
       obtain ⟨o, ho, -, hop⟩ := altCodec_p_admits hp
       simp only [List.mem_map] at ho
@@ -864,10 +885,11 @@ theorem ident_of_adm : ∀ {t : Term} {v : Value}, adm t v = false → ident t =
   | .nullable t, v, h => ident_of_adm (t := t) (v := v) (by
       simp only [adm, Bool.or_eq_false_iff] at h; exact h.1)
   | .lazy t, v, h => ident_of_adm (t := t) (v := v) h
+  | .held t f _, v, h => ident_of_adm (t := t) (v := f v) h
+  | .custom _ _, _, _ => rfl
   | .string, _, h | .boolean, _, h | .binary, _, h
   | .null, _, h | .set _, _, h | .array _, _, h | .tuple _ _, _, h
-  | .record _, _, h | .held _ _ _, _, h
-  | .custom _ _, _, h | .opaq _, _, h | .object _ _, _, h => nomatch h
+  | .record _, _, h | .opaq _, _, h | .object _ _, _, h => nomatch h
 
 /-- A union all of whose options refuse a value is one all of whose options decide their
     own membership — `ident_of_adm` lifted to the list, which `adm`'s union row makes
@@ -1055,6 +1077,102 @@ theorem not_sep_nullable_pair :
 theorem sep_nullable_plain (v : Value) :
     adm (.nullable (.literalS ["A"])) v = true → adm (Term.literalS ["C"]) v = false := by
   cases v <;> simp_all [adm]
+
+/-! ### `lazy` is transparent, and all four tables now say so
+
+    `denote fuel (.lazy t) = { denote fuel t with μ := none }`: the pair is the subterm's
+    and only the member is erased. §5 lists `lazy` with `custom` and `opaque` as
+    unanalysable, but that is inherited from the doc's thunk, which was `Unit → Term`.
+    `Term.lazy` carries a plain `Term` — a deliberate change, made because a closure adds
+    no constructible term and defeats the termination checker (`Term.lean`) — and the
+    opacity in `κ`/`ident`/`adm`/`admA` was left behind by it.
+
+    The four soundness cases are each a one-line appeal to the subterm's, which is the
+    evidence that the propagation is definitional rather than argued. -/
+
+/-- A `lazy` over a literal separates from a plain literal — the wrapper is invisible. -/
+theorem sep_lazy_literal (v : Value) :
+    adm (.lazy (.literalS ["A"])) v = true → adm (Term.literalS ["C"]) v = false := by
+  cases v <;> simp_all [adm]
+
+/-- …and on the attribute side, where `lazy` is as transparent as it is on the writable
+    one — unlike `legacy`, whose opacity really is one-sided. -/
+theorem sepA_lazy_literal (a : Attr) :
+    admA (.lazy (.literalS ["A"])) a = true → admA (Term.literalS ["C"]) a = false := by
+  cases a <;> simp_all [admA]
+
+/-- Nesting does not dim it: `κ` reaches a doubly-`lazy` scalar. -/
+theorem kappa_lazy_lazy : κ (.lazy (.lazy .string)) = some [.string] := rfl
+
+/-- And `ident` reaches through too, so a `lazy` option is `adm`-informative at all. -/
+theorem ident_lazy : ident (.lazy (.literalS ["A"])) = true := rfl
+
+/-! ### What "unanalysable" turned out to mean
+
+    `held` and `custom` were on the unanalysable list because they carry Lean functions,
+    and a function is not something a reader can look inside. But `adm` is not a reader:
+    it is a function with the term in hand, and the term *carries* `f`, `ce` and `cp` as
+    data. It can apply them.
+
+    `(c.through f g).e v = c.e (f v)` holds by `Iff.rfl`, so `held`'s writable set is the
+    subterm's pulled back along `f` — exactly, and with no appeal to `held`'s iso
+    obligation, which is about `T` and roundtripping rather than about the domain.
+    `custom` is starker still: `denote` sets `e := ce` and `p := cp`, so both rows are
+    `isSome` of the very function the term carries, and `custom`'s `T` is *defined* as
+    `dom(ce)`.
+
+    That leaves `opaq` as the only genuinely unanalysable term, and for a reason none of
+    the others shared: `opaqCodecω`'s domain is a recursion over the *input's* own depth,
+    so there is no set the syntax names to be precise about.
+
+    Three senses had been running together: (i) the term does not carry the information —
+    true of nothing here; (ii) the domain cannot be computed without running the codec —
+    true only of `opaq`; (iii) a reader cannot see through it — true of `held` and
+    `custom`, and not a property of the calculus. -/
+
+/-- `held`'s writable set, exactly: the subterm's, pulled back along `f`. -/
+theorem adm_held (t : Term) (f g : Value → Value) (v : Value) :
+    adm (.held t f g) v = adm t (f v) := rfl
+
+/-- So a `held` literal separates from a plain one on the **writable** side, which §5
+    could not say at all. The condition is on `f`, and it is the honest one: separation
+    fails exactly when the adapter sends the one value to the other. -/
+theorem sepV_literal_heldLiteral {f g : Value → Value} (hf : f (.str "A") ≠ .str "B") :
+    SepV (.literalS ["A"]) (.held (.literalS ["B"]) f g) :=
+  Or.inr fun v hv => by
+    have hv' : v = .str "A" := by cases v <;> simp_all [adm]
+    subst hv'
+    show adm (.literalS ["B"]) (f (.str "A")) = false
+    cases h : f (.str "A") <;> simp_all [adm]
+
+/-- And when the adapter *does* relabel, separation genuinely fails — the row is precise,
+    not merely tighter. The exact converse of the theorem above: both options write the
+    same value, and `adm` says so. -/
+theorem not_sepV_literal_heldLiteral {f g : Value → Value} (hf : f (.str "A") = .str "B") :
+    ¬ SepV (.literalS ["A"]) (.held (.literalS ["B"]) f g) := by
+  rintro (⟨kx, ky, -, hy, -⟩ | hdisj)
+  · exact absurd hy (by simp [κ])
+  · have h1 : adm (Term.literalS ["A"]) (.str "A") = true := by simp [adm]
+    have h2 := hdisj (.str "A") h1
+    rw [adm_held, hf] at h2
+    simp [adm] at h2
+
+/-- `custom`'s rows are `dom(ce)` and `dom(cp)` on the nose — the sharpest form of
+    "analysable": not a bound on the pair but the pair itself. -/
+theorem adm_custom (ce : Value → Option Attr) (cp : Attr → Option Value) (v : Value) :
+    adm (.custom ce cp) v = (ce v).isSome := rfl
+
+/-- …and the read side likewise. -/
+theorem admA_custom (ce : Value → Option Attr) (cp : Attr → Option Value) (a : Attr) :
+    admA (.custom ce cp) a = (cp a).isSome := rfl
+
+/-- Exact against the denotation, **both directions**. This is the statement a
+    soundness-only bundling could never force: an over-approximation is sound however
+    loose, and only the converse pins it. -/
+theorem adm_custom_exact (ce : Value → Option Attr) (cp : Attr → Option Value) (v : Value)
+    (fuel : Nat) :
+    adm (.custom ce cp) v = true ↔ ∃ a, (denote (fuel+1) (.custom ce cp)).e v = some a := by
+  simp [adm, denote, Option.isSome_iff_exists]
 
 /-! ### What the unified `literal` carries
 
