@@ -321,8 +321,17 @@ is. Scalars are refined by predicates; containers are refined structurally, and 
 has a gate to record.
 
 `literal` is the one ground term with **two** rules, because it is the only one whose member follows
-from its _values_ rather than from its name. There is deliberately no rule admitting a mixed set: a
-codec writes one member, so `literal(ℓ, k)` with `ℓ ∈ String` and `k ∈ D` has no derivation. That is
+from its _values_ rather than from its name. Those two are the ones worth naming, not the only ones
+possible: a literal over _any_ ground term is `refine(base, ∈ ℓ)`, which is already derivable and
+already separates, so a boolean or binary literal needs no rule and gets none. `(literal-S)` and
+`(literal-N)` are written out because their member follows from the values and a reader needs to see
+which; nothing else about them is special.
+
+There is deliberately no rule admitting a mixed set: a codec writes one member, so `literal(ℓ, k)`
+with `ℓ ∈ String` and `k ∈ D` has no derivation. That is **(W)** and not an omission, and it is not
+a limitation either — the spelling is `union(literal(ℓ), literal(k))`, whose options separate on
+both sides for free, by distinct members on the readable one and disjoint kinds on the writable.
+What the union concludes is `⊤`, which is the honest index for a term that writes two members. That is
 what makes this the term for an enum indexed by number — the held set is the literal union and the
 stored member is `N`, checked in both directions — and note that `⇝ N` carries `Numerals` on the wire
 while the held set is numeric, so `(R)` obliges the reading to return the number and not its text.
