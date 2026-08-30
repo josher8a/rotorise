@@ -134,9 +134,21 @@ noncomputable def adm : Term → Value → Bool
   | .legacy t _ => adm t
   | _ => fun _ => true
 
-/-- `adm`, attribute side. `legacy` is **not** transparent here: `extendRead` widens `p`
-    past the subterm's admissible set, which is exactly the direction `adm` claims to
-    bound. `literalN` is `true` — the read side goes through `Double.ofDec`, which is
+/-- `adm`, attribute side. The two wrappers that are `⊤` for `adm` part company here,
+    and the reason is which half of the pair each one touches.
+
+    `legacy` is **not** transparent: `extendRead` widens `p` past the subterm's
+    admissible set, which is exactly the direction `admA` claims to bound
+    (`not_admA_legacy`).
+
+    `held` **is**, and this is the one case where `admA` sees further than `adm`.
+    `through`'s `g` post-processes a read and is total, so `dom(p)` is the subterm's
+    *exactly* (`through_p`) — the adapter changes which value comes out, never which
+    attributes go in. Only `f` is opaque, and `f` gates the write, which is why `adm`
+    stays `⊤` here. §5's table gave `held` a single `⊤` row on both sides; its opacity
+    is one-sided, and `sepA_literal_heldLiteral` is a pair this separates.
+
+    `literalN` is `true` — the read side goes through `Double.ofDec`, which is
     axiomatized, so no syntactic set bounds it; numeric literals fall to (U) per input
     on the attribute side. -/
 def admA : Term → Attr → Bool
@@ -149,6 +161,7 @@ def admA : Term → Attr → Bool
       | _ => false
     | _ => false
   | .refine t _ => admA t
+  | .held t _ _ => admA t
   | _ => fun _ => true
 
 /-! ### Tag admission, on both sides
@@ -324,6 +337,9 @@ theorem admA_sound : ∀ (fuel : Nat) (t : Term) {a v},
       exact admA_dunion.mpr ⟨kvs, tag, rfl, hlk,
         contains_of_mem (mem_allTags htx (mem_of_contains htag))⟩
     case refine t' q => exact admA_sound fuel t' (restrict_p.mp hp).1
+    case held t' f g =>
+      obtain ⟨w, hw, -⟩ := through_p.mp hp
+      exact admA_sound fuel t' hw
     all_goals rfl
 
 /-! ### Why `admA` has no `legacy` case
@@ -699,6 +715,26 @@ theorem not_ident_string : ident .string = false := rfl
 def SepA (x y : Term) : Prop :=
   (∃ μx μy, μSyn x = some μx ∧ μSyn y = some μy ∧ μx ≠ μy) ∨
   (∀ a, admA x a = true → admA y a = false)
+
+/-- **`held`'s one-sided opacity, discharging a pair §5's table could not.**
+    `union(literal("A"), held(literal("B"), f, g))` separates on the readable side for
+    *every* `f` and `g`: the adapter post-processes a read, so it cannot move which
+    attributes the option accepts, and the two footprints are `{S "A"}` and `{S "B"}`.
+    The member disjunct is no help — both options are `⇝ S` — so this is the new `admA`
+    row doing the work alone. -/
+theorem sepA_literal_heldLiteral (f g : Value → Value) :
+    SepA (.literalS ["A"]) (.held (.literalS ["B"]) f g) :=
+  Or.inr fun a ha => by cases a <;> simp_all [admA]
+
+/-- And it is the *subterm* that decides, not the wrapper: with the same inner literal
+    the two footprints coincide and `SepA` fails on both disjuncts. That is the pair of
+    `not_uAtCan_literal_held`, still refused — §5's `held` counterexample survives the
+    row that discharges its neighbour. -/
+theorem not_sepA_literal_heldLiteral (f g : Value → Value) :
+    ¬ SepA (.literalS ["A"]) (.held (.literalS ["A"]) f g) := by
+  rintro (⟨μx, μy, hx, hy, hne⟩ | hdisj)
+  · cases hx; cases hy; exact hne rfl
+  · exact absurd (hdisj (.s "A") rfl) (by simp [admA])
 
 /-- §5's dischargers, combined: pairwise separation on each side of the pair, and
     closed options admitting their own canonicals — so admission is unique at every

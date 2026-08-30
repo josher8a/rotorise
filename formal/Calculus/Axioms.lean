@@ -94,6 +94,20 @@ rests on it. -/
 #assert_axioms admDisj_ident
 #assert_axioms sepV_string_dunion_nil
 
+/-! `through_p` is the fact the `held` row rests on — `g` post-processes a read and is
+total, so `dom(p)` is the subterm's exactly. It is cited as a result now, so it is guarded
+like one. -/
+
+#assert_axioms through_p
+
+/-! `admA`'s `held` row, both directions. §5 gave `held` one `⊤` row on both sides; its
+opacity is one-sided — `f` gates the write, `g` only post-processes the read — so the
+readable side passes through, and these two are the pair it separates and the pair it
+still does not. -/
+
+#assert_axioms sepA_literal_heldLiteral
+#assert_axioms not_sepA_literal_heldLiteral
+
 /-! The three lemmas that pin §5's declaration-time devices to the denotation. Without
 these, `κ`, `adm` and `admA` are transcriptions of a table rather than claims about the
 model, so their axiom base is part of what the soundness statements rest on. -/

@@ -596,6 +596,43 @@ declaration where two options are both `κ`-free, or give `held` a write-side `�
 carrier — and §1's `Value` is what would have to change for the second. `codec.uniqueadmission.spec.ts`
 carries the measurement as four assertions.
 
+### One where `held` was opaque on the wrong number of sides
+
+The entry above records `adm`/`admA` splitting because `legacy` widens `p`. The split had a second
+consequence nobody drew, and it runs the other way: **`held`'s opacity is one-sided, and §5's table
+priced it as total.**
+
+`held(c, f, g)` denotes `Codec.through`, whose two halves are not symmetric. `f` sits in front of
+`e`, so what the term will write is a question about a caller's function and `adm` is rightly `⊤`.
+`g` sits *behind* `p` and is total — `through_p` says `(c.through f g).p a = some v ↔ ∃ w, c.p a =
+some w ∧ v = g w` — so `dom(p)` is the subterm's exactly. The adapter changes which value comes out
+and never which attributes go in. The model had proved this from the beginning (`Combinators.lean`
+even says it in prose: "`held` and `legacy` are transparent on the side they do not touch"), and
+`admA` still sent `held` to the `_ => true` catch-all, alongside `custom` and `lazy`, whose reads
+really are unknowable.
+
+So the table had `legacy` and `held` sharing a `⊤` for opposite reasons — one because it reads
+*more* than its subterm, the other in spite of reading exactly what its subterm reads.
+
+**What it costs.** A discharge, and it is not a corner case:
+`union(literal("A"), held(literal("B"), f, g))` separates on the readable side for every `f` and
+`g` — the footprints are `{S "A"}` and `{S "B"}` — and §5 could not say so, because it had thrown
+the footprint away at the wrapper. The member disjunct does not help; both options are `⇝ S`.
+`sepA_literal_heldLiteral` is the witness.
+
+The row is precise rather than permissive, which is the part worth checking:
+`not_sepA_literal_heldLiteral` shows that with the *same* inner literal both disjuncts still fail,
+so `not_uAtCan_literal_held` — §5's standing `held` counterexample, and the reason (D) is
+incomparability rather than disjointness — survives untouched. The wrapper never decides. The
+subterm does, and reading through the wrapper is what lets the question be put to it.
+
+**How it was found.** Not by a proof and not by a sweep. The user asked whether
+`union(literal("A"), held(literal("B"), f, g))` decides, given that
+`union(literal("A"), held(literal("A"), f, g))` does not — a question about two terms differing in
+one leaf. Nothing in either document distinguished them, and the model's own `through_p` did. That
+is the same shape as every other entry here: two artifacts that had to agree, and one of them
+knowing something the other had stopped asking.
+
 ## §5 Certifying an implementation
 
 The calculus is portable by design: nothing in it is TypeScript, and nothing is Rotorise. An
