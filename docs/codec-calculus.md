@@ -179,8 +179,17 @@ The two rules check it in the two different places their admissible sets live. `
 back to, which is not redundant — a numeral the store holds can read back as a double past the
 maximum, and gating only the write is the configuration that breaks **(C)**. `(literal-N)` gates at
 the **declaration**, alongside `n ≥ 1` and pairwise distinctness, because `ℓ` is data the term owns
-and a premise on data is decidable when the codec is built. Its read side needs no gate of its own:
-membership in `ℓ` is checked already, and `ℓ ⊆ D` is what makes that check sufficient.
+and a premise on data is decidable when the codec is built.
+
+That premise discharges the **write** side and only the write side. `ℓ` is fixed when the codec is
+built, so every value `e` will ever accept has been checked already. It discharges nothing on the
+read side, and an earlier version of this paragraph claimed otherwise — that membership in `ℓ` was
+sufficient, since `ℓ ⊆ D`. It is not. Reading an `N` as a value is wider than membership, so an
+attribute that is not a numeral at all can land on a value the set contains, and the check passes on
+something §1 has no point for. **A premise bounds the values a term owns, and a stored attribute is
+not one of them.** So `(literal-N)` reads through the same gate as `(number)`: the stored text must
+be a numeral before it is read as a value. Three terms write an `N`, and a reader should not have to
+learn which of them is careful.
 
 Machine-checked — `Typed.literalN`'s `hD`, `not_typed_literalN_nonD`, and
 `typed_literalN_sub_number`, which is the containment `(literal-N)` had lost — and measured, in

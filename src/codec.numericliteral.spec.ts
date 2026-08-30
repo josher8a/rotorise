@@ -270,3 +270,70 @@ describe('the admissible set is what DynamoDB stores', () => {
         expect(writes(literal('NaN', 'Infinity'))).toBe('S')
     })
 })
+
+describe('the read side reads through the same gate as number', () => {
+    /**
+     * **The defect the `ℓ ⊆ D` premise did not cover, and was claimed to.**
+     *
+     * `decode` was `Number(carried)` then a membership test, and `Number` is far wider than an
+     * `N`: it reads `''`, whitespace, `0x10`, `0b11`. Membership does not filter those — it only
+     * rejects the ones whose numeric value happens to miss the set — so an attribute DynamoDB
+     * could never have written decoded to a value the type calls legitimate:
+     *
+     * ```
+     * literal(0, 1, 2).decode({ N: '' })      → 0
+     * literal(0, 16).decode({ N: '0x10' })    → 16
+     * ```
+     *
+     * No law in §2 catches it. (C) holds — `0` re-encodes fine — and so does (R). What it breaks
+     * is §1: `Carries('N')` is `Numerals`, and `''` is not one, so `p` was defined on something
+     * that is not an attribute. `decimal` and `number` both check this on the way in; `literal`
+     * is the third term that writes an `N` and it did not.
+     *
+     * The general form, since it is the second time this arc has met it: **a premise bounds the
+     * values this library owns, and a stored attribute is not one of them.** `ℓ ⊆ D` genuinely
+     * discharges the write side, because `ℓ` is frozen at construction. Nothing discharges a read.
+     */
+    it('refuses an N that is not a numeral, whatever Number would make of it', () => {
+        const status = literal(0, 1, 2)
+        for (const text of ['', ' ', '\n', '0b11', '0o7', '1_0']) {
+            expect(() => status.unsafeDecode({ N: text })).toThrow(
+                /is not a numeral, so this attribute was not written by DynamoDB/,
+            )
+        }
+        expect(() => literal(0, 16).unsafeDecode({ N: '0x10' })).toThrow(
+            /is not a numeral/,
+        )
+    })
+
+    it('agrees with number on every one of them', () => {
+        for (const text of ['', ' ', '0x10', '0b11', 'Infinity', 'NaN', 'abc']) {
+            expect(() => number.unsafeDecode({ N: text })).toThrow()
+            expect(() => literal(0, 1, 2).unsafeDecode({ N: text })).toThrow()
+        }
+    })
+
+    /** The forms DynamoDB does accept still read, which is what keeps the store round trip. */
+    it('still reads the denormalised forms the service normalises', () => {
+        const status = literal(0, 1, 2)
+        for (const text of ['1', '1.0', '01', '+1', '1e0']) {
+            expect(status.unsafeDecode({ N: text })).toBe(1)
+        }
+    })
+
+    /**
+     * `number` needs a second gate on the round-tripped value, because
+     * `Number('9.9…E+125')` rounds *up* to `1e126`. A literal does not: the rounded value is
+     * outside `D`, and `ℓ ⊆ D`, so membership refuses it. This is the subsumption argument that
+     * *is* sound — it is about a value landing in a set fixed at construction, not about an
+     * attribute — and it is pinned here rather than believed.
+     */
+    it('needs no second gate, because the rounded value cannot be in the set', () => {
+        const past = '9.9999999999999999999999999999999999999E+125'
+        expect(Number(past)).toBe(1e126)
+        expect(() => literal(1e125).unsafeDecode({ N: past })).toThrow(
+            /is not one of/,
+        )
+        expect(() => number.unsafeDecode({ N: past })).toThrow()
+    })
+})

@@ -399,6 +399,23 @@ simpler?* — and the first move was to ask the shipped constructor what it did 
 range. It wrote `{ N: 'NaN' }`. The answer to the question turned out to matter less than the
 measurement taken on the way to it.
 
+**And the entry recording all that contained a fresh error of its own**, which is why it is worth
+rereading twice. Having added `ℓ ⊆ D`, I argued the read side needed no gate: membership in `ℓ` is
+checked in both directions, `ℓ ⊆ D`, so the premise covers it. The user refused the argument — *it
+has to pass through the same checks as `decimal` and `number`* — and `literal(0, 1, 2)` read
+`⟨N, ""⟩` as `0`, `literal(0, 16)` read `⟨N, "0x10"⟩` as `16`. Reading an `N` as a value is wider
+than membership in `ℓ`, so the check passes on attributes §1 has no point for.
+
+No §2 law catches it — (C) and (R) both hold — which is the part worth keeping. What it breaks is
+**§1**, and therefore **C1**: the embedding into `𝔸` is partial, the implementation's attribute type
+is wider, and every term that reads an `N` is the one that must notice. Two of the three did.
+`codec-formalization.md` §4 carries the entry. The principle I had and misapplied is written down
+one section later in that same document — *an unchecked direction is sound exactly as far as
+something outside the codec enforces it* — and for a read there is nothing outside the codec at all.
+
+Three corrections in this arc have now come from the same move: the user declining to accept a
+justification. That is a higher hit rate than any audit in this file.
+
 Also worth recording, since it is the pairing that made the docstring: `Ker` is an
 equivalence and `Codec.Equiv` is not (`not_equiv_trans`, item 3). They are one symbol apart
 in the specification's prose and they differ exactly where a reviewer would assume they do
