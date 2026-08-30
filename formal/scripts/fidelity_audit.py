@@ -10,8 +10,8 @@ artifact meant to be checked rather than trusted:
 
 Four measurements, all re-runnable:
 
-  1. the guard's coverage  — theorem names the documents cite as results, against
-     the names `Calculus/Axioms.lean` actually puts through `#assert_axioms`;
+  1. the guard's coverage  — that `Calculus/Axioms.lean` still guards the whole
+     namespace universally, rather than an opt-in list this script has to police;
   2. §-tag coverage        — declarations whose own docstring names a spec section,
      per module: the only in-source link from a rule to its theorem;
   3. docstring coverage    — theorems and defs carrying any docstring at all;
@@ -65,11 +65,17 @@ def cited_names(decls):
             if m.group(1) in known: cited.add(m.group(1))
     return cited
 
-def guarded():
+def guarded_universally():
+    """The guard is `#assert_axioms_all`, which walks the environment: every theorem in
+    the namespace is checked because it exists, so coverage is not a number this script
+    can meaningfully report. All it can do is confirm the universal guard is still
+    invoked — and fail if someone swaps it back for an opt-in list."""
     p = os.path.join("Calculus", "Axioms.lean")
-    if not os.path.exists(p): return set()
+    if not os.path.exists(p): return None
     body = open(p).read()
-    return set(re.findall(r'#assert_axioms\s+([^\s]+)', body))
+    return re.search(r'^#assert_axioms_all\s*$', body, re.M) is not None
+
+GUARD_FAILED = []
 
 def main(show=False):
     decls = declarations()
@@ -78,16 +84,18 @@ def main(show=False):
     undocumented_defs = {d[0] for d in defs if not d[4].strip()}
 
     print("── 1. the guard's coverage ────────────────────────────────────────────\n")
-    cited, g = cited_names(decls), guarded()
-    missing = sorted(cited - g)
-    print(f"  cited as a result by the documents : {len(cited)}")
-    print(f"  put through #assert_axioms         : {len(g)}")
-    print(f"  cited but unguarded                : {len(missing)}")
-    if show and missing:
-        for n in missing: print(f"      {n}")
-    print("\n  Unguarded is not unsound — it means the advertised axiom base is a")
-    print("  claim for that theorem rather than a build error. Check with")
-    print("  `#print axioms` before trusting one.")
+    universal = guarded_universally()
+    print(f"  cited as a result by the documents : {len(cited_names(decls))}")
+    print(f"  #assert_axioms_all invoked         : {'yes' if universal else 'NO'}")
+    if universal:
+        print("\n  Coverage is structural: the guard walks the namespace, so a theorem is")
+        print("  checked because it exists. There is no unguarded set for this script to")
+        print("  report, and no line anyone can forget to add.")
+    else:
+        print("\n  FAIL — the universal guard is gone. Whatever replaced it guards only the")
+        print("  theorems someone remembered to name; the advertised axiom base in")
+        print("  docs/codec-formalization.md §3 is a claim again, not a build error.")
+        GUARD_FAILED.append(True)
 
     print("\n\n── 2. §-tag coverage, per module ──────────────────────────────────────\n")
     tag = collections.Counter(); tot = collections.Counter()
@@ -130,3 +138,6 @@ def main(show=False):
 if __name__ == "__main__":
     main(show="--names" in sys.argv)
     print()
+    # The one thing here that is a ratchet rather than a report: losing the universal
+    # guard is a failure, not a statistic.
+    if GUARD_FAILED: sys.exit(1)
