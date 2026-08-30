@@ -786,6 +786,7 @@ accept. They agree on most terms and part on four — and the partings go both w
 | `decimal`                   | `Stored`             | `Stored`, as stored `N`           |
 | `refine(c, q)`              | `adm(c) ∩ q`         | `admA(c)`                         |
 | `legacy(c, r)`              | `adm(c)`             | **`⊤`**                           |
+| `union(c₁ … cₙ)`            | `⋃ adm(cᵢ)`          | `⋃ admA(cᵢ)`                      |
 | `held(c, f, g)`             | **`⊤`**              | `admA(c)`                         |
 | anything else               | `⊤`                  | `⊤`                               |
 
@@ -849,6 +850,13 @@ All four partings are forced:
   still does not. The wrapper never decides; the subterm does, and reading through the wrapper is
   what lets the question be asked of it. Note that the member disjunct is no help in either case:
   both options are `⇝ S`.
+
+A union takes the `⋃` of its options', for the same reason `κ` does: a union admits what some
+option admits. Without that row the union _spelling_ of a set of literals would forget both sets
+where the single n-ary term keeps them, and the two would separate differently for no reason the
+semantics gives. With it they do not — which is what makes `literal(ℓ₁, ℓ₂)` and
+`union(literal(ℓ₁), literal(ℓ₂))` interchangeable rather than merely equal as pairs, and so what
+makes `union` an honest escape hatch rather than a lossy one.
 
 Two notes on what is _not_ in the table. `optional` and `fallback` are **fields** (§4), not terms,
 so nothing passes through them: `adm` is a function on terms and has no case to give them. And the

@@ -126,6 +126,8 @@ theorem mem_allTags {d : Name} {ts : List Term} {t tag} (ht : t ∈ ts)
     · exact List.mem_append.mpr (Or.inl htag)
     · exact List.mem_append.mpr (Or.inr (ih ht'))
 
+mutual
+
 /-- `adm`, value side. `noncomputable` only because `literalN` compares `Double`s, whose
     `DecidableEq` is axiomatized (§1) — the recursion itself is structural. -/
 noncomputable def adm : Term → Value → Bool
@@ -150,7 +152,21 @@ noncomputable def adm : Term → Value → Bool
   -- and a gate the term owns is exactly what `adm` is for.
   | .number => inD
   | .decimal => isStored
+  -- A union admits what some option admits — the same `⋃` `κ` already takes. Without it
+  -- the union spelling of a literal set forgets both sets, where the n-ary literal keeps
+  -- them, which would make `union(literal a, literal b)` strictly weaker than
+  -- `literal(a, b)` for no reason the semantics gives.
+  | .union opts => fun v => admList opts v
   | _ => fun _ => true
+
+/-- `adm`'s union row, as the list recursion the kernel needs. -/
+noncomputable def admList : List Term → Value → Bool
+  | [], _ => false
+  | t :: ts, v => adm t v || admList ts v
+
+end
+
+mutual
 
 /-- `adm`, attribute side. The two wrappers that are `⊤` for `adm` part company here,
     and the reason is which half of the pair each one touches.
@@ -180,11 +196,19 @@ def admA : Term → Attr → Bool
     | _ => false
   | .refine t _ => admA t
   | .held t _ _ => admA t
+  | .union opts => fun a => admAList opts a
   -- `decimal` is to `number` as `literal-S` is to `literal-N`: it holds numerals *as
   -- their text*, so its gate is a test on the stored attribute and both sides see it.
   -- `number`'s is not — the numeral goes through `Double.ofDec` — so it stays `⊤`.
   | .decimal => fun a => match a with | .n x => Numeral.Stored x | _ => false
   | _ => fun _ => true
+
+/-- …and on the attribute side. -/
+def admAList : List Term → Attr → Bool
+  | [], _ => false
+  | t :: ts, a => admA t a || admAList ts a
+
+end
 
 /-! ### Tag admission, on both sides
 
@@ -311,6 +335,22 @@ theorem κ_sound : ∀ (fuel : Nat) (t : Term) {ks : List Kind} {v a},
     | lazy γ => exact nomatch hκ
     | custom ce cp => exact nomatch hκ
     | opaq lossy => exact nomatch hκ
+/-- An option's admission lifts to the list — the `⋃` of `adm`'s union row. -/
+theorem admList_of_mem : ∀ {opts : List Term} {t : Term} {v : Value},
+    t ∈ opts → adm t v = true → admList opts v = true
+  | t' :: ts, t, v, hm, h => by
+    rcases List.mem_cons.mp hm with rfl | hm'
+    · simp [admList, h]
+    · simp [admList, admList_of_mem hm' h]
+
+/-- …and on the attribute side. -/
+theorem admAList_of_mem : ∀ {opts : List Term} {t : Term} {a : Attr},
+    t ∈ opts → admA t a = true → admAList opts a = true
+  | t' :: ts, t, a, hm, h => by
+    rcases List.mem_cons.mp hm with rfl | hm'
+    · simp [admAList, h]
+    · simp [admAList, admAList_of_mem hm' h]
+
 theorem adm_sound : ∀ (fuel : Nat) (t : Term) {v a},
     (denote fuel t).e v = some a → adm t v = true
   | 0, _, _, _, he => nomatch he
@@ -334,6 +374,12 @@ theorem adm_sound : ∀ (fuel : Nat) (t : Term) {v a},
     case number => cases v <;> simp_all [denote, numberCodec, inD, adm]
     case decimal => cases v <;> simp_all [denote, decimalCodec, isStored, adm]
     case legacy t' r => exact adm_sound fuel t' (extendRead_e.mp he)
+    case union opts =>
+      obtain ⟨o, ho, -, hoe⟩ := altCodec_e_admits he
+      simp only [List.mem_map] at ho
+      obtain ⟨tx, htx, rfl⟩ := ho
+      rw [optionSemOf_c] at hoe
+      exact admList_of_mem htx (adm_sound fuel tx hoe)
     all_goals rfl
 
 /-- Reading lands in `admA`. -/
@@ -356,6 +402,12 @@ theorem admA_sound : ∀ (fuel : Nat) (t : Term) {a v},
     case held t' f g =>
       obtain ⟨w, hw, -⟩ := through_p.mp hp
       exact admA_sound fuel t' hw
+    case union opts =>
+      obtain ⟨o, ho, -, hop⟩ := altCodec_p_admits hp
+      simp only [List.mem_map] at ho
+      obtain ⟨tx, htx, rfl⟩ := ho
+      rw [optionSemOf_c] at hop
+      exact admAList_of_mem htx (admA_sound fuel tx hop)
     all_goals rfl
 
 /-! ### Why `admA` has no `legacy` case
@@ -669,6 +721,8 @@ def SepV (x y : Term) : Prop :=
     ever *refuses* is `ident` — and two options with disjoint `adm` must each refuse
     somewhere, provided each also admits somewhere. -/
 
+mutual
+
 /-- **`adm` is informative only where `ident` holds.** If `adm` refuses a single value,
     the term is `ident`. This is the pinning `ident` otherwise lacks: `κ`, `adm` and
     `admA` each have a soundness lemma tying them to the denotation, and `ident` has no
@@ -682,10 +736,23 @@ theorem ident_of_adm : ∀ {t : Term} {v : Value}, adm t v = false → ident t =
   | .number, _, _ => rfl
   | .decimal, _, _ => rfl
   | .legacy t _, v, h => ident_of_adm (t := t) (v := v) h
+  | .union opts, v, h => identList_of_admList (opts := opts) (v := v) h
   | .string, _, h | .boolean, _, h | .binary, _, h
   | .null, _, h | .set _, _, h | .array _, _, h | .tuple _ _, _, h
   | .record _, _, h | .held _ _ _, _, h | .nullable _, _, h | .lazy _, _, h
-  | .custom _ _, _, h | .opaq _, _, h | .object _ _, _, h | .union _, _, h => nomatch h
+  | .custom _ _, _, h | .opaq _, _, h | .object _ _, _, h => nomatch h
+
+/-- A union all of whose options refuse a value is one all of whose options decide their
+    own membership — `ident_of_adm` lifted to the list, which `adm`'s union row makes
+    necessary. -/
+theorem identList_of_admList : ∀ {opts : List Term} {v : Value},
+    admList opts v = false → identList opts = true
+  | [], _, _ => rfl
+  | t :: ts, v, h => by
+    simp only [admList, Bool.or_eq_false_iff] at h
+    simp [identList, ident_of_adm h.1, identList_of_admList h.2]
+
+end
 
 /-- **§5's (K), recovered from `SepV`'s second disjunct.** Disjoint `adm` implies both
     `ident` conjuncts — given that each option admits *something*.
