@@ -1183,6 +1183,24 @@ So the sequence is: exactness for `AdmA`, then `SepV`/`SepA` re-derived on the p
 sites. The last of those is mechanical. The first two are not, and doing them in the other order
 would replace four checked recursions with two unchecked ones.
 
+**Step one is done.** `AdmA_exact` proves fourteen of the twenty-three attribute rows exact — two
+fewer than the value side, and the two are `refine` and `legacy`, the pair whose asymmetry is why §5
+needed `adm` and `admA` rather than one function. The numeric rows are the surprise: they reach
+`dom(p)` through `Double.ofDec`, which is axiomatized, and are exact anyway, because a row may
+*call* an axiomatized function even where no finite set of numerals describes its domain. §5 wrote
+`⊤` there and did not have to.
+
+The excuses gained two constructors — `valueUnderRead` and `widenedRead` — which cover nothing on
+the value side. That forced `excuse_witnessed` into its proper form: the covering is a *hypothesis*,
+so an excuse must be witnessed **on the side it is used on**, and neither side answers for the
+other's reasons. All seven attribute-side excuses are witnessed. Claiming `valueUnderRead` for
+`refine` on the value side — where it is provably exact — is rejected by both `excuse_shapes` and
+`excuse_witnessed`.
+
+Both halves now carry the same five obligations: exactness where claimed, soundness everywhere, a
+covering reason for each declining row, no excuse over an exact row, and a counterexample behind
+every excuse. What remains is `SepV`/`SepA`, and then the rename.
+
 ## §5 Certifying an implementation
 
 The calculus is portable by design: nothing in it is TypeScript, and nothing is Rotorise. An
