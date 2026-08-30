@@ -171,26 +171,6 @@ discriminator, and a membership test on the tag it carries. Stating that shape o
 what lets the `dunion` cases below say the one thing they are about: the tag the
 admitting option matched is one of the union's tags. -/
 
-/-- A tag option admits exactly the items whose discriminator carries one of its tags. -/
-theorem byTag_admitA {d : Name} {tags : List String} {c : Codec} {a : Attr} :
-    (OptionSem.byTag d tags c).admitA a = true ↔
-      ∃ kvs tag, a = .m kvs ∧ kvs.lookup d = some (.s tag) ∧ tags.contains tag = true := by
-  cases a <;> simp only [OptionSem.byTag] <;> try simp
-  case m kvs =>
-    cases hlk : kvs.lookup d with
-    | none => simp [hlk]
-    | some x => cases x <;> simp [hlk]
-
-/-- …and the values whose discriminator carries one, on the way in. -/
-theorem byTag_admitV {d : Name} {tags : List String} {c : Codec} {v : Value} :
-    (OptionSem.byTag d tags c).admitV v = true ↔
-      ∃ kvs tag, v = .map kvs ∧ kvs.lookup d = some (.str tag) ∧ tags.contains tag = true := by
-  cases v <;> simp only [OptionSem.byTag] <;> try simp
-  case map kvs =>
-    cases hlk : kvs.lookup d with
-    | none => simp [hlk]
-    | some x => cases x <;> simp [hlk]
-
 /-- `adm` at a `dunion` is the same test, against the union's whole tag set. -/
 theorem adm_dunion {d : Name} {opts : List Term} {v : Value} :
     adm (.dunion d opts) v = true ↔

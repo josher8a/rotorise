@@ -483,6 +483,19 @@ unions it covers:
 | tag disjointness                                   | `(dunion)`, outright — both sides                     | the discriminator literals    |
 | kind disjointness                                  | `opaque`'s fixpoint (§3), outright                    | one option per kind of §1     |
 
+**The four rows are one condition at four projections.** Fix a partial map from inputs to labels —
+a stored member, a runtime kind, a discriminator's tag — and give each option the set of labels it
+answers to. Where those sets are pairwise disjoint, no input can reach two options, because the
+label is a property of the _input_ and lands in at most one set. That is the whole argument, and it
+is why the rows differ only in two ways: which projection, and whether the projection is defined on
+_both_ sides of the pair. `μ` and `admA` label attributes; `κ` and `adm` label values; only a
+discriminator's tag and §1's kind label both — which is exactly why only those two settle **(U)**
+outright and the first two have to be combined.
+
+Read that way, `(dunion)` below is not a second kind of sum. It is `(union)` with admission **read
+off** the discriminator instead of attempted, and its `(U)` is a theorem because reading a label
+off an input is something an option cannot be wrong about.
+
 What no discharger covers stays an obligation the semantics enforces per input by failing — safe for
 every law except **(R)** at a canonical attribute, and that residue is exactly what the theorem
 below names. A `⊤` option is one **(K)** never separates, for the same reason it cannot be checked:

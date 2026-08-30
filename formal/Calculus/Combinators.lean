@@ -1341,6 +1341,39 @@ def OptionSem.byTag (d : Name) (tags : List String) (c : Codec) : OptionSem :=
       | _ => false
     c := c }
 
+/-- A tag option admits exactly the items whose discriminator carries one of its tags. -/
+theorem byTag_admitA {d : Name} {tags : List String} {c : Codec} {a : Attr} :
+    (OptionSem.byTag d tags c).admitA a = true ↔
+      ∃ kvs tag, a = .m kvs ∧ kvs.lookup d = some (.s tag) ∧ tags.contains tag = true := by
+  cases a <;> simp only [OptionSem.byTag] <;> try simp
+  case m kvs =>
+    cases hlk : kvs.lookup d with
+    | none => simp [hlk]
+    | some x => cases x <;> simp [hlk]
+
+/-- …and the values whose discriminator carries one, on the way in. -/
+theorem byTag_admitV {d : Name} {tags : List String} {c : Codec} {v : Value} :
+    (OptionSem.byTag d tags c).admitV v = true ↔
+      ∃ kvs tag, v = .map kvs ∧ kvs.lookup d = some (.str tag) ∧ tags.contains tag = true := by
+  cases v <;> simp only [OptionSem.byTag] <;> try simp
+  case map kvs =>
+    cases hlk : kvs.lookup d with
+    | none => simp [hlk]
+    | some x => cases x <;> simp [hlk]
+
+/-- §5's discriminator projection, on each side of the pair: the tag an item carries at
+    `d`, where it carries one. This is what `(dunion)` separates options by, and it is
+    the same *kind* of thing `Value.kind`/`Attr.kind` are for `opaque` — a partial
+    labelling of the input, read off before any codec is attempted. -/
+def tagOfV (d : Name) : Value → Option String
+  | .map kvs => match kvs.lookup d with | some (.str s) => some s | _ => none
+  | _ => none
+
+/-- …and on the stored side. -/
+def tagOfA (d : Name) : Attr → Option String
+  | .m kvs => match kvs.lookup d with | some (.s s) => some s | _ => none
+  | _ => none
+
 /-- The builder `denote` uses for a union option. -/
 def optionSemOf (c : Codec) : Option (List (Name × Bool)) → OptionSem
   | some spec => .byNames spec c
@@ -3074,26 +3107,6 @@ theorem lawful_altCodec {os : List OptionSem} {μA : Option Member}
       exact (h _ ho).agree hop hoe }
 
 
-/-- Disjoint tag lists select at most one option, and a member tag selects exactly it —
-    duplicates are impossible because a pair would be self-disjoint with a nonempty tag
-    list. -/
-theorem tag_filter_singleton {tag : String} :
-    ∀ (os : List (List String × Codec)),
-      List.Pairwise (fun x y => ∀ t ∈ x.1, t ∉ y.1) os →
-      ∀ x ∈ os, tag ∈ x.1 →
-      os.filter (fun y => y.1.contains tag) = [x]
-  | [], _, x, hx, _ => nomatch hx
-  | y :: os, hp, x, hx, htag => by
-      obtain ⟨hhead, htail⟩ := List.pairwise_cons.mp hp
-      rcases List.mem_cons.mp hx with rfl | hx'
-      · have hnil : os.filter (fun y => y.1.contains tag) = [] :=
-          filter_nil_of fun b hb =>
-            contains_eq_false_of_not_mem (hhead b hb tag htag)
-        simp only [List.filter, contains_of_mem htag, hnil]
-      · have hny : tag ∉ y.1 := fun hin => (hhead x hx' tag hin) htag
-        simp only [List.filter, contains_eq_false_of_not_mem hny]
-        exact tag_filter_singleton os htail x hx' htag
-
 /-! ### (U) by kind, and `opaque`'s fixpoint
 
     §5's other disjointness discharger, and the one `(opaque)` needs. An option is
@@ -3107,16 +3120,57 @@ theorem tag_filter_singleton {tag : String} :
 def OptionSem.OnKind (o : OptionSem) (k : Kind) : Prop :=
   (∀ v, o.admitV v = true → v.kind = k) ∧ (∀ a, o.admitA a = true → a.kind = k)
 
-/-- **(U) by kind-separation.** Pinned options with pairwise-distinct kinds can never
-    both admit, on either side of the pair. -/
+/-- An option pinned to a **set of labels**, under a partial projection of each side of
+    the pair. `OnKind` is the singleton case at `Value.kind`/`Attr.kind`; `(dunion)`'s
+    tag sets are the general one at `tagOfV`/`tagOfA`. -/
+def OptionSem.Labelled {L : Type} (πV : Value → Option L) (πA : Attr → Option L)
+    (o : OptionSem) (S : L → Prop) : Prop :=
+  (∀ v, o.admitV v = true → ∃ l, πV v = some l ∧ S l) ∧
+  (∀ a, o.admitA a = true → ∃ l, πA a = some l ∧ S l)
+
+/-- **(U) by projection** — §5's two outright dischargers, once.
+
+    Label each side of the pair by a partial projection of the input, give each option the
+    set of labels it answers to, and keep those sets pairwise disjoint: then no input can
+    reach two options, because the label it carries is a property of the *input* and lands
+    in at most one option's set. `hw` is the only codec-facing premise, and it is what
+    ties a canonical pair to its own option's admission.
+
+    Kind-separation (`opaque`'s fixpoint) and tag-separation (`(dunion)`) are this theorem
+    at two projections; §5's table reads as four conditions and is one. -/
+theorem uniqueAdmission_of_labels {L : Type} {πV : Value → Option L} {πA : Attr → Option L}
+    {os : List OptionSem} {Ss : List (L → Prop)}
+    (hz : List.Forall₂ (OptionSem.Labelled πV πA) os Ss)
+    (hdisj : List.Pairwise (fun S T => ∀ l, S l → ¬ T l) Ss)
+    (hw : ∀ o ∈ os, ∀ t a, o.c.e t = some a → o.admitV t = true ∧ o.admitA a = true) :
+    UniqueAdmission os := fun o ho t a he =>
+  ⟨filter_eq_singleton_of_labels (hz.imp fun _ _ h => h.2) hdisj o ho (hw o ho t a he).2,
+   filter_eq_singleton_of_labels (hz.imp fun _ _ h => h.1) hdisj o ho (hw o ho t a he).1⟩
+
+/-- **(U) by kind-separation**, `uniqueAdmission_of_labels` at the total projection
+    `Value.kind`/`Attr.kind` with one label per option: `Nodup` is disjointness of
+    singletons. -/
 theorem uniqueAdmission_of_kinds {os : List OptionSem} {ks : List Kind}
     (hz : List.Forall₂ OptionSem.OnKind os ks) (hnd : ks.Nodup)
     (hw : ∀ o ∈ os, ∀ t a, o.c.e t = some a →
       o.admitV t = true ∧ o.admitA a = true) :
-    UniqueAdmission os := fun o ho t a he =>
-  let ⟨hv, ha⟩ := hw o ho t a he
-  ⟨filter_eq_singleton_of_keys (key := Attr.kind) (hz.imp fun _ _ h => h.2) hnd o ho ha,
-   filter_eq_singleton_of_keys (key := Value.kind) (hz.imp fun _ _ h => h.1) hnd o ho hv⟩
+    UniqueAdmission os := by
+  refine uniqueAdmission_of_labels (πV := fun v => some v.kind) (πA := fun a => some a.kind)
+    (Ss := ks.map (fun k l => l = k)) ?_ ?_ hw
+  · rw [List.forall₂_map_right_iff]
+    exact hz.imp fun _ _ h =>
+      ⟨fun v hv => ⟨_, rfl, h.1 v hv⟩, fun a ha => ⟨_, rfl, h.2 a ha⟩⟩
+  · rw [List.pairwise_map]
+    exact hnd.imp fun hne l hl hl' => hne (hl.symm.trans hl')
+
+/-- A tag option is `Labelled` by its own tag set, definitionally. -/
+theorem labelled_byTag {d : Name} {tags : List String} {c : Codec} :
+    OptionSem.Labelled (tagOfV d) (tagOfA d) (.byTag d tags c) (· ∈ tags) := by
+  refine ⟨fun v hv => ?_, fun a ha => ?_⟩
+  · obtain ⟨kvs, tag, rfl, hlk, htag⟩ := byTag_admitV.mp hv
+    exact ⟨tag, by simp only [tagOfV, hlk], mem_of_contains htag⟩
+  · obtain ⟨kvs, tag, rfl, hlk, htag⟩ := byTag_admitA.mp ha
+    exact ⟨tag, by simp only [tagOfA, hlk], mem_of_contains htag⟩
 
 /-- An option that decides by attempting admits what it writes, on both sides — the
     read side by (R), which is the only thing `hw` above ever needs. -/
@@ -3137,29 +3191,17 @@ theorem uniqueAdmission_byTag {d : Name} {os : List (List String × Codec)}
         (∃ kvs, t = .map kvs ∧ kvs.lookup d = some (.str tag)))
     (hdisj : List.Pairwise (fun x y => ∀ tag ∈ x.1, tag ∉ y.1) os) :
     UniqueAdmission (os.map fun o => .byTag d o.1 o.2) := by
-  refine forall_mem_map fun x hx t a he => ?_
-  replace he : x.2.e t = some a := he
-  obtain ⟨tag, htag, ⟨kvsA, rfl, hlookA⟩, ⟨kvsV, rfl, hlookV⟩⟩ := hstamp x hx t a he
-  have hsel := tag_filter_singleton (tag := tag) os hdisj x hx htag
-  constructor
-  · have hpred : (fun y : List String × Codec =>
-        (OptionSem.byTag d y.1 y.2).admitA (Attr.m kvsA)) =
-        (fun y : List String × Codec => y.1.contains tag) := by
-      funext y
-      simp only [OptionSem.byTag]
-      rw [hlookA]
-    simp only [filter_map_comm]
-    rw [hpred, hsel]
-    rfl
-  · have hpred : (fun y : List String × Codec =>
-        (OptionSem.byTag d y.1 y.2).admitV (Value.map kvsV)) =
-        (fun y : List String × Codec => y.1.contains tag) := by
-      funext y
-      simp only [OptionSem.byTag]
-      rw [hlookV]
-    simp only [filter_map_comm]
-    rw [hpred, hsel]
-    rfl
+  refine uniqueAdmission_of_labels (πV := tagOfV d) (πA := tagOfA d)
+    (Ss := os.map (fun o l => l ∈ o.1)) ?_ ?_ ?_
+  · rw [List.forall₂_map_left_iff, List.forall₂_map_right_iff]
+    exact List.forall₂_same.mpr fun o _ => labelled_byTag
+  · rw [List.pairwise_map]
+    exact hdisj.imp fun h l hl => h l hl
+  · refine forall_mem_map fun o ho t a he => ?_
+    replace he : o.2.e t = some a := he
+    obtain ⟨tag, htag, ⟨kvsA, rfl, hlkA⟩, ⟨kvsV, rfl, hlkV⟩⟩ := hstamp o ho t a he
+    exact ⟨byTag_admitV.mpr ⟨kvsV, tag, rfl, hlkV, contains_of_mem htag⟩,
+           byTag_admitA.mpr ⟨kvsA, tag, rfl, hlkA, contains_of_mem htag⟩⟩
 
 /-- Every option of a `(dunion)` writes an `M` — the stamp says so, and the stamp is
     all either strength consults. -/

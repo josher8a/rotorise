@@ -596,6 +596,48 @@ declaration where two options are both `κ`-free, or give `held` a write-side `�
 carrier — and §1's `Value` is what would have to change for the second. `codec.uniqueadmission.spec.ts`
 carries the measurement as four assertions.
 
+### One where four dischargers were one theorem
+
+§5's discharger table lists four conditions, and the two marked *outright* — tag disjointness for
+`(dunion)`, kind disjointness for `opaque` — had a hand-written proof each:
+`uniqueAdmission_byTag` with its own filter lemma (`tag_filter_singleton`, 16 lines), and
+`uniqueAdmission_of_kinds` through `filter_eq_singleton_of_keys`. Same shape, twice.
+
+**The observation was the user's**, and it starts from something the model states outright:
+
+    dunionCodec d os = altCodec (os.map fun o => .byTag d o.1 o.2) (some .M)
+
+`(dunion)` *is* `(union)`. The only difference is which `OptionSem` builder wraps each option —
+`byAttempt` attempts the codec, `byTag d` reads the discriminator. So the uniqueness criterion is a
+**projection of the input**, and the two outright dischargers are that same criterion at two
+different projections: a tag for `(dunion)`, a kind for `opaque`.
+
+**The generalisation.** Label each side of the pair by a partial projection, give each option the
+set of labels it answers to, require those sets pairwise disjoint:
+
+    OptionSem.Labelled πV πA o S   -- admission is bounded by the option's label set
+    uniqueAdmission_of_labels      -- disjoint sets ⟹ (U), on both sides
+
+`uniqueAdmission_of_kinds` is that at `Value.kind`/`Attr.kind` with singleton sets, where `Nodup` is
+disjointness of singletons; `uniqueAdmission_byTag` is that at `tagOfV`/`tagOfA` with the tag sets.
+The same generalisation one level down turns `filter_eq_singleton_of_keys` — 25 lines of hand
+induction — into a six-line instance of `filter_eq_singleton_of_labels`, and makes
+`tag_filter_singleton` redundant outright; it is deleted, its content being the tag instance.
+
+Two lemmas moved on the way, which is §1 of `VOCABULARY` rather than this refactor's convenience:
+`byTag_admitA`/`byTag_admitV` were in `Discharge.lean`, three modules downstream of the definition
+they invert. They now sit beside `OptionSem.byTag`, and both the general lemma and
+`uniqueAdmission_byTag` cite them instead of unfolding by hand.
+
+**What it measures.** Theorem docstrings 61% → 62%, definitions 72% → 73%, and the unfolding-tic
+count **unchanged at 261** — new abstraction paid for by deleted hand-proof, which is the outcome
+this kind of change should have and usually does not.
+
+**What it opens.** With the dischargers written as projections, the table stops being a list and
+becomes a question: *which other projections separate?* §5's first two rows are the same condition
+run on one side each — `μ`/`admA` on attributes, `κ`/`adm` on values — which is now visibly why
+they must be combined while the last two need not be.
+
 ### One premise that turned out to be a missing guard
 
 §3 gave `(nullable)` two side premises — null-honesty, in both directions — and §5's theorem
