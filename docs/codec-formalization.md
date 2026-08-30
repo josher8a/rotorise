@@ -58,11 +58,19 @@ actually needs is an engineering judgement, argued in `codec-calculus.md` §2 an
 Everything below is machine-checked, `sorry`-free, on `propext`, `Quot.sound`, and the `Double`
 axioms of §1 — no `Classical.choice`, no `sorryAx`. `#print axioms` on any named theorem shows the
 whole trusted base, and `formal/Calculus/Axioms.lean` makes that sentence a **build error rather
-than a claim**: `#assert_axioms` collects what each headline theorem actually depends on and fails
-on anything unsanctioned. This matters more since mathlib arrived, because mathlib proves a great
+than a claim**: `#assert_axioms_all` walks the `Calculus` namespace and fails on anything
+unsanctioned. This matters more since mathlib arrived, because mathlib proves a great
 deal classically — a single `by_contra`, or an appeal to a lemma such as `List.filter_eq_nil_iff`,
 silently widens the base of everything downstream. Both leaks happened while the guard was being
 written, which is the argument for having it.
+
+The guard was itself opt-in until recently: 125 hand-written `#assert_axioms` lines naming 125
+theorems, in a namespace of 1199. That is the wrong default for a guard, because it holds exactly
+where someone remembered to invoke it and is silent everywhere else — and it *was* silent: one of
+the 1074 unnamed theorems, `not_equiv_tupleTail_tuple`, had acquired `Classical.choice` from
+`simp`'s classical push-neg and no one had noticed. The universal form found it on its first run.
+A theorem is now guarded **because it exists**; there is no list to keep in step and nothing for
+`scripts/fidelity_audit.py` to police beyond the presence of the guard itself.
 
 ### The theorem
 

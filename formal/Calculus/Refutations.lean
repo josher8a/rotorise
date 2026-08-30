@@ -81,9 +81,14 @@ theorem not_equiv_tupleTail_tuple :
                   (denoteω (.tuple [.string] none)) := by
   intro h
   have hv := (h.heldSet (.arr [.str "a", .str "b"])).mp
-  simp [denoteω, denoteωL, denoteωO, tupleCodec, align, stringCodec] at hv
-  obtain ⟨x, x1, hmem, hnT⟩ := hv
-  rcases hmem with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ <;> exact hnT ⟨_, rfl⟩
+  -- `simp`'s classical push-neg turned this into an existential and pulled
+  -- `Classical.choice` in with it; the implication is the constructive shape.
+  simp only [denoteω, denoteωL, denoteωO, tupleCodec, align, stringCodec,
+    Option.map_some', List.all_cons, List.all_nil, Bool.and_true, Bool.true_and,
+    Option.some.injEq, exists_eq_left', List.mem_cons, List.not_mem_nil, or_false,
+    Prod.mk.injEq] at hv
+  exact absurd (hv (by rintro p (rfl | rfl) <;> exact ⟨_, rfl⟩))
+    (by rintro ⟨ps, hps, -⟩; simp at hps)
 
 /-- Against the array: the empty sequence, which an array holds and a fixed head cannot. -/
 theorem not_equiv_tupleTail_array :
