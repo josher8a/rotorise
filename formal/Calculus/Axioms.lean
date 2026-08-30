@@ -3,6 +3,7 @@ import Calculus.Discharge
 import Calculus.Continuity
 import Calculus.Refutations
 import Calculus.HeldSet
+import Calculus.Exactness
 import Lean
 
 /-!
