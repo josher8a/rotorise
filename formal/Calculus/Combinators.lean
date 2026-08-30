@@ -1310,6 +1310,15 @@ def OptionSem.byAttempt (c : Codec) : OptionSem :=
     admitV := fun v => (c.e v).isSome
     c := c }
 
+/-- An attempted option admits an attribute exactly when its `p` is defined there — the
+    §1 rule applied to admission, so no proof takes `byAttempt` apart by hand. -/
+@[simp] theorem OptionSem.byAttempt_admitA {c : Codec} {a : Attr} :
+    (OptionSem.byAttempt c).admitA a = (c.p a).isSome := rfl
+
+/-- …and a value exactly when its `e` is. -/
+@[simp] theorem OptionSem.byAttempt_admitV {c : Codec} {v : Value} :
+    (OptionSem.byAttempt c).admitV v = (c.e v).isSome := rfl
+
 /-- The `⟨NULL⟩` point as a union option — §3's second half of `nullable(c)` read as
     `union(c, ⟨NULL⟩-point)`. It decides by attempting, like any ground option. -/
 abbrev nullOption : OptionSem := .byAttempt nullCodec
@@ -1358,7 +1367,9 @@ def UniqueAdmission (os : List OptionSem) : Prop :=
     canonical pair of each option and so refutes `UniqueAdmission`
     (`not_uAtCan_array_literals`) — while the union declines to write `[]` at all, so it
     never acts there and no law is ever asked. `adm` stops at the containers (§5), which
-    is why the collision is the empty case and nothing else. -/
+    is why the collision is the empty case and nothing else. `uAtAct_array_literals` is
+    that union meeting this condition, so the two are separated by a theorem and not by
+    an argument. -/
 def UniqueBothWays (os : List OptionSem) : Prop :=
   (∀ o ∈ os, ∀ t a, os.filter (·.admitV t) = [o] → o.c.e t = some a →
     os.filter (·.admitA a) = [o]) ∧

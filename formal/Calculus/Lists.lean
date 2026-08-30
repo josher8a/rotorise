@@ -447,6 +447,33 @@ theorem mem_of_filter_eq_singleton {α : Type} {l : List α} {p : α → Bool} {
     (h : l.filter p = [x]) : x ∈ l ∧ p x = true :=
   List.mem_filter.mp (h ▸ List.mem_cons_self x [])
 
+/-! Two options resolve to four cases, and a two-option union is where §5's conditions
+    are argued. These four state that split once, in both directions. Distinctness is
+    needed only to read a singleton back: `[y] = [x]` is otherwise no contradiction. -/
+
+/-- A pair filters to its head when the head passes and the tail does not — §5's
+    two-option resolution, one case of four. -/
+theorem filter_pair_left {α : Type} {p : α → Bool} {x y : α}
+    (hx : p x = true) (hy : p y = false) : List.filter p [x, y] = [x] := by
+  simp only [List.filter, hx, hy]
+
+/-- …and to its tail, dually. -/
+theorem filter_pair_right {α : Type} {p : α → Bool} {x y : α}
+    (hx : p x = false) (hy : p y = true) : List.filter p [x, y] = [y] := by
+  simp only [List.filter, hx, hy]
+
+/-- Reading a head-singleton back: exactly the head passed. §5's resolution, inverted. -/
+theorem filter_pair_left_inv {α : Type} {p : α → Bool} {x y : α} (hne : x ≠ y)
+    (h : List.filter p [x, y] = [x]) : p x = true ∧ p y = false := by
+  cases hx : p x <;> cases hy : p y <;>
+    simp only [List.filter, hx, hy] at h <;> simp_all
+
+/-- …and a tail-singleton. -/
+theorem filter_pair_right_inv {α : Type} {p : α → Bool} {x y : α} (hne : x ≠ y)
+    (h : List.filter p [x, y] = [y]) : p x = false ∧ p y = true := by
+  cases hx : p x <;> cases hy : p y <;>
+    simp only [List.filter, hx, hy] at h <;> simp_all
+
 /-- A property of every image is a property of every member of the mapped list — the
     step every case over a list of subterms begins with. -/
 theorem forall_mem_map {α β : Type} {xs : List α} {g : α → β} {P : β → Prop}
