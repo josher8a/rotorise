@@ -198,11 +198,9 @@ def TIsDomE (c : Codec) : Prop := ∀ v, c.T v ↔ (c.e v).isSome
 def unionLiteralString : Codec :=
   altCodec [.byAttempt (literalSCodec ["A"]), .byAttempt stringCodec] (some .S)
 
-/-- **(B) is false for `union`.** `"A"` is held and nothing is written for it, because both
-    options admit and (U) fails — so `T` strictly contains `dom(e)`.
-
-    Not a soundness failure: `Carrier` bounds `e` by `T` and never the converse. It says `: T`
-    at a `union` is an upper bound unless (U) holds in full. -/
+/-- **(B) is false for `union`:** `"A"` is held and nothing is written for it, both options
+    admitting. Not unsound — `Carrier` bounds `e` by `T`, never the converse — but `: T` at a
+    `union` is an upper bound unless (U) holds in full. -/
 theorem not_TIsDomE_unionLiteralString : ¬ TIsDomE unionLiteralString := by
   intro h
   have hT : unionLiteralString.T (.str "A") :=

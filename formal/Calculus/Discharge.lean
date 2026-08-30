@@ -654,15 +654,10 @@ theorem ident_of_adm : ∀ {t : Term} {v : Value}, adm t v = false → ident t =
   | .custom _ _, _, h | .opaq _, _, h | .object _ _, _, h | .union _, _, h => nomatch h
 
 /-- **§5's (K), recovered from `SepV`'s second disjunct.** Disjoint `adm` implies both
-    `ident` conjuncts, so `SepV` is not weaker than the doc's condition where the doc's
-    condition means anything — the two side conditions ask that each option admit *some*
-    value, which is what stops an option with an empty admissible set from separating
-    itself from everything.
+    `ident` conjuncts — given that each option admits *something*.
 
-    Both side conditions are needed, and the witness is not exotic: `dunion(d)` with no
-    options is derivable (`Typed.dunion` quantifies its premises over the option list)
-    and its `adm` is `false` everywhere, so it is trivially `adm`-disjoint from `string`,
-    which is not `ident`. -/
+    That side condition is not bookkeeping: `dunion(d)` with no options is derivable, admits
+    nothing, and is therefore `adm`-disjoint from `string`, which is not `ident`. -/
 theorem admDisj_ident {x y : Term} (hdisj : ∀ v, adm x v = true → adm y v = false)
     (hx : ∃ v, adm x v = true) (hy : ∃ v, adm y v = true) :
     ident x = true ∧ ident y = true := by

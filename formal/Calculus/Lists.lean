@@ -158,10 +158,8 @@ theorem traverse_isSome {f : α → Option γ} (h : ∀ y x, g y = some x → (f
     let ⟨_, _, hR⟩ := (traverse_eq_some.mp ht).mem_right hx; h _ _ hR
 
 /-- §5, Lemma (traversal), **`≼`** — "a shared position decodes and re-encodes through the
-    same step". A pointwise relation on the read-then-rewrite pair lifts to the zip, which is
-    the shape of every product's (MP). Read-then-rewrite is a *composite* of two traversals,
-    so this is `Forall₂.compose`, and `forall₂_iff_zip` delivers the zip membership that
-    `Agree.l` and `Agree.m` consume. -/
+    same step", which is every product's (MP). Read-then-rewrite is a composite of two
+    traversals, so `Forall₂.compose`; the zip is what `Agree.l`/`Agree.m` consume. -/
 theorem traverse_rel {f : α → Option γ} {R : γ → β → Prop}
     (h : ∀ y x z, g y = some x → f x = some z → R z y) :
     ∀ (ys : List β) (xs : List α) (zs : List γ),

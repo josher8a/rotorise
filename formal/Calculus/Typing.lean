@@ -74,17 +74,12 @@ def HNull (T : Held) : Held :=
 def HUnion (Ts : List Held) : Held :=
   fun v => ∃ T ∈ Ts, T v
 
-/-- §5's **(D)**, `(union)`'s well-formedness side condition: `∀ i ≠ j. ¬(Tᵢ ⊆ Tⱼ) ∧
-    ¬(Tⱼ ⊆ Tᵢ)`, pairwise over the options' held sets.
+/-- §5's **(D)**, `(union)`'s well-formedness side condition, pairwise over the held sets.
 
-    It is *incomparability*, not disjointness — §5 is explicit that demanding
-    disjointness would reject working unions, and `not_uAtCan_literal_held` is the
-    counterexample. It is also not a discharger of (U): "no condition on held sets can
-    be one", which is why no theorem consumes it. What it constrains is the judgement's
-    `T` index, and that is reason enough for it to be a premise of the rule rather than
-    an obligation — it is fuel-free and reads off the index the rule already computes.
-    Contrast `DDisj` (`Discharge.lean`), which is the strengthening §5 considered and
-    withdrew. -/
+    *Incomparability*, not disjointness: disjointness would reject working unions
+    (`not_uAtCan_literal_held`). Not a discharger of (U) either — no condition on held sets
+    is one — so nothing consumes it; it constrains the judgement's `T`. Contrast `DDisj`,
+    the strengthening §5 withdrew. -/
 def DIncomp (Ts : List Held) : Prop :=
   Ts.Pairwise fun Tx Ty => ¬ (∀ v, Tx v → Ty v) ∧ ¬ (∀ v, Ty v → Tx v)
 
@@ -108,12 +103,8 @@ inductive HOpaque (lossy : Bool) : Value → Prop where
   | bool (b)  : HOpaque lossy (.bool b)
   | bin  (b)  : HOpaque lossy (.bin b)
   | null      : HOpaque lossy .null
-  /-- The `D` premise, for the same reason as `set`'s non-emptiness above: a double
-      `opaque` cannot **write** is not one of "the values whose type is recoverable from
-      the value alone" — there is no `N` for it to be recoverable from. It arrived when
-      `(number)` grew its gate, and `codec-formalization.md` §4 had predicted this exact
-      step: the bound does not stay in `(number)`, and this is one of the two places it is
-      forced outward to. -/
+  /-- The `D` premise, for the reason `set` carries non-emptiness: a double `opaque` cannot
+      **write** has no `N` for its member to be recoverable from. -/
   | num  (d) (h : lossy = true) (hw : Numeral.WF d.toDec = true) : HOpaque lossy (.num d)
   /-- Non-emptiness is not decoration: §1's `SS`/`NS`/`BS` are `℘⁺fin`, so there is no
       empty wire set to write, and an empty set's member is not recoverable from the
@@ -143,11 +134,9 @@ inductive Typed : Term → Held → Option Member → Prop where
   | binary  : Typed .binary  (fun v => ∃ b, v = .bin b) (some .B)
   | literalS (ls : List String) (hne : ls ≠ []) (hnd : ls.Nodup) :
       Typed (.literalS ls) (fun v => ∃ s, s ∈ ls ∧ v = .str s) (some .S)
-  /-- `ℓ ⊆ D` — §3's premise, and the last place the `(number)` gate is forced outward.
-      A `literal` writes its values' own text, so a double outside §1's numeral domain would
-      be written to an attribute `𝔸` has no point for. It sits beside `hne` and `hnd` because
-      it is the same kind of thing: a decidable fact about data the term owns, checked once at
-      the declaration. -/
+  /-- §3's `ℓ ⊆ D`. A `literal` writes its values' own text, so a double outside §1's numeral
+      domain would be written to an attribute `𝔸` has no point for. Decidable at the
+      declaration, like `hne` and `hnd`. -/
   | literalN (ls : List Double) (hne : ls ≠ []) (hnd : ls.Nodup)
       (hD : ∀ d ∈ ls, Numeral.WF d.toDec = true) :
       Typed (.literalN ls) (fun v => ∃ d, d ∈ ls ∧ v = .num d) (some .N)
