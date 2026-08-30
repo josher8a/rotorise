@@ -14,4 +14,5 @@ import Calculus.Denoteω
 import Calculus.Soundnessω
 import Calculus.HeldSet
 import Calculus.Refutations
+import Calculus.Exactness
 import Calculus.Axioms

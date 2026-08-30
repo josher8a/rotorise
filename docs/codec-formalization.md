@@ -1031,6 +1031,56 @@ seven gaps in this log was an imprecision, not an unsoundness; not one of them w
 caught. What catches them is the converse direction, which is what `adm_custom_exact` states and
 what the remaining rows should be measured against.
 
+### Three where the recursion was on the wrong object, and what stating the converse found
+
+The entries above are seven imprecisions found one at a time. This one is the measurement that
+should have found them all, and the three further defects it turned up.
+
+**The statement.** `κ`, `ident`, `adm`, `admA` are over-approximations, so `⊤` is sound for every
+term and no soundness obligation can catch a loose row — `fun _ => true` discharges it with `rfl`.
+The converse is what bites: `Adm t v = true ↔ v ∈ dom(e)`. `formal/Calculus/Exactness.lean` states
+it and proves it for sixteen of the twenty-three constructors.
+
+Stating it turned up three things the per-table form hid.
+
+1. **Exactness belongs to the row, not to `adm`.** `adm .string` is `⊤`; it is `κ` that carries the
+   kind. Neither is exact alone and their conjunction is. Four hand-maintained recursions were
+   computing one predicate between them, and no single one of them could be held to anything.
+2. **The conjunction does not survive `held`.** `f` may change a value's kind, so `κ (held t f g)`
+   must be `none`, leaving no `κ` to pair the subterm's `adm` with. The kind gate has to be absorbed
+   into the row: `Adm (.held t f _) v = Adm t (f v)`. So the (κ, adm) factorisation is not preserved
+   by the term formers — which is the argument for treating the row as the unit that no amount of
+   staring at the tables would have produced.
+3. **The list rows recursed on the wrong thing.** `array`, `record` and `union` took `⋀`/`⋁` of
+   `adm` alone, where exactness needs `⋀`/`⋁` of the joint predicate. One defect with three faces.
+
+**The container defect, in detail**, because §5's justification for it is instructive. §5 argues
+`adm(array(c))` must be `⊤` because it would have to contain the empty array whatever `c` is. That
+argument is *true* and it justifies far less than it was asked to: the exact row still admits `[]`
+(`Adm_array_nil`, and `not_uAtCan_array_literals` survives on exactly that basis), while refusing
+`[.str "B"]` at `array(literal "A")` (`Adm_array_sharp`) at any nesting depth
+(`Adm_array_nested`). A sound reason was carrying a much stronger conclusion than it supports —
+the same shape as the `nullable` refusal two entries up, which was also true and also stipulated
+where it could have been derived.
+
+**The hatch, and why it is seven rather than one.** `Analysable` names the rows with no exactness
+proof, and each has a reason rather than a shrug: `opaq` (domain recurses on the *input's* depth);
+`union` (`select` admits only when **exactly one** option does, so `⋁` is exact precisely under
+(U) — a semantic obligation, not a syntactic row); `dunion` (the tag is checked, the matched
+option's admission is not); `set` (`asWireSet` demands payload homogeneity); `object` and `tuple`
+(name admission, alignment); and `nullable`.
+
+`nullable` is the subtle one and it has a witness. `ownsNull` is `(e null).isSome || (p null).isSome`
+— a disjunction over **both** halves. So a `legacy` whose migration reads the null point makes the
+guard fire, `withNull` adds nothing, and the wrapper's `e` still refuses `null` — while any row of
+the shape `Adm t v ∨ v = null` claims it. `not_ExactV_nullable` is that term.
+
+**What this settles about the construction.** The obvious repair — bundle each row with a soundness
+proof so a row cannot exist without one — cannot work, and this is the file that proves why: every
+defect in this log is an imprecision, and soundness is blind to all of them. Bundling with the
+*converse* is a different matter, and points 1 and 2 above are the argument for it: the obligation
+is joint across the four tables, and `held` shows it cannot be factored back into them.
+
 ## §5 Certifying an implementation
 
 The calculus is portable by design: nothing in it is TypeScript, and nothing is Rotorise. An
