@@ -454,9 +454,9 @@ unions it covers:
 
 What no discharger covers stays an obligation the semantics enforces per input by failing — safe for
 every law except **(R)** at a canonical attribute, and that residue is exactly what the theorem
-below names. A `⊤` option is exempt from **(K)** for the same reason it cannot be checked: it could
-be anything, refusing it against everything would refuse unions that work, and **(U)** still guards
-each value it is actually given.
+below names. A `⊤` option is one **(K)** never separates, for the same reason it cannot be checked:
+it could be anything. That costs nothing, because failing to discharge is not refusing — **(U)**
+still guards each value the option is actually given.
 
 ### The machinery of (K)
 
@@ -496,7 +496,7 @@ forcing.
 
 `⊤` covers two situations the check treats alike and the semantics does not: **unknown** — `held`,
 `lazy`, `custom`, whose answer exists but cannot be read — and **everything** — `opaque`, which
-accepts every kind by design. Both are exempt from **(K)** and fall to **(U)** per input. The
+accepts every kind by design. **(K)** separates neither, and both fall to **(U)** per input. The
 difference resurfaces only inside `opaque`'s own derivation, where "everything" is precisely what
 makes its fixpoint's options pairwise kind-disjoint (§3).
 
@@ -520,7 +520,7 @@ decide, and an open object that must be an option should declare what it means t
 decide alone.
 
 ```
-⊢ cᵢ : Tᵢ ⇝ μᵢ  (i ∈ 1…n)    (D)    (K)
+⊢ cᵢ : Tᵢ ⇝ μᵢ  (i ∈ 1…n)    (D)
 ─────────────────────────────────────────────────────────────────── (union)
 ⊢ union(c₁ … cₙ) : ⋃ Tᵢ ⇝ (μ if ∀i. μᵢ = μ;  else ⊤)
 
@@ -537,14 +537,26 @@ the tag sets never vouched for, and **(C)** would then re-encode a variant no ta
 |       |                                                                                |                                                                                                                                                        |
 | ----- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **D** | `∀ i ≠ j. ¬(Tᵢ ⊆ Tⱼ) ∧ ¬(Tⱼ ⊆ Tᵢ)`                                             | Well-formedness: no option's held set subsumes another's. Decidable from the held sets alone. It does **not** discharge the readable side — see below. |
-| **K** | `∀ i ≠ j. κ(cᵢ) ∩ κ(cⱼ) = ∅ ∨ (ident(cᵢ) ∧ ident(cⱼ) ∧ adm(cᵢ) ∩ adm(cⱼ) = ∅)` | Writable: no value belongs to two options. Needs `κ`, which the held sets do not determine.                                                            |
+| **K** | `∀ i ≠ j. κ(cᵢ) ∩ κ(cⱼ) = ∅ ∨ (ident(cᵢ) ∧ ident(cⱼ) ∧ adm(cᵢ) ∩ adm(cⱼ) = ∅)` | Writable: no value belongs to two options. A **discharger**, not a premise — it settles **(U)**'s writable side at the declaration where it holds, and where it fails the obligation stands. Needs `κ`, which the held sets do not determine. |
+
+Only **(D)** is a premise. **(K)** is the writable side's discharger, and the asymmetry is not an
+oversight: **(D)** is a condition on the judgement's own index, so the rule can demand it, while
+**(K)** answers a question about inputs that the rule states as **(U)** and settles where it can.
+A union no discharger covers is still a term — `union(array(literal("A")), array(literal("B")))`
+and its `record` twin are ones people write — and what such a union lacks is not derivability but
+the theorem: its **(U)** is unsettled at the declaration, and the semantics enforces it per input by
+failing. Note where the failing lands. `adm` does not propagate through a container (below), so the
+options collide at exactly one input — the empty array, the empty map — which is also the one input
+neither writes nor reads once they collide, so the loss is that the union declines the empty case
+and nothing else. The same union built from `object`s is decided outright, by names rather than by
+`adm`: a `req` binding is a name the empty item lacks, so there is no empty case to collide at.
 
 **(D)** and **(K)** ask the same kind of question of the two sides of the pair, and neither implies
 the other. `union(array(string), array(number))` satisfies **(D)** — the held sets are incomparable —
-and violates **(K)**: both accept a sequence, and neither is `ident`.
+and is not discharged by **(K)**: both accept a sequence, and neither is `ident`.
 `union(set(string), set(number))` is the same story with a twist worth naming: its options write
-_different members_, so reading was never in doubt. It is refused for the direction that cannot be
-resolved — and degraded twice over, because a set's member is computed from its element, so those
+_different members_, so reading was never in doubt. Only the direction that cannot be resolved is
+left to **(U)** — and it is degraded twice over, because a set's member is computed from its element, so those
 options are `⇝ SS` and `⇝ NS` and the union's own `μ` is `⊤` by the `(union)` rule. That is a second,
 independent loss: a `⊤` term is one only **(MP)** constrains, where a `⇝ SS` term is pinned by
 **(W)** and its read-side corollary.
@@ -552,8 +564,8 @@ independent loss: a `⊤` term is one only **(MP)** constrains, where a `⇝ SS`
 Why `ident` exempts a pair is the interesting half. **Encoding does not validate.** A term's `e` is
 defined on `T` and does whatever it does off it, so "this option encoded the value" carries no
 information about whether the value was meant for it. Only a term that knows its own membership
-answers a real question when attempted — which is why `union(literal("A"), literal("B"))` is well
-formed under **(K)** although both accept a string.
+answers a real question when attempted — which is why **(K)** discharges
+`union(literal("A"), literal("B"))` although both accept a string.
 
 But `ident` is only half of that exemption, and **(K)** cannot be weakened to
 `κ(cᵢ) ∩ κ(cⱼ) = ∅ ∨ ident(cᵢ) ∨ ident(cⱼ)`. Two counterexamples:
@@ -811,7 +823,7 @@ everywhere both are defined.
 | `legacy(c, p_c) ≡ c`                                                  | An older reading that is the current one adds nothing.                                                                                                                                                                        |
 | `legacy(c, r) ≈ c` on `Can(c)`                                        | A migration differs from its current encoding only off the canonical set.                                                                                                                                                     |
 | `union(c) ≡ c`                                                        | Choice of one.                                                                                                                                                                                                                |
-| `union(c₁, union(c₂, c₃)) ≡ union(c₁, c₂, c₃)`                        | Associative, where both sides satisfy (D) and (K) — and only on inputs satisfying (U): an ambiguity _inside_ the nested option fails locally on the left, where the outer union may still resolve, and globally on the right. |
+| `union(c₁, union(c₂, c₃)) ≡ union(c₁, c₂, c₃)`                        | Associative, where both sides satisfy (D) — and only on inputs satisfying (U): an ambiguity _inside_ the nested option fails locally on the left, where the outer union may still resolve, and globally on the right. |
 | `union(c₁ … cₙ) ≡ union(c_σ(1) … c_σ(n))` for any permutation `σ`     | Commutative: resolution is unique admission (§5), never declaration order.                                                                                                                                                    |
 | `nullable(nullable(c)) ≡ nullable(c)`                                 | Idempotent: the value language has one null, so the outer `𝟙` is the only one ever written or read — lawful because `nullable` is itself null-honest (§3).                                                                    |
 | `μ(w(c)) = μ(c)` for `w ∈ {held, refine, legacy, optional, fallback}` | Wrappers preserve the member — a field's member is its attribute's (§4). What keeps a key's attribute type stable under refactoring.                                                                                          |
@@ -820,11 +832,11 @@ everywhere both are defined.
 
 | Equation                                                            |                                                                                                                                                                                                                                   |
 | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `union(array(c₁), array(c₂)) ≢ array(union(c₁, c₂))`                | Left: a sequence homogeneous in one option. Right: a sequence of either, elementwise. Different held sets, and only the right is well formed under (K).                                                                           |
+| `union(array(c₁), array(c₂)) ≢ array(union(c₁, c₂))`                | Left: a sequence homogeneous in one option. Right: a sequence of either, elementwise. Different held sets, and only the right has (K) to discharge its (U).                                                                           |
 | `tuple(c₁ … cₙ, rest(c)) ≢ tuple(c₁ … cₙ) ` and `≢ array(union(…))` | A fixed head with a repeating tail is neither: a tuple has no tail and an array has no head.                                                                                                                                      |
 | `set(union(c₁, c₂))` — not derivable                                | The premise on `set` demands a member, and a union of options writing different members has none.                                                                                                                                 |
 | `refine(held(c, f, g), q) ≢ held(refine(c, q), f, g)`               | The refinement applies on opposite sides of the iso, so `q` is a subset of different sets. Two different terms, both meaningful.                                                                                                  |
-| `union(c₁ … cₙ) ≢ union(c₁ … cₙ, c)`                                | Not closed under extension: a further option can violate (D) or (K) and make the term ill formed.                                                                                                                                 |
+| `union(c₁ … cₙ) ≢ union(c₁ … cₙ, c)`                                | Not closed under extension: a further option can violate (D) and make the term ill formed, or leave (U) unresolved where it was discharged before.                                                                                                                                 |
 | `optional(optional(c))` — not derivable                             | A marker marks once, and nesting read only the outermost. `optional(fallback(c, v))` and `fallback(optional(c), v)` likewise.                                                                                                     |
 | `lazy(γ) ≢ γ(∗)`                                                    | The pair is the same and the μ is not: `lazy` concludes `⊤` where `γ(∗)` may name its member, so `set(lazy(γ))` has no derivation. `≡` compares the index too, and this is the row where that matters.                            |
 | `legacy(c, r)` breaks **(MP)**                                      | On purpose, and it is the only term licensed to: changing what is stored _is_ the migration, and §2's read-side corollary falls with it. So a `legacy` attribute cannot be an index key, which is the price and is worth stating. |
@@ -836,8 +848,9 @@ everywhere both are defined.
 
 Three layers answer different questions, and conflating them is what makes a side condition look
 optional. A grammar over the terms — a regular tree grammar, with nonterminals indexed by `μ` — says
-which terms can be _written_. It cannot express **(D)** or **(K)**, which relate siblings rather than
-a term to its subterms, so well-formedness needs the judgement of §3 and §5 rather than a production.
+which terms can be _written_. It cannot express **(D)**, which relates siblings rather than a term to
+its subterms, so well-formedness needs the judgement of §3 and §5 rather than a production — nor
+**(K)** and **(U)**, which are not about the term at all but about the inputs it is given.
 And the judgement in turn says nothing about what a term _means_; that is §2, the pair and its laws —
 a connection §5's soundness theorem proves rather than leaves implied.
 
