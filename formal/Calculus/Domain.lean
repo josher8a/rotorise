@@ -1,5 +1,6 @@
 import Mathlib.Data.Finset.Basic
 import Mathlib.Data.Finset.Card
+import Mathlib.Data.Fintype.Basic
 /-!
 # §1 — The attribute domain
 
@@ -259,7 +260,15 @@ inductive Attr where
   | ns   (v : Finset Numeral)
   | bs   (v : Finset Bytes)
   | l    (v : List Attr)
-  | m    (v : List (Name × Attr))
+  /-- §1's `M`. The reference calls it an *unordered* collection of name-value pairs, and
+      an update at an existing name replaces it — so the names form a **set** and the
+      values are a function on it. A list would admit two orderings of one map and a
+      repeated name, neither of which `M` has.
+
+      `Finset Name` is admissible because `Name` is concrete; the values sit in the
+      function's codomain, which is a strictly positive position. What is *not* admissible
+      is `Finset (Name × Attr)` — that nests the type under declaration. -/
+  | m    (keys : Finset Name) (f : {k // k ∈ keys} → Attr)
 
 /-- The member an attribute carries. -/
 def Attr.member : Attr → Member
@@ -272,7 +281,7 @@ def Attr.member : Attr → Member
   | .ns _   => .NS
   | .bs _   => .BS
   | .l _    => .L
-  | .m _    => .M
+  | .m _ _  => .M
 
 /-- The kind an attribute is of: its member, with `SS`/`NS`/`BS` identified. -/
 def Attr.kind : Attr → Kind
@@ -283,7 +292,7 @@ def Attr.kind : Attr → Kind
   | .null   => .null
   | .ss _ | .ns _ | .bs _ => .set
   | .l _    => .array
-  | .m _    => .map
+  | .m _ _  => .map
 
 /-- An item: an `M` without its wrapper (§1). -/
 abbrev Item := List (Name × Attr)
@@ -302,7 +311,8 @@ inductive Value where
   | numSet (v : Finset Double)
   | binSet (v : Finset Bytes)
   | arr  (v : List Value)
-  | map  (v : List (Name × Value))
+  /-- …and the value side of the same, for the same reason. -/
+  | map  (keys : Finset Name) (f : {k // k ∈ keys} → Value)
 
 /-- The kind a value is of — §5's `κ` reads this. -/
 def Value.kind : Value → Kind
@@ -315,6 +325,6 @@ def Value.kind : Value → Kind
   | .numSet _ => .set
   | .binSet _ => .set
   | .arr _  => .array
-  | .map _  => .map
+  | .map _ _ => .map
 
 end Calculus
