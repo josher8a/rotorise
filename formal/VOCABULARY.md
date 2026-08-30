@@ -269,7 +269,7 @@ through it; the rows that need `List.Perm` are the next probe.
 | ~~4~~ | ~~Complete the two partials~~ — **done**: `setCodec_p_eq`, and `fbDefaults` as the `filterMap` it is | set 5.0 → 4.0, object 6.5 → 4.0; four hand-rolled recursions and one duplicate retired |
 | 3 | Cash the last identity: `pointCodec = carriedCodec` | the ten ground codecs inherit inversion (`nullable`'s was cashed and became a dichotomy — §4) |
 | ~~7~~ | ~~`Discharge.lean`~~ — **done**: tag admission named on both sides, and the `refine`/`legacy` cases cite item 2's wrapper inversion | 50 → 36 sites; `adm_sound` 61 → 24 lines, `admA_sound` 51 → 20 |
-| ~~5~~ | ~~`Obligations` per-rule~~ — **done**: §3's three side conditions named (`IsoCancels`, `ReadsCoherently`, `NullHonest`), and one accessor per rule | 26 → 3 sites |
+| ~~5~~ | ~~`Obligations` per-rule~~ — **done**: §3's side conditions named (`IsoCancels`, `ReadsCoherently`; `NullHonest` too, until §3's guard made it derivable and it left `Obligations`), and one accessor per rule | 26 → 3 sites |
 | ~~6~~ | ~~`opaque`~~ — **done**, and not by inversion: `maxOf` names the four depth measures as one fold, and the budget-is-a-successor opening collapses to one clause | 952 → 839 lines, 57 → 41 sites |
 
 ## §7 Making it mechanical

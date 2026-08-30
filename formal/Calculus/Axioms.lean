@@ -94,6 +94,16 @@ rests on it. -/
 #assert_axioms admDisj_ident
 #assert_axioms sepV_string_dunion_nil
 
+/-! §3 `(nullable)`'s guard. `nullHonest_of_not_ownsNull` is the premise that stopped
+being one — it derives both honesty halves from lawfulness — and `withNull_ownsNull` is
+why §6's idempotence is a construction rather than an equation. -/
+
+#assert_axioms nullHonest_of_not_ownsNull
+#assert_axioms lawful_withNull
+#assert_axioms withNull_ownsNull
+#assert_axioms withNull_idem_e
+#assert_axioms withNull_idem_p
+
 /-! `(union)`'s residue, and the bridge every discharger now crosses. The two witnesses
 are one union seen by both residues: `UAtCan` refutes it at an input it never writes,
 `UAtAct` holds of it. -/

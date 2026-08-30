@@ -596,6 +596,53 @@ declaration where two options are both `κ`-free, or give `held` a write-side `�
 carrier — and §1's `Value` is what would have to change for the second. `codec.uniqueadmission.spec.ts`
 carries the measurement as four assertions.
 
+### One premise that turned out to be a missing guard
+
+§3 gave `(nullable)` two side premises — null-honesty, in both directions — and §5's theorem
+counted them among the four it levied. They are gone, and nothing replaced them.
+
+**What they were doing.** `orNull` writes `null ↦ ⟨NULL, ∗⟩` and reads it back, with the `NULL`
+branch taking precedence over `c`. That precedence is the whole problem: if `c` also touches the
+null point, the wrapper's branch shadows it, and a subterm moving a sentinel onto `null` round-trips
+to `null` instead of the sentinel. The premises forbade the collision by fiat.
+
+**What they should have been.** §3 already recorded the dichotomy — `nullable(c)` is
+`union(c, ⟨NULL⟩-point)` where `c` does not touch the point, and *equal to `c`* where it does
+(`orNull_eq_altCodec`, `orNull_eq_self`). Both halves were theorems *about* a wrapper whose
+definition ignored them. Making the dichotomy the definition removes the collision instead of
+forbidding it:
+
+    Codec.ownsNull c = (c.e null).isSome || (c.p null).isSome
+    Codec.withNull  c = if c.ownsNull then c's pair else c.orNull
+
+and then **null-honesty is a consequence** (`nullHonest_of_not_ownsNull`). Under the guard, a lawful
+`c` cannot write `⟨NULL, ∗⟩` — (R) would make it read the point back, so `ownsNull` would hold — and
+cannot read to `null` — (C) would make it write the point, likewise. Both hypotheses are refuted
+rather than assumed, and `Obligations` at `.nullable` is now just the subterm's.
+
+**The guard is joint, and that is not a detail.** Asked per side, `c` could decline to write `null`
+while still reading `⟨NULL, ∗⟩`; the null point's two ends would belong to different options, and
+(R) would break with each side, taken alone, looking unambiguous. `orNull_eq_altCodec` already had
+the right hypothesis — `c.e .null = none` **and** `c.p .null = none` — which is what made the fix
+findable.
+
+**What it cost.** `T` and `μ` had to stay outside the guard: `(nullable)` concludes `T + 𝟙 ⇝ ⊤`
+whichever branch runs, and a first attempt that guarded the whole codec broke `denote_μ` and
+`typed_TSub` immediately. Only the pair moves. Five sites in `Soundness`, one in `Denoteω`, one in
+`κ_sound`, two in `Equations`; nothing in `Opaque`, `Continuity` or `Discharge`'s dischargers.
+
+**And §6's idempotence stopped being an equation.** `nullable(nullable(c)) ≡ nullable(c)` used to
+need null-honesty to hold *of `nullable(c)` itself* before it was lawful. Now the wrapper's own
+point makes `ownsNull` true, so the second insertion finds it present and returns the pair
+untouched: `withNull_ownsNull` is a two-line proof and `withNull_idem_e`/`_p` follow from it. An
+equation became a property of insertion.
+
+**What it says about the term.** `nullable` is sugar — idempotent insertion of the null option into
+a pair that may already have it. §3 used to justify keeping it primitive by "compatibility and the
+`κ = ⊤` cases", where `union(c, null)` has no discharger. After (K) became a discharger rather than
+a premise, no discharger means an obligation, not a refusal, so that half of the justification is
+gone. Compatibility is what is left, and that is a packaging decision.
+
 ### One where the obligation was quantified over inputs the union refuses
 
 §5 stated **(U)** as `∀ input. ∣{i : cᵢ admits it}∣ = 1`, and the model transcribed it faithfully:
@@ -866,11 +913,16 @@ admissible set is data this library owns, which gives the check an authority a c
 cannot have.
 
 **C4 — Discharge the side conditions.** `Obligations fuel t` collects the specification's semantic
-premises — `legacy`'s `ran(r) ⊆ dom(e)` and coherence, `nullable`'s null-honesty, `fallback`'s
-writable stand-in, `held`'s iso on the carriers, `custom`'s laws — together with any obligation
-your *own* constructors add on top of the term they denote, in the shape of `refine`'s above. These are obligations on *your*
-values, and they are the four premises the proof failed without. A port that skips them has not
-weakened the certificate; it has voided it.
+premises — `legacy`'s `ran(r) ⊆ dom(e)` and coherence, `fallback`'s writable stand-in, `held`'s iso
+on the carriers, `custom`'s laws — together with any obligation your *own* constructors add on top
+of the term they denote, in the shape of `refine`'s above. These are obligations on *your* values,
+and they are the premises the proof failed without. A port that skips them has not weakened the
+certificate; it has voided it.
+
+`nullable`'s null-honesty was a fifth until the wrapper's guard made it derivable, and the porting
+lesson is in *how* it left: a premise that constrains the library's own construction can be designed
+out, where one that constrains a caller's function cannot. If your `nullable` adds the null point
+unconditionally rather than only when the base lacks it, you still owe both honesty conditions.
 
 **C5 — Discharge (U) for each union.** Use `uAtCan_of_separated` where the syntax decides it. Where
 it does not, (U) remains a per-input obligation the semantics enforces by failing, which is safe for

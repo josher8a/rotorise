@@ -161,9 +161,17 @@ def ReadsCoherently (c : Codec) (r : Attr → Option Value) : Prop :=
   (∀ a v, r a = some v → (c.e v).isSome) ∧
   (∀ a v, r a = some v → ∀ v', c.p a = some v' → v = v')
 
+/-- Does `c` already own the null point? Asked of **both halves at once**: a per-side
+    answer would let the two ends of one round trip belong to different options —
+    `c` declining to write `null` while still reading `⟨NULL, ∗⟩` — and (R) would break
+    with nothing looking ambiguous on either side taken alone. -/
+def Codec.ownsNull (c : Codec) : Bool := (c.e .null).isSome || (c.p .null).isSome
+
 /-- §3 `(nullable)`: `c` speaks of `NULL` only for `null`, in both directions —
     write-honesty then read-honesty. §5 records that these are (U) for the two-option
-    sum `union(c, ⟨NULL⟩-point)`, specialised. -/
+    sum `union(c, ⟨NULL⟩-point)`, specialised. **No longer a premise**: where the
+    wrapper's guard says `c` does not own the point, `nullHonest_of_not_ownsNull`
+    derives both halves from lawfulness alone. -/
 def NullHonest (c : Codec) : Prop :=
   (∀ v a, c.e v = some a → a = .null → v = .null) ∧
   (∀ a v, c.p a = some v → v = .null → a = .null)
