@@ -1410,6 +1410,41 @@ remains a modelling artefact is only the canonical *ordering* of `Value.set`'s l
 kernel refusing `Finset Value`, and to be documented as a representation choice rather than a claim
 about sets.
 
+### The reference, checked line by line — and `M` has the same defect as `SS`
+
+`docs/dynamo-datatypes.md` is the official datatype reference. Most of §1 survives it exactly:
+`Numeral.WF`'s 38 digits of precision and `-130 … 125` exponent range are the documented bounds;
+binary compares unsigned; `L` is ordered and heterogeneous, as modelled; empty strings and empty
+binary are permitted, empty lists and maps are permitted, empty sets are not, and the model already
+refuses the last. That is a good showing for a domain transcribed by hand.
+
+Two things do not survive, and they are one defect at two members.
+
+`SS`/`NS`/`BS` — recorded above.
+
+**`M` is unordered too**, and nobody had noticed: *"A map type attribute can store an **unordered**
+collection of name-value pairs."* The model's `M` is a `List (Name × Attr)`, so two orderings of one
+map are two attributes (`record_p_order_sensitive`, `record_e_order_sensitive`) and a repeated key
+is writable (`record_e_keeps_duplicate_keys`), which no map has.
+
+This is sharper than the set case twice over. **The model already states the intent elsewhere**:
+`Agree` at `M` is lookup-based, comparing by key and ignoring order entirely — so the two halves of
+the model contradict each other, not merely the reference. And **`M` cannot be repaired by typing**:
+`Finset String` is admissible at `SS` because the element type is concrete, but
+`Finset (Name × Attr)` is rejected by the kernel exactly as `Finset Value` is, the element type
+being the one under declaration. Verified.
+
+So the repair splits three ways rather than two:
+
+| member | spec | model | route |
+| --- | --- | --- | --- |
+| `SS`/`NS`/`BS` | unique, unordered, non-empty, homogeneous | ordered list, duplicates | **type it**: `Finset` |
+| `M` | unordered name-value pairs | ordered list, duplicate keys | **gate it**: unique keys, canonical order |
+| `Value.set`, `Value.map` | — | ordered lists | **gate them**: kernel refuses the quotient |
+
+`Wire.canon` serves all three: keyed by the payload for sets, by the name for maps. Which is why it
+was worth building generically over a key rather than for strings alone.
+
 ## §5 Certifying an implementation
 
 The calculus is portable by design: nothing in it is TypeScript, and nothing is Rotorise. An
