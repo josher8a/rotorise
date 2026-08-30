@@ -772,6 +772,38 @@ theorem uAtCan_of_refine_disjoint (fuel : Nat) {base : Term} {qs : List (Value �
         restrict_p.mpr ⟨hlaw.retract hb, hq⟩]
       rfl
 
+/-- **A union of numeric literals discharges on both sides.** §5's `admA` row sends a
+    numeric literal to `⊤`, and the reason is real — distinct numerals read to the same
+    double, so no syntactic set of attributes bounds one. Read from the *pair* rather than
+    the table, though, the options are refinements of a single `rawNumberCodec` with
+    disjoint predicates, and `uniqueAdmission_of_sharedBase` settles both sides.
+
+    Which is the honest reading of what a numeric literal set *is*: options told apart by
+    the value a read produces, never by the text the store holds. The table cannot see that
+    because it answers about one term at a time; this answers about a family sharing a
+    base. -/
+theorem uAtCan_of_literalN_disjoint (fuel : Nat) {lss : List (List Double)}
+    (hdisj : List.Pairwise (fun ls ls' => ∀ d ∈ ls, d ∉ ls') lss) :
+    UAtCan (fuel+1) (lss.map Term.literalN) := by
+  show UniqueAdmission (semsOf (fuel+1) (lss.map Term.literalN))
+  have hs : semsOf (fuel+1) (lss.map Term.literalN)
+      = (lss.map literalNCodec).map OptionSem.byAttempt := by
+    simp [semsOf, List.map_map, specOf, optionSemOf, denote]
+  rw [hs]
+  refine uniqueAdmission_of_sharedBase (base := rawNumberCodec) (qs := lss.map inLN)
+    lawfulCore_rawNumberCodec ?_ ?_
+  · rw [List.forall₂_map_left_iff, List.forall₂_map_right_iff]
+    exact List.forall₂_same.mpr fun ls _ =>
+      ⟨literalNCodec_e_restrict ls, literalNCodec_p_restrict ls⟩
+  · rw [List.pairwise_map]
+    refine hdisj.imp fun h v hv => ?_
+    cases v
+    case num d =>
+      simp only [inLN, decide_eq_true_eq] at hv
+      simp only [inLN, decide_eq_false_iff_not]
+      exact h d hv
+    all_goals exact Bool.noConfusion hv
+
 /-- §5 (D)'s stand-in, likewise widened: two options are separated on the readable side
     by distinct named members, **or** by disjoint admissible sets. The `adm` disjunct is
     what carries `union(literal("A"), literal("B"))`, whose options share `⇝ S`. -/

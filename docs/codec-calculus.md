@@ -763,9 +763,17 @@ All four partings are forced:
   The stored texts *are* known at the declaration, so `admA = { ⟨N, text(ℓᵢ)⟩ }` looks available. It
   is not, and the store is why: `literal(10²¹)` is written `⟨N, "1e+21"⟩` and handed back
   `⟨N, "1000000000000000000000"⟩`, which only the numeral-to-double read recovers. A syntactic `admA`
-  would refuse a row the codec itself wrote — `ker p` shrinking below `η`. So numeric literals fall
-  to **(U)** per input on the attribute side, while their value side separates as a string
-  literal's does.
+  would refuse a row the codec itself wrote — `ker p` shrinking below `η`. So no _table_ row bounds a
+  numeric literal's attribute side, while its value side separates as a string literal's does.
+
+  That is a limit of the table, not of the calculus, and the difference matters because it is the
+  whole shape of a numeric literal set. `number` and every numeric literal are the **same base**
+  under different predicates — the base being every finite double written as its shortest text, and
+  the predicates `D` and `∈ ℓ`. Two literals over disjoint value sets are therefore two refinements
+  of one base, and refinements of one base read an attribute to the _same_ value, so at most one
+  predicate accepts it. Both sides separate. A numeric literal union is options told apart by the
+  value a read produces, never by the text the store holds — and the table cannot see it because a
+  table answers about one term at a time, where this is a fact about a family sharing a base.
 - **`refine(c, q)`**, which parts because `q` is a predicate on **values**. It tightens what the
   term will write — `e` is defined only where `q` holds, so `adm(c) ∩ q` is a sound bound and a
   strictly better one than passing `adm(c)` through. The reading side cannot follow: `q` tests the

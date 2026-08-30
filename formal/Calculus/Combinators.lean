@@ -375,6 +375,28 @@ def rawDecimalCodec : Codec :=
     e := fun v => match v with | .str s => some (.n s) | _ => none
     p := fun a => match a with | .n x => some (.str x) | _ => none }
 
+/-- §3 `(number)`'s laws before the gate. `Double.roundtrip` is §1's axiom and the only
+    thing this needs; the gate adds nothing to (R). -/
+theorem lawfulCore_rawNumberCodec : LawfulCore rawNumberCodec where
+  retract := by
+    intro t a he
+    cases t with
+    | num d =>
+      cases he
+      show ((Double.ofDec d.toDec).map Value.num) = some (.num d)
+      rw [Double.roundtrip]; rfl
+    | _ => exact nomatch he
+  canon := by
+    intro a t hp
+    cases a with
+    | n x => obtain ⟨d, hd, rfl⟩ := Option.map_eq_some'.mp hp; rfl
+    | _ => exact nomatch hp
+  writes := by
+    intro μ hμ t a he
+    cases hμ; cases t with
+    | num d => cases he; rfl
+    | _ => exact nomatch he
+
 /-- **§3's `(number)` gate is `refine`**, on the writing half… -/
 theorem numberCodec_e_restrict : numberCodec.e = (rawNumberCodec.restrict inD).e := by
   funext v; cases v <;> simp [numberCodec, rawNumberCodec, Codec.restrict, inD]
@@ -391,6 +413,20 @@ theorem decimalCodec_e_restrict : decimalCodec.e = (rawDecimalCodec.restrict isS
 /-- …and on the reading half. -/
 theorem decimalCodec_p_restrict : decimalCodec.p = (rawDecimalCodec.restrict isStored).p := by
   funext a; cases a <;> simp [decimalCodec, rawDecimalCodec, Codec.restrict, isStored]
+
+/-- **§3's `(literal-N)` gate is the same `refine`, over the same base.** `literalNCodec`
+    gates on `d ∈ ls` and *not* on `D` — `hD` is a premise of the judgement, not part of
+    the pair — so `number` and every numeric literal are refinements of one
+    `rawNumberCodec`. That is what makes them separable: see
+    `uniqueAdmission_of_sharedBase`. -/
+theorem literalNCodec_e_restrict (ls : List Double) :
+    (literalNCodec ls).e = (rawNumberCodec.restrict (inLN ls)).e := by
+  funext v; cases v <;> simp [literalNCodec, rawNumberCodec, Codec.restrict, inLN]
+
+theorem literalNCodec_p_restrict (ls : List Double) :
+    (literalNCodec ls).p = (rawNumberCodec.restrict (inLN ls)).p := by
+  funext a; cases a <;> simp [literalNCodec, rawNumberCodec, Codec.restrict, inLN]
+  cases Double.ofDec _ <;> simp
 
 /-- `legacy`: extend the reading. With §3's coherence premise this presentation equals
     the order-free `p ∪ r`. -/
@@ -3251,6 +3287,44 @@ theorem uniqueAdmission_of_disjoint {os : List OptionSem}
     UniqueAdmission os := fun o ho t a he =>
   ⟨filter_eq_singleton_of_disjoint hA hdA o ho (hw o ho t a he).2,
    filter_eq_singleton_of_disjoint hV hdV o ho (hw o ho t a he).1⟩
+
+theorem uniqueAdmission_of_sharedBase {base : Codec} {cs : List Codec}
+    {qs : List (Value → Bool)} (hlaw : LawfulCore base)
+    (hz : List.Forall₂ (fun ci q => ci.e = (base.restrict q).e ∧ ci.p = (base.restrict q).p) cs qs)
+    (hdisj : List.Pairwise (fun q q' => ∀ v, q v = true → q' v = false) qs) :
+    UniqueAdmission (cs.map OptionSem.byAttempt) := by
+  refine uniqueAdmission_of_disjoint
+    (SVs := qs.map (fun q v => q v = true))
+    (SAs := qs.map (fun q a => ∃ v, base.p a = some v ∧ q v = true)) ?_ ?_ ?_ ?_ ?_
+  · rw [List.forall₂_map_left_iff, List.forall₂_map_right_iff]
+    refine hz.imp fun ci q h v hv => ?_
+    have : ((base.restrict q).e v).isSome = true := h.1 ▸ hv
+    obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp this
+    exact (restrict_e.mp hw).1
+  · rw [List.forall₂_map_left_iff, List.forall₂_map_right_iff]
+    refine hz.imp fun ci q h a ha => ?_
+    have : ((base.restrict q).p a).isSome = true := h.2 ▸ ha
+    obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp this
+    obtain ⟨hp, hq⟩ := restrict_p.mp hw
+    exact ⟨w, hp, hq⟩
+  · rw [List.pairwise_map]
+    refine hdisj.imp fun h v hv hv' => ?_
+    simp only at hv hv'; rw [h v hv] at hv'; exact nomatch hv'
+  · rw [List.pairwise_map]
+    refine hdisj.imp fun h a hx hy => ?_
+    obtain ⟨v, hv, hqv⟩ := hx
+    obtain ⟨v', hv', hqv'⟩ := hy
+    rw [hv] at hv'; cases hv'
+    rw [h v hqv] at hqv'; exact nomatch hqv'
+  · refine forall_mem_map fun ci hci t a he => ?_
+    obtain ⟨q, -, hq⟩ := hz.mem_left hci
+    have he' : (base.restrict q).e t = some a := hq.1 ▸ he
+    obtain ⟨hqt, hb⟩ := restrict_e.mp he'
+    refine ⟨?_, ?_⟩
+    · show (ci.e t).isSome = true
+      rw [hq.1, he']; rfl
+    · show (ci.p a).isSome = true
+      rw [hq.2, restrict_p.mpr ⟨hlaw.retract hb, hqt⟩]; rfl
 
 /-- An option pinned to a **set of labels**, under a partial projection of each side of
     the pair. `OnKind` is the singleton case at `Value.kind`/`Attr.kind`; `(dunion)`'s
