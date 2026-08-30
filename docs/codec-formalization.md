@@ -129,9 +129,10 @@ satisfiable — a discharger whose premises cannot all hold discharges nothing.
 
 Three claims in §5's discharger tables were unsound as written. Each is now corrected in
 `codec-calculus.md`, with the counterexample machine-checked in `formal/Calculus/Discharge.lean`.
-Five further findings follow the table — five defects and one correction that ran the other way,
-into the model. The last two are open against `codec-calculus.md`: the text has not been changed
-yet, and the entries say what the amendment should be.
+The 12 findings after the table are the rest of the log — defects in the specification, defects in
+the shipped implementation, and corrections that ran the other way into the model. Every amendment
+they call for has been made; **this file is where the history lives, and `codec-calculus.md` states
+only what is true now.**
 
 | Was claimed                                            | Counterexample                                                        | Now |
 | ------------------------------------------------------ | --------------------------------------------------------------------- | --- |
