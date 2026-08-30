@@ -561,7 +561,8 @@ theorem not_ExactV_opaq (lossy : Bool) : ¬ ExactV (.opaq lossy) := by
     simp only [opaqCodecω, Value.depth]
     exact opaqCodec_e_strSet lossy 1 ∅
   rw [hd] at h2
-  simp [setCodec, encSet] at h2
+  simp only [setCodec, encSet, Finset.card_empty] at h2
+  exact absurd h2 (by simp)
 
 /-- **Every excuse is earned.** Exhaustive over `Excuse`, so a new constructor must come
     with a term of a shape it covers on which exactness actually fails — which, for a shape
@@ -970,7 +971,8 @@ used on**, and neither side has to answer for the other's reasons. -/
 theorem not_ExactA_set : ¬ ExactA (.set .string) := by
   intro h
   have := (h (.ss ∅)).mp (by simp [AdmA])
-  simp [denoteω, setCodec, decSet] at this
+  simp only [denoteω, setCodec, decSet, Finset.card_empty] at this
+  exact absurd this (by simp)
 
 /-- Alignment again, read side. -/
 theorem not_ExactA_tuple : ¬ ExactA (.tuple [.string] none) := by
@@ -994,7 +996,8 @@ theorem not_ExactA_opaq (lossy : Bool) : ¬ ExactA (.opaq lossy) := by
     simp only [opaqCodecω, Attr.depth]
     exact opaqCodec_p_ss lossy 1 ∅
   rw [hd] at h2
-  simp [setCodec, decSet] at h2
+  simp only [setCodec, decSet, Finset.card_empty] at h2
+  exact absurd h2 (by simp)
 
 /-- Writes the null point — half of a pair whose write reaches it and whose read does not,
     the mirror of `rNull`, and the reason `nullable` is in both hatches rather than one. -/
