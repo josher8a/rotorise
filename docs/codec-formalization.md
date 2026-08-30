@@ -1111,6 +1111,19 @@ The polarity is the reason: it answers **`false`** — *no excuse covers this sh
 constructor lands in "not excusable", which forces `Analysable` to call it analysable, which forces
 `Adm_exact` to prove it. Every other catch-all here failed by silently saying yes.
 
+**And the hatch rows still needed soundness — which is where the discarded obligation belongs.**
+`Adm_exact` binds the sixteen analysable rows in both directions. The other seven had, for a while,
+*no* obligation whatever: nothing stopped one being written `fun _ => false`, which would have been
+an outright **unsoundness** rather than the imprecision every other defect in this log has been.
+Soundness is useless as the obligation for a row that has an exactness proof, because exactness
+implies it; it is exactly the right obligation for a row that does not. `Adm_sound` supplies it for
+all twenty-three. A hatch row may be loose; it may not be wrong.
+
+That is the correction to the correction. The first instinct — bundle each row with a soundness
+proof — was not wrong about soundness being *needed*; it was wrong about where. Applied uniformly it
+is vacuous on the rows that matter and it was absent on the rows where it was the only thing
+available.
+
 **What none of it can buy.** No construction inside the kernel prevents someone writing a weak
 specification: an `Excuse` constructor can always be added, and `covers` extended to admit a new
 shape. What the construction does is make the weak choice *expensive and visible* — a named reason,

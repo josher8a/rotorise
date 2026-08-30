@@ -338,5 +338,131 @@ theorem not_excused_of_analysable {t : Term} (h : Analysable t = true) :
   rw [excuse_shapes e t he] at h
   exact absurd h (by simp)
 
+/-- Entrywise soundness lifted to a container's traversal. Generalised over the codec so
+    the fueled and fuel-free forms share it. -/
+theorem AdmAll_sound_aux {c : Term} {C : Codec}
+    (hc : ∀ {v a}, C.e v = some a → Adm c v = true) :
+    ∀ {xs : List Value} {ys}, traverse C.e xs = some ys → AdmAll c xs = true
+  | [], _, _ => by simp [AdmAll]
+  | x :: xs, ys, h => by
+      simp only [traverse] at h
+      cases hx : C.e x with
+      | none => rw [hx] at h; exact nomatch h
+      | some y =>
+        cases hxs : traverse C.e xs with
+        | none => rw [hx, hxs] at h; exact nomatch h
+        | some ys' => simp [AdmAll, hc hx, AdmAll_sound_aux hc hxs]
+
+/-- …and over a record's entries. -/
+theorem AdmAllSnd_sound_aux {c : Term} {C : Codec}
+    (hc : ∀ {v a}, C.e v = some a → Adm c v = true) :
+    ∀ {kvs : List (Name × Value)} {ys},
+      traverse (encPair C) kvs = some ys → AdmAllSnd c kvs = true
+  | [], _, _ => by simp [AdmAllSnd]
+  | kv :: kvs, ys, h => by
+      simp only [traverse] at h
+      cases hx : encPair C kv with
+      | none => rw [hx] at h; exact nomatch h
+      | some y =>
+        cases hxs : traverse (encPair C) kvs with
+        | none => rw [hx, hxs] at h; exact nomatch h
+        | some ys' =>
+          have hs : (C.e kv.2).isSome = true := by
+            simpa [encPair] using congrArg Option.isSome hx
+          obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp hs
+          simp [AdmAllSnd, hc hw, AdmAllSnd_sound_aux hc hxs]
+
+set_option maxHeartbeats 1000000 in
+/-- Soundness of every row, fueled. The recursion is on **fuel**, not on the term, which
+    is what `κ_sound` and `adm_sound` do: a term recursion here makes the equation compiler
+    elaborate all twenty-three heavy cases as one well-founded definition, and it does not
+    finish. The heartbeat bump is for the twenty-three-way `cases`, not for any one case. -/
+theorem Adm_sound_fueled : ∀ (fuel : Nat) (t : Term) {v a},
+    (denote fuel t).e v = some a → Adm t v = true
+  | 0, _, _, _, he => nomatch he
+  | fuel+1, t, v, a, he => by
+    cases t
+    case string => cases v <;> simp_all [Adm, denote, stringCodec]
+    case boolean => cases v <;> simp_all [Adm, denote, booleanCodec]
+    case binary => cases v <;> simp_all [Adm, denote, binaryCodec]
+    case null => cases v <;> simp_all [Adm, denote, nullCodec]
+    case number => cases v <;> simp_all [Adm, denote, numberCodec, inD]
+    case decimal => cases v <;> simp_all [Adm, denote, decimalCodec, isStored]
+    case literalS ls => cases v <;> simp_all [Adm, denote, literalSCodec]
+    case literalN ls => cases v <;> simp_all [Adm, denote, literalNCodec]
+    case literal w =>
+      cases w <;> cases v <;>
+        simp_all [Adm, denote, literalCodec, Codec.restrict, stringCodec, rawNumberCodec,
+                  booleanCodec, binaryCodec, nullCodec, Codec.empty]
+    case custom ce cp => simp_all [Adm, denote]
+    case opaq lossy => simp [Adm]
+    case set c => cases v <;> simp_all [Adm, denote, setCodec]
+    case tuple ts tl => cases v <;> simp_all [Adm, denote, tupleCodec]
+    case object fs r => cases v <;> simp_all [Adm, denote, objectCodec, objectCodecCore]
+    case array c =>
+      cases v
+      case arr xs =>
+        simp only [Adm]
+        simp only [denote, arrayCodec] at he
+        obtain ⟨ys, hys, -⟩ := Option.map_eq_some'.mp he
+        exact AdmAll_sound_aux (fun {v a} h => Adm_sound_fueled fuel c h) hys
+      all_goals (simp only [denote, arrayCodec] at he; exact nomatch he)
+    case record c =>
+      cases v
+      case map kvs =>
+        simp only [Adm]
+        simp only [denote, recordCodec] at he
+        obtain ⟨ys, hys, -⟩ := Option.map_eq_some'.mp he
+        exact AdmAllSnd_sound_aux (fun {v a} h => Adm_sound_fueled fuel c h) hys
+      all_goals (simp only [denote, recordCodec] at he; exact nomatch he)
+    case refine c q =>
+      obtain ⟨hq, hc⟩ := restrict_e.mp he
+      simp [Adm, Adm_sound_fueled fuel c hc, hq]
+    case legacy c r => simpa [Adm] using Adm_sound_fueled fuel c (extendRead_e.mp he)
+    case lazy c => simpa [Adm] using Adm_sound_fueled fuel c he
+    case held c f g => simpa [Adm] using Adm_sound_fueled fuel c he
+    case nullable c =>
+      cases hw : (denote fuel c).ownsNull with
+      | true =>
+        rw [show (denote (fuel+1) (.nullable c)).e = (denote fuel c).e from
+          withNull_e_of_owns hw] at he
+        simp [Adm, Adm_sound_fueled fuel c he]
+      | false =>
+        rw [show denote (fuel+1) (.nullable c) = (denote fuel c).orNull from
+          withNull_eq_orNull hw] at he
+        rcases orNull_e.mp he with ⟨rfl, -⟩ | ⟨-, hc⟩
+        · simp [Adm]
+        · simp [Adm, Adm_sound_fueled fuel c hc]
+    case dunion d opts =>
+      have h2 := adm_sound _ _ he
+      have heq : Adm (.dunion d opts) v = adm (.dunion d opts) v := by rw [Adm, adm]; rfl
+      rw [heq]; exact h2
+    case union opts =>
+      simp only [denote] at he
+      obtain ⟨o, ho, -, hoe⟩ := altCodec_e_admits he
+      simp only [List.mem_map] at ho
+      obtain ⟨tx, htx, rfl⟩ := ho
+      rw [optionSemOf_c] at hoe
+      have key : ∀ (ts : List Term), tx ∈ ts → AdmAny ts v = true := by
+        intro ts hts
+        induction ts with
+        | nil => exact absurd hts (by simp)
+        | cons t0 ts ih =>
+          rcases List.mem_cons.mp hts with rfl | h'
+          · simp [AdmAny, Adm_sound_fueled fuel tx hoe]
+          · simp [AdmAny, ih h']
+      simpa [Adm] using key opts htx
+
+/-- **Every row is a sound over-approximation, the hatch included.**
+
+    `Adm_exact` binds the sixteen analysable rows to `dom(e)` in both directions. The other
+    seven had, until this theorem, *no* obligation at all: nothing stopped a hatch row being
+    written `fun _ => false`, which would have been an outright unsoundness rather than the
+    imprecision every defect in the log so far has been. A hatch row may be **loose**; it
+    may not be **wrong**, and that is now checked. -/
+theorem Adm_sound (t : Term) {v a} (he : (denoteω t).e v = some a) : Adm t v = true := by
+  rw [denoteω_eq t (termDepth t) (Nat.le_refl _)] at he
+  exact Adm_sound_fueled _ t he
+
 end
 end Calculus
