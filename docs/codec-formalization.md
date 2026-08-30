@@ -1264,6 +1264,28 @@ says decides; and `held(string, fSplit, _)`, whose adapter narrows to a single s
 and `f` where `ident` carries neither. That is the shape of the repair, if `ident` is repaired:
 one row for the adapter, not two.
 
+### One where a row was filed under the wrong combinator
+
+Asking whether `legacy` is an adapter too — it reads on two channels and writes on one — turned up
+that it is not, and that the misfiling was costing a row.
+
+An adapter **composes**: `adapt`'s read is `(c.p a).bind g`, so it can only lose attributes
+(`adapt_p_le`). `legacy`'s read **gains** them: `extendRead`'s `p` is the subterm's channel falling
+back to `r`'s, which is a *choice*. That is the family `nullable` belongs to (`orNull` adjoins the
+null point on both sides) and `union` (`altCodec`, n-ary, both sides); `legacy` is the one-sided
+member.
+
+§5 wrote `admA(legacy) = ⊤` because `extendRead` widens `p` past the subterm's set. True, and the
+wrong conclusion — because the thing it widens *by* is `r`, which the term carries. The domain is
+`dom(p) ∪ dom(r)`, both halves named, and `AdmA` can apply `r` for the same reason it can apply
+`held`'s `f` and `custom`'s `cp`. This is the fourth time in this log that "I cannot see inside it"
+was mistaken for "the row cannot use it", after `held`, `custom` and the numeric rows.
+
+So `legacy` leaves the attribute hatch — fifteen of twenty-three exact, not fourteen — and the
+`widenedRead` excuse is **deleted rather than witnessed**: it was covering a row that did not need
+excusing. `not_admA_legacy` survives untouched, because §5's *passthrough* really is unsound and the
+union is not the passthrough.
+
 `ident` cannot be made exact — whether an arbitrary `q : Value → Bool` narrows anything is not a
 syntactic question — but it can be honest about which side it errs on, and it is not. Nothing live
 depends on it: no `uAtCan_*` consumes it and `admDisj_ident` derives it rather than assuming it. The
