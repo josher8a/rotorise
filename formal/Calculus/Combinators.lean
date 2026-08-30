@@ -135,9 +135,13 @@ under Products) rather than two. -/
   out_into _ := rfl
   into_out {b x} h := by cases b <;> first | (cases h; rfl) | exact nomatch h
 
-/-- `map` values. -/ def mapV : Ctor (List (Name × Value)) Value where
-  into := Value.map
-  out := fun v => match v with | .map xs => some xs | _ => none
+/-- A map's payload: the name set, and the values on it. A dependent pair rather than a
+    list of pairs, because that is what `M` is — see `Attr.m`. -/
+abbrev MapOf (α : Type) := Σ keys : Finset Name, {k // k ∈ keys} → α
+
+/-- `map` values. -/ def mapV : Ctor (MapOf Value) Value where
+  into := fun p => Value.map p.1 p.2
+  out := fun v => match v with | .map keys f => some ⟨keys, f⟩ | _ => none
   out_into _ := rfl
   into_out {b x} h := by cases b <;> first | (cases h; rfl) | exact nomatch h
 
@@ -147,11 +151,41 @@ under Products) rather than two. -/
   out_into _ := rfl
   into_out {b x} h := by cases b <;> first | (cases h; rfl) | exact nomatch h
 
-/-- `M`'s payload. -/ def mA : Ctor (List (Name × Attr)) Attr where
-  into := Attr.m
-  out := fun a => match a with | .m xs => some xs | _ => none
+/-- `M`'s payload. -/ def mA : Ctor (MapOf Attr) Attr where
+  into := fun p => Attr.m p.1 p.2
+  out := fun a => match a with | .m keys f => some ⟨keys, f⟩ | _ => none
   out_into _ := rfl
   into_out {b x} h := by cases b <;> first | (cases h; rfl) | exact nomatch h
+
+/-- **The map analogue of `setImage`, and much simpler.** A set codec can collide two
+    elements onto one; a map cannot, because the names are fixed and the codec only moves
+    the values. So all this has to do is demand that every value succeeds. -/
+noncomputable def funImage {β : Type} {keys : Finset Name}
+    (g : {k // k ∈ keys} → Option β) : Option ({k // k ∈ keys} → β) :=
+  if h : ∀ k, (g k).isSome = true then some (fun k => (g k).get (h k)) else none
+
+theorem funImage_some {β : Type} {keys : Finset Name} {g : {k // k ∈ keys} → Option β}
+    {f : {k // k ∈ keys} → β} (h : funImage g = some f) : ∀ k, g k = some (f k) := by
+  unfold funImage at h
+  split at h
+  · next hall =>
+      intro k
+      have := Option.some.inj h
+      subst this
+      exact (Option.some_get (hall k)).symm
+  · exact nomatch h
+
+theorem funImage_isSome {β : Type} {keys : Finset Name} {g : {k // k ∈ keys} → Option β}
+    (hall : ∀ k, (g k).isSome = true) : (funImage g).isSome = true := by
+  unfold funImage; rw [dif_pos hall]; rfl
+
+theorem funImage_eq {β : Type} {keys : Finset Name} {g : {k // k ∈ keys} → Option β}
+    {f : {k // k ∈ keys} → β} (h : ∀ k, g k = some (f k)) : funImage g = some f := by
+  unfold funImage
+  rw [dif_pos (fun k => by rw [h k]; rfl)]
+  congr 1
+  funext k
+  exact Option.some.inj ((Option.some_get _).trans (h k))
 
 /-- **The point ground codecs of §3**, as one construction: a payload carried between a
     value constructor and an attribute constructor, both prisms.
@@ -1176,39 +1210,100 @@ theorem decPair_ran {c : Codec} (hc : Carrier c) :
   obtain ⟨v, hp, rfl⟩ := Option.map_eq_some'.mp hka
   exact hc.ranP hp
 
-def recordCodec (c : Codec) : Codec :=
-  { T := fun v => match v with | .map kvs => ∀ kv ∈ kvs, c.T kv.2 | _ => False
+noncomputable def recordCodec (c : Codec) : Codec :=
+  { T := fun v => match v with | .map _ f => ∀ k, c.T (f k) | _ => False
     μ := some .M
     e := fun v => match v with
-      | .map kvs => (traverse (encPair c) kvs).map Attr.m
+      | .map keys f => (funImage (fun k => c.e (f k))).map (Attr.m keys)
       | _ => none
     p := fun a => match a with
-      | .m kvs => (traverse (decPair c) kvs).map Value.map
+      | .m keys g => (funImage (fun k => c.p (g k))).map (Value.map keys)
       | _ => none }
 
-/-- `record` is the same product at `map`/`M`, with the entry pair carrying the name. -/
-theorem recordCodec_eq {c : Codec} :
-    recordCodec c = entrywise mapV mA .M (fun kvs => ∀ kv ∈ kvs, c.T kv.2)
-      (encPair c) (decPair c) := by
-  ext v <;> cases v <;> simp_all [recordCodec, entrywise, carriedCodec, mapV, mA, Ctor.into, Ctor.out]
+/-! `record` is no longer an `entrywise` product: `entrywise` traverses a *list* payload,
+and `M`'s payload is a name set with a function on it. What it still is, is `carriedCodec`
+between the same two prisms — `carriedCodec` is generic in the payload — so the shape of
+the derivation survives even though the traversal does not. These three are direct, and
+short, because `funImage` does the work `traverse` used to. -/
+
+/-- What `record` writes and reads: the same name set, every value through `c`. -/
+theorem recordCodec_e_eq {c : Codec} {v : Value} {a : Attr} :
+    (recordCodec c).e v = some a ↔
+      ∃ keys f g, v = .map keys f ∧ funImage (fun k => c.e (f k)) = some g ∧
+        a = .m keys g := by
+  cases v
+  case map keys f =>
+    constructor
+    · intro h
+      obtain ⟨g, hg, rfl⟩ := Option.map_eq_some'.mp h
+      exact ⟨keys, f, g, rfl, hg, rfl⟩
+    · rintro ⟨keys', f', g, hv, hg, rfl⟩
+      cases hv
+      show (funImage (fun k => c.e (f k))).map (Attr.m keys) = _
+      rw [hg]; rfl
+  all_goals
+    constructor
+    · intro h
+      exact nomatch h
+    · rintro ⟨_, _, _, hv, -, -⟩
+      exact nomatch hv
+
+theorem recordCodec_p_eq {c : Codec} {a : Attr} {v : Value} :
+    (recordCodec c).p a = some v ↔
+      ∃ keys g f, a = .m keys g ∧ funImage (fun k => c.p (g k)) = some f ∧
+        v = .map keys f := by
+  cases a
+  case m keys g =>
+    constructor
+    · intro h
+      obtain ⟨f, hf, rfl⟩ := Option.map_eq_some'.mp h
+      exact ⟨keys, g, f, rfl, hf, rfl⟩
+    · rintro ⟨keys', g', f, ha, hf, rfl⟩
+      cases ha
+      show (funImage (fun k => c.p (g k))).map (Value.map keys) = _
+      rw [hf]; rfl
+  all_goals
+    constructor
+    · intro h
+      exact nomatch h
+    · rintro ⟨_, _, _, ha, -, -⟩
+      exact nomatch ha
 
 /-- (R), (C), (W) — `M` is the member every `map` writes. -/
 theorem lawfulCore_recordCodec {c : Codec} (h : LawfulCore c) :
-    LawfulCore (recordCodec c) :=
-  recordCodec_eq ▸ lawfulCore_entrywise (fun _ => rfl) (encPair_decPair h)
-    (decPair_encPair h)
+    LawfulCore (recordCodec c) := by
+  refine ⟨?_, ?_, ?_⟩
+  · intro t a he
+    obtain ⟨keys, f, g, rfl, hg, rfl⟩ := recordCodec_e_eq.mp he
+    exact recordCodec_p_eq.mpr ⟨keys, g, f, rfl,
+      funImage_eq (fun k => h.retract (funImage_some hg k)), rfl⟩
+  · intro a t hp
+    obtain ⟨keys, g, f, rfl, hf, rfl⟩ := recordCodec_p_eq.mp hp
+    have := funImage_isSome (keys := keys) (g := fun k => c.e (f k))
+      (fun k => h.canon (funImage_some hf k))
+    simpa [recordCodec] using this
+  · intro μ hμ t a he
+    obtain ⟨keys, f, g, rfl, -, rfl⟩ := recordCodec_e_eq.mp he
+    simpa [Attr.member] using Option.some.inj hμ
 
-/-- `≼` at `M` is by name, not by position — the entries agree pointwise *and* keep their
-    names, and `lookup_rel` turns that into `Agree.m`. -/
-theorem lawful_recordCodec {c : Codec} (h : Lawful c) : Lawful (recordCodec c) :=
-  recordCodec_eq ▸ lawful_entrywise (fun _ => rfl) (encPair_decPair h.core)
-    (decPair_encPair h.core) (encPair_agree h)
-    (fun hlen hz => .m _ _ (lookup_rel _ _ hlen hz))
+/-- `≼` at `M` is by name, and now that is what the constructor says. -/
+theorem lawful_recordCodec {c : Codec} (h : Lawful c) : Lawful (recordCodec c) := by
+  refine ⟨(lawfulCore_recordCodec h.core).retract, (lawfulCore_recordCodec h.core).canon,
+    (lawfulCore_recordCodec h.core).writes, ?_⟩
+  intro a t a' hp he
+  obtain ⟨keys, g, f, rfl, hf, rfl⟩ := recordCodec_p_eq.mp hp
+  obtain ⟨keys', f', g', hv, hg, rfl⟩ := recordCodec_e_eq.mp he
+  cases hv
+  exact Agree.m keys keys g' g (fun k hx hy =>
+    h.agree (funImage_some hf ⟨k, hy⟩) (funImage_some hg ⟨k, hx⟩))
 
-theorem carrier_recordCodec {c : Codec} (hc : Carrier c) : Carrier (recordCodec c) :=
-  recordCodec_eq ▸ carrier_entrywise
-    (fun h => traverse_mem_input (encPair_dom hc) h)
-    (fun h => traverse_mem (decPair_ran hc) h)
+theorem carrier_recordCodec {c : Codec} (hc : Carrier c) : Carrier (recordCodec c) where
+  domE {v a} he := by
+    obtain ⟨keys, f, g, rfl, hg, rfl⟩ := recordCodec_e_eq.mp he
+    exact fun k => hc.domE (funImage_some hg k)
+  ranP {a v} hp := by
+    obtain ⟨keys, g, f, rfl, hf, rfl⟩ := recordCodec_p_eq.mp hp
+    exact fun k => hc.ranP (funImage_some hf k)
 
 /-! ### `tuple` (§3) — the positional product
 

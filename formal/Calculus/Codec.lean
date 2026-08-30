@@ -68,9 +68,12 @@ inductive Agree : Attr → Attr → Prop where
   | bs   (x y : Finset Bytes)   : Agree (.bs x) (.bs y)
   | l    (xs ys : List Attr)
          (h : ∀ q ∈ List.zip xs ys, Agree q.1 q.2) : Agree (.l xs) (.l ys)
-  | m    (xs ys : List (Name × Attr))
-         (h : ∀ k a a', xs.lookup k = some a → ys.lookup k = some a' → Agree a a') :
-         Agree (.m xs) (.m ys)
+  /-- Keyed, as it always was in intent — the list version compared by `lookup` and
+      ignored order, which is what `M` being unordered means. With the names a `Finset`
+      and the values a function on it, that is simply what the constructor says. -/
+  | m    (kx ky : Finset Name) (fx : {k // k ∈ kx} → Attr) (fy : {k // k ∈ ky} → Attr)
+         (h : ∀ k (hx : k ∈ kx) (hy : k ∈ ky), Agree (fx ⟨k, hx⟩) (fy ⟨k, hy⟩)) :
+         Agree (.m kx fx) (.m ky fy)
 
 /-- `≼` implies plain member equality — (MP) as §2 states it. -/
 theorem Agree.member_eq {a a' : Attr} (h : Agree a a') : a.member = a'.member := by
