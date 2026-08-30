@@ -74,7 +74,8 @@ theorem opaqCodecω_e_set_nil (lossy : Bool) :
   show (opaqCodec (Value.depth (Value.strSet ∅)) lossy).e (Value.strSet ∅) = none
   have hd : Value.depth (Value.strSet (∅ : Finset String)) = 1 + 1 := rfl
   rw [hd, opaqCodec_e_strSet]
-  simp [setCodec, encSet]
+  simp only [setCodec, encSet, Finset.card_empty]
+  rfl
 
 /-- The three agree, which is what makes the corrected `Uν` the right one: the value the
     old inductive admitted is held by no fuel and written by none. -/
