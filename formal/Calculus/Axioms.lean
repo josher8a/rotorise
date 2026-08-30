@@ -142,6 +142,13 @@ middle — the law production actually runs — and the two `decimal` rows are w
 `Numeral.Stored` the right held set rather than a cautious one: `η ⊆ ker p` holds after the
 narrowing and fails before it. -/
 
+/-! §2's corollary that a pair has two halves: a member a codec cannot write is one it
+cannot read. The `opaque`/`NS` defect is its counterexample, and (MP) is the only law that
+sees it — which is why it needs stating rather than following from the rest. -/
+
+#assert_axioms Lawful.no_read_without_write
+#assert_axioms Lawful.write_of_read
+
 #assert_axioms Codec.ker_equivalence
 #assert_axioms Lawful.stable
 #assert_axioms Lawful.retract_through_store

@@ -26,7 +26,7 @@ import type {
     SS,
 } from './attribute'
 import type { AttributeCodec } from './codec'
-import { failed, opaque } from './codec'
+import { CodecError, failed, opaque } from './codec'
 import type { native } from './native'
 import type { ErrorMessage } from './utils'
 
@@ -248,13 +248,13 @@ describe('what opaque reads back, as a type and as a function', () => {
      */
     it('differs from native.Decode where the two disagree', () => {
         attest<[native.Decode<NS>], [Set<number | bigint>]>()
-        attest<[opaque.Decode<NS>], [Set<string>]>()
+        attest<[Refuses<opaque.Decode<NS>>], [true]>()
 
         attest<[native.Decode<N>], [number | bigint]>()
         attest<[Refuses<opaque.Decode<N>>], [true]>()
 
-        // and the runtime agrees: a stored NS reads back as strings
-        expect(read({ NS: ['1', '2'] })).toEqual(new Set(['1', '2']))
+        // and the runtime agrees: a stored NS is refused, not guessed at
+        expect(read({ NS: ['1', '2'] })).toBe('refused')
     })
 })
 
@@ -296,26 +296,42 @@ describe('every N it writes is a numeral', () => {
     })
 
     /**
-     * A set of numbers never reaches the gate, because `opaque` has no `NS` write path at all — a
-     * numeric `Set` is refused outright, on the grounds that `NS` decodes as strings.
+     * A set of numbers never reaches the gate, because `opaque` has no `NS` write path — and
+     * now has no `NS` read either, which is the fix rather than the defect.
      *
-     * Worth pinning rather than passing over, because it is the write half of the `NS` asymmetry
-     * recorded in `docs/codec-formalization.md` §4: `opaque` **reads** `NS` as `Set<string>` and
-     * cannot **write** `NS` at all, so re-encoding what it read produces `SS`. The refusal here is
-     * correct on its own terms; it is the read that has nowhere to go.
+     * It used to read `NS` as `Set<string>`, so re-encoding what it read produced `SS`: an
+     * `NS` attribute silently becoming an `SS` on a read-modify-write. **(MP)**, and the only
+     * law watching, since `opaque`'s `μ` is `⊤`. A codec is a pair, and a member it cannot
+     * write is a member it cannot read — `Calculus.Lawful.no_read_without_write`.
      */
-    it('refuses a set of numbers before any gate applies, which is the other half', () => {
+    it('refuses a set of numbers on both sides, which is what a pair means', () => {
         const lossy = opaque('lossy')
         expect(() => lossy.unsafeEncode(new Set([5e-324]))).toThrow(
-            /NS decodes as strings/,
+            /NS decodes as strings|no counterpart/,
         )
-        expect(() => lossy.unsafeEncode(new Set([1]))).toThrow(
-            /NS decodes as strings/,
+        expect(() => lossy.unsafeEncode(new Set([1]))).toThrow(CodecError)
+        expect(() => lossy.unsafeDecode({ NS: ['1'] })).toThrow(
+            /no counterpart this codec can write/,
         )
-        expect(lossy.unsafeDecode({ NS: ['1'] })).toEqual(new Set(['1']))
-        expect(lossy.unsafeEncode(lossy.unsafeDecode({ NS: ['1'] }))).toEqual({
-            SS: ['1'],
-        })
+    })
+
+    /**
+     * And the read side of `N` is gated the way `number`'s is, which it was not.
+     *
+     * `Number` reads far more than an `N` carries, so `{ N: 'abc' }` decoded to `NaN` and
+     * `{ N: '1e400' }` to `Infinity` — values this codec's own `encode` refuses, which is
+     * **(C)** failing. `checkDecodesAreWritable` catches exactly this and had never been
+     * pointed at `opaque`; it is now, below.
+     */
+    it('gates the N it reads, as number does', () => {
+        const lossy = opaque('lossy')
+        for (const text of ['', ' ', '0x10', 'abc', 'NaN', '1e400']) {
+            expect(() => lossy.unsafeDecode({ N: text })).toThrow(
+                /is not a numeral/,
+            )
+        }
+        expect(lossy.unsafeDecode({ N: '1.50' })).toBe(1.5)
+        expect(lossy.unsafeDecode({ N: '0' })).toBe(0)
     })
 
     it('still writes the range that is stored, including the ends', () => {

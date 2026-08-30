@@ -124,6 +124,38 @@ theorem Lawful.reads {c : Codec} (h : Lawful c) {μ a t}
   have hm := (h.agree hp he).member_eq
   rw [← hm, h.writes hμ he]
 
+/-- §2 Corollary: **a member a codec cannot write is a member it cannot read.**
+
+    A codec is a *pair*, and the two halves are held together by **(MP)**: whatever `p`
+    accepts, `e` must write back to an attribute of the same member. So if `e` never produces
+    member `m` at all, then no attribute carrying `m` can be in `dom(p)` — reading one would
+    guarantee the member change (MP) exists to refuse.
+
+    Stated because a pair can be built that violates it and still satisfies (R) and (C): the
+    value survives the round trip, and only the *stored type* changes. `opaque` reading an
+    `NS` it has no way to write is exactly that shape, and re-encoding turned it into an `SS`
+    — a numeric index silently becoming a string one. This corollary is why the answer is to
+    stop reading it rather than to tolerate the asymmetry.
+
+    Note which law does the work. It is not (C): `e (p a)` is perfectly *defined* in the
+    failing case, it just lands on a different member. (W) does not reach it either — `opaque`
+    has `μ = ⊤`, so (W) says nothing. **(MP) is the only law that sees it**, which is the
+    sharpest illustration of §2's remark that (MP) binds hardest exactly where `μ = ⊤`. -/
+theorem Lawful.no_read_without_write {c : Codec} (h : Lawful c) {m : Member}
+    (hw : ∀ {v a}, c.e v = some a → a.member ≠ m) {a v} (hm : a.member = m) :
+    c.p a ≠ some v := by
+  intro hp
+  obtain ⟨a', he⟩ := Option.isSome_iff_exists.mp (h.canon hp)
+  exact hw he (((h.agree hp he).member_eq).trans hm)
+
+/-- The contrapositive, in the form a port checks: if a member is readable, it is writable.
+    `C1`'s audit list asks which terms touch a refined member; this asks the prior question
+    of *any* member, and a `⊤`-membered term is where it has teeth. -/
+theorem Lawful.write_of_read {c : Codec} (h : Lawful c) {a v} (hp : c.p a = some v) :
+    ∃ a', c.e v = some a' ∧ a'.member = a.member := by
+  obtain ⟨a', he⟩ := Option.isSome_iff_exists.mp (h.canon hp)
+  exact ⟨a', he, (h.agree hp he).member_eq⟩
+
 /-- `(R)` makes `e` injective on its domain — the Lemma of §5's proof, consumed by the
     `set` case. -/
 theorem Lawful.e_injective {c : Codec} (h : Lawful c) {t t' a}

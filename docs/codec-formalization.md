@@ -482,12 +482,39 @@ reads an attribute nothing it can produce will restore. Only two resolutions are
 refuse to read `NS`, as it already refuses to read `N` under `'refuse'`, or read it as numbers and
 write `NS` back.
 
-It is left open here rather than fixed, because the behaviour is deliberate and argued in the
-source: `opaque.Decode` documents `NS` reading back as `Set<string>` on the grounds that "nothing
-without a schema can say which of them a JS number holds faithfully", and `native.Decode`'s
-`Set<number | bigint>` is named as the guess it refuses to make. That reasoning is sound about the
-*value* and silent about the *member*, which is the shape of the whole finding — but reversing it
-changes a public type, so it is a decision and not a correction.
+The behaviour was deliberate and argued in the source — `opaque.Decode` documented `NS` reading
+back as `Set<string>` because "nothing without a schema can say which of them a JS number holds
+faithfully", with `native.Decode`'s `Set<number | bigint>` named as the guess it refuses to make.
+That reasoning is sound about the **value** and silent about the **member**, which is the shape of
+the whole finding.
+
+**Resolved, and the resolution is a one-line principle: a codec is a pair, so a member it cannot
+write is a member it cannot read.** `opaque` now refuses `NS` on both sides, and its `Decode` type
+says so.
+
+The principle is not a policy. It is a corollary of §2, and it is now proved
+(`Calculus.Lawful.no_read_without_write`): **(MP)** holds the two halves of a pair together, so if
+`e` never produces member `m`, no attribute carrying `m` can be in `dom(p)` — reading one would
+guarantee the member change (MP) exists to refuse. Note which law does the work. (C) is *satisfied*
+in the failing case: the value round-trips and only the stored type changes. (W) says nothing,
+because `opaque`'s `μ` is `⊤`. **(MP) is the only law that sees it**, which is the sharpest
+illustration available of §2's remark that (MP) binds hardest exactly where `μ = ⊤`.
+
+**And the read side of `N` was loose in the same term, which the same pass caught.**
+`opaque('lossy')` decoded `⟨N, "abc"⟩` to `NaN` and `⟨N, "1e400"⟩` to `Infinity` — values its own
+`encode` refuses, which is **(C)** failing outright. `Number` reads far more than an `N` carries:
+`""` and whitespace are `0`, `"0x10"` is `16`. It now reads through the same two gates `number`
+does, the second on the round-tripped value.
+
+That one is worth a paragraph of its own, because **the harness that catches it already existed and
+had never been pointed at this codec.** `checkDecodesAreWritable` generates *attributes* rather than
+values for exactly this reason, and it fails on the pre-fix codec within eighty cases, on the
+mutation "an N with a leading zero" — `⟨N, "0-1"⟩` decodes to `NaN`. It had been run on `Pet`, on
+`Listing`, on planted counterexamples, and never on `opaque`, the term with the widest read in the
+library. `codec.unknown.spec.ts` now runs it under both number policies. Two defects this session
+were of that shape — a harness that exists, is proven to catch the failure, and was pointed
+somewhere else — which makes *coverage of the harnesses themselves* a better next move than another
+harness.
 
 **The write half of the same audit was a correction, and is fixed.** `opaque('lossy')` wrote
 `⟨N, "5e-324"⟩`, `⟨N, "1e+200"⟩` and `⟨N, "1e-200"⟩`: it gated on `Number.isFinite`, which is not
