@@ -955,6 +955,44 @@ one leaf. Nothing in either document distinguished them, and the model's own `th
 is the same shape as every other entry here: two artifacts that had to agree, and one of them
 knowing something the other had stopped asking.
 
+### One where the opacity was the residue of a refactor nobody finished
+
+§5 lists `lazy` alongside `custom` and `opaque` as unanalysable, and `κ`, `ident`, `adm` and `admA`
+all four sent it to the catch-all. **`lazy` is the most transparent wrapper in the language.**
+
+`denote fuel (.lazy t) = { denote fuel t with μ := none }`. The pair *is* the subterm's — not
+adapted like `held`'s, not widened like `legacy`'s, not extended like `nullable`'s. Only the member
+is erased, which is what `(lazy)` concluding `⊤` means. Every one of the four tables was throwing
+away a footprint that was sitting definitionally in front of it, and the four soundness cases after
+the repair are each a one-line appeal to the subterm's own — `exact adm_sound fuel t' he` and its
+three siblings — which is the evidence that nothing had to be argued at all.
+
+**Why it was there.** The doc's `lazy` carried `Unit → Term`, a real thunk, and for *that*
+constructor the opacity is correct: you cannot analyse a closure. `Denoteω.lean` records the change
+— the closure "defeated the termination checker without adding a constructible term" — and
+`Term.lean` argues it at length. The constructor was replaced; the analysis rows it justified were
+not. So this is not a defect in the specification's reasoning but in its bookkeeping: a premise was
+withdrawn and four conclusions drawn from it stayed.
+
+**What it costs.** Every discharge through a `lazy`. `sep_lazy_literal` and `sepA_lazy_literal`
+separate a `lazy` literal from a plain one on both sides; `κ_lazy_lazy` reaches a doubly-nested
+scalar; `ident_lazy` makes a `lazy` option `adm`-informative at all. While the row was `⊤`, wrapping
+any option in `lazy` silently destroyed its separability — and because a `⊤` is sound, nothing ever
+failed.
+
+**How it was found.** The user asked why `lazy` was on the unanalysable list, and observed it should
+be analysable "at least if all the internal content is exact". The instinct was right and the hedge
+was unnecessary: the propagation is unconditional, because `e` and `p` are the subterm's
+definitionally rather than up to any obligation on the subterm. This is the seventh instance of the
+shape the other entries record, found the same way as the `held` one — a question about a term,
+against a model that already knew the answer.
+
+**What it says about the catch-all.** The six earlier instances were each argued as an oversight.
+This one could not have been noticed by re-reading the tables, because the table's own stated reason
+was coherent; it was wrong only against a constructor definition three files away. That is the case
+for the rows being exhaustive and the reasons being written down next to them — which they now are,
+and which is what made this entry findable at all.
+
 ## §5 Certifying an implementation
 
 The calculus is portable by design: nothing in it is TypeScript, and nothing is Rotorise. An

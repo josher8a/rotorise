@@ -56,7 +56,13 @@ def κ : Term → Option (List Kind)
   | .refine t _ | .legacy t _ => κ t
   | .nullable t => (κ t).map (.null :: ·)
   | .union opts => κList opts
-  | .held _ _ _ | .lazy _ | .custom _ _ | .opaq _ => none
+  -- `lazy` is the *most* transparent wrapper in the language, not an opaque one:
+  -- `denote fuel (.lazy t) = { denote fuel t with μ := none }`, so `e` and `p` are the
+  -- subterm's definitionally and only the member is erased. §5 calls it unanalysable
+  -- because the doc's thunk was `Unit → Term`; this `Term` is not that thunk, and the
+  -- opacity was the residue of that change rather than a fact about `lazy`.
+  | .lazy t => κ t
+  | .held _ _ _ | .custom _ _ | .opaq _ => none
 
 /-- `⋃ κ(cᵢ)`, `⊤`-absorbing. -/
 def κList : List Term → Option (List Kind)
@@ -104,8 +110,10 @@ def ident : Term → Bool
   -- `object` is the one container that does not propagate: its admission tests *names*,
   -- and the field terms' own sets are not what the option checks a value against.
   | .object _ _ => false
-  -- Unanalysable by construction (§5): `held`'s `f`, and the three opaque terms.
-  | .held _ _ _ | .lazy _ | .custom _ _ | .opaq _ => false
+  -- `lazy` propagates, for the reason given at `κ`: its pair *is* the subterm's.
+  | .lazy t => ident t
+  -- Unanalysable by construction: `held`'s `f`, and the two opaque terms.
+  | .held _ _ _ | .custom _ _ | .opaq _ => false
 
 def identList : List Term → Bool
   | [] => true
@@ -197,9 +205,11 @@ noncomputable def adm : Term → Value → Bool
   -- an arbitrary function, so no syntactic set bounds it. `admA` *does* see through
   -- `held` — see the row there and `through_p`.
   | .held _ _ _ => fun _ => true
-  -- The three terms §5 declares unanalysable: `lazy`'s subterm is not entered, `custom`
-  -- carries its pair as data, `opaq` has no subterm at all.
-  | .lazy _ | .custom _ _ | .opaq _ => fun _ => true
+  -- `lazy` propagates, for the reason given at `κ`.
+  | .lazy t => adm t
+  -- The two terms that really are unanalysable: `custom` carries its pair as data, and
+  -- `opaq` has no subterm at all.
+  | .custom _ _ | .opaq _ => fun _ => true
 
 /-- `adm`'s union row, as the list recursion the kernel needs. -/
 noncomputable def admList : List Term → Value → Bool
@@ -270,8 +280,10 @@ def admA : Term → Attr → Bool
   -- what `legacy` is for: `extendRead` widens `p` past the subterm's admissible set,
   -- which is the direction `admA` bounds. `not_admA_legacy` is the witness.
   | .legacy _ _ => fun _ => true
-  -- Unanalysable by construction (§5).
-  | .lazy _ | .custom _ _ | .opaq _ => fun _ => true
+  -- `lazy` propagates here too, and for the same reason: `p` is the subterm's.
+  | .lazy t => admA t
+  -- Unanalysable by construction.
+  | .custom _ _ | .opaq _ => fun _ => true
 
 /-- …and on the attribute side. -/
 def admAList : List Term → Attr → Bool
@@ -409,7 +421,7 @@ theorem κ_sound : ∀ (fuel : Nat) (t : Term) {ks : List Kind} {v a},
       exact hsub _ (κ_sound fuel tx hκx hoe)
     -- `κ` is `⊤` here: nothing is claimed, and the hypothesis is unsatisfiable
     | held t' f g => exact nomatch hκ
-    | lazy γ => exact nomatch hκ
+    | lazy γ => exact κ_sound fuel γ hκ he
     | custom ce cp => exact nomatch hκ
     | opaq lossy => exact nomatch hκ
 /-- An option's admission lifts to the list — the `⋃` of `adm`'s union row. -/
@@ -467,6 +479,7 @@ theorem adm_sound : ∀ (fuel : Nat) (t : Term) {v a},
     case number => cases v <;> simp_all [denote, numberCodec, inD, adm]
     case decimal => cases v <;> simp_all [denote, decimalCodec, isStored, adm]
     case legacy t' r => exact adm_sound fuel t' (extendRead_e.mp he)
+    case lazy t' => exact adm_sound fuel t' he
     case union opts =>
       obtain ⟨o, ho, -, hoe⟩ := altCodec_e_admits he
       simp only [List.mem_map] at ho
@@ -511,6 +524,7 @@ theorem admA_sound : ∀ (fuel : Nat) (t : Term) {a v},
     case held t' f g =>
       obtain ⟨w, hw, -⟩ := through_p.mp hp
       exact admA_sound fuel t' hw
+    case lazy t' => exact admA_sound fuel t' hp
     case union opts =>
       obtain ⟨o, ho, -, hop⟩ := altCodec_p_admits hp
       simp only [List.mem_map] at ho
@@ -849,9 +863,10 @@ theorem ident_of_adm : ∀ {t : Term} {v : Value}, adm t v = false → ident t =
   | .union opts, v, h => identList_of_admList (opts := opts) (v := v) h
   | .nullable t, v, h => ident_of_adm (t := t) (v := v) (by
       simp only [adm, Bool.or_eq_false_iff] at h; exact h.1)
+  | .lazy t, v, h => ident_of_adm (t := t) (v := v) h
   | .string, _, h | .boolean, _, h | .binary, _, h
   | .null, _, h | .set _, _, h | .array _, _, h | .tuple _ _, _, h
-  | .record _, _, h | .held _ _ _, _, h | .lazy _, _, h
+  | .record _, _, h | .held _ _ _, _, h
   | .custom _ _, _, h | .opaq _, _, h | .object _ _, _, h => nomatch h
 
 /-- A union all of whose options refuse a value is one all of whose options decide their
