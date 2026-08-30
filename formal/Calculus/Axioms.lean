@@ -94,6 +94,18 @@ rests on it. -/
 #assert_axioms admDisj_ident
 #assert_axioms sepV_string_dunion_nil
 
+/-! §5's two outright dischargers, as one theorem: label each side by a projection of the
+input, keep the options' label sets disjoint. `uniqueAdmission_of_kinds` and
+`uniqueAdmission_byTag` are its two instances. -/
+
+#assert_axioms uniqueAdmission_of_labels
+#assert_axioms uniqueAdmission_of_kinds
+#assert_axioms uniqueAdmission_byTag
+#assert_axioms filter_eq_singleton_of_labels
+#assert_axioms filter_eq_singleton_of_keys
+#assert_axioms byTag_admitA
+#assert_axioms byTag_admitV
+
 /-! §3 `(nullable)`'s guard. `nullHonest_of_not_ownsNull` is the premise that stopped
 being one — it derives both honesty halves from lawfulness — and `withNull_ownsNull` is
 why §6's idempotence is a construction rather than an equation. -/

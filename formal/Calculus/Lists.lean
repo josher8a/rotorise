@@ -411,24 +411,27 @@ theorem ne_nil_of_isEmpty_false {l : List α} (h : l.isEmpty = false) : l ≠ []
     entry admits `x` only when `key x` is that entry's key. If the keys are pairwise
     distinct, then whatever one entry admits, no other does — so filtering by admission
     leaves exactly that entry. This is the shape every disjointness discharger has. -/
-theorem filter_eq_singleton_of_keys {β α ι : Type} [DecidableEq ι]
-    {adm : β → α → Bool} {key : α → ι} {x : α} :
-    ∀ {os : List β} {ks : List ι},
-      List.Forall₂ (fun o k => ∀ y, adm o y = true → key y = k) os ks → ks.Nodup →
+theorem filter_eq_singleton_of_labels {β α ι : Type}
+    {adm : β → α → Bool} {key : α → Option ι} {x : α} :
+    ∀ {os : List β} {Ss : List (ι → Prop)},
+      List.Forall₂ (fun o S => ∀ y, adm o y = true → ∃ l, key y = some l ∧ S l) os Ss →
+      List.Pairwise (fun S T => ∀ l, S l → ¬ T l) Ss →
       ∀ o ∈ os, adm o x = true → os.filter (adm · x) = [o]
   | [], _, .nil, _, _, ho, _ => nomatch ho
-  | o₀ :: os', k₀ :: ks', .cons h₀ hz, hnd, o, ho, hx => by
-    have hnd' := List.nodup_cons.mp hnd
+  | o₀ :: os', S₀ :: Ss', .cons h₀ hz, hp, o, ho, hx => by
+    obtain ⟨hhead, htail⟩ := List.pairwise_cons.mp hp
     by_cases h0 : adm o₀ x = true
-    · have hk : key x = k₀ := h₀ x h0
+    · obtain ⟨l, hkey, hS₀⟩ := h₀ x h0
       have hnone : ∀ o' ∈ os', adm o' x = false := by
         intro o' ho'
         cases hq : adm o' x with
         | false => rfl
         | true =>
-          obtain ⟨k', hk', hrel⟩ := hz.mem_left ho'
-          exact absurd (hk ▸ hrel x hq ▸ hk') (by
-            intro hmem; exact hnd'.1 (by simpa [hk, hrel x hq] using hmem))
+          obtain ⟨S', hS'mem, hrel⟩ := hz.mem_left ho'
+          obtain ⟨l', hkey', hS'⟩ := hrel x hq
+          rw [hkey] at hkey'
+          cases hkey'
+          exact absurd hS' (hhead S' hS'mem l hS₀)
       obtain rfl : o = o₀ := by
         rcases List.mem_cons.mp ho with rfl | ho'
         · rfl
@@ -439,7 +442,20 @@ theorem filter_eq_singleton_of_keys {β α ι : Type} [DecidableEq ι]
         · exact absurd hx (by simp_all)
         · exact h
       rw [List.filter_cons_of_neg (p := (adm · x)) (by simpa using h0)]
-      exact filter_eq_singleton_of_keys hz hnd'.2 o ho' hx
+      exact filter_eq_singleton_of_labels hz htail o ho' hx
+
+/-- The single-label case: one key per option, keys distinct. An instance of the above at
+    a total projection and singleton label sets — `Nodup` is disjointness of singletons. -/
+theorem filter_eq_singleton_of_keys {β α ι : Type} [DecidableEq ι]
+    {adm : β → α → Bool} {key : α → ι} {x : α} {os : List β} {ks : List ι}
+    (hz : List.Forall₂ (fun o k => ∀ y, adm o y = true → key y = k) os ks) (hnd : ks.Nodup)
+    (o : β) (ho : o ∈ os) (hx : adm o x = true) : os.filter (adm · x) = [o] := by
+  refine filter_eq_singleton_of_labels (key := fun y => some (key y))
+    (Ss := ks.map (fun k l => l = k)) ?_ ?_ o ho hx
+  · rw [List.forall₂_map_right_iff]
+    exact hz.imp fun _ _ h y hy => ⟨key y, rfl, h y hy⟩
+  · rw [List.pairwise_map]
+    exact hnd.imp fun hne l hl hl' => hne (hl.symm.trans hl')
 
 /-- Filtering to a singleton names an element of the list that satisfies the
     predicate — how a resolved choice is read back. -/
