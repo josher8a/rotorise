@@ -129,10 +129,12 @@ inductive HOpaque (lossy : Bool) : Value → Prop where
       value anyway — you cannot tell `SS` from `NS`. Both readings §3 gives of `Uν` (the
       prose one, and the fixpoint `union(…, set(opaque), …)` whose `(set)` rule carries
       `vs ≠ []`) exclude it. `HeldSet.lean` has the witness. -/
-  | strSet (S : Finset String) (hne : S.Nonempty) : HOpaque lossy (.strSet S)
-  | numSet (S : Finset Double) (hne : S.Nonempty) (h : lossy = true) :
-      HOpaque lossy (.numSet S)
-  | binSet (S : Finset Bytes) (hne : S.Nonempty) : HOpaque lossy (.binSet S)
+  | strSet (S : Finset String) (hne : S.Nonempty)
+      (h : ∀ s ∈ S, HOpaque lossy (.str s)) : HOpaque lossy (.strSet S)
+  | numSet (S : Finset Double) (hne : S.Nonempty)
+      (h : ∀ d ∈ S, HOpaque lossy (.num d)) : HOpaque lossy (.numSet S)
+  | binSet (S : Finset Bytes) (hne : S.Nonempty)
+      (h : ∀ b ∈ S, HOpaque lossy (.bin b)) : HOpaque lossy (.binSet S)
   | arr  (vs) (h : ∀ x ∈ vs, HOpaque lossy x) : HOpaque lossy (.arr vs)
   | map  (kvs) (h : ∀ kv ∈ kvs, HOpaque lossy kv.2) : HOpaque lossy (.map kvs)
 
