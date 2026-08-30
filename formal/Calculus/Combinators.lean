@@ -3137,6 +3137,25 @@ theorem lawful_altCodec {os : List OptionSem} {μA : Option Member}
 def OptionSem.OnKind (o : OptionSem) (k : Kind) : Prop :=
   (∀ v, o.admitV v = true → v.kind = k) ∧ (∀ a, o.admitA a = true → a.kind = k)
 
+/-- **(U) by disjoint admissibility** — the structure the rest of this section presents.
+
+    Give each option a set of values and a set of attributes it is allowed to admit, and
+    keep each family pairwise disjoint: then no input reaches two options, and admission is
+    unique. That is the entire separation argument. Kinds, members, tags and admissible
+    sets are *ways of building* those two families, not four different conditions — and
+    the two families are independent, which is what lets the value side be separated by a
+    kind while the attribute side is separated by a member. -/
+theorem uniqueAdmission_of_disjoint {os : List OptionSem}
+    {SVs : List (Value → Prop)} {SAs : List (Attr → Prop)}
+    (hV : List.Forall₂ (fun o S => ∀ v, o.admitV v = true → S v) os SVs)
+    (hA : List.Forall₂ (fun o S => ∀ a, o.admitA a = true → S a) os SAs)
+    (hdV : List.Pairwise (fun S T => ∀ v, S v → ¬ T v) SVs)
+    (hdA : List.Pairwise (fun S T => ∀ a, S a → ¬ T a) SAs)
+    (hw : ∀ o ∈ os, ∀ t a, o.c.e t = some a → o.admitV t = true ∧ o.admitA a = true) :
+    UniqueAdmission os := fun o ho t a he =>
+  ⟨filter_eq_singleton_of_disjoint hA hdA o ho (hw o ho t a he).2,
+   filter_eq_singleton_of_disjoint hV hdV o ho (hw o ho t a he).1⟩
+
 /-- An option pinned to a **set of labels**, under a partial projection of each side of
     the pair. `OnKind` is the singleton case at `Value.kind`/`Attr.kind`; `(dunion)`'s
     tag sets are the general one at `tagOfV`/`tagOfA`. -/
@@ -3163,6 +3182,9 @@ theorem uniqueAdmission_of_labels {L : Type} {πV : Value → Option L} {πA : A
     UniqueAdmission os := fun o ho t a he =>
   ⟨filter_eq_singleton_of_labels (hz.imp fun _ _ h => h.2) hdisj o ho (hw o ho t a he).2,
    filter_eq_singleton_of_labels (hz.imp fun _ _ h => h.1) hdisj o ho (hw o ho t a he).1⟩
+-- `uniqueAdmission_of_labels` is `uniqueAdmission_of_disjoint` with both families pulled
+-- back along one projection; sharing the label type `L` is a convenience of the two cases
+-- that need it (a tag, a kind), not part of the structure.
 
 /-- **(U) by kind-separation**, `uniqueAdmission_of_labels` at the total projection
     `Value.kind`/`Attr.kind` with one label per option: `Nodup` is disjointness of
