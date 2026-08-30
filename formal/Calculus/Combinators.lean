@@ -426,6 +426,17 @@ theorem literalSCodec_p_restrict (ls : List String) :
     (literalSCodec ls).p = (stringCodec.restrict (inLS ls)).p := by
   funext a; cases a <;> simp [literalSCodec, stringCodec, Codec.restrict, inLS]
 
+/-- §3 `(literal)` at arity one: `refine` over the ground base of the value's kind, at
+    equality with that value. The dispatch is the rule's "`g` ground, `ℓ ⊆ T`" read as a
+    definition — a container has no ground base, which is why `(literal)` refuses one. -/
+noncomputable def literalCodec : Value → Codec
+  | .str s  => stringCodec.restrict    (fun w => match w with | .str s'  => s' == s  | _ => false)
+  | .num d  => rawNumberCodec.restrict (fun w => match w with | .num d'  => d' == d  | _ => false)
+  | .bool b => booleanCodec.restrict   (fun w => match w with | .bool b' => b' == b  | _ => false)
+  | .bin b  => binaryCodec.restrict    (fun w => match w with | .bin b'  => b' == b  | _ => false)
+  | .null   => nullCodec
+  | _       => Codec.empty
+
 /-- **§3's `(literal-N)` gate is the same `refine`, over the same base.** `literalNCodec`
     gates on `d ∈ ls` and *not* on `D` — `hD` is a premise of the judgement, not part of
     the pair — so `number` and every numeric literal are refinements of one
@@ -2142,6 +2153,51 @@ theorem Lawful.restrict {c : Codec} (h : Lawful c) (q : Value → Bool) :
   { LawfulCore.restrict h.core q with
     agree := fun hp he => h.agree (restrict_p.mp hp).1 (restrict_e.mp he).2 }
 
+
+/-- §3 `(literal)`'s `ℓ ⊆ T`: the value lies in its base's held set. Only `number`'s base
+    bounds anything — §1's `D` — so this is `WF` there and trivial elsewhere; a container
+    fails it because it has no ground base at all. -/
+def literalOK : Value → Bool
+  | .num d => Numeral.WF d.toDec
+  | .str _ | .bool _ | .bin _ | .null => true
+  | _ => false
+
+/-- `rawNumberCodec`'s full laws: `≼` at `N` is member equality. -/
+theorem lawful_rawNumberCodec : Lawful rawNumberCodec :=
+  { lawfulCore_rawNumberCodec with
+    agree := by
+      intro a t a' hp he
+      cases a with
+      | n x =>
+        obtain ⟨d, hd, rfl⟩ := Option.map_eq_some'.mp hp
+        cases he
+        exact .n ..
+      | _ => exact nomatch hp }
+
+/-- `rawNumberCodec` on its carrier. -/
+theorem carrier_rawNumberCodec : Carrier rawNumberCodec where
+  domE := by intro v a he; cases v with
+              | num d => exact ⟨d, rfl⟩
+              | _ => exact nomatch he
+  ranP := by intro a v hp; cases a with
+              | n x => obtain ⟨d, -, rfl⟩ := Option.map_eq_some'.mp hp; exact ⟨d, rfl⟩
+              | _ => exact nomatch hp
+
+/-- §3 `(literal)` is lawful whenever `ℓ ⊆ T` holds — its base's laws, restricted. -/
+theorem lawful_literalCodec : ∀ {v : Value}, literalOK v = true → Lawful (literalCodec v)
+  | .str _, _  => Lawful.restrict lawful_stringCodec _
+  | .num _, _  => Lawful.restrict lawful_rawNumberCodec _
+  | .bool _, _ => Lawful.restrict lawful_booleanCodec _
+  | .bin _, _  => Lawful.restrict lawful_binaryCodec _
+  | .null, _   => lawful_nullCodec
+
+/-- …and on its carrier. -/
+theorem carrier_literalCodec : ∀ {v : Value}, literalOK v = true → Carrier (literalCodec v)
+  | .str _, _  => carrier_restrict carrier_stringCodec _
+  | .num _, _  => carrier_restrict carrier_rawNumberCodec _
+  | .bool _, _ => carrier_restrict carrier_booleanCodec _
+  | .bin _, _  => carrier_restrict carrier_binaryCodec _
+  | .null, _   => carrier_nullCodec
 
 /-! ### The refinement ground codecs are lawful because their bases are
 

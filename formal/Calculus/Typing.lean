@@ -148,6 +148,13 @@ inductive Typed : Term → Held → Option Member → Prop where
   /-- §3 `(null)`: the point held set `{null}`, stored as `⟨NULL, ∗⟩`. -/
   | null : Typed .null (fun v => v = .null) (some .NULL)
   | binary  : Typed .binary  (fun v => ∃ b, v = .bin b) (some .B)
+  /-- §3 `(literal)`, unified: the base is fixed by the value's kind, `literalOK` is
+      `ℓ ⊆ T` at that base, and the member is what the base stores. One rule for `S`, `N`,
+      `BOOL`, `B` and `NULL`; `literalS`/`literalN` are it at the two commonest bases, kept
+      because their type carries the homogeneity an n-ary list would have to prove. -/
+  | literal (v : Value) (μ : Member) (hok : literalOK v = true)
+      (hμ : literalMember v = some μ) :
+      Typed (.literal v) (fun w => w = v) (some μ)
   | literalS (ls : List String) (hne : ls ≠ []) (hnd : ls.Nodup) :
       Typed (.literalS ls) (fun v => ∃ s, s ∈ ls ∧ v = .str s) (some .S)
   /-- §3's `ℓ ⊆ D`. A `literal` writes its values' own text, so a double outside §1's numeral

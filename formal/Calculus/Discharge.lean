@@ -43,6 +43,8 @@ mutual
 /-- §5's `κ`: the kinds of value a term accepts. `none` is the table's `⊤`, and it
     absorbs — `nullable`'s `∪` and `union`'s `⋃` answer `⊤` whenever a subterm does. -/
 def κ : Term → Option (List Kind)
+  -- §3 `(literal)`: the kind is the value's, which is also what fixes its base.
+  | .literal v => some [v.kind]
   | .string | .decimal | .literalS _ => some [.string]
   | .number | .literalN _ => some [.number]
   | .boolean => some [.boolean]
@@ -285,6 +287,13 @@ theorem κ_sound : ∀ (fuel : Nat) (t : Term) {ks : List Kind} {v a},
     cases t with
     | string => single_kind hκ v he
     | decimal => single_kind hκ v he
+    | literal w =>
+      -- `(literal)` is the one single-kind rule whose kind comes from *data*, so the
+      -- macro cannot serve: the codec must be reduced at `w` before `v` is split.
+      cases hκ
+      cases w <;> cases v <;>
+        simp_all [denote, literalCodec, Codec.restrict, stringCodec, rawNumberCodec,
+                  booleanCodec, binaryCodec, nullCodec, Codec.empty, Value.kind]
     | literalS ls => single_kind hκ v he
     | number => single_kind hκ v he
     | literalN ls => single_kind hκ v he

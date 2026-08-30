@@ -57,7 +57,7 @@ def Obligations : Nat → Term → Prop
   | fuel+1, t =>
     match t with
     | .string | .number | .decimal | .boolean | .binary | .null
-    | .literalS _ | .literalN _ | .opaq _ => True
+    | .literal _ | .literalS _ | .literalN _ | .opaq _ => True
     | .set t' | .array t' | .record t' | .refine t' _ => Obligations fuel t'
     | .tuple ts tail =>
       (∀ t' ∈ ts, Obligations fuel t') ∧ (∀ t' ∈ tail, Obligations fuel t')
@@ -85,6 +85,7 @@ def MPOk : Nat → Term → Prop
   | fuel+1, t =>
     match t with
     | .legacy _ _ => False
+    | .literal _
     | .string | .number | .decimal | .boolean | .binary | .null
     | .literalS _ | .literalN _ | .opaq _ | .custom _ _ => True
     | .set t' | .array t' | .record t' | .refine t' _ | .nullable t'
@@ -305,6 +306,7 @@ theorem denote_μ : ∀ (fuel : Nat) (t : Term), (denote fuel t).μ = μSyn t
   | 0, _ => rfl
   | fuel+1, t => by
     cases t with
+    | literal v => exact literalCodec_μ v
     | string => rfl
     | number => rfl
     | decimal => rfl
@@ -347,6 +349,7 @@ mutual
 
 /-- Typing's member index is the syntactic one — exactly, both sides. -/
 theorem typed_μSyn : ∀ {t T μ}, Typed t T μ → μSyn t = μ
+  | _, _, _, .literal _ _ _ hμ => hμ
   | _, _, _, .string => rfl
   | _, _, _, .number => rfl
   | _, _, _, .decimal => rfl
@@ -525,6 +528,7 @@ theorem soundness_both : ∀ (fuel : Nat) {t T μ}, Typed t T μ → Obligations
     have ih : ∀ {t' : Term} {T' μ'}, Typed t' T' μ' → Obligations fuel t' → Sound fuel t' :=
       fun h' hob' => soundness_both fuel h' hob'
     cases h with
+    | literal v μ hok hμ => exact sound_ground (lawful_literalCodec hok)
     | string => exact sound_ground lawful_stringCodec
     | number => exact sound_ground lawful_numberCodec
     | decimal => exact sound_ground lawful_decimalCodec
@@ -787,6 +791,9 @@ theorem typed_TSub : ∀ (fuel : Nat) {t T μ}, Typed t T μ →
   | fuel+1, t, T, μ, h, v, hv => by
     cases h with
     | string | number | decimal | boolean | binary | null => exact hv
+    | literal w μ hok hμ =>
+      cases w <;> cases v <;> simp_all [denote, literalCodec, Codec.restrict, stringCodec,
+        rawNumberCodec, booleanCodec, binaryCodec, nullCodec, literalOK]
     | literalS _ _ _ | literalN _ _ _ _ => exact hv
     | custom _ _ => exact hv
     | opaq lossy => exact opaq_TSubω lossy v hv
@@ -895,6 +902,7 @@ theorem carrier_denote : ∀ (fuel : Nat) {t T μ}, Typed t T μ → Obligations
   | 0, _, _, _, _, _ => carrier_dead
   | fuel+1, t, T, μ, h, hob => by
     cases h with
+    | literal v μ hok hμ => exact carrier_literalCodec hok
     | string => exact carrier_stringCodec
     | number => exact carrier_numberCodec
     | decimal => exact carrier_decimalCodec
