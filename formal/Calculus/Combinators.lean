@@ -2905,10 +2905,11 @@ theorem attr_bs_of_member {a : Attr} (h : a.member = .BS) : ∃ S, a = .bs S := 
 /-- Writing a set succeeds when its elements do and the element member is ground: the
     member fixes which branch `encSet` takes, and (R) supplies the injectivity. -/
 theorem encSet_isSome_of {α : Type} {c : Codec} (h : LawfulCore c)
-    {μ₀ μS : Member} (hc : c.μ = some μ₀) (hsm : setMember μ₀ = some μS)
+    {μ₀ μS : Member} (hsm : setMember μ₀ = some μS)
     {vinj : α → Value} (hvi : ∀ x y, vinj x = vinj y → x = y)
     {S : Finset α} (hne : S.Nonempty)
-    (hall : ∀ x ∈ S, (c.e (vinj x)).isSome = true) :
+    (hall : ∀ x ∈ S, (c.e (vinj x)).isSome = true)
+    (hmem : ∀ x ∈ S, ∀ a', c.e (vinj x) = some a' → a'.member = μ₀) :
     (encSet c vinj S).isSome = true := by
   obtain ⟨x₀, hx₀⟩ := hne
   unfold encSet
@@ -2919,7 +2920,7 @@ theorem encSet_isSome_of {α : Type} {c : Codec} (h : LawfulCore c)
     have hb : ∀ x ∈ S, ((c.e (vinj x)).bind sC.out).isSome = true := by
       intro x hx
       obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp (hall x hx)
-      have := h.writes hc ha'
+      have := hmem x hx _ ha'
       cases a' <;> simp_all [sC, Attr.member]
     have hinj : ∀ x₁ ∈ S, ∀ x₂ ∈ S, ∀ y,
         (c.e (vinj x₁)).bind sC.out = some y → (c.e (vinj x₂)).bind sC.out = some y →
@@ -2937,13 +2938,13 @@ theorem encSet_isSome_of {α : Type} {c : Codec} (h : LawfulCore c)
     have hb : ∀ x ∈ S, ((c.e (vinj x)).bind sC.out).isSome = true → False := by
       intro x hx hcon
       obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp (hall x hx)
-      have := h.writes hc ha'
+      have := hmem x hx _ ha'
       rw [ha'] at hcon
       cases a' <;> simp_all [sC, Attr.member]
     have hb2 : ∀ x ∈ S, ((c.e (vinj x)).bind nC.out).isSome = true := by
       intro x hx
       obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp (hall x hx)
-      have := h.writes hc ha'
+      have := hmem x hx _ ha'
       cases a' <;> simp_all [nC, Attr.member]
     have hinj : ∀ x₁ ∈ S, ∀ x₂ ∈ S, ∀ y,
         (c.e (vinj x₁)).bind nC.out = some y → (c.e (vinj x₂)).bind nC.out = some y →
@@ -2966,17 +2967,17 @@ theorem encSet_isSome_of {α : Type} {c : Codec} (h : LawfulCore c)
     have hfailS : setImage (fun x => (c.e (vinj x)).bind sC.out) S = none :=
       setImage_none_of hx₀ (by
         obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp (hall x₀ hx₀)
-        have := h.writes hc ha'
+        have := hmem x₀ hx₀ _ ha'
         cases a' <;> simp_all [sC, Attr.member])
     have hfailN : setImage (fun x => (c.e (vinj x)).bind nC.out) S = none :=
       setImage_none_of hx₀ (by
         obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp (hall x₀ hx₀)
-        have := h.writes hc ha'
+        have := hmem x₀ hx₀ _ ha'
         cases a' <;> simp_all [nC, Attr.member])
     have hb : ∀ x ∈ S, ((c.e (vinj x)).bind bC.out).isSome = true := by
       intro x hx
       obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp (hall x hx)
-      have := h.writes hc ha'
+      have := hmem x hx _ ha'
       cases a' <;> simp_all [bC, Attr.member]
     have hinj : ∀ x₁ ∈ S, ∀ x₂ ∈ S, ∀ y,
         (c.e (vinj x₁)).bind bC.out = some y → (c.e (vinj x₂)).bind bC.out = some y →
@@ -3003,10 +3004,133 @@ theorem lawfulCore_setCodec {c : Codec} {μ₀ μS : Member} (h : LawfulCore c)
   intro a t hp
   rcases setCodec_p_eq.mp hp with ⟨S, rfl, hD⟩ | ⟨S, rfl, hD⟩ | ⟨S, rfl, hD⟩ <;>
     · rcases decSet_mem hD with ⟨U, rfl, hne, hm⟩ | ⟨U, rfl, hne, hm⟩ | ⟨U, rfl, hne, hm⟩ <;>
-      · refine encSet_isSome_of h hμ hsm (fun x y hxy => by injection hxy) hne ?_
+      · refine encSet_isSome_of h hsm (fun x y hxy => by injection hxy) hne ?_
+          (fun x _ a' ha' => h.writes hμ ha')
         intro y hy
         obtain ⟨x, -, hpx⟩ := hm y hy
         exact h.canon hpx
+
+
+/-! ### Which branch `encSet` takes
+
+`encSet` tries `SS`, then `NS`, then `BS`. `lawfulCore_setCodec` only needed to know that
+*some* branch fires; **(A)** needs to know *which*, because `Agree` pairs a wire set with a
+wire set of the same family. The member of the elements' attributes decides it. -/
+
+/-- Elements at member `S` take the `SS` branch. -/
+theorem encSet_ss_of {α : Type} {c : Codec} {vinj : α → Value} {S : Finset α} {a : Attr}
+    (hm : ∀ x ∈ S, ∀ b, c.e (vinj x) = some b → b.member = .S)
+    (h : encSet c vinj S = some a) : ∃ T, a = .ss T := by
+  obtain ⟨x₀, hx₀⟩ := encSet_nonempty h
+  have hall := encSet_elem h
+  obtain ⟨b, hb⟩ := Option.isSome_iff_exists.mp (hall x₀ hx₀)
+  have hbm := hm x₀ hx₀ b hb
+  unfold encSet at h
+  rw [if_neg (Finset.card_ne_zero_of_mem hx₀)] at h
+  cases hT : setImage (fun x => (c.e (vinj x)).bind sC.out) S with
+  | some T => rw [hT] at h; exact ⟨T, (Option.some.inj h).symm⟩
+  | none =>
+    exfalso
+    have hN : setImage (fun x => (c.e (vinj x)).bind nC.out) S = none :=
+      setImage_none_of hx₀ (by cases b <;> simp_all [nC, Attr.member])
+    have hB : setImage (fun x => (c.e (vinj x)).bind bC.out) S = none :=
+      setImage_none_of hx₀ (by cases b <;> simp_all [bC, Attr.member])
+    rw [hT, hN, hB] at h
+    simp at h
+
+/-- Elements at member `N` take the `NS` branch, the `SS` one having failed. -/
+theorem encSet_ns_of {α : Type} {c : Codec} {vinj : α → Value} {S : Finset α} {a : Attr}
+    (hm : ∀ x ∈ S, ∀ b, c.e (vinj x) = some b → b.member = .N)
+    (h : encSet c vinj S = some a) : ∃ T, a = .ns T := by
+  obtain ⟨x₀, hx₀⟩ := encSet_nonempty h
+  have hall := encSet_elem h
+  obtain ⟨b, hb⟩ := Option.isSome_iff_exists.mp (hall x₀ hx₀)
+  have hbm := hm x₀ hx₀ b hb
+  have hS : setImage (fun x => (c.e (vinj x)).bind sC.out) S = none :=
+    setImage_none_of hx₀ (by cases b <;> simp_all [sC, Attr.member])
+  unfold encSet at h
+  rw [if_neg (Finset.card_ne_zero_of_mem hx₀), hS] at h
+  cases hT : setImage (fun x => (c.e (vinj x)).bind nC.out) S with
+  | some T => rw [hT] at h; exact ⟨T, (Option.some.inj h).symm⟩
+  | none =>
+    exfalso
+    have hB : setImage (fun x => (c.e (vinj x)).bind bC.out) S = none :=
+      setImage_none_of hx₀ (by cases b <;> simp_all [bC, Attr.member])
+    rw [hT, hB] at h
+    simp at h
+
+/-- Elements at member `B` take the `BS` branch, both earlier ones having failed. -/
+theorem encSet_bs_of {α : Type} {c : Codec} {vinj : α → Value} {S : Finset α} {a : Attr}
+    (hm : ∀ x ∈ S, ∀ b, c.e (vinj x) = some b → b.member = .B)
+    (h : encSet c vinj S = some a) : ∃ T, a = .bs T := by
+  obtain ⟨x₀, hx₀⟩ := encSet_nonempty h
+  have hall := encSet_elem h
+  obtain ⟨b, hb⟩ := Option.isSome_iff_exists.mp (hall x₀ hx₀)
+  have hbm := hm x₀ hx₀ b hb
+  have hS : setImage (fun x => (c.e (vinj x)).bind sC.out) S = none :=
+    setImage_none_of hx₀ (by cases b <;> simp_all [sC, Attr.member])
+  have hN : setImage (fun x => (c.e (vinj x)).bind nC.out) S = none :=
+    setImage_none_of hx₀ (by cases b <;> simp_all [nC, Attr.member])
+  unfold encSet at h
+  rw [if_neg (Finset.card_ne_zero_of_mem hx₀), hS, hN] at h
+  obtain ⟨T, -, hTa⟩ := Option.map_eq_some'.mp h
+  exact ⟨T, hTa.symm⟩
+
+
+/-- **`setCodec` is lawful**, and the argument is not `lawfulCore_setCodec` with `agree`
+    bolted on. That theorem gets member uniformity from `c.μ`, and the two call sites in
+    the `opaque` fixpoint cannot supply it: `opaqCodec`'s `μ` is `none`. Here it comes from
+    **(A)** instead — a value read out of `Attr.s x` writes back to something that *agrees*
+    with `Attr.s x`, hence shares its member — which is a fact about the attribute the read
+    came from, not about the codec's index. -/
+theorem lawful_setCodec {c : Codec} (h : Lawful c) : Lawful (setCodec c) := by
+  refine ⟨set_retract h.core, ?_, set_writes h.core, ?_⟩
+  · intro a t hp
+    rcases setCodec_p_eq.mp hp with ⟨S, rfl, hD⟩ | ⟨S, rfl, hD⟩ | ⟨S, rfl, hD⟩
+    · rcases decSet_mem hD with ⟨U, rfl, hne, hm⟩ | ⟨U, rfl, hne, hm⟩ | ⟨U, rfl, hne, hm⟩ <;>
+      · refine encSet_isSome_of (μ₀ := .S) (μS := .SS) h.core rfl
+          (fun x y hxy => by injection hxy) hne ?_ ?_
+        · intro y hy
+          obtain ⟨x, -, hpx⟩ := hm y hy
+          exact h.canon hpx
+        · intro y hy a' ha'
+          obtain ⟨x, -, hpx⟩ := hm y hy
+          exact (h.agree hpx ha').member_eq
+    · rcases decSet_mem hD with ⟨U, rfl, hne, hm⟩ | ⟨U, rfl, hne, hm⟩ | ⟨U, rfl, hne, hm⟩ <;>
+      · refine encSet_isSome_of (μ₀ := .N) (μS := .NS) h.core rfl
+          (fun x y hxy => by injection hxy) hne ?_ ?_
+        · intro y hy
+          obtain ⟨x, -, hpx⟩ := hm y hy
+          exact h.canon hpx
+        · intro y hy a' ha'
+          obtain ⟨x, -, hpx⟩ := hm y hy
+          exact (h.agree hpx ha').member_eq
+    · rcases decSet_mem hD with ⟨U, rfl, hne, hm⟩ | ⟨U, rfl, hne, hm⟩ | ⟨U, rfl, hne, hm⟩ <;>
+      · refine encSet_isSome_of (μ₀ := .B) (μS := .BS) h.core rfl
+          (fun x y hxy => by injection hxy) hne ?_ ?_
+        · intro y hy
+          obtain ⟨x, -, hpx⟩ := hm y hy
+          exact h.canon hpx
+        · intro y hy a' ha'
+          obtain ⟨x, -, hpx⟩ := hm y hy
+          exact (h.agree hpx ha').member_eq
+  · intro a t a' hp he
+    rcases setCodec_p_eq.mp hp with ⟨S, rfl, hD⟩ | ⟨S, rfl, hD⟩ | ⟨S, rfl, hD⟩
+    · rcases decSet_mem hD with ⟨U, rfl, hne, hm⟩ | ⟨U, rfl, hne, hm⟩ | ⟨U, rfl, hne, hm⟩ <;>
+      · obtain ⟨T, rfl⟩ := encSet_ss_of (fun y hy b hb => by
+          obtain ⟨x, -, hpx⟩ := hm y hy
+          exact (h.agree hpx hb).member_eq) he
+        exact Agree.ss T S
+    · rcases decSet_mem hD with ⟨U, rfl, hne, hm⟩ | ⟨U, rfl, hne, hm⟩ | ⟨U, rfl, hne, hm⟩ <;>
+      · obtain ⟨T, rfl⟩ := encSet_ns_of (fun y hy b hb => by
+          obtain ⟨x, -, hpx⟩ := hm y hy
+          exact (h.agree hpx hb).member_eq) he
+        exact Agree.ns T S
+    · rcases decSet_mem hD with ⟨U, rfl, hne, hm⟩ | ⟨U, rfl, hne, hm⟩ | ⟨U, rfl, hne, hm⟩ <;>
+      · obtain ⟨T, rfl⟩ := encSet_bs_of (fun y hy b hb => by
+          obtain ⟨x, -, hpx⟩ := hm y hy
+          exact (h.agree hpx hb).member_eq) he
+        exact Agree.bs T S
 
 
 /-! ### Keyed lookup and traversal facts (the keyed product consumes these) -/
