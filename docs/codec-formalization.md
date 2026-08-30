@@ -630,6 +630,13 @@ before, `(dunion)` and `opaque` included, with no proof changed.
 Nothing is admitted that was not derivable, and no law is weakened: the theorem now covers strictly
 more terms because the obligation stopped asking about inputs the semantics refuses.
 
+**The two are separated by a theorem, not by the argument above.** `uAtAct_array_literals` proves
+`UAtAct` of the very union `not_uAtCan_array_literals` refutes `UAtCan` of. What carries it is that
+a `literal`'s two halves test one set — `literalS_p_none` and its dual — so an element the
+neighbouring option declines to *write* is one it declines to *read*, and the traversal inherits
+that positionwise. Which is precisely what `held` breaks, so the argument is about literals and not
+about containers in general: `not_uAtCan_literal_held` is unaffected, as it must be.
+
 **How it was found.** By measuring before changing. The user's proposal was to weaken (U) to
 *agreement* — where two options both admit, let them through if they answer the same. That is sound,
 and it is a change to `altCodec`, which 11 files and 153 sites depend on. Counting those first is

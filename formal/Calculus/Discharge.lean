@@ -1045,6 +1045,178 @@ theorem not_uAtCan_array_literals :
   rw [if_pos (List.mem_cons_self _ _), if_neg (by simp)]
   exact fun h => nomatch h
 
+/-! ### …and the same union meets the residue the laws actually carry
+
+    `not_uAtCan_array_literals` refutes `UAtCan` at `[]` — a canonical pair of *each*
+    option, and one the union never writes, since both admit it and `altCodec` declines
+    what it cannot resolve. `UAtAct` (§5, `Soundness.lean`) asks only where the union
+    acts, and the same term meets it: every value the union does write is read back by
+    the option that wrote it.
+
+    So the two residues are not the same condition, and the gap is not a curiosity — it
+    holds `union(array(literal "A"), array(literal "B"))`, which is a schema people write.
+    What carries it is that a `literal`'s two halves test one set, so an element the
+    neighbouring option declines to *write* is one it declines to *read*. That is exactly
+    what `held` breaks (`not_uAtCan_literal_held`), which is why the argument is about
+    literals and not about containers in general. -/
+
+/-- §3 `(literal-S)`'s two halves test one set, so a `literal` declines to read the
+    attribute it declines to write. -/
+theorem literalS_p_none {ls ls' : List String} {t : Value} {a : Attr}
+    (he : (literalSCodec ls).e t = some a) (hne : (literalSCodec ls').e t = none) :
+    (literalSCodec ls').p a = none := by
+  cases t <;> simp_all [literalSCodec]
+  obtain ⟨-, rfl⟩ := he
+  simp [hne]
+
+/-- …the reading half of the same §3 `(literal-S)` fact. -/
+theorem literalS_e_none {ls ls' : List String} {t : Value} {a : Attr}
+    (hp : (literalSCodec ls).p a = some t) (hne : (literalSCodec ls').p a = none) :
+    (literalSCodec ls').e t = none := by
+  cases a <;> simp_all [literalSCodec]
+  obtain ⟨-, rfl⟩ := hp
+  simp [hne]
+
+/-- §3 `(array)`'s traversal inherits it: an element the neighbour refuses makes the
+    whole list unreadable, at the position the writing traversal already fixed. -/
+theorem traverse_literalS_p_none {ls ls' : List String} {vs : List Value} {as : List Attr}
+    (he : traverse (literalSCodec ls).e vs = some as)
+    (hne : traverse (literalSCodec ls').e vs = none) :
+    traverse (literalSCodec ls').p as = none := by
+  cases hres : traverse (literalSCodec ls').p as with
+  | none => rfl
+  | some ws =>
+    exfalso
+    have hall : ∀ v ∈ vs, ((literalSCodec ls').e v).isSome := by
+      intro v hv
+      obtain ⟨a, ha, hea⟩ := (traverse_eq_some.mp he).mem_left hv
+      obtain ⟨w, -, hpw⟩ := (traverse_eq_some.mp hres).mem_left ha
+      cases hev : (literalSCodec ls').e v with
+      | none => rw [literalS_p_none hea hev] at hpw; exact nomatch hpw
+      | some _ => rfl
+    have hs := traverse_isSome_of_all hall
+    rw [hne] at hs
+    exact nomatch hs
+
+/-- …and dually, at §3 `(array)`. -/
+theorem traverse_literalS_e_none {ls ls' : List String} {as : List Attr} {vs : List Value}
+    (hp : traverse (literalSCodec ls).p as = some vs)
+    (hne : traverse (literalSCodec ls').p as = none) :
+    traverse (literalSCodec ls').e vs = none := by
+  cases hres : traverse (literalSCodec ls').e vs with
+  | none => rfl
+  | some ws =>
+    exfalso
+    have hall : ∀ a ∈ as, ((literalSCodec ls').p a).isSome := by
+      intro a ha
+      obtain ⟨v, hv, hpv⟩ := (traverse_eq_some.mp hp).mem_left ha
+      obtain ⟨w, -, hew⟩ := (traverse_eq_some.mp hres).mem_left hv
+      cases hpa : (literalSCodec ls').p a with
+      | none => rw [literalS_e_none hpv hpa] at hew; exact nomatch hew
+      | some _ => rfl
+    have hs := traverse_isSome_of_all hall
+    rw [hne] at hs
+    exact nomatch hs
+
+/-- §3 `(array)` over §3 `(literal-S)`: it refuses on the attribute side whatever it
+    refuses on the value side, at the attribute its neighbour wrote. -/
+theorem arrayLiteral_p_none {ls ls' : List String} {t : Value} {a : Attr}
+    (he : (arrayCodec (literalSCodec ls)).e t = some a)
+    (hne : (arrayCodec (literalSCodec ls')).e t = none) :
+    (arrayCodec (literalSCodec ls')).p a = none := by
+  cases t with
+  | arr vs =>
+    simp only [arrayCodec, Option.map_eq_some'] at he
+    obtain ⟨as, has, rfl⟩ := he
+    simp only [arrayCodec] at hne ⊢
+    cases h2 : traverse (literalSCodec ls').e vs with
+    | some _ => rw [h2] at hne; exact nomatch hne
+    | none => rw [traverse_literalS_p_none has h2]; rfl
+  | _ => exact nomatch he
+
+/-- …and dually, the same §3 pair. -/
+theorem arrayLiteral_e_none {ls ls' : List String} {t : Value} {a : Attr}
+    (hp : (arrayCodec (literalSCodec ls)).p a = some t)
+    (hne : (arrayCodec (literalSCodec ls')).p a = none) :
+    (arrayCodec (literalSCodec ls')).e t = none := by
+  cases a with
+  | l as =>
+    simp only [arrayCodec, Option.map_eq_some'] at hp
+    obtain ⟨vs, hvs, rfl⟩ := hp
+    simp only [arrayCodec] at hne ⊢
+    cases h2 : traverse (literalSCodec ls').p as with
+    | some _ => rw [h2] at hne; exact nomatch hne
+    | none => rw [traverse_literalS_e_none hvs h2]; rfl
+  | _ => exact nomatch hp
+
+/-- The two §5 options are distinct — needed only to read a singleton filter back. -/
+theorem optionSem_arrayLiterals_ne :
+    OptionSem.byAttempt (arrayCodec (literalSCodec ["A"])) ≠
+      OptionSem.byAttempt (arrayCodec (literalSCodec ["B"])) := by
+  intro h
+  have := congrArg (fun o => o.admitV (.arr [.str "A"])) h
+  simp [OptionSem.byAttempt, arrayCodec, traverse, literalSCodec] at this
+
+/-- **§5's two residues, separated at a schema people write.**
+    `union(array(literal "A"), array(literal "B"))` fails `UAtCan`
+    (`not_uAtCan_array_literals`) and meets `UAtAct` — so the soundness theorem covers it
+    once (U) is asked where the union acts rather than at every option's canonicals. The
+    union declines the empty array, and every value it does write round-trips through the
+    option that wrote it. -/
+theorem uAtAct_array_literals :
+    UAtAct 2 [Term.array (.literalS ["A"]), Term.array (.literalS ["B"])] := by
+  show UniqueBothWays [OptionSem.byAttempt (arrayCodec (literalSCodec ["A"])),
+    OptionSem.byAttempt (arrayCodec (literalSCodec ["B"]))]
+  have lawA : LawfulCore (arrayCodec (literalSCodec ["A"])) :=
+    lawfulCore_arrayCodec (lawful_literalSCodec _).core
+  have lawB : LawfulCore (arrayCodec (literalSCodec ["B"])) :=
+    lawfulCore_arrayCodec (lawful_literalSCodec _).core
+  refine ⟨?_, ?_⟩
+  · intro o ho t a hf he
+    rcases List.mem_cons.mp ho with rfl | ho'
+    · obtain ⟨-, hB⟩ := filter_pair_left_inv optionSem_arrayLiterals_ne hf
+      rw [OptionSem.byAttempt_admitV] at hB
+      have hBe : (arrayCodec (literalSCodec ["B"])).e t = none := by
+        cases h : (arrayCodec (literalSCodec ["B"])).e t with
+        | none => rfl
+        | some _ => rw [h] at hB; exact nomatch hB
+      refine filter_pair_left ?_ ?_
+      · rw [OptionSem.byAttempt_admitA, lawA.retract he]; rfl
+      · rw [OptionSem.byAttempt_admitA, arrayLiteral_p_none he hBe]; rfl
+    · rcases List.mem_singleton.mp ho' with rfl
+      obtain ⟨hA, -⟩ := filter_pair_right_inv optionSem_arrayLiterals_ne hf
+      rw [OptionSem.byAttempt_admitV] at hA
+      have hAe : (arrayCodec (literalSCodec ["A"])).e t = none := by
+        cases h : (arrayCodec (literalSCodec ["A"])).e t with
+        | none => rfl
+        | some _ => rw [h] at hA; exact nomatch hA
+      refine filter_pair_right ?_ ?_
+      · rw [OptionSem.byAttempt_admitA, arrayLiteral_p_none he hAe]; rfl
+      · rw [OptionSem.byAttempt_admitA, lawB.retract he]; rfl
+  · intro o ho a t a' hf hp he
+    rcases List.mem_cons.mp ho with rfl | ho'
+    · obtain ⟨-, hB⟩ := filter_pair_left_inv optionSem_arrayLiterals_ne hf
+      rw [OptionSem.byAttempt_admitA] at hB
+      have hBp : (arrayCodec (literalSCodec ["B"])).p a = none := by
+        cases h : (arrayCodec (literalSCodec ["B"])).p a with
+        | none => rfl
+        | some _ => rw [h] at hB; exact nomatch hB
+      have h' : (arrayCodec (literalSCodec ["A"])).e t = some a' := he
+      refine filter_pair_left ?_ ?_
+      · rw [OptionSem.byAttempt_admitV, h']; rfl
+      · rw [OptionSem.byAttempt_admitV, arrayLiteral_e_none hp hBp]; rfl
+    · rcases List.mem_singleton.mp ho' with rfl
+      obtain ⟨hA, -⟩ := filter_pair_right_inv optionSem_arrayLiterals_ne hf
+      rw [OptionSem.byAttempt_admitA] at hA
+      have hAp : (arrayCodec (literalSCodec ["A"])).p a = none := by
+        cases h : (arrayCodec (literalSCodec ["A"])).p a with
+        | none => rfl
+        | some _ => rw [h] at hA; exact nomatch hA
+      have h' : (arrayCodec (literalSCodec ["B"])).e t = some a' := he
+      refine filter_pair_right ?_ ?_
+      · rw [OptionSem.byAttempt_admitV, arrayLiteral_e_none hp hAp]; rfl
+      · rw [OptionSem.byAttempt_admitV, h']; rfl
+
 /-- Both counterexamples are `ident` on the side(s) the withdrawn exemption appealed to
     — so it admitted them outright, rather than excluding them by a side condition. The
     `adm`-disjointness §5 now demands is what excludes them. -/

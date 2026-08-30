@@ -94,9 +94,13 @@ rests on it. -/
 #assert_axioms admDisj_ident
 #assert_axioms sepV_string_dunion_nil
 
-/-! `(union)`'s residue, and the bridge every discharger now crosses. -/
+/-! `(union)`'s residue, and the bridge every discharger now crosses. The two witnesses
+are one union seen by both residues: `UAtCan` refutes it at an input it never writes,
+`UAtAct` holds of it. -/
 
 #assert_axioms uAtAct_of_uAtCan
+#assert_axioms uAtAct_array_literals
+#assert_axioms literalS_p_none
 
 /-! `through_p` is the fact the `held` row rests on — `g` post-processes a read and is
 total, so `dom(p)` is the subterm's exactly. It is cited as a result now, so it is guarded
