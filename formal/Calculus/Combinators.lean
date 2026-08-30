@@ -414,6 +414,18 @@ theorem decimalCodec_e_restrict : decimalCodec.e = (rawDecimalCodec.restrict isS
 theorem decimalCodec_p_restrict : decimalCodec.p = (rawDecimalCodec.restrict isStored).p := by
   funext a; cases a <;> simp [decimalCodec, rawDecimalCodec, Codec.restrict, isStored]
 
+/-- **§3's `(literal-S)` gate is `refine` over a base the calculus already ships.** No raw
+    codec is needed here: `string` *is* the ungated pair, because a string's stored text is
+    the string. -/
+theorem literalSCodec_e_restrict (ls : List String) :
+    (literalSCodec ls).e = (stringCodec.restrict (inLS ls)).e := by
+  funext v; cases v <;> simp [literalSCodec, stringCodec, Codec.restrict, inLS]
+
+/-- …and on the reading half. -/
+theorem literalSCodec_p_restrict (ls : List String) :
+    (literalSCodec ls).p = (stringCodec.restrict (inLS ls)).p := by
+  funext a; cases a <;> simp [literalSCodec, stringCodec, Codec.restrict, inLS]
+
 /-- **§3's `(literal-N)` gate is the same `refine`, over the same base.** `literalNCodec`
     gates on `d ∈ ls` and *not* on `D` — `hD` is a premise of the judgement, not part of
     the pair — so `number` and every numeric literal are refinements of one

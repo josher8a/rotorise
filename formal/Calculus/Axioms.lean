@@ -120,6 +120,10 @@ combinator, and the pair agrees on the nose. -/
 halves by construction, which is what §3 argues an ad-hoc gate forgets. -/
 
 #assert_axioms lawfulCore_rawNumberCodec
+#assert_axioms literalSCodec_e_restrict
+#assert_axioms literalSCodec_p_restrict
+#assert_axioms admA_literalS_sees
+#assert_axioms admA_literalN_blind
 #assert_axioms literalNCodec_e_restrict
 #assert_axioms literalNCodec_p_restrict
 #assert_axioms uniqueAdmission_of_sharedBase

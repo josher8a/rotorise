@@ -758,7 +758,11 @@ All four partings are forced:
   `legacy` adds no way to *write*, so `adm` passes through.
 - **A numeric `literal`.** Its read side goes through the numeral-to-double reading of §1, which is
   not a membership test on the stored text: distinct numerals read to the same double, so a
-  syntactic set of values bounds no set of attributes.
+  syntactic set of values bounds no set of attributes. This is the one place the two literal rules
+  part, and the reason is §1's and not §3's: a **string** literal's stored text _is_ its value, so
+  `ℓ` bounds both sides and the table separates such a union unaided; a numeric literal's is not,
+  so only the value side is bounded. Both rules are otherwise the same term — `refine` over the
+  ground codec of their member, at `∈ ℓ`.
 
   The stored texts *are* known at the declaration, so `admA = { ⟨N, text(ℓᵢ)⟩ }` looks available. It
   is not, and the store is why: `literal(10²¹)` is written `⟨N, "1e+21"⟩` and handed back

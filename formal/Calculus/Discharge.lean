@@ -772,6 +772,18 @@ theorem uAtCan_of_refine_disjoint (fuel : Nat) {base : Term} {qs : List (Value �
         restrict_p.mpr ⟨hlaw.retract hb, hq⟩]
       rfl
 
+/-- **Where the two literal rules part.** A string literal's stored text *is* its value, so
+    `q` is visible on both sides and `admA` carries `ℓ` outright — §5's table separates such
+    a union with no help. A numeric literal's is not, so `admA` is `⊤` and the shared base
+    is what recovers the readable side. The two `rfl`s below are that difference, and it is
+    the whole of why `(literal-N)` needed an argument `(literal-S)` did not. -/
+theorem admA_literalS_sees (ls : List String) (s : String) :
+    admA (.literalS ls) (.s s) = decide (s ∈ ls) := rfl
+
+/-- …and the numeric side sees nothing. -/
+theorem admA_literalN_blind (ls : List Double) (x : Numeral) :
+    admA (.literalN ls) (.n x) = true := rfl
+
 /-- **A union of numeric literals discharges on both sides.** §5's `admA` row sends a
     numeric literal to `⊤`, and the reason is real — distinct numerals read to the same
     double, so no syntactic set of attributes bounds one. Read from the *pair* rather than
