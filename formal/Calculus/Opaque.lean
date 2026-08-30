@@ -548,20 +548,31 @@ theorem Attr.depthP_pos (kvs : List (Name × Attr)) : 1 <= Attr.depthP kvs := by
   | nil => simp [Attr.depthP]
   | cons kv kvs => simp only [Attr.depthP]; have := Attr.depth_pos kv.2; omega
 
-/-- A wire set is always exactly one layer of payloads. -/
-theorem asWireSet_depth : ∀ {as : List Attr} {a : Attr}, asWireSet as = some a ->
-    Attr.depth a = 2 := by
-  intro as a h
-  simp only [asWireSet] at h
+/-- A wire set is always exactly one layer of payloads, whichever family it lands in. -/
+theorem encSet_depth {α : Type} {c : Codec} {vinj : α → Value} {S : Finset α} {a : Attr}
+    (h : encSet c vinj S = some a) : Attr.depth a = 2 := by
+  unfold encSet at h
   split at h
   · exact nomatch h
   · split at h
     · cases h; rfl
     · split at h
       · cases h; rfl
-      · cases hb : binPayloads as with
-        | none => rw [hb] at h; exact nomatch h
-        | some bs => rw [hb] at h; cases h; rfl
+      · obtain ⟨T, -, hT⟩ := Option.map_eq_some'.mp h
+        cases hT; rfl
+
+/-- …and a value set likewise: its elements are scalars. -/
+theorem decSet_depth {α : Type} {c : Codec} {inj : α → Attr} {S : Finset α} {v : Value}
+    (h : decSet c inj S = some v) : Value.depth v = 2 := by
+  unfold decSet at h
+  split at h
+  · exact nomatch h
+  · split at h
+    · cases h; rfl
+    · split at h
+      · cases h; rfl
+      · obtain ⟨T, -, hT⟩ := Option.map_eq_some'.mp h
+        cases hT; rfl
 
 mutual
 
@@ -591,17 +602,18 @@ theorem opaq_e_depth (lossy : Bool) :
         by_cases hw : Numeral.WF d.toDec = true
         · rw [if_pos hw] at he; cases he; simp [Attr.depth, Value.depth]
         · rw [if_neg hw] at he; exact nomatch he
-  | .set vs, n'+1, a, he => by
-      rw [opaqCodec_e_set] at he
-      replace he : (traverse (opaqCodec n' lossy).e vs).bind asWireSet = some a := he
-      cases htr : traverse (opaqCodec n' lossy).e vs with
-      | none => rw [htr] at he; exact nomatch he
-      | some as =>
-        rw [htr] at he
-        rw [asWireSet_depth he]
-        simp only [Value.depth]
-        have := Value.depthL_pos vs
-        omega
+  | .strSet S, n'+1, a, he => by
+      rw [opaqCodec_e_strSet] at he
+      rw [encSet_depth (c := opaqCodec n' lossy) (vinj := Value.str) he]
+      simp [Value.depth]
+  | .numSet S, n'+1, a, he => by
+      rw [opaqCodec_e_numSet] at he
+      rw [encSet_depth (c := opaqCodec n' lossy) (vinj := Value.num) he]
+      simp [Value.depth]
+  | .binSet S, n'+1, a, he => by
+      rw [opaqCodec_e_binSet] at he
+      rw [encSet_depth (c := opaqCodec n' lossy) (vinj := Value.bin) he]
+      simp [Value.depth]
   | .arr vs, n'+1, a, he => by
       rw [opaqCodec_e_arr] at he
       replace he : (traverse (opaqCodec n' lossy).e vs).map Attr.l = some a := he
@@ -706,20 +718,10 @@ theorem opaq_p_leafL {α : Type} (elem : α → Attr) (lossy : Bool) (n : Nat)
       have h2 := opaq_p_leafL elem lossy n hleaf xs vs' hvs'
       simp only [Value.depthL]; omega
 
-/-- …and the wire set itself is one level above its leaves. `p` refuses the empty run,
-    which is where §1's `℘⁺fin` shows up in the depth argument. -/
-theorem opaq_p_wire_depth {α : Type} (elem : α → Attr) (lossy : Bool) (n : Nat)
-    (hleaf : ∀ (x : α) (v : Value), (opaqCodec n lossy).p (elem x) = some v →
-      Value.depth v <= 1)
-    {xs : List α} {v : Value}
-    (hp : (if xs.isEmpty then none
-            else (traverse (fun x => (opaqCodec n lossy).p (elem x)) xs).map Value.set)
-          = some v) : Value.depth v <= 2 := by
-  split at hp
-  · exact nomatch hp
-  · obtain ⟨vs, htr, rfl⟩ := Option.map_eq_some'.mp hp
-    have := opaq_p_leafL elem lossy n hleaf xs vs htr
-    simp only [Value.depth]; omega
+/-- …and the wire set itself is exactly one level above its leaves. `decSet` produces one
+    of the three value-set constructors, and those hold scalars. -/
+theorem opaq_p_wire_depth {α : Type} {c : Codec} {inj : α → Attr} {S : Finset α} {v : Value}
+    (hp : decSet c inj S = some v) : Value.depth v <= 2 := le_of_eq (decSet_depth hp)
 
 theorem opaq_p_ssL (lossy : Bool) (n : Nat) :
     ∀ (ss : List String) (vs : List Value),
@@ -762,18 +764,15 @@ theorem opaq_p_depth (lossy : Bool) :
       simp only [Attr.depth]; omega
   | .ss ss, n'+1, v, hp => by
       rw [opaqCodec_p_ss] at hp
-      have := opaq_p_wire_depth Attr.s lossy n'
-        (fun x w h => opaq_p_s_depth lossy x n' w h) hp
+      have := opaq_p_wire_depth (c := opaqCodec n' lossy) (inj := Attr.s) hp
       simp only [Attr.depth]; omega
   | .ns xs, n'+1, v, hp => by
       rw [opaqCodec_p_ns] at hp
-      have := opaq_p_wire_depth Attr.n lossy n'
-        (fun x w h => opaq_p_n_depth lossy x n' w h) hp
+      have := opaq_p_wire_depth (c := opaqCodec n' lossy) (inj := Attr.n) hp
       simp only [Attr.depth]; omega
   | .bs bs, n'+1, v, hp => by
       rw [opaqCodec_p_bs] at hp
-      have := opaq_p_wire_depth Attr.b lossy n'
-        (fun x w h => opaq_p_b_depth lossy x n' w h) hp
+      have := opaq_p_wire_depth (c := opaqCodec n' lossy) (inj := Attr.b) hp
       simp only [Attr.depth]; omega
   | .l as, n'+1, v, hp => by
       rw [opaqCodec_p_l] at hp
