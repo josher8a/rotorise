@@ -3546,13 +3546,12 @@ theorem object_retract (hf : ∀ kf ∈ sems, LawfulCore kf.2.codec)
     cases hc : entryCodec sems rc? k.1 with
     | none => rw [hc] at hw; exact nomatch hw
     | some c =>
-      rw [hc] at hw ⊢
-      simp only [Option.bind_some] at hw ⊢
+      simp only [hc, Option.bind_some] at hw ⊢
       exact (entryCodec_of hf hrc hc).retract hw
   · refine MapOf.ext ?_ ?_
-    · simp [hfilter, hfb0]
+    · simp only [hfilter, hfb0, Finset.union_empty]
     · intro k h₁ h₂
-      have hk1 : k ∈ p.1.filter (kn ·) := by rw [hfilter]; exact h₂
+      have hk1 : k ∈ p.1.filter (kn ·) := by rw [hfilter]; exact h₁
       simp only [dif_pos hk1]
 
 /-- (C): what was read is writable again — the kept entries by (C) one level down, the
