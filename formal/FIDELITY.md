@@ -319,17 +319,17 @@ table had drifted by a few lines per block and is re-synced to the script.
 python3 scripts/fidelity_audit.py          # --names to list the offenders
 ```
 
-At HEAD: 714 declarations, 520 theorems, 194 definitions.
+At HEAD: 739 declarations, 543 theorems, 196 definitions.
 
 | | |
 | --- | ---: |
 | theorem names the documents cite as results | 133 |
-| …put through `#assert_axioms` | **54** |
-| §-tag coverage (declarations naming a spec section) | **23%** |
-| docstring coverage, theorems | 59% |
+| …put through `#assert_axioms` | **61** |
+| §-tag coverage (declarations naming a spec section) | **24%** |
+| docstring coverage, theorems | 60% |
 | docstring coverage, definitions | 72% |
-| **theorem statements naming an undocumented definition** | **59%** |
-| …and themselves undocumented | 120 |
+| **theorem statements naming an undocumented definition** | **60%** |
+| …and themselves undocumented | 125 |
 
 The last row is the one that matters. A statement naming an undocumented definition
 cannot be read against the specification without a detour — and this counts the
@@ -342,13 +342,26 @@ and now 21% — both from the §6 audit below, which is what that audit turned o
 `Term`, `denote`, `setCodec`, `arrayCodec`, `objectCodec`. **No line of source says which
 §3 rule `setCodec` denotes** — that mapping exists only in `README.md` prose.
 
-**A level mismatch inside §6.** `Equations.lean`: 0 of 36 statements mention
-`denote`/`denoteω`/`Typed`. `Refutations.lean`: 17 of 18 do. So the "Hold" rows are stated
-about combinators and the "Do not hold" rows about terms, and checking a Hold row against
-the spec table needs an eight-entry translation — `through→held`, `restrict→refine`,
-`extendRead→legacy`, `orNull→nullable`, `altCodec→union`, `dunionCodec→discriminatedUnion`,
-`opaqCodec→opaque`, `objectCodecCore→object` — five of which share no substring with the
-spec term, and which is written down as a table nowhere.
+**A level mismatch inside §6 — closed** (§5 item 7). It was: `Equations.lean` had **0 of 36**
+statements mentioning `denote`/`denoteω`/`Typed` while `Refutations.lean` had 17 of 18, so the
+"Hold" rows were stated about combinators and the "Do not hold" rows about terms. Checking a
+Hold row against the specification needed an eight-entry translation — `through→held`,
+`restrict→refine`, `extendRead→legacy`, `orNull→nullable`, `altCodec→union`,
+`dunionCodec→discriminatedUnion`, `opaqCodec→opaque`, `objectCodecCore→object` — five of which
+share no substring with the term they translate, and it was written down nowhere.
+
+It is now written down as theorems: ten `denoteω_*` bridges, each `rfl`, because `denoteω`
+dispatches straight onto the combinator. Nothing is *proved* by them except the
+correspondence, which is exactly what was missing. Every Hold row then gets a term-level twin
+one line long, so both halves of §6 read in one language. **21 of 55** statements now name
+`denoteω`, up from 0 of 36.
+
+Two things the bridges made visible that the prose had not. `Equations.lean` did not import
+`Denoteω` at all — the file stating §6's equations could not mention the denotation those
+equations are about, which is the mechanical reason the mismatch persisted rather than an
+oversight anyone chose. And `opaque`'s bridge is to `opaqCodecω` rather than to a fueled
+codec, which is the same fact §5's discharger table records when it gives `(opaque)` a reason
+instead of a term-level row — one cause, two symptoms, previously written up separately.
 
 ## §4 What both audits agreed on, unprompted
 
@@ -371,7 +384,7 @@ for, and it now has three independent confirmations.
 | 4 | ~~`ident_sound`, or delete `ident` and say `adm` carries the exemption~~ **done**: `ident_of_adm` / `admDisj_ident`, plus the derivable pair where `SepV` and (K) part | a normative table transcribed and unconstrained is the definition of an unlocatable claim |
 | 5 | ~~`uAtCan_dunion`, `uAtCan_opaque` — the four discharger rows in one vocabulary~~ **done**: three in one vocabulary, and `opaque` has a reason | two one-line theorems; converts two unlocatable rows to checkable, and retires the dangling reference |
 | 6 | A §-tag ratchet in `fidelity_audit.py`, failing the build when coverage drops | 18% today, 1% in `Opaque.lean`; `Axioms.lean`'s principle applied to traceability |
-| 7 | Restate §6's eleven "Hold" rows at term level | retires the unwritten translation table and makes both halves of §6 one language |
+| 7 | ~~Restate §6's eleven "Hold" rows at term level~~ **done**: ten `rfl` bridges and a twin per row; 0 of 36 → 21 of 55 | retired the unwritten translation table and made both halves of §6 one language |
 | 8 | ~~The documentation corrections: D3, D5, U4, C2's eight stale comments~~ **done**; U4's second half was wrong and the row is five of five | cheap, and D3 is the only defect of the seven with no machine-checked witness |
 | 9 | ~~`Codec.Ker` and `Can` in `Codec.lean`~~ **done**: and `η ⊆ ker p` with them | `≈c` is §2's central device and had no name; `Can` sat in §6's file where §2 and §5 could not cite it |
 | 10 | ~~D3's amendment to `codec-calculus.md` §5~~ **done**: the `adm`/`admA` split, and a stratification error found while writing it | normative, so it waited for the call; the model had been right and unrecorded since `admA` was written |
