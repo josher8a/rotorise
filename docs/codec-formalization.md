@@ -1081,6 +1081,43 @@ defect in this log is an imprecision, and soundness is blind to all of them. Bun
 *converse* is a different matter, and points 1 and 2 above are the argument for it: the obligation
 is joint across the four tables, and `held` shows it cannot be factored back into them.
 
+### Where the bundling idea ends up, and what it can and cannot buy
+
+The construction first proposed for all of this was to bundle each analysis row with a proof, so
+that a row could not exist without one. Two rounds of measurement changed what goes in the bundle
+and what the bundle is for, and both changes are worth recording because the first instinct was
+right and the first *reason* was not.
+
+**Soundness cannot be the obligation.** `⊤` is sound for every term, so `admV := fun _ => true`
+discharges a soundness field with `rfl`. Every defect in this log is an imprecision. A
+soundness-bundled row would have caught none of the ten.
+
+**The forcing was already there, three times over.** `Adm`, `Analysable` and `Adm_exact` are
+separate exhaustive recursions, so a new `Term` constructor breaks all three. Re-wrapping them in a
+structure adds locality and atomicity, but not the property; that property is exhaustiveness, and
+`κ` had it from the beginning while the three tables with catch-alls accumulated seven gaps between
+them.
+
+**What was still soft was the hatch.** `Analysable`'s `false` rows are where a vague row can hide:
+the list could grow by one identifier, and the reasons lived only in a docstring nobody is obliged
+to write. So the reasons are a type. `Excuse` has five constructors and no `other`; `Excuse.covers`
+says which term shapes each may be invoked for; and `analysable_excused` — exhaustive over `Term` —
+says every declining row either names a covering excuse or inherits the refusal from a subterm.
+Filing `array` under `opaqueDepth` is a type error. `excuse_shapes` runs the other way: a covered
+shape really does decline, so the hatch cannot be used as a shortcut past a provable obligation.
+
+`covers` has a catch-all, and it is the one place in this development where a catch-all is correct.
+The polarity is the reason: it answers **`false`** — *no excuse covers this shape* — so a new `Term`
+constructor lands in "not excusable", which forces `Analysable` to call it analysable, which forces
+`Adm_exact` to prove it. Every other catch-all here failed by silently saying yes.
+
+**What none of it can buy.** No construction inside the kernel prevents someone writing a weak
+specification: an `Excuse` constructor can always be added, and `covers` extended to admit a new
+shape. What the construction does is make the weak choice *expensive and visible* — a named reason,
+of a declared shape, in a file a reviewer reads — and make the strong choice cheap, since sixteen
+rows already carry their proof. That is the honest limit, and it is the argument for spending the
+effort on exactness rather than on ceremony around soundness.
+
 ## §5 Certifying an implementation
 
 The calculus is portable by design: nothing in it is TypeScript, and nothing is Rotorise. An
