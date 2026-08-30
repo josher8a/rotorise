@@ -81,6 +81,9 @@ def ident : Term → Bool
   -- in and on the way out (§3 `(number)` "gates both halves"). The other four ground
   -- scalars accept their whole carrier and so decide nothing.
   | .number | .decimal => true
+  -- `(literal)` checks its one value on both halves — the definition of deciding your
+  -- own membership, and the reason the constructor is worth having over `refine`.
+  | .literal _ => true
   | .set t | .array t | .record t => ident t
   -- `refine` *holds* it rather than propagating: `q` is checked on the way in and on the
   -- way out, which is what deciding your own membership means. §3 argues the same — a `p`
@@ -152,6 +155,14 @@ noncomputable def adm : Term → Value → Bool
   -- §1's two number gates, recorded for the same reason a literal's set is: each is a
   -- `refine` over an ungated base (`numberCodec_e_restrict`, `decimalCodec_e_restrict`),
   -- and a gate the term owns is exactly what `adm` is for.
+  | .literal v => fun w =>
+      match v, w with
+      | .str s, .str s'   => decide (s' = s)
+      | .num d, .num d'   => decide (d' = d)
+      | .bool b, .bool b' => decide (b' = b)
+      | .bin b, .bin b'   => decide (b' = b)
+      | .null, .null      => true
+      | _, _              => false
   | .number => inD
   | .decimal => isStored
   -- A union admits what some option admits — the same `⋃` `κ` already takes. Without it
@@ -203,6 +214,17 @@ def admA : Term → Attr → Bool
   -- their text*, so its gate is a test on the stored attribute and both sides see it.
   -- `number`'s is not — the numeral goes through `Double.ofDec` — so it stays `⊤`.
   | .decimal => fun a => match a with | .n x => Numeral.Stored x | _ => false
+  -- The payoff over `refine`: for every base but `number` the stored attribute *is* the
+  -- value, so `ℓ` bounds the readable side too. At `number` it cannot — the numeral goes
+  -- through `Double.ofDec` — which is §5's `literal-S`/`literal-N` split, one rule down.
+  | .literal v => fun a =>
+      match v, a with
+      | .str s, .s s'   => decide (s' = s)
+      | .bool b, .bool b' => decide (b' = b)
+      | .bin b, .b b'   => decide (b' = b)
+      | .null, .null    => true
+      | .num _, _       => true
+      | _, _            => false
   | _ => fun _ => true
 
 /-- …and on the attribute side. -/
@@ -380,6 +402,10 @@ theorem adm_sound : ∀ (fuel : Nat) (t : Term) {v a},
     case refine t' q =>
       obtain ⟨hq, hc⟩ := restrict_e.mp he
       simp only [adm, adm_sound fuel t' hc, hq, Bool.and_self]
+    case literal w =>
+      cases w <;> cases v <;>
+        simp_all [denote, literalCodec, Codec.restrict, stringCodec, rawNumberCodec,
+                  booleanCodec, binaryCodec, nullCodec, Codec.empty, adm]
     case number => cases v <;> simp_all [denote, numberCodec, inD, adm]
     case decimal => cases v <;> simp_all [denote, decimalCodec, isStored, adm]
     case legacy t' r => exact adm_sound fuel t' (extendRead_e.mp he)
@@ -407,6 +433,10 @@ theorem admA_sound : ∀ (fuel : Nat) (t : Term) {a v},
       exact admA_dunion.mpr ⟨kvs, tag, rfl, hlk,
         contains_of_mem (mem_allTags htx (mem_of_contains htag))⟩
     case refine t' q => exact admA_sound fuel t' (restrict_p.mp hp).1
+    case literal w =>
+      cases w <;> cases a <;>
+        simp_all [denote, literalCodec, Codec.restrict, stringCodec, rawNumberCodec,
+                  booleanCodec, binaryCodec, nullCodec, Codec.empty, admA]
     case decimal => cases a <;> simp_all [denote, decimalCodec, admA]
     case held t' f g =>
       obtain ⟨w, hw, -⟩ := through_p.mp hp
@@ -742,6 +772,7 @@ theorem ident_of_adm : ∀ {t : Term} {v : Value}, adm t v = false → ident t =
   | .literalN _, _, _ => rfl
   | .dunion _ _, _, _ => rfl
   | .refine _ _, _, _ => rfl
+  | .literal _, _, _ => rfl
   | .number, _, _ => rfl
   | .decimal, _, _ => rfl
   | .legacy t _, v, h => ident_of_adm (t := t) (v := v) h
@@ -917,6 +948,31 @@ theorem uAtCan_boolLiterals (fuel : Nat) :
     intro v hv; cases v <;> simp_all [isTrueV, isFalseV]
   exact uAtCan_of_refine_disjoint (fuel+1) (qs := [isTrueV, isFalseV])
     lawful_booleanCodec.core (by simpa using h)
+
+/-! ### What the unified `literal` carries
+
+    At arity one `literal(v)` and `refine(g, · = v)` denote the same pair, so it is fair to
+    ask why the constructor exists. `adm` is the same either way. `admA` is not: `ℓ` is data
+    the *term* owns, so it can be tested against the stored attribute, where `refine`'s `q`
+    is a value predicate and cannot be pushed there. That is the whole of it, and it holds
+    at every base but one. -/
+
+/-- `admA` sees the value at a string base… -/
+theorem admA_literal_str (s s' : String) :
+    admA (.literal (.str s)) (.s s') = decide (s' = s) := rfl
+
+/-- …and at a boolean base, which §3 never wrote a `literal` rule for at all. -/
+theorem admA_literal_bool (b b' : Bool) :
+    admA (.literal (.bool b)) (.bool b') = decide (b' = b) := rfl
+
+/-- …and at `number` it cannot, the stored text not being the value — §1's asymmetry, now
+    stated once for the unified rule instead of twice for two. -/
+theorem admA_literal_num_blind (d : Double) (x : Numeral) :
+    admA (.literal (.num d)) (.n x) = true := rfl
+
+/-- The writable side sees it everywhere, `number` included. -/
+theorem adm_literal_num (d d' : Double) :
+    adm (.literal (.num d)) (.num d') = decide (d' = d) := rfl
 
 /-- **Where the two literal rules part.** A string literal's stored text *is* its value, so
     `q` is visible on both sides and `admA` carries `ℓ` outright — §5's table separates such
