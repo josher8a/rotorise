@@ -2091,7 +2091,22 @@ const encodeUnknown = (
                 "Reading it back is undecidable without a schema: as a `number` it rounds, and as a `string` it re-encodes as `S`, changing the attribute's stored type. Declare the attribute with `number` or `decimal`, or opt in with `opaque('lossy')`.",
             )
         }
-        return carrying('N', String(value))
+        /**
+         * **Writing an `N` means writing a numeral.** `Number.isFinite` is not that test: §1's
+         * `Carries('N')` is `Numerals`, bounded by 38 significant digits and magnitude
+         * `1e-130 … 9.9…e125`, and `5e-324` is a perfectly finite double outside it — the
+         * specification's own example of the bound going unchecked.
+         *
+         * `number` has gated on this since the numeral domain was tightened and `literal` since
+         * its `ℓ ⊆ D` premise. `opaque` is the third term that writes an `N` from a JS number and
+         * it was checking only that the number existed, which let it write an attribute §1's `𝔸`
+         * has no point for. Same obligation, same gate: `ran(e) ⊆ 𝔸`.
+         */
+        return isNumeral(String(value))
+            ? carrying('N', String(value))
+            : new CodecError(
+                  `${value} is not a number DynamoDB stores: it takes at most 38 significant digits and magnitude 1e-130 to 9.9e125`,
+              )
     }
 
     if (typeof value === 'bigint') {

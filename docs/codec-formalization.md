@@ -441,6 +441,61 @@ a real set — `ident_of_adm` and `admDisj_ident` — but only where each option
 `discriminatedUnion(d)` with no options is derivable and admits nothing (`sepV_string_dunion_nil`).
 §5 keeps the conjuncts and now says why: a stated premise is easier to check than a recovered one.
 
+### One found by asking whether the calculus can express the last one
+
+The previous entry ends with a question worth asking of any defect a formalization missed: *can the
+calculus say it at all?* For `⟨N, "">` the answer is that it says it in the **signature** — `p` is
+typed `𝔸 ⇀ T`, and `⟨N, "">` is not in `𝔸` — so no law is violated because in the calculus there is
+nothing to violate. C1 in §5 now carries the obligation that replaces the missing law, and with it
+the audit list it implies: **four members carry a refinement**, `N`, `SS`, `NS` and `BS`, and the
+question for a port is which of its terms read one.
+
+Running that list on this library found one more, and this one **is** expressible — by the strongest
+law in §2:
+
+```
+opaque('refuse').decode({ N: '1' })          → refused
+opaque('refuse').decode({ NS: ['1','2'] })   → Set(['1','2'])  of string
+                        re-encoded           → { SS: ['1','2'] }
+opaque('lossy').decode({ NS: ['1','2'] })    → the same
+```
+
+**`NS` in, `SS` out.** That is **(MP)** — `member(e(p(a))) ≠ member(a)` — and it is the exact failure
+`opaque`'s `N` refusal exists to prevent, one member over. §2 makes the argument in as many words:
+"a codec reading `⟨N, "1.5"⟩` to a string and writing `⟨S, "1.5"⟩` satisfies both — the *value*
+survives — while silently changing the stored type, so a numeric sort key stops ordering and a typed
+index rejects the write. This is why `opaque` refuses `N` by default." The `NS` path does not apply
+that rule, and it does not consult the number policy either: `'lossy'` reads `⟨N, "1"⟩` as `1` and
+still reads `⟨NS, …⟩` as strings.
+
+**The model has never had this.** `setCodec`'s `p` on `.ns` reads each entry through the element's
+`p`, which for `opaque` is `opaqCodec` itself — `Codec.empty` under `lossy = false`, so the set read
+fails and `NS` is refused exactly as `N` is; under `lossy = true` the entries are numbers and
+re-encode to `NS`. Both policies are right in the model and wrong in the implementation, which makes
+this the fourth defect the mechanization has found in shipped code and the first found by reading
+the *conformance obligation* rather than a rule.
+
+The write side makes it sharper than a missing check. **`opaque` has no `NS` write path at all** — a
+numeric `Set` is refused outright, on the same "NS decodes as strings" grounds — so there is no
+value in its language that writes back to `NS`. The read is not merely careless about the member; it
+reads an attribute nothing it can produce will restore. Only two resolutions are consistent with §2:
+refuse to read `NS`, as it already refuses to read `N` under `'refuse'`, or read it as numbers and
+write `NS` back.
+
+It is left open here rather than fixed, because the behaviour is deliberate and argued in the
+source: `opaque.Decode` documents `NS` reading back as `Set<string>` on the grounds that "nothing
+without a schema can say which of them a JS number holds faithfully", and `native.Decode`'s
+`Set<number | bigint>` is named as the guess it refuses to make. That reasoning is sound about the
+*value* and silent about the *member*, which is the shape of the whole finding — but reversing it
+changes a public type, so it is a decision and not a correction.
+
+**The write half of the same audit was a correction, and is fixed.** `opaque('lossy')` wrote
+`⟨N, "5e-324"⟩`, `⟨N, "1e+200"⟩` and `⟨N, "1e-200"⟩`: it gated on `Number.isFinite`, which is not
+`Carries('N')`. `5e-324` is `codec-calculus.md` §3's own example of the bound going unchecked, and
+it was still being written by the third term that writes an `N` after `number` and `literal` had
+both been closed. It now reads through the same numeral gate as they do, everywhere a number can
+nest. Nothing was deliberate about that one; it was simply the last place nobody had looked.
+
 ### One where §3 and §5 disagreed, and the term did not survive it
 
 §3 said of `numeric(T)` that `p` "returns the double it read and **does not verify membership
@@ -534,10 +589,45 @@ anyone can build with them, including ones not yet written.
 Five obligations. `C1`–`C3` are the port; `C4`–`C5` are per-codec and mostly discharged by the
 dischargers of §3.
 
-**C1 — Embed the domain.** Exhibit total maps from your value and attribute types into §1's `Value`
-and `Attr`, injective on the sets you claim to hold. §1's `Value` is partitioned exactly as `Kind`
-is; if your value language has a shape §1 lacks, the calculus does not cover it and this is where
-you find out.
+**C1 — Embed the domain.** Exhibit maps from your value and attribute types into §1's `Value` and
+`Attr`, injective on the sets you claim to hold. §1's `Value` is partitioned exactly as `Kind` is;
+if your value language has a shape §1 lacks, the calculus does not cover it and this is where you
+find out.
+
+**The attribute map is partial, and pretending otherwise is how a defect gets in.** This obligation
+used to ask for *total* maps, which no host language can supply: §1's `𝔸` is a coproduct over
+`Carries(m)`, and four of the ten members carry a **refinement** rather than a host type —
+
+| member | `Carries(m)` | what a host type does not enforce |
+| --- | --- | --- |
+| `N` | `Numerals` | the grammar, 38 significant digits, magnitude `1e-130 … 9.9…e125` |
+| `SS` | `℘⁺fin(String)` | non-empty |
+| `NS` | `℘⁺fin(Numerals)` | non-empty, **and** every entry a numeral |
+| `BS` | `℘⁺fin(Bytes)` | non-empty |
+
+— so `{ N: '' }`, `{ N: '5e-324' }` and `{ SS: [] }` are values of the implementation's attribute
+type with **no image in `𝔸`**. The embedding is therefore partial, and the obligation that replaces
+totality has two halves, because a pair has two directions:
+
+> **`ran(e) ⊆ dom(⌈·⌉)`** — a term may write only attributes the embedding sends somewhere.
+> **`dom(p) ⊆ dom(⌈·⌉)`** — and may read only those.
+>
+> Every term that touches a refined member is the term that has to check it, on the side it
+> touches it.
+
+Neither is a law of §2, and neither can be. §2 types the pair `e : T ⇀ 𝔸` and `p : 𝔸 ⇀ T`, so in
+the calculus the question never arises: there are no non-attributes to be written to or defined on.
+**The calculus expresses this in the signature of the pair, where nothing has to prove it because
+nothing can violate it** — which is precisely why a port can violate it and see nothing fail. (R),
+(C), (W) and (MP) all held while `literal(0, 1, 2)` read `⟨N, ""⟩` as `0`, and all four held while
+`literal(NaN)` wrote `⟨N, "NaN"⟩`.
+
+Those two defects are one obligation seen from its two ends, which is the argument for stating it
+this way rather than as a warning about numerals. The list is short and closed — four members — so
+for a port the audit is mechanical: *which of my terms touch one, and on which side*. In this
+repository the terms are `decimal`, `number`, `literal`, `set` and `opaque`, and running the audit
+found two more gaps, both in `opaque` and both in §4: it wrote `⟨N, "5e-324"⟩` because it checked
+`Number.isFinite` rather than the numeral domain, and it reads `NS` it can never write back.
 
 **C2 — Extract the pair.** For each codec `c` in your library, name its `(T, μ, e, p)`: the values
 it claims to hold, the member it stores them in, and its encode and decode read through the C1
@@ -678,6 +768,7 @@ transfer back through C1–C3 to your implementation.
 
 ```
 [ ] C1  value and attribute embeddings, injective on the claimed carriers
+[ ]     dom(p) ⊆ dom(embedding) — every term reading N, SS, NS or BS checks the refinement
 [ ] C2  (T, μ, e, p) named for every codec; μ is the real stored member
 [ ] C3  every constructor mapped to a Term, with Codec.Equiv demonstrated
 [ ]     constructors with no Term listed explicitly as out of scope
