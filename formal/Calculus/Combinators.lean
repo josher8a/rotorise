@@ -3631,8 +3631,7 @@ private theorem lawfulCore_objectCore
     (hfb : ∀ kf ∈ sems, ∀ c v, kf.2 = .fb c v → (c.e v).isSome = true)
     (hnd : (sems.map (·.1)).Nodup)
     (hrc : ∀ c ∈ rc?, LawfulCore c)
-    (hknE : ∀ kv ka, encEntry (fun k => sems.lookup k) (rc?.map (·.e)) kv = some ka →
-      kn ka.1 = true)
+    (hknE : ∀ k v a, (entryCodec sems rc? k).bind (fun c => c.e v) = some a → kn k = true)
     (hknDecl : ∀ k, (sems.lookup k).isSome = true → kn k = true) :
     LawfulCore (objectCodecCore sems rc? kn) :=
   objectCodecCore_eq ▸ lawfulCore_carried (fun _ => rfl)
@@ -3645,8 +3644,7 @@ private theorem lawful_objectCore
     (hfb : ∀ kf ∈ sems, ∀ c v, kf.2 = .fb c v → (c.e v).isSome = true)
     (hnd : (sems.map (·.1)).Nodup)
     (hrc : ∀ c ∈ rc?, Lawful c)
-    (hknE : ∀ kv ka, encEntry (fun k => sems.lookup k) (rc?.map (·.e)) kv = some ka →
-      kn ka.1 = true)
+    (hknE : ∀ k v a, (entryCodec sems rc? k).bind (fun c => c.e v) = some a → kn k = true)
     (hknDecl : ∀ k, (sems.lookup k).isSome = true → kn k = true) :
     Lawful (objectCodecCore sems rc? kn) :=
   let hf' := fun kf hkf => (hf kf hkf).core
@@ -3670,28 +3668,15 @@ theorem rcOf_forall {P : Codec → Prop} {rest : RestSem}
 /-- What object-encode produces, `keepB` keeps: under `drop` an encoded entry's name
     is declared, and the other policies keep everything. -/
 theorem keepB_of_encEntry {sems : List (Name × FieldSem)} {rest : RestSem} :
-    ∀ kv ka, encEntry (fun k => sems.lookup k) ((rcOf rest).map (·.e)) kv = some ka →
-      keepB rest sems ka.1 = true := by
-  intro kv ka h
+    ∀ k v a, (entryCodec sems (rcOf rest) k).bind (fun c => c.e v) = some a →
+      keepB rest sems k = true := by
+  intro k v a h
   cases rest with
   | drop =>
-    simp only [encEntry] at h
-    cases hsp : sems.lookup kv.1 with
-    | none =>
-      rw [hsp] at h
-      exact nomatch h
-    | some fs =>
-      rw [hsp] at h
-      replace h : (fs.codec.e kv.2).map ((kv.1, ·)) = some ka := h
-      cases hev : fs.codec.e kv.2 with
-      | none => rw [hev] at h; exact nomatch h
-      | some a₀ =>
-        rw [hev] at h
-        replace h : some (kv.1, a₀) = some ka := h
-        cases h
-        show (sems.lookup kv.1).isSome = true
-        rw [hsp]
-        rfl
+    simp only [entryCodec] at h
+    cases hsp : sems.lookup k with
+    | none => rw [hsp] at h; simp only [rcOf, Option.bind_none] at h; exact nomatch h
+    | some fs => simp [keepB, hsp]
   | refuse => rfl
   | codec rc => rfl
 
