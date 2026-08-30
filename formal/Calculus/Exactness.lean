@@ -66,7 +66,11 @@ noncomputable def Adm : Term → Value → Bool
   | .held t f _ => fun v => Adm t (f v)
   | .nullable t => fun v => Adm t v || (match v with | .null => true | _ => false)
   | .union opts => fun v => AdmAny opts v
-  | .set _      => fun v => match v with | .set _ => true | _ => false
+  -- `set` recurses like the other containers, and adds the non-emptiness `asWireSet`
+  -- demands. What it cannot add is payload homogeneity — that follows from the element's
+  -- member being ground, which is the `(set)` rule's own premise and not a fact about `v`.
+  | .set c      => fun v =>
+      match v with | .set vs => !vs.isEmpty && AdmAll c vs | _ => false
   | .tuple _ _  => fun v => match v with | .arr _ => true | _ => false
   | .object _ _ => fun v => match v with | .map _ => true | _ => false
   | .dunion d opts => fun v =>
@@ -399,7 +403,22 @@ theorem Adm_sound_fueled : ∀ (fuel : Nat) (t : Term) {v a},
                   booleanCodec, binaryCodec, nullCodec, Codec.empty]
     case custom ce cp => simp_all [Adm, denote]
     case opaq lossy => simp [Adm]
-    case set c => cases v <;> simp_all [Adm, denote, setCodec]
+    case set c =>
+      cases v
+      case set vs =>
+        simp only [denote, setCodec] at he
+        cases htr : traverse (denote fuel c).e vs with
+        | none => rw [htr] at he; exact nomatch he
+        | some as =>
+          rw [htr] at he
+          have hne : vs ≠ [] := by
+            rintro rfl
+            simp only [traverse, Option.some.injEq] at htr
+            subst htr
+            simp [asWireSet] at he
+          simp only [Adm, Bool.and_eq_true, Bool.not_eq_true', List.isEmpty_eq_false]
+          exact ⟨hne, AdmAll_sound_aux (fun {v a} h => Adm_sound_fueled fuel c h) htr⟩
+      all_goals (simp only [denote, setCodec] at he; exact nomatch he)
     case tuple ts tl => cases v <;> simp_all [Adm, denote, tupleCodec]
     case object fs r => cases v <;> simp_all [Adm, denote, objectCodec, objectCodecCore]
     case array c =>
@@ -485,10 +504,12 @@ excuse names a real phenomenon, not that it is tight on every term of that shape
 sometimes exact is not, and that is the residual softness. -/
 
 /-- `set`'s kind gate over-claims: `asWireSet` refuses the empty run at every element type. -/
-theorem not_ExactV_set : ¬ ExactV (.set .string) := by
+theorem not_ExactV_set : ¬ ExactV (.set (.union [.string, .boolean])) := by
   intro h
-  have := (h (.set [])).mp (by simp [Adm])
-  simp [denoteω, setCodec, traverse, asWireSet] at this
+  have h2 := (h (.set [.str "a", .bool true])).mp (by simp [Adm, AdmAll, AdmAny])
+  simp [denoteω, denoteωOpts, specOf, optionSemOf, altCodec, select, OptionSem.byAttempt,
+        stringCodec, booleanCodec, setCodec, traverse, asWireSet, strPayloads, numPayloads,
+        binPayloads, sC, nC, bC] at h2
 
 /-- `tuple`'s over-claims on alignment: one component against two elements. -/
 theorem not_ExactV_tuple : ¬ ExactV (.tuple [.string] none) := by
@@ -528,7 +549,7 @@ theorem excuse_witnessed : ∀ (e : Excuse) (t : Term), e.covers t = true →
     ∃ t' : Term, e.covers t' = true ∧ ¬ ExactV t'
   | .opaqueDepth, _, _     => ⟨.opaq false, rfl, not_ExactV_opaq false⟩
   | .uniqueAdmission, _, _ => ⟨.union [.string, .string], rfl, not_ExactV_union⟩
-  | .payloadShape, _, _    => ⟨.set .string, rfl, not_ExactV_set⟩
+  | .payloadShape, _, _    => ⟨.set (.union [.string, .boolean]), rfl, not_ExactV_set⟩
   | .nameAdmission, _, _   => ⟨.tuple [.string] none, rfl, not_ExactV_tuple⟩
   | .nullOwnership, _, _   => ⟨.nullable (.legacy .string rNull), rfl, not_ExactV_nullable⟩
   -- The two attribute-side reasons cover nothing here, so the hypothesis is unsatisfiable.
@@ -1486,6 +1507,28 @@ theorem legacy_p_isSome (t : Term) (r : Attr → Option Value) (a : Attr) :
 theorem AdmA_legacy_union (t : Term) (r : Attr → Option Value) (a : Attr) :
     AdmA (.legacy t r) a = (AdmA t a || (r a).isSome) := by
   simp [AdmA]
+
+/-- **A discharge §5 could not state.** Two sets over disjoint literals separate, because
+    `asWireSet` refuses the empty run and so the two options share no inhabitant. -/
+theorem sepJV_set_literals :
+    SepJV (.set (.literalS ["A"])) (.set (.literalS ["B"])) := by
+  intro v hv
+  cases v
+  case set vs =>
+    cases vs with
+    | nil => simp [Adm, AdmAll] at hv
+    | cons x xs =>
+      simp only [Adm, Bool.and_eq_true, AdmAll, Bool.not_eq_true', List.isEmpty_cons] at hv ⊢
+      cases x <;> simp_all [Adm, AdmAll]
+  all_goals simp [Adm]
+
+/-- …and the contrast that shows what the non-emptiness is doing: the *array* pair does not
+    separate, because both options admit `[]`. This is §5's empty-container argument in its
+    correct scope — it is a fact about `array`, `record` and `object`, not about `set`. -/
+theorem not_sepJV_array_literals :
+    ¬ SepJV (.array (.literalS ["A"])) (.array (.literalS ["B"])) := by
+  intro h
+  exact absurd (h (.arr []) (by simp [Adm, AdmAll])) (by simp [Adm, AdmAll])
 
 end
 end Calculus

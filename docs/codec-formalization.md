@@ -1292,6 +1292,32 @@ depends on it: no `uAtCan_*` consumes it and `admDisj_ident` derives it rather t
 lesson is the one every other entry in this log records, applied to the one table that had been
 exempted from it: a row nobody can fail is a row nobody has checked.
 
+### Round one of questioning the hatch: `set`
+
+The hatch entries were written with reasons, which is better than shrugs but is not the same as
+having been checked. Taking them one at a time, `set`'s reason was "`asWireSet` demands payload
+homogeneity" — true, and it justified the **kind gate**, which is far weaker than the row can be.
+
+Homogeneity follows from the element's encoded attributes sharing a member (`strPayloads_isSome`
+and its two siblings), and that is exactly what the `(set)` typing rule already demands:
+`Typed t T (some μ)` with `setMember μ = some μS`. So for any term the rule admits, homogeneity is
+free, and the row can say everything the other containers say plus the non-emptiness `asWireSet`
+enforces: `!vs.isEmpty && AdmAll c vs`. That is sound unconditionally, since `Adm` over-approximates
+each element.
+
+**The payoff is a discharge §5 could not state.** `set(literal "A")` and `set(literal "B")` separate
+(`sepJV_set_literals`), because the empty set is not an inhabitant of either — where
+`array(literal "A")` and `array(literal "B")` still do *not* (`not_sepJV_array_literals`), both
+admitting `[]`. §5's empty-container argument is correct and belongs to `array`, `record` and
+`object`; applying it to `set` was the error, and the corrected rows now say which is which.
+
+`set` stays in the hatch, but with an honest reason and a better witness. Unconditional exactness
+would need the element's member to be ground *and* its codec lawful — the `(set)` rule's premise and
+a semantic obligation, neither of which a `Bool` on terms can carry. The witness moved accordingly:
+`set(string)` is no longer inexact, so `payloadShape` is now earned by
+`set(union(string, boolean))`, whose element has no unanimous member and whose encodings are
+genuinely heterogeneous.
+
 ## §5 Certifying an implementation
 
 The calculus is portable by design: nothing in it is TypeScript, and nothing is Rotorise. An
