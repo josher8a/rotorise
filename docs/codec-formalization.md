@@ -1358,12 +1358,14 @@ with a well-formedness predicate is a workaround; using the right type is not.
   `Numeral`, `Bytes` — so nothing is nested and nothing is circular. There is no reason for these
   three to be lists, and every ordering and duplicate the model currently admits at `SS`/`NS`/`BS`
   is an artefact of the wrong type.
-* **Value side — the right type is impossible.** `Value.set (v : Finset Value)` is rejected by the
-  kernel: *"arg #1 contains a non valid occurrence of the datatypes being declared"*. `Multiset`
-  fails identically. Lean's nested inductives admit a type constructor only if it is a polynomial
-  functor, and both are quotients. `Value.set` **must** be a list, and the honest repair there is a
-  well-formedness predicate — exactly the pattern §1 already uses when `Numeral.WF` gates `N` rather
-  than `N` being a subtype.
+* **Value side — `Finset Value` is impossible, but that was the wrong type to try.**
+  `Value.set (v : Finset Value)` is rejected by the kernel: *"arg #1 contains a non valid occurrence
+  of the datatypes being declared"*, and `Multiset` fails identically — nested inductives admit only
+  polynomial functors, and both are quotients. But the reference does not describe a set of
+  *values*: **"The set types are string set, number set, and binary set."** Three concrete element
+  types, and all three are admissible — `Value.strSet (Finset String)`, `numSet (Finset Double)`,
+  `binSet (Finset Bytes)` all compile. See the entry below; the earlier conclusion that the value
+  side must stay a list was drawn from testing the wrong type.
 
 So the asymmetry is not a modelling preference; it is where the language stops. What follows from it:
 
@@ -1444,6 +1446,46 @@ So the repair splits three ways rather than two:
 
 `Wire.canon` serves all three: keyed by the payload for sets, by the name for maps. Which is why it
 was worth building generically over a key rather than for strings alone.
+
+### Where taking "string set, number set, binary set" literally leads
+
+Two questions in succession — whether a map is a `Finset` of pairs or a `Finset` of *names* with
+values alongside, and what the reference actually types a set as — correct two claims made above.
+
+**`Value`'s sets are fixable by typing, on both sides.** The earlier entry tested
+`Finset Value` and concluded the value side must remain a list. That was the wrong type to test.
+The reference says the set types *are* string set, number set and binary set — three things with
+concrete element types — and all three are admissible:
+
+    V2.strSet : Finset String → V2
+    V2.numSet : Finset Double → V2
+    V2.binSet : Finset Bytes  → V2
+
+So uniqueness, unorderedness and homogeneity all become **structural** rather than gated, on the
+value side as well as the wire. `Double`'s `DecidableEq` is already axiomatized in §1, which is what
+makes `Finset Double` available.
+
+The cost is not in the kernel but in `(set)`. Today `set(c)` takes an arbitrary element term whose
+member is ground, and `Value.set` holds a list of the values that term accepts. With the sets typed,
+the element payloads are raw `String`/`Double`/`Bytes` and the element codec must be reapplied to
+values reconstructed from them. That is coherent — note `decimal` already sends a `str` **value** to
+an `N` **attribute**, so a value-side set is classified by its element *kind* while the wire form is
+classified by its *member*, and the two need not agree — but it is a restructuring of the rule, not
+a change of representation.
+
+**Maps still cannot be typed, and the factoring is why.** `Finset (Name × Attr)` is rejected, the
+element type being the one under declaration. Splitting it as the question suggests does get past
+the kernel — `A2.m : Finset String → (String → A2) → A2`, and the sharper
+`A3.m : (keys : Finset String) → ({x // x ∈ keys} → A3) → A3`, which has nothing off-support at all.
+But `e` must *enumerate* the key set to build the wire form, and enumerating a `Finset` needs either
+choice (`Finset.toList`, via `Quot.out`) or an order (`Finset.sort`). So `Wire.canon` is still
+required, and now every structural recursion over `M` — `Agree`, `Attr.member`, `Attr.depth`, the
+`opaque` fixpoint — has to pass through an enumeration too. Maps keep the list and take the gate.
+
+One objection raised earlier does not apply: `Attr` and `Value` **do not derive `DecidableEq`** —
+only `Kind` and `Member` do. So nothing is lost by a constructor whose equality is undecidable, and
+the uniqueness gates were never going to be checkable on `Value` anyway. On the sets they are
+checkable on the payloads, which is where they belong.
 
 ## §5 Certifying an implementation
 
