@@ -586,7 +586,7 @@ so container options are never separated this way and the second counterexample 
 
 **It is two functions, not one.** A codec is a pair, and a term's admissible set is a claim about one
 half of it at a time: `adm(c) ⊆ Value` is what `e` will accept, `admA(c) ⊆ 𝔸` is what `p` will
-accept. They agree on most terms and part on two.
+accept. They agree on most terms and part on three — and the partings go both ways.
 
 | term                        | `adm` — value side   | `admA` — attribute side           |
 | --------------------------- | -------------------- | --------------------------------- |
@@ -595,9 +595,10 @@ accept. They agree on most terms and part on two.
 | `discriminatedUnion(d, o…)` | the pooled tags of the `oᵢ`, found by looking `d` up | the same, in the stored item |
 | `refine(c, q)`              | `adm(c)`             | `admA(c)`                         |
 | `legacy(c, r)`              | `adm(c)`             | **`⊤`**                           |
+| `held(c, f, g)`             | **`⊤`**              | `admA(c)`                         |
 | anything else               | `⊤`                  | `⊤`                               |
 
-Both partings are forced:
+All three partings are forced:
 
 - **`legacy(c, r)`.** The whole content of `legacy` is that `p` reads attributes `c` does not, so a
   passthrough `admA` would claim a bound on exactly the direction `r` widens. `legacy(literal("A"), r)`
@@ -614,6 +615,18 @@ Both partings are forced:
   would refuse a row the codec itself wrote — `ker p` shrinking below `η`. So numeric literals fall
   to **(U)** per input on the attribute side, while their value side separates as a string
   literal's does.
+- **`held(c, f, g)`**, and this one parts the other way — the only row where `admA` sees further
+  than `adm`. An adapter is opaque on the side its functions gate, and they gate one side only: `f`
+  sits in front of `e`, so what the term will *write* is unknowable and `adm` is `⊤`; `g` sits
+  behind `p` and is total, so it changes which value comes out and never which attributes go in.
+  `dom(p)` is the subterm's exactly, and `admA` passes through.
+
+  What this buys is a pair no other row reaches. `union(literal("A"), held(literal("B"), f, g))`
+  separates on the readable side for *every* `f` and `g` — the footprints are `{S "A"}` and
+  `{S "B"}` — while `union(literal("A"), held(literal("A"), f, g))`, the counterexample below,
+  still does not. The wrapper never decides; the subterm does, and reading through the wrapper is
+  what lets the question be asked of it. Note that the member disjunct is no help in either case:
+  both options are `⇝ S`.
 
 Two notes on what is _not_ in the table. `optional` and `fallback` are **fields** (§4), not terms,
 so nothing passes through them: `adm` is a function on terms and has no case to give them. And the
