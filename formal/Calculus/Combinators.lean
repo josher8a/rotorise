@@ -3398,6 +3398,36 @@ theorem entry_ranP {sems : List (Name × FieldSem)} {rc? : Option Codec}
   obtain ⟨c, v, hc, hp, rfl⟩ := decEntry_eq.mp h
   exact objEntryT_eq.mpr ⟨c, hc, (entryCodec_of hs hrc hc).ranP hp⟩
 
+/-- The same two, stated on the step the payload pair actually takes now: dispatch by
+    name, then run that entry's codec. -/
+theorem entry_domE' {sems : List (Name × FieldSem)} {rc? : Option Codec}
+    (hs : ∀ kf ∈ sems, Carrier kf.2.codec) (hrc : ∀ c ∈ rc?, Carrier c)
+    {k : Name} {v : Value} {a : Attr}
+    (h : (entryCodec sems rc? k).bind (fun c => c.e v) = some a) :
+    objEntryT sems rc? (k, v) := by
+  cases hc : entryCodec sems rc? k with
+  | none => rw [hc] at h; exact nomatch h
+  | some c =>
+    rw [hc] at h
+    exact objEntryT_eq.mpr ⟨c, hc, (entryCodec_of hs hrc hc).domE h⟩
+
+theorem entry_ranP' {sems : List (Name × FieldSem)} {rc? : Option Codec}
+    (hs : ∀ kf ∈ sems, Carrier kf.2.codec) (hrc : ∀ c ∈ rc?, Carrier c)
+    {k : Name} {a : Attr} {v : Value}
+    (h : (entryCodec sems rc? k).bind (fun c => c.p a) = some v) :
+    objEntryT sems rc? (k, v) := by
+  cases hc : entryCodec sems rc? k with
+  | none => rw [hc] at h; exact nomatch h
+  | some c =>
+    rw [hc] at h
+    exact objEntryT_eq.mpr ⟨c, hc, (entryCodec_of hs hrc hc).ranP h⟩
+
+/-- `fbValue` finds the stand-in a declared `fb` name reads to. -/
+theorem fbValue_of {sems : List (Name × FieldSem)} {k c v}
+    (hnd : (sems.map (·.1)).Nodup) (hm : (k, FieldSem.fb c v) ∈ sems) :
+    fbValue sems k = some v := by
+  simp [fbValue, lookup_eq_of_mem_nodup hnd hm]
+
 /-- §4's held set, both ways. The two premises past lawfulness are the doc's own:
     `hfb` is `(fallback)`'s `v(∗) ∈ dom(e)`, which with `domE` gives §4's `v : 𝟙 → T`;
     `hkeep` says the name filter never discards a declared name, which is what all
@@ -3416,33 +3446,36 @@ theorem carrier_objectCodecCore {sems : List (Name × FieldSem)} {rc? : Option C
     (hkeep : ∀ k, (sems.lookup k).isSome → kn k = true) :
     Carrier (objectCodecCore sems rc? kn) := by
   refine objectCodecCore_eq ▸ carrier_carried ?_ ?_
-  · intro kvs kas h
-    obtain ⟨hval, htr⟩ := objWrite_eq.mp h
-    exact ⟨hval, traverse_mem_input (entry_domE hsems hrc) htr⟩
-  · intro kas kvs h
-    obtain ⟨ds, hreq, htr, rfl⟩ := objRead_eq.mp h
-    refine ⟨valPresentB_of fun k fs hm hno => ?_, ?_⟩
-    · have hkn : kn k = true := hkeep k (by rw [lookup_eq_of_mem_nodup hnd hm]; rfl)
-      rw [List.map_append]
-      refine List.elem_eq_true_of_mem (List.mem_append.mpr ?_)
+  · rintro p q h
+    obtain ⟨hval, g, hg, rfl⟩ := objWrite_eq.mp h
+    exact ⟨hval, fun k => entry_domE' hsems hrc (funImage_some hg k)⟩
+  · rintro q p h
+    obtain ⟨hreq, d, hd, rfl⟩ := objRead_eq.mp h
+    constructor
+    · refine valPresentB_of fun k fs hm hno => ?_
+      have hkn : kn k = true := hkeep k (by rw [lookup_eq_of_mem_nodup hnd hm]; rfl)
+      rw [Finset.mem_union]
       cases fs with
       | opt c => exact absurd rfl (hno c)
       | req c =>
-        exact Or.inl (mem_decoded_names htr
-          (mem_of_contains (List.all_eq_true.mp hreq (k, .req c) hm)) hkn)
+        exact Or.inl (Finset.mem_filter.mpr ⟨reqPresentB_spec hreq hm, by simpa using hkn⟩)
       | fb c v₀ =>
-        cases hc : (kas.map (·.1)).contains k with
-        | true => exact Or.inl (mem_decoded_names htr (mem_of_contains hc) hkn)
-        | false => exact Or.inr (List.mem_map.mpr ⟨(k, v₀), fbDefaults_mem hm hc, rfl⟩)
-    · intro kv hkv
-      rcases List.mem_append.mp hkv with hd | hfd
-      · exact traverse_mem (entry_ranP hsems hrc) htr kv hd
-      · obtain ⟨c, hmem, hc⟩ := fbDefaults_spec hfd
-        obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp
-          (hfb (kv.1, .fb c kv.2) hmem c kv.2 rfl)
-        exact objEntryT_eq.mpr ⟨c, by
-          simp [entryCodec, lookup_eq_of_mem_nodup hnd hmem, FieldSem.codec],
-          (hsems (kv.1, .fb c kv.2) hmem).domE ha'⟩
+        by_cases hk : k ∈ q.1
+        · exact Or.inl (Finset.mem_filter.mpr ⟨hk, by simpa using hkn⟩)
+        · exact Or.inr (fbNames_mem hm hk)
+    · intro k
+      by_cases hk : k.1 ∈ q.1.filter (kn ·)
+      · simp only [dif_pos hk]
+        exact entry_ranP' hsems hrc (funImage_some hd ⟨k.1, hk⟩)
+      · simp only [dif_neg hk]
+        have hfbm : k.1 ∈ fbNames q.1 sems :=
+          (Finset.mem_union.mp k.2).resolve_left hk
+        obtain ⟨⟨c, v₀, hm⟩, -⟩ := mem_fbNames.mp hfbm
+        rw [fbValue_of hnd hm]
+        refine objEntryT_eq.mpr ⟨c, ?_, ?_⟩
+        · simp [entryCodec, lookup_eq_of_mem_nodup hnd hm, FieldSem.codec]
+        · obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp (hfb (k.1, .fb c v₀) hm c v₀ rfl)
+          exact (hsems (k.1, .fb c v₀) hm).domE ha'
 
 private theorem objStep_rt {sems : List (Name × FieldSem)} {rc? : Option Codec}
     (hf : ∀ kf ∈ sems, LawfulCore kf.2.codec) (hrc : ∀ c ∈ rc?, LawfulCore c) :
