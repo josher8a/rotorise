@@ -119,6 +119,11 @@ combinator, and the pair agrees on the nose. -/
 /-! §1's two number gates, as instances of the same combinator. `restrict` gates both
 halves by construction, which is what §3 argues an ad-hoc gate forgets. -/
 
+#assert_axioms lawfulCore_rawNumberCodec
+#assert_axioms literalNCodec_e_restrict
+#assert_axioms literalNCodec_p_restrict
+#assert_axioms uniqueAdmission_of_sharedBase
+#assert_axioms uAtCan_of_literalN_disjoint
 #assert_axioms numberCodec_e_restrict
 #assert_axioms numberCodec_p_restrict
 #assert_axioms decimalCodec_e_restrict
