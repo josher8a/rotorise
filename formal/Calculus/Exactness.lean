@@ -1638,5 +1638,50 @@ theorem retract_forbids_dedup_e {c : Codec} (h : LawfulCore c)
   rw [r1] at r2
   simp at r2
 
+/-! ### The reference, checked against the model
+
+`docs/dynamo-datatypes.md` is the official datatype reference. Most of §1 survives it
+exactly — `Numeral.WF`'s 38 digits and `-130 … 125` exponent range are the documented
+bounds; binary compares unsigned; empty strings and empty binary are permitted, empty lists
+and maps are permitted, empty sets are not, and the model already refuses the last.
+
+Two things do not survive, and they are the same defect at two members.
+
+**`SS`/`NS`/`BS`** — *"Each value within a set must be unique. The order of the values within
+a set is not preserved."* Recorded above.
+
+**`M`** — *"A map type attribute can store an **unordered** collection of name-value
+pairs."* The model's `M` is a `List (Name × Attr)`, so two orderings of one map are two
+attributes (`record_p_order_sensitive`, `record_e_order_sensitive`), and a repeated key is
+writable (`record_e_keeps_duplicate_keys`), which no map has.
+
+This one is sharper than the set case for two reasons. First, the model already *states* the
+intent elsewhere: `Agree` at `M` is lookup-based, comparing by key and ignoring order — so
+the two halves of the model disagree with each other, not merely with the reference. Second,
+maps cannot be repaired by typing. `Finset String` is admissible at `SS` because the element
+type is concrete; `Finset (Name × Attr)` is rejected by the kernel exactly as `Finset Value`
+is, the element type being the one under declaration. So `M` needs the well-formedness route
+on **both** sides — unique keys, canonically ordered — which is what `Wire.canon` provides,
+keyed by the name. -/
+
+/-- The reference: *"A map type attribute can store an **unordered** collection of
+    name-value pairs."* The model's `M` is a `List (Name × Attr)`, so two orderings of one
+    map are two attributes — the same defect as `SS`/`NS`/`BS`, one level up. -/
+theorem record_p_order_sensitive :
+    (recordCodec stringCodec).p (.m [("a", .s "x"), ("b", .s "y")])
+      ≠ (recordCodec stringCodec).p (.m [("b", .s "y"), ("a", .s "x")]) := by
+  simp [recordCodec, stringCodec, decPair, traverse]
+
+/-- …and on the write side. -/
+theorem record_e_order_sensitive :
+    (recordCodec stringCodec).e (.map [("a", .str "x"), ("b", .str "y")])
+      ≠ (recordCodec stringCodec).e (.map [("b", .str "y"), ("a", .str "x")]) := by
+  simp [recordCodec, stringCodec, encPair, traverse]
+
+/-- And a map may carry a repeated key, which no map has. -/
+theorem record_e_keeps_duplicate_keys :
+    ((recordCodec stringCodec).e (.map [("a", .str "x"), ("a", .str "y")])).isSome = true := by
+  simp [recordCodec, stringCodec, encPair, traverse]
+
 end
 end Calculus
