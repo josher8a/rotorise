@@ -41,12 +41,17 @@ def declarations():
         for a, b in zip(starts, starts[1:]):
             name = DECL.match(L[a]).group(1)
             kind = KIND.match(L[a]).group(1)
-            # the docstring immediately above, if any
-            doc, j = [], a - 1
+            # the docstring immediately above, if any. Attribute lines sit *between* the
+            # docstring and the declaration (`/-- … -/` then `@[simp]` then `def`), which
+            # is the order Lean requires, so skip back over them before looking.
+            j = a - 1
+            while j >= 0 and L[j].lstrip().startswith('@['):
+                j -= 1
+            doc, end = [], j + 1
             if j >= 0 and L[j].rstrip().endswith('-/'):
                 while j >= 0 and not L[j].lstrip().startswith('/--'):
                     j -= 1
-                doc = L[j:a]
+                doc = L[j:end]
             # the statement: up to the first `:=` or `where` or `by`
             stmt = []
             for i in range(a, b):
