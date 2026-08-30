@@ -48,7 +48,9 @@ mutual
     layer one more. -/
 def Value.depth : Value → Nat
   | .str _ | .num _ | .bool _ | .bin _ | .null => 1
-  | .set vs => Value.depthL vs + 1
+  -- A value set holds scalars, so it is one layer deep whatever its size — the same
+  -- reason `SS`/`NS`/`BS` are `2` on the attribute side.
+  | .strSet _ | .numSet _ | .binSet _ => 2
   | .arr vs => Value.depthL vs + 1
   | .map kvs => Value.depthP kvs + 1
 
@@ -200,10 +202,22 @@ theorem opaqCodec_e_num (lossy : Bool) (n : Nat) (d : Double) :
     simp [numberCodec_e_num, hw]
 
 /-- §3 `(opaque)`, write side at kind `set`: the wire member is computed from the elements (`asWireSet`), which is why one option covers `SS`, `NS` and `BS`. -/
-theorem opaqCodec_e_set (lossy : Bool) (n : Nat) (vs : List Value) :
-    (opaqCodec (n+1) lossy).e (.set vs)
-      = (setCodec (opaqCodec n lossy)).e (.set vs) := by
-  cases he : (setCodec (opaqCodec n lossy)).e (.set vs) <;>
+theorem opaqCodec_e_strSet (lossy : Bool) (n : Nat) (S : Finset String) :
+    (opaqCodec (n+1) lossy).e (.strSet S)
+      = (setCodec (opaqCodec n lossy)).e (.strSet S) := by
+  cases he : (setCodec (opaqCodec n lossy)).e (.strSet S) <;>
+    cases lossy <;> simp [-setCodec, he]
+
+theorem opaqCodec_e_numSet (lossy : Bool) (n : Nat) (S : Finset Double) :
+    (opaqCodec (n+1) lossy).e (.numSet S)
+      = (setCodec (opaqCodec n lossy)).e (.numSet S) := by
+  cases he : (setCodec (opaqCodec n lossy)).e (.numSet S) <;>
+    cases lossy <;> simp [-setCodec, he]
+
+theorem opaqCodec_e_binSet (lossy : Bool) (n : Nat) (S : Finset Bytes) :
+    (opaqCodec (n+1) lossy).e (.binSet S)
+      = (setCodec (opaqCodec n lossy)).e (.binSet S) := by
+  cases he : (setCodec (opaqCodec n lossy)).e (.binSet S) <;>
     cases lossy <;> simp [-setCodec, he]
 
 /-- §3 `(opaque)`, write side at kind `array`: the `L` option, recursing at one less fuel. -/
@@ -249,13 +263,30 @@ theorem opaq_e_agree (lossy : Bool) :
       rw [opaqCodec_e_null, opaqCodec_e_null]
   | .num _, n'+1, m'+1, hn, hm => by
       rw [opaqCodec_e_num, opaqCodec_e_num]
-  | .set vs, n'+1, m'+1, hn, hm => by
-      have hn' : Value.depthL vs <= n' := by simp only [Value.depth] at hn; omega
-      have hm' : Value.depthL vs <= m' := by simp only [Value.depth] at hm; omega
-      rw [opaqCodec_e_set, opaqCodec_e_set]
-      show (traverse (opaqCodec n' lossy).e vs).bind asWireSet
-         = (traverse (opaqCodec m' lossy).e vs).bind asWireSet
-      rw [opaq_e_agreeL lossy vs n' m' hn' hm']
+  | .strSet S, n'+1, m'+1, hn, hm => by
+      have hn' : (1:Nat) <= n' := by simp only [Value.depth] at hn; omega
+      have hm' : (1:Nat) <= m' := by simp only [Value.depth] at hm; omega
+      rw [opaqCodec_e_strSet, opaqCodec_e_strSet]
+      simp only [setCodec, encSet,
+        show ∀ x : String, (opaqCodec n' lossy).e (Value.str x)
+             = (opaqCodec m' lossy).e (Value.str x) from
+          fun x => opaq_e_agree lossy (.str x) n' m' hn' hm']
+  | .numSet S, n'+1, m'+1, hn, hm => by
+      have hn' : (1:Nat) <= n' := by simp only [Value.depth] at hn; omega
+      have hm' : (1:Nat) <= m' := by simp only [Value.depth] at hm; omega
+      rw [opaqCodec_e_numSet, opaqCodec_e_numSet]
+      simp only [setCodec, encSet,
+        show ∀ x : Double, (opaqCodec n' lossy).e (Value.num x)
+             = (opaqCodec m' lossy).e (Value.num x) from
+          fun x => opaq_e_agree lossy (.num x) n' m' hn' hm']
+  | .binSet S, n'+1, m'+1, hn, hm => by
+      have hn' : (1:Nat) <= n' := by simp only [Value.depth] at hn; omega
+      have hm' : (1:Nat) <= m' := by simp only [Value.depth] at hm; omega
+      rw [opaqCodec_e_binSet, opaqCodec_e_binSet]
+      simp only [setCodec, encSet,
+        show ∀ x : Bytes, (opaqCodec n' lossy).e (Value.bin x)
+             = (opaqCodec m' lossy).e (Value.bin x) from
+          fun x => opaq_e_agree lossy (.bin x) n' m' hn' hm']
   | .arr vs, n'+1, m'+1, hn, hm => by
       have hn' : Value.depthL vs <= n' := by simp only [Value.depth] at hn; omega
       have hm' : Value.depthL vs <= m' := by simp only [Value.depth] at hm; omega
