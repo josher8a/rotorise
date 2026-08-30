@@ -58,8 +58,10 @@ namespace Calculus
 abbrev Held := Value → Prop
 
 /-- `℘⁺fin(T)` — the nonempty finite subsets of `T` (§3 `(set)`). -/
-def HSet (T : Held) : Held :=
-  fun v => ∃ vs, v = .set vs ∧ vs ≠ [] ∧ ∀ x ∈ vs, T x
+def HSet (T : Held) : Held := fun v =>
+  (∃ S : Finset String, v = .strSet S ∧ S.Nonempty ∧ ∀ s ∈ S, T (.str s)) ∨
+  (∃ S : Finset Double, v = .numSet S ∧ S.Nonempty ∧ ∀ d ∈ S, T (.num d)) ∨
+  (∃ S : Finset Bytes,  v = .binSet S ∧ S.Nonempty ∧ ∀ b ∈ S, T (.bin b))
 
 /-- `T*` (§3 `(array)`). -/
 def HStar (T : Held) : Held :=
@@ -127,7 +129,10 @@ inductive HOpaque (lossy : Bool) : Value → Prop where
       value anyway — you cannot tell `SS` from `NS`. Both readings §3 gives of `Uν` (the
       prose one, and the fixpoint `union(…, set(opaque), …)` whose `(set)` rule carries
       `vs ≠ []`) exclude it. `HeldSet.lean` has the witness. -/
-  | set  (vs) (hne : vs ≠ []) (h : ∀ x ∈ vs, HOpaque lossy x) : HOpaque lossy (.set vs)
+  | strSet (S : Finset String) (hne : S.Nonempty) : HOpaque lossy (.strSet S)
+  | numSet (S : Finset Double) (hne : S.Nonempty) (h : lossy = true) :
+      HOpaque lossy (.numSet S)
+  | binSet (S : Finset Bytes) (hne : S.Nonempty) : HOpaque lossy (.binSet S)
   | arr  (vs) (h : ∀ x ∈ vs, HOpaque lossy x) : HOpaque lossy (.arr vs)
   | map  (kvs) (h : ∀ kv ∈ kvs, HOpaque lossy kv.2) : HOpaque lossy (.map kvs)
 
