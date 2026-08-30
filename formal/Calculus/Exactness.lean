@@ -1545,7 +1545,13 @@ theorem sepJV_set_literals :
     have h2 := hall' x hx
     simp [Adm] at h1 h2
     exact absurd (h1.symm.trans h2) (by decide)
-  all_goals simp [Adm] at hv ⊢
+  all_goals
+    first
+      | (simp only [Adm, Bool.and_eq_true, decide_eq_true_eq] at hv
+         obtain ⟨hne, hall⟩ := hv
+         obtain ⟨x, hx⟩ := Finset.card_ne_zero.mp hne
+         exact absurd (hall x hx) (by simp [Adm]))
+      | simp [Adm] at hv
 
 /-- …and the contrast that shows what the non-emptiness is doing: the *array* pair does not
     separate, because both options admit `[]`. This is §5's empty-container argument in its
@@ -1555,113 +1561,67 @@ theorem not_sepJV_array_literals :
   intro h
   exact absurd (h (.arr []) (by simp [Adm, AdmAll])) (by simp [Adm, AdmAll])
 
-/-! ### What `set` is, structurally — and one thing it is not
+/-! ### What `set` is, structurally — and the defect that closed
 
-Three readings are worth separating, because two are right and the third turns up a defect.
+Three readings were worth separating. Two were right and the third found a defect; the
+defect is now fixed by the type, and these are the witnesses that it is.
 
-**Not a `union`.** A union is a choice among *codecs*, resolved by (U); `set`'s elements all
-go through **one** codec, so no uniqueness obligation arises. That is the whole reason `set`
-is exact-modulo-homogeneity while `union` is exact only under (U).
+**Not a `union`.** A union is a choice among *codecs*, resolved by (U); a set's elements all
+go through **one** codec, so no uniqueness obligation arises. That is why `set` needs no (U)
+and `union` does.
 
-**Yes, `array` with a partial wrapper.** `setCodec_e_via_arrayCodec`: the two share
-`traverse c.e vs` exactly, and differ only in how the payload list is presented — the total
-constructor `Attr.l` against the partial `asWireSet`. Every difference between the rows is
-that partiality: the non-emptiness `set` gains, and the homogeneity that keeps it out of
-`Analysable`. `set` is not `entrywise`, which takes a total `Ctor`; it is the same traversal
-under a wrapper that can fail.
+**Not `array` with a wrapper either, any more.** It was, while both were lists: the two
+shared `traverse c.e vs` and differed only in how the payload list was presented. With the
+sets typed there is no shared list to share — `array` traverses a `List Value`, `set` images
+a `Finset` — and what survives of the old observation is that the *element* codec is the
+same in both.
 
-**But not "order does not matter".** §1 types `SS` as `℘⁺fin(String)` — non-empty,
-*unordered* — and §2 names set orderings as the first of three reasons `ker p` is not
-equality: "two orderings of one set are distinct attributes reading to one value". The model
-does not do that. `Value.set` is a `List Value` with no quotient and no well-formedness
-predicate, so orderings are preserved on both halves (`set_p_order_sensitive`,
-`set_e_order_sensitive`) and duplicates survive (`set_e_keeps_duplicates`).
+**And "order does not matter" is now true of the model**, where it was not. §1 types `SS` as
+`℘⁺fin(String)` and the reference says the order of a set's values is not preserved and each
+value is unique. Three theorems recorded that the model disagreed. They are replaced by the
+three below, which say the disagreement is over: an ordering is not a distinction a `Finset`
+can make, and a repeat is not an inhabitant it can hold. -/
 
-Nothing here is unsound — the laws hold of the model as written. What is false is §2's
-stated *reason* for the quotient, at least as the formalization realises §1: two orderings
-read to two values, so `ker p` is equality at `setCodec` and the collapse §2 attributes to
-sets does not happen. -/
+/-- Two "orderings" of one set are the same value — there is nothing to quotient. -/
+theorem set_order_irrelevant :
+    (Value.strSet {"a", "b"}) = (Value.strSet {"b", "a"}) :=
+  congrArg Value.strSet (Finset.ext fun x => by
+    simp only [Finset.mem_insert, Finset.mem_singleton]
+    exact ⟨fun h => h.elim (fun e => Or.inr e) (fun e => Or.inl e),
+           fun h => h.elim (fun e => Or.inr e) (fun e => Or.inl e)⟩)
 
-/-- `set` and `array` are one entrywise product with two presentations: the same
-    `traverse c.e vs`, wrapped by a *total* constructor in one case and a *partial* one in
-    the other. Every difference between the two rows is `asWireSet`'s partiality. -/
-theorem setCodec_e_via_arrayCodec (c : Codec) (vs : List Value) :
-    (setCodec c).e (.set vs)
-      = ((arrayCodec c).e (.arr vs)).bind
-          (fun a => match a with | .l as => asWireSet as | _ => none) := by
-  simp only [setCodec, arrayCodec]
-  cases traverse c.e vs <;> rfl
+/-- …and the same attribute. -/
+theorem wireSet_order_irrelevant :
+    (Attr.ss {"a", "b"}) = (Attr.ss {"b", "a"}) :=
+  congrArg Attr.ss (Finset.ext fun x => by
+    simp only [Finset.mem_insert, Finset.mem_singleton]
+    exact ⟨fun h => h.elim (fun e => Or.inr e) (fun e => Or.inl e),
+           fun h => h.elim (fun e => Or.inr e) (fun e => Or.inl e)⟩)
 
-/-- **The model's wire sets are ordered.** Two orderings of one set read to two *different*
-    values, so `ker p` is equality here — where §2 of the calculus says the quotient
-    collapses precisely because "two orderings of one set are distinct attributes reading
-    to one value". -/
-theorem set_p_order_sensitive :
-    (setCodec stringCodec).p (.ss ["a", "b"])
-      ≠ (setCodec stringCodec).p (.ss ["b", "a"]) := by
-  simp [setCodec, stringCodec, traverse]
+/-- A repeat is not an inhabitant: `℘⁺fin` has no multiplicities, and neither does the
+    model now. -/
+theorem set_no_duplicates :
+    (Value.strSet {"a", "a"}) = (Value.strSet {"a"}) :=
+  congrArg Value.strSet (Finset.ext fun x => by
+    simp only [Finset.mem_insert, Finset.mem_singleton]
+    exact ⟨fun h => h.elim id id, fun h => Or.inr h⟩)
 
-/-- …and on the write side too: two orderings of one value are two attributes. -/
-theorem set_e_order_sensitive :
-    (setCodec stringCodec).e (.set [.str "a", .str "b"])
-      ≠ (setCodec stringCodec).e (.set [.str "b", .str "a"]) := by
-  simp [setCodec, stringCodec, traverse, asWireSet, strPayloads, sC]
+/-! ### What (R) would have forced, had the type not settled it
 
-/-- Duplicates survive as well, which `℘⁺fin` does not permit. -/
-theorem set_e_keeps_duplicates :
-    (setCodec stringCodec).e (.set [.str "a", .str "a"]) = some (.ss ["a", "a"]) := by
-  simp [setCodec, stringCodec, traverse, asWireSet, strPayloads, sC]
+The repair was once going to be a canonical form over lists, and (R) constrained it hard:
+retraction is to the *same* value, not an agreeing one, so a codec whose `e` collapsed two
+orderings would owe one attribute two readings. `e` could not normalise; it would have had
+to accept exactly one representative per set and refuse the rest, with `p` normalising so
+that `ker p` collapsed the orderings — §2's sentence, made true by construction.
 
-/-! ### Fixing `set`: what (R) allows, and what it forbids
+None of that is needed. `Finset` has one representative per set *as a type*, so there is
+nothing for `e` to choose between and nothing for `p` to collapse; `ker p` is equality at
+`setCodec` and that is now correct rather than a defect. The constraint is recorded because
+it is what rules out the alternative design, not because anything here depends on it.
 
-`Value.set` is a list and §1's `SS` is `℘⁺fin`, so the model admits orderings and duplicates
-the domain does not. Repairing that is constrained from the start, and the constraint is
-worth stating before any design: **`e` cannot normalise.**
-
-(R) is `retract : c.e t = some a → c.p a = some t` — retraction to the *same* value, not to
-an agreeing one. So if two orderings of one set both write, they must write *different*
-attributes: a codec collapsing them would owe one attribute two readings
-(`retract_forbids_insensitive_e`), and the same argument kills duplicate-collapsing on the
-write side (`retract_forbids_dedup_e`).
-
-What is allowed is the other half. `Carrier` asks only `dom(e) ⊆ T`, not equality, so `e`
-may *refuse* the non-canonical representatives while `T` keeps holding them. And nothing
-constrains `p` to be injective — it is a quotient by design (§2). So the repair is forced
-into one shape:
-
-* `e` accepts exactly one representative per set — the payload-sorted, duplicate-free one —
-  and refuses the rest.
-* `p` normalises, so every ordering of a wire set reads to that one value.
-
-Which is exactly §2's sentence, made true: *two orderings of one set are distinct attributes
-reading to one value*. It is currently false only because the model never picked a
-representative.
-
-The canonicity test lives on the **payloads**, not on values: `asWireSet` already has
-`List String`, `List Numeral` and `List Bytes` in hand, all with decidable orders, so no
-order on `Value` — and none on the axiomatized `Double` — is needed. -/
-
-/-- **`e` cannot be order-insensitive.** (R) is retraction to the *same* value, not to an
-    agreeing one, so if two orderings of a set both write, they write different attributes.
-    A codec whose `e` collapsed them would have to read that one attribute back as two
-    values. -/
-theorem retract_forbids_insensitive_e {c : Codec} (h : LawfulCore c)
-    {x y : Value} (hne : x ≠ y) {a : Attr}
-    (h1 : c.e (.set [x, y]) = some a) (h2 : c.e (.set [y, x]) = some a) : False := by
-  have r1 := h.retract h1
-  have r2 := h.retract h2
-  rw [r1] at r2
-  simp at r2
-  exact hne r2.1
-
-/-- The same argument kills duplicate-collapsing on the write side. -/
-theorem retract_forbids_dedup_e {c : Codec} (h : LawfulCore c)
-    {x : Value} {a : Attr}
-    (h1 : c.e (.set [x]) = some a) (h2 : c.e (.set [x, x]) = some a) : False := by
-  have r1 := h.retract h1
-  have r2 := h.retract h2
-  rw [r1] at r2
-  simp at r2
+`Calculus/WireOrder.lean` — the canonical form and the axiom-free order it was built on —
+is likewise no longer on the set path. It stays for the map gate, where the kernel does
+refuse the quotient. -/
 
 /-! ### The reference, checked against the model
 
