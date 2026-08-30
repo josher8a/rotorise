@@ -1346,6 +1346,41 @@ collapse §2 attributes to sets does not occur. Either §1's `℘⁺fin` needs a
 on `Value.set` the way `Numeral.WF` gates `N`, or §2 should not cite sets among the three reasons.
 The other two — `η` normalising `N`, and `drop` discarding names — are unaffected.
 
+### One where the type was wrong, and only half of it can be fixed
+
+The repair above canonicalises lists. The prior question is why lists are there at all: `SS`, `NS`
+and `BS` *are* sets, and a list is not one. Modelling a set as a list and then repairing the damage
+with a well-formedness predicate is a workaround; using the right type is not.
+
+**The two sides answer differently, and the kernel decides it.**
+
+* **Attribute side — the right type works.** `Attr.ss : Finset String` compiles, with the recursive
+  `L` and `M` arms alongside it. The wire-set members carry *concrete* element types — `String`,
+  `Numeral`, `Bytes` — so nothing is nested and nothing is circular. There is no reason for these
+  three to be lists, and every ordering and duplicate the model currently admits at `SS`/`NS`/`BS`
+  is an artefact of the wrong type.
+* **Value side — the right type is impossible.** `Value.set (v : Finset Value)` is rejected by the
+  kernel: *"arg #1 contains a non valid occurrence of the datatypes being declared"*. `Multiset`
+  fails identically. Lean's nested inductives admit a type constructor only if it is a polynomial
+  functor, and both are quotients. `Value.set` **must** be a list, and the honest repair there is a
+  well-formedness predicate — exactly the pattern §1 already uses when `Numeral.WF` gates `N` rather
+  than `N` being a subtype.
+
+So the asymmetry is not a modelling preference; it is where the language stops. What follows from it:
+
+1. `Attr`'s three wire-set members should be `Finset`, which removes the spurious distinctions at
+   the source rather than quotienting them away afterwards.
+2. `Value.set` stays a list with a `SetWF` gate, and (R) still forces `e` to accept exactly one
+   representative — `retract_forbids_insensitive_e` is unaffected by the attribute type.
+3. The order in `Calculus/WireOrder.lean` is needed either way. Reading a `Finset String` back into
+   a canonical `List Value` is a `Finset.sort`, which wants a `LinearOrder`; mathlib's on `String`
+   pulls `Classical.choice` and `Finset.toList` goes through `Quot.out`. `lexLe` is the axiom-free
+   route to the same thing.
+
+This is a change to `Attr`, which is foundational — `Agree`, `Attr.member`, `Attr.depth`,
+`asWireSet`, the three payload projections, `setCodec`'s read side and the `opaque` fixpoint all
+pattern-match on it. It is the right change and it is not a small one.
+
 ## §5 Certifying an implementation
 
 The calculus is portable by design: nothing in it is TypeScript, and nothing is Rotorise. An

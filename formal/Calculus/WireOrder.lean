@@ -1,8 +1,14 @@
 /-!
 # Wire-set order
 
-§1's `SS`, `NS` and `BS` are *sets* — `℘⁺fin` — and the model represents them as lists, so
-repairing that needs a canonical representative per set, which needs an order. There are
+§1's `SS`, `NS` and `BS` are *sets* — `℘⁺fin` — and the model represents them as lists.
+`Attr` should not: its wire-set members carry concrete element types, so `Finset String`
+compiles there and is the right type. `Value.set` cannot follow, because a `Finset Value`
+nested in `Value`'s own declaration is rejected by the kernel — quotients are not polynomial
+functors — so that side keeps a list under a well-formedness gate, as `Numeral.WF` gates `N`.
+
+Either way a canonical representative is needed: reading a set back into a `List Value` is a
+sort, and a sort needs an order. There are
 only three payload types and all three are lists of bounded naturals: `String` and
 `Numeral` through their characters, `Bytes` through its octets. So the order lives on
 `List Nat`, where `Nat`'s own laws are **axiom-free** — no order on `Value`, none on the
