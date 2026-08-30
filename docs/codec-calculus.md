@@ -248,7 +248,12 @@ left to the service.
 The two rules check it in the two different places their admissible sets live. `(number)` gates
 **both halves**: `e` on the text the double is written as, and `p` on the double the text reads
 back to, which is not redundant — a numeral the store holds can read back as a double past the
-maximum, and gating only the write is the configuration that breaks **(C)**. `(literal-N)` gates at
+maximum, and gating only the write is the configuration that breaks **(C)**.
+
+Both-halves gating is not an extra duty these rules carry; it is what a gate _is_ in this calculus.
+A predicate checked on the way in and on the way out is `refine`, and both number rules are `refine`
+over an ungated base — `number` at `D`, `decimal` at `Stored`. Nothing about them is bespoke, and
+the shape is the argument: an ad-hoc `if` can gate one half and a `refine` cannot. `(literal-N)` gates at
 the **declaration**, alongside `n ≥ 1` and pairwise distinctness, because `ℓ` is data the term owns
 and a premise on data is decidable when the codec is built.
 
