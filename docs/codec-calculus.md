@@ -128,6 +128,36 @@ is then the canonizer, mapping any readable attribute to the canonical represent
 codec is total on `Can(c)` and merely partial on `𝔸`, which is the precise sense in which a table is
 more permissive than the schema describing it.
 
+### What a codec ideally is
+
+Those pieces assemble into something simpler than the four laws suggest, and it is worth stating
+because it says where the complexity actually lives.
+
+**Between `dom(e)` and `Can(c)`, a codec is a bijection.** `p ∘ e = id` there is **(R)**; `e ∘ p = id`
+there follows from it, since a canonical attribute is `e(t)` for some `t` and **(R)** sends it back
+to that `t`; and `e` is injective for the same reason. No quotient, no partiality, nothing to
+choose. On that part a codec is a plain isomorphism between a set of values and a set of attributes,
+and there is nothing further to say about it.
+
+Everything else in §2 is one of exactly **two extensions** of that bijection, in the two directions
+it can be extended:
+
+|                 | extension                             | what it buys                                                    | the law that governs it |
+| --------------- | ------------------------------------- | --------------------------------------------------------------- | ----------------------- |
+| **quotient**    | `dom(p) ⊇ Can(c)`, strictly           | reading back what the store hands you, not only what you wrote  | **(C)**, and `≈c`       |
+| **partiality**  | `dom(e) ⊆ T`, `dom(p) ⊊ 𝔸`            | refusing values and attributes that are not yours               | the domains themselves  |
+
+So `e ∘ p = id` being false is not a defect of the pair, and not a weakening of the iso. It is the
+first extension, seen from outside: on `Can(c)` the equation _does_ hold, and off it the canonizer
+maps each class to its representative. The literature has a name for each — quotient lenses [1] for
+the first, partial isomorphisms [2] for the second — and this calculus needs both, which is why
+neither reference alone is the right one.
+
+The same two relaxations reappear one level up, in the terms rather than in the pair: §3's `held` is
+an iso and `refine` its prism, and §6's `legacy(c, r) ≈ c` on `Can(c)` is the quotient again at the
+term level. That is not a coincidence but it is not a theorem either — the algebra that builds
+codecs relaxes an iso in the two ways a codec itself does.
+
 ---
 
 ## §3 The judgement
