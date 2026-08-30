@@ -267,7 +267,7 @@ group would cost if it leaked: the three devices that pin §5's declaration-time
 the denotation, the three ω-twins that all travel along `denoteω_eq`, and the `opaque`
 and numeral rows. The guard went green first try, which is the expected result — the
 point was never to find a leak, it was to stop the eleven hand-checks from having to be
-redone by the next reader. Coverage 17 → **28 of 99**, and 52 of 123 once items 3–5 and 8–11 and the `(number)` gate added theorems of their own.
+redone by the next reader. Coverage 17 → **28 of 99**, and 52 of 130 once items 3–5 and 8–11 and the `(number)` gate added theorems of their own; the denominator moved again when §6's audit began citing the theorems it had read.
 
 A measurement artefact worth naming, since this file's own rule is that the script wins:
 `fidelity_audit.py` reads `FIDELITY.md` as one of its document sources, so *citing* a
@@ -323,21 +323,22 @@ At HEAD: 714 declarations, 520 theorems, 194 definitions.
 
 | | |
 | --- | ---: |
-| theorem names the documents cite as results | 123 |
+| theorem names the documents cite as results | 130 |
 | …put through `#assert_axioms` | **52** |
-| §-tag coverage (declarations naming a spec section) | **20%** |
-| docstring coverage, theorems | 56% |
+| §-tag coverage (declarations naming a spec section) | **23%** |
+| docstring coverage, theorems | 59% |
 | docstring coverage, definitions | 72% |
 | **theorem statements naming an undocumented definition** | **59%** |
-| …and themselves undocumented | 134 |
+| …and themselves undocumented | 120 |
 
 The last row is the one that matters. A statement naming an undocumented definition
 cannot be read against the specification without a detour — and this counts the
 *statement*, never the proof. A reviewer is entitled to skip a proof; they are not
 entitled to skip a statement.
 
-Per-module §-tags are worst exactly where the volume is: `Combinators.lean` 10%,
-`Opaque.lean` 1%, `Term.lean` 0%. The 55 undocumented definitions include `Typed`,
+Per-module §-tags are worst exactly where the volume is: `Combinators.lean` 11%,
+`Term.lean` 0%, `Denoteω.lean` 3%. `Opaque.lean` was 1% and is now 25%, and `Lists.lean` 2%
+and now 21% — both from the §6 audit below, which is what that audit turned out to be *for*. The 55 undocumented definitions include `Typed`,
 `Term`, `denote`, `setCodec`, `arrayCodec`, `objectCodec`. **No line of source says which
 §3 rule `setCodec` denotes** — that mapping exists only in `README.md` prose.
 
@@ -425,10 +426,48 @@ Item 3 of `VOCABULARY.md`'s plan — `pointCodec = carriedCodec`, which would ha
 to the ten ground codecs — remains open and is now ranked below all of these. It is
 density; these are fidelity.
 
-## §6 What neither audit checked
+## §6 What neither audit checked — now read
 
-Neither compiled anything, and neither verified a proof. Not read: `Opaque.lean`'s
-eighteen unfoldings and depth lemmas, `Lists.lean` against §5's Traversal Lemma,
-`Denoteω`/`Soundnessω`'s transport, `Continuity.lean`. The §3 measurements are mechanical
+Neither audit compiled anything, and neither verified a proof. Four regions went unread:
+`Lists.lean` against §5's Traversal Lemma, `Opaque.lean`'s unfoldings and depth lemmas,
+`Denoteω`/`Soundnessω`'s transport, and `Continuity.lean`. The §3 measurements are mechanical
 and reproducible; the §2 findings are readings, and are marked with which of them was
 re-derived.
+
+**All four have now been read, and the verdict is: no defects.** That is worth stating first,
+because the prediction going in was the opposite one.
+
+| region | verdict |
+| --- | --- |
+| `Lists.lean` vs §5's Lemma (traversal) | **faithful.** All five clauses have counterparts and each says what the Lemma says: `traverse_eq_some` (the lift, positions preserved), `traverse_isSome_of_all` (defined where every entry is), `traverse_roundTrip` (R), `traverse_isSome` (C), `traverse_rel` (`≼`), `traverse_length`. The keyed clause is `traverse_fst` and `lookup_rel` |
+| `Opaque.lean`'s unfoldings and depth | **complete and exhaustive.** Eight `opaqCodec_e_*` and ten `opaqCodec_p_*` — total over `Value`'s and `Attr`'s constructors respectively — and `opaq_onKinds` pins all eight options to eight distinct kinds as a `Forall₂`, so the "one option per kind" claim `uniqueAdmission_of_kinds` consumes is total rather than sampled |
+| `Denoteω`/`Soundnessω` transport | **faithful.** `denoteω_eq` is a total case analysis over `Term`, already under `#assert_axioms` |
+| `Continuity.lean` | **faithful**, and the best-documented file in the development — it states the obligation `partial_function` cannot discharge, gives the witness at combinator and term level, and names the honest reading of its own counterexample |
+
+Two things came out of reading them, and neither is a defect:
+
+- **`Lists.lean` is §5's Traversal Lemma and nothing in it said so.** One `§` in 440 lines,
+  and that one was an aside about `Classical.choice`. Five typing rules rest on that Lemma and
+  a reviewer had no way to line up nine theorems against a paragraph of prose. The file now
+  opens with the clause-by-clause table and the theorems carry §5 tags; coverage 2% → 21%.
+  This is U-class exactly — true, provable, and unlocatable — and it is the largest single
+  instance of it left.
+- **One stale sentence in `Opaque.lean`'s header**: "the eight unfoldings, one per kind",
+  which is true of `e` and false of `p`. The read side has ten, because §1's three wire sets
+  are one *kind* and three *members*. The asymmetry is load-bearing — kind-disjointness is
+  what (U) needs — so the header now says which side is which and why.
+
+**And the prediction was wrong, which is the entry worth keeping.** Going in, the argument for
+reading these first was that this arc's defects had all come from unaudited transcriptions —
+`HOpaque.set`'s missing `vs ≠ []`, `admA`'s absent `legacy` case, §5's `adm` table — so the
+region with zero audit coverage was where the next one was most likely to be. It was not. The
+four unread files are, if anything, *better* than the audited ones: `Continuity.lean` is the
+most careful prose in the development and `Lists.lean`'s theorems are exactly the Lemma's
+clauses with nothing missing.
+
+The reason is visible in hindsight and is worth carrying forward. Every defect this arc found
+sat where **two artifacts had to agree** — a doc against the model, the model against the
+implementation, a rule figure against the paragraph beneath it. These four files have no
+counterpart to disagree with: `Lists.lean` is plumbing, `Continuity.lean` is a refutation of a
+claim about tooling. **Unaudited is not the predictor; unaudited *and* duplicated is.** The
+remaining places where two artifacts state the same thing are where the next defect is.

@@ -135,7 +135,7 @@ are true but unlocatable, two corrections to this package's own artifacts, and a
 review surface. Regenerate the measurements with `python3 scripts/fidelity_audit.py`.
 
 The headline: the guard puts 52 constants through `#assert_axioms` while the documents
-cite 123 as results, §-tag coverage is 20%, and **59% of theorem statements name a
+cite 130 as results, §-tag coverage is 23%, and **59% of theorem statements name a
 definition that is documented nowhere** — a statement a reviewer cannot read against the
 specification without a detour. (The guard's count was 17 when the audit was written;
 items 1–5, 8 and 9 of its plan closed the gap it measured, and its §5 records which.)

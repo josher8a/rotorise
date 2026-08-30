@@ -66,7 +66,45 @@ end List
 
 namespace Calculus
 
-/-! ## Traversal -/
+/-! ## Traversal — §5's Lemma, clause by clause
+
+This section **is** the specification's Lemma (traversal), and nothing in the file said so.
+§5 states it once and then says "every product case below is an instantiation", so five
+rules — `array`, `tuple`, `record`, `object`, `set` — rest on a paragraph of prose whose
+mechanization was spread across nine theorems with no stated correspondence. Here it is.
+
+> *Let a step be an entrywise pair between the entries of two lists, and lift it entrywise —
+> defined where every entry is, positions preserved. If the step satisfies a law pointwise,
+> the lift satisfies it listwise.*
+
+| §5's clause | here | how |
+| --- | --- | --- |
+| the lift itself, positions preserved | `traverse_eq_some` | the pivot: a successful traversal **is** `Forall₂ (f · = some ·)`, which is positional by construction |
+| defined where every entry is | `traverse_isSome_of_all` | no partner list — only that every entry is writable |
+| **(R)**, "positions re-read in place" | `traverse_roundTrip` | the relation, reversed |
+| **(C)**, "each entry re-encodes" | `traverse_isSome` | the relation, forgotten down to definedness |
+| **`≼`**, "a shared position decodes and re-encodes through the same step" | `traverse_rel` | the relation, composed — read-then-rewrite is two traversals, so `Forall₂.compose` |
+| "lengths survive both directions" | `traverse_length` | one direction; the other is `traverse_roundTrip` and this again |
+
+And the keyed refinement, which §5 adds in one sentence:
+
+> *Keyed lists add one clause: entries are dispatched and compared by name, first occurrence
+> first, so the lookup form of `≼`'s `M` clause follows from the pointwise one.*
+
+| | here |
+| --- | --- |
+| names survive the traversal | `traverse_fst` |
+| dispatched and compared by name, **first occurrence first** | `lookup_rel`, in the Lookup section below |
+
+`lookup_rel` is where "first occurrence first" is actually earned, and it is worth saying how,
+because the obvious reading is that it needs duplicate-free keys and it does not. It recurses
+on the two lists in lockstep and demands only that the names agree at each position, so the
+first occurrence of a name is at the same index in both — which is exactly why duplicates are
+harmless rather than excluded. §1's `M` and `Item` do admit duplicate keys (see `FIDELITY.md`
+D7), so this is load-bearing and not a convenience.
+
+Read the other way, this table is the answer to "which of these nine theorems may I skip".
+None of them: each is one clause of a Lemma five typing rules consume. -/
 
 /-- A list traversed by an entrywise partial function: all-or-nothing. -/
 def traverse {α β : Type} (f : α → Option β) : List α → Option (List β)
@@ -86,9 +124,9 @@ theorem traverse_cons {x : α} {xs : List α} :
     traverse f (x :: xs) = (f x).bind fun y => (traverse f xs).map (y :: ·) := by
   simp only [traverse]; cases f x <;> cases traverse f xs <;> rfl
 
-/-- **The pivot.** A traversal succeeds exactly when the entrywise function relates the
-    two lists position by position. Everything below is a corollary of this and mathlib's
-    `Forall₂` API. -/
+/-- **The pivot** (§5, Lemma (traversal): the lift, positions preserved). A traversal
+    succeeds exactly when the entrywise function relates the two lists position by position.
+    Everything below is a corollary of this and mathlib's `Forall₂` API. -/
 theorem traverse_eq_some {xs : List α} {ys : List β} :
     traverse f xs = some ys ↔ List.Forall₂ (fun x y => f x = some y) xs ys := by
   induction xs generalizing ys with
@@ -97,16 +135,20 @@ theorem traverse_eq_some {xs : List α} {ys : List β} :
     | nil => simp [traverse_cons, Option.bind_eq_some, ih]
     | cons y ys => simp [traverse_cons, Option.bind_eq_some, ih, List.forall₂_cons]
 
+/-- §5, Lemma (traversal): "lengths survive both directions". This is one of them; the
+    other is this applied to `traverse_roundTrip`'s conclusion. -/
 theorem traverse_length :
     ∀ (xs : List α) (ys : List β), traverse f xs = some ys → xs.length = ys.length :=
   fun _ _ ht => (traverse_eq_some.mp ht).length_eq
 
-/-- Pointwise (R) lifts to the traversal: reverse the relation. -/
+/-- §5, Lemma (traversal), **(R)** — "positions re-read in place". Pointwise (R) lifts to
+    the traversal: reverse the relation. -/
 theorem traverse_roundTrip (h : ∀ x y, f x = some y → g y = some x) :
     ∀ (xs : List α) (ys : List β), traverse f xs = some ys → traverse g ys = some xs :=
   fun _ _ ht => traverse_eq_some.mpr ((traverse_eq_some.mp ht).imp h).flip
 
-/-- Definedness needs no partner list — only that every entry is writable. -/
+/-- §5, Lemma (traversal): "defined where every entry is". Definedness needs no partner
+    list — only that every entry is writable. -/
 theorem traverse_isSome_of_all {xs : List α} (h : ∀ x ∈ xs, (f x).isSome) :
     (traverse f xs).isSome := by
   induction xs with
@@ -116,16 +158,18 @@ theorem traverse_isSome_of_all {xs : List α} (h : ∀ x ∈ xs, (f x).isSome) :
       obtain ⟨ys, hys⟩ := Option.isSome_iff_exists.mp (ih fun z hz => h z (by simp [hz]))
       simp [traverse_cons, hy, hys]
 
-/-- Pointwise (C) lifts to the traversal: forget the partner, keep definedness. -/
+/-- §5, Lemma (traversal), **(C)** — "each entry re-encodes". Pointwise (C) lifts to the
+    traversal: forget the partner, keep definedness. -/
 theorem traverse_isSome {f : α → Option γ} (h : ∀ y x, g y = some x → (f x).isSome) :
     ∀ (ys : List β) (xs : List α), traverse g ys = some xs → (traverse f xs).isSome :=
   fun _ _ ht => traverse_isSome_of_all fun _ hx =>
     let ⟨_, _, hR⟩ := (traverse_eq_some.mp ht).mem_right hx; h _ _ hR
 
-/-- A pointwise relation on the read-then-rewrite pair lifts to the zip — the shape of
-    every product's (MP). Read-then-rewrite is a *composite* of two traversals, so this is
-    `Forall₂.compose`, and `forall₂_iff_zip` delivers the zip membership that `Agree.l`
-    and `Agree.m` consume. -/
+/-- §5, Lemma (traversal), **`≼`** — "a shared position decodes and re-encodes through the
+    same step". A pointwise relation on the read-then-rewrite pair lifts to the zip, which is
+    the shape of every product's (MP). Read-then-rewrite is a *composite* of two traversals,
+    so this is `Forall₂.compose`, and `forall₂_iff_zip` delivers the zip membership that
+    `Agree.l` and `Agree.m` consume. -/
 theorem traverse_rel {f : α → Option γ} {R : γ → β → Prop}
     (h : ∀ y x z, g y = some x → f x = some z → R z y) :
     ∀ (ys : List β) (xs : List α) (zs : List γ),
@@ -174,7 +218,8 @@ theorem traverse_append_inv :
       obtain ⟨r₁, r₂, rfl, h₁, h₂⟩ := traverse_append_inv hr'
       exact ⟨y :: r₁, r₂, rfl, by simp [traverse_cons, hy, h₁], h₂⟩
 
-/-- A traversal that preserves each entry's name preserves the list of names. -/
+/-- §5, Lemma (traversal), keyed clause: names survive. A traversal that preserves each
+    entry's name preserves the list of names. -/
 theorem traverse_fst {f : Name × α → Option (Name × β)}
     (hf : ∀ kv kb, f kv = some kb → kb.1 = kv.1) {kvs : List (Name × α)} {ds}
     (h : traverse f kvs = some ds) : ds.map (·.1) = kvs.map (·.1) := by
@@ -248,8 +293,14 @@ theorem lookup_none_of_not_mem_fst :
       · rename_i hbe; cases eq_of_beq hbe; exact absurd (by simp) h
       · exact lookup_none_of_not_mem_fst fun h' => h (by simp [h'])
 
-/-- Pointwise-related keyed lists have pointwise-related lookups — what `Agree.m`
-    consumes on the object codec. -/
+/-- §5, Lemma (traversal), keyed clause: **"dispatched and compared by name, first
+    occurrence first"** — pointwise-related keyed lists have pointwise-related lookups, which
+    is what `Agree.m` consumes on the object codec.
+
+    No `Nodup` premise, and that is the content rather than an omission. The recursion walks
+    both lists in lockstep and demands only that the names agree at each position, so the
+    first occurrence of a name sits at the same index in both. §1's `M` admits duplicate keys
+    (`FIDELITY.md` D7), so a version needing distinctness would not cover the domain. -/
 theorem lookup_rel {R : α → β → Prop} :
     ∀ (l₁ : List (Name × α)) (l₂ : List (Name × β)),
       l₁.length = l₂.length →
