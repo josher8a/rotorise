@@ -281,6 +281,12 @@ inductive Excuse where
   /-- `ownsNull` is a disjunction over **both** halves, so a read that reaches the null
       point suppresses the wrapper while the write still refuses it. -/
   | nullOwnership
+  /-- `q` tests the value a read *produces*, and no syntactic set of attributes bounds
+      that. Attribute side only — on the value side `refine` narrows exactly. -/
+  | valueUnderRead
+  /-- `extendRead` widens `p` past the subterm's set, by construction. Attribute side
+      only — on the value side `legacy` is a transparent passthrough. -/
+  | widenedRead
   deriving DecidableEq
 
 /-- Which term shapes each excuse may be invoked for. The catch-all answers `false`, so a
@@ -521,12 +527,16 @@ theorem not_ExactV_opaq (lossy : Bool) : ¬ ExactV (.opaq lossy) := by
 /-- **Every excuse is earned.** Exhaustive over `Excuse`, so a new constructor must come
     with a term of a shape it covers on which exactness actually fails — which, for a shape
     that is exact, cannot be produced. -/
-theorem excuse_witnessed : ∀ e : Excuse, ∃ t : Term, e.covers t = true ∧ ¬ ExactV t
-  | .opaqueDepth     => ⟨.opaq false, rfl, not_ExactV_opaq false⟩
-  | .uniqueAdmission => ⟨.union [.string, .string], rfl, not_ExactV_union⟩
-  | .payloadShape    => ⟨.set .string, rfl, not_ExactV_set⟩
-  | .nameAdmission   => ⟨.tuple [.string] none, rfl, not_ExactV_tuple⟩
-  | .nullOwnership   => ⟨.nullable (.legacy .string rNull), rfl, not_ExactV_nullable⟩
+theorem excuse_witnessed : ∀ (e : Excuse) (t : Term), e.covers t = true →
+    ∃ t' : Term, e.covers t' = true ∧ ¬ ExactV t'
+  | .opaqueDepth, _, _     => ⟨.opaq false, rfl, not_ExactV_opaq false⟩
+  | .uniqueAdmission, _, _ => ⟨.union [.string, .string], rfl, not_ExactV_union⟩
+  | .payloadShape, _, _    => ⟨.set .string, rfl, not_ExactV_set⟩
+  | .nameAdmission, _, _   => ⟨.tuple [.string] none, rfl, not_ExactV_tuple⟩
+  | .nullOwnership, _, _   => ⟨.nullable (.legacy .string rNull), rfl, not_ExactV_nullable⟩
+  -- The two attribute-side reasons cover nothing here, so the hypothesis is unsatisfiable.
+  | .valueUnderRead, t, h  => by cases t <;> simp [Excuse.covers] at h
+  | .widenedRead, t, h     => by cases t <;> simp [Excuse.covers] at h
 
 /-! ## The attribute side
 
@@ -786,6 +796,236 @@ theorem AdmA_sound_fueled : ∀ (fuel : Nat) (t : Term) {a v},
 theorem AdmA_sound (t : Term) {a v} (hp : (denoteω t).p a = some v) : AdmA t a = true := by
   rw [denoteω_eq t (termDepth t) (Nat.le_refl _)] at hp
   exact AdmA_sound_fueled _ t hp
+
+/-- The converse direction on the attribute side: the row is `dom(p)`, not a bound on it. -/
+def ExactA (t : Term) : Prop := ∀ a, AdmA t a = true ↔ ((denoteω t).p a).isSome
+
+/-- The attribute-side hatch, wider than the value side's by three rows, and the three are
+    the asymmetries §1 imposes rather than anything this file chose.
+
+    * `refine` — `q` tests the value a read *produces*; no syntactic set of attributes
+      bounds that. This is the row `admA` could never narrow either, and the reason `adm`
+      and `admA` are two functions rather than one.
+    * `legacy` — `extendRead` widens `p` past the subterm's set, by construction
+      (`not_admA_legacy`).
+    * `nullable` — `ownsNull` again, and this side is where the disjunction bites first.
+
+    The remaining six are the same shapes the value side excuses. -/
+def AnalysableA : Term → Bool
+  | .string | .boolean | .binary | .null | .number | .decimal
+  | .literalS _ | .literalN _ | .literal _ | .custom _ _ => true
+  | .array c | .record c | .held c _ _ | .lazy c => AnalysableA c
+  | .refine _ _ | .legacy _ _ | .nullable _ | .union _
+  | .set _ | .tuple _ _ | .object _ _ | .dunion _ _ | .opaq _ => false
+
+/-- `AdmAAll` transported across the entry's exactness. -/
+theorem AdmAAll_iff {c : Term} (h : ExactA c) : ∀ as : List Attr,
+    AdmAAll c as = true ↔ ∀ a ∈ as, ((denoteω c).p a).isSome = true := by
+  intro as; induction as with
+  | nil => simp [AdmAAll]
+  | cons a as ih => simp [AdmAAll, ih, h a]
+
+/-- …and `AdmAAllSnd`. -/
+theorem AdmAAllSnd_iff {c : Term} (h : ExactA c) : ∀ kas : List (Name × Attr),
+    AdmAAllSnd c kas = true ↔ ∀ ka ∈ kas, ((denoteω c).p ka.2).isSome = true := by
+  intro kas; induction kas with
+  | nil => simp [AdmAAllSnd]
+  | cons ka kas ih => simp [AdmAAllSnd, ih, h ka.2]
+
+/-- **Fourteen of the twenty-three attribute rows are exact.** Two fewer than the value
+    side, and the two are `refine` and `legacy` — the pair whose asymmetry is the reason
+    §5 needed `adm` and `admA` rather than one function.
+
+    The numeric rows are the interesting ones: they reach `dom(p)` through `Double.ofDec`,
+    which is axiomatized, and are exact anyway — a row may *call* an axiomatized function
+    even though no finite set of numerals describes its domain. §5 wrote `⊤` there. -/
+theorem AdmA_exact : ∀ (t : Term), AnalysableA t = true → ExactA t
+  | .string, _ => by intro a; cases a <;> simp [AdmA, denoteω, stringCodec]
+  | .boolean, _ => by intro a; cases a <;> simp [AdmA, denoteω, booleanCodec]
+  | .binary, _ => by intro a; cases a <;> simp [AdmA, denoteω, binaryCodec]
+  | .null, _ => by intro a; cases a <;> simp [AdmA, denoteω, nullCodec]
+  | .number, _ => by
+      intro a
+      cases a
+      case n x =>
+        simp only [AdmA, denoteω, numberCodec]
+        cases hx : Double.ofDec x <;> simp [hx]
+      all_goals simp [AdmA, denoteω, numberCodec]
+  | .decimal, _ => by intro a; cases a <;> simp [AdmA, denoteω, decimalCodec]
+  | .literalS ls, _ => by intro a; cases a <;> simp [AdmA, denoteω, literalSCodec]
+  | .literalN ls, _ => by
+      intro a
+      cases a
+      case n x =>
+        simp only [AdmA, denoteω, literalNCodec]
+        cases hx : Double.ofDec x <;> simp [hx]
+      all_goals simp [AdmA, denoteω, literalNCodec]
+  | .literal w, _ => by
+      intro a
+      cases w
+      case num d =>
+        cases a
+        case n x =>
+          simp only [AdmA, denoteω, literalCodec, Codec.restrict, rawNumberCodec]
+          cases hx : Double.ofDec x <;> simp [hx]
+        all_goals simp [AdmA, denoteω, literalCodec, Codec.restrict, rawNumberCodec]
+      all_goals
+        (cases a <;>
+          simp [AdmA, denoteω, literalCodec, Codec.restrict, stringCodec, booleanCodec,
+                binaryCodec, nullCodec, Codec.empty])
+  | .custom ce cp, _ => by intro a; simp [AdmA, denoteω]
+  | .array c, ha => by
+      have hc := AdmA_exact c (by simpa [AnalysableA] using ha)
+      intro a
+      cases a
+      case l as =>
+        simp only [AdmA, denoteω, arrayCodec]
+        rw [AdmAAll_iff hc, ← traverse_isSome_iff]
+        cases traverse (denoteω c).p as <;> simp
+      all_goals simp [AdmA, denoteω, arrayCodec]
+  | .record c, ha => by
+      have hc := AdmA_exact c (by simpa [AnalysableA] using ha)
+      intro a
+      cases a
+      case m kas =>
+        simp only [AdmA, denoteω, recordCodec]
+        rw [AdmAAllSnd_iff hc]
+        have hkey : (∀ ka ∈ kas, ((denoteω c).p ka.2).isSome = true)
+                  ↔ (∀ ka ∈ kas, (decPair (denoteω c) ka).isSome = true) :=
+          ⟨fun hall ka hka => by simpa [decPair] using hall ka hka,
+           fun hall ka hka => by simpa [decPair] using hall ka hka⟩
+        rw [hkey, ← traverse_isSome_iff]
+        cases traverse (decPair (denoteω c)) kas <;> simp
+      all_goals simp [AdmA, denoteω, recordCodec]
+  | .held c f g, ha => by
+      have hc := AdmA_exact c (by simpa [AnalysableA] using ha)
+      intro a
+      simp only [AdmA, denoteω, Codec.through]
+      rw [hc a]
+      cases (denoteω c).p a <;> simp
+  | .lazy c, ha => by
+      have hc := AdmA_exact c (by simpa [AnalysableA] using ha)
+      intro a; simpa [AdmA, denoteω] using hc a
+  | .refine _ _, ha | .legacy _ _, ha | .nullable _, ha | .union _, ha
+  | .set _, ha | .tuple _ _, ha | .object _ _, ha | .dunion _ _, ha
+  | .opaq _, ha => by simp [AnalysableA] at ha
+
+/-! ### The attribute side's excuses, and their witnesses
+
+The value side's five reasons apply here too, and two more do — `refine`, which cannot
+narrow a read because `q` tests the value a read *produces*, and `legacy`, which widens one
+by construction. Those two cover nothing on the value side, which is why `excuse_witnessed`
+is stated with the covering as a hypothesis: an excuse must be witnessed **on the side it is
+used on**, and neither side has to answer for the other's reasons. -/
+
+/-- `set`'s member gate over-claims: the empty run is refused on this side too. -/
+theorem not_ExactA_set : ¬ ExactA (.set .string) := by
+  intro h
+  have := (h (.ss [])).mp (by simp [AdmA])
+  simp [denoteω, setCodec] at this
+
+/-- Alignment again, read side. -/
+theorem not_ExactA_tuple : ¬ ExactA (.tuple [.string] none) := by
+  intro h
+  have := (h (.l [.s "a", .s "b"])).mp (by simp [AdmA])
+  simp [denoteω, denoteωL, denoteωO, tupleCodec, align, stringCodec] at this
+
+/-- (U) failing, read side: two options admit and `select` reads nothing. -/
+theorem not_ExactA_union : ¬ ExactA (.union [.string, .string]) := by
+  intro h
+  have := (h (.s "a")).mp (by simp [AdmA, AdmAAny])
+  simp [denoteω, denoteωOpts, specOf, optionSemOf, altCodec, select, stringCodec] at this
+
+/-- `opaq`'s ⊤ over-claims: the empty wire set is refused by all eight options. -/
+theorem not_ExactA_opaq (lossy : Bool) : ¬ ExactA (.opaq lossy) := by
+  intro h
+  have h2 := (h (.ss [])).mp (by simp [AdmA])
+  have hd : (denoteω (Term.opaq lossy)).p (.ss [])
+      = (setCodec (opaqCodec 1 lossy)).p (.ss []) := by
+    show (opaqCodecω lossy).p (.ss []) = _
+    simp only [opaqCodecω, Attr.depth]
+    exact opaqCodec_p_ss lossy 1 []
+  rw [hd] at h2
+  simp [setCodec] at h2
+
+/-- Writes the null point — half of a pair whose write reaches it and whose read does not,
+    the mirror of `rNull`, and the reason `nullable` is in both hatches rather than one. -/
+def ceNull : Value → Option Attr := fun v => match v with | .null => some .null | _ => none
+/-- …and reads nothing at all. -/
+def cpNone : Attr → Option Value := fun _ => none
+
+theorem not_ExactA_nullable : ¬ ExactA (.nullable (.custom ceNull cpNone)) := by
+  intro h
+  have h2 := (h .null).mp (by simp [AdmA])
+  simp [denoteω, Codec.withNull, Codec.ownsNull, ceNull, cpNone] at h2
+
+/-- `refine` cannot narrow a read: `q` refuses everything, and `AdmA` cannot see it. -/
+theorem not_ExactA_refine : ¬ ExactA (.refine .string (fun _ => false)) := by
+  intro h
+  have h2 := (h (.s "a")).mp (by simp [AdmA])
+  simp [denoteω, Codec.restrict, stringCodec] at h2
+
+/-- `legacy` is `⊤` here, so it over-claims at every attribute its subterm refuses. -/
+theorem not_ExactA_legacy : ¬ ExactA (.legacy .string (fun _ => none)) := by
+  intro h
+  have h2 := (h (.n "1")).mp (by simp [AdmA])
+  simp [denoteω, Codec.extendRead, stringCodec] at h2
+
+
+/-- Which shapes each excuse may be invoked for **on the attribute side**. Two rows have no
+    value-side counterpart, and the catch-all answers `false` for the same reason it does
+    there: a new constructor is not excusable by default. -/
+def Excuse.coversA : Excuse → Term → Bool
+  | .opaqueDepth,     .opaq _      => true
+  | .uniqueAdmission, .union _     => true
+  | .uniqueAdmission, .dunion _ _  => true
+  | .payloadShape,    .set _       => true
+  | .nameAdmission,   .object _ _  => true
+  | .nameAdmission,   .tuple _ _   => true
+  | .nullOwnership,   .nullable _  => true
+  | .valueUnderRead,  .refine _ _  => true
+  | .widenedRead,     .legacy _ _  => true
+  | _, _ => false
+
+/-- The subterm a propagating **attribute** row inherits from. `refine` and `legacy` are
+    absent, which is the whole of the asymmetry: they propagate on the value side and are
+    excused here. -/
+def inheritsFromA : Term → Option Term
+  | .array c | .record c | .held c _ _ | .lazy c => some c
+  | _ => none
+
+/-- Every attribute row that declines exactness names a covering reason or inherits one. -/
+theorem analysableA_excused : ∀ (t : Term), AnalysableA t = false →
+    (∃ e : Excuse, e.coversA t = true) ∨ (∃ c, inheritsFromA t = some c ∧ AnalysableA c = false)
+  | .opaq _, _      => .inl ⟨.opaqueDepth, rfl⟩
+  | .union _, _     => .inl ⟨.uniqueAdmission, rfl⟩
+  | .dunion _ _, _  => .inl ⟨.uniqueAdmission, rfl⟩
+  | .set _, _       => .inl ⟨.payloadShape, rfl⟩
+  | .object _ _, _  => .inl ⟨.nameAdmission, rfl⟩
+  | .tuple _ _, _   => .inl ⟨.nameAdmission, rfl⟩
+  | .nullable _, _  => .inl ⟨.nullOwnership, rfl⟩
+  | .refine _ _, _  => .inl ⟨.valueUnderRead, rfl⟩
+  | .legacy _ _, _  => .inl ⟨.widenedRead, rfl⟩
+  | .array c, h | .record c, h | .held c _ _, h | .lazy c, h =>
+      .inr ⟨c, rfl, by simpa [AnalysableA] using h⟩
+  | .string, h | .boolean, h | .binary, h | .null, h | .number, h | .decimal, h
+  | .literalS _, h | .literalN _, h | .literal _, h | .custom _ _, h => nomatch h
+
+/-- No attribute-side excuse names an exact row. -/
+theorem excuseA_shapes (e : Excuse) (t : Term) (h : e.coversA t = true) :
+    AnalysableA t = false := by
+  cases e <;> cases t <;> simp_all [Excuse.coversA, AnalysableA]
+
+/-- **Every attribute-side excuse is earned**, on the side it is used on. -/
+theorem excuseA_witnessed : ∀ (e : Excuse) (t : Term), e.coversA t = true →
+    ∃ t' : Term, e.coversA t' = true ∧ ¬ ExactA t'
+  | .opaqueDepth, _, _     => ⟨.opaq false, rfl, not_ExactA_opaq false⟩
+  | .uniqueAdmission, _, _ => ⟨.union [.string, .string], rfl, not_ExactA_union⟩
+  | .payloadShape, _, _    => ⟨.set .string, rfl, not_ExactA_set⟩
+  | .nameAdmission, _, _   => ⟨.tuple [.string] none, rfl, not_ExactA_tuple⟩
+  | .nullOwnership, _, _   => ⟨.nullable (.custom ceNull cpNone), rfl, not_ExactA_nullable⟩
+  | .valueUnderRead, _, _  => ⟨.refine .string (fun _ => false), rfl, not_ExactA_refine⟩
+  | .widenedRead, _, _     => ⟨.legacy .string (fun _ => none), rfl, not_ExactA_legacy⟩
 
 end
 end Calculus
