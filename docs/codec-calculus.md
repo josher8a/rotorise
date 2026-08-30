@@ -10,6 +10,11 @@ define the rule. The calculus is also mechanized in Lean (`formal/`), and where 
 "the mechanized proof" it reports something that machine-checking forced or exhibited; the doc
 remains the normative statement.
 
+**It states what is true now, and carries no history.** Several rules here were corrected once the
+mechanization refuted them, and one term was removed; what was claimed before, which counterexample
+refuted it, and what the correction cost are logged in `codec-formalization.md` §4. A reader of this
+document should never need that log to understand a rule — only to learn how it came to be one.
+
 ---
 
 ## §1 The attribute domain
@@ -168,11 +173,9 @@ because `String` on a double is by definition the shortest text reading back as 
 `1.5` round-trips, and so does `2⁵³ + 1`, which _is_ `2⁵³` and round-trips as that. What bounds `D` is
 DynamoDB's magnitude range: at most 38 significant digits, and magnitude zero or `1e-130 … 9.9…e125`.
 
-`D` is **checked**. It was an unchecked precondition and this section used to say so — "the
-implementation writes whatever `String` produces, so `5e-324` is written and the service rejects it
-on arrival" — which is a defect and not a design. A term that writes an attribute outside §1's `𝔸`
-has stopped being a term of this calculus, and recording the gap here only guaranteed the failure
-would land at the service rather than at the call.
+`D` is **checked**, on both rules that write an `N` from a double. A term that writes an attribute
+outside §1's `𝔸` is not a term of this calculus, so the bound cannot be a precondition recorded and
+left to the service.
 
 The two rules check it in the two different places their admissible sets live. `(number)` gates
 **both halves**: `e` on the text the double is written as, and `p` on the double the text reads
@@ -181,28 +184,23 @@ maximum, and gating only the write is the configuration that breaks **(C)**. `(l
 the **declaration**, alongside `n ≥ 1` and pairwise distinctness, because `ℓ` is data the term owns
 and a premise on data is decidable when the codec is built.
 
-That premise discharges the **write** side and only the write side. `ℓ` is fixed when the codec is
+That premise discharges the **write** side and only the write side: `ℓ` is fixed when the codec is
 built, so every value `e` will ever accept has been checked already. It discharges nothing on the
-read side, and an earlier version of this paragraph claimed otherwise — that membership in `ℓ` was
-sufficient, since `ℓ ⊆ D`. It is not. Reading an `N` as a value is wider than membership, so an
-attribute that is not a numeral at all can land on a value the set contains, and the check passes on
-something §1 has no point for. **A premise bounds the values a term owns, and a stored attribute is
-not one of them.** So `(literal-N)` reads through the same gate as `(number)`: the stored text must
-be a numeral before it is read as a value. Three terms write an `N`, and a reader should not have to
-learn which of them is careful.
+read side. Reading an `N` as a value is wider than membership in `ℓ`, so an attribute that is not a
+numeral at all can land on a value the set contains, and the check passes on something §1 has no
+point for. **A premise bounds the values a term owns, and a stored attribute is not one of them.**
+So `(literal-N)` reads through the same gate as `(number)`: the stored text must be a numeral before
+it is read as a value.
 
 Machine-checked — `Typed.literalN`'s `hD`, `not_typed_literalN_nonD`, and
-`typed_literalN_sub_number`, which is the containment `(literal-N)` had lost — and measured, in
-`src/codec.numericliteral.spec.ts`, `5e-324` included.
+`typed_literalN_sub_number`, which is `ℓ ⊆ D`'s containment of `(number)` — and measured, in
+`src/codec.numericliteral.spec.ts`.
 
-A subset of `D` chosen by the caller — a numeric enum member — is `refine(number, T)` and has no
-rule of its own. There used to be one, `(numeric)`, described as "the claim without the check": `p`
-was to return the double it read and not verify membership in `T`. **It is gone**, for two reasons
-the mechanization made plain. It was not a different term — under §5's reading, the only reading
-under which the `: T` index is honest, `numeric(T)` and `refine(number, T)` denote the same codec on
-all four fields. And the reading that _would_ have made it different is one no term of this calculus
-is allowed: a `p` returning values outside `T` breaks `(C)`, and with it the claim that `: T` says
-anything. An unchecked narrowing of a read is a cast, and a cast belongs to `refine` — which does
+A subset of `D` chosen by the caller — a numeric enum member — is `refine(number, T)`, and has no
+rule of its own because it needs none. A term whose `p` returned the double it read *without*
+verifying membership in `T` would break **(C)**, and with it the claim that `: T` says anything; a
+term that does verify is `refine(number, T)` on all four fields. An unchecked narrowing of a read is
+a cast, and a cast belongs to `refine` — which does
 the check — or to `held`, which is where the caller's own functions live.
 
 `decimal` holds numerals, not a machine number. That is the one ground term whose held set is chosen
@@ -563,9 +561,9 @@ information about whether the value was meant for it. Only a term that knows its
 answers a real question when attempted — which is why `union(literal("A"), literal("B"))` is well
 formed under **(K)** although both accept a string.
 
-But `ident` is only half of that exemption, and an earlier statement of **(K)** —
-`κ(cᵢ) ∩ κ(cⱼ) = ∅ ∨ ident(cᵢ) ∨ ident(cⱼ)` — was wrong to stop there. Two counterexamples,
-both machine-checked (`Calculus/Discharge.lean`):
+But `ident` is only half of that exemption, and **(K)** cannot be weakened to
+`κ(cᵢ) ∩ κ(cⱼ) = ∅ ∨ ident(cᵢ) ∨ ident(cⱼ)`. Two counterexamples, both machine-checked
+(`Calculus/Discharge.lean`):
 
 - **One side is not enough.** `union(literal("A"), string)` has `ident` on the left, so the disjunction
   is satisfied — and both options admit `"A"`. A real answer from one option does not resolve a pair;
@@ -583,9 +581,7 @@ so container options are never separated this way and the second counterexample 
 
 **It is two functions, not one.** A codec is a pair, and a term's admissible set is a claim about one
 half of it at a time: `adm(c) ⊆ Value` is what `e` will accept, `admA(c) ⊆ 𝔸` is what `p` will
-accept.
-They agree on most terms and they genuinely part on two, which is why stating one of them was stating
-something false about the other.
+accept. They agree on most terms and part on two.
 
 | term                        | `adm` — value side   | `admA` — attribute side           |
 | --------------------------- | -------------------- | --------------------------------- |
@@ -596,37 +592,32 @@ something false about the other.
 | `legacy(c, r)`              | `adm(c)`             | **`⊤`**                           |
 | anything else               | `⊤`                  | `⊤`                               |
 
-Both partings are forced, and neither is a limitation of the mechanization:
+Both partings are forced:
 
 - **`legacy(c, r)`.** The whole content of `legacy` is that `p` reads attributes `c` does not, so a
   passthrough `admA` would claim a bound on exactly the direction `r` widens. `legacy(literal("A"), r)`
   with `r` reading `⟨N, "1"⟩` to `"A"` reads an attribute `admA(literal("A"))` refuses, so the
-  passthrough is not merely coarse, it is **unsound** — machine-checked as `not_admA_legacy`. The
-  value side is untouched: `legacy` adds no way to *write*, which is why `adm` passes through and is
-  the asymmetry to remember.
+  passthrough is **unsound**, not merely coarse (`not_admA_legacy`). The value side is untouched:
+  `legacy` adds no way to *write*, so `adm` passes through.
 - **A numeric `literal`.** Its read side goes through the numeral-to-double reading of §1, which is
   not a membership test on the stored text: distinct numerals read to the same double, so a
   syntactic set of values bounds no set of attributes.
 
-  It is worth being precise that this is **forced by the store and not by the reading being
-  opaque**, because the shape of `ℓ` invites the opposite conclusion. A literal's stored texts are
-  known at the declaration, so `admA` could be `{ ⟨N, text(ℓᵢ)⟩ }` — and that would be wrong.
-  `literal(10²¹)` is written `⟨N, "1e+21"⟩`, the store normalises it to `⟨N, "1000000000000000000000"⟩`,
-  and only the numeral-to-double read gets it back; a syntactic `admA` would refuse a row the codec
-  itself had written. That is `ker p` shrinking below `η` — §1's condition, failing the way `decimal`
-  failed it. The tolerant read is load-bearing, so numeric literals fall to **(U)** per input on the
-  attribute side, while their value side separates exactly as a string literal's does.
+  The stored texts *are* known at the declaration, so `admA = { ⟨N, text(ℓᵢ)⟩ }` looks available. It
+  is not, and the store is why: `literal(10²¹)` is written `⟨N, "1e+21"⟩` and handed back
+  `⟨N, "1000000000000000000000"⟩`, which only the numeral-to-double read recovers. A syntactic `admA`
+  would refuse a row the codec itself wrote — `ker p` shrinking below `η`. So numeric literals fall
+  to **(U)** per input on the attribute side, while their value side separates as a string
+  literal's does.
 
-Two notes on what is _not_ in the table. `optional` and `fallback` are **fields** (§4) and not terms,
-so nothing passes through them — an earlier version of this section listed them beside `refine` and
-`legacy`, which is the level confusion §4 exists to rule out. And the `⊤` default is what makes the
-`ident` conjuncts of **(K)** mostly redundant rather than decorative: two terms whose sets are both
-`⊤` can never be disjoint, so disjointness already implies each side carries a real set, which is
-what `ident` says (`ident_of_adm`, `admDisj_ident`). The conjuncts are kept because the recovery
-needs a side condition — it holds only where each option admits *something* — and there is a
-derivable term that admits nothing: `discriminatedUnion(d)` with no options, whose set is empty and
-which is therefore disjoint from every term, including the ones carrying no set at all
-(`sepV_string_dunion_nil`). A rule with a stated premise is easier to check than one with a
+Two notes on what is _not_ in the table. `optional` and `fallback` are **fields** (§4), not terms,
+so nothing passes through them: `adm` is a function on terms and has no case to give them. And the
+`⊤` default makes **(K)**'s `ident` conjuncts mostly redundant rather than decorative — two terms
+whose sets are both `⊤` can never be disjoint, so disjointness already implies each side carries a
+real set, which is what `ident` says (`ident_of_adm`, `admDisj_ident`). They are kept because the
+recovery needs a side condition, holding only where each option admits *something*, and a derivable
+term admits nothing: `discriminatedUnion(d)` with no options is disjoint from every term, including
+those carrying no set at all (`sepV_string_dunion_nil`). A stated premise is easier to check than a
 recovered one.
 
 The residue of the old rule is the honest one: the pairs `ident` genuinely resolves are the pairs of
@@ -638,9 +629,9 @@ latter being the tag-disjointness row of the discharger table, arrived at from t
 them, and resolution falls to the name-set device above. The gap between the two is exactly the set
 of unions resolved structurally rather than by type — and **(U)** is what fills it.
 
-An earlier version of this section went on to claim that stating **(D)** as genuine _disjointness_
-would be sound. It would not, and the reason is worth keeping, because it is the same confusion
-twice: **held sets are sets of values, and (U)'s readable side quantifies over attributes.** `held`
+Stating **(D)** as genuine _disjointness_ would not be sound either, and the reason is the same
+confusion twice: **held sets are sets of values, and (U)'s readable side quantifies over
+attributes.** `held`
 is precisely the term that separates the two — its adapter relabels — so two options can hold
 disjoint sets of values and still read one attribute, each to its own value.
 `union(literal("A"), held(literal("A"), f, g))` with `f` and `g` swapping `"B"` for `"A"` holds
@@ -650,8 +641,8 @@ disjoint sets of values and still read one attribute, each to its own value.
 So **(D)** is a well-formedness condition on the judgement's `T` index and not a discharger of
 **(U)**: no condition on held sets can be one. What decides the readable side is a condition on
 _stored attributes_ — distinct members `μᵢ ≠ μⱼ`, or disjoint `admA` — which is what the mechanized
-discharger takes, and the `admA` rather than `adm` is the point: a condition on values cannot decide
-a question about attributes, which is the same confusion this paragraph has just refused twice.
+discharger takes. `admA` rather than `adm` is the point: a condition on values cannot decide a
+question about attributes.
 
 ### Theorem (soundness)
 
@@ -808,9 +799,8 @@ partition the values and members partition the attributes — so admission is un
 every depth of the fixpoint, and the sum case closes with no residue here either. ∎
 
 What remains outside the theorem is exactly what §3 already names: `(custom)`'s premises are the
-caller's to keep, and each `(union)`'s residual **(U)**. `(number)`'s `D` used to be listed here as
-an unchecked precondition; it is now a gate on both halves of `(number)` and a premise of
-`(literal-N)`, so it is inside the theorem rather than beside it. Each law is checked per term in the implementation's law suite, and the proof's
+caller's to keep, and each `(union)`'s residual **(U)**. `D` is not among them — it is a gate on
+both halves of `(number)` and a premise of `(literal-N)`, so it is inside the theorem. Each law is checked per term in the implementation's law suite, and the proof's
 grouping above is the mechanization's file structure — the preamble's "checked _somewhere_", twice
 over.
 
