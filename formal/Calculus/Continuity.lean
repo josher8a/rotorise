@@ -64,7 +64,7 @@ theorem altCodec_not_monotone :
     ∧ (altCodec [optLit, optBot] (some .S)).e (.str "A") = some (.s "A")
     ∧ (altCodec [optLit, optStr] (some .S)).e (.str "A") = none := by
   refine ⟨optBot_approx_optStr, ?_, ?_⟩ <;>
-    simp [altCodec, optLit, optBot, optStr, OptionSem.byAttempt,
+    simp [altCodec, select, optLit, optBot, optStr, OptionSem.byAttempt,
           literalSCodec, stringCodec, Codec.empty]
 
 /-! ## The same defect through `denote`
@@ -84,7 +84,7 @@ theorem denote_not_fuel_monotone :
     (denote 2 tWitness).e (.str "A") = some (.s "A")
     ∧ (denote 3 tWitness).e (.str "A") = none := by
   constructor <;>
-    simp [denote, tWitness, specOf, optionSemOf, altCodec, OptionSem.byAttempt,
+    simp [denote, tWitness, specOf, optionSemOf, altCodec, select, OptionSem.byAttempt,
           literalSCodec, stringCodec, Codec.empty]
 
 /-- At fuel `3` the union is simply the ill-formed one §4 refuted, and `none` is correct;

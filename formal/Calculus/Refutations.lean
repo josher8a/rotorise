@@ -51,7 +51,7 @@ theorem not_equiv_union_extend :
   intro h
   have hb := (h.heldSet (.bool true)).mpr
   simp [denoteω, denoteωOpts, denoteωMems, optionSemOf, specOf, OptionSem.byAttempt,
-        altCodec, stringCodec, booleanCodec] at hb
+        altCodec, select, stringCodec, booleanCodec] at hb
 
 /-! ## `union(array(c₁), array(c₂)) ≢ array(union(c₁, c₂))`
 
@@ -66,7 +66,7 @@ theorem not_equiv_union_array :
   intro h
   have hv := (h.heldSet (.arr [.str "A", .str "B"])).mpr
   simp [denoteω, denoteωOpts, denoteωMems, optionSemOf, specOf, OptionSem.byAttempt,
-        altCodec, arrayCodec, literalSCodec] at hv
+        altCodec, select, arrayCodec, literalSCodec] at hv
 
 /-! ## `tuple(c₁ … cₙ, rest(c))` is neither a tuple nor an array of unions
 
@@ -92,7 +92,7 @@ theorem not_equiv_tupleTail_array :
   intro h
   have hv := (h.heldSet (.arr [])).mpr
   simp [denoteω, denoteωL, denoteωO, denoteωOpts, denoteωMems, optionSemOf, specOf,
-        OptionSem.byAttempt, altCodec, tupleCodec, align, arrayCodec, stringCodec] at hv
+        OptionSem.byAttempt, altCodec, select, tupleCodec, align, arrayCodec, stringCodec] at hv
 
 /-! ## `refine(held(c, f, g), q) ≢ held(refine(c, q), f, g)`
 
@@ -221,13 +221,13 @@ theorem assoc_left_e :
     (denoteω (.union [.string, .union [.literalS ["A"], .literalS ["A"]]])).e (.str "A")
       = some (.s "A") := by
   simp [denoteω, denoteωOpts, denoteωMems, optionSemOf, specOf, OptionSem.byAttempt,
-        altCodec, stringCodec, literalSCodec]
+        altCodec, select, stringCodec, literalSCodec]
 
 /-- Right: three options admit, so the union refuses globally. -/
 theorem assoc_right_e :
     (denoteω (.union [.string, .literalS ["A"], .literalS ["A"]])).e (.str "A") = none := by
   simp [denoteω, denoteωOpts, denoteωMems, optionSemOf, specOf, OptionSem.byAttempt,
-        altCodec, stringCodec, literalSCodec]
+        altCodec, select, stringCodec, literalSCodec]
 
 /-- The two associativity forms are `≡` but not interchangeable: one writes where the
     other refuses. §6's (D)/(K)/(U) hedge is about this, not about `≡`. -/

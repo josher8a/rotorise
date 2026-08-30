@@ -1,1 +1,4 @@
 .lake/
+
+# transient proof scratchpads
+Scratch.lean
