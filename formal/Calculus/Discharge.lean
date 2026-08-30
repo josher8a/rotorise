@@ -508,6 +508,7 @@ theorem adm_sound : ∀ (fuel : Nat) (t : Term) {v a},
       exact admList_of_mem htx (adm_sound fuel tx hoe)
     all_goals rfl
 
+set_option maxHeartbeats 1000000 in
 /-- Reading lands in `admA`. -/
 theorem admA_sound : ∀ (fuel : Nat) (t : Term) {a v},
     (denote fuel t).p a = some v → admA t a = true
