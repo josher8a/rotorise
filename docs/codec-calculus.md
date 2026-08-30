@@ -4,16 +4,15 @@ What a codec _is_, stated without reference to any implementation of one: a quot
 embedding-projection pair into the attribute domain, a typing judgement with two indices, and the
 equations between terms.
 
-This document is normative for the semantics and deliberately mentions no TypeScript. Where the
-implementation is named at all it is to record that a rule here is checked _somewhere_ — never to
-define the rule. The calculus is also mechanized in Lean (`formal/`), and where a remark below cites
-"the mechanized proof" it reports something that machine-checking forced or exhibited; the doc
-remains the normative statement.
+This document is normative for the semantics, and it names no implementation of one. Every claim
+below stands on the argument written beside it; nothing here is true because something elsewhere
+checks it.
 
-**It states what is true now, and carries no history.** Several rules here were corrected once the
-mechanization refuted them, and one term was removed; what was claimed before, which counterexample
-refuted it, and what the correction cost are logged in `codec-formalization.md` §4. A reader of this
-document should never need that log to understand a rule — only to learn how it came to be one.
+**It states what is true now, and carries no history.** Several rules here were corrected once a
+counterexample refuted them, and one term was removed; what was claimed before, what refuted it, and
+what the correction cost are logged in `codec-formalization.md` §4 — which is also where the
+mechanization's own account lives, including which theorem carries which rule. A reader of this
+document should never need either to understand a rule, only to learn how it came to be one.
 
 ---
 
@@ -192,10 +191,6 @@ point for. **A premise bounds the values a term owns, and a stored attribute is 
 So `(literal-N)` reads through the same gate as `(number)`: the stored text must be a numeral before
 it is read as a value.
 
-Machine-checked — `Typed.literalN`'s `hD`, `not_typed_literalN_nonD`, and
-`typed_literalN_sub_number`, which is `ℓ ⊆ D`'s containment of `(number)` — and measured, in
-`src/codec.numericliteral.spec.ts`.
-
 A subset of `D` chosen by the caller — a numeric enum member — is `refine(number, T)`, and has no
 rule of its own because it needs none. A term whose `p` returned the double it read *without*
 verifying membership in `T` would break **(C)**, and with it the claim that `: T` says anything; a
@@ -219,8 +214,8 @@ directly; in use there is a store between them, and it is not the identity on at
 lies inside `ker p`** — `≈c` of §2, the relation that already exists for "a different attribute
 reading to the same value". `number` satisfies that for free, since `p(1.500)` and `p(1.5)` are the
 same double; `decimal` cannot, because its `ker p` is equality. So the held set is narrowed to the
-fixed points of `η`, which is what `Stored` is. Measured, not assumed: `src/codec.dynamodb.spec.ts`
-puts each form into a real table and reads it back.
+fixed points of `η`, which is what `Stored` is. `η` is observed, not stipulated: it is the store's
+behaviour, and the calculus can only be arranged around it.
 
 `literal` is the one ground term with **two** rules, because it is the only one whose member follows
 from its _values_ rather than from its name. There is deliberately no rule admitting a mixed set: a
@@ -302,9 +297,8 @@ Demanding **(R)** alone would under-demand, deriving a `⊤` term free to change
 exact term §2's argument for `opaque` says cannot exist. (**(W)** is vacuous at `⊤`, so the three
 named are the whole obligation.)
 
-`opaque` is the custom-class term the calculus ships, and it is primitive only in presentation: the
-mechanized model exhibits it as the **union of everything self-identifying, closed under the
-containers** — a fixpoint of shape
+`opaque` is the custom-class term the calculus ships, and it is primitive only in presentation: it
+unfolds to the **union of everything self-identifying, closed under the containers** — a fixpoint of shape
 `union(string, boolean, binary, ⟨NULL⟩, number?, set(opaque), array(opaque), record(opaque))` —
 whose **(U)** holds because the options' kinds and members are pairwise disjoint. `Uν` is _defined_
 as the values whose member is recoverable from the value alone, so **(R)** holds by construction;
@@ -341,20 +335,20 @@ idempotence of §6 lawful rather than lucky.
 
 Null-honesty is not a new kind of condition. `nullable(c)` is structurally the two-option union
 `union(c, ⟨NULL⟩-point)`, and the two premises are exactly that pair's §5 side conditions —
-write-honesty is uniqueness of admission on the way in, read-honesty on the way out. The mechanized
-proof closes the `nullable` case on precisely those premises and nothing else.
+write-honesty is uniqueness of admission on the way in, read-honesty on the way out. The soundness
+proof of §5 closes the `nullable` case on precisely those premises and nothing else.
 
-`(null)` above makes `union(c, null)` a term, so both spellings exist — and mechanizing the
-relation between them gives a **dichotomy**, not a trade-off:
+`(null)` above makes `union(c, null)` a term, so both spellings exist — and the relation between
+them is a **dichotomy**, not a trade-off:
 
 - where `c` does not touch the null point — `e_c(null)` and `p_c(⟨NULL, ∗⟩)` both undefined —
-  `nullable(c)` and `union(c, null)` are the **same codec** (`orNull_eq_altCodec`);
-- where `c` does touch it, `nullable(c)` is **equal to `c`** (`orNull_eq_self`): the wrapper adds
+  `nullable(c)` and `union(c, null)` are the **same codec**;
+- where `c` does touch it, `nullable(c)` is **equal to `c`**: the wrapper adds
   nothing. `nullable(opaque) = opaque`, `nullable(nullable(c)) = nullable(c)` — §6's idempotence
   row as an equation — and `nullable(union(…, null)) = union(…, null)`.
 
 So `nullable` is either the union or the identity, and the precedence that distinguishes it buys
-nothing a schema would want. (The two are also `≡` unconditionally, `equiv_orNull_altCodec`; they
+nothing a schema would want. (The two are also `≡` unconditionally; they
 differ as codecs only in definedness, and only where the wrapper is redundant. The single term
 outside both readings is `nullable(null)` — member `⊤` over the `NULL` point, of no use.)
 
@@ -562,8 +556,7 @@ answers a real question when attempted — which is why `union(literal("A"), lit
 formed under **(K)** although both accept a string.
 
 But `ident` is only half of that exemption, and **(K)** cannot be weakened to
-`κ(cᵢ) ∩ κ(cⱼ) = ∅ ∨ ident(cᵢ) ∨ ident(cⱼ)`. Two counterexamples, both machine-checked
-(`Calculus/Discharge.lean`):
+`κ(cᵢ) ∩ κ(cⱼ) = ∅ ∨ ident(cᵢ) ∨ ident(cⱼ)`. Two counterexamples:
 
 - **One side is not enough.** `union(literal("A"), string)` has `ident` on the left, so the disjunction
   is satisfied — and both options admit `"A"`. A real answer from one option does not resolve a pair;
@@ -597,7 +590,7 @@ Both partings are forced:
 - **`legacy(c, r)`.** The whole content of `legacy` is that `p` reads attributes `c` does not, so a
   passthrough `admA` would claim a bound on exactly the direction `r` widens. `legacy(literal("A"), r)`
   with `r` reading `⟨N, "1"⟩` to `"A"` reads an attribute `admA(literal("A"))` refuses, so the
-  passthrough is **unsound**, not merely coarse (`not_admA_legacy`). The value side is untouched:
+  passthrough is **unsound**, not merely coarse. The value side is untouched:
   `legacy` adds no way to *write*, so `adm` passes through.
 - **A numeric `literal`.** Its read side goes through the numeral-to-double reading of §1, which is
   not a membership test on the stored text: distinct numerals read to the same double, so a
@@ -614,11 +607,10 @@ Two notes on what is _not_ in the table. `optional` and `fallback` are **fields*
 so nothing passes through them: `adm` is a function on terms and has no case to give them. And the
 `⊤` default makes **(K)**'s `ident` conjuncts mostly redundant rather than decorative — two terms
 whose sets are both `⊤` can never be disjoint, so disjointness already implies each side carries a
-real set, which is what `ident` says (`ident_of_adm`, `admDisj_ident`). They are kept because the
+real set, which is what `ident` says. They are kept because the
 recovery needs a side condition, holding only where each option admits *something*, and a derivable
 term admits nothing: `discriminatedUnion(d)` with no options is disjoint from every term, including
-those carrying no set at all (`sepV_string_dunion_nil`). A stated premise is easier to check than a
-recovered one.
+those carrying no set at all. A stated premise is easier to check than a recovered one.
 
 The residue of the old rule is the honest one: the pairs `ident` genuinely resolves are the pairs of
 `literal`s with disjoint values, and the pairs of `discriminatedUnion`s with disjoint tags — the
@@ -636,12 +628,12 @@ is precisely the term that separates the two — its adapter relabels — so two
 disjoint sets of values and still read one attribute, each to its own value.
 `union(literal("A"), held(literal("A"), f, g))` with `f` and `g` swapping `"B"` for `"A"` holds
 `{"A"}` and `{"B"}`, which are disjoint on the nose, and both options read `S "A"` — the first to
-`"A"`, the second to `"B"`. Machine-checked as `not_uAtCan_literal_held`.
+`"A"`, the second to `"B"`.
 
 So **(D)** is a well-formedness condition on the judgement's `T` index and not a discharger of
 **(U)**: no condition on held sets can be one. What decides the readable side is a condition on
-_stored attributes_ — distinct members `μᵢ ≠ μⱼ`, or disjoint `admA` — which is what the mechanized
-discharger takes. `admA` rather than `adm` is the point: a condition on values cannot decide a
+_stored attributes_ — distinct members `μᵢ ≠ μⱼ`, or disjoint `admA` — which is what the first row
+of the discharger table takes. `admA` rather than `adm` is the point: a condition on values cannot decide a
 question about attributes.
 
 ### Theorem (soundness)
@@ -684,9 +676,8 @@ form of `≼`'s `M` clause follows from the pointwise one. Proved once; every pr
 an instantiation. ∎
 
 **Proof.** By induction on the derivation, with one refinement recorded at `(lazy)`. Each case
-first says what the pair _is_ — the denotation is part of the rule, not of any implementation —
-then discharges the laws. The grouping is the mechanization's module structure, so the prose proof
-and the machine proof can be audited against each other case for case.
+first says what the pair _is_ — the denotation is part of the rule — then discharges the laws. The
+grouping is the algebra of §7: points, wrappers, products, sums.
 
 **Points.** Each ground term writes one member, totally on its held set, and reads exactly that
 member back into the held set. **(W)** and **(C)** are immediate, `≼` is member equality with no
@@ -800,9 +791,7 @@ every depth of the fixpoint, and the sum case closes with no residue here either
 
 What remains outside the theorem is exactly what §3 already names: `(custom)`'s premises are the
 caller's to keep, and each `(union)`'s residual **(U)**. `D` is not among them — it is a gate on
-both halves of `(number)` and a premise of `(literal-N)`, so it is inside the theorem. Each law is checked per term in the implementation's law suite, and the proof's
-grouping above is the mechanization's file structure — the preamble's "checked _somewhere_", twice
-over.
+both halves of `(number)` and a premise of `(literal-N)`, so it is inside the theorem.
 
 ---
 
@@ -843,13 +832,14 @@ everywhere both are defined.
 
 ---
 
-## §7 What each layer is
+## §7 The three layers, and the algebra
 
-The three layers answer different questions and are easy to conflate. A grammar over the terms — a
-regular tree grammar, with nonterminals indexed by `μ` — says which terms can be _written_. It cannot
-express **(D)** or **(K)**, which relate siblings, so well-formedness needs the judgement of §3 and §5
-rather than a production. And the judgement in turn says nothing about what a term _means_; that is
-§2, the pair and its laws — a connection §5's soundness theorem proves rather than leaves implied.
+Three layers answer different questions, and conflating them is what makes a side condition look
+optional. A grammar over the terms — a regular tree grammar, with nonterminals indexed by `μ` — says
+which terms can be _written_. It cannot express **(D)** or **(K)**, which relate siblings rather than
+a term to its subterms, so well-formedness needs the judgement of §3 and §5 rather than a production.
+And the judgement in turn says nothing about what a term _means_; that is §2, the pair and its laws —
+a connection §5's soundness theorem proves rather than leaves implied.
 
 Which places the calculus: **§1** a universal domain, **§2** types as quotient retracts of it,
 **§3–§5** a two-index typing relation with side conditions, tied back to §2 by soundness, **§6** the
@@ -860,9 +850,7 @@ its prism); one **agreeing read-extension** (`legacy`); three **products** — p
 one **sum** (`union`), resolved by unique admission, with `(dunion)` and `opaque` the two whose (U)
 is a theorem; and a **fixpoint** (`lazy`, and `opaque` again). Fields are the keyed product's
 presence decoration, and `nullable` is a sum in precedence clothing (§3). That is the divisible /
-decidable [4] skeleton, read invariantly because both directions are present at once — and it is
-also the mechanization's module structure, which is what keeps the prose proof and the machine
-proof auditable against each other.
+decidable [4] skeleton, read invariantly because both directions are present at once.
 
 ---
 

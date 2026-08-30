@@ -331,8 +331,10 @@ conditional was not hypothetical, and the term that had no premise was writing a
 on: what DynamoDB *accepts*. `Typed.literalN` carries `hD` beside `hne` and `hnd`, which is where it
 belongs — a decidable fact about data the term owns, checked once at the declaration. The
 implementation refuses at the constructor for the same reason and in the same place as the
-mixed-kind refusal. `typed_literalN_sub_number` is what it buys back: **every derivable numeric
-literal refines `number` again**, which is the containment the gate had broken.
+mixed-kind refusal. `not_typed_literalN_nonD` is the premise biting — `literal(d)` on a
+double outside `D` has no derivation at all — and `typed_literalN_sub_number` is what it buys back:
+**every derivable numeric literal refines `number` again**, which is the containment the gate had
+broken.
 
 Two things are worth keeping from how the decision was reached. The rule figure had said
 `ℓ₁ … ℓₙ ∈ D` **all along** — the amendment was not to the rule but to the paragraph under it, which
