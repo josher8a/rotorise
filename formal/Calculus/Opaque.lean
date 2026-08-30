@@ -18,18 +18,29 @@ its answer never changes. So `opaque` can be given a fuel-free denotation by sup
 each input its own budget — `Value.depth` on the write side, `Attr.depth` on the read
 side — and the laws transfer from `lawful_opaqCodec` through the stabilization lemmas.
 
+This file is §3's `(opaque)` rule and §3's `Uν`, and the sections below say which part of
+each they are. Nothing here is about a term other than `opaque`.
+
 Structure:
 
 * `Value.depth` / `Attr.depth` — structural budgets.
 * `traverse_congr` — the missing congruence: pointwise-equal functions traverse equally.
-* `opaqCodec_e_*` / `opaqCodec_p_*` — the eight unfoldings, one per kind. Each collapses
-  `altCodec`'s filter to a single option by kind-disjointness, and is where the "at most
-  one admits" argument is actually cashed.
+* `opaqCodec_e_*` / `opaqCodec_p_*` — the unfoldings, one per constructor of the domain
+  each side ranges over. Each collapses `altCodec`'s filter to a single option by
+  kind-disjointness, and is where the "at most one admits" argument is actually cashed.
+
+  **Eight on the write side and ten on the read side**, and the asymmetry is §1's rather
+  than an oversight: `Value` has eight constructors and `Attr` has ten, because the three
+  wire sets `SS`/`NS`/`BS` are one *kind* and three *members* (`Kind`, `Domain.lean`).
+  Kind-disjointness is what the (U) argument needs, so the write side has one unfolding per
+  option; the read side has one per member it can be handed, three of which route to the
+  same option. An earlier version of this header called them "the eight unfoldings, one per
+  kind", which is true of `e` and false of `p`.
 -/
 
 namespace Calculus
 
-/-! ## Depth -/
+/-! ## Depth — the budget §3's `(opaque)` fixpoint is measured against -/
 
 mutual
 
@@ -132,7 +143,7 @@ theorem traverse_congr {α β : Type} {f g : α → Option β} :
         traverse_congr xs (fun y hy => h y (by simp [hy]))
       simp only [traverse, hx, hxs]
 
-/-! ## The unfoldings
+/-! ## The unfoldings — §3 `(opaque)`, one per constructor of each domain
 
 Each says: at this value's kind, `altCodec`'s filter collapses to exactly one option, so
 the union's answer *is* that option's. This is kind-disjointness cashed — the property
@@ -160,18 +171,22 @@ section Unfoldings
 attribute [local simp] opaq_unfold altCodec OptionSem.byAttempt stringCodec booleanCodec
   binaryCodec nullCodec numberCodec setCodec arrayCodec recordCodec Codec.empty
 
+/-- §3 `(opaque)`, write side at kind `string`: only the `S` option admits, so the filter collapses to it. -/
 theorem opaqCodec_e_str (lossy : Bool) (n : Nat) (s : String) :
     (opaqCodec (n+1) lossy).e (.str s) = stringCodec.e (.str s) := by
   cases lossy <;> simp
 
+/-- §3 `(opaque)`, write side at kind `boolean`: only the `BOOL` option admits. -/
 theorem opaqCodec_e_bool (lossy : Bool) (n : Nat) (b : Bool) :
     (opaqCodec (n+1) lossy).e (.bool b) = booleanCodec.e (.bool b) := by
   cases lossy <;> simp
 
+/-- §3 `(opaque)`, write side at kind `binary`: only the `B` option admits. -/
 theorem opaqCodec_e_bin (lossy : Bool) (n : Nat) (b : Bytes) :
     (opaqCodec (n+1) lossy).e (.bin b) = binaryCodec.e (.bin b) := by
   cases lossy <;> simp
 
+/-- §3 `(opaque)`, write side at kind `null`: only the `NULL` point admits — §1's `𝟙` payload. -/
 theorem opaqCodec_e_null (lossy : Bool) (n : Nat) :
     (opaqCodec (n+1) lossy).e .null = nullCodec.e .null := by
   cases lossy <;> simp
@@ -186,18 +201,21 @@ theorem opaqCodec_e_num (lossy : Bool) (n : Nat) (d : Double) :
   by_cases hw : Numeral.WF d.toDec = true <;> cases lossy <;>
     simp [numberCodec_e_num, hw]
 
+/-- §3 `(opaque)`, write side at kind `set`: the wire member is computed from the elements (`asWireSet`), which is why one option covers `SS`, `NS` and `BS`. -/
 theorem opaqCodec_e_set (lossy : Bool) (n : Nat) (vs : List Value) :
     (opaqCodec (n+1) lossy).e (.set vs)
       = (setCodec (opaqCodec n lossy)).e (.set vs) := by
   cases he : (setCodec (opaqCodec n lossy)).e (.set vs) <;>
     cases lossy <;> simp [-setCodec, he]
 
+/-- §3 `(opaque)`, write side at kind `array`: the `L` option, recursing at one less fuel. -/
 theorem opaqCodec_e_arr (lossy : Bool) (n : Nat) (vs : List Value) :
     (opaqCodec (n+1) lossy).e (.arr vs)
       = (arrayCodec (opaqCodec n lossy)).e (.arr vs) := by
   cases he : (arrayCodec (opaqCodec n lossy)).e (.arr vs) <;>
     cases lossy <;> simp [-arrayCodec, he]
 
+/-- §3 `(opaque)`, write side at kind `map`: the `M` option, recursing at one less fuel. -/
 theorem opaqCodec_e_map (lossy : Bool) (n : Nat) (kvs : List (Name × Value)) :
     (opaqCodec (n+1) lossy).e (.map kvs)
       = (recordCodec (opaqCodec n lossy)).e (.map kvs) := by
@@ -295,18 +313,22 @@ section UnfoldingsA
 attribute [local simp] opaq_unfold altCodec OptionSem.byAttempt stringCodec booleanCodec
   binaryCodec nullCodec numberCodec setCodec arrayCodec recordCodec Codec.empty
 
+/-- §3 `(opaque)`, read side at member `S`: distinct members, so at most one option admits. -/
 theorem opaqCodec_p_s (lossy : Bool) (n : Nat) (s : String) :
     (opaqCodec (n+1) lossy).p (.s s) = stringCodec.p (.s s) := by
   cases lossy <;> simp
 
+/-- §3 `(opaque)`, read side at member `BOOL`. -/
 theorem opaqCodec_p_bool (lossy : Bool) (n : Nat) (b : Bool) :
     (opaqCodec (n+1) lossy).p (.bool b) = booleanCodec.p (.bool b) := by
   cases lossy <;> simp
 
+/-- §3 `(opaque)`, read side at member `B`. -/
 theorem opaqCodec_p_b (lossy : Bool) (n : Nat) (b : Bytes) :
     (opaqCodec (n+1) lossy).p (.b b) = binaryCodec.p (.b b) := by
   cases lossy <;> simp
 
+/-- §3 `(opaque)`, read side at member `NULL`. -/
 theorem opaqCodec_p_null (lossy : Bool) (n : Nat) :
     (opaqCodec (n+1) lossy).p .null = nullCodec.p .null := by
   cases lossy <;> simp
@@ -320,26 +342,31 @@ theorem opaqCodec_p_n (lossy : Bool) (n : Nat) (x : Numeral) :
     by_cases hw : Numeral.WF d.toDec = true <;> cases lossy <;>
       simp [numberCodec_p_n, hd, hw]
 
+/-- §3 `(opaque)`, read side at member `SS` — one of the three members routing to the single `set` option, which is the ten-versus-eight asymmetry in the header. -/
 theorem opaqCodec_p_ss (lossy : Bool) (n : Nat) (vs : List String) :
     (opaqCodec (n+1) lossy).p (.ss vs) = (setCodec (opaqCodec n lossy)).p (.ss vs) := by
   cases hp : (setCodec (opaqCodec n lossy)).p (.ss vs) <;>
     cases lossy <;> simp [-setCodec, hp]
 
+/-- §3 `(opaque)`, read side at member `NS`. -/
 theorem opaqCodec_p_ns (lossy : Bool) (n : Nat) (vs : List Numeral) :
     (opaqCodec (n+1) lossy).p (.ns vs) = (setCodec (opaqCodec n lossy)).p (.ns vs) := by
   cases hp : (setCodec (opaqCodec n lossy)).p (.ns vs) <;>
     cases lossy <;> simp [-setCodec, hp]
 
+/-- §3 `(opaque)`, read side at member `BS`. -/
 theorem opaqCodec_p_bs (lossy : Bool) (n : Nat) (vs : List Bytes) :
     (opaqCodec (n+1) lossy).p (.bs vs) = (setCodec (opaqCodec n lossy)).p (.bs vs) := by
   cases hp : (setCodec (opaqCodec n lossy)).p (.bs vs) <;>
     cases lossy <;> simp [-setCodec, hp]
 
+/-- §3 `(opaque)`, read side at member `L`. -/
 theorem opaqCodec_p_l (lossy : Bool) (n : Nat) (as : List Attr) :
     (opaqCodec (n+1) lossy).p (.l as) = (arrayCodec (opaqCodec n lossy)).p (.l as) := by
   cases hp : (arrayCodec (opaqCodec n lossy)).p (.l as) <;>
     cases lossy <;> simp [-arrayCodec, hp]
 
+/-- §3 `(opaque)`, read side at member `M`. -/
 theorem opaqCodec_p_m (lossy : Bool) (n : Nat) (kvs : List (Name × Attr)) :
     (opaqCodec (n+1) lossy).p (.m kvs) = (recordCodec (opaqCodec n lossy)).p (.m kvs) := by
   cases hp : (recordCodec (opaqCodec n lossy)).p (.m kvs) <;>
@@ -765,7 +792,7 @@ theorem opaq_p_depthP (lossy : Bool) :
 
 end
 
-/-! ## `opaque`, fuel-free
+/-! ## `opaque`, fuel-free — §3's `(opaque)` as a rule with no fuel in it
 
 Each input supplies its own budget: the write side from the value, the read side from the
 attribute. The held set is the union over all fuels, which keeps `Carrier` trivial and
