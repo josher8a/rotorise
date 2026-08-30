@@ -596,6 +596,42 @@ declaration where two options are both `κ`-free, or give `held` a write-side `�
 carrier — and §1's `Value` is what would have to change for the second. `codec.uniqueadmission.spec.ts`
 carries the measurement as four assertions.
 
+### The unified rule, mechanized — and why arity one was what made it affordable
+
+§3's `(literal)` was unified as a rule first and mechanized second, on the reading that one
+constructor would need `ℓ : List Value` plus a homogeneity premise the two typed constructors get
+for free. That reading was right about `List Value` and wrong about the conclusion, because it did
+not consider arity one.
+
+**The measurement that changed it.** There are *zero* multi-element literals in the source. All 41
+concrete uses are singletons; the other 80 sites are the list machinery — `literalSCodec ls`,
+`Typed.literalS ls`, membership lemmas — carried by 80 sites and exercised by no witness. At arity
+one the homogeneity premise never arises (one value has nothing to be homogeneous with), `hne` and
+`hnd` are vacuous, and the list machinery simplifies rather than moves.
+
+  Term.literal (v : Value)
+  literalCodec  — dispatch on the value's kind to its ground base, `restrict`ed at equality
+  literalOK     — §3's `ℓ ⊆ T`: `WF` at `number`, trivial elsewhere, false for a container
+  Typed.literal — one premise where the two old rules carried three
+
+**And the constructor still earns its place**, which is the part I had backwards. At arity one
+`literal(v)` and `refine(g, · = v)` denote the same pair, so the obvious move is to delete it. But
+`adm` is the same either way and **`admA` is not**: `ℓ` is data the term owns, so it can be tested
+against the *stored attribute*, where `refine`'s `q` is a value predicate and cannot be pushed
+there. `admA_literal_str` and `admA_literal_bool` against the `refine` row are that difference —
+the same `literal-S`/`literal-N` asymmetry, now deciding a design question rather than explaining
+one. `admA_literal_num_blind` is the one base where it still cannot, §1's `N` carrying text where
+the value is a double.
+
+**What is not done.** `literalS`/`literalN` remain, with all their witnesses; the new constructor
+was added alongside so the build stayed green at every step. Retiring them is mechanical — 41
+concrete sites — and the n-ary form becomes surface syntax for the union, which the `⋃` rows on
+`adm`/`admA` made lossless.
+
+`κ_sound`'s literal case is the one place the shape bit: it is the only single-kind rule whose kind
+comes from *data*, so the `single_kind` macro cannot serve and the codec has to be reduced at the
+literal's value before the tested value is split.
+
 ### One rule where §3 had been writing two
 
 `(literal-S)` and `(literal-N)` differed in exactly one thing: which set `ℓ` had to lie in, and

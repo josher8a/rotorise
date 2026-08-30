@@ -430,10 +430,10 @@ theorem literalSCodec_p_restrict (ls : List String) :
     equality with that value. The dispatch is the rule's "`g` ground, `ℓ ⊆ T`" read as a
     definition — a container has no ground base, which is why `(literal)` refuses one. -/
 noncomputable def literalCodec : Value → Codec
-  | .str s  => stringCodec.restrict    (fun w => match w with | .str s'  => s' == s  | _ => false)
-  | .num d  => rawNumberCodec.restrict (fun w => match w with | .num d'  => d' == d  | _ => false)
-  | .bool b => booleanCodec.restrict   (fun w => match w with | .bool b' => b' == b  | _ => false)
-  | .bin b  => binaryCodec.restrict    (fun w => match w with | .bin b'  => b' == b  | _ => false)
+  | .str s  => stringCodec.restrict    (fun w => match w with | .str s'  => decide (s' = s) | _ => false)
+  | .num d  => rawNumberCodec.restrict (fun w => match w with | .num d'  => decide (d' = d) | _ => false)
+  | .bool b => booleanCodec.restrict   (fun w => match w with | .bool b' => decide (b' = b) | _ => false)
+  | .bin b  => binaryCodec.restrict    (fun w => match w with | .bin b'  => decide (b' = b) | _ => false)
   | .null   => nullCodec
   | _       => Codec.empty
 
