@@ -529,8 +529,8 @@ def collapse : Value → Value := fun _ => .str "x"
 theorem not_ExactV_set : ¬ ExactV (.set (.held .string collapse (fun v => v))) := by
   intro h
   have h2 := (h (.strSet {"a", "b"})).mp (by simp [Adm, collapse])
-  simp [denoteω, setCodec, encSet, Codec.through, stringCodec, collapse, setImage,
-        sC, nC, bC] at h2
+  simp (config := { decide := true }) [denoteω, setCodec, encSet, Codec.through,
+        stringCodec, collapse, setImage, sC, nC, bC] at h2
 
 /-- `tuple`'s over-claims on alignment: one component against two elements. -/
 theorem not_ExactV_tuple : ¬ ExactV (.tuple [.string] none) := by
@@ -570,7 +570,7 @@ theorem excuse_witnessed : ∀ (e : Excuse) (t : Term), e.covers t = true →
     ∃ t' : Term, e.covers t' = true ∧ ¬ ExactV t'
   | .opaqueDepth, _, _     => ⟨.opaq false, rfl, not_ExactV_opaq false⟩
   | .uniqueAdmission, _, _ => ⟨.union [.string, .string], rfl, not_ExactV_union⟩
-  | .payloadShape, _, _    => ⟨.set (.union [.string, .boolean]), rfl, not_ExactV_set⟩
+  | .payloadShape, _, _    => ⟨.set (.held .string collapse (fun v => v)), rfl, not_ExactV_set⟩
   | .nameAdmission, _, _   => ⟨.tuple [.string] none, rfl, not_ExactV_tuple⟩
   | .nullOwnership, _, _   => ⟨.nullable (.legacy .string rNull), rfl, not_ExactV_nullable⟩
   -- The two attribute-side reasons cover nothing here, so the hypothesis is unsatisfiable.
@@ -969,8 +969,8 @@ used on**, and neither side has to answer for the other's reasons. -/
 /-- `set`'s member gate over-claims: the empty run is refused on this side too. -/
 theorem not_ExactA_set : ¬ ExactA (.set .string) := by
   intro h
-  have := (h (.ss [])).mp (by simp [AdmA])
-  simp [denoteω, setCodec] at this
+  have := (h (.ss ∅)).mp (by simp [AdmA])
+  simp [denoteω, setCodec, decSet] at this
 
 /-- Alignment again, read side. -/
 theorem not_ExactA_tuple : ¬ ExactA (.tuple [.string] none) := by
@@ -987,14 +987,14 @@ theorem not_ExactA_union : ¬ ExactA (.union [.string, .string]) := by
 /-- `opaq`'s ⊤ over-claims: the empty wire set is refused by all eight options. -/
 theorem not_ExactA_opaq (lossy : Bool) : ¬ ExactA (.opaq lossy) := by
   intro h
-  have h2 := (h (.ss [])).mp (by simp [AdmA])
-  have hd : (denoteω (Term.opaq lossy)).p (.ss [])
-      = (setCodec (opaqCodec 1 lossy)).p (.ss []) := by
-    show (opaqCodecω lossy).p (.ss []) = _
+  have h2 := (h (.ss ∅)).mp (by simp [AdmA])
+  have hd : (denoteω (Term.opaq lossy)).p (.ss ∅)
+      = (setCodec (opaqCodec 1 lossy)).p (.ss ∅) := by
+    show (opaqCodecω lossy).p (.ss ∅) = _
     simp only [opaqCodecω, Attr.depth]
-    exact opaqCodec_p_ss lossy 1 []
+    exact opaqCodec_p_ss lossy 1 ∅
   rw [hd] at h2
-  simp [setCodec] at h2
+  simp [setCodec, decSet] at h2
 
 /-- Writes the null point — half of a pair whose write reaches it and whose read does not,
     the mirror of `rNull`, and the reason `nullable` is in both hatches rather than one. -/
@@ -1300,7 +1300,7 @@ theorem sepJA_of_sepA {x y : Term} (h : SepA x y) : SepJA x y := by
 theorem sepJA_needs_member :
     ¬ (∀ a, AdmA (.set .string) a = true → AdmA (.set .number) a = false) := by
   intro h
-  exact absurd (h (.ns []) (by simp [AdmA])) (by simp [AdmA])
+  exact absurd (h (.ns ∅) (by simp [AdmA])) (by simp [AdmA])
 
 /-! ## `ident`, and why the pair does not replace it
 
@@ -1535,13 +1535,17 @@ theorem sepJV_set_literals :
     SepJV (.set (.literalS ["A"])) (.set (.literalS ["B"])) := by
   intro v hv
   cases v
-  case set vs =>
-    cases vs with
-    | nil => simp [Adm, AdmAll] at hv
-    | cons x xs =>
-      simp only [Adm, Bool.and_eq_true, AdmAll, Bool.not_eq_true', List.isEmpty_cons] at hv ⊢
-      cases x <;> simp_all [Adm, AdmAll]
-  all_goals simp [Adm]
+  case strSet S =>
+    simp only [Adm, Bool.and_eq_true, decide_eq_true_eq] at hv ⊢
+    obtain ⟨hne, hall⟩ := hv
+    obtain ⟨x, hx⟩ := Finset.card_ne_zero.mp hne
+    simp only [Bool.and_eq_false_iff, decide_eq_false_iff_not]
+    refine Or.inr fun hall' => ?_
+    have h1 := hall x hx
+    have h2 := hall' x hx
+    simp [Adm] at h1 h2
+    exact absurd (h1.symm.trans h2) (by decide)
+  all_goals simp [Adm] at hv ⊢
 
 /-- …and the contrast that shows what the non-emptiness is doing: the *array* pair does not
     separate, because both options admit `[]`. This is §5's empty-container argument in its
