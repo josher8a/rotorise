@@ -94,4 +94,30 @@ theorem tWitness_violates_uniqueAdmission :
     ((denote 3 tWitness).e (.str "A")).isNone := by
   simp [denote_not_fuel_monotone.2]
 
+/-! ## What *is* monotone, and why the contrast is the whole point
+
+    The refutation above is about `union`, and it is worth saying plainly that it is not
+    about the calculus. Two of the three wrappers §5 calls one-sided move cleanly in the
+    information order — one up, one down — and it is the *sum* that moves neither way.
+
+    So "a codec is a continuous map between information lattices" is a reading the
+    wrappers support and the sum refutes. It is refuted by (U) specifically: unique
+    admission is a **negative** condition on the other options, so growth anywhere in the
+    list can remove definedness everywhere. Nothing about partiality or the quotient is
+    responsible; a calculus with both and no sum would be continuous. -/
+
+/-- **`legacy` is a step up.** `extendRead` only ever adds readings — everything `c`
+    decodes, the migration decodes the same way, and the writing half is untouched. §3's
+    `(legacy)` coherence premise is what makes this an *extension* rather than a
+    replacement, and this is that fact in the information order. -/
+theorem approx_extendRead (c : Codec) (r : Attr → Option Value) :
+    Codec.Approx c (c.extendRead r) :=
+  ⟨fun h => h, fun h => by simp only [Codec.extendRead, h]⟩
+
+/-- **`refine` is a step down.** The prism only ever removes, on both halves — which is
+    why §6's `refine(c, T) ≡ c` is the top of a descending chain and not a coincidence. -/
+theorem approx_restrict (c : Codec) (q : Value → Bool) :
+    Codec.Approx (c.restrict q) c :=
+  ⟨fun h => (restrict_e.mp h).2, fun h => (restrict_p.mp h).1⟩
+
 end Calculus

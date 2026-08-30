@@ -98,6 +98,8 @@ rests on it. -/
 is one half and this is the other, so the bijection is a theorem rather than a reading. -/
 
 #assert_axioms Lawful.can_roundTrip
+#assert_axioms approx_extendRead
+#assert_axioms approx_restrict
 #assert_axioms Lawful.e_injective
 
 /-! §5's two outright dischargers, as one theorem: label each side by a projection of the
