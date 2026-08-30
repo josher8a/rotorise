@@ -1124,9 +1124,29 @@ proof — was not wrong about soundness being *needed*; it was wrong about where
 is vacuous on the rows that matter and it was absent on the rows where it was the only thing
 available.
 
+**Every excuse is earned.** `Excuse` said which rows may decline; nothing said the declining was
+*warranted*, so a constructor could name a shape that is secretly provable and the hatch would
+absorb a row that ought to carry a proof. `excuse_witnessed` makes each excuse owe a counterexample:
+a term of a shape it covers on which exactness genuinely fails. For a shape that is exact there is
+none to be had, and both `excuse_witnessed` and `excuse_shapes` reject the attempt independently.
+
+Four of the five witnesses had to be rebuilt around the axiom base, which is worth recording. The
+obvious `uniqueAdmission` witness is a union of `string` and `number` at a numeral outside `D` — and
+it is **not constructible**: `Double` is axiomatized with `toDec`, `ofDec`, `roundtrip` and `decEq`
+only, and is not even known to be inhabited, so no `.num` value can be built. The replacement is
+better than the original: `union(string, string)`, where `select` writes nothing because *two*
+options admit. That is (U) failing in its purest form, and it needs no arithmetic at all. `opaq`'s
+witness moved for the same reason — `opaq false` refuses every numeral, but the empty set is refused
+too and costs nothing.
+
+The obligation is that an excuse names a real phenomenon, **not** that it is tight on every term of
+that shape — the stronger reading is false, and `union []` is the counterexample: covered by
+`uniqueAdmission`, and perfectly exact, there being no option to admit. Widening `covers` to a shape
+that is always exact is caught; widening it to one that is *sometimes* exact is not, and that is the
+residual softness.
+
 **What none of it can buy.** No construction inside the kernel prevents someone writing a weak
-specification: an `Excuse` constructor can always be added, and `covers` extended to admit a new
-shape. What the construction does is make the weak choice *expensive and visible* — a named reason,
+specification: an `Excuse` constructor can always be added with a witness of its own. What the construction does is make the weak choice *expensive and visible* — a named reason,
 of a declared shape, in a file a reviewer reads — and make the strong choice cheap, since sixteen
 rows already carry their proof. That is the honest limit, and it is the argument for spending the
 effort on exactness rather than on ceremony around soundness.
