@@ -257,3 +257,72 @@ describe('what opaque reads back, as a type and as a function', () => {
         expect(read({ NS: ['1', '2'] })).toEqual(new Set(['1', '2']))
     })
 })
+
+describe('every N it writes is a numeral', () => {
+    /**
+     * `ran(e) ⊆ 𝔸`, the write half of C1's embedding obligation.
+     *
+     * §1's `Carries('N')` is `Numerals` — 38 significant digits, magnitude `1e-130 … 9.9…e125` —
+     * and `Number.isFinite`, which is what this checked, is not that test. `5e-324` is a finite
+     * double outside the range and is the specification's own example of the bound going
+     * unchecked; `opaque('lossy')` wrote it, along with `1e200` and `1e-200`.
+     *
+     * `number` has gated on this since the numeral domain was tightened, and `literal` since its
+     * `ℓ ⊆ D` premise. `opaque` is the third term that writes an `N` from a JS number, and the
+     * audit that found it is the one C1 now states: four members carry a refinement, and every
+     * term that writes one has to check it.
+     */
+    it('refuses a magnitude outside what an N holds', () => {
+        const lossy = opaque('lossy')
+        for (const v of [5e-324, 1e200, 1e-200, 1e126]) {
+            expect(() => lossy.unsafeEncode(v)).toThrow(
+                /magnitude 1e-130 to 9.9e125/,
+            )
+        }
+    })
+
+    it('keeps the clearer message for the ones that are not numbers at all', () => {
+        const lossy = opaque('lossy')
+        expect(() => lossy.unsafeEncode(NaN)).toThrow(/no number for NaN/)
+        expect(() => lossy.unsafeEncode(Infinity)).toThrow(
+            /no number for Infinity/,
+        )
+    })
+
+    it('applies the gate everywhere a number can be nested', () => {
+        const lossy = opaque('lossy')
+        expect(() => lossy.unsafeEncode([5e-324])).toThrow(/magnitude/)
+        expect(() => lossy.unsafeEncode({ a: 5e-324 })).toThrow(/magnitude/)
+    })
+
+    /**
+     * A set of numbers never reaches the gate, because `opaque` has no `NS` write path at all — a
+     * numeric `Set` is refused outright, on the grounds that `NS` decodes as strings.
+     *
+     * Worth pinning rather than passing over, because it is the write half of the `NS` asymmetry
+     * recorded in `docs/codec-formalization.md` §4: `opaque` **reads** `NS` as `Set<string>` and
+     * cannot **write** `NS` at all, so re-encoding what it read produces `SS`. The refusal here is
+     * correct on its own terms; it is the read that has nowhere to go.
+     */
+    it('refuses a set of numbers before any gate applies, which is the other half', () => {
+        const lossy = opaque('lossy')
+        expect(() => lossy.unsafeEncode(new Set([5e-324]))).toThrow(
+            /NS decodes as strings/,
+        )
+        expect(() => lossy.unsafeEncode(new Set([1]))).toThrow(
+            /NS decodes as strings/,
+        )
+        expect(lossy.unsafeDecode({ NS: ['1'] })).toEqual(new Set(['1']))
+        expect(lossy.unsafeEncode(lossy.unsafeDecode({ NS: ['1'] }))).toEqual({
+            SS: ['1'],
+        })
+    })
+
+    it('still writes the range that is stored, including the ends', () => {
+        const lossy = opaque('lossy')
+        expect(lossy.unsafeEncode(1e125)).toEqual({ N: '1e+125' })
+        expect(lossy.unsafeEncode(1e-130)).toEqual({ N: '1e-130' })
+        expect(lossy.unsafeEncode(0)).toEqual({ N: '0' })
+        expect(lossy.unsafeEncode(-1.5)).toEqual({ N: '-1.5' })
+    })
+})
