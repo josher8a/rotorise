@@ -108,6 +108,14 @@ input, keep the options' label sets disjoint. `uniqueAdmission_of_kinds` and
 
 #assert_axioms uniqueAdmission_of_disjoint
 #assert_axioms filter_eq_singleton_of_disjoint
+/-! §3's `held`/`refine` split, checked rather than asserted: both are one partial-iso
+combinator, and the pair agrees on the nose. -/
+
+#assert_axioms through_e_adapt
+#assert_axioms through_p_adapt
+#assert_axioms restrict_e_adapt
+#assert_axioms restrict_p_adapt
+
 #assert_axioms sepV_refine_disjoint
 #assert_axioms uAtCan_of_refine_disjoint
 #assert_axioms Lawful.restrict

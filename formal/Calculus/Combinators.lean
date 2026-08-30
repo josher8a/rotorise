@@ -296,6 +296,50 @@ def Codec.restrict (c : Codec) (q : Value → Bool) : Codec :=
     e := fun v => if q v then c.e v else none
     p := fun a => (c.p a).bind fun v => if q v then some v else none }
 
+/-- **The combinator `held` and `refine` both are.** A partial iso either side of the
+    pair: `f` in front of the writing, `g` behind the reading, both allowed to refuse.
+
+    §3 keeps the two apart and says why — "the literature collapses them … which is
+    exactly the merged combinator", separated for a reason *outside* the calculus, since a
+    total `g` lets a generator for `I` be pushed forward while a partial one leaves only
+    rejection sampling. This is that merged combinator, so the claim is checked rather
+    than asserted: `through` is `adapt` with both halves total, `refine` is `adapt` with a
+    partial identity on both halves, and the four theorems below are the whole of it.
+
+    The `Codec` is not redefined in its terms. `T` agrees only propositionally — `adapt`'s
+    is `∃ w, f v = some w ∧ c.T w` where `through`'s is `c.T (f v)` — so a merge at the
+    definition would cost every `rfl` over the two wrappers, which is the trade `withNull`
+    already showed is not worth taking blind. The pair is what the claim is about, and the
+    pair agrees on the nose. -/
+def Codec.adapt (c : Codec) (f g : Value → Option Value) : Codec :=
+  { T := fun v => ∃ w, f v = some w ∧ c.T w
+    μ := c.μ
+    e := fun v => (f v).bind c.e
+    p := fun a => (c.p a).bind g }
+
+/-- The partial identity on a predicate — `refine`'s adapter, on both halves. -/
+def partialId (q : Value → Bool) : Value → Option Value := fun v => if q v then some v else none
+
+/-- `held` writes as `adapt` with a total adapter. -/
+theorem through_e_adapt {c : Codec} (f g : Value → Value) :
+    (c.through f g).e = (c.adapt (some ∘ f) (some ∘ g)).e := rfl
+
+/-- …and reads as one. -/
+theorem through_p_adapt {c : Codec} (f g : Value → Value) :
+    (c.through f g).p = (c.adapt (some ∘ f) (some ∘ g)).p := by
+  funext a; simp only [Codec.through, Codec.adapt]; cases c.p a <;> rfl
+
+/-- `refine` writes as `adapt` with a partial identity — the *same* combinator, weaker
+    adapter. This is the sense in which it is sugar. -/
+theorem restrict_e_adapt {c : Codec} (q : Value → Bool) :
+    (c.restrict q).e = (c.adapt (partialId q) (partialId q)).e := by
+  funext v; simp only [Codec.restrict, Codec.adapt, partialId]; cases q v <;> rfl
+
+/-- …and reads as one. -/
+theorem restrict_p_adapt {c : Codec} (q : Value → Bool) :
+    (c.restrict q).p = (c.adapt (partialId q) (partialId q)).p := by
+  funext a; simp only [Codec.restrict, Codec.adapt, partialId]
+
 /-- `legacy`: extend the reading. With §3's coherence premise this presentation equals
     the order-free `p ∪ r`. -/
 def Codec.extendRead (c : Codec) (r : Attr → Option Value) : Codec :=

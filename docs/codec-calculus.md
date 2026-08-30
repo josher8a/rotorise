@@ -379,9 +379,26 @@ fit a double.
 
 `held` and `refine` are the same shape at different strengths: an **iso** and a **prism**. The
 literature collapses them — invertible syntax descriptions [2] builds everything from an algebra of
-partial isomorphisms, which is exactly the merged combinator. They are separate here for a reason
-outside the calculus: a total `g` lets a generator for `I` be pushed forward to one for `T`, while a
-partial one leaves only rejection sampling. Same terms, different search.
+partial isomorphisms, which is exactly the merged combinator.
+
+They really are one term, and it is worth being exact about the sense. Write the merged combinator
+as an adapter that may refuse on either half — `f` in front of the writing, `g` behind the reading:
+
+```
+e = λv. f(v) ⨾ e_c        p = λa. p_c(a) ⨾ g
+```
+
+`held(c, f, g)` is that with both halves **total**, and `refine(c, q)` is that with a **partial
+identity** on both halves — refuse off `q`, pass through on it. The pairs agree on the nose, not up
+to anything. So `refine` is not a second kind of adapter; it is the one adapter with a weaker
+premise, and its whole content is that refusing _is_ available, because `e` and `p` are partial to
+begin with.
+
+They are kept apart for a reason outside the calculus, and only that one: a total `g` lets a
+generator for `I` be pushed forward to one for `T`, while a partial one leaves only rejection
+sampling. Same term, different search. The split is a note about testing, written into the syntax
+so it cannot be lost — which is the same bargain `nullable` strikes with `union(c, null)`, and
+should be read the same way.
 
 `legacy`'s `r` is a bare partial map and not a codec, because only one direction is ever used: the
 rule writes through `c` whatever it read through. Asking for a codec would ask for a half that cannot
