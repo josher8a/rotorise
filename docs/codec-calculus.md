@@ -322,10 +322,18 @@ has a gate to record.
 
 `literal` is the one ground term with **two** rules, because it is the only one whose member follows
 from its _values_ rather than from its name. Those two are the ones worth naming, not the only ones
-possible: a literal over _any_ ground term is `refine(base, ∈ ℓ)`, which is already derivable and
-already separates, so a boolean or binary literal needs no rule and gets none. `(literal-S)` and
-`(literal-N)` are written out because their member follows from the values and a reader needs to see
-which; nothing else about them is special.
+possible, and the general fact is one statement rather than a rule per member:
+
+> For **any derivable base**, a union of refinements with pairwise disjoint predicates admits
+> uniquely on both sides.
+
+`(literal-S)` and `(literal-N)` are two instantiations, at `string` and at the ungated double codec.
+A boolean or binary literal is two more, and needs no rule because it gets none from anywhere else
+either. And the base need not be ground: two disjoint refinements of one `array(string)` separate by
+the same argument. "Literal" was never the operative word — _one base, disjoint predicates_ was, and
+that is why §3 stops at two rules without leaving anything out. `(literal-S)` and `(literal-N)` are
+written down because their member follows from the values and a reader needs to see which; nothing
+else about them is special.
 
 There is deliberately no rule admitting a mixed set: a codec writes one member, so `literal(ℓ, k)`
 with `ℓ ∈ String` and `k ∈ D` has no derivation. That is **(W)** and not an omission, and it is not
