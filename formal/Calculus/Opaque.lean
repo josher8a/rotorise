@@ -168,7 +168,7 @@ private theorem opaq_unfold (lossy : Bool) (n : Nat) :
 
 -- Every unfolding computes through the same eleven definitions.
 section Unfoldings
-attribute [local simp] opaq_unfold altCodec OptionSem.byAttempt stringCodec booleanCodec
+attribute [local simp] opaq_unfold altCodec select OptionSem.byAttempt stringCodec booleanCodec
   binaryCodec nullCodec numberCodec setCodec arrayCodec recordCodec Codec.empty
 
 /-- §3 `(opaque)`, write side at kind `string`: only the `S` option admits, so the filter collapses to it. -/
@@ -308,7 +308,7 @@ by the `set` option. Kind-disjointness is the same argument — each attribute c
 is accepted by at most one of the eight. -/
 
 section UnfoldingsA
-attribute [local simp] opaq_unfold altCodec OptionSem.byAttempt stringCodec booleanCodec
+attribute [local simp] opaq_unfold altCodec select OptionSem.byAttempt stringCodec booleanCodec
   binaryCodec nullCodec numberCodec setCodec arrayCodec recordCodec Codec.empty
 
 /-- §3 `(opaque)`, read side at member `S`: distinct members, so at most one option admits. -/

@@ -142,7 +142,7 @@ theorem denoteω_μ : ∀ t : Term, (denoteω t).μ = μSyn t
   | .opaq _ => rfl
   | .object _ _ => rfl
   | .union opts => by
-      simp only [denoteω, altCodec, μSyn, denoteωMems_eq]
+      simp only [denoteω, altCodec, select, μSyn, denoteωMems_eq]
       congr 1
       exact denoteω_μList opts
   | .dunion _ _ => rfl

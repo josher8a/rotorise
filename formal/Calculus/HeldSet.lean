@@ -206,7 +206,7 @@ theorem not_TIsDomE_unionLiteralString : ¬ TIsDomE unionLiteralString := by
   have hT : unionLiteralString.T (.str "A") :=
     ⟨.byAttempt (literalSCodec ["A"]), by simp [unionLiteralString], ⟨"A", by simp, rfl⟩⟩
   have he : unionLiteralString.e (.str "A") = none := by
-    simp [unionLiteralString, altCodec, OptionSem.byAttempt, literalSCodec, stringCodec]
+    simp [unionLiteralString, altCodec, select, OptionSem.byAttempt, literalSCodec, stringCodec]
   have := (h (.str "A")).mp hT
   rw [he] at this
   exact nomatch this

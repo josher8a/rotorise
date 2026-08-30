@@ -253,10 +253,10 @@ theorem orNull_eq_altCodec {c : Codec} (he : c.e .null = none) (hp : c.p .null =
         · exact .inr hT
         · exact absurd h (by simp)
   · funext v
-    cases v <;> simp [Codec.orNull, altCodec, OptionSem.byAttempt, nullCodec, he,
+    cases v <;> simp [Codec.orNull, altCodec, select, OptionSem.byAttempt, nullCodec, he,
       List.filter] <;> cases hc : c.e _ <;> simp_all
   · funext a
-    cases a <;> simp [Codec.orNull, altCodec, OptionSem.byAttempt, nullCodec, hp,
+    cases a <;> simp [Codec.orNull, altCodec, select, OptionSem.byAttempt, nullCodec, hp,
       List.filter] <;> cases hc : c.p _ <;> simp_all
 
 /-- …and null-honesty is not enough for it. `nullable(string)` is lawful and honest in
@@ -564,27 +564,27 @@ theorem altCodec_pair_e (o₂ o₃ : OptionSem) (μ' : Option Member) (v : Value
     (altCodec [o₂, o₃] μ').e v =
       resolve₂ (o₂.admitV v) (o₃.admitV v) (o₂.c.e v) (o₃.c.e v) := by
   cases hB : o₂.admitV v <;> cases hC : o₃.admitV v <;>
-    simp [altCodec, List.filter, resolve₂, hB, hC]
+    simp [altCodec, select, List.filter, resolve₂, hB, hC]
 
 theorem altCodec_pair_p (o₂ o₃ : OptionSem) (μ' : Option Member) (a : Attr) :
     (altCodec [o₂, o₃] μ').p a =
       resolve₂ (o₂.admitA a) (o₃.admitA a) (o₂.c.p a) (o₃.c.p a) := by
   cases hB : o₂.admitA a <;> cases hC : o₃.admitA a <;>
-    simp [altCodec, List.filter, resolve₂, hB, hC]
+    simp [altCodec, select, List.filter, resolve₂, hB, hC]
 
 theorem altCodec_triple_e (o₁ o₂ o₃ : OptionSem) (μ : Option Member) (v : Value) :
     (altCodec [o₁, o₂, o₃] μ).e v =
       resolve₃ (o₁.admitV v) (o₂.admitV v) (o₃.admitV v)
         (o₁.c.e v) (o₂.c.e v) (o₃.c.e v) := by
   cases hA : o₁.admitV v <;> cases hB : o₂.admitV v <;> cases hC : o₃.admitV v <;>
-    simp [altCodec, List.filter, resolve₃, hA, hB, hC]
+    simp [altCodec, select, List.filter, resolve₃, hA, hB, hC]
 
 theorem altCodec_triple_p (o₁ o₂ o₃ : OptionSem) (μ : Option Member) (a : Attr) :
     (altCodec [o₁, o₂, o₃] μ).p a =
       resolve₃ (o₁.admitA a) (o₂.admitA a) (o₃.admitA a)
         (o₁.c.p a) (o₂.c.p a) (o₃.c.p a) := by
   cases hA : o₁.admitA a <;> cases hB : o₂.admitA a <;> cases hC : o₃.admitA a <;>
-    simp [altCodec, List.filter, resolve₃, hA, hB, hC]
+    simp [altCodec, select, List.filter, resolve₃, hA, hB, hC]
 
 theorem altCodec_nest_e (o₁ o₂ o₃ : OptionSem) (μ μ' : Option Member) (v : Value) :
     (altCodec [o₁, .byAttempt (altCodec [o₂, o₃] μ')] μ).e v =

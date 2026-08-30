@@ -1421,16 +1421,23 @@ def unanimous : List (Option Member) → Option Member
   | [] => none
   | μ :: μs => if μs.all (· == μ) then μ else none
 
+/-- **One side of a sum.** Both halves of `altCodec` are this: filter the options by the
+    admission *that side* reads, and act through the one that answers alone. The two
+    differ only in which admission and which half of the pair — so stating the shape once
+    is what lets `altCodec_e` and `altCodec_p` be the same theorem at two instances,
+    instead of one theorem written twice. -/
+def select {A B : Type} (os : List OptionSem) (adm : OptionSem → A → Bool)
+    (run : OptionSem → A → Option B) (x : A) : Option B :=
+  match os.filter (adm · x) with
+  | [o] => run o x
+  | _ => none
+
 /-- `union`: the sum, resolved by unique admission — never by declaration order. -/
 def altCodec (os : List OptionSem) (μA : Option Member) : Codec :=
   { T := fun v => ∃ o ∈ os, o.c.T v
     μ := μA
-    e := fun v => match os.filter (·.admitV v) with
-      | [o] => o.c.e v
-      | _ => none
-    p := fun a => match os.filter (·.admitA a) with
-      | [o] => o.c.p a
-      | _ => none }
+    e := select os (·.admitV) (·.c.e)
+    p := select os (·.admitA) (·.c.p) }
 
 /-- `discriminatedUnion` is not its own codec: it is the sum over tag-admission
     options. Its (U) is `uniqueAdmission_byTag` — a theorem, which is what the term
@@ -1553,41 +1560,42 @@ if and only if exactly one survives. Stated as an `iff`, that is the whole of th
 — every theorem about `union` below, and every row of §6 that mentions one, is a
 statement about `os.filter` and nothing else. -/
 
+/-- **What a selection produces**: exactly one option admitted, and it answered. -/
+theorem select_eq_some {A B : Type} {os : List OptionSem} {adm : OptionSem → A → Bool}
+    {run : OptionSem → A → Option B} {x : A} {y : B} :
+    select os adm run x = some y ↔ ∃ o, os.filter (adm · x) = [o] ∧ run o x = some y := by
+  show (match os.filter (adm · x) with | [o] => run o x | _ => none) = some y ↔ _
+  cases hf : os.filter (adm · x) with
+  | nil => simp
+  | cons o tl => cases tl <;> simp
+
+/-- …and it routes through an option that admits. -/
+theorem select_admits {A B : Type} {os : List OptionSem} {adm : OptionSem → A → Bool}
+    {run : OptionSem → A → Option B} {x : A} {y : B}
+    (h : select os adm run x = some y) : ∃ o ∈ os, adm o x = true ∧ run o x = some y := by
+  obtain ⟨o, hf, hr⟩ := select_eq_some.mp h
+  obtain ⟨ho, hadm⟩ := mem_of_filter_eq_singleton hf
+  exact ⟨o, ho, hadm, hr⟩
+
 /-- **What a union writes**: exactly one option admitted the value, and it wrote. -/
 theorem altCodec_e {os : List OptionSem} {μA : Option Member} {v a} :
     (altCodec os μA).e v = some a ↔
-      ∃ o, os.filter (·.admitV v) = [o] ∧ o.c.e v = some a := by
-  show (match os.filter (·.admitV v) with | [o] => o.c.e v | _ => none) = some a ↔ _
-  cases hf : os.filter (·.admitV v) with
-  | nil => simp
-  | cons o tl => cases tl <;> simp
+      ∃ o, os.filter (·.admitV v) = [o] ∧ o.c.e v = some a := select_eq_some
 
-/-- **What a union reads**: the mirror, on the attribute side. -/
+/-- **What a union reads**: the same theorem, on the attribute side. -/
 theorem altCodec_p {os : List OptionSem} {μA : Option Member} {a v} :
     (altCodec os μA).p a = some v ↔
-      ∃ o, os.filter (·.admitA a) = [o] ∧ o.c.p a = some v := by
-  show (match os.filter (·.admitA a) with | [o] => o.c.p a | _ => none) = some v ↔ _
-  cases hf : os.filter (·.admitA a) with
-  | nil => simp
-  | cons o tl => cases tl <;> simp
+      ∃ o, os.filter (·.admitA a) = [o] ∧ o.c.p a = some v := select_eq_some
 
-/-- A sum's encode routes through an admitting option — the weaker form, which forgets
-    that the option was the *only* one. Enough where the uniqueness is not needed. -/
+/-- A sum's encode routes through an admitting option. -/
 theorem altCodec_e_admits {os : List OptionSem} {μA : Option Member} {v a}
     (he : (altCodec os μA).e v = some a) :
-    ∃ o ∈ os, o.admitV v = true ∧ o.c.e v = some a := by
-  obtain ⟨o, hf, hoe⟩ := altCodec_e.mp he
-  obtain ⟨ho, hadm⟩ := mem_of_filter_eq_singleton hf
-  exact ⟨o, ho, hadm, hoe⟩
+    ∃ o ∈ os, o.admitV v = true ∧ o.c.e v = some a := select_admits he
 
-/-- A sum's decode routes through an admitting option — the mirror of
-    `altCodec_e_admits`. -/
+/-- A sum's decode routes through an admitting option — the same theorem again. -/
 theorem altCodec_p_admits {os : List OptionSem} {μA : Option Member} {a v}
     (hp : (altCodec os μA).p a = some v) :
-    ∃ o ∈ os, o.admitA a = true ∧ o.c.p a = some v := by
-  obtain ⟨o, hf, hop⟩ := altCodec_p.mp hp
-  obtain ⟨ho, hadm⟩ := mem_of_filter_eq_singleton hf
-  exact ⟨o, ho, hadm, hop⟩
+    ∃ o ∈ os, o.admitA a = true ∧ o.c.p a = some v := select_admits hp
 
 /-! ### Wrappers -/
 
