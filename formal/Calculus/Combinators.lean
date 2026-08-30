@@ -3269,37 +3269,37 @@ theorem fbNames_not_mem {sems : List (Name × FieldSem)} {names : Finset Name} {
   fun hm => (mem_fbNames.mp hm).2 hc
 
 /-- The guard characterizations, via `List.all`. -/
-theorem valPresentB_spec {sems : List (Name × FieldSem)} {names : List Name}
+theorem valPresentB_spec {sems : List (Name × FieldSem)} {names : Finset Name}
     (h : valPresentB sems names = true) {k fs} (hm : (k, fs) ∈ sems)
-    (hno : ∀ c, fs ≠ FieldSem.opt c) : names.contains k = true := by
+    (hno : ∀ c, fs ≠ FieldSem.opt c) : k ∈ names := by
   have := List.all_eq_true.mp h (k, fs) hm
   cases fs with
   | opt c => exact absurd rfl (hno c)
-  | req c => exact this
-  | fb c v => exact this
+  | req c => exact of_decide_eq_true this
+  | fb c v => exact of_decide_eq_true this
 
-theorem valPresentB_of {sems : List (Name × FieldSem)} {names : List Name}
-    (h : ∀ k fs, (k, fs) ∈ sems → (∀ c, fs ≠ FieldSem.opt c) →
-      names.contains k = true) : valPresentB sems names = true := by
+theorem valPresentB_of {sems : List (Name × FieldSem)} {names : Finset Name}
+    (h : ∀ k fs, (k, fs) ∈ sems → (∀ c, fs ≠ FieldSem.opt c) → k ∈ names) :
+    valPresentB sems names = true := by
   refine List.all_eq_true.mpr fun kf hkf => ?_
   obtain ⟨k, fs⟩ := kf
   cases fs with
   | opt c => rfl
-  | req c => exact h k (.req c) hkf (fun _ h' => nomatch h')
-  | fb c v => exact h k (.fb c v) hkf (fun _ h' => nomatch h')
+  | req c => exact decide_eq_true (h k (.req c) hkf (fun _ h' => nomatch h'))
+  | fb c v => exact decide_eq_true (h k (.fb c v) hkf (fun _ h' => nomatch h'))
 
-theorem reqPresentB_spec {sems : List (Name × FieldSem)} {names : List Name}
+theorem reqPresentB_spec {sems : List (Name × FieldSem)} {names : Finset Name}
     (h : reqPresentB sems names = true) {k c} (hm : (k, FieldSem.req c) ∈ sems) :
-    names.contains k = true :=
-  List.all_eq_true.mp h (k, .req c) hm
+    k ∈ names :=
+  of_decide_eq_true (List.all_eq_true.mp h (k, .req c) hm)
 
-theorem reqPresentB_of {sems : List (Name × FieldSem)} {names : List Name}
-    (h : ∀ k c, (k, FieldSem.req c) ∈ sems → names.contains k = true) :
+theorem reqPresentB_of {sems : List (Name × FieldSem)} {names : Finset Name}
+    (h : ∀ k c, (k, FieldSem.req c) ∈ sems → k ∈ names) :
     reqPresentB sems names = true := by
   refine List.all_eq_true.mpr fun kf hkf => ?_
   obtain ⟨k, fs⟩ := kf
   cases fs with
-  | req c => exact h k c hkf
+  | req c => exact decide_eq_true (h k c hkf)
   | opt c => rfl
   | fb c v => rfl
 
