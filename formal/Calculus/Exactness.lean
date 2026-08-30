@@ -1587,5 +1587,56 @@ theorem set_e_keeps_duplicates :
     (setCodec stringCodec).e (.set [.str "a", .str "a"]) = some (.ss ["a", "a"]) := by
   simp [setCodec, stringCodec, traverse, asWireSet, strPayloads, sC]
 
+/-! ### Fixing `set`: what (R) allows, and what it forbids
+
+`Value.set` is a list and §1's `SS` is `℘⁺fin`, so the model admits orderings and duplicates
+the domain does not. Repairing that is constrained from the start, and the constraint is
+worth stating before any design: **`e` cannot normalise.**
+
+(R) is `retract : c.e t = some a → c.p a = some t` — retraction to the *same* value, not to
+an agreeing one. So if two orderings of one set both write, they must write *different*
+attributes: a codec collapsing them would owe one attribute two readings
+(`retract_forbids_insensitive_e`), and the same argument kills duplicate-collapsing on the
+write side (`retract_forbids_dedup_e`).
+
+What is allowed is the other half. `Carrier` asks only `dom(e) ⊆ T`, not equality, so `e`
+may *refuse* the non-canonical representatives while `T` keeps holding them. And nothing
+constrains `p` to be injective — it is a quotient by design (§2). So the repair is forced
+into one shape:
+
+* `e` accepts exactly one representative per set — the payload-sorted, duplicate-free one —
+  and refuses the rest.
+* `p` normalises, so every ordering of a wire set reads to that one value.
+
+Which is exactly §2's sentence, made true: *two orderings of one set are distinct attributes
+reading to one value*. It is currently false only because the model never picked a
+representative.
+
+The canonicity test lives on the **payloads**, not on values: `asWireSet` already has
+`List String`, `List Numeral` and `List Bytes` in hand, all with decidable orders, so no
+order on `Value` — and none on the axiomatized `Double` — is needed. -/
+
+/-- **`e` cannot be order-insensitive.** (R) is retraction to the *same* value, not to an
+    agreeing one, so if two orderings of a set both write, they write different attributes.
+    A codec whose `e` collapsed them would have to read that one attribute back as two
+    values. -/
+theorem retract_forbids_insensitive_e {c : Codec} (h : LawfulCore c)
+    {x y : Value} (hne : x ≠ y) {a : Attr}
+    (h1 : c.e (.set [x, y]) = some a) (h2 : c.e (.set [y, x]) = some a) : False := by
+  have r1 := h.retract h1
+  have r2 := h.retract h2
+  rw [r1] at r2
+  simp at r2
+  exact hne r2.1
+
+/-- The same argument kills duplicate-collapsing on the write side. -/
+theorem retract_forbids_dedup_e {c : Codec} (h : LawfulCore c)
+    {x : Value} {a : Attr}
+    (h1 : c.e (.set [x]) = some a) (h2 : c.e (.set [x, x]) = some a) : False := by
+  have r1 := h.retract h1
+  have r2 := h.retract h2
+  rw [r1] at r2
+  simp at r2
+
 end
 end Calculus
