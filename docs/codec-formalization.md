@@ -1487,6 +1487,51 @@ only `Kind` and `Member` do. So nothing is lost by a constructor whose equality 
 the uniqueness gates were never going to be checkable on `Value` anyway. On the sets they are
 checkable on the payloads, which is where they belong.
 
+### The set repair: measured end to end, with the landmines
+
+Everything needed to execute this is now known. Recording it so the next attempt has no unknowns.
+
+**The target shape.**
+
+| member | today | target |
+| --- | --- | --- |
+| `Attr.ss`/`ns`/`bs` | `List String` / `Numeral` / `Bytes` | `Finset` of each |
+| `Value.set` | `List Value` | `strSet (Finset String)`, `numSet (Finset Double)`, `binSet (Finset Bytes)` |
+| `Attr.m`, `Value.map` | `List (Name × _)` | unchanged, gated: unique keys, canonical order |
+
+**`Finset` is usable under §3's axiom base — but almost none of mathlib's API is.** This is the
+landmine, and it is invisible until `#assert_axioms_all` runs.
+
+* `Finset.ext`, `Multiset.mem_map`, `Multiset.Nodup.ext`, `Finset.mem_attach` — **clean**
+  (`propext`, `Quot.sound`).
+* `{a,b} = {b,a}` and `{a,a} = {a}` — **clean**, which is the whole point of the change.
+* `Finset.mem_image`, `Finset.image_nonempty`, `Multiset.mem_dedup` — **`Classical.choice`**.
+* `Finset.toList`, `Multiset.toList` — **noncomputable**, via `Quot.out`.
+* `tauto` — pulls `Classical.choice`; `or_comm` does not.
+
+So `Finset.image` is doubly wrong here: classical, and semantically wrong. A set codec must
+**refuse** an element map that collapses two elements, not silently dedup, because (R) would fail on
+the collapsed pair. The right primitive is a `Nodup`-**guarded** map — build `Multiset.map`, check
+`Nodup`, refuse otherwise — which needs no `dedup` and no choice, and encodes the injectivity (R)
+requires as a decidable guard.
+
+**Blast radius, measured rather than estimated.** Changing `Attr`'s three members alone gives 6
+errors in `Codec.lean` (all in `Agree`), then 49 in `Combinators.lean`, concentrated in `asWireSet`,
+the three payload projections, `setCodec`'s read side and `setCodec_p_eq`/`asWireSet_eq`. Downstream
+of Combinators is unmeasured because the build stops there; `Opaque.lean` has 15 `setCodec` sites
+including the fixpoint, and `Exactness.lean` 22.
+
+**`Attr` cannot move alone.** With `Attr.ss : Finset` and `Value.set` still a list, `p` must produce
+a list from a finite set, which needs an order or choice. With *both* sides typed there is no list
+anywhere on the set path and no canonical form is needed at all — `Wire.canon` is then required only
+for the **map** gate, keyed by name.
+
+**What `(set)` costs.** The rule takes an element term whose member is ground; with the value side
+typed, element payloads are raw `String`/`Double`/`Bytes` and the element codec is reapplied to
+values rebuilt from them. `setCodec` dispatches on which of the three value-set constructors it
+sees, and exactly one branch fires for a ground element codec. Coherent, but it is a rule change,
+not a representation change — and it is the one part of this that is design rather than mechanics.
+
 ## §5 Certifying an implementation
 
 The calculus is portable by design: nothing in it is TypeScript, and nothing is Rotorise. An
