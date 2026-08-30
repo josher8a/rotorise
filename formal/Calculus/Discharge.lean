@@ -933,20 +933,21 @@ theorem uAtCan_literal_literal (fuel : Nat) :
       simp
     all_goals exact nomatch ha
 
-/-! ## Why `ident` is *not* an exemption from (K), as §5 states it
+/-! ## Why one-sided `ident` was never an exemption from (K)
 
-    §5 states **(K)** as `∀ i ≠ j. κ(cᵢ) ∩ κ(cⱼ) = ∅ ∨ ident(cᵢ) ∨ ident(cⱼ)`, and
-    calls it a discharger — decidable and *sufficient* for (U). It is not sufficient,
-    and the two counterexamples below are the reason the `ident` half of (K) is absent
-    from `uAtCan_of_disjoint`. This is a correction of the doc, not a gap in the
-    mechanization.
+    An earlier §5 stated **(K)** as `∀ i ≠ j. κ(cᵢ) ∩ κ(cⱼ) = ∅ ∨ ident(cᵢ) ∨ ident(cⱼ)`
+    and called it *sufficient* for (U). It is not, and the two counterexamples below are
+    why the `ident` half is absent from `uAtCan_of_disjoint`. §5 now carries the repaired
+    form — `ident` on both sides **and** disjoint `adm` — and cites these two as its
+    reason, so what follows is the machine-checked half of a correction the doc has
+    already made, not a live disagreement with it.
 
-    The prose is right about what `ident` buys: attempted admission on a `literal` is
-    evidence, where attempted admission on `string` is not. What the rule as written
-    drops is that evidence only *resolves* a pair when it is available on **both**
-    sides and the two admissible sets are **disjoint**. §5's own worked example,
-    `union(literal("A"), literal("B"))`, has both; the rule it is offered in support of
-    demands neither. -/
+    The withdrawn rule was right about what `ident` buys: attempted admission on a
+    `literal` is evidence, where attempted admission on `string` is not. What it dropped
+    is that evidence only *resolves* a pair when it is available on **both** sides and
+    the two admissible sets are **disjoint**. §5's own worked example,
+    `union(literal("A"), literal("B"))`, has both; the rule offered in support of it
+    demanded neither. -/
 
 /-- A helper: two options of a two-element union that both admit one value refute (U).
     `hne` separates the options at some other value, so the singleton filter fails. -/
@@ -970,9 +971,9 @@ theorem not_uAtCan_pair {fuel : Nat} {t₁ t₂ : Term} {v w : Value} {a : Attr}
   · exact hne (congrArg (fun o => OptionSem.admitV o w) heq.symm)
   · exact absurd hnil (by simp)
 
-/-- **One-sided `ident` does not discharge (K).** `union(literal("A"), string)` passes
-    §5's (K) — `ident(literal("A"))` holds — and violates (U) at the value `"A"`, which
-    both options admit. `literal`'s attempt *is* evidence; `string`'s is not, and one
+/-- **One-sided `ident` does not discharge (U).** `union(literal("A"), string)` passes
+    the exemption §5 withdrew — `ident(literal("A"))` holds — and violates (U) at the
+    value `"A"`, which both options admit. `literal`'s attempt *is* evidence; `string`'s is not, and one
     honest answer does not resolve a pair. -/
 theorem not_uAtCan_literal_string :
     ¬ UAtCan 1 [Term.literalS ["A"], Term.string] := by
@@ -988,7 +989,7 @@ theorem not_uAtCan_literal_string :
     rw [hB]
     exact fun h => nomatch h
 
-/-- **Two-sided `ident` does not discharge (K) either.** `ident` propagates through
+/-- **Two-sided `ident` does not discharge (U) either.** `ident` propagates through
     `array` (§5's table), so `union(array(literal("A")), array(literal("B")))` has it on
     both sides — and both options admit the empty array, which neither literal ever
     sees. Propagating `ident` through a container does not propagate disjointness of
@@ -1008,26 +1009,30 @@ theorem not_uAtCan_array_literals :
   rw [if_pos (List.mem_cons_self _ _), if_neg (by simp)]
   exact fun h => nomatch h
 
-/-- Both counterexamples are `ident` on the side(s) §5's (K) appeals to — so they are
-    admitted by the rule as stated, not excluded by a side condition it carries. -/
+/-- Both counterexamples are `ident` on the side(s) the withdrawn exemption appealed to
+    — so it admitted them outright, rather than excluding them by a side condition. The
+    `adm`-disjointness §5 now demands is what excludes them. -/
 example : ident (.literalS ["A"]) = true := rfl
 example : ident (.array (.literalS ["A"])) = true := rfl
 example : ident (.array (.literalS ["B"])) = true := rfl
 
 /-! ## Why (D) does not discharge the readable side either
 
-    §5 lists **(D)** — incomparable held sets — as a discharger of (U)'s readable side,
-    and says in prose that stating it as genuine *disjointness* "would be sound and
-    would reject unions that work". The first half of that is false: held sets are sets
-    of **values**, (U)'s readable side quantifies over **attributes**, and `held` is
-    exactly the term that separates the two. Its adapter relabels, so two options can
-    hold disjoint sets of values and still read one attribute — each to its own value.
+    An earlier §5 listed **(D)** — incomparable held sets — as a discharger of (U)'s
+    readable side, and held that stating it as genuine *disjointness* would be sound
+    though needlessly strict. Disjointness is not sound either: held sets are sets of
+    **values**, (U)'s readable side quantifies over **attributes**, and `held` is exactly
+    the term that separates the two. Its adapter relabels, so two options can hold
+    disjoint sets of values and still read one attribute — each to its own value. §5 now
+    says this, and (D) is a well-formedness condition on the `T` index rather than a
+    discharger; the witness below is what settled it.
 
-    The witness below is `union(literal("A"), held(literal("A"), f, g))` with `f` and
-    `g` swapping `"B"` for `"A"`. Its held sets are `{"A"}` and `{"B"}` — disjoint, so
-    (D) passes in the strongest form §5 proposes — and both options read the attribute
-    `S "A"`, the first to `"A"` and the second to `"B"`. What decides the readable side
-    is a condition on stored attributes: distinct members, or disjoint `admA`. -/
+    That witness is `union(literal("A"), held(literal("A"), f, g))` with `f` and `g`
+    swapping `"B"` for `"A"`. Its held sets are `{"A"}` and `{"B"}` — disjoint, so (D)
+    passes in the strongest form ever proposed for it — and both options read the
+    attribute `S "A"`, the first to `"A"` and the second to `"B"`. What decides the
+    readable side is a condition on stored attributes: distinct members, or disjoint
+    `admA`. -/
 
 /-- (D) in its held-set form, as the disjointness §5 proposes: no value is held by two
     options. Stated so the counterexample below can be about it.
@@ -1068,7 +1073,7 @@ theorem not_uAtCan_pair_A {fuel : Nat} {t₁ t₂ : Term} {v w : Value} {a : Att
   · exact absurd hnil (by simp)
 
 /-- Both options are derivable, and their held sets are disjoint — so this really is a
-    union (D) admits, in the disjointness form §5 calls sound. -/
+    union (D) admits, in the disjointness form §5 once proposed and withdrew. -/
 theorem typed_tRel :
     Typed tRel (fun v => ∃ s, s ∈ ["A"] ∧ fRel v = .str s) (some .S) := by
   refine Typed.held (I := fun w => ∃ s, s ∈ ["A"] ∧ w = .str s) ?_ (fun _ => Iff.rfl)
