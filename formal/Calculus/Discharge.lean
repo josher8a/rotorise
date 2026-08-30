@@ -719,6 +719,59 @@ theorem sepV_refine_disjoint {q q' : Value → Bool} (h : ∀ v, q v = true → 
     simp only [adm, Bool.true_and] at hv ⊢
     exact h v hv
 
+/-- **Disjoint refinements of one base separate on both sides.** `adm` can carry `q` and
+    `admA` cannot — `q` tests the value a read *produces*, which no syntactic set of
+    attributes bounds — so the readable side looks undischargeable from the tables alone.
+    It is not. Two refinements of one base read an attribute to the **same** value, so at
+    most one predicate accepts it, and the readable side separates for the same reason the
+    writable side does.
+
+    The condition is *relational* — it is about options sharing a base, not about any one
+    option's admissible set — which is why it is a discharger of its own rather than a row
+    in the `adm` table. `uniqueAdmission_of_disjoint` takes the two families as arbitrary
+    predicates, so nothing here has to be syntactic: the attribute family is
+    `∃ v, base.p a = some v ∧ q v`, and disjointness is the base reading `a` to one value. -/
+theorem uAtCan_of_refine_disjoint (fuel : Nat) {base : Term} {qs : List (Value → Bool)}
+    (hlaw : LawfulCore (denote fuel base))
+    (hdisj : List.Pairwise (fun q q' => ∀ v, q v = true → q' v = false) qs) :
+    UAtCan (fuel+1) (qs.map (fun q => Term.refine base q)) := by
+  show UniqueAdmission (semsOf (fuel+1) (qs.map (fun q => Term.refine base q)))
+  refine uniqueAdmission_of_disjoint
+    (SVs := qs.map (fun q v => q v = true))
+    (SAs := qs.map (fun q a => ∃ v, (denote fuel base).p a = some v ∧ q v = true))
+    ?_ ?_ ?_ ?_ ?_
+  · rw [semsOf, List.map_map, List.forall₂_map_left_iff, List.forall₂_map_right_iff]
+    refine List.forall₂_same.mpr fun q _ v hv => ?_
+    obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp hv
+    exact (restrict_e.mp hw).1
+  · rw [semsOf, List.map_map, List.forall₂_map_left_iff, List.forall₂_map_right_iff]
+    refine List.forall₂_same.mpr fun q _ a ha => ?_
+    obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp ha
+    obtain ⟨hp, hq⟩ := restrict_p.mp hw
+    exact ⟨w, hp, hq⟩
+  · rw [List.pairwise_map]
+    refine hdisj.imp fun h v hv hv' => ?_
+    simp only at hv hv'
+    rw [h v hv] at hv'; exact nomatch hv'
+  · rw [List.pairwise_map]
+    refine hdisj.imp fun h a hx hy => ?_
+    obtain ⟨v, hv, hqv⟩ := hx
+    obtain ⟨v', hv', hqv'⟩ := hy
+    rw [hv] at hv'; cases hv'
+    rw [h v hqv] at hqv'; exact nomatch hqv'
+  · rw [semsOf, List.map_map]
+    refine forall_mem_map fun q _ t a he => ?_
+    simp only [Function.comp_apply] at he ⊢
+    rw [optionSemOf_c] at he
+    obtain ⟨hq, hb⟩ := restrict_e.mp he
+    refine ⟨?_, ?_⟩
+    · show ((denote (fuel+1) (.refine base q)).e t).isSome = true
+      rw [show (denote (fuel+1) (.refine base q)).e t = some a from he]; rfl
+    · show ((denote (fuel+1) (.refine base q)).p a).isSome = true
+      rw [show (denote (fuel+1) (.refine base q)).p a = some t from
+        restrict_p.mpr ⟨hlaw.retract hb, hq⟩]
+      rfl
+
 /-- §5 (D)'s stand-in, likewise widened: two options are separated on the readable side
     by distinct named members, **or** by disjoint admissible sets. The `adm` disjunct is
     what carries `union(literal("A"), literal("B"))`, whose options share `⇝ S`. -/

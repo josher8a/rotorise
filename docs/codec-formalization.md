@@ -617,6 +617,19 @@ weak: `refine`'s `e` is defined only where `q` holds. `admA` cannot follow — `
 read *produces*, and no syntactic set of attributes bounds that — which makes this the mirror of
 the `held` row, one-sided the other way. `sepV_refine_disjoint` is the witness.
 
+**And the readable side, which the table cannot reach.** `admA` cannot carry `q` — it tests the
+value a read *produces*, and no syntactic set of attributes bounds that — so from the tables alone
+the readable side looks undischargeable. It is not. Two refinements of **one base** read an
+attribute to the same value, so at most one predicate accepts it, and the readable side separates
+for exactly the reason the writable one does. `uAtCan_of_refine_disjoint` is that discharger, and
+it settles both sides outright.
+
+What made it reachable is that `uniqueAdmission_of_disjoint` takes the two families as *arbitrary
+predicates*. Nothing in it has to be syntactic, so the attribute family can be
+`∃ v, base.p a = some v ∧ q v` — a semantic set — and disjointness is just the base reading `a` to
+one value. The condition is relational, about options sharing a base rather than about any one
+option's admissible set, which is why it is a discharger and not a table row.
+
 **One consequence, and it is a correction to §5's `ident` table rather than a side effect.**
 `ident_of_adm` says a term whose `adm` ever refuses is `ident`. With `q` in `adm`, a refinement over
 a non-`ident` base refuses — so `refine` must *hold* `ident` rather than propagate it. That is also
