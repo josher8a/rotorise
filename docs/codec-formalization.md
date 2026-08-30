@@ -1250,6 +1250,20 @@ Worse, the `refine` row is an artifact rather than a claim: `ident (refine t q) 
 unconditionally is exactly what makes `ident_of_adm` go through, because `adm (refine t q)` can
 refuse on `q` alone while `ident t` is `false`. The row exists to satisfy the pinning lemma.
 
+**And the two errors are the same combinator.** `refine` and `held` are not unrelated rows that
+happen to fail in opposite directions: `Codec.adapt` generalises both, `held` taking the total
+`some ∘ f` and `refine` the partial identity `partialId q`, and this file says so already — "the
+*same* combinator, weaker adapter". `ident` gives them opposite rows, `true` unconditionally for one
+and propagation for the other, so the over-claim and the under-claim are one mistake seen from two
+sides. The witnesses are duals: `refine(string, ⊤)`, whose adapter narrows nothing and which `ident`
+says decides; and `held(string, fSplit, _)`, whose adapter narrows to a single string and which
+`ident` says does not.
+
+`Adm` has no such split — `Adm_refine_adapt` and `Adm_held_adapt` show it doing the one thing
+`adapt` describes on both rows, apply the adapter then ask the subterm, which is why it carries `q`
+and `f` where `ident` carries neither. That is the shape of the repair, if `ident` is repaired:
+one row for the adapter, not two.
+
 `ident` cannot be made exact — whether an arbitrary `q : Value → Bool` narrows anything is not a
 syntactic question — but it can be honest about which side it errs on, and it is not. Nothing live
 depends on it: no `uAtCan_*` consumes it and `admDisj_ident` derives it rather than assuming it. The

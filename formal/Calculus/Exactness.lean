@@ -1400,5 +1400,47 @@ theorem decides_object :
 
 theorem ident_object : ident (.object [("k", .req .string)] .refuse) = false := rfl
 
+/-! ### …and the two errors are the same combinator
+
+`refine` and `held` are not unrelated rows that happen to be wrong in opposite directions.
+They are **one combinator with two adapters**: `Codec.adapt` generalises both, `held` taking
+the total `some ∘ f` (`through_e_adapt`) and `refine` the partial identity `partialId q`
+(`restrict_e_adapt`). The doc says as much — "the *same* combinator, weaker adapter".
+
+`ident` gives them opposite rows. `refine` is `true` unconditionally; `held` propagates.
+So the over-claim and the under-claim are the same mistake seen from two sides, and the
+witnesses are duals:
+
+* `refine(string, ⊤)` — the adapter narrows nothing, and `ident` says it decides.
+* `held(string, fSplit, _)` — the adapter narrows to one string, and `ident` says it does
+  not.
+
+`Adm` has no such split. `Adm_refine_adapt` and `Adm_held_adapt` show it doing the one
+thing `adapt` describes on both rows — apply the adapter, then ask the subterm — which is
+why it carries `q` and `f` where `ident` carries neither. -/
+
+/-- An adapter that sends one string to itself and everything else off `string`'s carrier.
+    Total, so this is a `held` and not a `refine` — and it narrows exactly as a refinement
+    would. -/
+def fSplit : Value → Value := fun v => match v with | .str "A" => .str "A" | _ => .bool true
+
+/-- **The dual gap.** `held(string, fSplit, _)` writes `"A"` and refuses `"B"` — two values
+    of one kind, differing in admission — so it decides. `ident` says `false`. -/
+theorem decides_held : Decides (.held .string fSplit (fun v => v)) := by
+  refine ⟨.str "A", .str "B", ?_, rfl, ?_⟩
+  · simp [denoteω, Codec.through, stringCodec, fSplit]
+  · simp [denoteω, Codec.through, stringCodec, fSplit]
+
+theorem ident_held_false : ident (.held .string fSplit (fun v => v)) = false := rfl
+
+/-- `Adm` treats the two adapters uniformly: apply it, then ask the subterm. -/
+theorem Adm_refine_adapt (t : Term) (q : Value → Bool) (v : Value) :
+    Adm (.refine t q) v = ((partialId q v).elim false (Adm t)) := by
+  cases hq : q v <;> simp [Adm, partialId, hq]
+
+theorem Adm_held_adapt (t : Term) (f g : Value → Value) (v : Value) :
+    Adm (.held t f g) v = ((some (f v)).elim false (Adm t)) := by
+  simp [Adm]
+
 end
 end Calculus
