@@ -1780,12 +1780,12 @@ theorem objectCodecCore_eq :
 /-- Inversion of an object-encode success: the value is a map, the guard held, and the
     written item is the entrywise traversal. -/
 theorem objectCodecCore_e_inv {t a} (he : (objectCodecCore sems rc? kn).e t = some a) :
-    ∃ kvs ds, t = Value.map kvs ∧ a = Attr.m ds ∧
-      valPresentB sems (kvs.map (·.1)) = true ∧
-      traverse (encEntry (fun k => sems.lookup k) (rc?.map (·.e))) kvs = some ds := by
-  obtain ⟨kvs, kas, hv, hw, rfl⟩ := carried_e.mp (objectCodecCore_eq ▸ he)
-  obtain ⟨hval, htr⟩ := objWrite_eq.mp hw
-  exact ⟨kvs, kas, mapV.into_out hv, rfl, hval, htr⟩
+    ∃ keys f g, t = Value.map keys f ∧ a = Attr.m keys g ∧
+      valPresentB sems keys = true ∧
+      funImage (fun k => (entryCodec sems rc? k.1).bind (fun c => c.e (f k))) = some g := by
+  obtain ⟨p, q, hv, hw, rfl⟩ := carried_e.mp (objectCodecCore_eq ▸ he)
+  obtain ⟨hval, g, hg, rfl⟩ := objWrite_eq.mp hw
+  exact ⟨p.1, p.2, g, mapV.into_out hv, rfl, hval, hg⟩
 
 end Object
 
@@ -1799,14 +1799,14 @@ structure OptionSem where
   c : Codec
 
 /-- Name admission (objects): every present name declared, every required name present. -/
-def keysOk {α : Type} (spec : List (Name × Bool)) (kvs : List (Name × α)) : Bool :=
-  kvs.all (fun kv => spec.any (·.1 == kv.1)) &&
-  spec.all (fun kb => !kb.2 || (kvs.lookup kb.1).isSome)
+def keysOk (spec : List (Name × Bool)) (keys : Finset Name) : Bool :=
+  decide (∀ k ∈ keys, spec.any (·.1 == k)) &&
+  spec.all (fun kb => !kb.2 || decide (kb.1 ∈ keys))
 
 /-- An object option decides by names, never by being attempted. -/
 def OptionSem.byNames (spec : List (Name × Bool)) (c : Codec) : OptionSem :=
-  { admitA := fun a => match a with | .m kvs => keysOk spec kvs | _ => false
-    admitV := fun v => match v with | .map kvs => keysOk spec kvs | _ => false
+  { admitA := fun a => match a with | .m keys _ => keysOk spec keys | _ => false
+    admitV := fun v => match v with | .map keys _ => keysOk spec keys | _ => false
     c := c }
 
 /-- Any other option is admitted by attempt — the doc's `ident` caveat lives in the
@@ -1833,17 +1833,17 @@ abbrev nullOption : OptionSem := .byAttempt nullCodec
 def OptionSem.byTag (d : Name) (tags : List String) (c : Codec) : OptionSem :=
   { admitA := fun a =>
       match a with
-      | .m kvs =>
-        match kvs.lookup d with
-        | some (.s tag) => tags.contains tag
-        | _ => false
+      | .m keys g =>
+        if h : d ∈ keys then
+          match g ⟨d, h⟩ with | .s tag => tags.contains tag | _ => false
+        else false
       | _ => false
     admitV := fun v =>
       match v with
-      | .map kvs =>
-        match kvs.lookup d with
-        | some (.str tag) => tags.contains tag
-        | _ => false
+      | .map keys f =>
+        if h : d ∈ keys then
+          match f ⟨d, h⟩ with | .str tag => tags.contains tag | _ => false
+        else false
       | _ => false
     c := c }
 
@@ -3224,63 +3224,62 @@ theorem lawful_setCodec {c : Codec} (h : Lawful c) : Lawful (setCodec c) := by
 /-! ### Keyed lookup and traversal facts (the keyed product consumes these) -/
 
 
-/-- `fbDefaults` is a `filterMap`: the `fb` fields whose name the row omits, paired with
-    their stand-ins. Stating it that way retires four hand-rolled recursions in favour of
-    mathlib's `mem_filterMap`. -/
-theorem fbDefaults_eq (names : List Name) (sems : List (Name × FieldSem)) :
-    fbDefaults names sems
-      = sems.filterMap fun kf =>
-          match kf.2 with
-          | .fb _ v => if names.contains kf.1 then none else some (kf.1, v)
-          | _ => none := by
-  induction sems with
-  | nil => rfl
-  | cons kf sems ih =>
-    obtain ⟨k, f⟩ := kf
-    cases f <;> simp [fbDefaults, List.filterMap, ih]
-    split <;> simp_all [fbDefaults]
+/-- **What `fbNames` contains**: exactly the `fb` names the row omits. One induction,
+    and the four facts the object proofs need fall out of it. -/
+theorem mem_fbNames {names : Finset Name} :
+    ∀ {sems : List (Name × FieldSem)} {k},
+      k ∈ fbNames names sems ↔ (∃ c v, (k, FieldSem.fb c v) ∈ sems) ∧ k ∉ names
+  | [], k => by simp [fbNames]
+  | (k₀, f₀) :: sems, k => by
+    cases f₀ with
+    | req c =>
+      simp only [fbNames, mem_fbNames, List.mem_cons]
+      constructor
+      · rintro ⟨⟨c', v', hm⟩, hn⟩; exact ⟨⟨c', v', Or.inr hm⟩, hn⟩
+      · rintro ⟨⟨c', v', hm | hm⟩, hn⟩
+        · exact nomatch hm
+        · exact ⟨⟨c', v', hm⟩, hn⟩
+    | opt c =>
+      simp only [fbNames, mem_fbNames, List.mem_cons]
+      constructor
+      · rintro ⟨⟨c', v', hm⟩, hn⟩; exact ⟨⟨c', v', Or.inr hm⟩, hn⟩
+      · rintro ⟨⟨c', v', hm | hm⟩, hn⟩
+        · exact nomatch hm
+        · exact ⟨⟨c', v', hm⟩, hn⟩
+    | fb c v =>
+      by_cases h0 : k₀ ∈ names
+      · simp only [fbNames, if_pos h0, mem_fbNames, List.mem_cons]
+        constructor
+        · rintro ⟨⟨c', v', hm⟩, hn⟩; exact ⟨⟨c', v', Or.inr hm⟩, hn⟩
+        · rintro ⟨⟨c', v', hm | hm⟩, hn⟩
+          · cases hm; exact absurd h0 hn
+          · exact ⟨⟨c', v', hm⟩, hn⟩
+      · simp only [fbNames, if_neg h0, Finset.mem_insert, mem_fbNames, List.mem_cons]
+        constructor
+        · rintro (rfl | ⟨⟨c', v', hm⟩, hn⟩)
+          · exact ⟨⟨c, v, Or.inl rfl⟩, h0⟩
+          · exact ⟨⟨c', v', Or.inr hm⟩, hn⟩
+        · rintro ⟨⟨c', v', hm | hm⟩, hn⟩
+          · cases hm; exact Or.inl rfl
+          · exact Or.inr ⟨⟨c', v', hm⟩, hn⟩
 
-theorem fbDefaults_mem {sems : List (Name × FieldSem)} {names k c v}
-    (hm : (k, FieldSem.fb c v) ∈ sems) (hc : names.contains k = false) :
-    (k, v) ∈ fbDefaults names sems := by
-  rw [fbDefaults_eq]
-  exact List.mem_filterMap.mpr ⟨(k, .fb c v), hm, by
-    simp only []
-    rw [if_neg (by simpa using hc)]⟩
+theorem fbNames_mem {sems : List (Name × FieldSem)} {names : Finset Name} {k c v}
+    (hm : (k, FieldSem.fb c v) ∈ sems) (hc : k ∉ names) : k ∈ fbNames names sems :=
+  mem_fbNames.mpr ⟨⟨c, v, hm⟩, hc⟩
 
-theorem fbDefaults_spec {sems : List (Name × FieldSem)} {names k v}
-    (hm : (k, v) ∈ fbDefaults names sems) :
-    ∃ c, (k, FieldSem.fb c v) ∈ sems ∧ names.contains k = false := by
-  rw [fbDefaults_eq] at hm
-  obtain ⟨⟨k', f⟩, hmem, hg⟩ := List.mem_filterMap.mp hm
-  cases f with
-  | req _ => exact nomatch hg
-  | opt _ => exact nomatch hg
-  | fb c v' =>
-    simp only [] at hg
-    split at hg
-    · exact nomatch hg
-    · obtain ⟨rfl, rfl⟩ := by simpa using hg
-      exact ⟨c, hmem, by simpa using ‹¬names.contains k' = true›⟩
+theorem fbNames_spec {sems : List (Name × FieldSem)} {names : Finset Name} {k}
+    (hm : k ∈ fbNames names sems) :
+    (∃ c v, (k, FieldSem.fb c v) ∈ sems) ∧ k ∉ names := mem_fbNames.mp hm
 
-theorem fbDefaults_nil {sems : List (Name × FieldSem)} {names}
-    (h : ∀ k c v, (k, FieldSem.fb c v) ∈ sems → names.contains k = true) :
-    fbDefaults names sems = [] := by
-  cases h' : fbDefaults names sems with
-  | nil => rfl
-  | cons x xs =>
-    obtain ⟨k, v⟩ := x
-    obtain ⟨c, hmem, hc⟩ := fbDefaults_spec (by rw [h']; exact List.mem_cons_self _ _)
-    rw [h k c v hmem] at hc
-    exact nomatch hc
+theorem fbNames_empty {sems : List (Name × FieldSem)} {names : Finset Name}
+    (h : ∀ k c v, (k, FieldSem.fb c v) ∈ sems → k ∈ names) : fbNames names sems = ∅ := by
+  refine Finset.eq_empty_of_forall_not_mem (fun k hk => ?_)
+  obtain ⟨⟨c, v, hm⟩, hn⟩ := mem_fbNames.mp hk
+  exact hn (h k c v hm)
 
-theorem fbDefaults_not_mem {sems : List (Name × FieldSem)} {names k}
-    (hc : names.contains k = true) : k ∉ (fbDefaults names sems).map (·.1) := by
-  intro hm
-  obtain ⟨⟨k', v⟩, hmem, rfl⟩ := List.mem_map.mp hm
-  obtain ⟨-, -, hc'⟩ := fbDefaults_spec hmem
-  rw [hc] at hc'
-  exact nomatch hc'
+theorem fbNames_not_mem {sems : List (Name × FieldSem)} {names : Finset Name} {k}
+    (hc : k ∈ names) : k ∉ fbNames names sems :=
+  fun hm => (mem_fbNames.mp hm).2 hc
 
 /-- The guard characterizations, via `List.all`. -/
 theorem valPresentB_spec {sems : List (Name × FieldSem)} {names : List Name}
