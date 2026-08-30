@@ -464,5 +464,69 @@ theorem Adm_sound (t : Term) {v a} (he : (denoteω t).e v = some a) : Adm t v = 
   rw [denoteω_eq t (termDepth t) (Nat.le_refl _)] at he
   exact Adm_sound_fueled _ t he
 
+/-! ### Every excuse earned
+
+`Excuse` and `covers` say which rows may decline exactness. Nothing so far said the
+declining was *warranted*: a constructor could be added naming a shape that is secretly
+provable, and the hatch would absorb a row that ought to carry a proof.
+
+So each excuse owes a witness — a term of a shape it covers, for which exactness genuinely
+fails. `excuse_witnessed` collects the five. Adding an excuse now costs a counterexample,
+and for a shape that is exact there is none to be had.
+
+**What this does not claim**, because the stronger reading is false: *not* every covered
+term is inexact. `union []` is covered by `uniqueAdmission` and is perfectly exact — `Adm`
+is `false` and so is admission, there being no option to admit. The obligation is that an
+excuse names a real phenomenon, not that it is tight on every term of that shape. Widening
+`covers` to a shape that is always exact is still caught; widening it to one that is
+sometimes exact is not, and that is the residual softness. -/
+
+/-- `set`'s kind gate over-claims: `asWireSet` refuses the empty run at every element type. -/
+theorem not_ExactV_set : ¬ ExactV (.set .string) := by
+  intro h
+  have := (h (.set [])).mp (by simp [Adm])
+  simp [denoteω, setCodec, traverse, asWireSet] at this
+
+/-- `tuple`'s over-claims on alignment: one component against two elements. -/
+theorem not_ExactV_tuple : ¬ ExactV (.tuple [.string] none) := by
+  intro h
+  have := (h (.arr [.str "a", .str "b"])).mp (by simp [Adm])
+  simp [denoteω, denoteωL, denoteωO, tupleCodec, align, stringCodec] at this
+
+/-- **(U) failing in its purest form.** `select` writes only where *exactly one* option
+    admits, so two copies of one option admit everything and write nothing — while `⋁`
+    says yes. No arithmetic, no `Double`, just the counting `select` does. -/
+theorem not_ExactV_union : ¬ ExactV (.union [.string, .string]) := by
+  intro h
+  have := (h (.str "a")).mp (by simp [Adm, AdmAny])
+  simp [denoteω, denoteωOpts, specOf, optionSemOf, altCodec, select, stringCodec] at this
+
+/-- `opaq`'s ⊤ over-claims: every one of its eight options refuses the empty set.
+
+    `opaq false` also refuses every numeral, which would be the more obvious witness — but
+    `Double` is axiomatized with only `toDec`, `ofDec`, `roundtrip` and `decEq`, and is not
+    even known to be inhabited, so no `.num` value can be *constructed* here. The empty set
+    needs nothing. -/
+theorem not_ExactV_opaq (lossy : Bool) : ¬ ExactV (.opaq lossy) := by
+  intro h
+  have h2 := (h (.set [])).mp (by simp [Adm])
+  have hd : (denoteω (Term.opaq lossy)).e (.set [])
+      = (setCodec (opaqCodec 1 lossy)).e (.set []) := by
+    show (opaqCodecω lossy).e (.set []) = _
+    simp only [opaqCodecω, Value.depth, Value.depthL]
+    exact opaqCodec_e_set lossy 1 []
+  rw [hd] at h2
+  simp [setCodec, traverse, asWireSet] at h2
+
+/-- **Every excuse is earned.** Exhaustive over `Excuse`, so a new constructor must come
+    with a term of a shape it covers on which exactness actually fails — which, for a shape
+    that is exact, cannot be produced. -/
+theorem excuse_witnessed : ∀ e : Excuse, ∃ t : Term, e.covers t = true ∧ ¬ ExactV t
+  | .opaqueDepth     => ⟨.opaq false, rfl, not_ExactV_opaq false⟩
+  | .uniqueAdmission => ⟨.union [.string, .string], rfl, not_ExactV_union⟩
+  | .payloadShape    => ⟨.set .string, rfl, not_ExactV_set⟩
+  | .nameAdmission   => ⟨.tuple [.string] none, rfl, not_ExactV_tuple⟩
+  | .nullOwnership   => ⟨.nullable (.legacy .string rNull), rfl, not_ExactV_nullable⟩
+
 end
 end Calculus
