@@ -1027,5 +1027,241 @@ theorem excuseA_witnessed : ∀ (e : Excuse) (t : Term), e.coversA t = true →
   | .valueUnderRead, _, _  => ⟨.refine .string (fun _ => false), rfl, not_ExactA_refine⟩
   | .widenedRead, _, _     => ⟨.legacy .string (fun _ => none), rfl, not_ExactA_legacy⟩
 
+/-! ## Re-deriving §5's separations on the pair
+
+`SepV` and `SepA` are what the discharge machinery actually consumes, and they are stated
+on `κ`/`adm`/`admA`. Before any of that can move to `Adm`/`AdmA`, two things have to be
+true: the joint predicate must be at least as tight as the row it replaces, and every
+discharge §5 already has must survive.
+
+`Adm_le_adm` and `AdmA_le_admA` are the first. `sepJV_of_sepV` and `sepJA_of_sepA` are the
+second — nothing is lost.
+
+The interesting result is that the two sides do **not** re-derive the same way. On the value
+side `κ`'s disjunct is subsumed: `Adm` folds the kind gate into its own rows and
+`Adm_kind` proves it lands where `κ` says, so `SepJV` is a single clause. On the attribute
+side the member disjunct survives, because `setMember` sends one value kind to three
+attribute members and `AdmA`'s `set` row admits all three. `sepJA_needs_member` is the pair
+that shows it doing work. -/
+
+/-- `⋁` of `Adm` refines `⋁` of `adm`, option by option. -/
+theorem AdmAny_le_admList : ∀ (ts : List Term) (v : Value),
+    (∀ t ∈ ts, Adm t v = true → adm t v = true) →
+    AdmAny ts v = true → admList ts v = true
+  | [], _, _, h => by simp [AdmAny] at h
+  | t :: ts, v, hall, h => by
+      simp only [AdmAny, Bool.or_eq_true] at h
+      simp only [admList, Bool.or_eq_true]
+      rcases h with h | h
+      · exact Or.inl (hall t (by simp) h)
+      · exact Or.inr (AdmAny_le_admList ts v (fun t' ht' => hall t' (by simp [ht'])) h)
+
+/-- **`Adm` refines `adm`.** Every row of the joint predicate is at least as tight as the
+    row it replaces, which is what lets every existing discharge carry over unchanged. -/
+theorem Adm_le_adm : ∀ (t : Term) (v : Value), Adm t v = true → adm t v = true
+  | .string, _, _ => rfl
+  | .boolean, _, _ => rfl
+  | .binary, _, _ => rfl
+  | .null, _, _ => rfl
+  | .set _, _, _ => rfl
+  | .tuple _ _, _, _ => rfl
+  | .object _ _, _, _ => rfl
+  | .array _, _, _ => rfl
+  | .record _, _, _ => rfl
+  | .opaq _, _, _ => rfl
+  | .number, v, h => by simpa [adm] using (by simpa [Adm] using h : inD v = true)
+  | .decimal, v, h => by simpa [adm] using (by simpa [Adm] using h : isStored v = true)
+  | .literalS ls, v, h => by rw [adm]; rw [Adm] at h; exact h
+  | .literalN ls, v, h => by rw [adm]; rw [Adm] at h; exact h
+  | .literal w, v, h => by rw [adm]; rw [Adm] at h; exact h
+  | .custom ce cp, v, h => by rw [adm]; rw [Adm] at h; exact h
+  | .dunion d opts, v, h => by rw [adm]; rw [Adm] at h; exact h
+  | .refine t q, v, h => by
+      rw [Adm, Bool.and_eq_true] at h
+      rw [adm, Bool.and_eq_true]
+      exact ⟨Adm_le_adm t v h.1, h.2⟩
+  | .legacy t r, v, h => by
+      rw [adm]; exact Adm_le_adm t v (by rw [Adm] at h; exact h)
+  | .lazy t, v, h => by
+      rw [adm]; exact Adm_le_adm t v (by rw [Adm] at h; exact h)
+  | .held t f g, v, h => by
+      rw [adm]; exact Adm_le_adm t (f v) (by rw [Adm] at h; exact h)
+  | .nullable t, v, h => by
+      rw [Adm, Bool.or_eq_true] at h
+      rw [adm, Bool.or_eq_true]
+      rcases h with h | h
+      · exact Or.inl (Adm_le_adm t v h)
+      · exact Or.inr h
+  | .union opts, v, h => by
+      rw [adm]
+      exact AdmAny_le_admList opts v (fun t' _ => Adm_le_adm t' v) (by rw [Adm] at h; exact h)
+
+
+/-- …and lands in `⋃ κ`, which is what `union`'s kind row claims. -/
+theorem AdmAny_kind : ∀ (ts : List Term) (ks : List Kind) (v : Value),
+    κList ts = some ks →
+    (∀ t ∈ ts, ∀ ks', κ t = some ks' → Adm t v = true → v.kind ∈ ks') →
+    AdmAny ts v = true → v.kind ∈ ks
+  | [], _, _, _, _, h => by simp [AdmAny] at h
+  | t :: ts, ks, v, hk, hall, h => by
+      simp only [AdmAny, Bool.or_eq_true] at h
+      rcases h with h | h
+      · obtain ⟨ks', hks', hsub⟩ := κList_mem hk t (by simp)
+        exact hsub _ (hall t (by simp) ks' hks' h)
+      · have : ∀ t' ∈ ts, ∀ ks', κ t' = some ks' → Adm t' v = true → v.kind ∈ ks' :=
+          fun t' ht' => hall t' (by simp [ht'])
+        replace hk : (match κ t, κList ts with
+          | some k0, some k1 => some (k0 ++ k1) | _, _ => none) = some ks := hk
+        cases h0 : κ t with
+        | none => rw [h0] at hk; exact nomatch hk
+        | some k0 =>
+          cases h1 : κList ts with
+          | none => rw [h0, h1] at hk; exact nomatch hk
+          | some k1 =>
+            rw [h0, h1] at hk
+            have hks : ks = k0 ++ k1 := by simpa using hk.symm
+            subst hks
+            exact List.mem_append.mpr (Or.inr (AdmAny_kind ts k1 v h1 this h))
+
+/-- **`Adm` lands in `κ`.** Wherever `κ` names a kind list at all, an `Adm`-admitted value
+    has one of those kinds — so the kind gate `Adm` folds in really is `κ`'s, and `SepV`'s
+    first disjunct is subsumed by its second. -/
+theorem Adm_kind : ∀ (t : Term) (ks : List Kind) (v : Value),
+    κ t = some ks → Adm t v = true → v.kind ∈ ks
+  | .string, _, v, rfl, h => by cases v <;> simp_all [Adm, Value.kind]
+  | .boolean, _, v, rfl, h => by cases v <;> simp_all [Adm, Value.kind]
+  | .binary, _, v, rfl, h => by cases v <;> simp_all [Adm, Value.kind]
+  | .null, _, v, rfl, h => by cases v <;> simp_all [Adm, Value.kind]
+  | .number, _, v, rfl, h => by cases v <;> simp_all [Adm, inD, Value.kind]
+  | .decimal, _, v, rfl, h => by cases v <;> simp_all [Adm, isStored, Value.kind]
+  | .literalS _, _, v, rfl, h => by cases v <;> simp_all [Adm, Value.kind]
+  | .literalN _, _, v, rfl, h => by cases v <;> simp_all [Adm, Value.kind]
+  | .literal w, _, v, rfl, h => by cases w <;> cases v <;> simp_all [Adm, Value.kind]
+  | .set _, _, v, rfl, h => by cases v <;> simp_all [Adm, Value.kind]
+  | .array _, _, v, rfl, h => by cases v <;> simp_all [Adm, Value.kind]
+  | .tuple _ _, _, v, rfl, h => by cases v <;> simp_all [Adm, Value.kind]
+  | .record _, _, v, rfl, h => by cases v <;> simp_all [Adm, Value.kind]
+  | .object _ _, _, v, rfl, h => by cases v <;> simp_all [Adm, Value.kind]
+  | .dunion _ _, _, v, rfl, h => by cases v <;> simp_all [Adm, Value.kind]
+  | .refine t q, ks, v, hk, h => by
+      rw [Adm, Bool.and_eq_true] at h
+      exact Adm_kind t ks v (by rw [κ] at hk; exact hk) h.1
+  | .legacy t r, ks, v, hk, h => by
+      exact Adm_kind t ks v (by rw [κ] at hk; exact hk) (by rw [Adm] at h; exact h)
+  | .lazy t, ks, v, hk, h => by
+      exact Adm_kind t ks v (by rw [κ] at hk; exact hk) (by rw [Adm] at h; exact h)
+  | .nullable t, ks, v, hk, h => by
+      rw [κ] at hk
+      obtain ⟨ks', hks', rfl⟩ := Option.map_eq_some'.mp hk
+      rw [Adm, Bool.or_eq_true] at h
+      rcases h with h | h
+      · exact List.mem_cons_of_mem _ (Adm_kind t ks' v hks' h)
+      · cases v <;> simp_all [Value.kind]
+  | .union opts, ks, v, hk, h => by
+      exact AdmAny_kind opts ks v (by rw [κ] at hk; exact hk)
+        (fun t' _ ks' hk' h' => Adm_kind t' ks' v hk' h') (by rw [Adm] at h; exact h)
+  | .held _ _ _, ks, v, hk, h => by rw [κ] at hk; exact nomatch hk
+  | .custom _ _, ks, v, hk, h => by rw [κ] at hk; exact nomatch hk
+  | .opaq _, ks, v, hk, h => by rw [κ] at hk; exact nomatch hk
+
+
+/-- `⋁` of `AdmA` refines `⋁` of `admA`. -/
+theorem AdmAAny_le_admAList : ∀ (ts : List Term) (a : Attr),
+    (∀ t ∈ ts, AdmA t a = true → admA t a = true) →
+    AdmAAny ts a = true → admAList ts a = true
+  | [], _, _, h => by simp [AdmAAny] at h
+  | t :: ts, a, hall, h => by
+      simp only [AdmAAny, Bool.or_eq_true] at h
+      simp only [admAList, Bool.or_eq_true]
+      rcases h with h | h
+      · exact Or.inl (hall t (by simp) h)
+      · exact Or.inr (AdmAAny_le_admAList ts a (fun t' ht' => hall t' (by simp [ht'])) h)
+
+/-- **`AdmA` refines `admA`**, the attribute-side counterpart of `Adm_le_adm`. -/
+theorem AdmA_le_admA : ∀ (t : Term) (a : Attr), AdmA t a = true → admA t a = true
+  | .string, _, _ => rfl
+  | .boolean, _, _ => rfl
+  | .binary, _, _ => rfl
+  | .null, _, _ => rfl
+  | .number, _, _ => rfl
+  | .literalN _, _, _ => rfl
+  | .set _, _, _ => rfl
+  | .tuple _ _, _, _ => rfl
+  | .object _ _, _, _ => rfl
+  | .array _, _, _ => rfl
+  | .record _, _, _ => rfl
+  | .legacy _ _, _, _ => rfl
+  | .opaq _, _, _ => rfl
+  | .custom _ _, a, h => by rw [admA]; rw [AdmA] at h; exact h
+  | .decimal, a, h => by rw [admA]; rw [AdmA] at h; exact h
+  | .literalS _, a, h => by rw [admA]; rw [AdmA] at h; exact h
+  | .dunion _ _, a, h => by rw [admA]; rw [AdmA] at h; exact h
+  | .literal w, a, h => by
+      cases w <;> cases a <;> simp_all [AdmA, admA]
+  | .refine t _, a, h => by
+      rw [admA]; exact AdmA_le_admA t a (by rw [AdmA] at h; exact h)
+  | .held t _ _, a, h => by
+      rw [admA]; exact AdmA_le_admA t a (by rw [AdmA] at h; exact h)
+  | .lazy t, a, h => by
+      rw [admA]; exact AdmA_le_admA t a (by rw [AdmA] at h; exact h)
+  | .nullable t, a, h => by
+      rw [AdmA, Bool.or_eq_true] at h
+      rw [admA, Bool.or_eq_true]
+      rcases h with h | h
+      · exact Or.inl (AdmA_le_admA t a h)
+      · exact Or.inr h
+  | .union opts, a, h => by
+      rw [admA]
+      exact AdmAAny_le_admAList opts a (fun t' _ => AdmA_le_admA t' a)
+        (by rw [AdmA] at h; exact h)
+
+/-- **Separation on the joint predicate, value side — one clause.** §5's `SepV` offers a
+    choice between disjoint kinds and disjoint admissible sets; `Adm` carries the kind gate
+    in its own rows, so the first disjunct is subsumed (`Adm_kind`) and the definition
+    collapses. -/
+def SepJV (x y : Term) : Prop := ∀ v, Adm x v = true → Adm y v = false
+
+/-- **…and attribute side, which does *not* collapse.** The member disjunct stays, because
+    `AdmA` does not bound `μSyn`: a `set` row admits all three wire-set members whatever its
+    element term is, so two sets differing only in element member are separated by `μSyn`
+    and not by `AdmA` (`sepJA_needs_member`). The asymmetry is `setMember`'s — one value
+    kind, three attribute members — and it is why this side keeps two clauses. -/
+def SepJA (x y : Term) : Prop :=
+  (∃ μx μy, μSyn x = some μx ∧ μSyn y = some μy ∧ μx ≠ μy) ∨
+  (∀ a, AdmA x a = true → AdmA y a = false)
+
+/-- **Every §5 value-side discharge carries over**, from either disjunct. -/
+theorem sepJV_of_sepV {x y : Term} (h : SepV x y) : SepJV x y := by
+  intro v hv
+  cases hy : Adm y v with
+  | false => rfl
+  | true =>
+    exfalso
+    rcases h with ⟨kx, ky, hkx, hky, hdisj⟩ | hd
+    · exact hdisj _ (Adm_kind x kx v hkx hv) (Adm_kind y ky v hky hy)
+    · have := hd v (Adm_le_adm x v hv)
+      rw [Adm_le_adm y v hy] at this
+      exact absurd this (by simp)
+
+/-- …and every attribute-side one. -/
+theorem sepJA_of_sepA {x y : Term} (h : SepA x y) : SepJA x y := by
+  rcases h with hμ | hd
+  · exact Or.inl hμ
+  · refine Or.inr fun a ha => ?_
+    cases hy : AdmA y a with
+    | false => rfl
+    | true =>
+      exfalso
+      have := hd a (AdmA_le_admA x a ha)
+      rw [AdmA_le_admA y a hy] at this
+      exact absurd this (by simp)
+
+/-- The member disjunct is load-bearing: `set(string)` and `set(number)` differ in `μSyn`
+    and are indistinguishable to `AdmA`, which admits `NS` at both. -/
+theorem sepJA_needs_member :
+    ¬ (∀ a, AdmA (.set .string) a = true → AdmA (.set .number) a = false) := by
+  intro h
+  exact absurd (h (.ns []) (by simp [AdmA])) (by simp [AdmA])
+
 end
 end Calculus

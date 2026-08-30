@@ -1199,7 +1199,21 @@ other's reasons. All seven attribute-side excuses are witnessed. Claiming `value
 
 Both halves now carry the same five obligations: exactness where claimed, soundness everywhere, a
 covering reason for each declining row, no excuse over an exact row, and a counterexample behind
-every excuse. What remains is `SepV`/`SepA`, and then the rename.
+every excuse.
+
+**Step two is done, and the two sides did not re-derive the same way.** `Adm_le_adm` and
+`AdmA_le_admA` show the joint predicate is at least as tight as the rows it replaces, and
+`sepJV_of_sepV` / `sepJA_of_sepA` carry every discharge §5 already has — nothing is lost.
+
+But `SepJV` collapses to a **single clause** and `SepJA` does not. On the value side `Adm` folds the
+kind gate into its own rows, and `Adm_kind` proves it lands where `κ` says, so the kind disjunct is
+subsumed by the admissible-set one. On the attribute side the member disjunct survives, and the
+reason is `setMember`: one value kind maps to three attribute members, and `AdmA`'s `set` row admits
+all three whatever its element term is. `set(string)` and `set(number)` differ in `μSyn` and are
+indistinguishable to `AdmA` — `sepJA_needs_member` is that pair.
+
+So §5's two-disjunct shape was right on one side and redundant on the other, and nothing in the
+tables could have said which. What remains is the rename.
 
 ## §5 Certifying an implementation
 
