@@ -19,6 +19,13 @@ Mechanization choices, and where they diverge from the doc (each is routine to s
   `v(∗) ∈ dom(e)`, `(custom)`'s laws, and `(union)`'s residual (U) — are fuel-indexed
   and live in `Obligations` (Soundness.lean), consumed by the theorem. Same premises,
   fueled form.
+* **§5's (K) is in neither list, and that is the rule.** `(union)`'s premises are the
+  option judgements and (D); (K) is a *discharger* of the (U) obligation, and lives with
+  `κ`/`ident`/`adm` in `Discharge.lean` — downstream of this file, which is why it could
+  not be a premise here even if it were one. Failing to discharge is not refusing:
+  `union(array(literal "A"), array(literal "B"))` is `Typed`, and `UAtCan` is false of it
+  (`not_uAtCan_array_literals`), which is the calculus working as §5 describes rather
+  than a gap between them.
 * Premises over lists are auxiliary judgements (`TypedList`, …): the kernel refuses
   recursive occurrences nested under `∃`/`∀ ∈` binders.
 * `(union)` concludes the doc's unanimous μ, computed by `unanimous` from the option
