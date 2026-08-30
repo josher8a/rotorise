@@ -2711,6 +2711,31 @@ theorem nC_out_inj (a : Attr) (b : Numeral) (h : nC.out a = some b) : a = .n b :
 theorem bC_out_inj (a : Attr) (b : Bytes) (h : bC.out a = some b) : a = .b b := by
   cases a <;> simp_all [bC]
 
+/-- A payload projection pins the member. -/
+theorem member_of_sC {a : Attr} (h : (sC.out a).isSome = true) : a.member = .S := by
+  cases a <;> simp_all [sC, Attr.member]
+theorem member_of_nC {a : Attr} (h : (nC.out a).isSome = true) : a.member = .N := by
+  cases a <;> simp_all [nC, Attr.member]
+theorem member_of_bC {a : Attr} (h : (bC.out a).isSome = true) : a.member = .B := by
+  cases a <;> simp_all [bC, Attr.member]
+
+/-- The image succeeds when every element maps and no two collide. -/
+theorem setImage_isSome_of {α β : Type} [DecidableEq β] {f : α → Option β} {S : Finset α}
+    (hall : ∀ x ∈ S, (f x).isSome)
+    (hinj : ∀ x₁ ∈ S, ∀ x₂ ∈ S, ∀ y, f x₁ = some y → f x₂ = some y → x₁ = x₂) :
+    (setImage f S).isSome = true := by
+  unfold setImage
+  rw [dif_pos hall]
+  have hnd : (S.attach.val.map (fun x => (f x.1).get (hall x.1 x.2))).Nodup := by
+    refine Multiset.Nodup.map_on ?_ S.attach.nodup
+    intro x hx y hy hxy
+    have hfx : f x.1 = some ((f x.1).get (hall x.1 x.2)) := (Option.some_get _).symm
+    have hfy : f y.1 = some ((f y.1).get (hall y.1 y.2)) := (Option.some_get _).symm
+    rw [hxy] at hfx
+    exact Subtype.ext (hinj x.1 x.2 y.1 y.2 _ hfx hfy)
+  rw [dif_pos hnd]
+  rfl
+
 /-- What each wire element reads back to: the value it came from. -/
 theorem setImage_read {α β : Type} [DecidableEq β] {c : Codec} (h : LawfulCore c)
     {vinj : α → Value} {aout : Attr → Option β} {ainj : β → Attr}
@@ -2827,6 +2852,162 @@ theorem set_retract {c : Codec} (h : LawfulCore c) :
               exact decSet_binBranch hTne
                 (miss (vinj := Value.bin) (vout := vStr) bC_out_inj (fun _ => rfl) hTne hT)
                 (miss (vinj := Value.bin) (vout := vNum) bC_out_inj (fun _ => rfl) hTne hT) hR))
+
+/-- **(W) for `set`.** The wire member is `setMember` of the element's, and which branch
+    `encSet` took is fixed by the element codec's own member. -/
+theorem set_writes {c : Codec} (h : LawfulCore c) :
+    ∀ {μ}, (setCodec c).μ = some μ → ∀ {t a}, (setCodec c).e t = some a →
+      a.member = μ := by
+  intro μ hμ t a he
+  replace hμ : c.μ.bind setMember = some μ := hμ
+  cases hc : c.μ with
+  | none => rw [hc] at hμ; exact nomatch hμ
+  | some μ₀ =>
+    rw [hc] at hμ
+    replace hμ : setMember μ₀ = some μ := hμ
+    rcases setCodec_e_eq.mp he with ⟨S, rfl, hE⟩ | ⟨S, rfl, hE⟩ | ⟨S, rfl, hE⟩ <;>
+      · obtain ⟨x₀, hx₀⟩ := encSet_nonempty hE
+        obtain ⟨a₀, ha₀⟩ := Option.isSome_iff_exists.mp (encSet_elem hE x₀ hx₀)
+        have hm₀ : a₀.member = μ₀ := h.writes hc ha₀
+        unfold encSet at hE
+        split at hE
+        · exact nomatch hE
+        · split at hE
+          · next T hT =>
+            injection hE with hE; subst hE
+            have hs := setImage_some hT x₀ hx₀
+            rw [ha₀] at hs
+            rw [← hm₀, member_of_sC hs] at hμ
+            simpa [Attr.member] using Option.some.inj hμ
+          · split at hE
+            · next T hT =>
+              injection hE with hE; subst hE
+              have hs := setImage_some hT x₀ hx₀
+              rw [ha₀] at hs
+              rw [← hm₀, member_of_nC hs] at hμ
+              simpa [Attr.member] using Option.some.inj hμ
+            · next =>
+              obtain ⟨T, hT, hA⟩ := Option.map_eq_some'.mp hE
+              subst hA
+              have hs := setImage_some hT x₀ hx₀
+              rw [ha₀] at hs
+              rw [← hm₀, member_of_bC hs] at hμ
+              simpa [Attr.member] using Option.some.inj hμ
+
+/-- The wire member pins the constructor. -/
+theorem attr_ss_of_member {a : Attr} (h : a.member = .SS) : ∃ S, a = .ss S := by
+  cases a <;> simp_all [Attr.member]
+theorem attr_ns_of_member {a : Attr} (h : a.member = .NS) : ∃ S, a = .ns S := by
+  cases a <;> simp_all [Attr.member]
+theorem attr_bs_of_member {a : Attr} (h : a.member = .BS) : ∃ S, a = .bs S := by
+  cases a <;> simp_all [Attr.member]
+
+/-- Writing a set succeeds when its elements do and the element member is ground: the
+    member fixes which branch `encSet` takes, and (R) supplies the injectivity. -/
+theorem encSet_isSome_of {α : Type} {c : Codec} (h : LawfulCore c)
+    {μ₀ μS : Member} (hc : c.μ = some μ₀) (hsm : setMember μ₀ = some μS)
+    {vinj : α → Value} (hvi : ∀ x y, vinj x = vinj y → x = y)
+    {S : Finset α} (hne : S.Nonempty)
+    (hall : ∀ x ∈ S, (c.e (vinj x)).isSome = true) :
+    (encSet c vinj S).isSome = true := by
+  obtain ⟨x₀, hx₀⟩ := hne
+  unfold encSet
+  rw [if_neg (Finset.card_ne_zero_of_mem hx₀)]
+  -- the element member decides the branch
+  cases μ₀
+  case S =>
+    have hb : ∀ x ∈ S, ((c.e (vinj x)).bind sC.out).isSome = true := by
+      intro x hx
+      obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp (hall x hx)
+      have := h.writes hc ha'
+      cases a' <;> simp_all [sC, Attr.member]
+    have hinj : ∀ x₁ ∈ S, ∀ x₂ ∈ S, ∀ y,
+        (c.e (vinj x₁)).bind sC.out = some y → (c.e (vinj x₂)).bind sC.out = some y →
+        x₁ = x₂ := by
+      intro x₁ _ x₂ _ y h1 h2
+      simp only [Option.bind_eq_some] at h1 h2
+      obtain ⟨a₁, he₁, ho₁⟩ := h1
+      obtain ⟨a₂, he₂, ho₂⟩ := h2
+      rw [sC_out_inj a₁ y ho₁] at he₁
+      rw [sC_out_inj a₂ y ho₂] at he₂
+      exact hvi _ _ ((h.retract he₁).symm.trans (h.retract he₂) |> Option.some.inj)
+    obtain ⟨T, hT⟩ := Option.isSome_iff_exists.mp (setImage_isSome_of hb hinj)
+    rw [hT]; rfl
+  case N =>
+    have hb : ∀ x ∈ S, ((c.e (vinj x)).bind sC.out).isSome = true → False := by
+      intro x hx hcon
+      obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp (hall x hx)
+      have := h.writes hc ha'
+      rw [ha'] at hcon
+      cases a' <;> simp_all [sC, Attr.member]
+    have hb2 : ∀ x ∈ S, ((c.e (vinj x)).bind nC.out).isSome = true := by
+      intro x hx
+      obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp (hall x hx)
+      have := h.writes hc ha'
+      cases a' <;> simp_all [nC, Attr.member]
+    have hinj : ∀ x₁ ∈ S, ∀ x₂ ∈ S, ∀ y,
+        (c.e (vinj x₁)).bind nC.out = some y → (c.e (vinj x₂)).bind nC.out = some y →
+        x₁ = x₂ := by
+      intro x₁ _ x₂ _ y h1 h2
+      simp only [Option.bind_eq_some] at h1 h2
+      obtain ⟨a₁, he₁, ho₁⟩ := h1
+      obtain ⟨a₂, he₂, ho₂⟩ := h2
+      rw [nC_out_inj a₁ y ho₁] at he₁
+      rw [nC_out_inj a₂ y ho₂] at he₂
+      exact hvi _ _ ((h.retract he₁).symm.trans (h.retract he₂) |> Option.some.inj)
+    have hfail : setImage (fun x => (c.e (vinj x)).bind sC.out) S = none :=
+      setImage_none_of hx₀ (by
+        cases hcon : (c.e (vinj x₀)).bind sC.out with
+        | none => rfl
+        | some _ => exact absurd (by rw [hcon]; rfl) (fun hh => hb x₀ hx₀ hh))
+    obtain ⟨T, hT⟩ := Option.isSome_iff_exists.mp (setImage_isSome_of hb2 hinj)
+    rw [hfail, hT]; rfl
+  case B =>
+    have hfailS : setImage (fun x => (c.e (vinj x)).bind sC.out) S = none :=
+      setImage_none_of hx₀ (by
+        obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp (hall x₀ hx₀)
+        have := h.writes hc ha'
+        cases a' <;> simp_all [sC, Attr.member])
+    have hfailN : setImage (fun x => (c.e (vinj x)).bind nC.out) S = none :=
+      setImage_none_of hx₀ (by
+        obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp (hall x₀ hx₀)
+        have := h.writes hc ha'
+        cases a' <;> simp_all [nC, Attr.member])
+    have hb : ∀ x ∈ S, ((c.e (vinj x)).bind bC.out).isSome = true := by
+      intro x hx
+      obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp (hall x hx)
+      have := h.writes hc ha'
+      cases a' <;> simp_all [bC, Attr.member]
+    have hinj : ∀ x₁ ∈ S, ∀ x₂ ∈ S, ∀ y,
+        (c.e (vinj x₁)).bind bC.out = some y → (c.e (vinj x₂)).bind bC.out = some y →
+        x₁ = x₂ := by
+      intro x₁ _ x₂ _ y h1 h2
+      simp only [Option.bind_eq_some] at h1 h2
+      obtain ⟨a₁, he₁, ho₁⟩ := h1
+      obtain ⟨a₂, he₂, ho₂⟩ := h2
+      rw [bC_out_inj a₁ y ho₁] at he₁
+      rw [bC_out_inj a₂ y ho₂] at he₂
+      exact hvi _ _ ((h.retract he₁).symm.trans (h.retract he₂) |> Option.some.inj)
+    obtain ⟨T, hT⟩ := Option.isSome_iff_exists.mp (setImage_isSome_of hb hinj)
+    rw [hfailS, hfailN, hT]; rfl
+  all_goals exact nomatch hsm
+
+
+/-- Core set: (R), (C) and (W). The `(set)` rule's member premise is what fixes which wire
+    branch the write takes, so it is still a hypothesis — but nothing else is, and in
+    particular no traversal and no non-emptiness side condition. -/
+theorem lawfulCore_setCodec {c : Codec} {μ₀ μS : Member} (h : LawfulCore c)
+    (hμ : c.μ = some μ₀) (hsm : setMember μ₀ = some μS) :
+    LawfulCore (setCodec c) := by
+  refine ⟨set_retract h, ?_, set_writes h⟩
+  intro a t hp
+  rcases setCodec_p_eq.mp hp with ⟨S, rfl, hD⟩ | ⟨S, rfl, hD⟩ | ⟨S, rfl, hD⟩ <;>
+    · rcases decSet_mem hD with ⟨U, rfl, hne, hm⟩ | ⟨U, rfl, hne, hm⟩ | ⟨U, rfl, hne, hm⟩ <;>
+      · refine encSet_isSome_of h hμ hsm (fun x y hxy => by injection hxy) hne ?_
+        intro y hy
+        obtain ⟨x, -, hpx⟩ := hm y hy
+        exact h.canon hpx
+
 
 /-! ### Keyed lookup and traversal facts (the keyed product consumes these) -/
 
