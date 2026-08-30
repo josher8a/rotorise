@@ -1,4 +1,5 @@
 import Calculus.Soundness
+import Calculus.Denoteω
 
 /-!
 # §6 — Equations
@@ -56,6 +57,61 @@ theorem Codec.Equiv.refl (c : Codec) : Codec.Equiv c c :=
 theorem Codec.Equiv.symm {c d : Codec} (h : Codec.Equiv c d) : Codec.Equiv d c :=
   ⟨fun v => (h.heldSet v).symm, h.member.symm,
     fun hd hc => (h.writes hc hd).symm, fun hd hc => (h.reads hc hd).symm⟩
+
+/-! ## §6 at term level — the translation table, written down
+
+`FIDELITY.md` §3 records a level mismatch inside §6: the **Hold** rows are stated here about
+*combinators* (`through`, `restrict`, `extendRead`, `orNull`, `altCodec`, …) while the
+**Do not hold** rows in `Refutations.lean` are stated about *terms*. Checking a Hold row
+against the specification therefore needed an eight-entry translation, five of whose entries
+share no substring with the term they translate, and that table was written down nowhere.
+
+Here it is, as theorems. Each is `rfl` — `denoteω` dispatches straight onto the combinator —
+so nothing is proved by these except the correspondence itself, which is the point: a
+reviewer holding §6's table can now land on the combinator without knowing the codebase.
+
+The term-level twins of the Hold rows follow each row's combinator statement, so both halves
+of §6 can be read in one language. -/
+
+section Bridge
+
+theorem denoteω_set (t : Term) : denoteω (.set t) = setCodec (denoteω t) := rfl
+theorem denoteω_array (t : Term) : denoteω (.array t) = arrayCodec (denoteω t) := rfl
+theorem denoteω_record (t : Term) : denoteω (.record t) = recordCodec (denoteω t) := rfl
+
+/-- `held` denotes `through` — the entry that reads least like its term. -/
+theorem denoteω_held (t : Term) (f g : Value → Value) :
+    denoteω (.held t f g) = (denoteω t).through f g := rfl
+
+/-- `refine` denotes `restrict`. -/
+theorem denoteω_refine (t : Term) (q : Value → Bool) :
+    denoteω (.refine t q) = (denoteω t).restrict q := rfl
+
+/-- `legacy` denotes `extendRead`. -/
+theorem denoteω_legacy (t : Term) (r : Attr → Option Value) :
+    denoteω (.legacy t r) = (denoteω t).extendRead r := rfl
+
+/-- `nullable` denotes `orNull`. -/
+theorem denoteω_nullable (t : Term) : denoteω (.nullable t) = (denoteω t).orNull := rfl
+
+/-- `union` denotes `altCodec`, over the options' semantics and their unanimous member. -/
+theorem denoteω_union (opts : List Term) :
+    denoteω (.union opts) =
+      altCodec (denoteωOpts opts) (unanimous (denoteωMems opts)) := rfl
+
+/-- `discriminatedUnion` denotes `dunionCodec`. -/
+theorem denoteω_dunion (d : Name) (opts : List Term) :
+    denoteω (.dunion d opts) = dunionCodec d (denoteωTags d opts) := rfl
+
+/-- `opaque` denotes `opaqCodecω` — the fuel-free one, which is why §5's discharger table has
+    a row about `opaqCodec` at a fuel and a reason rather than a term-level twin. -/
+theorem denoteω_opaq (lossy : Bool) : denoteω (.opaq lossy) = opaqCodecω lossy := rfl
+
+/-- `object` denotes `objectCodec`. -/
+theorem denoteω_object (fields : List (Name × Field)) (rest : Rest) :
+    denoteω (.object fields rest) = objectCodec (denoteωF fields) (denoteωR rest) := rfl
+
+end Bridge
 
 /-! ## `nullable` is idempotent -/
 
@@ -614,5 +670,63 @@ theorem equiv_altCodec_assoc (o₁ o₂ o₃ : OptionSem) :
     rw [altCodec_triple_p] at hf
     exact nest_flat_resolve (o₁.admitA a) (o₂.admitA a) (o₃.admitA a)
       (o₁.c.p a) (o₂.c.p a) (o₃.c.p a) hn hf
+
+/-! ## §6's Hold rows, at term level
+
+Each row's twin, stated where a reader of `codec-calculus.md` §6 would look for it: about a
+`Term`, the way `Refutations.lean`'s "Do not hold" rows already are. Every one is its
+combinator row through the bridge above, so they cost a line each and buy the property
+`FIDELITY.md` §3 asked for — both halves of §6 in one language. -/
+
+section Terms
+
+/-- §6: `held(c, id, id) ≡ c`. -/
+theorem equiv_denoteω_held_id (t : Term) :
+    Codec.Equiv (denoteω (.held t id id)) (denoteω t) := equiv_through_id _
+
+/-- §6: `held(held(c, f, g), f′, g′) ≡ held(c, f ∘ f′, g′ ∘ g)`. -/
+theorem equiv_denoteω_held_comp (t : Term) (f g f' g' : Value → Value) :
+    Codec.Equiv (denoteω (.held (.held t f g) f' g'))
+      (denoteω (.held t (f ∘ f') (g' ∘ g))) := equiv_through_comp _ _ _ _ _
+
+/-- §6: `refine(refine(c, q), q′) ≡ refine(c, q ∩ q′)`. -/
+theorem equiv_denoteω_refine_meet (t : Term) (q q' : Value → Bool) :
+    Codec.Equiv (denoteω (.refine (.refine t q) q'))
+      (denoteω (.refine t (fun v => q v && q' v))) := equiv_restrict_meet _ _ _
+
+/-- §6: `refine(c, T) ≡ c` for `⊢ c : T ⇝ μ`. The premise is the row's, read off the
+    denotation rather than the judgement — `typed_TSub` is what connects the two. -/
+theorem equiv_denoteω_refine_full (t : Term) (q : Value → Bool)
+    (hq : ∀ v, (denoteω t).T v ↔ q v = true) :
+    Codec.Equiv (denoteω (.refine t q)) (denoteω t) := equiv_restrict_full _ _ hq
+
+/-- §6: `legacy(c, p_c) ≡ c`. -/
+theorem equiv_denoteω_legacy_self (t : Term) :
+    Codec.Equiv (denoteω (.legacy t (denoteω t).p)) (denoteω t) :=
+  equiv_extendRead_self _
+
+/-- §6: `legacy(c, r) ≈ c` on `Can(c)`. -/
+theorem denoteω_legacy_eq_on_can (t : Term) (r : Attr → Option Value)
+    (hc : Lawful (denoteω t)) {a : Attr} (ha : Can (denoteω t) a) :
+    (denoteω (.legacy t r)).p a = (denoteω t).p a :=
+  extendRead_eq_on_can _ r hc ha
+
+/-- §6: `nullable(nullable(c)) ≡ nullable(c)`. -/
+theorem equiv_denoteω_nullable_idem (t : Term) :
+    Codec.Equiv (denoteω (.nullable (.nullable t))) (denoteω (.nullable t)) :=
+  equiv_orNull_idem _
+
+/-- §6: `μ(w(c)) = μ(c)` for the three codec wrappers. The two field wrappers are
+    `optional_μ` and `fallback_μ`, which are already stated over a denotation. -/
+theorem denoteω_held_μ (t : Term) (f g : Value → Value) :
+    (denoteω (.held t f g)).μ = (denoteω t).μ := rfl
+
+theorem denoteω_refine_μ (t : Term) (q : Value → Bool) :
+    (denoteω (.refine t q)).μ = (denoteω t).μ := rfl
+
+theorem denoteω_legacy_μ (t : Term) (r : Attr → Option Value) :
+    (denoteω (.legacy t r)).μ = (denoteω t).μ := rfl
+
+end Terms
 
 end Calculus

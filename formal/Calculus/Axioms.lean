@@ -150,6 +150,18 @@ narrowing and fails before it. -/
 #assert_axioms survivesStore_decimalCodec
 #assert_axioms not_survivesStore_decimalWF
 
+/-! §6's Hold rows at term level. The ten `denoteω_*` bridges are `rfl` and carry no axiom
+risk worth a line each; what is guarded is the twins, which go through `Codec.Equiv` and are
+what a reviewer checks §6's table against. -/
+
+#assert_axioms equiv_denoteω_held_id
+#assert_axioms equiv_denoteω_held_comp
+#assert_axioms equiv_denoteω_refine_meet
+#assert_axioms equiv_denoteω_refine_full
+#assert_axioms equiv_denoteω_legacy_self
+#assert_axioms equiv_denoteω_nullable_idem
+#assert_axioms denoteω_legacy_eq_on_can
+
 /-! §7's continuity results — why fuel is not removable by a fixpoint. -/
 
 #assert_axioms altCodec_not_monotone
