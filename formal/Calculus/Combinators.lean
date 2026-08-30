@@ -690,6 +690,93 @@ theorem setImage_nonempty {α β : Type} [DecidableEq β] {f : α → Option β}
   obtain ⟨y, hy⟩ := Option.isSome_iff_exists.mp (setImage_some h x hx)
   exact ⟨y, (mem_setImage h y).mpr ⟨x, hx, hy⟩⟩
 
+/-- **The constructor for `setImage`.** Given that every element maps, that the map is
+    injective on the set, and a candidate image with the right membership, the image *is*
+    that candidate. The injectivity hypothesis is what (R) supplies, and what `Finset.image`
+    would have thrown away by dedupping. -/
+theorem setImage_eq {α β : Type} [DecidableEq β] {f : α → Option β} {S : Finset α}
+    {U : Finset β}
+    (hall : ∀ x ∈ S, (f x).isSome)
+    (hinj : ∀ x₁ ∈ S, ∀ x₂ ∈ S, ∀ y, f x₁ = some y → f x₂ = some y → x₁ = x₂)
+    (hmem : ∀ y, y ∈ U ↔ ∃ x ∈ S, f x = some y) :
+    setImage f S = some U := by
+  unfold setImage
+  rw [dif_pos hall]
+  have hnd : (S.attach.val.map (fun x => (f x.1).get (hall x.1 x.2))).Nodup := by
+    refine Multiset.Nodup.map_on ?_ S.attach.nodup
+    intro x hx y hy hxy
+    have hfx : f x.1 = some ((f x.1).get (hall x.1 x.2)) := (Option.some_get _).symm
+    have hfy : f y.1 = some ((f y.1).get (hall y.1 y.2)) := (Option.some_get _).symm
+    rw [hxy] at hfx
+    exact Subtype.ext (hinj x.1 x.2 y.1 y.2 _ hfx hfy)
+  rw [dif_pos hnd]
+  congr 1
+  apply Finset.ext
+  intro y
+  simp only [Finset.mem_mk, Multiset.mem_map, hmem y]
+  constructor
+  · rintro ⟨x, -, hxy⟩
+    exact ⟨x.1, x.2, by rw [← hxy]; exact (Option.some_get (hall x.1 x.2)).symm⟩
+  · rintro ⟨x, hx, hfx⟩
+    exact ⟨⟨x, hx⟩, Multiset.mem_attach _ _, by rw [Option.get_of_mem (hall x hx) hfx]⟩
+
+/-- **Inversion.** If the element map has a left inverse on its image, the set image
+    inverts too. This is (R) lifted from elements to sets, and it is where the collision
+    guard earns its place: without injectivity the image would be smaller than the source
+    and could not invert. -/
+theorem setImage_inv {α β : Type} [DecidableEq α] [DecidableEq β]
+    {f : α → Option β} {g : β → Option α} {S : Finset α} {T : Finset β}
+    (hfg : ∀ x y, f x = some y → g y = some x)
+    (h : setImage f S = some T) : setImage g T = some S := by
+  refine setImage_eq ?_ ?_ ?_
+  · intro y hy
+    obtain ⟨x, hx, hfx⟩ := (mem_setImage h y).mp hy
+    rw [hfg x y hfx]; rfl
+  · intro y₁ hy₁ y₂ hy₂ x hg₁ hg₂
+    obtain ⟨x₁, hx₁, hf₁⟩ := (mem_setImage h y₁).mp hy₁
+    obtain ⟨x₂, hx₂, hf₂⟩ := (mem_setImage h y₂).mp hy₂
+    rw [hfg x₁ y₁ hf₁] at hg₁
+    rw [hfg x₂ y₂ hf₂] at hg₂
+    cases Option.some.inj hg₁
+    cases Option.some.inj hg₂
+    exact Option.some.inj (hf₁.symm.trans hf₂)
+  · intro x
+    constructor
+    · intro hx
+      obtain ⟨y, hy⟩ := Option.isSome_iff_exists.mp (setImage_some h x hx)
+      exact ⟨y, (mem_setImage h y).mpr ⟨x, hx, hy⟩, hfg x y hy⟩
+    · rintro ⟨y, hy, hgy⟩
+      obtain ⟨x', hx', hf'⟩ := (mem_setImage h y).mp hy
+      rw [hfg x' y hf'] at hgy
+      cases Option.some.inj hgy
+      exact hx'
+
+/-- The round trip a set needs, assembled from the element codec's. -/
+theorem setImage_roundTrip {α β : Type} [DecidableEq α] [DecidableEq β]
+    {c : Codec} (h : LawfulCore c) {vinj : α → Value} {aout : Attr → Option β}
+    {ainj : β → Attr} {vout : Value → Option α}
+    (hA : ∀ a b, aout a = some b → a = ainj b)
+    (hV : ∀ x, vout (vinj x) = some x)
+    {S : Finset α} {T : Finset β}
+    (hI : setImage (fun x => (c.e (vinj x)).bind aout) S = some T) :
+    setImage (fun y => (c.p (ainj y)).bind vout) T = some S := by
+  refine setImage_inv (fun x y hxy => ?_) hI
+  simp only [Option.bind_eq_some] at hxy
+  obtain ⟨a, hea, hoa⟩ := hxy
+  rw [hA a y hoa] at hea
+  rw [h.retract hea]
+  simpa using hV x
+
+/-- One failing element sinks the image. -/
+theorem setImage_none_of {α β : Type} [DecidableEq β] {f : α → Option β} {S : Finset α}
+    {x : α} (hx : x ∈ S) (hf : f x = none) : setImage f S = none := by
+  unfold setImage
+  rw [dif_neg]
+  intro hall
+  have := hall x hx
+  rw [hf] at this
+  exact absurd this (by simp)
+
 /-- A successful `bind` needs a successful left. -/
 theorem bind_isSome_left {α β : Type} {o : Option α} {f : α → Option β}
     (h : (o.bind f).isSome = true) : o.isSome = true := by
@@ -2609,363 +2696,137 @@ theorem binPayloads_isSome {as : List Attr} (h : ∀ x ∈ as, x.member = .B) :
     case b v => rfl
     all_goals exact nomatch hm
 
-/-- What a written wire set can be: one member family, uniformly. -/
-theorem asWireSet_cases {as : List Attr} {a} (h : asWireSet as = some a) :
-    as ≠ [] ∧
-    ((∃ ss, as = ss.map Attr.s ∧ a = .ss ss) ∨
-     (∃ ns, as = ns.map Attr.n ∧ a = .ns ns) ∨
-     (∃ bs, as = bs.map Attr.b ∧ a = .bs bs)) := by
-  cases as with
-  | nil => exact nomatch h
-  | cons x rest =>
-    refine ⟨by simp, ?_⟩
-    replace h : (match strPayloads (x :: rest) with
-      | some ss => some (Attr.ss ss)
-      | none =>
-        match numPayloads (x :: rest) with
-        | some ns => some (Attr.ns ns)
-        | none => (binPayloads (x :: rest)).map Attr.bs) = some a := h
-    cases hs : strPayloads (x :: rest) with
-    | some ss =>
-      rw [hs] at h
-      replace h : some (Attr.ss ss) = some a := h
-      cases h
-      exact Or.inl ⟨ss, strPayloads_eq hs, rfl⟩
-    | none =>
-      rw [hs] at h
-      cases hn : numPayloads (x :: rest) with
-      | some ns =>
-        rw [hn] at h
-        replace h : some (Attr.ns ns) = some a := h
-        cases h
-        exact Or.inr (Or.inl ⟨ns, numPayloads_eq hn, rfl⟩)
-      | none =>
-        rw [hn] at h
-        replace h : (binPayloads (x :: rest)).map Attr.bs = some a := h
-        cases hb : binPayloads (x :: rest) with
-        | none => rw [hb] at h; exact nomatch h
-        | some bs =>
-          rw [hb] at h
-          replace h : some (Attr.bs bs) = some a := h
-          cases h
-          exact Or.inr (Or.inr ⟨bs, binPayloads_eq hb, rfl⟩)
+/-! ### `setCodec`'s laws
 
-/-! ### `setCodec`'s three payload families, once
+Every one of these was a traversal argument over a list; on `Finset` they are the element
+codec's own laws lifted by `setImage_inv`. What used to need `asWireSet`'s three-way
+payload split and a non-emptiness side condition needs neither: the split is the three
+constructors, and non-emptiness is `Finset.Nonempty`. -/
 
-`lawful_setCodec` proved `canon` and `agree` three times over — once for `SS`, once for
-`NS`, once for `BS` — with the branches textually identical apart from which prism the
-payload sits in. What actually varies is two facts, and they are the only two the
-argument consults: which member the element attributes name, and that `asWireSet` accepts
-a nonempty run of them. Both are stated below, per family, and the argument itself is
-stated once.
+/-- The three wire prisms invert as `setImage_roundTrip` wants. -/
+theorem sC_out_inj (a : Attr) (b : String) (h : sC.out a = some b) : a = .s b := by
+  cases a <;> simp_all [sC]
+theorem nC_out_inj (a : Attr) (b : Numeral) (h : nC.out a = some b) : a = .n b := by
+  cases a <;> simp_all [nC]
+theorem bC_out_inj (a : Attr) (b : Bytes) (h : bC.out a = some b) : a = .b b := by
+  cases a <;> simp_all [bC]
 
-This is the payload triplication of the wire sets, the same shape `Ctor` already retired
-for `strPayloads`/`numPayloads`/`binPayloads`. -/
+/-- What each wire element reads back to: the value it came from. -/
+theorem setImage_read {α β : Type} [DecidableEq β] {c : Codec} (h : LawfulCore c)
+    {vinj : α → Value} {aout : Attr → Option β} {ainj : β → Attr}
+    (hA : ∀ a b, aout a = some b → a = ainj b)
+    {S : Finset α} {T : Finset β}
+    (hI : setImage (fun x => (c.e (vinj x)).bind aout) S = some T) :
+    ∀ y ∈ T, ∃ x ∈ S, c.p (ainj y) = some (vinj x) := by
+  intro y hy
+  obtain ⟨x, hx, hxy⟩ := (mem_setImage hI y).mp hy
+  simp only [Option.bind_eq_some] at hxy
+  obtain ⟨a, hea, hoa⟩ := hxy
+  rw [hA a y hoa] at hea
+  exact ⟨x, hx, h.retract hea⟩
 
-/-- On the flat members — everything but `L` and `M` — `≼` is just equality of member.
-    The wire sets are flat, which is why the agreement half never inspects payloads. -/
-theorem agree_of_member_flat {x y : Attr} (hm : x.member = y.member)
-    (hL : x.member ≠ .L) (hM : x.member ≠ .M) : Agree x y := by
-  cases x <;> cases y <;>
-    simp_all [Attr.member] <;> constructor
+/-- `decSet` lands on the string branch when the reads produce strings. -/
+theorem decSet_strBranch {α : Type} {c : Codec} {inj : α → Attr} {S : Finset α}
+    {U : Finset String} (hne : S.Nonempty)
+    (h1 : setImage (fun y => (c.p (inj y)).bind vStr) S = some U) :
+    decSet c inj S = some (.strSet U) := by
+  obtain ⟨x, hx⟩ := hne
+  unfold decSet
+  rw [if_neg (Finset.card_ne_zero_of_mem hx), h1]
 
-/-- A nonempty run of one member is a wire set of the matching wire member. One proof per
-    family, and each is only about `asWireSet`'s dispatch order. -/
-theorem asWireSet_of_S {as : List Attr} (hne : as ≠ [])
-    (hm : ∀ y ∈ as, y.member = .S) :
-    ∃ a', asWireSet as = some a' ∧ a'.member = .SS := by
-  obtain ⟨ss, hss⟩ := strPayloads_isSome hm
-  refine ⟨.ss ss, ?_, rfl⟩
-  cases as with
-  | nil => exact absurd rfl hne
-  | cons x r => simp only [asWireSet]; rw [hss]; rfl
+/-- …the numeric branch when they produce numbers, the string branch having failed. -/
+theorem decSet_numBranch {α : Type} {c : Codec} {inj : α → Attr} {S : Finset α}
+    {U : Finset Double} (hne : S.Nonempty)
+    (h0 : setImage (fun y => (c.p (inj y)).bind vStr) S = none)
+    (h1 : setImage (fun y => (c.p (inj y)).bind vNum) S = some U) :
+    decSet c inj S = some (.numSet U) := by
+  obtain ⟨x, hx⟩ := hne
+  unfold decSet
+  rw [if_neg (Finset.card_ne_zero_of_mem hx), h0, h1]
 
-theorem asWireSet_of_N {as : List Attr} (hne : as ≠ [])
-    (hm : ∀ y ∈ as, y.member = .N) :
-    ∃ a', asWireSet as = some a' ∧ a'.member = .NS := by
-  obtain ⟨ns, hns⟩ := numPayloads_isSome hm
-  refine ⟨.ns ns, ?_, rfl⟩
-  cases as with
-  | nil => exact absurd rfl hne
-  | cons x r =>
-    have hs : strPayloads (x :: r) = none := by
-      have hx := hm x (List.mem_cons_self _ _)
-      cases x <;> simp_all [Attr.member, strPayloads, traverse, sC]
-    simp only [asWireSet]; rw [hs, hns]; rfl
-
-theorem asWireSet_of_B {as : List Attr} (hne : as ≠ [])
-    (hm : ∀ y ∈ as, y.member = .B) :
-    ∃ a', asWireSet as = some a' ∧ a'.member = .BS := by
-  obtain ⟨bs, hbs⟩ := binPayloads_isSome hm
-  refine ⟨.bs bs, ?_, rfl⟩
-  cases as with
-  | nil => exact absurd rfl hne
-  | cons x r =>
-    have hx := hm x (List.mem_cons_self _ _)
-    have hs : strPayloads (x :: r) = none := by
-      cases x <;> simp_all [Attr.member, strPayloads, traverse, sC]
-    have hn : numPayloads (x :: r) = none := by
-      cases x <;> simp_all [Attr.member, numPayloads, traverse, nC]
-    simp only [asWireSet]; rw [hs, hn, hbs]; rfl
-
-/-- The shared core of `setCodec`'s read-side laws: whatever a wire set decodes to,
-    re-encoding it yields a nonempty run of that family's member. Both `canon` and `agree`
-    consult exactly this and then differ only in what they do with it. -/
-theorem setCodec_reencode_of {α : Type} {c : Codec} (h : Lawful c)
-    (elem : Ctor α Attr) (m : Member) (hm : ∀ x, (elem.into x).member = m)
-    {xs : List α} {ws : List Value} (hxs : xs ≠ [])
-    (htr : traverse (fun x => c.p (elem.into x)) xs = some ws) :
-    ∃ as', traverse c.e ws = some as' ∧ as' ≠ [] ∧ ∀ y ∈ as', y.member = m := by
-  obtain ⟨as', has'⟩ := Option.isSome_iff_exists.mp
-    (traverse_isSome (f := c.e) (fun _ _ hyx => h.canon hyx) xs ws htr)
-  have hmem : ∀ y ∈ as', y.member = m := by
-    have hz := traverse_rel (g := fun x => c.p (elem.into x)) (f := c.e)
-      (R := fun z (_ : α) => z.member = m)
-      (fun x0 _ z hg hf => by
-        show z.member = m
-        rw [(h.agree hg hf).member_eq, hm x0])
-      xs ws as' htr has'
-    intro y hy
-    have hlen1 := traverse_length xs ws htr
-    have hlen2 := traverse_length ws as' has'
-    obtain ⟨y2, hy2⟩ := mem_zip_left as' xs (by omega) y hy
-    exact hz (y, y2) hy2
-  refine ⟨as', has', ?_, hmem⟩
-  intro h0
-  have hlen1 := traverse_length xs ws htr
-  have hlen2 := traverse_length ws as' has'
-  rw [h0] at hlen2
-  cases xs with
-  | nil => exact absurd rfl hxs
-  | cons _ _ => simp only [List.length_cons, List.length_nil] at hlen1 hlen2; omega
-
-/-- `setCodec`'s `canon`, stated once. The payload family enters only through `elem` and
-    the two facts about the member it names. -/
-theorem setCodec_canon_of {α : Type} {c : Codec} (h : Lawful c)
-    (elem : Ctor α Attr) (m wm : Member) (hm : ∀ x, (elem.into x).member = m)
-    (hwire : ∀ as : List Attr, as ≠ [] → (∀ y ∈ as, y.member = m) →
-      ∃ a', asWireSet as = some a' ∧ a'.member = wm)
-    {xs : List α} {t : Value} (hxs : xs ≠ [])
-    (hp : (traverse (fun x => c.p (elem.into x)) xs).map Value.set = some t) :
-    ((setCodec c).e t).isSome := by
-  cases htr : traverse (fun x => c.p (elem.into x)) xs with
-  | none => rw [htr] at hp; exact nomatch hp
-  | some ws =>
-    rw [htr] at hp
-    replace hp : some (Value.set ws) = some t := hp
-    cases hp
-    obtain ⟨as', has', hne', hmem⟩ := setCodec_reencode_of h elem m hm hxs htr
-    obtain ⟨a', ha', -⟩ := hwire as' hne' hmem
-    show ((traverse c.e ws).bind asWireSet).isSome
-    rw [has']
-    show (asWireSet as').isSome
-    rw [ha']
-    rfl
-
-/-- `setCodec`'s `agree`, stated once. Wire sets are flat, so the whole content is that
-    the re-encoding lands on the same wire member — no payload is ever inspected. -/
-theorem setCodec_agree_of {α : Type} {c : Codec} (h : Lawful c)
-    (elem : Ctor α Attr) (m wm : Member) (hm : ∀ x, (elem.into x).member = m)
-    (hwire : ∀ as : List Attr, as ≠ [] → (∀ y ∈ as, y.member = m) →
-      ∃ a', asWireSet as = some a' ∧ a'.member = wm)
-    (hL : wm ≠ .L) (hM : wm ≠ .M)
-    {xs : List α} {t : Value} {a a' : Attr} (hxs : xs ≠ [])
-    (ha : a.member = wm)
-    (hp : (traverse (fun x => c.p (elem.into x)) xs).map Value.set = some t)
-    (he : (setCodec c).e t = some a') : Agree a' a := by
-  cases htr : traverse (fun x => c.p (elem.into x)) xs with
-  | none => rw [htr] at hp; exact nomatch hp
-  | some ws =>
-    rw [htr] at hp
-    replace hp : some (Value.set ws) = some t := hp
-    cases hp
-    obtain ⟨as', has', hne', hmem⟩ := setCodec_reencode_of h elem m hm hxs htr
-    replace he : (traverse c.e ws).bind asWireSet = some a' := he
-    rw [has'] at he
-    replace he : asWireSet as' = some a' := he
-    obtain ⟨a'', ha'', hwm⟩ := hwire as' hne' hmem
-    rw [ha''] at he
-    cases he
-    exact agree_of_member_flat (by rw [hwm, ha]) (by rw [hwm]; exact hL) (by rw [hwm]; exact hM)
-
-/-! #### (R) and (W), argued once for both strengths
-
-These two clauses read the same whether the element codec is `Lawful` or only
-`LawfulCore` — (MP) contributes nothing to either — so they are stated once and both
-`lawfulCore_setCodec` and `lawful_setCodec` cite them. What the two strengths really
-differ on is (C): with (MP) the element's member comes from agreement, without it the
-`(set)` rule's own premise supplies it. -/
-
-/-- (R) per family: a wire set reads back by the same traversal, through the same prism
-    the payload projection put it in. -/
-theorem setCodec_retract_of {α : Type} {c : Codec} (h : LawfulCore c) (elem : Ctor α Attr)
-    {vs : List Value} {x : α} {xs : List α}
-    (htr : traverse c.e vs = some ((x :: xs).map elem.into)) :
-    (traverse (fun y => c.p (elem.into y)) (x :: xs)).map Value.set = some (.set vs) := by
-  have h1 := traverse_roundTrip (fun _ _ hxy => h.retract hxy) vs _ htr
-  rw [traverse_map] at h1
-  rw [h1]
+/-- …and the binary branch when both earlier ones have. -/
+theorem decSet_binBranch {α : Type} {c : Codec} {inj : α → Attr} {S : Finset α}
+    {U : Finset Bytes} (hne : S.Nonempty)
+    (h0 : setImage (fun y => (c.p (inj y)).bind vStr) S = none)
+    (h0' : setImage (fun y => (c.p (inj y)).bind vNum) S = none)
+    (h1 : setImage (fun y => (c.p (inj y)).bind vBin) S = some U) :
+    decSet c inj S = some (.binSet U) := by
+  obtain ⟨x, hx⟩ := hne
+  unfold decSet
+  rw [if_neg (Finset.card_ne_zero_of_mem hx), h0, h0', h1]
   rfl
 
+/-- **(R) for `set`.** The wire image inverts by `setImage_inv`, and the read side lands on
+    the branch the element codec's own reads determine — the *value* kind fixes it, whichever
+    wire member the write happened to use. -/
 theorem set_retract {c : Codec} (h : LawfulCore c) :
     ∀ {t a}, (setCodec c).e t = some a → (setCodec c).p a = some t := by
+  have key : ∀ {α β : Type} [DecidableEq α] [DecidableEq β]
+      {vinj : α → Value} {aout : Attr → Option β} {ainj : β → Attr}
+      {vout : Value → Option α},
+      (∀ a b, aout a = some b → a = ainj b) → (∀ x, vout (vinj x) = some x) →
+      ∀ {S : Finset α} {T : Finset β}, S.Nonempty →
+        setImage (fun x => (c.e (vinj x)).bind aout) S = some T →
+        setImage (fun y => (c.p (ainj y)).bind vout) T = some S ∧ T.Nonempty := by
+    intro α β _ _ vinj aout ainj vout hA hV S T hne hI
+    exact ⟨setImage_roundTrip h hA hV hI, setImage_nonempty hI hne⟩
+  have miss : ∀ {α β γ : Type} [DecidableEq β] [DecidableEq γ]
+      {vinj : α → Value} {aout : Attr → Option β} {ainj : β → Attr}
+      {vout : Value → Option γ},
+      (∀ a b, aout a = some b → a = ainj b) → (∀ x, vout (vinj x) = none) →
+      ∀ {S : Finset α} {T : Finset β}, T.Nonempty →
+        setImage (fun x => (c.e (vinj x)).bind aout) S = some T →
+        setImage (fun y => (c.p (ainj y)).bind vout) T = none := by
+    intro α β γ _ _ vinj aout ainj vout hA hV S T hne hI
+    obtain ⟨y, hy⟩ := hne
+    obtain ⟨x, -, hpx⟩ := setImage_read h hA hI y hy
+    exact setImage_none_of hy (by rw [hpx]; simpa using hV x)
   intro t a he
-  obtain ⟨vs, as, rfl, htr, hw⟩ := setCodec_e_eq.mp he
-  obtain ⟨hne, hcase⟩ := asWireSet_cases hw
-  rcases hcase with ⟨ss, rfl, rfl⟩ | ⟨ns, rfl, rfl⟩ | ⟨bs, rfl, rfl⟩
-  · cases ss with
-    | nil => exact absurd rfl hne
-    | cons _ _ => exact setCodec_retract_of h sC htr
-  · cases ns with
-    | nil => exact absurd rfl hne
-    | cons _ _ => exact setCodec_retract_of h nC htr
-  · cases bs with
-    | nil => exact absurd rfl hne
-    | cons _ _ => exact setCodec_retract_of h bC htr
-
-/-- (W) per family: the wire member is `setMember` of the element member, and the first
-    element is enough to name the latter. -/
-theorem setCodec_writes_of {α : Type} {elem : Ctor α Attr} {μE μS μ₀ μ : Member}
-    (hm : ∀ x, (elem.into x).member = μE) (hsm : setMember μE = some μS)
-    {x : α} {xs : List α} (hmem : ∀ y ∈ (x :: xs).map elem.into, y.member = μ₀)
-    (hμ : setMember μ₀ = some μ) : μS = μ := by
-  have hx := hmem _ (List.mem_cons_self _ _)
-  rw [hm] at hx
-  subst hx
-  rw [hsm] at hμ
-  exact Option.some.inj hμ
-
-theorem set_writes {c : Codec} (h : LawfulCore c) :
-    ∀ {μ}, (setCodec c).μ = some μ → ∀ {t a}, (setCodec c).e t = some a →
-      a.member = μ := by
-  intro μ hμ t a he
-  obtain ⟨vs, as, rfl, htr, hw⟩ := setCodec_e_eq.mp he
-  replace hμ : c.μ.bind setMember = some μ := hμ
-  cases hc : c.μ with
-  | none => rw [hc] at hμ; exact nomatch hμ
-  | some μ₀ =>
-    rw [hc] at hμ
-    replace hμ : setMember μ₀ = some μ := hμ
-    have hmem := traverse_mem (P := fun y => y.member = μ₀)
-      (fun _ y hxy => h.writes hc hxy) htr
-    obtain ⟨hne, hcase⟩ := asWireSet_cases hw
-    rcases hcase with ⟨ss, rfl, rfl⟩ | ⟨ns, rfl, rfl⟩ | ⟨bs, rfl, rfl⟩
-    · cases ss with
-      | nil => exact absurd rfl hne
-      | cons _ _ => exact setCodec_writes_of (elem := sC) (fun _ => rfl) rfl hmem hμ
-    · cases ns with
-      | nil => exact absurd rfl hne
-      | cons _ _ => exact setCodec_writes_of (elem := nC) (fun _ => rfl) rfl hmem hμ
-    · cases bs with
-      | nil => exact absurd rfl hne
-      | cons _ _ => exact setCodec_writes_of (elem := bC) (fun _ => rfl) rfl hmem hμ
-
-/-- Core set: the member-uniformity that (MP) supplied comes from (W) instead, so the
-    element's named member is a hypothesis — exactly the `(set)` rule's premise. -/
-theorem lawfulCore_setCodec {c : Codec} {μ₀ μS : Member} (h : LawfulCore c)
-    (hμ : c.μ = some μ₀) (hsm : setMember μ₀ = some μS) :
-    LawfulCore (setCodec c) := by
-  refine ⟨set_retract h, ?_, set_writes h⟩
-  have hbranch : ∀ (ws : List Value), ∀ as', traverse c.e ws = some as' → ws ≠ [] →
-      ((traverse c.e ws).bind asWireSet).isSome = true := by
-    intro ws as' has' hws
-    have hmem : ∀ x ∈ as', x.member = μ₀ :=
-      traverse_mem (fun _ y hxy => h.writes hμ hxy) has'
-    have hne' : as' ≠ [] := by
-      intro h0
-      have hlen := traverse_length ws as' has'
-      rw [h0] at hlen
-      exact hws (List.length_eq_zero.mp hlen)
-    rw [has']
-    show (asWireSet as').isSome = true
-    cases as' with
-    | nil => exact absurd rfl hne'
-    | cons x r =>
-      have hx := hmem x (List.mem_cons_self x r)
-      cases μ₀
-      case S =>
-        obtain ⟨ss', hss'⟩ := strPayloads_isSome hmem
-        simp only [asWireSet]; rw [hss']; rfl
-      case N =>
-        obtain ⟨ns', hns'⟩ := numPayloads_isSome hmem
-        cases x
-        case n v => simp only [asWireSet, strPayloads]; rw [hns']; rfl
-        all_goals exact nomatch hx
-      case B =>
-        obtain ⟨bs', hbs'⟩ := binPayloads_isSome hmem
-        cases x
-        case b v => simp only [asWireSet, strPayloads, numPayloads]; rw [hbs']; rfl
-        all_goals exact nomatch hx
-      all_goals exact nomatch hsm
-  have branch : ∀ {α : Type} (elem : Ctor α Attr) (x : α) (r : List α) (t : Value),
-      (traverse (fun y => c.p (elem.into y)) (x :: r)).map Value.set = some t →
-      ((setCodec c).e t).isSome = true := by
-    intro α elem x r t hp
-    obtain ⟨ws, htr, rfl⟩ := Option.map_eq_some'.mp hp
-    show ((traverse c.e ws).bind asWireSet).isSome = true
-    obtain ⟨as', has'⟩ := Option.isSome_iff_exists.mp
-      (traverse_isSome (f := c.e) (fun _ _ hyx => h.canon hyx) (x :: r) ws htr)
-    refine hbranch ws as' has' ?_
-    intro h0
-    have hlen := traverse_length (x :: r) ws htr
-    rw [h0] at hlen
-    exact nomatch hlen
-  intro a t hp
-  cases a
-  case ss vs' => cases vs' with
-    | nil => exact nomatch hp
-    | cons _ _ => exact branch sC _ _ t hp
-  case ns vs' => cases vs' with
-    | nil => exact nomatch hp
-    | cons _ _ => exact branch nC _ _ t hp
-  case bs vs' => cases vs' with
-    | nil => exact nomatch hp
-    | cons _ _ => exact branch bC _ _ t hp
-  all_goals exact nomatch hp
-
-/-- The quotiented product; `p` need not be injective — the shrink is the quotient. -/
-theorem lawful_setCodec {c : Codec} (h : Lawful c) : Lawful (setCodec c) := by
-  refine ⟨set_retract h.core, ?_, set_writes h.core, ?_⟩
-  · intro a t hp
-    cases a
-    case ss vs' => cases vs' with
-      | nil => exact nomatch hp
-      | cons _ _ =>
-        exact setCodec_canon_of h sC .S .SS (fun _ => rfl)
-          (fun _ hne hmem => asWireSet_of_S hne hmem) (by simp) hp
-    case ns vs' => cases vs' with
-      | nil => exact nomatch hp
-      | cons _ _ =>
-        exact setCodec_canon_of h nC .N .NS (fun _ => rfl)
-          (fun _ hne hmem => asWireSet_of_N hne hmem) (by simp) hp
-    case bs vs' => cases vs' with
-      | nil => exact nomatch hp
-      | cons _ _ =>
-        exact setCodec_canon_of h bC .B .BS (fun _ => rfl)
-          (fun _ hne hmem => asWireSet_of_B hne hmem) (by simp) hp
-    all_goals exact nomatch hp
-  · intro a t a' hp he
-    cases a
-    case ss vs' => cases vs' with
-      | nil => exact nomatch hp
-      | cons _ _ =>
-        exact setCodec_agree_of h sC .S .SS (fun _ => rfl)
-          (fun _ hne hmem => asWireSet_of_S hne hmem) (by decide) (by decide)
-          (by simp) rfl hp he
-    case ns vs' => cases vs' with
-      | nil => exact nomatch hp
-      | cons _ _ =>
-        exact setCodec_agree_of h nC .N .NS (fun _ => rfl)
-          (fun _ hne hmem => asWireSet_of_N hne hmem) (by decide) (by decide)
-          (by simp) rfl hp he
-    case bs vs' => cases vs' with
-      | nil => exact nomatch hp
-      | cons _ _ =>
-        exact setCodec_agree_of h bC .B .BS (fun _ => rfl)
-          (fun _ hne hmem => asWireSet_of_B hne hmem) (by decide) (by decide)
-          (by simp) rfl hp he
-    all_goals exact nomatch hp
-
+  rcases setCodec_e_eq.mp he with ⟨S, rfl, hE⟩ | ⟨S, rfl, hE⟩ | ⟨S, rfl, hE⟩ <;>
+    (unfold encSet at hE
+     split at hE
+     · exact nomatch hE
+     · next hcard =>
+       have hne : S.Nonempty := Finset.card_pos.mp (Nat.pos_of_ne_zero hcard)
+       split at hE
+       · next T hT =>
+         injection hE with hE; subst hE
+         first
+         | (obtain ⟨hR, hTne⟩ := key (vinj := Value.str) (vout := vStr) sC_out_inj (fun _ => rfl) hne hT
+            exact decSet_strBranch hTne hR)
+         | (obtain ⟨hR, hTne⟩ := key (vinj := Value.num) (vout := vNum) sC_out_inj (fun _ => rfl) hne hT
+            exact decSet_numBranch hTne
+              (miss (vinj := Value.num) (vout := vStr) sC_out_inj (fun _ => rfl) hTne hT) hR)
+         | (obtain ⟨hR, hTne⟩ := key (vinj := Value.bin) (vout := vBin) sC_out_inj (fun _ => rfl) hne hT
+            exact decSet_binBranch hTne
+              (miss (vinj := Value.bin) (vout := vStr) sC_out_inj (fun _ => rfl) hTne hT)
+              (miss (vinj := Value.bin) (vout := vNum) sC_out_inj (fun _ => rfl) hTne hT) hR)
+       · split at hE
+         · next T hT =>
+           injection hE with hE; subst hE
+           first
+           | (obtain ⟨hR, hTne⟩ := key (vinj := Value.str) (vout := vStr) nC_out_inj (fun _ => rfl) hne hT
+              exact decSet_strBranch hTne hR)
+           | (obtain ⟨hR, hTne⟩ := key (vinj := Value.num) (vout := vNum) nC_out_inj (fun _ => rfl) hne hT
+              exact decSet_numBranch hTne
+                (miss (vinj := Value.num) (vout := vStr) nC_out_inj (fun _ => rfl) hTne hT) hR)
+           | (obtain ⟨hR, hTne⟩ := key (vinj := Value.bin) (vout := vBin) nC_out_inj (fun _ => rfl) hne hT
+              exact decSet_binBranch hTne
+                (miss (vinj := Value.bin) (vout := vStr) nC_out_inj (fun _ => rfl) hTne hT)
+                (miss (vinj := Value.bin) (vout := vNum) nC_out_inj (fun _ => rfl) hTne hT) hR)
+         · next =>
+           obtain ⟨T, hT, hA⟩ := Option.map_eq_some'.mp hE
+           subst hA
+           first
+           | (obtain ⟨hR, hTne⟩ := key (vinj := Value.str) (vout := vStr) bC_out_inj (fun _ => rfl) hne hT
+              exact decSet_strBranch hTne hR)
+           | (obtain ⟨hR, hTne⟩ := key (vinj := Value.num) (vout := vNum) bC_out_inj (fun _ => rfl) hne hT
+              exact decSet_numBranch hTne
+                (miss (vinj := Value.num) (vout := vStr) bC_out_inj (fun _ => rfl) hTne hT) hR)
+           | (obtain ⟨hR, hTne⟩ := key (vinj := Value.bin) (vout := vBin) bC_out_inj (fun _ => rfl) hne hT
+              exact decSet_binBranch hTne
+                (miss (vinj := Value.bin) (vout := vStr) bC_out_inj (fun _ => rfl) hTne hT)
+                (miss (vinj := Value.bin) (vout := vNum) bC_out_inj (fun _ => rfl) hTne hT) hR))
 
 /-! ### Keyed lookup and traversal facts (the keyed product consumes these) -/
 
