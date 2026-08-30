@@ -910,6 +910,11 @@ export function literal<const T extends string | number>(
      * At the declaration and not per encode, because that is what the premise is: a fact about the
      * admissible set, which this library owns, decidable when the codec is built. The same place
      * the mixed-kind refusal above lives, and for the same reason.
+     *
+     * This **does** discharge the write side, and the distinction is worth keeping: `ℓ` is frozen
+     * at construction, so every value `encode` will ever accept has already been checked here.
+     * It does not discharge the read side, because a stored attribute is not drawn from `ℓ` — see
+     * `decode` below, which learned that the expensive way.
      */
     if (numeric) {
         const outside = (allowed as readonly number[]).filter(
@@ -948,10 +953,34 @@ export function literal<const T extends string | number>(
                         numeric ? String(ok) : (ok as string),
                     ) as LiteralAttribute<T>,
             ),
+        /**
+         * **The same gate `number` reads through, and for the same reason.**
+         *
+         * `Number` is far more permissive than an `N`: it reads `''`, whitespace, `0x10` and
+         * `0b11`, none of which DynamoDB will ever hand back. Membership in `ℓ` does not filter
+         * them out — it only rejects the ones whose numeric value happens to miss the set, so
+         * `literal(0, 1, 2)` read `{ N: '' }` as `0` and `literal(0, 16)` read `{ N: '0x10' }`
+         * as `16`. An attribute no store wrote, decoded to a value the type says is legitimate.
+         *
+         * The premise `ℓ ⊆ D` does not cover this and it was wrong to say it did. A premise
+         * bounds the values **this library owns**; a stored attribute is outside anything it
+         * owns, which is the whole reason `decode` re-checks what `encode` was trusted on.
+         *
+         * `number`'s *second* gate — the round-tripped value, not the digits — is genuinely
+         * subsumed here, and that one is safe to say: a numeral that rounds past the maximum
+         * lands outside `D`, and `ℓ ⊆ D`, so `admits` refuses it. That is a claim about a value
+         * landing in a set this library fixed at construction, not about an attribute.
+         */
         decode: (attribute) =>
-            andThen(expect(member, attribute), (carried) =>
-                admits(numeric ? Number(carried) : (carried as string)),
-            ),
+            andThen(expect(member, attribute), (carried) => {
+                if (!numeric) return admits(carried as string)
+                const text = carried as string
+                return isNumeral(text)
+                    ? admits(Number(text))
+                    : new CodecError(
+                          `'${text}' is not a numeral, so this attribute was not written by DynamoDB`,
+                      )
+            }),
     }) as ConstantCodec<T>
 }
 

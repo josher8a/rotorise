@@ -337,9 +337,43 @@ Two things are worth keeping from how the decision was reached. The rule figure 
 `ℓ₁ … ℓₙ ∈ D` **all along** — the amendment was not to the rule but to the paragraph under it, which
 called `D` "an unchecked precondition" and gave `5e-324` as the example of it going unchecked. A
 premise stated in a rule and disowned in the prose beneath it is worth less than no premise at all,
-because it reads as checked to everyone who stops at the figure. And the read side needed no gate:
-membership in `ℓ` is already checked in both directions, and `ℓ ⊆ D` is exactly what makes that
-check sufficient — the premise discharges the half it does not mention.
+because it reads as checked to everyone who stops at the figure.
+
+### One the premise was claimed to cover, and did not
+
+Writing the entry above, I argued that `(literal-N)` needed no read gate: membership in `ℓ` is
+checked in both directions, `ℓ ⊆ D`, so the premise discharges the half it does not mention. The
+user did not accept it — *it has to pass through the same checks as `decimal` and `number`* — and
+the measurement took one minute:
+
+```
+literal(0, 1, 2).decode({ N: '' })    → 0        number.decode({ N: '' })     → refused
+literal(0, 16).decode({ N: '0x10' })  → 16       number.decode({ N: '0x10' }) → refused
+```
+
+`Number` reads `''`, whitespace, `0x10`, `0b11`, `0o7`. Membership in `ℓ` does not filter those —
+it only rejects the ones whose numeric value happens to miss the set — so an attribute DynamoDB
+could never have written decoded to a value the type calls legitimate.
+
+**No law in §2 catches it.** (C) holds: `0` re-encodes to `⟨N, "0"⟩` without complaint. So does (R).
+What it breaks is **§1**: `Carries(N)` is `Numerals` and `""` is not one, so `p` was defined on
+something that is not an attribute. That is C1's obligation, seen from the inside — the embedding
+into `𝔸` is *partial*, the implementation's attribute type is wider than `𝔸`, and every term that
+reads an `N` is the one that has to notice. `decimal` and `number` both did. `literal` is the third
+and it did not, which is why "the same checks" was the right instinct and the derivation was not.
+
+The general form is already written down one section later, in the worked case for `refine`: **an
+unchecked direction is sound exactly as far as something outside the codec enforces it.** For
+`(literal-N)`'s write side that something is real — `ℓ` is frozen at construction, so the premise
+genuinely discharges it. For the read side there is nothing, because stored data is outside every
+invariant this library owns. I had the principle and applied it to the wrong half.
+
+One part of the derivation survives, and it is worth separating out because it is the same shape and
+it is *sound*: `number` needs a second read gate on the round-tripped value, since
+`Number('9.9…E+125')` rounds up to `1e126`. `(literal-N)` does not — the rounded value is outside
+`D`, and `ℓ ⊆ D`, so membership refuses it. That argument is about a value landing in a set fixed at
+construction, not about an attribute, which is exactly the distinction the failed one blurred. It is
+pinned by a test rather than believed.
 
 One thing fell out that neither estimate anticipated. §1 says `number` satisfies `η ⊆ ker p` "for
 free" because `p "1.500"` and `p "1.5"` are the same double, and with `Codec.Ker` in the model that
