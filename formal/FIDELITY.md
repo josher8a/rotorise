@@ -323,8 +323,8 @@ At HEAD: 714 declarations, 520 theorems, 194 definitions.
 
 | | |
 | --- | ---: |
-| theorem names the documents cite as results | 130 |
-| …put through `#assert_axioms` | **52** |
+| theorem names the documents cite as results | 133 |
+| …put through `#assert_axioms` | **54** |
 | §-tag coverage (declarations naming a spec section) | **23%** |
 | docstring coverage, theorems | 59% |
 | docstring coverage, definitions | 72% |
@@ -425,6 +425,36 @@ not. Stating them in the same file is cheaper than the remark that would otherwi
 Item 3 of `VOCABULARY.md`'s plan — `pointCodec = carriedCodec`, which would hand inversion
 to the ten ground codecs — remains open and is now ranked below all of these. It is
 density; these are fidelity.
+
+### A postscript, from applying §6's own conclusion
+
+§6 below ends with *unaudited is not the predictor; unaudited **and duplicated** is.* The next
+thing looked at was chosen by that rule rather than by coverage, and it paid immediately.
+
+`docs/codec-formalization.md` §6 has a row called **"`T` as an identity"**. Read against the
+theorem it cites, it is **two claims wearing one name**:
+
+- **(A)** the denotation's `T` is the judgement's — `(denoteω t).T = T`. This is what §3 means
+  by "`Uν` *is* `opaque`'s held set" and what `opaq_T_identity` proves.
+- **(B)** the held set is what the codec can write — `T = dom(e)`, the claim that makes `: T`
+  an honest index rather than an upper bound.
+
+The row asserted (A) and then explained why it is "*false* for `union` without full (U)" — and
+that explanation is about (B). (A) is not false at `union`; it is **definitional** there, since
+both sides are the same union of the options' sets (`altCodec_T`, `Iff.rfl`). (B) is the one
+that fails, and now has its witness: `not_TIsDomE_cLitStr`, in `union(literal("A"), string)`,
+where `"A"` is held and nothing is written because both options admit.
+
+The row is now two rows. What kept the conflation alive is worth naming, because it is the
+same mechanism as `(literal-N)`'s: **a claim and its justification drifted apart while both
+stayed true of *something*.** Each half was correct about a different proposition, so neither
+audit reading the row alone could catch it — it takes reading the row against the theorem.
+
+And the cost of closing (A) generally is now measured rather than estimated. `typed_TSub` only
+*projects* the denotation's witness; the converse must **construct** it, which needs a converse
+to `align_TSub` that builds `align`'s output and the object case's presence data. That is why
+it is open, and it is a bigger job than the row's "still open for the other constructors"
+suggests.
 
 ## §6 What neither audit checked — now read
 

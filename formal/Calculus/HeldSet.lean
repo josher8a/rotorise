@@ -173,6 +173,58 @@ theorem opaq_T_identity (lossy : Bool) (v : Value) :
   · intro h
     exact ⟨Value.depth v, hopaque_T lossy v (Value.depth v) h (Nat.le_refl _)⟩
 
+/-! ## Which identity? §6's row is two of them
+
+`docs/codec-formalization.md` §6 has one row called **"`T` as an identity"**, and reading it
+against the theorem it cites shows it is two different claims wearing one name:
+
+* **(A) the denotation's `T` is the judgement's** — `(denoteω t).T = T` for a derivable
+  `⊢ t : T ⇝ μ`. This is what §3 means by "`Uν` *is* `opaque`'s held set", and it is what
+  `opaq_T_identity` above proves. `typed_TSub` is one half of it.
+* **(B) the held set is what the codec can write** — `T = dom(e)`, which is the claim that
+  makes `: T` an honest index rather than an upper bound. `Carrier.domE` is one half of it.
+
+The row asserts (A) — "`opaq_T_identity` proves `(opaqCodecω ν).T = Uν` exactly" — and then
+says it is "*false* for `union` without full (U): `T` is the union of the options' sets, but
+`e` refuses wherever two of them admit, so the surplus is real". **That sentence is about
+(B).** (A) is not false for `union`; it is nearly definitional there, because both sides are
+the same union of the options' sets. The two theorems below separate them. -/
+
+/-- **(A) at a union is definitional.** `altCodec`'s held set *is* the union of its options'
+    — no (U), no premise, nothing to prove. So the union case of (A) is exactly the options'
+    (A), and §6's "false for `union`" cannot be about this claim. -/
+theorem altCodec_T (os : List OptionSem) (μA : Option Member) (v : Value) :
+    (altCodec os μA).T v ↔ ∃ o ∈ os, o.c.T v := Iff.rfl
+
+/-- **(B), named.** The held set is exactly what the pair can write — `T = dom(e)`.
+    `Carrier.domE` gives `dom(e) ⊆ T` for every derivable term; this is the converse, and it
+    is the direction that fails. -/
+def TIsDomE (c : Codec) : Prop := ∀ v, c.T v ↔ (c.e v).isSome
+
+/-- §4's counterexample pair, as a union: `union(literal("A"), string)`. Both options admit
+    `"A"`, which is what refuted (K) and is what makes the surplus below real. -/
+def cLitStr : Codec :=
+  altCodec [.byAttempt (literalSCodec ["A"]), .byAttempt stringCodec] (some .S)
+
+/-- **(B) is false for `union`, and this is the surplus §6 was describing.** `"A"` is in the
+    held set — the `literal` option holds it — and the union writes nothing for it, because
+    both options admit and (U) fails. So `T` strictly contains `dom(e)`.
+
+    Worth being exact about what this does *not* say. It is not a soundness failure: `Carrier`
+    bounds `e` by `T` and never the converse, and the semantics returning `none` where (U)
+    fails is the design. What it says is that `: T` at a `union` is an **upper bound** on what
+    can be written unless (U) holds in full — which is the residue `uAtCan_of_separated` names,
+    seen from the held set rather than from (R). -/
+theorem not_TIsDomE_cLitStr : ¬ TIsDomE cLitStr := by
+  intro h
+  have hT : cLitStr.T (.str "A") :=
+    ⟨.byAttempt (literalSCodec ["A"]), by simp [cLitStr], ⟨"A", by simp, rfl⟩⟩
+  have he : cLitStr.e (.str "A") = none := by
+    simp [cLitStr, altCodec, OptionSem.byAttempt, literalSCodec, stringCodec]
+  have := (h (.str "A")).mp hT
+  rw [he] at this
+  exact nomatch this
+
 /-! ## §1's numeral domain, checked
 
 `docs/codec-formalization.md` §6 listed `Numeral := String` as a gap: the grammar, the 38
