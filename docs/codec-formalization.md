@@ -596,6 +596,47 @@ declaration where two options are both `κ`-free, or give `held` a write-side `�
 carrier — and §1's `Value` is what would have to change for the second. `codec.uniqueadmission.spec.ts`
 carries the measurement as four assertions.
 
+### One where the obligation was quantified over inputs the union refuses
+
+§5 stated **(U)** as `∀ input. ∣{i : cᵢ admits it}∣ = 1`, and the model transcribed it faithfully:
+`UniqueAdmission` asks, of *every* canonical pair of *every* option, that the option admitting it
+admit it alone. The transcription was faithful and the rule was too strong, and the model is where
+it shows — because `altCodec` is the one artifact that says what the union actually does.
+
+**`altCodec` declines what it cannot resolve.** `e` is `match os.filter (·.admitV v) with | [o] =>
+o.c.e v | _ => none`. Where two options both admit, the union is *undefined*, and every law is
+quantified over `dom`. So an ambiguity at an input the union refuses is unreachable by (R), (C),
+(W) or `≼` — and (U) was demanding it be absent anyway.
+
+The three consumers say the same thing. `lawfulCore_altCodec` and `lawful_altCodec` use `hU`
+exactly three times, and every use instantiates it at an option obtained from a *singleton filter*:
+`retract` needs the attribute side unique at an `a` the union wrote, `canon` and `agree` need the
+value side unique at a `t` the union read to. Nothing asks about an option's canonicals in general.
+
+**What it cost.** `union(array(literal("A")), array(literal("B")))` — and its `record` twin, and
+`union(array(string), tuple(string, rest(number)))`. Each collides at one input: the empty array,
+the empty map, and (for the last) nowhere at all once both sides are compared, since the options
+agree there. `adm` does not propagate through a container (§5), so the collision is the empty case
+and nothing else. The union declines to write it, every other value round-trips through the one
+option that wrote it — and the soundness theorem covered none of them, because `UniqueAdmission`
+was refuted by a canonical pair the union never uses.
+
+**The repair.** `UniqueBothWays`: resolving one side of the pair resolves the other, through the
+same option. `UAtAct` is it at the union's own options, and it is what `(union)`'s `Obligations`
+now carries. `UAtCan` stays, as the strong form the dischargers produce, and
+`uAtAct_of_uAtCan` is the bridge — so every discharger in `Discharge.lean` discharges exactly as
+before, `(dunion)` and `opaque` included, with no proof changed.
+
+Nothing is admitted that was not derivable, and no law is weakened: the theorem now covers strictly
+more terms because the obligation stopped asking about inputs the semantics refuses.
+
+**How it was found.** By measuring before changing. The user's proposal was to weaken (U) to
+*agreement* — where two options both admit, let them through if they answer the same. That is sound,
+and it is a change to `altCodec`, which 11 files and 153 sites depend on. Counting those first is
+what surfaced the cheaper and more accurate diagnosis: the semantics was already right, and it was
+the obligation that over-quantified. Agreement would additionally let the union *write* the empty
+case; that remains open, and is a change to the denotation rather than to a premise.
+
 ### One where `held` was opaque on the wrong number of sides
 
 The entry above records `adm`/`admA` splitting because `legacy` widens `p`. The split had a second

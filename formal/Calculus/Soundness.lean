@@ -27,10 +27,28 @@ noncomputable def semsOf (fuel : Nat) (opts : List Term) : List OptionSem :=
   opts.map fun t' => optionSemOf (denote fuel t') (specOf t')
 
 /-- §5 (U) at canonical inputs: every canonical attribute of an option is admitted by
-    that option alone, on both sides. The theorem's residue; the disjointness
-    dischargers are proved in `Calculus.Discharge` (`uAtCan_of_disjoint`). -/
+    that option alone, on both sides. The strong form, and what the disjointness
+    dischargers of `Calculus.Discharge` produce (`uAtCan_of_disjoint`). -/
 def UAtCan (fuel : Nat) (opts : List Term) : Prop :=
   UniqueAdmission (semsOf fuel opts)
+
+/-- **§5 (U) where the union acts** — the theorem's actual residue, and what `(union)`
+    carries as an obligation.
+
+    `UAtCan` quantifies over every canonical pair of every *option*; the laws only ever
+    ask about inputs the *union* resolves, since `altCodec` declines everything else and
+    a law quantified over `dom` cannot reach a declined input. `UAtAct` is that
+    restriction (`UniqueBothWays`), and it is strictly weaker: the gap is where the
+    working schemas sit — `union(array(literal "A"), array(literal "B"))` fails `UAtCan`
+    at `[]` and meets `UAtAct`, because the union declines to write `[]`.
+
+    Every discharger still discharges, through `uAtAct_of_uAtCan`. -/
+def UAtAct (fuel : Nat) (opts : List Term) : Prop :=
+  UniqueBothWays (semsOf fuel opts)
+
+/-- The strong residue implies the one the laws need, so §5's dischargers are unaffected. -/
+theorem uAtAct_of_uAtCan {fuel opts} (h : UAtCan fuel opts) : UAtAct fuel opts :=
+  uniqueBothWays_of_uniqueAdmission h
 
 /-- The doc's semantic rule premises, at each fuel. Fuel 0 asks nothing — the
     denotation there is `Codec.empty`, whose laws are vacuous. -/
@@ -58,7 +76,7 @@ def Obligations : Nat → Term → Prop
           Obligations fuel t' ∧ ((denote fuel t').e v).isSome) ∧
       (match rest with | .codec t' => Obligations fuel t' | _ => True)
     | .union opts =>
-      (∀ t' ∈ opts, Obligations fuel t') ∧ UAtCan fuel opts
+      (∀ t' ∈ opts, Obligations fuel t') ∧ UAtAct fuel opts
     | .dunion _ opts => ∀ t' ∈ opts, Obligations fuel t'
 
 /-- Legacy-free to depth `fuel`: where (MP) holds without exemption. -/
@@ -119,9 +137,9 @@ theorem nullable {fuel t} (h : Obligations (fuel+1) (.nullable t)) :
 theorem custom {fuel ce cp} (h : Obligations (fuel+1) (.custom ce cp)) :
     Lawful { T := fun v => (ce v).isSome, μ := none, e := ce, p := cp } := h
 
-/-- §5 `(union)`: one premise per option, and (U) at canonical inputs. -/
+/-- §5 `(union)`: one premise per option, and (U) where the union acts. -/
 theorem union {fuel opts} (h : Obligations (fuel+1) (.union opts)) :
-    (∀ t ∈ opts, Obligations fuel t) ∧ UAtCan fuel opts := h
+    (∀ t ∈ opts, Obligations fuel t) ∧ UAtAct fuel opts := h
 
 /-- §5 `(dunion)`: one premise per option; (U) is a theorem here, not a premise. -/
 theorem dunion {fuel d opts} (h : Obligations (fuel+1) (.dunion d opts)) :
@@ -594,7 +612,7 @@ theorem soundness_both : ∀ (fuel : Nat) {t T μ}, Typed t T μ → Obligations
       have ihs : ∀ t' ∈ opts, Sound fuel t' := fun t' ht' => by
         obtain ⟨T', μ', hμ'⟩ := TypedListμ.forall hlist t' ht'
         exact ih hμ' (hob.1 t' ht')
-      have hU : UniqueAdmission
+      have hU : UniqueBothWays
           (opts.map fun t' => optionSemOf (denote fuel t') (specOf t')) := hob.2
       have hW : ∀ m, unanimous (opts.map fun t' => (denote fuel t').μ) = some m →
           ∀ o ∈ opts.map fun t' => optionSemOf (denote fuel t') (specOf t'),
