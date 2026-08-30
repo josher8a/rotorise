@@ -125,6 +125,8 @@ halves by construction, which is what §3 argues an ad-hoc gate forgets. -/
 #assert_axioms admList_of_mem
 #assert_axioms admAList_of_mem
 #assert_axioms identList_of_admList
+#assert_axioms uAtCan_of_refine_disjoint_of_typed
+#assert_axioms uAtCan_refine_container
 #assert_axioms uAtCan_boolLiterals
 #assert_axioms admA_literalS_sees
 #assert_axioms admA_literalN_blind

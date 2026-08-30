@@ -857,6 +857,22 @@ theorem uAtCan_of_refine_disjoint (fuel : Nat) {base : Term} {qs : List (Value �
         restrict_p.mpr ⟨hlaw.retract hb, hq⟩]
       rfl
 
+/-- **Literals over any base, in one theorem.** Drop the lawfulness side-condition by
+    taking it from soundness, and what is left is the whole result: for *any derivable
+    term* as base, a union of refinements with pairwise disjoint predicates admits uniquely
+    on both sides.
+
+    §3's `(literal-S)` and `(literal-N)` are two instantiations — `string` and the ungated
+    double codec, at `∈ ℓ`. `boolean` and `binary` are two more, for which §3 writes no
+    rule. And the base need not be ground at all: a union of disjoint refinements of one
+    `object`, or of one `union`, discharges by the same theorem. There was never a
+    per-member argument to make. -/
+theorem uAtCan_of_refine_disjoint_of_typed (fuel : Nat) {base : Term} {T μ}
+    {qs : List (Value → Bool)} (h : Typed base T μ) (hob : Obligations fuel base)
+    (hdisj : List.Pairwise (fun q q' => ∀ v, q v = true → q' v = false) qs) :
+    UAtCan (fuel+1) (qs.map (fun q => Term.refine base q)) :=
+  uAtCan_of_refine_disjoint fuel (soundness_both fuel h hob).1 hdisj
+
 /-! ### Literals over a primitive §3 gives no `literal` rule for
 
     §3 names two `literal` rules, at `S` and at `N`. Nothing makes those two special: a
@@ -874,6 +890,15 @@ def isFalseV : Value → Bool := fun v => match v with | .bool b => !b | _ => fa
 /-- It is derivable, with the member the base names — no rule of its own. -/
 theorem typed_boolLiteral : ∃ T, Typed (.refine .boolean isTrueV) T (some .BOOL) :=
   ⟨_, Typed.refine Typed.boolean⟩
+
+/-- A base that is not ground at all, to show the theorem does not care. Two disjoint
+    refinements of one `array(string)` separate exactly as two literals over `string` do —
+    "literal" was never the operative word, "one base, disjoint predicates" was. -/
+theorem uAtCan_refine_container (fuel : Nat) {q q' : Value → Bool}
+    (hd : List.Pairwise (fun a b => ∀ v, a v = true → b v = false) [q, q']) :
+    UAtCan (fuel+2) [Term.refine (.array .string) q, Term.refine (.array .string) q'] :=
+  uAtCan_of_refine_disjoint_of_typed (fuel+1) (Typed.array Typed.string)
+    (by cases fuel <;> trivial) hd
 
 /-- And a union of two discharges on **both** sides, by the same shared-base argument that
     settles numeric literals — a primitive §3 never wrote a `literal` rule for. -/
