@@ -40,16 +40,18 @@ way.
 
 namespace Calculus
 
-/-- `Uν` does not admit the empty set — the premise `Typing.lean` now carries. -/
-theorem not_hopaque_set_nil (lossy : Bool) : ¬ HOpaque lossy (Value.set []) := by
+/-- `Uν` does not admit the empty set — the premise `Typing.lean` now carries. With the
+    set types typed, "empty" is `∅` in one of three `Finset`s rather than `[]` in a list,
+    and the argument is the same at each. -/
+theorem not_hopaque_set_nil (lossy : Bool) : ¬ HOpaque lossy (Value.strSet ∅) := by
   intro h
   cases h with
-  | set vs hne hs => exact hne rfl
+  | strSet S hne => exact absurd hne (by simp)
 
-/-- Nor could it ever have: no fuel holds `set []`. `setCodec` demands a nonempty element
-    list, and every other option is a different kind. -/
+/-- Nor could it ever have: no fuel holds the empty set. `setCodec` demands a nonempty
+    element set, and every other option is a different kind. -/
 theorem opaqCodec_T_set_nil (lossy : Bool) :
-    ∀ n, ¬ (opaqCodec n lossy).T (Value.set []) := by
+    ∀ n, ¬ (opaqCodec n lossy).T (Value.strSet ∅) := by
   intro n hn
   cases n with
   | zero => exact hn
@@ -61,24 +63,25 @@ theorem opaqCodec_T_set_nil (lossy : Bool) :
         simp_all [OptionSem.byAttempt, stringCodec, booleanCodec, binaryCodec, nullCodec,
                   numberCodec, Codec.empty, setCodec, arrayCodec, recordCodec]
 
-theorem opaqCodecω_T_set_nil (lossy : Bool) : ¬ (opaqCodecω lossy).T (Value.set []) := by
+theorem opaqCodecω_T_set_nil (lossy : Bool) :
+    ¬ (opaqCodecω lossy).T (Value.strSet ∅) := by
   rintro ⟨n, hn⟩
   exact opaqCodec_T_set_nil lossy n hn
 
-/-- And nothing is written for it: `asWireSet []` refuses, so no option admits. -/
+/-- And nothing is written for it: `encSet` refuses a card-zero set, so no option admits. -/
 theorem opaqCodecω_e_set_nil (lossy : Bool) :
-    (opaqCodecω lossy).e (Value.set []) = none := by
-  show (opaqCodec (Value.depth (Value.set [])) lossy).e (Value.set []) = none
-  have hd : Value.depth (Value.set []) = 1 + 1 := rfl
-  rw [hd, opaqCodec_e_set]
-  simp [setCodec, traverse, asWireSet]
+    (opaqCodecω lossy).e (Value.strSet ∅) = none := by
+  show (opaqCodec (Value.depth (Value.strSet ∅)) lossy).e (Value.strSet ∅) = none
+  have hd : Value.depth (Value.strSet (∅ : Finset String)) = 1 + 1 := rfl
+  rw [hd, opaqCodec_e_strSet]
+  simp [setCodec, encSet]
 
 /-- The three agree, which is what makes the corrected `Uν` the right one: the value the
     old inductive admitted is held by no fuel and written by none. -/
 theorem set_nil_outside_opaque (lossy : Bool) :
-    ¬ HOpaque lossy (Value.set [])
-    ∧ ¬ (opaqCodecω lossy).T (Value.set [])
-    ∧ (opaqCodecω lossy).e (Value.set []) = none :=
+    ¬ HOpaque lossy (Value.strSet ∅)
+    ∧ ¬ (opaqCodecω lossy).T (Value.strSet ∅)
+    ∧ (opaqCodecω lossy).e (Value.strSet ∅) = none :=
   ⟨not_hopaque_set_nil lossy, opaqCodecω_T_set_nil lossy, opaqCodecω_e_set_nil lossy⟩
 
 /-! ## `T` as an identity, for `opaque`
@@ -117,13 +120,27 @@ theorem hopaque_T (lossy : Bool) :
         subst hl
         exact ⟨.byAttempt (if true then numberCodec else Codec.empty), by simp [opaqOptions],
                ⟨d, rfl, hw⟩⟩
-  | .set vs, n, h, hd => by
+  | .strSet S, n, h, hd => by
       cases n with | zero => exact absurd hd (by simp [Value.depth]) | succ n' =>
       cases h with
-      | set _ hne hall =>
-        have hL : Value.depthL vs <= n' := by simp only [Value.depth] at hd; omega
+      | strSet _ hne hall =>
         exact ⟨.byAttempt (setCodec (opaqCodec n' lossy)), by simp [opaqOptions],
-               ⟨hne, hopaque_TL lossy vs n' hall hL⟩⟩
+               ⟨hne, fun x hx => hopaque_T lossy (.str x) n' (hall x hx) (by
+                  simp only [Value.depth] at hd ⊢; omega)⟩⟩
+  | .numSet S, n, h, hd => by
+      cases n with | zero => exact absurd hd (by simp [Value.depth]) | succ n' =>
+      cases h with
+      | numSet _ hne hall =>
+        exact ⟨.byAttempt (setCodec (opaqCodec n' lossy)), by simp [opaqOptions],
+               ⟨hne, fun x hx => hopaque_T lossy (.num x) n' (hall x hx) (by
+                  simp only [Value.depth] at hd ⊢; omega)⟩⟩
+  | .binSet S, n, h, hd => by
+      cases n with | zero => exact absurd hd (by simp [Value.depth]) | succ n' =>
+      cases h with
+      | binSet _ hne hall =>
+        exact ⟨.byAttempt (setCodec (opaqCodec n' lossy)), by simp [opaqOptions],
+               ⟨hne, fun x hx => hopaque_T lossy (.bin x) n' (hall x hx) (by
+                  simp only [Value.depth] at hd ⊢; omega)⟩⟩
   | .arr vs, n, h, hd => by
       cases n with | zero => exact absurd hd (by simp [Value.depth]) | succ n' =>
       cases h with

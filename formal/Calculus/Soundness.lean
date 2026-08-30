@@ -739,13 +739,12 @@ theorem opaq_TSub : ∀ (fuel : Nat) (lossy : Bool) (v : Value),
         obtain ⟨d, rfl, hw⟩ := hT
         exact .num d rfl hw
     · cases v <;> first
-        | (obtain ⟨hne, -⟩ := hT; exact .strSet _ hne)
         | (obtain ⟨hne, hall⟩ := hT
-           obtain ⟨d, hd⟩ := hne
-           exact .numSet _ ⟨d, hd⟩ (by
-             cases ih (Value.num d) (hall d hd) with
-             | num _ hl _ => exact hl))
-        | (obtain ⟨hne, -⟩ := hT; exact .binSet _ hne)
+           exact .strSet _ hne fun s hs => ih (Value.str s) (hall s hs))
+        | (obtain ⟨hne, hall⟩ := hT
+           exact .numSet _ hne fun d hd => ih (Value.num d) (hall d hd))
+        | (obtain ⟨hne, hall⟩ := hT
+           exact .binSet _ hne fun b hb => ih (Value.bin b) (hall b hb))
         | exact nomatch hT
     · cases v <;> first
         | exact .arr _ fun x hx => ih x (hT x hx)
