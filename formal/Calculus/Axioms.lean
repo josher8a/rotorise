@@ -94,6 +94,10 @@ rests on it. -/
 #assert_axioms admDisj_ident
 #assert_axioms sepV_string_dunion_nil
 
+/-! `(union)`'s residue, and the bridge every discharger now crosses. -/
+
+#assert_axioms uAtAct_of_uAtCan
+
 /-! `through_p` is the fact the `held` row rests on — `g` post-processes a read and is
 total, so `dom(p)` is the subterm's exactly. It is cited as a result now, so it is guarded
 like one. -/

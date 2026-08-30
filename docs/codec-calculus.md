@@ -433,9 +433,21 @@ A union's pair is defined by **unique admission**. Each option answers, per inpu
 whether the input could be its — an attribute on the way out, a value on the way in — and the union
 acts through the option that answers alone:
 
-|       |                                       |                                                                    |
-| ----- | ------------------------------------- | ------------------------------------------------------------------ |
-| **U** | `∀ input. ∣{ i : cᵢ admits it }∣ = 1` | Per value and per attribute. Ambiguity is a failure, never a rank. |
+|       |                                                              |                                                                                                                       |
+| ----- | ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| **U** | resolving one side alone resolves the other, the same option | Asked where the union *acts*: at each value it writes, and each attribute it reads. Ambiguity is a failure, never a rank. |
+
+Read **(U)** carefully, because the scope is the whole content. `∣{i : cᵢ admits it}∣ = 1` at
+*every* input would be a stronger demand, and a wrong one: where two options both admit, the union
+is simply undefined, and a law quantified over `dom` cannot reach an input the pair declines. What
+the laws need is that ambiguity never appears *on the far side of a round trip the union did take* —
+`e(t)` unambiguous on the way out obliges `e(t)` to be unambiguous on the way back. An input the
+union refuses outright asks nothing of anyone.
+
+The difference is not idle, and it is where working schemas sit.
+`union(array(literal("A")), array(literal("B")))` has both options admitting `[]`, so it declines to
+write the empty array — but every value it does write is read back by the one option that wrote it.
+Under the stronger reading the union is refused; under this one it is lawful, minus the empty case.
 
 Declaration order is never consulted — which is what puts commutativity in §6, and why `legacy`'s
 coherence premise (§3) matters beyond `legacy`: a precedence between readings anywhere in the
@@ -666,7 +678,7 @@ question about attributes.
 Every derivable `⊢ c : T ⇝ μ`, and every `⊢ f : T ⊗ π ⇝ μ`, denotes a pair satisfying **(R)**,
 **(C)**, **(W)**, and **(MP)** in the strong form `e(p(a)) ≼ a` defined below — with two residues,
 both named exactly: **(MP)** is off on the attributes a `legacy` in the derivation rereads, and
-every `(union)` in the derivation carries **(U)** _at its canonical inputs_ as an obligation, which
+every `(union)` in the derivation carries **(U)** _where the union acts_ as an obligation, which
 the dischargers of this section settle at the declaration wherever they decide a pair — `(dunion)`
 and `opaque` outright.
 
@@ -793,10 +805,12 @@ and `pᵢ(a)` is defined, and admits value `t` when the `κ`/name filter passes 
 defined. `p(a) = pᵢ(a)` for the unique admitting `i`, else undefined; `e(t)` dually — **(U)** as
 semantics rather than aspiration. The laws, and where each needs **(U)**:
 
-- **(R)**: `t ∈ dom(e)` names a unique `i`, and `i` admits `eᵢ(t)` back (the premise's **(R)**);
-  _uniqueness_ of that admission is **(U)** on the attribute side at a canonical input — the
-  theorem's residue. Where it holds, `p(e(t)) = pᵢ(eᵢ(t)) = t`. Partiality cannot hide this: an
-  ambiguous `e(t)` makes `p(e(t))` undefined, which **(R)** counts as failure.
+- **(R)**: `t ∈ dom(e)` names a unique `i` — that is what makes `e(t)` defined at all — and `i`
+  admits `eᵢ(t)` back (the premise's **(R)**); _uniqueness_ of that admission is **(U)** on the
+  attribute side, asked at exactly the attributes the union writes. Where it holds,
+  `p(e(t)) = pᵢ(eᵢ(t)) = t`. Partiality cannot hide this: an ambiguous `e(t)` makes `p(e(t))`
+  undefined, which **(R)** counts as failure. What partiality _does_ excuse is the input the union
+  never wrote: `t ∉ dom(e)` is outside **(R)**'s quantifier, so an ambiguity there costs nothing.
 - **(C)**: `a ∈ dom(p)` names a unique `i`; `pᵢ(a) ∈ dom(eᵢ)` by the premise's **(C)**, so `i`
   admits it, and uniqueness is **(U)** on the value side. Where it holds, `p(a) ∈ dom(e)`.
 - `≼`: with both uniquenesses the route is the _same option in both directions_ — `i` admits

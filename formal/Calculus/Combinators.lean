@@ -1337,11 +1337,40 @@ def optionSemOf (c : Codec) : Option (List (Name × Bool)) → OptionSem
   | some spec => .byNames spec c
   | none => .byAttempt c
 
-/-- §5 (U): every canonical pair of an option is admitted by that option alone, on
-    both sides. The residue of the soundness theorem, as a premise. -/
+/-- §5 (U) at every option's canonical pairs: each is admitted by that option alone, on
+    both sides. The strong form, and what every discharger in `Discharge` produces. -/
 def UniqueAdmission (os : List OptionSem) : Prop :=
   ∀ o ∈ os, ∀ t a, o.c.e t = some a →
     os.filter (·.admitA a) = [o] ∧ os.filter (·.admitV t) = [o]
+
+/-- **§5 (U) where the laws consume it**, and the soundness theorem's actual residue.
+
+    `UniqueAdmission` quantifies over every canonical pair of every *option*. The four
+    laws never ask that much: they ask only about inputs the *union itself* resolves,
+    because `altCodec` is undefined wherever the filter is not a singleton, and a law
+    quantified over `dom` cannot reach an input the pair declines. This is that
+    restriction — resolving one side of the pair resolves the other, through the same
+    option — and the three uses in `lawfulCore_altCodec` and `lawful_altCodec` are
+    exactly its two clauses.
+
+    Strictly weaker, and the gap holds working schemas.
+    `union(array(literal "A"), array(literal "B"))` collides at `[]`, which is a
+    canonical pair of each option and so refutes `UniqueAdmission`
+    (`not_uAtCan_array_literals`) — while the union declines to write `[]` at all, so it
+    never acts there and no law is ever asked. `adm` stops at the containers (§5), which
+    is why the collision is the empty case and nothing else. -/
+def UniqueBothWays (os : List OptionSem) : Prop :=
+  (∀ o ∈ os, ∀ t a, os.filter (·.admitV t) = [o] → o.c.e t = some a →
+    os.filter (·.admitA a) = [o]) ∧
+  (∀ o ∈ os, ∀ a t a', os.filter (·.admitA a) = [o] → o.c.p a = some t →
+    o.c.e t = some a' → os.filter (·.admitV t) = [o])
+
+/-- The strong form implies the one the laws need — so every discharger still discharges,
+    unchanged. The converse fails, which is the whole point. -/
+theorem uniqueBothWays_of_uniqueAdmission {os : List OptionSem}
+    (hU : UniqueAdmission os) : UniqueBothWays os :=
+  ⟨fun o ho t a _ he => (hU o ho t a he).1,
+   fun o ho _ t a' _ _ he => (hU o ho t a' he).2⟩
 
 /-- A union's member: `μ` when unanimous, else `⊤` (§5 `(union)`). -/
 def unanimous : List (Option Member) → Option Member
@@ -2895,19 +2924,19 @@ theorem lawfulCore_objectCodec {sems : List (Name × FieldSem)} {rest : RestSem}
     the only one admitting either side of the pair, so the round trip comes back through
     the same option it went out through. -/
 theorem lawfulCore_altCodec {os : List OptionSem} {μA : Option Member}
-    (h : ∀ o ∈ os, LawfulCore o.c) (hU : UniqueAdmission os)
+    (h : ∀ o ∈ os, LawfulCore o.c) (hU : UniqueBothWays os)
     (hW : ∀ m, μA = some m → ∀ o ∈ os, ∀ t a, o.c.e t = some a → a.member = m) :
     LawfulCore (altCodec os μA) where
   retract he := by
     obtain ⟨o, hf, hoe⟩ := altCodec_e.mp he
     have ho := (mem_of_filter_eq_singleton hf).1
-    exact altCodec_p.mpr ⟨o, (hU o ho _ _ hoe).1, (h o ho).retract hoe⟩
+    exact altCodec_p.mpr ⟨o, hU.1 o ho _ _ hf hoe, (h o ho).retract hoe⟩
   canon hp := by
     obtain ⟨o, hf, hop⟩ := altCodec_p.mp hp
     have ho := (mem_of_filter_eq_singleton hf).1
     obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp ((h o ho).canon hop)
     exact Option.isSome_iff_exists.mpr
-      ⟨a', altCodec_e.mpr ⟨o, (hU o ho _ _ ha').2, ha'⟩⟩
+      ⟨a', altCodec_e.mpr ⟨o, hU.2 o ho _ _ _ hf hop ha', ha'⟩⟩
   writes := by
     intro μ hμ t a he
     obtain ⟨o, hf, hoe⟩ := altCodec_e.mp he
@@ -2916,7 +2945,7 @@ theorem lawfulCore_altCodec {os : List OptionSem} {μA : Option Member}
 /-- …and (MP) with them: the option that read is the option that re-writes, again by
     (U), so `≼` at the union is `≼` at that one option. -/
 theorem lawful_altCodec {os : List OptionSem} {μA : Option Member}
-    (h : ∀ o ∈ os, Lawful o.c) (hU : UniqueAdmission os)
+    (h : ∀ o ∈ os, Lawful o.c) (hU : UniqueBothWays os)
     (hW : ∀ m, μA = some m → ∀ o ∈ os, ∀ t a, o.c.e t = some a → a.member = m) :
     Lawful (altCodec os μA) :=
   { lawfulCore_altCodec (fun o ho => (h o ho).core) hU hW with
@@ -2925,7 +2954,7 @@ theorem lawful_altCodec {os : List OptionSem} {μA : Option Member}
       obtain ⟨o, hf, hop⟩ := altCodec_p.mp hp
       have ho := (mem_of_filter_eq_singleton hf).1
       obtain ⟨a'', ha''⟩ := Option.isSome_iff_exists.mp ((h o ho).canon hop)
-      obtain ⟨-, hV⟩ := hU o ho t a'' ha''
+      have hV := hU.2 o ho _ _ _ hf hop ha''
       obtain ⟨o', hf', hoe⟩ := altCodec_e.mp he
       have hoo : o' = o := by simpa using hf'.symm.trans hV
       subst hoo
@@ -3045,7 +3074,8 @@ theorem lawful_dunionCodec {d : Name} {os : List (List String × Codec)}
         (∃ kvs, t = .map kvs ∧ kvs.lookup d = some (.str tag)))
     (hdisj : List.Pairwise (fun x y => ∀ tag ∈ x.1, tag ∉ y.1) os) :
     Lawful (dunionCodec d os) :=
-  lawful_altCodec (forall_mem_map h) (uniqueAdmission_byTag hstamp hdisj)
+  lawful_altCodec (forall_mem_map h)
+    (uniqueBothWays_of_uniqueAdmission (uniqueAdmission_byTag hstamp hdisj))
     (dunion_writes hstamp)
 
 /-- Core `(dunion)`: the same corollary, with core options. -/
@@ -3056,7 +3086,8 @@ theorem lawfulCore_dunionCodec {d : Name} {os : List (List String × Codec)}
         (∃ kvs, t = .map kvs ∧ kvs.lookup d = some (.str tag)))
     (hdisj : List.Pairwise (fun x y => ∀ tag ∈ x.1, tag ∉ y.1) os) :
     LawfulCore (dunionCodec d os) :=
-  lawfulCore_altCodec (forall_mem_map h) (uniqueAdmission_byTag hstamp hdisj)
+  lawfulCore_altCodec (forall_mem_map h)
+    (uniqueBothWays_of_uniqueAdmission (uniqueAdmission_byTag hstamp hdisj))
     (dunion_writes hstamp)
 
 /-! ### `opaque`'s options, each pinned to its kind -/
@@ -3158,7 +3189,8 @@ theorem lawful_opaqCodec : ∀ (fuel : Nat) (lossy : Bool), Lawful (opaqCodec fu
   | fuel+1, lossy =>
     -- `μ` is `⊤`: the options name eight different members, so `unanimous` is `none`
     have hop : Lawful (opaqCodec fuel lossy) := lawful_opaqCodec fuel lossy
-    lawful_altCodec (lawful_opaqOptions hop) (uniqueAdmission_opaque fuel lossy hop)
+    lawful_altCodec (lawful_opaqOptions hop)
+      (uniqueBothWays_of_uniqueAdmission (uniqueAdmission_opaque fuel lossy hop))
       (fun _ hm => nomatch hm)
 
 end
