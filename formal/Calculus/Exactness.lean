@@ -67,10 +67,14 @@ noncomputable def Adm : Term → Value → Bool
   | .nullable t => fun v => Adm t v || (match v with | .null => true | _ => false)
   | .union opts => fun v => AdmAny opts v
   -- `set` recurses like the other containers, and adds the non-emptiness `asWireSet`
-  -- demands. What it cannot add is payload homogeneity — that follows from the element's
-  -- member being ground, which is the `(set)` rule's own premise and not a fact about `v`.
+  -- demands. Homogeneity is no longer a row's problem at all: §1's three set types are
+  -- three constructors, so an element's kind is fixed by which one it is.
   | .set c      => fun v =>
-      match v with | .set vs => !vs.isEmpty && AdmAll c vs | _ => false
+      match v with
+      | .strSet S => !S.card.beq 0 && decide (∀ s ∈ S, Adm c (.str s) = true)
+      | .numSet S => !S.card.beq 0 && decide (∀ d ∈ S, Adm c (.num d) = true)
+      | .binSet S => !S.card.beq 0 && decide (∀ b ∈ S, Adm c (.bin b) = true)
+      | _ => false
   | .tuple _ _  => fun v => match v with | .arr _ => true | _ => false
   | .object _ _ => fun v => match v with | .map _ => true | _ => false
   | .dunion d opts => fun v =>
@@ -503,13 +507,19 @@ excuse names a real phenomenon, not that it is tight on every term of that shape
 `covers` to a shape that is always exact is still caught; widening it to one that is
 sometimes exact is not, and that is the residual softness. -/
 
-/-- `set`'s kind gate over-claims: `asWireSet` refuses the empty run at every element type. -/
-theorem not_ExactV_set : ¬ ExactV (.set (.union [.string, .boolean])) := by
+/-- An adapter that collapses two distinct strings onto one. -/
+def collapse : Value → Value := fun _ => .str "x"
+
+/-- **`set`'s row still over-claims, but no longer for the reason §5 gave.** Heterogeneity
+    is gone — a value set is typed, so its elements cannot differ in kind. What remains is
+    *collision*: the row asks that every element write, and `encSet` asks in addition that
+    they write to **distinct** payloads, because a set codec that merged two elements could
+    not retract. -/
+theorem not_ExactV_set : ¬ ExactV (.set (.held .string collapse (fun v => v))) := by
   intro h
-  have h2 := (h (.set [.str "a", .bool true])).mp (by simp [Adm, AdmAll, AdmAny])
-  simp [denoteω, denoteωOpts, specOf, optionSemOf, altCodec, select, OptionSem.byAttempt,
-        stringCodec, booleanCodec, setCodec, traverse, asWireSet, strPayloads, numPayloads,
-        binPayloads, sC, nC, bC] at h2
+  have h2 := (h (.strSet {"a", "b"})).mp (by simp [Adm, collapse])
+  simp [denoteω, setCodec, encSet, Codec.through, stringCodec, collapse, setImage,
+        sC, nC, bC] at h2
 
 /-- `tuple`'s over-claims on alignment: one component against two elements. -/
 theorem not_ExactV_tuple : ¬ ExactV (.tuple [.string] none) := by
@@ -533,14 +543,14 @@ theorem not_ExactV_union : ¬ ExactV (.union [.string, .string]) := by
     needs nothing. -/
 theorem not_ExactV_opaq (lossy : Bool) : ¬ ExactV (.opaq lossy) := by
   intro h
-  have h2 := (h (.set [])).mp (by simp [Adm])
-  have hd : (denoteω (Term.opaq lossy)).e (.set [])
-      = (setCodec (opaqCodec 1 lossy)).e (.set []) := by
-    show (opaqCodecω lossy).e (.set []) = _
-    simp only [opaqCodecω, Value.depth, Value.depthL]
-    exact opaqCodec_e_set lossy 1 []
+  have h2 := (h (.strSet ∅)).mp (by simp [Adm])
+  have hd : (denoteω (Term.opaq lossy)).e (.strSet ∅)
+      = (setCodec (opaqCodec 1 lossy)).e (.strSet ∅) := by
+    show (opaqCodecω lossy).e (.strSet ∅) = _
+    simp only [opaqCodecω, Value.depth]
+    exact opaqCodec_e_strSet lossy 1 ∅
   rw [hd] at h2
-  simp [setCodec, traverse, asWireSet] at h2
+  simp [setCodec, encSet] at h2
 
 /-- **Every excuse is earned.** Exhaustive over `Excuse`, so a new constructor must come
     with a term of a shape it covers on which exactness actually fails — which, for a shape
