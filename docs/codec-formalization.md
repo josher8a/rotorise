@@ -1318,6 +1318,34 @@ a semantic obligation, neither of which a `Bool` on terms can carry. The witness
 `set(union(string, boolean))`, whose element has no unanimous member and whose encodings are
 genuinely heterogeneous.
 
+### One where the model represents a set as a list, and §2 reasons about the difference
+
+Asking what `set` *is* — a union without repetition? a tuple of at least one, order not mattering? —
+separates into three readings, two right and one that turns up a defect.
+
+It is **not** a union: a union is a choice among *codecs* resolved by (U), while a set's elements all
+go through **one** codec, which is exactly why `set` needs no uniqueness obligation and `union` does.
+
+It **is** `array` with a partial wrapper. `setCodec_e_via_arrayCodec` shows the two sharing
+`traverse c.e vs` exactly and differing only in presentation — the total constructor `Attr.l`
+against the partial `asWireSet`. Every difference between the rows is that partiality: the
+non-emptiness `set` gains, and the homogeneity that keeps it out of `Analysable`. (It is not
+`entrywise`, which takes a total `Ctor`.)
+
+But **"order does not matter" is not true of the model**, and §2 depends on it. §1 types `SS` as
+`℘⁺fin(String)` — non-empty, unordered — and §2 names set orderings as the first of three reasons
+`ker p` is not equality: *"two orderings of one set are distinct attributes reading to one value"*.
+`Value.set` is a `List Value` with no quotient and no well-formedness predicate. Orderings are
+preserved on both halves (`set_p_order_sensitive`, `set_e_order_sensitive`) and duplicates survive
+(`set_e_keeps_duplicates`, where `.set [a, a]` writes `SS ["a", "a"]`, which `℘⁺fin` does not
+contain).
+
+Nothing is unsound: the laws hold of the model as written. What is false is §2's stated *reason* for
+the quotient. Two orderings read to two values, so `ker p` **is** equality at `setCodec`, and the
+collapse §2 attributes to sets does not occur. Either §1's `℘⁺fin` needs a well-formedness predicate
+on `Value.set` the way `Numeral.WF` gates `N`, or §2 should not cite sets among the three reasons.
+The other two — `η` normalising `N`, and `drop` discarding names — are unaffected.
+
 ## §5 Certifying an implementation
 
 The calculus is portable by design: nothing in it is TypeScript, and nothing is Rotorise. An

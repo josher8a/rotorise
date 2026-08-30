@@ -1530,5 +1530,62 @@ theorem not_sepJV_array_literals :
   intro h
   exact absurd (h (.arr []) (by simp [Adm, AdmAll])) (by simp [Adm, AdmAll])
 
+/-! ### What `set` is, structurally — and one thing it is not
+
+Three readings are worth separating, because two are right and the third turns up a defect.
+
+**Not a `union`.** A union is a choice among *codecs*, resolved by (U); `set`'s elements all
+go through **one** codec, so no uniqueness obligation arises. That is the whole reason `set`
+is exact-modulo-homogeneity while `union` is exact only under (U).
+
+**Yes, `array` with a partial wrapper.** `setCodec_e_via_arrayCodec`: the two share
+`traverse c.e vs` exactly, and differ only in how the payload list is presented — the total
+constructor `Attr.l` against the partial `asWireSet`. Every difference between the rows is
+that partiality: the non-emptiness `set` gains, and the homogeneity that keeps it out of
+`Analysable`. `set` is not `entrywise`, which takes a total `Ctor`; it is the same traversal
+under a wrapper that can fail.
+
+**But not "order does not matter".** §1 types `SS` as `℘⁺fin(String)` — non-empty,
+*unordered* — and §2 names set orderings as the first of three reasons `ker p` is not
+equality: "two orderings of one set are distinct attributes reading to one value". The model
+does not do that. `Value.set` is a `List Value` with no quotient and no well-formedness
+predicate, so orderings are preserved on both halves (`set_p_order_sensitive`,
+`set_e_order_sensitive`) and duplicates survive (`set_e_keeps_duplicates`).
+
+Nothing here is unsound — the laws hold of the model as written. What is false is §2's
+stated *reason* for the quotient, at least as the formalization realises §1: two orderings
+read to two values, so `ker p` is equality at `setCodec` and the collapse §2 attributes to
+sets does not happen. -/
+
+/-- `set` and `array` are one entrywise product with two presentations: the same
+    `traverse c.e vs`, wrapped by a *total* constructor in one case and a *partial* one in
+    the other. Every difference between the two rows is `asWireSet`'s partiality. -/
+theorem setCodec_e_via_arrayCodec (c : Codec) (vs : List Value) :
+    (setCodec c).e (.set vs)
+      = ((arrayCodec c).e (.arr vs)).bind
+          (fun a => match a with | .l as => asWireSet as | _ => none) := by
+  simp only [setCodec, arrayCodec]
+  cases traverse c.e vs <;> rfl
+
+/-- **The model's wire sets are ordered.** Two orderings of one set read to two *different*
+    values, so `ker p` is equality here — where §2 of the calculus says the quotient
+    collapses precisely because "two orderings of one set are distinct attributes reading
+    to one value". -/
+theorem set_p_order_sensitive :
+    (setCodec stringCodec).p (.ss ["a", "b"])
+      ≠ (setCodec stringCodec).p (.ss ["b", "a"]) := by
+  simp [setCodec, stringCodec, traverse]
+
+/-- …and on the write side too: two orderings of one value are two attributes. -/
+theorem set_e_order_sensitive :
+    (setCodec stringCodec).e (.set [.str "a", .str "b"])
+      ≠ (setCodec stringCodec).e (.set [.str "b", .str "a"]) := by
+  simp [setCodec, stringCodec, traverse, asWireSet, strPayloads, sC]
+
+/-- Duplicates survive as well, which `℘⁺fin` does not permit. -/
+theorem set_e_keeps_duplicates :
+    (setCodec stringCodec).e (.set [.str "a", .str "a"]) = some (.ss ["a", "a"]) := by
+  simp [setCodec, stringCodec, traverse, asWireSet, strPayloads, sC]
+
 end
 end Calculus
