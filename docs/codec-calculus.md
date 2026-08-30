@@ -158,6 +158,45 @@ an iso and `refine` its prism, and §6's `legacy(c, r) ≈ c` on `Can(c)` is the
 term level. That is not a coincidence but it is not a theorem either — the algebra that builds
 codecs relaxes an iso in the two ways a codec itself does.
 
+### When the deviations vanish
+
+Both extensions can be driven to zero, and asking what it takes is the cleanest way to see what
+each one is really for. They do not have the same answer, and in this calculus they cannot be
+answered at once.
+
+**The quotient collapses** when `ker p` is equality — when no two distinct attributes read to one
+value. That fails for exactly three reasons, and only one of them is about the medium:
+
+- **`SS`, `NS`, `BS` are sets** (§1). Two orderings of one set are distinct attributes reading to
+  one value. This is a fact about the _domain_, not about how it is written down; any medium that
+  can store a set has it.
+- **`η` normalises `N`** (§3). This is the medium, and it is the calculus's one concession to
+  something it does not model.
+- **`drop` discards undeclared names** (§4). This is a schema's own decision, taken deliberately.
+
+So a codec collapses the quotient by holding no set, reading no normalised numeral, and declaring
+every name it means to keep. `decimal` is the witness that this is reachable: its `ker p` is
+equality, which is precisely why its held set had to be narrowed to `Stored`.
+
+**Partiality collapses** when `dom(p) = 𝔸` — when every attribute the domain admits is one this
+codec reads. And here the answer is structural rather than a matter of care: **§1 fixes one `𝔸`
+for many `T`.** A table holds items of several schemas; a codec is a retract of the domain, not a
+description of it. So partiality is not a tax on textual representation, and no choice of format
+removes it. It is the price of the domain being _shared_ — and it would be paid identically by a
+free algebra, a fixed-width binary layout, or a memory image, as long as more than one `T` lives in
+one `𝔸`. What removes it is one schema per store, which is a different architecture rather than a
+better encoding.
+
+**They do not collapse together.** `decimal` kills the quotient and keeps partiality; `opaque(lossy)`
+comes closest to reading all of `𝔸` and keeps the quotient, since its `N` option reads through the
+numeral-to-double reading. No term of this calculus has both at once, and §1 is why.
+
+One deviation _does_ have a clean term-level answer, and it is worth separating from the other two
+because it is often mistaken for them. Ambiguity in a `union` is not a property of the medium at
+all — it is what happens when a choice is written without a tag. `(dunion)` is the tagged case, and
+its **(U)** is a theorem rather than an obligation (§5). Whatever the storage looks like, that
+collapse is available by declaring the discriminator.
+
 ---
 
 ## §3 The judgement
