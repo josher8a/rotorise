@@ -528,5 +528,264 @@ theorem excuse_witnessed : ∀ e : Excuse, ∃ t : Term, e.covers t = true ∧ �
   | .nameAdmission   => ⟨.tuple [.string] none, rfl, not_ExactV_tuple⟩
   | .nullOwnership   => ⟨.nullable (.legacy .string rNull), rfl, not_ExactV_nullable⟩
 
+/-! ## The attribute side
+
+`Adm` is the value half. `admA` is the attribute half of §5's tables, and it has no
+`Adm`-shaped counterpart — which is the first reason the analysis tables cannot simply be
+renamed onto `Adm`. `AdmA` below is that counterpart's definition and its soundness proof.
+
+The mirror is not symmetric, and the asymmetries are §1's rather than this file's: the
+numeric rows go through `Double.ofDec`, `refine` cannot narrow a read, and `legacy` widens
+one. Each is a row here rather than a remark. -/
+
+mutual
+
+/-- **The joint admission predicate, attribute side.** The mirror of `Adm` across §1's
+    asymmetry, and it is not a symmetric mirror — three rows differ in kind, not degree.
+
+    * `number`, `literalN` and a numeric `literal` go through `Double.ofDec`, which is
+      axiomatized. The domain is still *expressible* — `ofDec` is a function and this row
+      may call it — so these rows are sharper here than §5's `⊤`, at the cost of being
+      `noncomputable`, which `adm` already was.
+    * `refine` cannot narrow here: `q` tests the value a read *produces*, and no syntactic
+      set of attributes bounds that. The row passes the subterm's through, which is sound
+      and not exact.
+    * `legacy` is `⊤`, because `extendRead` widens `p` past the subterm's set — the
+      asymmetry `not_admA_legacy` records, and the reason `adm` and `admA` split at all. -/
+noncomputable def AdmA : Term → Attr → Bool
+  | .string   => fun a => match a with | .s _ => true | _ => false
+  | .boolean  => fun a => match a with | .bool _ => true | _ => false
+  | .binary   => fun a => match a with | .b _ => true | _ => false
+  | .null     => fun a => match a with | .null => true | _ => false
+  | .number   => fun a =>
+      match a with
+      | .n x => (match Double.ofDec x with
+                 | some d => Numeral.WF d.toDec
+                 | none => false)
+      | _ => false
+  | .decimal  => fun a => match a with | .n x => Numeral.Stored x | _ => false
+  | .literalS ls => fun a => match a with | .s s => s ∈ ls | _ => false
+  | .literalN ls => fun a =>
+      match a with
+      | .n x => (match Double.ofDec x with
+                 | some d => decide (d ∈ ls)
+                 | none => false)
+      | _ => false
+  | .literal w => fun a =>
+      match w, a with
+      | .str s, .s s'     => decide (s' = s)
+      | .bool b, .bool b' => decide (b' = b)
+      | .bin b, .b b'     => decide (b' = b)
+      | .null, .null      => true
+      | .num d, .n x      => (match Double.ofDec x with
+                              | some d' => decide (d' = d)
+                              | none => false)
+      | _, _              => false
+  | .custom _ cp => fun a => (cp a).isSome
+  | .array c  => fun a => match a with | .l as => AdmAAll c as | _ => false
+  | .record c => fun a => match a with | .m kas => AdmAAllSnd c kas | _ => false
+  | .held t _ _ => AdmA t
+  | .lazy t   => AdmA t
+  -- hatch
+  | .refine t _ => AdmA t
+  | .legacy _ _ => fun _ => true
+  | .nullable t => fun a => AdmA t a || (match a with | .null => true | _ => false)
+  | .union opts => fun a => AdmAAny opts a
+  | .set _    => fun a => match a with | .ss _ | .ns _ | .bs _ => true | _ => false
+  | .tuple _ _ => fun a => match a with | .l _ => true | _ => false
+  | .object _ _ => fun a => match a with | .m _ => true | _ => false
+  | .dunion d opts => fun a =>
+      match a with
+      | .m kas =>
+        (match kas.lookup d with
+         | some (.s tag) => (allTags d opts).contains tag
+         | _ => false)
+      | _ => false
+  | .opaq _ => fun _ => true
+
+/-- `⋀` of `AdmA` over a container's entries. -/
+noncomputable def AdmAAll : Term → List Attr → Bool
+  | _, [] => true
+  | c, a :: as => AdmA c a && AdmAAll c as
+
+/-- …and over a record's entry attributes. -/
+noncomputable def AdmAAllSnd : Term → List (Name × Attr) → Bool
+  | _, [] => true
+  | c, ka :: kas => AdmA c ka.2 && AdmAAllSnd c kas
+
+/-- `⋁` over a union's options; sound, and exact only under (U), as on the value side. -/
+noncomputable def AdmAAny : List Term → Attr → Bool
+  | [], _ => false
+  | t :: ts, a => AdmA t a || AdmAAny ts a
+
+end
+
+
+/-- Entrywise soundness lifted to a container's traversal, attribute side. -/
+theorem AdmAAll_sound_aux {c : Term} {C : Codec}
+    (hc : ∀ {a v}, C.p a = some v → AdmA c a = true) :
+    ∀ {as : List Attr} {vs}, traverse C.p as = some vs → AdmAAll c as = true
+  | [], _, _ => by simp [AdmAAll]
+  | x :: as, vs, h => by
+      simp only [traverse] at h
+      cases hx : C.p x with
+      | none => rw [hx] at h; exact nomatch h
+      | some y =>
+        cases hxs : traverse C.p as with
+        | none => rw [hx, hxs] at h; exact nomatch h
+        | some vs' => simp [AdmAAll, hc hx, AdmAAll_sound_aux hc hxs]
+
+/-- …and over a record's entries. -/
+theorem AdmAAllSnd_sound_aux {c : Term} {C : Codec}
+    (hc : ∀ {a v}, C.p a = some v → AdmA c a = true) :
+    ∀ {kas : List (Name × Attr)} {vs},
+      traverse (decPair C) kas = some vs → AdmAAllSnd c kas = true
+  | [], _, _ => by simp [AdmAAllSnd]
+  | ka :: kas, vs, h => by
+      simp only [traverse] at h
+      cases hx : decPair C ka with
+      | none => rw [hx] at h; exact nomatch h
+      | some y =>
+        cases hxs : traverse (decPair C) kas with
+        | none => rw [hx, hxs] at h; exact nomatch h
+        | some vs' =>
+          have hs : (C.p ka.2).isSome = true := by
+            simpa [decPair] using congrArg Option.isSome hx
+          obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp hs
+          simp [AdmAAllSnd, hc hw, AdmAAllSnd_sound_aux hc hxs]
+
+set_option maxHeartbeats 1000000 in
+/-- Soundness of every attribute row, fueled; recursion on fuel, as on the value side. -/
+theorem AdmA_sound_fueled : ∀ (fuel : Nat) (t : Term) {a v},
+    (denote fuel t).p a = some v → AdmA t a = true
+  | 0, _, _, _, hp => nomatch hp
+  | fuel+1, t, a, v, hp => by
+    cases t
+    case string => cases a <;> simp_all [AdmA, denote, stringCodec]
+    case boolean => cases a <;> simp_all [AdmA, denote, booleanCodec]
+    case binary => cases a <;> simp_all [AdmA, denote, binaryCodec]
+    case null => cases a <;> simp_all [AdmA, denote, nullCodec]
+    case number =>
+      cases a
+      case n x =>
+        simp only [denote, numberCodec] at hp
+        cases hx : Double.ofDec x <;> rw [hx] at hp <;> simp_all [AdmA]
+      all_goals (simp only [denote, numberCodec] at hp; exact nomatch hp)
+    case decimal => cases a <;> simp_all [AdmA, denote, decimalCodec]
+    case literalS ls => cases a <;> simp_all [AdmA, denote, literalSCodec]
+    case literalN ls =>
+      cases a
+      case n x =>
+        simp only [denote, literalNCodec] at hp
+        cases hx : Double.ofDec x <;> rw [hx] at hp <;> simp_all [AdmA]
+      all_goals (simp only [denote, literalNCodec] at hp; exact nomatch hp)
+    case literal w =>
+      cases w
+      case num d =>
+        cases a
+        case n x =>
+          simp only [denote, literalCodec, Codec.restrict, rawNumberCodec] at hp
+          cases hx : Double.ofDec x with
+          | none => rw [hx] at hp; simp at hp
+          | some d' =>
+            rw [hx] at hp
+            -- keep only `d' = d`: the other conjunct equates the *decoded value* with `v`,
+            -- and `simp_all` will happily rewrite the literal's own payload backwards with it
+            obtain ⟨h1, -⟩ : d' = d ∧ Value.num d' = v := by simpa using hp
+            simp [AdmA, hx, h1]
+        all_goals
+          (simp only [denote, literalCodec, Codec.restrict, rawNumberCodec] at hp
+           exact nomatch hp)
+      -- For every payload but `num`, this row and `admA`'s coincide, so its soundness
+      -- lemma carries: the two part company only where `Double.ofDec` does.
+      -- For every payload but `num` this row and `admA`'s coincide — they part company
+      -- only where `Double.ofDec` does — so `admA_sound` carries them.
+      case str sv =>
+        have heq : AdmA (.literal (.str sv)) a = admA (.literal (.str sv)) a := by
+          cases a <;> simp [AdmA, admA]
+        rw [heq]; exact admA_sound _ _ hp
+      case bool bv =>
+        have heq : AdmA (.literal (.bool bv)) a = admA (.literal (.bool bv)) a := by
+          cases a <;> simp [AdmA, admA]
+        rw [heq]; exact admA_sound _ _ hp
+      case bin bv =>
+        have heq : AdmA (.literal (.bin bv)) a = admA (.literal (.bin bv)) a := by
+          cases a <;> simp [AdmA, admA]
+        rw [heq]; exact admA_sound _ _ hp
+      case null =>
+        have heq : AdmA (.literal .null) a = admA (.literal .null) a := by
+          cases a <;> simp [AdmA, admA]
+        rw [heq]; exact admA_sound _ _ hp
+      -- A container payload has no ground base, so `literalCodec` is `Codec.empty`.
+      all_goals (simp only [denote, literalCodec, Codec.empty] at hp; exact nomatch hp)
+    case custom ce cp => simp_all [AdmA, denote]
+    case opaq lossy => simp [AdmA]
+    case legacy c r => simp [AdmA]
+    case set c => cases a <;> simp_all [AdmA, denote, setCodec]
+    case tuple ts tl => cases a <;> simp_all [AdmA, denote, tupleCodec]
+    case object fs r => cases a <;> simp_all [AdmA, denote, objectCodec, objectCodecCore]
+    case array c =>
+      cases a
+      case l as =>
+        simp only [AdmA]
+        simp only [denote, arrayCodec] at hp
+        obtain ⟨vs, hvs, -⟩ := Option.map_eq_some'.mp hp
+        exact AdmAAll_sound_aux (fun {a v} h => AdmA_sound_fueled fuel c h) hvs
+      all_goals (simp only [denote, arrayCodec] at hp; exact nomatch hp)
+    case record c =>
+      cases a
+      case m kas =>
+        simp only [AdmA]
+        simp only [denote, recordCodec] at hp
+        obtain ⟨vs, hvs, -⟩ := Option.map_eq_some'.mp hp
+        exact AdmAAllSnd_sound_aux (fun {a v} h => AdmA_sound_fueled fuel c h) hvs
+      all_goals (simp only [denote, recordCodec] at hp; exact nomatch hp)
+    case refine c q => simpa [AdmA] using AdmA_sound_fueled fuel c (restrict_p.mp hp).1
+    case lazy c => simpa [AdmA] using AdmA_sound_fueled fuel c hp
+    case held c f g =>
+      obtain ⟨w, hw, -⟩ := through_p.mp hp
+      simpa [AdmA] using AdmA_sound_fueled fuel c hw
+    case nullable c =>
+      cases hw : (denote fuel c).ownsNull with
+      | true =>
+        rw [show (denote (fuel+1) (.nullable c)).p = (denote fuel c).p from
+          withNull_p_of_owns hw] at hp
+        simp [AdmA, AdmA_sound_fueled fuel c hp]
+      | false =>
+        rw [show denote (fuel+1) (.nullable c) = (denote fuel c).orNull from
+          withNull_eq_orNull hw] at hp
+        rcases orNull_p.mp hp with ⟨rfl, -⟩ | ⟨-, hc⟩
+        · simp [AdmA]
+        · simp [AdmA, AdmA_sound_fueled fuel c hc]
+    case dunion d opts =>
+      have h2 := admA_sound _ _ hp
+      have heq : AdmA (.dunion d opts) a = admA (.dunion d opts) a := by rw [AdmA, admA]; rfl
+      rw [heq]; exact h2
+    case union opts =>
+      simp only [denote] at hp
+      obtain ⟨o, ho, -, hop⟩ := altCodec_p_admits hp
+      simp only [List.mem_map] at ho
+      obtain ⟨tx, htx, rfl⟩ := ho
+      rw [optionSemOf_c] at hop
+      have key : ∀ (ts : List Term), tx ∈ ts → AdmAAny ts a = true := by
+        intro ts hts
+        induction ts with
+        | nil => exact absurd hts (by simp)
+        | cons t0 ts ih =>
+          rcases List.mem_cons.mp hts with rfl | h'
+          · simp [AdmAAny, AdmA_sound_fueled fuel tx hop]
+          · simp [AdmAAny, ih h']
+      simpa [AdmA] using key opts htx
+
+/-- **Every attribute row is a sound over-approximation, the hatch included** — the
+    attribute-side counterpart of `Adm_sound`, and the same obligation for the same reason.
+
+    Exactness for these rows is **not** yet proved; the value side's `Adm_exact` has no
+    mirror here. Until it does, `AdmA` carries one obligation where `Adm` carries two, and
+    the analysis tables cannot be migrated onto the pair. -/
+theorem AdmA_sound (t : Term) {a v} (hp : (denoteω t).p a = some v) : AdmA t a = true := by
+  rw [denoteω_eq t (termDepth t) (Nat.le_refl _)] at hp
+  exact AdmA_sound_fueled _ t hp
+
 end
 end Calculus
