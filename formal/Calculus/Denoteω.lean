@@ -219,7 +219,7 @@ mutual
     than at each of the twenty-two rules. The ground terms are then `rfl`, and the rest
     is the recursion pushed under whichever combinator the rule denotes. -/
 theorem denoteω_eq : ∀ (t : Term) (n : Nat), termDepth t <= n -> denoteω t = denote n t
-  | t, 0, h => absurd h (by cases t <;> simp [termDepth])
+  | t, 0, h => absurd h (by cases t <;> simp only [termDepth] <;> omega)
   | .literal _, _+1, _ => rfl
   | .string, _+1, _ => rfl
   | .number, _+1, _ => rfl
