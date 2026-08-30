@@ -284,9 +284,6 @@ inductive Excuse where
   /-- `q` tests the value a read *produces*, and no syntactic set of attributes bounds
       that. Attribute side only — on the value side `refine` narrows exactly. -/
   | valueUnderRead
-  /-- `extendRead` widens `p` past the subterm's set, by construction. Attribute side
-      only — on the value side `legacy` is a transparent passthrough. -/
-  | widenedRead
   deriving DecidableEq
 
 /-- Which term shapes each excuse may be invoked for. The catch-all answers `false`, so a
@@ -536,7 +533,6 @@ theorem excuse_witnessed : ∀ (e : Excuse) (t : Term), e.covers t = true →
   | .nullOwnership, _, _   => ⟨.nullable (.legacy .string rNull), rfl, not_ExactV_nullable⟩
   -- The two attribute-side reasons cover nothing here, so the hypothesis is unsatisfiable.
   | .valueUnderRead, t, h  => by cases t <;> simp [Excuse.covers] at h
-  | .widenedRead, t, h     => by cases t <;> simp [Excuse.covers] at h
 
 /-! ## The attribute side
 
@@ -598,7 +594,10 @@ noncomputable def AdmA : Term → Attr → Bool
   | .lazy t   => AdmA t
   -- hatch
   | .refine t _ => AdmA t
-  | .legacy _ _ => fun _ => true
+  -- `legacy` is the read-side **alternative**, not an adapter: `p` is the subterm's channel
+  -- falling back to `r`'s, so the domain is the *union* of the two. `r` is data the term
+  -- carries, exactly as `held`'s `f` and `custom`'s `cp` are, so the row can apply it.
+  | .legacy t r => fun a => AdmA t a || (r a).isSome
   | .nullable t => fun a => AdmA t a || (match a with | .null => true | _ => false)
   | .union opts => fun a => AdmAAny opts a
   | .set _    => fun a => match a with | .ss _ | .ns _ | .bs _ => true | _ => false
@@ -730,7 +729,11 @@ theorem AdmA_sound_fueled : ∀ (fuel : Nat) (t : Term) {a v},
       all_goals (simp only [denote, literalCodec, Codec.empty] at hp; exact nomatch hp)
     case custom ce cp => simp_all [AdmA, denote]
     case opaq lossy => simp [AdmA]
-    case legacy c r => simp [AdmA]
+    case legacy c r =>
+      simp only [denote, Codec.extendRead] at hp
+      cases hc : (denote fuel c).p a with
+      | some w => rw [hc] at hp; simp [AdmA, AdmA_sound_fueled fuel c hc]
+      | none => rw [hc] at hp; simp [AdmA, hp]
     case set c => cases a <;> simp_all [AdmA, denote, setCodec]
     case tuple ts tl => cases a <;> simp_all [AdmA, denote, tupleCodec]
     case object fs r => cases a <;> simp_all [AdmA, denote, objectCodec, objectCodecCore]
@@ -806,16 +809,14 @@ def ExactA (t : Term) : Prop := ∀ a, AdmA t a = true ↔ ((denoteω t).p a).is
     * `refine` — `q` tests the value a read *produces*; no syntactic set of attributes
       bounds that. This is the row `admA` could never narrow either, and the reason `adm`
       and `admA` are two functions rather than one.
-    * `legacy` — `extendRead` widens `p` past the subterm's set, by construction
-      (`not_admA_legacy`).
     * `nullable` — `ownsNull` again, and this side is where the disjunction bites first.
 
     The remaining six are the same shapes the value side excuses. -/
 def AnalysableA : Term → Bool
   | .string | .boolean | .binary | .null | .number | .decimal
   | .literalS _ | .literalN _ | .literal _ | .custom _ _ => true
-  | .array c | .record c | .held c _ _ | .lazy c => AnalysableA c
-  | .refine _ _ | .legacy _ _ | .nullable _ | .union _
+  | .array c | .record c | .held c _ _ | .lazy c | .legacy c _ => AnalysableA c
+  | .refine _ _ | .nullable _ | .union _
   | .set _ | .tuple _ _ | .object _ _ | .dunion _ _ | .opaq _ => false
 
 /-- `AdmAAll` transported across the entry's exactness. -/
@@ -906,7 +907,12 @@ theorem AdmA_exact : ∀ (t : Term), AnalysableA t = true → ExactA t
   | .lazy c, ha => by
       have hc := AdmA_exact c (by simpa [AnalysableA] using ha)
       intro a; simpa [AdmA, denoteω] using hc a
-  | .refine _ _, ha | .legacy _ _, ha | .nullable _, ha | .union _, ha
+  | .legacy c r, ha => by
+      have hc := AdmA_exact c (by simpa [AnalysableA] using ha)
+      intro a
+      simp only [AdmA, denoteω, Codec.extendRead]
+      cases hx : (denoteω c).p a <;> simp [hc a, hx]
+  | .refine _ _, ha | .nullable _, ha | .union _, ha
   | .set _, ha | .tuple _ _, ha | .object _ _, ha | .dunion _ _, ha
   | .opaq _, ha => by simp [AnalysableA] at ha
 
@@ -965,12 +971,6 @@ theorem not_ExactA_refine : ¬ ExactA (.refine .string (fun _ => false)) := by
   have h2 := (h (.s "a")).mp (by simp [AdmA])
   simp [denoteω, Codec.restrict, stringCodec] at h2
 
-/-- `legacy` is `⊤` here, so it over-claims at every attribute its subterm refuses. -/
-theorem not_ExactA_legacy : ¬ ExactA (.legacy .string (fun _ => none)) := by
-  intro h
-  have h2 := (h (.n "1")).mp (by simp [AdmA])
-  simp [denoteω, Codec.extendRead, stringCodec] at h2
-
 
 /-- Which shapes each excuse may be invoked for **on the attribute side**. Two rows have no
     value-side counterpart, and the catch-all answers `false` for the same reason it does
@@ -984,14 +984,13 @@ def Excuse.coversA : Excuse → Term → Bool
   | .nameAdmission,   .tuple _ _   => true
   | .nullOwnership,   .nullable _  => true
   | .valueUnderRead,  .refine _ _  => true
-  | .widenedRead,     .legacy _ _  => true
   | _, _ => false
 
 /-- The subterm a propagating **attribute** row inherits from. `refine` and `legacy` are
     absent, which is the whole of the asymmetry: they propagate on the value side and are
     excused here. -/
 def inheritsFromA : Term → Option Term
-  | .array c | .record c | .held c _ _ | .lazy c => some c
+  | .array c | .record c | .held c _ _ | .lazy c | .legacy c _ => some c
   | _ => none
 
 /-- Every attribute row that declines exactness names a covering reason or inherits one. -/
@@ -1005,8 +1004,7 @@ theorem analysableA_excused : ∀ (t : Term), AnalysableA t = false →
   | .tuple _ _, _   => .inl ⟨.nameAdmission, rfl⟩
   | .nullable _, _  => .inl ⟨.nullOwnership, rfl⟩
   | .refine _ _, _  => .inl ⟨.valueUnderRead, rfl⟩
-  | .legacy _ _, _  => .inl ⟨.widenedRead, rfl⟩
-  | .array c, h | .record c, h | .held c _ _, h | .lazy c, h =>
+  | .array c, h | .record c, h | .held c _ _, h | .lazy c, h | .legacy c _, h =>
       .inr ⟨c, rfl, by simpa [AnalysableA] using h⟩
   | .string, h | .boolean, h | .binary, h | .null, h | .number, h | .decimal, h
   | .literalS _, h | .literalN _, h | .literal _, h | .custom _ _, h => nomatch h
@@ -1025,7 +1023,6 @@ theorem excuseA_witnessed : ∀ (e : Excuse) (t : Term), e.coversA t = true →
   | .nameAdmission, _, _   => ⟨.tuple [.string] none, rfl, not_ExactA_tuple⟩
   | .nullOwnership, _, _   => ⟨.nullable (.custom ceNull cpNone), rfl, not_ExactA_nullable⟩
   | .valueUnderRead, _, _  => ⟨.refine .string (fun _ => false), rfl, not_ExactA_refine⟩
-  | .widenedRead, _, _     => ⟨.legacy .string (fun _ => none), rfl, not_ExactA_legacy⟩
 
 /-! ## Re-deriving §5's separations on the pair
 
@@ -1441,6 +1438,54 @@ theorem Adm_refine_adapt (t : Term) (q : Value → Bool) (v : Value) :
 theorem Adm_held_adapt (t : Term) (f g : Value → Value) (v : Value) :
     Adm (.held t f g) v = ((some (f v)).elim false (Adm t)) := by
   simp [Adm]
+
+/-! ### Adapters and alternatives, and why `legacy` was in the wrong family
+
+`held` and `refine` are `Codec.adapt` with different adapters. `legacy` is **not** an
+adapter at all, and asking whether it was is what found the row above.
+
+An adapter *composes*: `adapt`'s read is `(c.p a).bind g`, so it can only lose attributes —
+`adapt_p_le`. `legacy`'s read *gains* them: `extendRead`'s `p` is the subterm's channel
+falling back to `r`'s, which is a **choice**, not a composition. That is the family
+`nullable` belongs to as well (`orNull` adjoins the null point on both sides) and `union`
+(`altCodec`, n-ary, both sides). `legacy` is the one-sided member: it reads on two channels
+and writes on one.
+
+Placing it correctly is what makes the row exact. §5 called `admA(legacy)` `⊤` because
+`extendRead` widens past the subterm's set — true, and the wrong conclusion, because the
+thing it widens *by* is `r`, which the term carries. The domain is
+`dom(p) ∪ dom(r)`, both halves named, and `AdmA` can apply `r` for the same reason it can
+apply `held`'s `f` and `custom`'s `cp`.
+
+So `legacy` leaves the attribute hatch, and the `widenedRead` excuse is deleted rather than
+witnessed: it was covering a row that did not need excusing. What survives untouched is
+`not_admA_legacy` — §5's *passthrough* really is unsound, and the union is not the
+passthrough. -/
+
+/-- An adapter never widens the read domain. -/
+theorem adapt_p_le {c : Codec} {f g : Value → Option Value} {a : Attr} :
+    ((c.adapt f g).p a).isSome = true → (c.p a).isSome = true := by
+  intro h
+  simp only [Codec.adapt] at h
+  cases hc : c.p a with
+  | none => rw [hc] at h; simp at h
+  | some _ => rfl
+
+/-- `legacy` is the read-side alternative: the subterm's channel, falling back to `r`'s. -/
+theorem legacy_p_alt (t : Term) (r : Attr → Option Value) (a : Attr) :
+    (denoteω (.legacy t r)).p a
+      = (match (denoteω t).p a with | some v => some v | none => r a) := rfl
+
+/-- …so its read domain is the union of the two channels, and both are named. -/
+theorem legacy_p_isSome (t : Term) (r : Attr → Option Value) (a : Attr) :
+    ((denoteω (.legacy t r)).p a).isSome = (((denoteω t).p a).isSome || (r a).isSome) := by
+  simp only [legacy_p_alt]
+  cases (denoteω t).p a <;> simp
+
+/-- Which is exactly `AdmA`'s row, so `legacy` widens the read side and is exact anyway. -/
+theorem AdmA_legacy_union (t : Term) (r : Attr → Option Value) (a : Attr) :
+    AdmA (.legacy t r) a = (AdmA t a || (r a).isSome) := by
+  simp [AdmA]
 
 end
 end Calculus
