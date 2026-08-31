@@ -1042,10 +1042,14 @@ export const arbitraryOf = (
              * authority on a name it declares, and an undeclared value standing in for one would test
              * the wrong codec.
              */
-            if (def.rest) {
+            // only a rest *codec* puts undeclared names in the entity; `drop` and `refuse` both
+            // leave nothing to generate, and are now told apart from a codec rather than guessed
+            const restCodec =
+                typeof def.rest === 'string' ? undefined : def.rest
+            if (restCodec) {
                 for (let extra = Math.floor(rng() * 3); extra > 0; extra--) {
                     out[`rest${extra}`] = arbitraryOf(
-                        def.rest,
+                        restCodec,
                         rng,
                         Math.max(0, size - 1),
                     )
@@ -1859,7 +1863,9 @@ const unionsIn = (subject: AnyCodec): readonly UnionSite[] => {
                 return inner(def.tail)
             case 'attributes':
                 Object.values(def.of as Record<string, AnyCodec>).forEach(inner)
-                return inner(def.rest)
+                return inner(
+                    typeof def.rest === 'string' ? undefined : def.rest,
+                )
             case 'refine':
             case 'optional':
             case 'nullable':

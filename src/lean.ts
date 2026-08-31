@@ -325,12 +325,14 @@ const lazyLimit = 16
  *   an arbitrary closure, so these are unemittable *in general*. They are not unemittable in
  *   principle: a `refine` whose predicate is `Numeral.Stored` could be written by hand, and that
  *   is the natural next increment.
- * - **`Rest.drop` vs `Rest.refuse`.** `CodecDef` records the rest *codec* and nothing when the
- *   policy is a string, so the two are indistinguishable from the definition alone. That is sound
- *   for the vectors this module writes and only for them: `objectCodec`'s `e` is `objWrite`, which
- *   takes `rc?` and not the `kn` filter (`formal/Calculus/Combinators.lean:1691`), and `rcOf` is
- *   `none` for both policies — so the two denote the *same encode* and differ only under `p`. A
- *   decode-direction vector would have to distinguish them, and could not.
+ *
+ * `Rest.drop` vs `Rest.refuse` used to be a fourth entry here: `CodecDef` recorded the rest *codec*
+ * and nothing when the policy was a string, so this wrote `Rest.drop` for either. It was sound for
+ * the vectors this module writes and only for them — `objectCodec`'s `e` is `objWrite`, which takes
+ * `rc?` and not the `kn` filter (`formal/Calculus/Combinators.lean:1691`), and `rcOf` is `none` for
+ * both policies, so the two denote the same `e` and differ only under `p`. A decode-direction
+ * vector would have needed them apart and would have been silently wrong. `CodecDef['rest']` now
+ * carries the policy rather than only its codec, and this emits all three.
  */
 export const leanTermOf = (
     codec: AnyCodec,
@@ -409,10 +411,12 @@ const leanTermOfDef = (def: CodecDef, at: string, forced: number): string => {
                         ] as const,
                 ),
             )
-            // `drop` when the definition names no rest codec: see the note on this function
-            const rest = def.rest
-                ? `(Rest.codec (${leanTermOf(def.rest, `${at}.rest`, forced)}))`
-                : 'Rest.drop'
+            // three policies, three terms — `CodecDef` records the policy itself, so nothing here
+            // has to guess which of `drop` and `refuse` an absent codec meant
+            const rest =
+                typeof def.rest === 'string'
+                    ? `Rest.${def.rest}`
+                    : `(Rest.codec (${leanTermOf(def.rest, `${at}.rest`, forced)}))`
             return `Term.object ${leanFinset(names)} (${fields}) ${rest}`
         }
         case 'tagged': {
