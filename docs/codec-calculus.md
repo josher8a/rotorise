@@ -84,9 +84,9 @@ one: `legacy`, whose entire purpose is to change what is stored (§3, §6) — a
 recursive, a term _containing_ a `legacy` inherits the exemption on exactly the attributes the
 migration rereads, and on no others. Nothing is exempt from the other three.
 
-Only **(R)** is an equality on the nose. Taken as one, `e ∘ p = id` is _false_ and must be: a set has
-no order to preserve, so writing back what was read is free to reorder it, and digits have a normal
-form, so writing back is free to normalise. In the language of quotient lenses [1] `e ∘ p` is a
+Only **(R)** is an equality on the nose. Taken as one, `e ∘ p = id` is _false_ and must be: digits have
+a normal form, so writing back what was read is free to normalise it, and a schema may discard names
+it does not declare. In the language of quotient lenses [1] `e ∘ p` is a
 **canonizer** — total on `dom(p)` by **(C)** — and the equivalence it works modulo is not a parameter
 a programmer chooses: it is `ker p`, forced by the reading itself. Write `a ≈c a′ ⟺ p(a) = p(a′)`.
 
@@ -165,11 +165,8 @@ each one is really for. They do not have the same answer, and in this calculus t
 answered at once.
 
 **The quotient collapses** when `ker p` is equality — when no two distinct attributes read to one
-value. That fails for exactly three reasons, and only one of them is about the medium:
+value. That fails for exactly two reasons, and one of them is about the medium:
 
-- **`SS`, `NS`, `BS` are sets** (§1). Two orderings of one set are distinct attributes reading to
-  one value. This is a fact about the _domain_, not about how it is written down; any medium that
-  can store a set has it.
 - **`η` normalises `N`** (§3). This is the medium, and it is the calculus's one concession to
   something it does not model.
 - **`drop` discards undeclared names** (§4). This is a schema's own decision, taken deliberately.
@@ -248,7 +245,11 @@ maximum, and gating only the write is the configuration that breaks **(C)**.
 
 Both-halves gating is not an extra duty these rules carry; it is what a gate _is_ in this calculus.
 A predicate checked on the way in and on the way out is `refine`, and both number rules are `refine`
-over an ungated base — `number` at `D`, `decimal` at `Stored`. Nothing about them is bespoke, and
+— `number` at `D`, `decimal` at `Stored`. Neither base is an *ungated* one, and neither can be: with
+the `N` carrier typed, an ungated numeric codec would have to write an attribute the domain has no
+point for. `number` is itself the base on the double side, because §1's `Numerals` is the whole of
+`Carries(N)`; `decimal`'s base is the numerals gated at well-formedness, which is the largest
+decimal codec the carrier permits. Nothing about them is bespoke, and
 the shape is the argument: an ad-hoc `if` can gate one half and a `refine` cannot. `(literal)` gates
 at the **declaration**, alongside `n ≥ 1` and pairwise distinctness, because `ℓ` is data the term
 owns and a premise on data is decidable when the codec is built.
@@ -296,12 +297,11 @@ every bool a `Bool` — and there is nothing for them to check. The other four w
 the store will hold at that member, and each is `refine` over one of those bases at the predicate
 that names the subset:
 
-| term         | base      | predicate       |
-| ------------ | --------- | --------------- |
-| `number`     | doubles   | `D` (§1)        |
-| `decimal`    | numerals  | `Stored` (§1)   |
-| `literal(ℓ)` | `string`  | `∈ ℓ`           |
-| `literal(ℓ)` | doubles   | `∈ ℓ`           |
+| term            | base                | predicate     |
+| --------------- | ------------------- | ------------- |
+| `number`        | §1's `Numerals`     | `D` (§1)      |
+| `decimal`       | numerals at `WF`    | `Stored` (§1) |
+| `literal(g, ℓ)` | the ground term `g` | `∈ ℓ`         |
 
 This is not a resemblance. A predicate wanted on **both** halves _is_ `refine`, because `e` and `p`
 are partial and refusing is what the error channel does; a rule that gates one half and not the
@@ -556,8 +556,8 @@ policies differ only in what `p` does with an undeclared name — drop it, or fa
 difference in `dom(p)` and not in `T`. And `drop` is a **filter, never a traversal mode**: the
 discard is decided by the name alone, before anything is decoded, so it cannot depend on a value and
 the round trip through the declared names is untouched by what was discarded. That is the quotient
-of §2 again — an item is `≈c` itself minus its undeclared names — the same class of loss as a set's
-reordering.
+of §2 again — an item is `≈c` itself minus its undeclared names — and, now that `SS`/`NS`/`BS` carry
+no ordering to lose, one of only two places `ker p` is not equality. The other is `η`.
 
 ### The stratification does work
 
@@ -939,10 +939,10 @@ and it implies **(MP)** as stated.
 between the entries of two lists, and lift it entrywise — defined where every entry is, positions
 preserved. If the step satisfies a law pointwise, the lift satisfies it listwise: **(R)** because
 positions re-read in place, **(C)** because each entry re-encodes, `≼` because a shared position
-decodes and re-encodes through the same step, and lengths survive both directions. Keyed lists add
-one clause: entries are dispatched and compared _by name_, first occurrence first, so the lookup
-form of `≼`'s `M` clause follows from the pointwise one. Proved once; every product case below is
-an instantiation. ∎
+decodes and re-encodes through the same step, and lengths survive both directions. Keyed products need
+no extra clause: `M` is a name set with a function on it, so keys are unique by type and `≼`'s `M`
+clause compares at a shared key with no first occurrence to prefer. Proved once; every product case
+below is an instantiation. ∎
 
 **Proof.** By induction on the derivation, with one refinement recorded at `(lazy)`. Each case
 first says what the pair _is_ — the denotation is part of the rule — then discharges the laws. The
@@ -1031,7 +1031,7 @@ stand-ins `fallback` materialises are each on one side only, and `≼` compares 
 quotient again.
 
 _set._ The premise gives `e_c(x) = ⟨μ, w(x)⟩`; the step is `w` outward and `p_c(⟨μ, ·⟩)` back, and
-the wire set is the lifted list. **(R)**: `w` is injective by the injectivity Lemma (member fixed,
+the wire set is the image of the held set under it. **(R)**: `w` is injective by the injectivity Lemma (member fixed,
 `e_c` injective), so the written set holds one payload per element and the traversal Lemma reads
 each back; non-emptiness survives both directions. **(C)**: entrywise, and the re-encoded elements
 keep their member by `≼`, so the same payload projection re-succeeds. `p` need _not_ be injective —
@@ -1126,7 +1126,7 @@ Which places the calculus: **§1** a universal domain, **§2** types as quotient
 equational theory. And the terms are generated by a small algebra, which the soundness proof's
 grouping makes official: **points** (the ground terms); one **partial iso** (`held`, with `refine`
 its prism); one **agreeing read-extension** (`legacy`); three **products** — positional (`array`,
-`tuple`), keyed (`record`, `object`), quotiented (`set`) — all instances of one traversal argument;
+`tuple`), keyed (`record`, `object`), unordered (`set`) — all instances of one traversal argument;
 one **sum** (`union`), resolved by unique admission, with `(dunion)` and `opaque` the two whose (U)
 is a theorem; and a **fixpoint** (`lazy`, and `opaque` again). Fields are the keyed product's
 presence decoration, and `nullable` is that sum's guarded insertion (§3) rather than a term of its own.

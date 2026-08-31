@@ -200,7 +200,7 @@ cites `uniqueAdmission_of_disjoint`, which does not exist.
 
 **Three of the four now speak one language** (§5 item 5), and the fourth has a reason
 rather than an excuse. `(dunion)`'s row is `uAtCan_dunion`, at term level, with
-`denote_dunion` — an `rfl` — pinning its option list to the one the denotation is
+`denote_dunion_tags` — an `rfl` — pinning its option list to the one the denotation is
 actually built from; its premises are exactly `Typed.dunion`'s two side conditions, and
 `Obligations.dunion` says the obligation list has no (U) entry to receive them.
 
@@ -404,7 +404,7 @@ Item 9 turned out to carry more than its description. Naming `≈c` was three li
 `Lawful.retract_through_store` is **(R)** with the store in the middle — the law production
 actually runs, and the one the shipped `decimal` broke — and `decimal` now has both halves of
 its answer: `survivesStore_decimalCodec` says the narrowed held set discharges the premise,
-`not_survivesStore_decimalWF` says the un-narrowed one cannot, and `ker_decimalCodec` says
+`not_survivesStore_wfDecimalCodec` says the un-narrowed one cannot, and `ker_decimalCodec` says
 why the question is that sharp (its kernel is equality, so `η` has to be the identity where
 it can be handed anything). The narrowing was a fix with a measurement behind it; it is now a
 fix with a certificate behind it too.

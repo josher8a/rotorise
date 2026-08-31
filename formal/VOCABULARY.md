@@ -121,8 +121,9 @@ Two further conventions the passes settled on, both load-bearing:
   one place: `set`'s (C), where (MP)'s member-uniformity is replaced by the `(set)`
   rule's own premise.
 - **An identity stated in prose gets cashed as an equation.** `arrayCodec_eq`,
-  `recordCodec_eq`, `tupleCodec_eq`, `objectCodecCore_eq` each say "this construction
-  *is* that one", and carry every lemma across by `▸`. §4 below lists the three
+  `tupleCodec_eq` and `objectCodecCore_eq` each say "this construction *is* that one", and
+  carry every lemma across by `▸`; `record` gets the same service from a directional pair,
+  `recordCodec_e_eq`/`recordCodec_p_eq`, because it is not definitionally the traversal. §4 below lists the three
   identities still stranded in prose.
 
 ## §3 The audit
