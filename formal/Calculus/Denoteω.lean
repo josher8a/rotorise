@@ -82,7 +82,7 @@ def denoteωMems : List Term → List (Option Member)
   | [] => []
   | t :: ts => (denoteω t).μ :: denoteωMems ts
 
-def denoteωTags (d : Name) : List Term → List (List String × Codec)
+def denoteωTags (d : Name) : List Term → List (Finset String × Codec)
   | [] => []
   | t :: ts => (tagsOf d t, denoteω t) :: denoteωTags d ts
 

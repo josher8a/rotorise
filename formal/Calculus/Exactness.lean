@@ -47,8 +47,8 @@ noncomputable def Adm : Term → Value → Bool
   | .null     => fun v => match v with | .null => true | _ => false
   | .number   => inD
   | .decimal  => isStored
-  | .literalS ls => fun v => match v with | .str s => s ∈ ls | _ => false
-  | .literalN ls => fun v => match v with | .num d => d ∈ ls | _ => false
+  | .literalS ls => fun v => match v with | .str s => decide (s ∈ ls.1) | _ => false
+  | .literalN ls => fun v => match v with | .num d => decide (d ∈ ls.1) | _ => false
   | .literal w => fun v =>
       match w, v with
       | .str s, .str s'   => decide (s' = s)
@@ -84,7 +84,7 @@ noncomputable def Adm : Term → Value → Bool
   | .object _ _ _ => fun v => match v with | .map _ _ => true | _ => false
   | .dunion d opts => fun v =>
       match tagOfV d v with
-      | some tag => (allTags d opts).contains tag
+      | some tag => decide (tag ∈ allTags d opts)
       | none => false
   | .opaq _ => fun _ => true
 
@@ -223,12 +223,12 @@ theorem Adm_array_nil (c : Term) : Adm (.array c) (.arr []) = true := by
   simp [Adm, AdmAll]
 
 /-- …and it is strictly sharper than the `⊤` that was standing in for it. -/
-theorem Adm_array_sharp : Adm (.array (.literalS ["A"])) (.arr [.str "B"]) = false := by
+theorem Adm_array_sharp : Adm (.array (.literalS (.of "A" ∅))) (.arr [.str "B"]) = false := by
   simp [Adm, AdmAll]
 
 /-- Nested, which the old row could not see at any depth. -/
 theorem Adm_array_nested :
-    Adm (.array (.array (.literalS ["A"]))) (.arr [.arr [.str "B"]]) = false := by
+    Adm (.array (.array (.literalS (.of "A" ∅)))) (.arr [.arr [.str "B"]]) = false := by
   simp [Adm, AdmAll]
 
 /-- A migration whose *read* reaches the null point while its write does not. -/
@@ -588,11 +588,11 @@ noncomputable def AdmA : Term → Attr → Bool
                  | none => false)
       | _ => false
   | .decimal  => fun a => match a with | .n x => Numeral.Stored x | _ => false
-  | .literalS ls => fun a => match a with | .s s => s ∈ ls | _ => false
+  | .literalS ls => fun a => match a with | .s s => decide (s ∈ ls.1) | _ => false
   | .literalN ls => fun a =>
       match a with
       | .n x => (match Double.ofDec x with
-                 | some d => decide (d ∈ ls)
+                 | some d => decide (d ∈ ls.1)
                  | none => false)
       | _ => false
   | .literal w => fun a =>
@@ -624,7 +624,7 @@ noncomputable def AdmA : Term → Attr → Bool
   | .object _ _ _ => fun a => match a with | .m _ _ => true | _ => false
   | .dunion d opts => fun a =>
       match tagOfA d a with
-      | some tag => (allTags d opts).contains tag
+      | some tag => decide (tag ∈ allTags d opts)
       | none => false
   | .opaq _ => fun _ => true
 
@@ -1362,7 +1362,7 @@ def Decides (t : Term) : Prop :=
   ∃ v w, ((denoteω t).e v).isSome = true ∧ v.kind = w.kind ∧ ((denoteω t).e w).isSome = false
 
 /-- `literalS` decides, as §5 says. -/
-theorem decides_literalS : Decides (.literalS ["A"]) :=
+theorem decides_literalS : Decides (.literalS (.of "A" ∅)) :=
   ⟨.str "A", .str "B", by simp [denoteω, literalSCodec], rfl,
    by simp [denoteω, literalSCodec]⟩
 
@@ -1491,7 +1491,7 @@ theorem AdmA_legacy_union (t : Term) (r : Attr → Option Value) (a : Attr) :
     `℘⁺fin` has no empty inhabitant and so the two options share none. The non-emptiness
     is now the *type's*, which is why every branch here ends at `S.2`. -/
 theorem sepJV_set_literals :
-    SepJV (.set (.literalS ["A"])) (.set (.literalS ["B"])) := by
+    SepJV (.set (.literalS (.of "A" ∅))) (.set (.literalS (.of "B" ∅))) := by
   intro v hv
   cases v
   case strSet S =>
@@ -1515,7 +1515,7 @@ theorem sepJV_set_literals :
     separate, because both options admit `[]`. This is §5's empty-container argument in its
     correct scope — it is a fact about `array`, `record` and `object`, not about `set`. -/
 theorem not_sepJV_array_literals :
-    ¬ SepJV (.array (.literalS ["A"])) (.array (.literalS ["B"])) := by
+    ¬ SepJV (.array (.literalS (.of "A" ∅))) (.array (.literalS (.of "B" ∅))) := by
   intro h
   exact absurd (h (.arr []) (by simp [Adm, AdmAll])) (by simp [Adm, AdmAll])
 

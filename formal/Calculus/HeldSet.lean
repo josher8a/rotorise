@@ -172,7 +172,7 @@ def TIsDomE (c : Codec) : Prop := ∀ v, c.T v ↔ (c.e v).isSome
 
 /-- §4's counterexample pair: both options admit `"A"`, which is what refuted (K). -/
 def unionLiteralString : Codec :=
-  altCodec [.byAttempt (literalSCodec ["A"]), .byAttempt stringCodec] (some .S)
+  altCodec [.byAttempt (literalSCodec (.of "A" ∅)), .byAttempt stringCodec] (some .S)
 
 /-- **(B) is false for `union`:** `"A"` is held and nothing is written for it, both options
     admitting. Not unsound — `Carrier` bounds `e` by `T`, never the converse — but `: T` at a
@@ -180,7 +180,7 @@ def unionLiteralString : Codec :=
 theorem not_TIsDomE_unionLiteralString : ¬ TIsDomE unionLiteralString := by
   intro h
   have hT : unionLiteralString.T (.str "A") :=
-    ⟨.byAttempt (literalSCodec ["A"]), by simp [unionLiteralString], ⟨"A", by simp, rfl⟩⟩
+    ⟨.byAttempt (literalSCodec (.of "A" ∅)), by simp [unionLiteralString], ⟨"A", by simp, rfl⟩⟩
   have he : unionLiteralString.e (.str "A") = none := by
     simp [unionLiteralString, altCodec, select, OptionSem.byAttempt, literalSCodec, stringCodec]
   have := (h (.str "A")).mp hT
