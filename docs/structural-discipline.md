@@ -1,15 +1,28 @@
-# Structural impossibility over guards — and why the reason is portability
+# Structural impossibility over guards
 
 The rule, as JH states it:
 
-> Prefer making a bad state **unrepresentable** over **guarding** against it. Structural
-> impossibility translates to TypeScript and Rust confidently; a guard does not.
+> Prefer making a bad state **unrepresentable** over **guarding** against it.
 
-`codec-audit.md` §14 argues the same preference from proof economy — how many premises a type
-deletes. That argument is true and it is the weaker one. The stronger one is this file's: a Lean
-**type** can be mirrored by a host **type**, and the mirror is checked by a compiler. A Lean
-**gate** must be re-implemented as a host **check**, once per site that can reach it, and
-*nothing checks that you did it*.
+## Why — and it is not "so the TypeScript is easier to write"
+
+`codec-formalization.md` §1–§2 sets the terms, and they are stricter than a portability argument:
+the model is **not** a test suite for the implementation, nothing in `formal/` observes it, and
+*"a target implementation is certified by exhibiting a homomorphism into the model — not by
+re-deriving the laws."*
+
+So the reason structural impossibility is worth preferring is not that it makes an implementation
+easier to write. It is that **it decides what the certification obligation looks like.** A
+constraint the model carries in a *type* is discharged by exhibiting a structure-preserving map —
+a type-level check, once. A constraint the model carries in a *gate* becomes a proof obligation
+the target owes **per site that can reach it**, and nothing in the model can tell whether the
+target paid it.
+
+That is why the priority order is the model first and the target after: a guarantee made
+structural in the spec is a guarantee the target cannot silently fail to inherit. One made by
+gate is one the target must be audited for, forever.
+
+## The evidence, and it is downstream evidence
 
 The audit produced the data to settle this, and it is unusually clean.
 
@@ -17,8 +30,10 @@ The audit produced the data to settle this, and it is unusually clean.
 
 ## 1. The evidence: every live bug was on the same side of the line
 
-§9 audited `src/` against the five representation tightenings the model had just landed. Five
-live bugs. Sorting the five tightenings by *how the host carries them*:
+§9 audited `src/` against the five representation tightenings the model had just landed — an
+audit of a target that had **not** been certified, which is exactly why there was anything to
+find. Five live bugs. Sorting the five tightenings by whether the model's guarantee was structural
+or a gate *on the target's side*:
 
 | # | tightening | how TS carries it | bugs found |
 | --- | --- | --- | --- |
@@ -44,8 +59,12 @@ it — `literal(...allowed: readonly T[])` typechecks with zero arguments, and t
 array. So the guarantee had to become a construction-time throw plus a test, and the residual
 (no repeated alternatives) is *still* unchecked, because nothing forces it and nobody would notice.
 
-That is the whole argument, from data: **the correspondence is free where both sides are
-structural, and every defect lived where the model was structural and the host was not.**
+That is the whole argument, from data: **the obligation is discharged by construction where the
+target can carry the structure, and every defect lived where the target had to re-derive a gate.**
+
+Read forward rather than backward, this is the reason to spend effort on the spec and not on the
+target. Rows 1–2 needed no audit. Rows 3–5 needed one, got one, and it found five bugs — and would
+need another one after the next change.
 
 ---
 
@@ -122,7 +141,7 @@ So the discipline has a hierarchy, not one rule:
 
 ---
 
-## 5. Rust carries more than TypeScript, so the discipline is per-host
+## 5. Targets differ, which is a fact about certification, not a reason to chase targets
 
 The same Lean structure ports with different fidelity, and the target matters:
 
@@ -136,8 +155,11 @@ The same Lean structure ports with different fidelity, and the target matters:
   nominal typing, so the branded-type trick is the closest thing and is defeated by a cast.
 
 Practical consequence: **a guarantee that must be a gate in TypeScript may be structural in
-Rust**, so the audit question is not "is this structural?" but "is this structural *in this
-host*?" — and §2's three cases have to be re-answered per target.
+Rust.** §2's three cases are re-answered per target, at the time that target is certified — not
+in advance, and not as a reason to shape the model around one language. The model's job is to make
+the guarantee structural *in the model*; how much of it each target can carry is that target's
+certification, and `codec-formalization.md` §2 is explicit that this is a separate and currently
+unmet obligation.
 
 ---
 
