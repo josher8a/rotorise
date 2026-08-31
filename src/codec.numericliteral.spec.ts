@@ -215,6 +215,30 @@ describe('what mixing kinds would ask for', () => {
     })
 })
 
+describe('a literal with no alternatives', () => {
+    /**
+     * `ℓ` non-empty, which the model now carries in the type (`NEFinset`) and this carries at the
+     * construction site.
+     *
+     * `literal()` typechecked — a rest parameter accepts zero arguments — and was not the codec it
+     * looked like: the admission check was guarded by `allowed.length &&`, and a truthiness guard in
+     * front of a membership test inverts it exactly when the set is empty. So `literal()` admitted
+     * *everything*: any string written as `S`, any `S` read back. The caller asked for an enum and
+     * silently got `string`, and there is no term in the model that denotes it.
+     */
+    it('is refused, rather than admitting everything', () => {
+        expect(() => literal()).toThrow(/names none/)
+    })
+
+    /** And the honest caller the type could not be tightened for is still honest. */
+    it('still takes a spread of values the type cannot see as a tuple', () => {
+        const values: string[] = ['A', 'B']
+        const either = literal(...values)
+        expect(either.unsafeEncode('A')).toEqual({ S: 'A' })
+        expect(either.decode({ S: 'C' })).toBeInstanceOf(CodecError)
+    })
+})
+
 describe('the admissible set is what DynamoDB stores', () => {
     /**
      * §3's `(literal-N)` premise `ℓ ⊆ D`, and the defect that made it more than bookkeeping.

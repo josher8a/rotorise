@@ -885,6 +885,25 @@ export function literal<const T extends string | number>(
      * literal union `0 | 1 | 2`, the stored member is `N`, and the admissible set is checked in both
      * directions. Mixing kinds would ask one codec to write two members, which no codec can.
      */
+    /**
+     * **`ℓ` is non-empty** — the other half of the premise `NEFinset` now carries in the model.
+     *
+     * `literal()` typechecked, and was not the codec it looked like: with no alternatives the
+     * admission check below short-circuited to *admit everything*, so it encoded any string as `S`
+     * and decoded any `S`. The caller asked for an enum and got {@link string} — silently, and with
+     * no term in the model to denote it, because a `NEFinset` cannot be empty.
+     *
+     * A throw and not a type, because the type cannot say it without breaking the honest caller:
+     * `literal(...Object.values(Status))` spreads a plain array, which a `(first, ...rest)`
+     * signature refuses. So it is checked here, beside the mixed-kind refusal, and for the same
+     * reason — a fact about `ℓ`, decidable when the codec is built.
+     */
+    if (allowed.length === 0) {
+        throw new CodecError(
+            'a literal admits one of a non-empty set of values, and `literal()` names none; pass the values, or use `string`/`number` if anything is admissible',
+        )
+    }
+
     const numeric = typeof allowed[0] === 'number'
     // quoted as it was written: text in quotes, digits bare
     const named = (one: string | number) =>
@@ -935,7 +954,11 @@ export function literal<const T extends string | number>(
      * describes one variant of it.
      */
     const admits = (carried: string | number): Result<T> =>
-        allowed.length && !allowed.includes(carried as T)
+        // `allowed.length &&` used to guard this, which is how the empty case came to admit
+        // everything: a truthiness guard in front of a membership test *inverts* it exactly when the
+        // set is empty, where `∀ x. x ∉ ∅` should refuse everything. The set is non-empty above, so
+        // the guard is gone rather than corrected
+        !allowed.includes(carried as T)
             ? new CodecError(
                   `${named(carried)} is not one of ${allowed.map(named).join(', ')}`,
               )
