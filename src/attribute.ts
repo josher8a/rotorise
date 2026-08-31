@@ -102,6 +102,42 @@ export const memberOf = (value: AttributeValue): AttributeName | undefined => {
     return undefined
 }
 
+// ── what an `N` carries ──────────────────────────────────────────────
+//
+// `Carries('N')` is not `string`. Every term that writes or reads an `N` owes the same predicate,
+// and it lives here rather than beside any one of them: it is a property of the carrier, the way
+// `Attr.n : WFNumeral` is in `formal/Calculus/Domain.lean`, not of the codec that happens to use it.
+
+/**
+ * What DynamoDB **accepts** in an `N`: optional sign, digits, optional point, optional exponent;
+ * at most 38 significant digits; magnitude zero or `1e-130 … 9.9…e125`. §1's `Numerals`, and the
+ * same predicate as `Numeral.WF` in `formal/Calculus/Domain.lean`.
+ */
+const NUMERAL = /^[+-]?(\d+)(?:\.(\d+))?(?:[eE]([+-]?\d+))?$/
+
+export const isNumeral = (s: string): boolean => {
+    const m = NUMERAL.exec(s)
+    if (!m) return false
+    const int = m[1] as string
+    const frac = m[2] ?? ''
+    const mantissa = int + frac
+    const lead = mantissa.length - mantissa.replace(/^0+/, '').length
+    const significant = mantissa.replace(/^0+/, '').replace(/0+$/, '')
+    if (significant.length > 38) return false
+    if (significant.length === 0) return true // zero, however it is spelled
+    const exponent = int.length - 1 - lead + Number(m[3] ?? '0')
+    return exponent >= -130 && exponent <= 125
+}
+
+/**
+ * What DynamoDB **hands back**, which is a smaller set: it normalises every `N` it accepts —
+ * trimming leading and trailing zeros, dropping `+`, expanding exponents, and keeping one spelling
+ * of zero. Measured, not assumed: `codec.dynamodb.spec.ts` puts each form into a real table and reads it
+ * back, and `Numeral.Stored` in `formal/Calculus/Domain.lean` is the same set.
+ */
+export const isStoredNumeral = (s: string): boolean =>
+    s !== '-0' && /^-?(?:0|[1-9]\d*)(?:\.\d*[1-9])?$/.test(s) && isNumeral(s)
+
 // ── the stored shape, as a type you can write down ───────────────────
 //
 // A schema says what an entity is; these say what the *table* holds. Written by hand they pin the
