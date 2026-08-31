@@ -1643,17 +1643,7 @@ worth reading.
 
 **`literalS`/`literalN` — done.** See below.
 
-**`N`'s numeral domain — the one with a real argument against it.** §5's C1 table names `N` as one
-of four members whose `Carries(m)` is a refinement, and this document has taken the position that
-the honest split is to leave the *carrier* unrestricted (`Attr.n "abc"` stays representable) and put
-the burden on the codecs. That argument is not stale in the way the map one was: C1's point is that
-a **port's** attribute type is genuinely unrefined, and the partiality of the embedding is what a
-port has to see. But the partiality survives typing — it is the port's type that is unrefined, not
-the model's — and §5 already says the virtue of the calculus is that it "expresses this in the
-signature of the pair, where nothing has to prove it because nothing can violate it". Typing `Attr.n`
-is that sentence taken literally: every `by_cases hw : Numeral.WF` in `Opaque.lean` goes, and
-`opaque` writing `⟨N, "5e-324"⟩` becomes unwritable rather than refuted. It is also the largest blast
-radius of the four, since `NS` is `Finset Numeral` and moves with it.
+**`N`'s numeral domain — done, and it was the one that reshaped something.** See the last entry.
 
 The general lesson is the one the map entry above records, stated as a rule rather than an anecdote:
 **a refinement carried by a gate is a claim that the type cannot carry it, and that claim is cheap to
@@ -1785,6 +1775,66 @@ One mechanical note worth keeping. `NEFinset.of x S = ⟨insert x S, _⟩` write
 and `NEFinset.of_val` is `@[simp]`. Seventy-eight literal-set occurrences across six files migrated
 with **no proof change at all**, because `simp` sees through the constructor without any call site
 naming it. Marking the projection is worth more than editing the simp sets.
+
+### `Carries(N)`, typed — and the base that turned out not to exist
+
+`Attr.n` carries `WFNumeral = {x : Numeral // Numeral.WF x}` and `Attr.ns` a `NEFinset` of those.
+All four of §5's refined members are typed, so the model's `𝔸` is §1's `𝔸`: `⟨N, "abc"⟩ ` is not an
+attribute.
+
+**The argument that kept this gate was load-bearing on nothing.** This document had taken the
+position that the *carrier* should stay unrestricted so a port sees that the embedding `⌈·⌉` is
+partial. `Attr.n "abc"` appeared in **four comments and no theorem**. C1's insight survives intact
+and is sharper for the change: it is the *port's* attribute type that is unrefined, not the model's,
+and §5 already claims the virtue of the calculus is that it "expresses this in the signature of the
+pair, where nothing has to prove it because nothing can violate it". This is that sentence taken
+literally.
+
+**What the repair forced is more interesting than the repair.** There used to be a `rawNumberCodec`
+writing every double and a `rawDecimalCodec` writing every string, and the gated pairs were
+presented as `refine` over them. Neither base can exist once `Attr.n` carries `WF` — an ungated
+numeric codec would have to write an attribute `𝔸` has no point for. So the "gate is `refine`"
+presentation looked like a casualty. It is not:
+
+* **`numberCodec` *is* the base at `N`.** There is no wider numeric pair, because §1's `Numerals` is
+  the whole of `Carries(N)`. The base was never `rawNumberCodec`; that was an artefact of the
+  carrier being too big.
+* **`wfDecimalCodec` is the base on the text side**, gated at `WF` — §1's set again, and the largest
+  decimal codec the carrier permits. `decimal` refines it at `Stored`, and `Stored → WF` is what
+  makes the composite equal `decimal`. Note its read is *total*: `WF` is the carrier now, so the
+  gate that used to sit on `p` has nothing left to reject, which is exactly the asymmetry `decimal`
+  adds.
+* **`literalNCodec ls` is `numberCodec.restrict (inLN ls)`** — a refinement of `number` *by
+  construction*, where `typed_literalN_sub_number` had to prove the containment from `hD`. And
+  `uniqueAdmission_of_sharedBase`, the discharger for unions of numeric literals, now gets a real
+  base instead of an invented one.
+
+So the refinements are refinements of §1's own sets. The presentation improved because the ungated
+bases were standing in for sets the carrier should have been.
+
+**§4's `ℓ ⊆ D` defect changed shape and did not go away.** `literal-N` can no longer *write* a
+numeral outside `D` — `e` refuses, because there is no such attribute. What it still does is *hold*
+one, since `T` is §3's `ℓ` and `ℓ` may stray. `literalN_writes_off_numerals` is therefore replaced
+by `literalN_holds_what_it_cannot_write`: `T ⊄ dom(e)`, which is **(B)** failing. Typing the carrier
+relocated the symptom to the law that was always the real one, and `hD` remains necessary. This is
+the opposite of what happened at the empty set, and worth the contrast: there, typing removed the
+only witness and cost something; here, typing moved the witness to a sharper law and cost nothing.
+
+Two consequences that had to be paid rather than absorbed:
+
+**The analysis rows had to be tightened.** `Adm` and `AdmA`'s three numeric rows — `number` was
+already right, but `literalN` and a numeric `literal` were not — gain `Numeral.WF`. With the write
+gated and the row not, `Adm_exact` would simply be **false**. The rows now say what the codecs do,
+and `Adm_sub_adm` drops a conjunct where it used to be `exact`, because `Adm` is strictly stronger
+than §5's table at those rows. A row that over-claims is the failure mode this whole section exists
+to catch, so finding one here is the machinery working.
+
+**`Numeral.WF`'s body is a string parser.** Any `simp` that unfolds a numeric codec's `dite` chases
+`parse`, and runs out of heartbeats — six sites across `Soundness`, `Discharge` and `Exactness` hit
+it. The fix is the same shape as `recordCodec_p_n`'s: name the consequence. `numberCodec_e_isSome`,
+`decimalCodec_e_isSome` and `restrict_e_isSome` state the `isSome` of a write without the `dite`, so
+a row reads off a refinement without unfolding it. **No `set_option maxHeartbeats` was added** — the
+three in the tree are the three that were there before this arc began.
 
 ## §5 Certifying an implementation
 
