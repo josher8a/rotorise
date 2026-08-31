@@ -6,6 +6,7 @@ import Calculus.HeldSet
 import Calculus.Exactness
 import Calculus.LiteralArity1
 import Calculus.Nesting
+import Calculus.Vectors
 import Lean
 
 /-!
@@ -158,6 +159,12 @@ risk worth a line each; what is guarded is the twins, which go through `Codec.Eq
 what a reviewer checks §6's table against. -/
 
 /-! §7's continuity results — why fuel is not removable by a fixpoint. -/
+
+/-! The vector checker. `aeq`'s two soundness halves are what a generated vector line is
+cashed against, so they carry the whole differential-testing bridge — and the comparator
+reached this guard already carrying `Classical.choice`, from mathlib's `DecidableEq (Finset α)`
+of all places. `fsetEq` is the repair. This import is the reason the guard saw it: it walks
+the environment, and a module it does not import is not in the environment. -/
 
 #assert_axioms_all
 
