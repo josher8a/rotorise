@@ -149,13 +149,16 @@ theorem hopaque_T (lossy : Bool) :
         have hL : Value.depthL vs <= n' := by simp only [Value.depth] at hd; omega
         exact ⟨.byAttempt (arrayCodec (opaqCodec n' lossy)), by simp [opaqOptions],
                hopaque_TL lossy vs n' hall hL⟩
-  | .map kvs, n, h, hd => by
+  -- No list companion on this branch: `recordCodec`'s held set is already the pointwise
+  -- statement about the entry function, so the induction hypothesis applies at each key
+  -- with no traversal in between.
+  | .map keys f, n, h, hd => by
       cases n with | zero => exact absurd hd (by simp [Value.depth]) | succ n' =>
       cases h with
-      | map _ hall =>
-        have hP : Value.depthP kvs <= n' := by simp only [Value.depth] at hd; omega
+      | map _ _ hall =>
         exact ⟨.byAttempt (recordCodec (opaqCodec n' lossy)), by simp [opaqOptions],
-               hopaque_TP lossy kvs n' hall hP⟩
+               fun k => hopaque_T lossy (f k) n' (hall k)
+                 (by have := Value.depth_map_entry (f := f) k; omega)⟩
 
 theorem hopaque_TL (lossy : Bool) :
     ∀ (vs : List Value) (n : Nat), (∀ x ∈ vs, HOpaque lossy x) ->
@@ -167,17 +170,6 @@ theorem hopaque_TL (lossy : Bool) :
           (by simp only [Value.depthL] at hd; omega)
       · exact hopaque_TL lossy vs n (fun y hy => hall y (by simp [hy]))
           (by simp only [Value.depthL] at hd; omega) x hx'
-
-theorem hopaque_TP (lossy : Bool) :
-    ∀ (kvs : List (Name × Value)) (n : Nat), (∀ kv ∈ kvs, HOpaque lossy kv.2) ->
-      Value.depthP kvs <= n -> ∀ kv ∈ kvs, (opaqCodec n lossy).T kv.2
-  | [], _, _, _, kv, hkv => absurd hkv (by simp)
-  | kv :: kvs, n, hall, hd, x, hx => by
-      rcases List.mem_cons.mp hx with rfl | hx'
-      · exact hopaque_T lossy x.2 n (hall x (by simp))
-          (by simp only [Value.depthP] at hd; omega)
-      · exact hopaque_TP lossy kvs n (fun y hy => hall y (by simp [hy]))
-          (by simp only [Value.depthP] at hd; omega) x hx'
 
 end
 

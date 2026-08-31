@@ -79,9 +79,11 @@ def HTuple : List Held → Option Held → List Value → Prop
 def HProd (Ts : List Held) (tail : Option Held) : Held :=
   fun v => ∃ vs, v = .arr vs ∧ HTuple Ts tail vs
 
-/-- `Name ⇀fin T` (§3 `(record)`). -/
+/-- `Name ⇀fin T` (§3 `(record)`). The finite partial map is now literally that: a name
+    set and a function on it, so "every value holds `T`" is a statement about the
+    function's codomain and needs no membership hypothesis. -/
 def HMap (T : Held) : Held :=
-  fun v => ∃ kvs, v = .map kvs ∧ ∀ kv ∈ kvs, T kv.2
+  fun v => ∃ keys f, v = .map keys f ∧ ∀ k, T (f k)
 
 /-- `T + 𝟙` (§3 `(nullable)`). Idempotent, as §6 requires: the value language has one
     null, so a second `𝟙` adds nothing. -/
@@ -106,12 +108,12 @@ def DIncomp (Ts : List Held) : Prop :=
     set otherwise. Every `req` name is present, and every present name is either
     declared (and holds its own set) or falls to the open part. -/
 def HObject (binds : List (Name × Bool × Held)) (R : Option Held) : Held :=
-  fun v => ∃ kvs, v = .map kvs ∧
-    (∀ nb ∈ binds, nb.2.1 = true → (kvs.lookup nb.1).isSome) ∧
-    (∀ k x, kvs.lookup k = some x →
-      match binds.lookup k with
-      | some b => b.2 x
-      | none => ∃ T, R = some T ∧ T x)
+  fun v => ∃ keys f, v = .map keys f ∧
+    (∀ nb ∈ binds, nb.2.1 = true → nb.1 ∈ keys) ∧
+    (∀ k : {k // k ∈ keys},
+      match binds.lookup k.1 with
+      | some b => b.2 (f k)
+      | none => ∃ T, R = some T ∧ T (f k))
 
 /-- `Uν` (§3 `(opaque)`): the values whose member is recoverable from the value alone,
     as the doc's fixpoint — everything self-identifying, closed under the containers.
@@ -136,7 +138,7 @@ inductive HOpaque (lossy : Bool) : Value → Prop where
   | binSet (S : Finset Bytes) (hne : S.Nonempty)
       (h : ∀ b ∈ S, HOpaque lossy (.bin b)) : HOpaque lossy (.binSet S)
   | arr  (vs) (h : ∀ x ∈ vs, HOpaque lossy x) : HOpaque lossy (.arr vs)
-  | map  (kvs) (h : ∀ kv ∈ kvs, HOpaque lossy kv.2) : HOpaque lossy (.map kvs)
+  | map  (keys) (f) (h : ∀ k, HOpaque lossy (f k)) : HOpaque lossy (.map keys f)
 
 /-! ## The judgement -/
 
