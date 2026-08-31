@@ -21,7 +21,11 @@ left residue: machinery that existed only to repair the old representation, and 
 written when the old representation was current.
 
 A green build hides both. Dead code compiles, and **prose does not typecheck** — the two
-drift findings before this audit were caught by luck. Hence parallel read-only scans, each
+drift findings before this audit were caught by luck.
+
+**§14 states the strategy the arc was actually following, its one exception, and the larger
+principle (§13) that turned out to matter more.** Read that first if you are deciding what to do
+next rather than auditing what was done. Hence parallel read-only scans, each
 timeboxed. This file is their output and the disposition of each item.
 
 ## 1. Actionable queue
@@ -1109,3 +1113,96 @@ the assumption that fuel was forced. The ones that held — `DecidableEq Term`, 
 `Finset.toList` — held because a probe settled them in under a minute. The rule that falls out:
 **in a deterministic system, a claim about what is possible is worth one probe, and an argument
 about it is worth nothing.**
+
+## 14. The strategy, stated — and the one place it is wrong
+
+Asked directly: *is replacing logic guards with structural impossibility our best strategy?*
+Mostly yes, and this file has the evidence for a sharper version in three parts. Two of them are
+the answer; the third is that the biggest win of the arc is **not** this strategy at all.
+
+### 14.1 Where it works: gates about the shape of a payload the library owns
+
+Every landed repair is this, and the pattern is exact — the gate said something about *data the
+library holds*, decidable at construction:
+
+| gate | became | deleted |
+| --- | --- | --- |
+| `hnd` on `M`'s payload | `Finset Name` + a function on it | the premise, and `Lists.lean`'s whole association-list section |
+| `hnd` on the field table | the same, one level up | the premise, the `TypedFields` inductive, −293 lines |
+| `hne`, `hnd` on wire sets | `NEFinset α` | both premises, at three members |
+| `hne`, `hnd` on `ℓ` | `NEFinset` again | both, twice |
+| unrestricted `N` carrier | `Attr.n : WFNumeral` | made `Carries(N)` exact; `numberCodec` *became* the base it refined |
+| `hok`'s container half, `hμ` | `GroundValue`, then a `GroundKind` index | `hμ`, the container gate, the `hok` argument of two laws, a case in `Exactness` |
+| three literal constructors | one, indexed by the base | 2 constructors, a 26-line carrier proof, 2 of 3 `lawful_*` |
+
+The test that predicts success: **can the condition be decided from the constructor's own
+arguments, at construction, with no reference to a value being encoded?** Non-emptiness,
+uniqueness, unorderedness, "has a ground base", "which base" — all yes. That is the whole
+qualifying set, and it is now empty.
+
+### 14.2 Where it actively harms: when the gate is the only witness that a defect exists
+
+**§2.2's first row is the counter-example, and it is the one claim in this file that survived
+every push.** `Typed.literalN`'s `hD : ∀ d ∈ ℓ, Numeral.WF d.toDec` could be typed —
+`NEFinset {d // WF d.toDec}` is perfectly admissible. Doing it would **delete
+`literalN_holds_what_it_cannot_write`**, the theorem exhibiting a literal that is *held* and
+unwritable, which is (B) failing.
+
+That is not conservatism. A typed `hD` makes the bad term unconstructible, so the model can no
+longer *exhibit* the defect — and exhibiting it is what `Refutations.lean` is for. The difference
+between "this cannot be said" and "this can be said and here is why it is wrong" is the
+difference between a model that hides a defect and one that documents it. §4's numeral repair is
+the live example of the risk: the defect did not vanish, it **changed shape** — from "writes a
+non-attribute" to `T ⊄ dom(e)` — and it was only visible afterwards because a witness still
+existed to relocate.
+
+The `℘⁺fin` repair paid this cost for real and it is recorded: typing it destroyed the only
+`Double`-free witness that `opaque`'s exactness row over-claims, so `not_ExactV_opaq` and
+`excuse_witnessed` now take a `(d : Double)` they did not need.
+
+**So the rule has a second clause: a gate that is load-bearing for a refutation stays.** Not
+because typing it is impossible, but because typing it would make the model claim more than it
+can prove — by making the counterexample unsayable rather than false.
+
+### 14.3 The bigger principle, which is not this one
+
+Add up §14.1: seven repairs, on the order of fifty lines of premises and a few hundred lines of
+machinery that existed to repair the old representations.
+
+Now §13: a structural `denote` puts **~1400 lines** in question — `Denoteω` (314),
+`Continuity` (123), `Soundnessω` (77), `Opaque.lean`'s budget apparatus (854, 148 `depth` uses) —
+plus `fuel` threaded through `Soundness` (191 mentions), `Discharge` (159) and `Exactness` (40).
+
+And it is a **different move**. Fuel is not a guard; nothing is being made unrepresentable.
+`fuel`, `Value.depth` and `Attr.depth` are *measures standing in for a recursion the checker
+could not see*, and the repair is to let it see the recursion. Call it **measure → structure**,
+against §14.1's **gate → type**. On this codebase the second is worth an order of magnitude more
+than the first, and it was invisible for the whole arc because nobody asked the checker.
+
+### 14.4 The predictable tax, in one place
+
+Both moves push work into the elaborator, and it lands somewhere specific: **the moment a type
+carries an index or a quotient, the kernel and `simp` stop being free.**
+
+* A dependent field makes `simp [Adm]` exhaust the heartbeat budget across the row (§11.7); the
+  fix is to name the row, never to raise the budget.
+* A `Finset` payload cannot reach a `List`-shaped constructor without `Finset.toList`, which is
+  `Classical.choice` (§11.5).
+* A quotient cannot sit in a nested inductive position — `Multiset Term` is refused by the kernel
+  (§12.1), and so is `List (A n)` in an indexed family (§12.4).
+* `DecidableEq` is not always available at all: `Term.custom` carries functions on `Value`.
+
+None of these is a reason not to do it. They are where to look first when it goes wrong, and each
+one cost a probe of under a minute to establish.
+
+### 14.5 So, confirmed — with the clauses
+
+1. Replace a gate with a type when the condition is decidable from the constructor's own
+   arguments at construction. **The qualifying set is now empty**; §14.1's table is the whole of
+   it.
+2. **Keep** a gate that a refutation depends on. Typing it deletes the witness, and a model that
+   cannot state its defects is worse than one that gates them.
+3. **Prefer measure → structure over gate → type** where both are available. It is where the mass
+   is, and §13 is the open item.
+4. Settle every "can this be done" with a probe, not an argument. Every verdict in this file
+   reached by argument and later challenged was wrong; every one reached by probe held.
