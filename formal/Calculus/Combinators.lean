@@ -3624,6 +3624,8 @@ theorem object_agree (hf : ∀ kf ∈ sems, Lawful kf.2.codec) (hrc : ∀ c ∈ 
     simp only [dif_pos hkf] at hw
     exact (entryCodec_of hf hrc hc).agree hp hw
 
+end ObjectLaws
+
 /-- Core keyed product: (R), (C), (W) with only core children. -/
 private theorem lawfulCore_objectCore
     (sems : List (Name × FieldSem)) (rc? : Option Codec) (kn : Name → Bool)
@@ -3983,8 +3985,15 @@ theorem onKind_array (c : Codec) :
 
 theorem onKind_record (c : Codec) :
     OptionSem.OnKind (.byAttempt (recordCodec c)) .map := by
-  constructor <;> intro x hx <;> cases x <;>
-    simp_all [OptionSem.byAttempt, recordCodec, Value.kind, Attr.kind]
+  refine ⟨fun v hv => ?_, fun a ha => ?_⟩
+  · cases v
+    case map keys f => rfl
+    all_goals
+      (simp only [OptionSem.byAttempt, recordCodec] at hv; exact absurd hv (by simp))
+  · cases a
+    case m keys g => rfl
+    all_goals
+      (simp only [OptionSem.byAttempt, recordCodec] at ha; exact absurd ha (by simp))
 
 /-- The kinds `opaque`'s options are pinned to, in the order they are offered. -/
 def opaqKinds : List Kind :=
