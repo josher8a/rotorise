@@ -876,17 +876,7 @@ theorem carrier_denote : ∀ {t T μ}, Typed t T μ → Obligations t → Carrie
           replace hcr : some (denote t') = some rc := hcr
           cases hcr
           exact carrier_denote hty hob.2
-      -- the name filter never discards a declared name, under any rest policy
-      have hkeep : ∀ k, (MapOf.at (⟨fields, fun k => fieldSem (ff k)⟩ :
-          MapOf FieldSem) k).isSome →
-          keepB (restSem rest)
-            ⟨fields, fun k => fieldSem (ff k)⟩ k = true := by
-        intro k hk
-        cases rest with
-        | drop => exact hk
-        | refuse => rfl
-        | codec _ => rfl
-      exact carrier_objectCodecCore hsems hrc hfb hkeep
+      exact carrier_objectCodec hsems hrc hfb
     | @union opts Ts μs hlist _ =>
       rw [denote_union_sems, optionSems_eq]
       refine carrier_altCodec (forall_mem_map fun t' ht' => ?_)

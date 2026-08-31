@@ -55,7 +55,7 @@ content.
 | 15 | `src/codec.ts` | **DEFERRED — target work behind the spec.** **Nothing checks the 32-level nesting bound**, so the library writes items DynamoDB rejects — a C1 violation of the `⟨N,"5e-324"⟩` shape, and the fifth after §9 closed five. `opaque` and `native` are where it bites: both walk arbitrary user data. §12.3. | — | small (library); the model's side is a scope decision |
 | 16 | `Typing.lean:207-210` | `dunion` keyed by tag (`MapOf Term`, discriminator **injected** not read back) deletes `htags` and `hdisj` with no coherence gate — §2.2's stated reason was wrong. Blocked on one measurement: whether `discriminatedUnion` has a multi-tag variant. §12.2. | 2 premises | medium, and a C2/C3 change |
 | ~~6b~~ | ~~`Term.lean:27-35`~~ **Landed.** | **`literal`, `literalS` and `literalN` are one rule.** Raised by JH while item 6 was landing, and right: all three are *a nonempty finite set of values at one ground base*. Landed as the base-indexed form of §11.1 — `literal (k : GroundKind) (ls : NEFinset k.Carrier)` — after §11.4/§11.5 settled that the cheaper union route costs either `Classical.choice` or two reintroduced gates. | 2 constructors, 5 codec definitions → 4, 3 lawful theorems → 1, 2 carrier theorems → 1 (one of them 26 lines), 4 `admA` row lemmas → 3 | **landed** |
-| 7 | `Combinators.lean:3324, 3375, 3406` +2 | `objectCodecCore` takes `kn : Name → Bool` free; the only instantiation is `keepB rest sems`. Three hypotheses across five signatures all say *the filter never discards a declared name*. | 3 hypotheses × 5 signatures, plus `keepB_of_encEntry` and `keepB_of_declared` | medium (43 sites) |
+| ~~7~~ | ~~`Combinators.lean`, 43 sites~~ **Landed.** | `objectCodecCore` took `kn : Name → Bool` free; the only instantiation is `keepB rest sems`, and `rc?` is likewise always `rcOf rest`. Three hypotheses across five signatures all said *the filter never discards a declared name*. All three are gone, the private `lawfulCore_objectCore`/`lawful_objectCore` layer with them — it existed only to be instantiated by the public pair. §4.4 records what the parameter was actually costing, which was not the five signatures. | 2 theorems, 3 hypotheses × 5 signatures, 23 lines net | **landed** |
 | ~~8~~ | ~~36 declarations~~ **Landed, in two passes.** | Transitively dead plumbing. The estimate was ~61 and the delivered figure is **36**; §4.1 records what the other ~25 turned out to be, because the miss was systematic rather than random. | 36 decls, 302 lines | **landed** |
 | ~~9~~ | ~~`codec-calculus.md:249-251`, `:301-302`, `:938-944`, `:1034`~~ **Landed.** | §3 presented both number rules as `refine` over an **ungated base** (those bases cannot exist); the base table said "doubles"/"numerals"; §5's traversal Lemma had a "keyed lists … first occurrence first" clause naming nothing; `:1034` called a wire set "the lifted list". All four rewritten, and the literal rows collapsed to the one indexed rule. | one clause | **landed** |
 | ~~10~~ | ~~`Lists.lean:13-22`~~ **Landed.** | Header advertised "three groups" incl. `List.lookup` on association lists, "the pivot is `lookup_cons`" — a group deleted, and contradicted at `:81` in the same file. The three groups are now the ones that are there, and the deleted one is named as deleted with a pointer to the note that explains it. | — | **landed** |
@@ -335,6 +335,41 @@ The `README.md` fuel row is the one worth noting: item 17 removed fuel from `den
 commits before this audit opened, `Continuity.lean`'s own prose was rewritten for it at the
 time, and the map of the development still described the old design in two places. That is
 exactly the failure mode the check catches and a reviewer does not.
+
+### 4.4 Item 7: what a free parameter costs, and where
+
+`objectCodecCore` took two parameters — `rc? : Option Codec` and `kn : Name → Bool` — that the
+object rule always supplies together, as `rcOf rest` and `keepB rest sems`. The queue entry
+scoped the defect as three hypotheses on five signatures. That was right about the hypotheses
+and wrong about where the cost fell.
+
+**What went.** The three hypotheses (`hkeep`, `hknE`, `hknDecl`), from
+`carrier_objectCodecCore`, `object_retract`, `object_canon` and both halves of the private
+core layer. That layer — `lawfulCore_objectCore` and `lawful_objectCore`, both `private`, both
+taking five hypotheses — turned out to exist for no reason except to be instantiated by
+`lawful_objectCodec`/`lawfulCore_objectCodec` one line later, so it is deleted and inlined.
+`carrier_objectCodecCore` is now `carrier_objectCodec`.
+
+**Where the cost actually was.** Not in the five signatures, which a reader skips. In
+`Soundness.lean`, the `object` case of `carrier_denote` carried a ten-line `have hkeep` that
+re-proved `keepB_of_declared` by hand, in full, because the hypothesis asked for it and the
+lemma discharging it was not in scope at that altitude. **A free parameter with one
+instantiation does not cost you the parameter; it costs you a re-proof at every call site that
+cannot see the discharge.** One call site here, ten lines, and it is the kind of duplication
+that no reference count and no `simp` set will show you.
+
+`keepB_of_entryWrite` and `keepB_of_declared` were queued for deletion along with the
+hypotheses. They are not deleted — they are used three times between the specialized laws, and
+they are the *content* of what the hypotheses were asking for. They moved up the file instead,
+above the theorems that now discharge with them, next to `rcOf_forall`, which does the same job
+for the other half of `rest`.
+
+**What did not go, and the probe that settled it.** `objRead`, `objWrite` and
+`objectCodecCore` still take `rc?` and `kn`. After the laws were specialized no proof outside
+that block mentions `kn` at all, so the block is self-contained — but collapsing it deletes no
+declaration and lengthens `objRead_eq`'s statement by four occurrences of `keepB rest sems`.
+A parameter is where a payload function's argument belongs; the defect was hypotheses on laws.
+Measured, left.
 
 ### 4.2 Scaffolding
 

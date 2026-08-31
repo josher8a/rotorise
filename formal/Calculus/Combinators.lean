@@ -3154,188 +3154,14 @@ theorem fbValue_of {sems : MapOf FieldSem} {k c v}
     fbValue sems k = some v := by
   simp [fbValue, hm]
 
-/-- §4's held set, both ways. The two premises past lawfulness are the doc's own:
-    `hfb` is `(fallback)`'s `v(∗) ∈ dom(e)`, which with `domE` gives §4's `v : 𝟙 → T`;
-    `hkeep` says the name filter never discards a declared name, which is what all
-    three rest policies do.
+/-! #### The rest policy fixes both halves
 
-    Writing is immediate. Reading has to account for the stand-ins: every non-`opt`
-    name is present in the result — a `req` from the row it was stored in, an `fb`
-    from the row or else from its stand-in — and every entry is on its set, the kept
-    ones by `entry_ranP`, the stand-ins by `hfb`. -/
-theorem carrier_objectCodecCore {sems : MapOf FieldSem} {rc? : Option Codec}
-    {kn : Name → Bool}
-    (hsems : ∀ k, Carrier (sems.2 k).codec)
-    (hrc : ∀ rc, rc? = some rc → Carrier rc)
-    (hfb : ∀ k c v, sems.2 k = .fb c v → (c.e v).isSome)
-    (hkeep : ∀ k, (sems.at k).isSome → kn k = true) :
-    Carrier (objectCodecCore sems rc? kn) := by
-  refine objectCodecCore_eq ▸ carrier_carried ?_ ?_
-  · rintro p q h
-    obtain ⟨hval, g, hg, rfl⟩ := objWrite_eq.mp h
-    exact ⟨hval, fun k => entry_domE' hsems hrc (funImage_some hg k)⟩
-  · rintro q p h
-    obtain ⟨hreq, d, hd, rfl⟩ := objRead_eq.mp h
-    constructor
-    · refine valPresentB_of fun k fs hm hno => ?_
-      have hkn : kn k = true := hkeep k (by rw [hm]; rfl)
-      rw [Finset.mem_union]
-      cases fs with
-      | opt c => exact absurd rfl (hno c)
-      | req c =>
-        exact Or.inl (Finset.mem_filter.mpr ⟨reqPresentB_spec hreq hm, by simpa using hkn⟩)
-      | fb c v₀ =>
-        by_cases hk : k ∈ q.1
-        · exact Or.inl (Finset.mem_filter.mpr ⟨hk, by simpa using hkn⟩)
-        · exact Or.inr (fbNames_mem hm hk)
-    · intro k
-      by_cases hk : k.1 ∈ q.1.filter (kn ·)
-      · simp only [dif_pos hk]
-        exact entry_ranP' hsems hrc (funImage_some hd ⟨k.1, hk⟩)
-      · simp only [dif_neg hk]
-        have hfbm : k.1 ∈ fbNames q.1 sems :=
-          (Finset.mem_union.mp k.2).resolve_left hk
-        obtain ⟨⟨c, v₀, hm⟩, -⟩ := mem_fbNames.mp hfbm
-        obtain ⟨hk', hs⟩ := MapOf.at_eq_some.mp hm
-        rw [fbValue_of hm]
-        refine objEntryT_eq.mpr ⟨c, ?_, ?_⟩
-        · simp [entryCodec, hm, FieldSem.codec]
-        · obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp (hfb ⟨k.1, hk'⟩ c v₀ hs)
-          exact (MapOf.at_forall (Q := fun fs => Carrier fs.codec) hsems hm).domE ha'
-
-
-
-
-
-/-! #### §2's clauses for the object's payload pair
-
-Each is proved once, from core children, and both `lawfulCore_objectCore` and
-`lawful_objectCore` consume them. -/
-
-section ObjectLaws
-variable {sems : MapOf FieldSem} {rc? : Option Codec} {kn : Name → Bool}
-
-/-- (R): a written row is complete — every declared name present, none filtered out, no
-    stand-in owed — so reading it back is the entrywise round trip and nothing else. -/
-theorem object_retract (hf : ∀ k, LawfulCore (sems.2 k).codec)
-    (hrc : ∀ c ∈ rc?, LawfulCore c)
-    (hknE : ∀ k v a, (entryCodec sems rc? k).bind (fun c => c.e v) = some a → kn k = true) :
-    ∀ p q, objWrite sems rc? p = some q → objRead sems rc? kn q = some p := by
-  rintro p q h
-  obtain ⟨hval, g, hg, rfl⟩ := objWrite_eq.mp h
-  -- every name of a writable map is kept, so the `drop` filter is the identity
-  have hfilter : p.1.filter (kn ·) = p.1 :=
-    Finset.filter_eq_self.mpr fun k hk => by
-      simpa using hknE k (p.2 ⟨k, hk⟩) _ (funImage_some hg ⟨k, hk⟩)
-  -- and no fallback name is missing, so nothing is adjoined
-  have hfb0 : fbNames p.1 sems = ∅ :=
-    fbNames_empty fun k c v hm => valPresentB_spec hval hm (fun _ h' => nomatch h')
-  refine objRead_eq.mpr ⟨reqPresentB_of fun k c hm =>
-    valPresentB_spec hval hm (fun _ h' => nomatch h'), ?_⟩
-  refine ⟨fun k => p.2 ⟨k.1, (Finset.mem_filter.mp k.2).1⟩, funImage_eq fun k => ?_, ?_⟩
-  · have hw := funImage_some hg ⟨k.1, (Finset.mem_filter.mp k.2).1⟩
-    cases hc : entryCodec sems rc? k.1 with
-    | none => rw [hc] at hw; exact nomatch hw
-    | some c =>
-      simp only [hc, Option.bind_some] at hw ⊢
-      exact (entryCodec_of hf hrc hc).retract hw
-  · refine MapOf.ext ?_ ?_
-    · simp only [hfilter, hfb0, Finset.union_empty]
-    · intro k h₁ h₂
-      have hk1 : k ∈ p.1.filter (kn ·) := by rw [hfilter]; exact h₁
-      simp only [dif_pos hk1]
-
-/-- (C): what was read is writable again — the kept entries by (C) one level down, the
-    stand-ins by `(fallback)`'s own premise `v(∗) ∈ dom(e)`. -/
-theorem object_canon (hf : ∀ k, LawfulCore (sems.2 k).codec)
-    (hrc : ∀ c ∈ rc?, LawfulCore c)
-    (hfb : ∀ k c v, sems.2 k = .fb c v → (c.e v).isSome = true)
-    (hknDecl : ∀ k, (sems.at k).isSome = true → kn k = true) :
-    ∀ q p, objRead sems rc? kn q = some p → (objWrite sems rc? p).isSome = true := by
-  rintro q p h
-  obtain ⟨hreq, d, hd, rfl⟩ := objRead_eq.mp h
-  have hval : valPresentB sems (q.1.filter (kn ·) ∪ fbNames q.1 sems) = true := by
-    refine valPresentB_of fun k fs hm hno => ?_
-    have hknk : kn k = true := hknDecl k (by rw [hm]; rfl)
-    rw [Finset.mem_union]
-    by_cases hk : k ∈ q.1
-    · exact Or.inl (Finset.mem_filter.mpr ⟨hk, by simpa using hknk⟩)
-    · cases fs with
-      | opt c => exact absurd rfl (hno c)
-      | req c => exact absurd (reqPresentB_spec hreq hm) hk
-      | fb c v => exact Or.inr (fbNames_mem hm hk)
-  have hstep : ∀ k : {k // k ∈ q.1.filter (kn ·) ∪ fbNames q.1 sems},
-      ((entryCodec sems rc? k.1).bind (fun c => c.e
-        (if h : k.1 ∈ q.1.filter (kn ·) then d ⟨k.1, h⟩
-         else (fbValue sems k.1).getD .null))).isSome = true := by
-    intro k
-    by_cases hk : k.1 ∈ q.1.filter (kn ·)
-    · simp only [dif_pos hk]
-      have hp := funImage_some hd ⟨k.1, hk⟩
-      cases hc : entryCodec sems rc? k.1 with
-      | none => rw [hc] at hp; exact nomatch hp
-      | some c =>
-        simp only [hc, Option.bind_some] at hp ⊢
-        exact (entryCodec_of hf hrc hc).canon hp
-    · simp only [dif_neg hk]
-      obtain ⟨⟨c, v₀, hm⟩, -⟩ :=
-        mem_fbNames.mp ((Finset.mem_union.mp k.2).resolve_left hk)
-      have hc : entryCodec sems rc? k.1 = some c := by
-        simp [entryCodec, hm, FieldSem.codec]
-      obtain ⟨hk', hs⟩ := MapOf.at_eq_some.mp hm
-      simp only [fbValue_of hm, hc, Option.bind_some, Option.getD_some]
-      exact hfb ⟨k.1, hk'⟩ c v₀ hs
-  simp only [objWrite, if_pos hval]
-  exact funImage_map_isSome (funImage_isSome hstep) _
-
-theorem object_agree (hf : ∀ k, Lawful (sems.2 k).codec) (hrc : ∀ c ∈ rc?, Lawful c) :
-    ∀ q p q', objRead sems rc? kn q = some p →
-      objWrite sems rc? p = some q' → Agree (mA.into q') (mA.into q) := by
-  rintro q p q' hD hE
-  obtain ⟨hreq, d, hd, rfl⟩ := objRead_eq.mp hD
-  obtain ⟨hval, g, hg, rfl⟩ := objWrite_eq.mp hE
-  refine Agree.m _ _ _ _ fun k hx hy => ?_
-  -- a name the stored item carries cannot be one the row omits, so the `fb` half of the
-  -- union is unreachable here and only the kept entries have to agree
-  have hkf : k ∈ q.1.filter (kn ·) :=
-    (Finset.mem_union.mp hx).resolve_right fun h => (mem_fbNames.mp h).2 hy
-  have hp := funImage_some hd ⟨k, hkf⟩
-  have hw := funImage_some hg ⟨k, hx⟩
-  cases hc : entryCodec sems rc? k with
-  | none => rw [hc] at hp; exact nomatch hp
-  | some c =>
-    simp only [hc, Option.bind_some] at hp hw
-    simp only [dif_pos hkf] at hw
-    exact (entryCodec_of hf hrc hc).agree hp hw
-
-end ObjectLaws
-
-/-- Core keyed product: (R), (C), (W) with only core children. -/
-private theorem lawfulCore_objectCore
-    (sems : MapOf FieldSem) (rc? : Option Codec) (kn : Name → Bool)
-    (hf : ∀ k, LawfulCore (sems.2 k).codec)
-    (hfb : ∀ k c v, sems.2 k = .fb c v → (c.e v).isSome = true)
-    (hrc : ∀ c ∈ rc?, LawfulCore c)
-    (hknE : ∀ k v a, (entryCodec sems rc? k).bind (fun c => c.e v) = some a → kn k = true)
-    (hknDecl : ∀ k, (sems.at k).isSome = true → kn k = true) :
-    LawfulCore (objectCodecCore sems rc? kn) :=
-  objectCodecCore_eq ▸ lawfulCore_carried (fun _ => rfl)
-    (object_retract hf hrc hknE) (object_canon hf hrc hfb hknDecl)
-
-/-- The keyed product, parametrically: the same three clauses, plus (MP). -/
-private theorem lawful_objectCore
-    (sems : MapOf FieldSem) (rc? : Option Codec) (kn : Name → Bool)
-    (hf : ∀ k, Lawful (sems.2 k).codec)
-    (hfb : ∀ k c v, sems.2 k = .fb c v → (c.e v).isSome = true)
-    (hrc : ∀ c ∈ rc?, Lawful c)
-    (hknE : ∀ k v a, (entryCodec sems rc? k).bind (fun c => c.e v) = some a → kn k = true)
-    (hknDecl : ∀ k, (sems.at k).isSome = true → kn k = true) :
-    Lawful (objectCodecCore sems rc? kn) :=
-  let hf' := fun k => (hf k).core
-  let hrc' := fun c hc => (hrc c hc).core
-  objectCodecCore_eq ▸ lawful_carried (fun _ => rfl)
-    (object_retract hf' hrc' hknE) (object_canon hf' hrc' hfb hknDecl)
-    (object_agree hf hrc)
+`objectCodecCore` is stated over a free `rc? : Option Codec` and a free filter
+`kn : Name → Bool` because that is what its payload pair takes. Nothing instantiates
+them independently: the object rule reads both off one `rest : RestSem`, as `rcOf rest`
+and `keepB rest sems`. The three lemmas here are what that costs, discharged once —
+they used to be hypotheses on five signatures, and one of them was re-proved by hand at
+the call site in `Soundness.lean`. -/
 
 /-- A property of the rest policy's codec, from one per `rest = .codec c`. -/
 theorem rcOf_forall {P : Codec → Prop} {rest : RestSem}
@@ -3373,22 +3199,183 @@ theorem keepB_of_declared {sems : MapOf FieldSem} {rest : RestSem} :
   | refuse => rfl
   | codec rc => rfl
 
+/-- §4's held set, both ways. The two premises past lawfulness are the doc's own:
+    `hfb` is `(fallback)`'s `v(∗) ∈ dom(e)`, which with `domE` gives §4's `v : 𝟙 → T`;
+    `hkeep` says the name filter never discards a declared name, which is what all
+    three rest policies do.
+
+    Writing is immediate. Reading has to account for the stand-ins: every non-`opt`
+    name is present in the result — a `req` from the row it was stored in, an `fb`
+    from the row or else from its stand-in — and every entry is on its set, the kept
+    ones by `entry_ranP`, the stand-ins by `hfb`. -/
+theorem carrier_objectCodec {sems : MapOf FieldSem} {rest : RestSem}
+    (hsems : ∀ k, Carrier (sems.2 k).codec)
+    (hrc : ∀ rc, rcOf rest = some rc → Carrier rc)
+    (hfb : ∀ k c v, sems.2 k = .fb c v → (c.e v).isSome) :
+    Carrier (objectCodec sems rest) := by
+  show Carrier (objectCodecCore sems (rcOf rest) (keepB rest sems))
+  refine objectCodecCore_eq ▸ carrier_carried ?_ ?_
+  · rintro p q h
+    obtain ⟨hval, g, hg, rfl⟩ := objWrite_eq.mp h
+    exact ⟨hval, fun k => entry_domE' hsems hrc (funImage_some hg k)⟩
+  · rintro q p h
+    obtain ⟨hreq, d, hd, rfl⟩ := objRead_eq.mp h
+    constructor
+    · refine valPresentB_of fun k fs hm hno => ?_
+      have hkn : keepB rest sems k = true := keepB_of_declared k (by rw [hm]; rfl)
+      rw [Finset.mem_union]
+      cases fs with
+      | opt c => exact absurd rfl (hno c)
+      | req c =>
+        exact Or.inl (Finset.mem_filter.mpr ⟨reqPresentB_spec hreq hm, by simpa using hkn⟩)
+      | fb c v₀ =>
+        by_cases hk : k ∈ q.1
+        · exact Or.inl (Finset.mem_filter.mpr ⟨hk, by simpa using hkn⟩)
+        · exact Or.inr (fbNames_mem hm hk)
+    · intro k
+      by_cases hk : k.1 ∈ q.1.filter (keepB rest sems ·)
+      · simp only [dif_pos hk]
+        exact entry_ranP' hsems hrc (funImage_some hd ⟨k.1, hk⟩)
+      · simp only [dif_neg hk]
+        have hfbm : k.1 ∈ fbNames q.1 sems :=
+          (Finset.mem_union.mp k.2).resolve_left hk
+        obtain ⟨⟨c, v₀, hm⟩, -⟩ := mem_fbNames.mp hfbm
+        obtain ⟨hk', hs⟩ := MapOf.at_eq_some.mp hm
+        rw [fbValue_of hm]
+        refine objEntryT_eq.mpr ⟨c, ?_, ?_⟩
+        · simp [entryCodec, hm, FieldSem.codec]
+        · obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp (hfb ⟨k.1, hk'⟩ c v₀ hs)
+          exact (MapOf.at_forall (Q := fun fs => Carrier fs.codec) hsems hm).domE ha'
+
+
+
+
+
+/-! #### §2's clauses for the object's payload pair
+
+Each is proved once, from core children, and both `lawfulCore_objectCore` and
+`lawful_objectCore` consume them. -/
+
+section ObjectLaws
+variable {sems : MapOf FieldSem} {rest : RestSem}
+
+/-- (R): a written row is complete — every declared name present, none filtered out, no
+    stand-in owed — so reading it back is the entrywise round trip and nothing else. -/
+theorem object_retract (hf : ∀ k, LawfulCore (sems.2 k).codec)
+    (hrc : ∀ c ∈ rcOf rest, LawfulCore c) :
+    ∀ p q, objWrite sems (rcOf rest) p = some q →
+      objRead sems (rcOf rest) (keepB rest sems) q = some p := by
+  rintro p q h
+  obtain ⟨hval, g, hg, rfl⟩ := objWrite_eq.mp h
+  -- every name of a writable map is kept, so the `drop` filter is the identity
+  have hfilter : p.1.filter (keepB rest sems ·) = p.1 :=
+    Finset.filter_eq_self.mpr fun k hk => by
+      simpa using keepB_of_entryWrite k (p.2 ⟨k, hk⟩) _ (funImage_some hg ⟨k, hk⟩)
+  -- and no fallback name is missing, so nothing is adjoined
+  have hfb0 : fbNames p.1 sems = ∅ :=
+    fbNames_empty fun k c v hm => valPresentB_spec hval hm (fun _ h' => nomatch h')
+  refine objRead_eq.mpr ⟨reqPresentB_of fun k c hm =>
+    valPresentB_spec hval hm (fun _ h' => nomatch h'), ?_⟩
+  refine ⟨fun k => p.2 ⟨k.1, (Finset.mem_filter.mp k.2).1⟩, funImage_eq fun k => ?_, ?_⟩
+  · have hw := funImage_some hg ⟨k.1, (Finset.mem_filter.mp k.2).1⟩
+    cases hc : entryCodec sems (rcOf rest) k.1 with
+    | none => rw [hc] at hw; exact nomatch hw
+    | some c =>
+      simp only [hc, Option.bind_some] at hw ⊢
+      exact (entryCodec_of hf hrc hc).retract hw
+  · refine MapOf.ext ?_ ?_
+    · simp only [hfilter, hfb0, Finset.union_empty]
+    · intro k h₁ h₂
+      have hk1 : k ∈ p.1.filter (keepB rest sems ·) := by rw [hfilter]; exact h₁
+      simp only [dif_pos hk1]
+
+/-- (C): what was read is writable again — the kept entries by (C) one level down, the
+    stand-ins by `(fallback)`'s own premise `v(∗) ∈ dom(e)`. -/
+theorem object_canon (hf : ∀ k, LawfulCore (sems.2 k).codec)
+    (hrc : ∀ c ∈ rcOf rest, LawfulCore c)
+    (hfb : ∀ k c v, sems.2 k = .fb c v → (c.e v).isSome = true) :
+    ∀ q p, objRead sems (rcOf rest) (keepB rest sems) q = some p →
+      (objWrite sems (rcOf rest) p).isSome = true := by
+  rintro q p h
+  obtain ⟨hreq, d, hd, rfl⟩ := objRead_eq.mp h
+  have hval : valPresentB sems (q.1.filter (keepB rest sems ·) ∪ fbNames q.1 sems) = true := by
+    refine valPresentB_of fun k fs hm hno => ?_
+    have hknk : keepB rest sems k = true := keepB_of_declared k (by rw [hm]; rfl)
+    rw [Finset.mem_union]
+    by_cases hk : k ∈ q.1
+    · exact Or.inl (Finset.mem_filter.mpr ⟨hk, by simpa using hknk⟩)
+    · cases fs with
+      | opt c => exact absurd rfl (hno c)
+      | req c => exact absurd (reqPresentB_spec hreq hm) hk
+      | fb c v => exact Or.inr (fbNames_mem hm hk)
+  have hstep : ∀ k : {k // k ∈ q.1.filter (keepB rest sems ·) ∪ fbNames q.1 sems},
+      ((entryCodec sems (rcOf rest) k.1).bind (fun c => c.e
+        (if h : k.1 ∈ q.1.filter (keepB rest sems ·) then d ⟨k.1, h⟩
+         else (fbValue sems k.1).getD .null))).isSome = true := by
+    intro k
+    by_cases hk : k.1 ∈ q.1.filter (keepB rest sems ·)
+    · simp only [dif_pos hk]
+      have hp := funImage_some hd ⟨k.1, hk⟩
+      cases hc : entryCodec sems (rcOf rest) k.1 with
+      | none => rw [hc] at hp; exact nomatch hp
+      | some c =>
+        simp only [hc, Option.bind_some] at hp ⊢
+        exact (entryCodec_of hf hrc hc).canon hp
+    · simp only [dif_neg hk]
+      obtain ⟨⟨c, v₀, hm⟩, -⟩ :=
+        mem_fbNames.mp ((Finset.mem_union.mp k.2).resolve_left hk)
+      have hc : entryCodec sems (rcOf rest) k.1 = some c := by
+        simp [entryCodec, hm, FieldSem.codec]
+      obtain ⟨hk', hs⟩ := MapOf.at_eq_some.mp hm
+      simp only [fbValue_of hm, hc, Option.bind_some, Option.getD_some]
+      exact hfb ⟨k.1, hk'⟩ c v₀ hs
+  simp only [objWrite, if_pos hval]
+  exact funImage_map_isSome (funImage_isSome hstep) _
+
+theorem object_agree (hf : ∀ k, Lawful (sems.2 k).codec)
+    (hrc : ∀ c ∈ rcOf rest, Lawful c) :
+    ∀ q p q', objRead sems (rcOf rest) (keepB rest sems) q = some p →
+      objWrite sems (rcOf rest) p = some q' → Agree (mA.into q') (mA.into q) := by
+  rintro q p q' hD hE
+  obtain ⟨hreq, d, hd, rfl⟩ := objRead_eq.mp hD
+  obtain ⟨hval, g, hg, rfl⟩ := objWrite_eq.mp hE
+  refine Agree.m _ _ _ _ fun k hx hy => ?_
+  -- a name the stored item carries cannot be one the row omits, so the `fb` half of the
+  -- union is unreachable here and only the kept entries have to agree
+  have hkf : k ∈ q.1.filter (keepB rest sems ·) :=
+    (Finset.mem_union.mp hx).resolve_right fun h => (mem_fbNames.mp h).2 hy
+  have hp := funImage_some hd ⟨k, hkf⟩
+  have hw := funImage_some hg ⟨k, hx⟩
+  cases hc : entryCodec sems (rcOf rest) k with
+  | none => rw [hc] at hp; exact nomatch hp
+  | some c =>
+    simp only [hc, Option.bind_some] at hp hw
+    simp only [dif_pos hkf] at hw
+    exact (entryCodec_of hf hrc hc).agree hp hw
+
+end ObjectLaws
+
 /-- The keyed product — the doc's `object`. `hfb` is §4's `v(∗) ∈ dom(e)`. -/
 theorem lawful_objectCodec {sems : MapOf FieldSem} {rest : RestSem}
     (hf : ∀ k, Lawful (sems.2 k).codec)
     (hfb : ∀ k c v, sems.2 k = .fb c v → (c.e v).isSome)
     (hrest : ∀ c, rest = .codec c → Lawful c) :
-    Lawful (objectCodec sems rest) :=
-  lawful_objectCore sems (rcOf rest) (keepB rest sems) hf hfb
-    (rcOf_forall hrest) keepB_of_entryWrite keepB_of_declared
+    Lawful (objectCodec sems rest) := by
+  show Lawful (objectCodecCore sems (rcOf rest) (keepB rest sems))
+  have hf' := fun k => (hf k).core
+  have hrc' := fun c hc => ((rcOf_forall hrest) c hc).core
+  exact objectCodecCore_eq ▸ lawful_carried (fun _ => rfl)
+    (object_retract hf' hrc') (object_canon hf' hrc' hfb)
+    (object_agree hf (rcOf_forall hrest))
 
 theorem lawfulCore_objectCodec {sems : MapOf FieldSem} {rest : RestSem}
     (hf : ∀ k, LawfulCore (sems.2 k).codec)
     (hfb : ∀ k c v, sems.2 k = .fb c v → (c.e v).isSome)
     (hrest : ∀ c, rest = .codec c → LawfulCore c) :
-    LawfulCore (objectCodec sems rest) :=
-  lawfulCore_objectCore sems (rcOf rest) (keepB rest sems) hf hfb
-    (rcOf_forall hrest) keepB_of_entryWrite keepB_of_declared
+    LawfulCore (objectCodec sems rest) := by
+  show LawfulCore (objectCodecCore sems (rcOf rest) (keepB rest sems))
+  exact objectCodecCore_eq ▸ lawfulCore_carried (fun _ => rfl)
+    (object_retract hf (rcOf_forall hrest)) (object_canon hf (rcOf_forall hrest) hfb)
 
 /-- The sum's core laws. (U) is what makes them hold: it says the option that wrote is
     the only one admitting either side of the pair, so the round trip comes back through
