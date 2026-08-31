@@ -34,6 +34,7 @@ timeboxed. This file is their output and the disposition of each item.
 | 4 | `WireOrder.lean` | **17 of 19 declarations dead** (independently found by two scans); header argues for a design the code abandoned. Only `Axioms.lean` imports it, for the axiom scan. The `Classical.choice` warning about `LinearOrder String` is a real hazard and must be relocated, not lost. | ~247 lines | small |
 | 5 | `Domain.lean:344` | `Item := List (Name × Attr)`, docstring calls it "an `M` without its wrapper" — the exact shape five sites removed, beside the repaired `Attr.m`. **Dead**: grep finds only the declaration. | the declaration | none |
 | ~~6~~ | ~~`Typing.lean:165-167`~~ **Landed.** | `literalOK` did two jobs: `Numeral.WF` on `.num` (content, stays) and `\| _ => false` for containers, which is just *"this value has a ground base"* — a claim about the field's carrier. `Term.literal (v : GroundValue)` makes `literalMember` total. Landed exactly as scoped: `hμ` and `μ` gone, `literalOK` → `literalD` with only the `.num` case, both laws argument-free, `literalMember` deleted, `literalCodec`'s `Codec.empty` case and `Exactness`'s container case gone. | **all of `hμ`**, the container half of `hok`, the `hok` arg of two laws, a case in `Exactness` | small (11 sites) |
+| 17 | `Denote.lean:95` +4 modules | **`denote` does not need fuel.** A structural, fuel-free `denote` compiles against the real `Term` (§13.1). The obstructions were `List.map` and a higher-order `fieldSemOf`, both incidental. Puts `Denoteω` (314), `Soundnessω` (77), `Continuity` (123) and `Opaque.lean`'s budget apparatus (854, 148 `depth` uses) in question, plus `fuel` in `Soundness` (191), `Discharge` (159), `Exactness` (40). §13. | ~1400 lines | **largest in this file** — spike first |
 | 15 | `src/codec.ts` | **Nothing checks the 32-level nesting bound**, so the library writes items DynamoDB rejects — a C1 violation of the `⟨N,"5e-324"⟩` shape, and the fifth after §9 closed five. `opaque` and `native` are where it bites: both walk arbitrary user data. §12.3. | — | small (library); the model's side is a scope decision |
 | 16 | `Typing.lean:207-210` | `dunion` keyed by tag (`MapOf Term`, discriminator **injected** not read back) deletes `htags` and `hdisj` with no coherence gate — §2.2's stated reason was wrong. Blocked on one measurement: whether `discriminatedUnion` has a multi-tag variant. §12.2. | 2 premises | medium, and a C2/C3 change |
 | ~~6b~~ | ~~`Term.lean:27-35`~~ **Landed.** | **`literal`, `literalS` and `literalN` are one rule.** Raised by JH while item 6 was landing, and right: all three are *a nonempty finite set of values at one ground base*. Landed as the base-indexed form of §11.1 — `literal (k : GroundKind) (ls : NEFinset k.Carrier)` — after §11.4/§11.5 settled that the cheaper union route costs either `Classical.choice` or two reintroduced gates. | 2 constructors, 5 codec definitions → 4, 3 lawful theorems → 1, 2 carrier theorems → 1 (one of them 26 lines), 4 `admA` row lemmas → 3 | **landed** |
@@ -1008,3 +1009,103 @@ must not do is wait for item 15, which is a library bug with a local fix.
 
 *(§6's `:130` row now says "not typeable **as a subtype**", which is what the kernel actually
 refused. That is the third correction to that row.)*
+
+## 13. `denote` does not need fuel — and this is the largest finding in the file
+
+JH pushed on §12.4: *"you are scared of load-bearing where we can have stronger pieces. trust
+yourself, this is deterministic."* The push was right, and it landed somewhere much better than
+the depth bound.
+
+### 13.1 The probe
+
+This compiles, against the real `Term`, with no `decreasing_by` and no fuel:
+
+```lean
+mutual
+noncomputable def den : Term → Codec
+  | .set elem => setCodec (den elem)
+  | .tuple elems tail => tupleCodec (denL elems) (denO tail)
+  | .object fields f rest => objectCodec ⟨fields, fun k => denField (f k)⟩ (denRest rest)
+  | .union opts => altCodec (denOpts opts) (unanimous (denμs opts))
+  | .dunion d opts => dunionCodec d (denTagged d opts)
+  | …                                             -- the other fifteen rows unchanged
+noncomputable def denField : Field → FieldSem
+  | .req t => .req (den t) | .optional t => .opt (den t) | .fallback t v => .fb (den t) v
+noncomputable def denRest : Rest → RestSem
+  | .drop => .drop | .refuse => .refuse | .codec t => .codec (den t)
+noncomputable def denL : List Term → List Codec
+  | [] => [] | t :: ts => den t :: denL ts
+  -- …and one companion each for `Option Term`, options, members, tagged options
+end
+```
+
+Kept at `scratchpad/denote-structural-probe.lean`.
+
+### 13.2 What was actually blocking it — neither of the two things I assumed
+
+I reasoned twice from the wrong frame and the compiler corrected both.
+
+**Not `sizeOf`.** My first guess was that the map field defeats termination because `sizeOf`
+cannot see into a function: `sizeOf (Value.map keys f) = 1 + sizeOf keys + sizeOf f` and
+`sizeOf f = 0`, both confirmed by `simp`, so `sizeOf (f k) < sizeOf (Value.map keys f)` is
+unprovable. True — and irrelevant. **`Value.depth` in `Opaque.lean:50` already recurses at
+`f k`** with no fuel and no `decreasing_by`, because a function field makes `Value` reflexive and
+*structural* recursion goes through it. `sizeOf` only becomes the measure once something else
+forces well-founded recursion, which is what my first probe accidentally did by using
+`List.map` in the array case.
+
+**Not the `Finset`-plus-function representation.** The five repairs did not buy their types at
+the cost of fuel. The two real obstructions in the current `denote` are both incidental:
+
+1. `elems.map (denote fuel)` and `opts.map fun t' => … (denote fuel t')` — recursion under
+   `List.map`. A list companion fixes it, which is exactly what `μSyn`/`μSynList` in the same
+   file already do.
+2. `fieldSemOf (denote fuel) (f k)` and `restSemOf (denote fuel) rest` — `denote fuel` passed
+   **unapplied**, as a function value. Structural recursion cannot do that. But `fieldSemOf`
+   applies its argument to *exactly the subterm* in all three rows (`.req t => .req (den t)`),
+   so it is fully invertible: make it a mutual companion and the higher-order argument
+   disappears.
+
+### 13.3 What it costs to keep the fuel
+
+| module | lines | why it exists |
+| --- | --- | --- |
+| `Denoteω` | 314 | *is* the fuel-free denotation — the thing `den` above just is |
+| `Continuity` | 123 | relates fueled to fuel-free; contains one real finding (see below) |
+| `Soundnessω` | 77 | the same, for soundness |
+| `Opaque.lean` | 854 | `opaqCodecω`'s per-input depth budgets and stabilization, 148 `depth` uses |
+
+Plus `fuel` threaded through `Soundness` (191 mentions), `Discharge` (159), `Exactness` (40), and
+the `fuel = 0` base case of every induction — `lawful_dead`, `carrier_dead`, `Obligations 0 = True`.
+
+An earlier probe in this session also showed an `opaqE`-shaped `Value → Option Attr` compiles
+structurally, with a mutual list companion and a dependent `if h : ∀ k, (enc (f k)).isSome`. So
+`opaque`'s budget apparatus is avoidable on the same grounds, and the §12.4 depth-bound question
+is **moot**: nothing here needs a bound on nesting.
+
+### 13.4 What must survive, and what I have not shown
+
+`Continuity.lean`'s content is a *finding*, not scaffolding: union's admission is anti-monotone,
+so a genuinely recursive union has no fixpoint semantics in any system. That is why `Term.lazy`
+carries a plain `Term` rather than a thunk, and it has to survive as a statement whatever happens
+to the fuel around it.
+
+**Shown:** the definition typechecks and terminates structurally, against the real `Term`.
+**Not shown:** that the proofs port. They should get *simpler* — no fuel induction, no `fuel = 0`
+base case, `denote_μ`'s two-case induction collapses — but "simpler" is a prediction and this
+file's record on predictions is poor. The honest scope is: one spike that ports `Soundness.lean`
+to `den` and reports what actually happened, before anything is deleted.
+
+### 13.5 Queue position
+
+This subsumes item 4 (`WireOrder` dead), most of §4.1's dead-plumbing list, and §12.4. It is
+larger than 6b by a wide margin and it is the only item in the file that would make the model
+*smaller* rather than more exact. It does not touch item 15, which is still a live library bug
+with a local fix.
+
+**And the pattern is worth naming.** Every "this is load-bearing" verdict I wrote this session
+that JH pushed on has been wrong: §11.4's two objections, §6's depth row three times over, and now
+the assumption that fuel was forced. The ones that held — `DecidableEq Term`, `Multiset Term`,
+`Finset.toList` — held because a probe settled them in under a minute. The rule that falls out:
+**in a deterministic system, a claim about what is possible is worth one probe, and an argument
+about it is worth nothing.**
