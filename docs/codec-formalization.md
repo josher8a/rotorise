@@ -617,10 +617,17 @@ concrete uses are singletons; the other 80 sites are the list machinery — `lit
 one the homogeneity premise never arises (one value has nothing to be homogeneous with), `hne` and
 `hnd` are vacuous, and the list machinery simplifies rather than moves.
 
-  Term.literal (v : Value)
-  literalCodec  — dispatch on the value's kind to its ground base, `restrict`ed at equality
-  literalOK     — §3's `ℓ ⊆ T`: `WF` at `number`, trivial elsewhere, false for a container
+  Term.literal (v : GroundValue)
+  literalCodec  — dispatch on the payload's kind to its ground base, `restrict`ed at equality
+  literalD      — §3's `ℓ ⊆ D`: `WF` at `number`, trivial elsewhere
   Typed.literal — one premise where the two old rules carried three
+
+The payload was `Value` when this was written, and `literalOK` had a third case — `false` for a
+container — with `literalMember` returning `none` on the same values and the rule carrying `hμ`
+to pin the member. All three said *"this payload has a ground base"*, which is a claim about the
+payload's carrier. `GroundValue` says it once, in the type: `literalCodec` is total, the member
+is `GroundValue.member` and needs no premise, and what survives as `literalD` is `ℓ ⊆ D` — the
+arity-one reading of `(literal-N)`'s `hD`, and content.
 
 **And the constructor still earns its place**, which is the part I had backwards. At arity one
 `literal(v)` and `refine(g, · = v)` denote the same pair, so the obvious move is to delete it. But
@@ -632,9 +639,11 @@ one. `admA_literal_num_blind` is the one base where it still cannot, §1's `N` c
 the value is a double.
 
 **What is not done.** `literalS`/`literalN` remain, with all their witnesses; the new constructor
-was added alongside so the build stayed green at every step. Retiring them is mechanical — 41
-concrete sites — and the n-ary form becomes surface syntax for the union, which the `⋃` rows on
-`adm`/`admA` made lossless.
+was added alongside so the build stayed green at every step. Retiring them was recorded here as
+mechanical — 41 concrete sites, the n-ary form becoming surface syntax for the union, which the
+`⋃` rows on `adm`/`admA` made lossless. **That price is understated**; see §11 of
+`codec-audit.md`, which weighs it against a base-indexed n-ary literal and finds two costs this
+paragraph does not name.
 
 `κ_sound`'s literal case is the one place the shape bit: it is the only single-kind rule whose kind
 comes from *data*, so the `single_kind` macro cannot serve and the codec has to be reduced at the
