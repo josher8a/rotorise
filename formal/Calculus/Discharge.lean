@@ -386,7 +386,7 @@ theorem κ_sound : ∀ (fuel : Nat) (t : Term) {ks : List Kind} {v a},
       -- decision is a string parser, and the prism's own predicate already fixes the kind.
       cases w <;> cases v <;>
         simp_all [denote, literalCodec, Codec.restrict, stringCodec,
-                  booleanCodec, binaryCodec, nullCodec, Codec.empty, Value.kind]
+                  booleanCodec, binaryCodec, nullCodec, Value.kind, GroundValue.kind]
     | literalS ls => single_kind hκ v he
     | number => single_kind hκ v he
     | literalN ls => single_kind hκ v he
@@ -483,7 +483,7 @@ theorem adm_sound : ∀ (fuel : Nat) (t : Term) {v a},
     case literal w =>
       cases w <;> cases v <;>
         simp_all [denote, literalCodec, Codec.restrict, stringCodec, numberCodec,
-                  booleanCodec, binaryCodec, nullCodec, Codec.empty, adm]
+                  booleanCodec, binaryCodec, nullCodec, adm]
     case nullable t' =>
       cases hw : (denote fuel t').ownsNull with
       | true =>
@@ -546,7 +546,7 @@ theorem admA_sound : ∀ (fuel : Nat) (t : Term) {a v},
     case literal w =>
       cases w <;> cases a <;>
         simp_all [denote, literalCodec, Codec.restrict, stringCodec, numberCodec,
-                  booleanCodec, binaryCodec, nullCodec, Codec.empty, admA]
+                  booleanCodec, binaryCodec, nullCodec, admA]
     case nullable t' =>
       cases hw : (denote fuel t').ownsNull with
       | true =>

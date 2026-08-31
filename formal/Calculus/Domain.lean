@@ -373,4 +373,53 @@ def Value.kind : Value → Kind
   | .arr _  => .array
   | .map _ _ => .map
 
+/-! ## A value with a ground base (§3 `(literal)`'s payload)
+
+`(literal)` has always had a `g ground` premise, and the model carried it *twice*: as
+`literalOK`'s `| _ => false` and as `literalMember`'s `none`. Neither is content. Both say
+only *"this value has a ground base"* — a claim about the payload's carrier, which is what a
+payload's **type** is for.
+
+So the payload has one. `GroundValue.member` is total where `literalMember` was partial,
+`literalCodec` has no `Codec.empty` case to fall into, and the rule's `hμ` premise does not
+exist to be discharged. What is left of `literalOK` is `Numeral.WF` at `.num`, which is
+§3's `ℓ ⊆ D` and is content — the same premise `(literal-N)` carries as `hD`, at arity one. -/
+
+/-- The five ground kinds, as a carrier. `Value`'s scalar constructors and no others: a set,
+    an array and a map are exactly what `(literal)` cannot hold, and now cannot be handed. -/
+inductive GroundValue where
+  | str  (v : String)
+  | num  (v : Double)
+  | bool (v : Bool)
+  | bin  (v : Bytes)
+  | null
+
+/-- The value it is. Injective by construction — five constructors onto `Value`'s five
+    scalars — so nothing about `(literal)`'s held set changes except that it is now written
+    through an embedding. -/
+@[simp] def GroundValue.toValue : GroundValue → Value
+  | .str s  => .str s
+  | .num d  => .num d
+  | .bool b => .bool b
+  | .bin b  => .bin b
+  | .null   => .null
+
+/-- §5's `κ` on the payload. Agrees with `Value.kind` through the embedding, by `rfl`. -/
+@[simp] def GroundValue.kind : GroundValue → Kind
+  | .str _  => .string
+  | .num _  => .number
+  | .bool _ => .boolean
+  | .bin _  => .binary
+  | .null   => .null
+
+/-- §3 `(literal)`'s member: the one its base stores as. **Total**, which is the point —
+    `literalMember : Value → Option Member` was this function plus a `none` meaning "this
+    payload has no ground base", and that sentence is now unsayable. -/
+@[simp] def GroundValue.member : GroundValue → Member
+  | .str _  => .S
+  | .num _  => .N
+  | .bool _ => .BOOL
+  | .bin _  => .B
+  | .null   => .NULL
+
 end Calculus

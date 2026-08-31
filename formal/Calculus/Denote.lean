@@ -36,19 +36,14 @@ def tagsOf (d : Name) : Term → Finset String
   | .object fields f _ => tagsOfField (MapOf.at ⟨fields, f⟩ d)
   | _ => ∅
 
-/-- §3 `(literal)`'s member: the one its value's kind stores as. A container kind has no
-    ground base and so no member, which is the rule's `g ground` premise as a function. -/
-def literalMember : Value → Option Member
-  | .str _  => some .S
-  | .num _  => some .N
-  | .bool _ => some .BOOL
-  | .bin _  => some .B
-  | .null   => some .NULL
-  | _       => none
-
 /-- `(literal)`'s member is its base's — the dispatch in `literalCodec` and the one in
-    `literalMember` agree case for case. -/
-theorem literalCodec_μ (v : Value) : (literalCodec v).μ = literalMember v := by
+    `GroundValue.member` agree case for case.
+
+    `literalMember : Value → Option Member` used to sit here, and its `| _ => none` was the
+    `g ground` premise wearing a function's clothes. `GroundValue.member` is total, so the
+    `Option` here is only `Codec.μ`'s own — a codec that writes no attribute — and never
+    "this payload had no base". -/
+theorem literalCodec_μ (v : GroundValue) : (literalCodec v).μ = some v.member := by
   cases v <;> rfl
 
 mutual
@@ -58,7 +53,7 @@ mutual
     forced. -/
 def μSyn : Term → Option Member
   | .string => some .S
-  | .literal v => literalMember v
+  | .literal v => some v.member
   | .literalS _ => some .S
   | .number => some .N
   | .decimal => some .N

@@ -183,7 +183,7 @@ theorem Adm_exact : ∀ (t : Term), Analysable t = true → ExactV t
       intro v
       cases w <;> cases v <;>
         simp [Adm, denoteω, literalCodec, stringCodec, inD,
-              booleanCodec, binaryCodec, nullCodec, Codec.empty]
+              booleanCodec, binaryCodec, nullCodec]
   | .custom ce cp, _ => by intro v; simp [Adm, denoteω]
   | .array c, ha => by
       have hc := Adm_exact c (by simpa [Analysable] using ha)
@@ -404,7 +404,7 @@ theorem Adm_sound_fueled : ∀ (fuel : Nat) (t : Term) {v a},
       clear he
       cases w <;> cases v <;>
         simp_all [Adm, denote, literalCodec, stringCodec, inD,
-                  booleanCodec, binaryCodec, nullCodec, Codec.empty]
+                  booleanCodec, binaryCodec, nullCodec]
       all_goals (obtain ⟨rfl, h⟩ := hs; exact h)
     case custom ce cp => simp_all [Adm, denote]
     case opaq lossy => simp [Adm]
@@ -737,8 +737,6 @@ theorem AdmA_sound_fueled : ∀ (fuel : Nat) (t : Term) {a v},
         all_goals
           (simp only [denote, literalCodec, Codec.restrict, numberCodec] at hp
            exact nomatch hp)
-      -- For every payload but `num`, this row and `admA`'s coincide, so its soundness
-      -- lemma carries: the two part company only where `Double.ofDec` does.
       -- For every payload but `num` this row and `admA`'s coincide — they part company
       -- only where `Double.ofDec` does — so `admA_sound` carries them.
       case str sv =>
@@ -757,8 +755,6 @@ theorem AdmA_sound_fueled : ∀ (fuel : Nat) (t : Term) {a v},
         have heq : AdmA (.literal .null) a = admA (.literal .null) a := by
           cases a <;> simp [AdmA, admA]
         rw [heq]; exact admA_sound _ _ hp
-      -- A container payload has no ground base, so `literalCodec` is `Codec.empty`.
-      all_goals (simp only [denote, literalCodec, Codec.empty] at hp; exact nomatch hp)
     case custom ce cp => simp_all [AdmA, denote]
     case opaq lossy => simp [AdmA]
     case legacy c r =>
@@ -904,7 +900,7 @@ theorem AdmA_exact : ∀ (t : Term), AnalysableA t = true → ExactA t
       all_goals
         (cases a <;>
           simp [AdmA, denoteω, literalCodec, Codec.restrict, stringCodec, booleanCodec,
-                binaryCodec, nullCodec, Codec.empty])
+                binaryCodec, nullCodec])
   | .custom ce cp, _ => by intro a; simp [AdmA, denoteω]
   | .array c, ha => by
       have hc := AdmA_exact c (by simpa [AnalysableA] using ha)
