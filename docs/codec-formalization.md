@@ -1870,6 +1870,35 @@ it. The fix is the same shape as `recordCodec_p_n`'s: name the consequence. `num
 a row reads off a refinement without unfolding it. **No `set_option maxHeartbeats` was added** — the
 three in the tree are the three that were there before this arc began.
 
+### Two where a premise the model states was a check the library did not make
+
+`Typed.dunion` carries `hdisj` — the options' tag sets are pairwise disjoint — so a discriminated
+union whose options share a tag is not a term the calculus types. Asking whether `codec.ts` checks
+it found that it does not. `discriminatedUnion` normalizes its options into a table keyed by tag,
+one `byTag[tag] = option.item` per tag the option answers to, with no collision test: **the second
+write wins and the first option becomes unreachable.** It surfaced far from the declaration, as
+`encode` of a value of the first variant reporting a required attribute of the *second* one
+missing. With a multi-tag variant — which the library supports and relies on — the shadowing is
+partial, so one option keeps working at one of its own tags and fails at another.
+
+Reading that loop found a second defect beside it. The lookup was `byVariant[tag] ?? error` on a
+plain object, so a stored discriminator of `toString`, `constructor` or `__proto__` returned an
+inherited function rather than `undefined`, and the caller got a raw `TypeError` instead of a
+`CodecError`. The tag is read off the stored item, so that is reachable from data the library does
+not control, and every other failure in this file is careful to be a `CodecError` precisely because
+that is what callers handle.
+
+Both are fixed: a `SharedTags` type mirroring `union`'s `Overlapping`, a runtime throw mirroring
+`union`'s pairwise check, and `Object.hasOwn` at the lookup. `codec.dunion.lookup.spec.ts` is the
+report, and it asserts the multi-tag variant still constructs — the refusal must not take the
+feature with it.
+
+**What is worth carrying over is how they were found.** Neither is reachable by a round-trip test:
+each option round-trips perfectly on its own, and the defect is a property of the *table*, which is
+no option's property. They were found by taking a premise the model states and asking whether the
+host checks it — the same question that produced the five findings in `codec-audit.md` §9, asked of
+the one premise a queued refactor was about to delete.
+
 ## §5 Certifying an implementation
 
 The calculus is portable by design: nothing in it is TypeScript, and nothing is Rotorise. An

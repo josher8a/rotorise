@@ -3181,15 +3181,26 @@ const tagged = <T extends Record<string, unknown>>(
     discriminator: string,
     byVariant: Record<string, ItemCodec<Record<string, unknown>, unknown>>,
 ): DiscriminatedCodec<T, string, Record<string, unknown>> => {
-    const pick = (tag: string): Result<ItemCodec<T, unknown>> =>
-        (byVariant[tag] as ItemCodec<T, unknown> | undefined) ??
-        new CodecError(
-            `'${tag}' is not a variant of '${discriminator}'; expected ${Object.keys(
-                byVariant,
+    const pick = (tag: string): Result<ItemCodec<T, unknown>> => {
+        // `Object.hasOwn` and not a truthiness test: `byVariant` is a plain object, so a tag of
+        // `toString` or `constructor` reaches `Object.prototype` and comes back as a variant that
+        // has no `decode`. The tag is read off the *stored* item, so that is reachable from data
+        // this library does not control, and it surfaced as a raw `TypeError` — the one thing
+        // every other failure here is careful not to be.
+        const variant = Object.hasOwn(byVariant, tag)
+            ? (byVariant[tag] as ItemCodec<T, unknown> | undefined)
+            : undefined
+        return (
+            variant ??
+            new CodecError(
+                `'${tag}' is not a variant of '${discriminator}'; expected ${Object.keys(
+                    byVariant,
+                )
+                    .map((x) => `'${x}'`)
+                    .join(', ')}`,
             )
-                .map((x) => `'${x}'`)
-                .join(', ')}`,
         )
+    }
 
     const tagOf = (item: Partial<T>): Result<string> => {
         const tag = item[discriminator]
@@ -3705,17 +3716,56 @@ type ByTag<Specs extends readonly unknown[], D extends PropertyKey> = {
 }
 
 /**
- * Nothing, or the fact that some option does not say which variant it is.
+ * Which pairs of options answer to a tag in common, as `options i and j`.
  *
- * A discriminator only discriminates if every option names it with a `literal`. One that does not
- * cannot be found by a lookup, and would decode as whichever option happened to match instead.
+ * A discriminated union is a *lookup*, so two options claiming one tag is not an ambiguity to be
+ * resolved when a value turns up — it is a table with one key written twice, and the second write
+ * wins in silence. Decidable from the declaration, so it is refused there, the way
+ * {@link Overlapping} refuses an untagged union's.
+ */
+type SharedTagsFrom<
+    Head,
+    Rest extends readonly unknown[],
+    D extends PropertyKey,
+    At extends number,
+    Cursor extends readonly unknown[],
+> = Rest extends readonly [infer Next, ...infer Tail extends readonly unknown[]]
+    ?
+          | ([TagsOf<Head, D> & TagsOf<Next, D>] extends [never]
+                ? never
+                : `options ${At} and ${Cursor['length']}`)
+          | SharedTagsFrom<Head, Tail, D, At, [...Cursor, unknown]>
+    : never
+
+type SharedTags<
+    Specs extends readonly unknown[],
+    D extends PropertyKey,
+    Cursor extends readonly unknown[] = [],
+> = Specs extends readonly [
+    infer Head,
+    ...infer Rest extends readonly unknown[],
+]
+    ?
+          | SharedTagsFrom<Head, Rest, D, Cursor['length'], [...Cursor, unknown]>
+          | SharedTags<Rest, D, [...Cursor, unknown]>
+    : never
+
+/**
+ * Nothing, or the fact that the options cannot be looked up.
+ *
+ * Two ways that happens, in the order that gives the more specific message. An option that does not
+ * name the discriminator with a `literal` cannot be found at all, and would decode as whichever
+ * option happened to match instead. Two options that name the *same* value can each be found, and
+ * only one of them ever is.
  */
 type EveryOptionTagged<
     Specs extends readonly unknown[],
     D extends PropertyKey,
 > = [TagsOf<Specs[number], D>] extends [never]
     ? ErrorMessage<'[discriminatedUnion] every option must name the discriminator with `literal(...)`, or a lookup cannot find it'>
-    : unknown
+    : [SharedTags<Specs, D>] extends [never]
+      ? unknown
+      : ErrorMessage<`[discriminatedUnion] ${SharedTags<Specs, D>} answer to the same discriminator value, and a lookup reaches only one of them — give them distinct values`>
 
 /**
  * A union of objects told apart by one attribute — `zod`'s `discriminatedUnion`, over an item.
@@ -3769,6 +3819,15 @@ export const discriminatedUnion = <
         // the option is already built, so the variant is the codec it came with rather than a
         // second one built from the same spec
         for (const tag of tags) {
+            // Two options answering to one tag is a table with a key written twice: the second
+            // write wins and the first option becomes unreachable, which shows up later as a
+            // required attribute of the *other* variant going missing. `union` refuses its own
+            // ambiguity at the declaration; so does this.
+            if (Object.hasOwn(byTag, tag)) {
+                throw new CodecError(
+                    `two options answer to '${discriminator}' = '${tag}', and a lookup reaches only one of them — give them distinct values`,
+                )
+            }
             byTag[tag] = option.item as unknown as ItemCodec<
                 Record<string, unknown>,
                 unknown
