@@ -48,11 +48,17 @@ noncomputable def Adm : Term → Value → Bool
   | .number   => inD
   | .decimal  => isStored
   | .literalS ls => fun v => match v with | .str s => decide (s ∈ ls.1) | _ => false
-  | .literalN ls => fun v => match v with | .num d => decide (d ∈ ls.1) | _ => false
+  -- `&& inD`: with `Attr.n` carrying §1's `Numerals`, a numeric literal outside `D` is
+  -- *held* and not *written*, so the row that used to test membership alone now
+  -- over-claimed. This is the row saying what the codec does.
+  | .literalN ls => fun v => match v with
+      | .num d => decide (d ∈ ls.1) && Numeral.WF d.toDec
+      | _ => false
   | .literal w => fun v =>
       match w, v with
       | .str s, .str s'   => decide (s' = s)
-      | .num d, .num d'   => decide (d' = d)
+      -- …and the same at arity one, for the same reason
+      | .num d, .num d'   => decide (d' = d) && Numeral.WF d'.toDec
       | .bool b, .bool b' => decide (b' = b)
       | .bin b, .bin b'   => decide (b' = b)
       | .null, .null      => true
@@ -169,14 +175,14 @@ theorem Adm_exact : ∀ (t : Term), Analysable t = true → ExactV t
   | .boolean, _ => by intro v; cases v <;> simp [Adm, denoteω, booleanCodec]
   | .binary, _ => by intro v; cases v <;> simp [Adm, denoteω, binaryCodec]
   | .null, _ => by intro v; cases v <;> simp [Adm, denoteω, nullCodec]
-  | .number, _ => by intro v; cases v <;> simp [Adm, denoteω, numberCodec, inD]
-  | .decimal, _ => by intro v; cases v <;> simp [Adm, denoteω, decimalCodec, isStored]
+  | .number, _ => by intro v; cases v <;> simp [Adm, denoteω, inD]
+  | .decimal, _ => by intro v; cases v <;> simp [Adm, denoteω, isStored]
   | .literalS ls, _ => by intro v; cases v <;> simp [Adm, denoteω, literalSCodec]
-  | .literalN ls, _ => by intro v; cases v <;> simp [Adm, denoteω, literalNCodec]
+  | .literalN ls, _ => by intro v; cases v <;> simp [Adm, denoteω, literalNCodec, inLN, inD]
   | .literal w, _ => by
       intro v
       cases w <;> cases v <;>
-        simp [Adm, denoteω, literalCodec, Codec.restrict, stringCodec, rawNumberCodec,
+        simp [Adm, denoteω, literalCodec, stringCodec, inD,
               booleanCodec, binaryCodec, nullCodec, Codec.empty]
   | .custom ce cp, _ => by intro v; simp [Adm, denoteω]
   | .array c, ha => by
@@ -368,14 +374,38 @@ theorem Adm_sound_fueled : ∀ (fuel : Nat) (t : Term) {v a},
     case boolean => cases v <;> simp_all [Adm, denote, booleanCodec]
     case binary => cases v <;> simp_all [Adm, denote, binaryCodec]
     case null => cases v <;> simp_all [Adm, denote, nullCodec]
-    case number => cases v <;> simp_all [Adm, denote, numberCodec, inD]
-    case decimal => cases v <;> simp_all [Adm, denote, decimalCodec, isStored]
+    -- read off the write's `isSome` rather than unfolding the gate: the decision inside
+    -- it is `Numeral.WF`'s parser
+    case number =>
+      have hs : (numberCodec.e v).isSome = true := by
+        have h' : numberCodec.e v = some a := he
+        rw [h']; rfl
+      rw [numberCodec_e_isSome] at hs
+      simpa [Adm] using hs
+    case decimal =>
+      have hs : (decimalCodec.e v).isSome = true := by
+        have h' : decimalCodec.e v = some a := he
+        rw [h']; rfl
+      rw [decimalCodec_e_isSome] at hs
+      simpa [Adm] using hs
     case literalS ls => cases v <;> simp_all [Adm, denote, literalSCodec]
-    case literalN ls => cases v <;> simp_all [Adm, denote, literalNCodec]
+    case literalN ls =>
+      have hs : ((literalNCodec ls).e v).isSome = true := by
+        have h' : (literalNCodec ls).e v = some a := he
+        rw [h']; rfl
+      rw [show literalNCodec ls
+            = { numberCodec.restrict (inLN ls) with T := (literalNCodec ls).T } from rfl,
+        restrict_e_isSome, numberCodec_e_isSome] at hs
+      cases v <;> simp_all [Adm, inLN, inD]
     case literal w =>
+      -- via the write's `isSome`, so `restrict_e_isSome` can answer the numeric base
+      -- without `Codec.restrict` being unfolded into an `if` over the parser
+      have hs : ((denote (fuel+1) (.literal w)).e v).isSome = true := by rw [he]; rfl
+      clear he
       cases w <;> cases v <;>
-        simp_all [Adm, denote, literalCodec, Codec.restrict, stringCodec, rawNumberCodec,
+        simp_all [Adm, denote, literalCodec, stringCodec, inD,
                   booleanCodec, binaryCodec, nullCodec, Codec.empty]
+      all_goals (obtain ⟨rfl, h⟩ := hs; exact h)
     case custom ce cp => simp_all [Adm, denote]
     case opaq lossy => simp [Adm]
     case set c =>
@@ -583,16 +613,18 @@ noncomputable def AdmA : Term → Attr → Bool
   | .null     => fun a => match a with | .null => true | _ => false
   | .number   => fun a =>
       match a with
-      | .n x => (match Double.ofDec x with
+      | .n x => (match Double.ofDec x.1 with
                  | some d => Numeral.WF d.toDec
                  | none => false)
       | _ => false
-  | .decimal  => fun a => match a with | .n x => Numeral.Stored x | _ => false
+  | .decimal  => fun a => match a with | .n x => Numeral.Stored x.1 | _ => false
   | .literalS ls => fun a => match a with | .s s => decide (s ∈ ls.1) | _ => false
+  -- `&& WF`: `literal-N`'s read is `number`'s restricted now, so it refuses a numeral
+  -- whose double re-spells outside `D` even when the double is in `ℓ`
   | .literalN ls => fun a =>
       match a with
-      | .n x => (match Double.ofDec x with
-                 | some d => decide (d ∈ ls.1)
+      | .n x => (match Double.ofDec x.1 with
+                 | some d => decide (d ∈ ls.1) && Numeral.WF d.toDec
                  | none => false)
       | _ => false
   | .literal w => fun a =>
@@ -601,8 +633,8 @@ noncomputable def AdmA : Term → Attr → Bool
       | .bool b, .bool b' => decide (b' = b)
       | .bin b, .b b'     => decide (b' = b)
       | .null, .null      => true
-      | .num d, .n x      => (match Double.ofDec x with
-                              | some d' => decide (d' = d)
+      | .num d, .n x      => (match Double.ofDec x.1 with
+                              | some d' => decide (d' = d) && Numeral.WF d'.toDec
                               | none => false)
       | _, _              => false
   | .custom _ cp => fun a => (cp a).isSome
@@ -670,32 +702,40 @@ theorem AdmA_sound_fueled : ∀ (fuel : Nat) (t : Term) {a v},
       cases a
       case n x =>
         simp only [denote, numberCodec] at hp
-        cases hx : Double.ofDec x <;> rw [hx] at hp <;> simp_all [AdmA]
+        cases hx : Double.ofDec x.1 <;> rw [hx] at hp <;> simp_all [AdmA]
       all_goals (simp only [denote, numberCodec] at hp; exact nomatch hp)
     case decimal => cases a <;> simp_all [AdmA, denote, decimalCodec]
     case literalS ls => cases a <;> simp_all [AdmA, denote, literalSCodec]
     case literalN ls =>
       cases a
       case n x =>
-        simp only [denote, literalNCodec] at hp
-        cases hx : Double.ofDec x <;> rw [hx] at hp <;> simp_all [AdmA]
-      all_goals (simp only [denote, literalNCodec] at hp; exact nomatch hp)
+        simp only [denote, literalNCodec, Codec.restrict, numberCodec, inLN] at hp
+        cases hx : Double.ofDec x.1 with
+        | none => rw [hx] at hp; simp at hp
+        | some d =>
+          rw [hx] at hp
+          by_cases hw : Numeral.WF d.toDec = true <;> simp_all [AdmA]
+      all_goals (simp only [denote, literalNCodec, Codec.restrict, numberCodec, inLN] at hp; exact nomatch hp)
     case literal w =>
       cases w
       case num d =>
         cases a
         case n x =>
-          simp only [denote, literalCodec, Codec.restrict, rawNumberCodec] at hp
-          cases hx : Double.ofDec x with
+          simp only [denote, literalCodec, Codec.restrict, numberCodec] at hp
+          cases hx : Double.ofDec x.1 with
           | none => rw [hx] at hp; simp at hp
           | some d' =>
             rw [hx] at hp
-            -- keep only `d' = d`: the other conjunct equates the *decoded value* with `v`,
-            -- and `simp_all` will happily rewrite the literal's own payload backwards with it
-            obtain ⟨h1, -⟩ : d' = d ∧ Value.num d' = v := by simpa using hp
-            simp [AdmA, hx, h1]
+            by_cases hw : Numeral.WF d'.toDec = true
+            · -- keep only `d' = d`: the other conjunct equates the *decoded value* with
+              -- `v`, and `simp_all` will rewrite the literal's own payload backwards with it
+              rw [Option.some_bind, if_pos hw, Option.some_bind] at hp
+              by_cases h1 : d' = d
+              · subst h1; simp [AdmA, hx, hw]
+              · rw [if_neg (by simpa using h1)] at hp; exact nomatch hp
+            · simp [hw] at hp
         all_goals
-          (simp only [denote, literalCodec, Codec.restrict, rawNumberCodec] at hp
+          (simp only [denote, literalCodec, Codec.restrict, numberCodec] at hp
            exact nomatch hp)
       -- For every payload but `num`, this row and `admA`'s coincide, so its soundness
       -- lemma carries: the two part company only where `Double.ofDec` does.
@@ -837,7 +877,7 @@ theorem AdmA_exact : ∀ (t : Term), AnalysableA t = true → ExactA t
       cases a
       case n x =>
         simp only [AdmA, denoteω, numberCodec]
-        cases hx : Double.ofDec x <;> simp [hx]
+        cases hx : Double.ofDec x.1 <;> simp [hx]
       all_goals simp [AdmA, denoteω, numberCodec]
   | .decimal, _ => by intro a; cases a <;> simp [AdmA, denoteω, decimalCodec]
   | .literalS ls, _ => by intro a; cases a <;> simp [AdmA, denoteω, literalSCodec]
@@ -845,18 +885,22 @@ theorem AdmA_exact : ∀ (t : Term), AnalysableA t = true → ExactA t
       intro a
       cases a
       case n x =>
-        simp only [AdmA, denoteω, literalNCodec]
-        cases hx : Double.ofDec x <;> simp [hx]
-      all_goals simp [AdmA, denoteω, literalNCodec]
+        simp only [AdmA, denoteω, literalNCodec, Codec.restrict, numberCodec, inLN]
+        cases hx : Double.ofDec x.1 with
+        | none => simp [hx]
+        | some d => by_cases hw : Numeral.WF d.toDec = true <;> simp [hx, hw]
+      all_goals simp [AdmA, denoteω, literalNCodec, Codec.restrict, numberCodec, inLN]
   | .literal w, _ => by
       intro a
       cases w
       case num d =>
         cases a
         case n x =>
-          simp only [AdmA, denoteω, literalCodec, Codec.restrict, rawNumberCodec]
-          cases hx : Double.ofDec x <;> simp [hx]
-        all_goals simp [AdmA, denoteω, literalCodec, Codec.restrict, rawNumberCodec]
+          simp only [AdmA, denoteω, literalCodec, Codec.restrict, numberCodec]
+          cases hx : Double.ofDec x.1 with
+          | none => simp [hx]
+          | some d' => by_cases hw : Numeral.WF d'.toDec = true <;> simp [hx, hw]
+        all_goals simp [AdmA, denoteω, literalCodec, Codec.restrict, numberCodec]
       all_goals
         (cases a <;>
           simp [AdmA, denoteω, literalCodec, Codec.restrict, stringCodec, booleanCodec,
@@ -913,10 +957,10 @@ used on**, and neither side has to answer for the other's reasons. -/
     no axiom to construct. -/
 theorem not_ExactA_set : ¬ ExactA (.set .string) := by
   intro h
-  have h2 := (h (.ns (.of "1" ∅))).mp (by simp [AdmA])
+  have h2 := (h (.ns (.of (.of "1") ∅))).mp (by simp [AdmA])
   obtain ⟨v, hv⟩ := Option.isSome_iff_exists.mp h2
-  replace hv : decSet stringCodec Attr.n (NEFinset.of "1" ∅) = some v := hv
-  have := decSet_elem hv "1" (NEFinset.mem_of "1" ∅)
+  replace hv : decSet stringCodec Attr.n (NEFinset.of (WFNumeral.of "1") ∅) = some v := hv
+  have := decSet_elem hv (WFNumeral.of "1") (NEFinset.mem_of _ ∅)
   simp [stringCodec] at this
 
 /-- Alignment again, read side. -/
@@ -937,16 +981,17 @@ theorem not_ExactA_union : ¬ ExactA (.union [.string, .string]) := by
     numeric wire set says it now, and `Numeral` is `String`. -/
 theorem not_ExactA_opaq : ¬ ExactA (.opaq false) := by
   intro h
-  have h2 := (h (.ns (.of "1" ∅))).mp (by simp [AdmA])
-  have hd : (denoteω (Term.opaq false)).p (.ns (.of "1" ∅))
-      = (setCodec (opaqCodec 1 false)).p (.ns (.of "1" ∅)) := by
+  have h2 := (h (.ns (.of (.of "1") ∅))).mp (by simp [AdmA])
+  have hd : (denoteω (Term.opaq false)).p (.ns (.of (.of "1") ∅))
+      = (setCodec (opaqCodec 1 false)).p (.ns (.of (.of "1") ∅)) := by
     show (opaqCodecω false).p _ = _
     simp only [opaqCodecω, Attr.depth]
     exact opaqCodec_p_ns false 1 _
   rw [hd] at h2
   obtain ⟨v, hv⟩ := Option.isSome_iff_exists.mp h2
-  replace hv : decSet (opaqCodec 1 false) Attr.n (NEFinset.of "1" ∅) = some v := hv
-  have hel := decSet_elem hv "1" (NEFinset.mem_of "1" ∅)
+  replace hv : decSet (opaqCodec 1 false) Attr.n (NEFinset.of (WFNumeral.of "1") ∅)
+      = some v := hv
+  have hel := decSet_elem hv (WFNumeral.of "1") (NEFinset.mem_of _ ∅)
   rw [opaqCodec_p_n] at hel
   simp [Codec.empty] at hel
 
@@ -1065,8 +1110,10 @@ theorem Adm_le_adm : ∀ (t : Term) (v : Value), Adm t v = true → adm t v = tr
   | .number, v, h => by simpa [adm] using (by simpa [Adm] using h : inD v = true)
   | .decimal, v, h => by simpa [adm] using (by simpa [Adm] using h : isStored v = true)
   | .literalS ls, v, h => by rw [adm]; rw [Adm] at h; exact h
-  | .literalN ls, v, h => by rw [adm]; rw [Adm] at h; exact h
-  | .literal w, v, h => by rw [adm]; rw [Adm] at h; exact h
+  -- `Adm` is now *strictly* stronger at both numeric rows: it carries `WF`, which the
+  -- §5 table does not, so the containment drops a conjunct rather than being `exact`.
+  | .literalN ls, v, h => by cases v <;> simp_all [adm, Adm]
+  | .literal w, v, h => by cases w <;> cases v <;> simp_all [adm, Adm]
   | .custom ce cp, v, h => by rw [adm]; rw [Adm] at h; exact h
   | .dunion d opts, v, h => by rw [adm]; rw [Adm] at h; exact h
   | .refine t q, v, h => by
@@ -1254,7 +1301,7 @@ theorem sepJA_of_sepA {x y : Term} (h : SepA x y) : SepJA x y := by
 theorem sepJA_needs_member :
     ¬ (∀ a, AdmA (.set .string) a = true → AdmA (.set .number) a = false) := by
   intro h
-  exact absurd (h (.ns (.of "1" ∅)) (by simp [AdmA])) (by simp [AdmA])
+  exact absurd (h (.ns (.of (.of "1") ∅)) (by simp [AdmA])) (by simp [AdmA])
 
 /-! ## `ident`, and why the pair does not replace it
 

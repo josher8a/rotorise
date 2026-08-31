@@ -702,8 +702,15 @@ theorem typed_TSub : ∀ (fuel : Nat) {t T μ}, Typed t T μ →
     cases h with
     | string | number | decimal | boolean | binary | null => exact hv
     | literal w μ hok hμ =>
-      cases w <;> cases v <;> simp_all [denote, literalCodec, Codec.restrict, stringCodec,
-        rawNumberCodec, booleanCodec, binaryCodec, nullCodec, literalOK]
+      -- the numeric base is `numberCodec` now, and unfolding it here sends `simp` into
+      -- `Numeral.WF`'s decision procedure; the held set is all this case needs
+      cases w with
+      | num d =>
+        obtain ⟨-, hq⟩ := hv
+        cases v <;> simp_all
+      | _ =>
+        cases v <;> simp_all [denote, literalCodec, Codec.restrict, stringCodec,
+          booleanCodec, binaryCodec, nullCodec, literalOK]
     | literalS _ | literalN _ _ => exact hv
     | custom _ _ => exact hv
     | opaq lossy => exact opaq_TSubω lossy v hv

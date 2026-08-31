@@ -382,8 +382,10 @@ theorem κ_sound : ∀ (fuel : Nat) (t : Term) {ks : List Kind} {v a},
       -- `(literal)` is the one single-kind rule whose kind comes from *data*, so the
       -- macro cannot serve: the codec must be reduced at `w` before `v` is split.
       cases hκ
+      -- `numberCodec` is *not* in this set: its gate is a `dite` on `Numeral.WF`, whose
+      -- decision is a string parser, and the prism's own predicate already fixes the kind.
       cases w <;> cases v <;>
-        simp_all [denote, literalCodec, Codec.restrict, stringCodec, rawNumberCodec,
+        simp_all [denote, literalCodec, Codec.restrict, stringCodec,
                   booleanCodec, binaryCodec, nullCodec, Codec.empty, Value.kind]
     | literalS ls => single_kind hκ v he
     | number => single_kind hκ v he
@@ -459,7 +461,14 @@ theorem adm_sound : ∀ (fuel : Nat) (t : Term) {v a},
     case literalS ls =>
       cases v <;> simp_all [denote, literalSCodec, adm]
     case literalN ls =>
-      cases v <;> simp_all [denote, literalNCodec, adm]
+      cases v with
+      | num d =>
+        rw [show (denote (fuel+1) (.literalN ls)).e (.num d)
+              = (literalNCodec ls).e (.num d) from rfl, literalNCodec_e_num] at he
+        by_cases hd : d ∈ ls.1
+        · simp [adm, hd]
+        · rw [if_neg hd] at he; exact nomatch he
+      | _ => exact nomatch he
     case dunion d opts =>
       -- the admitting option's tag check is exactly `adm`'s, at one option
       obtain ⟨o, ho, hadm, -⟩ := altCodec_e_admits he
@@ -473,7 +482,7 @@ theorem adm_sound : ∀ (fuel : Nat) (t : Term) {v a},
       simp only [adm, adm_sound fuel t' hc, hq, Bool.and_self]
     case literal w =>
       cases w <;> cases v <;>
-        simp_all [denote, literalCodec, Codec.restrict, stringCodec, rawNumberCodec,
+        simp_all [denote, literalCodec, Codec.restrict, stringCodec, numberCodec,
                   booleanCodec, binaryCodec, nullCodec, Codec.empty, adm]
     case nullable t' =>
       cases hw : (denote fuel t').ownsNull with
@@ -487,8 +496,24 @@ theorem adm_sound : ∀ (fuel : Nat) (t : Term) {v a},
         rcases orNull_e.mp he with ⟨rfl, -⟩ | ⟨-, hc⟩
         · simp [adm]
         · simp [adm, adm_sound fuel t' hc]
-    case number => cases v <;> simp_all [denote, numberCodec, inD, adm]
-    case decimal => cases v <;> simp_all [denote, decimalCodec, isStored, adm]
+    case number =>
+      cases v with
+      | num d =>
+        rw [show (denote (fuel+1) .number).e (.num d) = numberCodec.e (.num d) from rfl,
+          numberCodec_e_num] at he
+        by_cases hw : Numeral.WF d.toDec = true
+        · simp [adm, inD, hw]
+        · rw [dif_neg hw] at he; exact nomatch he
+      | _ => exact nomatch he
+    case decimal =>
+      cases v with
+      | str s =>
+        rw [show (denote (fuel+1) .decimal).e (.str s) = decimalCodec.e (.str s) from rfl,
+          decimalCodec_e_str] at he
+        by_cases hs : Numeral.Stored s = true
+        · simp [adm, isStored, hs]
+        · rw [dif_neg hs] at he; exact nomatch he
+      | _ => exact nomatch he
     case legacy t' r => exact adm_sound fuel t' (extendRead_e.mp he)
     case lazy t' => exact adm_sound fuel t' he
     case held t' f g => exact adm_sound fuel t' he
@@ -520,7 +545,7 @@ theorem admA_sound : ∀ (fuel : Nat) (t : Term) {a v},
     case refine t' q => exact admA_sound fuel t' (restrict_p.mp hp).1
     case literal w =>
       cases w <;> cases a <;>
-        simp_all [denote, literalCodec, Codec.restrict, stringCodec, rawNumberCodec,
+        simp_all [denote, literalCodec, Codec.restrict, stringCodec, numberCodec,
                   booleanCodec, binaryCodec, nullCodec, Codec.empty, admA]
     case nullable t' =>
       cases hw : (denote fuel t').ownsNull with
@@ -569,8 +594,8 @@ def rNumeral : Attr → Option Value
 
 /-- The read really does land outside the subterm's `admA`. -/
 theorem legacy_p_outside_admA (fuel : Nat) :
-    (denote (fuel+2) (.legacy (.literalS (.of "A" ∅)) rNumeral)).p (.n "1") = some (.str "A") ∧
-      admA (.literalS (.of "A" ∅)) (.n "1") = false := ⟨rfl, rfl⟩
+    (denote (fuel+2) (.legacy (.literalS (.of "A" ∅)) rNumeral)).p (.n (.of "1")) = some (.str "A") ∧
+      admA (.literalS (.of "A" ∅)) (.n (.of "1")) = false := ⟨rfl, rfl⟩
 
 /-- **§5's `adm` cannot pass through `legacy` on the read side.** Stated as the row's
     refutation rather than as an omission, so the divergence between the document's one
@@ -579,7 +604,7 @@ theorem not_admA_legacy :
     ¬ ∀ (t : Term) (r : Attr → Option Value) (fuel : Nat) (a : Attr) (v : Value),
       (denote fuel (.legacy t r)).p a = some v → admA t a = true := by
   intro h
-  have hbad := h (.literalS (.of "A" ∅)) rNumeral 2 (.n "1") (.str "A")
+  have hbad := h (.literalS (.of "A" ∅)) rNumeral 2 (.n (.of "1")) (.str "A")
     (legacy_p_outside_admA 0).1
   rw [(legacy_p_outside_admA 0).2] at hbad
   exact nomatch hbad
@@ -1162,7 +1187,7 @@ theorem admA_literal_bool (b b' : Bool) :
 
 /-- …and at `number` it cannot, the stored text not being the value — §1's asymmetry, now
     stated once for the unified rule instead of twice for two. -/
-theorem admA_literal_num_blind (d : Double) (x : Numeral) :
+theorem admA_literal_num_blind (d : Double) (x : WFNumeral) :
     admA (.literal (.num d)) (.n x) = true := rfl
 
 /-- The writable side sees it everywhere, `number` included. -/
@@ -1178,13 +1203,13 @@ theorem admA_literalS_sees (ls : NEFinset String) (s : String) :
     admA (.literalS ls) (.s s) = decide (s ∈ ls.1) := rfl
 
 /-- …and the numeric side sees nothing. -/
-theorem admA_literalN_blind (ls : NEFinset Double) (x : Numeral) :
+theorem admA_literalN_blind (ls : NEFinset Double) (x : WFNumeral) :
     admA (.literalN ls) (.n x) = true := rfl
 
 /-- **A union of numeric literals discharges on both sides.** §5's `admA` row sends a
     numeric literal to `⊤`, and the reason is real — distinct numerals read to the same
     double, so no syntactic set of attributes bounds one. Read from the *pair* rather than
-    the table, though, the options are refinements of a single `rawNumberCodec` with
+    the table, though, the options are refinements of a single `numberCodec` with
     disjoint predicates, and `uniqueAdmission_of_sharedBase` settles both sides.
 
     Which is the honest reading of what a numeric literal set *is*: options told apart by
@@ -1199,8 +1224,8 @@ theorem uAtCan_of_literalN_disjoint (fuel : Nat) {lss : List (NEFinset Double)}
       = (lss.map literalNCodec).map OptionSem.byAttempt := by
     simp [semsOf, List.map_map, specOf, optionSemOf, denote]
   rw [hs]
-  refine uniqueAdmission_of_sharedBase (base := rawNumberCodec) (qs := lss.map inLN)
-    lawfulCore_rawNumberCodec ?_ ?_
+  refine uniqueAdmission_of_sharedBase (base := numberCodec) (qs := lss.map inLN)
+    lawful_numberCodec.core ?_ ?_
   · rw [List.forall₂_map_left_iff, List.forall₂_map_right_iff]
     exact List.forall₂_same.mpr fun ls _ =>
       ⟨literalNCodec_e_restrict ls, literalNCodec_p_restrict ls⟩

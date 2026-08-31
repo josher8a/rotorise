@@ -138,7 +138,7 @@ def migrateNtoS : Attr → Option Value
   | .n _ => some (.str "x")
   | _ => none
 
-theorem legacy_p_n : (denoteω (.legacy .string migrateNtoS)).p (.n "1") = some (.str "x") :=
+theorem legacy_p_n : (denoteω (.legacy .string migrateNtoS)).p (.n (.of "1")) = some (.str "x") :=
   rfl
 
 theorem legacy_e_x : (denoteω (.legacy .string migrateNtoS)).e (.str "x") = some (.s "x") :=
@@ -153,7 +153,7 @@ theorem legacy_breaks_MP : ¬ Lawful (denoteω (.legacy .string migrateNtoS)) :=
 /-- §6: `e ∘ p ≢ id` — equality holds only on `Can(c)`, and this attribute is off it. -/
 theorem e_comp_p_ne_id :
     ∃ (c : Codec) (a : Attr) (v : Value), c.p a = some v ∧ c.e v ≠ some a :=
-  ⟨denoteω (.legacy .string migrateNtoS), .n "1", .str "x", legacy_p_n, by
+  ⟨denoteω (.legacy .string migrateNtoS), .n (.of "1"), .str "x", legacy_p_n, by
     rw [legacy_e_x]; intro hc; exact nomatch hc⟩
 
 /-! ## `optional(optional(c))` — not derivable, by construction
@@ -381,15 +381,22 @@ theorem not_literalN_sub_number {d : Double} (hw : Numeral.WF d.toDec = false) :
   rw [hw] at hwd
   exact nomatch hwd
 
-/-- And the consequence is not confined to the held sets: the term **writes** an attribute
-    whose numeral is outside §1's `Numerals`, at a value `number` refuses outright. That is
-    the sentence `(literal-N)` would need `ℓ ⊆ D` to stop being able to say. -/
-theorem literalN_writes_off_numerals {d : Double} (hw : Numeral.WF d.toDec = false) :
-    (literalNCodec (.of d ∅)).e (.num d) = some (.n d.toDec) ∧
-      numberCodec.e (.num d) = none := by
-  refine ⟨?_, ?_⟩
-  · rw [literalNCodec_e_num, if_pos (NEFinset.mem_of d ∅)]
-  · rw [numberCodec_e_num, if_neg (by rw [hw]; exact Bool.noConfusion)]
+/-- And the consequence is not confined to the held sets — but it has **changed shape**,
+    and the new shape is sharper. With `Attr.n` carrying §1's `Numerals`, `literal-N` can
+    no longer *write* a numeral `𝔸` has no point for; `e` refuses, because there is no
+    such attribute to write. What it still does is **hold** the value, since `T` is §3's
+    `ℓ` and `ℓ` may stray outside `D`.
+
+    So the defect moved from *"writes an attribute that is not one"* to *"`T ⊄ dom(e)`"* —
+    which is **(B)** failing, and is exactly the sentence `(literal-N)` needs `ℓ ⊆ D` to
+    stop being able to say. Typing the carrier did not remove the reason for the premise;
+    it relocated the symptom to the law that was always the real one. -/
+theorem literalN_holds_what_it_cannot_write {d : Double} (hw : Numeral.WF d.toDec = false) :
+    (literalNCodec (.of d ∅)).T (.num d) ∧
+      (literalNCodec (.of d ∅)).e (.num d) = none := by
+  refine ⟨⟨d, NEFinset.mem_of d ∅, rfl⟩, ?_⟩
+  rw [literalNCodec_e_num, if_pos (NEFinset.mem_of d ∅), numberCodec_e_num,
+    dif_neg (by rw [hw]; exact Bool.noConfusion)]
 
 /-- The premise, read back off any derivation — this is what makes the two theorems above
     about *derivable* terms rather than about `literalNCodec` in isolation. -/
@@ -425,48 +432,44 @@ Without this the narrowing reads as a precaution. With it, it is the only option
 `"1.500"`, the store returns `"1.5"`, `decimal`'s `ker p` is equality (`ker_decimalCodec`),
 and (R) through the store fails on a value the codec claimed to hold. -/
 
-/-- `decimal`, gated on §1's grammar rather than on what the store hands back. -/
-def decimalWF : Codec :=
-  { T := fun v => ∃ s, v = .str s ∧ Numeral.WF s = true
-    μ := some .N
-    e := fun v => match v with
-      | .str s => if Numeral.WF s then some (.n s) else none
-      | _ => none
-    p := fun a => match a with
-      | .n x => if Numeral.WF x then some (.str x) else none
-      | _ => none }
+/-- `decimal`, gated on §1's grammar rather than on what the store hands back — which is
+    now **`wfDecimalCodec`, the base `decimal` actually refines**. Since `Attr.n` carries
+    `WF`, there is no wider text-side numeric codec to invent, so this refutation says
+    something about the base itself rather than about a codec built for the purpose.
+
+    Note its read is *total*: `WF` is the carrier now, so the gate that used to sit on `p`
+    has nothing left to reject. That is the whole asymmetry `decimal` adds — `Stored` is a
+    strictly smaller set than `WF`, and only the smaller one survives the store. -/
+abbrev decimalWF : Codec := wfDecimalCodec
 
 theorem decimalWF_e_str (s : String) :
-    decimalWF.e (.str s) = if Numeral.WF s then some (.n s) else none := rfl
+    decimalWF.e (.str s) = if h : Numeral.WF s then some (.n ⟨s, h⟩) else none := rfl
 
-theorem decimalWF_p_n (x : Numeral) :
-    decimalWF.p (.n x) = if Numeral.WF x then some (.str x) else none := rfl
+theorem decimalWF_p_n (x : WFNumeral) : decimalWF.p (.n x) = some (.str x.1) := rfl
 
 /-- `"1.500"` is one of the forms `stored_rejects_denormal` records the store rewriting, and
     the un-narrowed codec claims to hold it. -/
-theorem can_decimalWF_denormal : Can decimalWF (.n "1.500") :=
-  ⟨.str "1.500", by rw [decimalWF_e_str, if_pos (by decide : Numeral.WF "1.500" = true)]⟩
+theorem can_decimalWF_denormal : Can decimalWF (.n (.of "1.500")) :=
+  ⟨.str "1.500", by rw [decimalWF_e_str, dif_pos (by decide : Numeral.WF "1.500" = true)]; rfl⟩
 
 /-- **The un-narrowed `decimal` does not survive the store.** Any `η` that normalises
     `"1.500"` — which is what DynamoDB was measured to do — falls outside its `ker p`. -/
 theorem not_survivesStore_decimalWF {η : Attr → Attr}
-    (hη : η (.n "1.500") = .n "1.5") : ¬ SurvivesStore decimalWF η := by
+    (hη : η (.n (.of "1.500")) = .n (.of "1.5")) : ¬ SurvivesStore decimalWF η := by
   intro h
-  have hk : decimalWF.p (η (.n "1.500")) = decimalWF.p (.n "1.500") :=
+  have hk : decimalWF.p (η (.n (.of "1.500"))) = decimalWF.p (.n (.of "1.500")) :=
     h _ can_decimalWF_denormal
-  rw [hη, decimalWF_p_n, decimalWF_p_n,
-    if_pos (by decide : Numeral.WF "1.5" = true),
-    if_pos (by decide : Numeral.WF "1.500" = true)] at hk
+  rw [hη, decimalWF_p_n, decimalWF_p_n] at hk
   exact absurd (Value.str.inj (Option.some.inj hk)) (by decide)
 
 /-- And (R) through the store fails outright: the value is written, the store rewrites the
     attribute, and the codec reads back something else — the shape of the shipped defect. -/
 theorem not_retract_through_store_decimalWF {η : Attr → Attr}
-    (hη : η (.n "1.500") = .n "1.5") :
-    decimalWF.e (.str "1.500") = some (.n "1.500") ∧
-      decimalWF.p (η (.n "1.500")) ≠ some (.str "1.500") := by
-  refine ⟨by rw [decimalWF_e_str, if_pos (by decide : Numeral.WF "1.500" = true)], ?_⟩
-  rw [hη, decimalWF_p_n, if_pos (by decide : Numeral.WF "1.5" = true)]
+    (hη : η (.n (.of "1.500")) = .n (.of "1.5")) :
+    decimalWF.e (.str "1.500") = some (.n (.of "1.500")) ∧
+      decimalWF.p (η (.n (.of "1.500"))) ≠ some (.str "1.500") := by
+  refine ⟨by rw [decimalWF_e_str, dif_pos (by decide : Numeral.WF "1.500" = true)]; rfl, ?_⟩
+  rw [hη, decimalWF_p_n]
   intro hk
   exact absurd (Value.str.inj (Option.some.inj hk)) (by decide)
 
