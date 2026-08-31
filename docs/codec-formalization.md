@@ -1,5 +1,10 @@
 # Codec calculus — formalization goal, scope, and conformance
 
+> **C2/C3 and the host:** `docs/structural-discipline.md` states the standing rule for
+> carrying a model guarantee into TypeScript or Rust — when the host can mirror it structurally,
+> when it must gate, and what each owes. §9 of `codec-audit.md` is the evidence: every live
+> library bug was a model *type* that the host had to re-implement as a *check*.
+
 Companion to [`codec-calculus.md`](./codec-calculus.md). That document is the **specification**:
 what a codec is, what laws it obeys, and what side conditions its constructions carry. This one
 answers three questions about the machine-checked model in [`../formal/`](../formal/):
