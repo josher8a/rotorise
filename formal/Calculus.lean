@@ -15,4 +15,5 @@ import Calculus.Nesting
 import Calculus.Refutations
 import Calculus.Exactness
 import Calculus.LiteralArity1
+import Calculus.Vectors
 import Calculus.Axioms
