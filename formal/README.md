@@ -18,8 +18,8 @@ definition it touches.
 | `Calculus/Soundness.lean`   | §5          | `Obligations` (semantic premises, fueled), `UAtCan := UniqueAdmission ∘ semsOf`, `MPOk` (legacy exemption), theorem statements, and the held-set bridge `carrier_denote`/`typed_TSub`/`typed_e_mem`/`typed_p_mem`                                                    |
 | `Calculus/Equations.lean`   | §6          | `Codec.Equiv` (§6's `≡`), `Can`, and all eleven of §6's "Hold" rows — `held`'s identity and composition, `refine`'s meet and full case, `legacy` with its own reading and `≈` on `Can(c)`, `union` of one, its commutativity and its associativity (which needs none of §6's stated conditions), `nullable`'s idempotence, wrapper member preservation |
 | `Calculus/Opaque.lean`      | §3, §7      | `opaque` without fuel: `Value.depth`/`Attr.depth`, the eighteen kind-disjoint unfoldings (one `simp` set for the section, one line each), `opaq_e_agree`/`opaq_p_agree` (stabilization), `opaq_e_depth`/`opaq_p_depth` (depth preservation), and `opaqCodecω` with `lawful_opaqCodecω`/`carrier_opaqCodecω` |
-| `Calculus/HeldSet.lean`     | §1, §3, §6  | `T` as an identity: `opaq_T_identity` (`Uν` *is* `opaque`'s held set), `set_nil_outside_opaque` (the witness for the non-emptiness premise `HOpaque` was missing), and the numeral-domain report — `decimal_writes_wf`/`decimal_reads_wf` with worked boundary cases |
-| `Calculus/Continuity.lean`  | §5, §7      | Why fuel is not removable by a fixpoint: `Codec.Approx` (the information order any ccpo must extend), `altCodec_not_monotone` (unique admission is anti-monotone in the options) and `denote_not_fuel_monotone` (the fuel stages are not a chain) |
+| `Calculus/HeldSet.lean`     | §1, §3, §6  | `T` as an identity: `opaq_T_identity` (`Uν` *is* `opaque`'s held set), `not_TIsDomE_unionLiteralString` (§6's row is two identities and `union` has only the weaker one), and the numeral-domain report — `decimal_writes_stored`/`decimal_reads_stored` with worked boundary cases |
+| `Calculus/Continuity.lean`  | §5, §7      | Why `union` admits no fixpoint semantics: `Codec.Approx` (the information order any ccpo must extend), `altCodec_not_monotone` (unique admission is anti-monotone in the options) and `stage_not_monotone` — the same collapse over a staging defined locally, since `denote` is structural and no longer stages |
 | `Calculus/Refutations.lean` | §6          | §6's "Do not hold" table, all nine settled: `not_equiv_lazy` (the row where `≡`'s member index matters), `not_equiv_union_array`, `not_equiv_union_extend`, the two `tuple`-tail rows, `not_equiv_refine_held`, `legacy_breaks_MP`, `e_comp_p_ne_id`, `not_typed_set_union` — plus `optional` nesting, which the syntax rules out |
 | `Calculus/Axioms.lean`      | §3          | `#assert_axioms`, and the headline theorems run through it — the advertised axiom base (`propext`, `Quot.sound`, the `Double` axioms; **no `Classical.choice`**) as a build error rather than a claim in prose |
 | `Calculus/Discharge.lean`   | §5          | The machinery of (K): `κ`, `ident`, `adm`/`admA` as structural recursions (`Kind` itself is §1, and lives in `Domain.lean` on both sides of the pair), `κ_sound`/`adm_sound`/`admA_sound`, and `uAtCan_of_separated` — the dischargers of (U), proved, with witnesses and the two counterexamples that repaired (K)                       |
@@ -70,13 +70,13 @@ and the judgement to it), and `lazy` concludes `⊤` in the model exactly as the
   options — a negative condition, anti-monotone in exactly the argument a fixpoint must
   grow. `altCodec_not_monotone` is the `mono` obligation any ccpo construction
   (Isabelle's `partial_function`, HOLCF, a hand-rolled `⨆`) would have to discharge and
-  cannot; `denote_not_fuel_monotone` shows the fuel stages themselves are not a chain,
-  on `union(literal("A"), lazy(string))` — §5's own counterexample pair, staggered.
-  Note the direction: the low-fuel answer is *over*-defined, not under-defined.
-  What fuel actually stands in for is the finiteness of `Term` — `lazy` carries
-  `Unit → Term`, which defeats the termination checker without adding a single
-  constructible term. The repair is therefore in the model, not in the tool: see the
-  three steps in `docs/codec-formalization.md` §7.
+  cannot; `stage_not_monotone` shows the same collapse between two adjacent stages, on
+  `union(literal("A"), lazy(string))` — §5's own counterexample pair, staggered.
+  Note the direction: the low-stage answer is *over*-defined, not under-defined.
+  The staging is defined in `Continuity.lean` itself, as a witness rather than a
+  semantics: `denote` is structural and does not stage, and the reason it need not is
+  the refutation above — `Term.lazy` carries a plain `Term` rather than a thunk, so
+  there is no recursion to approximate. See `docs/codec-formalization.md` §7.
 - **One construction, one place — and one proof per law.** Each construction's
   definition, its two inversion lemmas, its carrier and both strengths of its
   lawfulness now sit together, and the core lemma is no longer a second copy of the
@@ -139,6 +139,21 @@ cite 133 as results, §-tag coverage is 24%, and **60% of theorem statements nam
 definition that is documented nowhere** — a statement a reviewer cannot read against the
 specification without a detour. (The guard's count was 17 when the audit was written;
 items 1–5, 8 and 9 of its plan closed the gap it measured, and its §5 records which.)
+
+## Do the documents still name what exists?
+
+Prose does not typecheck. Deleting a declaration leaves the build green and every citation
+of it dangling, and both drift findings before the residue sweep were caught by luck.
+`python3 scripts/name_drift.py` closes that: it reports every backticked Lean name in the
+current-state documents — this file, `FIDELITY.md`, `VOCABULARY.md`, `docs/codec-calculus.md`,
+`docs/structural-discipline.md` — that no longer occurs anywhere in `Calculus/`, and exits
+non-zero if there is one. Deliberate citations live in an `EXPECTED` table with a reason
+each, and the check fails if an entry there stops being cited, so the table cannot rot
+quietly either. `--all` also scans `docs/codec-formalization.md`, which is the change log
+and is *expected* to name things that have since been deleted.
+
+This is `Axioms.lean`'s principle at the documents: a claim that fails the build rather than
+a claim in prose.
 
 ## How the proofs are meant to read
 

@@ -44,24 +44,25 @@ content.
 
 | # | site | problem | deletes | radius |
 | --- | --- | --- | --- | --- |
-| 1 | `Domain.lean:9-13` | File header **inverted on four clauses**: wire sets and maps "are lists", the numeral carrier "stays unrestricted on purpose", set-ness lives in `ker p` "not in the carrier". Self-contradicted 290 lines later in the same file. | — | trivial |
-| 2 | `codec-formalization.md:2108`, `:2111` | Two §6 summary rows. `:2108` still says the carrier is unrestricted. `:2111` is **my own edit** and is wrong three ways: types are `NEFinset` not `Finset`, `encSet`'s card check is gone, non-emptiness is not gated at all. §6 is a summary a reader trusts — not covered by §4's supersession rule. | — | trivial |
-| 3 | `codec-calculus.md:87-88`, `:167-172`, `:559-560` | The **specification's** justification for the `ker p` quotient still lists *three* reasons, the first being set orderings. False in §1's own terms now the carriers are `℘⁺fin`. Should be two: `η` normalising `N`, `drop` discarding names. | a bullet + follow-on | small |
+| ~~1~~ | ~~`Domain.lean:9-13`~~ **Landed.** | File header **inverted on four clauses**: wire sets and maps "are lists", the numeral carrier "stays unrestricted on purpose", set-ness lives in `ker p` "not in the carrier". Self-contradicted 290 lines later in the same file. Rewritten to what the file now does, including the narrower true statement of the kernel's restriction — it rejects a `Finset` over the datatype being declared, not a `Finset` in a constructor. | — | **landed** |
+| ~~2~~ | ~~`codec-formalization.md` §6~~ **Landed.** | Two §6 summary rows, at `:2135` and `:2138` after the file moved. Both rewritten: the numeral carrier is `WFNumeral` and `⟨N, "abc"⟩` is unrepresentable; the wire sets are `NEFinset` not `Finset`, and non-emptiness is not gated at all — `neSetImage` carries it. | — | **landed** |
+| ~~3~~ | ~~`codec-calculus.md:87-88`, `:167-172`, `:559-560`~~ **Landed.** | The **specification's** justification for the `ker p` quotient listed *three* reasons, the first being set orderings. Now two — `η` normalising `N`, `drop` discarding names — at all three sites, and `:559` says which two rather than comparing to a loss that no longer exists. | a bullet + follow-on | **landed** |
 | ~~4~~ | ~~`WireOrder.lean`~~ **Landed — deleted.** | **17 of 19 declarations dead** (independently found by two scans); header argues for a design the code abandoned. Only `Axioms.lean` imports it, for the axiom scan. The `Classical.choice` warning about `LinearOrder String` is a real hazard and must be relocated, not lost. | ~247 lines | small |
 | ~~5~~ | ~~`Domain.lean:344`~~ **Landed — deleted.** | `Item := List (Name × Attr)`, docstring calls it "an `M` without its wrapper" — the exact shape five sites removed, beside the repaired `Attr.m`. **Dead**: grep finds only the declaration. | the declaration | none |
 | ~~6~~ | ~~`Typing.lean:165-167`~~ **Landed.** | `literalOK` did two jobs: `Numeral.WF` on `.num` (content, stays) and `\| _ => false` for containers, which is just *"this value has a ground base"* — a claim about the field's carrier. `Term.literal (v : GroundValue)` makes `literalMember` total. Landed exactly as scoped: `hμ` and `μ` gone, `literalOK` → `literalD` with only the `.num` case, both laws argument-free, `literalMember` deleted, `literalCodec`'s `Codec.empty` case and `Exactness`'s container case gone. | **all of `hμ`**, the container half of `hok`, the `hok` arg of two laws, a case in `Exactness` | small (11 sites) |
 | 17 | `Denote.lean:95` +4 modules | **`denote` does not need fuel.** A structural, fuel-free `denote` compiles against the real `Term` (§13.1). The obstructions were `List.map` and a higher-order `fieldSemOf`, both incidental. Puts `Denoteω` (314), `Soundnessω` (77), `Continuity` (123) and `Opaque.lean`'s budget apparatus (854, 148 `depth` uses) in question, plus `fuel` in `Soundness` (191), `Discharge` (159), `Exactness` (40). §13. | ~1400 lines | **largest in this file** — spike first |
+| ~~18~~ | ~~`codec-formalization.md`, ~45 names~~ **Half landed: the check exists and the current-state documents pass.** | **A name-drift scan the repo did not have.** `fidelity_audit.py` and `vocab_audit.py` measure the mechanization; neither checked that a backticked name in a document still exists in `Calculus/`. `scripts/name_drift.py` now does, and fails non-zero. The three current-state documents in `formal/` had **seven** broken citations, all fixed. What remains is `codec-formalization.md`'s ~45, nearly all in §4, where the supersession rule applies and a name records what was reasoned with — a judgment about §4, not an edit. | — | **check landed**; §4 open |
 | 15 | `src/codec.ts` | **DEFERRED — target work behind the spec.** **Nothing checks the 32-level nesting bound**, so the library writes items DynamoDB rejects — a C1 violation of the `⟨N,"5e-324"⟩` shape, and the fifth after §9 closed five. `opaque` and `native` are where it bites: both walk arbitrary user data. §12.3. | — | small (library); the model's side is a scope decision |
 | 16 | `Typing.lean:207-210` | `dunion` keyed by tag (`MapOf Term`, discriminator **injected** not read back) deletes `htags` and `hdisj` with no coherence gate — §2.2's stated reason was wrong. Blocked on one measurement: whether `discriminatedUnion` has a multi-tag variant. §12.2. | 2 premises | medium, and a C2/C3 change |
 | ~~6b~~ | ~~`Term.lean:27-35`~~ **Landed.** | **`literal`, `literalS` and `literalN` are one rule.** Raised by JH while item 6 was landing, and right: all three are *a nonempty finite set of values at one ground base*. Landed as the base-indexed form of §11.1 — `literal (k : GroundKind) (ls : NEFinset k.Carrier)` — after §11.4/§11.5 settled that the cheaper union route costs either `Classical.choice` or two reintroduced gates. | 2 constructors, 5 codec definitions → 4, 3 lawful theorems → 1, 2 carrier theorems → 1 (one of them 26 lines), 4 `admA` row lemmas → 3 | **landed** |
 | 7 | `Combinators.lean:3324, 3375, 3406` +2 | `objectCodecCore` takes `kn : Name → Bool` free; the only instantiation is `keepB rest sems`. Three hypotheses across five signatures all say *the filter never discards a declared name*. | 3 hypotheses × 5 signatures, plus `keepB_of_encEntry` and `keepB_of_declared` | medium (43 sites) |
-| 8 | ~61 declarations | Transitively dead plumbing, listed in §4.1. | ~61 decls | small, mechanical |
-| 9 | `codec-calculus.md:249-251`, `:301-302`, `:938-944`, `:1034` | §3 still presents both number rules as `refine` over an **ungated base** (those bases cannot exist); §5's traversal Lemma still has a "keyed lists … first occurrence first" clause (keys are unique by type, so it names nothing); `:1034` calls a wire set "the lifted list". | one clause | small |
-| 10 | `Lists.lean:13-22` | Header advertises "three groups" incl. `List.lookup` on association lists, "the pivot is `lookup_cons`". Group deleted; `lookup_cons` exists nowhere. The file contradicts itself at `:81`. | — | trivial |
+| ~~8~~ | ~~36 declarations~~ **Landed, in two passes.** | Transitively dead plumbing. The estimate was ~61 and the delivered figure is **36**; §4.1 records what the other ~25 turned out to be, because the miss was systematic rather than random. | 36 decls, 302 lines | **landed** |
+| ~~9~~ | ~~`codec-calculus.md:249-251`, `:301-302`, `:938-944`, `:1034`~~ **Landed.** | §3 presented both number rules as `refine` over an **ungated base** (those bases cannot exist); the base table said "doubles"/"numerals"; §5's traversal Lemma had a "keyed lists … first occurrence first" clause naming nothing; `:1034` called a wire set "the lifted list". All four rewritten, and the literal rows collapsed to the one indexed rule. | one clause | **landed** |
+| ~~10~~ | ~~`Lists.lean:13-22`~~ **Landed.** | Header advertised "three groups" incl. `List.lookup` on association lists, "the pivot is `lookup_cons`" — a group deleted, and contradicted at `:81` in the same file. The three groups are now the ones that are there, and the deleted one is named as deleted with a pointer to the note that explains it. | — | **landed** |
 | ~~11~~ | ~~`Discharge.lean:529`~~ **Landed — the option was not needed; two remain, both justified.** | The one `set_option maxHeartbeats` of three with **no justifying comment**. Re-measure — it may not be needed after the representation changes. | possibly the option | trivial |
 | ~~12~~ | ~~`Combinators.lean:3507`~~ **Landed — `keepB_of_entryWrite`.** | `keepB_of_encEntry` still carries the name of a deleted definition. Rename. | — | trivial |
 | ~~13~~ | ~~`Refutations.lean:443`~~ **Landed — inlined.** | `abbrev decimalWF : Codec := wfDecimalCodec` — the leftover half of a unification I did; its two `rfl` lemmas are free either way. | alias + 2 lemmas | trivial |
-| 14 | `Exactness.lean:980`; `codec-formalization.md:673`; `codec-calculus.md:1129` | Low: "`Numeral` is `String`" no longer explains why the numeric witness is free; a dangling `rawNumberCodec` inside a superseded §4 entry; §7 labelling `set` "quotiented", still true of `p`'s non-injectivity but reads as the withdrawn ordering quotient. | — | trivial |
+| ~~14~~ | ~~`Exactness.lean`; `codec-formalization.md:694`; `codec-calculus.md:1129`~~ **Landed.** | "`Numeral` is `String`" no longer explained why the numeric witness is axiom-free (it is `WFNumeral`'s decidable predicate, at two sites); a superseded §4 entry named `rawNumberCodec`, `literalSCodec`, `literalNCodec`, `inLS` and `inLN`, all five deleted, and now carries a supersession note; §7 labelled `set` "quotiented", now "unordered". | — | **landed** |
 
 ## 2. Closed questions — verified impossible, do not re-test
 
@@ -164,35 +165,182 @@ unobservable. Correct conclusion: the shape is wrong and the fitting type is bar
 978 top-level declarations scanned across 19 files. 663 have no in-code reference — **not a
 defect count**, this development is mostly leaf results. 153 of those are also absent from all
 three documents, carry no attribute, and match no result-naming pattern. 86 theorems have a
-trivial proof. **0** pairs of definitions share a body.
+trivial proof. **0** pairs of definitions share a body — *and that check did not cover
+theorems, which is how `lawful_dead`/`carrier_dead` survived it: they are `Lawful.empty` and
+`Carrier.empty` generalised over a `μ` nothing instantiates, and `carrier_dead`'s proof is
+byte-identical to `Carrier.empty`'s.*
 
-### 4.1 Plumbing, safe to delete (~61)
+*Scan of record, taken when the audit opened. The tree is now 17 files and 960 declarations —
+`WireOrder.lean`, `Denoteω.lean` and `Soundnessω.lean` are gone (items 4 and 17) and §4.1 has
+landed. The reference figures above are not re-derivable against the current tree, and the
+trap list at the end of §4.1 is why they should not be trusted to three digits even against
+the tree they were taken from.*
 
-- **`adapt`/`restrict` bridging family** (10), `Combinators.lean:360-535` — left over from when
-  `through`/`restrict` went via a general `adapt`; the representations now coincide
-  definitionally, which is why most are `rfl`.
-- **Payload-traversal cluster** (8), `Combinators.lean:688-2750` — `numPayloads`/`binPayloads`
-  are used by nothing but their own laws; the group falls together.
-- **Other `Combinators` plumbing** (7) — incl. `entrywise_e`/`entrywise_p`, whose proofs are
-  literally `:= carried_e` / `:= carried_p`, and the three `attr_*_of_member` inversion lemmas
-  superseded by the tag-projection work.
-- **`Discharge.lean`** (21) — the largest concentration, incl. a self-contained
-  boolean-literal example cluster and a `dunion`-specific (U) layer the `dunion` work routed
-  around.
-- **`Opaque.lean`** (8) — depth-recursion scaffolding, incl. `traverse_congr` and the
-  `opaq_p_*L` leaf family.
-- **Scattered** (7) — `Codec.lean`, `Continuity.lean`, `Denoteω.lean`, and three per-leaf
-  lawfulness lemmas in `Soundness.lean` the fueled theorem now subsumes.
+### 4.1 ~~Plumbing, safe to delete (~61)~~ — landed, and the count was wrong
 
-Each needs deletion-plus-build to confirm: reachability via `@[simp]`, typeclass resolution
-and `decide`/`omega` is not statically decidable. `Equations.lean`'s ~35 equation-table rows
-and the numeral exhibits in `HeldSet.lean`/`Domain.lean` came back as candidates and are
-**documented results — do not delete.**
+**36 declarations and 302 lines are gone; the build is green, warning-free and
+`#assert_axioms_all` still passes.** The first pass took 32; the second pass, prompted by JH
+asking whether anything else was being held up by a load-bearing verdict, took four more and
+is recorded at the end of this section. What the first pass took:
+
+- **The payload-traversal cluster** (11), `Combinators.lean` — `strPayloads`/`numPayloads`/
+  `binPayloads`, their six laws, and the two `traverse_ctor_*` lemmas that fell with them.
+  The section header said "Payload facts for the quotiented product" and the section after it
+  says why they are gone: on `Finset` the laws are the element codec's own, lifted by
+  `setImage_inv`.
+- **`entrywise_e`/`entrywise_p` and the three `attr_*_of_member`** (5), `Combinators.lean` —
+  the first two proved `:= carried_e` / `:= carried_p`. `carried_e`/`carried_p` were in the
+  first deletion batch and had to be put back: they are consumed through dot notation
+  (`(carried_e.mp h)`), which the reference scan could not see. See the traps below.
+- **A duplicate section header over an empty section**, `Combinators.lean` — a
+  `/-! ## The traversal toolkit -/` block, 11 lines of prose about `traverse_eq_some` and
+  "the four laws below", followed by a `section Traverse` containing a `variable` line and
+  nothing else. The toolkit it describes is in `Lists.lean`, where the same paragraph appears
+  and is true.
+- **Two `fbNames` corollaries** (2), `Combinators.lean` — one-line restatements of
+  `mem_fbNames`, no docstring, no users.
+- **`Opaque.lean`** (11) — `traverse_congr`, whose own docstring says "needed everywhere
+  below" and which nothing now needs; the two `depthL_pos` lemmas; three `opaqCodecω_*`
+  bridges, one of them documented as "the bridge `denote` will use once `opaque` stops
+  carrying [a fuel]" — `denote` stopped, and used something else; and **the `opaq_p_*L` leaf
+  family**, which is the most interesting of the five. Its three wire-set list lemmas were
+  superseded by `opaq_p_wire_depth`: `decSet` fixes a wire set's depth at 2 outright, so the
+  three-way traversal the list representation needed is not needed at all. A `℘⁺fin` dividend
+  nobody had collected.
+- **`Discharge.lean`** (2) — `traverse_input_isSome` and `filter_map_singleton`, general list
+  utilities whose consumers went in earlier arcs.
+
+#### What the other ~29 turned out to be, and why the estimate was wrong
+
+The estimate came from "has no in-code reference". §4's own opening paragraph says why that
+is not a defect count — *this development is mostly leaf results* — and the ~61 figure did not
+apply its own caveat. Two clusters account for nearly all of the gap.
+
+**The `adapt`/`restrict` bridging family: claimed 10, delivered 0.** `Codec.adapt`,
+`partialId` and `wfDecimalCodec` have live consumers in `Exactness.lean` and
+`Refutations.lean`. The three that really are unreferenced — `through_p_adapt`,
+`restrict_p_adapt`, `decimalCodec_p_restrict` — are each the *read* half of a write/read pair
+whose write half is cited in prose, under a docstring that says "the four theorems below are
+the whole of it". The claim being checked is that the two constructions agree **as pairs**.
+Deleting the read halves would leave a claim about half a codec, which is not the claim.
+
+**`Discharge.lean`: claimed 21, delivered 2.** The other nineteen are results. The
+boolean-literal cluster the audit filed as "a self-contained example" establishes that §3's
+two `literal` rules are not special — a literal over any ground base is a derivable
+`refine`, and a union of two discharges by the same shared-base argument. `typed_dunion_nil`
+is the "and it is derivable" half of a stated claim; `typed_tRel`/`dDisj_tRel` are what make
+the (D) counterexample a union (D) actually admits; the `adm_custom`/`admA_literal*` rows are
+the §5 table, checked. Every one carries a docstring saying what it establishes. That is the
+marker: **a declaration with no consumers is not dead if it is the output.**
+
+Smaller misreads of the same kind: `Codec.lean`'s §2 law corollaries (the API a port checks),
+`Continuity.lean`'s refutation witnesses, `Soundness.lean`'s six-row ground-term lawfulness
+table (three rows are consumed, three are not, and a table is the unit), and the equation
+tables in `Denote.lean` and `Equations.lean`.
+
+#### Three traps for the next scan
+
+1. **Dot notation.** `h.core` elaborates to `Lawful.core`, `(h.agree hp he).member_eq` to
+   `Agree.member_eq`, `carried_e.mp` to `carried_e`. A scan keyed on the full declaration name
+   sees none of these, and the first deletion batch broke the build on exactly this. Match a
+   dotted declaration on its **final segment** as well, and match dotted tokens on every
+   prefix, not only every suffix.
+2. **Closed cliques.** `Codec.adapt` has a reference — from the four `*_adapt` theorems that
+   exist only to relate it to `through` and `restrict`. Per-declaration reference counts cannot
+   distinguish a live definition from a mutually-citing island. Iterate to a fixpoint.
+3. **Macro bodies.** `term_depth_wf` keeps five `Term.depth_*` lemmas alive from inside a
+   `macro` declaration, whose name is a string literal and which a decl-header regex will skip
+   entirely — attributing its body to whatever declaration precedes it, and marking the whole
+   group dead.
+4. **Non-ASCII identifiers.** This development names things `μSyn`, `Lawful.μNone`,
+   `TypedListμ`, `denoteμs`, `opaqCodecω`, `κ`. An identifier pattern built from
+   `[A-Za-z0-9_']` splits `LawfulCore.μNone` into two tokens and reports it unreferenced —
+   it is passed bare at `Soundness.lean:479`. Tokenize with a Unicode letter class. Fixing
+   this alone moved 13 declarations from "dead" to live.
+
+The build is the only oracle here. Every batch above was applied and built before the next one
+was written, and one of them had to be partly reverted.
+
+#### Second pass: the keeps, probed
+
+The first pass kept about forty declarations on the argument "this is a documented result".
+That argument was worth nothing on its own — the docstring is written by the same hand as the
+theorem — so each keep was re-checked against corpora *outside* its own file. Almost all are
+**uncited anywhere but their own docstring**, which convicts nobody (most genuine results here
+are too) but does mean the original test was doing no work. Four more declarations went:
+
+- **`lawful_dead` and `carrier_dead`** — `Lawful.empty` and `Carrier.empty` generalised over a
+  `μ` nothing instantiates; `carrier_dead`'s proof is byte-identical to `Carrier.empty`'s.
+- **`MapOf.at_isSome`** — the one lemma in the `MapOf.at_*` group with no docstring, subsumed
+  by `at_eq_some`.
+- **`Term.depth_lt_rest`** — the fourth `object` position, where `term_depth_wf` handles the
+  rest case inline instead. The first pass declined to probe this one; declining was the error.
+
+**Three suspicions did not survive contact, and the reasons are reusable.**
+
+*A counterexample's premises are part of the counterexample.* `Refutations.lean`'s
+`lawful_cA`/`cB`/`cMid` and `carrier_cA`/`cB`/`cMid` establish that the witnesses to
+`¬ Transitive Codec.Equiv` are legitimate codecs — without them the refutation could be
+cheating with an unlawful pair. `lazy_e_eq`/`lazy_p_eq` are what make `not_equiv_lazy`
+interesting rather than vacuous: §6's row is *"the pair is the same and the `μ` is not"*, and
+the first half is those two theorems. `typed_tRel`/`dDisj_tRel` in `Discharge.lean` are the
+same shape. None is reachable from the headline theorem's proof term; all are load-bearing to
+its meaning. This category accounts for most of the unreferenced mass in `Refutations.lean`,
+`Discharge.lean` and `Exactness.lean`.
+
+*A translation table is a unit when its rows are not derivable by name.* `Denote.lean`'s
+`Bridge` section says so outright — the §6 correspondence needed "an eight-entry translation,
+five entries of which share no substring with the term they translate, written down nowhere".
+`denote_held = through` is the table's reason for existing; deleting the eight unreferenced
+rows would leave a reader looking up `held` and finding nothing.
+
+*And one left standing with the doubt recorded.* `Soundness.lean`'s seven ground-term
+lawfulness rows (`lawful_string` … `lawful_literal`) are complete over the ground terms and
+four are consumed, but each is one line (`simp only [denote]; exact lawful_stringCodec`) and
+each row's name names its target — the opposite of `Denote.lean`'s case. Deleting the three
+unused rows leaves an incomplete table; deleting all seven costs three edits at
+`uAtCan_string_null`, `uAtCan_string_boolean` and `uAtCan_literal_literal` and saves seven
+lines. **Examined, left alone, not re-litigated without a new reason.**
+
+### 4.3 The check that should have existed: `scripts/name_drift.py`
+
+Items 1, 2, 3, 9, 10 and 14 were six separate instances of one failure — a document naming a
+declaration the tree no longer has, or describing a representation two repairs out of date.
+Every one was found by a human reading, which is the same way the two drift findings before
+this audit were found. **`Axioms.lean` exists because "the axiom base is clean" is worth more
+as a build error than as a sentence; the same argument applies to "the documents name what
+exists", and nothing was enforcing it.**
+
+`scripts/name_drift.py` enforces it. Every backticked token that looks like a Lean name — has
+a `_` or a `.`, no spaces — is checked against every identifier *occurring anywhere* in
+`Calculus/*.lean`, which is deliberately loose: one use in one proof clears a citation, so the
+residue is small enough to read. Structure projections clear component-wise. Deliberate
+citations — a mathlib name given as future work, `FIDELITY.md`'s dated snapshot of the deleted
+ω layer — live in an `EXPECTED` table with a reason each, **and a stale entry there fails the
+check too**, so the suppression list cannot rot into a place where defects hide.
+
+The current-state documents pass. Seven citations were broken when it first ran, five of them
+naming declarations this branch deleted:
+
+| document | broken citation | now |
+| --- | --- | --- |
+| `README.md` | `decimal_writes_wf`/`decimal_reads_wf` | `decimal_writes_stored`/`decimal_reads_stored` |
+| `README.md` | `set_nil_outside_opaque` | gone with the non-emptiness premise; row rewritten to `not_TIsDomE_unionLiteralString` |
+| `README.md` (×2) | `denote_not_fuel_monotone` | `stage_not_monotone`, and the surrounding claim that `lazy` carries `Unit → Term` was false too |
+| `FIDELITY.md` | `denote_dunion` | `denote_dunion_tags` |
+| `FIDELITY.md` | `not_survivesStore_decimalWF` | `not_survivesStore_wfDecimalCodec` |
+| `VOCABULARY.md` | `recordCodec_eq` | `recordCodec_e_eq`/`recordCodec_p_eq` — `record` is not definitionally the traversal, so it gets a directional pair rather than one identity |
+
+The `README.md` fuel row is the one worth noting: item 17 removed fuel from `denote` three
+commits before this audit opened, `Continuity.lean`'s own prose was rewritten for it at the
+time, and the map of the development still described the old design in two places. That is
+exactly the failure mode the check catches and a reviewer does not.
 
 ### 4.2 Scaffolding
 
-- **Exactly 3 `set_option maxHeartbeats`**, as expected. One justified by an adjacent
-  docstring, one weakly (points at the first by analogy), one with none (queue item 11).
+- ~~**Exactly 3 `set_option maxHeartbeats`**~~ **Two, both in `Exactness.lean`, both
+  justified** — item 11 deleted the third, which was the one with no justifying comment, by
+  re-measuring rather than by argument.
 - **0 `sorry`, 0 `admit`, 0 commented-out code.** All 25 `admit` greps are prose.
 - **2 `attribute [local simp]` blocks in `Opaque.lean`, byte-identical, 160 lines apart** —
   nothing stale, but one shared section would do.
