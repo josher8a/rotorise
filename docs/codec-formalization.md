@@ -617,17 +617,21 @@ concrete uses are singletons; the other 80 sites are the list machinery — `lit
 one the homogeneity premise never arises (one value has nothing to be homogeneous with), `hne` and
 `hnd` are vacuous, and the list machinery simplifies rather than moves.
 
-  Term.literal (v : GroundValue)
-  literalCodec  — dispatch on the payload's kind to its ground base, `restrict`ed at equality
-  literalD      — §3's `ℓ ⊆ D`: `WF` at `number`, trivial elsewhere
-  Typed.literal — one premise where the two old rules carried three
+  Term.literal (k : GroundKind) (ls : NEFinset k.Carrier)
+  baseCodec     — §3's `g`: the pair the literal refines, chosen by the index
+  inL / HLit    — the prism, and §3's `{ℓ₁ … ℓₙ}`
+  literalCodec  — `(baseCodec k).restrict (inL k ls)`, with `T` kept as `ℓ`
+  LiteralD      — §3's `ℓ ⊆ D`: `WF` over the alternatives at `number`, `True` elsewhere
+  Typed.literal — one premise, where three constructors between them carried five
 
-The payload was `Value` when this was written, and `literalOK` had a third case — `false` for a
-container — with `literalMember` returning `none` on the same values and the rule carrying `hμ`
-to pin the member. All three said *"this payload has a ground base"*, which is a claim about the
-payload's carrier. `GroundValue` says it once, in the type: `literalCodec` is total, the member
-is `GroundValue.member` and needs no premise, and what survives as `literalD` is `ℓ ⊆ D` — the
-arity-one reading of `(literal-N)`'s `hD`, and content.
+**This entry has been rewritten twice, and the second time deleted the first.** When it was
+written the payload was a `Value`, and `literalOK` had a third case — `false` for a container —
+with `literalMember` returning `none` on the same values and the rule carrying `hμ` to pin the
+member. All three said *"this payload has a ground base"*. A `GroundValue` payload said it once,
+in the type. Then the base became an *index*, which says it once and also absorbs `literalS` and
+`literalN`: `n ≥ 1`, pairwise distinctness and homogeneity are all `NEFinset k.Carrier`'s, and
+the member is `k.member`, a function of the index. What survives is `LiteralD` — `ℓ ⊆ D`, and
+content. `codec-audit.md` §11 has the design comparison, §11.7 what landing it cost.
 
 **And the constructor still earns its place**, which is the part I had backwards. At arity one
 `literal(v)` and `refine(g, · = v)` denote the same pair, so the obvious move is to delete it. But
@@ -638,12 +642,13 @@ the same `literal-S`/`literal-N` asymmetry, now deciding a design question rathe
 one. `admA_literal_num_blind` is the one base where it still cannot, §1's `N` carrying text where
 the value is a double.
 
-**What is not done.** `literalS`/`literalN` remain, with all their witnesses; the new constructor
-was added alongside so the build stayed green at every step. Retiring them was recorded here as
-mechanical — 41 concrete sites, the n-ary form becoming surface syntax for the union, which the
-`⋃` rows on `adm`/`admA` made lossless. **That price is understated**; see §11 of
-`codec-audit.md`, which weighs it against a base-indexed n-ary literal and finds two costs this
-paragraph does not name.
+**Done, and not the way this paragraph proposed.** It recorded retiring `literalS`/`literalN` as
+mechanical, with the n-ary form becoming surface syntax for the union — which the `⋃` rows on
+`adm`/`admA` do make lossless, and `Calculus/LiteralArity1.lean` proves outright. It is not the
+route taken. `Term.union` is list-shaped and `literalS`'s payload is a `Finset`, so the bridge is
+`Finset.toList` — `Classical.choice` — and restating over a list brings back the `Nodup` and
+non-emptiness gates `℘⁺fin` had deleted. The base-indexed constructor keeps the payload a
+`Finset`, at the price of a dependent field.
 
 `κ_sound`'s literal case is the one place the shape bit: it is the only single-kind rule whose kind
 comes from *data*, so the `single_kind` macro cannot serve and the codec has to be reduced at the
