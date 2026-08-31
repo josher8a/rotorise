@@ -174,7 +174,7 @@ theorem Term.depth_lt_rest {fields : Finset Name} (f : {k // k ∈ fields} → F
 
 /-- The termination argument every `Term.depth` recursion in this development uses, written
     once. Five theorems share it — `soundness_both`, `typed_TSub`, `carrier_denote`,
-    `Adm_sound_rec`, `AdmA_sound_rec` — and their goal sets differ, so some alternatives
+    `Adm_sound`, `AdmA_sound` — and their goal sets differ, so some alternatives
     are dead at each use. That is what the `unreachableTactic` linter reports at those sites,
     and it is why the option is disabled there rather than the block being specialised five
     ways. -/

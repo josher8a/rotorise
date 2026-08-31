@@ -430,13 +430,12 @@ theorem extendRead_μ (c : Codec) (r : Attr → Option Value) :
 
 /-- §4 `(opt)`: an optional attribute is still stored somewhere, and where is the
     subterm's member. -/
-theorem optional_μ (den : Term → Codec) (t : Term) :
-    (fieldSemOf den (.optional t)).codec.μ = (den t).μ := rfl
+theorem optional_μ (t : Term) : (fieldSem (.optional t)).codec.μ = (denote t).μ := rfl
 
 /-- §4 `(fallback)`: the stand-in is written through the same codec, so the member is
     the subterm's too. -/
-theorem fallback_μ (den : Term → Codec) (t : Term) (v : Value) :
-    (fieldSemOf den (.fallback t v)).codec.μ = (den t).μ := rfl
+theorem fallback_μ (t : Term) (v : Value) :
+    (fieldSem (.fallback t v)).codec.μ = (denote t).μ := rfl
 
 /-! ## `union` is associative
 

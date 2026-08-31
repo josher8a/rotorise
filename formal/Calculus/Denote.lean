@@ -80,19 +80,6 @@ def μSynList : List Term → List (Option Member)
 
 end
 
-/-- A field's semantics through a given denotation — kept for the bridge lemmas below, which
-    let every downstream proof keep speaking of `fieldSemOf denote`. -/
-def fieldSemOf (den : Term → Codec) : Field → FieldSem
-  | .req t => .req (den t)
-  | .optional t => .opt (den t)
-  | .fallback t v => .fb (den t) v
-
-/-- A rest policy's semantics through a given denotation, for the same reason. -/
-def restSemOf (den : Term → Codec) : Rest → RestSem
-  | .drop => .drop
-  | .refuse => .refuse
-  | .codec t => .codec (den t)
-
 /-! ## The denotation
 
 **Structural, and there is no fuel.** `denote` used to take a `Nat` budget, with a dead
@@ -302,12 +289,6 @@ has to know the companions exist. -/
     denoteTagged d opts = opts.map fun t => (tagsOf d t, denote t)
   | _, [] => rfl
   | d, t :: ts => by simp only [denoteTagged, List.map]; rw [denoteTagged_eq d ts]
-
-theorem fieldSem_eq : fieldSem = fieldSemOf denote := by
-  funext fd; cases fd <;> rfl
-
-theorem restSem_eq : restSem = restSemOf denote := by
-  funext r; cases r <;> rfl
 
 end
 

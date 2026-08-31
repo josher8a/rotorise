@@ -681,10 +681,10 @@ theorem traverse_input_isSome {α β : Type} {f : α → Option β} :
     non-`optional` field. Stated where every argument is a variable — at the use site
     the field is `ff k`, and eliminating a function application in place is more
     trouble than naming the fact. -/
-theorem fieldSemOf_ne_opt {den : Term → Codec} {fd : Field}
+theorem fieldSem_ne_opt {fd : Field}
     (h : (match fd with | Field.optional _ => false | _ => true) = true) :
-    ∀ c, fieldSemOf den fd ≠ FieldSem.opt c := by
-  cases fd <;> simp_all [fieldSemOf]
+    ∀ c, fieldSem fd ≠ FieldSem.opt c := by
+  cases fd <;> simp_all [fieldSem]
 
 /-- Name admission from names alone: everything present is declared, everything
     required is present.
@@ -711,11 +711,11 @@ theorem keysOk_of_names {fields : Finset Name} {ff : {k // k ∈ fields} → Fie
     not touch the key set — so the value side's admission *is* the attribute side's, and
     there is nothing to transport. -/
 theorem keysOk_of_encode {fields : Finset Name} {ff : {k // k ∈ fields} → Field}
-    {den : Term → Codec} {keys : Finset Name}
+    {keys : Finset Name}
     {f : {k // k ∈ keys} → Value} {g : {k // k ∈ keys} → Attr}
-    (hval : valPresentB ⟨fields, fun k => fieldSemOf den (ff k)⟩ keys = true)
+    (hval : valPresentB ⟨fields, fun k => fieldSem (ff k)⟩ keys = true)
     (hfi : funImage (fun k : {k // k ∈ keys} =>
-        (entryCodec ⟨fields, fun k => fieldSemOf den (ff k)⟩ none k.1).bind
+        (entryCodec ⟨fields, fun k => fieldSem (ff k)⟩ none k.1).bind
           (fun c => c.e (f k))) = some g) :
     keysOk ⟨fields, fun k => match ff k with | Field.optional _ => false | _ => true⟩
       keys = true := by
@@ -724,11 +724,11 @@ theorem keysOk_of_encode {fields : Finset Name} {ff : {k // k ∈ fields} → Fi
     -- `entryCodec` succeeds only through the field table
     by_contra hnk
     have hw := funImage_some hfi ⟨k, hk⟩
-    rw [show entryCodec (⟨fields, fun k => fieldSemOf den (ff k)⟩ : MapOf FieldSem) none k
+    rw [show entryCodec (⟨fields, fun k => fieldSem (ff k)⟩ : MapOf FieldSem) none k
         = none from by simp only [entryCodec, MapOf.at, dif_neg hnk]] at hw
     exact nomatch hw
   · exact valPresentB_spec hval (MapOf.at_of_mem (m := ⟨fields, _⟩) k)
-      (fieldSemOf_ne_opt hb)
+      (fieldSem_ne_opt hb)
 
 /-- A closed option admits its own canonical pairs, on both sides. An *open* object —
     a rest codec — is excluded, as §5 demands: an undeclared name disqualifies the
@@ -767,8 +767,6 @@ theorem optionSem_self_admit (t : Term)
       obtain ⟨keys, fv, g, rfl, rfl, hval, hfi⟩ := objectCodecCore_e_inv he
       rw [hrc] at hfi
       -- both halves are the same `keysOk`, at the key set the two payloads share
-      -- `fieldSem` is `fieldSemOf denote`; the lemma is stated through the latter
-      rw [fieldSem_eq] at hval hfi
       exact ⟨keysOk_of_encode hval hfi, keysOk_of_encode hval hfi⟩
     all_goals exact nomatch hs
 
