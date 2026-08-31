@@ -20,10 +20,10 @@ namespace Calculus
 /-- Attribute names. -/
 abbrev Name := String
 
-/-- Wire numerals (§1 `Numerals`). The *carrier* is every string — `Attr.n (.of "abc")` stays
-    representable, because §1 describes what DynamoDB accepts, not what Lean can build.
-    Well-formedness (grammar, 38 digits, magnitude) is `Numeral.WF` below, and
-    `decimalCodec` gates on it. -/
+/-- Numeral *text*. Every string is one; §1's `Numerals` is the subset `Numeral.WF` picks
+    out, and `WFNumeral` below is that subset as a type. `Attr.n` carries the subtype, so
+    the attribute domain is exactly §1's — this abbreviation is the raw text a parser sees,
+    not the carrier of an `N`. -/
 abbrev Numeral := String
 
 /-- Byte strings. -/
@@ -35,10 +35,12 @@ The table in §1 states three clauses: "optional sign, digits, optional point, o
 exponent; ≤ 38 significant digits; magnitude 0 or `1e-130 … 9.9…e125`". All three are
 modelled here, as a decidable predicate on the carrier.
 
-`Numeral` stays `String` — the *carrier* is unrestricted, so `Attr.n (.of "abc")` remains
-representable — and well-formedness is what `decimal` checks. That is the honest split:
-§1 describes which strings DynamoDB will accept in an `N`, and the calculus's job is that
-its codecs write only those. `typed_e_mem` is what reports it.
+`Numeral` stays `String` as the *text* type, and `WFNumeral` — the subtype `WF` cuts out —
+is what `Attr.n` carries. So `⟨N, "abc"⟩` is not an attribute at all, and `Carries(N)` in
+§1's coproduct is exact rather than approximated. This document argued for a while that the
+carrier should stay unrestricted so that a port would see the embedding `⌈·⌉` is partial;
+that partiality is a fact about the **port's** types, not the model's, and nothing in the
+development ever used an ill-formed `N`. See `codec-formalization.md` §4.
 
 Note the read side has to check too, not merely the write side. If `p` accepted an
 ill-formed numeral it would return a value `e` then refuses, breaking **(C)** — so the
@@ -263,9 +265,10 @@ abbrev NEFinset (α : Type) := {S : Finset α // S.Nonempty}
 
     This was the last of §5's four refined members to be typed, and the argument against
     typing it — that the *carrier* should stay unrestricted so that a port sees the
-    embedding `⌈·⌉` is partial — turned out to be load-bearing on nothing: `Attr.n (.of "abc")`
-    appeared in four comments and no theorem. C1's insight survives intact, and is sharper
-    for it: it is the **port's** attribute type that is unrefined, not the model's. -/
+    embedding `⌈·⌉` is partial — turned out to be load-bearing on nothing: an ill-formed
+    numeral appeared in four comments of this development and in no theorem of it. C1's
+    insight survives intact, and is sharper for the change: it is the **port's** attribute
+    type that is unrefined, not the model's. -/
 abbrev WFNumeral := {x : Numeral // Numeral.WF x = true}
 
 /-- A literal numeral, with §1's check discharged where it is written. `WF` is decidable

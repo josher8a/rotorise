@@ -383,11 +383,12 @@ theorem restrict_p_adapt {c : Codec} (q : Value → Bool) :
     string is written as. §3 argues at length that gating only the write breaks (C), which
     is exactly the shape `restrict` has and an ad-hoc `if` does not.
 
-    So the gates are not bespoke. Each of the two codecs is `refine` over an *ungated*
-    base, and the four theorems below say so on the pair. `Numeral` is `String` with the
-    carrier unrestricted (`Domain.lean`) — `Attr.n (.of "abc")` stays typeable and is what the
-    gates refuse — so the ungated bases are honest objects rather than a convenient
-    fiction. -/
+    So the gates are not bespoke: each of the two codecs is `refine` over a base, and the
+    theorems below say so on the pair. The bases used to be *ungated* — every double, every
+    string — and cannot be, now that `Attr.n` carries §1's `Numerals`. They are §1's own
+    sets instead: `numberCodec` on the double side, `wfDecimalCodec` on the text side.
+    That is a better presentation than the one it replaced, because the ungated bases were
+    standing in for sets the carrier should have been. -/
 
 /-- §1's `D`, as a predicate on values. -/
 noncomputable def inD : Value → Bool :=

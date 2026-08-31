@@ -195,9 +195,10 @@ every string", with the note that once the predicate is tightened `typed_e_mem` 
 whether the codec respects it. `Domain.lean` now carries §1's predicate and
 `decimalCodec` gates on it, so here is that report.
 
-The carrier is deliberately *not* restricted — `Attr.n (.of "abc")` is still representable,
-because §1 describes which strings DynamoDB accepts in an `N`, and the calculus's job is
-that its codecs write only those. What changed is that the claim is now checkable. -/
+The carrier is no longer unrestricted either: `Attr.n` carries `WFNumeral`, so `⟨N, "abc"⟩`
+is not an attribute and `decimal`'s report below is about a codec whose target is exactly
+§1's. That was the last of §5's four refined members to be typed — see
+`codec-formalization.md` §4 for why the argument for leaving it alone did not survive. -/
 
 /-- `decimal`'s held set is exactly §1's `Numerals`. -/
 theorem decimal_T (v : Value) :
