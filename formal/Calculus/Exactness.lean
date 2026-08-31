@@ -70,14 +70,15 @@ noncomputable def Adm : Term → Value → Bool
   | .held t f _ => fun v => Adm t (f v)
   | .nullable t => fun v => Adm t v || (match v with | .null => true | _ => false)
   | .union opts => fun v => AdmAny opts v
-  -- `set` recurses like the other containers, and adds the non-emptiness `asWireSet`
-  -- demands. Homogeneity is no longer a row's problem at all: §1's three set types are
-  -- three constructors, so an element's kind is fixed by which one it is.
+  -- `set` recurses like the other containers, and adds nothing. Homogeneity is not a
+  -- row's problem — §1's three set types are three constructors, so an element's kind is
+  -- fixed by which one it is — and non-emptiness is not one either, now that `℘⁺fin` is
+  -- the payload type. What is left is the element recursion.
   | .set c      => fun v =>
       match v with
-      | .strSet S => decide (S.card ≠ 0) && decide (∀ s ∈ S, Adm c (.str s) = true)
-      | .numSet S => decide (S.card ≠ 0) && decide (∀ d ∈ S, Adm c (.num d) = true)
-      | .binSet S => decide (S.card ≠ 0) && decide (∀ b ∈ S, Adm c (.bin b) = true)
+      | .strSet S => decide (∀ s ∈ S.1, Adm c (.str s) = true)
+      | .numSet S => decide (∀ d ∈ S.1, Adm c (.num d) = true)
+      | .binSet S => decide (∀ b ∈ S.1, Adm c (.bin b) = true)
       | _ => false
   | .tuple _ _  => fun v => match v with | .arr _ => true | _ => false
   | .object _ _ _ => fun v => match v with | .map _ _ => true | _ => false
@@ -381,26 +382,23 @@ theorem Adm_sound_fueled : ∀ (fuel : Nat) (t : Term) {v a},
       cases v
       case strSet S =>
         simp only [denote, setCodec] at he
-        obtain ⟨x, hx⟩ := encSet_nonempty he
         have hall := encSet_elem he
-        simp only [Adm, Bool.and_eq_true, decide_eq_true_eq]
-        refine ⟨Finset.card_ne_zero_of_mem hx, fun y hy => ?_⟩
+        simp only [Adm, decide_eq_true_eq]
+        refine fun y hy => ?_
         obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp (hall y hy)
         exact Adm_sound_fueled fuel c ha'
       case numSet S =>
         simp only [denote, setCodec] at he
-        obtain ⟨x, hx⟩ := encSet_nonempty he
         have hall := encSet_elem he
-        simp only [Adm, Bool.and_eq_true, decide_eq_true_eq]
-        refine ⟨Finset.card_ne_zero_of_mem hx, fun y hy => ?_⟩
+        simp only [Adm, decide_eq_true_eq]
+        refine fun y hy => ?_
         obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp (hall y hy)
         exact Adm_sound_fueled fuel c ha'
       case binSet S =>
         simp only [denote, setCodec] at he
-        obtain ⟨x, hx⟩ := encSet_nonempty he
         have hall := encSet_elem he
-        simp only [Adm, Bool.and_eq_true, decide_eq_true_eq]
-        refine ⟨Finset.card_ne_zero_of_mem hx, fun y hy => ?_⟩
+        simp only [Adm, decide_eq_true_eq]
+        refine fun y hy => ?_
         obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp (hall y hy)
         exact Adm_sound_fueled fuel c ha'
       all_goals (simp only [denote, setCodec] at he; exact nomatch he)
@@ -502,9 +500,9 @@ def collapse : Value → Value := fun _ => .str "x"
     not retract. -/
 theorem not_ExactV_set : ¬ ExactV (.set (.held .string collapse (fun v => v))) := by
   intro h
-  have h2 := (h (.strSet {"a", "b"})).mp (by simp [Adm, collapse])
-  simp (config := { decide := true }) [denoteω, setCodec, encSet, Codec.through,
-        stringCodec, collapse, setImage, sC, nC, bC] at h2
+  have h2 := (h (.strSet (.of "a" {"b"}))).mp (by simp [Adm, NEFinset.of, collapse])
+  simp (config := { decide := true }) [denoteω, setCodec, encSet, neSetImage,
+        Codec.through, stringCodec, collapse, setImage, sC, nC, bC, NEFinset.of] at h2
 
 /-- `tuple`'s over-claims on alignment: one component against two elements. -/
 theorem not_ExactV_tuple : ¬ ExactV (.tuple [.string] none) := by
@@ -520,30 +518,33 @@ theorem not_ExactV_union : ¬ ExactV (.union [.string, .string]) := by
   have := (h (.str "a")).mp (by simp [Adm, AdmAny])
   simp [denoteω, denoteωOpts, specOf, optionSemOf, altCodec, select, stringCodec] at this
 
-/-- `opaq`'s ⊤ over-claims: every one of its eight options refuses the empty set.
+/-- `opaq`'s ⊤ over-claims, and after the set repair the **only** place it does so is the
+    numeral gate: `opaq false` is `refuse`, which writes no number at all.
 
-    `opaq false` also refuses every numeral, which would be the more obvious witness — but
-    `Double` is axiomatized with only `toDec`, `ofDec`, `roundtrip` and `decEq`, and is not
-    even known to be inhabited, so no `.num` value can be *constructed* here. The empty set
-    needs nothing. -/
-theorem not_ExactV_opaq (lossy : Bool) : ¬ ExactV (.opaq lossy) := by
+    This used to be witnessed by `.strSet ∅`, which every one of the eight options refused
+    and which needed nothing to construct. `℘⁺fin` has removed that value from the
+    language — the repair working — and taken the Double-free witness with it. What is
+    left is `.num`, and §1 axiomatizes `Double` with `toDec`, `ofDec`, `roundtrip` and
+    `decEq` and **no inhabitant**: `roundtrip` starts from a `Double` rather than producing
+    one. So the hypothesis is an inhabitant of §1's number carrier, which is the honest
+    form of "numbers exist" and is not assumed anywhere else in the development. -/
+theorem not_ExactV_opaq (d : Double) : ¬ ExactV (.opaq false) := by
   intro h
-  have h2 := (h (.strSet ∅)).mp (by simp [Adm])
-  have hd : (denoteω (Term.opaq lossy)).e (.strSet ∅)
-      = (setCodec (opaqCodec 1 lossy)).e (.strSet ∅) := by
-    show (opaqCodecω lossy).e (.strSet ∅) = _
+  have h2 := (h (.num d)).mp (by simp [Adm])
+  have hd : (denoteω (Term.opaq false)).e (.num d)
+      = (if false then numberCodec else Codec.empty).e (.num d) := by
+    show (opaqCodecω false).e (.num d) = _
     simp only [opaqCodecω, Value.depth]
-    exact opaqCodec_e_strSet lossy 1 ∅
+    exact opaqCodec_e_num false 0 d
   rw [hd] at h2
-  simp only [setCodec, encSet, Finset.card_empty] at h2
-  exact absurd h2 (by simp)
+  exact absurd h2 (by simp [Codec.empty])
 
 /-- **Every excuse is earned.** Exhaustive over `Excuse`, so a new constructor must come
     with a term of a shape it covers on which exactness actually fails — which, for a shape
     that is exact, cannot be produced. -/
-theorem excuse_witnessed : ∀ (e : Excuse) (t : Term), e.covers t = true →
+theorem excuse_witnessed (d : Double) : ∀ (e : Excuse) (t : Term), e.covers t = true →
     ∃ t' : Term, e.covers t' = true ∧ ¬ ExactV t'
-  | .opaqueDepth, _, _     => ⟨.opaq false, rfl, not_ExactV_opaq false⟩
+  | .opaqueDepth, _, _     => ⟨.opaq false, rfl, not_ExactV_opaq d⟩
   | .uniqueAdmission, _, _ => ⟨.union [.string, .string], rfl, not_ExactV_union⟩
   | .payloadShape, _, _    => ⟨.set (.held .string collapse (fun v => v)), rfl, not_ExactV_set⟩
   | .nameAdmission, _, _   => ⟨.tuple [.string] none, rfl, not_ExactV_tuple⟩
@@ -906,12 +907,17 @@ by construction. Those two cover nothing on the value side, which is why `excuse
 is stated with the covering as a hypothesis: an excuse must be witnessed **on the side it is
 used on**, and neither side has to answer for the other's reasons. -/
 
-/-- `set`'s member gate over-claims: the empty run is refused on this side too. -/
+/-- `set`'s member gate over-claims on the read side: `AdmA` accepts all three wire
+    families, and `set(string)` reads only `SS`. The empty run used to be the witness;
+    a numeric run is the one that survives typing, and `Numeral` is `String`, so it needs
+    no axiom to construct. -/
 theorem not_ExactA_set : ¬ ExactA (.set .string) := by
   intro h
-  have := (h (.ss ∅)).mp (by simp [AdmA])
-  simp only [denoteω, setCodec, decSet, Finset.card_empty] at this
-  exact absurd this (by simp)
+  have h2 := (h (.ns (.of "1" ∅))).mp (by simp [AdmA])
+  obtain ⟨v, hv⟩ := Option.isSome_iff_exists.mp h2
+  replace hv : decSet stringCodec Attr.n (NEFinset.of "1" ∅) = some v := hv
+  have := decSet_elem hv "1" (NEFinset.mem_of "1" ∅)
+  simp [stringCodec] at this
 
 /-- Alignment again, read side. -/
 theorem not_ExactA_tuple : ¬ ExactA (.tuple [.string] none) := by
@@ -925,18 +931,24 @@ theorem not_ExactA_union : ¬ ExactA (.union [.string, .string]) := by
   have := (h (.s "a")).mp (by simp [AdmA, AdmAAny])
   simp [denoteω, denoteωOpts, specOf, optionSemOf, altCodec, select, stringCodec] at this
 
-/-- `opaq`'s ⊤ over-claims: the empty wire set is refused by all eight options. -/
-theorem not_ExactA_opaq (lossy : Bool) : ¬ ExactA (.opaq lossy) := by
+/-- `opaq`'s ⊤ over-claims on the read side too, and here the surviving witness needs no
+    `Double`: `opaq false` is `refuse`, so it reads no `N` — and therefore no `NS`, whose
+    payloads are read through the same option. The empty wire set used to say this; a
+    numeric wire set says it now, and `Numeral` is `String`. -/
+theorem not_ExactA_opaq : ¬ ExactA (.opaq false) := by
   intro h
-  have h2 := (h (.ss ∅)).mp (by simp [AdmA])
-  have hd : (denoteω (Term.opaq lossy)).p (.ss ∅)
-      = (setCodec (opaqCodec 1 lossy)).p (.ss ∅) := by
-    show (opaqCodecω lossy).p (.ss ∅) = _
+  have h2 := (h (.ns (.of "1" ∅))).mp (by simp [AdmA])
+  have hd : (denoteω (Term.opaq false)).p (.ns (.of "1" ∅))
+      = (setCodec (opaqCodec 1 false)).p (.ns (.of "1" ∅)) := by
+    show (opaqCodecω false).p _ = _
     simp only [opaqCodecω, Attr.depth]
-    exact opaqCodec_p_ss lossy 1 ∅
+    exact opaqCodec_p_ns false 1 _
   rw [hd] at h2
-  simp only [setCodec, decSet, Finset.card_empty] at h2
-  exact absurd h2 (by simp)
+  obtain ⟨v, hv⟩ := Option.isSome_iff_exists.mp h2
+  replace hv : decSet (opaqCodec 1 false) Attr.n (NEFinset.of "1" ∅) = some v := hv
+  have hel := decSet_elem hv "1" (NEFinset.mem_of "1" ∅)
+  rw [opaqCodec_p_n] at hel
+  simp [Codec.empty] at hel
 
 /-- Writes the null point — half of a pair whose write reaches it and whose read does not,
     the mirror of `rNull`, and the reason `nullable` is in both hatches rather than one. -/
@@ -1001,7 +1013,7 @@ theorem excuseA_shapes (e : Excuse) (t : Term) (h : e.coversA t = true) :
 /-- **Every attribute-side excuse is earned**, on the side it is used on. -/
 theorem excuseA_witnessed : ∀ (e : Excuse) (t : Term), e.coversA t = true →
     ∃ t' : Term, e.coversA t' = true ∧ ¬ ExactA t'
-  | .opaqueDepth, _, _     => ⟨.opaq false, rfl, not_ExactA_opaq false⟩
+  | .opaqueDepth, _, _     => ⟨.opaq false, rfl, not_ExactA_opaq⟩
   | .uniqueAdmission, _, _ => ⟨.union [.string, .string], rfl, not_ExactA_union⟩
   | .payloadShape, _, _    => ⟨.set .string, rfl, not_ExactA_set⟩
   | .nameAdmission, _, _   => ⟨.tuple [.string] none, rfl, not_ExactA_tuple⟩
@@ -1242,7 +1254,7 @@ theorem sepJA_of_sepA {x y : Term} (h : SepA x y) : SepJA x y := by
 theorem sepJA_needs_member :
     ¬ (∀ a, AdmA (.set .string) a = true → AdmA (.set .number) a = false) := by
   intro h
-  exact absurd (h (.ns ∅) (by simp [AdmA])) (by simp [AdmA])
+  exact absurd (h (.ns (.of "1" ∅)) (by simp [AdmA])) (by simp [AdmA])
 
 /-! ## `ident`, and why the pair does not replace it
 
@@ -1476,27 +1488,27 @@ theorem AdmA_legacy_union (t : Term) (r : Attr → Option Value) (a : Attr) :
   simp [AdmA]
 
 /-- **A discharge §5 could not state.** Two sets over disjoint literals separate, because
-    `asWireSet` refuses the empty run and so the two options share no inhabitant. -/
+    `℘⁺fin` has no empty inhabitant and so the two options share none. The non-emptiness
+    is now the *type's*, which is why every branch here ends at `S.2`. -/
 theorem sepJV_set_literals :
     SepJV (.set (.literalS ["A"])) (.set (.literalS ["B"])) := by
   intro v hv
   cases v
   case strSet S =>
-    simp only [Adm, Bool.and_eq_true, decide_eq_true_eq] at hv ⊢
-    obtain ⟨hne, hall⟩ := hv
-    obtain ⟨x, hx⟩ := Finset.card_ne_zero.mp hne
-    simp only [Bool.and_eq_false_iff, decide_eq_false_iff_not]
-    refine Or.inr fun hall' => ?_
-    have h1 := hall x hx
+    simp only [Adm, decide_eq_true_eq] at hv ⊢
+    obtain ⟨x, hx⟩ := S.2
+    simp only [decide_eq_false_iff_not]
+    refine fun hall' => ?_
+    have h1 := hv x hx
     have h2 := hall' x hx
     simp [Adm] at h1 h2
     exact absurd (h1.symm.trans h2) (by decide)
   all_goals
     first
-      | (simp only [Adm, Bool.and_eq_true, decide_eq_true_eq] at hv
-         obtain ⟨hne, hall⟩ := hv
-         obtain ⟨x, hx⟩ := Finset.card_ne_zero.mp hne
-         exact absurd (hall x hx) (by simp [Adm]))
+      | (rename_i S
+         simp only [Adm, decide_eq_true_eq] at hv
+         obtain ⟨x, hx⟩ := S.2
+         exact absurd (hv x hx) (by simp [Adm]))
       | simp [Adm] at hv
 
 /-- …and the contrast that shows what the non-emptiness is doing: the *array* pair does not
@@ -1530,27 +1542,28 @@ can make, and a repeat is not an inhabitant it can hold. -/
 
 /-- Two "orderings" of one set are the same value — there is nothing to quotient. -/
 theorem set_order_irrelevant :
-    (Value.strSet {"a", "b"}) = (Value.strSet {"b", "a"}) :=
-  congrArg Value.strSet (Finset.ext fun x => by
-    simp only [Finset.mem_insert, Finset.mem_singleton]
+    (Value.strSet (.of "a" {"b"})) = (Value.strSet (.of "b" {"a"})) :=
+  congrArg Value.strSet (Subtype.ext (Finset.ext fun x => by
+    simp only [NEFinset.of, Finset.mem_insert, Finset.mem_singleton]
     exact ⟨fun h => h.elim (fun e => Or.inr e) (fun e => Or.inl e),
-           fun h => h.elim (fun e => Or.inr e) (fun e => Or.inl e)⟩)
+           fun h => h.elim (fun e => Or.inr e) (fun e => Or.inl e)⟩))
 
 /-- …and the same attribute. -/
 theorem wireSet_order_irrelevant :
-    (Attr.ss {"a", "b"}) = (Attr.ss {"b", "a"}) :=
-  congrArg Attr.ss (Finset.ext fun x => by
-    simp only [Finset.mem_insert, Finset.mem_singleton]
+    (Attr.ss (.of "a" {"b"})) = (Attr.ss (.of "b" {"a"})) :=
+  congrArg Attr.ss (Subtype.ext (Finset.ext fun x => by
+    simp only [NEFinset.of, Finset.mem_insert, Finset.mem_singleton]
     exact ⟨fun h => h.elim (fun e => Or.inr e) (fun e => Or.inl e),
-           fun h => h.elim (fun e => Or.inr e) (fun e => Or.inl e)⟩)
+           fun h => h.elim (fun e => Or.inr e) (fun e => Or.inl e)⟩))
 
 /-- A repeat is not an inhabitant: `℘⁺fin` has no multiplicities, and neither does the
     model now. -/
 theorem set_no_duplicates :
-    (Value.strSet {"a", "a"}) = (Value.strSet {"a"}) :=
-  congrArg Value.strSet (Finset.ext fun x => by
-    simp only [Finset.mem_insert, Finset.mem_singleton]
-    exact ⟨fun h => h.elim id id, fun h => Or.inr h⟩)
+    (Value.strSet (.of "a" {"a"})) = (Value.strSet (.of "a" ∅)) :=
+  congrArg Value.strSet (Subtype.ext (Finset.ext fun x => by
+    simp only [NEFinset.of, Finset.mem_insert, Finset.mem_singleton,
+      Finset.not_mem_empty, or_false]
+    exact ⟨fun h => h.elim id id, fun h => Or.inl h⟩))
 
 /-! ### What (R) would have forced, had the type not settled it
 

@@ -59,9 +59,9 @@ abbrev Held := Value → Prop
 
 /-- `℘⁺fin(T)` — the nonempty finite subsets of `T` (§3 `(set)`). -/
 def HSet (T : Held) : Held := fun v =>
-  (∃ S : Finset String, v = .strSet S ∧ S.Nonempty ∧ ∀ s ∈ S, T (.str s)) ∨
-  (∃ S : Finset Double, v = .numSet S ∧ S.Nonempty ∧ ∀ d ∈ S, T (.num d)) ∨
-  (∃ S : Finset Bytes,  v = .binSet S ∧ S.Nonempty ∧ ∀ b ∈ S, T (.bin b))
+  (∃ S : NEFinset String, v = .strSet S ∧ ∀ s ∈ S.1, T (.str s)) ∨
+  (∃ S : NEFinset Double, v = .numSet S ∧ ∀ d ∈ S.1, T (.num d)) ∨
+  (∃ S : NEFinset Bytes,  v = .binSet S ∧ ∀ b ∈ S.1, T (.bin b))
 
 /-- `T*` (§3 `(array)`). -/
 def HStar (T : Held) : Held :=
@@ -126,17 +126,18 @@ inductive HOpaque (lossy : Bool) : Value → Prop where
   /-- The `D` premise, for the reason `set` carries non-emptiness: a double `opaque` cannot
       **write** has no `N` for its member to be recoverable from. -/
   | num  (d) (h : lossy = true) (hw : Numeral.WF d.toDec = true) : HOpaque lossy (.num d)
-  /-- Non-emptiness is not decoration: §1's `SS`/`NS`/`BS` are `℘⁺fin`, so there is no
-      empty wire set to write, and an empty set's member is not recoverable from the
-      value anyway — you cannot tell `SS` from `NS`. Both readings §3 gives of `Uν` (the
-      prose one, and the fixpoint `union(…, set(opaque), …)` whose `(set)` rule carries
-      `vs ≠ []`) exclude it. `HeldSet.lean` has the witness. -/
-  | strSet (S : Finset String) (hne : S.Nonempty)
-      (h : ∀ s ∈ S, HOpaque lossy (.str s)) : HOpaque lossy (.strSet S)
-  | numSet (S : Finset Double) (hne : S.Nonempty)
-      (h : ∀ d ∈ S, HOpaque lossy (.num d)) : HOpaque lossy (.numSet S)
-  | binSet (S : Finset Bytes) (hne : S.Nonempty)
-      (h : ∀ b ∈ S, HOpaque lossy (.bin b)) : HOpaque lossy (.binSet S)
+  /-- Non-emptiness carried no premise here any more, because `℘⁺fin` is the type. The
+      argument for it stands and is worth keeping: an empty wire set is not writable, and
+      its member would not be recoverable from the value anyway — you cannot tell `SS`
+      from `NS` at `∅`. Both readings §3 gives of `Uν` exclude it. What changed is where
+      the exclusion lives: `HeldSet.lean` used to exhibit `opaque` refusing `strSet ∅`,
+      and that witness is now unstatable. -/
+  | strSet (S : NEFinset String)
+      (h : ∀ s ∈ S.1, HOpaque lossy (.str s)) : HOpaque lossy (.strSet S)
+  | numSet (S : NEFinset Double)
+      (h : ∀ d ∈ S.1, HOpaque lossy (.num d)) : HOpaque lossy (.numSet S)
+  | binSet (S : NEFinset Bytes)
+      (h : ∀ b ∈ S.1, HOpaque lossy (.bin b)) : HOpaque lossy (.binSet S)
   | arr  (vs) (h : ∀ x ∈ vs, HOpaque lossy x) : HOpaque lossy (.arr vs)
   | map  (keys) (f) (h : ∀ k, HOpaque lossy (f k)) : HOpaque lossy (.map keys f)
 

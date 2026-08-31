@@ -217,19 +217,19 @@ theorem opaqCodec_e_num (lossy : Bool) (n : Nat) (d : Double) :
     simp [numberCodec_e_num, hw]
 
 /-- §3 `(opaque)`, write side at kind `set`: the wire member is computed from the elements (`asWireSet`), which is why one option covers `SS`, `NS` and `BS`. -/
-theorem opaqCodec_e_strSet (lossy : Bool) (n : Nat) (S : Finset String) :
+theorem opaqCodec_e_strSet (lossy : Bool) (n : Nat) (S : NEFinset String) :
     (opaqCodec (n+1) lossy).e (.strSet S)
       = (setCodec (opaqCodec n lossy)).e (.strSet S) := by
   cases he : (setCodec (opaqCodec n lossy)).e (.strSet S) <;>
     cases lossy <;> simp [-setCodec, he]
 
-theorem opaqCodec_e_numSet (lossy : Bool) (n : Nat) (S : Finset Double) :
+theorem opaqCodec_e_numSet (lossy : Bool) (n : Nat) (S : NEFinset Double) :
     (opaqCodec (n+1) lossy).e (.numSet S)
       = (setCodec (opaqCodec n lossy)).e (.numSet S) := by
   cases he : (setCodec (opaqCodec n lossy)).e (.numSet S) <;>
     cases lossy <;> simp [-setCodec, he]
 
-theorem opaqCodec_e_binSet (lossy : Bool) (n : Nat) (S : Finset Bytes) :
+theorem opaqCodec_e_binSet (lossy : Bool) (n : Nat) (S : NEFinset Bytes) :
     (opaqCodec (n+1) lossy).e (.binSet S)
       = (setCodec (opaqCodec n lossy)).e (.binSet S) := by
   cases he : (setCodec (opaqCodec n lossy)).e (.binSet S) <;>
@@ -385,19 +385,19 @@ theorem opaqCodec_p_n (lossy : Bool) (n : Nat) (x : Numeral) :
       simp [-recordCodec, recordCodec_p_n, numberCodec_p_n, hd, hw]
 
 /-- §3 `(opaque)`, read side at member `SS` — one of the three members routing to the single `set` option, which is the ten-versus-eight asymmetry in the header. -/
-theorem opaqCodec_p_ss (lossy : Bool) (n : Nat) (vs : Finset String) :
+theorem opaqCodec_p_ss (lossy : Bool) (n : Nat) (vs : NEFinset String) :
     (opaqCodec (n+1) lossy).p (.ss vs) = (setCodec (opaqCodec n lossy)).p (.ss vs) := by
   cases hp : (setCodec (opaqCodec n lossy)).p (.ss vs) <;>
     cases lossy <;> simp [-setCodec, hp]
 
 /-- §3 `(opaque)`, read side at member `NS`. -/
-theorem opaqCodec_p_ns (lossy : Bool) (n : Nat) (vs : Finset Numeral) :
+theorem opaqCodec_p_ns (lossy : Bool) (n : Nat) (vs : NEFinset Numeral) :
     (opaqCodec (n+1) lossy).p (.ns vs) = (setCodec (opaqCodec n lossy)).p (.ns vs) := by
   cases hp : (setCodec (opaqCodec n lossy)).p (.ns vs) <;>
     cases lossy <;> simp [-setCodec, hp]
 
 /-- §3 `(opaque)`, read side at member `BS`. -/
-theorem opaqCodec_p_bs (lossy : Bool) (n : Nat) (vs : Finset Bytes) :
+theorem opaqCodec_p_bs (lossy : Bool) (n : Nat) (vs : NEFinset Bytes) :
     (opaqCodec (n+1) lossy).p (.bs vs) = (setCodec (opaqCodec n lossy)).p (.bs vs) := by
   cases hp : (setCodec (opaqCodec n lossy)).p (.bs vs) <;>
     cases lossy <;> simp [-setCodec, hp]
@@ -541,30 +541,26 @@ theorem Attr.depthL_pos (as : List Attr) : 1 <= Attr.depthL as := by
   | cons a as => simp only [Attr.depthL]; have := Attr.depth_pos a; omega
 
 /-- A wire set is always exactly one layer of payloads, whichever family it lands in. -/
-theorem encSet_depth {α : Type} {c : Codec} {vinj : α → Value} {S : Finset α} {a : Attr}
+theorem encSet_depth {α : Type} {c : Codec} {vinj : α → Value} {S : NEFinset α} {a : Attr}
     (h : encSet c vinj S = some a) : Attr.depth a = 2 := by
   unfold encSet at h
   split at h
-  · exact nomatch h
+  · cases h; rfl
   · split at h
     · cases h; rfl
-    · split at h
-      · cases h; rfl
-      · obtain ⟨T, -, hT⟩ := Option.map_eq_some'.mp h
-        cases hT; rfl
+    · obtain ⟨T, -, hT⟩ := Option.map_eq_some'.mp h
+      cases hT; rfl
 
 /-- …and a value set likewise: its elements are scalars. -/
-theorem decSet_depth {α : Type} {c : Codec} {inj : α → Attr} {S : Finset α} {v : Value}
+theorem decSet_depth {α : Type} {c : Codec} {inj : α → Attr} {S : NEFinset α} {v : Value}
     (h : decSet c inj S = some v) : Value.depth v = 2 := by
   unfold decSet at h
   split at h
-  · exact nomatch h
+  · cases h; rfl
   · split at h
     · cases h; rfl
-    · split at h
-      · cases h; rfl
-      · obtain ⟨T, -, hT⟩ := Option.map_eq_some'.mp h
-        cases hT; rfl
+    · obtain ⟨T, -, hT⟩ := Option.map_eq_some'.mp h
+      cases hT; rfl
 
 mutual
 
@@ -705,7 +701,7 @@ theorem opaq_p_leafL {α : Type} (elem : α → Attr) (lossy : Bool) (n : Nat)
 
 /-- …and the wire set itself is exactly one level above its leaves. `decSet` produces one
     of the three value-set constructors, and those hold scalars. -/
-theorem opaq_p_wire_depth {α : Type} {c : Codec} {inj : α → Attr} {S : Finset α} {v : Value}
+theorem opaq_p_wire_depth {α : Type} {c : Codec} {inj : α → Attr} {S : NEFinset α} {v : Value}
     (hp : decSet c inj S = some v) : Value.depth v <= 2 := le_of_eq (decSet_depth hp)
 
 theorem opaq_p_ssL (lossy : Bool) (n : Nat) :
