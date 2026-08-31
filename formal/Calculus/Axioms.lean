@@ -1,4 +1,4 @@
-import Calculus.Soundnessω
+import Calculus.Soundness
 import Calculus.Discharge
 import Calculus.Continuity
 import Calculus.Refutations
@@ -130,7 +130,7 @@ still does not. -/
 these, `κ`, `adm` and `admA` are transcriptions of a table rather than claims about the
 model, so their axiom base is part of what the soundness statements rest on. -/
 
-/-! The fuel-free twins. `denoteω_eq` is the transport every ω-result travels along, so an
+/-! The fuel-free twins. `denote_eq` is the transport every ω-result travels along, so an
 axiom acquired here would reach all of them at once. -/
 
 /-! §3's `Uν` for `opaque`, and §1's numeral domain. `opaq_T_identity` is the row
@@ -153,7 +153,7 @@ narrowing and fails before it. -/
 cannot read. The `opaque`/`NS` defect is its counterexample, and (MP) is the only law that
 sees it — which is why it needs stating rather than following from the rest. -/
 
-/-! §6's Hold rows at term level. The ten `denoteω_*` bridges are `rfl` and carry no axiom
+/-! §6's Hold rows at term level. The ten `denote_*` bridges are `rfl` and carry no axiom
 risk worth a line each; what is guarded is the twins, which go through `Codec.Equiv` and are
 what a reviewer checks §6's table against. -/
 

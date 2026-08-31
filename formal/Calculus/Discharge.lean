@@ -1376,7 +1376,7 @@ noncomputable def semsOfD (d : Name) (opts : List Term) : List OptionSem :=
     drifting away from `denote`. -/
 theorem denote_dunion_semsOfD (d : Name) (opts : List Term) :
     denote (.dunion d opts) = altCodec (semsOfD d opts) (some .M) := by
-  simp only [denote_dunion, semsOfD, dunionCodec, List.map_map]
+  simp only [denote_dunion_tags, denoteTagged_eq, semsOfD, dunionCodec, List.map_map]
 
 /-- §5 (U) for a `(dunion)`, in `UAtCan`'s vocabulary. -/
 def UAtCanD (d : Name) (opts : List Term) : Prop :=
@@ -1398,7 +1398,7 @@ theorem uAtCan_dunion {d : Name} {opts : List Term}
 /-- **Row four: `(opaque)`'s (U), unconditionally.** `uniqueAdmission_opaque` asks for the
     recursive option's lawfulness; `lawful_opaqCodec` supplies it, so the row has no
     premises at all. It is stated about `opaqCodec` at a fuel rather than about the term
-    `opaque` for the reason given above — `denoteω` of `opaque` is not a sum over one
+    `opaque` for the reason given above — `denote` of `opaque` is not a sum over one
     list. -/
 theorem uAtCan_opaque (lossy : Bool) :
     UniqueAdmission (opaqOptions lossy (opaqCodec fuel lossy)) :=

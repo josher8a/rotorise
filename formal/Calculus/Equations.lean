@@ -1,5 +1,6 @@
 import Calculus.Soundness
-import Calculus.Denoteω
+import Calculus.Denote
+import Calculus.Opaque
 
 /-!
 # §6 — Equations
@@ -58,56 +59,7 @@ theorem Codec.Equiv.symm {c d : Codec} (h : Codec.Equiv c d) : Codec.Equiv d c :
   ⟨fun v => (h.heldSet v).symm, h.member.symm,
     fun hd hc => (h.writes hc hd).symm, fun hd hc => (h.reads hc hd).symm⟩
 
-/-! ## §6 at term level — the translation table, written down
 
-§6's **Hold** rows are stated here about *combinators*; its **Do not hold** rows
-(`Refutations.lean`) are stated about *terms*. Reading a Hold row against the specification
-needed an eight-entry translation, five entries of which share no substring with the term
-they translate, written down nowhere.
-
-Here it is, as `rfl` theorems — `denoteω` dispatches straight onto the combinator, so these
-prove nothing but the correspondence. Term-level twins of each row follow at the end. -/
-
-section Bridge
-
-theorem denoteω_set (t : Term) : denoteω (.set t) = setCodec (denoteω t) := rfl
-theorem denoteω_array (t : Term) : denoteω (.array t) = arrayCodec (denoteω t) := rfl
-theorem denoteω_record (t : Term) : denoteω (.record t) = recordCodec (denoteω t) := rfl
-
-/-- `held` denotes `through` — the entry that reads least like its term. -/
-theorem denoteω_held (t : Term) (f g : Value → Value) :
-    denoteω (.held t f g) = (denoteω t).through f g := rfl
-
-/-- `refine` denotes `restrict`. -/
-theorem denoteω_refine (t : Term) (q : Value → Bool) :
-    denoteω (.refine t q) = (denoteω t).restrict q := rfl
-
-/-- `legacy` denotes `extendRead`. -/
-theorem denoteω_legacy (t : Term) (r : Attr → Option Value) :
-    denoteω (.legacy t r) = (denoteω t).extendRead r := rfl
-
-/-- `nullable` denotes `withNull` — `orNull` behind §3's guard. -/
-theorem denoteω_nullable (t : Term) : denoteω (.nullable t) = (denoteω t).withNull := rfl
-
-/-- `union` denotes `altCodec`, over the options' semantics and their unanimous member. -/
-theorem denoteω_union (opts : List Term) :
-    denoteω (.union opts) =
-      altCodec (denoteωOpts opts) (unanimous (denoteωMems opts)) := rfl
-
-/-- `discriminatedUnion` denotes `dunionCodec`. -/
-theorem denoteω_dunion (d : Name) (opts : List Term) :
-    denoteω (.dunion d opts) = dunionCodec d (denoteωTags d opts) := rfl
-
-/-- `opaque` denotes `opaqCodecω` — the fuel-free one, which is why §5's discharger table has
-    a row about `opaqCodec` at a fuel and a reason rather than a term-level twin. -/
-theorem denoteω_opaq (lossy : Bool) : denoteω (.opaq lossy) = opaqCodecω lossy := rfl
-
-/-- `object` denotes `objectCodec`. -/
-theorem denoteω_object (fields : Finset Name) (f : {k // k ∈ fields} → Field)
-    (rest : Rest) :
-    denoteω (.object fields f rest) = objectCodec (denoteωF fields f) (denoteωR rest) := rfl
-
-end Bridge
 
 /-! ## `nullable` is idempotent -/
 
@@ -694,51 +646,51 @@ combinator row through the bridge above, so they cost a line each and buy the pr
 section Terms
 
 /-- §6: `held(c, id, id) ≡ c`. -/
-theorem equiv_denoteω_held_id (t : Term) :
-    Codec.Equiv (denoteω (.held t id id)) (denoteω t) := equiv_through_id _
+theorem equiv_denote_held_id (t : Term) :
+    Codec.Equiv (denote (.held t id id)) (denote t) := equiv_through_id _
 
 /-- §6: `held(held(c, f, g), f′, g′) ≡ held(c, f ∘ f′, g′ ∘ g)`. -/
-theorem equiv_denoteω_held_comp (t : Term) (f g f' g' : Value → Value) :
-    Codec.Equiv (denoteω (.held (.held t f g) f' g'))
-      (denoteω (.held t (f ∘ f') (g' ∘ g))) := equiv_through_comp _ _ _ _ _
+theorem equiv_denote_held_comp (t : Term) (f g f' g' : Value → Value) :
+    Codec.Equiv (denote (.held (.held t f g) f' g'))
+      (denote (.held t (f ∘ f') (g' ∘ g))) := equiv_through_comp _ _ _ _ _
 
 /-- §6: `refine(refine(c, q), q′) ≡ refine(c, q ∩ q′)`. -/
-theorem equiv_denoteω_refine_meet (t : Term) (q q' : Value → Bool) :
-    Codec.Equiv (denoteω (.refine (.refine t q) q'))
-      (denoteω (.refine t (fun v => q v && q' v))) := equiv_restrict_meet _ _ _
+theorem equiv_denote_refine_meet (t : Term) (q q' : Value → Bool) :
+    Codec.Equiv (denote (.refine (.refine t q) q'))
+      (denote (.refine t (fun v => q v && q' v))) := equiv_restrict_meet _ _ _
 
 /-- §6: `refine(c, T) ≡ c` for `⊢ c : T ⇝ μ`. The premise is the row's, read off the
     denotation rather than the judgement — `typed_TSub` is what connects the two. -/
-theorem equiv_denoteω_refine_full (t : Term) (q : Value → Bool)
-    (hq : ∀ v, (denoteω t).T v ↔ q v = true) :
-    Codec.Equiv (denoteω (.refine t q)) (denoteω t) := equiv_restrict_full _ _ hq
+theorem equiv_denote_refine_full (t : Term) (q : Value → Bool)
+    (hq : ∀ v, (denote t).T v ↔ q v = true) :
+    Codec.Equiv (denote (.refine t q)) (denote t) := equiv_restrict_full _ _ hq
 
 /-- §6: `legacy(c, p_c) ≡ c`. -/
-theorem equiv_denoteω_legacy_self (t : Term) :
-    Codec.Equiv (denoteω (.legacy t (denoteω t).p)) (denoteω t) :=
+theorem equiv_denote_legacy_self (t : Term) :
+    Codec.Equiv (denote (.legacy t (denote t).p)) (denote t) :=
   equiv_extendRead_self _
 
 /-- §6: `legacy(c, r) ≈ c` on `Can(c)`. -/
-theorem denoteω_legacy_eq_on_can (t : Term) (r : Attr → Option Value)
-    (hc : Lawful (denoteω t)) {a : Attr} (ha : Can (denoteω t) a) :
-    (denoteω (.legacy t r)).p a = (denoteω t).p a :=
+theorem denote_legacy_eq_on_can (t : Term) (r : Attr → Option Value)
+    (hc : Lawful (denote t)) {a : Attr} (ha : Can (denote t) a) :
+    (denote (.legacy t r)).p a = (denote t).p a :=
   extendRead_eq_on_can _ r hc ha
 
 /-- §6: `nullable(nullable(c)) ≡ nullable(c)`. -/
-theorem equiv_denoteω_nullable_idem (t : Term) :
-    Codec.Equiv (denoteω (.nullable (.nullable t))) (denoteω (.nullable t)) :=
+theorem equiv_denote_nullable_idem (t : Term) :
+    Codec.Equiv (denote (.nullable (.nullable t))) (denote (.nullable t)) :=
   equiv_withNull_idem _
 
 /-- §6: `μ(w(c)) = μ(c)` for the three codec wrappers. The two field wrappers are
     `optional_μ` and `fallback_μ`, which are already stated over a denotation. -/
-theorem denoteω_held_μ (t : Term) (f g : Value → Value) :
-    (denoteω (.held t f g)).μ = (denoteω t).μ := rfl
+theorem denote_held_μ (t : Term) (f g : Value → Value) :
+    (denote (.held t f g)).μ = (denote t).μ := rfl
 
-theorem denoteω_refine_μ (t : Term) (q : Value → Bool) :
-    (denoteω (.refine t q)).μ = (denoteω t).μ := rfl
+theorem denote_refine_μ (t : Term) (q : Value → Bool) :
+    (denote (.refine t q)).μ = (denote t).μ := rfl
 
-theorem denoteω_legacy_μ (t : Term) (r : Attr → Option Value) :
-    (denoteω (.legacy t r)).μ = (denoteω t).μ := rfl
+theorem denote_legacy_μ (t : Term) (r : Attr → Option Value) :
+    (denote (.legacy t r)).μ = (denote t).μ := rfl
 
 end Terms
 

@@ -498,7 +498,7 @@ theorem soundness_both : ∀ {t T μ}, Typed t T μ → Obligations t → Sound 
           cases ht'
           cases hopt with
           | some hμ' => exact soundness_both hμ' ((Obligations.tuple hob).2 t' rfl)
-      rw [Sound, denote_tuple]
+      rw [Sound, denote_tuple, denoteList_eq, denoteOpt_eq]
       exact ⟨lawfulCore_tupleCodec (forall_mem_map fun t' ht' => (ihs t' ht').1)
           (forall_mem_map_option fun t' ht' => (iht t' ht').1),
         fun hmp => lawful_tupleCodec
@@ -530,8 +530,7 @@ theorem soundness_both : ∀ {t T μ}, Typed t T μ → Obligations t → Sound 
           replace hcr : RestSem.codec (denote t') = RestSem.codec c := hcr
           cases hcr
           exact ⟨(soundness_both hty hob.2).1, fun hmp => (soundness_both hty hob.2).2 hmp.2⟩
-      rw [Sound, denote_object]
-      simp only [← fieldSem_eq, ← restSem_eq]
+      rw [Sound, denote_object_table, fieldTable]
       exact ⟨lawfulCore_objectCodec (fun k => (ihf k).1) hfb
           (fun c hcr => (ihr c hcr).1),
         fun hmp => lawful_objectCodec (fun k => (ihf k).2 (hmp.1 k)) hfb
@@ -550,7 +549,7 @@ theorem soundness_both : ∀ {t T μ}, Typed t T μ → Obligations t → Sound 
         rw [optionSemOf_c] at he'
         exact (ihs tx htx).1.writes
           (unanimous_spec hm _ (List.mem_map.mpr ⟨tx, htx, rfl⟩)) he'
-      rw [Sound, denote_union]
+      rw [Sound, denote_union_sems, optionSems_eq, denoteμs_eq_map]
       exact ⟨lawfulCore_altCodec
           (forall_mem_map fun t' ht' => (optionSemOf_c _ _) ▸ (ihs t' ht').1) hU hW,
         fun hmp => lawful_altCodec
@@ -564,7 +563,7 @@ theorem soundness_both : ∀ {t T μ}, Typed t T μ → Obligations t → Sound 
       have hdisj' : List.Pairwise (fun x y => ∀ tag ∈ x.1, tag ∉ y.1)
           (opts.map fun t' => (tagsOf d t', denote t')) :=
         List.pairwise_map.mpr hdisj
-      rw [Sound, denote_dunion]
+      rw [Sound, denote_dunion_tags, denoteTagged_eq]
       exact ⟨lawfulCore_dunionCodec
           (forall_mem_map fun t' ht' => (ihs t' ht').1) hstamp hdisj',
         fun hmp => lawful_dunionCodec
@@ -724,7 +723,7 @@ theorem typed_TSub : ∀ {t T μ}, Typed t T μ → ∀ v, (denote t).T v → T 
         | exact ⟨_, _, rfl, fun k => typed_TSub h' _ (hv k)⟩
         | exact nomatch hv
     | @tuple ts Ts tail Tt hlist hopt =>
-      rw [denote_tuple] at hv
+      rw [denote_tuple, denoteList_eq, denoteOpt_eq] at hv
       cases v
       case arr vs =>
         obtain ⟨ps, hal, hall⟩ := hv
@@ -821,7 +820,7 @@ theorem carrier_denote : ∀ {t T μ}, Typed t T μ → Obligations t → Carrie
     | @record t' T' μ' h' =>
       exact carrier_recordCodec (carrier_denote h' hob.record)
     | @tuple ts Ts tail Tt hlist hopt =>
-      rw [denote_tuple]
+      rw [denote_tuple, denoteList_eq, denoteOpt_eq]
       refine carrier_tupleCodec (forall_mem_map ?_) (forall_mem_map_option ?_)
       · intro t' ht'
         obtain ⟨T', μ', hty⟩ := TypedList.forall hlist t' ht'
@@ -889,12 +888,12 @@ theorem carrier_denote : ∀ {t T μ}, Typed t T μ → Obligations t → Carrie
         | codec _ => rfl
       exact carrier_objectCodecCore hsems hrc hfb hkeep
     | @union opts Ts μs hlist _ =>
-      rw [denote_union]
+      rw [denote_union_sems, optionSems_eq]
       refine carrier_altCodec (forall_mem_map fun t' ht' => ?_)
       obtain ⟨T', μ', hty⟩ := TypedListμ.forall hlist t' ht'
       exact (optionSemOf_c _ _) ▸ carrier_denote hty ((Obligations.union hob).1 t' ht')
     | @dunion d opts Ts hlistM htags hdisj =>
-      rw [denote_dunion]
+      rw [denote_dunion_tags, denoteTagged_eq]
       refine carrier_altCodec (forall_mem_map (forall_mem_map fun t' ht' => ?_))
       obtain ⟨T', hty⟩ := TypedListM.forall hlistM t' ht'
       exact carrier_denote hty (Obligations.dunion hob t' ht')
