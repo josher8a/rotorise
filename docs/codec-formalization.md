@@ -336,8 +336,8 @@ conditional was not hypothetical, and the term that had no premise was writing a
 `(number)` pass predicted exactly this and could not close it alone.
 
 **`ℓ ⊆ D` is now §3's premise**, at the user's call, and the set is the one `(number)` already gates
-on: what DynamoDB *accepts*. `Typed.literalN` carries `hD` beside `hne` and `hnd`, which is where it
-belongs — a decidable fact about data the term owns, checked once at the declaration. The
+on: what DynamoDB *accepts*. `Typed.literalN` carries `hD` — since the alternatives became a `℘⁺fin`, its
+*only* premise — which is where it belongs — a decidable fact about data the term owns, checked once at the declaration. The
 implementation refuses at the constructor for the same reason and in the same place as the
 mixed-kind refusal. `not_typed_literalN_nonD` is the premise biting — `literal(d)` on a
 double outside `D` has no derivation at all — and `typed_literalN_sub_number` is what it buys back:
@@ -1641,8 +1641,7 @@ worth reading.
 
 **`fields`, in the syntax rather than the domain — done.** See the next entry.
 
-**`literalS`/`literalN`.** `hne` and `hnd` are a nonempty finite set spelled as two side conditions
-on a list. Smallest change of the four.
+**`literalS`/`literalN` — done.** See below.
 
 **`N`'s numeral domain — the one with a real argument against it.** §5's C1 table names `N` as one
 of four members whose `Carries(m)` is a refinement, and this document has taken the position that
@@ -1749,6 +1748,43 @@ better outcome — a typechecking error at the point where someone would write t
 earlier and cheaper than a theorem saying it is refused — but any *other* result that was leaning on
 that value for a witness has to find another one, or say what it now assumes. Three of these four
 repairs were free. This one was not, and the difference is that the empty set was doing two jobs.
+
+### The literals' alternatives, and what `hD` staying tells us
+
+`Term.literalS` and `literalN` carry `NEFinset String` and `NEFinset Double`. `(literal-S)`
+loses both its premises and `(literal-N)` loses two of three: `hne` and `hnd` said *nonempty* and
+*no repeats* about a list, and a `℘⁺fin` says both by being one. `literalS ["A","B"]` and
+`literalS ["B","A"]` were two terms denoting one codec — the field-table defect at the leaves.
+
+**`hD : ∀ d ∈ ℓ, Numeral.WF d.toDec` stays, and that contrast is the useful part of this entry.**
+It is §3's `ℓ ⊆ D`, and it is a claim about the *elements*: no collection type carries it, where
+two collection types carry non-emptiness and uniqueness. Two of `(literal-N)`'s three premises were
+representation debt; the third is content. So the rule stated a few entries above gets a qualifier
+it needed:
+
+> A gate is worth testing against the type when it constrains the **shape** of a collection —
+> ordered, repeatable, possibly empty. It is content, and stays a gate, when it constrains **what
+> the elements are**.
+
+That is also the honest reading of the one gate still open. `N`'s numeral domain is an
+element-level refinement, like `hD` — which is why typing it means a subtype on the *carrier*
+(`{x : Numeral // Numeral.WF x}`) rather than a different collection, and why it is the one with an
+argument still standing rather than a mechanical port.
+
+The tag machinery moved along with the literals, and not by choice. `tagsOf` reads a `literalS`'s
+alternatives, and a `Finset` does not become a `List` without choice (`Finset.toList`, via
+`Quot.out`) or an order (`Finset.sort`) — the same wall the map entry above walked into and went
+around. Going around it here means the tags are a `Finset String` end to end: `tagsOf`,
+`tagsOfField`, `allTags` (folding with `∪` rather than `++`), `OptionSem.byTag` and `dunionCodec`.
+`(dunion)`'s premise becomes `(tagsOf d t').Nonempty` rather than `≠ []`, and
+`contains_of_mem`/`mem_of_contains` drop out of the `dunion` proofs. This is the shape the
+specification already had: a discriminator's tag set is unordered and repeat-free, which is exactly
+what `(dunion)`'s pairwise-disjointness premise reasons about.
+
+One mechanical note worth keeping. `NEFinset.of x S = ⟨insert x S, _⟩` writes a literal `℘⁺fin`,
+and `NEFinset.of_val` is `@[simp]`. Seventy-eight literal-set occurrences across six files migrated
+with **no proof change at all**, because `simp` sees through the constructor without any call site
+naming it. Marking the projection is worth more than editing the simp sets.
 
 ## §5 Certifying an implementation
 
