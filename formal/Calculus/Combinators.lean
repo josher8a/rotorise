@@ -2407,7 +2407,7 @@ theorem ker_decimalCodec {x y : WFNumeral} (h : decimalCodec.Ker (.n x) (.n y))
   · rw [if_neg hy] at h'; exact nomatch h'
 
 /-- §1: `Can(decimal)` is the normal forms and a normalisation fixes its own, so `Stored`
-    discharges `η ⊆ ker p`. Necessity is `not_survivesStore_decimalWF`. -/
+    discharges `η ⊆ ker p`. Necessity is `not_survivesStore_wfDecimalCodec`. -/
 theorem survivesStore_decimalCodec {η : Attr → Attr}
     (hη : ∀ s : WFNumeral, Numeral.Stored s.1 = true → η (.n s) = .n s) :
     SurvivesStore decimalCodec η := by
@@ -3488,7 +3488,7 @@ theorem rcOf_forall {P : Codec → Prop} {rest : RestSem}
 
 /-- What object-encode produces, `keepB` keeps: under `drop` an encoded entry's name
     is declared, and the other policies keep everything. -/
-theorem keepB_of_encEntry {sems : MapOf FieldSem} {rest : RestSem} :
+theorem keepB_of_entryWrite {sems : MapOf FieldSem} {rest : RestSem} :
     ∀ k v a, (entryCodec sems (rcOf rest) k).bind (fun c => c.e v) = some a →
       keepB rest sems k = true := by
   intro k v a h
@@ -3517,7 +3517,7 @@ theorem lawful_objectCodec {sems : MapOf FieldSem} {rest : RestSem}
     (hrest : ∀ c, rest = .codec c → Lawful c) :
     Lawful (objectCodec sems rest) :=
   lawful_objectCore sems (rcOf rest) (keepB rest sems) hf hfb
-    (rcOf_forall hrest) keepB_of_encEntry keepB_of_declared
+    (rcOf_forall hrest) keepB_of_entryWrite keepB_of_declared
 
 theorem lawfulCore_objectCodec {sems : MapOf FieldSem} {rest : RestSem}
     (hf : ∀ k, LawfulCore (sems.2 k).codec)
@@ -3525,7 +3525,7 @@ theorem lawfulCore_objectCodec {sems : MapOf FieldSem} {rest : RestSem}
     (hrest : ∀ c, rest = .codec c → LawfulCore c) :
     LawfulCore (objectCodec sems rest) :=
   lawfulCore_objectCore sems (rcOf rest) (keepB rest sems) hf hfb
-    (rcOf_forall hrest) keepB_of_encEntry keepB_of_declared
+    (rcOf_forall hrest) keepB_of_entryWrite keepB_of_declared
 
 /-- The sum's core laws. (U) is what makes them hold: it says the option that wrote is
     the only one admitting either side of the pair, so the round trip comes back through

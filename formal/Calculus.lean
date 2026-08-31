@@ -14,5 +14,4 @@ import Calculus.HeldSet
 import Calculus.Refutations
 import Calculus.Exactness
 import Calculus.LiteralArity1
-import Calculus.WireOrder
 import Calculus.Axioms

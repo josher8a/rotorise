@@ -1645,8 +1645,9 @@ nothing for `e` to choose between and nothing for `p` to collapse; `ker p` is eq
 `setCodec` and that is now correct rather than a defect. The constraint is recorded because
 it is what rules out the alternative design, not because anything here depends on it.
 
-`Calculus/WireOrder.lean` — the canonical form and the axiom-free order it was built on —
-is likewise no longer on the set path. Nor, as the next section shows, on the map path: the
+`Calculus/WireOrder.lean` — the canonical form and the axiom-free order it was built on — was
+likewise no longer on the set path, and has been deleted; the `Classical.choice` hazard it
+existed to route around is recorded beside `NEFinset` in `Domain.lean`. Nor, as the next section shows, on the map path: the
 quotient the kernel refuses is `Finset (Name × Attr)`, and `M` does not need it. -/
 
 /-! ### The reference, checked against the model

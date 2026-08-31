@@ -442,36 +442,34 @@ and (R) through the store fails on a value the codec claimed to hold. -/
     Note its read is *total*: `WF` is the carrier now, so the gate that used to sit on `p`
     has nothing left to reject. That is the whole asymmetry `decimal` adds — `Stored` is a
     strictly smaller set than `WF`, and only the smaller one survives the store. -/
-abbrev decimalWF : Codec := wfDecimalCodec
+theorem wfDecimalCodec_e_str (s : String) :
+    wfDecimalCodec.e (.str s) = if h : Numeral.WF s then some (.n ⟨s, h⟩) else none := rfl
 
-theorem decimalWF_e_str (s : String) :
-    decimalWF.e (.str s) = if h : Numeral.WF s then some (.n ⟨s, h⟩) else none := rfl
-
-theorem decimalWF_p_n (x : WFNumeral) : decimalWF.p (.n x) = some (.str x.1) := rfl
+theorem wfDecimalCodec_p_n (x : WFNumeral) : wfDecimalCodec.p (.n x) = some (.str x.1) := rfl
 
 /-- `"1.500"` is one of the forms `stored_rejects_denormal` records the store rewriting, and
     the un-narrowed codec claims to hold it. -/
-theorem can_decimalWF_denormal : Can decimalWF (.n (.of "1.500")) :=
-  ⟨.str "1.500", by rw [decimalWF_e_str, dif_pos (by decide : Numeral.WF "1.500" = true)]; rfl⟩
+theorem can_wfDecimalCodec_denormal : Can wfDecimalCodec (.n (.of "1.500")) :=
+  ⟨.str "1.500", by rw [wfDecimalCodec_e_str, dif_pos (by decide : Numeral.WF "1.500" = true)]; rfl⟩
 
 /-- **The un-narrowed `decimal` does not survive the store.** Any `η` that normalises
     `"1.500"` — which is what DynamoDB was measured to do — falls outside its `ker p`. -/
-theorem not_survivesStore_decimalWF {η : Attr → Attr}
-    (hη : η (.n (.of "1.500")) = .n (.of "1.5")) : ¬ SurvivesStore decimalWF η := by
+theorem not_survivesStore_wfDecimalCodec {η : Attr → Attr}
+    (hη : η (.n (.of "1.500")) = .n (.of "1.5")) : ¬ SurvivesStore wfDecimalCodec η := by
   intro h
-  have hk : decimalWF.p (η (.n (.of "1.500"))) = decimalWF.p (.n (.of "1.500")) :=
-    h _ can_decimalWF_denormal
-  rw [hη, decimalWF_p_n, decimalWF_p_n] at hk
+  have hk : wfDecimalCodec.p (η (.n (.of "1.500"))) = wfDecimalCodec.p (.n (.of "1.500")) :=
+    h _ can_wfDecimalCodec_denormal
+  rw [hη, wfDecimalCodec_p_n, wfDecimalCodec_p_n] at hk
   exact absurd (Value.str.inj (Option.some.inj hk)) (by decide)
 
 /-- And (R) through the store fails outright: the value is written, the store rewrites the
     attribute, and the codec reads back something else — the shape of the shipped defect. -/
-theorem not_retract_through_store_decimalWF {η : Attr → Attr}
+theorem not_retract_through_store_wfDecimalCodec {η : Attr → Attr}
     (hη : η (.n (.of "1.500")) = .n (.of "1.5")) :
-    decimalWF.e (.str "1.500") = some (.n (.of "1.500")) ∧
-      decimalWF.p (η (.n (.of "1.500"))) ≠ some (.str "1.500") := by
-  refine ⟨by rw [decimalWF_e_str, dif_pos (by decide : Numeral.WF "1.500" = true)]; rfl, ?_⟩
-  rw [hη, decimalWF_p_n]
+    wfDecimalCodec.e (.str "1.500") = some (.n (.of "1.500")) ∧
+      wfDecimalCodec.p (η (.n (.of "1.500"))) ≠ some (.str "1.500") := by
+  refine ⟨by rw [wfDecimalCodec_e_str, dif_pos (by decide : Numeral.WF "1.500" = true)]; rfl, ?_⟩
+  rw [hη, wfDecimalCodec_p_n]
   intro hk
   exact absurd (Value.str.inj (Option.some.inj hk)) (by decide)
 

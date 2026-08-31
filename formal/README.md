@@ -18,8 +18,6 @@ definition it touches.
 | `Calculus/Soundness.lean`   | §5          | `Obligations` (semantic premises, fueled), `UAtCan := UniqueAdmission ∘ semsOf`, `MPOk` (legacy exemption), theorem statements, and the held-set bridge `carrier_denote`/`typed_TSub`/`typed_e_mem`/`typed_p_mem`                                                    |
 | `Calculus/Equations.lean`   | §6          | `Codec.Equiv` (§6's `≡`), `Can`, and all eleven of §6's "Hold" rows — `held`'s identity and composition, `refine`'s meet and full case, `legacy` with its own reading and `≈` on `Can(c)`, `union` of one, its commutativity and its associativity (which needs none of §6's stated conditions), `nullable`'s idempotence, wrapper member preservation |
 | `Calculus/Opaque.lean`      | §3, §7      | `opaque` without fuel: `Value.depth`/`Attr.depth`, the eighteen kind-disjoint unfoldings (one `simp` set for the section, one line each), `opaq_e_agree`/`opaq_p_agree` (stabilization), `opaq_e_depth`/`opaq_p_depth` (depth preservation), and `opaqCodecω` with `lawful_opaqCodecω`/`carrier_opaqCodecω` |
-| `Calculus/Denoteω.lean`     | —           | `denoteω : Term → Codec` — structural, no fuel — with `termDepth` and `denoteω_eq : termDepth t ≤ n → denoteω t = denote n t` |
-| `Calculus/Soundnessω.lean`  | §5          | §5 restated fuel-free: `soundnessω`, `soundness_coreω`, `carrier_denoteω`, `typed_e_memω`, `typed_p_memω`, `typed_μSynω` — transports, not reproofs |
 | `Calculus/HeldSet.lean`     | §1, §3, §6  | `T` as an identity: `opaq_T_identity` (`Uν` *is* `opaque`'s held set), `set_nil_outside_opaque` (the witness for the non-emptiness premise `HOpaque` was missing), and the numeral-domain report — `decimal_writes_wf`/`decimal_reads_wf` with worked boundary cases |
 | `Calculus/Continuity.lean`  | §5, §7      | Why fuel is not removable by a fixpoint: `Codec.Approx` (the information order any ccpo must extend), `altCodec_not_monotone` (unique admission is anti-monotone in the options) and `denote_not_fuel_monotone` (the fuel stages are not a chain) |
 | `Calculus/Refutations.lean` | §6          | §6's "Do not hold" table, all nine settled: `not_equiv_lazy` (the row where `≡`'s member index matters), `not_equiv_union_array`, `not_equiv_union_extend`, the two `tuple`-tail rows, `not_equiv_refine_held`, `legacy_breaks_MP`, `e_comp_p_ne_id`, `not_typed_set_union` — plus `optional` nesting, which the syntax rules out |
@@ -57,9 +55,11 @@ and the judgement to it), and `lazy` concludes `⊤` in the model exactly as the
   headline theorem actually depends on and fails the build on anything unsanctioned. Both
   of those leaks happened while the module was being written, which is why it exists.
 - **Fuel-primary denotation, now with a fuel-free twin.** `denote` still takes fuel and
-  every proof about it is unchanged; `denoteω` (Denoteω.lean) is structural and takes
-  none. `denoteω_eq` makes them *equal* at `termDepth t`, so the §5 statements transport
-  to the fuel-free form (Soundnessω.lean) without reproving anything. Fuel 0 still
+  **there is no fuel.** `denote : Term → Codec` is structural, and the two files that used
+  to hold a second fuel-free denotation and the transport to it — `Denoteω.lean`,
+  `Soundnessω.lean` — are deleted: `denoteω` was a name for `denote`, companion for
+  companion. What the proofs recurse on instead is `Term.depth`, a measure derived from the
+  term, so it appears in no statement. Fuel 0 still
   denotes `Codec.empty` (laws vacuous). Both blockers that forced fuel are gone: `lazy`
   carries a `Term`, and `opaq` denotes `opaqCodecω`.
 - **Fuel is not removable by a fixpoint, and that is a fact about (U), not about Lean.**

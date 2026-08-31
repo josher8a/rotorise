@@ -12,6 +12,14 @@ can also be **true but unlocatable** — correct, provable, and impossible for a
 line up against the rule it is supposed to represent. For this artifact's purpose those
 are the same defect, and this file measures both.
 
+> **Superseded in one respect, and deliberately not rewritten.** This file is a dated snapshot of
+> two audits, and its value is that it records what they found *at that moment* — so its citations
+> are left as they were. Since then the ω layer it measures (`Calculus/Denoteω.lean`,
+> `Calculus/Soundnessω.lean`, `denoteω`, `denoteω_eq`, `termDepth`) has been **deleted**: `denote`
+> is structural and `denoteω` was a name for it. Every mention of those below refers to a tree that
+> no longer exists. `Calculus/WireOrder.lean` is likewise gone. See §13 of
+> `docs/codec-audit.md`.
+
 ---
 
 ## §1 How this was produced, and how much to trust each line

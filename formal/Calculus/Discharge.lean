@@ -517,7 +517,6 @@ theorem adm_sound : ∀ (t : Term) {v a},
       exact admList_of_mem htx (adm_sound tx hoe)
     all_goals rfl
 
-set_option maxHeartbeats 1000000 in
 /-- Reading lands in `admA`. -/
 theorem admA_sound : ∀ (t : Term) {a v},
     (denote t).p a = some v → admA t a = true

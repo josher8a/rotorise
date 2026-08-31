@@ -160,7 +160,7 @@ and that is what this predicate is.
 the inclusion, both in `Codec.lean`; `Lawful.retract_through_store` is what they buy, which
 is **(R)** with the store in the middle. The two halves for `decimal` are
 `survivesStore_decimalCodec` — the narrowing discharges the premise, because a normalisation
-fixes its own normal forms — and `not_survivesStore_decimalWF` in `Refutations.lean`, which
+fixes its own normal forms — and `not_survivesStore_wfDecimalCodec` in `Refutations.lean`, which
 is the codec that gated on `WF` instead, failing on `"1.500"`. `ker_decimalCodec` is the fact
 both turn on: `decimal`'s kernel is equality, so nothing weaker than "η fixes it" would
 serve. -/
@@ -260,6 +260,19 @@ deriving DecidableEq, Repr
     a gate could enforce this was a claim worth testing. -/
 abbrev NEFinset (α : Type) := {S : Finset α // S.Nonempty}
 
+/-! **Do not reach for an order on these.** A wire set read back as a *list* would need a
+canonical representative, hence a sort, hence an order — and `LinearOrder String` and
+`List.sorted_insertionSort` both depend on `Classical.choice`, which the axiom base
+`docs/codec-formalization.md` §3 advertises does not include. `#assert_axioms_all` is what
+caught it, and `Calculus/WireOrder.lean` was 247 lines of axiom-free order built to get around
+it.
+
+None of that is needed any more, and the reason is this abbreviation: both sides of every wire
+set are now a `Finset` of a *concrete element type* — `NEFinset String`, `NEFinset Double`,
+`NEFinset Bytes` on `Value`, the same on `Attr` — so there is no list to sort and no
+representative to choose. The file is deleted; this note is the part of it that was load-bearing.
+-/
+
 /-- §1's `Numerals` — the strings DynamoDB accepts in an `N`, carried by the type. So
     `Carries(N)` is exact and `⟨N, "abc"⟩` is not an attribute at all.
 
@@ -339,9 +352,6 @@ def Attr.kind : Attr → Kind
   | .ss _ | .ns _ | .bs _ => .set
   | .l _    => .array
   | .m _ _  => .map
-
-/-- An item: an `M` without its wrapper (§1). -/
-abbrev Item := List (Name × Attr)
 
 /-- The value language, partitioned exactly as §5's `Kind`. `decimal` holds numerals as
     `str` values — one string kind, as in the doc's κ table. -/
