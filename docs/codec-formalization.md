@@ -1636,12 +1636,8 @@ All four are admissible. Verified against the kernel, alongside the recursive ar
 
 So none of the four is blocked. What remains is cost and, in one case, a live design argument.
 
-**Non-emptiness (`℘⁺fin`).** The cheapest and the one that finishes the set arc. It deletes
-`encSet`/`decSet`'s `card = 0` branch, `HSet`'s three `Nonempty` conjuncts, `HOpaque`'s three `hne`
-premises and `Adm`'s three `card ≠ 0` conjuncts; the obligation migrates once into `setImage`'s
-type, where "the image of a nonempty set is nonempty" is already proved (`setImage_nonempty`). The
-tell that it is the right move is the same tell the map repair had: `HeldSet.lean`'s witness that
-`opaque` refuses `strSet ∅` becomes **unstatable**, exactly as `record_e_keeps_duplicate_keys` did.
+**Non-emptiness (`℘⁺fin`) — done.** See two entries down; it cost something, and the something is
+worth reading.
 
 **`fields`, in the syntax rather than the domain — done.** See the next entry.
 
@@ -1705,6 +1701,54 @@ place; likewise `cases h : ff k` does not substitute into hypotheses introduced 
 solved the same way — extract once, at a statement where every argument *is* a variable
 (`TypedField.term`, `TypedField.not_optional`, `fieldSemOf_ne_opt`) — and that is cheaper than
 fighting dependent elimination at each of four call sites.
+
+### `℘⁺fin`, typed — and the first repair that cost something
+
+`Attr.ss`/`ns`/`bs` and `Value.strSet`/`numSet`/`binSet` carry
+`NEFinset α = {S : Finset α // S.Nonempty}`. §1 types all three wire sets as `℘⁺fin`, the reference
+says DynamoDB does not support empty sets, and that is now the type rather than a `card = 0` check
+inside `encSet`. One new definition carries it: `neSetImage`, the set image with non-emptiness
+attached, so `setImage_nonempty` is spent once instead of at every call site.
+
+The deletions are the expected ones — `encSet`/`decSet`'s guard and both `*_nonempty` lemmas,
+`setCodec`'s `T` conjunct, `HSet`'s three, `HOpaque`'s three `hne` premises, `Adm`'s three
+`card ≠ 0` tests, `encSet_isSome_of`'s `hne` argument, and the `Nonempty` half of `set_retract`'s
+`key`. And the tell is the one the map repair had: **`HeldSet.lean`'s empty-set section is now
+prose.** `not_hopaque_set_nil`, `opaqCodec_T_set_nil` and `opaqCodecω_e_set_nil` exhibited a value
+that `Uν` admitted, no fuel held and no fuel wrote. `Value.strSet ∅` does not typecheck any more, so
+none of the three can be stated — exactly as `record_e_keeps_duplicate_keys` could not be stated
+once `M`'s keys became a `Finset`.
+
+**Then it cost something, and this is the first of the four repairs that did.**
+
+`.strSet ∅` was carrying a second job. It was the only witness, anywhere in the development, that
+`opaque`'s `⊤` exactness row over-claims — and the only one that needs no `Double`. §1 axiomatizes
+`Double` with `toDec`, `ofDec`, `roundtrip` and `decEq`, and **no inhabitant**: `roundtrip` reads
+`∀ d : Double, ofDec (toDec d) = some d`, which starts from a `Double` rather than producing one. So
+with the empty set gone, `opaqCodecω` is total on every value this development can *construct*, and
+its inexactness is entirely a numeral-domain phenomenon that cannot be pointed at.
+
+What that changes, stated rather than absorbed:
+
+| | before | now |
+| --- | --- | --- |
+| `not_ExactV_opaq` | `∀ lossy`, no hypothesis | `opaq false`, given `(d : Double)` |
+| `not_ExactA_opaq` | `∀ lossy`, no hypothesis | `opaq false`, no hypothesis |
+| `excuse_witnessed` | no hypothesis | given `(d : Double)` |
+
+The read side recovers without an axiom because `refuse` reads no `N`, hence no `NS`, and `Numeral`
+is `String` — a numeric wire set is constructible where a `Double` is not. The write side does not:
+the honest form is "given an inhabitant of §1's number carrier", which is assumed nowhere else in
+the development and is exactly what the sentence *numbers exist* would add. The `lossy = true`
+witness is lost on both sides; it depended on the empty set being refused by every option regardless
+of the number gate.
+
+This is worth recording as the general shape rather than as an accident. **A witness that a value is
+excluded is worth having exactly while the value is expressible.** Typing the refinement away is the
+better outcome — a typechecking error at the point where someone would write the bad value is
+earlier and cheaper than a theorem saying it is refused — but any *other* result that was leaning on
+that value for a witness has to find another one, or say what it now assumes. Three of these four
+repairs were free. This one was not, and the difference is that the empty set was doing two jobs.
 
 ## §5 Certifying an implementation
 
