@@ -114,6 +114,13 @@ Four hats: `Term.union`, `Term.dunion`, `List OptionSem`, `dunionCodec`'s list. 
 
 ### 2.3 Collections already correctly typed
 
+**Including their cardinality, which is unbounded on purpose.** `dynamo-datatypes.md:132` and
+`:185`: *"There is no limit on the number of values in a list or a map"*, and the same for a set.
+`L = List 𝔸`, `M = Name ⇀fin 𝔸` and `℘⁺fin(α)` carry no cardinality refinement, and that is
+exact rather than loose — the only thing bounding breadth is the 400 KB item size, which is a
+property of the item and not of any attribute. The bound that *does* exist on `L`/`M` is depth,
+and it is a separate constraint that nothing enforces (§12.3).
+
 Confirmed with the theorem that settles each: `Attr.l` / `Value.arr` (the reference says lists
 are ordered and heterogeneous); `Term.tuple`, `align`/`slots`/`tupleCodec`, `HTuple`/`HProd`
 (position *is* the semantics — `align_eq_zip`, `slots_length`); `HUnion`/`DIncomp` and the
@@ -308,7 +315,8 @@ limit about tables, indexes and keys that the model does not have.
 | `:27` | attribute names ≥1 char, <64 KB | **OUT-OF-SCOPE-BY-SPEC.** §1's `M` row is `Name ⇀fin 𝔸` with no refinement and C1's table omits `M`. The non-emptiness half *is* kernel-admissible (`{s : String // s ≠ ""}`), but `Name` is a collection element type and function domain, not the carrier of a non-recursive field in the `Attr.n` sense — coercions and instances at ~35 map sites in the largest file, for no spec mandate. Highest cost of any candidate. **Not worth doing.** |
 | `:80`, `:103` | string/binary min length zero *"unless a key"* | **NOT-TYPEABLE.** A contextual permission; a subtype cannot express "unless it is a key" without a key concept the model lacks. Would also cost a witness (`Refutations.lean:203` uses `.str ""`). |
 | `:83-84`, `:106-107` | partition key ≤2048 B, sort key ≤1024 B | **OUT-OF-SCOPE**, un-typeable in principle — constrains a position in a table schema, not membership in `𝔸`. |
-| `:132`, `:185` | item size ≤400 KB | **NOT-TYPEABLE.** A global aggregate over the recursive structure; enforcing it refines `Attr.l`'s list and `Attr.m`'s function — the recursive occurrence, which the kernel rejects. A subtype on `Item` alone is admissible and vacuous. |
+| `:80`, `:103` | item size ≤400 KB | **NOT-TYPEABLE.** A global aggregate over the recursive structure; enforcing it refines `Attr.l`'s list and `Attr.m`'s function — the recursive occurrence, which the kernel rejects. A subtype on `Item` alone is admissible and vacuous. **Not checkable per attribute either** — it is a property of the *item*, so unlike depth it cannot be a codec's obligation. See §12.3. (Cited `:132`/`:185` here until JH pointed out those lines say the opposite; corrected below and in §2.3.) |
+| `:132`, `:185` | **no** limit on the number of values in a list, map or set | **NOT A CONSTRAINT — and the model is already right.** *"There is no limit on the number of values in a list or a map, as long as the item containing the values fits within the DynamoDB item size limit."* `L = List 𝔸`, `M = Name ⇀fin 𝔸` and `℘⁺fin` carry no cardinality bound, which is exact. Recorded so nobody tightens it later. |
 | `:130` | nesting ≤32 levels | **NOT-TYPEABLE** — `{as : List Attr // Attr.depthL as ≤ 31}` nests `Attr` under its own declaration, which the kernel rejects, exactly as for item size. ~~And typing it would destroy live theorems: the ω-codecs' totality argument depends on depth being unbounded.~~ **That second reason is wrong.** `Opaque.lean:17-20` supplies *each input its own budget* — `Value.depth` on the write side, `Attr.depth` on the read side — and a cap on the carrier makes those budgets bounded, not ill-typed. The un-typeability is the whole of it. **But see §12: un-typeable is not un-checkable, and nothing checks it.** |
 | `:63-65` | ≤38 significant digits, magnitude range | **ALREADY ENFORCED** — `WFNumeral`. |
 | `:134`, `:183`, `:187` | sets non-empty, unique, unordered, homogeneous | **ALREADY ENFORCED** — `NEFinset`. |
@@ -882,6 +890,18 @@ changing `codec.ts` too, not for keeping two premises.
 
 ### 12.3 Documents nest ≤32 levels — and nothing checks it
 
+**Corrected by JH after the first draft: 32 is a depth bound and nothing else.** The three limits
+are separate, and only one of them is a candidate for a codec to enforce:
+
+| limit | what it constrains | where it can be checked |
+| --- | --- | --- |
+| nesting ≤ 32 | depth — how many dereferences a path takes (`a.b.c…`), per attribute | **at `encode`, locally** — this is the gap |
+| element count | **nothing.** `dynamo-datatypes.md:132`, `:185`: *"There is no limit on the number of values in a list or a map"* — nor in a set | n/a; the model is already exact |
+| item size ≤ 400 KB | the cumulative size of every attribute name and value in one row | only at the *item* level, never inside one attribute's codec |
+
+So breadth is unbounded and the model saying so is correct, not loose. A `List 𝔸` of ten thousand
+elements is a legal attribute; a 33-deep one is not, at any size.
+
 `dynamo-datatypes.md:130`: *"The document types are list and map. These data types can be nested
 within each other, to represent complex data structures up to 32 levels deep."*
 
@@ -906,16 +926,23 @@ does not cover it, and being un-typeable never made it un-checkable — `Numeral
   precisely the `⟨N, "5e-324"⟩` shape — an attribute the store has no point for, reachable with
   no cast — and it is the fifth, found after §9 declared five and closed them. §9 did not look
   because §6 had already filed depth as out of scope.
-* **The model over-approximates `𝔸`.** `Carries(L)` and `Carries(M)` are unbounded, so
-  `ran(e) ⊆ 𝔸` holds against the model's `𝔸` and not against the store's. Unlike the numeral
-  case this cannot be repaired in the carrier, so the honest options are a *derived* bound
-  (`Attr.depth a ≤ 32` as a theorem about derivable terms, or as an `Obligations` entry) or an
-  explicit scope note in §1 saying `𝔸` is the unbounded closure and depth is checked outside it.
+* **The model over-approximates `𝔸` — in depth, and only in depth.** `Attr.l` and `Attr.m` admit
+  arbitrary *nesting*, so `ran(e) ⊆ 𝔸` holds against the model's `𝔸` and not the store's. Their
+  *breadth* is unbounded in both, which is right. Unlike the numeral case this cannot be repaired
+  in the carrier, so the honest options are a **derived** bound (`Attr.depth a ≤ 32` as a theorem
+  about derivable terms, or an `Obligations` entry) or an explicit scope note in §1 saying `𝔸` is
+  the unbounded closure with depth checked outside it.
 
 The library fix is independent of that choice and should not wait for it: a depth check on
-`encode` at the top level, or a `checkDepth` in `rotorise/testing` beside `checkAgainst`. Note
-`opaque` and `native` are where it bites hardest — both walk arbitrary user data, and `native` is
-the one people point at a table they did not design.
+`encode` at the top level, or a `checkDepth` in `rotorise/testing` beside `checkAgainst`. It is a
+*depth* walk — no counting, no sizing — which is what makes it cheap and local. `opaque` and
+`native` are where it bites hardest: both walk arbitrary user data, and `native` is the one people
+point at a table they did not design.
+
+The 400 KB limit is the one to leave alone at the codec level, and for a reason rather than a
+shrug: an attribute codec sees one attribute, and item size is a sum over all of them plus their
+names. It is checkable where an *item* is assembled and nowhere else, which is a different
+obligation from `ran(e) ⊆ 𝔸` and belongs to whatever writes the item.
 
 **What this says about the audit itself.** §6's heading is "the axis is closed", and it *is* —
 for the axis it defines. The defect got through because a constraint that fails one test
