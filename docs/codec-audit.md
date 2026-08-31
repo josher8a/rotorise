@@ -34,6 +34,8 @@ timeboxed. This file is their output and the disposition of each item.
 | 4 | `WireOrder.lean` | **17 of 19 declarations dead** (independently found by two scans); header argues for a design the code abandoned. Only `Axioms.lean` imports it, for the axiom scan. The `Classical.choice` warning about `LinearOrder String` is a real hazard and must be relocated, not lost. | ~247 lines | small |
 | 5 | `Domain.lean:344` | `Item := List (Name × Attr)`, docstring calls it "an `M` without its wrapper" — the exact shape five sites removed, beside the repaired `Attr.m`. **Dead**: grep finds only the declaration. | the declaration | none |
 | ~~6~~ | ~~`Typing.lean:165-167`~~ **Landed.** | `literalOK` did two jobs: `Numeral.WF` on `.num` (content, stays) and `\| _ => false` for containers, which is just *"this value has a ground base"* — a claim about the field's carrier. `Term.literal (v : GroundValue)` makes `literalMember` total. Landed exactly as scoped: `hμ` and `μ` gone, `literalOK` → `literalD` with only the `.num` case, both laws argument-free, `literalMember` deleted, `literalCodec`'s `Codec.empty` case and `Exactness`'s container case gone. | **all of `hμ`**, the container half of `hok`, the `hok` arg of two laws, a case in `Exactness` | small (11 sites) |
+| 15 | `src/codec.ts` | **Nothing checks the 32-level nesting bound**, so the library writes items DynamoDB rejects — a C1 violation of the `⟨N,"5e-324"⟩` shape, and the fifth after §9 closed five. `opaque` and `native` are where it bites: both walk arbitrary user data. §12.3. | — | small (library); the model's side is a scope decision |
+| 16 | `Typing.lean:207-210` | `dunion` keyed by tag (`MapOf Term`, discriminator **injected** not read back) deletes `htags` and `hdisj` with no coherence gate — §2.2's stated reason was wrong. Blocked on one measurement: whether `discriminatedUnion` has a multi-tag variant. §12.2. | 2 premises | medium, and a C2/C3 change |
 | ~~6b~~ | ~~`Term.lean:27-35`~~ **Landed.** | **`literal`, `literalS` and `literalN` are one rule.** Raised by JH while item 6 was landing, and right: all three are *a nonempty finite set of values at one ground base*. Landed as the base-indexed form of §11.1 — `literal (k : GroundKind) (ls : NEFinset k.Carrier)` — after §11.4/§11.5 settled that the cheaper union route costs either `Classical.choice` or two reintroduced gates. | 2 constructors, 5 codec definitions → 4, 3 lawful theorems → 1, 2 carrier theorems → 1 (one of them 26 lines), 4 `admA` row lemmas → 3 | **landed** |
 | 7 | `Combinators.lean:3324, 3375, 3406` +2 | `objectCodecCore` takes `kn : Name → Bool` free; the only instantiation is `keepB rest sems`. Three hypotheses across five signatures all say *the filter never discards a declared name*. | 3 hypotheses × 5 signatures, plus `keepB_of_encEntry` and `keepB_of_declared` | medium (43 sites) |
 | 8 | ~61 declarations | Transitively dead plumbing, listed in §4.1. | ~61 decls | small, mechanical |
@@ -47,6 +49,23 @@ timeboxed. This file is their output and the disposition of each item.
 ## 2. Closed questions — verified impossible, do not re-test
 
 ### 2.1 `union` / `dunion` option lists: the defect is real and unfixable
+
+**Asked again, and now closed by the kernel rather than by argument.** The payload cannot be a
+set for two independent reasons, both probed:
+
+* `NEFinset Term` needs `DecidableEq Term`, which cannot exist — `Term.custom` carries functions
+  on `Value`, so deciding two `custom` terms equal decides function equality on an infinite
+  domain (§11.5).
+* `Multiset Term` needs no `DecidableEq` and is *exactly* what §2.1 measured — order
+  unobservable (`altCodec_e_swap`), multiplicity observable (`select_dup_none`) — so it would
+  change nothing about the semantics and remove the over-specification. **The kernel rejects
+  it**: `arg #1 of 'T.union' contains a non valid occurrence of the datatypes being declared`.
+  A quotient in a nested inductive position is not a legal occurrence.
+
+So `union` stays list-shaped. One thing worth adding, because it narrows what the defect *is*:
+`dincomp_dup` makes `DIncomp` irreflexive, so a duplicate option is never **derivable**. The
+list's multiplicity is observable only at terms the judgement refuses, which is a smaller defect
+than "multiplicity is observable" alone suggests.
 
 Four theorems compiled to settle it:
 
@@ -89,7 +108,7 @@ Four hats: `Term.union`, `Term.dunion`, `List OptionSem`, `dunionCodec`'s list. 
 | `hD : ∀ d ∈ ℓ, Numeral.WF d.toDec` | `Typing.lean:176` | Typing it needs `NEFinset {d // WF d.toDec}`, which changes what `ℓ` *is* and **silently deletes** the (B) defect `literalN_holds_what_it_cannot_write` exhibits rather than proving it absent. |
 | `hsm : setMember μ₀ = some μS` | `Typing.lean:179` | Says the element's member is `S`/`N`/`B`, which selects `encSet`'s branch. `Term.set` holds a `Term` — no carrier to subtype. |
 | `hfb` (six signatures) | `Combinators.lean:3323` +5 | `FieldSem.fb (c) (v : {v // (c.e v).isSome})` *is* admissible and strikes all six — but cannot reach the syntax, since `Field.fallback` has no `denote` and no fuel. `fieldSemOf` would supply the proof: same obligation, moved. Net ≈ 0. |
-| `htags`, `hdisj` | `Typing.lean:207-210` | `htags` is shape-shaped, but `tagsOf` *computes* the set from the term — no stored field to subtype. Storing them duplicates derived data and needs a coherence gate of its own. |
+| `htags`, `hdisj` | `Typing.lean:207-210` | ~~`tagsOf` *computes* the set from the term, so storing them duplicates derived data and needs a coherence gate of its own.~~ **This reason is wrong as stated** — see §12. It holds only if each option *keeps* its own discriminator literal; a `dunion` keyed by tag that **injects** the discriminator has one source of truth and no coherence gate. The real costs are different ones. |
 | `hnd : ks.Nodup` | `Combinators.lean:3691` | `Finset Kind` *is* available, but `ks` is bound positionally to `os` by `List.Forall₂`, so order is load-bearing and `Nodup` cannot be separated from the pairing. |
 | `Obligations` / `MPOk` | `Soundness.lean:55-104` | All four remaining premises are semantic relations. `MPOk (.legacy _ _) = False` reads typeable, but needs a second mutual `Term` family plus an embedding — structural duplication for a one-line gate. |
 
@@ -274,7 +293,11 @@ for free and feed the above. **Read next:** arXiv 2505.17335, then Narcissus §3
 
 ## 6. Carrier refinements: the axis is closed
 
-**Zero defects.** The authoritative list is C1's own table at `codec-formalization.md:1871-1876`
+**Zero defects *on this axis*** — the axis being "which members of `𝔸` carry a subtype". §12
+records the constraint this framing let through: a limit that cannot be a carrier refinement is
+still a limit, and depth is one nothing enforces anywhere.
+
+The authoritative list is C1's own table at `codec-formalization.md:1871-1876`
 — exactly four members carry a refinement, `N` (grammar / 38 digits / magnitude) and
 `SS`/`NS`/`BS` (non-empty), and **all four are now enforced**. Every remaining constraint in
 `dynamo-datatypes.md` is either a resource limit §1 deliberately omits or a schema-position
@@ -286,7 +309,7 @@ limit about tables, indexes and keys that the model does not have.
 | `:80`, `:103` | string/binary min length zero *"unless a key"* | **NOT-TYPEABLE.** A contextual permission; a subtype cannot express "unless it is a key" without a key concept the model lacks. Would also cost a witness (`Refutations.lean:203` uses `.str ""`). |
 | `:83-84`, `:106-107` | partition key ≤2048 B, sort key ≤1024 B | **OUT-OF-SCOPE**, un-typeable in principle — constrains a position in a table schema, not membership in `𝔸`. |
 | `:132`, `:185` | item size ≤400 KB | **NOT-TYPEABLE.** A global aggregate over the recursive structure; enforcing it refines `Attr.l`'s list and `Attr.m`'s function — the recursive occurrence, which the kernel rejects. A subtype on `Item` alone is admissible and vacuous. |
-| `:130` | nesting ≤32 levels | **NOT-TYPEABLE, and typing it would destroy live theorems.** `{as : List Attr // Attr.depthL as ≤ 31}` nests `Attr` under its own declaration. Worse: the ω-codecs' totality argument *depends on depth being unbounded* — `Opaque.lean:19,27` and `Discharge.lean:222,1120,1371` state it by giving each input its own budget. A 32-cap makes that argument trivial or ill-typed. **The one candidate that is actively destructive.** |
+| `:130` | nesting ≤32 levels | **NOT-TYPEABLE** — `{as : List Attr // Attr.depthL as ≤ 31}` nests `Attr` under its own declaration, which the kernel rejects, exactly as for item size. ~~And typing it would destroy live theorems: the ω-codecs' totality argument depends on depth being unbounded.~~ **That second reason is wrong.** `Opaque.lean:17-20` supplies *each input its own budget* — `Value.depth` on the write side, `Attr.depth` on the read side — and a cap on the carrier makes those budgets bounded, not ill-typed. The un-typeability is the whole of it. **But see §12: un-typeable is not un-checkable, and nothing checks it.** |
 | `:63-65` | ≤38 significant digits, magnitude range | **ALREADY ENFORCED** — `WFNumeral`. |
 | `:134`, `:183`, `:187` | sets non-empty, unique, unordered, homogeneous | **ALREADY ENFORCED** — `NEFinset`. |
 | `:20-39` | table/index names, reserved words, `#`/`:` | **OUT-OF-SCOPE** — no table, index or expression language in the calculus. |
@@ -815,3 +838,87 @@ Two smaller costs worth recording, because neither was predicted:
 
 Green across all 20 modules, warning-free, `#assert_axioms_all` passing, `maxHeartbeats` still at
 three — none of the timeouts above were fixed by raising the budget.
+
+## 12. Three questions asked from outside the queue
+
+Raised by JH after §11 landed. One is closed by the kernel, one corrects a §2.2 row, and one is
+a **live defect in the shipped library** that this file's own structure hid.
+
+### 12.1 Should `union` take a `NEFinset`? — No, and now for a kernel reason
+
+Answered in §2.1. Two payloads were tried, not argued: `NEFinset Term` needs `DecidableEq Term`,
+which `Term.custom` makes impossible; `Multiset Term` needs no such instance and matches exactly
+what §2.1 measured, and the **kernel rejects it** as a non-valid occurrence of `Term` in its own
+declaration. A quotient cannot sit in a nested inductive position.
+
+### 12.2 Should `dunion` be a map from labels to codecs? — The obstruction I recorded is not real
+
+`dunion (d : Name) (opts : List Term)` carries `htags` (every option names at least one tag) and
+`hdisj` (their tag sets are pairwise disjoint). §2.2 filed both as content, on the grounds that
+`tagsOf` *computes* the tags from the option, so storing them would duplicate derived data and
+need a coherence gate. **That is only true while each option keeps its own discriminator field.**
+
+`dunion (d : Name) (opts : MapOf Term)` — a `Finset String` of tags with a function on it, the
+same shape `object`'s field table now has — with `dunion` **injecting** the discriminator into
+each variant instead of reading it back, has one source of truth. Then `htags` is "a key exists",
+which the type says, and `hdisj` is "keys are unique in a `Finset`", which the type also says.
+Both premises go, and no coherence gate replaces them.
+
+The real costs are two, and neither is the one I wrote down:
+
+1. **A variant answering to several tags.** `discriminatedUnion` allows a variant whose
+   discriminator is `literal .string {A, B}`. Keyed by tag, that variant appears under two keys —
+   duplicating its codec — or the map's values are keyed by `NEFinset String`, which puts
+   disjointness back as a premise. This is the actual reason the shape resists, and it is a
+   question about what the *implementation* allows, not about derived data.
+2. **C2/C3.** `codec.ts`'s `discriminatedUnion` demands each option declare the discriminator as
+   a bare `literal` — it reads the tag off the option. A model where `dunion` injects it instead
+   describes a different constructor, so the correspondence table stops holding at the one term
+   whose whole mechanism is the tag.
+
+Worth measuring before either: whether `discriminatedUnion` has a use with a multi-tag variant.
+If not, cost 1 evaporates and only the C2/C3 divergence remains — which is an argument for
+changing `codec.ts` too, not for keeping two premises.
+
+### 12.3 Documents nest ≤32 levels — and nothing checks it
+
+`dynamo-datatypes.md:130`: *"The document types are list and map. These data types can be nested
+within each other, to represent complex data structures up to 32 levels deep."*
+
+§6 has this as **NOT-TYPEABLE** and the first half of that verdict is right: the subtype
+`{as : List Attr // Attr.depthL as ≤ 31}` puts `Attr` under its own declaration and the kernel
+refuses it, exactly as for item size. The second half — *"the ω-codecs' totality argument depends
+on depth being unbounded"* — is wrong, and §6 is corrected: `Opaque.lean:17-20` gives **each
+input its own budget** (`Value.depth`, `Attr.depth`), and a bound on the carrier makes those
+budgets bounded rather than ill-typed.
+
+**The part neither §6 nor §9 covers.** §6 asks "can this be a carrier refinement?", answers no,
+and then declares the axis closed on the grounds that everything remaining is *"either a resource
+limit §1 deliberately omits or a schema-position limit about tables, indexes and keys"*. Depth is
+**neither**. It is a structural membership condition on `𝔸`: a 33-deep document is refused
+whatever its size, and there is no table or key in the statement. So the dichotomy that closed §6
+does not cover it, and being un-typeable never made it un-checkable — `Numerals` was *typed* and
+`src/` still had to gate on both halves, in three terms plus `native`.
+
+`grep` for a depth or nesting check across `src/codec.ts`: **nothing.** So:
+
+* **`src/` will write a 33-deep item and DynamoDB will reject the row.** This is a C1 violation of
+  precisely the `⟨N, "5e-324"⟩` shape — an attribute the store has no point for, reachable with
+  no cast — and it is the fifth, found after §9 declared five and closed them. §9 did not look
+  because §6 had already filed depth as out of scope.
+* **The model over-approximates `𝔸`.** `Carries(L)` and `Carries(M)` are unbounded, so
+  `ran(e) ⊆ 𝔸` holds against the model's `𝔸` and not against the store's. Unlike the numeral
+  case this cannot be repaired in the carrier, so the honest options are a *derived* bound
+  (`Attr.depth a ≤ 32` as a theorem about derivable terms, or as an `Obligations` entry) or an
+  explicit scope note in §1 saying `𝔸` is the unbounded closure and depth is checked outside it.
+
+The library fix is independent of that choice and should not wait for it: a depth check on
+`encode` at the top level, or a `checkDepth` in `rotorise/testing` beside `checkAgainst`. Note
+`opaque` and `native` are where it bites hardest — both walk arbitrary user data, and `native` is
+the one people point at a table they did not design.
+
+**What this says about the audit itself.** §6's heading is "the axis is closed", and it *is* —
+for the axis it defines. The defect got through because a constraint that fails one test
+(can it be a type?) was recorded as disposed of, rather than handed to the test it would have
+failed next (does anything enforce it?). §9 existed to ask exactly that question and never
+received this constraint.
