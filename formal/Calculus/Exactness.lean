@@ -371,11 +371,11 @@ theorem AdmAll_sound_aux {c : Term} {C : Codec}
 set_option maxHeartbeats 1000000 in
 -- the shared `term_depth_wf` block has alternatives this theorem's goals do not use
 set_option linter.unreachableTactic false in
-/-- Soundness of every row. The recursion is on `Term.depth` — the `_rec` form, which
+/-- Soundness of every row. The recursion is on `Term.depth`, which
     is what `κ_sound` and `adm_sound` do: a term recursion here makes the equation compiler
     elaborate all twenty-three heavy cases as one well-founded definition, and it does not
     finish. The heartbeat bump is for the twenty-three-way `cases`, not for any one case. -/
-theorem Adm_sound_rec : ∀ (t : Term) {v a},
+theorem Adm_sound : ∀ (t : Term) {v a},
     (denote t).e v = some a → Adm t v = true
   | t, v, a, he => by
     cases t
@@ -417,21 +417,21 @@ theorem Adm_sound_rec : ∀ (t : Term) {v a},
         simp only [Adm, decide_eq_true_eq]
         refine fun y hy => ?_
         obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp (hall y hy)
-        exact Adm_sound_rec c ha'
+        exact Adm_sound c ha'
       case numSet S =>
         simp only [denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, setCodec] at he
         have hall := encSet_elem he
         simp only [Adm, decide_eq_true_eq]
         refine fun y hy => ?_
         obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp (hall y hy)
-        exact Adm_sound_rec c ha'
+        exact Adm_sound c ha'
       case binSet S =>
         simp only [denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, setCodec] at he
         have hall := encSet_elem he
         simp only [Adm, decide_eq_true_eq]
         refine fun y hy => ?_
         obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp (hall y hy)
-        exact Adm_sound_rec c ha'
+        exact Adm_sound c ha'
       all_goals (simp only [denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, setCodec] at he; exact nomatch he)
     case tuple ts tl => cases v <;> simp_all [Adm, denote, tupleCodec]
     -- `objectCodecCore` is `carriedCodec` now, so the non-`map` rows are refused by the
@@ -445,7 +445,7 @@ theorem Adm_sound_rec : ∀ (t : Term) {v a},
         simp only [Adm]
         simp only [denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, arrayCodec] at he
         obtain ⟨ys, hys, -⟩ := Option.map_eq_some'.mp he
-        exact AdmAll_sound_aux (fun {v a} h => Adm_sound_rec c h) hys
+        exact AdmAll_sound_aux (fun {v a} h => Adm_sound c h) hys
       all_goals (simp only [denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, arrayCodec] at he; exact nomatch he)
     case record c =>
       cases v
@@ -453,26 +453,26 @@ theorem Adm_sound_rec : ∀ (t : Term) {v a},
         simp only [Adm, decide_eq_true_eq]
         simp only [denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, recordCodec] at he
         obtain ⟨g, hg, -⟩ := Option.map_eq_some'.mp he
-        exact fun k => Adm_sound_rec c (funImage_some hg k)
+        exact fun k => Adm_sound c (funImage_some hg k)
       all_goals (simp only [denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, recordCodec] at he; exact nomatch he)
     case refine c q =>
       obtain ⟨hq, hc⟩ := restrict_e.mp he
-      simp [Adm, Adm_sound_rec c hc, hq]
-    case legacy c r => simpa [Adm] using Adm_sound_rec c (extendRead_e.mp he)
-    case lazy c => simpa [Adm] using Adm_sound_rec c he
-    case held c f g => simpa [Adm] using Adm_sound_rec c he
+      simp [Adm, Adm_sound c hc, hq]
+    case legacy c r => simpa [Adm] using Adm_sound c (extendRead_e.mp he)
+    case lazy c => simpa [Adm] using Adm_sound c he
+    case held c f g => simpa [Adm] using Adm_sound c he
     case nullable c =>
       cases hw : (denote c).ownsNull with
       | true =>
         rw [show (denote (.nullable c)).e = (denote c).e from
           withNull_e_of_owns hw] at he
-        simp [Adm, Adm_sound_rec c he]
+        simp [Adm, Adm_sound c he]
       | false =>
         rw [show denote (.nullable c) = (denote c).orNull from
           withNull_eq_orNull hw] at he
         rcases orNull_e.mp he with ⟨rfl, -⟩ | ⟨-, hc⟩
         · simp [Adm]
-        · simp [Adm, Adm_sound_rec c hc]
+        · simp [Adm, Adm_sound c hc]
     case dunion d opts =>
       have h2 := adm_sound _ he
       have heq : Adm (.dunion d opts) v = adm (.dunion d opts) v := by rw [Adm, adm]; rfl
@@ -486,7 +486,7 @@ theorem Adm_sound_rec : ∀ (t : Term) {v a},
       -- the recursive call is taken **here**, before the generalisation: `key` quantifies over
       -- an arbitrary list containing `tx`, and a measure on the term cannot bound a call made
       -- inside that. With fuel it did not have to.
-      have htx' : Adm tx v = true := Adm_sound_rec tx hoe
+      have htx' : Adm tx v = true := Adm_sound tx hoe
       have key : ∀ (ts : List Term), tx ∈ ts → AdmAny ts v = true := by
         intro ts hts
         induction ts with
@@ -500,16 +500,13 @@ theorem Adm_sound_rec : ∀ (t : Term) {v a},
 termination_by t _ _ => Term.depth t
 decreasing_by term_depth_wf
 
-/-- **Every row is a sound over-approximation, the hatch included.**
+/-! **Every row is a sound over-approximation, the hatch included.**
 
     `Adm_exact` binds the sixteen analysable rows to `dom(e)` in both directions. The other
     seven had, until this theorem, *no* obligation at all: nothing stopped a hatch row being
     written `fun _ => false`, which would have been an outright unsoundness rather than the
     imprecision every defect in the log so far has been. A hatch row may be **loose**; it
     may not be **wrong**, and that is now checked. -/
-theorem Adm_sound (t : Term) {v a} (he : (denote t).e v = some a) : Adm t v = true := by
-  exact Adm_sound_rec t he
-
 /-! ### Every excuse earned
 
 `Excuse` and `covers` say which rows may decline exactness. Nothing so far said the
@@ -726,8 +723,8 @@ set_option maxHeartbeats 1000000 in
 -- the shared `term_depth_wf` block has alternatives this theorem's goals do not use
 set_option linter.unreachableTactic false in
 /-- Soundness of every attribute row; recursion on `Term.depth`, as on the value side. The
-    `_rec` suffix marks the recursive form; `AdmA_sound` is the statement to use. -/
-theorem AdmA_sound_rec : ∀ (t : Term) {a v},
+-/
+theorem AdmA_sound : ∀ (t : Term) {a v},
     (denote t).p a = some v → AdmA t a = true
   | t, a, v, hp => by
     cases t
@@ -769,7 +766,7 @@ theorem AdmA_sound_rec : ∀ (t : Term) {a v},
     case legacy c r =>
       simp only [denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, Codec.extendRead] at hp
       cases hc : (denote c).p a with
-      | some w => rw [hc] at hp; simp [AdmA, AdmA_sound_rec c hc]
+      | some w => rw [hc] at hp; simp [AdmA, AdmA_sound c hc]
       | none => rw [hc] at hp; simp [AdmA, hp]
     case set c => cases a <;> simp_all [AdmA, denote, setCodec]
     case tuple ts tl => cases a <;> simp_all [AdmA, denote, tupleCodec]
@@ -782,7 +779,7 @@ theorem AdmA_sound_rec : ∀ (t : Term) {a v},
         simp only [AdmA]
         simp only [denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, arrayCodec] at hp
         obtain ⟨vs, hvs, -⟩ := Option.map_eq_some'.mp hp
-        exact AdmAAll_sound_aux (fun {a v} h => AdmA_sound_rec c h) hvs
+        exact AdmAAll_sound_aux (fun {a v} h => AdmA_sound c h) hvs
       all_goals (simp only [denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, arrayCodec] at hp; exact nomatch hp)
     case record c =>
       cases a
@@ -790,25 +787,25 @@ theorem AdmA_sound_rec : ∀ (t : Term) {a v},
         simp only [AdmA, decide_eq_true_eq]
         simp only [denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, recordCodec] at hp
         obtain ⟨f, hf, -⟩ := Option.map_eq_some'.mp hp
-        exact fun k => AdmA_sound_rec c (funImage_some hf k)
+        exact fun k => AdmA_sound c (funImage_some hf k)
       all_goals (simp only [denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, recordCodec] at hp; exact nomatch hp)
-    case refine c q => simpa [AdmA] using AdmA_sound_rec c (restrict_p.mp hp).1
-    case lazy c => simpa [AdmA] using AdmA_sound_rec c hp
+    case refine c q => simpa [AdmA] using AdmA_sound c (restrict_p.mp hp).1
+    case lazy c => simpa [AdmA] using AdmA_sound c hp
     case held c f g =>
       obtain ⟨w, hw, -⟩ := through_p.mp hp
-      simpa [AdmA] using AdmA_sound_rec c hw
+      simpa [AdmA] using AdmA_sound c hw
     case nullable c =>
       cases hw : (denote c).ownsNull with
       | true =>
         rw [show (denote (.nullable c)).p = (denote c).p from
           withNull_p_of_owns hw] at hp
-        simp [AdmA, AdmA_sound_rec c hp]
+        simp [AdmA, AdmA_sound c hp]
       | false =>
         rw [show denote (.nullable c) = (denote c).orNull from
           withNull_eq_orNull hw] at hp
         rcases orNull_p.mp hp with ⟨rfl, -⟩ | ⟨-, hc⟩
         · simp [AdmA]
-        · simp [AdmA, AdmA_sound_rec c hc]
+        · simp [AdmA, AdmA_sound c hc]
     case dunion d opts =>
       have h2 := admA_sound _ hp
       have heq : AdmA (.dunion d opts) a = admA (.dunion d opts) a := by rw [AdmA, admA]; rfl
@@ -821,7 +818,7 @@ theorem AdmA_sound_rec : ∀ (t : Term) {a v},
       rw [optionSemOf_c] at hop
       -- hoisted for the reason the value side gives: the recursive call cannot live inside a
       -- generalisation over an arbitrary list
-      have htx' : AdmA tx a = true := AdmA_sound_rec tx hop
+      have htx' : AdmA tx a = true := AdmA_sound tx hop
       have key : ∀ (ts : List Term), tx ∈ ts → AdmAAny ts a = true := by
         intro ts hts
         induction ts with
@@ -835,15 +832,12 @@ theorem AdmA_sound_rec : ∀ (t : Term) {a v},
 termination_by t _ _ => Term.depth t
 decreasing_by term_depth_wf
 
-/-- **Every attribute row is a sound over-approximation, the hatch included** — the
+/-! **Every attribute row is a sound over-approximation, the hatch included** — the
     attribute-side counterpart of `Adm_sound`, and the same obligation for the same reason.
 
     Exactness for these rows is **not** yet proved; the value side's `Adm_exact` has no
     mirror here. Until it does, `AdmA` carries one obligation where `Adm` carries two, and
     the analysis tables cannot be migrated onto the pair. -/
-theorem AdmA_sound (t : Term) {a v} (hp : (denote t).p a = some v) : AdmA t a = true := by
-  exact AdmA_sound_rec t hp
-
 /-- The converse direction on the attribute side: the row is `dom(p)`, not a bound on it. -/
 def ExactA (t : Term) : Prop := ∀ a, AdmA t a = true ↔ ((denote t).p a).isSome
 
@@ -1458,12 +1452,12 @@ theorem decides_object :
     Decides (.object {"k"} (fun _ => .req .string) .refuse) := by
   refine ⟨.map {"k"} (fun _ => .str "a"),
           .map ∅ (fun k => absurd k.2 (Finset.not_mem_empty k.1)), ?_, rfl, ?_⟩
-  · simp [denote, denote, fieldTable, restSem, fieldSemOf, restSemOf, fieldSem, restSem,
+  · simp [denote, denote, fieldTable, restSem, fieldSem, restSem,
           objectCodec, objectCodecCore, stringCodec,
           valPresentB, valPresentAt, fieldSem, rcOf, FieldSem.codec, carriedCodec,
           mapV, mA, Ctor.out, Ctor.into, objWrite, entryCodec, MapOf.at, funImage,
           Subtype.forall]
-  · simp [denote, denote, fieldTable, restSem, fieldSemOf, restSemOf, fieldSem, restSem,
+  · simp [denote, denote, fieldTable, restSem, fieldSem, restSem,
           objectCodec, objectCodecCore, stringCodec,
           valPresentB, valPresentAt, fieldSem, rcOf, FieldSem.codec, carriedCodec,
           mapV, mA, Ctor.out, Ctor.into, objWrite, MapOf.at, Subtype.forall]
