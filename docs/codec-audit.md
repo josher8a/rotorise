@@ -3,9 +3,14 @@
 *Opened 2026-08-31, branch `wip/map-types`. All eight scans reported. Items are struck
 through as they land in the tree.*
 
-**The single most consequential finding is §9: five live bugs in the shipped TypeScript,
+~~**The single most consequential finding is §9: five live bugs in the shipped TypeScript,
 four of them C1 violations concentrated in one file, including two that §4 records as
-already fixed.** Everything above it is hygiene by comparison.
+already fixed.**~~ **Landed.** All five are closed in the tree — the four C1 violations by
+gating both halves of `native`'s `N` and refusing an empty stored set, the fifth by making
+`literal()` a construction-time refusal. `Carries('N')` moved out of `codec.ts` and into
+`attribute.ts` on the way, which is why one file could close four bugs in another: the
+predicate is a property of the carrier, and there is now one of it. See §9.7.
+Everything else in this file is hygiene by comparison.
 
 ## Why this exists
 
@@ -359,10 +364,12 @@ assertion that fails the build on an unclassified kind. Checked term by term aga
 - **GAP** — `literal<const T extends string | number>` (`codec.ts:871`). Lean's arity-one
   `literal` takes any `Value`, so `literal (Value.bool true)`, `literal Value.null` and
   `literal (Value.bytes …)` are model terms with no TS constructor.
-- **GAP** — `native` (`native.ts:296-305`) files itself under `def: { kind: 'opaque' }`, so the
-  C3 table counts it as `.opaq`. **It is not the same pair**: it writes `NS`, reads `NS`, and
-  honours `convertEmptyValues`, none of which `opaque`'s `(T, μ, e, p)` does. One kind, two
-  different codecs — and **every bug below hides in the half the table does not describe.**
+- **GAP, still open** — `native` files itself under `def: { kind: 'opaque' }`, so the C3 table
+  counts it as `.opaq`. **It is not the same pair**: it writes `NS`, reads `NS`, and honours
+  `convertEmptyValues`, none of which `opaque`'s `(T, μ, e, p)` does. One kind, two different
+  codecs — and **every bug below hid in the half the table does not describe.** The four C1
+  violations are fixed, so the two pairs no longer disagree about what an `N` *carries*; they
+  still disagree about everything else, and the table still describes only one of them.
 
 ### 9.2 The five tightenings
 
@@ -370,11 +377,11 @@ assertion that fails the build on an unclassified kind. Checked term by term aga
 | --- | --- | --- |
 | 1 | `M` unordered, unique-keyed | **OK** — `record`/`object` walk key-by-key; a JS object cannot carry a duplicate and no branch reads enumeration order. |
 | 2 | object field tables a set | **OK** — `spec` is a `Record<string, AnyCodec>` flattened once; keys unique by construction. |
-| 3 | sets non-empty by type | **OK** in `codec.ts` (`1166`, `1184`, `2134`, `2252` — all four refuse, and the comment names (C) as the reason). **BUG** in `native.ts:270-271`: `case 'BS': case 'SS': return new Set(carried)` with no emptiness check, so `{SS:[]}` decodes to an empty `Set`. |
-| 4 | literal alternatives non-empty, repeat-free | **BUG** — see 9.3. |
-| 5 | `Numeral.WF` on both halves | **OK** in `codec.ts` — `isNumeral` at `992-1006` explicitly cites `Numeral.WF`; both halves gated for `number` (`1056`, `1067`), `decimal` (`1033`, `1039`), numeric `literal` (`919`, `974`) and `opaque` (`2111`, `2215`). **§4's two named defects are closed there.** **BUG** in `native.ts` — see 9.4. |
+| 3 | sets non-empty by type | **OK** in `codec.ts` (all four refuse, and the comment names (C) as the reason). ~~**BUG** in `native.ts`~~ — **fixed**: all three of `SS`/`NS`/`BS` now refuse an empty stored set on read, through one `nonEmpty` helper carrying the (C) argument. |
+| 4 | literal alternatives non-empty, repeat-free | ~~**BUG**~~ — non-emptiness **fixed**, see 9.3. Repeat-freedom is still not checked. |
+| 5 | `Numeral.WF` on both halves | **OK** in `codec.ts` — `isNumeral` at `992-1006` explicitly cites `Numeral.WF`; both halves gated for `number` for `number`, `decimal`, numeric `literal` and `opaque`. **§4's two named defects are closed there.** ~~**BUG** in `native.ts`~~ — **fixed**, see 9.4. |
 
-### 9.3 `literal()` with no alternatives admits everything
+### 9.3 ~~`literal()` with no alternatives admits everything~~ — fixed
 
 `codec.ts:874-879` takes `...allowed: readonly T[]`, so **zero** arguments typecheck; and
 `admits` at `937-942` is `allowed.length && !allowed.includes(...)`, whose short-circuit makes
@@ -387,10 +394,18 @@ Also **GAP**: no repeated-alternative check, so `literal('a','a')` is accepted w
 model's `NEFinset` cannot express it. Semantically benign, but C3's "the constructor denotes
 this term" stops being injective.
 
-The rest of the family is right: mixed-kind refusal at `892-898`, `ℓ ⊆ D` at construction
-`919-930`, a genuine read-side numeral gate at `974-983`.
+The rest of the family is right: mixed-kind refusal, `ℓ ⊆ D` at construction, a genuine
+read-side numeral gate.
 
-### 9.4 `native.ts` — four C1 violations, and two of them are §4 defects §4 thinks are fixed
+**Fixed** by a construction-time `CodecError` beside the other two refusals, and by deleting the
+`allowed.length &&` guard rather than correcting it — a truthiness guard in front of a membership
+test *inverts* the test exactly when the set is empty, where `∀ x. x ∉ ∅` should refuse
+everything. Not a type, and the reason is worth recording: `literal(...Object.values(Status))` is
+an honest call that spreads a plain array, which a `(first, ...rest)` signature refuses. The type
+cannot carry `ℓ ≠ ∅` without breaking the caller who most wants it, so the construction site
+does. The repeated-alternative GAP is untouched.
+
+### 9.4 ~~`native.ts` — four C1 violations~~ — all four fixed
 
 - **`native.ts:78-95`** gates the write on `Number.isFinite` plus `MAX_SAFE_INTEGER`, then
   `carrying('N', value.toString())`. `5e-324` is finite and inside the safe range, so it
@@ -402,6 +417,21 @@ The rest of the family is right: mixed-kind refusal at `892-898`, `ℓ ⊆ D` at
 - **`native.ts:265-269`** `NS` decode maps `fromNativeNumber` with neither a numeral check nor
   an emptiness check: `{NS:[]}` and `{NS:['abc']}` both decode.
 - **`native.ts:270-271`** as in 9.2 row 3.
+
+**Fixed, and it is a deliberate divergence from the SDK rather than a repair of the port.**
+`convertToAttr` checks a finite double on the way in and `convertToNative` checks *nothing* on
+the way out; `Carries('N')` is neither. So the port now gates both halves on `isNumeral` and
+refuses the three empty stored sets, which means it refuses four things the real SDK accepts —
+each one an attribute DynamoDB itself rejects or never wrote. `native.spec.ts` records this as a
+`describe` that asserts **both** sides: that the SDK really does the permissive thing, and that
+this refuses it. `native.Deviations` (`readNumber`/`writeNumber`) is the way back for a team
+migrating a table that already holds such rows, and there is a test that it reproduces the SDK
+byte for byte.
+
+One gate suffices on `native`'s read side where `number` needs two: `number`'s second gate
+catches a stored numeral that rounds *out* of range on the way into a double, and this reader
+hands a wide value back as a `bigint` of the very digits stored, a narrow one from inside the
+safe range. Nothing it returns can fail to be writable again.
 
 ### 9.5 The C1 embedding verifies — but §5's term list is incomplete
 
@@ -416,14 +446,36 @@ That is the whole surface, and it is closed because `AttributeCarries` has exact
 the other six carry host types the model carries unrefined. **§5's claim that the list is short
 and closed verifies.** What does not verify is §5's *term* list: it names `decimal`, `number`,
 `literal`, `set`, `opaque` as the terms touching a refined member — and omits `native`, which
-touches `N` on both sides, `SS`/`BS` on the read side and `NS` on both, and gates none of them.
+touches `N` on both sides, `SS`/`BS` on the read side and `NS` on both, and gated none of them.
+It gates all of them now; the list is still wrong, and that is §9.6's remaining item.
 
 ### 9.6 Fixes, in order
 
-1. **Route `native.ts`'s number write and read through `codec.ts`'s `isNumeral`, and add the
-   emptiness check to its `SS`/`BS`/`NS` decode.** One file, closes all four C1 violations.
-2. Make `literal()`'s empty case a `CodecError`, beside the mixed-kind refusal at `codec.ts:892`.
-3. Add `native` to §5's term list, or give it its own term and stop filing it as `opaque`.
+1. ~~**Route `native.ts`'s number write and read through `codec.ts`'s `isNumeral`, and add the
+   emptiness check to its `SS`/`BS`/`NS` decode.**~~ **Landed** — though not by routing through
+   `codec.ts`; see §9.7.
+2. ~~Make `literal()`'s empty case a `CodecError`, beside the mixed-kind refusal.~~ **Landed.**
+3. **Open.** Add `native` to §5's term list, or give it its own term and stop filing it as
+   `opaque`. The second is the honest one and it is a model change, not a `src/` change: `native`
+   is a fourth pair over `unknown` whose `μ` is nine members wide, and the C3 table currently
+   claims `opaque`'s row describes it. §9.1's surviving GAP is the same item.
+
+### 9.7 Where `Carries('N')` lives now
+
+`isNumeral` and `isStoredNumeral` moved from `codec.ts` into `attribute.ts`, exported. §9.6's
+first item was written as "route `native` through `codec.ts`'s `isNumeral`", and that is the
+wrong direction: `native.ts` is a sibling entry point, deliberately dependency-free, and it
+should not import a codec module to learn what an attribute carries.
+
+The predicate is not a property of any codec. It is `Carries('N')` — a property of the *carrier*,
+which is what the `Attr.n : WFNumeral` change made exact on the Lean side. `attribute.ts` is the
+unrefined host `𝔸` (§9.5), so it is where the refinement belongs, and `codec.ts` and `native.ts`
+now import the same one. That is why one file's fix closed four bugs in another: before, there
+were two answers to "what does an `N` carry", and only one of them was written down.
+
+The cost is that `isNumeral` is public API (`Rotorise.ts` re-exports `./attribute`). That is
+defensible — a caller checking a string before a write is asking a real question — but it was not
+a decision the fix needed, and it can be walked back with an internal module if it becomes one.
 
 ## 10. EverCDDL, read
 
