@@ -11,6 +11,7 @@ import Calculus.Equations
 import Calculus.Continuity
 import Calculus.Opaque
 import Calculus.HeldSet
+import Calculus.Nesting
 import Calculus.Refutations
 import Calculus.Exactness
 import Calculus.LiteralArity1

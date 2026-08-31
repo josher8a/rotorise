@@ -1,6 +1,10 @@
 import Mathlib.Data.Finset.Basic
 import Mathlib.Data.Finset.Card
 import Mathlib.Data.Fintype.Basic
+-- `Finset.sup`, for `Attr.nesting` at `M`: the names are a set, so the layer below is a
+-- supremum over the key set and not a fold down a list. `Opaque.lean` imports it for the
+-- same reason at `Attr.depth`.
+import Mathlib.Data.Finset.Lattice.Fold
 /-!
 # §1 — The attribute domain
 
@@ -358,6 +362,53 @@ def Attr.kind : Attr → Kind
   | .ss _ | .ns _ | .bs _ => .set
   | .l _    => .array
   | .m _ _  => .map
+
+/-! ## §1's nesting bound — the one constraint on `𝔸` the carrier cannot carry
+
+`docs/dynamo-datatypes.md:130`: *"The document types are list and map. These data types can
+be nested within each other, to represent complex data structures up to 32 levels deep."*
+
+A subtype `{as : List Attr // Attr.nestingL as ≤ 31}` puts `Attr` under its own declaration
+and the kernel refuses it, exactly as it refuses `Finset Attr`. So `Attr` above is the
+*unbounded* closure and the bound is stated about it rather than inside it. §6 of
+`codec-audit.md` recorded that as "not typeable" and stopped there; being un-typeable never
+made it un-checkable, and `src/` had to gate on it in the end (§12.6).
+
+**It counts `L` and `M` and nothing else.** A scalar is not a document type. Neither is a
+wire set: `SS`/`NS`/`BS` carry payloads rather than attributes, so a set can neither nest
+nor be nested in, and one sitting at the deepest legal level is legal. That is what makes
+this a **different function from `Attr.depth`** (`Opaque.lean`), which is a termination
+measure and charges a wire set a layer for the payloads it recurses past. The measure is
+the wrong thing to bound: it would refuse a legal set. The two must not be conflated, and
+this docstring is where that is written down. -/
+
+mutual
+
+/-- How many document types an attribute nests. -/
+def Attr.nesting : Attr → Nat
+  | .s _ | .n _ | .b _ | .bool _ | .null => 0
+  | .ss _ | .ns _ | .bs _ => 0
+  | .l as => Attr.nestingL as + 1
+  -- as at `Attr.depth`: `M` is a key set with a function on it, so the layer below is a
+  -- `Finset.sup` over the keys rather than a fold down a list.
+  | .m keys f => (keys.attach.sup fun k => Attr.nesting (f k)) + 1
+
+/-- The elements' nesting — the list mirror `Attr.nesting` needs at `L`. Empty is `0`, so
+    `Attr.nesting (.l []) = 1`: an empty list is still one document. -/
+def Attr.nestingL : List Attr → Nat
+  | [] => 0
+  | a :: as => max (Attr.nesting a) (Attr.nestingL as)
+
+end
+
+/-- The reference's number, named once. -/
+def maxNesting : Nat := 32
+
+/-- **§1's `𝔸` as the store actually has it.** The `Attr` above is what the calculus writes
+    into; this is the subset DynamoDB accepts. Everything else in §1 is exact, so this
+    predicate is the whole of the difference — and `ran(e) ⊆ 𝔸` is only the guarantee it
+    reads as when the two agree. -/
+def Attr.Storable (a : Attr) : Prop := Attr.nesting a ≤ maxNesting
 
 /-- The value language, partitioned exactly as §5's `Kind`. `decimal` holds numerals as
     `str` values — one string kind, as in the doc's κ table. -/
