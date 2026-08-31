@@ -53,7 +53,7 @@ content.
 | 17 | `Denote.lean:95` +4 modules | **`denote` does not need fuel.** A structural, fuel-free `denote` compiles against the real `Term` (§13.1). The obstructions were `List.map` and a higher-order `fieldSemOf`, both incidental. Puts `Denoteω` (314), `Soundnessω` (77), `Continuity` (123) and `Opaque.lean`'s budget apparatus (854, 148 `depth` uses) in question, plus `fuel` in `Soundness` (191), `Discharge` (159), `Exactness` (40). §13. | ~1400 lines | **largest in this file** — spike first |
 | ~~18~~ | ~~`codec-formalization.md`, ~45 names~~ **Half landed: the check exists and the current-state documents pass.** | **A name-drift scan the repo did not have.** `fidelity_audit.py` and `vocab_audit.py` measure the mechanization; neither checked that a backticked name in a document still exists in `Calculus/`. `scripts/name_drift.py` now does, and fails non-zero. The three current-state documents in `formal/` had **seven** broken citations, all fixed. What remains is `codec-formalization.md`'s ~45, nearly all in §4, where the supersession rule applies and a name records what was reasoned with — a judgment about §4, not an edit. | — | **check landed**; §4 open |
 | 15 | `src/codec.ts` | **DEFERRED — target work behind the spec.** **Nothing checks the 32-level nesting bound**, so the library writes items DynamoDB rejects — a C1 violation of the `⟨N,"5e-324"⟩` shape, and the fifth after §9 closed five. `opaque` and `native` are where it bites: both walk arbitrary user data. §12.3. | — | small (library); the model's side is a scope decision |
-| 16 | `Typing.lean:207-210` | `dunion` keyed by tag (`MapOf Term`, discriminator **injected** not read back) deletes `htags` and `hdisj` with no coherence gate — §2.2's stated reason was wrong. Blocked on one measurement: whether `discriminatedUnion` has a multi-tag variant. §12.2. | 2 premises | medium, and a C2/C3 change |
+| ~~16~~ | ~~`Typing.lean:207-210`~~ **Refused, and the measurement found two live bugs instead.** | `dunion` keyed by tag would delete `htags` and `hdisj`. §12.2 withdrew §2.2's coherence-gate objection and asked for one measurement first. Taken: the library **already contains both shapes**, keeps the tag-keyed one private, and says in its own docstring why. `htags`/`hdisj` stay. §12.5 records the measurement and the two `src/` defects it turned up. | nothing | **refused, with evidence** |
 | ~~6b~~ | ~~`Term.lean:27-35`~~ **Landed.** | **`literal`, `literalS` and `literalN` are one rule.** Raised by JH while item 6 was landing, and right: all three are *a nonempty finite set of values at one ground base*. Landed as the base-indexed form of §11.1 — `literal (k : GroundKind) (ls : NEFinset k.Carrier)` — after §11.4/§11.5 settled that the cheaper union route costs either `Classical.choice` or two reintroduced gates. | 2 constructors, 5 codec definitions → 4, 3 lawful theorems → 1, 2 carrier theorems → 1 (one of them 26 lines), 4 `admA` row lemmas → 3 | **landed** |
 | ~~7~~ | ~~`Combinators.lean`, 43 sites~~ **Landed.** | `objectCodecCore` took `kn : Name → Bool` free; the only instantiation is `keepB rest sems`, and `rc?` is likewise always `rcOf rest`. Three hypotheses across five signatures all said *the filter never discards a declared name*. All three are gone, the private `lawfulCore_objectCore`/`lawful_objectCore` layer with them — it existed only to be instantiated by the public pair. §4.4 records what the parameter was actually costing, which was not the five signatures. | 2 theorems, 3 hypotheses × 5 signatures, 23 lines net | **landed** |
 | ~~8~~ | ~~36 declarations~~ **Landed, in two passes.** | Transitively dead plumbing. The estimate was ~61 and the delivered figure is **36**; §4.1 records what the other ~25 turned out to be, because the miss was systematic rather than random. | 36 decls, 302 lines | **landed** |
@@ -1059,7 +1059,12 @@ which `Term.custom` makes impossible; `Multiset Term` needs no such instance and
 what §2.1 measured, and the **kernel rejects it** as a non-valid occurrence of `Term` in its own
 declaration. A quotient cannot sit in a nested inductive position.
 
-### 12.2 Should `dunion` be a map from labels to codecs? — The obstruction I recorded is not real
+### 12.2 Should `dunion` be a map from labels to codecs? — ~~The obstruction I recorded is not real~~
+
+> **Overturned by §12.5.** The measurement this section asked for was taken, and it went the other
+> way: `codec.ts` contains both shapes, keeps the tag-keyed one private, and gives §2.2's
+> coherence-gate reason in its own docstring for doing so. Read what follows as the argument that
+> was tested, not as the verdict.
 
 `dunion (d : Name) (opts : List Term)` carries `htags` (every option names at least one tag) and
 `hdisj` (their tag sets are pairwise disjoint). §2.2 filed both as content, on the grounds that
@@ -1208,6 +1213,63 @@ must not do is wait for item 15, which is a library bug with a local fix.
 
 *(§6's `:130` row now says "not typeable **as a subtype**", which is what the kernel actually
 refused. That is the third correction to that row.)*
+
+### 12.5 Item 16, measured: the library made this decision already, and two bugs fell out
+
+§12.2 asked for one measurement before touching `dunion`: *whether `discriminatedUnion` has a use
+with a multi-tag variant*. The answer is in `TagsOf`'s own docstring — "A variant may span several
+tags, **and this codebase relies on it**: a carrier declared `carrierId: literal('ACME','GLOBEX')`
+is *one* variant covering two stored values" — and `codec.uniqueadmission.spec.ts` tests it. So
+cost 1 stands.
+
+**But the decisive finding is that `codec.ts` contains both shapes and chose between them, for the
+reason §2.2 gave and §12.2 withdrew.**
+
+* `tagged(d, byVariant : Record<tag, ItemCodec>)` — the tag-keyed map. **Not exported.**
+* `discriminatedUnion(d, options)` — the list, each option naming its own tag with a `literal`.
+  Exported, and it normalizes into `tagged`.
+
+`ByTag`'s docstring says why the keyed one is not the surface: *"Derived rather than declared. A
+record keyed by tag value repeats what the option's own `literal` already says, so
+`{ SHOT: { type: literal('CHECKUP') } }` is expressible and the two can disagree. Reading the tag
+off the option makes that unrepresentable."* That **is** §2.2's coherence gate, stated by the
+implementation. §12.2's escape was to have `dunion` *inject* the discriminator so there is one
+source of truth — but `tagged`'s variants still carry their own `literal` and `encode` writes it
+through the variant, so a model that injects describes a constructor the library does not have.
+Cost 2 confirmed as well. **`htags` and `hdisj` stay, and §2.2 was right for a reason that is
+measurable rather than arguable.**
+
+#### The two defects the measurement found
+
+Reading the normalization loop for the multi-tag question turned up two live bugs in it. Both were
+probed by execution against the real source, not read off the page.
+
+**1. Two options answering to one tag were accepted, and the first silently shadowed.**
+`byTag[tag] = option.item` in a loop, with no collision check — the second write wins. The model
+forbids exactly this: `Typed.dunion` carries `hdisj`, so a union with overlapping tag sets is not a
+`dunion` the calculus types. **The same shape as §9: a model premise the host did not check.** It
+failed late and in the wrong place — `encode` of a value of the *first* variant reported a required
+attribute of the *second* one missing, naming a field the caller never declared. With a multi-tag
+variant the shadowing is *partial*: `literal('ACME','GLOBEX')` beside `literal('GLOBEX')` leaves the
+first option working at `ACME` and broken at `GLOBEX`. Now refused at the declaration, at both
+levels — a `SharedTags` type mirroring `Overlapping`, and a runtime throw mirroring `union`'s.
+
+**2. The tag lookup reached `Object.prototype`.** `byVariant[tag] ?? error` on a plain object: a
+stored discriminator of `toString`, `constructor`, `__proto__` or `valueOf` returned an inherited
+function, which is truthy, so the "not a variant" branch never ran and the caller got
+`TypeError: variant.decode is not a function`. **Reachable from data the library does not
+control** — the tag is read off the stored item — and a raw `TypeError` is the one thing every
+other failure here is careful not to be, since the library's contract is that callers handle
+`CodecError`. Now `Object.hasOwn`.
+
+Neither is a C1 violation of the `⟨N,"5e-324"⟩` kind: nothing writes a row DynamoDB rejects. The
+first is a premise gap of §9's shape, the second a contract violation. Both are the sort a
+round-trip test cannot find, because each option round-trips perfectly on its own — the defect is
+in the *table*, which is not any option's property.
+
+**What made them findable:** the model states `hdisj` as a premise, so asking "does the host check
+it?" is a question with an answer. §9 found five bugs by asking that of five premises. This is the
+sixth and seventh, and item 16 — which was going to *delete* `hdisj` — is what asked.
 
 ## 13. `denote` does not need fuel — and this is the largest finding in the file
 
