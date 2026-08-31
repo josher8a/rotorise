@@ -20,7 +20,7 @@ namespace Calculus
 /-- Attribute names. -/
 abbrev Name := String
 
-/-- Wire numerals (§1 `Numerals`). The *carrier* is every string — `Attr.n "abc"` stays
+/-- Wire numerals (§1 `Numerals`). The *carrier* is every string — `Attr.n (.of "abc")` stays
     representable, because §1 describes what DynamoDB accepts, not what Lean can build.
     Well-formedness (grammar, 38 digits, magnitude) is `Numeral.WF` below, and
     `decimalCodec` gates on it. -/
@@ -35,7 +35,7 @@ The table in §1 states three clauses: "optional sign, digits, optional point, o
 exponent; ≤ 38 significant digits; magnitude 0 or `1e-130 … 9.9…e125`". All three are
 modelled here, as a decidable predicate on the carrier.
 
-`Numeral` stays `String` — the *carrier* is unrestricted, so `Attr.n "abc"` remains
+`Numeral` stays `String` — the *carrier* is unrestricted, so `Attr.n (.of "abc")` remains
 representable — and well-formedness is what `decimal` checks. That is the honest split:
 §1 describes which strings DynamoDB will accept in an `N`, and the calculus's job is that
 its codecs write only those. `typed_e_mem` is what reports it.
@@ -196,6 +196,11 @@ def Normal (s : Numeral) : Bool :=
 /-- `decimal`'s held set: accepted *and* returned unchanged. -/
 def Stored (s : Numeral) : Bool := WF s && Normal s
 
+/-- What the store hands back, it also accepts — so a `Stored` numeral is a `WFNumeral`
+    without further checking. `decimal` needs this now that `Attr.n` carries the proof. -/
+theorem stored_wf {s : Numeral} (h : Stored s = true) : WF s = true := by
+  simp only [Stored, Bool.and_eq_true] at h; exact h.1
+
 /-- The measured table's left column — written, and returned as something else. Every row
     that changed is a row `Stored` must reject. -/
 theorem stored_rejects_denormal :
@@ -253,6 +258,24 @@ deriving DecidableEq, Repr
     a gate could enforce this was a claim worth testing. -/
 abbrev NEFinset (α : Type) := {S : Finset α // S.Nonempty}
 
+/-- §1's `Numerals` — the strings DynamoDB accepts in an `N`, carried by the type. So
+    `Carries(N)` is exact and `⟨N, "abc"⟩` is not an attribute at all.
+
+    This was the last of §5's four refined members to be typed, and the argument against
+    typing it — that the *carrier* should stay unrestricted so that a port sees the
+    embedding `⌈·⌉` is partial — turned out to be load-bearing on nothing: `Attr.n (.of "abc")`
+    appeared in four comments and no theorem. C1's insight survives intact, and is sharper
+    for it: it is the **port's** attribute type that is unrefined, not the model's. -/
+abbrev WFNumeral := {x : Numeral // Numeral.WF x = true}
+
+/-- A literal numeral, with §1's check discharged where it is written. `WF` is decidable
+    by construction, so a concrete numeral carries its own proof and no witness in this
+    development had to change shape. -/
+def WFNumeral.of (x : Numeral) (h : Numeral.WF x = true := by decide) : WFNumeral := ⟨x, h⟩
+
+@[simp] theorem WFNumeral.of_val (x : Numeral) (h : Numeral.WF x = true) :
+    (WFNumeral.of x h).1 = x := rfl
+
 /-- A literal `℘⁺fin`, written as one element and the rest: `insert` is never empty, so
     the proof is discharged by construction rather than at each use site. -/
 def NEFinset.of {α : Type} [DecidableEq α] (x : α) (S : Finset α) : NEFinset α :=
@@ -269,7 +292,7 @@ theorem NEFinset.mem_of {α : Type} [DecidableEq α] (x : α) (S : Finset α) :
 /-- The attribute domain `𝔸` (§1). The coproduct is exact: one member per attribute. -/
 inductive Attr where
   | s    (v : String)
-  | n    (v : Numeral)
+  | n    (v : WFNumeral)
   | b    (v : Bytes)
   | bool (v : Bool)
   | null
@@ -277,7 +300,7 @@ inductive Attr where
       set's values is not preserved and each value is unique, and the store dedups on
       insert. Both facts are properties of the *type*, not obligations on a codec. -/
   | ss   (v : NEFinset String)
-  | ns   (v : NEFinset Numeral)
+  | ns   (v : NEFinset WFNumeral)
   | bs   (v : NEFinset Bytes)
   | l    (v : List Attr)
   /-- §1's `M`. The reference calls it an *unordered* collection of name-value pairs, and

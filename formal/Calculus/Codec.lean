@@ -59,12 +59,12 @@ def Can (c : Codec) (a : Attr) : Prop := ∃ v, c.e v = some a
     member to disagree on). -/
 inductive Agree : Attr → Attr → Prop where
   | s    (x y : String)  : Agree (.s x) (.s y)
-  | n    (x y : Numeral) : Agree (.n x) (.n y)
+  | n    (x y : WFNumeral) : Agree (.n x) (.n y)
   | b    (x y : Bytes)   : Agree (.b x) (.b y)
   | bool (x y : Bool)    : Agree (.bool x) (.bool y)
   | null                 : Agree .null .null
   | ss   (x y : NEFinset String)  : Agree (.ss x) (.ss y)
-  | ns   (x y : NEFinset Numeral) : Agree (.ns x) (.ns y)
+  | ns   (x y : NEFinset WFNumeral) : Agree (.ns x) (.ns y)
   | bs   (x y : NEFinset Bytes)   : Agree (.bs x) (.bs y)
   | l    (xs ys : List Attr)
          (h : ∀ q ∈ List.zip xs ys, Agree q.1 q.2) : Agree (.l xs) (.l ys)

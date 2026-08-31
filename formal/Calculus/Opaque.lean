@@ -372,10 +372,10 @@ theorem opaqCodec_p_null (lossy : Bool) (n : Nat) :
     `recordCodec`'s `M` branch is a `funImage`, and a `funImage` is a `Classical` `dif`;
     unfolding `recordCodec` inside the number case's four-way split sends `whnf` chasing
     that instance. Naming the answer — which is `rfl` — keeps the cost at nothing. -/
-private theorem recordCodec_p_n {c : Codec} (x : Numeral) :
+private theorem recordCodec_p_n {c : Codec} (x : WFNumeral) :
     (recordCodec c).p (.n x) = none := rfl
 
-theorem opaqCodec_p_n (lossy : Bool) (n : Nat) (x : Numeral) :
+theorem opaqCodec_p_n (lossy : Bool) (n : Nat) (x : WFNumeral) :
     (opaqCodec (n+1) lossy).p (.n x)
       = (if lossy then numberCodec else Codec.empty).p (.n x) := by
   cases hd : Double.ofDec x with
@@ -391,7 +391,7 @@ theorem opaqCodec_p_ss (lossy : Bool) (n : Nat) (vs : NEFinset String) :
     cases lossy <;> simp [-setCodec, hp]
 
 /-- §3 `(opaque)`, read side at member `NS`. -/
-theorem opaqCodec_p_ns (lossy : Bool) (n : Nat) (vs : NEFinset Numeral) :
+theorem opaqCodec_p_ns (lossy : Bool) (n : Nat) (vs : NEFinset WFNumeral) :
     (opaqCodec (n+1) lossy).p (.ns vs) = (setCodec (opaqCodec n lossy)).p (.ns vs) := by
   cases hp : (setCodec (opaqCodec n lossy)).p (.ns vs) <;>
     cases lossy <;> simp [-setCodec, hp]
@@ -432,7 +432,7 @@ theorem opaq_p_s_agree (lossy : Bool) (s : String) :
       cases m with | zero => exact absurd hm (by decide) | succ m' =>
       rw [opaqCodec_p_s, opaqCodec_p_s]
 
-theorem opaq_p_n_agree (lossy : Bool) (x : Numeral) :
+theorem opaq_p_n_agree (lossy : Bool) (x : WFNumeral) :
     ∀ (n m : Nat), 1 <= n -> 1 <= m ->
       (opaqCodec n lossy).p (.n x) = (opaqCodec m lossy).p (.n x)
   | n, m, hn, hm => by
@@ -480,7 +480,7 @@ theorem opaq_p_agree (lossy : Bool) :
       have hm' : 1 <= m' := by simp only [Attr.depth] at hm; omega
       rw [opaqCodec_p_ns, opaqCodec_p_ns]
       simp only [setCodec, decSet,
-        show ∀ x : Numeral, (opaqCodec n' lossy).p (Attr.n x)
+        show ∀ x : WFNumeral, (opaqCodec n' lossy).p (Attr.n x)
              = (opaqCodec m' lossy).p (Attr.n x) from
           fun x => opaq_p_n_agree lossy x n' m' hn' hm']
   | .bs vs, n'+1, m'+1, hn, hm => by
@@ -588,8 +588,8 @@ theorem opaq_e_depth (lossy : Bool) :
         replace he : numberCodec.e (.num d) = some a := he
         rw [numberCodec_e_num] at he
         by_cases hw : Numeral.WF d.toDec = true
-        · rw [if_pos hw] at he; cases he; simp [Attr.depth, Value.depth]
-        · rw [if_neg hw] at he; exact nomatch he
+        · rw [dif_pos hw] at he; cases he; simp [Attr.depth, Value.depth]
+        · rw [dif_neg hw] at he; exact nomatch he
   | .strSet S, n'+1, a, he => by
       rw [opaqCodec_e_strSet] at he
       rw [encSet_depth (c := opaqCodec n' lossy) (vinj := Value.str) he]
@@ -652,7 +652,7 @@ theorem opaq_p_s_depth (lossy : Bool) (s : String) :
       rw [opaqCodec_p_s] at hp
       simp only [stringCodec] at hp; cases hp; simp [Value.depth]
 
-theorem opaq_p_n_depth (lossy : Bool) (x : Numeral) :
+theorem opaq_p_n_depth (lossy : Bool) (x : WFNumeral) :
     ∀ (n : Nat) (v : Value), (opaqCodec n lossy).p (.n x) = some v -> Value.depth v <= 1
   | n, v, hp => by
       cases n with | zero => exact nomatch hp | succ n' =>
@@ -662,7 +662,7 @@ theorem opaq_p_n_depth (lossy : Bool) (x : Numeral) :
       | true =>
         replace hp : numberCodec.p (.n x) = some v := hp
         rw [numberCodec_p_n] at hp
-        cases hd : Double.ofDec x with
+        cases hd : Double.ofDec x.1 with
         | none => rw [hd] at hp; exact nomatch hp
         | some d =>
           rw [hd] at hp
@@ -711,7 +711,7 @@ theorem opaq_p_ssL (lossy : Bool) (n : Nat) :
   opaq_p_leafL Attr.s lossy n fun s v h => opaq_p_s_depth lossy s n v h
 
 theorem opaq_p_nsL (lossy : Bool) (n : Nat) :
-    ∀ (xs : List Numeral) (vs : List Value),
+    ∀ (xs : List WFNumeral) (vs : List Value),
       traverse (fun x => (opaqCodec n lossy).p (.n x)) xs = some vs ->
       Value.depthL vs <= 1 :=
   opaq_p_leafL Attr.n lossy n fun x v h => opaq_p_n_depth lossy x n v h

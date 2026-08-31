@@ -195,7 +195,7 @@ every string", with the note that once the predicate is tightened `typed_e_mem` 
 whether the codec respects it. `Domain.lean` now carries §1's predicate and
 `decimalCodec` gates on it, so here is that report.
 
-The carrier is deliberately *not* restricted — `Attr.n "abc"` is still representable,
+The carrier is deliberately *not* restricted — `Attr.n (.of "abc")` is still representable,
 because §1 describes which strings DynamoDB accepts in an `N`, and the calculus's job is
 that its codecs write only those. What changed is that the claim is now checkable. -/
 
@@ -210,10 +210,11 @@ theorem decimal_writes_stored {v : Value} {a : Attr}
     ∃ x, a = .n x ∧ Numeral.Stored x = true := by
   cases v with
   | str s =>
-    replace he : (if Numeral.Stored s = true then some (Attr.n s) else none) = some a := he
+    rw [show (denoteω .decimal).e (.str s) = decimalCodec.e (.str s) from rfl,
+      decimalCodec_e_str] at he
     by_cases hw : Numeral.Stored s = true
-    · rw [if_pos hw] at he; cases he; exact ⟨s, rfl, hw⟩
-    · rw [if_neg hw] at he; exact nomatch he
+    · rw [dif_pos hw] at he; cases he; exact ⟨_, rfl, hw⟩
+    · rw [dif_neg hw] at he; exact nomatch he
   | _ =>
     replace he : (none : Option Attr) = some a := he
     exact nomatch he
@@ -267,6 +268,6 @@ theorem decimal_refuses_exponent : (denoteω .decimal).e (.str "1e+21") = none :
 /-- The same number, spelled the way it comes back. -/
 theorem decimal_accepts_expanded :
     (denoteω .decimal).e (.str "1000000000000000000000")
-      = some (.n "1000000000000000000000") := rfl
+      = some (.n (.of "1000000000000000000000")) := rfl
 
 end Calculus
