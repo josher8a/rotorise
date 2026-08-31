@@ -480,10 +480,13 @@ Requested explicitly, and the sharpest ones continue this session's own arc:
    theorems would be unnecessary. Worth asking honestly how many of the 7 non-exact forms are
    non-exact because *the value type is still too loose*. If most are, the right move is to
    keep the apparatus only on the attribute side, where partiality is forced by the medium.
-4. **A relational format would collapse three laws into two.** With `fmt : V → Set 𝔸`
-   (Narcissus), normalization becomes part of the *specification*: "decode inverts `fmt`" and
-   "encode refines `fmt`" replace (R)+(C)+(MP), and `η` stops being a separate relation
-   compared against `ker p`. Leading refactor candidate.
+4. ~~**A relational format would collapse three laws into two.**~~ **Refuted with kernel
+   counterexamples — §12.10.** The two statements replace **(R) only**; (C) and (MP) both fail,
+   and restoring them takes the bundle to six clauses to buy four. The pair of decode clauses
+   *forces* `fmt` to be `ker p`'s fibre, and the fibre condition is strictly stronger than (MP)
+   because `Agree` is not transitive — so this proposes adopting exactly the non-malleability
+   property **§10.3 says we deliberately fail and should not have**. The shipped `object`/`drop`
+   codec provably has no relational format at all.
 5. **Hand-written combinators with hand-proved laws is what Narcissus exists to argue
    against**, and ~700 theorems for 23 term forms is evidence for their position, not ours.
 6. **The escape hatch has no bound.** It prevents silent widening but not loud widening, and
@@ -1431,6 +1434,76 @@ Two rules fall out.
 2. **Classicality is a property of definitions, not only of proofs.** Reviewing tactics is not
    enough; a `decide` on the wrong instance widens the base of everything downstream, silently, with
    every proof looking clean.
+
+### 12.10 The relational format, probed — refuted, and the file contradicted itself
+
+§5.6 item 4 was the last big unprobed criticism, and it was blocking: a separate spike declined to
+index `Codec` by its member until this was settled, since a pair-based `Codec` is what this proposes
+to delete. Probed sorry-free on `[propext, Quot.sound, Calculus.Double]`.
+
+**Statability was never the issue.** `Fmt := Value → Set Attr` elaborates fine — `Set` is `α → Prop`
+and `Attr`'s function-valued `.m` field sits in a `Prop` position, so nothing classical is touched.
+Every failure below is a *proof* failure.
+
+**The two clauses replace (R), and only (R).**
+
+* **(C) fails.** `e := fun _ => none`, `p .null = some (.str "a")`, `fmt (.str "a") = {.null}`. Both
+  relational clauses hold and `p` reads back a value `e` refuses to write.
+* **(MP) fails.** `≼` is *recursive member agreement*, and the two statements say nothing about how
+  two attributes in one fibre relate. `fmt (.str "v") = {.l [.s "x"], .l [.null]}` with `e` writing
+  the second: (R) and (C) hold, `Agree` does not.
+
+So `≼` has to be restated and the honest bundle is **six clauses to buy four**. The arithmetic in the
+criticism is backwards.
+
+**`fmt` is not a design choice.** Both decode directions together pin `fmt v = {a | c.p a = some v}`
+on the nose, so the fibre cannot be shrunk to buy the agreement clause — shrinking drops
+completeness and `p` goes unconstrained outside `fmt`, which is the (C) counterexample again.
+
+**And the fibre condition is strictly stronger than (MP), because `Agree` is not transitive.**
+Verified independently of the spike: `⟨.l [.null], .l [], .l [.s "x"]⟩` — zipping against `[]` is
+vacuous both times and the outer pair is not. (MP) compares an accepted attribute against *the one
+attribute `e` wrote*; the fibre condition compares every pair. The shipped codec sits in that gap:
+`objectCodec sems .drop` reads *every* `M` to the empty map, so `.m {"z"} (fun _ => .null)` and
+`.m {"z"} (fun _ => .s "x")` share a fibre and do not agree. **That codec has no relational format
+at all**, and it is `Lawful`.
+
+**The file contradicts itself, and that is the finding to keep.** §10.3 is titled *"Non-malleability:
+they prove it, we deliberately fail it — and `ker p` is the measure"* and says we do not have that
+theorem "and should not: our `ker p` is deliberately not equality". The fibre condition **is**
+non-malleability. §5.6 item 4 proposes adopting the property §10.3 rejects, and neither section
+cites the other — two sections of one document, both written from reading rather than probing,
+reaching opposite conclusions about the same property.
+
+**`η` is renamed, not removed.** `SurvivesStore c η ↔ ∀ v a, c.e v = some a → η a ∈ fmt v`: the same
+quantified statement against the same fibres, one word changed. The numeral case is also the one
+place the fibre condition is *free* (`Agree.n` is unconditional), so `fmt` buys nothing where `η`
+lives and breaks where `drop` lives.
+
+**What breaks that the criticism does not mention.** `Codec.Ker` loses its justification — it is an
+equivalence "because it is the kernel of a function, and for no other reason", and without `p` that
+becomes a seventh clause. `Can(c)` collapses into `dom(p)`, taking §2's "two extensions of a
+bijection" account with it: `Lawful.stable`, `can_roundTrip` and "canonizer" become unstateable.
+`ExactV`/`ExactA` are `Bool ↔ isSome`; against `fmt` the right side is `(fmt v).Nonempty`, a `Prop`
+with no `Decidable` instance, and `Classical.propDecidable` is a **build error** here — which cuts
+directly against §5.6 item 3, which wants *less* exactness apparatus. `setImage` would need a
+selection function to pick "the" attribute each element writes, and its own docstring already
+refuses the classical one by name. `select`'s `filter … = [o]` loses its `Bool`, so the definition
+goes, not just its proofs.
+
+**Cost, for the record:** 318 of 958 declarations mention `Codec` in their signature; 587 lines touch
+`.e`/`.p`; all 39 refutations, all 45 equation rows and all 1715 lines of `Exactness.lean` are in
+scope.
+
+#### The narrow version, which is worth doing
+
+Name `Fmt c v := {a | c.p a = some v}` as a **derived** definition beside `Codec.Ker`; prove the
+forcing lemma and the `SurvivesStore` bridge; and state the fibre condition as a **named
+non-property** — non-malleability, in the verified-formats community's own vocabulary — with the
+`object`/`drop` codec and the numeral case as its two witnesses. That turns §10.3's "name the
+property in their vocabulary and state where it fails" from a paragraph into a mechanized witness,
+and touches **zero existing declarations**.
+
 
 ## 13. `denote` does not need fuel — and this is the largest finding in the file
 
