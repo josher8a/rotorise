@@ -19,21 +19,21 @@ namespace Calculus
 noncomputable section
 
 /-- The name spec of an object option: `(name, required?)` — `none` for non-objects. -/
-def specOf : Term → Option (List (Name × Bool))
-  | .object fields _ =>
-    some (fields.map fun kf =>
-      (kf.1, match kf.2 with | .optional _ => false | _ => true))
+def specOf : Term → Option (MapOf Bool)
+  | .object fields f _ =>
+    some ⟨fields, fun k => match f k with | .optional _ => false | _ => true⟩
   | _ => none
 
 /-- The tags an object option answers to on discriminator `d` (§5 `(dunion)`).
     `req` only: a `fallback` discriminator would fill an absent tag with an arbitrary
     default, breaking the value-side stamp — and the implementation refuses one too
     (`discriminatedUnion` demands a bare `literal`). -/
+def tagsOfField : Option Field → List String
+  | some (.req (.literalS ls)) => ls
+  | _ => []
+
 def tagsOf (d : Name) : Term → List String
-  | .object fields _ =>
-    match fields.lookup d with
-    | some (.req (.literalS ls)) => ls
-    | _ => []
+  | .object fields f _ => tagsOfField (MapOf.at ⟨fields, f⟩ d)
   | _ => []
 
 /-- §3 `(literal)`'s member: the one its value's kind stores as. A container kind has no
@@ -77,7 +77,7 @@ def μSyn : Term → Option Member
   | .lazy _ => none
   | .custom _ _ => none
   | .opaq _ => none
-  | .object _ _ => some .M
+  | .object _ _ _ => some .M
   | .union opts => unanimous (μSynList opts)
   | .dunion _ _ => some .M
 
@@ -131,8 +131,8 @@ def denote : Nat → Term → Codec
         { T := fun v => (ce v).isSome, μ := none, e := ce, p := cp }
     -- Fuel-free: `opaqCodecω` budgets each input by its own depth (Opaque.lean).
     | .opaq lossy => opaqCodecω lossy
-    | .object fields rest =>
-        objectCodec (fields.map fun kf => (kf.1, fieldSemOf (denote fuel) kf.2))
+    | .object fields f rest =>
+        objectCodec ⟨fields, fun k => fieldSemOf (denote fuel) (f k)⟩
           (restSemOf (denote fuel) rest)
     | .union opts =>
         altCodec (opts.map fun t' => optionSemOf (denote fuel t') (specOf t'))

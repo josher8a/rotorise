@@ -51,7 +51,8 @@ def denoteω : Term → Codec
   | .custom ce cp => { T := fun v => (ce v).isSome, μ := none, e := ce, p := cp }
   -- The one case fuel used to be load-bearing for.
   | .opaq lossy => opaqCodecω lossy
-  | .object fields rest => objectCodec (denoteωF fields) (denoteωR rest)
+  | .object fields f rest =>
+      objectCodec ⟨fields, fun k => denoteωField (f k)⟩ (denoteωR rest)
   | .union opts => altCodec (denoteωOpts opts) (unanimous (denoteωMems opts))
   | .dunion d opts => dunionCodec d (denoteωTags d opts)
 
@@ -67,10 +68,6 @@ def denoteωField : Field → FieldSem
   | .req t => .req (denoteω t)
   | .optional t => .opt (denoteω t)
   | .fallback t v => .fb (denoteω t) v
-
-def denoteωF : List (Name × Field) → List (Name × FieldSem)
-  | [] => []
-  | kf :: rest => (kf.1, denoteωField kf.2) :: denoteωF rest
 
 def denoteωR : Rest → RestSem
   | .drop => .drop
@@ -96,6 +93,12 @@ end
 Stated so later proofs can move between the spelled-out recursions and `List.map`, which
 is how `denote` and the combinator lemmas phrase things. -/
 
+/-- The field table, denoted. Outside the mutual block on purpose: the recursion has to
+    see `denoteωField (f k)` at the constructor, so `denoteω` inlines it and this is the
+    name the proofs use. -/
+def denoteωF (fields : Finset Name) (f : {k // k ∈ fields} → Field) : MapOf FieldSem :=
+  ⟨fields, fun k => denoteωField (f k)⟩
+
 theorem denoteωL_eq : ∀ ts : List Term, denoteωL ts = ts.map denoteω
   | [] => rfl
   | t :: ts => by simp only [denoteωL, List.map, denoteωL_eq ts]
@@ -103,11 +106,6 @@ theorem denoteωL_eq : ∀ ts : List Term, denoteωL ts = ts.map denoteω
 theorem denoteωO_eq : ∀ t? : Option Term, denoteωO t? = t?.map denoteω
   | none => rfl
   | some _ => rfl
-
-theorem denoteωF_eq : ∀ fs : List (Name × Field),
-    denoteωF fs = fs.map fun kf => (kf.1, denoteωField kf.2)
-  | [] => rfl
-  | kf :: fs => by simp only [denoteωF, List.map, denoteωF_eq fs]
 
 theorem denoteωOpts_eq : ∀ ts : List Term,
     denoteωOpts ts = ts.map fun t => optionSemOf (denoteω t) (specOf t)
@@ -142,7 +140,7 @@ theorem denoteω_μ : ∀ t : Term, (denoteω t).μ = μSyn t
   | .lazy _ => rfl
   | .custom _ _ => rfl
   | .opaq _ => rfl
-  | .object _ _ => rfl
+  | .object _ _ _ => rfl
   | .union opts => by
       simp only [denoteω, altCodec, select, μSyn, denoteωMems_eq]
       congr 1
@@ -177,7 +175,11 @@ def termDepth : Term → Nat
   | .refine t _ => termDepth t + 1
   | .legacy t _ => termDepth t + 1
   | .tuple ts tail => max (termDepthL ts) (termDepthO tail) + 1
-  | .object fields rest => max (termDepthF fields) (termDepthR rest) + 1
+  -- The field table is a key set with a function on it, so its budget is a `Finset.sup`
+  -- over that set — the same shape `Value.depth` takes at a `map`, and there is no
+  -- `termDepthF` list companion left to write.
+  | .object fields f rest =>
+      max (fields.attach.sup fun k => termDepthField (f k)) (termDepthR rest) + 1
   | .union opts => termDepthL opts + 1
   | .dunion _ opts => termDepthL opts + 1
 
@@ -193,10 +195,6 @@ def termDepthField : Field → Nat
   | .req t => termDepth t
   | .optional t => termDepth t
   | .fallback t _ => termDepth t
-
-def termDepthF : List (Name × Field) → Nat
-  | [] => 1
-  | kf :: fs => max (termDepthField kf.2) (termDepthF fs)
 
 def termDepthR : Rest → Nat
   | .drop => 1
@@ -260,14 +258,19 @@ theorem denoteω_eq : ∀ (t : Term) (n : Nat), termDepth t <= n -> denoteω t =
       have hO : termDepthO tail <= n' := by simp only [termDepth] at h; omega
       simp only [denoteω, denote, denoteωL_eq]
       rw [mapCongrω ts (denoteω_eqPt ts n' hL), denoteω_eqO tail n' hO]
-  | .object fields rest, n'+1, h => by
-      have hF : termDepthF fields <= n' := by simp only [termDepth] at h; omega
+  -- No `mapCongrω` on this branch: the two field tables share a key set, so agreeing
+  -- pointwise *is* being the same table, and `funext` says so.
+  | .object fields f rest, n'+1, h => by
+      have hF : ∀ k, termDepthField (f k) <= n' := fun k => by
+        -- ascribed, so `omega` sees `termDepthField (f k)` and not an unreduced redex
+        have hle : termDepthField (f k)
+            <= fields.attach.sup (fun k => termDepthField (f k)) :=
+          Finset.le_sup (f := fun k => termDepthField (f k)) (Finset.mem_attach _ k)
+        simp only [termDepth] at h; omega
       have hR : termDepthR rest <= n' := by simp only [termDepth] at h; omega
-      simp only [denoteω, denote, denoteωF_eq]
+      simp only [denoteω, denote, denoteωF]
       rw [denoteω_eqR rest n' hR,
-          mapCongrω (f := fun kf => (kf.1, denoteωField kf.2))
-            (g := fun kf => (kf.1, fieldSemOf (denote n') kf.2))
-            fields (denoteω_eqFPt fields n' hF)]
+          funext fun k => denoteω_eqField (f k) n' (hF k)]
   | .union opts, n'+1, h => by
       have hpt := denoteω_eqPt opts n' (by simp only [termDepth] at h; omega)
       simp only [denoteω, denote, denoteωOpts_eq, denoteωMems_eq]
@@ -302,14 +305,6 @@ theorem denoteω_eqField : ∀ (f : Field) (n : Nat), termDepthField f <= n ->
   | .req t, n, h => by simp only [denoteωField, fieldSemOf, denoteω_eq t n h]
   | .optional t, n, h => by simp only [denoteωField, fieldSemOf, denoteω_eq t n h]
   | .fallback t v, n, h => by simp only [denoteωField, fieldSemOf, denoteω_eq t n h]
-
-theorem denoteω_eqFPt : ∀ (fs : List (Name × Field)) (n : Nat), termDepthF fs <= n ->
-    ∀ kf ∈ fs, (kf.1, denoteωField kf.2) = (kf.1, fieldSemOf (denote n) kf.2)
-  | [], _, _, kf, hkf => absurd hkf (by simp)
-  | kf :: fs, n, h, x, hx => by
-      rcases List.mem_cons.mp hx with rfl | hx'
-      · rw [denoteω_eqField x.2 n (by simp only [termDepthF] at h; omega)]
-      · exact denoteω_eqFPt fs n (by simp only [termDepthF] at h; omega) x hx'
 
 theorem denoteω_eqR : ∀ (r : Rest) (n : Nat), termDepthR r <= n ->
     denoteωR r = restSemOf (denote n) r

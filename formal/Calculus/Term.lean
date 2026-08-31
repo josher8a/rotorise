@@ -47,7 +47,13 @@ inductive Term where
   | custom   (ce : Value → Option Attr) (cp : Attr → Option Value)
   /-- §3 `(opaque)`: `lossy = false` is the `refuse` policy. -/
   | opaq     (lossy : Bool)
-  | object   (fields : List (Name × Field)) (rest : Rest)
+  /-- §4's field table is a *set* of names each declaring one field, so that is what the
+      term carries. A `List (Name × Field)` admitted two orderings of one object and a
+      repeated name, and the typing rule carried a `Nodup` premise to make the first
+      harmless and rule out the second; both are now properties of the type. `Field`
+      sits in the function's codomain, which is strictly positive — the same factoring
+      `Attr.m` and `Value.map` use one level down. -/
+  | object   (fields : Finset Name) (f : {k // k ∈ fields} → Field) (rest : Rest)
   | union    (options : List Term)
   | dunion   (d : Name) (options : List Term)
 
