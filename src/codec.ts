@@ -15,7 +15,7 @@ import type {
     SS,
     StoredItem,
 } from './attribute'
-import { carrying, memberOf } from './attribute'
+import { carrying, isNumeral, isStoredNumeral, memberOf } from './attribute'
 import type { Codec } from './build'
 import { codec } from './build'
 import {
@@ -983,36 +983,6 @@ export function literal<const T extends string | number>(
             }),
     }) as ConstantCodec<T>
 }
-
-/**
- * What DynamoDB **accepts** in an `N`: optional sign, digits, optional point, optional exponent;
- * at most 38 significant digits; magnitude zero or `1e-130 … 9.9…e125`. §1's `Numerals`, and the
- * same predicate as `Numeral.WF` in `formal/Calculus/Domain.lean`.
- */
-const NUMERAL = /^[+-]?(\d+)(?:\.(\d+))?(?:[eE]([+-]?\d+))?$/
-
-const isNumeral = (s: string): boolean => {
-    const m = NUMERAL.exec(s)
-    if (!m) return false
-    const int = m[1] as string
-    const frac = m[2] ?? ''
-    const mantissa = int + frac
-    const lead = mantissa.length - mantissa.replace(/^0+/, '').length
-    const significant = mantissa.replace(/^0+/, '').replace(/0+$/, '')
-    if (significant.length > 38) return false
-    if (significant.length === 0) return true // zero, however it is spelled
-    const exponent = int.length - 1 - lead + Number(m[3] ?? '0')
-    return exponent >= -130 && exponent <= 125
-}
-
-/**
- * What DynamoDB **hands back**, which is a smaller set: it normalises every `N` it accepts —
- * trimming leading and trailing zeros, dropping `+`, expanding exponents, and keeping one spelling
- * of zero. Measured, not assumed: `codec.dynamodb.spec.ts` puts each form into a real table and reads it
- * back, and `Numeral.Stored` in `formal/Calculus/Domain.lean` is the same set.
- */
-const isStoredNumeral = (s: string): boolean =>
-    s !== '-0' && /^-?(?:0|[1-9]\d*)(?:\.\d*[1-9])?$/.test(s) && isNumeral(s)
 
 /**
  * A decimal held as a string, stored as `N`. The codec for money — nothing becomes a JS number, so
