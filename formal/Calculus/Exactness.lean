@@ -23,16 +23,114 @@ per-table form obscured.
   one defect with three faces, and it is why §5 could justify `⊤` at a container with an
   argument (the empty array) that is true and proves far less than it was asked to.
 
-`Adm` below is that joint predicate as a single recursion. It is exact for sixteen of the
-twenty-three constructors (`Adm_exact`); the other seven are `Analysable`'s `false` rows,
-each for a stated reason, and three of those reasons have witnesses here.
+`Adm` below is that joint predicate as a single recursion. It is exact for eighteen of the
+twenty-one constructors (`Adm_exact`); the other three are `Analysable`'s `false` rows, each
+for a stated reason, and each with a witness here.
+
+**Four of those `false` rows were never forced.** `tuple`, `object`, `dunion` and `opaq` were
+excused on the strength of a reading — depth recursion, name admission, "the matched option's
+own admission" — and in every case the exact row was expressible and simply unwritten. The
+rows below are those four, and the deletions in the hatch are what they cost the excuses. The
+one row that resisted is `union`, and it resisted for a reason no reading had reached: see the
+note on `uniqueAdmission`.
 -/
 
 namespace Calculus
 
 noncomputable section
 
+/-! ## The rows a term's subterms hand up
+
+`Adm t` is a *predicate*, and every container row below is a combinator on the predicates its
+subterms compute — which is what `denote` does with codecs one level down. The shape is not a
+matter of taste: `Term.object`'s field table is a **function**, `sizeOf` is blind to functions,
+and a well-founded recursion therefore cannot reach a field's term. A structural recursion can,
+and a structural recursion is what this shape buys — the same reason `denote` is structural and
+`fieldSem`/`restSem` are its companions rather than its arguments.
+-/
+
+/-- A value-side row, once the subterms' rows are known. -/
+abbrev VP := Value → Bool
+
+/-- `⋀` over a container's elements. -/
+def allP (P : VP) : List Value → Bool
+  | [] => true
+  | x :: xs => P x && allP P xs
+
+/-- `⋁` over a union's options. -/
+def anyP : List VP → Value → Bool
+  | [], _ => false
+  | P :: Ps, v => P v || anyP Ps v
+
+/-- `align`'s row: the same length discipline — fixed head positionally, tail uniformly, a
+    mismatch refused — asked of the rows rather than of the codecs. §5's `⊤` on any `.arr`
+    ignored all three of those things. -/
+def alignP : List VP → Option VP → List Value → Bool
+  | [], none, [] => true
+  | [], none, _ :: _ => false
+  | [], some _, [] => true
+  | [], some P, v :: vs => P v && alignP [] (some P) vs
+  | _ :: _, _, [] => false
+  | P :: Ps, tail, v :: vs => P v && alignP Ps tail vs
+
+/-- `entryCodec`'s row: the field a name declares, or else the rest policy's. `none` is an
+    undeclared name under `drop` or `refuse` — which the *write* side refuses, `drop` being a
+    read-side filter. -/
+def entryP (fs : MapOf VP) (rp : Option VP) (k : Name) : Option VP :=
+  match fs.at k with | some P => some P | none => rp
+
+/-- `objWrite`'s traversal, as a row: every entry goes through the codec its name names. -/
+def objAdmV (fs : MapOf VP) (rp : Option VP) (keys : Finset Name)
+    (g : {k // k ∈ keys} → Value) : Bool :=
+  decide (∀ k : {k // k ∈ keys},
+    (match entryP fs rp k.1 with | some P => P (g k) | none => false) = true)
+
+/-- `valPresentB`'s guard, read off the *term*'s field table: only `optional` may be absent.
+    Decidable over a `Finset Name`, which is why the excuse that named it never held. -/
+def valPresentT (fields : Finset Name) (fld : {k // k ∈ fields} → Field)
+    (keys : Finset Name) : Bool :=
+  decide (∀ k : {k // k ∈ fields},
+    (match fld k with | .optional _ => true | _ => decide (k.1 ∈ keys)) = true)
+
+/-- `select` at a `dunion`, as a row. The tag filter is **syntactic** — `tagsOf` is a function
+    of the term — so the counting `select` does is available here, and the option the count
+    lands on then answers for itself. The old row stopped at `allTags`, which is the *union* of
+    the tag sets and so cannot see a tag two options answer to. -/
+def selTagV (d : Name) (os : List (Finset String × VP)) (v : Value) : Bool :=
+  match tagOfV d v with
+  | none => false
+  | some tag =>
+    match os.filter (fun o => decide (tag ∈ o.1)) with
+    | [o] => o.2 v
+    | _ => false
+
 mutual
+
+/-- **What `opaque` writes, exactly.** The excuse this replaces said `opaqCodecω`'s domain
+    "recurses on the input's own depth, so no syntactic set names it" — true of the *term*, and
+    beside the point: `Adm` may recurse on the **value**, which is where `opaqCodecω`'s own
+    recursion is, and `opaqOptions` is kind-disjoint, so each value kind meets exactly one
+    option. The scalars are total, `.num` is the policy gate, and the containers recurse.
+
+    The set rows need no injectivity clause, unlike the read side's: a value set's elements are
+    written by an injection (`sC`/`nC`/`bC` after the option's own `e`), and at `.numSet` that
+    is `Double.toDec`, which `Double.roundtrip` makes injective. `AdmOpaqA` at `.ns` has to say
+    so out loud, because `Double.ofDec` is not. -/
+noncomputable def AdmOpaqV (lossy : Bool) : Value → Bool
+  | .str _ | .bool _ | .bin _ | .null => true
+  | .num d => lossy && Numeral.WF d.toDec
+  | .strSet _ => true
+  | .numSet S => lossy && decide (∀ d ∈ S.1, Numeral.WF d.toDec = true)
+  | .binSet _ => true
+  | .arr vs => AdmOpaqVL lossy vs
+  | .map keys f => decide (∀ k : {k // k ∈ keys}, AdmOpaqV lossy (f k) = true)
+
+/-- `⋀` over an opaque container's elements. -/
+noncomputable def AdmOpaqVL (lossy : Bool) : List Value → Bool
+  | [] => true
+  | v :: vs => AdmOpaqV lossy v && AdmOpaqVL lossy vs
+
+end
 
 /-- What the literal codec **writes**, exactly.
 
@@ -47,12 +145,15 @@ mutual
 noncomputable def AdmLit (k : GroundKind) (ls : NEFinset k.Carrier) (v : Value) : Bool :=
   inL k ls v && (match v with | .num d => Numeral.WF d.toDec | _ => true)
 
+mutual
+
 /-- **The joint admission predicate.** What `κ` and `adm` compute between them, as one
     structural recursion — and the containers recurse with *this*, which is exactly what
     the old rows failed to do.
 
-    Rows for the seven `Analysable`-false constructors are sound over-approximations, kept
-    so that `Adm` is total; no exactness is claimed for them. -/
+    One row is still a sound over-approximation and claims no exactness: `union`. `set` and
+    `nullable` are the other two `Analysable`-false shapes, and their rows are the subterm
+    recursion and the disjunction they always were. -/
 noncomputable def Adm : Term → Value → Bool
   | .string   => fun v => match v with | .str _ => true | _ => false
   | .boolean  => fun v => match v with | .bool _ => true | _ => false
@@ -62,7 +163,7 @@ noncomputable def Adm : Term → Value → Bool
   | .decimal  => isStored
   | .literal k ls => AdmLit k ls
   | .custom ce _ => fun v => (ce v).isSome
-  | .array c  => fun v => match v with | .arr xs => AdmAll c xs | _ => false
+  | .array c  => fun v => match v with | .arr xs => allP (Adm c) xs | _ => false
   -- `record` needs no list companion either: `M`'s entries are a function on the key
   -- set, so "every entry admits" is one `decide` over that set, the way the three `set`
   -- rows are one `decide` over theirs.
@@ -73,7 +174,9 @@ noncomputable def Adm : Term → Value → Bool
   | .lazy t     => Adm t
   | .held t f _ => fun v => Adm t (f v)
   | .nullable t => fun v => Adm t v || (match v with | .null => true | _ => false)
-  | .union opts => fun v => AdmAny opts v
+  -- `union` is the one row that stays a disjunction, and the reason is `select`'s
+  -- **anti-monotonicity** rather than any missing vocabulary — see `Excuse.uniqueAdmission`.
+  | .union opts => fun v => anyP (AdmList opts) v
   -- `set` recurses like the other containers, and adds nothing. Homogeneity is not a
   -- row's problem — §1's three set types are three constructors, so an element's kind is
   -- fixed by which one it is — and non-emptiness is not one either, now that `℘⁺fin` is
@@ -84,26 +187,67 @@ noncomputable def Adm : Term → Value → Bool
       | .numSet S => decide (∀ d ∈ S.1, Adm c (.num d) = true)
       | .binSet S => decide (∀ b ∈ S.1, Adm c (.bin b) = true)
       | _ => false
-  | .tuple _ _  => fun v => match v with | .arr _ => true | _ => false
-  | .object _ _ _ => fun v => match v with | .map _ _ => true | _ => false
-  | .dunion d opts => fun v =>
-      match tagOfV d v with
-      | some tag => decide (tag ∈ allTags d opts)
-      | none => false
-  | .opaq _ => fun _ => true
+  | .tuple ts tail => fun v =>
+      match v with | .arr vs => alignP (AdmList ts) (AdmOptT tail) vs | _ => false
+  | .object fields fld rest => fun v =>
+      match v with
+      | .map keys g =>
+          valPresentT fields fld keys &&
+          objAdmV ⟨fields, fun k => AdmField (fld k)⟩ (AdmRest rest) keys g
+      | _ => false
+  | .dunion d opts => fun v => selTagV d (AdmTagged d opts) v
+  | .opaq lossy => AdmOpaqV lossy
 
-/-- `⋀` of `Adm` over a container's elements. -/
-noncomputable def AdmAll : Term → List Value → Bool
-  | _, [] => true
-  | c, x :: xs => Adm c x && AdmAll c xs
+/-- A field's row is its term's; the presence marker is `valPresentT`'s business, not this
+    one's. Mirrors `fieldSem`, and for the same reason: the recursion has to be passed
+    *applied*. -/
+noncomputable def AdmField : Field → VP
+  | .req t => Adm t
+  | .optional t => Adm t
+  | .fallback t _ => Adm t
 
-/-- `⋁` of `Adm` over a union's options. Sound, but *not* exact — `select` demands
-    exactly one admitting option, so a union is exact only under (U). -/
-noncomputable def AdmAny : List Term → Value → Bool
-  | [], _ => false
-  | t :: ts, v => Adm t v || AdmAny ts v
+/-- The rest policy's row, where it has one — `rcOf`'s mirror. `drop` and `refuse` have
+    none, and an undeclared name is therefore refused on the way *out* under both. -/
+noncomputable def AdmRest : Rest → Option VP
+  | .drop => none
+  | .refuse => none
+  | .codec t => some (Adm t)
+
+/-- The options' rows, in order — `denoteList`'s mirror. -/
+noncomputable def AdmList : List Term → List VP
+  | [] => []
+  | t :: ts => Adm t :: AdmList ts
+
+noncomputable def AdmOptT : Option Term → Option VP
+  | none => none
+  | some t => some (Adm t)
+
+/-- Each `dunion` option paired with the tags it answers to — `denoteTagged`'s mirror. -/
+noncomputable def AdmTagged (d : Name) : List Term → List (Finset String × VP)
+  | [] => []
+  | t :: ts => (tagsOf d t, Adm t) :: AdmTagged d ts
 
 end
+
+@[simp] theorem AdmList_eq : ∀ ts : List Term, AdmList ts = ts.map Adm
+  | [] => rfl
+  | t :: ts => by simp only [AdmList, List.map]; rw [AdmList_eq ts]
+
+@[simp] theorem AdmTagged_eq : ∀ (d : Name) (opts : List Term),
+    AdmTagged d opts = opts.map fun t => (tagsOf d t, Adm t)
+  | _, [] => rfl
+  | d, t :: ts => by simp only [AdmTagged, List.map]; rw [AdmTagged_eq d ts]
+
+/-- `⋁` of `Adm` over a union's options, named — sound, and *not* exact. -/
+noncomputable def AdmAny (ts : List Term) (v : Value) : Bool := anyP (AdmList ts) v
+
+@[simp] theorem AdmAny_nil (v : Value) : AdmAny [] v = false := rfl
+
+@[simp] theorem AdmAny_cons (t : Term) (ts : List Term) (v : Value) :
+    AdmAny (t :: ts) v = (Adm t v || AdmAny ts v) := rfl
+
+theorem Adm_union (opts : List Term) (v : Value) :
+    Adm (.union opts) v = AdmAny opts v := rfl
 
 /-- `Adm`'s literal row, named.
 
@@ -117,28 +261,85 @@ end
 /-- §5's converse direction: the row is `dom(e)`, not merely a bound on it. -/
 def ExactV (t : Term) : Prop := ∀ v, Adm t v = true ↔ ((denote t).e v).isSome
 
-/-- The terms whose rows carry an exactness proof, subterms included. The `false` rows are
-    the hatch, and each has a reason:
+mutual
+/-- The terms whose rows carry an exactness proof, subterms included. Three `false` rows are
+    left, and each has a reason:
 
-    * `opaq` — `opaqCodecω`'s domain recurses on the *input's* depth; no syntactic set names it.
-    * `union` — `select` admits only when **exactly one** option does, so `⋁` is exact
-      precisely under (U), which is a semantic obligation rather than a syntactic row.
-    * `dunion` — the tag is checked, the matched option's own admission is not.
-    * `set` — `asWireSet` also demands payload homogeneity, a fact about attributes.
-    * `object`, `tuple` — name admission and alignment.
-    * `nullable` — `ownsNull` is a disjunction over *both* halves, so a read that reaches
-      the null point suppresses the wrapper while the write still refuses it
+    * `union` — `select` admits only where **exactly one** option does, and the count is taken
+      over `Adm`'s own answers, which over-approximate at the two shapes below. Sharpening the
+      row to that count would make it *unsound* — see `Excuse.uniqueAdmission`.
+    * `set` — `encSet` demands the element map be **injective**, and no row of the elements
+      alone says so (`not_ExactV_set`).
+    * `nullable` — `ownsNull` is a disjunction over *both* halves, so a read that reaches the
+      null point suppresses the wrapper while the write still refuses it
       (`not_ExactV_nullable`).
+
+    `tuple`, `object`, `dunion` and `opaq` used to be here. Nothing about their *shapes* put
+    them here: the rows are written now, and the four excuses are deleted rather than
+    re-argued.
 
     This list is the escape hatch, and it is closed: a row cannot be left vague by
     accident, only by being added here, in the open. -/
 def Analysable : Term → Bool
   | .string | .boolean | .binary | .null | .number | .decimal
-  | .literal _ _ | .custom _ _ => true
+  | .literal _ _ | .custom _ _ | .opaq _ => true
   | .array c | .record c | .refine c _ | .legacy c _ | .lazy c
   | .held c _ _ => Analysable c
-  | .opaq _ | .object _ _ _ | .tuple _ _ | .set _ | .dunion _ _ | .union _
-  | .nullable _ => false
+  | .tuple ts tail => AnalysableL ts && AnalysableO tail
+  | .dunion _ opts => AnalysableL opts
+  | .object fields fld rest =>
+      decide (∀ k : {k // k ∈ fields}, AnalysableF (fld k) = true) && AnalysableR rest
+  | .set _ | .union _ | .nullable _ => false
+
+def AnalysableL : List Term → Bool
+  | [] => true
+  | t :: ts => Analysable t && AnalysableL ts
+
+def AnalysableO : Option Term → Bool
+  | none => true
+  | some t => Analysable t
+
+def AnalysableF : Field → Bool
+  | .req t => Analysable t
+  | .optional t => Analysable t
+  | .fallback t _ => Analysable t
+
+def AnalysableR : Rest → Bool
+  | .drop | .refuse => true
+  | .codec t => Analysable t
+end
+
+def ExactVL : List Term → Prop
+  | [] => True
+  | t :: ts => ExactV t ∧ ExactVL ts
+
+def ExactVO : Option Term → Prop
+  | none => True
+  | some t => ExactV t
+
+def ExactVR : Rest → Prop
+  | .drop | .refuse => True
+  | .codec t => ExactV t
+
+theorem exactVL_mem : ∀ (ts : List Term), ExactVL ts → ∀ t ∈ ts, ExactV t
+  | [], _, t, ht => absurd ht (by simp)
+  | t0 :: ts, h, t, ht => by
+      rcases List.mem_cons.mp ht with rfl | ht'
+      · exact h.1
+      · exact exactVL_mem ts h.2 t ht'
+
+theorem exactVO_mem : ∀ (tail : Option Term), ExactVO tail → ∀ t ∈ tail, ExactV t
+  | none, _, t, ht => absurd ht (by simp)
+  | some t0, h, t, ht => by
+      have heq : t0 = t := by simpa using ht
+      subst heq; exact h
+
+theorem exactVR_codec : ∀ (rest : Rest), ExactVR rest → ∀ t, rest = .codec t → ExactV t
+  | .drop, _, t, h => nomatch h
+  | .refuse, _, t, h => nomatch h
+  | .codec t0, h, t, hc => by
+      have : t = t0 := by injection hc.symm
+      subst this; exact h
 
 /-- A traversal succeeds exactly when every entry does. -/
 theorem traverse_isSome_iff {α β : Type} (f : α → Option β) : ∀ xs : List α,
@@ -165,34 +366,400 @@ theorem traverse_isSome_iff {α β : Type} (f : α → Option β) : ∀ xs : Lis
         · rw [hx]; rfl
         · exact hall z hz
 
-/-- `AdmAll` transported across the element's exactness. -/
+/-- `allP` transported across the element's exactness. -/
 theorem AdmAll_iff {c : Term} (h : ExactV c) : ∀ xs : List Value,
-    AdmAll c xs = true ↔ ∀ x ∈ xs, ((denote c).e x).isSome = true := by
+    allP (Adm c) xs = true ↔ ∀ x ∈ xs, ((denote c).e x).isSome = true := by
   intro xs; induction xs with
-  | nil => simp [AdmAll]
-  | cons x xs ih => simp [AdmAll, ih, h x]
+  | nil => simp [allP]
+  | cons x xs ih => simp [allP, ih, h x]
 
-/-- **Sixteen of the twenty-three rows are exact.** Not a bound on `dom(e)` — `dom(e)`.
+theorem traverse_cons_isSome {α β : Type} (f : α → Option β) (x : α) (xs : List α) :
+    (traverse f (x :: xs)).isSome = ((f x).isSome && (traverse f xs).isSome) := by
+  simp only [traverse]
+  cases hx : f x <;> cases hxs : traverse f xs <;> simp
+
+/-- A filter whose predicate never fires is empty. Written out rather than taken from
+    `List.filter_eq_nil_iff`, which is proved classically — see `Calculus/Axioms.lean`, where
+    that exact lemma is the example of how the base gets widened by accident. -/
+theorem filter_eq_nil_of_all_false {α : Type} (p : α → Bool) (l : List α)
+    (h : ∀ x, p x = false) : l.filter p = [] := by
+  induction l with
+  | nil => rfl
+  | cons a l ih => simp [List.filter_cons, h a, ih]
+
+theorem filter_map_comm {α β : Type} (f : α → β) (p : β → Bool) (l : List α) :
+    (l.map f).filter p = (l.filter (fun a => p (f a))).map f := by
+  induction l with
+  | nil => rfl
+  | cons a l ih => by_cases h : p (f a) <;> simp [List.filter_cons, h, ih]
+
+/-- `alignP` is `align`'s row: the same length discipline, the same per-position test. -/
+theorem alignP_iff (tail : Option Term) (htl : ∀ t ∈ tail, ExactV t) :
+    ∀ (ts : List Term) (vs : List Value), (∀ t ∈ ts, ExactV t) →
+      (alignP (AdmList ts) (AdmOptT tail) vs = true ↔
+        ((align (denoteList ts) (denoteOpt tail) vs).bind
+          (traverse fun cv => cv.1.e cv.2)).isSome = true)
+  | [], [], _ => by
+      cases tail <;> simp [alignP, AdmList, AdmOptT, align, denoteList, denoteOpt, traverse]
+  | [], v :: vs, _ => by
+      cases htail : tail with
+      | none => simp [alignP, AdmList, AdmOptT, align, denoteList, denoteOpt]
+      | some t =>
+        have ht : ExactV t := htl t (by simp [htail])
+        have ih := alignP_iff tail htl [] vs (by simp)
+        rw [htail] at ih
+        simp only [AdmList, AdmOptT, denoteList, denoteOpt] at ih
+        simp only [alignP, AdmList, AdmOptT, align, denoteList, denoteOpt,
+          Bool.and_eq_true]
+        cases hal : align [] (some (denote t)) vs with
+        | none =>
+          rw [hal] at ih
+          simp at ih
+          simp [hal, ih]
+        | some ps =>
+          rw [hal] at ih
+          simp only [hal, Option.map_some', Option.some_bind, Option.bind_some] at ih ⊢
+          rw [traverse_cons_isSome, Bool.and_eq_true, ← ht v, ← ih]
+  | t :: ts, [], _ => by
+      cases tail <;> simp [alignP, AdmList, AdmOptT, align, denoteList, denoteOpt]
+  | t :: ts, v :: vs, h => by
+      have ht : ExactV t := h t (by simp)
+      have ih := alignP_iff tail htl ts vs (fun t' ht' => h t' (by simp [ht']))
+      simp only [alignP, AdmList, AdmOptT, align, denoteList, denoteOpt, Bool.and_eq_true]
+      cases hal : align (denoteList ts) (denoteOpt tail) vs with
+      | none =>
+        simp only [hal, Option.map_none', Option.bind_none, Option.isSome_none] at ih ⊢
+        simp at ih
+        simp [ih]
+      | some ps =>
+        simp only [hal, Option.map_some', Option.some_bind, Option.bind_some] at ih ⊢
+        rw [traverse_cons_isSome, Bool.and_eq_true, ← ht v, ← ih]
+
+
+
+/-- **`tuple` is exact** once its components are. -/
+theorem ExactV_tuple {ts : List Term} {tail : Option Term}
+    (h : ∀ t ∈ ts, ExactV t) (htl : ∀ t ∈ tail, ExactV t) : ExactV (.tuple ts tail) := by
+  intro v
+  cases v
+  case arr vs =>
+    show alignP (AdmList ts) (AdmOptT tail) vs = true ↔
+      (((align (denoteList ts) (denoteOpt tail) vs).bind
+        (traverse fun cv => cv.1.e cv.2)).map Attr.l).isSome = true
+    rw [alignP_iff tail htl ts vs h]
+    cases (align (denoteList ts) (denoteOpt tail) vs).bind (traverse fun cv => cv.1.e cv.2) <;>
+      simp
+  all_goals simp [Adm, denote, tupleCodec]
+
+/-- **`dunion` is exact** once its options are: the tag filter is syntactic, and the one
+    option it lands on answers for itself. -/
+theorem ExactV_dunion {d : Name} {opts : List Term}
+    (h : ∀ t ∈ opts, ExactV t) : ExactV (.dunion d opts) := by
+  intro v
+  show selTagV d (AdmTagged d opts) v = true ↔
+    (select ((denoteTagged d opts).map fun o => OptionSem.byTag d o.1 o.2)
+      (·.admitV) (·.c.e) v).isSome = true
+  simp only [selTagV, denoteTagged_eq, AdmTagged_eq, List.map_map, select]
+  cases htag : tagOfV d v with
+  | none =>
+    have hz : ∀ t : Term, (OptionSem.byTag d (tagsOf d t) (denote t)).admitV v = false := by
+      intro t; simp [OptionSem.byTag, htag]
+    rw [filter_map_comm]
+    simp only [Function.comp_def]
+    rw [filter_eq_nil_of_all_false _ opts hz]
+    simp
+  | some tag =>
+    have hfil : ((opts.map fun t => (OptionSem.byTag d (tagsOf d t) (denote t))).filter
+        (·.admitV v))
+        = (opts.filter (fun t => decide (tag ∈ tagsOf d t))).map
+            (fun t => OptionSem.byTag d (tagsOf d t) (denote t)) := by
+      have hpred : (fun a => (OptionSem.byTag d (tagsOf d a) (denote a)).admitV v)
+          = (fun t => decide (tag ∈ tagsOf d t)) := by
+        funext t; simp [OptionSem.byTag, htag]
+      rw [filter_map_comm, hpred]
+    have hfil2 : ((opts.map fun t => (tagsOf d t, Adm t)).filter
+        (fun o => decide (tag ∈ o.1)))
+        = (opts.filter (fun t => decide (tag ∈ tagsOf d t))).map
+            (fun t => (tagsOf d t, Adm t)) := by
+      rw [filter_map_comm]
+    simp only [Function.comp_def, hfil, hfil2]
+    cases hL : opts.filter (fun t => decide (tag ∈ tagsOf d t)) with
+    | nil => simp
+    | cons t rest =>
+      cases rest with
+      | nil =>
+        have ht : t ∈ opts := List.mem_of_mem_filter (by rw [hL]; simp)
+        simp only [List.map_cons, List.map_nil]
+        exact h t ht v
+      | cons t2 rest2 => simp
+
+/-- A field's row is exact when the term it carries is. -/
+def ExactField (fd : Field) : Prop :=
+  ∀ v, AdmField fd v = true ↔ (((fieldSem fd).codec).e v).isSome
+
+theorem valPresentT_eq (fields : Finset Name) (fld : {k // k ∈ fields} → Field)
+    (keys : Finset Name) :
+    valPresentT fields fld keys = valPresentB ⟨fields, fun k => fieldSem (fld k)⟩ keys := by
+  simp only [valPresentT, valPresentB]
+  congr 1
+  apply propext
+  constructor <;> intro h k <;> have := h k <;> cases hfd : fld k <;>
+    simp_all [valPresentAt, fieldSem]
+
+theorem entry_iff {fields : Finset Name} {fld : {k // k ∈ fields} → Field} {rest : Rest}
+    (hf : ∀ k : {k // k ∈ fields}, ExactField (fld k))
+    (hr : ∀ t, rest = .codec t → ExactV t) (k : Name) (v : Value) :
+    (match entryP ⟨fields, fun k => AdmField (fld k)⟩ (AdmRest rest) k with
+      | some P => P v | none => false) = true ↔
+    ((entryCodec ⟨fields, fun k => fieldSem (fld k)⟩ (rcOf (restSem rest)) k).bind
+      (fun c => c.e v)).isSome = true := by
+  simp only [entryP, entryCodec, MapOf.at]
+  by_cases hk : k ∈ fields
+  · rw [dif_pos hk, dif_pos hk]
+    simpa using hf ⟨k, hk⟩ v
+  · rw [dif_neg hk, dif_neg hk]
+    cases rest with
+    | drop => simp [AdmRest, restSem, rcOf]
+    | refuse => simp [AdmRest, restSem, rcOf]
+    | codec t => simpa [AdmRest, restSem, rcOf] using hr t rfl v
+
+/-- **`object` is exact** once its fields and its rest policy are. -/
+theorem ExactV_object {fields : Finset Name} {fld : {k // k ∈ fields} → Field} {rest : Rest}
+    (hf : ∀ k : {k // k ∈ fields}, ExactField (fld k))
+    (hr : ∀ t, rest = .codec t → ExactV t) : ExactV (.object fields fld rest) := by
+  intro v
+  cases v
+  case map keys g =>
+    show (valPresentT fields fld keys &&
+        objAdmV ⟨fields, fun k => AdmField (fld k)⟩ (AdmRest rest) keys g) = true ↔
+      ((objectCodec ⟨fields, fun k => fieldSem (fld k)⟩ (restSem rest)).e (.map keys g)).isSome
+        = true
+    rw [valPresentT_eq]
+    simp only [objectCodec, objectCodecCore, carriedCodec, mapV, Ctor.out, objWrite,
+      objAdmV, Bool.and_eq_true, decide_eq_true_eq, Option.isSome_map',
+      Option.some_bind, Option.bind_some]
+    by_cases hv : valPresentB ⟨fields, fun k => fieldSem (fld k)⟩ keys = true
+    · rw [if_pos hv]
+      simp only [hv, true_and, Option.isSome_map', funImage_isSome_iff]
+      exact forall_congr' fun k => entry_iff hf hr k.1 (g k)
+    · rw [if_neg hv]
+      simp [hv]
+  all_goals
+    simp [Adm, denote, objectCodec, objectCodecCore, carriedCodec, mapV, Ctor.out]
+
+theorem setImage_isSome_of_inj {α β : Type} [DecidableEq β] {f : α → Option β} {S : Finset α}
+    (hall : ∀ x ∈ S, (f x).isSome = true)
+    (hinj : ∀ x ∈ S, ∀ y ∈ S, f x = f y → x = y) : (setImage f S).isSome = true := by
+  unfold setImage
+  rw [dif_pos hall]
+  have hnd : (S.attach.val.map (fun x => (f x.1).get (hall x.1 x.2))).Nodup := by
+    refine Multiset.Nodup.map_on ?_ S.attach.nodup
+    intro x hx y hy hxy
+    apply Subtype.ext
+    refine hinj x.1 x.2 y.1 y.2 ?_
+    rw [← Option.some_get (hall x.1 x.2), ← Option.some_get (hall y.1 y.2), hxy]
+  rw [dif_pos hnd]
+  rfl
+
+theorem setImage_none_of_fail {α β : Type} [DecidableEq β] {f : α → Option β} {S : Finset α}
+    {x : α} (hx : x ∈ S) (h : f x = none) : setImage f S = none := by
+  unfold setImage
+  rw [dif_neg]
+  intro hall
+  have := hall x hx
+  rw [h] at this
+  exact absurd this (by simp)
+
+theorem neSetImage_isSome_of_inj {α β : Type} [DecidableEq β] {f : α → Option β}
+    {S : NEFinset α} (hall : ∀ x ∈ S.1, (f x).isSome = true)
+    (hinj : ∀ x ∈ S.1, ∀ y ∈ S.1, f x = f y → x = y) : (neSetImage f S).isSome = true := by
+  obtain ⟨T, hT⟩ := Option.isSome_iff_exists.mp (setImage_isSome_of_inj hall hinj)
+  have h2 := (neSetImage_eq_setImage (f := f) (S := S)
+    (T := ⟨T, setImage_nonempty hT S.2⟩)).mpr hT
+  rw [h2]
+  rfl
+
+mutual
+/-- **`opaque` writes exactly what `AdmOpaqV` says**, at every budget that sees the value. -/
+theorem AdmOpaqV_iff (lossy : Bool) : ∀ (v : Value) (n : Nat), Value.depth v ≤ n →
+    (((opaqCodec n lossy).e v).isSome = true ↔ AdmOpaqV lossy v = true)
+  | v, 0, hn => absurd hn (by simpa using Nat.not_le.mpr (Value.depth_pos v))
+  | .str s, n'+1, _ => by rw [opaqCodec_e_str]; simp [AdmOpaqV, stringCodec]
+  | .bool b, n'+1, _ => by rw [opaqCodec_e_bool]; simp [AdmOpaqV, booleanCodec]
+  | .bin b, n'+1, _ => by rw [opaqCodec_e_bin]; simp [AdmOpaqV, binaryCodec]
+  | .null, n'+1, _ => by rw [opaqCodec_e_null]; simp [AdmOpaqV, nullCodec]
+  | .num d, n'+1, _ => by
+      rw [opaqCodec_e_num]
+      cases lossy <;> simp [AdmOpaqV, Codec.empty, inD]
+  | .strSet S, n'+1, hn => by
+      have h1 : 1 ≤ n' := Nat.le_of_succ_le_succ (by simpa [Value.depth] using hn)
+      cases n' with
+      | zero => exact absurd h1 (by simp)
+      | succ m =>
+        have hf : ∀ x : String, ((opaqCodec (m+1) lossy).e (.str x)).bind sC.out = some x := by
+          intro x; rw [opaqCodec_e_str]; rfl
+        have hns : (neSetImage (fun x => ((opaqCodec (m+1) lossy).e (.str x)).bind sC.out) S).isSome
+            = true :=
+          neSetImage_isSome_of_inj (fun x _ => by rw [hf x]; rfl)
+            (fun x _ y _ h => by rw [hf x, hf y] at h; exact Option.some.inj h)
+        obtain ⟨T, hT⟩ := Option.isSome_iff_exists.mp hns
+        rw [opaqCodec_e_strSet]
+        show ((encSet (opaqCodec (m+1) lossy) Value.str S).isSome = true ↔ _)
+        rw [encSet, hT]
+        simp [AdmOpaqV]
+  | .binSet S, n'+1, hn => by
+      have h1 : 1 ≤ n' := Nat.le_of_succ_le_succ (by simpa [Value.depth] using hn)
+      cases n' with
+      | zero => exact absurd h1 (by simp)
+      | succ m =>
+        have hf : ∀ x : Bytes, ((opaqCodec (m+1) lossy).e (.bin x)).bind bC.out = some x := by
+          intro x; rw [opaqCodec_e_bin]; rfl
+        have hs : ∀ x : Bytes, ((opaqCodec (m+1) lossy).e (.bin x)).bind sC.out = none := by
+          intro x; rw [opaqCodec_e_bin]; rfl
+        have hnn : ∀ x : Bytes, ((opaqCodec (m+1) lossy).e (.bin x)).bind nC.out = none := by
+          intro x; rw [opaqCodec_e_bin]; rfl
+        obtain ⟨x0, hx0⟩ := S.2
+        have hns : (neSetImage (fun x => ((opaqCodec (m+1) lossy).e (.bin x)).bind bC.out) S).isSome
+            = true :=
+          neSetImage_isSome_of_inj (fun x _ => by rw [hf x]; rfl)
+            (fun x _ y _ h => by rw [hf x, hf y] at h; exact Option.some.inj h)
+        obtain ⟨T, hT⟩ := Option.isSome_iff_exists.mp hns
+        rw [opaqCodec_e_binSet]
+        show ((encSet (opaqCodec (m+1) lossy) Value.bin S).isSome = true ↔ _)
+        rw [encSet, neSetImage_none (setImage_none_of_fail hx0 (hs x0)),
+          neSetImage_none (setImage_none_of_fail hx0 (hnn x0)), hT]
+        simp [AdmOpaqV]
+  | .numSet S, n'+1, hn => by
+      have h1 : 1 ≤ n' := Nat.le_of_succ_le_succ (by simpa [Value.depth] using hn)
+      cases n' with
+      | zero => exact absurd h1 (by simp)
+      | succ m =>
+        obtain ⟨x0, hx0⟩ := S.2
+        have hnum : ∀ x : Double, ((opaqCodec (m+1) lossy).e (.num x)).isSome
+            = (lossy && Numeral.WF x.toDec) := by
+          intro x
+          rw [opaqCodec_e_num]
+          cases lossy <;> simp [Codec.empty, inD]
+        constructor
+        · intro hsome
+          rw [opaqCodec_e_numSet] at hsome
+          obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp hsome
+          replace ha : encSet (opaqCodec (m+1) lossy) Value.num S = some a := ha
+          have hall := encSet_elem ha
+          have h0 := hall x0 hx0
+          rw [hnum] at h0
+          simp only [AdmOpaqV, Bool.and_eq_true, decide_eq_true_eq]
+          refine ⟨(Bool.and_eq_true _ _).mp h0 |>.1, fun x hx => ?_⟩
+          have hxx := hall x hx
+          rw [hnum] at hxx
+          exact (Bool.and_eq_true _ _).mp hxx |>.2
+        · intro hrow
+          simp only [AdmOpaqV, Bool.and_eq_true, decide_eq_true_eq] at hrow
+          obtain ⟨hl, hwf⟩ := hrow
+          subst hl
+          have hval : ∀ x (h : Numeral.WF x.toDec = true),
+              (opaqCodec (m+1) true).e (.num x) = some (.n ⟨x.toDec, h⟩) := by
+            intro x h
+            rw [opaqCodec_e_num]
+            simp [numberCodec_e_num, h]
+          have hs0 : ((opaqCodec (m+1) true).e (.num x0)).bind sC.out = none := by
+            rw [hval x0 (hwf x0 hx0)]; rfl
+          have hns : (neSetImage
+              (fun x => ((opaqCodec (m+1) true).e (.num x)).bind nC.out) S).isSome = true := by
+            refine neSetImage_isSome_of_inj (fun x hx => by rw [hval x (hwf x hx)]; rfl) ?_
+            intro x hx y hy h
+            rw [hval x (hwf x hx), hval y (hwf y hy)] at h
+            have hd : x.toDec = y.toDec := congrArg Subtype.val (Option.some.inj h)
+            have h1 := Double.roundtrip x
+            rw [hd, Double.roundtrip y] at h1
+            exact (Option.some.inj h1).symm
+          obtain ⟨T, hT⟩ := Option.isSome_iff_exists.mp hns
+          rw [opaqCodec_e_numSet]
+          show (encSet (opaqCodec (m+1) true) Value.num S).isSome = true
+          rw [encSet, neSetImage_none (setImage_none_of_fail hx0 hs0), hT]
+          rfl
+  | .arr vs, n'+1, hn => by
+      have hL : Value.depthL vs ≤ n' := Nat.le_of_succ_le_succ (by simpa [Value.depth] using hn)
+      rw [opaqCodec_e_arr]
+      show (((traverse (opaqCodec n' lossy).e vs).map Attr.l).isSome = true ↔ _)
+      rw [Option.isSome_map']
+      exact AdmOpaqVL_iff lossy vs n' hL
+  | .map keys f, n'+1, hn => by
+      have hk : ∀ k, Value.depth (f k) ≤ n' := fun k =>
+        Nat.le_of_succ_le_succ (le_trans (Value.depth_map_entry (f := f) k) hn)
+      rw [opaqCodec_e_map]
+      show ((((funImage fun k => (opaqCodec n' lossy).e (f k))).map (Attr.m keys)).isSome = true ↔ _)
+      rw [Option.isSome_map', funImage_isSome_iff]
+      simp only [AdmOpaqV, decide_eq_true_eq]
+      exact forall_congr' fun k => AdmOpaqV_iff lossy (f k) n' (hk k)
+
+theorem AdmOpaqVL_iff (lossy : Bool) : ∀ (vs : List Value) (n : Nat), Value.depthL vs ≤ n →
+    ((traverse (opaqCodec n lossy).e vs).isSome = true ↔ AdmOpaqVL lossy vs = true)
+  | [], _, _ => by simp [traverse, AdmOpaqVL]
+  | v :: vs, n, hn => by
+      have hv : Value.depth v ≤ n := le_trans (by simp [Value.depthL]) hn
+      have hvs : Value.depthL vs ≤ n := le_trans (by simp [Value.depthL]) hn
+      rw [traverse_cons_isSome]
+      simp only [AdmOpaqVL, Bool.and_eq_true]
+      rw [AdmOpaqV_iff lossy v n hv, AdmOpaqVL_iff lossy vs n hvs]
+end
+
+theorem ExactV_opaq (lossy : Bool) : ExactV (.opaq lossy) := by
+  intro v
+  show AdmOpaqV lossy v = true ↔ ((opaqCodec (Value.depth v) lossy).e v).isSome = true
+  exact (AdmOpaqV_iff lossy v (Value.depth v) (Nat.le_refl _)).symm
+
+
+mutual
+/-- **Eighteen of the twenty-one rows are exact.** Not a bound on `dom(e)` — `dom(e)`.
 
     The `held` case is the one worth reading: it appeals to the subterm at `f v`, which is
     the pullback, and it is one line because `(c.through f g).e v = c.e (f v)` holds by
-    `Iff.rfl`. The `array` and `record` cases are the repair of §5's container rows. -/
+    `Iff.rfl`. The `array` and `record` cases are the repair of §5's container rows, and the
+    four cases after them are the rows the hatch used to hold.
+
+    Mutual with the list, option, field and rest companions, for the same reason `denote` is:
+    a tuple's components and a `dunion`'s options are reached through a `List Term` and an
+    object's fields through a *function*, and a single recursion on the term cannot follow
+    either. -/
 theorem Adm_exact : ∀ (t : Term), Analysable t = true → ExactV t
-  | .string, _ => by intro v; cases v <;> simp [Adm, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, stringCodec]
-  | .boolean, _ => by intro v; cases v <;> simp [Adm, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, booleanCodec]
-  | .binary, _ => by intro v; cases v <;> simp [Adm, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, binaryCodec]
-  | .null, _ => by intro v; cases v <;> simp [Adm, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, nullCodec]
-  | .number, _ => by intro v; cases v <;> simp [Adm, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, inD]
-  | .decimal, _ => by intro v; cases v <;> simp [Adm, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, isStored]
+  -- the four rows §5 excused, and none of them needed excusing
+  | .tuple ts tail => by
+      intro ha
+      simp only [Analysable, Bool.and_eq_true] at ha
+      exact ExactV_tuple (exactVL_mem ts (Adm_exactL ts ha.1))
+        (exactVO_mem tail (Adm_exactO tail ha.2))
+  | .dunion d opts => by
+      intro ha
+      exact ExactV_dunion
+        (exactVL_mem opts (Adm_exactL opts (by simpa [Analysable] using ha)))
+  | .object fields fld rest => by
+      intro ha
+      simp only [Analysable, Bool.and_eq_true, decide_eq_true_eq] at ha
+      exact ExactV_object (fun k => Adm_exactF (fld k) (ha.1 k))
+        (exactVR_codec rest (Adm_exactR rest ha.2))
+  | .opaq lossy => fun _ => ExactV_opaq lossy
+  -- the three that are genuinely inexact, refuted by the hypothesis
+  | .set _ => by intro ha; simp [Analysable] at ha
+  | .union _ => by intro ha; simp [Analysable] at ha
+  | .nullable _ => by intro ha; simp [Analysable] at ha
+
+  | .string => by intro _ v; cases v <;> simp [Adm, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, stringCodec]
+  | .boolean => by intro _ v; cases v <;> simp [Adm, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, booleanCodec]
+  | .binary => by intro _ v; cases v <;> simp [Adm, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, binaryCodec]
+  | .null => by intro _ v; cases v <;> simp [Adm, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, nullCodec]
+  | .number => by intro _ v; cases v <;> simp [Adm, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, inD]
+  | .decimal => by intro _ v; cases v <;> simp [Adm, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, isStored]
   -- three rows into one, and `numberCodec` is read through `numberCodec_e_isSome` rather
   -- than unfolded: its `dite` is a string parser, and `simp` inside it runs out of heartbeats.
-  | .literal k ls, _ => by
-      intro v
+  | .literal k ls => by
+      intro _ v
       cases k <;> cases v <;>
         simp [AdmLit, denote, denote, literalCodec, baseCodec, inL,
               stringCodec, booleanCodec, binaryCodec, nullCodec, inD]
-  | .custom ce cp, _ => by intro v; simp [Adm, denote, denote]
-  | .array c, ha => by
+  | .custom ce cp => by intro _ v; simp [Adm, denote, denote]
+  | .array c => by
+      intro ha
       have hc := Adm_exact c (by simpa [Analysable] using ha)
       intro v
       cases v
@@ -201,7 +768,8 @@ theorem Adm_exact : ∀ (t : Term), Analysable t = true → ExactV t
         rw [AdmAll_iff hc, ← traverse_isSome_iff]
         cases traverse (denote c).e xs <;> simp
       all_goals simp [Adm, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, arrayCodec]
-  | .record c, ha => by
+  | .record c => by
+      intro ha
       have hc := Adm_exact c (by simpa [Analysable] using ha)
       intro v
       cases v
@@ -215,34 +783,66 @@ theorem Adm_exact : ∀ (t : Term), Analysable t = true → ExactV t
       -- `funImage` to see it is more work than reading it off the two `false`s
       all_goals simp only [Adm, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, recordCodec, Option.map_none',
         Option.isSome_none, Bool.false_eq_true]
-  | .refine c q, ha => by
+  | .refine c q => by
+      intro ha
       have hc := Adm_exact c (by simpa [Analysable] using ha)
       intro v; cases hq : q v <;> simp [Adm, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, Codec.restrict, hq, hc v]
-  | .legacy c r, ha => by
+  | .legacy c r => by
+      intro ha
       have hc := Adm_exact c (by simpa [Analysable] using ha)
       intro v; simpa [Adm, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, Codec.extendRead] using hc v
-  | .lazy c, ha => by
+  | .lazy c => by
+      intro ha
       have hc := Adm_exact c (by simpa [Analysable] using ha)
       intro v; simpa [Adm, denote] using hc v
-  | .held c f g, ha => by
+  | .held c f g => by
+      intro ha
       have hc := Adm_exact c (by simpa [Analysable] using ha)
       intro v; simpa [Adm, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, Codec.through] using hc (f v)
-  | .set _, ha | .tuple _ _, ha | .object _ _ _, ha | .dunion _ _, ha
-  | .union _, ha | .nullable _, ha | .opaq _, ha => by simp [Analysable] at ha
 
+/-- The options' exactness, in the shape the recursion can produce it: a `∀ t ∈ ts` needs a
+    membership hypothesis the structural checker cannot follow back to the constructor's
+    argument, and this does not. -/
+theorem Adm_exactL : ∀ (ts : List Term), AnalysableL ts = true → ExactVL ts
+  | [] => fun _ => trivial
+  | t0 :: ts => by
+      intro ha
+      simp only [AnalysableL, Bool.and_eq_true] at ha
+      exact ⟨Adm_exact t0 ha.1, Adm_exactL ts ha.2⟩
+
+theorem Adm_exactO : ∀ (tail : Option Term), AnalysableO tail = true → ExactVO tail
+  | none => fun _ => trivial
+  | some t0 => by
+      intro ha
+      exact Adm_exact t0 (by simpa [AnalysableO] using ha)
+
+/-- A field's row is exact when its term's is — the marker plays no part, which is what
+    `valPresentT` being a separate conjunct records. -/
+theorem Adm_exactF : ∀ (fd : Field), AnalysableF fd = true → ExactField fd
+  | .req t0 => by intro ha v; exact Adm_exact t0 (by simpa [AnalysableF] using ha) v
+  | .optional t0 => by intro ha v; exact Adm_exact t0 (by simpa [AnalysableF] using ha) v
+  | .fallback t0 _ => by intro ha v; exact Adm_exact t0 (by simpa [AnalysableF] using ha) v
+
+theorem Adm_exactR : ∀ (rest : Rest), AnalysableR rest = true → ExactVR rest
+  | .drop => fun _ => trivial
+  | .refuse => fun _ => trivial
+  | .codec t0 => by
+      intro ha
+      exact Adm_exact t0 (by simpa [AnalysableR] using ha)
+end
 
 /-- §5's empty-container argument, **derived**: the exact row still admits `[]`. -/
 theorem Adm_array_nil (c : Term) : Adm (.array c) (.arr []) = true := by
-  simp [Adm, AdmAll]
+  simp [Adm, allP]
 
 /-- …and it is strictly sharper than the `⊤` that was standing in for it. -/
 theorem Adm_array_sharp : Adm (.array (.literal .string (.of "A" ∅))) (.arr [.str "B"]) = false := by
-  simp [Adm, AdmAll, AdmLit, inL, NEFinset.of]
+  simp [Adm, allP, AdmLit, inL, NEFinset.of]
 
 /-- Nested, which the old row could not see at any depth. -/
 theorem Adm_array_nested :
     Adm (.array (.array (.literal .string (.of "A" ∅)))) (.arr [.arr [.str "B"]]) = false := by
-  simp [Adm, AdmAll, AdmLit, inL, NEFinset.of]
+  simp [Adm, allP, AdmLit, inL, NEFinset.of]
 
 /-- A migration whose *read* reaches the null point while its write does not. -/
 def rNull : Attr → Option Value := fun a => match a with | .null => some (.str "x") | _ => none
@@ -264,14 +864,21 @@ theorem not_ExactV_nullable : ¬ ExactV (.nullable (.legacy .string rNull)) := b
 
 `Analysable`'s `false` rows are the last place a vague row can hide. The three exhaustive
 recursions above already force a *row* per constructor, so a new `Term` constructor cannot
-be added silently. What they do not force is a **reason**: the seven `false` rows could be
-eight, and the eighth would cost one identifier and a docstring nobody has to write.
+be added silently. What they do not force is a **reason**: the three `false` rows could be
+four, and the fourth would cost one identifier and a docstring nobody has to write.
 
 So the excuses are a type. `Excuse.covers` says which term shapes each one may be invoked
 for, and `analysable_excused` — exhaustive over `Term` — says every `Analysable`-false term
 has one. Filing `array` under `opaqueDepth` is then a type error, and adding a row to the
-hatch means naming which of these five things is true of it, in the open, where a reviewer
+hatch means naming which of these four things is true of it, in the open, where a reviewer
 reads the reason rather than trusting that one existed.
+
+The type is two constructors shorter than it was. `opaqueDepth` and `nameAdmission` covered
+`opaq`, `tuple` and `object`, all three of which are exact above, and an excuse with no user
+is an excuse with no content: they are deleted rather than left standing over rows that no
+longer decline. `excuse_witnessed` could not have caught this — it asks for *some* term of a
+covered shape on which exactness fails, and once the row is written there is none — which is
+the residual softness its own docstring concedes, seen from the other side.
 
 `covers`' catch-all is the one place a catch-all is right, and the polarity is why: it
 answers **`false`** — *no excuse covers this* — so a new `Term` constructor lands in "no
@@ -279,17 +886,23 @@ excuse available" and `analysable_excused` forces `Analysable` to call it analys
 forces `Adm_exact` to prove it. The failure mode of every other catch-all in this
 development was that it silently said yes. -/
 
-/-- The five reasons a row may decline to be exact. There is no `other`, deliberately. -/
+/-- The four reasons a row may decline to be exact. There is no `other`, deliberately. -/
 inductive Excuse where
-  /-- The domain recurses on the *input's* own depth, so no syntactic set names it. -/
-  | opaqueDepth
-  /-- `select` admits only where **exactly one** option does, so `⋁` is exact precisely
-      under (U) — a semantic obligation rather than a syntactic row. -/
+  /-- `select` admits only where **exactly one** option does, and the count that decides it
+      is taken over the *rows*, not over `dom(e)`.
+
+      This is **not** the obligation (U): (U) is what the laws need, and a row needs only
+      counting — `(opts.filter (Adm · v)).length = 1` is written as easily as `⋁` is. What
+      forbids it is that `Adm` must stay **sound at every term**, and at `set` and `nullable`
+      it over-approximates. An over-counted filter is a filter that is *not* a singleton, so
+      the sharper row would answer `false` where the union writes: sharpening `union` breaks
+      soundness rather than improving precision. `dunion` escapes exactly because its filter
+      is by *tag* and does not consult a row at all. The anti-monotonicity is `Continuity`'s,
+      and this is where it bites. -/
   | uniqueAdmission
-  /-- `asWireSet` demands payload homogeneity: a fact about attributes, not values. -/
+  /-- `encSet` demands the element map be **injective** — a set codec that merged two
+      elements could not retract — and no row of the elements alone says so. -/
   | payloadShape
-  /-- Name admission and alignment, which are about the shape of the container's spec. -/
-  | nameAdmission
   /-- `ownsNull` is a disjunction over **both** halves, so a read that reaches the null
       point suppresses the wrapper while the write still refuses it. -/
   | nullOwnership
@@ -301,21 +914,26 @@ inductive Excuse where
 /-- Which term shapes each excuse may be invoked for. The catch-all answers `false`, so a
     new constructor is *not* excusable by default — see the note above. -/
 def Excuse.covers : Excuse → Term → Bool
-  | .opaqueDepth,     .opaq _      => true
   | .uniqueAdmission, .union _     => true
-  | .uniqueAdmission, .dunion _ _  => true
   | .payloadShape,    .set _       => true
-  | .nameAdmission,   .object _ _ _  => true
-  | .nameAdmission,   .tuple _ _   => true
   | .nullOwnership,   .nullable _  => true
   | _, _ => false
 
-/-- The subterm a propagating row inherits its answer from. The catch-all is `none` —
-    "does not inherit" — so a new constructor must justify itself at the root rather than
-    quietly borrowing a subterm's excuse. -/
-def inheritsFrom : Term → Option Term
-  | .array c | .record c | .refine c _ | .legacy c _ | .lazy c | .held c _ _ => some c
-  | _ => none
+/-- The answer a propagating row inherits: its children's, conjoined. The catch-all is
+    `true` — "nothing to inherit" — so a new constructor must justify itself at the root
+    rather than quietly borrowing a subterm's excuse.
+
+    A `Term → Option Term` said this while every propagating row had exactly one subterm.
+    `tuple`, `dunion` and `object` propagate too now, and their children are a list, a list
+    and a *function on a `Finset`*; naming one of them would need a choice the axiom base does
+    not have (`Finset.toList` is `Classical.choice`), so the row conjoins them instead. -/
+def childrenAnalysable : Term → Bool
+  | .array c | .record c | .refine c _ | .legacy c _ | .lazy c | .held c _ _ => Analysable c
+  | .tuple ts tail => AnalysableL ts && AnalysableO tail
+  | .dunion _ opts => AnalysableL opts
+  | .object fields fld rest =>
+      decide (∀ k : {k // k ∈ fields}, AnalysableF (fld k) = true) && AnalysableR rest
+  | _ => true
 
 /-- **Every row that declines exactness either names a reason of the right shape, or
     inherits the refusal from a subterm.** Exhaustive over `Term`, so growing the hatch
@@ -323,21 +941,20 @@ def inheritsFrom : Term → Option Term
     `covers`, a visible act — or leaving this proof unclosed. There is no third branch and
     no `other` constructor to reach for. -/
 theorem analysable_excused : ∀ (t : Term), Analysable t = false →
-    (∃ e : Excuse, e.covers t = true) ∨ (∃ c, inheritsFrom t = some c ∧ Analysable c = false)
-  | .opaq _, _      => .inl ⟨.opaqueDepth, rfl⟩
+    (∃ e : Excuse, e.covers t = true) ∨ childrenAnalysable t = false
   | .union _, _     => .inl ⟨.uniqueAdmission, rfl⟩
-  | .dunion _ _, _  => .inl ⟨.uniqueAdmission, rfl⟩
   | .set _, _       => .inl ⟨.payloadShape, rfl⟩
-  | .object _ _ _, _  => .inl ⟨.nameAdmission, rfl⟩
-  | .tuple _ _, _   => .inl ⟨.nameAdmission, rfl⟩
   | .nullable _, _  => .inl ⟨.nullOwnership, rfl⟩
-  -- The propagating wrappers decline only by inheritance, and say so.
+  -- The propagating rows decline only by inheritance, and say so — the four that used to
+  -- name an excuse are here now, which is the whole of the change.
   | .array c, h | .record c, h | .refine c _, h | .legacy c _, h | .lazy c, h
-  | .held c _ _, h => .inr ⟨c, rfl, by simpa [Analysable] using h⟩
+  | .held c _ _, h => .inr (by simpa [childrenAnalysable, Analysable] using h)
+  | .tuple _ _, h | .dunion _ _, h | .object _ _ _, h =>
+      .inr (by simpa [childrenAnalysable, Analysable] using h)
   -- The exact rows: the hypothesis refutes them, which is the point — a term cannot both
   -- carry an exactness proof and claim an excuse.
   | .string, h | .boolean, h | .binary, h | .null, h | .number, h | .decimal, h
-  | .literal _ _, h | .custom _ _, h => nomatch h
+  | .literal _ _, h | .custom _ _, h | .opaq _, h => nomatch h
 
 /-- **No excuse names an exact row.** The hatch cannot be used as a shortcut past an
     obligation that is provable: a covered shape really does decline. -/
@@ -357,8 +974,8 @@ theorem not_excused_of_analysable {t : Term} (h : Analysable t = true) :
     the fueled and fuel-free forms share it. -/
 theorem AdmAll_sound_aux {c : Term} {C : Codec}
     (hc : ∀ {v a}, C.e v = some a → Adm c v = true) :
-    ∀ {xs : List Value} {ys}, traverse C.e xs = some ys → AdmAll c xs = true
-  | [], _, _ => by simp [AdmAll]
+    ∀ {xs : List Value} {ys}, traverse C.e xs = some ys → allP (Adm c) xs = true
+  | [], _, _ => by simp [allP]
   | x :: xs, ys, h => by
       simp only [traverse] at h
       cases hx : C.e x with
@@ -366,15 +983,169 @@ theorem AdmAll_sound_aux {c : Term} {C : Codec}
       | some y =>
         cases hxs : traverse C.e xs with
         | none => rw [hx, hxs] at h; exact nomatch h
-        | some ys' => simp [AdmAll, hc hx, AdmAll_sound_aux hc hxs]
+        | some ys' => simp [allP, hc hx, AdmAll_sound_aux hc hxs]
+
+/-! ### Soundness of the four repaired rows, and why it is a separate proof
+
+Exactness was proved *given* the subterms' exactness. `Adm_sound` may assume no such thing —
+it holds at every term, and at `set`, `nullable` and anything containing them the subterm's
+row is loose. What carries the four rows across that gap is that each is **monotone** in the
+rows it is built from: a conjunction of subterm answers (`tuple`, `object`), or one option's
+answer behind a filter that does not consult a row at all (`dunion`), or no subterm at all
+(`opaq`). Loosen a subterm and the row only loosens.
+
+`union` is exactly the row that fails this test, which is why it keeps its excuse: its
+`select` is a *count*, and a loosened option is one more admitting option, so the count that
+would make it exact makes it refuse where the codec writes. That is `Continuity`'s
+anti-monotonicity, arriving as a soundness obligation. -/
+
+/-- The soundness half, as a predicate on a term. -/
+def SoundV (t : Term) : Prop := ∀ v, ((denote t).e v).isSome = true → Adm t v = true
+
+def SoundField (fd : Field) : Prop :=
+  ∀ v, (((fieldSem fd).codec).e v).isSome = true → AdmField fd v = true
+
+theorem alignP_sound (tail : Option Term) (htl : ∀ t ∈ tail, SoundV t) :
+    ∀ (ts : List Term) (vs : List Value), (∀ t ∈ ts, SoundV t) →
+      ((align (denoteList ts) (denoteOpt tail) vs).bind
+        (traverse fun cv => cv.1.e cv.2)).isSome = true →
+      alignP (AdmList ts) (AdmOptT tail) vs = true
+  | [], [], _, _ => by cases tail <;> simp [alignP, AdmList, AdmOptT]
+  | [], v :: vs, _, h => by
+      cases htail : tail with
+      | none => rw [htail] at h; simp [align, denoteOpt, denoteList] at h
+      | some t =>
+        have ht : SoundV t := htl t (by simp [htail])
+        have ih := alignP_sound tail htl [] vs (by simp)
+        rw [htail] at ih h
+        simp only [AdmList, AdmOptT, denoteList, denoteOpt] at ih h ⊢
+        simp only [alignP, Bool.and_eq_true]
+        cases hal : align [] (some (denote t)) vs with
+        | none =>
+          simp only [align] at h
+          rw [hal] at h
+          simp at h
+        | some ps =>
+          rw [hal] at ih
+          simp only [align, hal, Option.map_some', Option.some_bind, Option.bind_some] at h
+          rw [traverse_cons_isSome, Bool.and_eq_true] at h
+          exact ⟨ht v h.1, ih (by simp [h.2])⟩
+  | t :: ts, [], _, h => by cases tail <;> simp [align, denoteList, denoteOpt] at h
+  | t :: ts, v :: vs, hall, h => by
+      have ht : SoundV t := hall t (by simp)
+      have ih := alignP_sound tail htl ts vs (fun t' ht' => hall t' (by simp [ht']))
+      simp only [alignP, AdmList, AdmOptT, Bool.and_eq_true]
+      simp only [denoteList, align] at h
+      cases hal : align (denoteList ts) (denoteOpt tail) vs with
+      | none => rw [hal] at h; simp at h
+      | some ps =>
+        rw [hal] at ih
+        simp only [hal, Option.map_some', Option.some_bind, Option.bind_some] at h
+        rw [traverse_cons_isSome, Bool.and_eq_true] at h
+        exact ⟨ht v h.1, ih (by simp [h.2])⟩
+
+theorem entry_sound {fields : Finset Name} {fld : {k // k ∈ fields} → Field} {rest : Rest}
+    (hf : ∀ k : {k // k ∈ fields}, SoundField (fld k))
+    (hr : ∀ t, rest = .codec t → SoundV t) (k : Name) (v : Value)
+    (h : ((entryCodec ⟨fields, fun k => fieldSem (fld k)⟩ (rcOf (restSem rest)) k).bind
+      (fun c => c.e v)).isSome = true) :
+    (match entryP ⟨fields, fun k => AdmField (fld k)⟩ (AdmRest rest) k with
+      | some P => P v | none => false) = true := by
+  simp only [entryP, entryCodec, MapOf.at] at h ⊢
+  by_cases hk : k ∈ fields
+  · rw [dif_pos hk] at h ⊢
+    simpa using hf ⟨k, hk⟩ v (by simpa using h)
+  · rw [dif_neg hk] at h ⊢
+    cases rest with
+    | drop => simp [rcOf, restSem] at h
+    | refuse => simp [rcOf, restSem] at h
+    | codec t => simpa [AdmRest, restSem, rcOf] using hr t rfl v (by simpa [rcOf, restSem] using h)
+
+theorem Adm_tuple_sound {ts : List Term} {tail : Option Term}
+    (h : ∀ t ∈ ts, SoundV t) (htl : ∀ t ∈ tail, SoundV t) : SoundV (.tuple ts tail) := by
+  intro v hv
+  cases v
+  case arr vs =>
+    show alignP (AdmList ts) (AdmOptT tail) vs = true
+    refine alignP_sound tail htl ts vs h ?_
+    replace hv : (((align (denoteList ts) (denoteOpt tail) vs).bind
+      (traverse fun cv => cv.1.e cv.2)).map Attr.l).isSome = true := hv
+    rwa [Option.isSome_map'] at hv
+  all_goals simp [denote, tupleCodec] at hv
+
+theorem Adm_object_sound {fields : Finset Name} {fld : {k // k ∈ fields} → Field} {rest : Rest}
+    (hf : ∀ k : {k // k ∈ fields}, SoundField (fld k))
+    (hr : ∀ t, rest = .codec t → SoundV t) : SoundV (.object fields fld rest) := by
+  intro v hv
+  cases v
+  case map keys g =>
+    show (valPresentT fields fld keys &&
+      objAdmV ⟨fields, fun k => AdmField (fld k)⟩ (AdmRest rest) keys g) = true
+    replace hv : ((objectCodec ⟨fields, fun k => fieldSem (fld k)⟩
+      (restSem rest)).e (.map keys g)).isSome = true := hv
+    rw [valPresentT_eq]
+    simp only [objectCodec, objectCodecCore, carriedCodec, mapV, Ctor.out, objWrite,
+      objAdmV, Bool.and_eq_true, decide_eq_true_eq, Option.isSome_map',
+      Option.some_bind, Option.bind_some] at hv ⊢
+    by_cases hvp : valPresentB ⟨fields, fun k => fieldSem (fld k)⟩ keys = true
+    · rw [if_pos hvp] at hv
+      rw [Option.isSome_map', funImage_isSome_iff] at hv
+      exact ⟨hvp, fun k => entry_sound hf hr k.1 (g k) (hv k)⟩
+    · rw [if_neg hvp] at hv; simp at hv
+  all_goals
+    simp [denote, objectCodec, objectCodecCore, carriedCodec, mapV, Ctor.out] at hv
+
+theorem Adm_dunion_sound {d : Name} {opts : List Term}
+    (h : ∀ t ∈ opts, SoundV t) : SoundV (.dunion d opts) := by
+  intro v hv
+  show selTagV d (AdmTagged d opts) v = true
+  replace hv : (select ((denoteTagged d opts).map fun o => OptionSem.byTag d o.1 o.2)
+      (·.admitV) (·.c.e) v).isSome = true := hv
+  simp only [selTagV, denoteTagged_eq, AdmTagged_eq, List.map_map, select] at hv ⊢
+  cases htag : tagOfV d v with
+  | none =>
+    have hz : ∀ t : Term, (OptionSem.byTag d (tagsOf d t) (denote t)).admitV v = false := by
+      intro t; simp [OptionSem.byTag, htag]
+    rw [filter_map_comm] at hv
+    simp only [Function.comp_def] at hv
+    rw [filter_eq_nil_of_all_false _ opts hz] at hv
+    simp at hv
+  | some tag =>
+    have hpred : (fun t => (OptionSem.byTag d (tagsOf d t) (denote t)).admitV v)
+        = (fun t => decide (tag ∈ tagsOf d t)) := by
+      funext t; simp [OptionSem.byTag, htag]
+    have hfil : ((opts.map fun t => (OptionSem.byTag d (tagsOf d t) (denote t))).filter
+        (·.admitV v))
+        = (opts.filter (fun t => decide (tag ∈ tagsOf d t))).map
+            (fun t => OptionSem.byTag d (tagsOf d t) (denote t)) := by
+      rw [filter_map_comm, hpred]
+    have hfil2 : ((opts.map fun t => (tagsOf d t, Adm t)).filter
+        (fun o => decide (tag ∈ o.1)))
+        = (opts.filter (fun t => decide (tag ∈ tagsOf d t))).map
+            (fun t => (tagsOf d t, Adm t)) := by
+      rw [filter_map_comm]
+    simp only [Function.comp_def, hfil, hfil2] at hv ⊢
+    cases hL : opts.filter (fun t => decide (tag ∈ tagsOf d t)) with
+    | nil => rw [hL] at hv; simp at hv
+    | cons t rest =>
+      cases rest with
+      | nil =>
+        have ht : t ∈ opts := List.mem_of_mem_filter (by rw [hL]; simp)
+        rw [hL] at hv
+        simp only [List.map_cons, List.map_nil] at hv ⊢
+        exact h t ht v hv
+      | cons t2 rest2 => rw [hL] at hv; simp at hv
+
+theorem Adm_opaq_sound (lossy : Bool) : SoundV (.opaq lossy) :=
+  fun v hv => (ExactV_opaq lossy v).mpr hv
 
 set_option maxHeartbeats 1000000 in
 -- the shared `term_depth_wf` block has alternatives this theorem's goals do not use
 set_option linter.unreachableTactic false in
 /-- Soundness of every row. The recursion is on `Term.depth`, which
     is what `κ_sound` and `adm_sound` do: a term recursion here makes the equation compiler
-    elaborate all twenty-three heavy cases as one well-founded definition, and it does not
-    finish. The heartbeat bump is for the twenty-three-way `cases`, not for any one case. -/
+    elaborate all twenty-one heavy cases as one well-founded definition, and it does not
+    finish. The heartbeat bump is for the twenty-one-way `cases`, not for any one case. -/
 theorem Adm_sound : ∀ (t : Term) {v a},
     (denote t).e v = some a → Adm t v = true
   | t, v, a, he => by
@@ -408,7 +1179,9 @@ theorem Adm_sound : ∀ (t : Term) {v a},
         simp_all [AdmLit, denote, literalCodec, baseCodec, inL, stringCodec, inD,
                   booleanCodec, binaryCodec, nullCodec]
     case custom ce cp => simp_all [Adm, denote]
-    case opaq lossy => simp [Adm]
+    -- the four repaired rows are sound because they are **exact** given the subterms'
+    -- soundness, and each row is monotone in those — which is what `union` is not.
+    case opaq lossy => exact Adm_opaq_sound lossy v (by rw [he]; rfl)
     case set c =>
       cases v
       case strSet S =>
@@ -433,12 +1206,27 @@ theorem Adm_sound : ∀ (t : Term) {v a},
         obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp (hall y hy)
         exact Adm_sound c ha'
       all_goals (simp only [denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, setCodec] at he; exact nomatch he)
-    case tuple ts tl => cases v <;> simp_all [Adm, denote, tupleCodec]
+    case tuple ts tl =>
+      refine Adm_tuple_sound (fun t' ht' w hw => ?_) (fun t' ht' w hw => ?_) v (by rw [he]; rfl)
+      · obtain ⟨b, hb⟩ := Option.isSome_iff_exists.mp hw
+        exact Adm_sound t' hb
+      · obtain ⟨b, hb⟩ := Option.isSome_iff_exists.mp hw
+        exact Adm_sound t' hb
     -- `objectCodecCore` is `carriedCodec` now, so the non-`map` rows are refused by the
     -- value prism rather than by a traversal: `mapV.out` is what says so.
-    case object fs r =>
-      cases v <;>
-        simp_all [Adm, denote, objectCodec, objectCodecCore, carriedCodec, mapV, Ctor.out]
+    case object fields fld rest =>
+      have hf : ∀ k : {k // k ∈ fields}, SoundField (fld k) := by
+        intro k w hw
+        obtain ⟨b, hb⟩ := Option.isSome_iff_exists.mp hw
+        cases hfd : fld k with
+        | req t0 => rw [hfd] at hb; exact Adm_sound t0 hb
+        | optional t0 => rw [hfd] at hb; exact Adm_sound t0 hb
+        | fallback t0 v0 => rw [hfd] at hb; exact Adm_sound t0 hb
+      have hr : ∀ t0, rest = .codec t0 → SoundV t0 := by
+        intro t0 hrest w hw
+        obtain ⟨b, hb⟩ := Option.isSome_iff_exists.mp hw
+        exact Adm_sound t0 hb
+      exact Adm_object_sound hf hr v (by rw [he]; rfl)
     case array c =>
       cases v
       case arr xs =>
@@ -474,9 +1262,9 @@ theorem Adm_sound : ∀ (t : Term) {v a},
         · simp [Adm]
         · simp [Adm, Adm_sound c hc]
     case dunion d opts =>
-      have h2 := adm_sound _ he
-      have heq : Adm (.dunion d opts) v = adm (.dunion d opts) v := by rw [Adm, adm]; rfl
-      rw [heq]; exact h2
+      refine Adm_dunion_sound (fun t' ht' w hw => ?_) v (by rw [he]; rfl)
+      obtain ⟨b, hb⟩ := Option.isSome_iff_exists.mp hw
+      exact Adm_sound t' hb
     case union opts =>
       simp only [denote, optionSems_eq] at he
       obtain ⟨o, ho, -, hoe⟩ := altCodec_e_admits he
@@ -493,17 +1281,17 @@ theorem Adm_sound : ∀ (t : Term) {v a},
         | nil => exact absurd hts (by simp)
         | cons t0 ts ih =>
           rcases List.mem_cons.mp hts with rfl | h'
-          · simp [AdmAny, htx']
-          · simp [AdmAny, ih h']
-      simpa [Adm] using key opts htx
+          · simp [AdmAny_cons, htx']
+          · simp [AdmAny_cons, ih h']
+      exact key opts htx
 
 termination_by t _ _ => Term.depth t
 decreasing_by term_depth_wf
 
 /-! **Every row is a sound over-approximation, the hatch included.**
 
-    `Adm_exact` binds the sixteen analysable rows to `dom(e)` in both directions. The other
-    seven had, until this theorem, *no* obligation at all: nothing stopped a hatch row being
+    `Adm_exact` binds the eighteen analysable rows to `dom(e)` in both directions. The other
+    three had, until this theorem, *no* obligation at all: nothing stopped a hatch row being
     written `fun _ => false`, which would have been an outright unsoundness rather than the
     imprecision every defect in the log so far has been. A hatch row may be **loose**; it
     may not be **wrong**, and that is now checked. -/
@@ -514,15 +1302,22 @@ declining was *warranted*: a constructor could be added naming a shape that is s
 provable, and the hatch would absorb a row that ought to carry a proof.
 
 So each excuse owes a witness — a term of a shape it covers, for which exactness genuinely
-fails. `excuse_witnessed` collects the five. Adding an excuse now costs a counterexample,
-and for a shape that is exact there is none to be had.
+fails. `excuse_witnessed` collects them. Adding an excuse now costs a counterexample, and
+for a shape that is exact there is none to be had.
 
 **What this does not claim**, because the stronger reading is false: *not* every covered
 term is inexact. `union []` is covered by `uniqueAdmission` and is perfectly exact — `Adm`
 is `false` and so is admission, there being no option to admit. The obligation is that an
 excuse names a real phenomenon, not that it is tight on every term of that shape. Widening
 `covers` to a shape that is always exact is still caught; widening it to one that is
-sometimes exact is not, and that is the residual softness. -/
+sometimes exact is not, and that is the residual softness.
+
+**And that softness had already cost something.** `opaqueDepth` and `nameAdmission` each had
+a witness here and were each covering a shape whose row is now exact: the witnesses were
+terms on which the *old, loose* row over-claimed, not evidence that no exact row existed. A
+witnessed excuse says the row as written is loose; it never said the row had to be. Both
+constructors are deleted above, and the two witnesses (`not_ExactV_tuple`, `not_ExactV_opaq`
+and their read-side twins) with them. -/
 
 /-- An adapter that collapses two distinct strings onto one. -/
 def collapse : Value → Value := fun _ => .str "x"
@@ -538,53 +1333,26 @@ theorem not_ExactV_set : ¬ ExactV (.set (.held .string collapse (fun v => v))) 
   simp (config := { decide := true }) [denote, denote, setCodec, encSet, neSetImage,
         Codec.through, stringCodec, collapse, setImage, sC, nC, bC, NEFinset.of] at h2
 
-/-- `tuple`'s over-claims on alignment: one component against two elements. -/
-theorem not_ExactV_tuple : ¬ ExactV (.tuple [.string] none) := by
-  intro h
-  have := (h (.arr [.str "a", .str "b"])).mp (by simp [Adm])
-  simp [denote, denote, denoteList, denoteOpt, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, tupleCodec, align, stringCodec] at this
+/-- **The counting failing in its purest form.** `select` writes only where *exactly one*
+    option admits, so two copies of one option admit everything and write nothing — while `⋁`
+    says yes. No arithmetic, no `Double`, just the counting `select` does.
 
-/-- **(U) failing in its purest form.** `select` writes only where *exactly one* option
-    admits, so two copies of one option admit everything and write nothing — while `⋁`
-    says yes. No arithmetic, no `Double`, just the counting `select` does. -/
+    This is the row a count *would* fix and may not: see `Excuse.uniqueAdmission`. -/
 theorem not_ExactV_union : ¬ ExactV (.union [.string, .string]) := by
   intro h
-  have := (h (.str "a")).mp (by simp [Adm, AdmAny])
+  have := (h (.str "a")).mp (by simp [Adm, anyP, AdmList])
   simp [denote, denote, optionSems, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, specOf, optionSemOf, altCodec, select,
     stringCodec] at this
-
-/-- `opaq`'s ⊤ over-claims, and after the set repair the **only** place it does so is the
-    numeral gate: `opaq false` is `refuse`, which writes no number at all.
-
-    This used to be witnessed by `.strSet ∅`, which every one of the eight options refused
-    and which needed nothing to construct. `℘⁺fin` has removed that value from the
-    language — the repair working — and taken the Double-free witness with it. What is
-    left is `.num`, and §1 axiomatizes `Double` with `toDec`, `ofDec`, `roundtrip` and
-    `decEq` and **no inhabitant**: `roundtrip` starts from a `Double` rather than producing
-    one. So the hypothesis is an inhabitant of §1's number carrier, which is the honest
-    form of "numbers exist" and is not assumed anywhere else in the development. -/
-theorem not_ExactV_opaq (d : Double) : ¬ ExactV (.opaq false) := by
-  intro h
-  have h2 := (h (.num d)).mp (by simp [Adm])
-  have hd : (denote (Term.opaq false)).e (.num d)
-      = (if false then numberCodec else Codec.empty).e (.num d) := by
-    show (opaqCodecω false).e (.num d) = _
-    simp only [opaqCodecω, Value.depth]
-    exact opaqCodec_e_num false 0 d
-  rw [hd] at h2
-  exact absurd h2 (by simp [Codec.empty])
 
 /-- **Every excuse is earned.** Exhaustive over `Excuse`, so a new constructor must come
     with a term of a shape it covers on which exactness actually fails — which, for a shape
     that is exact, cannot be produced. -/
-theorem excuse_witnessed (d : Double) : ∀ (e : Excuse) (t : Term), e.covers t = true →
+theorem excuse_witnessed : ∀ (e : Excuse) (t : Term), e.covers t = true →
     ∃ t' : Term, e.covers t' = true ∧ ¬ ExactV t'
-  | .opaqueDepth, _, _     => ⟨.opaq false, rfl, not_ExactV_opaq d⟩
   | .uniqueAdmission, _, _ => ⟨.union [.string, .string], rfl, not_ExactV_union⟩
   | .payloadShape, _, _    => ⟨.set (.held .string collapse (fun v => v)), rfl, not_ExactV_set⟩
-  | .nameAdmission, _, _   => ⟨.tuple [.string] none, rfl, not_ExactV_tuple⟩
   | .nullOwnership, _, _   => ⟨.nullable (.legacy .string rNull), rfl, not_ExactV_nullable⟩
-  -- The two attribute-side reasons cover nothing here, so the hypothesis is unsatisfiable.
+  -- The one attribute-side reason covers nothing here, so the hypothesis is unsatisfiable.
   | .valueUnderRead, t, h  => by cases t <;> simp [Excuse.covers] at h
 
 /-! ## The attribute side
@@ -597,7 +1365,95 @@ The mirror is not symmetric, and the asymmetries are §1's rather than this file
 numeric rows go through `Double.ofDec`, `refine` cannot narrow a read, and `legacy` widens
 one. Each is a row here rather than a remark. -/
 
+/-! ### The attribute side's rows, and the three that are not the value side's
+
+The combinators below mirror the value side's one for one, with one genuine difference:
+`objRead` filters the *stored* names through `keepB` before traversing — `drop` is a read-side
+policy — so `objAdmA` carries the filter and `objAdmV` does not. The filter is written as an
+implication over the key set rather than as a `Finset.filter` on the subtype, because the two
+predicates (`keepB` on the denoted table, `keepT` on the term's) are equal and not
+*definitionally* equal, and a filtered subtype would make that difference a transport. -/
+
+/-- An attribute-side row, once the subterms' rows are known. -/
+abbrev AP := Attr → Bool
+
+def allPA (P : AP) : List Attr → Bool
+  | [] => true
+  | x :: xs => P x && allPA P xs
+
+def anyPA : List AP → Attr → Bool
+  | [], _ => false
+  | P :: Ps, a => P a || anyPA Ps a
+
+def alignPA : List AP → Option AP → List Attr → Bool
+  | [], none, [] => true
+  | [], none, _ :: _ => false
+  | [], some _, [] => true
+  | [], some P, a :: as => P a && alignPA [] (some P) as
+  | _ :: _, _, [] => false
+  | P :: Ps, tail, a :: as => P a && alignPA Ps tail as
+
+def entryPA (fs : MapOf AP) (rp : Option AP) (k : Name) : Option AP :=
+  match fs.at k with | some P => some P | none => rp
+
+/-- `objRead`'s traversal, as a row: every *kept* entry goes through its name's codec. -/
+def objAdmA (fs : MapOf AP) (rp : Option AP) (kn : Name → Bool) (keys : Finset Name)
+    (g : {k // k ∈ keys} → Attr) : Bool :=
+  decide (∀ k : {k // k ∈ keys}, kn k.1 = true →
+    (match entryPA fs rp k.1 with | some P => P (g k) | none => false) = true)
+
+/-- `reqPresentB`'s guard off the term's table: `fb` reads to its stand-in, so only `req`
+    must be present. -/
+def reqPresentT (fields : Finset Name) (fld : {k // k ∈ fields} → Field)
+    (keys : Finset Name) : Bool :=
+  decide (∀ k : {k // k ∈ fields},
+    (match fld k with | .req _ => decide (k.1 ∈ keys) | _ => true) = true)
+
+/-- `keepB`'s row: `drop` keeps declared names, the other two keep everything. -/
+def keepT (rest : Rest) (fields : Finset Name) : Name → Bool :=
+  match rest with
+  | .drop => fun k => decide (k ∈ fields)
+  | _ => fun _ => true
+
+/-- `select` at a `dunion`, read side. -/
+def selTagA (d : Name) (os : List (Finset String × AP)) (a : Attr) : Bool :=
+  match tagOfA d a with
+  | none => false
+  | some tag =>
+    match os.filter (fun o => decide (tag ∈ o.1)) with
+    | [o] => o.2 a
+    | _ => false
+
 mutual
+
+/-- **What `opaque` reads, exactly.**
+
+    `.ns` is the one row that has to say something the value side does not: `decSet` refuses a
+    collision, and on the way *in* the payload map is injective for free (`Double.roundtrip`),
+    while on the way *out* it is `Double.ofDec`, which rounds — two numerals may name one
+    double, and then the set the read would produce is smaller than the one it was given. The
+    clause is decidable because §1 axiomatizes `Double.decEq`; it is not decorative, and it is
+    why the write side's `.numSet` row is shorter than this one. -/
+noncomputable def AdmOpaqA (lossy : Bool) : Attr → Bool
+  | .s _ | .bool _ | .b _ | .null => true
+  | .n x => lossy && (match Double.ofDec x.1 with
+                      | some d => Numeral.WF d.toDec
+                      | none => false)
+  | .ss _ => true
+  | .ns S => lossy &&
+      decide (∀ x ∈ S.1, (match Double.ofDec x.1 with
+                          | some d => Numeral.WF d.toDec
+                          | none => false) = true) &&
+      decide (∀ x ∈ S.1, ∀ y ∈ S.1, Double.ofDec x.1 = Double.ofDec y.1 → x = y)
+  | .bs _ => true
+  | .l as => AdmOpaqAL lossy as
+  | .m keys f => decide (∀ k : {k // k ∈ keys}, AdmOpaqA lossy (f k) = true)
+
+noncomputable def AdmOpaqAL (lossy : Bool) : List Attr → Bool
+  | [] => true
+  | a :: as => AdmOpaqA lossy a && AdmOpaqAL lossy as
+
+end
 
 /-- What the literal codec **reads**, exactly.
 
@@ -620,6 +1476,8 @@ noncomputable def AdmALit : (k : GroundKind) → NEFinset k.Carrier → Attr →
                               | none => false)
   | _, _, _ => false
 
+mutual
+
 /-- **The joint admission predicate, attribute side.** The mirror of `Adm` across §1's
     asymmetry, and it is not a symmetric mirror — three rows differ in kind, not degree.
 
@@ -630,8 +1488,9 @@ noncomputable def AdmALit : (k : GroundKind) → NEFinset k.Carrier → Attr →
     * `refine` cannot narrow here: `q` tests the value a read *produces*, and no syntactic
       set of attributes bounds that. The row passes the subterm's through, which is sound
       and not exact.
-    * `legacy` is `⊤`, because `extendRead` widens `p` past the subterm's set — the
-      asymmetry `not_admA_legacy` records, and the reason `adm` and `admA` split at all. -/
+    * `legacy` is the read-side alternative: `p` is the subterm's channel falling back to
+      `r`'s, and `r` is data the term carries — the asymmetry `not_admA_legacy` records, and
+      the reason `adm` and `admA` split at all. -/
 noncomputable def AdmA : Term → Attr → Bool
   | .string   => fun a => match a with | .s _ => true | _ => false
   | .boolean  => fun a => match a with | .bool _ => true | _ => false
@@ -646,39 +1505,73 @@ noncomputable def AdmA : Term → Attr → Bool
   | .decimal  => fun a => match a with | .n x => Numeral.Stored x.1 | _ => false
   | .literal k ls => AdmALit k ls
   | .custom _ cp => fun a => (cp a).isSome
-  | .array c  => fun a => match a with | .l as => AdmAAll c as | _ => false
+  | .array c  => fun a => match a with | .l as => allPA (AdmA c) as | _ => false
   | .record c => fun a =>
       match a with | .m _ g => decide (∀ k, AdmA c (g k) = true) | _ => false
   | .held t _ _ => AdmA t
   | .lazy t   => AdmA t
   -- hatch
   | .refine t _ => AdmA t
-  -- `legacy` is the read-side **alternative**, not an adapter: `p` is the subterm's channel
-  -- falling back to `r`'s, so the domain is the *union* of the two. `r` is data the term
-  -- carries, exactly as `held`'s `f` and `custom`'s `cp` are, so the row can apply it.
   | .legacy t r => fun a => AdmA t a || (r a).isSome
   | .nullable t => fun a => AdmA t a || (match a with | .null => true | _ => false)
-  | .union opts => fun a => AdmAAny opts a
+  | .union opts => fun a => anyPA (AdmAList opts) a
   | .set _    => fun a => match a with | .ss _ | .ns _ | .bs _ => true | _ => false
-  | .tuple _ _ => fun a => match a with | .l _ => true | _ => false
-  | .object _ _ _ => fun a => match a with | .m _ _ => true | _ => false
-  | .dunion d opts => fun a =>
-      match tagOfA d a with
-      | some tag => decide (tag ∈ allTags d opts)
-      | none => false
-  | .opaq _ => fun _ => true
+  | .tuple ts tail => fun a =>
+      match a with | .l as => alignPA (AdmAList ts) (AdmAOptT tail) as | _ => false
+  | .object fields fld rest => fun a =>
+      match a with
+      | .m keys g =>
+          reqPresentT fields fld keys &&
+          objAdmA ⟨fields, fun k => AdmAField (fld k)⟩ (AdmARest rest)
+            (keepT rest fields) keys g
+      | _ => false
+  | .dunion d opts => fun a => selTagA d (AdmATagged d opts) a
+  | .opaq lossy => AdmOpaqA lossy
 
-/-- `⋀` of `AdmA` over a container's entries. -/
-noncomputable def AdmAAll : Term → List Attr → Bool
-  | _, [] => true
-  | c, a :: as => AdmA c a && AdmAAll c as
+noncomputable def AdmAField : Field → AP
+  | .req t => AdmA t
+  | .optional t => AdmA t
+  | .fallback t _ => AdmA t
 
-/-- `⋁` over a union's options; sound, and exact only under (U), as on the value side. -/
-noncomputable def AdmAAny : List Term → Attr → Bool
-  | [], _ => false
-  | t :: ts, a => AdmA t a || AdmAAny ts a
+noncomputable def AdmARest : Rest → Option AP
+  | .drop => none
+  | .refuse => none
+  | .codec t => some (AdmA t)
+
+noncomputable def AdmAList : List Term → List AP
+  | [] => []
+  | t :: ts => AdmA t :: AdmAList ts
+
+noncomputable def AdmAOptT : Option Term → Option AP
+  | none => none
+  | some t => some (AdmA t)
+
+noncomputable def AdmATagged (d : Name) : List Term → List (Finset String × AP)
+  | [] => []
+  | t :: ts => (tagsOf d t, AdmA t) :: AdmATagged d ts
 
 end
+
+@[simp] theorem AdmAList_eq : ∀ ts : List Term, AdmAList ts = ts.map AdmA
+  | [] => rfl
+  | t :: ts => by simp only [AdmAList, List.map]; rw [AdmAList_eq ts]
+
+@[simp] theorem AdmATagged_eq : ∀ (d : Name) (opts : List Term),
+    AdmATagged d opts = opts.map fun t => (tagsOf d t, AdmA t)
+  | _, [] => rfl
+  | d, t :: ts => by simp only [AdmATagged, List.map]; rw [AdmATagged_eq d ts]
+
+/-- `⋁` of `AdmA` over a union's options; sound, and inexact for the reason the value side
+    gives. -/
+noncomputable def AdmAAny (ts : List Term) (a : Attr) : Bool := anyPA (AdmAList ts) a
+
+@[simp] theorem AdmAAny_nil (a : Attr) : AdmAAny [] a = false := rfl
+
+@[simp] theorem AdmAAny_cons (t : Term) (ts : List Term) (a : Attr) :
+    AdmAAny (t :: ts) a = (AdmA t a || AdmAAny ts a) := rfl
+
+theorem AdmA_union (opts : List Term) (a : Attr) :
+    AdmA (.union opts) a = AdmAAny opts a := rfl
 
 /-- `AdmA`'s literal row, named — for the reason `Adm_literal` gives. -/
 @[simp] theorem AdmA_literal (k : GroundKind) (ls : NEFinset k.Carrier) (a : Attr) :
@@ -705,11 +1598,563 @@ theorem AdmALit_null_exact (ls : NEFinset Unit) (a : Attr) :
           nullCodec]
 
 
+/-- The converse direction on the attribute side: the row is `dom(p)`, not a bound on it. -/
+def ExactA (t : Term) : Prop := ∀ a, AdmA t a = true ↔ ((denote t).p a).isSome
+
+theorem alignPA_iff (tail : Option Term) (htl : ∀ t ∈ tail, ExactA t) :
+    ∀ (ts : List Term) (as : List Attr), (∀ t ∈ ts, ExactA t) →
+      (alignPA (AdmAList ts) (AdmAOptT tail) as = true ↔
+        ((align (denoteList ts) (denoteOpt tail) as).bind
+          (traverse fun ca => ca.1.p ca.2)).isSome = true)
+  | [], [], _ => by
+      cases tail <;> simp [alignPA, AdmAList, AdmAOptT, align, denoteList, denoteOpt, traverse]
+  | [], a :: as, _ => by
+      cases htail : tail with
+      | none => simp [alignPA, AdmAList, AdmAOptT, align, denoteList, denoteOpt]
+      | some t =>
+        have ht : ExactA t := htl t (by simp [htail])
+        have ih := alignPA_iff tail htl [] as (by simp)
+        rw [htail] at ih
+        simp only [AdmAList, AdmAOptT, denoteList, denoteOpt] at ih
+        simp only [alignPA, AdmAList, AdmAOptT, align, denoteList, denoteOpt,
+          Bool.and_eq_true]
+        cases hal : align [] (some (denote t)) as with
+        | none =>
+          rw [hal] at ih
+          simp at ih
+          simp [hal, ih]
+        | some ps =>
+          rw [hal] at ih
+          simp only [hal, Option.map_some', Option.some_bind, Option.bind_some] at ih ⊢
+          rw [traverse_cons_isSome, Bool.and_eq_true, ← ht a, ← ih]
+  | t :: ts, [], _ => by
+      cases tail <;> simp [alignPA, AdmAList, AdmAOptT, align, denoteList, denoteOpt]
+  | t :: ts, a :: as, h => by
+      have ht : ExactA t := h t (by simp)
+      have ih := alignPA_iff tail htl ts as (fun t' ht' => h t' (by simp [ht']))
+      simp only [alignPA, AdmAList, AdmAOptT, align, denoteList, denoteOpt, Bool.and_eq_true]
+      cases hal : align (denoteList ts) (denoteOpt tail) as with
+      | none =>
+        simp only [hal, Option.map_none', Option.bind_none, Option.isSome_none] at ih ⊢
+        simp at ih
+        simp [ih]
+      | some ps =>
+        simp only [hal, Option.map_some', Option.some_bind, Option.bind_some] at ih ⊢
+        rw [traverse_cons_isSome, Bool.and_eq_true, ← ht a, ← ih]
+
+theorem ExactA_tuple {ts : List Term} {tail : Option Term}
+    (h : ∀ t ∈ ts, ExactA t) (htl : ∀ t ∈ tail, ExactA t) : ExactA (.tuple ts tail) := by
+  intro a
+  cases a
+  case l as =>
+    show alignPA (AdmAList ts) (AdmAOptT tail) as = true ↔
+      (((align (denoteList ts) (denoteOpt tail) as).bind
+        (traverse fun ca => ca.1.p ca.2)).map Value.arr).isSome = true
+    rw [alignPA_iff tail htl ts as h]
+    cases (align (denoteList ts) (denoteOpt tail) as).bind (traverse fun ca => ca.1.p ca.2) <;>
+      simp
+  all_goals simp [AdmA, denote, tupleCodec]
+
+theorem ExactA_dunion {d : Name} {opts : List Term}
+    (h : ∀ t ∈ opts, ExactA t) : ExactA (.dunion d opts) := by
+  intro a
+  show selTagA d (AdmATagged d opts) a = true ↔
+    (select ((denoteTagged d opts).map fun o => OptionSem.byTag d o.1 o.2)
+      (·.admitA) (·.c.p) a).isSome = true
+  simp only [selTagA, denoteTagged_eq, AdmATagged_eq, List.map_map, select]
+  cases htag : tagOfA d a with
+  | none =>
+    have hz : ∀ t : Term, (OptionSem.byTag d (tagsOf d t) (denote t)).admitA a = false := by
+      intro t; simp [OptionSem.byTag, htag]
+    rw [filter_map_comm]
+    simp only [Function.comp_def]
+    rw [filter_eq_nil_of_all_false _ opts hz]
+    simp
+  | some tag =>
+    have hpred : (fun t => (OptionSem.byTag d (tagsOf d t) (denote t)).admitA a)
+        = (fun t => decide (tag ∈ tagsOf d t)) := by
+      funext t; simp [OptionSem.byTag, htag]
+    have hfil : ((opts.map fun t => (OptionSem.byTag d (tagsOf d t) (denote t))).filter
+        (·.admitA a))
+        = (opts.filter (fun t => decide (tag ∈ tagsOf d t))).map
+            (fun t => OptionSem.byTag d (tagsOf d t) (denote t)) := by
+      rw [filter_map_comm, hpred]
+    have hfil2 : ((opts.map fun t => (tagsOf d t, AdmA t)).filter
+        (fun o => decide (tag ∈ o.1)))
+        = (opts.filter (fun t => decide (tag ∈ tagsOf d t))).map
+            (fun t => (tagsOf d t, AdmA t)) := by
+      rw [filter_map_comm]
+    simp only [Function.comp_def, hfil, hfil2]
+    cases hL : opts.filter (fun t => decide (tag ∈ tagsOf d t)) with
+    | nil => simp
+    | cons t rest =>
+      cases rest with
+      | nil =>
+        have ht : t ∈ opts := List.mem_of_mem_filter (by rw [hL]; simp)
+        simp only [List.map_cons, List.map_nil]
+        exact h t ht a
+      | cons t2 rest2 => simp
+
+def ExactAField (fd : Field) : Prop :=
+  ∀ a, AdmAField fd a = true ↔ (((fieldSem fd).codec).p a).isSome
+
+theorem reqPresentT_eq (fields : Finset Name) (fld : {k // k ∈ fields} → Field)
+    (keys : Finset Name) :
+    reqPresentT fields fld keys = reqPresentB ⟨fields, fun k => fieldSem (fld k)⟩ keys := by
+  simp only [reqPresentT, reqPresentB]
+  congr 1
+  apply propext
+  constructor <;> intro h k <;> have := h k <;> cases hfd : fld k <;>
+    simp_all [reqPresentAt, fieldSem]
+
+theorem keepB_eq (fields : Finset Name) (fld : {k // k ∈ fields} → Field) (rest : Rest)
+    (k : Name) :
+    keepB (restSem rest) ⟨fields, fun k => fieldSem (fld k)⟩ k = keepT rest fields k := by
+  cases rest with
+  | drop =>
+    simp only [keepB, keepT, restSem, MapOf.at]
+    by_cases hk : k ∈ fields <;> simp [hk]
+  | refuse => rfl
+  | codec t => rfl
+
+theorem entryA_iff {fields : Finset Name} {fld : {k // k ∈ fields} → Field} {rest : Rest}
+    (hf : ∀ k : {k // k ∈ fields}, ExactAField (fld k))
+    (hr : ∀ t, rest = .codec t → ExactA t) (k : Name) (a : Attr) :
+    (match entryPA ⟨fields, fun k => AdmAField (fld k)⟩ (AdmARest rest) k with
+      | some P => P a | none => false) = true ↔
+    ((entryCodec ⟨fields, fun k => fieldSem (fld k)⟩ (rcOf (restSem rest)) k).bind
+      (fun c => c.p a)).isSome = true := by
+  simp only [entryPA, entryCodec, MapOf.at]
+  by_cases hk : k ∈ fields
+  · rw [dif_pos hk, dif_pos hk]
+    simpa using hf ⟨k, hk⟩ a
+  · rw [dif_neg hk, dif_neg hk]
+    cases rest with
+    | drop => simp [AdmARest, restSem, rcOf]
+    | refuse => simp [AdmARest, restSem, rcOf]
+    | codec t => simpa [AdmARest, restSem, rcOf] using hr t rfl a
+
+theorem ExactA_object {fields : Finset Name} {fld : {k // k ∈ fields} → Field} {rest : Rest}
+    (hf : ∀ k : {k // k ∈ fields}, ExactAField (fld k))
+    (hr : ∀ t, rest = .codec t → ExactA t) : ExactA (.object fields fld rest) := by
+  intro a
+  cases a
+  case m keys g =>
+    show (reqPresentT fields fld keys &&
+        objAdmA ⟨fields, fun k => AdmAField (fld k)⟩ (AdmARest rest)
+          (keepT rest fields) keys g) = true ↔
+      ((objectCodec ⟨fields, fun k => fieldSem (fld k)⟩ (restSem rest)).p (.m keys g)).isSome
+        = true
+    rw [reqPresentT_eq]
+    simp only [objectCodec, objectCodecCore, carriedCodec, mA, Ctor.out, objRead,
+      objAdmA, Bool.and_eq_true, decide_eq_true_eq, Option.isSome_map',
+      Option.some_bind, Option.bind_some]
+    by_cases hv : reqPresentB ⟨fields, fun k => fieldSem (fld k)⟩ keys = true
+    · rw [if_pos hv]
+      simp only [hv, true_and, Option.isSome_map', funImage_isSome_iff]
+      constructor
+      · intro h k
+        refine (entryA_iff hf hr k.1 _).mp ?_
+        refine h ⟨k.1, (Finset.mem_filter.mp k.2).1⟩ ?_
+        rw [← keepB_eq fields fld rest]
+        exact (Finset.mem_filter.mp k.2).2
+      · intro h k hk
+        refine (entryA_iff hf hr k.1 (g k)).mpr ?_
+        have hmem : k.1 ∈ keys.filter (keepB (restSem rest) ⟨fields, fun k => fieldSem (fld k)⟩ ·) :=
+          Finset.mem_filter.mpr ⟨k.2, by rw [keepB_eq fields fld rest]; exact hk⟩
+        exact h ⟨k.1, hmem⟩
+    · rw [if_neg hv]
+      simp [hv]
+  all_goals
+    simp [AdmA, denote, objectCodec, objectCodecCore, carriedCodec, mA, Ctor.out]
+
+theorem setImage_isSome_iff {α β : Type} [DecidableEq β] {f : α → Option β} {S : Finset α} :
+    (setImage f S).isSome = true ↔
+      ((∀ x ∈ S, (f x).isSome = true) ∧ (∀ x ∈ S, ∀ y ∈ S, f x = f y → x = y)) := by
+  constructor
+  · intro h
+    obtain ⟨T, hT⟩ := Option.isSome_iff_exists.mp h
+    refine ⟨setImage_some hT, ?_⟩
+    unfold setImage at hT
+    split at hT
+    · next hall =>
+      split at hT
+      · next hnd =>
+        intro x hx y hy hxy
+        have := Multiset.inj_on_of_nodup_map hnd ⟨x, hx⟩ (Multiset.mem_attach _ _)
+          ⟨y, hy⟩ (Multiset.mem_attach _ _)
+        refine congrArg Subtype.val (this ?_)
+        simp only
+        rw [← Option.some_inj, Option.some_get, Option.some_get, hxy]
+      · exact nomatch hT
+    · exact nomatch hT
+  · rintro ⟨h1, h2⟩; exact setImage_isSome_of_inj h1 h2
+
+theorem neSetImage_isSome_iff {α β : Type} [DecidableEq β] {f : α → Option β}
+    {S : NEFinset α} :
+    (neSetImage f S).isSome = true ↔
+      ((∀ x ∈ S.1, (f x).isSome = true) ∧ (∀ x ∈ S.1, ∀ y ∈ S.1, f x = f y → x = y)) := by
+  rw [← setImage_isSome_iff]
+  constructor
+  · intro h
+    obtain ⟨T, hT⟩ := Option.isSome_iff_exists.mp h
+    rw [neSetImage_eq_setImage.mp hT]; rfl
+  · intro h
+    obtain ⟨T, hT⟩ := Option.isSome_iff_exists.mp h
+    have h2 := (neSetImage_eq_setImage (f := f) (S := S)
+      (T := ⟨T, setImage_nonempty hT S.2⟩)).mpr hT
+    rw [h2]; rfl
+
+
+mutual
+/-- **`opaque` reads exactly what `AdmOpaqA` says**, at every budget that sees the item. -/
+theorem AdmOpaqA_iff (lossy : Bool) : ∀ (a : Attr) (n : Nat), Attr.depth a ≤ n →
+    (((opaqCodec n lossy).p a).isSome = true ↔ AdmOpaqA lossy a = true)
+  | a, 0, hn => absurd hn (by simpa using Nat.not_le.mpr (Attr.depth_pos a))
+  | .s s, n'+1, _ => by rw [opaqCodec_p_s]; simp [AdmOpaqA, stringCodec]
+  | .bool b, n'+1, _ => by rw [opaqCodec_p_bool]; simp [AdmOpaqA, booleanCodec]
+  | .b b, n'+1, _ => by rw [opaqCodec_p_b]; simp [AdmOpaqA, binaryCodec]
+  | .null, n'+1, _ => by rw [opaqCodec_p_null]; simp [AdmOpaqA, nullCodec]
+  | .n x, n'+1, _ => by
+      rw [opaqCodec_p_n]
+      cases lossy
+      · simp [AdmOpaqA, Codec.empty]
+      · simp only [if_pos rfl, numberCodec_p_n, AdmOpaqA, Bool.true_and, if_true]
+        cases hx : Double.ofDec x.1 with
+        | none => simp [hx]
+        | some d => by_cases hw : Numeral.WF d.toDec = true <;> simp [hx, hw]
+  | .ss S, n'+1, hn => by
+      have h1 : 1 ≤ n' := Nat.le_of_succ_le_succ (by simpa [Attr.depth] using hn)
+      cases n' with
+      | zero => exact absurd h1 (by simp)
+      | succ m =>
+        have hf : ∀ s : String, ((opaqCodec (m+1) lossy).p (.s s)).bind vStr = some s := by
+          intro s; rw [opaqCodec_p_s]; rfl
+        have hns : (neSetImage
+            (fun s => ((opaqCodec (m+1) lossy).p (.s s)).bind vStr) S).isSome = true :=
+          neSetImage_isSome_of_inj (fun x _ => by rw [hf x]; rfl)
+            (fun x _ y _ h => by rw [hf x, hf y] at h; exact Option.some.inj h)
+        obtain ⟨T, hT⟩ := Option.isSome_iff_exists.mp hns
+        rw [opaqCodec_p_ss]
+        show ((decSet (opaqCodec (m+1) lossy) Attr.s S).isSome = true ↔ _)
+        rw [decSet, hT]
+        simp [AdmOpaqA]
+  | .bs S, n'+1, hn => by
+      have h1 : 1 ≤ n' := Nat.le_of_succ_le_succ (by simpa [Attr.depth] using hn)
+      cases n' with
+      | zero => exact absurd h1 (by simp)
+      | succ m =>
+        obtain ⟨x0, hx0⟩ := S.2
+        have hf : ∀ b : Bytes, ((opaqCodec (m+1) lossy).p (.b b)).bind vBin = some b := by
+          intro b; rw [opaqCodec_p_b]; rfl
+        have hs : ∀ b : Bytes, ((opaqCodec (m+1) lossy).p (.b b)).bind vStr = none := by
+          intro b; rw [opaqCodec_p_b]; rfl
+        have hnn : ∀ b : Bytes, ((opaqCodec (m+1) lossy).p (.b b)).bind vNum = none := by
+          intro b; rw [opaqCodec_p_b]; rfl
+        have hns : (neSetImage
+            (fun b => ((opaqCodec (m+1) lossy).p (.b b)).bind vBin) S).isSome = true :=
+          neSetImage_isSome_of_inj (fun x _ => by rw [hf x]; rfl)
+            (fun x _ y _ h => by rw [hf x, hf y] at h; exact Option.some.inj h)
+        obtain ⟨T, hT⟩ := Option.isSome_iff_exists.mp hns
+        rw [opaqCodec_p_bs]
+        show ((decSet (opaqCodec (m+1) lossy) Attr.b S).isSome = true ↔ _)
+        rw [decSet, neSetImage_none (setImage_none_of_fail hx0 (hs x0)),
+          neSetImage_none (setImage_none_of_fail hx0 (hnn x0))]
+        simp [AdmOpaqA, hT]
+  | .ns S, n'+1, hn => by
+      have h1 : 1 ≤ n' := Nat.le_of_succ_le_succ (by simpa [Attr.depth] using hn)
+      cases n' with
+      | zero => exact absurd h1 (by simp)
+      | succ m =>
+        obtain ⟨x0, hx0⟩ := S.2
+        have hstr : ∀ x : WFNumeral,
+            ((opaqCodec (m+1) lossy).p (.n x)).bind vStr = none := by
+          intro x
+          rw [opaqCodec_p_n]
+          cases lossy
+          · rfl
+          · show (numberCodec.p (.n x)).bind vStr = none
+            rw [numberCodec_p_n]
+            cases hx : Double.ofDec x.1 with
+            | none => rfl
+            | some d => by_cases hw : Numeral.WF d.toDec = true <;> simp [hw, vStr]
+        have hnum : ∀ x : WFNumeral, ((opaqCodec (m+1) lossy).p (.n x)).bind vNum
+            = (if lossy then
+                 (Double.ofDec x.1).bind (fun d => if Numeral.WF d.toDec then some d else none)
+               else none) := by
+          intro x
+          rw [opaqCodec_p_n]
+          cases lossy
+          · rfl
+          · show (numberCodec.p (.n x)).bind vNum
+              = (Double.ofDec x.1).bind (fun d => if Numeral.WF d.toDec then some d else none)
+            rw [numberCodec_p_n]
+            cases hx : Double.ofDec x.1 with
+            | none => rfl
+            | some d => by_cases hw : Numeral.WF d.toDec = true <;> simp [hw, vNum]
+        rw [opaqCodec_p_ns]
+        show ((decSet (opaqCodec (m+1) lossy) Attr.n S).isSome = true ↔ _)
+        rw [decSet, neSetImage_none (setImage_none_of_fail hx0 (hstr x0))]
+        show ((match neSetImage (fun x => ((opaqCodec (m+1) lossy).p (.n x)).bind vNum) S with
+                | some T => some (Value.numSet T)
+                | none => (neSetImage
+                    (fun x => ((opaqCodec (m+1) lossy).p (.n x)).bind vBin) S).map
+                      Value.binSet).isSome = true ↔ _)
+        have hbin : ∀ x : WFNumeral, ((opaqCodec (m+1) lossy).p (.n x)).bind vBin = none := by
+          intro x
+          rw [opaqCodec_p_n]
+          cases lossy
+          · rfl
+          · show (numberCodec.p (.n x)).bind vBin = none
+            rw [numberCodec_p_n]
+            cases hx : Double.ofDec x.1 with
+            | none => rfl
+            | some d => by_cases hw : Numeral.WF d.toDec = true <;> simp [hw, vBin]
+        cases hns : neSetImage (fun x => ((opaqCodec (m+1) lossy).p (.n x)).bind vNum) S with
+        | some T =>
+          have hiff := neSetImage_isSome_iff (f := fun x =>
+            ((opaqCodec (m+1) lossy).p (.n x)).bind vNum) (S := S)
+          rw [hns] at hiff
+          obtain ⟨h1', h2'⟩ := hiff.mp rfl
+          have hl : lossy = true := by
+            have := h1' x0 hx0
+            rw [hnum] at this
+            cases lossy
+            · exact absurd this (by simp)
+            · rfl
+          subst hl
+          simp only [Option.isSome_some, true_iff, AdmOpaqA, Bool.true_and,
+            Bool.and_eq_true, decide_eq_true_eq]
+          refine ⟨fun x hx => ?_, fun x hx y hy hxy => ?_⟩
+          · have := h1' x hx
+            rw [hnum] at this
+            simp only [if_pos rfl] at this
+            cases hox : Double.ofDec x.1 with
+            | none => rw [hox] at this; exact absurd this (by simp)
+            | some d =>
+              rw [hox] at this
+              by_cases hw : Numeral.WF d.toDec = true <;> simp_all
+          · refine h2' x hx y hy ?_
+            rw [hnum, hnum]
+            simp only [if_pos rfl, hxy]
+        | none =>
+          rw [neSetImage_none (setImage_none_of_fail hx0 (hbin x0))]
+          simp only [Option.map_none', Option.isSome_none, Bool.false_eq_true, false_iff]
+          intro hrow
+          simp only [AdmOpaqA, Bool.and_eq_true, decide_eq_true_eq] at hrow
+          obtain ⟨⟨hl, hparse⟩, hinj⟩ := hrow
+          subst hl
+          have : (neSetImage (fun x => ((opaqCodec (m+1) true).p (.n x)).bind vNum) S).isSome
+              = true := by
+            refine neSetImage_isSome_iff.mpr ⟨fun x hx => ?_, fun x hx y hy hxy => ?_⟩
+            · have := hparse x hx
+              rw [hnum]
+              simp only [if_pos rfl]
+              cases hox : Double.ofDec x.1 with
+              | none => rw [hox] at this; exact absurd this (by simp)
+              | some d => rw [hox] at this; simp_all
+            · refine hinj x hx y hy ?_
+              rw [hnum, hnum] at hxy
+              simp only [if_pos rfl] at hxy
+              have hx' := hparse x hx
+              have hy' := hparse y hy
+              cases hox : Double.ofDec x.1 with
+              | none => rw [hox] at hx'; exact absurd hx' (by simp)
+              | some dx =>
+                cases hoy : Double.ofDec y.1 with
+                | none => rw [hoy] at hy'; exact absurd hy' (by simp)
+                | some dy =>
+                  rw [hox, hoy] at hxy
+                  rw [hox] at hx'
+                  rw [hoy] at hy'
+                  replace hx' : Numeral.WF dx.toDec = true := hx'
+                  replace hy' : Numeral.WF dy.toDec = true := hy'
+                  simp only [Option.some_bind, if_pos hx', if_pos hy'] at hxy
+                  exact hxy
+          rw [hns] at this
+          exact absurd this (by simp)
+  | .l as, n'+1, hn => by
+      have hL : Attr.depthL as ≤ n' := Nat.le_of_succ_le_succ (by simpa [Attr.depth] using hn)
+      rw [opaqCodec_p_l]
+      show (((traverse (opaqCodec n' lossy).p as).map Value.arr).isSome = true ↔ _)
+      rw [Option.isSome_map']
+      exact AdmOpaqAL_iff lossy as n' hL
+  | .m keys f, n'+1, hn => by
+      have hk : ∀ k, Attr.depth (f k) ≤ n' := fun k =>
+        Nat.le_of_succ_le_succ (le_trans (Attr.depth_map_entry (f := f) k) hn)
+      rw [opaqCodec_p_m]
+      show ((((funImage fun k => (opaqCodec n' lossy).p (f k))).map (Value.map keys)).isSome
+        = true ↔ _)
+      rw [Option.isSome_map', funImage_isSome_iff]
+      simp only [AdmOpaqA, decide_eq_true_eq]
+      exact forall_congr' fun k => AdmOpaqA_iff lossy (f k) n' (hk k)
+
+theorem AdmOpaqAL_iff (lossy : Bool) : ∀ (as : List Attr) (n : Nat), Attr.depthL as ≤ n →
+    ((traverse (opaqCodec n lossy).p as).isSome = true ↔ AdmOpaqAL lossy as = true)
+  | [], _, _ => by simp [traverse, AdmOpaqAL]
+  | a :: as, n, hn => by
+      have ha : Attr.depth a ≤ n := le_trans (by simp [Attr.depthL]) hn
+      have has : Attr.depthL as ≤ n := le_trans (by simp [Attr.depthL]) hn
+      rw [traverse_cons_isSome]
+      simp only [AdmOpaqAL, Bool.and_eq_true]
+      rw [AdmOpaqA_iff lossy a n ha, AdmOpaqAL_iff lossy as n has]
+end
+
+theorem ExactA_opaq (lossy : Bool) : ExactA (.opaq lossy) := by
+  intro a
+  show AdmOpaqA lossy a = true ↔ ((opaqCodec (Attr.depth a) lossy).p a).isSome = true
+  exact (AdmOpaqA_iff lossy a (Attr.depth a) (Nat.le_refl _)).symm
+
+def SoundA (t : Term) : Prop := ∀ a, ((denote t).p a).isSome = true → AdmA t a = true
+
+def SoundAField (fd : Field) : Prop :=
+  ∀ a, (((fieldSem fd).codec).p a).isSome = true → AdmAField fd a = true
+
+theorem alignPA_sound (tail : Option Term) (htl : ∀ t ∈ tail, SoundA t) :
+    ∀ (ts : List Term) (as : List Attr), (∀ t ∈ ts, SoundA t) →
+      ((align (denoteList ts) (denoteOpt tail) as).bind
+        (traverse fun ca => ca.1.p ca.2)).isSome = true →
+      alignPA (AdmAList ts) (AdmAOptT tail) as = true
+  | [], [], _, _ => by cases tail <;> simp [alignPA, AdmAList, AdmAOptT]
+  | [], a :: as, _, h => by
+      cases htail : tail with
+      | none => rw [htail] at h; simp [align, denoteOpt, denoteList] at h
+      | some t =>
+        have ht : SoundA t := htl t (by simp [htail])
+        have ih := alignPA_sound tail htl [] as (by simp)
+        rw [htail] at ih h
+        simp only [AdmAList, AdmAOptT, denoteList, denoteOpt] at ih h ⊢
+        simp only [alignPA, Bool.and_eq_true]
+        cases hal : align [] (some (denote t)) as with
+        | none =>
+          simp only [align] at h
+          rw [hal] at h
+          simp at h
+        | some ps =>
+          rw [hal] at ih
+          simp only [align, hal, Option.map_some', Option.some_bind, Option.bind_some] at h
+          rw [traverse_cons_isSome, Bool.and_eq_true] at h
+          exact ⟨ht a h.1, ih (by simp [h.2])⟩
+  | t :: ts, [], _, h => by cases tail <;> simp [align, denoteList, denoteOpt] at h
+  | t :: ts, a :: as, hall, h => by
+      have ht : SoundA t := hall t (by simp)
+      have ih := alignPA_sound tail htl ts as (fun t' ht' => hall t' (by simp [ht']))
+      simp only [alignPA, AdmAList, AdmAOptT, Bool.and_eq_true]
+      simp only [denoteList, align] at h
+      cases hal : align (denoteList ts) (denoteOpt tail) as with
+      | none => rw [hal] at h; simp at h
+      | some ps =>
+        rw [hal] at ih
+        simp only [hal, Option.map_some', Option.some_bind, Option.bind_some] at h
+        rw [traverse_cons_isSome, Bool.and_eq_true] at h
+        exact ⟨ht a h.1, ih (by simp [h.2])⟩
+
+theorem entryA_sound {fields : Finset Name} {fld : {k // k ∈ fields} → Field} {rest : Rest}
+    (hf : ∀ k : {k // k ∈ fields}, SoundAField (fld k))
+    (hr : ∀ t, rest = .codec t → SoundA t) (k : Name) (a : Attr)
+    (h : ((entryCodec ⟨fields, fun k => fieldSem (fld k)⟩ (rcOf (restSem rest)) k).bind
+      (fun c => c.p a)).isSome = true) :
+    (match entryPA ⟨fields, fun k => AdmAField (fld k)⟩ (AdmARest rest) k with
+      | some P => P a | none => false) = true := by
+  simp only [entryPA, entryCodec, MapOf.at] at h ⊢
+  by_cases hk : k ∈ fields
+  · rw [dif_pos hk] at h ⊢
+    simpa using hf ⟨k, hk⟩ a (by simpa using h)
+  · rw [dif_neg hk] at h ⊢
+    cases rest with
+    | drop => simp [rcOf, restSem] at h
+    | refuse => simp [rcOf, restSem] at h
+    | codec t =>
+      simpa [AdmARest, restSem, rcOf] using hr t rfl a (by simpa [rcOf, restSem] using h)
+
+theorem AdmA_tuple_sound {ts : List Term} {tail : Option Term}
+    (h : ∀ t ∈ ts, SoundA t) (htl : ∀ t ∈ tail, SoundA t) : SoundA (.tuple ts tail) := by
+  intro a ha
+  cases a
+  case l as =>
+    show alignPA (AdmAList ts) (AdmAOptT tail) as = true
+    refine alignPA_sound tail htl ts as h ?_
+    replace ha : (((align (denoteList ts) (denoteOpt tail) as).bind
+      (traverse fun ca => ca.1.p ca.2)).map Value.arr).isSome = true := ha
+    rwa [Option.isSome_map'] at ha
+  all_goals simp [denote, tupleCodec] at ha
+
+theorem AdmA_object_sound {fields : Finset Name} {fld : {k // k ∈ fields} → Field} {rest : Rest}
+    (hf : ∀ k : {k // k ∈ fields}, SoundAField (fld k))
+    (hr : ∀ t, rest = .codec t → SoundA t) : SoundA (.object fields fld rest) := by
+  intro a ha
+  cases a
+  case m keys g =>
+    show (reqPresentT fields fld keys &&
+      objAdmA ⟨fields, fun k => AdmAField (fld k)⟩ (AdmARest rest)
+        (keepT rest fields) keys g) = true
+    replace ha : ((objectCodec ⟨fields, fun k => fieldSem (fld k)⟩
+      (restSem rest)).p (.m keys g)).isSome = true := ha
+    rw [reqPresentT_eq]
+    simp only [objectCodec, objectCodecCore, carriedCodec, mA, Ctor.out, objRead,
+      objAdmA, Bool.and_eq_true, decide_eq_true_eq, Option.isSome_map',
+      Option.some_bind, Option.bind_some] at ha ⊢
+    by_cases hrp : reqPresentB ⟨fields, fun k => fieldSem (fld k)⟩ keys = true
+    · rw [if_pos hrp] at ha
+      rw [Option.isSome_map', funImage_isSome_iff] at ha
+      refine ⟨hrp, fun k hk => ?_⟩
+      have hmem : k.1 ∈ keys.filter
+          (keepB (restSem rest) ⟨fields, fun k => fieldSem (fld k)⟩ ·) :=
+        Finset.mem_filter.mpr ⟨k.2, by rw [keepB_eq fields fld rest]; exact hk⟩
+      exact entryA_sound hf hr k.1 (g k) (ha ⟨k.1, hmem⟩)
+    · rw [if_neg hrp] at ha; simp at ha
+  all_goals
+    simp [denote, objectCodec, objectCodecCore, carriedCodec, mA, Ctor.out] at ha
+
+theorem AdmA_dunion_sound {d : Name} {opts : List Term}
+    (h : ∀ t ∈ opts, SoundA t) : SoundA (.dunion d opts) := by
+  intro a ha
+  show selTagA d (AdmATagged d opts) a = true
+  replace ha : (select ((denoteTagged d opts).map fun o => OptionSem.byTag d o.1 o.2)
+      (·.admitA) (·.c.p) a).isSome = true := ha
+  simp only [selTagA, denoteTagged_eq, AdmATagged_eq, List.map_map, select] at ha ⊢
+  cases htag : tagOfA d a with
+  | none =>
+    have hz : ∀ t : Term, (OptionSem.byTag d (tagsOf d t) (denote t)).admitA a = false := by
+      intro t; simp [OptionSem.byTag, htag]
+    rw [filter_map_comm] at ha
+    simp only [Function.comp_def] at ha
+    rw [filter_eq_nil_of_all_false _ opts hz] at ha
+    simp at ha
+  | some tag =>
+    have hpred : (fun t => (OptionSem.byTag d (tagsOf d t) (denote t)).admitA a)
+        = (fun t => decide (tag ∈ tagsOf d t)) := by
+      funext t; simp [OptionSem.byTag, htag]
+    have hfil : ((opts.map fun t => (OptionSem.byTag d (tagsOf d t) (denote t))).filter
+        (·.admitA a))
+        = (opts.filter (fun t => decide (tag ∈ tagsOf d t))).map
+            (fun t => OptionSem.byTag d (tagsOf d t) (denote t)) := by
+      rw [filter_map_comm, hpred]
+    have hfil2 : ((opts.map fun t => (tagsOf d t, AdmA t)).filter
+        (fun o => decide (tag ∈ o.1)))
+        = (opts.filter (fun t => decide (tag ∈ tagsOf d t))).map
+            (fun t => (tagsOf d t, AdmA t)) := by
+      rw [filter_map_comm]
+    simp only [Function.comp_def, hfil, hfil2] at ha ⊢
+    cases hL : opts.filter (fun t => decide (tag ∈ tagsOf d t)) with
+    | nil => rw [hL] at ha; simp at ha
+    | cons t rest =>
+      cases rest with
+      | nil =>
+        have ht : t ∈ opts := List.mem_of_mem_filter (by rw [hL]; simp)
+        rw [hL] at ha
+        simp only [List.map_cons, List.map_nil] at ha ⊢
+        exact h t ht a ha
+      | cons t2 rest2 => rw [hL] at ha; simp at ha
+
+theorem AdmA_opaq_sound (lossy : Bool) : SoundA (.opaq lossy) :=
+  fun a ha => (ExactA_opaq lossy a).mpr ha
+
 /-- Entrywise soundness lifted to a container's traversal, attribute side. -/
 theorem AdmAAll_sound_aux {c : Term} {C : Codec}
     (hc : ∀ {a v}, C.p a = some v → AdmA c a = true) :
-    ∀ {as : List Attr} {vs}, traverse C.p as = some vs → AdmAAll c as = true
-  | [], _, _ => by simp [AdmAAll]
+    ∀ {as : List Attr} {vs}, traverse C.p as = some vs → allPA (AdmA c) as = true
+  | [], _, _ => by simp [allPA]
   | x :: as, vs, h => by
       simp only [traverse] at h
       cases hx : C.p x with
@@ -717,7 +2162,7 @@ theorem AdmAAll_sound_aux {c : Term} {C : Codec}
       | some y =>
         cases hxs : traverse C.p as with
         | none => rw [hx, hxs] at h; exact nomatch h
-        | some vs' => simp [AdmAAll, hc hx, AdmAAll_sound_aux hc hxs]
+        | some vs' => simp [allPA, hc hx, AdmAAll_sound_aux hc hxs]
 
 set_option maxHeartbeats 1000000 in
 -- the shared `term_depth_wf` block has alternatives this theorem's goals do not use
@@ -762,17 +2207,33 @@ theorem AdmA_sound : ∀ (t : Term) {a v},
               cases a <;> simp [AdmALit, admA, admALit]]
          exact admA_sound _ hp)
     case custom ce cp => simp_all [AdmA, denote]
-    case opaq lossy => simp [AdmA]
+    -- the four repaired rows, sound for the reason the value side gives
+    case opaq lossy => exact AdmA_opaq_sound lossy a (by rw [hp]; rfl)
     case legacy c r =>
       simp only [denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, Codec.extendRead] at hp
       cases hc : (denote c).p a with
       | some w => rw [hc] at hp; simp [AdmA, AdmA_sound c hc]
       | none => rw [hc] at hp; simp [AdmA, hp]
     case set c => cases a <;> simp_all [AdmA, denote, setCodec]
-    case tuple ts tl => cases a <;> simp_all [AdmA, denote, tupleCodec]
-    case object fs r =>
-      cases a <;>
-        simp_all [AdmA, denote, objectCodec, objectCodecCore, carriedCodec, mA, Ctor.out]
+    case tuple ts tl =>
+      refine AdmA_tuple_sound (fun t' ht' b hb => ?_) (fun t' ht' b hb => ?_) a (by rw [hp]; rfl)
+      · obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp hb
+        exact AdmA_sound t' hw
+      · obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp hb
+        exact AdmA_sound t' hw
+    case object fields fld rest =>
+      have hf : ∀ k : {k // k ∈ fields}, SoundAField (fld k) := by
+        intro k b hb
+        obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp hb
+        cases hfd : fld k with
+        | req t0 => rw [hfd] at hw; exact AdmA_sound t0 hw
+        | optional t0 => rw [hfd] at hw; exact AdmA_sound t0 hw
+        | fallback t0 v0 => rw [hfd] at hw; exact AdmA_sound t0 hw
+      have hr : ∀ t0, rest = .codec t0 → SoundA t0 := by
+        intro t0 hrest b hb
+        obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp hb
+        exact AdmA_sound t0 hw
+      exact AdmA_object_sound hf hr a (by rw [hp]; rfl)
     case array c =>
       cases a
       case l as =>
@@ -807,9 +2268,9 @@ theorem AdmA_sound : ∀ (t : Term) {a v},
         · simp [AdmA]
         · simp [AdmA, AdmA_sound c hc]
     case dunion d opts =>
-      have h2 := admA_sound _ hp
-      have heq : AdmA (.dunion d opts) a = admA (.dunion d opts) a := by rw [AdmA, admA]; rfl
-      rw [heq]; exact h2
+      refine AdmA_dunion_sound (fun t' ht' b hb => ?_) a (by rw [hp]; rfl)
+      obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp hb
+      exact AdmA_sound t' hw
     case union opts =>
       simp only [denote, optionSems_eq] at hp
       obtain ⟨o, ho, -, hop⟩ := altCodec_p_admits hp
@@ -825,9 +2286,9 @@ theorem AdmA_sound : ∀ (t : Term) {a v},
         | nil => exact absurd hts (by simp)
         | cons t0 ts ih =>
           rcases List.mem_cons.mp hts with rfl | h'
-          · simp [AdmAAny, htx']
-          · simp [AdmAAny, ih h']
-      simpa [AdmA] using key opts htx
+          · simp [AdmAAny_cons, htx']
+          · simp [AdmAAny_cons, ih h']
+      exact key opts htx
 
 termination_by t _ _ => Term.depth t
 decreasing_by term_depth_wf
@@ -835,60 +2296,136 @@ decreasing_by term_depth_wf
 /-! **Every attribute row is a sound over-approximation, the hatch included** — the
     attribute-side counterpart of `Adm_sound`, and the same obligation for the same reason.
 
-    Exactness for these rows is **not** yet proved; the value side's `Adm_exact` has no
-    mirror here. Until it does, `AdmA` carries one obligation where `Adm` carries two, and
-    the analysis tables cannot be migrated onto the pair. -/
-/-- The converse direction on the attribute side: the row is `dom(p)`, not a bound on it. -/
-def ExactA (t : Term) : Prop := ∀ a, AdmA t a = true ↔ ((denote t).p a).isSome
+    Exactness now has a mirror here (`AdmA_exact`), so both sides of the pair carry two
+    obligations rather than one and a half, and the analysis tables can be read off either. -/
 
-/-- The attribute-side hatch, wider than the value side's by three rows, and the three are
-    the asymmetries §1 imposes rather than anything this file chose.
+mutual
+/-- The attribute-side hatch, wider than the value side's by one row, and that row is an
+    asymmetry §1 imposes rather than anything this file chose.
 
     * `refine` — `q` tests the value a read *produces*; no syntactic set of attributes
       bounds that. This is the row `admA` could never narrow either, and the reason `adm`
       and `admA` are two functions rather than one.
-    * `nullable` — `ownsNull` again, and this side is where the disjunction bites first.
+    * `union`, `set`, `nullable` — the value side's three, for the value side's reasons.
 
-    The remaining six are the same shapes the value side excuses. -/
+    `legacy` left this list when its row became the union of the two channels; `tuple`,
+    `object`, `dunion` and `opaq` leave it now. -/
 def AnalysableA : Term → Bool
   | .string | .boolean | .binary | .null | .number | .decimal
-  | .literal _ _ | .custom _ _ => true
+  | .literal _ _ | .custom _ _ | .opaq _ => true
   | .array c | .record c | .held c _ _ | .lazy c | .legacy c _ => AnalysableA c
-  | .refine _ _ | .nullable _ | .union _
-  | .set _ | .tuple _ _ | .object _ _ _ | .dunion _ _ | .opaq _ => false
+  | .tuple ts tail => AnalysableAL ts && AnalysableAO tail
+  | .dunion _ opts => AnalysableAL opts
+  | .object fields fld rest =>
+      decide (∀ k : {k // k ∈ fields}, AnalysableAF (fld k) = true) && AnalysableAR rest
+  | .refine _ _ | .nullable _ | .union _ | .set _ => false
 
-/-- `AdmAAll` transported across the entry's exactness. -/
+def AnalysableAL : List Term → Bool
+  | [] => true
+  | t :: ts => AnalysableA t && AnalysableAL ts
+
+def AnalysableAO : Option Term → Bool
+  | none => true
+  | some t => AnalysableA t
+
+def AnalysableAF : Field → Bool
+  | .req t => AnalysableA t
+  | .optional t => AnalysableA t
+  | .fallback t _ => AnalysableA t
+
+def AnalysableAR : Rest → Bool
+  | .drop | .refuse => true
+  | .codec t => AnalysableA t
+end
+
+def ExactAL : List Term → Prop
+  | [] => True
+  | t :: ts => ExactA t ∧ ExactAL ts
+
+def ExactAO : Option Term → Prop
+  | none => True
+  | some t => ExactA t
+
+def ExactAR : Rest → Prop
+  | .drop | .refuse => True
+  | .codec t => ExactA t
+
+theorem exactAL_mem : ∀ (ts : List Term), ExactAL ts → ∀ t ∈ ts, ExactA t
+  | [], _, t, ht => absurd ht (by simp)
+  | t0 :: ts, h, t, ht => by
+      rcases List.mem_cons.mp ht with rfl | ht'
+      · exact h.1
+      · exact exactAL_mem ts h.2 t ht'
+
+theorem exactAO_mem : ∀ (tail : Option Term), ExactAO tail → ∀ t ∈ tail, ExactA t
+  | none, _, t, ht => absurd ht (by simp)
+  | some t0, h, t, ht => by
+      have heq : t0 = t := by simpa using ht
+      subst heq; exact h
+
+theorem exactAR_codec : ∀ (rest : Rest), ExactAR rest → ∀ t, rest = .codec t → ExactA t
+  | .drop, _, t, h => nomatch h
+  | .refuse, _, t, h => nomatch h
+  | .codec t0, h, t, hc => by
+      have heq : t = t0 := by injection hc.symm
+      subst heq; exact h
+
+/-- `allPA` transported across the entry's exactness. -/
 theorem AdmAAll_iff {c : Term} (h : ExactA c) : ∀ as : List Attr,
-    AdmAAll c as = true ↔ ∀ a ∈ as, ((denote c).p a).isSome = true := by
+    allPA (AdmA c) as = true ↔ ∀ a ∈ as, ((denote c).p a).isSome = true := by
   intro as; induction as with
-  | nil => simp [AdmAAll]
-  | cons a as ih => simp [AdmAAll, ih, h a]
+  | nil => simp [allPA]
+  | cons a as ih => simp [allPA, ih, h a]
 
-/-- **Fourteen of the twenty-three attribute rows are exact.** Two fewer than the value
-    side, and the two are `refine` and `legacy` — the pair whose asymmetry is the reason
-    §5 needed `adm` and `admA` rather than one function.
+mutual
+/-- **Seventeen of the twenty-one attribute rows are exact.** One fewer than the value side,
+    and the one is `refine` — half of the pair whose asymmetry is the reason §5 needed `adm`
+    and `admA` rather than one function; `legacy`, the other half, is exact here because its
+    row is the union of the two channels it reads on.
 
     The numeric rows are the interesting ones: they reach `dom(p)` through `Double.ofDec`,
     which is axiomatized, and are exact anyway — a row may *call* an axiomatized function
     even though no finite set of numerals describes its domain. §5 wrote `⊤` there. -/
 theorem AdmA_exact : ∀ (t : Term), AnalysableA t = true → ExactA t
-  | .string, _ => by intro a; cases a <;> simp [AdmA, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, stringCodec]
-  | .boolean, _ => by intro a; cases a <;> simp [AdmA, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, booleanCodec]
-  | .binary, _ => by intro a; cases a <;> simp [AdmA, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, binaryCodec]
-  | .null, _ => by intro a; cases a <;> simp [AdmA, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, nullCodec]
-  | .number, _ => by
-      intro a
+  -- the four rows §5 excused on this side too
+  | .tuple ts tail => by
+      intro ha
+      simp only [AnalysableA, Bool.and_eq_true] at ha
+      exact ExactA_tuple (exactAL_mem ts (AdmA_exactL ts ha.1))
+        (exactAO_mem tail (AdmA_exactO tail ha.2))
+  | .dunion d opts => by
+      intro ha
+      exact ExactA_dunion
+        (exactAL_mem opts (AdmA_exactL opts (by simpa [AnalysableA] using ha)))
+  | .object fields fld rest => by
+      intro ha
+      simp only [AnalysableA, Bool.and_eq_true, decide_eq_true_eq] at ha
+      exact ExactA_object (fun k => AdmA_exactF (fld k) (ha.1 k))
+        (exactAR_codec rest (AdmA_exactR rest ha.2))
+  | .opaq lossy => fun _ => ExactA_opaq lossy
+  -- the four that decline, refuted by the hypothesis
+  | .refine _ _ => by intro ha; simp [AnalysableA] at ha
+  | .nullable _ => by intro ha; simp [AnalysableA] at ha
+  | .union _ => by intro ha; simp [AnalysableA] at ha
+  | .set _ => by intro ha; simp [AnalysableA] at ha
+
+  | .string => by intro _ a; cases a <;> simp [AdmA, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, stringCodec]
+  | .boolean => by intro _ a; cases a <;> simp [AdmA, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, booleanCodec]
+  | .binary => by intro _ a; cases a <;> simp [AdmA, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, binaryCodec]
+  | .null => by intro _ a; cases a <;> simp [AdmA, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, nullCodec]
+  | .number => by
+      intro _ a
       cases a
       case n x =>
         simp only [AdmA, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, numberCodec]
         cases hx : Double.ofDec x.1 <;> simp [hx]
       all_goals simp [AdmA, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, numberCodec]
-  | .decimal, _ => by intro a; cases a <;> simp [AdmA, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, decimalCodec]
+  | .decimal => by intro _ a; cases a <;> simp [AdmA, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, decimalCodec]
   -- Three rows into one. The `number` base is the only one needing `Double.ofDec`, and it is
   -- also the only one where unfolding `numberCodec` is safe here: the `simp only` fixes the
   -- shape before `Numeral.WF`'s parser can be reached.
-  | .literal k ls, _ => by
-      intro a
+  | .literal k ls => by
+      intro _ a
       cases k
       case number =>
         cases a
@@ -917,8 +2454,9 @@ theorem AdmA_exact : ∀ (t : Term), AnalysableA t = true → ExactA t
                           inL, booleanCodec]
       case binary => exact AdmALit_binary_exact ls a
       case null => exact AdmALit_null_exact ls a
-  | .custom ce cp, _ => by intro a; simp [AdmA, denote, denote]
-  | .array c, ha => by
+  | .custom ce cp => by intro _ a; simp [AdmA, denote, denote]
+  | .array c => by
+      intro ha
       have hc := AdmA_exact c (by simpa [AnalysableA] using ha)
       intro a
       cases a
@@ -927,7 +2465,8 @@ theorem AdmA_exact : ∀ (t : Term), AnalysableA t = true → ExactA t
         rw [AdmAAll_iff hc, ← traverse_isSome_iff]
         cases traverse (denote c).p as <;> simp
       all_goals simp [AdmA, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, arrayCodec]
-  | .record c, ha => by
+  | .record c => by
+      intro ha
       have hc := AdmA_exact c (by simpa [AnalysableA] using ha)
       intro a
       cases a
@@ -937,31 +2476,61 @@ theorem AdmA_exact : ∀ (t : Term), AnalysableA t = true → ExactA t
         exact forall_congr' fun k => hc (g k)
       all_goals simp only [AdmA, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, recordCodec, Option.map_none',
         Option.isSome_none, Bool.false_eq_true]
-  | .held c f g, ha => by
+  | .held c f g => by
+      intro ha
       have hc := AdmA_exact c (by simpa [AnalysableA] using ha)
       intro a
       simp only [AdmA, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, Codec.through]
       rw [hc a]
       cases (denote c).p a <;> simp
-  | .lazy c, ha => by
+  | .lazy c => by
+      intro ha
       have hc := AdmA_exact c (by simpa [AnalysableA] using ha)
       intro a; simpa [AdmA, denote] using hc a
-  | .legacy c r, ha => by
+  | .legacy c r => by
+      intro ha
       have hc := AdmA_exact c (by simpa [AnalysableA] using ha)
       intro a
       simp only [AdmA, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, Codec.extendRead]
       cases hx : (denote c).p a <;> simp [hc a, hx]
-  | .refine _ _, ha | .nullable _, ha | .union _, ha
-  | .set _, ha | .tuple _ _, ha | .object _ _ _, ha | .dunion _ _, ha
-  | .opaq _, ha => by simp [AnalysableA] at ha
+
+theorem AdmA_exactL : ∀ (ts : List Term), AnalysableAL ts = true → ExactAL ts
+  | [] => fun _ => trivial
+  | t0 :: ts => by
+      intro ha
+      simp only [AnalysableAL, Bool.and_eq_true] at ha
+      exact ⟨AdmA_exact t0 ha.1, AdmA_exactL ts ha.2⟩
+
+theorem AdmA_exactO : ∀ (tail : Option Term), AnalysableAO tail = true → ExactAO tail
+  | none => fun _ => trivial
+  | some t0 => by
+      intro ha
+      exact AdmA_exact t0 (by simpa [AnalysableAO] using ha)
+
+theorem AdmA_exactF : ∀ (fd : Field), AnalysableAF fd = true → ExactAField fd
+  | .req t0 => by intro ha a; exact AdmA_exact t0 (by simpa [AnalysableAF] using ha) a
+  | .optional t0 => by intro ha a; exact AdmA_exact t0 (by simpa [AnalysableAF] using ha) a
+  | .fallback t0 _ => by intro ha a; exact AdmA_exact t0 (by simpa [AnalysableAF] using ha) a
+
+theorem AdmA_exactR : ∀ (rest : Rest), AnalysableAR rest = true → ExactAR rest
+  | .drop => fun _ => trivial
+  | .refuse => fun _ => trivial
+  | .codec t0 => by
+      intro ha
+      exact AdmA_exact t0 (by simpa [AnalysableAR] using ha)
+end
 
 /-! ### The attribute side's excuses, and their witnesses
 
-The value side's five reasons apply here too, and two more do — `refine`, which cannot
-narrow a read because `q` tests the value a read *produces*, and `legacy`, which widens one
-by construction. Those two cover nothing on the value side, which is why `excuse_witnessed`
-is stated with the covering as a hypothesis: an excuse must be witnessed **on the side it is
-used on**, and neither side has to answer for the other's reasons. -/
+The value side's three reasons apply here too, and one more does — `refine`, which cannot
+narrow a read because `q` tests the value a read *produces*. It covers nothing on the value
+side, which is why `excuse_witnessed` is stated with the covering as a hypothesis: an excuse
+must be witnessed **on the side it is used on**, and neither side has to answer for the
+other's reasons.
+
+`legacy` used to be the second such reason and is exact on both sides now; `tuple` and
+`opaq` used to be witnessed here and are exact too, so their witnesses are gone rather than
+restated. -/
 
 /-- `set`'s member gate over-claims on the read side: `AdmA` accepts all three wire
     families, and `set(string)` reads only `SS`. The empty run used to be the witness;
@@ -975,39 +2544,12 @@ theorem not_ExactA_set : ¬ ExactA (.set .string) := by
   have := decSet_elem hv (WFNumeral.of "1") (NEFinset.mem_of _ ∅)
   simp [stringCodec] at this
 
-/-- Alignment again, read side. -/
-theorem not_ExactA_tuple : ¬ ExactA (.tuple [.string] none) := by
-  intro h
-  have := (h (.l [.s "a", .s "b"])).mp (by simp [AdmA])
-  simp [denote, denote, denoteList, denoteOpt, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, tupleCodec, align, stringCodec] at this
-
 /-- (U) failing, read side: two options admit and `select` reads nothing. -/
 theorem not_ExactA_union : ¬ ExactA (.union [.string, .string]) := by
   intro h
-  have := (h (.s "a")).mp (by simp [AdmA, AdmAAny])
+  have := (h (.s "a")).mp (by simp [AdmA, anyPA, AdmAList])
   simp [denote, denote, optionSems, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, specOf, optionSemOf, altCodec, select,
     stringCodec] at this
-
-/-- `opaq`'s ⊤ over-claims on the read side too, and here the surviving witness needs no
-    `Double`: `opaq false` is `refuse`, so it reads no `N` — and therefore no `NS`, whose
-    payloads are read through the same option. The empty wire set used to say this; a
-    numeric wire set says it now, built from `WFNumeral.of "1"` — decidable, so still
-    no `Double`. -/
-theorem not_ExactA_opaq : ¬ ExactA (.opaq false) := by
-  intro h
-  have h2 := (h (.ns (.of (.of "1") ∅))).mp (by simp [AdmA])
-  have hd : (denote (Term.opaq false)).p (.ns (.of (.of "1") ∅))
-      = (setCodec (opaqCodec 1 false)).p (.ns (.of (.of "1") ∅)) := by
-    show (opaqCodecω false).p _ = _
-    simp only [opaqCodecω, Attr.depth]
-    exact opaqCodec_p_ns false 1 _
-  rw [hd] at h2
-  obtain ⟨v, hv⟩ := Option.isSome_iff_exists.mp h2
-  replace hv : decSet (opaqCodec 1 false) Attr.n (NEFinset.of (WFNumeral.of "1") ∅)
-      = some v := hv
-  have hel := decSet_elem hv (WFNumeral.of "1") (NEFinset.mem_of _ ∅)
-  rw [opaqCodec_p_n] at hel
-  simp [Codec.empty] at hel
 
 /-- Writes the null point — half of a pair whose write reaches it and whose read does not,
     the mirror of `rNull`, and the reason `nullable` is in both hatches rather than one. -/
@@ -1031,38 +2573,36 @@ theorem not_ExactA_refine : ¬ ExactA (.refine .string (fun _ => false)) := by
     value-side counterpart, and the catch-all answers `false` for the same reason it does
     there: a new constructor is not excusable by default. -/
 def Excuse.coversA : Excuse → Term → Bool
-  | .opaqueDepth,     .opaq _      => true
   | .uniqueAdmission, .union _     => true
-  | .uniqueAdmission, .dunion _ _  => true
   | .payloadShape,    .set _       => true
-  | .nameAdmission,   .object _ _ _  => true
-  | .nameAdmission,   .tuple _ _   => true
   | .nullOwnership,   .nullable _  => true
   | .valueUnderRead,  .refine _ _  => true
   | _, _ => false
 
-/-- The subterm a propagating **attribute** row inherits from. `refine` and `legacy` are
-    absent, which is the whole of the asymmetry: they propagate on the value side and are
-    excused here. -/
-def inheritsFromA : Term → Option Term
-  | .array c | .record c | .held c _ _ | .lazy c | .legacy c _ => some c
-  | _ => none
+/-- The answer a propagating **attribute** row inherits, conjoined as on the value side.
+    `refine` is absent, which is now the whole of the asymmetry: it propagates on the value
+    side and is excused here. -/
+def childrenAnalysableA : Term → Bool
+  | .array c | .record c | .held c _ _ | .lazy c | .legacy c _ => AnalysableA c
+  | .tuple ts tail => AnalysableAL ts && AnalysableAO tail
+  | .dunion _ opts => AnalysableAL opts
+  | .object fields fld rest =>
+      decide (∀ k : {k // k ∈ fields}, AnalysableAF (fld k) = true) && AnalysableAR rest
+  | _ => true
 
 /-- Every attribute row that declines exactness names a covering reason or inherits one. -/
 theorem analysableA_excused : ∀ (t : Term), AnalysableA t = false →
-    (∃ e : Excuse, e.coversA t = true) ∨ (∃ c, inheritsFromA t = some c ∧ AnalysableA c = false)
-  | .opaq _, _      => .inl ⟨.opaqueDepth, rfl⟩
+    (∃ e : Excuse, e.coversA t = true) ∨ childrenAnalysableA t = false
   | .union _, _     => .inl ⟨.uniqueAdmission, rfl⟩
-  | .dunion _ _, _  => .inl ⟨.uniqueAdmission, rfl⟩
   | .set _, _       => .inl ⟨.payloadShape, rfl⟩
-  | .object _ _ _, _  => .inl ⟨.nameAdmission, rfl⟩
-  | .tuple _ _, _   => .inl ⟨.nameAdmission, rfl⟩
   | .nullable _, _  => .inl ⟨.nullOwnership, rfl⟩
   | .refine _ _, _  => .inl ⟨.valueUnderRead, rfl⟩
   | .array c, h | .record c, h | .held c _ _, h | .lazy c, h | .legacy c _, h =>
-      .inr ⟨c, rfl, by simpa [AnalysableA] using h⟩
+      .inr (by simpa [childrenAnalysableA, AnalysableA] using h)
+  | .tuple _ _, h | .dunion _ _, h | .object _ _ _, h =>
+      .inr (by simpa [childrenAnalysableA, AnalysableA] using h)
   | .string, h | .boolean, h | .binary, h | .null, h | .number, h | .decimal, h
-  | .literal _ _, h | .custom _ _, h => nomatch h
+  | .literal _ _, h | .custom _ _, h | .opaq _, h => nomatch h
 
 /-- No attribute-side excuse names an exact row. -/
 theorem excuseA_shapes (e : Excuse) (t : Term) (h : e.coversA t = true) :
@@ -1072,10 +2612,8 @@ theorem excuseA_shapes (e : Excuse) (t : Term) (h : e.coversA t = true) :
 /-- **Every attribute-side excuse is earned**, on the side it is used on. -/
 theorem excuseA_witnessed : ∀ (e : Excuse) (t : Term), e.coversA t = true →
     ∃ t' : Term, e.coversA t' = true ∧ ¬ ExactA t'
-  | .opaqueDepth, _, _     => ⟨.opaq false, rfl, not_ExactA_opaq⟩
   | .uniqueAdmission, _, _ => ⟨.union [.string, .string], rfl, not_ExactA_union⟩
   | .payloadShape, _, _    => ⟨.set .string, rfl, not_ExactA_set⟩
-  | .nameAdmission, _, _   => ⟨.tuple [.string] none, rfl, not_ExactA_tuple⟩
   | .nullOwnership, _, _   => ⟨.nullable (.custom ceNull cpNone), rfl, not_ExactA_nullable⟩
   | .valueUnderRead, _, _  => ⟨.refine .string (fun _ => false), rfl, not_ExactA_refine⟩
 
@@ -1100,13 +2638,35 @@ that shows it doing work. -/
 theorem AdmAny_le_admList : ∀ (ts : List Term) (v : Value),
     (∀ t ∈ ts, Adm t v = true → adm t v = true) →
     AdmAny ts v = true → admList ts v = true
-  | [], _, _, h => by simp [AdmAny] at h
+  | [], _, _, h => by simp [AdmAny_nil] at h
   | t :: ts, v, hall, h => by
-      simp only [AdmAny, Bool.or_eq_true] at h
+      simp only [AdmAny_cons, Bool.or_eq_true] at h
       simp only [admList, Bool.or_eq_true]
       rcases h with h | h
       · exact Or.inl (hall t (by simp) h)
       · exact Or.inr (AdmAny_le_admList ts v (fun t' ht' => hall t' (by simp [ht'])) h)
+
+/-- The tag a `dunion`'s row lands on is one of the pooled tags. The row is sharper than
+    `allTags` — it counts, where `allTags` unions — so the containment needs saying. -/
+theorem selTagV_mem {d : Name} {opts : List Term} {v : Value}
+    (h : selTagV d (AdmTagged d opts) v = true) :
+    ∃ tag, tagOfV d v = some tag ∧ tag ∈ allTags d opts := by
+  simp only [selTagV, AdmTagged_eq] at h
+  cases htag : tagOfV d v with
+  | none => rw [htag] at h; simp at h
+  | some tag =>
+    rw [htag] at h
+    refine ⟨tag, rfl, ?_⟩
+    replace h : (match (opts.map fun t => (tagsOf d t, Adm t)).filter
+        (fun o => decide (tag ∈ o.1)) with
+      | [o] => o.2 v | _ => false) = true := h
+    rw [filter_map_comm] at h
+    cases hL : opts.filter (fun t => decide (tag ∈ tagsOf d t)) with
+    | nil => rw [hL] at h; simp at h
+    | cons t rest =>
+      have hmem : t ∈ opts.filter (fun t => decide (tag ∈ tagsOf d t)) := by
+        rw [hL]; simp
+      exact mem_allTags (List.mem_of_mem_filter hmem) (by simpa using List.of_mem_filter hmem)
 
 /-- **`Adm` refines `adm`.** Every row of the joint predicate is at least as tight as the
     row it replaces, which is what lets every existing discharge carry over unchanged. -/
@@ -1131,7 +2691,13 @@ theorem Adm_le_adm : ∀ (t : Term) (v : Value), Adm t v = true → adm t v = tr
       rw [Adm_literal] at h
       exact (Bool.and_eq_true _ _ ▸ h : inL k ls v = true ∧ _).1
   | .custom ce cp, v, h => by rw [adm]; rw [Adm] at h; exact h
-  | .dunion d opts, v, h => by rw [adm]; rw [Adm] at h; exact h
+  -- the sharpened row: `select`'s filter lands on an option whose tags are pooled into
+  -- `allTags`, which is all §5's row ever said
+  | .dunion d opts, v, h => by
+      obtain ⟨tag, htag, hmem⟩ := selTagV_mem h
+      rw [adm]
+      simp only [htag, decide_eq_true_eq]
+      exact hmem
   | .refine t q, v, h => by
       rw [Adm, Bool.and_eq_true] at h
       rw [adm, Bool.and_eq_true]
@@ -1158,9 +2724,9 @@ theorem AdmAny_kind : ∀ (ts : List Term) (ks : List Kind) (v : Value),
     κList ts = some ks →
     (∀ t ∈ ts, ∀ ks', κ t = some ks' → Adm t v = true → v.kind ∈ ks') →
     AdmAny ts v = true → v.kind ∈ ks
-  | [], _, _, _, _, h => by simp [AdmAny] at h
+  | [], _, _, _, _, h => by simp [AdmAny_nil] at h
   | t :: ts, ks, v, hk, hall, h => by
-      simp only [AdmAny, Bool.or_eq_true] at h
+      simp only [AdmAny_cons, Bool.or_eq_true] at h
       rcases h with h | h
       · obtain ⟨ks', hks', hsub⟩ := κList_mem hk t (by simp)
         exact hsub _ (hall t (by simp) ks' hks' h)
@@ -1197,7 +2763,9 @@ theorem Adm_kind : ∀ (t : Term) (ks : List Kind) (v : Value),
   | .tuple _ _, _, v, rfl, h => by cases v <;> simp_all [Adm, Value.kind]
   | .record _, _, v, rfl, h => by cases v <;> simp_all [Adm, Value.kind]
   | .object _ _ _, _, v, rfl, h => by cases v <;> simp_all [Adm, Value.kind]
-  | .dunion _ _, _, v, rfl, h => by cases v <;> simp_all [Adm, tagOfV, Value.kind]
+  | .dunion d opts, _, v, rfl, h => by
+      obtain ⟨tag, htag, -⟩ := selTagV_mem h
+      cases v <;> simp_all [tagOfV, Value.kind]
   | .refine t q, ks, v, hk, h => by
       rw [Adm, Bool.and_eq_true] at h
       exact Adm_kind t ks v (by rw [κ] at hk; exact hk) h.1
@@ -1224,13 +2792,34 @@ theorem Adm_kind : ∀ (t : Term) (ks : List Kind) (v : Value),
 theorem AdmAAny_le_admAList : ∀ (ts : List Term) (a : Attr),
     (∀ t ∈ ts, AdmA t a = true → admA t a = true) →
     AdmAAny ts a = true → admAList ts a = true
-  | [], _, _, h => by simp [AdmAAny] at h
+  | [], _, _, h => by simp [AdmAAny_nil] at h
   | t :: ts, a, hall, h => by
-      simp only [AdmAAny, Bool.or_eq_true] at h
+      simp only [AdmAAny_cons, Bool.or_eq_true] at h
       simp only [admAList, Bool.or_eq_true]
       rcases h with h | h
       · exact Or.inl (hall t (by simp) h)
       · exact Or.inr (AdmAAny_le_admAList ts a (fun t' ht' => hall t' (by simp [ht'])) h)
+
+/-- The read-side mirror of `selTagV_mem`. -/
+theorem selTagA_mem {d : Name} {opts : List Term} {a : Attr}
+    (h : selTagA d (AdmATagged d opts) a = true) :
+    ∃ tag, tagOfA d a = some tag ∧ tag ∈ allTags d opts := by
+  simp only [selTagA, AdmATagged_eq] at h
+  cases htag : tagOfA d a with
+  | none => rw [htag] at h; simp at h
+  | some tag =>
+    rw [htag] at h
+    refine ⟨tag, rfl, ?_⟩
+    replace h : (match (opts.map fun t => (tagsOf d t, AdmA t)).filter
+        (fun o => decide (tag ∈ o.1)) with
+      | [o] => o.2 a | _ => false) = true := h
+    rw [filter_map_comm] at h
+    cases hL : opts.filter (fun t => decide (tag ∈ tagsOf d t)) with
+    | nil => rw [hL] at h; simp at h
+    | cons t rest =>
+      have hmem : t ∈ opts.filter (fun t => decide (tag ∈ tagsOf d t)) := by
+        rw [hL]; simp
+      exact mem_allTags (List.mem_of_mem_filter hmem) (by simpa using List.of_mem_filter hmem)
 
 /-- **`AdmA` refines `admA`**, the attribute-side counterpart of `Adm_le_adm`. -/
 theorem AdmA_le_admA : ∀ (t : Term) (a : Attr), AdmA t a = true → admA t a = true
@@ -1248,7 +2837,11 @@ theorem AdmA_le_admA : ∀ (t : Term) (a : Attr), AdmA t a = true → admA t a =
   | .opaq _, _, _ => rfl
   | .custom _ _, a, h => by rw [admA]; rw [AdmA] at h; exact h
   | .decimal, a, h => by rw [admA]; rw [AdmA] at h; exact h
-  | .dunion _ _, a, h => by rw [admA]; rw [AdmA] at h; exact h
+  | .dunion d opts, a, h => by
+      obtain ⟨tag, htag, hmem⟩ := selTagA_mem h
+      rw [admA]
+      simp only [htag, decide_eq_true_eq]
+      exact hmem
   | .literal k ls, a, h => by
       cases k <;> cases a <;> simp_all [AdmA_literal, AdmALit, admA, admALit]
   | .refine t _, a, h => by
@@ -1585,7 +3178,7 @@ theorem sepJV_set_literals :
 theorem not_sepJV_array_literals :
     ¬ SepJV (.array (.literal .string (.of "A" ∅))) (.array (.literal .string (.of "B" ∅))) := by
   intro h
-  exact absurd (h (.arr []) (by simp [Adm, AdmAll])) (by simp [Adm, AdmAll])
+  exact absurd (h (.arr []) (by simp [Adm, allP])) (by simp [Adm, allP])
 
 /-! ### What `set` is, structurally — and the defect that closed
 
@@ -1713,3 +3306,4 @@ theorem mapKeys_no_duplicates : ({"a", "a"} : Finset Name) = {"a"} :=
 
 end
 end Calculus
+
