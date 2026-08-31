@@ -38,7 +38,7 @@ import type {
     S,
     SS,
 } from './attribute'
-import { carrying, isNumeral, memberOf } from './attribute'
+import { carrying, isNumeral, memberOf, tooDeeplyNested } from './attribute'
 import { codec } from './build'
 import type { AttributeCodec, Result } from './codec'
 import { andThen, CodecError, every, everyEntry } from './codec'
@@ -172,6 +172,14 @@ const toNative = (
     value: unknown,
     options: native.Options,
     write: (value: number | bigint) => Result<AttributeValue>,
+    /**
+     * How many `L`/`M` this value already sits inside.
+     *
+     * The SDK's marshaller has no such check and will hand DynamoDB a row it rejects. This is a
+     * deliberate divergence of the same kind as the `N` gate above: `native` mirrors the SDK's
+     * *shape*, not its willingness to write what the store refuses.
+     */
+    enclosing = 0,
 ): Result<AttributeValue> => {
     if (value === undefined) {
         return new CodecError(
@@ -186,8 +194,12 @@ const toNative = (
                 typeof item !== 'function' &&
                 (!options.removeUndefinedValues || item !== undefined),
         )
+        const deep = tooDeeplyNested(enclosing)
+        if (deep) return new CodecError(deep)
         return andThen(
-            every(kept, (item) => toNative(item, options, write)),
+            every(kept, (item) =>
+                toNative(item, options, write, enclosing + 1),
+            ),
             (written) => carrying('L', written),
         )
     }
@@ -197,10 +209,12 @@ const toNative = (
     if (named === 'Set')
         return nativeSet(value as ReadonlySet<unknown>, options, write)
     if (named === 'Map') {
+        const deep = tooDeeplyNested(enclosing)
+        if (deep) return new CodecError(deep)
         return andThen(
             everyEntry(
                 Object.fromEntries(value as Map<string, unknown>),
-                (held) => toNative(held, options, write),
+                (held) => toNative(held, options, write, enclosing + 1),
             ),
             (written) => carrying('M', written),
         )
@@ -220,8 +234,12 @@ const toNative = (
             if (held === undefined && options.removeUndefinedValues) continue
             kept[key] = held
         }
+        const deep = tooDeeplyNested(enclosing)
+        if (deep) return new CodecError(deep)
         return andThen(
-            everyEntry(kept, (held) => toNative(held, options, write)),
+            everyEntry(kept, (held) =>
+                toNative(held, options, write, enclosing + 1),
+            ),
             (written) => carrying('M', written),
         )
     }
