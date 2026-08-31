@@ -33,7 +33,8 @@ timeboxed. This file is their output and the disposition of each item.
 | 3 | `codec-calculus.md:87-88`, `:167-172`, `:559-560` | The **specification's** justification for the `ker p` quotient still lists *three* reasons, the first being set orderings. False in §1's own terms now the carriers are `℘⁺fin`. Should be two: `η` normalising `N`, `drop` discarding names. | a bullet + follow-on | small |
 | 4 | `WireOrder.lean` | **17 of 19 declarations dead** (independently found by two scans); header argues for a design the code abandoned. Only `Axioms.lean` imports it, for the axiom scan. The `Classical.choice` warning about `LinearOrder String` is a real hazard and must be relocated, not lost. | ~247 lines | small |
 | 5 | `Domain.lean:344` | `Item := List (Name × Attr)`, docstring calls it "an `M` without its wrapper" — the exact shape five sites removed, beside the repaired `Attr.m`. **Dead**: grep finds only the declaration. | the declaration | none |
-| 6 | `Typing.lean:165-167` | `literalOK` does two jobs: `Numeral.WF` on `.num` (content, stays) and `\| _ => false` for containers, which is just *"this value has a ground base"* — a claim about the field's carrier. `Term.literal (v : GroundValue)` makes `literalMember` total. | **all of `hμ`**, the container half of `hok`, the `hok` arg of two laws, a case in `Exactness` | small (11 sites) |
+| ~~6~~ | ~~`Typing.lean:165-167`~~ **Landed.** | `literalOK` did two jobs: `Numeral.WF` on `.num` (content, stays) and `\| _ => false` for containers, which is just *"this value has a ground base"* — a claim about the field's carrier. `Term.literal (v : GroundValue)` makes `literalMember` total. Landed exactly as scoped: `hμ` and `μ` gone, `literalOK` → `literalD` with only the `.num` case, both laws argument-free, `literalMember` deleted, `literalCodec`'s `Codec.empty` case and `Exactness`'s container case gone. | **all of `hμ`**, the container half of `hok`, the `hok` arg of two laws, a case in `Exactness` | small (11 sites) |
+| 6b | `Term.lean:27-35` | **`literal`, `literalS` and `literalN` are one rule.** Raised by JH while item 6 was landing, and right: all three are *a nonempty finite set of values at one ground base*. Item 6 makes arity-one exactly that at cardinality one. The honest form is base-indexed — see §11 — and it deletes two constructors, their codecs, their `κ`/`adm`/`admA` rows and their exactness rows. | 2 constructors + ~266 mentions | **large** |
 | 7 | `Combinators.lean:3324, 3375, 3406` +2 | `objectCodecCore` takes `kn : Name → Bool` free; the only instantiation is `keepB rest sems`. Three hypotheses across five signatures all say *the filter never discards a declared name*. | 3 hypotheses × 5 signatures, plus `keepB_of_encEntry` and `keepB_of_declared` | medium (43 sites) |
 | 8 | ~61 declarations | Transitively dead plumbing, listed in §4.1. | ~61 decls | small, mechanical |
 | 9 | `codec-calculus.md:249-251`, `:301-302`, `:938-944`, `:1034` | §3 still presents both number rules as `refine` over an **ungated base** (those bases cannot exist); §5's traversal Lemma still has a "keyed lists … first occurrence first" clause (keys are unique by type, so it names nothing); `:1034` calls a wire set "the lifted list". | one clause | small |
@@ -589,3 +590,163 @@ for that type"* attached to Theorem 4.4 was the extraction's inference, not a qu
 Injectivity is not exactness of a domain, so **the §5.4 conclusion stands as written**: the
 "exact, not merely sound" domain result is still ours, and the reference for it is local
 completeness in Cousot's sense, not this paper. Confirm against the PDF before citing.
+
+## 11. The literal family collapses to one rule
+
+Raised mid-item-6, and it subsumes it.
+
+**The specification already has one rule.** §3 of `codec-calculus.md:230` reads
+
+```
+⊢ g : T ⇝ μ,  g ground    ℓ₁ … ℓₙ ∈ T,  n ≥ 1,  pairwise distinct
+───────────────────────────────────────────────────────────────── (literal)
+⊢ literal(ℓ₁ … ℓₙ) : {ℓ₁ … ℓₙ} ⇝ μ
+```
+
+One rule, n-ary, with `g ground` as a premise. The model has three constructors, and this is not
+a case of the model being more precise than the spec — every part of that premise line is now
+expressible as a type. `g ground` is a `GroundKind` index; `n ≥ 1, pairwise distinct` is
+`NEFinset`, which the model already uses for `literalS` and `literalN`; `ℓᵢ ∈ T` at the indexed
+carrier is what makes the set homogeneous. So the collapse is not a new design — it is **the
+model finally transcribing the rule it has**, which is the same argument the five landed repairs
+made one representation at a time.
+
+Three constructors —
+
+```lean
+| literal  (v : GroundValue)        -- after item 6
+| literalS (ls : NEFinset String)
+| literalN (ls : NEFinset Double)
+```
+
+— are three readings of one thing: **a nonempty finite set of values, all at one ground base.**
+`literalS` is that at `String`, `literalN` at `Double`, and item 6's `literal` is that at
+cardinality one, which is why item 6 is the prerequisite rather than a competitor: it is what
+turns arity-one from "a `Value`, if it happens to be ground" into "a ground base and a value".
+
+### 11.1 The form that keeps the payload a `Finset`
+
+```lean
+inductive GroundKind where | string | number | boolean | binary | null
+def GroundKind.Carrier : GroundKind → Type
+  | .string => String | .number => Double | .boolean => Bool
+  | .binary => Bytes  | .null   => Unit
+def GroundKind.member : GroundKind → Member          -- total, as item 6's is
+
+| literal (k : GroundKind) (ls : NEFinset k.Carrier)
+```
+
+`literalS ls` is `literal .string ls`; `literalN ls` is `literal .number ls`; item 6's
+`literal (.str s)` is `literal .string {s}`. Three properties stop being premises and become
+the type's: **non-emptiness** (already `NEFinset`'s), **homogeneity** (all elements share a
+base because they share a carrier), and **the member** (`k.member`, a function of the index —
+item 6's deletion of `hμ`, now for the whole family). `NEFinset Unit` at `.null` is a
+singleton, so `literal .null` cannot say anything but the one thing it means.
+
+What stays a premise is `hD`: `∀ d ∈ ls, Numeral.WF d.toDec` at `k = .number`, as a `Bool` over
+the dependent pair. **It must stay** — §2.2's first row is the reason. Typing it into the
+element carrier silently deletes `literalN_holds_what_it_cannot_write`, the witness that (B)
+fails without it, rather than proving the defect absent.
+
+### 11.2 The version to refuse
+
+`literal (ls : NEFinset GroundValue)` — no index, one flat set. Tempting, and wrong: a set may
+mix `.str` with `.num`, so the member is no longer a function of the payload and the rule needs
+`hhomog : all elements share a base`. That is `hμ` returning under a new name, one commit after
+item 6 deleted it. The index is what makes homogeneity unsayable-otherwise.
+
+### 11.3 Cost of the indexed route, honestly
+
+`Term` gains a dependent field, so every `cases w` in `Discharge`/`Exactness` becomes `cases k`
+first — tractable (the carrier reduces once `k` is a constructor) but it is the dependent
+elimination the object-field work already paid for once. `literalS`/`literalN` are named **266
+times** across twelve modules, `Discharge` alone 118. `tagsOfField` reads `literalS` for
+`discriminatedUnion`'s tags and `Refutations` builds the §2.1 union witnesses out of it, so both
+need the new spelling before anything compiles.
+
+This is a day, not an hour — and §11.4 settles that it is the *fallback* day's work rather than
+the first choice, with §11.5 naming the one measurement that decides between them. Either way it
+is the last of the five representation repairs' family: the four that landed each replaced one
+gate with one type, and this replaces *constructors* with the thing they differ in.
+
+### 11.4 The other answer, which the record already gave — and it is the right one
+
+`codec-formalization.md:632` got here first, and answered differently: retire `literalS`/`literalN`
+and let **the n-ary form be surface syntax for the union**, "which the `⋃` rows on `adm`/`admA`
+made lossless". No new constructor at all — strictly cheaper than §11.1 if it holds.
+
+It may well hold *denotationally*. §2.1's defect is about duplicate options and order:
+`altCodec_e_swap`/`altCodec_p_swap` make order unobservable, and `select_dup_none` makes
+multiplicity observable — but a `Finset`'s elements are distinct, so a union of distinct singleton
+literals dodges the one thing that is observable. Taken as a claim about `adm`/`admA` I have no
+reason to doubt it.
+
+I raised two objections to it and **both were wrong.** `Calculus/LiteralArity1.lean` was written
+to settle them and does, by proof rather than by argument — that file is the evidence, and it
+changes the recommendation from §11.1 to this one.
+
+1. **`tagsOf` needs no homogeneity proof.** I claimed the union route would have to recognise *a
+   union whose every option is a singleton string literal* and prove homogeneity while rebuilding
+   the `Finset String`. It does not: a non-conforming option contributes `∅`, which is exactly
+   what `tagsOfField`'s existing `| _ => ∅` already does. Heterogeneity is an empty contribution,
+   not an error — and the error it should be is `(dunion)`'s `htags` premise, where it already
+   lives. `mem_tagStringsOf_union` is that, one level deep and non-recursive, like the definition
+   it would replace.
+2. **The union's separation premises discharge once, centrally, not per use site.** (D) is
+   *incomparability*, not disjointness — `DIncomp`'s own docstring says disjointness would reject
+   working unions — and two distinct singletons contain each other in neither order:
+   `dincomp_map_literal_str`, from `Nodup` alone. (U) is the interesting one, because §5's table
+   says it is impossible: `admA_literalN_blind` sends a numeric literal's read side to `⊤`, so two
+   numeric options never separate *in the table*. They separate in the **pair** —
+   `numberCodec.restrict` at disjoint predicates — which is all `uniqueAdmission_of_sharedBase`
+   needs. `uAtCan_of_literalN_disjoint` already made that argument for a union of `literalN`s and
+   never used the n-ary constructor to make it, only the shared base; `uAtCan_map_literal_num` is
+   the same proof with `ℓ` as list data instead.
+
+So both rules are **derivable**: `typed_literalsS` and `typed_literalsN` conclude exactly what
+`Typed.literalS` and `Typed.literalN` conclude, from `Typed.literal` and `Typed.union`, with
+`(literal-N)`'s `ℓ ⊆ D` still a premise and not absorbed into a carrier (§2.2's warning honoured).
+The two constructors are not rules. They are a union of arity-one literals with a rule's clothes on.
+
+### 11.5 The cost that only appeared by building it
+
+`Term.union`'s payload is a `List Term`. `literalS`'s is a `NEFinset String`. Bridging them is
+`Finset.toList`, which is `Multiset.toList`, which is `Quotient.out` — **`Classical.choice`**.
+
+This is not a guess. The first draft of `LiteralArity1.lean` stated the two derivations over
+`NEFinset` and `#assert_axioms_all` rejected five theorems for exactly that reason:
+
+```
+Calculus.typed_literalsN: [Classical.choice],  Calculus.typed_literalsS: [Classical.choice],
+Calculus.tagStringsOf_literalsS: [Classical.choice], Calculus.toList_ne_nil: [Classical.choice],
+Calculus.tagStringsOf_fold: [Classical.choice]
+```
+
+Restated over `(l : List α)` with `hnd : l.Nodup` and `hne : l ≠ []`, all of it is choice-free and
+the module passes the scan. But look at what those two premises are: **`hnd` and `hne` are exactly
+the gates the `℘⁺fin` repair deleted from `literalS` on this branch.** So the absorption, routed
+through `union`, offers a choice:
+
+* keep `Term.union` list-shaped and let the n-ary literal be a `List` with `Nodup` and
+  non-emptiness spelled out — which reintroduces two of the five gates this arc removed; or
+* convert the `Finset` at the boundary and take `Classical.choice` into the axiom base — which
+  voids what `formal/` advertises, and is not a trade anyone should make for two constructors.
+
+There is a third door, and it is worth measuring before either: `Term.union`'s payload is a list
+because §2.1 found multiplicity *observable* (`select_dup_none`) and order *not*
+(`altCodec_e_swap`). A payload that is unordered and repeat-free is what `select`'s
+exactly-one-admitting semantics wants anyway. If `union` can take a `NEFinset Term` — needing
+`DecidableEq Term`, which `Term`'s `Finset Name`/function fields make a real question — then the
+bridge is the identity, no choice enters, and both n-ary literals collapse for free. **That is the
+next thing to measure**, and it is a smaller question than either route.
+
+### 11.6 Where this leaves the recommendation
+
+§11.1's base-indexed `literal (k : GroundKind) (ls : NEFinset k.Carrier)` is no longer the
+proposal. It is the *fallback* if `union` cannot take a `NEFinset` — it keeps the payload a
+`Finset`, so no choice and no reintroduced gates, at the price of a dependent field and the 266
+sites. The union route is strictly better if and only if §11.5's third door opens.
+
+`LiteralArity1.lean` stays either way: it is the proof that the two constructors carry no
+derivable judgement of their own, which is the fact both routes depend on and neither should have
+to re-establish.
