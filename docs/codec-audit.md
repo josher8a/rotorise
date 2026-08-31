@@ -317,7 +317,7 @@ limit about tables, indexes and keys that the model does not have.
 | `:83-84`, `:106-107` | partition key ≤2048 B, sort key ≤1024 B | **OUT-OF-SCOPE**, un-typeable in principle — constrains a position in a table schema, not membership in `𝔸`. |
 | `:80`, `:103` | item size ≤400 KB | **NOT-TYPEABLE.** A global aggregate over the recursive structure; enforcing it refines `Attr.l`'s list and `Attr.m`'s function — the recursive occurrence, which the kernel rejects. A subtype on `Item` alone is admissible and vacuous. **Not checkable per attribute either** — it is a property of the *item*, so unlike depth it cannot be a codec's obligation. See §12.3. (Cited `:132`/`:185` here until JH pointed out those lines say the opposite; corrected below and in §2.3.) |
 | `:132`, `:185` | **no** limit on the number of values in a list, map or set | **NOT A CONSTRAINT — and the model is already right.** *"There is no limit on the number of values in a list or a map, as long as the item containing the values fits within the DynamoDB item size limit."* `L = List 𝔸`, `M = Name ⇀fin 𝔸` and `℘⁺fin` carry no cardinality bound, which is exact. Recorded so nobody tightens it later. |
-| `:130` | nesting ≤32 levels | **NOT-TYPEABLE** — `{as : List Attr // Attr.depthL as ≤ 31}` nests `Attr` under its own declaration, which the kernel rejects, exactly as for item size. ~~And typing it would destroy live theorems: the ω-codecs' totality argument depends on depth being unbounded.~~ **That second reason is wrong.** `Opaque.lean:17-20` supplies *each input its own budget* — `Value.depth` on the write side, `Attr.depth` on the read side — and a cap on the carrier makes those budgets bounded, not ill-typed. The un-typeability is the whole of it. **But see §12: un-typeable is not un-checkable, and nothing checks it.** |
+| `:130` | nesting ≤32 levels | **NOT TYPEABLE AS A SUBTYPE** — `{as : List Attr // Attr.depthL as ≤ 31}` nests `Attr` under its own declaration, which the kernel rejects, exactly as for item size. An *indexed family* `Attr : Nat → Type` is a different move and the kernel takes it; §12.4 has the probe and the price. ~~And typing it would destroy live theorems: the ω-codecs' totality argument depends on depth being unbounded.~~ **That second reason is wrong.** `Opaque.lean:17-20` supplies *each input its own budget* — `Value.depth` on the write side, `Attr.depth` on the read side — and a cap on the carrier makes those budgets bounded, not ill-typed. The un-typeability is the whole of it. **But see §12: un-typeable is not un-checkable, and nothing checks it.** |
 | `:63-65` | ≤38 significant digits, magnitude range | **ALREADY ENFORCED** — `WFNumeral`. |
 | `:134`, `:183`, `:187` | sets non-empty, unique, unordered, homogeneous | **ALREADY ENFORCED** — `NEFinset`. |
 | `:20-39` | table/index names, reserved words, `#`/`:` | **OUT-OF-SCOPE** — no table, index or expression language in the calculus. |
@@ -949,3 +949,62 @@ for the axis it defines. The defect got through because a constraint that fails 
 (can it be a type?) was recorded as disposed of, rather than handed to the test it would have
 failed next (does anything enforce it?). §9 existed to ask exactly that question and never
 received this constraint.
+
+### 12.4 Bounding the nesting *would* simplify what I called load-bearing — and the price is `List`
+
+JH's follow-on, and it is right in kind. The `∀ n, Value.depth v ≤ n → …` shape in
+`HeldSet.lean:58-61` is described there as *"what lets the induction go through"*, and
+`Opaque.lean` names the depth budget **148 times**. That machinery exists for one reason: the
+budget is a **measure** on an unbounded carrier rather than a **type**. Bound the carrier and the
+measure becomes an index — which is the same move as all five landed representation repairs, and
+would take `opaqCodec`'s input-side fuel and its stabilization lemmas with it.
+
+So the question is whether the bound is reachable. Two probes:
+
+```lean
+inductive A : Nat → Type where
+  | l {n} (v : List (A n)) : A (n+1)      -- kernel: invalid nested inductive datatype 'List',
+                                          -- nested inductive parameters cannot contain local variables
+```
+
+Rejected — the same class of refusal as `Multiset Term` in §12.1. But:
+
+```lean
+mutual
+inductive A : Nat → Type where
+  | l {n} (v : AL n) : A (n+1)
+  | m {n} (keys : Finset Name) (f : {k // k ∈ keys} → A n) : A (n+1)
+inductive AL : Nat → Type where
+  | nil {n} | cons {n} (a : A n) (as : AL n) : AL n
+end
+```
+
+**Legal.** So the bound *is* reachable, and §6's "NOT-TYPEABLE" is too strong: what is
+un-typeable is a *subtype* of the unbounded carrier. An indexed family is a different move and
+the kernel takes it — with `Finset Name` and the function-valued map field surviving intact.
+
+The price is precise, and it is the wrong way round for this branch:
+
+* **`Attr.l` stops being `List Attr`.** The only way past the nested-`List` refusal is a bespoke
+  index-carrying list. §2.3 certifies `Attr.l`/`Value.arr` as *already correctly typed* on the
+  reference's own words — lists are ordered and heterogeneous, so `List` is exact — and a
+  hand-rolled `AL n` is the same shape as the five containers this arc replaced, reintroduced to
+  encode a bound.
+* **Every theorem mentioning `Attr` or `Value` gains an index.** That is most of 731.
+* **It buys no correctness.** The bound in the carrier does nothing about item 15: `src/` still
+  needs a runtime depth check, because the defect is that the *library* writes a 33-deep row.
+
+And the scope of the win is narrower than it first looks. `denote`'s fuel is **Term**-level — it
+decrements on subterms — so a carrier bound does not touch it, and `Denoteω`, `Soundnessω` and
+`Continuity` (514 lines between them) are all Term-level too. What is in scope is exactly
+`Opaque.lean` (854 lines, 148 depth mentions) and `HeldSet.lean`'s opaque held-set lemmas (22).
+Those recurse on the *input's* depth, which is the only place a carrier index would be an index.
+
+**Verdict: a spike, not an item, and bigger than 6b was.** The honest statement of the trade is
+that it converts a 170-use measure into a type — genuinely the winning move — at the cost of
+undoing the one container the audit certifies as exact and reindexing the model. Worth measuring
+`Opaque.lean` against an indexed carrier in a scratch file before anyone commits to it. What it
+must not do is wait for item 15, which is a library bug with a local fix.
+
+*(§6's `:130` row now says "not typeable **as a subtype**", which is what the kernel actually
+refused. That is the third correction to that row.)*
