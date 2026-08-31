@@ -12,14 +12,18 @@ plumbing rather than content.
 
 Three groups:
 
+* Three additions to mathlib's `Forall₂` — `mem_left`, `mem_right`, `compose` — which is
+  where the file starts because the next group rests on them.
 * `traverse` and its laws — the one proof shape every product consumes. It rests on a
   single pivot, `traverse_eq_some`: **a successful traversal *is* the pointwise relation**
   `List.Forall₂ (f · = some ·)`. Each law is then that relation pushed around — reversed
   for (R), forgotten for (C), composed for (MP) — which is what mathlib's `Forall₂` API
   is for.
-* `List.lookup` on association lists, which mathlib develops only for `AList`/`dlookup`.
-  The pivot is `lookup_cons`, after which `simp`/`split` decides the family.
-* A handful of `filter` and `zip` facts stated in the form the object codec wants.
+* A handful of `filter` facts stated in the form the sum proofs want, mostly about a
+  `filter` that resolves to a singleton or to nil.
+
+There used to be a fourth, `List.lookup` on association lists. It served §5's keyed
+refinement, and both are gone — see the note at the end of the traversal section.
 
 The bar for adding here is that mathlib genuinely lacks the fact, or states it in a shape
 the use sites cannot consume. Anything mathlib has outright should be cited under mathlib's

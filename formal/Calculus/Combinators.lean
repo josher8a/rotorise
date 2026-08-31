@@ -47,8 +47,9 @@ written out once per constructor before it was named:
 * the **point ground codecs** (`pointCodec` below) — `string`, `boolean`, `binary` and
   `null` are a payload carried between a value constructor and an attribute constructor,
   differing in nothing but which pair;
-* the **wire-set payload projections** (`sC`/`nC`/`bC`, under Products) — the same
-  traversal three times.
+* the **scalar payload prisms** (`sC`/`nC`/`bC`) — the attribute half of three of those
+  pairs, factored out because `encSet` needs the same three prisms to decide which wire set
+  a homogeneous element set writes to.
 
 Naming the shape once is what lets §2's four laws be discharged once for each family
 rather than once per constructor. -/
@@ -619,35 +620,6 @@ theorem orNull_p {a v} :
 
 end WrapperInversion
 
-/-! ## The traversal toolkit
-
-One proof shape, proved once: a list traversed by an entrywise partial function, with
-the laws lifting pointwise. `drop`'s skipping is not a traversal mode: it filters by
-name first, then traverses — so every product consumes these same lemmas.
-
-The whole toolkit rests on one observation, `traverse_eq_some`: **a successful traversal
-*is* the pointwise relation**, `List.Forall₂ (f · = some ·)`. Every law below is then that
-relation being pushed around — reversed for (R), forgotten for (C), composed for (MP) —
-and mathlib's `Forall₂` API does the pushing. What used to be four twenty-line case
-analyses on `Option` are four appeals to the pivot. -/
-
-
-section Traverse
-variable {α β γ : Type} {f : α → Option β} {g : β → Option α}
-
-
-end Traverse
-
-
-/-- A dead pair — nothing readable, nothing writable — is lawful whatever its `μ`. -/
-theorem lawful_dead {m? : Option Member} :
-    Lawful { T := fun _ => False, μ := m?, e := fun _ => none, p := fun _ => none } := by
-  refine ⟨?_, ?_, ?_, ?_⟩
-  · intro _ _ h; exact nomatch h
-  · intro _ _ h; exact nomatch h
-  · intro _ _ _ _ h; exact nomatch h
-  · intro _ _ _ h _; exact nomatch h
-
 
 /-- Lawfulness sees only the pair and the member, so it transfers to any codec agreeing on
     those three. This is how a ground codec inherits from the wrapper it turns out to be,
@@ -684,47 +656,6 @@ theorem LawfulCore.μNone {c : Codec} (h : LawfulCore c) :
 
 
 /-! ## Products -/
-
-/-! ### The wire-set payload projections
-
-Each is `traverse` of one of the attribute prisms' inverses, and each of its two lemmas is
-an instance of one general fact. -/
-
-/-- A traversal through a prism recovers its input exactly. -/
-theorem traverse_ctor_eq {α : Type} (c : Ctor α Attr) :
-    ∀ {as : List Attr} {xs}, traverse c.out as = some xs → as = xs.map c.into
-  | [], xs, h => by
-      replace h : some [] = some xs := h
-      cases h; rfl
-  | a :: as, xs, h => by
-      simp only [traverse] at h
-      cases hu : c.out a with
-      | none => rw [hu] at h; exact nomatch h
-      | some x =>
-        rw [hu] at h
-        cases ht : traverse c.out as with
-        | none => rw [ht] at h; exact nomatch h
-        | some xs' =>
-          rw [ht] at h
-          replace h : some (x :: xs') = some xs := h
-          cases h
-          simp only [List.map]
-          rw [← c.into_out hu, ← traverse_ctor_eq c ht]
-
-/-- And it succeeds exactly when every element matches. -/
-theorem traverse_ctor_isSome {α : Type} (c : Ctor α Attr) :
-    ∀ {as : List Attr}, (∀ a ∈ as, (c.out a).isSome) → ∃ xs, traverse c.out as = some xs
-  | [], _ => ⟨[], rfl⟩
-  | a :: as, h => by
-      obtain ⟨x, hx⟩ := Option.isSome_iff_exists.mp (h a (List.mem_cons_self a as))
-      obtain ⟨xs, hxs⟩ := traverse_ctor_isSome c fun y hy => h y (List.mem_cons_of_mem _ hy)
-      exact ⟨x :: xs, by simp only [traverse, hx, hxs]⟩
-
-def strPayloads (as : List Attr) : Option (List String) := traverse sC.out as
-
-def numPayloads (as : List Attr) : Option (List WFNumeral) := traverse nC.out as
-
-def binPayloads (as : List Attr) : Option (List Bytes) := traverse bC.out as
 
 /-- **The set image.** Map a finite set through a partial function, refusing if an element
     fails *or if two elements collide*.
@@ -1137,14 +1068,6 @@ def entrywise {α β : Type} (V : Ctor (List α) Value) (A : Ctor (List β) Attr
 section Entrywise
 variable {α β : Type} {V : Ctor (List α) Value} {A : Ctor (List β) Attr}
   {μ₀ : Member} {P : List α → Prop} {f : α → Option β} {g : β → Option α}
-
-theorem entrywise_e {v a} :
-    (entrywise V A μ₀ P f g).e v = some a ↔
-      ∃ xs ys, V.out v = some xs ∧ traverse f xs = some ys ∧ a = A.into ys := carried_e
-
-theorem entrywise_p {a v} :
-    (entrywise V A μ₀ P f g).p a = some v ↔
-      ∃ ys xs, A.out a = some ys ∧ traverse g ys = some xs ∧ v = V.into xs := carried_p
 
 /-- The traversal toolkit is exactly what the payload pair's three clauses ask for:
     the round trip reversed, definedness forgotten. -/
@@ -1658,10 +1581,6 @@ theorem MapOf.at_eq_some {α : Type} {m : MapOf α} {k : Name} {x : α} :
 theorem MapOf.at_of_mem {α : Type} {m : MapOf α} (k : {k // k ∈ m.1}) :
     m.at k.1 = some (m.2 k) := by
   simp only [MapOf.at, dif_pos k.2]
-
-theorem MapOf.at_isSome {α : Type} {m : MapOf α} {k : Name} :
-    (m.at k).isSome = true ↔ k ∈ m.1 := by
-  simp only [MapOf.at]; split <;> simp_all
 
 /-- A property of every value is a property of every declared name's value. -/
 theorem MapOf.at_forall {α : Type} {m : MapOf α} {Q : α → Prop}
@@ -2227,10 +2146,6 @@ theorem carrier_setCodec {c : Codec} (hc : Carrier c) : Carrier (setCodec c) whe
 
 /-! ### Sums -/
 
-theorem carrier_dead {m? : Option Member} :
-    Carrier { T := fun _ => False, μ := m?, e := fun _ => none, p := fun _ => none } := by
-  refine ⟨?_, ?_⟩ <;> intro _ _ h <;> exact nomatch h
-
 theorem carrier_altCodec {os : List OptionSem} {μA : Option Member}
     (h : ∀ o ∈ os, Carrier o.c) : Carrier (altCodec os μA) := by
   refine ⟨?_, ?_⟩
@@ -2703,42 +2618,6 @@ theorem withNull_idem_p {c : Codec} : c.withNull.withNull.p = c.withNull.p :=
 
 /-! ## Lawfulness — the open frontier (README roadmap) -/
 
-/-! ### Payload facts for the quotiented product -/
-
-
-theorem strPayloads_eq {as : List Attr} {ss} (h : strPayloads as = some ss) :
-    as = ss.map Attr.s := traverse_ctor_eq sC h
-
-theorem numPayloads_eq {as : List Attr} {ns} (h : numPayloads as = some ns) :
-    as = ns.map Attr.n := traverse_ctor_eq nC h
-
-theorem binPayloads_eq {as : List Attr} {bs} (h : binPayloads as = some bs) :
-    as = bs.map Attr.b := traverse_ctor_eq bC h
-
-theorem strPayloads_isSome {as : List Attr} (h : ∀ x ∈ as, x.member = .S) :
-    ∃ ss, strPayloads as = some ss :=
-  traverse_ctor_isSome sC fun a ha => by
-    have hm := h a ha
-    cases a
-    case s v => rfl
-    all_goals exact nomatch hm
-
-theorem numPayloads_isSome {as : List Attr} (h : ∀ x ∈ as, x.member = .N) :
-    ∃ ns, numPayloads as = some ns :=
-  traverse_ctor_isSome nC fun a ha => by
-    have hm := h a ha
-    cases a
-    case n v => rfl
-    all_goals exact nomatch hm
-
-theorem binPayloads_isSome {as : List Attr} (h : ∀ x ∈ as, x.member = .B) :
-    ∃ bs, binPayloads as = some bs :=
-  traverse_ctor_isSome bC fun a ha => by
-    have hm := h a ha
-    cases a
-    case b v => rfl
-    all_goals exact nomatch hm
-
 /-! ### `setCodec`'s laws
 
 Every one of these was a traversal argument over a list; on `Finset` they are the element
@@ -2926,14 +2805,6 @@ theorem set_writes {c : Codec} (h : LawfulCore c) :
             rw [ha₀] at hs
             rw [← hm₀, member_of_bC hs] at hμ
             simpa [Attr.member] using Option.some.inj hμ
-
-/-- The wire member pins the constructor. -/
-theorem attr_ss_of_member {a : Attr} (h : a.member = .SS) : ∃ S, a = .ss S := by
-  cases a <;> simp_all [Attr.member]
-theorem attr_ns_of_member {a : Attr} (h : a.member = .NS) : ∃ S, a = .ns S := by
-  cases a <;> simp_all [Attr.member]
-theorem attr_bs_of_member {a : Attr} (h : a.member = .BS) : ∃ S, a = .bs S := by
-  cases a <;> simp_all [Attr.member]
 
 /-- Writing a set succeeds when its elements do and the element member is ground: the
     member fixes which branch `encSet` takes, and (R) supplies the injectivity. -/
@@ -3190,10 +3061,6 @@ theorem fbNames_mem {sems : MapOf FieldSem} {names : Finset Name} {k c v}
     (hm : sems.at k = some (.fb c v)) (hc : k ∉ names) : k ∈ fbNames names sems :=
   mem_fbNames.mpr ⟨⟨c, v, hm⟩, hc⟩
 
-theorem fbNames_spec {sems : MapOf FieldSem} {names : Finset Name} {k}
-    (hm : k ∈ fbNames names sems) :
-    (∃ c v, sems.at k = some (.fb c v)) ∧ k ∉ names := mem_fbNames.mp hm
-
 /-- Emptiness by `Finset.ext`, not by `Finset.eq_empty_of_forall_not_mem`: the mathlib
     lemma is proved classically, and this file's axiom base (`Axioms.lean`) does not
     admit `Classical.choice`. -/
@@ -3202,10 +3069,6 @@ theorem fbNames_empty {sems : MapOf FieldSem} {names : Finset Name}
   Finset.ext fun k =>
     ⟨fun hk => by obtain ⟨⟨c, v, hm⟩, hn⟩ := mem_fbNames.mp hk; exact absurd (h k c v hm) hn,
      fun hk => absurd hk (Finset.not_mem_empty k)⟩
-
-theorem fbNames_not_mem {sems : MapOf FieldSem} {names : Finset Name} {k}
-    (hc : k ∈ names) : k ∉ fbNames names sems :=
-  fun hm => (mem_fbNames.mp hm).2 hc
 
 /-- The guard characterizations. One `decide` over the key set replaces the `List.all`,
     and the `Nodup` premise that used to accompany every use of them is gone. -/

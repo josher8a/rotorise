@@ -6,11 +6,17 @@ import Mathlib.Data.Fintype.Basic
 
 Mechanization of `docs/codec-calculus.md`. Modelling choices, each recorded where it bites:
 
-* `Numeral` is `String`, with §1's grammar/bounds as the decidable predicate `Numeral.WF`
-  below. The carrier stays unrestricted on purpose — `decimal` is what checks.
-* Wire sets (`SS`/`NS`/`BS`) and maps (`M`) are lists: a quotient type cannot occur
-  recursively inside an inductive, and the laws never inspect order — the quotient of §2
-  (`ker p`) is where set-ness lives, not in the carrier.
+* `Numeral` is `String` — the *raw text a parser sees*. The carrier is not: `Attr.n`
+  carries `WFNumeral`, the subtype `Numeral.WF` picks out, so `⟨N, "abc"⟩` is
+  unrepresentable rather than merely unwritten. `decimal` still gates, at `Stored`, which
+  is a narrower question than well-formedness.
+* Wire sets (`SS`/`NS`/`BS`) are `NEFinset` of a *concrete element type* — `NEFinset
+  String`, `NEFinset WFNumeral`, `NEFinset Bytes`, and the same three on `Value`. Maps
+  (`M`) are a `Finset Name` with a function on it. Unordered, unique and non-empty are
+  properties of the type, so set-ness lives in the carrier and not in §2's `ker p`. The
+  kernel's restriction is narrower than it looks: it rejects a `Finset` whose element type
+  is the datatype being declared, which is why `union`'s payload is still a list (§11.5 of
+  `codec-audit.md`), and accepts one over a concrete type in the same constructor.
 * `Double` is axiomatized with exactly the shortest-text round trip the doc's `(number)`
   case consumes. That is an IEEE-754 fact, not a theorem of this calculus.
 -/
