@@ -55,13 +55,6 @@ theorem Forall₂.compose {α β γ : Type _} {R : α → β → Prop} {S : β �
   | _, _, _, .nil, .nil => .nil
   | _, _, _, .cons hxy hxs, .cons hyz hys => .cons (h _ _ _ hxy hyz) (hxs.compose h hys)
 
-/-- The `cons` step of `List.lookup`, as an `if` — the pivot for the family below.
-    Mathlib develops `lookup` only for `AList`/`dlookup`, so this is stated here. -/
-theorem lookup_cons_eq {κ α : Type _} [BEq κ] [LawfulBEq κ] {k k₁ : κ} {v₁ : α}
-    {l : List (κ × α)} :
-    List.lookup k ((k₁, v₁) :: l) = if k == k₁ then some v₁ else List.lookup k l := by
-  simp only [List.lookup]; split <;> simp_all
-
 end List
 
 namespace Calculus
@@ -84,19 +77,12 @@ This section **is** §5's Lemma (traversal), which five rules — `array`, `tupl
 | **`≼`**, "a shared position decodes and re-encodes through the same step" | `traverse_rel` | the relation, composed — read-then-rewrite is two traversals, so `Forall₂.compose` |
 | "lengths survive both directions" | `traverse_length` | one direction; the other is `traverse_roundTrip` and this again |
 
-And the keyed refinement, which §5 adds in one sentence:
-
-> *Keyed lists add one clause: entries are dispatched and compared by name, first occurrence
-> first, so the lookup form of `≼`'s `M` clause follows from the pointwise one.*
-
-| | here |
-| --- | --- |
-| names survive the traversal | `traverse_fst` |
-| dispatched and compared by name, **first occurrence first** | `lookup_rel`, in the Lookup section below |
-
-`lookup_rel` earns "first occurrence first" without a `Nodup`: it recurses in lockstep and
-demands only that names agree at each position. §1's `M` admits duplicate keys, so that is
-load-bearing rather than a convenience. -/
+§5's keyed refinement — *"entries are dispatched and compared by name, first occurrence
+first"* — is **gone from this file**, along with the whole association-list section that
+served it. It was a statement about `M` as a `List (Name × Attr)`: a clause needed because
+a keyed list has an order and can repeat a key. `M` is now a name set with a function on
+it, so `Agree.m` compares at a shared key and there is no first occurrence to prefer.
+`traverse_fst` survives because `L` really is a list. -/
 
 /-- A list traversed by an entrywise partial function: all-or-nothing. -/
 def traverse {α β : Type} (f : α → Option β) : List α → Option (List β)
@@ -186,27 +172,8 @@ theorem traverse_mem_input {P : α → Prop} (hP : ∀ x y, f x = some y → P x
     (h : traverse f xs = some ys) : ∀ x ∈ xs, P x :=
   fun _ hx => let ⟨_, _, hf⟩ := (traverse_eq_some.mp h).mem_left hx; hP _ _ hf
 
-theorem traverse_map {g : γ → α} :
-    ∀ l : List γ, traverse f (l.map g) = traverse (fun x => f (g x)) l
-  | [] => rfl
-  | x :: l => by simp only [List.map, traverse_cons, traverse_map l]
 
-theorem traverse_append {l₁ l₂ : List α} {r₁ r₂}
-    (h₁ : traverse f l₁ = some r₁) (h₂ : traverse f l₂ = some r₂) :
-    traverse f (l₁ ++ l₂) = some (r₁ ++ r₂) :=
-  traverse_eq_some.mpr
-    (List.rel_append (traverse_eq_some.mp h₁) (traverse_eq_some.mp h₂))
 
-theorem traverse_append_inv :
-    ∀ {l₁ l₂ : List α} {r}, traverse f (l₁ ++ l₂) = some r →
-      ∃ r₁ r₂, r = r₁ ++ r₂ ∧ traverse f l₁ = some r₁ ∧ traverse f l₂ = some r₂
-  | [], _, r, h => ⟨[], r, rfl, rfl, h⟩
-  | x :: l₁, l₂, r, h => by
-      simp only [List.cons_append, traverse_cons, Option.bind_eq_some,
-        Option.map_eq_some'] at h
-      obtain ⟨y, hy, r', hr', rfl⟩ := h
-      obtain ⟨r₁, r₂, rfl, h₁, h₂⟩ := traverse_append_inv hr'
-      exact ⟨y :: r₁, r₂, rfl, by simp [traverse_cons, hy, h₁], h₂⟩
 
 /-- §5, Lemma (traversal), keyed clause: names survive. A traversal that preserves each
     entry's name preserves the list of names. -/
@@ -222,150 +189,12 @@ theorem traverse_fst {f : Name × α → Option (Name × β)}
 
 end Traverse
 
-/-! ## Association lists
-
-`List.lookup` on `List (Name × α)`. Mathlib develops the theory for `AList`/`dlookup`
-instead, so the small part this development needs is proved here, off `lookup_cons_eq`. -/
-
-section Lookup
-variable {α β : Type}
-
-theorem mem_of_lookup : ∀ {l : List (Name × α)} {k v}, l.lookup k = some v → (k, v) ∈ l
-  | [], _, _, h => nomatch h
-  | (k₁, v₁) :: l, k, v, h => by
-      rw [List.lookup_cons_eq] at h
-      split at h
-      · rename_i hbe; cases h; cases eq_of_beq hbe; exact List.mem_cons_self _ _
-      · exact List.mem_cons_of_mem _ (mem_of_lookup h)
-
-theorem mem_fst_of_lookup {l : List (Name × α)} {k v} (h : l.lookup k = some v) :
-    k ∈ l.map (·.1) :=
-  List.mem_map.mpr ⟨(k, v), mem_of_lookup h, rfl⟩
-
-theorem exists_of_mem_fst {l : List (Name × α)} {k} (h : k ∈ l.map (·.1)) :
-    ∃ x, (k, x) ∈ l := by
-  obtain ⟨p, hp, hp1⟩ := List.mem_map.mp h
-  exact ⟨p.2, by rw [← hp1]; exact hp⟩
-
-theorem lookup_isSome_of_mem_fst :
-    ∀ {l : List (Name × α)} {k}, k ∈ l.map (·.1) → (l.lookup k).isSome = true
-  | [], _, h => absurd h (by simp)
-  | (k₁, _) :: l, k, h => by
-      rw [List.lookup_cons_eq]
-      split
-      · rfl
-      · rename_i hbe
-        simp only [List.map, List.mem_cons] at h
-        exact lookup_isSome_of_mem_fst (h.resolve_left fun hk => by simp [hk] at hbe)
-
-theorem lookup_eq_of_mem_nodup :
-    ∀ {l : List (Name × α)} {k v}, (l.map (·.1)).Nodup → (k, v) ∈ l →
-      l.lookup k = some v
-  | [], _, _, _, hm => nomatch hm
-  | (k₁, v₁) :: l, k, v, hnd, hm => by
-      obtain ⟨hnotin, hnd'⟩ := List.nodup_cons.mp hnd
-      rw [List.lookup_cons_eq]
-      rcases List.mem_cons.mp hm with heq | hm'
-      · cases heq; simp
-      · split
-        · rename_i hbe
-          have hk : k = k₁ := eq_of_beq hbe
-          subst hk
-          exact absurd (List.mem_map.mpr ⟨(k, v), hm', rfl⟩) hnotin
-        · exact lookup_eq_of_mem_nodup hnd' hm'
-
-theorem lookup_none_of_not_mem_fst :
-    ∀ {l : List (Name × α)} {k}, k ∉ l.map (·.1) → l.lookup k = none
-  | [], _, _ => rfl
-  | (k₁, _) :: l, k, h => by
-      rw [List.lookup_cons_eq]
-      split
-      · rename_i hbe; cases eq_of_beq hbe; exact absurd (by simp) h
-      · exact lookup_none_of_not_mem_fst fun h' => h (by simp [h'])
-
-/-- §5, Lemma (traversal), keyed clause: **"dispatched and compared by name, first
-    occurrence first"** — what `Agree.m` consumes on the object codec. No `Nodup`: see the
-    section header for why that is the content. -/
-theorem lookup_rel {R : α → β → Prop} :
-    ∀ (l₁ : List (Name × α)) (l₂ : List (Name × β)),
-      l₁.length = l₂.length →
-      (∀ q ∈ l₁.zip l₂, q.1.1 = q.2.1 ∧ R q.1.2 q.2.2) →
-      ∀ k a b, l₁.lookup k = some a → l₂.lookup k = some b → R a b
-  | [], [], _, _, _, _, _, h1, _ => nomatch h1
-  | [], _ :: _, hlen, _, _, _, _, _, _ => nomatch hlen
-  | _ :: _, [], hlen, _, _, _, _, _, _ => nomatch hlen
-  | (k₁, a₁) :: l₁, (k₂, b₁) :: l₂, hlen, hzip, k, a, b, h1, h2 => by
-      obtain ⟨hk, hR⟩ := hzip ((k₁, a₁), (k₂, b₁)) (List.mem_cons_self _ _)
-      simp only at hk
-      subst hk
-      rw [List.lookup_cons_eq] at h1 h2
-      split at h1
-      · rw [if_pos ‹_›] at h2; cases h1; cases h2; exact hR
-      · rw [if_neg ‹_›] at h2
-        exact lookup_rel l₁ l₂ (by simpa using hlen)
-          (fun q hq => hzip q (List.mem_cons_of_mem _ hq)) k a b h1 h2
-
-theorem lookup_append :
-    ∀ (l₁ l₂ : List (Name × α)) (k : Name),
-      (l₁ ++ l₂).lookup k =
-        match l₁.lookup k with
-        | some v => some v
-        | none => l₂.lookup k
-  | [], _, _ => rfl
-  | (k₁, v₁) :: l₁, l₂, k => by
-      show ((k₁, v₁) :: (l₁ ++ l₂)).lookup k = _
-      rw [List.lookup_cons_eq, List.lookup_cons_eq]
-      split
-      · rfl
-      · exact lookup_append l₁ l₂ k
-
-/-- Filtering on the key does not disturb a lookup the filter keeps… -/
-theorem lookup_filter_pos {kn : Name → Bool} {k : Name} (hk : kn k = true) :
-    ∀ (l : List (Name × α)), (l.filter fun kv => kn kv.1).lookup k = l.lookup k
-  | [] => rfl
-  | (k₁, v₁) :: l => by
-      simp only [List.filter]
-      cases hkn₁ : kn k₁ with
-      | true => rw [List.lookup_cons_eq, List.lookup_cons_eq]
-                split
-                · rfl
-                · exact lookup_filter_pos hk l
-      | false =>
-        rw [List.lookup_cons_eq, if_neg]
-        · exact lookup_filter_pos hk l
-        · intro hbe; cases eq_of_beq hbe; rw [hk] at hkn₁; exact nomatch hkn₁
-
-/-- …and removes every lookup it drops. -/
-theorem lookup_filter_neg {kn : Name → Bool} {k : Name} (hk : kn k = false) :
-    ∀ (l : List (Name × α)), (l.filter fun kv => kn kv.1).lookup k = none
-  | [] => rfl
-  | (k₁, v₁) :: l => by
-      simp only [List.filter]
-      cases hkn₁ : kn k₁ with
-      | true =>
-        rw [List.lookup_cons_eq, if_neg]
-        · exact lookup_filter_neg hk l
-        · intro hbe; cases eq_of_beq hbe; rw [hk] at hkn₁; exact nomatch hkn₁
-      | false => exact lookup_filter_neg hk l
-
-end Lookup
-
-/-! ## Filters, membership and zips
-
-Stated in the shape the use sites want; each is a line of mathlib underneath. -/
-
-section Misc
-variable {α β : Type}
-
 theorem contains_of_mem {l : List String} {s : String} (h : s ∈ l) : l.contains s = true :=
   List.contains_iff_mem.mpr h
 
 theorem mem_of_contains {l : List String} {s : String} (h : l.contains s = true) : s ∈ l :=
   List.contains_iff_mem.mp h
 
-theorem contains_eq_false_of_not_mem {l : List String} {s : String} (h : s ∉ l) :
-    l.contains s = false := by
-  simpa using fun hc => h (List.contains_iff_mem.mp hc)
 
 /-- Constructive on purpose: mathlib's `filter_eq_nil_iff` routes through
     `Classical.choice`, and §3 of the formalization doc advertises an axiom base without
@@ -378,34 +207,9 @@ theorem filter_nil_of {p : α → Bool} :
       simp only [List.filter, ha]
       exact filter_nil_of fun y hy => h y (List.mem_cons_of_mem a hy)
 
-theorem filter_eq_self_of_all {p : α → Bool} {l : List α} (h : ∀ x ∈ l, p x = true) :
-    l.filter p = l :=
-  List.filter_eq_self.mpr h
 
-/-- The unique survivor of a filter on a duplicate-free list. -/
-theorem filter_singleton_of {p : α → Bool} :
-    ∀ {l : List α} {x : α}, l.Nodup → x ∈ l → p x = true →
-      (∀ y ∈ l, y ≠ x → p y = false) → l.filter p = [x]
-  | [], x, _, hx, _, _ => nomatch hx
-  | a :: l, x, hnd, hx, hpx, hout => by
-      have hnd' := List.nodup_cons.mp hnd
-      rcases List.mem_cons.mp hx with rfl | hx'
-      · have hnil : l.filter p = [] :=
-          filter_nil_of fun y hy =>
-            hout y (List.mem_cons_of_mem x hy) (fun h => hnd'.1 (h ▸ hy))
-        simp only [List.filter, hpx, hnil]
-      · have hax : a ≠ x := fun h => hnd'.1 (h ▸ hx')
-        have hpa := hout a (List.mem_cons_self a l) hax
-        simp only [List.filter, hpa]
-        exact filter_singleton_of hnd'.2 hx' hpx
-          (fun y hy hyx => hout y (List.mem_cons_of_mem a hy) hyx)
 
-theorem filter_map_comm (f : α → β) (p : β → Bool) (l : List α) :
-    (l.map f).filter p = (l.filter fun x => p (f x)).map f :=
-  List.filter_map f l
 
-theorem ne_nil_of_isEmpty_false {l : List α} (h : l.isEmpty = false) : l ≠ [] := by
-  simpa using h
 
 /-- **Separation.** Suppose a predicate family `adm` pins each list entry to a key: an
     entry admits `x` only when `key x` is that entry's key. If the keys are pairwise
@@ -457,18 +261,6 @@ theorem filter_eq_singleton_of_labels {β α ι : Type}
     rw [hk] at hk'; cases hk'
     exact h l hS hS'
 
-/-- The single-label case: one key per option, keys distinct. An instance of the above at
-    a total projection and singleton label sets — `Nodup` is disjointness of singletons. -/
-theorem filter_eq_singleton_of_keys {β α ι : Type} [DecidableEq ι]
-    {adm : β → α → Bool} {key : α → ι} {x : α} {os : List β} {ks : List ι}
-    (hz : List.Forall₂ (fun o k => ∀ y, adm o y = true → key y = k) os ks) (hnd : ks.Nodup)
-    (o : β) (ho : o ∈ os) (hx : adm o x = true) : os.filter (adm · x) = [o] := by
-  refine filter_eq_singleton_of_labels (key := fun y => some (key y))
-    (Ss := ks.map (fun k l => l = k)) ?_ ?_ o ho hx
-  · rw [List.forall₂_map_right_iff]
-    exact hz.imp fun _ _ h y hy => ⟨key y, rfl, h y hy⟩
-  · rw [List.pairwise_map]
-    exact hnd.imp fun hne l hl hl' => hne (hl.symm.trans hl')
 
 /-- Filtering to a singleton names an element of the list that satisfies the
     predicate — how a resolved choice is read back. -/
@@ -516,17 +308,3 @@ theorem forall_mem_map_option {α β : Type} {x? : Option α} {g : α → β} {P
     (h : ∀ x ∈ x?, P (g x)) : ∀ y ∈ x?.map g, P y := by
   cases x? <;> simp_all
 
-theorem mem_zip_left :
-    ∀ (l₁ : List α) (l₂ : List β), l₁.length = l₂.length →
-      ∀ x, x ∈ l₁ → ∃ y, (x, y) ∈ l₁.zip l₂
-  | [], _, _, _, hx => nomatch hx
-  | _ :: _, [], hlen, _, _ => nomatch hlen
-  | a :: l₁, b :: l₂, hlen, x, hx => by
-      rcases List.mem_cons.mp hx with rfl | hx'
-      · exact ⟨b, List.mem_cons_self _ _⟩
-      · obtain ⟨y, hy⟩ := mem_zip_left l₁ l₂ (by simpa using hlen) x hx'
-        exact ⟨y, List.mem_cons_of_mem _ hy⟩
-
-end Misc
-
-end Calculus

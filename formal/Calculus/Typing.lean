@@ -107,13 +107,13 @@ def DIncomp (Ts : List Held) : Prop :=
     held set)`; `R` is the open part — `none` for `drop`/`refuse`, the rest codec's held
     set otherwise. Every `req` name is present, and every present name is either
     declared (and holds its own set) or falls to the open part. -/
-def HObject (binds : List (Name × Bool × Held)) (R : Option Held) : Held :=
+def HObject (names : Finset Name) (b : {k // k ∈ names} → Bool × Held) (R : Option Held) :
+    Held :=
   fun v => ∃ keys f, v = .map keys f ∧
-    (∀ nb ∈ binds, nb.2.1 = true → nb.1 ∈ keys) ∧
+    (∀ k : {k // k ∈ names}, (b k).1 = true → k.1 ∈ keys) ∧
     (∀ k : {k // k ∈ keys},
-      match binds.lookup k.1 with
-      | some b => b.2 (f k)
-      | none => ∃ T, R = some T ∧ T (f k))
+      if h : k.1 ∈ names then (b ⟨k.1, h⟩).2 (f k)
+      else ∃ T, R = some T ∧ T (f k))
 
 /-- `Uν` (§3 `(opaque)`): the values whose member is recoverable from the value alone,
     as the doc's fixpoint — everything self-identifying, closed under the containers.
@@ -189,9 +189,14 @@ inductive Typed : Term → Held → Option Member → Prop where
   | lazy {t T μ} (h : Typed t T μ) : Typed (.lazy t) T none
   | custom (ce cp) : Typed (.custom ce cp) (fun v => (ce v).isSome = true) none
   | opaq (lossy) : Typed (.opaq lossy) (HOpaque lossy) none
-  | object {fields binds rest R} (hf : TypedFields fields binds)
-      (hnd : (fields.map (·.1)).Nodup) (hr : TypedRest rest R) :
-      Typed (.object fields rest) (HObject binds R) (some .M)
+  /-- §4 `(object)`. The field table is a key set with a function on it, so the
+      judgement is **pointwise**: every declared name's field is typed at its binding,
+      and the bindings are indexed by the same set — so "the same names, in the same
+      order, without repeats" is not a premise, it is the type. `hnd` is gone with it. -/
+  | object {fields f b rest R} {μs : {k // k ∈ fields} → Option Member}
+      (hf : ∀ k, TypedField (f k) (b k).2 (b k).1 (μs k))
+      (hr : TypedRest rest R) :
+      Typed (.object fields f rest) (HObject fields b R) (some .M)
   /-- `(union)`: the option judgements, and §5's **(D)** on their held sets. -/
   | union {opts Ts μs} (h : TypedListμ opts Ts μs) (hD : DIncomp Ts) :
       Typed (.union opts) (HUnion Ts) (unanimous μs)
@@ -227,11 +232,6 @@ inductive TypedField : Field → Held → Bool → Option Member → Prop where
   | optional {t T μ} (h : Typed t T μ) : TypedField (.optional t) T false μ
   | fallback {t T μ v} (h : Typed t T μ) : TypedField (.fallback t v) T true μ
 
-inductive TypedFields : List (Name × Field) → List (Name × Bool × Held) → Prop where
-  | nil : TypedFields [] []
-  | cons {k f fs binds T π μ} (h : TypedField f T π μ) (hs : TypedFields fs binds) :
-      TypedFields ((k, f) :: fs) ((k, π, T) :: binds)
-
 /-- §4's `⊢ ρ : rest`, carrying `R(ρ)` — `∅` (here `none`) for the two string policies,
     the rest codec's held set otherwise. -/
 inductive TypedRest : Rest → Option Held → Prop where
@@ -240,5 +240,30 @@ inductive TypedRest : Rest → Option Held → Prop where
   | codec {t T μ} (h : Typed t T μ) : TypedRest (.codec t) (some T)
 
 end
+
+/-! ## Reading a field's judgement
+
+`TypedField`'s indices at a declared name are `(b k).2`, `(b k).1` and `μs k` — none of
+them a variable — so `cases` on it cannot eliminate. These two extract what the callers
+want without eliminating at the use site. -/
+
+/-- A typed field gives its term, that term's judgement, and which of the three shapes
+    the field has. -/
+theorem TypedField.term {fd : Field} {T π μ} (h : TypedField fd T π μ) :
+    ∃ t', Typed t' T μ ∧
+      (fd = .req t' ∨ fd = .optional t' ∨ ∃ v, fd = .fallback t' v) := by
+  cases h with
+  | req h' => exact ⟨_, h', Or.inl rfl⟩
+  | optional h' => exact ⟨_, h', Or.inr (Or.inl rfl)⟩
+  | fallback h' => exact ⟨_, h', Or.inr (Or.inr ⟨_, rfl⟩)⟩
+
+/-- …and a *required* one is not `optional`, which is §4's `fallback` concluding `req`
+    read backwards. -/
+theorem TypedField.not_optional {fd : Field} {T π μ} (h : TypedField fd T π μ)
+    (hπ : π = true) : ∀ t', fd ≠ .optional t' := by
+  cases h with
+  | req _ => intro t' hc; exact nomatch hc
+  | fallback _ => intro t' hc; exact nomatch hc
+  | optional _ => exact absurd hπ (by simp)
 
 end Calculus

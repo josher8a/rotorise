@@ -1585,36 +1585,84 @@ inductive RestSem where
   | drop | refuse
   | codec (c : Codec)
 
+/-! ### The field table is a map, not a row
 
+§4 declares a *set* of field names, each with one field — so the table is a `MapOf`,
+exactly as `M`'s payload is, and for the same reason. A `List (Name × FieldSem)` admits
+two orderings of one object and a repeated name, and the `Nodup` premise that used to
+travel with every object law existed to make the first harmless and rule out the second.
+Both are now properties of the type, and that premise is gone from all five of them.
+
+`semAt` is the lookup a `MapOf` has: a membership decision and a function application.
+It is deliberately shaped like `List.lookup` so that everything downstream — `entryCodec`,
+`objEntryT`, `fbValue`, `keepB` and every proof that splits on them — reads unchanged. -/
+
+/-- The value a `MapOf` gives a name, where it gives one — the lookup a key set with a
+    function on it has. Generic because the *term*'s field table needs it too. -/
+def MapOf.at {α : Type} (m : MapOf α) (k : Name) : Option α :=
+  if h : k ∈ m.1 then some (m.2 ⟨k, h⟩) else none
+
+/-- A declared name is one the table's key set carries, and conversely. -/
+theorem MapOf.at_eq_some {α : Type} {m : MapOf α} {k : Name} {x : α} :
+    m.at k = some x ↔ ∃ h : k ∈ m.1, m.2 ⟨k, h⟩ = x := by
+  simp only [MapOf.at]
+  by_cases h : k ∈ m.1
+  · rw [dif_pos h]
+    exact ⟨fun he => ⟨h, Option.some.inj he⟩, fun ⟨_, he⟩ => by rw [← he]⟩
+  · rw [dif_neg h]
+    exact Iff.intro (fun he => nomatch he) (fun ⟨h', _⟩ => absurd h' h)
+
+/-- Every key of the table is declared, at the value the table gives it. -/
+theorem MapOf.at_of_mem {α : Type} {m : MapOf α} (k : {k // k ∈ m.1}) :
+    m.at k.1 = some (m.2 k) := by
+  simp only [MapOf.at, dif_pos k.2]
+
+theorem MapOf.at_isSome {α : Type} {m : MapOf α} {k : Name} :
+    (m.at k).isSome = true ↔ k ∈ m.1 := by
+  simp only [MapOf.at]; split <;> simp_all
+
+/-- A property of every value is a property of every declared name's value. -/
+theorem MapOf.at_forall {α : Type} {m : MapOf α} {Q : α → Prop}
+    (h : ∀ k, Q (m.2 k)) {k x} (hm : m.at k = some x) : Q x := by
+  obtain ⟨hk, rfl⟩ := MapOf.at_eq_some.mp hm
+  exact h ⟨k, hk⟩
 
 /-- `fb`'s absent case, `p♭(ε) = v(∗)`: the stand-ins for the fallback names a row
-    omits. Empty on canonical items, where every `fb` name is present. -/
-def fbNames (names : Finset Name) : List (Name × FieldSem) → Finset Name
-  | [] => ∅
-  | (k, .fb _ _) :: sems =>
-    if k ∈ names then fbNames names sems else insert k (fbNames names sems)
-  | _ :: sems => fbNames names sems
+    omits. Empty on canonical items, where every `fb` name is present.
+
+    A `Finset.filter` over the declared names, where the list form was a fold with an
+    `insert` — and its characterization is `Finset.mem_filter` rather than an induction. -/
+def isFbB : Option FieldSem → Bool
+  | some (.fb _ _) => true
+  | _ => false
+
+def fbNames (names : Finset Name) (sems : MapOf FieldSem) : Finset Name :=
+  sems.1.filter fun k => isFbB (sems.at k) && !decide (k ∈ names)
 
 /-- …and the stand-in each of them reads to. -/
-def fbValue (sems : List (Name × FieldSem)) (k : Name) : Option Value :=
-  match sems.lookup k with
+def fbValue (sems : MapOf FieldSem) (k : Name) : Option Value :=
+  match sems.at k with
   | some (.fb _ v) => some v
   | _ => none
 
+/-- What each guard asks of one binding, named so the guards themselves are a single
+    quantifier over the key set rather than a `List.all` over a row. -/
+def valPresentAt (names : Finset Name) : Name → FieldSem → Bool
+  | _, .opt _ => true
+  | k, _ => decide (k ∈ names)
+
+def reqPresentAt (names : Finset Name) : Name → FieldSem → Bool
+  | k, .req _ => decide (k ∈ names)
+  | _, _ => true
+
 /-- Every non-`opt` binding present — the value-side guard (§4: `fallback` concludes
     `req`). -/
-def valPresentB (sems : List (Name × FieldSem)) (names : Finset Name) : Bool :=
-  sems.all fun kf =>
-    match kf.2 with
-    | .opt _ => true
-    | _ => decide (kf.1 ∈ names)
+def valPresentB (sems : MapOf FieldSem) (names : Finset Name) : Bool :=
+  decide (∀ k : {k // k ∈ sems.1}, valPresentAt names k.1 (sems.2 k) = true)
 
 /-- Every `req` name present — the stored-side guard; `fb` reads to its stand-in. -/
-def reqPresentB (sems : List (Name × FieldSem)) (names : Finset Name) : Bool :=
-  sems.all fun kf =>
-    match kf.2 with
-    | .req _ => decide (kf.1 ∈ names)
-    | _ => true
+def reqPresentB (sems : MapOf FieldSem) (names : Finset Name) : Bool :=
+  decide (∀ k : {k // k ∈ sems.1}, reqPresentAt names k.1 (sems.2 k) = true)
 
 /-- The rest policy's codec, where it has one. -/
 def rcOf : RestSem → Option Codec
@@ -1623,9 +1671,9 @@ def rcOf : RestSem → Option Codec
 
 /-- The name filter: `drop` keeps declared names only; the others keep everything.
     A filter, never a traversal mode (§4). -/
-def keepB (rest : RestSem) (sems : List (Name × FieldSem)) : Name → Bool :=
+def keepB (rest : RestSem) (sems : MapOf FieldSem) : Name → Bool :=
   match rest with
-  | .drop => fun k => (sems.lookup k).isSome
+  | .drop => fun k => (sems.at k).isSome
   | _ => fun _ => true
 
 /-! ### The object, taken apart
@@ -1640,30 +1688,30 @@ and `M`, so §2's prism halves are the ones already discharged. -/
 
 /-- The per-name half of §4's held set: a declared name holds its field's set, an
     undeclared one falls to the open part `R(ρ)`. -/
-def objEntryT (sems : List (Name × FieldSem)) (rc? : Option Codec) :
+def objEntryT (sems : MapOf FieldSem) (rc? : Option Codec) :
     Name × Value → Prop := fun kv =>
-  match sems.lookup kv.1 with
+  match sems.at kv.1 with
   | some fs => fs.codec.T kv.2
   | none => ∃ rc, rc? = some rc ∧ rc.T kv.2
 
 /-- The codec one entry goes through: the field its name declares, or else the rest
     policy's. `none` is an undeclared name under `refuse`. -/
-def entryCodec (sems : List (Name × FieldSem)) (rc? : Option Codec) (k : Name) :
+def entryCodec (sems : MapOf FieldSem) (rc? : Option Codec) (k : Name) :
     Option Codec :=
-  match sems.lookup k with
+  match sems.at k with
   | some fs => some fs.codec
   | none => rc?
 
 section Object
-variable {sems : List (Name × FieldSem)} {rc? : Option Codec} {kn : Name → Bool}
+variable {sems : MapOf FieldSem} {rc? : Option Codec} {kn : Name → Bool}
 
 /-- A property of every field and of the rest codec is a property of every entry's
     codec — which is how the object's per-entry laws are discharged, once each. -/
-theorem entryCodec_of {Q : Codec → Prop} (hf : ∀ kf ∈ sems, Q kf.2.codec)
+theorem entryCodec_of {Q : Codec → Prop} (hf : ∀ k, Q (sems.2 k).codec)
     (hrc : ∀ c ∈ rc?, Q c) {k c} (h : entryCodec sems rc? k = some c) : Q c := by
   simp only [entryCodec] at h
-  cases hsp : sems.lookup k with
-  | some fs => rw [hsp] at h; cases h; exact hf _ (mem_of_lookup hsp)
+  cases hsp : sems.at k with
+  | some fs => rw [hsp] at h; cases h; exact MapOf.at_forall (Q := fun fs => Q fs.codec) hf hsp
   | none => rw [hsp] at h; exact hrc c h
 
 
@@ -1672,11 +1720,11 @@ theorem entryCodec_of {Q : Codec → Prop} (hf : ∀ kf ∈ sems, Q kf.2.codec)
 theorem objEntryT_eq {kv} :
     objEntryT sems rc? kv ↔ ∃ c, entryCodec sems rc? kv.1 = some c ∧ c.T kv.2 := by
   simp only [objEntryT, entryCodec]
-  cases sems.lookup kv.1 <;> simp
+  cases sems.at kv.1 <;> simp
 
 /-- The object's payload pair, going out: the value-side presence guard, then the
     name-dispatched steps. -/
-noncomputable def objWrite (sems : List (Name × FieldSem)) (rc? : Option Codec) :
+noncomputable def objWrite (sems : MapOf FieldSem) (rc? : Option Codec) :
     MapOf Value → Option (MapOf Attr) := fun p =>
   if valPresentB sems p.1 = true then
     (funImage (fun k => (entryCodec sems rc? k.1).bind (fun c => c.e (p.2 k)))).map
@@ -1685,7 +1733,7 @@ noncomputable def objWrite (sems : List (Name × FieldSem)) (rc? : Option Codec)
 
 /-- …and coming back: the stored-side guard, the `drop` filter, the steps, and the
     stand-ins for the fallback names the row omits. -/
-noncomputable def objRead (sems : List (Name × FieldSem)) (rc? : Option Codec)
+noncomputable def objRead (sems : MapOf FieldSem) (rc? : Option Codec)
     (kn : Name → Bool) : MapOf Attr → Option (MapOf Value) := fun p =>
   if reqPresentB sems p.1 = true then
     (funImage (fun k : {k // k ∈ p.1.filter (kn ·)} =>
@@ -1721,13 +1769,13 @@ theorem objRead_eq {q : MapOf Attr} {p : MapOf Value} :
   · next hg => simp [hg]
 
 /-- The object is `carriedCodec` between `map` and `M`, at that pair. -/
-noncomputable def objectCodecCore (sems : List (Name × FieldSem)) (rc? : Option Codec)
+noncomputable def objectCodecCore (sems : MapOf FieldSem) (rc? : Option Codec)
     (kn : Name → Bool) : Codec :=
   carriedCodec mapV mA .M
     (fun p => valPresentB sems p.1 = true ∧ ∀ k, objEntryT sems rc? (k.1, p.2 k))
     (objWrite sems rc?) (objRead sems rc? kn)
 
-noncomputable def objectCodec (sems : List (Name × FieldSem)) (rest : RestSem) : Codec :=
+noncomputable def objectCodec (sems : MapOf FieldSem) (rest : RestSem) : Codec :=
   objectCodecCore sems (rcOf rest) (keepB rest sems)
 
 theorem objectCodecCore_eq :
@@ -1757,13 +1805,16 @@ structure OptionSem where
   admitV : Value → Bool
   c : Codec
 
-/-- Name admission (objects): every present name declared, every required name present. -/
-def keysOk (spec : List (Name × Bool)) (keys : Finset Name) : Bool :=
-  decide (∀ k ∈ keys, spec.any (·.1 == k)) &&
-  spec.all (fun kb => !kb.2 || decide (kb.1 ∈ keys))
+/-- Name admission (objects): every present name declared, every required name present.
+    The spec is a `MapOf Bool` — the declared names with each one's required flag —
+    for the same reason the field table is: a list of pairs admits orderings and
+    repeats that a declaration does not have. -/
+def keysOk (spec : MapOf Bool) (keys : Finset Name) : Bool :=
+  decide (∀ k ∈ keys, k ∈ spec.1) &&
+  decide (∀ k : {k // k ∈ spec.1}, spec.2 k = true → k.1 ∈ keys)
 
 /-- An object option decides by names, never by being attempted. -/
-def OptionSem.byNames (spec : List (Name × Bool)) (c : Codec) : OptionSem :=
+def OptionSem.byNames (spec : MapOf Bool) (c : Codec) : OptionSem :=
   { admitA := fun a => match a with | .m keys _ => keysOk spec keys | _ => false
     admitV := fun v => match v with | .map keys _ => keysOk spec keys | _ => false
     c := c }
@@ -1827,7 +1878,7 @@ theorem byTag_admitV {d : Name} {tags : List String} {c : Codec} {v : Value} :
   | some tag => simp
 
 /-- The builder `denote` uses for a union option. -/
-def optionSemOf (c : Codec) : Option (List (Name × Bool)) → OptionSem
+def optionSemOf (c : Codec) : Option (MapOf Bool) → OptionSem
   | some spec => .byNames spec c
   | none => .byAttempt c
 
@@ -3170,100 +3221,85 @@ theorem lawful_setCodec {c : Codec} (h : Lawful c) : Lawful (setCodec c) := by
 /-! ### Keyed lookup and traversal facts (the keyed product consumes these) -/
 
 
-/-- **What `fbNames` contains**: exactly the `fb` names the row omits. One induction,
-    and the four facts the object proofs need fall out of it. -/
-theorem mem_fbNames {names : Finset Name} :
-    ∀ {sems : List (Name × FieldSem)} {k},
-      k ∈ fbNames names sems ↔ (∃ c v, (k, FieldSem.fb c v) ∈ sems) ∧ k ∉ names
-  | [], k => by simp [fbNames]
-  | (k₀, f₀) :: sems, k => by
-    cases f₀ with
-    | req c =>
-      simp only [fbNames, mem_fbNames, List.mem_cons]
-      constructor
-      · rintro ⟨⟨c', v', hm⟩, hn⟩; exact ⟨⟨c', v', Or.inr hm⟩, hn⟩
-      · rintro ⟨⟨c', v', hm | hm⟩, hn⟩
-        · exact nomatch hm
-        · exact ⟨⟨c', v', hm⟩, hn⟩
-    | opt c =>
-      simp only [fbNames, mem_fbNames, List.mem_cons]
-      constructor
-      · rintro ⟨⟨c', v', hm⟩, hn⟩; exact ⟨⟨c', v', Or.inr hm⟩, hn⟩
-      · rintro ⟨⟨c', v', hm | hm⟩, hn⟩
-        · exact nomatch hm
-        · exact ⟨⟨c', v', hm⟩, hn⟩
-    | fb c v =>
-      by_cases h0 : k₀ ∈ names
-      · simp only [fbNames, if_pos h0, mem_fbNames, List.mem_cons]
-        constructor
-        · rintro ⟨⟨c', v', hm⟩, hn⟩; exact ⟨⟨c', v', Or.inr hm⟩, hn⟩
-        · rintro ⟨⟨c', v', hm | hm⟩, hn⟩
-          · cases hm; exact absurd h0 hn
-          · exact ⟨⟨c', v', hm⟩, hn⟩
-      · simp only [fbNames, if_neg h0, Finset.mem_insert, mem_fbNames, List.mem_cons]
-        constructor
-        · rintro (rfl | ⟨⟨c', v', hm⟩, hn⟩)
-          · exact ⟨⟨c, v, Or.inl rfl⟩, h0⟩
-          · exact ⟨⟨c', v', Or.inr hm⟩, hn⟩
-        · rintro ⟨⟨c', v', hm | hm⟩, hn⟩
-          · cases hm; exact Or.inl rfl
-          · exact Or.inr ⟨⟨c', v', hm⟩, hn⟩
+/-- **What `fbNames` contains**: exactly the `fb` names the row omits.
 
-theorem fbNames_mem {sems : List (Name × FieldSem)} {names : Finset Name} {k c v}
-    (hm : (k, FieldSem.fb c v) ∈ sems) (hc : k ∉ names) : k ∈ fbNames names sems :=
+    The list form needed a forty-line induction over the row; a `Finset.filter` needs
+    `Finset.mem_filter`, and the four facts the object proofs use still fall out of it. -/
+private theorem isFbB_eq {o : Option FieldSem} :
+    isFbB o = true ↔ ∃ c v, o = some (.fb c v) := by
+  cases o with
+  | none => simp [isFbB]
+  | some fs => cases fs <;> simp [isFbB]
+
+theorem mem_fbNames {names : Finset Name} {sems : MapOf FieldSem} {k} :
+    k ∈ fbNames names sems ↔ (∃ c v, sems.at k = some (.fb c v)) ∧ k ∉ names := by
+  simp only [fbNames, Finset.mem_filter, Bool.and_eq_true, Bool.not_eq_true',
+    decide_eq_false_iff_not, isFbB_eq]
+  exact ⟨fun ⟨_, hfb, hn⟩ => ⟨hfb, hn⟩,
+         fun ⟨⟨c, v, hm⟩, hn⟩ => ⟨(MapOf.at_eq_some.mp hm).1, ⟨c, v, hm⟩, hn⟩⟩
+
+theorem fbNames_mem {sems : MapOf FieldSem} {names : Finset Name} {k c v}
+    (hm : sems.at k = some (.fb c v)) (hc : k ∉ names) : k ∈ fbNames names sems :=
   mem_fbNames.mpr ⟨⟨c, v, hm⟩, hc⟩
 
-theorem fbNames_spec {sems : List (Name × FieldSem)} {names : Finset Name} {k}
+theorem fbNames_spec {sems : MapOf FieldSem} {names : Finset Name} {k}
     (hm : k ∈ fbNames names sems) :
-    (∃ c v, (k, FieldSem.fb c v) ∈ sems) ∧ k ∉ names := mem_fbNames.mp hm
+    (∃ c v, sems.at k = some (.fb c v)) ∧ k ∉ names := mem_fbNames.mp hm
 
 /-- Emptiness by `Finset.ext`, not by `Finset.eq_empty_of_forall_not_mem`: the mathlib
     lemma is proved classically, and this file's axiom base (`Axioms.lean`) does not
     admit `Classical.choice`. -/
-theorem fbNames_empty {sems : List (Name × FieldSem)} {names : Finset Name}
-    (h : ∀ k c v, (k, FieldSem.fb c v) ∈ sems → k ∈ names) : fbNames names sems = ∅ :=
+theorem fbNames_empty {sems : MapOf FieldSem} {names : Finset Name}
+    (h : ∀ k c v, sems.at k = some (.fb c v) → k ∈ names) : fbNames names sems = ∅ :=
   Finset.ext fun k =>
     ⟨fun hk => by obtain ⟨⟨c, v, hm⟩, hn⟩ := mem_fbNames.mp hk; exact absurd (h k c v hm) hn,
      fun hk => absurd hk (Finset.not_mem_empty k)⟩
 
-theorem fbNames_not_mem {sems : List (Name × FieldSem)} {names : Finset Name} {k}
+theorem fbNames_not_mem {sems : MapOf FieldSem} {names : Finset Name} {k}
     (hc : k ∈ names) : k ∉ fbNames names sems :=
   fun hm => (mem_fbNames.mp hm).2 hc
 
-/-- The guard characterizations, via `List.all`. -/
-theorem valPresentB_spec {sems : List (Name × FieldSem)} {names : Finset Name}
-    (h : valPresentB sems names = true) {k fs} (hm : (k, fs) ∈ sems)
+/-- The guard characterizations. One `decide` over the key set replaces the `List.all`,
+    and the `Nodup` premise that used to accompany every use of them is gone. -/
+theorem valPresentB_spec {sems : MapOf FieldSem} {names : Finset Name}
+    (h : valPresentB sems names = true) {k fs} (hm : sems.at k = some fs)
     (hno : ∀ c, fs ≠ FieldSem.opt c) : k ∈ names := by
-  have := List.all_eq_true.mp h (k, fs) hm
-  cases fs with
-  | opt c => exact absurd rfl (hno c)
-  | req c => exact of_decide_eq_true this
-  | fb c v => exact of_decide_eq_true this
+  obtain ⟨hk, rfl⟩ := MapOf.at_eq_some.mp hm
+  have hb := of_decide_eq_true h ⟨k, hk⟩
+  cases hs : sems.2 ⟨k, hk⟩ with
+  | opt c => rw [hs] at hno; exact absurd rfl (hno c)
+  | req c => rw [hs] at hb; exact of_decide_eq_true hb
+  | fb c v => rw [hs] at hb; exact of_decide_eq_true hb
 
-theorem valPresentB_of {sems : List (Name × FieldSem)} {names : Finset Name}
-    (h : ∀ k fs, (k, fs) ∈ sems → (∀ c, fs ≠ FieldSem.opt c) → k ∈ names) :
+theorem valPresentB_of {sems : MapOf FieldSem} {names : Finset Name}
+    (h : ∀ k fs, sems.at k = some fs → (∀ c, fs ≠ FieldSem.opt c) → k ∈ names) :
     valPresentB sems names = true := by
-  refine List.all_eq_true.mpr fun kf hkf => ?_
-  obtain ⟨k, fs⟩ := kf
-  cases fs with
-  | opt c => rfl
-  | req c => exact decide_eq_true (h k (.req c) hkf (fun _ h' => nomatch h'))
-  | fb c v => exact decide_eq_true (h k (.fb c v) hkf (fun _ h' => nomatch h'))
+  refine decide_eq_true fun k => ?_
+  cases hs : sems.2 k with
+  | opt c => simp [valPresentAt, hs]
+  | req c =>
+    simpa [valPresentAt, hs] using
+      h k.1 (.req c) (by rw [MapOf.at_of_mem k, hs]) (fun _ h' => nomatch h')
+  | fb c v =>
+    simpa [valPresentAt, hs] using
+      h k.1 (.fb c v) (by rw [MapOf.at_of_mem k, hs]) (fun _ h' => nomatch h')
 
-theorem reqPresentB_spec {sems : List (Name × FieldSem)} {names : Finset Name}
-    (h : reqPresentB sems names = true) {k c} (hm : (k, FieldSem.req c) ∈ sems) :
-    k ∈ names :=
-  of_decide_eq_true (List.all_eq_true.mp h (k, .req c) hm)
+theorem reqPresentB_spec {sems : MapOf FieldSem} {names : Finset Name}
+    (h : reqPresentB sems names = true) {k c} (hm : sems.at k = some (.req c)) :
+    k ∈ names := by
+  obtain ⟨hk, hs⟩ := MapOf.at_eq_some.mp hm
+  have hb := of_decide_eq_true h ⟨k, hk⟩
+  rw [hs] at hb
+  exact of_decide_eq_true hb
 
-theorem reqPresentB_of {sems : List (Name × FieldSem)} {names : Finset Name}
-    (h : ∀ k c, (k, FieldSem.req c) ∈ sems → k ∈ names) :
+theorem reqPresentB_of {sems : MapOf FieldSem} {names : Finset Name}
+    (h : ∀ k c, sems.at k = some (.req c) → k ∈ names) :
     reqPresentB sems names = true := by
-  refine List.all_eq_true.mpr fun kf hkf => ?_
-  obtain ⟨k, fs⟩ := kf
-  cases fs with
-  | req c => exact decide_eq_true (h k c hkf)
-  | opt c => rfl
-  | fb c v => rfl
+  refine decide_eq_true fun k => ?_
+  cases hs : sems.2 k with
+  | req c => simpa [reqPresentAt, hs] using h k.1 c (by rw [MapOf.at_of_mem k, hs])
+  | opt c => simp [reqPresentAt, hs]
+  | fb c v => simp [reqPresentAt, hs]
 
 
 /-! ### The keyed steps: round trip, definedness, agreement, and name preservation -/
@@ -3279,8 +3315,8 @@ theorem reqPresentB_of {sems : List (Name × FieldSem)} {names : Finset Name}
 
 /-- The same two, stated on the step the payload pair actually takes now: dispatch by
     name, then run that entry's codec. -/
-theorem entry_domE' {sems : List (Name × FieldSem)} {rc? : Option Codec}
-    (hs : ∀ kf ∈ sems, Carrier kf.2.codec) (hrc : ∀ c ∈ rc?, Carrier c)
+theorem entry_domE' {sems : MapOf FieldSem} {rc? : Option Codec}
+    (hs : ∀ k, Carrier (sems.2 k).codec) (hrc : ∀ c ∈ rc?, Carrier c)
     {k : Name} {v : Value} {a : Attr}
     (h : (entryCodec sems rc? k).bind (fun c => c.e v) = some a) :
     objEntryT sems rc? (k, v) := by
@@ -3290,8 +3326,8 @@ theorem entry_domE' {sems : List (Name × FieldSem)} {rc? : Option Codec}
     rw [hc] at h
     exact objEntryT_eq.mpr ⟨c, hc, (entryCodec_of hs hrc hc).domE h⟩
 
-theorem entry_ranP' {sems : List (Name × FieldSem)} {rc? : Option Codec}
-    (hs : ∀ kf ∈ sems, Carrier kf.2.codec) (hrc : ∀ c ∈ rc?, Carrier c)
+theorem entry_ranP' {sems : MapOf FieldSem} {rc? : Option Codec}
+    (hs : ∀ k, Carrier (sems.2 k).codec) (hrc : ∀ c ∈ rc?, Carrier c)
     {k : Name} {a : Attr} {v : Value}
     (h : (entryCodec sems rc? k).bind (fun c => c.p a) = some v) :
     objEntryT sems rc? (k, v) := by
@@ -3302,10 +3338,10 @@ theorem entry_ranP' {sems : List (Name × FieldSem)} {rc? : Option Codec}
     exact objEntryT_eq.mpr ⟨c, hc, (entryCodec_of hs hrc hc).ranP h⟩
 
 /-- `fbValue` finds the stand-in a declared `fb` name reads to. -/
-theorem fbValue_of {sems : List (Name × FieldSem)} {k c v}
-    (hnd : (sems.map (·.1)).Nodup) (hm : (k, FieldSem.fb c v) ∈ sems) :
+theorem fbValue_of {sems : MapOf FieldSem} {k c v}
+ (hm : sems.at k = some (.fb c v)) :
     fbValue sems k = some v := by
-  simp [fbValue, lookup_eq_of_mem_nodup hnd hm]
+  simp [fbValue, hm]
 
 /-- §4's held set, both ways. The two premises past lawfulness are the doc's own:
     `hfb` is `(fallback)`'s `v(∗) ∈ dom(e)`, which with `domE` gives §4's `v : 𝟙 → T`;
@@ -3316,13 +3352,12 @@ theorem fbValue_of {sems : List (Name × FieldSem)} {k c v}
     name is present in the result — a `req` from the row it was stored in, an `fb`
     from the row or else from its stand-in — and every entry is on its set, the kept
     ones by `entry_ranP`, the stand-ins by `hfb`. -/
-theorem carrier_objectCodecCore {sems : List (Name × FieldSem)} {rc? : Option Codec}
+theorem carrier_objectCodecCore {sems : MapOf FieldSem} {rc? : Option Codec}
     {kn : Name → Bool}
-    (hsems : ∀ kf ∈ sems, Carrier kf.2.codec)
+    (hsems : ∀ k, Carrier (sems.2 k).codec)
     (hrc : ∀ rc, rc? = some rc → Carrier rc)
-    (hfb : ∀ kf ∈ sems, ∀ c v, kf.2 = .fb c v → (c.e v).isSome)
-    (hnd : (sems.map (·.1)).Nodup)
-    (hkeep : ∀ k, (sems.lookup k).isSome → kn k = true) :
+    (hfb : ∀ k c v, sems.2 k = .fb c v → (c.e v).isSome)
+    (hkeep : ∀ k, (sems.at k).isSome → kn k = true) :
     Carrier (objectCodecCore sems rc? kn) := by
   refine objectCodecCore_eq ▸ carrier_carried ?_ ?_
   · rintro p q h
@@ -3332,7 +3367,7 @@ theorem carrier_objectCodecCore {sems : List (Name × FieldSem)} {rc? : Option C
     obtain ⟨hreq, d, hd, rfl⟩ := objRead_eq.mp h
     constructor
     · refine valPresentB_of fun k fs hm hno => ?_
-      have hkn : kn k = true := hkeep k (by rw [lookup_eq_of_mem_nodup hnd hm]; rfl)
+      have hkn : kn k = true := hkeep k (by rw [hm]; rfl)
       rw [Finset.mem_union]
       cases fs with
       | opt c => exact absurd rfl (hno c)
@@ -3350,11 +3385,12 @@ theorem carrier_objectCodecCore {sems : List (Name × FieldSem)} {rc? : Option C
         have hfbm : k.1 ∈ fbNames q.1 sems :=
           (Finset.mem_union.mp k.2).resolve_left hk
         obtain ⟨⟨c, v₀, hm⟩, -⟩ := mem_fbNames.mp hfbm
-        rw [fbValue_of hnd hm]
+        obtain ⟨hk', hs⟩ := MapOf.at_eq_some.mp hm
+        rw [fbValue_of hm]
         refine objEntryT_eq.mpr ⟨c, ?_, ?_⟩
-        · simp [entryCodec, lookup_eq_of_mem_nodup hnd hm, FieldSem.codec]
-        · obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp (hfb (k.1, .fb c v₀) hm c v₀ rfl)
-          exact (hsems (k.1, .fb c v₀) hm).domE ha'
+        · simp [entryCodec, hm, FieldSem.codec]
+        · obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp (hfb ⟨k.1, hk'⟩ c v₀ hs)
+          exact (MapOf.at_forall (Q := fun fs => Carrier fs.codec) hsems hm).domE ha'
 
 
 
@@ -3366,11 +3402,11 @@ Each is proved once, from core children, and both `lawfulCore_objectCore` and
 `lawful_objectCore` consume them. -/
 
 section ObjectLaws
-variable {sems : List (Name × FieldSem)} {rc? : Option Codec} {kn : Name → Bool}
+variable {sems : MapOf FieldSem} {rc? : Option Codec} {kn : Name → Bool}
 
 /-- (R): a written row is complete — every declared name present, none filtered out, no
     stand-in owed — so reading it back is the entrywise round trip and nothing else. -/
-theorem object_retract (hf : ∀ kf ∈ sems, LawfulCore kf.2.codec)
+theorem object_retract (hf : ∀ k, LawfulCore (sems.2 k).codec)
     (hrc : ∀ c ∈ rc?, LawfulCore c)
     (hknE : ∀ k v a, (entryCodec sems rc? k).bind (fun c => c.e v) = some a → kn k = true) :
     ∀ p q, objWrite sems rc? p = some q → objRead sems rc? kn q = some p := by
@@ -3400,17 +3436,16 @@ theorem object_retract (hf : ∀ kf ∈ sems, LawfulCore kf.2.codec)
 
 /-- (C): what was read is writable again — the kept entries by (C) one level down, the
     stand-ins by `(fallback)`'s own premise `v(∗) ∈ dom(e)`. -/
-theorem object_canon (hf : ∀ kf ∈ sems, LawfulCore kf.2.codec)
+theorem object_canon (hf : ∀ k, LawfulCore (sems.2 k).codec)
     (hrc : ∀ c ∈ rc?, LawfulCore c)
-    (hfb : ∀ kf ∈ sems, ∀ c v, kf.2 = .fb c v → (c.e v).isSome = true)
-    (hnd : (sems.map (·.1)).Nodup)
-    (hknDecl : ∀ k, (sems.lookup k).isSome = true → kn k = true) :
+    (hfb : ∀ k c v, sems.2 k = .fb c v → (c.e v).isSome = true)
+    (hknDecl : ∀ k, (sems.at k).isSome = true → kn k = true) :
     ∀ q p, objRead sems rc? kn q = some p → (objWrite sems rc? p).isSome = true := by
   rintro q p h
   obtain ⟨hreq, d, hd, rfl⟩ := objRead_eq.mp h
   have hval : valPresentB sems (q.1.filter (kn ·) ∪ fbNames q.1 sems) = true := by
     refine valPresentB_of fun k fs hm hno => ?_
-    have hknk : kn k = true := hknDecl k (by rw [lookup_eq_of_mem_nodup hnd hm]; rfl)
+    have hknk : kn k = true := hknDecl k (by rw [hm]; rfl)
     rw [Finset.mem_union]
     by_cases hk : k ∈ q.1
     · exact Or.inl (Finset.mem_filter.mpr ⟨hk, by simpa using hknk⟩)
@@ -3435,13 +3470,14 @@ theorem object_canon (hf : ∀ kf ∈ sems, LawfulCore kf.2.codec)
       obtain ⟨⟨c, v₀, hm⟩, -⟩ :=
         mem_fbNames.mp ((Finset.mem_union.mp k.2).resolve_left hk)
       have hc : entryCodec sems rc? k.1 = some c := by
-        simp [entryCodec, lookup_eq_of_mem_nodup hnd hm, FieldSem.codec]
-      simp only [fbValue_of hnd hm, hc, Option.bind_some, Option.getD_some]
-      exact hfb (k.1, .fb c v₀) hm c v₀ rfl
+        simp [entryCodec, hm, FieldSem.codec]
+      obtain ⟨hk', hs⟩ := MapOf.at_eq_some.mp hm
+      simp only [fbValue_of hm, hc, Option.bind_some, Option.getD_some]
+      exact hfb ⟨k.1, hk'⟩ c v₀ hs
   simp only [objWrite, if_pos hval]
   exact funImage_map_isSome (funImage_isSome hstep) _
 
-theorem object_agree (hf : ∀ kf ∈ sems, Lawful kf.2.codec) (hrc : ∀ c ∈ rc?, Lawful c) :
+theorem object_agree (hf : ∀ k, Lawful (sems.2 k).codec) (hrc : ∀ c ∈ rc?, Lawful c) :
     ∀ q p q', objRead sems rc? kn q = some p →
       objWrite sems rc? p = some q' → Agree (mA.into q') (mA.into q) := by
   rintro q p q' hD hE
@@ -3465,31 +3501,29 @@ end ObjectLaws
 
 /-- Core keyed product: (R), (C), (W) with only core children. -/
 private theorem lawfulCore_objectCore
-    (sems : List (Name × FieldSem)) (rc? : Option Codec) (kn : Name → Bool)
-    (hf : ∀ kf ∈ sems, LawfulCore kf.2.codec)
-    (hfb : ∀ kf ∈ sems, ∀ c v, kf.2 = .fb c v → (c.e v).isSome = true)
-    (hnd : (sems.map (·.1)).Nodup)
+    (sems : MapOf FieldSem) (rc? : Option Codec) (kn : Name → Bool)
+    (hf : ∀ k, LawfulCore (sems.2 k).codec)
+    (hfb : ∀ k c v, sems.2 k = .fb c v → (c.e v).isSome = true)
     (hrc : ∀ c ∈ rc?, LawfulCore c)
     (hknE : ∀ k v a, (entryCodec sems rc? k).bind (fun c => c.e v) = some a → kn k = true)
-    (hknDecl : ∀ k, (sems.lookup k).isSome = true → kn k = true) :
+    (hknDecl : ∀ k, (sems.at k).isSome = true → kn k = true) :
     LawfulCore (objectCodecCore sems rc? kn) :=
   objectCodecCore_eq ▸ lawfulCore_carried (fun _ => rfl)
-    (object_retract hf hrc hknE) (object_canon hf hrc hfb hnd hknDecl)
+    (object_retract hf hrc hknE) (object_canon hf hrc hfb hknDecl)
 
 /-- The keyed product, parametrically: the same three clauses, plus (MP). -/
 private theorem lawful_objectCore
-    (sems : List (Name × FieldSem)) (rc? : Option Codec) (kn : Name → Bool)
-    (hf : ∀ kf ∈ sems, Lawful kf.2.codec)
-    (hfb : ∀ kf ∈ sems, ∀ c v, kf.2 = .fb c v → (c.e v).isSome = true)
-    (hnd : (sems.map (·.1)).Nodup)
+    (sems : MapOf FieldSem) (rc? : Option Codec) (kn : Name → Bool)
+    (hf : ∀ k, Lawful (sems.2 k).codec)
+    (hfb : ∀ k c v, sems.2 k = .fb c v → (c.e v).isSome = true)
     (hrc : ∀ c ∈ rc?, Lawful c)
     (hknE : ∀ k v a, (entryCodec sems rc? k).bind (fun c => c.e v) = some a → kn k = true)
-    (hknDecl : ∀ k, (sems.lookup k).isSome = true → kn k = true) :
+    (hknDecl : ∀ k, (sems.at k).isSome = true → kn k = true) :
     Lawful (objectCodecCore sems rc? kn) :=
-  let hf' := fun kf hkf => (hf kf hkf).core
+  let hf' := fun k => (hf k).core
   let hrc' := fun c hc => (hrc c hc).core
   objectCodecCore_eq ▸ lawful_carried (fun _ => rfl)
-    (object_retract hf' hrc' hknE) (object_canon hf' hrc' hfb hnd hknDecl)
+    (object_retract hf' hrc' hknE) (object_canon hf' hrc' hfb hknDecl)
     (object_agree hf hrc)
 
 /-- A property of the rest policy's codec, from one per `rest = .codec c`. -/
@@ -3506,22 +3540,22 @@ theorem rcOf_forall {P : Codec → Prop} {rest : RestSem}
 
 /-- What object-encode produces, `keepB` keeps: under `drop` an encoded entry's name
     is declared, and the other policies keep everything. -/
-theorem keepB_of_encEntry {sems : List (Name × FieldSem)} {rest : RestSem} :
+theorem keepB_of_encEntry {sems : MapOf FieldSem} {rest : RestSem} :
     ∀ k v a, (entryCodec sems (rcOf rest) k).bind (fun c => c.e v) = some a →
       keepB rest sems k = true := by
   intro k v a h
   cases rest with
   | drop =>
     simp only [entryCodec] at h
-    cases hsp : sems.lookup k with
+    cases hsp : sems.at k with
     | none => rw [hsp] at h; simp only [rcOf, Option.bind_none] at h; exact nomatch h
     | some fs => simp [keepB, hsp]
   | refuse => rfl
   | codec rc => rfl
 
 /-- Declared names pass every keep filter. -/
-theorem keepB_of_declared {sems : List (Name × FieldSem)} {rest : RestSem} :
-    ∀ k, (sems.lookup k).isSome = true → keepB rest sems k = true := by
+theorem keepB_of_declared {sems : MapOf FieldSem} {rest : RestSem} :
+    ∀ k, (sems.at k).isSome = true → keepB rest sems k = true := by
   intro k h
   cases rest with
   | drop => exact h
@@ -3529,22 +3563,20 @@ theorem keepB_of_declared {sems : List (Name × FieldSem)} {rest : RestSem} :
   | codec rc => rfl
 
 /-- The keyed product — the doc's `object`. `hfb` is §4's `v(∗) ∈ dom(e)`. -/
-theorem lawful_objectCodec {sems : List (Name × FieldSem)} {rest : RestSem}
-    (hf : ∀ kf ∈ sems, Lawful kf.2.codec)
-    (hfb : ∀ kf ∈ sems, ∀ c v, kf.2 = .fb c v → (c.e v).isSome)
-    (hnd : (sems.map (·.1)).Nodup)
+theorem lawful_objectCodec {sems : MapOf FieldSem} {rest : RestSem}
+    (hf : ∀ k, Lawful (sems.2 k).codec)
+    (hfb : ∀ k c v, sems.2 k = .fb c v → (c.e v).isSome)
     (hrest : ∀ c, rest = .codec c → Lawful c) :
     Lawful (objectCodec sems rest) :=
-  lawful_objectCore sems (rcOf rest) (keepB rest sems) hf hfb hnd
+  lawful_objectCore sems (rcOf rest) (keepB rest sems) hf hfb
     (rcOf_forall hrest) keepB_of_encEntry keepB_of_declared
 
-theorem lawfulCore_objectCodec {sems : List (Name × FieldSem)} {rest : RestSem}
-    (hf : ∀ kf ∈ sems, LawfulCore kf.2.codec)
-    (hfb : ∀ kf ∈ sems, ∀ c v, kf.2 = .fb c v → (c.e v).isSome)
-    (hnd : (sems.map (·.1)).Nodup)
+theorem lawfulCore_objectCodec {sems : MapOf FieldSem} {rest : RestSem}
+    (hf : ∀ k, LawfulCore (sems.2 k).codec)
+    (hfb : ∀ k c v, sems.2 k = .fb c v → (c.e v).isSome)
     (hrest : ∀ c, rest = .codec c → LawfulCore c) :
     LawfulCore (objectCodec sems rest) :=
-  lawfulCore_objectCore sems (rcOf rest) (keepB rest sems) hf hfb hnd
+  lawfulCore_objectCore sems (rcOf rest) (keepB rest sems) hf hfb
     (rcOf_forall hrest) keepB_of_encEntry keepB_of_declared
 
 /-- The sum's core laws. (U) is what makes them hold: it says the option that wrote is

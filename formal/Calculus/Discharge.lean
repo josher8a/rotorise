@@ -52,7 +52,7 @@ def κ : Term → Option (List Kind)
   | .binary => some [.binary]
   | .set _ => some [.set]
   | .array _ | .tuple _ _ => some [.array]
-  | .record _ | .object _ _ | .dunion _ _ => some [.map]
+  | .record _ | .object _ _ _ | .dunion _ _ => some [.map]
   | .refine t _ | .legacy t _ => κ t
   | .nullable t => (κ t).map (.null :: ·)
   | .union opts => κList opts
@@ -109,7 +109,7 @@ def ident : Term → Bool
   | .string | .boolean | .binary | .null => false
   -- `object` is the one container that does not propagate: its admission tests *names*,
   -- and the field terms' own sets are not what the option checks a value against.
-  | .object _ _ => false
+  | .object _ _ _ => false
   -- `lazy` propagates, for the reason given at `κ`: its pair *is* the subterm's.
   | .lazy t => ident t
   -- `held` propagates: `adm` applies `f` and asks the subterm, so the subterm is what
@@ -206,7 +206,7 @@ noncomputable def adm : Term → Value → Bool
   -- The containers. `adm (array c)` would have to contain the empty array whatever `c`
   -- is, so propagating the element's set would claim a separation that is false —
   -- `not_uAtCan_array_literals` is the witness. Same argument for the other four.
-  | .set _ | .array _ | .tuple _ _ | .record _ | .object _ _ => fun _ => true
+  | .set _ | .array _ | .tuple _ _ | .record _ | .object _ _ _ => fun _ => true
   -- `held` is transparent here too, and `f` is what makes it so rather than what blocks
   -- it: `(c.through f g).e v = c.e (f v)` by `Iff.rfl`, so the writable set is the
   -- subterm's pulled back along `f`. `f` is *data the term carries*, and `adm` is a
@@ -288,7 +288,7 @@ def admA : Term → Attr → Bool
   -- split, and `admA_literalN_blind` is the witness that the set really is lost.
   | .literalN _ => fun _ => true
   -- The containers, by the empty-container argument on the value side.
-  | .set _ | .array _ | .tuple _ _ | .record _ | .object _ _ => fun _ => true
+  | .set _ | .array _ | .tuple _ _ | .record _ | .object _ _ _ => fun _ => true
   -- `legacy` is the row that is `⊤` here and a passthrough above, and the asymmetry is
   -- what `legacy` is for: `extendRead` widens `p` past the subterm's admissible set,
   -- which is the direction `admA` bounds. `not_admA_legacy` is the witness.
@@ -654,34 +654,30 @@ theorem traverse_input_isSome {α β : Type} {f : α → Option β} :
           · rw [hfx]; rfl
           · exact traverse_input_isSome hxs x hx'
 
+/-- Only `optional` denotes to `opt`, which is what the value-side guard needs of a
+    non-`optional` field. Stated where every argument is a variable — at the use site
+    the field is `ff k`, and eliminating a function application in place is more
+    trouble than naming the fact. -/
+theorem fieldSemOf_ne_opt {den : Term → Codec} {fd : Field}
+    (h : (match fd with | Field.optional _ => false | _ => true) = true) :
+    ∀ c, fieldSemOf den fd ≠ FieldSem.opt c := by
+  cases fd <;> simp_all [fieldSemOf]
+
 /-- Name admission from names alone: everything present is declared, everything
-    required is present. -/
-theorem keysOk_of_names {fields : List (Name × Field)} {keys : Finset Name}
-    (hsub : ∀ k ∈ keys, k ∈ fields.map (·.1))
-    (hreq : ∀ kf ∈ fields,
-      (match kf.2 with | Field.optional _ => false | _ => true) = true →
-      kf.1 ∈ keys) :
-    keysOk (fields.map fun kf =>
-      (kf.1, match kf.2 with | Field.optional _ => false | _ => true)) keys = true := by
+    required is present.
+
+    Two hypotheses in, `keysOk` out — literally. `keysOk` is now a pair of quantifiers
+    over the declared names, so this is `⟨hsub, hreq⟩` where the row form needed a
+    `List.any` witness built by hand and a `List.all` over the mapped row. -/
+theorem keysOk_of_names {fields : Finset Name} {ff : {k // k ∈ fields} → Field}
+    {keys : Finset Name}
+    (hsub : ∀ k ∈ keys, k ∈ fields)
+    (hreq : ∀ k : {k // k ∈ fields},
+      (match ff k with | Field.optional _ => false | _ => true) = true → k.1 ∈ keys) :
+    keysOk ⟨fields, fun k => match ff k with | Field.optional _ => false | _ => true⟩
+      keys = true := by
   simp only [keysOk, Bool.and_eq_true, decide_eq_true_eq]
-  constructor
-  · intro k hk
-    obtain ⟨kf, hkf, hfst⟩ := List.mem_map.mp (hsub k hk)
-    refine List.any_eq_true.mpr
-      ⟨(kf.1, match kf.2 with | Field.optional _ => false | _ => true),
-        List.mem_map.mpr ⟨kf, hkf, rfl⟩, ?_⟩
-    show (kf.1 == k) = true
-    rw [hfst]
-    exact beq_self_eq_true k
-  · refine List.all_eq_true.mpr fun kb hkb => ?_
-    obtain ⟨kf, hkf, rfl⟩ := List.mem_map.mp hkb
-    show (!(match kf.2 with | Field.optional _ => false | _ => true) ||
-      decide (kf.1 ∈ keys)) = true
-    cases hb : (match kf.2 with | Field.optional _ => false | _ => true) with
-    | false => rfl
-    | true =>
-      simp only [Bool.not_true, Bool.false_or, decide_eq_true_eq]
-      exact hreq kf hkf hb
+  exact ⟨hsub, hreq⟩
 
 /-- Object-encode under a closed rest policy stamps name admission: every written name
     is declared and every non-`opt` name is written.
@@ -691,42 +687,31 @@ theorem keysOk_of_names {fields : List (Name × Field)} {keys : Finset Name}
     `traverse_fst`. `M`'s payload is a key set with a function on it, and encoding does
     not touch the key set — so the value side's admission *is* the attribute side's, and
     there is nothing to transport. -/
-theorem keysOk_of_encode {fields : List (Name × Field)} {den : Term → Codec}
-    {keys : Finset Name} {f : {k // k ∈ keys} → Value} {g : {k // k ∈ keys} → Attr}
-    (hval : valPresentB (fields.map fun kf => (kf.1, fieldSemOf den kf.2)) keys = true)
+theorem keysOk_of_encode {fields : Finset Name} {ff : {k // k ∈ fields} → Field}
+    {den : Term → Codec} {keys : Finset Name}
+    {f : {k // k ∈ keys} → Value} {g : {k // k ∈ keys} → Attr}
+    (hval : valPresentB ⟨fields, fun k => fieldSemOf den (ff k)⟩ keys = true)
     (hfi : funImage (fun k : {k // k ∈ keys} =>
-        (entryCodec (fields.map fun kf => (kf.1, fieldSemOf den kf.2)) none k.1).bind
+        (entryCodec ⟨fields, fun k => fieldSemOf den (ff k)⟩ none k.1).bind
           (fun c => c.e (f k))) = some g) :
-    keysOk (fields.map fun kf =>
-        (kf.1, match kf.2 with | Field.optional _ => false | _ => true)) keys = true := by
-  refine keysOk_of_names (fun k hk => ?_) (fun kf hkf hb => ?_)
-  · -- a name the entry function is defined at is a declared name: `rc?` is `none`, so
+    keysOk ⟨fields, fun k => match ff k with | Field.optional _ => false | _ => true⟩
+      keys = true := by
+  refine keysOk_of_names (fun k hk => ?_) (fun k hb => ?_)
+  · -- a name the entry function is defined at is declared: `rc?` is `none`, so
     -- `entryCodec` succeeds only through the field table
+    by_contra hnk
     have hw := funImage_some hfi ⟨k, hk⟩
-    cases hlk : (fields.map fun kf => (kf.1, fieldSemOf den kf.2)).lookup k with
-    | none =>
-      rw [show entryCodec (fields.map fun kf => (kf.1, fieldSemOf den kf.2)) none k = none by
-        simp only [entryCodec, hlk]] at hw
-      exact nomatch hw
-    | some fs =>
-      obtain ⟨kf, hkf, heq⟩ := List.mem_map.mp (mem_of_lookup hlk)
-      exact List.mem_map.mpr ⟨kf, hkf, congrArg Prod.fst heq⟩
-  · have hmem : (kf.1, fieldSemOf den kf.2) ∈
-        fields.map fun kf => (kf.1, fieldSemOf den kf.2) :=
-      List.mem_map.mpr ⟨kf, hkf, rfl⟩
-    have hno : ∀ c, fieldSemOf den kf.2 ≠ FieldSem.opt c := by
-      intro c hc
-      cases hf2 : kf.2 with
-      | optional t' => rw [hf2] at hb; exact nomatch hb
-      | req t' => rw [hf2] at hc; exact nomatch hc
-      | fallback t' v' => rw [hf2] at hc; exact nomatch hc
-    exact valPresentB_spec hval hmem hno
+    rw [show entryCodec (⟨fields, fun k => fieldSemOf den (ff k)⟩ : MapOf FieldSem) none k
+        = none from by simp only [entryCodec, MapOf.at, dif_neg hnk]] at hw
+    exact nomatch hw
+  · exact valPresentB_spec hval (MapOf.at_of_mem (m := ⟨fields, _⟩) k)
+      (fieldSemOf_ne_opt hb)
 
 /-- A closed option admits its own canonical pairs, on both sides. An *open* object —
     a rest codec — is excluded, as §5 demands: an undeclared name disqualifies the
     option even where its rest codec would hold it. -/
 theorem optionSem_self_admit (fuel : Nat) (t : Term)
-    (hcl : ∀ fields tr, t ≠ .object fields (.codec tr))
+    (hcl : ∀ fields ff tr, t ≠ .object fields ff (.codec tr))
     (hlaw : Lawful (denote fuel t)) {v a}
     (he : (denote fuel t).e v = some a) :
     (optionSemOf (denote fuel t) (specOf t)).admitV v = true ∧
@@ -740,9 +725,9 @@ theorem optionSem_self_admit (fuel : Nat) (t : Term)
       rw [hlaw.retract he]; rfl
   | some spec =>
     cases t
-    case object fields rest =>
-      replace hs : some (fields.map fun kf =>
-        (kf.1, match kf.2 with | Field.optional _ => false | _ => true)) =
+    case object fields ff rest =>
+      replace hs : some (⟨fields, fun k =>
+        match ff k with | Field.optional _ => false | _ => true⟩ : MapOf Bool) =
         some spec := hs
       cases hs
       cases fuel with
@@ -752,12 +737,12 @@ theorem optionSem_self_admit (fuel : Nat) (t : Term)
           cases rest with
           | drop => rfl
           | refuse => rfl
-          | codec tr => exact absurd rfl (hcl fields tr)
+          | codec tr => exact absurd rfl (hcl fields ff tr)
         replace he : (objectCodecCore
-            (fields.map fun kf => (kf.1, fieldSemOf (denote f) kf.2))
+            ⟨fields, fun k => fieldSemOf (denote f) (ff k)⟩
             (rcOf (restSemOf (denote f) rest))
             (keepB (restSemOf (denote f) rest)
-              (fields.map fun kf => (kf.1, fieldSemOf (denote f) kf.2)))).e v =
+              ⟨fields, fun k => fieldSemOf (denote f) (ff k)⟩)).e v =
           some a := he
         obtain ⟨keys, fv, g, rfl, rfl, hval, hfi⟩ := objectCodecCore_e_inv he
         rw [hrc] at hfi
@@ -874,7 +859,7 @@ theorem ident_of_adm : ∀ {t : Term} {v : Value}, adm t v = false → ident t =
   | .custom _ _, _, _ => rfl
   | .string, _, h | .boolean, _, h | .binary, _, h
   | .null, _, h | .set _, _, h | .array _, _, h | .tuple _ _, _, h
-  | .record _, _, h | .opaq _, _, h | .object _ _, _, h => nomatch h
+  | .record _, _, h | .opaq _, _, h | .object _ _ _, _, h => nomatch h
 
 /-- A union all of whose options refuse a value is one all of whose options decide their
     own membership — `ident_of_adm` lifted to the list, which `adm`'s union row makes
@@ -1309,7 +1294,7 @@ theorem SAof_disjoint {x y : Term} (h : SepA x y) : ∀ a, SAof x a → ¬ SAof 
     argument of its own. -/
 theorem uAtCan_of_separated (fuel : Nat) {opts : List Term}
     (hlaw : ∀ t ∈ opts, Lawful (denote fuel t))
-    (hcl : ∀ t ∈ opts, ∀ fields tr, t ≠ .object fields (.codec tr))
+    (hcl : ∀ t ∈ opts, ∀ fields ff tr, t ≠ .object fields ff (.codec tr))
     (hV : List.Pairwise SepV opts)
     (hA : List.Pairwise SepA opts) :
     UAtCan fuel opts := by
@@ -1329,7 +1314,7 @@ theorem uAtCan_of_separated (fuel : Nat) {opts : List Term}
     corollary of `uAtCan_of_separated`. -/
 theorem uAtCan_of_disjoint (fuel : Nat) {opts : List Term}
     (hlaw : ∀ t ∈ opts, Lawful (denote fuel t))
-    (hcl : ∀ t ∈ opts, ∀ fields tr, t ≠ .object fields (.codec tr))
+    (hcl : ∀ t ∈ opts, ∀ fields ff tr, t ≠ .object fields ff (.codec tr))
     (hκ : ∀ t ∈ opts, (κ t).isSome)
     (hμ : ∀ t ∈ opts, (μSyn t).isSome)
     (hκd : List.Pairwise (fun x y => ∀ kx ky, κ x = some kx → κ y = some ky →
@@ -1433,7 +1418,7 @@ theorem uAtCan_string_null (fuel : Nat) :
     UAtCan fuel [Term.string, Term.null] := by
   refine uAtCan_of_disjoint fuel
     (forall_mem_pair (lawful_string fuel) (lawful_null fuel))
-    (forall_mem_pair (fun _ _ h => nomatch h) (fun _ _ h => nomatch h))
+    (forall_mem_pair (fun _ _ _ h => nomatch h) (fun _ _ _ h => nomatch h))
     (forall_mem_pair rfl rfl) (forall_mem_pair rfl rfl)
     (pairwise_pair ?_) (pairwise_pair ?_)
   · intro kx ky hx hy k hk
@@ -1453,7 +1438,7 @@ theorem uAtCan_string_boolean (fuel : Nat) :
     UAtCan fuel [Term.string, Term.boolean] := by
   refine uAtCan_of_disjoint fuel
     (forall_mem_pair (lawful_string fuel) (lawful_boolean fuel))
-    (forall_mem_pair (fun _ _ h => nomatch h) (fun _ _ h => nomatch h))
+    (forall_mem_pair (fun _ _ _ h => nomatch h) (fun _ _ _ h => nomatch h))
     (forall_mem_pair rfl rfl) (forall_mem_pair rfl rfl)
     (pairwise_pair ?_) (pairwise_pair ?_)
   · intro kx ky hx hy k hk
@@ -1475,7 +1460,7 @@ theorem uAtCan_literal_literal (fuel : Nat) :
     UAtCan fuel [Term.literalS ["A"], Term.literalS ["B"]] := by
   refine uAtCan_of_separated fuel
     (forall_mem_pair (lawful_literalS _ fuel) (lawful_literalS _ fuel))
-    (forall_mem_pair (fun _ _ h => nomatch h) (fun _ _ h => nomatch h))
+    (forall_mem_pair (fun _ _ _ h => nomatch h) (fun _ _ _ h => nomatch h))
     (pairwise_pair (Or.inr ?_)) (pairwise_pair (Or.inr ?_))
   · intro v hv
     cases v

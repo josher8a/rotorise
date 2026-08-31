@@ -103,8 +103,9 @@ theorem denoteω_dunion (d : Name) (opts : List Term) :
 theorem denoteω_opaq (lossy : Bool) : denoteω (.opaq lossy) = opaqCodecω lossy := rfl
 
 /-- `object` denotes `objectCodec`. -/
-theorem denoteω_object (fields : List (Name × Field)) (rest : Rest) :
-    denoteω (.object fields rest) = objectCodec (denoteωF fields) (denoteωR rest) := rfl
+theorem denoteω_object (fields : Finset Name) (f : {k // k ∈ fields} → Field)
+    (rest : Rest) :
+    denoteω (.object fields f rest) = objectCodec (denoteωF fields f) (denoteωR rest) := rfl
 
 end Bridge
 

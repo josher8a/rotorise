@@ -80,7 +80,7 @@ noncomputable def Adm : Term → Value → Bool
       | .binSet S => decide (S.card ≠ 0) && decide (∀ b ∈ S, Adm c (.bin b) = true)
       | _ => false
   | .tuple _ _  => fun v => match v with | .arr _ => true | _ => false
-  | .object _ _ => fun v => match v with | .map _ _ => true | _ => false
+  | .object _ _ _ => fun v => match v with | .map _ _ => true | _ => false
   | .dunion d opts => fun v =>
       match tagOfV d v with
       | some tag => (allTags d opts).contains tag
@@ -123,7 +123,7 @@ def Analysable : Term → Bool
   | .literalS _ | .literalN _ | .literal _ | .custom _ _ => true
   | .array c | .record c | .refine c _ | .legacy c _ | .lazy c
   | .held c _ _ => Analysable c
-  | .opaq _ | .object _ _ | .tuple _ _ | .set _ | .dunion _ _ | .union _
+  | .opaq _ | .object _ _ _ | .tuple _ _ | .set _ | .dunion _ _ | .union _
   | .nullable _ => false
 
 /-- A traversal succeeds exactly when every entry does. -/
@@ -213,7 +213,7 @@ theorem Adm_exact : ∀ (t : Term), Analysable t = true → ExactV t
   | .held c f g, ha => by
       have hc := Adm_exact c (by simpa [Analysable] using ha)
       intro v; simpa [Adm, denoteω, Codec.through] using hc (f v)
-  | .set _, ha | .tuple _ _, ha | .object _ _, ha | .dunion _ _, ha
+  | .set _, ha | .tuple _ _, ha | .object _ _ _, ha | .dunion _ _, ha
   | .union _, ha | .nullable _, ha | .opaq _, ha => by simp [Analysable] at ha
 
 
@@ -290,7 +290,7 @@ def Excuse.covers : Excuse → Term → Bool
   | .uniqueAdmission, .union _     => true
   | .uniqueAdmission, .dunion _ _  => true
   | .payloadShape,    .set _       => true
-  | .nameAdmission,   .object _ _  => true
+  | .nameAdmission,   .object _ _ _  => true
   | .nameAdmission,   .tuple _ _   => true
   | .nullOwnership,   .nullable _  => true
   | _, _ => false
@@ -313,7 +313,7 @@ theorem analysable_excused : ∀ (t : Term), Analysable t = false →
   | .union _, _     => .inl ⟨.uniqueAdmission, rfl⟩
   | .dunion _ _, _  => .inl ⟨.uniqueAdmission, rfl⟩
   | .set _, _       => .inl ⟨.payloadShape, rfl⟩
-  | .object _ _, _  => .inl ⟨.nameAdmission, rfl⟩
+  | .object _ _ _, _  => .inl ⟨.nameAdmission, rfl⟩
   | .tuple _ _, _   => .inl ⟨.nameAdmission, rfl⟩
   | .nullable _, _  => .inl ⟨.nullOwnership, rfl⟩
   -- The propagating wrappers decline only by inheritance, and say so.
@@ -620,7 +620,7 @@ noncomputable def AdmA : Term → Attr → Bool
   | .union opts => fun a => AdmAAny opts a
   | .set _    => fun a => match a with | .ss _ | .ns _ | .bs _ => true | _ => false
   | .tuple _ _ => fun a => match a with | .l _ => true | _ => false
-  | .object _ _ => fun a => match a with | .m _ _ => true | _ => false
+  | .object _ _ _ => fun a => match a with | .m _ _ => true | _ => false
   | .dunion d opts => fun a =>
       match tagOfA d a with
       | some tag => (allTags d opts).contains tag
@@ -810,7 +810,7 @@ def AnalysableA : Term → Bool
   | .literalS _ | .literalN _ | .literal _ | .custom _ _ => true
   | .array c | .record c | .held c _ _ | .lazy c | .legacy c _ => AnalysableA c
   | .refine _ _ | .nullable _ | .union _
-  | .set _ | .tuple _ _ | .object _ _ | .dunion _ _ | .opaq _ => false
+  | .set _ | .tuple _ _ | .object _ _ _ | .dunion _ _ | .opaq _ => false
 
 /-- `AdmAAll` transported across the entry's exactness. -/
 theorem AdmAAll_iff {c : Term} (h : ExactA c) : ∀ as : List Attr,
@@ -895,7 +895,7 @@ theorem AdmA_exact : ∀ (t : Term), AnalysableA t = true → ExactA t
       simp only [AdmA, denoteω, Codec.extendRead]
       cases hx : (denoteω c).p a <;> simp [hc a, hx]
   | .refine _ _, ha | .nullable _, ha | .union _, ha
-  | .set _, ha | .tuple _ _, ha | .object _ _, ha | .dunion _ _, ha
+  | .set _, ha | .tuple _ _, ha | .object _ _ _, ha | .dunion _ _, ha
   | .opaq _, ha => by simp [AnalysableA] at ha
 
 /-! ### The attribute side's excuses, and their witnesses
@@ -964,7 +964,7 @@ def Excuse.coversA : Excuse → Term → Bool
   | .uniqueAdmission, .union _     => true
   | .uniqueAdmission, .dunion _ _  => true
   | .payloadShape,    .set _       => true
-  | .nameAdmission,   .object _ _  => true
+  | .nameAdmission,   .object _ _ _  => true
   | .nameAdmission,   .tuple _ _   => true
   | .nullOwnership,   .nullable _  => true
   | .valueUnderRead,  .refine _ _  => true
@@ -984,7 +984,7 @@ theorem analysableA_excused : ∀ (t : Term), AnalysableA t = false →
   | .union _, _     => .inl ⟨.uniqueAdmission, rfl⟩
   | .dunion _ _, _  => .inl ⟨.uniqueAdmission, rfl⟩
   | .set _, _       => .inl ⟨.payloadShape, rfl⟩
-  | .object _ _, _  => .inl ⟨.nameAdmission, rfl⟩
+  | .object _ _ _, _  => .inl ⟨.nameAdmission, rfl⟩
   | .tuple _ _, _   => .inl ⟨.nameAdmission, rfl⟩
   | .nullable _, _  => .inl ⟨.nullOwnership, rfl⟩
   | .refine _ _, _  => .inl ⟨.valueUnderRead, rfl⟩
@@ -1046,7 +1046,7 @@ theorem Adm_le_adm : ∀ (t : Term) (v : Value), Adm t v = true → adm t v = tr
   | .null, _, _ => rfl
   | .set _, _, _ => rfl
   | .tuple _ _, _, _ => rfl
-  | .object _ _, _, _ => rfl
+  | .object _ _ _, _, _ => rfl
   | .array _, _, _ => rfl
   | .record _, _, _ => rfl
   | .opaq _, _, _ => rfl
@@ -1122,7 +1122,7 @@ theorem Adm_kind : ∀ (t : Term) (ks : List Kind) (v : Value),
   | .array _, _, v, rfl, h => by cases v <;> simp_all [Adm, Value.kind]
   | .tuple _ _, _, v, rfl, h => by cases v <;> simp_all [Adm, Value.kind]
   | .record _, _, v, rfl, h => by cases v <;> simp_all [Adm, Value.kind]
-  | .object _ _, _, v, rfl, h => by cases v <;> simp_all [Adm, Value.kind]
+  | .object _ _ _, _, v, rfl, h => by cases v <;> simp_all [Adm, Value.kind]
   | .dunion _ _, _, v, rfl, h => by cases v <;> simp_all [Adm, tagOfV, Value.kind]
   | .refine t q, ks, v, hk, h => by
       rw [Adm, Bool.and_eq_true] at h
@@ -1168,7 +1168,7 @@ theorem AdmA_le_admA : ∀ (t : Term) (a : Attr), AdmA t a = true → admA t a =
   | .literalN _, _, _ => rfl
   | .set _, _, _ => rfl
   | .tuple _ _, _, _ => rfl
-  | .object _ _, _, _ => rfl
+  | .object _ _ _, _, _ => rfl
   | .array _, _, _ => rfl
   | .record _, _, _ => rfl
   | .legacy _ _, _, _ => rfl
@@ -1372,17 +1372,18 @@ theorem not_decides_refine_top : ¬ Decides (.refine .string qTop) := by
 /-- **And too stingy.** An object with a required field refuses the empty map and writes a
     populated one — two `map`s differing in admission — while `ident` calls it `false`. -/
 theorem decides_object :
-    Decides (.object [("k", .req .string)] .refuse) := by
+    Decides (.object {"k"} (fun _ => .req .string) .refuse) := by
   refine ⟨.map {"k"} (fun _ => .str "a"),
           .map ∅ (fun k => absurd k.2 (Finset.not_mem_empty k.1)), ?_, rfl, ?_⟩
   · simp [denoteω, denoteωF, denoteωR, objectCodec, objectCodecCore, stringCodec,
-          valPresentB, denoteωField, rcOf, FieldSem.codec, carriedCodec, mapV, mA,
-          Ctor.out, Ctor.into, objWrite, entryCodec, funImage, Subtype.forall]
+          valPresentB, valPresentAt, denoteωField, rcOf, FieldSem.codec, carriedCodec,
+          mapV, mA, Ctor.out, Ctor.into, objWrite, entryCodec, MapOf.at, funImage,
+          Subtype.forall]
   · simp [denoteω, denoteωF, denoteωR, objectCodec, objectCodecCore, stringCodec,
-          valPresentB, denoteωField, rcOf, FieldSem.codec, carriedCodec, mapV, mA,
-          Ctor.out, Ctor.into, objWrite]
+          valPresentB, valPresentAt, denoteωField, rcOf, FieldSem.codec, carriedCodec,
+          mapV, mA, Ctor.out, Ctor.into, objWrite, MapOf.at, Subtype.forall]
 
-theorem ident_object : ident (.object [("k", .req .string)] .refuse) = false := rfl
+theorem ident_object : ident (.object {"k"} (fun _ => .req .string) .refuse) = false := rfl
 
 /-! ### …and the two errors are the same combinator
 
