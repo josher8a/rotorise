@@ -1532,6 +1532,93 @@ values rebuilt from them. `setCodec` dispatches on which of the three value-set 
 sees, and exactly one branch fires for a ground element codec. Coherent, but it is a rule change,
 not a representation change — and it is the one part of this that is design rather than mechanics.
 
+### Both repairs, executed — and the claim that had to be false for maps to be possible
+
+The four entries above are a record of the question being narrowed, and they end one step short.
+Sets and maps are both typed now, on both sides, and the last of the four is wrong about the second
+of them in a way worth stating precisely, because the error is instructive rather than clerical.
+
+**What landed.**
+
+| member | before | now |
+| --- | --- | --- |
+| `Attr.ss`/`ns`/`bs` | `List String` / `Numeral` / `Bytes` | `Finset` of each |
+| `Value.set` | `List Value` | `strSet (Finset String)`, `numSet (Finset Double)`, `binSet (Finset Bytes)` |
+| `Attr.m`, `Value.map` | `List (Name × _)` | `(keys : Finset Name) (f : {k // k ∈ keys} → _)` |
+
+No `SetWF`, no unique-key gate, no canonical order, and `Calculus/WireOrder.lean` is off both paths.
+Only non-emptiness is still gated.
+
+**The claim that was wrong.** *"Maps still cannot be typed, and the factoring is why."* The premise
+was right — `Finset (Name × Attr)` is rejected by the kernel, exactly as `Finset Value` is, the
+element type being the one under declaration — and the conclusion drawn from it was that `M` must
+keep the list and take the gate. The entry even wrote down the shape that works
+(`(keys : Finset Name) → ({x // x ∈ keys} → A) → A`) and then rejected it, for this reason:
+
+> But `e` must *enumerate* the key set to build the wire form, and enumerating a `Finset` needs
+> either choice (`Finset.toList`, via `Quot.out`) or an order (`Finset.sort`).
+
+**`e` does not enumerate anything.** Both sides of the pair carry the *same* key set, so encoding a
+map is composition in the function's codomain and never a traversal of the names:
+`funImage (fun k => c.e (f k))`, which is defined exactly where every entry's `e` is. There is no
+wire form to build out of an ordering, because `M`'s payload is not a sequence on either side. The
+same answer disposes of the second half of the objection — that every structural recursion over `M`
+would have to pass through an enumeration. `Value.depth` at a map is `Finset.sup` over the key set,
+and the equation compiler takes the recursive call under it directly; the recursor is not needed.
+
+Note also that the earlier entry's two reasons for calling the map defect *sharper* than the set one
+do not both survive. The first does: `Agree` at `M` was already lookup-based, comparing by key and
+ignoring order, so the two halves of the model contradicted each other and not merely the reference.
+The second was the claim just retracted.
+
+So the three-way repair table collapses to one route:
+
+| member | spec | route |
+| --- | --- | --- |
+| `SS`/`NS`/`BS`, `Value`'s three sets | unique, unordered, non-empty, homogeneous | **type it**: `Finset` over a concrete element type |
+| `M`, `Value.map` | unordered name-value pairs, unique keys | **type it**: `Finset` of names, values in a function's codomain |
+
+**What the representation bought, measured rather than asserted.** Every deletion below is a lemma
+that existed only to repair the representation, and each is gone because the type now says what it
+was proving:
+
+* `Value.depthP`/`Attr.depthP` and their `maxOf` companions — four depth measures become two, and
+  the four `P` depth-preservation lemmas become two `Finset` facts (`depth_map_entry`, `depth_m_le`).
+* `encPair`/`decPair` and their five laws — §2's four one level down, which existed to carry a name
+  past a codec inside `traverse`. Nothing carries a name anywhere now.
+* `AdmAllSnd`/`AdmAAllSnd` and their four companions — the `Adm` rows at `record` are one `decide`
+  over the key set, exactly as the three `set` rows are one over theirs.
+* Half of `keysOk_of_encode`. It claimed name admission of the value row *and* of the attribute row,
+  the second transported from the first along `traverse_fst`. Encoding does not touch the key set,
+  so the two claims are one claim.
+* `opaq_e_agreeP`/`opaq_p_agreeP`. Agreement of two fuels at a map is pointwise agreement of the two
+  entry functions, which is `funext` — where the list form needed a companion induction.
+* The object case of `typed_TSub` no longer splits on the value at all: `carriedCodec` hands over the
+  payload, and the payload is already `HObject`'s witness.
+
+And one residue that is evidence rather than cost: `object_agree`'s `fb` case is **unreachable**
+under the new representation, which is the key set being shared saying so.
+
+**The landmines that were real.** Two, both from mathlib rather than from the design.
+
+`Finset` brings mathlib's simp set into scope for every downstream file, and plain `simp` will then
+close goals through `Classical.choice` without failing. The guard is what catches it: one lemma
+(`fbNames_empty`, routed through `Finset.eq_empty_of_forall_not_mem`, which mathlib proves
+classically) was leaking into seventeen guarded theorems including `soundness` and `soundnessω`, and
+it stayed invisible until the tree compiled far enough for `#assert_axioms_all` to run. `Finset.ext`
+is the axiom-free replacement. The rule of thumb is `simp` → `simp only`, and any hit is a bug in the
+proof rather than a price of the representation: `Finset` itself, `setImage`, `funImage`, `encSet`,
+`setCodec`, `recordCodec` and every law about them are clean.
+
+Second, `recordCodec`'s `M` branch is a `funImage`, and a `funImage` is a `Classical` `dif`, so
+unfolding `recordCodec` inside a multi-way case split sends `whnf` past its heartbeat budget where
+the list form was cheap. It bit twice, and the fix is the same shape both times: stop `simp` from
+recomputing something already settled. At `opaqCodec_p_n` the settled thing is that the `M` option
+does not admit an `N`, named as `recordCodec_p_n` and proved by `rfl`; at `Adm_exact`'s nine
+non-`map` rows it is `simp only` with the four lemmas the goal actually needs. Neither wants a
+heartbeat bump: the three `set_option maxHeartbeats` in the tree are the three that were there
+before, and the map migration added none.
+
 ## §5 Certifying an implementation
 
 The calculus is portable by design: nothing in it is TypeScript, and nothing is Rotorise. An
@@ -1804,7 +1891,7 @@ Stated plainly, because a certificate that hides its edges is worth less than on
 | **§1's numeral domain**                 | **Modelled.** `Numeral.WF` (Domain.lean) carries §1's three clauses — grammar, ≤ 38 significant digits, magnitude `0` or `1e-130 … 9.9…e125` — and `decimal` gates on it, so it no longer holds every string. `decimal_writes_wf`/`decimal_reads_wf` are the report. The *carrier* is still unrestricted (`Attr.n "abc"` remains representable), which is the honest split: §1 says which strings DynamoDB accepts in an `N`, and the calculus's job is that its codecs write only those. Two narrowings are noted at the definition: a bare integer part is required, and significance is counted between first and last nonzero digit. |
 | **§6's equations**                      | **Twenty of twenty, with one row narrower than the table reads — and now stated in one language.** Every Hold row has a term-level twin (`equiv_denoteω_*`), reached through ten `rfl` bridges that write down the combinator-to-term translation the model had only implied. The "do not hold" table is settled: eight machine-checked, and `optional(optional(c))` enforced by the syntax, since no `Field` constructor takes a `Field`. All eleven "Hold" rows are proved, but `union`'s commutativity is proved for the **adjacent transposition** (`equiv_altCodec_swap`), which generates every permutation without the lift to `List.Perm` being written down. Wrapper member preservation is five of five — three codec wrappers, and the two field wrappers through `FieldSem.codec`, which §4 of the specification says is where a field's member lives. `union` associativity, the table's only *conditional* row, holds **without** its conditions — see §4. And `≡` itself is reflexive and symmetric but **not transitive** (`not_equiv_trans`), which bounds what a table of rewrites licenses. |
 | **`Double`**                            | Axiomatized with exactly the shortest-text round trip `(number)` consumes. IEEE-754 facts are not this calculus's theorems. |
-| **Set-ness**                            | Wire sets and maps are lists; the quotient lives in `ker p`, where §2 puts it, not in the carrier. |
+| **Set-ness**                            | **Closed, on both halves — the row above described the model before the repair.** `SS`/`NS`/`BS` are `Finset String`/`Finset Numeral`/`Finset Bytes` and `Value` carries `strSet`/`numSet`/`binSet` over the same three concrete types; `M` and `Value.map` are a `Finset Name` of names with a function on it (`m (keys : Finset Name) (f : {k // k ∈ keys} → Attr)`). Unordered, unique-keyed and homogeneous are properties of the type rather than obligations on a codec, and there are no longer two orderings of one set or one map for `ker p` to collapse — so §2's first of three reasons is withdrawn rather than relocated, and the remaining two (`η` normalising `N`, `drop` discarding names) are the honest list. What is still *gated* is non-emptiness, by `encSet`'s card check, which is a refinement `℘⁺fin` carries and no type of finite sets does. |
 
 ## §7 Tooling rationale
 
