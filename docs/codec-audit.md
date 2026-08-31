@@ -1120,6 +1120,14 @@ Asked directly: *is replacing logic guards with structural impossibility our bes
 Mostly yes, and this file has the evidence for a sharper version in three parts. Two of them are
 the answer; the third is that the biggest win of the arc is **not** this strategy at all.
 
+> **The standing rule now lives in `docs/structural-discipline.md`.** It argues the same
+> preference from a stronger premise than this section does — **portability**: a Lean *type* can
+> be mirrored by a host *type* and the mirror is checked by a compiler, where a Lean *gate* must
+> be re-implemented as a host *check* and nothing checks that you did. §9's five bugs are the
+> evidence, and they sort perfectly: zero bugs in the two tightenings TypeScript carries
+> structurally, four in the two it had to gate, one in the one it cannot express. This section is
+> the audit-local version; that file is the discipline.
+
 ### 14.1 Where it works: gates about the shape of a payload the library owns
 
 Every landed repair is this, and the pattern is exact — the gate said something about *data the
