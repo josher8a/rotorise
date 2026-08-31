@@ -44,7 +44,7 @@ theorem Codec.Approx.empty_le (c : Codec) : Codec.Approx Codec.empty c := by
 of definedness. -/
 
 /-- The stable option: `literal("A")`, which admits `"A"` at every stage. -/
-def optLit : OptionSem := .byAttempt (literalSCodec (.of "A" ∅))
+noncomputable def optLit : OptionSem := .byAttempt (literalCodec .string (.of "A" ∅))
 
 /-- The growing option, before unfolding: undefined everywhere. -/
 def optBot : OptionSem := .byAttempt Codec.empty
@@ -65,7 +65,7 @@ theorem altCodec_not_monotone :
     ∧ (altCodec [optLit, optStr] (some .S)).e (.str "A") = none := by
   refine ⟨optBot_approx_optStr, ?_, ?_⟩ <;>
     simp [altCodec, select, optLit, optBot, optStr, OptionSem.byAttempt,
-          literalSCodec, stringCodec, Codec.empty, NEFinset.of]
+          literalCodec, baseCodec, Codec.restrict, inL, stringCodec, Codec.empty, NEFinset.of]
 
 /-! ## The same defect through `denote`
 
@@ -75,7 +75,7 @@ two adjacent stages of the very function whose fuel we would like to remove. -/
 /-- §4's `union(literal("A"), string)`, with the `string` option behind a `lazy` so it
     arrives one fuel step later than the literal. -/
 def tWitness : Term :=
-  .union [.literalS (.of "A" ∅), .lazy .string]
+  .union [.literal .string (.of "A" ∅), .lazy .string]
 
 /-- **The fuel stages are not a chain.** Fuel `2` encodes `"A"`; fuel `3` encodes nothing.
     So `⨆ fuel, denote fuel t` is not a definition either, and the low-fuel answer is
@@ -85,7 +85,7 @@ theorem denote_not_fuel_monotone :
     ∧ (denote 3 tWitness).e (.str "A") = none := by
   constructor <;>
     simp [denote, tWitness, specOf, optionSemOf, altCodec, select, OptionSem.byAttempt,
-          literalSCodec, stringCodec, Codec.empty, NEFinset.of]
+          literalCodec, baseCodec, Codec.restrict, inL, stringCodec, Codec.empty, NEFinset.of]
 
 /-- At fuel `3` the union is simply the ill-formed one §4 refuted, and `none` is correct;
     fuel `2` hid that by not looking. The defect is not a wrong answer at fuel `3` — it is

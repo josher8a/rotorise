@@ -29,15 +29,13 @@ mutual
 
 /-- §3–§4, denoted. Same dispatch as `denote`, no fuel. -/
 def denoteω : Term → Codec
-  | .literal v => literalCodec v
+  | .literal k ls => literalCodec k ls
   | .string => stringCodec
   | .number => numberCodec
   | .decimal => decimalCodec
   | .boolean => booleanCodec
   | .null => nullCodec
   | .binary => binaryCodec
-  | .literalS ls => literalSCodec ls
-  | .literalN ls => literalNCodec ls
   | .set elem => setCodec (denoteω elem)
   | .array elem => arrayCodec (denoteω elem)
   | .tuple elems tail => tupleCodec (denoteωL elems) (denoteωO tail)
@@ -127,9 +125,8 @@ mutual
 /-- `denoteω`'s member index is the syntactic one — `μSyn`, exactly as `denote_μ` says of
     the fueled denotation, but with no fuel hypothesis to carry. -/
 theorem denoteω_μ : ∀ t : Term, (denoteω t).μ = μSyn t
-  | .string | .number | .decimal | .boolean | .binary | .null
-  | .literalS _ | .literalN _ => rfl
-  | .literal v => literalCodec_μ v
+  | .string | .number | .decimal | .boolean | .binary | .null => rfl
+  | .literal k ls => literalCodec_μ k ls
   | .set elem => by
       simp only [denoteω, μSyn, setCodec, denoteω_μ elem]
   | .array _ | .tuple _ _ | .record _ => rfl
@@ -169,7 +166,7 @@ mutual
 
 def termDepth : Term → Nat
   | .string | .number | .decimal | .boolean | .binary | .null
-  | .literal _ | .literalS _ | .literalN _ | .custom _ _ | .opaq _ => 1
+  | .literal _ _ | .custom _ _ | .opaq _ => 1
   | .set t | .array t | .record t | .nullable t | .lazy t => termDepth t + 1
   | .held t _ _ => termDepth t + 1
   | .refine t _ => termDepth t + 1
@@ -218,15 +215,13 @@ mutual
     is the recursion pushed under whichever combinator the rule denotes. -/
 theorem denoteω_eq : ∀ (t : Term) (n : Nat), termDepth t <= n -> denoteω t = denote n t
   | t, 0, h => absurd h (by cases t <;> simp only [termDepth] <;> omega)
-  | .literal _, _+1, _ => rfl
+  | .literal _ _, _+1, _ => rfl
   | .string, _+1, _ => rfl
   | .number, _+1, _ => rfl
   | .decimal, _+1, _ => rfl
   | .boolean, _+1, _ => rfl
   | .null, _+1, _ => rfl
   | .binary, _+1, _ => rfl
-  | .literalS _, _+1, _ => rfl
-  | .literalN _, _+1, _ => rfl
   | .custom _ _, _+1, _ => rfl
   | .opaq _, _+1, _ => rfl
   | .set t, n'+1, h => by

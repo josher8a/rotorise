@@ -34,7 +34,7 @@ timeboxed. This file is their output and the disposition of each item.
 | 4 | `WireOrder.lean` | **17 of 19 declarations dead** (independently found by two scans); header argues for a design the code abandoned. Only `Axioms.lean` imports it, for the axiom scan. The `Classical.choice` warning about `LinearOrder String` is a real hazard and must be relocated, not lost. | ~247 lines | small |
 | 5 | `Domain.lean:344` | `Item := List (Name × Attr)`, docstring calls it "an `M` without its wrapper" — the exact shape five sites removed, beside the repaired `Attr.m`. **Dead**: grep finds only the declaration. | the declaration | none |
 | ~~6~~ | ~~`Typing.lean:165-167`~~ **Landed.** | `literalOK` did two jobs: `Numeral.WF` on `.num` (content, stays) and `\| _ => false` for containers, which is just *"this value has a ground base"* — a claim about the field's carrier. `Term.literal (v : GroundValue)` makes `literalMember` total. Landed exactly as scoped: `hμ` and `μ` gone, `literalOK` → `literalD` with only the `.num` case, both laws argument-free, `literalMember` deleted, `literalCodec`'s `Codec.empty` case and `Exactness`'s container case gone. | **all of `hμ`**, the container half of `hok`, the `hok` arg of two laws, a case in `Exactness` | small (11 sites) |
-| 6b | `Term.lean:27-35` | **`literal`, `literalS` and `literalN` are one rule.** Raised by JH while item 6 was landing, and right: all three are *a nonempty finite set of values at one ground base*. Item 6 makes arity-one exactly that at cardinality one. The honest form is base-indexed — see §11 — and it deletes two constructors, their codecs, their `κ`/`adm`/`admA` rows and their exactness rows. | 2 constructors + ~266 mentions | **large** |
+| ~~6b~~ | ~~`Term.lean:27-35`~~ **Landed.** | **`literal`, `literalS` and `literalN` are one rule.** Raised by JH while item 6 was landing, and right: all three are *a nonempty finite set of values at one ground base*. Landed as the base-indexed form of §11.1 — `literal (k : GroundKind) (ls : NEFinset k.Carrier)` — after §11.4/§11.5 settled that the cheaper union route costs either `Classical.choice` or two reintroduced gates. | 2 constructors, 5 codec definitions → 4, 3 lawful theorems → 1, 2 carrier theorems → 1 (one of them 26 lines), 4 `admA` row lemmas → 3 | **landed** |
 | 7 | `Combinators.lean:3324, 3375, 3406` +2 | `objectCodecCore` takes `kn : Name → Bool` free; the only instantiation is `keepB rest sems`. Three hypotheses across five signatures all say *the filter never discards a declared name*. | 3 hypotheses × 5 signatures, plus `keepB_of_encEntry` and `keepB_of_declared` | medium (43 sites) |
 | 8 | ~61 declarations | Transitively dead plumbing, listed in §4.1. | ~61 decls | small, mechanical |
 | 9 | `codec-calculus.md:249-251`, `:301-302`, `:938-944`, `:1034` | §3 still presents both number rules as `refine` over an **ungated base** (those bases cannot exist); §5's traversal Lemma still has a "keyed lists … first occurrence first" clause (keys are unique by type, so it names nothing); `:1034` calls a wire set "the lifted list". | one clause | small |
@@ -748,7 +748,7 @@ infinite. This is not a gap in `deriving` — `deriving instance DecidableEq for
 but the point is that no hand-written instance exists either. So `union` stays list-shaped, and
 the two bullets above are the whole choice: **choice, or two gates back.**
 
-### 11.6 Where this leaves the recommendation
+### 11.6 Where this left the recommendation — and what landing it cost
 
 **Back to §11.1, now for a proved reason rather than a hedge.** The base-indexed
 `literal (k : GroundKind) (ls : NEFinset k.Carrier)` is the only route that keeps the payload a
@@ -766,3 +766,52 @@ carry no derivable judgement of their own — the fact both routes rest on, and 
 have to re-establish. It is also the thing to check the indexed rewrite against: whatever
 `literal (k) (ls)` ends up concluding, `typed_literalsS`/`typed_literalsN` say what it has to
 imply.
+
+### 11.7 Landed — and where the estimate was wrong
+
+The indexed form is in the tree. What the collapse actually bought, beyond deleting two
+constructors:
+
+* **Five codec definitions became four, and they are the right four.** `literalSCodec`,
+  `literalNCodec`, `inLS`, `inLN` and the old arity-one `literalCodec` are now `baseCodec`,
+  `inL`, `HLit` and one `literalCodec`. The codec **is** `(baseCodec k).restrict (inL k ls)`
+  rather than a hand-written pair that agreed with one, so `literalCodec_e_restrict` and
+  `_p_restrict` are `rfl` where the string versions needed a `funext` and a case split.
+* **`carrier_literalNCodec` was twenty-six lines and is now shared.** It unfolded
+  `Double.ofDec`, split on `Numeral.WF`, then on membership — all of it because the codec only
+  *agreed* with a restriction. `carrier_literalCodec` is `Carrier.congr` over
+  `carrier_restrict`, one line for all five bases, and the only content left is `hLit_of_inL`.
+* **Three `lawful_*` theorems became one, with no hypothesis.** `Lawful` never mentions `T`, so
+  the restriction of a lawful pair is lawful whatever `ℓ` is.
+* **`adm`'s literal row is `inL`** — the codec's own prism, not a second definition of it. Its
+  soundness case went from three cases (a `simp_all`, a `Double.ofDec` split, and a five-way
+  arity-one split) to `exact (restrict_e.mp he).1`.
+* **`typed_TSub`'s literal case is `exact hv`.** The denotation's held set and the rule's are the
+  same expression, `HLit k ls`, at every base.
+* **§5's `literal-S`/`literal-N` asymmetry is now one line of `admALit`.** It was never a
+  difference between two rules; it is a difference between two *bases* of one, and the definition
+  says so where two constructors used to imply otherwise.
+
+Where the estimate in §11.3 was wrong, in both directions. It said 266 sites; the real count of
+*edits* was far smaller, because most of those mentions were `literalS`/`literalN` in positions a
+mechanical rename covers. But it under-priced the dependent field in exactly one way that cost
+real time: **`simp [Adm]` and `simp [AdmA]` blow up at a dependent row.** `Exactness`'s two big
+tables are mutual definitions with ~20 rows each, and generating their equation lemmas across a
+pattern whose second field's *type mentions the first* exhausts the heartbeat budget — in proofs
+that used to close in one step. The fix is the same one the numeric sites already use: name the
+row (`Adm_literal`, `AdmA_literal`, both `@[simp]`) and never unfold the table at a literal.
+
+Two smaller costs worth recording, because neither was predicted:
+
+* `GroundKind.Carrier` must be **reducible**. An indexed `DecidableEq k.Carrier` instance works
+  and is *noncomputable* — `Double`'s equality is one of §1's axioms — which then spreads
+  `noncomputable` to every `def` that names a literal. Reducible carriers let membership resolve
+  through `String.decEq` and friends instead.
+* At `binary` (`List UInt8`) and `null` (`Unit`), even the named row was not enough for
+  `AdmA_exact`: `NEFinset k.Carrier` at a constructor `k` is the same *type* as `NEFinset Bytes`
+  but not the same *expression*, and `simp` re-derives that on every rewrite.
+  `AdmALit_binary_exact` and `AdmALit_null_exact` state those two bases with the carrier written
+  out, which does the reduction once at elaboration.
+
+Green across all 20 modules, warning-free, `#assert_axioms_all` passing, `maxHeartbeats` still at
+three — none of the timeouts above were fixed by raising the budget.

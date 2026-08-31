@@ -57,7 +57,7 @@ def Obligations : Nat → Term → Prop
   | fuel+1, t =>
     match t with
     | .string | .number | .decimal | .boolean | .binary | .null
-    | .literal _ | .literalS _ | .literalN _ | .opaq _ => True
+    | .literal _ _ | .opaq _ => True
     | .set t' | .array t' | .record t' | .refine t' _ => Obligations fuel t'
     | .tuple ts tail =>
       (∀ t' ∈ ts, Obligations fuel t') ∧ (∀ t' ∈ tail, Obligations fuel t')
@@ -85,9 +85,9 @@ def MPOk : Nat → Term → Prop
   | fuel+1, t =>
     match t with
     | .legacy _ _ => False
-    | .literal _
+    | .literal _ _
     | .string | .number | .decimal | .boolean | .binary | .null
-    | .literalS _ | .literalN _ | .opaq _ | .custom _ _ => True
+    | .opaq _ | .custom _ _ => True
     | .set t' | .array t' | .record t' | .refine t' _ | .nullable t'
     | .held t' _ _ => MPOk fuel t'
     | .tuple ts tail =>
@@ -185,13 +185,11 @@ theorem lawful_number : ∀ fuel, Lawful (denote fuel .number)
   | 0 => lawful_dead
   | _+1 => by simp only [denote]; exact lawful_numberCodec
 
-theorem lawful_literalS (ls : NEFinset String) : ∀ fuel, Lawful (denote fuel (.literalS ls))
+/-- One where there were two, at every base rather than the two commonest. -/
+theorem lawful_literal (k : GroundKind) (ls : NEFinset k.Carrier) :
+    ∀ fuel, Lawful (denote fuel (.literal k ls))
   | 0 => lawful_dead
-  | _+1 => by simp only [denote]; exact lawful_literalSCodec ls
-
-theorem lawful_literalN (ls : NEFinset Double) : ∀ fuel, Lawful (denote fuel (.literalN ls))
-  | 0 => lawful_dead
-  | _+1 => by simp only [denote]; exact lawful_literalNCodec ls
+  | _+1 => by simp only [denote]; exact lawful_literalCodec k ls
 
 /-! ## Inversion and dispatch helpers -/
 
@@ -247,15 +245,13 @@ theorem denote_μ : ∀ (fuel : Nat) (t : Term), (denote fuel t).μ = μSyn t
   | 0, _ => rfl
   | fuel+1, t => by
     cases t with
-    | literal v => exact literalCodec_μ v
+    | literal k ls => exact literalCodec_μ k ls
     | string => rfl
     | number => rfl
     | decimal => rfl
     | boolean => rfl
     | binary => rfl
     | null => rfl
-    | literalS ls => rfl
-    | literalN ls => rfl
     | set t' =>
       show (denote fuel t').μ.bind setMember = (μSyn t').bind setMember
       rw [denote_μ fuel t']
@@ -290,17 +286,15 @@ mutual
 
 /-- Typing's member index is the syntactic one — exactly, both sides. -/
 theorem typed_μSyn : ∀ {t T μ}, Typed t T μ → μSyn t = μ
-  -- `rfl`, where this used to be the rule's `hμ`. The member is now a function of the
-  -- payload on both sides — `μSyn` reads `GroundValue.member`, and so does the rule.
-  | _, _, _, .literal _ _ => rfl
+  -- `rfl`, where this used to be the rule's `hμ`. The member is a function of the *index* on
+  -- both sides now — `μSyn` reads `GroundKind.member`, and so does the rule.
+  | _, _, _, .literal _ _ _ => rfl
   | _, _, _, .string => rfl
   | _, _, _, .number => rfl
   | _, _, _, .decimal => rfl
   | _, _, _, .boolean => rfl
   | _, _, _, .null => rfl
   | _, _, _, .binary => rfl
-  | _, _, _, .literalS _ => rfl
-  | _, _, _, .literalN _ _ => rfl
   | _, _, _, .set h' hs => by
       show (μSyn _).bind setMember = _
       rw [typed_μSyn h']
@@ -332,12 +326,15 @@ end
 /-! ## The `(dunion)` stamp -/
 
 /-- Typing's nonempty-tags premise **is** a shape constraint: `tagsOf` is empty for
-    everything except an object whose `d` field is a `req literalS`, so a term with tags
-    is one, and its tags are that literal's set. Stated once, it replaces the outer case
-    analysis in `dunion_stamp` below. -/
+    everything except an object whose `d` field is a `req literal` **at the string base**, so a
+    term with tags is one, and its tags are that literal's set. Stated once, it replaces the
+    outer case analysis in `dunion_stamp` below.
+
+    The base is now part of the shape rather than part of the constructor's name, which is the
+    one place the collapse shows up as a change of statement rather than a deletion. -/
 theorem tagsOf_ne_nil {d : Name} {t : Term} (h : (tagsOf d t).Nonempty) :
     ∃ fields f rest ls, t = .object fields f rest ∧
-      MapOf.at ⟨fields, f⟩ d = some (.req (.literalS ls)) ∧ tagsOf d t = ls.1 := by
+      MapOf.at ⟨fields, f⟩ d = some (.req (.literal .string ls)) ∧ tagsOf d t = ls.1 := by
   cases t
   case object fields f rest =>
     cases hlk : MapOf.at (α := Field) ⟨fields, f⟩ d with
@@ -348,13 +345,16 @@ theorem tagsOf_ne_nil {d : Name} {t : Term} (h : (tagsOf d t).Nonempty) :
       | fallback _ _ => exact absurd h (by simp only [tagsOf]; rw [hlk]; simp [tagsOfField])
       | req tlit =>
         cases tlit
-        case literalS ls => exact ⟨fields, f, rest, ls, rfl, hlk, by
-          simp only [tagsOf]; rw [hlk]; rfl⟩
+        case literal k ls =>
+          cases k
+          case string => exact ⟨fields, f, rest, ls, rfl, hlk, by
+            simp only [tagsOf]; rw [hlk]; rfl⟩
+          all_goals exact absurd h (by simp only [tagsOf]; rw [hlk]; simp [tagsOfField])
         all_goals exact absurd h (by simp only [tagsOf]; rw [hlk]; simp [tagsOfField])
   all_goals exact absurd h (by simp [tagsOf])
 
 /-- Typing's nonempty-tags premise forces each `(dunion)` option to be an object whose
-    discriminator is a `req literalS`, and object-encode then stamps the tag on both
+    discriminator is a `req literal` at the string base, and object-encode then stamps it on both
     sides of every canonical pair — exactly the `hstamp` the sum lemmas consume.
     Shared by both halves of the theorem. -/
 theorem dunion_stamp (fuel : Nat) {d : Name} {opts : List Term}
@@ -373,9 +373,9 @@ theorem dunion_stamp (fuel : Nat) {d : Name} {opts : List Term}
     -- the discriminator is declared and non-`opt`, so the key set carries it. Denoting
     -- the table does not touch its key set, so the term's lookup *is* the semantics'.
     have hslk : MapOf.at (⟨fields, fun k => fieldSemOf (denote f) (ff k)⟩ : MapOf FieldSem) d
-        = some (FieldSem.req (denote f (Term.literalS ls))) := by
+        = some (FieldSem.req (denote f (Term.literal .string ls))) := by
       obtain ⟨hdf, hfd⟩ := MapOf.at_eq_some.mp hlk
-      replace hfd : ff ⟨d, hdf⟩ = Field.req (Term.literalS ls) := hfd
+      replace hfd : ff ⟨d, hdf⟩ = Field.req (Term.literal .string ls) := hfd
       refine MapOf.at_eq_some.mpr ⟨hdf, ?_⟩
       show fieldSemOf (denote f) (ff ⟨d, hdf⟩) = _
       rw [hfd]; rfl
@@ -386,16 +386,19 @@ theorem dunion_stamp (fuel : Nat) {d : Name} {opts : List Term}
     -- where the list representation had to find `d` in each row separately.
     have hw := funImage_some hfi ⟨d, hd⟩
     rw [show entryCodec ⟨fields, fun k => fieldSemOf (denote f) (ff k)⟩
-          (rcOf (restSemOf (denote f) rest)) d = some (denote f (Term.literalS ls)) by
+          (rcOf (restSemOf (denote f) rest)) d = some (denote f (Term.literal .string ls)) by
         simp only [entryCodec, hslk]; rfl] at hw
     cases f with
     | zero => exact nomatch hw
     | succ f' =>
-      replace hw : (literalSCodec ls).e (fv ⟨d, hd⟩) = some (g ⟨d, hd⟩) := hw
+      replace hw : (literalCodec .string ls).e (fv ⟨d, hd⟩) = some (g ⟨d, hd⟩) := hw
       cases hfv : fv ⟨d, hd⟩ <;> rw [hfv] at hw
       case str tagv =>
+        -- the literal codec is now `string`'s pair restricted rather than a hand-written
+        -- one, so the `if` is a step away instead of being the definition
         replace hw : (if tagv ∈ ls.1 then some (Attr.s tagv) else none)
-            = some (g ⟨d, hd⟩) := hw
+            = some (g ⟨d, hd⟩) := by
+          simpa [literalCodec, baseCodec, Codec.restrict, inL, stringCodec] using hw
         split at hw
         · rename_i hin
           replace hw : Attr.s tagv = g ⟨d, hd⟩ := by simpa using hw
@@ -466,15 +469,13 @@ theorem soundness_both : ∀ (fuel : Nat) {t T μ}, Typed t T μ → Obligations
     have ih : ∀ {t' : Term} {T' μ'}, Typed t' T' μ' → Obligations fuel t' → Sound fuel t' :=
       fun h' hob' => soundness_both fuel h' hob'
     cases h with
-    | literal v hD => exact sound_ground (lawful_literalCodec v)
+    | literal k ls hD => exact sound_ground (lawful_literalCodec k ls)
     | string => exact sound_ground lawful_stringCodec
     | number => exact sound_ground lawful_numberCodec
     | decimal => exact sound_ground lawful_decimalCodec
     | boolean => exact sound_ground lawful_booleanCodec
     | null => exact sound_ground lawful_nullCodec
     | binary => exact sound_ground lawful_binaryCodec
-    | literalS ls => exact sound_ground (lawful_literalSCodec ls)
-    | literalN ls hD => exact sound_ground (lawful_literalNCodec ls)
     | opaq lossy => exact sound_ground (lawful_opaqCodecω lossy)
     | custom ce cp =>
       exact sound_ground hob.custom
@@ -703,17 +704,10 @@ theorem typed_TSub : ∀ (fuel : Nat) {t T μ}, Typed t T μ →
   | fuel+1, t, T, μ, h, v, hv => by
     cases h with
     | string | number | decimal | boolean | binary | null => exact hv
-    | literal w hD =>
-      -- the numeric base is `numberCodec` now, and unfolding it here sends `simp` into
-      -- `Numeral.WF`'s decision procedure; the held set is all this case needs
-      cases w with
-      | num d =>
-        obtain ⟨-, hq⟩ := hv
-        cases v <;> simp_all
-      | _ =>
-        cases v <;> simp_all [denote, literalCodec, Codec.restrict, stringCodec,
-          booleanCodec, binaryCodec, nullCodec, literalD]
-    | literalS _ | literalN _ _ => exact hv
+    -- `exact hv`, where this was a five-way split guarding against `simp` unfolding
+    -- `numberCodec` into `Numeral.WF`'s decision procedure. The denotation's held set and the
+    -- rule's are the same expression now — `HLit k ls` — so there is nothing to prove.
+    | literal _ _ _ => exact hv
     | custom _ _ => exact hv
     | opaq lossy => exact opaq_TSubω lossy v hv
     | @set t' T' μ₀ μS h' hs =>
@@ -807,15 +801,13 @@ theorem carrier_denote : ∀ (fuel : Nat) {t T μ}, Typed t T μ → Obligations
   | 0, _, _, _, _, _ => carrier_dead
   | fuel+1, t, T, μ, h, hob => by
     cases h with
-    | literal v hD => exact carrier_literalCodec v
+    | literal k ls _ => exact carrier_literalCodec k ls
     | string => exact carrier_stringCodec
     | number => exact carrier_numberCodec
     | decimal => exact carrier_decimalCodec
     | boolean => exact carrier_booleanCodec
     | null => exact carrier_nullCodec
     | binary => exact carrier_binaryCodec
-    | literalS ls => exact carrier_literalSCodec ls
-    | literalN ls _ => exact carrier_literalNCodec ls
     | @set t' T' μ₀ μS h' hs =>
       exact carrier_setCodec (carrier_denote fuel h' hob.set)
     | @array t' T' μ' h' =>

@@ -61,12 +61,13 @@ elementwise." The witness is the shortest heterogeneous sequence. -/
 /-- `["A", "B"]` is an array of either literal, but homogeneous in neither. -/
 theorem not_equiv_union_array :
     ¬ Codec.Equiv
-        (denoteω (.union [.array (.literalS (.of "A" ∅)), .array (.literalS (.of "B" ∅))]))
-        (denoteω (.array (.union [.literalS (.of "A" ∅), .literalS (.of "B" ∅)]))) := by
+        (denoteω (.union [.array (.literal .string (.of "A" ∅)), .array (.literal .string (.of "B" ∅))]))
+        (denoteω (.array (.union [.literal .string (.of "A" ∅), .literal .string (.of "B" ∅)]))) := by
   intro h
   have hv := (h.heldSet (.arr [.str "A", .str "B"])).mpr
   simp [denoteω, denoteωOpts, denoteωMems, optionSemOf, specOf, OptionSem.byAttempt,
-        altCodec, select, arrayCodec, literalSCodec] at hv
+        altCodec, select, arrayCodec, literalCodec, baseCodec, Codec.restrict, inL,
+        stringCodec, NEFinset.of, HLit] at hv
 
 /-! ## `tuple(c₁ … cₙ, rest(c))` is neither a tuple nor an array of unions
 
@@ -223,24 +224,24 @@ the model shows the condition is needed for *interchangeability*, not for `≡`.
 
 /-- Left: the outer union resolves, because the inner one has already failed. -/
 theorem assoc_left_e :
-    (denoteω (.union [.string, .union [.literalS (.of "A" ∅), .literalS (.of "A" ∅)]])).e (.str "A")
+    (denoteω (.union [.string, .union [.literal .string (.of "A" ∅), .literal .string (.of "A" ∅)]])).e (.str "A")
       = some (.s "A") := by
   simp [denoteω, denoteωOpts, denoteωMems, optionSemOf, specOf, OptionSem.byAttempt,
-        altCodec, select, stringCodec, literalSCodec]
+        altCodec, select, stringCodec, literalCodec, baseCodec, Codec.restrict, inL]
 
 /-- Right: three options admit, so the union refuses globally. -/
 theorem assoc_right_e :
-    (denoteω (.union [.string, .literalS (.of "A" ∅), .literalS (.of "A" ∅)])).e (.str "A") = none := by
+    (denoteω (.union [.string, .literal .string (.of "A" ∅), .literal .string (.of "A" ∅)])).e (.str "A") = none := by
   simp [denoteω, denoteωOpts, denoteωMems, optionSemOf, specOf, OptionSem.byAttempt,
-        altCodec, select, stringCodec, literalSCodec]
+        altCodec, select, stringCodec, literalCodec, baseCodec, Codec.restrict, inL]
 
 /-- The two associativity forms are `≡` but not interchangeable: one writes where the
     other refuses. §6's (D)/(K)/(U) hedge is about this, not about `≡`. -/
 theorem not_eq_altCodec_assoc :
     ∃ (l r : Term) (v : Value) (a : Attr),
       (denoteω l).e v = some a ∧ (denoteω r).e v = none :=
-  ⟨.union [.string, .union [.literalS (.of "A" ∅), .literalS (.of "A" ∅)]],
-   .union [.string, .literalS (.of "A" ∅), .literalS (.of "A" ∅)],
+  ⟨.union [.string, .union [.literal .string (.of "A" ∅), .literal .string (.of "A" ∅)]],
+   .union [.string, .literal .string (.of "A" ∅), .literal .string (.of "A" ∅)],
    .str "A", .s "A", assoc_left_e, assoc_right_e⟩
 
 /-! ## `≡` is not transitive
@@ -367,14 +368,14 @@ which is what settled the question the conditional leaves open. -/
     decoration for the proof's sake: it is the whole of what the prism needed. -/
 theorem literalN_sub_number (ls : NEFinset Double)
     (hD : ∀ d ∈ ls.1, Numeral.WF d.toDec = true) :
-    ∀ v, (literalNCodec ls).T v → numberCodec.T v := by
+    ∀ v, (literalCodec .number ls).T v → numberCodec.T v := by
   rintro v ⟨d, hd, rfl⟩
   exact ⟨d, rfl, hD d hd⟩
 
 /-- **Without it, it is not.** A literal outside `D` is held by `literal-N` and not by
     `number`, so the two rules disagree about a value one of them claims to hold. -/
 theorem not_literalN_sub_number {d : Double} (hw : Numeral.WF d.toDec = false) :
-    ¬ ∀ v, (literalNCodec (.of d ∅)).T v → numberCodec.T v := by
+    ¬ ∀ v, (literalCodec .number (.of d ∅)).T v → numberCodec.T v := by
   intro h
   obtain ⟨d', hd', hwd⟩ := h (.num d) ⟨d, by simp, rfl⟩
   cases Value.num.inj hd'
@@ -392,30 +393,31 @@ theorem not_literalN_sub_number {d : Double} (hw : Numeral.WF d.toDec = false) :
     stop being able to say. Typing the carrier did not remove the reason for the premise;
     it relocated the symptom to the law that was always the real one. -/
 theorem literalN_holds_what_it_cannot_write {d : Double} (hw : Numeral.WF d.toDec = false) :
-    (literalNCodec (.of d ∅)).T (.num d) ∧
-      (literalNCodec (.of d ∅)).e (.num d) = none := by
+    (literalCodec .number (.of d ∅)).T (.num d) ∧
+      (literalCodec .number (.of d ∅)).e (.num d) = none := by
   refine ⟨⟨d, NEFinset.mem_of d ∅, rfl⟩, ?_⟩
   rw [literalNCodec_e_num, if_pos (NEFinset.mem_of d ∅), numberCodec_e_num,
     dif_neg (by rw [hw]; exact Bool.noConfusion)]
 
 /-- The premise, read back off any derivation — this is what makes the two theorems above
     about *derivable* terms rather than about `literalNCodec` in isolation. -/
-theorem typed_literalN_D {ls : NEFinset Double} {T μ} (h : Typed (.literalN ls) T μ) :
+theorem typed_literalN_D {ls : NEFinset Double} {T μ} (h : Typed (.literal .number ls) T μ) :
     ∀ d ∈ ls.1, Numeral.WF d.toDec = true := by
-  cases h with | literalN _ hD => exact hD
+  cases h with | literal _ _ hD => exact hD
 
 /-- **Every derivable numeric literal refines `number` again.** The prism
     `lawful_literalNCodec` was once proved through is not restored as a proof route — the two
     codecs still differ, since one gates and the other tests membership — but the containment
     it stood for is a theorem once more, and it is `ℓ ⊆ D` that makes it one. -/
-theorem typed_literalN_sub_number {ls : NEFinset Double} {T μ} (h : Typed (.literalN ls) T μ) :
-    ∀ v, (literalNCodec ls).T v → numberCodec.T v :=
+theorem typed_literalN_sub_number {ls : NEFinset Double} {T μ}
+    (h : Typed (.literal .number ls) T μ) :
+    ∀ v, (literalCodec .number ls).T v → numberCodec.T v :=
   literalN_sub_number ls (typed_literalN_D h)
 
 /-- And the derivation the premise refuses. Before it, this held for **any** `d` with no
     hypothesis at all, which is what `literal(NaN)` was in the shipped library. -/
 theorem not_typed_literalN_nonD {d : Double} (hw : Numeral.WF d.toDec = false) :
-    ¬ ∃ T μ, Typed (.literalN (.of d ∅)) T μ := by
+    ¬ ∃ T μ, Typed (.literal .number (.of d ∅)) T μ := by
   rintro ⟨T, μ, h⟩
   have hd := typed_literalN_D h d (by simp)
   rw [hw] at hd

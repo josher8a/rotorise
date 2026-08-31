@@ -158,29 +158,26 @@ inductive Typed : Term → Held → Option Member → Prop where
   /-- §3 `(null)`: the point held set `{null}`, stored as `⟨NULL, ∗⟩`. -/
   | null : Typed .null (fun v => v = .null) (some .NULL)
   | binary  : Typed .binary  (fun v => ∃ b, v = .bin b) (some .B)
-  /-- §3 `(literal)`, unified: the base is fixed by the value's kind, `hD` is `ℓ ⊆ D` at
-      that base, and the member is what the base stores. One rule for `S`, `N`, `BOOL`, `B`
-      and `NULL`; `literalS`/`literalN` are it at the two commonest bases, kept because their
-      type carries the homogeneity an n-ary list would have to prove.
+  /-- **§3 `(literal)`, and now there is one of it.**
 
-      **`μ` and `hμ` are gone.** The member was an index with a premise pinning it to
-      `literalMember v`, which is a function of the payload — so it is written as one. What
-      made that possible is the payload's type: `GroundValue.member` is total, where
-      `literalMember` needed a `some` on the right to mean "and it has a base at all". `hD`
-      is the one premise left, and it is content — the arity-one `ℓ ⊆ D`. -/
-  | literal (v : GroundValue) (hD : literalD v = true) :
-      Typed (.literal v) (fun w => w = v.toValue) (some v.member)
-  /-- §3 `(literal-S)`. `hne` and `hnd` are gone: `ℓ` is a `℘⁺fin(String)`, so nonempty
-      and repeat-free are the type's, not the rule's. -/
-  | literalS (ls : NEFinset String) :
-      Typed (.literalS ls) (fun v => ∃ s, s ∈ ls.1 ∧ v = .str s) (some .S)
-  /-- §3's `ℓ ⊆ D`, and it is the **only** premise this rule has left. A `literal` writes
-      its values' own text, so a double outside §1's numeral domain would be written to an
-      attribute `𝔸` has no point for. That is a claim about the *elements*, which no
-      collection type carries — unlike `hne` and `hnd`, which two of them did. -/
-  | literalN (ls : NEFinset Double)
-      (hD : ∀ d ∈ ls.1, Numeral.WF d.toDec = true) :
-      Typed (.literalN ls) (fun v => ∃ d, d ∈ ls.1 ∧ v = .num d) (some .N)
+      The rule as §3 writes it is `⊢ g : T ⇝ μ, g ground; ℓ₁ … ℓₙ ∈ T; n ≥ 1; pairwise
+      distinct`. Every clause of that premise line is now a type rather than a hypothesis:
+      `g ground` is the index `k`, `n ≥ 1` and distinctness are `NEFinset`'s, and `ℓᵢ ∈ T`
+      at one base is `NEFinset k.Carrier`. The member is `k.member`, a *function* of the
+      index, where three constructors between them carried it as an index with a premise
+      (`hμ`), as `.S`, and as `.N`.
+
+      `hD` is what is left, and it is the only thing here that is content: `LiteralD` is
+      `ℓ ⊆ D` at `number` and `True` elsewhere. §2.2 of `docs/codec-audit.md` is why it is a
+      premise and not a carrier — typing it deletes `literalN_holds_what_it_cannot_write`,
+      which is the witness that (B) fails without it, rather than proving the defect absent.
+
+      This replaces `literal`, `literalS` and `literalN`. What it is *not* is a union of
+      arity-one literals, which `Calculus/LiteralArity1.lean` shows is derivable and §11.5 of
+      the audit shows is not free: `Term.union` is list-shaped, and the bridge from a `Finset`
+      is `Classical.choice`. -/
+  | literal (k : GroundKind) (ls : NEFinset k.Carrier) (hD : LiteralD k ls) :
+      Typed (.literal k ls) (HLit k ls) (some k.member)
   | set {t T μ μS} (h : Typed t T (some μ)) (hs : setMember μ = some μS) :
       Typed (.set t) (HSet T) (some μS)
   | array {t T μ} (h : Typed t T μ) : Typed (.array t) (HStar T) (some .L)

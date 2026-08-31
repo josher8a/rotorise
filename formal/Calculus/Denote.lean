@@ -29,22 +29,22 @@ def specOf : Term → Option (MapOf Bool)
     default, breaking the value-side stamp — and the implementation refuses one too
     (`discriminatedUnion` demands a bare `literal`). -/
 def tagsOfField : Option Field → Finset String
-  | some (.req (.literalS ls)) => ls.1
+  | some (.req (.literal .string ls)) => ls.1
   | _ => ∅
 
 def tagsOf (d : Name) : Term → Finset String
   | .object fields f _ => tagsOfField (MapOf.at ⟨fields, f⟩ d)
   | _ => ∅
 
-/-- `(literal)`'s member is its base's — the dispatch in `literalCodec` and the one in
-    `GroundValue.member` agree case for case.
+/-! ### Where `literalMember` went
 
-    `literalMember : Value → Option Member` used to sit here, and its `| _ => none` was the
-    `g ground` premise wearing a function's clothes. `GroundValue.member` is total, so the
-    `Option` here is only `Codec.μ`'s own — a codec that writes no attribute — and never
-    "this payload had no base". -/
-theorem literalCodec_μ (v : GroundValue) : (literalCodec v).μ = some v.member := by
-  cases v <;> rfl
+`(literal)`'s member is its base's — `literalCodec` and `GroundKind.member` agree case for case,
+which is `Combinators.literalCodec_μ`, stated where the codec is.
+
+`literalMember : Value → Option Member` used to sit here, and its `| _ => none` was the
+`g ground` premise wearing a function's clothes. The member is a function of the index now, so
+the `Option` in `Codec.μ` is only `Codec.μ`'s own — a codec that writes no attribute — and never
+"this payload had no base". -/
 
 mutual
 
@@ -53,11 +53,9 @@ mutual
     forced. -/
 def μSyn : Term → Option Member
   | .string => some .S
-  | .literal v => some v.member
-  | .literalS _ => some .S
+  | .literal k _ => some k.member
   | .number => some .N
   | .decimal => some .N
-  | .literalN _ => some .N
   | .boolean => some .BOOL
   | .null => some .NULL
   | .binary => some .B
@@ -107,9 +105,7 @@ def denote : Nat → Term → Codec
     | .boolean => booleanCodec
     | .null => nullCodec
     | .binary => binaryCodec
-    | .literal v => literalCodec v
-    | .literalS ls => literalSCodec ls
-    | .literalN ls => literalNCodec ls
+    | .literal k ls => literalCodec k ls
     | .set elem => setCodec (denote fuel elem)
     | .array elem => arrayCodec (denote fuel elem)
     | .tuple elems tail =>

@@ -1,37 +1,54 @@
 import Calculus.Discharge
 
 /-!
-# The n-ary literal is derivable from arity one
+# The n-ary literal is derivable from singletons — the route not taken
 
-`(literal-S)` and `(literal-N)` are constructors of `Term`, and §3 has **one** `(literal)` rule.
-This file asks whether the two n-ary constructors are *rules* at all, or whether they are the
-union of arity-one literals wearing a rule's clothes — and the answer is the latter, on every
-count the constructors are used for.
+`(literal)` is now one constructor, `literal (k : GroundKind) (ls : NEFinset k.Carrier)`, and it
+absorbed `literalS` and `literalN`. **This file is why it is that shape and not a union.**
 
-The three things a rule has to supply are the judgement, §5's **(D)**, and (U):
+Before the collapse there were three constructors, and the obvious cheap fix was to keep only
+arity one and let the n-ary form be `Term.union` over singletons — which `codec-formalization.md`
+had proposed and which needs no new constructor at all. That fix works, and the theorems here are
+the proof of it, restated over the collapsed constructor at singleton `ℓ`:
 
-* `typed_literalsS` / `typed_literalsN` derive **exactly `Typed.literalS`/`Typed.literalN`'s
-  conclusion** from `Typed.literal` and `Typed.union`. The held set is the same set, the member
-  is the same member.
-* `dincomp_literalsS` / `dincomp_literalsN` discharge (D) from the alternatives being distinct,
-  which `NEFinset` already gives.
-* `uAtCan_literalsS` / `uAtCan_literalsN` discharge (U) **on both sides**, through
+* `typed_literalsS` / `typed_literalsN` derive exactly what the old `Typed.literalS` and
+  `Typed.literalN` concluded, from `Typed.literal` at a singleton and `Typed.union`. Same held
+  set, same member.
+* `dincomp_map_literal_str` / `_num` discharge §5's **(D)** from the alternatives being distinct.
+* `uAtCan_map_literal_str` / `_num` discharge (U) **on both sides**, through
   `uniqueAdmission_of_sharedBase`.
 
-The last one is the one worth stating plainly, because the §5 table says the opposite. `admA`
-sends a numeric literal to `⊤` — `admA_literalN_blind` — so read from the table, two numeric
-options never separate on the read side and a union of them cannot resolve. Read from the *pair*,
-they are refinements of one `numberCodec` at disjoint predicates, and that is all
-`uniqueAdmission_of_sharedBase` needs. `uAtCan_of_literalN_disjoint` already made this argument
-for a union of `literalN`s; the point here is that it never needed the n-ary constructor, only
-the shared base — so it holds for a union of arity-*one* literals, where `ℓ` is `Finset` data
-rather than a term's payload.
+The (U) one is worth stating plainly, because the §5 table says the opposite. `admA` sends a
+numeric literal's read side to `⊤` — `admA_literalN_blind` — so read from the table, two numeric
+options never separate and a union of them cannot resolve. Read from the *pair*, they are
+refinements of one `numberCodec` at disjoint predicates, which is all
+`uniqueAdmission_of_sharedBase` needs. `uAtCan_of_literalN_disjoint` already made that argument
+for a union of n-ary numeric literals and never used the n-ary constructor to make it — only the
+shared base — so it holds for singletons too.
 
-This does not delete anything by itself. It is the evidence that deleting the two constructors
-loses no derivable judgement — the check that has to come before the 266-site edit, not after.
+**So why is the constructor n-ary?** Because the union route cannot carry `ℓ` as a `Finset`.
+`Term.union` takes a `List Term`; bridging from a `NEFinset` is `Finset.toList`, which is
+`Multiset.toList`, which is `Quotient.out` — `Classical.choice`. The first draft of this file was
+stated over `NEFinset` and `#assert_axioms_all` rejected five theorems for exactly that. Stated
+over `(l : List α)` with `l.Nodup` and `l ≠ []`, as it is here, it is choice-free — and those two
+premises are precisely the gates the `℘⁺fin` repair had deleted. `Term` cannot have
+`DecidableEq` either (`Term.custom` carries functions on `Value`), so `union` cannot take a
+`NEFinset Term` and close the gap that way.
+
+`docs/codec-audit.md` §11 records the whole comparison. What survives here is the part worth
+keeping: whatever the collapsed rule concludes, these theorems say what it has to imply.
 -/
-
 namespace Calculus
+
+/-- A singleton literal's held set, as the one-value predicate the options below are stated
+    with. `HLit` is `∃ x ∈ ℓ, v = k.toValue x`; at a singleton that existential is the point. -/
+theorem hLit_singleton_str (s : String) :
+    HLit .string (.of s ∅) = fun v => v = Value.str s := by
+  funext v; simp [HLit, NEFinset.of]
+
+theorem hLit_singleton_num (d : Double) :
+    HLit .number (.of d ∅) = fun v => v = Value.num d := by
+  funext v; simp [HLit, NEFinset.of]
 
 /-! ## The judgement
 
@@ -42,24 +59,37 @@ shape the object-field work settled on. -/
 /-- Every option of a string literal set is derivable, at `S`. No premise: `literalD` is `true`
     at every base but `number`. -/
 theorem typedListμ_map_literal_str : ∀ (l : List String),
-    TypedListμ (l.map fun s => .literal (.str s))
+    TypedListμ (l.map fun s => .literal .string (.of s ∅))
       (l.map fun s => fun v => v = Value.str s)
       (l.map fun _ => some Member.S)
   | [] => .nil
-  | s :: rest => .cons (Typed.literal (.str s) rfl) (typedListμ_map_literal_str rest)
+  | s :: rest => by
+      refine .cons ?_ (typedListμ_map_literal_str rest)
+      show Typed (Term.literal .string (.of s ∅)) (fun v => v = Value.str s) (some .S)
+      rw [← hLit_singleton_str s]
+      exact Typed.literal .string (.of s ∅) trivial
 
 /-- …and of a numeric one, at `N`, on `ℓ ⊆ D` — the premise `(literal-N)` carries as `hD`, here
     consumed one element at a time by the arity-one rule. It is not weakened and not absorbed:
     §2.2 of the audit is the reason that matters. -/
 theorem typedListμ_map_literal_num : ∀ (l : List Double),
     (∀ d ∈ l, Numeral.WF d.toDec = true) →
-    TypedListμ (l.map fun d => .literal (.num d))
+    TypedListμ (l.map fun d => .literal .number (.of d ∅))
       (l.map fun d => fun v => v = Value.num d)
       (l.map fun _ => some Member.N)
   | [], _ => .nil
-  | d :: rest, h =>
-      .cons (Typed.literal (.num d) (h d (List.mem_cons_self _ _)))
-        (typedListμ_map_literal_num rest fun x hx => h x (List.mem_cons_of_mem _ hx))
+  | d :: rest, h => by
+      have hD : LiteralD .number (.of d ∅) := by
+        intro x hx
+        -- `subst` would eliminate `d`, the pattern variable, and `h` is stated about it
+        have hxd : x = d := by simpa [NEFinset.of] using hx
+        rw [hxd]
+        exact h d (List.mem_cons_self _ _)
+      refine .cons ?_ (typedListμ_map_literal_num rest
+        fun x hx => h x (List.mem_cons_of_mem _ hx))
+      show Typed (Term.literal .number (.of d ∅)) (fun v => v = Value.num d) (some .N)
+      rw [← hLit_singleton_num d]
+      exact Typed.literal .number (.of d ∅) hD
 
 /-! ## The member, the held set, and (D) -/
 
@@ -127,51 +157,41 @@ which is why it holds here with `ℓ` as `Finset` data instead. -/
 
 /-- (U) on both sides for a string literal set's options. -/
 theorem uAtCan_map_literal_str (fuel : Nat) {l : List String} (hnd : l.Nodup) :
-    UAtCan (fuel+1) (l.map fun s => .literal (.str s)) := by
+    UAtCan (fuel+1) (l.map fun s => .literal .string (.of s ∅)) := by
   show UniqueAdmission (semsOf (fuel+1) _)
-  have hs : semsOf (fuel+1) (l.map fun s => .literal (.str s))
-      = (l.map fun s => literalCodec (.str s)).map OptionSem.byAttempt := by
+  have hs : semsOf (fuel+1) (l.map fun s => .literal .string (.of s ∅))
+      = (l.map fun s => literalCodec .string (.of s ∅)).map OptionSem.byAttempt := by
     simp [semsOf, List.map_map, specOf, optionSemOf, denote]
   rw [hs]
-  refine uniqueAdmission_of_sharedBase (base := stringCodec)
-    (qs := l.map fun s => (fun w => match w with | .str s' => decide (s' = s) | _ => false))
-    lawful_stringCodec.core ?_ ?_
+  refine uniqueAdmission_of_sharedBase (base := baseCodec .string)
+    (qs := l.map fun s => inL .string (.of s ∅))
+    (lawful_baseCodec .string).core ?_ ?_
   · rw [List.forall₂_map_left_iff, List.forall₂_map_right_iff]
-    exact List.forall₂_same.mpr fun s _ => ⟨rfl, rfl⟩
+    exact List.forall₂_same.mpr fun s _ =>
+      ⟨literalCodec_e_restrict .string (.of s ∅), literalCodec_p_restrict .string (.of s ∅)⟩
   · rw [List.pairwise_map]
     refine hnd.imp ?_
     intro a b hab v hv
-    cases v with
-    | str s =>
-      simp only [decide_eq_true_eq] at hv
-      subst hv
-      simp only [decide_eq_false_iff_not]
-      exact hab
-    | _ => exact Bool.noConfusion hv
+    cases v <;> simp_all [inL, NEFinset.of]
 
 /-- …and at the numeric base, where the table cannot. -/
 theorem uAtCan_map_literal_num (fuel : Nat) {l : List Double} (hnd : l.Nodup) :
-    UAtCan (fuel+1) (l.map fun d => .literal (.num d)) := by
+    UAtCan (fuel+1) (l.map fun d => .literal .number (.of d ∅)) := by
   show UniqueAdmission (semsOf (fuel+1) _)
-  have hs : semsOf (fuel+1) (l.map fun d => .literal (.num d))
-      = (l.map fun d => literalCodec (.num d)).map OptionSem.byAttempt := by
+  have hs : semsOf (fuel+1) (l.map fun d => .literal .number (.of d ∅))
+      = (l.map fun d => literalCodec .number (.of d ∅)).map OptionSem.byAttempt := by
     simp [semsOf, List.map_map, specOf, optionSemOf, denote]
   rw [hs]
-  refine uniqueAdmission_of_sharedBase (base := numberCodec)
-    (qs := l.map fun d => (fun w => match w with | .num d' => decide (d' = d) | _ => false))
-    lawful_numberCodec.core ?_ ?_
+  refine uniqueAdmission_of_sharedBase (base := baseCodec .number)
+    (qs := l.map fun d => inL .number (.of d ∅))
+    (lawful_baseCodec .number).core ?_ ?_
   · rw [List.forall₂_map_left_iff, List.forall₂_map_right_iff]
-    exact List.forall₂_same.mpr fun d _ => ⟨rfl, rfl⟩
+    exact List.forall₂_same.mpr fun d _ =>
+      ⟨literalCodec_e_restrict .number (.of d ∅), literalCodec_p_restrict .number (.of d ∅)⟩
   · rw [List.pairwise_map]
     refine hnd.imp ?_
     intro a b hab v hv
-    cases v with
-    | num d =>
-      simp only [decide_eq_true_eq] at hv
-      subst hv
-      simp only [decide_eq_false_iff_not]
-      exact hab
-    | _ => exact Bool.noConfusion hv
+    cases v <;> simp_all [inL, NEFinset.of]
 
 /-! ## The two rules, derived — over a `List`, and that is the finding
 
@@ -188,7 +208,7 @@ that this file was written to find. See §11.5 of `docs/codec-audit.md`. -/
     the member — comes from `Typed.literal` and `Typed.union`, with no premise `literalS` does not
     already have: `hnd` and `hne` are what `NEFinset` was carrying. -/
 theorem typed_literalsS {l : List String} (hnd : l.Nodup) (hne : l ≠ []) :
-    Typed (.union (l.map fun s => .literal (.str s)))
+    Typed (.union (l.map fun s => .literal .string (.of s ∅)))
       (fun v => ∃ s, s ∈ l ∧ v = .str s) (some .S) := by
   have h := Typed.union (typedListμ_map_literal_str l) (dincomp_map_literal_str hnd)
   rw [hunion_map_literal_str, unanimous_map_const _ hne] at h
@@ -198,7 +218,7 @@ theorem typed_literalsS {l : List String} (hnd : l.Nodup) (hne : l ≠ []) :
     carrier, which §2.2 of the audit is the reason for. -/
 theorem typed_literalsN {l : List Double} (hnd : l.Nodup) (hne : l ≠ [])
     (hD : ∀ d ∈ l, Numeral.WF d.toDec = true) :
-    Typed (.union (l.map fun d => .literal (.num d)))
+    Typed (.union (l.map fun d => .literal .number (.of d ∅)))
       (fun v => ∃ d, d ∈ l ∧ v = .num d) (some .N) := by
   have h := Typed.union (typedListμ_map_literal_num l hD) (dincomp_map_literal_num hnd)
   rw [hunion_map_literal_num, unanimous_map_const _ hne] at h
@@ -220,7 +240,7 @@ definition it would replace is touched. -/
 /-- The tag an option names, if it names one. Shallow, exactly as `tagsOfField` is: a term that
     is not a string literal contributes nothing, and that is not an error. -/
 def tagOf1 : Term → Finset String
-  | .literal (.str s) => {s}
+  | .literal .string ls => ls.1
   | _ => ∅
 
 /-- The tags a discriminator field names — one level, no recursion, so no termination argument
@@ -230,12 +250,12 @@ noncomputable def tagStringsOf : Term → Finset String
   | t => tagOf1 t
 
 theorem mem_tagStringsOf_fold (l : List String) (x : String) :
-    x ∈ (((l.map fun s => Term.literal (.str s)).map tagOf1).foldr (· ∪ ·) ∅) ↔ x ∈ l := by
+    x ∈ (((l.map fun s => Term.literal .string (.of s ∅)).map tagOf1).foldr (· ∪ ·) ∅) ↔ x ∈ l := by
   induction l with
   | nil => simp
   | cons s rest ih =>
-    show x ∈ tagOf1 (Term.literal (.str s)) ∪
-        ((rest.map fun s => Term.literal (.str s)).map tagOf1).foldr (· ∪ ·) ∅ ↔ _
+    show x ∈ tagOf1 (Term.literal .string (.of s ∅)) ∪
+        ((rest.map fun s => Term.literal .string (.of s ∅)).map tagOf1).foldr (· ∪ ·) ∅ ↔ _
     rw [Finset.mem_union, ih]
     show x ∈ ({s} : Finset String) ∨ x ∈ rest ↔ _
     rw [Finset.mem_singleton]
@@ -246,7 +266,7 @@ theorem mem_tagStringsOf_fold (l : List String) (x : String) :
     which is what `tagsOfField`'s existing `| _ => ∅` already does; heterogeneity is an empty
     contribution, not an error, and the error it *should* be is `(dunion)`'s `htags`. -/
 theorem mem_tagStringsOf_union (l : List String) (x : String) :
-    x ∈ tagStringsOf (.union (l.map fun s => .literal (.str s))) ↔ x ∈ l :=
+    x ∈ tagStringsOf (.union (l.map fun s => .literal .string (.of s ∅))) ↔ x ∈ l :=
   mem_tagStringsOf_fold l x
 
 end Calculus

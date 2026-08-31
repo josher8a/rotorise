@@ -295,25 +295,35 @@ def nullCodec : Codec :=
     e := fun v => match v with | .null => some .null | _ => none
     p := fun a => match a with | .null => some .null | _ => none }
 
-def literalSCodec (ls : NEFinset String) : Codec :=
-  { T := fun v => ∃ s, s ∈ ls.1 ∧ v = .str s
-    μ := some .S
-    e := fun v => match v with
-      | .str s => if s ∈ ls.1 then some (.s s) else none
-      | _ => none
-    p := fun a => match a with
-      | .s s => if s ∈ ls.1 then some (.str s) else none
-      | _ => none }
+/-- The pair a literal refines: its base's, chosen by the index.
 
-/-- `literal(ℓ)`'s predicate on the string side. -/
-def inLS (ls : NEFinset String) : Value → Bool
-  | .str s => decide (s ∈ ls.1)
-  | _ => false
+    §3's `(literal)` premise is `⊢ g : T ⇝ μ, g ground`, and this is `g`. It exists because
+    the rule quantifies over the base — the three constructors this replaces had it hard-coded
+    three times over, which is why `literal-S` and `literal-N` were two rules and `boolean`,
+    `binary` and `null` were none. -/
+noncomputable def baseCodec : GroundKind → Codec
+  | .string  => stringCodec
+  | .number  => numberCodec
+  | .boolean => booleanCodec
+  | .binary  => binaryCodec
+  | .null    => nullCodec
 
-/-- `literal(ℓ)`'s predicate on the numeric side. -/
-def inLN (ls : NEFinset Double) : Value → Bool
-  | .num d => decide (d ∈ ls.1)
-  | _ => false
+/-- `literal(ℓ)`'s predicate: the value is one of the alternatives.
+
+    One definition where there were two (`inLS`, `inLN`) and three bases with none. Dispatching
+    on the index first is what makes the carrier concrete, and so the membership decidable. -/
+noncomputable def inL : (k : GroundKind) → NEFinset k.Carrier → Value → Bool
+  | .string,  ls, .str s  => decide (s ∈ ls.1)
+  | .number,  ls, .num d  => decide (d ∈ ls.1)
+  | .boolean, ls, .bool b => decide (b ∈ ls.1)
+  | .binary,  ls, .bin b  => decide (b ∈ ls.1)
+  | .null,    _,  .null   => true
+  | _, _, _ => false
+
+/-- §3's `{ℓ₁ … ℓₙ}` — the held set, uniform in the base because `toValue` is. Spelled
+    `Value → Prop` rather than `Held`, which is `Typing`'s abbreviation and one module down. -/
+def HLit (k : GroundKind) (ls : NEFinset k.Carrier) : Value → Prop :=
+  fun v => ∃ x, x ∈ ls.1 ∧ v = k.toValue x
 
 
 /-! ## Wrappers -/
@@ -469,40 +479,27 @@ theorem decimalCodec_p_restrict : decimalCodec.p = (wfDecimalCodec.restrict isSt
       simp [decimalCodec, wfDecimalCodec, Codec.restrict, isStored, hs]
   | _ => rfl
 
-/-- **§3's `(literal-S)` gate is `refine` over a base the calculus already ships.** No raw
-    codec is needed here: `string` *is* the ungated pair, because a string's stored text is
-    the string. -/
-theorem literalSCodec_e_restrict (ls : NEFinset String) :
-    (literalSCodec ls).e = (stringCodec.restrict (inLS ls)).e := by
-  funext v; cases v <;> simp [literalSCodec, stringCodec, Codec.restrict, inLS]
+/-- §3 `(literal)`. **The pair is a refinement of its base by construction** — the `refine`
+    §7 calls "an iso and a prism", with the prism named by `ℓ` and the iso supplied by the
+    index.
 
-/-- …and on the reading half. -/
-theorem literalSCodec_p_restrict (ls : NEFinset String) :
-    (literalSCodec ls).p = (stringCodec.restrict (inLS ls)).p := by
-  funext a; cases a <;> simp [literalSCodec, stringCodec, Codec.restrict, inLS]
-
-/-- §3 `(literal-N)`. **The pair is a refinement of `number` by construction**, where it
-    used to gate on `d ∈ ℓ` alone and write `.n d.toDec` unchecked. With `Attr.n` carrying
-    `Numeral.WF` there is no unchecked write to be had, so `e` and `p` are `number`'s
-    restricted — which is what `uniqueAdmission_of_sharedBase` wanted and used to get from
-    an artificial `numberCodec`.
-
-    **`T` is deliberately *not* the refinement's.** It stays §3's `ℓ`, so a literal outside
-    §1's `D` is still *held* and is now unwritable — which is (B) failing, and is exactly
-    why `(literal-N)` needs `ℓ ⊆ D`. Typing the carrier moved that defect from "writes an
-    attribute `𝔸` has no point for" to "holds a value it cannot write"; it did not remove
-    the reason for the premise. -/
-noncomputable def literalNCodec (ls : NEFinset Double) : Codec :=
-  { numberCodec.restrict (inLN ls) with T := fun v => ∃ d, d ∈ ls.1 ∧ v = .num d }
+    **`T` is deliberately *not* the refinement's.** It stays §3's `ℓ`, so a numeric literal
+    outside §1's `D` is still *held* and is unwritable — which is (B) failing, and is exactly
+    why the rule needs `ℓ ⊆ D`. Typing the carrier moved that defect from "writes an attribute
+    `𝔸` has no point for" to "holds a value it cannot write"; it did not remove the reason for
+    the premise. At every other base the two coincide, which is why only `number` has one. -/
+noncomputable def literalCodec (k : GroundKind) (ls : NEFinset k.Carrier) : Codec :=
+  { (baseCodec k).restrict (inL k ls) with T := HLit k ls }
 
 theorem literalNCodec_e_num (ls : NEFinset Double) (d : Double) :
-    (literalNCodec ls).e (.num d)
+    (literalCodec .number ls).e (.num d)
       = if d ∈ ls.1 then numberCodec.e (.num d) else none := by
-  by_cases hd : d ∈ ls.1 <;> simp [literalNCodec, Codec.restrict, inLN, hd]
+  by_cases hd : d ∈ ls.1 <;>
+    simp [literalCodec, baseCodec, Codec.restrict, inL, hd]
 
 theorem literalNCodec_p_n (ls : NEFinset Double) (x : WFNumeral) :
-    (literalNCodec ls).p (.n x) =
-      (numberCodec.p (.n x)).bind (fun v => if inLN ls v then some v else none) := rfl
+    (literalCodec .number ls).p (.n x) =
+      (numberCodec.p (.n x)).bind (fun v => if inL .number ls v then some v else none) := rfl
 
 /-! ### The gated ground codecs are refinements
 
@@ -514,28 +511,35 @@ that visible, and lets all four of its laws come from `Lawful.restrict` and
 `decimal` is deliberately *not* here. It moves the member (`str` values to an `N`
 attribute), so it is not a refinement of `string` and keeps its own proofs. -/
 
-/-- §3 `(literal)` at arity one: `refine` over the ground base of the value's kind, at
-    equality with that value. The dispatch is the rule's "`g` ground, `ℓ ⊆ T`" read as a
-    definition — and **total**, because a `GroundValue` has a ground base by construction.
-    The `| _ => Codec.empty` case this used to end with was the `g ground` premise's third
-    copy: a codec that holds nothing and writes nothing, existing only to be the image of a
-    payload the rule already refused. -/
-noncomputable def literalCodec : GroundValue → Codec
-  | .str s  => stringCodec.restrict    (fun w => match w with | .str s'  => decide (s' = s) | _ => false)
-  | .num d  => numberCodec.restrict    (fun w => match w with | .num d'  => decide (d' = d) | _ => false)
-  | .bool b => booleanCodec.restrict   (fun w => match w with | .bool b' => decide (b' = b) | _ => false)
-  | .bin b  => binaryCodec.restrict    (fun w => match w with | .bin b'  => decide (b' = b) | _ => false)
-  | .null   => nullCodec
+/-- **§3's gate is `refine` over the base, at every base** — and the numeric one is `number`
+    itself rather than an ungated stand-in, because §1's `Numerals` is the whole of
+    `Carries(N)` and there is no wider numeric pair. That is what makes numeric literals
+    separable: see `uniqueAdmission_of_sharedBase`.
 
-/-- **§3's `(literal-N)` gate is the same `refine`, over the same base** — and both are
-    now `number` itself rather than an ungated stand-in, because §1's `Numerals` is the
-    whole of `Carries(N)` and there is no wider numeric pair. That is what makes numeric
-    literals separable: see `uniqueAdmission_of_sharedBase`. -/
-theorem literalNCodec_e_restrict (ls : NEFinset Double) :
-    (literalNCodec ls).e = (numberCodec.restrict (inLN ls)).e := rfl
+    Both halves are `rfl` now, where the string pair needed a `funext` and a case split: the
+    codec *is* the restriction, rather than a hand-written pair that agreed with one. -/
+theorem literalCodec_e_restrict (k : GroundKind) (ls : NEFinset k.Carrier) :
+    (literalCodec k ls).e = ((baseCodec k).restrict (inL k ls)).e := rfl
 
-theorem literalNCodec_p_restrict (ls : NEFinset Double) :
-    (literalNCodec ls).p = (numberCodec.restrict (inLN ls)).p := rfl
+theorem literalCodec_p_restrict (k : GroundKind) (ls : NEFinset k.Carrier) :
+    (literalCodec k ls).p = ((baseCodec k).restrict (inL k ls)).p := rfl
+
+/-- The member is the base's, and the base's is the index's. -/
+theorem literalCodec_μ (k : GroundKind) (ls : NEFinset k.Carrier) :
+    (literalCodec k ls).μ = some k.member := by cases k <;> rfl
+
+/-- Membership in `ℓ` places the value in the held set — the direction `Carrier` needs, and
+    the one place `.null`'s nonemptiness is used for anything. -/
+theorem hLit_of_inL (k : GroundKind) (ls : NEFinset k.Carrier) (v : Value) :
+    inL k ls v = true → HLit k ls v := by
+  cases k <;> cases v <;> intro h <;>
+    first
+      | exact Bool.noConfusion h
+      | exact ⟨_, by simpa [inL] using h, rfl⟩
+      -- `.null`'s carrier is `Unit`, so the alternative is whichever one the nonemptiness
+      -- proof names. Destructed rather than `choose`n: `Exists.choose` is `Classical.choice`,
+      -- and `formal/` advertises its absence.
+      | exact (by obtain ⟨x, hx⟩ := ls.2; exact ⟨x, hx, rfl⟩)
 
 /-- `legacy`: extend the reading. With §3's coherence premise this presentation equals
     the order-free `p ∪ r`. -/
@@ -2156,47 +2160,28 @@ theorem carrier_restrict {c : Codec} (hc : Carrier c) (q : Value → Bool) :
   ranP hp := let ⟨hcv, hq⟩ := restrict_p.mp hp; ⟨hc.ranP hcv, hq⟩
 
 
+/-- Every base is on its carrier — the five lemmas above, indexed. -/
+theorem carrier_baseCodec : ∀ k : GroundKind, Carrier (baseCodec k)
+  | .string  => carrier_stringCodec
+  | .number  => carrier_numberCodec
+  | .boolean => carrier_booleanCodec
+  | .binary  => carrier_binaryCodec
+  | .null    => carrier_nullCodec
+
 /-! ### The refinement ground codecs, on their carriers -/
 
-theorem carrier_literalSCodec (ls : NEFinset String) : Carrier (literalSCodec ls) :=
-  Carrier.congr (by funext v; cases v <;> simp [literalSCodec, Codec.restrict, stringCodec, inLS])
-    (by funext a; cases a <;> simp [literalSCodec, Codec.restrict, stringCodec, inLS])
-    (by rintro v ⟨⟨s, rfl⟩, hq⟩; exact ⟨s, by simpa [inLS] using hq, rfl⟩)
-    (carrier_restrict carrier_stringCodec (inLS ls))
+/-- **One theorem where there were two, and the numeric one was twenty-six lines.**
 
-/-- Proved directly rather than as a prism over `number`, which is what it was until
-    `(number)` grew its `D` gate. The route is gone, not the theorem: `literalNCodec` gates
-    on `d ∈ ls` alone, so a literal outside `D` is still writable here and is not writable
-    through `number`. See `not_literalN_sub_number` in `Refutations.lean` for what that
-    costs, and `codec-formalization.md` §4 for the premise §3 would need to close it. -/
-theorem carrier_literalNCodec (ls : NEFinset Double) : Carrier (literalNCodec ls) := by
-  refine ⟨?_, ?_⟩
-  · intro v a h
-    cases v with
-    | num d =>
-      rw [literalNCodec_e_num] at h
-      by_cases hd : d ∈ ls.1
-      · exact ⟨d, hd, rfl⟩
-      · rw [if_neg hd] at h; exact nomatch h
-    | _ => exact nomatch h
-  · intro a v h
-    cases a with
-    | n x =>
-      rw [literalNCodec_p_n] at h
-      rw [numberCodec_p_n] at h
-      cases hx : Double.ofDec x.1 with
-      | none => rw [hx] at h; exact nomatch h
-      | some d =>
-        rw [hx] at h
-        by_cases hw : Numeral.WF d.toDec = true
-        · rw [Option.some_bind, if_pos hw] at h
-          replace h : (if inLN ls (Value.num d) then some (Value.num d) else none)
-              = some v := h
-          by_cases hd : d ∈ ls.1
-          · rw [if_pos (by simpa [inLN] using hd)] at h; cases h; exact ⟨d, hd, rfl⟩
-          · rw [if_neg (by simpa [inLN] using hd)] at h; exact nomatch h
-        · rw [Option.some_bind, if_neg hw] at h; exact nomatch h
-    | _ => exact nomatch h
+    `literalNCodec`'s carrier used to be proved by hand — unfolding `Double.ofDec`, splitting on
+    `Numeral.WF`, then on membership — because the codec was a hand-written pair that only
+    *agreed* with a restriction. It now **is** the restriction, so `carrier_restrict` supplies
+    everything and all that remains is the held set being no smaller than the restriction's,
+    which is `hLit_of_inL`. -/
+theorem carrier_literalCodec (k : GroundKind) (ls : NEFinset k.Carrier) :
+    Carrier (literalCodec k ls) :=
+  Carrier.congr (d := (baseCodec k).restrict (inL k ls)) rfl rfl
+    (fun _ hv => hLit_of_inL k ls _ hv.2)
+    (carrier_restrict (carrier_baseCodec k) (inL k ls))
 
 /-- `legacy`: the migration lands in `T` because §3's `ran(r) ⊆ dom(e)` puts it in
     `dom(e)`, and `e`'s domain is `T`. The doc writes `r : 𝔸 ⇀ T` directly; this is the
@@ -2534,58 +2519,45 @@ theorem Lawful.restrict {c : Codec} (h : Lawful c) (q : Value → Bool) :
     agree := fun hp he => h.agree (restrict_p.mp hp).1 (restrict_e.mp he).2 }
 
 
-/-- **§3 `(literal)`'s `ℓ ⊆ D` at arity one** — and now nothing else.
+/-- **§3 `(literal)`'s `ℓ ⊆ D`** — the rule's one remaining premise, and content.
 
-    This was `literalOK`, and it did two jobs. `Numeral.WF` at `.num` is content: `number`'s
-    base is the only one that bounds anything, and a double outside §1's `D` is *held* by the
-    rule and unwritable, which is **(B)** failing — the same sentence `(literal-N)` needs
-    `hD` for, one arity down. The other job was `| _ => false` on containers, which said
-    "this payload has no ground base" and is now `GroundValue`'s to say. Renamed to match the
-    premise it is, and to read the same as `(literal-N)`'s `hD`. -/
-def literalD : GroundValue → Bool
-  | .num d => Numeral.WF d.toDec
-  | .str _ | .bool _ | .bin _ | .null => true
+    `number`'s base is the only one that bounds anything, so this is `Numeral.WF` over the
+    alternatives there and `True` everywhere else. A double outside §1's `D` is *held* by the
+    rule and unwritable, which is **(B)** failing; §2.2 of `docs/codec-audit.md` is why it stays
+    a premise instead of being typed into the carrier — doing that deletes
+    `literalN_holds_what_it_cannot_write` rather than proving the defect absent.
 
-/-- §3 `(literal)` is lawful, full stop — its base's laws, restricted.
+    A `Prop` rather than the `Bool` the arity-one gate was, because it now quantifies over `ℓ`.
+    This is `literalOK` and `literalN`'s `hD` unified: the other two jobs `literalOK` had —
+    "this payload has a ground base", "and it is this member" — are `GroundKind`'s. -/
+def LiteralD : (k : GroundKind) → NEFinset k.Carrier → Prop
+  | .number, ls => ∀ d ∈ ls.1, Numeral.WF d.toDec = true
+  | .string, _ | .boolean, _ | .binary, _ | .null, _ => True
 
-    **No `ℓ ⊆ D` hypothesis, and there never was one in the proof**: every case ignored it,
-    because a restriction of a lawful codec is lawful whether or not the restriction is
-    inhabited. The argument existed to *exclude the container cases*, and those are gone
-    from the payload's type, so the two theorems lose a premise each without losing a step.
-    `literalD` remains where it is content: the typing rule, guarding (B). -/
-theorem lawful_literalCodec : ∀ (v : GroundValue), Lawful (literalCodec v)
-  | .str _  => Lawful.restrict lawful_stringCodec _
-  | .num _  => Lawful.restrict lawful_numberCodec _
-  | .bool _ => Lawful.restrict lawful_booleanCodec _
-  | .bin _  => Lawful.restrict lawful_binaryCodec _
-  | .null   => lawful_nullCodec
+/-- …and every base is lawful. -/
+theorem lawful_baseCodec : ∀ k : GroundKind, Lawful (baseCodec k)
+  | .string  => lawful_stringCodec
+  | .number  => lawful_numberCodec
+  | .boolean => lawful_booleanCodec
+  | .binary  => lawful_binaryCodec
+  | .null    => lawful_nullCodec
 
-/-- …and on its carrier, for the same reason. -/
-theorem carrier_literalCodec : ∀ (v : GroundValue), Carrier (literalCodec v)
-  | .str _  => carrier_restrict carrier_stringCodec _
-  | .num _  => carrier_restrict carrier_numberCodec _
-  | .bool _ => carrier_restrict carrier_booleanCodec _
-  | .bin _  => carrier_restrict carrier_binaryCodec _
-  | .null   => carrier_nullCodec
+/-! ### The literal codec is lawful because its base is
 
-/-! ### The refinement ground codecs are lawful because their bases are
+`literal` adds a prism and nothing else, so all four laws come from `Lawful.restrict`. This
+used to be two inductions, then two statements of which codec is refined by which predicate;
+it is now one, because there is one codec. -/
 
-`literal` adds a prism and nothing else, so all four laws come from `Lawful.restrict`.
-What used to be two inductions is now two statements of which codec is being refined by
-which predicate. -/
+/-- §3 `(literal)` is lawful, full stop.
 
-theorem lawful_literalSCodec (ls : NEFinset String) : Lawful (literalSCodec ls) := by
-  refine Lawful.congr ?_ ?_ ?_ (Lawful.restrict lawful_stringCodec (inLS ls))
-  · funext v; cases v <;> simp [literalSCodec, Codec.restrict, stringCodec, inLS]
-  · funext a; cases a <;> simp [literalSCodec, Codec.restrict, stringCodec, inLS]
-  · rfl
-
-/-- Direct, for the reason `carrier_literalNCodec` gives: the prism over `number` no longer
-    exists, because `number` gates and this does not. The laws never needed it — `(R)` here
-    is `Double.roundtrip` and the membership test, the same two facts the prism was carrying
-    second-hand. -/
-theorem lawful_literalNCodec (ls : NEFinset Double) : Lawful (literalNCodec ls) := by
-  refine Lawful.congr ?_ ?_ ?_ (Lawful.restrict lawful_numberCodec (inLN ls)) <;> rfl
+    **No `ℓ ⊆ D` hypothesis, and there never was one in the proof.** `Lawful` relates `e` and
+    `p` to each other and never mentions `T`, so a restriction of a lawful pair is lawful
+    whether or not the restriction is inhabited. `LiteralD` earns its place in the *judgement*,
+    where `Carrier` and (B) live, not here. -/
+theorem lawful_literalCodec (k : GroundKind) (ls : NEFinset k.Carrier) :
+    Lawful (literalCodec k ls) :=
+  Lawful.congr (d := (baseCodec k).restrict (inL k ls)) rfl rfl rfl
+    (Lawful.restrict (lawful_baseCodec k) (inL k ls))
 
 theorem LawfulCore.extendRead {c : Codec} (h : LawfulCore c) {r : Attr → Option Value}
     (hran : ∀ a v, r a = some v → (c.e v).isSome) :
