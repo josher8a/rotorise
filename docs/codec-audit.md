@@ -424,3 +424,116 @@ touches `N` on both sides, `SS`/`BS` on the read side and `NS` on both, and gate
    emptiness check to its `SS`/`BS`/`NS` decode.** One file, closes all four C1 violations.
 2. Make `literal()`'s empty case a `CodecError`, beside the mixed-kind refusal at `codec.ts:892`.
 3. Add `native` to §5's term list, or give it its own term and stop filing it as `opaque`.
+
+## 10. EverCDDL, read
+
+Read from the arXiv HTML (§2 PulseParse, §3 EverCBOR, §4 EverCDDL). Quotes are from that
+text; where a gloss is inference rather than the paper's own words it is marked.
+
+### 10.1 Their (U) is the *definedness of a compilation pass*, not a premise
+
+**Theorem 4.4.** *"Given a CDDL type `t`, if `elab(t)` is defined, and `p` is the parser
+specification associated with `t`, then `p` is injective."*
+
+That is our (U), and the factoring is better than ours. They do not carry a side condition on
+the rule and then supply dischargers; they run an **elaborator**, a partial function on
+schemas, and *its definedness is the well-formedness check*. `EverCDDL` is "a tool that checks
+that a CDDL definition is well-formed, and then produces verified parsers and serializers for
+it" — so the user never discharges anything. Theorem 4.3 is the bridge: the elaborated type
+has "equivalent validation semantics to the original".
+
+This sharpens the criticism in §5.6.2. (U) does not merely want to be a *field* of the `union`
+constructor; it wants to be the **output of a checker** — an `elab : Term → Option Term'` whose
+definedness implies the property, with our existing dischargers as its cases. `UAtAct` in
+`Obligations` becomes `elab t = some t'` and stops being a semantic obligation the caller
+proves.
+
+### 10.2 Their serializer's *type* carries the round trip — this is (R) as a type
+
+```
+serializer p = (x: t) → (b: seq U8.t { p b == Some (x, length b) })
+```
+
+The refinement is in the codomain, so **(R) holds by construction and is not a law**. Our
+analogue is available and constructible, because a Lean structure field may mention an earlier
+one:
+
+```lean
+structure Codec where
+  p : Attr → Option Value
+  e : (v : Value) → Option {a : Attr // p a = some v}   -- (R) is the type
+```
+
+That would make (R) — the *first* law, not a side condition — structural for every combinator,
+which is the largest remaining instance of this session's move. **But it is not obviously
+right, and the tension is worth stating rather than resolving:** it fuses definitions with
+proofs, so each combinator's `e` produces the retract witness inline instead of once in
+`lawfulCore_*`; `Codec.Equiv`, `Codec.Approx` and the `Continuity` results all compare `e`s
+whose types would now differ; and Narcissus deliberately went the *other* way, separating a
+relational spec from its correctness. It is the same work relocated, and readability is the
+thing being traded. Worth a spike, not a commitment.
+
+### 10.3 Non-malleability: they prove it, we deliberately fail it — and `ker p` is the measure
+
+Their property, §2.1: *"if `p(b1) = Some (v, n1)` and `p(b2) = Some (v, n2)` … then `n1 = n2`
+and `b1` and `b2` coincide on their first `n1` bytes"* — two inputs decoding to one value must
+be equal.
+
+Our analogue would be: `p a₁ = some v → p a₂ = some v → a₁ ≈ a₂`. **We do not have this theorem
+and should not: our `ker p` is deliberately not equality**, and §2's two surviving reasons —
+`η` normalising an `N`, `drop` discarding names — are exactly its failures. Their CBOR result
+holds only of the *deterministic fragment*; DynamoDB has no deterministic fragment, because the
+store itself rewrites numerals.
+
+So the honest move is to name the property in their vocabulary and state where it fails:
+`SurvivesStore` (`η ⊆ ker p`) is precisely the condition under which the failure is harmless,
+and `ker_decimalCodec` / `not_survivesStore_decimalWF` are already the two halves. This costs
+nothing and buys legibility to the verified-formats community.
+
+### 10.4 EverCBOR keeps the representation we abandoned — and is right to
+
+Their raw map type, §3.2:
+
+```
+Map: (len: raw_u64) → (v: nlist (raw_data & raw_data) len.value) → raw_data
+```
+
+A **list of pairs with "no duplicate checking in raw form"**, with key uniqueness as a `valid`
+predicate (§3.3: "no two entries have equivalent map keys"), plus **Theorem 3.2**, a
+lexicographic byte order on keys, because deterministic CBOR sorts map entries.
+
+That is the representation this arc spent five sites removing, plus the canonical order
+`WireOrder.lean` was built for. **The reason they need it and we do not is the layer**: their
+`raw_data` models *bytes before parsing*, which genuinely is an ordered sequence that can
+repeat a key. DynamoDB's `𝔸` is *post-parse* — the SDK hands over a map, not a byte string —
+so our carrier can be exact and no order is forced.
+
+This retro-justifies the arc and simultaneously explains why `WireOrder.lean` is dead (§1 item
+4): the module was importing a wire-level obligation into an API-level domain. **The design
+axis is whether the domain is the wire or the API**, not whether typing is better than gating.
+Worth recording, because it is the answer to "why does the closest prior art not do what we
+just did".
+
+### 10.5 Three of their four well-formedness conditions we get free
+
+| their condition (§4.1, Thms 4.1–4.4) | ours |
+| --- | --- |
+| "all alternatives must be disjoint" (map-group choice) | **(U)** — the one that survives |
+| Kleene star: "if `∗a1,∗a2,a3` appears, then `a1` and `a2` must be disjoint and `a1` and `a3` must be disjoint" | free — our `tuple` + tail assigns **positionally** via `align`; there is no boundary to locate |
+| map concatenation: "if `g1,g2` appears, then the footprints of `g1` and `g2` must be disjoint" | free — `object` + `rest` dispatches on `k ∈ keys` via `entryCodec`, so the declared and open groups are disjoint by construction |
+| "deterministic map form" `g ::= ℓ ⇒ t \| ℓ : t \| ∗(tk ⇒ tv) \| g1 // g2 \| ?g \| g1,g2` | n/a — no group grammar; the field table *is* a `MapOf FieldSem` |
+
+**This reduces the reinvention claim in §5.3.** Three of the four are *ambiguity conditions
+forced by having to find boundaries in a byte stream*. Only the choice condition is
+domain-independent, and that is the one we have. Our (U) is not "EverCDDL's well-formedness
+conditions, rediscovered"; it is the single condition of theirs that survives the change of
+layer — and the other three being discharged by our representation is a point in the
+representation's favour.
+
+### 10.6 One caveat on the extraction
+
+The gloss *"this implies the elaborated parser's domain is exactly the set of valid CBOR items
+for that type"* attached to Theorem 4.4 was the extraction's inference, not a quoted theorem.
+Injectivity is not exactness of a domain, so **the §5.4 conclusion stands as written**: the
+"exact, not merely sound" domain result is still ours, and the reference for it is local
+completeness in Cousot's sense, not this paper. Confirm against the PDF before citing.
