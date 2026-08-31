@@ -189,6 +189,15 @@ theorem funImage_isSome {β : Type} {keys : Finset Name} {g : {k // k ∈ keys} 
     (hall : ∀ k, (g k).isSome = true) : (funImage g).isSome = true := by
   unfold funImage; rw [dif_pos hall]; rfl
 
+/-- …and exactly when, which is what the exactness rows need: `funImage` is defined at a
+    key set precisely where every entry is. -/
+theorem funImage_isSome_iff {β : Type} {keys : Finset Name}
+    {g : {k // k ∈ keys} → Option β} :
+    (funImage g).isSome = true ↔ ∀ k, (g k).isSome = true := by
+  refine ⟨fun h k => ?_, funImage_isSome⟩
+  obtain ⟨f, hf⟩ := Option.isSome_iff_exists.mp h
+  rw [funImage_some hf k]; rfl
+
 theorem funImage_map_isSome {β γ : Type} {keys : Finset Name}
     {g : {k // k ∈ keys} → Option β} (h : (funImage g).isSome = true)
     (f : ({k // k ∈ keys} → β) → γ) : ((funImage g).map f).isSome = true := by
@@ -1183,49 +1192,13 @@ theorem carrier_arrayCodec {c : Codec} (hc : Carrier c) : Carrier (arrayCodec c)
     (fun h => traverse_mem_input (fun _ _ => hc.domE) h)
     (fun h => traverse_mem (fun _ _ => hc.ranP) h)
 
-/-! ### `record` (§3) — entrywise between `map` and `M` -/
+/-! ### `record` (§3) — `carriedCodec` between `map` and `M`
 
-/-- The keyed entry steps: `record` is their uniform instance, `object` their
-    name-dispatched one. -/
-def encPair (c : Codec) : Name × Value → Option (Name × Attr) :=
-  fun kv => (c.e kv.2).map ((kv.1, ·))
-
-def decPair (c : Codec) : Name × Attr → Option (Name × Value) :=
-  fun kv => (c.p kv.2).map ((kv.1, ·))
-
-/-- The entry steps invert each other, keep the name, and agree — §2's four laws one
-    level down, which is all `entrywise` asks of them. -/
-theorem encPair_decPair {c : Codec} (h : LawfulCore c) :
-    ∀ kv ka, encPair c kv = some ka → decPair c ka = some kv := by
-  rintro ⟨k, v⟩ ka hkv
-  obtain ⟨a, he, rfl⟩ := Option.map_eq_some'.mp hkv
-  exact Option.map_eq_some'.mpr ⟨v, h.retract he, rfl⟩
-
-theorem decPair_encPair {c : Codec} (h : LawfulCore c) :
-    ∀ ka kv, decPair c ka = some kv → (encPair c kv).isSome := by
-  rintro ⟨k, a⟩ kv hka
-  obtain ⟨v, hp, rfl⟩ := Option.map_eq_some'.mp hka
-  simpa [encPair] using h.canon hp
-
-theorem encPair_agree {c : Codec} (h : Lawful c) :
-    ∀ ka kv ka', decPair c ka = some kv → encPair c kv = some ka' →
-      ka'.1 = ka.1 ∧ Agree ka'.2 ka.2 := by
-  rintro ⟨k, a⟩ kv ka' hka hkv
-  obtain ⟨v, hp, rfl⟩ := Option.map_eq_some'.mp hka
-  obtain ⟨a', he, rfl⟩ := Option.map_eq_some'.mp hkv
-  exact ⟨rfl, h.agree hp he⟩
-
-theorem encPair_dom {c : Codec} (hc : Carrier c) :
-    ∀ kv ka, encPair c kv = some ka → c.T kv.2 := by
-  rintro ⟨k, v⟩ ka hkv
-  obtain ⟨a, he, _⟩ := Option.map_eq_some'.mp hkv
-  exact hc.domE he
-
-theorem decPair_ran {c : Codec} (hc : Carrier c) :
-    ∀ ka kv, decPair c ka = some kv → c.T kv.2 := by
-  rintro ⟨k, a⟩ kv hka
-  obtain ⟨v, hp, rfl⟩ := Option.map_eq_some'.mp hka
-  exact hc.ranP hp
+The keyed entry steps `encPair`/`decPair` are gone with the traversal. They existed to
+carry a name past a codec inside `traverse`, and `M`'s payload no longer has a list for
+`traverse` to walk: the names are the index, so `funImage` moves the entry function and
+nothing has to carry a name anywhere. Their five laws went with them — §2's four, one
+level down, were what `entrywise` asked and `carriedCodec` does not. -/
 
 noncomputable def recordCodec (c : Codec) : Codec :=
   { T := fun v => match v with | .map _ f => ∀ k, c.T (f k) | _ => False
@@ -3275,11 +3248,14 @@ theorem fbNames_spec {sems : List (Name × FieldSem)} {names : Finset Name} {k}
     (hm : k ∈ fbNames names sems) :
     (∃ c v, (k, FieldSem.fb c v) ∈ sems) ∧ k ∉ names := mem_fbNames.mp hm
 
+/-- Emptiness by `Finset.ext`, not by `Finset.eq_empty_of_forall_not_mem`: the mathlib
+    lemma is proved classically, and this file's axiom base (`Axioms.lean`) does not
+    admit `Classical.choice`. -/
 theorem fbNames_empty {sems : List (Name × FieldSem)} {names : Finset Name}
-    (h : ∀ k c v, (k, FieldSem.fb c v) ∈ sems → k ∈ names) : fbNames names sems = ∅ := by
-  refine Finset.eq_empty_of_forall_not_mem (fun k hk => ?_)
-  obtain ⟨⟨c, v, hm⟩, hn⟩ := mem_fbNames.mp hk
-  exact hn (h k c v hm)
+    (h : ∀ k c v, (k, FieldSem.fb c v) ∈ sems → k ∈ names) : fbNames names sems = ∅ :=
+  Finset.ext fun k =>
+    ⟨fun hk => by obtain ⟨⟨c, v, hm⟩, hn⟩ := mem_fbNames.mp hk; exact absurd (h k c v hm) hn,
+     fun hk => absurd hk (Finset.not_mem_empty k)⟩
 
 theorem fbNames_not_mem {sems : List (Name × FieldSem)} {names : Finset Name} {k}
     (hc : k ∈ names) : k ∉ fbNames names sems :=
