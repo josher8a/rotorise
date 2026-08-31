@@ -1,7 +1,7 @@
 import Calculus.Denote
 
 /-!
-# Non-continuity of `union` — why fuel is not an artefact of Lean
+# Non-continuity of `union` — why a fixpoint definition is impossible
 
 Every least-fixpoint construction discharges a **monotonicity obligation**: unfolding may only
 add information. `altCodec` resolves by *unique* admission, so as the recursive results grow,
@@ -33,8 +33,8 @@ structure Codec.Approx (c c' : Codec) : Prop where
 theorem Codec.Approx.refl (c : Codec) : Codec.Approx c c :=
   ⟨fun h => h, fun h => h⟩
 
-/-- `Codec.empty` is below everything: the bottom of any such order, and the pair
-    `denote` has at fuel `0`. -/
+/-- `Codec.empty` is below everything: the bottom of any such order, and what a staged
+    definition would start from. -/
 theorem Codec.Approx.empty_le (c : Codec) : Codec.Approx Codec.empty c := by
   refine ⟨?_, ?_⟩ <;> intro _ _ h <;> exact nomatch h
 
@@ -67,32 +67,55 @@ theorem altCodec_not_monotone :
     simp [altCodec, select, optLit, optBot, optStr, OptionSem.byAttempt,
           literalCodec, baseCodec, Codec.restrict, inL, stringCodec, Codec.empty, NEFinset.of]
 
-/-! ## The same defect through `denote`
+/-! ## The same defect through a staged denotation
 
-`lazy` staggers the `string` option by one fuel step, so the collapse happens between
-two adjacent stages of the very function whose fuel we would like to remove. -/
+`denote` used to take a fuel argument, and this section showed the collapse happening between
+two adjacent stages of it: `lazy` staggered the `string` option by one step, fuel `2` encoded
+`"A"`, fuel `3` encoded nothing.
+
+**`denote` is structural now and does not stage**, so that presentation is no longer a statement
+about it — and *why* it need not stage is the same fact this file is about. `Term.lazy` carries a
+plain `Term`, not a thunk, precisely because a genuinely recursive union has no fixpoint
+semantics (the refutation above). There is no recursion to approximate, so there is no
+approximation to be non-monotone.
+
+The theorem is kept, restated over a staging defined **here**, as a witness construction rather
+than as the denotation. That is the honest shape: the staged function is what a fixpoint
+definition of `denote` would have had to be, and the theorem says it cannot be one. -/
+
+/-- The staged approximation a fixpoint definition of `denote` would need, at the shape the
+    witness uses. Everything else is `Codec.empty`: this is a witness, not a semantics. -/
+noncomputable def stage : Nat → Term → Codec
+  | 0, _ => Codec.empty
+  | _+1, .literal k ls => literalCodec k ls
+  | _+1, .string => stringCodec
+  | n+1, .lazy t => { stage n t with μ := none }
+  | n+1, .union opts =>
+      altCodec (opts.map fun t => optionSemOf (stage n t) (specOf t))
+        (unanimous (opts.map fun t => (stage n t).μ))
+  | _+1, _ => Codec.empty
 
 /-- §4's `union(literal("A"), string)`, with the `string` option behind a `lazy` so it
-    arrives one fuel step later than the literal. -/
+    arrives one stage later than the literal. -/
 def tWitness : Term :=
   .union [.literal .string (.of "A" ∅), .lazy .string]
 
-/-- **The fuel stages are not a chain.** Fuel `2` encodes `"A"`; fuel `3` encodes nothing.
-    So `⨆ fuel, denote fuel t` is not a definition either, and the low-fuel answer is
-    *over*-defined — a different answer, not an approximation from below. -/
-theorem denote_not_fuel_monotone :
-    (denote 2 tWitness).e (.str "A") = some (.s "A")
-    ∧ (denote 3 tWitness).e (.str "A") = none := by
+/-- **The stages are not a chain.** Stage `2` encodes `"A"`; stage `3` encodes nothing. So
+    `⨆ n, stage n t` is not a definition either, and the low-stage answer is *over*-defined —
+    a different answer, not an approximation from below. -/
+theorem stage_not_monotone :
+    (stage 2 tWitness).e (.str "A") = some (.s "A")
+    ∧ (stage 3 tWitness).e (.str "A") = none := by
   constructor <;>
-    simp [denote, tWitness, specOf, optionSemOf, altCodec, select, OptionSem.byAttempt,
+    simp [stage, tWitness, specOf, optionSemOf, altCodec, select, OptionSem.byAttempt,
           literalCodec, baseCodec, Codec.restrict, inL, stringCodec, Codec.empty, NEFinset.of]
 
-/-- At fuel `3` the union is simply the ill-formed one §4 refuted, and `none` is correct;
-    fuel `2` hid that by not looking. The defect is not a wrong answer at fuel `3` — it is
+/-- At stage `3` the union is simply the ill-formed one §4 refuted, and `none` is correct;
+    stage `2` hid that by not looking. The defect is not a wrong answer at stage `3` — it is
     that no monotone approximation exists, (U) being a property of the whole option list. -/
 theorem tWitness_violates_uniqueAdmission :
-    ((denote 3 tWitness).e (.str "A")).isNone := by
-  simp [denote_not_fuel_monotone.2]
+    ((stage 3 tWitness).e (.str "A")).isNone := by
+  simp [stage_not_monotone.2]
 
 /-! ## What *is* monotone, and why the contrast is the whole point
 
