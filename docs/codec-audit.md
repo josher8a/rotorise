@@ -732,21 +732,37 @@ through `union`, offers a choice:
 * convert the `Finset` at the boundary and take `Classical.choice` into the axiom base — which
   voids what `formal/` advertises, and is not a trade anyone should make for two constructors.
 
-There is a third door, and it is worth measuring before either: `Term.union`'s payload is a list
-because §2.1 found multiplicity *observable* (`select_dup_none`) and order *not*
-(`altCodec_e_swap`). A payload that is unordered and repeat-free is what `select`'s
-exactly-one-admitting semantics wants anyway. If `union` can take a `NEFinset Term` — needing
-`DecidableEq Term`, which `Term`'s `Finset Name`/function fields make a real question — then the
-bridge is the identity, no choice enters, and both n-ary literals collapse for free. **That is the
-next thing to measure**, and it is a smaller question than either route.
+There was a third door, and it is shut. `Term.union`'s payload is a list because §2.1 found
+multiplicity *observable* (`select_dup_none`) and order *not* (`altCodec_e_swap`) — so an
+unordered, repeat-free payload is what `select`'s exactly-one-admitting semantics wants anyway,
+and `NEFinset Term` would make the bridge the identity with no choice in it.
+
+`NEFinset Term` needs `DecidableEq Term`. **`Term` cannot have one.**
+
+```lean
+| custom (ce : Value → Option Attr) (cp : Attr → Option Value)
+```
+
+Deciding `custom ce cp = custom ce' cp'` decides equality of functions on `Value`, which is
+infinite. This is not a gap in `deriving` — `deriving instance DecidableEq for Term` does fail,
+but the point is that no hand-written instance exists either. So `union` stays list-shaped, and
+the two bullets above are the whole choice: **choice, or two gates back.**
 
 ### 11.6 Where this leaves the recommendation
 
-§11.1's base-indexed `literal (k : GroundKind) (ls : NEFinset k.Carrier)` is no longer the
-proposal. It is the *fallback* if `union` cannot take a `NEFinset` — it keeps the payload a
-`Finset`, so no choice and no reintroduced gates, at the price of a dependent field and the 266
-sites. The union route is strictly better if and only if §11.5's third door opens.
+**Back to §11.1, now for a proved reason rather than a hedge.** The base-indexed
+`literal (k : GroundKind) (ls : NEFinset k.Carrier)` is the only route that keeps the payload a
+`Finset`: no `Classical.choice`, no `Nodup`/non-emptiness premises coming back, at the price of a
+dependent field and the 266 sites. The union route would have been cheaper and is not available,
+because `Term.custom` makes `DecidableEq Term` impossible and `Finset.toList` makes the bridge
+non-constructive.
 
-`LiteralArity1.lean` stays either way: it is the proof that the two constructors carry no
-derivable judgement of their own, which is the fact both routes depend on and neither should have
-to re-establish.
+That is a better answer than the one this section opened with, and it is not the one I would have
+reached by reading. Both of the objections I wrote down were wrong; the obstruction that actually
+decides it was found by the axiom scan on a draft, and closed by a three-line probe.
+
+`LiteralArity1.lean` stays regardless of the route. It is the proof that the two constructors
+carry no derivable judgement of their own — the fact both routes rest on, and one neither should
+have to re-establish. It is also the thing to check the indexed rewrite against: whatever
+`literal (k) (ls)` ends up concluding, `typed_literalsS`/`typed_literalsN` say what it has to
+imply.
