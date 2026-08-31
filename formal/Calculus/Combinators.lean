@@ -1585,28 +1585,7 @@ inductive RestSem where
   | drop | refuse
   | codec (c : Codec)
 
-/-- One value entry, dispatched by name: declared through its field, undeclared through
-    the rest codec — or refused, since the doc's `e` is domained on the closed record
-    type `T` for `drop` and `refuse` alike (they differ in `dom(p)`, §4). -/
-def encEntry (spec : Name → Option FieldSem) (restE : Option (Value → Option Attr)) :
-    Name × Value → Option (Name × Attr) := fun kv =>
-  match spec kv.1 with
-  | some fs => (fs.codec.e kv.2).map ((kv.1, ·))
-  | none =>
-    match restE with
-    | some f => (f kv.2).map ((kv.1, ·))
-    | none => none
 
-/-- One stored entry, dispatched by name. Undeclared names reach this only under
-    `refuse` (fail) or a rest codec — `drop` filtered them out already. -/
-def decEntry (spec : Name → Option FieldSem) (restP : Option (Attr → Option Value)) :
-    Name × Attr → Option (Name × Value) := fun kv =>
-  match spec kv.1 with
-  | some fs => (fs.codec.p kv.2).map ((kv.1, ·))
-  | none =>
-    match restP with
-    | some f => (f kv.2).map ((kv.1, ·))
-    | none => none
 
 /-- `fb`'s absent case, `p♭(ε) = v(∗)`: the stand-ins for the fallback names a row
     omits. Empty on canonical items, where every `fb` name is present. -/
@@ -1687,17 +1666,7 @@ theorem entryCodec_of {Q : Codec → Prop} (hf : ∀ kf ∈ sems, Q kf.2.codec)
   | some fs => rw [hsp] at h; cases h; exact hf _ (mem_of_lookup hsp)
   | none => rw [hsp] at h; exact hrc c h
 
-theorem encEntry_eq {kv ka} :
-    encEntry (fun k => sems.lookup k) (rc?.map (·.e)) kv = some ka ↔
-      ∃ c a, entryCodec sems rc? kv.1 = some c ∧ c.e kv.2 = some a ∧ ka = (kv.1, a) := by
-  simp only [encEntry, entryCodec]
-  cases sems.lookup kv.1 <;> cases rc? <;> simp [Option.map_eq_some', eq_comm (a := ka)]
 
-theorem decEntry_eq {ka kv} :
-    decEntry (fun k => sems.lookup k) (rc?.map (·.p)) ka = some kv ↔
-      ∃ c v, entryCodec sems rc? ka.1 = some c ∧ c.p ka.2 = some v ∧ kv = (ka.1, v) := by
-  simp only [decEntry, entryCodec]
-  cases sems.lookup ka.1 <;> cases rc? <;> simp [Option.map_eq_some', eq_comm (a := kv)]
 
 /-- §4's held set, per entry, in the same vocabulary. -/
 theorem objEntryT_eq {kv} :
@@ -3299,97 +3268,14 @@ theorem reqPresentB_of {sems : List (Name × FieldSem)} {names : Finset Name}
 
 /-! ### The keyed steps: round trip, definedness, agreement, and name preservation -/
 
-theorem encEntry_fst {sems : List (Name × FieldSem)} {rc? : Option Codec} :
-    ∀ (kv : Name × Value) (ka : Name × Attr),
-      encEntry (fun k => sems.lookup k) (rc?.map (·.e)) kv = some ka → ka.1 = kv.1 := by
-  intro ⟨k, v⟩ ka h
-  simp only [encEntry] at h
-  cases hsp : sems.lookup k with
-  | some fs =>
-    rw [hsp] at h
-    replace h : (fs.codec.e v).map ((k, ·)) = some ka := h
-    cases hev : fs.codec.e v with
-    | none => rw [hev] at h; exact nomatch h
-    | some a₀ =>
-      rw [hev] at h
-      replace h : some (k, a₀) = some ka := h
-      cases h
-      rfl
-  | none =>
-    rw [hsp] at h
-    cases rc? with
-    | none => exact nomatch h
-    | some rc =>
-      replace h : (rc.e v).map ((k, ·)) = some ka := h
-      cases hev : rc.e v with
-      | none => rw [hev] at h; exact nomatch h
-      | some a₀ =>
-        rw [hev] at h
-        replace h : some (k, a₀) = some ka := h
-        cases h
-        rfl
 
-theorem decEntry_fst {sems : List (Name × FieldSem)} {rc? : Option Codec} :
-    ∀ (ka : Name × Attr) (kv : Name × Value),
-      decEntry (fun k => sems.lookup k) (rc?.map (·.p)) ka = some kv → kv.1 = ka.1 := by
-  intro ⟨k, a⟩ kv h
-  simp only [decEntry] at h
-  cases hsp : sems.lookup k with
-  | some fs =>
-    rw [hsp] at h
-    replace h : (fs.codec.p a).map ((k, ·)) = some kv := h
-    cases hpa : fs.codec.p a with
-    | none => rw [hpa] at h; exact nomatch h
-    | some v₀ =>
-      rw [hpa] at h
-      replace h : some (k, v₀) = some kv := h
-      cases h
-      rfl
-  | none =>
-    rw [hsp] at h
-    cases rc? with
-    | none => exact nomatch h
-    | some rc =>
-      replace h : (rc.p a).map ((k, ·)) = some kv := h
-      cases hpa : rc.p a with
-      | none => rw [hpa] at h; exact nomatch h
-      | some v₀ =>
-        rw [hpa] at h
-        replace h : some (k, v₀) = some kv := h
-        cases h
-        rfl
 
 /-! ### Carriers, continued: objects
 
     Placed here, after the name-dispatch helpers `p` needs. -/
 
-/-- An entry survives `p`'s name filter and so appears among its outputs. -/
-theorem mem_decoded_names {kvs : List (Name × Attr)} {kn : Name → Bool}
-    {sems : List (Name × FieldSem)} {rc? : Option Codec} {ds k}
-    (htr : traverse (decEntry (fun k' => sems.lookup k') (rc?.map (·.p)))
-      (kvs.filter fun kv => kn kv.1) = some ds)
-    (hk : k ∈ kvs.map (·.1)) (hkeep : kn k = true) : k ∈ ds.map (·.1) := by
-  rw [traverse_fst decEntry_fst htr]
-  obtain ⟨kv, hkv, rfl⟩ := List.mem_map.mp hk
-  exact List.mem_map.mpr ⟨kv, List.mem_filter.mpr ⟨hkv, hkeep⟩, rfl⟩
 
-/-- Every entry lands on the set its name declares — the write side. -/
-theorem entry_domE {sems : List (Name × FieldSem)} {rc? : Option Codec}
-    (hs : ∀ kf ∈ sems, Carrier kf.2.codec) (hrc : ∀ c ∈ rc?, Carrier c) :
-    ∀ kv ka, encEntry (fun k => sems.lookup k) (rc?.map (·.e)) kv = some ka →
-      objEntryT sems rc? kv := by
-  rintro kv ka h
-  obtain ⟨c, a, hc, he, rfl⟩ := encEntry_eq.mp h
-  exact objEntryT_eq.mpr ⟨c, hc, (entryCodec_of hs hrc hc).domE he⟩
 
-/-- …and the read side. -/
-theorem entry_ranP {sems : List (Name × FieldSem)} {rc? : Option Codec}
-    (hs : ∀ kf ∈ sems, Carrier kf.2.codec) (hrc : ∀ c ∈ rc?, Carrier c) :
-    ∀ ka kv, decEntry (fun k => sems.lookup k) (rc?.map (·.p)) ka = some kv →
-      objEntryT sems rc? kv := by
-  rintro ka kv h
-  obtain ⟨c, v, hc, hp, rfl⟩ := decEntry_eq.mp h
-  exact objEntryT_eq.mpr ⟨c, hc, (entryCodec_of hs hrc hc).ranP hp⟩
 
 /-- The same two, stated on the step the payload pair actually takes now: dispatch by
     name, then run that entry's codec. -/
@@ -3470,33 +3356,8 @@ theorem carrier_objectCodecCore {sems : List (Name × FieldSem)} {rc? : Option C
         · obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp (hfb (k.1, .fb c v₀) hm c v₀ rfl)
           exact (hsems (k.1, .fb c v₀) hm).domE ha'
 
-private theorem objStep_rt {sems : List (Name × FieldSem)} {rc? : Option Codec}
-    (hf : ∀ kf ∈ sems, LawfulCore kf.2.codec) (hrc : ∀ c ∈ rc?, LawfulCore c) :
-    ∀ kv ka, encEntry (fun k => sems.lookup k) (rc?.map (·.e)) kv = some ka →
-      decEntry (fun k => sems.lookup k) (rc?.map (·.p)) ka = some kv := by
-  rintro ⟨k, v⟩ ka h
-  obtain ⟨c, a, hc, he, rfl⟩ := encEntry_eq.mp h
-  exact decEntry_eq.mpr ⟨c, v, hc, (entryCodec_of hf hrc hc).retract he, rfl⟩
 
-private theorem objStep_canon {sems : List (Name × FieldSem)} {rc? : Option Codec}
-    (hf : ∀ kf ∈ sems, LawfulCore kf.2.codec) (hrc : ∀ c ∈ rc?, LawfulCore c) :
-    ∀ ka kv, decEntry (fun k => sems.lookup k) (rc?.map (·.p)) ka = some kv →
-      (encEntry (fun k => sems.lookup k) (rc?.map (·.e)) kv).isSome = true := by
-  rintro ⟨k, a⟩ kv h
-  obtain ⟨c, v, hc, hp, rfl⟩ := decEntry_eq.mp h
-  obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp ((entryCodec_of hf hrc hc).canon hp)
-  exact Option.isSome_iff_exists.mpr ⟨_, encEntry_eq.mpr ⟨c, a', hc, ha', rfl⟩⟩
 
-private theorem objStep_agree {sems : List (Name × FieldSem)} {rc? : Option Codec}
-    (hf : ∀ kf ∈ sems, Lawful kf.2.codec) (hrc : ∀ c ∈ rc?, Lawful c) :
-    ∀ ka kv ka', decEntry (fun k => sems.lookup k) (rc?.map (·.p)) ka = some kv →
-      encEntry (fun k => sems.lookup k) (rc?.map (·.e)) kv = some ka' →
-      ka'.1 = ka.1 ∧ Agree ka'.2 ka.2 := by
-  rintro ⟨k, a⟩ kv ka' h h'
-  obtain ⟨c, v, hc, hp, rfl⟩ := decEntry_eq.mp h
-  obtain ⟨c', a', hc', he, rfl⟩ := encEntry_eq.mp h'
-  cases hc'.symm.trans hc
-  exact ⟨rfl, (entryCodec_of hf hrc hc).agree hp he⟩
 
 
 /-! #### §2's clauses for the object's payload pair
