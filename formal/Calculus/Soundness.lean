@@ -290,7 +290,9 @@ mutual
 
 /-- Typing's member index is the syntactic one — exactly, both sides. -/
 theorem typed_μSyn : ∀ {t T μ}, Typed t T μ → μSyn t = μ
-  | _, _, _, .literal _ _ _ hμ => hμ
+  -- `rfl`, where this used to be the rule's `hμ`. The member is now a function of the
+  -- payload on both sides — `μSyn` reads `GroundValue.member`, and so does the rule.
+  | _, _, _, .literal _ _ => rfl
   | _, _, _, .string => rfl
   | _, _, _, .number => rfl
   | _, _, _, .decimal => rfl
@@ -464,7 +466,7 @@ theorem soundness_both : ∀ (fuel : Nat) {t T μ}, Typed t T μ → Obligations
     have ih : ∀ {t' : Term} {T' μ'}, Typed t' T' μ' → Obligations fuel t' → Sound fuel t' :=
       fun h' hob' => soundness_both fuel h' hob'
     cases h with
-    | literal v μ hok hμ => exact sound_ground (lawful_literalCodec hok)
+    | literal v hD => exact sound_ground (lawful_literalCodec v)
     | string => exact sound_ground lawful_stringCodec
     | number => exact sound_ground lawful_numberCodec
     | decimal => exact sound_ground lawful_decimalCodec
@@ -701,7 +703,7 @@ theorem typed_TSub : ∀ (fuel : Nat) {t T μ}, Typed t T μ →
   | fuel+1, t, T, μ, h, v, hv => by
     cases h with
     | string | number | decimal | boolean | binary | null => exact hv
-    | literal w μ hok hμ =>
+    | literal w hD =>
       -- the numeric base is `numberCodec` now, and unfolding it here sends `simp` into
       -- `Numeral.WF`'s decision procedure; the held set is all this case needs
       cases w with
@@ -710,7 +712,7 @@ theorem typed_TSub : ∀ (fuel : Nat) {t T μ}, Typed t T μ →
         cases v <;> simp_all
       | _ =>
         cases v <;> simp_all [denote, literalCodec, Codec.restrict, stringCodec,
-          booleanCodec, binaryCodec, nullCodec, literalOK]
+          booleanCodec, binaryCodec, nullCodec, literalD]
     | literalS _ | literalN _ _ => exact hv
     | custom _ _ => exact hv
     | opaq lossy => exact opaq_TSubω lossy v hv
@@ -805,7 +807,7 @@ theorem carrier_denote : ∀ (fuel : Nat) {t T μ}, Typed t T μ → Obligations
   | 0, _, _, _, _, _ => carrier_dead
   | fuel+1, t, T, μ, h, hob => by
     cases h with
-    | literal v μ hok hμ => exact carrier_literalCodec hok
+    | literal v hD => exact carrier_literalCodec v
     | string => exact carrier_stringCodec
     | number => exact carrier_numberCodec
     | decimal => exact carrier_decimalCodec

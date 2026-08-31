@@ -25,8 +25,12 @@ inductive Term where
       so a schema could not say "this attribute is exactly NULL". -/
   | null
   /-- §3 `(literal)` at arity one: a single value, whose base — and so whose member — is
-      fixed by its kind. The n-ary form is surface syntax for the union of these. -/
-  | literal (v : Value)
+      fixed by its kind. The n-ary form is surface syntax for the union of these.
+
+      A `GroundValue`, not a `Value`: the rule's `g ground` premise is the payload's
+      carrier, so it is the payload's type. See `GroundValue` in `Domain.lean` for what
+      that deletes. -/
+  | literal (v : GroundValue)
   /-- §3 `(literal-S)`. The alternatives are a **nonempty finite set**, which is what the
       rule's `hne`/`hnd` premises said about a list: order does not matter to `∈`, so two
       orderings were two terms denoting one codec, and a repeat was a term the rule had to

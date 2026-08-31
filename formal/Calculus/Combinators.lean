@@ -516,14 +516,16 @@ attribute), so it is not a refinement of `string` and keeps its own proofs. -/
 
 /-- §3 `(literal)` at arity one: `refine` over the ground base of the value's kind, at
     equality with that value. The dispatch is the rule's "`g` ground, `ℓ ⊆ T`" read as a
-    definition — a container has no ground base, which is why `(literal)` refuses one. -/
-noncomputable def literalCodec : Value → Codec
+    definition — and **total**, because a `GroundValue` has a ground base by construction.
+    The `| _ => Codec.empty` case this used to end with was the `g ground` premise's third
+    copy: a codec that holds nothing and writes nothing, existing only to be the image of a
+    payload the rule already refused. -/
+noncomputable def literalCodec : GroundValue → Codec
   | .str s  => stringCodec.restrict    (fun w => match w with | .str s'  => decide (s' = s) | _ => false)
   | .num d  => numberCodec.restrict    (fun w => match w with | .num d'  => decide (d' = d) | _ => false)
   | .bool b => booleanCodec.restrict   (fun w => match w with | .bool b' => decide (b' = b) | _ => false)
   | .bin b  => binaryCodec.restrict    (fun w => match w with | .bin b'  => decide (b' = b) | _ => false)
   | .null   => nullCodec
-  | _       => Codec.empty
 
 /-- **§3's `(literal-N)` gate is the same `refine`, over the same base** — and both are
     now `number` itself rather than an ungated stand-in, because §1's `Numerals` is the
@@ -2532,29 +2534,39 @@ theorem Lawful.restrict {c : Codec} (h : Lawful c) (q : Value → Bool) :
     agree := fun hp he => h.agree (restrict_p.mp hp).1 (restrict_e.mp he).2 }
 
 
-/-- §3 `(literal)`'s `ℓ ⊆ T`: the value lies in its base's held set. Only `number`'s base
-    bounds anything — §1's `D` — so this is `WF` there and trivial elsewhere; a container
-    fails it because it has no ground base at all. -/
-def literalOK : Value → Bool
+/-- **§3 `(literal)`'s `ℓ ⊆ D` at arity one** — and now nothing else.
+
+    This was `literalOK`, and it did two jobs. `Numeral.WF` at `.num` is content: `number`'s
+    base is the only one that bounds anything, and a double outside §1's `D` is *held* by the
+    rule and unwritable, which is **(B)** failing — the same sentence `(literal-N)` needs
+    `hD` for, one arity down. The other job was `| _ => false` on containers, which said
+    "this payload has no ground base" and is now `GroundValue`'s to say. Renamed to match the
+    premise it is, and to read the same as `(literal-N)`'s `hD`. -/
+def literalD : GroundValue → Bool
   | .num d => Numeral.WF d.toDec
   | .str _ | .bool _ | .bin _ | .null => true
-  | _ => false
 
-/-- §3 `(literal)` is lawful whenever `ℓ ⊆ T` holds — its base's laws, restricted. -/
-theorem lawful_literalCodec : ∀ {v : Value}, literalOK v = true → Lawful (literalCodec v)
-  | .str _, _  => Lawful.restrict lawful_stringCodec _
-  | .num _, _  => Lawful.restrict lawful_numberCodec _
-  | .bool _, _ => Lawful.restrict lawful_booleanCodec _
-  | .bin _, _  => Lawful.restrict lawful_binaryCodec _
-  | .null, _   => lawful_nullCodec
+/-- §3 `(literal)` is lawful, full stop — its base's laws, restricted.
 
-/-- …and on its carrier. -/
-theorem carrier_literalCodec : ∀ {v : Value}, literalOK v = true → Carrier (literalCodec v)
-  | .str _, _  => carrier_restrict carrier_stringCodec _
-  | .num _, _  => carrier_restrict carrier_numberCodec _
-  | .bool _, _ => carrier_restrict carrier_booleanCodec _
-  | .bin _, _  => carrier_restrict carrier_binaryCodec _
-  | .null, _   => carrier_nullCodec
+    **No `ℓ ⊆ D` hypothesis, and there never was one in the proof**: every case ignored it,
+    because a restriction of a lawful codec is lawful whether or not the restriction is
+    inhabited. The argument existed to *exclude the container cases*, and those are gone
+    from the payload's type, so the two theorems lose a premise each without losing a step.
+    `literalD` remains where it is content: the typing rule, guarding (B). -/
+theorem lawful_literalCodec : ∀ (v : GroundValue), Lawful (literalCodec v)
+  | .str _  => Lawful.restrict lawful_stringCodec _
+  | .num _  => Lawful.restrict lawful_numberCodec _
+  | .bool _ => Lawful.restrict lawful_booleanCodec _
+  | .bin _  => Lawful.restrict lawful_binaryCodec _
+  | .null   => lawful_nullCodec
+
+/-- …and on its carrier, for the same reason. -/
+theorem carrier_literalCodec : ∀ (v : GroundValue), Carrier (literalCodec v)
+  | .str _  => carrier_restrict carrier_stringCodec _
+  | .num _  => carrier_restrict carrier_numberCodec _
+  | .bool _ => carrier_restrict carrier_booleanCodec _
+  | .bin _  => carrier_restrict carrier_binaryCodec _
+  | .null   => carrier_nullCodec
 
 /-! ### The refinement ground codecs are lawful because their bases are
 

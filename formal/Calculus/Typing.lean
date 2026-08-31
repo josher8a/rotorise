@@ -158,13 +158,18 @@ inductive Typed : Term → Held → Option Member → Prop where
   /-- §3 `(null)`: the point held set `{null}`, stored as `⟨NULL, ∗⟩`. -/
   | null : Typed .null (fun v => v = .null) (some .NULL)
   | binary  : Typed .binary  (fun v => ∃ b, v = .bin b) (some .B)
-  /-- §3 `(literal)`, unified: the base is fixed by the value's kind, `literalOK` is
-      `ℓ ⊆ T` at that base, and the member is what the base stores. One rule for `S`, `N`,
-      `BOOL`, `B` and `NULL`; `literalS`/`literalN` are it at the two commonest bases, kept
-      because their type carries the homogeneity an n-ary list would have to prove. -/
-  | literal (v : Value) (μ : Member) (hok : literalOK v = true)
-      (hμ : literalMember v = some μ) :
-      Typed (.literal v) (fun w => w = v) (some μ)
+  /-- §3 `(literal)`, unified: the base is fixed by the value's kind, `hD` is `ℓ ⊆ D` at
+      that base, and the member is what the base stores. One rule for `S`, `N`, `BOOL`, `B`
+      and `NULL`; `literalS`/`literalN` are it at the two commonest bases, kept because their
+      type carries the homogeneity an n-ary list would have to prove.
+
+      **`μ` and `hμ` are gone.** The member was an index with a premise pinning it to
+      `literalMember v`, which is a function of the payload — so it is written as one. What
+      made that possible is the payload's type: `GroundValue.member` is total, where
+      `literalMember` needed a `some` on the right to mean "and it has a base at all". `hD`
+      is the one premise left, and it is content — the arity-one `ℓ ⊆ D`. -/
+  | literal (v : GroundValue) (hD : literalD v = true) :
+      Typed (.literal v) (fun w => w = v.toValue) (some v.member)
   /-- §3 `(literal-S)`. `hne` and `hnd` are gone: `ℓ` is a `℘⁺fin(String)`, so nonempty
       and repeat-free are the type's, not the rule's. -/
   | literalS (ls : NEFinset String) :
