@@ -34,6 +34,19 @@ noncomputable section
 
 mutual
 
+/-- What the literal codec **writes**, exactly.
+
+    `inL` is the prism, and at `number` that is not the whole story: with `Attr.n` carrying
+    §1's `Numerals`, an alternative outside `D` is *held* and not *written*, so a row testing
+    membership alone would over-claim. The second conjunct is that gap — the same (B) failure
+    `LiteralD` exists to forbid in a derivable term, stated here as a fact about the codec,
+    which has no premise to lean on.
+
+    Uniform in the base rather than a case per base: `inL k ls (.num d)` can only hold at
+    `k = .number`, so the numeral conjunct is `true` wherever it is not the point. -/
+noncomputable def AdmLit (k : GroundKind) (ls : NEFinset k.Carrier) (v : Value) : Bool :=
+  inL k ls v && (match v with | .num d => Numeral.WF d.toDec | _ => true)
+
 /-- **The joint admission predicate.** What `κ` and `adm` compute between them, as one
     structural recursion — and the containers recurse with *this*, which is exactly what
     the old rows failed to do.
@@ -47,22 +60,7 @@ noncomputable def Adm : Term → Value → Bool
   | .null     => fun v => match v with | .null => true | _ => false
   | .number   => inD
   | .decimal  => isStored
-  | .literalS ls => fun v => match v with | .str s => decide (s ∈ ls.1) | _ => false
-  -- `&& inD`: with `Attr.n` carrying §1's `Numerals`, a numeric literal outside `D` is
-  -- *held* and not *written*, so the row that used to test membership alone now
-  -- over-claimed. This is the row saying what the codec does.
-  | .literalN ls => fun v => match v with
-      | .num d => decide (d ∈ ls.1) && Numeral.WF d.toDec
-      | _ => false
-  | .literal w => fun v =>
-      match w, v with
-      | .str s, .str s'   => decide (s' = s)
-      -- …and the same at arity one, for the same reason
-      | .num d, .num d'   => decide (d' = d) && Numeral.WF d'.toDec
-      | .bool b, .bool b' => decide (b' = b)
-      | .bin b, .bin b'   => decide (b' = b)
-      | .null, .null      => true
-      | _, _              => false
+  | .literal k ls => AdmLit k ls
   | .custom ce _ => fun v => (ce v).isSome
   | .array c  => fun v => match v with | .arr xs => AdmAll c xs | _ => false
   -- `record` needs no list companion either: `M`'s entries are a function on the key
@@ -107,6 +105,15 @@ noncomputable def AdmAny : List Term → Value → Bool
 
 end
 
+/-- `Adm`'s literal row, named.
+
+    Nothing should `simp [Adm]` at a literal: the row's pattern is *dependent* — `ls`'s type
+    mentions `k` — so generating the table's equation lemmas across it is expensive enough to
+    exhaust the heartbeat budget in proofs that used to close in one step. Stating the row once
+    contains that cost, and every literal proof below rewrites with this instead. -/
+@[simp] theorem Adm_literal (k : GroundKind) (ls : NEFinset k.Carrier) (v : Value) :
+    Adm (.literal k ls) v = AdmLit k ls v := by unfold Adm; rfl
+
 /-- §5's converse direction: the row is `dom(e)`, not merely a bound on it. -/
 def ExactV (t : Term) : Prop := ∀ v, Adm t v = true ↔ ((denoteω t).e v).isSome
 
@@ -127,7 +134,7 @@ def ExactV (t : Term) : Prop := ∀ v, Adm t v = true ↔ ((denoteω t).e v).isS
     accident, only by being added here, in the open. -/
 def Analysable : Term → Bool
   | .string | .boolean | .binary | .null | .number | .decimal
-  | .literalS _ | .literalN _ | .literal _ | .custom _ _ => true
+  | .literal _ _ | .custom _ _ => true
   | .array c | .record c | .refine c _ | .legacy c _ | .lazy c
   | .held c _ _ => Analysable c
   | .opaq _ | .object _ _ _ | .tuple _ _ | .set _ | .dunion _ _ | .union _
@@ -177,13 +184,13 @@ theorem Adm_exact : ∀ (t : Term), Analysable t = true → ExactV t
   | .null, _ => by intro v; cases v <;> simp [Adm, denoteω, nullCodec]
   | .number, _ => by intro v; cases v <;> simp [Adm, denoteω, inD]
   | .decimal, _ => by intro v; cases v <;> simp [Adm, denoteω, isStored]
-  | .literalS ls, _ => by intro v; cases v <;> simp [Adm, denoteω, literalSCodec]
-  | .literalN ls, _ => by intro v; cases v <;> simp [Adm, denoteω, literalNCodec, inLN, inD]
-  | .literal w, _ => by
+  -- three rows into one, and `numberCodec` is read through `numberCodec_e_isSome` rather
+  -- than unfolded: its `dite` is a string parser, and `simp` inside it runs out of heartbeats.
+  | .literal k ls, _ => by
       intro v
-      cases w <;> cases v <;>
-        simp [Adm, denoteω, literalCodec, stringCodec, inD,
-              booleanCodec, binaryCodec, nullCodec]
+      cases k <;> cases v <;>
+        simp [AdmLit, denoteω, literalCodec, baseCodec, inL,
+              stringCodec, booleanCodec, binaryCodec, nullCodec, inD]
   | .custom ce cp, _ => by intro v; simp [Adm, denoteω]
   | .array c, ha => by
       have hc := Adm_exact c (by simpa [Analysable] using ha)
@@ -229,13 +236,13 @@ theorem Adm_array_nil (c : Term) : Adm (.array c) (.arr []) = true := by
   simp [Adm, AdmAll]
 
 /-- …and it is strictly sharper than the `⊤` that was standing in for it. -/
-theorem Adm_array_sharp : Adm (.array (.literalS (.of "A" ∅))) (.arr [.str "B"]) = false := by
-  simp [Adm, AdmAll]
+theorem Adm_array_sharp : Adm (.array (.literal .string (.of "A" ∅))) (.arr [.str "B"]) = false := by
+  simp [Adm, AdmAll, AdmLit, inL, NEFinset.of]
 
 /-- Nested, which the old row could not see at any depth. -/
 theorem Adm_array_nested :
-    Adm (.array (.array (.literalS (.of "A" ∅)))) (.arr [.arr [.str "B"]]) = false := by
-  simp [Adm, AdmAll]
+    Adm (.array (.array (.literal .string (.of "A" ∅)))) (.arr [.arr [.str "B"]]) = false := by
+  simp [Adm, AdmAll, AdmLit, inL, NEFinset.of]
 
 /-- A migration whose *read* reaches the null point while its write does not. -/
 def rNull : Attr → Option Value := fun a => match a with | .null => some (.str "x") | _ => none
@@ -329,7 +336,7 @@ theorem analysable_excused : ∀ (t : Term), Analysable t = false →
   -- The exact rows: the hypothesis refutes them, which is the point — a term cannot both
   -- carry an exactness proof and claim an excuse.
   | .string, h | .boolean, h | .binary, h | .null, h | .number, h | .decimal, h
-  | .literalS _, h | .literalN _, h | .literal _, h | .custom _ _, h => nomatch h
+  | .literal _ _, h | .custom _ _, h => nomatch h
 
 /-- **No excuse names an exact row.** The hatch cannot be used as a shortcut past an
     obligation that is provable: a covered shape really does decline. -/
@@ -388,24 +395,16 @@ theorem Adm_sound_fueled : ∀ (fuel : Nat) (t : Term) {v a},
         rw [h']; rfl
       rw [decimalCodec_e_isSome] at hs
       simpa [Adm] using hs
-    case literalS ls => cases v <;> simp_all [Adm, denote, literalSCodec]
-    case literalN ls =>
-      have hs : ((literalNCodec ls).e v).isSome = true := by
-        have h' : (literalNCodec ls).e v = some a := he
-        rw [h']; rfl
-      rw [show literalNCodec ls
-            = { numberCodec.restrict (inLN ls) with T := (literalNCodec ls).T } from rfl,
-        restrict_e_isSome, numberCodec_e_isSome] at hs
-      cases v <;> simp_all [Adm, inLN, inD]
-    case literal w =>
-      -- via the write's `isSome`, so `restrict_e_isSome` can answer the numeric base
-      -- without `Codec.restrict` being unfolded into an `if` over the parser
-      have hs : ((denote (fuel+1) (.literal w)).e v).isSome = true := by rw [he]; rfl
+    -- Three cases into one, and the numeric base no longer needs its own `show`: the codec
+    -- **is** `(baseCodec k).restrict (inL k ls)`, so `restrict_e_isSome` and
+    -- `numberCodec_e_isSome` answer it without `Codec.restrict` being unfolded into an `if`
+    -- over `Numeral.WF`'s parser.
+    case literal k ls =>
+      have hs : ((denote (fuel+1) (.literal k ls)).e v).isSome = true := by rw [he]; rfl
       clear he
-      cases w <;> cases v <;>
-        simp_all [Adm, denote, literalCodec, stringCodec, inD,
+      cases k <;> cases v <;>
+        simp_all [AdmLit, denote, literalCodec, baseCodec, inL, stringCodec, inD,
                   booleanCodec, binaryCodec, nullCodec]
-      all_goals (obtain ⟨rfl, h⟩ := hs; exact h)
     case custom ce cp => simp_all [Adm, denote]
     case opaq lossy => simp [Adm]
     case set c =>
@@ -594,6 +593,27 @@ one. Each is a row here rather than a remark. -/
 
 mutual
 
+/-- What the literal codec **reads**, exactly.
+
+    Three rows into one, and the `number` row is the only one that is not simply membership:
+    the read goes through `Double.ofDec`, and `&& WF` is there because the base's own read is
+    `number`'s restricted, so it refuses a numeral whose double re-spells outside `D` even when
+    that double is in `ℓ`.
+
+    Note this is `AdmA`'s exact row, not §5's table row (`admALit` in `Discharge`), which is
+    `⊤` at `number` and cannot be otherwise — a *syntactic* set of attributes does not bound a
+    read that goes through `Double.ofDec`. The two disagreeing at exactly one base is the
+    content of `admA_literalN_blind`. -/
+noncomputable def AdmALit : (k : GroundKind) → NEFinset k.Carrier → Attr → Bool
+  | .string,  ls, .s s    => decide (s ∈ ls.1)
+  | .boolean, ls, .bool b => decide (b ∈ ls.1)
+  | .binary,  ls, .b b    => decide (b ∈ ls.1)
+  | .null,    _,  .null   => true
+  | .number,  ls, .n x    => (match Double.ofDec x.1 with
+                              | some d => decide (d ∈ ls.1) && Numeral.WF d.toDec
+                              | none => false)
+  | _, _, _ => false
+
 /-- **The joint admission predicate, attribute side.** The mirror of `Adm` across §1's
     asymmetry, and it is not a symmetric mirror — three rows differ in kind, not degree.
 
@@ -618,25 +638,7 @@ noncomputable def AdmA : Term → Attr → Bool
                  | none => false)
       | _ => false
   | .decimal  => fun a => match a with | .n x => Numeral.Stored x.1 | _ => false
-  | .literalS ls => fun a => match a with | .s s => decide (s ∈ ls.1) | _ => false
-  -- `&& WF`: `literal-N`'s read is `number`'s restricted now, so it refuses a numeral
-  -- whose double re-spells outside `D` even when the double is in `ℓ`
-  | .literalN ls => fun a =>
-      match a with
-      | .n x => (match Double.ofDec x.1 with
-                 | some d => decide (d ∈ ls.1) && Numeral.WF d.toDec
-                 | none => false)
-      | _ => false
-  | .literal w => fun a =>
-      match w, a with
-      | .str s, .s s'     => decide (s' = s)
-      | .bool b, .bool b' => decide (b' = b)
-      | .bin b, .b b'     => decide (b' = b)
-      | .null, .null      => true
-      | .num d, .n x      => (match Double.ofDec x.1 with
-                              | some d' => decide (d' = d) && Numeral.WF d'.toDec
-                              | none => false)
-      | _, _              => false
+  | .literal k ls => AdmALit k ls
   | .custom _ cp => fun a => (cp a).isSome
   | .array c  => fun a => match a with | .l as => AdmAAll c as | _ => false
   | .record c => fun a =>
@@ -672,6 +674,30 @@ noncomputable def AdmAAny : List Term → Attr → Bool
 
 end
 
+/-- `AdmA`'s literal row, named — for the reason `Adm_literal` gives. -/
+@[simp] theorem AdmA_literal (k : GroundKind) (ls : NEFinset k.Carrier) (a : Attr) :
+    AdmA (.literal k ls) a = AdmALit k ls a := by unfold AdmA; rfl
+
+/-! Two bases stated as standalone lemmas, with their carriers written out.
+
+`GroundKind.Carrier` is reducible, so `NEFinset k.Carrier` at a *constructor* `k` is the same
+type as `NEFinset Bytes` — but it is not the same *expression*, and `simp` inside the goal
+re-derives that on every rewrite. At `binary` (`List UInt8`) and `null` (`Unit`) that was
+enough to exhaust the heartbeat budget. Taking the carrier as a plain type in the statement
+does the reduction once, at elaboration. -/
+
+theorem AdmALit_binary_exact (ls : NEFinset Bytes) (a : Attr) :
+    AdmA (.literal .binary ls) a = true ↔ ((denoteω (Term.literal .binary ls)).p a).isSome = true := by
+  cases a <;>
+    simp [AdmA_literal, AdmALit, denoteω, literalCodec, baseCodec, Codec.restrict, inL,
+          binaryCodec]
+
+theorem AdmALit_null_exact (ls : NEFinset Unit) (a : Attr) :
+    AdmA (.literal .null ls) a = true ↔ ((denoteω (Term.literal .null ls)).p a).isSome = true := by
+  cases a <;>
+    simp [AdmA_literal, AdmALit, denoteω, literalCodec, baseCodec, Codec.restrict, inL,
+          nullCodec]
+
 
 /-- Entrywise soundness lifted to a container's traversal, attribute side. -/
 theorem AdmAAll_sound_aux {c : Term} {C : Codec}
@@ -705,56 +731,28 @@ theorem AdmA_sound_fueled : ∀ (fuel : Nat) (t : Term) {a v},
         cases hx : Double.ofDec x.1 <;> rw [hx] at hp <;> simp_all [AdmA]
       all_goals (simp only [denote, numberCodec] at hp; exact nomatch hp)
     case decimal => cases a <;> simp_all [AdmA, denote, decimalCodec]
-    case literalS ls => cases a <;> simp_all [AdmA, denote, literalSCodec]
-    case literalN ls =>
-      cases a
-      case n x =>
-        simp only [denote, literalNCodec, Codec.restrict, numberCodec, inLN] at hp
-        cases hx : Double.ofDec x.1 with
-        | none => rw [hx] at hp; simp at hp
-        | some d =>
-          rw [hx] at hp
-          by_cases hw : Numeral.WF d.toDec = true <;> simp_all [AdmA]
-      all_goals (simp only [denote, literalNCodec, Codec.restrict, numberCodec, inLN] at hp; exact nomatch hp)
-    case literal w =>
-      cases w
-      case num d =>
+    -- One case where there were three, and the shape of the argument is now visible: the
+    -- `number` base is the only one whose read goes through `Double.ofDec`, so it is the only
+    -- one where the exact row and §5's table row differ. The other four coincide, and
+    -- `admA_sound` carries them.
+    case literal k ls =>
+      cases k
+      case number =>
         cases a
         case n x =>
-          simp only [denote, literalCodec, Codec.restrict, numberCodec] at hp
+          simp only [denote, literalCodec, baseCodec, Codec.restrict, numberCodec, inL] at hp
           cases hx : Double.ofDec x.1 with
           | none => rw [hx] at hp; simp at hp
-          | some d' =>
+          | some d =>
             rw [hx] at hp
-            by_cases hw : Numeral.WF d'.toDec = true
-            · -- keep only `d' = d`: the other conjunct equates the *decoded value* with
-              -- `v`, and `simp_all` will rewrite the literal's own payload backwards with it
-              rw [Option.some_bind, if_pos hw, Option.some_bind] at hp
-              by_cases h1 : d' = d
-              · subst h1; simp [AdmA, hx, hw]
-              · rw [if_neg (by simpa using h1)] at hp; exact nomatch hp
-            · simp [hw] at hp
+            by_cases hw : Numeral.WF d.toDec = true <;> simp_all [AdmALit]
         all_goals
-          (simp only [denote, literalCodec, Codec.restrict, numberCodec] at hp
+          (simp only [denote, literalCodec, baseCodec, Codec.restrict, numberCodec, inL] at hp
            exact nomatch hp)
-      -- For every payload but `num` this row and `admA`'s coincide — they part company
-      -- only where `Double.ofDec` does — so `admA_sound` carries them.
-      case str sv =>
-        have heq : AdmA (.literal (.str sv)) a = admA (.literal (.str sv)) a := by
-          cases a <;> simp [AdmA, admA]
-        rw [heq]; exact admA_sound _ _ hp
-      case bool bv =>
-        have heq : AdmA (.literal (.bool bv)) a = admA (.literal (.bool bv)) a := by
-          cases a <;> simp [AdmA, admA]
-        rw [heq]; exact admA_sound _ _ hp
-      case bin bv =>
-        have heq : AdmA (.literal (.bin bv)) a = admA (.literal (.bin bv)) a := by
-          cases a <;> simp [AdmA, admA]
-        rw [heq]; exact admA_sound _ _ hp
-      case null =>
-        have heq : AdmA (.literal .null) a = admA (.literal .null) a := by
-          cases a <;> simp [AdmA, admA]
-        rw [heq]; exact admA_sound _ _ hp
+      all_goals
+        (rw [show AdmA (.literal _ ls) a = admA (.literal _ ls) a from by
+              cases a <;> simp [AdmALit, admA, admALit]]
+         exact admA_sound _ _ hp)
     case custom ce cp => simp_all [AdmA, denote]
     case opaq lossy => simp [AdmA]
     case legacy c r =>
@@ -844,7 +842,7 @@ def ExactA (t : Term) : Prop := ∀ a, AdmA t a = true ↔ ((denoteω t).p a).is
     The remaining six are the same shapes the value side excuses. -/
 def AnalysableA : Term → Bool
   | .string | .boolean | .binary | .null | .number | .decimal
-  | .literalS _ | .literalN _ | .literal _ | .custom _ _ => true
+  | .literal _ _ | .custom _ _ => true
   | .array c | .record c | .held c _ _ | .lazy c | .legacy c _ => AnalysableA c
   | .refine _ _ | .nullable _ | .union _
   | .set _ | .tuple _ _ | .object _ _ _ | .dunion _ _ | .opaq _ => false
@@ -876,31 +874,39 @@ theorem AdmA_exact : ∀ (t : Term), AnalysableA t = true → ExactA t
         cases hx : Double.ofDec x.1 <;> simp [hx]
       all_goals simp [AdmA, denoteω, numberCodec]
   | .decimal, _ => by intro a; cases a <;> simp [AdmA, denoteω, decimalCodec]
-  | .literalS ls, _ => by intro a; cases a <;> simp [AdmA, denoteω, literalSCodec]
-  | .literalN ls, _ => by
+  -- Three rows into one. The `number` base is the only one needing `Double.ofDec`, and it is
+  -- also the only one where unfolding `numberCodec` is safe here: the `simp only` fixes the
+  -- shape before `Numeral.WF`'s parser can be reached.
+  | .literal k ls, _ => by
       intro a
-      cases a
-      case n x =>
-        simp only [AdmA, denoteω, literalNCodec, Codec.restrict, numberCodec, inLN]
-        cases hx : Double.ofDec x.1 with
-        | none => simp [hx]
-        | some d => by_cases hw : Numeral.WF d.toDec = true <;> simp [hx, hw]
-      all_goals simp [AdmA, denoteω, literalNCodec, Codec.restrict, numberCodec, inLN]
-  | .literal w, _ => by
-      intro a
-      cases w
-      case num d =>
+      cases k
+      case number =>
         cases a
         case n x =>
-          simp only [AdmA, denoteω, literalCodec, Codec.restrict, numberCodec]
+          -- through the named shape lemmas, not by unfolding `numberCodec`: its `p` is a
+          -- `bind` over `Double.ofDec` guarded by `Numeral.WF`, and `simp` inside that gate
+          -- reaches the parser and runs out of heartbeats
+          rw [show (denoteω (Term.literal .number ls)).p (.n x)
+                 = (literalCodec .number ls).p (.n x) from rfl,
+             literalNCodec_p_n, numberCodec_p_n]
           cases hx : Double.ofDec x.1 with
-          | none => simp [hx]
-          | some d' => by_cases hw : Numeral.WF d'.toDec = true <;> simp [hx, hw]
-        all_goals simp [AdmA, denoteω, literalCodec, Codec.restrict, numberCodec]
-      all_goals
-        (cases a <;>
-          simp [AdmA, denoteω, literalCodec, Codec.restrict, stringCodec, booleanCodec,
-                binaryCodec, nullCodec])
+          | none => simp [hx, AdmALit]
+          | some d =>
+            by_cases hw : Numeral.WF d.toDec = true <;>
+              simp [hx, hw, AdmALit, inL]
+        -- for every other attribute the base's own read is `none` by a match, so this is
+        -- `rfl` once `AdmA`'s recursion is unfolded — no `numberCodec` in the simp set
+        all_goals (simp only [AdmA_literal, AdmALit]; rfl)
+      -- the four bases whose stored attribute *is* the value, one tight simp set each: a
+      -- shared set has to mention every base's codec, and one of those is `number`
+      case string =>
+        cases a <;> simp [AdmALit, denoteω, literalCodec, baseCodec, Codec.restrict,
+                          inL, stringCodec]
+      case boolean =>
+        cases a <;> simp [AdmALit, denoteω, literalCodec, baseCodec, Codec.restrict,
+                          inL, booleanCodec]
+      case binary => exact AdmALit_binary_exact ls a
+      case null => exact AdmALit_null_exact ls a
   | .custom ce cp, _ => by intro a; simp [AdmA, denoteω]
   | .array c, ha => by
       have hc := AdmA_exact c (by simpa [AnalysableA] using ha)
@@ -1044,7 +1050,7 @@ theorem analysableA_excused : ∀ (t : Term), AnalysableA t = false →
   | .array c, h | .record c, h | .held c _ _, h | .lazy c, h | .legacy c _, h =>
       .inr ⟨c, rfl, by simpa [AnalysableA] using h⟩
   | .string, h | .boolean, h | .binary, h | .null, h | .number, h | .decimal, h
-  | .literalS _, h | .literalN _, h | .literal _, h | .custom _ _, h => nomatch h
+  | .literal _ _, h | .custom _ _, h => nomatch h
 
 /-- No attribute-side excuse names an exact row. -/
 theorem excuseA_shapes (e : Excuse) (t : Term) (h : e.coversA t = true) :
@@ -1105,11 +1111,13 @@ theorem Adm_le_adm : ∀ (t : Term) (v : Value), Adm t v = true → adm t v = tr
   | .opaq _, _, _ => rfl
   | .number, v, h => by simpa [adm] using (by simpa [Adm] using h : inD v = true)
   | .decimal, v, h => by simpa [adm] using (by simpa [Adm] using h : isStored v = true)
-  | .literalS ls, v, h => by rw [adm]; rw [Adm] at h; exact h
-  -- `Adm` is now *strictly* stronger at both numeric rows: it carries `WF`, which the
-  -- §5 table does not, so the containment drops a conjunct rather than being `exact`.
-  | .literalN ls, v, h => by cases v <;> simp_all [adm, Adm]
-  | .literal w, v, h => by cases w <;> cases v <;> simp_all [adm, Adm]
+  -- `Adm` is *strictly* stronger at the numeric base: it carries `WF`, which §5's table does
+  -- not, so the containment drops a conjunct there rather than being `exact`. At the other
+  -- four the two rows are the same predicate — `inL` — which is what one rule makes visible.
+  | .literal k ls, v, h => by
+      rw [adm]
+      rw [Adm_literal] at h
+      exact (Bool.and_eq_true _ _ ▸ h : inL k ls v = true ∧ _).1
   | .custom ce cp, v, h => by rw [adm]; rw [Adm] at h; exact h
   | .dunion d opts, v, h => by rw [adm]; rw [Adm] at h; exact h
   | .refine t q, v, h => by
@@ -1170,9 +1178,8 @@ theorem Adm_kind : ∀ (t : Term) (ks : List Kind) (v : Value),
   | .null, _, v, rfl, h => by cases v <;> simp_all [Adm, Value.kind]
   | .number, _, v, rfl, h => by cases v <;> simp_all [Adm, inD, Value.kind]
   | .decimal, _, v, rfl, h => by cases v <;> simp_all [Adm, isStored, Value.kind]
-  | .literalS _, _, v, rfl, h => by cases v <;> simp_all [Adm, Value.kind]
-  | .literalN _, _, v, rfl, h => by cases v <;> simp_all [Adm, Value.kind]
-  | .literal w, _, v, rfl, h => by cases w <;> cases v <;> simp_all [Adm, Value.kind]
+  | .literal k _, _, v, rfl, h => by
+      cases k <;> cases v <;> simp_all [Adm_literal, AdmLit, inL, Value.kind]
   | .set _, _, v, rfl, h => by cases v <;> simp_all [Adm, Value.kind]
   | .array _, _, v, rfl, h => by cases v <;> simp_all [Adm, Value.kind]
   | .tuple _ _, _, v, rfl, h => by cases v <;> simp_all [Adm, Value.kind]
@@ -1220,7 +1227,6 @@ theorem AdmA_le_admA : ∀ (t : Term) (a : Attr), AdmA t a = true → admA t a =
   | .binary, _, _ => rfl
   | .null, _, _ => rfl
   | .number, _, _ => rfl
-  | .literalN _, _, _ => rfl
   | .set _, _, _ => rfl
   | .tuple _ _, _, _ => rfl
   | .object _ _ _, _, _ => rfl
@@ -1230,10 +1236,9 @@ theorem AdmA_le_admA : ∀ (t : Term) (a : Attr), AdmA t a = true → admA t a =
   | .opaq _, _, _ => rfl
   | .custom _ _, a, h => by rw [admA]; rw [AdmA] at h; exact h
   | .decimal, a, h => by rw [admA]; rw [AdmA] at h; exact h
-  | .literalS _, a, h => by rw [admA]; rw [AdmA] at h; exact h
   | .dunion _ _, a, h => by rw [admA]; rw [AdmA] at h; exact h
-  | .literal w, a, h => by
-      cases w <;> cases a <;> simp_all [AdmA, admA]
+  | .literal k ls, a, h => by
+      cases k <;> cases a <;> simp_all [AdmA_literal, AdmALit, admA, admALit]
   | .refine t _, a, h => by
       rw [admA]; exact AdmA_le_admA t a (by rw [AdmA] at h; exact h)
   | .held t _ _, a, h => by
@@ -1405,9 +1410,11 @@ def Decides (t : Term) : Prop :=
   ∃ v w, ((denoteω t).e v).isSome = true ∧ v.kind = w.kind ∧ ((denoteω t).e w).isSome = false
 
 /-- `literalS` decides, as §5 says. -/
-theorem decides_literalS : Decides (.literalS (.of "A" ∅)) :=
-  ⟨.str "A", .str "B", by simp [denoteω, literalSCodec], rfl,
-   by simp [denoteω, literalSCodec]⟩
+theorem decides_literalS : Decides (.literal .string (.of "A" ∅)) :=
+  ⟨.str "A", .str "B",
+   by simp [denoteω, literalCodec, baseCodec, Codec.restrict, inL, stringCodec, NEFinset.of],
+   rfl,
+   by simp [denoteω, literalCodec, baseCodec, Codec.restrict, inL, stringCodec, NEFinset.of]⟩
 
 /-- `string` does not, as §5 also says. -/
 theorem not_decides_string : ¬ Decides .string := by
@@ -1534,7 +1541,7 @@ theorem AdmA_legacy_union (t : Term) (r : Attr → Option Value) (a : Attr) :
     `℘⁺fin` has no empty inhabitant and so the two options share none. The non-emptiness
     is now the *type's*, which is why every branch here ends at `S.2`. -/
 theorem sepJV_set_literals :
-    SepJV (.set (.literalS (.of "A" ∅))) (.set (.literalS (.of "B" ∅))) := by
+    SepJV (.set (.literal .string (.of "A" ∅))) (.set (.literal .string (.of "B" ∅))) := by
   intro v hv
   cases v
   case strSet S =>
@@ -1544,21 +1551,21 @@ theorem sepJV_set_literals :
     refine fun hall' => ?_
     have h1 := hv x hx
     have h2 := hall' x hx
-    simp [Adm] at h1 h2
+    simp [Adm_literal, AdmLit, inL, NEFinset.of] at h1 h2
     exact absurd (h1.symm.trans h2) (by decide)
   all_goals
     first
       | (rename_i S
          simp only [Adm, decide_eq_true_eq] at hv
          obtain ⟨x, hx⟩ := S.2
-         exact absurd (hv x hx) (by simp [Adm]))
+         exact absurd (hv x hx) (by simp [Adm_literal, AdmLit, inL, NEFinset.of]))
       | simp [Adm] at hv
 
 /-- …and the contrast that shows what the non-emptiness is doing: the *array* pair does not
     separate, because both options admit `[]`. This is §5's empty-container argument in its
     correct scope — it is a fact about `array`, `record` and `object`, not about `set`. -/
 theorem not_sepJV_array_literals :
-    ¬ SepJV (.array (.literalS (.of "A" ∅))) (.array (.literalS (.of "B" ∅))) := by
+    ¬ SepJV (.array (.literal .string (.of "A" ∅))) (.array (.literal .string (.of "B" ∅))) := by
   intro h
   exact absurd (h (.arr []) (by simp [Adm, AdmAll])) (by simp [Adm, AdmAll])
 

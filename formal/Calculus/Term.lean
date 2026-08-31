@@ -24,19 +24,21 @@ inductive Term where
       `nullCodec` is one of `opaque`'s options, but until now no *term* denoted it —
       so a schema could not say "this attribute is exactly NULL". -/
   | null
-  /-- §3 `(literal)` at arity one: a single value, whose base — and so whose member — is
-      fixed by its kind. The n-ary form is surface syntax for the union of these.
+  /-- §3 `(literal)`, in the shape §3 states it: a ground **base**, and a nonempty finite set
+      of that base's alternatives.
 
-      A `GroundValue`, not a `Value`: the rule's `g ground` premise is the payload's
-      carrier, so it is the payload's type. See `GroundValue` in `Domain.lean` for what
-      that deletes. -/
-  | literal (v : GroundValue)
-  /-- §3 `(literal-S)`. The alternatives are a **nonempty finite set**, which is what the
-      rule's `hne`/`hnd` premises said about a list: order does not matter to `∈`, so two
-      orderings were two terms denoting one codec, and a repeat was a term the rule had to
-      exclude by hand. Both premises are gone with the type. -/
-  | literalS (ls : NEFinset String)
-  | literalN (ls : NEFinset Double)
+      This was three constructors — arity-one over a value, and `literalS`/`literalN` at the
+      two commonest bases — because no single payload type could say "these alternatives, all
+      at one base". `(k : GroundKind)` with `ls : NEFinset k.Carrier` says it: the base is an
+      index, so `g ground` is unsayable-otherwise and the member is a function rather than an
+      index with a premise; the alternatives are a `NEFinset` of that base's carrier, so
+      `n ≥ 1`, pairwise distinctness *and* homogeneity are the type's. Arity one is the
+      singleton case, and `.null`'s carrier is `Unit`, so `literal .null` can say nothing but
+      what it means.
+
+      Not a union of arity-one literals, which is derivable but not free: see
+      `Calculus/LiteralArity1.lean` and `docs/codec-audit.md` §11.5. -/
+  | literal (k : GroundKind) (ls : NEFinset k.Carrier)
   | set      (elem : Term)
   | array    (elem : Term)
   /-- `(tuple)` and `(tuple-tail)` in one constructor; `tail = none` is the plain tuple. -/

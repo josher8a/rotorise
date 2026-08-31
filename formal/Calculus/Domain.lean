@@ -373,53 +373,75 @@ def Value.kind : Value → Kind
   | .arr _  => .array
   | .map _ _ => .map
 
-/-! ## A value with a ground base (§3 `(literal)`'s payload)
+/-! ## The ground bases, and what each one carries (§3 `(literal)`'s payload)
 
-`(literal)` has always had a `g ground` premise, and the model carried it *twice*: as
-`literalOK`'s `| _ => false` and as `literalMember`'s `none`. Neither is content. Both say
-only *"this value has a ground base"* — a claim about the payload's carrier, which is what a
-payload's **type** is for.
+§3 has **one** `(literal)` rule:
 
-So the payload has one. `GroundValue.member` is total where `literalMember` was partial,
-`literalCodec` has no `Codec.empty` case to fall into, and the rule's `hμ` premise does not
-exist to be discharged. What is left of `literalOK` is `Numeral.WF` at `.num`, which is
-§3's `ℓ ⊆ D` and is content — the same premise `(literal-N)` carries as `hD`, at arity one. -/
+```
+⊢ g : T ⇝ μ,  g ground    ℓ₁ … ℓₙ ∈ T,  n ≥ 1,  pairwise distinct
+───────────────────────────────────────────────────────────────── (literal)
+⊢ literal(ℓ₁ … ℓₙ) : {ℓ₁ … ℓₙ} ⇝ μ
+```
 
-/-- The five ground kinds, as a carrier. `Value`'s scalar constructors and no others: a set,
-    an array and a map are exactly what `(literal)` cannot hold, and now cannot be handed. -/
-inductive GroundValue where
-  | str  (v : String)
-  | num  (v : Double)
-  | bool (v : Bool)
-  | bin  (v : Bytes)
-  | null
+The model had three constructors for it — arity-one over a `Value`, and two n-ary ones at the
+two commonest bases — and every part of that premise line was a gate. `g ground` was carried
+three times over (`literalOK`'s `| _ => false`, `literalMember`'s `none`, `literalCodec`'s
+`Codec.empty`); `n ≥ 1` and pairwise distinctness were `hne`/`hnd` until `℘⁺fin` typed them;
+`ℓᵢ ∈ T` at a base the other constructors could not name was why there were two of them.
 
-/-- The value it is. Injective by construction — five constructors onto `Value`'s five
-    scalars — so nothing about `(literal)`'s held set changes except that it is now written
-    through an embedding. -/
-@[simp] def GroundValue.toValue : GroundValue → Value
-  | .str s  => .str s
-  | .num d  => .num d
-  | .bool b => .bool b
-  | .bin b  => .bin b
-  | .null   => .null
+`GroundKind` is the premise line as a type. The base is an index, so `member` is a function of
+it and `g ground` is unsayable-otherwise; the alternatives are a `NEFinset` of *that base's*
+carrier, so non-emptiness, distinctness and homogeneity are all the type's. One constructor, and
+arity one is the singleton case.
 
-/-- §5's `κ` on the payload. Agrees with `Value.kind` through the embedding, by `rfl`. -/
-@[simp] def GroundValue.kind : GroundValue → Kind
-  | .str _  => .string
-  | .num _  => .number
-  | .bool _ => .boolean
-  | .bin _  => .binary
-  | .null   => .null
+`Calculus/LiteralArity1.lean` is why it is this shape rather than a union of arity-one literals:
+the union is derivable, but `Term.union` is list-shaped and the bridge from a `Finset` is
+`Classical.choice`. See `docs/codec-audit.md` §11. -/
 
-/-- §3 `(literal)`'s member: the one its base stores as. **Total**, which is the point —
-    `literalMember : Value → Option Member` was this function plus a `none` meaning "this
-    payload has no ground base", and that sentence is now unsayable. -/
-@[simp] def GroundValue.member : GroundValue → Member
-  | .str _  => .S
-  | .num _  => .N
-  | .bool _ => .BOOL
-  | .bin _  => .B
-  | .null   => .NULL
+/-- The five bases a literal can sit at — `Kind` minus the three container kinds. -/
+inductive GroundKind where
+  | string | number | boolean | binary | null
+deriving DecidableEq, Repr
+
+/-- What each base's held set is drawn from. `Unit` at `.null` is not a degenerate case: the
+    only nonempty subset of `Unit` is `{()}`, so `NEFinset .null.Carrier` says "exactly null"
+    and cannot say anything else.
+
+    **Reducible**, and that is load-bearing: it lets `Carrier .string` elaborate as `String`, so
+    membership in `ℓ` resolves through `String.decEq` and the ordinary instances. An indexed
+    `DecidableEq k.Carrier` instance would work too, and would be *noncomputable* — `Double`'s
+    equality is one of §1's axioms — which then spreads to every `def` that names a literal. -/
+@[reducible] def GroundKind.Carrier : GroundKind → Type
+  | .string  => String
+  | .number  => Double
+  | .boolean => Bool
+  | .binary  => Bytes
+  | .null    => Unit
+
+/-- An alternative, as the value it is. Injective at every base. -/
+@[simp] def GroundKind.toValue : (k : GroundKind) → k.Carrier → Value
+  | .string,  s => .str s
+  | .number,  d => .num d
+  | .boolean, b => .bool b
+  | .binary,  b => .bin b
+  | .null,    _ => .null
+
+/-- §3 `(literal)`'s member: the one the base stores as. **Total**, and a function of the index
+    rather than an index with a premise pinning it — which is the `hμ` the three constructors
+    between them carried. -/
+@[simp] def GroundKind.member : GroundKind → Member
+  | .string  => .S
+  | .number  => .N
+  | .boolean => .BOOL
+  | .binary  => .B
+  | .null    => .NULL
+
+/-- §5's `κ` on a literal: the base's kind. -/
+@[simp] def GroundKind.kind : GroundKind → Kind
+  | .string  => .string
+  | .number  => .number
+  | .boolean => .boolean
+  | .binary  => .binary
+  | .null    => .null
 
 end Calculus
