@@ -156,10 +156,10 @@ for a union of `literalN`s — and never used the n-ary constructor for it, only
 which is why it holds here with `ℓ` as `Finset` data instead. -/
 
 /-- (U) on both sides for a string literal set's options. -/
-theorem uAtCan_map_literal_str (fuel : Nat) {l : List String} (hnd : l.Nodup) :
-    UAtCan (fuel+1) (l.map fun s => .literal .string (.of s ∅)) := by
-  show UniqueAdmission (semsOf (fuel+1) _)
-  have hs : semsOf (fuel+1) (l.map fun s => .literal .string (.of s ∅))
+theorem uAtCan_map_literal_str {l : List String} (hnd : l.Nodup) :
+    UAtCan (l.map fun s => .literal .string (.of s ∅)) := by
+  show UniqueAdmission (semsOf _)
+  have hs : semsOf (l.map fun s => .literal .string (.of s ∅))
       = (l.map fun s => literalCodec .string (.of s ∅)).map OptionSem.byAttempt := by
     simp [semsOf, List.map_map, specOf, optionSemOf, denote]
   rw [hs]
@@ -175,10 +175,10 @@ theorem uAtCan_map_literal_str (fuel : Nat) {l : List String} (hnd : l.Nodup) :
     cases v <;> simp_all [inL, NEFinset.of]
 
 /-- …and at the numeric base, where the table cannot. -/
-theorem uAtCan_map_literal_num (fuel : Nat) {l : List Double} (hnd : l.Nodup) :
-    UAtCan (fuel+1) (l.map fun d => .literal .number (.of d ∅)) := by
-  show UniqueAdmission (semsOf (fuel+1) _)
-  have hs : semsOf (fuel+1) (l.map fun d => .literal .number (.of d ∅))
+theorem uAtCan_map_literal_num {l : List Double} (hnd : l.Nodup) :
+    UAtCan (l.map fun d => .literal .number (.of d ∅)) := by
+  show UniqueAdmission (semsOf _)
+  have hs : semsOf (l.map fun d => .literal .number (.of d ∅))
       = (l.map fun d => literalCodec .number (.of d ∅)).map OptionSem.byAttempt := by
     simp [semsOf, List.map_map, specOf, optionSemOf, denote]
   rw [hs]

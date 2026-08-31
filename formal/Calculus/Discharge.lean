@@ -57,7 +57,7 @@ def κ : Term → Option (List Kind)
   | .nullable t => (κ t).map (.null :: ·)
   | .union opts => κList opts
   -- `lazy` is the *most* transparent wrapper in the language, not an opaque one:
-  -- `denote fuel (.lazy t) = { denote fuel t with μ := none }`, so `e` and `p` are the
+  -- `denote (.lazy t) = { denote t with μ := none }`, so `e` and `p` are the
   -- subterm's definitionally and only the member is erased. §5 calls it unanalysable
   -- because the doc's thunk was `Unit → Term`; this `Term` is not that thunk, and the
   -- opacity was the residue of that change rather than a fact about `lazy`.
@@ -374,10 +374,9 @@ local macro "single_kind" hk:ident hv:ident he:ident : tactic =>
     from a subterm's: the two transparent wrappers, `nullable`'s `∪`, `union`'s `⋃`,
     and `dunion`, whose kind comes from the option that admitted rather than from its
     own syntax. Four more answer `⊤`, where the hypothesis is unsatisfiable. -/
-theorem κ_sound : ∀ (fuel : Nat) (t : Term) {ks : List Kind} {v a},
-    κ t = some ks → (denote fuel t).e v = some a → Value.kind v ∈ ks
-  | 0, _, _, _, _, _, he => nomatch he
-  | fuel+1, t, ks, v, a, hκ, he => by
+theorem κ_sound : ∀ (t : Term) {ks : List Kind} {v a},
+    κ t = some ks → (denote t).e v = some a → Value.kind v ∈ ks
+  | t, ks, v, a, hκ, he => by
     cases t with
     | string => single_kind hκ v he
     | decimal => single_kind hκ v he
@@ -402,39 +401,41 @@ theorem κ_sound : ∀ (fuel : Nat) (t : Term) {ks : List Kind} {v a},
       -- a stamped option writes a `map`, so the kind is `map` however it was reached
       cases hκ
       obtain ⟨o, ho, hadm, -⟩ := altCodec_e_admits he
+      simp only [optionSems_eq, denoteTagged_eq] at ho
       obtain ⟨x, hx, rfl⟩ := List.mem_map.mp ho
       cases v <;> first
         | exact List.mem_cons_self _ _
         | exact nomatch hadm
-    | refine t' q => exact κ_sound fuel t' hκ (restrict_e.mp he).2
-    | legacy t' r => exact κ_sound fuel t' hκ he
+    | refine t' q => exact κ_sound t' hκ (restrict_e.mp he).2
+    | legacy t' r => exact κ_sound t' hκ he
     | nullable t' =>
       -- `nullable`'s `∪`: `null` is the wrapper's own kind, everything else the
       -- subterm's, and `orNull` sends every non-`null` value straight to it
       replace hκ : (κ t').map (Kind.null :: ·) = some ks := hκ
       obtain ⟨ks', hκt, rfl⟩ := Option.map_eq_some'.mp hκ
-      cases hw : (denote fuel t').ownsNull with
+      cases hw : (denote t').ownsNull with
       | true =>
         -- the guard declined: the wrapper writes exactly what the subterm writes
-        rw [show (denote (fuel+1) (.nullable t')).e = (denote fuel t').e from
+        rw [show (denote (.nullable t')).e = (denote t').e from
           withNull_e_of_owns hw] at he
-        exact List.mem_cons_of_mem _ (κ_sound fuel t' hκt he)
+        exact List.mem_cons_of_mem _ (κ_sound t' hκt he)
       | false =>
-        rw [show denote (fuel+1) (.nullable t') = (denote fuel t').withNull from rfl,
+        rw [show denote (.nullable t') = (denote t').withNull from rfl,
           withNull_eq_orNull hw] at he
         cases v
         case null => exact List.mem_cons_self _ _
-        all_goals exact List.mem_cons_of_mem _ (κ_sound fuel t' hκt he)
+        all_goals exact List.mem_cons_of_mem _ (κ_sound t' hκt he)
     | union opts =>
       -- `union`'s `⋃`: the kind is the admitting option's, and `κList` contains it
       obtain ⟨o, ho, -, hoe⟩ := altCodec_e_admits he
+      simp only [optionSems_eq, denoteTagged_eq] at ho
       obtain ⟨tx, htx, rfl⟩ := List.mem_map.mp ho
       rw [optionSemOf_c] at hoe
       obtain ⟨ksx, hκx, hsub⟩ := κList_mem hκ tx htx
-      exact hsub _ (κ_sound fuel tx hκx hoe)
+      exact hsub _ (κ_sound tx hκx hoe)
     -- `κ` is `⊤` here: nothing is claimed, and the hypothesis is unsatisfiable
     | held t' f g => exact nomatch hκ
-    | lazy γ => exact κ_sound fuel γ hκ he
+    | lazy γ => exact κ_sound γ hκ he
     | custom ce cp => exact nomatch hκ
     | opaq lossy => exact nomatch hκ
 /-- An option's admission lifts to the list — the `⋃` of `adm`'s union row. -/
@@ -453,10 +454,9 @@ theorem admAList_of_mem : ∀ {opts : List Term} {t : Term} {a : Attr},
     · simp [admAList, h]
     · simp [admAList, admAList_of_mem hm' h]
 
-theorem adm_sound : ∀ (fuel : Nat) (t : Term) {v a},
-    (denote fuel t).e v = some a → adm t v = true
-  | 0, _, _, _, he => nomatch he
-  | fuel+1, t, v, a, he => by
+theorem adm_sound : ∀ (t : Term) {v a},
+    (denote t).e v = some a → adm t v = true
+  | t, v, a, he => by
     cases t
     -- `adm` at a literal **is** the codec's own prism, so soundness is the prism's first
     -- projection and nothing else. This was three cases — a `simp_all` for strings, a
@@ -465,6 +465,7 @@ theorem adm_sound : ∀ (fuel : Nat) (t : Term) {v a},
     case dunion d opts =>
       -- the admitting option's tag check is exactly `adm`'s, at one option
       obtain ⟨o, ho, hadm, -⟩ := altCodec_e_admits he
+      simp only [optionSems_eq, denoteTagged_eq] at ho
       simp only [List.mem_map] at ho
       obtain ⟨-, ⟨tx, htx, rfl⟩, rfl⟩ := ho
       obtain ⟨tag, hV, htag⟩ := byTag_admitV.mp hadm
@@ -472,23 +473,23 @@ theorem adm_sound : ∀ (fuel : Nat) (t : Term) {v a},
         mem_allTags htx htag⟩
     case refine t' q =>
       obtain ⟨hq, hc⟩ := restrict_e.mp he
-      simp only [adm, adm_sound fuel t' hc, hq, Bool.and_self]
+      simp only [adm, adm_sound t' hc, hq, Bool.and_self]
     case nullable t' =>
-      cases hw : (denote fuel t').ownsNull with
+      cases hw : (denote t').ownsNull with
       | true =>
-        rw [show (denote (fuel+1) (.nullable t')).e = (denote fuel t').e from
+        rw [show (denote (.nullable t')).e = (denote t').e from
           withNull_e_of_owns hw] at he
-        simp [adm, adm_sound fuel t' he]
+        simp [adm, adm_sound t' he]
       | false =>
-        rw [show denote (fuel+1) (.nullable t') = (denote fuel t').orNull from
+        rw [show denote (.nullable t') = (denote t').orNull from
           withNull_eq_orNull hw] at he
         rcases orNull_e.mp he with ⟨rfl, -⟩ | ⟨-, hc⟩
         · simp [adm]
-        · simp [adm, adm_sound fuel t' hc]
+        · simp [adm, adm_sound t' hc]
     case number =>
       cases v with
       | num d =>
-        rw [show (denote (fuel+1) .number).e (.num d) = numberCodec.e (.num d) from rfl,
+        rw [show (denote .number).e (.num d) = numberCodec.e (.num d) from rfl,
           numberCodec_e_num] at he
         by_cases hw : Numeral.WF d.toDec = true
         · simp [adm, inD, hw]
@@ -497,30 +498,30 @@ theorem adm_sound : ∀ (fuel : Nat) (t : Term) {v a},
     case decimal =>
       cases v with
       | str s =>
-        rw [show (denote (fuel+1) .decimal).e (.str s) = decimalCodec.e (.str s) from rfl,
+        rw [show (denote .decimal).e (.str s) = decimalCodec.e (.str s) from rfl,
           decimalCodec_e_str] at he
         by_cases hs : Numeral.Stored s = true
         · simp [adm, isStored, hs]
         · rw [dif_neg hs] at he; exact nomatch he
       | _ => exact nomatch he
-    case legacy t' r => exact adm_sound fuel t' (extendRead_e.mp he)
-    case lazy t' => exact adm_sound fuel t' he
-    case held t' f g => exact adm_sound fuel t' he
+    case legacy t' r => exact adm_sound t' (extendRead_e.mp he)
+    case lazy t' => exact adm_sound t' he
+    case held t' f g => exact adm_sound t' he
     case custom ce cp => simp_all [adm, denote]
     case union opts =>
       obtain ⟨o, ho, -, hoe⟩ := altCodec_e_admits he
+      simp only [optionSems_eq, denoteTagged_eq] at ho
       simp only [List.mem_map] at ho
       obtain ⟨tx, htx, rfl⟩ := ho
       rw [optionSemOf_c] at hoe
-      exact admList_of_mem htx (adm_sound fuel tx hoe)
+      exact admList_of_mem htx (adm_sound tx hoe)
     all_goals rfl
 
 set_option maxHeartbeats 1000000 in
 /-- Reading lands in `admA`. -/
-theorem admA_sound : ∀ (fuel : Nat) (t : Term) {a v},
-    (denote fuel t).p a = some v → admA t a = true
-  | 0, _, _, _, hp => nomatch hp
-  | fuel+1, t, a, v, hp => by
+theorem admA_sound : ∀ (t : Term) {a v},
+    (denote t).p a = some v → admA t a = true
+  | t, a, v, hp => by
     cases t
     case literal k ls =>
       -- the read side is the prism's second projection *plus* the base's own reading, which is
@@ -536,36 +537,38 @@ theorem admA_sound : ∀ (fuel : Nat) (t : Term) {a v},
           | simp [admA, admALit]
     case dunion d opts =>
       obtain ⟨o, ho, hadm, -⟩ := altCodec_p_admits hp
+      simp only [optionSems_eq, denoteTagged_eq] at ho
       simp only [List.mem_map] at ho
       obtain ⟨-, ⟨tx, htx, rfl⟩, rfl⟩ := ho
       obtain ⟨tag, hA, htag⟩ := byTag_admitA.mp hadm
       exact admA_dunion.mpr ⟨tag, hA,
         mem_allTags htx htag⟩
-    case refine t' q => exact admA_sound fuel t' (restrict_p.mp hp).1
+    case refine t' q => exact admA_sound t' (restrict_p.mp hp).1
     case nullable t' =>
-      cases hw : (denote fuel t').ownsNull with
+      cases hw : (denote t').ownsNull with
       | true =>
-        rw [show (denote (fuel+1) (.nullable t')).p = (denote fuel t').p from
+        rw [show (denote (.nullable t')).p = (denote t').p from
           withNull_p_of_owns hw] at hp
-        simp [admA, admA_sound fuel t' hp]
+        simp [admA, admA_sound t' hp]
       | false =>
-        rw [show denote (fuel+1) (.nullable t') = (denote fuel t').orNull from
+        rw [show denote (.nullable t') = (denote t').orNull from
           withNull_eq_orNull hw] at hp
         rcases orNull_p.mp hp with ⟨rfl, -⟩ | ⟨-, hc⟩
         · simp [admA]
-        · simp [admA, admA_sound fuel t' hc]
-    case decimal => cases a <;> simp_all [denote, decimalCodec, admA]
+        · simp [admA, admA_sound t' hc]
+    case decimal => cases a <;> simp_all [denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, decimalCodec, admA]
     case held t' f g =>
       obtain ⟨w, hw, -⟩ := through_p.mp hp
-      exact admA_sound fuel t' hw
-    case lazy t' => exact admA_sound fuel t' hp
+      exact admA_sound t' hw
+    case lazy t' => exact admA_sound t' hp
     case custom ce cp => simp_all [admA, denote]
     case union opts =>
       obtain ⟨o, ho, -, hop⟩ := altCodec_p_admits hp
+      simp only [optionSems_eq, denoteTagged_eq] at ho
       simp only [List.mem_map] at ho
       obtain ⟨tx, htx, rfl⟩ := ho
       rw [optionSemOf_c] at hop
-      exact admAList_of_mem htx (admA_sound fuel tx hop)
+      exact admAList_of_mem htx (admA_sound tx hop)
     all_goals rfl
 
 /-! ### Why `admA` has no `legacy` case
@@ -588,36 +591,36 @@ def rNumeral : Attr → Option Value
   | _ => none
 
 /-- The read really does land outside the subterm's `admA`. -/
-theorem legacy_p_outside_admA (fuel : Nat) :
-    (denote (fuel+2) (.legacy (.literal .string (.of "A" ∅)) rNumeral)).p (.n (.of "1")) = some (.str "A") ∧
+theorem legacy_p_outside_admA :
+    (denote (.legacy (.literal .string (.of "A" ∅)) rNumeral)).p (.n (.of "1")) = some (.str "A") ∧
       admA (.literal .string (.of "A" ∅)) (.n (.of "1")) = false := ⟨rfl, rfl⟩
 
 /-- **§5's `adm` cannot pass through `legacy` on the read side.** Stated as the row's
     refutation rather than as an omission, so the divergence between the document's one
     `adm` and the model's two is a theorem rather than a comment. -/
 theorem not_admA_legacy :
-    ¬ ∀ (t : Term) (r : Attr → Option Value) (fuel : Nat) (a : Attr) (v : Value),
-      (denote fuel (.legacy t r)).p a = some v → admA t a = true := by
+    ¬ ∀ (t : Term) (r : Attr → Option Value) (a : Attr) (v : Value),
+      (denote (.legacy t r)).p a = some v → admA t a = true := by
   intro h
-  have hbad := h (.literal .string (.of "A" ∅)) rNumeral 2 (.n (.of "1")) (.str "A")
-    (legacy_p_outside_admA 0).1
-  rw [(legacy_p_outside_admA 0).2] at hbad
+  have hbad := h (.literal .string (.of "A" ∅)) rNumeral (.n (.of "1")) (.str "A")
+    legacy_p_outside_admA.1
+  rw [legacy_p_outside_admA.2] at hbad
   exact nomatch hbad
 
 /-! ## Admission is guarded -/
 
 /-- Any option's value admission is `κ`-guarded: an admitted value has a kind the
     option's (non-`⊤`) `κ` names. -/
-theorem admitV_kind (fuel : Nat) (t : Term) {ks : List Kind} {v}
+theorem admitV_kind (t : Term) {ks : List Kind} {v}
     (hκ : κ t = some ks)
-    (h : (optionSemOf (denote fuel t) (specOf t)).admitV v = true) :
+    (h : (optionSemOf (denote t) (specOf t)).admitV v = true) :
     Value.kind v ∈ ks := by
   cases hs : specOf t with
   | none =>
     rw [hs] at h
-    replace h : ((denote fuel t).e v).isSome = true := h
+    replace h : ((denote t).e v).isSome = true := h
     obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp h
-    exact κ_sound fuel t hκ ha
+    exact κ_sound t hκ ha
   | some spec =>
     rw [hs] at h
     cases t
@@ -632,14 +635,14 @@ theorem admitV_kind (fuel : Nat) (t : Term) {ks : List Kind} {v}
 /-- Any option's attribute admission is member-guarded: with a lawful pair and a
     named member, an admitted attribute carries that member — §5's read-side (W),
     doing (D)'s job through the member index. -/
-theorem admitA_member (fuel : Nat) (t : Term) {μ a}
-    (hμ : μSyn t = some μ) (hlaw : Lawful (denote fuel t))
-    (h : (optionSemOf (denote fuel t) (specOf t)).admitA a = true) :
+theorem admitA_member (t : Term) {μ a}
+    (hμ : μSyn t = some μ) (hlaw : Lawful (denote t))
+    (h : (optionSemOf (denote t) (specOf t)).admitA a = true) :
     a.member = μ := by
   cases hs : specOf t with
   | none =>
     rw [hs] at h
-    replace h : ((denote fuel t).p a).isSome = true := h
+    replace h : ((denote t).p a).isSome = true := h
     obtain ⟨v, hv⟩ := Option.isSome_iff_exists.mp h
     refine hlaw.reads ?_ hv
     rw [denote_μ]
@@ -730,18 +733,18 @@ theorem keysOk_of_encode {fields : Finset Name} {ff : {k // k ∈ fields} → Fi
 /-- A closed option admits its own canonical pairs, on both sides. An *open* object —
     a rest codec — is excluded, as §5 demands: an undeclared name disqualifies the
     option even where its rest codec would hold it. -/
-theorem optionSem_self_admit (fuel : Nat) (t : Term)
+theorem optionSem_self_admit (t : Term)
     (hcl : ∀ fields ff tr, t ≠ .object fields ff (.codec tr))
-    (hlaw : Lawful (denote fuel t)) {v a}
-    (he : (denote fuel t).e v = some a) :
-    (optionSemOf (denote fuel t) (specOf t)).admitV v = true ∧
-    (optionSemOf (denote fuel t) (specOf t)).admitA a = true := by
+    (hlaw : Lawful (denote t)) {v a}
+    (he : (denote t).e v = some a) :
+    (optionSemOf (denote t) (specOf t)).admitV v = true ∧
+    (optionSemOf (denote t) (specOf t)).admitA a = true := by
   cases hs : specOf t with
   | none =>
     constructor
-    · show ((denote fuel t).e v).isSome = true
+    · show ((denote t).e v).isSome = true
       rw [he]; rfl
-    · show ((denote fuel t).p a).isSome = true
+    · show ((denote t).p a).isSome = true
       rw [hlaw.retract he]; rfl
   | some spec =>
     cases t
@@ -750,49 +753,48 @@ theorem optionSem_self_admit (fuel : Nat) (t : Term)
         match ff k with | Field.optional _ => false | _ => true⟩ : MapOf Bool) =
         some spec := hs
       cases hs
-      cases fuel with
-      | zero => exact nomatch he
-      | succ f =>
-        have hrc : rcOf (restSemOf (denote f) rest) = none := by
-          cases rest with
-          | drop => rfl
-          | refuse => rfl
-          | codec tr => exact absurd rfl (hcl fields ff tr)
-        replace he : (objectCodecCore
-            ⟨fields, fun k => fieldSemOf (denote f) (ff k)⟩
-            (rcOf (restSemOf (denote f) rest))
-            (keepB (restSemOf (denote f) rest)
-              ⟨fields, fun k => fieldSemOf (denote f) (ff k)⟩)).e v =
-          some a := he
-        obtain ⟨keys, fv, g, rfl, rfl, hval, hfi⟩ := objectCodecCore_e_inv he
-        rw [hrc] at hfi
-        -- both halves are the same `keysOk`, at the key set the two payloads share
-        exact ⟨keysOk_of_encode hval hfi, keysOk_of_encode hval hfi⟩
+      have hrc : rcOf (restSem rest) = none := by
+        cases rest with
+        | drop => rfl
+        | refuse => rfl
+        | codec tr => exact absurd rfl (hcl fields ff tr)
+      replace he : (objectCodecCore
+          ⟨fields, fun k => fieldSem (ff k)⟩
+          (rcOf (restSem rest))
+          (keepB (restSem rest)
+            ⟨fields, fun k => fieldSem (ff k)⟩)).e v =
+        some a := he
+      obtain ⟨keys, fv, g, rfl, rfl, hval, hfi⟩ := objectCodecCore_e_inv he
+      rw [hrc] at hfi
+      -- both halves are the same `keysOk`, at the key set the two payloads share
+      -- `fieldSem` is `fieldSemOf denote`; the lemma is stated through the latter
+      rw [fieldSem_eq] at hval hfi
+      exact ⟨keysOk_of_encode hval hfi, keysOk_of_encode hval hfi⟩
     all_goals exact nomatch hs
 
 /-- Any option's value admission is `adm`-guarded. -/
-theorem admitV_adm (fuel : Nat) (t : Term) {v}
-    (h : (optionSemOf (denote fuel t) (specOf t)).admitV v = true) : adm t v = true := by
+theorem admitV_adm (t : Term) {v}
+    (h : (optionSemOf (denote t) (specOf t)).admitV v = true) : adm t v = true := by
   cases hs : specOf t with
   | none =>
     rw [hs] at h
-    replace h : ((denote fuel t).e v).isSome = true := h
+    replace h : ((denote t).e v).isSome = true := h
     obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp h
-    exact adm_sound fuel t ha
+    exact adm_sound t ha
   | some spec =>
     cases t
     case object fields rest => rfl
     all_goals exact nomatch hs
 
 /-- Any option's attribute admission is `admA`-guarded. -/
-theorem admitA_admA (fuel : Nat) (t : Term) {a}
-    (h : (optionSemOf (denote fuel t) (specOf t)).admitA a = true) : admA t a = true := by
+theorem admitA_admA (t : Term) {a}
+    (h : (optionSemOf (denote t) (specOf t)).admitA a = true) : admA t a = true := by
   cases hs : specOf t with
   | none =>
     rw [hs] at h
-    replace h : ((denote fuel t).p a).isSome = true := h
+    replace h : ((denote t).p a).isSome = true := h
     obtain ⟨v, hv⟩ := Option.isSome_iff_exists.mp h
-    exact admA_sound fuel t hv
+    exact admA_sound t hv
   | some spec =>
     cases t
     case object fields rest => rfl
@@ -954,14 +956,14 @@ theorem sepV_refine_disjoint {q q' : Value → Bool} (h : ∀ v, q v = true → 
     in the `adm` table. `uniqueAdmission_of_disjoint` takes the two families as arbitrary
     predicates, so nothing here has to be syntactic: the attribute family is
     `∃ v, base.p a = some v ∧ q v`, and disjointness is the base reading `a` to one value. -/
-theorem uAtCan_of_refine_disjoint (fuel : Nat) {base : Term} {qs : List (Value → Bool)}
-    (hlaw : LawfulCore (denote fuel base))
+theorem uAtCan_of_refine_disjoint {base : Term} {qs : List (Value → Bool)}
+    (hlaw : LawfulCore (denote base))
     (hdisj : List.Pairwise (fun q q' => ∀ v, q v = true → q' v = false) qs) :
-    UAtCan (fuel+1) (qs.map (fun q => Term.refine base q)) := by
-  show UniqueAdmission (semsOf (fuel+1) (qs.map (fun q => Term.refine base q)))
+    UAtCan (qs.map (fun q => Term.refine base q)) := by
+  show UniqueAdmission (semsOf (qs.map (fun q => Term.refine base q)))
   refine uniqueAdmission_of_disjoint
     (SVs := qs.map (fun q v => q v = true))
-    (SAs := qs.map (fun q a => ∃ v, (denote fuel base).p a = some v ∧ q v = true))
+    (SAs := qs.map (fun q a => ∃ v, (denote base).p a = some v ∧ q v = true))
     ?_ ?_ ?_ ?_ ?_
   · rw [semsOf, List.map_map, List.forall₂_map_left_iff, List.forall₂_map_right_iff]
     refine List.forall₂_same.mpr fun q _ v hv => ?_
@@ -988,10 +990,10 @@ theorem uAtCan_of_refine_disjoint (fuel : Nat) {base : Term} {qs : List (Value �
     rw [optionSemOf_c] at he
     obtain ⟨hq, hb⟩ := restrict_e.mp he
     refine ⟨?_, ?_⟩
-    · show ((denote (fuel+1) (.refine base q)).e t).isSome = true
-      rw [show (denote (fuel+1) (.refine base q)).e t = some a from he]; rfl
-    · show ((denote (fuel+1) (.refine base q)).p a).isSome = true
-      rw [show (denote (fuel+1) (.refine base q)).p a = some t from
+    · show ((denote (.refine base q)).e t).isSome = true
+      rw [show (denote (.refine base q)).e t = some a from he]; rfl
+    · show ((denote (.refine base q)).p a).isSome = true
+      rw [show (denote (.refine base q)).p a = some t from
         restrict_p.mpr ⟨hlaw.retract hb, hq⟩]
       rfl
 
@@ -1005,11 +1007,11 @@ theorem uAtCan_of_refine_disjoint (fuel : Nat) {base : Term} {qs : List (Value �
     rule. And the base need not be ground at all: a union of disjoint refinements of one
     `object`, or of one `union`, discharges by the same theorem. There was never a
     per-member argument to make. -/
-theorem uAtCan_of_refine_disjoint_of_typed (fuel : Nat) {base : Term} {T μ}
-    {qs : List (Value → Bool)} (h : Typed base T μ) (hob : Obligations fuel base)
+theorem uAtCan_of_refine_disjoint_of_typed {base : Term} {T μ}
+    {qs : List (Value → Bool)} (h : Typed base T μ) (hob : Obligations base)
     (hdisj : List.Pairwise (fun q q' => ∀ v, q v = true → q' v = false) qs) :
-    UAtCan (fuel+1) (qs.map (fun q => Term.refine base q)) :=
-  uAtCan_of_refine_disjoint fuel (soundness_both fuel h hob).1 hdisj
+    UAtCan (qs.map (fun q => Term.refine base q)) :=
+  uAtCan_of_refine_disjoint (soundness_both h hob).1 hdisj
 
 /-! ### Literals over a primitive §3 gives no `literal` rule for
 
@@ -1032,19 +1034,19 @@ theorem typed_boolLiteral : ∃ T, Typed (.refine .boolean isTrueV) T (some .BOO
 /-- A base that is not ground at all, to show the theorem does not care. Two disjoint
     refinements of one `array(string)` separate exactly as two literals over `string` do —
     "literal" was never the operative word, "one base, disjoint predicates" was. -/
-theorem uAtCan_refine_container (fuel : Nat) {q q' : Value → Bool}
+theorem uAtCan_refine_container {q q' : Value → Bool}
     (hd : List.Pairwise (fun a b => ∀ v, a v = true → b v = false) [q, q']) :
-    UAtCan (fuel+2) [Term.refine (.array .string) q, Term.refine (.array .string) q'] :=
-  uAtCan_of_refine_disjoint_of_typed (fuel+1) (Typed.array Typed.string)
-    (by cases fuel <;> trivial) hd
+    UAtCan [Term.refine (.array .string) q, Term.refine (.array .string) q'] :=
+  uAtCan_of_refine_disjoint_of_typed (Typed.array Typed.string)
+    trivial hd
 
 /-- And a union of two discharges on **both** sides, by the same shared-base argument that
     settles numeric literals — a primitive §3 never wrote a `literal` rule for. -/
-theorem uAtCan_boolLiterals (fuel : Nat) :
-    UAtCan (fuel+2) [Term.refine .boolean isTrueV, Term.refine .boolean isFalseV] := by
+theorem uAtCan_boolLiterals :
+    UAtCan [Term.refine .boolean isTrueV, Term.refine .boolean isFalseV] := by
   have h : ∀ v, isTrueV v = true → isFalseV v = false := by
     intro v hv; cases v <;> simp_all [isTrueV, isFalseV]
-  exact uAtCan_of_refine_disjoint (fuel+1) (qs := [isTrueV, isFalseV])
+  exact uAtCan_of_refine_disjoint (qs := [isTrueV, isFalseV])
     lawful_booleanCodec.core (by simpa using h)
 
 /-! ### `nullable`, and a refusal that stopped being stipulated
@@ -1069,7 +1071,7 @@ theorem sep_nullable_plain (v : Value) :
 
 /-! ### `lazy` is transparent, and all four tables now say so
 
-    `denote fuel (.lazy t) = { denote fuel t with μ := none }`: the pair is the subterm's
+    `denote (.lazy t) = { denote t with μ := none }`: the pair is the subterm's
     and only the member is erased. §5 lists `lazy` with `custom` and `opaque` as
     unanalysable, but that is inherited from the doc's thunk, which was `Unit → Term`.
     `Term.lazy` carries a plain `Term` — a deliberate change, made because a closure adds
@@ -1159,8 +1161,8 @@ theorem admA_custom (ce : Value → Option Attr) (cp : Attr → Option Value) (a
     soundness-only bundling could never force: an over-approximation is sound however
     loose, and only the converse pins it. -/
 theorem adm_custom_exact (ce : Value → Option Attr) (cp : Attr → Option Value) (v : Value)
-    (fuel : Nat) :
-    adm (.custom ce cp) v = true ↔ ∃ a, (denote (fuel+1) (.custom ce cp)).e v = some a := by
+    :
+    adm (.custom ce cp) v = true ↔ ∃ a, (denote (.custom ce cp)).e v = some a := by
   simp [adm, denote, Option.isSome_iff_exists]
 
 /-! ### What the unified `literal` carries
@@ -1208,13 +1210,13 @@ theorem admA_literalN_blind (ls : NEFinset Double) (x : WFNumeral) :
     the value a read produces, never by the text the store holds. The table cannot see that
     because it answers about one term at a time; this answers about a family sharing a
     base. -/
-theorem uAtCan_of_literalN_disjoint (fuel : Nat) {lss : List (NEFinset Double)}
+theorem uAtCan_of_literalN_disjoint {lss : List (NEFinset Double)}
     (hdisj : List.Pairwise (fun ls ls' => ∀ d ∈ ls.1, d ∉ ls'.1) lss) :
-    UAtCan (fuel+1) (lss.map (Term.literal .number)) := by
-  show UniqueAdmission (semsOf (fuel+1) (lss.map (Term.literal .number)))
-  have hs : semsOf (fuel+1) (lss.map (Term.literal .number))
+    UAtCan (lss.map (Term.literal .number)) := by
+  show UniqueAdmission (semsOf (lss.map (Term.literal .number)))
+  have hs : semsOf (lss.map (Term.literal .number))
       = (lss.map (literalCodec .number)).map OptionSem.byAttempt := by
-    simp [semsOf, List.map_map, specOf, optionSemOf, denote]
+    simp [semsOf, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, List.map_map, specOf, optionSemOf, denote]
   rw [hs]
   refine uniqueAdmission_of_sharedBase (base := numberCodec) (qs := lss.map (inL .number))
     lawful_numberCodec.core ?_ ?_
@@ -1278,14 +1280,14 @@ def SAof (t : Term) : Attr → Prop :=
   fun a => (∀ μ, μSyn t = some μ → a.member = μ) ∧ admA t a = true
 
 /-- Admission lands in the value family — `κ` and `adm`'s soundness lemmas, together. -/
-theorem admitV_SVof (fuel : Nat) (t : Term) {v}
-    (h : (optionSemOf (denote fuel t) (specOf t)).admitV v = true) : SVof t v :=
-  ⟨fun _ hκ => admitV_kind fuel t hκ h, admitV_adm fuel t h⟩
+theorem admitV_SVof (t : Term) {v}
+    (h : (optionSemOf (denote t) (specOf t)).admitV v = true) : SVof t v :=
+  ⟨fun _ hκ => admitV_kind t hκ h, admitV_adm t h⟩
 
 /-- …and in the attribute family. Lawfulness is what `μ`'s bridge needs. -/
-theorem admitA_SAof (fuel : Nat) (t : Term) (hlaw : Lawful (denote fuel t)) {a}
-    (h : (optionSemOf (denote fuel t) (specOf t)).admitA a = true) : SAof t a :=
-  ⟨fun _ hμ => admitA_member fuel t hμ hlaw h, admitA_admA fuel t h⟩
+theorem admitA_SAof (t : Term) (hlaw : Lawful (denote t)) {a}
+    (h : (optionSemOf (denote t) (specOf t)).admitA a = true) : SAof t a :=
+  ⟨fun _ hμ => admitA_member t hμ hlaw h, admitA_admA t h⟩
 
 /-- **§5's `SepV` is disjointness of the value families.** Either disjunct gives it,
     because a disjoint factor makes the intersection disjoint. -/
@@ -1310,36 +1312,36 @@ theorem SAof_disjoint {x y : Term} (h : SepA x y) : ∀ a, SAof x a → ¬ SAof 
     The proof is now one appeal to `uniqueAdmission_of_disjoint`: the two families are
     `SVof`/`SAof`, their disjointness is what `SepV`/`SepA` say, and neither side needs an
     argument of its own. -/
-theorem uAtCan_of_separated (fuel : Nat) {opts : List Term}
-    (hlaw : ∀ t ∈ opts, Lawful (denote fuel t))
+theorem uAtCan_of_separated {opts : List Term}
+    (hlaw : ∀ t ∈ opts, Lawful (denote t))
     (hcl : ∀ t ∈ opts, ∀ fields ff tr, t ≠ .object fields ff (.codec tr))
     (hV : List.Pairwise SepV opts)
     (hA : List.Pairwise SepA opts) :
-    UAtCan fuel opts := by
+    UAtCan opts := by
   refine uniqueAdmission_of_disjoint
     (SVs := opts.map SVof) (SAs := opts.map SAof) ?_ ?_ ?_ ?_ ?_
   · rw [semsOf, List.forall₂_map_left_iff, List.forall₂_map_right_iff]
-    exact List.forall₂_same.mpr fun t _ v hv => admitV_SVof fuel t hv
+    exact List.forall₂_same.mpr fun t _ v hv => admitV_SVof t hv
   · rw [semsOf, List.forall₂_map_left_iff, List.forall₂_map_right_iff]
-    exact List.forall₂_same.mpr fun t ht a ha => admitA_SAof fuel t (hlaw t ht) ha
+    exact List.forall₂_same.mpr fun t ht a ha => admitA_SAof t (hlaw t ht) ha
   · rw [List.pairwise_map]; exact hV.imp SVof_disjoint
   · rw [List.pairwise_map]; exact hA.imp SAof_disjoint
   · refine forall_mem_map fun t ht v a he => ?_
     rw [optionSemOf_c] at he
-    exact optionSem_self_admit fuel t (hcl t ht) (hlaw t ht) he
+    exact optionSem_self_admit t (hcl t ht) (hlaw t ht) he
 
 /-- The kind/member half on its own — the original disjointness discharger, now a
     corollary of `uAtCan_of_separated`. -/
-theorem uAtCan_of_disjoint (fuel : Nat) {opts : List Term}
-    (hlaw : ∀ t ∈ opts, Lawful (denote fuel t))
+theorem uAtCan_of_disjoint {opts : List Term}
+    (hlaw : ∀ t ∈ opts, Lawful (denote t))
     (hcl : ∀ t ∈ opts, ∀ fields ff tr, t ≠ .object fields ff (.codec tr))
     (hκ : ∀ t ∈ opts, (κ t).isSome)
     (hμ : ∀ t ∈ opts, (μSyn t).isSome)
     (hκd : List.Pairwise (fun x y => ∀ kx ky, κ x = some kx → κ y = some ky →
       ∀ k ∈ kx, k ∉ ky) opts)
     (hμd : List.Pairwise (fun x y => μSyn x ≠ μSyn y) opts) :
-    UAtCan fuel opts := by
-  refine uAtCan_of_separated fuel hlaw hcl (pairwise_imp_mem ?_ hκd)
+    UAtCan opts := by
+  refine uAtCan_of_separated hlaw hcl (pairwise_imp_mem ?_ hκd)
     (pairwise_imp_mem ?_ hμd)
   · intro x hx y hy hxy
     obtain ⟨kx, hkx⟩ := Option.isSome_iff_exists.mp (hκ x hx)
@@ -1353,7 +1355,7 @@ theorem uAtCan_of_disjoint (fuel : Nat) {opts : List Term}
 /-! ## The other two rows of §5's table
 
     §5's discharger table has four rows, and until now a reviewer checking it changed
-    vocabulary halfway across: two rows are about `UAtCan fuel opts` — a list of
+    vocabulary halfway across: two rows are about `UAtCan opts` — a list of
     **terms** — and two are about `UniqueAdmission os`, a list of `OptionSem`. Worse,
     `(dunion)`'s row was never stated at all: it appeared only inside
     `lawful_dunionCodec`, where it is an argument rather than a claim.
@@ -1367,17 +1369,18 @@ theorem uAtCan_of_disjoint (fuel : Nat) {opts : List Term}
 
 /-- The options of a `(dunion)`, exactly as `denote`'s dunion case builds them: tag
     admission on `d`, where `(union)`'s `semsOf` uses name admission. -/
-noncomputable def semsOfD (fuel : Nat) (d : Name) (opts : List Term) : List OptionSem :=
-  (opts.map fun t' => (tagsOf d t', denote fuel t')).map fun o => .byTag d o.1 o.2
+noncomputable def semsOfD (d : Name) (opts : List Term) : List OptionSem :=
+  (opts.map fun t' => (tagsOf d t', denote t')).map fun o => .byTag d o.1 o.2
 
 /-- And it really is the denotation's option list — the `rfl` that keeps `semsOfD` from
     drifting away from `denote`. -/
-theorem denote_dunion (fuel : Nat) (d : Name) (opts : List Term) :
-    denote (fuel+1) (.dunion d opts) = altCodec (semsOfD fuel d opts) (some .M) := rfl
+theorem denote_dunion_semsOfD (d : Name) (opts : List Term) :
+    denote (.dunion d opts) = altCodec (semsOfD d opts) (some .M) := by
+  simp only [denote_dunion, semsOfD, dunionCodec, List.map_map]
 
 /-- §5 (U) for a `(dunion)`, in `UAtCan`'s vocabulary. -/
-def UAtCanD (fuel : Nat) (d : Name) (opts : List Term) : Prop :=
-  UniqueAdmission (semsOfD fuel d opts)
+def UAtCanD (d : Name) (opts : List Term) : Prop :=
+  UniqueAdmission (semsOfD d opts)
 
 /-- **Row three: `(dunion)`'s (U) is a theorem, not a premise** — §5's "the one union
     whose (U) is discharged by the rule itself". The premises are exactly `Typed.dunion`'s
@@ -1386,18 +1389,18 @@ def UAtCanD (fuel : Nat) (d : Name) (opts : List Term) : Prop :=
     rule's obligation list has no (U) entry to begin with. Stated here because inside
     `lawful_dunionCodec` it is an argument to a lemma, and a reviewer checking §5's table
     has nothing to point at. -/
-theorem uAtCan_dunion (fuel : Nat) {d : Name} {opts : List Term}
+theorem uAtCan_dunion {d : Name} {opts : List Term}
     (htags : ∀ t' ∈ opts, (tagsOf d t').Nonempty)
     (hdisj : List.Pairwise (fun a b => ∀ tag ∈ tagsOf d a, tag ∉ tagsOf d b) opts) :
-    UAtCanD fuel d opts :=
-  uniqueAdmission_byTag (dunion_stamp fuel htags) (List.pairwise_map.mpr hdisj)
+    UAtCanD d opts :=
+  uniqueAdmission_byTag (dunion_stamp htags) (List.pairwise_map.mpr hdisj)
 
 /-- **Row four: `(opaque)`'s (U), unconditionally.** `uniqueAdmission_opaque` asks for the
     recursive option's lawfulness; `lawful_opaqCodec` supplies it, so the row has no
     premises at all. It is stated about `opaqCodec` at a fuel rather than about the term
     `opaque` for the reason given above — `denoteω` of `opaque` is not a sum over one
     list. -/
-theorem uAtCan_opaque (fuel : Nat) (lossy : Bool) :
+theorem uAtCan_opaque (lossy : Bool) :
     UniqueAdmission (opaqOptions lossy (opaqCodec fuel lossy)) :=
   uniqueAdmission_opaque fuel lossy (lawful_opaqCodec fuel lossy)
 
@@ -1432,10 +1435,10 @@ theorem pairwise_pair {α : Type} {R : α → α → Prop} {x y : α} (h : R x y
     §3's `(null)` rule exists for. Kinds settle it at the declaration: `κ(null)` is
     `{null}`, disjoint from every other ground kind, and `NULL` is a member no other
     ground term names. -/
-theorem uAtCan_string_null (fuel : Nat) :
-    UAtCan fuel [Term.string, Term.null] := by
-  refine uAtCan_of_disjoint fuel
-    (forall_mem_pair (lawful_string fuel) (lawful_null fuel))
+theorem uAtCan_string_null :
+    UAtCan [Term.string, Term.null] := by
+  refine uAtCan_of_disjoint
+    (forall_mem_pair (lawful_string) (lawful_null))
     (forall_mem_pair (fun _ _ _ h => nomatch h) (fun _ _ _ h => nomatch h))
     (forall_mem_pair rfl rfl) (forall_mem_pair rfl rfl)
     (pairwise_pair ?_) (pairwise_pair ?_)
@@ -1452,10 +1455,10 @@ theorem uAtCan_string_null (fuel : Nat) :
 
 /-- Satisfiability witness for `uAtCan_of_disjoint`: `union(string, boolean)` is
     discharged at the declaration, at every fuel. -/
-theorem uAtCan_string_boolean (fuel : Nat) :
-    UAtCan fuel [Term.string, Term.boolean] := by
-  refine uAtCan_of_disjoint fuel
-    (forall_mem_pair (lawful_string fuel) (lawful_boolean fuel))
+theorem uAtCan_string_boolean :
+    UAtCan [Term.string, Term.boolean] := by
+  refine uAtCan_of_disjoint
+    (forall_mem_pair (lawful_string) (lawful_boolean))
     (forall_mem_pair (fun _ _ _ h => nomatch h) (fun _ _ _ h => nomatch h))
     (forall_mem_pair rfl rfl) (forall_mem_pair rfl rfl)
     (pairwise_pair ?_) (pairwise_pair ?_)
@@ -1474,10 +1477,10 @@ theorem uAtCan_string_boolean (fuel : Nat) :
     options share `κ = {string}` *and* share `⇝ S`, so neither kinds nor members
     separate them; the `adm` disjunct on both sides is what carries it. This is the
     pair §5 claims for `ident`, and `adm` is what makes the claim good. -/
-theorem uAtCan_literal_literal (fuel : Nat) :
-    UAtCan fuel [Term.literal .string (.of "A" ∅), Term.literal .string (.of "B" ∅)] := by
-  refine uAtCan_of_separated fuel
-    (forall_mem_pair (lawful_literal _ _ fuel) (lawful_literal _ _ fuel))
+theorem uAtCan_literal_literal :
+    UAtCan [Term.literal .string (.of "A" ∅), Term.literal .string (.of "B" ∅)] := by
+  refine uAtCan_of_separated
+    (forall_mem_pair (lawful_literal _ _) (lawful_literal _ _))
     (forall_mem_pair (fun _ _ _ h => nomatch h) (fun _ _ _ h => nomatch h))
     (pairwise_pair (Or.inr ?_)) (pairwise_pair (Or.inr ?_))
   · intro v hv
@@ -1517,19 +1520,19 @@ theorem uAtCan_literal_literal (fuel : Nat) :
 
 /-- A helper: two options of a two-element union that both admit one value refute (U).
     `hne` separates the options at some other value, so the singleton filter fails. -/
-theorem not_uAtCan_pair {fuel : Nat} {t₁ t₂ : Term} {v w : Value} {a : Attr}
-    (he : (denote fuel t₁).e v = some a)
-    (h₂ : (optionSemOf (denote fuel t₂) (specOf t₂)).admitV v = true)
-    (hne : (optionSemOf (denote fuel t₁) (specOf t₁)).admitV w ≠
-      (optionSemOf (denote fuel t₂) (specOf t₂)).admitV w) :
-    ¬ UAtCan fuel [t₁, t₂] := by
+theorem not_uAtCan_pair {t₁ t₂ : Term} {v w : Value} {a : Attr}
+    (he : (denote t₁).e v = some a)
+    (h₂ : (optionSemOf (denote t₂) (specOf t₂)).admitV v = true)
+    (hne : (optionSemOf (denote t₁) (specOf t₁)).admitV w ≠
+      (optionSemOf (denote t₂) (specOf t₂)).admitV w) :
+    ¬ UAtCan [t₁, t₂] := by
   intro h
-  have ho : optionSemOf (denote fuel t₁) (specOf t₁) ∈ semsOf fuel [t₁, t₂] :=
+  have ho : optionSemOf (denote t₁) (specOf t₁) ∈ semsOf [t₁, t₂] :=
     List.mem_cons_self _ _
   have hfilt := (h _ ho v a (by rw [optionSemOf_c]; exact he)).2
   -- the second option survives the filter too, so the filter cannot be `[o₁]`
-  have hmem : optionSemOf (denote fuel t₂) (specOf t₂) ∈
-      [optionSemOf (denote fuel t₁) (specOf t₁)] := by
+  have hmem : optionSemOf (denote t₂) (specOf t₂) ∈
+      [optionSemOf (denote t₁) (specOf t₁)] := by
     rw [← hfilt]
     exact List.mem_filter.mpr
       ⟨List.mem_cons_of_mem _ (List.mem_cons_self _ _), h₂⟩
@@ -1542,16 +1545,16 @@ theorem not_uAtCan_pair {fuel : Nat} {t₁ t₂ : Term} {v w : Value} {a : Attr}
     value `"A"`, which both options admit. `literal`'s attempt *is* evidence; `string`'s is not, and one
     honest answer does not resolve a pair. -/
 theorem not_uAtCan_literal_string :
-    ¬ UAtCan 1 [Term.literal .string (.of "A" ∅), Term.string] := by
-  have hA : (denote 1 (Term.literal .string (.of "A" ∅))).e (Value.str "A") = some (Attr.s "A") := by
+    ¬ UAtCan [Term.literal .string (.of "A" ∅), Term.string] := by
+  have hA : (denote (Term.literal .string (.of "A" ∅))).e (Value.str "A") = some (Attr.s "A") := by
     show (if "A" ∈ ["A"] then some (Attr.s "A") else none) = some (Attr.s "A")
     rw [if_pos (List.mem_cons_self _ _)]
-  have hB : (denote 1 (Term.literal .string (.of "A" ∅))).e (Value.str "B") = none := by
+  have hB : (denote (Term.literal .string (.of "A" ∅))).e (Value.str "B") = none := by
     show (if "B" ∈ ["A"] then some (Attr.s "B") else none) = none
     rw [if_neg (by simp)]
   refine not_uAtCan_pair (v := .str "A") (a := Attr.s "A") (w := .str "B") hA rfl ?_
-  · show ((denote 1 (Term.literal .string (.of "A" ∅))).e (Value.str "B")).isSome ≠
-      ((denote 1 Term.string).e (Value.str "B")).isSome
+  · show ((denote (Term.literal .string (.of "A" ∅))).e (Value.str "B")).isSome ≠
+      ((denote Term.string).e (Value.str "B")).isSome
     rw [hB]
     exact fun h => nomatch h
 
@@ -1561,7 +1564,7 @@ theorem not_uAtCan_literal_string :
     sees. Propagating `ident` through a container does not propagate disjointness of
     the admissible sets: every container admits its empty case. -/
 theorem not_uAtCan_array_literals :
-    ¬ UAtCan 2 [Term.array (.literal .string (.of "A" ∅)), Term.array (.literal .string (.of "B" ∅))] := by
+    ¬ UAtCan [Term.array (.literal .string (.of "A" ∅)), Term.array (.literal .string (.of "B" ∅))] := by
   refine not_uAtCan_pair (v := .arr []) (a := Attr.l []) (w := .arr [.str "A"])
     rfl rfl ?_
   -- separated one fuel down, where the element codecs are live: `["A"]` is written by
@@ -1719,7 +1722,7 @@ theorem optionSem_arrayLiterals_ne :
     union declines the empty array, and every value it does write round-trips through the
     option that wrote it. -/
 theorem uAtAct_array_literals :
-    UAtAct 2 [Term.array (.literal .string (.of "A" ∅)), Term.array (.literal .string (.of "B" ∅))] := by
+    UAtAct [Term.array (.literal .string (.of "A" ∅)), Term.array (.literal .string (.of "B" ∅))] := by
   show UniqueBothWays [OptionSem.byAttempt (arrayCodec (literalCodec .string (.of "A" ∅))),
     OptionSem.byAttempt (arrayCodec (literalCodec .string (.of "B" ∅)))]
   have lawA : LawfulCore (arrayCodec (literalCodec .string (.of "A" ∅))) :=
@@ -1816,18 +1819,18 @@ def gRel : Value → Value := fun v => match v with | .str "A" => .str "B" | _ =
 def tRel : Term := .held (.literal .string (.of "A" ∅)) fRel gRel
 
 /-- The attribute-side twin of `not_uAtCan_pair`. -/
-theorem not_uAtCan_pair_A {fuel : Nat} {t₁ t₂ : Term} {v w : Value} {a : Attr}
-    (he : (denote fuel t₁).e v = some a)
-    (h₂ : (optionSemOf (denote fuel t₂) (specOf t₂)).admitA a = true)
-    (hne : (optionSemOf (denote fuel t₁) (specOf t₁)).admitV w ≠
-      (optionSemOf (denote fuel t₂) (specOf t₂)).admitV w) :
-    ¬ UAtCan fuel [t₁, t₂] := by
+theorem not_uAtCan_pair_A {t₁ t₂ : Term} {v w : Value} {a : Attr}
+    (he : (denote t₁).e v = some a)
+    (h₂ : (optionSemOf (denote t₂) (specOf t₂)).admitA a = true)
+    (hne : (optionSemOf (denote t₁) (specOf t₁)).admitV w ≠
+      (optionSemOf (denote t₂) (specOf t₂)).admitV w) :
+    ¬ UAtCan [t₁, t₂] := by
   intro h
-  have ho : optionSemOf (denote fuel t₁) (specOf t₁) ∈ semsOf fuel [t₁, t₂] :=
+  have ho : optionSemOf (denote t₁) (specOf t₁) ∈ semsOf [t₁, t₂] :=
     List.mem_cons_self _ _
   have hfilt := (h _ ho v a (by rw [optionSemOf_c]; exact he)).1
-  have hmem : optionSemOf (denote fuel t₂) (specOf t₂) ∈
-      [optionSemOf (denote fuel t₁) (specOf t₁)] := by
+  have hmem : optionSemOf (denote t₂) (specOf t₂) ∈
+      [optionSemOf (denote t₁) (specOf t₁)] := by
     rw [← hfilt]
     exact List.mem_filter.mpr
       ⟨List.mem_cons_of_mem _ (List.mem_cons_self _ _), h₂⟩
@@ -1858,18 +1861,18 @@ theorem dDisj_tRel :
 /-- **(D) does not discharge the readable side.** Disjoint held sets, and both options
     admit the attribute `S "A"` — the first reading it to `"A"`, the second to `"B"`. -/
 theorem not_uAtCan_literal_held :
-    ¬ UAtCan 2 [Term.literal .string (.of "A" ∅), tRel] := by
-  have hA : (denote 2 (Term.literal .string (.of "A" ∅))).e (Value.str "A") = some (Attr.s "A") := by
+    ¬ UAtCan [Term.literal .string (.of "A" ∅), tRel] := by
+  have hA : (denote (Term.literal .string (.of "A" ∅))).e (Value.str "A") = some (Attr.s "A") := by
     show (if "A" ∈ ["A"] then some (Attr.s "A") else none) = some (Attr.s "A")
     rw [if_pos (List.mem_cons_self _ _)]
   refine not_uAtCan_pair_A (v := .str "A") (a := Attr.s "A") (w := .str "A") hA ?_ ?_
   · show (((if "A" ∈ ["A"] then some (Value.str "A") else none).map gRel)).isSome = true
     rw [if_pos (List.mem_cons_self _ _)]
     rfl
-  · show ((denote 2 (Term.literal .string (.of "A" ∅))).e (Value.str "A")).isSome ≠
-      ((denote 1 (Term.literal .string (.of "A" ∅))).e (fRel (Value.str "A"))).isSome
+  · show ((denote (Term.literal .string (.of "A" ∅))).e (Value.str "A")).isSome ≠
+      ((denote (Term.literal .string (.of "A" ∅))).e (fRel (Value.str "A"))).isSome
     rw [hA]
-    show true ≠ ((denote 1 (Term.literal .string (.of "A" ∅))).e Value.null).isSome
+    show true ≠ ((denote (Term.literal .string (.of "A" ∅))).e Value.null).isSome
     exact fun h => nomatch h
 
 end Calculus
