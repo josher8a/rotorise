@@ -6,6 +6,7 @@
  * them would be wrong about what the entity *is*. It is the one thing total coverage cannot say.
  */
 import { describe, expect, it } from 'vitest'
+import type { AnyCodec } from './codec'
 import { CodecError, literal, object, opaque, refine, string } from './codec'
 import { tableEntry } from './Rotorise'
 import { checkMembersStable, checkRoundTrip } from './testing'
@@ -136,6 +137,74 @@ describe("'refuse', for a service that owns its table", () => {
     it('is untroubled by an item that carries exactly what it declares', () => {
         expect(Strict.unsafeDecode({ id: { S: 'w1' } })).toEqual({ id: 'w1' })
         checkRoundTrip(Strict, { count: 50, seed: 1 })
+    })
+})
+
+/**
+ * **The policy, in the definition.**
+ *
+ * `CodecDef` is this library's own abstract syntax, and `src/lean.ts` reads it to reconstruct the
+ * equivalent term in `formal/`. It used to record the rest *codec* alone — `undefined` for both
+ * `'drop'` and `'refuse'` — on the argument that neither contributes an attribute to generate. That
+ * argument covers the write half and only the write half: the two policies disagree about whether an
+ * undeclared name is an error, which is the read half, so two codecs that behave differently had
+ * byte-identical definitions and every consumer reading one was guessing. The emitter guessed
+ * `Rest.drop`, which is right for the encode vectors it writes and would have been silently wrong
+ * for a decode vector.
+ *
+ * `.item.rest` did carry the policy the whole time, so this was reachable from a *top-level* codec.
+ * It is not reachable from a definition walk, which is the only surface a consumer has once it has
+ * descended into a nested `object(...)`: `def.of` is typed `Record<string, AnyCodec>`, and `AnyCodec`
+ * has no `item`. The last test here is that walk.
+ */
+describe('the rest policy a definition records', () => {
+    it('tells the two string policies apart', () => {
+        expect(object({ id: string }, 'drop').def).toMatchObject({
+            kind: 'attributes',
+            rest: 'drop',
+        })
+        expect(object({ id: string }, 'refuse').def).toMatchObject({
+            kind: 'attributes',
+            rest: 'refuse',
+        })
+    })
+
+    it('records a rest codec as itself, not as a flag', () => {
+        const def = object({ vendorId: literal('ACME', 'GLOBEX') }, scalar).def
+        expect(def).toMatchObject({ kind: 'attributes' })
+        expect((def as { rest: unknown }).rest).toBe(scalar)
+    })
+
+    it('agrees with the policy the item codec reports', () => {
+        for (const policy of ['drop', 'refuse'] as const) {
+            const built = object({ id: string }, policy)
+            expect((built.def as { rest: unknown }).rest).toBe(built.item.rest)
+        }
+    })
+
+    /**
+     * The defect, as a consumer would have met it: two specs differing only in a *nested* policy.
+     *
+     * Before the fix both definitions walked to the same value, so nothing downstream could choose
+     * between `Rest.drop` and `Rest.refuse` — and reaching for `.item` is not available here, because
+     * a definition walk hands out `AnyCodec`.
+     */
+    it('survives a walk into a nested object, where `.item` is not offered', () => {
+        const restOfNested = (codec: AnyCodec): unknown => {
+            const def = codec.def
+            if (def?.kind !== 'attributes') throw new Error('not an object')
+            const inner = def.of.inner as AnyCodec
+            const innerDef = inner.def
+            if (innerDef?.kind !== 'attributes') throw new Error('not nested')
+            return innerDef.rest
+        }
+
+        expect(
+            restOfNested(object({ inner: object({ id: string }, 'drop') })),
+        ).toBe('drop')
+        expect(
+            restOfNested(object({ inner: object({ id: string }, 'refuse') })),
+        ).toBe('refuse')
     })
 })
 

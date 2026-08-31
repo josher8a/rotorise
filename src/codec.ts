@@ -288,15 +288,22 @@ export type CodecDef =
           readonly kind: 'attributes'
           readonly of: Attributes
           /**
-           * The codec for what the spec does not name, where there is one.
+           * The policy for what the spec does not name — the constructor's own argument, verbatim.
            *
            * Recorded because a definition that left it out did not determine the codec: two objects
            * differing only in their rest policy had the same definition, and a harness reading it
            * generated only the declared attributes — so an open entity's round-trip law was checked
-           * on its closed part and nowhere else. `drop` and `refuse` need no entry: neither puts
-           * anything in the entity, so there is nothing to generate.
+           * on its closed part and nowhere else.
+           *
+           * This used to record the rest *codec* alone, and `undefined` for either string policy, on
+           * the argument that neither puts anything in the entity so a generator has nothing to make
+           * of them. That argument is about the *write* half only. `drop` and `refuse` disagree about
+           * whether an undeclared name is an error, which is the read half — §4's `p` — so a
+           * consumer reading a definition to reconstruct the codec could not reconstruct that, and
+           * `src/lean.ts` was silently writing `Rest.drop` for both. The field now carries the
+           * policy itself, so the three cases are three values rather than two.
            */
-          readonly rest?: AnyCodec
+          readonly rest: RestDeclaration
       }
     | {
           readonly kind: 'tagged'
@@ -2797,7 +2804,7 @@ export const object = <
         def: {
             kind: 'attributes',
             of: attributes as unknown as Attributes,
-            rest: restCodec,
+            rest: rest as RestDeclaration,
         },
     }
 

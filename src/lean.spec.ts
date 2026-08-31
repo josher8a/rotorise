@@ -151,18 +151,22 @@ describe('terms', () => {
     })
 
     /**
-     * **The one place the emitter guesses, and the argument that it is allowed to.**
+     * **The place the emitter used to guess.**
      *
-     * `CodecDef` records the rest *codec*, and both `'drop'` and `'refuse'` record nothing — so the
-     * definition alone cannot tell them apart, and the emitter writes `Rest.drop` for either. That
-     * would be a real defect for a decode vector and is not one for an encode vector:
-     * `objectCodec`'s `e` is `objWrite sems rc?`, which never sees the `kn` filter the policy
-     * decides, and `rcOf` is `none` for both. So the two denote the *same* `e`, and this module
-     * only ever writes `e` vectors.
+     * `CodecDef` recorded the rest *codec*, and both `'drop'` and `'refuse'` recorded nothing — so
+     * the definition alone could not tell them apart and this wrote `Rest.drop` for either. It was
+     * not wrong for the vectors this module writes: `objectCodec`'s `e` is `objWrite sems rc?`,
+     * which never sees the `kn` filter the policy decides, and `rcOf` is `none` for both, so the two
+     * denote the *same* `e`. It was wrong about the codec, and a decode-direction vector — whose `p`
+     * is exactly where they differ — would have been silently false. `CodecDef['rest']` now carries
+     * the policy, and the emitter reads it rather than guessing.
      */
-    it('cannot tell `drop` from `refuse`, which is sound only because both write the same', () => {
+    it('tells `refuse` from `drop`, which a decode vector would need', () => {
         expect(leanTermOf(erase(object({ a: string }, 'refuse')))).toBe(
-            leanTermOf(erase(object({ a: string }, 'drop'))),
+            'Term.object {"a"} (fun k => Field.req (Term.string)) Rest.refuse',
+        )
+        expect(leanTermOf(erase(object({ a: string }, 'drop')))).toBe(
+            'Term.object {"a"} (fun k => Field.req (Term.string)) Rest.drop',
         )
     })
 
