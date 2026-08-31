@@ -1,5 +1,5 @@
 import Calculus.Discharge
-import Calculus.Soundnessω
+import Calculus.Soundness
 
 /-!
 # §5 — exactness: what `κ` and `adm` were computing between them
@@ -115,7 +115,7 @@ end
     Adm (.literal k ls) v = AdmLit k ls v := by unfold Adm; rfl
 
 /-- §5's converse direction: the row is `dom(e)`, not merely a bound on it. -/
-def ExactV (t : Term) : Prop := ∀ v, Adm t v = true ↔ ((denoteω t).e v).isSome
+def ExactV (t : Term) : Prop := ∀ v, Adm t v = true ↔ ((denote t).e v).isSome
 
 /-- The terms whose rows carry an exactness proof, subterms included. The `false` rows are
     the hatch, and each has a reason:
@@ -167,7 +167,7 @@ theorem traverse_isSome_iff {α β : Type} (f : α → Option β) : ∀ xs : Lis
 
 /-- `AdmAll` transported across the element's exactness. -/
 theorem AdmAll_iff {c : Term} (h : ExactV c) : ∀ xs : List Value,
-    AdmAll c xs = true ↔ ∀ x ∈ xs, ((denoteω c).e x).isSome = true := by
+    AdmAll c xs = true ↔ ∀ x ∈ xs, ((denote c).e x).isSome = true := by
   intro xs; induction xs with
   | nil => simp [AdmAll]
   | cons x xs ih => simp [AdmAll, ih, h x]
@@ -178,29 +178,29 @@ theorem AdmAll_iff {c : Term} (h : ExactV c) : ∀ xs : List Value,
     the pullback, and it is one line because `(c.through f g).e v = c.e (f v)` holds by
     `Iff.rfl`. The `array` and `record` cases are the repair of §5's container rows. -/
 theorem Adm_exact : ∀ (t : Term), Analysable t = true → ExactV t
-  | .string, _ => by intro v; cases v <;> simp [Adm, denoteω, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, stringCodec]
-  | .boolean, _ => by intro v; cases v <;> simp [Adm, denoteω, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, booleanCodec]
-  | .binary, _ => by intro v; cases v <;> simp [Adm, denoteω, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, binaryCodec]
-  | .null, _ => by intro v; cases v <;> simp [Adm, denoteω, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, nullCodec]
-  | .number, _ => by intro v; cases v <;> simp [Adm, denoteω, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, inD]
-  | .decimal, _ => by intro v; cases v <;> simp [Adm, denoteω, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, isStored]
+  | .string, _ => by intro v; cases v <;> simp [Adm, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, stringCodec]
+  | .boolean, _ => by intro v; cases v <;> simp [Adm, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, booleanCodec]
+  | .binary, _ => by intro v; cases v <;> simp [Adm, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, binaryCodec]
+  | .null, _ => by intro v; cases v <;> simp [Adm, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, nullCodec]
+  | .number, _ => by intro v; cases v <;> simp [Adm, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, inD]
+  | .decimal, _ => by intro v; cases v <;> simp [Adm, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, isStored]
   -- three rows into one, and `numberCodec` is read through `numberCodec_e_isSome` rather
   -- than unfolded: its `dite` is a string parser, and `simp` inside it runs out of heartbeats.
   | .literal k ls, _ => by
       intro v
       cases k <;> cases v <;>
-        simp [AdmLit, denoteω, denote, literalCodec, baseCodec, inL,
+        simp [AdmLit, denote, denote, literalCodec, baseCodec, inL,
               stringCodec, booleanCodec, binaryCodec, nullCodec, inD]
-  | .custom ce cp, _ => by intro v; simp [Adm, denoteω, denote]
+  | .custom ce cp, _ => by intro v; simp [Adm, denote, denote]
   | .array c, ha => by
       have hc := Adm_exact c (by simpa [Analysable] using ha)
       intro v
       cases v
       case arr xs =>
-        simp only [Adm, denoteω, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, arrayCodec, Option.isSome_map]
+        simp only [Adm, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, arrayCodec, Option.isSome_map]
         rw [AdmAll_iff hc, ← traverse_isSome_iff]
-        cases traverse (denoteω c).e xs <;> simp
-      all_goals simp [Adm, denoteω, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, arrayCodec]
+        cases traverse (denote c).e xs <;> simp
+      all_goals simp [Adm, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, arrayCodec]
   | .record c, ha => by
       have hc := Adm_exact c (by simpa [Analysable] using ha)
       intro v
@@ -208,25 +208,25 @@ theorem Adm_exact : ∀ (t : Term), Analysable t = true → ExactV t
       -- The entry-key transport is gone with the traversal: `funImage` is defined
       -- exactly where every entry's `e` is, which is the row verbatim.
       case map keys f =>
-        simp only [Adm, denoteω, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, recordCodec, Option.isSome_map', decide_eq_true_eq,
+        simp only [Adm, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, recordCodec, Option.isSome_map', decide_eq_true_eq,
           funImage_isSome_iff]
         exact forall_congr' fun k => hc (f k)
       -- the other nine rows are refused on both sides, and unfolding `recordCodec`'s
       -- `funImage` to see it is more work than reading it off the two `false`s
-      all_goals simp only [Adm, denoteω, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, recordCodec, Option.map_none',
+      all_goals simp only [Adm, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, recordCodec, Option.map_none',
         Option.isSome_none, Bool.false_eq_true]
   | .refine c q, ha => by
       have hc := Adm_exact c (by simpa [Analysable] using ha)
-      intro v; cases hq : q v <;> simp [Adm, denoteω, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, Codec.restrict, hq, hc v]
+      intro v; cases hq : q v <;> simp [Adm, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, Codec.restrict, hq, hc v]
   | .legacy c r, ha => by
       have hc := Adm_exact c (by simpa [Analysable] using ha)
-      intro v; simpa [Adm, denoteω, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, Codec.extendRead] using hc v
+      intro v; simpa [Adm, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, Codec.extendRead] using hc v
   | .lazy c, ha => by
       have hc := Adm_exact c (by simpa [Analysable] using ha)
-      intro v; simpa [Adm, denoteω] using hc v
+      intro v; simpa [Adm, denote] using hc v
   | .held c f g, ha => by
       have hc := Adm_exact c (by simpa [Analysable] using ha)
-      intro v; simpa [Adm, denoteω, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, Codec.through] using hc (f v)
+      intro v; simpa [Adm, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, Codec.through] using hc (f v)
   | .set _, ha | .tuple _ _, ha | .object _ _ _, ha | .dunion _ _, ha
   | .union _, ha | .nullable _, ha | .opaq _, ha => by simp [Analysable] at ha
 
@@ -257,7 +257,7 @@ theorem not_ExactV_nullable : ¬ ExactV (.nullable (.legacy .string rNull)) := b
   have hadm : Adm (.nullable (.legacy .string rNull)) .null = true := by simp [Adm]
   have := (h .null).mp hadm
   simp only [denote, Codec.withNull, Codec.extendRead] at this
-  simp [denoteω, Codec.withNull, Codec.ownsNull, Codec.extendRead, stringCodec, rNull] at this
+  simp [denote, Codec.withNull, Codec.ownsNull, Codec.extendRead, stringCodec, rNull] at this
 
 
 /-! ## The hatch, made expensive
@@ -507,8 +507,7 @@ decreasing_by term_depth_wf
     written `fun _ => false`, which would have been an outright unsoundness rather than the
     imprecision every defect in the log so far has been. A hatch row may be **loose**; it
     may not be **wrong**, and that is now checked. -/
-theorem Adm_sound (t : Term) {v a} (he : (denoteω t).e v = some a) : Adm t v = true := by
-  rw [denoteω_self t] at he
+theorem Adm_sound (t : Term) {v a} (he : (denote t).e v = some a) : Adm t v = true := by
   exact Adm_sound_rec t he
 
 /-! ### Every excuse earned
@@ -539,14 +538,14 @@ def collapse : Value → Value := fun _ => .str "x"
 theorem not_ExactV_set : ¬ ExactV (.set (.held .string collapse (fun v => v))) := by
   intro h
   have h2 := (h (.strSet (.of "a" {"b"}))).mp (by simp [Adm, NEFinset.of, collapse])
-  simp (config := { decide := true }) [denoteω, denote, setCodec, encSet, neSetImage,
+  simp (config := { decide := true }) [denote, denote, setCodec, encSet, neSetImage,
         Codec.through, stringCodec, collapse, setImage, sC, nC, bC, NEFinset.of] at h2
 
 /-- `tuple`'s over-claims on alignment: one component against two elements. -/
 theorem not_ExactV_tuple : ¬ ExactV (.tuple [.string] none) := by
   intro h
   have := (h (.arr [.str "a", .str "b"])).mp (by simp [Adm])
-  simp [denoteω, denote, denoteωL, denoteωO, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, tupleCodec, align, stringCodec] at this
+  simp [denote, denote, denoteList, denoteOpt, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, tupleCodec, align, stringCodec] at this
 
 /-- **(U) failing in its purest form.** `select` writes only where *exactly one* option
     admits, so two copies of one option admit everything and write nothing — while `⋁`
@@ -554,7 +553,7 @@ theorem not_ExactV_tuple : ¬ ExactV (.tuple [.string] none) := by
 theorem not_ExactV_union : ¬ ExactV (.union [.string, .string]) := by
   intro h
   have := (h (.str "a")).mp (by simp [Adm, AdmAny])
-  simp [denoteω, denote, denoteωOpts, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, specOf, optionSemOf, altCodec, select,
+  simp [denote, denote, optionSems, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, specOf, optionSemOf, altCodec, select,
     stringCodec] at this
 
 /-- `opaq`'s ⊤ over-claims, and after the set repair the **only** place it does so is the
@@ -570,7 +569,7 @@ theorem not_ExactV_union : ¬ ExactV (.union [.string, .string]) := by
 theorem not_ExactV_opaq (d : Double) : ¬ ExactV (.opaq false) := by
   intro h
   have h2 := (h (.num d)).mp (by simp [Adm])
-  have hd : (denoteω (Term.opaq false)).e (.num d)
+  have hd : (denote (Term.opaq false)).e (.num d)
       = (if false then numberCodec else Codec.empty).e (.num d) := by
     show (opaqCodecω false).e (.num d) = _
     simp only [opaqCodecω, Value.depth]
@@ -697,15 +696,15 @@ enough to exhaust the heartbeat budget. Taking the carrier as a plain type in th
 does the reduction once, at elaboration. -/
 
 theorem AdmALit_binary_exact (ls : NEFinset Bytes) (a : Attr) :
-    AdmA (.literal .binary ls) a = true ↔ ((denoteω (Term.literal .binary ls)).p a).isSome = true := by
+    AdmA (.literal .binary ls) a = true ↔ ((denote (Term.literal .binary ls)).p a).isSome = true := by
   cases a <;>
-    simp [AdmA_literal, AdmALit, denoteω, denote, literalCodec, baseCodec, Codec.restrict, inL,
+    simp [AdmA_literal, AdmALit, denote, denote, literalCodec, baseCodec, Codec.restrict, inL,
           binaryCodec]
 
 theorem AdmALit_null_exact (ls : NEFinset Unit) (a : Attr) :
-    AdmA (.literal .null ls) a = true ↔ ((denoteω (Term.literal .null ls)).p a).isSome = true := by
+    AdmA (.literal .null ls) a = true ↔ ((denote (Term.literal .null ls)).p a).isSome = true := by
   cases a <;>
-    simp [AdmA_literal, AdmALit, denoteω, denote, literalCodec, baseCodec, Codec.restrict, inL,
+    simp [AdmA_literal, AdmALit, denote, denote, literalCodec, baseCodec, Codec.restrict, inL,
           nullCodec]
 
 
@@ -842,12 +841,11 @@ decreasing_by term_depth_wf
     Exactness for these rows is **not** yet proved; the value side's `Adm_exact` has no
     mirror here. Until it does, `AdmA` carries one obligation where `Adm` carries two, and
     the analysis tables cannot be migrated onto the pair. -/
-theorem AdmA_sound (t : Term) {a v} (hp : (denoteω t).p a = some v) : AdmA t a = true := by
-  rw [denoteω_self t] at hp
+theorem AdmA_sound (t : Term) {a v} (hp : (denote t).p a = some v) : AdmA t a = true := by
   exact AdmA_sound_rec t hp
 
 /-- The converse direction on the attribute side: the row is `dom(p)`, not a bound on it. -/
-def ExactA (t : Term) : Prop := ∀ a, AdmA t a = true ↔ ((denoteω t).p a).isSome
+def ExactA (t : Term) : Prop := ∀ a, AdmA t a = true ↔ ((denote t).p a).isSome
 
 /-- The attribute-side hatch, wider than the value side's by three rows, and the three are
     the asymmetries §1 imposes rather than anything this file chose.
@@ -867,7 +865,7 @@ def AnalysableA : Term → Bool
 
 /-- `AdmAAll` transported across the entry's exactness. -/
 theorem AdmAAll_iff {c : Term} (h : ExactA c) : ∀ as : List Attr,
-    AdmAAll c as = true ↔ ∀ a ∈ as, ((denoteω c).p a).isSome = true := by
+    AdmAAll c as = true ↔ ∀ a ∈ as, ((denote c).p a).isSome = true := by
   intro as; induction as with
   | nil => simp [AdmAAll]
   | cons a as ih => simp [AdmAAll, ih, h a]
@@ -880,18 +878,18 @@ theorem AdmAAll_iff {c : Term} (h : ExactA c) : ∀ as : List Attr,
     which is axiomatized, and are exact anyway — a row may *call* an axiomatized function
     even though no finite set of numerals describes its domain. §5 wrote `⊤` there. -/
 theorem AdmA_exact : ∀ (t : Term), AnalysableA t = true → ExactA t
-  | .string, _ => by intro a; cases a <;> simp [AdmA, denoteω, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, stringCodec]
-  | .boolean, _ => by intro a; cases a <;> simp [AdmA, denoteω, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, booleanCodec]
-  | .binary, _ => by intro a; cases a <;> simp [AdmA, denoteω, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, binaryCodec]
-  | .null, _ => by intro a; cases a <;> simp [AdmA, denoteω, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, nullCodec]
+  | .string, _ => by intro a; cases a <;> simp [AdmA, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, stringCodec]
+  | .boolean, _ => by intro a; cases a <;> simp [AdmA, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, booleanCodec]
+  | .binary, _ => by intro a; cases a <;> simp [AdmA, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, binaryCodec]
+  | .null, _ => by intro a; cases a <;> simp [AdmA, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, nullCodec]
   | .number, _ => by
       intro a
       cases a
       case n x =>
-        simp only [AdmA, denoteω, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, numberCodec]
+        simp only [AdmA, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, numberCodec]
         cases hx : Double.ofDec x.1 <;> simp [hx]
-      all_goals simp [AdmA, denoteω, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, numberCodec]
-  | .decimal, _ => by intro a; cases a <;> simp [AdmA, denoteω, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, decimalCodec]
+      all_goals simp [AdmA, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, numberCodec]
+  | .decimal, _ => by intro a; cases a <;> simp [AdmA, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, decimalCodec]
   -- Three rows into one. The `number` base is the only one needing `Double.ofDec`, and it is
   -- also the only one where unfolding `numberCodec` is safe here: the `simp only` fixes the
   -- shape before `Numeral.WF`'s parser can be reached.
@@ -904,7 +902,7 @@ theorem AdmA_exact : ∀ (t : Term), AnalysableA t = true → ExactA t
           -- through the named shape lemmas, not by unfolding `numberCodec`: its `p` is a
           -- `bind` over `Double.ofDec` guarded by `Numeral.WF`, and `simp` inside that gate
           -- reaches the parser and runs out of heartbeats
-          rw [show (denoteω (Term.literal .number ls)).p (.n x)
+          rw [show (denote (Term.literal .number ls)).p (.n x)
                  = (literalCodec .number ls).p (.n x) from rfl,
              literalNCodec_p_n, numberCodec_p_n]
           cases hx : Double.ofDec x.1 with
@@ -918,47 +916,47 @@ theorem AdmA_exact : ∀ (t : Term), AnalysableA t = true → ExactA t
       -- the four bases whose stored attribute *is* the value, one tight simp set each: a
       -- shared set has to mention every base's codec, and one of those is `number`
       case string =>
-        cases a <;> simp [AdmALit, denoteω, denote, literalCodec, baseCodec, Codec.restrict,
+        cases a <;> simp [AdmALit, denote, denote, literalCodec, baseCodec, Codec.restrict,
                           inL, stringCodec]
       case boolean =>
-        cases a <;> simp [AdmALit, denoteω, denote, literalCodec, baseCodec, Codec.restrict,
+        cases a <;> simp [AdmALit, denote, denote, literalCodec, baseCodec, Codec.restrict,
                           inL, booleanCodec]
       case binary => exact AdmALit_binary_exact ls a
       case null => exact AdmALit_null_exact ls a
-  | .custom ce cp, _ => by intro a; simp [AdmA, denoteω, denote]
+  | .custom ce cp, _ => by intro a; simp [AdmA, denote, denote]
   | .array c, ha => by
       have hc := AdmA_exact c (by simpa [AnalysableA] using ha)
       intro a
       cases a
       case l as =>
-        simp only [AdmA, denoteω, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, arrayCodec]
+        simp only [AdmA, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, arrayCodec]
         rw [AdmAAll_iff hc, ← traverse_isSome_iff]
-        cases traverse (denoteω c).p as <;> simp
-      all_goals simp [AdmA, denoteω, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, arrayCodec]
+        cases traverse (denote c).p as <;> simp
+      all_goals simp [AdmA, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, arrayCodec]
   | .record c, ha => by
       have hc := AdmA_exact c (by simpa [AnalysableA] using ha)
       intro a
       cases a
       case m keys g =>
-        simp only [AdmA, denoteω, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, recordCodec, Option.isSome_map', decide_eq_true_eq,
+        simp only [AdmA, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, recordCodec, Option.isSome_map', decide_eq_true_eq,
           funImage_isSome_iff]
         exact forall_congr' fun k => hc (g k)
-      all_goals simp only [AdmA, denoteω, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, recordCodec, Option.map_none',
+      all_goals simp only [AdmA, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, recordCodec, Option.map_none',
         Option.isSome_none, Bool.false_eq_true]
   | .held c f g, ha => by
       have hc := AdmA_exact c (by simpa [AnalysableA] using ha)
       intro a
-      simp only [AdmA, denoteω, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, Codec.through]
+      simp only [AdmA, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, Codec.through]
       rw [hc a]
-      cases (denoteω c).p a <;> simp
+      cases (denote c).p a <;> simp
   | .lazy c, ha => by
       have hc := AdmA_exact c (by simpa [AnalysableA] using ha)
-      intro a; simpa [AdmA, denoteω] using hc a
+      intro a; simpa [AdmA, denote] using hc a
   | .legacy c r, ha => by
       have hc := AdmA_exact c (by simpa [AnalysableA] using ha)
       intro a
-      simp only [AdmA, denoteω, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, Codec.extendRead]
-      cases hx : (denoteω c).p a <;> simp [hc a, hx]
+      simp only [AdmA, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, Codec.extendRead]
+      cases hx : (denote c).p a <;> simp [hc a, hx]
   | .refine _ _, ha | .nullable _, ha | .union _, ha
   | .set _, ha | .tuple _ _, ha | .object _ _ _, ha | .dunion _ _, ha
   | .opaq _, ha => by simp [AnalysableA] at ha
@@ -987,13 +985,13 @@ theorem not_ExactA_set : ¬ ExactA (.set .string) := by
 theorem not_ExactA_tuple : ¬ ExactA (.tuple [.string] none) := by
   intro h
   have := (h (.l [.s "a", .s "b"])).mp (by simp [AdmA])
-  simp [denoteω, denote, denoteωL, denoteωO, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, tupleCodec, align, stringCodec] at this
+  simp [denote, denote, denoteList, denoteOpt, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, tupleCodec, align, stringCodec] at this
 
 /-- (U) failing, read side: two options admit and `select` reads nothing. -/
 theorem not_ExactA_union : ¬ ExactA (.union [.string, .string]) := by
   intro h
   have := (h (.s "a")).mp (by simp [AdmA, AdmAAny])
-  simp [denoteω, denote, denoteωOpts, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, specOf, optionSemOf, altCodec, select,
+  simp [denote, denote, optionSems, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, specOf, optionSemOf, altCodec, select,
     stringCodec] at this
 
 /-- `opaq`'s ⊤ over-claims on the read side too, and here the surviving witness needs no
@@ -1003,7 +1001,7 @@ theorem not_ExactA_union : ¬ ExactA (.union [.string, .string]) := by
 theorem not_ExactA_opaq : ¬ ExactA (.opaq false) := by
   intro h
   have h2 := (h (.ns (.of (.of "1") ∅))).mp (by simp [AdmA])
-  have hd : (denoteω (Term.opaq false)).p (.ns (.of (.of "1") ∅))
+  have hd : (denote (Term.opaq false)).p (.ns (.of (.of "1") ∅))
       = (setCodec (opaqCodec 1 false)).p (.ns (.of (.of "1") ∅)) := by
     show (opaqCodecω false).p _ = _
     simp only [opaqCodecω, Attr.depth]
@@ -1025,13 +1023,13 @@ def cpNone : Attr → Option Value := fun _ => none
 theorem not_ExactA_nullable : ¬ ExactA (.nullable (.custom ceNull cpNone)) := by
   intro h
   have h2 := (h .null).mp (by simp [AdmA])
-  simp [denoteω, denote, Codec.withNull, Codec.ownsNull, ceNull, cpNone] at h2
+  simp [denote, denote, Codec.withNull, Codec.ownsNull, ceNull, cpNone] at h2
 
 /-- `refine` cannot narrow a read: `q` refuses everything, and `AdmA` cannot see it. -/
 theorem not_ExactA_refine : ¬ ExactA (.refine .string (fun _ => false)) := by
   intro h
   have h2 := (h (.s "a")).mp (by simp [AdmA])
-  simp [denoteω, denote, Codec.restrict, stringCodec] at h2
+  simp [denote, denote, Codec.restrict, stringCodec] at h2
 
 
 /-- Which shapes each excuse may be invoked for **on the attribute side**. Two rows have no
@@ -1378,20 +1376,20 @@ theorem ident_not_determined_by_adm :
     `Adm_sound` connects it straight to the denotation, and that is all the discharge needs.
     Where `x` writes, `y` refuses. -/
 theorem admitV_of_sepJV {x y : Term} (h : SepJV x y) (v : Value) (a : Attr)
-    (hx : (denoteω x).e v = some a) : ((denoteω y).e v).isSome = false := by
+    (hx : (denote x).e v = some a) : ((denote y).e v).isSome = false := by
   have hAx : Adm x v = true := Adm_sound x hx
   have hAy : Adm y v = false := h v hAx
-  cases hy : (denoteω y).e v with
+  cases hy : (denote y).e v with
   | none => rfl
   | some b => exact absurd (Adm_sound y hy) (by simp [hAy])
 
 /-- …and on the attribute side, from `SepJA`'s second disjunct. -/
 theorem admitA_of_sepJA {x y : Term} (h : ∀ a, AdmA x a = true → AdmA y a = false)
-    (a : Attr) (v : Value) (hx : (denoteω x).p a = some v) :
-    ((denoteω y).p a).isSome = false := by
+    (a : Attr) (v : Value) (hx : (denote x).p a = some v) :
+    ((denote y).p a).isSome = false := by
   have hAx : AdmA x a = true := AdmA_sound x hx
   have hAy : AdmA y a = false := h a hAx
-  cases hy : (denoteω y).p a with
+  cases hy : (denote y).p a with
   | none => rfl
   | some w => exact absurd (AdmA_sound y hy) (by simp [hAy])
 
@@ -1426,22 +1424,22 @@ present it errs on both. Nothing live depends on it: no `uAtCan_*` consumes it, 
     written and one refused: the kind does not settle admission, so an admission is
     evidence. This is the content §5's `ident` gestures at, stated on the denotation. -/
 def Decides (t : Term) : Prop :=
-  ∃ v w, ((denoteω t).e v).isSome = true ∧ v.kind = w.kind ∧ ((denoteω t).e w).isSome = false
+  ∃ v w, ((denote t).e v).isSome = true ∧ v.kind = w.kind ∧ ((denote t).e w).isSome = false
 
 /-- `literalS` decides, as §5 says. -/
 theorem decides_literalS : Decides (.literal .string (.of "A" ∅)) :=
   ⟨.str "A", .str "B",
-   by simp [denoteω, denote, literalCodec, baseCodec, Codec.restrict, inL, stringCodec,
+   by simp [denote, denote, literalCodec, baseCodec, Codec.restrict, inL, stringCodec,
          NEFinset.of],
    rfl,
-   by simp [denoteω, denote, literalCodec, baseCodec, Codec.restrict, inL, stringCodec,
+   by simp [denote, denote, literalCodec, baseCodec, Codec.restrict, inL, stringCodec,
          NEFinset.of]⟩
 
 /-- `string` does not, as §5 also says. -/
 theorem not_decides_string : ¬ Decides .string := by
   rintro ⟨v, w, hv, hk, hw⟩
-  simp only [denoteω, denote] at hv hw
-  cases v <;> cases w <;> simp_all [denoteω, stringCodec, Value.kind]
+  simp only [denote, denote] at hv hw
+  cases v <;> cases w <;> simp_all [denote, stringCodec, Value.kind]
 
 /-- **`ident` is too generous.** A refinement by the trivially-true predicate is `ident`,
     and decides nothing: `q` is checked on both halves and always passes, so admission is
@@ -1450,9 +1448,9 @@ theorem ident_refine_top : ident (.refine .string qTop) = true := rfl
 
 theorem not_decides_refine_top : ¬ Decides (.refine .string qTop) := by
   rintro ⟨v, w, hv, hk, hw⟩
-  simp only [denoteω, denote] at hv hw
+  simp only [denote, denote] at hv hw
   cases v <;> cases w <;>
-    simp_all [denoteω, Codec.restrict, stringCodec, qTop, Value.kind]
+    simp_all [denote, Codec.restrict, stringCodec, qTop, Value.kind]
 
 /-- **And too stingy.** An object with a required field refuses the empty map and writes a
     populated one — two `map`s differing in admission — while `ident` calls it `false`. -/
@@ -1460,12 +1458,12 @@ theorem decides_object :
     Decides (.object {"k"} (fun _ => .req .string) .refuse) := by
   refine ⟨.map {"k"} (fun _ => .str "a"),
           .map ∅ (fun k => absurd k.2 (Finset.not_mem_empty k.1)), ?_, rfl, ?_⟩
-  · simp [denoteω, denote, denoteωF, denoteωR, fieldSemOf, restSemOf, fieldSem, restSem,
+  · simp [denote, denote, fieldTable, restSem, fieldSemOf, restSemOf, fieldSem, restSem,
           objectCodec, objectCodecCore, stringCodec,
           valPresentB, valPresentAt, fieldSem, rcOf, FieldSem.codec, carriedCodec,
           mapV, mA, Ctor.out, Ctor.into, objWrite, entryCodec, MapOf.at, funImage,
           Subtype.forall]
-  · simp [denoteω, denote, denoteωF, denoteωR, fieldSemOf, restSemOf, fieldSem, restSem,
+  · simp [denote, denote, fieldTable, restSem, fieldSemOf, restSemOf, fieldSem, restSem,
           objectCodec, objectCodecCore, stringCodec,
           valPresentB, valPresentAt, fieldSem, rcOf, FieldSem.codec, carriedCodec,
           mapV, mA, Ctor.out, Ctor.into, objWrite, MapOf.at, Subtype.forall]
@@ -1500,8 +1498,8 @@ def fSplit : Value → Value := fun v => match v with | .str "A" => .str "A" | _
     of one kind, differing in admission — so it decides. `ident` says `false`. -/
 theorem decides_held : Decides (.held .string fSplit (fun v => v)) := by
   refine ⟨.str "A", .str "B", ?_, rfl, ?_⟩
-  · simp [denoteω, denote, Codec.through, stringCodec, fSplit]
-  · simp [denoteω, denote, Codec.through, stringCodec, fSplit]
+  · simp [denote, denote, Codec.through, stringCodec, fSplit]
+  · simp [denote, denote, Codec.through, stringCodec, fSplit]
 
 theorem ident_held_false : ident (.held .string fSplit (fun v => v)) = false := rfl
 
@@ -1548,14 +1546,14 @@ theorem adapt_p_le {c : Codec} {f g : Value → Option Value} {a : Attr} :
 
 /-- `legacy` is the read-side alternative: the subterm's channel, falling back to `r`'s. -/
 theorem legacy_p_alt (t : Term) (r : Attr → Option Value) (a : Attr) :
-    (denoteω (.legacy t r)).p a
-      = (match (denoteω t).p a with | some v => some v | none => r a) := rfl
+    (denote (.legacy t r)).p a
+      = (match (denote t).p a with | some v => some v | none => r a) := rfl
 
 /-- …so its read domain is the union of the two channels, and both are named. -/
 theorem legacy_p_isSome (t : Term) (r : Attr → Option Value) (a : Attr) :
-    ((denoteω (.legacy t r)).p a).isSome = (((denoteω t).p a).isSome || (r a).isSome) := by
+    ((denote (.legacy t r)).p a).isSome = (((denote t).p a).isSome || (r a).isSome) := by
   simp only [legacy_p_alt]
-  cases (denoteω t).p a <;> simp
+  cases (denote t).p a <;> simp
 
 /-- Which is exactly `AdmA`'s row, so `legacy` widens the read side and is exact anyway. -/
 theorem AdmA_legacy_union (t : Term) (r : Attr → Option Value) (a : Attr) :

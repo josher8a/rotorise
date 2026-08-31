@@ -1,5 +1,5 @@
 import Calculus.Equations
-import Calculus.Soundnessω
+import Calculus.Soundness
 
 /-!
 # §6's "Do not hold" table, refuted
@@ -8,7 +8,7 @@ Nine rows of §6 assert that a rewrite *fails*. Until now none was machine-check
 `docs/codec-formalization.md` §7 called "the most suspicious remaining surface" — given
 that mechanizing §5's *positive* discharger claims refuted three of them.
 
-They are stated here against `denoteω`, which is what makes them readable: a claim about
+They are stated here against `denote`, which is what makes them readable: a claim about
 `≡` is a claim about `T`, `μ`, `e` and `p` together, and until the denotation lost its
 fuel every such statement carried a budget that had nothing to do with the equation.
 
@@ -28,16 +28,16 @@ too, and this is the row where that matters." The model says exactly that — th
 denotations differ in `μ` alone, and `Codec.Equiv` sees it. -/
 
 /-- The pairs really are the same: `lazy` changes only the index. -/
-theorem lazy_e_eq (t : Term) : (denoteω (.lazy t)).e = (denoteω t).e := rfl
+theorem lazy_e_eq (t : Term) : (denote (.lazy t)).e = (denote t).e := rfl
 
-theorem lazy_p_eq (t : Term) : (denoteω (.lazy t)).p = (denoteω t).p := rfl
+theorem lazy_p_eq (t : Term) : (denote (.lazy t)).p = (denote t).p := rfl
 
 /-- And the index really does differ: `lazy` concludes `⊤`, `string` names `S`. -/
-theorem lazy_μ_ne : (denoteω (.lazy .string)).μ ≠ (denoteω .string).μ := by
-  simp [denoteω, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, stringCodec]
+theorem lazy_μ_ne : (denote (.lazy .string)).μ ≠ (denote .string).μ := by
+  simp [denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, stringCodec]
 
 /-- §6: `lazy(γ) ≢ γ(∗)` — refuted on the member index, with the pair identical. -/
-theorem not_equiv_lazy : ¬ Codec.Equiv (denoteω (.lazy .string)) (denoteω .string) :=
+theorem not_equiv_lazy : ¬ Codec.Equiv (denote (.lazy .string)) (denote .string) :=
   fun h => lazy_μ_ne h.member
 
 /-! ## `union(c₁ … cₙ) ≢ union(c₁ … cₙ, c)`
@@ -47,10 +47,10 @@ consulted — which is the stronger statement, since §6 justifies the row by we
 and the model shows it fails for a more basic reason. -/
 
 theorem not_equiv_union_extend :
-    ¬ Codec.Equiv (denoteω (.union [.string])) (denoteω (.union [.string, .boolean])) := by
+    ¬ Codec.Equiv (denote (.union [.string])) (denote (.union [.string, .boolean])) := by
   intro h
   have hb := (h.heldSet (.bool true)).mpr
-  simp [denoteω, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, denoteωOpts, denoteωMems, optionSemOf, specOf, OptionSem.byAttempt,
+  simp [denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, optionSems, denoteμs, optionSemOf, specOf, OptionSem.byAttempt,
         altCodec, select, stringCodec, booleanCodec] at hb
 
 /-! ## `union(array(c₁), array(c₂)) ≢ array(union(c₁, c₂))`
@@ -61,11 +61,11 @@ elementwise." The witness is the shortest heterogeneous sequence. -/
 /-- `["A", "B"]` is an array of either literal, but homogeneous in neither. -/
 theorem not_equiv_union_array :
     ¬ Codec.Equiv
-        (denoteω (.union [.array (.literal .string (.of "A" ∅)), .array (.literal .string (.of "B" ∅))]))
-        (denoteω (.array (.union [.literal .string (.of "A" ∅), .literal .string (.of "B" ∅)]))) := by
+        (denote (.union [.array (.literal .string (.of "A" ∅)), .array (.literal .string (.of "B" ∅))]))
+        (denote (.array (.union [.literal .string (.of "A" ∅), .literal .string (.of "B" ∅)]))) := by
   intro h
   have hv := (h.heldSet (.arr [.str "A", .str "B"])).mpr
-  simp [denoteω, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, denoteωOpts, denoteωMems, optionSemOf, specOf, OptionSem.byAttempt,
+  simp [denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, optionSems, denoteμs, optionSemOf, specOf, OptionSem.byAttempt,
         altCodec, select, arrayCodec, literalCodec, baseCodec, Codec.restrict, inL,
         stringCodec, NEFinset.of, HLit] at hv
 
@@ -78,13 +78,13 @@ isolates the missing feature. -/
 /-- Against the plain tuple: a second element the tail accepts and the tuple has no
     position for. -/
 theorem not_equiv_tupleTail_tuple :
-    ¬ Codec.Equiv (denoteω (.tuple [.string] (some .string)))
-                  (denoteω (.tuple [.string] none)) := by
+    ¬ Codec.Equiv (denote (.tuple [.string] (some .string)))
+                  (denote (.tuple [.string] none)) := by
   intro h
   have hv := (h.heldSet (.arr [.str "a", .str "b"])).mp
   -- `simp`'s classical push-neg turned this into an existential and pulled
   -- `Classical.choice` in with it; the implication is the constructive shape.
-  simp only [denoteω, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, denoteωL, denoteωO, tupleCodec, align, stringCodec,
+  simp only [denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, denoteList, denoteOpt, tupleCodec, align, stringCodec,
     Option.map_some', List.all_cons, List.all_nil, Bool.and_true, Bool.true_and,
     Option.some.injEq, exists_eq_left', List.mem_cons, List.not_mem_nil, or_false,
     Prod.mk.injEq] at hv
@@ -93,11 +93,11 @@ theorem not_equiv_tupleTail_tuple :
 
 /-- Against the array: the empty sequence, which an array holds and a fixed head cannot. -/
 theorem not_equiv_tupleTail_array :
-    ¬ Codec.Equiv (denoteω (.tuple [.string] (some .string)))
-                  (denoteω (.array (.union [.string]))) := by
+    ¬ Codec.Equiv (denote (.tuple [.string] (some .string)))
+                  (denote (.array (.union [.string]))) := by
   intro h
   have hv := (h.heldSet (.arr [])).mpr
-  simp [denoteω, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, denoteωL, denoteωO, denoteωOpts, denoteωMems, optionSemOf, specOf,
+  simp [denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, denoteList, denoteOpt, optionSems, denoteμs, optionSemOf, specOf,
         OptionSem.byAttempt, altCodec, select, tupleCodec, align, arrayCodec, stringCodec] at hv
 
 /-! ## `refine(held(c, f, g), q) ≢ held(refine(c, q), f, g)`
@@ -117,11 +117,11 @@ def predA : Value → Bool
 /-- At `"B"`: the outer refinement rejects it, the inner one never sees it — `f` has
     already replaced it with `"A"`. -/
 theorem not_equiv_refine_held :
-    ¬ Codec.Equiv (denoteω (.refine (.held .string isoF id) predA))
-                  (denoteω (.held (.refine .string predA) isoF id)) := by
+    ¬ Codec.Equiv (denote (.refine (.held .string isoF id) predA))
+                  (denote (.held (.refine .string predA) isoF id)) := by
   intro h
   have hv := (h.heldSet (.str "B")).mpr
-  simp [denoteω, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, Codec.through, Codec.restrict, stringCodec, isoF, predA] at hv
+  simp [denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, Codec.through, Codec.restrict, stringCodec, isoF, predA] at hv
 
 /-! ## `legacy(c, r)` breaks (MP), and `e ∘ p ≢ id`
 
@@ -139,14 +139,14 @@ def migrateNtoS : Attr → Option Value
   | .n _ => some (.str "x")
   | _ => none
 
-theorem legacy_p_n : (denoteω (.legacy .string migrateNtoS)).p (.n (.of "1")) = some (.str "x") :=
+theorem legacy_p_n : (denote (.legacy .string migrateNtoS)).p (.n (.of "1")) = some (.str "x") :=
   rfl
 
-theorem legacy_e_x : (denoteω (.legacy .string migrateNtoS)).e (.str "x") = some (.s "x") :=
+theorem legacy_e_x : (denote (.legacy .string migrateNtoS)).e (.str "x") = some (.s "x") :=
   rfl
 
 /-- §6: `legacy(c, r)` breaks (MP). The migration reads `N` and writes `S`. -/
-theorem legacy_breaks_MP : ¬ Lawful (denoteω (.legacy .string migrateNtoS)) := by
+theorem legacy_breaks_MP : ¬ Lawful (denote (.legacy .string migrateNtoS)) := by
   intro h
   have hag := h.agree legacy_p_n legacy_e_x
   cases hag
@@ -154,7 +154,7 @@ theorem legacy_breaks_MP : ¬ Lawful (denoteω (.legacy .string migrateNtoS)) :=
 /-- §6: `e ∘ p ≢ id` — equality holds only on `Can(c)`, and this attribute is off it. -/
 theorem e_comp_p_ne_id :
     ∃ (c : Codec) (a : Attr) (v : Value), c.p a = some v ∧ c.e v ≠ some a :=
-  ⟨denoteω (.legacy .string migrateNtoS), .n (.of "1"), .str "x", legacy_p_n, by
+  ⟨denote (.legacy .string migrateNtoS), .n (.of "1"), .str "x", legacy_p_n, by
     rw [legacy_e_x]; intro hc; exact nomatch hc⟩
 
 /-! ## `optional(optional(c))` — not derivable, by construction
@@ -224,22 +224,22 @@ the model shows the condition is needed for *interchangeability*, not for `≡`.
 
 /-- Left: the outer union resolves, because the inner one has already failed. -/
 theorem assoc_left_e :
-    (denoteω (.union [.string, .union [.literal .string (.of "A" ∅), .literal .string (.of "A" ∅)]])).e (.str "A")
+    (denote (.union [.string, .union [.literal .string (.of "A" ∅), .literal .string (.of "A" ∅)]])).e (.str "A")
       = some (.s "A") := by
-  simp [denoteω, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, denoteωOpts, denoteωMems, optionSemOf, specOf, OptionSem.byAttempt,
+  simp [denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, optionSems, denoteμs, optionSemOf, specOf, OptionSem.byAttempt,
         altCodec, select, stringCodec, literalCodec, baseCodec, Codec.restrict, inL]
 
 /-- Right: three options admit, so the union refuses globally. -/
 theorem assoc_right_e :
-    (denoteω (.union [.string, .literal .string (.of "A" ∅), .literal .string (.of "A" ∅)])).e (.str "A") = none := by
-  simp [denoteω, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, denoteωOpts, denoteωMems, optionSemOf, specOf, OptionSem.byAttempt,
+    (denote (.union [.string, .literal .string (.of "A" ∅), .literal .string (.of "A" ∅)])).e (.str "A") = none := by
+  simp [denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, optionSems, denoteμs, optionSemOf, specOf, OptionSem.byAttempt,
         altCodec, select, stringCodec, literalCodec, baseCodec, Codec.restrict, inL]
 
 /-- The two associativity forms are `≡` but not interchangeable: one writes where the
     other refuses. §6's (D)/(K)/(U) hedge is about this, not about `≡`. -/
 theorem not_eq_altCodec_assoc :
     ∃ (l r : Term) (v : Value) (a : Attr),
-      (denoteω l).e v = some a ∧ (denoteω r).e v = none :=
+      (denote l).e v = some a ∧ (denote r).e v = none :=
   ⟨.union [.string, .union [.literal .string (.of "A" ∅), .literal .string (.of "A" ∅)]],
    .union [.string, .literal .string (.of "A" ∅), .literal .string (.of "A" ∅)],
    .str "A", .s "A", assoc_left_e, assoc_right_e⟩
@@ -264,7 +264,7 @@ imposes on a pair. It uses only the licence §2 grants explicitly — a term's `
 whatever it likes off `T` — and the fact that `Carrier` bounds `dom(e)` by `T` without
 requiring the converse.
 
-What is *not* settled here: whether `≡` chains when both ends are `denoteω` of derivable
+What is *not* settled here: whether `≡` chains when both ends are `denote` of derivable
 terms. The middle codec below holds `null` and writes nothing, and no derivable term does
 that, so this refutation does not decide the restricted question. -/
 

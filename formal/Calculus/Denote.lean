@@ -213,6 +213,67 @@ theorem denoteμs_eq : ∀ opts : List Term, denoteμs opts = μSynList opts
 
 end
 
+/-! ### §6 at term level — the translation table, written down
+
+Moved here from `Equations.lean` when `Denoteω` was deleted. It lived downstream because
+`denoteω` did; these are equations about `denote` and belong beside it.
+
+§6's **Hold** rows are stated about *combinators*; its **Do not hold** rows
+(`Refutations.lean`) are stated about *terms*. Reading a Hold row against the specification
+needed an eight-entry translation, five entries of which share no substring with the term
+they translate, written down nowhere.
+
+Here it is, as `rfl` theorems — `denote` dispatches straight onto the combinator, so these
+prove nothing but the correspondence. Term-level twins of each row follow at the end. -/
+
+/-- The object field table, denoted. Was `denoteωF`. -/
+def fieldTable (fields : Finset Name) (f : {k // k ∈ fields} → Field) : MapOf FieldSem :=
+  ⟨fields, fun k => fieldSem (f k)⟩
+
+section Bridge
+
+theorem denote_set (t : Term) : denote (.set t) = setCodec (denote t) := rfl
+theorem denote_array (t : Term) : denote (.array t) = arrayCodec (denote t) := rfl
+theorem denote_record (t : Term) : denote (.record t) = recordCodec (denote t) := rfl
+
+theorem denote_tuple (ts : List Term) (tail : Option Term) :
+    denote (.tuple ts tail) = tupleCodec (denoteList ts) (denoteOpt tail) := rfl
+
+/-- `held` denotes `through` — the entry that reads least like its term. -/
+theorem denote_held (t : Term) (f g : Value → Value) :
+    denote (.held t f g) = (denote t).through f g := rfl
+
+/-- `refine` denotes `restrict`. -/
+theorem denote_refine (t : Term) (q : Value → Bool) :
+    denote (.refine t q) = (denote t).restrict q := rfl
+
+/-- `legacy` denotes `extendRead`. -/
+theorem denote_legacy (t : Term) (r : Attr → Option Value) :
+    denote (.legacy t r) = (denote t).extendRead r := rfl
+
+/-- `nullable` denotes `withNull` — `orNull` behind §3's guard. -/
+theorem denote_nullable (t : Term) : denote (.nullable t) = (denote t).withNull := rfl
+
+/-- `union` denotes `altCodec`, over the options' semantics and their unanimous member. -/
+theorem denote_union_sems (opts : List Term) :
+    denote (.union opts) =
+      altCodec (optionSems opts) (unanimous (denoteμs opts)) := rfl
+
+/-- `discriminatedUnion` denotes `dunionCodec`. -/
+theorem denote_dunion_tags (d : Name) (opts : List Term) :
+    denote (.dunion d opts) = dunionCodec d (denoteTagged d opts) := rfl
+
+/-- `opaque` denotes `opaqCodecω` — the fuel-free one, which is why §5's discharger table has
+    a row about `opaqCodec` at a fuel and a reason rather than a term-level twin. -/
+theorem denote_opaq (lossy : Bool) : denote (.opaq lossy) = opaqCodecω lossy := rfl
+
+/-- `object` denotes `objectCodec`. -/
+theorem denote_object_table (fields : Finset Name) (f : {k // k ∈ fields} → Field)
+    (rest : Rest) :
+    denote (.object fields f rest) = objectCodec (fieldTable fields f) (restSem rest) := rfl
+
+end Bridge
+
 /-! ### The companions are the old mapped forms
 
 `denote` had to name its list companions to become structural, and every proof downstream was
@@ -242,33 +303,11 @@ has to know the companions exist. -/
   | _, [] => rfl
   | d, t :: ts => by simp only [denoteTagged, List.map]; rw [denoteTagged_eq d ts]
 
-/-! Per-constructor equations in the shape the fueled `denote` had, so downstream proofs written
-against `opts.map (denote fuel)` need no change beyond dropping the argument. -/
-
-@[simp] theorem denote_tuple (ts : List Term) (tail : Option Term) :
-    denote (.tuple ts tail) = tupleCodec (ts.map denote) (tail.map denote) := by
-  simp only [denote, denoteList_eq, denoteOpt_eq]
-
-@[simp] theorem denote_union (opts : List Term) :
-    denote (.union opts)
-      = altCodec (opts.map fun t => optionSemOf (denote t) (specOf t))
-          (unanimous (opts.map fun t => (denote t).μ)) := by
-  simp only [denote, optionSems_eq, denoteμs_eq_map]
-
-@[simp] theorem denote_dunion (d : Name) (opts : List Term) :
-    denote (.dunion d opts) = dunionCodec d (opts.map fun t => (tagsOf d t, denote t)) := by
-  simp only [denote, denoteTagged_eq]
-
 theorem fieldSem_eq : fieldSem = fieldSemOf denote := by
   funext fd; cases fd <;> rfl
 
 theorem restSem_eq : restSem = restSemOf denote := by
   funext r; cases r <;> rfl
-
-@[simp] theorem denote_object (fields : Finset Name) (f : {k // k ∈ fields} → Field) (rest : Rest) :
-    denote (.object fields f rest)
-      = objectCodec ⟨fields, fun k => fieldSemOf denote (f k)⟩ (restSemOf denote rest) := by
-  simp only [denote, fieldSem_eq, restSem_eq]
 
 end
 

@@ -1,4 +1,4 @@
-import Calculus.Soundnessω
+import Calculus.Soundness
 
 /-!
 # `Uν` and the empty set — a mechanization bug, closed by the type
@@ -151,7 +151,7 @@ theorem opaq_T_identity (lossy : Bool) (v : Value) :
 
 /-! ## Which identity? §6's row is two of them
 
-* **(A)** `(denoteω t).T = T` for a derivable `⊢ t : T ⇝ μ` — §3's "`Uν` *is* `opaque`'s held
+* **(A)** `(denote t).T = T` for a derivable `⊢ t : T ⇝ μ` — §3's "`Uν` *is* `opaque`'s held
   set", which `opaq_T_identity` proves and `typed_TSub` half-proves in general.
 * **(B)** `T = dom(e)` — what makes `: T` an honest index rather than an upper bound.
   `Carrier.domE` is its other half.
@@ -203,16 +203,16 @@ is not an attribute and `decimal`'s report below is about a codec whose target i
 
 /-- `decimal`'s held set is exactly §1's `Numerals`. -/
 theorem decimal_T (v : Value) :
-    (denoteω .decimal).T v ↔ ∃ s, v = .str s ∧ Numeral.Stored s = true := Iff.rfl
+    (denote .decimal).T v ↔ ∃ s, v = .str s ∧ Numeral.Stored s = true := Iff.rfl
 
 /-- **The report.** A derivable `decimal` writes only well-formed numerals — the tightened
     `: T` index, cashed on the attribute side. -/
 theorem decimal_writes_stored {v : Value} {a : Attr}
-    (he : (denoteω .decimal).e v = some a) :
+    (he : (denote .decimal).e v = some a) :
     ∃ x, a = .n x ∧ Numeral.Stored x = true := by
   cases v with
   | str s =>
-    rw [show (denoteω .decimal).e (.str s) = decimalCodec.e (.str s) from rfl,
+    rw [show (denote .decimal).e (.str s) = decimalCodec.e (.str s) from rfl,
       decimalCodec_e_str] at he
     by_cases hw : Numeral.Stored s = true
     · rw [dif_pos hw] at he; cases he; exact ⟨_, rfl, hw⟩
@@ -224,7 +224,7 @@ theorem decimal_writes_stored {v : Value} {a : Attr}
 /-- Dually, it reads only well-formed numerals — which is not a nicety: a `p` accepting an
     ill-formed `N` would name a value `e` then refuses, and that is **(C)** failing. -/
 theorem decimal_reads_stored {a : Attr} {v : Value}
-    (hp : (denoteω .decimal).p a = some v) :
+    (hp : (denote .decimal).p a = some v) :
     ∃ x, a = .n x ∧ Numeral.Stored x = true := by
   cases a with
   | n x =>
@@ -250,7 +250,7 @@ identity on the digits — so the round trip fails at the one point §2 cannot s
 `e` and `p`. `Numeral.Stored` is that set, and the measurements it is read off are in
 `src/codec.dynamodb.spec.ts`. -/
 
-theorem decimal_refuses_nonNumeral : (denoteω .decimal).e (.str "abc") = none := rfl
+theorem decimal_refuses_nonNumeral : (denote .decimal).e (.str "abc") = none := rfl
 
 /-- Magnitude, isolated at the `WF` level, where notation is not also in play. -/
 theorem wf_refuses_overMagnitude : Numeral.WF "1e130" = false := by decide
@@ -259,17 +259,17 @@ theorem wf_refuses_39_digits :
     Numeral.WF "123456789012345678901234567890123456789" = false := by decide
 
 theorem decimal_refuses_39_digits :
-    (denoteω .decimal).e (.str "123456789012345678901234567890123456789") = none := rfl
+    (denote .decimal).e (.str "123456789012345678901234567890123456789") = none := rfl
 
 /-- §1's own example, at the level it was written about: the service accepts an exponent. -/
 theorem wf_accepts_exponent : Numeral.WF "1e+21" = true := by decide
 
 /-- `decimal` does not, and the reason is the store rather than the grammar. -/
-theorem decimal_refuses_exponent : (denoteω .decimal).e (.str "1e+21") = none := rfl
+theorem decimal_refuses_exponent : (denote .decimal).e (.str "1e+21") = none := rfl
 
 /-- The same number, spelled the way it comes back. -/
 theorem decimal_accepts_expanded :
-    (denoteω .decimal).e (.str "1000000000000000000000")
+    (denote .decimal).e (.str "1000000000000000000000")
       = some (.n (.of "1000000000000000000000")) := rfl
 
 end Calculus
