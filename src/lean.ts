@@ -1,0 +1,696 @@
+/**
+ * Test vectors for the Lean model, emitted as Lean source.
+ *
+ * `formal/` is a mechanization of the codec calculus; this library is what it is supposed to
+ * certify. The correspondence between the two is a *paper* obligation — somebody reads `denote`
+ * and reads `src/codec.ts` and believes they agree — and `docs/codec-audit.md` records it as the
+ * largest remaining risk. This module is the machine-checkable half of that belief.
+ *
+ * ── why the traffic goes this way ───────────────────────────────────────────────────────────────
+ *
+ * The obvious design is the other one: let Lean produce the expected attribute and compare it here.
+ * That is not available, and the reason is structural rather than a missing feature.
+ *
+ * `denote` is `noncomputable` — `funImage` (`formal/Calculus/Combinators.lean:174`) is a `dite` on
+ * a `Decidable` instance the kernel does not evaluate for free, and `Double` is an *axiom* with no
+ * closed terms at all. So `#eval` fails on every denoted codec, and Lean can generate nothing.
+ *
+ * What Lean *can* do is check. `(denote t).e v = some a` is a closed proposition, and for every
+ * term form this library can express it is provable by kernel reduction — see the `vector` tactic
+ * this module emits, and `src/lean.spec.ts` for the boundary. So TypeScript proposes and Lean
+ * disposes: {@link leanVectorModule} writes a file of `theorem`s, and `lake build` on it either
+ * succeeds or names the vector the two sides disagree about.
+ *
+ * ── the tactic, and why it is not `rfl` ────────────────────────────────────────────────────────
+ *
+ * `rfl` closes a scalar vector and dies on every map-shaped one, which was the surprise. `M`'s
+ * payload is a `Finset Name` with a *function* on it (`formal/Calculus/Domain.lean:377`), so the
+ * attribute the model computes is `fun k => (c.e (f k)).get _` — a lambda whose body is stuck on
+ * the bound key. It is pointwise equal to the lambda emitted here and not definitionally equal to
+ * it, and no amount of reduction closes that gap: it needs `funext` plus a case split on the key
+ * set. The emitted `vector` tactic is exactly that, applied to a fixpoint so it reaches nested
+ * maps:
+ *
+ * ```lean
+ * refine congrArg some ?_
+ * repeat' first
+ *   | (refine congrArg (Attr.m _) (funext fun k => ?_); obtain ⟨_, hk⟩ := k; fin_cases hk)
+ *   | rfl
+ *   | congr 1
+ * ```
+ *
+ * The order matters and cost a probe to find: `rfl` first sends the top-level goal into an
+ * `isDefEq` loop that exhausts the heartbeat budget rather than failing.
+ *
+ * ── what cannot be emitted ─────────────────────────────────────────────────────────────────────
+ *
+ * {@link LeanUnemittable} is thrown, never guessed around, and its cases are the honest boundary of
+ * the bridge. See {@link leanTermOf}. The largest of them is **numbers**: `Double` is an axiom, so
+ * `Value.num` has no closed inhabitant and no vector can mention one, ever. `decimal` is the
+ * numeric escape hatch — it is text on both sides, and it evaluates.
+ */
+import type { AttributeValue } from './attribute'
+import { memberOf } from './attribute'
+import type { AnyCodec, CodecDef } from './codec'
+
+/**
+ * A term, value or attribute the Lean model has no closed expression for.
+ *
+ * Thrown rather than reported as a `Result`, because there is nothing a caller can do with half a
+ * vector — and because a *silent* approximation is the one failure mode a differential test must
+ * not have. Emitting `Term.refine inner (fun _ => true)` for a refinement whose predicate is a
+ * TypeScript closure would produce a file that compiles and proves the wrong theorem.
+ */
+export class LeanUnemittable extends Error {
+    /** Where in the codec or value the obstruction is, as a dotted path. */
+    readonly at: string
+    /** Why the model cannot say it. */
+    readonly reason: string
+    constructor(at: string, reason: string) {
+        super(`cannot emit Lean for ${at}: ${reason}`)
+        this.name = 'LeanUnemittable'
+        this.at = at
+        this.reason = reason
+    }
+}
+
+const refuse = (at: string, reason: string): never => {
+    throw new LeanUnemittable(at, reason)
+}
+
+/* ── lexical ─────────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * A Lean string literal.
+ *
+ * Not `JSON.stringify`: the two escape languages overlap but do not agree, and the disagreements
+ * are silent. Lean 4 takes `\n`, `\t`, `\\`, `\"` and `\u{...}`; JSON emits `\uXXXX` for the
+ * control range, which Lean reads as a *different* escape (`\u` there wants braces), and neither
+ * escapes DEL. Everything outside the printable ASCII range is written as `\u{...}` here, which is
+ * unambiguous in Lean and survives a copy-paste through any editor.
+ */
+export const leanString = (value: string): string => {
+    let out = '"'
+    for (const ch of value) {
+        const code = ch.codePointAt(0) as number
+        out +=
+            ch === '"'
+                ? '\\"'
+                : ch === '\\'
+                  ? '\\\\'
+                  : ch === '\n'
+                    ? '\\n'
+                    : ch === '\t'
+                      ? '\\t'
+                      : code < 0x20 || code === 0x7f || code > 0x7e
+                        ? `\\u{${code.toString(16)}}`
+                        : ch
+    }
+    return `${out}"`
+}
+
+/** A `Finset Name` literal — `∅` when empty, because `{}` is notation Lean does not have here. */
+const leanFinset = (names: readonly string[]): string =>
+    names.length === 0 ? '∅' : `{${names.map(leanString).join(', ')}}`
+
+/**
+ * A `℘⁺fin` literal, as `NEFinset.of` wants it: one element and the rest.
+ *
+ * The helper (`formal/Calculus/Domain.lean:271`) exists so the non-emptiness proof is discharged by
+ * `insert` rather than at the call site, which is why this can be pure text.
+ */
+const leanNonEmptySet = (elements: readonly string[], at: string): string => {
+    const [first, ...rest] = elements
+    if (first === undefined) {
+        return refuse(
+            at,
+            'an empty wire set — §1 types SS/NS/BS as ℘⁺fin, so `NEFinset` has no empty inhabitant',
+        )
+    }
+    return `NEFinset.of ${first} ${rest.length === 0 ? '∅' : `{${rest.join(', ')}}`}`
+}
+
+/**
+ * The `{k // k ∈ keys} → α` half of a map, as a chain of key tests.
+ *
+ * The last entry is the `else`, which is total by accident of the type rather than by luck: the
+ * subtype's inhabitants are exactly the declared keys, so `fin_cases` in the `vector` tactic
+ * reaches the final branch only for the final key.
+ */
+const leanKeyFunction = (
+    entries: readonly (readonly [string, string])[],
+): string => {
+    if (entries.length === 0) {
+        return 'fun k => absurd k.2 (Finset.not_mem_empty k.1)'
+    }
+    const last = entries[entries.length - 1] as readonly [string, string]
+    const tests = entries
+        .slice(0, -1)
+        .map(
+            ([name, body]) => `if k.1 = ${leanString(name)} then ${body} else `,
+        )
+        .join('')
+    return `fun k => ${tests}${last[1]}`
+}
+
+/** A byte string, as the `List UInt8` §1 calls `Bytes`. */
+const leanBytes = (bytes: Uint8Array): string =>
+    `[${Array.from(bytes).join(', ')}]`
+
+/* ── values ──────────────────────────────────────────────────────────────────────────────── */
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+    typeof value === 'object' && value !== null && !Array.isArray(value)
+
+/**
+ * A `Value` — §1's value language, as `denote`'s `e` consumes it.
+ *
+ * Directed by the *value*, not by the codec, which is sound because §5's `κ` is: a value and the
+ * attribute it writes have the same kind, and every codec in this library takes the kind its
+ * grammar says it takes. The one place that would bite is `held`, whose whole job is to change the
+ * kind held — and `held` is unemittable for a different reason anyway.
+ *
+ * A `number` is refused here rather than approximated. `Double` is an axiom
+ * (`formal/Calculus/Domain.lean:236`) with `toDec`, `ofDec` and a round-trip law but no
+ * constructor, so `Value.num` has no closed term and no `#print`able spelling. This is permanent,
+ * not a gap: writing one would need a numeral-to-double literal the model deliberately does not
+ * have.
+ */
+export const leanValueOf = (value: unknown, at = 'value'): string => {
+    if (typeof value === 'string') return `Value.str ${leanString(value)}`
+    if (typeof value === 'boolean') return `Value.bool ${value}`
+    if (value === null || value === undefined) return 'Value.null'
+    if (typeof value === 'number' || typeof value === 'bigint') {
+        return refuse(
+            at,
+            '`Double` is an axiom with no closed terms, so `Value.num` is unconstructible — use `decimal`',
+        )
+    }
+    if (value instanceof Uint8Array) return `Value.bin ${leanBytes(value)}`
+    if (value instanceof Set) {
+        const members = [...value]
+        const first = members[0]
+        if (typeof first === 'string') {
+            return `Value.strSet (${leanNonEmptySet(
+                members.map((m) => leanString(m as string)),
+                at,
+            )})`
+        }
+        if (first instanceof Uint8Array) {
+            return `Value.binSet (${leanNonEmptySet(
+                members.map((m) => leanBytes(m as Uint8Array)),
+                at,
+            )})`
+        }
+        if (typeof first === 'number') {
+            return refuse(
+                at,
+                '`Value.numSet` is a `NEFinset Double`, and `Double` has no closed terms',
+            )
+        }
+        return refuse(
+            at,
+            'an empty set, or one whose element kind is not S, N or B',
+        )
+    }
+    if (Array.isArray(value)) {
+        return `Value.arr [${value
+            .map((element, index) => leanValueOf(element, `${at}[${index}]`))
+            .join(', ')}]`
+    }
+    if (isRecord(value)) {
+        // an absent optional attribute is a name the map does not have, not a name holding null —
+        // §4's `optional` is about presence, and emitting `null` would test a different vector
+        const names = Object.keys(value).filter(
+            (name) => value[name] !== undefined,
+        )
+        return `Value.map ${leanFinset(names)} (${leanKeyFunction(
+            names.map(
+                (name) =>
+                    [name, leanValueOf(value[name], `${at}.${name}`)] as const,
+            ),
+        )})`
+    }
+    return refuse(at, `no Value for a ${typeof value}`)
+}
+
+/* ── attributes ──────────────────────────────────────────────────────────────────────────── */
+
+/** A numeral, with §1's well-formedness discharged by `by decide` where it is written. */
+const leanNumeral = (numeral: string): string =>
+    `WFNumeral.of ${leanString(numeral)}`
+
+/**
+ * An `Attr` — §1's attribute domain, one member per attribute.
+ *
+ * `N` carries `WFNumeral`, a subtype, so `WFNumeral.of` runs §1's grammar at elaboration time with
+ * its `by decide` default argument. A numeral this library will happily write but §1 refuses does
+ * not produce a false theorem: it produces a *file that will not elaborate*, naming the numeral.
+ * That is the bridge working, and it is worth knowing that is what such a failure means.
+ */
+export const leanAttrOf = (
+    attribute: AttributeValue,
+    at = 'attribute',
+): string => {
+    const member = memberOf(attribute)
+    switch (member) {
+        case 'S':
+            return `Attr.s ${leanString(attribute.S as string)}`
+        case 'N':
+            return `Attr.n (${leanNumeral(attribute.N as string)})`
+        case 'B':
+            return `Attr.b ${leanBytes(attribute.B as Uint8Array)}`
+        case 'BOOL':
+            return `Attr.bool ${attribute.BOOL}`
+        case 'NULL':
+            return 'Attr.null'
+        case 'SS':
+            return `Attr.ss (${leanNonEmptySet(
+                (attribute.SS as readonly string[]).map(leanString),
+                at,
+            )})`
+        case 'NS':
+            return `Attr.ns (${leanNonEmptySet(
+                (attribute.NS as readonly string[]).map(
+                    (n) => `(${leanNumeral(n)})`,
+                ),
+                at,
+            )})`
+        case 'BS':
+            return `Attr.bs (${leanNonEmptySet(
+                (attribute.BS as readonly Uint8Array[]).map(leanBytes),
+                at,
+            )})`
+        case 'L':
+            return `Attr.l [${(attribute.L as readonly AttributeValue[])
+                .map((element, index) => leanAttrOf(element, `${at}[${index}]`))
+                .join(', ')}]`
+        case 'M': {
+            const map = attribute.M as Record<string, AttributeValue>
+            const names = Object.keys(map)
+            return `Attr.m ${leanFinset(names)} (${leanKeyFunction(
+                names.map(
+                    (name) =>
+                        [
+                            name,
+                            leanAttrOf(
+                                map[name] as AttributeValue,
+                                `${at}.${name}`,
+                            ),
+                        ] as const,
+                ),
+            )})`
+        }
+        default:
+            return refuse(at, 'an attribute carrying no member')
+    }
+}
+
+/* ── terms ───────────────────────────────────────────────────────────────────────────────── */
+
+/** How deep a `lazy` chain may be forced before the emitter calls it recursive and gives up. */
+const lazyLimit = 16
+
+/**
+ * A `Term` — §3's syntax, from what the codec says it is.
+ *
+ * Read off `codec.def`, which is this library's own abstract syntax and is documented as such. The
+ * mapping is one-to-one where it exists at all; where it does not, this throws
+ * {@link LeanUnemittable}, and the throwing cases are the interesting half of the bridge:
+ *
+ * - **`number`, and a numeric `literal`.** `Double` is an axiom. Permanent.
+ * - **`refine`, `held`, `legacy`, `custom`.** Four of §3's constructors carry *functions* —
+ *   `q : Value → Bool`, `f g : Value → Value`, `r : Attr → Option Value`, `ce`/`cp` — and this
+ *   library carries JavaScript closures in the same positions. There is no expression in Lean for
+ *   an arbitrary closure, so these are unemittable *in general*. They are not unemittable in
+ *   principle: a `refine` whose predicate is `Numeral.Stored` could be written by hand, and that
+ *   is the natural next increment.
+ * - **`Rest.drop` vs `Rest.refuse`.** `CodecDef` records the rest *codec* and nothing when the
+ *   policy is a string, so the two are indistinguishable from the definition alone. That is sound
+ *   for the vectors this module writes and only for them: `objectCodec`'s `e` is `objWrite`, which
+ *   takes `rc?` and not the `kn` filter (`formal/Calculus/Combinators.lean:1691`), and `rcOf` is
+ *   `none` for both policies — so the two denote the *same encode* and differ only under `p`. A
+ *   decode-direction vector would have to distinguish them, and could not.
+ */
+export const leanTermOf = (
+    codec: AnyCodec,
+    at = 'codec',
+    forced = 0,
+): string => {
+    const def = codec.def
+    if (!def) {
+        return refuse(
+            at,
+            'a codec with no definition — nothing says which term it is',
+        )
+    }
+    return leanTermOfDef(def, at, forced)
+}
+
+const leanTermOfDef = (def: CodecDef, at: string, forced: number): string => {
+    switch (def.kind) {
+        case 'string':
+            return 'Term.string'
+        case 'decimal':
+            return 'Term.decimal'
+        case 'boolean':
+            return 'Term.boolean'
+        case 'binary':
+            return 'Term.binary'
+        case 'null':
+            return 'Term.null'
+        case 'number':
+            return refuse(
+                at,
+                '`Term.number` denotes `numberCodec`, whose carrier is the `Double` axiom — no vector can name a value at it',
+            )
+        case 'literal': {
+            const allowed = [...new Set(def.allowed)]
+            if (allowed.some((one) => typeof one === 'number')) {
+                return refuse(
+                    at,
+                    'a numeric literal sits at `GroundKind.number`, whose carrier is `Double`',
+                )
+            }
+            return `Term.literal GroundKind.string (${leanNonEmptySet(
+                allowed.map((one) => leanString(one as string)),
+                at,
+            )})`
+        }
+        case 'set':
+            return `Term.set (${leanTermOf(def.element, `${at}.element`, forced)})`
+        case 'array':
+            return `Term.array (${leanTermOf(def.element, `${at}.element`, forced)})`
+        case 'tuple': {
+            const elements = def.elements
+                .map((element, index) =>
+                    leanTermOf(element, `${at}[${index}]`, forced),
+                )
+                .join(', ')
+            const tail = def.tail
+                ? `(some (${leanTermOf(def.tail, `${at}.tail`, forced)}))`
+                : 'none'
+            return `Term.tuple [${elements}] ${tail}`
+        }
+        case 'record':
+            return `Term.record (${leanTermOf(def.value, `${at}.value`, forced)})`
+        case 'attributes': {
+            const names = Object.keys(def.of)
+            const fields = leanKeyFunction(
+                names.map(
+                    (name) =>
+                        [
+                            name,
+                            leanFieldOf(
+                                def.of[name] as AnyCodec,
+                                `${at}.${name}`,
+                                forced,
+                            ),
+                        ] as const,
+                ),
+            )
+            // `drop` when the definition names no rest codec: see the note on this function
+            const rest = def.rest
+                ? `(Rest.codec (${leanTermOf(def.rest, `${at}.rest`, forced)}))`
+                : 'Rest.drop'
+            return `Term.object ${leanFinset(names)} (${fields}) ${rest}`
+        }
+        case 'tagged': {
+            // the table is keyed by *tag*, and an option may answer to several — so the same codec
+            // appears more than once in it. `Term.dunion` takes the option list, and repeating an
+            // option there would make its own tag set overlap itself, which is exactly the premise
+            // `Typed.dunion` carries. Deduplicated by identity, which is what the table did to it
+            const options = [...new Set(Object.values(def.variants))]
+                .map((variant, index) =>
+                    leanTermOf(variant, `${at}.variants[${index}]`, forced),
+                )
+                .join(', ')
+            return `Term.dunion ${leanString(def.discriminator)} [${options}]`
+        }
+        case 'untagged':
+            return `Term.union [${def.variants
+                .map((variant, index) =>
+                    leanTermOf(variant, `${at}[${index}]`, forced),
+                )
+                .join(', ')}]`
+        case 'nullable':
+            return `Term.nullable (${leanTermOf(def.inner, `${at}.inner`, forced)})`
+        case 'opaque':
+            return `Term.opaq ${def.numbers === 'lossy'}`
+        case 'lazy': {
+            if (forced >= lazyLimit) {
+                return refuse(
+                    at,
+                    `a lazy chain deeper than ${lazyLimit} — `.concat(
+                        'a genuinely recursive codec has no term at all: `Term.lazy` carries a `Term`, ',
+                        'not a thunk, and `Continuity.lean` shows a recursive union has no fixpoint semantics',
+                    ),
+                )
+            }
+            return `Term.lazy (${leanTermOf(def.get(), `${at}.inner`, forced + 1)})`
+        }
+        case 'refine':
+            return refuse(
+                at,
+                `\`Term.refine\` carries \`q : Value → Bool\`; this one carries the closure ${JSON.stringify(def.refined.what)}`,
+            )
+        case 'held':
+            return refuse(
+                at,
+                '`Term.held` carries two `Value → Value` functions; this one carries a pair of closures',
+            )
+        case 'legacy':
+            return refuse(
+                at,
+                '`Term.legacy` carries `r : Attr → Option Value`; this one carries a closure',
+            )
+        case 'custom':
+            return refuse(
+                at,
+                '`Term.custom` carries its pair as data, and a hand-written codec has no data to give',
+            )
+        case 'optional':
+        case 'fallback':
+            return refuse(
+                at,
+                'a §4 *field*, not a term — `optional`/`fallback` denote `Field`, and no `Term` position accepts one',
+            )
+        case 'restOf':
+            return refuse(
+                at,
+                'a §4 *rest policy*, not a term — it denotes `Rest`, which is a third stratum',
+            )
+    }
+}
+
+/** A `Field` — §4's stratum, which is a *position* in a map and not a codec. */
+const leanFieldOf = (codec: AnyCodec, at: string, forced: number): string => {
+    const def = codec.def
+    if (def?.kind === 'optional') {
+        return `Field.optional (${leanTermOf(def.inner, at, forced)})`
+    }
+    if (def?.kind === 'fallback') {
+        return `Field.fallback (${leanTermOf(def.inner, at, forced)}) (${leanValueOf(
+            def.value(),
+            `${at}.fallback`,
+        )})`
+    }
+    return `Field.req (${leanTermOf(codec, at, forced)})`
+}
+
+/* ── vectors ─────────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * How a vector states its claim to the kernel.
+ *
+ * `'check'` writes `check n ((denote t).e v) (some a) = .same := rfl` and is the default. It
+ * depends on `Calculus/Vectors.lean` — a fuelled three-valued comparator with `check_same` and
+ * `check_differ` proved about it, so a passing line cashes to `(denote t).e v = some a` as a
+ * theorem. No tactic, no `funext` gymnastics, an order of magnitude faster on maps, and it can
+ * state a **negative** vector (`= .differ`), which an equation cannot. The `n` is fuel, because
+ * only structural recursion reduces in the kernel; {@link leanVector} computes it from the
+ * attribute, and under-fuelling reduces to `.exhausted`, which matches neither side and fails the
+ * build rather than passing quietly.
+ *
+ * `'equation'` writes `(denote t).e v = some a` and proves it with a tactic the generated file
+ * carries. It depends on nothing beyond `denote`, which is worth keeping for a tree where
+ * `Vectors.lean` is absent — but it cannot express a refusal, and on maps `rfl` does not merely
+ * fail, it **diverges**: `Attr.m` holds a function, so the model's answer is stuck under a binder,
+ * pointwise equal to the emitted lambda and not definitionally equal, and `isDefEq` runs to the
+ * heartbeat limit.
+ */
+export type Protocol = 'equation' | 'check'
+
+/** One proposed agreement: this codec, given this value, writes this attribute. */
+export type Vector = {
+    /** A Lean identifier; anything else is sanitized, because a bad name loses the whole file. */
+    readonly name: string
+    readonly codec: AnyCodec
+    readonly value: unknown
+}
+
+/** Lean identifiers are not JavaScript ones — keep it to the safe intersection. */
+const leanIdent = (name: string): string => {
+    const cleaned = name.replace(/[^A-Za-z0-9_]/g, '_')
+    return /^[A-Za-z_]/.test(cleaned) ? cleaned : `v_${cleaned}`
+}
+
+/**
+ * One vector, as a Lean `theorem`.
+ *
+ * The attribute is not supplied — it is *taken from the library*, by running the encode this
+ * theorem is about. That is the whole design: what gets checked is what this library actually
+ * writes on this input, today, and a change to `codec.ts` that changes it makes the Lean file stop
+ * compiling. Supplying the attribute by hand would check the vector's author instead.
+ *
+ * `unsafeEncode` throwing is left to propagate: a value this library refuses is not a vector about
+ * agreement, it is a vector about refusal, and `e v = none` is the theorem for that.
+ */
+export const leanVector = (
+    { name, codec, value }: Vector,
+    protocol: Protocol = 'check',
+): string => {
+    const term = leanTermOf(codec, name)
+    const attribute = codec.unsafeEncode(value as never)
+    const head = [`/-- \`${name}\` -/`, `theorem ${leanIdent(name)} :`]
+    return protocol === 'equation'
+        ? [
+              ...head,
+              `    (denote (${term})).e`,
+              `      (${leanValueOf(value, name)})`,
+              `    = some (${leanAttrOf(attribute, name)}) := by`,
+              '  vector',
+          ].join('\n')
+        : [
+              ...head,
+              `    check ${fuelFor(attribute)}`,
+              `      ((denote (${term})).e`,
+              `        (${leanValueOf(value, name)}))`,
+              `      (some (${leanAttrOf(attribute, name)})) = .same := rfl`,
+          ].join('\n')
+}
+
+/**
+ * How much fuel the `check` protocol's comparator needs for this attribute.
+ *
+ * `aeq` recurses on a `Nat` rather than on the attribute, because only a *structurally* recursive
+ * function reduces in the kernel — a well-founded one elaborates to `WellFounded.fix` and no `rfl`
+ * would close a vector line. So the budget is the generator's job, and it is exactly the
+ * attribute's document nesting: one layer per `L` or `M`, one for the scalar at the bottom.
+ *
+ * Computed rather than fixed at a generous constant. Under-fuelling does not produce a false
+ * theorem — `Verdict` has a third constructor, and an exhausted run matches neither `.same` nor
+ * `.differ`, so the file fails to compile — but it does produce a puzzling failure, and there is no
+ * reason to risk one when the number is right here.
+ */
+const fuelFor = (attribute: AttributeValue): number => {
+    const member = memberOf(attribute)
+    if (member === 'L') {
+        return (
+            1 +
+            Math.max(
+                0,
+                ...(attribute.L as readonly AttributeValue[]).map(fuelFor),
+            )
+        )
+    }
+    if (member === 'M') {
+        return (
+            1 +
+            Math.max(
+                0,
+                ...Object.values(
+                    attribute.M as Record<string, AttributeValue>,
+                ).map(fuelFor),
+            )
+        )
+    }
+    return 1
+}
+
+/**
+ * The `vector` tactic, and why the file carries it rather than `formal/` doing so.
+ *
+ * A generated file is a *proposal*. If it needed a tactic that lives in the mechanization, then
+ * regenerating it could require editing the thing it is supposed to be independent of, and the
+ * bridge would stop being one-directional. Everything the generated file needs is in the generated
+ * file.
+ */
+const preamble = `import Calculus.Denote
+import Calculus.Combinators
+import Mathlib.Tactic.FinCases
+
+/-!
+# Differential-testing vectors
+
+**Generated — do not edit.** Emitted by \`src/lean.ts\` from the shipped TypeScript codecs: each
+theorem below is one \`encode\` this library actually performed, proposed to the model as an
+equation. A failure here is a disagreement between \`src/codec.ts\` and \`Calculus.denote\`, and the
+theorem's name says which vector.
+-/
+
+namespace Calculus
+
+/-- The one tactic every vector uses.
+
+    \`rfl\` alone closes the scalar vectors and none of the map-shaped ones: \`M\`'s payload is a
+    key set with a *function* on it, so the model's answer is \`fun k => (c.e (f k)).get _\` — stuck
+    on the bound key, pointwise equal to the emitted lambda and not definitionally equal to it. The
+    gap is closed by \`funext\` and a case split on the key set, applied to a fixpoint so that a map
+    nested inside a map is reached too.
+
+    The three wire-set alternatives are the second surprise. §1 types \`SS\`/\`NS\`/\`BS\` as
+    \`Finset\`s, so their *order* carries no information — but a \`Finset\` is a \`Multiset\` with a
+    proof, a \`Multiset\` is a quotient of lists, and two \`Quot.mk\`s of differently-ordered lists
+    are not definitionally equal. This library sorts a set on the way out and the model keeps the
+    order it was given, so \`rfl\` diverges on every set whose two sides disagree about order.
+    \`decide\` settles it, because \`Finset\` equality at a concrete element type is decidable.
+
+    The alternatives are ordered as they are because \`rfl\` first sends both the top-level goal and
+    a mis-ordered set into an \`isDefEq\` loop that exhausts the heartbeat budget rather than
+    failing. -/
+macro "vector" : tactic => \`(tactic|
+  (refine congrArg some ?_
+   repeat' first
+     | (refine congrArg (Attr.m _) (funext fun k => ?_)
+        obtain ⟨_, hk⟩ := k
+        fin_cases hk)
+     | (refine congrArg Attr.ss (Subtype.ext ?_); decide)
+     | (refine congrArg Attr.ns (Subtype.ext ?_); decide)
+     | (refine congrArg Attr.bs (Subtype.ext ?_); decide)
+     | rfl
+     | congr 1))
+`
+
+const checkPreamble = `import Calculus.Vectors
+
+/-!
+# Differential-testing vectors
+
+**Generated — do not edit.** Emitted by \`src/lean.ts\` from the shipped TypeScript codecs: each
+theorem below is one \`encode\` this library actually performed, proposed to the model. A failure
+here is a disagreement between \`src/codec.ts\` and \`Calculus.denote\`, and the theorem's name says
+which vector.
+
+The verdict is \`Calculus.check\`'s, and \`check_same\` is what makes it worth having: \`.same\`
+*implies* the two attributes are equal, so a line that reduces to \`.same\` is a proof and not a
+comparator's opinion. The fuel on each line is the attribute's own nesting, computed by the
+generator — an under-fuelled line reduces to \`.exhausted\`, which matches neither \`.same\` nor
+\`.differ\`, so it fails to compile rather than passing quietly.
+-/
+
+namespace Calculus
+`
+
+/**
+ * A whole Lean module: a preamble and one theorem per vector.
+ *
+ * Two protocols, and the choice is not cosmetic — see {@link Protocol}.
+ */
+export const leanVectorModule = (
+    vectors: readonly Vector[],
+    protocol: Protocol = 'check',
+): string =>
+    `${protocol === 'equation' ? preamble : checkPreamble}\n${vectors
+        .map((vector) => leanVector(vector, protocol))
+        .join('\n\n')}\n\nend Calculus\n`
