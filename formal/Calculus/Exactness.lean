@@ -965,8 +965,8 @@ used on**, and neither side has to answer for the other's reasons. -/
 
 /-- `set`'s member gate over-claims on the read side: `AdmA` accepts all three wire
     families, and `set(string)` reads only `SS`. The empty run used to be the witness;
-    a numeric run is the one that survives typing, and `Numeral` is `String`, so it needs
-    no axiom to construct. -/
+    a numeric run is the one that survives typing, and `WFNumeral`'s predicate is
+    decidable, so `WFNumeral.of "1"` computes and the witness needs no axiom. -/
 theorem not_ExactA_set : ¬ ExactA (.set .string) := by
   intro h
   have h2 := (h (.ns (.of (.of "1") ∅))).mp (by simp [AdmA])
@@ -991,7 +991,8 @@ theorem not_ExactA_union : ¬ ExactA (.union [.string, .string]) := by
 /-- `opaq`'s ⊤ over-claims on the read side too, and here the surviving witness needs no
     `Double`: `opaq false` is `refuse`, so it reads no `N` — and therefore no `NS`, whose
     payloads are read through the same option. The empty wire set used to say this; a
-    numeric wire set says it now, and `Numeral` is `String`. -/
+    numeric wire set says it now, built from `WFNumeral.of "1"` — decidable, so still
+    no `Double`. -/
 theorem not_ExactA_opaq : ¬ ExactA (.opaq false) := by
   intro h
   have h2 := (h (.ns (.of (.of "1") ∅))).mp (by simp [AdmA])

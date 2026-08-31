@@ -168,10 +168,6 @@ theorem Term.depth_lt_object_fb {fields : Finset Name} {f : {k // k ∈ fields} 
   have h1 := Term.depth_lt_object f rest k
   rw [h] at h1; simp only [Field.depth] at h1; omega
 
-theorem Term.depth_lt_rest {fields : Finset Name} (f : {k // k ∈ fields} → Field) (rest : Rest) :
-    Rest.depth rest < Term.depth (.object fields f rest) := by
-  simp only [Term.depth]; omega
-
 /-- The termination argument every `Term.depth` recursion in this development uses, written
     once. Five theorems share it — `soundness_both`, `typed_TSub`, `carrier_denote`,
     `Adm_sound`, `AdmA_sound` — and their goal sets differ, so some alternatives

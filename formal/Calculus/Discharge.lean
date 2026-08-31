@@ -659,23 +659,6 @@ theorem admitA_member (t : Term) {μ a}
 
 /-! ## Options admit their own canonical pairs -/
 
-/-- Traversal success is entrywise success. -/
-theorem traverse_input_isSome {α β : Type} {f : α → Option β} :
-    ∀ {xs : List α} {ys}, traverse f xs = some ys → ∀ x ∈ xs, (f x).isSome
-  | [], _, _, x, hx => absurd hx (by simp)
-  | x₀ :: xs, ys, h, x, hx => by
-      simp only [traverse] at h
-      cases hfx : f x₀ with
-      | none => rw [hfx] at h; exact nomatch h
-      | some y₀ =>
-        rw [hfx] at h
-        cases hxs : traverse f xs with
-        | none => rw [hxs] at h; exact nomatch h
-        | some ys' =>
-          rcases List.mem_cons.mp hx with rfl | hx'
-          · rw [hfx]; rfl
-          · exact traverse_input_isSome hxs x hx'
-
 /-- Only `optional` denotes to `opt`, which is what the value-side guard needs of a
     non-`optional` field. Stated where every argument is a variable — at the use site
     the field is `ff k`, and eliminating a function application in place is more
@@ -811,25 +794,6 @@ theorem pairwise_imp_mem {α : Type} {R S : α → α → Prop} :
       exact pairwise_imp_mem
         (fun x hx y hy => h x (List.mem_cons_of_mem a hx) y (List.mem_cons_of_mem a hy))
         htail
-
-/-- One admitting element under pairwise mutual exclusion filters to a singleton. -/
-theorem filter_map_singleton {α β : Type} (f : α → β) (P : β → Bool) :
-    ∀ (l : List α),
-      List.Pairwise (fun x y => (P (f x) = true → P (f y) = false) ∧
-        (P (f y) = true → P (f x) = false)) l →
-      ∀ x ∈ l, P (f x) = true → (l.map f).filter P = [f x]
-  | [], _, x, hx, _ => nomatch hx
-  | y :: l, hp, x, hx, hPx => by
-      obtain ⟨hhead, htail⟩ := List.pairwise_cons.mp hp
-      rcases List.mem_cons.mp hx with rfl | hx'
-      · have hnil : (l.map f).filter P = [] := by
-          refine filter_nil_of fun b hb => ?_
-          obtain ⟨y', hy', rfl⟩ := List.mem_map.mp hb
-          exact (hhead y' hy').1 hPx
-        simp only [List.map, List.filter, hPx, hnil]
-      · have hny : P (f y) = false := (hhead x hx').2 hPx
-        simp only [List.map, List.filter, hny]
-        exact filter_map_singleton f P l htail x hx' hPx
 
 /-- §5 (K), repaired and decidable: two options are separated on the writable side by
     disjoint kinds, **or** by disjoint admissible sets. The second disjunct is the

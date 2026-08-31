@@ -145,21 +145,6 @@ theorem traverse_maxOf_le {α β : Type} {f : α → Option β} {mα : α → Na
       have := traverse_maxOf_le h xs ys' hys'
       simp only [maxOf]; omega
 
-/-! ## Traverse congruence
-
-Missing from `Combinators.lean`, and needed everywhere below: the element function is
-`(opaqCodec n).e` at one fuel and `(opaqCodec m).e` at another, and the induction
-supplies exactly pointwise agreement. -/
-
-theorem traverse_congr {α β : Type} {f g : α → Option β} :
-    ∀ (xs : List α), (∀ x ∈ xs, f x = g x) → traverse f xs = traverse g xs
-  | [], _ => rfl
-  | x :: xs, h => by
-      have hx : f x = g x := h x (by simp)
-      have hxs : traverse f xs = traverse g xs :=
-        traverse_congr xs (fun y hy => h y (by simp [hy]))
-      simp only [traverse, hx, hxs]
-
 /-! ## The unfoldings — §3 `(opaque)`, one per constructor of each domain
 
 Each says: at this value's kind, `altCodec`'s filter collapses to exactly one option, so
@@ -527,18 +512,8 @@ end
 
 `opaqCodecω` below picks its write-side fuel from the value and its read-side fuel from
 the attribute, so the two budgets never coincide and `retract`/`canon` have to transport
-between them. These two lemmas are what licenses the transport: encoding never deepens,
+between them. The lemmas here are what licenses the transport: encoding never deepens,
 and neither does decoding. -/
-
-theorem Value.depthL_pos (vs : List Value) : 1 <= Value.depthL vs := by
-  cases vs with
-  | nil => simp [Value.depthL]
-  | cons v vs => simp only [Value.depthL]; have := Value.depth_pos v; omega
-
-theorem Attr.depthL_pos (as : List Attr) : 1 <= Attr.depthL as := by
-  cases as with
-  | nil => simp [Attr.depthL]
-  | cons a as => simp only [Attr.depthL]; have := Attr.depth_pos a; omega
 
 /-- A wire set is always exactly one layer of payloads, whichever family it lands in. -/
 theorem encSet_depth {α : Type} {c : Codec} {vinj : α → Value} {S : NEFinset α} {a : Attr}
@@ -642,15 +617,10 @@ end
 
 /-! ### Read-side depth preservation
 
-The wire-set cases need their own list lemmas: their elements come from decoding
-*payloads* through the leaf codecs, so they bottom out at depth 1 rather than recursing. -/
-
-theorem opaq_p_s_depth (lossy : Bool) (s : String) :
-    ∀ (n : Nat) (v : Value), (opaqCodec n lossy).p (.s s) = some v -> Value.depth v <= 1
-  | n, v, hp => by
-      cases n with | zero => exact nomatch hp | succ n' =>
-      rw [opaqCodec_p_s] at hp
-      simp only [stringCodec] at hp; cases hp; simp [Value.depth]
+The one case that is not a leaf `simp` is `N`, where reading goes through `Double.ofDec`
+and the write-back gate. The wire sets need no list lemma of their own: `decSet` fixes
+their depth at 2 outright (`opaq_p_wire_depth`), where the list representation they
+replaced had to be traversed three times. -/
 
 theorem opaq_p_n_depth (lossy : Bool) (x : WFNumeral) :
     ∀ (n : Nat) (v : Value), (opaqCodec n lossy).p (.n x) = some v -> Value.depth v <= 1
@@ -671,56 +641,10 @@ theorem opaq_p_n_depth (lossy : Bool) (x : WFNumeral) :
           · rw [if_pos hw] at hp; cases hp; simp [Value.depth]
           · rw [if_neg hw] at hp; exact nomatch hp
 
-theorem opaq_p_b_depth (lossy : Bool) (b : Bytes) :
-    ∀ (n : Nat) (v : Value), (opaqCodec n lossy).p (.b b) = some v -> Value.depth v <= 1
-  | n, v, hp => by
-      cases n with | zero => exact nomatch hp | succ n' =>
-      rw [opaqCodec_p_b] at hp
-      simp only [binaryCodec] at hp; cases hp; simp [Value.depth]
-
-/-- **The wire sets, once.** A wire set's elements are leaf attributes, and a leaf reads
-    to depth 1, so the list it reads to has list-depth 1 — whichever of `SS`/`NS`/`BS`
-    it is. The three families differ only in which prism the payload sits in, and the
-    argument consults nothing else. -/
-theorem opaq_p_leafL {α : Type} (elem : α → Attr) (lossy : Bool) (n : Nat)
-    (hleaf : ∀ (x : α) (v : Value), (opaqCodec n lossy).p (elem x) = some v →
-      Value.depth v <= 1) :
-    ∀ (xs : List α) (vs : List Value),
-      traverse (fun x => (opaqCodec n lossy).p (elem x)) xs = some vs ->
-      Value.depthL vs <= 1
-  | [], vs, htr => by
-      replace htr : some [] = some vs := htr
-      cases htr; simp [Value.depthL]
-  | x :: xs, vs, htr => by
-      rw [traverse_cons] at htr
-      obtain ⟨v, hv, hrest⟩ := Option.bind_eq_some.mp htr
-      obtain ⟨vs', hvs', rfl⟩ := Option.map_eq_some'.mp hrest
-      have h1 := hleaf x v hv
-      have h2 := opaq_p_leafL elem lossy n hleaf xs vs' hvs'
-      simp only [Value.depthL]; omega
-
 /-- …and the wire set itself is exactly one level above its leaves. `decSet` produces one
     of the three value-set constructors, and those hold scalars. -/
 theorem opaq_p_wire_depth {α : Type} {c : Codec} {inj : α → Attr} {S : NEFinset α} {v : Value}
     (hp : decSet c inj S = some v) : Value.depth v <= 2 := le_of_eq (decSet_depth hp)
-
-theorem opaq_p_ssL (lossy : Bool) (n : Nat) :
-    ∀ (ss : List String) (vs : List Value),
-      traverse (fun s => (opaqCodec n lossy).p (.s s)) ss = some vs ->
-      Value.depthL vs <= 1 :=
-  opaq_p_leafL Attr.s lossy n fun s v h => opaq_p_s_depth lossy s n v h
-
-theorem opaq_p_nsL (lossy : Bool) (n : Nat) :
-    ∀ (xs : List WFNumeral) (vs : List Value),
-      traverse (fun x => (opaqCodec n lossy).p (.n x)) xs = some vs ->
-      Value.depthL vs <= 1 :=
-  opaq_p_leafL Attr.n lossy n fun x v h => opaq_p_n_depth lossy x n v h
-
-theorem opaq_p_bsL (lossy : Bool) (n : Nat) :
-    ∀ (bs : List Bytes) (vs : List Value),
-      traverse (fun b => (opaqCodec n lossy).p (.b b)) bs = some vs ->
-      Value.depthL vs <= 1 :=
-  opaq_p_leafL Attr.b lossy n fun b v h => opaq_p_b_depth lossy b n v h
 
 mutual
 
@@ -805,18 +729,6 @@ noncomputable def opaqCodecω (lossy : Bool) : Codec :=
     μ := none
     e := fun v => (opaqCodec (Value.depth v) lossy).e v
     p := fun a => (opaqCodec (Attr.depth a) lossy).p a }
-
-theorem opaqCodecω_μ (lossy : Bool) : (opaqCodecω lossy).μ = none := rfl
-
-/-- Every fuel's answer is `opaqCodecω`'s answer, given enough fuel. The bridge `denote`
-    will use once `opaque` stops carrying one. -/
-theorem opaqCodecω_e (lossy : Bool) (v : Value) (n : Nat) (h : Value.depth v <= n) :
-    (opaqCodecω lossy).e v = (opaqCodec n lossy).e v :=
-  opaq_e_agree lossy v (Value.depth v) n (Nat.le_refl _) h
-
-theorem opaqCodecω_p (lossy : Bool) (a : Attr) (n : Nat) (h : Attr.depth a <= n) :
-    (opaqCodecω lossy).p a = (opaqCodec n lossy).p a :=
-  opaq_p_agree lossy a (Attr.depth a) n (Nat.le_refl _) h
 
 theorem lawful_opaqCodecω (lossy : Bool) : Lawful (opaqCodecω lossy) := by
   refine ⟨?_, ?_, ?_, ?_⟩
