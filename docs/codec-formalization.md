@@ -1547,7 +1547,8 @@ of them in a way worth stating precisely, because the error is instructive rathe
 | `Attr.m`, `Value.map` | `List (Name × _)` | `(keys : Finset Name) (f : {k // k ∈ keys} → _)` |
 
 No `SetWF`, no unique-key gate, no canonical order, and `Calculus/WireOrder.lean` is off both paths.
-Only non-emptiness is still gated.
+Only non-emptiness is still gated — and that is now a **choice, not a limit**, which is the next
+entry's subject.
 
 **The claim that was wrong.** *"Maps still cannot be typed, and the factoring is why."* The premise
 was right — `Finset (Name × Attr)` is rejected by the kernel, exactly as `Finset Value` is, the
@@ -1618,6 +1619,56 @@ does not admit an `N`, named as `recordCodec_p_n` and proved by `rfl`; at `Adm_e
 non-`map` rows it is `simp only` with the four lemmas the goal actually needs. Neither wants a
 heartbeat bump: the three `set_option maxHeartbeats` in the tree are the three that were there
 before, and the map migration added none.
+
+### What is still gated, and which of it is a limit
+
+The repair above should not be read as finished. Four members of the model still carry a refinement
+as a **codec obligation** where a type could carry it, and the difference between them is worth
+recording, because the argument that kept each one there was written before the map repair showed
+that "the kernel refuses it" is a claim to test rather than to assume.
+
+All four are admissible. Verified against the kernel, alongside the recursive arms in each case:
+
+    | ss (v : {S : Finset String // S.Nonempty})
+    | n  (v : {x : Numeral // Numeral.WF x = true})
+    | literalS (ls : {S : Finset String // S.Nonempty})
+    | object (fields : Finset Name) (f : {k // k ∈ fields} → Field) (rest : Rest)
+
+So none of the four is blocked. What remains is cost and, in one case, a live design argument.
+
+**Non-emptiness (`℘⁺fin`).** The cheapest and the one that finishes the set arc. It deletes
+`encSet`/`decSet`'s `card = 0` branch, `HSet`'s three `Nonempty` conjuncts, `HOpaque`'s three `hne`
+premises and `Adm`'s three `card ≠ 0` conjuncts; the obligation migrates once into `setImage`'s
+type, where "the image of a nonempty set is nonempty" is already proved (`setImage_nonempty`). The
+tell that it is the right move is the same tell the map repair had: `HeldSet.lean`'s witness that
+`opaque` refuses `strSet ∅` becomes **unstatable**, exactly as `record_e_keeps_duplicate_keys` did.
+
+**`fields`, in the syntax rather than the domain.** `Term.object` holds a `List (Name × Field)` and
+the typing rule carries `hnd : (fields.map (·.1)).Nodup`. Field order is not semantically
+observable — `objWrite` dispatches by `lookup`, and `hnd` is what makes that well-defined — so two
+orderings of one object are two *terms* denoting one codec. That is the defect this section just
+closed, one level up, in the syntax. Typing it deletes `hnd` from the rule and the `lookup_map`
+detours it forces through `Soundness` and `Discharge`, and turns `TypedFields` from a list relation
+into a pointwise one.
+
+**`literalS`/`literalN`.** `hne` and `hnd` are a nonempty finite set spelled as two side conditions
+on a list. Smallest change of the four.
+
+**`N`'s numeral domain — the one with a real argument against it.** §5's C1 table names `N` as one
+of four members whose `Carries(m)` is a refinement, and this document has taken the position that
+the honest split is to leave the *carrier* unrestricted (`Attr.n "abc"` stays representable) and put
+the burden on the codecs. That argument is not stale in the way the map one was: C1's point is that
+a **port's** attribute type is genuinely unrefined, and the partiality of the embedding is what a
+port has to see. But the partiality survives typing — it is the port's type that is unrefined, not
+the model's — and §5 already says the virtue of the calculus is that it "expresses this in the
+signature of the pair, where nothing has to prove it because nothing can violate it". Typing `Attr.n`
+is that sentence taken literally: every `by_cases hw : Numeral.WF` in `Opaque.lean` goes, and
+`opaque` writing `⟨N, "5e-324"⟩` becomes unwritable rather than refuted. It is also the largest blast
+radius of the four, since `NS` is `Finset Numeral` and moves with it.
+
+The general lesson is the one the map entry above records, stated as a rule rather than an anecdote:
+**a refinement carried by a gate is a claim that the type cannot carry it, and that claim is cheap to
+test and has now been wrong three times.**
 
 ## §5 Certifying an implementation
 
@@ -1891,7 +1942,7 @@ Stated plainly, because a certificate that hides its edges is worth less than on
 | **§1's numeral domain**                 | **Modelled.** `Numeral.WF` (Domain.lean) carries §1's three clauses — grammar, ≤ 38 significant digits, magnitude `0` or `1e-130 … 9.9…e125` — and `decimal` gates on it, so it no longer holds every string. `decimal_writes_wf`/`decimal_reads_wf` are the report. The *carrier* is still unrestricted (`Attr.n "abc"` remains representable), which is the honest split: §1 says which strings DynamoDB accepts in an `N`, and the calculus's job is that its codecs write only those. Two narrowings are noted at the definition: a bare integer part is required, and significance is counted between first and last nonzero digit. |
 | **§6's equations**                      | **Twenty of twenty, with one row narrower than the table reads — and now stated in one language.** Every Hold row has a term-level twin (`equiv_denoteω_*`), reached through ten `rfl` bridges that write down the combinator-to-term translation the model had only implied. The "do not hold" table is settled: eight machine-checked, and `optional(optional(c))` enforced by the syntax, since no `Field` constructor takes a `Field`. All eleven "Hold" rows are proved, but `union`'s commutativity is proved for the **adjacent transposition** (`equiv_altCodec_swap`), which generates every permutation without the lift to `List.Perm` being written down. Wrapper member preservation is five of five — three codec wrappers, and the two field wrappers through `FieldSem.codec`, which §4 of the specification says is where a field's member lives. `union` associativity, the table's only *conditional* row, holds **without** its conditions — see §4. And `≡` itself is reflexive and symmetric but **not transitive** (`not_equiv_trans`), which bounds what a table of rewrites licenses. |
 | **`Double`**                            | Axiomatized with exactly the shortest-text round trip `(number)` consumes. IEEE-754 facts are not this calculus's theorems. |
-| **Set-ness**                            | **Closed, on both halves — the row above described the model before the repair.** `SS`/`NS`/`BS` are `Finset String`/`Finset Numeral`/`Finset Bytes` and `Value` carries `strSet`/`numSet`/`binSet` over the same three concrete types; `M` and `Value.map` are a `Finset Name` of names with a function on it (`m (keys : Finset Name) (f : {k // k ∈ keys} → Attr)`). Unordered, unique-keyed and homogeneous are properties of the type rather than obligations on a codec, and there are no longer two orderings of one set or one map for `ker p` to collapse — so §2's first of three reasons is withdrawn rather than relocated, and the remaining two (`η` normalising `N`, `drop` discarding names) are the honest list. What is still *gated* is non-emptiness, by `encSet`'s card check, which is a refinement `℘⁺fin` carries and no type of finite sets does. |
+| **Set-ness**                            | **Closed, on both halves — the row above described the model before the repair.** `SS`/`NS`/`BS` are `Finset String`/`Finset Numeral`/`Finset Bytes` and `Value` carries `strSet`/`numSet`/`binSet` over the same three concrete types; `M` and `Value.map` are a `Finset Name` of names with a function on it (`m (keys : Finset Name) (f : {k // k ∈ keys} → Attr)`). Unordered, unique-keyed and homogeneous are properties of the type rather than obligations on a codec, and there are no longer two orderings of one set or one map for `ker p` to collapse — so §2's first of three reasons is withdrawn rather than relocated, and the remaining two (`η` normalising `N`, `drop` discarding names) are the honest list. What is still *gated* is non-emptiness, by `encSet`'s card check — and that is a choice we have not yet revisited rather than a limit of the kernel: `{S : Finset String // S.Nonempty}` is admissible in a constructor alongside the recursive arms, so `℘⁺fin` is typeable exactly as `℘fin` was. See §4's last entry. |
 
 ## §7 Tooling rationale
 
