@@ -54,7 +54,19 @@ and the judgement to it), and `lazy` concludes `⊤` in the model exactly as the
   a single `by_contra`, or an appeal to a lemma like `List.filter_eq_nil_iff`, silently
   widens the base of everything downstream. `Calculus/Axioms.lean` collects the axioms each
   headline theorem actually depends on and fails the build on anything unsanctioned. Both
-  of those leaks happened while the module was being written, which is why it exists.
+  of those leaks happened while the module was being written, which is why it exists — and it
+  has caught two more since, one of them entering through a `def` rather than a proof
+  (mathlib's `DecidableEq (Finset α)` is classical in this toolchain), where no amount of
+  reviewing tactics would have found it.
+
+  **The guard only sees what is loaded**, and `Axioms.lean` imports a hand-maintained list, so
+  a module nothing on that list reaches is silently unguarded. That is the same opt-in failure
+  this file's own docstring argues against, one level up. `python3 scripts/guard_reach.py`
+  closes it: it builds the import graph under `Calculus/` and fails if any module is outside
+  the transitive closure of the guard's imports. It checks *reachability*, not that the guard
+  is configured correctly. `Axioms.lean` cannot simply `import Calculus` instead — the
+  aggregator imports the guard, so that is a cycle, and inverting it would let
+  `defaultTargets = ["Calculus"]` build the tree with no guard running at all.
 - **Fuel-primary denotation, now with a fuel-free twin.** `denote` still takes fuel and
   **there is no fuel.** `denote : Term → Codec` is structural, and the two files that used
   to hold a second fuel-free denotation and the transport to it — `Denoteω.lean`,
