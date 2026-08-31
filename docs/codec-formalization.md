@@ -1643,13 +1643,7 @@ type, where "the image of a nonempty set is nonempty" is already proved (`setIma
 tell that it is the right move is the same tell the map repair had: `HeldSet.lean`'s witness that
 `opaque` refuses `strSet ∅` becomes **unstatable**, exactly as `record_e_keeps_duplicate_keys` did.
 
-**`fields`, in the syntax rather than the domain.** `Term.object` holds a `List (Name × Field)` and
-the typing rule carries `hnd : (fields.map (·.1)).Nodup`. Field order is not semantically
-observable — `objWrite` dispatches by `lookup`, and `hnd` is what makes that well-defined — so two
-orderings of one object are two *terms* denoting one codec. That is the defect this section just
-closed, one level up, in the syntax. Typing it deletes `hnd` from the rule and the `lookup_map`
-detours it forces through `Soundness` and `Discharge`, and turns `TypedFields` from a list relation
-into a pointwise one.
+**`fields`, in the syntax rather than the domain — done.** See the next entry.
 
 **`literalS`/`literalN`.** `hne` and `hnd` are a nonempty finite set spelled as two side conditions
 on a list. Smallest change of the four.
@@ -1669,6 +1663,48 @@ radius of the four, since `NS` is `Finset Numeral` and moves with it.
 The general lesson is the one the map entry above records, stated as a rule rather than an anecdote:
 **a refinement carried by a gate is a claim that the type cannot carry it, and that claim is cheap to
 test and has now been wrong three times.**
+
+### The field table, typed — the same defect one level up, in the syntax
+
+`Term.object` held a `List (Name × Field)`, and `(object)` carried `hnd : (fields.map (·.1)).Nodup`.
+Field order is not semantically observable: `objWrite` dispatches by lookup, and `hnd` is precisely
+what makes that well-defined. So two orderings of one object were two **terms** denoting one codec,
+and a repeated field name was a term the rule had to exclude by hand — `record_e_order_sensitive`
+and `record_e_keeps_duplicate_keys`, one level up, in the syntax rather than the domain. Closing the
+domain version and leaving this one standing was an oversight, not a judgement.
+
+    | object (fields : Finset Name) (f : {k // k ∈ fields} → Field) (rest : Rest)
+
+and `objectCodec`'s spec becomes a `MapOf FieldSem`. The move that keeps the cost down is
+**`MapOf.at`** — the lookup a key set with a function on it has, deliberately shaped like
+`List.lookup` so that every proof that split on `sems.lookup k` reads unchanged. 180 `sems` sites in
+`Combinators.lean`; 17 errors.
+
+`hnd` is gone from all five object laws. What else went with it:
+
+* **`TypedFields`**, the inductive relating a field row to a binding row, and its three induction
+  lemmas. `(object)`'s premise is now `∀ k, TypedField (f k) (b k).2 (b k).1 (μs k)` — the bindings
+  are indexed by the term's own key set, so "the same names, in the same order, without repeats" is
+  not a claim to be made. Each of `TypedFields.forall`, `.lookup_bind` and `.mem_bind` is `hf k`.
+* **`keysOk_of_names` is `⟨hsub, hreq⟩`.** `keysOk` is two quantifiers over the declared names where
+  it was a hand-built `List.any` witness plus a `List.all` over the mapped row.
+* **`mem_fbNames` is `Finset.mem_filter`**, where it was a forty-line induction over the row.
+* `termDepthF`, `denoteωF_eq`, `denoteω_eqFPt`, `fieldSems_nodup`: deleted.
+* **`Lists.lean` loses its entire association-list section** — 23 declarations, found dead by a
+  transitive reference scan and confirmed by the build. With neither `M` nor the field table a keyed
+  list, there are no keyed lists left in the model. §5's keyed refinement went with them: *"entries
+  are dispatched and compared by name, first occurrence first"* was a clause about a representation
+  that had an order to prefer and a duplicate to disambiguate. `traverse_fst` stays, because `L`
+  really is a list.
+
+Net −293 lines across ten files, 714 theorems under the guard.
+
+One thing worth recording because it cost time and will recur. `TypedField`'s indices at a declared
+name are `(b k).2`, `(b k).1` and `μs k`, none of them a variable, so `cases` cannot eliminate it in
+place; likewise `cases h : ff k` does not substitute into hypotheses introduced before it. Both are
+solved the same way — extract once, at a statement where every argument *is* a variable
+(`TypedField.term`, `TypedField.not_optional`, `fieldSemOf_ne_opt`) — and that is cheaper than
+fighting dependent elimination at each of four call sites.
 
 ## §5 Certifying an implementation
 
