@@ -164,13 +164,13 @@ mutual
 noncomputable def adm : Term → Value → Bool
   | .literalS ls => fun v => match v with | .str s => s ∈ ls | _ => false
   | .literalN ls => fun v => match v with | .num d => d ∈ ls | _ => false
+  -- The discriminator projection is `OptionSem.byTag`'s own (`tagOfV`), so this table
+  -- and the admission it bounds read the same function rather than two copies of one
+  -- lookup-and-match.
   | .dunion d opts => fun v =>
-    match v with
-    | .map kvs =>
-      match kvs.lookup d with
-      | some (.str tag) => (allTags d opts).contains tag
-      | _ => false
-    | _ => false
+    match tagOfV d v with
+    | some tag => (allTags d opts).contains tag
+    | none => false
   -- `q` is a predicate on *values*, so it tightens this side and only this side.
   -- `refine`'s `e` is defined only where `q` holds, so `adm t ∩ q` is a sound bound and a
   -- strictly better one than the passthrough. `admA` cannot follow: `q` tests the value a
@@ -256,12 +256,9 @@ mutual
 def admA : Term → Attr → Bool
   | .literalS ls => fun a => match a with | .s s => s ∈ ls | _ => false
   | .dunion d opts => fun a =>
-    match a with
-    | .m kvs =>
-      match kvs.lookup d with
-      | some (.s tag) => (allTags d opts).contains tag
-      | _ => false
-    | _ => false
+    match tagOfA d a with
+    | some tag => (allTags d opts).contains tag
+    | none => false
   | .refine t _ => admA t
   | .held t _ _ => admA t
   | .union opts => fun a => admAList opts a
@@ -320,24 +317,20 @@ admitting option matched is one of the union's tags. -/
 /-- `adm` at a `dunion` is the same test, against the union's whole tag set. -/
 theorem adm_dunion {d : Name} {opts : List Term} {v : Value} :
     adm (.dunion d opts) v = true ↔
-      ∃ kvs tag, v = .map kvs ∧ kvs.lookup d = some (.str tag) ∧
-        (allTags d opts).contains tag = true := by
-  cases v <;> simp only [adm] <;> try simp
-  case map kvs =>
-    cases hlk : kvs.lookup d with
-    | none => simp [hlk]
-    | some x => cases x <;> simp [hlk]
+      ∃ tag, tagOfV d v = some tag ∧ (allTags d opts).contains tag = true := by
+  simp only [adm]
+  cases tagOfV d v with
+  | none => simp
+  | some tag => simp
 
 /-- …and `admA` likewise. -/
 theorem admA_dunion {d : Name} {opts : List Term} {a : Attr} :
     admA (.dunion d opts) a = true ↔
-      ∃ kvs tag, a = .m kvs ∧ kvs.lookup d = some (.s tag) ∧
-        (allTags d opts).contains tag = true := by
-  cases a <;> simp only [admA] <;> try simp
-  case m kvs =>
-    cases hlk : kvs.lookup d with
-    | none => simp [hlk]
-    | some x => cases x <;> simp [hlk]
+      ∃ tag, tagOfA d a = some tag ∧ (allTags d opts).contains tag = true := by
+  simp only [admA]
+  cases tagOfA d a with
+  | none => simp
+  | some tag => simp
 
 /-! ## κ is sound for the denotation -/
 
@@ -472,8 +465,8 @@ theorem adm_sound : ∀ (fuel : Nat) (t : Term) {v a},
       obtain ⟨o, ho, hadm, -⟩ := altCodec_e_admits he
       simp only [List.mem_map] at ho
       obtain ⟨-, ⟨tx, htx, rfl⟩, rfl⟩ := ho
-      obtain ⟨kvs, tag, rfl, hlk, htag⟩ := byTag_admitV.mp hadm
-      exact adm_dunion.mpr ⟨kvs, tag, rfl, hlk,
+      obtain ⟨tag, hV, htag⟩ := byTag_admitV.mp hadm
+      exact adm_dunion.mpr ⟨tag, hV,
         contains_of_mem (mem_allTags htx (mem_of_contains htag))⟩
     case refine t' q =>
       obtain ⟨hq, hc⟩ := restrict_e.mp he
@@ -521,8 +514,8 @@ theorem admA_sound : ∀ (fuel : Nat) (t : Term) {a v},
       obtain ⟨o, ho, hadm, -⟩ := altCodec_p_admits hp
       simp only [List.mem_map] at ho
       obtain ⟨-, ⟨tx, htx, rfl⟩, rfl⟩ := ho
-      obtain ⟨kvs, tag, rfl, hlk, htag⟩ := byTag_admitA.mp hadm
-      exact admA_dunion.mpr ⟨kvs, tag, rfl, hlk,
+      obtain ⟨tag, hA, htag⟩ := byTag_admitA.mp hadm
+      exact admA_dunion.mpr ⟨tag, hA,
         contains_of_mem (mem_allTags htx (mem_of_contains htag))⟩
     case refine t' q => exact admA_sound fuel t' (restrict_p.mp hp).1
     case literal w =>
@@ -663,64 +656,62 @@ theorem traverse_input_isSome {α β : Type} {f : α → Option β} :
 
 /-- Name admission from names alone: everything present is declared, everything
     required is present. -/
-theorem keysOk_of_names {α : Type} {fields : List (Name × Field)} {l : List (Name × α)}
-    (hsub : ∀ k ∈ l.map (·.1), k ∈ fields.map (·.1))
+theorem keysOk_of_names {fields : List (Name × Field)} {keys : Finset Name}
+    (hsub : ∀ k ∈ keys, k ∈ fields.map (·.1))
     (hreq : ∀ kf ∈ fields,
       (match kf.2 with | Field.optional _ => false | _ => true) = true →
-      kf.1 ∈ l.map (·.1)) :
+      kf.1 ∈ keys) :
     keysOk (fields.map fun kf =>
-      (kf.1, match kf.2 with | Field.optional _ => false | _ => true)) l = true := by
-  simp only [keysOk, Bool.and_eq_true]
+      (kf.1, match kf.2 with | Field.optional _ => false | _ => true)) keys = true := by
+  simp only [keysOk, Bool.and_eq_true, decide_eq_true_eq]
   constructor
-  · refine List.all_eq_true.mpr fun kv hkv => ?_
-    have hk := hsub kv.1 (List.mem_map.mpr ⟨kv, hkv, rfl⟩)
-    obtain ⟨kf, hkf, hfst⟩ := List.mem_map.mp hk
+  · intro k hk
+    obtain ⟨kf, hkf, hfst⟩ := List.mem_map.mp (hsub k hk)
     refine List.any_eq_true.mpr
       ⟨(kf.1, match kf.2 with | Field.optional _ => false | _ => true),
         List.mem_map.mpr ⟨kf, hkf, rfl⟩, ?_⟩
-    show (kf.1 == kv.1) = true
+    show (kf.1 == k) = true
     rw [hfst]
-    exact beq_self_eq_true kv.1
+    exact beq_self_eq_true k
   · refine List.all_eq_true.mpr fun kb hkb => ?_
     obtain ⟨kf, hkf, rfl⟩ := List.mem_map.mp hkb
     show (!(match kf.2 with | Field.optional _ => false | _ => true) ||
-      (l.lookup kf.1).isSome) = true
+      decide (kf.1 ∈ keys)) = true
     cases hb : (match kf.2 with | Field.optional _ => false | _ => true) with
     | false => rfl
-    | true => exact lookup_isSome_of_mem_fst (hreq kf hkf hb)
+    | true =>
+      simp only [Bool.not_true, Bool.false_or, decide_eq_true_eq]
+      exact hreq kf hkf hb
 
-/-- Object-encode under a closed rest policy stamps name admission on both sides:
-    every written name is declared and every non-`opt` name is written — for the
-    value and for the attribute it becomes. -/
+/-- Object-encode under a closed rest policy stamps name admission: every written name
+    is declared and every non-`opt` name is written.
+
+    **One statement where there were two.** The list representation had a value row and
+    an attribute row, and the second half of this lemma was the first transported along
+    `traverse_fst`. `M`'s payload is a key set with a function on it, and encoding does
+    not touch the key set — so the value side's admission *is* the attribute side's, and
+    there is nothing to transport. -/
 theorem keysOk_of_encode {fields : List (Name × Field)} {den : Term → Codec}
-    {kvs : List (Name × Value)} {ds : List (Name × Attr)}
-    (hval : valPresentB (fields.map fun kf => (kf.1, fieldSemOf den kf.2))
-      (kvs.map (·.1)) = true)
-    (htr : traverse (encEntry
-        (fun k => (fields.map fun kf => (kf.1, fieldSemOf den kf.2)).lookup k) none)
-      kvs = some ds) :
+    {keys : Finset Name} {f : {k // k ∈ keys} → Value} {g : {k // k ∈ keys} → Attr}
+    (hval : valPresentB (fields.map fun kf => (kf.1, fieldSemOf den kf.2)) keys = true)
+    (hfi : funImage (fun k : {k // k ∈ keys} =>
+        (entryCodec (fields.map fun kf => (kf.1, fieldSemOf den kf.2)) none k.1).bind
+          (fun c => c.e (f k))) = some g) :
     keysOk (fields.map fun kf =>
-        (kf.1, match kf.2 with | Field.optional _ => false | _ => true)) kvs = true ∧
-    keysOk (fields.map fun kf =>
-        (kf.1, match kf.2 with | Field.optional _ => false | _ => true)) ds = true := by
-  have hnames : ds.map (·.1) = kvs.map (·.1) :=
-    traverse_fst (encEntry_fst (rc? := none)) htr
-  have hsub : ∀ k ∈ kvs.map (·.1), k ∈ fields.map (·.1) := by
-    intro k hk
-    obtain ⟨kv, hkv, rfl⟩ := List.mem_map.mp hk
-    have hsome := traverse_input_isSome htr kv hkv
-    simp only [encEntry] at hsome
-    cases hlk : (fields.map fun kf => (kf.1, fieldSemOf den kf.2)).lookup kv.1 with
-    | none => rw [hlk] at hsome; exact nomatch hsome
+        (kf.1, match kf.2 with | Field.optional _ => false | _ => true)) keys = true := by
+  refine keysOk_of_names (fun k hk => ?_) (fun kf hkf hb => ?_)
+  · -- a name the entry function is defined at is a declared name: `rc?` is `none`, so
+    -- `entryCodec` succeeds only through the field table
+    have hw := funImage_some hfi ⟨k, hk⟩
+    cases hlk : (fields.map fun kf => (kf.1, fieldSemOf den kf.2)).lookup k with
+    | none =>
+      rw [show entryCodec (fields.map fun kf => (kf.1, fieldSemOf den kf.2)) none k = none by
+        simp only [entryCodec, hlk]] at hw
+      exact nomatch hw
     | some fs =>
-      have hm := mem_of_lookup hlk
-      obtain ⟨kf, hkf, heq⟩ := List.mem_map.mp hm
+      obtain ⟨kf, hkf, heq⟩ := List.mem_map.mp (mem_of_lookup hlk)
       exact List.mem_map.mpr ⟨kf, hkf, congrArg Prod.fst heq⟩
-  have hreq : ∀ kf ∈ fields,
-      (match kf.2 with | Field.optional _ => false | _ => true) = true →
-      kf.1 ∈ kvs.map (·.1) := by
-    intro kf hkf hb
-    have hmem : (kf.1, fieldSemOf den kf.2) ∈
+  · have hmem : (kf.1, fieldSemOf den kf.2) ∈
         fields.map fun kf => (kf.1, fieldSemOf den kf.2) :=
       List.mem_map.mpr ⟨kf, hkf, rfl⟩
     have hno : ∀ c, fieldSemOf den kf.2 ≠ FieldSem.opt c := by
@@ -729,11 +720,7 @@ theorem keysOk_of_encode {fields : List (Name × Field)} {den : Term → Codec}
       | optional t' => rw [hf2] at hb; exact nomatch hb
       | req t' => rw [hf2] at hc; exact nomatch hc
       | fallback t' v' => rw [hf2] at hc; exact nomatch hc
-    have := valPresentB_spec hval hmem hno
-    exact mem_of_contains this
-  refine ⟨keysOk_of_names hsub hreq, keysOk_of_names ?_ ?_⟩
-  · rw [hnames]; exact hsub
-  · rw [hnames]; exact hreq
+    exact valPresentB_spec hval hmem hno
 
 /-- A closed option admits its own canonical pairs, on both sides. An *open* object —
     a rest codec — is excluded, as §5 demands: an undeclared name disqualifies the
@@ -772,13 +759,10 @@ theorem optionSem_self_admit (fuel : Nat) (t : Term)
             (keepB (restSemOf (denote f) rest)
               (fields.map fun kf => (kf.1, fieldSemOf (denote f) kf.2)))).e v =
           some a := he
-        obtain ⟨kvs, ds, rfl, rfl, hval, htr⟩ := objectCodecCore_e_inv he
-        rw [hrc] at htr
-        replace htr : traverse (encEntry
-            (fun k => (fields.map fun kf =>
-              (kf.1, fieldSemOf (denote f) kf.2)).lookup k) none)
-          kvs = some ds := htr
-        exact keysOk_of_encode hval htr
+        obtain ⟨keys, fv, g, rfl, rfl, hval, hfi⟩ := objectCodecCore_e_inv he
+        rw [hrc] at hfi
+        -- both halves are the same `keysOk`, at the key set the two payloads share
+        exact ⟨keysOk_of_encode hval hfi, keysOk_of_encode hval hfi⟩
     all_goals exact nomatch hs
 
 /-- Any option's value admission is `adm`-guarded. -/
@@ -926,8 +910,8 @@ theorem admDisj_ident {x y : Term} (hdisj : ∀ v, adm x v = true → adm y v = 
 
 /-- A `discriminatedUnion` with no options refuses every value: `allTags` is empty. -/
 theorem adm_dunion_nil (d : Name) (v : Value) : adm (.dunion d []) v = false := by
-  cases v <;> simp only [adm, allTags]
-  split <;> rfl
+  simp only [adm, allTags]
+  cases tagOfV d v <;> rfl
 
 /-- And it is derivable — `(dunion)`'s premises are quantified over the option list. -/
 theorem typed_dunion_nil (d : Name) : Typed (.dunion d []) (HUnion []) (some .M) :=
