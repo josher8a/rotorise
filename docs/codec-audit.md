@@ -54,6 +54,7 @@ content.
 | ~~18~~ | ~~`codec-formalization.md`, ~45 names~~ **Half landed: the check exists and the current-state documents pass.** | **A name-drift scan the repo did not have.** `fidelity_audit.py` and `vocab_audit.py` measure the mechanization; neither checked that a backticked name in a document still exists in `Calculus/`. `scripts/name_drift.py` now does, and fails non-zero. The three current-state documents in `formal/` had **seven** broken citations, all fixed. What remains is `codec-formalization.md`'s ~45, nearly all in §4, where the supersession rule applies and a name records what was reasoned with — a judgment about §4, not an edit. | — | **check landed**; §4 open |
 | 19 | `src/codec.ts` — `lazy` | **A recursive typed codec is the third place depth runs away, and item 15 does not cover it.** A self-nesting `object` holding an `array` of itself costs two levels a turn and passes 32 at the sixteenth — measured, `depth 82` at forty levels. Unlike `opaque`/`native` the depth arrives through a *declared* spec, so closing it means threading a level through every container codec rather than guarding two escape hatches. Cited from `attribute.ts`'s `tooDeeplyNested` docstring, so it must not be dropped silently. | — | medium; touches every container |
 | 20 | `Nesting.lean` | **The compositional bound, which is the actual repair.** §12.7 states the defect and proves the two building blocks — ground terms write nesting `0`, `array` adds exactly one. What is missing is `∀ t v a, Typed t T μ → (denote t).e v = some a → Attr.nesting a ≤ f t` for a syntactic `f`, and **no such `f` exists** for the whole language: `opaque` and `lazy` take their depth from the value. So the theorem is about the fragment that excludes them, and naming that fragment is the work. | — | medium; the honest form of item 19 |
+| 21 | `src/codec.ts:2653` | **`CodecDef` cannot tell `Rest.drop` from `Rest.refuse`.** Both are strings, so `restCodec` is `undefined` for either and the `def` records nothing that separates them. Found by the vector emitter, which writes `Rest.drop` for both. Sound for *encode* vectors — `objWrite` never sees the `kn` filter and `rcOf` is `none` either way, so the two denote the same `e` — and **fatal for a decode-direction generator**, which would emit a term whose `p` is wrong. Fix before anyone builds the `p` side. | — | small |
 | ~~15~~ | ~~`src/codec.ts`~~ **Landed.** | **Nothing checked the 32-level nesting bound**, so `opaque` and `native` wrote items DynamoDB rejects — §12.3's fifth C1 violation, plus a raw `RangeError` at pathological depth. Both now refuse, sharing one `tooDeeplyNested` in `attribute.ts` beside `isNumeral`. The deferral was the queue row's; §12.3 and §12.4 both said in terms that the library fix must not wait, and they were the half that was right. §12.6. | — | **landed** |
 | ~~16~~ | ~~`Typing.lean:207-210`~~ **Refused, and the measurement found two live bugs instead.** | `dunion` keyed by tag would delete `htags` and `hdisj`. §12.2 withdrew §2.2's coherence-gate objection and asked for one measurement first. Taken: the library **already contains both shapes**, keeps the tag-keyed one private, and says in its own docstring why. `htags`/`hdisj` stay. §12.5 records the measurement and the two `src/` defects it turned up. | nothing | **refused, with evidence** |
 | ~~6b~~ | ~~`Term.lean:27-35`~~ **Landed.** | **`literal`, `literalS` and `literalN` are one rule.** Raised by JH while item 6 was landing, and right: all three are *a nonempty finite set of values at one ground base*. Landed as the base-indexed form of §11.1 — `literal (k : GroundKind) (ls : NEFinset k.Carrier)` — after §11.4/§11.5 settled that the cheaper union route costs either `Classical.choice` or two reintroduced gates. | 2 constructors, 5 codec definitions → 4, 3 lawful theorems → 1, 2 carrier theorems → 1 (one of them 26 lines), 4 `admA` row lemmas → 3 | **landed** |
@@ -493,9 +494,13 @@ Requested explicitly, and the sharpest ones continue this session's own arc:
 
 ### 5.7 To adopt
 
-**Differential testing against the shipped TypeScript**, the way Cedar and ShardStore do it:
+~~**Differential testing against the shipped TypeScript**, the way Cedar and ShardStore do it:
 generate random terms and values from the deep embedding, run the Lean-evaluated reference and
-the TS implementation, diff. This is the realistic answer to certifying the port — extraction
+the TS implementation, diff.~~ **Built (§12.8) — and the direction in that sentence is backwards.**
+Lean cannot run the reference: `denote` is `noncomputable`, `#eval` fails at the first term, and
+`Finset.sort` is stuck in the kernel, so no vector can be *printed*. It can be *checked*, by `rfl`,
+at every term form. The host generates and the model verifies, which is the opposite of "run the
+Lean-evaluated reference and diff", and it is forced rather than chosen. This is the realistic answer to certifying the port — extraction
 to TypeScript is not credible. **QuickChick-style derived generators** with soundness *and*
 completeness proofs against an inductive relation would turn `Adm`/`AdmA` into a test oracle
 for free and feed the above. **Read next:** arXiv 2505.17335, then Narcissus §3–4.
@@ -1273,6 +1278,46 @@ in the *table*, which is not any option's property.
 it?" is a question with an answer. §9 found five bugs by asking that of five premises. This is the
 sixth and seventh, and item 16 — which was going to *delete* `hdisj` — is what asked.
 
+### 12.6 Item 15, landed — and the boundary is the one thing a probe could not settle
+
+§12.3 called this the fifth C1 violation and said the library fix "should not wait" for the model's
+side; §12.4 ended "what it must not do is wait for item 15". The queue row said **DEFERRED**. The
+body was right and the row was stale — the third time this pass the queue row was the wrong half.
+
+**Measured first.** `opaque.encode` of 100 nested arrays produced a 101-deep attribute with no
+complaint; `native.encode` of 40 produced 41. Both would be rejected on write. A third result was
+not expected: `opaque.encode` of a 20 000-deep array threw
+`RangeError: Maximum call stack size exceeded` — a raw `RangeError` escaping the same contract the
+`TypeError` in §12.5 escaped, from the same cause, a walk with no guard on it.
+
+**The fix.** `MAX_DOCUMENT_NESTING` and `tooDeeplyNested` in `attribute.ts`, beside `isNumeral` and
+for §9.7's reason: a fact about what the carrier holds belongs where the carrier is described, and
+two walkers ask it. Asked *on the way in*, before recursing — which is what turns the 20 000 case
+into a refusal instead of a crash, where measuring the finished attribute would have crashed first.
+
+**The boundary is unverified, and that is worth saying plainly.** `dynamo-datatypes.md:130` is the
+only statement of the limit in this repo, and its sentence — *"document types … can be nested
+within each other … up to 32 levels deep"* — does not say whether a scalar sitting inside 32 lists
+is the 32nd level or the 33rd. What is implemented is the literal reading: at most 32 nested
+**document types**, the leaf not being one, so 32 nested lists holding a string is accepted and 33
+refused. If a live table disagrees it disagrees by exactly one, and `codec.depth.spec.ts` pins both
+sides of the boundary so the disagreement arrives as a named failing test rather than as a rejected
+write. **This is the one claim in the fix no probe here could settle; it wants a round trip against
+a real table.**
+
+**A correction to §12.3's proposed model-side statement.** It suggests stating the bound as
+`Attr.depth a ≤ 32`. That will not do. `Attr.depth` is a *termination measure*, and its wire-set row
+(`.ss`/`.ns`/`.bs` = 2) is one greater than the store's nesting count, because a set holds payloads
+rather than attributes and is not a document type at all. A model-side bound has to count `L` and
+`M` only — a different function from the one `Opaque.lean` recurses on. Aligning the library to
+`Attr.depth` would have made it refuse a legal set at the deepest level.
+
+**And the fix does not cover everything.** Typed codecs are unguarded, which is right for a spec
+whose depth is fixed by its declaration — *except* under `lazy`, where a recursive entity's depth
+comes from the data. Measured at `depth 82` for a forty-level tree. Queued as item 19 rather than
+absorbed here, because the fix is structurally different: threading a level through every
+container, not guarding the two hatches that walk undeclared data.
+
 ### 12.7 The model can now state the defect — `Nesting.lean`
 
 §12.6 fixed the library and left the model silent, which is the wrong way round for a document
@@ -1320,45 +1365,72 @@ language, because `opaque` and `lazy` take their depth from the value rather tha
 statement is therefore about a *fragment*, and naming that fragment precisely is item 20 — which
 is also the honest form of item 19, since a recursive typed codec is exactly a term outside it.
 
-### 12.6 Item 15, landed — and the boundary is the one thing a probe could not settle
+### 12.8 The bridge, built — and what it cost to find out how
 
-§12.3 called this the fifth C1 violation and said the library fix "should not wait" for the model's
-side; §12.4 ended "what it must not do is wait for item 15". The queue row said **DEFERRED**. The
-body was right and the row was stale — the third time this pass the queue row was the wrong half.
+§6 of `codec-formalization.md` calls C1–C3 "a paper obligation" and "the largest remaining risk";
+§5.7 names differential testing as the answer and assumes Lean generates the vectors. **It cannot.**
+`denote` is `noncomputable`, so `#eval` fails on the very first term, and `Finset.sort` is stuck in
+the kernel — Lean can never *print* an attribute. But the kernel *evaluates* `denote` by `rfl` at
+every term form, sub-second. So the direction is forced rather than chosen: the host proposes, the
+model checks. Both halves are now in the tree (`Calculus/Vectors.lean`, `src/lean.ts`).
 
-**Measured first.** `opaque.encode` of 100 nested arrays produced a 101-deep attribute with no
-complaint; `native.encode` of 40 produced 41. Both would be rejected on write. A third result was
-not expected: `opaque.encode` of a 20 000-deep array threw
-`RangeError: Maximum call stack size exceeded` — a raw `RangeError` escaping the same contract the
-`TypeError` in §12.5 escaped, from the same cause, a walk with no guard on it.
+**Three things contradicted the brief the work was scoped against, and each was found by running
+something rather than reading it.**
 
-**The fix.** `MAX_DOCUMENT_NESTING` and `tooDeeplyNested` in `attribute.ts`, beside `isNumeral` and
-for §9.7's reason: a fact about what the carrier holds belongs where the carrier is described, and
-two walkers ask it. Asked *on the way in*, before recursing — which is what turns the 20 000 case
-into a refusal instead of a crash, where measuring the finished attribute would have crashed first.
+*The map case does not fail `rfl`; it diverges.* `Attr.m` holds a function, so the model's answer is
+stuck under a binder — pointwise equal to an emitted lambda, not definitionally equal — and
+`isDefEq` runs to the 200 000-heartbeat limit. `funImage` being `noncomputable` is not the cause;
+its `dite` reduces fine. The suspects named in the brief — `Finset`, `Finset.sup`, subtype carriers
+— blocked nothing.
 
-**The boundary is unverified, and that is worth saying plainly.** `dynamo-datatypes.md:130` is the
-only statement of the limit in this repo, and its sentence — *"document types … can be nested
-within each other … up to 32 levels deep"* — does not say whether a scalar sitting inside 32 lists
-is the 32nd level or the 33rd. What is implemented is the literal reading: at most 32 nested
-**document types**, the leaf not being one, so 32 nested lists holding a string is accepted and 33
-refused. If a live table disagrees it disagrees by exactly one, and `codec.depth.spec.ts` pins both
-sides of the boundary so the disagreement arrives as a named failing test rather than as a rejected
-write. **This is the one claim in the fix no probe here could settle; it wants a round trip against
-a real table.**
+*Wire sets break `rfl` for a second, independent reason.* The library sorts a set on encode; the
+model keeps insertion order. A `Finset` is a quotient of lists, so two orders are equal Finsets and
+not defeq `Quot.mk`s. **Invisible in a same-order test** — it survived a whole probe batch and
+appeared only on a full sample run. It is a disagreement in representation, not in meaning, and it
+is exactly the class of thing differential testing exists to surface.
 
-**A correction to §12.3's proposed model-side statement.** It suggests stating the bound as
-`Attr.depth a ≤ 32`. That will not do. `Attr.depth` is a *termination measure*, and its wire-set row
-(`.ss`/`.ns`/`.bs` = 2) is one greater than the store's nesting count, because a set holds payloads
-rather than attributes and is not a document type at all. A model-side bound has to count `L` and
-`M` only — a different function from the one `Opaque.lean` recurses on. Aligning the library to
-`Attr.depth` would have made it refuse a legal set at the deepest level.
+*The map cost was not where anyone expected.* Not `Finset` `DecidableEq`, not the bounded `∀` — the
+*interaction*. Ranging the quantifier over the codec's key set drives the decidable-`∀` instance
+through `funImage` and re-does the codec's work per step. Ranging it over the vector's literal key
+set instead — identical statement, identical proof — took 630 ms to 64 ms. The rule is in the
+docstring: *iterate over the written side, look up on the computed side.*
 
-**And the fix does not cover everything.** Typed codecs are unguarded, which is right for a spec
-whose depth is fixed by its declaration — *except* under `lazy`, where a recursive entity's depth
-comes from the data. Measured at `depth 82` for a forty-level tree. Queued as item 19 rather than
-absorbed here, because the fix is structurally different: threading a level through every
-container, not guarding the two hatches that walk undeclared data.
+**Measured, so the deployment question is answered rather than argued.** ~4 ms per scalar vector,
+~90 ms per 2-deep object vector, linear in N. Fuel is not a cost driver (`check 2`/`8`/`32` within
+1%), so the generator can pass a constant. Batching into one `List.all` is worse than useless: 200
+distinct vectors blow the heartbeat limit where 200 separate lines pass in 19 s. **A few hundred
+vectors is seconds — this belongs in CI, not a periodic sweep.**
+
+**What it cannot reach, permanently.** `number` and numeric literals: `Double` is an axiom with no
+closed terms, so `Value.num` has no inhabitant to write. That hole closes only by de-axiomatizing
+`Double`, which is a change to the axiom base §3 advertises — a spec decision, not a testing one.
+`decimal` is the numeric escape hatch and is why `Attr.n`'s comparator row compares the underlying
+text. Empty wire sets have no `NEFinset` inhabitant. And `refine`/`held`/`legacy`/`custom` carry
+Lean functions where the library carries closures — the emitter **refuses** rather than
+substituting a stand-in, because `fun _ => true` for a refinement compiles and proves the wrong
+theorem. Hand-written Lean for the specific predicates this library ships is the next increment.
+
+### 12.9 The axiom guard has now caught two silent leaks, and the pattern is the point
+
+Recorded as a pattern rather than two anecdotes, because the second one would not have been found
+by any amount of proof review.
+
+`Nesting.lean` (§12.7) used `omega`, which can reach `Classical.choice`, and sat outside
+`#assert_axioms_all` until its module was imported into `Axioms.lean` by hand. `Vectors.lean` used
+`decide (ka = kb)` on a `Finset Name`, and **the axiom entered through a `def`**: `#print axioms` on
+the definition `aeq` was already classical, and so was a bare `Verdict.noConfusion`. No proof step
+was at fault. mathlib's `DecidableEq (Finset α)` is classical in this toolchain; `Finset.decidableMem`
+is not. The repair is `fsetEq`, equality as mutual inclusion, sound by `Finset.Subset.antisymm`.
+
+Two rules fall out.
+
+1. **A guard that walks a namespace only sees what is loaded.** `Axioms.lean` imports a fixed list,
+   so every module added after it is invisible until someone edits that list. Two modules in one
+   week hit this. It should be a checked property, not a habit — the same argument `Axioms.lean`
+   itself makes about the axiom base being a build error rather than a sentence.
+2. **Classicality is a property of definitions, not only of proofs.** Reviewing tactics is not
+   enough; a `decide` on the wrong instance widens the base of everything downstream, silently, with
+   every proof looking clean.
 
 ## 13. `denote` does not need fuel — and this is the largest finding in the file
 
