@@ -16,7 +16,13 @@
  * `rotorise/testing` to prove each attribute as it is replaced.
  *
  * Verified against the real SDK: twenty values and three option sets, both directions, agreeing on
- * every one including the cases where the SDK throws.
+ * every one including the cases where the SDK throws — with **one deliberate divergence, in the
+ * direction of the store**. `Carries('N')` is the numerals, not the finite doubles, and the SDK
+ * checks only the latter: it will marshal `1e300` and `5e-324` into an `N` DynamoDB refuses, and
+ * unmarshal `{ N: '' }` as `0` and `{ N: '0x10' }` as `16`. This gates both halves on the same
+ * predicate every other term that touches an `N` uses, and refuses an empty `SS`/`NS`/`BS` on read
+ * where the SDK hands back an empty `Set`. {@link native.Deviations} restores the SDK's exact
+ * behaviour for a caller who wants the bytes and nothing else.
  */
 import type {
     AttributeMap,
@@ -32,7 +38,7 @@ import type {
     S,
     SS,
 } from './attribute'
-import { carrying, memberOf } from './attribute'
+import { carrying, isNumeral, memberOf } from './attribute'
 import { codec } from './build'
 import type { AttributeCodec, Result } from './codec'
 import { andThen, CodecError, every, everyEntry } from './codec'
@@ -92,7 +98,24 @@ const nativeNumber = (
             )
         }
     }
-    return carrying('N', value.toString())
+    /**
+     * **The gate the SDK does not have.** `Number.isFinite` and the safe range are its two checks,
+     * and neither is `Carries('N')`: `5e-324` is finite, inside the safe range, and outside the
+     * numerals — 38 significant digits and magnitude `1e-130 … 9.9…e125`. `convertToAttr` writes
+     * `{ N: '5e-324' }` happily, and DynamoDB refuses the row.
+     *
+     * So this is a deliberate divergence from the SDK, in the direction of the store: `ran(e) ⊆ 𝔸`
+     * is the obligation every term that writes an `N` carries, and `number`, `literal` and `opaque`
+     * all gate on it. A marshaller that skipped it would be the one place in the package that
+     * certifies an attribute the model has no point for. `deviations.writeNumber` is there for a
+     * caller who wants the SDK's exact behaviour back, byte for byte.
+     */
+    const digits = value.toString()
+    return isNumeral(digits)
+        ? carrying('N', digits)
+        : new CodecError(
+              `${digits} is not a number DynamoDB stores: it takes at most 38 significant digits and magnitude 1e-130 to 9.9e125`,
+          )
 }
 
 const nativeSet = (
@@ -224,6 +247,23 @@ const toNative = (
 
 /** A stored number, as `convertToNative` reads it — a `bigint` outside the safe range. */
 const fromNativeNumber = (digits: string): Result<unknown> => {
+    /**
+     * **`Number` reads far more than an `N` carries**, and the SDK hands it the digits unchecked:
+     * `''` and whitespace are `0`, `'0x10'` is `16`, `'abc'` is `NaN`. Each is a value this codec's
+     * own `encode` now refuses, which is **(C)** failing — the pair's two halves disagreeing about
+     * what an `N` holds. `number` and `opaque` have read through this gate since the numeral domain
+     * was tightened; this is the third reader of an `N`, one file over.
+     *
+     * One gate is enough here, where `number` needs two. `number`'s second gate catches a numeral
+     * that rounds *out* of range on the way into a double; this reader hands a wide value back as a
+     * `bigint` of the very digits stored, and a narrow one is inside the safe range, so nothing it
+     * returns can fail to be writable again.
+     */
+    if (!isNumeral(digits)) {
+        return new CodecError(
+            `'${digits}' is not a numeral, so this attribute was not written by DynamoDB`,
+        )
+    }
     const asNumber = Number(digits)
     const wide =
         asNumber > Number.MAX_SAFE_INTEGER || asNumber < Number.MIN_SAFE_INTEGER
@@ -236,6 +276,24 @@ const fromNativeNumber = (digits: string): Result<unknown> => {
         )
     }
 }
+
+/**
+ * A stored set, refused when empty.
+ *
+ * DynamoDB has no empty `SS`, `NS` or `BS`, so an item carrying one was written by something else —
+ * and {@link nativeSet} refuses to write one, either erroring or storing `NULL`. Reading it would
+ * hand back a value this codec's own `encode` cannot produce, which is **(C)** failing. The SDK
+ * returns an empty `Set` for all three; this does not.
+ */
+const nonEmpty = <T>(
+    member: 'SS' | 'NS' | 'BS',
+    members: readonly T[],
+): Result<readonly T[]> =>
+    members.length === 0
+        ? new CodecError(
+              `DynamoDB has no empty ${member}, so this attribute was not written by it; a set this codec would refuse to write is not one it can read`,
+          )
+        : members
 
 /** A stored value, as `@aws-sdk/util-dynamodb`'s `convertToNative` reads it. */
 const fromNative = (
@@ -264,12 +322,18 @@ const fromNative = (
             )
         case 'NS':
             return andThen(
-                every(carried as readonly string[], read),
+                andThen(
+                    nonEmpty(member, carried as readonly string[]),
+                    (members) => every(members, read),
+                ),
                 (read) => new Set(read),
             )
         case 'BS':
         case 'SS':
-            return new Set(carried as readonly unknown[])
+            return andThen(
+                nonEmpty(member, carried as readonly unknown[]),
+                (members) => new Set(members),
+            )
         default:
             return new CodecError(
                 `No value defined: ${JSON.stringify(attribute)}`,
@@ -395,6 +459,12 @@ export namespace native {
      * The usual one is numbers. A marshaller that hands `N` back as a string keeps a decimal exact
      * where the SDK's would round it, and that single branch is the difference between two marshallers
      * writing the same bytes and reading them differently.
+     *
+     * They are also the way *back* to the SDK. This port's own numbers deviate from it — both halves
+     * gate on `Carries('N')`, where the SDK checks a finite double on the way in and nothing at all
+     * on the way out — so a caller migrating a table that already holds `{ N: '1e300' }` passes
+     * `readNumber: Number` and gets the SDK's reading, non-numerals and all, until the rows are
+     * repaired.
      */
     export type Deviations = {
         /** How a stored `N` is read. The SDK's answer is a number, widening to `bigint`. */

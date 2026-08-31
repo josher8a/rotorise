@@ -12,7 +12,9 @@
  * verified against so a package manager can say when yours is far from it.
  *
  * Two kinds of agreement are checked, and the second is the one a port usually gets wrong:
- * the *values* both produce, and the *types* both name.
+ * the *values* both produce, and the *types* both name. Then the one **disagreement**, which is
+ * where the port stops being faithful on purpose: the SDK does not check that an `N` carries a
+ * numeral, in either direction, and this does.
  */
 
 import type { marshallOptions } from '@aws-sdk/util-dynamodb'
@@ -220,7 +222,10 @@ describe('the port agrees on combinations of options', () => {
         new Set<string>(),
         { a: undefined, b: 'x' },
         [undefined, 'x'],
-        1e300,
+        // imprecise, so `allowImpreciseNumbers` decides it — and *inside* the numerals, so the
+        // gate below does not. `1e300` was here, which conflated the two checks; it now has its
+        // own describe, because that is a disagreement rather than an agreement
+        1e30,
         { nested: { deeper: [new Set(['a']), ''] } },
     ]
 
@@ -241,6 +246,89 @@ describe('the port agrees on combinations of options', () => {
             }
             expect(ours, JSON.stringify(value)).toEqual(theirs)
         }
+    })
+})
+
+/**
+ * The one place the port deliberately disagrees — and it is the store it agrees with instead.
+ *
+ * `Carries('N')` is the numerals: 38 significant digits, magnitude `1e-130 … 9.9…e125`. The SDK
+ * checks a finite double on the way in and *nothing* on the way out, so `convertToAttr` marshals
+ * numbers DynamoDB refuses and `convertToNative` reads back strings DynamoDB never stored. A port
+ * faithful there would be the one codec in this package that writes outside `𝔸`, so both halves
+ * gate on the same predicate every other term touching an `N` uses.
+ *
+ * Each case asserts *both* sides: that the SDK really does the thing (so the divergence is a fact
+ * about the SDK and not about a test) and that this refuses it.
+ */
+describe('the port refuses four things the SDK does not', () => {
+    const permissive = { allowImpreciseNumbers: true }
+
+    it.each([
+        { name: 'too large', value: 1e300 },
+        { name: 'denormal', value: 5e-324 },
+        // a `bigint` is the case that turns up in real data rather than in a bound: it is exactly
+        // how a caller carries more digits than a double holds, and the safe-range check that
+        // catches the two above does not look at it at all
+        {
+            name: '41 significant digits',
+            value: 12345678901234567890123456789012345678901n,
+        },
+    ])('will not write $name, where the SDK will', ({ value }) => {
+        expect(sdk.convertToAttr(value, permissive)).toHaveProperty('N')
+        expect(native(permissive).encode(value)).toBeInstanceOf(CodecError)
+    })
+
+    it.each([
+        { name: 'empty', digits: '', reads: 0 },
+        { name: 'hexadecimal', digits: '0x10', reads: 16 },
+        { name: 'not a number at all', digits: 'abc', reads: Number.NaN },
+        {
+            name: 'out of range',
+            digits: '1e400',
+            reads: Number.POSITIVE_INFINITY,
+        },
+    ])(
+        'will not read $name, where the SDK reads it as $reads',
+        ({ digits, reads }) => {
+            expect(sdk.convertToNative({ N: digits } as never)).toEqual(reads)
+            expect(native.decode({ N: digits } as never)).toBeInstanceOf(
+                CodecError,
+            )
+        },
+    )
+
+    it.each(['SS', 'NS', 'BS'] as const)(
+        'will not read an empty %s, where the SDK returns an empty Set',
+        (member) => {
+            const stored = { [member]: [] } as never
+            expect(sdk.convertToNative(stored)).toEqual(new Set())
+            expect(native.decode(stored)).toBeInstanceOf(CodecError)
+        },
+    )
+
+    it('will not read an NS holding a non-numeral', () => {
+        const stored = { NS: ['1', 'abc'] } as never
+        expect(sdk.convertToNative(stored)).toEqual(new Set([1, Number.NaN]))
+        expect(native.decode(stored)).toBeInstanceOf(CodecError)
+    })
+
+    /**
+     * And the way back. A team migrating a table that already holds these rows needs the SDK's
+     * reading until they are repaired, which is what {@link native.Deviations} is for — so the
+     * divergence is a default, not a wall.
+     */
+    it('restores the SDK exactly, through deviations', () => {
+        const sdkLike = native(permissive, {
+            writeNumber: (value) => ({ N: value.toString() }),
+            readNumber: (digits) => Number(digits),
+        })
+        expect(sdkLike.encode(5e-324)).toEqual(
+            sdk.convertToAttr(5e-324, permissive),
+        )
+        expect(sdkLike.decode({ N: '' } as never)).toBe(
+            sdk.convertToNative({ N: '' } as never),
+        )
     })
 })
 
