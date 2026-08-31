@@ -53,6 +53,7 @@ content.
 | 17 | `Denote.lean:95` +4 modules | **`denote` does not need fuel.** A structural, fuel-free `denote` compiles against the real `Term` (§13.1). The obstructions were `List.map` and a higher-order `fieldSemOf`, both incidental. Puts `Denoteω` (314), `Soundnessω` (77), `Continuity` (123) and `Opaque.lean`'s budget apparatus (854, 148 `depth` uses) in question, plus `fuel` in `Soundness` (191), `Discharge` (159), `Exactness` (40). §13. | ~1400 lines | **largest in this file** — spike first |
 | ~~18~~ | ~~`codec-formalization.md`, ~45 names~~ **Half landed: the check exists and the current-state documents pass.** | **A name-drift scan the repo did not have.** `fidelity_audit.py` and `vocab_audit.py` measure the mechanization; neither checked that a backticked name in a document still exists in `Calculus/`. `scripts/name_drift.py` now does, and fails non-zero. The three current-state documents in `formal/` had **seven** broken citations, all fixed. What remains is `codec-formalization.md`'s ~45, nearly all in §4, where the supersession rule applies and a name records what was reasoned with — a judgment about §4, not an edit. | — | **check landed**; §4 open |
 | 19 | `src/codec.ts` — `lazy` | **A recursive typed codec is the third place depth runs away, and item 15 does not cover it.** A self-nesting `object` holding an `array` of itself costs two levels a turn and passes 32 at the sixteenth — measured, `depth 82` at forty levels. Unlike `opaque`/`native` the depth arrives through a *declared* spec, so closing it means threading a level through every container codec rather than guarding two escape hatches. Cited from `attribute.ts`'s `tooDeeplyNested` docstring, so it must not be dropped silently. | — | medium; touches every container |
+| 20 | `Nesting.lean` | **The compositional bound, which is the actual repair.** §12.7 states the defect and proves the two building blocks — ground terms write nesting `0`, `array` adds exactly one. What is missing is `∀ t v a, Typed t T μ → (denote t).e v = some a → Attr.nesting a ≤ f t` for a syntactic `f`, and **no such `f` exists** for the whole language: `opaque` and `lazy` take their depth from the value. So the theorem is about the fragment that excludes them, and naming that fragment is the work. | — | medium; the honest form of item 19 |
 | ~~15~~ | ~~`src/codec.ts`~~ **Landed.** | **Nothing checked the 32-level nesting bound**, so `opaque` and `native` wrote items DynamoDB rejects — §12.3's fifth C1 violation, plus a raw `RangeError` at pathological depth. Both now refuse, sharing one `tooDeeplyNested` in `attribute.ts` beside `isNumeral`. The deferral was the queue row's; §12.3 and §12.4 both said in terms that the library fix must not wait, and they were the half that was right. §12.6. | — | **landed** |
 | ~~16~~ | ~~`Typing.lean:207-210`~~ **Refused, and the measurement found two live bugs instead.** | `dunion` keyed by tag would delete `htags` and `hdisj`. §12.2 withdrew §2.2's coherence-gate objection and asked for one measurement first. Taken: the library **already contains both shapes**, keeps the tag-keyed one private, and says in its own docstring why. `htags`/`hdisj` stay. §12.5 records the measurement and the two `src/` defects it turned up. | nothing | **refused, with evidence** |
 | ~~6b~~ | ~~`Term.lean:27-35`~~ **Landed.** | **`literal`, `literalS` and `literalN` are one rule.** Raised by JH while item 6 was landing, and right: all three are *a nonempty finite set of values at one ground base*. Landed as the base-indexed form of §11.1 — `literal (k : GroundKind) (ls : NEFinset k.Carrier)` — after §11.4/§11.5 settled that the cheaper union route costs either `Classical.choice` or two reintroduced gates. | 2 constructors, 5 codec definitions → 4, 3 lawful theorems → 1, 2 carrier theorems → 1 (one of them 26 lines), 4 `admA` row lemmas → 3 | **landed** |
@@ -1271,6 +1272,53 @@ in the *table*, which is not any option's property.
 **What made them findable:** the model states `hdisj` as a premise, so asking "does the host check
 it?" is a question with an answer. §9 found five bugs by asking that of five premises. This is the
 sixth and seventh, and item 16 — which was going to *delete* `hdisj` — is what asked.
+
+### 12.7 The model can now state the defect — `Nesting.lean`
+
+§12.6 fixed the library and left the model silent, which is the wrong way round for a document
+whose §1 says a target is certified by exhibiting a homomorphism *into the model*. A target that
+refuses more than the spec is not wrong, but a spec that cannot say why it refuses is a weaker
+certificate than the one its readers think they are getting. §14.2 already names this as the
+exception that survives every push: **a model that cannot state its defects is worse than one that
+gates them.**
+
+`Attr.nesting`, `maxNesting` and `Attr.Storable` are in `Domain.lean`, beside the carrier they
+constrain, and `Nesting.lean` says what the calculus does and does not guarantee about them.
+
+* **`nesting_zero_of_ground`** — every ground codec writes a scalar or a wire set, neither of which
+  is a document type, so the bound is never a question for the terms that do not nest.
+* **`nesting_l` / `nestingL_of_mem`** — `array` adds exactly one level and an element never nests
+  deeper than the list holding it. That is what makes a budget divide down a term instead of being
+  recomputed at every node.
+* **`not_storable_of_typed`** — the witness. A derivable term, a value on its held set, and an
+  encoding outside `Storable`. `ran(e) ⊆ 𝔸` is exact against the model's `𝔸` and **false against
+  the store's**, and that is now a theorem rather than a remark in an audit.
+
+The witness is `array^33(string)`, and what it shows is sharper than "the library had a bug": the
+term carries **no premise about depth, because §3 states none**. Nothing was forgotten in a
+derivation — the rules do not mention the constraint. That rules out the two repairs that look
+obvious. It is not a carrier refinement (§6: the subtype puts `Attr` under its own declaration and
+the kernel refuses it), and it is not an `Obligations` entry either, because an obligation is
+discharged from the *term* and this depends on the *value*.
+
+Two things were nearly got wrong and are worth recording.
+
+**`Attr.nesting` is not `Attr.depth`.** The measure `Opaque.lean` recurses on charges a wire set
+two layers, because it walks past the payloads; the store charges it none, because a set is not a
+document type and cannot contain one. Bounding the measure would refuse a legal set at the deepest
+level. §12.3 proposed `Attr.depth a ≤ 32` and that is the third correction to that entry.
+
+**The axiom guard does not see a module it does not import.** `Nesting.lean` uses `omega`, which
+can reach `Classical.choice`, and `Axioms.lean` imports a fixed list rather than the root — so the
+new theorems were outside `#assert_axioms_all` until the import was added. They are inside it now
+and clean (`propext`, `Quot.sound`, the `Double` axioms). **A guard that walks a namespace still
+only sees what is loaded**, which is a standing hazard for every module added after it.
+
+What is still missing is the compositional theorem — a syntactic `f` with
+`Typed t T μ → (denote t).e v = some a → Attr.nesting a ≤ f t`. No such `f` exists for the whole
+language, because `opaque` and `lazy` take their depth from the value rather than the term. The
+statement is therefore about a *fragment*, and naming that fragment precisely is item 20 — which
+is also the honest form of item 19, since a recursive typed codec is exactly a term outside it.
 
 ### 12.6 Item 15, landed — and the boundary is the one thing a probe could not settle
 

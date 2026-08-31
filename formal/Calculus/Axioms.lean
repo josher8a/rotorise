@@ -5,6 +5,7 @@ import Calculus.Refutations
 import Calculus.HeldSet
 import Calculus.Exactness
 import Calculus.LiteralArity1
+import Calculus.Nesting
 import Lean
 
 /-!

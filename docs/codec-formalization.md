@@ -1925,8 +1925,17 @@ that states the bound will have to make the same choice, and should make the sam
 
 The gap that remains is `lazy`: a recursive *typed* codec's depth comes from the data, not from its
 spec, and a self-nesting object holding an array of itself passes 32 at the sixteenth turn. That is
-item 19 of `codec-audit.md`, and it is where a model-side statement would earn the most — a bound
-on the carrier says nothing about it, but a bound derived for *derivable terms* would.
+item 19 of `codec-audit.md`.
+
+**The model now states this, in `Nesting.lean`.** `Attr.Storable` is §1's bound and
+`not_storable_of_typed` exhibits a derivable term whose encoding falls outside it — so
+`ran(e) ⊆ 𝔸` is exact against the model's `𝔸` and false against the store's, as a theorem rather
+than a note. The witness is `array^33(string)`, and it carries **no premise about depth because §3
+states none**: nothing was forgotten in a derivation, the rules do not mention the constraint. That
+is what rules out both obvious repairs — a carrier refinement (§6: the kernel refuses the subtype)
+and an `Obligations` entry (an obligation is discharged from the term, and this depends on the
+value). What remains is a compositional bound over the fragment that excludes `opaque` and `lazy`,
+which is item 20.
 
 ## §5 Certifying an implementation
 
