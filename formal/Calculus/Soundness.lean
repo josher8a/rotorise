@@ -417,8 +417,7 @@ theorem tagsOf_ne_nil {d : Name} {t : Term} (h : tagsOf d t ≠ []) :
 theorem dunion_stamp (fuel : Nat) {d : Name} {opts : List Term}
     (htags : ∀ t' ∈ opts, tagsOf d t' ≠ []) :
     ∀ o ∈ opts.map fun t' => (tagsOf d t', denote fuel t'), ∀ t' a, o.2.e t' = some a →
-      ∃ tag ∈ o.1, (∃ kvs, a = .m kvs ∧ kvs.lookup d = some (.s tag)) ∧
-        (∃ kvs, t' = .map kvs ∧ kvs.lookup d = some (.str tag)) := by
+      ∃ tag ∈ o.1, tagOfA d a = some tag ∧ tagOfV d t' = some tag := by
   refine forall_mem_map fun tx htx t' a he' => ?_
   replace he' : (denote fuel tx).e t' = some a := he'
   obtain ⟨fields, rest, ls, rfl, hlk, htagsls⟩ := tagsOf_ne_nil (htags tx htx)
@@ -428,38 +427,37 @@ theorem dunion_stamp (fuel : Nat) {d : Name} {opts : List Term}
     replace he' : (objectCodec
         (fields.map fun kf => (kf.1, fieldSemOf (denote f) kf.2))
         (restSemOf (denote f) rest)).e t' = some a := he'
-    obtain ⟨kvs, ds, rfl, rfl, hval, htr⟩ := objectCodecCore_e_inv he'
-    -- the discriminator is declared and non-`opt`, so the row carries it…
+    obtain ⟨keys, fv, g, rfl, rfl, hval, hfi⟩ := objectCodecCore_e_inv he'
+    -- the discriminator is declared and non-`opt`, so the key set carries it…
     have hslk : ((fields.map fun kf => (kf.1, fieldSemOf (denote f) kf.2)).lookup d) =
         some (FieldSem.req (denote f (Term.literalS ls))) := by
       rw [lookup_map (fieldSemOf (denote f)) fields d, hlk]
       rfl
-    obtain ⟨vd, hvd⟩ := Option.isSome_iff_exists.mp (lookup_isSome_of_mem_fst
-      (mem_of_contains (valPresentB_spec hval (mem_of_lookup hslk)
-        (fun _ h' => nomatch h'))))
-    -- …and `literal` writes it verbatim, which is the stamp on both sides
-    obtain ⟨b, hbds, hbenc⟩ := traverse_lookup encEntry_fst htr d vd hvd
-    simp only [encEntry] at hbenc
-    rw [hslk] at hbenc
-    replace hbenc : ((denote f (Term.literalS ls)).e vd).map ((d, ·)) = some (d, b) :=
-      hbenc
+    have hd : d ∈ keys :=
+      valPresentB_spec hval (mem_of_lookup hslk) (fun _ h' => nomatch h')
+    -- …and `literal` writes it verbatim, which is the stamp on both sides. The key set
+    -- is shared by the two payloads, so one membership proof serves both projections —
+    -- where the list representation had to find `d` in each row separately.
+    have hw := funImage_some hfi ⟨d, hd⟩
+    rw [show entryCodec (fields.map fun kf => (kf.1, fieldSemOf (denote f) kf.2))
+          (rcOf (restSemOf (denote f) rest)) d = some (denote f (Term.literalS ls)) by
+        simp only [entryCodec, hslk]; rfl] at hw
     cases f with
-    | zero =>
-      replace hbenc : (Option.map ((d, ·)) (none : Option Attr)) = some (d, b) := hbenc
-      exact nomatch hbenc
+    | zero => exact nomatch hw
     | succ f' =>
-      replace hbenc : ((literalSCodec ls).e vd).map ((d, ·)) = some (d, b) := hbenc
-      cases vd
+      replace hw : (literalSCodec ls).e (fv ⟨d, hd⟩) = some (g ⟨d, hd⟩) := hw
+      cases hfv : fv ⟨d, hd⟩ <;> rw [hfv] at hw
       case str tagv =>
-        replace hbenc : ((if tagv ∈ ls then some (Attr.s tagv)
-          else none)).map ((d, ·)) = some (d, b) := hbenc
-        split at hbenc
-        · replace hbenc : some (d, Attr.s tagv) = some (d, b) := hbenc
-          cases hbenc
-          rename_i hin
-          exact ⟨tagv, htagsls ▸ hin, ⟨ds, rfl, hbds⟩, ⟨kvs, rfl, hvd⟩⟩
-        · exact nomatch hbenc
-      all_goals exact nomatch hbenc
+        replace hw : (if tagv ∈ ls then some (Attr.s tagv) else none)
+            = some (g ⟨d, hd⟩) := hw
+        split at hw
+        · rename_i hin
+          replace hw : Attr.s tagv = g ⟨d, hd⟩ := by simpa using hw
+          exact ⟨tagv, htagsls ▸ hin,
+            by simp only [tagOfA, dif_pos hd, ← hw],
+            by simp only [tagOfV, dif_pos hd, hfv]⟩
+        · exact nomatch hw
+      all_goals exact nomatch hw
 
 /-! ## The theorem
 
@@ -750,7 +748,7 @@ theorem opaq_TSub : ∀ (fuel : Nat) (lossy : Bool) (v : Value),
         | exact .arr _ fun x hx => ih x (hT x hx)
         | exact nomatch hT
     · cases v <;> first
-        | exact .map _ fun kv hkv => ih kv.2 (hT kv hkv)
+        | exact .map _ _ fun k => ih _ (hT k)
         | exact nomatch hT
 
 /-- `opaqCodecω`'s held set — the union over all fuels — still lands in §3's `Uν`. -/
@@ -817,7 +815,7 @@ theorem typed_TSub : ∀ (fuel : Nat) {t T μ}, Typed t T μ →
         | exact nomatch hv
     | @record t' T' μ' h' =>
       cases v <;> first
-        | exact ⟨_, rfl, fun kv hkv => typed_TSub fuel h' kv.2 (hv kv hkv)⟩
+        | exact ⟨_, _, rfl, fun k => typed_TSub fuel h' _ (hv k)⟩
         | exact nomatch hv
     | @tuple ts Ts tail Tt hlist hopt =>
       cases v <;> first
@@ -835,60 +833,59 @@ theorem typed_TSub : ∀ (fuel : Nat) {t T μ}, Typed t T μ →
       · exact Or.inr rfl
     | @lazy γ T' μ' h' => exact typed_TSub fuel h' v hv
     | @object fields binds rest R hfields hnd hrest =>
-      cases v
-      case map kvs =>
-        obtain ⟨hval, hall⟩ := hv
-        refine ⟨kvs, rfl, ?_, ?_⟩
-        · -- every required binding's name is present, because its field is not `opt`
-          intro nb hnb hreq
-          obtain ⟨nk, nπ, nT⟩ := nb
-          obtain ⟨f, hmem, μf, hty⟩ := TypedFields.mem_bind hfields (nk, nπ, nT) hnb
-          have hsem : (nk, fieldSemOf (denote fuel) f) ∈
-              fields.map fun kf => (kf.1, fieldSemOf (denote fuel) kf.2) :=
-            List.mem_map.mpr ⟨(nk, f), hmem, rfl⟩
-          have hno : ∀ c, fieldSemOf (denote fuel) f ≠ FieldSem.opt c := by
-            intro c hc
-            cases hty with
-            | req _ => exact nomatch hc
-            | fallback _ => exact nomatch hc
-            | optional _ => exact nomatch hreq
-          exact lookup_isSome_of_mem_fst
-            (mem_of_contains (valPresentB_spec hval hsem hno))
-        · -- and every present name holds what its binding, or the open part, says
-          intro k x hlk
-          have hentry := hall (k, x) (mem_of_lookup hlk)
-          have hsl : (fields.map fun kf =>
-              (kf.1, fieldSemOf (denote fuel) kf.2)).lookup k =
-              (fields.lookup k).map (fieldSemOf (denote fuel)) :=
-            lookup_map _ fields k
-          cases hf : fields.lookup k with
-          | some f =>
-            obtain ⟨T', π', μ', hbl, htyf⟩ :=
-              (TypedFields.lookup_bind hfields k).2 f hf
-            rw [hbl]
-            simp only [objEntryT, hsl, hf, Option.map] at hentry
-            cases htyf with
-            | req hty' => exact typed_TSub fuel hty' x hentry
-            | optional hty' => exact typed_TSub fuel hty' x hentry
-            | fallback hty' => exact typed_TSub fuel hty' x hentry
-          | none =>
-            have hbn : binds.lookup k = none := by
-              have := (TypedFields.lookup_bind hfields k).1
-              rw [hf] at this
-              cases hb : binds.lookup k with
-              | none => rfl
-              | some b => rw [hb] at this; exact nomatch this
-            rw [hbn]
-            simp only [objEntryT, hsl, hf, Option.map] at hentry
-            obtain ⟨rc, hrc, hrcT⟩ := hentry
-            cases hrest with
-            | drop => exact nomatch hrc
-            | refuse => exact nomatch hrc
-            | @codec t' T'' μ'' hty' =>
-              replace hrc : some (denote fuel t') = some rc := hrc
-              cases hrc
-              exact ⟨T'', rfl, typed_TSub fuel hty' x hrcT⟩
-      all_goals exact nomatch hv
+      -- No case split on `v`: the object's `T` is `carriedCodec`'s, so it *hands over*
+      -- the payload — a key set and a function on it, which is exactly `HObject`'s
+      -- witness. The list representation had to take `v` apart to find one.
+      obtain ⟨⟨keys, kvs⟩, hvp, hval, hall⟩ := hv
+      refine ⟨keys, kvs, hvp, ?_, ?_⟩
+      · -- every required binding's name is present, because its field is not `opt`
+        intro nb hnb hreq
+        obtain ⟨nk, nπ, nT⟩ := nb
+        obtain ⟨f, hmem, μf, hty⟩ := TypedFields.mem_bind hfields (nk, nπ, nT) hnb
+        have hsem : (nk, fieldSemOf (denote fuel) f) ∈
+            fields.map fun kf => (kf.1, fieldSemOf (denote fuel) kf.2) :=
+          List.mem_map.mpr ⟨(nk, f), hmem, rfl⟩
+        have hno : ∀ c, fieldSemOf (denote fuel) f ≠ FieldSem.opt c := by
+          intro c hc
+          cases hty with
+          | req _ => exact nomatch hc
+          | fallback _ => exact nomatch hc
+          | optional _ => exact nomatch hreq
+        exact valPresentB_spec hval hsem hno
+      · -- and every present name holds what its binding, or the open part, says
+        intro k
+        have hentry := hall k
+        have hsl : (fields.map fun kf =>
+            (kf.1, fieldSemOf (denote fuel) kf.2)).lookup k.1 =
+            (fields.lookup k.1).map (fieldSemOf (denote fuel)) :=
+          lookup_map _ fields k.1
+        cases hf : fields.lookup k.1 with
+        | some f =>
+          obtain ⟨T', π', μ', hbl, htyf⟩ :=
+            (TypedFields.lookup_bind hfields k.1).2 f hf
+          rw [hbl]
+          simp only [objEntryT, hsl, hf, Option.map] at hentry
+          cases htyf with
+          | req hty' => exact typed_TSub fuel hty' _ hentry
+          | optional hty' => exact typed_TSub fuel hty' _ hentry
+          | fallback hty' => exact typed_TSub fuel hty' _ hentry
+        | none =>
+          have hbn : binds.lookup k.1 = none := by
+            have := (TypedFields.lookup_bind hfields k.1).1
+            rw [hf] at this
+            cases hb : binds.lookup k.1 with
+            | none => rfl
+            | some b => rw [hb] at this; exact nomatch this
+          rw [hbn]
+          simp only [objEntryT, hsl, hf, Option.map] at hentry
+          obtain ⟨rc, hrc, hrcT⟩ := hentry
+          cases hrest with
+          | drop => exact nomatch hrc
+          | refuse => exact nomatch hrc
+          | @codec t' T'' μ'' hty' =>
+            replace hrc : some (denote fuel t') = some rc := hrc
+            cases hrc
+            exact ⟨T'', rfl, typed_TSub fuel hty' _ hrcT⟩
     | @union opts Ts μs hlist _ =>
       obtain ⟨o, ho, hT⟩ := hv
       simp only [List.mem_map] at ho

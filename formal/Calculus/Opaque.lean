@@ -1,4 +1,5 @@
 import Calculus.Combinators
+import Mathlib.Data.Finset.Lattice.Fold
 
 /-!
 # `opaque` stabilizes — the last fuel in the denotation
@@ -52,15 +53,14 @@ def Value.depth : Value → Nat
   -- reason `SS`/`NS`/`BS` are `2` on the attribute side.
   | .strSet _ | .numSet _ | .binSet _ => 2
   | .arr vs => Value.depthL vs + 1
-  | .map kvs => Value.depthP kvs + 1
+  -- §1's `M` is a key *set* with a function on it, so a map's layer is the largest
+  -- entry budget over the key set — a `Finset.sup`, where the array's is a list fold.
+  -- There is no list to recurse down and so no `depthP` companion.
+  | .map keys f => (keys.attach.sup fun k => Value.depth (f k)) + 1
 
 def Value.depthL : List Value → Nat
   | [] => 1
   | v :: vs => max (Value.depth v) (Value.depthL vs)
-
-def Value.depthP : List (Name × Value) → Nat
-  | [] => 1
-  | kv :: kvs => max (Value.depth kv.2) (Value.depthP kvs)
 
 end
 
@@ -72,15 +72,11 @@ def Attr.depth : Attr → Nat
   | .s _ | .n _ | .b _ | .bool _ | .null => 1
   | .ss _ | .ns _ | .bs _ => 2
   | .l as => Attr.depthL as + 1
-  | .m kvs => Attr.depthP kvs + 1
+  | .m keys f => (keys.attach.sup fun k => Attr.depth (f k)) + 1
 
 def Attr.depthL : List Attr → Nat
   | [] => 1
   | a :: as => max (Attr.depth a) (Attr.depthL as)
-
-def Attr.depthP : List (Name × Attr) → Nat
-  | [] => 1
-  | kv :: kvs => max (Attr.depth kv.2) (Attr.depthP kvs)
 
 end
 
@@ -90,12 +86,39 @@ theorem Value.depth_pos (v : Value) : 0 < Value.depth v := by
 theorem Attr.depth_pos (a : Attr) : 0 < Attr.depth a := by
   cases a <;> simp [Attr.depth]
 
+/-! ### Entries are one layer shallower
+
+What the list companions get from unfolding a `cons`, the map cases get from `Finset.sup`:
+every entry is under the sup, and the sup is under any bound all the entries meet. Two
+lemmas each way, and they are the whole of what the `map`/`M` cases below need. -/
+
+/-- Every entry of a map is one layer shallower than the map. -/
+theorem Value.depth_map_entry {keys : Finset Name} {f : {k // k ∈ keys} → Value}
+    (k : {k // k ∈ keys}) : Value.depth (f k) + 1 <= Value.depth (.map keys f) :=
+  Nat.succ_le_succ
+    (Finset.le_sup (f := fun k => Value.depth (f k)) (Finset.mem_attach _ k))
+
+/-- …and the read side of the same. -/
+theorem Attr.depth_map_entry {keys : Finset Name} {f : {k // k ∈ keys} → Attr}
+    (k : {k // k ∈ keys}) : Attr.depth (f k) + 1 <= Attr.depth (.m keys f) :=
+  Nat.succ_le_succ
+    (Finset.le_sup (f := fun k => Attr.depth (f k)) (Finset.mem_attach _ k))
+
+/-- A map is no deeper than a bound its every entry meets. -/
+theorem Attr.depth_m_le {keys : Finset Name} {f : {k // k ∈ keys} → Attr} {b : Nat}
+    (h : ∀ k, Attr.depth (f k) <= b) : Attr.depth (.m keys f) <= b + 1 :=
+  Nat.succ_le_succ (Finset.sup_le fun k _ => h k)
+
+/-- …and the write side of the same. -/
+theorem Value.depth_map_le {keys : Finset Name} {f : {k // k ∈ keys} → Value} {b : Nat}
+    (h : ∀ k, Value.depth (f k) <= b) : Value.depth (.map keys f) <= b + 1 :=
+  Nat.succ_le_succ (Finset.sup_le fun k _ => h k)
+
 /-! ### The four depth measures are one shape
 
-`Value.depthL`, `Value.depthP`, `Attr.depthL` and `Attr.depthP` are the same fold — the
-largest entry measure, or 1 for the empty list. Naming it lets the four depth-preservation
-companions cite one traversal fact instead of writing the same cons-unfolding out four
-times. -/
+`Value.depthL` and `Attr.depthL` are the same fold — the largest entry measure, or 1 for
+the empty list. Naming it lets both depth-preservation companions cite one traversal fact
+instead of writing the same cons-unfolding out twice. -/
 
 /-- The largest entry measure, or 1 for the empty list. -/
 def maxOf {α : Type} (m : α → Nat) : List α → Nat
@@ -105,16 +128,8 @@ def maxOf {α : Type} (m : α → Nat) : List α → Nat
 theorem Value.depthL_eq (vs : List Value) : Value.depthL vs = maxOf Value.depth vs := by
   induction vs <;> simp_all [Value.depthL, maxOf]
 
-theorem Value.depthP_eq (kvs : List (Name × Value)) :
-    Value.depthP kvs = maxOf (fun kv => Value.depth kv.2) kvs := by
-  induction kvs <;> simp_all [Value.depthP, maxOf]
-
 theorem Attr.depthL_eq (as : List Attr) : Attr.depthL as = maxOf Attr.depth as := by
   induction as <;> simp_all [Attr.depthL, maxOf]
-
-theorem Attr.depthP_eq (kvs : List (Name × Attr)) :
-    Attr.depthP kvs = maxOf (fun kv => Attr.depth kv.2) kvs := by
-  induction kvs <;> simp_all [Attr.depthP, maxOf]
 
 /-- A traversal whose entry step does not increase the measure does not increase the
     list's maximum. -/
@@ -228,10 +243,11 @@ theorem opaqCodec_e_arr (lossy : Bool) (n : Nat) (vs : List Value) :
     cases lossy <;> simp [-arrayCodec, he]
 
 /-- §3 `(opaque)`, write side at kind `map`: the `M` option, recursing at one less fuel. -/
-theorem opaqCodec_e_map (lossy : Bool) (n : Nat) (kvs : List (Name × Value)) :
-    (opaqCodec (n+1) lossy).e (.map kvs)
-      = (recordCodec (opaqCodec n lossy)).e (.map kvs) := by
-  cases he : (recordCodec (opaqCodec n lossy)).e (.map kvs) <;>
+theorem opaqCodec_e_map (lossy : Bool) (n : Nat) (keys : Finset Name)
+    (f : {k // k ∈ keys} → Value) :
+    (opaqCodec (n+1) lossy).e (.map keys f)
+      = (recordCodec (opaqCodec n lossy)).e (.map keys f) := by
+  cases he : (recordCodec (opaqCodec n lossy)).e (.map keys f) <;>
     cases lossy <;> simp [-recordCodec, he]
 
 end Unfoldings
@@ -294,13 +310,18 @@ theorem opaq_e_agree (lossy : Bool) :
       show (traverse (opaqCodec n' lossy).e vs).map Attr.l
          = (traverse (opaqCodec m' lossy).e vs).map Attr.l
       rw [opaq_e_agreeL lossy vs n' m' hn' hm']
-  | .map kvs, n'+1, m'+1, hn, hm => by
-      have hn' : Value.depthP kvs <= n' := by simp only [Value.depth] at hn; omega
-      have hm' : Value.depthP kvs <= m' := by simp only [Value.depth] at hm; omega
+  -- The map case takes no list companion: the entries are indexed by the key set, so
+  -- pointwise agreement *is* equality of the two entry functions, and `funImage` — which
+  -- is the whole of `recordCodec`'s write side — is applied to one function, not two.
+  | .map keys f, n'+1, m'+1, hn, hm => by
+      have hn' : ∀ k, Value.depth (f k) <= n' := fun k => by
+        have := Value.depth_map_entry (f := f) k; omega
+      have hm' : ∀ k, Value.depth (f k) <= m' := fun k => by
+        have := Value.depth_map_entry (f := f) k; omega
       rw [opaqCodec_e_map, opaqCodec_e_map]
-      show (traverse (encPair (opaqCodec n' lossy)) kvs).map Attr.m
-         = (traverse (encPair (opaqCodec m' lossy)) kvs).map Attr.m
-      rw [opaq_e_agreeP lossy kvs n' m' hn' hm']
+      show (funImage (fun k => (opaqCodec n' lossy).e (f k))).map (Attr.m keys)
+         = (funImage (fun k => (opaqCodec m' lossy).e (f k))).map (Attr.m keys)
+      rw [funext fun k => opaq_e_agree lossy (f k) n' m' (hn' k) (hm' k)]
 
 theorem opaq_e_agreeL (lossy : Bool) :
     ∀ (vs : List Value) (n m : Nat), Value.depthL vs <= n -> Value.depthL vs <= m ->
@@ -314,21 +335,6 @@ theorem opaq_e_agreeL (lossy : Bool) :
       have hv := opaq_e_agree lossy v n m hvn hvm
       have hvs := opaq_e_agreeL lossy vs n m hsn hsm
       simp only [traverse, hv, hvs]
-
-theorem opaq_e_agreeP (lossy : Bool) :
-    ∀ (kvs : List (Name × Value)) (n m : Nat),
-      Value.depthP kvs <= n -> Value.depthP kvs <= m ->
-      traverse (encPair (opaqCodec n lossy)) kvs
-        = traverse (encPair (opaqCodec m lossy)) kvs
-  | [], _, _, _, _ => rfl
-  | kv :: kvs, n, m, hn, hm => by
-      have hvn : Value.depth kv.2 <= n := by simp only [Value.depthP] at hn; omega
-      have hvm : Value.depth kv.2 <= m := by simp only [Value.depthP] at hm; omega
-      have hsn : Value.depthP kvs <= n := by simp only [Value.depthP] at hn; omega
-      have hsm : Value.depthP kvs <= m := by simp only [Value.depthP] at hm; omega
-      have hv := opaq_e_agree lossy kv.2 n m hvn hvm
-      have hkvs := opaq_e_agreeP lossy kvs n m hsn hsm
-      simp only [traverse, encPair, hv, hkvs]
 
 end
 
@@ -362,6 +368,13 @@ theorem opaqCodec_p_null (lossy : Bool) (n : Nat) :
     (opaqCodec (n+1) lossy).p .null = nullCodec.p .null := by
   cases lossy <;> simp
 
+/-- The `M` option does not admit an `N`, said as an unfolding rather than left to `simp`.
+    `recordCodec`'s `M` branch is a `funImage`, and a `funImage` is a `Classical` `dif`;
+    unfolding `recordCodec` inside the number case's four-way split sends `whnf` chasing
+    that instance. Naming the answer — which is `rfl` — keeps the cost at nothing. -/
+private theorem recordCodec_p_n {c : Codec} (x : Numeral) :
+    (recordCodec c).p (.n x) = none := rfl
+
 theorem opaqCodec_p_n (lossy : Bool) (n : Nat) (x : Numeral) :
     (opaqCodec (n+1) lossy).p (.n x)
       = (if lossy then numberCodec else Codec.empty).p (.n x) := by
@@ -369,7 +382,7 @@ theorem opaqCodec_p_n (lossy : Bool) (n : Nat) (x : Numeral) :
   | none => cases lossy <;> simp [numberCodec_p_n, hd]
   | some d =>
     by_cases hw : Numeral.WF d.toDec = true <;> cases lossy <;>
-      simp [numberCodec_p_n, hd, hw]
+      simp [-recordCodec, recordCodec_p_n, numberCodec_p_n, hd, hw]
 
 /-- §3 `(opaque)`, read side at member `SS` — one of the three members routing to the single `set` option, which is the ten-versus-eight asymmetry in the header. -/
 theorem opaqCodec_p_ss (lossy : Bool) (n : Nat) (vs : Finset String) :
@@ -396,9 +409,11 @@ theorem opaqCodec_p_l (lossy : Bool) (n : Nat) (as : List Attr) :
     cases lossy <;> simp [-arrayCodec, hp]
 
 /-- §3 `(opaque)`, read side at member `M`. -/
-theorem opaqCodec_p_m (lossy : Bool) (n : Nat) (kvs : List (Name × Attr)) :
-    (opaqCodec (n+1) lossy).p (.m kvs) = (recordCodec (opaqCodec n lossy)).p (.m kvs) := by
-  cases hp : (recordCodec (opaqCodec n lossy)).p (.m kvs) <;>
+theorem opaqCodec_p_m (lossy : Bool) (n : Nat) (keys : Finset Name)
+    (g : {k // k ∈ keys} → Attr) :
+    (opaqCodec (n+1) lossy).p (.m keys g)
+      = (recordCodec (opaqCodec n lossy)).p (.m keys g) := by
+  cases hp : (recordCodec (opaqCodec n lossy)).p (.m keys g) <;>
     cases lossy <;> simp [-recordCodec, hp]
 
 end UnfoldingsA
@@ -483,13 +498,15 @@ theorem opaq_p_agree (lossy : Bool) :
       show (traverse (opaqCodec n' lossy).p as).map Value.arr
          = (traverse (opaqCodec m' lossy).p as).map Value.arr
       rw [opaq_p_agreeL lossy as n' m' hn' hm']
-  | .m kvs, n'+1, m'+1, hn, hm => by
-      have hn' : Attr.depthP kvs <= n' := by simp only [Attr.depth] at hn; omega
-      have hm' : Attr.depthP kvs <= m' := by simp only [Attr.depth] at hm; omega
+  | .m keys g, n'+1, m'+1, hn, hm => by
+      have hn' : ∀ k, Attr.depth (g k) <= n' := fun k => by
+        have := Attr.depth_map_entry (f := g) k; omega
+      have hm' : ∀ k, Attr.depth (g k) <= m' := fun k => by
+        have := Attr.depth_map_entry (f := g) k; omega
       rw [opaqCodec_p_m, opaqCodec_p_m]
-      show (traverse (decPair (opaqCodec n' lossy)) kvs).map Value.map
-         = (traverse (decPair (opaqCodec m' lossy)) kvs).map Value.map
-      rw [opaq_p_agreeP lossy kvs n' m' hn' hm']
+      show (funImage (fun k => (opaqCodec n' lossy).p (g k))).map (Value.map keys)
+         = (funImage (fun k => (opaqCodec m' lossy).p (g k))).map (Value.map keys)
+      rw [funext fun k => opaq_p_agree lossy (g k) n' m' (hn' k) (hm' k)]
 
 theorem opaq_p_agreeL (lossy : Bool) :
     ∀ (as : List Attr) (n m : Nat), Attr.depthL as <= n -> Attr.depthL as <= m ->
@@ -503,21 +520,6 @@ theorem opaq_p_agreeL (lossy : Bool) :
       have ha := opaq_p_agree lossy a n m han ham
       have has := opaq_p_agreeL lossy as n m hsn hsm
       simp only [traverse, ha, has]
-
-theorem opaq_p_agreeP (lossy : Bool) :
-    ∀ (kvs : List (Name × Attr)) (n m : Nat),
-      Attr.depthP kvs <= n -> Attr.depthP kvs <= m ->
-      traverse (decPair (opaqCodec n lossy)) kvs
-        = traverse (decPair (opaqCodec m lossy)) kvs
-  | [], _, _, _, _ => rfl
-  | kv :: kvs, n, m, hn, hm => by
-      have han : Attr.depth kv.2 <= n := by simp only [Attr.depthP] at hn; omega
-      have ham : Attr.depth kv.2 <= m := by simp only [Attr.depthP] at hm; omega
-      have hsn : Attr.depthP kvs <= n := by simp only [Attr.depthP] at hn; omega
-      have hsm : Attr.depthP kvs <= m := by simp only [Attr.depthP] at hm; omega
-      have ha := opaq_p_agree lossy kv.2 n m han ham
-      have hkvs := opaq_p_agreeP lossy kvs n m hsn hsm
-      simp only [traverse, decPair, ha, hkvs]
 
 end
 
@@ -533,20 +535,10 @@ theorem Value.depthL_pos (vs : List Value) : 1 <= Value.depthL vs := by
   | nil => simp [Value.depthL]
   | cons v vs => simp only [Value.depthL]; have := Value.depth_pos v; omega
 
-theorem Value.depthP_pos (kvs : List (Name × Value)) : 1 <= Value.depthP kvs := by
-  cases kvs with
-  | nil => simp [Value.depthP]
-  | cons kv kvs => simp only [Value.depthP]; have := Value.depth_pos kv.2; omega
-
 theorem Attr.depthL_pos (as : List Attr) : 1 <= Attr.depthL as := by
   cases as with
   | nil => simp [Attr.depthL]
   | cons a as => simp only [Attr.depthL]; have := Attr.depth_pos a; omega
-
-theorem Attr.depthP_pos (kvs : List (Name × Attr)) : 1 <= Attr.depthP kvs := by
-  cases kvs with
-  | nil => simp [Attr.depthP]
-  | cons kv kvs => simp only [Attr.depthP]; have := Attr.depth_pos kv.2; omega
 
 /-- A wire set is always exactly one layer of payloads, whichever family it lands in. -/
 theorem encSet_depth {α : Type} {c : Codec} {vinj : α → Value} {S : Finset α} {a : Attr}
@@ -626,18 +618,21 @@ theorem opaq_e_depth (lossy : Bool) :
         simp only [Attr.depth, Value.depth]
         have := opaq_e_depthL lossy vs n' as htr
         omega
-  | .map kvs, n'+1, a, he => by
+  -- `M` keeps the key set, so the two sups run over the same index and the bound is
+  -- entrywise. `funImage` hands the entry hypothesis over directly (`funImage_some`).
+  | .map keys f, n'+1, a, he => by
       rw [opaqCodec_e_map] at he
-      replace he : (traverse (encPair (opaqCodec n' lossy)) kvs).map Attr.m = some a := he
-      cases htr : traverse (encPair (opaqCodec n' lossy)) kvs with
-      | none => rw [htr] at he; exact nomatch he
-      | some kas =>
-        rw [htr] at he
-        replace he : Attr.m kas = a := by simpa using he
+      replace he :
+          (funImage (fun k => (opaqCodec n' lossy).e (f k))).map (Attr.m keys) = some a := he
+      cases hfi : funImage (fun k => (opaqCodec n' lossy).e (f k)) with
+      | none => rw [hfi] at he; exact nomatch he
+      | some g =>
+        rw [hfi] at he
+        replace he : Attr.m keys g = a := by simpa using he
         subst he
-        simp only [Attr.depth, Value.depth]
-        have := opaq_e_depthP lossy kvs n' kas htr
-        omega
+        refine Attr.depth_m_le fun k => ?_
+        exact le_trans (opaq_e_depth lossy (f k) n' (g k) (funImage_some hfi k))
+          (Finset.le_sup (f := fun k => Value.depth (f k)) (Finset.mem_attach _ k))
 
 theorem opaq_e_depthL (lossy : Bool) :
     ∀ (vs : List Value) (n : Nat) (as : List Attr),
@@ -646,16 +641,6 @@ theorem opaq_e_depthL (lossy : Bool) :
   | vs, n, as, htr => by
       rw [Attr.depthL_eq, Value.depthL_eq]
       exact traverse_maxOf_le (fun v a hv => opaq_e_depth lossy v n a hv) vs as htr
-
-theorem opaq_e_depthP (lossy : Bool) :
-    ∀ (kvs : List (Name × Value)) (n : Nat) (kas : List (Name × Attr)),
-      traverse (encPair (opaqCodec n lossy)) kvs = some kas ->
-      Attr.depthP kas <= Value.depthP kvs
-  | kvs, n, kas, htr => by
-      rw [Attr.depthP_eq, Value.depthP_eq]
-      refine traverse_maxOf_le (fun kv ka hkv => ?_) kvs kas htr
-      obtain ⟨a, ha, rfl⟩ := Option.map_eq_some'.mp hkv
-      exact opaq_e_depth lossy kv.2 n a ha
 
 end
 
@@ -785,17 +770,19 @@ theorem opaq_p_depth (lossy : Bool) :
         subst hp
         have := opaq_p_depthL lossy as n' vs htr
         simp only [Attr.depth, Value.depth]; omega
-  | .m kvs, n'+1, v, hp => by
+  | .m keys g, n'+1, v, hp => by
       rw [opaqCodec_p_m] at hp
-      replace hp : (traverse (decPair (opaqCodec n' lossy)) kvs).map Value.map = some v := hp
-      cases htr : traverse (decPair (opaqCodec n' lossy)) kvs with
-      | none => rw [htr] at hp; exact nomatch hp
-      | some kvs' =>
-        rw [htr] at hp
-        replace hp : Value.map kvs' = v := by simpa using hp
+      replace hp :
+          (funImage (fun k => (opaqCodec n' lossy).p (g k))).map (Value.map keys) = some v := hp
+      cases hfi : funImage (fun k => (opaqCodec n' lossy).p (g k)) with
+      | none => rw [hfi] at hp; exact nomatch hp
+      | some f =>
+        rw [hfi] at hp
+        replace hp : Value.map keys f = v := by simpa using hp
         subst hp
-        have := opaq_p_depthP lossy kvs n' kvs' htr
-        simp only [Attr.depth, Value.depth]; omega
+        refine Value.depth_map_le fun k => ?_
+        exact le_trans (opaq_p_depth lossy (g k) n' (f k) (funImage_some hfi k))
+          (Finset.le_sup (f := fun k => Attr.depth (g k)) (Finset.mem_attach _ k))
 
 theorem opaq_p_depthL (lossy : Bool) :
     ∀ (as : List Attr) (n : Nat) (vs : List Value),
@@ -804,16 +791,6 @@ theorem opaq_p_depthL (lossy : Bool) :
   | as, n, vs, htr => by
       rw [Value.depthL_eq, Attr.depthL_eq]
       exact traverse_maxOf_le (fun a v ha => opaq_p_depth lossy a n v ha) as vs htr
-
-theorem opaq_p_depthP (lossy : Bool) :
-    ∀ (kvs : List (Name × Attr)) (n : Nat) (kvs' : List (Name × Value)),
-      traverse (decPair (opaqCodec n lossy)) kvs = some kvs' ->
-      Value.depthP kvs' <= Attr.depthP kvs
-  | kvs, n, kvs', htr => by
-      rw [Value.depthP_eq, Attr.depthP_eq]
-      refine traverse_maxOf_le (fun ka kv hka => ?_) kvs kvs' htr
-      obtain ⟨v, hv, rfl⟩ := Option.map_eq_some'.mp hka
-      exact opaq_p_depth lossy ka.2 n v hv
 
 end
 
