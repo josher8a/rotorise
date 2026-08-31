@@ -750,6 +750,34 @@ theorem setImage_nonempty {α β : Type} [DecidableEq β] {f : α → Option β}
   obtain ⟨y, hy⟩ := Option.isSome_iff_exists.mp (setImage_some h x hx)
   exact ⟨y, (mem_setImage h y).mpr ⟨x, hx, hy⟩⟩
 
+/-- **The set image at `℘⁺fin`.** The same map, with non-emptiness carried rather than
+    re-derived: `setImage_nonempty` is spent once, here, instead of at every call site.
+    Everything else known about `setImage` transports through `neSetImage_eq_setImage`. -/
+noncomputable def neSetImage {α β : Type} [DecidableEq β]
+    (f : α → Option β) (S : NEFinset α) : Option (NEFinset β) :=
+  match h : setImage f S.1 with
+  | some T => some ⟨T, setImage_nonempty h S.2⟩
+  | none => none
+
+theorem neSetImage_eq_setImage {α β : Type} [DecidableEq β] {f : α → Option β}
+    {S : NEFinset α} {T : NEFinset β} :
+    neSetImage f S = some T ↔ setImage f S.1 = some T.1 := by
+  unfold neSetImage
+  split
+  · next T' hT' =>
+      refine ⟨fun h => ?_, fun h => ?_⟩
+      · cases h; exact hT'
+      · rw [hT'] at h; injection h with h; exact congrArg some (Subtype.ext h)
+  · next hT' =>
+      exact Iff.intro (fun h => nomatch h) (fun h => by rw [hT'] at h; exact nomatch h)
+
+/-- …and `none` transports too. -/
+theorem neSetImage_none {α β : Type} [DecidableEq β] {f : α → Option β} {S : NEFinset α}
+    (h : setImage f S.1 = none) : neSetImage f S = none := by
+  unfold neSetImage; split
+  · next T' hT' => rw [h] at hT'; exact nomatch hT'
+  · rfl
+
 /-- **The constructor for `setImage`.** Given that every element maps, that the map is
     injective on the set, and a candidate image with the right membership, the image *is*
     that candidate. The injectivity hypothesis is what (R) supplies, and what `Finset.image`
@@ -874,109 +902,93 @@ def setMember : Member → Option Member
   | _ => none
 
 /-- Encode a value-set's payloads into the wire set their member selects. -/
-noncomputable def encSet {α : Type} (c : Codec) (inj : α → Value) (S : Finset α) :
+noncomputable def encSet {α : Type} (c : Codec) (inj : α → Value) (S : NEFinset α) :
     Option Attr :=
-  if S.card = 0 then none
-  else match setImage (fun x => (c.e (inj x)).bind sC.out) S with
-    | some T => some (.ss T)
-    | none => match setImage (fun x => (c.e (inj x)).bind nC.out) S with
-      | some T => some (.ns T)
-      | none => (setImage (fun x => (c.e (inj x)).bind bC.out) S).map Attr.bs
+  match neSetImage (fun x => (c.e (inj x)).bind sC.out) S with
+  | some T => some (.ss T)
+  | none => match neSetImage (fun x => (c.e (inj x)).bind nC.out) S with
+    | some T => some (.ns T)
+    | none => (neSetImage (fun x => (c.e (inj x)).bind bC.out) S).map Attr.bs
 
 /-- …and back: decode a wire set's payloads into the value set their kind selects. -/
-noncomputable def decSet {α : Type} (c : Codec) (inj : α → Attr) (S : Finset α) :
+noncomputable def decSet {α : Type} (c : Codec) (inj : α → Attr) (S : NEFinset α) :
     Option Value :=
-  if S.card = 0 then none
-  else match setImage (fun x => (c.p (inj x)).bind vStr) S with
-    | some T => some (.strSet T)
-    | none => match setImage (fun x => (c.p (inj x)).bind vNum) S with
-      | some T => some (.numSet T)
-      | none => (setImage (fun x => (c.p (inj x)).bind vBin) S).map Value.binSet
+  match neSetImage (fun x => (c.p (inj x)).bind vStr) S with
+  | some T => some (.strSet T)
+  | none => match neSetImage (fun x => (c.p (inj x)).bind vNum) S with
+    | some T => some (.numSet T)
+    | none => (neSetImage (fun x => (c.p (inj x)).bind vBin) S).map Value.binSet
 
-/-- Writing a set needs a non-empty one… -/
-theorem encSet_nonempty {α : Type} {c : Codec} {inj : α → Value} {S : Finset α} {a : Attr}
-    (h : encSet c inj S = some a) : S.Nonempty := by
+/-! The `card = 0` guard that used to open both of these is gone, and so are
+`encSet_nonempty`/`decSet_nonempty`. §1 types the wire sets as `℘⁺fin`, and `℘⁺fin` is a
+type — there is no empty set for a codec to refuse. -/
+
+/-- Writing a set needs every element to write. -/
+theorem encSet_elem {α : Type} {c : Codec} {inj : α → Value} {S : NEFinset α} {a : Attr}
+    (h : encSet c inj S = some a) : ∀ x ∈ S.1, (c.e (inj x)).isSome = true := by
   unfold encSet at h
   split at h
-  · exact nomatch h
-  · next hcard => exact Finset.card_pos.mp (Nat.pos_of_ne_zero hcard)
-
-/-- …and every element to write. -/
-theorem encSet_elem {α : Type} {c : Codec} {inj : α → Value} {S : Finset α} {a : Attr}
-    (h : encSet c inj S = some a) : ∀ x ∈ S, (c.e (inj x)).isSome = true := by
-  unfold encSet at h
-  split at h
-  · exact nomatch h
+  · next T hT =>
+      exact fun x hx => bind_isSome_left (setImage_some (neSetImage_eq_setImage.mp hT) x hx)
   · split at h
-    · next T hT => exact fun x hx => bind_isSome_left (setImage_some hT x hx)
-    · split at h
-      · next T hT => exact fun x hx => bind_isSome_left (setImage_some hT x hx)
-      · next =>
-        obtain ⟨T, hT, -⟩ := Option.map_eq_some'.mp h
-        exact fun x hx => bind_isSome_left (setImage_some hT x hx)
+    · next T hT =>
+        exact fun x hx => bind_isSome_left (setImage_some (neSetImage_eq_setImage.mp hT) x hx)
+    · next =>
+      obtain ⟨T, hT, -⟩ := Option.map_eq_some'.mp h
+      exact fun x hx => bind_isSome_left (setImage_some (neSetImage_eq_setImage.mp hT) x hx)
 
-/-- Reading a set needs a non-empty one… -/
-theorem decSet_nonempty {α : Type} {c : Codec} {inj : α → Attr} {S : Finset α} {v : Value}
-    (h : decSet c inj S = some v) : S.Nonempty := by
+/-- …and reading one needs every element to read. -/
+theorem decSet_elem {α : Type} {c : Codec} {inj : α → Attr} {S : NEFinset α} {v : Value}
+    (h : decSet c inj S = some v) : ∀ x ∈ S.1, (c.p (inj x)).isSome = true := by
   unfold decSet at h
   split at h
-  · exact nomatch h
-  · next hcard => exact Finset.card_pos.mp (Nat.pos_of_ne_zero hcard)
-
-/-- …and every element to read. -/
-theorem decSet_elem {α : Type} {c : Codec} {inj : α → Attr} {S : Finset α} {v : Value}
-    (h : decSet c inj S = some v) : ∀ x ∈ S, (c.p (inj x)).isSome = true := by
-  unfold decSet at h
-  split at h
-  · exact nomatch h
+  · next T hT =>
+      exact fun x hx => bind_isSome_left (setImage_some (neSetImage_eq_setImage.mp hT) x hx)
   · split at h
-    · next T hT => exact fun x hx => bind_isSome_left (setImage_some hT x hx)
-    · split at h
-      · next T hT => exact fun x hx => bind_isSome_left (setImage_some hT x hx)
-      · next =>
-        obtain ⟨T, hT, -⟩ := Option.map_eq_some'.mp h
-        exact fun x hx => bind_isSome_left (setImage_some hT x hx)
+    · next T hT =>
+        exact fun x hx => bind_isSome_left (setImage_some (neSetImage_eq_setImage.mp hT) x hx)
+    · next =>
+      obtain ⟨T, hT, -⟩ := Option.map_eq_some'.mp h
+      exact fun x hx => bind_isSome_left (setImage_some (neSetImage_eq_setImage.mp hT) x hx)
 
 /-- What a read produces: one of the three value sets, each element read from an element
     of the wire set. -/
-theorem decSet_mem {α : Type} {c : Codec} {inj : α → Attr} {S : Finset α} {v : Value}
+theorem decSet_mem {α : Type} {c : Codec} {inj : α → Attr} {S : NEFinset α} {v : Value}
     (h : decSet c inj S = some v) :
-    (∃ T : Finset String, v = .strSet T ∧ T.Nonempty ∧
-        ∀ y ∈ T, ∃ x ∈ S, c.p (inj x) = some (.str y))
-  ∨ (∃ T : Finset Double, v = .numSet T ∧ T.Nonempty ∧
-        ∀ y ∈ T, ∃ x ∈ S, c.p (inj x) = some (.num y))
-  ∨ (∃ T : Finset Bytes, v = .binSet T ∧ T.Nonempty ∧
-        ∀ y ∈ T, ∃ x ∈ S, c.p (inj x) = some (.bin y)) := by
-  have hS : S.Nonempty := decSet_nonempty h
+    (∃ T : NEFinset String, v = .strSet T ∧
+        ∀ y ∈ T.1, ∃ x ∈ S.1, c.p (inj x) = some (.str y))
+  ∨ (∃ T : NEFinset Double, v = .numSet T ∧
+        ∀ y ∈ T.1, ∃ x ∈ S.1, c.p (inj x) = some (.num y))
+  ∨ (∃ T : NEFinset Bytes, v = .binSet T ∧
+        ∀ y ∈ T.1, ∃ x ∈ S.1, c.p (inj x) = some (.bin y)) := by
   unfold decSet at h
   split at h
-  · exact nomatch h
+  · next T hT =>
+    injection h with h
+    refine Or.inl ⟨T, h.symm, fun y hy => ?_⟩
+    obtain ⟨x, hx, hxy⟩ := (mem_setImage (neSetImage_eq_setImage.mp hT) y).mp hy
+    exact ⟨x, hx, bind_vStr hxy⟩
   · split at h
     · next T hT =>
       injection h with h
-      refine Or.inl ⟨T, h.symm, setImage_nonempty hT hS, fun y hy => ?_⟩
-      obtain ⟨x, hx, hxy⟩ := (mem_setImage hT y).mp hy
-      exact ⟨x, hx, bind_vStr hxy⟩
-    · split at h
-      · next T hT =>
-        injection h with h
-        refine Or.inr (Or.inl ⟨T, h.symm, setImage_nonempty hT hS, fun y hy => ?_⟩)
-        obtain ⟨x, hx, hxy⟩ := (mem_setImage hT y).mp hy
-        exact ⟨x, hx, bind_vNum hxy⟩
-      · next =>
-        obtain ⟨T, hT, hv⟩ := Option.map_eq_some'.mp h
-        refine Or.inr (Or.inr ⟨T, hv.symm, setImage_nonempty hT hS, fun y hy => ?_⟩)
-        obtain ⟨x, hx, hxy⟩ := (mem_setImage hT y).mp hy
-        exact ⟨x, hx, bind_vBin hxy⟩
+      refine Or.inr (Or.inl ⟨T, h.symm, fun y hy => ?_⟩)
+      obtain ⟨x, hx, hxy⟩ := (mem_setImage (neSetImage_eq_setImage.mp hT) y).mp hy
+      exact ⟨x, hx, bind_vNum hxy⟩
+    · next =>
+      obtain ⟨T, hT, hv⟩ := Option.map_eq_some'.mp h
+      refine Or.inr (Or.inr ⟨T, hv.symm, fun y hy => ?_⟩)
+      obtain ⟨x, hx, hxy⟩ := (mem_setImage (neSetImage_eq_setImage.mp hT) y).mp hy
+      exact ⟨x, hx, bind_vBin hxy⟩
 
-/-- §3 `(set)`. Non-emptiness, uniqueness and homogeneity are all carried by the **types**
-    now: a `Finset` has no repeats and no order, and the three constructors are the three
-    element types the reference names. What is left for the codec is the element map. -/
+/-- §3 `(set)`. Non-emptiness, uniqueness and homogeneity are all carried by the **types**:
+    a `Finset` has no repeats and no order, `℘⁺fin` has no empty inhabitant, and the three
+    constructors are the three element types the reference names. What is left for the
+    codec is the element map — and that is the whole of `(set)` now. -/
 noncomputable def setCodec (c : Codec) : Codec :=
   { T := fun v => match v with
-      | .strSet S => S.Nonempty ∧ ∀ s ∈ S, c.T (.str s)
-      | .numSet S => S.Nonempty ∧ ∀ d ∈ S, c.T (.num d)
-      | .binSet S => S.Nonempty ∧ ∀ b ∈ S, c.T (.bin b)
+      | .strSet S => ∀ s ∈ S.1, c.T (.str s)
+      | .numSet S => ∀ d ∈ S.1, c.T (.num d)
+      | .binSet S => ∀ b ∈ S.1, c.T (.bin b)
       | _ => False
     μ := c.μ.bind setMember
     e := fun v => match v with
@@ -1146,17 +1158,17 @@ end Entrywise
     through the element codec. -/
 theorem setCodec_e_eq {c : Codec} {v : Value} {a : Attr} :
     (setCodec c).e v = some a ↔
-      (∃ S : Finset String, v = .strSet S ∧ encSet c Value.str S = some a)
-      ∨ (∃ S : Finset Double, v = .numSet S ∧ encSet c Value.num S = some a)
-      ∨ (∃ S : Finset Bytes, v = .binSet S ∧ encSet c Value.bin S = some a) := by
+      (∃ S : NEFinset String, v = .strSet S ∧ encSet c Value.str S = some a)
+      ∨ (∃ S : NEFinset Double, v = .numSet S ∧ encSet c Value.num S = some a)
+      ∨ (∃ S : NEFinset Bytes, v = .binSet S ∧ encSet c Value.bin S = some a) := by
   cases v <;> simp [setCodec]
 
 /-- …and what it reads: one of the three wire sets, imaged back. -/
 theorem setCodec_p_eq {c : Codec} {a : Attr} {v : Value} :
     (setCodec c).p a = some v ↔
-      (∃ S : Finset String, a = .ss S ∧ decSet c Attr.s S = some v)
-      ∨ (∃ S : Finset Numeral, a = .ns S ∧ decSet c Attr.n S = some v)
-      ∨ (∃ S : Finset Bytes, a = .bs S ∧ decSet c Attr.b S = some v) := by
+      (∃ S : NEFinset String, a = .ss S ∧ decSet c Attr.s S = some v)
+      ∨ (∃ S : NEFinset Numeral, a = .ns S ∧ decSet c Attr.n S = some v)
+      ∨ (∃ S : NEFinset Bytes, a = .bs S ∧ decSet c Attr.b S = some v) := by
   cases a <;> simp [setCodec]
 
 def arrayCodec (c : Codec) : Codec :=
@@ -2187,13 +2199,13 @@ theorem carrier_orNull {c : Codec} (hc : Carrier c) : Carrier c.orNull where
 theorem carrier_setCodec {c : Codec} (hc : Carrier c) : Carrier (setCodec c) where
   domE he := by
     rcases setCodec_e_eq.mp he with ⟨S, rfl, hE⟩ | ⟨S, rfl, hE⟩ | ⟨S, rfl, hE⟩ <;>
-      refine ⟨encSet_nonempty hE, fun x hx => ?_⟩ <;>
+      refine fun x hx => ?_ <;>
       · obtain ⟨b, hb⟩ := Option.isSome_iff_exists.mp (encSet_elem hE x hx)
         exact hc.domE hb
   ranP hp := by
     rcases setCodec_p_eq.mp hp with ⟨S, rfl, hD⟩ | ⟨S, rfl, hD⟩ | ⟨S, rfl, hD⟩ <;>
-      · rcases decSet_mem hD with ⟨T, rfl, hne, hm⟩ | ⟨T, rfl, hne, hm⟩ | ⟨T, rfl, hne, hm⟩ <;>
-        · refine ⟨hne, fun y hy => ?_⟩
+      · rcases decSet_mem hD with ⟨T, rfl, hm⟩ | ⟨T, rfl, hm⟩ | ⟨T, rfl, hm⟩ <;>
+        · refine fun y hy => ?_
           obtain ⟨x, -, hx⟩ := hm y hy
           exact hc.ranP hx
 
@@ -2836,107 +2848,99 @@ theorem setImage_read {α β : Type} [DecidableEq β] {c : Codec} (h : LawfulCor
   exact ⟨x, hx, h.retract hea⟩
 
 /-- `decSet` lands on the string branch when the reads produce strings. -/
-theorem decSet_strBranch {α : Type} {c : Codec} {inj : α → Attr} {S : Finset α}
-    {U : Finset String} (hne : S.Nonempty)
-    (h1 : setImage (fun y => (c.p (inj y)).bind vStr) S = some U) :
+theorem decSet_strBranch {α : Type} {c : Codec} {inj : α → Attr} {S : NEFinset α}
+    {U : NEFinset String}
+    (h1 : neSetImage (fun y => (c.p (inj y)).bind vStr) S = some U) :
     decSet c inj S = some (.strSet U) := by
-  obtain ⟨x, hx⟩ := hne
-  unfold decSet
-  rw [if_neg (Finset.card_ne_zero_of_mem hx), h1]
+  unfold decSet; rw [h1]
 
 /-- …the numeric branch when they produce numbers, the string branch having failed. -/
-theorem decSet_numBranch {α : Type} {c : Codec} {inj : α → Attr} {S : Finset α}
-    {U : Finset Double} (hne : S.Nonempty)
-    (h0 : setImage (fun y => (c.p (inj y)).bind vStr) S = none)
-    (h1 : setImage (fun y => (c.p (inj y)).bind vNum) S = some U) :
+theorem decSet_numBranch {α : Type} {c : Codec} {inj : α → Attr} {S : NEFinset α}
+    {U : NEFinset Double}
+    (h0 : neSetImage (fun y => (c.p (inj y)).bind vStr) S = none)
+    (h1 : neSetImage (fun y => (c.p (inj y)).bind vNum) S = some U) :
     decSet c inj S = some (.numSet U) := by
-  obtain ⟨x, hx⟩ := hne
-  unfold decSet
-  rw [if_neg (Finset.card_ne_zero_of_mem hx), h0, h1]
+  unfold decSet; rw [h0, h1]
 
 /-- …and the binary branch when both earlier ones have. -/
-theorem decSet_binBranch {α : Type} {c : Codec} {inj : α → Attr} {S : Finset α}
-    {U : Finset Bytes} (hne : S.Nonempty)
-    (h0 : setImage (fun y => (c.p (inj y)).bind vStr) S = none)
-    (h0' : setImage (fun y => (c.p (inj y)).bind vNum) S = none)
-    (h1 : setImage (fun y => (c.p (inj y)).bind vBin) S = some U) :
+theorem decSet_binBranch {α : Type} {c : Codec} {inj : α → Attr} {S : NEFinset α}
+    {U : NEFinset Bytes}
+    (h0 : neSetImage (fun y => (c.p (inj y)).bind vStr) S = none)
+    (h0' : neSetImage (fun y => (c.p (inj y)).bind vNum) S = none)
+    (h1 : neSetImage (fun y => (c.p (inj y)).bind vBin) S = some U) :
     decSet c inj S = some (.binSet U) := by
-  obtain ⟨x, hx⟩ := hne
-  unfold decSet
-  rw [if_neg (Finset.card_ne_zero_of_mem hx), h0, h0', h1]
-  rfl
+  unfold decSet; rw [h0, h0', h1]; rfl
 
 /-- **(R) for `set`.** The wire image inverts by `setImage_inv`, and the read side lands on
     the branch the element codec's own reads determine — the *value* kind fixes it, whichever
     wire member the write happened to use. -/
 theorem set_retract {c : Codec} (h : LawfulCore c) :
     ∀ {t a}, (setCodec c).e t = some a → (setCodec c).p a = some t := by
+  -- Both helpers lose a `Nonempty` argument: `℘⁺fin` carries it, so `key` returns only
+  -- the round trip and `miss` takes its witness from `T.2`.
   have key : ∀ {α β : Type} [DecidableEq α] [DecidableEq β]
       {vinj : α → Value} {aout : Attr → Option β} {ainj : β → Attr}
       {vout : Value → Option α},
       (∀ a b, aout a = some b → a = ainj b) → (∀ x, vout (vinj x) = some x) →
-      ∀ {S : Finset α} {T : Finset β}, S.Nonempty →
-        setImage (fun x => (c.e (vinj x)).bind aout) S = some T →
-        setImage (fun y => (c.p (ainj y)).bind vout) T = some S ∧ T.Nonempty := by
-    intro α β _ _ vinj aout ainj vout hA hV S T hne hI
-    exact ⟨setImage_roundTrip h hA hV hI, setImage_nonempty hI hne⟩
+      ∀ {S : NEFinset α} {T : NEFinset β},
+        neSetImage (fun x => (c.e (vinj x)).bind aout) S = some T →
+        neSetImage (fun y => (c.p (ainj y)).bind vout) T = some S := by
+    intro α β _ _ vinj aout ainj vout hA hV S T hI
+    exact neSetImage_eq_setImage.mpr
+      (setImage_roundTrip h hA hV (neSetImage_eq_setImage.mp hI))
   have miss : ∀ {α β γ : Type} [DecidableEq β] [DecidableEq γ]
       {vinj : α → Value} {aout : Attr → Option β} {ainj : β → Attr}
       {vout : Value → Option γ},
       (∀ a b, aout a = some b → a = ainj b) → (∀ x, vout (vinj x) = none) →
-      ∀ {S : Finset α} {T : Finset β}, T.Nonempty →
-        setImage (fun x => (c.e (vinj x)).bind aout) S = some T →
-        setImage (fun y => (c.p (ainj y)).bind vout) T = none := by
-    intro α β γ _ _ vinj aout ainj vout hA hV S T hne hI
-    obtain ⟨y, hy⟩ := hne
-    obtain ⟨x, -, hpx⟩ := setImage_read h hA hI y hy
-    exact setImage_none_of hy (by rw [hpx]; simpa using hV x)
+      ∀ {S : NEFinset α} {T : NEFinset β},
+        neSetImage (fun x => (c.e (vinj x)).bind aout) S = some T →
+        neSetImage (fun y => (c.p (ainj y)).bind vout) T = none := by
+    intro α β γ _ _ vinj aout ainj vout hA hV S T hI
+    obtain ⟨y, hy⟩ := T.2
+    obtain ⟨x, -, hpx⟩ := setImage_read h hA (neSetImage_eq_setImage.mp hI) y hy
+    exact neSetImage_none (setImage_none_of hy (by rw [hpx]; simpa using hV x))
   intro t a he
   rcases setCodec_e_eq.mp he with ⟨S, rfl, hE⟩ | ⟨S, rfl, hE⟩ | ⟨S, rfl, hE⟩ <;>
     (unfold encSet at hE
      split at hE
-     · exact nomatch hE
-     · next hcard =>
-       have hne : S.Nonempty := Finset.card_pos.mp (Nat.pos_of_ne_zero hcard)
-       split at hE
+     · next T hT =>
+       injection hE with hE; subst hE
+       first
+       | exact decSet_strBranch
+           (key (vinj := Value.str) (vout := vStr) sC_out_inj (fun _ => rfl) hT)
+       | exact decSet_numBranch
+           (miss (vinj := Value.num) (vout := vStr) sC_out_inj (fun _ => rfl) hT)
+           (key (vinj := Value.num) (vout := vNum) sC_out_inj (fun _ => rfl) hT)
+       | exact decSet_binBranch
+           (miss (vinj := Value.bin) (vout := vStr) sC_out_inj (fun _ => rfl) hT)
+           (miss (vinj := Value.bin) (vout := vNum) sC_out_inj (fun _ => rfl) hT)
+           (key (vinj := Value.bin) (vout := vBin) sC_out_inj (fun _ => rfl) hT)
+     · split at hE
        · next T hT =>
          injection hE with hE; subst hE
          first
-         | (obtain ⟨hR, hTne⟩ := key (vinj := Value.str) (vout := vStr) sC_out_inj (fun _ => rfl) hne hT
-            exact decSet_strBranch hTne hR)
-         | (obtain ⟨hR, hTne⟩ := key (vinj := Value.num) (vout := vNum) sC_out_inj (fun _ => rfl) hne hT
-            exact decSet_numBranch hTne
-              (miss (vinj := Value.num) (vout := vStr) sC_out_inj (fun _ => rfl) hTne hT) hR)
-         | (obtain ⟨hR, hTne⟩ := key (vinj := Value.bin) (vout := vBin) sC_out_inj (fun _ => rfl) hne hT
-            exact decSet_binBranch hTne
-              (miss (vinj := Value.bin) (vout := vStr) sC_out_inj (fun _ => rfl) hTne hT)
-              (miss (vinj := Value.bin) (vout := vNum) sC_out_inj (fun _ => rfl) hTne hT) hR)
-       · split at hE
-         · next T hT =>
-           injection hE with hE; subst hE
-           first
-           | (obtain ⟨hR, hTne⟩ := key (vinj := Value.str) (vout := vStr) nC_out_inj (fun _ => rfl) hne hT
-              exact decSet_strBranch hTne hR)
-           | (obtain ⟨hR, hTne⟩ := key (vinj := Value.num) (vout := vNum) nC_out_inj (fun _ => rfl) hne hT
-              exact decSet_numBranch hTne
-                (miss (vinj := Value.num) (vout := vStr) nC_out_inj (fun _ => rfl) hTne hT) hR)
-           | (obtain ⟨hR, hTne⟩ := key (vinj := Value.bin) (vout := vBin) nC_out_inj (fun _ => rfl) hne hT
-              exact decSet_binBranch hTne
-                (miss (vinj := Value.bin) (vout := vStr) nC_out_inj (fun _ => rfl) hTne hT)
-                (miss (vinj := Value.bin) (vout := vNum) nC_out_inj (fun _ => rfl) hTne hT) hR)
-         · next =>
-           obtain ⟨T, hT, hA⟩ := Option.map_eq_some'.mp hE
-           subst hA
-           first
-           | (obtain ⟨hR, hTne⟩ := key (vinj := Value.str) (vout := vStr) bC_out_inj (fun _ => rfl) hne hT
-              exact decSet_strBranch hTne hR)
-           | (obtain ⟨hR, hTne⟩ := key (vinj := Value.num) (vout := vNum) bC_out_inj (fun _ => rfl) hne hT
-              exact decSet_numBranch hTne
-                (miss (vinj := Value.num) (vout := vStr) bC_out_inj (fun _ => rfl) hTne hT) hR)
-           | (obtain ⟨hR, hTne⟩ := key (vinj := Value.bin) (vout := vBin) bC_out_inj (fun _ => rfl) hne hT
-              exact decSet_binBranch hTne
-                (miss (vinj := Value.bin) (vout := vStr) bC_out_inj (fun _ => rfl) hTne hT)
-                (miss (vinj := Value.bin) (vout := vNum) bC_out_inj (fun _ => rfl) hTne hT) hR))
+         | exact decSet_strBranch
+             (key (vinj := Value.str) (vout := vStr) nC_out_inj (fun _ => rfl) hT)
+         | exact decSet_numBranch
+             (miss (vinj := Value.num) (vout := vStr) nC_out_inj (fun _ => rfl) hT)
+             (key (vinj := Value.num) (vout := vNum) nC_out_inj (fun _ => rfl) hT)
+         | exact decSet_binBranch
+             (miss (vinj := Value.bin) (vout := vStr) nC_out_inj (fun _ => rfl) hT)
+             (miss (vinj := Value.bin) (vout := vNum) nC_out_inj (fun _ => rfl) hT)
+             (key (vinj := Value.bin) (vout := vBin) nC_out_inj (fun _ => rfl) hT)
+       · next =>
+         obtain ⟨T, hT, hA⟩ := Option.map_eq_some'.mp hE
+         subst hA
+         first
+         | exact decSet_strBranch
+             (key (vinj := Value.str) (vout := vStr) bC_out_inj (fun _ => rfl) hT)
+         | exact decSet_numBranch
+             (miss (vinj := Value.num) (vout := vStr) bC_out_inj (fun _ => rfl) hT)
+             (key (vinj := Value.num) (vout := vNum) bC_out_inj (fun _ => rfl) hT)
+         | exact decSet_binBranch
+             (miss (vinj := Value.bin) (vout := vStr) bC_out_inj (fun _ => rfl) hT)
+             (miss (vinj := Value.bin) (vout := vNum) bC_out_inj (fun _ => rfl) hT)
+             (key (vinj := Value.bin) (vout := vBin) bC_out_inj (fun _ => rfl) hT))
 
 /-- **(W) for `set`.** The wire member is `setMember` of the element's, and which branch
     `encSet` took is fixed by the element codec's own member. -/
@@ -2951,33 +2955,31 @@ theorem set_writes {c : Codec} (h : LawfulCore c) :
     rw [hc] at hμ
     replace hμ : setMember μ₀ = some μ := hμ
     rcases setCodec_e_eq.mp he with ⟨S, rfl, hE⟩ | ⟨S, rfl, hE⟩ | ⟨S, rfl, hE⟩ <;>
-      · obtain ⟨x₀, hx₀⟩ := encSet_nonempty hE
+      · obtain ⟨x₀, hx₀⟩ := S.2
         obtain ⟨a₀, ha₀⟩ := Option.isSome_iff_exists.mp (encSet_elem hE x₀ hx₀)
         have hm₀ : a₀.member = μ₀ := h.writes hc ha₀
         unfold encSet at hE
         split at hE
-        · exact nomatch hE
+        · next T hT =>
+          injection hE with hE; subst hE
+          have hs := setImage_some (neSetImage_eq_setImage.mp hT) x₀ hx₀
+          rw [ha₀] at hs
+          rw [← hm₀, member_of_sC hs] at hμ
+          simpa [Attr.member] using Option.some.inj hμ
         · split at hE
           · next T hT =>
             injection hE with hE; subst hE
-            have hs := setImage_some hT x₀ hx₀
+            have hs := setImage_some (neSetImage_eq_setImage.mp hT) x₀ hx₀
             rw [ha₀] at hs
-            rw [← hm₀, member_of_sC hs] at hμ
+            rw [← hm₀, member_of_nC hs] at hμ
             simpa [Attr.member] using Option.some.inj hμ
-          · split at hE
-            · next T hT =>
-              injection hE with hE; subst hE
-              have hs := setImage_some hT x₀ hx₀
-              rw [ha₀] at hs
-              rw [← hm₀, member_of_nC hs] at hμ
-              simpa [Attr.member] using Option.some.inj hμ
-            · next =>
-              obtain ⟨T, hT, hA⟩ := Option.map_eq_some'.mp hE
-              subst hA
-              have hs := setImage_some hT x₀ hx₀
-              rw [ha₀] at hs
-              rw [← hm₀, member_of_bC hs] at hμ
-              simpa [Attr.member] using Option.some.inj hμ
+          · next =>
+            obtain ⟨T, hT, hA⟩ := Option.map_eq_some'.mp hE
+            subst hA
+            have hs := setImage_some (neSetImage_eq_setImage.mp hT) x₀ hx₀
+            rw [ha₀] at hs
+            rw [← hm₀, member_of_bC hs] at hμ
+            simpa [Attr.member] using Option.some.inj hμ
 
 /-- The wire member pins the constructor. -/
 theorem attr_ss_of_member {a : Attr} (h : a.member = .SS) : ∃ S, a = .ss S := by
@@ -2992,22 +2994,21 @@ theorem attr_bs_of_member {a : Attr} (h : a.member = .BS) : ∃ S, a = .bs S := 
 theorem encSet_isSome_of {α : Type} {c : Codec} (h : LawfulCore c)
     {μ₀ μS : Member} (hsm : setMember μ₀ = some μS)
     {vinj : α → Value} (hvi : ∀ x y, vinj x = vinj y → x = y)
-    {S : Finset α} (hne : S.Nonempty)
-    (hall : ∀ x ∈ S, (c.e (vinj x)).isSome = true)
-    (hmem : ∀ x ∈ S, ∀ a', c.e (vinj x) = some a' → a'.member = μ₀) :
+    {S : NEFinset α}
+    (hall : ∀ x ∈ S.1, (c.e (vinj x)).isSome = true)
+    (hmem : ∀ x ∈ S.1, ∀ a', c.e (vinj x) = some a' → a'.member = μ₀) :
     (encSet c vinj S).isSome = true := by
-  obtain ⟨x₀, hx₀⟩ := hne
+  obtain ⟨x₀, hx₀⟩ := S.2
   unfold encSet
-  rw [if_neg (Finset.card_ne_zero_of_mem hx₀)]
   -- the element member decides the branch
   cases μ₀
   case S =>
-    have hb : ∀ x ∈ S, ((c.e (vinj x)).bind sC.out).isSome = true := by
+    have hb : ∀ x ∈ S.1, ((c.e (vinj x)).bind sC.out).isSome = true := by
       intro x hx
       obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp (hall x hx)
       have := hmem x hx _ ha'
       cases a' <;> simp_all [sC, Attr.member]
-    have hinj : ∀ x₁ ∈ S, ∀ x₂ ∈ S, ∀ y,
+    have hinj : ∀ x₁ ∈ S.1, ∀ x₂ ∈ S.1, ∀ y,
         (c.e (vinj x₁)).bind sC.out = some y → (c.e (vinj x₂)).bind sC.out = some y →
         x₁ = x₂ := by
       intro x₁ _ x₂ _ y h1 h2
@@ -3018,20 +3019,20 @@ theorem encSet_isSome_of {α : Type} {c : Codec} (h : LawfulCore c)
       rw [sC_out_inj a₂ y ho₂] at he₂
       exact hvi _ _ ((h.retract he₁).symm.trans (h.retract he₂) |> Option.some.inj)
     obtain ⟨T, hT⟩ := Option.isSome_iff_exists.mp (setImage_isSome_of hb hinj)
-    rw [hT]; rfl
+    rw [(neSetImage_eq_setImage (T := ⟨T, setImage_nonempty hT S.2⟩)).mpr hT]; rfl
   case N =>
-    have hb : ∀ x ∈ S, ((c.e (vinj x)).bind sC.out).isSome = true → False := by
+    have hb : ∀ x ∈ S.1, ((c.e (vinj x)).bind sC.out).isSome = true → False := by
       intro x hx hcon
       obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp (hall x hx)
       have := hmem x hx _ ha'
       rw [ha'] at hcon
       cases a' <;> simp_all [sC, Attr.member]
-    have hb2 : ∀ x ∈ S, ((c.e (vinj x)).bind nC.out).isSome = true := by
+    have hb2 : ∀ x ∈ S.1, ((c.e (vinj x)).bind nC.out).isSome = true := by
       intro x hx
       obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp (hall x hx)
       have := hmem x hx _ ha'
       cases a' <;> simp_all [nC, Attr.member]
-    have hinj : ∀ x₁ ∈ S, ∀ x₂ ∈ S, ∀ y,
+    have hinj : ∀ x₁ ∈ S.1, ∀ x₂ ∈ S.1, ∀ y,
         (c.e (vinj x₁)).bind nC.out = some y → (c.e (vinj x₂)).bind nC.out = some y →
         x₁ = x₂ := by
       intro x₁ _ x₂ _ y h1 h2
@@ -3047,7 +3048,8 @@ theorem encSet_isSome_of {α : Type} {c : Codec} (h : LawfulCore c)
         | none => rfl
         | some _ => exact absurd (by rw [hcon]; rfl) (fun hh => hb x₀ hx₀ hh))
     obtain ⟨T, hT⟩ := Option.isSome_iff_exists.mp (setImage_isSome_of hb2 hinj)
-    rw [hfail, hT]; rfl
+    rw [neSetImage_none hfail,
+      (neSetImage_eq_setImage (T := ⟨T, setImage_nonempty hT S.2⟩)).mpr hT]; rfl
   case B =>
     have hfailS : setImage (fun x => (c.e (vinj x)).bind sC.out) S = none :=
       setImage_none_of hx₀ (by
@@ -3059,12 +3061,12 @@ theorem encSet_isSome_of {α : Type} {c : Codec} (h : LawfulCore c)
         obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp (hall x₀ hx₀)
         have := hmem x₀ hx₀ _ ha'
         cases a' <;> simp_all [nC, Attr.member])
-    have hb : ∀ x ∈ S, ((c.e (vinj x)).bind bC.out).isSome = true := by
+    have hb : ∀ x ∈ S.1, ((c.e (vinj x)).bind bC.out).isSome = true := by
       intro x hx
       obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp (hall x hx)
       have := hmem x hx _ ha'
       cases a' <;> simp_all [bC, Attr.member]
-    have hinj : ∀ x₁ ∈ S, ∀ x₂ ∈ S, ∀ y,
+    have hinj : ∀ x₁ ∈ S.1, ∀ x₂ ∈ S.1, ∀ y,
         (c.e (vinj x₁)).bind bC.out = some y → (c.e (vinj x₂)).bind bC.out = some y →
         x₁ = x₂ := by
       intro x₁ _ x₂ _ y h1 h2
@@ -3075,7 +3077,8 @@ theorem encSet_isSome_of {α : Type} {c : Codec} (h : LawfulCore c)
       rw [bC_out_inj a₂ y ho₂] at he₂
       exact hvi _ _ ((h.retract he₁).symm.trans (h.retract he₂) |> Option.some.inj)
     obtain ⟨T, hT⟩ := Option.isSome_iff_exists.mp (setImage_isSome_of hb hinj)
-    rw [hfailS, hfailN, hT]; rfl
+    rw [neSetImage_none hfailS, neSetImage_none hfailN,
+      (neSetImage_eq_setImage (T := ⟨T, setImage_nonempty hT S.2⟩)).mpr hT]; rfl
   all_goals exact nomatch hsm
 
 
@@ -3088,8 +3091,8 @@ theorem lawfulCore_setCodec {c : Codec} {μ₀ μS : Member} (h : LawfulCore c)
   refine ⟨set_retract h, ?_, set_writes h⟩
   intro a t hp
   rcases setCodec_p_eq.mp hp with ⟨S, rfl, hD⟩ | ⟨S, rfl, hD⟩ | ⟨S, rfl, hD⟩ <;>
-    · rcases decSet_mem hD with ⟨U, rfl, hne, hm⟩ | ⟨U, rfl, hne, hm⟩ | ⟨U, rfl, hne, hm⟩ <;>
-      · refine encSet_isSome_of h hsm (fun x y hxy => by injection hxy) hne ?_
+    · rcases decSet_mem hD with ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ <;>
+      · refine encSet_isSome_of h hsm (fun x y hxy => by injection hxy) ?_
           (fun x _ a' ha' => h.writes hμ ha')
         intro y hy
         obtain ⟨x, -, hpx⟩ := hm y hy
@@ -3103,61 +3106,60 @@ theorem lawfulCore_setCodec {c : Codec} {μ₀ μS : Member} (h : LawfulCore c)
 wire set of the same family. The member of the elements' attributes decides it. -/
 
 /-- Elements at member `S` take the `SS` branch. -/
-theorem encSet_ss_of {α : Type} {c : Codec} {vinj : α → Value} {S : Finset α} {a : Attr}
-    (hm : ∀ x ∈ S, ∀ b, c.e (vinj x) = some b → b.member = .S)
+theorem encSet_ss_of {α : Type} {c : Codec} {vinj : α → Value} {S : NEFinset α} {a : Attr}
+    (hm : ∀ x ∈ S.1, ∀ b, c.e (vinj x) = some b → b.member = .S)
     (h : encSet c vinj S = some a) : ∃ T, a = .ss T := by
-  obtain ⟨x₀, hx₀⟩ := encSet_nonempty h
+  obtain ⟨x₀, hx₀⟩ := S.2
   have hall := encSet_elem h
   obtain ⟨b, hb⟩ := Option.isSome_iff_exists.mp (hall x₀ hx₀)
   have hbm := hm x₀ hx₀ b hb
   unfold encSet at h
-  rw [if_neg (Finset.card_ne_zero_of_mem hx₀)] at h
-  cases hT : setImage (fun x => (c.e (vinj x)).bind sC.out) S with
+  cases hT : neSetImage (fun x => (c.e (vinj x)).bind sC.out) S with
   | some T => rw [hT] at h; exact ⟨T, (Option.some.inj h).symm⟩
   | none =>
     exfalso
-    have hN : setImage (fun x => (c.e (vinj x)).bind nC.out) S = none :=
-      setImage_none_of hx₀ (by cases b <;> simp_all [nC, Attr.member])
-    have hB : setImage (fun x => (c.e (vinj x)).bind bC.out) S = none :=
-      setImage_none_of hx₀ (by cases b <;> simp_all [bC, Attr.member])
+    have hN : neSetImage (fun x => (c.e (vinj x)).bind nC.out) S = none :=
+      neSetImage_none (setImage_none_of hx₀ (by cases b <;> simp_all [nC, Attr.member]))
+    have hB : neSetImage (fun x => (c.e (vinj x)).bind bC.out) S = none :=
+      neSetImage_none (setImage_none_of hx₀ (by cases b <;> simp_all [bC, Attr.member]))
     rw [hT, hN, hB] at h
     simp at h
 
 /-- Elements at member `N` take the `NS` branch, the `SS` one having failed. -/
-theorem encSet_ns_of {α : Type} {c : Codec} {vinj : α → Value} {S : Finset α} {a : Attr}
-    (hm : ∀ x ∈ S, ∀ b, c.e (vinj x) = some b → b.member = .N)
+theorem encSet_ns_of {α : Type} {c : Codec} {vinj : α → Value} {S : NEFinset α} {a : Attr}
+    (hm : ∀ x ∈ S.1, ∀ b, c.e (vinj x) = some b → b.member = .N)
     (h : encSet c vinj S = some a) : ∃ T, a = .ns T := by
-  obtain ⟨x₀, hx₀⟩ := encSet_nonempty h
+  obtain ⟨x₀, hx₀⟩ := S.2
   have hall := encSet_elem h
   obtain ⟨b, hb⟩ := Option.isSome_iff_exists.mp (hall x₀ hx₀)
   have hbm := hm x₀ hx₀ b hb
-  have hS : setImage (fun x => (c.e (vinj x)).bind sC.out) S = none :=
-    setImage_none_of hx₀ (by cases b <;> simp_all [sC, Attr.member])
+  have hS : neSetImage (fun x => (c.e (vinj x)).bind sC.out) S = none :=
+    neSetImage_none (setImage_none_of hx₀ (by cases b <;> simp_all [sC, Attr.member]))
   unfold encSet at h
-  rw [if_neg (Finset.card_ne_zero_of_mem hx₀), hS] at h
-  cases hT : setImage (fun x => (c.e (vinj x)).bind nC.out) S with
+  rw [hS] at h
+  cases hT : neSetImage (fun x => (c.e (vinj x)).bind nC.out) S with
   | some T => rw [hT] at h; exact ⟨T, (Option.some.inj h).symm⟩
   | none =>
     exfalso
-    have hB : setImage (fun x => (c.e (vinj x)).bind bC.out) S = none :=
-      setImage_none_of hx₀ (by cases b <;> simp_all [bC, Attr.member])
+    have hB : neSetImage (fun x => (c.e (vinj x)).bind bC.out) S = none :=
+      neSetImage_none (setImage_none_of hx₀ (by cases b <;> simp_all [bC, Attr.member]))
     rw [hT, hB] at h
     simp at h
 
 /-- Elements at member `B` take the `BS` branch, both earlier ones having failed. -/
-theorem encSet_bs_of {α : Type} {c : Codec} {vinj : α → Value} {S : Finset α} {a : Attr}
-    (hm : ∀ x ∈ S, ∀ b, c.e (vinj x) = some b → b.member = .B)
+theorem encSet_bs_of {α : Type} {c : Codec} {vinj : α → Value} {S : NEFinset α} {a : Attr}
+    (hm : ∀ x ∈ S.1, ∀ b, c.e (vinj x) = some b → b.member = .B)
     (h : encSet c vinj S = some a) : ∃ T, a = .bs T := by
-  obtain ⟨x₀, hx₀⟩ := encSet_nonempty h
+  obtain ⟨x₀, hx₀⟩ := S.2
   have hall := encSet_elem h
   obtain ⟨b, hb⟩ := Option.isSome_iff_exists.mp (hall x₀ hx₀)
   have hbm := hm x₀ hx₀ b hb
-  have hS : setImage (fun x => (c.e (vinj x)).bind sC.out) S = none :=
-    setImage_none_of hx₀ (by cases b <;> simp_all [sC, Attr.member])
-  have hN : setImage (fun x => (c.e (vinj x)).bind nC.out) S = none :=
-    setImage_none_of hx₀ (by cases b <;> simp_all [nC, Attr.member])
+  have hS : neSetImage (fun x => (c.e (vinj x)).bind sC.out) S = none :=
+    neSetImage_none (setImage_none_of hx₀ (by cases b <;> simp_all [sC, Attr.member]))
+  have hN : neSetImage (fun x => (c.e (vinj x)).bind nC.out) S = none :=
+    neSetImage_none (setImage_none_of hx₀ (by cases b <;> simp_all [nC, Attr.member]))
   unfold encSet at h
-  rw [if_neg (Finset.card_ne_zero_of_mem hx₀), hS, hN] at h
+  rw [hS, hN] at h
   obtain ⟨T, -, hTa⟩ := Option.map_eq_some'.mp h
   exact ⟨T, hTa.symm⟩
 
@@ -3172,27 +3174,27 @@ theorem lawful_setCodec {c : Codec} (h : Lawful c) : Lawful (setCodec c) := by
   refine ⟨set_retract h.core, ?_, set_writes h.core, ?_⟩
   · intro a t hp
     rcases setCodec_p_eq.mp hp with ⟨S, rfl, hD⟩ | ⟨S, rfl, hD⟩ | ⟨S, rfl, hD⟩
-    · rcases decSet_mem hD with ⟨U, rfl, hne, hm⟩ | ⟨U, rfl, hne, hm⟩ | ⟨U, rfl, hne, hm⟩ <;>
+    · rcases decSet_mem hD with ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ <;>
       · refine encSet_isSome_of (μ₀ := .S) (μS := .SS) h.core rfl
-          (fun x y hxy => by injection hxy) hne ?_ ?_
+          (fun x y hxy => by injection hxy) ?_ ?_
         · intro y hy
           obtain ⟨x, -, hpx⟩ := hm y hy
           exact h.canon hpx
         · intro y hy a' ha'
           obtain ⟨x, -, hpx⟩ := hm y hy
           exact (h.agree hpx ha').member_eq
-    · rcases decSet_mem hD with ⟨U, rfl, hne, hm⟩ | ⟨U, rfl, hne, hm⟩ | ⟨U, rfl, hne, hm⟩ <;>
+    · rcases decSet_mem hD with ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ <;>
       · refine encSet_isSome_of (μ₀ := .N) (μS := .NS) h.core rfl
-          (fun x y hxy => by injection hxy) hne ?_ ?_
+          (fun x y hxy => by injection hxy) ?_ ?_
         · intro y hy
           obtain ⟨x, -, hpx⟩ := hm y hy
           exact h.canon hpx
         · intro y hy a' ha'
           obtain ⟨x, -, hpx⟩ := hm y hy
           exact (h.agree hpx ha').member_eq
-    · rcases decSet_mem hD with ⟨U, rfl, hne, hm⟩ | ⟨U, rfl, hne, hm⟩ | ⟨U, rfl, hne, hm⟩ <;>
+    · rcases decSet_mem hD with ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ <;>
       · refine encSet_isSome_of (μ₀ := .B) (μS := .BS) h.core rfl
-          (fun x y hxy => by injection hxy) hne ?_ ?_
+          (fun x y hxy => by injection hxy) ?_ ?_
         · intro y hy
           obtain ⟨x, -, hpx⟩ := hm y hy
           exact h.canon hpx
@@ -3201,17 +3203,17 @@ theorem lawful_setCodec {c : Codec} (h : Lawful c) : Lawful (setCodec c) := by
           exact (h.agree hpx ha').member_eq
   · intro a t a' hp he
     rcases setCodec_p_eq.mp hp with ⟨S, rfl, hD⟩ | ⟨S, rfl, hD⟩ | ⟨S, rfl, hD⟩
-    · rcases decSet_mem hD with ⟨U, rfl, hne, hm⟩ | ⟨U, rfl, hne, hm⟩ | ⟨U, rfl, hne, hm⟩ <;>
+    · rcases decSet_mem hD with ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ <;>
       · obtain ⟨T, rfl⟩ := encSet_ss_of (fun y hy b hb => by
           obtain ⟨x, -, hpx⟩ := hm y hy
           exact (h.agree hpx hb).member_eq) he
         exact Agree.ss T S
-    · rcases decSet_mem hD with ⟨U, rfl, hne, hm⟩ | ⟨U, rfl, hne, hm⟩ | ⟨U, rfl, hne, hm⟩ <;>
+    · rcases decSet_mem hD with ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ <;>
       · obtain ⟨T, rfl⟩ := encSet_ns_of (fun y hy b hb => by
           obtain ⟨x, -, hpx⟩ := hm y hy
           exact (h.agree hpx hb).member_eq) he
         exact Agree.ns T S
-    · rcases decSet_mem hD with ⟨U, rfl, hne, hm⟩ | ⟨U, rfl, hne, hm⟩ | ⟨U, rfl, hne, hm⟩ <;>
+    · rcases decSet_mem hD with ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ <;>
       · obtain ⟨T, rfl⟩ := encSet_bs_of (fun y hy b hb => by
           obtain ⟨x, -, hpx⟩ := hm y hy
           exact (h.agree hpx hb).member_eq) he

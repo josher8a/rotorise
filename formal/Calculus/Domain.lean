@@ -246,6 +246,21 @@ inductive Member where
   | S | N | B | BOOL | NULL | SS | NS | BS | L | M
 deriving DecidableEq, Repr
 
+/-- §1's `℘⁺fin(α)` — the **nonempty** finite subsets. The reference: *"DynamoDB does not
+    support empty sets"*, and §1 types all three wire sets as `℘⁺fin`. Carried by the type
+    rather than gated by a codec, for the same reason unorderedness and uniqueness are:
+    `{S : Finset α // S.Nonempty}` is admissible in a constructor, so the claim that only
+    a gate could enforce this was a claim worth testing. -/
+abbrev NEFinset (α : Type) := {S : Finset α // S.Nonempty}
+
+/-- A literal `℘⁺fin`, written as one element and the rest: `insert` is never empty, so
+    the proof is discharged by construction rather than at each use site. -/
+def NEFinset.of {α : Type} [DecidableEq α] (x : α) (S : Finset α) : NEFinset α :=
+  ⟨insert x S, Finset.insert_nonempty x S⟩
+
+theorem NEFinset.mem_of {α : Type} [DecidableEq α] (x : α) (S : Finset α) :
+    x ∈ (NEFinset.of x S).1 := Finset.mem_insert_self x S
+
 /-- The attribute domain `𝔸` (§1). The coproduct is exact: one member per attribute. -/
 inductive Attr where
   | s    (v : String)
@@ -256,9 +271,9 @@ inductive Attr where
   /-- §1's `℘⁺fin(String)`. A `Finset` and not a list: the reference says the order of a
       set's values is not preserved and each value is unique, and the store dedups on
       insert. Both facts are properties of the *type*, not obligations on a codec. -/
-  | ss   (v : Finset String)
-  | ns   (v : Finset Numeral)
-  | bs   (v : Finset Bytes)
+  | ss   (v : NEFinset String)
+  | ns   (v : NEFinset Numeral)
+  | bs   (v : NEFinset Bytes)
   | l    (v : List Attr)
   /-- §1's `M`. The reference calls it an *unordered* collection of name-value pairs, and
       an update at an existing name replaces it — so the names form a **set** and the
@@ -307,9 +322,9 @@ inductive Value where
   | null
   /-- The reference: "The set types are string set, number set, and binary set." Three
       concrete element types, so each is a genuine `Finset`. -/
-  | strSet (v : Finset String)
-  | numSet (v : Finset Double)
-  | binSet (v : Finset Bytes)
+  | strSet (v : NEFinset String)
+  | numSet (v : NEFinset Double)
+  | binSet (v : NEFinset Bytes)
   | arr  (v : List Value)
   /-- …and the value side of the same, for the same reason. -/
   | map  (keys : Finset Name) (f : {k // k ∈ keys} → Value)

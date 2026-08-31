@@ -1,11 +1,11 @@
 import Calculus.Soundnessω
 
 /-!
-# `Uν` and the empty set — a mechanization bug, and its witness
+# `Uν` and the empty set — a mechanization bug, closed by the type
 
 `docs/codec-formalization.md` §6 lists "`T` as an identity" as unproved, and says it
 "bites hardest at `opaque`, where §3 says `Uν` *is* the held set". Attempting it turned up
-a defect — but, unlike §4's three, this one was in the **model**, not the specification.
+a defect — and, unlike §4's three, this one was in the **model**, not the specification.
 
 `HOpaque`'s `set` clause was transcribed as
 
@@ -14,11 +14,11 @@ a defect — but, unlike §4's three, this one was in the **model**, not the spe
 ```
 
 with no constraint on `vs`, so `HOpaque lossy (set [])` held vacuously. Nothing in the
-calculus agrees:
+calculus agreed:
 
 * §1's `SS`/`NS`/`BS` are `℘⁺fin` — explicitly non-empty. There is no empty wire set to
-  write, and `asWireSet []` refuses.
-* `(set)`'s own held set `HSet` carries `vs ≠ []`. §3 exhibits `Uν` as the fixpoint
+  write.
+* `(set)`'s own held set `HSet` excluded it. §3 exhibits `Uν` as the fixpoint
   `union(…, set(opaque), …)`, whose `set` option is that rule — so the fixpoint reading
   excludes `set []` too.
 * §3's prose reading — "the values whose member is recoverable from the value alone" —
@@ -26,64 +26,30 @@ calculus agrees:
   `SS`, `NS` and `BS` are indistinguishable. Its member is precisely what cannot be
   recovered.
 
-All three readings agree, and the inductive disagreed with all three. `Typing.lean` now
-carries `hne : vs ≠ []`. The lemmas below are the witness for why it has to, and a
-regression test: `opaqCodec` never held `set []` at any fuel, and never wrote it, so the
-old `Uν` claimed a value the denotation could not represent.
+**The repair went through three stages, and the last one is why this section is now
+prose.** First the inductive gained `hne : vs ≠ []`, and three theorems here exhibited the
+gap: `not_hopaque_set_nil`, `opaqCodec_T_set_nil` and `opaqCodecω_e_set_nil` — the empty
+set is held by no fuel, written by none, and refused by the corrected `Uν`. Then the sets
+became `Finset`, and `vs ≠ []` became `S.Nonempty`. Now `Value.strSet` takes a
+`NEFinset String`, and **the three theorems cannot be stated**: `Value.strSet ∅` does not
+typecheck, because `∅` carries no non-emptiness proof and `℘⁺fin` has no other inhabitant
+to offer.
 
-The direction of the old error is worth recording. `typed_TSub` (denotation ⊆ judgement)
-was unaffected and still holds — the surplus was on the *judgement's* side, so no law
-broke and `soundness` never depended on it. What was wrong was the advertised precision of
-the `: T` index, which is exactly the claim §6 was unable to check while fuel was in the
-way.
+That is the closure, and it is the same shape as the map defect's
+(`record_e_keeps_duplicate_keys` became unstatable when `M`'s keys became a `Finset`). A
+witness that a value is excluded is worth having exactly while the value is expressible.
+When the type stops admitting it, the witness stops being a theorem and becomes a
+typechecking error at the point where anyone would try to write it down — which is
+earlier, and cheaper to act on.
+
+The direction of the original error is still worth recording. `typed_TSub` (denotation ⊆
+judgement) was unaffected and still holds — the surplus was on the *judgement's* side, so
+no law broke and `soundness` never depended on it. What was wrong was the advertised
+precision of the `: T` index, which is exactly the claim §6 was unable to check while fuel
+was in the way.
 -/
 
 namespace Calculus
-
-/-- `Uν` does not admit the empty set — the premise `Typing.lean` now carries. With the
-    set types typed, "empty" is `∅` in one of three `Finset`s rather than `[]` in a list,
-    and the argument is the same at each. -/
-theorem not_hopaque_set_nil (lossy : Bool) : ¬ HOpaque lossy (Value.strSet ∅) := by
-  intro h
-  cases h with
-  | strSet S hne => exact absurd hne (by simp)
-
-/-- Nor could it ever have: no fuel holds the empty set. `setCodec` demands a nonempty
-    element set, and every other option is a different kind. -/
-theorem opaqCodec_T_set_nil (lossy : Bool) :
-    ∀ n, ¬ (opaqCodec n lossy).T (Value.strSet ∅) := by
-  intro n hn
-  cases n with
-  | zero => exact hn
-  | succ n' =>
-    obtain ⟨o, ho, hT⟩ := hn
-    simp only [opaqOptions, List.mem_cons, List.not_mem_nil, or_false] at ho
-    cases lossy <;>
-      rcases ho with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;>
-        simp_all [OptionSem.byAttempt, stringCodec, booleanCodec, binaryCodec, nullCodec,
-                  numberCodec, Codec.empty, setCodec, arrayCodec, recordCodec]
-
-theorem opaqCodecω_T_set_nil (lossy : Bool) :
-    ¬ (opaqCodecω lossy).T (Value.strSet ∅) := by
-  rintro ⟨n, hn⟩
-  exact opaqCodec_T_set_nil lossy n hn
-
-/-- And nothing is written for it: `encSet` refuses a card-zero set, so no option admits. -/
-theorem opaqCodecω_e_set_nil (lossy : Bool) :
-    (opaqCodecω lossy).e (Value.strSet ∅) = none := by
-  show (opaqCodec (Value.depth (Value.strSet ∅)) lossy).e (Value.strSet ∅) = none
-  have hd : Value.depth (Value.strSet (∅ : Finset String)) = 1 + 1 := rfl
-  rw [hd, opaqCodec_e_strSet]
-  simp only [setCodec, encSet, Finset.card_empty]
-  rfl
-
-/-- The three agree, which is what makes the corrected `Uν` the right one: the value the
-    old inductive admitted is held by no fuel and written by none. -/
-theorem set_nil_outside_opaque (lossy : Bool) :
-    ¬ HOpaque lossy (Value.strSet ∅)
-    ∧ ¬ (opaqCodecω lossy).T (Value.strSet ∅)
-    ∧ (opaqCodecω lossy).e (Value.strSet ∅) = none :=
-  ⟨not_hopaque_set_nil lossy, opaqCodecω_T_set_nil lossy, opaqCodecω_e_set_nil lossy⟩
 
 /-! ## `T` as an identity, for `opaque`
 
@@ -124,24 +90,24 @@ theorem hopaque_T (lossy : Bool) :
   | .strSet S, n, h, hd => by
       cases n with | zero => exact absurd hd (by simp [Value.depth]) | succ n' =>
       cases h with
-      | strSet _ hne hall =>
+      | strSet _ hall =>
         exact ⟨.byAttempt (setCodec (opaqCodec n' lossy)), by simp [opaqOptions],
-               ⟨hne, fun x hx => hopaque_T lossy (.str x) n' (hall x hx) (by
-                  simp only [Value.depth] at hd ⊢; omega)⟩⟩
+               fun x hx => hopaque_T lossy (.str x) n' (hall x hx) (by
+                  simp only [Value.depth] at hd ⊢; omega)⟩
   | .numSet S, n, h, hd => by
       cases n with | zero => exact absurd hd (by simp [Value.depth]) | succ n' =>
       cases h with
-      | numSet _ hne hall =>
+      | numSet _ hall =>
         exact ⟨.byAttempt (setCodec (opaqCodec n' lossy)), by simp [opaqOptions],
-               ⟨hne, fun x hx => hopaque_T lossy (.num x) n' (hall x hx) (by
-                  simp only [Value.depth] at hd ⊢; omega)⟩⟩
+               fun x hx => hopaque_T lossy (.num x) n' (hall x hx) (by
+                  simp only [Value.depth] at hd ⊢; omega)⟩
   | .binSet S, n, h, hd => by
       cases n with | zero => exact absurd hd (by simp [Value.depth]) | succ n' =>
       cases h with
-      | binSet _ hne hall =>
+      | binSet _ hall =>
         exact ⟨.byAttempt (setCodec (opaqCodec n' lossy)), by simp [opaqOptions],
-               ⟨hne, fun x hx => hopaque_T lossy (.bin x) n' (hall x hx) (by
-                  simp only [Value.depth] at hd ⊢; omega)⟩⟩
+               fun x hx => hopaque_T lossy (.bin x) n' (hall x hx) (by
+                  simp only [Value.depth] at hd ⊢; omega)⟩
   | .arr vs, n, h, hd => by
       cases n with | zero => exact absurd hd (by simp [Value.depth]) | succ n' =>
       cases h with

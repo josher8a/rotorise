@@ -657,12 +657,9 @@ theorem opaq_TSub : ∀ (fuel : Nat) (lossy : Bool) (v : Value),
         obtain ⟨d, rfl, hw⟩ := hT
         exact .num d rfl hw
     · cases v <;> first
-        | (obtain ⟨hne, hall⟩ := hT
-           exact .strSet _ hne fun s hs => ih (Value.str s) (hall s hs))
-        | (obtain ⟨hne, hall⟩ := hT
-           exact .numSet _ hne fun d hd => ih (Value.num d) (hall d hd))
-        | (obtain ⟨hne, hall⟩ := hT
-           exact .binSet _ hne fun b hb => ih (Value.bin b) (hall b hb))
+        | exact .strSet _ fun s hs => ih (Value.str s) (hT s hs)
+        | exact .numSet _ fun d hd => ih (Value.num d) (hT d hd)
+        | exact .binSet _ fun b hb => ih (Value.bin b) (hT b hb)
         | exact nomatch hT
     · cases v <;> first
         | exact .arr _ fun x hx => ih x (hT x hx)
@@ -712,12 +709,9 @@ theorem typed_TSub : ∀ (fuel : Nat) {t T μ}, Typed t T μ →
     | opaq lossy => exact opaq_TSubω lossy v hv
     | @set t' T' μ₀ μS h' hs =>
       cases v <;> first
-        | (obtain ⟨hne, hall⟩ := hv
-           exact Or.inl ⟨_, rfl, hne, fun x hx => typed_TSub fuel h' _ (hall x hx)⟩)
-        | (obtain ⟨hne, hall⟩ := hv
-           exact Or.inr (Or.inl ⟨_, rfl, hne, fun x hx => typed_TSub fuel h' _ (hall x hx)⟩))
-        | (obtain ⟨hne, hall⟩ := hv
-           exact Or.inr (Or.inr ⟨_, rfl, hne, fun x hx => typed_TSub fuel h' _ (hall x hx)⟩))
+        | exact Or.inl ⟨_, rfl, fun x hx => typed_TSub fuel h' _ (hv x hx)⟩
+        | exact Or.inr (Or.inl ⟨_, rfl, fun x hx => typed_TSub fuel h' _ (hv x hx)⟩)
+        | exact Or.inr (Or.inr ⟨_, rfl, fun x hx => typed_TSub fuel h' _ (hv x hx)⟩)
         | exact nomatch hv
     | @array t' T' μ' h' =>
       cases v <;> first
