@@ -27,8 +27,12 @@ inductive Term where
   /-- §3 `(literal)` at arity one: a single value, whose base — and so whose member — is
       fixed by its kind. The n-ary form is surface syntax for the union of these. -/
   | literal (v : Value)
-  | literalS (ls : List String)
-  | literalN (ls : List Double)
+  /-- §3 `(literal-S)`. The alternatives are a **nonempty finite set**, which is what the
+      rule's `hne`/`hnd` premises said about a list: order does not matter to `∈`, so two
+      orderings were two terms denoting one codec, and a repeat was a term the rule had to
+      exclude by hand. Both premises are gone with the type. -/
+  | literalS (ls : NEFinset String)
+  | literalN (ls : NEFinset Double)
   | set      (elem : Term)
   | array    (elem : Term)
   /-- `(tuple)` and `(tuple-tail)` in one constructor; `tail = none` is the plain tuple. -/

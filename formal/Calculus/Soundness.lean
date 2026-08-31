@@ -185,11 +185,11 @@ theorem lawful_number : ∀ fuel, Lawful (denote fuel .number)
   | 0 => lawful_dead
   | _+1 => by simp only [denote]; exact lawful_numberCodec
 
-theorem lawful_literalS (ls : List String) : ∀ fuel, Lawful (denote fuel (.literalS ls))
+theorem lawful_literalS (ls : NEFinset String) : ∀ fuel, Lawful (denote fuel (.literalS ls))
   | 0 => lawful_dead
   | _+1 => by simp only [denote]; exact lawful_literalSCodec ls
 
-theorem lawful_literalN (ls : List Double) : ∀ fuel, Lawful (denote fuel (.literalN ls))
+theorem lawful_literalN (ls : NEFinset Double) : ∀ fuel, Lawful (denote fuel (.literalN ls))
   | 0 => lawful_dead
   | _+1 => by simp only [denote]; exact lawful_literalNCodec ls
 
@@ -297,8 +297,8 @@ theorem typed_μSyn : ∀ {t T μ}, Typed t T μ → μSyn t = μ
   | _, _, _, .boolean => rfl
   | _, _, _, .null => rfl
   | _, _, _, .binary => rfl
-  | _, _, _, .literalS _ _ _ => rfl
-  | _, _, _, .literalN _ _ _ _ => rfl
+  | _, _, _, .literalS _ => rfl
+  | _, _, _, .literalN _ _ => rfl
   | _, _, _, .set h' hs => by
       show (μSyn _).bind setMember = _
       rw [typed_μSyn h']
@@ -333,30 +333,30 @@ end
     everything except an object whose `d` field is a `req literalS`, so a term with tags
     is one, and its tags are that literal's set. Stated once, it replaces the outer case
     analysis in `dunion_stamp` below. -/
-theorem tagsOf_ne_nil {d : Name} {t : Term} (h : tagsOf d t ≠ []) :
+theorem tagsOf_ne_nil {d : Name} {t : Term} (h : (tagsOf d t).Nonempty) :
     ∃ fields f rest ls, t = .object fields f rest ∧
-      MapOf.at ⟨fields, f⟩ d = some (.req (.literalS ls)) ∧ tagsOf d t = ls := by
+      MapOf.at ⟨fields, f⟩ d = some (.req (.literalS ls)) ∧ tagsOf d t = ls.1 := by
   cases t
   case object fields f rest =>
     cases hlk : MapOf.at (α := Field) ⟨fields, f⟩ d with
-    | none => exact absurd (by simp only [tagsOf]; rw [hlk]; rfl) h
+    | none => exact absurd h (by simp only [tagsOf]; rw [hlk]; simp [tagsOfField])
     | some fd =>
       cases fd with
-      | optional _ => exact absurd (by simp only [tagsOf]; rw [hlk]; rfl) h
-      | fallback _ _ => exact absurd (by simp only [tagsOf]; rw [hlk]; rfl) h
+      | optional _ => exact absurd h (by simp only [tagsOf]; rw [hlk]; simp [tagsOfField])
+      | fallback _ _ => exact absurd h (by simp only [tagsOf]; rw [hlk]; simp [tagsOfField])
       | req tlit =>
         cases tlit
         case literalS ls => exact ⟨fields, f, rest, ls, rfl, hlk, by
           simp only [tagsOf]; rw [hlk]; rfl⟩
-        all_goals exact absurd (by simp only [tagsOf]; rw [hlk]; rfl) h
-  all_goals exact absurd rfl h
+        all_goals exact absurd h (by simp only [tagsOf]; rw [hlk]; simp [tagsOfField])
+  all_goals exact absurd h (by simp [tagsOf])
 
 /-- Typing's nonempty-tags premise forces each `(dunion)` option to be an object whose
     discriminator is a `req literalS`, and object-encode then stamps the tag on both
     sides of every canonical pair — exactly the `hstamp` the sum lemmas consume.
     Shared by both halves of the theorem. -/
 theorem dunion_stamp (fuel : Nat) {d : Name} {opts : List Term}
-    (htags : ∀ t' ∈ opts, tagsOf d t' ≠ []) :
+    (htags : ∀ t' ∈ opts, (tagsOf d t').Nonempty) :
     ∀ o ∈ opts.map fun t' => (tagsOf d t', denote fuel t'), ∀ t' a, o.2.e t' = some a →
       ∃ tag ∈ o.1, tagOfA d a = some tag ∧ tagOfV d t' = some tag := by
   refine forall_mem_map fun tx htx t' a he' => ?_
@@ -392,7 +392,7 @@ theorem dunion_stamp (fuel : Nat) {d : Name} {opts : List Term}
       replace hw : (literalSCodec ls).e (fv ⟨d, hd⟩) = some (g ⟨d, hd⟩) := hw
       cases hfv : fv ⟨d, hd⟩ <;> rw [hfv] at hw
       case str tagv =>
-        replace hw : (if tagv ∈ ls then some (Attr.s tagv) else none)
+        replace hw : (if tagv ∈ ls.1 then some (Attr.s tagv) else none)
             = some (g ⟨d, hd⟩) := hw
         split at hw
         · rename_i hin
@@ -471,8 +471,8 @@ theorem soundness_both : ∀ (fuel : Nat) {t T μ}, Typed t T μ → Obligations
     | boolean => exact sound_ground lawful_booleanCodec
     | null => exact sound_ground lawful_nullCodec
     | binary => exact sound_ground lawful_binaryCodec
-    | literalS ls hne hnd => exact sound_ground (lawful_literalSCodec ls)
-    | literalN ls hne hnd hD => exact sound_ground (lawful_literalNCodec ls)
+    | literalS ls => exact sound_ground (lawful_literalSCodec ls)
+    | literalN ls hD => exact sound_ground (lawful_literalNCodec ls)
     | opaq lossy => exact sound_ground (lawful_opaqCodecω lossy)
     | custom ce cp =>
       exact sound_ground hob.custom
@@ -704,7 +704,7 @@ theorem typed_TSub : ∀ (fuel : Nat) {t T μ}, Typed t T μ →
     | literal w μ hok hμ =>
       cases w <;> cases v <;> simp_all [denote, literalCodec, Codec.restrict, stringCodec,
         rawNumberCodec, booleanCodec, binaryCodec, nullCodec, literalOK]
-    | literalS _ _ _ | literalN _ _ _ _ => exact hv
+    | literalS _ | literalN _ _ => exact hv
     | custom _ _ => exact hv
     | opaq lossy => exact opaq_TSubω lossy v hv
     | @set t' T' μ₀ μS h' hs =>
@@ -805,8 +805,8 @@ theorem carrier_denote : ∀ (fuel : Nat) {t T μ}, Typed t T μ → Obligations
     | boolean => exact carrier_booleanCodec
     | null => exact carrier_nullCodec
     | binary => exact carrier_binaryCodec
-    | literalS ls _ _ => exact carrier_literalSCodec ls
-    | literalN ls _ _ => exact carrier_literalNCodec ls
+    | literalS ls => exact carrier_literalSCodec ls
+    | literalN ls _ => exact carrier_literalNCodec ls
     | @set t' T' μ₀ μS h' hs =>
       exact carrier_setCodec (carrier_denote fuel h' hob.set)
     | @array t' T' μ' h' =>

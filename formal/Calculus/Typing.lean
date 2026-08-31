@@ -165,14 +165,17 @@ inductive Typed : Term → Held → Option Member → Prop where
   | literal (v : Value) (μ : Member) (hok : literalOK v = true)
       (hμ : literalMember v = some μ) :
       Typed (.literal v) (fun w => w = v) (some μ)
-  | literalS (ls : List String) (hne : ls ≠ []) (hnd : ls.Nodup) :
-      Typed (.literalS ls) (fun v => ∃ s, s ∈ ls ∧ v = .str s) (some .S)
-  /-- §3's `ℓ ⊆ D`. A `literal` writes its values' own text, so a double outside §1's numeral
-      domain would be written to an attribute `𝔸` has no point for. Decidable at the
-      declaration, like `hne` and `hnd`. -/
-  | literalN (ls : List Double) (hne : ls ≠ []) (hnd : ls.Nodup)
-      (hD : ∀ d ∈ ls, Numeral.WF d.toDec = true) :
-      Typed (.literalN ls) (fun v => ∃ d, d ∈ ls ∧ v = .num d) (some .N)
+  /-- §3 `(literal-S)`. `hne` and `hnd` are gone: `ℓ` is a `℘⁺fin(String)`, so nonempty
+      and repeat-free are the type's, not the rule's. -/
+  | literalS (ls : NEFinset String) :
+      Typed (.literalS ls) (fun v => ∃ s, s ∈ ls.1 ∧ v = .str s) (some .S)
+  /-- §3's `ℓ ⊆ D`, and it is the **only** premise this rule has left. A `literal` writes
+      its values' own text, so a double outside §1's numeral domain would be written to an
+      attribute `𝔸` has no point for. That is a claim about the *elements*, which no
+      collection type carries — unlike `hne` and `hnd`, which two of them did. -/
+  | literalN (ls : NEFinset Double)
+      (hD : ∀ d ∈ ls.1, Numeral.WF d.toDec = true) :
+      Typed (.literalN ls) (fun v => ∃ d, d ∈ ls.1 ∧ v = .num d) (some .N)
   | set {t T μ μS} (h : Typed t T (some μ)) (hs : setMember μ = some μS) :
       Typed (.set t) (HSet T) (some μS)
   | array {t T μ} (h : Typed t T μ) : Typed (.array t) (HStar T) (some .L)
@@ -202,7 +205,7 @@ inductive Typed : Term → Held → Option Member → Prop where
   | union {opts Ts μs} (h : TypedListμ opts Ts μs) (hD : DIncomp Ts) :
       Typed (.union opts) (HUnion Ts) (unanimous μs)
   | dunion {d opts Ts} (h : TypedListM opts Ts)
-      (htags : ∀ t' ∈ opts, tagsOf d t' ≠ [])
+      (htags : ∀ t' ∈ opts, (tagsOf d t').Nonempty)
       (hdisj : List.Pairwise (fun a b => ∀ tag ∈ tagsOf d a, tag ∉ tagsOf d b) opts) :
       Typed (.dunion d opts) (HUnion Ts) (some .M)
 

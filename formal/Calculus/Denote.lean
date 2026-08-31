@@ -28,13 +28,13 @@ def specOf : Term → Option (MapOf Bool)
     `req` only: a `fallback` discriminator would fill an absent tag with an arbitrary
     default, breaking the value-side stamp — and the implementation refuses one too
     (`discriminatedUnion` demands a bare `literal`). -/
-def tagsOfField : Option Field → List String
-  | some (.req (.literalS ls)) => ls
-  | _ => []
+def tagsOfField : Option Field → Finset String
+  | some (.req (.literalS ls)) => ls.1
+  | _ => ∅
 
-def tagsOf (d : Name) : Term → List String
+def tagsOf (d : Name) : Term → Finset String
   | .object fields f _ => tagsOfField (MapOf.at ⟨fields, f⟩ d)
-  | _ => []
+  | _ => ∅
 
 /-- §3 `(literal)`'s member: the one its value's kind stores as. A container kind has no
     ground base and so no member, which is the rule's `g ground` premise as a function. -/

@@ -292,32 +292,32 @@ def nullCodec : Codec :=
     e := fun v => match v with | .null => some .null | _ => none
     p := fun a => match a with | .null => some .null | _ => none }
 
-def literalSCodec (ls : List String) : Codec :=
-  { T := fun v => ∃ s, s ∈ ls ∧ v = .str s
+def literalSCodec (ls : NEFinset String) : Codec :=
+  { T := fun v => ∃ s, s ∈ ls.1 ∧ v = .str s
     μ := some .S
     e := fun v => match v with
-      | .str s => if s ∈ ls then some (.s s) else none
+      | .str s => if s ∈ ls.1 then some (.s s) else none
       | _ => none
     p := fun a => match a with
-      | .s s => if s ∈ ls then some (.str s) else none
+      | .s s => if s ∈ ls.1 then some (.str s) else none
       | _ => none }
 
-def literalNCodec (ls : List Double) : Codec :=
-  { T := fun v => ∃ d, d ∈ ls ∧ v = .num d
+def literalNCodec (ls : NEFinset Double) : Codec :=
+  { T := fun v => ∃ d, d ∈ ls.1 ∧ v = .num d
     μ := some .N
     e := fun v => match v with
-      | .num d => if d ∈ ls then some (.n d.toDec) else none
+      | .num d => if d ∈ ls.1 then some (.n d.toDec) else none
       | _ => none
     p := fun a => match a with
-      | .n x => (Double.ofDec x).bind fun d => if d ∈ ls then some (.num d) else none
+      | .n x => (Double.ofDec x).bind fun d => if d ∈ ls.1 then some (.num d) else none
       | _ => none }
 
-theorem literalNCodec_e_num (ls : List Double) (d : Double) :
-    (literalNCodec ls).e (.num d) = if d ∈ ls then some (.n d.toDec) else none := rfl
+theorem literalNCodec_e_num (ls : NEFinset Double) (d : Double) :
+    (literalNCodec ls).e (.num d) = if d ∈ ls.1 then some (.n d.toDec) else none := rfl
 
-theorem literalNCodec_p_n (ls : List Double) (x : Numeral) :
+theorem literalNCodec_p_n (ls : NEFinset Double) (x : Numeral) :
     (literalNCodec ls).p (.n x) =
-      (Double.ofDec x).bind (fun d => if d ∈ ls then some (.num d) else none) := rfl
+      (Double.ofDec x).bind (fun d => if d ∈ ls.1 then some (.num d) else none) := rfl
 
 /-! ### The gated ground codecs are refinements
 
@@ -330,13 +330,13 @@ that visible, and lets all four of its laws come from `Lawful.restrict` and
 attribute), so it is not a refinement of `string` and keeps its own proofs. -/
 
 /-- `literal(ℓ)`'s predicate on the string side. -/
-def inLS (ls : List String) : Value → Bool
-  | .str s => decide (s ∈ ls)
+def inLS (ls : NEFinset String) : Value → Bool
+  | .str s => decide (s ∈ ls.1)
   | _ => false
 
 /-- `literal(ℓ)`'s predicate on the numeric side. -/
-def inLN (ls : List Double) : Value → Bool
-  | .num d => decide (d ∈ ls)
+def inLN (ls : NEFinset Double) : Value → Bool
+  | .num d => decide (d ∈ ls.1)
   | _ => false
 
 
@@ -477,12 +477,12 @@ theorem decimalCodec_p_restrict : decimalCodec.p = (rawDecimalCodec.restrict isS
 /-- **§3's `(literal-S)` gate is `refine` over a base the calculus already ships.** No raw
     codec is needed here: `string` *is* the ungated pair, because a string's stored text is
     the string. -/
-theorem literalSCodec_e_restrict (ls : List String) :
+theorem literalSCodec_e_restrict (ls : NEFinset String) :
     (literalSCodec ls).e = (stringCodec.restrict (inLS ls)).e := by
   funext v; cases v <;> simp [literalSCodec, stringCodec, Codec.restrict, inLS]
 
 /-- …and on the reading half. -/
-theorem literalSCodec_p_restrict (ls : List String) :
+theorem literalSCodec_p_restrict (ls : NEFinset String) :
     (literalSCodec ls).p = (stringCodec.restrict (inLS ls)).p := by
   funext a; cases a <;> simp [literalSCodec, stringCodec, Codec.restrict, inLS]
 
@@ -502,11 +502,11 @@ noncomputable def literalCodec : Value → Codec
     the pair — so `number` and every numeric literal are refinements of one
     `rawNumberCodec`. That is what makes them separable: see
     `uniqueAdmission_of_sharedBase`. -/
-theorem literalNCodec_e_restrict (ls : List Double) :
+theorem literalNCodec_e_restrict (ls : NEFinset Double) :
     (literalNCodec ls).e = (rawNumberCodec.restrict (inLN ls)).e := by
   funext v; cases v <;> simp [literalNCodec, rawNumberCodec, Codec.restrict, inLN]
 
-theorem literalNCodec_p_restrict (ls : List Double) :
+theorem literalNCodec_p_restrict (ls : NEFinset Double) :
     (literalNCodec ls).p = (rawNumberCodec.restrict (inLN ls)).p := by
   funext a; cases a <;> simp [literalNCodec, rawNumberCodec, Codec.restrict, inLN]
   cases Double.ofDec _ <;> simp
@@ -1866,24 +1866,24 @@ def tagOfA (d : Name) : Attr → Option String
   | _ => none
 
 /-- A `(dunion)` option is admitted by its discriminator tag. -/
-def OptionSem.byTag (d : Name) (tags : List String) (c : Codec) : OptionSem :=
-  { admitA := fun a => match tagOfA d a with | some tag => tags.contains tag | none => false
-    admitV := fun v => match tagOfV d v with | some tag => tags.contains tag | none => false
+def OptionSem.byTag (d : Name) (tags : Finset String) (c : Codec) : OptionSem :=
+  { admitA := fun a => match tagOfA d a with | some tag => decide (tag ∈ tags) | none => false
+    admitV := fun v => match tagOfV d v with | some tag => decide (tag ∈ tags) | none => false
     c := c }
 
 /-- A tag option admits exactly the items whose discriminator carries one of its tags. -/
-theorem byTag_admitA {d : Name} {tags : List String} {c : Codec} {a : Attr} :
+theorem byTag_admitA {d : Name} {tags : Finset String} {c : Codec} {a : Attr} :
     (OptionSem.byTag d tags c).admitA a = true ↔
-      ∃ tag, tagOfA d a = some tag ∧ tags.contains tag = true := by
+      ∃ tag, tagOfA d a = some tag ∧ tag ∈ tags := by
   simp only [OptionSem.byTag]
   cases h : tagOfA d a with
   | none => simp
   | some tag => simp
 
 /-- …and the values whose discriminator carries one, on the way in. -/
-theorem byTag_admitV {d : Name} {tags : List String} {c : Codec} {v : Value} :
+theorem byTag_admitV {d : Name} {tags : Finset String} {c : Codec} {v : Value} :
     (OptionSem.byTag d tags c).admitV v = true ↔
-      ∃ tag, tagOfV d v = some tag ∧ tags.contains tag = true := by
+      ∃ tag, tagOfV d v = some tag ∧ tag ∈ tags := by
   simp only [OptionSem.byTag]
   cases h : tagOfV d v with
   | none => simp
@@ -1957,7 +1957,7 @@ def altCodec (os : List OptionSem) (μA : Option Member) : Codec :=
 /-- `discriminatedUnion` is not its own codec: it is the sum over tag-admission
     options. Its (U) is `uniqueAdmission_byTag` — a theorem, which is what the term
     is for. -/
-def dunionCodec (d : Name) (os : List (List String × Codec)) : Codec :=
+def dunionCodec (d : Name) (os : List (Finset String × Codec)) : Codec :=
   altCodec (os.map fun o => .byTag d o.1 o.2) (some .M)
 
 /-! ## Unknown values (§3 `(opaque)`) -/
@@ -2132,7 +2132,7 @@ theorem carrier_restrict {c : Codec} (hc : Carrier c) (q : Value → Bool) :
 
 /-! ### The refinement ground codecs, on their carriers -/
 
-theorem carrier_literalSCodec (ls : List String) : Carrier (literalSCodec ls) :=
+theorem carrier_literalSCodec (ls : NEFinset String) : Carrier (literalSCodec ls) :=
   Carrier.congr (by funext v; cases v <;> simp [literalSCodec, Codec.restrict, stringCodec, inLS])
     (by funext a; cases a <;> simp [literalSCodec, Codec.restrict, stringCodec, inLS])
     (by rintro v ⟨⟨s, rfl⟩, hq⟩; exact ⟨s, by simpa [inLS] using hq, rfl⟩)
@@ -2143,13 +2143,13 @@ theorem carrier_literalSCodec (ls : List String) : Carrier (literalSCodec ls) :=
     on `d ∈ ls` alone, so a literal outside `D` is still writable here and is not writable
     through `number`. See `not_literalN_sub_number` in `Refutations.lean` for what that
     costs, and `codec-formalization.md` §4 for the premise §3 would need to close it. -/
-theorem carrier_literalNCodec (ls : List Double) : Carrier (literalNCodec ls) := by
+theorem carrier_literalNCodec (ls : NEFinset Double) : Carrier (literalNCodec ls) := by
   refine ⟨?_, ?_⟩
   · intro v a h
     cases v with
     | num d =>
       rw [literalNCodec_e_num] at h
-      by_cases hd : d ∈ ls
+      by_cases hd : d ∈ ls.1
       · exact ⟨d, hd, rfl⟩
       · rw [if_neg hd] at h; exact nomatch h
     | _ => exact nomatch h
@@ -2161,8 +2161,8 @@ theorem carrier_literalNCodec (ls : List Double) : Carrier (literalNCodec ls) :=
       | none => rw [hx] at h; exact nomatch h
       | some d =>
         rw [hx] at h
-        replace h : (if d ∈ ls then some (Value.num d) else none) = some v := h
-        by_cases hd : d ∈ ls
+        replace h : (if d ∈ ls.1 then some (Value.num d) else none) = some v := h
+        by_cases hd : d ∈ ls.1
         · rw [if_pos hd] at h; cases h; exact ⟨d, hd, rfl⟩
         · rw [if_neg hd] at h; exact nomatch h
     | _ => exact nomatch h
@@ -2551,7 +2551,7 @@ theorem carrier_literalCodec : ∀ {v : Value}, literalOK v = true → Carrier (
 What used to be two inductions is now two statements of which codec is being refined by
 which predicate. -/
 
-theorem lawful_literalSCodec (ls : List String) : Lawful (literalSCodec ls) := by
+theorem lawful_literalSCodec (ls : NEFinset String) : Lawful (literalSCodec ls) := by
   refine Lawful.congr ?_ ?_ ?_ (Lawful.restrict lawful_stringCodec (inLS ls))
   · funext v; cases v <;> simp [literalSCodec, Codec.restrict, stringCodec, inLS]
   · funext a; cases a <;> simp [literalSCodec, Codec.restrict, stringCodec, inLS]
@@ -2561,16 +2561,16 @@ theorem lawful_literalSCodec (ls : List String) : Lawful (literalSCodec ls) := b
     exists, because `number` gates and this does not. The laws never needed it — `(R)` here
     is `Double.roundtrip` and the membership test, the same two facts the prism was carrying
     second-hand. -/
-theorem lawful_literalNCodec (ls : List Double) : Lawful (literalNCodec ls) := by
+theorem lawful_literalNCodec (ls : NEFinset Double) : Lawful (literalNCodec ls) := by
   refine ⟨?_, ?_, ?_, ?_⟩
   · intro t a he
     cases t with
     | num d =>
       rw [literalNCodec_e_num] at he
-      by_cases hd : d ∈ ls
+      by_cases hd : d ∈ ls.1
       · rw [if_pos hd] at he; cases he
         rw [literalNCodec_p_n, Double.roundtrip]
-        show (if d ∈ ls then some (Value.num d) else none) = some (.num d)
+        show (if d ∈ ls.1 then some (Value.num d) else none) = some (.num d)
         rw [if_pos hd]
       · rw [if_neg hd] at he; exact nomatch he
     | _ => exact nomatch he
@@ -2582,8 +2582,8 @@ theorem lawful_literalNCodec (ls : List Double) : Lawful (literalNCodec ls) := b
       | none => rw [hx] at hp; exact nomatch hp
       | some d =>
         rw [hx] at hp
-        replace hp : (if d ∈ ls then some (Value.num d) else none) = some t := hp
-        by_cases hd : d ∈ ls
+        replace hp : (if d ∈ ls.1 then some (Value.num d) else none) = some t := hp
+        by_cases hd : d ∈ ls.1
         · rw [if_pos hd] at hp; cases hp
           rw [literalNCodec_e_num, if_pos hd]; rfl
         · rw [if_neg hd] at hp; exact nomatch hp
@@ -2592,7 +2592,7 @@ theorem lawful_literalNCodec (ls : List Double) : Lawful (literalNCodec ls) := b
     cases t with
     | num d =>
       rw [literalNCodec_e_num] at he
-      by_cases hd : d ∈ ls
+      by_cases hd : d ∈ ls.1
       · rw [if_pos hd] at he; cases he; cases hμ; rfl
       · rw [if_neg hd] at he; exact nomatch he
     | _ => exact nomatch he
@@ -2604,8 +2604,8 @@ theorem lawful_literalNCodec (ls : List Double) : Lawful (literalNCodec ls) := b
       | none => rw [hx] at hp; exact nomatch hp
       | some d =>
         rw [hx] at hp
-        replace hp : (if d ∈ ls then some (Value.num d) else none) = some t := hp
-        by_cases hd : d ∈ ls
+        replace hp : (if d ∈ ls.1 then some (Value.num d) else none) = some t := hp
+        by_cases hd : d ∈ ls.1
         · rw [if_pos hd] at hp; cases hp
           rw [literalNCodec_e_num, if_pos hd] at he
           cases he
@@ -3739,13 +3739,13 @@ theorem uniqueAdmission_of_kinds {os : List OptionSem} {ks : List Kind}
     exact hnd.imp fun hne l hl hl' => hne (hl.symm.trans hl')
 
 /-- A tag option is `Labelled` by its own tag set, definitionally. -/
-theorem labelled_byTag {d : Name} {tags : List String} {c : Codec} :
+theorem labelled_byTag {d : Name} {tags : Finset String} {c : Codec} :
     OptionSem.Labelled (tagOfV d) (tagOfA d) (.byTag d tags c) (· ∈ tags) := by
   refine ⟨fun v hv => ?_, fun a ha => ?_⟩
   · obtain ⟨tag, htv, htag⟩ := byTag_admitV.mp hv
-    exact ⟨tag, htv, mem_of_contains htag⟩
+    exact ⟨tag, htv, htag⟩
   · obtain ⟨tag, hta, htag⟩ := byTag_admitA.mp ha
-    exact ⟨tag, hta, mem_of_contains htag⟩
+    exact ⟨tag, hta, htag⟩
 
 /-- An option that decides by attempting admits what it writes, on both sides — the
     read side by (R), which is the only thing `hw` above ever needs. -/
@@ -3760,7 +3760,7 @@ theorem byAttempt_write {c : Codec} (h : Lawful c) {t a} (he : c.e t = some a) :
     this into an encode-side and a decode-side stamp; the proof showed the value side
     of the *canonical pair* is what admission reads, and only the combined form
     supplies it without assuming (R).) -/
-theorem uniqueAdmission_byTag {d : Name} {os : List (List String × Codec)}
+theorem uniqueAdmission_byTag {d : Name} {os : List (Finset String × Codec)}
     (hstamp : ∀ o ∈ os, ∀ t a, o.2.e t = some a →
       ∃ tag ∈ o.1, tagOfA d a = some tag ∧ tagOfV d t = some tag)
     (hdisj : List.Pairwise (fun x y => ∀ tag ∈ x.1, tag ∉ y.1) os) :
@@ -3774,12 +3774,11 @@ theorem uniqueAdmission_byTag {d : Name} {os : List (List String × Codec)}
   · refine forall_mem_map fun o ho t a he => ?_
     replace he : o.2.e t = some a := he
     obtain ⟨tag, htag, hA, hV⟩ := hstamp o ho t a he
-    exact ⟨byTag_admitV.mpr ⟨tag, hV, contains_of_mem htag⟩,
-           byTag_admitA.mpr ⟨tag, hA, contains_of_mem htag⟩⟩
+    exact ⟨byTag_admitV.mpr ⟨tag, hV, htag⟩, byTag_admitA.mpr ⟨tag, hA, htag⟩⟩
 
 /-- Every option of a `(dunion)` writes an `M` — the stamp says so, and the stamp is
     all either strength consults. -/
-private theorem dunion_writes {d : Name} {os : List (List String × Codec)}
+private theorem dunion_writes {d : Name} {os : List (Finset String × Codec)}
     (hstamp : ∀ o ∈ os, ∀ t a, o.2.e t = some a →
       ∃ tag ∈ o.1, tagOfA d a = some tag ∧ tagOfV d t = some tag) :
     ∀ m, some Member.M = some m →
@@ -3796,7 +3795,7 @@ private theorem dunion_writes {d : Name} {os : List (List String × Codec)}
 /-- `(dunion)` soundness is a corollary: the sum lemma composed with its (U) theorem;
     the member law comes from the stamp itself — a stamped canonical attribute is an
     `M`. -/
-theorem lawful_dunionCodec {d : Name} {os : List (List String × Codec)}
+theorem lawful_dunionCodec {d : Name} {os : List (Finset String × Codec)}
     (h : ∀ o ∈ os, Lawful o.2)
     (hstamp : ∀ o ∈ os, ∀ t a, o.2.e t = some a →
       ∃ tag ∈ o.1, tagOfA d a = some tag ∧ tagOfV d t = some tag)
@@ -3807,7 +3806,7 @@ theorem lawful_dunionCodec {d : Name} {os : List (List String × Codec)}
     (dunion_writes hstamp)
 
 /-- Core `(dunion)`: the same corollary, with core options. -/
-theorem lawfulCore_dunionCodec {d : Name} {os : List (List String × Codec)}
+theorem lawfulCore_dunionCodec {d : Name} {os : List (Finset String × Codec)}
     (h : ∀ o ∈ os, LawfulCore o.2)
     (hstamp : ∀ o ∈ os, ∀ t a, o.2.e t = some a →
       ∃ tag ∈ o.1, tagOfA d a = some tag ∧ tagOfV d t = some tag)

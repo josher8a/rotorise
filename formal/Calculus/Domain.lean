@@ -261,6 +261,11 @@ def NEFinset.of {α : Type} [DecidableEq α] (x : α) (S : Finset α) : NEFinset
 theorem NEFinset.mem_of {α : Type} [DecidableEq α] (x : α) (S : Finset α) :
     x ∈ (NEFinset.of x S).1 := Finset.mem_insert_self x S
 
+/-- …and its carrier is the `insert`, so `simp` sees through a literal without every
+    call site naming `NEFinset.of` in its own simp set. -/
+@[simp] theorem NEFinset.of_val {α : Type} [DecidableEq α] (x : α) (S : Finset α) :
+    (NEFinset.of x S).1 = insert x S := rfl
+
 /-- The attribute domain `𝔸` (§1). The coproduct is exact: one member per attribute. -/
 inductive Attr where
   | s    (v : String)
