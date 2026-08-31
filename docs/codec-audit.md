@@ -52,7 +52,8 @@ content.
 | ~~6~~ | ~~`Typing.lean:165-167`~~ **Landed.** | `literalOK` did two jobs: `Numeral.WF` on `.num` (content, stays) and `\| _ => false` for containers, which is just *"this value has a ground base"* — a claim about the field's carrier. `Term.literal (v : GroundValue)` makes `literalMember` total. Landed exactly as scoped: `hμ` and `μ` gone, `literalOK` → `literalD` with only the `.num` case, both laws argument-free, `literalMember` deleted, `literalCodec`'s `Codec.empty` case and `Exactness`'s container case gone. | **all of `hμ`**, the container half of `hok`, the `hok` arg of two laws, a case in `Exactness` | small (11 sites) |
 | 17 | `Denote.lean:95` +4 modules | **`denote` does not need fuel.** A structural, fuel-free `denote` compiles against the real `Term` (§13.1). The obstructions were `List.map` and a higher-order `fieldSemOf`, both incidental. Puts `Denoteω` (314), `Soundnessω` (77), `Continuity` (123) and `Opaque.lean`'s budget apparatus (854, 148 `depth` uses) in question, plus `fuel` in `Soundness` (191), `Discharge` (159), `Exactness` (40). §13. | ~1400 lines | **largest in this file** — spike first |
 | ~~18~~ | ~~`codec-formalization.md`, ~45 names~~ **Half landed: the check exists and the current-state documents pass.** | **A name-drift scan the repo did not have.** `fidelity_audit.py` and `vocab_audit.py` measure the mechanization; neither checked that a backticked name in a document still exists in `Calculus/`. `scripts/name_drift.py` now does, and fails non-zero. The three current-state documents in `formal/` had **seven** broken citations, all fixed. What remains is `codec-formalization.md`'s ~45, nearly all in §4, where the supersession rule applies and a name records what was reasoned with — a judgment about §4, not an edit. | — | **check landed**; §4 open |
-| 15 | `src/codec.ts` | **DEFERRED — target work behind the spec.** **Nothing checks the 32-level nesting bound**, so the library writes items DynamoDB rejects — a C1 violation of the `⟨N,"5e-324"⟩` shape, and the fifth after §9 closed five. `opaque` and `native` are where it bites: both walk arbitrary user data. §12.3. | — | small (library); the model's side is a scope decision |
+| 19 | `src/codec.ts` — `lazy` | **A recursive typed codec is the third place depth runs away, and item 15 does not cover it.** A self-nesting `object` holding an `array` of itself costs two levels a turn and passes 32 at the sixteenth — measured, `depth 82` at forty levels. Unlike `opaque`/`native` the depth arrives through a *declared* spec, so closing it means threading a level through every container codec rather than guarding two escape hatches. Cited from `attribute.ts`'s `tooDeeplyNested` docstring, so it must not be dropped silently. | — | medium; touches every container |
+| ~~15~~ | ~~`src/codec.ts`~~ **Landed.** | **Nothing checked the 32-level nesting bound**, so `opaque` and `native` wrote items DynamoDB rejects — §12.3's fifth C1 violation, plus a raw `RangeError` at pathological depth. Both now refuse, sharing one `tooDeeplyNested` in `attribute.ts` beside `isNumeral`. The deferral was the queue row's; §12.3 and §12.4 both said in terms that the library fix must not wait, and they were the half that was right. §12.6. | — | **landed** |
 | ~~16~~ | ~~`Typing.lean:207-210`~~ **Refused, and the measurement found two live bugs instead.** | `dunion` keyed by tag would delete `htags` and `hdisj`. §12.2 withdrew §2.2's coherence-gate objection and asked for one measurement first. Taken: the library **already contains both shapes**, keeps the tag-keyed one private, and says in its own docstring why. `htags`/`hdisj` stay. §12.5 records the measurement and the two `src/` defects it turned up. | nothing | **refused, with evidence** |
 | ~~6b~~ | ~~`Term.lean:27-35`~~ **Landed.** | **`literal`, `literalS` and `literalN` are one rule.** Raised by JH while item 6 was landing, and right: all three are *a nonempty finite set of values at one ground base*. Landed as the base-indexed form of §11.1 — `literal (k : GroundKind) (ls : NEFinset k.Carrier)` — after §11.4/§11.5 settled that the cheaper union route costs either `Classical.choice` or two reintroduced gates. | 2 constructors, 5 codec definitions → 4, 3 lawful theorems → 1, 2 carrier theorems → 1 (one of them 26 lines), 4 `admA` row lemmas → 3 | **landed** |
 | ~~7~~ | ~~`Combinators.lean`, 43 sites~~ **Landed.** | `objectCodecCore` took `kn : Name → Bool` free; the only instantiation is `keepB rest sems`, and `rc?` is likewise always `rcOf rest`. Three hypotheses across five signatures all said *the filter never discards a declared name*. All three are gone, the private `lawfulCore_objectCore`/`lawful_objectCore` layer with them — it existed only to be instantiated by the public pair. §4.4 records what the parameter was actually costing, which was not the five signatures. | 2 theorems, 3 hypotheses × 5 signatures, 23 lines net | **landed** |
@@ -1093,7 +1094,7 @@ Worth measuring before either: whether `discriminatedUnion` has a use with a mul
 If not, cost 1 evaporates and only the C2/C3 divergence remains — which is an argument for
 changing `codec.ts` too, not for keeping two premises.
 
-### 12.3 Documents nest ≤32 levels — and nothing checks it
+### 12.3 Documents nest ≤32 levels — ~~and nothing checks it~~ **now something does (§12.6)**
 
 **Corrected by JH after the first draft: 32 is a depth bound and nothing else.** The three limits
 are separate, and only one of them is a candidate for a codec to enforce:
@@ -1270,6 +1271,46 @@ in the *table*, which is not any option's property.
 **What made them findable:** the model states `hdisj` as a premise, so asking "does the host check
 it?" is a question with an answer. §9 found five bugs by asking that of five premises. This is the
 sixth and seventh, and item 16 — which was going to *delete* `hdisj` — is what asked.
+
+### 12.6 Item 15, landed — and the boundary is the one thing a probe could not settle
+
+§12.3 called this the fifth C1 violation and said the library fix "should not wait" for the model's
+side; §12.4 ended "what it must not do is wait for item 15". The queue row said **DEFERRED**. The
+body was right and the row was stale — the third time this pass the queue row was the wrong half.
+
+**Measured first.** `opaque.encode` of 100 nested arrays produced a 101-deep attribute with no
+complaint; `native.encode` of 40 produced 41. Both would be rejected on write. A third result was
+not expected: `opaque.encode` of a 20 000-deep array threw
+`RangeError: Maximum call stack size exceeded` — a raw `RangeError` escaping the same contract the
+`TypeError` in §12.5 escaped, from the same cause, a walk with no guard on it.
+
+**The fix.** `MAX_DOCUMENT_NESTING` and `tooDeeplyNested` in `attribute.ts`, beside `isNumeral` and
+for §9.7's reason: a fact about what the carrier holds belongs where the carrier is described, and
+two walkers ask it. Asked *on the way in*, before recursing — which is what turns the 20 000 case
+into a refusal instead of a crash, where measuring the finished attribute would have crashed first.
+
+**The boundary is unverified, and that is worth saying plainly.** `dynamo-datatypes.md:130` is the
+only statement of the limit in this repo, and its sentence — *"document types … can be nested
+within each other … up to 32 levels deep"* — does not say whether a scalar sitting inside 32 lists
+is the 32nd level or the 33rd. What is implemented is the literal reading: at most 32 nested
+**document types**, the leaf not being one, so 32 nested lists holding a string is accepted and 33
+refused. If a live table disagrees it disagrees by exactly one, and `codec.depth.spec.ts` pins both
+sides of the boundary so the disagreement arrives as a named failing test rather than as a rejected
+write. **This is the one claim in the fix no probe here could settle; it wants a round trip against
+a real table.**
+
+**A correction to §12.3's proposed model-side statement.** It suggests stating the bound as
+`Attr.depth a ≤ 32`. That will not do. `Attr.depth` is a *termination measure*, and its wire-set row
+(`.ss`/`.ns`/`.bs` = 2) is one greater than the store's nesting count, because a set holds payloads
+rather than attributes and is not a document type at all. A model-side bound has to count `L` and
+`M` only — a different function from the one `Opaque.lean` recurses on. Aligning the library to
+`Attr.depth` would have made it refuse a legal set at the deepest level.
+
+**And the fix does not cover everything.** Typed codecs are unguarded, which is right for a spec
+whose depth is fixed by its declaration — *except* under `lazy`, where a recursive entity's depth
+comes from the data. Measured at `depth 82` for a forty-level tree. Queued as item 19 rather than
+absorbed here, because the fix is structurally different: threading a level through every
+container, not guarding the two hatches that walk undeclared data.
 
 ## 13. `denote` does not need fuel — and this is the largest finding in the file
 

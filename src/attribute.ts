@@ -197,3 +197,51 @@ export type M<
 > = { readonly M: Of } & {
     readonly [other in Exclude<AttributeName, 'M'>]?: never
 }
+
+/**
+ * How deep DynamoDB nests document types.
+ *
+ * `docs/dynamo-datatypes.md:130`: *"The document types are list and map. These data types can be
+ * nested within each other, to represent complex data structures up to 32 levels deep."* So this
+ * counts **`L` and `M` only** — a scalar or a set is not a document type and cannot contain one, so
+ * neither adds a level, and a set at the deepest legal level is legal.
+ *
+ * The other two limits in that reference are not this one and are not checkable here. Element count
+ * is unbounded (`:132`, `:185` — *"There is no limit on the number of values in a list or a map"*),
+ * so a wide attribute is exact rather than lucky. Item size (400 KB) is a sum over every attribute
+ * name and value in a row, so it is checkable where an *item* is assembled and nowhere inside one
+ * attribute's codec.
+ *
+ * **The boundary is the one thing the reference does not settle.** Its sentence does not say
+ * whether a scalar sitting inside 32 lists is the 32nd level or the 33rd. This takes the reading
+ * the sentence states literally — at most 32 nested *document types*, the leaf not being one — so
+ * 32 nested lists holding a string is accepted and 33 is refused. If a live table disagrees it will
+ * disagree by exactly one, and this constant with the two `> MAX_DOCUMENT_NESTING` tests are the
+ * whole of what has to change.
+ */
+export const MAX_DOCUMENT_NESTING = 32
+
+/**
+ * Nothing, or why one more `L`/`M` would put a document past what DynamoDB stores.
+ *
+ * The reason and not the error, because {@link CodecError} lives in `./result`, which already
+ * imports this file — and because the bound and its wording belong wherever the carrier is
+ * described, the way `isNumeral` does. Two walkers ask it and there is one of it.
+ *
+ * Asked on the way *in*, before recursing, which is what makes a pathological input a refusal
+ * rather than a crash: a 20 000-deep array exhausted the call stack before anything looked at it,
+ * and a `RangeError` is not what callers of this library handle.
+ *
+ * **Where it is asked, and the one place it is not.** `opaque` and `native` ask it, because they
+ * are the two that walk data nobody declared. A typed codec does not, because its depth is fixed
+ * by its spec and checking it per value would be a walk with a known answer — *except* under
+ * `lazy`, where a recursive entity's depth comes from the data: a self-nesting `object` holding an
+ * `array` of itself costs two levels a turn and passes 32 at the sixteenth. That case is a real
+ * gap and is queued rather than fixed here, because closing it means threading a level through
+ * every container codec, which is a different change from guarding the two escape hatches. See
+ * item 19 of `docs/codec-audit.md`.
+ */
+export const tooDeeplyNested = (enclosing: number): string | undefined =>
+    enclosing >= MAX_DOCUMENT_NESTING
+        ? `nesting reaches ${enclosing + 1} levels of list and map, and DynamoDB stores at most ${MAX_DOCUMENT_NESTING} — the write would be rejected`
+        : undefined

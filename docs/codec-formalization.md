@@ -1899,6 +1899,35 @@ no option's property. They were found by taking a premise the model states and a
 host checks it — the same question that produced the five findings in `codec-audit.md` §9, asked of
 the one premise a queued refactor was about to delete.
 
+### One where the *model* is the loose one, and the host had to gate anyway
+
+Every other entry in this log runs the other way: the model states something and the host fails to
+check it. This one is the model's own over-approximation. `Attr.l` and `Attr.m` admit arbitrary
+nesting, so `ran(e) ⊆ 𝔸` holds against the model's `𝔸` and not the store's — DynamoDB nests
+document types 32 levels and refuses the 33rd. Nothing in `src/` checked it either, so `opaque` and
+`native` would encode a 101-deep document and DynamoDB would reject the row. Both now refuse, on a
+`tooDeeplyNested` shared from `attribute.ts`.
+
+Two things are worth carrying into the model's side of it.
+
+**The bound is not `Attr.depth ≤ 32`,** which is the obvious statement and the wrong one.
+`Attr.depth` is the termination measure `Opaque.lean` recurses on, and it charges a wire set two
+layers because a set holds payloads rather than attributes. The store charges it none: a set is not
+a document type and cannot contain one. A model-side bound has to count `L` and `M` only, which is
+a *different function* from the measure — so this is not the carrier refinement §6 asked about, and
+not the measure §12.4 proposed indexing on either.
+
+**The boundary is not settled by the reference.** *"Document types … can be nested within each
+other … up to 32 levels deep"* does not say whether a scalar inside 32 lists is the 32nd level or
+the 33rd. The library implements the literal reading and pins both sides of it in
+`codec.depth.spec.ts`, so a disagreement with a live table arrives as a named failing test. A model
+that states the bound will have to make the same choice, and should make the same one.
+
+The gap that remains is `lazy`: a recursive *typed* codec's depth comes from the data, not from its
+spec, and a self-nesting object holding an array of itself passes 32 at the sixteenth turn. That is
+item 19 of `codec-audit.md`, and it is where a model-side statement would earn the most — a bound
+on the carrier says nothing about it, but a bound derived for *derivable terms* would.
+
 ## §5 Certifying an implementation
 
 The calculus is portable by design: nothing in it is TypeScript, and nothing is Rotorise. An

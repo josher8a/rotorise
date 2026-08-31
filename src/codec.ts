@@ -15,7 +15,13 @@ import type {
     SS,
     StoredItem,
 } from './attribute'
-import { carrying, isNumeral, isStoredNumeral, memberOf } from './attribute'
+import {
+    carrying,
+    isNumeral,
+    isStoredNumeral,
+    memberOf,
+    tooDeeplyNested,
+} from './attribute'
 import type { Codec } from './build'
 import { codec } from './build'
 import {
@@ -943,7 +949,9 @@ export function literal<const T extends string | number>(
             throw new CodecError(
                 `a numeric literal is stored as 'N', and ${outside
                     .map(named)
-                    .join(', ')} ${outside.length === 1 ? 'is not a number' : 'are not numbers'} DynamoDB stores: it takes at most 38 significant digits and magnitude 1e-130 to 9.9e125, and has no NaN or Infinity`,
+                    .join(
+                        ', ',
+                    )} ${outside.length === 1 ? 'is not a number' : 'are not numbers'} DynamoDB stores: it takes at most 38 significant digits and magnitude 1e-130 to 9.9e125, and has no NaN or Infinity`,
             )
         }
     }
@@ -2074,6 +2082,8 @@ const unrecoverable = (what: string, instead: string) =>
 const encodeUnknown = (
     value: unknown,
     numbers: opaque.Numbers,
+    /** How many `L`/`M` this value already sits inside. See {@link MAX_DOCUMENT_NESTING}. */
+    enclosing = 0,
 ): Result<AttributeValue> => {
     if (value === null) return carrying('NULL', true)
     if (typeof value === 'string') return carrying('S', value)
@@ -2116,8 +2126,10 @@ const encodeUnknown = (
     }
 
     if (Array.isArray(value)) {
+        const deep = tooDeeplyNested(enclosing)
+        if (deep) return new CodecError(deep)
         return andThen(
-            every(value, (x) => encodeUnknown(x, numbers)),
+            every(value, (x) => encodeUnknown(x, numbers, enclosing + 1)),
             (written) => carrying('L', written),
         )
     }
@@ -2153,13 +2165,15 @@ const encodeUnknown = (
                 'Only plain objects survive: `M` carries the own enumerable properties and nothing that says how to rebuild the instance. Convert it first — a `Date`, for example, is faithful as an ISO string.',
             )
         }
+        const deep = tooDeeplyNested(enclosing)
+        if (deep) return new CodecError(deep)
         return andThen(
             everyEntry(value as Record<string, unknown>, (v, k) =>
                 v === undefined
                     ? new CodecError(
                           `'${k}' is undefined, and DynamoDB has no attribute holding undefined. Omit the key, or use \`optional(...)\` on a declared attribute.`,
                       )
-                    : encodeUnknown(v, numbers),
+                    : encodeUnknown(v, numbers, enclosing + 1),
             ),
             (written) => carrying('M', written),
         )
@@ -3746,7 +3760,13 @@ type SharedTags<
     ...infer Rest extends readonly unknown[],
 ]
     ?
-          | SharedTagsFrom<Head, Rest, D, Cursor['length'], [...Cursor, unknown]>
+          | SharedTagsFrom<
+                Head,
+                Rest,
+                D,
+                Cursor['length'],
+                [...Cursor, unknown]
+            >
           | SharedTags<Rest, D, [...Cursor, unknown]>
     : never
 
