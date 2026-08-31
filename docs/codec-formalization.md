@@ -90,8 +90,10 @@ For every derivable judgement `⊢ c : T ⇝ μ`, the denoted pair satisfies §2
 
 Both indices of `⊢ c : T ⇝ μ` are therefore claims about the denotation, not decoration.
 
-Each has a fuel-free twin on `denoteω` — `soundnessω`, `soundness_coreω`, `typed_e_memω`,
-`typed_p_memω`, `typed_μSynω` (`Calculus/Soundnessω.lean`). Same content, no `fuel` in the
+**There are no fuel-free twins any more, because there is no fuel.** `denote : Term → Codec` is
+structural; `denoteω` was a name for it, and `Calculus/Denoteω.lean` and
+`Calculus/Soundnessω.lean` — the second denotation and the transports onto it — are deleted. The
+statements below are the fuel-free ones. No `fuel` in the
 statement; see §7 for why that took a change to the model rather than a change of tool.
 
 ### Two named residues
@@ -874,7 +876,7 @@ findable.
 
 **What it cost.** `T` and `μ` had to stay outside the guard: `(nullable)` concludes `T + 𝟙 ⇝ ⊤`
 whichever branch runs, and a first attempt that guarded the whole codec broke `denote_μ` and
-`typed_TSub` immediately. Only the pair moves. Five sites in `Soundness`, one in `Denoteω`, one in
+`typed_TSub` immediately. Only the pair moves. Five sites in `Soundness`, one in
 `κ_sound`, two in `Equations`; nothing in `Opaque`, `Continuity` or `Discharge`'s dischargers.
 
 **And §6's idempotence stopped being an equation.** `nullable(nullable(c)) ≡ nullable(c)` used to
@@ -987,7 +989,7 @@ the repair are each a one-line appeal to the subterm's own — `exact adm_sound 
 three siblings — which is the evidence that nothing had to be argued at all.
 
 **Why it was there.** The doc's `lazy` carried `Unit → Term`, a real thunk, and for *that*
-constructor the opacity is correct: you cannot analyse a closure. `Denoteω.lean` records the change
+constructor the opacity is correct: you cannot analyse a closure. `Continuity.lean` records the change
 — the closure "defeated the termination checker without adding a constructible term" — and
 `Term.lean` argues it at length. The constructor was replaced; the analysis rows it justified were
 not. So this is not a defect in the specification's reasoning but in its bookkeeping: a premise was
@@ -1392,7 +1394,10 @@ So the asymmetry is not a modelling preference; it is where the language stops. 
    the source rather than quotienting them away afterwards.
 2. `Value.set` stays a list with a `SetWF` gate, and (R) still forces `e` to accept exactly one
    representative — `retract_forbids_insensitive_e` is unaffected by the attribute type.
-3. The order in `Calculus/WireOrder.lean` is needed either way. Reading a `Finset String` back into
+3. ~~The order in `Calculus/WireOrder.lean` is needed either way.~~ **It is needed neither way,
+   and the file is deleted** — both sides of every wire set are a `Finset` of a concrete element
+   type, so there is no list to sort. The `Classical.choice` hazard it routed around is recorded
+   beside `NEFinset` in `Domain.lean`. Reading a `Finset String` back into
    a canonical `List Value` is a `Finset.sort`, which wants a `LinearOrder`; mathlib's on `String`
    pulls `Classical.choice` and `Finset.toList` goes through `Quot.out`. `lexLe` is the axiom-free
    route to the same thing.
@@ -1565,7 +1570,8 @@ of them in a way worth stating precisely, because the error is instructive rathe
 | `Value.set` | `List Value` | `strSet (Finset String)`, `numSet (Finset Double)`, `binSet (Finset Bytes)` |
 | `Attr.m`, `Value.map` | `List (Name × _)` | `(keys : Finset Name) (f : {k // k ∈ keys} → _)` |
 
-No `SetWF`, no unique-key gate, no canonical order, and `Calculus/WireOrder.lean` is off both paths.
+No `SetWF`, no unique-key gate, no canonical order, and `Calculus/WireOrder.lean` — off both
+paths — is deleted.
 Only non-emptiness is still gated — and that is now a **choice, not a limit**, which is the next
 entry's subject.
 
@@ -1624,7 +1630,7 @@ under the new representation, which is the key set being shared saying so.
 `Finset` brings mathlib's simp set into scope for every downstream file, and plain `simp` will then
 close goals through `Classical.choice` without failing. The guard is what catches it: one lemma
 (`fbNames_empty`, routed through `Finset.eq_empty_of_forall_not_mem`, which mathlib proves
-classically) was leaking into seventeen guarded theorems including `soundness` and `soundnessω`, and
+classically) was leaking into seventeen guarded theorems including `soundness`, and
 it stayed invisible until the tree compiled far enough for `#assert_axioms_all` to run. `Finset.ext`
 is the axiom-free replacement. The rule of thumb is `simp` → `simp only`, and any hit is a bug in the
 proof rather than a price of the representation: `Finset` itself, `setImage`, `funImage`, `encSet`,
@@ -1693,7 +1699,8 @@ and `objectCodec`'s spec becomes a `MapOf FieldSem`. The move that keeps the cos
 * **`keysOk_of_names` is `⟨hsub, hreq⟩`.** `keysOk` is two quantifiers over the declared names where
   it was a hand-built `List.any` witness plus a `List.all` over the mapped row.
 * **`mem_fbNames` is `Finset.mem_filter`**, where it was a forty-line induction over the row.
-* `termDepthF`, `denoteωF_eq`, `denoteω_eqFPt`, `fieldSems_nodup`: deleted.
+* `termDepthF`, `denoteωF_eq`, `denoteω_eqFPt`, `fieldSems_nodup`: deleted — as, later, was
+  the whole ω layer they belonged to.
 * **`Lists.lean` loses its entire association-list section** — 23 declarations, found dead by a
   transitive reference scan and confirmed by the build. With neither `M` nor the field table a keyed
   list, there are no keyed lists left in the model. §5's keyed refinement went with them: *"entries
@@ -2122,10 +2129,10 @@ Stated plainly, because a certificate that hides its edges is worth less than on
 | **(U) in general**                      | A premise. The dischargers cover the decidable cases; the rest fails per input at runtime.  |
 | **Recursive `union`**                   | Unmodelled — and not for convenience. `union`'s unique admission is *anti-monotone* in its options, so a union whose options are genuinely recursive has no fixpoint semantics at all (§7, `Continuity.lean`). `Term.lazy` carries `Unit → Term`, which defeats the termination checker without adding a single term, so every term in the model is finite. `lazy` under `union` is therefore not merely awkward to model; it is outside the model, and (U) is why. |
 | **(MP) under `legacy`**                 | Off, by design, on re-read attributes.                                                      |
-| **(A) the denotation's `T` is the judgement's** | `(denoteω t).T = T` for a derivable `⊢ t : T ⇝ μ`, which is what §3 means by "`Uν` *is* `opaque`'s held set". **Closed for `opaque`** (`opaq_T_identity`), and `typed_TSub` is one half of it in general. Open for the other constructors: the missing half must *construct* the denotation's witness, where `typed_TSub` only projects it — a converse to `align_TSub` that builds `align`'s output, and the object case's presence data. Not false anywhere, and **definitional at `union`** (`altCodec_T`): both sides are the same union of the options' sets. |
+| **(A) the denotation's `T` is the judgement's** | `(denote t).T = T` for a derivable `⊢ t : T ⇝ μ`, which is what §3 means by "`Uν` *is* `opaque`'s held set". **Closed for `opaque`** (`opaq_T_identity`), and `typed_TSub` is one half of it in general. Open for the other constructors: the missing half must *construct* the denotation's witness, where `typed_TSub` only projects it — a converse to `align_TSub` that builds `align`'s output, and the object case's presence data. Not false anywhere, and **definitional at `union`** (`altCodec_T`): both sides are the same union of the options' sets. |
 | **(B) the held set is what can be written** | `T = dom(e)` — the claim that makes `: T` an honest index rather than an upper bound. `Carrier.domE` gives `dom(e) ⊆ T` for every derivable term. The converse is **false for `union` without full (U)** (`not_TIsDomE_unionLiteralString`): in `union(literal("A"), string)`, `"A"` is in the held set and the union writes nothing for it, because both options admit. That is the residue `uAtCan_of_separated` names, seen from the held set rather than from **(R)**. |
 | **§1's numeral domain**                 | **Modelled.** `Numeral.WF` (Domain.lean) carries §1's three clauses — grammar, ≤ 38 significant digits, magnitude `0` or `1e-130 … 9.9…e125` — and `decimal` gates on it, so it no longer holds every string. `decimal_writes_wf`/`decimal_reads_wf` are the report. The *carrier* is still unrestricted (`Attr.n "abc"` remains representable), which is the honest split: §1 says which strings DynamoDB accepts in an `N`, and the calculus's job is that its codecs write only those. Two narrowings are noted at the definition: a bare integer part is required, and significance is counted between first and last nonzero digit. |
-| **§6's equations**                      | **Twenty of twenty, with one row narrower than the table reads — and now stated in one language.** Every Hold row has a term-level twin (`equiv_denoteω_*`), reached through ten `rfl` bridges that write down the combinator-to-term translation the model had only implied. The "do not hold" table is settled: eight machine-checked, and `optional(optional(c))` enforced by the syntax, since no `Field` constructor takes a `Field`. All eleven "Hold" rows are proved, but `union`'s commutativity is proved for the **adjacent transposition** (`equiv_altCodec_swap`), which generates every permutation without the lift to `List.Perm` being written down. Wrapper member preservation is five of five — three codec wrappers, and the two field wrappers through `FieldSem.codec`, which §4 of the specification says is where a field's member lives. `union` associativity, the table's only *conditional* row, holds **without** its conditions — see §4. And `≡` itself is reflexive and symmetric but **not transitive** (`not_equiv_trans`), which bounds what a table of rewrites licenses. |
+| **§6's equations**                      | **Twenty of twenty, with one row narrower than the table reads — and now stated in one language.** Every Hold row has a term-level twin (`equiv_denote_*`), reached through ten `rfl` bridges that write down the combinator-to-term translation the model had only implied. The "do not hold" table is settled: eight machine-checked, and `optional(optional(c))` enforced by the syntax, since no `Field` constructor takes a `Field`. All eleven "Hold" rows are proved, but `union`'s commutativity is proved for the **adjacent transposition** (`equiv_altCodec_swap`), which generates every permutation without the lift to `List.Perm` being written down. Wrapper member preservation is five of five — three codec wrappers, and the two field wrappers through `FieldSem.codec`, which §4 of the specification says is where a field's member lives. `union` associativity, the table's only *conditional* row, holds **without** its conditions — see §4. And `≡` itself is reflexive and symmetric but **not transitive** (`not_equiv_trans`), which bounds what a table of rewrites licenses. |
 | **`Double`**                            | Axiomatized with exactly the shortest-text round trip `(number)` consumes. IEEE-754 facts are not this calculus's theorems. |
 | **Set-ness**                            | **Closed, on both halves — the row above described the model before the repair.** `SS`/`NS`/`BS` are `Finset String`/`Finset Numeral`/`Finset Bytes` and `Value` carries `strSet`/`numSet`/`binSet` over the same three concrete types; `M` and `Value.map` are a `Finset Name` of names with a function on it (`m (keys : Finset Name) (f : {k // k ∈ keys} → Attr)`). Unordered, unique-keyed and homogeneous are properties of the type rather than obligations on a codec, and there are no longer two orderings of one set or one map for `ker p` to collapse — so §2's first of three reasons is withdrawn rather than relocated, and the remaining two (`η` normalising `N`, `drop` discarding names) are the honest list. What is still *gated* is non-emptiness, by `encSet`'s card check — and that is a choice we have not yet revisited rather than a limit of the kernel: `{S : Finset String // S.Nonempty}` is admissible in a constructor alongside the recursive arms, so `℘⁺fin` is typeable exactly as `℘fin` was. See §4's last entry. |
 
@@ -2185,7 +2192,7 @@ needed a proof assistant. Bounded exhaustive checking over the existing implemen
 found all three quickly. The proof assistant earned its keep on the *positive* theorem — soundness
 of the algebra — which is what cannot be established by testing at all.
 
-The corollary for planning held up: the nine refutations went quickly once `≡` and `denoteω` were in
+The corollary for planning held up: the nine refutations went quickly once `≡` and `denote` were in
 place, and every one turned on a *held-set* separation rather than an `e`/`p` disagreement — `≡`
 tolerates a shrinking domain but never a differing `T`, so that is where the cheap witness lives.
 **Reach for a counterexample finder before a proof, on any new side condition.**
@@ -2215,21 +2222,31 @@ The cheaper repair was in the model, and it is **done** — in Lean, in three st
    reading; `opaq_e_agree`/`opaq_p_agree` prove the answer never changes past those budgets, and
    `opaq_e_depth`/`opaq_p_depth` license the transport between them that `retract` and `canon`
    need. `lawful_opaqCodecω` and `carrier_opaqCodecω` follow.
-3. **`denoteω : Term → Codec`** (`Calculus/Denoteω.lean`) is structural — no fuel parameter at
-   all. With `denote`'s `opaq` case now fuel-independent too, `denote` *stabilizes*, and
-   `denoteω_eq : termDepth t ≤ n → denoteω t = denote n t` makes the two denotations equal (as
-   codecs, not merely pointwise) at sufficient fuel.
+3. **`denote : Term → Codec` is structural, and there is no second denotation.**
 
-So the fuel-free statements are transports, not reproofs — the existing ~7,500 `sorry`-free lines
-were not rewritten. `Calculus/Soundnessω.lean` states the theorem the way §5 always meant it:
+   This entry used to describe `denoteω` in `Calculus/Denoteω.lean`, with
+   `denoteω_eq : termDepth t ≤ n → denoteω t = denote n t` transporting the fueled results onto
+   it, and `Calculus/Soundnessω.lean` restating §5 along that transport. Both files are deleted:
+   `denoteω` was a name for `denote`, companion for companion, and every transport is `rfl`.
+
+   What removed the fuel was not the `opaq` case stabilizing. It was two incidental obstructions
+   — recursion under `List.map`, and `fieldSemOf` receiving the recursion *unapplied* — and
+   neither is about the term language. Structural recursion goes straight through the object
+   field table's function, as `Value.depth` always did.
+
+   Fuel was doing a second job, and that one needed replacing: it was the induction measure, and
+   `Typed` is a `Prop`-valued mutual family with no `.brecOn`. `Term.depth` replaces it —
+   `attach.sup` over the key set, the inequality `sizeOf` cannot give at `Term.object` — and it
+   is derived from the term, so it appears in no statement, no `Obligations`, and no rule.
+
+So §5's theorem is stated the way §5 always meant it, with no twin:
 
 ```
-soundnessω : Typed t T μ → Obligationsω t → MPOkω t → Lawful (denoteω t)
+soundness : Typed t T μ → Obligations t → MPOk t → Lawful (denote t)
 ```
 
-with `soundness_coreω`, `carrier_denoteω`, `typed_e_memω`, `typed_p_memω` and `typed_μSynω`
-alongside. Axiom base unchanged throughout: `propext`, `Quot.sound`, and the `Double` axioms of
-§1 — no `Classical.choice`.
+Axiom base unchanged throughout: `propext`, `Quot.sound`, and the `Double` axioms of §1 — no
+`Classical.choice`.
 
 Worth noting which constructors this leaves alone: `dunion` never consults the recursive result to
 decide admission, and `opaque`'s options are kind-disjoint, so both look continuous and could carry
