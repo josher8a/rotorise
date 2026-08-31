@@ -59,7 +59,11 @@ noncomputable def Adm : Term → Value → Bool
       | _, _              => false
   | .custom ce _ => fun v => (ce v).isSome
   | .array c  => fun v => match v with | .arr xs => AdmAll c xs | _ => false
-  | .record c => fun v => match v with | .map kvs => AdmAllSnd c kvs | _ => false
+  -- `record` needs no list companion either: `M`'s entries are a function on the key
+  -- set, so "every entry admits" is one `decide` over that set, the way the three `set`
+  -- rows are one `decide` over theirs.
+  | .record c => fun v =>
+      match v with | .map _ f => decide (∀ k, Adm c (f k) = true) | _ => false
   | .refine t q => fun v => Adm t v && q v
   | .legacy t _ => Adm t
   | .lazy t     => Adm t
@@ -76,25 +80,17 @@ noncomputable def Adm : Term → Value → Bool
       | .binSet S => decide (S.card ≠ 0) && decide (∀ b ∈ S, Adm c (.bin b) = true)
       | _ => false
   | .tuple _ _  => fun v => match v with | .arr _ => true | _ => false
-  | .object _ _ => fun v => match v with | .map _ => true | _ => false
+  | .object _ _ => fun v => match v with | .map _ _ => true | _ => false
   | .dunion d opts => fun v =>
-      match v with
-      | .map kvs =>
-        match kvs.lookup d with
-        | some (.str tag) => (allTags d opts).contains tag
-        | _ => false
-      | _ => false
+      match tagOfV d v with
+      | some tag => (allTags d opts).contains tag
+      | none => false
   | .opaq _ => fun _ => true
 
 /-- `⋀` of `Adm` over a container's elements. -/
 noncomputable def AdmAll : Term → List Value → Bool
   | _, [] => true
   | c, x :: xs => Adm c x && AdmAll c xs
-
-/-- …and over a record's entry values, the names being carried past unexamined. -/
-noncomputable def AdmAllSnd : Term → List (Name × Value) → Bool
-  | _, [] => true
-  | c, kv :: kvs => Adm c kv.2 && AdmAllSnd c kvs
 
 /-- `⋁` of `Adm` over a union's options. Sound, but *not* exact — `select` demands
     exactly one admitting option, so a union is exact only under (U). -/
@@ -162,13 +158,6 @@ theorem AdmAll_iff {c : Term} (h : ExactV c) : ∀ xs : List Value,
   | nil => simp [AdmAll]
   | cons x xs ih => simp [AdmAll, ih, h x]
 
-/-- …and `AdmAllSnd`. -/
-theorem AdmAllSnd_iff {c : Term} (h : ExactV c) : ∀ kvs : List (Name × Value),
-    AdmAllSnd c kvs = true ↔ ∀ kv ∈ kvs, ((denoteω c).e kv.2).isSome = true := by
-  intro kvs; induction kvs with
-  | nil => simp [AdmAllSnd]
-  | cons kv kvs ih => simp [AdmAllSnd, ih, h kv.2]
-
 /-- **Sixteen of the twenty-three rows are exact.** Not a bound on `dom(e)` — `dom(e)`.
 
     The `held` case is the one worth reading: it appeals to the subterm at `f v`, which is
@@ -202,16 +191,16 @@ theorem Adm_exact : ∀ (t : Term), Analysable t = true → ExactV t
       have hc := Adm_exact c (by simpa [Analysable] using ha)
       intro v
       cases v
-      case map kvs =>
-        simp only [Adm, denoteω, recordCodec, Option.isSome_map]
-        rw [AdmAllSnd_iff hc]
-        have hkey : (∀ kv ∈ kvs, ((denoteω c).e kv.2).isSome = true)
-                  ↔ (∀ kv ∈ kvs, (encPair (denoteω c) kv).isSome = true) :=
-          ⟨fun hall kv hkv => by simpa [encPair] using hall kv hkv,
-           fun hall kv hkv => by simpa [encPair] using hall kv hkv⟩
-        rw [hkey, ← traverse_isSome_iff]
-        cases traverse (encPair (denoteω c)) kvs <;> simp
-      all_goals simp [Adm, denoteω, recordCodec]
+      -- The entry-key transport is gone with the traversal: `funImage` is defined
+      -- exactly where every entry's `e` is, which is the row verbatim.
+      case map keys f =>
+        simp only [Adm, denoteω, recordCodec, Option.isSome_map', decide_eq_true_eq,
+          funImage_isSome_iff]
+        exact forall_congr' fun k => hc (f k)
+      -- the other nine rows are refused on both sides, and unfolding `recordCodec`'s
+      -- `funImage` to see it is more work than reading it off the two `false`s
+      all_goals simp only [Adm, denoteω, recordCodec, Option.map_none',
+        Option.isSome_none, Bool.false_eq_true]
   | .refine c q, ha => by
       have hc := Adm_exact c (by simpa [Analysable] using ha)
       intro v; cases hq : q v <;> simp [Adm, denoteω, Codec.restrict, hq, hc v]
@@ -364,25 +353,6 @@ theorem AdmAll_sound_aux {c : Term} {C : Codec}
         | none => rw [hx, hxs] at h; exact nomatch h
         | some ys' => simp [AdmAll, hc hx, AdmAll_sound_aux hc hxs]
 
-/-- …and over a record's entries. -/
-theorem AdmAllSnd_sound_aux {c : Term} {C : Codec}
-    (hc : ∀ {v a}, C.e v = some a → Adm c v = true) :
-    ∀ {kvs : List (Name × Value)} {ys},
-      traverse (encPair C) kvs = some ys → AdmAllSnd c kvs = true
-  | [], _, _ => by simp [AdmAllSnd]
-  | kv :: kvs, ys, h => by
-      simp only [traverse] at h
-      cases hx : encPair C kv with
-      | none => rw [hx] at h; exact nomatch h
-      | some y =>
-        cases hxs : traverse (encPair C) kvs with
-        | none => rw [hx, hxs] at h; exact nomatch h
-        | some ys' =>
-          have hs : (C.e kv.2).isSome = true := by
-            simpa [encPair] using congrArg Option.isSome hx
-          obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp hs
-          simp [AdmAllSnd, hc hw, AdmAllSnd_sound_aux hc hxs]
-
 set_option maxHeartbeats 1000000 in
 /-- Soundness of every row, fueled. The recursion is on **fuel**, not on the term, which
     is what `κ_sound` and `adm_sound` do: a term recursion here makes the equation compiler
@@ -435,7 +405,11 @@ theorem Adm_sound_fueled : ∀ (fuel : Nat) (t : Term) {v a},
         exact Adm_sound_fueled fuel c ha'
       all_goals (simp only [denote, setCodec] at he; exact nomatch he)
     case tuple ts tl => cases v <;> simp_all [Adm, denote, tupleCodec]
-    case object fs r => cases v <;> simp_all [Adm, denote, objectCodec, objectCodecCore]
+    -- `objectCodecCore` is `carriedCodec` now, so the non-`map` rows are refused by the
+    -- value prism rather than by a traversal: `mapV.out` is what says so.
+    case object fs r =>
+      cases v <;>
+        simp_all [Adm, denote, objectCodec, objectCodecCore, carriedCodec, mapV, Ctor.out]
     case array c =>
       cases v
       case arr xs =>
@@ -446,11 +420,11 @@ theorem Adm_sound_fueled : ∀ (fuel : Nat) (t : Term) {v a},
       all_goals (simp only [denote, arrayCodec] at he; exact nomatch he)
     case record c =>
       cases v
-      case map kvs =>
-        simp only [Adm]
+      case map keys f =>
+        simp only [Adm, decide_eq_true_eq]
         simp only [denote, recordCodec] at he
-        obtain ⟨ys, hys, -⟩ := Option.map_eq_some'.mp he
-        exact AdmAllSnd_sound_aux (fun {v a} h => Adm_sound_fueled fuel c h) hys
+        obtain ⟨g, hg, -⟩ := Option.map_eq_some'.mp he
+        exact fun k => Adm_sound_fueled fuel c (funImage_some hg k)
       all_goals (simp only [denote, recordCodec] at he; exact nomatch he)
     case refine c q =>
       obtain ⟨hq, hc⟩ := restrict_e.mp he
@@ -632,7 +606,8 @@ noncomputable def AdmA : Term → Attr → Bool
       | _, _              => false
   | .custom _ cp => fun a => (cp a).isSome
   | .array c  => fun a => match a with | .l as => AdmAAll c as | _ => false
-  | .record c => fun a => match a with | .m kas => AdmAAllSnd c kas | _ => false
+  | .record c => fun a =>
+      match a with | .m _ g => decide (∀ k, AdmA c (g k) = true) | _ => false
   | .held t _ _ => AdmA t
   | .lazy t   => AdmA t
   -- hatch
@@ -645,25 +620,17 @@ noncomputable def AdmA : Term → Attr → Bool
   | .union opts => fun a => AdmAAny opts a
   | .set _    => fun a => match a with | .ss _ | .ns _ | .bs _ => true | _ => false
   | .tuple _ _ => fun a => match a with | .l _ => true | _ => false
-  | .object _ _ => fun a => match a with | .m _ => true | _ => false
+  | .object _ _ => fun a => match a with | .m _ _ => true | _ => false
   | .dunion d opts => fun a =>
-      match a with
-      | .m kas =>
-        (match kas.lookup d with
-         | some (.s tag) => (allTags d opts).contains tag
-         | _ => false)
-      | _ => false
+      match tagOfA d a with
+      | some tag => (allTags d opts).contains tag
+      | none => false
   | .opaq _ => fun _ => true
 
 /-- `⋀` of `AdmA` over a container's entries. -/
 noncomputable def AdmAAll : Term → List Attr → Bool
   | _, [] => true
   | c, a :: as => AdmA c a && AdmAAll c as
-
-/-- …and over a record's entry attributes. -/
-noncomputable def AdmAAllSnd : Term → List (Name × Attr) → Bool
-  | _, [] => true
-  | c, ka :: kas => AdmA c ka.2 && AdmAAllSnd c kas
 
 /-- `⋁` over a union's options; sound, and exact only under (U), as on the value side. -/
 noncomputable def AdmAAny : List Term → Attr → Bool
@@ -686,25 +653,6 @@ theorem AdmAAll_sound_aux {c : Term} {C : Codec}
         cases hxs : traverse C.p as with
         | none => rw [hx, hxs] at h; exact nomatch h
         | some vs' => simp [AdmAAll, hc hx, AdmAAll_sound_aux hc hxs]
-
-/-- …and over a record's entries. -/
-theorem AdmAAllSnd_sound_aux {c : Term} {C : Codec}
-    (hc : ∀ {a v}, C.p a = some v → AdmA c a = true) :
-    ∀ {kas : List (Name × Attr)} {vs},
-      traverse (decPair C) kas = some vs → AdmAAllSnd c kas = true
-  | [], _, _ => by simp [AdmAAllSnd]
-  | ka :: kas, vs, h => by
-      simp only [traverse] at h
-      cases hx : decPair C ka with
-      | none => rw [hx] at h; exact nomatch h
-      | some y =>
-        cases hxs : traverse (decPair C) kas with
-        | none => rw [hx, hxs] at h; exact nomatch h
-        | some vs' =>
-          have hs : (C.p ka.2).isSome = true := by
-            simpa [decPair] using congrArg Option.isSome hx
-          obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp hs
-          simp [AdmAAllSnd, hc hw, AdmAAllSnd_sound_aux hc hxs]
 
 set_option maxHeartbeats 1000000 in
 /-- Soundness of every attribute row, fueled; recursion on fuel, as on the value side. -/
@@ -779,7 +727,9 @@ theorem AdmA_sound_fueled : ∀ (fuel : Nat) (t : Term) {a v},
       | none => rw [hc] at hp; simp [AdmA, hp]
     case set c => cases a <;> simp_all [AdmA, denote, setCodec]
     case tuple ts tl => cases a <;> simp_all [AdmA, denote, tupleCodec]
-    case object fs r => cases a <;> simp_all [AdmA, denote, objectCodec, objectCodecCore]
+    case object fs r =>
+      cases a <;>
+        simp_all [AdmA, denote, objectCodec, objectCodecCore, carriedCodec, mA, Ctor.out]
     case array c =>
       cases a
       case l as =>
@@ -790,11 +740,11 @@ theorem AdmA_sound_fueled : ∀ (fuel : Nat) (t : Term) {a v},
       all_goals (simp only [denote, arrayCodec] at hp; exact nomatch hp)
     case record c =>
       cases a
-      case m kas =>
-        simp only [AdmA]
+      case m keys g =>
+        simp only [AdmA, decide_eq_true_eq]
         simp only [denote, recordCodec] at hp
-        obtain ⟨vs, hvs, -⟩ := Option.map_eq_some'.mp hp
-        exact AdmAAllSnd_sound_aux (fun {a v} h => AdmA_sound_fueled fuel c h) hvs
+        obtain ⟨f, hf, -⟩ := Option.map_eq_some'.mp hp
+        exact fun k => AdmA_sound_fueled fuel c (funImage_some hf k)
       all_goals (simp only [denote, recordCodec] at hp; exact nomatch hp)
     case refine c q => simpa [AdmA] using AdmA_sound_fueled fuel c (restrict_p.mp hp).1
     case lazy c => simpa [AdmA] using AdmA_sound_fueled fuel c hp
@@ -869,13 +819,6 @@ theorem AdmAAll_iff {c : Term} (h : ExactA c) : ∀ as : List Attr,
   | nil => simp [AdmAAll]
   | cons a as ih => simp [AdmAAll, ih, h a]
 
-/-- …and `AdmAAllSnd`. -/
-theorem AdmAAllSnd_iff {c : Term} (h : ExactA c) : ∀ kas : List (Name × Attr),
-    AdmAAllSnd c kas = true ↔ ∀ ka ∈ kas, ((denoteω c).p ka.2).isSome = true := by
-  intro kas; induction kas with
-  | nil => simp [AdmAAllSnd]
-  | cons ka kas ih => simp [AdmAAllSnd, ih, h ka.2]
-
 /-- **Fourteen of the twenty-three attribute rows are exact.** Two fewer than the value
     side, and the two are `refine` and `legacy` — the pair whose asymmetry is the reason
     §5 needed `adm` and `admA` rather than one function.
@@ -931,16 +874,12 @@ theorem AdmA_exact : ∀ (t : Term), AnalysableA t = true → ExactA t
       have hc := AdmA_exact c (by simpa [AnalysableA] using ha)
       intro a
       cases a
-      case m kas =>
-        simp only [AdmA, denoteω, recordCodec]
-        rw [AdmAAllSnd_iff hc]
-        have hkey : (∀ ka ∈ kas, ((denoteω c).p ka.2).isSome = true)
-                  ↔ (∀ ka ∈ kas, (decPair (denoteω c) ka).isSome = true) :=
-          ⟨fun hall ka hka => by simpa [decPair] using hall ka hka,
-           fun hall ka hka => by simpa [decPair] using hall ka hka⟩
-        rw [hkey, ← traverse_isSome_iff]
-        cases traverse (decPair (denoteω c)) kas <;> simp
-      all_goals simp [AdmA, denoteω, recordCodec]
+      case m keys g =>
+        simp only [AdmA, denoteω, recordCodec, Option.isSome_map', decide_eq_true_eq,
+          funImage_isSome_iff]
+        exact forall_congr' fun k => hc (g k)
+      all_goals simp only [AdmA, denoteω, recordCodec, Option.map_none',
+        Option.isSome_none, Bool.false_eq_true]
   | .held c f g, ha => by
       have hc := AdmA_exact c (by simpa [AnalysableA] using ha)
       intro a
@@ -1184,7 +1123,7 @@ theorem Adm_kind : ∀ (t : Term) (ks : List Kind) (v : Value),
   | .tuple _ _, _, v, rfl, h => by cases v <;> simp_all [Adm, Value.kind]
   | .record _, _, v, rfl, h => by cases v <;> simp_all [Adm, Value.kind]
   | .object _ _, _, v, rfl, h => by cases v <;> simp_all [Adm, Value.kind]
-  | .dunion _ _, _, v, rfl, h => by cases v <;> simp_all [Adm, Value.kind]
+  | .dunion _ _, _, v, rfl, h => by cases v <;> simp_all [Adm, tagOfV, Value.kind]
   | .refine t q, ks, v, hk, h => by
       rw [Adm, Bool.and_eq_true] at h
       exact Adm_kind t ks v (by rw [κ] at hk; exact hk) h.1
@@ -1434,11 +1373,14 @@ theorem not_decides_refine_top : ¬ Decides (.refine .string qTop) := by
     populated one — two `map`s differing in admission — while `ident` calls it `false`. -/
 theorem decides_object :
     Decides (.object [("k", .req .string)] .refuse) := by
-  refine ⟨.map [("k", .str "a")], .map [], ?_, rfl, ?_⟩
+  refine ⟨.map {"k"} (fun _ => .str "a"),
+          .map ∅ (fun k => absurd k.2 (Finset.not_mem_empty k.1)), ?_, rfl, ?_⟩
   · simp [denoteω, denoteωF, denoteωR, objectCodec, objectCodecCore, stringCodec,
-          valPresentB, encEntry, denoteωField, rcOf, traverse, FieldSem.codec]
+          valPresentB, denoteωField, rcOf, FieldSem.codec, carriedCodec, mapV, mA,
+          Ctor.out, Ctor.into, objWrite, entryCodec, funImage, Subtype.forall]
   · simp [denoteω, denoteωF, denoteωR, objectCodec, objectCodecCore, stringCodec,
-          valPresentB, encEntry, denoteωField, rcOf, traverse, FieldSem.codec]
+          valPresentB, denoteωField, rcOf, FieldSem.codec, carriedCodec, mapV, mA,
+          Ctor.out, Ctor.into, objWrite]
 
 theorem ident_object : ident (.object [("k", .req .string)] .refuse) = false := rfl
 
@@ -1623,8 +1565,8 @@ nothing for `e` to choose between and nothing for `p` to collapse; `ker p` is eq
 it is what rules out the alternative design, not because anything here depends on it.
 
 `Calculus/WireOrder.lean` — the canonical form and the axiom-free order it was built on —
-is likewise no longer on the set path. It stays for the map gate, where the kernel does
-refuse the quotient. -/
+is likewise no longer on the set path. Nor, as the next section shows, on the map path: the
+quotient the kernel refuses is `Finset (Name × Attr)`, and `M` does not need it. -/
 
 /-! ### The reference, checked against the model
 
@@ -1639,37 +1581,52 @@ Two things do not survive, and they are the same defect at two members.
 a set is not preserved."* Recorded above.
 
 **`M`** — *"A map type attribute can store an **unordered** collection of name-value
-pairs."* The model's `M` is a `List (Name × Attr)`, so two orderings of one map are two
-attributes (`record_p_order_sensitive`, `record_e_order_sensitive`), and a repeated key is
-writable (`record_e_keeps_duplicate_keys`), which no map has.
+pairs."* The model's `M` was a `List (Name × Attr)`, so two orderings of one map were two
+attributes and a repeated key was writable, which no map has. Three theorems recorded the
+disagreement; they are replaced by the three below.
 
-This one is sharper than the set case for two reasons. First, the model already *states* the
-intent elsewhere: `Agree` at `M` is lookup-based, comparing by key and ignoring order — so
-the two halves of the model disagree with each other, not merely with the reference. Second,
-maps cannot be repaired by typing. `Finset String` is admissible at `SS` because the element
-type is concrete; `Finset (Name × Attr)` is rejected by the kernel exactly as `Finset Value`
-is, the element type being the one under declaration. So `M` needs the well-formedness route
-on **both** sides — unique keys, canonically ordered — which is what `Wire.canon` provides,
-keyed by the name. -/
+This one was called sharper than the set case for two reasons, and only the first survives.
+The model does *state* the intent elsewhere — `Agree` at `M` compares by key and ignores
+order — so the two halves of the model disagreed with each other and not merely with the
+reference. But the second reason, that maps cannot be repaired by typing, was wrong, and the
+correction is the content of this section. `Finset (Name × Attr)` **is** rejected by the
+kernel, exactly as `Finset Value` is, the element type being the one under declaration. What
+does not follow is that `M` needs the well-formedness route. The pair need not be the
+element: §1's `M` is a finite *partial function*, so the names go in a `Finset` over the
+concrete type `Name` and the attributes go in a function's codomain — a strictly positive
+position, which the kernel accepts:
 
-/-- The reference: *"A map type attribute can store an **unordered** collection of
-    name-value pairs."* The model's `M` is a `List (Name × Attr)`, so two orderings of one
-    map are two attributes — the same defect as `SS`/`NS`/`BS`, one level up. -/
-theorem record_p_order_sensitive :
-    (recordCodec stringCodec).p (.m [("a", .s "x"), ("b", .s "y")])
-      ≠ (recordCodec stringCodec).p (.m [("b", .s "y"), ("a", .s "x")]) := by
-  simp [recordCodec, stringCodec, decPair, traverse]
+    | m (keys : Finset Name) (f : {k // k ∈ keys} → Attr)
 
-/-- …and on the write side. -/
-theorem record_e_order_sensitive :
-    (recordCodec stringCodec).e (.map [("a", .str "x"), ("b", .str "y")])
-      ≠ (recordCodec stringCodec).e (.map [("b", .str "y"), ("a", .str "x")]) := by
-  simp [recordCodec, stringCodec, encPair, traverse]
+Unordered, unique-keyed and total-on-its-keys are now facts about the type. No canonical
+order, no `Wire.canon`, and nothing for `e` to choose between. -/
 
-/-- And a map may carry a repeated key, which no map has. -/
-theorem record_e_keeps_duplicate_keys :
-    ((recordCodec stringCodec).e (.map [("a", .str "x"), ("a", .str "y")])).isSome = true := by
-  simp [recordCodec, stringCodec, encPair, traverse]
+/-- Two "orderings" of one map's names are one name set — there is nothing to quotient. -/
+theorem mapKeys_order_irrelevant : ({"a", "b"} : Finset Name) = {"b", "a"} :=
+  Finset.ext fun x => by
+    simp only [Finset.mem_insert, Finset.mem_singleton]
+    exact ⟨fun h => h.elim (fun e => Or.inr e) (fun e => Or.inl e),
+           fun h => h.elim (fun e => Or.inr e) (fun e => Or.inl e)⟩
+
+/-- …so the codec has one answer where it used to have two. Equal key sets and
+    pointwise-equal entries are one attribute (`MapOf.ext`), and one attribute is one
+    reading — the order-sensitivity had nowhere left to live. -/
+theorem record_p_order_irrelevant
+    (g : {k // k ∈ ({"a", "b"} : Finset Name)} → Attr)
+    (g' : {k // k ∈ ({"b", "a"} : Finset Name)} → Attr)
+    (h : ∀ k (h₁ : k ∈ ({"a", "b"} : Finset Name)) (h₂ : k ∈ ({"b", "a"} : Finset Name)),
+      g ⟨k, h₁⟩ = g' ⟨k, h₂⟩) :
+    (recordCodec stringCodec).p (.m {"a", "b"} g)
+      = (recordCodec stringCodec).p (.m {"b", "a"} g') :=
+  congrArg (fun p : MapOf Attr => (recordCodec stringCodec).p (.m p.1 p.2))
+    (MapOf.ext (p := ⟨{"a", "b"}, g⟩) (q := ⟨{"b", "a"}, g'⟩) mapKeys_order_irrelevant h)
+
+/-- A repeated key is not an inhabitant: the map that was supposed to carry `"a"` twice is
+    the map that carries it once. -/
+theorem mapKeys_no_duplicates : ({"a", "a"} : Finset Name) = {"a"} :=
+  Finset.ext fun x => by
+    simp only [Finset.mem_insert, Finset.mem_singleton]
+    exact ⟨fun h => h.elim id id, fun h => Or.inr h⟩
 
 end
 end Calculus
