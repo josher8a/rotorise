@@ -63,8 +63,17 @@ The read-side slot is `Member`, which `Attr.member` already computes.
 | slot | the `Value` constructor on the write side, the `Member` on the read side | `Orth1` |
 | names | two-sided `keysOk` containment over the declared/required name sets | `OrthM` |
 | tag | `tagOfV d`/`tagOfA d` | **not a phase of `Orth`** — see below |
-| alternatives | two literals at one base with disjoint `ℓ` | not implemented |
+| alternatives | two literals at one base with disjoint `ℓ` | `separates_literal_disjoint` |
 | opaque predicate | `refine`'s `q`, `held`'s `f`, `custom` | undecidable by construction |
+
+The interface the discharger consumes is `Separates`, a `Prop`; `Orth` is the *decidable*
+sufficient condition for it, covering the first two phases. Phase *alternatives* is deliberately
+**not** folded into `Orth`, and the reason is a type rather than a preference:
+`GroundKind.number.Carrier` is `Double`, whose `DecidableEq` is a field of the axiomatized
+`numericHost`, so a `Bool`-valued test for `ℓ ∩ ℓ' = ∅` uniform in the base would be
+`noncomputable` — and `Orth` would stop reducing in the kernel, which is the whole of its value.
+`Domain.lean`'s note on `GroundKind.Carrier` predicts exactly this. So phase *alternatives* is a
+premise a caller supplies, and `Orth` stays a `by decide`.
 
 **The tag is not a phase of `Orth`, and this is a finding rather than an omission.** A
 `union` option that is an object is admitted by `OptionSem.byNames` — `keysOk`, a test on the
@@ -626,24 +635,31 @@ theorem orthSA_disjoint {x y : Term} (h : Orth x y = true) :
       · exact keysOk_of_reqNotDeclared hr hky hkx
     | _ => exact absurd hax (by simp [admitOptA])
 
-/-- **§5's (U), from one decidable premise.** Pairwise `Orth` over the options, and the two
-    premises every discharger in `Discharge.lean` already takes: lawfulness, which soundness
-    supplies, and the closed-object restriction.
+/-- **What the discharger consumes.** Both families disjoint, as a `Prop` — the interface, of
+    which `Orth` is the decidable part and phase *alternatives* the part that cannot be.
+
+    Naming it is what keeps one discharger: a new phase is a new theorem producing
+    `Separates`, not a new case in `uAtCan_of_separates`. -/
+def Separates (x y : Term) : Prop :=
+  (∀ v, OrthSV x v → ¬ OrthSV y v) ∧ (∀ a, OrthSA x a → ¬ OrthSA y a)
+
+theorem separates_of_orth {x y : Term} (h : Orth x y = true) : Separates x y :=
+  ⟨orthSV_disjoint h, orthSA_disjoint h⟩
+
+/-- **§5's (U), from pairwise separation.** The two other premises are the ones every
+    discharger in `Discharge.lean` already takes: lawfulness, which soundness supplies, and
+    the closed-object restriction.
 
     `hcl` is not a defect being worked around. An object option with an open rest
     (`.codec t`) has `Adm t v = true` where `admitOptV … v = false` — the option refuses maps
     its own `e` accepts — and `docs/codec-calculus.md:713` argues that this is the intended
-    reading ("an open object that must be an option should declare what it means to keep").
-    `optionSem_self_admit` takes the same premise for the same reason. `Orth` declines to
-    certify such an option rather than proposing a repair.
-
-    Thirteen of the sixteen hand `sep*`/`uAtCan_*` theorems are instances of this. What it
-    does not reach is recorded below: phase *alternatives* (two literals at one base with
-    disjoint `ℓ`) is not implemented, and phase *opaque predicate* cannot be. -/
-theorem uAtCan_of_orth {opts : List Term}
+    reading ("an object's open part is unreachable through a union — the price of deciding by
+    names"). `optionSem_self_admit` takes the same premise for the same reason. `Orth`
+    declines to certify such an option rather than proposing a repair. -/
+theorem uAtCan_of_separates {opts : List Term}
     (hlaw : ∀ t ∈ opts, Lawful (denote t))
     (hcl : ∀ t ∈ opts, ∀ fields ff tr, t ≠ .object fields ff (.codec tr))
-    (h : List.Pairwise (fun x y => Orth x y = true) opts) :
+    (h : List.Pairwise Separates opts) :
     UAtCan opts := by
   refine uniqueAdmission_of_disjoint
     (SVs := opts.map OrthSV) (SAs := opts.map OrthSA) ?_ ?_ ?_ ?_ ?_
@@ -655,11 +671,20 @@ theorem uAtCan_of_orth {opts : List Term}
     refine List.forall₂_same.mpr fun t _ a ha => ?_
     rw [admitOptA_eq (AdmA_exact t) a] at ha
     exact ⟨occA_admitOpt (occA_sound t) a ha, ha⟩
-  · rw [List.pairwise_map]; exact h.imp orthSV_disjoint
-  · rw [List.pairwise_map]; exact h.imp orthSA_disjoint
+  · rw [List.pairwise_map]; exact h.imp (fun hs => hs.1)
+  · rw [List.pairwise_map]; exact h.imp (fun hs => hs.2)
   · refine forall_mem_map fun t ht v a he => ?_
     rw [optionSemOf_c] at he
     exact optionSem_self_admit t (hcl t ht) (hlaw t ht) he
+
+/-- …and from the decidable premise alone, which is where thirteen of the sixteen hand
+    `sep*`/`uAtCan_*` theorems live. -/
+theorem uAtCan_of_orth {opts : List Term}
+    (hlaw : ∀ t ∈ opts, Lawful (denote t))
+    (hcl : ∀ t ∈ opts, ∀ fields ff tr, t ≠ .object fields ff (.codec tr))
+    (h : List.Pairwise (fun x y => Orth x y = true) opts) :
+    UAtCan opts :=
+  uAtCan_of_separates hlaw hcl (h.imp separates_of_orth)
 
 /-- …and the residue the laws actually need. -/
 theorem uAtAct_of_orth {opts : List Term}
@@ -668,6 +693,125 @@ theorem uAtAct_of_orth {opts : List Term}
     (h : List.Pairwise (fun x y => Orth x y = true) opts) :
     UAtAct opts :=
   uAtAct_of_uAtCan (uAtCan_of_orth hlaw hcl h)
+
+/-! ## Phase *alternatives*
+
+Two literals at one base with disjoint held sets. This is the one phase whose test is a
+`Prop` rather than a `Bool`, for the reason given at the top of the file, and it is the
+generalization of `sepA_literalN_disjoint` and `sepV_refine_disjoint`'s literal instances:
+`uAtCan_literal_literal` and `uAtCan_of_literalN_disjoint` in `Discharge.lean` are two bases
+of the *same* rule, and this is that rule once, uniform in the base. -/
+
+/-- Disjoint held sets make `inL` disjoint, at every base. Two bases are not the pattern
+    match:
+
+    * `null` — `inL .null _ .null` is `true` unconditionally, so two null literals are never
+      disjoint. The premise is what rules it out, *vacuously*: `NEFinset Unit` has exactly one
+      inhabitant, so `ls` and `ls'` both contain `()` and `hd` is uninhabited. The rule needs
+      no `k ≠ .null` side condition.
+    * `decimal` — membership goes *through* the `Numeral.Stored` gate rather than round it, so
+      the proof is a `split` on the `dite` rather than a rewrite. `by_cases` would reach
+      `Classical.em`; `split` does not. -/
+theorem inL_disjoint {k : GroundKind} {ls ls' : NEFinset k.Carrier}
+    (hd : ∀ x ∈ ls.1, x ∉ ls'.1) (v : Value) (h : inL k ls v = true) : inL k ls' v = false := by
+  cases k with
+  | string =>
+    cases v with
+    | str s =>
+      replace h : decide (s ∈ ls.1) = true := h
+      exact decide_eq_false (hd s (of_decide_eq_true h))
+    | _ => rfl
+  | number =>
+    cases v with
+    | num d =>
+      replace h : decide (d ∈ ls.1) = true := h
+      exact decide_eq_false (hd d (of_decide_eq_true h))
+    | _ => rfl
+  | boolean =>
+    cases v with
+    | bool b =>
+      replace h : decide (b ∈ ls.1) = true := h
+      exact decide_eq_false (hd b (of_decide_eq_true h))
+    | _ => rfl
+  | binary =>
+    cases v with
+    | bin b =>
+      replace h : decide (b ∈ ls.1) = true := h
+      exact decide_eq_false (hd b (of_decide_eq_true h))
+    | _ => rfl
+  | null =>
+    cases v with
+    | null =>
+      obtain ⟨u, hu⟩ := ls.2
+      obtain ⟨u', hu'⟩ := ls'.2
+      exact absurd (by cases u; cases u'; exact hu') (hd u hu)
+    | _ => rfl
+  | decimal =>
+    cases v with
+    | str s =>
+      show (if hst : Numeral.Stored s = true then
+              decide ((⟨s, hst⟩ : StoredNumeral) ∈ ls'.1) else false) = false
+      replace h : (if hs : Numeral.Stored s = true then
+              decide ((⟨s, hs⟩ : StoredNumeral) ∈ ls.1) else false) = true := h
+      split
+      · rename_i hst
+        rw [dif_pos hst] at h
+        exact decide_eq_false (hd _ (of_decide_eq_true h))
+      · rfl
+    | _ => rfl
+
+theorem denote_lit (k : GroundKind) (ls : NEFinset k.Carrier) :
+    denote (.literal k ls) = literalCodec k ls := rfl
+
+/-- The literal's read row *is* the codec's read domain — `AdmA_exact` with no hypothesis, so
+    this is a rewrite rather than a discharge. It is what makes the read side of the rule
+    uniform in the base: `AdmALit` is spelled per base (and at `decimal` it asks the codec),
+    but the domain is `(baseCodec k).restrict (inL k ls)` at every base. -/
+theorem admALit_iff {k : GroundKind} {ls : NEFinset k.Carrier} {a : Attr} :
+    AdmALit k ls a = true ↔ ((literalCodec k ls).p a).isSome = true := by
+  rw [← denote_lit k ls, ← AdmA_literal k ls a]
+  exact AdmA_exact (.literal k ls) a
+
+/-- …and so the read side is the same `inL` disjointness, one level up: the base reads the
+    attribute to *one* value, and one value cannot be in two disjoint held sets.
+
+    This is `sepA_refine_disjoint`'s argument at a literal, and the reason §5 recorded the
+    readable side as "undischargeable from the tables alone" was that the old `admALit .number`
+    row was `⊤`. The row asks now. -/
+theorem admALit_disjoint {k : GroundKind} {ls ls' : NEFinset k.Carrier}
+    (hd : ∀ x ∈ ls.1, x ∉ ls'.1) (a : Attr)
+    (h : AdmALit k ls a = true) : AdmALit k ls' a = false := by
+  obtain ⟨v, hp⟩ := Option.isSome_iff_exists.mp (admALit_iff.mp h)
+  rw [literalCodec_p_restrict] at hp
+  obtain ⟨hbase, hin⟩ := restrict_p.mp hp
+  cases hq : AdmALit k ls' a with
+  | false => rfl
+  | true =>
+    obtain ⟨v', hp'⟩ := Option.isSome_iff_exists.mp (admALit_iff.mp hq)
+    rw [literalCodec_p_restrict] at hp'
+    obtain ⟨hbase', hin'⟩ := restrict_p.mp hp'
+    rw [hbase] at hbase'
+    obtain rfl : v = v' := Option.some.inj hbase'
+    rw [inL_disjoint hd v hin] at hin'
+    exact absurd hin' (by simp)
+
+/-- **Phase *alternatives*.** Uniform in the base, both sides, no lawfulness premise and no
+    `ident` conjunct — where §5 states (K)'s second disjunct as
+    `ident(cᵢ) ∧ ident(cⱼ) ∧ adm(cᵢ) ∩ adm(cⱼ) = ∅`. -/
+theorem separates_literal_disjoint {k : GroundKind} {ls ls' : NEFinset k.Carrier}
+    (hd : ∀ x ∈ ls.1, x ∉ ls'.1) :
+    Separates (.literal k ls) (.literal k ls') := by
+  refine ⟨?_, ?_⟩
+  · rintro v ⟨-, hx⟩ ⟨-, hy⟩
+    rw [specOf_none_admitOptV rfl, Adm_literal] at hx hy
+    have hix : inL k ls v = true := (Bool.and_eq_true_iff.mp hx).1
+    have hiy : inL k ls' v = true := (Bool.and_eq_true_iff.mp hy).1
+    rw [inL_disjoint hd v hix] at hiy
+    exact absurd hiy (by simp)
+  · rintro a ⟨-, hx⟩ ⟨-, hy⟩
+    rw [specOf_none_admitOptA rfl, AdmA_literal] at hx hy
+    rw [admALit_disjoint hd a hx] at hy
+    exact absurd hy (by simp)
 
 /-! ## The classifier, checked against the table
 
@@ -744,12 +888,22 @@ theorem not_orth_literal_held (f g : Value → Value) :
     Orth (.literal .string lsA) (.held (.literal .string lsB) f g) = false := by
   simp [Orth, Orth1, OrthM, occV, occA, occTop, occOnly, Slot.all, Member.all, specOf]
 
-/-- Phase *alternatives* is not implemented, so `union(literal "A", literal "B")` — §5's own
-    worked `ident` example, hand-discharged as `uAtCan_literal_literal` — is not certified.
-    Not an unsoundness; the missing rule is disjointness of the two `ℓ`s, which the
-    occupancies deliberately forget. -/
+/-- Phase *alternatives* is not part of `Orth`, so the classifier alone does not certify
+    §5's own worked `ident` example — the occupancies deliberately forget `ℓ`. That is a
+    division of labour, not a gap: `uAtCan_literal_literal_by_orth` below discharges the same
+    pair through `separates_literal_disjoint`. -/
 theorem not_orth_literal_literal :
     Orth (.literal .string lsA) (.literal .string lsB) = false := by decide
+
+/-- …and the pair, discharged — `uAtCan_literal_literal` again, with the base-specific
+    reasoning replaced by one appeal to the uniform rule. At `.number` the same theorem
+    applies with the premise proved by hand rather than by `decide`, `DecidableEq Double`
+    being noncomputable; that is `uAtCan_of_literalN_disjoint`'s content, generalized. -/
+theorem uAtCan_literal_literal_by_orth :
+    UAtCan [Term.literal .string lsA, Term.literal .string lsB] :=
+  uAtCan_of_separates (forall_mem_pair (lawful_literal _ _) (lawful_literal _ _))
+    (forall_mem_pair (fun _ _ _ h => nomatch h) (fun _ _ _ h => nomatch h))
+    (pairwise_pair (separates_literal_disjoint (by decide)))
 
 /-- The end-to-end shape: `uAtCan_string_null` again, from one `decide`. -/
 theorem uAtCan_string_null_by_orth : UAtCan [Term.string, Term.null] :=
