@@ -104,34 +104,6 @@ def selTagV (d : Name) (os : List (Finset String × VP)) (v : Value) : Bool :=
     | [o] => o.2 v
     | _ => false
 
-mutual
-
-/-- **What `opaque` writes, exactly.** The excuse this replaces said `opaqCodecω`'s domain
-    "recurses on the input's own depth, so no syntactic set names it" — true of the *term*, and
-    beside the point: `Adm` may recurse on the **value**, which is where `opaqCodecω`'s own
-    recursion is, and `opaqOptions` is kind-disjoint, so each value kind meets exactly one
-    option. The scalars are total, `.num` is the policy gate, and the containers recurse.
-
-    The set rows need no injectivity clause, unlike the read side's: a value set's elements are
-    written by an injection (`sC`/`nC`/`bC` after the option's own `e`), and at `.numSet` that
-    is `Double.toDec`, which `Double.roundtrip` makes injective. `AdmOpaqA` at `.ns` has to say
-    so out loud, because `Double.ofDec` is not. -/
-noncomputable def AdmOpaqV (lossy : Bool) : Value → Bool
-  | .str _ | .bool _ | .bin _ | .null => true
-  | .num d => lossy && Numeral.WF d.toDec
-  | .strSet _ => true
-  | .numSet S => lossy && decide (∀ d ∈ S.1, Numeral.WF d.toDec = true)
-  | .binSet _ => true
-  | .arr vs => AdmOpaqVL lossy vs
-  | .map keys f => decide (∀ k : {k // k ∈ keys}, AdmOpaqV lossy (f k) = true)
-
-/-- `⋀` over an opaque container's elements. -/
-noncomputable def AdmOpaqVL (lossy : Bool) : List Value → Bool
-  | [] => true
-  | v :: vs => AdmOpaqV lossy v && AdmOpaqVL lossy vs
-
-end
-
 /-- What the literal codec **writes**, exactly.
 
     `inL` is the prism, and at `number` that is not the whole story: with `Attr.n` carrying
@@ -196,7 +168,16 @@ noncomputable def Adm : Term → Value → Bool
           objAdmV ⟨fields, fun k => AdmField (fld k)⟩ (AdmRest rest) keys g
       | _ => false
   | .dunion d opts => fun v => selTagV d (AdmTagged d opts) v
-  | .opaq lossy => AdmOpaqV lossy
+  -- **The second row that asks its own codec**, and the same row `adm` has
+  -- (`Discharge.lean`): `denote (.opaq lossy)` *is* `opaqCodecω lossy`, so this is
+  -- `dom(e)` rather than a description of it, and `ExactV_opaq` is `Iff.rfl`.
+  --
+  -- It replaces a hand-written recursion over the value (`AdmOpaqV`) that computed the
+  -- same set. That recursion was correct and cost ~120 lines of proof, and it was the
+  -- wrong shape for one reason: it stated `opaque`'s domain a *second* time, so a change
+  -- to `opaqCodec` — a new option, a different numeric policy — meant editing two
+  -- definitions that had to agree. Deferring leaves one.
+  | .opaq lossy => fun v => ((opaqCodecω lossy).e v).isSome
 
 /-- A field's row is its term's; the presence marker is `valPresentT`'s business, not this
     one's. Mirrors `fieldSem`, and for the same reason: the recursion has to be passed
@@ -579,135 +560,30 @@ theorem neSetImage_isSome_of_inj {α β : Type} [DecidableEq β] {f : α → Opt
   rw [h2]
   rfl
 
-mutual
-/-- **`opaque` writes exactly what `AdmOpaqV` says**, at every budget that sees the value. -/
-theorem AdmOpaqV_iff (lossy : Bool) : ∀ (v : Value) (n : Nat), Value.depth v ≤ n →
-    (((opaqCodec n lossy).e v).isSome = true ↔ AdmOpaqV lossy v = true)
-  | v, 0, hn => absurd hn (by simpa using Nat.not_le.mpr (Value.depth_pos v))
-  | .str s, n'+1, _ => by rw [opaqCodec_e_str]; simp [AdmOpaqV, stringCodec]
-  | .bool b, n'+1, _ => by rw [opaqCodec_e_bool]; simp [AdmOpaqV, booleanCodec]
-  | .bin b, n'+1, _ => by rw [opaqCodec_e_bin]; simp [AdmOpaqV, binaryCodec]
-  | .null, n'+1, _ => by rw [opaqCodec_e_null]; simp [AdmOpaqV, nullCodec]
-  | .num d, n'+1, _ => by
-      rw [opaqCodec_e_num]
-      cases lossy <;> simp [AdmOpaqV, Codec.empty, inD]
-  | .strSet S, n'+1, hn => by
-      have h1 : 1 ≤ n' := Nat.le_of_succ_le_succ (by simpa [Value.depth] using hn)
-      cases n' with
-      | zero => exact absurd h1 (by simp)
-      | succ m =>
-        have hf : ∀ x : String, ((opaqCodec (m+1) lossy).e (.str x)).bind sC.out = some x := by
-          intro x; rw [opaqCodec_e_str]; rfl
-        have hns : (neSetImage (fun x => ((opaqCodec (m+1) lossy).e (.str x)).bind sC.out) S).isSome
-            = true :=
-          neSetImage_isSome_of_inj (fun x _ => by rw [hf x]; rfl)
-            (fun x _ y _ h => by rw [hf x, hf y] at h; exact Option.some.inj h)
-        obtain ⟨T, hT⟩ := Option.isSome_iff_exists.mp hns
-        rw [opaqCodec_e_strSet]
-        show ((encSet (opaqCodec (m+1) lossy) Value.str S).isSome = true ↔ _)
-        rw [encSet, hT]
-        simp [AdmOpaqV]
-  | .binSet S, n'+1, hn => by
-      have h1 : 1 ≤ n' := Nat.le_of_succ_le_succ (by simpa [Value.depth] using hn)
-      cases n' with
-      | zero => exact absurd h1 (by simp)
-      | succ m =>
-        have hf : ∀ x : Bytes, ((opaqCodec (m+1) lossy).e (.bin x)).bind bC.out = some x := by
-          intro x; rw [opaqCodec_e_bin]; rfl
-        have hs : ∀ x : Bytes, ((opaqCodec (m+1) lossy).e (.bin x)).bind sC.out = none := by
-          intro x; rw [opaqCodec_e_bin]; rfl
-        have hnn : ∀ x : Bytes, ((opaqCodec (m+1) lossy).e (.bin x)).bind nC.out = none := by
-          intro x; rw [opaqCodec_e_bin]; rfl
-        obtain ⟨x0, hx0⟩ := S.2
-        have hns : (neSetImage (fun x => ((opaqCodec (m+1) lossy).e (.bin x)).bind bC.out) S).isSome
-            = true :=
-          neSetImage_isSome_of_inj (fun x _ => by rw [hf x]; rfl)
-            (fun x _ y _ h => by rw [hf x, hf y] at h; exact Option.some.inj h)
-        obtain ⟨T, hT⟩ := Option.isSome_iff_exists.mp hns
-        rw [opaqCodec_e_binSet]
-        show ((encSet (opaqCodec (m+1) lossy) Value.bin S).isSome = true ↔ _)
-        rw [encSet, neSetImage_none (setImage_none_of_fail hx0 (hs x0)),
-          neSetImage_none (setImage_none_of_fail hx0 (hnn x0)), hT]
-        simp [AdmOpaqV]
-  | .numSet S, n'+1, hn => by
-      have h1 : 1 ≤ n' := Nat.le_of_succ_le_succ (by simpa [Value.depth] using hn)
-      cases n' with
-      | zero => exact absurd h1 (by simp)
-      | succ m =>
-        obtain ⟨x0, hx0⟩ := S.2
-        have hnum : ∀ x : Double, ((opaqCodec (m+1) lossy).e (.num x)).isSome
-            = (lossy && Numeral.WF x.toDec) := by
-          intro x
-          rw [opaqCodec_e_num]
-          cases lossy <;> simp [Codec.empty, inD]
-        constructor
-        · intro hsome
-          rw [opaqCodec_e_numSet] at hsome
-          obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp hsome
-          replace ha : encSet (opaqCodec (m+1) lossy) Value.num S = some a := ha
-          have hall := encSet_elem ha
-          have h0 := hall x0 hx0
-          rw [hnum] at h0
-          simp only [AdmOpaqV, Bool.and_eq_true, decide_eq_true_eq]
-          refine ⟨(Bool.and_eq_true _ _).mp h0 |>.1, fun x hx => ?_⟩
-          have hxx := hall x hx
-          rw [hnum] at hxx
-          exact (Bool.and_eq_true _ _).mp hxx |>.2
-        · intro hrow
-          simp only [AdmOpaqV, Bool.and_eq_true, decide_eq_true_eq] at hrow
-          obtain ⟨hl, hwf⟩ := hrow
-          subst hl
-          have hval : ∀ x (h : Numeral.WF x.toDec = true),
-              (opaqCodec (m+1) true).e (.num x) = some (.n ⟨x.toDec, h⟩) := by
-            intro x h
-            rw [opaqCodec_e_num]
-            simp [numberCodec_e_num, h]
-          have hs0 : ((opaqCodec (m+1) true).e (.num x0)).bind sC.out = none := by
-            rw [hval x0 (hwf x0 hx0)]; rfl
-          have hns : (neSetImage
-              (fun x => ((opaqCodec (m+1) true).e (.num x)).bind nC.out) S).isSome = true := by
-            refine neSetImage_isSome_of_inj (fun x hx => by rw [hval x (hwf x hx)]; rfl) ?_
-            intro x hx y hy h
-            rw [hval x (hwf x hx), hval y (hwf y hy)] at h
-            have hd : x.toDec = y.toDec := congrArg Subtype.val (Option.some.inj h)
-            have h1 := Double.roundtrip x
-            rw [hd, Double.roundtrip y] at h1
-            exact (Option.some.inj h1).symm
-          obtain ⟨T, hT⟩ := Option.isSome_iff_exists.mp hns
-          rw [opaqCodec_e_numSet]
-          show (encSet (opaqCodec (m+1) true) Value.num S).isSome = true
-          rw [encSet, neSetImage_none (setImage_none_of_fail hx0 hs0), hT]
-          rfl
-  | .arr vs, n'+1, hn => by
-      have hL : Value.depthL vs ≤ n' := Nat.le_of_succ_le_succ (by simpa [Value.depth] using hn)
-      rw [opaqCodec_e_arr]
-      show (((traverse (opaqCodec n' lossy).e vs).map Attr.l).isSome = true ↔ _)
-      rw [Option.isSome_map']
-      exact AdmOpaqVL_iff lossy vs n' hL
-  | .map keys f, n'+1, hn => by
-      have hk : ∀ k, Value.depth (f k) ≤ n' := fun k =>
-        Nat.le_of_succ_le_succ (le_trans (Value.depth_map_entry (f := f) k) hn)
-      rw [opaqCodec_e_map]
-      show ((((funImage fun k => (opaqCodec n' lossy).e (f k))).map (Attr.m keys)).isSome = true ↔ _)
-      rw [Option.isSome_map', funImage_isSome_iff]
-      simp only [AdmOpaqV, decide_eq_true_eq]
-      exact forall_congr' fun k => AdmOpaqV_iff lossy (f k) n' (hk k)
+/-- **`opaque` writes exactly what its row says — definitionally.**
 
-theorem AdmOpaqVL_iff (lossy : Bool) : ∀ (vs : List Value) (n : Nat), Value.depthL vs ≤ n →
-    ((traverse (opaqCodec n lossy).e vs).isSome = true ↔ AdmOpaqVL lossy vs = true)
-  | [], _, _ => by simp [traverse, AdmOpaqVL]
-  | v :: vs, n, hn => by
-      have hv : Value.depth v ≤ n := le_trans (by simp [Value.depthL]) hn
-      have hvs : Value.depthL vs ≤ n := le_trans (by simp [Value.depthL]) hn
-      rw [traverse_cons_isSome]
-      simp only [AdmOpaqVL, Bool.and_eq_true]
-      rw [AdmOpaqV_iff lossy v n hv, AdmOpaqVL_iff lossy vs n hvs]
-end
+    Read the proof before the statement: it is `Iff.rfl`, and that is the whole of what is
+    being claimed. `Adm (.opaq lossy)` is `((opaqCodecω lossy).e ·).isSome` and
+    `denote (.opaq lossy)` is `opaqCodecω lossy`, so the two sides of the `↔` are the same
+    Boolean and there is nothing to prove.
 
-theorem ExactV_opaq (lossy : Bool) : ExactV (.opaq lossy) := by
-  intro v
-  show AdmOpaqV lossy v = true ↔ ((opaqCodec (Value.depth v) lossy).e v).isSome = true
-  exact (AdmOpaqV_iff lossy v (Value.depth v) (Nat.le_refl _)).symm
+    This is exactness **earned by deferring**, not by a clever row: as a claim about the
+    analysis it is exactly the `custom` row's claim, which is to say it says the analysis
+    of an escape hatch is the hatch's own answer, and nothing about what that answer is.
+    What it replaced was a 120-line induction (`AdmOpaqV_iff`) proving a hand-written
+    recursion over the value agreed with the codec at every budget that sees the value.
+    That was a real theorem about `opaqCodec`; this is not one, and does not pretend to be.
+
+    What is bought instead is decoupling: change `opaqCodecω` and this still holds, still
+    by `rfl`. `custom` and `opaq` are exactly the terms for which that is true.
+
+    They are **not** interchangeable, and the difference is on the other side of the row.
+    `custom`'s codec is warranted by its user — `Obligations (.custom ce cp)` is a `Lawful`
+    premise nothing here discharges. `opaque`'s is warranted by the calculus:
+    `Obligations (.opaq _) = True`, because `lawful_opaqCodecω` and `carrier_opaqCodecω`
+    (`Opaque.lean`) are proved. Same deferral, opposite warranty; `opaque` is the member of
+    the pair that owes nothing. -/
+theorem ExactV_opaq (lossy : Bool) : ExactV (.opaq lossy) := fun _ => Iff.rfl
 
 
 mutual
@@ -1424,37 +1300,6 @@ def selTagA (d : Name) (os : List (Finset String × AP)) (a : Attr) : Bool :=
     | [o] => o.2 a
     | _ => false
 
-mutual
-
-/-- **What `opaque` reads, exactly.**
-
-    `.ns` is the one row that has to say something the value side does not: `decSet` refuses a
-    collision, and on the way *in* the payload map is injective for free (`Double.roundtrip`),
-    while on the way *out* it is `Double.ofDec`, which rounds — two numerals may name one
-    double, and then the set the read would produce is smaller than the one it was given. The
-    clause is decidable because §1 axiomatizes `Double.decEq`; it is not decorative, and it is
-    why the write side's `.numSet` row is shorter than this one. -/
-noncomputable def AdmOpaqA (lossy : Bool) : Attr → Bool
-  | .s _ | .bool _ | .b _ | .null => true
-  | .n x => lossy && (match Double.ofDec x.1 with
-                      | some d => Numeral.WF d.toDec
-                      | none => false)
-  | .ss _ => true
-  | .ns S => lossy &&
-      decide (∀ x ∈ S.1, (match Double.ofDec x.1 with
-                          | some d => Numeral.WF d.toDec
-                          | none => false) = true) &&
-      decide (∀ x ∈ S.1, ∀ y ∈ S.1, Double.ofDec x.1 = Double.ofDec y.1 → x = y)
-  | .bs _ => true
-  | .l as => AdmOpaqAL lossy as
-  | .m keys f => decide (∀ k : {k // k ∈ keys}, AdmOpaqA lossy (f k) = true)
-
-noncomputable def AdmOpaqAL (lossy : Bool) : List Attr → Bool
-  | [] => true
-  | a :: as => AdmOpaqA lossy a && AdmOpaqAL lossy as
-
-end
-
 /-- What the literal codec **reads**, exactly.
 
     Three rows into one, and the `number` row is the only one that is not simply membership:
@@ -1526,7 +1371,8 @@ noncomputable def AdmA : Term → Attr → Bool
             (keepT rest fields) keys g
       | _ => false
   | .dunion d opts => fun a => selTagA d (AdmATagged d opts) a
-  | .opaq lossy => AdmOpaqA lossy
+  -- the read side of the same deferral; see the `Adm` row and `ExactA_opaq`
+  | .opaq lossy => fun a => ((opaqCodecω lossy).p a).isSome
 
 noncomputable def AdmAField : Field → AP
   | .req t => AdmA t
@@ -1768,242 +1614,14 @@ theorem ExactA_object {fields : Finset Name} {fld : {k // k ∈ fields} → Fiel
   all_goals
     simp [AdmA, denote, objectCodec, objectCodecCore, carriedCodec, mA, Ctor.out]
 
-theorem setImage_isSome_iff {α β : Type} [DecidableEq β] {f : α → Option β} {S : Finset α} :
-    (setImage f S).isSome = true ↔
-      ((∀ x ∈ S, (f x).isSome = true) ∧ (∀ x ∈ S, ∀ y ∈ S, f x = f y → x = y)) := by
-  constructor
-  · intro h
-    obtain ⟨T, hT⟩ := Option.isSome_iff_exists.mp h
-    refine ⟨setImage_some hT, ?_⟩
-    unfold setImage at hT
-    split at hT
-    · next hall =>
-      split at hT
-      · next hnd =>
-        intro x hx y hy hxy
-        have := Multiset.inj_on_of_nodup_map hnd ⟨x, hx⟩ (Multiset.mem_attach _ _)
-          ⟨y, hy⟩ (Multiset.mem_attach _ _)
-        refine congrArg Subtype.val (this ?_)
-        simp only
-        rw [← Option.some_inj, Option.some_get, Option.some_get, hxy]
-      · exact nomatch hT
-    · exact nomatch hT
-  · rintro ⟨h1, h2⟩; exact setImage_isSome_of_inj h1 h2
-
-theorem neSetImage_isSome_iff {α β : Type} [DecidableEq β] {f : α → Option β}
-    {S : NEFinset α} :
-    (neSetImage f S).isSome = true ↔
-      ((∀ x ∈ S.1, (f x).isSome = true) ∧ (∀ x ∈ S.1, ∀ y ∈ S.1, f x = f y → x = y)) := by
-  rw [← setImage_isSome_iff]
-  constructor
-  · intro h
-    obtain ⟨T, hT⟩ := Option.isSome_iff_exists.mp h
-    rw [neSetImage_eq_setImage.mp hT]; rfl
-  · intro h
-    obtain ⟨T, hT⟩ := Option.isSome_iff_exists.mp h
-    have h2 := (neSetImage_eq_setImage (f := f) (S := S)
-      (T := ⟨T, setImage_nonempty hT S.2⟩)).mpr hT
-    rw [h2]; rfl
-
-
-mutual
-/-- **`opaque` reads exactly what `AdmOpaqA` says**, at every budget that sees the item. -/
-theorem AdmOpaqA_iff (lossy : Bool) : ∀ (a : Attr) (n : Nat), Attr.depth a ≤ n →
-    (((opaqCodec n lossy).p a).isSome = true ↔ AdmOpaqA lossy a = true)
-  | a, 0, hn => absurd hn (by simpa using Nat.not_le.mpr (Attr.depth_pos a))
-  | .s s, n'+1, _ => by rw [opaqCodec_p_s]; simp [AdmOpaqA, stringCodec]
-  | .bool b, n'+1, _ => by rw [opaqCodec_p_bool]; simp [AdmOpaqA, booleanCodec]
-  | .b b, n'+1, _ => by rw [opaqCodec_p_b]; simp [AdmOpaqA, binaryCodec]
-  | .null, n'+1, _ => by rw [opaqCodec_p_null]; simp [AdmOpaqA, nullCodec]
-  | .n x, n'+1, _ => by
-      rw [opaqCodec_p_n]
-      cases lossy
-      · simp [AdmOpaqA, Codec.empty]
-      · simp only [if_pos rfl, numberCodec_p_n, AdmOpaqA, Bool.true_and, if_true]
-        cases hx : Double.ofDec x.1 with
-        | none => simp [hx]
-        | some d => by_cases hw : Numeral.WF d.toDec = true <;> simp [hx, hw]
-  | .ss S, n'+1, hn => by
-      have h1 : 1 ≤ n' := Nat.le_of_succ_le_succ (by simpa [Attr.depth] using hn)
-      cases n' with
-      | zero => exact absurd h1 (by simp)
-      | succ m =>
-        have hf : ∀ s : String, ((opaqCodec (m+1) lossy).p (.s s)).bind vStr = some s := by
-          intro s; rw [opaqCodec_p_s]; rfl
-        have hns : (neSetImage
-            (fun s => ((opaqCodec (m+1) lossy).p (.s s)).bind vStr) S).isSome = true :=
-          neSetImage_isSome_of_inj (fun x _ => by rw [hf x]; rfl)
-            (fun x _ y _ h => by rw [hf x, hf y] at h; exact Option.some.inj h)
-        obtain ⟨T, hT⟩ := Option.isSome_iff_exists.mp hns
-        rw [opaqCodec_p_ss]
-        show ((decSet (opaqCodec (m+1) lossy) Attr.s S).isSome = true ↔ _)
-        rw [decSet, hT]
-        simp [AdmOpaqA]
-  | .bs S, n'+1, hn => by
-      have h1 : 1 ≤ n' := Nat.le_of_succ_le_succ (by simpa [Attr.depth] using hn)
-      cases n' with
-      | zero => exact absurd h1 (by simp)
-      | succ m =>
-        obtain ⟨x0, hx0⟩ := S.2
-        have hf : ∀ b : Bytes, ((opaqCodec (m+1) lossy).p (.b b)).bind vBin = some b := by
-          intro b; rw [opaqCodec_p_b]; rfl
-        have hs : ∀ b : Bytes, ((opaqCodec (m+1) lossy).p (.b b)).bind vStr = none := by
-          intro b; rw [opaqCodec_p_b]; rfl
-        have hnn : ∀ b : Bytes, ((opaqCodec (m+1) lossy).p (.b b)).bind vNum = none := by
-          intro b; rw [opaqCodec_p_b]; rfl
-        have hns : (neSetImage
-            (fun b => ((opaqCodec (m+1) lossy).p (.b b)).bind vBin) S).isSome = true :=
-          neSetImage_isSome_of_inj (fun x _ => by rw [hf x]; rfl)
-            (fun x _ y _ h => by rw [hf x, hf y] at h; exact Option.some.inj h)
-        obtain ⟨T, hT⟩ := Option.isSome_iff_exists.mp hns
-        rw [opaqCodec_p_bs]
-        show ((decSet (opaqCodec (m+1) lossy) Attr.b S).isSome = true ↔ _)
-        rw [decSet, neSetImage_none (setImage_none_of_fail hx0 (hs x0)),
-          neSetImage_none (setImage_none_of_fail hx0 (hnn x0))]
-        simp [AdmOpaqA, hT]
-  | .ns S, n'+1, hn => by
-      have h1 : 1 ≤ n' := Nat.le_of_succ_le_succ (by simpa [Attr.depth] using hn)
-      cases n' with
-      | zero => exact absurd h1 (by simp)
-      | succ m =>
-        obtain ⟨x0, hx0⟩ := S.2
-        have hstr : ∀ x : WFNumeral,
-            ((opaqCodec (m+1) lossy).p (.n x)).bind vStr = none := by
-          intro x
-          rw [opaqCodec_p_n]
-          cases lossy
-          · rfl
-          · show (numberCodec.p (.n x)).bind vStr = none
-            rw [numberCodec_p_n]
-            cases hx : Double.ofDec x.1 with
-            | none => rfl
-            | some d => by_cases hw : Numeral.WF d.toDec = true <;> simp [hw, vStr]
-        have hnum : ∀ x : WFNumeral, ((opaqCodec (m+1) lossy).p (.n x)).bind vNum
-            = (if lossy then
-                 (Double.ofDec x.1).bind (fun d => if Numeral.WF d.toDec then some d else none)
-               else none) := by
-          intro x
-          rw [opaqCodec_p_n]
-          cases lossy
-          · rfl
-          · show (numberCodec.p (.n x)).bind vNum
-              = (Double.ofDec x.1).bind (fun d => if Numeral.WF d.toDec then some d else none)
-            rw [numberCodec_p_n]
-            cases hx : Double.ofDec x.1 with
-            | none => rfl
-            | some d => by_cases hw : Numeral.WF d.toDec = true <;> simp [hw, vNum]
-        rw [opaqCodec_p_ns]
-        show ((decSet (opaqCodec (m+1) lossy) Attr.n S).isSome = true ↔ _)
-        rw [decSet, neSetImage_none (setImage_none_of_fail hx0 (hstr x0))]
-        show ((match neSetImage (fun x => ((opaqCodec (m+1) lossy).p (.n x)).bind vNum) S with
-                | some T => some (Value.numSet T)
-                | none => (neSetImage
-                    (fun x => ((opaqCodec (m+1) lossy).p (.n x)).bind vBin) S).map
-                      Value.binSet).isSome = true ↔ _)
-        have hbin : ∀ x : WFNumeral, ((opaqCodec (m+1) lossy).p (.n x)).bind vBin = none := by
-          intro x
-          rw [opaqCodec_p_n]
-          cases lossy
-          · rfl
-          · show (numberCodec.p (.n x)).bind vBin = none
-            rw [numberCodec_p_n]
-            cases hx : Double.ofDec x.1 with
-            | none => rfl
-            | some d => by_cases hw : Numeral.WF d.toDec = true <;> simp [hw, vBin]
-        cases hns : neSetImage (fun x => ((opaqCodec (m+1) lossy).p (.n x)).bind vNum) S with
-        | some T =>
-          have hiff := neSetImage_isSome_iff (f := fun x =>
-            ((opaqCodec (m+1) lossy).p (.n x)).bind vNum) (S := S)
-          rw [hns] at hiff
-          obtain ⟨h1', h2'⟩ := hiff.mp rfl
-          have hl : lossy = true := by
-            have := h1' x0 hx0
-            rw [hnum] at this
-            cases lossy
-            · exact absurd this (by simp)
-            · rfl
-          subst hl
-          simp only [Option.isSome_some, true_iff, AdmOpaqA, Bool.true_and,
-            Bool.and_eq_true, decide_eq_true_eq]
-          refine ⟨fun x hx => ?_, fun x hx y hy hxy => ?_⟩
-          · have := h1' x hx
-            rw [hnum] at this
-            simp only [if_pos rfl] at this
-            cases hox : Double.ofDec x.1 with
-            | none => rw [hox] at this; exact absurd this (by simp)
-            | some d =>
-              rw [hox] at this
-              by_cases hw : Numeral.WF d.toDec = true <;> simp_all
-          · refine h2' x hx y hy ?_
-            rw [hnum, hnum]
-            simp only [if_pos rfl, hxy]
-        | none =>
-          rw [neSetImage_none (setImage_none_of_fail hx0 (hbin x0))]
-          simp only [Option.map_none', Option.isSome_none, Bool.false_eq_true, false_iff]
-          intro hrow
-          simp only [AdmOpaqA, Bool.and_eq_true, decide_eq_true_eq] at hrow
-          obtain ⟨⟨hl, hparse⟩, hinj⟩ := hrow
-          subst hl
-          have : (neSetImage (fun x => ((opaqCodec (m+1) true).p (.n x)).bind vNum) S).isSome
-              = true := by
-            refine neSetImage_isSome_iff.mpr ⟨fun x hx => ?_, fun x hx y hy hxy => ?_⟩
-            · have := hparse x hx
-              rw [hnum]
-              simp only [if_pos rfl]
-              cases hox : Double.ofDec x.1 with
-              | none => rw [hox] at this; exact absurd this (by simp)
-              | some d => rw [hox] at this; simp_all
-            · refine hinj x hx y hy ?_
-              rw [hnum, hnum] at hxy
-              simp only [if_pos rfl] at hxy
-              have hx' := hparse x hx
-              have hy' := hparse y hy
-              cases hox : Double.ofDec x.1 with
-              | none => rw [hox] at hx'; exact absurd hx' (by simp)
-              | some dx =>
-                cases hoy : Double.ofDec y.1 with
-                | none => rw [hoy] at hy'; exact absurd hy' (by simp)
-                | some dy =>
-                  rw [hox, hoy] at hxy
-                  rw [hox] at hx'
-                  rw [hoy] at hy'
-                  replace hx' : Numeral.WF dx.toDec = true := hx'
-                  replace hy' : Numeral.WF dy.toDec = true := hy'
-                  simp only [Option.some_bind, if_pos hx', if_pos hy'] at hxy
-                  exact hxy
-          rw [hns] at this
-          exact absurd this (by simp)
-  | .l as, n'+1, hn => by
-      have hL : Attr.depthL as ≤ n' := Nat.le_of_succ_le_succ (by simpa [Attr.depth] using hn)
-      rw [opaqCodec_p_l]
-      show (((traverse (opaqCodec n' lossy).p as).map Value.arr).isSome = true ↔ _)
-      rw [Option.isSome_map']
-      exact AdmOpaqAL_iff lossy as n' hL
-  | .m keys f, n'+1, hn => by
-      have hk : ∀ k, Attr.depth (f k) ≤ n' := fun k =>
-        Nat.le_of_succ_le_succ (le_trans (Attr.depth_map_entry (f := f) k) hn)
-      rw [opaqCodec_p_m]
-      show ((((funImage fun k => (opaqCodec n' lossy).p (f k))).map (Value.map keys)).isSome
-        = true ↔ _)
-      rw [Option.isSome_map', funImage_isSome_iff]
-      simp only [AdmOpaqA, decide_eq_true_eq]
-      exact forall_congr' fun k => AdmOpaqA_iff lossy (f k) n' (hk k)
-
-theorem AdmOpaqAL_iff (lossy : Bool) : ∀ (as : List Attr) (n : Nat), Attr.depthL as ≤ n →
-    ((traverse (opaqCodec n lossy).p as).isSome = true ↔ AdmOpaqAL lossy as = true)
-  | [], _, _ => by simp [traverse, AdmOpaqAL]
-  | a :: as, n, hn => by
-      have ha : Attr.depth a ≤ n := le_trans (by simp [Attr.depthL]) hn
-      have has : Attr.depthL as ≤ n := le_trans (by simp [Attr.depthL]) hn
-      rw [traverse_cons_isSome]
-      simp only [AdmOpaqAL, Bool.and_eq_true]
-      rw [AdmOpaqA_iff lossy a n ha, AdmOpaqAL_iff lossy as n has]
-end
-
-theorem ExactA_opaq (lossy : Bool) : ExactA (.opaq lossy) := by
-  intro a
-  show AdmOpaqA lossy a = true ↔ ((opaqCodec (Attr.depth a) lossy).p a).isSome = true
-  exact (AdmOpaqA_iff lossy a (Attr.depth a) (Nat.le_refl _)).symm
+/-- **`opaque` reads exactly what its row says**, definitionally, and for the reason
+    `ExactV_opaq` gives at length: `p := (opaqCodecω lossy).p`, so the row and `dom(p)` are
+    one function. `AdmOpaqA_iff` — a second induction, this one carrying an injectivity
+    clause about `Double.ofDec` that `decSet` needs — is deleted rather than moved. The
+    clause was true and is still true; it is now the codec's business, where it was always
+    stated (`decSet`, `Combinators.lean`), instead of being restated here in a form that had
+    to be kept in step by hand. -/
+theorem ExactA_opaq (lossy : Bool) : ExactA (.opaq lossy) := fun _ => Iff.rfl
 
 def SoundA (t : Term) : Prop := ∀ a, ((denote t).p a).isSome = true → AdmA t a = true
 
@@ -2680,13 +2298,10 @@ theorem Adm_le_adm : ∀ (t : Term) (v : Value), Adm t v = true → adm t v = tr
   | .object _ _ _, _, _ => rfl
   | .array _, _, _ => rfl
   | .record _, _, _ => rfl
-  -- `adm`'s `opaq` row is no longer `⊤`: it carries the numeric policy, and `AdmOpaqV`
-  -- carries it too (with `WF` besides), so the containment drops a conjunct here in
-  -- exactly the way it does at `number`.
-  | .opaq lossy, v, h => by
-      cases v
-      case num d => exact ((Bool.and_eq_true _ _).mp h).1
-      all_goals rfl
+  -- the two rows are now the **same** row — both ask `(opaqCodecω lossy).e` — so the
+  -- containment is the identity, exactly as it is at `custom`. It was three lines while
+  -- `Adm` recursed over the value and `adm` matched on the top constructor.
+  | .opaq _, _, h => by rw [adm]; rw [Adm] at h; exact h
   | .number, v, h => by simpa [adm] using (by simpa [Adm] using h : inD v = true)
   | .decimal, v, h => by simpa [adm] using (by simpa [Adm] using h : isStored v = true)
   -- `Adm` is *strictly* stronger at the numeric base: it carries `WF`, which §5's table does
@@ -2840,12 +2455,8 @@ theorem AdmA_le_admA : ∀ (t : Term) (a : Attr), AdmA t a = true → admA t a =
   | .array _, _, _ => rfl
   | .record _, _, _ => rfl
   | .legacy _ _, _, _ => rfl
-  -- as on the value side: the policy bit is in both rows, and `AdmOpaqA` adds the
-  -- `Double.ofDec` clause `admA` cannot state.
-  | .opaq lossy, a, h => by
-      cases a
-      case n x => exact ((Bool.and_eq_true _ _).mp h).1
-      all_goals rfl
+  -- as on the value side: one row, so the containment is the identity
+  | .opaq _, a, h => by rw [admA]; rw [AdmA] at h; exact h
   | .custom _ _, a, h => by rw [admA]; rw [AdmA] at h; exact h
   | .decimal, a, h => by rw [admA]; rw [AdmA] at h; exact h
   | .dunion d opts, a, h => by

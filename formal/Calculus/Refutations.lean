@@ -477,67 +477,79 @@ theorem not_retract_through_store_wfDecimalCodec {η : Attr → Attr}
 /-! ## `union(opaque, c)` is never separable
 
 Not one of §6's nine rows — a row §5 never wrote, and the reason it did not is that
-`opaque` looked like a term with nothing to say. `κ (.opaq _)` is `⊤` and, until the
-policy bit was put into `adm`, so were `adm (.opaq _)` and `admA (.opaq _)`. `SepV`
+`opaque` looked like a term with nothing to say. `κ (.opaq _)` is `⊤` and, before `adm`
+was made to ask `opaqCodecω`, so were `adm (.opaq _)` and `admA (.opaq _)`. `SepV`
 offers exactly two routes — a disjoint kind or a disjoint admissible set — and `SepA`
 two more — a distinct named member or a disjoint admissible set. A `⊤` on every one of
 the four is not a weak option; it is an **absorbing** one, in the sense `unknown | T` is
 absorbing in TypeScript.
 
-At `lossy = true` that is still exactly the situation, and these are the theorems. They
-are stated for *every* option that admits anything, in both argument orders, because
-`List.Pairwise` asks the question one way round and the fact does not care. -/
+The absorption survives the semantic row, and the statements below say so in the form
+the row leaves them. They used to read "for every option that admits anything", on the
+strength of `adm (.opaq true) = ⊤`; that blanket is gone, because `adm` now asks the
+codec and `opaqCodecω` at a lossy policy still refuses `.num d` when
+`Numeral.WF (Double.toDec d)` fails — and `Double.toDec` is an axiom with no such
+guarantee (`Domain.lean`). What is true, and is all the refutation ever used, is: **an
+`opaque` never separates from an option they both admit.** The kind and member disjuncts
+are still structurally unavailable, so a single shared value or attribute is enough.
 
-/-- A lossy `opaque` admits every value: the value-side `⊤`, as a lemma rather than as a
-    row a reader has to reduce. -/
-theorem adm_opaq_lossy (v : Value) : adm (.opaq true) v = true := by cases v <;> rfl
+Stated in both argument orders, because `List.Pairwise` asks the question one way round
+and the fact does not care; and at both policies, because the policy bit plays no part —
+what does the work is that `κ` and `μSyn` are `⊤` at an `opaque` whatever it writes. -/
 
-/-- …and every attribute. -/
-theorem admA_opaq_lossy (a : Attr) : admA (.opaq true) a = true := by cases a <;> rfl
+/-- **An `opaque` is not writably separable from any option that shares a value with it.**
+    Both disjuncts fail: the kind disjunct because `κ (.opaq _) = ⊤`, the `adm` disjunct
+    because `v` is in both sets.
 
-/-- **A lossy `opaque` is not writably separable from any option that writes anything.**
-    Both disjuncts fail structurally: the kind disjunct because `κ (.opaq _) = ⊤`, the
-    `adm` disjunct because the lemma above leaves no value for the other option to have
-    to itself. -/
-theorem not_sepV_opaq_lossy_left {t : Term} {v : Value} (hv : adm t v = true) :
-    ¬ SepV (.opaq true) t := by
+    The hypothesis `ho` is what replaced `adm_opaq_lossy` — the old lemma said every value
+    satisfies it, and the semantic row does not license that. `adm_opaq_str` discharges it
+    at any string, which is what the instance below uses. -/
+theorem not_sepV_opaq_lossy_left {b : Bool} {t : Term} {v : Value}
+    (ho : adm (.opaq b) v = true) (hv : adm t v = true) : ¬ SepV (.opaq b) t := by
   rintro (⟨kx, ky, hx, -, -⟩ | hdisj)
   · exact absurd hx (by simp [κ])
-  · rw [hdisj v (adm_opaq_lossy v)] at hv; exact nomatch hv
+  · rw [hdisj v ho] at hv; exact nomatch hv
 
-theorem not_sepV_opaq_lossy_right {t : Term} {v : Value} (hv : adm t v = true) :
-    ¬ SepV t (.opaq true) := by
+theorem not_sepV_opaq_lossy_right {b : Bool} {t : Term} {v : Value}
+    (ho : adm (.opaq b) v = true) (hv : adm t v = true) : ¬ SepV t (.opaq b) := by
   rintro (⟨kx, ky, -, hy, -⟩ | hdisj)
   · exact absurd hy (by simp [κ])
-  · have h := hdisj v hv
-    rw [adm_opaq_lossy v] at h
-    exact nomatch h
+  · rw [hdisj v hv] at ho; exact nomatch ho
 
 /-- The readable side, the same way: `μSyn (.opaq _)` is `⊤`, so the member disjunct is
-    unavailable, and `admA` is `⊤`. -/
-theorem not_sepA_opaq_lossy_left {t : Term} {a : Attr} (ha : admA t a = true) :
-    ¬ SepA (.opaq true) t := by
+    unavailable, and a shared attribute closes the other. -/
+theorem not_sepA_opaq_lossy_left {b : Bool} {t : Term} {a : Attr}
+    (ho : admA (.opaq b) a = true) (ha : admA t a = true) : ¬ SepA (.opaq b) t := by
   rintro (⟨μx, μy, hx, -, -⟩ | hdisj)
   · exact nomatch hx
-  · rw [hdisj a (admA_opaq_lossy a)] at ha; exact nomatch ha
+  · rw [hdisj a ho] at ha; exact nomatch ha
 
-theorem not_sepA_opaq_lossy_right {t : Term} {a : Attr} (ha : admA t a = true) :
-    ¬ SepA t (.opaq true) := by
+theorem not_sepA_opaq_lossy_right {b : Bool} {t : Term} {a : Attr}
+    (ho : admA (.opaq b) a = true) (ha : admA t a = true) : ¬ SepA t (.opaq b) := by
   rintro (⟨μx, μy, -, hy, -⟩ | hdisj)
   · exact nomatch hy
-  · have h := hdisj a ha
-    rw [admA_opaq_lossy a] at h
-    exact nomatch h
+  · rw [hdisj a ha] at ho; exact nomatch ho
 
 /-- **`union(opaque, string)` is separable on neither side, in either order** — the
-    concrete instance, at the most ordinary option in the language. Every `t` that admits
-    a single value or a single attribute gives another. -/
+    concrete instance, at the most ordinary option in the language, and unchanged in
+    statement: a string is admitted by every `opaque` at every policy
+    (`adm_opaq_str`/`admA_opaq_s`). -/
 theorem not_sep_opaq_lossy_string :
     ¬ SepV (.opaq true) .string ∧ ¬ SepV .string (.opaq true) ∧
       ¬ SepA (.opaq true) .string ∧ ¬ SepA .string (.opaq true) :=
-  ⟨not_sepV_opaq_lossy_left (v := .str "x") rfl,
-   not_sepV_opaq_lossy_right (v := .str "x") rfl,
-   not_sepA_opaq_lossy_left (a := .s "x") rfl,
-   not_sepA_opaq_lossy_right (a := .s "x") rfl⟩
+  ⟨not_sepV_opaq_lossy_left (v := .str "x") (adm_opaq_str true "x") rfl,
+   not_sepV_opaq_lossy_right (v := .str "x") (adm_opaq_str true "x") rfl,
+   not_sepA_opaq_lossy_left (a := .s "x") (admA_opaq_s true "x") rfl,
+   not_sepA_opaq_lossy_right (a := .s "x") (admA_opaq_s true "x") rfl⟩
+
+/-- …and at a refusing policy too, which the old statements could not reach in this form:
+    the absorption was never about the numeric policy. -/
+theorem not_sep_opaq_strict_string :
+    ¬ SepV (.opaq false) .string ∧ ¬ SepV .string (.opaq false) ∧
+      ¬ SepA (.opaq false) .string ∧ ¬ SepA .string (.opaq false) :=
+  ⟨not_sepV_opaq_lossy_left (v := .str "x") (adm_opaq_str false "x") rfl,
+   not_sepV_opaq_lossy_right (v := .str "x") (adm_opaq_str false "x") rfl,
+   not_sepA_opaq_lossy_left (a := .s "x") (admA_opaq_s false "x") rfl,
+   not_sepA_opaq_lossy_right (a := .s "x") (admA_opaq_s false "x") rfl⟩
 
 end Calculus
