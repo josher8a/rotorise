@@ -330,6 +330,15 @@ representative to choose. The file is deleted; this note is the part of it that 
     type that is unrefined, not the model's. -/
 abbrev WFNumeral := {x : Numeral // Numeral.WF x = true}
 
+/-- A numeral in the form the store hands back — §1's `Stored`, carried rather than gated.
+
+    This is `decimal`'s literal carrier, and the reason `decimal` is worth a ground base of its
+    own. At `number` the alternatives are `Double`s and `(literal)`'s premise `ℓ ⊆ D` is a *gate*
+    outside the carrier, which is why `adm (.literal .number ls)` over-approximates by exactly
+    that conjunct. Here the gate is the subtype, so `inL` is the whole of admission and the row
+    is exact by construction. -/
+abbrev StoredNumeral := {s : Numeral // Numeral.Stored s = true}
+
 /-- A literal numeral, with §1's check discharged where it is written. `WF` is decidable
     by construction, so a concrete numeral carries its own proof and no witness in this
     development had to change shape. -/
@@ -537,7 +546,7 @@ the union is derivable, but `Term.union` is list-shaped and the bridge from a `F
 
 /-- The five bases a literal can sit at — `Kind` minus the three container kinds. -/
 inductive GroundKind where
-  | string | number | boolean | binary | null
+  | string | number | decimal | boolean | binary | null
 deriving DecidableEq, Repr
 
 /-- What each base's held set is drawn from. `Unit` at `.null` is not a degenerate case: the
@@ -552,6 +561,9 @@ deriving DecidableEq, Repr
 @[reducible] def GroundKind.Carrier : GroundKind → Type
   | .string  => String
   | .number  => Double
+  -- §1's stored numerals, as a subtype. See `StoredNumeral`: the gate `number` carries as a
+  -- premise is this base's carrier, which is the whole point of having the base.
+  | .decimal => StoredNumeral
   | .boolean => Bool
   | .binary  => Bytes
   | .null    => Unit
@@ -560,6 +572,9 @@ deriving DecidableEq, Repr
 @[simp] def GroundKind.toValue : (k : GroundKind) → k.Carrier → Value
   | .string,  s => .str s
   | .number,  d => .num d
+  -- `decimal` holds its numeral as *text* and stores it as `N`; the value side is a `.str`,
+  -- which is exactly why `GroundKind` indexes value carriers and `SetBase` could not reuse it.
+  | .decimal, x => .str x.1
   | .boolean, b => .bool b
   | .binary,  b => .bin b
   | .null,    _ => .null
@@ -570,6 +585,7 @@ deriving DecidableEq, Repr
 @[simp] def GroundKind.member : GroundKind → Member
   | .string  => .S
   | .number  => .N
+  | .decimal => .N
   | .boolean => .BOOL
   | .binary  => .B
   | .null    => .NULL
@@ -578,6 +594,9 @@ deriving DecidableEq, Repr
 @[simp] def GroundKind.kind : GroundKind → Kind
   | .string  => .string
   | .number  => .number
+  -- the *value*'s kind, and a decimal literal's values are strings — so it shares `κ` with
+  -- `string` and is told apart from it by the member, not the kind.
+  | .decimal => .string
   | .boolean => .boolean
   | .binary  => .binary
   | .null    => .null

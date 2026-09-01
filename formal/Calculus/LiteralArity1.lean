@@ -306,6 +306,7 @@ base's own `inD`. -/
 def groundTerm : GroundKind → Term
   | .string => .string
   | .number => .number
+  | .decimal => .decimal
   | .boolean => .boolean
   | .binary => .binary
   | .null => .null
@@ -334,6 +335,15 @@ theorem admA_refine_ground_eq_admALit (k : GroundKind) (ls : NEFinset k.Carrier)
                                    binaryCodec, inL]
   case null => cases a <;> simp [admA, admALit, refineReads, groundTerm, denote,
                                  nullCodec, inL]
+  case decimal =>
+    show (admA .decimal a && refineReads (groundTerm .decimal) (inL .decimal ls) a)
+        = ((literalCodec .decimal ls).p a).isSome
+    rw [show ((literalCodec .decimal ls).p a)
+          = (decimalCodec.p a).bind (fun v => if inL .decimal ls v then some v else none) from rfl]
+    show (admA .decimal a &&
+        (match decimalCodec.p a with | some v => inL .decimal ls v | none => false)) = _
+    cases h : decimalCodec.p a <;> cases a <;> simp_all [admA, decimalCodec]
+    split <;> simp_all
   case number =>
     show (admA .number a && refineReads (groundTerm .number) (inL .number ls) a)
         = ((literalCodec .number ls).p a).isSome
@@ -351,12 +361,26 @@ theorem adm_refine_ground_le_adm_literal (k : GroundKind) (ls : NEFinset k.Carri
     adm (.refine (groundTerm k) (inL k ls)) v = true → adm (.literal k ls) v = true := by
   cases k <;> · intro h; rw [adm] at h; exact (Bool.and_eq_true _ _ ▸ h).2
 
-/-- …and the four non-numeric bases are an equality, the base's own row being `⊤`. -/
+/-- …and every base but `number` is an equality — for two different reasons, and the second
+    is why `decimal` is worth a base of its own.
+
+    At `string`, `boolean`, `binary` and `null` the base's own row is `⊤`, so the refinement adds
+    nothing and the two coincide trivially. At `decimal` the row is *not* `⊤` — `isStored` gates
+    it — and the equality holds anyway, because **membership in the alternatives implies the
+    gate**: the carrier is `StoredNumeral`, so there is no alternative that fails `Stored`.
+
+    That is exactly what fails at `number`. There the carrier is `Double` and §1's `D` is a
+    predicate on its *text*, so `ls` may hold a double outside `D`, `inL` admits it and the
+    base refuses it — which is why `adm (.literal .number ls)` over-approximates by precisely
+    the conjunct `adm (.refine …)` carries. Typing the carrier is the whole difference. -/
 theorem adm_refine_ground_eq_adm_literal (k : GroundKind) (ls : NEFinset k.Carrier)
     (v : Value) (hk : k ≠ .number) :
     adm (.refine (groundTerm k) (inL k ls)) v = adm (.literal k ls) v := by
   cases k
   case number => exact absurd rfl hk
+  -- the gate is in the carrier, so `inL` already carries it
+  case decimal =>
+    cases v <;> simp only [adm, groundTerm, inL, isStored] <;> (try split) <;> simp_all
   all_goals simp [adm, groundTerm]
 
 /-- The numeric row, written out: the refinement carries §1's `D` gate that the literal's row

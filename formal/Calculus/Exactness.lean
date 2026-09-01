@@ -619,6 +619,10 @@ theorem ExactV_set (b : SetBase) : ExactV (.set b) := by
     rw [decide_eq_true_eq, encSet_base_iff b (fun _ _ h => by injection h) S]
   all_goals exact Iff.intro (fun h => nomatch h) (fun h => nomatch h)
 
+-- `unnecessarySeqFocus` fires on `Adm_exact`'s `literal` case and is wrong there: `try split`
+-- leaves two goals at `decimal`, and the `;` it suggests would reach only the first.
+-- Suppressed at the block, as `term_depth_wf`'s five sharers already are.
+set_option linter.unnecessarySeqFocus false in
 mutual
 /-- **Nineteen of the twenty-one rows are exact.** Not a bound on `dom(e)` — `dom(e)`.
 
@@ -662,11 +666,18 @@ theorem Adm_exact : ∀ (t : Term), Analysable t = true → ExactV t
   | .decimal => by intro _ v; cases v <;> simp [Adm, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, isStored]
   -- three rows into one, and `numberCodec` is read through `numberCodec_e_isSome` rather
   -- than unfolded: its `dite` is a string parser, and `simp` inside it runs out of heartbeats.
+  --
+  -- `unnecessarySeqFocus` fires on the `<;>` before `simp_all` below and is wrong: `try split`
+  -- leaves two goals at `decimal` and `;` would reach only the first. Suppressed at the
+  -- declaration rather than restructured, the way `term_depth_wf`'s sharers already are.
   | .literal k ls => by
       intro _ v
       cases k <;> cases v <;>
         simp [AdmLit, denote, denote, literalCodec, baseCodec, inL,
-              stringCodec, booleanCodec, binaryCodec, nullCodec, inD]
+              stringCodec, booleanCodec, binaryCodec, nullCodec, inD, decimalCodec] <;>
+        -- `decimal` alone leaves a goal: its `inL` is a `dite` on the gate, and splitting it is
+        -- what shows the alternatives already carry `Stored` — the base's whole point.
+        (try split) <;> simp_all [isStored]
   | .custom ce cp => by intro _ v; simp [Adm, denote, denote]
   | .array c => by
       intro ha
@@ -1335,6 +1346,11 @@ noncomputable def AdmALit : (k : GroundKind) → NEFinset k.Carrier → Attr →
   | .number,  ls, .n x    => (match Double.ofDec x.1 with
                               | some d => decide (d ∈ ls.1) && Numeral.WF d.toDec
                               | none => false)
+  -- `decimal` asks its codec, which is what `admALit` does at this base too — so the joint row
+  -- and the table row are the *same function* here rather than two spellings that have to be
+  -- proved equal. `number` cannot do this and spells the `ofDec` lookup out, because its answer
+  -- depends on the host's numeric type; `decimal`'s does not.
+  | .decimal, ls, a       => ((literalCodec .decimal ls).p a).isSome
   | _, _, _ => false
 
 /-- **What a set base reads.**
@@ -2164,6 +2180,8 @@ theorem AdmA_exact : ∀ (t : Term), AnalysableA t = true → ExactA t
   | .literal k ls => by
       intro _ a
       cases k
+      -- the row asks the codec, so the biconditional is the row read twice
+      case decimal => simp [AdmA, AdmALit, denote]
       case number =>
         cases a
         case n x =>

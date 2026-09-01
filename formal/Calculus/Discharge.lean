@@ -257,6 +257,11 @@ noncomputable def admALit : (k : GroundKind) → NEFinset k.Carrier → Attr →
   -- disjoint alternative sets now separate in the table (`sepA_literalN_disjoint`) and not
   -- only in the pair.
   | .number,  ls, a       => ((literalCodec .number ls).p a).isSome
+  -- `decimal` asks for the same reason and gets a sharper answer. Its alternatives *are*
+  -- stored numerals, so unlike `number` the row could in principle be spelled out — but
+  -- asking keeps one definition of what the base reads instead of two that must agree, and
+  -- a different `decimal` codec would need no edit here.
+  | .decimal, ls, a       => ((literalCodec .decimal ls).p a).isSome
   | _, _, _ => false
 
 mutual
@@ -668,13 +673,14 @@ theorem admA_sound : ∀ (t : Term) {a v},
   | t, a, v, hp => by
     cases t
     case literal k ls =>
-      -- the read side is the prism's second projection *plus* the base's own reading, which is
-      -- what makes `admA` weaker than `adm` here: at `number` the base loses the value, so the
-      -- row is `⊤` and `rfl` closes it before anything is unfolded.
+      -- The read side is the prism's second projection *plus* the base's own reading. Two
+      -- shapes of row, and they split here: the four bases whose stored attribute *is* the
+      -- value are spelled out and close through `restrict_p`, while the two numeric bases ask
+      -- their codec, so `hp` **is** the answer being asked for —
+      -- `denote (.literal k ls)` is `literalCodec k ls` by `rfl` at either.
       cases k
-      -- the numeric row now asks its codec, so `hp` **is** the answer it asks for —
-      -- `denote (.literal .number ls)` is `literalCodec .number ls` by `rfl`
-      case number => cases a <;> simp_all [admA, admALit, denote]
+      case number  => cases a <;> simp_all [admA, admALit, denote]
+      case decimal => cases a <;> simp_all [admA, admALit, denote]
       all_goals
         obtain ⟨hb, hq⟩ := restrict_p.mp hp
         cases a <;>

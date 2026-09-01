@@ -305,6 +305,7 @@ def nullCodec : Codec :=
 noncomputable def baseCodec : GroundKind → Codec
   | .string  => stringCodec
   | .number  => numberCodec
+  | .decimal => decimalCodec
   | .boolean => booleanCodec
   | .binary  => binaryCodec
   | .null    => nullCodec
@@ -328,6 +329,10 @@ noncomputable def SetBase.elem : SetBase → Codec
 noncomputable def inL : (k : GroundKind) → NEFinset k.Carrier → Value → Bool
   | .string,  ls, .str s  => decide (s ∈ ls.1)
   | .number,  ls, .num d  => decide (d ∈ ls.1)
+  -- `decimal`'s value is a `.str` and its carrier is the `Stored` subtype, so membership goes
+  -- through the gate rather than round it: a text that is not stored is in no alternative set.
+  | .decimal, ls, .str s  =>
+      if h : Numeral.Stored s = true then decide ((⟨s, h⟩ : StoredNumeral) ∈ ls.1) else false
   | .boolean, ls, .bool b => decide (b ∈ ls.1)
   | .binary,  ls, .bin b  => decide (b ∈ ls.1)
   | .null,    _,  .null   => true
@@ -549,6 +554,15 @@ theorem hLit_of_inL (k : GroundKind) (ls : NEFinset k.Carrier) (v : Value) :
     first
       | exact Bool.noConfusion h
       | exact ⟨_, by simpa [inL] using h, rfl⟩
+      -- `decimal` reaches here and the others do not: its row is a `dite` on the gate, so the
+      -- alternative above — which expects the value's payload to *be* the carrier — cannot see
+      -- through it. Splitting on the gate names the alternative as a subtype, and `toValue`
+      -- projects it straight back. `cases hs :` rather than `by_cases`, which is classical.
+      | exact (by
+          rename_i s
+          cases hs : Numeral.Stored s with
+          | false => simp [inL, hs] at h
+          | true => exact ⟨⟨s, hs⟩, by simpa [inL, hs] using h, rfl⟩)
       -- `.null`'s carrier is `Unit`, so the alternative is whichever one the nonemptiness
       -- proof names. Destructed rather than `choose`n: `Exists.choose` is `Classical.choice`,
       -- and `formal/` advertises its absence.
@@ -2292,10 +2306,11 @@ theorem carrier_restrict {c : Codec} (hc : Carrier c) (q : Value → Bool) :
   ranP hp := let ⟨hcv, hq⟩ := restrict_p.mp hp; ⟨hc.ranP hcv, hq⟩
 
 
-/-- Every base is on its carrier — the five lemmas above, indexed. -/
+/-- Every base is on its carrier — the six lemmas above, indexed. -/
 theorem carrier_baseCodec : ∀ k : GroundKind, Carrier (baseCodec k)
   | .string  => carrier_stringCodec
   | .number  => carrier_numberCodec
+  | .decimal => carrier_decimalCodec
   | .boolean => carrier_booleanCodec
   | .binary  => carrier_binaryCodec
   | .null    => carrier_nullCodec
@@ -2667,12 +2682,18 @@ theorem Lawful.restrict {c : Codec} (h : Lawful c) (q : Value → Bool) :
     "this payload has a ground base", "and it is this member" — are `GroundKind`'s. -/
 def LiteralD : (k : GroundKind) → NEFinset k.Carrier → Prop
   | .number, ls => ∀ d ∈ ls.1, Numeral.WF d.toDec = true
+  -- **Vacuous at `decimal`, and that is the base's reason for existing.** §3's `ℓ ⊆ D` is a
+  -- premise at `number` because the alternatives are `Double`s and well-formedness is a fact
+  -- about their text. Here the alternatives *are* stored numerals, `Stored → WF` by
+  -- `Numeral.stored_wf`, and the premise has nothing left to say.
+  | .decimal, _ => True
   | .string, _ | .boolean, _ | .binary, _ | .null, _ => True
 
 /-- …and every base is lawful. -/
 theorem lawful_baseCodec : ∀ k : GroundKind, Lawful (baseCodec k)
   | .string  => lawful_stringCodec
   | .number  => lawful_numberCodec
+  | .decimal => lawful_decimalCodec
   | .boolean => lawful_booleanCodec
   | .binary  => lawful_binaryCodec
   | .null    => lawful_nullCodec
