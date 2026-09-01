@@ -16,5 +16,6 @@ import Calculus.Malleability
 import Calculus.Refutations
 import Calculus.Exactness
 import Calculus.LiteralArity1
+import Calculus.Orthogonality
 import Calculus.Vectors
 import Calculus.Axioms
