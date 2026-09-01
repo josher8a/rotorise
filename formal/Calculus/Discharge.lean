@@ -116,11 +116,14 @@ def ident : Term → Bool
   | .held t _ _ => ident t
   -- `custom` decides its own membership outright — its `T` *is* `dom(ce)`.
   | .custom _ _ => true
-  -- `opaq` decides nothing **when its numeric policy is lossy**: `opaqCodecω` then accepts
-  -- every value of every kind, and an admission is no evidence. At `lossy = false` it does
-  -- decide something — it refuses numbers on both sides — and `ident_of_adm` forces the row
-  -- to say so, since `adm (.opaq false)` now refuses.
-  | .opaq lossy => !lossy
+  -- `opaq` decides its own membership for the same reason `custom` does, and the rows
+  -- below are why: `adm (.opaq _)` **is** `dom((opaqCodecω _).e)`, so an admission is an
+  -- answer from the codec rather than a syntactic guess. The old row was `!lossy`, forced
+  -- by `ident_of_adm` when a scalar-prefix row refused only at `.num`; the semantic row
+  -- refuses far more (a `numSet`, an array holding a numeral the store will not take),
+  -- and at *every* policy — `Numeral.WF (Double.toDec d)` is not a theorem — so `!lossy`
+  -- is no longer sound and `true` is what `ident_of_adm` now forces.
+  | .opaq _ => true
 
 def identList : List Term → Bool
   | [] => true
@@ -141,7 +144,62 @@ end
     In particular `adm` does *not* propagate through the containers, though `ident`
     does. `adm(array(c))` would have to contain the empty array whatever `c` is, so
     propagating it would claim a separation that is false — see
-    `not_uAtCan_array_literals` below. -/
+    `not_uAtCan_array_literals` below.
+
+    ### The two rows that ask their own codec
+
+    `custom` and `opaque` are the language's two escape hatches, and they are the two
+    rows here that **do not describe a set at all**. Each one asks the codec it denotes:
+
+        adm  (.custom ce _)   v = (ce v).isSome
+        adm  (.opaq lossy)    v = ((opaqCodecω lossy).e v).isSome
+        admA (.custom _ cp)   a = (cp a).isSome
+        admA (.opaq lossy)    a = ((opaqCodecω lossy).p a).isSome
+
+    Three things follow, and they are the same three for both.
+
+    *They are exact by construction.* `denote`'s rows set `e := ce` and
+    `e := (opaqCodecω lossy).e` (`denote_custom`, `denote_opaq`), so the row and `dom(e)`
+    are the same function and `ExactV`/`ExactA` at either term is `Iff.rfl`. That is not a
+    sharp analysis of an escape hatch; it is the analysis *declining* to be one, and the
+    exactness is the codec's, borrowed. `Exactness.lean` says so again where the two
+    `Exact` rows are proved.
+
+    *They are as precise as the semantics is.* No syntactic set could name
+    `opaqCodecω`'s domain: it recurses on the *input's own depth*, refusing a `numSet` of
+    numerals the store will not take, or an array with one such numeral at any depth. A
+    row over the term cannot see past the top constructor — the row this one replaced saw
+    exactly that far, which gave `number` a separation `set(number)` could not have for no
+    reason in the semantics. Deferring sees all of it, because it does not look.
+
+    *Nothing here knows anything about either implementation.* Swap `opaqCodecω` for a
+    different `opaque` — a different numeric policy, a different set of options, a
+    different fuel discipline — and every theorem downstream of these rows is still true
+    and still proved, because none of them ever mentions what the codec answers. That is
+    what `custom` has always had and what this buys `opaque`: the analysis is decoupled
+    from the hatch. Precision is the consequence, not the goal.
+
+    ### …and the one respect in which they are opposite
+
+    The likeness is **the analysis, and only the analysis**. `opaque` is not a `custom`,
+    and the difference is the warranty behind the codec each row asks:
+
+    * `custom` carries a real premise. `Obligations (.custom ce cp)` (`Soundness.lean`) is
+      `Lawful ⟨dom(ce), none, ce, cp⟩` — a proof obligation on whoever writes the term, and
+      nothing in the calculus discharges it. The row asks a codec **the user warrants**.
+    * `opaque` carries none. `Obligations (.opaq _) = True`, and it is `True` because the
+      laws are *theorems* here: `lawful_opaqCodecω` and `carrier_opaqCodecω`
+      (`Opaque.lean`), off the stabilization and depth-preservation lemmas. The row asks a
+      codec **the calculus warrants**.
+
+    So `opaque` is strictly the stronger of the two — same decoupling, no premise — and
+    that is what "a *well-behaved* `custom`" means. A reading of these rows as "`opaque` is
+    a `custom`" gets the obligation exactly backwards.
+
+    The price is paid and worth naming. Neither row can be *read* to learn what the term
+    admits — a reviewer wanting that reads the codec — and `admA` had to become
+    `noncomputable`, which `adm` already was (`opaqCodecω` is, and `custom` carries
+    arbitrary functions). Nothing in §5 evaluates these; every use is a proof. -/
 
 /-- The tags a `(dunion)`'s options answer to, pooled. Spelled out rather than a
     `flatMap` so the membership lemma is one induction. -/
@@ -230,16 +288,20 @@ noncomputable def adm : Term → Value → Bool
   | .lazy t => adm t
   -- `custom` carries its pair as data, which is the reason it is *analysable*, not the
   -- reason it is not: `denote`'s `custom` row sets `e := ce`, so `dom(e)` is `ce`'s and
-  -- this row is exact.
+  -- this row is exact. The first of the two rows that ask their own codec; see the
+  -- section header.
   | .custom ce _ => fun v => (ce v).isSome
-  -- `opaq` carries **one bit of syntax** — its numeric policy — and that bit is a gate:
-  -- `opaqCodec`'s `N` option is `if lossy then numberCodec else Codec.empty`
-  -- (`opaq_unfold`, `Opaque.lean`), so a non-lossy `opaque` writes no number at all. The
-  -- row below is that bit and nothing else. Everything past the top constructor stays `⊤`:
-  -- `opaqCodecω`'s domain is a recursion over the input's own depth, so the *nested*
-  -- refusals (a `numSet`, an array holding a number) are over-approximated here even
-  -- though they are real. Over-approximating is sound; see `adm_sound`.
-  | .opaq lossy => fun v => match v with | .num _ => lossy | _ => true
+  -- `opaq` is the second member of that family, and this row is the whole of the change
+  -- that made it one. `denote (.opaq lossy)` **is** `opaqCodecω lossy` (`denote_opaq`), so
+  -- asking the codec is asking the denotation, and the row is `dom(e)` on the nose.
+  --
+  -- What it replaces was a scalar-prefix approximation — `.num ↦ lossy`, everything else
+  -- `⊤` — which saw only the top constructor of the hole. A non-lossy `opaque` also refuses
+  -- a `.numSet`, and an array or map carrying a numeral anywhere inside; so does a *lossy*
+  -- one, at any numeral whose text is not `Numeral.WF`. None of that is syntax, and none of
+  -- it needs to be: `opaqCodecω` recurses on the value's own depth, and so does this row,
+  -- by deferring to it.
+  | .opaq lossy => fun v => ((opaqCodecω lossy).e v).isSome
 
 /-- `adm`'s union row, as the list recursion the kernel needs. -/
 noncomputable def admList : List Term → Value → Bool
@@ -272,7 +334,7 @@ mutual
     `literalN` is `true` — the read side goes through `Double.ofDec`, which is
     axiomatized, so no syntactic set bounds it; numeric literals fall to (U) per input
     on the attribute side. -/
-def admA : Term → Attr → Bool
+noncomputable def admA : Term → Attr → Bool
   | .dunion d opts => fun a =>
     match tagOfA d a with
     | some tag => decide (tag ∈ allTags d opts)
@@ -307,14 +369,13 @@ def admA : Term → Attr → Bool
   | .lazy t => admA t
   -- `custom`'s read side, exact for the same reason: `p := cp`.
   | .custom _ cp => fun a => (cp a).isSome
-  -- `opaq`'s numeric policy again, on the read side: the `N` option is `Codec.empty` when
-  -- the policy refuses, so no `N` attribute is readable (`opaqCodec_p_n`). `.ns` is
-  -- refused too and this row does not say so — the same over-approximation as on the
-  -- value side, and for the same reason.
-  | .opaq lossy => fun a => match a with | .n _ => lossy | _ => true
+  -- `opaq`'s read side, deferring the same way: `p := (opaqCodecω lossy).p`, so the row is
+  -- `dom(p)` exactly — the refused `.ns`, and the `.l`/`.m` carrying an unreadable numeral
+  -- somewhere inside, are all seen, and none of them by a rule about `opaque`.
+  | .opaq lossy => fun a => ((opaqCodecω lossy).p a).isSome
 
 /-- …and on the attribute side. -/
-def admAList : List Term → Attr → Bool
+noncomputable def admAList : List Term → Attr → Bool
   | [], _ => false
   | t :: ts, a => admA t a || admAList ts a
 
@@ -525,16 +586,8 @@ theorem adm_sound : ∀ (t : Term) {v a},
       obtain ⟨tx, htx, rfl⟩ := ho
       rw [optionSemOf_c] at hoe
       exact admList_of_mem htx (adm_sound tx hoe)
-    case opaq lossy =>
-      -- the only row with content: a `.num` is writable only if the policy is lossy
-      cases v with
-      | num d =>
-        replace he : (opaqCodec (0+1) lossy).e (.num d) = some a := he
-        rw [opaqCodec_e_num] at he
-        cases lossy with
-        | true => rfl
-        | false => exact nomatch he
-      | _ => rfl
+    -- the row *is* the definedness being asserted, exactly as at `custom` one line up
+    case opaq lossy => simp_all [adm, denote]
     all_goals rfl
 
 /-- Reading lands in `admA`. -/
@@ -588,15 +641,7 @@ theorem admA_sound : ∀ (t : Term) {a v},
       obtain ⟨tx, htx, rfl⟩ := ho
       rw [optionSemOf_c] at hop
       exact admAList_of_mem htx (admA_sound tx hop)
-    case opaq lossy =>
-      cases a with
-      | n x =>
-        replace hp : (opaqCodec (0+1) lossy).p (.n x) = some v := hp
-        rw [opaqCodec_p_n] at hp
-        cases lossy with
-        | true => rfl
-        | false => exact nomatch hp
-      | _ => rfl
+    case opaq lossy => simp_all [admA, denote]
     all_goals rfl
 
 /-! ### Why `admA` has no `legacy` case
@@ -867,18 +912,13 @@ theorem ident_of_adm : ∀ {t : Term} {v : Value}, adm t v = false → ident t =
       simp only [adm, Bool.or_eq_false_iff] at h; exact h.1)
   | .lazy t, v, h => ident_of_adm (t := t) (v := v) h
   | .held t f _, v, h => ident_of_adm (t := t) (v := f v) h
+  -- the two rows that ask their own codec: a refusal is the codec's, and both terms are
+  -- `ident` unconditionally for exactly that reason
   | .custom _ _, _, _ => rfl
+  | .opaq _, _, _ => rfl
   | .string, _, h | .boolean, _, h | .binary, _, h
   | .null, _, h | .set _, _, h | .array _, _, h | .tuple _ _, _, h
   | .record _, _, h | .object _ _ _, _, h => nomatch h
-  -- `opaq`'s row refuses only at `.num`, and only when the policy is not lossy — which is
-  -- exactly when `ident (.opaq lossy) = !lossy` is `true`.
-  | .opaq lossy, v, h => by
-      cases v
-      case num d =>
-        replace h : lossy = false := h
-        simp [ident, h]
-      all_goals exact nomatch (h : (true : Bool) = false)
 
 /-- A union all of whose options refuse a value is one all of whose options decide their
     own membership — `ident_of_adm` lifted to the list, which `adm`'s union row makes
@@ -1110,19 +1150,19 @@ theorem ident_lazy : ident (.lazy (.literal .string (.of "A" ∅))) = true := rf
     `isSome` of the very function the term carries, and `custom`'s `T` is *defined* as
     `dom(ce)`.
 
-    That leaves `opaq` as the only *largely* unanalysable term, and for a reason none of
-    the others shared: `opaqCodecω`'s domain is a recursion over the *input's* own depth,
-    so there is no set the syntax names to be precise about. Largely, and not wholly —
-    `opaq` carries one bit of syntax, its numeric policy, and the rows above spend it. What
-    the syntax cannot bound is the *recursion*: a non-lossy `opaque` also refuses a
-    `numSet`, and an array or map holding a number anywhere inside it, and no finite row
-    over the term says which values those are.
+    And `opaq` is no longer the exception. It was called *largely* unanalysable on the
+    ground that `opaqCodecω`'s domain is a recursion over the *input's* own depth, so no
+    set the syntax names is precise about it. True, and the wrong conclusion: the row does
+    not have to name the set, it can ask. `adm (.opaq lossy)` is now
+    `((opaqCodecω lossy).e ·).isSome`, so the recursion the syntax cannot bound is the
+    recursion the row runs, and `opaq` sits beside `custom` rather than after it.
 
     Three senses had been running together: (i) the term does not carry the information —
-    true of nothing here, and `opaq`'s policy bit is why the row was the last place this
-    was still assumed; (ii) the domain cannot be computed without running the codec —
-    true only of `opaq`, and only past its top constructor; (iii) a reader cannot see
-    through it — true of `held` and `custom`, and not a property of the calculus. -/
+    true of nothing here, and `opaq` was the last row where it was still assumed;
+    (ii) the domain cannot be computed without running the codec — true of `opaq` and of
+    `custom`, and the reason both rows *do* run it, at the price of being
+    `noncomputable`; (iii) a reader cannot see through it — true of `held`, `custom` and
+    `opaq`, and not a property of the calculus. -/
 
 /-- `held`'s writable set, exactly: the subterm's, pulled back along `f`. -/
 theorem adm_held (t : Term) (f g : Value → Value) (v : Value) :
@@ -1407,35 +1447,78 @@ theorem uAtCan_opaque (lossy : Bool) :
     UniqueAdmission (opaqOptions lossy (opaqCodec fuel lossy)) :=
   uniqueAdmission_opaque fuel lossy (lawful_opaqCodec fuel lossy)
 
-/-! ## What `opaque`'s policy bit buys
+/-! ## What asking the codec buys
 
     Before the rows above, `adm (.opaq _)` and `admA (.opaq _)` were `⊤` and `κ (.opaq _)`
     is `none`. `SepV` and `SepA` each offer exactly two routes — a disjoint kind (resp. a
     distinct member) or a disjoint admissible set — and an `opaque` option had **neither**
     on either side. So `union(opaque, c)` was never separable, for any `c` that admits
-    anything at all; `not_sepV_opaq` below is that fact, still true at `lossy = true`.
+    anything at all; `not_sepV_opaq_lossy_left` (`Refutations.lean`) is what remains of
+    that fact.
 
     It was an artifact of the analysis rather than of the semantics: `opaqCodec`'s `N`
     option is `Codec.empty` when `numbers = 'refuse'`, so a non-lossy `opaque` writes no
     number and reads no `N`, and `union(opaque false, number)` really is disjoint on both
-    sides. The rows now see the writable half of that. -/
+    sides. The rows see the writable half of that — and, since they ask the codec rather
+    than reading the policy bit, they see the nested half too (`adm_opaq_false_numSet`).
+    Nothing below mentions the policy bit; it is the codec that answers. -/
 
-/-- `opaque` at a lossy policy admits everything — the absorption, stated. -/
-theorem adm_opaq_true (v : Value) : adm (.opaq true) v = true := by cases v <;> rfl
+/-- `opaque` admits every string, at either policy — the one absorption that survived the
+    semantic row, and the witness the refutations are instantiated at.
 
-theorem admA_opaq_true (a : Attr) : admA (.opaq true) a = true := by cases a <;> rfl
+    Its predecessor was `adm (.opaq true) v = true` for **every** `v`, and that is no
+    longer true: `adm` asks `opaqCodecω`, and a lossy `opaque` still refuses `.num d`
+    whenever `Numeral.WF (Double.toDec d)` fails. `Double.toDec` is axiomatized
+    (`Domain.lean`) with no such guarantee, so the blanket `⊤` was a claim the row made and
+    the codec does not. Nothing downstream wanted it: the refutations below want a value
+    *both* options admit, and a string is one. -/
+theorem adm_opaq_str (b : Bool) (s : String) : adm (.opaq b) (.str s) = true := by
+  show ((opaqCodec (0+1) b).e (.str s)).isSome = true
+  rw [opaqCodec_e_str]; rfl
 
-/-- …and at a refusing policy it admits everything that is not a number. -/
-theorem adm_opaq_false (v : Value) (h : ∀ d, v ≠ .num d) : adm (.opaq false) v = true := by
-  cases v <;> first | rfl | exact absurd rfl (h _)
+theorem admA_opaq_s (b : Bool) (s : String) : admA (.opaq b) (.s s) = true := by
+  show ((opaqCodec (0+1) b).p (.s s)).isSome = true
+  rw [opaqCodec_p_s]; rfl
+
+/-- A refusing policy writes no numeral — the fact the old scalar-prefix row carried, now
+    read off the codec rather than off a `match`. -/
+theorem adm_opaq_false_num (d : Double) : adm (.opaq false) (.num d) = false := by
+  show ((opaqCodec (0+1) false).e (.num d)).isSome = false
+  rw [opaqCodec_e_num]; rfl
+
+theorem admA_opaq_false_n (x : WFNumeral) : admA (.opaq false) (.n x) = false := by
+  show ((opaqCodec (0+1) false).p (.n x)).isSome = false
+  rw [opaqCodec_p_n]; rfl
+
+/-- **And the refusal the old row could not state.** A non-lossy `opaque` refuses a *set*
+    of numbers too, and a `numSet` is not a `.num`: the row this replaces matched on the
+    top constructor and so gave `number` a separation `set(number)` could not have, for no
+    reason in the semantics. The semantic row sees it because it does not look — `encSet`
+    fails at the first element the element codec refuses, and every element is refused.
+
+    `adm (.set .number)` is itself `⊤` (the empty-container argument), so this does not by
+    itself hand `set(number)` a `SepV`; what it removes is the *asymmetry* — the analysis
+    of `opaque` no longer stops at depth zero, and any option whose own row is informative
+    at a set now meets a matching refusal here. -/
+theorem adm_opaq_false_numSet (S : NEFinset Double) :
+    adm (.opaq false) (.numSet S) = false := by
+  show ((opaqCodec (1+1) false).e (.numSet S)).isSome = false
+  rw [opaqCodec_e_numSet]
+  cases he : (setCodec (opaqCodec 1 false)).e (.numSet S) with
+  | none => rfl
+  | some a =>
+    obtain ⟨x, hx⟩ := S.2
+    have := encSet_elem (c := opaqCodec 1 false) (inj := Value.num) (S := S) (a := a) he x hx
+    rw [show (opaqCodec 1 false).e (.num x) = _ from opaqCodec_e_num false 0 x] at this
+    exact nomatch this
 
 /-- **The row buys a writable-side separation from `number`.** `κ (.opaq _)` is `⊤`, so
     `SepV`'s kind disjunct is unavailable for every pair containing an `opaque`: the whole
-    of the work is the `adm` disjunct, which was `⊤` before and is the policy bit now. -/
+    of the work is the `adm` disjunct, which was `⊤` before and is the codec's answer now. -/
 theorem sepV_number_opaque : SepV .number (.opaq false) :=
   Or.inr fun v hv => by
     cases v
-    case num d => rfl
+    case num d => exact adm_opaq_false_num d
     all_goals exact nomatch (by simpa only [adm, inD] using hv : (false : Bool) = true)
 
 /-- **But `union(opaque false, number)` is still not separable — and `opaque` is no longer
@@ -1447,7 +1530,9 @@ theorem sepV_number_opaque : SepV .number (.opaq false) :=
 theorem not_sepA_number_opaque : ¬ SepA .number (.opaq false) := by
   rintro (⟨μx, μy, hx, hy, -⟩ | hdisj)
   · exact nomatch hy
-  · exact absurd (hdisj (.s "x") rfl) (by decide)
+  · have h := hdisj (.s "x") rfl
+    rw [admA_opaq_s] at h
+    exact nomatch h
 
 /-- The pair that *does* separate on both sides: `number`'s own pair, declared through
     `custom`, whose rows are exact by construction (`e := ce`, `p := cp`). Semantically
@@ -1458,13 +1543,13 @@ noncomputable def numberCustom : Term := .custom numberCodec.e numberCodec.p
 theorem sepV_numberCustom_opaque : SepV numberCustom (.opaq false) :=
   Or.inr fun v hv => by
     cases v
-    case num d => rfl
+    case num d => exact adm_opaq_false_num d
     all_goals exact nomatch (hv : (false : Bool) = true)
 
 theorem sepA_numberCustom_opaque : SepA numberCustom (.opaq false) :=
   Or.inr fun a ha => by
     cases a
-    case n x => rfl
+    case n x => exact admA_opaq_false_n x
     all_goals exact nomatch (ha : (false : Bool) = true)
 
 theorem lawful_numberCustom : Lawful (denote numberCustom) := by
@@ -1475,7 +1560,7 @@ theorem lawful_numberCustom : Lawful (denote numberCustom) := by
   · exact fun hp he => lawful_numberCodec.agree hp he
 
 /-- **`union(number-as-`custom`, opaque false)` discharges (U) at the declaration.** The
-    positive case: with the policy bit in the rows, an `opaque` option can be an option of
+    positive case: with the rows deferring to the codec, an `opaque` option can be an option of
     a separable union. Nothing in this proof is available with `adm (.opaq _) = ⊤`. -/
 theorem uAtCan_numberCustom_opaque : UAtCan [numberCustom, .opaq false] := by
   refine uAtCan_of_separated ?_ ?_ ?_ ?_
