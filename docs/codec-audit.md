@@ -490,9 +490,11 @@ Requested explicitly, and the sharpest ones continue this session's own arc:
    codec provably has no relational format at all.
 5. **Hand-written combinators with hand-proved laws is what Narcissus exists to argue
    against**, and ~700 theorems for 23 term forms is evidence for their position, not ours.
-6. **The escape hatch has no bound.** It prevents silent widening but not loud widening, and
+6. ~~**The escape hatch has no bound.** It prevents silent widening but not loud widening, and
    nothing stops it reaching 23 excuses and a vacuous claim. Consider a theorem about the
-   excuse set itself.
+   excuse set itself.~~ **Settled by removal, not by a theorem.** Every row is exact, so the
+   hatch has no members and is deleted; `Adm_exact : ∀ t, ExactV t` is exhaustive over `Term`
+   with no `false` row to reach for, which bounds it at zero. See §7.
 7. **The axiom guard is hygiene, not novelty** — and note our own record that `omega` can pull
    `Classical.choice`, which is why it is load-bearing.
 
@@ -540,6 +542,37 @@ size limits are resource limits and §1 excludes them on purpose — treating th
 membership would itself be the defect.
 
 ## 7. The exactness hatch: one promotion, one wrong reason
+
+> **Superseded, and by the largest margin of any verdict in this document.** This section
+> concluded "exactly one promotion available, `.object` on the value side; `AnalysableA` gets
+> none". **Every row was promotable, on both sides.** `Adm_exact` and `AdmA_exact` are now
+> `∀ t, ExactV t` and `∀ t, ExactA t` — no hypothesis, 21/21 — and `Analysable`, `Excuse`,
+> `covers`, `childrenAnalysable`, `analysable_excused`, `excuse_shapes`, `excuse_witnessed`
+> and their attribute-side twins are all deleted, along with every witness.
+>
+> The two rows this section did not reach:
+>
+> - **`nullable`.** Its excuse said `ownsNull` is a disjunction over both halves of the pair
+>   and inferred that a row could not account for it. `Codec.ownsNull` is a computable `Bool`
+>   off the subterm's codec, so the row asks it: `Adm (.nullable t) v = Adm t v || (v = null
+>   && !(denote t).ownsNull)`. Eight lines per side.
+> - **`union`.** Its excuse was the one argument here about something real — a count is
+>   anti-monotone, so while any row was loose the count refused where the codec writes. That
+>   is a fact about the *state of the table*, recorded as a fact about the row. Once `set`
+>   (a narrower constructor) and `nullable` (a row that asks) stopped being loose, the count
+>   is exact given the options' exactness, which is the hypothesis every other container row
+>   already takes. The carpentry the excuse hid: `select`'s filter is **not** `Adm` — an
+>   object option is admitted by `keysOk`, its *names*, not its fields' contents — so the row
+>   mirrors `optionSems` (`admitOptV`/`selOptV`) rather than counting rows.
+>
+> Section 5.6 item 6 asked for "a theorem about the excuse set itself" because the hatch had
+> no bound. It has no members instead. `Adm_exact` exhaustive over `Term` with no `false` row
+> to reach for is the bound that was wanted, and it is stronger than the theorem proposed.
+>
+> The reading below is kept as the record of what a static pass concluded. It is a fair
+> account of the rows as they then stood and a poor predictor of which were writable — the
+> third time in this arc that "the row cannot see it" turned out to mean "the row did not
+> ask".
 
 Ranked most to least retirable. Static reading only, so the promotion is *"looks provable,
 record-shaped"*, not checked.
@@ -613,8 +646,11 @@ Two imprecisions worth fixing in the remaining three:
   while `Analysable`'s bullet gives `dunion` a *different* reason ("the tag is checked, the
   matched option's own admission is not").
 
-**Net for `Analysable`/`AnalysableA`:** exactly one promotion available, `.object` on the value
-side. `AnalysableA` gets none — the object read still goes through `fbNames`/`fbValue`/`keepB`.
+**Net for `Analysable`/`AnalysableA`:** ~~exactly one promotion available, `.object` on the value
+side. `AnalysableA` gets none — the object read still goes through `fbNames`/`fbValue`/`keepB`.~~
+**Wrong on both counts.** `.object` was promotable and so was everything else, the attribute
+side included; `fbNames`/`fbValue`/`keepB` constrain `p` and the read row was written against
+them rather than blocked by them. See the note at the head of this section.
 
 ## 9. TypeScript conformance — five live bugs
 
