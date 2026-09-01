@@ -42,7 +42,11 @@ import re, sys, os, glob
 
 CURRENT = ["README.md", "FIDELITY.md", "VOCABULARY.md",
            "../docs/codec-calculus.md", "../docs/structural-discipline.md"]
-LOG = ["../docs/codec-formalization.md"]
+# Scanned under --all, reported, never failing. Both are part change log and part live
+# document, so a name that no longer exists may be a deliberate record of a deletion —
+# `codec-audit.md`'s struck queue items are exactly that — or may be real drift. A human
+# reads the list; a check cannot tell the two apart.
+LOG = ["../docs/codec-formalization.md", "../docs/codec-audit.md"]
 
 IDENT = re.compile(r"[^\W\d][\w'!?⁺₀-₉]*(?:\.[^\W\d][\w'!?⁺₀-₉]*)*", re.UNICODE)
 BACKTICKED = re.compile(r"`([^`\n]{2,80})`")

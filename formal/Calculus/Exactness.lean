@@ -1307,10 +1307,12 @@ def selTagA (d : Name) (os : List (Finset String × AP)) (a : Attr) : Bool :=
     `number`'s restricted, so it refuses a numeral whose double re-spells outside `D` even when
     that double is in `ℓ`.
 
-    Note this is `AdmA`'s exact row, not §5's table row (`admALit` in `Discharge`), which is
-    `⊤` at `number` and cannot be otherwise — a *syntactic* set of attributes does not bound a
-    read that goes through `Double.ofDec`. The two disagreeing at exactly one base is the
-    content of `admA_literalN_blind`. -/
+    §5's table row (`admALit` in `Discharge`) used to be `⊤` here, on the ground that a
+    *syntactic* set of attributes does not bound a read through `Double.ofDec`. True, and it
+    never made the row unwritable: `ofDec` is a function the row may call, exactly as this one
+    does. The table's row now asks its codec, so the two rows **agree at every base**, and
+    `AdmA_le_admA`'s numeric cases are `AdmA_exact` rather than the `rfl` a `⊤` used to make
+    them. -/
 noncomputable def AdmALit : (k : GroundKind) → NEFinset k.Carrier → Attr → Bool
   | .string,  ls, .s s    => decide (s ∈ ls.1)
   | .boolean, ls, .bool b => decide (b ∈ ls.1)
@@ -1328,8 +1330,9 @@ mutual
 
     * `number`, `literalN` and a numeric `literal` go through `Double.ofDec`, which is
       axiomatized. The domain is still *expressible* — `ofDec` is a function and this row
-      may call it — so these rows are sharper here than §5's `⊤`, at the cost of being
-      `noncomputable`, which `adm` already was.
+      may call it — at the cost of being `noncomputable`, which `adm` already was. These rows
+      used to be sharper than §5's `⊤`; they are now equal to it, because the observation in
+      the previous sentence is exactly the one §5's numeric rows were missing.
     * `refine` cannot narrow here: `q` tests the value a read *produces*, and no syntactic
       set of attributes bounds that. The row passes the subterm's through, which is sound
       and not exact.
@@ -2448,7 +2451,6 @@ theorem AdmA_le_admA : ∀ (t : Term) (a : Attr), AdmA t a = true → admA t a =
   | .boolean, _, _ => rfl
   | .binary, _, _ => rfl
   | .null, _, _ => rfl
-  | .number, _, _ => rfl
   | .set _, _, _ => rfl
   | .tuple _ _, _, _ => rfl
   | .object _ _ _, _, _ => rfl
@@ -2464,8 +2466,18 @@ theorem AdmA_le_admA : ∀ (t : Term) (a : Attr), AdmA t a = true → admA t a =
       rw [admA]
       simp only [htag, decide_eq_true_eq]
       exact hmem
+  -- **`number` and a numeric `literal` are no longer containments.** §5's rows at these two
+  -- terms used to be `⊤`, so the containment was `rfl`; they now ask the same codec `AdmA`
+  -- asks, so the two analyses *coincide* and `AdmA_exact` is what says so.
+  | .number, a, h => by
+      show ((denote Term.number).p a).isSome = true
+      exact (AdmA_exact .number rfl a).mp h
   | .literal k ls, a, h => by
-      cases k <;> cases a <;> simp_all [AdmA_literal, AdmALit, admA, admALit]
+      cases k
+      case number =>
+        show ((denote (Term.literal .number ls)).p a).isSome = true
+        exact (AdmA_exact (.literal .number ls) rfl a).mp h
+      all_goals cases a <;> simp_all [AdmA_literal, AdmALit, admA, admALit]
   | .refine t _, a, h => by
       rw [admA]; exact AdmA_le_admA t a (by rw [AdmA] at h; exact h)
   | .held t _ _, a, h => by

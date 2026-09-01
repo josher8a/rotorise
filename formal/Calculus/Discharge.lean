@@ -219,19 +219,34 @@ theorem mem_allTags {d : Name} {ts : List Term} {t tag} (ht : t ∈ ts)
 /-- `admA`'s literal row: what the *stored attribute* tells you about `ℓ`.
 
     For every base but `number` the stored attribute **is** the value, so `ℓ` bounds the readable
-    side outright. At `number` it cannot — the numeral goes through `Double.ofDec` — so the row is
-    `⊤`, which is §5's `literal-S`/`literal-N` split. With one rule the split is a *case of the
-    definition* rather than two constructors, which is the honest place for it: it was never a
-    difference between two rules, only between two bases of one.
+    side outright in one `decide`. At `number` it does not — the numeral goes through
+    `Double.ofDec` — and this row used to be `⊤` on that ground, which is what §5 called the
+    `literal-S`/`literal-N` split. **The ground did not support the conclusion.** No syntactic
+    set of attributes names the numerals that read into `ℓ`, and the row does not need one: it
+    can *ask*, since `ofDec` is a function it may call and `denote (.literal .number ls)` is
+    `literalCodec .number ls`. What survives of the split is that the numeric answer costs a
+    `bind` through an axiom where the others cost a `decide` — a difference in how the row is
+    computed, not in what it decides. With one rule that is a *case of the definition* rather
+    than two constructors, which is the honest place for it: it was never a difference between
+    two rules, only between two bases of one.
 
     Not `inL`'s mirror, and that asymmetry is the content: `adm` is `inL` exactly, because the
     write side sees the value. -/
-def admALit : (k : GroundKind) → NEFinset k.Carrier → Attr → Bool
+noncomputable def admALit : (k : GroundKind) → NEFinset k.Carrier → Attr → Bool
   | .string,  ls, .s s    => decide (s ∈ ls.1)
   | .boolean, ls, .bool b => decide (b ∈ ls.1)
   | .binary,  ls, .b b    => decide (b ∈ ls.1)
   | .null,    _,  .null   => true
-  | .number,  _,  _       => true
+  -- **The row that used to be `⊤`, asking its codec instead.** The old justification was
+  -- that `Double.ofDec` is axiomatized, so no syntactic set of *attributes* bounds which
+  -- numerals a numeric literal reads. True, and beside the point: the row does not have to
+  -- name the set, it can ask, and `denote (.literal .number ls)` **is**
+  -- `literalCodec .number ls` (`rfl`), so this is `dom(p)` on the nose. What the analysis
+  -- ever needed was not *which* numerals a stored text reads to but whether the answer is
+  -- **unique**, and `Double.ofDec` being a function gives that for free — which is why
+  -- disjoint alternative sets now separate in the table (`sepA_literalN_disjoint`) and not
+  -- only in the pair.
+  | .number,  ls, a       => ((literalCodec .number ls).p a).isSome
   | _, _, _ => false
 
 mutual
@@ -331,9 +346,16 @@ mutual
     What stays asymmetric is the shape of the answer — `admA` passes the subterm's set
     through unchanged, `adm` pulls it back along `f`.
 
-    `literalN` is `true` — the read side goes through `Double.ofDec`, which is
-    axiomatized, so no syntactic set bounds it; numeric literals fall to (U) per input
-    on the attribute side. -/
+    `number` and `literalN` are the **third and fourth rows that ask their own codec**, and
+    they arrived by the same correction `opaq` did. Both were `⊤`, and both `⊤`s were bought
+    with one non-argument: `Double.ofDec` is axiomatized, therefore no syntactic set of
+    attributes bounds the read. The premise is true; the conclusion confuses *cannot bound
+    which values* with *cannot bound which option*. `numberCodec.p` answers `none` at every
+    attribute constructor but `.n`, and at an `.n` it answers at most one value, because
+    `ofDec` is a **function**. Uniqueness is all `admA` ever needed, and it is free. The rows
+    are `(numberCodec.p ·).isSome` and `((literalCodec .number ls).p ·).isSome`, both `dom(p)`
+    on the nose; `sepA_number_opaque` and `sepA_literalN_disjoint` are the two separations that
+    were previously refuted or deferred to the pair reading. -/
 noncomputable def admA : Term → Attr → Bool
   | .dunion d opts => fun a =>
     match tagOfA d a with
@@ -342,23 +364,27 @@ noncomputable def admA : Term → Attr → Bool
   | .refine t _ => admA t
   | .held t _ _ => admA t
   | .union opts => fun a => admAList opts a
-  -- `decimal` is to `number` as `literal-S` is to `literal-N`: it holds numerals *as
-  -- their text*, so its gate is a test on the stored attribute and both sides see it.
-  -- `number`'s is not — the numeral goes through `Double.ofDec` — so it stays `⊤`.
+  -- `decimal` holds numerals *as their text*, so its gate is a plain test on the stored
+  -- attribute. `number`'s gate is not — the numeral goes through `Double.ofDec` — which is
+  -- why its row asks the codec below instead of testing anything.
   | .nullable t => fun a => admA t a || (match a with | .null => true | _ => false)
   | .decimal => fun a => match a with | .n x => Numeral.Stored x | _ => false
   -- The payoff over `refine`: for every base but `number` the stored attribute *is* the
-  -- value, so `ℓ` bounds the readable side too. At `number` it cannot — the numeral goes
-  -- through `Double.ofDec` — which is §5's `literal-S`/`literal-N` split, one rule down.
+  -- value, so `ℓ` bounds the readable side in a `decide`. At `number` `ℓ` still bounds it,
+  -- one indirection out, through the codec — see `admALit`'s `.number` row.
   | .literal k ls => admALit k ls
   -- As on the value side, the `⊤` rows are written out with their reasons.
   --
-  -- Ground scalars accepting their whole carrier. `number` joins them here and does not
-  -- above: the stored numeral goes through `Double.ofDec`, so no syntactic set of
-  -- attributes bounds the read even though `inD` bounds the write.
-  | .string | .boolean | .binary | .null | .number => fun _ => true
-  -- `literalN` for the same reason, one rule down: this is §5's `literal-S`/`literal-N`
-  -- split, and `admA_literalN_blind` is the witness that the set really is lost.
+  -- Ground scalars accepting their whole carrier.
+  | .string | .boolean | .binary | .null => fun _ => true
+  -- **`number` is no longer one of them.** It sat in that group on the ground that
+  -- `Double.ofDec` is an axiom, so no syntactic set of attributes bounds which numerals
+  -- are readable. That is true and it is not what the row needed: `numberCodec.p` answers
+  -- `none` at every attribute constructor but `.n`, so *which member* is bounded even
+  -- though *which values* is not. Asking the codec gets both — `denote .number` **is**
+  -- `numberCodec` (`rfl`), so this row is `dom(p)`, exactly, and it is the third of the
+  -- rows that ask rather than describe.
+  | .number => fun a => (numberCodec.p a).isSome
   -- The containers, by the empty-container argument on the value side.
   | .set _ | .array _ | .tuple _ _ | .record _ | .object _ _ _ => fun _ => true
   -- `legacy` is the row that is `⊤` here and a passthrough above, and the asymmetry is
@@ -599,14 +625,19 @@ theorem admA_sound : ∀ (t : Term) {a v},
       -- the read side is the prism's second projection *plus* the base's own reading, which is
       -- what makes `admA` weaker than `adm` here: at `number` the base loses the value, so the
       -- row is `⊤` and `rfl` closes it before anything is unfolded.
-      obtain ⟨hb, hq⟩ := restrict_p.mp hp
-      cases k <;> cases a <;>
-        simp only [baseCodec, stringCodec, booleanCodec, binaryCodec, nullCodec,
-                   Option.some.injEq] at hb <;>
-        first
-          | (subst hb; simp [admA, admALit, inL] at hq ⊢; exact hq)
-          | exact absurd hb (by simp)
-          | simp [admA, admALit]
+      cases k
+      -- the numeric row now asks its codec, so `hp` **is** the answer it asks for —
+      -- `denote (.literal .number ls)` is `literalCodec .number ls` by `rfl`
+      case number => cases a <;> simp_all [admA, admALit, denote]
+      all_goals
+        obtain ⟨hb, hq⟩ := restrict_p.mp hp
+        cases a <;>
+          simp only [baseCodec, stringCodec, booleanCodec, binaryCodec, nullCodec,
+                     Option.some.injEq] at hb <;>
+          first
+            | (subst hb; simp [admA, admALit, inL] at hq ⊢; exact hq)
+            | exact absurd hb (by simp)
+            | simp [admA, admALit]
     case dunion d opts =>
       obtain ⟨o, ho, hadm, -⟩ := altCodec_p_admits hp
       simp only [optionSems_eq, denoteTagged_eq] at ho
@@ -642,6 +673,8 @@ theorem admA_sound : ∀ (t : Term) {a v},
       rw [optionSemOf_c] at hop
       exact admAList_of_mem htx (admA_sound tx hop)
     case opaq lossy => simp_all [admA, denote]
+    -- `number` joined them: the row is `dom(p)`, and `hp` says `p` is defined here
+    case number => simp_all [admA, denote]
     all_goals rfl
 
 /-! ### Why `admA` has no `legacy` case
@@ -1229,30 +1262,51 @@ theorem admA_literal_bin (ls : NEFinset Bytes) (b : Bytes) :
 theorem adm_literal_num (ls : NEFinset Double) (d : Double) :
     adm (.literal .number ls) (.num d) = decide (d ∈ ls.1) := rfl
 
-/-- **Where the two bases part** — and it is now a difference between two *bases* of one rule
-    rather than between two rules. A string literal's stored text *is* its value, so `ℓ` is
-    visible on both sides and `admA` carries it outright; §5's table separates such a union with
-    no help. A numeric literal's is not, so `admA` is `⊤` and the shared base recovers the
-    readable side. The two `rfl`s below are that difference, and it is the whole of why
-    `(literal-N)` needed an argument `(literal-S)` did not — an argument the collapse relocates
-    to `admALit`'s `.number` row, where it reads as one line of a definition. -/
+/-- **Where the two bases part — and they part by *how much work the row does*, not by
+    whether it can be written.** A string literal's stored text *is* its value, so `ℓ` is
+    visible in one `decide`. A numeric literal's is not: the stored numeral goes through
+    `Double.ofDec`, and no syntactic set of *attributes* names the ones that read into `ℓ`.
+
+    That used to be recorded as `admA_literalN_blind : admA (.literal .number ls) (.n x) =
+    true` — the read side is `⊤` — and the conclusion was wrong. The row never needed to
+    *name* the set; it only needed to be able to *decide* membership, and it can, by
+    asking the codec (`denote (.literal .number ls)` is `literalCodec .number ls`, by
+    `rfl`). What is left of the asymmetry is that the numeric answer is a `bind` through an
+    axiomatized function rather than a `decide` — which is a statement about how the row is
+    computed, not about what it knows. -/
 theorem admA_literalS_sees (ls : NEFinset String) (s : String) :
     admA (.literal .string ls) (.s s) = decide (s ∈ ls.1) := rfl
 
-/-- …and the numeric side sees nothing. -/
-theorem admA_literalN_blind (ls : NEFinset Double) (x : WFNumeral) :
-    admA (.literal .number ls) (.n x) = true := rfl
+/-- …and the numeric side sees `ℓ` as well, one indirection further out: an `N` attribute is
+    admitted exactly when the numeral it holds reads to a well-formed member of `ℓ`. -/
+theorem admA_literalN_sees (ls : NEFinset Double) (x : WFNumeral) :
+    admA (.literal .number ls) (.n x) = true ↔
+      ∃ d, Double.ofDec x.1 = some d ∧ Numeral.WF d.toDec = true ∧ d ∈ ls.1 := by
+  show ((literalCodec .number ls).p (.n x)).isSome = true ↔ _
+  rw [literalNCodec_p_n, numberCodec_p_n]
+  cases hd : Double.ofDec x.1 with
+  | none => simp
+  | some d =>
+    by_cases hw : Numeral.WF d.toDec = true
+    · by_cases hm : d ∈ ls.1 <;> simp [hw, hm, inL]
+    · simp [hw]
 
-/-- **A union of numeric literals discharges on both sides.** §5's `admA` row sends a
-    numeric literal to `⊤`, and the reason is real — distinct numerals read to the same
-    double, so no syntactic set of attributes bounds one. Read from the *pair* rather than
-    the table, though, the options are refinements of a single `numberCodec` with
-    disjoint predicates, and `uniqueAdmission_of_sharedBase` settles both sides.
+/-- …and every other attribute constructor is refused outright, because `numberCodec.p` is:
+    the row bounds *which member* even where it cannot bound which values. -/
+theorem admA_literalN_notN (ls : NEFinset Double) (s : String) :
+    admA (.literal .number ls) (.s s) = false := rfl
+
+/-- **A union of numeric literals discharges on both sides — in one step, for any arity.**
+    This used to be advertised as the *only* route, on the ground that §5's `admA` row sent a
+    numeric literal to `⊤` and the table therefore could not tell two of them apart. The
+    second half of that was wrong (`sepA_literalN_disjoint`), and the correction does not cost
+    this theorem anything: read from the *pair*, the options are refinements of a single
+    `numberCodec` with disjoint predicates, and `uniqueAdmission_of_sharedBase` settles an
+    `n`-ary family and both sides at once, where the table settles a pair at a time.
 
     Which is the honest reading of what a numeric literal set *is*: options told apart by
-    the value a read produces, never by the text the store holds. The table cannot see that
-    because it answers about one term at a time; this answers about a family sharing a
-    base. -/
+    the value a read produces, never by the text the store holds. That reading is now
+    available to the table as well, because the table's row asks the same codec. -/
 theorem uAtCan_of_literalN_disjoint {lss : List (NEFinset Double)}
     (hdisj : List.Pairwise (fun ls ls' => ∀ d ∈ ls.1, d ∉ ls'.1) lss) :
     UAtCan (lss.map (Term.literal .number)) := by
@@ -1291,6 +1345,30 @@ def SepA (x y : Term) : Prop :=
 theorem sepA_literal_heldLiteral (f g : Value → Value) :
     SepA (.literal .string (.of "A" ∅)) (.held (.literal .string (.of "B" ∅)) f g) :=
   Or.inr fun a ha => by cases a <;> simp_all [admA, admALit, NEFinset.of]
+
+/-- **Two numeric literals with disjoint sets separate in the table.** §5 recorded the
+    opposite — that only the *pair* reading (`uAtCan_of_literalN_disjoint`, via
+    `uniqueAdmission_of_sharedBase`) could tell them apart, because `admA` at a numeric
+    literal was `⊤`. The refutation is one line of the semantics: `Double.ofDec` is a
+    **function**, so a stored numeral reads to at most one double, and one double cannot
+    inhabit two disjoint sets. The row never had to know which numerals read into `ℓ`, only
+    that the answer is unique.
+
+    The pair reading is not superseded — it discharges the whole `UAtCan` for an `n`-ary
+    family in one step, and on both sides — but it is no longer the only route. -/
+theorem sepA_literalN_disjoint {ls ls' : NEFinset Double} (hd : ∀ d ∈ ls.1, d ∉ ls'.1) :
+    SepA (.literal .number ls) (.literal .number ls') :=
+  Or.inr fun a ha => by
+    cases a
+    case n x =>
+      obtain ⟨d, hof, hw, hm⟩ := (admA_literalN_sees ls x).mp ha
+      by_contra h
+      obtain ⟨d', hof', -, hm'⟩ :=
+        (admA_literalN_sees ls' x).mp (by simpa using h)
+      rw [hof] at hof'
+      cases hof'
+      exact hd d hm hm'
+    all_goals exact nomatch (ha : (false : Bool) = true)
 
 /-- And it is the *subterm* that decides, not the wrapper: with the same inner literal
     the two footprints coincide and `SepA` fails on both disjuncts. That is the pair of
@@ -1521,52 +1599,36 @@ theorem sepV_number_opaque : SepV .number (.opaq false) :=
     case num d => exact adm_opaq_false_num d
     all_goals exact nomatch (by simpa only [adm, inD] using hv : (false : Bool) = true)
 
-/-- **But `union(opaque false, number)` is still not separable — and `opaque` is no longer
-    what blocks it.** `admA .number` is `⊤` by its own row (the numeral goes through
-    `Double.ofDec`, so no syntactic set of attributes bounds the read), and `μSyn` of an
-    `opaque` is `⊤`, so `SepA` has neither disjunct. The obstruction has moved from the
-    `opaque` option to the `number` one, which is a statement about `number`'s row and not
-    about `opaque`'s. -/
-theorem not_sepA_number_opaque : ¬ SepA .number (.opaq false) := by
-  rintro (⟨μx, μy, hx, hy, -⟩ | hdisj)
-  · exact nomatch hy
-  · have h := hdisj (.s "x") rfl
-    rw [admA_opaq_s] at h
-    exact nomatch h
+/-- **And `union(opaque false, number)` separates on the readable side too.** This
+    replaces `not_sepA_number_opaque`, which recorded the pair as unseparable and named
+    `number`'s row as the obstruction: `admA .number` was `⊤` on the ground that the stored
+    numeral goes through `Double.ofDec`, so no syntactic set of attributes bounds the read.
+    The premise was true and the conclusion did not follow. `admA` never needed to know
+    *which* numerals a stored text reads to — only that no attribute other than an `N` is
+    readable at all, which `numberCodec.p` answers by returning `none` at every other
+    constructor. The row asks it, and the ⊤ is gone.
 
-/-- The pair that *does* separate on both sides: `number`'s own pair, declared through
-    `custom`, whose rows are exact by construction (`e := ce`, `p := cp`). Semantically
-    this option is `number`; syntactically it is the constructor whose `admA` is not
-    forced to `⊤`. -/
-noncomputable def numberCustom : Term := .custom numberCodec.e numberCodec.p
-
-theorem sepV_numberCustom_opaque : SepV numberCustom (.opaq false) :=
-  Or.inr fun v hv => by
-    cases v
-    case num d => exact adm_opaq_false_num d
-    all_goals exact nomatch (hv : (false : Bool) = true)
-
-theorem sepA_numberCustom_opaque : SepA numberCustom (.opaq false) :=
+    `μSyn (.opaq _)` is still `⊤`, so as with `SepV` the whole of the work is the `admA`
+    disjunct, and both disjuncts of the *pair* are now the codecs' own answers. -/
+theorem sepA_number_opaque : SepA .number (.opaq false) :=
   Or.inr fun a ha => by
     cases a
     case n x => exact admA_opaq_false_n x
     all_goals exact nomatch (ha : (false : Bool) = true)
 
-theorem lawful_numberCustom : Lawful (denote numberCustom) := by
-  refine ⟨?_, ?_, ?_, ?_⟩
-  · exact fun he => lawful_numberCodec.retract he
-  · exact fun hp => lawful_numberCodec.canon hp
-  · intro μ hμ; exact nomatch hμ
-  · exact fun hp he => lawful_numberCodec.agree hp he
-
-/-- **`union(number-as-`custom`, opaque false)` discharges (U) at the declaration.** The
-    positive case: with the rows deferring to the codec, an `opaque` option can be an option of
-    a separable union. Nothing in this proof is available with `adm (.opaq _) = ⊤`. -/
-theorem uAtCan_numberCustom_opaque : UAtCan [numberCustom, .opaq false] := by
+/-- **`union(number, opaque false)` discharges (U) at the declaration.** The positive
+    result the whole change is for, and it is stated at `number` itself rather than at a
+    `custom` stand-in: the block this replaces defined `numberCustom := .custom
+    numberCodec.e numberCodec.p` and proved four theorems about it, for the sole reason
+    that `custom`'s rows asked their codec and `number`'s did not. Semantically the two
+    terms were always the same codec; the detour was a fact about §5's table, not about the
+    language. With `admA .number` asking as well, the stand-in has nothing left to stand
+    in for. -/
+theorem uAtCan_number_opaque : UAtCan [.number, .opaq false] := by
   refine uAtCan_of_separated ?_ ?_ ?_ ?_
   · intro t ht
     rcases List.mem_cons.mp ht with rfl | ht
-    · exact lawful_numberCustom
+    · exact lawful_numberCodec
     · rcases List.mem_cons.mp ht with rfl | ht
       · exact lawful_opaqCodecω false
       · exact nomatch ht
@@ -1578,11 +1640,11 @@ theorem uAtCan_numberCustom_opaque : UAtCan [numberCustom, .opaq false] := by
       · exact nomatch ht
   · refine List.pairwise_cons.mpr ⟨fun y hy => ?_, List.pairwise_singleton _ _⟩
     rcases List.mem_cons.mp hy with rfl | hy
-    · exact sepV_numberCustom_opaque
+    · exact sepV_number_opaque
     · exact nomatch hy
   · refine List.pairwise_cons.mpr ⟨fun y hy => ?_, List.pairwise_singleton _ _⟩
     rcases List.mem_cons.mp hy with rfl | hy
-    · exact sepA_numberCustom_opaque
+    · exact sepA_number_opaque
     · exact nomatch hy
 
 /-- **`refine`/`held` of an `opaque` is that `opaque`, on the stored side.** The adapters

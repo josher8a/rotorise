@@ -190,12 +190,16 @@ because `pointCodec` gives four of the ground codecs one shared proof.
 The theorem is proved; these tighten the model's fidelity to the doc, none affect
 soundness. `union`'s commutativity is proved for the adjacent transposition, which
 generates every permutation, and lifting it to `List.Perm` is the obvious next step.
-`admA` stops at `literalS`/`dunion`: a numeric literal's read side goes through the
-axiomatized `Double.ofDec`, so no syntactic set bounds it, and those pairs still fall to
-(U) per input. `(literal-N)` carries `ℓ ⊆ D` as of §3's amendment, so
-`admA`'s silence there is about the *store* and not about the premise: a literal's stored
+An entry that used to sit here said `admA` stops at `literalS`/`dunion` — that a numeric
+literal's read side goes through the axiomatized `Double.ofDec`, so no *syntactic* set
+bounds it, and those pairs fall to (U) per input. The premise holds and the conclusion did
+not: the row does not have to name its set, it can ask its codec, and `ofDec` being a
+function is enough to make the answer unique. `admA number` and `admA literalN` are now
+`dom(p)` exactly (`sepA_number_opaque`, `sepA_literalN_disjoint`). What the observation
+about the store was really about survives on the other side of the pair: a literal's stored
 texts are known at the declaration, but `10²¹` is written `1e+21` and handed back
-normalised, so a syntactic `admA` would refuse a row the codec itself wrote. Two entries that used to sit here are done — §6's rows are all proved
+normalised, so a row that tested the *text* would refuse a row the codec itself wrote —
+which is why the row tests the codec instead. Three entries that used to sit here are done — §6's rows are all proved
 (see `FIDELITY.md` for what "all" is worth on the commutativity row), and `typed_TSub`
 ties the judgement's `T` to the denotation, `typed_e_mem` and `typed_p_mem` being the
 statements a reviewer wants.

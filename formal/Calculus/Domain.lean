@@ -22,7 +22,10 @@ Mechanization of `docs/codec-calculus.md`. Modelling choices, each recorded wher
   is the datatype being declared, which is why `union`'s payload is still a list (§11.5 of
   `codec-audit.md`), and accepts one over a concrete type in the same constructor.
 * `Double` is axiomatized with exactly the shortest-text round trip the doc's `(number)`
-  case consumes. That is an IEEE-754 fact, not a theorem of this calculus.
+  case consumes. That is an IEEE-754 fact, not a theorem of this calculus. It is asserted as
+  *one* thing — `numericHost : NumericHost Double` — so what the calculus assumes about
+  numbers is an interface a reader can inspect and inhabit, rather than five axioms that
+  must be collected before the question can even be asked.
 -/
 
 namespace Calculus
@@ -232,20 +235,53 @@ theorem stored_lt_wf : ∃ s, WF s = true ∧ Stored s = false := ⟨"1.500", by
 
 end Numeral
 
+/-! ### The numeric host, as an interface rather than five assumptions
+
+This block used to be five axioms — a type, two functions, a round trip and a
+`DecidableEq` — and every one of them said "binary64" in its docstring while asserting
+nothing of the sort. Five separate assertions cannot be *inspected*: a reader asking "what
+exactly is assumed about the host?" had to collect them, and nothing in the development
+could quantify over the answer.
+
+`NumericHost` is that answer, as one structure. The axiom block below is then two lines —
+a type, and the claim that it carries the interface — and the `Double.*` names are
+`def`s projecting out of it, so every call site is unchanged. What this buys is not the
+count. It is that the assumption is now a **first-class object**, so the claim the block
+was always making — *the calculus does not depend on binary64, only on a host with a
+decimal spelling that re-reads* — becomes checkable. `numericHost_wfNumeral` and
+`numericHost_unit` below are two inhabitants with provably different decimal images, and
+the first needs no `Double` axiom at all. -/
+
+/-- **What §1 assumes of the numeric host, and all it assumes.** A decimal spelling, a
+    partial reader, the round trip §3's `(number)` needs, and decidable equality. -/
+structure NumericHost (D : Type) where
+  /-- Shortest decimal text reading back as the same element. -/
+  toDec : D → Numeral
+  /-- Read a numeral (rounding), where the magnitude admits one. -/
+  ofDec : Numeral → Option D
+  /-- The §3 `(number)` round trip: shortest text re-reads exactly. -/
+  roundtrip : ∀ d, ofDec (toDec d) = some d
+  /-- Equality is decidable (bit patterns, for binary64; NaN excluded from the model). -/
+  decEq : DecidableEq D
+
 /-- IEEE-754 binary64, opaque. -/
 axiom Double : Type
 
+/-- …and the whole of what is assumed about it: that it is a `NumericHost`. -/
+axiom numericHost : NumericHost Double
+
 /-- Shortest decimal text reading back as the same double. -/
-axiom Double.toDec : Double → Numeral
+noncomputable def Double.toDec : Double → Numeral := numericHost.toDec
 
 /-- Read a numeral as a double (rounding), where the magnitude admits one. -/
-axiom Double.ofDec : Numeral → Option Double
+noncomputable def Double.ofDec : Numeral → Option Double := numericHost.ofDec
 
 /-- The §3 `(number)` round trip: shortest text re-reads exactly. -/
-axiom Double.roundtrip : ∀ d : Double, Double.ofDec (Double.toDec d) = some d
+theorem Double.roundtrip : ∀ d : Double, Double.ofDec (Double.toDec d) = some d :=
+  numericHost.roundtrip
 
 /-- Equality of doubles is decidable (bit patterns; NaN excluded from the model). -/
-axiom Double.decEq : DecidableEq Double
+noncomputable def Double.decEq : DecidableEq Double := numericHost.decEq
 
 attribute [instance] Double.decEq
 
@@ -301,6 +337,40 @@ def WFNumeral.of (x : Numeral) (h : Numeral.WF x = true := by decide) : WFNumera
 
 @[simp] theorem WFNumeral.of_val (x : Numeral) (h : Numeral.WF x = true) :
     (WFNumeral.of x h).1 = x := rfl
+
+/-! ### Two inhabitants, so the interface is checkably an interface
+
+An axiom block with no models is indistinguishable from an assumption. These two are the
+evidence that `NumericHost` is the weaker thing it claims to be — a *signature the calculus
+programs against* — rather than binary64 under another name. -/
+
+/-- **The arbitrary-precision host.** `WFNumeral` is its own decimal spelling, so the
+    adapter is the identity and the round trip is `dif_pos` on the subtype's own proof.
+    Note what is *not* imported here: this model needs no `Double` axiom, so every theorem
+    of §1 that is really about the interface holds of a host with no rounding at all. -/
+def numericHost_wfNumeral : NumericHost WFNumeral where
+  toDec := Subtype.val
+  ofDec := fun x => if h : Numeral.WF x = true then some ⟨x, h⟩ else none
+  roundtrip := fun d => by simp [d.2]
+  decEq := inferInstance
+
+/-- **The one-number host**, at the other extreme: a single element, spelled `"0"`. Total
+    on nothing but its own spelling, and still a lawful `NumericHost`. -/
+def numericHost_unit : NumericHost Unit where
+  toDec := fun _ => "0"
+  ofDec := fun x => if x = "0" then some () else none
+  roundtrip := fun _ => rfl
+  decEq := inferInstance
+
+/-- **And their decimal images differ**, which is what makes the pair evidence rather than
+    decoration: `"1.5"` is the spelling of an element of the first host and of no element of
+    the second. A property provable from `NumericHost` alone therefore cannot decide how
+    many numbers the host has, nor which decimals it spells — which is exactly the
+    independence the axiom block asserts and could not previously exhibit. -/
+theorem numericHost_images_differ :
+    (∃ d, numericHost_wfNumeral.toDec d = "1.5") ∧
+      (∀ u, numericHost_unit.toDec u ≠ "1.5") :=
+  ⟨⟨WFNumeral.of "1.5", rfl⟩, fun _ => by simp [numericHost_unit]⟩
 
 /-- A literal `℘⁺fin`, written as one element and the rest: `insert` is never empty, so
     the proof is discharged by construction rather than at each use site. -/
@@ -477,7 +547,8 @@ deriving DecidableEq, Repr
     **Reducible**, and that is load-bearing: it lets `Carrier .string` elaborate as `String`, so
     membership in `ℓ` resolves through `String.decEq` and the ordinary instances. An indexed
     `DecidableEq k.Carrier` instance would work too, and would be *noncomputable* — `Double`'s
-    equality is one of §1's axioms — which then spreads to every `def` that names a literal. -/
+    equality is a field of §1's axiomatized `NumericHost` — which then spreads to every `def`
+    that names a literal. -/
 @[reducible] def GroundKind.Carrier : GroundKind → Type
   | .string  => String
   | .number  => Double
