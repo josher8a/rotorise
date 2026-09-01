@@ -65,6 +65,7 @@ content.
 | ~~11~~ | ~~`Discharge.lean:529`~~ **Landed — the option was not needed; two remain, both justified.** | The one `set_option maxHeartbeats` of three with **no justifying comment**. Re-measure — it may not be needed after the representation changes. | possibly the option | trivial |
 | ~~12~~ | ~~`Combinators.lean:3507`~~ **Landed — `keepB_of_entryWrite`.** | `keepB_of_encEntry` still carries the name of a deleted definition. Rename. | — | trivial |
 | ~~13~~ | ~~`Refutations.lean:443`~~ **Landed — inlined.** | `abbrev decimalWF : Codec := wfDecimalCodec` — the leftover half of a unification I did; its two `rfl` lemmas are free either way. | alias + 2 lemmas | trivial |
+| 18 | `codec-calculus.md:790-848` | **§5's `adm`/`admA` table lags the model at three rows, and the prose under it argues for one of them.** The table gives `admA` `⊤` at `number` and at a numeric `literal`, and `admA(c)` at `refine(c, q)`; all three now ask their codec. The `refine` bullet still says the reading side "cannot follow: `q` tests the value a read *produces*, and no syntactic set of attributes bounds that", and that the readable side "cannot be recovered from this table" — refuted by `sepA_refine_disjoint`. Normative, so it waits for the call, exactly as item 10 did; the model has been ahead since `b52910d` and is further ahead now. The `legacy` row and the `held` row are both still right. | — | one table + two bullets |
 | ~~14~~ | ~~`Exactness.lean`; `codec-formalization.md:694`; `codec-calculus.md:1129`~~ **Landed.** | "`Numeral` is `String`" no longer explained why the numeric witness is axiom-free (it is `WFNumeral`'s decidable predicate, at two sites); a superseded §4 entry named `rawNumberCodec`, `literalSCodec`, `literalNCodec`, `inLS` and `inLN`, all five deleted, and now carries a supersession note; §7 labelled `set` "quotiented", now "unordered". | — | **landed** |
 
 ## 2. Closed questions — verified impossible, do not re-test
@@ -576,7 +577,22 @@ at `Exactness.lean:281-282` and in `Analysable`'s bullet list; `Adm`'s `.set` co
 already right, and `not_ExactV_set`'s own docstring already states the corrected reason.
 
 **`opaqueDepth`, `uniqueAdmission`, `nullOwnership`, `valueUnderRead` — reasons accurate,
-witnesses hold, not retirable.** Two imprecisions worth fixing:
+witnesses hold, not retirable.**
+
+**`valueUnderRead` was retirable, and is retired.** Its reason — "`q` tests the value a read
+*produces*, and no syntactic set of attributes bounds that" — is a true sentence about syntax,
+and this entry took it for a fact about the row. `admA (refine t q)` is not confined to syntax:
+it decodes with the base and applies `q` to the result, which is sound and, whenever the base's
+row is exact, **exact** (`refineReads`, `AdmA_exact` at `.refine`). The excuse, its witness
+`not_ExactA_refine`, and its `coversA` row are deleted; `AnalysableA` goes 17/21 → 18/21 and now
+matches the value side row for row. The consequence worth having is `sepA_refine_disjoint`: two
+refinements of one base with disjoint predicates separate *in the table*, at any base and with no
+lawfulness premise — the general form of `sepA_literalN_disjoint`.
+
+This is the fourth row bought with the same non-argument, after `custom`, `opaque` and the two
+numeric rows: a row that cannot *describe* its set may still *ask* for it.
+
+Two imprecisions worth fixing in the remaining three:
 
 - `not_ExactV_opaq`'s docstring — **my own sentence** — claims that after the set repair the
   numeral gate is "the only place" `⊤` over-claims. But the constructor's named reason is

@@ -266,11 +266,12 @@ noncomputable def adm : Term → Value → Bool
     match tagOfV d v with
     | some tag => decide (tag ∈ allTags d opts)
     | none => false
-  -- `q` is a predicate on *values*, so it tightens this side and only this side.
-  -- `refine`'s `e` is defined only where `q` holds, so `adm t ∩ q` is a sound bound and a
-  -- strictly better one than the passthrough. `admA` cannot follow: `q` tests the value a
-  -- read *produces*, and no syntactic set of attributes bounds that — `held` one-sided the
-  -- other way.
+  -- `q` is a predicate on *values*, so it applies here without ceremony: `refine`'s `e` is
+  -- defined only where `q` holds, so `adm t ∩ q` is a sound bound and a strictly better one
+  -- than the passthrough. `admA` was long said not to be able to follow — "`q` tests the
+  -- value a read *produces*, and no syntactic set of attributes bounds that" — which is a
+  -- reason to stop being *syntactic*, not a reason to drop `q`. It now follows, one decode
+  -- out; see `refineReads`. `held` is the row that is still one-sided.
   | .refine t q => fun v => adm t v && q v
   | .legacy t _ => adm t
   -- §1's two number gates, recorded for the same reason a literal's set is: each is a
@@ -325,6 +326,32 @@ noncomputable def admList : List Term → Value → Bool
 
 end
 
+/-- **`refine`'s read-side gate**: decode with the base, then apply `q` to what comes out.
+
+    The row this replaces was `admA (.refine t q) = admA t` — the predicate dropped — and
+    the reason on record was that `q` tests the value a read *produces*, so no *syntactic*
+    set of attributes bounds it. The premise is true and the conclusion does not follow, in
+    exactly the way `number`'s and `opaq`'s `⊤`s did not follow: a row is not confined to
+    syntax. It may call the denotation, and the denotation is what produces the value `q`
+    tests. `(denote t).p a` is that value, or `none`; the gate is `q` of it.
+
+    Shared verbatim by §5's `admA` and §5.5's `AdmA`, so the two rows are the *same*
+    function at `refine` and `AdmA_le_admA` is a containment rather than a coincidence. -/
+noncomputable def refineReads (t : Term) (q : Value → Bool) (a : Attr) : Bool :=
+  match (denote t).p a with
+  | some v => q v
+  | none => false
+
+/-- The gate, unfolded at a successful read. -/
+theorem refineReads_some {t : Term} {q : Value → Bool} {a : Attr} {v : Value}
+    (h : (denote t).p a = some v) : refineReads t q a = q v := by
+  simp [refineReads, h]
+
+/-- …and at a failed one. -/
+theorem refineReads_none {t : Term} {q : Value → Bool} {a : Attr}
+    (h : (denote t).p a = none) : refineReads t q a = false := by
+  simp [refineReads, h]
+
 mutual
 
 /-- `adm`, attribute side. The two wrappers that are `⊤` for `adm` part company here,
@@ -355,13 +382,22 @@ mutual
     `ofDec` is a **function**. Uniqueness is all `admA` ever needed, and it is free. The rows
     are `(numberCodec.p ·).isSome` and `((literalCodec .number ls).p ·).isSome`, both `dom(p)`
     on the nose; `sepA_number_opaque` and `sepA_literalN_disjoint` are the two separations that
-    were previously refuted or deferred to the pair reading. -/
+    were previously refuted or deferred to the pair reading.
+
+    **`refine` is the fifth, and the same mistake bought it.** Its row was `admA t` with `q`
+    discarded, on the ground that `q` tests the value a read produces and no *syntactic* set
+    of attributes bounds that. True of syntax, and the row is not syntax: it decodes with the
+    base and applies `q` to the result (`refineReads`). That is not merely sound, it is
+    exact whenever the base's row is — `dom((c.restrict q).p) = {a | ∃ v, c.p a = some v ∧ q v}`
+    is what the row computes — and `sepA_refine_disjoint` is the separation it buys. -/
 noncomputable def admA : Term → Attr → Bool
   | .dunion d opts => fun a =>
     match tagOfA d a with
     | some tag => decide (tag ∈ allTags d opts)
     | none => false
-  | .refine t _ => admA t
+  -- `refine` asks its base to decode and then applies `q` — the fifth row to ask rather
+  -- than describe, and the last of the family. See `refineReads`.
+  | .refine t q => fun a => admA t a && refineReads t q a
   | .held t _ _ => admA t
   | .union opts => fun a => admAList opts a
   -- `decimal` holds numerals *as their text*, so its gate is a plain test on the stored
@@ -646,7 +682,10 @@ theorem admA_sound : ∀ (t : Term) {a v},
       obtain ⟨tag, hA, htag⟩ := byTag_admitA.mp hadm
       exact admA_dunion.mpr ⟨tag, hA,
         mem_allTags htx htag⟩
-    case refine t' q => exact admA_sound t' (restrict_p.mp hp).1
+    case refine t' q =>
+      obtain ⟨hp', hq⟩ := restrict_p.mp hp
+      rw [admA, Bool.and_eq_true]
+      exact ⟨admA_sound t' hp', by rw [refineReads_some hp']; exact hq⟩
     case nullable t' =>
       cases hw : (denote t').ownsNull with
       | true =>
@@ -1015,18 +1054,18 @@ theorem sepV_refine_disjoint {q q' : Value → Bool} (h : ∀ v, q v = true → 
     simp only [adm, Bool.true_and] at hv ⊢
     exact h v hv
 
-/-- **Disjoint refinements of one base separate on both sides.** `adm` can carry `q` and
-    `admA` cannot — `q` tests the value a read *produces*, which no syntactic set of
-    attributes bounds — so the readable side looks undischargeable from the tables alone.
-    It is not. Two refinements of one base read an attribute to the **same** value, so at
-    most one predicate accepts it, and the readable side separates for the same reason the
-    writable side does.
+/-- **The pair reading of the same fact**, and it is not superseded: it discharges the whole
+    `UAtCan` for an `n`-ary family in one step, where `sepA_refine_disjoint` separates a pair.
+    Two refinements of one base read an attribute to the **same** value, so at most one
+    predicate accepts it, and the readable side separates for the same reason the writable
+    side does.
 
     The condition is *relational* — it is about options sharing a base, not about any one
-    option's admissible set — which is why it is a discharger of its own rather than a row
-    in the `adm` table. `uniqueAdmission_of_disjoint` takes the two families as arbitrary
-    predicates, so nothing here has to be syntactic: the attribute family is
-    `∃ v, base.p a = some v ∧ q v`, and disjointness is the base reading `a` to one value. -/
+    option's admissible set — which is why it is a discharger of its own as well as a row.
+    `uniqueAdmission_of_disjoint` takes the two families as arbitrary predicates, so nothing
+    here has to be syntactic: the attribute family is `∃ v, base.p a = some v ∧ q v`, which
+    is exactly what `refineReads` computes, and disjointness is the base reading `a` to one
+    value. -/
 theorem uAtCan_of_refine_disjoint {base : Term} {qs : List (Value → Bool)}
     (hlaw : LawfulCore (denote base))
     (hdisj : List.Pairwise (fun q q' => ∀ v, q v = true → q' v = false) qs) :
@@ -1381,6 +1420,29 @@ theorem not_sepA_literal_heldLiteral (f g : Value → Value) :
   · exact absurd (hdisj (.s "A") (by simp [admA, admALit, NEFinset.of]))
       (by simp [admA, admALit, NEFinset.of])
 
+/-- **…and what `q` in `admA` buys, which is the same thing.** Two refinements of one base
+    with disjoint predicates separate on the *readable* side too, at **any** base and with
+    no lawfulness premise: the base reads `a` to one value, and one value cannot satisfy two
+    disjoint predicates.
+
+    This is the general form of `sepA_literalN_disjoint`, and it is the theorem the old row
+    made unstatable. §5 recorded that the readable side was "undischargeable from the tables
+    alone" because `q` tests the value a read produces and no syntactic set of attributes
+    bounds it — so only the *pair* reading (`uAtCan_of_refine_disjoint`, below) could tell two
+    refinements apart. The premise was about syntax and the conclusion was about rows. The row
+    decodes, and the table separates them. -/
+theorem sepA_refine_disjoint {base : Term} {q q' : Value → Bool}
+    (h : ∀ v, q v = true → q' v = false) :
+    SepA (.refine base q) (.refine base q') :=
+  Or.inr fun a ha => by
+    rw [admA, Bool.and_eq_true] at ha
+    show (admA base a && refineReads base q' a) = false
+    cases hx : (denote base).p a with
+    | none => rw [refineReads_none hx, Bool.and_false]
+    | some v =>
+      rw [refineReads_some hx] at ha
+      rw [refineReads_some hx, h v ha.2, Bool.and_false]
+
 /-! ### Separation, as one set per option per side
 
     `SepV` and `SepA` each offer a *choice* — a disjoint kind or a disjoint admissible
@@ -1647,16 +1709,30 @@ theorem uAtCan_number_opaque : UAtCan [.number, .opaq false] := by
     · exact sepA_number_opaque
     · exact nomatch hy
 
-/-- **`refine`/`held` of an `opaque` is that `opaque`, on the stored side.** The adapters
-    are value-side functions — `refine`'s gate `q` is checked on the way in and `held`'s
-    `f` gates the write — so neither can narrow which *attributes* the option reads. The
-    sharpest one-line form of the absorption: no wrapper the language has rescues an
-    `opaque` option's read-side footprint. -/
-theorem admA_refine_opaq (b : Bool) (q : Value → Bool) :
-    admA (.refine (.opaq b) q) = admA (.opaq b) := rfl
+/-- **`held` of an `opaque` is that `opaque`, on the stored side.** `through`'s `g` is
+    total and post-processes a read, so it changes which value comes out and never which
+    attributes go in.
 
+    `refine` was stated here alongside it — `admA (.refine (.opaq b) q) = admA (.opaq b)`,
+    "no wrapper the language has rescues an `opaque` option's read-side footprint" — and
+    that half is **false**. It was true of the old row, which dropped `q`; it is not true of
+    the read. `refine_opaq_narrows` below is the general form, and `admA_refine_bot` the
+    sharpest instance: a refinement can shrink an `opaque`'s footprint to nothing. -/
 theorem admA_held_opaq (b : Bool) (f g : Value → Value) :
     admA (.held (.opaq b) f g) = admA (.opaq b) := rfl
+
+/-- The corrected statement: the footprint is the `opaque`'s **intersected** with `q` of
+    what it decodes to. -/
+theorem refine_opaq_narrows (b : Bool) (q : Value → Bool) (a : Attr) :
+    admA (.refine (.opaq b) q) a
+      = (((opaqCodecω b).p a).isSome && refineReads (.opaq b) q a) := rfl
+
+/-- **A refinement by `⊥` reads nothing, at any base.** The row sees it, which is the whole
+    of the change: the old row answered `admA t` here and claimed the read was unnarrowed. -/
+theorem admA_refine_bot (t : Term) : admA (.refine t (fun _ => false)) = fun _ => false := by
+  funext a
+  simp only [admA, refineReads]
+  cases h : (denote t).p a <;> simp [h]
 
 /-! ## The premises are jointly inhabited
 

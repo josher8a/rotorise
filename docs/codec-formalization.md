@@ -640,14 +640,28 @@ in the type. Then the base became an *index*, which says it once and also absorb
 the member is `k.member`, a function of the index. What survives is `LiteralD` — `ℓ ⊆ D`, and
 content. `codec-audit.md` §11 has the design comparison, §11.7 what landing it cost.
 
-**And the constructor still earns its place**, which is the part I had backwards. At arity one
-`literal(v)` and `refine(g, · = v)` denote the same pair, so the obvious move is to delete it. But
-`adm` is the same either way and **`admA` is not**: `ℓ` is data the term owns, so it can be tested
-against the *stored attribute*, where `refine`'s `q` is a value predicate and cannot be pushed
-there. `admA_literal_str` and `admA_literal_bool` against the `refine` row are that difference —
-the same `literal-S`/`literal-N` asymmetry, now deciding a design question rather than explaining
-one. `admA_literal_num_blind` is the one base where it still cannot, §1's `N` carrying text where
-the value is a double.
+**And the constructor still earns its place** — for one of the two reasons given here, the
+other having since been refuted. At arity one `literal(v)` and `refine(g, · = v)` denote the
+same pair, so the obvious move is to delete it.
+
+**What was claimed:** `adm` is the same either way and `admA` is not — "`ℓ` is data the term
+owns, so it can be tested against the *stored attribute*, where `refine`'s `q` is a value
+predicate and cannot be pushed there" — with `admA_literal_str`/`admA_literal_bool` against the
+`refine` row as the difference, and a numeric base where even the literal was blind.
+
+**Why it was wrong:** `q` being a value predicate says only that it cannot be tested by
+*syntax* on the attribute. A row is not syntax. `admA (refine t q)` may decode with the base and
+apply `q` to what comes out, and that is what it does now (`refineReads`). So the difference the
+paragraph rested on does not exist: `admA_refine_ground_eq_admALit` proves
+`admA (refine(base k, ∈ ℓ)) = admALit k ℓ` **at every ground base, `number` included**. The
+numeric half was retired separately, when `admALit .number` stopped being `⊤`.
+
+**What is true now:** on the write side the refinement is if anything *sharper* —
+`adm (literal k ℓ)` is `inL` alone, which over-approximates at `number`, where the refinement
+also carries the base's `inD` (`adm_refine_ground_number`). The constructor's remaining
+justification is the one `codec-audit.md` §11 gives and this paragraph did not: the *n*-ary
+form carries `ℓ` as a `NEFinset`, and the union route out of it needs `Finset.toList`, which is
+`Classical.choice`. That is the reason. Read-side precision is not.
 
 **Done, and not the way this paragraph proposed.** It recorded retiring `literalS`/`literalN` as
 mechanical, with the n-ary form becoming surface syntax for the union — which the `⋃` rows on
@@ -718,13 +732,22 @@ invisible to every discharger. `union(refine(number, positive), refine(number, n
 input despite the two predicates being disjoint by construction.
 
 `adm (refine(c, q)) = adm c ∩ q` fixes it, and is sound for the reason the passthrough was too
-weak: `refine`'s `e` is defined only where `q` holds. `admA` cannot follow — `q` tests the value a
-read *produces*, and no syntactic set of attributes bounds that — which makes this the mirror of
-the `held` row, one-sided the other way. `sepV_refine_disjoint` is the witness.
+weak: `refine`'s `e` is defined only where `q` holds. `sepV_refine_disjoint` is the witness.
 
-**And the readable side, which the table cannot reach.** `admA` cannot carry `q` — it tests the
-value a read *produces*, and no syntactic set of attributes bounds that — so from the tables alone
-the readable side looks undischargeable. It is not. Two refinements of **one base** read an
+The sentence that stood here — "`admA` cannot follow: `q` tests the value a read *produces*, and
+no syntactic set of attributes bounds that, which makes this the mirror of the `held` row,
+one-sided the other way" — is **withdrawn**. The premise is a fact about syntax and the
+conclusion was about a row, which is free to decode: `admA (refine(t, q)) = admA t ∩ (q ∘ p_t)`
+(`refineReads`). It is exact whenever the base's row is, and `sepA_refine_disjoint` is the
+witness on that side. `held` is now the only one-sided wrapper: `through`'s `f` gates a write and
+is not applied by any read, so `admA` sees through it and `adm` does not.
+
+**And the readable side, which the table was said not to reach.** The claim was that `admA`
+cannot carry `q` — "it tests the value a read *produces*, and no syntactic set of attributes
+bounds that" — so from the tables alone the readable side looks undischargeable. The table
+reaches it now (`sepA_refine_disjoint`); what follows is the *pair* reading, which is not
+superseded, because it settles an `n`-ary family and both sides in one step where the table
+settles a pair at a time. Two refinements of **one base** read an
 attribute to the same value, so at most one predicate accepts it, and the readable side separates
 for exactly the reason the writable one does. `uAtCan_of_refine_disjoint` is that discharger, and
 it settles both sides outright.
@@ -1193,9 +1216,13 @@ interchangeable with the tables it would replace.
 
 The mirror is not symmetric either, and the asymmetries are §1's. `number`, `literalN` and a numeric
 `literal` reach their domains through `Double.ofDec`; the row can *call* it, so these are sharper
-than §5's `⊤`, at the cost of being noncomputable. `refine` cannot narrow a read at all — `q` tests
-the value a read produces and no syntactic set of attributes bounds that. `legacy` is `⊤` because
-`extendRead` widens `p` past the subterm's set. Three rows differing in kind, not degree.
+than §5's `⊤`, at the cost of being noncomputable. `legacy` is `⊤` because `extendRead` widens `p`
+past the subterm's set.
+
+A third was listed — "`refine` cannot narrow a read at all: `q` tests the value a read produces
+and no syntactic set of attributes bounds that" — and it is **not** an asymmetry. The row calls
+the denotation for the same reason the numeric rows call `ofDec`, and the paragraph refutes its
+own third entry two sentences earlier. `AdmA (refine t q)` is `AdmA t ∩ (q ∘ p_t)`, and exact.
 
 **`SepV` uses `κ` structurally, not as a predicate.** Its first disjunct is
 `∃ kx ky, κ x = some kx ∧ κ y = some ky ∧ ∀ k ∈ kx, k ∉ ky` — it needs the *kind list*, and `Adm`
@@ -1213,7 +1240,10 @@ would replace four checked recursions with two unchecked ones.
 
 **Step one is done.** `AdmA_exact` proves fourteen of the twenty-three attribute rows exact — two
 fewer than the value side, and the two are `refine` and `legacy`, the pair whose asymmetry is why §5
-needed `adm` and `admA` rather than one function. The numeric rows are the surprise: they reach
+needed `adm` and `admA` rather than one function. (Both counts are superseded: the constructor set
+collapsed to twenty-one, and both `legacy` and then `refine` became exact. **Eighteen of twenty-one
+on each side**, and the three that decline — `union`, `set`, `nullable` — are the same three.
+`legacy` is still the reason the two functions are two, and `refine` is no longer a second reason.) The numeric rows are the surprise: they reach
 `dom(p)` through `Double.ofDec`, which is axiomatized, and are exact anyway, because a row may
 *call* an axiomatized function even where no finite set of numerals describes its domain. §5 wrote
 `⊤` there and did not have to.
@@ -1221,9 +1251,16 @@ needed `adm` and `admA` rather than one function. The numeric rows are the surpr
 The excuses gained two constructors — `valueUnderRead` and `widenedRead` — which cover nothing on
 the value side. That forced `excuse_witnessed` into its proper form: the covering is a *hypothesis*,
 so an excuse must be witnessed **on the side it is used on**, and neither side answers for the
-other's reasons. All seven attribute-side excuses are witnessed. Claiming `valueUnderRead` for
-`refine` on the value side — where it is provably exact — is rejected by both `excuse_shapes` and
-`excuse_witnessed`.
+other's reasons.
+
+Both constructors are since **deleted**, and for the same reason each time: the row each excused
+was writable. `widenedRead` went when `legacy`'s row became the union of its two channels;
+`valueUnderRead` — "`q` tests the value a read *produces*, and no syntactic set of attributes
+bounds that" — went when `refine`'s row began to decode and then apply `q`. The sentence each was
+named for is still true and neither was ever a reason. What survives is the shape of the
+obligation: `excuse_witnessed` still takes the covering as a hypothesis, so a genuine future
+asymmetry does not have to re-derive it, and the two tables `Excuse.covers`/`Excuse.coversA` are
+kept distinct even though they are now equal.
 
 Both halves now carry the same five obligations: exactness where claimed, soundness everywhere, a
 covering reason for each declining row, no excuse over an exact row, and a counterexample behind
