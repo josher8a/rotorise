@@ -62,14 +62,14 @@ theorem literal_alternatives :
 /-- `set_of_string` -/
 theorem set_of_string :
     check 1
-      ((denote (Term.set (Term.string))).e
+      ((denote (Term.set SetBase.string)).e
         (Value.strSet (NEFinset.of "b" {"a"})))
       (some (Attr.ss (NEFinset.of "a" {"b"}))) = .same := rfl
 
 /-- `set_of_decimal` -/
 theorem set_of_decimal :
     check 1
-      ((denote (Term.set (Term.decimal))).e
+      ((denote (Term.set SetBase.decimal)).e
         (Value.strSet (NEFinset.of "1.5" {"2"})))
       (some (Attr.ns (NEFinset.of (WFNumeral.of "1.5") {(WFNumeral.of "2")}))) = .same := rfl
 

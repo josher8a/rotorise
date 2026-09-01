@@ -52,6 +52,7 @@
 import type { AttributeValue } from './attribute'
 import { isNumeral, isStoredNumeral, memberOf } from './attribute'
 import type { AnyCodec, CodecDef } from './codec'
+import { setBase } from './codec'
 
 /**
  * A term, value or attribute the Lean model has no closed expression for.
@@ -386,8 +387,10 @@ const shippedPredicates: ReadonlyMap<unknown, ShippedPredicate> = new Map<
 const writesOnlyStrings = (def: CodecDef | undefined): boolean => {
     if (!def) return false
     if (def.kind === 'string' || def.kind === 'decimal') return true
+    // read off the base rather than off the values, which is the same change the definition made:
+    // a `decimal` literal's alternatives are text, and so is what it writes
     if (def.kind === 'literal') {
-        return def.allowed.every((one) => typeof one === 'string')
+        return def.base === 'string' || def.base === 'decimal'
     }
     if (def.kind === 'refine') return writesOnlyStrings(def.inner.def)
     return false
@@ -459,21 +462,84 @@ const leanTermOfDef = (def: CodecDef, at: string, forced: number): string => {
                 at,
                 '`Term.number` denotes `numberCodec`, whose carrier is the `Double` axiom — no vector can name a value at it',
             )
+        /**
+         * `Term.literal` is indexed by a `GroundKind`, and this emits the two bases whose carrier
+         * has closed terms.
+         *
+         * - `string` → `GroundKind.string`, carrier `String`.
+         * - `boolean` → `GroundKind.boolean`, carrier `Bool`.
+         * - `number` → `GroundKind.number`, carrier `Double`, which is an axiom. Permanent, and the
+         *   same refusal `Term.number` gets.
+         * - `binary` → `GroundKind.binary`, carrier `Bytes`, which *is* emittable — but
+         *   `leanValue` has no `B` case, so a vector at it could state a term and no value. Refused
+         *   here rather than half-emitted.
+         * - `decimal` → **nothing**, and this is the one gap the new surface opens. §3's
+         *   `GroundKind` is `string | number | boolean | binary | null`
+         *   (`formal/Calculus/Domain.lean:539`) and has no `decimal`; `Domain.lean:598` says so in
+         *   as many words, while explaining why `SetBase` *does* have one. So `decimal('1')` — the
+         *   lossless numeric literal, the headline of the new surface — has no term. It is not
+         *   emitted as `GroundKind.string`, which would denote a codec writing `S`, nor as
+         *   `GroundKind.number`, whose carrier is a double and would lose the exactness that is the
+         *   whole point. It is named and refused, which is what this module is for.
+         */
         case 'literal': {
-            const allowed = [...new Set(def.allowed)]
-            if (allowed.some((one) => typeof one === 'number')) {
+            const base = def.base
+            if (base === 'number') {
                 return refuse(
                     at,
                     'a numeric literal sits at `GroundKind.number`, whose carrier is `Double`',
                 )
             }
-            return `Term.literal GroundKind.string (${leanNonEmptySet(
-                allowed.map((one) => leanString(one as string)),
+            if (base === 'decimal') {
+                return refuse(
+                    at,
+                    "a decimal literal has no term: §3's `GroundKind` is `string | number | boolean | binary | null` and has no `decimal`, so `Term.literal` cannot index it (`formal/Calculus/Domain.lean:539`). `SetBase` has one, so `decimal.set()` is modelled and `decimal(...)` is not",
+                )
+            }
+            if (base === 'binary') {
+                return refuse(
+                    at,
+                    '`GroundKind.binary` exists, but `leanValue` has no `B` case, so a vector at a binary literal could state a term and no value',
+                )
+            }
+            const allowed = [...new Set(def.allowed as readonly unknown[])]
+            const kind = base === 'boolean' ? 'boolean' : 'string'
+            return `Term.literal GroundKind.${kind} (${leanNonEmptySet(
+                allowed.map((one) =>
+                    base === 'boolean'
+                        ? String(one)
+                        : leanString(one as string),
+                ),
                 at,
             )})`
         }
-        case 'set':
-            return `Term.set (${leanTermOf(def.element, `${at}.element`, forced)})`
+        /**
+         * `Term.set` is indexed by a **`SetBase`**, not by an element term.
+         *
+         * This emitted `Term.set (<element term>)` and stopped compiling the day
+         * `formal/Calculus/Term.lean:60` changed: the rule's premise `setMember μ = some μS` was
+         * partial, so the old constructor accepted element terms the rule then refused, and the
+         * index makes that refusal a type error instead.
+         *
+         * A **restricted** element — `set(refine(b, q))`, `set(string('a','b'))` — is still a
+         * perfectly good codec and still has no *term*. `setCodec_restrict` says the set of a
+         * restriction and the restriction of a set write the same attribute, but that is an
+         * equation between `Codec`s, and the restriction it lifts is not itself a `Term.set`. So a
+         * bare base is emitted and everything else is named and refused, rather than emitted as its
+         * base — which would denote a codec that admits members this one rejects.
+         */
+        case 'set': {
+            const base = setBase(def.element)
+            if (!base || def.element.def?.kind !== base) {
+                return refuse(
+                    `${at}.element`,
+                    base
+                        ? `a set of a *restricted* element — this one is a \`${def.element.def?.kind}\` over \`${base}\`. \`Term.set\` is indexed by a bare \`SetBase\`, and the lift \`setCodec_restrict\` is an equation between codecs rather than a term`
+                        : 'a set whose element is not one of the four `SetBase` bases',
+                )
+            }
+            return `Term.set SetBase.${base}`
+        }
         case 'array':
             return `Term.array (${leanTermOf(def.element, `${at}.element`, forced)})`
         case 'tuple': {

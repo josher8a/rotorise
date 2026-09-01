@@ -267,7 +267,17 @@ export type CodecDef =
     | { readonly kind: 'string' }
     | {
           readonly kind: 'literal'
-          readonly allowed: readonly (string | number)[]
+          /**
+           * Which ground term the alternatives belong to — **named, not inferred**.
+           *
+           * This used to be absent, and every reader worked it out from `typeof allowed[0]`: digits
+           * were `N`, text was `S`. That guess is exactly what `decimal('1')` refutes — its
+           * alternatives are text and it stores `N` — so the base is recorded rather than recovered.
+           * `formal/Calculus/Domain.lean:539` carries the same decision as `GroundKind`, an *index*
+           * on `Term.literal` rather than a premise read off the values.
+           */
+          readonly base: LiteralBase
+          readonly allowed: readonly LiteralValue[]
       }
     | { readonly kind: 'decimal' }
     | { readonly kind: 'number' }
@@ -475,10 +485,11 @@ export const writes = (codec: AnyCodec): AttributeName | undefined => {
             }
             return one
         }
-        // a literal's member follows from its values: digits are `N`, text is `S`, and an empty
-        // admissible set admits any string
+        // a literal's member follows from its **base**, which the definition now names. It used to
+        // follow from `typeof allowed[0]`, and that reading has a counterexample: `decimal('1')`
+        // holds text and stores `N`
         case 'literal':
-            return typeof def.allowed[0] === 'number' ? 'N' : 'S'
+            return literalMember[def.base]
         case 'set': {
             const element = writes(def.element)
             return element === 'S' || element === 'N' || element === 'B'
@@ -555,9 +566,10 @@ export const carries = (codec: AnyCodec): readonly Shape[] | undefined => {
             }
             return [...shapes]
         }
-        // the same fact from the other side of the pair: a numeric literal takes a number
+        // the same fact from the other side of the pair, and the two sides do not agree base for
+        // base: `decimal(...)` takes a string and writes an `N`, exactly as bare `decimal` does
         case 'literal':
-            return [typeof def.allowed[0] === 'number' ? 'number' : 'string']
+            return [literalShape[def.base]]
         default: {
             const one = carriedBy[def.kind]
             return one && [one]
@@ -629,6 +641,37 @@ export const decides = (codec: AnyCodec): unknown => {
             return def.allowed.length === 1 ? def.allowed[0] : undefined
         case 'fallback':
             return decides(def.inner)
+        default:
+            return undefined
+    }
+}
+
+/**
+ * Which of the four set bases this codec's elements sit at, or `undefined` if it is not one.
+ *
+ * The companion of {@link writes} for {@link set}, and the two answer different questions. `writes`
+ * is a fact about the *attribute*: `set(decimal)` and `set(number)` both write `NS`, so the member
+ * cannot tell them apart. This is a fact about the *term*, and it can — which is exactly why
+ * `formal/Calculus/Domain.lean:602` indexes a set by a base rather than by a `Member`.
+ *
+ * Reads through `refine` and a literal, and through nothing else. Both of those are *restrictions*
+ * of a base, so the set they build is a restriction of the base's set — `setCodec_restrict`. An
+ * adapter (`held`), a read widening (`legacy`) or a union is not a restriction of anything, has no
+ * base, and gets `undefined`.
+ */
+export const setBase = (codec: AnyCodec): SetBase | undefined => {
+    const def = codec.def
+    switch (def?.kind) {
+        case 'string':
+        case 'number':
+        case 'decimal':
+        case 'binary':
+            return def.kind
+        // a literal at `boolean` is the one that has no set: there is no `BOOLS`
+        case 'literal':
+            return def.base === 'boolean' ? undefined : def.base
+        case 'refine':
+            return setBase(def.inner)
         default:
             return undefined
     }
@@ -848,114 +891,116 @@ export const custom = <T, A extends AttributeValue = AttributeValue>(raw: {
 
 // ── scalars ─────────────────────────────────────────────────────────
 
-/** A string, as `S`. Exact in both directions: DynamoDB does not normalise strings. */
-export const string: AttributeCodec<string, Attribute<'S'>> = codec({
-    def: { kind: 'string' },
-    encode: (value) => carrying('S', value),
-    decode: (attribute) => expect('S', attribute),
-})
+/**
+ * The ground terms a literal can sit at.
+ *
+ * **Named by the caller, never guessed.** `literal(...)` read its carrier off the JS type of its
+ * arguments — digits meant `N`, text meant `S` — and that was the one place in this library where a
+ * term's member followed from its *values* rather than from its name. The exception is gone: a
+ * literal is now a capability of the primitive that names the base, so `string('A')`, `number(1)`
+ * and `decimal('1')` each say which ground term they narrow.
+ *
+ * The list is `formal/Calculus/Domain.lean:539`'s `GroundKind` **plus `decimal`**, and that is not a
+ * cosmetic difference — see {@link decimal}'s note on what the model can and cannot state.
+ */
+export type LiteralBase = 'string' | 'number' | 'decimal' | 'boolean' | 'binary'
+
+/** An alternative, at whichever base carries it. */
+export type LiteralValue = string | number | boolean | Uint8Array
 
 /**
- * A literal with exactly one admissible value.
+ * Which member each base stores a literal in.
  *
- * Its own type records the value, which is what lets a caller that has no entity in hand — a key
- * being rebuilt, say — read the value off the schema rather than be handed it. A literal of two
- * or more values is an ordinary {@link AttributeCodec}: it narrows what is admissible without
- * deciding it.
+ * Not injective: `number` and `decimal` both store `N`. That is exactly why the base has to be
+ * recorded — the member cannot recover it, and neither can the JS type of the values, since a
+ * `decimal` literal's alternatives are text.
  */
+const literalMember: { readonly [B in LiteralBase]: AttributeName } = {
+    string: 'S',
+    number: 'N',
+    decimal: 'N',
+    boolean: 'BOOL',
+    binary: 'B',
+}
+
+/** Which kind of JS value each base's alternatives are — the mirror, and not the same partition. */
+const literalShape: { readonly [B in LiteralBase]: Shape } = {
+    string: 'string',
+    number: 'number',
+    // a decimal is held as a string and stored as `N`, which is the whole point of it
+    decimal: 'string',
+    boolean: 'boolean',
+    binary: 'binary',
+}
+
 /**
- * Where a literal is stored, which follows from what it holds.
+ * The bases a native set can be built from — `formal/Calculus/Domain.lean:602`'s `SetBase`.
  *
- * Non-distributive on purpose: `'A' | 'B'` is `S`, `0 | 1` is `N`, and a set mixing the two is
- * `never` — a codec cannot write two members, and the type says so before the constructor has to.
+ * `boolean` is the one base with no set: DynamoDB has `SS`, `NS` and `BS`, and no `BOOLS`. Four
+ * bases onto three wire members, because `number` and `decimal` are both real and neither is a
+ * legacy spelling of the other.
  */
-export type LiteralAttribute<T> = [T] extends [string]
-    ? Attribute<'S'>
-    : [T] extends [number]
-      ? Attribute<'N'>
-      : never
+export type SetBase = Exclude<LiteralBase, 'boolean'>
 
-export type ConstantCodec<T extends string | number> = AttributeCodec<
-    T,
-    LiteralAttribute<T>
-> & { readonly constant: T }
+/** Two alternatives, compared the way the base compares them: bytes for `binary`, `===` otherwise. */
+const sameLiteral = (one: LiteralValue, other: LiteralValue): boolean =>
+    one instanceof Uint8Array
+        ? other instanceof Uint8Array &&
+          one.length === other.length &&
+          one.every((byte, at) => byte === other[at])
+        : one === other
 
-/** A string literal union, as `S`. */
-export function literal<const T extends string | number>(
-    only: T,
-): ConstantCodec<T>
-export function literal<const T extends string | number>(
-    ...allowed: readonly T[]
-): AttributeCodec<T, LiteralAttribute<T>>
-export function literal<const T extends string | number>(
-    ...allowed: readonly T[]
-): AttributeCodec<T, LiteralAttribute<T>> {
-    /**
-     * Numbers are stored as `N`, strings as `S`, and a mix is refused.
-     *
-     * A literal is the one ground term whose member follows from its *values* rather than from its
-     * name, which is what makes it the tool for an enum indexed by number: the held type is the
-     * literal union `0 | 1 | 2`, the stored member is `N`, and the admissible set is checked in both
-     * directions. Mixing kinds would ask one codec to write two members, which no codec can.
-     */
-    /**
-     * **`ℓ` is non-empty** — the other half of the premise `NEFinset` now carries in the model.
-     *
-     * `literal()` typechecked, and was not the codec it looked like: with no alternatives the
-     * admission check below short-circuited to *admit everything*, so it encoded any string as `S`
-     * and decoded any `S`. The caller asked for an enum and got {@link string} — silently, and with
-     * no term in the model to denote it, because a `NEFinset` cannot be empty.
-     *
-     * A throw and not a type, because the type cannot say it without breaking the honest caller:
-     * `literal(...Object.values(Status))` spreads a plain array, which a `(first, ...rest)`
-     * signature refuses. So it is checked here, beside the mixed-kind refusal, and for the same
-     * reason — a fact about `ℓ`, decidable when the codec is built.
-     */
-    if (allowed.length === 0) {
+/** An alternative as a message names it: text in quotes, digits bare, bytes in hex. */
+const namedLiteral = (one: LiteralValue): string =>
+    typeof one === 'string'
+        ? `'${one}'`
+        : one instanceof Uint8Array
+          ? `0x${[...one].map((byte) => byte.toString(16).padStart(2, '0')).join('')}`
+          : String(one)
+
+/**
+ * A literal at a named base — the one builder every literal in this library goes through.
+ *
+ * The premises §3 states on `(literal)`, checked where the rule states them:
+ *
+ * - **`ℓ` is non-empty.** Checked by each caller, because the message wants to name the
+ *   constructor the caller actually wrote.
+ * - **`ℓ` is homogeneous at the base.** Free in the model — `NEFinset k.Carrier` — and not free
+ *   here, because a spread of a plain array defeats the type. So it is a construction-time refusal.
+ * - **`ℓ ⊆ D`** at the two bases that write an `N`. `number` reads through `Number.prototype
+ *   .toString`; `decimal` is text already and has to be in the form the service returns, or the
+ *   literal is one this codec could write and never read back.
+ *
+ * All three are decided when the codec is built, because `ℓ` is data this library owns.
+ */
+const literalCodec = <T extends LiteralValue>(
+    base: LiteralBase,
+    allowed: readonly T[],
+): AttributeCodec<T, AttributeValue> => {
+    const member = literalMember[base]
+
+    const wrong = allowed.filter((one) => shapeOf(one) !== literalShape[base])
+    if (wrong.length) {
         throw new CodecError(
-            'a literal admits one of a non-empty set of values, and `literal()` names none; pass the values, or use `string`/`number` if anything is admissible',
+            `\`${base}(...)\` admits ${literalShape[base]} values, and ${wrong
+                .map(namedLiteral)
+                .join(', ')} ${wrong.length === 1 ? 'is' : 'are'} not one`,
         )
     }
 
-    const numeric = typeof allowed[0] === 'number'
-    // quoted as it was written: text in quotes, digits bare
-    const named = (one: string | number) =>
-        typeof one === 'number' ? String(one) : `'${one}'`
-    if (allowed.some((one) => (typeof one === 'number') !== numeric)) {
-        throw new CodecError(
-            `a literal is stored as 'S' or as 'N' and cannot be both, and these mix strings with numbers: ${allowed
-                .map(named)
-                .join(', ')}`,
-        )
-    }
-    const member = numeric ? 'N' : 'S'
-
     /**
-     * **`ℓ ⊆ D`** — §3's premise on `(literal-N)`, checked where the rule checks it.
-     *
-     * `number` refuses `NaN`, `Infinity` and anything past 38 significant digits or the magnitude
-     * range; `literal` was writing all of them. `literal(NaN)` produced `{ N: 'NaN' }` and
-     * `literal(1e400)` produced `{ N: 'Infinity' }`, both reachable with no cast and both rejected
-     * by DynamoDB — an attribute outside §1's `Numerals`, which is the one thing a term is never
-     * allowed to write.
-     *
-     * At the declaration and not per encode, because that is what the premise is: a fact about the
-     * admissible set, which this library owns, decidable when the codec is built. The same place
-     * the mixed-kind refusal above lives, and for the same reason.
-     *
-     * This **does** discharge the write side, and the distinction is worth keeping: `ℓ` is frozen
-     * at construction, so every value `encode` will ever accept has already been checked here.
-     * It does not discharge the read side, because a stored attribute is not drawn from `ℓ` — see
-     * `decode` below, which learned that the expensive way.
+     * **`ℓ ⊆ D`** — the premise on the numeric bases, and the defect that made it more than
+     * bookkeeping. `literal(NaN)` produced `{ N: 'NaN' }` and `literal(1e400)` produced
+     * `{ N: 'Infinity' }`, both reachable with no cast and both rejected by the service.
      */
-    if (numeric) {
+    if (base === 'number') {
         const outside = (allowed as readonly number[]).filter(
             (one) => !isNumeral(String(one)),
         )
         if (outside.length) {
             throw new CodecError(
                 `a numeric literal is stored as 'N', and ${outside
-                    .map(named)
+                    .map(namedLiteral)
                     .join(
                         ', ',
                     )} ${outside.length === 1 ? 'is not a number' : 'are not numbers'} DynamoDB stores: it takes at most 38 significant digits and magnitude 1e-130 to 9.9e125, and has no NaN or Infinity`,
@@ -964,35 +1009,58 @@ export function literal<const T extends string | number>(
     }
 
     /**
+     * The same premise at `decimal`, and it is *narrower* than `number`'s, for the reason
+     * {@link decimal} gives: the service normalises what it accepts, and this codec's read side is
+     * the identity on the digits, so an alternative in any other form is one that could be written
+     * and would come back as a different string.
+     */
+    if (base === 'decimal') {
+        const outside = (allowed as readonly string[]).filter(
+            (one) => !isStoredNumeral(one),
+        )
+        if (outside.length) {
+            throw new CodecError(
+                `a decimal literal is stored as 'N' in the form DynamoDB returns, and ${outside
+                    .map(namedLiteral)
+                    .join(
+                        ', ',
+                    )} ${outside.length === 1 ? 'is' : 'are'} not: it accepts at most 38 significant digits, magnitude 1e-130 to 9.9e125, and returns the normalised form (no leading or trailing zeros, no exponent, no '+')`,
+            )
+        }
+    }
+
+    /**
      * Checked both ways. An unchecked `encode` makes {@link ConstantCodec.constant} a lie — claim
      * one value, write another — which the type misses where the entity is a union and the codec
      * describes one variant of it.
+     *
+     * Answers with the *stored* alternative rather than the one it was handed, which matters at
+     * `binary`: two `Uint8Array`s with the same bytes are different objects, so returning the
+     * member of `ℓ` is what keeps a decoded value identical to the one the schema names.
      */
-    const admits = (carried: string | number): Result<T> =>
-        // `allowed.length &&` used to guard this, which is how the empty case came to admit
-        // everything: a truthiness guard in front of a membership test *inverts* it exactly when the
-        // set is empty, where `∀ x. x ∉ ∅` should refuse everything. The set is non-empty above, so
-        // the guard is gone rather than corrected
-        !allowed.includes(carried as T)
+    const admits = (value: LiteralValue): Result<T> => {
+        const found = allowed.find((one) => sameLiteral(one, value))
+        return found === undefined
             ? new CodecError(
-                  `${named(carried)} is not one of ${allowed.map(named).join(', ')}`,
+                  `${namedLiteral(value)} is not one of ${allowed
+                      .map(namedLiteral)
+                      .join(', ')}`,
               )
-            : (carried as T)
+            : found
+    }
 
     // `N` carries digits, so a numeric literal is written as text and read back as the number it is
-    return codec<T, LiteralAttribute<T>>({
-        def: { kind: 'literal', allowed },
+    return codec<T, AttributeValue>({
+        def: { kind: 'literal', base, allowed },
         encode: (value) =>
-            andThen(
-                admits(value),
-                (ok) =>
-                    carrying(
-                        member,
-                        numeric ? String(ok) : (ok as string),
-                    ) as LiteralAttribute<T>,
+            andThen(admits(value), (ok) =>
+                carrying(
+                    member,
+                    (base === 'number' ? String(ok) : ok) as never,
+                ),
             ),
         /**
-         * **The same gate `number` reads through, and for the same reason.**
+         * **The same gate the base's own codec reads through, and for the same reason.**
          *
          * `Number` is far more permissive than an `N`: it reads `''`, whitespace, `0x10` and
          * `0b11`, none of which DynamoDB will ever hand back. Membership in `ℓ` does not filter
@@ -1006,21 +1074,140 @@ export function literal<const T extends string | number>(
          *
          * `number`'s *second* gate — the round-tripped value, not the digits — is genuinely
          * subsumed here, and that one is safe to say: a numeral that rounds past the maximum
-         * lands outside `D`, and `ℓ ⊆ D`, so `admits` refuses it. That is a claim about a value
-         * landing in a set this library fixed at construction, not about an attribute.
+         * lands outside `D`, and `ℓ ⊆ D`, so `admits` refuses it.
          */
         decode: (attribute) =>
             andThen(expect(member, attribute), (carried) => {
-                if (!numeric) return admits(carried as string)
-                const text = carried as string
-                return isNumeral(text)
-                    ? admits(Number(text))
-                    : new CodecError(
-                          `'${text}' is not a numeral, so this attribute was not written by DynamoDB`,
-                      )
+                if (base === 'number') {
+                    const text = carried as string
+                    return isNumeral(text)
+                        ? admits(Number(text))
+                        : new CodecError(
+                              `'${text}' is not a numeral, so this attribute was not written by DynamoDB`,
+                          )
+                }
+                if (base === 'decimal') {
+                    const text = carried as string
+                    return isStoredNumeral(text)
+                        ? admits(text)
+                        : new CodecError(
+                              `'${text}' is not a numeral in the form DynamoDB stores, so this attribute was not written by it`,
+                          )
+                }
+                return admits(carried as LiteralValue)
             }),
-    }) as ConstantCodec<T>
+    })
 }
+
+/** `ℓ` non-empty, refused where the caller can see which constructor named nothing. */
+const someAlternatives = <T extends LiteralValue>(
+    base: LiteralBase,
+    allowed: readonly T[],
+): readonly T[] => {
+    if (allowed.length === 0) {
+        throw new CodecError(
+            `a literal admits one of a non-empty set of values, and \`${base}()\` names none; pass the values, or use \`${base}\` itself if anything is admissible`,
+        )
+    }
+    return allowed
+}
+
+/**
+ * Where a literal is stored, which follows from what it holds.
+ *
+ * Non-distributive on purpose: `'A' | 'B'` is `S`, `0 | 1` is `N`, and a set mixing the two is
+ * `never` — a codec cannot write two members, and the type says so before the constructor has to.
+ *
+ * The default of {@link ConstantCodec}'s second parameter, and only the default. `decimal('1')`
+ * holds a string and stores `N`, so it passes its attribute explicitly: this type is the *guess*
+ * the new surface exists to stop making, kept because {@link literal} still makes it.
+ */
+export type LiteralAttribute<T> = [T] extends [string]
+    ? Attribute<'S'>
+    : [T] extends [number]
+      ? Attribute<'N'>
+      : never
+
+/**
+ * A literal with exactly one admissible value.
+ *
+ * Its own type records the value, which is what lets a caller that has no entity in hand — a key
+ * being rebuilt, say — read the value off the schema rather than be handed it. A literal of two
+ * or more values is an ordinary {@link AttributeCodec}: it narrows what is admissible without
+ * deciding it.
+ *
+ * `constant` is a **type-level** brand and carries no runtime property; {@link decides} is what
+ * reads the value back at runtime.
+ */
+export type ConstantCodec<
+    T extends LiteralValue,
+    A extends AttributeValue = LiteralAttribute<T>,
+> = AttributeCodec<T, A> & { readonly constant: T }
+
+/**
+ * The `.set()` capability, on the four bases that have one.
+ *
+ * `base.set()` is the whole base; `base.set(...values)` is a set of a literal at it. Both are the
+ * same {@link set} underneath, which is what keeps there being one set combinator rather than two.
+ */
+const setCapability =
+    (base: SetBase, ground: () => AnyCodec) =>
+    (...allowed: readonly LiteralValue[]) =>
+        // the *public* codec, reached through a thunk because it is the constant being defined:
+        // `string.set()` and `set(string)` should be the same codec, definition included, and a
+        // second element object built from the same closures would compare unequal
+        set(
+            (allowed.length
+                ? literalCodec(base, allowed)
+                : ground()) as AnyCodec,
+        )
+
+/** The literal capability, on every base. */
+const literalCapability =
+    (base: LiteralBase) =>
+    (...allowed: readonly LiteralValue[]) =>
+        literalCodec(base, someAlternatives(base, allowed))
+
+/**
+ * A string, as `S`. Exact in both directions: DynamoDB does not normalise strings.
+ *
+ * ```ts
+ * string              // any string
+ * string('A')         // exactly 'A', and its type says so
+ * string('A', 'B')    // one of two
+ * string.set()        // SS
+ * string.set('A', 'B')// SS whose members are checked
+ * ```
+ *
+ * Callable *and* a codec, the same {@link opaque} trick and for the same reason: `string.encode`
+ * and `string('A')` are one name for one ground term, rather than a codec and a constructor that
+ * have to be kept in step.
+ */
+export type StringCodec = AttributeCodec<string, Attribute<'S'>> & {
+    <const T extends string>(only: T): ConstantCodec<T, Attribute<'S'>>
+    <const T extends string>(
+        ...allowed: readonly T[]
+    ): AttributeCodec<T, Attribute<'S'>>
+    readonly set: {
+        (): AttributeCodec<ReadonlySet<string>, SS>
+        <const T extends string>(
+            ...allowed: readonly T[]
+        ): AttributeCodec<ReadonlySet<T>, SS>
+    }
+}
+
+const stringCodec: AttributeCodec<string, Attribute<'S'>> = codec({
+    def: { kind: 'string' },
+    encode: (value) => carrying('S', value),
+    decode: (attribute) => expect('S', attribute),
+})
+
+/** @see {@link StringCodec} */
+export const string: StringCodec = Object.assign(
+    literalCapability('string'),
+    stringCodec,
+    { set: setCapability('string', () => string) },
+) as unknown as StringCodec
 
 /**
  * A decimal held as a string, stored as `N`. The codec for money — nothing becomes a JS number, so
@@ -1035,8 +1222,30 @@ export function literal<const T extends string | number>(
  *
  * `'1.50'` is not a price this codec will write. `'1.5'` is. Where exact digits matter more than
  * numeric ordering — trailing zeros that mean something — use {@link string}.
+ *
+ * **`decimal('1')` is the literal the old surface could not spell.** `literal('1')` guessed `S` from
+ * the JS type and `literal(1)` went through the host's `number`; neither says "stored as `N`,
+ * exactly this text". It is also the one thing on this surface with **no counterpart in the
+ * calculus**: `formal/Calculus/Domain.lean:539`'s `GroundKind` is `string | number | boolean |
+ * binary | null` and has no `decimal`, which `Domain.lean:598` states outright. So `Term.literal`
+ * cannot index it, and `src/lean.ts` refuses it by name rather than emitting something that would
+ * denote a different codec. `SetBase` *does* have `decimal`, so `decimal.set()` is modelled and
+ * `decimal('1')` is not.
  */
-export const decimal: AttributeCodec<string, Attribute<'N'>> = codec({
+export type DecimalCodec = AttributeCodec<string, Attribute<'N'>> & {
+    <const T extends string>(only: T): ConstantCodec<T, Attribute<'N'>>
+    <const T extends string>(
+        ...allowed: readonly T[]
+    ): AttributeCodec<T, Attribute<'N'>>
+    readonly set: {
+        (): AttributeCodec<ReadonlySet<string>, NS>
+        <const T extends string>(
+            ...allowed: readonly T[]
+        ): AttributeCodec<ReadonlySet<T>, NS>
+    }
+}
+
+const decimalCodec: AttributeCodec<string, Attribute<'N'>> = codec({
     def: { kind: 'decimal' },
     encode: (value) =>
         isStoredNumeral(value)
@@ -1054,11 +1263,37 @@ export const decimal: AttributeCodec<string, Attribute<'N'>> = codec({
         ),
 })
 
+/** @see {@link DecimalCodec} */
+export const decimal: DecimalCodec = Object.assign(
+    literalCapability('decimal'),
+    decimalCodec,
+    { set: setCapability('decimal', () => decimal) },
+) as unknown as DecimalCodec
+
 /**
  * A JS number, stored as `N`. Lossy by construction — `N` carries 38 digits, `number` about 15.
  * Right for enums, counts and flags; wrong for money, which is {@link decimal}.
+ *
+ * `number.set()` and `decimal.set()` are **both first-class**, and neither is the other's legacy
+ * spelling: `number.set()` is what a caller who means their platform's numbers means, and
+ * `decimal.set()` is the host-independent one. They write the same member, `NS`, and hold different
+ * things — which is why `formal/Calculus/Domain.lean:602` indexes a set by a base rather than by
+ * `Member`.
  */
-export const number: AttributeCodec<number, Attribute<'N'>> = codec({
+export type NumberCodec = AttributeCodec<number, Attribute<'N'>> & {
+    <const T extends number>(only: T): ConstantCodec<T, Attribute<'N'>>
+    <const T extends number>(
+        ...allowed: readonly T[]
+    ): AttributeCodec<T, Attribute<'N'>>
+    readonly set: {
+        (): AttributeCodec<ReadonlySet<number>, NS>
+        <const T extends number>(
+            ...allowed: readonly T[]
+        ): AttributeCodec<ReadonlySet<T>, NS>
+    }
+}
+
+const numberCodec: AttributeCodec<number, Attribute<'N'>> = codec({
     def: { kind: 'number' },
     encode: (value) =>
         isNumeral(value.toString())
@@ -1088,12 +1323,38 @@ export const number: AttributeCodec<number, Attribute<'N'>> = codec({
         }),
 })
 
-/** A boolean, as `BOOL`. */
-export const boolean: AttributeCodec<boolean, Attribute<'BOOL'>> = codec({
+/** @see {@link NumberCodec} */
+export const number: NumberCodec = Object.assign(
+    literalCapability('number'),
+    numberCodec,
+    { set: setCapability('number', () => number) },
+) as unknown as NumberCodec
+
+/**
+ * A boolean, as `BOOL`.
+ *
+ * `boolean(true)` is a literal at `BOOL`, which nothing on the old surface could spell —
+ * `literal(...)` took a string or a number and there was no third option. There is deliberately no
+ * `boolean.set()`: DynamoDB has `SS`, `NS` and `BS`, and no set of booleans.
+ */
+export type BooleanCodec = AttributeCodec<boolean, Attribute<'BOOL'>> & {
+    <const T extends boolean>(only: T): ConstantCodec<T, Attribute<'BOOL'>>
+    <const T extends boolean>(
+        ...allowed: readonly T[]
+    ): AttributeCodec<T, Attribute<'BOOL'>>
+}
+
+const booleanCodec: AttributeCodec<boolean, Attribute<'BOOL'>> = codec({
     def: { kind: 'boolean' },
     encode: (value) => carrying('BOOL', value),
     decode: (attribute) => expect('BOOL', attribute),
 })
+
+/** @see {@link BooleanCodec} */
+export const boolean: BooleanCodec = Object.assign(
+    literalCapability('boolean'),
+    booleanCodec,
+) as unknown as BooleanCodec
 
 /**
  * The `NULL` point: the one value `null`, stored as `⟨NULL, ∗⟩`.
@@ -1109,12 +1370,15 @@ export const boolean: AttributeCodec<boolean, Attribute<'BOOL'>> = codec({
  *
  * Distinct from {@link nullable}, which *adds* `null` to another codec's held set. This holds
  * nothing else.
+ *
+ * Not callable, and there is nothing for it to be: the model's `GroundKind.null` has carrier `Unit`,
+ * so `literal .null` can say nothing this codec does not already say.
  */
 export const nullValue: AttributeCodec<null, Attribute<'NULL'>> = codec({
     def: { kind: 'null' },
     // checked, though the type already says so: the admissible set is one value and this library
     // owns it, so an unchecked `encode` would write `NULL` for anything that reached it — a pair
-    // whose `e` is defined outside its own held set. {@link literal} checks for the same reason
+    // whose `e` is defined outside its own held set. A literal checks for the same reason
     encode: (value) =>
         value === null
             ? carrying('NULL', true)
@@ -1124,12 +1388,88 @@ export const nullValue: AttributeCodec<null, Attribute<'NULL'>> = codec({
     decode: (attribute) => andThen(expect('NULL', attribute), () => null),
 })
 
-/** Binary, as `B`. */
-export const binary: AttributeCodec<Uint8Array, Attribute<'B'>> = codec({
+/**
+ * Binary, as `B`.
+ *
+ * `binary(bytes)` compares **by bytes**, not by reference — two `Uint8Array`s holding the same
+ * octets are the same alternative, and a decoded value comes back as the member of `ℓ` rather than
+ * as the array that was read off the wire.
+ */
+export type BinaryCodec = AttributeCodec<Uint8Array, Attribute<'B'>> & {
+    (only: Uint8Array): ConstantCodec<Uint8Array, Attribute<'B'>>
+    (
+        ...allowed: readonly Uint8Array[]
+    ): AttributeCodec<Uint8Array, Attribute<'B'>>
+    readonly set: {
+        (): AttributeCodec<ReadonlySet<Uint8Array>, BS>
+        (
+            ...allowed: readonly Uint8Array[]
+        ): AttributeCodec<ReadonlySet<Uint8Array>, BS>
+    }
+}
+
+const binaryCodec: AttributeCodec<Uint8Array, Attribute<'B'>> = codec({
     def: { kind: 'binary' },
     encode: (value) => carrying('B', value),
     decode: (attribute) => expect('B', attribute),
 })
+
+/** @see {@link BinaryCodec} */
+export const binary: BinaryCodec = Object.assign(
+    literalCapability('binary'),
+    binaryCodec,
+    { set: setCapability('binary', () => binary) },
+) as unknown as BinaryCodec
+
+/**
+ * A literal whose carrier is guessed from its values.
+ *
+ * @deprecated Name the base instead: `string('A')` for `literal('A')`, `number(1)` for `literal(1)`.
+ *
+ * Kept working, and kept *exactly* working — same definition, same brand, same messages — because
+ * it is on every existing schema and because a deprecation that changes behaviour is a breakage
+ * wearing a tag. What is deprecated is the **guess**: this is the one constructor in the library
+ * whose stored member follows from the JS type of its arguments rather than from its name, and
+ * `decimal('1')` is the counterexample that retires the rule — text that stores an `N`.
+ *
+ * It is strictly less expressive than what replaces it. `literal` reaches `S` and `N`-from-a-double
+ * and nothing else; the base-named forms also reach `BOOL`, `B`, and `N`-from-text.
+ */
+export function literal<const T extends string | number>(
+    only: T,
+): ConstantCodec<T>
+export function literal<const T extends string | number>(
+    ...allowed: readonly T[]
+): AttributeCodec<T, LiteralAttribute<T>>
+export function literal<const T extends string | number>(
+    ...allowed: readonly T[]
+): AttributeCodec<T, LiteralAttribute<T>> {
+    if (allowed.length === 0) {
+        throw new CodecError(
+            'a literal admits one of a non-empty set of values, and `literal()` names none; pass the values, or use `string`/`number` if anything is admissible',
+        )
+    }
+    /**
+     * The guess, written out once so it is visible: digits are `N`, text is `S`, and a mix is
+     * refused because one codec cannot write two members.
+     *
+     * `literalCodec` would refuse the mix too, at whichever base the first value picked, but with a
+     * message about that base rather than about the mixing — and the mixing is the thing a caller of
+     * *this* constructor got wrong.
+     */
+    const numeric = typeof allowed[0] === 'number'
+    if (allowed.some((one) => (typeof one === 'number') !== numeric)) {
+        throw new CodecError(
+            `a literal is stored as 'S' or as 'N' and cannot be both, and these mix strings with numbers: ${allowed
+                .map(namedLiteral)
+                .join(', ')}`,
+        )
+    }
+    return literalCodec(
+        numeric ? 'number' : 'string',
+        allowed,
+    ) as unknown as AttributeCodec<T, LiteralAttribute<T>>
+}
 
 // ── collections ─────────────────────────────────────────────────────
 
@@ -1154,6 +1494,27 @@ export const set = <const C extends AnyCodec>(
     if (member !== 'S' && member !== 'N' && member !== 'B') {
         throw new CodecError(
             `a set holds strings, numbers or binary, and this element writes ${member ? `'${member}'` : 'no single member'}`,
+        )
+    }
+    /**
+     * …and the element reduces to one of the four bases a stored set is built from.
+     *
+     * The member check above is §3 `(set)`'s premise as it *was* — `setMember μ = some μS` — and it
+     * is not enough, because `writes` reads through wrappers that a set has no way to record.
+     * `set(held(string, f, g))` passed it: `held` writes where its inner term does, so the member
+     * was `'S'`, and the adapter's two functions then ran per member of an attribute that stores no
+     * such thing. The model closed this by indexing `Term.set` with a `SetBase`
+     * (`formal/Calculus/Term.lean:60`) and says outright what that gives up — `set(held …)` and
+     * `set(legacy …)`, neither of which has a set-level spelling and neither of which appears in
+     * `src/`. This is the same refusal, at the same place the other one lives.
+     *
+     * `refine` and a literal are **not** given up: a restriction of the elements is a restriction of
+     * the set, and `setCodec_restrict` (`formal/Calculus/Combinators.lean`) proves the two write the
+     * same attribute. So {@link setBase} reads through those two and nothing else.
+     */
+    if (!setBase(inner)) {
+        throw new CodecError(
+            `a set's element must be one of the four bases a stored set is built from — \`string\`, \`number\`, \`decimal\` or \`binary\`, narrowed by \`refine\` or by a literal — and this element is a \`${inner.def?.kind ?? 'codec with no definition'}\`, which writes '${member}' by reading through to something else. A set of it has nothing DynamoDB stores`,
         )
     }
     const setMember = `${member}S` as 'SS' | 'NS' | 'BS'
@@ -3837,10 +4198,21 @@ export const discriminatedUnion = <
         }
         // the whole admissible set, not one value: an option may answer to several tags
         const def = option.item.spec[discriminator]?.def
-        const tags = def?.kind === 'literal' ? def.allowed : undefined
+        /**
+         * A tag is read back by {@link readTag}, which accepts `S` or `N` and nothing else — so the
+         * bases that can carry one are exactly the three that write those two members. A literal at
+         * `boolean` or `binary` is a perfectly good literal and cannot be a discriminator: `BOOL`
+         * and `B` name no variant a lookup could find, and the value is not a key.
+         */
+        const tags =
+            def?.kind === 'literal' &&
+            def.base !== 'boolean' &&
+            def.base !== 'binary'
+                ? (def.allowed as readonly (string | number)[])
+                : undefined
         if (!tags?.length) {
             throw new CodecError(
-                `every option must name '${discriminator}' with \`literal(...)\`, and one of them does not — without it a lookup cannot find the variant`,
+                `every option must name '${discriminator}' with a literal at \`string\`, \`number\` or \`decimal\`, and one of them does not — a tag is carried as 'S' or 'N', and without one a lookup cannot find the variant`,
             )
         }
         // the option is already built, so the variant is the codec it came with rather than a
