@@ -1,5 +1,6 @@
 import Calculus.Equations
 import Calculus.Soundness
+import Calculus.Discharge
 
 /-!
 # §6's "Do not hold" table, refuted
@@ -472,5 +473,71 @@ theorem not_retract_through_store_wfDecimalCodec {η : Attr → Attr}
   rw [hη, wfDecimalCodec_p_n]
   intro hk
   exact absurd (Value.str.inj (Option.some.inj hk)) (by decide)
+
+/-! ## `union(opaque, c)` is never separable
+
+Not one of §6's nine rows — a row §5 never wrote, and the reason it did not is that
+`opaque` looked like a term with nothing to say. `κ (.opaq _)` is `⊤` and, until the
+policy bit was put into `adm`, so were `adm (.opaq _)` and `admA (.opaq _)`. `SepV`
+offers exactly two routes — a disjoint kind or a disjoint admissible set — and `SepA`
+two more — a distinct named member or a disjoint admissible set. A `⊤` on every one of
+the four is not a weak option; it is an **absorbing** one, in the sense `unknown | T` is
+absorbing in TypeScript.
+
+At `lossy = true` that is still exactly the situation, and these are the theorems. They
+are stated for *every* option that admits anything, in both argument orders, because
+`List.Pairwise` asks the question one way round and the fact does not care. -/
+
+/-- A lossy `opaque` admits every value: the value-side `⊤`, as a lemma rather than as a
+    row a reader has to reduce. -/
+theorem adm_opaq_lossy (v : Value) : adm (.opaq true) v = true := by cases v <;> rfl
+
+/-- …and every attribute. -/
+theorem admA_opaq_lossy (a : Attr) : admA (.opaq true) a = true := by cases a <;> rfl
+
+/-- **A lossy `opaque` is not writably separable from any option that writes anything.**
+    Both disjuncts fail structurally: the kind disjunct because `κ (.opaq _) = ⊤`, the
+    `adm` disjunct because the lemma above leaves no value for the other option to have
+    to itself. -/
+theorem not_sepV_opaq_lossy_left {t : Term} {v : Value} (hv : adm t v = true) :
+    ¬ SepV (.opaq true) t := by
+  rintro (⟨kx, ky, hx, -, -⟩ | hdisj)
+  · exact absurd hx (by simp [κ])
+  · rw [hdisj v (adm_opaq_lossy v)] at hv; exact nomatch hv
+
+theorem not_sepV_opaq_lossy_right {t : Term} {v : Value} (hv : adm t v = true) :
+    ¬ SepV t (.opaq true) := by
+  rintro (⟨kx, ky, -, hy, -⟩ | hdisj)
+  · exact absurd hy (by simp [κ])
+  · have h := hdisj v hv
+    rw [adm_opaq_lossy v] at h
+    exact nomatch h
+
+/-- The readable side, the same way: `μSyn (.opaq _)` is `⊤`, so the member disjunct is
+    unavailable, and `admA` is `⊤`. -/
+theorem not_sepA_opaq_lossy_left {t : Term} {a : Attr} (ha : admA t a = true) :
+    ¬ SepA (.opaq true) t := by
+  rintro (⟨μx, μy, hx, -, -⟩ | hdisj)
+  · exact nomatch hx
+  · rw [hdisj a (admA_opaq_lossy a)] at ha; exact nomatch ha
+
+theorem not_sepA_opaq_lossy_right {t : Term} {a : Attr} (ha : admA t a = true) :
+    ¬ SepA t (.opaq true) := by
+  rintro (⟨μx, μy, -, hy, -⟩ | hdisj)
+  · exact nomatch hy
+  · have h := hdisj a ha
+    rw [admA_opaq_lossy a] at h
+    exact nomatch h
+
+/-- **`union(opaque, string)` is separable on neither side, in either order** — the
+    concrete instance, at the most ordinary option in the language. Every `t` that admits
+    a single value or a single attribute gives another. -/
+theorem not_sep_opaq_lossy_string :
+    ¬ SepV (.opaq true) .string ∧ ¬ SepV .string (.opaq true) ∧
+      ¬ SepA (.opaq true) .string ∧ ¬ SepA .string (.opaq true) :=
+  ⟨not_sepV_opaq_lossy_left (v := .str "x") rfl,
+   not_sepV_opaq_lossy_right (v := .str "x") rfl,
+   not_sepA_opaq_lossy_left (a := .s "x") rfl,
+   not_sepA_opaq_lossy_right (a := .s "x") rfl⟩
 
 end Calculus
