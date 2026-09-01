@@ -40,7 +40,24 @@ inductive Term where
       Not a union of arity-one literals, which is derivable but not free: see
       `Calculus/LiteralArity1.lean` and `docs/codec-audit.md` §11.5. -/
   | literal (k : GroundKind) (ls : NEFinset k.Carrier)
-  | set      (elem : Term)
+  /-- §3 `(set)`, indexed by its element **base** rather than by an arbitrary element term.
+
+      The rule's premise was `⊢ c : T ⇝ μ` together with `setMember μ = some μS`, and
+      `setMember` is partial — so the constructor accepted element terms the rule then
+      refused (`set(union(string, boolean))` was the standing witness). `SetBase` is the
+      four bases that survive that premise, so the member is a function of the index and
+      the refusal is a type error.
+
+      **What this gives up, deliberately.** `set(refine(b, q))` and `set(literal k ls)` are
+      *not* lost: a restriction of the elements is a restriction of the set, and
+      `setCodec_restrict` (`Combinators.lean`) proves the two write the same attribute on
+      the nose, with `liftQ` carrying the predicate through. What is lost is
+      `set(held b f g)` and `set(legacy b r)` — an element-level adapter and an
+      element-level read widening. Neither appears in `src/`, and neither has a set-level
+      spelling: a set-level `held` would need `setImage` rather than the classical
+      `Finset.image` to stay injective, and a set-level `legacy` widens the whole attribute
+      rather than each member. -/
+  | set      (base : SetBase)
   | array    (elem : Term)
   /-- `(tuple)` and `(tuple-tail)` in one constructor; `tail = none` is the plain tuple. -/
   | tuple    (elems : List Term) (tail : Option Term)
@@ -96,8 +113,10 @@ mutual
 
 def Term.depth : Term → Nat
   | .string | .number | .decimal | .boolean | .binary | .null
-  | .literal _ _ | .custom _ _ | .opaq _ => 1
-  | .set t | .array t | .record t | .nullable t | .lazy t => Term.depth t + 1
+  -- `set` is a **leaf** since its base became an index: there is no element term to
+  -- measure, so it sits with the other ground shapes rather than costing a layer.
+  | .literal _ _ | .custom _ _ | .opaq _ | .set _ => 1
+  | .array t | .record t | .nullable t | .lazy t => Term.depth t + 1
   | .held t _ _ | .refine t _ | .legacy t _ => Term.depth t + 1
   | .tuple ts tail => max (Term.depthL ts) (Term.depthO tail) + 1
   -- the field table is a key *set* with a function on it, so its layer is the largest field

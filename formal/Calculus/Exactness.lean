@@ -23,8 +23,8 @@ per-table form obscured.
   one defect with three faces, and it is why §5 could justify `⊤` at a container with an
   argument (the empty array) that is true and proves far less than it was asked to.
 
-`Adm` below is that joint predicate as a single recursion. It is exact for eighteen of the
-twenty-one constructors (`Adm_exact`); the other three are `Analysable`'s `false` rows, each
+`Adm` below is that joint predicate as a single recursion. It is exact for nineteen of the
+twenty-one constructors (`Adm_exact`); the other two are `Analysable`'s `false` rows, each
 for a stated reason, and each with a witness here.
 
 **Four of those `false` rows were never forced.** `tuple`, `object`, `dunion` and `opaq` were
@@ -149,15 +149,18 @@ noncomputable def Adm : Term → Value → Bool
   -- `union` is the one row that stays a disjunction, and the reason is `select`'s
   -- **anti-monotonicity** rather than any missing vocabulary — see `Excuse.uniqueAdmission`.
   | .union opts => fun v => anyP (AdmList opts) v
-  -- `set` recurses like the other containers, and adds nothing. Homogeneity is not a
-  -- row's problem — §1's three set types are three constructors, so an element's kind is
-  -- fixed by which one it is — and non-emptiness is not one either, now that `℘⁺fin` is
-  -- the payload type. What is left is the element recursion.
-  | .set c      => fun v =>
+  -- **`set` is a leaf, and exact.** Its base's row is `SetBase.adm` — the four ground rows
+  -- of this table, indexed — and the set's row is that row over whichever payload the value
+  -- carries. All three wire families are matched rather than gated on kind: a base admits at
+  -- most one of them, and `℘⁺fin` has no empty inhabitant, so the other two answer `false`
+  -- element by element. Homogeneity is the value type's and non-emptiness is `℘⁺fin`'s;
+  -- what used to be missing was **injectivity**, and indexing supplies it — every base's
+  -- element map is injective, so `encSet`'s collision guard never fires (`encSet_base_iff`).
+  | .set b      => fun v =>
       match v with
-      | .strSet S => decide (∀ s ∈ S.1, Adm c (.str s) = true)
-      | .numSet S => decide (∀ d ∈ S.1, Adm c (.num d) = true)
-      | .binSet S => decide (∀ b ∈ S.1, Adm c (.bin b) = true)
+      | .strSet S => decide (∀ s ∈ S.1, b.adm (.str s) = true)
+      | .numSet S => decide (∀ d ∈ S.1, b.adm (.num d) = true)
+      | .binSet S => decide (∀ y ∈ S.1, b.adm (.bin y) = true)
       | _ => false
   | .tuple ts tail => fun v =>
       match v with | .arr vs => alignP (AdmList ts) (AdmOptT tail) vs | _ => false
@@ -247,17 +250,18 @@ mutual
     left, and each has a reason:
 
     * `union` — `select` admits only where **exactly one** option does, and the count is taken
-      over `Adm`'s own answers, which over-approximate at the two shapes below. Sharpening the
+      over `Adm`'s own answers, which over-approximate at the shape below. Sharpening the
       row to that count would make it *unsound* — see `Excuse.uniqueAdmission`.
-    * `set` — `encSet` demands the element map be **injective**, and no row of the elements
-      alone says so (`not_ExactV_set`).
     * `nullable` — `ownsNull` is a disjunction over *both* halves, so a read that reaches the
       null point suppresses the wrapper while the write still refuses it
       (`not_ExactV_nullable`).
 
     `tuple`, `object`, `dunion` and `opaq` used to be here. Nothing about their *shapes* put
     them here: the rows are written now, and the four excuses are deleted rather than
-    re-argued.
+    re-argued. **`set` used to be here too**, and it left by a different door: not a sharper
+    row over the same constructor, but a narrower constructor. `encSet` demands the element
+    map be injective and no row of an arbitrary element *term* says so; a `SetBase` says it,
+    at all four bases, so the row that was excused is now provable as written.
 
     This list is the escape hatch, and it is closed: a row cannot be left vague by
     accident, only by being added here, in the open. -/
@@ -270,7 +274,8 @@ def Analysable : Term → Bool
   | .dunion _ opts => AnalysableL opts
   | .object fields fld rest =>
       decide (∀ k : {k // k ∈ fields}, AnalysableF (fld k) = true) && AnalysableR rest
-  | .set _ | .union _ | .nullable _ => false
+  | .set _ => true
+  | .union _ | .nullable _ => false
 
 def AnalysableL : List Term → Bool
   | [] => true
@@ -586,8 +591,36 @@ theorem neSetImage_isSome_of_inj {α β : Type} [DecidableEq β] {f : α → Opt
 theorem ExactV_opaq (lossy : Bool) : ExactV (.opaq lossy) := fun _ => Iff.rfl
 
 
+/-- **`set` writes exactly what its row says**, which the constructor's old shape made
+    false.
+
+    Both directions run through `encSet_base_iff`, and the direction that used to fail is
+    the interesting one: `encSet` refuses a *collision*, and a row over the elements cannot
+    see one. At a base there is none to see — every base's element map is injective, by
+    `Double.roundtrip` at `number` and by construction at the other three — so the guard
+    never fires and the element conjunction is the whole domain.
+
+    The three wire families are three cases rather than one because the payload types
+    differ; the argument is the same in each. -/
+theorem ExactV_set (b : SetBase) : ExactV (.set b) := by
+  intro v
+  cases v
+  case strSet S =>
+    show decide (∀ s ∈ S.1, b.adm (.str s) = true) = true
+      ↔ (encSet b.elem Value.str S).isSome = true
+    rw [decide_eq_true_eq, encSet_base_iff b (fun _ _ h => by injection h) S]
+  case numSet S =>
+    show decide (∀ d ∈ S.1, b.adm (.num d) = true) = true
+      ↔ (encSet b.elem Value.num S).isSome = true
+    rw [decide_eq_true_eq, encSet_base_iff b (fun _ _ h => by injection h) S]
+  case binSet S =>
+    show decide (∀ y ∈ S.1, b.adm (.bin y) = true) = true
+      ↔ (encSet b.elem Value.bin S).isSome = true
+    rw [decide_eq_true_eq, encSet_base_iff b (fun _ _ h => by injection h) S]
+  all_goals exact Iff.intro (fun h => nomatch h) (fun h => nomatch h)
+
 mutual
-/-- **Eighteen of the twenty-one rows are exact.** Not a bound on `dom(e)` — `dom(e)`.
+/-- **Nineteen of the twenty-one rows are exact.** Not a bound on `dom(e)` — `dom(e)`.
 
     The `held` case is the one worth reading: it appeals to the subterm at `f v`, which is
     the pullback, and it is one line because `(c.through f g).e v = c.e (f v)` holds by
@@ -615,8 +648,9 @@ theorem Adm_exact : ∀ (t : Term), Analysable t = true → ExactV t
       exact ExactV_object (fun k => Adm_exactF (fld k) (ha.1 k))
         (exactVR_codec rest (Adm_exactR rest ha.2))
   | .opaq lossy => fun _ => ExactV_opaq lossy
-  -- the three that are genuinely inexact, refuted by the hypothesis
-  | .set _ => by intro ha; simp [Analysable] at ha
+  -- the row the *constructor* made exact, rather than a sharper analysis of the old one
+  | .set b => fun _ => ExactV_set b
+  -- the two that are genuinely inexact, refuted by the hypothesis
   | .union _ => by intro ha; simp [Analysable] at ha
   | .nullable _ => by intro ha; simp [Analysable] at ha
 
@@ -740,8 +774,8 @@ theorem not_ExactV_nullable : ¬ ExactV (.nullable (.legacy .string rNull)) := b
 
 `Analysable`'s `false` rows are the last place a vague row can hide. The three exhaustive
 recursions above already force a *row* per constructor, so a new `Term` constructor cannot
-be added silently. What they do not force is a **reason**: the three `false` rows could be
-four, and the fourth would cost one identifier and a docstring nobody has to write.
+be added silently. What they do not force is a **reason**: the two `false` rows could be
+three, and the third would cost one identifier and a docstring nobody has to write.
 
 So the excuses are a type. `Excuse.covers` says which term shapes each one may be invoked
 for, and `analysable_excused` — exhaustive over `Term` — says every `Analysable`-false term
@@ -749,10 +783,10 @@ has one. Filing `array` under `opaqueDepth` is then a type error, and adding a r
 hatch means naming which of these four things is true of it, in the open, where a reviewer
 reads the reason rather than trusting that one existed.
 
-The type is two constructors shorter than it was. `opaqueDepth` and `nameAdmission` covered
-`opaq`, `tuple` and `object`, all three of which are exact above, and an excuse with no user
-is an excuse with no content: they are deleted rather than left standing over rows that no
-longer decline. `excuse_witnessed` could not have caught this — it asks for *some* term of a
+The type is three constructors shorter than it was. `opaqueDepth` and `nameAdmission` covered
+`opaq`, `tuple` and `object`, all three of which are exact above, and `payloadShape` covered
+`set`, whose *constructor* narrowed; an excuse with no user is an excuse with no content, so
+all three are deleted rather than left standing over rows that no longer decline. `excuse_witnessed` could not have caught this — it asks for *some* term of a
 covered shape on which exactness fails, and once the row is written there is none — which is
 the residual softness its own docstring concedes, seen from the other side.
 
@@ -762,13 +796,28 @@ excuse available" and `analysable_excused` forces `Analysable` to call it analys
 forces `Adm_exact` to prove it. The failure mode of every other catch-all in this
 development was that it silently said yes. -/
 
-/-- The three reasons a row may decline to be exact. There is no `other`, deliberately.
+/-- The two reasons a row may decline to be exact. There is no `other`, deliberately.
 
     There were four. `valueUnderRead` — "`q` tests the value a read *produces*, and no
     syntactic set of attributes bounds that" — covered `refine` on the attribute side, and
     was deleted when the row it excused turned out to be writable: a row may decode and then
     apply `q` (`refineReads`), so `refine` is exact on both sides and needs no reason. The
-    sentence the excuse was named for is still true; it was never a reason. -/
+    sentence the excuse was named for is still true; it was never a reason.
+
+    **`payloadShape` is the third deletion, and it went a different way.** It covered `set`
+    on both sides, and its docstring gave one reason — "`encSet` demands the element map be
+    **injective**, and no row of the elements alone says so". That was the *write* side's
+    reason and it was only ever half the story: the read-side witness `not_ExactA_set` was
+    `set(string)`, a typed, `Obligations`-discharged term whose inexactness had nothing to do
+    with injectivity. Its cause was `AdmA (.set _)`, which admitted `.ss`, `.ns` and `.bs`
+    whatever the element term was, because `setMember` sends one value kind to three
+    attribute members and a row over an element term cannot say which. Two causes, one
+    excuse, one of them unstated.
+
+    Both die at the constructor rather than at the row. Indexing `set` by a `SetBase` makes
+    every element map injective — so `encSet`'s collision guard cannot fire — and makes the
+    wire family a function of the index — so the read row names one of the three. Neither
+    row was sharpened; the shape they were excusing stopped existing. -/
 inductive Excuse where
   /-- `select` admits only where **exactly one** option does, and the count that decides it
       is taken over the *rows*, not over `dom(e)`.
@@ -782,9 +831,6 @@ inductive Excuse where
       is by *tag* and does not consult a row at all. The anti-monotonicity is `Continuity`'s,
       and this is where it bites. -/
   | uniqueAdmission
-  /-- `encSet` demands the element map be **injective** — a set codec that merged two
-      elements could not retract — and no row of the elements alone says so. -/
-  | payloadShape
   /-- `ownsNull` is a disjunction over **both** halves, so a read that reaches the null
       point suppresses the wrapper while the write still refuses it. -/
   | nullOwnership
@@ -794,7 +840,6 @@ inductive Excuse where
     new constructor is *not* excusable by default — see the note above. -/
 def Excuse.covers : Excuse → Term → Bool
   | .uniqueAdmission, .union _     => true
-  | .payloadShape,    .set _       => true
   | .nullOwnership,   .nullable _  => true
   | _, _ => false
 
@@ -822,7 +867,6 @@ def childrenAnalysable : Term → Bool
 theorem analysable_excused : ∀ (t : Term), Analysable t = false →
     (∃ e : Excuse, e.covers t = true) ∨ childrenAnalysable t = false
   | .union _, _     => .inl ⟨.uniqueAdmission, rfl⟩
-  | .set _, _       => .inl ⟨.payloadShape, rfl⟩
   | .nullable _, _  => .inl ⟨.nullOwnership, rfl⟩
   -- The propagating rows decline only by inheritance, and say so — the four that used to
   -- name an excuse are here now, which is the whole of the change.
@@ -833,7 +877,7 @@ theorem analysable_excused : ∀ (t : Term), Analysable t = false →
   -- The exact rows: the hypothesis refutes them, which is the point — a term cannot both
   -- carry an exactness proof and claim an excuse.
   | .string, h | .boolean, h | .binary, h | .null, h | .number, h | .decimal, h
-  | .literal _ _, h | .custom _ _, h | .opaq _, h => nomatch h
+  | .literal _ _, h | .custom _ _, h | .opaq _, h | .set _, h => nomatch h
 
 /-- **No excuse names an exact row.** The hatch cannot be used as a shortcut past an
     obligation that is provable: a covered shape really does decline. -/
@@ -1061,30 +1105,8 @@ theorem Adm_sound : ∀ (t : Term) {v a},
     -- the four repaired rows are sound because they are **exact** given the subterms'
     -- soundness, and each row is monotone in those — which is what `union` is not.
     case opaq lossy => exact Adm_opaq_sound lossy v (by rw [he]; rfl)
-    case set c =>
-      cases v
-      case strSet S =>
-        simp only [denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, setCodec] at he
-        have hall := encSet_elem he
-        simp only [Adm, decide_eq_true_eq]
-        refine fun y hy => ?_
-        obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp (hall y hy)
-        exact Adm_sound c ha'
-      case numSet S =>
-        simp only [denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, setCodec] at he
-        have hall := encSet_elem he
-        simp only [Adm, decide_eq_true_eq]
-        refine fun y hy => ?_
-        obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp (hall y hy)
-        exact Adm_sound c ha'
-      case binSet S =>
-        simp only [denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, setCodec] at he
-        have hall := encSet_elem he
-        simp only [Adm, decide_eq_true_eq]
-        refine fun y hy => ?_
-        obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp (hall y hy)
-        exact Adm_sound c ha'
-      all_goals (simp only [denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, setCodec] at he; exact nomatch he)
+    -- the row is exact now, so soundness is one half of the `Iff` rather than a traversal
+    case set b => exact (ExactV_set b v).mpr (by rw [he]; rfl)
     case tuple ts tl =>
       refine Adm_tuple_sound (fun t' ht' w hw => ?_) (fun t' ht' w hw => ?_) v (by rw [he]; rfl)
       · obtain ⟨b, hb⟩ := Option.isSome_iff_exists.mp hw
@@ -1169,8 +1191,8 @@ decreasing_by term_depth_wf
 
 /-! **Every row is a sound over-approximation, the hatch included.**
 
-    `Adm_exact` binds the eighteen analysable rows to `dom(e)` in both directions. The other
-    three had, until this theorem, *no* obligation at all: nothing stopped a hatch row being
+    `Adm_exact` binds the nineteen analysable rows to `dom(e)` in both directions. The other
+    two had, until this theorem, *no* obligation at all: nothing stopped a hatch row being
     written `fun _ => false`, which would have been an outright unsoundness rather than the
     imprecision every defect in the log so far has been. A hatch row may be **loose**; it
     may not be **wrong**, and that is now checked. -/
@@ -1198,19 +1220,10 @@ witnessed excuse says the row as written is loose; it never said the row had to 
 constructors are deleted above, and the two witnesses (`not_ExactV_tuple`, `not_ExactV_opaq`
 and their read-side twins) with them. -/
 
-/-- An adapter that collapses two distinct strings onto one. -/
-def collapse : Value → Value := fun _ => .str "x"
-
-/-- **`set`'s row still over-claims, but no longer for the reason §5 gave.** Heterogeneity
-    is gone — a value set is typed, so its elements cannot differ in kind. What remains is
-    *collision*: the row asks that every element write, and `encSet` asks in addition that
-    they write to **distinct** payloads, because a set codec that merged two elements could
-    not retract. -/
-theorem not_ExactV_set : ¬ ExactV (.set (.held .string collapse (fun v => v))) := by
-  intro h
-  have h2 := (h (.strSet (.of "a" {"b"}))).mp (by simp [Adm, NEFinset.of, collapse])
-  simp (config := { decide := true }) [denote, denote, setCodec, encSet, neSetImage,
-        Codec.through, stringCodec, collapse, setImage, sC, nC, bC, NEFinset.of] at h2
+/-! `not_ExactV_set` stood here. It was `set(held(string, collapse, id))` — an element
+adapter merging `"a"` and `"b"`, so every element writes and `encSet` refuses the collision —
+and it is **unstatable** now: `Term.set` takes a `SetBase`, and no base has a colliding
+element map. The witness is gone because the shape it witnessed is. -/
 
 /-- **The counting failing in its purest form.** `select` writes only where *exactly one*
     option admits, so two copies of one option admit everything and write nothing — while `⋁`
@@ -1229,7 +1242,6 @@ theorem not_ExactV_union : ¬ ExactV (.union [.string, .string]) := by
 theorem excuse_witnessed : ∀ (e : Excuse) (t : Term), e.covers t = true →
     ∃ t' : Term, e.covers t' = true ∧ ¬ ExactV t'
   | .uniqueAdmission, _, _ => ⟨.union [.string, .string], rfl, not_ExactV_union⟩
-  | .payloadShape, _, _    => ⟨.set (.held .string collapse (fun v => v)), rfl, not_ExactV_set⟩
   | .nullOwnership, _, _   => ⟨.nullable (.legacy .string rNull), rfl, not_ExactV_nullable⟩
 
 /-! ## The attribute side
@@ -1325,6 +1337,28 @@ noncomputable def AdmALit : (k : GroundKind) → NEFinset k.Carrier → Attr →
                               | none => false)
   | _, _, _ => false
 
+/-- **What a set base reads.**
+
+    Three bases answer concretely: `string` reads `SS` and nothing else, `binary` `BS`,
+    `decimal` an `NS` every numeral of which is `Stored`. `number` **asks its codec** — the
+    same move `admALit .number` (`Discharge.lean`) makes at the same base, and for a related
+    but different reason.
+
+    The reason is worth stating, because it is the one residue the re-indexing does *not*
+    remove and it is not injectivity of `e`. `numberCodec.p` goes through `Double.ofDec`,
+    which **rounds** (`Combinators.lean`), so two distinct stored numerals can read to the
+    same double and `decSet`'s `Nodup` gate then refuses an `NS` every element of which
+    reads. That is `e ∘ p ≠ id`, not `e` non-injective, and `numericHost` says nothing about
+    whether it ever fires — it is decidable, through `Double.decEq`, and not describable
+    syntactically, so the exact row is the codec's own answer. `AdmA` is already
+    `noncomputable`, so this costs nothing it had not already spent. -/
+noncomputable def AdmASet : SetBase → Attr → Bool
+  | .string,  .ss _ => true
+  | .binary,  .bs _ => true
+  | .decimal, .ns S => decide (∀ x ∈ S.1, Numeral.Stored x.1 = true)
+  | .number,  .ns S => (decSet numberCodec Attr.n S).isSome
+  | _, _ => false
+
 mutual
 
 /-- **The joint admission predicate, attribute side.** The mirror of `Adm` across §1's
@@ -1367,7 +1401,10 @@ noncomputable def AdmA : Term → Attr → Bool
   | .legacy t r => fun a => AdmA t a || (r a).isSome
   | .nullable t => fun a => AdmA t a || (match a with | .null => true | _ => false)
   | .union opts => fun a => anyPA (AdmAList opts) a
-  | .set _    => fun a => match a with | .ss _ | .ns _ | .bs _ => true | _ => false
+  -- **the row that used to admit all three wire families whatever the element term was.**
+  -- With the base an index the family is a function of it, so this names one — and at
+  -- `number` defers to the codec, for the rounding residue `AdmASet` documents.
+  | .set b    => AdmASet b
   | .tuple ts tail => fun a =>
       match a with | .l as => alignPA (AdmAList ts) (AdmAOptT tail) as | _ => false
   | .object fields fld rest => fun a =>
@@ -1453,6 +1490,72 @@ theorem AdmALit_null_exact (ls : NEFinset Unit) (a : Attr) :
 
 /-- The converse direction on the attribute side: the row is `dom(p)`, not a bound on it. -/
 def ExactA (t : Term) : Prop := ∀ a, AdmA t a = true ↔ ((denote t).p a).isSome
+
+/-- **`set` reads exactly what its row says.**
+
+    Four bases, eleven attribute constructors, and the argument is the same three moves in
+    each cell: `decSet` succeeds on the branch the base's `p` lands in, and fails at the
+    first element that base refuses (`decSet_isSome_false`). `number` is the cell that is
+    `rfl`, because its row *is* the codec's answer — see `AdmASet` for why it has to be. -/
+theorem ExactA_set (b : SetBase) : ExactA (.set b) := by
+  intro a
+  show AdmASet b a = true ↔ ((setCodec b.elem).p a).isSome = true
+  cases a
+  case ss S =>
+    cases b
+    case string =>
+      have h : (decSet stringCodec Attr.s S).isSome = true :=
+        decSet_isSome_str (fun _ _ => rfl) (fun _ _ _ _ _ h1 h2 => by
+          simp only [stringCodec, Option.some_bind, vStr] at h1 h2
+          exact (Option.some.inj h1).trans (Option.some.inj h2).symm)
+      exact Iff.intro (fun _ => h) (fun _ => rfl)
+    all_goals
+      obtain ⟨x, hx⟩ := S.2
+      simp only [AdmASet, SetBase.elem, setCodec]
+      rw [decSet_isSome_false hx rfl]
+  case ns S =>
+    cases b
+    case number => exact Iff.rfl
+    case decimal =>
+      show decide (∀ x ∈ S.1, Numeral.Stored x.1 = true) = true
+        ↔ (decSet decimalCodec Attr.n S).isSome = true
+      rw [decide_eq_true_eq]
+      constructor
+      · intro hst
+        have hp : ∀ x ∈ S.1, (decimalCodec.p (Attr.n x)).bind vStr = some x.1 := by
+          intro x hx
+          show ((if Numeral.Stored x.1 then some (Value.str x.1) else none).bind vStr)
+            = some x.1
+          rw [if_pos (hst x hx)]; rfl
+        refine decSet_isSome_str (fun x hx => by rw [hp x hx]; rfl) ?_
+        intro x₁ h₁ x₂ h₂ y e₁ e₂
+        rw [hp x₁ h₁] at e₁; rw [hp x₂ h₂] at e₂
+        exact Subtype.ext ((Option.some.inj e₁).trans (Option.some.inj e₂).symm)
+      · intro hd x hx
+        by_contra hc
+        have hn : decimalCodec.p (Attr.n x) = none := by
+          show (if Numeral.Stored x.1 then some (Value.str x.1) else none) = none
+          rw [if_neg hc]
+        rw [decSet_isSome_false hx hn] at hd
+        exact nomatch hd
+    all_goals
+      obtain ⟨x, hx⟩ := S.2
+      simp only [AdmASet, SetBase.elem, setCodec]
+      rw [decSet_isSome_false hx rfl]
+  case bs S =>
+    cases b
+    case binary =>
+      obtain ⟨x₀, hx₀⟩ := S.2
+      have h : (decSet binaryCodec Attr.b S).isSome = true :=
+        decSet_isSome_bin hx₀ rfl rfl (fun _ _ => rfl) (fun _ _ _ _ _ h1 h2 => by
+          simp only [binaryCodec, Option.some_bind, vBin] at h1 h2
+          exact (Option.some.inj h1).trans (Option.some.inj h2).symm)
+      exact Iff.intro (fun _ => h) (fun _ => rfl)
+    all_goals
+      obtain ⟨x, hx⟩ := S.2
+      simp only [AdmASet, SetBase.elem, setCodec]
+      rw [decSet_isSome_false hx rfl]
+  all_goals cases b <;> exact Iff.intro (fun h => nomatch h) (fun h => nomatch h)
 
 theorem alignPA_iff (tail : Option Term) (htl : ∀ t ∈ tail, ExactA t) :
     ∀ (ts : List Term) (as : List Attr), (∀ t ∈ ts, ExactA t) →
@@ -1839,7 +1942,8 @@ theorem AdmA_sound : ∀ (t : Term) {a v},
       cases hc : (denote c).p a with
       | some w => rw [hc] at hp; simp [AdmA, AdmA_sound c hc]
       | none => rw [hc] at hp; simp [AdmA, hp]
-    case set c => cases a <;> simp_all [AdmA, denote, setCodec]
+    -- exact, so soundness is one half of the `Iff`
+    case set b => exact (ExactA_set b a).mpr (by rw [hp]; rfl)
     case tuple ts tl =>
       refine AdmA_tuple_sound (fun t' ht' b hb => ?_) (fun t' ht' b hb => ?_) a (by rw [hp]; rfl)
       · obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp hb
@@ -1949,7 +2053,8 @@ def AnalysableA : Term → Bool
   | .dunion _ opts => AnalysableAL opts
   | .object fields fld rest =>
       decide (∀ k : {k // k ∈ fields}, AnalysableAF (fld k) = true) && AnalysableAR rest
-  | .nullable _ | .union _ | .set _ => false
+  | .set _ => true
+  | .nullable _ | .union _ => false
 
 def AnalysableAL : List Term → Bool
   | [] => true
@@ -2009,9 +2114,9 @@ theorem AdmAAll_iff {c : Term} (h : ExactA c) : ∀ as : List Attr,
   | cons a as ih => simp [allPA, ih, h a]
 
 mutual
-/-- **Eighteen of the twenty-one attribute rows are exact** — the same eighteen as the value
-    side, and the three that decline are the same three. `refine` was the seventeenth-versus-
-    eighteenth difference and is exact now: its row decodes and then applies `q`. `legacy`,
+/-- **Nineteen of the twenty-one attribute rows are exact** — the same nineteen as the value
+    side, and the two that decline are the same two. `refine` was the last difference between
+    the two sides and is exact now: its row decodes and then applies `q`. `legacy`,
     which used to be the other half of that asymmetry, is exact here because its row is the
     union of the two channels it reads on.
 
@@ -2035,10 +2140,11 @@ theorem AdmA_exact : ∀ (t : Term), AnalysableA t = true → ExactA t
       exact ExactA_object (fun k => AdmA_exactF (fld k) (ha.1 k))
         (exactAR_codec rest (AdmA_exactR rest ha.2))
   | .opaq lossy => fun _ => ExactA_opaq lossy
-  -- the three that decline, refuted by the hypothesis
+  -- exact because the constructor narrowed, not because the row sharpened
+  | .set b => fun _ => ExactA_set b
+  -- the two that decline, refuted by the hypothesis
   | .nullable _ => by intro ha; simp [AnalysableA] at ha
   | .union _ => by intro ha; simp [AnalysableA] at ha
-  | .set _ => by intro ha; simp [AnalysableA] at ha
 
   | .string => by intro _ a; cases a <;> simp [AdmA, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, stringCodec]
   | .boolean => by intro _ a; cases a <;> simp [AdmA, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, booleanCodec]
@@ -2162,7 +2268,7 @@ end
 
 /-! ### The attribute side's excuses, and their witnesses
 
-The value side's three reasons apply here too, and they are now the whole list. A fourth —
+The value side's two reasons apply here too, and they are now the whole list. A fourth —
 `refine`, "which cannot narrow a read because `q` tests the value a read *produces*" — was
 here until the row was written: `AdmA` decodes with the base and applies `q`, so the shape
 is exact and the reason is deleted rather than restated. `excuse_witnessed` keeps the
@@ -2172,17 +2278,10 @@ and a future asymmetry should not have to re-derive that.
 `legacy` used to be the second such reason and is exact on both sides now; `tuple` and
 `opaq` used to be witnessed here and are exact too. -/
 
-/-- `set`'s member gate over-claims on the read side: `AdmA` accepts all three wire
-    families, and `set(string)` reads only `SS`. The empty run used to be the witness;
-    a numeric run is the one that survives typing, and `WFNumeral`'s predicate is
-    decidable, so `WFNumeral.of "1"` computes and the witness needs no axiom. -/
-theorem not_ExactA_set : ¬ ExactA (.set .string) := by
-  intro h
-  have h2 := (h (.ns (.of (.of "1") ∅))).mp (by simp [AdmA])
-  obtain ⟨v, hv⟩ := Option.isSome_iff_exists.mp h2
-  replace hv : decSet stringCodec Attr.n (NEFinset.of (WFNumeral.of "1") ∅) = some v := hv
-  have := decSet_elem hv (WFNumeral.of "1") (NEFinset.mem_of _ ∅)
-  simp [stringCodec] at this
+/-! `not_ExactA_set` stood here: `set(string)` admitted an `NS` because `AdmA`'s `set` row
+answered `true` at all three wire families whatever the element term was. That row is gone —
+the family is a function of the base — and with it the witness. It was the *read* side's
+half of `payloadShape`, and the half that excuse's docstring never mentioned. -/
 
 /-- (U) failing, read side: two options admit and `select` reads nothing. -/
 theorem not_ExactA_union : ¬ ExactA (.union [.string, .string]) := by
@@ -2216,7 +2315,6 @@ theorem AdmA_refine_bot (a : Attr) : AdmA (.refine .string (fun _ => false)) a =
     and a future asymmetry should be able to appear in one of them. -/
 def Excuse.coversA : Excuse → Term → Bool
   | .uniqueAdmission, .union _     => true
-  | .payloadShape,    .set _       => true
   | .nullOwnership,   .nullable _  => true
   | _, _ => false
 
@@ -2236,7 +2334,6 @@ def childrenAnalysableA : Term → Bool
 theorem analysableA_excused : ∀ (t : Term), AnalysableA t = false →
     (∃ e : Excuse, e.coversA t = true) ∨ childrenAnalysableA t = false
   | .union _, _     => .inl ⟨.uniqueAdmission, rfl⟩
-  | .set _, _       => .inl ⟨.payloadShape, rfl⟩
   | .nullable _, _  => .inl ⟨.nullOwnership, rfl⟩
   | .array c, h | .record c, h | .held c _ _, h | .lazy c, h | .legacy c _, h
   | .refine c _, h =>
@@ -2244,7 +2341,7 @@ theorem analysableA_excused : ∀ (t : Term), AnalysableA t = false →
   | .tuple _ _, h | .dunion _ _, h | .object _ _ _, h =>
       .inr (by simpa [childrenAnalysableA, AnalysableA] using h)
   | .string, h | .boolean, h | .binary, h | .null, h | .number, h | .decimal, h
-  | .literal _ _, h | .custom _ _, h | .opaq _, h => nomatch h
+  | .literal _ _, h | .custom _ _, h | .opaq _, h | .set _, h => nomatch h
 
 /-- No attribute-side excuse names an exact row. -/
 theorem excuseA_shapes (e : Excuse) (t : Term) (h : e.coversA t = true) :
@@ -2255,7 +2352,6 @@ theorem excuseA_shapes (e : Excuse) (t : Term) (h : e.coversA t = true) :
 theorem excuseA_witnessed : ∀ (e : Excuse) (t : Term), e.coversA t = true →
     ∃ t' : Term, e.coversA t' = true ∧ ¬ ExactA t'
   | .uniqueAdmission, _, _ => ⟨.union [.string, .string], rfl, not_ExactA_union⟩
-  | .payloadShape, _, _    => ⟨.set .string, rfl, not_ExactA_set⟩
   | .nullOwnership, _, _   => ⟨.nullable (.custom ceNull cpNone), rfl, not_ExactA_nullable⟩
 
 /-! ## Re-deriving §5's separations on the pair
@@ -2526,10 +2622,15 @@ theorem AdmA_le_admA : ∀ (t : Term) (a : Attr), AdmA t a = true → admA t a =
 def SepJV (x y : Term) : Prop := ∀ v, Adm x v = true → Adm y v = false
 
 /-- **…and attribute side, which does *not* collapse.** The member disjunct stays, because
-    `AdmA` does not bound `μSyn`: a `set` row admits all three wire-set members whatever its
-    element term is, so two sets differing only in element member are separated by `μSyn`
-    and not by `AdmA` (`sepJA_needs_member`). The asymmetry is `setMember`'s — one value
-    kind, three attribute members — and it is why this side keeps two clauses. -/
+    `AdmA` does not bound `μSyn`.
+
+    The reason used to be `setMember`'s — one value kind, three attribute members, so a
+    `set` row admitted `SS`, `NS` and `BS` whatever its element term was. That reason is
+    **gone**: `set` is indexed by its base, so its wire family is a function of the index
+    and its row names one member. The clause survives anyway, because the phenomenon was
+    never `set`'s alone. `legacy` widens a read past the member its own term claims — `p`
+    falls back to a channel the term carries as data — so `AdmA` still fails to bound
+    `μSyn`, and `sepJA_needs_member` is now witnessed there. -/
 def SepJA (x y : Term) : Prop :=
   (∃ μx μy, μSyn x = some μx ∧ μSyn y = some μy ∧ μx ≠ μy) ∨
   (∀ a, AdmA x a = true → AdmA y a = false)
@@ -2560,12 +2661,30 @@ theorem sepJA_of_sepA {x y : Term} (h : SepA x y) : SepJA x y := by
       rw [AdmA_le_admA y a hy] at this
       exact absurd this (by simp)
 
-/-- The member disjunct is load-bearing: `set(string)` and `set(number)` differ in `μSyn`
-    and are indistinguishable to `AdmA`, which admits `NS` at both. -/
+/-- A read channel that fires at `N` and nowhere else — `legacy`'s widening, minimal. -/
+def rNum : Attr → Option Value := fun a => match a with | .n _ => some (.str "x") | _ => none
+
+/-- **The member disjunct is load-bearing, and the witness moved.**
+
+    It used to be `set(string)` against `set(number)`: they differ in `μSyn` and were
+    indistinguishable to `AdmA`, which admitted `NS` at both. Indexing `set` killed that
+    pair — the wire family is now a function of the base, so `AdmA` separates those two on
+    its own — and it did **not** kill the disjunct, because `set` was never the only way to
+    have a read that outruns `μSyn`.
+
+    `legacy` is. `legacy(string, r)` stores `S`, and `r` reading an `.n` widens `p` past the
+    member the term claims; `decimal` stores `N` and admits the same attribute. So the two
+    are separated by `μSyn` and not by `AdmA`, which is exactly what the first clause of
+    `SepJA` is for. -/
 theorem sepJA_needs_member :
-    ¬ (∀ a, AdmA (.set .string) a = true → AdmA (.set .number) a = false) := by
+    ¬ (∀ a, AdmA (.legacy .string rNum) a = true → AdmA .decimal a = false) := by
   intro h
-  exact absurd (h (.ns (.of (.of "1") ∅)) (by simp [AdmA])) (by simp [AdmA])
+  exact absurd (h (.n (.of "1")) (by simp [AdmA, rNum])) (by simp [AdmA]; decide)
+
+/-- …and the pair really is separated — by the member disjunct alone, which is what makes
+    `SepJA`'s two clauses independent rather than redundant. -/
+theorem sepJA_legacy_decimal : SepJA (.legacy .string rNum) .decimal :=
+  Or.inl ⟨.S, .N, rfl, rfl, by decide⟩
 
 /-! ## `ident`, and why the pair does not replace it
 
@@ -2808,27 +2927,39 @@ theorem AdmA_legacy_union (t : Term) (r : Attr → Option Value) (a : Attr) :
 
 /-- **A discharge §5 could not state.** Two sets over disjoint literals separate, because
     `℘⁺fin` has no empty inhabitant and so the two options share none. The non-emptiness
-    is now the *type's*, which is why every branch here ends at `S.2`. -/
+    is the *type's*, which is why every branch here ends at `S.2`.
+
+    The terms are `refine(set(string), liftQ …)` where they were `set(literal …)`, and that
+    is the whole of what the re-indexing cost this discharge: with `set` taking a base, a
+    literal element is a **restriction of the set**, and `setCodec_restrict` proves the two
+    write the same attribute on the nose. Same separation, one spelling further out. -/
 theorem sepJV_set_literals :
-    SepJV (.set (.literal .string (.of "A" ∅))) (.set (.literal .string (.of "B" ∅))) := by
+    SepJV (.refine (.set .string) (liftQ (inL .string (.of "A" ∅))))
+          (.refine (.set .string) (liftQ (inL .string (.of "B" ∅)))) := by
   intro v hv
   cases v
   case strSet S =>
-    simp only [Adm, decide_eq_true_eq] at hv ⊢
     obtain ⟨x, hx⟩ := S.2
-    simp only [decide_eq_false_iff_not]
-    refine fun hall' => ?_
-    have h1 := hv x hx
-    have h2 := hall' x hx
-    simp [Adm_literal, AdmLit, inL, NEFinset.of] at h1 h2
-    exact absurd (h1.symm.trans h2) (by decide)
-  all_goals
-    first
-      | (rename_i S
-         simp only [Adm, decide_eq_true_eq] at hv
-         obtain ⟨x, hx⟩ := S.2
-         exact absurd (hv x hx) (by simp [Adm_literal, AdmLit, inL, NEFinset.of]))
-      | simp [Adm] at hv
+    simp only [Adm, Bool.and_eq_true, liftQ, decide_eq_true_eq] at hv
+    have hxA : x = "A" := by
+      have h1 := hv.2 x hx
+      simpa [inL, NEFinset.of] using h1
+    simp only [Adm, liftQ, Bool.and_eq_false_iff, decide_eq_false_iff_not]
+    refine Or.inr (fun hall => ?_)
+    have h2 := hall x hx
+    rw [hxA] at h2
+    simp [inL, NEFinset.of] at h2
+  -- the other two wire families are refused by the *set* row, element by element: a
+  -- `string` base admits no number and no byte string, and `℘⁺fin` supplies the element
+  case numSet S =>
+    obtain ⟨x, hx⟩ := S.2
+    simp only [Adm, Bool.and_eq_false_iff, decide_eq_false_iff_not]
+    exact Or.inl (fun hall => by have h := hall x hx; simp [SetBase.adm] at h)
+  case binSet S =>
+    obtain ⟨x, hx⟩ := S.2
+    simp only [Adm, Bool.and_eq_false_iff, decide_eq_false_iff_not]
+    exact Or.inl (fun hall => by have h := hall x hx; simp [SetBase.adm] at h)
+  all_goals simp [Adm, liftQ]
 
 /-- …and the contrast that shows what the non-emptiness is doing: the *array* pair does not
     separate, because both options admit `[]`. This is §5's empty-container argument in its

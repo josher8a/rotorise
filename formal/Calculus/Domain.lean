@@ -582,4 +582,34 @@ deriving DecidableEq, Repr
   | .binary  => .binary
   | .null    => .null
 
+/-! ## The set bases (§3 `(set)`'s payload)
+
+§3's `(set)` rule reads a member off its element term and refuses when there is none. Four
+element terms have one — `string`, `number`, `decimal`, `binary` — and every other element
+term the constructor accepted was either underivable (`setMember` is partial) or unreachable
+in `src/`. `SetBase` is those four as an index, so the rule's member premise becomes a
+function of the index and `set(union(…))` is unstatable rather than merely underivable.
+
+**Four bases onto three wire members.** `number` and `decimal` both store `NS`; they are not
+the same base and neither is redundant. `number` is a caller's platform number — §1's `D`
+reached through `Double.toDec` — and `decimal` is the host-independent spelling, carried as a
+`Numerals` string on the value side. Collapsing them would delete the only base whose value
+side is exact, and `Member` cannot tell them apart (both `NS`), which is why the index is
+neither `Member` nor `GroundKind`: `GroundKind` has no `decimal`, and it indexes *value*
+carriers, where `set(decimal)` is a `strSet`. -/
+
+/-- The four bases a set's elements may sit at. -/
+inductive SetBase where
+  | string | number | decimal | binary
+deriving DecidableEq, Repr
+
+/-- The wire member a set at this base stores as — §3 `(set)`'s `μS`, now a total function
+    of the index where it was a premise (`setMember μ = some μS`). Not injective: `number`
+    and `decimal` share `NS`. -/
+@[simp] def SetBase.member : SetBase → Member
+  | .string  => .SS
+  | .number  => .NS
+  | .decimal => .NS
+  | .binary  => .BS
+
 end Calculus

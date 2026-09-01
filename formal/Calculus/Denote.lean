@@ -59,7 +59,8 @@ def μSyn : Term → Option Member
   | .boolean => some .BOOL
   | .null => some .NULL
   | .binary => some .B
-  | .set t => (μSyn t).bind setMember
+  -- the member is the base's, where it was `setMember` of the element's and could be `none`
+  | .set b => some b.member
   | .array _ => some .L
   | .tuple _ _ => some .L
   | .record _ => some .M
@@ -111,7 +112,7 @@ def denote : Term → Codec
   | .null => nullCodec
   | .binary => binaryCodec
   | .literal k ls => literalCodec k ls
-  | .set elem => setCodec (denote elem)
+  | .set b => setCodec b.elem
   | .array elem => arrayCodec (denote elem)
   | .tuple elems tail => tupleCodec (denoteList elems) (denoteOpt tail)
   | .record val => recordCodec (denote val)
@@ -176,9 +177,7 @@ mutual
 theorem denote_μ : ∀ t : Term, (denote t).μ = μSyn t
   | .literal k ls => literalCodec_μ k ls
   | .string | .number | .decimal | .boolean | .binary | .null => rfl
-  | .set t' => by
-      show (denote t').μ.bind setMember = (μSyn t').bind setMember
-      rw [denote_μ t']
+  | .set b => SetBase.setCodec_μ b
   | .array _ | .tuple _ _ | .record _ => rfl
   | .held t' _ _ => denote_μ t'
   | .refine t' _ => denote_μ t'
@@ -219,7 +218,7 @@ def fieldTable (fields : Finset Name) (f : {k // k ∈ fields} → Field) : MapO
 
 section Bridge
 
-theorem denote_set (t : Term) : denote (.set t) = setCodec (denote t) := rfl
+theorem denote_set (b : SetBase) : denote (.set b) = setCodec b.elem := rfl
 theorem denote_array (t : Term) : denote (.array t) = arrayCodec (denote t) := rfl
 theorem denote_record (t : Term) : denote (.record t) = recordCodec (denote t) := rfl
 

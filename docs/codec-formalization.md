@@ -1974,6 +1974,88 @@ and an `Obligations` entry (an obligation is discharged from the term, and this 
 value). What remains is a compositional bound over the fragment that excludes `opaque` and `lazy`,
 which is item 20.
 
+### One where the row could not be sharpened and the constructor could
+
+`set` had been in the exactness hatch since the hatch existed, under `Excuse.payloadShape`, and
+every round of questioning it (the "Round one" entry above) sharpened the *row* and left the
+excuse standing. The reason the excuse gave was injectivity: `encSet` refuses an element map that
+collapses two elements, because (R) cannot hold on the collapsed pair, and no predicate on the
+elements individually sees a collision *between* two of them. True, and it was only half of what
+was being excused. The read-side witness `not_ExactA_set` was `set(string)` — typed,
+`Obligations`-discharged, perfectly ordinary — and its inexactness had nothing to do with
+injectivity: `AdmA (.set _)` admitted `SS`, `NS` and `BS` whatever the element term was, because
+`setMember` sends one value kind to three attribute members and a row over an arbitrary element
+term cannot say which one fires. Two causes, one excuse, and the docstring named the one that was
+not doing the work on that side.
+
+**`Term.set` now takes a base, not a term.**
+
+    inductive SetBase | string | number | decimal | binary
+
+with `string → SS`, `number → NS`, `decimal → NS`, `binary → BS`. Both numeric bases are
+first-class: `number` is a caller's platform number and `decimal` is the host-independent
+spelling, which the old shape could not ask for at all — `set(decimal)` is a `strSet` on the value
+side and an `NS` on the wire, so neither `GroundKind` (no `decimal`, and it indexes value
+carriers) nor `Member` (cannot tell the two apart) is the right index.
+
+Both causes die at the constructor. Every base's element map is injective — `Double.toDec` from
+`Double.roundtrip`, the other three identity or subtype projections — so `encSet`'s collision
+guard cannot fire, and `encSet_base_iff` is the element conjunction in both directions. The wire
+family is a function of the index, so the read row names one member. `payloadShape` is **deleted**,
+its two witnesses with it: `not_ExactV_set` is unstatable (no base collides) and `not_ExactA_set`
+is false. `Analysable` and `AnalysableA` both go **18/21 → 19/21**; `union` and `nullable` are what
+is left, on both sides.
+
+**What the constructor gives up, and what it does not.** `set(refine(b, q))` and
+`set(literal k ls)` are *not* lost. A restriction of the elements is a restriction of the set:
+`setCodec_restrict` proves `(setCodec (c.restrict q)).e = ((setCodec c).restrict (liftQ q)).e` on
+the nose, with `liftQ q (.strSet S) = ∀ s ∈ S, q (.str s)` and the two other families alongside.
+The read side follows from `434e54d`, which made `restrict` check `q` after decoding. `liftQ` is
+choice-free, and deliberately so — the subset test reaches `Finset.decidableDforallFinset` and
+`Finset.decidableMem`, not `DecidableEq (Finset α)`, which is `Classical.choice`. `sepJV_set_literals`
+is the same discharge in the new spelling.
+
+The shape this has to keep working is `src/codec.set.spec.ts:76`, which is
+`set(refine(decimal, isAmount))` — a branded numeric element. It survives twice over: `decimal` is
+one of the four bases (it was not reachable as a *set* element under the old constructor at all,
+since nothing named it), and the refinement lifts.
+
+What *is* lost is `set(held b f g)` and `set(legacy b r)` at the element level. Neither appears in
+`src/`, and neither has a set-level substitute: a set-level `held` would need `setImage` rather
+than the classical `Finset.image` to stay injective, and a set-level `legacy` widens the whole
+attribute rather than each member. That is the deliberate cost, recorded at the constructor.
+
+**One residue survives, and it is not injectivity.** `AdmA`'s row at `number` asks its codec:
+`numberCodec.p` goes through `Double.ofDec`, which *rounds*, so two distinct stored numerals can
+read to one double and `decSet`'s `Nodup` gate then refuses an `NS` every element of which reads.
+That is `e ∘ p ≠ id`, not `e` non-injective; `numericHost` says nothing about whether it fires; it
+is decidable through `Double.decEq` and not describable syntactically. So the row is
+`((setCodec numberCodec).p a).isSome` — the same "ask the codec" move `admALit` already makes at
+the same base. The other three bases answer concretely.
+
+**And it closes a divergence between the model and the library.** `src/codec.ts:1184` **deduplicates**
+on write — `[...new Set(written)].sort()` — where the model **refuses** a collision (`setImage`,
+`Combinators.lean`). The two disagree about what to do when two elements write to one payload.
+Under the new shape that case is unreachable at all four bases, so the disagreement is about a
+situation neither side can now be in. It is not a repair of either; it is a divergence that stopped
+being observable, which is worth recording as such rather than as a fix.
+
+**A correction to two entries above.** The `SepJA` passage says the member disjunct survives
+"because `setMember` … `AdmA`'s `set` row admits all three whatever its element term is", with
+`set(string)`/`set(number)` as the pair. That reason is gone — those two are separated by `AdmA`
+alone now. The **disjunct** is not: `legacy` widens a read past the member its own term claims, so
+`AdmA` still fails to bound `μSyn`, and `sepJA_needs_member` is re-witnessed at
+`legacy(string, r)` against `decimal`. And "Round one of questioning the hatch: `set`" ends by
+saying `payloadShape` is "now earned by `set(union(string, boolean))`" — that term is not writable
+any more, and neither is `not_typed_set_union`, the §6 refutation it was standing next to. `(set)`
+demanding a member is the constructor's argument type now, checked at elaboration; `Refutations.lean`
+records the closure in prose, as `HeldSet.lean` does for `strSet ∅`.
+
+`codec-calculus.md`'s `(set)` rule — `⊢ c : T ⇝ μ`, `μ ∈ {S, N, B}` — is **normative and
+unchanged**. The model is now narrower than it, in the direction the rule's own side condition was
+pointing, and the divergence waits for the call, as `codec-audit.md` item 18 does for the
+`adm`/`admA` table.
+
 ## §5 Certifying an implementation
 
 The calculus is portable by design: nothing in it is TypeScript, and nothing is Rotorise. An

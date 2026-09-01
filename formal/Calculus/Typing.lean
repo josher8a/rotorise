@@ -63,6 +63,22 @@ def HSet (T : Held) : Held := fun v =>
   (∃ S : NEFinset Double, v = .numSet S ∧ ∀ d ∈ S.1, T (.num d)) ∨
   (∃ S : NEFinset Bytes,  v = .binSet S ∧ ∀ b ∈ S.1, T (.bin b))
 
+/-- The held set of a set's **base** — §3 `(set)`'s `T` premise, now a function of the
+    index. Each is the ground rule's conclusion at that base, verbatim: `string` holds every
+    string, `number` §1's `D`, `decimal` §1's `Numerals` carried as strings, `binary` every
+    byte string. -/
+def SetBase.held : SetBase → Held
+  | .string  => fun v => ∃ s, v = .str s
+  | .number  => fun v => ∃ d, v = .num d ∧ Numeral.WF d.toDec = true
+  | .decimal => fun v => ∃ s, v = .str s ∧ Numeral.Stored s = true
+  | .binary  => fun v => ∃ b, v = .bin b
+
+/-- The base's held set **is** its codec's, at every base — the four rows were transcribed
+    from the four ground rules, and those rules' codecs carry the same condition. `rfl`, so
+    `(set)`'s subset obligation reduces to nothing. -/
+theorem SetBase.elem_T : ∀ b : SetBase, b.elem.T = b.held
+  | .string | .number | .decimal | .binary => rfl
+
 /-- `T*` (§3 `(array)`). -/
 def HStar (T : Held) : Held :=
   fun v => ∃ vs, v = .arr vs ∧ ∀ x ∈ vs, T x
@@ -178,8 +194,14 @@ inductive Typed : Term → Held → Option Member → Prop where
       is `Classical.choice`. -/
   | literal (k : GroundKind) (ls : NEFinset k.Carrier) (hD : LiteralD k ls) :
       Typed (.literal k ls) (HLit k ls) (some k.member)
-  | set {t T μ μS} (h : Typed t T (some μ)) (hs : setMember μ = some μS) :
-      Typed (.set t) (HSet T) (some μS)
+  /-- §3 `(set)`, and there is nothing left of the premise line.
+
+      The rule was `⊢ c : T ⇝ μ` plus `setMember μ = some μS`, and the second premise was
+      the whole content: `setMember` is partial, so the constructor could be applied to
+      element terms the rule then refused. The base is an index, so `T` is `b.held`, `μS` is
+      `b.member`, and both are functions rather than premises — the same move `(literal)`
+      made when `GroundKind` replaced its three constructors. -/
+  | set (b : SetBase) : Typed (.set b) (HSet b.held) (some b.member)
   | array {t T μ} (h : Typed t T μ) : Typed (.array t) (HStar T) (some .L)
   | tuple {ts Ts tail Tt} (h : TypedList ts Ts) (ht : TypedOpt tail Tt) :
       Typed (.tuple ts tail) (HProd Ts Tt) (some .L)
