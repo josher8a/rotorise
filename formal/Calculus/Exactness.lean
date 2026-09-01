@@ -23,16 +23,20 @@ per-table form obscured.
   one defect with three faces, and it is why §5 could justify `⊤` at a container with an
   argument (the empty array) that is true and proves far less than it was asked to.
 
-`Adm` below is that joint predicate as a single recursion. It is exact for nineteen of the
-twenty-one constructors (`Adm_exact`); the other two are `Analysable`'s `false` rows, each
-for a stated reason, and each with a witness here.
+`Adm` below is that joint predicate as a single recursion. It is exact for **twenty of the
+twenty-one** constructors (`Adm_exact`); the one that is not is `union`, `Analysable`'s only
+`false` row, and it has a witness here.
 
-**Four of those `false` rows were never forced.** `tuple`, `object`, `dunion` and `opaq` were
+**Five of those `false` rows were never forced.** `tuple`, `object`, `dunion` and `opaq` were
 excused on the strength of a reading — depth recursion, name admission, "the matched option's
-own admission" — and in every case the exact row was expressible and simply unwritten. The
-rows below are those four, and the deletions in the hatch are what they cost the excuses. The
-one row that resisted is `union`, and it resisted for a reason no reading had reached: see the
-note on `uniqueAdmission`.
+own admission" — and in every case the exact row was expressible and simply unwritten.
+**`nullable` is the fifth and the cheapest of them**: its excuse said `ownsNull` is a
+disjunction over both halves of the pair, which is true, and concluded that the row could not
+account for it — where `Codec.ownsNull` is a computable `Bool` the row may simply *ask*. Same
+correction as `opaque`, `number` and `refine`, at a sixth row.
+
+The one row that resists is `union`, and it resists for a reason no reading had reached: see
+the note on `uniqueAdmission`.
 -/
 
 namespace Calculus
@@ -123,9 +127,8 @@ mutual
     structural recursion — and the containers recurse with *this*, which is exactly what
     the old rows failed to do.
 
-    One row is still a sound over-approximation and claims no exactness: `union`. `set` and
-    `nullable` are the other two `Analysable`-false shapes, and their rows are the subterm
-    recursion and the disjunction they always were. -/
+    One row is still a sound over-approximation and claims no exactness: `union`, and it is
+    now the only one. -/
 noncomputable def Adm : Term → Value → Bool
   | .string   => fun v => match v with | .str _ => true | _ => false
   | .boolean  => fun v => match v with | .bool _ => true | _ => false
@@ -145,7 +148,19 @@ noncomputable def Adm : Term → Value → Bool
   | .legacy t _ => Adm t
   | .lazy t     => Adm t
   | .held t f _ => fun v => Adm t (f v)
-  | .nullable t => fun v => Adm t v || (match v with | .null => true | _ => false)
+  -- **`ownsNull` is asked, not assumed.** The row was `Adm t v || v = null`, which claims
+  -- the wrapper always adds the point. §3's `withNull` adds it *unless the subterm already
+  -- owns it*, and `ownsNull` is a disjunction over **both** halves — so a subterm whose
+  -- *read* reaches null (a `legacy` widening) suppresses the wrapper while its write still
+  -- refuses null, and the old row admitted a value the codec does not write
+  -- (`not_ExactV_nullable`, deleted with the excuse it witnessed).
+  --
+  -- The conjunct is the sixth row to **ask its codec** rather than describe it, and the
+  -- cheapest of them: `Codec.ownsNull` is a computable `Bool` off the subterm's pair, so
+  -- this needs no mutual recursion and no new vocabulary — only the question the old row
+  -- answered from a reading.
+  | .nullable t => fun v =>
+      Adm t v || ((match v with | .null => true | _ => false) && !(denote t).ownsNull)
   -- `union` is the one row that stays a disjunction, and the reason is `select`'s
   -- **anti-monotonicity** rather than any missing vocabulary — see `Excuse.uniqueAdmission`.
   | .union opts => fun v => anyP (AdmList opts) v
@@ -246,22 +261,23 @@ theorem Adm_union (opts : List Term) (v : Value) :
 def ExactV (t : Term) : Prop := ∀ v, Adm t v = true ↔ ((denote t).e v).isSome
 
 mutual
-/-- The terms whose rows carry an exactness proof, subterms included. Three `false` rows are
-    left, and each has a reason:
+/-- The terms whose rows carry an exactness proof, subterms included. **One `false` row is
+    left**, and it has a reason:
 
     * `union` — `select` admits only where **exactly one** option does, and the count is taken
       over `Adm`'s own answers, which over-approximate at the shape below. Sharpening the
       row to that count would make it *unsound* — see `Excuse.uniqueAdmission`.
-    * `nullable` — `ownsNull` is a disjunction over *both* halves, so a read that reaches the
-      null point suppresses the wrapper while the write still refuses it
-      (`not_ExactV_nullable`).
 
     `tuple`, `object`, `dunion` and `opaq` used to be here. Nothing about their *shapes* put
     them here: the rows are written now, and the four excuses are deleted rather than
-    re-argued. **`set` used to be here too**, and it left by a different door: not a sharper
-    row over the same constructor, but a narrower constructor. `encSet` demands the element
-    map be injective and no row of an arbitrary element *term* says so; a `SetBase` says it,
-    at all four bases, so the row that was excused is now provable as written.
+    re-argued. **`nullable` left last**, and by the same door as `opaque`, `number` and
+    `refine`: its excuse said `ownsNull` is a disjunction over both halves of the pair, and
+    inferred that a row could not account for it — where `Codec.ownsNull` is a computable
+    `Bool` off the subterm's codec, so the row asks for it (`ExactV_nullable`). **`set` left
+    by a different door**: not a sharper row over the same constructor, but a narrower
+    constructor. `encSet` demands the element map be injective and no row of an arbitrary
+    element *term* says so; a `SetBase` says it, at all four bases, so the row that was
+    excused is now provable as written.
 
     This list is the escape hatch, and it is closed: a row cannot be left vague by
     accident, only by being added here, in the open. -/
@@ -275,7 +291,8 @@ def Analysable : Term → Bool
   | .object fields fld rest =>
       decide (∀ k : {k // k ∈ fields}, AnalysableF (fld k) = true) && AnalysableR rest
   | .set _ => true
-  | .union _ | .nullable _ => false
+  | .nullable c => Analysable c
+  | .union _ => false
 
 def AnalysableL : List Term → Bool
   | [] => true
@@ -619,12 +636,35 @@ theorem ExactV_set (b : SetBase) : ExactV (.set b) := by
     rw [decide_eq_true_eq, encSet_base_iff b (fun _ _ h => by injection h) S]
   all_goals exact Iff.intro (fun h => nomatch h) (fun h => nomatch h)
 
+/-- **`nullable` writes exactly what its row says**, once the row asks `ownsNull`.
+
+    The proof is the definition of `withNull` in two cases, and each case is where the old
+    row went wrong or did not:
+
+    * `ownsNull = true` — the wrapper is *suppressed*, `e` is the subterm's, and the row
+      collapses to the subterm's row. The old row still offered `null`, and at
+      `nullable(legacy(string, ⟨NULL⟩))` that was a value the pair refuses to write: the
+      read side owns the point, so the guard fires, and the write side is `string`'s.
+    * `ownsNull = false` — the wrapper is `orNull`, and the point really is added.
+
+    So the conjunct is not a repair of an approximation. It is the guard §3 already has,
+    stated on the side of the analysis that had been reading it as unconditional. -/
+theorem ExactV_nullable {t : Term} (h : ExactV t) : ExactV (.nullable t) := by
+  intro v
+  rw [denote_nullable]
+  simp only [Adm, Codec.withNull]
+  cases hw : (denote t).ownsNull with
+  | true => simp [hw, h v]
+  | false =>
+    simp only [hw, Bool.not_false, Bool.and_true, if_false, Bool.false_eq_true, addPoint]
+    cases v <;> simp [h _]
+
 -- `unnecessarySeqFocus` fires on `Adm_exact`'s `literal` case and is wrong there: `try split`
 -- leaves two goals at `decimal`, and the `;` it suggests would reach only the first.
 -- Suppressed at the block, as `term_depth_wf`'s five sharers already are.
 set_option linter.unnecessarySeqFocus false in
 mutual
-/-- **Nineteen of the twenty-one rows are exact.** Not a bound on `dom(e)` — `dom(e)`.
+/-- **Twenty of the twenty-one rows are exact.** Not a bound on `dom(e)` — `dom(e)`.
 
     The `held` case is the one worth reading: it appeals to the subterm at `f v`, which is
     the pullback, and it is one line because `(c.through f g).e v = c.e (f v)` holds by
@@ -654,9 +694,12 @@ theorem Adm_exact : ∀ (t : Term), Analysable t = true → ExactV t
   | .opaq lossy => fun _ => ExactV_opaq lossy
   -- the row the *constructor* made exact, rather than a sharper analysis of the old one
   | .set b => fun _ => ExactV_set b
-  -- the two that are genuinely inexact, refuted by the hypothesis
+  -- the row that asks `ownsNull`, which is what took it off the hatch
+  | .nullable c => by
+      intro ha
+      exact ExactV_nullable (Adm_exact c (by simpa [Analysable] using ha))
+  -- the one that is genuinely inexact, refuted by the hypothesis
   | .union _ => by intro ha; simp [Analysable] at ha
-  | .nullable _ => by intro ha; simp [Analysable] at ha
 
   | .string => by intro _ v; cases v <;> simp [Adm, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, stringCodec]
   | .boolean => by intro _ v; cases v <;> simp [Adm, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, booleanCodec]
@@ -765,20 +808,12 @@ theorem Adm_array_nested :
     Adm (.array (.array (.literal .string (.of "A" ∅)))) (.arr [.arr [.str "B"]]) = false := by
   simp [Adm, allP, AdmLit, inL, NEFinset.of]
 
-/-- A migration whose *read* reaches the null point while its write does not. -/
-def rNull : Attr → Option Value := fun a => match a with | .null => some (.str "x") | _ => none
-
-/-- **Why `nullable` is in the hatch**, with a witness rather than an assertion.
-    `ownsNull` is `(e null).isSome || (p null).isSome` — a disjunction over *both* halves.
-    A `legacy` that reads the null point makes the guard fire, so `withNull` adds nothing,
-    and the wrapper's `e` still refuses `null` — while any row of the shape
-    `Adm t v || v = null` claims it. -/
-theorem not_ExactV_nullable : ¬ ExactV (.nullable (.legacy .string rNull)) := by
-  intro h
-  have hadm : Adm (.nullable (.legacy .string rNull)) .null = true := by simp [Adm]
-  have := (h .null).mp hadm
-  simp only [denote, Codec.withNull, Codec.extendRead] at this
-  simp [denote, Codec.withNull, Codec.ownsNull, Codec.extendRead, stringCodec, rNull] at this
+/-! `not_ExactV_nullable` stood here. It was `nullable(legacy(string, ⟨read NULL⟩))` — a
+subterm whose *read* reaches the null point, so `withNull`'s guard fires and the wrapper
+adds nothing, while the write side is still `string`'s — and it refuted the row
+`Adm t v || v = null`. That row is gone: `Adm (.nullable t)` asks `ownsNull`, so on this very
+term it now answers `false` at `.null`, correctly. The witness is deleted because the row it
+witnessed is, and `rNull` with it — nothing else used either. -/
 
 
 /-! ## The hatch, made expensive
@@ -835,23 +870,19 @@ inductive Excuse where
 
       This is **not** the obligation (U): (U) is what the laws need, and a row needs only
       counting — `(opts.filter (Adm · v)).length = 1` is written as easily as `⋁` is. What
-      forbids it is that `Adm` must stay **sound at every term**, and at `set` and `nullable`
-      it over-approximates. An over-counted filter is a filter that is *not* a singleton, so
+      forbids it is that `Adm` must stay **sound at every term**, and at a `union` — the one
+      row left — it over-approximates. An over-counted filter is not a singleton, so
       the sharper row would answer `false` where the union writes: sharpening `union` breaks
       soundness rather than improving precision. `dunion` escapes exactly because its filter
       is by *tag* and does not consult a row at all. The anti-monotonicity is `Continuity`'s,
       and this is where it bites. -/
   | uniqueAdmission
-  /-- `ownsNull` is a disjunction over **both** halves, so a read that reaches the null
-      point suppresses the wrapper while the write still refuses it. -/
-  | nullOwnership
   deriving DecidableEq
 
 /-- Which term shapes each excuse may be invoked for. The catch-all answers `false`, so a
     new constructor is *not* excusable by default — see the note above. -/
 def Excuse.covers : Excuse → Term → Bool
   | .uniqueAdmission, .union _     => true
-  | .nullOwnership,   .nullable _  => true
   | _, _ => false
 
 /-- The answer a propagating row inherits: its children's, conjoined. The catch-all is
@@ -863,7 +894,8 @@ def Excuse.covers : Excuse → Term → Bool
     and a *function on a `Finset`*; naming one of them would need a choice the axiom base does
     not have (`Finset.toList` is `Classical.choice`), so the row conjoins them instead. -/
 def childrenAnalysable : Term → Bool
-  | .array c | .record c | .refine c _ | .legacy c _ | .lazy c | .held c _ _ => Analysable c
+  | .array c | .record c | .refine c _ | .legacy c _ | .lazy c | .held c _ _
+  | .nullable c => Analysable c
   | .tuple ts tail => AnalysableL ts && AnalysableO tail
   | .dunion _ opts => AnalysableL opts
   | .object fields fld rest =>
@@ -878,11 +910,11 @@ def childrenAnalysable : Term → Bool
 theorem analysable_excused : ∀ (t : Term), Analysable t = false →
     (∃ e : Excuse, e.covers t = true) ∨ childrenAnalysable t = false
   | .union _, _     => .inl ⟨.uniqueAdmission, rfl⟩
-  | .nullable _, _  => .inl ⟨.nullOwnership, rfl⟩
   -- The propagating rows decline only by inheritance, and say so — the four that used to
   -- name an excuse are here now, which is the whole of the change.
   | .array c, h | .record c, h | .refine c _, h | .legacy c _, h | .lazy c, h
-  | .held c _ _, h => .inr (by simpa [childrenAnalysable, Analysable] using h)
+  | .held c _ _, h | .nullable c, h =>
+      .inr (by simpa [childrenAnalysable, Analysable] using h)
   | .tuple _ _, h | .dunion _ _, h | .object _ _ _, h =>
       .inr (by simpa [childrenAnalysable, Analysable] using h)
   -- The exact rows: the hypothesis refutes them, which is the point — a term cannot both
@@ -894,7 +926,8 @@ theorem analysable_excused : ∀ (t : Term), Analysable t = false →
     obligation that is provable: a covered shape really does decline. -/
 theorem excuse_shapes (e : Excuse) (t : Term) (h : e.covers t = true) :
     Analysable t = false := by
-  cases e <;> cases t <;> simp_all [Excuse.covers, Analysable]
+  cases e
+  cases t <;> simp_all [Excuse.covers, Analysable]
 
 /-- …stated the way a reviewer wants it: an exact row has no excuse available to it, so
     the two halves of `analysable_excused` are exclusive as well as exhaustive. -/
@@ -922,11 +955,12 @@ theorem AdmAll_sound_aux {c : Term} {C : Codec}
 /-! ### Soundness of the four repaired rows, and why it is a separate proof
 
 Exactness was proved *given* the subterms' exactness. `Adm_sound` may assume no such thing —
-it holds at every term, and at `set`, `nullable` and anything containing them the subterm's
-row is loose. What carries the four rows across that gap is that each is **monotone** in the
-rows it is built from: a conjunction of subterm answers (`tuple`, `object`), or one option's
-answer behind a filter that does not consult a row at all (`dunion`), or no subterm at all
-(`opaq`). Loosen a subterm and the row only loosens.
+it holds at every term, and at `union` and anything containing it the subterm's row is loose.
+What carries the rows across that gap is that each is **monotone** in the rows it is built
+from: a conjunction of subterm answers (`tuple`, `object`), or one option's answer behind a
+filter that does not consult a row at all (`dunion`), or no subterm at all (`opaq`). Loosen a
+subterm and the row only loosens. `nullable`'s new conjunct is monotone for a sharper reason:
+`ownsNull` is asked of the *codec*, not of the row, so loosening a row cannot move it.
 
 `union` is exactly the row that fails this test, which is why it keeps its excuse: its
 `select` is a *count*, and a loosened option is one more admitting option, so the count that
@@ -1171,7 +1205,8 @@ theorem Adm_sound : ∀ (t : Term) {v a},
         rw [show denote (.nullable c) = (denote c).orNull from
           withNull_eq_orNull hw] at he
         rcases orNull_e.mp he with ⟨rfl, -⟩ | ⟨-, hc⟩
-        · simp [Adm]
+        -- the added point, and `hw` is what the row now asks for before offering it
+        · simp [Adm, hw]
         · simp [Adm, Adm_sound c hc]
     case dunion d opts =>
       refine Adm_dunion_sound (fun t' ht' w hw => ?_) v (by rw [he]; rfl)
@@ -1202,7 +1237,7 @@ decreasing_by term_depth_wf
 
 /-! **Every row is a sound over-approximation, the hatch included.**
 
-    `Adm_exact` binds the nineteen analysable rows to `dom(e)` in both directions. The other
+    `Adm_exact` binds the twenty analysable rows to `dom(e)` in both directions. The other
     two had, until this theorem, *no* obligation at all: nothing stopped a hatch row being
     written `fun _ => false`, which would have been an outright unsoundness rather than the
     imprecision every defect in the log so far has been. A hatch row may be **loose**; it
@@ -1253,7 +1288,6 @@ theorem not_ExactV_union : ¬ ExactV (.union [.string, .string]) := by
 theorem excuse_witnessed : ∀ (e : Excuse) (t : Term), e.covers t = true →
     ∃ t' : Term, e.covers t' = true ∧ ¬ ExactV t'
   | .uniqueAdmission, _, _ => ⟨.union [.string, .string], rfl, not_ExactV_union⟩
-  | .nullOwnership, _, _   => ⟨.nullable (.legacy .string rNull), rfl, not_ExactV_nullable⟩
 
 /-! ## The attribute side
 
@@ -1415,7 +1449,10 @@ noncomputable def AdmA : Term → Attr → Bool
   | .refine t q => fun a => AdmA t a && refineReads t q a
   -- hatch
   | .legacy t r => fun a => AdmA t a || (r a).isSome
-  | .nullable t => fun a => AdmA t a || (match a with | .null => true | _ => false)
+  -- the read side of the same question; see the `Adm` row. `withNull` guards *both* halves
+  -- on the same `ownsNull`, so the conjunct is identical rather than a mirror of it.
+  | .nullable t => fun a =>
+      AdmA t a || ((match a with | .null => true | _ => false) && !(denote t).ownsNull)
   | .union opts => fun a => anyPA (AdmAList opts) a
   -- **the row that used to admit all three wire families whatever the element term was.**
   -- With the base an index the family is a function of it, so this names one — and at
@@ -1506,6 +1543,19 @@ theorem AdmALit_null_exact (ls : NEFinset Unit) (a : Attr) :
 
 /-- The converse direction on the attribute side: the row is `dom(p)`, not a bound on it. -/
 def ExactA (t : Term) : Prop := ∀ a, AdmA t a = true ↔ ((denote t).p a).isSome
+
+/-- **`nullable` reads exactly what its row says.** The same two cases as `ExactV_nullable`,
+    against the same guard: `withNull` gates *both* halves of the pair on one `ownsNull`, so
+    the read side needs no separate argument and gets none. -/
+theorem ExactA_nullable {t : Term} (h : ExactA t) : ExactA (.nullable t) := by
+  intro a
+  rw [denote_nullable]
+  simp only [AdmA, Codec.withNull]
+  cases hw : (denote t).ownsNull with
+  | true => simp [hw, h a]
+  | false =>
+    simp only [hw, Bool.not_false, Bool.and_true, if_false, Bool.false_eq_true, addPoint]
+    cases a <;> simp [h _]
 
 /-- **`set` reads exactly what its row says.**
 
@@ -2013,7 +2063,8 @@ theorem AdmA_sound : ∀ (t : Term) {a v},
         rw [show denote (.nullable c) = (denote c).orNull from
           withNull_eq_orNull hw] at hp
         rcases orNull_p.mp hp with ⟨rfl, -⟩ | ⟨-, hc⟩
-        · simp [AdmA]
+        -- the added point, and `hw` is what the row now asks for before offering it
+        · simp [AdmA, hw]
         · simp [AdmA, AdmA_sound c hc]
     case dunion d opts =>
       refine AdmA_dunion_sound (fun t' ht' b hb => ?_) a (by rw [hp]; rfl)
@@ -2070,7 +2121,8 @@ def AnalysableA : Term → Bool
   | .object fields fld rest =>
       decide (∀ k : {k // k ∈ fields}, AnalysableAF (fld k) = true) && AnalysableAR rest
   | .set _ => true
-  | .nullable _ | .union _ => false
+  | .nullable c => AnalysableA c
+  | .union _ => false
 
 def AnalysableAL : List Term → Bool
   | [] => true
@@ -2130,7 +2182,7 @@ theorem AdmAAll_iff {c : Term} (h : ExactA c) : ∀ as : List Attr,
   | cons a as ih => simp [allPA, ih, h a]
 
 mutual
-/-- **Nineteen of the twenty-one attribute rows are exact** — the same nineteen as the value
+/-- **Twenty of the twenty-one attribute rows are exact** — the same twenty as the value
     side, and the two that decline are the same two. `refine` was the last difference between
     the two sides and is exact now: its row decodes and then applies `q`. `legacy`,
     which used to be the other half of that asymmetry, is exact here because its row is the
@@ -2158,8 +2210,11 @@ theorem AdmA_exact : ∀ (t : Term), AnalysableA t = true → ExactA t
   | .opaq lossy => fun _ => ExactA_opaq lossy
   -- exact because the constructor narrowed, not because the row sharpened
   | .set b => fun _ => ExactA_set b
-  -- the two that decline, refuted by the hypothesis
-  | .nullable _ => by intro ha; simp [AnalysableA] at ha
+  -- the row that asks `ownsNull`; see `ExactA_nullable`
+  | .nullable c => by
+      intro ha
+      exact ExactA_nullable (AdmA_exact c (by simpa [AnalysableA] using ha))
+  -- the one that declines, refuted by the hypothesis
   | .union _ => by intro ha; simp [AnalysableA] at ha
 
   | .string => by intro _ a; cases a <;> simp [AdmA, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, stringCodec]
@@ -2308,16 +2363,9 @@ theorem not_ExactA_union : ¬ ExactA (.union [.string, .string]) := by
   simp [denote, denote, optionSems, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, specOf, optionSemOf, altCodec, select,
     stringCodec] at this
 
-/-- Writes the null point — half of a pair whose write reaches it and whose read does not,
-    the mirror of `rNull`, and the reason `nullable` is in both hatches rather than one. -/
-def ceNull : Value → Option Attr := fun v => match v with | .null => some .null | _ => none
-/-- …and reads nothing at all. -/
-def cpNone : Attr → Option Value := fun _ => none
-
-theorem not_ExactA_nullable : ¬ ExactA (.nullable (.custom ceNull cpNone)) := by
-  intro h
-  have h2 := (h .null).mp (by simp [AdmA])
-  simp [denote, denote, Codec.withNull, Codec.ownsNull, ceNull, cpNone] at h2
+/-! `not_ExactA_nullable` stood here — `nullable(custom(writes NULL, reads nothing))`, the
+mirror of the value side's witness, and it is gone for the same reason. `ceNull`/`cpNone`
+went with it. -/
 
 /-- **The witness that is now a theorem the other way.** `refine(string, ⊥)` reads nothing,
     and `AdmA` says so: the row decodes with `stringCodec` and applies `⊥`. This used to be
@@ -2333,15 +2381,14 @@ theorem AdmA_refine_bot (a : Attr) : AdmA (.refine .string (fun _ => false)) a =
     and a future asymmetry should be able to appear in one of them. -/
 def Excuse.coversA : Excuse → Term → Bool
   | .uniqueAdmission, .union _     => true
-  | .nullOwnership,   .nullable _  => true
   | _, _ => false
 
 /-- The answer a propagating **attribute** row inherits, conjoined as on the value side.
     `refine` is here now rather than excused, which closes the last shape at which the two
     hatches differed: `coversA` and `covers` are the same table. -/
 def childrenAnalysableA : Term → Bool
-  | .array c | .record c | .held c _ _ | .lazy c | .legacy c _ | .refine c _ =>
-      AnalysableA c
+  | .array c | .record c | .held c _ _ | .lazy c | .legacy c _ | .refine c _
+  | .nullable c => AnalysableA c
   | .tuple ts tail => AnalysableAL ts && AnalysableAO tail
   | .dunion _ opts => AnalysableAL opts
   | .object fields fld rest =>
@@ -2352,9 +2399,8 @@ def childrenAnalysableA : Term → Bool
 theorem analysableA_excused : ∀ (t : Term), AnalysableA t = false →
     (∃ e : Excuse, e.coversA t = true) ∨ childrenAnalysableA t = false
   | .union _, _     => .inl ⟨.uniqueAdmission, rfl⟩
-  | .nullable _, _  => .inl ⟨.nullOwnership, rfl⟩
   | .array c, h | .record c, h | .held c _ _, h | .lazy c, h | .legacy c _, h
-  | .refine c _, h =>
+  | .refine c _, h | .nullable c, h =>
       .inr (by simpa [childrenAnalysableA, AnalysableA] using h)
   | .tuple _ _, h | .dunion _ _, h | .object _ _ _, h =>
       .inr (by simpa [childrenAnalysableA, AnalysableA] using h)
@@ -2364,13 +2410,13 @@ theorem analysableA_excused : ∀ (t : Term), AnalysableA t = false →
 /-- No attribute-side excuse names an exact row. -/
 theorem excuseA_shapes (e : Excuse) (t : Term) (h : e.coversA t = true) :
     AnalysableA t = false := by
-  cases e <;> cases t <;> simp_all [Excuse.coversA, AnalysableA]
+  cases e
+  cases t <;> simp_all [Excuse.coversA, AnalysableA]
 
 /-- **Every attribute-side excuse is earned**, on the side it is used on. -/
 theorem excuseA_witnessed : ∀ (e : Excuse) (t : Term), e.coversA t = true →
     ∃ t' : Term, e.coversA t' = true ∧ ¬ ExactA t'
   | .uniqueAdmission, _, _ => ⟨.union [.string, .string], rfl, not_ExactA_union⟩
-  | .nullOwnership, _, _   => ⟨.nullable (.custom ceNull cpNone), rfl, not_ExactA_nullable⟩
 
 /-! ## Re-deriving §5's separations on the pair
 
@@ -2471,7 +2517,11 @@ theorem Adm_le_adm : ∀ (t : Term) (v : Value), Adm t v = true → adm t v = tr
       rw [adm, Bool.or_eq_true]
       rcases h with h | h
       · exact Or.inl (Adm_le_adm t v h)
-      · exact Or.inr h
+      -- `Adm`'s null disjunct carries the `ownsNull` guard and `adm`'s does not, so the
+      -- containment drops it. `adm` is the discharger's row and may be loose; that it is
+      -- loose *here* is now visible rather than incidental.
+      · refine Or.inr ?_
+        revert h; cases v <;> simp
   | .union opts, v, h => by
       rw [adm]
       exact AdmAny_le_admList opts v (fun t' _ => Adm_le_adm t' v) (by rw [Adm] at h; exact h)
@@ -2627,7 +2677,9 @@ theorem AdmA_le_admA : ∀ (t : Term) (a : Attr), AdmA t a = true → admA t a =
       rw [admA, Bool.or_eq_true]
       rcases h with h | h
       · exact Or.inl (AdmA_le_admA t a h)
-      · exact Or.inr h
+      -- as on the value side: `admA`'s null disjunct is unguarded, so the guard is dropped
+      · refine Or.inr ?_
+        revert h; cases a <;> simp
   | .union opts, a, h => by
       rw [admA]
       exact AdmAAny_le_admAList opts a (fun t' _ => AdmA_le_admA t' a)
