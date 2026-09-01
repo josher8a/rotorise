@@ -18,13 +18,13 @@ the proof of it, restated over the collapsed constructor at singleton `ℓ`:
 * `uAtCan_map_literal_str` / `_num` discharge (U) **on both sides**, through
   `uniqueAdmission_of_sharedBase`.
 
-The (U) one is worth stating plainly, because the §5 table says the opposite. `admA` sends a
-numeric literal's read side to `⊤` — `admA_literalN_blind` — so read from the table, two numeric
-options never separate and a union of them cannot resolve. Read from the *pair*, they are
-refinements of one `numberCodec` at disjoint predicates, which is all
-`uniqueAdmission_of_sharedBase` needs. `uAtCan_of_literalN_disjoint` already made that argument
-for a union of n-ary numeric literals and never used the n-ary constructor to make it — only the
-shared base — so it holds for singletons too.
+The (U) one is worth stating plainly, because the §5 table used to say the opposite and was
+wrong to. Read from the *pair*, two numeric options are refinements of one `numberCodec` at
+disjoint predicates, which is all `uniqueAdmission_of_sharedBase` needs.
+`uAtCan_of_literalN_disjoint` already made that argument for a union of n-ary numeric literals
+and never used the n-ary constructor to make it — only the shared base — so it holds for
+singletons too. The table now agrees (`sepA_literalN_disjoint`); the correction is recorded
+below and it does not change a line of this file's proofs, which never appealed to the table.
 
 **So why is the constructor n-ary?** Because the union route cannot carry `ℓ` as a `Finset`.
 `Term.union` takes a `List Term`; bridging from a `NEFinset` is `Finset.toList`, which is
@@ -145,15 +145,30 @@ theorem dincomp_map_literal_num {l : List Double} (hnd : l.Nodup) :
   · have h' : Value.num b = Value.num a := h (.num b) rfl
     exact (by simpa using h' : b = a).symm
 
-/-! ## (U), which the §5 table says is impossible at the numeric base
+/-! ## (U) at the numeric base, and the claim that used to be made here
 
-`admA_literalN_blind`: the read side of a numeric literal is `⊤`, because the stored text goes
-through `Double.ofDec` and no syntactic set of attributes bounds one value. Two numeric options
-therefore never separate *in the table*. They separate in the **pair**: each is
-`numberCodec.restrict` at a predicate, the predicates are disjoint, and that is exactly
-`uniqueAdmission_of_sharedBase`'s hypothesis. `uAtCan_of_literalN_disjoint` made this argument
-for a union of `literalN`s — and never used the n-ary constructor for it, only the shared base,
-which is why it holds here with `ℓ` as `Finset` data instead. -/
+**What this section claimed.** That the read side of a numeric literal is `⊤` — the lemma was
+called `admA_literalN_blind` — because the stored text goes through `Double.ofDec` and no
+syntactic set of attributes bounds one value; and therefore that two numeric options "never
+separate *in the table*" and separate only in the **pair**.
+
+**Why the second half was false.** The premise is about *values*: no set of attributes names the
+numerals that read into `ℓ`. `admA` never needed that. It needed to know whether an attribute is
+admitted, and `ofDec` is a **function** — a stored numeral reads to at most one double, and one
+double cannot inhabit two disjoint sets. Nothing about the answer had to be *nameable*, only
+unique, and the row can obtain it by calling the codec rather than by describing it. Both of §5's
+numeric `⊤`s came from the same confusion between "cannot bound which values" and "cannot bound
+which option".
+
+**What is true now.** `admALit`'s `.number` row is `((literalCodec .number ls).p ·).isSome`, and
+`sepA_literalN_disjoint` separates two disjoint numeric literals in the table, alongside
+`admA_literalN_sees`, which states exactly what an `N` attribute has to satisfy to be admitted.
+The pair reading is not superseded: it is `uniqueAdmission_of_sharedBase`'s, it settles an
+`n`-ary family and both sides in one step where the table settles a pair at a time, and it is the
+one used below. Each is `numberCodec.restrict` at a predicate, the predicates are disjoint, and
+that is the hypothesis. `uAtCan_of_literalN_disjoint` made this argument for a union of
+`literalN`s — and never used the n-ary constructor for it, only the shared base, which is why it
+holds here with `ℓ` as `Finset` data instead. -/
 
 /-- (U) on both sides for a string literal set's options. -/
 theorem uAtCan_map_literal_str {l : List String} (hnd : l.Nodup) :
@@ -174,7 +189,8 @@ theorem uAtCan_map_literal_str {l : List String} (hnd : l.Nodup) :
     intro a b hab v hv
     cases v <;> simp_all [inL, NEFinset.of]
 
-/-- …and at the numeric base, where the table cannot. -/
+/-- …and at the numeric base, by the same shared-base route: `n`-ary and both sides in one
+    step, which is what this route buys over the table's pairwise `sepA_literalN_disjoint`. -/
 theorem uAtCan_map_literal_num {l : List Double} (hnd : l.Nodup) :
     UAtCan (l.map fun d => .literal .number (.of d ∅)) := by
   show UniqueAdmission (semsOf _)

@@ -936,13 +936,26 @@ changes the recommendation from §11.1 to this one.
 2. **The union's separation premises discharge once, centrally, not per use site.** (D) is
    *incomparability*, not disjointness — `DIncomp`'s own docstring says disjointness would reject
    working unions — and two distinct singletons contain each other in neither order:
-   `dincomp_map_literal_str`, from `Nodup` alone. (U) is the interesting one, because §5's table
-   says it is impossible: `admA_literalN_blind` sends a numeric literal's read side to `⊤`, so two
-   numeric options never separate *in the table*. They separate in the **pair** —
-   `numberCodec.restrict` at disjoint predicates — which is all `uniqueAdmission_of_sharedBase`
-   needs. `uAtCan_of_literalN_disjoint` already made that argument for a union of `literalN`s and
-   never used the n-ary constructor to make it, only the shared base; `uAtCan_map_literal_num` is
-   the same proof with `ℓ` as list data instead.
+   `dincomp_map_literal_str`, from `Nodup` alone. (U) is the interesting one, and the paragraph
+   that stood here overstated it. **It claimed** that §5's table makes (U) impossible at the
+   numeric base — that `admA_literalN_blind` sends a numeric literal's read side to `⊤`, so two
+   numeric options "never separate *in the table*" and separate only in the **pair**. **It was
+   wrong**, and the error is worth naming because §5 made it twice. The premise — no *syntactic*
+   set of attributes names the numerals a stored text reads to, because `Double.ofDec` is
+   axiomatized — is true and is about *values*. `admA` never needed to know which numerals a
+   stored text reads to, only that the answer is **unique**, and `ofDec` being a function gives
+   that for free: one stored numeral, at most one double, and one double cannot inhabit two
+   disjoint sets. The row does not have to describe its set; it can ask its codec, which is what
+   `custom` had always done and what `opaque` had just been changed to do. Both of §5's numeric
+   `⊤`s — `admA number` and `admA literalN` — came from reading "cannot bound which values" as
+   "cannot bound which option". **What is true now**: `admALit`'s `.number` row is
+   `((literalCodec .number ls).p ·).isSome`, and `sepA_literalN_disjoint` separates two disjoint
+   numeric literals in the table. The pair reading keeps its own advantage rather than its
+   monopoly: `uniqueAdmission_of_sharedBase` settles an `n`-ary family and both sides in one
+   step, where the table settles a pair at a time. `uAtCan_of_literalN_disjoint` already made
+   that argument for a union of `literalN`s and never used the n-ary constructor to make it,
+   only the shared base; `uAtCan_map_literal_num` is the same proof with `ℓ` as list data
+   instead.
 
 So both rules are **derivable**: `typed_literalsS` and `typed_literalsN` conclude exactly what
 `Typed.literalS` and `Typed.literalN` conclude, from `Typed.literal` and `Typed.union`, with

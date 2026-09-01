@@ -14,8 +14,8 @@ import Lean
 # The axiom base, as a checked claim
 
 `docs/codec-formalization.md` §3 advertises that the whole development stands on `propext`,
-`Quot.sound`, and the `Double` axioms of §1 — **no `Classical.choice`, no `sorryAx`**. That
-sentence was, until now, something a reader had to verify by hand with `#print axioms`.
+`Quot.sound`, and §1's numeric host — **no `Classical.choice`, no `sorryAx`**. That sentence
+was, until now, something a reader had to verify by hand with `#print axioms`.
 
 Here it is a build error instead. `#assert_axioms` collects the axioms a constant actually
 depends on and fails if any of them is outside the sanctioned base below.
@@ -30,12 +30,19 @@ open Lean Elab Command
 
 namespace Calculus
 
-/-- The sanctioned base: Lean's two propositional axioms, plus §1's `Double` interface,
-    which is axiomatized deliberately (IEEE-754 facts are not this calculus's theorems). -/
+/-- The sanctioned base: Lean's two propositional axioms, plus §1's numeric host, which is
+    axiomatized deliberately (IEEE-754 facts are not this calculus's theorems).
+
+    Four names where there were seven, and the shrinkage is not the point. `Double.toDec`,
+    `Double.ofDec`, `Double.roundtrip` and `Double.decEq` are now *theorems and definitions*
+    projecting out of `numericHost : NumericHost Double` (`Domain.lean`), so what this list
+    sanctions is one interface rather than five assertions that happen to fit together. That
+    it is an interface and not a disguised claim about binary64 is itself checked:
+    `numericHost_wfNumeral` and `numericHost_unit` inhabit `NumericHost` at two types with
+    provably different decimal images (`numericHost_images_differ`), and the first is built
+    with no `Double` axiom at all. -/
 def sanctionedAxioms : List Lean.Name :=
-  [``propext, ``Quot.sound,
-   `Calculus.Double, `Calculus.Double.decEq, `Calculus.Double.ofDec,
-   `Calculus.Double.roundtrip, `Calculus.Double.toDec]
+  [``propext, ``Quot.sound, `Calculus.Double, `Calculus.numericHost]
 
 /-- `#assert_axioms c` errors unless every axiom `c` depends on is in
     `Calculus.sanctionedAxioms`. -/
