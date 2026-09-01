@@ -2680,7 +2680,13 @@ theorem Adm_le_adm : ∀ (t : Term) (v : Value), Adm t v = true → adm t v = tr
   | .object _ _ _, _, _ => rfl
   | .array _, _, _ => rfl
   | .record _, _, _ => rfl
-  | .opaq _, _, _ => rfl
+  -- `adm`'s `opaq` row is no longer `⊤`: it carries the numeric policy, and `AdmOpaqV`
+  -- carries it too (with `WF` besides), so the containment drops a conjunct here in
+  -- exactly the way it does at `number`.
+  | .opaq lossy, v, h => by
+      cases v
+      case num d => exact ((Bool.and_eq_true _ _).mp h).1
+      all_goals rfl
   | .number, v, h => by simpa [adm] using (by simpa [Adm] using h : inD v = true)
   | .decimal, v, h => by simpa [adm] using (by simpa [Adm] using h : isStored v = true)
   -- `Adm` is *strictly* stronger at the numeric base: it carries `WF`, which §5's table does
@@ -2834,7 +2840,12 @@ theorem AdmA_le_admA : ∀ (t : Term) (a : Attr), AdmA t a = true → admA t a =
   | .array _, _, _ => rfl
   | .record _, _, _ => rfl
   | .legacy _ _, _, _ => rfl
-  | .opaq _, _, _ => rfl
+  -- as on the value side: the policy bit is in both rows, and `AdmOpaqA` adds the
+  -- `Double.ofDec` clause `admA` cannot state.
+  | .opaq lossy, a, h => by
+      cases a
+      case n x => exact ((Bool.and_eq_true _ _).mp h).1
+      all_goals rfl
   | .custom _ _, a, h => by rw [admA]; rw [AdmA] at h; exact h
   | .decimal, a, h => by rw [admA]; rw [AdmA] at h; exact h
   | .dunion d opts, a, h => by
