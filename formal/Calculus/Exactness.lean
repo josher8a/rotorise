@@ -1770,6 +1770,160 @@ theorem AdmA_refine_bot (a : Attr) : AdmA (.refine .string (fun _ => false)) a =
   simp [AdmA, refineReads]
   cases a <;> simp [denote, stringCodec]
 
+/-! ## Two of the twenty-one constructors are derivable
+
+`array` is the degenerate `tuple` — empty fixed part, uniform tail — and `record` the
+degenerate `object`: no declared names, `codec` rest. Both rows agree with their general
+form *pointwise*, on both sides, so nothing in the analysis depends on them existing.
+
+They are kept anyway, and the reason is the shape of the row rather than the size of the
+language. `array`'s row is `allP`, one fold; the `tuple` it expands to is `alignP`, which
+carries a length discipline that at `([], some c)` can never fire. `record`'s row is one
+`decide` over the key set; the `object` it expands to is `valPresentT && objAdmV`, a
+presence guard over an empty field table — vacuous — conjoined with a traversal that
+consults `entryP` at every name only to be handed the rest policy back. So the narrow
+constructor buys a row a reader can check by eye, and that is the **opposite** trade from
+`set`, where a narrower constructor bought *exactness*: `set b` cannot be spelled as a
+`refine` of anything, and indexing by the base is what made `encSet`'s collision guard
+provably dead. Convenience here, necessity there.
+
+### …and `union` is not a congruence for codec equivalence
+
+`record c` and `object ∅ noFields (.codec c)` have identical rows on both sides, hence —
+by `Adm_exact`/`AdmA_exact`, which take no hypothesis — identical domains on both sides.
+They are the same codec as far as anything observable through `e` and `p` can tell.
+
+`union` still distinguishes them, and `union_not_congruent` is the pair. An option's
+admission is `admitOptV`, which matches the **constructor**: `specOf (.record c) = none`,
+so the option is admitted *by attempt*, while `specOf (.object ∅ noFields (.codec c))` is
+`some ⟨∅, _⟩`, so the option is admitted *by names* — and an empty name spec admits no map
+that carries a name. On `{"a" ↦ "x"}` the first option answers `true` and the second
+`false`, with equal domains behind both.
+
+This is not a defect in the rows and not one in `select`; it is the price of deciding an
+object option syntactically, which `docs/codec-calculus.md:713` argues for on other
+grounds ("an open object that must be an option should declare what it means to keep").
+What that passage does not observe is this consequence: **term equivalence is not a
+congruence for `union`**, so no rewrite that replaces a subterm by a domain-equal one is
+sound inside a `union`. Anything that wants to normalize `record` to `object` — or `array`
+to `tuple`, which is safe, both being `specOf = none` — has to check the spec, not the
+domain. -/
+
+/-- The empty field table. Not `by simp`: `simp`'s route to a vacuous `Finset ∅` goal reaches
+    `Classical.choice`, and this is a *definition*, so it would put the axiom under every
+    theorem below rather than under a proof. `Finset.not_mem_empty` is the direct term. -/
+def noFields : {k // k ∈ (∅ : Finset Name)} → Field :=
+  fun k => absurd k.2 (Finset.not_mem_empty k.1)
+
+/-- `array`'s fold is its `tuple`'s alignment. The induction is on the value's list, not the
+    term: `alignP [] (some P)` recurses with the same `(([], some P))`, so there is nothing
+    structural to follow on the term side. -/
+theorem arrayRow (c : Term) (v : Value) : Adm (.array c) v = Adm (.tuple [] (some c)) v := by
+  cases v with
+  | arr xs =>
+    simp only [Adm, AdmList, AdmOptT]
+    induction xs with
+    | nil => rfl
+    | cons x xs ih => simp [allP, alignP, ih]
+  | _ => rfl
+
+/-- The same on the read side; `allPA`/`alignPA` are the same two shapes over `Attr`. -/
+theorem arrayRowA (c : Term) (a : Attr) : AdmA (.array c) a = AdmA (.tuple [] (some c)) a := by
+  cases a with
+  | l as =>
+    simp only [AdmA, AdmAList, AdmAOptT]
+    induction as with
+    | nil => rfl
+    | cons x as ih => simp [allPA, alignPA, ih]
+  | _ => rfl
+
+/-- `record`'s one `decide` is its `object`'s guard-and-traverse, with both extra pieces
+    dead: the presence guard quantifies over an empty field table, and `entryP` finds no
+    declaration at any name and hands back the rest policy.
+
+    Spelled out rather than left to `simp`. The one-line `simp [Adm, valPresentT, objAdmV,
+    entryP, AdmRest, noFields, MapOf.at]` proves it and reaches `Classical.choice` — the
+    `decide` over a `Finset` subtype is where simp picks up a classical instance — which
+    `#assert_axioms_all` rejects. `decide_eq_true` and `dif_neg` are the two facts actually
+    needed. -/
+theorem recordRow (c : Term) (v : Value) :
+    Adm (.record c) v = Adm (.object ∅ noFields (.codec c)) v := by
+  cases v with
+  | map keys f =>
+    have hv : valPresentT ∅ noFields keys = true :=
+      decide_eq_true (fun k => absurd k.2 (Finset.not_mem_empty k.1))
+    have he : ∀ k : Name, entryP ⟨∅, fun k => AdmField (noFields k)⟩ (some (Adm c)) k
+        = some (Adm c) := fun k => by
+      simp only [entryP, MapOf.at, dif_neg (Finset.not_mem_empty k)]
+    simp only [Adm, hv, Bool.true_and, objAdmV, AdmRest, he]
+  | _ => rfl
+
+/-- The read side, with one extra dead piece: `keepT (.codec c) ∅` is the constant `true`,
+    an open rest keeping every name, so `objAdmA`'s guard discharges by `true_implies`. -/
+theorem recordRowA (c : Term) (a : Attr) :
+    AdmA (.record c) a = AdmA (.object ∅ noFields (.codec c)) a := by
+  cases a with
+  | m keys g =>
+    have hv : reqPresentT ∅ noFields keys = true :=
+      decide_eq_true (fun k => absurd k.2 (Finset.not_mem_empty k.1))
+    have he : ∀ k : Name, entryPA ⟨∅, fun k => AdmAField (noFields k)⟩ (some (AdmA c)) k
+        = some (AdmA c) := fun k => by
+      simp only [entryPA, MapOf.at, dif_neg (Finset.not_mem_empty k)]
+    simp only [AdmA, hv, Bool.true_and, objAdmA, AdmARest, keepT, he, true_implies]
+  | _ => rfl
+
+/-! ### Row equality is domain equality, for free
+
+Each of the four above becomes a statement about `e` and `p` with no further work, which is
+what an unconditional `Adm_exact`/`AdmA_exact` buys: the row *is* the domain, so a proof
+that two rows agree is a proof that two codecs' domains agree. Under the old exactness —
+a hypothesis to discharge per term — each of these would have needed its own discharge. -/
+
+theorem arrayDom (c : Term) (v : Value) :
+    ((denote (.array c)).e v).isSome = ((denote (.tuple [] (some c))).e v).isSome :=
+  Bool.coe_iff_coe.mp
+    ((Adm_exact (.array c) v).symm.trans (arrayRow c v ▸ Adm_exact (.tuple [] (some c)) v))
+
+theorem arrayDomA (c : Term) (a : Attr) :
+    ((denote (.array c)).p a).isSome = ((denote (.tuple [] (some c))).p a).isSome :=
+  Bool.coe_iff_coe.mp
+    ((AdmA_exact (.array c) a).symm.trans (arrayRowA c a ▸ AdmA_exact (.tuple [] (some c)) a))
+
+theorem recordDom (c : Term) (v : Value) :
+    ((denote (.record c)).e v).isSome = ((denote (.object ∅ noFields (.codec c))).e v).isSome :=
+  Bool.coe_iff_coe.mp
+    ((Adm_exact (.record c) v).symm.trans
+      (recordRow c v ▸ Adm_exact (.object ∅ noFields (.codec c)) v))
+
+theorem recordDomA (c : Term) (a : Attr) :
+    ((denote (.record c)).p a).isSome = ((denote (.object ∅ noFields (.codec c))).p a).isSome :=
+  Bool.coe_iff_coe.mp
+    ((AdmA_exact (.record c) a).symm.trans
+      (recordRowA c a ▸ AdmA_exact (.object ∅ noFields (.codec c)) a))
+
+/-- `record` is admitted by attempt… -/
+theorem specOf_record (c : Term) : specOf (.record c) = none := rfl
+
+/-- …and the `object` with its domain is admitted by names. -/
+theorem specOf_object_isSome (c : Term) :
+    (specOf (.object ∅ noFields (.codec c))).isSome = true := rfl
+
+/-- **`union` is not a congruence for domain equality.** `recordDom` and `recordDomA` say
+    these two terms have the same `e` and the same `p` at every point. As *options* they
+    disagree at `{"a" ↦ "x"}`: the first is attempted and admits, the second is asked for
+    its names and refuses, because its spec is empty and the map is not.
+
+    So a normalization pass over `Term` may not replace `record c` by its `object` inside a
+    `union` — nor, in general, replace any subterm by a domain-equal one there. See the
+    section note above; `docs/codec-calculus.md:713` gives the reason `ρ` goes unread and
+    does not draw this corollary. -/
+theorem union_not_congruent :
+    admitOptV (specOf (.record .string), Adm (.record .string))
+        (.map {"a"} (fun _ => .str "x")) = true
+      ∧ admitOptV (specOf (.object ∅ noFields (.codec .string)),
+          Adm (.object ∅ noFields (.codec .string))) (.map {"a"} (fun _ => .str "x")) = false :=
+  ⟨rfl, rfl⟩
+
 /-! ## Re-deriving §5's separations on the pair
 
 `SepV` and `SepA` are what the discharge machinery actually consumes, and they are stated
