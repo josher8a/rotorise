@@ -4,6 +4,7 @@ import Calculus.Continuity
 import Calculus.Refutations
 import Calculus.HeldSet
 import Calculus.Exactness
+import Batteries.Tactic.Lint
 import Calculus.LiteralArity1
 import Calculus.Nesting
 import Calculus.Malleability
@@ -176,5 +177,64 @@ of all places. `fsetEq` is the repair. This import is the reason the guard saw i
 the environment, and a module it does not import is not in the environment. -/
 
 #assert_axioms_all
+
+/-! ## …and the environment linters, for the same reason
+
+`#assert_axioms_all` guards one property of the environment. Batteries ships fifteen more —
+`simpNF`, `unusedArguments`, `synTaut`, `dupNamespace`, `checkType` and the rest — and this
+development had **never run them**, because `Batteries.Tactic.Lint` is not imported by
+anything `Calculus` needed and so was never built.
+
+The first run over 1674 declarations found one substantive defect and it was invisible by
+reading: `SetBase.setMember_elemMember` was `@[simp]` with a left-hand side that cannot occur
+in simp-normal form, because `SetBase.elemMember` is `@[simp]` too and unfolds first. An
+attribute asserting something about behaviour that had quietly stopped being true — the same
+failure class as a description drifting from what it describes, and the reason this guard is
+here rather than a note saying someone should lint occasionally.
+
+`docBlame` is **excluded**, not sanctioned: its 90 hits are helper definitions (`allPA`,
+`Term.depthL`, `Codec.e`), and whether this development's docstring convention reaches them is
+a judgement, not a defect. Excluding it is visible here; sanctioning 90 hits would not be.
+-/
+
+/-- Linters not run. One entry, and it owes the reason above. -/
+def unrunLinters : List Lean.Name := [`docBlame]
+
+/-- Hits this development sanctions, as `(linter, declaration)`.
+
+    Both are `fun _ => true` — the ⊤ predicate and the ⊤ occupancy — so the unused argument
+    *is* the content. Two entries, named individually, for the reason `sanctionedAxioms` is a
+    list rather than a policy: an exception nobody can see is an exception nobody rechecks. -/
+def sanctionedLintHits : List (Lean.Name × Lean.Name) :=
+  [(`unusedArguments, `Calculus.qTop), (`unusedArguments, `Calculus.occTop)]
+
+open Batteries.Tactic.Lint
+
+/-- `#lint_calculus` runs every linter but `unrunLinters` over the `Calculus` namespace and
+    fails the build on any hit outside `sanctionedLintHits`. The namespace walk is
+    `#assert_axioms_all`'s, and the declaration filter drops what the equation compiler and
+    `deriving` emit — those are not source declarations and their shape is not ours to fix. -/
+syntax (name := lintCalculus) "#lint_calculus" : command
+
+@[command_elab lintCalculus]
+def elabLintCalculus : CommandElab := fun _ => do
+  let env ← getEnv
+  let linters := (← liftCoreM <| getChecks (slow := true) none none).filter
+    fun l => l.name.getString! ∉ unrunLinters.map (·.getString!)
+  let decls := env.constants.toList.filterMap fun (n, _) =>
+    if (`Calculus).isPrefixOf n && !n.isInternalDetail
+       && !(n.getString!.startsWith "eq_") && !(n.getString!.startsWith "match_")
+    then some n else none
+  let results ← liftCoreM <| lintCore decls.toArray linters
+  let mut bad : Array Lean.MessageData := #[]
+  for (l, hits) in results do
+    for (n, msg) in hits do
+      unless sanctionedLintHits.any (fun p => p.1.getString! == l.name.getString! && p.2 == n) do
+        bad := bad.push m!"  {l.name} {n}: {msg}"
+  unless bad.isEmpty do
+    throwError "environment linter(s) reported unsanctioned hits:\n{bad.toList}\n\
+      Fix the declaration, or add it to `sanctionedLintHits` with a reason."
+
+#lint_calculus
 
 end Calculus

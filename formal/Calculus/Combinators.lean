@@ -1055,8 +1055,15 @@ noncomputable def setCodec (c : Codec) : Codec :=
 @[simp] theorem SetBase.elem_μ : ∀ b : SetBase, b.elem.μ = some b.elemMember
   | .string | .number | .decimal | .binary => rfl
 
-/-- …and `setMember` takes the one to the other, which is the premise `(set)` carried. -/
-@[simp] theorem SetBase.setMember_elemMember :
+/-- …and `setMember` takes the one to the other, which is the premise `(set)` carried.
+
+    **Not `@[simp]`, and it cannot usefully be.** `SetBase.elemMember` is itself `@[simp]`, so
+    `simp` unfolds `b.elemMember` into its `match` before this lemma is ever tried: the
+    left-hand side does not exist in simp-normal form, and the attribute could never fire.
+    Batteries' `simpNF` linter is what found it (`#lint_calculus`, `Axioms.lean`) — the one
+    substantive hit in 1674 declarations. It is named explicitly at its single use site
+    (`encSet_isSome_of`, below), which is why the dead attribute cost nothing and hid. -/
+theorem SetBase.setMember_elemMember :
     ∀ b : SetBase, setMember b.elemMember = some b.member
   | .string | .number | .decimal | .binary => rfl
 
