@@ -172,25 +172,23 @@ codec is expected has no corresponding `Term`, and the mapping fails there rathe
 quietly succeeding.
 -/
 
-/-! ## `set(union(c₁, c₂))` — not derivable
+/-! ## `set(union(c₁, c₂))` — not derivable, and now not writable
 
 §6: "the premise on `set` demands a member, and a union of options writing different
-members has none." This is the one row that is a claim about the *judgement* rather than
-about `≡`, and the model settles it from the member index alone: `(set)` concludes
-`some μS`, `μSyn` of a heterogeneous union is `none`, and `typed_μSyn` says the two must
-agree.
+members has none." This was the one row that is a claim about the *judgement* rather than
+about `≡`, and the model settled it from the member index alone: `(set)` concluded
+`some μS`, `μSyn` of a heterogeneous union is `none`, and `typed_μSyn` said the two must
+agree. `not_typed_set_union` was that proof.
 
-Note it is not the union that is underivable — `union(string, boolean)` is perfectly well
-typed at `⊤`. It is putting one under `set` that has no derivation, which is the
-distinction §3's `⇝` column exists to draw. -/
+**It cannot be stated any more.** `Term.set` takes a `SetBase`, so
+`set(union(string, boolean))` is not a term — the elaborator refuses it where a derivation
+used to fail. That is the same closure `HeldSet.lean` records for `strSet ∅` and the map
+defect for duplicate keys: a witness that something is excluded is worth having exactly
+while it is expressible, and when the type takes over the exclusion the witness goes with
+it. What §6's row asked of the judgement is now the constructor's argument type.
 
-theorem not_typed_set_union :
-    ¬ ∃ T μ, Typed (.set (.union [.string, .boolean])) T μ := by
-  rintro ⟨T, μ, h⟩
-  cases h with
-  | set h' hs =>
-    have hμ := typed_μSyn h'
-    simp [μSyn, μSynList, unanimous] at hμ
+The union on its own is unaffected, and is still worth exhibiting: it was never the union
+that was underivable, only the `set` above it. -/
 
 /-- The union on its own is fine — it is the `set` above it that has no derivation. -/
 theorem typed_union_string_boolean :

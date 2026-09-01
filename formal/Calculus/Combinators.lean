@@ -309,6 +309,18 @@ noncomputable def baseCodec : GroundKind → Codec
   | .binary  => binaryCodec
   | .null    => nullCodec
 
+/-- §3 `(set)`'s element pair, chosen by the base.
+
+    `denote (.set b)` is `setCodec b.elem`, which is why `setCodec`, `encSet`, `decSet` and
+    `setImage` are untouched by the re-indexing: the *constructor* changed, the combinator
+    did not. Four bases, three wire members — `decimal` and `number` are both `NS`, and are
+    different pairs at it. -/
+noncomputable def SetBase.elem : SetBase → Codec
+  | .string  => stringCodec
+  | .number  => numberCodec
+  | .decimal => decimalCodec
+  | .binary  => binaryCodec
+
 /-- `literal(ℓ)`'s predicate: the value is one of the alternatives.
 
     One definition where there were two (`inLS`, `inLN`) and three bases with none. Dispatching
@@ -826,6 +838,53 @@ theorem setImage_none_of {α β : Type} [DecidableEq β] {f : α → Option β} 
   rw [hf] at this
   exact absurd this (by simp)
 
+/-- The image succeeds when every element maps and no two collide. -/
+theorem setImage_isSome_of {α β : Type} [DecidableEq β] {f : α → Option β} {S : Finset α}
+    (hall : ∀ x ∈ S, (f x).isSome)
+    (hinj : ∀ x₁ ∈ S, ∀ x₂ ∈ S, ∀ y, f x₁ = some y → f x₂ = some y → x₁ = x₂) :
+    (setImage f S).isSome = true := by
+  unfold setImage
+  rw [dif_pos hall]
+  have hnd : (S.attach.val.map (fun x => (f x.1).get (hall x.1 x.2))).Nodup := by
+    refine Multiset.Nodup.map_on ?_ S.attach.nodup
+    intro x hx y hy hxy
+    have hfx : f x.1 = some ((f x.1).get (hall x.1 x.2)) := (Option.some_get _).symm
+    have hfy : f y.1 = some ((f y.1).get (hall y.1 y.2)) := (Option.some_get _).symm
+    rw [hxy] at hfx
+    exact Subtype.ext (hinj x.1 x.2 y.1 y.2 _ hfx hfy)
+  rw [dif_pos hnd]
+  rfl
+
+/-- **The image only looks at the set.** Two element maps agreeing on `S` have the same
+    image — needed because `Codec.restrict` changes `e` everywhere and the set only sees it
+    at its own members. -/
+theorem setImage_congr {α β : Type} [DecidableEq β] {f g : α → Option β} {S : Finset α}
+    (h : ∀ x ∈ S, f x = g x) : setImage f S = setImage g S := by
+  have hiff : (∀ x ∈ S, (f x).isSome) ↔ (∀ x ∈ S, (g x).isSome) :=
+    ⟨fun hh x hx => (h x hx) ▸ hh x hx, fun hh x hx => (h x hx).symm ▸ hh x hx⟩
+  unfold setImage
+  split
+  · next hf =>
+    have hg := hiff.mp hf
+    rw [dif_pos hg]
+    have hmap : (S.attach.val.map (fun x => (f x.1).get (hf x.1 x.2)))
+        = (S.attach.val.map (fun x => (g x.1).get (hg x.1 x.2))) := by
+      refine Multiset.map_congr rfl (fun x _ => ?_)
+      exact Option.some.inj (by rw [Option.some_get, Option.some_get, h x.1 x.2])
+    simp only [hmap]
+  · next hf =>
+    rw [dif_neg (fun hg => hf (hiff.mpr hg))]
+
+/-- …and the same at `℘⁺fin`. -/
+theorem neSetImage_congr {α β : Type} [DecidableEq β] {f g : α → Option β} {S : NEFinset α}
+    (h : ∀ x ∈ S.1, f x = g x) : neSetImage f S = neSetImage g S := by
+  cases hs : setImage f S.1 with
+  | none => rw [neSetImage_none hs, neSetImage_none ((setImage_congr h).symm.trans hs)]
+  | some T =>
+    have hT : setImage g S.1 = some T := (setImage_congr h).symm.trans hs
+    rw [(neSetImage_eq_setImage (T := ⟨T, setImage_nonempty hs S.2⟩)).mpr hs,
+      (neSetImage_eq_setImage (T := ⟨T, setImage_nonempty hs S.2⟩)).mpr hT]
+
 /-- A successful `bind` needs a successful left. -/
 theorem bind_isSome_left {α β : Type} {o : Option α} {f : α → Option β}
     (h : (o.bind f).isSome = true) : o.isSome = true := by
@@ -962,6 +1021,160 @@ noncomputable def setCodec (c : Codec) : Codec :=
       | .ns S => decSet c Attr.n S
       | .bs S => decSet c Attr.b S
       | _ => none }
+
+/-! ### `setCodec` at a base, and the restriction that survives the re-indexing -/
+
+/-- The set's member is the base's, by computation at each of the four. This is §3
+    `(set)`'s premise `setMember μ = some μS` discharged once and for all — there is no
+    element term left for it to be a premise about. -/
+@[simp] theorem SetBase.setCodec_μ : ∀ b : SetBase, (setCodec b.elem).μ = some b.member
+  | .string | .number | .decimal | .binary => rfl
+
+/-- The member a base's *elements* store as, as against `SetBase.member`, which is the
+    member the **set** stores as. `number` and `decimal` are both `.N` here and both `.NS`
+    there. -/
+@[simp] def SetBase.elemMember : SetBase → Member
+  | .string  => .S
+  | .number | .decimal => .N
+  | .binary  => .B
+
+@[simp] theorem SetBase.elem_μ : ∀ b : SetBase, b.elem.μ = some b.elemMember
+  | .string | .number | .decimal | .binary => rfl
+
+/-- …and `setMember` takes the one to the other, which is the premise `(set)` carried. -/
+@[simp] theorem SetBase.setMember_elemMember :
+    ∀ b : SetBase, setMember b.elemMember = some b.member
+  | .string | .number | .decimal | .binary => rfl
+
+/-- **What a set base writes, element by element.** The four ground rows of `Adm`, indexed:
+    `string` and `binary` accept their whole carrier, `number` is §1's `D` and `decimal`
+    §1's `Stored`. -/
+noncomputable def SetBase.adm : SetBase → Value → Bool
+  | .string  => fun v => match v with | .str _ => true | _ => false
+  | .number  => inD
+  | .decimal => isStored
+  | .binary  => fun v => match v with | .bin _ => true | _ => false
+
+/-- …and it is exactly the base pair's write domain. -/
+theorem SetBase.adm_iff (b : SetBase) (v : Value) :
+    b.adm v = true ↔ (b.elem.e v).isSome = true := by
+  cases b <;> cases v <;>
+    simp [SetBase.adm, SetBase.elem, stringCodec, binaryCodec]
+
+/-- One failing element sinks a write. `encSet_elem` contraposed, in the form the exact
+    rows use. -/
+theorem encSet_isSome_false {α : Type} {c : Codec} {inj : α → Value} {S : NEFinset α}
+    {x : α} (hx : x ∈ S.1) (h : c.e (inj x) = none) : (encSet c inj S).isSome = false := by
+  cases he : encSet c inj S with
+  | none => rfl
+  | some a =>
+    have := encSet_elem he x hx
+    rw [h] at this; exact absurd this (by simp)
+
+/-- …and a read. -/
+theorem decSet_isSome_false {α : Type} {c : Codec} {inj : α → Attr} {S : NEFinset α}
+    {x : α} (hx : x ∈ S.1) (h : c.p (inj x) = none) : (decSet c inj S).isSome = false := by
+  cases hd : decSet c inj S with
+  | none => rfl
+  | some v =>
+    have := decSet_elem hd x hx
+    rw [h] at this; exact absurd this (by simp)
+
+/-- Elements reading to strings take `decSet`'s first branch. The mirror of
+    `encSet_isSome_of` at the read side, and it takes injectivity as a hypothesis rather
+    than deriving it from `LawfulCore`: the read side's injectivity is **not** free —
+    `numberCodec.p` goes through `Double.ofDec`, which rounds. -/
+theorem decSet_isSome_str {α : Type} {c : Codec} {inj : α → Attr} {S : NEFinset α}
+    (hall : ∀ x ∈ S.1, ((c.p (inj x)).bind vStr).isSome = true)
+    (hinj : ∀ x₁ ∈ S.1, ∀ x₂ ∈ S.1, ∀ y, (c.p (inj x₁)).bind vStr = some y →
+      (c.p (inj x₂)).bind vStr = some y → x₁ = x₂) :
+    (decSet c inj S).isSome = true := by
+  obtain ⟨T, hT⟩ := Option.isSome_iff_exists.mp (setImage_isSome_of hall hinj)
+  unfold decSet
+  rw [(neSetImage_eq_setImage (T := ⟨T, setImage_nonempty hT S.2⟩)).mpr hT]
+  rfl
+
+/-- …and elements reading to bytes take the third, the two before it having failed. -/
+theorem decSet_isSome_bin {α : Type} {c : Codec} {inj : α → Attr} {S : NEFinset α}
+    {x₀ : α} (hx₀ : x₀ ∈ S.1)
+    (hs : (c.p (inj x₀)).bind vStr = none) (hn : (c.p (inj x₀)).bind vNum = none)
+    (hall : ∀ x ∈ S.1, ((c.p (inj x)).bind vBin).isSome = true)
+    (hinj : ∀ x₁ ∈ S.1, ∀ x₂ ∈ S.1, ∀ y, (c.p (inj x₁)).bind vBin = some y →
+      (c.p (inj x₂)).bind vBin = some y → x₁ = x₂) :
+    (decSet c inj S).isSome = true := by
+  obtain ⟨T, hT⟩ := Option.isSome_iff_exists.mp (setImage_isSome_of hall hinj)
+  unfold decSet
+  rw [neSetImage_none (setImage_none_of hx₀ hs), neSetImage_none (setImage_none_of hx₀ hn),
+    (neSetImage_eq_setImage (T := ⟨T, setImage_nonempty hT S.2⟩)).mpr hT]
+  rfl
+
+/-- **A predicate on the elements, lifted to the set.** `q` holding of every member, and
+    nothing but a set satisfying it.
+
+    Choice-free, and the reason is worth naming: the test reaches
+    `Finset.decidableDforallFinset` and so `Finset.decidableMem`, not
+    `DecidableEq (Finset α)` — which is `Classical.choice` and which a subset test written
+    as `S ⊆ ls` through `Finset`'s lattice would have pulled in. -/
+def liftQ (q : Value → Bool) : Value → Bool
+  | .strSet S => decide (∀ s ∈ S.1, q (.str s) = true)
+  | .numSet S => decide (∀ d ∈ S.1, q (.num d) = true)
+  | .binSet S => decide (∀ b ∈ S.1, q (.bin b) = true)
+  | _ => false
+
+/-- A restricted element codec writes a set exactly when every element passes `q` and the
+    unrestricted codec writes it. -/
+theorem encSet_restrict {α : Type} (c : Codec) (q : Value → Bool) (inj : α → Value)
+    (S : NEFinset α) [DecidablePred fun x => q (inj x) = true] :
+    encSet (c.restrict q) inj S =
+      if decide (∀ x ∈ S.1, q (inj x) = true) then encSet c inj S else none := by
+  -- the split is on the **`decide`**, not on the proposition: `by_cases` on the latter
+  -- reaches `Classical.em`, which puts `Classical.choice` under everything downstream
+  cases hd : decide (∀ x ∈ S.1, q (inj x) = true)
+  case true =>
+    have hq : ∀ x ∈ S.1, q (inj x) = true := of_decide_eq_true hd
+    show encSet (c.restrict q) inj S = encSet c inj S
+    unfold encSet
+    rw [neSetImage_congr (f := fun x => ((c.restrict q).e (inj x)).bind sC.out)
+          (g := fun x => (c.e (inj x)).bind sC.out)
+          (fun x hx => by simp only [Codec.restrict, if_pos (hq x hx)]),
+        neSetImage_congr (f := fun x => ((c.restrict q).e (inj x)).bind nC.out)
+          (g := fun x => (c.e (inj x)).bind nC.out)
+          (fun x hx => by simp only [Codec.restrict, if_pos (hq x hx)]),
+        neSetImage_congr (f := fun x => ((c.restrict q).e (inj x)).bind bC.out)
+          (g := fun x => (c.e (inj x)).bind bC.out)
+          (fun x hx => by simp only [Codec.restrict, if_pos (hq x hx)])]
+  case false =>
+    have hq : ¬ ∀ x ∈ S.1, q (inj x) = true := of_decide_eq_false hd
+    show encSet (c.restrict q) inj S = none
+    -- the witness is extracted **decidably** too — `by_contra` is the same trap
+    obtain ⟨x₀, hx₀, hqx⟩ : ∃ x ∈ S.1, q (inj x) ≠ true :=
+      Decidable.byContradiction fun hc =>
+        hq fun x hx => Decidable.byContradiction fun h' => hc ⟨x, hx, h'⟩
+    cases he : encSet (c.restrict q) inj S with
+    | none => rfl
+    | some a =>
+      have hno := encSet_isSome_false (c := c.restrict q) hx₀
+        (show (c.restrict q).e (inj x₀) = none by simp only [Codec.restrict, if_neg hqx])
+      rw [he] at hno; exact nomatch hno
+
+/-- **`set(refine(b, q))` is `refine(set(b), liftQ q)` on the write side — on the nose.**
+
+    This is what makes indexing `set` by a base non-lossy. Restricting the *elements* and
+    restricting the *set* by the lifted predicate produce the same `e`, so
+    `set(literal k ls)` and `set(refine(b, q))` — the two shapes `src/` actually uses
+    (`src/codec.set.spec.ts:76`) — are still expressible, as refinements of the set. The
+    read side follows from `434e54d`: `restrict`'s `p` decodes and then applies `q`, so
+    a set read is admitted exactly when every element it produced passes. -/
+theorem setCodec_restrict (c : Codec) (q : Value → Bool) :
+    (setCodec (c.restrict q)).e = ((setCodec c).restrict (liftQ q)).e := by
+  funext v
+  -- each of the three is `encSet_restrict` verbatim: `liftQ q` at a wire family **is** the
+  -- `decide` that theorem splits on, same instance, so there is nothing between them
+  cases v with
+  | strSet S => exact encSet_restrict c q Value.str S
+  | numSet S => exact encSet_restrict c q Value.num S
+  | binSet S => exact encSet_restrict c q Value.bin S
+  | _ => rfl
 
 /-! ### A codec carried between two prisms
 
@@ -2087,6 +2300,13 @@ theorem carrier_baseCodec : ∀ k : GroundKind, Carrier (baseCodec k)
   | .binary  => carrier_binaryCodec
   | .null    => carrier_nullCodec
 
+/-- …and each set base's element pair is on its carrier too. -/
+theorem carrier_setBase : ∀ b : SetBase, Carrier b.elem
+  | .string  => carrier_stringCodec
+  | .number  => carrier_numberCodec
+  | .decimal => carrier_decimalCodec
+  | .binary  => carrier_binaryCodec
+
 /-! ### The refinement ground codecs, on their carriers -/
 
 /-- **One theorem where there were two, and the numeric one was twenty-six lines.**
@@ -2457,6 +2677,14 @@ theorem lawful_baseCodec : ∀ k : GroundKind, Lawful (baseCodec k)
   | .binary  => lawful_binaryCodec
   | .null    => lawful_nullCodec
 
+/-- …and so is each set base's element pair. `decimal` is the one that is not a
+    `GroundKind`, which is why this is a second table rather than a composition. -/
+theorem lawful_setBase : ∀ b : SetBase, Lawful b.elem
+  | .string  => lawful_stringCodec
+  | .number  => lawful_numberCodec
+  | .decimal => lawful_decimalCodec
+  | .binary  => lawful_binaryCodec
+
 /-! ### The literal codec is lawful because its base is
 
 `literal` adds a prism and nothing else, so all four laws come from `Lawful.restrict`. This
@@ -2641,22 +2869,6 @@ theorem member_of_nC {a : Attr} (h : (nC.out a).isSome = true) : a.member = .N :
 theorem member_of_bC {a : Attr} (h : (bC.out a).isSome = true) : a.member = .B := by
   cases a <;> simp_all [bC, Attr.member]
 
-/-- The image succeeds when every element maps and no two collide. -/
-theorem setImage_isSome_of {α β : Type} [DecidableEq β] {f : α → Option β} {S : Finset α}
-    (hall : ∀ x ∈ S, (f x).isSome)
-    (hinj : ∀ x₁ ∈ S, ∀ x₂ ∈ S, ∀ y, f x₁ = some y → f x₂ = some y → x₁ = x₂) :
-    (setImage f S).isSome = true := by
-  unfold setImage
-  rw [dif_pos hall]
-  have hnd : (S.attach.val.map (fun x => (f x.1).get (hall x.1 x.2))).Nodup := by
-    refine Multiset.Nodup.map_on ?_ S.attach.nodup
-    intro x hx y hy hxy
-    have hfx : f x.1 = some ((f x.1).get (hall x.1 x.2)) := (Option.some_get _).symm
-    have hfy : f y.1 = some ((f y.1).get (hall y.1 y.2)) := (Option.some_get _).symm
-    rw [hxy] at hfx
-    exact Subtype.ext (hinj x.1 x.2 y.1 y.2 _ hfx hfy)
-  rw [dif_pos hnd]
-  rfl
 
 /-- What each wire element reads back to: the value it came from. -/
 theorem setImage_read {α β : Type} [DecidableEq β] {c : Codec} (h : LawfulCore c)
@@ -2980,6 +3192,27 @@ theorem encSet_bs_of {α : Type} {c : Codec} {vinj : α → Value} {S : NEFinset
   obtain ⟨T, -, hTa⟩ := Option.map_eq_some'.mp h
   exact ⟨T, hTa.symm⟩
 
+
+/-- **A set writes exactly when every element does.**
+
+    Both directions, and neither needs a hypothesis the term does not already carry: the
+    injectivity `encSet` demands comes from the element pair's own **(R)**
+    (`encSet_isSome_of`), and every base's element map is injective for a reason —
+    `Double.toDec` from `Double.roundtrip`, the other three by construction. This is why
+    indexing `set` makes the value-side row exact where an arbitrary element term could not
+    (a `held` adapter may collapse two elements). -/
+theorem encSet_base_iff {α : Type} (b : SetBase) {vinj : α → Value}
+    (hvi : ∀ x y, vinj x = vinj y → x = y) (S : NEFinset α) :
+    (encSet b.elem vinj S).isSome = true ↔ ∀ x ∈ S.1, b.adm (vinj x) = true := by
+  constructor
+  · intro h x hx
+    cases he : encSet b.elem vinj S with
+    | none => rw [he] at h; exact nomatch h
+    | some a => exact (b.adm_iff (vinj x)).mpr (encSet_elem he x hx)
+  · intro h
+    exact encSet_isSome_of (lawful_setBase b).core (b.setMember_elemMember) hvi
+      (fun x hx => (b.adm_iff (vinj x)).mp (h x hx))
+      (fun _ _ a' ha' => (lawful_setBase b).core.writes b.elem_μ ha')
 
 /-- **`setCodec` is lawful**, and the argument is not `lawfulCore_setCodec` with `agree`
     bolted on. That theorem gets member uniformity from `c.μ`, and the two call sites in

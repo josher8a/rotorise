@@ -556,8 +556,18 @@ rewrite `Adm`'s `.object` row, fill the `.object` case of `Adm_exact`, flip `Ana
 **delete the `nameAdmission → .object` row from `Excuse.covers`** or `excuse_shapes` and
 `analysable_excused` break. The attribute side stays excused.
 
-**`payloadShape` — the stated reason is now wrong; the excuse survives for two different
-reasons.** It says *"`asWireSet` demands payload homogeneity: a fact about attributes, not
+**`payloadShape` — ~~the stated reason is now wrong; the excuse survives for two different
+reasons~~ — retired, and the row was never the thing to fix.** `Term.set` takes a `SetBase`
+(`string`/`number`/`decimal`/`binary`) rather than an element term. Every base's element map is
+injective, so obstruction 1 below cannot arise; every base writes one wire family, so obstruction
+2 cannot either. `payloadShape`, `not_ExactV_set` and `not_ExactA_set` are all deleted, and
+`Analysable`/`AnalysableA` go 18/21 → 19/21. The analysis below is a correct reading of the *old*
+constructor and is kept for that; what it missed is that the excuse also covered a read-side cause
+it never named — `AdmA (.set _)` admitting all three wire members — and that neither cause was a
+property of the row. `codec-formalization.md` §4, "One where the row could not be sharpened and the
+constructor could".
+
+The reading, as it stood: It says *"`asWireSet` demands payload homogeneity: a fact about attributes, not
 values"*. Homogeneity of values and non-emptiness are structural now, so that sentence is
 stale. `not_ExactV_set` still holds, and it is not about homogeneity at all: `collapse` sends
 both elements to one string, so both admit while `setImage`'s `Nodup` check refuses. The two

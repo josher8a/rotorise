@@ -74,6 +74,15 @@ def κList : List Term → Option (List Kind)
 
 end
 
+/-- Whether a set's **base** decides its own membership — what `ident` used to read off the
+    element term. `number` and `decimal` check §1's gate on the way in and on the way out, so
+    an attempted admission is evidence; `string` and `binary` accept their whole carrier and
+    so decide nothing. Indexing `set` turns a propagation into this table, and the four
+    answers are the four the propagation gave. -/
+def SetBase.ident : SetBase → Bool
+  | .string | .binary => false
+  | .number | .decimal => true
+
 mutual
 
 /-- §5's `ident`: the term decides its own membership — attempted admission is
@@ -93,7 +102,8 @@ def ident : Term → Bool
   -- nullable options separating on a null neither subterm decides — but with `adm` precise
   -- that refusal is carried by the sets *overlapping at null*, which is the honest reason.
   | .nullable t => ident t
-  | .set t | .array t | .record t => ident t
+  | .set b => b.ident
+  | .array t | .record t => ident t
   -- `refine` *holds* it rather than propagating: `q` is checked on the way in and on the
   -- way out, which is what deciding your own membership means. §3 argues the same — a `p`
   -- returning the value it read without verifying `q` would break (C).

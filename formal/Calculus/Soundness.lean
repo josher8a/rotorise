@@ -59,9 +59,10 @@ mutual
     The companions below are what replace the fuel — `∀ t' ∈ ts, Obligations t'` is not a
     structural recursion, and `ObligationsList` is. -/
 def Obligations : Term → Prop
+  -- `set` joins the leaves: its base is an index, so there is no subterm to carry premises.
   | .string | .number | .decimal | .boolean | .binary | .null
-  | .literal _ _ | .opaq _ => True
-  | .set t' | .array t' | .record t' | .refine t' _ => Obligations t'
+  | .literal _ _ | .opaq _ | .set _ => True
+  | .array t' | .record t' | .refine t' _ => Obligations t'
   | .tuple ts tail => ObligationsList ts ∧ ObligationsOpt tail
   | .held t' f g => Obligations t' ∧ IsoCancels (denote t') f g
   | .legacy t' r => Obligations t' ∧ ReadsCoherently (denote t') r
@@ -100,8 +101,8 @@ def MPOk : Term → Prop
   | .legacy _ _ => False
   | .literal _ _
   | .string | .number | .decimal | .boolean | .binary | .null
-  | .opaq _ | .custom _ _ => True
-  | .set t' | .array t' | .record t' | .refine t' _ | .nullable t'
+  | .opaq _ | .custom _ _ | .set _ => True
+  | .array t' | .record t' | .refine t' _ | .nullable t'
   | .held t' _ _ => MPOk t'
   | .tuple ts tail => MPOkList ts ∧ MPOkOpt tail
   | .lazy t' => MPOk t'
@@ -163,7 +164,6 @@ rule, and they read as the rule they belong to. Each is `:= h`. -/
 
 namespace Obligations
 
-theorem set {t} (h : Obligations (.set t)) : Obligations t := h
 theorem array {t} (h : Obligations (.array t)) : Obligations t := h
 theorem record {t} (h : Obligations (.record t)) : Obligations t := h
 theorem refine {t q} (h : Obligations (.refine t q)) : Obligations t := h
@@ -293,10 +293,7 @@ theorem typed_μSyn : ∀ {t T μ}, Typed t T μ → μSyn t = μ
   | _, _, _, .boolean => rfl
   | _, _, _, .null => rfl
   | _, _, _, .binary => rfl
-  | _, _, _, .set h' hs => by
-      show (μSyn _).bind setMember = _
-      rw [typed_μSyn h']
-      exact hs
+  | _, _, _, .set _ => rfl
   | _, _, _, .array _ => rfl
   | _, _, _, .tuple _ _ => rfl
   | _, _, _, .record _ => rfl
@@ -466,9 +463,9 @@ theorem soundness_both : ∀ {t T μ}, Typed t T μ → Obligations t → Sound 
     | opaq lossy => exact sound_ground (lawful_opaqCodecω lossy)
     | custom ce cp =>
       exact sound_ground hob.custom
-    | @set t' T' μ₀ μS h' hs =>
-      have hμ : (denote t').μ = some μ₀ := by rw [denote_μ]; exact typed_μSyn h'
-      exact sound_wrap (t := t') (soundness_both h' hob) (lawfulCore_setCodec · hμ hs) lawful_setCodec
+    -- a leaf now: `setCodec` is lawful at each of the four bases, so `(set)` discharges the
+    -- way the ground rules do rather than by wrapping a subterm's soundness
+    | set b => exact sound_ground (lawful_setCodec (lawful_setBase b))
     | @array t' T' μ' h' =>
       exact sound_wrap (t := t') (soundness_both h' hob) lawfulCore_arrayCodec lawful_arrayCodec
     | @record t' T' μ' h' =>
@@ -708,11 +705,13 @@ theorem typed_TSub : ∀ {t T μ}, Typed t T μ → ∀ v, (denote t).T v → T 
     | literal _ _ _ => exact hv
     | custom _ _ => exact hv
     | opaq lossy => exact opaq_TSubω lossy v hv
-    | @set t' T' μ₀ μS h' hs =>
-      cases v <;> first
-        | exact Or.inl ⟨_, rfl, fun x hx => typed_TSub h' _ (hv x hx)⟩
-        | exact Or.inr (Or.inl ⟨_, rfl, fun x hx => typed_TSub h' _ (hv x hx)⟩)
-        | exact Or.inr (Or.inr ⟨_, rfl, fun x hx => typed_TSub h' _ (hv x hx)⟩)
+    -- the base's codec holds exactly the base's held set (`SetBase.elem_T`), so the three
+    -- wire families transport with no recursion left to do
+    | set b =>
+      cases b <;> cases v <;> first
+        | exact Or.inl ⟨_, rfl, fun x hx => hv x hx⟩
+        | exact Or.inr (Or.inl ⟨_, rfl, fun x hx => hv x hx⟩)
+        | exact Or.inr (Or.inr ⟨_, rfl, fun x hx => hv x hx⟩)
         | exact nomatch hv
     | @array t' T' μ' h' =>
       cases v <;> first
@@ -813,8 +812,7 @@ theorem carrier_denote : ∀ {t T μ}, Typed t T μ → Obligations t → Carrie
     | boolean => exact carrier_booleanCodec
     | null => exact carrier_nullCodec
     | binary => exact carrier_binaryCodec
-    | @set t' T' μ₀ μS h' hs =>
-      exact carrier_setCodec (carrier_denote h' hob.set)
+    | set b => exact carrier_setCodec (carrier_setBase b)
     | @array t' T' μ' h' =>
       exact carrier_arrayCodec (carrier_denote h' hob.array)
     | @record t' T' μ' h' =>
