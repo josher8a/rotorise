@@ -905,6 +905,39 @@ theorem uAtCan_literal_literal_by_orth :
     (forall_mem_pair (fun _ _ _ h => nomatch h) (fun _ _ _ h => nomatch h))
     (pairwise_pair (separates_literal_disjoint (by decide)))
 
+/-! ### The existing discharges, by phase
+
+Where the hand proofs sit, and the two that sit nowhere. `Orth` is the decidable part, and
+`Separates` covers one more phase; the last column says which.
+
+| theorem | phase | reached |
+| --- | --- | --- |
+| `sepV_string_dunion_nil` | slot | `Orth1` |
+| `sepV_number_opaque`, `sepA_number_opaque` | slot | `Orth1` |
+| `uAtCan_string_null`, `uAtCan_string_boolean` | slot | `Orth1` |
+| `uAtCan_literal_literal`, `uAtCan_of_literalN_disjoint` | alternatives | `separates_literal_disjoint` |
+| `sepA_literalN_disjoint`, `sepA_literal_heldLiteral` | alternatives | read half of the same |
+| `sep_lazy_literal`, `sepA_lazy_literal`, `sep_nullable_plain` | alternatives | the same, under a transparent wrapper |
+| `sepV_refine_disjoint`, `sepA_refine_disjoint`, `uAtCan_of_refine_disjoint`, `uAtCan_boolLiterals`, `uAtCan_refine_container` | opaque predicate | never — `q` is arbitrary |
+| `sepV_literal_heldLiteral`, `sepJV_set_literals` | opaque predicate | never — `f`, and a `q` inside a `refine` |
+| `uAtCan_dunion` | tag | a different constructor; already a theorem |
+| `uAtCan_opaque` | kind | one level below the term language |
+
+**Two fit no phase, and each is a limit worth naming.**
+
+`sepJA_legacy_decimal` separates `legacy(string, r)` from `decimal` by the **member**, and
+`Orth` cannot: `occA (.legacy _ _)` is `⊤` because the *row* is
+`AdmA t a || (r a).isSome` with `r` arbitrary data, while `μSyn (.legacy t _) = μSyn t` is
+sharper — true of the lawful codec, false of the row. `sepJA_needs_member` is the pair
+showing `AdmA` alone does not separate them either. So the member disjunct of `SepJA` is not
+subsumed here, and a phase that reached it would have to take `ReadsCoherently` as a premise.
+
+`uAtAct_array_literals` is out of reach **by strength, not by phase**: `Orth` produces
+`UAtCan`, and that pair genuinely fails `UAtCan` (`not_uAtCan_array_literals` — both options
+admit `[]`) while meeting `UAtAct`, because the *union* declines the empty array. Nothing that
+holds only where the union acts can be certified per-option, which is what a syntactic
+certificate on a pair of terms is. That gap is where the working container schemas sit. -/
+
 /-- The end-to-end shape: `uAtCan_string_null` again, from one `decide`. -/
 theorem uAtCan_string_null_by_orth : UAtCan [Term.string, Term.null] :=
   uAtCan_of_orth (forall_mem_pair lawful_string lawful_null)
