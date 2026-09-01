@@ -285,4 +285,83 @@ theorem mem_tagStringsOf_union (l : List String) (x : String) :
     x ∈ tagStringsOf (.union (l.map fun s => .literal .string (.of s ∅))) ↔ x ∈ l :=
   mem_tagStringsOf_fold l x
 
+/-! ## The other route not taken: `literal` as a refinement
+
+`refine(base, · ∈ ℓ)` is the second derivation of `literal`, and until now it cost precision:
+`admA (.refine t q)` dropped `q`, so the refinement form was **blind on the read side** where
+`admALit` was not. That was the argument against a literal API in which every primitive codec
+accepts its own alternatives — `string('A')`, `number(1)`, `decimal('1')` — since the natural
+encoding of that API is a refinement.
+
+The argument is gone with the row. `admA` at a `refine` decodes with the base and applies `q`,
+and `literalCodec k ls` **is** `(baseCodec k).restrict (inL k ls)`, so the two terms denote the
+same read and the two rows now compute the same answer, at every base including `number`.
+
+On the write side the refinement is not merely equal but **strictly sharper at `number`**:
+`adm (.literal k ls)` is `inL k ls` alone, which over-approximates there (`dom(e)` is `inL`
+*and* `WF d.toDec` — the fourth row `b52910d` left standing), while the refinement conjoins the
+base's own `inD`. -/
+
+/-- The term denoting a ground base, as an index. `baseCodec`'s counterpart one level up. -/
+def groundTerm : GroundKind → Term
+  | .string => .string
+  | .number => .number
+  | .boolean => .boolean
+  | .binary => .binary
+  | .null => .null
+
+theorem denote_groundTerm (k : GroundKind) : denote (groundTerm k) = baseCodec k := by
+  cases k <;> rfl
+
+/-- **`literal k ℓ` and `refine(base k, ∈ ℓ)` denote the same pair**, up to the held set the
+    literal carries — which `restrict` cannot know and `T` is not consulted by either row. -/
+theorem denote_refine_ground_p (k : GroundKind) (ls : NEFinset k.Carrier) (a : Attr) :
+    (denote (.refine (groundTerm k) (inL k ls))).p a = (denote (.literal k ls)).p a := by
+  cases k <;> rfl
+
+/-- **The question the row was changed to settle: yes.** `refine(base, ∈ ℓ)` is exactly as
+    precise on the readable side as `literal base ℓ`, at every ground base — the numeric one
+    included, where both rows ask the codec and get the same answer. A uniform
+    `string('A')` / `number(1)` / `decimal('1')` API pays nothing for being uniform. -/
+theorem admA_refine_ground_eq_admALit (k : GroundKind) (ls : NEFinset k.Carrier) (a : Attr) :
+    admA (.refine (groundTerm k) (inL k ls)) a = admALit k ls a := by
+  cases k
+  case string => cases a <;> simp [admA, admALit, refineReads, groundTerm, denote,
+                                   stringCodec, inL]
+  case boolean => cases a <;> simp [admA, admALit, refineReads, groundTerm, denote,
+                                    booleanCodec, inL]
+  case binary => cases a <;> simp [admA, admALit, refineReads, groundTerm, denote,
+                                   binaryCodec, inL]
+  case null => cases a <;> simp [admA, admALit, refineReads, groundTerm, denote,
+                                 nullCodec, inL]
+  case number =>
+    show (admA .number a && refineReads (groundTerm .number) (inL .number ls) a)
+        = ((literalCodec .number ls).p a).isSome
+    rw [show ((literalCodec .number ls).p a)
+          = (numberCodec.p a).bind (fun v => if inL .number ls v then some v else none) from rfl]
+    show (((numberCodec.p a).isSome : Bool) &&
+        (match numberCodec.p a with | some v => inL .number ls v | none => false)) = _
+    cases h : numberCodec.p a <;> simp [h]
+    split <;> simp_all
+
+/-- On the write side the refinement is **at least** as precise, and at `number` strictly:
+    `adm (.literal .number ls)` is `inL` alone. -/
+theorem adm_refine_ground_le_adm_literal (k : GroundKind) (ls : NEFinset k.Carrier)
+    (v : Value) :
+    adm (.refine (groundTerm k) (inL k ls)) v = true → adm (.literal k ls) v = true := by
+  cases k <;> · intro h; rw [adm] at h; exact (Bool.and_eq_true _ _ ▸ h).2
+
+/-- …and the four non-numeric bases are an equality, the base's own row being `⊤`. -/
+theorem adm_refine_ground_eq_adm_literal (k : GroundKind) (ls : NEFinset k.Carrier)
+    (v : Value) (hk : k ≠ .number) :
+    adm (.refine (groundTerm k) (inL k ls)) v = adm (.literal k ls) v := by
+  cases k
+  case number => exact absurd rfl hk
+  all_goals simp [adm, groundTerm]
+
+/-- The numeric row, written out: the refinement carries §1's `D` gate that the literal's row
+    drops. -/
+theorem adm_refine_ground_number (ls : NEFinset Double) (v : Value) :
+    adm (.refine (groundTerm .number) (inL .number ls)) v = (inD v && inL .number ls v) := rfl
+
 end Calculus

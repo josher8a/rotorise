@@ -762,7 +762,13 @@ excuse available" and `analysable_excused` forces `Analysable` to call it analys
 forces `Adm_exact` to prove it. The failure mode of every other catch-all in this
 development was that it silently said yes. -/
 
-/-- The four reasons a row may decline to be exact. There is no `other`, deliberately. -/
+/-- The three reasons a row may decline to be exact. There is no `other`, deliberately.
+
+    There were four. `valueUnderRead` — "`q` tests the value a read *produces*, and no
+    syntactic set of attributes bounds that" — covered `refine` on the attribute side, and
+    was deleted when the row it excused turned out to be writable: a row may decode and then
+    apply `q` (`refineReads`), so `refine` is exact on both sides and needs no reason. The
+    sentence the excuse was named for is still true; it was never a reason. -/
 inductive Excuse where
   /-- `select` admits only where **exactly one** option does, and the count that decides it
       is taken over the *rows*, not over `dom(e)`.
@@ -782,9 +788,6 @@ inductive Excuse where
   /-- `ownsNull` is a disjunction over **both** halves, so a read that reaches the null
       point suppresses the wrapper while the write still refuses it. -/
   | nullOwnership
-  /-- `q` tests the value a read *produces*, and no syntactic set of attributes bounds
-      that. Attribute side only — on the value side `refine` narrows exactly. -/
-  | valueUnderRead
   deriving DecidableEq
 
 /-- Which term shapes each excuse may be invoked for. The catch-all answers `false`, so a
@@ -1228,8 +1231,6 @@ theorem excuse_witnessed : ∀ (e : Excuse) (t : Term), e.covers t = true →
   | .uniqueAdmission, _, _ => ⟨.union [.string, .string], rfl, not_ExactV_union⟩
   | .payloadShape, _, _    => ⟨.set (.held .string collapse (fun v => v)), rfl, not_ExactV_set⟩
   | .nullOwnership, _, _   => ⟨.nullable (.legacy .string rNull), rfl, not_ExactV_nullable⟩
-  -- The one attribute-side reason covers nothing here, so the hypothesis is unsatisfiable.
-  | .valueUnderRead, t, h  => by cases t <;> simp [Excuse.covers] at h
 
 /-! ## The attribute side
 
@@ -1237,9 +1238,10 @@ theorem excuse_witnessed : ∀ (e : Excuse) (t : Term), e.covers t = true →
 `Adm`-shaped counterpart — which is the first reason the analysis tables cannot simply be
 renamed onto `Adm`. `AdmA` below is that counterpart's definition and its soundness proof.
 
-The mirror is not symmetric, and the asymmetries are §1's rather than this file's: the
-numeric rows go through `Double.ofDec`, `refine` cannot narrow a read, and `legacy` widens
-one. Each is a row here rather than a remark. -/
+The mirror is not symmetric, and the asymmetry that remains is §1's rather than this
+file's: the numeric rows go through `Double.ofDec`, and `legacy` widens a read. `refine`
+was listed here as a third — "cannot narrow a read" — and is not one: the row decodes and
+then applies `q`. Each is a row here rather than a remark. -/
 
 /-! ### The attribute side's rows, and the three that are not the value side's
 
@@ -1333,9 +1335,11 @@ mutual
       may call it — at the cost of being `noncomputable`, which `adm` already was. These rows
       used to be sharper than §5's `⊤`; they are now equal to it, because the observation in
       the previous sentence is exactly the one §5's numeric rows were missing.
-    * `refine` cannot narrow here: `q` tests the value a read *produces*, and no syntactic
-      set of attributes bounds that. The row passes the subterm's through, which is sound
-      and not exact.
+    * `refine` **does** narrow here, and the row that said it could not was wrong in the
+      same way the numeric `⊤`s were. "`q` tests the value a read *produces*, and no
+      syntactic set of attributes bounds that" is true of syntax and says nothing about a
+      row, which may decode and then ask `q` (`refineReads`). Sound, and exact whenever the
+      subterm's row is: `dom((c.restrict q).p)` is precisely `{a | ∃ v, c.p a = some v ∧ q v}`.
     * `legacy` is the read-side alternative: `p` is the subterm's channel falling back to
       `r`'s, and `r` is data the term carries — the asymmetry `not_admA_legacy` records, and
       the reason `adm` and `admA` split at all. -/
@@ -1358,8 +1362,8 @@ noncomputable def AdmA : Term → Attr → Bool
       match a with | .m _ g => decide (∀ k, AdmA c (g k) = true) | _ => false
   | .held t _ _ => AdmA t
   | .lazy t   => AdmA t
+  | .refine t q => fun a => AdmA t a && refineReads t q a
   -- hatch
-  | .refine t _ => AdmA t
   | .legacy t r => fun a => AdmA t a || (r a).isSome
   | .nullable t => fun a => AdmA t a || (match a with | .null => true | _ => false)
   | .union opts => fun a => anyPA (AdmAList opts) a
@@ -1871,7 +1875,10 @@ theorem AdmA_sound : ∀ (t : Term) {a v},
         obtain ⟨f, hf, -⟩ := Option.map_eq_some'.mp hp
         exact fun k => AdmA_sound c (funImage_some hf k)
       all_goals (simp only [denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, recordCodec] at hp; exact nomatch hp)
-    case refine c q => simpa [AdmA] using AdmA_sound c (restrict_p.mp hp).1
+    case refine c q =>
+      obtain ⟨hp', hq⟩ := restrict_p.mp hp
+      rw [AdmA, Bool.and_eq_true]
+      exact ⟨AdmA_sound c hp', by rw [refineReads_some hp']; exact hq⟩
     case lazy c => simpa [AdmA] using AdmA_sound c hp
     case held c f g =>
       obtain ⟨w, hw, -⟩ := through_p.mp hp
@@ -1921,25 +1928,28 @@ decreasing_by term_depth_wf
     obligations rather than one and a half, and the analysis tables can be read off either. -/
 
 mutual
-/-- The attribute-side hatch, wider than the value side's by one row, and that row is an
-    asymmetry §1 imposes rather than anything this file chose.
+/-- The attribute-side hatch, and it is now **the value side's, exactly** — `union`, `set`
+    and `nullable`, for the value side's reasons.
 
-    * `refine` — `q` tests the value a read *produces*; no syntactic set of attributes
-      bounds that. This is the row `admA` could never narrow either, and the reason `adm`
-      and `admA` are two functions rather than one.
-    * `union`, `set`, `nullable` — the value side's three, for the value side's reasons.
+    `refine` used to be the fourth, and the one asymmetry: "`q` tests the value a read
+    *produces*; no syntactic set of attributes bounds that". The sentence is true and the
+    inference from it was not — a row is free to decode and then ask `q` (`refineReads`),
+    which is what `AdmA`'s row now does, so `refine` propagates on both sides. The claim
+    that this row is why `adm` and `admA` are two functions rather than one is likewise
+    retracted; `legacy` is why, and `legacy` alone (`not_admA_legacy`).
 
     `legacy` left this list when its row became the union of the two channels; `tuple`,
-    `object`, `dunion` and `opaq` leave it now. -/
+    `object`, `dunion` and `opaq` left it next; `refine` leaves it now. -/
 def AnalysableA : Term → Bool
   | .string | .boolean | .binary | .null | .number | .decimal
   | .literal _ _ | .custom _ _ | .opaq _ => true
-  | .array c | .record c | .held c _ _ | .lazy c | .legacy c _ => AnalysableA c
+  | .array c | .record c | .held c _ _ | .lazy c | .legacy c _ | .refine c _ =>
+      AnalysableA c
   | .tuple ts tail => AnalysableAL ts && AnalysableAO tail
   | .dunion _ opts => AnalysableAL opts
   | .object fields fld rest =>
       decide (∀ k : {k // k ∈ fields}, AnalysableAF (fld k) = true) && AnalysableAR rest
-  | .refine _ _ | .nullable _ | .union _ | .set _ => false
+  | .nullable _ | .union _ | .set _ => false
 
 def AnalysableAL : List Term → Bool
   | [] => true
@@ -1999,10 +2009,11 @@ theorem AdmAAll_iff {c : Term} (h : ExactA c) : ∀ as : List Attr,
   | cons a as ih => simp [allPA, ih, h a]
 
 mutual
-/-- **Seventeen of the twenty-one attribute rows are exact.** One fewer than the value side,
-    and the one is `refine` — half of the pair whose asymmetry is the reason §5 needed `adm`
-    and `admA` rather than one function; `legacy`, the other half, is exact here because its
-    row is the union of the two channels it reads on.
+/-- **Eighteen of the twenty-one attribute rows are exact** — the same eighteen as the value
+    side, and the three that decline are the same three. `refine` was the seventeenth-versus-
+    eighteenth difference and is exact now: its row decodes and then applies `q`. `legacy`,
+    which used to be the other half of that asymmetry, is exact here because its row is the
+    union of the two channels it reads on.
 
     The numeric rows are the interesting ones: they reach `dom(p)` through `Double.ofDec`,
     which is axiomatized, and are exact anyway — a row may *call* an axiomatized function
@@ -2024,8 +2035,7 @@ theorem AdmA_exact : ∀ (t : Term), AnalysableA t = true → ExactA t
       exact ExactA_object (fun k => AdmA_exactF (fld k) (ha.1 k))
         (exactAR_codec rest (AdmA_exactR rest ha.2))
   | .opaq lossy => fun _ => ExactA_opaq lossy
-  -- the four that decline, refuted by the hypothesis
-  | .refine _ _ => by intro ha; simp [AnalysableA] at ha
+  -- the three that decline, refuted by the hypothesis
   | .nullable _ => by intro ha; simp [AnalysableA] at ha
   | .union _ => by intro ha; simp [AnalysableA] at ha
   | .set _ => by intro ha; simp [AnalysableA] at ha
@@ -2104,6 +2114,15 @@ theorem AdmA_exact : ∀ (t : Term), AnalysableA t = true → ExactA t
       simp only [AdmA, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, Codec.through]
       rw [hc a]
       cases (denote c).p a <;> simp
+  -- **the row this file said could not exist.** `restrict`'s `p` is the base's `bind`ed
+  -- through `q`, so `dom(p)` is `dom` of the base's intersected with `q` of what it decodes
+  -- to — and that is what the row computes, term for term.
+  | .refine c q => by
+      intro ha
+      have hc := AdmA_exact c (by simpa [AnalysableA] using ha)
+      intro a
+      simp only [AdmA, refineReads, denote_refine, Codec.restrict, Bool.and_eq_true, hc a]
+      cases hx : (denote c).p a <;> simp [hx]
   | .lazy c => by
       intro ha
       have hc := AdmA_exact c (by simpa [AnalysableA] using ha)
@@ -2143,15 +2162,15 @@ end
 
 /-! ### The attribute side's excuses, and their witnesses
 
-The value side's three reasons apply here too, and one more does — `refine`, which cannot
-narrow a read because `q` tests the value a read *produces*. It covers nothing on the value
-side, which is why `excuse_witnessed` is stated with the covering as a hypothesis: an excuse
-must be witnessed **on the side it is used on**, and neither side has to answer for the
-other's reasons.
+The value side's three reasons apply here too, and they are now the whole list. A fourth —
+`refine`, "which cannot narrow a read because `q` tests the value a read *produces*" — was
+here until the row was written: `AdmA` decodes with the base and applies `q`, so the shape
+is exact and the reason is deleted rather than restated. `excuse_witnessed` keeps the
+covering as a hypothesis anyway: an excuse must be witnessed **on the side it is used on**,
+and a future asymmetry should not have to re-derive that.
 
 `legacy` used to be the second such reason and is exact on both sides now; `tuple` and
-`opaq` used to be witnessed here and are exact too, so their witnesses are gone rather than
-restated. -/
+`opaq` used to be witnessed here and are exact too. -/
 
 /-- `set`'s member gate over-claims on the read side: `AdmA` accepts all three wire
     families, and `set(string)` reads only `SS`. The empty run used to be the witness;
@@ -2183,28 +2202,30 @@ theorem not_ExactA_nullable : ¬ ExactA (.nullable (.custom ceNull cpNone)) := b
   have h2 := (h .null).mp (by simp [AdmA])
   simp [denote, denote, Codec.withNull, Codec.ownsNull, ceNull, cpNone] at h2
 
-/-- `refine` cannot narrow a read: `q` refuses everything, and `AdmA` cannot see it. -/
-theorem not_ExactA_refine : ¬ ExactA (.refine .string (fun _ => false)) := by
-  intro h
-  have h2 := (h (.s "a")).mp (by simp [AdmA])
-  simp [denote, denote, Codec.restrict, stringCodec] at h2
+/-- **The witness that is now a theorem the other way.** `refine(string, ⊥)` reads nothing,
+    and `AdmA` says so: the row decodes with `stringCodec` and applies `⊥`. This used to be
+    `not_ExactA_refine`, stated as "`AdmA` cannot see it". -/
+theorem AdmA_refine_bot (a : Attr) : AdmA (.refine .string (fun _ => false)) a = false := by
+  simp [AdmA, refineReads]
+  cases a <;> simp [denote, stringCodec]
 
-
-/-- Which shapes each excuse may be invoked for **on the attribute side**. Two rows have no
-    value-side counterpart, and the catch-all answers `false` for the same reason it does
-    there: a new constructor is not excusable by default. -/
+/-- Which shapes each excuse may be invoked for **on the attribute side**. It is now the
+    value side's table, row for row — `refine` was the last entry that differed — and the
+    catch-all answers `false` for the same reason it does there: a new constructor is not
+    excusable by default. The two tables are kept separate anyway: nothing makes them agree,
+    and a future asymmetry should be able to appear in one of them. -/
 def Excuse.coversA : Excuse → Term → Bool
   | .uniqueAdmission, .union _     => true
   | .payloadShape,    .set _       => true
   | .nullOwnership,   .nullable _  => true
-  | .valueUnderRead,  .refine _ _  => true
   | _, _ => false
 
 /-- The answer a propagating **attribute** row inherits, conjoined as on the value side.
-    `refine` is absent, which is now the whole of the asymmetry: it propagates on the value
-    side and is excused here. -/
+    `refine` is here now rather than excused, which closes the last shape at which the two
+    hatches differed: `coversA` and `covers` are the same table. -/
 def childrenAnalysableA : Term → Bool
-  | .array c | .record c | .held c _ _ | .lazy c | .legacy c _ => AnalysableA c
+  | .array c | .record c | .held c _ _ | .lazy c | .legacy c _ | .refine c _ =>
+      AnalysableA c
   | .tuple ts tail => AnalysableAL ts && AnalysableAO tail
   | .dunion _ opts => AnalysableAL opts
   | .object fields fld rest =>
@@ -2217,8 +2238,8 @@ theorem analysableA_excused : ∀ (t : Term), AnalysableA t = false →
   | .union _, _     => .inl ⟨.uniqueAdmission, rfl⟩
   | .set _, _       => .inl ⟨.payloadShape, rfl⟩
   | .nullable _, _  => .inl ⟨.nullOwnership, rfl⟩
-  | .refine _ _, _  => .inl ⟨.valueUnderRead, rfl⟩
-  | .array c, h | .record c, h | .held c _ _, h | .lazy c, h | .legacy c _, h =>
+  | .array c, h | .record c, h | .held c _ _, h | .lazy c, h | .legacy c _, h
+  | .refine c _, h =>
       .inr (by simpa [childrenAnalysableA, AnalysableA] using h)
   | .tuple _ _, h | .dunion _ _, h | .object _ _ _, h =>
       .inr (by simpa [childrenAnalysableA, AnalysableA] using h)
@@ -2236,7 +2257,6 @@ theorem excuseA_witnessed : ∀ (e : Excuse) (t : Term), e.coversA t = true →
   | .uniqueAdmission, _, _ => ⟨.union [.string, .string], rfl, not_ExactA_union⟩
   | .payloadShape, _, _    => ⟨.set .string, rfl, not_ExactA_set⟩
   | .nullOwnership, _, _   => ⟨.nullable (.custom ceNull cpNone), rfl, not_ExactA_nullable⟩
-  | .valueUnderRead, _, _  => ⟨.refine .string (fun _ => false), rfl, not_ExactA_refine⟩
 
 /-! ## Re-deriving §5's separations on the pair
 
@@ -2478,8 +2498,12 @@ theorem AdmA_le_admA : ∀ (t : Term) (a : Attr), AdmA t a = true → admA t a =
         show ((denote (Term.literal .number ls)).p a).isSome = true
         exact (AdmA_exact (.literal .number ls) rfl a).mp h
       all_goals cases a <;> simp_all [AdmA_literal, AdmALit, admA, admALit]
-  | .refine t _, a, h => by
-      rw [admA]; exact AdmA_le_admA t a (by rw [AdmA] at h; exact h)
+  -- the two rows are the *same* gate now — `refineReads` verbatim on both sides — so this
+  -- is the containment of the base's, conjoined with a shared conjunct
+  | .refine t q, a, h => by
+      rw [AdmA, Bool.and_eq_true] at h
+      rw [admA, Bool.and_eq_true]
+      exact ⟨AdmA_le_admA t a h.1, h.2⟩
   | .held t _ _, a, h => by
       rw [admA]; exact AdmA_le_admA t a (by rw [AdmA] at h; exact h)
   | .lazy t, a, h => by
