@@ -1,0 +1,279 @@
+/**
+ * A literal is a capability of the primitive that names its base — not a constructor that guesses.
+ *
+ * `literal(...)` inferred its carrier from the JS type of its arguments, and `src/codec.ts` said so
+ * in its own words: *"A literal is the one ground term whose member follows from its **values**
+ * rather than from its name."* That was the single exception to how every other term in this library
+ * works, and it is retired here. `string('A')`, `number(1)`, `decimal('1')`, `boolean(true)` and
+ * `binary(bytes)` each name the ground term they narrow, so the base is data and not an inference.
+ *
+ * **What the guess could not reach, and this can.** Three things, and one of them is the reason:
+ *
+ * 1. `decimal('1')` — *stored as `N`, exactly this text*. `literal('1')` gave an `S` and `literal(1)`
+ *    went through the host's `number`, so a lossless numeric literal was not expressible at all. It
+ *    is the counterexample that retires the rule outright: text that stores an `N`.
+ * 2. `boolean(true)` — a literal at `BOOL`, which no spelling reached.
+ * 3. `binary(bytes)` — a literal at `B`, compared by bytes rather than by reference.
+ *
+ * The definition records the base (`CodecDef['literal']['base']`) rather than leaving `writes` and
+ * `carries` to recover it, because at `decimal` there is nothing to recover it *from*: the values are
+ * strings and the member is `N`, and no reading of either says so.
+ */
+import { describe, expect, it } from 'vitest'
+import type { B, BOOL, N, S } from './attribute'
+import {
+    binary,
+    boolean,
+    carries,
+    CodecError,
+    decides,
+    decimal,
+    discriminatedUnion,
+    literal,
+    number,
+    object,
+    string,
+    union,
+    writes,
+} from './codec'
+import { checkRoundTrip } from './testing'
+
+describe('the base is named, not inferred', () => {
+    /**
+     * The whole finding in one assertion: two literals whose *values* are the same JS type and
+     * whose stored members differ, and two whose values differ and whose members agree. No function
+     * of the values decides this. Only the name does.
+     */
+    it('separates what the values cannot: decimal is text stored as N', () => {
+        expect(writes(decimal('1'))).toBe('N')
+        expect(carries(decimal('1'))).toEqual(['string'])
+        expect(writes(string('1'))).toBe('S')
+        expect(carries(string('1'))).toEqual(['string'])
+
+        expect(writes(number(1))).toBe('N')
+        expect(carries(number(1))).toEqual(['number'])
+    })
+
+    it('writes each base into the member that base stores', () => {
+        expect(string('A').unsafeEncode('A')).toEqual({ S: 'A' })
+        expect(number(1).unsafeEncode(1)).toEqual({ N: '1' })
+        expect(decimal('1').unsafeEncode('1')).toEqual({ N: '1' })
+        expect(boolean(true).unsafeEncode(true)).toEqual({ BOOL: true })
+        expect(
+            binary(Uint8Array.from([1, 2])).unsafeEncode(
+                Uint8Array.from([1, 2]),
+            ),
+        ).toEqual({ B: Uint8Array.from([1, 2]) })
+    })
+
+    it('types the attribute at each base', () => {
+        const text: S = string('A').unsafeEncode('A')
+        const digits: N = number(1).unsafeEncode(1)
+        const exact: N = decimal('1').unsafeEncode('1')
+        const flag: BOOL = boolean(true).unsafeEncode(true)
+        const bytes: B = binary(Uint8Array.from([7])).unsafeEncode(
+            Uint8Array.from([7]),
+        )
+        expect([text, digits, exact, flag, bytes]).toHaveLength(5)
+    })
+
+    /** The primitive is still the primitive: calling it is what narrows. */
+    it('leaves the uncalled codec exactly what it was', () => {
+        expect(writes(string)).toBe('S')
+        expect(string.unsafeEncode('anything')).toEqual({ S: 'anything' })
+        expect(decimal.unsafeEncode('1.5')).toEqual({ N: '1.5' })
+        expect(number.unsafeDecode({ N: '3' })).toBe(3)
+    })
+})
+
+/**
+ * `decimal('1')` is the point of the change, so its two halves are pinned separately.
+ *
+ * The held value is the **text**, not a number — that is the whole difference from `number(1)`,
+ * which is the same attribute reached through a double. And the admissible set is checked against
+ * the form DynamoDB *returns*, not merely the form it accepts: `decimal`'s read side is the identity
+ * on the digits, so an alternative like `'1.50'` would be one this codec could write and could never
+ * read back as the string it was given.
+ */
+describe('a decimal literal', () => {
+    it('holds the text and stores the digits', () => {
+        const one = decimal('1')
+        const back: string = one.unsafeDecode({ N: '1' })
+        expect(back).toBe('1')
+        expect(typeof back).toBe('string')
+    })
+
+    it('is exact where a numeric literal is not', () => {
+        const wide = '123456789012345678901234567890'
+        expect(decimal(wide).unsafeDecode({ N: wide })).toBe(wide)
+        // the same value through the host: a double cannot hold it, so `number` never had it to lose
+        expect(String(Number(wide))).not.toBe(wide)
+    })
+
+    it('checks the admissible set in both directions', () => {
+        const one = decimal('1', '2')
+        expect(() => one.unsafeDecode({ N: '3' })).toThrow(
+            /'3' is not one of '1', '2'/,
+        )
+        // @ts-expect-error the held type is the alternatives, so this is refused before it runs
+        expect(() => one.unsafeEncode('3')).toThrow(CodecError)
+    })
+
+    /**
+     * The read gate is bare `decimal`'s, and it is not subsumed by membership: `'1.0'` is a numeral
+     * the service accepts and never returns, and membership would have rejected it for the wrong
+     * reason — or accepted it, had `'1.0'` been the alternative named.
+     */
+    it('reads through the same gate bare `decimal` does', () => {
+        expect(() => decimal('1').unsafeDecode({ N: '1.0' })).toThrow(
+            /is not a numeral in the form DynamoDB stores/,
+        )
+        expect(() => decimal('1').unsafeDecode({ N: '0x1' })).toThrow(
+            /is not a numeral in the form DynamoDB stores/,
+        )
+    })
+
+    /** `ℓ ⊆ D`, at the narrower `D` this base has. */
+    it('refuses an alternative the service would normalise away', () => {
+        expect(() => decimal('1.50')).toThrow(/normalised form/)
+        expect(() => decimal('007')).toThrow(/normalised form/)
+        expect(() => decimal('1e5')).toThrow(/normalised form/)
+        expect(() => decimal('1', 'x')).toThrow(/'x'/)
+    })
+
+    it('round-trips', () => {
+        checkRoundTrip(object({ price: decimal('1', '2.5', '100') }).item, {
+            count: 100,
+            seed: 20260901,
+        })
+    })
+})
+
+describe('the two bases that were unreachable', () => {
+    it('holds a boolean literal, which `literal` had no spelling for', () => {
+        const yes = boolean(true)
+        expect(writes(yes)).toBe('BOOL')
+        expect(carries(yes)).toEqual(['boolean'])
+        expect(yes.unsafeDecode({ BOOL: true })).toBe(true)
+        expect(() => yes.unsafeDecode({ BOOL: false })).toThrow(
+            /false is not one of true/,
+        )
+    })
+
+    /**
+     * Binary compares **by bytes**. Reference equality would make the codec useless — the array a
+     * schema names is never the array that came off the wire — and it would make `decode` answer
+     * with a value the type says is one of `ℓ` and `===` says is not. So `decode` answers with the
+     * member of `ℓ`, which is what keeps a decoded literal identical to the declared one.
+     */
+    it('compares a binary literal by its octets, and answers with the declared array', () => {
+        const magic = Uint8Array.from([0x89, 0x50])
+        const png = binary(magic)
+        expect(writes(png)).toBe('B')
+        expect(png.unsafeDecode({ B: Uint8Array.from([0x89, 0x50]) })).toBe(
+            magic,
+        )
+        expect(() =>
+            png.unsafeDecode({ B: Uint8Array.from([0x89, 0x51]) }),
+        ).toThrow(/0x8951 is not one of 0x8950/)
+    })
+})
+
+describe('what each base refuses', () => {
+    it('refuses no alternatives at all, naming the constructor that named none', () => {
+        expect(() => string()).toThrow(/`string\(\)` names none/)
+        expect(() => number()).toThrow(/`number\(\)` names none/)
+        expect(() => decimal()).toThrow(/`decimal\(\)` names none/)
+        expect(() => boolean()).toThrow(/`boolean\(\)` names none/)
+        expect(() => binary()).toThrow(/`binary\(\)` names none/)
+    })
+
+    /**
+     * Homogeneity is free in the model — `NEFinset k.Carrier` — and is not free here, because a
+     * spread of a plain array (`string(...Object.values(Status))`) defeats any tuple-shaped
+     * signature. So it is a construction-time refusal, at the base the caller named.
+     */
+    it('refuses a value that is not of the base it was handed to', () => {
+        expect(() => string('A', 1 as unknown as string)).toThrow(
+            /`string\(\.\.\.\)` admits string values, and 1 is not one/,
+        )
+        expect(() => number(1, 'A' as unknown as number)).toThrow(
+            /admits number values, and 'A' is not one/,
+        )
+    })
+
+    /** `ℓ ⊆ D` at `number`, which is where the old `literal` had the defect. */
+    it('still refuses a numeric alternative outside what an N holds', () => {
+        expect(() => number(Number.NaN)).toThrow(/has no NaN or Infinity/)
+        expect(() => number(1e200)).toThrow(/magnitude 1e-130 to 9.9e125/)
+    })
+})
+
+/**
+ * Two literals at different bases are a union that resolves, and the interesting pair is the one
+ * the old surface could not build: `number(1)` and `decimal('1')` write the *same member* and take
+ * different kinds of value, so `carries` separates them where `writes` cannot.
+ */
+describe('bases as union options', () => {
+    it('resolves a numeric literal against a decimal one by what each takes', () => {
+        const either = union([number(1), decimal('2.5')])
+        expect(either.unsafeEncode(1)).toEqual({ N: '1' })
+        expect(either.unsafeEncode('2.5')).toEqual({ N: '2.5' })
+    })
+
+    it('reads a decimal tag, because a tag is carried as S or N', () => {
+        const Rows = discriminatedUnion('v', [
+            object({ v: decimal('1'), a: string }),
+            object({ v: decimal('2'), b: string }),
+        ])
+        expect(
+            Rows.item.unsafeDecode({ v: { N: '2' }, b: { S: 'x' } }),
+        ).toEqual({ v: '2', b: 'x' })
+    })
+
+    /**
+     * And the two bases that cannot be tags are refused at the declaration. `readTag` accepts `S`
+     * or `N` and nothing else, so a literal at `BOOL` or `B` names no variant a lookup could reach
+     * — which used to be discovered at decode time as "must be carried as 'S' or 'N'", one item at
+     * a time, rather than when the union was built.
+     */
+    it('refuses a discriminator at a base no tag is carried in', () => {
+        const options = [
+            object({ v: boolean(true), a: string }),
+            object({ v: boolean(false), b: string }),
+        ] as const
+        // the type refuses it too — `EveryOptionTagged` reads the discriminator's definition — so
+        // the runtime refusal is what a cast one line away would otherwise walk straight past
+        // @ts-expect-error a `BOOL` names no tag a lookup could find
+        expect(() => discriminatedUnion('v', options)).toThrow(
+            /a tag is carried as 'S' or 'N'/,
+        )
+    })
+})
+
+/**
+ * `literal(...)` is deprecated, and *works*.
+ *
+ * A deprecation that changes behaviour is a breakage wearing a tag, so this pins that the old
+ * constructor still produces the very same codec the base-named form does — same definition, same
+ * member, same brand, same messages. What is deprecated is the guess, not the codec.
+ */
+describe('the old constructor', () => {
+    it('is exactly the base-named one, at the two bases it could reach', () => {
+        expect(literal('A', 'B').def).toEqual(string('A', 'B').def)
+        expect(literal(0, 1).def).toEqual(number(0, 1).def)
+        expect(decides(literal('A'))).toBe('A')
+        expect(decides(string('A'))).toBe('A')
+    })
+
+    it('keeps the message a caller mixing kinds already gets', () => {
+        expect(() =>
+            // @ts-expect-error a literal is stored as S or as N and cannot be both
+            literal('A', 0),
+        ).toThrow(/a literal is stored as 'S' or as 'N' and cannot be both/)
+    })
+
+    it('and still refuses to name nothing', () => {
+        expect(() => literal()).toThrow(/`literal\(\)` names none/)
+    })
+})

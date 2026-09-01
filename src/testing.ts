@@ -394,11 +394,13 @@ const SHAPES: readonly {
     {
         // the form DynamoDB normalises away, which `decimal` was writing and reading
         what: 'a denormalised N',
-        to: (v) => (memberOf(v) === 'N' ? { N: `${v.N as string}0` } : undefined),
+        to: (v) =>
+            memberOf(v) === 'N' ? { N: `${v.N as string}0` } : undefined,
     },
     {
         what: 'an N with a leading zero',
-        to: (v) => (memberOf(v) === 'N' ? { N: `0${v.N as string}` } : undefined),
+        to: (v) =>
+            memberOf(v) === 'N' ? { N: `0${v.N as string}` } : undefined,
     },
     {
         what: 'an N past the magnitude DynamoDB stores',
@@ -951,10 +953,10 @@ export const arbitraryOf = (
     switch (def.kind) {
         case 'string':
             return someString(rng)
+        // `ℓ` is non-empty by construction now — every constructor that builds one refuses
+        // an empty admissible set — so there is no fallback branch to take
         case 'literal':
-            return def.allowed.length
-                ? pickFrom(rng, def.allowed)
-                : someString(rng)
+            return pickFrom(rng, def.allowed)
         case 'decimal':
             return someDecimal(rng)
         case 'number':
@@ -1129,8 +1131,16 @@ export const shrinkOf = (
     switch (def.kind) {
         case 'string':
             return shrinkString(value as string)
+        /**
+         * Towards the first alternative, which is the smallest one the schema names.
+         *
+         * `indexOf` rather than a comparison, and at `binary` that is reference equality — which
+         * holds, because a literal's `decode` answers with the member of `ℓ` rather than with the
+         * array it read. A value that is not in `ℓ` shrinks to nothing, which is right: nothing
+         * smaller is admissible.
+         */
         case 'literal': {
-            const at = def.allowed.indexOf(value as string)
+            const at = (def.allowed as readonly unknown[]).indexOf(value)
             return def.allowed.slice(0, Math.max(0, at))
         }
         case 'decimal':
@@ -1700,7 +1710,10 @@ const declaration = (of: Record<string, AnyCodec>) => {
 }
 
 /** `OptionSem.byNames` — an object option decides by names, never by being attempted. */
-const byNames = (codec: AnyCodec, of: Record<string, AnyCodec>): UnionOption => {
+const byNames = (
+    codec: AnyCodec,
+    of: Record<string, AnyCodec>,
+): UnionOption => {
     const { declares, requires } = declaration(of)
     return {
         codec,
@@ -1752,7 +1765,9 @@ const byTag = (
         if (!carried) return false
         const member = memberOf(carried)
         if (member !== 'S' && member !== 'N') return false
-        return tags.includes(String((carried as Record<string, unknown>)[member]))
+        return tags.includes(
+            String((carried as Record<string, unknown>)[member]),
+        )
     },
 })
 

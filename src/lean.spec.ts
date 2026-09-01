@@ -107,12 +107,50 @@ describe('terms', () => {
         expect(leanTermOf(erase(array(string)))).toBe(
             'Term.array (Term.string)',
         )
-        expect(leanTermOf(erase(set(string)))).toBe('Term.set (Term.string)')
         expect(leanTermOf(erase(record(boolean)))).toBe(
             'Term.record (Term.boolean)',
         )
         expect(leanTermOf(erase(tuple(string, boolean)))).toBe(
             'Term.tuple [Term.string, Term.boolean] none',
+        )
+    })
+
+    /**
+     * A set is **not** structural, and stopped being so the day `Term.set` took a `SetBase`
+     * (`formal/Calculus/Term.lean:60`). This emitted `Term.set (<element term>)` until then, and
+     * the generated file stopped compiling — which is the defect this test now guards.
+     *
+     * Both numeric bases are emitted, and they are different terms writing the same member: `NS`
+     * cannot tell `number` from `decimal`, and the index can.
+     */
+    it('emits a set as its base, not as its element term', () => {
+        expect(leanTermOf(erase(set(string)))).toBe('Term.set SetBase.string')
+        expect(leanTermOf(erase(decimal.set()))).toBe(
+            'Term.set SetBase.decimal',
+        )
+        expect(leanTermOf(erase(number.set()))).toBe('Term.set SetBase.number')
+        expect(leanTermOf(erase(binary.set()))).toBe('Term.set SetBase.binary')
+    })
+
+    /**
+     * And a *restricted* element is refused rather than emitted as its base.
+     *
+     * `setCodec_restrict` says the set of a restriction writes what the restriction of a set writes,
+     * so nothing is lost as a **codec** — but it is an equation between codecs, and `Term.set` has
+     * no room for the predicate. Emitting `Term.set SetBase.string` for `string('a','b')` would
+     * state a theorem about a term that admits `'z'`, which this one does not.
+     */
+    it('refuses a set of a restricted element rather than widening it', () => {
+        expect(() => leanTermOf(erase(string.set('a', 'b')))).toThrow(
+            /\*restricted\* element/,
+        )
+        const positive = refine(
+            decimal,
+            (value: string): value is string => !value.startsWith('-'),
+            { describe: 'non-negative' },
+        )
+        expect(() => leanTermOf(erase(set(positive)))).toThrow(
+            /\*restricted\* element/,
         )
     })
 
