@@ -50,7 +50,7 @@
  * numeric escape hatch — it is text on both sides, and it evaluates.
  */
 import type { AttributeValue } from './attribute'
-import { memberOf } from './attribute'
+import { isNumeral, isStoredNumeral, memberOf } from './attribute'
 import type { AnyCodec, CodecDef } from './codec'
 
 /**
@@ -306,6 +306,93 @@ export const leanAttrOf = (
     }
 }
 
+/* ── the predicates this library ships ───────────────────────────────────────────────────── */
+
+/**
+ * A `refine` predicate the model can name, and the Lean expression that names it.
+ *
+ * ── why this is a registry of two, and not of everything ───────────────────────────────────────
+ *
+ * `Term.refine` carries `q : Value → Bool` and this library carries a JavaScript closure, so the
+ * general case has no emission and never will. What makes *some* cases emittable is that a closure
+ * this library itself exported is not arbitrary: it is a function with a specification, and the
+ * model has the same specification under a name. Recognition is by **reference** against the
+ * exported function — not by `Function.prototype.toString`, which a minifier or a refactor changes
+ * without changing meaning, and which would therefore go on emitting after the correspondence had
+ * stopped holding.
+ *
+ * The inventory is small, and the smallness is the finding rather than an omission: `src/` builds
+ * **no** `refine`, `held`, `legacy` or `custom` internally — every one of the four is a combinator
+ * a caller reaches for, and `codec.ts` never reaches for them itself. The only functions this
+ * package exports that can stand in a predicate position at all are {@link isNumeral} and
+ * {@link isStoredNumeral} (`src/attribute.ts`), which are properties of the `N` carrier rather
+ * than of any codec. So the boundary this registry moves is exactly two predicates wide.
+ *
+ * ── the correspondence, and what checked it ────────────────────────────────────────────────────
+ *
+ * `isStoredNumeral` ↦ `isStored` (`formal/Calculus/Combinators.lean:409`) and `isNumeral` ↦ the
+ * same shape over `Numeral.WF`, which the model spells only at the `.num` carrier (`inD`,
+ * `Combinators.lean:405`) and so is written out here. Both were checked against the kernel rather
+ * than read across: a corpus of numeral spellings was run through the TypeScript predicates, the
+ * verdicts emitted as `Numeral.WF s = b` / `Numeral.Stored s = b` rows, and all of them closed by
+ * `rfl`. `inD` is deliberately *not* used for `isNumeral`: it decides `Numeral.WF d.toDec` for a
+ * **double**, which is a different predicate on a different carrier, and it is `noncomputable`, so
+ * a vector mentioning it would not reduce.
+ *
+ * ── the side condition, which is not decoration ────────────────────────────────────────────────
+ *
+ * The two TypeScript predicates take a `string`; a `Value → Bool` takes anything. They disagree
+ * where JavaScript coerces: `isStoredNumeral(['1'])` is `true`, because `RegExp.test` stringifies
+ * its argument and `String(['1'])` is `'1'`, while `isStored (Value.arr …)` is `false`. So the
+ * correspondence holds *on string values only*, and {@link writesOnlyStrings} confines the emission
+ * to inner terms that write nowhere else — where `Codec.restrict`'s `e` is `if q v then c.e v else
+ * none` and `c.e v` is already `none` off the strings, so `q`'s verdict there cannot be observed.
+ */
+type ShippedPredicate = {
+    /** The Lean expression, parenthesised where it is not an identifier. */
+    readonly lean: string
+    /** What it is, for the refusal message when the side condition fails. */
+    readonly what: string
+}
+
+const shippedPredicates: ReadonlyMap<unknown, ShippedPredicate> = new Map<
+    unknown,
+    ShippedPredicate
+>([
+    [
+        isStoredNumeral,
+        {
+            lean: 'isStored',
+            what: '`isStoredNumeral`, which is `Numeral.Stored`',
+        },
+    ],
+    [
+        isNumeral,
+        {
+            lean: '(fun v => match v with | .str s => Numeral.WF s | _ => false)',
+            what: '`isNumeral`, which is `Numeral.WF` at the text carrier',
+        },
+    ],
+])
+
+/**
+ * Whether every value this term writes is a `Value.str`.
+ *
+ * The side condition on {@link shippedPredicates}. Deliberately a short whitelist rather than a
+ * walk over `writes`: a term whose written *attribute* is `S` is not the same as a term whose
+ * accepted *value* is a string — `held` is the counterexample, and `opaque` writes whatever it is
+ * handed. Recurses through `refine`, because a refinement writes where its inner term does.
+ */
+const writesOnlyStrings = (def: CodecDef | undefined): boolean => {
+    if (!def) return false
+    if (def.kind === 'string' || def.kind === 'decimal') return true
+    if (def.kind === 'literal') {
+        return def.allowed.every((one) => typeof one === 'string')
+    }
+    if (def.kind === 'refine') return writesOnlyStrings(def.inner.def)
+    return false
+}
+
 /* ── terms ───────────────────────────────────────────────────────────────────────────────── */
 
 /** How deep a `lazy` chain may be forced before the emitter calls it recursive and gives up. */
@@ -319,12 +406,18 @@ const lazyLimit = 16
  * {@link LeanUnemittable}, and the throwing cases are the interesting half of the bridge:
  *
  * - **`number`, and a numeric `literal`.** `Double` is an axiom. Permanent.
- * - **`refine`, `held`, `legacy`, `custom`.** Four of §3's constructors carry *functions* —
- *   `q : Value → Bool`, `f g : Value → Value`, `r : Attr → Option Value`, `ce`/`cp` — and this
- *   library carries JavaScript closures in the same positions. There is no expression in Lean for
- *   an arbitrary closure, so these are unemittable *in general*. They are not unemittable in
- *   principle: a `refine` whose predicate is `Numeral.Stored` could be written by hand, and that
- *   is the natural next increment.
+ * - **`held`, `legacy`, `custom`.** Three of §3's constructors carry *functions* —
+ *   `f g : Value → Value`, `r : Attr → Option Value`, `ce`/`cp` — and this library carries
+ *   JavaScript closures in the same positions. There is no expression in Lean for an arbitrary
+ *   closure. `legacy` is the worst of the three and for a second reason: `CodecDef` keeps only the
+ *   *current* codec, so the older readers are not even recorded to be refused about.
+ * - **`refine`, unless the predicate is one this library shipped.** The fourth
+ *   function-carrying constructor, and the one where the line has moved. See
+ *   {@link ShippedPredicate}: `isNumeral` and `isStoredNumeral` are recognised by reference and
+ *   emitted as the model's own predicates, and everything else is still refused, by name. The
+ *   boundary is no longer "all refinements" but "refinements this library did not build", which is
+ *   the honest line — and it is only two predicates wide, because `src/` constructs none of these
+ *   four internally.
  *
  * `Rest.drop` vs `Rest.refuse` used to be a fourth entry here: `CodecDef` recorded the rest *codec*
  * and nothing when the policy was a string, so this wrote `Rest.drop` for either. It was sound for
@@ -453,20 +546,33 @@ const leanTermOfDef = (def: CodecDef, at: string, forced: number): string => {
             }
             return `Term.lazy (${leanTermOf(def.get(), `${at}.inner`, forced + 1)})`
         }
-        case 'refine':
-            return refuse(
-                at,
-                `\`Term.refine\` carries \`q : Value → Bool\`; this one carries the closure ${JSON.stringify(def.refined.what)}`,
-            )
+        case 'refine': {
+            // recognised by reference against the function this package exported, so a rename or a
+            // reimplementation of the predicate is a type error here rather than a silent misemission
+            const known = shippedPredicates.get(def.refined.is)
+            if (!known) {
+                return refuse(
+                    at,
+                    `\`Term.refine\` carries \`q : Value → Bool\`, and this predicate is not one this library ships — it is the caller's closure for ${JSON.stringify(def.refined.what)}. The recognised ones are \`isNumeral\` and \`isStoredNumeral\` from \`src/attribute.ts\`, passed by reference`,
+                )
+            }
+            if (!writesOnlyStrings(def.inner.def)) {
+                return refuse(
+                    at,
+                    `${known.what} decides a *string*, and this refinement's inner term writes values that are not strings — where JavaScript would coerce and the model would not, so the two predicates would part company`,
+                )
+            }
+            return `Term.refine (${leanTermOf(def.inner, `${at}.inner`, forced)}) ${known.lean}`
+        }
         case 'held':
             return refuse(
                 at,
-                '`Term.held` carries two `Value → Value` functions; this one carries a pair of closures',
+                '`Term.held` carries two `Value → Value` functions; this one carries a pair of closures, and this library ships no adapters of its own to recognise — `held` is a combinator callers reach for and `codec.ts` never uses',
             )
         case 'legacy':
             return refuse(
                 at,
-                '`Term.legacy` carries `r : Attr → Option Value`; this one carries a closure',
+                "`Term.legacy` carries `r : Attr → Option Value`; `CodecDef['legacy']` records only the *current* codec and drops the older readers entirely, so there is nothing here to emit even for a reader this library recognised",
             )
         case 'custom':
             return refuse(
