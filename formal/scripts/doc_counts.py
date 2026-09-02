@@ -120,6 +120,12 @@ def counts():
             if l.strip().startswith("decreasing_by term_depth_wf")), "words"),
         "sep_family": (fam, "digits"),
         "orth_file_lines": (len(open(ORTH).read().split("\n")) - 1, "digits"),
+        # §4c cites `Combinators.lean`'s size against the tree's. Both drift on every commit
+        # that touches either, and both were stale (3988 of a tree the sentence did not name).
+        "combinators_lines": (len(open("Calculus/Combinators.lean").read().split("\n")) - 1,
+                              "digits"),
+        "tree_lines": (sum(len(open(f).read().split("\n")) - 1
+                           for f in sorted(glob.glob("Calculus/*.lean"))), "digits"),
         "orth_slot_theorems": (len(slot), "digits"),
         "orth_slot_lines": (slot_l, "digits"),
         "orth_alt_theorems": (len(alt), "digits"),

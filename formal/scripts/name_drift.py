@@ -39,6 +39,11 @@ tokenizer bug described at `BACKTICKED`, which means the guard's *existing* job 
 incomplete. A guard that is loose in a way nobody has measured is a guard whose passes mean
 less than they look like.
 
+**Lean docstrings are scanned too**, and were not for most of this development's life. A
+citation inside a proof's docstring is a broken pointer on exactly the same terms as one in a
+document, and there are far more of them; the only reason they were not checked is that the
+`CURRENT` list was written by hand from the `docs/` directory.
+
 A hit in `docs/codec-formalization.md` §4 is usually not a defect: that file is the
 change log, it says so, and a name there records what was reasoned with at the time.
 Hits in the current-state documents — `formal/README.md`, `formal/ARCHITECTURE.md`,
@@ -54,6 +59,13 @@ import re, sys, os, glob
 
 CURRENT = ["README.md", "ARCHITECTURE.md", "FIDELITY.md", "VOCABULARY.md",
            "../docs/codec-calculus.md", "../docs/structural-discipline.md"]
+# **The docstrings, which this guard never read.** Every module here is dense with backticked
+# names and none of them was checked — 763 distinct citations, invisible. Demonstrated rather
+# than assumed: writing `nullHonest_of_ownsNull_false` for `nullHonest_of_not_ownsNull` in a
+# `Soundness.lean` docstring passed this guard clean. They are `CURRENT`, not a reported-only
+# list, because at the time of adding them none dangled — so the bar is "keep it at zero",
+# which is only meaningful if breaking it fails the build.
+CURRENT += sorted(glob.glob("Calculus/*.lean"))
 # Scanned under --all, reported, never failing. Both are part change log and part live
 # document, so a name that no longer exists may be a deliberate record of a deletion —
 # `codec-audit.md`'s struck queue items are exactly that — or may be real drift. A human

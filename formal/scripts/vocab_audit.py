@@ -29,7 +29,13 @@ CONSTRUCTIONS = [
     ("numberCodec", "numberCodec"), ("decimalCodec", "decimalCodec"),
     ("booleanCodec", "booleanCodec"),
     ("binaryCodec", "binaryCodec"), ("nullCodec", "nullCodec"),
-    ("literalSCodec", "literalSCodec"), ("literalNCodec", "literalNCodec"),
+    # `literalSCodec`/`literalNCodec` stood here and neither exists: `GroundKind` replaced
+    # both with one `literalCodec`. They scored as empty rows, so every denominator was 23
+    # where it should be 22 and every ✓ count was measured against two constructions that
+    # could not have lemmas. `literalNCodec` even scored a p-inversion, off
+    # `literalNCodec_p_n` — a lemma about `literalCodec .number` still carrying the old
+    # stem, which is a naming defect no guard can see and is logged in the handoff.
+    ("literalCodec", "literalCodec"),
     ("through", "through"), ("restrict", "restrict"),
     ("extendRead", "extendRead"), ("orNull", "orNull"),
     ("carriedCodec", "carried"), ("entrywise", "entrywise"),

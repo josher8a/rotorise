@@ -179,11 +179,12 @@ its own inversion lemma, and every proof downstream cites the lemma — together
 naming scheme, a measured audit of where the vocabulary is still incomplete, and the
 ranked plan for closing it. The numbers regenerate: `python3 scripts/vocab_audit.py`.
 
-The short version: the *obligation* half of the vocabulary is done (22/23 carriers,
-21/23 lawfulness lemmas); the *observation* half — `X_e`/`X_p`, what a construction
-writes and reads — is 25 of 48. Six of every ten remaining hand-unfoldings are `Option`
+The short version: the *obligation* half of the vocabulary is done (20/22 carriers,
+20/22 lawfulness lemmas); the *observation* half — `X_e`/`X_p`, what a construction
+writes and reads — is 28 of 44. Seven of every ten remaining hand-unfoldings are `Option`
 algebra rather than anything about codecs. The controlled comparison is the four blocks
-that *gained* inversion during the arc, same content before and after: 7.2 → 5.0 and
+that *gained* inversion during that arc, same content before and after — historical
+endpoints, not the current table: 7.2 → 5.0 and
 8.9 → 1.5 sites per hundred lines, with `array + record` at 0.0 and `tuple` at 3.0.
 Across all blocks the spread is now 0.0–5.1, so the separation is real but narrower than
 a first reading of the table suggests — `ground` sits at 3.5 with no inversion at all,
