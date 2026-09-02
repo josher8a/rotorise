@@ -459,16 +459,12 @@ def isStored : Value → Bool :=
 
 /-! ### The base at `N` is §1's own set, not an ungated one
 
-There used to be a `numberCodec` writing *every* double and a `wfDecimalCodec` writing
-*every* string, and the gated pairs were presented as `refine` over them. With `Attr.n`
-carrying `Numeral.WF`, neither base exists — an ungated numeric codec would have to write
-an attribute `𝔸` has no point for.
-
-What replaces them is better than a workaround. `numberCodec` **is** the base on the
-double side: there is no wider numeric codec, because §1's `Numerals` is the whole of
-`Carries(N)`. And `wfDecimalCodec` is the base on the text side, gated at `WF` — §1's set
-again, and the largest decimal codec the carrier permits. The refinements below are
-refinements of §1's sets rather than of an artefact. -/
+**There is no ungated numeric base**, because `Attr.n` carries `Numeral.WF`: an ungated
+numeric codec would have to write an attribute `𝔸` has no point for. So `numberCodec` **is**
+the base on the double side — §1's `Numerals` is the whole of `Carries(N)`, and there is no
+wider codec to refine — and `wfDecimalCodec` is the base on the text side, gated at `WF`,
+which is the largest decimal codec the carrier permits. The refinements below refine §1's own
+sets. -/
 
 /-- `decimal` before its *storage* gate: every numeral §1 accepts, held as its own text.
     Gated at `WF` and not at `Stored`, which is exactly the difference `decimal` adds. -/
@@ -511,14 +507,6 @@ theorem decimalCodec_p_restrict : decimalCodec.p = (wfDecimalCodec.restrict isSt
     (`Refutations.lean`), a prism over an ungated `ℓ` that is not a `Term`. -/
 noncomputable def literalCodec (k : GroundKind) (ls : NEFinset k.Carrier) : Codec :=
   { (baseCodec k).restrict (inL k ls) with T := HLit k ls }
-
-/-! `literalNCodec_e_num` stood here — `(literalCodec .number ls).e (.num d)` as an `ite` on
-`ℓ`-membership. **`scripts/unreferenced.lean` deleted it**, which is the control snapshot doing
-the job §6 claims for it: before the carrier change every sibling characterization lemma
-(`numberCodec_e_num`, `numberCodec_p_n`, `literalNCodec_p_n`, `decimalCodec_e_str`) had a
-consumer, and after it this one had none. Its only user was
-`literalNRule_holds_what_it_cannot_write`, and that witness moved to `literalNRule`, which is built
-from `Codec.restrict` directly. No document cited it. -/
 
 theorem literalNCodec_p_n (ls : NEFinset WFDouble) (x : WFNumeral) :
     (literalCodec .number ls).p (.n x) =
@@ -965,9 +953,8 @@ noncomputable def decSet {α : Type} (c : Codec) (inj : α → Attr) (S : NEFins
     | some T => some (.numSet T)
     | none => (neSetImage (fun x => (c.p (inj x)).bind vBin) S).map Value.binSet
 
-/-! The `card = 0` guard that used to open both of these is gone, and so are
-`encSet_nonempty`/`decSet_nonempty`. §1 types the wire sets as `℘⁺fin`, and `℘⁺fin` is a
-type — there is no empty set for a codec to refuse. -/
+/-! No emptiness guard here: §1 types the wire sets as `℘⁺fin`, which is a type, so there is
+no empty set for a codec to refuse. -/
 
 /-- Writing a set needs every element to write. -/
 theorem encSet_elem {α : Type} {c : Codec} {inj : α → Value} {S : NEFinset α} {a : Attr}
@@ -2707,17 +2694,15 @@ theorem lawful_setBase : ∀ b : SetBase, Lawful b.elem
 
 /-! ### The literal codec is lawful because its base is
 
-`literal` adds a prism and nothing else, so all four laws come from `Lawful.restrict`. This
-used to be two inductions, then two statements of which codec is refined by which predicate;
-it is now one, because there is one codec. -/
+`literal` adds a prism and nothing else, so all four laws come from `Lawful.restrict` — one
+statement, because there is one codec. -/
 
 /-- §3 `(literal)` is lawful, full stop.
 
-    **No `ℓ ⊆ D` hypothesis, and there never was one in the proof.** `Lawful` relates `e` and
-    `p` to each other and never mentions `T`, so a restriction of a lawful pair is lawful
-    whether or not the restriction is inhabited. §3's `ℓ ⊆ D` was a premise of the *judgement*
-    for that reason and is now `GroundKind.number`'s carrier, which is one place further out
-    still. -/
+    **No `ℓ ⊆ D` hypothesis, and the proof never needed one.** `Lawful` relates `e` and `p` to
+    each other and never mentions `T`, so a restriction of a lawful pair is lawful whether or
+    not the restriction is inhabited. That is why §3's `ℓ ⊆ D` belongs to the carrier and not
+    here. -/
 theorem lawful_literalCodec (k : GroundKind) (ls : NEFinset k.Carrier) :
     Lawful (literalCodec k ls) :=
   Lawful.congr (d := (baseCodec k).restrict (inL k ls)) rfl rfl rfl

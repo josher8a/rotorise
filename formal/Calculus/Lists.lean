@@ -22,9 +22,6 @@ Three groups:
 * A handful of `filter` facts stated in the form the sum proofs want, mostly about a
   `filter` that resolves to a singleton or to nil.
 
-There used to be a fourth, `List.lookup` on association lists. It served §5's keyed
-refinement, and both are gone — see the note at the end of the traversal section.
-
 The bar for adding here is that mathlib genuinely lacks the fact, or states it in a shape
 the use sites cannot consume. Anything mathlib has outright should be cited under mathlib's
 own name at the use site instead.

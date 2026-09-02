@@ -58,10 +58,9 @@ mutual
 
 /-- The doc's semantic rule premises.
 
-    **Structural, and no longer fuel-indexed.** `Obligations t` used to mean "the premises
-    hold to depth `fuel`", vacuous at zero. It now means what the specification means: they hold.
-    The companions below are what replace the fuel — `∀ t' ∈ ts, Obligations t'` is not a
-    structural recursion, and `ObligationsList` is. -/
+    **Structural**, and it means what the specification means: the premises hold. The list
+    companions exist because `∀ t' ∈ ts, Obligations t'` is not a structural recursion and
+    `ObligationsList` is. -/
 def Obligations : Term → Prop
   -- `set` joins the leaves: its base is an index, so there is no subterm to carry premises.
   | .string | .number | .decimal | .boolean | .binary | .null
