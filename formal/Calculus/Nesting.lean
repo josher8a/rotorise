@@ -25,8 +25,8 @@ Three things are proved:
   against the model's `𝔸` and fails against the store's, and there is a witness rather than a
   remark.
 
-The third is why `src/` gates on depth at `opaque` and `native` (§12.6 of `codec-audit.md`)
-and why a recursive typed codec is a live gap (item 19). It is also why the honest repair is
+The third is why `src/` gates on depth at `opaque` and `native`, and why a recursive typed
+codec is a live gap. It is also why the honest repair is
 *not* a carrier refinement: the witness is well-typed, so no premise of the typing rules is
 being violated — the rules simply do not mention depth.
 -/

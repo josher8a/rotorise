@@ -5,9 +5,9 @@ import Calculus.Discharge
 /-!
 # §6's "Do not hold" table, refuted
 
-Nine rows of §6 assert that a rewrite *fails*. Until now none was machine-checked, which
-`docs/codec-formalization.md` §7 called "the most suspicious remaining surface" — given
-that mechanizing §5's *positive* discharger claims refuted three of them.
+Nine rows of §6 assert that a rewrite *fails*, and none was machine-checked — the most
+suspicious remaining surface, given that mechanizing §5's *positive* discharger claims
+refuted three of them.
 
 They are stated here against `denote`, which is what makes them readable: a claim about
 `≡` is a claim about `T`, `μ`, `e` and `p` together, and until the denotation lost its
@@ -247,8 +247,8 @@ theorem not_eq_altCodec_assoc :
 
 Not a row of §6 — a property of §6 itself. `Codec.Equiv.refl` and `Codec.Equiv.symm` are
 proved in `Equations.lean`; `trans` is absent, and this is why. §6 is presented as an
-equational theory and `docs/codec-formalization.md`'s conformance standard asks a port to
-exhibit `Codec.Equiv`, so a reader is entitled to assume the relation chains. It does not,
+equational theory and the conformance standard asks a port to exhibit `Codec.Equiv`, so a
+reader is entitled to assume the relation chains. It does not,
 and nothing said so.
 
 The mechanism is the tolerance the header above describes: `≡` compares `e` and `p` only
@@ -346,9 +346,9 @@ theorem not_equiv_trans :
 /-! ## `(literal-N)`'s `ℓ ⊆ D`, and what it refuses
 
 `(number)` gates on §1's numeral domain, which is what the rule always claimed. `(literal-N)`
-now carries the same bound as a premise — the second and last of the two places
-`codec-formalization.md` §4 predicted it would be forced outward, and the one that needed the
-specification amended rather than the model corrected.
+now carries the same bound as a premise — the second and last of the two places the bound was
+forced outward, and the one that needed the specification amended rather than the model
+corrected.
 
 It is the same set on both rules: **what DynamoDB accepts**, `Numeral.WF` of the text the
 value is written as. `literal` writes its values' own digits, so a double outside that domain
@@ -380,8 +380,8 @@ statable any more: `GroundKind.number.Carrier` is `WFDouble`, so there is no suc
 such `Term`.
 
 **That is a reason to move the witnesses, not to lose them** — and restating them corrected the
-sentence they were carrying. §2.2 of `docs/codec-audit.md` argued the gate had to stay a premise
-so that these two could be stated, and this file used to say the defect they exhibit is one "in
+sentence they were carrying. The case for keeping the gate as a premise was that these two
+could then be stated, and this file used to say the defect they exhibit is one "in
 §3's rule". **It is not.** §3's `(literal)` premise line is `⊢ g : T ⇝ μ, g ground; ℓ₁ … ℓₙ ∈ T`,
 and at `g = number` the base's held set `T` *is* §1's `D` — so `ℓ ⊆ D` is already a premise of
 the rule as written (`docs/codec-calculus.md`, the `(literal)` figure). The rule is gated.
@@ -450,8 +450,8 @@ component, so there is nothing left to state. `typed_literalN_sub_number` is
 premise at all. A theorem whose hypothesis has become decoration is a description that has
 stopped describing, and the linter was the only thing keeping it honest.
 
-`docs/codec-formalization.md` cites `typed_literalN_sub_number` twice, as the change log may:
-it records what was reasoned with at the time. -/
+Both names survive only in the commit history, which is where a deleted declaration's record
+belongs. -/
 
 /-! `not_typed_literalN_nonD` stood here: `¬ ∃ T μ, Typed (.literal .number (.of d ∅)) T μ`
 for a `d` outside `D`, and before `LiteralD` it held for *any* `d` with no hypothesis at all —

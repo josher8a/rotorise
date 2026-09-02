@@ -3,8 +3,8 @@ import Calculus.Soundness
 /-!
 # `Uν` and the empty set — a mechanization bug, closed by the type
 
-`docs/codec-formalization.md` §6 lists "`T` as an identity" as unproved, and says it
-"bites hardest at `opaque`, where §3 says `Uν` *is* the held set". Attempting it turned up
+"`T` as an identity" was long unproved, and it bites hardest at `opaque`, where §3 says
+`Uν` *is* the held set. Attempting it turned up
 a defect — and, unlike §4's three, this one was in the **model**, not the specification.
 
 `HOpaque`'s `set` clause was transcribed as
@@ -190,16 +190,17 @@ theorem not_TIsDomE_unionLiteralString : ¬ TIsDomE unionLiteralString := by
 
 /-! ## §1's numeral domain, checked
 
-`docs/codec-formalization.md` §6 listed `Numeral := String` as a gap: the grammar, the 38
-significant digits and the magnitude range were unmodelled, "so `decimal` currently holds
+`Numeral := String` was a standing gap: the grammar, the 38
+significant digits and the magnitude range were unmodelled, so `decimal` held
 every string", with the note that once the predicate is tightened `typed_e_mem` reports
 whether the codec respects it. `Domain.lean` now carries §1's predicate and
 `decimalCodec` gates on it, so here is that report.
 
 The carrier is no longer unrestricted either: `Attr.n` carries `WFNumeral`, so `⟨N, "abc"⟩`
 is not an attribute and `decimal`'s report below is about a codec whose target is exactly
-§1's. That was the last of §5's four refined members to be typed — see
-`codec-formalization.md` §4 for why the argument for leaving it alone did not survive. -/
+§1's. That was the last of §5's four refined members to be typed, and the argument for
+leaving it alone — that a port should see the embedding is partial — did not survive: the
+partiality is a fact about the port's types, not the model's. -/
 
 /-- `decimal`'s held set is exactly §1's `Numerals`. -/
 theorem decimal_T (v : Value) :

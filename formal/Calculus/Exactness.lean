@@ -6,8 +6,8 @@ import Calculus.Soundness
 
 `κ`, `ident`, `adm` and `admA` are **over**-approximations, and that is the whole of the
 problem this file exists to fix. `⊤` is sound for every term, so a row that claims nothing
-is a row that can never fail, and every one of the defects in `docs/codec-formalization.md`
-§4 is an imprecision rather than an unsoundness. A soundness obligation attached to each row
+is a row that can never fail, and every defect this development has caught in §5's tables was
+an imprecision rather than an unsoundness. A soundness obligation attached to each row
 would have caught none of them: `fun _ => true` discharges it with `rfl`.
 
 What catches them is the **converse** direction, and stating it turns up three things the

@@ -85,8 +85,8 @@ Consistent today; normative from here, so the next proof inherits it.
 
 Measured, because this arc drifted: prose-to-code across `Calculus/` was 0.38, and six of the
 eight longest docstrings were narrative added while *closing* findings rather than while
-writing the code. `Continuity.lean` carried 84 lines of prose over 20 of code, restating
-`codec-formalization.md` §7 almost sentence for sentence.
+writing the code. `Continuity.lean` carried 84 lines of prose over 20 of code, restating a document's
+argument almost sentence for sentence.
 
 **The source explains the code; the documents carry the arc.** In a docstring, keep:
 
@@ -227,7 +227,7 @@ prose and never cashes:
   `union(c, ⟨NULL⟩-point)` are `≡` with *no* premise (`equiv_orNull_altCodec`), and the
   same codec only when the base does not touch the null point (`orNull_eq_altCodec`) —
   strictly stronger than honesty, which §3 had claimed was enough. The witness is
-  `nullable(nullable(c))`. See `docs/codec-formalization.md` §4.
+  `nullable(nullable(c))`.
 - `dunionCodec` is already *defined* as `altCodec`, so it comes free once the union has
   an iff.
 

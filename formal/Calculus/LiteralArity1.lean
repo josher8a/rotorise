@@ -7,8 +7,8 @@ import Calculus.Discharge
 absorbed `literalS` and `literalN`. **This file is why it is that shape and not a union.**
 
 Before the collapse there were three constructors, and the obvious cheap fix was to keep only
-arity one and let the n-ary form be `Term.union` over singletons — which `codec-formalization.md`
-had proposed and which needs no new constructor at all. That fix works, and the theorems here are
+arity one and let the n-ary form be `Term.union` over singletons, which needs no new
+constructor at all. That fix works, and the theorems here are
 the proof of it, restated over the collapsed constructor at singleton `ℓ`:
 
 * `typed_literalsS` / `typed_literalsN` derive exactly what the old `Typed.literalS` and
@@ -35,8 +35,8 @@ premises are precisely the gates the `℘⁺fin` repair had deleted. `Term` cann
 `DecidableEq` either (`Term.custom` carries functions on `Value`), so `union` cannot take a
 `NEFinset Term` and close the gap that way.
 
-`docs/codec-audit.md` §11 records the whole comparison. What survives here is the part worth
-keeping: whatever the collapsed rule concludes, these theorems say what it has to imply.
+What survives of the comparison is the part worth keeping: whatever the collapsed rule
+concludes, these theorems say what it has to imply.
 -/
 namespace Calculus
 
@@ -225,7 +225,7 @@ this file stated the two rules over `NEFinset` and five theorems came back unsan
 
 So they are stated over a list with the two premises spelled out, which is choice-free and is the
 honest shape of the claim. It is also the cost, and it is the argument *against* the absorption
-that this file was written to find. See §11.5 of `docs/codec-audit.md`. -/
+that this file was written to find. -/
 
 /-- **`(literal-S)` is derivable.** Every part of `Typed.literalS`'s conclusion — the held set and
     the member — comes from `Typed.literal` and `Typed.union`, with no premise `literalS` does not

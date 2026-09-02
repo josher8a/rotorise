@@ -10,8 +10,8 @@ checks it.
 
 **It states what is true now, and carries no history.** Several rules here were corrected once a
 counterexample refuted them, and one term was removed; what was claimed before, what refuted it, and
-what the correction cost are logged in `codec-formalization.md` §4 — which is also where the
-mechanization's own account lives, including which theorem carries which rule. A reader of this
+what the correction cost are in the commit history: `git log --follow docs/codec-calculus.md`,
+and the messages of the commits it names. A reader of this
 document should never need either to understand a rule, only to learn how it came to be one.
 
 ---
@@ -694,7 +694,7 @@ rests on a premise is weaker as a specification, whatever it gains in totality. 
 reason this is recorded here and not adopted.
 
 And it changes what the fixpoint argument says. The non-continuity result
-(`docs/codec-formalization.md` §7, and `Continuity.lean`) — *"a union whose options are genuinely
+(`Continuity.lean`, and commit `7ed4e5e`) — *"a union whose options are genuinely
 recursive has no fixpoint semantics"* — is a refutation of **counting**, not of `union`:
 
 - `confluent_survives_the_refutation` — the recorded witness has both options writing `⟨S,"A"⟩`, so

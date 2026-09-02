@@ -15,9 +15,9 @@ import Lean
 /-!
 # The axiom base, as a checked claim
 
-`docs/codec-formalization.md` §3 advertises that the whole development stands on `propext`,
-`Quot.sound`, and §1's numeric host — **no `Classical.choice`, no `sorryAx`**. That sentence
-was, until now, something a reader had to verify by hand with `#print axioms`.
+**The whole development stands on `propext`, `Quot.sound`, and §1's numeric host — no
+`Classical.choice`, no `sorryAx`.** `sanctionedAxioms` below is that claim, and this file turns
+it from a sentence a reader had to verify by hand with `#print axioms` into a build error.
 
 Here it is a build error instead. `#assert_axioms` collects the axioms a constant actually
 depends on and fails if any of them is outside the sanctioned base below.
@@ -58,7 +58,7 @@ def elabAssertAxioms : CommandElab := fun stx => do
   let stray := axs.filter (· ∉ sanctionedAxioms)
   unless stray.isEmpty do
     throwError "{name} depends on unsanctioned axiom(s): {stray.toList}\n\
-      The sanctioned base is {sanctionedAxioms}. See docs/codec-formalization.md §3."
+      The sanctioned base is {sanctionedAxioms}. See ARCHITECTURE.md §6."
 
 /-- `#assert_axioms_all` is `#assert_axioms` over the whole `Calculus` namespace, found by
     walking the environment instead of by naming constants one at a time.
@@ -84,7 +84,7 @@ def elabAssertAxiomsAll : CommandElab := fun _ => do
   unless bad.isEmpty do
     throwError "unsanctioned axiom(s) outside {sanctionedAxioms}:\n\
       {bad.toList.map (fun p => m!"  {p.1}: {p.2}")}\n\
-      See docs/codec-formalization.md §3."
+      See ARCHITECTURE.md §6."
 
 /-! ## The theorems the documentation makes claims about
 
@@ -145,7 +145,7 @@ model, so their axiom base is part of what the soundness statements rest on. -/
 axiom acquired here would reach all of them at once. -/
 
 /-! §3's `Uν` for `opaque`, and §1's numeral domain. `opaq_T_identity` is the row
-`docs/codec-formalization.md` calls closed for `opaque`; its proof sits behind seven
+closed for `opaque`; its proof sits behind seven
 `omega` calls in `HeldSet.lean`, and `omega` is a known `Classical.choice` route — which
 makes it the single constant in this file with the most to lose from going unguarded. -/
 

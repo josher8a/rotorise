@@ -5,14 +5,14 @@ Paste the block below into a fresh session. Read `HANDOFF.md` for where the work
 ---
 
 ```
-Read HANDOFF.md, then docs/codec-audit.md §14 and docs/structural-discipline.md.
+Read HANDOFF.md, then formal/ARCHITECTURE.md and formal/VOCABULARY.md.
 Work under these standing rules.
 
 PROBE, DON'T ARGUE. If a question can be settled by four lines and a build,
 settle it. Do not reason about what a definition does when you can print it.
 In this repo roughly one reading-derived verdict in three has been wrong.
 
-DOCUMENTED VERDICTS ARE HYPOTHESES. When a docstring or the audit says
+DOCUMENTED VERDICTS ARE HYPOTHESES. When a docstring or a document says
 something is impossible, forced, or load-bearing, treat it as a claim to test.
 Six "impossible"s in the last arc turned out to be "did not". Two sections of
 one document have contradicted each other. If you find one wrong, say so with

@@ -769,8 +769,7 @@ theorem admA_sound : ∀ (t : Term) {a v},
     witness below is the proof: it reads an `N` attribute out of a `legacy` over a string
     literal, so a passthrough would claim the read is inside `literal("A")`'s admissible set
     when the whole point of the migration is that it is not. That is one disjunct of the row,
-    not the row. This is the specification defect with no other machine-checked witness;
-    `docs/codec-formalization.md` §4 records it.
+    not the row. This is the specification defect with no other machine-checked witness.
 
     A tighter row was probed and refused: `((denote (.legacy t r)).p a).isSome` is exact and
     compiles at a one-line cost, but it replaces the subterm's *over-approximation* with the

@@ -7,7 +7,7 @@ question that matters for an artifact meant to be **checked rather than trusted*
 > verify a single theorem in isolation — and would they be verifying the specification?
 
 Two failure modes, and the second is the one people forget. A claim can be **false**, and
-`docs/codec-formalization.md` §4 logs six of those the mechanization has caught. A claim
+Six of those the mechanization has caught are logged in the commit history. A claim
 can also be **true but unlocatable** — correct, provable, and impossible for a reviewer to
 line up against the rule it is supposed to represent. For this artifact's purpose those
 are the same defect, and this file measures both.
@@ -17,8 +17,7 @@ are the same defect, and this file measures both.
 > are left as they were. Since then the ω layer it measures (`Calculus/Denoteω.lean`,
 > `Calculus/Soundnessω.lean`, `denoteω`, `denoteω_eq`, `termDepth`) has been **deleted**: `denote`
 > is structural and `denoteω` was a name for it. Every mention of those below refers to a tree that
-> no longer exists. `Calculus/WireOrder.lean` is likewise gone. See §13 of
-> `docs/codec-audit.md`.
+> no longer exists. `Calculus/WireOrder.lean` is likewise gone.
 >
 > **Two further rows were falsified by work done after the snapshot, and are footnoted in place
 > rather than rewritten:** D2's "`admA` has no `legacy` case" (`90794bd` gave it one) and item
@@ -70,7 +69,7 @@ because `number.encode('-1')` succeeds — encoding does not validate, so define
 almost no two ground options. So `byAttempt` is not merely missing a conjunct the discharger
 re-derives; it is the reading under which a union this library ships and recommends is unsound.
 `checkUniqueAdmission` (`src/testing.ts`) states admission the specification's way for that reason,
-and `codec-formalization.md` §4 records what it found once it did. And the loss is *why*
+and the commit that closed it records what it found. And the loss is *why*
 `uAtCan_of_separated` needs a lawfulness premise it would otherwise not — the discharger
 re-derives by read-side (W) what the missing member filter would have given free.
 
@@ -104,8 +103,8 @@ No theorem consumes it, which is correct and is now stated where a reviewer will
 **The model already corrects this** — `admA` (`Discharge.lean`) had no `legacy` case when this
 was written; as of `90794bd` it has one, `admA t a || (r a).isSome`, which names both channels
 rather than passing the subterm's through, so the correction stands in a sharper form than the
-snapshot records — but the correction is not in `codec-formalization.md` §4, so the document
-still asserts
+snapshot records — but the correction was never carried into the specification, so the
+document still asserts
 the false row. A defect of the same species as the six logged, and the only one currently
 unwitnessed by a theorem. Second half: the doc has one `adm`, the model needs two, and
 they genuinely disagree at `legacy` and at `literalN`. §5 should split it.
@@ -113,7 +112,7 @@ they genuinely disagree at `legacy` and at `literalN`. §5 should split it.
 **Witnessed, logged, and now amended** (§5 items 8 and 10). `not_admA_legacy`:
 `legacy(literal("A"), r)` with `r` reading an `N` reads `⟨N, "1"⟩` to `"A"`, and
 `admA(literal("A"))` refuses it — so a passthrough `admA` makes `admA_sound` false.
-`codec-formalization.md` §4 carries the entry, including the `literalN` half.
+The commit history carries the entry, including the `literalN` half.
 
 **`codec-calculus.md` §5 now states the two functions**, at the user's call, as a table over
 `Term` with both partings argued: `legacy` passes `adm` and not `admA` because a migration
@@ -156,7 +155,7 @@ was to be a fourth thing.
 proved first: `numeric(q)` and `refine(number, q)` are the same codec on all four fields,
 so nothing expressible was lost. Enumerated members go to `literal(0, 1, …)`, which is
 `literal‑N` and checks both directions; an arbitrary subset goes to `refine`; a caller's
-own narrowing goes to `held`. The general lesson is in `codec-formalization.md` §4: an
+own narrowing goes to `held`. The general lesson: an
 unchecked read cast cannot be a term of a calculus whose judgement carries a held set.
 
 **D6 — `(held)`'s iso premise is stronger than the proof consumes. [reported]**
@@ -231,7 +230,7 @@ the three statements about the list cite it. And the dangling reference is gone 
 `Codec.Equiv` (`Equations.lean:36`) is faithful to §6 — agreeing everywhere both are
 defined. `Equiv.refl` and `Equiv.symm` are proved; **`trans` is absent and false**: take
 three codecs agreeing on `T` and `μ` where the middle one's `e` is nowhere defined.
-§6 is presented as an equational theory, and `codec-formalization.md`'s conformance
+§6 is presented as an equational theory, and the conformance
 standard asks a port to exhibit `Codec.Equiv` — a relation that does not chain.
 
 **Now said, three places** (§5 item 3): `not_equiv_trans` in `Refutations.lean`, a
@@ -249,7 +248,7 @@ term does, so this refutation does not decide the restricted question.
 **U4 — §6's "Hold" table is advertised complete; two of eleven rows are not. [reported — half of it wrong]**
 Commutativity is proved for the adjacent transposition only (`equiv_altCodec_swap`);
 wrapper member preservation for three of five wrappers. `README.md` is honest about the
-first; `codec-formalization.md:287` ("Complete — twenty of twenty") is not. The second
+first; the change log's "Complete — twenty of twenty" was not. The second
 audit adds that the remaining two are not merely unproved but **unstatable** in the
 current model: `FieldSem` carries no `μ` field, while §4 insists a field carries a member.
 
@@ -261,7 +260,7 @@ their half of the row was "the stratification of §4 and not a statement about `
 at all" — an evasion, since §4 says in as many words that a field carries a member like
 anything else. The docstring now says so and proves the rows.
 
-The first half stands and is now stated honestly in `codec-formalization.md`:
+The first half stands and was restated honestly when the claim was corrected:
 commutativity is the adjacent transposition, which generates every permutation without
 the `List.Perm` lift being written down. That row also carries the `≡`-is-not-transitive
 caveat from U3, which bounds what a table of rewrites licenses at all.
@@ -271,7 +270,7 @@ caveat from U3, which bounds what a table of rewrites licenses at all.
 theorem names as results. Unguarded and doc-claimed: every §6 row, six of nine
 refutations, all four ω-twins, two of the four dischargers, `κ_sound`/`adm_sound`/
 `admA_sound`, `denoteω_eq`, and **`opaq_T_identity`** — the one row
-`codec-formalization.md` calls "Closed for `opaque`", behind seven `omega` calls in
+was called "Closed for `opaque`", behind seven `omega` calls in
 `HeldSet.lean`, and `omega` is a known `Classical.choice` route.
 
 **This one I settled rather than reported.** `#print axioms` on `opaq_T_identity` and the
@@ -441,7 +440,7 @@ than membership in `ℓ`, so the check passes on attributes §1 has no point for
 No §2 law catches it — (C) and (R) both hold — which is the part worth keeping. What it breaks is
 **§1**, and therefore **C1**: the embedding into `𝔸` is partial, the implementation's attribute type
 is wider, and every term that reads an `N` is the one that must notice. Two of the three did.
-`codec-formalization.md` §4 carries the entry. The principle I had and misapplied is written down
+The commit history carries the entry. The principle I had and misapplied is written down
 one section later in that same document — *an unchecked direction is sound exactly as far as
 something outside the codec enforces it* — and for a read there is nothing outside the codec at all.
 
@@ -462,7 +461,7 @@ density; these are fidelity.
 §6 below ends with *unaudited is not the predictor; unaudited **and duplicated** is.* The next
 thing looked at was chosen by that rule rather than by coverage, and it paid immediately.
 
-`docs/codec-formalization.md` §6 has a row called **"`T` as an identity"**. Read against the
+The change log had a row called **"`T` as an identity"**. Read against the
 theorem it cites, it is **two claims wearing one name**:
 
 - **(A)** the denotation's `T` is the judgement's — `(denoteω t).T = T`. This is what §3 means
