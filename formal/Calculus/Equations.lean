@@ -129,13 +129,9 @@ private theorem filterA_ne {c : Codec} {a : Attr} (ha : a ≠ .null) :
 
 /-! ## `nullable` *is* `union` with the null point — at `≡`, and only at `≡`
 
-§3 of the specification calls `nullable(c)` "structurally the two-option union
-`union(c, ⟨NULL⟩-point)`" — that sentence is still there. What used to follow it is not:
-§3 said the two "coincide under honesty, which is why the precedence is harmless."
-
-Mechanizing that sentence showed it wrong in both directions, and the correction is
-sharper than the claim, so §3 now states the dichotomy instead ("`nullable` is either the
-union or the identity"). This section is what changed it:
+§3 calls `nullable(c)` "structurally the two-option union `union(c, ⟨NULL⟩-point)`", and
+states the dichotomy — `nullable` is either that union or the identity. This section is why it
+is a dichotomy and not a coincidence under honesty:
 
 * the **equivalence needs no premise at all** — not honesty, not lawfulness
   (`equiv_orNull_altCodec`). `≡` compares the pairs where both are defined, and the only

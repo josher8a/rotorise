@@ -61,10 +61,8 @@ def tagsOf (d : Name) : Term → Finset String
 `(literal)`'s member is its base's — `literalCodec` and `GroundKind.member` agree case for case,
 which is `Combinators.literalCodec_μ`, stated where the codec is.
 
-`literalMember : Value → Option Member` used to sit here, and its `| _ => none` was the
-`g ground` premise wearing a function's clothes. The member is a function of the index now, so
-the `Option` in `Codec.μ` is only `Codec.μ`'s own — a codec that writes no attribute — and never
-"this payload had no base". -/
+The `Option` in `Codec.μ` is `Codec.μ`'s own — a codec that writes no attribute — and never
+"this payload had no base", the member being a function of the index. -/
 
 mutual
 

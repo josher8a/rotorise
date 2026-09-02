@@ -13,12 +13,11 @@ The consequence for the specification, which is why this file sits beside `Disch
 union whose options are genuinely recursive has no fixpoint semantics **under this resolution
 rule**, so `lazy` under `union` is unmodelled rather than merely awkward.
 
-**That scope is load-bearing and this file used to overstate it.** The sentence read "no fixpoint
-semantics at all", while the note below already had it right — *"refuted by (U) specifically:
-unique admission is a **negative** condition on the other options"*. The refutation is about the
-**rule**, not the constructor, and the last section is the demonstration: weaken (U) to
-*confluence* — every admitter agrees, rather than exactly one admits — and monotonicity comes
-back, `altCodec_not_monotone`'s own witness being one where the two admitters agree.
+**The scope is load-bearing: this is refuted by (U) specifically**, unique admission being a
+**negative** condition on the other options — so the refutation is about the *rule*, not about
+the constructor. The last section is the demonstration: weaken (U) to *confluence*, where every
+admitter agrees rather than exactly one admitting, and monotonicity comes back —
+`altCodec_not_monotone`'s own witness has its two admitters agreeing.
 
 The full argument is below and in commit `7ed4e5e` — the ccpo obligation, the direction of
 failure, the relational route, and what a port to Isabelle/HOL would meet instead.
@@ -76,14 +75,11 @@ theorem altCodec_not_monotone :
 
 /-! ## The same defect through a staged denotation
 
-`denote` used to take a fuel argument, and this section showed the collapse happening between
-two adjacent stages of it: `lazy` staggered the `string` option by one step, fuel `2` encoded
-`"A"`, fuel `3` encoded nothing.
-
-**`denote` is structural now and does not stage**, so that presentation is no longer a statement
-about it — and *why* it need not stage is the same fact this file is about. `Term.lazy` carries a
-plain `Term`, not a thunk, precisely because a genuinely recursive union has no fixpoint
-semantics (the refutation above). There is no recursion to approximate, so there is no
+`denote` is structural and does not stage, so the collapse below is shown on a staged
+denotation built for the purpose rather than on `denote` itself — and *why* `denote` need not
+stage is the same fact this file is about. `Term.lazy` carries a plain `Term`, not a thunk,
+precisely because a genuinely recursive union has no fixpoint semantics (the refutation
+above). There is no recursion to approximate, so there is no
 approximation to be non-monotone.
 
 The theorem is kept, restated over a staging defined **here**, as a witness construction rather
