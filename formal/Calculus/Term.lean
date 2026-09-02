@@ -34,7 +34,7 @@ inductive Term where
   /-- §3 `(literal)`, in the shape §3 states it: a ground **base**, and a nonempty finite set
       of that base's alternatives.
 
-      This was three constructors — arity-one over a value, and `literalS`/`literalN` at the
+      This was three constructors — arity-one over a value, and ~~literalS~~/~~literalN~~ at the
       two commonest bases — because no single payload type could say "these alternatives, all
       at one base". `(k : GroundKind)` with `ls : NEFinset k.Carrier` says it: the base is an
       index, so `g ground` is unsayable-otherwise and the member is a function rather than an

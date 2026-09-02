@@ -324,7 +324,7 @@ noncomputable def SetBase.elem : SetBase → Codec
 
 /-- `literal(ℓ)`'s predicate: the value is one of the alternatives.
 
-    One definition where there were two (`inLS`, `inLN`) and three bases with none. Dispatching
+    One definition where there were two (~~inLS~~, ~~inLN~~) and three bases with none. Dispatching
     on the index first is what makes the carrier concrete, and so the membership decidable. -/
 noncomputable def inL : (k : GroundKind) → NEFinset k.Carrier → Value → Bool
   | .string,  ls, .str s  => decide (s ∈ ls.1)
@@ -552,7 +552,7 @@ theorem hLit_of_inL (k : GroundKind) (ls : NEFinset k.Carrier) (v : Value) :
       -- *be* the carrier — cannot see through it. Splitting on the gate names the alternative
       -- as a subtype, and `toValue` projects it straight back. `cases hs :` rather than
       -- `by_cases`, which is classical. `number` joined `decimal` here when `ℓ ⊆ D` moved from
-      -- `LiteralD` into `WFDouble`; the two branches differ only in which gate they split.
+      -- ~~LiteralD~~ into `WFDouble`; the two branches differ only in which gate they split.
       | exact (by
           rename_i s
           cases hs : Numeral.Stored s with
@@ -1392,7 +1392,7 @@ theorem carrier_arrayCodec {c : Codec} (hc : Carrier c) : Carrier (arrayCodec c)
 
 /-! ### `record` (§3) — `carriedCodec` between `map` and `M`
 
-The keyed entry steps `encPair`/`decPair` are gone with the traversal. They existed to
+The keyed entry steps ~~encPair~~/~~decPair~~ are gone with the traversal. They existed to
 carry a name past a codec inside `traverse`, and `M`'s payload no longer has a list for
 `traverse` to walk: the names are the index, so `funImage` moves the entry function and
 nothing has to carry a name anywhere. Their five laws went with them — §2's four, one
@@ -1791,7 +1791,7 @@ two orderings of one object and a repeated name, and the `Nodup` premise that us
 travel with every object law existed to make the first harmless and rule out the second.
 Both are now properties of the type, and that premise is gone from all five of them.
 
-`semAt` is the lookup a `MapOf` has: a membership decision and a function application.
+`MapOf.at` is the lookup a `MapOf` has: a membership decision and a function application.
 It is deliberately shaped like `List.lookup` so that everything downstream — `entryCodec`,
 `objEntryT`, `fbValue`, `keepB` and every proof that splits on them — reads unchanged. -/
 
@@ -1874,7 +1874,7 @@ def keepB (rest : RestSem) (sems : MapOf FieldSem) : Name → Bool :=
 
 Three namings, and everything §4 asks becomes short. **`entryCodec`** is the codec one
 entry goes through — the field its name declares, or else the rest policy's — which is
-the only thing `encEntry`/`decEntry` do with a name, so every per-entry law is one appeal
+the only thing ~~encEntry~~/~~decEntry~~ do with a name, so every per-entry law is one appeal
 to `entryCodec_of`. **`objWrite`/`objRead`** are the payload pair: the guard and the
 steps going out, the guard, the `drop` filter, the steps and the fallback stand-ins
 coming back. **`objectCodecCore_eq`** then makes the object `carriedCodec` between `map`
@@ -2332,7 +2332,7 @@ theorem carrier_setBase : ∀ b : SetBase, Carrier b.elem
 
 /-- **One theorem where there were two, and the numeric one was twenty-six lines.**
 
-    `literalNCodec`'s carrier used to be proved by hand — unfolding `Double.ofDec`, splitting on
+    ~~literalNCodec~~'s carrier used to be proved by hand — unfolding `Double.ofDec`, splitting on
     `Numeral.WF`, then on membership — because the codec was a hand-written pair that only
     *agreed* with a restriction. It now **is** the restriction, so `carrier_restrict` supplies
     everything and all that remains is the held set being no smaller than the restriction's,
@@ -2855,7 +2855,7 @@ theorem withNull_idem_p {c : Codec} : c.withNull.withNull.p = c.withNull.p :=
 /-! ### `setCodec`'s laws
 
 Every one of these was a traversal argument over a list; on `Finset` they are the element
-codec's own laws lifted by `setImage_inv`. What used to need `asWireSet`'s three-way
+codec's own laws lifted by `setImage_inv`. What used to need ~~asWireSet~~'s three-way
 payload split and a non-emptiness side condition needs neither: the split is the three
 constructors, and non-emptiness is `Finset.Nonempty`. -/
 
@@ -3438,15 +3438,15 @@ theorem keepB_of_declared {sems : MapOf FieldSem} {rest : RestSem} :
   | refuse => rfl
   | codec rc => rfl
 
-/-- §4's held set, both ways. The two premises past lawfulness are the doc's own:
-    `hfb` is `(fallback)`'s `v(∗) ∈ dom(e)`, which with `domE` gives §4's `v : 𝟙 → T`;
-    `hkeep` says the name filter never discards a declared name, which is what all
-    three rest policies do.
+/-- §4's held set, both ways. The one premise past lawfulness is the doc's own: `hfb` is
+    `(fallback)`'s `v(∗) ∈ dom(e)`, which with `domE` gives §4's `v : 𝟙 → T`. That the name
+    filter never discards a declared name is not a premise but a fact about the policies —
+    `keepB_of_declared`, discharged inline below, and true of all three.
 
     Writing is immediate. Reading has to account for the stand-ins: every non-`opt`
     name is present in the result — a `req` from the row it was stored in, an `fb`
     from the row or else from its stand-in — and every entry is on its set, the kept
-    ones by `entry_ranP`, the stand-ins by `hfb`. -/
+    ones by `entry_ranP'`, the stand-ins by `hfb`. -/
 theorem carrier_objectCodec {sems : MapOf FieldSem} {rest : RestSem}
     (hsems : ∀ k, Carrier (sems.2 k).codec)
     (hrc : ∀ rc, rcOf rest = some rc → Carrier rc)
@@ -3492,8 +3492,8 @@ theorem carrier_objectCodec {sems : MapOf FieldSem} {rest : RestSem}
 
 /-! #### §2's clauses for the object's payload pair
 
-Each is proved once, from core children, and both `lawfulCore_objectCore` and
-`lawful_objectCore` consume them. -/
+Each is proved once, from core children, and both `lawfulCore_objectCodec` and
+`lawful_objectCodec` consume them. -/
 
 section ObjectLaws
 variable {sems : MapOf FieldSem} {rest : RestSem}

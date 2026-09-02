@@ -28,7 +28,7 @@ calculus agreed:
 
 **The repair went through three stages, and the last one is why this section is now
 prose.** First the inductive gained `hne : vs ≠ []`, and three theorems here exhibited the
-gap: `not_hopaque_set_nil`, `opaqCodec_T_set_nil` and `opaqCodecω_e_set_nil` — the empty
+gap: ~~not_hopaque_set_nil~~, ~~opaqCodec_T_set_nil~~ and ~~opaqCodecω_e_set_nil~~ — the empty
 set is held by no fuel, written by none, and refused by the corrected `Uν`. Then the sets
 became `Finset`, and `vs ≠ []` became `S.Nonempty`. Now `Value.strSet` takes a
 `NEFinset String`, and **the three theorems cannot be stated**: `Value.strSet ∅` does not
@@ -36,7 +36,7 @@ typecheck, because `∅` carries no non-emptiness proof and `℘⁺fin` has no o
 to offer.
 
 That is the closure, and it is the same shape as the map defect's
-(`record_e_keeps_duplicate_keys` became unstatable when `M`'s keys became a `Finset`). A
+(~~record_e_keeps_duplicate_keys~~ became unstatable when `M`'s keys became a `Finset`). A
 witness that a value is excluded is worth having exactly while the value is expressible.
 When the type stops admitting it, the witness stops being a theorem and becomes a
 typechecking error at the point where anyone would try to write it down — which is

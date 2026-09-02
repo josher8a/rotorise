@@ -11,7 +11,7 @@ stage.
 
 This paragraph described `denote fuel t` and said "fuel is primary: every recursive call
 decrements it". That was the shape until the ω-layer was deleted and `denote` lost its fuel,
-which is the change that also retired `denoteω` as a name for `denote`. What survived the
+which is the change that also retired ~~denoteω~~ as a name for `denote`. What survived the
 deletion is the fact the fuel was never needed for: `μ := μSyn t` is a *function of the
 term*, which is the content of `denote_μ` and the reason the `⇝` column stays truthful.
 
@@ -56,7 +56,7 @@ def tagsOf (d : Name) : Term → Finset String
   | .object b => b.tags d
   | _ => ∅
 
-/-! ### Where `literalMember` went
+/-! ### Where ~~literalMember~~ went
 
 `(literal)`'s member is its base's — `literalCodec` and `GroundKind.member` agree case for case,
 which is `Combinators.literalCodec_μ`, stated where the codec is.
@@ -102,13 +102,13 @@ end
 /-! ## The denotation
 
 **Structural, and there is no fuel.** `denote` used to take a `Nat` budget, with a dead
-`fuel = 0` codec at the bottom and a whole ω-layer (`Denoteω`, `Soundnessω`, `Continuity`) to
+`fuel = 0` codec at the bottom and a whole ω-layer (~~Denoteω~~, ~~Soundnessω~~, `Continuity`) to
 recover the fuel-free reading. None of that was forced by the term language:
 
 * the recursion under `List.map` — `elems.map (denote fuel)` — needs a **list companion**, which
   is exactly what `μSyn`/`μSynList` above already do;
 * `fieldSemOf (denote fuel) (f k)` passed the recursion **unapplied**, as a function value, which
-  structural recursion cannot do. But `fieldSemOf` applied its argument to *precisely the
+  structural recursion cannot do. But ~~fieldSemOf~~ applied its argument to *precisely the
   subterm* in every row, so it inverts: it becomes a mutual companion and the higher-order
   argument disappears.
 
@@ -219,7 +219,7 @@ theorem denote_μ : ∀ t : Term, (denote t).μ = μSyn t
       rw [denoteμs_eq opts]
   | .dunion _ _ => rfl
 
-/-- The union options' members, per option. `μSynList_eq` under its old name was the same fact
+/-- The union options' members, per option. ~~μSynList_eq~~ under its old name was the same fact
     with a fuel index and a `termination_by`; both are gone. -/
 theorem denoteμs_eq : ∀ opts : List Term, denoteμs opts = μSynList opts
   | [] => rfl
@@ -231,8 +231,8 @@ end
 
 /-! ### §6 at term level — the translation table, written down
 
-Moved here from `Equations.lean` when `Denoteω` was deleted. It lived downstream because
-`denoteω` did; these are equations about `denote` and belong beside it.
+Moved here from `Equations.lean` when ~~Denoteω~~ was deleted. It lived downstream because
+~~denoteω~~ did; these are equations about `denote` and belong beside it.
 
 §6's **Hold** rows are stated about *combinators*; its **Do not hold** rows
 (`Refutations.lean`) are stated about *terms*. Reading a Hold row against the specification
@@ -242,7 +242,7 @@ they translate, written down nowhere.
 Here it is, as `rfl` theorems — `denote` dispatches straight onto the combinator, so these
 prove nothing but the correspondence. Term-level twins of each row follow at the end. -/
 
-/-- The object field table, denoted. Was `denoteωF`. -/
+/-- The object field table, denoted. Was ~~denoteωF~~. -/
 def fieldTable (fields : Finset Name) (f : {k // k ∈ fields} → Field) : MapOf FieldSem :=
   ⟨fields, fun k => fieldSem (f k)⟩
 

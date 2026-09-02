@@ -541,7 +541,7 @@ def Value.kind : Value → Kind
 
 The model had three constructors for it — arity-one over a `Value`, and two n-ary ones at the
 two commonest bases — and every part of that premise line was a gate. `g ground` was carried
-three times over (`literalOK`'s `| _ => false`, `literalMember`'s `none`, `literalCodec`'s
+three times over (~~literalOK~~'s `| _ => false`, ~~literalMember~~'s `none`, `literalCodec`'s
 `Codec.empty`); `n ≥ 1` and pairwise distinctness were `hne`/`hnd` until `℘⁺fin` typed them;
 `ℓᵢ ∈ T` at a base the other constructors could not name was why there were two of them.
 
@@ -571,7 +571,7 @@ deriving DecidableEq, Repr
 @[reducible] def GroundKind.Carrier : GroundKind → Type
   | .string  => String
   -- Gated, for the reason `WFDouble` gives: §3's `ℓ ⊆ D` is this base's carrier, not a premise
-  -- beside it. `LiteralD` was that premise and is deleted.
+  -- beside it. ~~LiteralD~~ was that premise and is deleted.
   | .number  => WFDouble
   -- §1's stored numerals, as a subtype. See `StoredNumeral`: the gate `number` carries as a
   -- premise is this base's carrier, which is the whole point of having the base.

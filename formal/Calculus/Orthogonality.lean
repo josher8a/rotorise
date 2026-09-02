@@ -230,7 +230,7 @@ mutual
 
     `legacy t r` is `⊤` here where it was the subterm's on the write side, and the reason is
     the *row*, not the codec: `AdmA (.legacy t r) a = AdmA t a || (r a).isSome`, and `r` is
-    arbitrary data the term carries. A lawful `legacyCodec` does respect the member —
+    arbitrary data the term carries. A lawful `r` does respect the member —
     `μSyn (.legacy t _) = μSyn t`, and `ReadsCoherently` is what makes that good — but
     `Orth` is stated on the row, which is looser, so the certificate declines. That is the
     one place where `μSyn` is sharper than `occA`, and it is sharper only under an

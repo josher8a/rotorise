@@ -4,15 +4,15 @@ import Calculus.Discharge
 # The n-ary literal is derivable from singletons — the route not taken
 
 `(literal)` is now one constructor, `literal (k : GroundKind) (ls : NEFinset k.Carrier)`, and it
-absorbed `literalS` and `literalN`. **This file is why it is that shape and not a union.**
+absorbed ~~literalS~~ and ~~literalN~~. **This file is why it is that shape and not a union.**
 
 Before the collapse there were three constructors, and the obvious cheap fix was to keep only
 arity one and let the n-ary form be `Term.union` over singletons, which needs no new
 constructor at all. That fix works, and the theorems here are
 the proof of it, restated over the collapsed constructor at singleton `ℓ`:
 
-* `typed_literalsS` / `typed_literalsN` derive exactly what the old `Typed.literalS` and
-  `Typed.literalN` concluded, from `Typed.literal` at a singleton and `Typed.union`. Same held
+* `typed_literalsS` / `typed_literalsN` derive exactly what the old ~~Typed.literalS~~ and
+  ~~Typed.literalN~~ concluded, from `Typed.literal` at a singleton and `Typed.union`. Same held
   set, same member.
 * `dincomp_map_literal_str` / `_num` discharge §5's **(D)** from the alternatives being distinct.
 * `uAtCan_map_literal_str` / `_num` discharge (U) **on both sides**, through
@@ -56,8 +56,8 @@ Stated over a bare `List` and applied to `Finset.toList`, rather than by inducti
 `ls.1.toList` — the list is not a variable there, so the motive does not generalise. The same
 shape the object-field work settled on. -/
 
-/-- Every option of a string literal set is derivable, at `S`. No premise: `literalD` is `true`
-    at every base but `number`. -/
+/-- Every option of a string literal set is derivable, at `S`. No premise: ~~LiteralD~~, the
+    gate this used to carry beside the rule, was `true` at every base but `number`. -/
 theorem typedListμ_map_literal_str : ∀ (l : List String),
     TypedListμ (l.map fun s => .literal .string (.of s ∅))
       (l.map fun s => fun v => v = Value.str s)
@@ -216,8 +216,8 @@ So they are stated over a list with the two premises spelled out, which is choic
 honest shape of the claim. It is also the cost, and it is the argument *against* the absorption
 that this file was written to find. -/
 
-/-- **`(literal-S)` is derivable.** Every part of `Typed.literalS`'s conclusion — the held set and
-    the member — comes from `Typed.literal` and `Typed.union`, with no premise `literalS` does not
+/-- **`(literal-S)` is derivable.** Every part of ~~Typed.literalS~~'s conclusion — the held set and
+    the member — comes from `Typed.literal` and `Typed.union`, with no premise ~~literalS~~ does not
     already have: `hnd` and `hne` are what `NEFinset` was carrying. -/
 theorem typed_literalsS {l : List String} (hnd : l.Nodup) (hne : l ≠ []) :
     Typed (.union (l.map fun s => .literal .string (.of s ∅)))
