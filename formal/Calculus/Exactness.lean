@@ -1949,6 +1949,12 @@ discharge §5 already has must survive.
 `Adm_le_adm` and `AdmA_le_admA` are the first. `sepJV_of_sepV` and `sepJA_of_sepA` are the
 second — nothing is lost.
 
+**And that is not enough to move `uAtCan_of_separated`, which is the third thing.** Both
+bridges run from `SepV` to `SepJV`, the direction a *producer* wants; a consumer needs the
+opposite, and at an `object` option it is unavailable — `not_uAtCan_of_sepJ`, at the end of
+this section, is the discharger restated on the pair and refuted. The migration this section
+was written to prepare does not go through.
+
 The interesting result is that the two sides do **not** re-derive the same way. On the value
 side `κ`'s disjunct is subsumed: `Adm` folds the kind gate into its own rows and
 `Adm_kind` proves it lands where `κ` says, so `SepJV` is a single clause. On the attribute
@@ -2331,10 +2337,14 @@ theorem ident_not_determined_by_adm :
     ∃ x y : Term, adm x = adm y ∧ ident x ≠ ident y :=
   ⟨.string, .refine .string qTop, adm_string_eq_refine, ident_string_ne_refine⟩
 
-/-- **`SepJV` suffices for the discharge.** This is what "nothing is lost" means: the joint
-    predicate is tighter than the rows it replaces, so `SepJV` is a *weaker* statement — but
-    `Adm_sound` connects it straight to the denotation, and that is all the discharge needs.
-    Where `x` writes, `y` refuses. -/
+/-- **`SepJV` suffices for the codec-level discharge.** The joint predicate is tighter than
+    the rows it replaces, so `SepJV` is a *weaker* statement — but `Adm_sound` connects it
+    straight to the denotation: where `x` writes, `y` refuses.
+
+    This said "and that is all the discharge needs", which is where it over-claimed. What
+    `uAtCan_of_separated` consumes is disjointness of the *options* `select` builds, and an
+    object option is admitted by `keysOk` rather than by attempting its codec. The section
+    below is that gap, with the pair that refutes the stronger reading. -/
 theorem admitV_of_sepJV {x y : Term} (h : SepJV x y) (v : Value) (a : Attr)
     (hx : (denote x).e v = some a) : ((denote y).e v).isSome = false := by
   have hAx : Adm x v = true := Adm_sound x hx
@@ -2352,6 +2362,182 @@ theorem admitA_of_sepJA {x y : Term} (h : ∀ a, AdmA x a = true → AdmA y a = 
   cases hy : (denote y).p a with
   | none => rfl
   | some w => exact absurd (AdmA_sound y hy) (by simp [hAy])
+
+/-! ### …and it does **not** suffice for the discharger, because of `adm`'s `object` row
+
+The paragraph above says the discharge never needed `adm`'s extra strength. That is true of
+the two theorems it is stated about and false of the theorem the migration exists to move,
+and the difference is worth being precise about because the whole retirement of `adm` turns
+on it.
+
+`admitV_of_sepJV` is a claim about the **codec**: where `x`'s `e` writes, `y`'s `e` refuses.
+`uAtCan_of_separated` is a claim about the **options `select` builds**, and at an `object`
+those are not the same test. `admitOptV` records the asymmetry already — an object option is
+admitted by `keysOk`, which reads which names a map carries and never what they hold — but
+the corollary was not drawn: `Adm` is not an over-approximation of `OptionSem.admitV` at an
+object, it is strictly *tighter*, and disjointness of a tighter predicate does not imply
+disjointness of admission.
+
+`adm (.object _) = ⊤` is what makes §5's generation sound here, and it is not slack. It is
+exactly the over-approximation that turns `adm`-disjointness into admission-disjointness,
+and it is why `SepV` cannot separate two objects at all: both `κ`s are `[map]` and both
+`adm`s are `⊤`, so neither disjunct is available. Restate the discharger on `SepJV` and the
+pair separates — while `select` attempts both options, so (U) genuinely fails. The premise
+gets *stronger* and the theorem becomes *false*.
+
+The witness is two objects with the same names and different field terms. Both are derivable
+(`Typed.object`), both closed (`rest = drop`), and both lawful, so no other premise of
+`uAtCan_of_separated` is what declines them — which is what makes `not_uAtCan_of_sepJ` a
+refutation of the migration rather than a failure to find its proof.
+
+And the `object` row is the *only* obstruction: `admitV_Adm_nonObject` and
+`admitA_AdmA_nonObject` are the containments the discharger needs, and they hold, from
+exactness alone, for every term whose `specOf` is `none` — which is every term but an
+`object`. -/
+
+/-- One required field, holding a string. -/
+def bodyReqStr : Body := .mk {"a"} (fun _ => .req .string) .drop
+
+/-- The same name, the same policy, a different field term. -/
+def bodyReqNum : Body := .mk {"a"} (fun _ => .req .number) .drop
+
+def objReqStr : Term := .object bodyReqStr
+def objReqNum : Term := .object bodyReqNum
+
+/-- A map the first object writes and the second refuses. -/
+def mapReqStr : Value := .map {"a"} (fun _ => .str "x")
+
+/-- `adm` at an object is `⊤`, at either of them — the row this section is about. -/
+theorem adm_objReq (v : Value) : adm objReqStr v = true ∧ adm objReqNum v = true :=
+  ⟨rfl, rfl⟩
+
+theorem Adm_objReqStr : Adm objReqStr mapReqStr = true := by
+  simp [objReqStr, bodyReqStr, mapReqStr, Adm, AdmBody, AdmField, AdmRest, objAdmV,
+    valPresentT, entryP, MapOf.at]
+
+theorem Adm_objReqNum : Adm objReqNum mapReqStr = false := by
+  simp [objReqNum, bodyReqNum, mapReqStr, Adm, AdmBody, AdmField, AdmRest, objAdmV,
+    valPresentT, entryP, MapOf.at, inD]
+
+/-- **The joint predicate separates the pair on the writable side.** A map the first admits
+    carries a string at `"a"`, which the second's field term refuses; and neither admits a
+    value that is not a map. -/
+theorem sepJV_objReq : SepJV objReqStr objReqNum := by
+  intro v hv
+  cases v with
+  | map keys g =>
+    simp only [objReqStr, bodyReqStr, Adm, AdmBody, valPresentT, objAdmV, entryP, MapOf.at,
+      Bool.and_eq_true, decide_eq_true_eq] at hv
+    simp only [objReqNum, bodyReqNum, Adm, AdmBody, valPresentT, objAdmV, entryP, MapOf.at,
+      Bool.and_eq_true, decide_eq_true_eq, Bool.and_eq_false_iff, decide_eq_false_iff_not]
+    refine Or.inr fun h => ?_
+    have ha : "a" ∈ keys := hv.1 ⟨"a", Finset.mem_singleton_self _⟩
+    have h1 := hv.2 ⟨"a", ha⟩
+    have h2 := h ⟨"a", ha⟩
+    simp only [Finset.mem_singleton, dif_pos, AdmField] at h1 h2
+    cases hg : g ⟨"a", ha⟩ <;> simp_all [Adm, inD]
+  | _ => rfl
+
+/-- …and on the readable side, on the `AdmA` disjunct: the member disjunct is no help,
+    both objects being `⇝ M`. -/
+theorem sepJA_objReq : SepJA objReqStr objReqNum := by
+  refine Or.inr fun a ha => ?_
+  cases a with
+  | m keys g =>
+    simp only [objReqStr, bodyReqStr, AdmA, AdmABody, reqPresentT, objAdmA, entryPA,
+      MapOf.at, keepT, Bool.and_eq_true, decide_eq_true_eq] at ha
+    simp only [objReqNum, bodyReqNum, AdmA, AdmABody, reqPresentT, objAdmA, entryPA,
+      MapOf.at, keepT, Bool.and_eq_true, decide_eq_true_eq, Bool.and_eq_false_iff,
+      decide_eq_false_iff_not]
+    refine Or.inr fun h => ?_
+    have ha' : "a" ∈ keys := ha.1 ⟨"a", Finset.mem_singleton_self _⟩
+    have h1 := ha.2 ⟨"a", ha'⟩
+    have h2 := h ⟨"a", ha'⟩
+    simp only [Finset.mem_singleton, dif_pos, AdmAField, decide_true] at h1 h2
+    cases hg : g ⟨"a", ha'⟩ <;> simp_all [AdmA]
+  | _ => rfl
+
+theorem typed_objReqStr :
+    Typed objReqStr (HObject {"a"} (fun _ => (true, fun v => ∃ s, v = .str s)) none)
+      (some .M) := .object (fun _ => .req .string) .drop
+
+theorem typed_objReqNum :
+    Typed objReqNum
+      (HObject {"a"}
+        (fun _ => (true, fun v => ∃ d, v = .num d ∧ Numeral.WF d.toDec = true)) none)
+      (some .M) := .object (fun _ => .req .number) .drop
+
+theorem lawful_objReqStr : Lawful (denote objReqStr) :=
+  soundness typed_objReqStr ⟨fun _ => trivial, trivial⟩ ⟨fun _ => trivial, trivial⟩
+
+theorem lawful_objReqNum : Lawful (denote objReqNum) :=
+  soundness typed_objReqNum ⟨fun _ => trivial, trivial⟩ ⟨fun _ => trivial, trivial⟩
+
+/-- **The pair is not uniquely admitting.** `select` counts an object option by its names,
+    the two specs are the same spec, so a map the first option writes is admitted by both
+    and the filter is not a singleton. -/
+theorem not_uAtCan_objReq : ¬ UAtCan [objReqStr, objReqNum] := by
+  intro h
+  obtain ⟨a, ha⟩ :=
+    Option.isSome_iff_exists.mp ((Adm_exact objReqStr mapReqStr).mp Adm_objReqStr)
+  have hfil := (h (optionSemOf (denote objReqStr) (specOf objReqStr)) (by simp [semsOf])
+    mapReqStr a (by rw [optionSemOf_c]; exact ha)).2
+  simp [semsOf, objReqStr, objReqNum, bodyReqStr, bodyReqNum, specOf, Body.spec, optionSemOf,
+    OptionSem.byNames, keysOk, mapReqStr] at hfil
+
+/-- **`admitV_adm`'s analogue on the exact row is false**, which is the route the discharger
+    would have to take. An object option admits by names; `Adm` asks the field terms. -/
+theorem not_admitV_le_Adm :
+    ¬ ∀ (t : Term) (v : Value),
+      (optionSemOf (denote t) (specOf t)).admitV v = true → Adm t v = true := fun h =>
+  absurd (h objReqNum mapReqStr rfl) (by simp [Adm_objReqNum])
+
+/-- **`uAtCan_of_separated`, restated on the joint predicate, is false.** Every premise
+    holds of `[objReqStr, objReqNum]` and the conclusion does not. This is the theorem that
+    would have to survive for `adm`, `admA`, `SepV` and `SepA` to be retired in favour of
+    `Adm`, `AdmA`, `SepJV` and `SepJA`; it does not, and the reason is a row rather than a
+    proof — see the section note above. -/
+theorem not_uAtCan_of_sepJ :
+    ¬ ∀ (opts : List Term),
+      (∀ t ∈ opts, Lawful (denote t)) →
+      (∀ t ∈ opts, t.isOpenObject = false) →
+      List.Pairwise SepJV opts →
+      List.Pairwise SepJA opts →
+      UAtCan opts := by
+  intro h
+  refine not_uAtCan_objReq (h [objReqStr, objReqNum] ?_ ?_ ?_ ?_)
+  · intro t ht
+    rcases List.mem_cons.mp ht with rfl | ht
+    · exact lawful_objReqStr
+    · rcases List.mem_cons.mp ht with rfl | ht
+      · exact lawful_objReqNum
+      · exact nomatch ht
+  · intro t ht
+    rcases List.mem_cons.mp ht with rfl | ht
+    · rfl
+    · rcases List.mem_cons.mp ht with rfl | ht
+      · rfl
+      · exact nomatch ht
+  · refine .cons (fun y hy => ?_) (.cons (by simp) .nil)
+    rcases List.mem_singleton.mp hy with rfl
+    exact sepJV_objReq
+  · refine .cons (fun y hy => ?_) (.cons (by simp) .nil)
+    rcases List.mem_singleton.mp hy with rfl
+    exact sepJA_objReq
+
+/-- **The containment the discharger needs, everywhere it holds.** Off an `object`, `specOf`
+    is `none`, admission *is* attempted encoding, and exactness identifies it with the row.
+    So the `object` row is the whole of the obstruction above. -/
+theorem admitV_Adm_nonObject (t : Term) (hs : specOf t = none) {v : Value}
+    (h : (optionSemOf (denote t) (specOf t)).admitV v = true) : Adm t v = true := by
+  rw [hs] at h
+  exact (Adm_exact t v).mpr h
+
+/-- …and its twin on the readable side. -/
+theorem admitA_AdmA_nonObject (t : Term) (hs : specOf t = none) {a : Attr}
+    (h : (optionSemOf (denote t) (specOf t)).admitA a = true) : AdmA t a = true := by
+  rw [hs] at h
+  exact (AdmA_exact t a).mpr h
 
 /-! ### `ident`, pinned from below
 
