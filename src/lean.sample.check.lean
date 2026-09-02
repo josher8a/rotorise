@@ -59,6 +59,20 @@ theorem literal_alternatives :
         (Value.str "B"))
       (some (Attr.s "B")) = .same := rfl
 
+/-- `literal_decimal` -/
+theorem literal_decimal :
+    check 1
+      ((denote (Term.literal GroundKind.decimal (NEFinset.of ⟨"1", by decide⟩ {⟨"2.5", by decide⟩}))).e
+        (Value.str "2.5"))
+      (some (Attr.n (WFNumeral.of "2.5"))) = .same := rfl
+
+/-- `literal_binary` -/
+theorem literal_binary :
+    check 1
+      ((denote (Term.literal GroundKind.binary (NEFinset.of [0, 127, 255] ∅))).e
+        (Value.bin [0, 127, 255]))
+      (some (Attr.b [0, 127, 255])) = .same := rfl
+
 /-- `set_of_string` -/
 theorem set_of_string :
     check 1

@@ -103,6 +103,42 @@ describe('terms', () => {
         )
     })
 
+    /**
+     * `GroundKind.decimal`'s carrier is `StoredNumeral`, a subtype gated on `Numeral.Stored`, so an
+     * alternative is a pair and not a string. `by decide` is the gate run at elaboration time — the
+     * same discipline `WFNumeral.of` uses on the attribute side, and the reason a numeral this
+     * library writes and §1 refuses would fail the build rather than prove something false.
+     *
+     * This was refused outright until `decimal` became a `GroundKind`. The kernel accepts the term
+     * and both directions of its admission; `literal_decimal` in the sample is the vector.
+     */
+    it('emits a decimal literal at its own base, with the stored gate discharged', () => {
+        expect(leanTermOf(erase(decimal('1', '2.5')))).toBe(
+            'Term.literal GroundKind.decimal (NEFinset.of ⟨"1", by decide⟩ {⟨"2.5", by decide⟩})',
+        )
+        expect(leanTermOf(erase(decimal('-1.5')))).toBe(
+            'Term.literal GroundKind.decimal (NEFinset.of ⟨"-1.5", by decide⟩ ∅)',
+        )
+    })
+
+    /**
+     * And a binary literal, which was refused for a reason that was never true: `leanValueOf` has
+     * emitted `Value.bin` for a `Uint8Array` all along, so a vector at a binary literal can state
+     * both halves. Kernel-checked the same way.
+     */
+    it('emits a binary literal as its octets', () => {
+        expect(leanTermOf(erase(binary(new Uint8Array([0, 127, 255]))))).toBe(
+            'Term.literal GroundKind.binary (NEFinset.of [0, 127, 255] ∅)',
+        )
+    })
+
+    /** `GroundKind.number`'s carrier is the `Double` axiom, and that refusal is permanent. */
+    it('refuses a numeric literal, permanently', () => {
+        expect(refusal(() => leanTermOf(erase(number(1)))).reason).toContain(
+            '`Double`',
+        )
+    })
+
     it('emits the containers structurally', () => {
         expect(leanTermOf(erase(array(string)))).toBe(
             'Term.array (Term.string)',
@@ -476,6 +512,16 @@ export const sampleVectors: readonly Vector[] = [
         name: 'literal_alternatives',
         codec: erase(literal('A', 'B')),
         value: 'B',
+    },
+    {
+        name: 'literal_decimal',
+        codec: erase(decimal('1', '2.5')),
+        value: '2.5',
+    },
+    {
+        name: 'literal_binary',
+        codec: erase(binary(new Uint8Array([0, 127, 255]))),
+        value: new Uint8Array([0, 127, 255]),
     },
     {
         name: 'set_of_string',

@@ -463,24 +463,36 @@ const leanTermOfDef = (def: CodecDef, at: string, forced: number): string => {
                 '`Term.number` denotes `numberCodec`, whose carrier is the `Double` axiom — no vector can name a value at it',
             )
         /**
-         * `Term.literal` is indexed by a `GroundKind`, and this emits the two bases whose carrier
-         * has closed terms.
+         * `Term.literal` is indexed by a `GroundKind`, and this emits every base whose carrier has
+         * closed terms — which, since `decimal` became one, is four of the six.
          *
          * - `string` → `GroundKind.string`, carrier `String`.
          * - `boolean` → `GroundKind.boolean`, carrier `Bool`.
+         * - `decimal` → `GroundKind.decimal`, carrier `StoredNumeral`, a **subtype** of `Numeral`
+         *   gated on `Numeral.Stored`. So an alternative is `⟨"1", by decide⟩` and not `"1"`: the
+         *   gate is §1's grammar run at elaboration time, exactly as `WFNumeral.of` runs it on the
+         *   attribute side. A numeral this library would write and §1 refuses does not produce a
+         *   false theorem — it produces a file that will not elaborate, naming the numeral. The
+         *   constructor already refuses a non-stored alternative (`literalCodec`'s `ℓ ⊆ D` at
+         *   `decimal`), so in practice the two gates agree and `lean.predicates.spec.ts` is what
+         *   says they are the same predicate.
+         * - `binary` → `GroundKind.binary`, carrier `Bytes`, which is §1's `List UInt8` and emits
+         *   as one.
          * - `number` → `GroundKind.number`, carrier `Double`, which is an axiom. Permanent, and the
          *   same refusal `Term.number` gets.
-         * - `binary` → `GroundKind.binary`, carrier `Bytes`, which *is* emittable — but
-         *   `leanValue` has no `B` case, so a vector at it could state a term and no value. Refused
-         *   here rather than half-emitted.
-         * - `decimal` → **nothing**, and this is the one gap the new surface opens. §3's
-         *   `GroundKind` is `string | number | boolean | binary | null`
-         *   (`formal/Calculus/Domain.lean:539`) and has no `decimal`; `Domain.lean:598` says so in
-         *   as many words, while explaining why `SetBase` *does* have one. So `decimal('1')` — the
-         *   lossless numeric literal, the headline of the new surface — has no term. It is not
-         *   emitted as `GroundKind.string`, which would denote a codec writing `S`, nor as
-         *   `GroundKind.number`, whose carrier is a double and would lose the exactness that is the
-         *   whole point. It is named and refused, which is what this module is for.
+         *
+         * `binary` was refused here too, on the ground that "`leanValue` has no `B` case". It has
+         * one — `leanValueOf` emits `Value.bin` for a `Uint8Array`, and has for as long as the
+         * refusal has been there — so the refusal was reachable only by never being tried. The
+         * kernel accepts the term and both directions of its admission.
+         *
+         * `decimal` was refused here until `decimal` became a `GroundKind`, on the ground that
+         * `GroundKind` was `string | number | boolean | binary | null`. That was true when written
+         * and stopped being true; the base and its `StoredNumeral` carrier are in `Domain.lean`'s
+         * `GroundKind.Carrier`, and `GroundKind.toValue` sends a decimal alternative to `.str x.1`,
+         * so the value side needed no change at all. The old note also reasoned that emitting it as
+         * `GroundKind.string` would denote a codec writing `S` and `GroundKind.number` would lose
+         * the exactness — both still true, and both now beside the point.
          */
         case 'literal': {
             const base = def.base
@@ -490,26 +502,17 @@ const leanTermOfDef = (def: CodecDef, at: string, forced: number): string => {
                     'a numeric literal sits at `GroundKind.number`, whose carrier is `Double`',
                 )
             }
-            if (base === 'decimal') {
-                return refuse(
-                    at,
-                    "a decimal literal has no term: §3's `GroundKind` is `string | number | boolean | binary | null` and has no `decimal`, so `Term.literal` cannot index it (`formal/Calculus/Domain.lean:539`). `SetBase` has one, so `decimal.set()` is modelled and `decimal(...)` is not",
-                )
-            }
-            if (base === 'binary') {
-                return refuse(
-                    at,
-                    '`GroundKind.binary` exists, but `leanValue` has no `B` case, so a vector at a binary literal could state a term and no value',
-                )
-            }
             const allowed = [...new Set(def.allowed as readonly unknown[])]
-            const kind = base === 'boolean' ? 'boolean' : 'string'
-            return `Term.literal GroundKind.${kind} (${leanNonEmptySet(
-                allowed.map((one) =>
-                    base === 'boolean'
-                        ? String(one)
-                        : leanString(one as string),
-                ),
+            const alternative = (one: unknown): string =>
+                base === 'boolean'
+                    ? String(one)
+                    : base === 'binary'
+                      ? leanBytes(one as Uint8Array)
+                      : base === 'decimal'
+                        ? `⟨${leanString(one as string)}, by decide⟩`
+                        : leanString(one as string)
+            return `Term.literal GroundKind.${base} (${leanNonEmptySet(
+                allowed.map(alternative),
                 at,
             )})`
         }
