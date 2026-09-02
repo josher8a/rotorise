@@ -495,9 +495,9 @@ Two blind spots, and the second is the same shape as the gap it closes:
   in a row, so no parser finds them and the script carries them as a hand-written list of two
   names.** A third limit that nobody adds to that list goes quietly missing from the total.
 
-**`scripts/ratchet.py`** — three per-file counts held to the state they were in, failing when
-one *rises*: hand-unfolding sites (332), retirement marks (72), and public theorems with no
-docstring (269 of 896). It exists because §10's two guards could not be bars: a docstring
+**`scripts/ratchet.py`** — four per-file counts held to the state they were in, failing when
+one *rises*: hand-unfolding sites (332), retirement marks (72), public theorems with no
+docstring (269 of 896), and decision points (5260). It exists because §10's two guards could not be bars: a docstring
 coverage bar at 269 is a bar nobody can satisfy, so it would be switched off, where a ratchet
 asks nothing on the day it lands and makes the next docstring cheaper than the argument for
 skipping it. Baselines live in `scripts/ratchets.json` rather than in the script, so that the
@@ -511,6 +511,9 @@ count at 333 against a 332 baseline, so the proof went in as `simp only` instead
 positive, and the reason a ratchet on a number in the hundreds is worth having: the bar it sets
 is today's number, and what it buys is that the cheaper proof is the one that passes.
 
+A metric absent from the baseline entirely fails rather than passing as twenty new files —
+adding an instrument should not be a way to add an unmeasured number.
+
 Two blind spots:
 - **A ratchet accepts the state it was born in, so it cannot see a defect older than itself.**
   The 269 and the 332 are invisible to it by construction — it guards the derivative, not the
@@ -521,6 +524,50 @@ Two blind spots:
   name is absent, never that it *deserved* marking, so a session that deletes a declaration and
   marks its citations in one commit is still trusted — the count is where that shows, which is
   why it ranges over the documents and not only the docstrings.
+
+**`scripts/complexity.py`** — decision points per declaration and per file: pattern rows, `if`,
+`dite`, `match`, `cases`/`rcases`/`obtain`/`induction`, `by_cases`, `<;>`, `all_goals`, `.elim`.
+It exists because `vocab_audit.py`'s site count is a **vocabulary** measure — a `show` or a
+`replace` is a proof taking a definition apart by hand — and says nothing about a proof that
+does its work by wide case analysis. Per file the two rank at **Spearman 0.56**, so this is a
+second number rather than a restatement: `Discharge.lean` is 8.9 branches per unfolding site
+and `Orthogonality.lean` is 31.1, the first hand-unfolding heavy and the second case-analysis
+heavy where the older guard is blind. `ratchet.py` holds the count. Two blind spots:
+- **The density is the sharper reading and is deliberately not ratcheted.** `occV_sound` at 1.48
+  branches a line is the densest proof here; `soundness_both` at 0.36 over 122 lines is a table,
+  one line per typing rule, exactly as §5 claims — so the ratio is the number that vindicates
+  the long proofs. But its denominator moves when a signature is re-wrapped, and this repo has
+  already paid for a formatting-sensitive metric: `7fff6e8` moved `orth_unreach_lines`
+  168 → 169 that way. The count does not — re-wrapping a signature onto four lines was run as a
+  control and left it unchanged.
+- **A `def`'s branch count is usually §3's row count, not a design choice.** `HObject` is 47
+  because the object rule has that many cases and `aeq` is 23 because `Attr` has ten
+  constructors. Theorems and defs are reported apart for that reason, and a reading that treats
+  a table as a tangle is wrong about the specification, not about the code.
+
+**`scripts/complexity.lean`** — what the kernel holds: proof-term size, the sharing behind it,
+and direct dependency count, over a named watch list. `blast_radius.lean`'s walk, asked about
+one declaration instead of its dependents. **Count the DAG, not the tree**, and that is the
+whole reason this file has a header: `Expr` is a DAG, a naive recursive size counts every
+occurrence of a shared subterm, and `AdmA_exact` reads as *tree 2754337 / dag 7239*. The tree
+number would have been reported here as a finding — three hundred times the largest thing in
+the development — when the kernel stores 7239 nodes and `Adm_exact`, at 8844, is **larger**.
+- **The sharing ratio is the sharpest signal in the tree.** Everything measured sits at 2–19×;
+  `AdmA_exact` is at **380×**, alone, which is a tactic duplicating one large subterm across
+  every branch. No textual measure sees it — that proof is calm at 0.58 branches a line over
+  unremarkable source. When something is slow to check and reads fine, this is the column.
+- **Elaboration heartbeats are not deterministic, and that was checked rather than assumed.**
+  The counter is a step count and not a clock, so it looks like the right instrument. Three
+  `Meta.check` runs on one value in one process spread 1.2% to 13.7%, run 1 always highest —
+  cold instance and `whnf` caches — so it measures the cost of checking under a cache state
+  rather than a property of the declaration, and a ratchet on it fires on noise. It is a
+  tripwire at an order of magnitude, and it corroborates the DAG count: heartbeats and DAG both
+  put `Adm_exact` above `AdmA_exact`, the ordering the tree number reverses.
+- **Transitive dependency count is a dead end, and it is measured so nobody rebuilds it.** The
+  closure runs 750–3710 across the development and its *largest* values are `soundness_both`
+  (3650) and `carrier_denote` (3710) — 79 kernel nodes each, the two simplest proofs in every
+  other column. It measures which layer of §1's stratification a declaration sits in, not
+  complexity. Direct deps (8–225) are worth something as coupling and track the branch count.
 
 **`scripts/unreferenced.lean`** — a **diff instrument only**, not a verdict, and run by hand
 (`lake env lean scripts/unreferenced.lean`; it is outside `Calculus/`, so `lake build` never

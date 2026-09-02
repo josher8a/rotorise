@@ -1,5 +1,28 @@
 {
   "_comment": "Per-file ratchet baselines. See scripts/ratchet.py \u2014 a rise fails the build; move a number only with --accept.",
+  "branches": {
+    "Calculus/Axioms.lean": 7,
+    "Calculus/Codec.lean": 45,
+    "Calculus/Combinators.lean": 1286,
+    "Calculus/Continuity.lean": 80,
+    "Calculus/Denote.lean": 132,
+    "Calculus/Discharge.lean": 586,
+    "Calculus/Domain.lean": 179,
+    "Calculus/Equations.lean": 211,
+    "Calculus/Exactness.lean": 993,
+    "Calculus/HeldSet.lean": 63,
+    "Calculus/Lists.lean": 94,
+    "Calculus/LiteralArity1.lean": 83,
+    "Calculus/Malleability.lean": 38,
+    "Calculus/Nesting.lean": 38,
+    "Calculus/Opaque.lean": 258,
+    "Calculus/Orthogonality.lean": 404,
+    "Calculus/Refutations.lean": 101,
+    "Calculus/Soundness.lean": 383,
+    "Calculus/Term.lean": 81,
+    "Calculus/Typing.lean": 77,
+    "Calculus/Vectors.lean": 121
+  },
   "retirement_marks": {
     "../docs/codec-calculus.md": 0,
     "ARCHITECTURE.md": 15,

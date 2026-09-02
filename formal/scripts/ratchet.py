@@ -22,6 +22,18 @@ Three counts, none of which can be *fixed* in one arc and all of which can quiet
   undocumented_public_theorems  public `theorem`/`lemma` with no docstring. §10's bar is that
                                 a reader who knows the specification can tell what a theorem
                                 says from its name and one line. 269 of 896 today, 30%.
+  branches                      decision points — pattern rows, `if`, `cases`, `<;>` and the
+                                rest of `complexity.py`'s list. The case-analysis measure that
+                                `unfolding_sites` is blind to: per file the two rank at Spearman
+                                0.56, so this is a second number and not a restatement.
+                                5260 today.
+
+**The branch count and not the branch *density*.** Density is the sharper reading —
+`occV_sound` at 1.48 a line against `soundness_both`'s 0.36 over 122 — but its denominator
+moves when a signature is re-wrapped, and this repo has paid for a formatting-sensitive metric
+once already: `7fff6e8` moved `orth_unreach_lines` 168 → 169 by splitting one signature onto
+two lines. A count of `|` and `cases` does not move for that. `complexity.py` prints the
+density and nothing ratchets it.
 
 **A bar and a ratchet fail differently, and only one of them was available.** A coverage bar
 at 269 undocumented theorems would be decoration: nobody can satisfy it, so it would be
@@ -74,6 +86,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 # handling that file's docstring argues for. `name_drift.py` globs `Calculus/` at import, so
 # both scripts have the same "run from formal/" requirement.
 from name_drift import strip_comments, LEANISH, NOISE, RETIRED, CURRENT
+# `complexity.py` owns the branch definition and the argument for it; this file only holds
+# the number to its baseline. Same reason `strip_comments` is imported and not copied.
+from complexity import branches, DECL
 
 BASELINE = os.path.join("scripts", "ratchets.json")
 
@@ -143,11 +158,16 @@ def measure():
     in a docstring.
     """
     out = {m: {} for m in ("unfolding_sites", "retirement_marks",
-                           "undocumented_public_theorems")}
+                           "undocumented_public_theorems", "branches")}
     for path in sorted(glob.glob("Calculus/*.lean")):
         code = strip_comments(open(path).read())
-        out["unfolding_sites"][path] = sum(1 for l in code.split("\n") if SITE.search(l))
+        lines = code.split("\n")
+        out["unfolding_sites"][path] = sum(1 for l in lines if SITE.search(l))
         out["undocumented_public_theorems"][path] = len(undocumented(path))
+        heads = [i for i, l in enumerate(lines) if DECL.match(l)]
+        out["branches"][path] = sum(
+            branches(lines[i:(heads[k + 1] if k + 1 < len(heads) else len(lines))])
+            for k, i in enumerate(heads))
     for path in CURRENT:
         if not os.path.exists(path):
             continue
@@ -191,9 +211,14 @@ def main():
         print("\n  run with --accept to create it.")
         return 1
 
-    rises, falls, new_files, stale = [], [], [], []
+    rises, falls, new_files, stale, new_metrics = [], [], [], [], []
     for metric, counts in current.items():
         base = baseline.get(metric, {})
+        # A metric with no baseline at all is not twenty new files, it is an unaccepted
+        # instrument — and "no prior" must not let a whole metric pass unmeasured.
+        if not base:
+            new_metrics.append((metric, sum(counts.values())))
+            continue
         for path, n in counts.items():
             if path not in base:
                 new_files.append((metric, path, n)); continue
@@ -207,7 +232,11 @@ def main():
 
     for metric, counts in sorted(current.items()):
         base = baseline.get(metric, {})
-        total, btotal = sum(counts.values()), sum(base.values())
+        total = sum(counts.values())
+        if not base:
+            print(f"  {metric:30s} {total:5d}  (no baseline)")
+            continue
+        btotal = sum(base.values())
         arrow = "=" if total == btotal else ("UP" if total > btotal else "down")
         print(f"  {metric:30s} {total:5d}  (baseline {btotal}, {arrow})")
 
@@ -220,6 +249,9 @@ def main():
         print(f"  RISE  {metric:30s} {os.path.basename(path):24s} {was} -> {now}")
     for metric, path in stale:
         print(f"  STALE {metric:30s} {path}  (file is gone — drop it with --accept)")
+    for metric, total in new_metrics:
+        print(f"  NEW   {metric:30s} {'':24s} {total} across the tree, no baseline "
+              f"— --accept to adopt it")
 
     if "--names" in sys.argv:
         print()
@@ -239,8 +271,9 @@ def main():
         print(f"\n  {BASELINE} rewritten.")
         return 0
 
-    if rises or stale:
-        print("\n  a ratcheted count rose, or a baseline names a file that is gone.")
+    if rises or stale or new_metrics:
+        print("\n  a ratcheted count rose, a baseline names a file that is gone, or a metric "
+              "has no baseline.")
         return 1
     return 0
 
