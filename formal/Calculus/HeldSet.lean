@@ -42,11 +42,9 @@ When the type stops admitting it, the witness stops being a theorem and becomes 
 typechecking error at the point where anyone would try to write it down — which is
 earlier, and cheaper to act on.
 
-The direction of the original error is still worth recording. `typed_TSub` (denotation ⊆
-judgement) was unaffected and still holds — the surplus was on the *judgement's* side, so
-no law broke and `soundness` never depended on it. What was wrong was the advertised
-precision of the `: T` index, which is exactly the claim §6 was unable to check while fuel
-was in the way.
+The direction matters: `typed_TSub` (denotation ⊆ judgement) holds either way, so no law
+depends on this. What a surplus on the judgement's side costs is the advertised precision of
+the `: T` index, and nothing else.
 -/
 
 namespace Calculus

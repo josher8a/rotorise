@@ -59,11 +59,10 @@ Note the read side has to check too, not merely the write side. If `p` accepted 
 ill-formed numeral it would return a value `e` then refuses, breaking **(C)** — so the
 grammar is forced onto both halves by the laws, not by taste.
 
-One simplification, narrowing rather than widening: a bare integer part is required, so
-`".5"` and `"1."` are rejected. The reason first given for that was wrong — DynamoDB
-*accepts* both and normalises them to `"0.5"` and `"1"` (`src/codec.dynamodb.spec.ts`). The
-narrowing stands, because `Stored` below rejects them anyway, but it is a narrowing of §1
-rather than a transcription of it. Significance is counted between the first and last
+One narrowing, and it is a narrowing of §1 rather than a transcription of it: a bare integer
+part is required, so `".5"` and `"1."` are rejected where DynamoDB *accepts* both and
+normalises them (`src/codec.dynamodb.spec.ts`). It stands because `Stored` below rejects them
+anyway. Significance is counted between the first and last
 nonzero digit, which is the trimming DynamoDB documents.
 
 **`WF` is what DynamoDB accepts; `Stored` is what it hands back.** They are different
@@ -237,11 +236,9 @@ end Numeral
 
 /-! ### The numeric host, as an interface rather than five assumptions
 
-This block used to be five axioms — a type, two functions, a round trip and a
-`DecidableEq` — and every one of them said "binary64" in its docstring while asserting
-nothing of the sort. Five separate assertions cannot be *inspected*: a reader asking "what
-exactly is assumed about the host?" had to collect them, and nothing in the development
-could quantify over the answer.
+Five separate axioms cannot be *inspected*: a reader asking "what exactly is assumed about the
+host?" would have to collect them, and nothing in the development could quantify over the
+answer.
 
 `NumericHost` is that answer, as one structure. The axiom block below is then two lines —
 a type, and the claim that it carries the interface — and the `Double.*` names are
@@ -322,12 +319,9 @@ representative to choose. The file is deleted; this note is the part of it that 
 /-- §1's `Numerals` — the strings DynamoDB accepts in an `N`, carried by the type. So
     `Carries(N)` is exact and `⟨N, "abc"⟩` is not an attribute at all.
 
-    This was the last of §5's four refined members to be typed, and the argument against
-    typing it — that the *carrier* should stay unrestricted so that a port sees the
-    embedding `⌈·⌉` is partial — turned out to be load-bearing on nothing: an ill-formed
-    numeral appeared in four comments of this development and in no theorem of it. C1's
-    insight survives intact, and is sharper for the change: it is the **port's** attribute
-    type that is unrefined, not the model's. -/
+    The case for leaving the carrier unrefined was that a port should see the embedding `⌈·⌉`
+    is partial. That partiality is a fact about the **port's** attribute type, not the
+    model's. -/
 abbrev WFNumeral := {x : Numeral // Numeral.WF x = true}
 
 /-- A numeral in the form the store hands back — §1's `Stored`, carried rather than gated.
@@ -341,14 +335,10 @@ abbrev StoredNumeral := {s : Numeral // Numeral.Stored s = true}
 
 /-- **A double §1's `D` contains** — `(literal)`'s `ℓ ⊆ D`, carried rather than gated.
 
-    This is the third instance of the same move, and the two above it are the argument for it.
-    `WFNumeral` typed §5's last refined member after the case against it "turned out to be
-    load-bearing on nothing"; `StoredNumeral` is `decimal`'s literal carrier and its docstring
-    already said what this one does — *"At `number` the alternatives are `Double`s and
-    `(literal)`'s premise `ℓ ⊆ D` is a gate outside the carrier, which is why
-    `adm (.literal .number ls)` over-approximates by exactly that conjunct. Here the gate is the
-    subtype, so `inL` is the whole of admission and the row is exact by construction."* That
-    paragraph described `decimal` and diagnosed `number`.
+    The third of the three gated carriers, with `WFNumeral` and `StoredNumeral` above. What it
+    buys is what `StoredNumeral`'s docstring says of `decimal`: the gate is the subtype, so `inL`
+    is the whole of admission and `adm (.literal .number ls)` is exact rather than
+    over-approximating by the `WF` conjunct.
 
     **No `.of` helper, and the reason is `Double`.** `WFNumeral.of` can default its proof to
     `by decide` because a numeral is a `String` and `WF` is a decidable predicate on one. A
@@ -638,12 +628,7 @@ reached through `Double.toDec` — and `decimal` is the host-independent spellin
 `Numerals` string on the value side. Collapsing them would delete the only base whose value
 side is exact, and `Member` cannot tell them apart (both `NS`), which is why the index is
 neither `Member` nor `GroundKind`: `GroundKind` **indexes value carriers**, and `set(decimal)`
-is a `strSet` there while it is an `NS` on the wire.
-
-    This used to give a second reason — *"`GroundKind` has no `decimal`"* — and it was true when
-    written and false seventy lines above, from the commit that added `.decimal` to the inductive.
-    Only the carrier half was ever load-bearing, so the conclusion is untouched; the dead reason
-    is what a description costs when nothing keeps it honest. -/
+is a `strSet` there while it is an `NS` on the wire. -/
 
 /-- The four bases a set's elements may sit at. -/
 inductive SetBase where
