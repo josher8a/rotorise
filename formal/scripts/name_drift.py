@@ -133,6 +133,8 @@ EXPECTED = {
         "mono": "the ccpo/`partial_fixpoint` obligation's conventional name; `altCodec_not_monotone` is ours",
     },
     "ARCHITECTURE.md": {
+        "orth_unreach_lines": "a `doc_counts.py` marker key, not a Lean name — §6 cites it to "
+                              "name the count that moved in `7fff6e8`",
         "mono": "same as `README.md`'s — the ccpo obligation's conventional name, at §7's "
                 "not-modelled row",
         "List.Perm": "mathlib; §9's commutativity row names it as the next probe, not as "
@@ -202,7 +204,7 @@ PRELUDE = set("""
 Bool Prop Type Sort Nat Int String Char Unit True False And Or Not Iff Eq Option Some None
 List Array Finset Set Subtype Quot Quotient Decidable DecidableEq Repr BEq Inhabited Nonempty
 Function Equivalence Forall₂ Perm Prod Sum Classical Exists Std Batteries Lean Mathlib
-Multiset WellFounded
+Multiset WellFounded Expr Environment NameSet ExprSet StateM Meta Core Elab IO
 sizeOf casesOn recOn binductionOn brecOn noConfusion propext sorry rfl decide simp omega
 deriving instance structure inductive theorem lemma abbrev mutual noncomputable partial unsafe
 def example where match with fun let have show this at using
