@@ -1,192 +1,197 @@
 # Handoff
 
 **Branch `wip/map-types`. `lake build` green and warning-free, `#assert_axioms_all` and
-`#lint_calculus` over 21 modules, `guard_reach.py`, `name_drift.py` and the new
-`doc_counts.py --check` all exit 0.**
+`#lint_calculus` over 21 modules, `guard_reach.py`, `name_drift.py` and
+`doc_counts.py --check` all exit 0.** Verify with the block at the end of §Landmines, by exit
+code and not by eye.
 
-Delete this file once read — it is a handoff, not a document. Read the commit messages; they are
-the record, and this arc's are unusually load-bearing because most of what it produced was
-measurements rather than code.
+Delete this file once read. The commit messages are the record; `git log` is now the only
+change log there is.
 
 ---
 
-## The one idea, because most of the arc is an instance of it
+## The one idea
 
-**A description must be kept in agreement with what it describes; a question cannot drift.** That
-was the previous arc's finding at the analysis rows, and this arc found it one level up: the same
-thing is true of *counts*, *citations* and *commit messages*, and nothing was keeping any of them
-honest.
+**A description must be kept in agreement with what it describes; a question cannot drift.**
+The previous arc found that at the analysis rows. This one found it one level up — of *counts*,
+*citations* and *commit messages* — and then found the corollary that ended it:
 
-Every count defect this month was a number typed by hand. Every dangling citation was a name a
-guard could not see. And two of this arc's own commit messages claimed things that were false when
-written. So the work split roughly in half: three instruments that hold the documents to the tree,
-and four changes that the instruments then immediately caught drifting.
+> **Prose that records how the code came to be this way is not describing the code.** It goes
+> in the commit message, where nothing has to keep it honest because nothing reads it as a
+> claim about the tree.
 
-The corollary that keeps paying: **a guard that is loose in a way nobody has measured is a guard
-whose passes mean less than they look like.** `name_drift.py` had been passing for months while
-blind to 194 citations and deaf to 11 more.
+Four documents and 430 lines of docstring went on that principle. What survived every pass was
+the same three things: the § tag, the **forced choice** — why the definition could not have
+been the obvious other one — and what a refutation refutes. That list is `ARCHITECTURE.md` §9
+now, and it is the whole convention.
 
 ---
 
 ## What landed
 
-Thirteen commits since `02dc06f`, though two of them are a pair that nets to nothing.
+Twelve commits since `954ddc2`. Three instruments, four changes, then the deletion.
 
 | commit | why |
 | --- | --- |
-| `c66d493` | `(held)`'s held set is a definition, not a premise — `hT` restated what `Codec.through` already defines, and three of four consumers never used it |
-| `0aec076` | four recorded counts re-measured; §5's `Orth` table disagreed with itself about whether a 53-line theorem was in it |
-| `2e13324` | the one `Orth` row that misses by strength says so in its phase cell, not with a dash |
-| `83d61df` | `name_drift.py` checks single-word citations — **and its tokenizer had been swallowing real ones** |
-| `9d8a263` | `doc_counts.py`: the counts ARCHITECTURE rests on are computed and `--check`ed, not typed |
-| `daa211e` | `select` over `List.attach` probed and **killed**; the obstruction was a lemma that existed and was not being called |
-| `152ab6b` | `(literal)`'s `ℓ ⊆ D` becomes `GroundKind.number`'s carrier (JH's call) — `LiteralD` deleted, §8's inexact row closed by deletion |
-| `90794bd` | `admA`'s `legacy` row asks instead of parting into `⊤` — the last excuse of that shape |
-| `eed1b58` | six sites call `mem_of_filter_eq_singleton` instead of open-coding it |
-| `1516bda` | fixes a citation `eed1b58` broke, and records that I committed past a red guard |
-| `8b13204` | `MapOf.insert` and `bodySemMap`, machinery for a `(dunion)` shape that was then declined |
-| `bdeb8ec` | reverts it — plumbing with no consumer is what `unreferenced.lean` cannot tell from a defect |
-| `36df8e7` | `(dunion)`'s discriminator is arity one (JH's call) — **and it simplified nothing, measured** |
+| `e3bd71f` | twelve sentences no guard can see, found by an adversarial read of the documents |
+| `1590eaf` | a count that commit moved — **and a record that I committed past a red guard** |
+| `6a90359` | `vocab_audit.py` was scoring two codecs that do not exist, which is why three documents disagreed about one denominator |
+| `2798a6b` | `ARCHITECTURE.md` §8, "What the host owes" — absorbing the `src/` discipline before deleting it |
+| `b163c17` | the audit, the change log and the `src/` discipline deleted; 4466 lines, 63 citations resolved |
+| `fefc1f0` | `FIDELITY.md` deleted — **minus three live findings**, carried to §10 |
+| `1746bde` | `VOCABULARY.md` deleted — its rules became §9, its audit went |
+| `3f7708a` | README's archaeology, 224 → 208 |
+| `6e66b44` | `codec-calculus.md` keeps its arguments and loses the framing that called them history |
+| `a55b552`, `078c254`, `8b9844c` | the docstring sweep, 430 lines out of fourteen modules |
 
-### The three instruments, and what each is blind to
-
-**`scripts/name_drift.py`** now checks single-word citations, with four categories skipped by
-*shape* rather than by name so the list cannot rot: module names, a fixed Lean/mathlib/keyword
-list, tokens of two characters or fewer, and commit hashes. That is 194 citations it could not see,
-and it caught `Item` in `README.md`'s module inventory — deleted on purpose in `f3bb956`.
-
-**Its tokenizer was the worse bug and had been wrong for months.** `BACKTICKED` required two or
-more characters between backticks, so a one-character code span (`` `7` ``, `` `N` ``, `` `q` ``,
-and these documents are full of them) failed to match, the scanner resumed *inside* the pairing,
-and the next match was the prose between two spans, which `.strip()` turned into a plausible
-identifier. The noise was harmless. The harm was that **11 real dotted citations were swallowed
-into those prose runs and never checked**, one of them dangling: `lookup_rel`, deleted in
-`e9ac3be`. Blind spot remaining: a count is not a name, which is why the next instrument exists.
-
-**`scripts/doc_counts.py`** computes twelve counts and rewrites them between
-`<!-- count:NAME -->` markers; `--check` exits 1 on disagreement. Two blind spots, and the second
-has the same shape as the gap it closes: it measures the **tree, not the argument** — it will say
-six theorems sit in the *slot* row and cannot say *slot* is the right phase for them — and two of
-§5's twenty-five discharges are named in prose beneath the by-phase table rather than in a row, so
-the script carries them as a hand-written list of two names. A third limit nobody adds goes
-quietly missing from the total.
-
-**`scripts/blast_radius.lean` costs neither a constructor nor a sharpened row.** The constructor
-half was already recorded. The row half was measured this arc, on the `admA .legacy` change: the
-four-way partition is *identical* before and after — 75 old-only, 19 both, 136 new-only, 1433
-neither — and the old-only set is unchanged name for name. It has to be. The walk measures
-dependence on a **name**, and sharpening a row changes a definition's body, not who depends on it.
-§5 used to say this instrument costs exactly that question; it does not, and §5 is corrected.
-
-### A guard caught drift in the commit that introduced it, three times
-
-Worth naming because it is the case for having them, and because two of the three caught me.
-
-- `doc_counts.py --check` failed on `Orthogonality.lean`'s length — 951 in the document, 960 in
-  the tree — drift introduced by `0aec076`, the commit that *corrected* §5's table.
-- It failed again on `152ab6b`, which lengthened an *alternatives*-phase proof (70 → 75).
-- `name_drift.py` went red on `eed1b58`, which deleted the last occurrence of a name its own §8
-  paragraph cited. **I ran the guard, did not read its exit code, and committed anyway**, in the
-  commit whose message says all four pass. `1516bda` fixes it and keeps the record rather than
-  amending it away: a commit message claiming green over a red tree is the same class of defect as
-  a docstring describing a row it no longer matches.
+**Where things are now.** `docs/` is `codec-calculus.md` (normative) and `dynamo-datatypes.md`
+(the reference). `formal/` is `README.md` and `ARCHITECTURE.md`. `ARCHITECTURE.md`'s sections
+renumbered twice: **§8** what the host owes, **§9** the proof vocabulary and the docstring
+convention, **§10** open questions, **§11** the change checklist. `EXPECTED` is 6 entries from
+20. `Calculus/` is 17321 lines from 17553, net of everything this arc added to those files.
 
 ---
 
 ## Pick up here
 
-1. **`src/`'s arity-one check — JH's call.** `(dunion)`'s discriminator is arity one in the
-   calculus now. `src/` is not: `EveryOptionTagged` (`src/codec.ts`) refuses only options naming
-   no literal and pairs sharing a tag, so `string('A','B')` at a discriminator is legal, and
-   `codec.ts:4415` records that as deliberate — *"the whole admissible set, not one value: an
-   option may answer to several tags"*. One type-level check that the literal has exactly one
-   value, plus that comment, which becomes false. Keying `discriminatedUnion` by tag was
-   **declined**, so its list (`codec.ts:4394`) stays.
-2. **`admits`' violation list — JH's call.** `admits(c,v) ↔ !isError(c.encode(v))` is false in one
-   direction, because `string`/`boolean`/`binary`/`array(string)` do not validate on `encode`.
-   Making `encode` use `admits` closes it at the root and is a behaviour change.
-3. **Wiring `admits` into `union`'s resolver — JH's call**, and deliberately not done. It replaces
-   try-and-see with a decision and retires `identifying` (45 lines, one consumer). Depends on (2).
-4. **The change log's 70 dangling names** (`codec-formalization.md` §4) — a judgement about
-   whether a change log carries names of deleted things, not an edit. Note that `name_drift --all`
-   now reports *more* of them, because the tokenizer fix made them visible.
-5. **`fa9ce05`'s commit message** cites a regex pass as a reachability measurement. Needs a
-   rebase; `scripts/unreferenced.lean` is the honest instrument for next time.
+1. **`name_drift.py` passes on a class of drift it claims to catch, and this is the first
+   thing to fix.** `occurring()` builds its source set from raw file text, comments included,
+   so a name cited *only* in a docstring is present in its own evidence and clears itself.
+   Adding `Calculus/*.lean` to `CURRENT` in `6a90359` therefore proves less than that commit's
+   message claims.
 
-**Closed this arc, do not re-open:** `select` over `List.attach` (`daa211e` — measured, and the
-ten-site count in it was six); `adm (.literal .number ls)` not exact (`152ab6b`); `admA`'s `legacy`
-`⊤` row (`90794bd`); the value/attribute twin merge (ARCHITECTURE §8 — the pair count is an
-artifact of its transform, three passes gave 82, 69 and 72, and the dimension that decides it is
-size against similarity); bundling `Lawful` into `custom` (§4a — elaborates, buys five lines,
-costs ~33 sites).
+   **Reproducer:** `literalNRule_holds_what_it_cannot_write` was renamed from
+   `literalN_holds_what_it_cannot_write`; three docstrings and `ARCHITECTURE.md` kept citing
+   the old name; the guard passed clean. It only went red once the docstring archaeology sweep
+   deleted the prose that was clearing it.
+
+   Stripping comments was tried and **over-corrects** — it then rejects legitimate citations of
+   things deliberately *absent* from the code, `Classical.choice` above all, plus mathlib names
+   and Lean keywords mentioned but not used. Doing it properly means extending `PRELUDE` and
+   `EXPECTED` for roughly twenty such names. `ARCHITECTURE.md` §6 has the analysis.
+
+2. **A question, not a task: 78 theorems are named by a deleted document and by nothing else.**
+   `Lawful.stable`, `Lawful.core`, `Carrier.empty`, `object_agree`, `Adm_array_sharp` and
+   `AdmALit_binary_exact` among them; most of the rest are genuinely internal
+   (`keepB_of_declared`, `slots_length`, `align_eq_zip`). Whether `README.md` or
+   `ARCHITECTURE.md` should name any of them is a judgement about what a surviving document is
+   for, and the list is the input — it is in the message of the commit that sent it, not here,
+   because a handoff should stay short. Reproduce it by diffing backticked theorem citations in
+   the current documents against `git show b163c17^:docs/codec-formalization.md`.
+
+3. **`src/`'s arity-one check — JH's call.** `(dunion)`'s discriminator is arity one in the
+   calculus. `EveryOptionTagged` (`src/codec.ts`) refuses only options naming no literal and
+   pairs sharing a tag, so `string('A','B')` at a discriminator is legal, and `codec.ts:4415`
+   records that as deliberate — *"an option may answer to several tags"*. One type-level check
+   plus that comment, which becomes false. Keying `discriminatedUnion` by tag was **declined**,
+   so its list stays.
+
+4. **`admits`' violation list — JH's call.** `admits(c,v) ↔ !isError(c.encode(v))` is false in
+   one direction, because `string`/`boolean`/`binary`/`array(string)` do not validate on
+   `encode`. Making `encode` use `admits` closes it at the root and is a behaviour change.
+
+5. **Wiring `admits` into `union`'s resolver — JH's call**, and deliberately not done. It
+   replaces try-and-see with a decision and retires `identifying` (45 lines, one consumer).
+   Depends on (4).
+
+6. **Two guards available on `Axioms.lean`'s principle**, both in §10: ratchet
+   `vocab_audit.py`'s site count so §9's rule is enforceable rather than aspirational, and set
+   a docstring-coverage bar on public theorems. `fidelity_audit.py` reports both numbers.
+
+**Closed this arc, do not re-open:** `select` over `List.attach` (`daa211e` — measured; and the
+ten-site count in it was six); `adm (.literal .number ls)` not exact (`152ab6b`); `admA`'s
+`legacy` `⊤` row (`90794bd`); the value/attribute twin merge (§10 — the pair count is an
+artifact of its transform, three passes gave 82, 69 and 72); bundling `Lawful` into `custom`
+(§4a — elaborates, buys five lines, costs ~33 sites); keying `(dunion)` by tag (§4a — the
+`Body` subtype cannot be written, `Body.fields` being defined after the mutual block).
 
 ---
 
 ## Landmines
 
-**Three Claude sessions share this working tree, and there is one index.** A peer's `git commit -a`
-commits your staged *and* unstaged edits under its message, and your own commit then reports
-"nothing to commit, working tree clean". That happened this arc: `2e13324` carries an edit I wrote
-under another session's commit message. **Before committing, check `git log -1` as well as
-`git status`** — a clean tree may mean a peer already committed your work, not that your edit
-vanished. Do not rewrite a peer-authored commit to reclaim authorship; verify the content and
-message are accurate and leave it. For genuinely parallel work, put one session in its own
-`git worktree`; otherwise agree explicitly on who owns the index.
+**Three Claude sessions share this working tree, and there is one index.** A peer's
+`git commit -a` commits your staged *and* unstaged edits under its message, and your own commit
+then reports "nothing to commit, working tree clean". `2e13324` carries an edit I wrote under
+another session's commit message. **Check `git log -1` as well as `git status`.** Do not rewrite
+a peer-authored commit to reclaim authorship. For parallel work, use a separate `git worktree`.
+
+**Gate on exit codes, not on printed output.** I shipped two commits claiming all guards pass
+over a red tree (`eed1b58`, `e3bd71f`) because I ran them as `…; echo "$g=$?"; done && git
+commit` — `echo` always succeeds, so the chain gated on nothing. Use:
+
+```sh
+fail=0
+python3 scripts/guard_reach.py >/dev/null 2>&1 || fail=1
+python3 scripts/name_drift.py  >/dev/null 2>&1 || fail=1
+python3 scripts/doc_counts.py --check >/dev/null 2>&1 || fail=1
+docker exec rotorise-lean-dev bash -lc 'cd /workspaces/Rotorise/formal && lake build' >/dev/null 2>&1 || fail=1
+echo "ALL_GREEN=$([ $fail -eq 0 ] && echo yes || echo NO)"
+```
+
+Editing *any* `Calculus/*.lean` can move a `doc_counts` count, because §5 and §8 cite file
+lengths — a comments-only edit is not exempt.
 
 **`lake env lean` reads the *existing* olean of a dependency.** Edit `Domain.lean`, check
-`Combinators.lean`, and the new constructor is an unknown identifier until you build.
+`Combinators.lean`, and the new constructor is unknown until you build.
 
-**Host writes take ~1 s to reach the container mount.** `sleep 2` after editing, before building.
+**Host writes take ~1 s to reach the container mount.** `sleep 2` after editing.
 
-**One `lake build` at a time**, and the corollary a parallel session needs: *your* build rewrites
-oleans under someone else's `lake env lean`. Editing a late module and checking it with
-`lake env lean` writes nothing and is the safe way to work alongside an agent.
+**One `lake build` at a time**, and *your* build rewrites oleans under someone else's
+`lake env lean`. Editing a late module and checking it with `lake env lean` writes nothing.
 
-**The TS toolchain is not on PATH and neither is `node`.** Run it in a container against the host
-`node_modules`; `mcr.microsoft.com/devcontainers/typescript-node:0-20` works, `tsc --noEmit` is
-**clean** there (the "one pre-existing aws-sdk error" is a host artefact), biome is at **8**.
+**Python is on the host, not in `rotorise-lean-dev`.** The four scripts run from `formal/` on
+the Mac.
 
-**Python is on the host, not in `rotorise-lean-dev`.** The three guard scripts run from `formal/`
-on the Mac; `python3` does not exist in the Lean container.
+**The TS toolchain is not on PATH and neither is `node`.** Run it in a container against the
+host `node_modules`; `tsc --noEmit` is clean there, biome is at 8.
 
 **`tuple` is variadic.** `tuple([x])` passes an array as one element and every reader of
-`def.elements[0].def` then sees `undefined`. It cost me a false bug report.
+`def.elements[0].def` then sees `undefined`.
 
-**`by_cases` and `by_contra` reach `Classical.em`**; `simp` reaches `Classical.choice` more often
-than you expect. Use `cases h : decide P` and `Decidable.byContradiction`. `Finset.card_pos`,
-`Finset.mem_insert` and `Finset.mem_filter` are clean; `Finset.toList` is `Quotient.out` and is
-not.
+**`by_cases` and `by_contra` reach `Classical.em`**; `simp` reaches `Classical.choice` more
+often than you expect. Use `cases h : decide P` and `Decidable.byContradiction`.
+`Finset.card_pos`, `mem_insert` and `mem_filter` are clean; `Finset.toList` is `Quotient.out`
+and is not. Extracting an element from a `Finset` is where it turns — `Finset.card_eq_one` is an
+existential, so getting the witness inside a `def` is choice.
 
-**`grep` has two blind spots and both bit this arc.** A pattern anchored on a qualified name misses
-an anonymous-constructor pattern — changing `Typed.held`'s arity missed a consumer written
-`| _, _, _, .held h' _ =>`, and only the build found it. And **a grep piped into `head` is not a
-measurement**: a truncated pipe twice produced a false reading, once nearly asserting in a commit
-message that two lemmas no longer existed. If a claim rests on a grep, run it without a limit.
+**`grep` has two blind spots.** A pattern anchored on a qualified name misses an
+anonymous-constructor pattern — changing `Typed.held`'s arity missed a consumer written
+`| _, _, _, .held h' _ =>`, and only the build found it. And **a grep piped into `head` is not
+a measurement**: a truncated pipe twice produced a false reading here.
 
 ---
 
 ## The thing to keep
 
-Two findings outrank every change in the table above, and both are corrections to what the repo
-believed about itself.
+Four results outrank every change above them.
 
-**§3's `(literal)` premise is load-bearing, not defective.** Four places — ARCHITECTURE §8,
-`Typing.lean`, `Combinators.lean` and `codec-audit.md` §2.2 — said
-`literalN_holds_what_it_cannot_write` "records a defect in §3's rule". It does not. §3's premise
-line is `⊢ g : T ⇝ μ, g ground; ℓ₁ … ℓₙ ∈ T`, and at `g = number` the base's held set **is** §1's
-`D`, so the rule already requires `ℓ ⊆ D` and `hD` was transcribing it faithfully. What the witness
-shows is that omitting the premise breaks **(B)** — a fact about §3 worth keeping, and a better
-reason to keep the witness than the one written down. It now lives on `literalNRule`, the prism
-with that premise omitted, deliberately not a `Term`. `docs/codec-calculus.md` needed no change.
+**§3's `(literal)` premise is load-bearing, not defective.** Four places said
+`literalNRule_holds_what_it_cannot_write` "records a defect in §3's rule". It does not. §3's
+premise line is `⊢ g : T ⇝ μ, g ground; ℓ₁ … ℓₙ ∈ T`, and at `g = number` the base's held set
+**is** §1's `D` — so the rule already requires `ℓ ⊆ D`. The witness shows that omitting the
+premise breaks **(B)**, which is a fact about §3 worth keeping and a better reason to keep the
+witness than the one written down.
 
-**The `(dunion)` narrowing simplified nothing, and the measurement is the deliverable.** JH's
-rationale had two halves — "simplifies proofs" and "aligned to how I will use it". Measured over
-every declaration whose name mentions the machinery: 39 declarations / 350 lines before, 40 / 353
-after, the three lines being a bridge lemma, and **not one proof changed length**. Every proof over
-`(dunion)` consumes only the tag set's *nonemptiness*; none consults the arity. Nothing shrank
-because nothing was ever waiting on it. The second half of the rationale is real and the first is
-not, and the normative note says so where the next person will look.
+**The `(dunion)` narrowing simplified nothing, and the measurement is the deliverable.**
+39 declarations / 350 lines before, 40 / 353 after, **not one proof changing length**. Every
+proof over `(dunion)` consumes only the tag set's *nonemptiness*; none consults the arity.
+Nothing shrank because nothing was ever waiting on it.
 
-The general lesson both share: **the sentence saying the brief was wrong is the most valuable thing
-in any report.** Three of the four briefs this arc were wrong about something load-bearing, and in
-each case the correction was worth more than the change it arrived with.
+**`FIDELITY.md` carried a live (R) hazard that was stated nowhere else, and deleting it unread
+would have lost it.** §1's `℘⁺fin` and `⇀fin` are not in the carrier and the two omissions
+cancel: `HSet` is a nonempty **list**, so `set [x,x]` encodes to `ss [s,s]` and reads back and
+(R) holds — under §1's actual `℘⁺fin` the wire set would collapse and **(R) would fail on that
+input**. Tightening either widening alone breaks `lawful_setCodec`. It is §10's second-to-last
+bullet now, and that paragraph is the only place it exists. **A file being a dated snapshot
+does not make everything in it archaeology.**
+
+**And `codec-calculus.md`'s "history" was algebra under a label.** Sixty lines headed *"The
+original argument, for the record"* turned out to be the reasons each `adm`/`admA` row parts
+the way it does — the `1e+21` normalisation, `number` and every numeric literal being one base
+under different predicates, `refine`'s `q` bounding the write and not the read. That document
+came out at **−6 lines**, against 4466 from the other three. **Read what is under the label
+before believing it.**
+
+The lesson all four share: **the sentence saying the brief was wrong is the most valuable thing
+in any report.** Every brief in this arc was wrong about something load-bearing, and in each
+case the correction was worth more than the change it arrived with.
