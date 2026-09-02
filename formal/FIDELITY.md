@@ -19,6 +19,13 @@ are the same defect, and this file measures both.
 > is structural and `denoteω` was a name for it. Every mention of those below refers to a tree that
 > no longer exists. `Calculus/WireOrder.lean` is likewise gone. See §13 of
 > `docs/codec-audit.md`.
+>
+> **Two further rows were falsified by work done after the snapshot, and are footnoted in place
+> rather than rewritten:** D2's "`admA` has no `legacy` case" (`90794bd` gave it one) and item
+> 11's `hD` (`152ab6b` moved the gate into `GroundKind.number`'s carrier and deleted the
+> premise). Both corrections make the snapshot's *verdict* stronger, not weaker, which is why
+> the rows stay. An adversarial read of these documents found them; no guard can, because a
+> count and a claim about a row are neither of them names.
 
 ---
 
@@ -94,8 +101,11 @@ No theorem consumes it, which is correct and is now stated where a reviewer will
 **D3 — §5's `adm` cannot pass through `legacy` on the read side. [checked] [witnessed, logged]**
 `codec-calculus.md:514` says `legacy` passes `adm` through. It cannot: `extendRead`
 (`Combinators.lean:289`) widens `p` by `r`, which is exactly the direction `adm` bounds.
-**The model already corrects this** — `admA` (`Discharge.lean:139`) has no `legacy` case —
-but the correction is not in `codec-formalization.md` §4, so the document still asserts
+**The model already corrects this** — `admA` (`Discharge.lean`) had no `legacy` case when this
+was written; as of `90794bd` it has one, `admA t a || (r a).isSome`, which names both channels
+rather than passing the subterm's through, so the correction stands in a sharper form than the
+snapshot records — but the correction is not in `codec-formalization.md` §4, so the document
+still asserts
 the false row. A defect of the same species as the six logged, and the only one currently
 unwitnessed by a theorem. Second half: the doc has one `adm`, the model needs two, and
 they genuinely disagree at `legacy` and at `literalN`. §5 should split it.
@@ -396,7 +406,7 @@ for, and it now has three independent confirmations.
 | 8 | ~~The documentation corrections: D3, D5, U4, C2's eight stale comments~~ **done**; U4's second half was wrong and the row is five of five | cheap, and D3 is the only defect of the seven with no machine-checked witness |
 | 9 | ~~`Codec.Ker` and `Can` in `Codec.lean`~~ **done**: and `η ⊆ ker p` with them | `≈c` is §2's central device and had no name; `Can` sat in §6's file where §2 and §5 could not cite it |
 | 10 | ~~D3's amendment to `codec-calculus.md` §5~~ **done**: the `adm`/`admA` split, and a stratification error found while writing it | normative, so it waited for the call; the model had been right and unrecorded since `admA` was written |
-| 11 | ~~`(literal-N)`'s `ℓ ⊆ D`~~ **done**: §3's premise, `Typed.literalN`'s `hD`, and the shipped `literal(NaN)` that settled it | the rule figure had said `∈ D` all along and the paragraph under it called `D` unchecked — the worst of the three states a premise can be in |
+| 11 | ~~`(literal-N)`'s `ℓ ⊆ D`~~ **done**: §3's premise, `Typed.literal`'s `hD`, and the shipped `literal(NaN)` that settled it. `hD` is itself gone as of `152ab6b` — the gate is `GroundKind.number`'s carrier — and `Typed.literalN` never existed under that name | the rule figure had said `∈ D` all along and the paragraph under it called `D` unchecked — the worst of the three states a premise can be in |
 
 Item 9 turned out to carry more than its description. Naming `≈c` was three lines and an
 `Equivalence`; what it unlocked was §1's store concession, which had been prose in

@@ -3,10 +3,14 @@ import Calculus.Typing
 /-!
 # §5 — Soundness
 
-The theorem, in the fueled form. `Obligations t` collects the doc's *semantic* rule
-premises at each fuel — `(legacy)`'s two side conditions, `(nullable)`'s null-honesty,
-`(fallback)`'s writable stand-in, `(custom)`'s laws, `(union)`'s residual (U) at
-canonical inputs. `MPOk` marks a derivation legacy-free to depth `fuel` — the doc's
+The theorem. `Obligations t` collects the doc's *semantic* rule premises — `(legacy)`'s two
+side conditions, `(held)`'s cancellation laws, `(fallback)`'s writable stand-in, `(custom)`'s
+laws, `(union)`'s residual (U) at canonical inputs. **Neither fueled nor carrying
+`(nullable)`'s null-honesty**, both of which this paragraph said: `Obligations : Term → Prop`
+is structural, as its own docstring says in as many words, and the `nullable` row is
+`Obligations t'` with no conjunct — `NullHonest` left `Obligations` when §3's guard made it
+derivable (`Combinators.lean`'s `nullHonest_of_not_ownsNull`, and VOCABULARY's struck item
+5). `MPOk` marks a derivation legacy-free — the doc's
 (MP) exemption, as a predicate.
 
 Statements:
