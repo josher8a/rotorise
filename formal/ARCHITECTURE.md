@@ -290,7 +290,7 @@ already.
 ### 4c. One codec, stated once for both sides of the pair
 
 `Combinators.lean` is <!-- count:combinators_lines -->3966<!-- /count --> lines of the tree's
-<!-- count:tree_lines -->17339<!-- /count -->, and this is its organizing idea; without it
+<!-- count:tree_lines -->17330<!-- /count -->, and this is its organizing idea; without it
 the file reads as the inventory `README.md` already has. A constructor is a **prism** —
 `Ctor α β`, with `into`/`out` and the laws `out_into` (matching what was built returns it) and
 `into_out` (anything that matches was built) — and those two *are* §2's (R) and (C) at a
