@@ -2053,6 +2053,31 @@ any more, and neither is `not_typed_set_union`, the §6 refutation it was standi
 demanding a member is the constructor's argument type now, checked at elaboration; `Refutations.lean`
 records the closure in prose, as `HeldSet.lean` does for `strSet ∅`.
 
+**A correction to the "nothing is lost" entry, and it kills the migration it was written to
+prepare.** The passage above says `admitV_of_sepJV` / `admitA_of_sepJA` are what "nothing is lost"
+actually means and that "the discharge never needed the extra strength". Both bridges are true and
+the conclusion does not follow, because those two theorems are about the **codec** — where `x`'s
+`e` writes, `y`'s `e` refuses — and `uAtCan_of_separated`, the theorem the migration exists to move,
+is about the **options `select` builds**. At an `object` those are not the same test: an object
+option is admitted by `keysOk`, which reads which names a map carries and never what they hold. So
+`Adm` is not an over-approximation of `OptionSem.admitV` there; it is strictly tighter, and
+disjointness of a tighter predicate does not imply disjointness of admission.
+
+`adm (.object _) = ⊤` is what makes §5's generation sound at objects, and it is not slack — it is
+exactly the over-approximation that turns `adm`-disjointness into admission-disjointness, and it is
+why `SepV` cannot separate two objects at all (both `κ`s are `[map]`, both `adm`s are `⊤`). Restate
+the discharger on `SepJV` and it *does* separate two objects with the same names and different
+field terms, while `select` attempts both, so (U) genuinely fails: the premise gets stronger and
+the theorem becomes **false**. `not_uAtCan_of_sepJ` is that refutation, at a pair that is derivable,
+closed and lawful, so no other premise is what declines it; `not_admitV_le_Adm` is the containment
+lemma the discharger would have needed. The `object` row is the whole of the obstruction —
+`admitV_Adm_nonObject` and `admitA_AdmA_nonObject` hold from exactness alone for every term whose
+`specOf` is `none`, which is every term but an `object`.
+
+So `adm`, `admA`, `SepV` and `SepA` stay, and not only for `ident`'s sake. **Retiring them was
+costed before it was probed** — 74 declarations depending on the old generation, 17 bridges — and
+the twenty lines that answered the question would have been cheaper than any of that measurement.
+
 `codec-calculus.md`'s `(set)` rule — `⊢ c : T ⇝ μ`, `μ ∈ {S, N, B}` — is **normative and
 unchanged**. The model is now narrower than it, in the direction the rule's own side condition was
 pointing, and the divergence waits for the call, as `codec-audit.md` item 18 does for the
