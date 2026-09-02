@@ -600,9 +600,9 @@ file, not a change to `select` deep in the graph** — no clean build window req
 the whole of what the queued item was actually after.
 
 *Done, and the ten-site count was mine and was wrong.* Six of the ten hold a filter *equation*
-and are `(mem_of_filter_eq_singleton h).1`. Two more (`mem_allTags`, twice) applied
-`List.mem_of_mem_filter` and `List.of_mem_filter` to the same membership hypothesis where
-`List.mem_filter.mp` gives both halves at once. The last two, in `Orthogonality.lean`, recover
+and are `(mem_of_filter_eq_singleton h).1`. Two more (`mem_allTags`, twice) applied a pair of
+one-sided `List.filter` lemmas to the same membership hypothesis, where `List.mem_filter.mp`
+gives both halves at once. The last two, in `Orthogonality.lean`, recover
 from a membership hypothesis and need exactly the one lemma they already call — nothing to do.
 Sixteen lines changed, no behaviour, `Orthogonality.lean` untouched.
 
