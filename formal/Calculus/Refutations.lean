@@ -372,29 +372,16 @@ theorem literalN_sub_number (ls : NEFinset WFDouble) :
   rintro v ⟨d, hd, rfl⟩
   exact ⟨d.1, rfl, d.2⟩
 
-/-! ### §3's `(literal)` at `number`, transcribed — and why it is not a `Term`
+/-! ### §3's `(literal)` at `number`, with `ℓᵢ ∈ T` dropped
 
-`not_literalN_sub_number` and `literalN_holds_what_it_cannot_write` stood below, stated on
-`literalCodec .number (.of d ∅)` for a `d` with `Numeral.WF d.toDec = false`. Neither is
-statable any more: `GroundKind.number.Carrier` is `WFDouble`, so there is no such `ls` and no
-such `Term`.
+§3's premise line is `⊢ g : T ⇝ μ, g ground; ℓ₁ … ℓₙ ∈ T`, and at `g = number` the base's held
+set *is* §1's `D` — so the rule already requires `ℓ ⊆ D`. **The two witnesses below show that
+premise is load-bearing: drop it and (B) fails.** That needs an ungated prism to be stated
+about, not an ungated `Term`, which `GroundKind.number.Carrier = WFDouble` no longer admits.
 
-**That is a reason to move the witnesses, not to lose them** — and restating them corrected the
-sentence they were carrying. The case for keeping the gate as a premise was that these two
-could then be stated, and this file used to say the defect they exhibit is one "in
-§3's rule". **It is not.** §3's `(literal)` premise line is `⊢ g : T ⇝ μ, g ground; ℓ₁ … ℓₙ ∈ T`,
-and at `g = number` the base's held set `T` *is* §1's `D` — so `ℓ ⊆ D` is already a premise of
-the rule as written (`docs/codec-calculus.md`, the `(literal)` figure). The rule is gated.
-
-What the two witnesses below actually show is that **the rule's premise is load-bearing**: drop
-`ℓᵢ ∈ T` and (B) fails. That is a demonstration about §3, not a defect in it, and it is worth
-keeping for exactly that reason — a premise nobody can exhibit a use for is a premise nobody can
-defend.
-
-`literalNRule` is therefore §3's `(literal)` at base `number` **with `ℓᵢ ∈ T` omitted**: the
-prism over an ungated `ℓ : NEFinset Double`. **It is deliberately not a `Term` and no constructor
-builds it** — it exists only to carry the two witnesses below, which is why it is here in
-`Refutations.lean` and not in `Combinators.lean` with the codecs the calculus uses. -/
+`literalNRule` is that prism. It is deliberately not a `Term`, no constructor builds it, and it
+exists only to carry the two theorems below — which is why it is here and not in
+`Combinators.lean` with the codecs the calculus uses. -/
 
 /-- `(literal)`'s prism at base `number`, over an ungated `ℓ` — §3's, not ours. -/
 noncomputable def inLNRule (ls : NEFinset Double) : Value → Bool
@@ -422,13 +409,7 @@ theorem not_literalNRule_sub_number {d : Double} (hw : Numeral.WF d.toDec = fals
     its ungated `ℓ`.
 
     So the failure is *"`T ⊄ dom(e)`"* — **(B)**, and exactly the sentence `(literal-N)` needs
-    `ℓ ⊆ D` to stop being able to say. This used to be stated on
-    `literalCodec .number (.of d ∅)`, closing with the claim that typing the carrier "did not
-    remove the reason for the premise; it relocated the symptom". Typing the carrier *has* now
-    removed the reason for a premise, because the gate is the carrier — and the reason is not
-    lost, it is here, on the ungated transcription. Which is the honest place for it: our
-    constructor is one mechanization of `(literal)`, and this is the claim that §3's own premise
-    line is doing work. JH's call, after the measurement. -/
+    `ℓ ⊆ D` to stop being able to say. -/
 theorem literalNRule_holds_what_it_cannot_write {d : Double}
     (hw : Numeral.WF d.toDec = false) :
     (literalNRule (.of d ∅)).T (.num d) ∧ (literalNRule (.of d ∅)).e (.num d) = none := by
@@ -437,30 +418,15 @@ theorem literalNRule_holds_what_it_cannot_write {d : Double}
   rw [if_pos (by simp [inLNRule, NEFinset.mem_of]), numberCodec_e_num,
     dif_neg (by rw [hw]; exact Bool.noConfusion)]
 
-/-! `typed_literalN_D` and `typed_literalN_sub_number` stood here, and **`#lint_calculus`
-deleted them.** Both quantified over a derivation in order to read `hD` back off it —
-"the premise, read back off any derivation", which is what made the theorems above about
-*derivable* terms rather than about a codec in isolation. With the gate in the carrier the
-derivation argument is unused, `unusedArguments` said so, and the honest response to that
-report is not a sanction entry.
+/-! Two theorems here quantified over a derivation only to read `hD` back off it. With the gate
+in the carrier the derivation argument is unused, `#lint_calculus` reported it, and the honest
+response to that report is deletion rather than a sanction entry: one became `fun d _ => d.2`
+and the other became `literalN_sub_number` above, which needs no premise. A theorem whose
+hypothesis has become decoration is a description that has stopped describing.
 
-What each becomes: `typed_literalN_D` is `fun d _ => d.2`, the element's own second
-component, so there is nothing left to state. `typed_literalN_sub_number` is
-`literalN_sub_number` above, which now holds of every `ls : NEFinset WFDouble` with no
-premise at all. A theorem whose hypothesis has become decoration is a description that has
-stopped describing, and the linter was the only thing keeping it honest.
-
-Both names survive only in the commit history, which is where a deleted declaration's record
-belongs. -/
-
-/-! `not_typed_literalN_nonD` stood here: `¬ ∃ T μ, Typed (.literal .number (.of d ∅)) T μ`
-for a `d` outside `D`, and before `LiteralD` it held for *any* `d` with no hypothesis at all —
-which is what `literal(NaN)` was in the shipped library.
-
-It is deleted, and not because it became false. It became **unstatable, in the direction that
-was wanted**: `.of d ∅` needs `d : WFDouble`, so a numeric literal outside `D` is not a term to
-quantify over. A theorem saying "this cannot be derived" and a type saying "this cannot be
-written" make the same claim, and only one of them can go stale. -/
+A third said no numeric literal outside `D` is derivable. `.of d ∅` needs `d : WFDouble`, so
+there is no such term to quantify over — "this cannot be derived" and "this cannot be written"
+are one claim, and only the theorem can go stale. -/
 
 /-! ## `decimal` before its held set was narrowed
 

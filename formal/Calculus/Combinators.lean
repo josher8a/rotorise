@@ -504,15 +504,11 @@ theorem decimalCodec_p_restrict : decimalCodec.p = (wfDecimalCodec.restrict isSt
     §7 calls "an iso and a prism", with the prism named by `ℓ` and the iso supplied by the
     index.
 
-    **`T` is deliberately *not* the refinement's**, and what that used to buy is gone in the
-    good direction. It stays §3's `ℓ`; the paragraph here used to add that a numeric literal
-    outside §1's `D` is therefore still *held* and unwritable — (B) failing — and that typing
-    the carrier "did not remove the reason for the premise". It does. `GroundKind.number`'s
-    carrier is `WFDouble`, so every element of `ls` is well-formed, `HLit` holds only values
-    `numberCodec` writes, and there is no such literal to hold. The defect was never in this
-    constructor; it is in §3's rule, which admits an ungated `ℓ`, and
-    `literalNRule_holds_what_it_cannot_write` (`Refutations.lean`) now says so about a
-    transcription of the rule rather than about a `Term`. -/
+    **`T` is deliberately *not* the refinement's**: it stays §3's `ℓ`. That used to mean a
+    numeric literal outside `D` was *held* and unwritable — (B) failing — and it no longer can
+    be, because `GroundKind.number`'s carrier is `WFDouble`, so `HLit` holds only values
+    `numberCodec` writes. What (B) failing looks like is stated on `literalNRule`
+    (`Refutations.lean`), a prism over an ungated `ℓ` that is not a `Term`. -/
 noncomputable def literalCodec (k : GroundKind) (ls : NEFinset k.Carrier) : Codec :=
   { (baseCodec k).restrict (inL k ls) with T := HLit k ls }
 
@@ -2691,29 +2687,6 @@ theorem Lawful.restrict {c : Codec} (h : Lawful c) (q : Value → Bool) :
   { LawfulCore.restrict h.core q with
     agree := fun hp he => h.agree (restrict_p.mp hp).1 (restrict_e.mp he).2 }
 
-
-/-! **`LiteralD` stood here, and the carrier ate it.**
-
-    It was `∀ d ∈ ls.1, Numeral.WF d.toDec = true` at `number` and `True` at all five other
-    bases — §3's `ℓ ⊆ D` as a premise of the judgement. Its own docstring argued for keeping it
-    there, on the ground that typing the gate into the carrier "deletes
-    `literalNRule_holds_what_it_cannot_write` rather than proving the defect absent".
-
-    That was the right objection and the wrong conclusion, and restating the witness found a
-    third thing wrong with the sentence it was defending. §3's `(literal)` is **not** ungated:
-    its premise line is `ℓ₁ … ℓₙ ∈ T` and at `g = number` the base's `T` is §1's `D`, so the
-    rule already requires `ℓ ⊆ D`. What the witness shows is that **that premise is
-    load-bearing** — omit it and (B) fails — which is a fact worth keeping about §3 and is not
-    a defect in §3. It is restated in `Refutations.lean` on `literalNRule`, the prism over an
-    ungated `ℓ` that is deliberately *not* a `Term`; and `not_typed_literalN_nonD` is gone
-    because "this cannot be derived" and "this cannot be written" are the same claim and only
-    the theorem can go stale.
-
-    The premise was also the last thing standing between the older analysis generation and
-    exactness at this row: `adm (.literal .number ls)` over-approximated by precisely this
-    conjunct, and with the gate in the carrier `inL` is the whole of admission
-    (`ExactV_literalN`). `StoredNumeral`'s docstring in `Domain.lean` predicted both effects
-    while describing `decimal`. JH's call, after the measurement. -/
 
 /-- …and every base is lawful. -/
 theorem lawful_baseCodec : ∀ k : GroundKind, Lawful (baseCodec k)

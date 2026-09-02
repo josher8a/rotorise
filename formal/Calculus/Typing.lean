@@ -11,31 +11,18 @@ Mechanization choices, and where they diverge from the doc (each is routine to s
   set formers below. The index is determined by the term in every rule, exactly as a
   syntax-directed judgement should be; it is an index rather than a function so the rules
   read as §3 writes them.
-* `Typed` keeps only the *syntactic and fuel-free* premises, and after the premise-becomes-
-  an-index moves that is a short list, now two entries long: `(union)`'s **(D)** and
-  `(dunion)`'s tag arity and disjointness. `(literal)`'s `LiteralD` was the third until
-  `GroundKind.number`'s carrier became `WFDouble`. This list also named "set member" and
-  "object name distinctness"; both are gone, and each constructor's own docstring below says
-  so while this one did not. `(set)`'s base is an index, so its premise line is empty, and
-  `object`'s field table is a `Finset Name` with a function off the subtype, which retired
-  `hnd`.
+* `Typed` keeps only the *syntactic* premises, and there are two: `(union)`'s **(D)** and
+  `(dunion)`'s tag arity and disjointness. Every other side condition became a type — see each
+  constructor's own docstring.
   The doc's *semantic* premises — `(held)`'s carrier-restricted iso, `(legacy)`'s
-  `ran(r) ⊆ dom(e)` and coherence, `(fallback)`'s
-  `v(∗) ∈ dom(e)`, `(custom)`'s laws, and `(union)`'s residual (U) — live in `Obligations`
-  (Soundness.lean), consumed by the theorem. Same premises, stated where they can mention the
-  denotation. This said they "are fuel-indexed", which `Obligations`' own docstring contradicts
-  in as many words — *"Structural, and no longer fuel-indexed"* — since `denote` lost its fuel.
-* **`literal` is one rule in §3 and one constructor here**, and the metalanguage is why it
-  took three tries to get there. §3's `(literal)` reads its member off a base — `ℓ` lies in
-  some ground term's held set, and the literal stores what that term stores — which needs
-  `ℓ : List Value` plus a premise that the values share a kind. `literal (k : GroundKind)
-  (ls : NEFinset k.Carrier)` gets that premise from the *type*: the base is an index, so
-  homogeneity, nonemptiness and pairwise distinctness are Lean's rather than carried through
-  every rule and every witness. This bullet described the intermediate state — `literalS`
-  and `literalN` at the two commonest bases, with `boolean`, `binary` and `null` spelled
-  `refine` — which the constructor's docstring below has contradicted since `GroundKind`
-  replaced all three. `GroundKind` has all six bases; nothing §3 admits is spelled `refine`
-  any more.
+  `ran(r) ⊆ dom(e)` and coherence, `(fallback)`'s `v(∗) ∈ dom(e)`, `(custom)`'s laws, and
+  `(union)`'s residual (U) — live in `Obligations` (Soundness.lean), which is where they can
+  mention the denotation.
+* **`literal` is one rule in §3 and one constructor here.** §3's `(literal)` reads its member
+  off a base, which in a naive transcription needs `ℓ : List Value` plus a premise that the
+  values share a kind. `literal (k : GroundKind) (ls : NEFinset k.Carrier)` gets that from the
+  *type*: with the base as an index, homogeneity, nonemptiness and pairwise distinctness are
+  Lean's. `GroundKind` covers all six bases, so nothing §3 admits is spelled `refine`.
 * **§5's (K) is in neither list, and that is the rule.** `(union)`'s premises are the
   option judgements and (D); (K) is a *discharger* of the (U) obligation, and lives with
   `κ`/`ident`/`adm` in `Discharge.lean` — downstream of this file, which is why it could
@@ -47,10 +34,8 @@ Mechanization choices, and where they diverge from the doc (each is routine to s
   recursive occurrences nested under `∃`/`∀ ∈` binders.
 * `(union)` concludes the doc's unanimous μ, computed by `unanimous` from the option
   judgements (`TypedListμ` keeps their members alongside their held sets).
-* `held`'s iso premises are carrier-restricted (`T ≃ I`, not `Value ≃ Value`) and so
-  mention `e`, which is why they sit in `Obligations` with the other semantic premises. Not
-  because they are fuel-indexed: this bullet said that too, twenty lines after the one above
-  records that nothing in `Obligations` is.
+* `held`'s iso premises are carrier-restricted (`T ≃ I`, not `Value ≃ Value`) and so mention
+  `e`, which is why they sit in `Obligations` with the other semantic premises.
   The *rule* carries none of them, and no longer carries the held set's half of the iso
   either: that half is not a premise but the conclusion's index, `fun v => I (f v)`,
   which is what `through` builds.
@@ -185,37 +170,23 @@ inductive Typed : Term → Held → Option Member → Prop where
   /-- §3 `(null)`: the point held set `{null}`, stored as `⟨NULL, ∗⟩`. -/
   | null : Typed .null (fun v => v = .null) (some .NULL)
   | binary  : Typed .binary  (fun v => ∃ b, v = .bin b) (some .B)
-  /-- **§3 `(literal)`, and now there is one of it.**
+  /-- **§3 `(literal)`, with no premise line left.**
 
-      The rule as §3 writes it is `⊢ g : T ⇝ μ, g ground; ℓ₁ … ℓₙ ∈ T; n ≥ 1; pairwise
-      distinct`. Every clause of that premise line is now a type rather than a hypothesis:
-      `g ground` is the index `k`, `n ≥ 1` and distinctness are `NEFinset`'s, and `ℓᵢ ∈ T`
-      at one base is `NEFinset k.Carrier`. The member is `k.member`, a *function* of the
-      index, where three constructors between them carried it as an index with a premise
-      (`hμ`), as `.S`, and as `.N`.
+      §3 writes it `⊢ g : T ⇝ μ, g ground; ℓ₁ … ℓₙ ∈ T; n ≥ 1; pairwise distinct`. Every clause
+      is a type here: `g ground` is the index `k`; `n ≥ 1` and distinctness are `NEFinset`'s;
+      `ℓᵢ ∈ T` is `NEFinset k.Carrier`, which at `number` means `WFDouble` and so carries §1's
+      `ℓ ⊆ D` in the element. The member is `k.member`, a function of the index.
 
-      **And now nothing is left.** `hD : LiteralD k ls` stood here — §3's `ℓ ⊆ D`, `Numeral.WF`
-      over the alternatives at `number` and `True` at the other five bases. The case for keeping
-      it as a premise was that typing it into the carrier "deletes
-      `literalNRule_holds_what_it_cannot_write` rather than proving the defect absent".
+      **The one thing typing the carrier would have cost, and did not.**
+      `literalNRule_holds_what_it_cannot_write` (`Refutations.lean`) exhibits a literal that is
+      *held* and unwritable, which is (B) failing, and the case against gating the carrier was
+      that gating it deletes the witness. It does not: the witness is about §3's rule, which
+      admits an ungated `ℓ` only if you drop `ℓᵢ ∈ T`, so it is stated on an ungated prism that
+      is deliberately not a `Term`. What the gate does buy is that `inL` is the whole of
+      admission, which makes `adm (.literal .number ls)` exact.
 
-      The objection was right that the witness matters and wrong about what it witnesses. §3's
-      `(literal)` premise line is `ℓ₁ … ℓₙ ∈ T`, and at `g = number` the base's held set is §1's
-      `D` — so the rule already carries `ℓ ⊆ D` and `hD` was transcribing it faithfully. What
-      the witness shows is that **the rule's premise is load-bearing**: drop it and (B) fails.
-      That claim needs an ungated prism to be stated about, not an ungated `Term`, and it is
-      restated on `literalNRule` (`Refutations.lean`), which is deliberately not a `Term`.
-      `GroundKind.number.Carrier` is `WFDouble`, so the premise is now the element's own second
-      component — the same place `NEFinset` keeps `n ≥ 1` and distinctness. JH's call.
-
-      The row that was waiting on this: `adm (.literal .number ls)` over-approximated by exactly
-      the `WF` conjunct, so the older analysis generation was inexact at one row (§8). With the
-      gate in the carrier `inL` is the whole of admission and the row is exact for free.
-
-      This replaces `literal`, `literalS` and `literalN`. What it is *not* is a union of
-      arity-one literals, which `Calculus/LiteralArity1.lean` shows is derivable and §11.5 of
-      the audit shows is not free: `Term.union` is list-shaped, and the bridge from a `Finset`
-      is `Classical.choice`. -/
+      Not a union of arity-one literals: derivable (`Calculus/LiteralArity1.lean`) but not free,
+      since `Term.union` is list-shaped and the bridge from a `Finset` is `Classical.choice`. -/
   | literal (k : GroundKind) (ls : NEFinset k.Carrier) :
       Typed (.literal k ls) (HLit k ls) (some k.member)
   /-- §3 `(set)`, and there is nothing left of the premise line.
@@ -233,13 +204,9 @@ inductive Typed : Term → Held → Option Member → Prop where
   /-- `(held)`: the held set **is** the premise's, pulled back along `f`; the cancellation
       laws are `Obligations`'.
 
-      `T` used to be an index with `hT : ∀ v, T v ↔ I (f v)` beside it, which made this the
-      one rule whose index its term did not determine — two derivations of the same term
-      could carry propositionally equal but distinct `T`s, and every consumer had to relay
-      the iff to get from one to the other. `Codec.through` already *defines*
-      `T := fun v => c.T (f v)`, so the premise was restating the combinator being typed.
-      As an index it is the same set with no premise to carry, and the header's "the index
-      is determined by the term in every rule" is true rather than nearly true. -/
+      No premise relating `T` to `I`, because `Codec.through` — what `denote` maps a `held` to
+      — *defines* `T := fun v => c.T (f v)`. Carrying the iff instead would leave this the one
+      rule whose index its term does not determine. -/
   | held {t I μ f g} (h : Typed t I μ) :
       Typed (.held t f g) (fun v => I (f v)) μ
   | refine {t T μ q} (h : Typed t T μ) :
@@ -263,24 +230,19 @@ inductive Typed : Term → Held → Option Member → Prop where
   /-- §5 `(dunion)`, **arity one at the discriminator**. JH's call, in his words: *"go with the
       middle, arity one at the discriminator only"*.
 
-      `hone` was `htags : ∀ t' ∈ opts, (tagsOf d t').Nonempty`. The premise is doing the same
-      four jobs it always did — `tagsOf` is empty for everything but an object whose `d` field is
-      `req (literal .string ls)`, so requiring anything of it forces *object*, *`d` declared*,
-      *`req` rather than `optional`/`fallback`*, and *a literal at the string base*
-      (`tagsOf_ne_nil`). What changes is the fifth: `ls` must be a **singleton**, so a variant
-      answers to exactly one tag.
+      `hone` does five jobs, and only the fifth is about arity. `tagsOf` is empty for everything
+      but an object whose `d` field is `req (literal .string ls)`, so asking anything of it forces
+      *object*, *`d` declared*, *`req` rather than `optional`/`fallback`*, and *a literal at the
+      string base* — see `tagsOf_ne_nil`, which is the inversion that extracts all four. `card = 1`
+      adds that `ls` is a singleton, so a variant answers to exactly one tag.
 
-      **What that buys is the language, not the proofs**, and the measurement is in the commit
-      rather than promised here. A `dunion` is a *lookup*: two options claiming one tag is a
-      table with a key written twice, and an option claiming two tags is a key that does not
-      identify its variant. `src/` documents the second as deliberate — *"the whole admissible
-      set, not one value: an option may answer to several tags"* — and narrowing it is a
-      separate call there, not made here.
+      **The arity buys the language, not the proofs**: no proof over `(dunion)` consults it, they
+      all want only nonemptiness. A `dunion` is a *lookup*, and an option answering to two tags is
+      a key that does not identify its variant. `src/` still permits several and narrowing it there
+      is a separate call.
 
-      `hdisj` is unchanged, and that is the honest division: arity is a property of **one**
-      option against its own field, so it is a premise §4a's criterion permits; distinctness
-      relates one option to *others* at a shared key, which is the clause that criterion puts
-      on the wrong side. Two options with the same single tag is still a premise's business. -/
+      `hdisj` stays a premise because distinctness relates one option to *others* at a shared key —
+      §4a's criterion puts that on the wrong side of the boundary, where arity is on the right one. -/
   | dunion {d opts Ts} (h : TypedListM opts Ts)
       (hone : ∀ t' ∈ opts, (tagsOf d t').card = 1)
       (hdisj : List.Pairwise (fun a b => ∀ tag ∈ tagsOf d a, tag ∉ tagsOf d b) opts) :
