@@ -58,14 +58,32 @@ convention, **§10** open questions, **§11** the change checklist. `EXPECTED` i
    themselves; `occurring()` strips comments now, §9 gained the `~~oldName~~` marker at JH's
    call, and 18 stale pointers were fixed. §6 has the measurement and the shapes that lost.
 
-2. **A question, not a task: 78 theorems are named by a deleted document and by nothing else.**
-   `Lawful.stable`, `Lawful.core`, `Carrier.empty`, `object_agree`, `Adm_array_sharp` and
-   `AdmALit_binary_exact` among them; most of the rest are genuinely internal
-   (`keepB_of_declared`, `slots_length`, `align_eq_zip`). Whether `README.md` or
-   `ARCHITECTURE.md` should name any of them is a judgement about what a surviving document is
-   for, and the list is the input — it is in the message of the commit that sent it, not here,
-   because a handoff should stay short. Reproduce it by diffing backticked theorem citations in
-   the current documents against `git show b163c17^:docs/codec-formalization.md`.
+2. **A question, not a task: 172 declarations are named by a document this arc deleted and by
+   no surviving one.** Whether `README.md` or `ARCHITECTURE.md` should name any of them is a
+   judgement about what a surviving document is for. The three-bin proposal is written and is
+   with JH: **(i) 12** §2 laws and corollaries namespaced under `Lawful`/`LawfulCore`/`Carrier`/
+   `Agree`/`Codec.Equiv`; **(ii) 10** where a surviving document already makes the claim in
+   prose and cites nothing — the bin with content, since a claim nobody cites is a claim
+   `name_drift.py` cannot see; **(iii) 150** plumbing whose name is its content.
+
+   **This item used to say "78 theorems" and to name the wrong file, and neither survived
+   reproduction.** The recipe was "diff backticked theorem citations in the current documents
+   against `git show b163c17^:docs/codec-formalization.md`". The example names it gave —
+   `Lawful.stable`, `Lawful.core`, `Carrier.empty`, `AdmALit_binary_exact` — are cited by
+   `docs/codec-audit.md`, a *different* deleted file. And no reading reaches 78:
+
+   | source set | orphans | minus names a `Calculus/` docstring still mentions |
+   | --- | --- | --- |
+   | `codec-formalization.md` (the file this item named) | 94 | 43 |
+   | `codec-audit.md` (the file the examples came from) | 58 | 41 |
+   | both, i.e. `name_drift.py`'s old `LOG` | 147 | 82 |
+   | **all five deleted documents — the reading used** | **172** | 90 |
+
+   Also "theorems" is wrong: `Lawful.retract` and its siblings are structure *fields*, and
+   `Lawful.core` is a theorem, so the universe is declarations of both kinds. Reproduce with
+   the five deleted documents — the three above plus `docs/structural-discipline.md`,
+   `formal/FIDELITY.md`, `formal/VOCABULARY.md` — against `README.md`, `ARCHITECTURE.md` and
+   `docs/codec-calculus.md`.
 
 3. **`src/`'s arity-one check — JH's call.** `(dunion)`'s discriminator is arity one in the
    calculus. `EveryOptionTagged` (`src/codec.ts`) refuses only options naming no literal and
