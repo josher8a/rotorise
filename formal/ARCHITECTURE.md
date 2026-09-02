@@ -502,7 +502,16 @@ coverage bar at 269 is a bar nobody can satisfy, so it would be switched off, wh
 asks nothing on the day it lands and makes the next docstring cheaper than the argument for
 skipping it. Baselines live in `scripts/ratchets.json` rather than in the script, so that the
 guard's own source stays still and a change to a number is worth reading; a baseline key naming
-a file that is gone fails, which is the rot `EXPECTED` demonstrated. Two blind spots:
+a file that is gone fails, which is the rot `EXPECTED` demonstrated.
+
+**It changes what gets written, not only what gets noticed**, and the first commit after it
+landed is the evidence: `7fff6e8` generalised `sepV_refine_disjoint` with a `show` to
+beta-reduce the goal — legitimate, and what its attribute-side twin does — which put the site
+count at 333 against a 332 baseline, so the proof went in as `simp only` instead. Not a false
+positive, and the reason a ratchet on a number in the hundreds is worth having: the bar it sets
+is today's number, and what it buys is that the cheaper proof is the one that passes.
+
+Two blind spots:
 - **A ratchet accepts the state it was born in, so it cannot see a defect older than itself.**
   The 269 and the 332 are invisible to it by construction — it guards the derivative, not the
   value. `--accept` with a *lowered* number is the only way a baseline should ever move, and
