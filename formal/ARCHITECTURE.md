@@ -28,8 +28,9 @@ stated inline.
 
 21 modules, and the import graph is an almost-linear spine — `Domain` → `Codec` →
 {`Combinators`, `Term`} → `Denote` → `Typing` → `Soundness` → the analyses (`Discharge`,
-`HeldSet`, `Nesting`, `Equations`, `Malleability`) → `Exactness` → `Orthogonality`, with
-`Axioms` as the sink. `python3 scripts/guard_reach.py --graph` prints it; nothing else is
+`HeldSet`, `Nesting`, `Equations`) → `Exactness` → `Orthogonality`, with
+`Axioms` as the sink — `Malleability` is the one analysis off the spine, importing
+`Combinators` alone. `python3 scripts/guard_reach.py --graph` prints it; nothing else is
 worth writing down about it, because **the layering is a convenience and only one property
 of it is checked.**
 
@@ -84,8 +85,12 @@ Two things follow, and both are the reason to do it again:
   second. Both are now properties of the type. `Field` sits in the function's *codomain*,
   which is strictly positive — the same factoring `Attr.m` and `Value.map` use one level down.
 
-**The pattern, so a fifth stratum is written correctly.** A stratum owes seven companions,
-and the existing four each have them:
+**The pattern, so a fifth stratum is written correctly.** A stratum owes eight companions —
+seven kinds, with the admission row counted on both sides — and `db444e3`'s own table is the
+list. `Term` and `Body` have all eight; `Field` has no spec projection (`Body.spec` matches on
+the field inline) and `Rest` has neither spec nor tags, because a policy answers to no name and
+carries no tag. So the two name-reading projections are owed only by a stratum that holds
+names; the other five are owed unconditionally:
 
 | Companion | For `Body` | Why it is owed |
 | --- | --- | --- |
@@ -93,7 +98,7 @@ and the existing four each have them:
 | a denotation clause | `bodySem` | `denote` must dispatch without a case split at the use site |
 | a spec projection | `Body.spec` | `select` counts an object option by its names, not its contents |
 | a member/tag projection | `Body.tags` | the union residues read this, not the payload |
-| an admission row | `AdmBody` | exactness is per-row; a stratum with no row cannot be exact |
+| an admission row, per side | `AdmBody`/`AdmABody` | exactness is per-row; a stratum with no row cannot be exact |
 | a premise carrier | `ObligationsBody` | semantic side conditions are structural, not global |
 | a law exemption | `MPOkBody` | `legacy`'s (MP) exemption propagates through the stratum |
 
@@ -182,19 +187,20 @@ a `union` index.
 
 The analysis tables in `Discharge.lean` (`κ`, `ident`, `adm`, `admA`) approximate what a codec
 writes and reads. A row can either *describe* the set or *call the codec and ask*. `custom`
-always asked (`(cp a).isSome`, because `p := cp`). Over two arcs, six more converted:
+always asked (`(cp a).isSome`, because `p := cp`). Over two arcs, six more converted, and the
+seventh row below was written that way from the start:
 
 | Row | What it asks | The excuse it retired |
 | --- | --- | --- |
 | `opaq` | `((opaqCodecω lossy).p a).isSome` | "`opaque` needs a rule of its own" |
 | `admA .number` | `(numberCodec.p a).isSome` | "`Double.ofDec` is an axiom, so no syntactic set bounds it" |
 | `admALit .number` | `((literalCodec .number ls).p a).isSome` | the same, at a literal |
-| `admALit .decimal` | `((literalCodec .decimal ls).p a).isSome` | could be spelled out; asking keeps *one* definition |
+| `admALit .decimal` | `((literalCodec .decimal ls).p a).isSome` | none — a new row (`5b6a0c1`), and it could be spelled out; asking keeps *one* definition |
 | `refine` (read side) | `refineReads t q a` | "`q` tests the value a read produces" |
 | `nullable` | `Codec.ownsNull` | "`ownsNull` is a disjunction over both halves of the pair" |
 | `union` | the count, given the options' exactness | "a count is anti-monotone" — true of the *table*, recorded as a fact about the row |
 
-Every one of those excuses was a correct observation reaching a wrong conclusion, and the
+Every excuse in that column was a correct observation reaching a wrong conclusion, and the
 pattern is identical: *no syntactic set names it* is a reason to stop being syntactic, not a
 reason to give up. `denote (.literal .number ls)` **is** `literalCodec .number ls` by `rfl`, so
 the row that asks is `dom(p)` on the nose.
@@ -217,8 +223,9 @@ as a refactor estimate (`scripts/blast_radius.lean`). None of them was added spe
 
 ## 5. Two generations of analysis, and why both stay
 
-`Discharge.lean` holds §5's per-aspect approximations — `κ`, `ident`, `adm`, `admA`, `μSyn` —
-with the separation predicates `SepV` and `SepA`, each a **two-disjunct** disjunction (labels
+`Discharge.lean` holds §5's per-aspect approximations — `κ`, `ident`, `adm`, `admA`; the fifth
+aspect, `μSyn`, is `Denote.lean`'s, because `denote` needs the member index itself — with the
+separation predicates `SepV` and `SepA`, each a **two-disjunct** disjunction (labels
 disjoint, *or* admissible sets disjoint).
 
 `Exactness.lean` holds the joint predicate `Adm`/`AdmA`, exact at **all twenty-one**
@@ -286,7 +293,9 @@ it says nothing about whether the elaborator is correct, whether `sanctionedAxio
 the documents claim, or whether the walk's filters let something through.
 
 **`scripts/name_drift.py`** — every backticked Lean-looking name in the current-state documents
-must occur somewhere in `Calculus/`, with an `EXPECTED` table carrying a reason per deliberate
+must occur somewhere in `Calculus/` — where *Lean-looking* means it carries a `_` or a `.`, so a
+one-word citation (`Adm`, `Orth`, `Fmt`) is never checked at all — with an `EXPECTED` table
+carrying a reason per deliberate
 exception (and failing if an entry there stops being cited, so the table cannot rot quietly).
 **Blind spot, stated in `7a91de8`: a count is not a name.** It cannot see "five theorems share
 `term_depth_wf`" being false while all five names exist. It also clears a dotted name
