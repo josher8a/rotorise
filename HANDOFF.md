@@ -1,8 +1,8 @@
 # Handoff
 
 **Branch `wip/map-types`. `lake build` green and warning-free, `#assert_axioms_all` and
-`#lint_calculus` over 21 modules, `guard_reach.py`, `name_drift.py` and
-`doc_counts.py --check` all exit 0.** Verify with the block at the end of §Landmines, by exit
+`#lint_calculus` over 21 modules, `guard_reach.py`, `name_drift.py`,
+`doc_counts.py --check` and `ratchet.py` all exit 0.** Verify with the block at the end of §Landmines, by exit
 code and not by eye.
 
 Delete this file once read. The commit messages are the record; `git log` is now the only
@@ -54,21 +54,9 @@ convention, **§10** open questions, **§11** the change checklist. `EXPECTED` i
 
 ## Pick up here
 
-1. **`name_drift.py` passes on a class of drift it claims to catch, and this is the first
-   thing to fix.** `occurring()` builds its source set from raw file text, comments included,
-   so a name cited *only* in a docstring is present in its own evidence and clears itself.
-   Adding `Calculus/*.lean` to `CURRENT` in `6a90359` therefore proves less than that commit's
-   message claims.
-
-   **Reproducer:** `literalNRule_holds_what_it_cannot_write` was renamed from
-   `literalN_holds_what_it_cannot_write`; three docstrings and `ARCHITECTURE.md` kept citing
-   the old name; the guard passed clean. It only went red once the docstring archaeology sweep
-   deleted the prose that was clearing it.
-
-   Stripping comments was tried and **over-corrects** — it then rejects legitimate citations of
-   things deliberately *absent* from the code, `Classical.choice` above all, plus mathlib names
-   and Lean keywords mentioned but not used. Doing it properly means extending `PRELUDE` and
-   `EXPECTED` for roughly twenty such names. `ARCHITECTURE.md` §6 has the analysis.
+1. **Done at `2d57420`.** `name_drift.py`'s docstring check was clearing citations with
+   themselves; `occurring()` strips comments now, §9 gained the `~~oldName~~` marker at JH's
+   call, and 18 stale pointers were fixed. §6 has the measurement and the shapes that lost.
 
 2. **A question, not a task: 78 theorems are named by a deleted document and by nothing else.**
    `Lawful.stable`, `Lawful.core`, `Carrier.empty`, `object_agree`, `Adm_array_sharp` and
@@ -94,9 +82,11 @@ convention, **§10** open questions, **§11** the change checklist. `EXPECTED` i
    replaces try-and-see with a decision and retires `identifying` (45 lines, one consumer).
    Depends on (4).
 
-6. **Two guards available on `Axioms.lean`'s principle**, both in §10: ratchet
-   `vocab_audit.py`'s site count so §9's rule is enforceable rather than aspirational, and set
-   a docstring-coverage bar on public theorems. `fidelity_audit.py` reports both numbers.
+6. **Done at the commit after `2d57420`.** `scripts/ratchet.py` holds three per-file counts
+   and fails on a rise: hand-unfolding sites (332), retirement marks (72), undocumented public
+   theorems (269 of 896). The docstring-coverage *bar* §10 asked for is not buildable at 269 —
+   a bar nobody can satisfy gets switched off — so all three are ratchets. Baselines in
+   `scripts/ratchets.json`; `--accept` to move one, `--allow-rise` on top to weaken it.
 
 **Closed this arc, do not re-open:** `select` over `List.attach` (`daa211e` — measured; and the
 ten-site count in it was six); `adm (.literal .number ls)` not exact (`152ab6b`); `admA`'s
@@ -124,6 +114,7 @@ fail=0
 python3 scripts/guard_reach.py >/dev/null 2>&1 || fail=1
 python3 scripts/name_drift.py  >/dev/null 2>&1 || fail=1
 python3 scripts/doc_counts.py --check >/dev/null 2>&1 || fail=1
+python3 scripts/ratchet.py     >/dev/null 2>&1 || fail=1
 docker exec rotorise-lean-dev bash -lc 'cd /workspaces/Rotorise/formal && lake build' >/dev/null 2>&1 || fail=1
 echo "ALL_GREEN=$([ $fail -eq 0 ] && echo yes || echo NO)"
 ```
@@ -139,8 +130,8 @@ lengths — a comments-only edit is not exempt.
 **One `lake build` at a time**, and *your* build rewrites oleans under someone else's
 `lake env lean`. Editing a late module and checking it with `lake env lean` writes nothing.
 
-**Python is on the host, not in `rotorise-lean-dev`.** The four scripts run from `formal/` on
-the Mac.
+**Python is on the host, not in `rotorise-lean-dev`.** There is no Python in that container at
+all — `which python3` there exits non-zero. The six scripts run from `formal/` on the Mac.
 
 **The TS toolchain is not on PATH and neither is `node`.** Run it in a container against the
 host `node_modules`; `tsc --noEmit` is clean there, biome is at 8.
