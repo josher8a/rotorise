@@ -544,13 +544,32 @@ comparing, gave 40 pairs ≥0.9 and 10 — but both put `ExactV_set`/`ExactA_set
 put the biggest twins at the bottom. **Neither the pair count nor any single similarity number
 is the dimension; the size-against-similarity ordering is.**
 
-**`select` over `List.attach`.** `select` filters a list of options and acts through the one
-that answers alone, and `List.filter` hands back a bare element — so every proof that needs "the
-surviving option came from *this* term" recovers it by hand (`List.mem_of_mem_filter (by rw [hf];
-simp)`, at roughly ten sites), and the filter-over-map commutation needs its own lemmas
-(`filter_map_AdmSpecs`, `filter_AdmSpecs`). Attaching membership would carry it through. Queued
-as a standalone strict improvement; it touches `Combinators.lean`, deep in the graph, so it needs
-a clean build window. **Recorded only in the handoff, nowhere in `docs/`.**
+**`select` over `List.attach` — probed, and it does not pay.** The queued item said that
+because `List.filter` hands back a bare element, every proof needing "the surviving option came
+from *this* term" recovers it by hand (`List.mem_of_mem_filter (by rw [hf]; simp)`, at ten sites
+in `Exactness.lean` and `Orthogonality.lean`), and that attaching membership would carry it
+through. Both halves were measured and both are wrong.
+
+A `select` written over `os.attach.filter` works: the iff re-proves with the *same* four
+tactic lines,
+and `select_admits` does get its membership free — `⟨o.1, o.2, hr⟩` where it used to call
+`mem_of_filter_eq_singleton`. That saves one line, in one lemma. What the consumers see instead
+is a filter equation over `os.attach`, a list of subtypes, with an `o.1` on every use of the
+survivor. **And the membership `attach` hands back is the wrong one.** No consumer holds `os`;
+they hold `opts : List Term` with `os = semsOf opts`, which is `opts.map`, so `o.2` proves
+`o.1 ∈ opts.map f` when what all ten sites want is `t ∈ opts`. `List.mem_map.mp` is still
+needed, on top of the projection. The obstruction is not removed, it is relocated and taxed.
+
+The queued text also offered the filter-over-map commutation lemmas (`filter_map_AdmSpecs`,
+`filter_AdmSpecs`) as evidence for the change. They exist and they do carry that commutation —
+and they are an argument the other way: `(opts.map f).attach` has no clean commutation with
+`map`, where `opts.map f |> List.filter` has one already proved twice.
+
+The ten sites were never blocked on `select` at all: `mem_of_filter_eq_singleton`
+(`Lists.lean:271`) already turns `hf : l.filter p = [x]` into `x ∈ l ∧ p x = true` in one term,
+and the sites open-code it instead of calling it. **That is a ten-site cleanup in two late
+files, not a change to `select` deep in the graph** — no clean build window required, and it is
+the whole of what the queued item was actually after.
 
 **`adm (.literal .number ls)` is not exact** — it is `inL`, missing the `Numeral.WF d.toDec`
 gate. Note the exact row already has it: `AdmLit` is `inL` conjoined with the numeral condition,
