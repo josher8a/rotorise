@@ -282,10 +282,14 @@ structure IsSupAt (f : Nat → OptionSem) (oω : OptionSem) (v : Value) : Prop w
   /-- …and least at `v`: the limit adds no answer the chain did not have -/
   least : ∀ a, oω.c.e v = some a → ∃ i, (f i).c.e v = some a
 
-/-- **Continuity, and it needs no confluence** — which is the sharper half of the diagnosis.
-    Counting is continuous too (admission only grows, so its filter is `[o]` or `[]`); what
-    counting lacks is monotonicity alone. So the entire fixpoint obstruction was the negative
-    condition, and confluence is precisely its repair.
+/-- **Continuity — with the growing option first, needing no confluence.** That arrangement is
+    load-bearing and the general case does not share it: see `selectF_continuous_list`, which
+    takes the obligation at each stage. Growth-first is automatically the first admitter, so no
+    other option can answer; elsewhere in the list the obligation is what says they agree.
+
+    Counting is continuous *unconditionally* — its singleton requirement at the limit forces
+    uniqueness at every earlier stage — and cannot be monotone at all. So the obligation is what
+    buys monotonicity and, in general, continuity too.
 
     The two premises are the model's own: `hself` is `uniqueAdmission_of_disjoint`'s `hw` — a
     canonical pair admits its *own* option — and `hadm` is `byAttempt`'s definition, trivial for
@@ -307,6 +311,88 @@ theorem selectF_continuous {f : Nat → OptionSem} {oω o₂ : OptionSem} {v : V
       | true => rw [hadm 0 h0] at hω; exact nomatch hω
       | false => rfl
     rw [selectF_skip h0]; rw [selectF_skip hω] at h; exact h
+
+
+/-- Confluence is inherited by a tail. -/
+theorem ConfluentAt.tail {o : OptionSem} {os : List OptionSem} {v : Value}
+    (h : ConfluentAt (o :: os) v) : ConfluentAt os v :=
+  fun a ha b hb => h a (by simp [ha]) b (by simp [hb])
+
+/-- The answer `selectF` gives comes from a member that admits. -/
+theorem selectF_mem : ∀ {os : List OptionSem} {v : Value} {a : Attr},
+    selectF os v = some a → ∃ o ∈ os, o.admitV v = true ∧ o.c.e v = some a
+  | [], _, _, h => absurd h (by simp [selectF])
+  | o :: os, v, a, h => by
+      cases ho : o.admitV v with
+      | true => exact ⟨o, by simp, ho, by rw [selectF_admit ho] at h; exact h⟩
+      | false =>
+        rw [selectF_skip ho] at h
+        obtain ⟨o', ho', hadm, he⟩ := selectF_mem h
+        exact ⟨o', by simp [ho'], hadm, he⟩
+
+/-- **Order-independence as a theorem.** Under the obligation, *any* admitter's answer is the
+    answer — so the first-match definition does not depend on the order after all. -/
+theorem selectF_of_mem : ∀ {os : List OptionSem} {v : Value} {o : OptionSem},
+    ConfluentAt os v → o ∈ os → o.admitV v = true → selectF os v = o.c.e v
+  | [], _, _, _, ho, _ => absurd ho (by simp)
+  | hd :: tl, v, o, hc, ho, hadm => by
+      cases hhd : hd.admitV v with
+      | true =>
+        rw [selectF_admit hhd]
+        exact hc hd (by simp) o (by simp [ho]) hhd hadm
+      | false =>
+        rw [selectF_skip hhd]
+        have hne : o ≠ hd := fun h => by rw [h, hhd] at hadm; exact nomatch hadm
+        exact selectF_of_mem (ConfluentAt.tail hc) (by
+          rcases List.mem_cons.mp ho with rfl | h'
+          · exact absurd rfl hne
+          · exact h') hadm
+
+
+/-! ### The general list versions, and a correction they force
+
+The two theorems above are the two-option, growth-first case. Generalising them changes one
+claim: `selectF_continuous`'s docstring said continuity "needs no confluence". **That is true of
+growth-first and false in general** — with the growing option first it is automatically the first
+admitter, so no other option can answer; anywhere else in the list, the obligation is what says
+the first admitter agrees with the one that grew.
+
+Counting is the reverse: its continuity really is unconditional, because its own singleton
+requirement *at the limit* forces uniqueness at every earlier stage (admission only grows, so the
+filter is `[o]` or `[]`). So the corrected diagnosis is simpler than the one it replaces —
+**the obligation must hold at every stage, and that one requirement buys both** monotonicity and
+continuity, where counting gets continuity free and cannot have monotonicity at all. -/
+
+/-- **Monotonicity over an arbitrary option list**, with the growth as a map. Cleaner than the
+    two-option case, because `selectF_of_mem` does the work: the answer comes from *some*
+    admitting member (`selectF_mem`), that member grows to an admitter with the same answer, and
+    under the obligation any admitter's answer is the answer. -/
+theorem selectF_mono_list {os : List OptionSem} {g : OptionSem → OptionSem}
+    {v : Value} {a : Attr}
+    (hap : ∀ o ∈ os, Codec.Approx o.c (g o).c)
+    (hadm : ∀ o ∈ os, o.admitV v = true → (g o).admitV v = true)
+    (hc : ConfluentAt (os.map g) v)
+    (h : selectF os v = some a) : selectF (os.map g) v = some a := by
+  obtain ⟨o, ho, hoadm, hoe⟩ := selectF_mem h
+  have hmem : g o ∈ os.map g := List.mem_map_of_mem g ho
+  rw [selectF_of_mem hc hmem (hadm o ho hoadm)]
+  exact (hap o ho).e hoe
+
+/-- **Continuity, in general — and it does need the obligation at each stage.** See the note
+    above: `selectF_continuous` escaped it by putting the growing option first. -/
+
+theorem selectF_continuous_list {os : List OptionSem} {F : Nat → OptionSem → OptionSem}
+    {v : Value} {a : Attr}
+    (hself : ∀ i, ∀ o ∈ os, ∀ b, (F i o).c.e v = some b → (F i o).admitV v = true)
+    (hleast : ∀ o ∈ os, ∀ b, o.c.e v = some b → ∃ i, (F i o).c.e v = some b)
+    (hc : ∀ i, ConfluentAt (os.map (F i)) v)
+    (h : selectF os v = some a) : ∃ i, selectF (os.map (F i)) v = some a := by
+  obtain ⟨o, ho, hoadm, hoe⟩ := selectF_mem h
+  obtain ⟨i, hi⟩ := hleast o ho a hoe
+  refine ⟨i, ?_⟩
+  have hmem : F i o ∈ os.map (F i) := List.mem_map_of_mem (F i) ho
+  rw [selectF_of_mem (hc i) hmem (hself i o ho a hi)]
+  exact hi
 
 /-! ### What this does and does not establish
 
