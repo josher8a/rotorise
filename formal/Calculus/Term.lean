@@ -297,11 +297,17 @@ theorem Term.depth_lt_object_rest {b : Body} {t : Term} (h : b.rest = .codec t) 
   lt_trans (Body.depth_lt_rest b h) (Term.depth_lt_object_body b)
 
 /-- The termination argument every `Term.depth` recursion in this development uses, written
-    once. Five theorems share it — `soundness_both`, `typed_TSub`, `carrier_denote`,
-    `Adm_sound`, `AdmA_sound` — and their goal sets differ, so some alternatives
-    are dead at each use. That is what the `unreachableTactic` linter reports at those sites,
-    and it is why the option is disabled there rather than the block being specialised five
-    ways. -/
+    once. **Three** theorems share it, all in `Soundness.lean` — `soundness_both`,
+    `typed_TSub`, `carrier_denote` — and their goal sets differ, so some alternatives are dead
+    at each use. That is what the `unreachableTactic` linter reports at those sites, and it is
+    why the option is disabled there rather than the block being specialised three ways.
+
+    This said *five*, naming `Adm_sound` and `AdmA_sound` as the other two. They do not
+    recurse: `Adm_exact`/`AdmA_exact` are structural mutual recursions over the term family
+    with no `termination_by`, and `Adm_sound`/`AdmA_sound` are one-line corollaries of them.
+    The claim was true before the exactness rewrite replaced a measured recursion with a
+    structural one, and nothing was keeping it honest — `name_drift.py` checks that cited
+    names *exist*, and all five do. -/
 macro "term_depth_wf" : tactic => `(tactic|
   (all_goals simp_wf
    all_goals subst_vars

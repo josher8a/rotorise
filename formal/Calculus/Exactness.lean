@@ -787,7 +787,7 @@ theorem ExactV_nullable {t : Term} (h : ExactV t) : ExactV (.nullable t) := by
 
 -- `unnecessarySeqFocus` fires on `Adm_exact`'s `literal` case and is wrong there: `try split`
 -- leaves two goals at `decimal`, and the `;` it suggests would reach only the first.
--- Suppressed at the block, as `term_depth_wf`'s five sharers already are.
+-- Suppressed at the block, as the three `term_depth_wf` recursions already do.
 set_option linter.unnecessarySeqFocus false in
 mutual
 /-- **Every row is exact.** Not a bound on `dom(e)` — `dom(e)`, at all twenty-one
@@ -834,7 +834,7 @@ theorem Adm_exact : ∀ (t : Term), ExactV t
   --
   -- `unnecessarySeqFocus` fires on the `<;>` before `simp_all` below and is wrong: `try split`
   -- leaves two goals at `decimal` and `;` would reach only the first. Suppressed at the
-  -- declaration rather than restructured, the way `term_depth_wf`'s sharers already are.
+  -- declaration rather than restructured, the way the `term_depth_wf` recursions already do.
   | .literal k ls => by
       intro v
       cases k <;> cases v <;>
