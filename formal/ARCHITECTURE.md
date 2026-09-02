@@ -311,7 +311,7 @@ Two shapes sit over them, and the second is the load-bearing one:
 - `carriedCodec (V : Ctor γ Value) (A : Ctor δ Attr)` — a payload *pair* between two prisms,
   the shape underneath every product (`entrywise`, hence `arrayCodec`/`recordCodec`;
   `tupleCodec`; `objectCodec`). **The model states a codec once for both sides**, which is why
-  §8's twin question is askable at all: the doubling is in the analyses, not the algebra.
+  §9's twin question is askable at all: the doubling is in the analyses, not the algebra.
 - `set` is the one deliberate non-instance: its attribute side is a choice among three wire
   constructors rather than one prism (`setCodec`, `Combinators.lean`), so its inversion names all
   three families (`setCodec_p_eq`).
@@ -558,7 +558,80 @@ shrink a fibre to buy the agreement clause without losing completeness.
 
 ---
 
-## 8. Open architectural questions
+## 8. What the host owes, and what it does not
+
+Everything above is about the model. This section is about the other side of the
+correspondence, and it is here because the model's structural guarantees are not
+self-enforcing in an implementation: §4a's criterion decides what becomes a type *here*, and a
+type here is a question the host still has to answer.
+
+**The rule, as JH states it:** prefer making a bad state **unrepresentable** over **guarding**
+against it. What follows is what that costs a host, case by case.
+
+### The three cases, and what each one owes
+
+For every structural guarantee the model makes, a host is in exactly one of three positions.
+
+| the host… | owes | why that is the whole debt |
+| --- | --- | --- |
+| **(a)** carries it structurally | **nothing** — verify by types and move on | the host type is doing the work; there is no gate to own and nothing to test that the type does not already say |
+| **(b)** must gate | a **named** gate, in the module that owns the carrier, and a test that asserts **both** sides | *one owner*: a gate mirroring a carrier refinement belongs to the module that *is* the unrefined carrier, not the module that first needed it — a sibling entry point that must not import the first module will otherwise write a second answer to the same question. And a test that checks only our behaviour cannot tell a deliberate divergence from a reference implementation apart from a regression |
+| **(c)** cannot express it | a construction-time **refusal**, a test that pins it, and a written **reason** | the reason is the part that gets skipped and the part that matters: an unexplained gate is indistinguishable from an un-migrated one, and the next reader "fixes" the signature |
+
+### The exception: a gate a refutation depends on stays — and it is narrower than it was written
+
+This inverts the rule, and the case for it used to be `(literal)`'s `ℓ ⊆ D`: the gate *can* be
+typed, and typing it was said to delete the theorem exhibiting a literal that is held and
+unwritable, which is (B) failing. For a model whose job is to be checked rather than trusted,
+"this cannot be said" is weaker than "this can be said, and here is the theorem saying why it is
+wrong" — the second ports to a test in the host and the first ports to nothing.
+
+**That argument is right and its example was wrong, which narrows the exception.** `152ab6b`
+typed the gate and the witness survived: it moved to `literalNRule`, an ungated transcription of
+§3's rule that is deliberately not a `Term`, and
+`literalNRule_holds_what_it_cannot_write` says what it always said. So the exception is not "a
+refutation depends on this gate" but:
+
+> Keep the gate only where the refutation **cannot be restated outside the term language**. If
+> the thing being refuted is a rule rather than one of our constructors, a standalone
+> transcription carries it and the gate can go.
+
+The `℘⁺fin` repair is the case that still pays: typing it destroyed the only `Double`-free
+witness that `opaque`'s exactness row over-claims, and no transcription recovers that one,
+because the claim is about our own row.
+
+### Measures do not port, so they are pure overhead
+
+`denote`'s `fuel` was unnecessary — a structural definition compiles — and the host reading
+sharpens why that mattered: **no line of `src/` has a fuel parameter.** A measure standing in
+for a recursion the checker could not see corresponds to *nothing* in an implementation. So the
+discipline is a hierarchy, not one rule, in descending order of what it buys:
+
+1. **measure → structure.** No host counterpart at all, so deleting one costs the
+   correspondence nothing. Worth an order of magnitude more than (2) on this codebase.
+2. **gate → type**, where the condition is decidable from a constructor's own arguments at
+   construction *and* the host can mirror it, or can pay (b) or (c) honestly.
+3. **keep the gate**, where the exception above genuinely applies.
+
+### Targets differ, and that is a fact about certification
+
+The same structure ports with different fidelity. `NEFinset α` is not expressible for a
+variadic in TypeScript and is a newtype with a private constructor in Rust.
+`literal (k : GroundKind) (ls : NEFinset k.Carrier)` is a discriminated union of literal types
+in TypeScript, easy to widen by accident, and in Rust an enum with a distinct payload per
+variant — which *is* the indexed family, and is the clearest case where the model's newest shape
+ports better than its old one. `Attr.n : WFNumeral` wants a checked newtype in both; TypeScript
+has no nominal typing, so the branded-type trick is the closest thing and a cast defeats it.
+
+**So a guarantee that must be a gate in one target may be structural in another.** The three
+cases are re-answered per target, at the time that target is certified — not in advance, and not
+as a reason to shape the model around one language. The model's job is to make the guarantee
+structural *in the model*; how much each target carries is that target's certification, which is
+a separate and currently unmet obligation.
+
+---
+
+## 9. Open architectural questions
 
 One line each, with the number or name that decides it.
 
@@ -665,7 +738,7 @@ lookup is and not a lever on the model. `src/` is not aligned and that is a sepa
 
 ---
 
-## 9. If you change something
+## 10. If you change something
 
 - New module under `Calculus/` → reachable from `Axioms.lean` (§1).
 - New stratum in the term family → all eight companions (§2), counted per side.
@@ -686,3 +759,19 @@ lookup is and not a lever on the model. `src/` is not aligned and that is a sepa
   *difference*.
 - Touching a normative document, the advertised axiom base, or `src/` behaviour → that is the
   user's decision. Deliver the measurement and stop.
+
+### …and on the `src/` side, per structural guarantee (§8)
+
+- Which of §8's three cases is this host in? Answer it before writing the gate, not after.
+- **(a)** Name the host type that carries it. No gate, no test.
+- **(b)** The gate lives in the module that owns the carrier, not the first caller. One owner.
+- **(b)** The test asserts *both* sides wherever the behaviour diverges from a reference
+  implementation — otherwise a deliberate divergence and a regression look identical.
+- **(c)** Construction-time refusal, a test that pins it, and a comment saying why the type
+  cannot carry it.
+- Does a refutation depend on this being a gate *in the model*? Only then keep it, and only if
+  the refutation cannot be restated outside the term language (§8).
+- Is it a *measure* rather than a guard? Then it has no host counterpart and is overhead (§8).
+- **Un-typeable never means un-checkable.** A constraint that fails "can it be a type?" is not
+  disposed of; it is handed to the next question, "does anything enforce it?". Filing it as
+  closed on the first answer is a recorded failure mode of this project's own auditing.
