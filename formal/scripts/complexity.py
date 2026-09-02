@@ -73,15 +73,33 @@ POINTS = [re.compile(p) for p in (
     r'\bby_cases\b', r'<;>', r'\ball_goals\b', r'\bany_goals\b', r'\.elim\b')]
 
 
-def branches(lines):
-    """1 + the decision points, the standard cyclomatic convention."""
-    n = 1
+def decision_points(lines):
+    """The decision points alone, with no +1 for the declaration itself.
+
+    **The +1 is deliberately not here, and its absence is the whole of what makes the per-file
+    total usable as a ratchet.** The textbook cyclomatic number is `1 + decisions` per unit, and
+    summing that over a file adds one per declaration — so extracting a lemma raises the total
+    by one even when it strictly reduces the work. That is backwards for this repo, where §9
+    wants a proof to cite a lemma rather than inline it: the first real use of this metric was
+    `AdmA_exact`'s fan, where pulling two cases into named lemmas cut the proof term from
+    2754337 tree nodes to 59397 and the ratchet called it a rise. A guard that fires on the
+    refactor it exists to encourage is a guard nobody keeps.
+
+    `branches()` below adds the 1 back for a single declaration, which is the right convention
+    for *ranking* one proof against another.
+    """
+    n = 0
     for line in lines:
         if ROW.match(line):
             n += 1
         for rx in POINTS:
             n += len(rx.findall(line))
     return n
+
+
+def branches(lines):
+    """`1 + decision_points`, the textbook number, for ranking one declaration."""
+    return 1 + decision_points(lines)
 
 
 def declarations():

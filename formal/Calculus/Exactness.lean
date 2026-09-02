@@ -1237,13 +1237,18 @@ theorem selOptA_le_AdmAAny {opts : List Term} {a : Attr}
 @[simp] theorem AdmA_literal (k : GroundKind) (ls : NEFinset k.Carrier) (a : Attr) :
     AdmA (.literal k ls) a = AdmALit k ls a := by unfold AdmA; rfl
 
-/-! Two bases stated as standalone lemmas, with their carriers written out.
+/-! The four bases whose stored attribute *is* the value, stated as standalone lemmas with
+their carriers written out.
 
 `GroundKind.Carrier` is reducible, so `NEFinset k.Carrier` at a *constructor* `k` is the same
 type as `NEFinset Bytes` — but it is not the same *expression*, and `simp` inside the goal
 re-derives that on every rewrite. At `binary` (`List UInt8`) and `null` (`Unit`) that was
 enough to exhaust the heartbeat budget. Taking the carrier as a plain type in the statement
-does the reduction once, at elaboration. -/
+does the reduction once, at elaboration.
+
+`string` and `boolean` are here for the same reason and not because they failed: inline in
+`AdmA_exact` they were re-derived inside a twenty-case fan, and the row each one needs is a
+statement about *one* base. `AdmA_exact` cites all four and unfolds none. -/
 
 theorem AdmALit_binary_exact (ls : NEFinset Bytes) (a : Attr) :
     AdmA (.literal .binary ls) a = true ↔ ((denote (Term.literal .binary ls)).p a).isSome = true := by
@@ -1256,6 +1261,22 @@ theorem AdmALit_null_exact (ls : NEFinset Unit) (a : Attr) :
   cases a <;>
     simp [AdmA_literal, AdmALit, denote, denote, literalCodec, baseCodec, Codec.restrict, inL,
           nullCodec]
+
+/-- `(literal)` at `string`, read side. `NEFinset String` and not `NEFinset k.Carrier`: the
+    carrier reduces once here instead of on every rewrite. -/
+theorem AdmALit_string_exact (ls : NEFinset String) (a : Attr) :
+    AdmA (.literal .string ls) a = true ↔ ((denote (Term.literal .string ls)).p a).isSome = true := by
+  cases a <;>
+    simp [AdmA_literal, AdmALit, denote, denote, literalCodec, baseCodec, Codec.restrict, inL,
+          stringCodec]
+
+/-- `(literal)` at `boolean`, read side. Same shape as `AdmALit_string_exact`, and the two
+    cannot share a `simp` set — one of them would have to name the other's codec. -/
+theorem AdmALit_boolean_exact (ls : NEFinset Bool) (a : Attr) :
+    AdmA (.literal .boolean ls) a = true ↔ ((denote (Term.literal .boolean ls)).p a).isSome = true := by
+  cases a <;>
+    simp [AdmA_literal, AdmALit, denote, denote, literalCodec, baseCodec, Codec.restrict, inL,
+          booleanCodec]
 
 
 /-- The converse direction on the attribute side: the row is `dom(p)`, not a bound on it. -/
@@ -1675,12 +1696,8 @@ theorem AdmA_exact : ∀ (t : Term), ExactA t
         all_goals (simp only [AdmA_literal, AdmALit]; rfl)
       -- the four bases whose stored attribute *is* the value, one tight simp set each: a
       -- shared set has to mention every base's codec, and one of those is `number`
-      case string =>
-        cases a <;> simp [AdmALit, denote, denote, literalCodec, baseCodec, Codec.restrict,
-                          inL, stringCodec]
-      case boolean =>
-        cases a <;> simp [AdmALit, denote, denote, literalCodec, baseCodec, Codec.restrict,
-                          inL, booleanCodec]
+      case string => exact AdmALit_string_exact ls a
+      case boolean => exact AdmALit_boolean_exact ls a
       case binary => exact AdmALit_binary_exact ls a
       case null => exact AdmALit_null_exact ls a
   | .custom ce cp => by intro a; simp [AdmA, denote, denote]

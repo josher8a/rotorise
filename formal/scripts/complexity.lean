@@ -26,11 +26,11 @@
 
   ## So the sharing ratio is the metric, and it is the sharpest signal in the tree
 
-  Everything measured sits between 2x and 19x. `AdmA_exact` is at **380x**, alone. That is the
-  signature of a tactic duplicating one large subterm across every branch — a `simp` or
-  `decide` fan — and **no textual measure can see it**: the same proof is calm at 0.58 branches
-  per line, and its 104 source lines are unremarkable. When a proof is slow to check and reads
-  fine, this is the column to look at.
+  The band is 2x to 19x. A ratio outside it is a tactic duplicating one large subterm across
+  every branch — a `simp` or `decide` fan — and **no textual measure can see one**: the proof
+  that carried this development's only example was calm at 0.58 branches per line over 104
+  unremarkable source lines. When something is slow to check and reads fine, this is the
+  column, and `fanOf` is what names the culprit once the ratio says one is there.
 
   ## Transitive dependency count is a dead end, measured, so nobody rebuilds it
 
@@ -99,8 +99,50 @@ private partial def dagGo (e : Expr) : StateM ExprSet Unit := do
   | .proj _ _ x      => dagGo x
   | _                => return
 
-/-- Distinct subterms: what the kernel stores and typechecks. This is the size. -/
+/-- Distinct subterms: what the kernel stores and typechecks. This is the size.
+
+    **It reports a number and never which subterm recurred.** That gap is why `fanOf` exists:
+    a 380× ratio says a fan is present and says nothing about where, and the first attempt at
+    probing one went looking for a naming facility this had never had. -/
 def dagSize (e : Expr) : Nat := ((dagGo e).run {}).2.size
+
+/-- Every occurrence of every subterm, so the count is the true multiplicity.
+
+    A full tree walk and therefore as expensive as `treeSize`; it is the price of naming the
+    fan rather than detecting it. Ranked by `occurrences × own size`, which is what the
+    duplication actually costs — the top of that ranking on `AdmA_exact` was
+    `Calculus.inL.match_1`, 1053 times at ~800 nodes, and `dite` 2922 times. That named the
+    defect: three `literal` bases had `inL` in a `simp` set inline, where `binary` and `null`
+    had already been pulled into standalone lemmas for the same reason. -/
+partial def occGo (e : Expr) : StateM (Std.HashMap Expr Nat) Unit := do
+  modify fun m => m.insert e (m.getD e 0 + 1)
+  match e with
+  | .app f a         => occGo f; occGo a
+  | .lam _ t b _     => occGo t; occGo b
+  | .forallE _ t b _ => occGo t; occGo b
+  | .letE _ t v b _  => occGo t; occGo v; occGo b
+  | .mdata _ x       => occGo x
+  | .proj _ _ x      => occGo x
+  | _                => return
+
+/-- The `n` costliest duplicated subterms of `e`, as (occurrences × size, occurrences, size,
+    head constant). Subterms occurring once, and those under three nodes, are dropped: the
+    spine occurs once by construction and would otherwise fill the ranking. -/
+def fanOf (e : Expr) (n : Nat := 10) : Array (Nat × Nat × Nat × String) :=
+  let m := ((occGo e).run {}).2
+  let rows := m.toArray.filterMap fun (sub, times) =>
+    if times < 2 then none
+    else
+      let sz := treeSize sub
+      if sz < 3 then none
+      else
+        let head := match sub.getAppFn with
+          | .const c _ => toString c
+          | .lam ..    => "(lam)"
+          | .fvar ..   => "(fvar)"
+          | _          => "(other)"
+        some (times * sz, times, sz, head)
+  (rows.qsort fun a b => a.1 > b.1)[:n]
 
 /-- Constants named by a declaration's type *and* value — `blast_radius.lean`'s walk, one step
     rather than closed. Coupling, not depth: the closure is a dead end and the header says why. -/
@@ -122,8 +164,21 @@ def watched : List Name :=
    `Calculus.soundness_both, `Calculus.carrier_denote, `Calculus.typed_TSub,
    `Calculus.occV, `Calculus.aeq, `Calculus.ExactV_opaq, `Calculus.sepV_refine_disjoint]
 
+/-- Set to a declaration name to print its fan instead of the table. -/
+def fanTarget : Option Name := none
+
 run_cmd do
   let env ← Lean.getEnv
+  match fanTarget with
+  | some target =>
+    match (env.find? target).bind (·.value?) with
+    | none => IO.println s!"  {target}: no value"
+    | some v =>
+      IO.println s!"  fan of {target}"
+      IO.println "    nodes    times    size  head constant"
+      for (cost, times, sz, head) in fanOf v do
+        IO.println s!"{cost.repr.leftpad 9}{times.repr.leftpad 9}{sz.repr.leftpad 8}  {head}"
+  | none =>
   IO.println "      dag      tree  sharing    deps  declaration"
   IO.println "  ─────────────────────────────────────────────────────────────"
   for n in watched do
@@ -139,5 +194,6 @@ run_cmd do
   IO.println ""
   IO.println "  dag     distinct subterms — the size the kernel checks"
   IO.println "  tree    every occurrence — not a size, only the ratio's denominator"
-  IO.println "  sharing tree/dag; 2-19x is normal here, 380x is a simp fan"
+  IO.println "  sharing tree/dag; 2-19x is the band, outside it is a fan — use fanOf"
   IO.println "  deps    constants named by type and value; coupling, not depth"
+  IO.println "  (set `fanTarget` to a name to rank its duplicated subterms instead)"

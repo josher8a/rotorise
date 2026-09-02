@@ -88,7 +88,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from name_drift import strip_comments, LEANISH, NOISE, RETIRED, CURRENT
 # `complexity.py` owns the branch definition and the argument for it; this file only holds
 # the number to its baseline. Same reason `strip_comments` is imported and not copied.
-from complexity import branches, DECL
+from complexity import decision_points, DECL
 
 BASELINE = os.path.join("scripts", "ratchets.json")
 
@@ -165,8 +165,10 @@ def measure():
         out["unfolding_sites"][path] = sum(1 for l in lines if SITE.search(l))
         out["undocumented_public_theorems"][path] = len(undocumented(path))
         heads = [i for i, l in enumerate(lines) if DECL.match(l)]
+        # decision points, not per-declaration cyclomatic numbers: summing `1 + decisions`
+        # would make extracting a lemma a rise. `complexity.py`'s `decision_points` says why.
         out["branches"][path] = sum(
-            branches(lines[i:(heads[k + 1] if k + 1 < len(heads) else len(lines))])
+            decision_points(lines[i:(heads[k + 1] if k + 1 < len(heads) else len(lines))])
             for k, i in enumerate(heads))
     for path in CURRENT:
         if not os.path.exists(path):

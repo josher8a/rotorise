@@ -245,6 +245,23 @@ naming `(custom)`'s laws — in `Obligations`, "stated where they can mention th
 `(held)`'s premise-to-index move (`c66d493`) was the syntactic kind and landed; this is the
 semantic kind. **The criterion is necessary, not sufficient — measure the site count too.**
 
+**Unifying `κ` with `occV`/`occA` — probed and rejected, and the cost *shape* is the reason.**
+`Kind` is a coarsening of `Slot` by design: `Value.kind` and `Value.slot` are both functions of
+the constructor, and the first collapses `strSet`/`numSet`/`binSet` to `.set`. So `occV` really
+is `κ`'s question at a finer grain, and a Slot-granular `κ` stays computable — `Slot` never
+inspects a payload, where `adm`'s noncomputability comes from comparing `Double`s inside the
+literal row. The gate passes and the merge still does not pay. The two tables have **no code
+contact**: `κ` is 32 code lines across `Discharge`, `Exactness` and `Refutations`, `occV`/`occA`
+and their list companions are 85 references entirely inside `Orthogonality.lean`, and `κ`
+appears in that file only in prose. And their ⊤ encodings are incompatible where it is
+load-bearing — `κ` is `Option (List Kind)` with `none` as *no information*, consumed by six
+`κ t = some ks` hypotheses and by `Adm_kind` killing the `held`/`custom`/`opaq` rows with
+`nomatch`, against a total predicate whose ⊤ is `occTop`, which cannot distinguish "occupies
+everything" from "unknown" and is one of §6's two sanctioned lint hits for exactly that reason.
+So a merge is not widening a codomain, it is choosing one of two ⊤ encodings and rewriting the
+other's consumers — pushing the coarse/fine distinction into three files to shrink one. What
+killed it is the shape of that cost, not its size.
+
 ### 4b. A row asks its codec instead of describing it
 
 The analysis tables in `Discharge.lean` (`κ`, `ident`, `adm`, `admA`) approximate what a codec
@@ -290,7 +307,7 @@ already.
 ### 4c. One codec, stated once for both sides of the pair
 
 `Combinators.lean` is <!-- count:combinators_lines -->3966<!-- /count --> lines of the tree's
-<!-- count:tree_lines -->17330<!-- /count -->, and this is its organizing idea; without it
+<!-- count:tree_lines -->17347<!-- /count -->, and this is its organizing idea; without it
 the file reads as the inventory `README.md` already has. A constructor is a **prism** —
 `Ctor α β`, with `into`/`out` and the laws `out_into` (matching what was built returns it) and
 `into_out` (anything that matches was built) — and those two *are* §2's (R) and (C) at a
@@ -533,6 +550,13 @@ does its work by wide case analysis. Per file the two rank at **Spearman 0.56**,
 second number rather than a restatement: `Discharge.lean` is 8.9 branches per unfolding site
 and `Orthogonality.lean` is 31.1, the first hand-unfolding heavy and the second case-analysis
 heavy where the older guard is blind. `ratchet.py` holds the count. Two blind spots:
+- **The per-file total counts decision points and not per-declaration cyclomatic numbers**,
+  and the difference is the whole of whether the metric is usable. `1 + decisions` summed over a
+  file adds one per declaration, so *extracting a lemma raises the total* even when it strictly
+  reduces the work — which is backwards for §9, where a proof citing a lemma is the goal. Found
+  on the metric's first real use: pulling two cases out of `AdmA_exact` cut its proof term from
+  2754337 tree nodes to 59397 and the ratchet called it a rise. A guard that fires on the
+  refactor it exists to encourage is a guard nobody keeps.
 - **The density is the sharper reading and is deliberately not ratcheted.** `occV_sound` at 1.48
   branches a line is the densest proof here; `soundness_both` at 0.36 over 122 lines is a table,
   one line per typing rule, exactly as §5 claims — so the ratio is the number that vindicates
@@ -552,6 +576,10 @@ whole reason this file has a header: `Expr` is a DAG, a naive recursive size cou
 occurrence of a shared subterm, and `AdmA_exact` reads as *tree 2754337 / dag 7239*. The tree
 number would have been reported here as a finding — three hundred times the largest thing in
 the development — when the kernel stores 7239 nodes and `Adm_exact`, at 8844, is **larger**.
+**`dagSize` reports a number and never a location**, which is a gap worth stating rather than
+discovering: a ratio says a fan is present and says nothing about where. `fanOf` closes it with
+a full occurrence walk ranked by occurrences × own size, and on the one fan this development
+had it named `inL.match_1` at 1053 occurrences of ~800 nodes.
 - **The sharing ratio is the sharpest signal in the tree.** Everything measured sits at 2–19×;
   `AdmA_exact` is at **380×**, alone, which is a tactic duplicating one large subterm across
   every branch. No textual measure sees it — that proof is calm at 0.58 branches a line over
