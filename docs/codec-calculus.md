@@ -348,10 +348,23 @@ while the held set is numeric, so `(R)` obliges the reading to return the number
 
 ### Containers
 
+`(set)`'s premise line is **an index**, not a hypothesis. It read `⊢ c : T ⇝ μ` together with
+`μ ∈ {S, N, B}`, and that second premise was the whole content: the member test was partial, so the
+constructor accepted element terms the rule then refused — `set(union(string, boolean))` was the
+standing witness. Four element terms survive it, so `SetBase` is those four, `b.held` and
+`b.member` are functions of the index, and the refusal is a type error. **Four bases onto three wire
+members**: `number` and `decimal` both store `NS` and are not the same base, one being the caller's
+platform number and the other the host-independent spelling.
+
+What that gives up, deliberately: `set(refine(b, q))` and `set(literal(…))` are **not** lost — a
+restriction of the elements is a restriction of the set, which is `setCodec_restrict` — but
+`set(held(…))` and `set(legacy(…))` are, having no set-level spelling and no appearance in any
+schema.
+
 ```
-⊢ c : T ⇝ μ      μ ∈ {S, N, B}
-──────────────────────────────── (set)
-⊢ set(c) : ℘⁺fin(T) ⇝ μS
+b ∈ {string, number, decimal, binary}
+─────────────────────────────────────── (set)
+⊢ set(b) : ℘⁺fin(b.held) ⇝ b.member
 
 ⊢ c : T ⇝ μ                          ⊢ cᵢ : Tᵢ ⇝ μᵢ    i ∈ 1…n
 ──────────────────────── (array)     ───────────────────────────────────── (tuple)
@@ -657,6 +670,51 @@ below names. A `⊤` option is one **(K)** never separates, for the same reason 
 it could be anything. That costs nothing, because failing to discharge is not refusing — **(U)**
 still guards each value the option is actually given.
 
+### A weaker condition, proved and not adopted
+
+The reading above rejects `∣{i : cᵢ admits it}∣ = 1` as too strong and settles for *undefined at the
+overlap*. There is a third position between them, and it is worth recording because the model now
+proves what it costs and what it buys.
+
+**Confluent admission.** Where several options admit, require only that they **agree** — and then
+act. Stated as *first-match plus an obligation*, which is what makes it usable: the rule takes the
+first admitter and never compares attributes, while the obligation says the choice did not matter.
+So declaration order enters the definition and leaves again as a theorem. `selectF` and
+`ConfluentAt` (`Continuity.lean`) are the two halves.
+
+It is strictly weaker than **(U)**, so strictly more total, and the case it gains is the one this
+section already named as the price: `union(array(literal("A")), array(literal("B")))` writes `[]`,
+because both options write `⟨L, []⟩` and the choice is inconsequential. "Lawful, minus the empty
+case" loses the *minus*.
+
+What it costs is stated as plainly. **Order-independence stops being unconditional.** Under **(U)**
+commutativity is a fact about the definition — §6's `union(c₁, c₂, …) ≡ union(c₂, c₁, …)` has no
+hypotheses. Under confluence it holds *given the obligation*, and a specification whose commutativity
+rests on a premise is weaker as a specification, whatever it gains in totality. That trade is the
+reason this is recorded here and not adopted.
+
+And it changes what the fixpoint argument says. The non-continuity result
+(`docs/codec-formalization.md` §7, and `Continuity.lean`) — *"a union whose options are genuinely
+recursive has no fixpoint semantics"* — is a refutation of **counting**, not of `union`:
+
+- `confluent_survives_the_refutation` — the recorded witness has both options writing `⟨S,"A"⟩`, so
+  the weaker rule still resolves where counting collapses to `none`;
+- `selectF_mono` — monotone given the obligation, which counting provably lacks;
+- `selectF_continuous` — continuous, and **needing no obligation at all**. Counting is continuous
+  too; monotonicity alone is what it lacks. So the whole obstruction was that unique admission is a
+  *negative* condition on the other options.
+
+Two things that are **not** established, and the second is why `lazy` under `union` stays
+unmodelled. A fixpoint is not shown to exist — monotonicity and continuity are its obligations, not
+its construction, and both theorems are the two-option case. And the obligation must hold at every
+stage of an unrolling, which is not automatic: `string_decimal_not_confluent` is two *ground* terms
+that both take `.str "1.5"` and store it differently. Where the options are pairwise disjoint it is
+vacuous, so a syntactic disjointness test — `Orth1` and `OrthM`, `Orthogonality.lean` — is what would
+license it.
+
+**Normatively, the rule is unique admission as stated above.** This subsection records a proved
+alternative and the trade, not a change to the judgement.
+
 ### The machinery of (K)
 
 Three auxiliary functions, defined by structural recursion so that **(K)** is decidable rather than
@@ -790,18 +848,36 @@ accept. They agree on most terms and part on four — and the partings go both w
 | term                        | `adm` — value side   | `admA` — attribute side           |
 | --------------------------- | -------------------- | --------------------------------- |
 | `literal(ℓ)` at base `string` | `ℓ`                | `ℓ`, as stored `S`                |
-| `literal(ℓ)` at base `number` | `ℓ`                | **`⊤`**                           |
+| `literal(ℓ)` at base `number` | `ℓ`                | `ℓ`, one read out — `admALit`     |
 | `discriminatedUnion(d, o…)` | the pooled tags of the `oᵢ`, found by looking `d` up | the same, in the stored item |
-| `number`                    | `D`                  | **`⊤`**                           |
+| `number`                    | `D`                  | `dom(p)`, asked of the codec      |
 | `decimal`                   | `Stored`             | `Stored`, as stored `N`           |
-| `refine(c, q)`              | `adm(c) ∩ q`         | `admA(c)`                         |
+| `refine(c, q)`              | `adm(c) ∩ q`         | `admA(c) ∩ q∘p` — `refineReads`   |
 | `legacy(c, r)`              | `adm(c)`             | **`⊤`**                           |
 | `union(c₁ … cₙ)`            | `⋃ adm(cᵢ)`          | `⋃ admA(cᵢ)`                      |
 | `nullable(c)`               | `adm(c) ∪ {null}`    | `admA(c) ∪ {⟨NULL, ∗⟩}`           |
-| `held(c, f, g)`             | **`⊤`**              | `admA(c)`                         |
+| `held(c, f, g)`             | `adm(c) ∘ f`         | `admA(c)`                         |
 | anything else               | `⊤`                  | `⊤`                               |
 
-All four partings are forced:
+**Three of these rows used to be `⊤`, and one parting remains.** The table above is the corrected
+one; the argument below is the original, kept because it is a good argument that reaches the wrong
+conclusion, and the way it fails is the same way three times.
+
+Each `⊤` was bought with the observation that **no syntactic set of attributes bounds the readable
+side** — true of `number`, of a numeric `literal`, and of `refine`. The inference does not follow: a
+row is not confined to syntax. It may **ask the denotation**, and the denotation is exactly what
+produces the value in question. `admA .number` is `dom(numberCodec.p)`; `admALit .number` is
+`dom((literalCodec .number ℓ).p)`; `refine`'s row decodes with the base and applies `q` to the result
+(`refineReads`). Each is `dom(p)` on the nose rather than a description of it, and each was
+previously recorded as impossible. `held`'s value side went the same way for a different reason: `f`
+is *data the term carries*, and a row is a function that may apply it, so `adm(c) ∘ f` is the
+pullback rather than a `⊤`.
+
+What survives is **one** parting into `⊤` — `legacy` on the read side — and one asymmetry of *shape*
+without a `⊤`: `held` pulls back along `f` where `admA` passes through, because `g` is total and
+post-processes while `f` gates the write.
+
+The original argument, for the record:
 
 - **`legacy(c, r)`.** The whole content of `legacy` is that `p` reads attributes `c` does not, so a
   passthrough `admA` would claim a bound on exactly the direction `r` widens. `legacy(literal("A"), r)`
