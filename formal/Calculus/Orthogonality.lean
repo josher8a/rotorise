@@ -5,9 +5,14 @@ import Calculus.Exactness
 
 `Typed.union` and `Obligations (.union opts)` between them carry two side conditions the
 model has been discharging by hand, once per shape: `DIncomp` (§5's (D)) and `UAtAct` (§5's
-residual (U)). Sixteen `sep*`/`uAtCan_*` theorems in `Discharge.lean`, `Exactness.lean` and
-`Refutations.lean` do that work, and about thirteen of them are the *same rule* at different
-constructors.
+residual (U)). Thirty-two `sep*`/`uAtCan_*`/`uAtAct_*` theorems live in `Discharge.lean` and
+`Exactness.lean` — not in `Refutations.lean`, whose separation theorems are all `not_sep*` and
+are refutations rather than discharges. Twenty-five of the thirty-two are the per-shape hand
+discharges; the other seven are the two generic dischargers, the `SepV`→`SepJV` bridges, the
+`refine`-family discharger, and the two `object` witnesses that exist in order to *fail*
+(`not_uAtCan_of_sepJ`). **Thirteen of the twenty-five are the *same rule* at different
+constructors**, and the by-phase table at the end of this file is that count, measured rather
+than estimated.
 
 `Orth` is that rule, written once. It is a **phase classifier**: given a pair of terms it
 answers whether there is a *syntactic certificate* that they cannot both admit one input.
@@ -681,8 +686,9 @@ theorem uAtCan_of_separates {opts : List Term}
     rw [optionSemOf_c] at he
     exact optionSem_self_admit t (hcl t ht) (hlaw t ht) he
 
-/-- …and from the decidable premise alone, which is where thirteen of the sixteen hand
-    `sep*`/`uAtCan_*` theorems live. -/
+/-- …and from the decidable premise alone, which reaches six of the twenty-five hand
+    discharges; seven more need `Separates` and `uAtCan_of_separates` above, for thirteen of
+    twenty-five between them. The by-phase table at the end of the file is the measurement. -/
 theorem uAtCan_of_orth {opts : List Term}
     (hlaw : ∀ t ∈ opts, Lawful (denote t))
     (hcl : ∀ t ∈ opts, t.isOpenObject = false)
@@ -918,7 +924,7 @@ Where the hand proofs sit, and the two that sit nowhere. `Orth` is the decidable
 | --- | --- | --- |
 | `sepV_string_dunion_nil` | slot | `Orth1` |
 | `sepV_number_opaque`, `sepA_number_opaque` | slot | `Orth1` |
-| `uAtCan_string_null`, `uAtCan_string_boolean` | slot | `Orth1` |
+| `uAtCan_string_null`, `uAtCan_string_boolean`, `uAtCan_number_opaque` | slot | `Orth1` |
 | `uAtCan_literal_literal`, `uAtCan_of_literalN_disjoint` | alternatives | `separates_literal_disjoint` |
 | `sepA_literalN_disjoint`, `sepA_literal_heldLiteral` | alternatives | read half of the same |
 | `sep_lazy_literal`, `sepA_lazy_literal`, `sep_nullable_plain` | alternatives | the same, under a transparent wrapper |
@@ -926,6 +932,7 @@ Where the hand proofs sit, and the two that sit nowhere. `Orth` is the decidable
 | `sepV_literal_heldLiteral`, `sepJV_set_literals` | opaque predicate | never — `f`, and a `q` inside a `refine` |
 | `uAtCan_dunion` | tag | a different constructor; already a theorem |
 | `uAtCan_opaque` | kind | one level below the term language |
+| `uAtAct_array_literals` | — | never — `UAtCan` is false of the pair, so there is nothing to certify |
 
 **Two fit no phase, and each is a limit worth naming.**
 
