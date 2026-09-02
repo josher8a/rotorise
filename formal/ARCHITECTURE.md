@@ -241,6 +241,19 @@ seventh row below was written that way from the start:
 | `refine` (read side) | `refineReads t q a` | "`q` tests the value a read produces" |
 | `nullable` | `Codec.ownsNull` | "`ownsNull` is a disjunction over both halves of the pair" |
 | `union` | the count, given the options' exactness | "a count is anti-monotone" — true of the *table*, recorded as a fact about the row |
+| `admA .legacy` | `admA t a \|\| (r a).isSome` — the subterm's row, or `r` | "`extendRead` widens `p` past the subterm's admissible set, which is the direction `admA` bounds" |
+
+**The last row is the odd one and the difference matters.** It does not ask its codec; it names
+both of `r`'s and the subterm's channels and takes the union, keeping the subterm's
+*over-approximation* rather than reaching past it. Asking was probed — the row
+`((denote (.legacy t r)).p a).isSome` is exact and compiles at a one-line cost — and **refused**,
+because it sees through `admA (.object _) = ⊤`, which §5 records as load-bearing slack rather
+than looseness. Two objects cannot be separated by `SepA` (both rows `⊤`); wrapped in a `legacy`
+they could be, while `select` still attempts both options, which is `not_uAtCan_of_sepJ`'s
+failure one wrapper out. So this row is as sharp as it can be *without* becoming unsound, and
+the excuse it retired was still a correct observation reaching a wrong conclusion: what
+`extendRead` widens *by* is `r`, data the term carries. `Exactness.lean`'s "why `legacy` was in
+the wrong family" reached this first, for the joint predicate.
 
 Every excuse in that column was a correct observation reaching a wrong conclusion, and the
 pattern is identical: *no syntactic set names it* is a reason to stop being syntactic, not a
@@ -325,9 +338,16 @@ and they hold from exactness alone for every term whose `specOf` is `none` — w
 but an `object`.
 
 So: do not delete `Discharge.lean`, and if you sharpen an `adm` row at a container, check
-whether you have just broken a discharge that was relying on the slack. `scripts/blast_radius.lean`
-exists to cost exactly this question and prints the four-way partition (old only / new only /
-both / neither).
+whether you have just broken a discharge that was relying on the slack.
+
+**And do not expect `scripts/blast_radius.lean` to cost that**, which this section used to say
+it did. Measured on the `admA .legacy` sharpening (§4b): the four-way partition is *identical*
+before and after — 75 old-only, 19 both, 136 new-only, 1433 neither — and the old-only set is
+unchanged name for name. It has to be: the walk measures dependence on a **name**, and
+sharpening a row changes a definition's *body*, not who depends on it. The instrument costs
+deleting or replacing a declaration; it is blind to a row that stays and says something
+different. What caught the consequence was the build (`AdmA_le_admA`'s `legacy` case stopped
+being `rfl`), and what caught the *hazard* was reading this section. Neither is an instrument.
 
 ### And a third machine, `Orth`, which does not pay — measured
 
@@ -437,7 +457,15 @@ constructor**: asked about `Term.object` against `Term.string`, the partition ca
 any one of them is "everything that touches `Term`". A constructor-shape change is a syntactic
 question wanting a syntactic instrument — the `Body` refactor was costed by hand-classifying 60
 hits into 57 code sites, and there was no shortcut. **And the syntactic instrument is `grep`,
-which has its own blind spot: anonymous-constructor patterns.** Changing `Typed.held`'s arity
+which has two blind spots of its own.**
+
+The first is a habit, not a limitation: **a `grep` piped into `head` is not a measurement.**
+Twice in one session a truncated pipe produced a false reading here — once nearly asserting in
+a commit message that `filter_map_AdmSpecs` and `filter_AdmSpecs` no longer existed, when the
+`| head -10` had simply filled with `AdmSpecs` hits first. If a claim rests on a grep, run the
+grep without a limit, or count it.
+
+The second is real: **anonymous-constructor patterns.** Changing `Typed.held`'s arity
 (`c66d493`) missed a consumer because `typed_μSyn` destructures it as `| _, _, _, .held h' _ =>`,
 which matches neither `Typed.held` nor `@held` nor `case held`; only the build found it. When
 costing a constructor change, grep the bare `.<name>` as well as the qualified form, and expect

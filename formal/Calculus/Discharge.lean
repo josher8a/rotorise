@@ -372,9 +372,12 @@ mutual
 /-- `adm`, attribute side. The two wrappers that are `⊤` for `adm` part company here,
     and the reason is which half of the pair each one touches.
 
-    `legacy` is **not** transparent: `extendRead` widens `p` past the subterm's
-    admissible set, which is exactly the direction `admA` claims to bound
-    (`not_admA_legacy`).
+    `legacy` is **not** transparent, and this row used to be `⊤` on that ground: `extendRead`
+    widens `p` past the subterm's admissible set, which is exactly the direction `admA` claims
+    to bound (`not_admA_legacy`). The premise is true and the conclusion did not follow — what
+    it widens by is `r`, data the term carries — so the row is `admA t a || (r a).isSome`, both
+    channels named. `not_admA_legacy` is unaffected: it refutes the *passthrough* `admA t`,
+    which is one disjunct of this row and not the row.
 
     `held` **is**, and this is the one case where `admA` sees further than `adm`.
     `through`'s `g` post-processes a read and is total, so `dom(p)` is the subterm's
@@ -438,10 +441,15 @@ noncomputable def admA : Term → Attr → Bool
   | .number => fun a => (numberCodec.p a).isSome
   -- The containers, by the empty-container argument on the value side.
   | .set _ | .array _ | .tuple _ _ | .record _ | .object _ => fun _ => true
-  -- `legacy` is the row that is `⊤` here and a passthrough above, and the asymmetry is
-  -- what `legacy` is for: `extendRead` widens `p` past the subterm's admissible set,
-  -- which is the direction `admA` bounds. `not_admA_legacy` is the witness.
-  | .legacy _ _ => fun _ => true
+  -- **`legacy` asks too now, and it is the last row that parted into `⊤`.** The excuse was
+  -- that `extendRead` widens `p` past the subterm's admissible set, which is the direction
+  -- `admA` bounds — true, and the wrong conclusion, because the thing it widens *by* is `r`,
+  -- which the term carries. Both channels are named, so the row is their union.
+  --
+  -- `not_admA_legacy` still stands and is about something else: §5's *passthrough*, `admA t`
+  -- alone, really is unsound here. A union is not a passthrough. `Exactness.lean`'s section
+  -- "why `legacy` was in the wrong family" is the analysis, and reached it first for `AdmA`.
+  | .legacy t r => fun a => admA t a || (r a).isSome
   -- `lazy` propagates here too, and for the same reason: `p` is the subterm's.
   | .lazy t => admA t
   -- `custom`'s read side, exact for the same reason: `p := cp`.
@@ -732,20 +740,44 @@ theorem admA_sound : ∀ (t : Term) {a v},
     case opaq lossy => simp_all [admA, denote]
     -- `number` joined them: the row is `dom(p)`, and `hp` says `p` is defined here
     case number => simp_all [admA, denote]
+    -- `legacy` is the union of two named channels, so the read landed in one of them
+    case legacy t' r =>
+      rw [denote_legacy] at hp
+      simp only [admA, Bool.or_eq_true]
+      rcases extendRead_p.mp hp with hcv | ⟨-, hrv⟩
+      · exact Or.inl (admA_sound t' hcv)
+      · exact Or.inr (by simp [hrv])
     all_goals rfl
 
-/-! ### Why `admA` has no `legacy` case
+/-! ### Why `admA` has no *passthrough* `legacy` case — and why it does have a row
 
-    §5 lists `refine`, `optional`, `fallback` and `legacy` as passing `adm` through, on
-    one `adm`. The value side can: `adm` above does have a `legacy` case. The attribute
-    side cannot, and the reason is what `legacy` is for — `extendRead` widens `p` by `r`,
-    which is exactly the direction `admA` bounds.
+    This section was headed "Why `admA` has no `legacy` case" and argued that it could not
+    have one. **The argument was right and the conclusion was wrong**, in the shape §4b's table
+    records for every describing row that has been retired: §5 lists `refine`, `optional`,
+    `fallback` and `legacy` as passing `adm` through on one `adm`; the value side can and does;
+    the attribute side cannot, *because* `extendRead` widens `p` by `r`.
 
-    `admA_sound` is what would break. The witness below reads an `N` attribute out of a
-    `legacy` over a string literal, so a passthrough `admA` would claim the read is
-    inside `literal("A")`'s admissible set when the whole point of the migration is that
-    it is not. This is the specification defect with no other machine-checked witness;
-    `docs/codec-formalization.md` §4 records it. -/
+    All of that is true, and none of it says the row must be `⊤`. It says the row cannot be the
+    **subterm's alone**. `r` is data the term carries, so `dom(p)` is `dom((denote t).p) ∪
+    dom(r)` with both halves named, and the row is `admA t a || (r a).isSome`.
+    `Exactness.lean`'s "Adapters and alternatives, and why `legacy` was in the wrong family"
+    got there first, for the joint predicate, and the reasoning is not repeated here.
+
+    **What survives untouched is the witness**, and it is worth being exact about what it
+    refutes. `admA_sound` would break for the *passthrough* — `admA t` on its own — and the
+    witness below is the proof: it reads an `N` attribute out of a `legacy` over a string
+    literal, so a passthrough would claim the read is inside `literal("A")`'s admissible set
+    when the whole point of the migration is that it is not. That is one disjunct of the row,
+    not the row. This is the specification defect with no other machine-checked witness;
+    `docs/codec-formalization.md` §4 records it.
+
+    A tighter row was probed and refused: `((denote (.legacy t r)).p a).isSome` is exact and
+    compiles at a one-line cost, but it replaces the subterm's *over-approximation* with the
+    subterm's exact read domain — so it sees through `admA (.object _) = ⊤`, which §5 of
+    `ARCHITECTURE.md` records as load-bearing slack rather than looseness. Two objects cannot
+    be separated by `SepA` because both rows are `⊤`; wrapped in a `legacy` they could be,
+    while `select` still attempts both options. That is `not_uAtCan_of_sepJ`'s failure one
+    wrapper out, so the row keeps the subterm's row rather than its codec. -/
 
 /-- A migration that reads a numeral into the literal's value — the shape `legacy` exists
     for, and the shape no syntactic set over the subterm can bound. -/
