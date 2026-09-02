@@ -5,13 +5,20 @@ import Calculus.Opaque
 /-!
 # Denotation
 
-`denote fuel t` dispatches each term to its certified combinator (Combinators.lean).
-Fuel is primary: every recursive call decrements it, so termination is structural on
-`Nat` and `lazy` costs nothing special — at fuel 0 every term's pair is empty and its
-laws hold vacuously. The **index is not**: `denote 0 t` keeps `μ := μSyn t`, which is the
-whole content of `denote_μ` and the reason the `⇝` column stays truthful at every depth.
-The doc's `lazy` case ("partiality is doing the termination argument's work") is this,
-literally. Laws are stated for all fuel (Soundness.lean).
+`denote t` dispatches each term to its certified combinator (Combinators.lean), and the
+recursion is **structural** — `Term.lazy` carries a plain `Term`, so there is nothing to
+stage.
+
+This paragraph described `denote fuel t` and said "fuel is primary: every recursive call
+decrements it". That was the shape until the ω-layer was deleted and `denote` lost its fuel,
+which is the change that also retired `denoteω` as a name for `denote`. What survived the
+deletion is the fact the fuel was never needed for: `μ := μSyn t` is a *function of the
+term*, which is the content of `denote_μ` and the reason the `⇝` column stays truthful.
+
+Why it need not stage is `Continuity.lean`'s subject: a union resolved by *unique* admission
+is anti-monotone, so a genuinely recursive union has no fixpoint semantics under that rule —
+there is no recursion to approximate, so no approximation to be non-monotone. Laws are in
+Soundness.lean.
 -/
 
 namespace Calculus
