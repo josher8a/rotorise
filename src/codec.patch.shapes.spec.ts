@@ -10,7 +10,6 @@ import { describe, expect, it } from 'vitest'
 import {
     CodecError,
     discriminatedUnion,
-    literal,
     number,
     object,
     optional,
@@ -40,10 +39,10 @@ describe('shipments', () => {
         },
         {
             codec: {
-                TAG: literal('SHIPMENT'),
+                TAG: string('SHIPMENT'),
                 userId: string,
                 shipmentId: string,
-                status: literal('PENDING', 'SETTLED'),
+                status: string('PENDING', 'SETTLED'),
                 createdAt: string,
                 provider: string,
                 vendorShipmentId: string,
@@ -53,7 +52,7 @@ describe('shipments', () => {
     )
 
     it('rebuilds only the key a status change invalidates, TAG unasked', () => {
-        // `TAG: literal('SHIPMENT')` admits one value, so the codec supplies it and the signature
+        // `TAG: string('SHIPMENT')` admits one value, so the codec supplies it and the signature
         // does not ask. This call carried `{ TAG: 'SHIPMENT' }` as context before the codec was read.
         const keys = Shipments.keyUpdates({ status: 'SETTLED' })
         expect(Object.keys(keys)).toEqual(['GSI1PK'])
@@ -241,8 +240,8 @@ describe('a literal decides a component only when it admits one value', () => {
         },
         {
             codec: {
-                TAG: literal('ROW'),
-                kind: literal('A', 'B'),
+                TAG: string('ROW'),
+                kind: string('A', 'B'),
                 id: string,
                 label: string,
             },
@@ -251,7 +250,7 @@ describe('a literal decides a component only when it admits one value', () => {
 
     it('still asks for a many-valued literal', () => {
         const _needsKind = () =>
-            // @ts-expect-error GSI2PK is built from `kind`, and literal('A', 'B') decides nothing
+            // @ts-expect-error GSI2PK is built from `kind`, and string('A', 'B') decides nothing
             Rows.keyUpdates({ label: 'x' })
         expect(typeof _needsKind).toBe('function')
     })
@@ -286,7 +285,7 @@ describe('a constant is only ever as good as the codec that claims it', () => {
                 { PK: ['id'], GSI1PK: ['TAG', 'label'] },
                 {
                     // @ts-expect-error one map describes one variant and mis-describes the rest
-                    codec: { TAG: literal('A'), id: string, label: string },
+                    codec: { TAG: string('A'), id: string, label: string },
                 },
             )
         expect(typeof _single).toBe('function')
@@ -304,7 +303,7 @@ describe('a constant is only ever as good as the codec that claims it', () => {
             { PK: ['id'], GSI1PK: ['TAG', 'label'] },
             {
                 codec: {
-                    TAG: literal('A'),
+                    TAG: string('A'),
                     id: string,
                     label: string,
                 } as never,
@@ -315,7 +314,7 @@ describe('a constant is only ever as good as the codec that claims it', () => {
         expect(() => (Rows as never as ItemWriter).unsafeToItem(b)).toThrow(
             CodecError,
         )
-        expect(() => literal('A').unsafeEncode('B' as 'A')).toThrow(
+        expect(() => string('A').unsafeEncode('B' as 'A')).toThrow(
             "'B' is not one of 'A'",
         )
         // and for a row it does admit, the codec and the constant agree
@@ -338,8 +337,8 @@ describe('a constant is only ever as good as the codec that claims it', () => {
         // read as one `M` value rather than through `.item`, which is the whole difference:
         // an attribute codec has no variants to ask
         const asUnion = discriminatedUnion('TAG', [
-            object({ TAG: literal('A'), id: string, label: string }),
-            object({ TAG: literal('B'), id: string, label: string }),
+            object({ TAG: string('A'), id: string, label: string }),
+            object({ TAG: string('B'), id: string, label: string }),
         ])
 
         expect(() =>
@@ -390,19 +389,19 @@ describe('a union entity, described by a tagged codec', () => {
         {
             codec: discriminatedUnion('type', [
                 object({
-                    TAG: literal('INVOICE'),
-                    type: literal('CARD'),
+                    TAG: string('INVOICE'),
+                    type: string('CARD'),
                     orgId: string,
                     invoiceId: string,
-                    status: literal('NEW', 'DONE'),
+                    status: string('NEW', 'DONE'),
                     vendorInvoiceId: string,
                 }),
                 object({
-                    TAG: literal('INVOICE'),
-                    type: literal('PICKUP'),
+                    TAG: string('INVOICE'),
+                    type: string('PICKUP'),
                     orgId: string,
                     invoiceId: string,
-                    status: literal('NEW', 'DONE'),
+                    status: string('NEW', 'DONE'),
                 }),
             ]).item,
         },
@@ -434,7 +433,7 @@ describe('a union entity, described by a tagged codec', () => {
         )
     })
 
-    /** Every variant writes `TAG: literal('INVOICE')`, so the variants together decide it. */
+    /** Every variant writes `TAG: string('INVOICE')`, so the variants together decide it. */
     it('reads a constant the variants agree on', () => {
         // GSI2SK is built from TAG, orgId and invoiceId; only orgId has to be supplied
         const keys = Invoices.keyUpdates({ invoiceId: 'p9' }, { orgId: 'o1' })
@@ -461,7 +460,7 @@ describe('a union entity, described by a tagged codec', () => {
     })
 
     /**
-     * `type` is `literal('CARD')` in one variant and `literal('PICKUP')` in the other, so it is
+     * `type` is `string('CARD')` in one variant and `string('PICKUP')` in the other, so it is
      * exactly what the variants do not agree on — deciding it is their whole disagreement. `TAG`
      * is a component of `PK` in the same change and is not asked for, which is the contrast.
      */

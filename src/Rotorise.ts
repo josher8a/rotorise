@@ -1122,7 +1122,7 @@ type AcrossVariants<Variants, K> = {
  * The attributes every variant decides, and decides the same way.
  *
  * The rule a union needs, and the same rule one map needs — "exactly one value" — asked of the
- * variants together rather than of a single codec. `TAG: literal('PAYMENT')` in every variant is
+ * variants together rather than of a single codec. `TAG: string('PAYMENT')` in every variant is
  * decided; a discriminator is not, because deciding it is the variants' whole disagreement.
  *
  * `keyof Variants[keyof Variants]` is the attributes *shared* by every variant, because `keyof` of

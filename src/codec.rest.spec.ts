@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import type { AnyCodec } from './codec'
-import { CodecError, literal, object, opaque, refine, string } from './codec'
+import { CodecError, object, opaque, refine, string } from './codec'
 import { tableEntry } from './Rotorise'
 import { checkMembersStable, checkRoundTrip } from './testing'
 
@@ -43,7 +43,7 @@ const scalar = refine(
     },
 )
 
-const Meta = object({ vendorId: literal('ACME', 'GLOBEX') }, scalar).item
+const Meta = object({ vendorId: string('ACME', 'GLOBEX') }, scalar).item
 
 describe('an open type', () => {
     const meta: VendorMeta = {
@@ -170,7 +170,7 @@ describe('the rest policy a definition records', () => {
     })
 
     it('records a rest codec as itself, not as a flag', () => {
-        const def = object({ vendorId: literal('ACME', 'GLOBEX') }, scalar).def
+        const def = object({ vendorId: string('ACME', 'GLOBEX') }, scalar).def
         expect(def).toMatchObject({ kind: 'attributes' })
         expect((def as { rest: unknown }).rest).toBe(scalar)
     })
@@ -228,7 +228,7 @@ describe('a built codec passed to tableEntry', () => {
     type Meta = MetaKeys & { [key: string]: unknown }
 
     const Attributes = object(
-        { TAG: literal('META'), id: string },
+        { TAG: string('META'), id: string },
         opaque('lossy'),
     ).item
     it('round-trips the attributes the spec does not name', () => {

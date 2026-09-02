@@ -14,7 +14,6 @@ import {
     CodecError,
     decimal,
     discriminatedUnion,
-    literal,
     number,
     object,
     string,
@@ -26,8 +25,8 @@ type Op =
     | { type: 'COUNTER'; amount: string; note: string }
 
 const OpCodec = discriminatedUnion('type', [
-    object({ type: literal('SHIPMENT'), amount: decimal, note: string }),
-    object({ type: literal('COUNTER'), amount: string, note: string }),
+    object({ type: string('SHIPMENT'), amount: decimal, note: string }),
+    object({ type: string('COUNTER'), amount: string, note: string }),
 ])
 
 const Entity = object({ op: OpCodec }).item
@@ -88,8 +87,8 @@ describe('where they agree, or only one declares it', () => {
         type Mixed = { tag: 'A'; only: number } | { tag: 'B'; shared: string }
         const M = object({
             m: discriminatedUnion('tag', [
-                object({ tag: literal('A'), only: number }),
-                object({ tag: literal('B'), shared: string }),
+                object({ tag: string('A'), only: number }),
+                object({ tag: string('B'), shared: string }),
             ]),
         }).item
         expect(M.at((p) => p.m.only).unsafeEncode(7)).toEqual({ N: '7' })

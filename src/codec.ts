@@ -158,7 +158,7 @@ type CodecShape<In, Out, A extends AttributeValue> = {
      * A value this codec can faithfully carry, for property testing.
      *
      * Per codec, not derived from the type: `decimal` is a `string` but only a *normalised* one
-     * survives, and `set(string)` must not be empty. `size` bounds recursion.
+     * survives, and `string.set()` must not be empty. `size` bounds recursion.
      */
     readonly arbitrary?: (rng: Rng, size: number) => Out
     /**
@@ -529,7 +529,7 @@ const writtenBy: { readonly [K in TermKind]?: AttributeName } = {
  *
  * What it *can* be resolved by is this, first: `union([string, number])` given `'x'` has one option
  * that takes a string. Trying is still needed after it, because two options can take the same kind of
- * value and still be disjoint — `literal('A')` and `literal('B')` both take a string, and exactly one
+ * value and still be disjoint — `string('A')` and `string('B')` both take a string, and exactly one
  * of them accepts `'A'`.
  *
  * `undefined` means the kind does not decide: `opaque` takes anything, and asking a `lazy` would
@@ -547,7 +547,7 @@ export const carries = (codec: AnyCodec): readonly Shape[] | undefined => {
         case 'legacy':
             return carries(def.current)
         // and this one deliberately does *not* read through. An adapter exists precisely to change
-        // the kind of value held — `held(set(string), ...)` takes an array where `set(string)` takes
+        // the kind of value held — `held(string.set(), ...)` takes an array where `string.set()` takes
         // a `Set` — so the inner codec's answer would be the wrong one. Nothing about the definition
         // says what the outer kind is, so it says so by not answering, and a union falls back to
         // trying it
@@ -650,7 +650,7 @@ export const decides = (codec: AnyCodec): unknown => {
  * Which of the four set bases this codec's elements sit at, or `undefined` if it is not one.
  *
  * The companion of {@link writes} for {@link set}, and the two answer different questions. `writes`
- * is a fact about the *attribute*: `set(decimal)` and `set(number)` both write `NS`, so the member
+ * is a fact about the *attribute*: `decimal.set()` and `number.set()` both write `NS`, so the member
  * cannot tell them apart. This is a fact about the *term*, and it can — which is exactly why
  * `formal/Calculus/Domain.lean:602` indexes a set by a base rather than by a `Member`.
  *
@@ -896,12 +896,15 @@ export const custom = <T, A extends AttributeValue = AttributeValue>(raw: {
  *
  * **Named by the caller, never guessed.** `literal(...)` read its carrier off the JS type of its
  * arguments — digits meant `N`, text meant `S` — and that was the one place in this library where a
- * term's member followed from its *values* rather than from its name. The exception is gone: a
- * literal is now a capability of the primitive that names the base, so `string('A')`, `number(1)`
- * and `decimal('1')` each say which ground term they narrow.
+ * term's member followed from its *values* rather than from its name. That constructor is now
+ * removed, not merely deprecated: a literal is a capability of the primitive that names the base,
+ * so `string('A')`, `number(1)` and `decimal('1')` each say which ground term they narrow.
  *
- * The list is `formal/Calculus/Domain.lean:539`'s `GroundKind` **plus `decimal`**, and that is not a
- * cosmetic difference — see {@link decimal}'s note on what the model can and cannot state.
+ * The list is §3's `GroundKind` **minus `null`**. It read "plus `decimal`" while `GroundKind` was
+ * `string | number | boolean | binary | null`; `decimal` is a ground base in the model now, so the
+ * difference is the other way round and it is a stratification one — `nullValue` is a codec and
+ * `nullValue()` is not a literal anyone can write, because the only nonempty subset of `Unit` is
+ * `Unit`.
  */
 export type LiteralBase = 'string' | 'number' | 'decimal' | 'boolean' | 'binary'
 
@@ -1065,7 +1068,7 @@ const literalCodec = <T extends LiteralValue>(
          * `Number` is far more permissive than an `N`: it reads `''`, whitespace, `0x10` and
          * `0b11`, none of which DynamoDB will ever hand back. Membership in `ℓ` does not filter
          * them out — it only rejects the ones whose numeric value happens to miss the set, so
-         * `literal(0, 1, 2)` read `{ N: '' }` as `0` and `literal(0, 16)` read `{ N: '0x10' }`
+         * `number(0, 1, 2)` read `{ N: '' }` as `0` and `number(0, 16)` read `{ N: '0x10' }`
          * as `16`. An attribute no store wrote, decoded to a value the type says is legitimate.
          *
          * The premise `ℓ ⊆ D` does not cover this and it was wrong to say it did. A premise
@@ -1154,8 +1157,8 @@ const setCapability =
     (base: SetBase, ground: () => AnyCodec) =>
     (...allowed: readonly LiteralValue[]) =>
         // the *public* codec, reached through a thunk because it is the constant being defined:
-        // `string.set()` and `set(string)` should be the same codec, definition included, and a
-        // second element object built from the same closures would compare unequal
+        // `string.set()` and the set of that same base should be the same codec, definition
+        // included, and a second element object built from the same closures would compare unequal
         set(
             (allowed.length
                 ? literalCodec(base, allowed)
@@ -1223,9 +1226,9 @@ export const string: StringCodec = Object.assign(
  * `'1.50'` is not a price this codec will write. `'1.5'` is. Where exact digits matter more than
  * numeric ordering — trailing zeros that mean something — use {@link string}.
  *
- * **`decimal('1')` is the literal the old surface could not spell.** `literal('1')` guessed `S` from
- * the JS type and `literal(1)` went through the host's `number`; neither says "stored as `N`,
- * exactly this text".
+ * **`decimal('1')` is the literal the old surface could not spell.** The removed `literal(...)`
+ * guessed `S` from the JS type for `literal('1')` and went through the host's `number` for
+ * `literal(1)`; neither says "stored as `N`, exactly this text".
  *
  * It is modelled. This docstring said for a while that it was "the one thing on this surface with
  * no counterpart in the calculus", because `GroundKind` was `string | number | boolean | binary |
@@ -1423,63 +1426,21 @@ export const binary: BinaryCodec = Object.assign(
     { set: setCapability('binary', () => binary) },
 ) as unknown as BinaryCodec
 
-/**
- * A literal whose carrier is guessed from its values.
- *
- * @deprecated Name the base instead: `string('A')` for `literal('A')`, `number(1)` for `literal(1)`.
- *
- * Kept working, and kept *exactly* working — same definition, same brand, same messages — because
- * it is on every existing schema and because a deprecation that changes behaviour is a breakage
- * wearing a tag. What is deprecated is the **guess**: this is the one constructor in the library
- * whose stored member follows from the JS type of its arguments rather than from its name, and
- * `decimal('1')` is the counterexample that retires the rule — text that stores an `N`.
- *
- * It is strictly less expressive than what replaces it. `literal` reaches `S` and `N`-from-a-double
- * and nothing else; the base-named forms also reach `BOOL`, `B`, and `N`-from-text.
- */
-export function literal<const T extends string | number>(
-    only: T,
-): ConstantCodec<T>
-export function literal<const T extends string | number>(
-    ...allowed: readonly T[]
-): AttributeCodec<T, LiteralAttribute<T>>
-export function literal<const T extends string | number>(
-    ...allowed: readonly T[]
-): AttributeCodec<T, LiteralAttribute<T>> {
-    if (allowed.length === 0) {
-        throw new CodecError(
-            'a literal admits one of a non-empty set of values, and `literal()` names none; pass the values, or use `string`/`number` if anything is admissible',
-        )
-    }
-    /**
-     * The guess, written out once so it is visible: digits are `N`, text is `S`, and a mix is
-     * refused because one codec cannot write two members.
-     *
-     * `literalCodec` would refuse the mix too, at whichever base the first value picked, but with a
-     * message about that base rather than about the mixing — and the mixing is the thing a caller of
-     * *this* constructor got wrong.
-     */
-    const numeric = typeof allowed[0] === 'number'
-    if (allowed.some((one) => (typeof one === 'number') !== numeric)) {
-        throw new CodecError(
-            `a literal is stored as 'S' or as 'N' and cannot be both, and these mix strings with numbers: ${allowed
-                .map(namedLiteral)
-                .join(', ')}`,
-        )
-    }
-    return literalCodec(
-        numeric ? 'number' : 'string',
-        allowed,
-    ) as unknown as AttributeCodec<T, LiteralAttribute<T>>
-}
-
 // ── collections ─────────────────────────────────────────────────────
 
 /**
- * A non-empty array, stored as the native set its members belong to.
+ * A non-empty set, stored as the native set its members belong to.
  *
- * Which set follows from the element's {@link AttributeCodec.member}: `SS`, `NS` or `BS`. Taking a
- * codec rather than being fixed to strings is what makes `set(price)` decode back as prices.
+ * **The one set builder, and it is internal.** Every set in the surface comes through here:
+ * `string.set()` and the other three bases via {@link setCapability}, and everything that reduces
+ * to a base via {@link setCapable} — `amount.set()` where `amount = refine(decimal, isAmount)`.
+ * It was exported as `set(element)` and is not any more: the capability propagates, so a
+ * free-standing form said nothing `.set()` cannot, and having two spellings of one combinator on
+ * the surface meant two things to keep in step. It stays a function rather than being inlined
+ * because it is where both halves of §3 `(set)`'s premise are checked, and they are checked once.
+ *
+ * Which set follows from the element's member: `SS`, `NS` or `BS`. Taking a codec rather than being
+ * fixed to strings is what makes `price.set()` decode back as prices.
  *
  * **Order is not preserved.** A DynamoDB set comes back in an order the service chooses, so both
  * directions sort. `decode ∘ encode = id` therefore holds only for canonical values; for the rest
@@ -1487,7 +1448,7 @@ export function literal<const T extends string | number>(
  *
  * **Empty is not representable** — encode throws rather than writing what the service refuses.
  */
-export const set = <const C extends AnyCodec>(
+const set = <const C extends AnyCodec>(
     element: C & NotAboutAbsence<C>,
 ): AttributeCodec<ReadonlySet<Decoded<C>>, SetOf<C>> => {
     type T = Decoded<C>
@@ -1503,11 +1464,11 @@ export const set = <const C extends AnyCodec>(
      *
      * The member check above is §3 `(set)`'s premise as it *was* — `setMember μ = some μS` — and it
      * is not enough, because `writes` reads through wrappers that a set has no way to record.
-     * `set(held(string, f, g))` passed it: `held` writes where its inner term does, so the member
+     * a set of `held(string, f, g)` passed it: `held` writes where its inner term does, so the member
      * was `'S'`, and the adapter's two functions then ran per member of an attribute that stores no
      * such thing. The model closed this by indexing `Term.set` with a `SetBase`
-     * (`formal/Calculus/Term.lean:60`) and says outright what that gives up — `set(held …)` and
-     * `set(legacy …)`, neither of which has a set-level spelling and neither of which appears in
+     * (`formal/Calculus/Term.lean:60`) and says outright what that gives up — a set of a `held` and
+     * of a `legacy`, neither of which has a set-level spelling and neither of which appears in
      * `src/`. This is the same refusal, at the same place the other one lives.
      *
      * `refine` and a literal are **not** given up: a restriction of the elements is a restriction of
@@ -1836,6 +1797,68 @@ export const record = <const C extends AnyCodec>(
  * a union can widen a field's type, so the guarantee is not available, and its admissible set is
  * data this library owns, which gives the check an authority a caller's predicate cannot have.
  */
+export type Refined<T, A extends AttributeValue> = AttributeCodec<T, A> &
+    SetCapable<T, A>
+
+/**
+ * `.set()`, where the codec it sits on can be a set's element.
+ *
+ * The capability {@link setBase} decides at runtime, stated at the type as far as the type can see
+ * it — which is not all the way. `CodecShape` declares `def?: CodecDef`, so a codec's *type* is not
+ * generic in its definition: `refine(...)`'s type knows the attribute and never the base it reduced
+ * through. So the gate here is the attribute — `S`, `N` or `B`, the three a stored set is built
+ * from — and `refine(held(string, f, g), p).set()` type-checks and throws, because `held` writes
+ * `S` and reduces to no base. That gap closes only by making the codec type generic in its
+ * definition, which was measured at 481 of 968 signatures and rejected; the runtime refusal in
+ * {@link set} is what stands in for it, and is tested at each of the six kinds that reach it.
+ *
+ * **One member at a time, and each test non-distributive.** Two shorter spellings were tried and
+ * both admit `refine(union([string, number]), p).set()`, which is a set of an element writing two
+ * members and cannot exist:
+ *
+ * - `[A] extends [Attribute<'S'> | Attribute<'N'> | Attribute<'B'>]` — a union of admissible
+ *   attributes is assignable to a union of them, so it passes.
+ * - the same without the tuples, distributing — each arm passes on its own, and the result is
+ *   `{ set: () => SS } | { set: () => NS }`, a union whose members all have a `set`, so calling it
+ *   is allowed.
+ *
+ * Asking each member separately, with `[A] extends [...]` so the question is about `A` whole, is
+ * what refuses the union: it is not `Attribute<'S'>`, not `Attribute<'N'>` and not
+ * `Attribute<'B'>`, so it falls through.
+ *
+ * `Record<never, never>` rather than `{}` in the last branch: an intersection with it is the codec
+ * unchanged, and `{}` means "anything but null", which would make the intersection accept a `.set`
+ * this type is declining to give.
+ */
+export type SetCapable<T, A extends AttributeValue> = [A] extends [
+    Attribute<'S'>,
+]
+    ? { readonly set: () => AttributeCodec<ReadonlySet<T>, SS> }
+    : [A] extends [Attribute<'N'>]
+      ? { readonly set: () => AttributeCodec<ReadonlySet<T>, NS> }
+      : [A] extends [Attribute<'B'>]
+        ? { readonly set: () => AttributeCodec<ReadonlySet<T>, BS> }
+        : Record<never, never>
+
+/**
+ * The `.set()` capability, attached to a codec that is not one of the four bases.
+ *
+ * The thunk closes over the codec **it returns**, not the one it was handed, and that is the whole
+ * of the care needed here: `.set()` records its element in `def`, so a thunk closing over the
+ * argument would make `amount.set().def` and `amount.set().def` two definitions that differ by a
+ * `set` property nobody can see. Same reason {@link setCapability} reaches its base through a thunk
+ * rather than naming the constant it is defining.
+ */
+const setCapable = <T, A extends AttributeValue>(
+    self: AttributeCodec<T, A>,
+): Refined<T, A> => {
+    const capable = {
+        ...self,
+        set: () => set(capable as unknown as AnyCodec),
+    }
+    return capable as unknown as Refined<T, A>
+}
+
 export const refine = <Wide, Narrow extends Wide, A extends AttributeValue>(
     inner: AttributeCodec<Wide, A>,
     is: (value: Wide) => value is Narrow,
@@ -1856,7 +1879,7 @@ export const refine = <Wide, Narrow extends Wide, A extends AttributeValue>(
          */
         readonly onThinSearch?: (what: string, rate: number) => void
     } = {},
-): AttributeCodec<Narrow, A> => {
+): Refined<Narrow, A> => {
     const what = options.describe ?? 'the expected form'
 
     /**
@@ -1870,31 +1893,37 @@ export const refine = <Wide, Narrow extends Wide, A extends AttributeValue>(
      * without saying so is worth a word, and this can only be reached from a generator, so the word
      * only ever lands in a test.
      */
-    // `writes` reads through a refinement, which is what lets `set(price)` work; `decides` does
-    // not, because the predicate may be exactly what rejects the constant
-    return derive<Narrow, A>(inner, {
-        def: {
-            kind: 'refine',
-            inner: inner as AnyCodec,
-            refined: {
-                is: is as (value: never) => boolean,
-                what,
-                arbitrary: options.arbitrary as
-                    | ((rng: Rng, size: number) => unknown)
-                    | undefined,
-                onThinSearch: options.onThinSearch,
+    // `writes` reads through a refinement, which is what lets a set of a brand work; `decides`
+    // does not, because the predicate may be exactly what rejects the constant.
+    //
+    // `setCapable` is what carries `.set()` across the refinement, and it is the whole of why the
+    // brand survives: `amount.set()` decodes as `ReadonlySet<Price>` because the set is built from
+    // `amount`, where the predicate that produces a `Price` already lives.
+    return setCapable(
+        derive<Narrow, A>(inner, {
+            def: {
+                kind: 'refine',
+                inner: inner as AnyCodec,
+                refined: {
+                    is: is as (value: never) => boolean,
+                    what,
+                    arbitrary: options.arbitrary as
+                        | ((rng: Rng, size: number) => unknown)
+                        | undefined,
+                    onThinSearch: options.onThinSearch,
+                },
             },
-        },
-        encode: (value) => inner.encode(value),
-        decode: (attribute) =>
-            andThen(inner.decode(attribute), (decoded) =>
-                is(decoded)
-                    ? decoded
-                    : new CodecError(
-                          `${JSON.stringify(decoded)} is not ${what}`,
-                      ),
-            ),
-    })
+            encode: (value) => inner.encode(value),
+            decode: (attribute) =>
+                andThen(inner.decode(attribute), (decoded) =>
+                    is(decoded)
+                        ? decoded
+                        : new CodecError(
+                              `${JSON.stringify(decoded)} is not ${what}`,
+                          ),
+                ),
+        }),
+    )
 }
 
 // ── reading what is already there ───────────────────────────────────
@@ -1941,7 +1970,7 @@ const fallbackOf = (codec: AnyCodec): (() => unknown) | undefined =>
  * or narrows the second. This one changes only the second, by naming the two halves of the
  * conversion, and leaves what the table holds exactly as it was.
  *
- * Which makes it the answer to "my values arrive as an array and `set(...)` wants a `Set`": nothing
+ * Which makes it the answer to "my values arrive as an array and `.set()` wants a `Set`": nothing
  * about the *table* has to change for that, so nothing about the codec does either. It is also the
  * one to reach for before {@link custom} — the member, the generation and the definition all keep
  * coming from the codec underneath, where a hand-written codec has to restate them.
@@ -1949,7 +1978,7 @@ const fallbackOf = (codec: AnyCodec): (() => unknown) | undefined =>
  * @example
  * ```ts
  * // stored as SS, held as an array
- * const tags = held(set(string), {
+ * const tags = held(string.set(), {
  *     encode: (tags: readonly string[]) => new Set(tags),
  *     decode: (tags) => [...tags],
  * })
@@ -2399,7 +2428,7 @@ export namespace opaque {
                         // has no write path here, so reading one would re-encode as `SS` and
                         // change the attribute's stored type — (MP), which `μ = ⊤` leaves as
                         // the only law watching
-                        ErrorMessage<'[opaque] a stored set of numbers has no counterpart this codec can write, so reading it would re-encode as `SS`. Declare the attribute with `set(number)` or `set(decimal)`'>
+                        ErrorMessage<'[opaque] a stored set of numbers has no counterpart this codec can write, so reading it would re-encode as `SS`. Declare the attribute with `number.set()` or `decimal.set()`'>
                       : A extends BS
                         ? Set<Uint8Array>
                         : A extends L<infer Element>
@@ -2624,7 +2653,7 @@ const decodeUnknown = (
         case 'NS':
             return unrecoverable(
                 'a stored set of numbers',
-                "`NS` has no counterpart this codec can write — a set of numbers is refused on the way in, because nothing without a schema says which of its members a JS number holds faithfully. Reading it would mean re-encoding it as `SS` and changing the attribute's stored type. Declare the attribute with `set(number)` or `set(decimal)`.",
+                "`NS` has no counterpart this codec can write — a set of numbers is refused on the way in, because nothing without a schema says which of its members a JS number holds faithfully. Reading it would mean re-encoding it as `SS` and changing the attribute's stored type. Declare the attribute with `number.set()` or `decimal.set()`.",
             )
         case 'SS':
         case 'BS': {
@@ -2998,7 +3027,7 @@ type Declared = {
  *     SK: string,
  *     ownerId: string,
  *     price: decimal,               // money, never a float
- *     tags: set(string),            // SS, not L
+ *     tags: string.set(),           // SS, not L
  *     adopted: boolean,
  *     soldAt: optional(string),
  * })
@@ -3556,8 +3585,8 @@ const readTag = (item: StoredItem, discriminator: string): Result<string> => {
  * @example
  * ```ts
  * const Visit = tagged<Visit>()('type', {
- *     CHECKUP: { type: literal('CHECKUP'), petId: string, vetId: string },
- *     VACCINATION: { type: literal('VACCINATION'), petId: string, vaccine: string },
+ *     CHECKUP: { type: string('CHECKUP'), petId: string, vetId: string },
+ *     VACCINATION: { type: string('VACCINATION'), petId: string, vaccine: string },
  * })
  * ```
  */
@@ -3709,7 +3738,7 @@ export type ValidateVariants<Specs extends readonly unknown[]> = [
  * that type matches both. `string` and `decimal` both read back as `string`, so *every* value is
  * ambiguous — which is also why the union is ill-formed rather than merely risky: its entity type is
  * `string`, so nothing about a value says which option produced it and `decode ∘ encode = id` cannot
- * hold. `literal('A')` and `literal('B')` read back as `'A'` and `'B'`, which no value satisfies
+ * hold. `string('A')` and `string('B')` read back as `'A'` and `'B'`, which no value satisfies
  * both of.
  */
 type Overlaps<A, B> = [Decoded<A>] extends [Decoded<B>]
@@ -3913,8 +3942,8 @@ type Option = {
  * nothing else does — encoding does not validate — which is why a union cannot generally resolve by
  * trying.
  *
- * It **propagates through containers**, and it has to. `set(literal(1))` refuses a set of strings,
- * because the element refuses each one — so `union(set(literal('a')), set(literal(1)))` is perfectly
+ * It **propagates through containers**, and it has to. `number.set(1)` refuses a set of strings,
+ * because the element refuses each one — so `union([string.set('a'), number.set(1)])` is perfectly
  * resolvable, and reading the property off the option alone refused it. The same for a wrapper that
  * encodes straight through its inner codec.
  *
@@ -4071,7 +4100,7 @@ const namesOf = (held: Record<string, unknown>) => {
  * The tag values a variant answers to — its discriminator's whole admissible set, not one value.
  *
  * A variant may span several tags, and this codebase relies on it: a carrier declared
- * `carrierId: literal('ACME', 'GLOBEX')` is *one* variant covering two stored values, which is why
+ * `carrierId: string('ACME', 'GLOBEX')` is *one* variant covering two stored values, which is why
  * {@link VariantOf} asks whether a tag is *among* a member's tags rather than equal to it.
  */
 type TagsOf<Spec, D extends PropertyKey> = Spec extends unknown
@@ -4092,7 +4121,7 @@ type TagsOf<Spec, D extends PropertyKey> = Spec extends unknown
  * The options keyed by their own tag, which is what a lookup needs.
  *
  * Derived rather than declared. A record keyed by tag value repeats what the option's own `literal`
- * already says, so `{ SHOT: { type: literal('CHECKUP') } }` is expressible and the two can disagree.
+ * already says, so `{ SHOT: { type: string('CHECKUP') } }` is expressible and the two can disagree.
  * Reading the tag off the option makes that unrepresentable — and it is how `zod` does it.
  */
 type ByTag<Specs extends readonly unknown[], D extends PropertyKey> = {
@@ -4152,7 +4181,7 @@ type EveryOptionTagged<
     Specs extends readonly unknown[],
     D extends PropertyKey,
 > = [TagsOf<Specs[number], D>] extends [never]
-    ? ErrorMessage<'[discriminatedUnion] every option must name the discriminator with `literal(...)`, or a lookup cannot find it'>
+    ? ErrorMessage<'[discriminatedUnion] every option must name the discriminator with a literal at `string`, `number` or `decimal`, or a lookup cannot find it'>
     : [SharedTags<Specs, D>] extends [never]
       ? unknown
       : ErrorMessage<`[discriminatedUnion] ${SharedTags<Specs, D>} answer to the same discriminator value, and a lookup reaches only one of them — give them distinct values`>
@@ -4161,7 +4190,8 @@ type EveryOptionTagged<
  * A union of objects told apart by one attribute — `zod`'s `discriminatedUnion`, over an item.
  *
  * The stored value of the discriminator chooses the option, and each option says which value it is by
- * naming that attribute with `literal(...)`. A lookup rather than a search: it cannot be ambiguous,
+ * naming that attribute with a literal — `string('CHECKUP')`, `number(1)`, `decimal('1')`. A
+ * lookup rather than a search: it cannot be ambiguous,
  * and it is the only union that can encode a *patch*, because a subset of the attributes does not say
  * which option it belongs to.
  *
@@ -4172,8 +4202,8 @@ type EveryOptionTagged<
  * @example
  * ```ts
  * discriminatedUnion('type', [
- *     object({ type: literal('CHECKUP'), petId: string, vetId: string }),
- *     object({ type: literal('SHOT'), petId: string, vaccine: string }),
+ *     object({ type: string('CHECKUP'), petId: string, vetId: string }),
+ *     object({ type: string('SHOT'), petId: string, vaccine: string }),
  * ])
  * ```
  */
@@ -4248,8 +4278,8 @@ export const discriminatedUnion = <
  *
  * Ambiguity is reported rather than resolved by declaration order. Two object options that can hold
  * the same attributes are refused at the declaration; two attribute options that can both carry one
- * particular value cannot be known until that value turns up, because `literal('A')` and
- * `literal('B')` both write `S` and are never ambiguous — so that one is reported when it happens.
+ * particular value cannot be known until that value turns up, because `string('A')` and
+ * `string('B')` both write `S` and are never ambiguous — so that one is reported when it happens.
  *
  * @example
  * ```ts
@@ -4280,7 +4310,7 @@ export const union = <const Options extends readonly AnyCodec[]>(
      *
      * - an **object** option is chosen by the attribute names present, never by being tried
      * - a **literal** knows which values are its own, so trying it is a real question — which is why
-     *   `union([literal('A'), literal('B')])` is not ambiguous and never was
+     *   `union([string('A'), string('B')])` is not ambiguous and never was
      *
      * An option whose kind is unknown — an adapter, an `opaque` — is not compared: it could be
      * anything, and refusing it against everything would refuse unions that work.
@@ -4338,7 +4368,7 @@ export const union = <const Options extends readonly AnyCodec[]>(
      * If it leaves several, they are **tried**, and exactly one must succeed. That step alone would
      * not do: encoding does not validate (see {@link carries}), so several permissive options would
      * all "succeed" on a value only one of them means. And the first step alone would not do either:
-     * `literal('A')` and `literal('B')` take the same kind of value and are never ambiguous.
+     * `string('A')` and `string('B')` take the same kind of value and are never ambiguous.
      */
     const only = <A>(
         survives: (option: Option) => boolean,

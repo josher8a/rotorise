@@ -12,7 +12,6 @@ import { describe, expect, it } from 'vitest'
 import {
     decimal,
     discriminatedUnion,
-    literal,
     number,
     object,
     optional,
@@ -91,9 +90,9 @@ type Adoption = {
 // ── the codecs, composed bottom-up ───────────────────────────────────
 
 const AssetCodec = discriminatedUnion('tenderType', [
-    object({ tenderType: literal('STORE_CREDIT'), tender: string }),
+    object({ tenderType: string('STORE_CREDIT'), tender: string }),
     object({
-        tenderType: literal('CASH'),
+        tenderType: string('CASH'),
         tender: string,
         cardId: string,
         cardDetailId: optional(string),
@@ -103,12 +102,12 @@ const AssetCodec = discriminatedUnion('tenderType', [
 // a union nested inside a union
 const AmountCodec = discriminatedUnion('chargeType', [
     object({
-        chargeType: literal('FIXED'),
+        chargeType: string('FIXED'),
         value: decimal,
         tender: AssetCodec,
     }),
     object({
-        chargeType: literal('VARIABLE_OUT'),
+        chargeType: string('VARIABLE_OUT'),
         expected: decimal,
         minPrice: decimal,
         tolerancePercent: decimal,
@@ -118,22 +117,22 @@ const AmountCodec = discriminatedUnion('chargeType', [
 
 const ProviderCodec = discriminatedUnion('carrierId', [
     object({
-        carrierId: literal('ACME', 'GLOBEX'),
+        carrierId: string('ACME', 'GLOBEX'),
         carrierRefId: optional(string),
-        traits: object({ type: literal('scheduled'), duration: string }),
+        traits: object({ type: string('scheduled'), duration: string }),
     }),
     object(
-        // one option, two tags: `literal('ACME', 'GLOBEX')` covers both stored values
+        // one option, two tags: `string('ACME', 'GLOBEX')` covers both stored values
         {
-            carrierId: literal('PICKUP'),
-            traits: object({ type: literal('walkin'), duration: string }),
+            carrierId: string('PICKUP'),
+            traits: object({ type: string('walkin'), duration: string }),
         },
     ),
 ])
 
 const StepCodec = object({
     legType: string,
-    fixedSide: literal('IN', 'OUT'),
+    fixedSide: string('IN', 'OUT'),
     priceIn: AmountCodec,
     priceOut: AmountCodec,
     carrier: optional(ProviderCodec),
@@ -146,17 +145,17 @@ const StepCodec = object({
 // a union whose variants differ in tuple arity
 const FulfilmentCodec = discriminatedUnion('type', [
     object({
-        type: literal('SINGLE_LEG'),
+        type: string('SINGLE_LEG'),
         legs: tuple(StepCodec),
     }),
     object({
-        type: literal('MULTI_LEG'),
+        type: string('MULTI_LEG'),
         legs: tuple(StepCodec, StepCodec),
     }),
 ])
 
 const AdoptionCodec = object({
-    TAG: literal('ADOPTION'),
+    TAG: string('ADOPTION'),
     adoptionId: string,
     customerId: string,
     displayPrice: decimal,

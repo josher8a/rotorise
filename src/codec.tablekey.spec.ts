@@ -7,7 +7,7 @@
  * one means writing a different item.
  */
 import { describe, expect, it } from 'vitest'
-import { literal, number, string } from './codec'
+import { number, string } from './codec'
 import { RotoriseError, table, tableEntry } from './Rotorise'
 
 type Adoption = {
@@ -30,7 +30,7 @@ const Adoption = tableEntry<Adoption>()(
         codec: {
             adoptionId: string,
             userId: string,
-            status: literal('DRAFT', 'PACKING', 'CANCELED'),
+            status: string('DRAFT', 'PACKING', 'CANCELED'),
             updatedAt: string,
             currentLegIndex: number,
         },

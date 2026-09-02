@@ -18,7 +18,6 @@ import {
     number,
     object,
     rest,
-    set,
     string,
     tuple,
     union,
@@ -129,8 +128,6 @@ describe('where a tail cannot go', () => {
         const _wrong = () => [
             // @ts-expect-error an array is already every element
             array(rest(string)),
-            // @ts-expect-error as is a set
-            set(rest(string)),
             // @ts-expect-error an item has names, not positions
             object({ a: rest(string) }),
             // @ts-expect-error nor is a union option a position

@@ -16,7 +16,6 @@ import {
     decimal,
     fallback,
     legacy,
-    literal,
     number,
     object,
     string,
@@ -36,10 +35,10 @@ type Listing = {
 const Listing = object({
     id: string,
     holding: fallback(
-        literal('STORE_V1', 'STORE_V2'),
+        string('STORE_V1', 'STORE_V2'),
         () => 'STORE_V1' as const,
     ),
-    vendorId: fallback(literal('PICKUP', 'ACME'), () => 'PICKUP' as const),
+    vendorId: fallback(string('PICKUP', 'ACME'), () => 'PICKUP' as const),
     rate: legacy({ current: decimal, older: string }),
 }).item
 

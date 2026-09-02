@@ -24,13 +24,11 @@ import {
     decimal,
     held,
     discriminatedUnion,
-    literal,
     nullable,
     number,
     object,
     optional,
     record,
-    set,
     string,
     union,
     writes,
@@ -56,14 +54,14 @@ describe('the unions this library ships', () => {
     })
 
     it('holds for literals, which are told apart by nothing else', () => {
-        checkUniqueAdmission(union([literal('A'), literal('B')]), { seed })
+        checkUniqueAdmission(union([string('A'), string('B')]), { seed })
     })
 
     it('holds for a discriminated union', () => {
         checkUniqueAdmission(
             discriminatedUnion('type', [
-                object({ type: literal('CHECKUP'), petId: string }),
-                object({ type: literal('SHOT'), vaccine: string }),
+                object({ type: string('CHECKUP'), petId: string }),
+                object({ type: string('SHOT'), vaccine: string }),
             ]),
             { seed },
         )
@@ -72,8 +70,8 @@ describe('the unions this library ships', () => {
     it('holds for a variant answering to two tags', () => {
         checkUniqueAdmission(
             discriminatedUnion('carrierId', [
-                object({ carrierId: literal('ACME', 'GLOBEX'), at: string }),
-                object({ carrierId: literal('LOCAL'), depot: string }),
+                object({ carrierId: string('ACME', 'GLOBEX'), at: string }),
+                object({ carrierId: string('LOCAL'), depot: string }),
             ]),
             { seed },
         )
@@ -177,7 +175,7 @@ describe('an object option with attributes it does not declare', () => {
         checkUniqueAdmission(
             union([
                 object({ a: string, b: optional(string) }),
-                object({ c: set(string) }),
+                object({ c: string.set() }),
             ]),
             { seed },
         )

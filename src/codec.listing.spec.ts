@@ -18,13 +18,11 @@ import {
     boolean,
     CodecError,
     decimal,
-    literal,
     number,
     object,
     opaque,
     optional,
     record,
-    set,
     string,
 } from './codec'
 import {
@@ -153,12 +151,12 @@ const Listing = object({
     filterIxBreed: optional(string),
     pausedReason: optional(string),
     status_reason: optional(string),
-    visibility: literal('PUBLIC', 'PRIVATE'),
+    visibility: string('PUBLIC', 'PRIVATE'),
 
     // stored as `N`, and the original's `{ N: value.toString() }` — a numeric literal,
     // so the enum's members are checked on the way in *and* on the way out
-    type: literal(ListingType.ADOPTION, ListingType.SALE),
-    status: literal(
+    type: number(ListingType.ADOPTION, ListingType.SALE),
+    status: number(
         ListingStatus.DRAFT,
         ListingStatus.LISTED,
         ListingStatus.RESERVED,
@@ -173,7 +171,7 @@ const Listing = object({
     allowsAgentPickup: boolean,
 
     // a native set, not a list — the choice no generic marshaller can infer
-    acceptedTenders: set(string),
+    acceptedTenders: string.set(),
     tenderDetailIds: array(string),
 
     breed: object({

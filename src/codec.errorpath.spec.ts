@@ -12,7 +12,6 @@ import {
     array,
     CodecError,
     decimal,
-    literal,
     number,
     object,
     record,
@@ -101,7 +100,7 @@ describe('a failure carries the path it took', () => {
     /** Encoding fails too — `literal` checks on the way out, and says where. */
     it('says where on the way out, not only on the way in', () => {
         const Row = object({
-            kind: literal('A'),
+            kind: string('A'),
             id: string,
         }).item
         expect(

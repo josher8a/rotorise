@@ -19,14 +19,12 @@ import {
     discriminatedUnion,
     lazy,
     legacy,
-    literal,
     nullable,
     object,
     opaque,
     optional,
     record,
     refine,
-    set,
     string,
     tuple,
     union,
@@ -35,7 +33,7 @@ import { tableEntry } from './Rotorise'
 
 type Pet = { TAG: 'PET'; id: string; name: string }
 
-const Pet = object({ TAG: literal('PET'), id: string, name: string }).item
+const Pet = object({ TAG: string('PET'), id: string, name: string }).item
 const pet: Pet = { TAG: 'PET', id: 'p1', name: 'Rex' }
 
 type Tree = { name: string; children?: readonly Tree[] }
@@ -45,7 +43,7 @@ const Tree: AttributeCodec<Tree, Attribute<'M'>> = lazy(() =>
 
 type Visit = { type: 'CHECKUP'; petId: string }
 const Visits = discriminatedUnion('type', [
-    object({ type: literal('CHECKUP'), petId: string }),
+    object({ type: string('CHECKUP'), petId: string }),
 ]).item
 
 type Line = { petId: string } | { petIds: readonly string[] }
@@ -134,7 +132,7 @@ describe('tableEntry has the same pair', () => {
     const Pets = tableEntry<Pet>()(
         { PK: ['TAG', 'id'] },
         {
-            codec: { TAG: literal('PET'), id: string, name: string },
+            codec: { TAG: string('PET'), id: string, name: string },
         },
     )
 
@@ -174,12 +172,12 @@ describe('tableEntry has the same pair', () => {
 describe('the safe pair never throws, whatever is thrown at it', () => {
     const badly: readonly (readonly [string, () => unknown])[] = [
         ['string', () => string.decode({ N: '1' })],
-        ['literal', () => literal('A').decode({ N: '1' })],
-        ['literal encode', () => literal('A').encode('B' as 'A')],
+        ['literal', () => string('A').decode({ N: '1' })],
+        ['literal encode', () => string('A').encode('B' as 'A')],
         ['opaque encode', () => opaque.encode(1n)],
         ['opaque decode', () => opaque.decode({ N: '1' })],
         ['opaque nested', () => opaque.encode({ a: [{ b: 1n }] })],
-        ['set', () => set(string).encode(new Set())],
+        ['set', () => string.set().encode(new Set())],
         ['array', () => array(string).decode({ L: [{ N: '1' }] })],
         ['tuple', () => tuple(string).decode({ L: [] })],
         ['record', () => record(string).decode({ M: { k: { N: '1' } } })],

@@ -18,11 +18,9 @@ import {
     boolean,
     CodecError,
     decimal,
-    literal,
     number,
     object,
     optional,
-    set,
     string,
     union,
 } from './codec'
@@ -75,7 +73,7 @@ describe('the kind of value is a filter, not the answer', () => {
      * Filtering by kind leaves both, so both are tried, and exactly one accepts the value. This is
      * the case that rules out deciding by kind alone.
      */
-    const Tag = union([literal('A'), literal('B')])
+    const Tag = union([string('A'), string('B')])
 
     it('is settled by trying, where the kind cannot settle it', () => {
         expect(Tag.unsafeEncode('A')).toEqual({ S: 'A' })
@@ -168,7 +166,7 @@ describe('what the value cannot tell apart', () => {
      * as a `Set` they are disjoint in both directions: `Set<string>` against `readonly string[]` at
      * the declaration, and `SS` against `L` in the table.
      */
-    const Tags = union([set(string), array(string)])
+    const Tags = union([string.set(), array(string)])
 
     it('writes SS for a set and L for a list', () => {
         expect(Tags.unsafeEncode(new Set(['b', 'a']))).toEqual({

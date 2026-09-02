@@ -19,7 +19,6 @@ import {
     decimal,
     discriminatedUnion,
     legacy,
-    literal,
     nullable,
     nullValue,
     number,
@@ -28,7 +27,6 @@ import {
     optional,
     record,
     refine,
-    set,
     string,
     tuple,
     union,
@@ -45,16 +43,16 @@ type Line = { petId: string; price: string } | { petIds: readonly string[] }
 
 const codecs: readonly (readonly [string, AnyCodec])[] = [
     ['string', string],
-    ['literal', literal('A', 'B', 'C')],
-    ['literal(one)', literal('ONLY')],
+    ['literal', string('A', 'B', 'C')],
+    ['literal(one)', string('ONLY')],
     ['decimal', decimal],
     ['number', number],
-    ['literal(N)', literal(0, 1, 2)],
+    ['literal(N)', number(0, 1, 2)],
     ['boolean', boolean],
     ['null', nullValue],
     ['binary', binary],
     ['opaque', opaque],
-    ['set', set(string)],
+    ['set', string.set()],
     ['array', array(string)],
     ['tuple', tuple(string, number)],
     ['record', record(decimal)],
@@ -66,7 +64,7 @@ const codecs: readonly (readonly [string, AnyCodec])[] = [
     [
         'item',
         object({
-            TAG: literal('PET'),
+            TAG: string('PET'),
             id: string,
             name: optional(string),
         }),
@@ -74,9 +72,9 @@ const codecs: readonly (readonly [string, AnyCodec])[] = [
     [
         'tagged',
         discriminatedUnion('type', [
-            object({ type: literal('CHECKUP'), petId: string }),
+            object({ type: string('CHECKUP'), petId: string }),
             object({
-                type: literal('SHOT'),
+                type: string('SHOT'),
                 petId: string,
                 vaccine: string,
             }),
@@ -122,7 +120,7 @@ describe('a definition generates what the codec generated', () => {
     )
 
     // 19: `numeric` was removed (it was `number` with an unchecked cast, and its two call sites
-    // here are now `number` and `literal(0, 1, 2)`, whose kinds were already covered), and
+    // here are now `number` and `number(0, 1, 2)`, whose kinds were already covered), and
     // `nullValue` was added, giving the `NULL` point a codec for the first time
     it('covers every kind a codec can be', () => {
         const kinds = new Set(codecs.map(([, c]) => c.def?.kind))
