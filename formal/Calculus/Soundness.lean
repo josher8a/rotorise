@@ -305,7 +305,7 @@ theorem typed_μSyn : ∀ {t T μ}, Typed t T μ → μSyn t = μ
   | _, _, _, .array _ => rfl
   | _, _, _, .tuple _ _ => rfl
   | _, _, _, .record _ => rfl
-  | _, _, _, .held h' _ => by have ih := typed_μSyn h'; exact ih
+  | _, _, _, .held h' => by have ih := typed_μSyn h'; exact ih
   | _, _, _, .refine h' => by have ih := typed_μSyn h'; exact ih
   | _, _, _, .legacy h' => by have ih := typed_μSyn h'; exact ih
   | _, _, _, .nullable _ => rfl
@@ -485,7 +485,7 @@ theorem soundness_both : ∀ {t T μ}, Typed t T μ → Obligations t → Sound 
       exact sound_wrap (t := t') (soundness_both h' hob) (LawfulCore.restrict · q) (Lawful.restrict · q)
     | @lazy γ T' μ' h' =>
       exact sound_wrap (t := γ) (soundness_both h' hob) LawfulCore.μNone Lawful.μNone
-    | @held t' I' T' μ' f g h' hT =>
+    | @held t' I' μ' f g h' =>
       exact sound_wrap (t := t') (soundness_both h' hob.1) (LawfulCore.through · hob.2)
         (Lawful.through · hob.2)
     | @nullable t' T' μ' h' =>
@@ -745,8 +745,8 @@ theorem typed_TSub : ∀ {t T μ}, Typed t T μ → ∀ v, (denote t).T v → T 
           (fun t' _ _ _ hty v hv => typed_TSub hty v hv) hlist
           (fun t' _ _ _ hty v hv => typed_TSub hty v hv) hal hall⟩
       all_goals exact absurd hv (by simp only [tupleCodec]; exact id)
-    | @held t' I' T' μ' f g h' hT =>
-      exact (hT v).mpr (typed_TSub h' (f v) hv)
+    | @held t' I' μ' f g h' =>
+      exact typed_TSub h' (f v) hv
     | @refine t' T' μ' q h' => exact ⟨typed_TSub h' v hv.1, hv.2⟩
     | @legacy t' T' μ' r h' => exact typed_TSub h' v hv
     | @nullable t' T' μ' h' =>
@@ -848,7 +848,7 @@ theorem carrier_denote : ∀ {t T μ}, Typed t T μ → Obligations t → Carrie
           cases ht'
           cases hopt with
           | some hty => exact carrier_denote hty ((Obligations.tuple hob).2 t' rfl)
-    | @held t' I' T' μ' f g h' hT =>
+    | @held t' I' μ' f g h' =>
       exact carrier_through (carrier_denote h' hob.1)
         (soundness_both h' hob.1).1 hob.2.2
     | @refine t' T' μ' q h' =>

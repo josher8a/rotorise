@@ -42,8 +42,9 @@ Mechanization choices, and where they diverge from the doc (each is routine to s
   judgements (`TypedListμ` keeps their members alongside their held sets).
 * `held`'s iso premises are carrier-restricted (`T ≃ I`, not `Value ≃ Value`) and so
   mention `e` — fuel-indexed, hence in `Obligations` with the other semantic premises.
-  What the *rule* carries is the held set's half of the iso, `T v ↔ I (f v)`, which is
-  syntactic and is what `through` builds.
+  The *rule* carries none of them, and no longer carries the held set's half of the iso
+  either: that half is not a premise but the conclusion's index, `fun v => I (f v)`,
+  which is what `through` builds.
 * `(refine)` concludes `T v ∧ q v` where the doc concludes `q` under the premise
   `q ⊆ T`. The same set, stated without a premise the conclusion can carry.
 -/
@@ -207,10 +208,18 @@ inductive Typed : Term → Held → Option Member → Prop where
   | tuple {ts Ts tail Tt} (h : TypedList ts Ts) (ht : TypedOpt tail Tt) :
       Typed (.tuple ts tail) (HProd Ts Tt) (some .L)
   | record {t T μ} (h : Typed t T μ) : Typed (.record t) (HMap T) (some .M)
-  /-- `(held)`: the carrier half of the iso is the rule's, the cancellation laws are
-      `Obligations`'. -/
-  | held {t I T μ f g} (h : Typed t I μ) (hT : ∀ v, T v ↔ I (f v)) :
-      Typed (.held t f g) T μ
+  /-- `(held)`: the held set **is** the premise's, pulled back along `f`; the cancellation
+      laws are `Obligations`'.
+
+      `T` used to be an index with `hT : ∀ v, T v ↔ I (f v)` beside it, which made this the
+      one rule whose index its term did not determine — two derivations of the same term
+      could carry propositionally equal but distinct `T`s, and every consumer had to relay
+      the iff to get from one to the other. `Codec.through` already *defines*
+      `T := fun v => c.T (f v)`, so the premise was restating the combinator being typed.
+      As an index it is the same set with no premise to carry, and the header's "the index
+      is determined by the term in every rule" is true rather than nearly true. -/
+  | held {t I μ f g} (h : Typed t I μ) :
+      Typed (.held t f g) (fun v => I (f v)) μ
   | refine {t T μ q} (h : Typed t T μ) :
       Typed (.refine t q) (fun v => T v ∧ q v) μ
   | legacy {t T μ r} (h : Typed t T μ) : Typed (.legacy t r) T μ

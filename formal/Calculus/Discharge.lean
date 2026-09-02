@@ -2195,7 +2195,7 @@ theorem not_uAtCan_pair_A {t₁ t₂ : Term} {v w : Value} {a : Attr}
     union (D) admits, in the disjointness form §5 once proposed and withdrew. -/
 theorem typed_tRel :
     Typed tRel (fun v => ∃ s, s ∈ ["A"] ∧ fRel v = .str s) (some .S) := by
-  refine Typed.held (I := fun w => ∃ s, s ∈ ["A"] ∧ w = .str s) ?_ (fun _ => Iff.rfl)
+  refine Typed.held (I := fun w => ∃ s, s ∈ ["A"] ∧ w = .str s) ?_
   have h := Typed.literal .string (.of "A" ∅) trivial
   have hT : HLit .string (.of "A" ∅) = fun w => ∃ s, s ∈ ["A"] ∧ w = Value.str s := by
     funext w; simp [HLit, NEFinset.of]
