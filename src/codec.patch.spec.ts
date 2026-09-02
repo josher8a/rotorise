@@ -11,7 +11,7 @@
  * codec, rebuilding a key needs only the schema.
  */
 import { describe, expect, it } from 'vitest'
-import { literal, number, optional, string } from './codec'
+import { number, optional, string } from './codec'
 import { tableEntry } from './Rotorise'
 
 type Adoption = {
@@ -39,7 +39,7 @@ const Adoption = tableEntry<Adoption>()(
         codec: {
             adoptionId: string,
             userId: string,
-            status: literal('DRAFT', 'READY', 'PACKING', 'CANCELED'),
+            status: string('DRAFT', 'READY', 'PACKING', 'CANCELED'),
             updatedAt: string,
             currentLegIndex: number,
             adoptionGroupId: optional(string),

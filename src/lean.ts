@@ -524,7 +524,7 @@ const leanTermOfDef = (def: CodecDef, at: string, forced: number): string => {
          * partial, so the old constructor accepted element terms the rule then refused, and the
          * index makes that refusal a type error instead.
          *
-         * A **restricted** element — `set(refine(b, q))`, `set(string('a','b'))` — is still a
+         * A **restricted** element — `refine(b, q).set()`, `string.set('a','b')` — is still a
          * perfectly good codec and still has no *term*. `setCodec_restrict` says the set of a
          * restriction and the restriction of a set write the same attribute, but that is an
          * equation between `Codec`s, and the restriction it lifts is not itself a `Term.set`. So a

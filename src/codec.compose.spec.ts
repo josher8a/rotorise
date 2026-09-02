@@ -10,7 +10,6 @@ import { describe, expect, it } from 'vitest'
 import {
     array,
     discriminatedUnion,
-    literal,
     number,
     object,
     optional,
@@ -36,8 +35,8 @@ type Adoption = {
 const Adoption = object({
     id: string,
     tender: discriminatedUnion('kind', [
-        object({ kind: literal('CASH'), code: string }),
-        object({ kind: literal('PET'), coat: string }),
+        object({ kind: string('CASH'), code: string }),
+        object({ kind: string('PET'), coat: string }),
     ]),
     items: array(object({ n: number })),
     legs: tuple(object({ n: number }), object({ n: number })),

@@ -7,7 +7,7 @@
  * well formed whether or not anything has been delivered — writing the path is how you ask.
  */
 import { describe, expect, it } from 'vitest'
-import { literal, number, object, optional, string } from './codec'
+import { number, object, optional, string } from './codec'
 import { tableEntry } from './Rotorise'
 
 type Leg = {
@@ -114,10 +114,10 @@ describe('both entry points build the same paths', () => {
      * second implementation that drifted would resolve a codec for one path and hand back another.
      */
     const Codec = object({
-        TAG: literal('ADOPTION'),
+        TAG: string('ADOPTION'),
         adoptionId: string,
         userId: string,
-        status: literal('DRAFT', 'PACKING'),
+        status: string('DRAFT', 'PACKING'),
         updatedAt: string,
         currentLegIndex: number,
         fulfilment: optional(string) as never,

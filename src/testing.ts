@@ -215,7 +215,7 @@ export type CheckOptions<T = unknown> = {
  * `decode ∘ encode = id`, over generated entities.
  *
  * Generation is driven by the codec rather than the TypeScript type — see
- * {@link AttributeCodec.arbitrary} — so `decimal` yields normalised decimals and `set(string)`
+ * {@link AttributeCodec.arbitrary} — so `decimal` yields normalised decimals and `string.set()`
  * never yields the empty set. A structurally free generator would produce values DynamoDB itself
  * rejects and blame the codec.
  *
@@ -1507,7 +1507,7 @@ export const checkEquivalent = <T>(
  *
  * @example
  * ```ts
- * checkIso(set(string), {
+ * checkIso(string.set(), {
  *     encode: (tags: readonly string[]) => new Set(tags),
  *     decode: (tags) => [...tags],
  * })
@@ -1846,7 +1846,7 @@ const unionsIn = (subject: AnyCodec): readonly UnionSite[] => {
                  * One option per *variant*, carrying every tag it answers to.
                  *
                  * `dunionCodec`'s options are `(List String × Codec)` — a tag *set* per option, not
-                 * one tag — and this library relies on it: `carrierId: literal('ACME', 'GLOBEX')`
+                 * one tag — and this library relies on it: `carrierId: string('ACME', 'GLOBEX')`
                  * is one variant registered under two keys. Split per key it would be two options
                  * over one codec, and a value one of them generated would be admitted by the other,
                  * which is a fact about the index and not about the union.

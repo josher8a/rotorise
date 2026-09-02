@@ -30,7 +30,7 @@
 import { describe, expect, it } from 'vitest'
 import { isNumeral, isStoredNumeral } from './attribute'
 import type { AnyCodec, AttributeCodec } from './codec'
-import { array, decimal, held, legacy, literal, refine, string } from './codec'
+import { array, decimal, held, legacy, refine, string } from './codec'
 import { LeanUnemittable, leanTermOf, leanVector } from './lean'
 
 /** The emitter takes the erased codec; the library's types are richer than it needs. */
@@ -94,7 +94,7 @@ describe('the predicates this library ships', () => {
     /** A string literal writes only strings, so the side condition is met there too. */
     it('emits over a string literal', () => {
         const one = refine(
-            literal('1', '2') as AttributeCodec<string>,
+            string('1', '2') as AttributeCodec<string>,
             narrowing(isStoredNumeral),
         )
         expect(leanTermOf(erase(one))).toContain('isStored')

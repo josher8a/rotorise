@@ -206,7 +206,7 @@ describe('what opaque reads back, as a type and as a function', () => {
         expect(read({ N: '1.5' }, 'lossy')).toBe(1.5)
     })
 
-    /** Every native set comes back as a `Set`, which is not what `set(...)` decodes to. */
+    /** Every native set comes back as a `Set`, which is not what `.set()` decodes to. */
     it('on the three native sets', () => {
         attest<[opaque.Decode<SS>], [Set<string>]>()
         attest<[opaque.Decode<BS>], [Set<Uint8Array>]>()

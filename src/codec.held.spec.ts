@@ -3,7 +3,7 @@
  *
  * Two words this library keeps apart. An attribute is **stored** as `S`, `N`, `SS`; it is **held**,
  * in code, as a `string`, a `Date`, an array. `held` changes only the second, which makes it the
- * answer to "my values arrive as an array and `set(...)` wants a `Set`" — nothing about the table has
+ * answer to "my values arrive as an array and `.set()` wants a `Set`" — nothing about the table has
  * to change for that, so nothing about what is written does either.
  */
 import { describe, expect, it } from 'vitest'
@@ -19,7 +19,6 @@ import {
     object,
     optional,
     refine,
-    set,
     string,
     union,
     writes,
@@ -27,7 +26,7 @@ import {
 import { checkEncodePaths, checkRoundTrip } from './testing'
 
 /** The case that prompted it: values arrive as an array, the table holds a set. */
-const tags = held(set(string), {
+const tags = held(string.set(), {
     encode: (tags: readonly string[]) => new Set(tags),
     decode: (tags) => [...tags],
 })

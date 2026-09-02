@@ -2,7 +2,7 @@
  * **The lookup table a discriminated union normalizes into, and two ways it was not a lookup.**
  *
  * `discriminatedUnion(d, options)` does not keep the option list. It reads each option's own
- * `literal(...)` for the values that option answers to and writes them into a table keyed by tag,
+ * literal for the values that option answers to and writes them into a table keyed by tag,
  * then hands that table to the internal `tagged`. Every later decision — which variant encodes,
  * which variant a stored item decodes as — is one read of that table. Both defects here are
  * properties of the table rather than of the options, which is why neither showed up in a
@@ -16,7 +16,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import type { AnyObjectCodec } from './codec'
-import { discriminatedUnion, literal, object, string } from './codec'
+import { discriminatedUnion, object, string } from './codec'
 import { CodecError } from './Rotorise'
 
 /** The constructor with its declaration-time constraint forgotten, so the runtime can be asked. */
@@ -40,8 +40,8 @@ describe('two options answering to the same tag', () => {
         const _wrong = () =>
             // @ts-expect-error both options answer to 'A', so a lookup reaches only one
             discriminatedUnion('type', [
-                object({ type: literal('A'), x: string }),
-                object({ type: literal('A'), y: string }),
+                object({ type: string('A'), x: string }),
+                object({ type: string('A'), y: string }),
             ])
         expect(typeof _wrong).toBe('function')
     })
@@ -49,8 +49,8 @@ describe('two options answering to the same tag', () => {
     it('and the runtime refuses it too, where the declaration is', () => {
         expect(() =>
             declare('type', [
-                object({ type: literal('A'), x: string }),
-                object({ type: literal('A'), y: string }),
+                object({ type: string('A'), x: string }),
+                object({ type: string('A'), y: string }),
             ]),
         ).toThrow(/two options answer to 'type' = 'A'/)
     })
@@ -65,14 +65,14 @@ describe('two options answering to the same tag', () => {
         const _wrong = () =>
             // @ts-expect-error 'GLOBEX' is already taken by the option above
             discriminatedUnion('carrierId', [
-                object({ carrierId: literal('ACME', 'GLOBEX'), at: string }),
-                object({ carrierId: literal('GLOBEX'), depot: string }),
+                object({ carrierId: string('ACME', 'GLOBEX'), at: string }),
+                object({ carrierId: string('GLOBEX'), depot: string }),
             ])
         expect(typeof _wrong).toBe('function')
         expect(() =>
             declare('carrierId', [
-                object({ carrierId: literal('ACME', 'GLOBEX'), at: string }),
-                object({ carrierId: literal('GLOBEX'), depot: string }),
+                object({ carrierId: string('ACME', 'GLOBEX'), at: string }),
+                object({ carrierId: string('GLOBEX'), depot: string }),
             ]),
         ).toThrow(/two options answer to 'carrierId' = 'GLOBEX'/)
     })
@@ -80,8 +80,8 @@ describe('two options answering to the same tag', () => {
     /** And the feature the refusal must not take with it. */
     it('still accepts a multi-tag variant that collides with nothing', () => {
         const u = discriminatedUnion('carrierId', [
-            object({ carrierId: literal('ACME', 'GLOBEX'), at: string }),
-            object({ carrierId: literal('LOCAL'), depot: string }),
+            object({ carrierId: string('ACME', 'GLOBEX'), at: string }),
+            object({ carrierId: string('LOCAL'), depot: string }),
         ])
         expect(u.encode({ carrierId: 'ACME', at: 'x' })).toEqual({
             M: { carrierId: { S: 'ACME' }, at: { S: 'x' } },
@@ -94,8 +94,8 @@ describe('two options answering to the same tag', () => {
 
 describe('a stored tag that names a member of Object.prototype', () => {
     const visit = discriminatedUnion('type', [
-        object({ type: literal('CHECKUP'), petId: string }),
-        object({ type: literal('SHOT'), vaccine: string }),
+        object({ type: string('CHECKUP'), petId: string }),
+        object({ type: string('SHOT'), vaccine: string }),
     ])
     const stored = (tag: string) => ({
         M: { type: { S: tag }, petId: { S: 'p' } },

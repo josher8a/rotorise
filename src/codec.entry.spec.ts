@@ -5,7 +5,7 @@
  * hand-written `getKeys` — every one of them `tableEntry` and a codec each doing half the job.
  */
 import { describe, expect, it } from 'vitest'
-import { decimal, literal, optional, string } from './codec'
+import { decimal, optional, string } from './codec'
 import { tableEntry } from './Rotorise'
 import { checkEncodePaths, checkMembersStable, checkRoundTrip } from './testing'
 
@@ -23,11 +23,11 @@ const Pet = tableEntry<Pet>()(
     { PK: ['userId'], SK: ['TAG', 'salt'] },
     {
         codec: {
-            TAG: literal('PET'),
+            TAG: string('PET'),
             userId: string,
             salt: string,
             balance: decimal,
-            status: literal('ACTIVE', 'CLOSED'),
+            status: string('ACTIVE', 'CLOSED'),
             closedAt: optional(string),
         },
     },

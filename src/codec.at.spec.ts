@@ -11,7 +11,6 @@ import {
     array,
     CodecError,
     discriminatedUnion,
-    literal,
     number,
     object,
     optional,
@@ -43,11 +42,11 @@ type Leg = typeof Leg extends { unsafeDecode: (...a: never[]) => infer T }
 
 const Fulfilment = discriminatedUnion('type', [
     object({
-        type: literal('SINGLE_LEG'),
+        type: string('SINGLE_LEG'),
         legs: tuple(Leg),
     }),
     object({
-        type: literal('MULTI_LEG'),
+        type: string('MULTI_LEG'),
         legs: tuple(Leg, Leg),
     }),
 ])

@@ -23,14 +23,12 @@ import {
     boolean,
     decimal,
     discriminatedUnion,
-    literal,
     nullable,
     number,
     object,
     opaque,
     optional,
     record,
-    set,
     string,
     tuple,
     union,
@@ -68,13 +66,13 @@ type PetItem = {
 }
 
 const spec = {
-    TAG: literal('PET'),
+    TAG: string('PET'),
     id: string,
     price: decimal,
     weight: number,
     adopted: boolean,
     photo: binary,
-    tags: set(string),
+    tags: string.set(),
     breed: object({ species: string, coat: optional(string) }),
     visits: array(object({ at: string })),
     note: optional(string),
@@ -408,14 +406,14 @@ describe('a union pins the shape it writes', () => {
         | { TAG: S; kind: S; petId: S; dose: N }
 
     const checkup = object({
-        TAG: literal('VISIT'),
-        kind: literal('CHECKUP'),
+        TAG: string('VISIT'),
+        kind: string('CHECKUP'),
         petId: string,
         vetId: string,
     })
     const shot = object({
-        TAG: literal('VISIT'),
-        kind: literal('SHOT'),
+        TAG: string('VISIT'),
+        kind: string('SHOT'),
         petId: string,
         dose: decimal,
     })
@@ -479,7 +477,7 @@ describe('an entry pins the row it writes', () => {
     type Row = { TAG: 'PET'; id: string; price: string }
     type RowItem = { TAG: S; id: S; price: N; PK: S; GSI1PK: S }
 
-    const rowSpec = { TAG: literal('PET'), id: string, price: decimal }
+    const rowSpec = { TAG: string('PET'), id: string, price: decimal }
     const row: Row = { TAG: 'PET', id: 'p', price: '1.5' }
 
     // the schema is written inline at each call: hoisted, `['TAG']` widens to `string[]` and stops

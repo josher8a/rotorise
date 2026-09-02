@@ -31,12 +31,10 @@ import {
     binary,
     decimal,
     failed,
-    literal,
     number,
     object,
     opaque,
     optional,
-    set,
     string,
 } from './codec'
 import {
@@ -122,8 +120,8 @@ const Row = object({
     pk: string,
     amount: decimal,
     count: number,
-    kind: literal('A', 'B'),
-    tags: set(string),
+    kind: string('A', 'B'),
+    tags: string.set(),
     steps: array(string),
     blob: binary,
     // `unknown` includes `undefined`, so the spec requires the optional form.

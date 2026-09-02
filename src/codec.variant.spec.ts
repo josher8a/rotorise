@@ -8,7 +8,6 @@ import {
     CodecError,
     decimal,
     discriminatedUnion,
-    literal,
     number,
     object,
     optional,
@@ -34,13 +33,13 @@ type Account =
 
 const Account = discriminatedUnion('type', [
     object({
-        type: literal('OWNER'),
+        type: string('OWNER'),
         userId: string,
         profileId: string,
         balance: decimal,
     }),
     object({
-        type: literal('STAFF'),
+        type: string('STAFF'),
         userId: string,
         profileId: string,
         branchId: string,

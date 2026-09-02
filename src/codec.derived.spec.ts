@@ -25,7 +25,6 @@ import {
     fallback,
     lazy,
     legacy,
-    literal,
     nullable,
     nullValue,
     number,
@@ -34,7 +33,6 @@ import {
     optional,
     record,
     refine,
-    set,
     string,
     tuple,
     union,
@@ -46,10 +44,10 @@ const isTag = (v: string): v is `t-${string}` => v.startsWith('t-')
 describe('the member a codec writes', () => {
     it.each([
         { kind: 'string', codec: string, member: 'S' },
-        { kind: 'literal', codec: literal('A'), member: 'S' },
+        { kind: 'literal', codec: string('A'), member: 'S' },
         { kind: 'decimal', codec: decimal, member: 'N' },
         { kind: 'number', codec: number, member: 'N' },
-        { kind: 'literal(N)', codec: literal(0, 1), member: 'N' },
+        { kind: 'literal(N)', codec: number(0, 1), member: 'N' },
         { kind: 'boolean', codec: boolean, member: 'BOOL' },
         { kind: 'null', codec: nullValue, member: 'NULL' },
         { kind: 'binary', codec: binary, member: 'B' },
@@ -74,10 +72,11 @@ describe('the member a codec writes', () => {
         expect(writes(opaque)).toBeUndefined()
     })
 
-    /** What `set` reads, and the reason a codec has to be able to say it at all. */
+    /** What the set builder reads, and the reason a codec has to be able to say it at all. */
     it('is what lets a refined scalar still be a set element', () => {
-        expect(() => set(refine(string, isTag))).not.toThrow()
-        expect(() => set(nullable(string))).toThrow(CodecError)
+        expect(() => refine(string, isTag).set()).not.toThrow()
+        // @ts-expect-error `nullable` writes no single member, so the type declines the capability
+        expect(() => refine(nullable(string), isTag).set()).toThrow(CodecError)
     })
 
     /**
@@ -91,8 +90,8 @@ describe('the member a codec writes', () => {
 
 describe('the value a codec decides', () => {
     it('is the one a single-valued literal admits', () => {
-        expect(decides(literal('ONLY'))).toBe('ONLY')
-        expect(decides(literal('A', 'B'))).toBeUndefined()
+        expect(decides(string('ONLY'))).toBe('ONLY')
+        expect(decides(string('A', 'B'))).toBeUndefined()
     })
 
     /**
@@ -100,19 +99,17 @@ describe('the value a codec decides', () => {
      * and each of these may change values or admit absence.
      */
     it('does not survive a wrapper that may change the value', () => {
-        expect(decides(refine(literal('ONLY'), isTag as never))).toBeUndefined()
+        expect(decides(refine(string('ONLY'), isTag as never))).toBeUndefined()
         expect(
-            decides(
-                legacy({ current: literal('ONLY'), older: literal('ONLY') }),
-            ),
+            decides(legacy({ current: string('ONLY'), older: string('ONLY') })),
         ).toBeUndefined()
-        expect(decides(nullable(literal('ONLY')))).toBeUndefined()
-        expect(decides(optional(literal('ONLY')))).toBeUndefined()
+        expect(decides(nullable(string('ONLY')))).toBeUndefined()
+        expect(decides(optional(string('ONLY')))).toBeUndefined()
     })
 
     /** `fallback` always writes the attribute, and its replacement is typed to the same value. */
     it('survives fallback, which is the one that keeps it', () => {
-        expect(decides(fallback(literal('ONLY'), () => 'ONLY' as const))).toBe(
+        expect(decides(fallback(string('ONLY'), () => 'ONLY' as const))).toBe(
             'ONLY',
         )
     })
@@ -133,7 +130,7 @@ describe('what is one segment deeper', () => {
 
     /** A set is unordered, so no document path addresses a member of one. */
     it('refuses to descend a set', () => {
-        expect(deeper(set(string), 0)).toBeUndefined()
+        expect(deeper(string.set(), 0)).toBeUndefined()
     })
 
     it('descends through a wrapper to what it wraps', () => {
@@ -161,8 +158,8 @@ describe('what is one segment deeper', () => {
             | { type: 'CHECKUP'; petId: string }
             | { type: 'SHOT'; petId: string }
         const Visits = discriminatedUnion('type', [
-            object({ type: literal('CHECKUP'), petId: string }),
-            object({ type: literal('SHOT'), petId: string }),
+            object({ type: string('CHECKUP'), petId: string }),
+            object({ type: string('SHOT'), petId: string }),
         ])
         // both variants declare `petId` the same way, so there is nothing to choose between
         expect(deeper(Visits, 'petId')?.def?.kind).toBe('string')
@@ -171,8 +168,8 @@ describe('what is one segment deeper', () => {
 
     it('gives no answer where the variants disagree, rather than a fabricated one', () => {
         const Ops = discriminatedUnion('type', [
-            object({ type: literal('A'), amount: number }),
-            object({ type: literal('B'), amount: string }),
+            object({ type: string('A'), amount: number }),
+            object({ type: string('B'), amount: string }),
         ])
         // two codecs are one segment down and neither is *the* one, so there is nothing to return.
         // `ItemCodec.at` carries the disagreement instead, and reports it if the path ends on it

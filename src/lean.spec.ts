@@ -39,7 +39,6 @@ import {
     held,
     lazy,
     legacy,
-    literal,
     nullable,
     nullValue,
     number,
@@ -48,7 +47,6 @@ import {
     optional,
     record,
     refine,
-    set,
     string,
     tuple,
     union,
@@ -95,10 +93,10 @@ describe('terms', () => {
      * discharged by the type, and the emitter's only job is to write the first element and the rest.
      */
     it('emits a string literal as its base and its alternatives', () => {
-        expect(leanTermOf(erase(literal('A', 'B', 'C')))).toBe(
+        expect(leanTermOf(erase(string('A', 'B', 'C')))).toBe(
             'Term.literal GroundKind.string (NEFinset.of "A" {"B", "C"})',
         )
-        expect(leanTermOf(erase(literal('only')))).toBe(
+        expect(leanTermOf(erase(string('only')))).toBe(
             'Term.literal GroundKind.string (NEFinset.of "only" ∅)',
         )
     })
@@ -160,7 +158,7 @@ describe('terms', () => {
      * cannot tell `number` from `decimal`, and the index can.
      */
     it('emits a set as its base, not as its element term', () => {
-        expect(leanTermOf(erase(set(string)))).toBe('Term.set SetBase.string')
+        expect(leanTermOf(erase(string.set()))).toBe('Term.set SetBase.string')
         expect(leanTermOf(erase(decimal.set()))).toBe(
             'Term.set SetBase.decimal',
         )
@@ -185,7 +183,7 @@ describe('terms', () => {
             (value: string): value is string => !value.startsWith('-'),
             { describe: 'non-negative' },
         )
-        expect(() => leanTermOf(erase(set(positive)))).toThrow(
+        expect(() => leanTermOf(erase(positive.set()))).toThrow(
             /\*restricted\* element/,
         )
     })
@@ -260,7 +258,7 @@ describe('terms', () => {
      * `Typed.dunion` carries. Deduplicated by identity.
      */
     it('emits a discriminated union once per option, not once per tag', () => {
-        const many = object({ kind: literal('a', 'b'), x: string })
+        const many = object({ kind: string('a', 'b'), x: string })
         const emitted = leanTermOf(erase(discriminatedUnion('kind', [many])))
         expect(emitted).toContain('Term.dunion "kind" [Term.object')
         expect(emitted.split('Term.object')).toHaveLength(2)
@@ -297,9 +295,9 @@ describe('what cannot be emitted', () => {
     })
 
     it('refuses a numeric literal, which is the same fact one level up', () => {
-        expect(
-            refusal(() => leanTermOf(erase(literal(1, 2)))).reason,
-        ).toContain('GroundKind.number')
+        expect(refusal(() => leanTermOf(erase(number(1, 2)))).reason).toContain(
+            'GroundKind.number',
+        )
     })
 
     /**
@@ -317,7 +315,7 @@ describe('what cannot be emitted', () => {
         expect(refusal(() => leanTermOf(erase(notEmpty))).reason).toContain(
             'Value → Bool',
         )
-        const adapted = held(set(string), {
+        const adapted = held(string.set(), {
             encode: (value: readonly string[]) => new Set(value),
             decode: (holding: ReadonlySet<string>) => [...holding],
         })
@@ -510,7 +508,7 @@ export const sampleVectors: readonly Vector[] = [
     { name: 'scalar_null', codec: erase(nullValue), value: null },
     {
         name: 'literal_alternatives',
-        codec: erase(literal('A', 'B')),
+        codec: erase(string('A', 'B')),
         value: 'B',
     },
     {
@@ -525,12 +523,12 @@ export const sampleVectors: readonly Vector[] = [
     },
     {
         name: 'set_of_string',
-        codec: erase(set(string)),
+        codec: erase(string.set()),
         value: new Set(['b', 'a']),
     },
     {
         name: 'set_of_decimal',
-        codec: erase(set(decimal)),
+        codec: erase(decimal.set()),
         value: new Set(['1.5', '2']),
     },
     { name: 'array_of_string', codec: erase(array(string)), value: ['a', 'b'] },
@@ -586,8 +584,8 @@ export const sampleVectors: readonly Vector[] = [
         name: 'discriminated_union',
         codec: erase(
             discriminatedUnion('kind', [
-                object({ kind: literal('a'), x: string }),
-                object({ kind: literal('b'), y: boolean }),
+                object({ kind: string('a'), x: string }),
+                object({ kind: string('b'), y: boolean }),
             ]),
         ),
         value: { kind: 'a', x: 'v' },

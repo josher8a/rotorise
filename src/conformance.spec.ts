@@ -11,16 +11,7 @@ import * as sdk from '@aws-sdk/util-dynamodb'
 import { describe, expect, it } from 'vitest'
 import type { AttributeMap, AttributeValue } from './attribute'
 import type { Encoded } from './codec'
-import {
-    array,
-    CodecError,
-    decimal,
-    literal,
-    number,
-    object,
-    set,
-    string,
-} from './codec'
+import { array, CodecError, decimal, number, object, string } from './codec'
 import type { native } from './native'
 import type { Reference } from './testing'
 import { checkAgainst, firstDifference } from './testing'
@@ -28,10 +19,10 @@ import { checkAgainst, firstDifference } from './testing'
 type Pet = { TAG: 'PET'; id: string; price: string; tags: ReadonlySet<string> }
 
 const Pet = object({
-    TAG: literal('PET'),
+    TAG: string('PET'),
     id: string,
     price: decimal,
-    tags: set(string),
+    tags: string.set(),
 }).item
 
 /** A marshaller that agrees: money as `N`, tags as a set. */
@@ -188,7 +179,7 @@ describe('the two implementations agree on the shape of a row', () => {
         id: string,
         price: decimal,
         qty: number,
-        tags: set(string),
+        tags: string.set(),
         fee: object({ price: decimal }),
         history: array(decimal),
     }
@@ -227,7 +218,7 @@ describe('the two implementations agree on the shape of a row', () => {
                      */
                     price: string
                     qty: string
-                    /** A native set, as a `Set` — which is what `set(...)` reads too. */
+                    /** A native set, as a `Set` — which is what `.set()` reads too. */
                     tags: Set<string>
                     /** Nested maps come back readonly, where the top level does not. */
                     fee: { readonly price: string }
@@ -291,10 +282,10 @@ describe('a codec against the SDK itself', () => {
     }
 
     const Row = object({
-        TAG: literal('ROW'),
+        TAG: string('ROW'),
         id: string,
         note: string,
-        tags: set(string),
+        tags: string.set(),
     }).item
 
     const row: Row = {
@@ -323,7 +314,7 @@ describe('a codec against the SDK itself', () => {
      * The one difference that is left: order.
      *
      * `SS` is a set, so the order it is written in carries no information — and DynamoDB does not
-     * promise to give it back. `set(...)` sorts, so what is stored is a function of the value alone;
+     * promise to give it back. a set codec sorts, so what is stored is a function of the value alone;
      * the SDK writes the order the `Set` happened to be built in.
      */
     it('sorts a set where the SDK keeps the order it was given', () => {

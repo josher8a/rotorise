@@ -8,22 +8,16 @@
  * member-specific attribute is the whole reason to write the path.
  */
 import { describe, expect, it } from 'vitest'
-import {
-    discriminatedUnion,
-    literal,
-    object,
-    pathBuilder,
-    string,
-} from './codec'
+import { discriminatedUnion, object, pathBuilder, string } from './codec'
 
 type Tender =
     | { tenderType: 'STORE_CREDIT'; tender: string }
     | { tenderType: 'CASH'; tender: string; cardId: string }
 
 const AssetCodec = discriminatedUnion('tenderType', [
-    object({ tenderType: literal('STORE_CREDIT'), tender: string }),
+    object({ tenderType: string('STORE_CREDIT'), tender: string }),
     object({
-        tenderType: literal('CASH'),
+        tenderType: string('CASH'),
         tender: string,
         cardId: string,
     }),

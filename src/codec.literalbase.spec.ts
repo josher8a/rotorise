@@ -1,16 +1,17 @@
 /**
  * A literal is a capability of the primitive that names its base — not a constructor that guesses.
  *
- * `literal(...)` inferred its carrier from the JS type of its arguments, and `src/codec.ts` said so
- * in its own words: *"A literal is the one ground term whose member follows from its **values**
- * rather than from its name."* That was the single exception to how every other term in this library
- * works, and it is retired here. `string('A')`, `number(1)`, `decimal('1')`, `boolean(true)` and
+ * `literal(...)` — now removed — inferred its carrier from the JS type of its arguments, and
+ * `src/codec.ts` said so in its own words: *"A literal is the one ground term whose member follows
+ * from its **values** rather than from its name."* That was the single exception to how every other
+ * term in this library works, and it is retired here. `string('A')`, `number(1)`, `decimal('1')`, `boolean(true)` and
  * `binary(bytes)` each name the ground term they narrow, so the base is data and not an inference.
  *
  * **What the guess could not reach, and this can.** Three things, and one of them is the reason:
  *
- * 1. `decimal('1')` — *stored as `N`, exactly this text*. `literal('1')` gave an `S` and `literal(1)`
- *    went through the host's `number`, so a lossless numeric literal was not expressible at all. It
+ * 1. `decimal('1')` — *stored as `N`, exactly this text*. The guess gave an `S` for `literal('1')`
+ *    and went through the host's `number` for `literal(1)`, so a lossless numeric literal was not
+ *    expressible at all. It
  *    is the counterexample that retires the rule outright: text that stores an `N`.
  * 2. `boolean(true)` — a literal at `BOOL`, which no spelling reached.
  * 3. `binary(bytes)` — a literal at `B`, compared by bytes rather than by reference.
@@ -29,7 +30,6 @@ import {
     decides,
     decimal,
     discriminatedUnion,
-    literal,
     number,
     object,
     string,
@@ -150,7 +150,7 @@ describe('a decimal literal', () => {
 })
 
 describe('the two bases that were unreachable', () => {
-    it('holds a boolean literal, which `literal` had no spelling for', () => {
+    it('holds a boolean literal, which the guessing form had no spelling for', () => {
         const yes = boolean(true)
         expect(writes(yes)).toBe('BOOL')
         expect(carries(yes)).toEqual(['boolean'])
@@ -252,28 +252,36 @@ describe('bases as union options', () => {
 })
 
 /**
- * `literal(...)` is deprecated, and *works*.
+ * **`literal(...)` is gone, and what stands in its place is pinned here.**
  *
- * A deprecation that changes behaviour is a breakage wearing a tag, so this pins that the old
- * constructor still produces the very same codec the base-named form does — same definition, same
- * member, same brand, same messages. What is deprecated is the guess, not the codec.
+ * The deprecated constructor guessed its base from the JS type of its arguments and was, at the two
+ * bases it could reach, behaviourally identical to the base-named forms — `literal('A','B').def`
+ * deep-equalled `string('A','B').def`, which this file used to assert. It is removed rather than
+ * left deprecated, because it was the library's one term whose member followed from its values, and
+ * a surface that keeps a retired exception around keeps having to explain it.
+ *
+ * What is asserted now is the part a caller can still get wrong, and the two messages they meet.
+ * The mixing message is the one thing the old constructor said better — it named the *mixing* —
+ * and `string('A', 0)` names the base and the offending value instead, which is the more useful
+ * half of it and is why nothing was kept to say the other.
  */
-describe('the old constructor', () => {
-    it('is exactly the base-named one, at the two bases it could reach', () => {
-        expect(literal('A', 'B').def).toEqual(string('A', 'B').def)
-        expect(literal(0, 1).def).toEqual(number(0, 1).def)
-        expect(decides(literal('A'))).toBe('A')
-        expect(decides(string('A'))).toBe('A')
-    })
-
-    it('keeps the message a caller mixing kinds already gets', () => {
+describe('what replaced the constructor that guessed', () => {
+    it('refuses a value the base does not hold, and names it', () => {
         expect(() =>
-            // @ts-expect-error a literal is stored as S or as N and cannot be both
-            literal('A', 0),
-        ).toThrow(/a literal is stored as 'S' or as 'N' and cannot be both/)
+            // @ts-expect-error `string(...)` admits strings, and 0 is not one
+            string('A', 0),
+        ).toThrow(/`string\(\.\.\.\)` admits string values, and 0 is not one/)
+        expect(() =>
+            // @ts-expect-error `number(...)` admits numbers, and 'A' is not one
+            number(0, 'A'),
+        ).toThrow(/`number\(\.\.\.\)` admits number values, and 'A' is not one/)
     })
 
-    it('and still refuses to name nothing', () => {
-        expect(() => literal()).toThrow(/`literal\(\)` names none/)
+    it('refuses to name nothing, at every base', () => {
+        expect(() => string()).toThrow(/`string\(\)` names none/)
+        expect(() => number()).toThrow(/`number\(\)` names none/)
+        expect(() => decimal()).toThrow(/`decimal\(\)` names none/)
+        expect(() => boolean()).toThrow(/`boolean\(\)` names none/)
+        expect(() => binary()).toThrow(/`binary\(\)` names none/)
     })
 })

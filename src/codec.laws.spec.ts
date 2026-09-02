@@ -23,14 +23,12 @@ import {
     fallback,
     held,
     legacy,
-    literal,
     nullable,
     number,
     object,
     optional,
     record,
     refine,
-    set,
     string,
     tuple,
     union,
@@ -74,7 +72,7 @@ describe('held', () => {
     it('leaves what is stored alone, which is the whole of what it claims', () => {
         expect(
             writes(
-                held(set(string), {
+                held(string.set(), {
                     encode: (tags: readonly string[]) => new Set(tags),
                     decode: (tags) => [...tags],
                 }),
@@ -87,7 +85,7 @@ describe('held', () => {
 
     it('is an isomorphism where it says it is', () => {
         checkIso(
-            set(string),
+            string.set(),
             {
                 encode: (tags: readonly string[]) => new Set(tags),
                 decode: (tags: ReadonlySet<string>) => [...tags],
@@ -258,7 +256,7 @@ describe('optional', () => {
 
     it('leaves what is stored alone', () => {
         expect(writes(optional(decimal))).toBe('N')
-        expect(writes(optional(set(string)))).toBe('SS')
+        expect(writes(optional(string.set()))).toBe('SS')
     })
 })
 
@@ -278,9 +276,9 @@ describe('what the wrappers preserve', () => {
     })
 
     it('and a set keeps the member its element decides', () => {
-        expect(writes(set(string))).toBe('SS')
-        expect(writes(set(number))).toBe('NS')
-        expect(writes(set(binary))).toBe('BS')
+        expect(writes(string.set())).toBe('SS')
+        expect(writes(number.set())).toBe('NS')
+        expect(writes(binary.set())).toBe('BS')
         expect(writes(array(string))).toBe('L')
     })
 })
@@ -292,8 +290,8 @@ describe('the laws that do NOT hold', () => {
      */
     it('a union is not closed under adding an option', () => {
         const _wrong = () =>
-            // @ts-expect-error `literal('A')` reads back as a subtype of what `string` reads back
-            union([string, literal('A')])
+            // @ts-expect-error `string('A')` reads back as a subtype of what `string` reads back
+            union([string, string('A')])
         expect(typeof _wrong).toBe('function')
     })
 
@@ -356,7 +354,12 @@ describe('the laws that do NOT hold', () => {
      * which for a codec declared at module scope is import time.
      */
     it('a set of a union is not a set at all', () => {
-        expect(() => set(union([string, number]))).toThrow(
+        const either = refine(
+            union([string, number]),
+            (value): value is string | number => value !== null,
+        )
+        // @ts-expect-error a union writes no single member, so the type declines the capability
+        expect(() => either.set()).toThrow(
             /a set holds strings, numbers or binary, and this element writes no single member/,
         )
     })
@@ -369,16 +372,16 @@ describe('the laws that do NOT hold', () => {
      * cannot be resolved is the one that decides whether the declaration is allowed at all.
      */
     it('a union of sets is refused, though reading it would have worked', () => {
-        expect(() => union([set(string), set(number)])).toThrow(
+        expect(() => union([string.set(), number.set()])).toThrow(
             /both take the same kind of value — set — and neither checks/,
         )
 
         // the stored side always knew which: the two write different members, and that is what the
         // decode filter reads. It is the value side that cannot tell one `Set` from another
-        expect(writes(set(string))).toBe('SS')
-        expect(writes(set(number))).toBe('NS')
-        expect(set(string).unsafeDecode({ SS: ['a'] })).toEqual(new Set(['a']))
-        expect(set(number).unsafeDecode({ NS: ['1'] })).toEqual(new Set([1]))
+        expect(writes(string.set())).toBe('SS')
+        expect(writes(number.set())).toBe('NS')
+        expect(string.set().unsafeDecode({ SS: ['a'] })).toEqual(new Set(['a']))
+        expect(number.set().unsafeDecode({ NS: ['1'] })).toEqual(new Set([1]))
     })
 
     /**
@@ -396,8 +399,6 @@ describe('the laws that do NOT hold', () => {
         const _wrong = () => [
             // @ts-expect-error nothing in a list has a name to be absent from
             array(optional(string)),
-            // @ts-expect-error nor in a set
-            set(optional(string)),
             // @ts-expect-error nor in a record
             record(optional(string)),
             // @ts-expect-error nor in a tuple
@@ -420,7 +421,7 @@ describe('the laws that do NOT hold', () => {
 
     /** A set is not a list held as an array, however similar the two look. */
     it('a set is not an array', () => {
-        expect(writes(set(string))).toBe('SS')
+        expect(writes(string.set())).toBe('SS')
         expect(writes(array(string))).toBe('L')
     })
 })
@@ -441,7 +442,7 @@ describe('(C): what a codec reads, it can write', () => {
         id: string,
         price: decimal,
         count: number,
-        tags: set(string),
+        tags: string.set(),
         steps: array(string),
         note: optional(string),
         nick: fallback(string, () => 'anon'),
@@ -458,8 +459,8 @@ describe('(C): what a codec reads, it can write', () => {
             n: number,
             b: boolean,
             bin: binary,
-            lit: literal('A', 'B'),
-            litN: literal(0, 1),
+            lit: string('A', 'B'),
+            litN: number(0, 1),
             nul: nullable(string),
         }).item
         checkDecodesAreWritable(Ground, { count: 40, seed: 20260829 })

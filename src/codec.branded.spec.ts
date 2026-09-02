@@ -11,7 +11,6 @@ import {
     CodecError,
     decimal,
     discriminatedUnion,
-    literal,
     object,
     optional,
     refine,
@@ -117,14 +116,14 @@ const balance = {
 
 const AccountCodec = discriminatedUnion('type', [
     object({
-        type: literal('OWNER'),
+        type: string('OWNER'),
         userId,
         profileId,
         speciesId,
         ...balance,
     }),
     object({
-        type: literal('STAFF'),
+        type: string('STAFF'),
         userId,
         profileId,
         speciesId,
@@ -135,13 +134,13 @@ const AccountCodec = discriminatedUnion('type', [
 
 const HolderCodec = discriminatedUnion('type', [
     object({
-        type: literal('OWNER'),
+        type: string('OWNER'),
         userId,
         profileId,
         speciesId,
     }),
     object({
-        type: literal('STAFF'),
+        type: string('STAFF'),
         userId,
         profileId,
         speciesId,

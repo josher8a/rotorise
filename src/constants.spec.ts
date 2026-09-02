@@ -16,7 +16,7 @@
 import { attest } from '@ark/attest'
 import { describe, expect, it } from 'vitest'
 import type { AnyCodec, ConstantCodec } from './codec'
-import { decides, decimal, literal, optional, refine, string } from './codec'
+import { decides, decimal, optional, refine, string } from './codec'
 import type { ConstantAttributes } from './Rotorise'
 
 /**
@@ -37,21 +37,21 @@ const decided = (spec: Record<string, AnyCodec>): readonly string[] =>
 
 describe('the type and the function agree on what is decided', () => {
     it('on a single-valued literal, which is the whole point', () => {
-        const spec = { TAG: literal('PET'), id: string }
+        const spec = { TAG: string('PET'), id: string }
         attest<[ConstantAttributes<typeof spec>], ['TAG']>()
         expect(decided(spec)).toEqual(['TAG'])
     })
 
     it('on a many-valued literal, which decides nothing', () => {
-        const spec = { status: literal('NEW', 'DONE'), id: string }
+        const spec = { status: string('NEW', 'DONE'), id: string }
         attest<[ConstantAttributes<typeof spec>], [never]>()
         expect(decided(spec)).toEqual([])
     })
 
     it('on several, and on a spec with none at all', () => {
         const several = {
-            TAG: literal('PET'),
-            kind: literal('DOG'),
+            TAG: string('PET'),
+            kind: string('DOG'),
             id: string,
         }
         attest<[ConstantAttributes<typeof several>], ['TAG' | 'kind']>()
@@ -63,14 +63,15 @@ describe('the type and the function agree on what is decided', () => {
     })
 
     /**
-     * The case that was wrong, and is not reachable through `literal()` — which is why it survived.
+     * The case that was wrong, and is not reachable through the constructors — which is why it
+     * survived.
      *
      * A codec branded as deciding *two* values decides neither. Asking only whether a `constant` was
      * declared made the type call this decided while `decides` called it undecided: `keyUpdates`
      * would not ask for the component, then throw demanding it.
      */
     it('on a codec branded with two values, which decides neither', () => {
-        const twoValued = literal('A', 'B') as unknown as ConstantCodec<
+        const twoValued = string('A', 'B') as unknown as ConstantCodec<
             'A' | 'B'
         >
         const spec = { kind: twoValued, id: string }
@@ -83,12 +84,12 @@ describe('the type and the function agree on what is decided', () => {
      * and `optional` is the one that used to keep the claim on the record.
      */
     it('on a wrapped literal, which neither calls decided', () => {
-        const wrapped = { TAG: optional(literal('PET')), id: string }
+        const wrapped = { TAG: optional(string('PET')), id: string }
         attest<[ConstantAttributes<typeof wrapped>], [never]>()
         expect(decided(wrapped)).toEqual([])
 
         const refined = {
-            TAG: refine(literal('PET'), (v): v is 'PET' => v === 'PET'),
+            TAG: refine(string('PET'), (v): v is 'PET' => v === 'PET'),
             id: string,
         }
         attest<[ConstantAttributes<typeof refined>], [never]>()

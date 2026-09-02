@@ -15,10 +15,8 @@ import {
     carries,
     decides,
     discriminatedUnion,
-    literal,
     number,
     object,
-    set,
     string,
     union,
     writes,
@@ -29,7 +27,7 @@ import { checkRoundTrip } from './testing'
 const Status = { DRAFT: 0, LISTED: 1, SOLD: 2 } as const
 type Status = (typeof Status)[keyof typeof Status]
 
-const status = literal(...(Object.values(Status) as Status[]))
+const status = number(...(Object.values(Status) as Status[]))
 
 describe('a numeric literal', () => {
     it('is stored as N', () => {
@@ -45,7 +43,7 @@ describe('a numeric literal', () => {
 
     it('types the attribute as N, and a string literal as S', () => {
         const numeric: N = status.unsafeEncode(0)
-        const text: S = literal('DRAFT').unsafeEncode('DRAFT')
+        const text: S = string('DRAFT').unsafeEncode('DRAFT')
         expect([numeric, text]).toHaveLength(2)
     })
 
@@ -63,7 +61,7 @@ describe('a numeric literal', () => {
     })
 
     it('keeps the constant brand for a single value', () => {
-        const draft = literal(0)
+        const draft = number(0)
         // the brand is type-level, and the annotation is the assertion; `decides` is what reads the
         // value back at runtime, and is what a key component is built from
         type Only = typeof draft.constant
@@ -90,8 +88,8 @@ describe('a numeric tag', () => {
     type Row = { kind: 0; draftedAt: string } | { kind: 1; listedAt: string }
 
     const Rows = discriminatedUnion('kind', [
-        object({ kind: literal(0), draftedAt: string }),
-        object({ kind: literal(1), listedAt: string }),
+        object({ kind: number(0), draftedAt: string }),
+        object({ kind: number(1), listedAt: string }),
     ])
 
     it('chooses the variant', () => {
@@ -130,8 +128,8 @@ describe('a numeric tag', () => {
  * member, and the element now has one either way.
  */
 describe('a set of a literal', () => {
-    const tags = set(literal('a', 'b', 'c'))
-    const codes = set(literal(1, 2, 3, 4))
+    const tags = string.set('a', 'b', 'c')
+    const codes = number.set(1, 2, 3, 4)
 
     it('writes SS for text and NS for digits', () => {
         expect(writes(tags)).toBe('SS')
@@ -163,7 +161,7 @@ describe('a set of a literal', () => {
      * holds anyway. This is the case that would break if a set were an array.
      */
     it('round-trips digits that do not sort numerically', () => {
-        const codec = set(literal(1, 2, 10))
+        const codec = number.set(1, 2, 10)
         const value = new Set([10, 2] as const)
         expect(codec.unsafeEncode(value)).toEqual({ NS: ['10', '2'] })
         expect(codec.unsafeDecode(codec.unsafeEncode(value))).toEqual(value)
@@ -180,35 +178,43 @@ describe('a set of a literal', () => {
      * And a union of two such sets is allowed, which is the interesting part.
      *
      * Both options are given a `Set`, so the kind cannot choose between them — but a literal element
-     * *refuses* a value that is not its own, so trying can. `union(set(string), set(number))` stays
+     * *refuses* a value that is not its own, so trying can. `union(string.set(), number.set())` stays
      * refused for exactly the reason this one is not: those elements check nothing.
      */
     it('and a union of two literal sets resolves, where a union of plain sets cannot', () => {
-        const either = union([set(literal('a', 'b')), set(literal(1, 2))])
+        const either = union([string.set('a', 'b'), number.set(1, 2)])
         expect(either.unsafeEncode(new Set<'a' | 'b'>(['a']))).toEqual({
             SS: ['a'],
         })
         expect(either.unsafeEncode(new Set<1 | 2>([2]))).toEqual({ NS: ['2'] })
         expect(either.unsafeDecode({ NS: ['1'] })).toEqual(new Set([1]))
 
-        expect(() => union([set(string), set(number)])).toThrow(
+        expect(() => union([string.set(), number.set()])).toThrow(
             /both take the same kind of value — set — and neither checks/,
         )
     })
 })
 
 describe('what mixing kinds would ask for', () => {
+    /**
+     * The message changed when `literal(...)` was removed, and the new one is better.
+     *
+     * The guessing constructor picked a base from the first value and then reported the *mixing*
+     * — "a literal is stored as 'S' or as 'N' and cannot be both" — because the mixing was what a
+     * caller of *that* constructor got wrong. `string('A', 0)` has already named the base, so what
+     * is wrong is one value, and naming it is what the caller needs.
+     */
     it('is refused, because one codec writes one member', () => {
         const _wrong = () =>
-            // @ts-expect-error a literal is stored as S or as N and cannot be both
-            literal('A', 0)
+            // @ts-expect-error `string(...)` admits strings, and 0 is not one
+            string('A', 0)
         expect(_wrong).toThrow(
-            /a literal is stored as 'S' or as 'N' and cannot be both/,
+            /`string\(\.\.\.\)` admits string values, and 0 is not one/,
         )
     })
 
     it('though a union of the two is fine, since the kinds differ', () => {
-        const either = union([literal('A'), literal(0)])
+        const either = union([string('A'), number(0)])
         expect(either.unsafeEncode('A')).toEqual({ S: 'A' })
         expect(either.unsafeEncode(0)).toEqual({ N: '0' })
         expect(either.unsafeDecode({ N: '0' })).toBe(0)
@@ -227,13 +233,13 @@ describe('a literal with no alternatives', () => {
      * silently got `string`, and there is no term in the model that denotes it.
      */
     it('is refused, rather than admitting everything', () => {
-        expect(() => literal()).toThrow(/names none/)
+        expect(() => string()).toThrow(/names none/)
     })
 
     /** And the honest caller the type could not be tightened for is still honest. */
     it('still takes a spread of values the type cannot see as a tuple', () => {
         const values: string[] = ['A', 'B']
-        const either = literal(...values)
+        const either = string(...values)
         expect(either.unsafeEncode('A')).toEqual({ S: 'A' })
         expect(either.decode({ S: 'C' })).toBeInstanceOf(CodecError)
     })
@@ -253,23 +259,23 @@ describe('the admissible set is what DynamoDB stores', () => {
      * `ℓ` is data this library owns, so the check is decidable when the codec is built.
      */
     it('refuses NaN and Infinity, which is where the defect was', () => {
-        expect(() => literal(NaN)).toThrow(/has no NaN or Infinity/)
-        expect(() => literal(1e400)).toThrow(/has no NaN or Infinity/)
-        expect(() => literal(-1e400)).toThrow(/has no NaN or Infinity/)
+        expect(() => number(NaN)).toThrow(/has no NaN or Infinity/)
+        expect(() => number(1e400)).toThrow(/has no NaN or Infinity/)
+        expect(() => number(-1e400)).toThrow(/has no NaN or Infinity/)
     })
 
     it('refuses one bad value among good ones, and names it', () => {
-        expect(() => literal(0, 1, NaN)).toThrow(/NaN is not a number/)
+        expect(() => number(0, 1, NaN)).toThrow(/NaN is not a number/)
     })
 
     it('names all of them when several are outside', () => {
-        expect(() => literal(NaN, 1e400)).toThrow(/NaN, Infinity are not numbers/)
+        expect(() => number(NaN, 1e400)).toThrow(/NaN, Infinity are not numbers/)
     })
 
     /** The magnitude range is DynamoDB's, not JavaScript's — `1e200` is a fine double. */
     it('refuses a magnitude past what an N holds', () => {
-        expect(() => literal(1e200)).toThrow(/magnitude 1e-130 to 9.9e125/)
-        expect(() => literal(1e-200)).toThrow(/magnitude 1e-130 to 9.9e125/)
+        expect(() => number(1e200)).toThrow(/magnitude 1e-130 to 9.9e125/)
+        expect(() => number(1e-200)).toThrow(/magnitude 1e-130 to 9.9e125/)
     })
 
     /**
@@ -279,19 +285,19 @@ describe('the admissible set is what DynamoDB stores', () => {
      * which is where it is still local.
      */
     it('refuses the denormal the specification named as the unchecked case', () => {
-        expect(() => literal(5e-324)).toThrow(/magnitude 1e-130 to 9.9e125/)
+        expect(() => number(5e-324)).toThrow(/magnitude 1e-130 to 9.9e125/)
         expect(() => number.unsafeEncode(5e-324)).toThrow(
             /magnitude 1e-130 to 9.9e125/,
         )
     })
 
     it('admits the range that is actually stored, including the ends', () => {
-        expect(writes(literal(0, 1, -1, 1e125, 1e-130))).toBe('N')
+        expect(writes(number(0, 1, -1, 1e125, 1e-130))).toBe('N')
     })
 
     /** A string literal is unaffected: `S` carries any text, and the premise is `(literal-N)`'s. */
     it('says nothing about a string literal', () => {
-        expect(writes(literal('NaN', 'Infinity'))).toBe('S')
+        expect(writes(string('NaN', 'Infinity'))).toBe('S')
     })
 })
 
@@ -305,8 +311,8 @@ describe('the read side reads through the same gate as number', () => {
      * could never have written decoded to a value the type calls legitimate:
      *
      * ```
-     * literal(0, 1, 2).decode({ N: '' })      → 0
-     * literal(0, 16).decode({ N: '0x10' })    → 16
+     * number(0, 1, 2).decode({ N: '' })      → 0
+     * number(0, 16).decode({ N: '0x10' })    → 16
      * ```
      *
      * No law in §2 catches it. (C) holds — `0` re-encodes fine — and so does (R). What it breaks
@@ -319,13 +325,13 @@ describe('the read side reads through the same gate as number', () => {
      * discharges the write side, because `ℓ` is frozen at construction. Nothing discharges a read.
      */
     it('refuses an N that is not a numeral, whatever Number would make of it', () => {
-        const status = literal(0, 1, 2)
+        const status = number(0, 1, 2)
         for (const text of ['', ' ', '\n', '0b11', '0o7', '1_0']) {
             expect(() => status.unsafeDecode({ N: text })).toThrow(
                 /is not a numeral, so this attribute was not written by DynamoDB/,
             )
         }
-        expect(() => literal(0, 16).unsafeDecode({ N: '0x10' })).toThrow(
+        expect(() => number(0, 16).unsafeDecode({ N: '0x10' })).toThrow(
             /is not a numeral/,
         )
     })
@@ -333,13 +339,13 @@ describe('the read side reads through the same gate as number', () => {
     it('agrees with number on every one of them', () => {
         for (const text of ['', ' ', '0x10', '0b11', 'Infinity', 'NaN', 'abc']) {
             expect(() => number.unsafeDecode({ N: text })).toThrow()
-            expect(() => literal(0, 1, 2).unsafeDecode({ N: text })).toThrow()
+            expect(() => number(0, 1, 2).unsafeDecode({ N: text })).toThrow()
         }
     })
 
     /** The forms DynamoDB does accept still read, which is what keeps the store round trip. */
     it('still reads the denormalised forms the service normalises', () => {
-        const status = literal(0, 1, 2)
+        const status = number(0, 1, 2)
         for (const text of ['1', '1.0', '01', '+1', '1e0']) {
             expect(status.unsafeDecode({ N: text })).toBe(1)
         }
@@ -355,7 +361,7 @@ describe('the read side reads through the same gate as number', () => {
     it('needs no second gate, because the rounded value cannot be in the set', () => {
         const past = '9.9999999999999999999999999999999999999E+125'
         expect(Number(past)).toBe(1e126)
-        expect(() => literal(1e125).unsafeDecode({ N: past })).toThrow(
+        expect(() => number(1e125).unsafeDecode({ N: past })).toThrow(
             /is not one of/,
         )
         expect(() => number.unsafeDecode({ N: past })).toThrow()
