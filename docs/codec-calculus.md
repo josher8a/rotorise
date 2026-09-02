@@ -524,11 +524,10 @@ that may already have it. It expresses nothing new, it costs no premise, and its
 property of insertion rather than a fact about `𝟙`. The one term outside both branches of the
 dichotomy is `nullable(null)`, which under the guard is simply `null`.
 
-It is kept as a term for compatibility, and no longer for the reason once given here. That reason
-was the `κ = ⊤` cases — `held`, `custom`, `lazy` — where `union(c, null)` has no discharger and
-`nullable(c)` had explicit premises instead. But no discharger means an **obligation**, not a
-refusal (§5): `union(c, null)` is derivable for a `κ = ⊤` subterm and carries **(U)** per input,
-which is what the honesty premises were doing by hand.
+It is kept as a term for compatibility, and **not** because `union(c, null)` cannot replace it at
+a `κ = ⊤` subterm — `held`, `custom`, `lazy`. It can: no discharger means an **obligation**, not a
+refusal (§5), so `union(c, null)` is derivable there and carries **(U)** per input, which is what
+`nullable`'s honesty premises were doing by hand.
 
 ---
 
@@ -797,10 +796,10 @@ the tag sets never vouched for, and **(C)** would then re-encode a variant no ta
 
 **Arity one at the discriminator**, and n-ary literals everywhere else. The rule above read
 `sᵢ(d) = literal(Lᵢ)` with `Lᵢ` a *set* of tags, pairwise disjoint; it now asks for a single tag
-`tᵢ`, and disjointness of singletons is distinctness. The original is kept because the argument
-for it is sound as far as it goes: `(literal)` is n-ary, a set of tags is a perfectly good
-admissible set, and pairwise disjointness is exactly the condition (U) needs — nothing about the
-soundness of the calculus required narrowing this.
+`tᵢ`, and disjointness of singletons is distinctness. **Nothing about the soundness of the
+calculus required narrowing this**, and that is worth stating rather than leaving implicit:
+`(literal)` is n-ary, a set of tags is a perfectly good admissible set, and pairwise disjointness
+is exactly the condition (U) needs.
 
 What required it is what a discriminated union *is*. It is a **lookup**: the stored tag chooses
 the variant. A variant answering to two tags is a key that does not identify its variant, and a
@@ -900,9 +899,8 @@ accept. They agree on most terms and part on four — and the partings go both w
 | `held(c, f, g)`             | `adm(c) ∘ f`         | `admA(c)`                         |
 | anything else               | `⊤`                  | `⊤`                               |
 
-**Three of these rows used to be `⊤`, and one parting remains.** The table above is the corrected
-one; the argument below is the original, kept because it is a good argument that reaches the wrong
-conclusion, and the way it fails is the same way three times.
+**One parting into `⊤` remains, and the rest of the table asks its codec.** Why each row parts
+the way it does is below — the reasons are the rows' content, not their history.
 
 Each `⊤` was bought with the observation that **no syntactic set of attributes bounds the readable
 side** — true of `number`, of a numeric `literal`, and of `refine`. The inference does not follow: a
@@ -918,7 +916,7 @@ What survives is **one** parting into `⊤` — `legacy` on the read side — an
 without a `⊤`: `held` pulls back along `f` where `admA` passes through, because `g` is total and
 post-processes while `f` gates the write.
 
-The original argument, for the record:
+Row by row, and the reason in each case is a fact about the term rather than about the table:
 
 - **`legacy(c, r)`.** The whole content of `legacy` is that `p` reads attributes `c` does not, so a
   passthrough `admA` would claim a bound on exactly the direction `r` widens. `legacy(literal("A"), r)`
