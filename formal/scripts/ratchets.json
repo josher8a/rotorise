@@ -3,7 +3,7 @@
   "branches": {
     "Calculus/Axioms.lean": 1,
     "Calculus/Codec.lean": 21,
-    "Calculus/Combinators.lean": 972,
+    "Calculus/Combinators.lean": 978,
     "Calculus/Continuity.lean": 49,
     "Calculus/Denote.lean": 93,
     "Calculus/Discharge.lean": 461,

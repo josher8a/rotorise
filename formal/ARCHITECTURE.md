@@ -306,8 +306,8 @@ already.
 
 ### 4c. One codec, stated once for both sides of the pair
 
-`Combinators.lean` is <!-- count:combinators_lines -->3966<!-- /count --> lines of the tree's
-<!-- count:tree_lines -->17347<!-- /count -->, and this is its organizing idea; without it
+`Combinators.lean` is <!-- count:combinators_lines -->4001<!-- /count --> lines of the tree's
+<!-- count:tree_lines -->17382<!-- /count -->, and this is its organizing idea; without it
 the file reads as the inventory `README.md` already has. A constructor is a **prism** —
 `Ctor α β`, with `into`/`out` and the laws `out_into` (matching what was built returns it) and
 `into_out` (anything that matches was built) — and those two *are* §2's (R) and (C) at a
@@ -329,6 +329,20 @@ Two shapes sit over them, and the second is the load-bearing one:
 - `set` is the one deliberate non-instance: its attribute side is a choice among three wire
   constructors rather than one prism (`setCodec`, `Combinators.lean`), so its inversion names all
   three families (`setCodec_p_eq`).
+
+**The read side of an inversion is not optional, and its absence cost a 683× fan.**
+`restrict_e_isSome` was `@[simp]` and there was no `restrict_p_isSome`, so every literal row on
+the *read* side unfolded `Codec.restrict` and `inL` by hand instead of rewriting. Unfolding
+`inL` means unfolding `inL.match_1`, the matcher Lean derives for the whole ten-row table, and
+paying for all ten rows at every rewrite — which is what `fanOf` found behind `AdmA_exact`'s
+duplication (§6). Adding the missing twin, plus `@[simp]` row equations for `inL` at the four
+ungated bases, took the four per-base exactness lemmas from 683–797× sharing to 11–39× and
+their combined proof term from 3.9M tree nodes to 134k. **§4c's rule is that a codec is stated
+once for both sides of the pair; this is that rule applied to an inversion rather than to a
+construction, and the cost of the exception was invisible until something measured the term.**
+Collapsing the four into one parametric lemma over `GroundKind` was probed and does not pay:
+8% off the DAG, 1% on the tree, two `k ≠ …` premises at every call site, and it puts
+`NEFinset k.Carrier` back in a statement — the expression whose re-derivation started this.
 
 ### 4d. The guards exist because prose does not typecheck
 
