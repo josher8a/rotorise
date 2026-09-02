@@ -1093,13 +1093,23 @@ theorem not_ident_string : ident .string = false := rfl
 
 /-- **What `q` in `adm` buys.** Two refinements of one base with disjoint predicates are
     separated on the writable side by `SepV`'s `adm` disjunct — which the passthrough
-    could never satisfy, both sides having been `⊤`. The `κ` disjunct is no help here:
-    both options are `{string}`. -/
-theorem sepV_refine_disjoint {q q' : Value → Bool} (h : ∀ v, q v = true → q' v = false) :
-    SepV (.refine .string q) (.refine .string q') :=
+    could never satisfy, both sides having been `⊤`. The `κ` disjunct is no help whatever
+    the base: two refinements of one `t` have the same `κ`, so `adm` is the only disjunct
+    that can tell them apart.
+
+    **General in the base, and nothing about `t` is needed.** The row is
+    `adm (.refine t q) v = adm t v && q v`, so `q v = true` follows from the antecedent and
+    `h` closes it on the second conjunct alone — `adm t v` is carried through untouched.
+    Stated at `.string` until `2d57420`'s citation audit found that
+    `docs/codec-calculus.md` §"two disjoint refinements of one `array(string)`" claims the
+    general statement while only its attribute-side twin `sepA_refine_disjoint` proved it.
+    A container base is the case the document names, and it was the case not covered. -/
+theorem sepV_refine_disjoint {t : Term} {q q' : Value → Bool}
+    (h : ∀ v, q v = true → q' v = false) :
+    SepV (.refine t q) (.refine t q') :=
   Or.inr fun v hv => by
-    simp only [adm, Bool.true_and] at hv ⊢
-    exact h v hv
+    rw [adm, Bool.and_eq_true] at hv
+    simp only [adm, h v hv.2, Bool.and_false]
 
 /-- **The pair reading of the same fact**, and it is not superseded: it discharges the whole
     `UAtCan` for an `n`-ary family in one step, where `sepA_refine_disjoint` separates a pair.
