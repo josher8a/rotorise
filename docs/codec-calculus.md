@@ -700,8 +700,12 @@ recursive has no fixpoint semantics"* — is a refutation of **counting**, not o
 - `confluent_survives_the_refutation` — the recorded witness has both options writing `⟨S,"A"⟩`, so
   the weaker rule still resolves where counting collapses to `none`;
 - `selectF_mono` — monotone given the obligation, which counting provably lacks;
-- `selectF_continuous` — continuous, and **needing no obligation at all**. Counting is continuous
-  too; monotonicity alone is what it lacks. So the whole obstruction was that unique admission is a
+- `selectF_continuous_list` — continuous, and in general this needs the obligation **at each
+  stage** too. (`selectF_continuous`, the two-option case, escapes it by putting the growing option
+  first, which makes it automatically the first admitter.) Counting's continuity *is*
+  unconditional — its singleton requirement at the limit forces uniqueness at every earlier stage —
+  and counting cannot be monotone at all. So one requirement, the obligation holding at every
+  stage, buys both; what unique admission cannot buy at any price is monotonicity, being a
   *negative* condition on the other options.
 
 Two things that are **not** established, and the second is why `lazy` under `union` stays

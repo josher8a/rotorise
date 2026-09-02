@@ -614,8 +614,13 @@ the same base and neither is redundant. `number` is a caller's platform number �
 reached through `Double.toDec` — and `decimal` is the host-independent spelling, carried as a
 `Numerals` string on the value side. Collapsing them would delete the only base whose value
 side is exact, and `Member` cannot tell them apart (both `NS`), which is why the index is
-neither `Member` nor `GroundKind`: `GroundKind` has no `decimal`, and it indexes *value*
-carriers, where `set(decimal)` is a `strSet`. -/
+neither `Member` nor `GroundKind`: `GroundKind` **indexes value carriers**, and `set(decimal)`
+is a `strSet` there while it is an `NS` on the wire.
+
+    This used to give a second reason — *"`GroundKind` has no `decimal`"* — and it was true when
+    written and false seventy lines above, from the commit that added `.decimal` to the inductive.
+    Only the carrier half was ever load-bearing, so the conclusion is untouched; the dead reason
+    is what a description costs when nothing keeps it honest. -/
 
 /-- The four bases a set's elements may sit at. -/
 inductive SetBase where

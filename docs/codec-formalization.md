@@ -1995,8 +1995,10 @@ not doing the work on that side.
 with `string → SS`, `number → NS`, `decimal → NS`, `binary → BS`. Both numeric bases are
 first-class: `number` is a caller's platform number and `decimal` is the host-independent
 spelling, which the old shape could not ask for at all — `set(decimal)` is a `strSet` on the value
-side and an `NS` on the wire, so neither `GroundKind` (no `decimal`, and it indexes value
-carriers) nor `Member` (cannot tell the two apart) is the right index.
+side and an `NS` on the wire, so neither `GroundKind` (which indexes value carriers) nor
+`Member` (which cannot tell the two apart) is the right index. *This entry originally added "no
+`decimal`" as a first reason for `GroundKind`; `5b6a0c1` gave it one, so only the carrier half
+survives — the conclusion is unchanged.*
 
 Both causes die at the constructor. Every base's element map is injective — `Double.toDec` from
 `Double.roundtrip`, the other three identity or subtype projections — so `encSet`'s collision
