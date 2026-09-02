@@ -307,7 +307,7 @@ already.
 ### 4c. One codec, stated once for both sides of the pair
 
 `Combinators.lean` is <!-- count:combinators_lines -->4001<!-- /count --> lines of the tree's
-<!-- count:tree_lines -->17382<!-- /count -->, and this is its organizing idea; without it
+<!-- count:tree_lines -->17380<!-- /count -->, and this is its organizing idea; without it
 the file reads as the inventory `README.md` already has. A constructor is a **prism** —
 `Ctor α β`, with `into`/`out` and the laws `out_into` (matching what was built returns it) and
 `into_out` (anything that matches was built) — and those two *are* §2's (R) and (C) at a
@@ -404,7 +404,7 @@ being `rfl`), and what caught the *hazard* was reading this section. Neither is 
 
 ### And a third machine, `Orth`, which does not pay — measured
 
-`Orthogonality.lean` is the fourth-largest file at <!-- count:orth_file_lines -->969<!-- /count --> lines: a decidable certificate for a
+`Orthogonality.lean` is the fourth-largest file at <!-- count:orth_file_lines -->967<!-- /count --> lines: a decidable certificate for a
 fragment of (U), over-approximating each term's occupancy per side (`occV`/`occA`) and
 certifying a pair whose occupancies are disjoint, `by decide`. **Measured against what it
 replaces it does not pay**, and its own by-phase table is the measurement — the <!-- count:orth_total_theorems -->25<!-- /count --> hand
@@ -427,7 +427,7 @@ verdict below does not move, but it was being stated with a number 24 lines too 
 the hand proofs and 24 too harsh on `Orth`.
 
 And **nothing was deleted** — `6daa5e3`, `0335cdb` and `5763b6d` touch only the new module and
-two import lines — so <!-- count:orth_file_lines -->969<!-- /count --> lines stand *beside* the <!-- count:orth_reachable_lines -->145<!-- /count --> they could replace. It stays anyway,
+two import lines — so <!-- count:orth_file_lines -->967<!-- /count --> lines stand *beside* the <!-- count:orth_reachable_lines -->145<!-- /count --> they could replace. It stays anyway,
 because its value moved. The classifier framing did not pay; but confluent admission —
 the weaker rule proved monotone and continuous and **not adopted** (§7) — needs its obligation
 to be an *invariant of the unrolling* (`string_decimal_not_confluent`), which is vacuous exactly
