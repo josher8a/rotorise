@@ -20,7 +20,7 @@ so a structure projection or a mathlib lemma used in one proof is enough to clea
 citation of it. The residue is therefore small and worth reading by hand.
 
 Three classes of false positive are filtered. Naming *patterns* (`X_e`, `lawful_X`,
-`_p_admits` in `VOCABULARY.md`) and filenames are filtered by shape. Structure
+`_p_admits`) and filenames are filtered by shape. Structure
 projections are cleared component-wise: `Carrier.ranP` is legitimate when `Carrier` and
 `ranP` both occur, even though the sources never write the two together.
 
@@ -51,7 +51,7 @@ document, and there are far more of them; the only reason they were not checked 
 `CURRENT` list was written by hand from the `docs/` directory.
 
 Hits in the current-state documents — `formal/README.md`, `formal/ARCHITECTURE.md`,
-`formal/VOCABULARY.md`, `docs/codec-calculus.md`,
+`docs/codec-calculus.md`,
 `docs/structural-discipline.md` —
 are broken pointers and should be fixed or explicitly marked superseded.
 
@@ -61,8 +61,7 @@ Exit code 1 if any current-state document has a hit.
 """
 import re, sys, os, glob
 
-CURRENT = ["README.md", "ARCHITECTURE.md", "VOCABULARY.md",
-           "../docs/codec-calculus.md"]
+CURRENT = ["README.md", "ARCHITECTURE.md", "../docs/codec-calculus.md"]
 # **The docstrings, which this guard never read.** Every module here is dense with backticked
 # names and none of them was checked — 763 distinct citations, invisible. Demonstrated rather
 # than assumed: writing `nullHonest_of_ownsNull_false` for `nullHonest_of_not_ownsNull` in a
@@ -101,11 +100,6 @@ EXPECTED = {
                 "not-modelled row",
         "List.Perm": "mathlib; §9's commutativity row names it as the next probe, not as "
                      "something proved here — inherited from the deleted representation audit",
-    },
-    "VOCABULARY.md": {
-        "List.Perm": "same, at the set-equality row",
-        "cLitStr": "cited *as* the opaque name that `unionLiteralString` replaced — the example is the point",
-        "fbDefaults": "a struck row recording a completed item; the name was retired by the same change (`c740a96` region)",
     },
     "../docs/codec-calculus.md": {
         "e_c": "the specification's own notation for a component codec, not a Lean name",

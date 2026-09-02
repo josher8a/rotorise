@@ -29,9 +29,10 @@ SRC = sorted(glob.glob(os.path.join("Calculus", "*.lean")))
 # 43%. Removing it gave 116. `ARCHITECTURE.md` had never been scanned despite being a
 # current-state document, so it went in at the same time: 159. Then `FIDELITY.md` was deleted
 # too, and the figure is **130**. Each step measures what the *surviving* current-state
-# documents name, which is the honest question; none of the three drops is a regression, and
-# without this comment every one of them would have looked like one.
-DOCS = ["README.md", "VOCABULARY.md", "ARCHITECTURE.md"]
+# documents name, which is the honest question. `VOCABULARY.md` went too, taking it to
+# **116** — the same figure as step two by coincidence, from a different set of documents. None of the four drops is a regression, and without this comment every one of them
+# would have looked like one — which is the whole reason the trail is here and not in a message.
+DOCS = ["README.md", "ARCHITECTURE.md"]
 if not SRC:
     sys.exit("no Calculus/*.lean found — run from formal/")
 

@@ -148,7 +148,7 @@ Two independent readings, in opposite directions, asked whether every normative 
 `docs/codec-calculus.md` has an exact counterpart here and whether a reviewer could check one
 in isolation. They found seven specification defects, five claims true but unlocatable, and two
 corrections to this package's own artifacts. **Eleven of the fourteen are closed**; the three
-still open are `ARCHITECTURE.md` §9's last three bullets — `(held)`'s over-strong iso premise,
+still open are `ARCHITECTURE.md` §10's last three bullets — `(held)`'s over-strong iso premise,
 the `℘⁺fin`/`⇀fin` coupling that nothing else states, and what §6's commutativity row is
 actually worth.
 
@@ -163,8 +163,8 @@ against the specification without a detour.
 Prose does not typecheck. Deleting a declaration leaves the build green and every citation
 of it dangling, and both drift findings before the residue sweep were caught by luck.
 `python3 scripts/name_drift.py` closes that: it reports every backticked Lean name in the
-current-state documents — this file, `ARCHITECTURE.md`, `VOCABULARY.md`,
-`docs/codec-calculus.md` — and every module docstring, that no longer occurs in `Calculus/`,
+current-state documents — this file, `ARCHITECTURE.md`, `docs/codec-calculus.md` — and
+every module docstring, that no longer occurs in `Calculus/`,
 and exits
 non-zero if there is one. Deliberate citations live in an `EXPECTED` table with a reason
 each, and the check fails if an entry there stops being cited, so the table cannot rot
@@ -175,10 +175,10 @@ a claim in prose.
 
 ## How the proofs are meant to read
 
-[`VOCABULARY.md`](./VOCABULARY.md) is the convention — a definition is unfolded once, in
-its own inversion lemma, and every proof downstream cites the lemma — together with the
-naming scheme, a measured audit of where the vocabulary is still incomplete, and the
-ranked plan for closing it. The numbers regenerate: `python3 scripts/vocab_audit.py`.
+The convention is `ARCHITECTURE.md` §9: a definition is unfolded once, in its own inversion
+lemma, and every proof downstream cites the lemma. §9 carries the naming scheme, which is
+normative, and what a docstring is for. Where the vocabulary is still incomplete is a
+measurement, and it regenerates: `python3 scripts/vocab_audit.py`.
 
 The short version: the *obligation* half of the vocabulary is done (20/22 carriers,
 20/22 lawfulness lemmas); the *observation* half — `X_e`/`X_p`, what a construction
@@ -206,7 +206,7 @@ about the store was really about survives on the other side of the pair: a liter
 texts are known at the declaration, but `10²¹` is written `1e+21` and handed back
 normalised, so a row that tested the *text* would refuse a row the codec itself wrote —
 which is why the row tests the codec instead. Three entries that used to sit here are done — §6's rows are all proved
-(see `ARCHITECTURE.md` §9 for what "all" is worth on the commutativity row), and `typed_TSub`
+(see `ARCHITECTURE.md` §10 for what "all" is worth on the commutativity row), and `typed_TSub`
 ties the judgement's `T` to the denotation, `typed_e_mem` and `typed_p_mem` being the
 statements a reviewer wants.
 
