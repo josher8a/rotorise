@@ -415,12 +415,13 @@ mutual
     `opaq false` is the one appeal to a `⊤`-row lemma from the table (`adm_opaq_false_num`),
     and it is available because the row asks the codec. -/
 theorem occV_sound : ∀ (t : Term), OccSoundV t
-  | .string => fun v h => by cases v <;> simp_all [Adm, occV, occOnly, Value.slot]
+  -- The rows whose `Adm` is a kind test and nothing more: one group, because a per-row
+  -- proof here would be seven copies of one simp set. `number` and `decimal` are separate
+  -- only because their gates (`inD`, `isStored`) have to be in the set.
+  | .string | .boolean | .binary | .null =>
+      fun v h => by cases v <;> simp_all [Adm, occV, occOnly, Value.slot]
   | .number => fun v h => by cases v <;> simp_all [Adm, inD, occV, occOnly, Value.slot]
   | .decimal => fun v h => by cases v <;> simp_all [Adm, isStored, occV, occOnly, Value.slot]
-  | .boolean => fun v h => by cases v <;> simp_all [Adm, occV, occOnly, Value.slot]
-  | .binary => fun v h => by cases v <;> simp_all [Adm, occV, occOnly, Value.slot]
-  | .null => fun v h => by cases v <;> simp_all [Adm, occV, occOnly, Value.slot]
   | .literal k _ => fun v h => by
       rw [Adm_literal] at h
       cases k <;> cases v <;>
@@ -434,9 +435,9 @@ theorem occV_sound : ∀ (t : Term), OccSoundV t
       | binSet S => obtain ⟨x, hx⟩ := S.2; cases b <;>
           simp_all [Adm, SetBase.adm, inD, isStored, occV, occOnly, Value.slot, SetBase.slot]
       | _ => exact absurd h (by simp [Adm])
-  | .array _ => fun v h => by cases v <;> simp_all [Adm, occV, occOnly, Value.slot]
-  | .tuple _ _ => fun v h => by cases v <;> simp_all [Adm, occV, occOnly, Value.slot]
-  | .record _ => fun v h => by cases v <;> simp_all [Adm, occV, occOnly, Value.slot]
+  -- the containers, whose slot is fixed by the constructor and not by the payload
+  | .array _ | .tuple _ _ | .record _ =>
+      fun v h => by cases v <;> simp_all [Adm, occV, occOnly, Value.slot]
   | .dunion _ _ => fun v h => by
       cases v <;> simp_all [Adm, selTagV, tagOfV, occV, occOnly, Value.slot]
   | .object (.mk _ _ _) => fun v h => by
@@ -515,12 +516,10 @@ mutual
     `legacy` on the other sides and `literal .decimal` going through (W) rather than through
     a pattern. -/
 theorem occA_sound : ∀ (t : Term), OccSoundA t
-  | .string => fun a h => by cases a <;> simp_all [AdmA, occA, occOnly, Attr.member]
-  | .number => fun a h => by cases a <;> simp_all [AdmA, occA, occOnly, Attr.member]
-  | .decimal => fun a h => by cases a <;> simp_all [AdmA, occA, occOnly, Attr.member]
-  | .boolean => fun a h => by cases a <;> simp_all [AdmA, occA, occOnly, Attr.member]
-  | .binary => fun a h => by cases a <;> simp_all [AdmA, occA, occOnly, Attr.member]
-  | .null => fun a h => by cases a <;> simp_all [AdmA, occA, occOnly, Attr.member]
+  -- One group where the write side needs three: on the read side the gates are gone, the
+  -- stored member being what `Attr.member` already computes.
+  | .string | .number | .decimal | .boolean | .binary | .null =>
+      fun a h => by cases a <;> simp_all [AdmA, occA, occOnly, Attr.member]
   | .literal k _ => fun a h => by
       rw [AdmA_literal] at h
       cases k with
@@ -529,9 +528,8 @@ theorem occA_sound : ∀ (t : Term), OccSoundA t
   | .set b => fun a h => by
       cases b <;> cases a <;>
         simp_all [AdmA, AdmASet, occA, occOnly, Attr.member, SetBase.member]
-  | .array _ => fun a h => by cases a <;> simp_all [AdmA, occA, occOnly, Attr.member]
-  | .tuple _ _ => fun a h => by cases a <;> simp_all [AdmA, occA, occOnly, Attr.member]
-  | .record _ => fun a h => by cases a <;> simp_all [AdmA, occA, occOnly, Attr.member]
+  | .array _ | .tuple _ _ | .record _ =>
+      fun a h => by cases a <;> simp_all [AdmA, occA, occOnly, Attr.member]
   | .object (.mk _ _ _) => fun a h => by
       cases a <;> simp_all [AdmA, AdmABody, occA, occOnly, Attr.member]
   | .dunion _ _ => fun a h => by
