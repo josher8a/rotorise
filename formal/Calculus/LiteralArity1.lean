@@ -255,7 +255,7 @@ walks a union's options and unions what each contributes, and a non-conforming o
 `∅` — which is exactly what the existing `| _ => ∅` already does for every term that is not a
 string literal. There is nothing to prove about the options being homogeneous, because
 heterogeneity is not an error here, it is an empty contribution. A discriminator whose tags come
-back `∅` fails `(dunion)`'s `htags` premise, which is where that error already belongs and where
+back `∅` fails `(dunion)`'s arity premise, which is where that error already belongs and where
 it already lived.
 
 Stated as a candidate and proved against the union form, so the claim is checked before the
@@ -288,7 +288,7 @@ theorem mem_tagStringsOf_fold (l : List String) (x : String) :
 /-- **`tagsOf` recovers the tag set from the union form, with no premise** — the objection I
     raised in §11.4 of the audit and had not checked. A non-conforming option contributes `∅`,
     which is what `tagsOfField`'s existing `| _ => ∅` already does; heterogeneity is an empty
-    contribution, not an error, and the error it *should* be is `(dunion)`'s `htags`. -/
+    contribution, not an error, and the error it *should* be is `(dunion)`'s arity premise. -/
 theorem mem_tagStringsOf_union (l : List String) (x : String) :
     x ∈ tagStringsOf (.union (l.map fun s => .literal .string (.of s ∅))) ↔ x ∈ l :=
   mem_tagStringsOf_fold l x

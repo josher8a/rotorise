@@ -85,14 +85,22 @@ member. Read those four commit messages; they are the record.
    `Term`. And the premise that made this a fidelity call was misdescribed: §3's rule already
    carries `ℓ ⊆ D` as `ℓᵢ ∈ T`, so the witness shows that premise is load-bearing rather than
    showing a defect in the rule. See ARCHITECTURE §8 and the commit message.
-3. **`admits`' violation list** — `admits(c,v) ↔ !isError(c.encode(v))` is false in one
+3. **One-line `src/` follow-up, JH's call.** `(dunion)`'s discriminator is arity one in the
+   calculus as of this arc. `src/` is not aligned: `EveryOptionTagged` (`src/codec.ts`) refuses
+   only options naming no literal and pairs sharing a tag, so `string('A','B')` at a
+   discriminator is legal, and `codec.ts:4415` records that as deliberate — *"the whole
+   admissible set, not one value: an option may answer to several tags"*. The change is one
+   type-level check that the discriminator's literal has exactly one value, plus that comment,
+   which becomes false. `discriminatedUnion` also takes a list rather than a tag-keyed table
+   (`codec.ts:4394`); keying it was **declined**, so the list stays.
+4. **`admits`' violation list** — `admits(c,v) ↔ !isError(c.encode(v))` is false in one
    direction, because `string`/`boolean`/`binary`/`array(string)` do not validate on `encode`.
    Making `encode` use `admits` closes it at the root and is a behaviour change.
-4. **Wiring `admits` into `union`'s resolver** — deliberately not done. It replaces try-and-see
+5. **Wiring `admits` into `union`'s resolver** — deliberately not done. It replaces try-and-see
    with a decision and retires `identifying` (45 lines, one consumer), and it depends on (3).
-5. **The change log's 70 dangling names** (`codec-formalization.md` §4) — a judgement about
+6. **The change log's 70 dangling names** (`codec-formalization.md` §4) — a judgement about
    whether a change log carries names of deleted things, not an edit.
-6. **`fa9ce05`'s commit message** cites a regex pass as a reachability measurement. Needs a
+7. **`fa9ce05`'s commit message** cites a regex pass as a reachability measurement. Needs a
    rebase; `scripts/unreferenced.lean` is the honest instrument for next time.
 
 ---

@@ -13,7 +13,7 @@ Mechanization choices, and where they diverge from the doc (each is routine to s
   read as §3 writes them.
 * `Typed` keeps only the *syntactic and fuel-free* premises, and after the premise-becomes-
   an-index moves that is a short list, now two entries long: `(union)`'s **(D)** and
-  `(dunion)`'s tag nonemptiness and disjointness. `(literal)`'s `LiteralD` was the third until
+  `(dunion)`'s tag arity and disjointness. `(literal)`'s `LiteralD` was the third until
   `GroundKind.number`'s carrier became `WFDouble`. This list also named "set member" and
   "object name distinctness"; both are gone, and each constructor's own docstring below says
   so while this one did not. `(set)`'s base is an index, so its premise line is empty, and
@@ -260,8 +260,29 @@ inductive Typed : Term → Held → Option Member → Prop where
   /-- `(union)`: the option judgements, and §5's **(D)** on their held sets. -/
   | union {opts Ts μs} (h : TypedListμ opts Ts μs) (hD : DIncomp Ts) :
       Typed (.union opts) (HUnion Ts) (unanimous μs)
+  /-- §5 `(dunion)`, **arity one at the discriminator**. JH's call, in his words: *"go with the
+      middle, arity one at the discriminator only"*.
+
+      `hone` was `htags : ∀ t' ∈ opts, (tagsOf d t').Nonempty`. The premise is doing the same
+      four jobs it always did — `tagsOf` is empty for everything but an object whose `d` field is
+      `req (literal .string ls)`, so requiring anything of it forces *object*, *`d` declared*,
+      *`req` rather than `optional`/`fallback`*, and *a literal at the string base*
+      (`tagsOf_ne_nil`). What changes is the fifth: `ls` must be a **singleton**, so a variant
+      answers to exactly one tag.
+
+      **What that buys is the language, not the proofs**, and the measurement is in the commit
+      rather than promised here. A `dunion` is a *lookup*: two options claiming one tag is a
+      table with a key written twice, and an option claiming two tags is a key that does not
+      identify its variant. `src/` documents the second as deliberate — *"the whole admissible
+      set, not one value: an option may answer to several tags"* — and narrowing it is a
+      separate call there, not made here.
+
+      `hdisj` is unchanged, and that is the honest division: arity is a property of **one**
+      option against its own field, so it is a premise §4a's criterion permits; distinctness
+      relates one option to *others* at a shared key, which is the clause that criterion puts
+      on the wrong side. Two options with the same single tag is still a premise's business. -/
   | dunion {d opts Ts} (h : TypedListM opts Ts)
-      (htags : ∀ t' ∈ opts, (tagsOf d t').Nonempty)
+      (hone : ∀ t' ∈ opts, (tagsOf d t').card = 1)
       (hdisj : List.Pairwise (fun a b => ∀ tag ∈ tagsOf d a, tag ∉ tagsOf d b) opts) :
       Typed (.dunion d opts) (HUnion Ts) (some .M)
 
