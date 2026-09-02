@@ -227,12 +227,7 @@ noncomputable def Adm : Term → Value → Bool
       | _ => false
   | .tuple ts tail => fun v =>
       match v with | .arr vs => alignP (AdmList ts) (AdmOptT tail) vs | _ => false
-  | .object fields fld rest => fun v =>
-      match v with
-      | .map keys g =>
-          valPresentT fields fld keys &&
-          objAdmV ⟨fields, fun k => AdmField (fld k)⟩ (AdmRest rest) keys g
-      | _ => false
+  | .object b => AdmBody b
   | .dunion d opts => fun v => selTagV d (AdmTagged d opts) v
   -- **The second row that asks its own codec**, and the same row `adm` has
   -- (`Discharge.lean`): `denote (.opaq lossy)` *is* `opaqCodecω lossy`, so this is
@@ -244,6 +239,18 @@ noncomputable def Adm : Term → Value → Bool
   -- to `opaqCodec` — a new option, a different numeric policy — meant editing two
   -- definitions that had to agree. Deferring leaves one.
   | .opaq lossy => fun v => ((opaqCodecω lossy).e v).isSome
+
+/-- The payload's row: the declared names are present, and every present name's value is
+    admitted by its field or by the rest policy. The companion `AdmField` and `AdmRest`
+    were missing — `Adm`'s object row inlined it, so the one place that says what an object
+    payload admits was a row of a table rather than a definition. -/
+noncomputable def AdmBody : Body → VP
+  | .mk fields fld rest => fun v =>
+      match v with
+      | .map keys g =>
+          valPresentT fields fld keys &&
+          objAdmV ⟨fields, fun k => AdmField (fld k)⟩ (AdmRest rest) keys g
+      | _ => false
 
 /-- A field's row is its term's; the presence marker is `valPresentT`'s business, not this
     one's. Mirrors `fieldSem`, and for the same reason: the recursion has to be passed
@@ -572,7 +579,8 @@ theorem entry_iff {fields : Finset Name} {fld : {k // k ∈ fields} → Field} {
 /-- **`object` is exact** once its fields and its rest policy are. -/
 theorem ExactV_object {fields : Finset Name} {fld : {k // k ∈ fields} → Field} {rest : Rest}
     (hf : ∀ k : {k // k ∈ fields}, ExactField (fld k))
-    (hr : ∀ t, rest = .codec t → ExactV t) : ExactV (.object fields fld rest) := by
+    (hr : ∀ t, rest = .codec t → ExactV t) :
+    ExactV (.object (.mk fields fld rest)) := by
   intro v
   cases v
   case map keys g =>
@@ -591,7 +599,8 @@ theorem ExactV_object {fields : Finset Name} {fld : {k // k ∈ fields} → Fiel
     · rw [if_neg hv]
       simp [hv]
   all_goals
-    simp [Adm, denote, objectCodec, objectCodecCore, carriedCodec, mapV, Ctor.out]
+    simp [Adm, AdmBody, denote, bodySem, objectCodec, objectCodecCore, carriedCodec, mapV,
+      Ctor.out]
 
 theorem setImage_isSome_of_inj {α β : Type} [DecidableEq β] {f : α → Option β} {S : Finset α}
     (hall : ∀ x ∈ S, (f x).isSome = true)
@@ -802,7 +811,7 @@ theorem Adm_exact : ∀ (t : Term), ExactV t
   | .tuple ts tail =>
       ExactV_tuple (exactVL_mem ts (Adm_exactL ts)) (exactVO_mem tail (Adm_exactO tail))
   | .dunion _ opts => ExactV_dunion (exactVL_mem opts (Adm_exactL opts))
-  | .object fields fld rest =>
+  | .object (.mk fields fld rest) =>
       ExactV_object (fun k => Adm_exactF (fld k)) (exactVR_codec rest (Adm_exactR rest))
   | .opaq lossy => ExactV_opaq lossy
   -- the row the *constructor* made exact, rather than a sharper analysis of the old one
@@ -1143,16 +1152,20 @@ noncomputable def AdmA : Term → Attr → Bool
   | .set b    => AdmASet b
   | .tuple ts tail => fun a =>
       match a with | .l as => alignPA (AdmAList ts) (AdmAOptT tail) as | _ => false
-  | .object fields fld rest => fun a =>
+  | .object b => AdmABody b
+  | .dunion d opts => fun a => selTagA d (AdmATagged d opts) a
+  -- the read side of the same deferral; see the `Adm` row and `ExactA_opaq`
+  | .opaq lossy => fun a => ((opaqCodecω lossy).p a).isSome
+
+/-- The read side's payload row; `AdmBody`'s mirror. -/
+noncomputable def AdmABody : Body → AP
+  | .mk fields fld rest => fun a =>
       match a with
       | .m keys g =>
           reqPresentT fields fld keys &&
           objAdmA ⟨fields, fun k => AdmAField (fld k)⟩ (AdmARest rest)
             (keepT rest fields) keys g
       | _ => false
-  | .dunion d opts => fun a => selTagA d (AdmATagged d opts) a
-  -- the read side of the same deferral; see the `Adm` row and `ExactA_opaq`
-  | .opaq lossy => fun a => ((opaqCodecω lossy).p a).isSome
 
 noncomputable def AdmAField : Field → AP
   | .req t => AdmA t
@@ -1530,7 +1543,8 @@ theorem entryA_iff {fields : Finset Name} {fld : {k // k ∈ fields} → Field} 
 
 theorem ExactA_object {fields : Finset Name} {fld : {k // k ∈ fields} → Field} {rest : Rest}
     (hf : ∀ k : {k // k ∈ fields}, ExactAField (fld k))
-    (hr : ∀ t, rest = .codec t → ExactA t) : ExactA (.object fields fld rest) := by
+    (hr : ∀ t, rest = .codec t → ExactA t) :
+    ExactA (.object (.mk fields fld rest)) := by
   intro a
   cases a
   case m keys g =>
@@ -1560,7 +1574,8 @@ theorem ExactA_object {fields : Finset Name} {fld : {k // k ∈ fields} → Fiel
     · rw [if_neg hv]
       simp [hv]
   all_goals
-    simp [AdmA, denote, objectCodec, objectCodecCore, carriedCodec, mA, Ctor.out]
+    simp [AdmA, AdmABody, denote, bodySem, objectCodec, objectCodecCore, carriedCodec, mA,
+      Ctor.out]
 
 /-- **`opaque` reads exactly what its row says**, definitionally, and for the reason
     `ExactV_opaq` gives at length: `p := (opaqCodecω lossy).p`, so the row and `dom(p)` are
@@ -1629,7 +1644,7 @@ theorem AdmA_exact : ∀ (t : Term), ExactA t
   | .tuple ts tail =>
       ExactA_tuple (exactAL_mem ts (AdmA_exactL ts)) (exactAO_mem tail (AdmA_exactO tail))
   | .dunion _ opts => ExactA_dunion (exactAL_mem opts (AdmA_exactL opts))
-  | .object fields fld rest =>
+  | .object (.mk fields fld rest) =>
       ExactA_object (fun k => AdmA_exactF (fld k)) (exactAR_codec rest (AdmA_exactR rest))
   | .opaq lossy => ExactA_opaq lossy
   -- exact because the constructor narrowed, not because the row sharpened
@@ -1795,7 +1810,7 @@ They are the same codec as far as anything observable through `e` and `p` can te
 
 `union` still distinguishes them, and `union_not_congruent` is the pair. An option's
 admission is `admitOptV`, which matches the **constructor**: `specOf (.record c) = none`,
-so the option is admitted *by attempt*, while `specOf (.object ∅ noFields (.codec c))` is
+so the option is admitted *by attempt*, while `specOf (.object (.mk ∅ noFields (.codec c)))` is
 `some ⟨∅, _⟩`, so the option is admitted *by names* — and an empty name spec admits no map
 that carries a name. On `{"a" ↦ "x"}` the first option answers `true` and the second
 `false`, with equal domains behind both.
@@ -1847,7 +1862,7 @@ theorem arrayRowA (c : Term) (a : Attr) : AdmA (.array c) a = AdmA (.tuple [] (s
     `#assert_axioms_all` rejects. `decide_eq_true` and `dif_neg` are the two facts actually
     needed. -/
 theorem recordRow (c : Term) (v : Value) :
-    Adm (.record c) v = Adm (.object ∅ noFields (.codec c)) v := by
+    Adm (.record c) v = Adm (.object (.mk ∅ noFields (.codec c))) v := by
   cases v with
   | map keys f =>
     have hv : valPresentT ∅ noFields keys = true :=
@@ -1855,13 +1870,13 @@ theorem recordRow (c : Term) (v : Value) :
     have he : ∀ k : Name, entryP ⟨∅, fun k => AdmField (noFields k)⟩ (some (Adm c)) k
         = some (Adm c) := fun k => by
       simp only [entryP, MapOf.at, dif_neg (Finset.not_mem_empty k)]
-    simp only [Adm, hv, Bool.true_and, objAdmV, AdmRest, he]
+    simp only [Adm, AdmBody, hv, Bool.true_and, objAdmV, AdmRest, he]
   | _ => rfl
 
 /-- The read side, with one extra dead piece: `keepT (.codec c) ∅` is the constant `true`,
     an open rest keeping every name, so `objAdmA`'s guard discharges by `true_implies`. -/
 theorem recordRowA (c : Term) (a : Attr) :
-    AdmA (.record c) a = AdmA (.object ∅ noFields (.codec c)) a := by
+    AdmA (.record c) a = AdmA (.object (.mk ∅ noFields (.codec c))) a := by
   cases a with
   | m keys g =>
     have hv : reqPresentT ∅ noFields keys = true :=
@@ -1869,7 +1884,7 @@ theorem recordRowA (c : Term) (a : Attr) :
     have he : ∀ k : Name, entryPA ⟨∅, fun k => AdmAField (noFields k)⟩ (some (AdmA c)) k
         = some (AdmA c) := fun k => by
       simp only [entryPA, MapOf.at, dif_neg (Finset.not_mem_empty k)]
-    simp only [AdmA, hv, Bool.true_and, objAdmA, AdmARest, keepT, he, true_implies]
+    simp only [AdmA, AdmABody, hv, Bool.true_and, objAdmA, AdmARest, keepT, he, true_implies]
   | _ => rfl
 
 /-! ### Row equality is domain equality, for free
@@ -1890,23 +1905,23 @@ theorem arrayDomA (c : Term) (a : Attr) :
     ((AdmA_exact (.array c) a).symm.trans (arrayRowA c a ▸ AdmA_exact (.tuple [] (some c)) a))
 
 theorem recordDom (c : Term) (v : Value) :
-    ((denote (.record c)).e v).isSome = ((denote (.object ∅ noFields (.codec c))).e v).isSome :=
+    ((denote (.record c)).e v).isSome = ((denote (.object (.mk ∅ noFields (.codec c)))).e v).isSome :=
   Bool.coe_iff_coe.mp
     ((Adm_exact (.record c) v).symm.trans
-      (recordRow c v ▸ Adm_exact (.object ∅ noFields (.codec c)) v))
+      (recordRow c v ▸ Adm_exact (.object (.mk ∅ noFields (.codec c))) v))
 
 theorem recordDomA (c : Term) (a : Attr) :
-    ((denote (.record c)).p a).isSome = ((denote (.object ∅ noFields (.codec c))).p a).isSome :=
+    ((denote (.record c)).p a).isSome = ((denote (.object (.mk ∅ noFields (.codec c)))).p a).isSome :=
   Bool.coe_iff_coe.mp
     ((AdmA_exact (.record c) a).symm.trans
-      (recordRowA c a ▸ AdmA_exact (.object ∅ noFields (.codec c)) a))
+      (recordRowA c a ▸ AdmA_exact (.object (.mk ∅ noFields (.codec c))) a))
 
 /-- `record` is admitted by attempt… -/
 theorem specOf_record (c : Term) : specOf (.record c) = none := rfl
 
 /-- …and the `object` with its domain is admitted by names. -/
 theorem specOf_object_isSome (c : Term) :
-    (specOf (.object ∅ noFields (.codec c))).isSome = true := rfl
+    (specOf (.object (.mk ∅ noFields (.codec c)))).isSome = true := rfl
 
 /-- **`union` is not a congruence for domain equality.** `recordDom` and `recordDomA` say
     these two terms have the same `e` and the same `p` at every point. As *options* they
@@ -1920,8 +1935,8 @@ theorem specOf_object_isSome (c : Term) :
 theorem union_not_congruent :
     admitOptV (specOf (.record .string), Adm (.record .string))
         (.map {"a"} (fun _ => .str "x")) = true
-      ∧ admitOptV (specOf (.object ∅ noFields (.codec .string)),
-          Adm (.object ∅ noFields (.codec .string))) (.map {"a"} (fun _ => .str "x")) = false :=
+      ∧ admitOptV (specOf (.object (.mk ∅ noFields (.codec .string))),
+          Adm (.object (.mk ∅ noFields (.codec .string)))) (.map {"a"} (fun _ => .str "x")) = false :=
   ⟨rfl, rfl⟩
 
 /-! ## Re-deriving §5's separations on the pair
@@ -1984,7 +1999,7 @@ theorem Adm_le_adm : ∀ (t : Term) (v : Value), Adm t v = true → adm t v = tr
   | .null, _, _ => rfl
   | .set _, _, _ => rfl
   | .tuple _ _, _, _ => rfl
-  | .object _ _ _, _, _ => rfl
+  | .object _, _, _ => rfl
   | .array _, _, _ => rfl
   | .record _, _, _ => rfl
   -- the two rows are now the **same** row — both ask `(opaqCodecω lossy).e` — so the
@@ -2079,7 +2094,7 @@ theorem Adm_kind : ∀ (t : Term) (ks : List Kind) (v : Value),
   | .array _, _, v, rfl, h => by cases v <;> simp_all [Adm, Value.kind]
   | .tuple _ _, _, v, rfl, h => by cases v <;> simp_all [Adm, Value.kind]
   | .record _, _, v, rfl, h => by cases v <;> simp_all [Adm, Value.kind]
-  | .object _ _ _, _, v, rfl, h => by cases v <;> simp_all [Adm, Value.kind]
+  | .object (.mk _ _ _), _, v, rfl, h => by cases v <;> simp_all [Adm, AdmBody, Value.kind]
   | .dunion d opts, _, v, rfl, h => by
       obtain ⟨tag, htag, -⟩ := selTagV_mem h
       cases v <;> simp_all [tagOfV, Value.kind]
@@ -2147,7 +2162,7 @@ theorem AdmA_le_admA : ∀ (t : Term) (a : Attr), AdmA t a = true → admA t a =
   | .null, _, _ => rfl
   | .set _, _, _ => rfl
   | .tuple _ _, _, _ => rfl
-  | .object _ _ _, _, _ => rfl
+  | .object _, _, _ => rfl
   | .array _, _, _ => rfl
   | .record _, _, _ => rfl
   | .legacy _ _, _, _ => rfl
@@ -2400,20 +2415,20 @@ theorem not_decides_refine_top : ¬ Decides (.refine .string qTop) := by
 /-- **And too stingy.** An object with a required field refuses the empty map and writes a
     populated one — two `map`s differing in admission — while `ident` calls it `false`. -/
 theorem decides_object :
-    Decides (.object {"k"} (fun _ => .req .string) .refuse) := by
+    Decides (.object (.mk {"k"} (fun _ => .req .string) .refuse)) := by
   refine ⟨.map {"k"} (fun _ => .str "a"),
           .map ∅ (fun k => absurd k.2 (Finset.not_mem_empty k.1)), ?_, rfl, ?_⟩
-  · simp [denote, denote, fieldTable, restSem, fieldSem, restSem,
+  · simp [denote, denote, bodySem, fieldTable, restSem, fieldSem, restSem,
           objectCodec, objectCodecCore, stringCodec,
           valPresentB, valPresentAt, fieldSem, rcOf, FieldSem.codec, carriedCodec,
           mapV, mA, Ctor.out, Ctor.into, objWrite, entryCodec, MapOf.at, funImage,
           Subtype.forall]
-  · simp [denote, denote, fieldTable, restSem, fieldSem, restSem,
+  · simp [denote, denote, bodySem, fieldTable, restSem, fieldSem, restSem,
           objectCodec, objectCodecCore, stringCodec,
           valPresentB, valPresentAt, fieldSem, rcOf, FieldSem.codec, carriedCodec,
           mapV, mA, Ctor.out, Ctor.into, objWrite, MapOf.at, Subtype.forall]
 
-theorem ident_object : ident (.object {"k"} (fun _ => .req .string) .refuse) = false := rfl
+theorem ident_object : ident (.object (.mk {"k"} (fun _ => .req .string) .refuse)) = false := rfl
 
 /-! ### …and the two errors are the same combinator
 

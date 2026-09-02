@@ -52,7 +52,7 @@ def κ : Term → Option (List Kind)
   | .binary => some [.binary]
   | .set _ => some [.set]
   | .array _ | .tuple _ _ => some [.array]
-  | .record _ | .object _ _ _ | .dunion _ _ => some [.map]
+  | .record _ | .object _ | .dunion _ _ => some [.map]
   | .refine t _ | .legacy t _ => κ t
   | .nullable t => (κ t).map (.null :: ·)
   | .union opts => κList opts
@@ -118,7 +118,7 @@ def ident : Term → Bool
   | .string | .boolean | .binary | .null => false
   -- `object` is the one container that does not propagate: its admission tests *names*,
   -- and the field terms' own sets are not what the option checks a value against.
-  | .object _ _ _ => false
+  | .object _ => false
   -- `lazy` propagates, for the reason given at `κ`: its pair *is* the subterm's.
   | .lazy t => ident t
   -- `held` propagates: `adm` applies `f` and asks the subterm, so the subterm is what
@@ -309,7 +309,7 @@ noncomputable def adm : Term → Value → Bool
   -- The containers. `adm (array c)` would have to contain the empty array whatever `c`
   -- is, so propagating the element's set would claim a separation that is false —
   -- `not_uAtCan_array_literals` is the witness. Same argument for the other four.
-  | .set _ | .array _ | .tuple _ _ | .record _ | .object _ _ _ => fun _ => true
+  | .set _ | .array _ | .tuple _ _ | .record _ | .object _ => fun _ => true
   -- `held` is transparent here too, and `f` is what makes it so rather than what blocks
   -- it: `(c.through f g).e v = c.e (f v)` by `Iff.rfl`, so the writable set is the
   -- subterm's pulled back along `f`. `f` is *data the term carries*, and `adm` is a
@@ -437,7 +437,7 @@ noncomputable def admA : Term → Attr → Bool
   -- rows that ask rather than describe.
   | .number => fun a => (numberCodec.p a).isSome
   -- The containers, by the empty-container argument on the value side.
-  | .set _ | .array _ | .tuple _ _ | .record _ | .object _ _ _ => fun _ => true
+  | .set _ | .array _ | .tuple _ _ | .record _ | .object _ => fun _ => true
   -- `legacy` is the row that is `⊤` here and a passthrough above, and the asymmetry is
   -- what `legacy` is for: `extendRead` widens `p` past the subterm's admissible set,
   -- which is the direction `admA` bounds. `not_admA_legacy` is the witness.
@@ -544,7 +544,9 @@ theorem κ_sound : ∀ (t : Term) {ks : List Kind} {v a},
     | array t' => single_kind hκ v he
     | tuple ts tail => single_kind hκ v he
     | record t' => single_kind hκ v he
-    | object fields rest => single_kind hκ v he
+    -- the payload is matched because `single_kind` refutes the non-`map` values *by
+    -- reduction*: `bodySem` is a companion, so it reduces only at a constructor
+    | object body => cases body with | mk fields ff rest => single_kind hκ v he
     | dunion d opts =>
       -- a stamped option writes a `map`, so the kind is `map` however it was reached
       cases hκ
@@ -785,7 +787,7 @@ theorem admitV_kind (t : Term) {ks : List Kind} {v}
   | some spec =>
     rw [hs] at h
     cases t
-    case object fields rest =>
+    case object body =>
       replace hκ : some [Kind.map] = some ks := hκ
       cases hκ
       cases v <;> first
@@ -811,7 +813,7 @@ theorem admitA_member (t : Term) {μ a}
   | some spec =>
     rw [hs] at h
     cases t
-    case object fields rest =>
+    case object body =>
       replace hμ : some Member.M = some μ := hμ
       cases hμ
       cases a <;> first
@@ -878,7 +880,7 @@ theorem keysOk_of_encode {fields : Finset Name} {ff : {k // k ∈ fields} → Fi
     a rest codec — is excluded, as §5 demands: an undeclared name disqualifies the
     option even where its rest codec would hold it. -/
 theorem optionSem_self_admit (t : Term)
-    (hcl : ∀ fields ff tr, t ≠ .object fields ff (.codec tr))
+    (hcl : t.isOpenObject = false)
     (hlaw : Lawful (denote t)) {v a}
     (he : (denote t).e v = some a) :
     (optionSemOf (denote t) (specOf t)).admitV v = true ∧
@@ -892,7 +894,8 @@ theorem optionSem_self_admit (t : Term)
       rw [hlaw.retract he]; rfl
   | some spec =>
     cases t
-    case object fields ff rest =>
+    case object body =>
+      cases body with | mk fields ff rest =>
       replace hs : some (⟨fields, fun k =>
         match ff k with | Field.optional _ => false | _ => true⟩ : MapOf Bool) =
         some spec := hs
@@ -901,7 +904,9 @@ theorem optionSem_self_admit (t : Term)
         cases rest with
         | drop => rfl
         | refuse => rfl
-        | codec tr => exact absurd rfl (hcl fields ff tr)
+        | codec tr =>
+          exact absurd rfl
+            (Term.isOpenObject_eq_false.mp hcl (.mk fields ff (.codec tr)) tr rfl)
       replace he : (objectCodecCore
           ⟨fields, fun k => fieldSem (ff k)⟩
           (rcOf (restSem rest))
@@ -925,7 +930,7 @@ theorem admitV_adm (t : Term) {v}
     exact adm_sound t ha
   | some spec =>
     cases t
-    case object fields rest => rfl
+    case object body => rfl
     all_goals exact nomatch hs
 
 /-- Any option's attribute admission is `admA`-guarded. -/
@@ -939,7 +944,7 @@ theorem admitA_admA (t : Term) {a}
     exact admA_sound t hv
   | some spec =>
     cases t
-    case object fields rest => rfl
+    case object body => rfl
     all_goals exact nomatch hs
 
 /-! ## The discharger -/
@@ -1006,7 +1011,7 @@ theorem ident_of_adm : ∀ {t : Term} {v : Value}, adm t v = false → ident t =
   | .opaq _, _, _ => rfl
   | .string, _, h | .boolean, _, h | .binary, _, h
   | .null, _, h | .set _, _, h | .array _, _, h | .tuple _ _, _, h
-  | .record _, _, h | .object _ _ _, _, h => nomatch h
+  | .record _, _, h | .object _, _, h => nomatch h
 
 /-- A union all of whose options refuse a value is one all of whose options decide their
     own membership — `ident_of_adm` lifted to the list, which `adm`'s union row makes
@@ -1513,7 +1518,7 @@ theorem SAof_disjoint {x y : Term} (h : SepA x y) : ∀ a, SAof x a → ¬ SAof 
     argument of its own. -/
 theorem uAtCan_of_separated {opts : List Term}
     (hlaw : ∀ t ∈ opts, Lawful (denote t))
-    (hcl : ∀ t ∈ opts, ∀ fields ff tr, t ≠ .object fields ff (.codec tr))
+    (hcl : ∀ t ∈ opts, t.isOpenObject = false)
     (hV : List.Pairwise SepV opts)
     (hA : List.Pairwise SepA opts) :
     UAtCan opts := by
@@ -1533,7 +1538,7 @@ theorem uAtCan_of_separated {opts : List Term}
     corollary of `uAtCan_of_separated`. -/
 theorem uAtCan_of_disjoint {opts : List Term}
     (hlaw : ∀ t ∈ opts, Lawful (denote t))
-    (hcl : ∀ t ∈ opts, ∀ fields ff tr, t ≠ .object fields ff (.codec tr))
+    (hcl : ∀ t ∈ opts, t.isOpenObject = false)
     (hκ : ∀ t ∈ opts, (κ t).isSome)
     (hμ : ∀ t ∈ opts, (μSyn t).isSome)
     (hκd : List.Pairwise (fun x y => ∀ kx ky, κ x = some kx → κ y = some ky →
@@ -1710,11 +1715,13 @@ theorem uAtCan_number_opaque : UAtCan [.number, .opaq false] := by
     · rcases List.mem_cons.mp ht with rfl | ht
       · exact lawful_opaqCodecω false
       · exact nomatch ht
-  · intro t ht fields ff tr
+  -- `isOpenObject` is a `Bool` off the syntax, so a non-object discharges it by `rfl`
+  -- where the three-quantifier disequality needed `Term.noConfusion`
+  · intro t ht
     rcases List.mem_cons.mp ht with rfl | ht
-    · exact Term.noConfusion
+    · rfl
     · rcases List.mem_cons.mp ht with rfl | ht
-      · exact Term.noConfusion
+      · rfl
       · exact nomatch ht
   · refine List.pairwise_cons.mpr ⟨fun y hy => ?_, List.pairwise_singleton _ _⟩
     rcases List.mem_cons.mp hy with rfl | hy
@@ -1785,7 +1792,7 @@ theorem uAtCan_string_null :
     UAtCan [Term.string, Term.null] := by
   refine uAtCan_of_disjoint
     (forall_mem_pair (lawful_string) (lawful_null))
-    (forall_mem_pair (fun _ _ _ h => nomatch h) (fun _ _ _ h => nomatch h))
+    (forall_mem_pair rfl rfl)
     (forall_mem_pair rfl rfl) (forall_mem_pair rfl rfl)
     (pairwise_pair ?_) (pairwise_pair ?_)
   · intro kx ky hx hy k hk
@@ -1805,7 +1812,7 @@ theorem uAtCan_string_boolean :
     UAtCan [Term.string, Term.boolean] := by
   refine uAtCan_of_disjoint
     (forall_mem_pair (lawful_string) (lawful_boolean))
-    (forall_mem_pair (fun _ _ _ h => nomatch h) (fun _ _ _ h => nomatch h))
+    (forall_mem_pair rfl rfl)
     (forall_mem_pair rfl rfl) (forall_mem_pair rfl rfl)
     (pairwise_pair ?_) (pairwise_pair ?_)
   · intro kx ky hx hy k hk
@@ -1827,7 +1834,7 @@ theorem uAtCan_literal_literal :
     UAtCan [Term.literal .string (.of "A" ∅), Term.literal .string (.of "B" ∅)] := by
   refine uAtCan_of_separated
     (forall_mem_pair (lawful_literal _ _) (lawful_literal _ _))
-    (forall_mem_pair (fun _ _ _ h => nomatch h) (fun _ _ _ h => nomatch h))
+    (forall_mem_pair rfl rfl)
     (pairwise_pair (Or.inr ?_)) (pairwise_pair (Or.inr ?_))
   · intro v hv
     cases v

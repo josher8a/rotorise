@@ -221,10 +221,10 @@ inductive Typed : Term → Held → Option Member → Prop where
       judgement is **pointwise**: every declared name's field is typed at its binding,
       and the bindings are indexed by the same set — so "the same names, in the same
       order, without repeats" is not a premise, it is the type. `hnd` is gone with it. -/
-  | object {fields f b rest R} {μs : {k // k ∈ fields} → Option Member}
-      (hf : ∀ k, TypedField (f k) (b k).2 (b k).1 (μs k))
-      (hr : TypedRest rest R) :
-      Typed (.object fields f rest) (HObject fields b R) (some .M)
+  | object {body : Body} {bind R} {μs : {k // k ∈ body.fields} → Option Member}
+      (hf : ∀ k, TypedField (body.at k) (bind k).2 (bind k).1 (μs k))
+      (hr : TypedRest body.rest R) :
+      Typed (.object body) (HObject body.fields bind R) (some .M)
   /-- `(union)`: the option judgements, and §5's **(D)** on their held sets. -/
   | union {opts Ts μs} (h : TypedListμ opts Ts μs) (hD : DIncomp Ts) :
       Typed (.union opts) (HUnion Ts) (unanimous μs)
