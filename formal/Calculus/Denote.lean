@@ -119,8 +119,7 @@ straight through `f k`, as `Value.depth` in `Opaque.lean` has always done. `size
 into a function, but `sizeOf` is only the measure once something forces well-founded recursion,
 and nothing here does.
 
-`codec-formalization.md` §2: *"Fuel is a termination device, not a cost measure."* It is not even
-that any more. -/
+Fuel was a termination device and never a cost measure; it is not even that any more. -/
 
 mutual
 

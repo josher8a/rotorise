@@ -3,8 +3,8 @@ import Calculus.Denote
 /-!
 # The vector checker — how a generated test vector becomes a kernel-checked theorem
 
-`docs/codec-formalization.md` states the correspondence between this model and `src/` as
-prose: the TypeScript codec is claimed to compute what `denote` denotes. Nothing checked it.
+The correspondence between this model and `src/` was stated as prose: the TypeScript codec is
+claimed to compute what `denote` denotes. Nothing checked it.
 This file is the Lean half of the bridge that does: a generator emits one line per vector,
 and the *kernel* — not a tactic, not `#eval` — decides whether the model agrees.
 

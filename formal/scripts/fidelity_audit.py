@@ -24,8 +24,13 @@ Usage:  python3 scripts/fidelity_audit.py           (run from formal/)
 import re, sys, os, glob, collections
 
 SRC = sorted(glob.glob(os.path.join("Calculus", "*.lean")))
-DOCS = ["README.md", "VOCABULARY.md", "FIDELITY.md",
-        os.path.join("..", "docs", "codec-formalization.md")]
+# **Re-baselined when the change log was deleted, and the list gained a document.**
+# `docs/codec-formalization.md` was here and supplied 88 of the 204 citations §1 reported — 43%.
+# Removing it alone would have given 116. `ARCHITECTURE.md` was never in the list and is a
+# current-state document, so it was added at the same time, and the figure is **159**. The
+# metric now measures what the current-state documents name, which is the honest question; a
+# move from 204 would look like a regression to anyone who did not know, and it is not one.
+DOCS = ["README.md", "VOCABULARY.md", "FIDELITY.md", "ARCHITECTURE.md"]
 if not SRC:
     sys.exit("no Calculus/*.lean found — run from formal/")
 
@@ -99,7 +104,7 @@ def main(show=False):
     else:
         print("\n  FAIL — the universal guard is gone. Whatever replaced it guards only the")
         print("  theorems someone remembered to name; the advertised axiom base in")
-        print("  docs/codec-formalization.md §3 is a claim again, not a build error.")
+        print("  the axiom base is a claim again, not a build error.")
         GUARD_FAILED.append(True)
 
     print("\n\n── 2. §-tag coverage, per module ──────────────────────────────────────\n")

@@ -90,7 +90,7 @@ and the judgement to it), and `lazy` concludes `⊤` in the model exactly as the
   The staging is defined in `Continuity.lean` itself, as a witness rather than a
   semantics: `denote` is structural and does not stage, and the reason it need not is
   the refutation above — `Term.lazy` carries a plain `Term` rather than a thunk, so
-  there is no recursion to approximate. See `docs/codec-formalization.md` §7.
+  there is no recursion to approximate. `Continuity.lean` carries the argument.
 - **One construction, one place — and one proof per law.** Each construction's
   definition, its two inversion lemmas, its carrier and both strengths of its
   lawfulness now sit together, and the core lemma is no longer a second copy of the
@@ -162,12 +162,12 @@ items 1–5, 8 and 9 of its plan closed the gap it measured, and its §5 records
 Prose does not typecheck. Deleting a declaration leaves the build green and every citation
 of it dangling, and both drift findings before the residue sweep were caught by luck.
 `python3 scripts/name_drift.py` closes that: it reports every backticked Lean name in the
-current-state documents — this file, `FIDELITY.md`, `VOCABULARY.md`, `docs/codec-calculus.md`,
-`docs/structural-discipline.md` — that no longer occurs anywhere in `Calculus/`, and exits
+current-state documents — this file, `ARCHITECTURE.md`, `FIDELITY.md`, `VOCABULARY.md`,
+`docs/codec-calculus.md` — and every module docstring, that no longer occurs in `Calculus/`,
+and exits
 non-zero if there is one. Deliberate citations live in an `EXPECTED` table with a reason
 each, and the check fails if an entry there stops being cited, so the table cannot rot
-quietly either. `--all` also scans `docs/codec-formalization.md`, which is the change log
-and is *expected* to name things that have since been deleted.
+quietly either.
 
 This is `Axioms.lean`'s principle at the documents: a claim that fails the build rather than
 a claim in prose.

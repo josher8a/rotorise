@@ -44,7 +44,7 @@ inductive Term where
       what it means.
 
       Not a union of arity-one literals, which is derivable but not free: see
-      `Calculus/LiteralArity1.lean` and `docs/codec-audit.md` §11.5. -/
+      `Calculus/LiteralArity1.lean`. -/
   | literal (k : GroundKind) (ls : NEFinset k.Carrier)
   /-- §3 `(set)`, indexed by its element **base** rather than by an arbitrary element term.
 

@@ -11,8 +11,7 @@ Where something is already written down, this cites it instead of restating it:
 | For | Read |
 | --- | --- |
 | The rules, normatively (§1–§7) | `docs/codec-calculus.md` |
-| What changed and why, historically | `docs/codec-formalization.md` |
-| Findings, refutations, prices | `docs/codec-audit.md` |
+| What changed and why, historically | `git log` — see §6 |
 | Module table, modelling decisions, how to build | `README.md` |
 | Whether the model *is* the specification | `FIDELITY.md` |
 | How a proof is meant to read | `VOCABULARY.md` |
@@ -293,7 +292,7 @@ already.
 ### 4c. One codec, stated once for both sides of the pair
 
 `Combinators.lean` is <!-- count:combinators_lines -->4008<!-- /count --> lines of the tree's
-<!-- count:tree_lines -->17553<!-- /count -->, and this is its organizing idea; without it
+<!-- count:tree_lines -->17551<!-- /count -->, and this is its organizing idea; without it
 the file reads as the inventory `README.md` already has. A constructor is a **prism** —
 `Ctor α β`, with `into`/`out` and the laws `out_into` (matching what was built returns it) and
 `into_out` (anything that matches was built) — and those two *are* §2's (R) and (C) at a
@@ -442,6 +441,22 @@ must occur somewhere in `Calculus/` — where *Lean-looking* means it carries a 
 one-word citation (`Adm`, `Orth`, `Fmt`) is never checked at all — with an `EXPECTED` table
 carrying a reason per deliberate
 exception (and failing if an entry there stops being cited, so the table cannot rot quietly).
+**And the docstring check is partly vacuous, which is a defect in the extension not the
+original.** `occurring()` builds its source set from the raw file text, comments included, so a
+name appearing *only* in a docstring is present in its own evidence and clears itself. Adding
+`Calculus/*.lean` to `CURRENT` (`6a90359`) therefore proves less than that commit's message
+claims: "none of the 763 dangles today" was established by a check that cannot see the case it
+was added for. Demonstrated — `literalN_holds_what_it_cannot_write` was cited in three
+docstrings and here while the declaration had been renamed to
+`literalNRule_holds_what_it_cannot_write`, and the guard passed clean; the citations are fixed,
+the guard did not find them.
+
+Stripping comments from the source set was tried and **over-corrects**: it then rejects
+legitimate citations of things deliberately *absent* from the code — `Classical.choice` above
+all, which the whole axiom base exists to keep out, plus mathlib names and Lean keywords
+mentioned but not used. Doing it properly means extending `PRELUDE` and `EXPECTED` for roughly
+twenty such names, which is its own piece of work and not this arc's. Reverted, recorded here.
+
 **Blind spot, stated in `7a91de8`: a count is not a name.** It cannot see "five theorems share
 `term_depth_wf`" being false while all five names exist. It also clears a dotted name
 component-wise, so a dotted citation passes whenever both halves occur anywhere.
@@ -532,8 +547,19 @@ well-typed term, a value on its held set, an encoding outside `Attr.Storable`. T
 able to **state** this, because a target certified against a spec that cannot say it is
 certified against a claim weaker than its users read. The honest repair is *not* a carrier
 refinement: the witness violates no premise, because §3's rules simply do not mention depth. The
-indexed-family alternative (`Attr : Nat → Type`, which the kernel does accept, unlike the
-subtype) is priced in `docs/codec-audit.md` §12.4.
+indexed-family alternative is `Attr : Nat → Type`, and the kernel accepts it where it rejects
+the subtype — **but only in the mutual form**. The direct shape is refused:
+
+    inductive A : Nat → Type where
+      | l {n} (v : List (A n)) : A (n+1)   -- nested inductive parameters cannot
+                                           -- contain local variables
+
+so every list position needs a hand-rolled companion indexed alongside it, which is the price:
+the same `List`-companion tax `Term` already pays, once per index. Against it, the benefit is
+real — bounding the carrier turns the depth *measure* into an index and takes `opaqCodec`'s
+input-side budget and its stabilization lemmas with it, and `Opaque.lean` names that budget
+around 150 times. Not attempted; the trade is recorded so the next reader does not re-derive
+the kernel error.
 
 Note that `Attr.Storable` counts `L` and `M` only, and is a **different function** from
 `Attr.depth`, which is a termination measure and charges a wire set a layer. Do not unify them.
@@ -713,7 +739,7 @@ would have broken `adm_literal_num`'s `rfl` and every `SepV` over literals; the 
 broke `adm_literal_num`'s `rfl` too, and nothing else.
 
 *And the reason it was a fidelity call turned out to be misstated, in this file and in three
-docstrings.* The witness `literalN_holds_what_it_cannot_write` was said to record a defect in
+docstrings.* The witness `literalNRule_holds_what_it_cannot_write` was said to record a defect in
 **§3's rule**. It does not: §3's `(literal)` premise line is `ℓ₁ … ℓₙ ∈ T`, and at `g = number`
 the base's held set is §1's `D`, so **the rule already requires `ℓ ⊆ D`** — `hD` was transcribing
 it faithfully, not compensating for its absence. What the witness shows is that the rule's

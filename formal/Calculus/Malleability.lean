@@ -3,13 +3,11 @@ import Calculus.Combinators
 /-!
 # Non-malleability: the property we are asked to adopt, and the two places it dies
 
-`docs/codec-audit.md` reached two opposite conclusions about one property, in two sections
-that never cited each other. §10.3, *"Non-malleability: they prove it, we deliberately fail
-it — and `ker p` is the measure"*, says we do not have `p a₁ = some v → p a₂ = some v →
-a₁ ≈ a₂` **and should not**: our `ker p` is deliberately not equality. §5.6 item 4 then
-proposed replacing the codec pair `(e, p)` with a relational format `fmt : Value → Set Attr`
-whose two decode clauses *entail exactly that property*. The refutation is recorded in §12.10;
-this file is the part of it that was worth keeping, and it touches no existing declaration.
+**Non-malleability is a property we deliberately fail, and `ker p` is why.** We do not have
+`p a₁ = some v → p a₂ = some v → a₁ ≈ a₂` and should not: our `ker p` is deliberately not
+equality. A proposal to replace the codec pair `(e, p)` with a relational format
+`fmt : Value → Set Attr`, whose two decode clauses *entail* that property, is refuted here —
+this file is the part of the refutation worth keeping, and it touches no existing declaration.
 
 Three things are here, and the reason each is here rather than in `Codec.lean` is that none
 of them is a new primitive.

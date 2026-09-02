@@ -511,7 +511,7 @@ theorem decimalCodec_p_restrict : decimalCodec.p = (wfDecimalCodec.restrict isSt
     carrier is `WFDouble`, so every element of `ls` is well-formed, `HLit` holds only values
     `numberCodec` writes, and there is no such literal to hold. The defect was never in this
     constructor; it is in §3's rule, which admits an ungated `ℓ`, and
-    `literalN_holds_what_it_cannot_write` (`Refutations.lean`) now says so about a
+    `literalNRule_holds_what_it_cannot_write` (`Refutations.lean`) now says so about a
     transcription of the rule rather than about a `Term`. -/
 noncomputable def literalCodec (k : GroundKind) (ls : NEFinset k.Carrier) : Codec :=
   { (baseCodec k).restrict (inL k ls) with T := HLit k ls }
@@ -521,7 +521,7 @@ noncomputable def literalCodec (k : GroundKind) (ls : NEFinset k.Carrier) : Code
 the job §6 claims for it: before the carrier change every sibling characterization lemma
 (`numberCodec_e_num`, `numberCodec_p_n`, `literalNCodec_p_n`, `decimalCodec_e_str`) had a
 consumer, and after it this one had none. Its only user was
-`literalN_holds_what_it_cannot_write`, and that witness moved to `literalNRule`, which is built
+`literalNRule_holds_what_it_cannot_write`, and that witness moved to `literalNRule`, which is built
 from `Codec.restrict` directly. No document cited it. -/
 
 theorem literalNCodec_p_n (ls : NEFinset WFDouble) (x : WFNumeral) :
@@ -2696,8 +2696,8 @@ theorem Lawful.restrict {c : Codec} (h : Lawful c) (q : Value → Bool) :
 
     It was `∀ d ∈ ls.1, Numeral.WF d.toDec = true` at `number` and `True` at all five other
     bases — §3's `ℓ ⊆ D` as a premise of the judgement. Its own docstring argued for keeping it
-    there, citing §2.2 of `docs/codec-audit.md`: typing the gate into the carrier "deletes
-    `literalN_holds_what_it_cannot_write` rather than proving the defect absent".
+    there, on the ground that typing the gate into the carrier "deletes
+    `literalNRule_holds_what_it_cannot_write` rather than proving the defect absent".
 
     That was the right objection and the wrong conclusion, and restating the witness found a
     third thing wrong with the sentence it was defending. §3's `(literal)` is **not** ungated:

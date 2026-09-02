@@ -19,8 +19,8 @@ Mechanization of `docs/codec-calculus.md`. Modelling choices, each recorded wher
   (`M`) are a `Finset Name` with a function on it. Unordered, unique and non-empty are
   properties of the type, so set-ness lives in the carrier and not in §2's `ker p`. The
   kernel's restriction is narrower than it looks: it rejects a `Finset` whose element type
-  is the datatype being declared, which is why `union`'s payload is still a list (§11.5 of
-  `codec-audit.md`), and accepts one over a concrete type in the same constructor.
+  is the datatype being declared, which is why `union`'s payload is still a list (see
+  `Calculus/LiteralArity1.lean`), and accepts one over a concrete type in the same constructor.
 * `Double` is axiomatized with exactly the shortest-text round trip the doc's `(number)`
   case consumes. That is an IEEE-754 fact, not a theorem of this calculus. It is asserted as
   *one* thing — `numericHost : NumericHost Double` — so what the calculus assumes about
@@ -53,7 +53,7 @@ is what `Attr.n` carries. So `⟨N, "abc"⟩` is not an attribute at all, and `C
 §1's coproduct is exact rather than approximated. This document argued for a while that the
 carrier should stay unrestricted so that a port would see the embedding `⌈·⌉` is partial;
 that partiality is a fact about the **port's** types, not the model's, and nothing in the
-development ever used an ill-formed `N`. See `codec-formalization.md` §4.
+development ever used an ill-formed `N`.
 
 Note the read side has to check too, not merely the write side. If `p` accepted an
 ill-formed numeral it would return a value `e` then refuses, breaking **(C)** — so the
@@ -308,8 +308,8 @@ abbrev NEFinset (α : Type) := {S : Finset α // S.Nonempty}
 
 /-! **Do not reach for an order on these.** A wire set read back as a *list* would need a
 canonical representative, hence a sort, hence an order — and `LinearOrder String` and
-`List.sorted_insertionSort` both depend on `Classical.choice`, which the axiom base
-`docs/codec-formalization.md` §3 advertises does not include. `#assert_axioms_all` is what
+`List.sorted_insertionSort` both depend on `Classical.choice`, which `sanctionedAxioms`
+(`Calculus/Axioms.lean`) does not include. `#assert_axioms_all` is what
 caught it, and `Calculus/WireOrder.lean` was 247 lines of axiom-free order built to get around
 it.
 
@@ -468,9 +468,10 @@ be nested within each other, to represent complex data structures up to 32 level
 
 A subtype `{as : List Attr // Attr.nestingL as ≤ 31}` puts `Attr` under its own declaration
 and the kernel refuses it, exactly as it refuses `Finset Attr`. So `Attr` above is the
-*unbounded* closure and the bound is stated about it rather than inside it. §6 of
-`codec-audit.md` recorded that as "not typeable" and stopped there; being un-typeable never
-made it un-checkable, and `src/` had to gate on it in the end (§12.6).
+*unbounded* closure and the bound is stated about it rather than inside it. It was once
+recorded as "not typeable" and filed as disposed of on that answer alone; being un-typeable
+never made it un-checkable, and `src/` had to gate on it in the end. That failure mode is a
+checklist item in `ARCHITECTURE.md` §10.
 
 **It counts `L` and `M` and nothing else.** A scalar is not a document type. Neither is a
 wire set: `SS`/`NS`/`BS` carry payloads rather than attributes, so a set can neither nest
@@ -561,7 +562,7 @@ arity one is the singleton case.
 
 `Calculus/LiteralArity1.lean` is why it is this shape rather than a union of arity-one literals:
 the union is derivable, but `Term.union` is list-shaped and the bridge from a `Finset` is
-`Classical.choice`. See `docs/codec-audit.md` §11. -/
+`Classical.choice`. -/
 
 /-- The five bases a literal can sit at — `Kind` minus the three container kinds. -/
 inductive GroundKind where

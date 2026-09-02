@@ -20,8 +20,8 @@ unique admission is a **negative** condition on the other options"*. The refutat
 *confluence* — every admitter agrees, rather than exactly one admits — and monotonicity comes
 back, `altCodec_not_monotone`'s own witness being one where the two admitters agree.
 
-`docs/codec-formalization.md` §7 carries the full argument — the ccpo obligation, the direction
-of failure, the relational route, and what a port to Isabelle/HOL would meet instead.
+The full argument is below and in commit `7ed4e5e` — the ccpo obligation, the direction of
+failure, the relational route, and what a port to Isabelle/HOL would meet instead.
 -/
 
 namespace Calculus

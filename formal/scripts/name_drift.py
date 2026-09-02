@@ -30,6 +30,12 @@ snapshot, which says in its own header that its citations are left as they were.
 entry there is a claim that the citation is deliberate. **Deleting a declaration named
 in `EXPECTED` without amending the reason is the failure this file exists to catch.**
 
+**What it cannot catch is an entry keyed to a document that no longer exists.** `scan()` runs
+per target, so the stale check only fires for documents still in `CURRENT`; three entries keyed
+to `docs/structural-discipline.md` became unreachable the moment that file left the list, and
+nothing reported them. They were removed by hand. If a document is dropped from `CURRENT`, drop
+its `EXPECTED` block in the same edit.
+
 Two defects were found by the change that turned single-word checking on, and both had been
 invisible for months, so they are worth naming as evidence that the blind spot was real:
 `Item` in `README.md`'s module inventory, deleted from the model on purpose in `f3bb956` and
@@ -44,8 +50,6 @@ citation inside a proof's docstring is a broken pointer on exactly the same term
 document, and there are far more of them; the only reason they were not checked is that the
 `CURRENT` list was written by hand from the `docs/` directory.
 
-A hit in `docs/codec-formalization.md` §4 is usually not a defect: that file is the
-change log, it says so, and a name there records what was reasoned with at the time.
 Hits in the current-state documents — `formal/README.md`, `formal/ARCHITECTURE.md`,
 `formal/FIDELITY.md`, `formal/VOCABULARY.md`, `docs/codec-calculus.md`,
 `docs/structural-discipline.md` —
@@ -58,7 +62,7 @@ Exit code 1 if any current-state document has a hit.
 import re, sys, os, glob
 
 CURRENT = ["README.md", "ARCHITECTURE.md", "FIDELITY.md", "VOCABULARY.md",
-           "../docs/codec-calculus.md", "../docs/structural-discipline.md"]
+           "../docs/codec-calculus.md"]
 # **The docstrings, which this guard never read.** Every module here is dense with backticked
 # names and none of them was checked — 763 distinct citations, invisible. Demonstrated rather
 # than assumed: writing `nullHonest_of_ownsNull_false` for `nullHonest_of_not_ownsNull` in a
@@ -66,11 +70,12 @@ CURRENT = ["README.md", "ARCHITECTURE.md", "FIDELITY.md", "VOCABULARY.md",
 # list, because at the time of adding them none dangled — so the bar is "keep it at zero",
 # which is only meaningful if breaking it fails the build.
 CURRENT += sorted(glob.glob("Calculus/*.lean"))
-# Scanned under --all, reported, never failing. Both are part change log and part live
-# document, so a name that no longer exists may be a deliberate record of a deletion —
-# `codec-audit.md`'s struck queue items are exactly that — or may be real drift. A human
-# reads the list; a check cannot tell the two apart.
-LOG = ["../docs/codec-formalization.md", "../docs/codec-audit.md"]
+# `LOG` held `docs/codec-formalization.md` and `docs/codec-audit.md` — scanned under `--all`,
+# reported, never failing, because a name missing from a change log may be a deliberate record
+# of a deletion rather than drift and no check can tell those apart. Both files are deleted;
+# `git log` is the change log now, and a commit message is not a document to scan. The list
+# stays as the hook for any future reported-only target.
+LOG = []
 
 IDENT = re.compile(r"[^\W\d][\w'!?⁺₀-₉]*(?:\.[^\W\d][\w'!?⁺₀-₉]*)*", re.UNICODE)
 # **`{1,80}`, and it matters.** With a `{2,80}` minimum a one-character code span (`` `7` ``,
@@ -117,11 +122,6 @@ EXPECTED = {
         "e_c": "the specification's own notation for a component codec, not a Lean name",
         "Encoded": "§1's own wire type, named by the specification; the model has no Lean type for it",
     },
-    "../docs/structural-discipline.md": {
-        "isNumeral": "`src/`'s gate, in a table measuring `src/`; not a `Calculus/` name",
-        "CodecError": "`src/`'s error type, at the row about construction-time refusal",
-        "Number.isFinite": "the JavaScript builtin `src/` used to use, quoted as the answer it gave",
-    },
 }
 
 
@@ -151,7 +151,7 @@ Function Equivalence Forall₂ Perm Prod Sum Classical Exists Std Batteries Lean
 sizeOf casesOn recOn binductionOn brecOn noConfusion propext sorry rfl decide simp omega
 deriving instance structure inductive theorem lemma abbrev mutual noncomputable partial unsafe
 def example where match with fun let have show this at using
-docBlame unreachableTactic simpNF EXPECTED CURRENT HEAD defaultTargets grep
+docBlame unreachableTactic simpNF EXPECTED CURRENT PRELUDE LOG HEAD defaultTargets grep
 """.split())
 
 
@@ -223,8 +223,8 @@ def main():
             print(f"  {label:38s} {len(stale)} stale EXPECTED entr{'y' if len(stale) == 1 else 'ies'}")
             for name in stale:
                 print(f"              {name}  (no longer cited — drop it from EXPECTED)")
-    if "--all" not in sys.argv:
-        print("\n  (--all also scans docs/codec-formalization.md, the change log)")
+    if LOG and "--all" not in sys.argv:
+        print(f"\n  (--all also scans {', '.join(os.path.normpath(p) for p in LOG)})")
     return 1 if failed else 0
 
 

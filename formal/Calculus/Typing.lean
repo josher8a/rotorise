@@ -195,9 +195,9 @@ inductive Typed : Term → Held → Option Member → Prop where
       (`hμ`), as `.S`, and as `.N`.
 
       **And now nothing is left.** `hD : LiteralD k ls` stood here — §3's `ℓ ⊆ D`, `Numeral.WF`
-      over the alternatives at `number` and `True` at the other five bases. §2.2 of
-      `docs/codec-audit.md` argued it had to stay a premise, because typing it into the carrier
-      "deletes `literalN_holds_what_it_cannot_write` rather than proving the defect absent".
+      over the alternatives at `number` and `True` at the other five bases. The case for keeping
+      it as a premise was that typing it into the carrier "deletes
+      `literalNRule_holds_what_it_cannot_write` rather than proving the defect absent".
 
       The objection was right that the witness matters and wrong about what it witnesses. §3's
       `(literal)` premise line is `ℓ₁ … ℓₙ ∈ T`, and at `g = number` the base's held set is §1's
