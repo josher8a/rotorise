@@ -678,6 +678,185 @@ export const setBase = (codec: AnyCodec): SetBase | undefined => {
 }
 
 /**
+ * Whether this codec admits this value — §3's `Adm : Term → Value → Bool`, ported.
+ *
+ * The sixth reader of a definition, beside {@link writes}, {@link carries}, {@link decides},
+ * {@link setBase} and {@link deeper}, and it is a *function of the term* rather than a field of the
+ * codec for the same reason they all are: there is nothing to forget in a function. The model
+ * proved this exact at all 21 constructors (`Adm_exact`), which is what makes the port sound rather
+ * than a second description of the same thing drifting from it.
+ *
+ * **This is narrower than "encode succeeds", and deliberately.** Encoding does not validate — a
+ * codec's input is typed, so `string.encode(5)` writes `{ S: 5 }` — so the law that holds is one
+ * way round: `admits(c, v)` implies `encode` succeeds, and the converse fails at exactly the
+ * codecs whose `encode` trusts its type. `src/codec.laws.spec.ts` states the implication and lists
+ * the codecs where the converse fails, which is the useful part: that list is the set of places
+ * `encode` would start rejecting if it were made to consult this.
+ *
+ * **Two rows ask their codec instead of describing it**, which is the model's own move (`adm
+ * (.custom ce _) = fun v => (ce v).isSome`, and `opaque`'s rows were converted to match):
+ *
+ * - `custom` carries no payload at all — `{ kind: 'custom' }` — so there is nothing to read and
+ *   asking is the only option.
+ * - `opaque` carries only `numbers`, and its domain is everything else it checks: nesting depth,
+ *   plain-object-ness, no empty set, no `NS`, no `Map`, no `bigint`. A hand-written recursion
+ *   stating that a second time is a description that must be kept in agreement with what it
+ *   describes; a question cannot drift. The brief for this asked for a closed form here and it
+ *   would have been the weaker choice.
+ *
+ * `lazy` terminates because it recurses on the **value**, not on the term: `def.get()` is forced
+ * once per level of the value, and a value is finite.
+ */
+export const admits = (codec: AnyCodec, value: unknown): boolean => {
+    const def = codec.def
+    // no definition is no claim: nothing says which term this is, so nothing says what it admits
+    if (!def) return false
+    switch (def.kind) {
+        case 'string':
+        case 'boolean':
+        case 'binary':
+            return shapeOf(value) === def.kind
+        // the gate already inside `encode`, lifted out: writing an `N` means writing a numeral, and
+        // `Number.isFinite` is not that test
+        case 'number':
+            return typeof value === 'number' && isNumeral(String(value))
+        // `isStoredNumeral` stringifies what it is given — `isStoredNumeral(['1'])` is `true` — so
+        // the kind is checked first rather than relying on the regexp to do it
+        case 'decimal':
+            return typeof value === 'string' && isStoredNumeral(value)
+        case 'null':
+            return value === null
+        // dispatched on the base, because the base is what says which JS kind the alternatives are;
+        // `sameLiteral` is what compares binary by its octets rather than by reference
+        case 'literal':
+            return (
+                shapeOf(value) === literalShape[def.base] &&
+                def.allowed.some((one) =>
+                    sameLiteral(one, value as LiteralValue),
+                )
+            )
+        // non-emptiness is part of it: DynamoDB has no empty `SS`, so `encode` refuses one and this
+        // has to as well or the implication fails at the empty set
+        case 'set':
+            return (
+                value instanceof Set &&
+                value.size > 0 &&
+                [...value].every((member) => admits(def.element, member))
+            )
+        // and `[]` **is** admitted, which is the mirror of that and is correct: `L` has an empty
+        // inhabitant where the set members do not
+        case 'array':
+            return (
+                Array.isArray(value) &&
+                value.every((element) => admits(def.element, element))
+            )
+        case 'tuple': {
+            if (!Array.isArray(value)) return false
+            const fixed = def.elements.length
+            const tail = def.tail
+            if (tail ? value.length < fixed : value.length !== fixed) {
+                return false
+            }
+            return value.every((one, at) =>
+                admits((def.elements[at] ?? tail) as AnyCodec, one),
+            )
+        }
+        case 'record': {
+            const held = asRecord(value)
+            return (
+                held !== undefined &&
+                Object.values(held).every((one) => admits(def.value, one))
+            )
+        }
+        /**
+         * §4's field table, read the way `encode` reads it: a declared name must be there and be
+         * admitted unless the field is `optional`, and an undeclared name is checked only where
+         * there is a rest codec to check it with — `drop` and `refuse` both ignore it on the way
+         * in, which is what `encode` does.
+         *
+         * A `fallback` field is **not** absence-tolerant here, and that matches `encode`: the
+         * stand-in is what a *read* supplies when the attribute is missing, not what a write may
+         * leave out.
+         */
+        case 'attributes': {
+            const held = asRecord(value)
+            if (!held) return false
+            for (const name in def.of) {
+                const field = def.of[name] as AnyCodec
+                const at = held[name]
+                if (at === undefined) {
+                    if (field.def?.kind === 'optional') continue
+                    return false
+                }
+                if (!admits(field, at)) return false
+            }
+            const rest = def.rest
+            if (typeof rest === 'string') return true
+            for (const name in held) {
+                if (name in def.of || held[name] === undefined) continue
+                if (!admits(rest, held[name])) return false
+            }
+            return true
+        }
+        /** The tag lookup, `Object.hasOwn` for the reason {@link discriminatedUnion} gives. */
+        case 'tagged': {
+            const held = asRecord(value)
+            const tag = held?.[def.discriminator]
+            if (tag === undefined) return false
+            const name = String(tag)
+            return (
+                Object.hasOwn(def.variants, name) &&
+                admits(def.variants[name] as AnyCodec, value)
+            )
+        }
+        /**
+         * The disjunction, which is what the *value* side of a union is: an option admits it or
+         * none does. Left as a disjunction on purpose — the resolver `union` actually runs is a
+         * different question (it counts, and refuses where two options both admit), and rewiring
+         * it to this is a behaviour change out of scope here.
+         */
+        case 'untagged':
+            return def.variants.some((variant) => admits(variant, value))
+        case 'refine':
+            return (
+                admits(def.inner, value) &&
+                def.refined.is(value as never) === true
+            )
+        /**
+         * An adapter is asked about the value it *holds*, so the value is put through the adapter
+         * first — and the adapter is a caller's function, which throws on a value it does not own
+         * (`(value as readonly string[]).join` on a number). A throw is not an admission.
+         */
+        case 'held':
+            try {
+                return admits(def.inner, def.adapt.encode(value as never))
+            } catch {
+                return false
+            }
+        // a read widening writes what it currently is, and the older readings are read-side only
+        case 'legacy':
+            return admits(def.current, value)
+        case 'nullable':
+            return value === null || admits(def.inner, value)
+        // §4's positions: the mark is about the name, and what may be held is the inner term's
+        case 'optional':
+        case 'fallback':
+        case 'restOf':
+            return admits(def.inner, value)
+        case 'lazy':
+            return admits(def.get(), value)
+        // the two that ask — see the note above
+        case 'opaque':
+        case 'custom':
+            try {
+                return !failed(codec.encode(value as never))
+            } catch {
+                return false
+            }
+    }
+}
+
+/**
  * The codec one segment deeper, or `undefined` where the path runs past the schema.
  *
  * How {@link ItemCodec.at} walks. Defined here beside {@link writes} and {@link decides} because it
@@ -4035,8 +4214,13 @@ const optionOf = (codec: AnyCodec): Option => {
  * Two conditions, and both matter for the law: every name present must be one the option declares
  * (otherwise encoding would drop data), and every attribute it requires must be present (otherwise
  * it is simply not this one).
+ *
+ * Named for what it is, which used to be `admits` — and it is emphatically **not** {@link admits},
+ * §3's `Adm`. It is a test on *names* alone, the `keysOk` the model's `optionSemOf` uses for object
+ * options, and it says nothing about whether the values at those names are admissible. Two things
+ * called `admits` in one file was one name for two questions.
  */
-const admits = (option: Option, names: ReadonlySet<string>) => {
+const namesFit = (option: Option, names: ReadonlySet<string>) => {
     const declares = option.declares
     if (!declares) return false
     for (const name of names) if (!declares.has(name)) return false
@@ -4396,7 +4580,7 @@ export const union = <const Options extends readonly AnyCodec[]>(
         (shape: Shape | undefined, names: ReadonlySet<string> | undefined) =>
         (option: Option) =>
             option.declares
-                ? shape === 'map' && !!names && admits(option, names)
+                ? shape === 'map' && !!names && namesFit(option, names)
                 : !option.carries || !shape || option.carries.includes(shape)
 
     type T = DerivedUnion<Options>
@@ -4412,7 +4596,7 @@ export const union = <const Options extends readonly AnyCodec[]>(
         return only(
             (option) =>
                 option.declares
-                    ? member === 'M' && !!names && admits(option, names)
+                    ? member === 'M' && !!names && namesFit(option, names)
                     : option.member === undefined ||
                       member === undefined ||
                       option.member === member,
@@ -4425,7 +4609,7 @@ export const union = <const Options extends readonly AnyCodec[]>(
     const readItem = (item: StoredItem): Result<T> => {
         const names = namesOf(item)
         return only(
-            (option) => admits(option, names),
+            (option) => namesFit(option, names),
             naming('this item', names),
             (option) =>
                 (
@@ -4437,7 +4621,7 @@ export const union = <const Options extends readonly AnyCodec[]>(
     const writeItem = (item: T): Result<AttributeMap> => {
         const names = namesOf(item as Record<string, unknown>)
         return only(
-            (option) => admits(option, names),
+            (option) => namesFit(option, names),
             naming('this entity', names),
             (option) =>
                 (
