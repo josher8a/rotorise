@@ -1253,13 +1253,13 @@ statement about *one* base. `AdmA_exact` cites all four and unfolds none. -/
 theorem AdmALit_binary_exact (ls : NEFinset Bytes) (a : Attr) :
     AdmA (.literal .binary ls) a = true ↔ ((denote (Term.literal .binary ls)).p a).isSome = true := by
   cases a <;>
-    simp [AdmA_literal, AdmALit, denote, denote, literalCodec, baseCodec, Codec.restrict, inL,
+    simp [AdmA_literal, AdmALit, denote, denote, literalCodec, baseCodec,
           binaryCodec]
 
 theorem AdmALit_null_exact (ls : NEFinset Unit) (a : Attr) :
     AdmA (.literal .null ls) a = true ↔ ((denote (Term.literal .null ls)).p a).isSome = true := by
   cases a <;>
-    simp [AdmA_literal, AdmALit, denote, denote, literalCodec, baseCodec, Codec.restrict, inL,
+    simp [AdmA_literal, AdmALit, denote, denote, literalCodec, baseCodec,
           nullCodec]
 
 /-- `(literal)` at `string`, read side. `NEFinset String` and not `NEFinset k.Carrier`: the
@@ -1267,7 +1267,7 @@ theorem AdmALit_null_exact (ls : NEFinset Unit) (a : Attr) :
 theorem AdmALit_string_exact (ls : NEFinset String) (a : Attr) :
     AdmA (.literal .string ls) a = true ↔ ((denote (Term.literal .string ls)).p a).isSome = true := by
   cases a <;>
-    simp [AdmA_literal, AdmALit, denote, denote, literalCodec, baseCodec, Codec.restrict, inL,
+    simp [AdmA_literal, AdmALit, denote, denote, literalCodec, baseCodec,
           stringCodec]
 
 /-- `(literal)` at `boolean`, read side. Same shape as `AdmALit_string_exact`, and the two
@@ -1275,7 +1275,7 @@ theorem AdmALit_string_exact (ls : NEFinset String) (a : Attr) :
 theorem AdmALit_boolean_exact (ls : NEFinset Bool) (a : Attr) :
     AdmA (.literal .boolean ls) a = true ↔ ((denote (Term.literal .boolean ls)).p a).isSome = true := by
   cases a <;>
-    simp [AdmA_literal, AdmALit, denote, denote, literalCodec, baseCodec, Codec.restrict, inL,
+    simp [AdmA_literal, AdmALit, denote, denote, literalCodec, baseCodec,
           booleanCodec]
 
 

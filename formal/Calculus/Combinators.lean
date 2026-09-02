@@ -341,6 +341,31 @@ noncomputable def inL : (k : GroundKind) → NEFinset k.Carrier → Value → Bo
   | .null,    _,  .null   => true
   | _, _, _ => false
 
+/-! `inL`'s rows at the four ungated bases, as `@[simp]` equations.
+
+Without these a `simp` that needs `inL` at one base unfolds `inL.match_1` — the matcher Lean
+derives for the whole ten-row table — and pays for all ten rows at every rewrite. That is what
+`fanOf` found behind `AdmA_exact`'s duplication. `number` and `decimal` get no equation here:
+their rows are a `dite` on a gate, so the useful statement is about the gate rather than about
+the row, and `hLit_of_inL`'s two `cases hs :` branches are where that is done. -/
+
+/-- `.str` at `string`: the payload *is* the carrier, so this is `rfl`. -/
+@[simp] theorem inL_str (ls : NEFinset String) (s : String) :
+    inL .string ls (.str s) = decide (s ∈ ls.1) := rfl
+
+/-- `.bool` at `boolean`, on the same terms. -/
+@[simp] theorem inL_bool (ls : NEFinset Bool) (b : Bool) :
+    inL .boolean ls (.bool b) = decide (b ∈ ls.1) := rfl
+
+/-- `.bin` at `binary`, on the same terms. -/
+@[simp] theorem inL_bin (ls : NEFinset Bytes) (b : Bytes) :
+    inL .binary ls (.bin b) = decide (b ∈ ls.1) := rfl
+
+/-- `.null` at `null`: the alternative set cannot distinguish anything, `Unit` having one
+    inhabitant and `℘⁺fin` no empty one, so the row is `true` and not a membership test. -/
+@[simp] theorem inL_null (ls : NEFinset Unit) :
+    inL .null ls .null = true := rfl
+
 /-- §3's `{ℓ₁ … ℓₙ}` — the held set, uniform in the base because `toValue` is. Spelled
     `Value → Prop` rather than `Held`, which is `Typing`'s abbreviation and one module down. -/
 def HLit (k : GroundKind) (ls : NEFinset k.Carrier) : Value → Prop :=
@@ -608,6 +633,16 @@ theorem through_e {f g : Value → Value} {v a} :
 theorem through_p {f g : Value → Value} {a v} :
     (c.through f g).p a = some v ↔ ∃ w, c.p a = some w ∧ v = g w := by
   simp [Codec.through, Option.map_eq_some', eq_comm (a := v)]
+
+/-- The read side of `restrict_e_isSome`, and its absence is why every literal row unfolded
+    `Codec.restrict` by hand. §4c asks for one codec stated once for both sides; the write half
+    was `@[simp]` and the read half was not there. -/
+@[simp] theorem restrict_p_isSome {c : Codec} {q : Value → Bool} (a : Attr) :
+    ((c.restrict q).p a).isSome = ((c.p a).elim false q) := by
+  simp only [Codec.restrict]
+  cases c.p a with
+  | none => rfl
+  | some v => cases hq : q v <;> simp [hq]
 
 /-- `refine` writes only what passes the prism… -/
 theorem restrict_e {q : Value → Bool} {v a} :
