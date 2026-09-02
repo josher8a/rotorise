@@ -16,9 +16,10 @@ Mechanization choices, and where they diverge from the doc (each is routine to s
   distinctness).
   The doc's *semantic* premises — `(held)`'s carrier-restricted iso, `(legacy)`'s
   `ran(r) ⊆ dom(e)` and coherence, `(nullable)`'s null-honesty, `(fallback)`'s
-  `v(∗) ∈ dom(e)`, `(custom)`'s laws, and `(union)`'s residual (U) — are fuel-indexed
-  and live in `Obligations` (Soundness.lean), consumed by the theorem. Same premises,
-  fueled form.
+  `v(∗) ∈ dom(e)`, `(custom)`'s laws, and `(union)`'s residual (U) — live in `Obligations`
+  (Soundness.lean), consumed by the theorem. Same premises, stated where they can mention the
+  denotation. This said they "are fuel-indexed", which `Obligations`' own docstring contradicts
+  in as many words — *"Structural, and no longer fuel-indexed"* — since `denote` lost its fuel.
 * **`literal` is one rule in §3 and two constructors here**, and the metalanguage is the
   reason. §3's `(literal)` reads its member off a base — `ℓ` lies in some ground term's held
   set, and the literal stores what that term stores — which needs `ℓ : List Value` plus a

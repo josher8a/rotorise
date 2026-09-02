@@ -400,8 +400,10 @@ theorem selectF_continuous_list {os : List OptionSem} {F : Nat → OptionSem →
 the obligation) and continuous (unconditionally), which are the two obligations a least-fixpoint
 construction discharges.
 
-**Does not:** that a fixpoint *exists*. Both theorems are the two-option, growth-first case; the
-general list versions are the same arguments, unwritten. And the construction needs a ccpo this
+**Does not:** that a fixpoint *exists*. `selectF_mono_list` and `selectF_continuous_list` above
+are the general versions — this paragraph said they were "the same arguments, unwritten" and
+stayed that way through the commit that wrote them, thirty lines up. Monotonicity and continuity
+are a fixpoint's *obligations*, not its construction: the construction needs a ccpo this
 file deliberately does not define, while `denote` is structural and does not stage — `Term.lazy`
 carries a plain `Term` rather than a thunk *because* the refutation was believed. Reopening
 recursion means staging `denote` again, which is a larger change than these theorems.
