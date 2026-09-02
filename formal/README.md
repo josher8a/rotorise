@@ -144,25 +144,26 @@ and the judgement to it), and `lazy` concludes `⊤` in the model exactly as the
 
 ## Is the model the specification?
 
-[`FIDELITY.md`](./FIDELITY.md) is the representation audit — two independent readings, in
-opposite directions, of whether every normative element of `docs/codec-calculus.md` has an
-exact counterpart here and whether a reviewer could check one in isolation. It records
-seven specification defects (three found by both readings independently), five claims that
-are true but unlocatable, two corrections to this package's own artifacts, and a measured
-review surface. Regenerate the measurements with `python3 scripts/fidelity_audit.py`.
+Two independent readings, in opposite directions, asked whether every normative element of
+`docs/codec-calculus.md` has an exact counterpart here and whether a reviewer could check one
+in isolation. They found seven specification defects, five claims true but unlocatable, and two
+corrections to this package's own artifacts. **Eleven of the fourteen are closed**; the three
+still open are `ARCHITECTURE.md` §9's last three bullets — `(held)`'s over-strong iso premise,
+the `℘⁺fin`/`⇀fin` coupling that nothing else states, and what §6's commutativity row is
+actually worth.
 
-The headline: the guard puts 63 constants through `#assert_axioms` while the documents
-cite 133 as results, §-tag coverage is 24%, and **60% of theorem statements name a
-definition that is documented nowhere** — a statement a reviewer cannot read against the
-specification without a detour. (The guard's count was 17 when the audit was written;
-items 1–5, 8 and 9 of its plan closed the gap it measured, and its §5 records which.)
+The measurement regenerates: `python3 scripts/fidelity_audit.py`. Its live figures are the
+ones to quote — `#assert_axioms_all` is universal over the environment now, so the audit-era
+"63 of 133 constants" is gone, and what remains worth watching is that **41% of theorem
+statements name a definition documented nowhere**, which is a statement a reviewer cannot read
+against the specification without a detour.
 
 ## Do the documents still name what exists?
 
 Prose does not typecheck. Deleting a declaration leaves the build green and every citation
 of it dangling, and both drift findings before the residue sweep were caught by luck.
 `python3 scripts/name_drift.py` closes that: it reports every backticked Lean name in the
-current-state documents — this file, `ARCHITECTURE.md`, `FIDELITY.md`, `VOCABULARY.md`,
+current-state documents — this file, `ARCHITECTURE.md`, `VOCABULARY.md`,
 `docs/codec-calculus.md` — and every module docstring, that no longer occurs in `Calculus/`,
 and exits
 non-zero if there is one. Deliberate citations live in an `EXPECTED` table with a reason
@@ -205,7 +206,7 @@ about the store was really about survives on the other side of the pair: a liter
 texts are known at the declaration, but `10²¹` is written `1e+21` and handed back
 normalised, so a row that tested the *text* would refuse a row the codec itself wrote —
 which is why the row tests the codec instead. Three entries that used to sit here are done — §6's rows are all proved
-(see `FIDELITY.md` for what "all" is worth on the commutativity row), and `typed_TSub`
+(see `ARCHITECTURE.md` §9 for what "all" is worth on the commutativity row), and `typed_TSub`
 ties the judgement's `T` to the denotation, `typed_e_mem` and `typed_p_mem` being the
 statements a reviewer wants.
 

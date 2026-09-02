@@ -25,8 +25,8 @@ projections are cleared component-wise: `Carrier.ranP` is legitimate when `Carri
 `ranP` both occur, even though the sources never write the two together.
 
 What is left is a small `EXPECTED` table, each entry carrying the reason it is not a
-defect — a mathlib name cited as future work, or a name in `FIDELITY.md`'s dated
-snapshot, which says in its own header that its citations are left as they were. An
+defect — a mathlib name cited as future work, or a name a document cites *as* something
+that was retired, where the retirement is the point. An
 entry there is a claim that the citation is deliberate. **Deleting a declaration named
 in `EXPECTED` without amending the reason is the failure this file exists to catch.**
 
@@ -39,8 +39,8 @@ its `EXPECTED` block in the same edit.
 Two defects were found by the change that turned single-word checking on, and both had been
 invisible for months, so they are worth naming as evidence that the blind spot was real:
 `Item` in `README.md`'s module inventory, deleted from the model on purpose in `f3bb956` and
-still listed as something `Domain.lean` defines; and `lookup_rel`, cited by `FIDELITY.md` and
-deleted in `e9ac3be`. The second was not a single-word citation at all — it was hidden by the
+still listed as something `Domain.lean` defines; and `lookup_rel`, cited by the
+representation audit and deleted in `e9ac3be`. The second was not a single-word citation at all — it was hidden by the
 tokenizer bug described at `BACKTICKED`, which means the guard's *existing* job was also
 incomplete. A guard that is loose in a way nobody has measured is a guard whose passes mean
 less than they look like.
@@ -51,7 +51,7 @@ document, and there are far more of them; the only reason they were not checked 
 `CURRENT` list was written by hand from the `docs/` directory.
 
 Hits in the current-state documents — `formal/README.md`, `formal/ARCHITECTURE.md`,
-`formal/FIDELITY.md`, `formal/VOCABULARY.md`, `docs/codec-calculus.md`,
+`formal/VOCABULARY.md`, `docs/codec-calculus.md`,
 `docs/structural-discipline.md` —
 are broken pointers and should be fixed or explicitly marked superseded.
 
@@ -61,7 +61,7 @@ Exit code 1 if any current-state document has a hit.
 """
 import re, sys, os, glob
 
-CURRENT = ["README.md", "ARCHITECTURE.md", "FIDELITY.md", "VOCABULARY.md",
+CURRENT = ["README.md", "ARCHITECTURE.md", "VOCABULARY.md",
            "../docs/codec-calculus.md"]
 # **The docstrings, which this guard never read.** Every module here is dense with backticked
 # names and none of them was checked — 763 distinct citations, invisible. Demonstrated rather
@@ -83,7 +83,7 @@ IDENT = re.compile(r"[^\W\d][\w'!?⁺₀-₉]*(?:\.[^\W\d][\w'!?⁺₀-₉]*)*",
 # match is the prose between two spans — which `.strip()` then turned into a plausible
 # identifier. That is how `becomes`, `carries` and `are` used to be reported as Lean names, and,
 # far worse, how 13 real citations were swallowed into prose runs and never checked at all. One
-# of the 13 was `lookup_rel`, deleted in `e9ac3be` and dangling in `FIDELITY.md` ever since.
+# of the 13 was `lookup_rel`, deleted in `e9ac3be` and dangling ever since.
 # The token is now used exactly as captured; a capture with a space in it fails `LEANISH`.
 BACKTICKED = re.compile(r"`([^`\n]{1,80})`")
 LEANISH = re.compile(r"^[^\W\d][\w'!?⁺₀-₉]*(?:\.[^\W\d][\w'!?⁺₀-₉]*)*$", re.UNICODE)
@@ -99,24 +99,13 @@ EXPECTED = {
     "ARCHITECTURE.md": {
         "mono": "same as `README.md`'s — the ccpo obligation's conventional name, at §7's "
                 "not-modelled row",
+        "List.Perm": "mathlib; §9's commutativity row names it as the next probe, not as "
+                     "something proved here — inherited from the deleted representation audit",
     },
     "VOCABULARY.md": {
         "List.Perm": "same, at the set-equality row",
         "cLitStr": "cited *as* the opaque name that `unionLiteralString` replaced — the example is the point",
         "fbDefaults": "a struck row recording a completed item; the name was retired by the same change (`c740a96` region)",
-    },
-    "FIDELITY.md": {
-        "List.Perm": "same",
-        "denoteω_eq": "the ω layer this snapshot measures, named as deleted in its own header",
-        "numericCodec_eq_restrict": "cited with its commit; `(numeric)` was removed after it",
-        "ident_sound": "the proposal in a struck row; the delivered names follow it",
-        "termDepth": "the ω layer this snapshot measures; its own header names it as deleted",
-        "checkUniqueAdmission": "`src/testing.ts`, and the sentence says so; not a `Calculus/` name",
-        "numericCodec": "removed with `(numeric)` at JH's call, after `numericCodec_eq_restrict` above",
-        "Item": "§1's wire type, deleted from the model in `f3bb956`; this snapshot predates that",
-        "lookup_rel": "`Lists.lean`'s keyed clause, deleted in `e9ac3be` when the field table "
-                      "became a key set with a function on it. **Found by fixing this script's "
-                      "tokenizer** — the citation had been swallowed into a prose run since then.",
     },
     "../docs/codec-calculus.md": {
         "e_c": "the specification's own notation for a component codec, not a Lean name",

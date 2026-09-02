@@ -13,7 +13,6 @@ Where something is already written down, this cites it instead of restating it:
 | The rules, normatively (§1–§7) | `docs/codec-calculus.md` |
 | What changed and why, historically | `git log` — see §6 |
 | Module table, modelling decisions, how to build | `README.md` |
-| Whether the model *is* the specification | `FIDELITY.md` |
 | How a proof is meant to read | `VOCABULARY.md` |
 
 One standing rule from `WORKING-AGREEMENT.md` governs this file too: **record why, not what**,
@@ -759,6 +758,31 @@ language no longer admits a variant answering to two tags, which is a statement 
 lookup is and not a lever on the model. `src/` is not aligned and that is a separate call
 (`codec.ts:4415` records multi-tag options as deliberate).
 
+**`(held)`'s iso premise is stronger than the proof consumes.** The doc demands total
+cancellation on the carriers; `IsoCancels` restricts both directions to `(c.e ·).isSome`, and
+`soundness_both` closes on the restricted form. So the specification asks for more than the
+mechanization needs — the mirror image of a premise that is too weak, and the same defect
+class. Reported, never resolved: either the doc's premise is loosened to what the proof uses,
+or the model is asked to discharge the stronger one. Carried here from the representation audit,
+which is deleted.
+
+**§1's `℘⁺fin` and `⇀fin` are not in the carrier, and the two omissions cancel — which nothing
+else states.** `Attr.ss []` is well-formed and `M` admits duplicate keys, and `Domain.lean`
+records the list-for-set choice as being about *order* only. That is not the whole of it.
+`HSet` is a nonempty **list**, so `set [x,x]` encodes to `ss [s,s]` and reads back, and (R)
+holds. Under §1's actual `℘⁺fin` the wire set would collapse and **(R) would fail on that
+input**. So the two widenings are load-bearing on each other: tightening either one alone
+breaks `lawful_setCodec`. This project has already paid for that class of error once, at
+`HOpaque` admitting `set []`. The audit that found the coupling said the coupling was stated
+nowhere; this paragraph is now the only place it is, which is why it is here rather than gone.
+
+**§6's commutativity row is the adjacent transposition, not the permutation.**
+`equiv_altCodec_swap` proves the adjacent case, which generates every permutation — but the
+`List.Perm` lift is not written down, so the table's "all" is worth what one transposition is
+worth. `README.md` was always honest about this and the change log's "twenty of twenty" was
+not. The row also inherits the `≡`-is-not-transitive caveat, which bounds what a table of
+rewrites licenses at all. The `List.Perm` lift is the next probe.
+
 **`admits`' violation list and wiring it into `union`'s resolver** — both behaviour changes in
 `src/`, both the user's call. See the handoff.
 
@@ -774,7 +798,7 @@ lookup is and not a lever on the model. `src/` is not aligned and that is a sepa
   exactness clause, because a missing row is a silent `⊤` and `⊤` is sound.
 - Sharpening a `⊤` row at a container → check what was relying on the slack (§5), and cost it
   with `scripts/blast_radius.lean`, not with grep.
-- Citing a Lean name in `README.md`, `FIDELITY.md`, `VOCABULARY.md`, this file, or
+- Citing a Lean name in `README.md`, `VOCABULARY.md`, this file, or
   `docs/codec-calculus.md` → `python3 scripts/name_drift.py` must exit 0. Single-word
   citations are covered as of `83d61df`; four categories are skipped by shape and the reason
   for each is in the script.
