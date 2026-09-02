@@ -2200,7 +2200,13 @@ theorem AdmA_le_admA : ∀ (t : Term) (a : Attr), AdmA t a = true → admA t a =
   | .object _, _, _ => rfl
   | .array _, _, _ => rfl
   | .record _, _, _ => rfl
-  | .legacy _ _, _, _ => rfl
+  -- **`legacy` stopped being `rfl` here, and that is the change working.** It held because
+  -- `admA (.legacy _ _)` was `⊤`, so any `AdmA` implied it. The two rows are now the same
+  -- union, `admA t a || (r a).isSome`, so the containment is the subterm's, disjunct-wise.
+  | .legacy t r, a, h => by
+      simp only [admA, Bool.or_eq_true]
+      simp only [AdmA, Bool.or_eq_true] at h
+      exact h.imp (AdmA_le_admA t a) id
   -- as on the value side: one row, so the containment is the identity
   | .opaq _, a, h => by rw [admA]; rw [AdmA] at h; exact h
   | .custom _ _, a, h => by rw [admA]; rw [AdmA] at h; exact h
