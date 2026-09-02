@@ -10,10 +10,12 @@ import {
     CodecError,
     decimal,
     nullValue,
+    number,
     object,
     optional,
     string,
     union,
+    writes,
 } from './codec'
 import { checkRoundTrip, roundTrip } from './testing'
 
@@ -96,6 +98,60 @@ describe('untagged', () => {
             // @ts-expect-error the declaration itself is rejected
             [object({ a: string, b: optional(string) }), object({ a: string })],
         )
+    })
+
+    /**
+     * **A one-sided check on a two-sided condition, and the union it let through.**
+     *
+     * The construction guard compared `carries` — value kinds — and nothing compared `writes`. So
+     * `union([decimal, number])` was accepted: `decimal` takes a string, `number` takes a number,
+     * no shared kind. Both store `'N'`.
+     *
+     * It built, it encoded, and it could never read back what it had written:
+     *
+     * ```
+     * union([decimal, number]).encode('1.5')   → { N: '1.5' }
+     * union([decimal, number]).decode({ N: '1.5' })
+     *   → 'decimal and number both admit this attribute'
+     * ```
+     *
+     * A row a union writes and no reader of that union can resolve is strictly worse than a
+     * declaration that is refused, and this was invisible only because the *mirror* — the two
+     * options swapped for two that share a value kind — is refused by the loop one line above.
+     * That asymmetry is the whole tell: an ambiguity check on a pair has a write side and a read
+     * side, and only one of them was written.
+     *
+     * **This rejects a union that built yesterday.** Deliberately, and there is no version of it
+     * that keeps working: nothing about `{ N: '1.5' }` says whether it was written as a decimal or
+     * as a host number.
+     */
+    it('rejects two options that store the same member, which no read can resolve', () => {
+        expect(() => union([decimal, number])).toThrow(
+            /decimal and number both store 'N', and neither checks what it reads/,
+        )
+        // and the mirror it was hiding behind, which was refused all along — twice over, since two
+        // options reading back as the same type is also `ValidateOptions`. `union([decimal,
+        // number])` passes *that* check too: they read back as `string` and `number`
+        expect(() =>
+            // @ts-expect-error both read back as a string, which the type refuses as well
+            union([string, decimal]),
+        ).toThrow(/both take the same kind of value/)
+    })
+
+    /**
+     * The exemptions are the read side's too, and they are the ones the write side already had: an
+     * object option is chosen by its names, and a literal knows which values are its own. So the two
+     * numeric literals below share `'N'` and are still perfectly resolvable.
+     */
+    it('keeps the two exemptions the write side has', () => {
+        expect(writes(number(0, 1))).toBe(writes(decimal('2', '3')))
+        const either = union([number(0, 1), decimal('2', '3')])
+        expect(either.unsafeDecode({ N: '2' })).toBe('2')
+        expect(either.unsafeDecode({ N: '1' })).toBe(1)
+        // two object options both store `M`, and the names are what choose
+        expect(() =>
+            union([object({ a: string }), object({ b: string })]),
+        ).not.toThrow()
     })
 
     it('still refuses ambiguity at runtime, as a backstop', () => {

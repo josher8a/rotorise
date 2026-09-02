@@ -4498,6 +4498,15 @@ export const union = <const Options extends readonly AnyCodec[]>(
      *
      * An option whose kind is unknown — an adapter, an `opaque` — is not compared: it could be
      * anything, and refusing it against everything would refuse unions that work.
+     *
+     * **Both directions, because the condition has two sides.** This loop compared `carries` — value
+     * kinds — and nothing compared `writes`, so `union([decimal, number])` was accepted: `decimal`
+     * takes a string and `number` takes a number, no shared kind, declaration allowed. Both store
+     * `'N'`. It encoded `'1.5'` to `{ N: '1.5' }` and then *could not read back what it had
+     * written* — the decode filter kept both options and reported "decimal and number both admit
+     * this attribute". A union that writes a row no reader can resolve is worse than one that is
+     * refused, and it was invisible only because the mirror `union([string, decimal])` *is* refused,
+     * by the kind check, one line up.
      */
     for (let i = 0; i < all.length; i++) {
         for (let j = i + 1; j < all.length; j++) {
@@ -4511,6 +4520,11 @@ export const union = <const Options extends readonly AnyCodec[]>(
             if (shared) {
                 throw new CodecError(
                     `${first.describe} and ${second.describe} both take the same kind of value — ${shared} — and neither checks what it is given, so no value can choose between them; give the entity a discriminator and use discriminatedUnion`,
+                )
+            }
+            if (first.member !== undefined && first.member === second.member) {
+                throw new CodecError(
+                    `${first.describe} and ${second.describe} both store '${first.member}', and neither checks what it reads, so no stored attribute can choose between them; give the entity a discriminator and use discriminatedUnion`,
                 )
             }
         }
