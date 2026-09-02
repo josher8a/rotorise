@@ -1832,6 +1832,51 @@ theorem MapOf.at_of_mem {α : Type} {m : MapOf α} (k : {k // k ∈ m.1}) :
     m.at k.1 = some (m.2 k) := by
   simp only [MapOf.at, dif_pos k.2]
 
+/-! ### Adding one entry to a map payload
+
+`(dunion)`'s discriminator is not a field the variant declares — it is the union's key, injected
+into the *denoted* field map. Injecting into the `Body` instead would make `denote` recurse on a
+manufactured body that is no structural subterm, and `denote` is structurally recursive (see
+`Denote.lean`'s header, and the fuel it removed). At this level the recursion is still the
+variant's own fields and the injected entry is a closed codec, so nothing about `denote` moves.
+
+**Where the non-membership lives, and the linter settled it.** The first draft demanded
+`hk : k ∉ m.1` here, so that a variant declaring the discriminator could not quietly be made
+to shadow it. `unusedVariables` reported `hk` unused — correctly, because the *function* does
+not need it: `Insert.insert` on a `Finset` is total and the override case is well defined. A
+proof an operation does not consume is a use-site obligation wearing an argument's clothes. So
+this is the plain total insertion, and "the discriminator is not a field the variant declares"
+belongs to `(dunion)`'s own shape, one level up, where it is a property of one argument against
+the union's key. -/
+
+/-- One entry added to a map payload; at a name already present, the new value wins. -/
+def MapOf.insert {α : Type} (m : MapOf α) (k : Name) (v : α) : MapOf α :=
+  ⟨Insert.insert k m.1, fun j =>
+    if hj : j.1 = k then v
+    else m.2 ⟨j.1, by
+      rcases Finset.mem_insert.mp j.2 with he | hmem
+      · exact absurd he hj
+      · exact hmem⟩⟩
+
+/-- The injected name gives the injected value. -/
+theorem MapOf.at_insert_self {α : Type} {m : MapOf α} {k : Name} {v : α} :
+    (m.insert k v).at k = some v := by
+  simp only [MapOf.at, dif_pos (Finset.mem_insert_self k m.1)]
+  simp [MapOf.insert]
+
+/-- …and every other name gives what it gave before, so the injection is invisible to the
+    variant's own table. -/
+theorem MapOf.at_insert_of_ne {α : Type} {m : MapOf α} {k j : Name} {v : α}
+    (hj : j ≠ k) : (m.insert k v).at j = m.at j := by
+  simp only [MapOf.at]
+  by_cases hm : j ∈ m.1
+  · rw [dif_pos (show j ∈ (m.insert k v).1 from Finset.mem_insert_of_mem hm), dif_pos hm]
+    simp [MapOf.insert, hj]
+  · have hni : j ∉ (m.insert k v).1 := by
+      simp only [MapOf.insert, Finset.mem_insert]
+      exact fun h => h.elim hj hm
+    rw [dif_neg hni, dif_neg hm]
+
 /-- A property of every value is a property of every declared name's value. -/
 theorem MapOf.at_forall {α : Type} {m : MapOf α} {Q : α → Prop}
     (h : ∀ k, Q (m.2 k)) {k x} (hm : m.at k = some x) : Q x := by
