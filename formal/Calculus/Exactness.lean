@@ -348,7 +348,7 @@ theorem selOptV_le_AdmAny {opts : List Term} {v : Value}
     | nil =>
       rw [hf] at h
       have hmem : o ∈ opts.map fun t => (specOf t, Adm t) :=
-        List.mem_of_mem_filter (a := o) (by rw [hf]; simp)
+        (mem_of_filter_eq_singleton hf).1
       obtain ⟨t, ht, rfl⟩ := List.mem_map.mp hmem
       exact AdmAny_of_mem ht h
 
@@ -548,7 +548,7 @@ theorem ExactV_dunion {d : Name} {opts : List Term}
     | cons t rest =>
       cases rest with
       | nil =>
-        have ht : t ∈ opts := List.mem_of_mem_filter (by rw [hL]; simp)
+        have ht : t ∈ opts := (mem_of_filter_eq_singleton hL).1
         simp only [List.map_cons, List.map_nil]
         exact h t ht v
       | cons t2 rest2 => simp
@@ -765,7 +765,7 @@ theorem ExactV_union {opts : List Term} (h : ∀ t ∈ opts, ExactV t) : ExactV 
   | cons t rest =>
     cases rest with
     | nil =>
-      have ht : ExactV t := h t (List.mem_of_mem_filter (a := t) (by rw [hf]; simp))
+      have ht : ExactV t := h t (mem_of_filter_eq_singleton hf).1
       simpa [optionSemOf_c] using ht v
     | cons t2 r2 => simp
 
@@ -1276,7 +1276,7 @@ theorem selOptA_le_AdmAAny {opts : List Term} {a : Attr}
     | nil =>
       rw [hf] at h
       have hmem : o ∈ opts.map fun t => (specOf t, AdmA t) :=
-        List.mem_of_mem_filter (a := o) (by rw [hf]; simp)
+        (mem_of_filter_eq_singleton hf).1
       obtain ⟨t, ht, rfl⟩ := List.mem_map.mp hmem
       exact AdmAAny_of_mem ht h
 
@@ -1357,7 +1357,7 @@ theorem ExactA_union {opts : List Term} (h : ∀ t ∈ opts, ExactA t) : ExactA 
   | cons t rest =>
     cases rest with
     | nil =>
-      have ht : ExactA t := h t (List.mem_of_mem_filter (a := t) (by rw [hf]; simp))
+      have ht : ExactA t := h t (mem_of_filter_eq_singleton hf).1
       simpa [optionSemOf_c] using ht a
     | cons t2 r2 => simp
 
@@ -1529,7 +1529,7 @@ theorem ExactA_dunion {d : Name} {opts : List Term}
     | cons t rest =>
       cases rest with
       | nil =>
-        have ht : t ∈ opts := List.mem_of_mem_filter (by rw [hL]; simp)
+        have ht : t ∈ opts := (mem_of_filter_eq_singleton hL).1
         simp only [List.map_cons, List.map_nil]
         exact h t ht a
       | cons t2 rest2 => simp
@@ -2026,7 +2026,7 @@ theorem selTagV_mem {d : Name} {opts : List Term} {v : Value}
     | cons t rest =>
       have hmem : t ∈ opts.filter (fun t => decide (tag ∈ tagsOf d t)) := by
         rw [hL]; simp
-      exact mem_allTags (List.mem_of_mem_filter hmem) (by simpa using List.of_mem_filter hmem)
+      exact mem_allTags (List.mem_filter.mp hmem).1 (by simpa using (List.mem_filter.mp hmem).2)
 
 /-- **`Adm` refines `adm`.** Every row of the joint predicate is at least as tight as the
     row it replaces, which is what lets every existing discharge carry over unchanged. -/
@@ -2187,7 +2187,7 @@ theorem selTagA_mem {d : Name} {opts : List Term} {a : Attr}
     | cons t rest =>
       have hmem : t ∈ opts.filter (fun t => decide (tag ∈ tagsOf d t)) := by
         rw [hL]; simp
-      exact mem_allTags (List.mem_of_mem_filter hmem) (by simpa using List.of_mem_filter hmem)
+      exact mem_allTags (List.mem_filter.mp hmem).1 (by simpa using (List.mem_filter.mp hmem).2)
 
 /-- **`AdmA` refines `admA`**, the attribute-side counterpart of `Adm_le_adm`. -/
 theorem AdmA_le_admA : ∀ (t : Term) (a : Attr), AdmA t a = true → admA t a = true

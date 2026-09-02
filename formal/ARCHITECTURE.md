@@ -576,7 +576,7 @@ is the dimension; the size-against-similarity ordering is.**
 because `List.filter` hands back a bare element, every proof needing "the surviving option came
 from *this* term" recovers it by hand (`List.mem_of_mem_filter (by rw [hf]; simp)`, at ten sites
 in `Exactness.lean` and `Orthogonality.lean`), and that attaching membership would carry it
-through. Both halves were measured and both are wrong.
+through. Both halves were measured and both are wrong — and the ten was six.
 
 A `select` written over `os.attach.filter` works: the iff re-proves with the *same* four
 tactic lines,
@@ -595,9 +595,16 @@ and they are an argument the other way: `(opts.map f).attach` has no clean commu
 
 The ten sites were never blocked on `select` at all: `mem_of_filter_eq_singleton`
 (`Lists.lean:271`) already turns `hf : l.filter p = [x]` into `x ∈ l ∧ p x = true` in one term,
-and the sites open-code it instead of calling it. **That is a ten-site cleanup in two late
-files, not a change to `select` deep in the graph** — no clean build window required, and it is
+and the sites open-code it instead of calling it. **That is a six-site cleanup in one late
+file, not a change to `select` deep in the graph** — no clean build window required, and it is
 the whole of what the queued item was actually after.
+
+*Done, and the ten-site count was mine and was wrong.* Six of the ten hold a filter *equation*
+and are `(mem_of_filter_eq_singleton h).1`. Two more (`mem_allTags`, twice) applied
+`List.mem_of_mem_filter` and `List.of_mem_filter` to the same membership hypothesis where
+`List.mem_filter.mp` gives both halves at once. The last two, in `Orthogonality.lean`, recover
+from a membership hypothesis and need exactly the one lemma they already call — nothing to do.
+Sixteen lines changed, no behaviour, `Orthogonality.lean` untouched.
 
 **~~`adm (.literal .number ls)` is not exact~~ — closed at JH's call, by the carrier route.**
 `GroundKind.number.Carrier` is now `{d : Double // Numeral.WF d.toDec = true}`, so `inL` splits
