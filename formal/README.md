@@ -67,15 +67,10 @@ and the judgement to it), and `lazy` concludes `⊤` in the model exactly as the
   is configured correctly. `Axioms.lean` cannot simply `import Calculus` instead — the
   aggregator imports the guard, so that is a cycle, and inverting it would let
   `defaultTargets = ["Calculus"]` build the tree with no guard running at all.
-- **There is no fuel.** `denote : Term → Codec` is structural, and the two files that used
-  to hold a second fuel-free denotation and the transport to it — `Denoteω.lean`,
-  `Soundnessω.lean` — are deleted: `denoteω` was a name for `denote`, companion for
-  companion. What the proofs recurse on instead is `Term.depth`, a measure derived from the
-  term, so it appears in no statement. Both blockers that forced fuel are gone: `lazy`
-  carries a `Term`, and `opaq` denotes `opaqCodecω`. *This bullet was a half-finished edit —
-  it opened "**Fuel-primary denotation, now with a fuel-free twin.** `denote` still takes fuel
-  and **there is no fuel.**", two contradictory clauses spliced, and closed with "Fuel 0 still
-  denotes `Codec.empty`", which `Denote.lean` never mentions.*
+- **There is no fuel.** `denote : Term → Codec` is structural. What the proofs recurse on
+  instead is `Term.depth`, a measure derived from the term, so it appears in no statement.
+  Neither of the two things that forced fuel still does: `lazy` carries a `Term`, and `opaq`
+  denotes `opaqCodecω`.
 - **Fuel is not removable by a fixpoint, and that is a fact about (U), not about Lean.**
   `Continuity.lean` proves it: `altCodec` resolves a union by *unique* admission, and
   `OptionSem.byAttempt` derives admission from `(c.e v).isSome`, so growing the recursive
@@ -126,9 +121,9 @@ and the judgement to it), and `lazy` concludes `⊤` in the model exactly as the
   held sets — sets of *values* — while (U)'s readable side quantifies over *attributes*,
   and `held`'s adapter relabels between them. `not_uAtCan_literal_held` exhibits
   `union(literal("A"), held(literal("A"), f, g))`: held sets `{"A"}` and `{"B"}`,
-  disjoint on the nose, both options reading `S "A"`. §5 used to say that stating (D) as
-  disjointness "would be sound"; it now says (D) is well-formedness on the `T` index, and
-  the readable side is decided on stored attributes (distinct `μ`, or disjoint `adm`).
+  disjoint on the nose, both options reading `S "A"`. So (D) is well-formedness on the `T`
+  index, and the readable side is decided on stored attributes — distinct `μ`, or disjoint
+  `adm`.
 - **§5's `ident` half of (K) was unsound as stated; the mechanization found it and the
   doc is fixed.** §5 used to write (K) as `κ(cᵢ) ∩ κ(cⱼ) = ∅ ∨ ident(cᵢ) ∨ ident(cⱼ)`
   and call it sufficient for (U). Neither disjunct carries it, and both counterexamples
@@ -152,16 +147,14 @@ still open are `ARCHITECTURE.md` §10's last three bullets — `(held)`'s over-s
 the `℘⁺fin`/`⇀fin` coupling that nothing else states, and what §6's commutativity row is
 actually worth.
 
-The measurement regenerates: `python3 scripts/fidelity_audit.py`. Its live figures are the
-ones to quote — `#assert_axioms_all` is universal over the environment now, so the audit-era
-"63 of 133 constants" is gone, and what remains worth watching is that **41% of theorem
-statements name a definition documented nowhere**, which is a statement a reviewer cannot read
-against the specification without a detour.
+The measurement regenerates: `python3 scripts/fidelity_audit.py`. What is worth watching in it
+is that **41% of theorem statements name a definition documented nowhere** — a statement a
+reviewer cannot read against the specification without a detour.
 
 ## Do the documents still name what exists?
 
 Prose does not typecheck. Deleting a declaration leaves the build green and every citation
-of it dangling, and both drift findings before the residue sweep were caught by luck.
+of it dangling.
 `python3 scripts/name_drift.py` closes that: it reports every backticked Lean name in the
 current-state documents — this file, `ARCHITECTURE.md`, `docs/codec-calculus.md` — and
 every module docstring, that no longer occurs in `Calculus/`,
@@ -183,32 +176,23 @@ measurement, and it regenerates: `python3 scripts/vocab_audit.py`.
 The short version: the *obligation* half of the vocabulary is done (20/22 carriers,
 20/22 lawfulness lemmas); the *observation* half — `X_e`/`X_p`, what a construction
 writes and reads — is 28 of 44. Seven of every ten remaining hand-unfoldings are `Option`
-algebra rather than anything about codecs. The controlled comparison is the four blocks
-that *gained* inversion during that arc, same content before and after — historical
-endpoints, not the current table: 7.2 → 5.0 and
-8.9 → 1.5 sites per hundred lines, with `array + record` at 0.0 and `tuple` at 3.0.
-Across all blocks the spread is now 0.0–5.1, so the separation is real but narrower than
-a first reading of the table suggests — `ground` sits at 3.5 with no inversion at all,
-because `pointCodec` gives four of the ground codecs one shared proof.
+algebra rather than anything about codecs. Across blocks the spread is narrower than a first
+reading of the table suggests, and `ground` sits mid-table with no inversion at all — because
+`pointCodec` gives four of the ground codecs one shared proof, which argues *for* the
+convention rather than against it: shared construction, fewer sites.
 
 ## What remains (sharpenings, not gaps)
 
 The theorem is proved; these tighten the model's fidelity to the doc, none affect
 soundness. `union`'s commutativity is proved for the adjacent transposition, which
 generates every permutation, and lifting it to `List.Perm` is the obvious next step.
-An entry that used to sit here said `admA` stops at `literalS`/`dunion` — that a numeric
-literal's read side goes through the axiomatized `Double.ofDec`, so no *syntactic* set
-bounds it, and those pairs fall to (U) per input. The premise holds and the conclusion did
-not: the row does not have to name its set, it can ask its codec, and `ofDec` being a
-function is enough to make the answer unique. `admA number` and `admA literalN` are now
-`dom(p)` exactly (`sepA_number_opaque`, `sepA_literalN_disjoint`). What the observation
-about the store was really about survives on the other side of the pair: a literal's stored
-texts are known at the declaration, but `10²¹` is written `1e+21` and handed back
-normalised, so a row that tested the *text* would refuse a row the codec itself wrote —
-which is why the row tests the codec instead. Three entries that used to sit here are done — §6's rows are all proved
-(see `ARCHITECTURE.md` §10 for what "all" is worth on the commutativity row), and `typed_TSub`
-ties the judgement's `T` to the denotation, `typed_e_mem` and `typed_p_mem` being the
-statements a reviewer wants.
+A numeric literal's read side goes through the axiomatized `Double.ofDec`, so no *syntactic*
+set bounds it — and the row does not have to name its set, it can ask its codec, `ofDec` being
+a function is enough to make the answer unique. `admA number` and `admA literalN` are `dom(p)`
+exactly (`sepA_number_opaque`, `sepA_literalN_disjoint`). The store observation survives on the
+other side of the pair: a literal's stored texts are known at the declaration, but `10²¹` is
+written `1e+21` and handed back normalised, so a row testing the *text* would refuse a row the
+codec itself wrote. That is why the row tests the codec.
 
 ## Building
 
