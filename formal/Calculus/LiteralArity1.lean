@@ -18,9 +18,9 @@ the proof of it, restated over the collapsed constructor at singleton `ℓ`:
 * `uAtCan_map_literal_str` / `_num` discharge (U) **on both sides**, through
   `uniqueAdmission_of_sharedBase`.
 
-The (U) one is worth stating plainly, because the §5 table used to say the opposite and was
-wrong to. Read from the *pair*, two numeric options are refinements of one `numberCodec` at
-disjoint predicates, which is all `uniqueAdmission_of_sharedBase` needs.
+The (U) one is worth stating plainly. Read from the *pair*, two numeric options are refinements
+of one `numberCodec` at disjoint predicates, which is all `uniqueAdmission_of_sharedBase`
+needs.
 `uAtCan_of_literalN_disjoint` already made that argument for a union of n-ary numeric literals
 and never used the n-ary constructor to make it — only the shared base — so it holds for
 singletons too. The table now agrees (`sepA_literalN_disjoint`); the correction is recorded
@@ -69,13 +69,8 @@ theorem typedListμ_map_literal_str : ∀ (l : List String),
       rw [← hLit_singleton_str s]
       exact Typed.literal .string (.of s ∅)
 
-/-- …and of a numeric one, at `N`, **with no premise at all now**.
-
-    This took `(∀ d ∈ l, Numeral.WF d.toDec = true)` and unpacked it one element at a time into
-    `hD`, and its docstring said the premise "is not weakened and not absorbed: §2.2 of the
-    audit is the reason that matters". It is absorbed, at JH's call: the list is a
-    `List WFDouble` and each element carries its own gate. Nine lines of unpacking went with the
-    premise — the clearest local measure of what typing the carrier bought. -/
+/-- …and of a numeric one, at `N`, with no premise: the list is a `List WFDouble`, so each
+    element carries its own gate. -/
 theorem typedListμ_map_literal_num : ∀ (l : List WFDouble),
     TypedListμ (l.map fun d => .literal .number (.of d ∅))
       (l.map fun d => fun v => v = Value.num d.1)
@@ -141,30 +136,24 @@ theorem dincomp_map_literal_num {l : List WFDouble} (hnd : l.Nodup) :
   · have h' : Value.num b.1 = Value.num a.1 := h (.num b.1) rfl
     exact (Subtype.ext (by simpa using h') : b = a).symm
 
-/-! ## (U) at the numeric base, and the claim that used to be made here
+/-! ## (U) at the numeric base
 
-**What this section claimed.** That the read side of a numeric literal is `⊤` — the lemma was
-called `admA_literalN_blind` — because the stored text goes through `Double.ofDec` and no
-syntactic set of attributes bounds one value; and therefore that two numeric options "never
-separate *in the table*" and separate only in the **pair**.
+**`admA` does not need to *name* the attributes that read into `ℓ`, only to decide one.** The
+tempting inference is that it does: the stored text goes through `Double.ofDec`, and no
+syntactic set of attributes names the numerals reading into a given value. That is a fact about
+*values*. `ofDec` is a **function** — a stored numeral reads to at most one double, and one
+double cannot inhabit two disjoint sets — so the answer is unique without being nameable, and
+the row obtains it by calling the codec.
 
-**Why the second half was false.** The premise is about *values*: no set of attributes names the
-numerals that read into `ℓ`. `admA` never needed that. It needed to know whether an attribute is
-admitted, and `ofDec` is a **function** — a stored numeral reads to at most one double, and one
-double cannot inhabit two disjoint sets. Nothing about the answer had to be *nameable*, only
-unique, and the row can obtain it by calling the codec rather than by describing it. Both of §5's
-numeric `⊤`s came from the same confusion between "cannot bound which values" and "cannot bound
-which option".
+So `admALit`'s `.number` row is `((literalCodec .number ls).p ·).isSome`, and
+`sepA_literalN_disjoint` separates two disjoint numeric literals in the table, with
+`admA_literalN_sees` stating what an `N` attribute must satisfy to be admitted.
 
-**What is true now.** `admALit`'s `.number` row is `((literalCodec .number ls).p ·).isSome`, and
-`sepA_literalN_disjoint` separates two disjoint numeric literals in the table, alongside
-`admA_literalN_sees`, which states exactly what an `N` attribute has to satisfy to be admitted.
-The pair reading is not superseded: it is `uniqueAdmission_of_sharedBase`'s, it settles an
-`n`-ary family and both sides in one step where the table settles a pair at a time, and it is the
-one used below. Each is `numberCodec.restrict` at a predicate, the predicates are disjoint, and
-that is the hypothesis. `uAtCan_of_literalN_disjoint` made this argument for a union of
-`literalN`s — and never used the n-ary constructor for it, only the shared base, which is why it
-holds here with `ℓ` as `Finset` data instead. -/
+The pair reading is not superseded and is the one used below: `uniqueAdmission_of_sharedBase`
+settles an `n`-ary family on both sides in one step where the table settles a pair at a time.
+Each option is `numberCodec.restrict` at a predicate, the predicates are disjoint, and that is
+the hypothesis — which needs only the shared base, never the n-ary constructor, so it holds
+here with `ℓ` as `Finset` data. -/
 
 /-- (U) on both sides for a string literal set's options. -/
 theorem uAtCan_map_literal_str {l : List String} (hnd : l.Nodup) :
@@ -237,10 +226,7 @@ theorem typed_literalsS {l : List String} (hnd : l.Nodup) (hne : l ≠ []) :
   rw [hunion_map_literal_str, unanimous_map_const _ hne] at h
   exact h
 
-/-- **`(literal-N)` is derivable**, and the `ℓ ⊆ D` it used to carry is the list's element type.
-    The docstring here said "not absorbed into a carrier, which §2.2 of the audit is the reason
-    for"; it is absorbed, and §2.2's objection is answered in `Refutations.lean` instead, where
-    the witness now lives on a transcription of §3's rule. -/
+/-- **`(literal-N)` is derivable**, and §3's `ℓ ⊆ D` is the list's element type. -/
 theorem typed_literalsN {l : List WFDouble} (hnd : l.Nodup) (hne : l ≠ []) :
     Typed (.union (l.map fun d => .literal .number (.of d ∅)))
       (fun v => ∃ d, d ∈ l ∧ v = .num d.1) (some .N) := by

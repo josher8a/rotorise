@@ -23,28 +23,18 @@ per-table form obscured.
   one defect with three faces, and it is why §5 could justify `⊤` at a container with an
   argument (the empty array) that is true and proves far less than it was asked to.
 
-`Adm` below is that joint predicate as a single recursion, and it is exact at **all twenty-one
-constructors**: `Adm_exact : ∀ t, ExactV t`, with no hypothesis and no escape hatch.
+`Adm` below is that joint predicate as a single recursion, exact at **all twenty-one
+constructors**: `Adm_exact : ∀ t, ExactV t`, no hypothesis and no escape hatch.
 
-**Not one of the seven `false` rows this file used to carry was forced.** `tuple`, `object`,
-`dunion` and `opaq` were excused on the strength of a reading — depth recursion, name
-admission, "the matched option's own admission" — and in every case the exact row was
-expressible and simply unwritten. `set` left by a narrower *constructor* rather than a sharper
-row. `nullable`'s excuse said `ownsNull` is a disjunction over both halves of the pair, which
-is true, and inferred that a row could not account for it — where `Codec.ownsNull` is a
-computable `Bool` the row may simply **ask**, as `opaque`, `number` and `refine` already do.
+**`union` is the one row whose looseness was about something real, and its reason is why
+`ExactV_union` takes a hypothesis.** `select` admits where *exactly one* option does, and a
+count is anti-monotone: loosen an option and you add an admitting option, so the count refuses
+where the codec writes. That makes the count unsound *while any row is loose*. Once no row is
+loose there is nothing left to loosen, and the count is exact given the options' exactness —
+the hypothesis every other container row already takes. See `selOptV` and `ExactV_union`.
 
-**`union` was the last and the only one whose excuse was about something real.** `select`
-admits where *exactly one* option does, and a count is anti-monotone: loosen an option and you
-add an admitting option, so the count refuses where the codec writes. That made the count
-unsound *while any row was loose* — which is a fact about the state of this table, and it was
-recorded as a fact about the row. Once nothing was loose there was nothing left to loosen, and
-the count is exact given the options' exactness — the hypothesis every other container row
-already takes. See `selOptV` and `ExactV_union`.
-
-So `Analysable`, `Excuse` and the whole apparatus for making a vague row expensive are
-deleted. What is left in their place is stronger: an exhaustive `∀ t, ExactV t` with no `false`
-row to reach for. See "The hatch is closed, and empty".
+`nullable` is the row worth copying: `Codec.ownsNull` is a computable `Bool`, so the row
+**asks** it rather than describing a disjunction over both halves of the pair.
 -/
 
 namespace Calculus
@@ -364,11 +354,6 @@ theorem selOptV_le_AdmAny {opts : List Term} {v : Value}
 /-- §5's converse direction: the row is `dom(e)`, not merely a bound on it. -/
 def ExactV (t : Term) : Prop := ∀ v, Adm t v = true ↔ ((denote t).e v).isSome
 
-/-! `Analysable`, `AnalysableL`, `AnalysableO`, `AnalysableF` and `AnalysableR` stood here —
-the escape hatch, listing which rows carried an exactness proof. Every row does now, so the
-list was `fun _ => true` and `Adm_exact` takes no hypothesis. See "The hatch is closed, and
-empty" below for why the whole apparatus is deleted rather than kept as a dead guard. -/
-
 def ExactVL : List Term → Prop
   | [] => True
   | t :: ts => ExactV t ∧ ExactVL ts
@@ -650,7 +635,7 @@ theorem neSetImage_isSome_of_inj {α β : Type} [DecidableEq β] {f : α → Opt
 
     This is exactness **earned by deferring**, not by a clever row: as a claim about the
     analysis it is exactly the `custom` row's claim, which is to say it says the analysis
-    of an escape hatch is the hatch's own answer, and nothing about what that answer is.
+    of an escape hatch is that hatch's own answer, and nothing about what the answer is.
     What it replaced was a 120-line induction (`AdmOpaqV_iff`) proving a hand-written
     recursion over the value agreed with the codec at every budget that sees the value.
     That was a real theorem about `opaqCodec`; this is not one, and does not pretend to be.
@@ -802,8 +787,7 @@ mutual
 
     The `held` case is the one worth reading: it appeals to the subterm at `f v`, which is
     the pullback, and it is one line because `(c.through f g).e v = c.e (f v)` holds by
-    `Iff.rfl`. The `array` and `record` cases are the repair of §5's container rows, and the
-    seven cases before them are the rows the hatch used to hold.
+    `Iff.rfl`. The `array` and `record` cases are the repair of §5's container rows.
 
     **There is no hypothesis to discharge**, which is the whole of what the last two rows
     bought: `Adm_sound` is now `(Adm_exact t v).mpr`, and a new `Term` constructor cannot be
@@ -825,9 +809,8 @@ theorem Adm_exact : ∀ (t : Term), ExactV t
   | .set b => ExactV_set b
   -- the row that asks `ownsNull`
   | .nullable c => ExactV_nullable (Adm_exact c)
-  -- **the last row off the hatch**, and the one whose excuse was about the table rather
-  -- than the row: the count is exact given the options' exactness, which is the very
-  -- hypothesis this recursion hands it. See `ExactV_union`.
+  -- the count is exact given the options' exactness, which is the hypothesis this
+  -- recursion hands it. See `ExactV_union`.
   | .union opts => ExactV_union (exactVL_mem opts (Adm_exactL opts))
 
   | .string => by intro v; cases v <;> simp [Adm, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, stringCodec]
@@ -943,14 +926,6 @@ theorem adm_literal_exact (k : GroundKind) (ls : NEFinset k.Carrier) (v : Value)
   rw [adm_literal_eq_Adm]
   exact Adm_exact (.literal k ls) v
 
-/-! `not_ExactV_nullable` stood here. It was `nullable(legacy(string, ⟨read NULL⟩))` — a
-subterm whose *read* reaches the null point, so `withNull`'s guard fires and the wrapper
-adds nothing, while the write side is still `string`'s — and it refuted the row
-`Adm t v || v = null`. That row is gone: `Adm (.nullable t)` asks `ownsNull`, so on this very
-term it now answers `false` at `.null`, correctly. The witness is deleted because the row it
-witnessed is, and `rNull` with it — nothing else used either. -/
-
-
 /-- Soundness of every row — **now a corollary.**
 
     This was a hundred-and-twenty-line recursion on `Term.depth`, separate from `Adm_exact`
@@ -964,35 +939,13 @@ witnessed is, and `rNull` with it — nothing else used either. -/
 theorem Adm_sound (t : Term) {v a} (he : (denote t).e v = some a) : Adm t v = true :=
   (Adm_exact t v).mpr (by rw [he]; rfl)
 
-/-! ### The hatch is closed, and empty
+/-! ### No escape hatch
 
-`Analysable`, `Excuse`, `Excuse.covers`, `childrenAnalysable`, `analysable_excused`,
-`excuse_shapes`, `not_excused_of_analysable` and `excuse_witnessed` all stood here, together
-with their attribute-side twins and the two witnesses `not_ExactV_union` and
-`not_ExactA_union`. **All of it is deleted**, and the reason is the one the apparatus itself
-recorded for `opaqueDepth`, `nameAdmission` and `payloadShape`: *an excuse with no user is an
-excuse with no content.*
-
-`Adm_exact` and `AdmA_exact` now hold at **every** term with no hypothesis, so `Analysable`
-was a function provably equal to `fun _ => true`, `covers` a table nothing could satisfy, and
-`excuse_witnessed` an obligation with no witness available — it asks for a covered term on
-which exactness fails, and once the last row is exact there is none to produce. Keeping the
-scaffold would not have preserved the discipline it existed for; it would have replaced a
-*checked* obligation with a dead one.
-
-What replaces it is stronger rather than weaker. The hatch's purpose was to make a vague row
-expensive: `Analysable` forced a row per constructor and `excuse_witnessed` made adding a
-`false` row cost a counterexample. `Adm_exact : ∀ t, ExactV t` — exhaustive over `Term`, no
-hypothesis to weaken — forces a *proof* per constructor and offers no `false` row to reach
-for. A new `Term` constructor cannot be added without one; there is no longer anywhere to put
-an excuse.
-
-The residual softness the old `excuse_witnessed` docstring conceded — that widening `covers`
-to a sometimes-exact shape went uncaught — is gone with the mechanism that had it.
-
-`not_ExactV_set` stood here too, and left earlier and differently: it was
-`set(held(string, collapse, id))`, and `Term.set` taking a `SetBase` made it **unstatable**
-rather than false. -/
+**No row may be `false`, and there is nowhere to put an excuse.** An earlier apparatus —
+`Analysable`, `Excuse` and their twins — forced a row per constructor and made adding a `false`
+row cost a counterexample. `Adm_exact : ∀ t, ExactV t`, exhaustive over `Term` with no
+hypothesis, forces a *proof* per constructor instead, which is the stronger form of the same
+discipline: a new constructor cannot be added without one. -/
 
 /-! ## The attribute side
 
@@ -1619,9 +1572,6 @@ theorem ExactA_object {fields : Finset Name} {fld : {k // k ∈ fields} → Fiel
 theorem ExactA_opaq (lossy : Bool) : ExactA (.opaq lossy) := fun _ => Iff.rfl
 
 
-/-! `AnalysableA` and its four companions stood here, the attribute-side hatch. It is empty
-for the value side's reason and deleted for the value side's reason. -/
-
 def ExactAL : List Term → Prop
   | [] => True
   | t :: ts => ExactA t ∧ ExactAL ts
@@ -1683,7 +1633,7 @@ theorem AdmA_exact : ∀ (t : Term), ExactA t
   | .set b => ExactA_set b
   -- the row that asks `ownsNull`; see `ExactA_nullable`
   | .nullable c => ExactA_nullable (AdmA_exact c)
-  -- the last row off the hatch; see `ExactA_union`
+  -- see `ExactA_union`
   | .union opts => ExactA_union (exactAL_mem opts (AdmA_exactL opts))
 
   | .string => by intro a; cases a <;> simp [AdmA, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, stringCodec]
@@ -1800,15 +1750,6 @@ end
     are deleted: `AdmA_exact` carries no hypothesis, so the weaker half comes free. -/
 theorem AdmA_sound (t : Term) {a v} (hp : (denote t).p a = some v) : AdmA t a = true :=
   (AdmA_exact t a).mpr (by rw [hp]; rfl)
-
-/-! `not_ExactA_set` and `not_ExactA_union` stood here, with the narrative of the
-attribute-side excuses. `not_ExactA_set` was `set(string)` — the row admitted all three wire
-families whatever the element term was — and went when the family became a function of the
-base. `not_ExactA_union` was `union [string, string]`, and it goes now: the row counts, so it
-answers `false` there, correctly. -/
-/-! `not_ExactA_nullable` stood here — `nullable(custom(writes NULL, reads nothing))`, the
-mirror of the value side's witness, and it is gone for the same reason. `ceNull`/`cpNone`
-went with it. -/
 
 /-- **The witness that is now a theorem the other way.** `refine(string, ⊥)` reads nothing,
     and `AdmA` says so: the row decodes with `stringCodec` and applies `⊥`. This used to be
