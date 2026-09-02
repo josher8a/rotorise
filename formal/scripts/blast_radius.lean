@@ -24,6 +24,26 @@
   needs answered is the four-way partition: what depends on the old only (the cost), on the
   new only (already migrated), on both (the bridges), on neither.
 
+  ## It cannot cost a **constructor**, and a control experiment says so
+
+  `86d3a42`'s message claimed this "answers *what breaks if I delete X* for any `X`". **False
+  for a constructor of an inductive.** Asked about `Term.object` against `Term.string` — a
+  nullary constructor nothing destructures — the partition is:
+
+      depends on OLD only (Term.object)   0
+      depends on BOTH                   535
+      depends on NEW only (Term.string)   7
+
+  The two are the same set. `Term.casesOn`'s *type* mentions every constructor, so the closure
+  of any one of them is "everything that touches `Term`". What this walk measures is dependence
+  on a **name**, and a constructor's name is reachable from every case analysis on its type
+  whether or not that analysis cares about the constructor's payload.
+
+  So it costs a *declaration* — a definition, a theorem, a whole analysis — and it cannot cost a
+  change to a constructor's shape. That question is syntactic and wants a syntactic instrument:
+  the `Body` refactor was costed by hand-classifying 60 hits into 57 code sites, and there was
+  no shortcut.
+
   ## The one thing it cannot see
 
   Members of a `mutual` block do not reference each other in any constant's value — they are
