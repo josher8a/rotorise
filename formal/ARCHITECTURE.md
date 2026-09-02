@@ -495,6 +495,24 @@ Two blind spots, and the second is the same shape as the gap it closes:
   in a row, so no parser finds them and the script carries them as a hand-written list of two
   names.** A third limit that nobody adds to that list goes quietly missing from the total.
 
+**`scripts/ratchet.py`** — three per-file counts held to the state they were in, failing when
+one *rises*: hand-unfolding sites (332), retirement marks (72), and public theorems with no
+docstring (269 of 896). It exists because §10's two guards could not be bars: a docstring
+coverage bar at 269 is a bar nobody can satisfy, so it would be switched off, where a ratchet
+asks nothing on the day it lands and makes the next docstring cheaper than the argument for
+skipping it. Baselines live in `scripts/ratchets.json` rather than in the script, so that the
+guard's own source stays still and a change to a number is worth reading; a baseline key naming
+a file that is gone fails, which is the rot `EXPECTED` demonstrated. Two blind spots:
+- **A ratchet accepts the state it was born in, so it cannot see a defect older than itself.**
+  The 269 and the 332 are invisible to it by construction — it guards the derivative, not the
+  value. `--accept` with a *lowered* number is the only way a baseline should ever move, and
+  writing a rise needs `--allow-rise` on top, so that weakening the guard reads as a sentence
+  in a commit message rather than as a tool invocation that happened to work.
+- The mark count is the only check on a mark at all. `name_drift.py` verifies that a marked
+  name is absent, never that it *deserved* marking, so a session that deletes a declaration and
+  marks its citations in one commit is still trusted — the count is where that shows, which is
+  why it ranges over the documents and not only the docstrings.
+
 **`scripts/unreferenced.lean`** — a **diff instrument only**, not a verdict, and run by hand
 (`lake env lean scripts/unreferenced.lean`; it is outside `Calculus/`, so `lake build` never
 touches it). Two reasons it cannot be a guard:
@@ -532,7 +550,7 @@ costing a constructor change, grep the bare `.<name>` as well as the qualified f
 the arity to be implicit in a positional match. The control experiment is in its docstring;
 `86d3a42`'s commit message claimed otherwise and is wrong.
 
-One more blind spot common to all five: **none of them looks at `src/`.** `Vectors.lean` is the
+One more blind spot common to all of them: **none looks at `src/`.** `Vectors.lean` is the
 only bridge between the model and the shipped TypeScript, and it checks generated vector lines
 by kernel typechecking rather than by evaluation — `denote` is `noncomputable` because `Double`
 is an axiom, so `#eval` and `native_decide` are both unavailable, and that is not a toolchain
@@ -886,11 +904,17 @@ worth. `README.md` was always honest about this and the change log's "twenty of 
 not. The row also inherits the `≡`-is-not-transitive caveat, which bounds what a table of
 rewrites licenses at all. The `List.Perm` lift is the next probe.
 
-**Two guards available on `Axioms.lean`'s principle, neither expensive.** Ratchet
-`vocab_audit.py`'s site count and fail the build when it *rises*, which makes §9's rule
-enforceable rather than aspirational. And set a docstring-coverage bar on public theorems — not
-"every lemma", but that a reader who knows the specification can tell what a theorem says from
-its name and one line. `fidelity_audit.py` already reports both numbers.
+**Two guards on `Axioms.lean`'s principle — built, and one of them is not the shape this
+section asked for.** `scripts/ratchet.py` (§6) holds `vocab_audit.py`'s site count and fails
+when it rises, which makes §9's rule enforceable rather than aspirational. The second was
+specified here as a docstring-coverage *bar* on public theorems — that a reader who knows the
+specification can tell what a theorem says from its name and one line. Measured, 269 of 896
+public theorems carry no docstring, so a bar is decoration: it would be switched off or exempted
+into meaninglessness, and the number it would have to name is the number it exists to reject.
+A ratchet needs nothing of the kind, costs zero to satisfy on the day it lands, and is what
+shipped. **The bar above is still the right target; it is not the right instrument.** (This
+section also said `fidelity_audit.py` reports both numbers, and it does not: it reports
+docstring and §-tag coverage, and the site count is `vocab_audit.py`'s.)
 
 **`admits`' violation list and wiring it into `union`'s resolver** — both behaviour changes in
 `src/`, both the user's call. See the handoff.
@@ -899,7 +923,9 @@ its name and one line. `fidelity_audit.py` already reports both numbers.
 
 ## 11. If you change something
 
-- New module under `Calculus/` → reachable from `Axioms.lean` (§1).
+- New module under `Calculus/` → reachable from `Axioms.lean` (§1), and `ratchet.py
+  --accept` to admit its counts (§6) — a new module has no prior state, so it is
+  baselined rather than judged.
 - New stratum in the term family → all eight companions (§2), counted per side.
 - New rule → put each premise in one of the three places, `Typed`/`Obligations`/`MPOk` (§2).
 - New term recursion → `term_depth_wf`, and new inequalities beside `Term.depth` (§3).
