@@ -785,7 +785,7 @@ decide alone.
 ─────────────────────────────────────────────────────────────────── (union)
 ⊢ union(c₁ … cₙ) : ⋃ Tᵢ ⇝ (μ if ∀i. μᵢ = μ;  else ⊤)
 
-⊢ oᵢ = object(sᵢ, ρᵢ) : Tᵢ ⇝ M    sᵢ(d) = literal(Lᵢ)    Lᵢ pairwise disjoint
+⊢ oᵢ = object(sᵢ, ρᵢ) : Tᵢ ⇝ M    sᵢ(d) = literal(tᵢ)    tᵢ pairwise distinct
 ─────────────────────────────────────────────────────────────────────────────── (dunion)
 ⊢ discriminatedUnion(d, o₁ … oₙ) : ⋃ Tᵢ ⇝ M
 ```
@@ -794,6 +794,42 @@ Note that `(dunion)`'s premise asks `sᵢ(d)` to _be_ the literal — an attribu
 field. A `fallback` around it has no derivation, and the proof says why rather than leaving it to
 taste: a row omitting the discriminator would read to the fallback's stand-in, an arbitrary value
 the tag sets never vouched for, and **(C)** would then re-encode a variant no tag selects.
+
+**Arity one at the discriminator**, and n-ary literals everywhere else. The rule above read
+`sᵢ(d) = literal(Lᵢ)` with `Lᵢ` a *set* of tags, pairwise disjoint; it now asks for a single tag
+`tᵢ`, and disjointness of singletons is distinctness. The original is kept because the argument
+for it is sound as far as it goes: `(literal)` is n-ary, a set of tags is a perfectly good
+admissible set, and pairwise disjointness is exactly the condition (U) needs — nothing about the
+soundness of the calculus required narrowing this.
+
+What required it is what a discriminated union *is*. It is a **lookup**: the stored tag chooses
+the variant. A variant answering to two tags is a key that does not identify its variant, and a
+reader who has the tag still cannot say which shape they hold without consulting the table twice.
+JH's call, in his words — *"go with the middle, arity one at the discriminator only"*.
+
+Three alternatives were declined, and each for a reason worth recording:
+
+- **Keying the union by tag, with the discriminator injected from the key and absent from the
+  variant body.** Declined for reuse and declaration flexibility: a variant would stop being an
+  ordinary `object` term the user can name, reuse elsewhere and read on its own.
+- **A variant helper in the implementation** to build the tagged object for you. Declined for the
+  same reason, one level up — it makes the tagged shape the library's rather than the caller's.
+- **Arity one for literals generally.** Declined because a set of alternatives is the natural
+  spelling of an enum member and because the carrier is a `Finset`; the constraint belongs at the
+  discriminator, where the lookup is, and nowhere else.
+
+**Mechanization note, and it is a negative result.** The narrowing bought no proof simplification
+whatsoever — the expectation going in was that it would. Every proof over `(dunion)` consumes only
+the *nonemptiness* of the tag set (`tagsOf_ne_nil`'s four-job inversion, `dunion_stamp`,
+`uniqueAdmission_byTag`, `ExactV_dunion`/`ExactA_dunion`), and none of them consults the arity. So
+the premise changed from `Nonempty` to `card = 1`, one three-line bridge lemma was added to recover
+the weaker fact, and 353 lines of `dunion` machinery stayed at the same 353 minus that. The
+constraint is a statement about the language, not a lever on the model.
+
+`src/` is not aligned to this and aligning it is a separate call. `codec.ts:4415` records the
+opposite as deliberate — *"the whole admissible set, not one value: an option may answer to
+several tags"* — and `discriminatedUnion` takes a list of options (`codec.ts:4394`) rather than a
+table keyed by tag. The change there is one type-level check plus that comment; it is JH's.
 
 |       |                                                                                |                                                                                                                                                        |
 | ----- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |

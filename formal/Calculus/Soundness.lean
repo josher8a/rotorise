@@ -356,6 +356,15 @@ theorem tagsOf_ne_nil {d : Name} {t : Term} (h : (tagsOf d t).Nonempty) :
         all_goals exact absurd h (by simp only [tagsOf, Body.tags]; rw [hlk]; simp [tagsOfField])
   all_goals exact absurd h (by simp [tagsOf])
 
+/-- **Arity one is nonemptiness**, which is all the four-jobs inversion needs. `(dunion)`'s
+    premise narrowed from `Nonempty` to `card = 1` when the discriminator became arity one, and
+    every proof below wants the weaker fact — so the narrowing costs exactly this one line and
+    changes no proof under it. That is the measurement, not a hope: `dunion_stamp`,
+    `tagsOf_ne_nil` and `uniqueAdmission_byTag` are untouched by the change. -/
+theorem tagsOf_nonempty_of_card_one {d : Name} {t : Term} (h : (tagsOf d t).card = 1) :
+    (tagsOf d t).Nonempty :=
+  Finset.card_pos.mp (by rw [h]; exact Nat.one_pos)
+
 /-- Typing's nonempty-tags premise forces each `(dunion)` option to be an object whose
     discriminator is a `req literal` at the string base, and object-encode then stamps it on both
     sides of every canonical pair — exactly the `hstamp` the sum lemmas consume.
@@ -567,11 +576,11 @@ theorem soundness_both : ∀ {t T μ}, Typed t T μ → Obligations t → Sound 
         fun hmp => lawful_altCodec
           (forall_mem_map fun t' ht' => (optionSemOf_c _ _) ▸ (ihs t' ht').2 (mpOkList_iff.mp hmp t' ht'))
           hU hW⟩
-    | @dunion d opts Ts hlistM htags hdisj =>
+    | @dunion d opts Ts hlistM hone hdisj =>
       have ihs : ∀ t' ∈ opts, Sound t' := fun t' ht' => by
         obtain ⟨T', hty⟩ := TypedListM.forall hlistM t' ht'
         exact soundness_both hty (obligationsList_iff.mp hob t' ht')
-      have hstamp := dunion_stamp htags
+      have hstamp := dunion_stamp fun t' ht' => tagsOf_nonempty_of_card_one (hone t' ht')
       have hdisj' : List.Pairwise (fun x y => ∀ tag ∈ x.1, tag ∉ y.1)
           (opts.map fun t' => (tagsOf d t', denote t')) :=
         List.pairwise_map.mpr hdisj
@@ -804,7 +813,7 @@ theorem typed_TSub : ∀ {t T μ}, Typed t T μ → ∀ v, (denote t).T v → T 
       obtain ⟨T', hT', μ', hty⟩ := TypedListμ.mem hlist tx htx
       rw [optionSemOf_c] at hT
       exact ⟨T', hT', typed_TSub hty v hT⟩
-    | @dunion d opts Ts hlistM htags hdisj =>
+    | @dunion d opts Ts hlistM hone hdisj =>
       simp only [denote, denoteTagged_eq] at hv
       obtain ⟨o, ho, hT⟩ := hv
       simp only [List.mem_map] at ho
@@ -899,7 +908,7 @@ theorem carrier_denote : ∀ {t T μ}, Typed t T μ → Obligations t → Carrie
       refine carrier_altCodec (forall_mem_map fun t' ht' => ?_)
       obtain ⟨T', μ', hty⟩ := TypedListμ.forall hlist t' ht'
       exact (optionSemOf_c _ _) ▸ carrier_denote hty ((Obligations.union hob).1 t' ht')
-    | @dunion d opts Ts hlistM htags hdisj =>
+    | @dunion d opts Ts hlistM hone hdisj =>
       rw [denote_dunion_tags, denoteTagged_eq]
       refine carrier_altCodec (forall_mem_map (forall_mem_map fun t' ht' => ?_))
       obtain ⟨T', hty⟩ := TypedListM.forall hlistM t' ht'

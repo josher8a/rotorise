@@ -203,6 +203,25 @@ resolves. Indices make per-thing properties structural; this is not one, which i
 `set`/`literal`/`object` moves worked and `union` resists. Do not spend another arc looking for
 a `union` index.
 
+**And the case where the criterion cuts a premise in half: `(dunion)`'s tags.** The rule carried
+two premises, tag nonemptiness and pairwise tag disjointness. Arity one at the discriminator (JH's
+call) sharpens the first and leaves the second exactly where it was, and the criterion says why:
+arity is a property of **one** option against its own field, so it is a premise — and could in
+principle be a carrier; distinctness relates one option to *others* at a shared key, which is the
+clause on the wrong side of the boundary, the same side as `union`'s (U). Two options with one tag
+stays a premise's business.
+
+The structural version was probed and declined, and the *shape* of the failure is worth having:
+keying the union by tag and injecting the discriminator would have made all of it structural, but
+`{b : Body // d ∉ b.fields}` cannot be written — `Body.fields` is defined after the mutual block,
+so it does not exist where the constructor is declared. The exclusion *is* expressible if the
+variant's three components are inlined instead of taking a `Body` (`{s : Finset Name // d ∉ s}`
+needs only `Finset` and `d`, both in scope), and **that is rejected on the same criterion in the
+same direction as the `custom` bundling below**: it re-threads the three components `Body` exists
+to bundle, at one constructor, and every table over terms grows a three-argument row — to buy one
+decidable premise. §2's rule about a new stratum costing all seven companions is the same
+observation from the other end.
+
 **One move that passes the criterion and still does not pay: bundling `Lawful` into `custom`.**
 `Obligations (.custom ce cp)` is `Lawful ⟨dom(ce), none, ce, cp⟩` and `ce`/`cp` never travel
 apart, so the law is a property of one argument-group and the criterion admits it. It also
@@ -622,6 +641,18 @@ it faithfully, not compensating for its absence. What the witness shows is that 
 premise is *load-bearing*: omit it and (B) fails. That claim needs an ungated prism to be about,
 not an ungated `Term`, so it is restated on `literalNRule` (`Refutations.lean`), which is
 deliberately not a `Term`. `docs/codec-calculus.md` needed no change; the rule is unchanged.
+
+**~~`(dunion)`'s two premises~~ — narrowed at JH's call, and the narrowing bought nothing
+mechanical.** The discriminator's literal is arity one; n-ary literals stay everywhere else. **The
+expectation was proof simplification and there was none**, which is the result worth recording:
+every proof over `(dunion)` consumes only the tag set's *nonemptiness* — `tagsOf_ne_nil`'s
+four-job inversion, `dunion_stamp`, `uniqueAdmission_byTag`, `ExactV_dunion`/`ExactA_dunion` — and
+not one of them consults the arity. The premise went from `Nonempty` to `card = 1`, one three-line
+bridge recovers the weaker fact, and the machinery measured 39 declarations / 350 lines before and
+40 / 353 after. Nothing shrank because nothing was ever waiting on it. The payoff is that the
+language no longer admits a variant answering to two tags, which is a statement about what a
+lookup is and not a lever on the model. `src/` is not aligned and that is a separate call
+(`codec.ts:4415` records multi-tag options as deliberate).
 
 **`admits`' violation list and wiring it into `union`'s resolver** — both behaviour changes in
 `src/`, both the user's call. See the handoff.
