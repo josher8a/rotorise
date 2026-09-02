@@ -138,7 +138,12 @@ echo "ALL_GREEN=$([ $fail -eq 0 ] && echo yes || echo NO)"
 ```
 
 Editing *any* `Calculus/*.lean` can move a `doc_counts` count, because §5 and §8 cite file
-lengths — a comments-only edit is not exempt.
+lengths — a comments-only edit is not exempt. **And a count can move in a file you did not
+edit.** §5's `orth_unreach_lines` sums the *spans* of the unreachable declarations, and a span
+runs from the `theorem` line to the last non-blank line before the next declaration — so
+re-wrapping one signature onto two lines moves a number the document attributes to
+`Orthogonality.lean`. `7fff6e8` moved it 168 → 169 that way. When a count moves and you cannot
+see why, recompute the spans against `HEAD` rather than guessing which edit did it.
 
 **`lake env lean` reads the *existing* olean of a dependency.** Edit `Domain.lean`, check
 `Combinators.lean`, and the new constructor is unknown until you build.
