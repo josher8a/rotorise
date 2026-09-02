@@ -24,13 +24,14 @@ Usage:  python3 scripts/fidelity_audit.py           (run from formal/)
 import re, sys, os, glob, collections
 
 SRC = sorted(glob.glob(os.path.join("Calculus", "*.lean")))
-# **Re-baselined when the change log was deleted, and the list gained a document.**
-# `docs/codec-formalization.md` was here and supplied 88 of the 204 citations §1 reported — 43%.
-# Removing it alone would have given 116. `ARCHITECTURE.md` was never in the list and is a
-# current-state document, so it was added at the same time, and the figure is **159**. The
-# metric now measures what the current-state documents name, which is the honest question; a
-# move from 204 would look like a regression to anyone who did not know, and it is not one.
-DOCS = ["README.md", "VOCABULARY.md", "FIDELITY.md", "ARCHITECTURE.md"]
+# **Re-baselined twice as the archaeology went, and the trail matters more than the number.**
+# 204 with `docs/codec-formalization.md` in the list; that change log alone supplied 88 of them,
+# 43%. Removing it gave 116. `ARCHITECTURE.md` had never been scanned despite being a
+# current-state document, so it went in at the same time: 159. Then `FIDELITY.md` was deleted
+# too, and the figure is **130**. Each step measures what the *surviving* current-state
+# documents name, which is the honest question; none of the three drops is a regression, and
+# without this comment every one of them would have looked like one.
+DOCS = ["README.md", "VOCABULARY.md", "ARCHITECTURE.md"]
 if not SRC:
     sys.exit("no Calculus/*.lean found — run from formal/")
 
