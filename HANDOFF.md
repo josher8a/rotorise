@@ -1,9 +1,11 @@
 # Handoff
 
 **Branch `wip/map-types`. `lake build` green and warning-free, `#assert_axioms_all` and
-`#lint_calculus` over 21 modules, `guard_reach.py`, `name_drift.py`,
-`doc_counts.py --check` and `ratchet.py` all exit 0.** Verify with the block at the end of §Landmines, by exit
-code and not by eye.
+`#lint_calculus` over 21 modules, and all four Python guards — `guard_reach.py`,
+`name_drift.py`, `doc_counts.py --check`, `ratchet.py` — exit 0.** Verify with the block at
+the end of §Landmines, by exit code and not by eye. `complexity.py`, `complexity.lean`,
+`twins.py`, `vocab_audit.py` and `fidelity_audit.py` report and never fail; they are not in
+the gate.
 
 Delete this file once read. The commit messages are the record; `git log` is now the only
 change log there is.
@@ -12,106 +14,100 @@ change log there is.
 
 ## The one idea
 
-**A description must be kept in agreement with what it describes; a question cannot drift.**
-The previous arc found that at the analysis rows. This one found it one level up — of *counts*,
-*citations* and *commit messages* — and then found the corollary that ended it:
+**Probe the fix you were handed, and it will tell you where the defect actually is.** Three
+times in eleven commits a brief named a repair that could not have worked, and writing it out
+far enough to fail is what located the cause:
 
-> **Prose that records how the code came to be this way is not describing the code.** It goes
-> in the commit message, where nothing has to keep it honest because nothing reads it as a
-> claim about the tree.
+- "one inversion lemma for `inL` at a general `GroundKind`" — the statement respelled `HLit`,
+  which exists, and a `Prop` existential says nothing about the nine rows answering `false`.
+  Writing it found the real gap: `restrict_e_isSome` was `@[simp]` and `restrict_p_isSome` did
+  not exist, so every literal row on the read side unfolded `Codec.restrict` by hand.
+- "the per-constructor rows go through one `List.all` argument" — they are `Term` constructors,
+  not `Slot` cases, and the per-row work differs. What was there instead: sixteen rows whose
+  proofs were byte identical.
+- "cheap, because `vocab_audit.py` already computes the pair table" — it computes one that asks
+  *presence* where the gap was *shape*, and it scored `restrict` complete on the day the missing
+  twin was costing 683×.
 
-Four documents and 430 lines of docstring went on that principle. What survived every pass was
-the same three things: the § tag, the **forced choice** — why the definition could not have
-been the obvious other one — and what a refutation refutes. That list is `ARCHITECTURE.md` §9
-now, and it is the whole convention.
+The corollary, which is the arc's other half: **a number is a claim about the tree and has to
+be measured, including the numbers a new instrument produces.** Every metric tried here was
+wrong in a way only measurement caught.
 
 ---
 
 ## What landed
 
-Twelve commits since `954ddc2`. Three instruments, four changes, then the deletion.
+Eleven commits since `93f44d2`. Four instruments, two wins, three negative results.
 
 | commit | why |
 | --- | --- |
-| `e3bd71f` | twelve sentences no guard can see, found by an adversarial read of the documents |
-| `1590eaf` | a count that commit moved — **and a record that I committed past a red guard** |
-| `6a90359` | `vocab_audit.py` was scoring two codecs that do not exist, which is why three documents disagreed about one denominator |
-| `2798a6b` | `ARCHITECTURE.md` §8, "What the host owes" — absorbing the `src/` discipline before deleting it |
-| `b163c17` | the audit, the change log and the `src/` discipline deleted; 4466 lines, 63 citations resolved |
-| `fefc1f0` | `FIDELITY.md` deleted — **minus three live findings**, carried to §10 |
-| `1746bde` | `VOCABULARY.md` deleted — its rules became §9, its audit went |
-| `3f7708a` | README's archaeology, 224 → 208 |
-| `6e66b44` | `codec-calculus.md` keeps its arguments and loses the framing that called them history |
-| `a55b552`, `078c254`, `8b9844c` | the docstring sweep, 430 lines out of fourteen modules |
+| `2d57420` | `name_drift.py`'s docstring check cleared citations with themselves; §9 gained the `~~retired~~` marker at JH's call, 18 stale pointers fixed |
+| `09d0654` | `ratchet.py` — §10's two guards, built as ratchets because a docstring bar at 269 is decoration |
+| `9f1be62` | HANDOFF item 2 named the wrong file and a count that does not reproduce |
+| `7fff6e8` | `sepV_refine_disjoint` general in the base — the value side of a claim `codec-calculus.md` already made |
+| `7fc0c4f` | two mechanisms `7fff6e8` exposed: a signature span moves a count in a file you did not edit, and the ratchet steers a proof |
+| `cdf766c` | that commit's own docstring said what the code says — 13 lines to 4 |
+| `2c62f6b` | `complexity.py`/`complexity.lean`, the `branches` ratchet, and two measured dead ends |
+| `bd80576` | `AdmA_exact`'s fan named by `fanOf` — 380× to 12×, and the ratchet's own +1-per-declaration defect |
+| `423c276` | the fan was a missing read-side inversion, not a missing `inL` lemma |
+| `db3eb6d` | the two densest proofs were sixteen copies of two simp sets |
+| `cc8477b` | `twins.py`, and the pair table could not have found the gap that motivated it |
 
-**Where things are now.** `docs/` is `codec-calculus.md` (normative) and `dynamo-datatypes.md`
-(the reference). `formal/` is `README.md` and `ARCHITECTURE.md`. `ARCHITECTURE.md`'s sections
-renumbered twice: **§8** what the host owes, **§9** the proof vocabulary and the docstring
-convention, **§10** open questions, **§11** the change checklist. `EXPECTED` is 6 entries from
-20. `Calculus/` is 17321 lines from 17553, net of everything this arc added to those files.
+**The instruments, all recorded in `ARCHITECTURE.md` §6 with their blind spots.**
+
+- **`ratchet.py`** — four per-file counts, failing on a *rise*: `unfolding_sites` 332,
+  `retirement_marks` 72, `undocumented_public_theorems` 269 of 896, `branches` 3972. Baselines
+  in `scripts/ratchets.json`, never in the script, so the guard's source stays still and a
+  changed number is worth reading. `--accept` writes falls; a rise additionally needs
+  `--allow-rise`, so weakening the guard has to be a sentence in a commit message. A metric
+  with no baseline fails rather than passing as twenty new files.
+- **`complexity.py`** — decision points per declaration and file. Not a restatement of
+  `unfolding_sites`: Spearman 0.56, and `Orthogonality.lean` is 31 branches per unfolding site
+  where `Discharge.lean` is 9. The *count* is ratcheted and the *density* only printed, because
+  a density has lines in its denominator.
+- **`complexity.lean`** — proof-term DAG size, sharing ratio, direct deps, and `fanOf`.
+  **Count the DAG, not the tree**: `Expr` is a DAG and the naive size read `AdmA_exact` as
+  2754337 when the kernel holds 7239. `dagSize` reports a number and never a location, which is
+  why `fanOf` exists.
+- **`twins.py`** — one-sided inversions paired on `(stem, suffix)`. `@[simp]` on the surviving
+  side is the filter that works: it picks 2 real candidates out of 15.
 
 ---
 
 ## Pick up here
 
-1. **Done at `2d57420`.** `name_drift.py`'s docstring check was clearing citations with
-   themselves; `occurring()` strips comments now, §9 gained the `~~oldName~~` marker at JH's
-   call, and 18 stale pointers were fixed. §6 has the measurement and the shapes that lost.
+**Nothing is queued.** The instruments line is exhausted; every probe it suggested has been run
+and the three that did not pay are recorded as rejections rather than as backlog. What remains
+is four decisions, and all four are JH's.
 
-2. **A question, not a task: 172 declarations are named by a document this arc deleted and by
-   no surviving one.** Whether `README.md` or `ARCHITECTURE.md` should name any of them is a
-   judgement about what a surviving document is for. The three-bin proposal is written and is
-   with JH: **(i) 12** §2 laws and corollaries namespaced under `Lawful`/`LawfulCore`/`Carrier`/
-   `Agree`/`Codec.Equiv`; **(ii) 10** where a surviving document already makes the claim in
-   prose and cites nothing — the bin with content, since a claim nobody cites is a claim
-   `name_drift.py` cannot see; **(iii) 150** plumbing whose name is its content.
-
-   **This item used to say "78 theorems" and to name the wrong file, and neither survived
-   reproduction.** The recipe was "diff backticked theorem citations in the current documents
-   against `git show b163c17^:docs/codec-formalization.md`". The example names it gave —
-   `Lawful.stable`, `Lawful.core`, `Carrier.empty`, `AdmALit_binary_exact` — are cited by
-   `docs/codec-audit.md`, a *different* deleted file. And no reading reaches 78:
-
-   | source set | orphans | minus names a `Calculus/` docstring still mentions |
-   | --- | --- | --- |
-   | `codec-formalization.md` (the file this item named) | 94 | 43 |
-   | `codec-audit.md` (the file the examples came from) | 58 | 41 |
-   | both, i.e. `name_drift.py`'s old `LOG` | 147 | 82 |
-   | **all five deleted documents — the reading used** | **172** | 90 |
-
-   Also "theorems" is wrong: `Lawful.retract` and its siblings are structure *fields*, and
-   `Lawful.core` is a theorem, so the universe is declarations of both kinds. Reproduce with
-   the five deleted documents — the three above plus `docs/structural-discipline.md`,
-   `formal/FIDELITY.md`, `formal/VOCABULARY.md` — against `README.md`, `ARCHITECTURE.md` and
-   `docs/codec-calculus.md`.
-
-3. **`src/`'s arity-one check — JH's call.** `(dunion)`'s discriminator is arity one in the
+1. **Item 2's citations — with JH, unanswered.** 172 declarations are named by a document this
+   arc deleted and by no surviving one, in three bins: 12 §2 laws, **10 where a surviving
+   document already makes the claim and cites nothing**, 150 plumbing. The proposal is 13
+   citations — six non-normative bin (ii) anchors, three of the four normative ones, four of the
+   twelve §2 laws, nothing from bin (iii). Reproduce with the five deleted documents against
+   `README.md`, `ARCHITECTURE.md` and `docs/codec-calculus.md`; the four alternative readings and
+   their counts are in `9f1be62`.
+2. **`src/`'s arity-one check — JH's call.** `(dunion)`'s discriminator is arity one in the
    calculus. `EveryOptionTagged` (`src/codec.ts`) refuses only options naming no literal and
    pairs sharing a tag, so `string('A','B')` at a discriminator is legal, and `codec.ts:4415`
    records that as deliberate — *"an option may answer to several tags"*. One type-level check
-   plus that comment, which becomes false. Keying `discriminatedUnion` by tag was **declined**,
-   so its list stays.
-
-4. **`admits`' violation list — JH's call.** `admits(c,v) ↔ !isError(c.encode(v))` is false in
+   plus that comment, which becomes false. Keying `discriminatedUnion` by tag was **declined**.
+3. **`admits`' violation list — JH's call.** `admits(c,v) ↔ !isError(c.encode(v))` is false in
    one direction, because `string`/`boolean`/`binary`/`array(string)` do not validate on
    `encode`. Making `encode` use `admits` closes it at the root and is a behaviour change.
-
-5. **Wiring `admits` into `union`'s resolver — JH's call**, and deliberately not done. It
+4. **Wiring `admits` into `union`'s resolver — JH's call**, and deliberately not done. It
    replaces try-and-see with a decision and retires `identifying` (45 lines, one consumer).
-   Depends on (4).
+   Depends on (3).
 
-6. **Done at the commit after `2d57420`.** `scripts/ratchet.py` holds three per-file counts
-   and fails on a rise: hand-unfolding sites (332), retirement marks (72), undocumented public
-   theorems (269 of 896). The docstring-coverage *bar* §10 asked for is not buildable at 269 —
-   a bar nobody can satisfy gets switched off — so all three are ratchets. Baselines in
-   `scripts/ratchets.json`; `--accept` to move one, `--allow-rise` on top to weaken it.
-
-**Closed this arc, do not re-open:** `select` over `List.attach` (`daa211e` — measured; and the
-ten-site count in it was six); `adm (.literal .number ls)` not exact (`152ab6b`); `admA`'s
-`legacy` `⊤` row (`90794bd`); the value/attribute twin merge (§10 — the pair count is an
-artifact of its transform, three passes gave 82, 69 and 72); bundling `Lawful` into `custom`
-(§4a — elaborates, buys five lines, costs ~33 sites); keying `(dunion)` by tag (§4a — the
-`Body` subtype cannot be written, `Body.fields` being defined after the mutual block).
+**Closed this arc, do not re-open:** unifying `κ` with `occV`/`occA` (§4a — the computability
+gate passes and the ⊤ encodings are incompatible; the cost shape kills it); collapsing the four
+per-base `AdmALit_*_exact` into one parametric lemma (`423c276` — dag −8%, tree +1%, two premises
+at every call site); the twin census as a backlog (`cc8477b` — the ranked list is empty);
+elaboration heartbeats and transitive dependency count as metrics (§6 — measured, both wrong);
+a docstring-coverage *bar* (§10 — 269 of 896 makes it decoration). And from the previous arc:
+`select` over `List.attach` (`daa211e`); `adm (.literal .number ls)` not exact (`152ab6b`);
+`admA`'s `legacy` `⊤` row (`90794bd`); the value/attribute twin merge (§10); bundling `Lawful`
+into `custom` (§4a); keying `(dunion)` by tag (§4a).
 
 ---
 
@@ -177,35 +173,40 @@ a measurement**: a truncated pipe twice produced a false reading here.
 
 ## The thing to keep
 
-Four results outrank every change above them.
+**A guard that fires on the refactor it exists to encourage is a guard nobody keeps.**
+`branches` summed `1 + decision_points` per declaration, so the per-file total counted one per
+declaration — and extracting a lemma *raised* it. Found the first time the metric was used in
+anger: pulling two cases out of `AdmA_exact` cut its proof term 46× and the ratchet called it a
+rise. The per-file total is decision points alone now. Any new metric wants this question asked
+of it before it is ratcheted.
 
-**§3's `(literal)` premise is load-bearing, not defective.** Four places said
-`literalNRule_holds_what_it_cannot_write` "records a defect in §3's rule". It does not. §3's
-premise line is `⊢ g : T ⇝ μ, g ground; ℓ₁ … ℓₙ ∈ T`, and at `g = number` the base's held set
-**is** §1's `D` — so the rule already requires `ℓ ⊆ D`. The witness shows that omitting the
-premise breaks **(B)**, which is a fact about §3 worth keeping and a better reason to keep the
-witness than the one written down.
+**Text measures and term measures are blind to each other, and neither subsumes the other.**
+`Adm_kind` is worst-tier on branch density (1.41 a line) and trivial in the kernel (103 nodes) —
+its branches live in a `<;>` chain that elaborates to nothing. `encSet_isSome_of` reads calm at
+0.38 and is 4845 nodes. `soundness_both` is 122 lines, 0.36 a line, 79 kernel nodes and 2×
+sharing: a table, not a tangle, which §5 and §6 claimed in prose and four numbers now agree
+with. **Do not shorten it, and do not pick a refactor target from one column.**
 
-**The `(dunion)` narrowing simplified nothing, and the measurement is the deliverable.**
-39 declarations / 350 lines before, 40 / 353 after, **not one proof changing length**. Every
-proof over `(dunion)` consumes only the tag set's *nonemptiness*; none consults the arity.
-Nothing shrank because nothing was ever waiting on it.
+**The sharing ratio is the only thing that saw the one real fan, and it is a ratio of two
+numbers neither of which is a size.** 2–19× is the band. `AdmA_exact` was at 380×, from three
+literal bases with `inL` in a `simp` set, each unfolding a ten-row matcher on every rewrite —
+and the proof read calm at 0.58 branches a line over unremarkable source. The fix was §4c's
+rule applied to an *inversion*: `restrict_p_isSome`, the twin of an `@[simp]` lemma that had
+none, plus row equations for `inL` at the four ungated bases. Family proof term 3.9M tree nodes
+to 134k. **When something is slow to check and reads fine, measure the term.**
 
-**`FIDELITY.md` carried a live (R) hazard that was stated nowhere else, and deleting it unread
-would have lost it.** §1's `℘⁺fin` and `⇀fin` are not in the carrier and the two omissions
-cancel: `HSet` is a nonempty **list**, so `set [x,x]` encodes to `ss [s,s]` and reads back and
-(R) holds — under §1's actual `℘⁺fin` the wire set would collapse and **(R) would fail on that
-input**. Tightening either widening alone breaks `lawful_setCodec`. It is §10's second-to-last
-bullet now, and that paragraph is the only place it exists. **A file being a dated snapshot
-does not make everything in it archaeology.**
+**Four metrics were tried and are wrong; §6 records them so nobody rebuilds them.** A long
+docstring is not a smell — 91 of the 118 declarations whose docstring outruns their code have
+three lines or fewer of code, because §9 makes a forced choice most interesting exactly where
+the proof is one line. Naive `Expr` size is a sharing measurement in disguise. **Elaboration
+heartbeats are not deterministic** — three identical `Meta.check` runs in one process spread
+1.2% to 13.7%, run 1 always highest from cold caches. Transitive dependency closure measures
+which layer of §1 you are in: its largest values are the two simplest proofs in every other
+column.
 
-**And `codec-calculus.md`'s "history" was algebra under a label.** Sixty lines headed *"The
-original argument, for the record"* turned out to be the reasons each `adm`/`admA` row parts
-the way it does — the `1e+21` normalisation, `number` and every numeric literal being one base
-under different predicates, `refine`'s `q` bounding the write and not the read. That document
-came out at **−6 lines**, against 4466 from the other three. **Read what is under the label
-before believing it.**
-
-The lesson all four share: **the sentence saying the brief was wrong is the most valuable thing
-in any report.** Every brief in this arc was wrong about something load-bearing, and in each
-case the correction was worth more than the change it arrived with.
+The lesson all four share, and the previous arc's four as well: **the sentence saying the brief
+was wrong is the most valuable thing in any report.** Every brief in this arc was wrong about
+something load-bearing, three of them about the repair itself, and in each case the correction
+was worth more than the change it arrived with. The previous arc's four results are in the
+documents now — §3's `(literal)` premise, the `(dunion)` measurement, §1's cancelling
+widenings at §10, and `codec-calculus.md`'s algebra-under-a-label.
