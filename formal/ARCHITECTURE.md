@@ -203,6 +203,28 @@ resolves. Indices make per-thing properties structural; this is not one, which i
 `set`/`literal`/`object` moves worked and `union` resists. Do not spend another arc looking for
 a `union` index.
 
+**One move that passes the criterion and still does not pay: bundling `Lawful` into `custom`.**
+`Obligations (.custom ce cp)` is `Lawful ⟨dom(ce), none, ce, cp⟩` and `ce`/`cp` never travel
+apart, so the law is a property of one argument-group and the criterion admits it. It also
+elaborates — a scratch mutual block carrying
+`Lawful { T := fun v => (ce v).isSome, μ := none, e := ce, p := cp }` in a `Term`-shaped
+inductive compiles with no positivity complaint, proof irrelevance makes two laws on the same
+pair `rfl`-equal, and table rows still match `.custom ce _ _`. **It was measured and dropped
+anyway.** The bundle cannot take a whole `Codec`: `Carrier.domE` is not derivable from `Lawful`,
+so `T` must stay `dom(ce)` or a `Carrier` field must ride along too, and `μSyn`/`denote` both
+fix `μ := none`. What it buys is the `Obligations` row (2 lines) joining the `True` list and one
+3-line accessor — **five lines, against ~33 pattern and statement sites in 8 files**. Only one of
+the four `Soundness` custom cases actually shrinks; `carrier_denote`'s still builds `Carrier` by
+hand. And it would strip the arbitrary pair out of `adm_custom`, `admA_custom` and
+`adm_custom_exact`, whose content *is* the arbitrariness — `adm_custom`'s docstring says so:
+"not a bound on the pair but the pair itself". Last, it is the one instance of this move that
+crosses a stated decision rather than realizing one: `Term.lean:11` says `custom` "carries its
+pair as data; its *laws* are premises of the typing rule (§3), exactly as in the doc", and
+`Typing.lean`'s header puts the *syntactic* premises in `Typed` and the *semantic* ones —
+naming `(custom)`'s laws — in `Obligations`, "stated where they can mention the denotation".
+`(held)`'s premise-to-index move (`c66d493`) was the syntactic kind and landed; this is the
+semantic kind. **The criterion is necessary, not sufficient — measure the site count too.**
+
 ### 4b. A row asks its codec instead of describing it
 
 The analysis tables in `Discharge.lean` (`κ`, `ident`, `adm`, `admA`) approximate what a codec
@@ -312,17 +334,26 @@ both / neither).
 `Orthogonality.lean` is the fourth-largest file at 951 lines: a decidable certificate for a
 fragment of (U), over-approximating each term's occupancy per side (`occV`/`occA`) and
 certifying a pair whose occupancies are disjoint, `by decide`. **Measured against what it
-replaces it does not pay**, and its own by-phase table is the measurement — the 23 hand
-discharges it names:
+replaces it does not pay**, and its own by-phase table is the measurement — the 25 hand
+discharges it names, 23 as rows and 2 in the prose beneath them:
 
 | | theorems | lines of proof |
 | --- | --- | --- |
-| reachable by `Orth` itself — phase *slot* | 5 | 46 |
+| reachable by `Orth` itself — phase *slot* | 6 | 70 |
 | reachable only through `Separates`, the `Prop` interface — phase *alternatives*, where `DecidableEq Double` makes a `Bool` test noncomputable | 7 | 70 |
-| unreachable on principle — an arbitrary `q` or `f`, a different constructor, `SepJA`'s member disjunct, or `UAtCan` itself failing (`uAtAct_array_literals`) | 11 | 162 |
+| unreachable on principle — an arbitrary `q` or `f`, a different constructor, `SepJA`'s member disjunct, or `UAtCan` itself failing (`uAtAct_array_literals`) | 12 | 168 |
+
+*Re-measured, and the previous version of this table was wrong in three ways.* It said 23
+where the section names 25; it counted 11 unreachable theorems against a line total of 162
+that silently included a twelfth (`uAtAct_array_literals`, 53 lines, named in the row's own
+description but in no row); and `uAtCan_number_opaque` (24 lines) was reachable — the pair
+form of two *slot* discharges, and `orth_number_opaque` certifies it `by decide` — while
+appearing in no row at all. The reachable total is therefore **140 lines, not 116** — the
+verdict below does not move, but it was being stated with a number 24 lines too kind to
+the hand proofs and 24 too harsh on `Orth`.
 
 And **nothing was deleted** — `6daa5e3`, `0335cdb` and `5763b6d` touch only the new module and
-two import lines — so 951 lines stand *beside* the 116 they could replace. It stays anyway,
+two import lines — so 951 lines stand *beside* the 140 they could replace. It stays anyway,
 because its value moved. The classifier framing did not pay; but confluent admission —
 the weaker rule proved monotone and continuous and **not adopted** (§7) — needs its obligation
 to be an *invariant of the unrolling* (`string_decimal_not_confluent`), which is vacuous exactly
@@ -391,7 +422,12 @@ constructor**: asked about `Term.object` against `Term.string`, the partition ca
 7, because the auto-generated `casesOn`'s *type* mentions every constructor, so the closure from
 any one of them is "everything that touches `Term`". A constructor-shape change is a syntactic
 question wanting a syntactic instrument — the `Body` refactor was costed by hand-classifying 60
-hits into 57 code sites, and there was no shortcut. The control experiment is in its docstring;
+hits into 57 code sites, and there was no shortcut. **And the syntactic instrument is `grep`,
+which has its own blind spot: anonymous-constructor patterns.** Changing `Typed.held`'s arity
+(`c66d493`) missed a consumer because `typed_μSyn` destructures it as `| _, _, _, .held h' _ =>`,
+which matches neither `Typed.held` nor `@held` nor `case held`; only the build found it. When
+costing a constructor change, grep the bare `.<name>` as well as the qualified form, and expect
+the arity to be implicit in a positional match. The control experiment is in its docstring;
 `86d3a42`'s commit message claimed otherwise and is wrong.
 
 One more blind spot common to all five: **none of them looks at `src/`.** `Vectors.lean` is the
@@ -466,10 +502,33 @@ side-split stays **local** — it does not thread through the codec algebra, for
 `Exactness.lean`. `set` is the standing exception, the one product that is not an instance
 (§4c, `Combinators.lean:1212-1214`).
 *The numbers I was handed — 82 twin pairs, ~45 mergeable — are recorded nowhere in the repo and
-I could not reproduce them.* A naming-based count over 1296 declarations (twin = `X`/`XA`, or a
-`V`→`A` or `Value`→`Attr` substitution) gives **69 pairs, 32 of them in `Exactness.lean`**;
-loosening the transform to include the write/read `_e`/`_p` split gives 100. Treat 82/45 as
-unverified and re-measure before costing the merge.
+I could not reproduce them.* A naming-based count over the declarations of `Calculus/`
+(twin = `X`/`XA`, or a `V`→`A` or `Value`→`Attr` substitution) gives **72 pairs, 34 of them in
+`Exactness.lean`**, over 1276 declarations; loosening the transform to include the write/read
+`_e`/`_p` split gives 100. **Do not cost this on a pair count — every count here is an artifact
+of its transform, and three passes have produced 82, 69 and 72.**
+
+**Measured on the dimension that actually decides it, the merge is not worth doing.** Rename
+each value-side declaration to its attribute-side twin, then compare the two bodies textually:
+
+- The **40 pairs at ≥0.9 similarity average 5.1 lines each** — 203 attribute-side lines of
+  membership lemmas, `mem` wrappers and one-line `Exact*` abbreviations. These are the
+  mergeable ones, and they are mergeable *because* they are tiny.
+- The **12 pairs of ≥15 attribute-side lines hold 363 of the 648** — more than half the twin
+  mass — and average **0.67**, with the largest being the least alike: `ExactV_set`/`ExactA_set`
+  **59 lines at 0.16**, `occV`/`occA` 22 at **0.06**, `occV_sound`/`occA_sound` 45 at 0.32,
+  `adm`/`admA` 45 at 0.47, `AdmLit`/`AdmALit` 14 at 0.33, `Adm`/`AdmA` 38 at 0.58.
+
+So the twins that are cheap to merge are cheap because there is nothing in them, and the twins
+holding the bulk are twins in name only — which is §4c's point arriving from the other side:
+`carriedCodec` states one codec for both sides precisely where the two sides *are* the same, and
+where they are not, the doubling is content. A parametrised development would abstract 203 lines
+of boilerplate and leave the 363 that matter untouched. The absolute ratios move with the
+transform; the *ordering* does not, and the ordering is the verdict. Two passes over the same
+648 lines, differing only in whether the value-side names were renamed to their twins before
+comparing, gave 40 pairs ≥0.9 and 10 — but both put `ExactV_set`/`ExactA_set` at 0.16 and both
+put the biggest twins at the bottom. **Neither the pair count nor any single similarity number
+is the dimension; the size-against-similarity ordering is.**
 
 **`select` over `List.attach`.** `select` filters a list of options and acts through the one
 that answers alone, and `List.filter` hands back a bare element — so every proof that needs "the

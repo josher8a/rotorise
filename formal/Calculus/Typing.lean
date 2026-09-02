@@ -11,24 +11,30 @@ Mechanization choices, and where they diverge from the doc (each is routine to s
   set formers below. The index is determined by the term in every rule, exactly as a
   syntax-directed judgement should be; it is an index rather than a function so the rules
   read as §3 writes them.
-* `Typed` keeps only the *syntactic and fuel-free* premises (set member, literal
-  side conditions, `(union)`'s **(D)**, `(dunion)` tag disjointness, object name
-  distinctness).
+* `Typed` keeps only the *syntactic and fuel-free* premises, and after the premise-becomes-
+  an-index moves that is a short list: `(literal)`'s `LiteralD`, `(union)`'s **(D)**, and
+  `(dunion)`'s tag nonemptiness and disjointness. This list also named "set member" and
+  "object name distinctness"; both are gone, and each constructor's own docstring below says
+  so while this one did not. `(set)`'s base is an index, so its premise line is empty, and
+  `object`'s field table is a `Finset Name` with a function off the subtype, which retired
+  `hnd`.
   The doc's *semantic* premises — `(held)`'s carrier-restricted iso, `(legacy)`'s
   `ran(r) ⊆ dom(e)` and coherence, `(nullable)`'s null-honesty, `(fallback)`'s
   `v(∗) ∈ dom(e)`, `(custom)`'s laws, and `(union)`'s residual (U) — live in `Obligations`
   (Soundness.lean), consumed by the theorem. Same premises, stated where they can mention the
   denotation. This said they "are fuel-indexed", which `Obligations`' own docstring contradicts
   in as many words — *"Structural, and no longer fuel-indexed"* — since `denote` lost its fuel.
-* **`literal` is one rule in §3 and two constructors here**, and the metalanguage is the
-  reason. §3's `(literal)` reads its member off a base — `ℓ` lies in some ground term's held
-  set, and the literal stores what that term stores — which needs `ℓ : List Value` plus a
-  premise that the values share a kind. `literalS (ls : List String)` and
-  `literalN (ls : List Double)` get that premise from the *type*, so homogeneity is checked
-  by Lean rather than carried through every rule and every witness. The two constructors
-  are §3's rule at its two commonest bases; the others (`boolean`, `binary`, `null`) are
-  written `refine` here, and `uAtCan_of_refine_disjoint_of_typed` shows they discharge
-  identically — so nothing §3 admits is unreachable, only differently spelled.
+* **`literal` is one rule in §3 and one constructor here**, and the metalanguage is why it
+  took three tries to get there. §3's `(literal)` reads its member off a base — `ℓ` lies in
+  some ground term's held set, and the literal stores what that term stores — which needs
+  `ℓ : List Value` plus a premise that the values share a kind. `literal (k : GroundKind)
+  (ls : NEFinset k.Carrier)` gets that premise from the *type*: the base is an index, so
+  homogeneity, nonemptiness and pairwise distinctness are Lean's rather than carried through
+  every rule and every witness. This bullet described the intermediate state — `literalS`
+  and `literalN` at the two commonest bases, with `boolean`, `binary` and `null` spelled
+  `refine` — which the constructor's docstring below has contradicted since `GroundKind`
+  replaced all three. `GroundKind` has all six bases; nothing §3 admits is spelled `refine`
+  any more.
 * **§5's (K) is in neither list, and that is the rule.** `(union)`'s premises are the
   option judgements and (D); (K) is a *discharger* of the (U) obligation, and lives with
   `κ`/`ident`/`adm` in `Discharge.lean` — downstream of this file, which is why it could
@@ -41,7 +47,9 @@ Mechanization choices, and where they diverge from the doc (each is routine to s
 * `(union)` concludes the doc's unanimous μ, computed by `unanimous` from the option
   judgements (`TypedListμ` keeps their members alongside their held sets).
 * `held`'s iso premises are carrier-restricted (`T ≃ I`, not `Value ≃ Value`) and so
-  mention `e` — fuel-indexed, hence in `Obligations` with the other semantic premises.
+  mention `e`, which is why they sit in `Obligations` with the other semantic premises. Not
+  because they are fuel-indexed: this bullet said that too, twenty lines after the one above
+  records that nothing in `Obligations` is.
   The *rule* carries none of them, and no longer carries the held set's half of the iso
   either: that half is not a premise but the conclusion's index, `fun v => I (f v)`,
   which is what `through` builds.
