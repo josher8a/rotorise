@@ -109,6 +109,26 @@ Miss one and the failure is not a build error but a silent `⊤`: the analysis w
 block admits no `structure`. Rows needing all three still pattern-match on `.mk`, which keeps
 the equation compiler's iota reductions available.
 
+### Where a side condition goes, and why there are three places
+
+The first thing to settle when adding a rule, and `Typing.lean`'s module header states it —
+`Typed` keeps only the "*syntactic and fuel-free*" premises:
+
+| A premise that is… | goes in | consumed by |
+| --- | --- | --- |
+| decidable from the term | `Typed` (`Typing.lean`) — `(union)`'s is `hD : DIncomp Ts` | the judgement itself |
+| about what a codec *does* — `e`, `p`, an iso, a resolution | `Obligations` (`Soundness.lean`) — `UAtAct opts`, `IsoCancels`, `ReadsCoherently` | both soundness theorems |
+| §2's `(MP)`, which `legacy` is exempt from | `MPOk` (`Soundness.lean`) — `.legacy _ _ => False`, structural elsewhere | `soundness` alone |
+
+`MPOk` is not a rule premise at all: it is a predicate on the *term* saying the derivation is
+legacy-free, and it is the single hypothesis separating `soundness_core` (`LawfulCore` — (R),
+(C), (W)) from `soundness` (`Lawful`, adding (MP)). Choosing wrong is not a build error: a
+semantic premise in `Typed` makes the judgement undecidable, a syntactic one in `Obligations`
+becomes a burden every caller carries. All three recur structurally, which is what the
+companion table's last two rows owe. (Two stale spots in that header, invisible to the guards
+because no name is dangling: the semantic premises are still called "fuel-indexed" where
+`Obligations` now says "**Structural, and no longer fuel-indexed**", and `literalS`/`literalN`
+are named though `GroundKind` retired them — §4a.)
 ---
 
 ## 3. Termination: why there is a hand-rolled depth at all
@@ -142,7 +162,7 @@ friends — not inline.
 
 ---
 
-## 4. The three recurring design moves
+## 4. The four recurring design moves
 
 These are the architecture, more than the module list is.
 
@@ -211,7 +231,32 @@ to add a row, prefer asking. The price is only that the row becomes `noncomputab
 codec is, which costs nothing here — `Double`'s equality is a field of an axiomatized interface
 already.
 
-### 4c. The guards exist because prose does not typecheck
+### 4c. One codec, stated once for both sides of the pair
+
+`Combinators.lean` is 3988 lines, 23% of the tree, and this is its organizing idea; without it
+the file reads as the inventory `README.md` already has. A constructor is a **prism** —
+`Ctor α β`, with `into`/`out` and the laws `out_into` (matching what was built returns it) and
+`into_out` (anything that matches was built) — and those two *are* §2's (R) and (C) at a
+constructor, so the prism half of every lawfulness proof is discharged once, here.
+
+Thirteen prisms: six value-side (`strV`, `boolV`, `binV`, `nullV`, `arrV`, `mapV`), seven
+attribute-side (`sC`, `nC`, `bC`, `boolA`, `nullA`, `lA`, `mA`). The inventory is **partial on
+both sides on purpose** — the gaps are the constructions that are not one payload between one
+pair: `.num`, where §1's numeral gate stops `out` being onto the image, and the three wire sets.
+Two shapes sit over them, and the second is the load-bearing one:
+
+- `pointCodec V A μ₀` — the degenerate case, one payload type on both sides; `string`,
+  `boolean`, `binary` and `null` share **one** lawfulness proof through it
+  (`lawful_pointCodec`, via `Lawful.congr`).
+- `carriedCodec (V : Ctor γ Value) (A : Ctor δ Attr)` — a payload *pair* between two prisms,
+  the shape underneath every product (`entrywise`, hence `arrayCodec`/`recordCodec`;
+  `tupleCodec`; `objectCodec`). **The model states a codec once for both sides**, which is why
+  §8's twin question is askable at all: the doubling is in the analyses, not the algebra.
+- `set` is the one deliberate non-instance: its attribute side is a choice among three wire
+  constructors rather than one prism (`Combinators.lean:1212-1214`), so its inversion names all
+  three families (`setCodec_p_eq`).
+
+### 4d. The guards exist because prose does not typecheck
 
 Every instrument in §6 was built after a description drifted from what it described: an axiom
 claim in prose (`#assert_axioms_all`), a `@[simp]` attribute asserting a behaviour that had
@@ -221,7 +266,7 @@ as a refactor estimate (`scripts/blast_radius.lean`). None of them was added spe
 
 ---
 
-## 5. Two generations of analysis, and why both stay
+## 5. Generations of analysis: two that stay, one that does not pay
 
 `Discharge.lean` holds §5's per-aspect approximations — `κ`, `ident`, `adm`, `admA`; the fifth
 aspect, `μSyn`, is `Denote.lean`'s, because `denote` needs the member index itself — with the
@@ -261,6 +306,29 @@ So: do not delete `Discharge.lean`, and if you sharpen an `adm` row at a contain
 whether you have just broken a discharge that was relying on the slack. `scripts/blast_radius.lean`
 exists to cost exactly this question and prints the four-way partition (old only / new only /
 both / neither).
+
+### And a third machine, `Orth`, which does not pay — measured
+
+`Orthogonality.lean` is the fourth-largest file at 951 lines: a decidable certificate for a
+fragment of (U), over-approximating each term's occupancy per side (`occV`/`occA`) and
+certifying a pair whose occupancies are disjoint, `by decide`. **Measured against what it
+replaces it does not pay**, and its own by-phase table is the measurement — the 23 hand
+discharges it names:
+
+| | theorems | lines of proof |
+| --- | --- | --- |
+| reachable by `Orth` itself — phase *slot* | 5 | 46 |
+| reachable only through `Separates`, the `Prop` interface — phase *alternatives*, where `DecidableEq Double` makes a `Bool` test noncomputable | 7 | 70 |
+| unreachable on principle — an arbitrary `q` or `f`, a different constructor, `SepJA`'s member disjunct, or `UAtCan` itself failing (`uAtAct_array_literals`) | 11 | 162 |
+
+And **nothing was deleted** — `6daa5e3`, `0335cdb` and `5763b6d` touch only the new module and
+two import lines — so 951 lines stand *beside* the 116 they could replace. It stays anyway,
+because its value moved. The classifier framing did not pay; but confluent admission —
+the weaker rule proved monotone and continuous and **not adopted** (§7) — needs its obligation
+to be an *invariant of the unrolling* (`string_decimal_not_confluent`), which is vacuous exactly
+where the options are pairwise disjoint. So a syntactic disjointness test is what would license
+recursion under `union`, and `Orth` is that test — delete it and that is the question you
+delete.
 
 ---
 
@@ -393,10 +461,10 @@ One line each, with the number or name that decides it.
 
 **The value/attribute doubling.** Nearly every analysis declaration has an attribute twin, and
 the question is whether the two sides should be one parametrised development. A probe found the
-side-split stays **local** — it does not thread through the codec algebra — and that the
-mergeable bulk sits in `Exactness.lean`. `set` is the standing exception: its attribute side is
-a choice among three wire constructors rather than one prism, argued at the section note above
-`carriedCodec` (`Combinators.lean:1213`).
+side-split stays **local** — it does not thread through the codec algebra, for §4c's reason:
+`carriedCodec` states one codec for both sides — and that the mergeable bulk sits in
+`Exactness.lean`. `set` is the standing exception, the one product that is not an instance
+(§4c, `Combinators.lean:1212-1214`).
 *The numbers I was handed — 82 twin pairs, ~45 mergeable — are recorded nowhere in the repo and
 I could not reproduce them.* A naming-based count over 1296 declarations (twin = `X`/`XA`, or a
 `V`→`A` or `Value`→`Attr` substitution) gives **69 pairs, 32 of them in `Exactness.lean`**;
@@ -429,6 +497,7 @@ rule**, not in our constructor.
 
 - New module under `Calculus/` → reachable from `Axioms.lean` (§1).
 - New stratum in the term family → all seven companions (§2).
+- New rule → put each premise in one of the three places, `Typed`/`Obligations`/`MPOk` (§2).
 - New term recursion → `term_depth_wf`, and new inequalities beside `Term.depth` (§3).
 - New analysis row → prefer asking the codec over describing the set (§4b); then prove its
   exactness clause, because a missing row is a silent `⊤` and `⊤` is sound.
