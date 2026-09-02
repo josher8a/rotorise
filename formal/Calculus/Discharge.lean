@@ -1318,9 +1318,14 @@ theorem admA_literal_bool (ls : NEFinset Bool) (b : Bool) :
 theorem admA_literal_bin (ls : NEFinset Bytes) (b : Bytes) :
     admA (.literal .binary ls) (.b b) = decide (b ∈ ls.1) := rfl
 
-/-- The writable side sees `ℓ` everywhere, `number` included — it is `inL`, the codec's prism. -/
-theorem adm_literal_num (ls : NEFinset Double) (d : Double) :
-    adm (.literal .number ls) (.num d) = decide (d ∈ ls.1) := rfl
+/-- The writable side sees `ℓ` everywhere, `number` included — it is `inL`, the codec's prism.
+
+    No longer `rfl`: `inL`'s `number` row splits on the carrier's gate, and the alternative is
+    named by the element's own `d.2`. That is the whole cost of `LiteralD`'s deletion on this
+    side, and `ExactV_literalN` is what it bought. -/
+theorem adm_literal_num (ls : NEFinset WFDouble) (d : WFDouble) :
+    adm (.literal .number ls) (.num d.1) = decide (d ∈ ls.1) := by
+  simp [adm, inL, d.2]
 
 /-- **Where the two bases part — and they part by *how much work the row does*, not by
     whether it can be written.** A string literal's stored text *is* its value, so `ℓ` is
@@ -1339,21 +1344,31 @@ theorem admA_literalS_sees (ls : NEFinset String) (s : String) :
 
 /-- …and the numeric side sees `ℓ` as well, one indirection further out: an `N` attribute is
     admitted exactly when the numeral it holds reads to a well-formed member of `ℓ`. -/
-theorem admA_literalN_sees (ls : NEFinset Double) (x : WFNumeral) :
+theorem admA_literalN_sees (ls : NEFinset WFDouble) (x : WFNumeral) :
     admA (.literal .number ls) (.n x) = true ↔
-      ∃ d, Double.ofDec x.1 = some d ∧ Numeral.WF d.toDec = true ∧ d ∈ ls.1 := by
+      ∃ d : WFDouble, Double.ofDec x.1 = some d.1 ∧ d ∈ ls.1 := by
   show ((literalCodec .number ls).p (.n x)).isSome = true ↔ _
   rw [literalNCodec_p_n, numberCodec_p_n]
   cases hd : Double.ofDec x.1 with
   | none => simp
   | some d =>
-    by_cases hw : Numeral.WF d.toDec = true
-    · by_cases hm : d ∈ ls.1 <;> simp [hw, hm, inL]
-    · simp [hw]
+    constructor
+    · intro h
+      cases hw : Numeral.WF d.toDec with
+      | false => simp [hw] at h
+      | true =>
+        refine ⟨⟨d, hw⟩, rfl, ?_⟩
+        -- `cases hm : decide` rather than `by_contra`, which reaches `Classical.em`
+        cases hm : decide ((⟨d, hw⟩ : WFDouble) ∈ ls.1) with
+        | false => simp [hw, inL, hm] at h
+        | true => exact of_decide_eq_true hm
+    · rintro ⟨d', hof, hmem⟩
+      obtain rfl : d = d'.1 := Option.some.inj hof
+      simp [d'.2, inL, hmem]
 
 /-- …and every other attribute constructor is refused outright, because `numberCodec.p` is:
     the row bounds *which member* even where it cannot bound which values. -/
-theorem admA_literalN_notN (ls : NEFinset Double) (s : String) :
+theorem admA_literalN_notN (ls : NEFinset WFDouble) (s : String) :
     admA (.literal .number ls) (.s s) = false := rfl
 
 /-- **A union of numeric literals discharges on both sides — in one step, for any arity.**
@@ -1367,7 +1382,7 @@ theorem admA_literalN_notN (ls : NEFinset Double) (s : String) :
     Which is the honest reading of what a numeric literal set *is*: options told apart by
     the value a read produces, never by the text the store holds. That reading is now
     available to the table as well, because the table's row asks the same codec. -/
-theorem uAtCan_of_literalN_disjoint {lss : List (NEFinset Double)}
+theorem uAtCan_of_literalN_disjoint {lss : List (NEFinset WFDouble)}
     (hdisj : List.Pairwise (fun ls ls' => ∀ d ∈ ls.1, d ∉ ls'.1) lss) :
     UAtCan (lss.map (Term.literal .number)) := by
   show UniqueAdmission (semsOf (lss.map (Term.literal .number)))
@@ -1384,9 +1399,13 @@ theorem uAtCan_of_literalN_disjoint {lss : List (NEFinset Double)}
     refine hdisj.imp fun h v hv => ?_
     cases v
     case num d =>
-      simp only [inL, decide_eq_true_eq] at hv
-      simp only [inL, decide_eq_false_iff_not]
-      exact h d hv
+      -- the gate is now inside `inL`'s `number` row, so the split names the subtype
+      cases hw : Numeral.WF d.toDec with
+      | false => simp [inL, hw] at hv
+      | true =>
+        simp only [inL, hw, dite_true, decide_eq_true_eq] at hv
+        simp only [inL, hw, dite_true, decide_eq_false_iff_not]
+        exact h ⟨d, hw⟩ hv
     all_goals exact Bool.noConfusion hv
 
 /-- §5 (D)'s stand-in, likewise widened: two options are separated on the readable side
@@ -1416,18 +1435,19 @@ theorem sepA_literal_heldLiteral (f g : Value → Value) :
 
     The pair reading is not superseded — it discharges the whole `UAtCan` for an `n`-ary
     family in one step, and on both sides — but it is no longer the only route. -/
-theorem sepA_literalN_disjoint {ls ls' : NEFinset Double} (hd : ∀ d ∈ ls.1, d ∉ ls'.1) :
+theorem sepA_literalN_disjoint {ls ls' : NEFinset WFDouble} (hd : ∀ d ∈ ls.1, d ∉ ls'.1) :
     SepA (.literal .number ls) (.literal .number ls') :=
   Or.inr fun a ha => by
     cases a
     case n x =>
-      obtain ⟨d, hof, hw, hm⟩ := (admA_literalN_sees ls x).mp ha
-      by_contra h
-      obtain ⟨d', hof', -, hm'⟩ :=
-        (admA_literalN_sees ls' x).mp (by simpa using h)
-      rw [hof] at hof'
-      cases hof'
-      exact hd d hm hm'
+      obtain ⟨d, hof, hm⟩ := (admA_literalN_sees ls x).mp ha
+      cases hcon : admA (.literal .number ls') (.n x) with
+      | false => rfl
+      | true =>
+        obtain ⟨d', hof', hm'⟩ := (admA_literalN_sees ls' x).mp hcon
+        rw [hof] at hof'
+        obtain rfl : d = d' := Subtype.ext (Option.some.inj hof')
+        exact absurd hm' (hd d hm)
     all_goals exact nomatch (ha : (false : Bool) = true)
 
 /-- And it is the *subterm* that decides, not the wrapper: with the same inner literal
@@ -2196,7 +2216,7 @@ theorem not_uAtCan_pair_A {t₁ t₂ : Term} {v w : Value} {a : Attr}
 theorem typed_tRel :
     Typed tRel (fun v => ∃ s, s ∈ ["A"] ∧ fRel v = .str s) (some .S) := by
   refine Typed.held (I := fun w => ∃ s, s ∈ ["A"] ∧ w = .str s) ?_
-  have h := Typed.literal .string (.of "A" ∅) trivial
+  have h := Typed.literal .string (.of "A" ∅)
   have hT : HLit .string (.of "A" ∅) = fun w => ∃ s, s ∈ ["A"] ∧ w = Value.str s := by
     funext w; simp [HLit, NEFinset.of]
   rw [hT] at h

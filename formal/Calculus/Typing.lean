@@ -12,8 +12,9 @@ Mechanization choices, and where they diverge from the doc (each is routine to s
   syntax-directed judgement should be; it is an index rather than a function so the rules
   read as §3 writes them.
 * `Typed` keeps only the *syntactic and fuel-free* premises, and after the premise-becomes-
-  an-index moves that is a short list: `(literal)`'s `LiteralD`, `(union)`'s **(D)**, and
-  `(dunion)`'s tag nonemptiness and disjointness. This list also named "set member" and
+  an-index moves that is a short list, now two entries long: `(union)`'s **(D)** and
+  `(dunion)`'s tag nonemptiness and disjointness. `(literal)`'s `LiteralD` was the third until
+  `GroundKind.number`'s carrier became `WFDouble`. This list also named "set member" and
   "object name distinctness"; both are gone, and each constructor's own docstring below says
   so while this one did not. `(set)`'s base is an index, so its premise line is empty, and
   `object`'s field table is a `Finset Name` with a function off the subtype, which retired
@@ -193,16 +194,29 @@ inductive Typed : Term → Held → Option Member → Prop where
       index, where three constructors between them carried it as an index with a premise
       (`hμ`), as `.S`, and as `.N`.
 
-      `hD` is what is left, and it is the only thing here that is content: `LiteralD` is
-      `ℓ ⊆ D` at `number` and `True` elsewhere. §2.2 of `docs/codec-audit.md` is why it is a
-      premise and not a carrier — typing it deletes `literalN_holds_what_it_cannot_write`,
-      which is the witness that (B) fails without it, rather than proving the defect absent.
+      **And now nothing is left.** `hD : LiteralD k ls` stood here — §3's `ℓ ⊆ D`, `Numeral.WF`
+      over the alternatives at `number` and `True` at the other five bases. §2.2 of
+      `docs/codec-audit.md` argued it had to stay a premise, because typing it into the carrier
+      "deletes `literalN_holds_what_it_cannot_write` rather than proving the defect absent".
+
+      The objection was right that the witness matters and wrong about what it witnesses. §3's
+      `(literal)` premise line is `ℓ₁ … ℓₙ ∈ T`, and at `g = number` the base's held set is §1's
+      `D` — so the rule already carries `ℓ ⊆ D` and `hD` was transcribing it faithfully. What
+      the witness shows is that **the rule's premise is load-bearing**: drop it and (B) fails.
+      That claim needs an ungated prism to be stated about, not an ungated `Term`, and it is
+      restated on `literalNRule` (`Refutations.lean`), which is deliberately not a `Term`.
+      `GroundKind.number.Carrier` is `WFDouble`, so the premise is now the element's own second
+      component — the same place `NEFinset` keeps `n ≥ 1` and distinctness. JH's call.
+
+      The row that was waiting on this: `adm (.literal .number ls)` over-approximated by exactly
+      the `WF` conjunct, so the older analysis generation was inexact at one row (§8). With the
+      gate in the carrier `inL` is the whole of admission and the row is exact for free.
 
       This replaces `literal`, `literalS` and `literalN`. What it is *not* is a union of
       arity-one literals, which `Calculus/LiteralArity1.lean` shows is derivable and §11.5 of
       the audit shows is not free: `Term.union` is list-shaped, and the bridge from a `Finset`
       is `Classical.choice`. -/
-  | literal (k : GroundKind) (ls : NEFinset k.Carrier) (hD : LiteralD k ls) :
+  | literal (k : GroundKind) (ls : NEFinset k.Carrier) :
       Typed (.literal k ls) (HLit k ls) (some k.member)
   /-- §3 `(set)`, and there is nothing left of the premise line.
 

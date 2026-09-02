@@ -339,6 +339,25 @@ abbrev WFNumeral := {x : Numeral // Numeral.WF x = true}
     is exact by construction. -/
 abbrev StoredNumeral := {s : Numeral // Numeral.Stored s = true}
 
+/-- **A double §1's `D` contains** — `(literal)`'s `ℓ ⊆ D`, carried rather than gated.
+
+    This is the third instance of the same move, and the two above it are the argument for it.
+    `WFNumeral` typed §5's last refined member after the case against it "turned out to be
+    load-bearing on nothing"; `StoredNumeral` is `decimal`'s literal carrier and its docstring
+    already said what this one does — *"At `number` the alternatives are `Double`s and
+    `(literal)`'s premise `ℓ ⊆ D` is a gate outside the carrier, which is why
+    `adm (.literal .number ls)` over-approximates by exactly that conjunct. Here the gate is the
+    subtype, so `inL` is the whole of admission and the row is exact by construction."* That
+    paragraph described `decimal` and diagnosed `number`.
+
+    **No `.of` helper, and the reason is `Double`.** `WFNumeral.of` can default its proof to
+    `by decide` because a numeral is a `String` and `WF` is a decidable predicate on one. A
+    `Double` is an axiom and `Double.toDec` is a field of `NumericHost`, so `Numeral.WF d.toDec`
+    has no decision procedure for any `d` a proof can name — and there is no concrete `Double`
+    in this development to want one for. Every site quantifies over doubles, so the gate travels
+    as the element's own second component, which is what made this change mechanical. -/
+abbrev WFDouble := {d : Double // Numeral.WF d.toDec = true}
+
 /-- A literal numeral, with §1's check discharged where it is written. `WF` is decidable
     by construction, so a concrete numeral carries its own proof and no witness in this
     development had to change shape. -/
@@ -560,7 +579,9 @@ deriving DecidableEq, Repr
     that names a literal. -/
 @[reducible] def GroundKind.Carrier : GroundKind → Type
   | .string  => String
-  | .number  => Double
+  -- Gated, for the reason `WFDouble` gives: §3's `ℓ ⊆ D` is this base's carrier, not a premise
+  -- beside it. `LiteralD` was that premise and is deleted.
+  | .number  => WFDouble
   -- §1's stored numerals, as a subtype. See `StoredNumeral`: the gate `number` carries as a
   -- premise is this base's carrier, which is the whole point of having the base.
   | .decimal => StoredNumeral
@@ -571,7 +592,8 @@ deriving DecidableEq, Repr
 /-- An alternative, as the value it is. Injective at every base. -/
 @[simp] def GroundKind.toValue : (k : GroundKind) → k.Carrier → Value
   | .string,  s => .str s
-  | .number,  d => .num d
+  -- the gate is the element's second component; the value is the double it carries
+  | .number,  d => .num d.1
   -- `decimal` holds its numeral as *text* and stores it as `N`; the value side is a `.str`,
   -- which is exactly why `GroundKind` indexes value carriers and `SetBase` could not reuse it.
   | .decimal, x => .str x.1

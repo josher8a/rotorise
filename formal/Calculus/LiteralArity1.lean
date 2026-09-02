@@ -46,8 +46,8 @@ theorem hLit_singleton_str (s : String) :
     HLit .string (.of s ∅) = fun v => v = Value.str s := by
   funext v; simp [HLit, NEFinset.of]
 
-theorem hLit_singleton_num (d : Double) :
-    HLit .number (.of d ∅) = fun v => v = Value.num d := by
+theorem hLit_singleton_num (d : WFDouble) :
+    HLit .number (.of d ∅) = fun v => v = Value.num d.1 := by
   funext v; simp [HLit, NEFinset.of]
 
 /-! ## The judgement
@@ -67,29 +67,25 @@ theorem typedListμ_map_literal_str : ∀ (l : List String),
       refine .cons ?_ (typedListμ_map_literal_str rest)
       show Typed (Term.literal .string (.of s ∅)) (fun v => v = Value.str s) (some .S)
       rw [← hLit_singleton_str s]
-      exact Typed.literal .string (.of s ∅) trivial
+      exact Typed.literal .string (.of s ∅)
 
-/-- …and of a numeric one, at `N`, on `ℓ ⊆ D` — the premise `(literal-N)` carries as `hD`, here
-    consumed one element at a time by the arity-one rule. It is not weakened and not absorbed:
-    §2.2 of the audit is the reason that matters. -/
-theorem typedListμ_map_literal_num : ∀ (l : List Double),
-    (∀ d ∈ l, Numeral.WF d.toDec = true) →
+/-- …and of a numeric one, at `N`, **with no premise at all now**.
+
+    This took `(∀ d ∈ l, Numeral.WF d.toDec = true)` and unpacked it one element at a time into
+    `hD`, and its docstring said the premise "is not weakened and not absorbed: §2.2 of the
+    audit is the reason that matters". It is absorbed, at JH's call: the list is a
+    `List WFDouble` and each element carries its own gate. Nine lines of unpacking went with the
+    premise — the clearest local measure of what typing the carrier bought. -/
+theorem typedListμ_map_literal_num : ∀ (l : List WFDouble),
     TypedListμ (l.map fun d => .literal .number (.of d ∅))
-      (l.map fun d => fun v => v = Value.num d)
+      (l.map fun d => fun v => v = Value.num d.1)
       (l.map fun _ => some Member.N)
-  | [], _ => .nil
-  | d :: rest, h => by
-      have hD : LiteralD .number (.of d ∅) := by
-        intro x hx
-        -- `subst` would eliminate `d`, the pattern variable, and `h` is stated about it
-        have hxd : x = d := by simpa [NEFinset.of] using hx
-        rw [hxd]
-        exact h d (List.mem_cons_self _ _)
-      refine .cons ?_ (typedListμ_map_literal_num rest
-        fun x hx => h x (List.mem_cons_of_mem _ hx))
-      show Typed (Term.literal .number (.of d ∅)) (fun v => v = Value.num d) (some .N)
+  | [] => .nil
+  | d :: rest => by
+      refine .cons ?_ (typedListμ_map_literal_num rest)
+      show Typed (Term.literal .number (.of d ∅)) (fun v => v = Value.num d.1) (some .N)
       rw [← hLit_singleton_num d]
-      exact Typed.literal .number (.of d ∅) hD
+      exact Typed.literal .number (.of d ∅)
 
 /-! ## The member, the held set, and (D) -/
 
@@ -110,9 +106,9 @@ theorem hunion_map_literal_str (l : List String) :
   · rintro ⟨s, hs, rfl⟩; exact ⟨_, ⟨s, hs, rfl⟩, rfl⟩
 
 /-- …and at the numeric base. -/
-theorem hunion_map_literal_num (l : List Double) :
-    HUnion (l.map fun d => fun v => v = Value.num d)
-      = fun v => ∃ d, d ∈ l ∧ v = .num d := by
+theorem hunion_map_literal_num (l : List WFDouble) :
+    HUnion (l.map fun d => fun v => v = Value.num d.1)
+      = fun v => ∃ d, d ∈ l ∧ v = .num d.1 := by
   funext v
   simp only [HUnion, List.mem_map, eq_iff_iff]
   constructor
@@ -134,16 +130,16 @@ theorem dincomp_map_literal_str {l : List String} (hnd : l.Nodup) :
     exact (by simpa using h' : b = a).symm
 
 /-- …and the same at the numeric base. -/
-theorem dincomp_map_literal_num {l : List Double} (hnd : l.Nodup) :
-    DIncomp (l.map fun d => fun v => v = Value.num d) := by
+theorem dincomp_map_literal_num {l : List WFDouble} (hnd : l.Nodup) :
+    DIncomp (l.map fun d => fun v => v = Value.num d.1) := by
   rw [DIncomp, List.pairwise_map]
   refine hnd.imp ?_
   intro a b hab
   refine ⟨fun h => hab ?_, fun h => hab ?_⟩
-  · have h' : Value.num a = Value.num b := h (.num a) rfl
-    simpa using h'
-  · have h' : Value.num b = Value.num a := h (.num b) rfl
-    exact (by simpa using h' : b = a).symm
+  · have h' : Value.num a.1 = Value.num b.1 := h (.num a.1) rfl
+    exact Subtype.ext (by simpa using h')
+  · have h' : Value.num b.1 = Value.num a.1 := h (.num b.1) rfl
+    exact (Subtype.ext (by simpa using h') : b = a).symm
 
 /-! ## (U) at the numeric base, and the claim that used to be made here
 
@@ -191,7 +187,7 @@ theorem uAtCan_map_literal_str {l : List String} (hnd : l.Nodup) :
 
 /-- …and at the numeric base, by the same shared-base route: `n`-ary and both sides in one
     step, which is what this route buys over the table's pairwise `sepA_literalN_disjoint`. -/
-theorem uAtCan_map_literal_num {l : List Double} (hnd : l.Nodup) :
+theorem uAtCan_map_literal_num {l : List WFDouble} (hnd : l.Nodup) :
     UAtCan (l.map fun d => .literal .number (.of d ∅)) := by
   show UniqueAdmission (semsOf _)
   have hs : semsOf (l.map fun d => .literal .number (.of d ∅))
@@ -207,7 +203,18 @@ theorem uAtCan_map_literal_num {l : List Double} (hnd : l.Nodup) :
   · rw [List.pairwise_map]
     refine hnd.imp ?_
     intro a b hab v hv
-    cases v <;> simp_all [inL, NEFinset.of]
+    cases v
+    case num d =>
+      -- the gate is `inL`'s now, on both the hypothesis and the goal
+      cases hw : Numeral.WF d.toDec with
+      | false => simp [inL, hw] at hv
+      | true =>
+        simp only [inL, hw, dite_true, NEFinset.of, Finset.mem_insert,
+          Finset.not_mem_empty, or_false, decide_eq_true_eq] at hv
+        simp only [inL, hw, dite_true, NEFinset.of, Finset.mem_insert,
+          Finset.not_mem_empty, or_false, decide_eq_false_iff_not, hv]
+        exact hab
+    all_goals simp_all [inL, NEFinset.of]
 
 /-! ## The two rules, derived — over a `List`, and that is the finding
 
@@ -230,13 +237,14 @@ theorem typed_literalsS {l : List String} (hnd : l.Nodup) (hne : l ≠ []) :
   rw [hunion_map_literal_str, unanimous_map_const _ hne] at h
   exact h
 
-/-- **`(literal-N)` is derivable**, on the same `ℓ ⊆ D` it already carries — not absorbed into a
-    carrier, which §2.2 of the audit is the reason for. -/
-theorem typed_literalsN {l : List Double} (hnd : l.Nodup) (hne : l ≠ [])
-    (hD : ∀ d ∈ l, Numeral.WF d.toDec = true) :
+/-- **`(literal-N)` is derivable**, and the `ℓ ⊆ D` it used to carry is the list's element type.
+    The docstring here said "not absorbed into a carrier, which §2.2 of the audit is the reason
+    for"; it is absorbed, and §2.2's objection is answered in `Refutations.lean` instead, where
+    the witness now lives on a transcription of §3's rule. -/
+theorem typed_literalsN {l : List WFDouble} (hnd : l.Nodup) (hne : l ≠ []) :
     Typed (.union (l.map fun d => .literal .number (.of d ∅)))
-      (fun v => ∃ d, d ∈ l ∧ v = .num d) (some .N) := by
-  have h := Typed.union (typedListμ_map_literal_num l hD) (dincomp_map_literal_num hnd)
+      (fun v => ∃ d, d ∈ l ∧ v = .num d.1) (some .N) := by
+  have h := Typed.union (typedListμ_map_literal_num l) (dincomp_map_literal_num hnd)
   rw [hunion_map_literal_num, unanimous_map_const _ hne] at h
   exact h
 
@@ -385,7 +393,7 @@ theorem adm_refine_ground_eq_adm_literal (k : GroundKind) (ls : NEFinset k.Carri
 
 /-- The numeric row, written out: the refinement carries §1's `D` gate that the literal's row
     drops. -/
-theorem adm_refine_ground_number (ls : NEFinset Double) (v : Value) :
+theorem adm_refine_ground_number (ls : NEFinset WFDouble) (v : Value) :
     adm (.refine (groundTerm .number) (inL .number ls)) v = (inD v && inL .number ls v) := rfl
 
 end Calculus

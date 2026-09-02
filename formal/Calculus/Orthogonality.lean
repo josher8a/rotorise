@@ -734,8 +734,13 @@ theorem inL_disjoint {k : GroundKind} {ls ls' : NEFinset k.Carrier}
   | number =>
     cases v with
     | num d =>
-      replace h : decide (d ∈ ls.1) = true := h
-      exact decide_eq_false (hd d (of_decide_eq_true h))
+      -- `number` joined `decimal` in splitting on its carrier's gate
+      cases hw : Numeral.WF d.toDec with
+      | false => simp [inL, hw] at h
+      | true =>
+        simp only [inL, hw, dite_true, decide_eq_true_eq] at h
+        simp only [inL, hw, dite_true]
+        exact decide_eq_false (hd ⟨d, hw⟩ h)
     | _ => rfl
   | boolean =>
     cases v with
@@ -814,8 +819,9 @@ theorem separates_literal_disjoint {k : GroundKind} {ls ls' : NEFinset k.Carrier
   refine ⟨?_, ?_⟩
   · rintro v ⟨-, hx⟩ ⟨-, hy⟩
     rw [specOf_none_admitOptV rfl, Adm_literal] at hx hy
-    have hix : inL k ls v = true := (Bool.and_eq_true_iff.mp hx).1
-    have hiy : inL k ls' v = true := (Bool.and_eq_true_iff.mp hy).1
+    -- `AdmLit` is `inL`, full stop, since `number`'s `WF` conjunct became its carrier's
+    have hix : inL k ls v = true := hx
+    have hiy : inL k ls' v = true := hy
     rw [inL_disjoint hd v hix] at hiy
     exact absurd hiy (by simp)
   · rintro a ⟨-, hx⟩ ⟨-, hy⟩
