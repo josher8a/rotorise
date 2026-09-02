@@ -124,7 +124,11 @@ LEANISH = re.compile(r"^[^\W\d][\w'!?⁺₀-₉]*(?:\.[^\W\d][\w'!?⁺₀-₉]*)
 # back or get reused.
 RETIRED = re.compile(r"~~([^~\n]{1,80})~~")
 # naming patterns and filenames, not citations
-NOISE = re.compile(r"\.(md|py|ts|lean|json|toml|sh)$|(^|[._])X([._]|$)|^_|^f_sound$")
+# `.match_1`, `.eq_def`, `.proof_3`: **auto-generated names, real constants, never in source.**
+# `inL.match_1` is the matcher Lean derives for `inL`'s pattern match — §6 names it as the fan
+# `fanOf` found — and no amount of grepping `Calculus/` will locate it, because nobody wrote it.
+NOISE = re.compile(r"\.(md|py|ts|lean|json|toml|sh)$|(^|[._])X([._]|$)|^_|^f_sound$"
+                   r"|\.(match|proof|eq)_\d+$|\.eq_def$")
 
 # Cited on purpose, with the reason. Keyed by document, then name.
 EXPECTED = {
@@ -294,8 +298,13 @@ def occurring():
     archaeology sweep deleted the prose that was clearing them. Comments are 45.1% of
     `Calculus/` by character; a citation now has to be answered by code.
     """
+    # `scripts/*.lean` as well as `Calculus/*.lean`: `blast_radius.lean` and `complexity.lean`
+    # are Lean code in this development, and §6 cites the definitions inside them (`dagSize`,
+    # `fanOf`). A citation of an instrument's own API is not drift, and leaving them out made
+    # the guard fail on §6's description of the guard's siblings.
     src = "".join(strip_comments(open(f).read())
-                  for f in sorted(glob.glob("Calculus/*.lean")))
+                  for f in sorted(glob.glob("Calculus/*.lean"))
+                          + sorted(glob.glob("scripts/*.lean")))
     out = set()
     for tok in IDENT.findall(src):
         parts = tok.split(".")
