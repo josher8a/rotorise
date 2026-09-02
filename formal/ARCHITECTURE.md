@@ -13,7 +13,6 @@ Where something is already written down, this cites it instead of restating it:
 | The rules, normatively (§1–§7) | `docs/codec-calculus.md` |
 | What changed and why, historically | `git log` — see §6 |
 | Module table, modelling decisions, how to build | `README.md` |
-| How a proof is meant to read | `VOCABULARY.md` |
 
 One standing rule from `WORKING-AGREEMENT.md` governs this file too: **record why, not what**,
 and **a documented verdict is a hypothesis**. Everything below was re-checked against the
@@ -309,7 +308,7 @@ Two shapes sit over them, and the second is the load-bearing one:
 - `carriedCodec (V : Ctor γ Value) (A : Ctor δ Attr)` — a payload *pair* between two prisms,
   the shape underneath every product (`entrywise`, hence `arrayCodec`/`recordCodec`;
   `tupleCodec`; `objectCodec`). **The model states a codec once for both sides**, which is why
-  §9's twin question is askable at all: the doubling is in the analyses, not the algebra.
+  §10's twin question is askable at all: the doubling is in the analyses, not the algebra.
 - `set` is the one deliberate non-instance: its attribute side is a choice among three wire
   constructors rather than one prism (`setCodec`, `Combinators.lean`), so its inversion names all
   three families (`setCodec_p_eq`).
@@ -656,7 +655,75 @@ a separate and currently unmet obligation.
 
 ---
 
-## 9. Open architectural questions
+## 9. The proof vocabulary, and what a docstring is for
+
+Absorbed from `VOCABULARY.md` when that file was deleted as archaeology. Its measurements went
+with it; these are the rules, and `scripts/vocab_audit.py` is what holds the tree to them.
+
+### The rule
+
+> **A definition is unfolded once, in its own inversion lemma. Every proof downstream cites the
+> lemma.**
+
+Each construction gets two, proved in one step and being the *only* place that construction's
+`Option` chain is ever taken apart:
+
+    theorem X_e : (X …).e v = some a ↔ ⟨what X writes⟩
+    theorem X_p : (X …).p a = some v ↔ ⟨what X reads⟩
+
+Downstream, `obtain ⟨…⟩ := X_e.mp he` opens a proof in one line and `X_e.mpr ⟨…⟩` closes it in
+one. What it replaces is the eight-line hand unfolding, repeated per site.
+
+### The naming scheme — **normative**, so the next proof inherits it
+
+| form | means |
+| --- | --- |
+| `X_e` / `X_p` | inversion — what `X` writes, what `X` reads |
+| `X_eq` | `X` **is** an instance of a named construction, on the nose |
+| `lawfulCore_X` / `lawful_X` / `carrier_X` | the three obligations, in that order |
+| `Lawful.X` / `LawfulCore.X` | the same where the construction is itself namespaced; `Lawful.through` reads "`through` preserves `Lawful`", which is the better name. Both forms are sanctioned and `vocab_audit.py` prints the split rather than absorbing it |
+| `f_sound` | a syntactic function agrees with the denotation (`κ_sound`, `adm_sound`) |
+| `equiv_X` | a §6 row |
+| `not_X` | a refutation — a "Do not hold" row, or a repaired discharger |
+| `onKind_X` | `X` is pinned to a kind (§3's "self-identifying") |
+
+### What a docstring is for
+
+**The source explains the code; the history is in `git log`.** In a docstring, keep:
+
+- the **§ tag** — which rule or clause this is, which `fidelity_audit.py` counts and which lets
+  a reviewer check a theorem in isolation;
+- the **forced choice** — why the definition could not have been the obvious other one
+  (`number`'s `p` gating on the round-tripped value, not the stored digits);
+- what a **refutation is a refutation of**.
+
+Move out: how a finding was made, what it cost, which audit missed it, and any argument another
+document already states. And prefer a name that makes the sentence unnecessary —
+`unionLiteralString` needs no gloss.
+
+Two further conventions, both load-bearing:
+
+- **The core lemma is not a second proof.** `lawfulCore_X` and `lawful_X` share their clauses
+  and differ only where the content differs. Today that is one place: `set`'s (C), where (MP)'s
+  member-uniformity is replaced by the `(set)` rule's own premise.
+- **An identity stated in prose gets cashed as an equation.** `arrayCodec_eq`, `tupleCodec_eq`
+  and `objectCodecCore_eq` each say "this construction *is* that one" and carry every lemma
+  across by `▸`; `record` gets the same service from a directional pair,
+  `recordCodec_e_eq`/`recordCodec_p_eq`, because it is not definitionally the traversal.
+
+Inline `--` comments are exempt. They are proof waypoints inside a long tactic block —
+navigation, which is the one thing a name cannot supply.
+
+### Length is not the metric; sites are
+
+`soundness_both` and `carrier_denote` are near the top of the length table and belong there:
+each is one line per typing rule, a table of which two combinator lemmas each rule cites. That
+is the right shape for a theorem whose content *is* the rule-by-rule dispatch, and compressing
+it would cost the reader the correspondence with §3–§5.
+
+---
+
+## 10. Open architectural questions
 
 One line each, with the number or name that decides it.
 
@@ -783,12 +850,18 @@ worth. `README.md` was always honest about this and the change log's "twenty of 
 not. The row also inherits the `≡`-is-not-transitive caveat, which bounds what a table of
 rewrites licenses at all. The `List.Perm` lift is the next probe.
 
+**Two guards available on `Axioms.lean`'s principle, neither expensive.** Ratchet
+`vocab_audit.py`'s site count and fail the build when it *rises*, which makes §9's rule
+enforceable rather than aspirational. And set a docstring-coverage bar on public theorems — not
+"every lemma", but that a reader who knows the specification can tell what a theorem says from
+its name and one line. `fidelity_audit.py` already reports both numbers.
+
 **`admits`' violation list and wiring it into `union`'s resolver** — both behaviour changes in
 `src/`, both the user's call. See the handoff.
 
 ---
 
-## 10. If you change something
+## 11. If you change something
 
 - New module under `Calculus/` → reachable from `Axioms.lean` (§1).
 - New stratum in the term family → all eight companions (§2), counted per side.
@@ -798,7 +871,7 @@ rewrites licenses at all. The `List.Perm` lift is the next probe.
   exactness clause, because a missing row is a silent `⊤` and `⊤` is sound.
 - Sharpening a `⊤` row at a container → check what was relying on the slack (§5), and cost it
   with `scripts/blast_radius.lean`, not with grep.
-- Citing a Lean name in `README.md`, `VOCABULARY.md`, this file, or
+- Citing a Lean name in `README.md`, this file, or
   `docs/codec-calculus.md` → `python3 scripts/name_drift.py` must exit 0. Single-word
   citations are covered as of `83d61df`; four categories are skipped by shape and the reason
   for each is in the script.

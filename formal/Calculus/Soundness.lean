@@ -9,8 +9,8 @@ laws, `(union)`'s residual (U) at canonical inputs. **Neither fueled nor carryin
 `(nullable)`'s null-honesty**, both of which this paragraph said: `Obligations : Term → Prop`
 is structural, as its own docstring says in as many words, and the `nullable` row is
 `Obligations t'` with no conjunct — `NullHonest` left `Obligations` when §3's guard made it
-derivable (`Combinators.lean`'s `nullHonest_of_not_ownsNull`, and VOCABULARY's struck item
-5). `MPOk` marks a derivation legacy-free — the doc's
+derivable (`Combinators.lean`'s `nullHonest_of_not_ownsNull`). `MPOk` marks a derivation
+legacy-free — the doc's
 (MP) exemption, as a predicate.
 
 Statements:

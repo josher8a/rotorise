@@ -5,7 +5,7 @@ Paste the block below into a fresh session. Read `HANDOFF.md` for where the work
 ---
 
 ```
-Read HANDOFF.md, then formal/ARCHITECTURE.md and formal/VOCABULARY.md.
+Read HANDOFF.md, then formal/ARCHITECTURE.md and formal/README.md.
 Work under these standing rules.
 
 PROBE, DON'T ARGUE. If a question can be settled by four lines and a build,
@@ -48,9 +48,9 @@ without ceremony; if I am wrong, hold the line with evidence.
 ## What this prompt cannot do
 
 **Most of the rigour is already in the repo, not in the prompt.** `#assert_axioms_all` failing
-the build rather than asserting cleanliness; `scripts/guard_reach.py` and
-`scripts/name_drift.py`; the docstring convention of explaining *why* a thing is the way it is
-and what would go wrong otherwise. Above all the **commit messages** — they are the real record
+the build rather than asserting cleanliness; `scripts/guard_reach.py`, `scripts/name_drift.py`
+and `scripts/doc_counts.py`; the docstring convention in `ARCHITECTURE.md` §9 — explain *why* a
+thing is the way it is and what would go wrong otherwise, and move the history to `git log`. Above all the **commit messages** — they are the real record
 of this work, more than any document, and a session that reads `git log` inherits the reasoning
 along with the result.
 
