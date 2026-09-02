@@ -13,6 +13,12 @@ Deep embedding. Notes:
 * `opaque` is a Lean keyword, hence `opaq`.
 * Fields (§4) are a separate inductive — the stratification is the point: no `Term`
   position accepts a `Field`.
+* An object's **payload** (§4) is a separate inductive for the same reason, one level up.
+  `Body` is the key set, the field function on it, and the rest policy, as one thing — so
+  every table over terms has a *one-argument* `.object` row that delegates to a `Body`
+  companion, the way `denote`'s row delegates to `fieldSem` and `restSem`. Threading three
+  arguments by hand through twenty tables was the only reason those three had to agree by
+  convention rather than by type.
 -/
 
 namespace Calculus
@@ -81,9 +87,16 @@ inductive Term where
       harmless and rule out the second; both are now properties of the type. `Field`
       sits in the function's codomain, which is strictly positive — the same factoring
       `Attr.m` and `Value.map` use one level down. -/
-  | object   (fields : Finset Name) (f : {k // k ∈ fields} → Field) (rest : Rest)
+  | object   (b : Body)
   | union    (options : List Term)
   | dunion   (d : Name) (options : List Term)
+
+/-- §4's object payload: the declared names, the field at each, and the policy for
+    everything else. A `mutual` block admits no `structure`, so this is `inductive … | mk`
+    and the projections below are written by hand — three lines, against a `Body`-shaped
+    row in every table over terms. -/
+inductive Body where
+  | mk (fields : Finset Name) (f : {k // k ∈ fields} → Field) (rest : Rest)
 
 inductive Field where
   | req      (t : Term)
@@ -95,6 +108,71 @@ inductive Rest where
   | codec (t : Term)
 
 end
+
+/-! ## `Body`'s projections
+
+`inductive … | mk` generates none, and a `mutual` block admits no `structure`, so these are
+written out. They are named for `MapOf`'s — `fields`/`at` — because a body *is* a `MapOf Field`
+paired with a policy, and `MapOf Field` is not expressible here: nesting an inductive through a
+structure whose field is a function into the type being defined is not something the nested
+inductive compiler accepts.
+
+The projections exist so that a *statement* about an object can quantify over one thing. Rows
+that need all three components still pattern-match on `.mk`, which is cheaper than three
+projections and keeps the equation compiler's iota reductions available. -/
+
+def Body.fields : Body → Finset Name
+  | .mk fields _ _ => fields
+
+def Body.at : (b : Body) → {k // k ∈ b.fields} → Field
+  | .mk _ f _ => f
+
+def Body.rest : Body → Rest
+  | .mk _ _ rest => rest
+
+@[simp] theorem Body.fields_mk (fields : Finset Name) (f : {k // k ∈ fields} → Field)
+    (rest : Rest) : (Body.mk fields f rest).fields = fields := rfl
+
+@[simp] theorem Body.rest_mk (fields : Finset Name) (f : {k // k ∈ fields} → Field)
+    (rest : Rest) : (Body.mk fields f rest).rest = rest := rfl
+
+@[simp] theorem Body.at_mk (fields : Finset Name) (f : {k // k ∈ fields} → Field)
+    (rest : Rest) : (Body.mk fields f rest).at = f := rfl
+
+/-- `codec` is the policy that *holds* an undeclared name; `drop` and `refuse` both refuse
+    it on the way out. -/
+def Rest.isOpen : Rest → Bool
+  | .codec _ => true
+  | .drop | .refuse => false
+
+/-- An **open object**: one whose rest policy is a codec, so an undeclared name is held
+    rather than refused.
+
+    §5's closed-option dischargers exclude exactly these, and they used to say so with three
+    quantifiers and a disequality — `∀ fields ff tr, t ≠ .object fields ff (.codec tr)` — at
+    seven statements. The payload is one thing now, so the exclusion is one decidable
+    question about it. `isOpenObject_eq_false` below is the form the disequality had. -/
+def Term.isOpenObject : Term → Bool
+  | .object b => b.rest.isOpen
+  | _ => false
+
+/-- The old spelling of the premise, so a reader can see the two say the same thing. -/
+theorem Term.isOpenObject_eq_false {t : Term} :
+    t.isOpenObject = false ↔ ∀ b tr, t = .object b → b.rest ≠ .codec tr := by
+  constructor
+  · intro h b tr hb hr
+    subst hb
+    simp only [Term.isOpenObject, hr, Rest.isOpen] at h
+    exact absurd h (by simp)
+  · intro h
+    cases t with
+    | object b =>
+      cases hr : b.rest with
+      | drop => simp [Term.isOpenObject, hr, Rest.isOpen]
+      | refuse => simp [Term.isOpenObject, hr, Rest.isOpen]
+      | codec tr => exact absurd hr (h b tr rfl)
+    | _ => rfl
+
 
 /-! ## A structural measure on terms
 
@@ -119,12 +197,19 @@ def Term.depth : Term → Nat
   | .array t | .record t | .nullable t | .lazy t => Term.depth t + 1
   | .held t _ _ | .refine t _ | .legacy t _ => Term.depth t + 1
   | .tuple ts tail => max (Term.depthL ts) (Term.depthO tail) + 1
-  -- the field table is a key *set* with a function on it, so its layer is the largest field
-  -- budget over the key set — a `Finset.sup`, where a list would be a fold
-  | .object fields f rest =>
-      max (fields.attach.sup fun k => Field.depth (f k)) (Rest.depth rest) + 1
+  -- one companion, like every other non-leaf row
+  | .object b => Body.depth b + 1
   | .union opts => Term.depthL opts + 1
   | .dunion _ opts => Term.depthL opts + 1
+
+/-- The payload's own budget: the field table is a key *set* with a function on it, so its
+    layer is the largest field budget over the key set — a `Finset.sup`, where a list would be
+    a fold — against the rest policy's. This is the companion `Field.depth` and `Rest.depth`
+    were always missing: the object row used to inline it, which is why the three inequality
+    lemmas below had to quantify over three components. -/
+def Body.depth : Body → Nat
+  | .mk fields f rest =>
+      max (fields.attach.sup fun k => Field.depth (f k)) (Rest.depth rest) + 1
 
 def Field.depth : Field → Nat
   | .req t | .optional t => Term.depth t + 1
@@ -157,35 +242,59 @@ theorem Term.depth_le_depthL : ∀ {ts : List Term} {t}, t ∈ ts → Term.depth
 theorem Term.depthO_le : ∀ {tail : Option Term} {t}, t ∈ tail → Term.depth t ≤ Term.depthO tail
   | some _, _, h => by cases h; simp [Term.depthO]
 
-/-- A declared field's term is strictly shallower than the object — the inequality `sizeOf`
-    cannot give, and the reason this measure exists. -/
-theorem Term.depth_lt_object {fields : Finset Name} (f : {k // k ∈ fields} → Field)
-    (rest : Rest) (k : {k // k ∈ fields}) :
-    Field.depth (f k) < Term.depth (.object fields f rest) := by
-  have : (fun k => Field.depth (f k)) k ≤ fields.attach.sup fun k => Field.depth (f k) :=
-    Finset.le_sup (f := fun k => Field.depth (f k)) (Finset.mem_attach _ k)
-  simp only at this
-  simp only [Term.depth]
-  omega
+/-- A declared field is strictly shallower than the body — the inequality `sizeOf` cannot give,
+    and the reason this measure exists. Stated at `Body`, where it belongs: it is a fact about a
+    key set and a function on it, and mentions no `Term` at all. -/
+theorem Body.depth_lt_field : ∀ (b : Body) (k : {k // k ∈ b.fields}),
+    Field.depth (b.at k) < Body.depth b
+  | .mk fields f _, k => by
+      have : (fun k => Field.depth (f k)) k ≤ fields.attach.sup fun k => Field.depth (f k) :=
+        Finset.le_sup (f := fun k => Field.depth (f k)) (Finset.mem_attach _ k)
+      simp only at this
+      simp only [Body.depth, Body.at]
+      omega
 
-/-- …and the three field shapes, which is what a proof recursing into a declared field needs. -/
-theorem Term.depth_lt_object_req {fields : Finset Name} {f : {k // k ∈ fields} → Field}
-    {rest : Rest} (k : {k // k ∈ fields}) {t : Term} (h : f k = .req t) :
-    Term.depth t < Term.depth (.object fields f rest) := by
-  have h1 := Term.depth_lt_object f rest k
+/-- …and the rest policy's codec, the other half of the payload. -/
+theorem Body.depth_lt_rest : ∀ (b : Body) {t : Term}, b.rest = .codec t →
+    Term.depth t < Body.depth b
+  | .mk _ _ _, _, h => by
+      simp only [Body.rest] at h
+      subst h
+      simp only [Body.depth, Rest.depth]
+      omega
+
+/-- The body is strictly shallower than the object term — one layer, by `rfl` on the measure. -/
+theorem Term.depth_lt_object_body (b : Body) : Body.depth b < Term.depth (.object b) := by
+  simp only [Term.depth]; omega
+
+/-- A declared field's *layer* against the object's, kept under its old name: every downstream
+    citation is of this, and the payload's own version is `Body.depth_lt_field`. -/
+theorem Term.depth_lt_object (b : Body) (k : {k // k ∈ b.fields}) :
+    Field.depth (b.at k) < Term.depth (.object b) :=
+  lt_trans (Body.depth_lt_field b k) (Term.depth_lt_object_body b)
+
+/-- …and the three field shapes, which is what a proof recursing into a declared field needs.
+    A row that matched `.object (.mk fields f rest)` discharges these with `f k = .req t` in
+    hand: `(Body.mk fields f rest).at k` is `f k` by `rfl`, so `assumption` closes it. -/
+theorem Term.depth_lt_object_req {b : Body} (k : {k // k ∈ b.fields}) {t : Term}
+    (h : b.at k = .req t) : Term.depth t < Term.depth (.object b) := by
+  have h1 := Term.depth_lt_object b k
   rw [h] at h1; simp only [Field.depth] at h1; omega
 
-theorem Term.depth_lt_object_opt {fields : Finset Name} {f : {k // k ∈ fields} → Field}
-    {rest : Rest} (k : {k // k ∈ fields}) {t : Term} (h : f k = .optional t) :
-    Term.depth t < Term.depth (.object fields f rest) := by
-  have h1 := Term.depth_lt_object f rest k
+theorem Term.depth_lt_object_opt {b : Body} (k : {k // k ∈ b.fields}) {t : Term}
+    (h : b.at k = .optional t) : Term.depth t < Term.depth (.object b) := by
+  have h1 := Term.depth_lt_object b k
   rw [h] at h1; simp only [Field.depth] at h1; omega
 
-theorem Term.depth_lt_object_fb {fields : Finset Name} {f : {k // k ∈ fields} → Field}
-    {rest : Rest} (k : {k // k ∈ fields}) {t : Term} {v : Value} (h : f k = .fallback t v) :
-    Term.depth t < Term.depth (.object fields f rest) := by
-  have h1 := Term.depth_lt_object f rest k
+theorem Term.depth_lt_object_fb {b : Body} (k : {k // k ∈ b.fields}) {t : Term} {v : Value}
+    (h : b.at k = .fallback t v) : Term.depth t < Term.depth (.object b) := by
+  have h1 := Term.depth_lt_object b k
   rw [h] at h1; simp only [Field.depth] at h1; omega
+
+/-- The rest policy's codec against the object's layer, for the same reason. -/
+theorem Term.depth_lt_object_rest {b : Body} {t : Term} (h : b.rest = .codec t) :
+    Term.depth t < Term.depth (.object b) :=
+  lt_trans (Body.depth_lt_rest b h) (Term.depth_lt_object_body b)
 
 /-- The termination argument every `Term.depth` recursion in this development uses, written
     once. Five theorems share it — `soundness_both`, `typed_TSub`, `carrier_denote`,
@@ -216,7 +325,9 @@ macro "term_depth_wf" : tactic => `(tactic|
        | exact Term.depth_lt_object_opt _ (by assumption)
        | exact Term.depth_lt_object_fb _ (by assumption)
        -- the rest policy's codec
-       | (simp only [Term.depth, Rest.depth]
+       | exact Term.depth_lt_object_rest (by assumption)
+       | exact Term.depth_lt_object_rest rfl
+       | (simp only [Term.depth, Body.depth, Rest.depth]
           first
             | exact Nat.lt_succ_of_le (le_trans (Nat.le_succ _) (le_max_right _ _))
             | exact Nat.lt_succ_of_le (le_max_right _ _)

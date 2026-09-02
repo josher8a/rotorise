@@ -70,9 +70,14 @@ def Obligations : Term → Prop
   | .lazy t' => Obligations t'
   | .custom ce cp =>
     Lawful { T := fun v => (ce v).isSome, μ := none, e := ce, p := cp }
-  | .object _ f rest => (∀ k, ObligationsField (f k)) ∧ ObligationsRest rest
+  | .object b => ObligationsBody b
   | .union opts => ObligationsList opts ∧ UAtAct opts
   | .dunion _ opts => ObligationsList opts
+
+/-- The payload's premises: every declared field's, and the rest policy's. The companion
+    `Field` and `Rest` already had and the object row inlined. -/
+def ObligationsBody : Body → Prop
+  | .mk _ f rest => (∀ k, ObligationsField (f k)) ∧ ObligationsRest rest
 
 /-- A field's premises: the subterm's, plus `fallback`'s own `v(∗) ∈ dom(e)`. -/
 def ObligationsField : Field → Prop
@@ -106,9 +111,12 @@ def MPOk : Term → Prop
   | .held t' _ _ => MPOk t'
   | .tuple ts tail => MPOkList ts ∧ MPOkOpt tail
   | .lazy t' => MPOk t'
-  | .object _ f rest => (∀ k, MPOkField (f k)) ∧ MPOkRest rest
+  | .object b => MPOkBody b
   | .union opts => MPOkList opts
   | .dunion _ opts => MPOkList opts
+
+def MPOkBody : Body → Prop
+  | .mk _ f rest => (∀ k, MPOkField (f k)) ∧ MPOkRest rest
 
 def MPOkField : Field → Prop
   | .req t' | .optional t' => MPOk t'
@@ -328,24 +336,24 @@ end
     The base is now part of the shape rather than part of the constructor's name, which is the
     one place the collapse shows up as a change of statement rather than a deletion. -/
 theorem tagsOf_ne_nil {d : Name} {t : Term} (h : (tagsOf d t).Nonempty) :
-    ∃ fields f rest ls, t = .object fields f rest ∧
-      MapOf.at ⟨fields, f⟩ d = some (.req (.literal .string ls)) ∧ tagsOf d t = ls.1 := by
+    ∃ b ls, t = .object b ∧
+      b.map.at d = some (.req (.literal .string ls)) ∧ tagsOf d t = ls.1 := by
   cases t
-  case object fields f rest =>
-    cases hlk : MapOf.at (α := Field) ⟨fields, f⟩ d with
-    | none => exact absurd h (by simp only [tagsOf]; rw [hlk]; simp [tagsOfField])
+  case object body =>
+    cases hlk : MapOf.at (α := Field) body.map d with
+    | none => exact absurd h (by simp only [tagsOf, Body.tags]; rw [hlk]; simp [tagsOfField])
     | some fd =>
       cases fd with
-      | optional _ => exact absurd h (by simp only [tagsOf]; rw [hlk]; simp [tagsOfField])
-      | fallback _ _ => exact absurd h (by simp only [tagsOf]; rw [hlk]; simp [tagsOfField])
+      | optional _ => exact absurd h (by simp only [tagsOf, Body.tags]; rw [hlk]; simp [tagsOfField])
+      | fallback _ _ => exact absurd h (by simp only [tagsOf, Body.tags]; rw [hlk]; simp [tagsOfField])
       | req tlit =>
         cases tlit
         case literal k ls =>
           cases k
-          case string => exact ⟨fields, f, rest, ls, rfl, hlk, by
-            simp only [tagsOf]; rw [hlk]; rfl⟩
-          all_goals exact absurd h (by simp only [tagsOf]; rw [hlk]; simp [tagsOfField])
-        all_goals exact absurd h (by simp only [tagsOf]; rw [hlk]; simp [tagsOfField])
+          case string => exact ⟨body, ls, rfl, hlk, by
+            simp only [tagsOf, Body.tags]; rw [hlk]; rfl⟩
+          all_goals exact absurd h (by simp only [tagsOf, Body.tags]; rw [hlk]; simp [tagsOfField])
+        all_goals exact absurd h (by simp only [tagsOf, Body.tags]; rw [hlk]; simp [tagsOfField])
   all_goals exact absurd h (by simp [tagsOf])
 
 /-- Typing's nonempty-tags premise forces each `(dunion)` option to be an object whose
@@ -358,7 +366,10 @@ theorem dunion_stamp {d : Name} {opts : List Term}
       ∃ tag ∈ o.1, tagOfA d a = some tag ∧ tagOfV d t' = some tag := by
   refine forall_mem_map fun tx htx t' a he' => ?_
   replace he' : (denote tx).e t' = some a := he'
-  obtain ⟨fields, ff, rest, ls, rfl, hlk, htagsls⟩ := tagsOf_ne_nil (htags tx htx)
+  obtain ⟨body, ls, rfl, hlk, htagsls⟩ := tagsOf_ne_nil (htags tx htx)
+  -- the payload's three components are what `objectCodecCore_e_inv` reads, so it is taken
+  -- apart once, here, rather than threaded through the statement above
+  obtain ⟨fields, ff, rest⟩ := body
   -- no `cases fuel` any more: there is no dead denotation to rule out first
   replace he' : (objectCodec ⟨fields, fun k => fieldSem (ff k)⟩ (restSem rest)).e t' = some a :=
     he'
@@ -504,7 +515,11 @@ theorem soundness_both : ∀ {t T μ}, Typed t T μ → Obligations t → Sound 
     -- The field table is indexed by the declared names, so the induction hypothesis is
     -- read off at a key rather than at a membership, and `TypedFields.forall` — which
     -- existed to walk the row — is not needed. Nor is a `Nodup` to transport.
-    | @object fields ff b rest R μs hfields hrest =>
+    | @object body bind R μs hfields hrest =>
+      -- the payload is taken apart once, here: the field lemmas below read a key set and a
+      -- function on it, and `objectCodec` is stated over those
+      cases body with | mk fields ff rest =>
+      simp only [Body.fields_mk, Body.at_mk, Body.rest_mk] at hfields hrest
       -- a field's codec is its term's denotation, and (MP) reaches it unchanged
       have ihf : ∀ k, LawfulCore (fieldSem (ff k)).codec ∧
           (MPOkField (ff k) → Lawful (fieldSem (ff k)).codec) := by
@@ -518,7 +533,7 @@ theorem soundness_both : ∀ {t T μ}, Typed t T μ → Obligations t → Sound 
         · exact soundness_both hty' (Obligations.fallback hobf).1
       have hfb := fieldSems_fb hob.1
       have ihr : ∀ c, restSem rest = .codec c →
-          LawfulCore c ∧ (MPOk (.object fields ff rest) → Lawful c) := by
+          LawfulCore c ∧ (MPOk (.object (.mk fields ff rest)) → Lawful c) := by
         intro c hcr
         cases hrest with
         | drop => exact nomatch hcr
@@ -739,7 +754,9 @@ theorem typed_TSub : ∀ {t T μ}, Typed t T μ → ∀ v, (denote t).T v → T 
       · exact Or.inl (typed_TSub h' v hv')
       · exact Or.inr rfl
     | @lazy γ T' μ' h' => exact typed_TSub h' v hv
-    | @object fields ff b rest R μs hfields hrest =>
+    | @object body bind R μs hfields hrest =>
+      cases body with | mk fields ff rest =>
+      simp only [Body.fields_mk, Body.at_mk, Body.rest_mk] at hfields hrest ⊢
       -- No case split on `v`: the object's `T` is `carriedCodec`'s, so it *hands over*
       -- the payload — a key set and a function on it, which is exactly `HObject`'s
       -- witness. The list representation had to take `v` apart to find one.
@@ -854,7 +871,9 @@ theorem carrier_denote : ∀ {t T μ}, Typed t T μ → Obligations t → Carrie
         replace hp : cp a = some v := hp
         exact hob.canon hp
     | opaq lossy => exact carrier_opaqCodecω lossy
-    | @object fields ff b rest R μs hfields hrest =>
+    | @object body bind R μs hfields hrest =>
+      cases body with | mk fields ff rest =>
+      simp only [Body.fields_mk, Body.at_mk, Body.rest_mk] at hfields hrest
       have hsems : ∀ k : {k // k ∈ fields},
           Carrier (fieldSem (ff k)).codec := by
         intro k

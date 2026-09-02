@@ -18,10 +18,20 @@ namespace Calculus
 
 noncomputable section
 
+/-- The payload's field table as a `MapOf` — the shape `MapOf.at` reads. `MapOf Field` is
+    what `Body` would *be* if a `mutual` block could nest an inductive through a structure
+    whose field is a function into the type being defined; it cannot, so this is the coercion.
+    -/
+def Body.map (b : Body) : MapOf Field := ⟨b.fields, b.at⟩
+
+/-- A body's name spec: `(name, required?)`. The payload's own function, so `specOf` is a
+    dispatch and nothing more. -/
+def Body.spec : Body → MapOf Bool
+  | .mk fields f _ => ⟨fields, fun k => match f k with | .optional _ => false | _ => true⟩
+
 /-- The name spec of an object option: `(name, required?)` — `none` for non-objects. -/
 def specOf : Term → Option (MapOf Bool)
-  | .object fields f _ =>
-    some ⟨fields, fun k => match f k with | .optional _ => false | _ => true⟩
+  | .object b => some b.spec
   | _ => none
 
 /-- The tags an object option answers to on discriminator `d` (§5 `(dunion)`).
@@ -32,8 +42,11 @@ def tagsOfField : Option Field → Finset String
   | some (.req (.literal .string ls)) => ls.1
   | _ => ∅
 
+/-- A body's tags on discriminator `d`: the field declared at `d`, if any, read as a tag set. -/
+def Body.tags (d : Name) (b : Body) : Finset String := tagsOfField (b.map.at d)
+
 def tagsOf (d : Name) : Term → Finset String
-  | .object fields f _ => tagsOfField (MapOf.at ⟨fields, f⟩ d)
+  | .object b => b.tags d
   | _ => ∅
 
 /-! ### Where `literalMember` went
@@ -71,7 +84,7 @@ def μSyn : Term → Option Member
   | .lazy _ => none
   | .custom _ _ => none
   | .opaq _ => none
-  | .object _ _ _ => some .M
+  | .object _ => some .M
   | .union opts => unanimous (μSynList opts)
   | .dunion _ _ => some .M
 
@@ -126,10 +139,17 @@ def denote : Term → Codec
   -- `opaqCodecω` budgets each input by its own depth (`Opaque.lean`); that is a recursion on the
   -- *input*, not on the term, and is untouched by this.
   | .opaq lossy => opaqCodecω lossy
-  | .object fields f rest =>
-      objectCodec ⟨fields, fun k => fieldSem (f k)⟩ (restSem rest)
+  | .object b => bodySem b
   | .union opts => altCodec (optionSems opts) (unanimous (denoteμs opts))
   | .dunion d opts => dunionCodec d (denoteTagged d opts)
+
+/-- The payload's semantics: the field table and the rest policy, each through its own
+    companion. This is the third companion of `denote`, alongside `fieldSem` and `restSem`, and
+    it exists for the same reason they do — the recursion has to be passed *applied*. Before
+    `Body`, `denote`'s row inlined it, which is why nothing else could name "the codec an
+    object payload denotes" without repeating the pair. -/
+def bodySem : Body → Codec
+  | .mk fields f rest => objectCodec ⟨fields, fun k => fieldSem (f k)⟩ (restSem rest)
 
 /-- A field's semantics. A companion of `denote` rather than a function of one — which is what
     removed the fuel. -/
@@ -172,6 +192,12 @@ Was "fuel-free" as a *claim about a fueled denotation*; now it is a fact about a
 and the proof is a plain induction on the term. `termination_by fuel _ => (fuel, 0)` and its
 companion's `(fuel, opts.length + 1)` are gone with the parameter. -/
 
+/-- Whatever the payload, an object writes a map. The companion `denote_μ`'s `.object` row
+    needs: with the payload inlined the row was `rfl`, and with a `Body` variable in hand there
+    is nothing to reduce until the payload is matched — so the match happens once, here. -/
+theorem bodySem_μ : ∀ b : Body, (bodySem b).μ = some .M
+  | .mk _ _ _ => rfl
+
 mutual
 
 theorem denote_μ : ∀ t : Term, (denote t).μ = μSyn t
@@ -183,7 +209,7 @@ theorem denote_μ : ∀ t : Term, (denote t).μ = μSyn t
   | .refine t' _ => denote_μ t'
   | .legacy t' _ => denote_μ t'
   | .nullable _ | .lazy _ | .custom _ _ | .opaq _ => rfl
-  | .object _ _ _ => rfl
+  | .object b => bodySem_μ b
   | .union opts => by
       show unanimous (denoteμs opts) = unanimous (μSynList opts)
       rw [denoteμs_eq opts]
@@ -256,7 +282,12 @@ theorem denote_opaq (lossy : Bool) : denote (.opaq lossy) = opaqCodecω lossy :=
 /-- `object` denotes `objectCodec`. -/
 theorem denote_object_table (fields : Finset Name) (f : {k // k ∈ fields} → Field)
     (rest : Rest) :
-    denote (.object fields f rest) = objectCodec (fieldTable fields f) (restSem rest) := rfl
+    denote (.object (.mk fields f rest)) = objectCodec (fieldTable fields f) (restSem rest) :=
+  rfl
+
+/-- …and the `Body`-level form, which is the one a statement about an arbitrary object needs. -/
+theorem denote_object (b : Body) : denote (.object b) = bodySem b := rfl
+
 
 end Bridge
 

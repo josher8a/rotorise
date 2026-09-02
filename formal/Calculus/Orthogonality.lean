@@ -199,7 +199,7 @@ def occV : Term → Slot → Bool
   | .array _     => occOnly .arr
   | .tuple _ _   => occOnly .arr
   | .record _    => occOnly .map
-  | .object _ _ _ => occOnly .map
+  | .object _   => occOnly .map
   | .dunion _ _  => occOnly .map
   | .held _ _ _  => occTop
   | .custom _ _  => occTop
@@ -239,7 +239,7 @@ def occA : Term → Member → Bool
   | .array _     => occOnly .L
   | .tuple _ _   => occOnly .L
   | .record _    => occOnly .M
-  | .object _ _ _ => occOnly .M
+  | .object _   => occOnly .M
   | .dunion _ _  => occOnly .M
   | .legacy _ _  => occTop
   | .custom _ _  => occTop
@@ -346,7 +346,7 @@ theorem selOptA_mem_admitOpt {opts : List Term} {a : Attr}
 /-- Only an object has a name spec — the fact that lets the `admitOptV` wrapper below split
     into two cases instead of twenty-one. -/
 theorem specOf_some_object {t : Term} {spec : MapOf Bool} (h : specOf t = some spec) :
-    ∃ f ff r, t = .object f ff r := by
+    ∃ b, t = .object b := by
   cases t <;> simp_all [specOf]
 
 def OccSoundV (t : Term) : Prop := ∀ v, Adm t v = true → occV t v.slot = true
@@ -378,7 +378,7 @@ theorem occV_admitOpt {t : Term} (h : OccSoundV t) (v : Value)
   cases hs : specOf t with
   | none => exact h v (by rw [admitOptV, hs] at hv; exact hv)
   | some spec =>
-      obtain ⟨f, ff, r, rfl⟩ := specOf_some_object hs
+      obtain ⟨b, rfl⟩ := specOf_some_object hs
       cases v <;> simp_all [admitOptV, specOf, occV, occOnly, Value.slot]
 
 /-- `Adm` and `adm` are the same function at `opaq` — both ask `opaqCodecω` — so the table's
@@ -431,7 +431,8 @@ theorem occV_sound : ∀ (t : Term), OccSoundV t
   | .record _ => fun v h => by cases v <;> simp_all [Adm, occV, occOnly, Value.slot]
   | .dunion _ _ => fun v h => by
       cases v <;> simp_all [Adm, selTagV, tagOfV, occV, occOnly, Value.slot]
-  | .object _ _ _ => fun v h => by cases v <;> simp_all [Adm, occV, occOnly, Value.slot]
+  | .object (.mk _ _ _) => fun v h => by
+      cases v <;> simp_all [Adm, AdmBody, occV, occOnly, Value.slot]
   | .held _ _ _ => fun _ _ => rfl
   | .custom _ _ => fun _ _ => rfl
   | .refine t _ => fun v h => by
@@ -523,7 +524,8 @@ theorem occA_sound : ∀ (t : Term), OccSoundA t
   | .array _ => fun a h => by cases a <;> simp_all [AdmA, occA, occOnly, Attr.member]
   | .tuple _ _ => fun a h => by cases a <;> simp_all [AdmA, occA, occOnly, Attr.member]
   | .record _ => fun a h => by cases a <;> simp_all [AdmA, occA, occOnly, Attr.member]
-  | .object _ _ _ => fun a h => by cases a <;> simp_all [AdmA, occA, occOnly, Attr.member]
+  | .object (.mk _ _ _) => fun a h => by
+      cases a <;> simp_all [AdmA, AdmABody, occA, occOnly, Attr.member]
   | .dunion _ _ => fun a h => by
       cases a <;> simp_all [AdmA, selTagA, tagOfA, occA, occOnly, Attr.member]
   | .legacy _ _ => fun _ _ => rfl
@@ -650,7 +652,9 @@ theorem separates_of_orth {x y : Term} (h : Orth x y = true) : Separates x y :=
     discharger in `Discharge.lean` already takes: lawfulness, which soundness supplies, and
     the closed-object restriction.
 
-    `hcl` is not a defect being worked around. An object option with an open rest
+    `hcl` is `Term.isOpenObject`, one decidable question about the payload, where the
+    premise used to be three quantifiers and a disequality against a three-argument
+    constructor. It is not a defect being worked around: an object option with an open rest
     (`.codec t`) has `Adm t v = true` where `admitOptV … v = false` — the option refuses maps
     its own `e` accepts — and `docs/codec-calculus.md:713` argues that this is the intended
     reading ("an object's open part is unreachable through a union — the price of deciding by
@@ -658,7 +662,7 @@ theorem separates_of_orth {x y : Term} (h : Orth x y = true) : Separates x y :=
     declines to certify such an option rather than proposing a repair. -/
 theorem uAtCan_of_separates {opts : List Term}
     (hlaw : ∀ t ∈ opts, Lawful (denote t))
-    (hcl : ∀ t ∈ opts, ∀ fields ff tr, t ≠ .object fields ff (.codec tr))
+    (hcl : ∀ t ∈ opts, t.isOpenObject = false)
     (h : List.Pairwise Separates opts) :
     UAtCan opts := by
   refine uniqueAdmission_of_disjoint
@@ -681,7 +685,7 @@ theorem uAtCan_of_separates {opts : List Term}
     `sep*`/`uAtCan_*` theorems live. -/
 theorem uAtCan_of_orth {opts : List Term}
     (hlaw : ∀ t ∈ opts, Lawful (denote t))
-    (hcl : ∀ t ∈ opts, ∀ fields ff tr, t ≠ .object fields ff (.codec tr))
+    (hcl : ∀ t ∈ opts, t.isOpenObject = false)
     (h : List.Pairwise (fun x y => Orth x y = true) opts) :
     UAtCan opts :=
   uAtCan_of_separates hlaw hcl (h.imp separates_of_orth)
@@ -689,7 +693,7 @@ theorem uAtCan_of_orth {opts : List Term}
 /-- …and the residue the laws actually need. -/
 theorem uAtAct_of_orth {opts : List Term}
     (hlaw : ∀ t ∈ opts, Lawful (denote t))
-    (hcl : ∀ t ∈ opts, ∀ fields ff tr, t ≠ .object fields ff (.codec tr))
+    (hcl : ∀ t ∈ opts, t.isOpenObject = false)
     (h : List.Pairwise (fun x y => Orth x y = true) opts) :
     UAtAct opts :=
   uAtAct_of_uAtCan (uAtCan_of_orth hlaw hcl h)
@@ -849,15 +853,15 @@ theorem orth_set_string_decimal : Orth (.set .string) (.set .decimal) = false :=
     separator in practice, and invisible to every slot-based phase, since both options occupy
     `map` and `M`. -/
 theorem orth_objects_no_shared_name :
-    Orth (.object {"petId", "price"} (fun _ => .req .string) .refuse)
-         (.object {"petIds"} (fun _ => .req .string) .refuse) = true := by decide
+    Orth (.object (.mk {"petId", "price"} (fun _ => .req .string) .refuse))
+         (.object (.mk {"petIds"} (fun _ => .req .string) .refuse)) = true := by decide
 
 /-- …and the ambiguity `docs/codec-calculus.md:711` names: **an optional binding widens
     admission**, so two objects declaring only optional names both admit the empty map and
     are not separated however disjoint their names are. -/
 theorem orth_objects_optional_only :
-    Orth (.object {"a"} (fun _ => .optional .string) .refuse)
-         (.object {"b"} (fun _ => .optional .string) .refuse) = false := by decide
+    Orth (.object (.mk {"a"} (fun _ => .optional .string) .refuse))
+         (.object (.mk {"b"} (fun _ => .optional .string) .refuse)) = false := by decide
 
 /-! ### The negatives
 
@@ -902,7 +906,7 @@ theorem not_orth_literal_literal :
 theorem uAtCan_literal_literal_by_orth :
     UAtCan [Term.literal .string lsA, Term.literal .string lsB] :=
   uAtCan_of_separates (forall_mem_pair (lawful_literal _ _) (lawful_literal _ _))
-    (forall_mem_pair (fun _ _ _ h => nomatch h) (fun _ _ _ h => nomatch h))
+    (forall_mem_pair rfl rfl)
     (pairwise_pair (separates_literal_disjoint (by decide)))
 
 /-! ### The existing discharges, by phase
@@ -941,7 +945,7 @@ certificate on a pair of terms is. That gap is where the working container schem
 /-- The end-to-end shape: `uAtCan_string_null` again, from one `decide`. -/
 theorem uAtCan_string_null_by_orth : UAtCan [Term.string, Term.null] :=
   uAtCan_of_orth (forall_mem_pair lawful_string lawful_null)
-    (forall_mem_pair (fun _ _ _ h => nomatch h) (fun _ _ _ h => nomatch h))
+    (forall_mem_pair rfl rfl)
     (pairwise_pair (by decide))
 
 end Calculus
