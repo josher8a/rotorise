@@ -823,7 +823,8 @@ whatsoever — the expectation going in was that it would. Every proof over `(du
 the *nonemptiness* of the tag set (`tagsOf_ne_nil`'s four-job inversion, `dunion_stamp`,
 `uniqueAdmission_byTag`, `ExactV_dunion`/`ExactA_dunion`), and none of them consults the arity. So
 the premise changed from `Nonempty` to `card = 1`, one three-line bridge lemma was added to recover
-the weaker fact, and 353 lines of `dunion` machinery stayed at the same 353 minus that. The
+the weaker fact, and the `dunion` machinery went from 39 declarations / 350 lines to 40 / 353
+— the three lines being that bridge, with no proof changing length. The
 constraint is a statement about the language, not a lever on the model.
 
 `src/` is not aligned to this and aligning it is a separate call. `codec.ts:4415` records the

@@ -3,8 +3,9 @@ import Calculus.Soundness
 /-!
 # §5 — The decidable dischargers of (U)
 
-The machinery of (K): `Kind`, `κ`, `ident` and `adm` as total structural recursions over
-the term language, exactly as §5's tables state them, plus the theorem that puts them to
+The machinery of (K): `κ`, `ident`, `adm` and `admA` as total structural recursions over the
+term language, exactly as §5's tables state them — `Kind` is §1's and lives in `Domain.lean`,
+which this paragraph had among the recursions — plus the theorem that puts them to
 work — `uAtCan_of_separated`, discharging `(union)`'s residual (U) at the declaration.
 
 Separation is asked of each side of the pair. On the writable side: disjoint `κ`

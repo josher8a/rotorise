@@ -8,14 +8,14 @@ definition it touches.
 
 | Module                      | Doc section | Content                                                                                                                                                                                                                                                               |
 | --------------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Calculus/Lists.lean`       | —           | The list plumbing: `traverse` and its laws off the pivot `traverse_eq_some` (a successful traversal *is* `List.Forall₂ (f · = some ·)`), `List.lookup` on association lists, and the `filter`/`zip` facts mathlib states in the wrong shape — everything with no codec in it, kept apart so `Combinators.lean` reads as codec vocabulary |
+| `Calculus/Lists.lean`       | —           | The list plumbing: `traverse` and its laws off the pivot `traverse_eq_some` (a successful traversal *is* `List.Forall₂ (f · = some ·)`), the keyed clause `traverse_fst`, and the `filter` facts mathlib states in the wrong shape — everything with no codec in it, kept apart so `Combinators.lean` reads as codec vocabulary |
 | `Calculus/Domain.lean`      | §1          | `Member`, `Attr`, the value language, `Kind` with `Value.kind`/`Attr.kind` (the ten members collapsing onto eight), `Double` axioms, and `Numeral.WF` — §1's numeral grammar, 38 significant digits and magnitude range, as a decidable predicate                                                                                            |
 | `Calculus/Codec.lean`       | §2, §5      | `Codec`, `Agree` (`≼`), `Lawful`/`LawfulCore`, corollaries (Q, read-side W), injectivity lemma — **proved**                                                                                                                                                           |
 | `Calculus/Combinators.lean` | §3–§5       | The certified combinator algebra, opening with `Ctor` — a constructor as a partial iso onto its image, the prism §7 names. The point ground codecs (`string`, `boolean`, `binary`, `null`) are `pointCodec` at four pairs of prisms and share one lawfulness proof; the wire-set payload projections are the same shape again. Then `through`/`restrict` (iso/prism), `extendRead` (legacy), `orNull` (nullable), `carriedCodec` — a payload pair carried between two prisms, the shape underneath every product: `entrywise` is it at a traversal (`array`, `record`, left with only the shape of `≼` at their attribute constructor), `tupleCodec` it at `align` + a traversal, over `slots` — the codec row a shape assigns to a row of *n* positions, which is what makes alignment depend on length alone; the remaining products, `altCodec`+`UniqueAdmission` and `dunionCodec` (sums), `opaqCodec` — with one lawfulness lemma each |
 | `Calculus/Term.lean`        | §3–§4       | Deep-embedded terms (including §3's `null` point), fields, rest policies                                                                                                                                                                                                                            |
 | `Calculus/Denote.lean`      | —           | `denote : Term → Codec`, structural, pure dispatch into the combinators                                                                                                                                                                                                     |
 | `Calculus/Typing.lean`      | §3–§5       | The judgement `⊢ c : T ⇝ μ`, both indices, with the held-set formers (`HSet`, `HStar`, `HProd`, `HMap`, `HNull`, `HObject`, `HUnion`, `HOpaque`); syntactic premises only                                                                                             |
-| `Calculus/Soundness.lean`   | §5          | `Obligations` (semantic premises, fueled), `UAtCan := UniqueAdmission ∘ semsOf`, `MPOk` (legacy exemption), theorem statements, and the held-set bridge `carrier_denote`/`typed_TSub`/`typed_e_mem`/`typed_p_mem`                                                    |
+| `Calculus/Soundness.lean`   | §5          | `Obligations` (semantic premises, structural), `UAtCan := UniqueAdmission ∘ semsOf`, `MPOk` (legacy exemption), theorem statements, and the held-set bridge `carrier_denote`/`typed_TSub`/`typed_e_mem`/`typed_p_mem`                                                    |
 | `Calculus/Equations.lean`   | §6          | `Codec.Equiv` (§6's `≡`), `Can`, and all eleven of §6's "Hold" rows — `held`'s identity and composition, `refine`'s meet and full case, `legacy` with its own reading and `≈` on `Can(c)`, `union` of one, its commutativity and its associativity (which needs none of §6's stated conditions), `nullable`'s idempotence, wrapper member preservation |
 | `Calculus/Opaque.lean`      | §3, §7      | `opaque` without fuel: `Value.depth`/`Attr.depth`, the eighteen kind-disjoint unfoldings (one `simp` set for the section, one line each), `opaq_e_agree`/`opaq_p_agree` (stabilization), `opaq_e_depth`/`opaq_p_depth` (depth preservation), and `opaqCodecω` with `lawful_opaqCodecω`/`carrier_opaqCodecω` |
 | `Calculus/HeldSet.lean`     | §1, §3, §6  | `T` as an identity: `opaq_T_identity` (`Uν` *is* `opaque`'s held set), `not_TIsDomE_unionLiteralString` (§6's row is two identities and `union` has only the weaker one), and the numeral-domain report — `decimal_writes_stored`/`decimal_reads_stored` with worked boundary cases |
@@ -67,14 +67,15 @@ and the judgement to it), and `lazy` concludes `⊤` in the model exactly as the
   is configured correctly. `Axioms.lean` cannot simply `import Calculus` instead — the
   aggregator imports the guard, so that is a cycle, and inverting it would let
   `defaultTargets = ["Calculus"]` build the tree with no guard running at all.
-- **Fuel-primary denotation, now with a fuel-free twin.** `denote` still takes fuel and
-  **there is no fuel.** `denote : Term → Codec` is structural, and the two files that used
+- **There is no fuel.** `denote : Term → Codec` is structural, and the two files that used
   to hold a second fuel-free denotation and the transport to it — `Denoteω.lean`,
   `Soundnessω.lean` — are deleted: `denoteω` was a name for `denote`, companion for
   companion. What the proofs recurse on instead is `Term.depth`, a measure derived from the
-  term, so it appears in no statement. Fuel 0 still
-  denotes `Codec.empty` (laws vacuous). Both blockers that forced fuel are gone: `lazy`
-  carries a `Term`, and `opaq` denotes `opaqCodecω`.
+  term, so it appears in no statement. Both blockers that forced fuel are gone: `lazy`
+  carries a `Term`, and `opaq` denotes `opaqCodecω`. *This bullet was a half-finished edit —
+  it opened "**Fuel-primary denotation, now with a fuel-free twin.** `denote` still takes fuel
+  and **there is no fuel.**", two contradictory clauses spliced, and closed with "Fuel 0 still
+  denotes `Codec.empty`", which `Denote.lean` never mentions.*
 - **Fuel is not removable by a fixpoint, and that is a fact about (U), not about Lean.**
   `Continuity.lean` proves it: `altCodec` resolves a union by *unique* admission, and
   `OptionSem.byAttempt` derives admission from `(c.e v).isSome`, so growing the recursive
@@ -111,9 +112,12 @@ and the judgement to it), and `lazy` concludes `⊤` in the model exactly as the
   nothing from the recursive call, and why `opaque` is not a special construction.
 - **`Double` is axiomatized** with exactly the shortest-text round trip §3's `(number)`
   consumes. IEEE-754 facts are not this calculus's theorems.
-- **Semantic rule premises live in `Obligations fuel t`**, not in `Typed`: the doc's
-  `(legacy)`/`(nullable)`/`(fallback)`/`(custom)` side conditions mention `e`/`p`, which
-  are fuel-indexed here, so the premises are too. Same premises, fueled form.
+- **Semantic rule premises live in `Obligations t`**, not in `Typed`: the doc's
+  `(legacy)`/`(held)`/`(fallback)`/`(custom)` side conditions mention `e`/`p`, so they are
+  stated where the denotation is in scope. `Obligations` is **structural, not fuel-indexed** —
+  this bullet said `Obligations fuel t` and "same premises, fueled form" long after `denote`
+  became structural. `(nullable)` is not in the list either: `NullHonest` left `Obligations`
+  when §3's guard made it derivable.
 - **(U) is a premise, not a conclusion** (`UAtCan`), matching the doc's theorem residue.
   Its disjointness dischargers are proved (`Calculus/Discharge.lean`): pairwise-disjoint
   `κ` settles the value side, pairwise-distinct named members the attribute side.

@@ -142,10 +142,16 @@ python3 scripts/vocab_audit.py          # add --sites to list them for triage
 | `lawfulCore_X` / `lawful_X` — §2's laws | **22 / 24** | `extendRead` exempt: (MP) is the sanctioned breach |
 | `X_e` / `X_p` — **what it writes, what it reads** | **25 / 48** | counting an `X_eq` that carries inversion across, and a per-constructor *family* (`opaqCodec_e_str`, …) as inversion |
 
-The obligation half of the vocabulary is done. **The observation half is 12% done.**
-Every product, the union and all four wrappers now have both. The ten ground codecs,
-`dunionCodec` and `opaqCodec` have neither — and of those, only `opaqCodec` carries a
-measurable residue.
+The obligation half of the vocabulary is done. **The observation half is 25 of 48.**
+Every product, the union and all four wrappers now have both; `dunionCodec` and the ground
+codecs other than `number`/`decimal` have neither.
+
+*This paragraph read "**The observation half is 12% done**" and "only `opaqCodec` carries a
+measurable residue" — the headline §1 of this same file retracts in as many words, having found
+that both figures came from `vocab_audit.py` blind spots that flattered it. Two sections of one
+document contradicting each other is the defect this file exists to catch elsewhere.* The
+residue is what §2 measures and it is not `opaqCodec` alone: raw `Option` algebra is 230 sites
+of the 333, spread across `Combinators`, `Discharge` and `Exactness`.
 
 ### What the remaining hand-unfolding is actually about
 

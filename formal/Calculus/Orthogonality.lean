@@ -45,7 +45,8 @@ witnesses, in opposite directions, are why both families are carried here:
   `SetBase.decimal.member = .NS`. So `union(set(string), set(decimal))` separates on the read
   side and not on the write side. `orth_set_string_decimal` is the check.
 
-Neither pair is orthogonal, and each fails on a different half. `docs/codec-calculus.md:756`
+Neither pair is orthogonal, and each fails on a different half. `docs/codec-calculus.md`'s
+(U) discussion
 states the asymmetry for the case that *does* separate — `union(set(string), set(number))`,
 where "its options write different members, so reading was never in doubt".
 
@@ -74,8 +75,10 @@ The read-side slot is `Member`, which `Attr.member` already computes.
 The interface the discharger consumes is `Separates`, a `Prop`; `Orth` is the *decidable*
 sufficient condition for it, covering the first two phases. Phase *alternatives* is deliberately
 **not** folded into `Orth`, and the reason is a type rather than a preference:
-`GroundKind.number.Carrier` is `Double`, whose `DecidableEq` is a field of the axiomatized
-`numericHost`, so a `Bool`-valued test for `ℓ ∩ ℓ' = ∅` uniform in the base would be
+`GroundKind.number.Carrier` is `WFDouble`, a subtype of `Double`, whose `DecidableEq` is a
+field of the axiomatized `numericHost` — the gate moved into the carrier but the
+noncomputability did not move with it, since `Subtype`'s instance is the base type's. So a
+`Bool`-valued test for `ℓ ∩ ℓ' = ∅` uniform in the base would still be
 `noncomputable` — and `Orth` would stop reducing in the kernel, which is the whole of its value.
 `Domain.lean`'s note on `GroundKind.Carrier` predicts exactly this. So phase *alternatives* is a
 premise a caller supplies, and `Orth` stays a `by decide`.

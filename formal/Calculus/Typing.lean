@@ -20,7 +20,7 @@ Mechanization choices, and where they diverge from the doc (each is routine to s
   `object`'s field table is a `Finset Name` with a function off the subtype, which retired
   `hnd`.
   The doc's *semantic* premises — `(held)`'s carrier-restricted iso, `(legacy)`'s
-  `ran(r) ⊆ dom(e)` and coherence, `(nullable)`'s null-honesty, `(fallback)`'s
+  `ran(r) ⊆ dom(e)` and coherence, `(fallback)`'s
   `v(∗) ∈ dom(e)`, `(custom)`'s laws, and `(union)`'s residual (U) — live in `Obligations`
   (Soundness.lean), consumed by the theorem. Same premises, stated where they can mention the
   denotation. This said they "are fuel-indexed", which `Obligations`' own docstring contradicts

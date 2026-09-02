@@ -125,10 +125,14 @@ legacy-free, and it is the single hypothesis separating `soundness_core` (`Lawfu
 (C), (W)) from `soundness` (`Lawful`, adding (MP)). Choosing wrong is not a build error: a
 semantic premise in `Typed` makes the judgement undecidable, a syntactic one in `Obligations`
 becomes a burden every caller carries. All three recur structurally, which is what the
-companion table's last two rows owe. (Two stale spots in that header, invisible to the guards
-because no name is dangling: the semantic premises are still called "fuel-indexed" where
-`Obligations` now says "**Structural, and no longer fuel-indexed**", and `literalS`/`literalN`
-are named though `GroundKind` retired them — §4a.)
+companion table's last two rows owe. (That header carried two stale spots of exactly this
+kind, invisible to the guards because no name was dangling: the semantic premises were called
+"fuel-indexed" where `Obligations` says "**Structural, and no longer fuel-indexed**", and
+`literalS`/`literalN` were named as live constructors though `GroundKind` had retired them.
+Both are **corrected inline** as of `0aec076`, along with two more the same pass found — "set
+member" in the premise list and `boolean`/`binary`/`null` described as spelled `refine`. Kept
+here as the worked example, because four defects in one header is the strongest evidence in
+the repo that prose does not typecheck.)
 ---
 
 ## 3. Termination: why there is a hand-rolled depth at all
@@ -219,7 +223,7 @@ variant's three components are inlined instead of taking a `Body` (`{s : Finset 
 needs only `Finset` and `d`, both in scope), and **that is rejected on the same criterion in the
 same direction as the `custom` bundling below**: it re-threads the three components `Body` exists
 to bundle, at one constructor, and every table over terms grows a three-argument row — to buy one
-decidable premise. §2's rule about a new stratum costing all seven companions is the same
+decidable premise. §2's rule about a new stratum costing all eight companions is the same
 observation from the other end.
 
 **One move that passes the criterion and still does not pay: bundling `Lawful` into `custom`.**
@@ -248,8 +252,9 @@ semantic kind. **The criterion is necessary, not sufficient — measure the site
 
 The analysis tables in `Discharge.lean` (`κ`, `ident`, `adm`, `admA`) approximate what a codec
 writes and reads. A row can either *describe* the set or *call the codec and ask*. `custom`
-always asked (`(cp a).isSome`, because `p := cp`). Over two arcs, six more converted, and the
-seventh row below was written that way from the start:
+always asked (`(cp a).isSome`, because `p := cp`). Over two arcs **seven** more converted —
+`admA .legacy` is the newest and the last of that shape — and one row below,
+`admALit .decimal`, was written that way from the start:
 
 | Row | What it asks | The excuse it retired |
 | --- | --- | --- |
@@ -307,7 +312,7 @@ Two shapes sit over them, and the second is the load-bearing one:
   `tupleCodec`; `objectCodec`). **The model states a codec once for both sides**, which is why
   §8's twin question is askable at all: the doubling is in the analyses, not the algebra.
 - `set` is the one deliberate non-instance: its attribute side is a choice among three wire
-  constructors rather than one prism (`Combinators.lean:1212-1214`), so its inversion names all
+  constructors rather than one prism (`setCodec`, `Combinators.lean`), so its inversion names all
   three families (`setCodec_p_eq`).
 
 ### 4d. The guards exist because prose does not typecheck
@@ -561,7 +566,7 @@ the question is whether the two sides should be one parametrised development. A 
 side-split stays **local** — it does not thread through the codec algebra, for §4c's reason:
 `carriedCodec` states one codec for both sides — and that the mergeable bulk sits in
 `Exactness.lean`. `set` is the standing exception, the one product that is not an instance
-(§4c, `Combinators.lean:1212-1214`).
+(§4c, `setCodec` in `Combinators.lean`).
 *The numbers I was handed — 82 twin pairs, ~45 mergeable — are recorded nowhere in the repo and
 I could not reproduce them.* A naming-based count over the declarations of `Calculus/`
 (twin = `X`/`XA`, or a `V`→`A` or `Value`→`Attr` substitution) gives **72 pairs, 34 of them in
@@ -662,7 +667,7 @@ lookup is and not a lever on the model. `src/` is not aligned and that is a sepa
 ## 9. If you change something
 
 - New module under `Calculus/` → reachable from `Axioms.lean` (§1).
-- New stratum in the term family → all seven companions (§2).
+- New stratum in the term family → all eight companions (§2), counted per side.
 - New rule → put each premise in one of the three places, `Typed`/`Obligations`/`MPOk` (§2).
 - New term recursion → `term_depth_wf`, and new inequalities beside `Term.depth` (§3).
 - New analysis row → prefer asking the codec over describing the set (§4b); then prove its
