@@ -85,6 +85,20 @@ theorem literal_alternatives :
     = some (Attr.s "B") := by
   vector
 
+/-- `literal_decimal` -/
+theorem literal_decimal :
+    (denote (Term.literal GroundKind.decimal (NEFinset.of ⟨"1", by decide⟩ {⟨"2.5", by decide⟩}))).e
+      (Value.str "2.5")
+    = some (Attr.n (WFNumeral.of "2.5")) := by
+  vector
+
+/-- `literal_binary` -/
+theorem literal_binary :
+    (denote (Term.literal GroundKind.binary (NEFinset.of [0, 127, 255] ∅))).e
+      (Value.bin [0, 127, 255])
+    = some (Attr.b [0, 127, 255]) := by
+  vector
+
 /-- `set_of_string` -/
 theorem set_of_string :
     (denote (Term.set SetBase.string)).e

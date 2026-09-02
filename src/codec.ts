@@ -1225,12 +1225,14 @@ export const string: StringCodec = Object.assign(
  *
  * **`decimal('1')` is the literal the old surface could not spell.** `literal('1')` guessed `S` from
  * the JS type and `literal(1)` went through the host's `number`; neither says "stored as `N`,
- * exactly this text". It is also the one thing on this surface with **no counterpart in the
- * calculus**: `formal/Calculus/Domain.lean:539`'s `GroundKind` is `string | number | boolean |
- * binary | null` and has no `decimal`, which `Domain.lean:598` states outright. So `Term.literal`
- * cannot index it, and `src/lean.ts` refuses it by name rather than emitting something that would
- * denote a different codec. `SetBase` *does* have `decimal`, so `decimal.set()` is modelled and
- * `decimal('1')` is not.
+ * exactly this text".
+ *
+ * It is modelled. This docstring said for a while that it was "the one thing on this surface with
+ * no counterpart in the calculus", because `GroundKind` was `string | number | boolean | binary |
+ * null`. `decimal` is a `GroundKind` now, carrying `StoredNumeral` — the same gate this codec runs
+ * — and `GroundKind.toValue` sends it to a `.str`, which is why the *value* side needed no change.
+ * `src/lean.ts` emits `Term.literal GroundKind.decimal`, and both `decimal('1')` and
+ * `decimal.set()` are covered by kernel-checked vectors.
  */
 export type DecimalCodec = AttributeCodec<string, Attribute<'N'>> & {
     <const T extends string>(only: T): ConstantCodec<T, Attribute<'N'>>
