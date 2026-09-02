@@ -556,6 +556,26 @@ Two blind spots:
   marks its citations in one commit is still trusted — the count is where that shows, which is
   why it ranges over the documents and not only the docstrings.
 
+**`scripts/twins.py`** — one-sided inversions: an `X_e…` with no `X_p…`, or the reverse, paired
+on `(stem, suffix)` so `_isSome` is only ever compared with `_isSome`. It exists because §4c's
+rule had been applied to constructions and not to inversions, and **`vocab_audit.py`'s
+completeness matrix cannot see that** — its `p-inv` column asks whether *any* lemma named
+`restrict_p`-ish exists, one did (`restrict_p`, an iff about `= some v`), so the matrix scored
+`restrict` complete on the day the missing `.isSome` twin was costing a 683× fan. Presence is
+the wrong question and shape is the right one. Two blind spots:
+- **Suffix matching is literal, so most of what it reports is not a pair.** 22 of 37 one-sided
+  names are side-specific by construction — a suffix naming a `Value` constructor (`_num`,
+  `_str`) cannot exist on the read side, one naming an `Attr` constructor (`_n`) cannot exist on
+  the write side. Of the 15 that remain, the `opaq_p_*_agree` family's counterpart is
+  `opaq_e_agree`, one lemma where the read side has one per constructor, and no string
+  comparison sees that. **`@[simp]` on the surviving side is the filter that works**: it means
+  one side rewrites where the other unfolds, and it selects the two real candidates out of 15.
+- **It ranks nothing by itself.** A missing twin matters in proportion to the fan it would
+  remove, which only `complexity.lean`'s `fanOf` can say. Run today: the two `@[simp]`-flagged
+  candidates' consumer `admA_refine_ground_eq_admALit` has no fan — 2838 nodes at 10×, inside
+  the band — so the actionable list is empty and `restrict_p_isSome` stays the only instance
+  that cost anything. The instrument is prospective, not a backlog.
+
 **`scripts/complexity.py`** — decision points per declaration and per file: pattern rows, `if`,
 `dite`, `match`, `cases`/`rcases`/`obtain`/`induction`, `by_cases`, `<;>`, `all_goals`, `.elim`.
 It exists because `vocab_audit.py`'s site count is a **vocabulary** measure — a `show` or a
