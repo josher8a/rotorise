@@ -373,19 +373,16 @@ mutual
 /-- `adm`, attribute side. The two wrappers that are `⊤` for `adm` part company here,
     and the reason is which half of the pair each one touches.
 
-    `legacy` is **not** transparent, and this row used to be `⊤` on that ground: `extendRead`
-    widens `p` past the subterm's admissible set, which is exactly the direction `admA` claims
-    to bound (`not_admA_legacy`). The premise is true and the conclusion did not follow — what
-    it widens by is `r`, data the term carries — so the row is `admA t a || (r a).isSome`, both
-    channels named. `not_admA_legacy` is unaffected: it refutes the *passthrough* `admA t`,
-    which is one disjunct of this row and not the row.
+    `legacy` is **not** transparent: `extendRead` widens `p` past the subterm's admissible set,
+    which is the direction `admA` bounds. So the row names both channels —
+    `admA t a || (r a).isSome` — rather than passing the subterm's through, and
+    `not_admA_legacy` refutes that passthrough, one disjunct of this row and not the row.
 
-    `held` **is**, and this is the one case where `admA` sees further than `adm`.
-    `through`'s `g` post-processes a read and is total, so `dom(p)` is the subterm's
-    *exactly* (`through_p`) — the adapter changes which value comes out, never which
-    attributes go in. Only `f` is opaque, and `f` gates the write, which is why `adm`
-    stays `⊤` here. §5's table gave `held` a single `⊤` row on both sides;
-    `sepA_literal_heldLiteral` is a pair this separates.
+    `held` **is** transparent, and this is the one case where `admA` sees further than `adm`.
+    `through`'s `g` post-processes a read and is total, so `dom(p)` is the subterm's *exactly*
+    (`through_p`): the adapter changes which value comes out, never which attributes go in.
+    Only `f` is opaque and `f` gates the write, which is why `adm` stays `⊤`.
+    `sepA_literal_heldLiteral` is a pair this separates and §5's single `⊤` row could not.
 
     Both sides now see through `held`, by different routes: this one because `g` is total
     and post-processes, the value side because `f` is *applied* rather than guessed at.
@@ -750,34 +747,25 @@ theorem admA_sound : ∀ (t : Term) {a v},
       · exact Or.inr (by simp [hrv])
     all_goals rfl
 
-/-! ### Why `admA` has no *passthrough* `legacy` case — and why it does have a row
+/-! ### `admA`'s `legacy` row, and why it is not the passthrough
 
-    This section was headed "Why `admA` has no `legacy` case" and argued that it could not
-    have one. **The argument was right and the conclusion was wrong**, in the shape §4b's table
-    records for every describing row that has been retired: §5 lists `refine`, `optional`,
-    `fallback` and `legacy` as passing `adm` through on one `adm`; the value side can and does;
-    the attribute side cannot, *because* `extendRead` widens `p` by `r`.
+§5 lists `refine`, `optional`, `fallback` and `legacy` as passing `adm` through on one `adm`.
+The value side does; the attribute side cannot, because `extendRead` widens `p` by `r`. That
+rules out the *passthrough* and not a row: `r` is data the term carries, so `dom(p)` is
+`dom((denote t).p) ∪ dom(r)`, both halves named, and the row is `admA t a || (r a).isSome`.
+`Exactness.lean`'s "why `legacy` was in the wrong family" has the fuller argument.
 
-    All of that is true, and none of it says the row must be `⊤`. It says the row cannot be the
-    **subterm's alone**. `r` is data the term carries, so `dom(p)` is `dom((denote t).p) ∪
-    dom(r)` with both halves named, and the row is `admA t a || (r a).isSome`.
-    `Exactness.lean`'s "Adapters and alternatives, and why `legacy` was in the wrong family"
-    got there first, for the joint predicate, and the reasoning is not repeated here.
+**The witness below refutes the passthrough, which is one disjunct and not the row.**
+`admA_sound` would break for `admA t` alone: the witness reads an `N` attribute out of a
+`legacy` over a string literal, so a passthrough would claim the read is inside
+`literal("A")`'s admissible set. This is the specification defect with no other
+machine-checked witness.
 
-    **What survives untouched is the witness**, and it is worth being exact about what it
-    refutes. `admA_sound` would break for the *passthrough* — `admA t` on its own — and the
-    witness below is the proof: it reads an `N` attribute out of a `legacy` over a string
-    literal, so a passthrough would claim the read is inside `literal("A")`'s admissible set
-    when the whole point of the migration is that it is not. That is one disjunct of the row,
-    not the row. This is the specification defect with no other machine-checked witness.
-
-    A tighter row was probed and refused: `((denote (.legacy t r)).p a).isSome` is exact and
-    compiles at a one-line cost, but it replaces the subterm's *over-approximation* with the
-    subterm's exact read domain — so it sees through `admA (.object _) = ⊤`, which §5 of
-    `ARCHITECTURE.md` records as load-bearing slack rather than looseness. Two objects cannot
-    be separated by `SepA` because both rows are `⊤`; wrapped in a `legacy` they could be,
-    while `select` still attempts both options. That is `not_uAtCan_of_sepJ`'s failure one
-    wrapper out, so the row keeps the subterm's row rather than its codec. -/
+Asking the codec — `((denote (.legacy t r)).p a).isSome` — is exact and costs one line, and is
+**refused**: it replaces the subterm's over-approximation with its exact read domain, so it
+sees through `admA (.object _) = ⊤`, which `ARCHITECTURE.md` §5 records as load-bearing slack.
+Two objects cannot be separated by `SepA` since both rows are `⊤`; wrapped in a `legacy` they
+could be, while `select` still attempts both — `not_uAtCan_of_sepJ`'s failure one wrapper out. -/
 
 /-- A migration that reads a numeral into the literal's value — the shape `legacy` exists
     for, and the shape no syntactic set over the subterm can bound. -/

@@ -289,8 +289,8 @@ already.
 
 ### 4c. One codec, stated once for both sides of the pair
 
-`Combinators.lean` is <!-- count:combinators_lines -->4008<!-- /count --> lines of the tree's
-<!-- count:tree_lines -->17551<!-- /count -->, and this is its organizing idea; without it
+`Combinators.lean` is <!-- count:combinators_lines -->3981<!-- /count --> lines of the tree's
+<!-- count:tree_lines -->17440<!-- /count -->, and this is its organizing idea; without it
 the file reads as the inventory `README.md` already has. A constructor is a **prism** —
 `Ctor α β`, with `into`/`out` and the laws `out_into` (matching what was built returns it) and
 `into_out` (anything that matches was built) — and those two *are* §2's (R) and (C) at a
@@ -444,10 +444,13 @@ original.** `occurring()` builds its source set from the raw file text, comments
 name appearing *only* in a docstring is present in its own evidence and clears itself. Adding
 `Calculus/*.lean` to `CURRENT` (`6a90359`) therefore proves less than that commit's message
 claims: "none of the 763 dangles today" was established by a check that cannot see the case it
-was added for. Demonstrated — `literalN_holds_what_it_cannot_write` was cited in three
-docstrings and here while the declaration had been renamed to
-`literalNRule_holds_what_it_cannot_write`, and the guard passed clean; the citations are fixed,
-the guard did not find them.
+was added for. Demonstrated: `literalNRule_holds_what_it_cannot_write` had been renamed, three
+docstrings and this file still cited the old name, and the guard passed clean because those
+citations were their own evidence. The citations are fixed; the guard did not find them.
+
+**And deleting the docstring archaeology is what finally exposed one.** Removing the prose that
+cited the old name removed the only thing clearing it, so the next run went red — the
+circularity resolving itself, in the one direction that is useful.
 
 Stripping comments from the source set was tried and **over-corrects**: it then rejects
 legitimate citations of things deliberately *absent* from the code — `Classical.choice` above
