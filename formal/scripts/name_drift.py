@@ -30,8 +30,9 @@ in `EXPECTED` without amending the reason is the failure this file exists to cat
 
 A hit in `docs/codec-formalization.md` §4 is usually not a defect: that file is the
 change log, it says so, and a name there records what was reasoned with at the time.
-Hits in the current-state documents — `formal/README.md`, `formal/FIDELITY.md`,
-`formal/VOCABULARY.md`, `docs/codec-calculus.md`, `docs/structural-discipline.md` —
+Hits in the current-state documents — `formal/README.md`, `formal/ARCHITECTURE.md`,
+`formal/FIDELITY.md`, `formal/VOCABULARY.md`, `docs/codec-calculus.md`,
+`docs/structural-discipline.md` —
 are broken pointers and should be fixed or explicitly marked superseded.
 
 Usage:  python3 scripts/name_drift.py            (run from formal/)
@@ -40,7 +41,7 @@ Exit code 1 if any current-state document has a hit.
 """
 import re, sys, os, glob
 
-CURRENT = ["README.md", "FIDELITY.md", "VOCABULARY.md",
+CURRENT = ["README.md", "ARCHITECTURE.md", "FIDELITY.md", "VOCABULARY.md",
            "../docs/codec-calculus.md", "../docs/structural-discipline.md"]
 # Scanned under --all, reported, never failing. Both are part change log and part live
 # document, so a name that no longer exists may be a deliberate record of a deletion —
