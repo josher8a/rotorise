@@ -932,9 +932,11 @@ Where the hand proofs sit, and the two that sit nowhere. `Orth` is the decidable
 | `sepV_literal_heldLiteral`, `sepJV_set_literals` | opaque predicate | never — `f`, and a `q` inside a `refine` |
 | `uAtCan_dunion` | tag | a different constructor; already a theorem |
 | `uAtCan_opaque` | kind | one level below the term language |
-| `uAtAct_array_literals` | — | never — `UAtCan` is false of the pair, so there is nothing to certify |
+| `uAtAct_array_literals` | none: `UAtCan` itself is false | never — there is nothing to certify |
 
-**Two fit no phase, and each is a limit worth naming.**
+**Two fit no phase of the classifier, and each is a limit worth naming** — a different limit
+from the row above them, where the phase is `none` because `UAtCan` is false and there is no
+orthogonality to certify at all.
 
 `sepJA_legacy_decimal` separates `legacy(string, r)` from `decimal` by the **member**, and
 `Orth` cannot: `occA (.legacy _ _)` is `⊤` because the *row* is
