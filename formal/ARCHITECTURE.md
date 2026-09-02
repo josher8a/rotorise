@@ -26,7 +26,7 @@ stated inline.
 
 ## 1. The layering, and the one thing the build enforces about it
 
-21 modules, and the import graph is an almost-linear spine — `Domain` → `Codec` →
+<!-- count:modules -->21<!-- /count --> modules, and the import graph is an almost-linear spine — `Domain` → `Codec` →
 {`Combinators`, `Term`} → `Denote` → `Typing` → `Soundness` → the analyses (`Discharge`,
 `HeldSet`, `Nesting`, `Equations`) → `Exactness` → `Orthogonality`, with
 `Axioms` as the sink — `Malleability` is the one analysis off the spine, importing
@@ -52,7 +52,7 @@ instead — the aggregator imports the guard, so that is a cycle, and inverting 
 Nothing else about the graph is enforced. There is no layering lint; a cycle would be caught
 by Lean and a bad-taste upward dependency would not be caught at all.
 
-> `README.md`'s module table predates five of the 21 modules — `Exactness.lean`,
+> `README.md`'s module table predates five of the <!-- count:modules -->21<!-- /count --> modules — `Exactness.lean`,
 > `Orthogonality.lean`, `Malleability.lean`, `LiteralArity1.lean`, `Vectors.lean` have no row.
 > Each opens with a module docstring that says what it is for; read those.
 
@@ -144,7 +144,7 @@ What matters is that it is **derived from the term**, so it appears in no statem
 `Obligations`, and no rule. That is the whole difference between it and the `fuel` parameter it
 replaced.
 
-`term_depth_wf` is the shared `decreasing_by` tactic. **Three** declarations use it, all in
+`term_depth_wf` is the shared `decreasing_by` tactic. **<!-- count:term_depth_wf_users -->Three<!-- /count -->** declarations use it, all in
 `Soundness.lean`: `soundness_both`, `typed_TSub`, `carrier_denote`. Their goal sets differ, so
 some alternatives in the block are dead at each site — that is what `unreachableTactic` reports
 there, and it is why the option is disabled at those declarations rather than the block being
@@ -331,29 +331,30 @@ both / neither).
 
 ### And a third machine, `Orth`, which does not pay — measured
 
-`Orthogonality.lean` is the fourth-largest file at 951 lines: a decidable certificate for a
+`Orthogonality.lean` is the fourth-largest file at <!-- count:orth_file_lines -->960<!-- /count --> lines: a decidable certificate for a
 fragment of (U), over-approximating each term's occupancy per side (`occV`/`occA`) and
 certifying a pair whose occupancies are disjoint, `by decide`. **Measured against what it
-replaces it does not pay**, and its own by-phase table is the measurement — the 25 hand
-discharges it names, 23 as rows and 2 in the prose beneath them:
+replaces it does not pay**, and its own by-phase table is the measurement — the <!-- count:orth_total_theorems -->25<!-- /count --> hand
+discharges it names, 23 as rows and 2 in the prose beneath them, out of a
+<!-- count:sep_family -->32<!-- /count -->-theorem `sep*`/`uAtCan_*`/`uAtAct_*` family:
 
 | | theorems | lines of proof |
 | --- | --- | --- |
-| reachable by `Orth` itself — phase *slot* | 6 | 70 |
-| reachable only through `Separates`, the `Prop` interface — phase *alternatives*, where `DecidableEq Double` makes a `Bool` test noncomputable | 7 | 70 |
-| unreachable on principle — an arbitrary `q` or `f`, a different constructor, `SepJA`'s member disjunct, or `UAtCan` itself failing (`uAtAct_array_literals`) | 12 | 168 |
+| reachable by `Orth` itself — phase *slot* | <!-- count:orth_slot_theorems -->6<!-- /count --> | <!-- count:orth_slot_lines -->70<!-- /count --> |
+| reachable only through `Separates`, the `Prop` interface — phase *alternatives*, where `DecidableEq Double` makes a `Bool` test noncomputable | <!-- count:orth_alt_theorems -->7<!-- /count --> | <!-- count:orth_alt_lines -->70<!-- /count --> |
+| unreachable on principle — an arbitrary `q` or `f`, a different constructor, `SepJA`'s member disjunct, or `UAtCan` itself failing (`uAtAct_array_literals`) | <!-- count:orth_unreach_theorems -->12<!-- /count --> | <!-- count:orth_unreach_lines -->168<!-- /count --> |
 
 *Re-measured, and the previous version of this table was wrong in three ways.* It said 23
 where the section names 25; it counted 11 unreachable theorems against a line total of 162
 that silently included a twelfth (`uAtAct_array_literals`, 53 lines, named in the row's own
 description but in no row); and `uAtCan_number_opaque` (24 lines) was reachable — the pair
 form of two *slot* discharges, and `orth_number_opaque` certifies it `by decide` — while
-appearing in no row at all. The reachable total is therefore **140 lines, not 116** — the
+appearing in no row at all. The reachable total is therefore **<!-- count:orth_reachable_lines -->140<!-- /count --> lines, not 116** — the
 verdict below does not move, but it was being stated with a number 24 lines too kind to
 the hand proofs and 24 too harsh on `Orth`.
 
 And **nothing was deleted** — `6daa5e3`, `0335cdb` and `5763b6d` touch only the new module and
-two import lines — so 951 lines stand *beside* the 140 they could replace. It stays anyway,
+two import lines — so <!-- count:orth_file_lines -->960<!-- /count --> lines stand *beside* the <!-- count:orth_reachable_lines -->140<!-- /count --> they could replace. It stays anyway,
 because its value moved. The classifier framing did not pay; but confluent admission —
 the weaker rule proved monotone and continuous and **not adopted** (§7) — needs its obligation
 to be an *invariant of the unrolling* (`string_decimal_not_confluent`), which is vacuous exactly
@@ -400,6 +401,19 @@ exception (and failing if an entry there stops being cited, so the table cannot 
 `term_depth_wf`" being false while all five names exist. It also clears a dotted name
 component-wise, so a dotted citation passes whenever both halves occur anywhere.
 **This document is in its `CURRENT` list.**
+
+**`scripts/doc_counts.py`** — computes the counts this document rests on and rewrites them
+between `<!-- count:NAME -->` markers; `--check` exits 1 on disagreement. It exists because
+**every count that drifted this month was a number typed by hand**, and `name_drift.py`
+cannot see one: a count is not a name. It caught `Orthogonality.lean`'s length going 951 → 960
+within a minute of being written, drift introduced by the commit that corrected §5's table.
+Two blind spots, and the second is the same shape as the gap it closes:
+- It measures the tree, not the argument. It will say six theorems sit in the *slot* row; it
+  cannot say *slot* is the right phase for them. A row filed under the wrong phase keeps every
+  total honest and the classification wrong.
+- **Two of §5's twenty-five discharges are named in the prose beneath the by-phase table, not
+  in a row, so no parser finds them and the script carries them as a hand-written list of two
+  names.** A third limit that nobody adds to that list goes quietly missing from the total.
 
 **`scripts/unreferenced.lean`** — a **diff instrument only**, not a verdict, and run by hand
 (`lake env lean scripts/unreferenced.lean`; it is outside `Calculus/`, so `lake build` never
@@ -563,8 +577,12 @@ rule**, not in our constructor.
 - Sharpening a `⊤` row at a container → check what was relying on the slack (§5), and cost it
   with `scripts/blast_radius.lean`, not with grep.
 - Citing a Lean name in `README.md`, `FIDELITY.md`, `VOCABULARY.md`, this file, or
-  `docs/codec-calculus.md` → `python3 scripts/name_drift.py` must exit 0. A count in prose is
-  not covered; verify counts by hand.
+  `docs/codec-calculus.md` → `python3 scripts/name_drift.py` must exit 0. Single-word
+  citations are covered as of `83d61df`; four categories are skipped by shape and the reason
+  for each is in the script.
+- Stating a count in this file → put it between `<!-- count:NAME -->` markers and add it to
+  `scripts/doc_counts.py`, then `--check` must exit 0. An unmarked count is unguarded, and
+  every count that drifted this month was an unmarked one.
 - Deleting a declaration → snapshot `scripts/unreferenced.lean` before and after and read the
   *difference*.
 - Touching a normative document, the advertised axiom base, or `src/` behaviour → that is the
