@@ -19,7 +19,7 @@
   ## What it measures here
 
   The model carries two generations of the same analysis. `Discharge.lean` has §5's
-  per-aspect approximations — `adm`, `admA`, `κ`, `ident`, `μSyn` — and `Exactness.lean` has
+  per-aspect approximations — `adm`, `admA`, `κ`, `ident` — and `Exactness.lean` has
   the joint exact `Adm`/`AdmA`, with bridge theorems between them. The question a refactor
   needs answered is the four-way partition: what depends on the old only (the cost), on the
   new only (already migrated), on both (the bridges), on neither.

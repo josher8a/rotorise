@@ -169,8 +169,11 @@ mutual
     structural recursion — and the containers recurse with *this*, which is exactly what
     the old rows failed to do.
 
-    One row is still a sound over-approximation and claims no exactness: `union`, and it is
-    now the only one. -/
+    **Every row is exact.** This said `union` was "still a sound over-approximation and
+    claims no exactness, and it is now the only one" — true when written and false from the
+    commit that proved `ExactV_union` and made `Adm_exact` unconditional, which rewrote the
+    header of this file and missed the sentence eleven lines below it. One more description
+    that nothing was keeping honest. -/
 noncomputable def Adm : Term → Value → Bool
   | .string   => fun v => match v with | .str _ => true | _ => false
   | .boolean  => fun v => match v with | .bool _ => true | _ => false
