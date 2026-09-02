@@ -178,7 +178,7 @@ quietly succeeding.
 members has none." This was the one row that is a claim about the *judgement* rather than
 about `≡`, and the model settled it from the member index alone: `(set)` concluded
 `some μS`, `μSyn` of a heterogeneous union is `none`, and `typed_μSyn` said the two must
-agree. `not_typed_set_union` was that proof.
+agree. ~~not_typed_set_union~~ was that proof.
 
 **It cannot be stated any more.** `Term.set` takes a `SetBase`, so
 `set(union(string, boolean))` is not a term — the elaborator refuses it where a derivation
@@ -505,7 +505,7 @@ what does the work is that `κ` and `μSyn` are `⊤` at an `opaque` whatever it
     Both disjuncts fail: the kind disjunct because `κ (.opaq _) = ⊤`, the `adm` disjunct
     because `v` is in both sets.
 
-    The hypothesis `ho` is what replaced `adm_opaq_lossy` — the old lemma said every value
+    The hypothesis `ho` is what replaced ~~adm_opaq_lossy~~ — the old lemma said every value
     satisfies it, and the semantic row does not license that. `adm_opaq_str` discharges it
     at any string, which is what the instance below uses. -/
 theorem not_sepV_opaq_lossy_left {b : Bool} {t : Term} {v : Value}

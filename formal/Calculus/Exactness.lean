@@ -126,7 +126,7 @@ def admitOptV (o : Option (MapOf Bool) × VP) (v : Value) : Bool :=
 /-- `select` at a `union`, as a row: filter the options by the admission each one reads, and
     the option that answers **alone** answers for the union.
 
-    **This is the row `Excuse.uniqueAdmission` said would be unsound**, and the excuse was
+    **This is the row ~~Excuse.uniqueAdmission~~ said would be unsound**, and the excuse was
     right about the calculus it was written in. A count is anti-monotone — loosen an option and
     you add an admitting option, which turns a singleton into a pair and makes the row refuse
     where the codec writes — so while any row was loose, sharpening `union` traded imprecision
@@ -144,7 +144,7 @@ def selOptV (os : List (Option (MapOf Bool) × VP)) (v : Value) : Bool :=
 
     **This was `inL` conjoined with `Numeral.WF`, and the conjunct is now the carrier's.**
     The second conjunct existed because at `number` an alternative outside §1's `D` was *held*
-    and not *written*, so membership alone over-claimed — the same (B) failure `LiteralD`
+    and not *written*, so membership alone over-claimed — the same (B) failure ~~LiteralD~~
     forbade in a derivable term, stated here as a fact about the codec, which had no premise to
     lean on. `GroundKind.number.Carrier` is `WFDouble`, so `inL`'s own row splits on the gate
     and there is no alternative left for the conjunct to catch.
@@ -192,7 +192,7 @@ noncomputable def Adm : Term → Value → Bool
   -- owns it*, and `ownsNull` is a disjunction over **both** halves — so a subterm whose
   -- *read* reaches null (a `legacy` widening) suppresses the wrapper while its write still
   -- refuses null, and the old row admitted a value the codec does not write
-  -- (`not_ExactV_nullable`, deleted with the excuse it witnessed).
+  -- (~~not_ExactV_nullable~~, deleted with the excuse it witnessed).
   --
   -- The conjunct is the sixth row to **ask its codec** rather than describe it, and the
   -- cheapest of them: `Codec.ownsNull` is a computable `Bool` off the subterm's pair, so
@@ -230,7 +230,7 @@ noncomputable def Adm : Term → Value → Bool
   -- (`Discharge.lean`): `denote (.opaq lossy)` *is* `opaqCodecω lossy`, so this is
   -- `dom(e)` rather than a description of it, and `ExactV_opaq` is `Iff.rfl`.
   --
-  -- It replaces a hand-written recursion over the value (`AdmOpaqV`) that computed the
+  -- It replaces a hand-written recursion over the value (~~AdmOpaqV~~) that computed the
   -- same set. That recursion was correct and cost ~120 lines of proof, and it was the
   -- wrong shape for one reason: it stated `opaque`'s domain a *second* time, so a change
   -- to `opaqCodec` — a new option, a different numeric policy — meant editing two
@@ -636,7 +636,7 @@ theorem neSetImage_isSome_of_inj {α β : Type} [DecidableEq β] {f : α → Opt
     This is exactness **earned by deferring**, not by a clever row: as a claim about the
     analysis it is exactly the `custom` row's claim, which is to say it says the analysis
     of an escape hatch is that hatch's own answer, and nothing about what the answer is.
-    What it replaced was a 120-line induction (`AdmOpaqV_iff`) proving a hand-written
+    What it replaced was a 120-line induction (~~AdmOpaqV_iff~~) proving a hand-written
     recursion over the value agreed with the codec at every budget that sees the value.
     That was a real theorem about `opaqCodec`; this is not one, and does not pretend to be.
 
@@ -722,7 +722,7 @@ theorem filter_AdmSpecs {opts : List Term} (h : ∀ t ∈ opts, ExactV t) (v : V
     simp only [optionSems, List.filter_cons, admitOptV_eq ht, ih hts]
     cases hb : admitOptV (specOf t, Adm t) v <;> simp [hb]
 
-/-- **`union` writes exactly what its row says**, and this is the row `Excuse.uniqueAdmission`
+/-- **`union` writes exactly what its row says**, and this is the row ~~Excuse.uniqueAdmission~~
     said could not be written soundly.
 
     The excuse's argument was correct and its scope was the table, not the row: a count is
@@ -934,7 +934,7 @@ theorem adm_literal_exact (k : GroundKind) (ls : NEFinset k.Carrier) (v : Value)
     monotone instead. All three rows are exact now, `Adm_exact` carries no hypothesis, and the
     separate proof was proving the weaker half of something already available.
 
-    The scaffolding it needed — `SoundV`, `alignP_sound` and the per-constructor soundness
+    The scaffolding it needed — ~~SoundV~~, ~~alignP_sound~~ and the per-constructor soundness
     lemmas — goes with it. -/
 theorem Adm_sound (t : Term) {v a} (he : (denote t).e v = some a) : Adm t v = true :=
   (Adm_exact t v).mpr (by rw [he]; rfl)
@@ -942,7 +942,7 @@ theorem Adm_sound (t : Term) {v a} (he : (denote t).e v = some a) : Adm t v = tr
 /-! ### No escape hatch
 
 **No row may be `false`, and there is nowhere to put an excuse.** An earlier apparatus —
-`Analysable`, `Excuse` and their twins — forced a row per constructor and made adding a `false`
+~~Analysable~~, ~~Excuse~~ and their twins — forced a row per constructor and made adding a `false`
 row cost a counterexample. `Adm_exact : ∀ t, ExactV t`, exhaustive over `Term` with no
 hypothesis, forces a *proof* per constructor instead, which is the stronger form of the same
 discipline: a new constructor cannot be added without one. -/
@@ -1090,7 +1090,7 @@ mutual
 /-- **The joint admission predicate, attribute side.** The mirror of `Adm` across §1's
     asymmetry, and it is not a symmetric mirror — three rows differ in kind, not degree.
 
-    * `number`, `literalN` and a numeric `literal` go through `Double.ofDec`, which is
+    * `number` and a numeric `literal` go through `Double.ofDec`, which is
       axiomatized. The domain is still *expressible* — `ofDec` is a function and this row
       may call it — at the cost of being `noncomputable`, which `adm` already was. These rows
       used to be sharper than §5's `⊤`; they are now equal to it, because the observation in
@@ -1564,7 +1564,7 @@ theorem ExactA_object {fields : Finset Name} {fld : {k // k ∈ fields} → Fiel
 
 /-- **`opaque` reads exactly what its row says**, definitionally, and for the reason
     `ExactV_opaq` gives at length: `p := (opaqCodecω lossy).p`, so the row and `dom(p)` are
-    one function. `AdmOpaqA_iff` — a second induction, this one carrying an injectivity
+    one function. ~~AdmOpaqA_iff~~ — a second induction, this one carrying an injectivity
     clause about `Double.ofDec` that `decSet` needs — is deleted rather than moved. The
     clause was true and is still true; it is now the codec's business, where it was always
     stated (`decSet`, `Combinators.lean`), instead of being restated here in a form that had
@@ -1746,14 +1746,14 @@ theorem AdmA_exactR : ∀ (rest : Rest), ExactAR rest
 end
 
 /-- Soundness of every attribute row — a corollary, as on the value side. The
-    hundred-and-thirty-line depth recursion this was, and the `SoundA` scaffolding it needed,
+    hundred-and-thirty-line depth recursion this was, and the ~~SoundA~~ scaffolding it needed,
     are deleted: `AdmA_exact` carries no hypothesis, so the weaker half comes free. -/
 theorem AdmA_sound (t : Term) {a v} (hp : (denote t).p a = some v) : AdmA t a = true :=
   (AdmA_exact t a).mpr (by rw [hp]; rfl)
 
 /-- **The witness that is now a theorem the other way.** `refine(string, ⊥)` reads nothing,
     and `AdmA` says so: the row decodes with `stringCodec` and applies `⊥`. This used to be
-    `not_ExactA_refine`, stated as "`AdmA` cannot see it". -/
+    ~~not_ExactA_refine~~, stated as "`AdmA` cannot see it". -/
 theorem AdmA_refine_bot (a : Attr) : AdmA (.refine .string (fun _ => false)) a = false := by
   simp [AdmA, refineReads]
   cases a <;> simp [denote, stringCodec]
@@ -2548,7 +2548,7 @@ present it errs on both. Nothing live depends on it: no `uAtCan_*` consumes it, 
 def Decides (t : Term) : Prop :=
   ∃ v w, ((denote t).e v).isSome = true ∧ v.kind = w.kind ∧ ((denote t).e w).isSome = false
 
-/-- `literalS` decides, as §5 says. -/
+/-- A string `literal` decides, as §5 says. -/
 theorem decides_literalS : Decides (.literal .string (.of "A" ∅)) :=
   ⟨.str "A", .str "B",
    by simp [denote, denote, literalCodec, baseCodec, Codec.restrict, inL, stringCodec,
@@ -2652,7 +2652,7 @@ thing it widens *by* is `r`, which the term carries. The domain is
 `dom(p) ∪ dom(r)`, both halves named, and `AdmA` can apply `r` for the same reason it can
 apply `held`'s `f` and `custom`'s `cp`.
 
-So `legacy` leaves the attribute hatch, and the `widenedRead` excuse is deleted rather than
+So `legacy` leaves the attribute hatch, and the ~~widenedRead~~ excuse is deleted rather than
 witnessed: it was covering a row that did not need excusing. What survives untouched is
 `not_admA_legacy` — §5's *passthrough* really is unsound, and the union is not the
 passthrough. -/
@@ -2821,7 +2821,7 @@ position, which the kernel accepts:
     | m (keys : Finset Name) (f : {k // k ∈ keys} → Attr)
 
 Unordered, unique-keyed and total-on-its-keys are now facts about the type. No canonical
-order, no `Wire.canon`, and nothing for `e` to choose between. -/
+order, no ~~Wire.canon~~, and nothing for `e` to choose between. -/
 
 /-- Two "orderings" of one map's names are one name set — there is nothing to quotient. -/
 theorem mapKeys_order_irrelevant : ({"a", "b"} : Finset Name) = {"b", "a"} :=

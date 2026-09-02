@@ -125,7 +125,7 @@ becomes a burden every caller carries. All three recur structurally, which is wh
 companion table's last two rows owe. (That header carried two stale spots of exactly this
 kind, invisible to the guards because no name was dangling: the semantic premises were called
 "fuel-indexed" where `Obligations` says "**Structural, and no longer fuel-indexed**", and
-`literalS`/`literalN` were named as live constructors though `GroundKind` had retired them.
+~~literalS~~/~~literalN~~ were named as live constructors though `GroundKind` had retired them.
 Both are **corrected inline** as of `0aec076`, along with two more the same pass found — "set
 member" in the premise list and `boolean`/`binary`/`null` described as spelled `refine`. Kept
 here as the worked example, because four defects in one header is the strongest evidence in
@@ -177,7 +177,7 @@ constructor, at which point violating it stops being possible rather than being 
   (`set(union(string, boolean))` was the standing witness). `SetBase` is the four bases that
   survive the premise; `SetBase.member` is now a total function of the index, and the refusal
   is a type error.
-- **`GroundKind`.** Three literal constructors — arity-one, `literalS`, `literalN` — became
+- **`GroundKind`.** Three literal constructors — arity-one, ~~literalS~~, ~~literalN~~ — became
   `literal (k : GroundKind) (ls : NEFinset k.Carrier)`. The index makes the carrier concrete,
   hence membership decidable; `NEFinset` makes nonemptiness, pairwise distinctness *and*
   homogeneity the type's rather than three premises. `GroundKind.Carrier` is `@[reducible]`
@@ -290,7 +290,7 @@ already.
 ### 4c. One codec, stated once for both sides of the pair
 
 `Combinators.lean` is <!-- count:combinators_lines -->3966<!-- /count --> lines of the tree's
-<!-- count:tree_lines -->17321<!-- /count -->, and this is its organizing idea; without it
+<!-- count:tree_lines -->17329<!-- /count -->, and this is its organizing idea; without it
 the file reads as the inventory `README.md` already has. A constructor is a **prism** —
 `Ctor α β`, with `into`/`out` and the laws `out_into` (matching what was built returns it) and
 `into_out` (anything that matches was built) — and those two *are* §2's (R) and (C) at a
@@ -439,24 +439,43 @@ must occur somewhere in `Calculus/` — where *Lean-looking* means it carries a 
 one-word citation (`Adm`, `Orth`, `Fmt`) is never checked at all — with an `EXPECTED` table
 carrying a reason per deliberate
 exception (and failing if an entry there stops being cited, so the table cannot rot quietly).
-**And the docstring check is partly vacuous, which is a defect in the extension not the
-original.** `occurring()` builds its source set from the raw file text, comments included, so a
-name appearing *only* in a docstring is present in its own evidence and clears itself. Adding
-`Calculus/*.lean` to `CURRENT` (`6a90359`) therefore proves less than that commit's message
-claims: "none of the 763 dangles today" was established by a check that cannot see the case it
-was added for. Demonstrated: `literalNRule_holds_what_it_cannot_write` had been renamed, three
-docstrings and this file still cited the old name, and the guard passed clean because those
-citations were their own evidence. The citations are fixed; the guard did not find them.
+**The docstring check was partly vacuous, and the fix needed a convention before it could
+exist.** `occurring()` built its source set from raw file text, comments included, so a name
+appearing *only* in a docstring was present in its own evidence and cleared itself. Adding
+`Calculus/*.lean` to `CURRENT` (`6a90359`) therefore proved less than that commit's message
+claimed: "none of the 763 dangles today" was established by a check that could not see the case
+it was added for. Demonstrated: `literalNRule_holds_what_it_cannot_write` had been renamed,
+three docstrings and this file still cited the old name, and the guard passed clean because
+those citations were their own evidence. **And deleting the docstring archaeology is what
+finally exposed one** — removing the prose that cited the old name removed the only thing
+clearing it, so the next run went red, the circularity resolving itself in the one direction
+that is useful.
 
-**And deleting the docstring archaeology is what finally exposed one.** Removing the prose that
-cited the old name removed the only thing clearing it, so the next run went red — the
-circularity resolving itself, in the one direction that is useful.
+`occurring()` now strips comments and docstrings (45.1% of `Calculus/` by character), so a
+citation has to be answered by code. **The reason that took a convention change rather than an
+exception list is the finding, and it is not the one the earlier note here predicted.** The
+prediction was ~20 mathlib and Lean names, `Classical.choice` above all. Measured, the
+mechanical classes were 99 of 169 hits and cost four *kinds* of entry rather than a longer list
+of one kind — the language by root namespace, `src/`'s names at §8's boundary, the
+specification's own notation, and per-document one-offs. What was not predicted is the other 60:
+**docstrings that name a retired declaration on purpose, because §9 tells them to.** "Was
+~~denoteωF~~", "~~encPair~~/~~decPair~~ are gone with the traversal",
+"~~record_e_keeps_duplicate_keys~~ became unstatable when `M`'s keys became a `Finset`" — a
+docstring records what the forced choice cost, and naming the thing that lost is how it does
+that. Against a code-only source set those are indistinguishable from real drift: both are a
+backticked token absent from code, and the difference is the *tense of the sentence*.
 
-Stripping comments from the source set was tried and **over-corrects**: it then rejects
-legitimate citations of things deliberately *absent* from the code — `Classical.choice` above
-all, which the whole axiom base exists to keep out, plus mathlib names and Lean keywords
-mentioned but not used. Doing it properly means extending `PRELUDE` and `EXPECTED` for roughly
-twenty such names, which is its own piece of work and not this arc's. Reverted, recorded here.
+So §9 gained the marker — a retired name is written `~~oldName~~` and the guard reads only
+unmarked citations — and the judgement sits with the person writing the sentence, who knows
+whether the thing is dead. The marks are checked in the other direction too: `~~X~~` where `X`
+is still in the sources is a **false retirement** and fails, so they cannot rot into decoration.
+The alternative shapes were measured and are worse: declarations-only rejects every mathlib
+lemma a proof actually appeals to (302 hits), and a per-name `EXPECTED` entry for each of the 60
+would grow the table from 6 entries to ~85, roughly 60 of them the same sentence, taxing the
+convention that produced them. **After the split, 18 stale pointers were left** — including one
+that was a content defect rather than a name: `Discharge.lean` called `number` "a `refine` over
+an ungated base", where `Combinators.lean` establishes under its own heading that there is no
+ungated numeric base, `Attr.n` carrying `Numeral.WF`.
 
 **Blind spot, stated in `7a91de8`: a count is not a name.** It cannot see "five theorems share
 `term_depth_wf`" being false while all five names exist. It also clears a dotted name
@@ -704,6 +723,20 @@ Move out: how a finding was made, what it cost, which audit missed it, and any a
 document already states. And prefer a name that makes the sentence unnecessary —
 `unionLiteralString` needs no gloss.
 
+**A name the sources do not define is marked, not backticked — `~~oldName~~` — and this is
+normative.** Usually it is retired: a docstring that records what a forced choice cost has to
+name the thing that lost, and that is the convention above working, not drift: "Was ~~denoteωF~~", "~~encPair~~/~~decPair~~ are gone with
+the traversal". But `name_drift.py` reads the code, and to it a deliberately dead name and a
+renamed one are the same token absent from the sources — the difference is the tense of the
+sentence, which no parser reads. The mark carries it. **An unmarked backticked name is a claim
+that it is live, and the guard holds you to it**; a marked one is a claim that it is dead, and
+the guard holds you to that too — `~~X~~` where `X` is still in the sources fails as a *false
+retirement*. Occasionally the name never existed — `Value.depth`'s missing ~~depthP~~
+companion, which the map row has no list to need — and the mark says the same useful thing
+there. Sixty citations were relabelled when this came in and eighteen turned out to be
+genuinely stale, so the ratio is roughly three to one: assume a name you are about to write in
+the past tense wants the marker. §6 has the measurement and the shapes that lost.
+
 Two further conventions, both load-bearing:
 
 - **The core lemma is not a second proof.** `lawfulCore_X` and `lawful_X` share their clauses
@@ -801,7 +834,7 @@ Sixteen lines changed, no behaviour, `Orthogonality.lean` untouched.
 
 **~~`adm (.literal .number ls)` is not exact~~ — closed at JH's call, by the carrier route.**
 `GroundKind.number.Carrier` is now `{d : Double // Numeral.WF d.toDec = true}`, so `inL` splits
-on the element's own gate, `LiteralD` is deleted, and `adm`'s literal row and the joint row are
+on the element's own gate, ~~LiteralD~~ is deleted, and `adm`'s literal row and the joint row are
 the same function (`adm_literal_eq_Adm`) — which makes the older generation exact at this row
 with **nothing added to it** (`adm_literal_exact`). The alternative route, tightening the row,
 would have broken `adm_literal_num`'s `rfl` and every `SepV` over literals; the carrier route

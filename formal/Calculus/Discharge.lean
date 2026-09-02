@@ -170,7 +170,8 @@ end
     Three things follow, and they are the same three for both.
 
     *They are exact by construction.* `denote`'s rows set `e := ce` and
-    `e := (opaqCodecω lossy).e` (`denote_custom`, `denote_opaq`), so the row and `dom(e)`
+    `e := (opaqCodecω lossy).e` — the `custom` row definitionally, `opaque` by
+    `denote_opaq` — so the row and `dom(e)`
     are the same function and `ExactV`/`ExactA` at either term is `Iff.rfl`. That is not a
     sharp analysis of an escape hatch; it is the analysis *declining* to be one, and the
     exactness is the codec's, borrowed. `Exactness.lean` says so again where the two
@@ -267,7 +268,8 @@ noncomputable def admALit : (k : GroundKind) → NEFinset k.Carrier → Attr →
 
 mutual
 
-/-- `adm`, value side. `noncomputable` only because `literalN` compares `Double`s, whose
+/-- `adm`, value side. `noncomputable` only because the `literal` row at `number` compares
+    `Double`s, whose
     `DecidableEq` is axiomatized (§1) — the recursion itself is structural. -/
 noncomputable def adm : Term → Value → Bool
   -- **`inL`, the codec's own predicate** — where three rows used to spell it out twice for the
@@ -290,9 +292,12 @@ noncomputable def adm : Term → Value → Bool
   -- out; see `refineReads`. `held` is the row that is still one-sided.
   | .refine t q => fun v => adm t v && q v
   | .legacy t _ => adm t
-  -- §1's two number gates, recorded for the same reason a literal's set is: each is a
-  -- `refine` over an ungated base (`numberCodec_e_restrict`, `decimalCodec_e_restrict`),
-  -- and a gate the term owns is exactly what `adm` is for.
+  -- §1's two number gates, recorded for the same reason a literal's set is: a gate the term
+  -- owns is exactly what `adm` is for. Only `decimal` is a `refine` over an ungated base
+  -- (`decimalCodec_e_restrict`, over `wfDecimalCodec`). At `number` there is none to refine:
+  -- `Attr.n` carries `Numeral.WF`, so `numberCodec` **is** §1's set — `Combinators.lean`'s
+  -- "The base at `N` is §1's own set, not an ungated one", and the reason `decimal`'s
+  -- restriction lemma has no numeric counterpart to cite beside it.
   | .nullable t => fun v => adm t v || (match v with | .null => true | _ => false)
   | .number => inD
   | .decimal => isStored
@@ -389,7 +394,8 @@ mutual
     What stays asymmetric is the shape of the answer — `admA` passes the subterm's set
     through unchanged, `adm` pulls it back along `f`.
 
-    `number` and `literalN` are the **third and fourth rows that ask their own codec**, and
+    `number` and a numeric `literal` are the **third and fourth rows that ask their own
+    codec**, and
     they arrived by the same correction `opaq` did. Both were `⊤`, and both `⊤`s were bought
     with one non-argument: `Double.ofDec` is axiomatized, therefore no syntactic set of
     attributes bounds the read. The premise is true; the conclusion confuses *cannot bound
@@ -1341,8 +1347,8 @@ theorem admA_literal_bin (ls : NEFinset Bytes) (b : Bytes) :
 /-- The writable side sees `ℓ` everywhere, `number` included — it is `inL`, the codec's prism.
 
     No longer `rfl`: `inL`'s `number` row splits on the carrier's gate, and the alternative is
-    named by the element's own `d.2`. That is the whole cost of `LiteralD`'s deletion on this
-    side, and `ExactV_literalN` is what it bought. -/
+    named by the element's own `d.2`. That is the whole cost of ~~LiteralD~~'s deletion on this
+    side, and `adm_literal_exact` is what it bought. -/
 theorem adm_literal_num (ls : NEFinset WFDouble) (d : WFDouble) :
     adm (.literal .number ls) (.num d.1) = decide (d ∈ ls.1) := by
   simp [adm, inL, d.2]
@@ -1723,7 +1729,7 @@ theorem sepV_number_opaque : SepV .number (.opaq false) :=
     all_goals exact nomatch (by simpa only [adm, inD] using hv : (false : Bool) = true)
 
 /-- **And `union(opaque false, number)` separates on the readable side too.** This
-    replaces `not_sepA_number_opaque`, which recorded the pair as unseparable and named
+    replaces ~~not_sepA_number_opaque~~, which recorded the pair as unseparable and named
     `number`'s row as the obstruction: `admA .number` was `⊤` on the ground that the stored
     numeral goes through `Double.ofDec`, so no syntactic set of attributes bounds the read.
     The premise was true and the conclusion did not follow. `admA` never needed to know
@@ -1988,7 +1994,7 @@ theorem not_uAtCan_array_literals :
 
 /-! `literalCodec` at the string base, in the shape the four lemmas below need.
 
-Named rather than unfolded. `literalSCodec` used to be a hand-written pair, so `simp
+Named rather than unfolded. ~~literalSCodec~~ used to be a hand-written pair, so `simp
 [literalSCodec]` was one step; the unified codec is `Codec.restrict` over `baseCodec`, and
 unfolding that inside a `simp_all` with two hypotheses in play runs out of heartbeats — the
 `whnf` reaches for `numberCodec`'s `dite` on `Numeral.WF`, which is a string parser. The fix is

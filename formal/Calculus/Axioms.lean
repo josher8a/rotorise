@@ -141,8 +141,9 @@ still does not. -/
 these, `κ`, `adm` and `admA` are transcriptions of a table rather than claims about the
 model, so their axiom base is part of what the soundness statements rest on. -/
 
-/-! The fuel-free twins. `denote_eq` is the transport every ω-result travels along, so an
-axiom acquired here would reach all of them at once. -/
+/-! The fuel-free twins. They meet §6's table through `Codec.Equiv` rather than through a
+shared transport constant — ~~denote_eq~~ was the ω-layer's and went with the layer
+(`Denote.lean`) — so each is guarded on its own footing. -/
 
 /-! §3's `Uν` for `opaque`, and §1's numeral domain. `opaq_T_identity` is the row
 closed for `opaque`; its proof sits behind seven
@@ -151,7 +152,7 @@ makes it the single constant in this file with the most to lose from going ungua
 
 /-! §3's `(number)` gate and the two places the bound is forced outward. `opaq_T_identity`
 above is guarded for `Uν` *after* `HOpaque.num` gained its premise, which is the half of this
-change that reaches the depth machinery. The `literalN` rows are the half that does not:
+change that reaches the depth machinery. The `(literal-N)` rows are the half that does not:
 they are `(literal-N)`'s `ℓ ⊆ D`, added to §3 once the shipped `literal(NaN)` settled the
 question the conditional refutations leave open. -/
 

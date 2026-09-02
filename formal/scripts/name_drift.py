@@ -13,11 +13,17 @@ both caught by luck rather than by a check.
 
 A hit is a backticked token that *looks* like a Lean name — no spaces, and either a `_`
 or a `.` in it or else a single word that is not one of four categories that cannot be
-`Calculus/` names (see `single_word_checkable`) — and matches no identifier occurring
-anywhere in `Calculus/*.lean`. That is
-deliberately loose on the source side: any occurrence counts, not just a declaration,
-so a structure projection or a mathlib lemma used in one proof is enough to clear a
-citation of it. The residue is therefore small and worth reading by hand.
+`Calculus/` names (see `single_word_checkable`) — and matches no identifier occurring in
+**the code** of `Calculus/*.lean`, comments and docstrings stripped (`occurring()`).
+It stays deliberately loose about *where* in the code: any occurrence clears a citation, not
+just a declaration, so a structure projection or a mathlib lemma appealed to in one proof is
+enough. The residue is therefore small and worth reading by hand.
+
+**Stripping the comments is what makes the check mean anything, and it is not free.** The
+source set was raw file text until `6a90359`'s defect was measured, which made a name cited
+only in a docstring its own evidence. Code-only closes that, and immediately raises the
+question the marker convention answers: a docstring that names a *deleted* declaration on
+purpose looks exactly like one that names a renamed declaration by accident. See `RETIRED`.
 
 Three classes of false positive are filtered. Naming *patterns* (`X_e`, `lawful_X`,
 `_p_admits`) and filenames are filtered by shape. Structure
@@ -50,6 +56,19 @@ citation inside a proof's docstring is a broken pointer on exactly the same term
 document, and there are far more of them; the only reason they were not checked is that the
 `CURRENT` list was written by hand from the `docs/` directory.
 
+**Four reasons a cited name can be legitimately absent, and each has its own place.** Keeping
+them apart is most of this file, because a single undifferentiated exception list would say
+nothing about *why* any entry is in it:
+
+    ~~marked~~   retired: the declaration is gone and the prose says so (`RETIRED`, §9)
+    PRELUDE      the language: Lean, mathlib, Batteries — judged by root namespace
+    HOST         `src/`'s names, at §8's boundary — live, just not here
+    SPEC         the specification's own notation, from `docs/codec-calculus.md`
+    EXPECTED     a genuine one-off, keyed to the document that makes it
+
+When this split was first measured the four absorbed 99 of 169 hits between them, the marks
+took 60, and 18 stale pointers were left — which is the number the guard exists to report.
+
 Hits in the current-state documents — `formal/README.md`, `formal/ARCHITECTURE.md`,
 `docs/codec-calculus.md`,
 `docs/structural-discipline.md` —
@@ -57,7 +76,8 @@ are broken pointers and should be fixed or explicitly marked superseded.
 
 Usage:  python3 scripts/name_drift.py            (run from formal/)
         python3 scripts/name_drift.py --all      (include the change log)
-Exit code 1 if any current-state document has a hit.
+Exit code 1 if any current-state document has a hit, a stale `EXPECTED` entry, or a
+`~~name~~` whose name is still in the sources.
 """
 import re, sys, os, glob
 
@@ -86,6 +106,23 @@ IDENT = re.compile(r"[^\W\d][\w'!?⁺₀-₉]*(?:\.[^\W\d][\w'!?⁺₀-₉]*)*",
 # The token is now used exactly as captured; a capture with a space in it fails `LEANISH`.
 BACKTICKED = re.compile(r"`([^`\n]{1,80})`")
 LEANISH = re.compile(r"^[^\W\d][\w'!?⁺₀-₉]*(?:\.[^\W\d][\w'!?⁺₀-₉]*)*$", re.UNICODE)
+# **A name the sources do not define is marked, not backticked** — `~~oldName~~` — and this
+# guard reads only the unmarked citations. Usually the name is retired; sometimes it never
+# existed (`depthP`, a companion `Value.depth`'s map row has no list to need). That convention is `ARCHITECTURE.md` §9's, and it exists because the check
+# below cannot work without it: once the source set is code, a docstring that names a deleted
+# declaration *on purpose* — "Was `denoteωF`", "`encPair`/`decPair` are gone with the traversal",
+# "`record_e_keeps_duplicate_keys` became unstatable when `M`'s keys became a `Finset`" — is
+# indistinguishable from one that names a renamed declaration by accident. Both are a backticked
+# token absent from code; the difference is the tense of the sentence, and no parser reads tense.
+# §9 tells a docstring to record what the forced choice cost, so those citations are the
+# convention working, not drift: 49 of them, against 13 real stale pointers, when this was first
+# measured. Marking them moves the judgement to where the judgement is — the person writing the
+# sentence, who knows whether the thing is dead.
+#
+# The marker is held honest in the other direction too: `~~X~~` where `X` *does* occur in code is
+# a failure (`false retirement`), so the marks cannot quietly rot into decoration as names come
+# back or get reused.
+RETIRED = re.compile(r"~~([^~\n]{1,80})~~")
 # naming patterns and filenames, not citations
 NOISE = re.compile(r"\.(md|py|ts|lean|json|toml|sh)$|(^|[._])X([._]|$)|^_|^f_sound$")
 
@@ -105,6 +142,40 @@ EXPECTED = {
         "e_c": "the specification's own notation for a component codec, not a Lean name",
         "Encoded": "§1's own wire type, named by the specification; the model has no Lean type for it",
     },
+}
+
+
+# Two classes of name that are *live somewhere*, so `~~retired~~` would be a lie, and absent
+# from `Calculus/` by design, so the code cannot clear them. Both are global rather than
+# per-document because each recurs across many targets — `opaque` alone is cited in 17 places —
+# and an `EXPECTED` entry repeated 17 times is a table nobody reads.
+
+# The shipped TypeScript's names, at §8's boundary. The host has codecs and methods the model
+# deliberately does not: §8 records what the host owes, and naming the thing that owes it is how.
+HOST = {
+    "opaque": "`src/`'s codec, analysed here as a well-behaved `custom` — same analysis, "
+              "opposite warranty (§7). `opaqCodec` is the model's, and is not the same name",
+    "admits": "`src/codec.ts`'s method, §10's open question about wiring it into `union`'s "
+              "resolver. The model's predicate is `adm`",
+    "discriminatedUnion": "`src/`'s combinator; the calculus has no such codec — it is the sum "
+                          "over tag-admission, which is why `(dunion)` is a rule and not a row",
+    "EveryOptionTagged": "`src/codec.ts`'s type-level check, cited by §8's arity-one row",
+}
+
+# The specification's own notation, from `docs/codec-calculus.md`. §1 names sets and §5 names
+# policies in a vocabulary the model realises under other names, and a document quoting the
+# specification is quoting it correctly.
+SPEC = {
+    "Numerals": "§1's numeral set; the model picks it out as `Numeral.WF`, so the specification's "
+                "name for it is not a Lean name",
+    "Numbers": "§5's policy name, realised as the `lossy`/`refuse` split — `onKind_number` is the "
+               "theorem, `Numbers` is the row",
+    "dom": "§2's notation for a partial function's domain, written `dom(e)`; `domE` is the Lean "
+           "lemma about it",
+    "p_c": "§2's notation for a component codec's read half, paired with `e_c`",
+    "ground": "§9's table block, named by the convention rather than by the model — the codecs "
+              "in it are `pointCodec`'s four",
+    "Exact": "the `ExactV`/`ExactA` family under one name, as §5's table heads the two rows",
 }
 
 
@@ -131,11 +202,37 @@ PRELUDE = set("""
 Bool Prop Type Sort Nat Int String Char Unit True False And Or Not Iff Eq Option Some None
 List Array Finset Set Subtype Quot Quotient Decidable DecidableEq Repr BEq Inhabited Nonempty
 Function Equivalence Forall₂ Perm Prod Sum Classical Exists Std Batteries Lean Mathlib
+Multiset WellFounded
 sizeOf casesOn recOn binductionOn brecOn noConfusion propext sorry rfl decide simp omega
 deriving instance structure inductive theorem lemma abbrev mutual noncomputable partial unsafe
 def example where match with fun let have show this at using
-docBlame unreachableTactic simpNF EXPECTED CURRENT PRELUDE LOG HEAD defaultTargets grep
+dite dif whnf native native_decide with_unfolding_all maxHeartbeats partial_function
+choose iff head lookup zipWith flatMap not_forall filter_eq_nil_iff sorryAx unknown
+docBlame unreachableTactic simpNF synTaut dupNamespace checkType
+EXPECTED CURRENT PRELUDE LOG HEAD defaultTargets grep
 """.split())
+# The last four rows are the ones the stripped source set made necessary, and they are a
+# different kind of entry from the first four. `Bool` was always unclearable; `dite`,
+# `native_decide` and `Finset.image` used to be cleared by *a proof's own comment* mentioning
+# them, which is exactly the circularity `occurring()` now refuses. A Lean tactic, a Batteries
+# linter and a mathlib lemma cited in prose are citations of the language, and the language is
+# not this development's to define.
+
+
+def language(t):
+    """Is this a citation of Lean, mathlib or Batteries rather than of `Calculus/`?
+
+    A dotted name is judged by its root namespace: `Classical.choice`, `Finset.image` and
+    `Quotient.out` are the language's whether or not any proof here appeals to them, and
+    `Classical.choice` above all — the axiom base exists to keep it out, so the one thing
+    certain about it is that it does *not* occur in the sources.
+    """
+    return t in PRELUDE or t.split(".")[0] in PRELUDE
+
+
+def deliberately_absent(t):
+    """Absent from `Calculus/` by design: the language, the host's names, the specification's."""
+    return language(t) or t in HOST or t in SPEC
 
 
 def single_word_checkable(t):
@@ -143,9 +240,60 @@ def single_word_checkable(t):
     return not (len(t) <= 2 or HASH.match(t) or t in MODULE_NAMES or t in PRELUDE)
 
 
+def strip_comments(s):
+    """`s` with every Lean comment and docstring removed, string literals kept.
+
+    Handles `--` to end of line and nested `/- … -/`, which covers `/-- … -/` docstrings and
+    `/-! … -/` module docs as the block forms they are. String literals are copied through so
+    that a `"--"` inside one does not open a comment, and newlines inside a stripped block are
+    kept so that reported line numbers still mean something.
+    """
+    out, i, n, depth = [], 0, len(s), 0
+    while i < n:
+        if depth:
+            if s.startswith("/-", i):
+                depth += 1; i += 2
+            elif s.startswith("-/", i):
+                depth -= 1; i += 2
+            else:
+                if s[i] == "\n":
+                    out.append("\n")
+                i += 1
+            continue
+        c = s[i]
+        if c == '"':
+            out.append(c); i += 1
+            while i < n:
+                if s[i] == "\\":
+                    out.append(s[i:i + 2]); i += 2; continue
+                out.append(s[i])
+                if s[i] == '"':
+                    i += 1; break
+                i += 1
+            continue
+        if s.startswith("--", i):
+            while i < n and s[i] != "\n":
+                i += 1
+            continue
+        if s.startswith("/-", i):
+            depth = 1; i += 2
+            continue
+        out.append(c); i += 1
+    return "".join(out)
+
+
 def occurring():
-    """Every identifier, and every dotted sub-path of one, appearing in the sources."""
-    src = "".join(open(f).read() for f in sorted(glob.glob("Calculus/*.lean")))
+    """Every identifier, and every dotted sub-path of one, appearing in the sources.
+
+    **Comments and docstrings are stripped first, and that is the whole of `6a90359`'s fix.**
+    Before it the source set was raw file text, so a name appearing *only* in a docstring was
+    present in its own evidence and cleared itself — `literalNRule_holds_what_it_cannot_write`
+    was renamed, four citations kept the old name, and this guard passed clean until the
+    archaeology sweep deleted the prose that was clearing them. Comments are 45.1% of
+    `Calculus/` by character; a citation now has to be answered by code.
+    """
+    src = "".join(strip_comments(open(f).read())
+                  for f in sorted(glob.glob("Calculus/*.lean")))
     out = set()
     for tok in IDENT.findall(src):
         parts = tok.split(".")
@@ -157,8 +305,12 @@ def occurring():
 
 def scan(path, present):
     expected = EXPECTED.get(path, {})
-    hits, seen, stale = [], set(), []
+    hits, seen, stale, false_retirements = [], set(), [], []
     for lineno, line in enumerate(open(path).read().split("\n"), 1):
+        # `~~X~~` claims `X` is retired. Not a citation — but the claim is checked.
+        for tok in RETIRED.findall(line):
+            if LEANISH.match(tok) and not NOISE.search(tok) and tok in present:
+                false_retirements.append((lineno, tok))
         for tok in BACKTICKED.findall(line):
             t = tok
             if not LEANISH.match(t) or NOISE.search(t):
@@ -171,13 +323,15 @@ def scan(path, present):
             # a structure projection is fine when both halves occur
             if t in present or all(part in present for part in t.split(".")):
                 continue
+            if deliberately_absent(t):
+                continue
             if t in expected:
                 continue
             hits.append((lineno, t))
     for name in expected:
         if name not in seen:
             stale.append(name)
-    return hits, stale
+    return hits, stale, false_retirements
 
 
 def main():
@@ -189,10 +343,10 @@ def main():
     for path in targets:
         if not os.path.exists(path):
             continue
-        hits, stale = scan(path, present)
+        hits, stale, false_retirements = scan(path, present)
         label = os.path.normpath(path)
         current = path in CURRENT
-        if not hits and not stale:
+        if not hits and not stale and not false_retirements:
             print(f"  {label:38s} clean")
             continue
         if hits:
@@ -206,6 +360,12 @@ def main():
             print(f"  {label:38s} {len(stale)} stale EXPECTED entr{'y' if len(stale) == 1 else 'ies'}")
             for name in stale:
                 print(f"              {name}  (no longer cited — drop it from EXPECTED)")
+        if false_retirements:
+            failed = True
+            n = len(false_retirements)
+            print(f"  {label:38s} {n} false retirement{'' if n == 1 else 's'}")
+            for lineno, name in false_retirements:
+                print(f"      {lineno:6d}  ~~{name}~~  (still in the sources — unmark it)")
     if LOG and "--all" not in sys.argv:
         print(f"\n  (--all also scans {', '.join(os.path.normpath(p) for p in LOG)})")
     return 1 if failed else 0

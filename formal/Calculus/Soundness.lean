@@ -525,7 +525,7 @@ theorem soundness_both : ∀ {t T μ}, Typed t T μ → Obligations t → Sound 
           (forall_mem_map fun t' ht' => (ihs t' ht').2 (mpOkList_iff.mp hmp.1 t' ht'))
           (forall_mem_map_option fun t' ht' => (iht t' ht').2 (mpOkOpt_iff.mp hmp.2 t' ht'))⟩
     -- The field table is indexed by the declared names, so the induction hypothesis is
-    -- read off at a key rather than at a membership, and `TypedFields.forall` — which
+    -- read off at a key rather than at a membership, and ~~TypedFields.forall~~ — which
     -- existed to walk the row — is not needed. Nor is a `Nodup` to transport.
     | @object body bind R μs hfields hrest =>
       -- the payload is taken apart once, here: the field lemmas below read a key set and a

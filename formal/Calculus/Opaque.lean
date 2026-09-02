@@ -25,7 +25,8 @@ each they are. Nothing here is about a term other than `opaque`.
 Structure:
 
 * `Value.depth` / `Attr.depth` — structural budgets.
-* `traverse_congr` — the missing congruence: pointwise-equal functions traverse equally.
+* `maxOf` / `traverse_maxOf_le` — the measure and the step that keeps it: a traversal whose
+  entry step does not increase the measure does not increase the list's maximum.
 * `opaqCodec_e_*` / `opaqCodec_p_*` — the unfoldings, one per constructor of the domain
   each side ranges over. Each collapses `altCodec`'s filter to a single option by
   kind-disjointness, and is where the "at most one admits" argument is actually cashed.
@@ -55,7 +56,7 @@ def Value.depth : Value → Nat
   | .arr vs => Value.depthL vs + 1
   -- §1's `M` is a key *set* with a function on it, so a map's layer is the largest
   -- entry budget over the key set — a `Finset.sup`, where the array's is a list fold.
-  -- There is no list to recurse down and so no `depthP` companion.
+  -- There is no list to recurse down and so no ~~depthP~~ companion.
   | .map keys f => (keys.attach.sup fun k => Value.depth (f k)) + 1
 
 def Value.depthL : List Value → Nat
@@ -201,7 +202,7 @@ theorem opaqCodec_e_num (lossy : Bool) (n : Nat) (d : Double) :
   by_cases hw : Numeral.WF d.toDec = true <;> cases lossy <;>
     simp [numberCodec_e_num, hw]
 
-/-- §3 `(opaque)`, write side at kind `set`: the wire member is computed from the elements (`asWireSet`), which is why one option covers `SS`, `NS` and `BS`. -/
+/-- §3 `(opaque)`, write side at kind `set`: the wire member is computed from the elements (`setCodec`), which is why one option covers `SS`, `NS` and `BS`. -/
 theorem opaqCodec_e_strSet (lossy : Bool) (n : Nat) (S : NEFinset String) :
     (opaqCodec (n+1) lossy).e (.strSet S)
       = (setCodec (opaqCodec n lossy)).e (.strSet S) := by
