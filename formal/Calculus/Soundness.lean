@@ -294,7 +294,7 @@ mutual
 theorem typed_μSyn : ∀ {t T μ}, Typed t T μ → μSyn t = μ
   -- `rfl`, where this used to be the rule's `hμ`. The member is a function of the *index* on
   -- both sides now — `μSyn` reads `GroundKind.member`, and so does the rule.
-  | _, _, _, .literal _ _ _ => rfl
+  | _, _, _, .literal _ _ => rfl
   | _, _, _, .string => rfl
   | _, _, _, .number => rfl
   | _, _, _, .decimal => rfl
@@ -464,7 +464,7 @@ set_option linter.unreachableTactic false in
 theorem soundness_both : ∀ {t T μ}, Typed t T μ → Obligations t → Sound t
   | t, T, μ, h, hob => by
     cases h with
-    | literal k ls hD => exact sound_ground (lawful_literalCodec k ls)
+    | literal k ls => exact sound_ground (lawful_literalCodec k ls)
     | string => exact sound_ground lawful_stringCodec
     | number => exact sound_ground lawful_numberCodec
     | decimal => exact sound_ground lawful_decimalCodec
@@ -717,7 +717,7 @@ theorem typed_TSub : ∀ {t T μ}, Typed t T μ → ∀ v, (denote t).T v → T 
     -- `exact hv`, where this was a five-way split guarding against `simp` unfolding
     -- `numberCodec` into `Numeral.WF`'s decision procedure. The denotation's held set and the
     -- rule's are the same expression now — `HLit k ls` — so there is nothing to prove.
-    | literal _ _ _ => exact hv
+    | literal _ _ => exact hv
     | custom _ _ => exact hv
     | opaq lossy => exact opaq_TSubω lossy v hv
     -- the base's codec holds exactly the base's held set (`SetBase.elem_T`), so the three
@@ -822,7 +822,7 @@ set_option linter.unreachableTactic false in
 theorem carrier_denote : ∀ {t T μ}, Typed t T μ → Obligations t → Carrier (denote t)
   | t, T, μ, h, hob => by
     cases h with
-    | literal k ls _ => exact carrier_literalCodec k ls
+    | literal k ls => exact carrier_literalCodec k ls
     | string => exact carrier_stringCodec
     | number => exact carrier_numberCodec
     | decimal => exact carrier_decimalCodec

@@ -331,7 +331,7 @@ both / neither).
 
 ### And a third machine, `Orth`, which does not pay — measured
 
-`Orthogonality.lean` is the fourth-largest file at <!-- count:orth_file_lines -->960<!-- /count --> lines: a decidable certificate for a
+`Orthogonality.lean` is the fourth-largest file at <!-- count:orth_file_lines -->966<!-- /count --> lines: a decidable certificate for a
 fragment of (U), over-approximating each term's occupancy per side (`occV`/`occA`) and
 certifying a pair whose occupancies are disjoint, `by decide`. **Measured against what it
 replaces it does not pay**, and its own by-phase table is the measurement — the <!-- count:orth_total_theorems -->25<!-- /count --> hand
@@ -341,7 +341,7 @@ discharges it names, 23 as rows and 2 in the prose beneath them, out of a
 | | theorems | lines of proof |
 | --- | --- | --- |
 | reachable by `Orth` itself — phase *slot* | <!-- count:orth_slot_theorems -->6<!-- /count --> | <!-- count:orth_slot_lines -->70<!-- /count --> |
-| reachable only through `Separates`, the `Prop` interface — phase *alternatives*, where `DecidableEq Double` makes a `Bool` test noncomputable | <!-- count:orth_alt_theorems -->7<!-- /count --> | <!-- count:orth_alt_lines -->70<!-- /count --> |
+| reachable only through `Separates`, the `Prop` interface — phase *alternatives*, where `DecidableEq Double` makes a `Bool` test noncomputable | <!-- count:orth_alt_theorems -->7<!-- /count --> | <!-- count:orth_alt_lines -->75<!-- /count --> |
 | unreachable on principle — an arbitrary `q` or `f`, a different constructor, `SepJA`'s member disjunct, or `UAtCan` itself failing (`uAtAct_array_literals`) | <!-- count:orth_unreach_theorems -->12<!-- /count --> | <!-- count:orth_unreach_lines -->168<!-- /count --> |
 
 *Re-measured, and the previous version of this table was wrong in three ways.* It said 23
@@ -349,12 +349,12 @@ where the section names 25; it counted 11 unreachable theorems against a line to
 that silently included a twelfth (`uAtAct_array_literals`, 53 lines, named in the row's own
 description but in no row); and `uAtCan_number_opaque` (24 lines) was reachable — the pair
 form of two *slot* discharges, and `orth_number_opaque` certifies it `by decide` — while
-appearing in no row at all. The reachable total is therefore **<!-- count:orth_reachable_lines -->140<!-- /count --> lines, not 116** — the
+appearing in no row at all. The reachable total is therefore **<!-- count:orth_reachable_lines -->145<!-- /count --> lines, not 116** — the
 verdict below does not move, but it was being stated with a number 24 lines too kind to
 the hand proofs and 24 too harsh on `Orth`.
 
 And **nothing was deleted** — `6daa5e3`, `0335cdb` and `5763b6d` touch only the new module and
-two import lines — so <!-- count:orth_file_lines -->960<!-- /count --> lines stand *beside* the <!-- count:orth_reachable_lines -->140<!-- /count --> they could replace. It stays anyway,
+two import lines — so <!-- count:orth_file_lines -->966<!-- /count --> lines stand *beside* the <!-- count:orth_reachable_lines -->145<!-- /count --> they could replace. It stays anyway,
 because its value moved. The classifier framing did not pay; but confluent admission —
 the weaker rule proved monotone and continuous and **not adopted** (§7) — needs its obligation
 to be an *invariant of the unrolling* (`string_decimal_not_confluent`), which is vacuous exactly
@@ -571,14 +571,22 @@ and the sites open-code it instead of calling it. **That is a ten-site cleanup i
 files, not a change to `select` deep in the graph** — no clean build window required, and it is
 the whole of what the queued item was actually after.
 
-**`adm (.literal .number ls)` is not exact** — it is `inL`, missing the `Numeral.WF d.toDec`
-gate. Note the exact row already has it: `AdmLit` is `inL` conjoined with the numeral condition,
-which is why `Adm_exact` covers the literal. So this is a defect in the *older* generation only.
-Two routes, and the second is a **fidelity call, not a cleanup**: tighten the row (breaks
-`adm_literal_num`'s `rfl` and every `SepV` over literals), or make `GroundKind.number`'s carrier
-the gated subtype, which is probed, works, and deletes `LiteralD` entirely — at the cost of
-making `literalN_holds_what_it_cannot_write` unstatable. That witness records a defect in **§3's
-rule**, not in our constructor.
+**~~`adm (.literal .number ls)` is not exact~~ — closed at JH's call, by the carrier route.**
+`GroundKind.number.Carrier` is now `{d : Double // Numeral.WF d.toDec = true}`, so `inL` splits
+on the element's own gate, `LiteralD` is deleted, and `adm`'s literal row and the joint row are
+the same function (`adm_literal_eq_Adm`) — which makes the older generation exact at this row
+with **nothing added to it** (`adm_literal_exact`). The alternative route, tightening the row,
+would have broken `adm_literal_num`'s `rfl` and every `SepV` over literals; the carrier route
+broke `adm_literal_num`'s `rfl` too, and nothing else.
+
+*And the reason it was a fidelity call turned out to be misstated, in this file and in three
+docstrings.* The witness `literalN_holds_what_it_cannot_write` was said to record a defect in
+**§3's rule**. It does not: §3's `(literal)` premise line is `ℓ₁ … ℓₙ ∈ T`, and at `g = number`
+the base's held set is §1's `D`, so **the rule already requires `ℓ ⊆ D`** — `hD` was transcribing
+it faithfully, not compensating for its absence. What the witness shows is that the rule's
+premise is *load-bearing*: omit it and (B) fails. That claim needs an ungated prism to be about,
+not an ungated `Term`, so it is restated on `literalNRule` (`Refutations.lean`), which is
+deliberately not a `Term`. `docs/codec-calculus.md` needed no change; the rule is unchanged.
 
 **`admits`' violation list and wiring it into `union`'s resolver** — both behaviour changes in
 `src/`, both the user's call. See the handoff.

@@ -152,16 +152,20 @@ def selOptV (os : List (Option (MapOf Bool) × VP)) (v : Value) : Bool :=
 
 /-- What the literal codec **writes**, exactly.
 
-    `inL` is the prism, and at `number` that is not the whole story: with `Attr.n` carrying
-    §1's `Numerals`, an alternative outside `D` is *held* and not *written*, so a row testing
-    membership alone would over-claim. The second conjunct is that gap — the same (B) failure
-    `LiteralD` exists to forbid in a derivable term, stated here as a fact about the codec,
-    which has no premise to lean on.
+    **This was `inL` conjoined with `Numeral.WF`, and the conjunct is now the carrier's.**
+    The second conjunct existed because at `number` an alternative outside §1's `D` was *held*
+    and not *written*, so membership alone over-claimed — the same (B) failure `LiteralD`
+    forbade in a derivable term, stated here as a fact about the codec, which had no premise to
+    lean on. `GroundKind.number.Carrier` is `WFDouble`, so `inL`'s own row splits on the gate
+    and there is no alternative left for the conjunct to catch.
 
-    Uniform in the base rather than a case per base: `inL k ls (.num d)` can only hold at
-    `k = .number`, so the numeral conjunct is `true` wherever it is not the point. -/
+    What that closes is §8's third open question. `adm`'s literal row (`Discharge.lean`) was
+    always `inL` and was therefore inexact at `number` by exactly this conjunct; the joint row
+    carried it and so `Adm_exact` covered the literal. The two rows are now the *same
+    function* — `adm_literal_eq_Adm` — so the older generation is exact at this row for free.
+    The defect is closed rather than patched: nothing was added to `adm`. -/
 noncomputable def AdmLit (k : GroundKind) (ls : NEFinset k.Carrier) (v : Value) : Bool :=
-  inL k ls v && (match v with | .num d => Numeral.WF d.toDec | _ => true)
+  inL k ls v
 
 mutual
 
@@ -920,6 +924,25 @@ theorem Adm_array_nested :
     Adm (.array (.array (.literal .string (.of "A" ∅)))) (.arr [.arr [.str "B"]]) = false := by
   simp [Adm, allP, AdmLit, inL, NEFinset.of]
 
+/-- **§8's third open question, closed — and closed by deletion, not by a patch.**
+
+    `adm (.literal .number ls)` was the one inexact row in the older generation: it is `inL`,
+    and `inL` was missing §1's `WF` gate, so the row admitted a `.num d` the codec refuses to
+    write. The joint row `AdmLit` carried the gate as a second conjunct, which is why
+    `Adm_exact` covered the literal while `adm` did not.
+
+    Nothing was added to `adm`. `GroundKind.number.Carrier` became `WFDouble`, `inL`'s `number`
+    row now splits on the element's own gate, and the two generations' literal rows are the
+    same function on the nose. -/
+theorem adm_literal_eq_Adm (k : GroundKind) (ls : NEFinset k.Carrier) :
+    adm (.literal k ls) = Adm (.literal k ls) := rfl
+
+/-- …so §5's own row is exact at every base, including `number`. -/
+theorem adm_literal_exact (k : GroundKind) (ls : NEFinset k.Carrier) (v : Value) :
+    adm (.literal k ls) v = true ↔ ((denote (.literal k ls)).e v).isSome := by
+  rw [adm_literal_eq_Adm]
+  exact Adm_exact (.literal k ls) v
+
 /-! `not_ExactV_nullable` stood here. It was `nullable(legacy(string, ⟨read NULL⟩))` — a
 subterm whose *read* reaches the null point, so `withNull`'s guard fires and the wrapper
 adds nothing, while the write side is still `string`'s — and it refuted the row
@@ -1071,8 +1094,14 @@ noncomputable def AdmALit : (k : GroundKind) → NEFinset k.Carrier → Attr →
   | .boolean, ls, .bool b => decide (b ∈ ls.1)
   | .binary,  ls, .b b    => decide (b ∈ ls.1)
   | .null,    _,  .null   => true
+  -- **The `&& Numeral.WF d.toDec` conjunct used to be written out here**, and it was the
+  -- reason this row was exact while the table's `adm` row was not (§8). It is now the
+  -- carrier's: `ls : NEFinset WFDouble`, so the gate is what names the alternative.
   | .number,  ls, .n x    => (match Double.ofDec x.1 with
-                              | some d => decide (d ∈ ls.1) && Numeral.WF d.toDec
+                              | some d =>
+                                  if h : Numeral.WF d.toDec = true then
+                                    decide ((⟨d, h⟩ : WFDouble) ∈ ls.1)
+                                  else false
                               | none => false)
   -- `decimal` asks its codec, which is what `admALit` does at this base too — so the joint row
   -- and the table row are the *same function* here rather than two spellings that have to be
@@ -2017,13 +2046,10 @@ theorem Adm_le_adm : ∀ (t : Term) (v : Value), Adm t v = true → adm t v = tr
   | .opaq _, _, h => by rw [adm]; rw [Adm] at h; exact h
   | .number, v, h => by simpa [adm] using (by simpa [Adm] using h : inD v = true)
   | .decimal, v, h => by simpa [adm] using (by simpa [Adm] using h : isStored v = true)
-  -- `Adm` is *strictly* stronger at the numeric base: it carries `WF`, which §5's table does
-  -- not, so the containment drops a conjunct there rather than being `exact`. At the other
-  -- four the two rows are the same predicate — `inL` — which is what one rule makes visible.
-  | .literal k ls, v, h => by
-      rw [adm]
-      rw [Adm_literal] at h
-      exact (Bool.and_eq_true _ _ ▸ h : inL k ls v = true ∧ _).1
+  -- **The two rows are now the same predicate at every base**, `inL`. `Adm` used to be
+  -- strictly stronger at `number` — it carried `WF` where §5's table did not — so this case
+  -- dropped a conjunct rather than being the hypothesis. The gate is `WFDouble`'s now.
+  | .literal k ls, v, h => by rw [adm]; rw [Adm_literal, AdmLit] at h; exact h
   | .custom ce cp, v, h => by rw [adm]; rw [Adm] at h; exact h
   -- the sharpened row: `select`'s filter lands on an option whose tags are pooled into
   -- `allTags`, which is all §5's row ever said

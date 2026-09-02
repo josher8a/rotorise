@@ -328,7 +328,10 @@ noncomputable def SetBase.elem : SetBase → Codec
     on the index first is what makes the carrier concrete, and so the membership decidable. -/
 noncomputable def inL : (k : GroundKind) → NEFinset k.Carrier → Value → Bool
   | .string,  ls, .str s  => decide (s ∈ ls.1)
-  | .number,  ls, .num d  => decide (d ∈ ls.1)
+  -- `number`'s carrier is gated too now (`WFDouble`), so this row is `decimal`'s: membership
+  -- goes *through* the gate, and a double whose text §1 refuses is in no alternative set.
+  | .number,  ls, .num d  =>
+      if h : Numeral.WF d.toDec = true then decide ((⟨d, h⟩ : WFDouble) ∈ ls.1) else false
   -- `decimal`'s value is a `.str` and its carrier is the `Stored` subtype, so membership goes
   -- through the gate rather than round it: a text that is not stored is in no alternative set.
   | .decimal, ls, .str s  =>
@@ -501,21 +504,27 @@ theorem decimalCodec_p_restrict : decimalCodec.p = (wfDecimalCodec.restrict isSt
     §7 calls "an iso and a prism", with the prism named by `ℓ` and the iso supplied by the
     index.
 
-    **`T` is deliberately *not* the refinement's.** It stays §3's `ℓ`, so a numeric literal
-    outside §1's `D` is still *held* and is unwritable — which is (B) failing, and is exactly
-    why the rule needs `ℓ ⊆ D`. Typing the carrier moved that defect from "writes an attribute
-    `𝔸` has no point for" to "holds a value it cannot write"; it did not remove the reason for
-    the premise. At every other base the two coincide, which is why only `number` has one. -/
+    **`T` is deliberately *not* the refinement's**, and what that used to buy is gone in the
+    good direction. It stays §3's `ℓ`; the paragraph here used to add that a numeric literal
+    outside §1's `D` is therefore still *held* and unwritable — (B) failing — and that typing
+    the carrier "did not remove the reason for the premise". It does. `GroundKind.number`'s
+    carrier is `WFDouble`, so every element of `ls` is well-formed, `HLit` holds only values
+    `numberCodec` writes, and there is no such literal to hold. The defect was never in this
+    constructor; it is in §3's rule, which admits an ungated `ℓ`, and
+    `literalN_holds_what_it_cannot_write` (`Refutations.lean`) now says so about a
+    transcription of the rule rather than about a `Term`. -/
 noncomputable def literalCodec (k : GroundKind) (ls : NEFinset k.Carrier) : Codec :=
   { (baseCodec k).restrict (inL k ls) with T := HLit k ls }
 
-theorem literalNCodec_e_num (ls : NEFinset Double) (d : Double) :
-    (literalCodec .number ls).e (.num d)
-      = if d ∈ ls.1 then numberCodec.e (.num d) else none := by
-  by_cases hd : d ∈ ls.1 <;>
-    simp [literalCodec, baseCodec, Codec.restrict, inL, hd]
+/-! `literalNCodec_e_num` stood here — `(literalCodec .number ls).e (.num d)` as an `ite` on
+`ℓ`-membership. **`scripts/unreferenced.lean` deleted it**, which is the control snapshot doing
+the job §6 claims for it: before the carrier change every sibling characterization lemma
+(`numberCodec_e_num`, `numberCodec_p_n`, `literalNCodec_p_n`, `decimalCodec_e_str`) had a
+consumer, and after it this one had none. Its only user was
+`literalN_holds_what_it_cannot_write`, and that witness moved to `literalNRule`, which is built
+from `Codec.restrict` directly. No document cited it. -/
 
-theorem literalNCodec_p_n (ls : NEFinset Double) (x : WFNumeral) :
+theorem literalNCodec_p_n (ls : NEFinset WFDouble) (x : WFNumeral) :
     (literalCodec .number ls).p (.n x) =
       (numberCodec.p (.n x)).bind (fun v => if inL .number ls v then some v else none) := rfl
 
@@ -554,15 +563,22 @@ theorem hLit_of_inL (k : GroundKind) (ls : NEFinset k.Carrier) (v : Value) :
     first
       | exact Bool.noConfusion h
       | exact ⟨_, by simpa [inL] using h, rfl⟩
-      -- `decimal` reaches here and the others do not: its row is a `dite` on the gate, so the
-      -- alternative above — which expects the value's payload to *be* the carrier — cannot see
-      -- through it. Splitting on the gate names the alternative as a subtype, and `toValue`
-      -- projects it straight back. `cases hs :` rather than `by_cases`, which is classical.
+      -- **The two gated bases reach here and the four ungated ones do not.** Their rows are a
+      -- `dite` on the gate, so the alternative above — which expects the value's payload to
+      -- *be* the carrier — cannot see through it. Splitting on the gate names the alternative
+      -- as a subtype, and `toValue` projects it straight back. `cases hs :` rather than
+      -- `by_cases`, which is classical. `number` joined `decimal` here when `ℓ ⊆ D` moved from
+      -- `LiteralD` into `WFDouble`; the two branches differ only in which gate they split.
       | exact (by
           rename_i s
           cases hs : Numeral.Stored s with
           | false => simp [inL, hs] at h
           | true => exact ⟨⟨s, hs⟩, by simpa [inL, hs] using h, rfl⟩)
+      | exact (by
+          rename_i d
+          cases hs : Numeral.WF d.toDec with
+          | false => simp [inL, hs] at h
+          | true => exact ⟨⟨d, hs⟩, by simpa [inL, hs] using h, rfl⟩)
       -- `.null`'s carrier is `Unit`, so the alternative is whichever one the nonemptiness
       -- proof names. Destructed rather than `choose`n: `Exists.choose` is `Classical.choice`,
       -- and `formal/` advertises its absence.
@@ -2676,25 +2692,28 @@ theorem Lawful.restrict {c : Codec} (h : Lawful c) (q : Value → Bool) :
     agree := fun hp he => h.agree (restrict_p.mp hp).1 (restrict_e.mp he).2 }
 
 
-/-- **§3 `(literal)`'s `ℓ ⊆ D`** — the rule's one remaining premise, and content.
+/-! **`LiteralD` stood here, and the carrier ate it.**
 
-    `number`'s base is the only one that bounds anything, so this is `Numeral.WF` over the
-    alternatives there and `True` everywhere else. A double outside §1's `D` is *held* by the
-    rule and unwritable, which is **(B)** failing; §2.2 of `docs/codec-audit.md` is why it stays
-    a premise instead of being typed into the carrier — doing that deletes
-    `literalN_holds_what_it_cannot_write` rather than proving the defect absent.
+    It was `∀ d ∈ ls.1, Numeral.WF d.toDec = true` at `number` and `True` at all five other
+    bases — §3's `ℓ ⊆ D` as a premise of the judgement. Its own docstring argued for keeping it
+    there, citing §2.2 of `docs/codec-audit.md`: typing the gate into the carrier "deletes
+    `literalN_holds_what_it_cannot_write` rather than proving the defect absent".
 
-    A `Prop` rather than the `Bool` the arity-one gate was, because it now quantifies over `ℓ`.
-    This is `literalOK` and `literalN`'s `hD` unified: the other two jobs `literalOK` had —
-    "this payload has a ground base", "and it is this member" — are `GroundKind`'s. -/
-def LiteralD : (k : GroundKind) → NEFinset k.Carrier → Prop
-  | .number, ls => ∀ d ∈ ls.1, Numeral.WF d.toDec = true
-  -- **Vacuous at `decimal`, and that is the base's reason for existing.** §3's `ℓ ⊆ D` is a
-  -- premise at `number` because the alternatives are `Double`s and well-formedness is a fact
-  -- about their text. Here the alternatives *are* stored numerals, `Stored → WF` by
-  -- `Numeral.stored_wf`, and the premise has nothing left to say.
-  | .decimal, _ => True
-  | .string, _ | .boolean, _ | .binary, _ | .null, _ => True
+    That was the right objection and the wrong conclusion, and restating the witness found a
+    third thing wrong with the sentence it was defending. §3's `(literal)` is **not** ungated:
+    its premise line is `ℓ₁ … ℓₙ ∈ T` and at `g = number` the base's `T` is §1's `D`, so the
+    rule already requires `ℓ ⊆ D`. What the witness shows is that **that premise is
+    load-bearing** — omit it and (B) fails — which is a fact worth keeping about §3 and is not
+    a defect in §3. It is restated in `Refutations.lean` on `literalNRule`, the prism over an
+    ungated `ℓ` that is deliberately *not* a `Term`; and `not_typed_literalN_nonD` is gone
+    because "this cannot be derived" and "this cannot be written" are the same claim and only
+    the theorem can go stale.
+
+    The premise was also the last thing standing between the older analysis generation and
+    exactness at this row: `adm (.literal .number ls)` over-approximated by precisely this
+    conjunct, and with the gate in the carrier `inL` is the whole of admission
+    (`ExactV_literalN`). `StoredNumeral`'s docstring in `Domain.lean` predicted both effects
+    while describing `decimal`. JH's call, after the measurement. -/
 
 /-- …and every base is lawful. -/
 theorem lawful_baseCodec : ∀ k : GroundKind, Lawful (baseCodec k)
@@ -2723,8 +2742,9 @@ it is now one, because there is one codec. -/
 
     **No `ℓ ⊆ D` hypothesis, and there never was one in the proof.** `Lawful` relates `e` and
     `p` to each other and never mentions `T`, so a restriction of a lawful pair is lawful
-    whether or not the restriction is inhabited. `LiteralD` earns its place in the *judgement*,
-    where `Carrier` and (B) live, not here. -/
+    whether or not the restriction is inhabited. §3's `ℓ ⊆ D` was a premise of the *judgement*
+    for that reason and is now `GroundKind.number`'s carrier, which is one place further out
+    still. -/
 theorem lawful_literalCodec (k : GroundKind) (ls : NEFinset k.Carrier) :
     Lawful (literalCodec k ls) :=
   Lawful.congr (d := (baseCodec k).restrict (inL k ls)) rfl rfl rfl

@@ -78,13 +78,13 @@ member. Read those four commit messages; they are the record.
 1. **`select` over `List.attach`** — queued since `Codec μ`'s spike, described as a standalone
    strict improvement removing the only structural obstruction in the union proofs. Touches
    `Combinators.lean`, deep in the graph, so it needs a clean build window.
-2. **`adm (.literal .number ls)` is not exact** — missing `WF d.toDec`. Two routes, and the
-   second is a **fidelity call**: tighten the row (breaks `adm_literal_num`'s `rfl` and every
-   `SepV` over literals), or make `GroundKind.number`'s carrier the gated subtype
-   `{d : Double // Numeral.WF d.toDec}`, which is probed and works and deletes `LiteralD`
-   entirely — at the cost of making `literalN_holds_what_it_cannot_write` unstatable. That
-   witness records a defect in **§3's rule**, not in our constructor, which is why it is a call
-   and not a cleanup.
+2. ~~**`adm (.literal .number ls)` is not exact**~~ — **done**, by the carrier route, at JH's
+   call. `GroundKind.number.Carrier` is the gated subtype, `LiteralD` is gone, and the older
+   generation's literal row is exact for free because it is now the *same function* as the
+   joint row. The witness moved to `literalNRule`, an ungated transcription that is not a
+   `Term`. And the premise that made this a fidelity call was misdescribed: §3's rule already
+   carries `ℓ ⊆ D` as `ℓᵢ ∈ T`, so the witness shows that premise is load-bearing rather than
+   showing a defect in the rule. See ARCHITECTURE §8 and the commit message.
 3. **`admits`' violation list** — `admits(c,v) ↔ !isError(c.encode(v))` is false in one
    direction, because `string`/`boolean`/`binary`/`array(string)` do not validate on `encode`.
    Making `encode` use `admits` closes it at the root and is a behaviour change.
