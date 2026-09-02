@@ -193,27 +193,6 @@ def denoteTagged (d : Name) : List Term → List (Finset String × Codec)
 
 end
 
-/-! ### The denoted field table, named
-
-`bodySem` inlines it, and `(dunion)` needs to name it: the discriminator is the union's key,
-not a field the variant declares, so it is injected into *this* map rather than into the
-`Body`. Injecting into the body would make `denote` recurse on a manufactured body that is no
-structural subterm, and `denote` is structural — see this file's header and the fuel that fact
-removed. Here the recursion is still the variant's own fields and the injected entry is a
-closed codec.
-
-**Outside the mutual block, and that is not incidental.** The first draft put it inside, with
-`bodySem b` calling `bodySemMap b`; Lean refused to show termination, correctly — the call is
-on the *same* `b`, so there is nothing decreasing about it. It is not part of the recursion, it
-is a name for what one row of the recursion already builds, so it belongs after the block with
-the equation below as its only tie to `bodySem`. -/
-def bodySemMap : Body → MapOf FieldSem
-  | .mk fields f _ => ⟨fields, fun k => fieldSem (f k)⟩
-
-/-- …and `bodySem` is `objectCodec` over it, by `rfl`. -/
-theorem bodySem_eq (b : Body) : bodySem b = objectCodec (bodySemMap b) (restSem b.rest) := by
-  cases b; rfl
-
 /-! ## The member index
 
 Was "fuel-free" as a *claim about a fueled denotation*; now it is a fact about a structural one,
