@@ -583,6 +583,29 @@ ungated numeric base, `Attr.n` carrying `Numeral.WF`.
 component-wise, so a dotted citation passes whenever both halves occur anywhere.
 **This document is in its `CURRENT` list.**
 
+**And a second blind spot in its own tables: an entry fails when it stops being *cited* and
+cannot fail when its *reason* goes stale.** `HOST`'s `admits` entry read "§10's open question
+about wiring it into `union`'s resolver" for as long as that question was open and for a while
+after `ff75c6b` closed it — cited, so green, and describing a decision that had been taken. The
+citation half is checkable and the prose half is not, which is the same asymmetry §9's docstring
+rule has and the reason both are conventions rather than guards.
+
+**`Orth` as an instrument, not only a classifier** (§5) — `Orth x y` is decidable, so it answers
+`src/`'s declaration-time separation question by `decide`, and `src/lean.ts`'s `Separation`
+carries the one direction that is a law: `src/` never refuses a pair the model certifies. What
+it is blind to is the converse, and stating that plainly is the whole of using it — `Orth` is
+*sufficient*, so its `false` is a decline and not a refutation, and 66 of 351 corpus pairs are
+declines `src/` rightly accepts.
+
+**It is also the first case where the model had an answer by `decide` that `src/` reached by
+measurement.** `Orth (.set .string) (.set .number) = true` was true before `ff75c6b` was written;
+`src/` refused that declaration, and the way the over-refusal was actually found was measuring
+`admits` over a value corpus. Two instruments, one cheap and exact and already present, the other
+statistical over whatever the corpus happened to contain — and the cheap one was not consulted
+because nothing connected it to `src/`. That connection is what the bridge is; the lesson is that
+a decidable model-side answer is worth wiring to the host guard it specifies *before* reaching
+for a corpus.
+
 **The vector bridge** (`src/lean.ts` → `Calculus/Vectors.lean`) — the differential check
 between this model and `src/`: the generator emits one theorem per encode the library actually
 performed, and the *kernel* decides whether the model agrees. Blind spot, and it cost a day:

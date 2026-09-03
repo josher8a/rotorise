@@ -223,7 +223,7 @@ def example where match with fun let have show this at using
 dite dif whnf native native_decide with_unfolding_all maxHeartbeats partial_function
 choose iff head lookup zipWith flatMap not_forall filter_eq_nil_iff sorryAx unknown
 docBlame unreachableTactic simpNF synTaut dupNamespace checkType
-EXPECTED CURRENT PRELUDE LOG HEAD defaultTargets grep
+EXPECTED CURRENT PRELUDE LOG HEAD HOST SPEC MODULE_NAMES defaultTargets grep
 """.split())
 # The last four rows are the ones the stripped source set made necessary, and they are a
 # different kind of entry from the first four. `Bool` was always unclearable; `dite`,
