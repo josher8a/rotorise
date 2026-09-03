@@ -623,6 +623,24 @@ theorem alignTail_TSub {c : Codec} {T' : Held} (ih : ∀ v, c.T v → T' v) :
         · exact alignTail_TSub ih hal'
             (fun p hp => hall p (List.mem_cons_of_mem _ hp)) x hx'
 
+/-- …and the same tail, built rather than read. `alignTail_TSub` takes an `align` that
+    already succeeded; the converse has to *produce* one, and that is the whole difference
+    between the two directions here: on this side `align`'s success is a conclusion, not a
+    hypothesis. It never fails at a tail, because a tail accepts any length. -/
+theorem alignTail_T {c : Codec} {T' : Held} (ih : ∀ v, T' v → c.T v) :
+    ∀ (vs : List Value), (∀ x ∈ vs, T' x) →
+      ∃ ps, align [] (some c) vs = some ps ∧ ∀ p ∈ ps, p.1.T p.2
+  | [], _ => ⟨[], rfl, by simp⟩
+  | v :: vs, hall => by
+      obtain ⟨ps, hal, hps⟩ :=
+        alignTail_T ih vs (fun x hx => hall x (List.mem_cons_of_mem _ hx))
+      refine ⟨(c, v) :: ps, ?_, ?_⟩
+      · simp only [align, hal, Option.map_some']
+      · intro p hp
+        rcases List.mem_cons.mp hp with rfl | hp'
+        · exact ih v (hall v (List.mem_cons_self _ _))
+        · exact hps p hp'
+
 /-- `align`'s positional pairing is §3's `T₁ × … × Tₙ`, one position at a time. -/
 theorem align_TSub {tail Tt} (hopt : TypedOpt tail Tt)
     (ihTail : ∀ t' ∈ tail, ∀ (T' : Held) (μ' : Option Member),
@@ -658,6 +676,41 @@ theorem align_TSub {tail Tt} (hopt : TypedOpt tail Tt)
           exact align_TSub hopt ihTail hs
             (fun t' ht' => ih t' (List.mem_cons_of_mem _ ht')) hal'
             (fun p hp => hall p (List.mem_cons_of_mem _ hp))
+
+/-- …and the positional pairing built from the held sets instead of read off them.
+
+    **`HTuple` is what makes `align` total here**, and that is the content of this direction:
+    the head lists are the same length by construction, and a tail accepts whatever is left,
+    so the `none` rows of `align` are unreachable under the hypothesis. `align_TSub` never
+    has to know that — it is handed the `some`. -/
+theorem align_T_of_HTuple {tail Tt} (hopt : TypedOpt tail Tt)
+    (ihTail : ∀ t' ∈ tail, ∀ (T' : Held) (μ' : Option Member),
+      Typed t' T' μ' → ∀ v, T' v → (denote t').T v) :
+    ∀ {ts Ts}, TypedList ts Ts →
+      (∀ t' ∈ ts, ∀ (T' : Held) (μ' : Option Member),
+        Typed t' T' μ' → ∀ v, T' v → (denote t').T v) →
+      ∀ (vs : List Value), HTuple Ts Tt vs →
+      ∃ ps, align (ts.map denote) (tail.map denote) vs = some ps ∧ ∀ p ∈ ps, p.1.T p.2
+  | _, _, .nil, _, vs, hall => by
+      cases hopt with
+      | none =>
+        obtain rfl : vs = [] := hall
+        exact ⟨[], rfl, by simp⟩
+      | @some t' T' μ' hty =>
+        exact alignTail_T (ihTail _ rfl _ _ hty) vs hall
+  | _, _, @TypedList.cons tx tsx Tx Tsx μx hty hs, ih, vs, hall => by
+      cases vs with
+      | nil => exact nomatch hall
+      | cons v vs' =>
+        obtain ⟨ps, hal, hps⟩ :=
+          align_T_of_HTuple hopt ihTail hs
+            (fun x hx => ih x (List.mem_cons_of_mem _ hx)) vs' hall.2
+        refine ⟨(denote tx, v) :: ps, ?_, ?_⟩
+        · simp only [List.map_cons, align, hal, Option.map_some']
+        · intro p hp
+          rcases List.mem_cons.mp hp with rfl | hp'
+          · exact ih tx (List.mem_cons_self _ _) _ _ hty v hall.1
+          · exact hps p hp'
 
 /-- `opaque`'s fixpoint carries §3's `Uν` at every fuel.
 
@@ -718,6 +771,37 @@ theorem TypedListM.mem : ∀ {ts Ts}, TypedListM ts Ts →
       · exact ⟨_, List.mem_cons_self _ _, h⟩
       · obtain ⟨T', hT', hty⟩ := TypedListM.mem hs t ht'
         exact ⟨T', List.mem_cons_of_mem _ hT', hty⟩
+
+/-- …and the option that answers for a held set, which is the lookup in the other direction.
+
+    `TypedListμ.mem` goes from a *term* in the list to its held set; here a value is known to
+    lie in one of the rule's held sets and the option holding it has to be produced. The two
+    lists are built together by the same `cons`, so neither direction needs a premise — but
+    membership in `Ts` names no term, so this cannot be `mem` applied backwards and is a
+    recursion of its own. The denotation argument arrives as `ih` rather than being taken
+    here, because the caller is the one with the depth measure. -/
+theorem unionT_of_mem : ∀ {opts : List Term} {Ts μs}, TypedListμ opts Ts μs →
+    (∀ t ∈ opts, ∀ (T : Held) (μ), Typed t T μ → ∀ v, T v → (denote t).T v) →
+    ∀ (v : Value) (T : Held), T ∈ Ts → T v → ∃ t ∈ opts, (denote t).T v
+  | _, _, _, .nil, _, _, _, hT, _ => nomatch hT
+  | _, _, _, .cons hty hs, ih, v, T, hT, hv => by
+    rcases List.mem_cons.mp hT with rfl | hT'
+    · exact ⟨_, List.mem_cons_self _ _, ih _ (List.mem_cons_self _ _) _ _ hty v hv⟩
+    · obtain ⟨t'', ht'', hd⟩ :=
+        unionT_of_mem hs (fun x hx => ih x (List.mem_cons_of_mem _ hx)) v T hT' hv
+      exact ⟨t'', List.mem_cons_of_mem _ ht'', hd⟩
+
+/-- …and its `(dunion)` twin, where every option is at `M`. -/
+theorem unionMT_of_mem : ∀ {opts : List Term} {Ts}, TypedListM opts Ts →
+    (∀ t ∈ opts, ∀ (T : Held) (μ), Typed t T μ → ∀ v, T v → (denote t).T v) →
+    ∀ (v : Value) (T : Held), T ∈ Ts → T v → ∃ t ∈ opts, (denote t).T v
+  | _, _, .nil, _, _, _, hT, _ => nomatch hT
+  | _, _, .cons hty hs, ih, v, T, hT, hv => by
+    rcases List.mem_cons.mp hT with rfl | hT'
+    · exact ⟨_, List.mem_cons_self _ _, ih _ (List.mem_cons_self _ _) _ _ hty v hv⟩
+    · obtain ⟨t'', ht'', hd⟩ :=
+        unionMT_of_mem hs (fun x hx => ih x (List.mem_cons_of_mem _ hx)) v T hT' hv
+      exact ⟨t'', List.mem_cons_of_mem _ ht'', hd⟩
 
 -- the shared `term_depth_wf` block has alternatives this theorem's goals do not use
 set_option linter.unreachableTactic false in
@@ -826,6 +910,7 @@ theorem typed_TSub : ∀ {t T μ}, Typed t T μ → ∀ v, (denote t).T v → T 
 
 termination_by t _ _ _ _ _ => Term.depth t
 decreasing_by term_depth_wf
+
 -- the shared `term_depth_wf` block has alternatives this theorem's goals do not use
 set_option linter.unreachableTactic false in
 /-- Every derivable term denotes a pair **on its carrier** — §3's `e : T ⇀ 𝔸`,

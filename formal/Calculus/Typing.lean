@@ -309,4 +309,19 @@ theorem TypedField.not_optional {fd : Field} {T π μ} (h : TypedField fd T π �
   | fallback _ => intro t' hc; exact nomatch hc
   | optional _ => exact absurd hπ (by simp)
 
+/-- …and the same fact read the other way: a field that is not `optional` is required.
+
+    `not_optional` is what a *consumer* of the judgement wants — it has `π = true` and needs
+    the shape. Producing `π = true` from the shape is the converse, and `typed_T_eq`'s
+    `object` case is where it is needed: there the map's key set is known to contain every
+    required name and the guard `valPresentB` is stated by shape, so the two have to be
+    exchanged in this direction. Both rows are `rfl`; §4's "`fallback` concludes `req`" is
+    the second one. -/
+theorem TypedField.true_of_not_optional {fd : Field} {T π μ} (h : TypedField fd T π μ)
+    (hno : ∀ t', fd ≠ .optional t') : π = true := by
+  cases h with
+  | req _ => rfl
+  | fallback _ => rfl
+  | optional _ => exact absurd rfl (hno _)
+
 end Calculus

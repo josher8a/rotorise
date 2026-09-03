@@ -10,7 +10,7 @@
     "Calculus/Domain.lean": 127,
     "Calculus/Equations.lean": 159,
     "Calculus/Exactness.lean": 783,
-    "Calculus/HeldSet.lean": 46,
+    "Calculus/HeldSet.lean": 89,
     "Calculus/Lists.lean": 66,
     "Calculus/LiteralArity1.lean": 59,
     "Calculus/Malleability.lean": 18,
@@ -18,9 +18,9 @@
     "Calculus/Opaque.lean": 204,
     "Calculus/Orthogonality.lean": 288,
     "Calculus/Refutations.lean": 52,
-    "Calculus/Soundness.lean": 317,
+    "Calculus/Soundness.lean": 340,
     "Calculus/Term.lean": 55,
-    "Calculus/Typing.lean": 63,
+    "Calculus/Typing.lean": 67,
     "Calculus/Vectors.lean": 105
   },
   "retirement_marks": {
