@@ -1656,4 +1656,59 @@ export const tableEntry =
     }
 
 export * from './attribute'
-export * from './codec'
+
+/**
+ * The codec surface, **enumerated rather than starred**, because six of `codec.ts`'s exports are
+ * not API.
+ *
+ * `admits`, `carries`, `writes`, `decides`, `setBase` and `deeper` are the definition *readers* —
+ * `admits`' own docstring calls it "the sixth reader of a definition, beside `writes`, `carries`,
+ * `decides`, `setBase` and `deeper`". They exist so this library's own resolver and declaration
+ * guards can ask what a term is; a caller has the codec's behaviour instead, which is the thing
+ * they are derived from. They reached the published surface only because this was
+ * `export * from './codec'`, and `46cb950` shipped `admits` that way without the export being a
+ * decision anyone took.
+ *
+ * Five of the listed values reach here *through* `codec.ts` from `result.ts`, which is where the
+ * pair's error and its combinators live — `CodecError`, `andThen`, `every`, `everyEntry`,
+ * `failed`, `orThrow`. They were starred before and are listed now like the rest.
+ *
+ * So the values are listed and the types are starred. **Adding a codec means adding a line here**,
+ * which is the cost of the list and the point of it: an export becomes a decision rather than a
+ * consequence of where a function happens to live. `Rotorise.spec.ts` pins both halves — the
+ * twenty-four that are API and the six that are not — so a name cannot rejoin the surface by
+ * accident either.
+ */
+export type * from './codec'
+export {
+    andThen,
+    array,
+    binary,
+    boolean,
+    CodecError,
+    custom,
+    decimal,
+    discriminatedUnion,
+    every,
+    everyEntry,
+    failed,
+    fallback,
+    held,
+    lazy,
+    legacy,
+    nullable,
+    nullValue,
+    number,
+    object,
+    opaque,
+    optional,
+    orThrow,
+    pathBuilder,
+    record,
+    refine,
+    rest,
+    shapeOf,
+    string,
+    tuple,
+    union,
+} from './codec'

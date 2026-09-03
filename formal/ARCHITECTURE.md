@@ -1204,17 +1204,29 @@ exactly, and two descriptions of one thing need a guard between them. The differ
 and separation artifacts. **Do not re-open this as a port without first showing a pair where the
 two disagree.**
 
-**And a public read-side twin of `admits` — declined at JH's call, which is the narrower
-question the rejected port left behind.** `admits` is exported and a caller can filter with it;
-there is no equivalent for a stored attribute except catching the read's own failure. The
-proposal was one line asking the codec rather than describing it — §4b's move, exact by
-construction, nothing to keep in agreement — and it was still declined, on the ground that a
-caller can catch that themselves and every export is a compatibility surface the library
-carries forever. Recorded because the *asymmetry* is the durable part: `admits` had to be a
-reader of the definition because the write side was loose, and a read-side twin must **not** be
-one, because the read side is already exact. A future proposal that reaches for twenty-one rows
-here is repeating `a41f874`'s rejection; one that reaches for a one-line ask is repeating this
-one.
+**And the read-side twin — built, internal, after `admits` itself stopped being public.** The
+first answer was to decline it as API, and then JH's reading changed the question: *"`admits`
+should not be a public api in the first place. Those and the proposed one are internal utils."*
+So the **six definition readers** — `admits`, `carries`, `writes`, `decides`, `setBase`, `deeper`
+— left the published surface, and the twin arrived as an internal one.
+
+The mechanism is the finding, because those two were not separable. `admits` was public **only**
+because `src/Rotorise.ts` said `export * from './codec'`; this library has no package-private,
+no `@internal` convention and nothing testing its surface, so "internal but importable" did not
+exist. Moving the function to its own module hits a real import cycle — it needs `codec.ts`'s
+helpers and `codec.ts`'s resolver needs it. What remained was to **enumerate**: `export type *`
+for the sixty-six types and a list for the twenty-four values that are API. Adding a codec is a
+line in that list now, which is the cost, and the point — an export becomes a decision rather
+than a consequence of where a function happens to live. `46cb950` shipped `admits` public with
+no such decision taken.
+
+**And the enumeration is what made the twin expressible**, which is the only reason it was
+built: `codec.ts` can export freely now without reaching the surface. Two places had already
+written it — `testing.ts` as `reads`, `lean.ts`'s read-verdict generator as the same six lines
+inlined — and neither could see the other's. `admitsAttribute` is those two, once. It **asks the
+codec** and is not a reader of the definition: `admits` had to read rows because the write side
+was loose, and this must not, because the read side is already exact (`a41f874`). A future
+proposal reaching for twenty-one rows here is repeating that rejection.
 
 ---
 

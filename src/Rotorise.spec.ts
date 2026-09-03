@@ -1321,3 +1321,68 @@ describe('DynamoDB Utils', () => {
         )
     })
 })
+
+/**
+ * **The published surface, pinned — both what is on it and what is deliberately not.**
+ *
+ * `Rotorise.ts` enumerates the codec values rather than starring them, so that an export is a
+ * decision rather than a consequence of where a function happens to live. That only holds if
+ * something notices when the two lists drift, and nothing did: `admits` reached the surface in
+ * `46cb950` because the re-export was `export * from './codec'`, and no test could have said so.
+ *
+ * The absent half is the load-bearing one. The six definition *readers* — `admits`, `carries`,
+ * `writes`, `decides`, `setBase`, `deeper` — exist for this library's own resolver and
+ * declaration guards to ask what a term is. A caller has the codec's behaviour, which is what
+ * they are derived from. Re-adding one is a decision; this makes it a visible one.
+ */
+describe('the published surface', () => {
+    const internal = [
+        // the six definition readers
+        'admits',
+        'carries',
+        'writes',
+        'decides',
+        'setBase',
+        'deeper',
+        // and the read-side predicate, which is not a reader at all — it asks the codec
+        'admitsAttribute',
+    ] as const
+
+    it('does not carry the internal utilities', async () => {
+        const surface = await import('./Rotorise')
+        for (const name of internal) {
+            expect(Object.hasOwn(surface, name)).toBe(false)
+        }
+    })
+
+    it('carries the constructors and combinators', async () => {
+        const surface = await import('./Rotorise')
+        for (const name of [
+            'array',
+            'binary',
+            'boolean',
+            'custom',
+            'decimal',
+            'discriminatedUnion',
+            'fallback',
+            'held',
+            'lazy',
+            'legacy',
+            'nullValue',
+            'nullable',
+            'number',
+            'object',
+            'opaque',
+            'optional',
+            'record',
+            'refine',
+            'rest',
+            'string',
+            'tuple',
+            'union',
+            'CodecError',
+        ]) {
+            expect(Object.hasOwn(surface, name)).toBe(true)
+        }
+    })
+})

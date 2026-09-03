@@ -52,7 +52,7 @@
 import type { AttributeValue } from './attribute'
 import { isNumeral, isStoredNumeral, memberOf } from './attribute'
 import type { AnyCodec, CodecDef } from './codec'
-import { admits, setBase, union } from './codec'
+import { admits, admitsAttribute, setBase, union } from './codec'
 import { failed } from './result'
 
 /**
@@ -957,12 +957,7 @@ export const readRowIsStuck = ({ codec, attribute }: ReadVerdict): boolean =>
 /** One read verdict, as a Lean `theorem`; `src/`'s answer is taken by running `decode`. */
 export const leanReadVerdict = (one: ReadVerdict): string => {
     const { name, codec, attribute } = one
-    let decodes: boolean
-    try {
-        decodes = !failed(codec.decode(attribute as never))
-    } catch {
-        decodes = false
-    }
+    const decodes = admitsAttribute(codec, attribute)
     return [
         `/-- \`${name}\` — \`src/\` ${decodes ? 'decodes' : 'refuses'} this attribute -/`,
         `theorem ${leanIdent(name)} :`,
