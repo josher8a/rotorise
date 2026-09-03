@@ -252,16 +252,23 @@ describe('terms', () => {
     })
 
     /**
-     * A discriminated union's table is keyed by *tag*, and an option may answer to several — so one
-     * codec can occupy two entries. `Term.dunion` takes the option *list*, and repeating an option
-     * there would give it a tag set overlapping itself, which is exactly the disjointness premise
-     * `Typed.dunion` carries. Deduplicated by identity.
+     * **This checked that one codec occupying two table entries is emitted once**, because
+     * repeating an option in `Term.dunion`'s list would give it a tag set overlapping itself and
+     * `Typed.dunion` carries `hdisj` against exactly that. Arity one refuses the two-entry option
+     * at the declaration, so the emitter's dedup went with the test and the invariant is answered
+     * in one place instead of two. What is left worth pinning is that the list is emitted at all.
      */
-    it('emits a discriminated union once per option, not once per tag', () => {
-        const many = object({ kind: string('a', 'b'), x: string })
-        const emitted = leanTermOf(erase(discriminatedUnion('kind', [many])))
+    it('emits a discriminated union as its option list', () => {
+        const emitted = leanTermOf(
+            erase(
+                discriminatedUnion('kind', [
+                    object({ kind: string('a'), x: string }),
+                    object({ kind: string('b'), y: string }),
+                ]),
+            ),
+        )
         expect(emitted).toContain('Term.dunion "kind" [Term.object')
-        expect(emitted.split('Term.object')).toHaveLength(2)
+        expect(emitted.split('Term.object')).toHaveLength(3)
     })
 
     it('forces a lazy and emits what it finds', () => {

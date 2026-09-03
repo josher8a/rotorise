@@ -115,19 +115,24 @@ const AmountCodec = discriminatedUnion('chargeType', [
     }),
 ])
 
+// one option per tag: `string('ACME', 'GLOBEX')` at a discriminator was legal until arity one,
+// and two options with the same shape is what it becomes — the duplication is the price of the
+// tag being a lookup key rather than a set
 const ProviderCodec = discriminatedUnion('carrierId', [
     object({
-        carrierId: string('ACME', 'GLOBEX'),
+        carrierId: string('ACME'),
         carrierRefId: optional(string),
         traits: object({ type: string('scheduled'), duration: string }),
     }),
-    object(
-        // one option, two tags: `string('ACME', 'GLOBEX')` covers both stored values
-        {
-            carrierId: string('PICKUP'),
-            traits: object({ type: string('walkin'), duration: string }),
-        },
-    ),
+    object({
+        carrierId: string('GLOBEX'),
+        carrierRefId: optional(string),
+        traits: object({ type: string('scheduled'), duration: string }),
+    }),
+    object({
+        carrierId: string('PICKUP'),
+        traits: object({ type: string('walkin'), duration: string }),
+    }),
 ])
 
 const StepCodec = object({

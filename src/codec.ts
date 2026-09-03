@@ -4334,6 +4334,42 @@ type SharedTagsFrom<
           | SharedTagsFrom<Head, Tail, D, At, [...Cursor, unknown]>
     : never
 
+/**
+ * Whether a tag set has more than one member.
+ *
+ * The intersection of a union of distinct literals is `never`, and of a single literal is itself —
+ * so this is the one distinction a conditional cannot make directly, because `extends` on a naked
+ * type parameter distributes and every branch then sees one member.
+ */
+type TagIntersection<Tags> = (
+    Tags extends unknown
+        ? (x: Tags) => void
+        : never
+) extends (x: infer One) => void
+    ? One
+    : never
+
+/**
+ * The options whose discriminator literal admits more than one value.
+ *
+ * Indexed by position like {@link SharedTags}, and one option at a time rather than a pair: this is
+ * a defect in a single option, so naming its neighbour would say nothing.
+ */
+type MultiTagged<
+    Specs extends readonly unknown[],
+    D extends PropertyKey,
+    Cursor extends readonly unknown[] = [],
+> = Specs extends readonly [
+    infer Head,
+    ...infer Rest extends readonly unknown[],
+]
+    ?
+          | ([TagsOf<Head, D>] extends [TagIntersection<TagsOf<Head, D>>]
+                ? never
+                : `option ${Cursor['length']}`)
+          | MultiTagged<Rest, D, [...Cursor, unknown]>
+    : never
+
 type SharedTags<
     Specs extends readonly unknown[],
     D extends PropertyKey,
@@ -4356,19 +4392,26 @@ type SharedTags<
 /**
  * Nothing, or the fact that the options cannot be looked up.
  *
- * Two ways that happens, in the order that gives the more specific message. An option that does not
- * name the discriminator with a `literal` cannot be found at all, and would decode as whichever
- * option happened to match instead. Two options that name the *same* value can each be found, and
+ * Three ways that happens, in the order that gives the more specific message. An option that does
+ * not name the discriminator with a `literal` cannot be found at all, and would decode as whichever
+ * option happened to match instead. An option whose literal admits *several* values is arity one's
+ * refusal — one variant, one tag. Two options that name the *same* value can each be found, and
  * only one of them ever is.
+ *
+ * The arity check comes before the sharing check because it is a defect in one option rather than
+ * in a pair, and because an option with two tags has to lose one before the sharing question is
+ * even well posed.
  */
 type EveryOptionTagged<
     Specs extends readonly unknown[],
     D extends PropertyKey,
 > = [TagsOf<Specs[number], D>] extends [never]
     ? ErrorMessage<'[discriminatedUnion] every option must name the discriminator with a literal at `string`, `number` or `decimal`, or a lookup cannot find it'>
-    : [SharedTags<Specs, D>] extends [never]
-      ? unknown
-      : ErrorMessage<`[discriminatedUnion] ${SharedTags<Specs, D>} answer to the same discriminator value, and a lookup reaches only one of them — give them distinct values`>
+    : [MultiTagged<Specs, D>] extends [never]
+      ? [SharedTags<Specs, D>] extends [never]
+          ? unknown
+          : ErrorMessage<`[discriminatedUnion] ${SharedTags<Specs, D>} answer to the same discriminator value, and a lookup reaches only one of them — give them distinct values`>
+      : ErrorMessage<`[discriminatedUnion] ${MultiTagged<Specs, D>} names the discriminator with a literal admitting several values, and a variant answers to exactly one tag — split it into one option per value`>
 
 /**
  * A union of objects told apart by one attribute — `zod`'s `discriminatedUnion`, over an item.
@@ -4412,7 +4455,8 @@ export const discriminatedUnion = <
                 `every option must be an object codec, and one of them is not — a bare spec has no variant to select, so pass \`object(...)\` around it`,
             )
         }
-        // the whole admissible set, not one value: an option may answer to several tags
+        // one value, not the whole admissible set: a variant answers to exactly one tag, so the
+        // `allowed` set below is read for its single member and refused if it has more
         const def = option.item.spec[discriminator]?.def
         /**
          * A tag is read back by {@link readTag}, which accepts `S` or `N` and nothing else — so the
@@ -4431,23 +4475,27 @@ export const discriminatedUnion = <
                 `every option must name '${discriminator}' with a literal at \`string\`, \`number\` or \`decimal\`, and one of them does not — a tag is carried as 'S' or 'N', and without one a lookup cannot find the variant`,
             )
         }
+        if (tags.length > 1) {
+            throw new CodecError(
+                `'${discriminator}' names ${tags.length} values at one option (${tags.join(', ')}), and a variant answers to exactly one tag — split it into one option per value`,
+            )
+        }
+        const [tag] = tags as readonly [string | number]
+        // Two options answering to one tag is a table with a key written twice: the second
+        // write wins and the first option becomes unreachable, which shows up later as a
+        // required attribute of the *other* variant going missing. `union` refuses its own
+        // ambiguity at the declaration; so does this.
+        if (Object.hasOwn(byTag, tag)) {
+            throw new CodecError(
+                `two options answer to '${discriminator}' = '${tag}', and a lookup reaches only one of them — give them distinct values`,
+            )
+        }
         // the option is already built, so the variant is the codec it came with rather than a
         // second one built from the same spec
-        for (const tag of tags) {
-            // Two options answering to one tag is a table with a key written twice: the second
-            // write wins and the first option becomes unreachable, which shows up later as a
-            // required attribute of the *other* variant going missing. `union` refuses its own
-            // ambiguity at the declaration; so does this.
-            if (Object.hasOwn(byTag, tag)) {
-                throw new CodecError(
-                    `two options answer to '${discriminator}' = '${tag}', and a lookup reaches only one of them — give them distinct values`,
-                )
-            }
-            byTag[tag] = option.item as unknown as ItemCodec<
-                Record<string, unknown>,
-                unknown
-            >
-        }
+        byTag[tag] = option.item as unknown as ItemCodec<
+            Record<string, unknown>,
+            unknown
+        >
     }
     return tagged(discriminator, byTag) as never
 }

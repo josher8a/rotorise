@@ -67,10 +67,16 @@ describe('the unions this library ships', () => {
         )
     })
 
-    it('holds for a variant answering to two tags', () => {
+    /**
+     * This asked the same question of a variant answering to *two* tags, which arity one refuses
+     * at the declaration. The case is gone, the property is not: what it was really checking is
+     * (U) at a `dunion` whose options carry different attribute sets, which is what the two
+     * options below are — restated at one tag each, on the same seed.
+     */
+    it('holds for options with different attributes at one tag each', () => {
         checkUniqueAdmission(
             discriminatedUnion('carrierId', [
-                object({ carrierId: string('ACME', 'GLOBEX'), at: string }),
+                object({ carrierId: string('ACME'), at: string }),
                 object({ carrierId: string('LOCAL'), depot: string }),
             ]),
             { seed },
