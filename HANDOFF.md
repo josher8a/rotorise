@@ -76,28 +76,50 @@ Eleven commits since `93f44d2`. Four instruments, two wins, three negative resul
 
 ## Pick up here
 
-**Nothing is queued.** The instruments line is exhausted; every probe it suggested has been run
-and the three that did not pay are recorded as rejections rather than as backlog. What remains
-is four decisions, and all four are JH's.
+**One decision is open and it is JH's.** The three `src/` items are done — JH's words were
+*"send them to solve `src/`"* — and each is struck below with its commit and its result, because
+every one of them was wrong about something load-bearing and the correction is the part worth
+inheriting.
 
-1. **Item 2's citations — with JH, unanswered.** 172 declarations are named by a document this
-   arc deleted and by no surviving one, in three bins: 12 §2 laws, **10 where a surviving
-   document already makes the claim and cites nothing**, 150 plumbing. The proposal is 13
-   citations — six non-normative bin (ii) anchors, three of the four normative ones, four of the
-   twelve §2 laws, nothing from bin (iii). Reproduce with the five deleted documents against
-   `README.md`, `ARCHITECTURE.md` and `docs/codec-calculus.md`; the four alternative readings and
-   their counts are in `9f1be62`.
-2. **`src/`'s arity-one check — JH's call.** `(dunion)`'s discriminator is arity one in the
-   calculus. `EveryOptionTagged` (`src/codec.ts`) refuses only options naming no literal and
-   pairs sharing a tag, so `string('A','B')` at a discriminator is legal, and `codec.ts:4415`
-   records that as deliberate — *"an option may answer to several tags"*. One type-level check
-   plus that comment, which becomes false. Keying `discriminatedUnion` by tag was **declined**.
-3. **`admits`' violation list — JH's call.** `admits(c,v) ↔ !isError(c.encode(v))` is false in
-   one direction, because `string`/`boolean`/`binary`/`array(string)` do not validate on
-   `encode`. Making `encode` use `admits` closes it at the root and is a behaviour change.
-4. **Wiring `admits` into `union`'s resolver — JH's call**, and deliberately not done. It
-   replaces try-and-see with a decision and retires `identifying` (45 lines, one consumer).
-   Depends on (3).
+1. **The 13 citations — with JH, unanswered, and the only thing queued.** 172 declarations are
+   named by a document this arc deleted and by no surviving one, in three bins: 12 §2 laws,
+   **10 where a surviving document already makes the claim and cites nothing**, 150 plumbing.
+   The proposal is 13 citations — six non-normative bin (ii) anchors, three of the four normative
+   ones, four of the twelve §2 laws, nothing from bin (iii). Reproduce with the five deleted
+   documents against `README.md`, `ARCHITECTURE.md` and `docs/codec-calculus.md`; the four
+   alternative readings and their counts are in `9f1be62`.
+2. ~~**`src/`'s arity-one check**~~ — **`999b877`.** `EveryOptionTagged` and the runtime both
+   refuse a discriminator literal admitting several values. It cost **four deliberate tests**,
+   one of them labelled "the feature the refusal must not take with it" and written to prevent
+   exactly this; the two that went unstatable are `HOpaque set []`'s shape again. `src/lean.ts`'s
+   dedup-by-identity went with them, so `Typed.dunion`'s `hdisj` is answered at the declaration
+   rather than in two places.
+3. ~~**`admits`' violation list**~~ — **`7b376f9`** and **`c37e5cf`.** `admits(c,v) ↔
+   !isError(c.encode(v))` is an **iff** at all thirty-two codecs in `codec.laws.spec.ts`'s table.
+   This item said four codecs were loose; the repo's own pinned test said **twenty-three**, and
+   had said so since it was written. Eleven gates closed all of them, because twelve were loose
+   only through their elements. Every gate runs the predicate `admits` already ran — one test per
+   kind, two callers — and `opaque`/`custom` are carved out because `admits` reaches them *by*
+   calling `encode`, so consulting it there would not terminate.
+4. ~~**Wiring `admits` into `union`'s resolver**~~ — **`ff75c6b`**, and half of it was
+   impossible. The write side decides through `admits` (`onlyAdmitting`) and the swap changed no
+   test, which is the evidence (3) had to land first. **`identifying` cannot be retired**, and
+   not for want of trying: its one consumer is the *declaration-time* pairwise guard, which asks
+   whether **any** value can tell two options apart, and `admits` answers a question about a
+   value there is none of at import time. Its docstring says so now. The declaration guard was
+   also narrowed — `set` separates where `array` and `record` do not, because an empty `Set` is
+   admitted by neither and `[]` is admitted by both.
+
+**A recorded question, not a task: `src/` has no port of `AdmA`.** So the union resolver's *read*
+side still attempts, where the write side decides. `only` and `onlyAdmitting` are two functions
+rather than one flag because of it, and each says so. Whether the attribute side wants a twin is
+open; nothing depends on it today.
+
+**The `src/` numbers, measured at `ff75c6b` in
+`mcr.microsoft.com/devcontainers/typescript-node:0-20` against the host `node_modules`:**
+`tsc --noEmit` clean, `biome ci src` **6**, `vitest run` **870 passed, 9 skipped**. HANDOFF said
+biome was at 8 and a session note said 9; it was 7 before this batch and neither number had been
+run. **Re-measure; do not quote this paragraph either.**
 
 **Closed this arc, do not re-open:** unifying `κ` with `occV`/`occA` (§4a — the computability
 gate passes and the ⊤ encodings are incompatible; the cost shape kills it); collapsing the four
@@ -153,8 +175,17 @@ see why, recompute the spans against `HEAD` rather than guessing which edit did 
 **Python is on the host, not in `rotorise-lean-dev`.** There is no Python in that container at
 all — `which python3` there exits non-zero. The six scripts run from `formal/` on the Mac.
 
-**The TS toolchain is not on PATH and neither is `node`.** Run it in a container against the
-host `node_modules`; `tsc --noEmit` is clean there, biome is at 8.
+**The TS toolchain is not on PATH and neither is `node`.** Run it in
+`mcr.microsoft.com/devcontainers/typescript-node:0-20` mounted on the repo, against the host
+`node_modules`: `npx --no-install tsc --noEmit`, `npx --no-install biome ci src`,
+`npx --no-install vitest run --reporter=dot`.
+
+**And baseline all three before touching anything, because this file has been wrong about one of
+them twice.** It said biome was at 8, a session note said 9, and it was **7** — nobody had run it.
+`biome ci` exits non-zero at HEAD, so exit code alone says nothing; read the count. `vitest` exit
+0 alone is not proof either — a run that collects nothing exits 0, so require the
+`Tests N passed` line. And `biome format --write` on a file that is already dirty produces a
+diff nobody asked for mixed into the commit, so format only the files your own change touched.
 
 **`tuple` is variadic.** `tuple([x])` passes an array as one element and every reader of
 `def.elements[0].def` then sees `undefined`.
@@ -180,6 +211,27 @@ already know are in the file.
 ---
 
 ## The thing to keep
+
+**An ambiguity a resolver reports may be its own looseness wearing an ambiguity's clothes.**
+`codec.uniqueadmission.spec.ts` recorded a union this library builds, decodes from, and cannot
+encode into — `union([held(decimal, dateAdapter), string])`, throwing on *every* `Date` — and
+left the repair as a choice between refusing the declaration and giving `held` a write-side `κ`,
+"both the specification's call". **Neither was needed.** The cause was in the defect's own prose:
+with no `κ` the resolver falls back to attempting, and `string.encode(new Date())` succeeded. Gate
+`string` and the `held` option answers alone. The option that had no `κ` still has none; what it
+no longer has is a rival that admitted everything. A resolver that decides by *trying* inherits
+every looseness of everything it tries, and then reports the result as a property of the
+declaration — so before costing a repair for an ambiguity, check whether both options really
+admit the value or whether one of them merely failed to refuse it.
+
+**Twenty-three loose rows closed with eleven gates, because twelve were loose only through their
+elements.** The measurement was the deliverable of `admits`' violation list, and the useful part
+was not the total but its *shape*: five ground gates closed seventeen, since a `tuple` took a
+`Uint8Array` of the right length only because its positions did, and `attributes`, the four
+wrappers, `legacy`, `held`, `lazy` and both unions inherited the same way. Only the six that were
+loose in their **own** row needed their own gate. **Measure a container's defect at its leaves
+before costing it per container** — and re-measure after each layer, because the second
+measurement is what said six and not eighteen.
 
 **A guard that fires on the refactor it exists to encourage is a guard nobody keeps.**
 `branches` summed `1 + decision_points` per declaration, so the per-file total counted one per
