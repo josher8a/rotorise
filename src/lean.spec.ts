@@ -27,6 +27,7 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import type { AttributeValue } from './attribute'
 import type { AnyCodec, AttributeCodec } from './codec'
 import {
     admits,
@@ -52,16 +53,18 @@ import {
     tuple,
     union,
 } from './codec'
-import type { Refusal, Separation, Vector } from './lean'
+import type { ReadVerdict, Refusal, Separation, Vector } from './lean'
 import {
     LeanUnemittable,
     leanAttrOf,
+    leanReadModule,
     leanSeparation,
     leanSeparationModule,
     leanTermOf,
     leanValueOf,
     leanVector,
     leanVectorModule,
+    readRowIsStuck,
 } from './lean'
 
 /** The emitter takes the erased codec; the constructors return precise ones. */
@@ -741,6 +744,90 @@ const separationPairs = (): readonly Separation[] => {
     }
     return out
 }
+
+/**
+ * Every (codec, attribute) pair the corpus offers, for the read-side differential.
+ *
+ * The attributes are what the corpus actually *writes*, plus six raw shapes for the members no
+ * corpus vector produces alone. Bounded by `leanAttrOf` the way the pairs are bounded by
+ * `leanTermOf`: an attribute the model has no closed expression for cannot be put to it.
+ */
+const readVerdicts = (): readonly ReadVerdict[] => {
+    const codecs: readonly (readonly [string, AnyCodec])[] = [
+        ...sampleVectors.map((v) => [v.name, v.codec] as const),
+        ['scalar_number', erase(number)] as const,
+    ]
+    const attributes: [string, AttributeValue][] = []
+    for (const v of sampleVectors) {
+        try {
+            attributes.push([
+                v.name,
+                v.codec.unsafeEncode(v.value as never) as AttributeValue,
+            ])
+        } catch {
+            // a value its own codec refuses writes no attribute to read back
+        }
+    }
+    attributes.push(['raw_S', { S: 'x' } as AttributeValue])
+    attributes.push(['raw_N', { N: '1.5' } as AttributeValue])
+    attributes.push(['raw_BOOL', { BOOL: true } as AttributeValue])
+    attributes.push(['raw_NULL', { NULL: true } as AttributeValue])
+    attributes.push(['raw_L_empty', { L: [] } as AttributeValue])
+    attributes.push(['raw_M_empty', { M: {} } as AttributeValue])
+
+    const out: ReadVerdict[] = []
+    for (const [cn, codec] of codecs) {
+        try {
+            leanTermOf(codec, cn)
+        } catch {
+            continue
+        }
+        for (const [an, attribute] of attributes) {
+            try {
+                leanAttrOf(attribute, an)
+            } catch {
+                continue
+            }
+            out.push({ name: `${cn}__reads__${an}`, codec, attribute })
+        }
+    }
+    return out
+}
+
+describe("the read side, against the model's read row", () => {
+    /**
+     * **The measurement that rejected a port.** HANDOFF's fourth item wanted the resolver's read
+     * side decided through a port of `AdmA`. `decode` already agrees with `AdmA` at every pair
+     * the kernel can check, because `decode` validates — it parses data somebody else wrote —
+     * where `encode` trusted its argument's type. So the port would have been a second
+     * description of one thing, and this differential is the guard that a second description
+     * would have needed anyway.
+     */
+    it('offers 864 pairs, three of them stuck on the `Double` axiom', () => {
+        const verdicts = readVerdicts()
+        expect(verdicts.length).toBe(864)
+        const stuck = verdicts.filter(readRowIsStuck)
+        expect(stuck.map((one) => one.name)).toEqual([
+            'scalar_number__reads__scalar_decimal',
+            'scalar_number__reads__literal_decimal',
+            'scalar_number__reads__raw_N',
+        ])
+    })
+
+    it('emits them for the gate to elaborate', () => {
+        if (process.env.EMIT_LEAN_REFUSALS) {
+            writeFileSync(
+                join(process.cwd(), 'formal', '.readverdicts.lean'),
+                leanReadModule(readVerdicts()),
+            )
+        }
+        const module = leanReadModule(readVerdicts())
+        expect(module).toContain('import Calculus.Exactness')
+        // the stuck ones are named in the header rather than dropped in silence
+        expect(module).toContain('stuck, not skipped')
+        expect(module).toContain('scalar_number__reads__raw_N')
+    })
+})
 
 describe("the declaration guard, against the model's classifier", () => {
     /**

@@ -92,7 +92,9 @@ if [ "$RUN_BUILD" -eq 1 ]; then
   # Emit the full refusal cross product and the declaration-guard verdicts, then elaborate them
   # beside the two committed samples. `.separations.lean` is one theorem per option pair `src/`'s
   # `union` refuses, asserting the model does not certify it — the law runs that way only, `Orth`
-  # being sufficient and not necessary (`ARCHITECTURE.md` §5).
+  # being sufficient and not necessary (`ARCHITECTURE.md` §5). `.readverdicts.lean` is the
+  # read-side differential: `AdmA t a` against whether `decode` accepted it, 861 of 864 pairs,
+  # the other three stuck on the `Double` axiom and named in its header (§10).
   # The committed samples are a readable subset and say so in their header; what is *verified*
   # is all of it, which is the distinction the broken bridge was hiding — a sample regenerated
   # from a stale emitter agrees with itself, so only elaboration is evidence.
@@ -101,7 +103,7 @@ if [ "$RUN_BUILD" -eq 1 ]; then
   run 'vector bridge' docker exec "$CONTAINER" bash -lc \
     'cd /workspaces/Rotorise/formal &&
      for f in ../src/lean.sample.check.lean ../src/lean.sample.lean .vectors.full.lean \
-              .separations.lean; do
+              .separations.lean .readverdicts.lean; do
        [ -f "$f" ] || { echo "missing $f"; exit 1; }
        out=$(lake env lean "$f" 2>&1) || { echo "$out"; exit 1; }
        # warnings are failures here: the generated files are machine-written, so a warning is
