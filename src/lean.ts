@@ -52,7 +52,7 @@
 import type { AttributeValue } from './attribute'
 import { isNumeral, isStoredNumeral, memberOf } from './attribute'
 import type { AnyCodec, CodecDef } from './codec'
-import { admits, admitsAttribute, setBase, union } from './codec'
+import { admits, admitsAttribute, setBase, shapeOf, union } from './codec'
 import { failed } from './result'
 
 /**
@@ -996,6 +996,186 @@ set_option linter.unusedVariables false
 namespace Calculus
 
 ${live.map(leanReadVerdict).join('\n\n')}
+
+end Calculus
+`
+}
+
+/**
+ * One proposed **resolution**: this union, given this value or attribute, picks what the model's
+ * `select` picks.
+ *
+ * **Coverage, not a hole.** `lean.sample*.lean` already pins two — `union_of_two` and
+ * `discriminated_union`, one value each — and the refusal cross product carries 88 more union and
+ * `dunion` lines. Those check the same thing this does: a positive vector *is* an agreement about
+ * which option answered, because the attribute it names is the one that option produced. What was
+ * thin was the corpus, so this widens two pinned resolutions to 208 on the write side and 226 on
+ * the read side, and the artifact is worth having for that and not for closing a gap.
+ *
+ * The write side reuses the `check` comparator, which is what crosses `Attr.m`'s binder. The read
+ * side cannot: its answer is a `Value`, `Value.map` carries a function, and `Vectors.lean` has no
+ * `Option Value` twin of `aeq`. See {@link readResolutionIsUnstatable}.
+ */
+export type Resolution = {
+    /** A Lean identifier; anything else is sanitized, because a bad name loses the whole file. */
+    readonly name: string
+    readonly union: AnyCodec
+    readonly value: unknown
+}
+
+/** One write-side resolution: what the union wrote, or that it wrote nothing. */
+export const leanResolution = ({
+    name,
+    union: u,
+    value,
+}: Resolution): string => {
+    const term = leanTermOf(u, name)
+    let written: unknown
+    let wrote = true
+    try {
+        const out = u.encode(value as never)
+        wrote = !failed(out)
+        written = out
+    } catch {
+        wrote = false
+    }
+    const head = [
+        `/-- \`${name}\` — the option the union picked -/`,
+        `theorem ${leanIdent(name)} :`,
+    ]
+    return wrote
+        ? [
+              ...head,
+              `    check ${fuelFor(written as AttributeValue)}`,
+              `      ((denote (${term})).e`,
+              `        (${leanValueOf(value, name)}))`,
+              `      (some (${leanAttrOf(written as AttributeValue, name)})) = .same := rfl`,
+          ].join('\n')
+        : [
+              ...head,
+              `    (denote (${term})).e`,
+              `      (${leanValueOf(value, name)}) = none := rfl`,
+          ].join('\n')
+}
+
+/** One read-side resolution, addressed by the attribute rather than the value. */
+export type ReadResolution = {
+    readonly name: string
+    readonly union: AnyCodec
+    readonly attribute: AttributeValue
+}
+
+/**
+ * Whether a read-side resolution **cannot be stated**, for want of a comparator.
+ *
+ * A union that reads an attribute back to a **map** produces a `Value.map`, which carries a
+ * function — so the model's answer is a lambda stuck under a binder, pointwise equal to the
+ * emitted one and not definitionally equal. That is the same funext gap `Vectors.lean` opens by
+ * describing for `Attr.m`, and the write side solves it with `aeq`: a fuelled comparator that
+ * never compares two functions, only their values at every key of a key set it has already
+ * checked is the same.
+ *
+ * **There is no `Option Value` twin of it.** `aeq` and `check` compare attributes. So these are
+ * recorded rather than asserted, exactly as the three `Double`-stuck read verdicts are — and
+ * unlike those, this one is a gap in the *machinery* and closable: the `veq` that would close it
+ * is `aeq`'s construction over `Value.map` instead of `Attr.m`.
+ *
+ * **The second reason is the `Double` axiom arriving a third way**, and the three are worth
+ * distinguishing because each closes differently or not at all. A numeric `literal` is
+ * *term*-inexpressible: its alternatives are `NEFinset Double`. `AdmA .number`'s `.n` row is
+ * *row*-irreducible: `Double.ofDec` has no computation rule. And here it is the **decoded value**
+ * — `union([string.set(), number.set()])` reads an `NS` back to a `Set<number>`, whose Lean form
+ * is `Value.numSet` over a `NEFinset Double`. Same axiom, three places, and only the funext one
+ * has a repair.
+ */
+export const readResolutionIsUnstatable = (
+    one: ReadResolution,
+): 'no Value comparator' | 'Double' | undefined => {
+    let read: unknown
+    try {
+        const out = one.union.decode(one.attribute as never)
+        if (failed(out)) return undefined
+        read = out
+    } catch {
+        return undefined
+    }
+    if (shapeOf(read) === 'map') return 'no Value comparator'
+    try {
+        leanValueOf(read)
+    } catch {
+        return 'Double'
+    }
+    return undefined
+}
+
+/** One read-side resolution: what the union read, or that it read nothing. */
+export const leanReadResolution = (one: ReadResolution): string => {
+    const { name, union: u, attribute } = one
+    let read: unknown
+    let did = true
+    try {
+        const out = u.decode(attribute as never)
+        did = !failed(out)
+        read = out
+    } catch {
+        did = false
+    }
+    return [
+        `/-- \`${name}\` — the option the union read it back through -/`,
+        `theorem ${leanIdent(name)} :`,
+        `    (denote (${leanTermOf(u, name)})).p`,
+        `      (${leanAttrOf(attribute, name)}) = ${did ? `some (${leanValueOf(read, name)})` : 'none'} := rfl`,
+    ].join('\n')
+}
+
+/**
+ * The resolutions as a module of their own.
+ *
+ * Generated at gate time and elaborated, never committed — the counts are in
+ * `formal/ARCHITECTURE.md` §5, beside the classifier this is the other half of.
+ */
+export const leanResolutionModule = (
+    writes: readonly Resolution[],
+    reads: readonly ReadResolution[],
+): string => {
+    const statable = reads.filter((one) => !readResolutionIsUnstatable(one))
+    const unstatable = reads.filter(
+        (one) => readResolutionIsUnstatable(one) === 'no Value comparator',
+    )
+    const doubled = reads.filter(
+        (one) => readResolutionIsUnstatable(one) === 'Double',
+    )
+    return `import Calculus.Vectors
+
+/-!
+# Union resolution, model against library
+
+**Generated — do not edit.** One theorem per (union, value) and (union, attribute) pair: the
+option the model's \`select\` resolves to, against the one this library's resolver picked.
+${writes.length} on the write side, ${statable.length} on the read side.
+
+${unstatable.length} read pairs **cannot be stated for want of a comparator**, which is a gap in the
+machinery rather than in either side: a union reading an attribute back to a map produces a
+\`Value.map\`, which carries a function, and \`aeq\`/\`check\` compare \`Attr\` only. A \`veq\`
+built the way \`aeq\` is would make them statable.
+${unstatable.map((one) => `  * \`${one.name}\``).join('\n')}
+
+${doubled.length} more **cannot be written down at all**: the value read back is a set of numbers,
+so its Lean form is \`Value.numSet\` over a \`NEFinset Double\`, and \`Double\` is an axiom with no
+closed terms. That is the same axiom the numeric \`literal\` and \`AdmA .number\` meet, arriving a
+third way — at the *decoded value* rather than the term or the row — and it has no repair.
+${doubled.map((one) => `  * \`${one.name}\``).join('\n')}
+-/
+
+/-! The emitted key function is total on a membership subtype, so a single-name object binds a
+\`k\` it never reads; the binder cannot be \`_\` because a multi-name object reads \`k.1\`. -/
+set_option linter.unusedVariables false
+
+namespace Calculus
+
+${writes.map(leanResolution).join('\n\n')}
+
+${statable.map(leanReadResolution).join('\n\n')}
 
 end Calculus
 `

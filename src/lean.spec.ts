@@ -53,17 +53,26 @@ import {
     tuple,
     union,
 } from './codec'
-import type { ReadVerdict, Refusal, Separation, Vector } from './lean'
+import type {
+    ReadResolution,
+    ReadVerdict,
+    Refusal,
+    Resolution,
+    Separation,
+    Vector,
+} from './lean'
 import {
     LeanUnemittable,
     leanAttrOf,
     leanReadModule,
+    leanResolutionModule,
     leanSeparation,
     leanSeparationModule,
     leanTermOf,
     leanValueOf,
     leanVector,
     leanVectorModule,
+    readResolutionIsUnstatable,
     readRowIsStuck,
 } from './lean'
 
@@ -793,6 +802,151 @@ const readVerdicts = (): readonly ReadVerdict[] => {
     }
     return out
 }
+
+/**
+ * The unions this bridge resolves, and why they are a list rather than the corpus.
+ *
+ * `sampleVectors` carries two — `union_of_two` and `discriminated_union` — and both are already
+ * pinned in the committed sample. These widen that: the pair `ff75c6b` un-refused
+ * (`set(string)`/`set(number)`, which `Orth` certifies), objects chosen by name, two literals,
+ * a `nullValue` arm, an `optional` inside a variant, and a three-way `dunion`. Every one is legal
+ * at the declaration and emittable.
+ */
+const resolutionUnions = (): readonly (readonly [string, AnyCodec])[] => [
+    ['u_string_boolean', erase(union([string, boolean]))],
+    ['u_string_null', erase(union([string, nullValue]))],
+    ['u_setstring_setnumber', erase(union([string.set(), number.set()]))],
+    [
+        'u_objects_by_name',
+        erase(union([object({ a: string }), object({ b: boolean })])),
+    ],
+    ['u_literal_pair', erase(union([string('A'), string('B')]))],
+    [
+        'u_optional_inner',
+        erase(union([string, object({ z: optional(boolean) })])),
+    ],
+    [
+        'd_two_variants',
+        erase(
+            discriminatedUnion('kind', [
+                object({ kind: string('a'), x: string }),
+                object({ kind: string('b'), y: boolean }),
+            ]),
+        ),
+    ],
+    [
+        'd_three_variants',
+        erase(
+            discriminatedUnion('t', [
+                object({ t: string('p'), v: string }),
+                object({ t: string('q'), v: boolean }),
+                object({ t: string('r'), v: decimal }),
+            ]),
+        ),
+    ],
+]
+
+const writeResolutions = (): readonly Resolution[] =>
+    resolutionUnions().flatMap(([un, u]) =>
+        sampleVectors.flatMap((v) => {
+            try {
+                leanValueOf(v.value, v.name)
+            } catch {
+                return []
+            }
+            return [{ name: `ur_${un}__${v.name}`, union: u, value: v.value }]
+        }),
+    )
+
+const readResolutions = (): readonly ReadResolution[] => {
+    const attributes: [string, AttributeValue][] = []
+    for (const v of sampleVectors) {
+        try {
+            attributes.push([
+                v.name,
+                v.codec.unsafeEncode(v.value as never) as AttributeValue,
+            ])
+        } catch {
+            // a value its own codec refuses writes no attribute to read back
+        }
+    }
+    attributes.push(['raw_S', { S: 'x' } as AttributeValue])
+    attributes.push(['raw_BOOL', { BOOL: true } as AttributeValue])
+    attributes.push(['raw_NULL', { NULL: true } as AttributeValue])
+    return resolutionUnions().flatMap(([un, u]) =>
+        attributes.flatMap(([an, attribute]) => {
+            try {
+                leanAttrOf(attribute, an)
+            } catch {
+                return []
+            }
+            return [{ name: `rr_${un}__${an}`, union: u, attribute }]
+        }),
+    )
+}
+
+describe('union resolution, model against library', () => {
+    /**
+     * **Coverage, and it is worth being exact about that.** Two resolutions were pinned before —
+     * a positive vector *is* an agreement about which option answered, since the attribute it
+     * names is the one that option produced — and the refusal set carries 88 more union lines.
+     * This widens two to 208, and the value is the corpus rather than the question.
+     */
+    it('offers 208 write pairs and 226 statable of 232 read pairs', () => {
+        expect(writeResolutions().length).toBe(208)
+        const reads = readResolutions()
+        expect(reads.length).toBe(232)
+        expect(
+            reads.filter(
+                (one) =>
+                    readResolutionIsUnstatable(one) === 'no Value comparator',
+            ).length,
+        ).toBe(5)
+        // and one the `Double` axiom reaches a third way — at the decoded value
+        expect(
+            reads
+                .filter((one) => readResolutionIsUnstatable(one) === 'Double')
+                .map((one) => one.name),
+        ).toEqual(['rr_u_setstring_setnumber__set_of_decimal'])
+    })
+
+    /**
+     * The five that cannot be stated, named — a union reading back to a map produces a
+     * `Value.map`, which carries a function, and the comparator is `Attr`-only.
+     */
+    it('names the five a `Value` comparator would close', () => {
+        expect(
+            readResolutions()
+                .filter(
+                    (one) =>
+                        readResolutionIsUnstatable(one) ===
+                        'no Value comparator',
+                )
+                .map((one) => one.name),
+        ).toEqual([
+            'rr_u_objects_by_name__object_optional_absent',
+            'rr_u_objects_by_name__object_fallback_present',
+            'rr_u_objects_by_name__opaque_map',
+            'rr_u_optional_inner__record_empty',
+            'rr_d_two_variants__discriminated_union',
+        ])
+    })
+
+    it('emits them for the gate to elaborate', () => {
+        if (process.env.EMIT_LEAN_REFUSALS) {
+            writeFileSync(
+                join(process.cwd(), 'formal', '.resolutions.lean'),
+                leanResolutionModule(writeResolutions(), readResolutions()),
+            )
+        }
+        const module = leanResolutionModule(
+            writeResolutions(),
+            readResolutions(),
+        )
+        expect(module).toContain('import Calculus.Vectors')
+        expect(module).toContain('cannot be stated')
+    })
+})
 
 describe("the read side, against the model's read row", () => {
     /**

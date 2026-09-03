@@ -95,6 +95,8 @@ if [ "$RUN_BUILD" -eq 1 ]; then
   # being sufficient and not necessary (`ARCHITECTURE.md` §5). `.readverdicts.lean` is the
   # read-side differential: `AdmA t a` against whether `decode` accepted it, 861 of 864 pairs,
   # the other three stuck on the `Double` axiom and named in its header (§10).
+  # `.resolutions.lean` widens the two pinned union vectors to 208 write and 226 read pairs —
+  # which option the model's `select` picks against the one the library's resolver did.
   # The committed samples are a readable subset and say so in their header; what is *verified*
   # is all of it, which is the distinction the broken bridge was hiding — a sample regenerated
   # from a stale emitter agrees with itself, so only elaboration is evidence.
@@ -103,7 +105,7 @@ if [ "$RUN_BUILD" -eq 1 ]; then
   run 'vector bridge' docker exec "$CONTAINER" bash -lc \
     'cd /workspaces/Rotorise/formal &&
      for f in ../src/lean.sample.check.lean ../src/lean.sample.lean .vectors.full.lean \
-              .separations.lean .readverdicts.lean; do
+              .separations.lean .readverdicts.lean .resolutions.lean; do
        [ -f "$f" ] || { echo "missing $f"; exit 1; }
        out=$(lake env lean "$f" 2>&1) || { echo "$out"; exit 1; }
        # warnings are failures here: the generated files are machine-written, so a warning is

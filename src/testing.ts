@@ -1785,11 +1785,26 @@ const byTag = (
  * `codec-calculus.md` §5 is explicit that an option admits `t` when "the `κ`/name filter passes
  * **and** `eᵢ(t)` is defined", and that is what this reads. The model's `OptionSem.byAttempt` drops
  * the first conjunct — `FIDELITY.md` D1 records that `κ` is never consulted by the denotation — and
- * the difference is not cosmetic: **`union([string, number])` violates (U) under the model's
- * reading and satisfies it under the specification's**, because `number.encode('-1')` used to
- * succeed. Encoding validates now, so definedness *does* tell the two ground options apart and
- * that particular divergence is closed — the two readings still differ, and this reads the
- * specification's, because the first conjunct is what a union's declaration guard is made of.
+ * the difference used to be visible: **`union([string, number])` violated (U) under the model's
+ * reading and satisfied it under the specification's**, because `number.encode('-1')` succeeded.
+ *
+ * **The two readings coincide, and by theorem rather than by luck.** `Calculus.κ_sound` is
+ * `κ t = some ks → (denote t).e v = some a → Value.kind v ∈ ks` — encoding lands in `κ`. Its
+ * contrapositive is that a κ failure forces an encode failure, so "the filter refuses and the
+ * attempt succeeds", the only state in which the two conjuncts disagree, **cannot arise in the
+ * model at all**. Where `κ` answers `⊤` there is no conjunct to fail, which is the same vacuity
+ * this function reads off an absent `carries`.
+ *
+ * A sentence here used to say the readings "still differ" after that divergence closed. They do
+ * not, and the claim outlived its own witness by three commits: `number.encode('-1')` stopped
+ * succeeding in `c37e5cf`, and nothing was put in its place.
+ *
+ * **What is not a theorem is the correspondence between the two sides' κ.** The model's is
+ * `κ : Term → Option (List Kind)`; this library's is {@link carries}, over `Shape`, which is a
+ * coarser alphabet. `κ_sound` settles the model; what settles the pair is the bridge, and it
+ * checks 208 write and 226 read resolutions with no disagreement. So this reads the
+ * specification's form because the first conjunct is what a union's declaration guard is made of
+ * — not because the two forms are known to select differently.
  *
  * `κ` is read off the definition, which is where it lives: {@link carries} is the kinds of value a
  * term takes and {@link writes} the member it stores them in, both computed from the term and

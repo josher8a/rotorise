@@ -8,3 +8,4 @@ tsconfig.tsbuildinfo
 /formal/.vectors.full.lean
 /formal/.separations.lean
 /formal/.readverdicts.lean
+/formal/.resolutions.lean
