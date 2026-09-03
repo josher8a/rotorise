@@ -2489,7 +2489,9 @@ theorem not_admitV_le_Adm :
     holds of `[objReqStr, objReqNum]` and the conclusion does not. This is the theorem that
     would have to survive for `adm`, `admA`, `SepV` and `SepA` to be retired in favour of
     `Adm`, `AdmA`, `SepJV` and `SepJA`; it does not, and the reason is a row rather than a
-    proof — see the section note above. -/
+    proof — see the section note above, which is wider than this theorem: the `object` row is
+    the whole obstruction on the *value* side only, and `sepJA_needs_member` is a second one on
+    the read side, at a different constructor and reached by no premise here. -/
 theorem not_uAtCan_of_sepJ :
     ¬ ∀ (opts : List Term),
       (∀ t ∈ opts, Lawful (denote t)) →
