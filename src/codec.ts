@@ -862,6 +862,38 @@ export const admits = (codec: AnyCodec, value: unknown): boolean => {
 }
 
 /**
+ * Whether this codec reads this attribute at all — §3's `AdmA`, and **not** ported the way
+ * {@link admits} ports `Adm`.
+ *
+ * `admits` is a reader of the *definition*, one row per constructor, because the write side was
+ * loose: `encode` trusted its argument's type, so "would this be written?" and "does the row
+ * admit it?" were different questions and the row was the honest one. **The read side never had
+ * that licence.** It parses data somebody else wrote, so it validates, and a differential over
+ * 864 (codec, attribute) pairs found the model's `AdmA` and this library's read agreeing at all
+ * 861 checkable ones (`a41f874`, `formal/ARCHITECTURE.md` §10). A twenty-one-row reader here
+ * would be a second description of something already exact — so this **asks the codec**, which is
+ * the same move `admits` itself makes at its two exact rows.
+ *
+ * A throw is not a reading: an adapter is a caller's function and may throw on an attribute it
+ * does not own, exactly as it may on a value.
+ *
+ * **Internal.** Like the six definition readers, it is not on the published surface — see
+ * `Rotorise.ts`'s export list. It exists because two places had already written it: `testing.ts`
+ * had it as `reads`, and `lean.ts`'s read-verdict generator had the same six lines inlined, and
+ * neither could see the other's.
+ */
+export const admitsAttribute = (
+    codec: AnyCodec,
+    attribute: AttributeValue,
+): boolean => {
+    try {
+        return !failed(codec.decode(attribute as never))
+    } catch {
+        return false
+    }
+}
+
+/**
  * The codec one segment deeper, or `undefined` where the path runs past the schema.
  *
  * How {@link ItemCodec.at} walks. Defined here beside {@link writes} and {@link decides} because it

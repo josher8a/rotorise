@@ -74,6 +74,15 @@
   - a narrowing that is genuinely the caller's to guarantee → `held`, where the caller's own
     functions belong.
 
+- **The six definition readers leave the published surface** — `admits`, `carries`, `writes`,
+  `decides`, `setBase` and `deeper`. **Breaking.** They are how this library's own union resolver
+  and declaration guards ask what a term is; a caller has the codec's behaviour, which is what
+  they are derived from. `admits` reached the surface in `46cb950` and the other five before it,
+  all because the re-export was `export * from './codec'` — the export was never a decision
+  anyone took. `src/Rotorise.ts` enumerates the twenty-four codec values now and stars only the
+  types, so adding one is a line in a list, and `Rotorise.spec.ts` pins both halves: what is API
+  and what is deliberately not.
+
 ## 0.3.6 — 2026-07-31
 
 ### Fixed

@@ -161,9 +161,24 @@ EXPECTED = {
 HOST = {
     "opaque": "`src/`'s codec, analysed here as a well-behaved `custom` — same analysis, "
               "opposite warranty (§7). `opaqCodec` is the model's, and is not the same name",
-    "admits": "`src/codec.ts`'s reader, and §10's open question about wiring it into `union`'s "
-              "resolver is closed — `ff75c6b` did, on the write side. The model's predicate is "
-              "`adm`, proved exact, which is what made the swap behaviour-preserving",
+    "admits": "`src/codec.ts`'s reader — **internal** as of the surface enumeration, with the "
+              "other five definition readers. §10's question about wiring it into `union`'s "
+              "resolver is closed (`ff75c6b`, write side). The model's predicate is `adm`, "
+              "proved exact, which is what made that swap behaviour-preserving",
+    "admitsAttribute": "`src/codec.ts`'s read-side predicate, internal, and deliberately not a "
+                       "reader of the definition — it asks the codec, because the read side "
+                       "validates already. §10 records why a row-by-row port was rejected",
+    # The other four of the six definition readers. `writes` needs no entry: it occurs in
+    # `Calculus/` on its own account. Cited together by §10's record of the surface enumeration,
+    # which is the decision these four are the subject of.
+    "carries": "`src/codec.ts`'s reader of which value kinds a term takes — the union's "
+               "declaration filter. Internal since the surface enumeration (§10)",
+    "decides": "`src/codec.ts`'s reader of whether a term pins one value; internal, and what "
+               "`ident` is to the model",
+    "setBase": "`src/codec.ts`'s reader of a set's element base; internal. The model indexes "
+               "`set` by `SetBase` instead, which is §4a's premise-becomes-an-index",
+    "deeper": "`src/codec.ts`'s one-segment path walk; internal, and the reason a path through "
+              "a variant that disagrees has no single honest answer",
     "identifying": "`src/codec.ts`'s declaration-time guard: whether an option decides its own "
                    "membership. §5 cites it because `Orth` is its specification, and because "
                    "`admits` cannot replace it — a \u2200-value question is not a per-value one",

@@ -56,7 +56,15 @@ import type {
     RestPolicy,
     Rng,
 } from './codec'
-import { carries, CodecError, failed, opaque, shapeOf, writes } from './codec'
+import {
+    admitsAttribute,
+    carries,
+    CodecError,
+    failed,
+    opaque,
+    shapeOf,
+    writes,
+} from './codec'
 
 /** mulberry32 — small, fast, and good enough to search a value space. */
 export const rngFrom = (seed: number): Rng => {
@@ -1665,14 +1673,14 @@ const written = (
     }
 }
 
-/** Whether a codec reads an attribute at all — `p a` is defined. */
-const reads = (codec: AnyCodec, attribute: AttributeValue): boolean => {
-    try {
-        return !failed(codec.decode(attribute))
-    } catch {
-        return false
-    }
-}
+/**
+ * Whether a codec reads an attribute at all — `p a` is defined.
+ *
+ * The body moved to `codec.ts` as `admitsAttribute`, because `lean.ts`'s read-verdict generator
+ * had written the same six lines and neither file could see the other's. Kept as a local name
+ * because this file reads better with `reads` beside `written`.
+ */
+const reads = admitsAttribute
 
 /** A value read as a bare record of names, as the object matcher reads one. */
 const recordOf = (value: unknown): Record<string, unknown> | undefined => {
