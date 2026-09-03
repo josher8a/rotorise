@@ -5,7 +5,7 @@ import Calculus.Codec
 # Certified combinators
 
 The semantic constructions the denotation factors through, each carrying its own
-lawfulness lemma — so soundness becomes plumbing rather than eighteen bespoke cases.
+lawfulness lemma — so soundness becomes plumbing rather than twenty-one bespoke cases.
 The inventory mirrors the doc's own analysis (§7: products and coproducts are the
 irreducible structure; everything else wraps one subterm):
 
@@ -24,7 +24,8 @@ irreducible structure; everything else wraps one subterm):
   underneath all of them; `entrywise` is it at a traversal (hence `arrayCodec` and
   `recordCodec`), `tupleCodec` it at `align` + a traversal, where the one fact worth
   proving is that alignment depends on a row's *length* alone (`slots`, `align_eq_some`).
-  `setCodec` and `objectCodec` are argued on their own;
+  `setCodec` is argued on its own — `objectCodec` is not, `objectCodecCore_eq` cashing it as an
+  equation the way §10's convention asks;
 * sums — `altCodec` over `OptionSem`s that carry their *admission as data*, with
   `UniqueAdmission` ((U) as a premise). `dunionCodec` is `altCodec` over
   tag-admission options — "the one union whose (U) is a theorem" (doc §5) is

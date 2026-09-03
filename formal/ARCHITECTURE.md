@@ -84,10 +84,11 @@ Two things follow, and both are the reason to do it again:
 
 **The pattern, so a fifth stratum is written correctly.** A stratum owes **nine** companions —
 seven kinds with the admission row counted on both sides, and the emitter clause the ninth —
-and `db444e3`'s own table was the list of the first eight. `Term` and `Body` have all eight; `Field` has no spec projection (`Body.spec` matches on
-the field inline) and `Rest` has neither spec nor tags, because a policy answers to no name and
-carries no tag. So the two name-reading projections are owed only by a stratum that holds
-names; the other five are owed unconditionally:
+and `db444e3`'s own table was the list of the first eight. `Term` and `Body` have all nine;
+`Field` has no spec projection (`Body.spec` matches on the field inline) and `Rest` has neither
+spec nor tags, because a policy answers to no name and carries no tag. So the two name-reading
+projections are owed only by a stratum that holds names; the other **six** rows are owed
+unconditionally, which is seven companions with the admission row counted on both sides:
 
 | Companion | For `Body` | Why it is owed |
 | --- | --- | --- |
@@ -111,7 +112,7 @@ bridge, typechecked against no `Calculus/` for ten commits. **Nothing could have
 *by that emitter*, so a stale generator agrees with its own stale output; a test that compares a
 generator against what it produced cannot see the generator being wrong. And no gate ran a
 generated file through Lean: this repository's build is `Calculus/` and the samples live in
-`src/`, which the build does not reach. `scripts/gate.sh` now has a sixth check that elaborates
+`src/`, which the build does not reach. `scripts/gate.sh` now has a check that elaborates
 both, which is the only thing that closes it — and the reason a stratum's debt to the emitter is
 a row in this table rather than a sentence in a commit message.
 
@@ -237,7 +238,7 @@ variant's three components are inlined instead of taking a `Body` (`{s : Finset 
 needs only `Finset` and `d`, both in scope), and **that is rejected on the same criterion in the
 same direction as the `custom` bundling below**: it re-threads the three components `Body` exists
 to bundle, at one constructor, and every table over terms grows a three-argument row — to buy one
-decidable premise. §2's rule about a new stratum costing all eight companions is the same
+decidable premise. §2's rule about a new stratum costing all nine companions is the same
 observation from the other end.
 
 **One move that passes the criterion and still does not pay: bundling `Lawful` into `custom`.**
@@ -323,8 +324,8 @@ already.
 
 ### 4c. One codec, stated once for both sides of the pair
 
-`Combinators.lean` is <!-- count:combinators_lines -->4001<!-- /count --> lines of the tree's
-<!-- count:tree_lines -->17619<!-- /count -->, and this is its organizing idea; without it
+`Combinators.lean` is <!-- count:combinators_lines -->4002<!-- /count --> lines of the tree's
+<!-- count:tree_lines -->17626<!-- /count -->, and this is its organizing idea; without it
 the file reads as the inventory `README.md` already has. A constructor is a **prism** —
 `Ctor α β`, with `into`/`out` and the laws `out_into` (matching what was built returns it) and
 `into_out` (anything that matches was built) — and those two *are* §2's (R) and (C) at a
@@ -450,7 +451,7 @@ being `rfl`), and what caught the *hazard* was reading this section. Neither is 
 
 ### And a third machine, `Orth`, which does not pay — measured
 
-`Orthogonality.lean` is the fourth-largest file at <!-- count:orth_file_lines -->967<!-- /count --> lines: a decidable certificate for a
+`Orthogonality.lean` is the fifth-largest file at <!-- count:orth_file_lines -->967<!-- /count --> lines — `Soundness.lean` is 1032 —: a decidable certificate for a
 fragment of (U), over-approximating each term's occupancy per side (`occV`/`occA`) and
 certifying a pair whose occupancies are disjoint, `by decide`. **Measured against what it
 replaces it does not pay**, and its own by-phase table is the measurement — the <!-- count:orth_total_theorems -->25<!-- /count --> hand
@@ -536,8 +537,10 @@ it says nothing about whether the elaborator is correct, whether `sanctionedAxio
 the documents claim, or whether the walk's filters let something through.
 
 **`scripts/name_drift.py`** — every backticked Lean-looking name in the current-state documents
-must occur somewhere in `Calculus/` — where *Lean-looking* means it carries a `_` or a `.`, so a
-one-word citation (`Adm`, `Orth`, `Fmt`) is never checked at all — with an `EXPECTED` table
+must occur somewhere in `Calculus/` — where *Lean-looking* means it carries a `_` or a `.`, **or
+is a single word that is not one of four shapes the script skips** (`83d61df`; the four and the
+reason for each are in `single_word_checkable`), so `Adm` and `Orth` are checked and a filename
+or a naming pattern is not — with an `EXPECTED` table
 carrying a reason per deliberate
 exception (and failing if an entry there stops being cited, so the table cannot rot quietly).
 **The docstring check was partly vacuous, and the fix needed a convention before it could
@@ -635,7 +638,7 @@ Two blind spots, and the second is the same shape as the gap it closes:
 
 **`scripts/ratchet.py`** — four per-file counts held to the state they were in, failing when
 one *rises*: hand-unfolding sites (332), retirement marks (72), public theorems with no
-docstring (269 of 896), and decision points (5260). It exists because §10's two guards could not be bars: a docstring
+docstring (269 of 896), and decision points. The counts live in `scripts/ratchets.json` and are quoted here by *name* rather than by value, because three places typed this one by hand and gave 3972, 4042 and 5260. It exists because §10's two guards could not be bars: a docstring
 coverage bar at 269 is a bar nobody can satisfy, so it would be switched off, where a ratchet
 asks nothing on the day it lands and makes the next docstring cheaper than the argument for
 skipping it. Baselines live in `scripts/ratchets.json` rather than in the script, so that the
@@ -1102,8 +1105,9 @@ not one of them consults the arity. The premise went from `Nonempty` to `card = 
 bridge recovers the weaker fact, and the machinery measured 39 declarations / 350 lines before and
 40 / 353 after. Nothing shrank because nothing was ever waiting on it. The payoff is that the
 language no longer admits a variant answering to two tags, which is a statement about what a
-lookup is and not a lever on the model. `src/` is not aligned and that is a separate call
-(`codec.ts:4415` records multi-tag options as deliberate).
+lookup is and not a lever on the model. **`src/` is aligned as of `999b877`**: `EveryOptionTagged`
+refuses a multi-valued discriminator literal at compile time and the constructor refuses one at
+construction. It cost four deliberate tests, which that commit records.
 
 **`(held)`'s iso premise is stronger than the proof consumes.** The doc demands total
 cancellation on the carriers; `IsoCancels` restricts both directions to `(c.e ·).isSome`, and
@@ -1235,7 +1239,7 @@ proposal reaching for twenty-one rows here is repeating that rejection.
 - New module under `Calculus/` → reachable from `Axioms.lean` (§1), and `ratchet.py
   --accept` to admit its counts (§6) — a new module has no prior state, so it is
   baselined rather than judged.
-- New stratum in the term family → all eight companions (§2), counted per side.
+- New stratum in the term family → all nine companions (§2), counted per side.
 - New rule → put each premise in one of the three places, `Typed`/`Obligations`/`MPOk` (§2).
 - New term recursion → `term_depth_wf`, and new inequalities beside `Term.depth` (§3).
 - New analysis row → prefer asking the codec over describing the set (§4b); then prove its
@@ -1253,10 +1257,12 @@ proposal reaching for twenty-one rows here is repeating that rejection.
   *difference*.
 - Touching a normative document, the advertised axiom base, or `src/` behaviour → that is the
   user's decision. Deliver the measurement and stop.
-- Committing anything → `scripts/gate.sh`, and gate on its **exit code**. It runs the four
-  Python guards on the host and `lake build` in the container, prints one line per check and
-  exits nonzero if any failed. `--no-build` drops the build and is honest only when nothing you
-  touched can reach the elaborator — a `.lean` docstring can, and a comments-only edit still
+- Committing anything → `scripts/gate.sh`, and gate on its **exit code**. Seven checks: the four
+  Python guards on the host, `lake build` in the container, then **vector emit** (generating the
+  four bridge artifacts) and **vector bridge** (elaborating them beside the two committed vector
+  samples). It prints one line per check and exits nonzero if any failed. `--no-build` drops the
+  three that need the container and is honest only when nothing you touched can reach the
+  elaborator — a `.lean` docstring can, and a comments-only edit still
   moves the counts `doc_counts.py` guards, so it is not the "docs" flag it looks like. Two commits (`eed1b58`,
   `e3bd71f`) claimed a green tree over a red one by printing exit codes instead of testing
   them; that is the defect the script exists to make unavailable.

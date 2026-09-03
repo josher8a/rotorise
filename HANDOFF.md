@@ -3,9 +3,10 @@
 **Branch `wip/map-types`. `lake build` green and warning-free, `#assert_axioms_all` and
 `#lint_calculus` over 21 modules, and all four Python guards — `guard_reach.py`,
 `name_drift.py`, `doc_counts.py --check`, `ratchet.py` — exit 0.** Verify with
-`formal/scripts/gate.sh`, which runs all five and exits nonzero on any failure — by exit code
-and not by eye. `complexity.py`, `complexity.lean`, `twins.py`, `vocab_audit.py` and
-`fidelity_audit.py` report and never fail; they are not in the gate.
+`formal/scripts/gate.sh`, which runs all seven and exits nonzero on any failure — by exit code
+and not by eye. `complexity.py`, `complexity.lean`, `twins.py` and `vocab_audit.py` report and
+never fail; they are not in the gate. Nor is `fidelity_audit.py`, which reports but **does**
+exit 1 — if `#assert_axioms_all` is absent, which is its one guard rather than its measurement.
 
 Delete this file once read. The commit messages are the record; `git log` is now the only
 change log there is.
@@ -55,9 +56,10 @@ Eleven commits since `93f44d2`. Four instruments, two wins, three negative resul
 
 **The instruments, all recorded in `ARCHITECTURE.md` §6 with their blind spots.**
 
-- **`ratchet.py`** — four per-file counts, failing on a *rise*: `unfolding_sites` 332,
-  `retirement_marks` 72, `undocumented_public_theorems` 269 of 896, `branches` 3972. Baselines
-  in `scripts/ratchets.json`, never in the script, so the guard's source stays still and a
+- **`ratchet.py`** — four per-file counts, failing on a *rise*: `unfolding_sites`,
+  `retirement_marks`, `undocumented_public_theorems` and `branches`. **The values are in
+  `scripts/ratchets.json` and are not repeated here**, because three places typed `branches` by
+  hand and gave 3972, 4042 and 5260. Baselines live in that file, never in the script, so the guard's source stays still and a
   changed number is worth reading. `--accept` writes falls; a rise additionally needs
   `--allow-rise`, so weakening the guard has to be a sentence in a commit message. A metric
   with no baseline fails rather than passing as twenty new files.
@@ -188,11 +190,14 @@ formal/scripts/gate.sh              # the four guards and the Docker build
 formal/scripts/gate.sh --no-build   # guards only — see its header for when that is honest
 ```
 
-It runs the five checks in the order below, prints one line each, and exits nonzero if any
-failed, so `gate.sh && git commit` gates on something. Every check runs even after one fails,
-so one invocation reports the whole state of the tree rather than its first symptom.
+It runs **seven** checks — the four Python guards, `lake build`, then *vector emit* (generating
+the four bridge artifacts) and *vector bridge* (elaborating them beside the two committed vector
+samples) — prints one line each, and exits nonzero if any failed, so `gate.sh && git commit`
+gates on something. Every check runs even after one fails, so one invocation reports the whole
+state of the tree rather than its first symptom. (This said "the five checks in the order below"
+and listed nothing: the order moved into the script when the paste block did.)
 
-Editing *any* `Calculus/*.lean` can move a `doc_counts` count, because §5 and §8 cite file
+Editing *any* `Calculus/*.lean` can move a `doc_counts` count, because §4c and §5 cite file
 lengths — a comments-only edit is not exempt. **And a count can move in a file you did not
 edit.** §5's `orth_unreach_lines` sums the *spans* of the unreachable declarations, and a span
 runs from the `theorem` line to the last non-blank line before the next declaration — so
@@ -209,7 +214,7 @@ see why, recompute the spans against `HEAD` rather than guessing which edit did 
 `lake env lean`. Editing a late module and checking it with `lake env lean` writes nothing.
 
 **Python is on the host, not in `rotorise-lean-dev`.** There is no Python in that container at
-all — `which python3` there exits non-zero. The six scripts run from `formal/` on the Mac.
+all — `which python3` there exits non-zero. The Python scripts run from `formal/` on the Mac.
 
 **The TS toolchain is not on PATH and neither is `node`.** Run it in
 `mcr.microsoft.com/devcontainers/typescript-node:0-20` mounted on the repo, against the host
