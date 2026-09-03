@@ -17,7 +17,7 @@ definition it touches.
 | `Calculus/Typing.lean`      | §3–§5       | The judgement `⊢ c : T ⇝ μ`, both indices, with the held-set formers (`HSet`, `HStar`, `HProd`, `HMap`, `HNull`, `HObject`, `HUnion`, `HOpaque`); syntactic premises only                                                                                             |
 | `Calculus/Soundness.lean`   | §5          | `Obligations` (semantic premises, structural), `UAtCan := UniqueAdmission ∘ semsOf`, `MPOk` (legacy exemption), theorem statements, and the held-set bridge `carrier_denote`/`typed_TSub`/`typed_e_mem`/`typed_p_mem`                                                    |
 | `Calculus/Equations.lean`   | §6          | `Codec.Equiv` (§6's `≡`), `Can`, and all eleven of §6's "Hold" rows — `held`'s identity and composition, `refine`'s meet and full case, `legacy` with its own reading and `≈` on `Can(c)`, `union` of one, its commutativity and its associativity (which needs none of §6's stated conditions), `nullable`'s idempotence, wrapper member preservation |
-| `Calculus/Opaque.lean`      | §3, §7      | `opaque` without fuel: `Value.depth`/`Attr.depth`, the eighteen kind-disjoint unfoldings (one `simp` set for the section, one line each), `opaq_e_agree`/`opaq_p_agree` (stabilization), `opaq_e_depth`/`opaq_p_depth` (depth preservation), and `opaqCodecω` with `lawful_opaqCodecω`/`carrier_opaqCodecω` |
+| `Calculus/Opaque.lean`      | §3, §7      | `opaque` without fuel: `Value.depth`/`Attr.depth`, the twenty kind-disjoint unfoldings — ten a side (one `simp` set for the section, one line each), `opaq_e_agree`/`opaq_p_agree` (stabilization), `opaq_e_depth`/`opaq_p_depth` (depth preservation), and `opaqCodecω` with `lawful_opaqCodecω`/`carrier_opaqCodecω` |
 | `Calculus/HeldSet.lean`     | §1, §3, §6  | `T` as an identity: `opaq_T_identity` (`Uν` *is* `opaque`'s held set), `not_TIsDomE_unionLiteralString` (§6's row is two identities and `union` has only the weaker one), and the numeral-domain report — `decimal_writes_stored`/`decimal_reads_stored` with worked boundary cases |
 | `Calculus/Continuity.lean`  | §5, §7      | Why `union` admits no fixpoint semantics: `Codec.Approx` (the information order any ccpo must extend), `altCodec_not_monotone` (unique admission is anti-monotone in the options) and `stage_not_monotone` — the same collapse over a staging defined locally, since `denote` is structural and no longer stages |
 | `Calculus/Nesting.lean`     | §1          | **The one place `𝔸` is bigger in the model than in the store.** `Attr.Storable` (`Domain.lean`) is §1's 32-level bound, counting `L` and `M` only — a different function from `Attr.depth`, which is a termination measure and charges a wire set a layer. The ground fragment writes nesting `0`, containers add exactly one, and `not_storable_of_typed` exhibits a **derivable** term whose encoding the store refuses: the bound is absent from §3's rules rather than a premise someone failed to discharge |
@@ -145,12 +145,13 @@ Two independent readings, in opposite directions, asked whether every normative 
 `docs/codec-calculus.md` has an exact counterpart here and whether a reviewer could check one
 in isolation. They found seven specification defects, five claims true but unlocatable, and two
 corrections to this package's own artifacts. **Eleven of the fourteen are closed**; the three
-still open are `ARCHITECTURE.md` §10's last three bullets — `(held)`'s over-strong iso premise,
-the `℘⁺fin`/`⇀fin` coupling that nothing else states, and what §6's commutativity row is
-actually worth.
+still open are named rather than positioned, §10 having gained bullets since — `(held)`'s
+over-strong iso premise, the `℘⁺fin`/`⇀fin` coupling that nothing else states, and what §6's
+commutativity row is actually worth.
 
 The measurement regenerates: `python3 scripts/fidelity_audit.py`. What is worth watching in it
-is that **41% of theorem statements name a definition documented nowhere** — a statement a
+is the share of **theorem statements naming a definition documented nowhere** — the script
+prints it; it is not typed here, having been 41% when it was — a statement a
 reviewer cannot read against the specification without a detour.
 
 ## Do the documents still name what exists?
@@ -190,7 +191,8 @@ soundness. `union`'s commutativity is proved for the adjacent transposition, whi
 generates every permutation, and lifting it to `List.Perm` is the obvious next step.
 A numeric literal's read side goes through the axiomatized `Double.ofDec`, so no *syntactic*
 set bounds it — and the row does not have to name its set, it can ask its codec, `ofDec` being
-a function is enough to make the answer unique. `admA number` and `admA literalN` are `dom(p)`
+a function is enough to make the answer unique. `admA`'s `number` row and `admALit`'s `.number`
+row are `dom(p)`
 exactly (`sepA_number_opaque`, `sepA_literalN_disjoint`). The store observation survives on the
 other side of the pair — `Lawful.retract_through_store`, which is (R) asked through any
 transformation the store may apply: a literal's stored texts are known at the declaration, but

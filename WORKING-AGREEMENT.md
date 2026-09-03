@@ -23,8 +23,10 @@ without checking the load-bearing parts yourself. Grep is not verification —
 a too-literal pattern has produced three false readings here.
 
 BASELINE BEFORE CLAIMING A REGRESSION. This repo has pre-existing failures
-(biome 8, one tsc error in the sandbox from aws-sdk drift, a lockfile out of
-sync). Compare against HEAD before attributing anything to your change.
+(a biome count, one tsc error in the sandbox from aws-sdk drift, a lockfile out
+of sync). Measure them at HEAD before touching anything and compare against
+that. Do not quote a number from any document, this one included: the biome
+count was written here as 8 and in a session note as 9, and measured 7.
 
 NEGATIVE RESULTS ARE THE DELIVERABLE. "This cannot be done, here is the kernel
 error" and "your brief was wrong about X" outrank a landed change. Measure
@@ -73,5 +75,6 @@ the brief was wrong.**
 - Host writes take ~1 s to reach the container mount. `sleep 2` after editing, before building.
 - One `lake build` at a time. Parallel agents may use `lake env lean`, which writes nothing.
 - `by_cases` and `by_contra` reach `Classical.em`. Use `cases h : decide P` and
-  `Decidable.byContradiction`. Two of the four classical leaks found here entered through a
-  `def`, not a proof — check `#print axioms` on definitions, not only theorems.
+  `Decidable.byContradiction`. At least one classical leak entered through a `def` rather than a
+  proof — `Vectors.lean`, via mathlib's `DecidableEq (Finset α)`, which no reviewing of tactics
+  would have found. Check `#print axioms` on definitions, not only theorems.

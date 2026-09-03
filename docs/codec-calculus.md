@@ -826,11 +826,6 @@ the weaker fact, and the `dunion` machinery went from 39 declarations / 350 line
 — the three lines being that bridge, with no proof changing length. The
 constraint is a statement about the language, not a lever on the model.
 
-`src/` is not aligned to this and aligning it is a separate call. `codec.ts:4415` records the
-opposite as deliberate — *"the whole admissible set, not one value: an option may answer to
-several tags"* — and `discriminatedUnion` takes a list of options (`codec.ts:4394`) rather than a
-table keyed by tag. The change there is one type-level check plus that comment; it is JH's.
-
 |       |                                                                                |                                                                                                                                                        |
 | ----- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **D** | `∀ i ≠ j. ¬(Tᵢ ⊆ Tⱼ) ∧ ¬(Tⱼ ⊆ Tᵢ)`                                             | Well-formedness: no option's held set subsumes another's. Decidable from the held sets alone. It does **not** discharge the readable side — see below. |
