@@ -1778,8 +1778,10 @@ const byTag = (
  * **and** `eᵢ(t)` is defined", and that is what this reads. The model's `OptionSem.byAttempt` drops
  * the first conjunct — `FIDELITY.md` D1 records that `κ` is never consulted by the denotation — and
  * the difference is not cosmetic: **`union([string, number])` violates (U) under the model's
- * reading and satisfies it under the specification's**, because `number.encode('-1')` succeeds.
- * Encoding does not validate, so definedness alone tells almost no two ground options apart.
+ * reading and satisfies it under the specification's**, because `number.encode('-1')` used to
+ * succeed. Encoding validates now, so definedness *does* tell the two ground options apart and
+ * that particular divergence is closed — the two readings still differ, and this reads the
+ * specification's, because the first conjunct is what a union's declaration guard is made of.
  *
  * `κ` is read off the definition, which is where it lives: {@link carries} is the kinds of value a
  * term takes and {@link writes} the member it stores them in, both computed from the term and
