@@ -1801,8 +1801,8 @@ const byTag = (
  *
  * **What is not a theorem is the correspondence between the two sides' κ.** The model's is
  * `κ : Term → Option (List Kind)`; this library's is {@link carries}, over `Shape`, which is a
- * coarser alphabet. `κ_sound` settles the model; what settles the pair is the bridge, and it
- * checks 208 write and 226 read resolutions with no disagreement. So this reads the
+ * coarser alphabet. `κ_sound` settles the model; what settles the pair is the bridge, whose
+ * union-resolution artifact states its counts in its own generated header. So this reads the
  * specification's form because the first conjunct is what a union's declaration guard is made of
  * — not because the two forms are known to select differently.
  *

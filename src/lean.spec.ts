@@ -65,6 +65,7 @@ import {
     LeanUnemittable,
     leanAttrOf,
     leanReadModule,
+    leanReadResolution,
     leanResolutionModule,
     leanSeparation,
     leanSeparationModule,
@@ -892,17 +893,12 @@ describe('union resolution, model against library', () => {
      * names is the one that option produced — and the refusal set carries 88 more union lines.
      * This widens two to 208, and the value is the corpus rather than the question.
      */
-    it('offers 208 write pairs and 226 statable of 232 read pairs', () => {
+    it('offers 208 write pairs and 231 statable of 232 read pairs', () => {
         expect(writeResolutions().length).toBe(208)
         const reads = readResolutions()
         expect(reads.length).toBe(232)
-        expect(
-            reads.filter(
-                (one) =>
-                    readResolutionIsUnstatable(one) === 'no Value comparator',
-            ).length,
-        ).toBe(5)
-        // and one the `Double` axiom reaches a third way — at the decoded value
+        // one pair only, and it is the `Double` axiom reaching the decoded value; the five
+        // map-valued reads beside it are stated through `vcheck` now
         expect(
             reads
                 .filter((one) => readResolutionIsUnstatable(one) === 'Double')
@@ -911,25 +907,26 @@ describe('union resolution, model against library', () => {
     })
 
     /**
-     * The five that cannot be stated, named — a union reading back to a map produces a
-     * `Value.map`, which carries a function, and the comparator is `Attr`-only.
+     * The five a `Value` comparator closed, named — they read back to a map, whose `Value.map`
+     * carries a function, and `aeq`/`check` compare `Attr` only. `veq` is that comparator and
+     * these are the pairs it was built for, so they are pinned as **statable** rather than as a
+     * shortfall, and pinned by the fact that they go through `vcheck`.
      */
-    it('names the five a `Value` comparator would close', () => {
-        expect(
-            readResolutions()
-                .filter(
-                    (one) =>
-                        readResolutionIsUnstatable(one) ===
-                        'no Value comparator',
-                )
-                .map((one) => one.name),
-        ).toEqual([
+    it('states the five map-valued reads that wanted `veq`', () => {
+        const byName = new Map(
+            readResolutions().map((one) => [one.name, one] as const),
+        )
+        for (const name of [
             'rr_u_objects_by_name__object_optional_absent',
             'rr_u_objects_by_name__object_fallback_present',
             'rr_u_objects_by_name__opaque_map',
             'rr_u_optional_inner__record_empty',
             'rr_d_two_variants__discriminated_union',
-        ])
+        ]) {
+            const one = byName.get(name) as ReadResolution
+            expect(readResolutionIsUnstatable(one)).toBeUndefined()
+            expect(leanReadResolution(one)).toContain('vcheck')
+        }
     })
 
     it('emits them for the gate to elaborate', () => {
@@ -944,7 +941,9 @@ describe('union resolution, model against library', () => {
             readResolutions(),
         )
         expect(module).toContain('import Calculus.Vectors')
-        expect(module).toContain('cannot be stated')
+        // the one pair that stays out, and the reason, both in the header
+        expect(module).toContain('cannot be written down at all')
+        expect(module).toContain('vcheck')
     })
 })
 
