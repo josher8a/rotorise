@@ -1204,6 +1204,18 @@ exactly, and two descriptions of one thing need a guard between them. The differ
 and separation artifacts. **Do not re-open this as a port without first showing a pair where the
 two disagree.**
 
+**And a public read-side twin of `admits` — declined at JH's call, which is the narrower
+question the rejected port left behind.** `admits` is exported and a caller can filter with it;
+there is no equivalent for a stored attribute except catching the read's own failure. The
+proposal was one line asking the codec rather than describing it — §4b's move, exact by
+construction, nothing to keep in agreement — and it was still declined, on the ground that a
+caller can catch that themselves and every export is a compatibility surface the library
+carries forever. Recorded because the *asymmetry* is the durable part: `admits` had to be a
+reader of the definition because the write side was loose, and a read-side twin must **not** be
+one, because the read side is already exact. A future proposal that reaches for twenty-one rows
+here is repeating `a41f874`'s rejection; one that reaches for a one-line ask is repeating this
+one.
+
 ---
 
 ## 11. If you change something

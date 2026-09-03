@@ -76,10 +76,10 @@ Eleven commits since `93f44d2`. Four instruments, two wins, three negative resul
 
 ## Pick up here
 
-**Nothing is queued.** All four decisions are answered — JH's words on the `src/` three were
-*"send them to solve `src/`"* — and each is struck below with its commit and its result, because
-every one of them was wrong about something load-bearing and the correction is the part worth
-inheriting.
+**Nothing is queued.** Every decision is answered and every item is struck below with its commit
+and its result — because **each brief was wrong about something load-bearing, and the correction
+is the part worth inheriting**. Two of the five ended as refusals rather than changes, and those
+two are the ones to read first.
 
 1. ~~**The 13 citations**~~ — **ten landed, three refused on principle.** Eight names in
    `ARCHITECTURE.md`, two in `README.md`, each the theorem's name added to the sentence that
@@ -125,15 +125,28 @@ inheriting.
    also narrowed — `set` separates where `array` and `record` do not, because an empty `Set` is
    admitted by neither and `[]` is admitted by both.
 
-**A recorded question, not a task: `src/` has no port of `AdmA`.** So the union resolver's *read*
-side still attempts, where the write side decides. `only` and `onlyAdmitting` are two functions
-rather than one flag because of it, and each says so. Whether the attribute side wants a twin is
-open; nothing depends on it today.
+5. ~~**The `AdmA` port**~~ — **rejected on measurement (`a41f874`), and its guard landed
+   instead.** This was a recorded question and became a task; the answer is no. `AdmA t a` and
+   whether the library's read accepts `a` agree at **861 of 861 checkable pairs** of 864, and
+   disagree at none. **The read side validates because it parses data somebody else wrote**;
+   the write side trusted its argument's *type*, which is the whole of why wiring gained there
+   and gains nothing here. Three pairs are stuck rather than divergent — `AdmA .number`'s `.n`
+   row goes through `Double.ofDec`, an axiom with no computation rule, so *both* assertions
+   fail, which is how it was told apart from a disagreement. §10 has it, with the instruction:
+   **do not re-open as a port without first showing a pair where the two disagree.** A public
+   one-line read-side twin of `admits` was put to JH separately and **declined**; §10 records
+   that too, and why a twin must not be a def-reader even if one is ever wanted.
 
-**The `src/` numbers, measured at `ff75c6b` in
+**The bridge is three artifacts now, all generated at gate time and none committed:** the refusal
+cross product (599), the declaration-guard verdicts (17), and the read-side differential (861).
+`scripts/gate.sh` elaborates all three beside the two committed vector samples, and treats a
+*warning* as a failure, machine-written files having no judgement calls to make. Seven checks,
+about twenty seconds.
+
+**The `src/` numbers, measured at `a41f874` in
 `mcr.microsoft.com/devcontainers/typescript-node:0-20` against the host `node_modules`:**
-`tsc --noEmit` clean, `biome ci src` **6**, `vitest run` **870 passed, 9 skipped**. HANDOFF said
-biome was at 8 and a session note said 9; it was 7 before this batch and neither number had been
+`tsc --noEmit` clean, `biome ci src` **6**, `vitest run` **876 passed, 9 skipped**. HANDOFF said
+biome was at 8 and a session note said 9; it was 7 before this arc and neither number had been
 run. **Re-measure; do not quote this paragraph either.**
 
 **Closed this arc, do not re-open:** unifying `κ` with `occV`/`occA` (§4a — the computability
@@ -226,6 +239,29 @@ already know are in the file.
 ---
 
 ## The thing to keep
+
+**A test that compares a generator against what it produced cannot see the generator being
+wrong.** The differential bridge — the one artifact checking `src/` against the model — **had not
+compiled for a day and ten commits**, and every guard was green. `db444e3` changed
+`Term.object`'s arity; the emitter kept the old spelling; `src/lean.spec.ts` compared the
+emitter's bytes against files *that emitter generates*, so a stale generator agreed with its own
+stale output. Its docstring said "a sample that is not regenerated is a sample that lies"; the
+sharper statement is that **a regenerated sample lies just as well, because regeneration is not
+verification**. Nothing ran a generated file through Lean — the build is `Calculus/` and the
+samples live in `src/`. Ask of any generated artifact: *what would fail if the generator were
+wrong?* If the answer is a comparison against the generator's own output, nothing would.
+
+The corollary is `ARCHITECTURE.md` §2's ninth companion. A stratum owed eight; `Body` proved it
+owes an **emitter clause** too, and that debt is a row in the table now rather than a sentence in
+a commit message, because the eight were what `db444e3` was written against.
+
+**The read side validates because it parses data somebody else wrote; the write side trusted its
+argument's type.** That one asymmetry explains the whole `admits` arc. On the write side it made
+twenty-three of thirty-two rows loose, made a union report an ambiguity that was never real, and
+made wiring the resolver worth doing. On the read side it makes all of that unnecessary — 861 of
+861 checkable pairs already agree with the model — so the port was rejected and its guard landed
+instead. **Before porting a predicate to the other side of a pair, ask whether that side ever had
+the licence the first side abused.**
 
 **An ambiguity a resolver reports may be its own looseness wearing an ambiguity's clothes.**
 `codec.uniqueadmission.spec.ts` recorded a union this library builds, decodes from, and cannot
