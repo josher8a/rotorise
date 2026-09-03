@@ -13,7 +13,7 @@
 #
 # `--no-build` skips the two checks that need the container — the build and the vector
 # bridge — and is NOT for comments-only commits in the sense of "docs are exempt". Editing any `Calculus/*.lean`, comments included, can move a
-# `doc_counts` count, because §5 and §8 cite file lengths and a span runs to the
+# `doc_counts` count, because §4c and §5 cite file lengths and a span runs to the
 # last non-blank line before the next declaration — so a re-wrapped signature
 # moves a number in a file you did not edit. `doc_counts.py --check` runs under
 # `--no-build` for exactly that reason. What `--no-build` skips is the ~12-minute
