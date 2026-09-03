@@ -82,9 +82,9 @@ Two things follow, and both are the reason to do it again:
   second. Both are now properties of the type. `Field` sits in the function's *codomain*,
   which is strictly positive — the same factoring `Attr.m` and `Value.map` use one level down.
 
-**The pattern, so a fifth stratum is written correctly.** A stratum owes eight companions —
-seven kinds, with the admission row counted on both sides — and `db444e3`'s own table is the
-list. `Term` and `Body` have all eight; `Field` has no spec projection (`Body.spec` matches on
+**The pattern, so a fifth stratum is written correctly.** A stratum owes **nine** companions —
+seven kinds with the admission row counted on both sides, and the emitter clause the ninth —
+and `db444e3`'s own table was the list of the first eight. `Term` and `Body` have all eight; `Field` has no spec projection (`Body.spec` matches on
 the field inline) and `Rest` has neither spec nor tags, because a policy answers to no name and
 carries no tag. So the two name-reading projections are owed only by a stratum that holds
 names; the other five are owed unconditionally:
@@ -98,9 +98,22 @@ names; the other five are owed unconditionally:
 | an admission row, per side | `AdmBody`/`AdmABody` | exactness is per-row; a stratum with no row cannot be exact |
 | a premise carrier | `ObligationsBody` | semantic side conditions are structural, not global |
 | a law exemption | `MPOkBody` | `legacy`'s (MP) exemption propagates through the stratum |
+| an emitter clause | the term emitter's object row (`src/lean.ts`) | the vector bridge writes terms in this language; a constructor it cannot spell breaks it |
 
-Miss one and the failure is not a build error but a silent `⊤`: the analysis will still be
-*sound* and will have stopped saying anything. That asymmetry is the subject of §5.
+Miss one of the first eight and the failure is not a build error but a silent `⊤`: the analysis
+will still be *sound* and will have stopped saying anything. That asymmetry is the subject of §5.
+
+**The ninth is `db444e3`'s own debt, and it went unpaid for a day with every guard green.**
+Making the payload a stratum changed `Term.object` from three arguments to one, and `src/lean.ts`
+kept emitting three — so `src/lean.sample.lean` and its `check` twin, the committed output of the
+bridge, typechecked against no `Calculus/` for ten commits. **Nothing could have reported it.**
+`src/lean.spec.ts` compares the emitter's bytes against those files, and the files are generated
+*by that emitter*, so a stale generator agrees with its own stale output; a test that compares a
+generator against what it produced cannot see the generator being wrong. And no gate ran a
+generated file through Lean: this repository's build is `Calculus/` and the samples live in
+`src/`, which the build does not reach. `scripts/gate.sh` now has a sixth check that elaborates
+both, which is the only thing that closes it — and the reason a stratum's debt to the emitter is
+a row in this table rather than a sentence in a commit message.
 
 `Body`'s projections (`Body.fields`, `Body.at`, `Body.rest`) are written by hand — a `mutual`
 block admits no `structure`. Rows needing all three still pattern-match on `.mk`, which keeps
