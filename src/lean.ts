@@ -52,7 +52,7 @@
 import type { AttributeValue } from './attribute'
 import { isNumeral, isStoredNumeral, memberOf } from './attribute'
 import type { AnyCodec, CodecDef } from './codec'
-import { setBase } from './codec'
+import { admits, setBase } from './codec'
 
 /**
  * A term, value or attribute the Lean model has no closed expression for.
@@ -408,7 +408,16 @@ const lazyLimit = 16
  * mapping is one-to-one where it exists at all; where it does not, this throws
  * {@link LeanUnemittable}, and the throwing cases are the interesting half of the bridge:
  *
- * - **`number`, and a numeric `literal`.** `Double` is an axiom. Permanent.
+ * **Two kinds of inexpressible, and they were one bullet until refusal vectors split them.**
+ * A term is unemittable when *the term* has no Lean expression; a positive vector is impossible
+ * when the term is fine and no *value* at it can be written. Only the first belongs here.
+ *
+ * - **A numeric `literal`.** Term-inexpressible: `Term.literal GroundKind.number ls` needs `ls :
+ *   NEFinset Double`, and `Double` is an axiom with no closed terms, so there is no alternatives
+ *   set to write. Permanent, in both directions — no refusal vector can name this term either.
+ * - **`number` itself is *not* here.** `Term.number` is a closed term. `Value.num` is what has no
+ *   inhabitant, and `leanValueOf` refuses it, so the impossibility is reported where it lives and
+ *   refusal vectors reach `number` with no flag and no mode parameter.
  * - **`held`, `legacy`, `custom`.** Three of §3's constructors carry *functions* —
  *   `f g : Value → Value`, `r : Attr → Option Value`, `ce`/`cp` — and this library carries
  *   JavaScript closures in the same positions. There is no expression in Lean for an arbitrary
@@ -457,11 +466,15 @@ const leanTermOfDef = (def: CodecDef, at: string, forced: number): string => {
             return 'Term.binary'
         case 'null':
             return 'Term.null'
+        // **Emittable, and it took refusal vectors to see that.** `Term.number` is a closed term;
+        // what has no closed inhabitant is `Value.num`, and `leanValueOf` refuses that with an
+        // accurate message. So a *positive* vector here still fails, at the value where the
+        // impossibility actually is, and a *refusal* vector — `(denote Term.number).e
+        // (Value.str "x") = none` — is `rfl`. The refusal used to sit here and made the whole
+        // term unmentionable, which is a fact about positive vectors written as a fact about the
+        // syntax. Contrast `literal` at `number` below, which really is unemittable.
         case 'number':
-            return refuse(
-                at,
-                '`Term.number` denotes `numberCodec`, whose carrier is the `Double` axiom — no vector can name a value at it',
-            )
+            return 'Term.number'
         /**
          * `Term.literal` is indexed by a `GroundKind`, and this emits every base whose carrier has
          * closed terms — which, since `decimal` became one, is four of the six.
@@ -478,8 +491,11 @@ const leanTermOfDef = (def: CodecDef, at: string, forced: number): string => {
          *   says they are the same predicate.
          * - `binary` → `GroundKind.binary`, carrier `Bytes`, which is §1's `List UInt8` and emits
          *   as one.
-         * - `number` → `GroundKind.number`, carrier `Double`, which is an axiom. Permanent, and the
-         *   same refusal `Term.number` gets.
+         * - `number` → `GroundKind.number`, carrier `Double`, which is an axiom. Permanent — and
+         *   **not** the same refusal `Term.number` used to get, which is the distinction refusal
+         *   vectors forced. `Term.number` is a closed term whose *values* are unwritable; this one
+         *   has no closed term at all, because the alternatives set is `NEFinset Double`. The first
+         *   moved to the value side and the second cannot.
          *
          * `binary` was refused here too, on the ground that "`leanValue` has no `B` case". It has
          * one — `leanValueOf` emits `Value.bin` for a `Uint8Array`, and has for as long as the
@@ -757,6 +773,56 @@ export const leanVector = (
 }
 
 /**
+ * One proposed **refusal**: this codec, given this value, writes nothing — and neither does the
+ * model.
+ *
+ * **The class of vector 573 loose rows never produced.** A positive vector is an agreement about
+ * what `encode` wrote, so a value `encode` refuses produced no vector at all — which is exactly
+ * the half of the pair where `src/` and the model could disagree unobserved. `leanVector`'s own
+ * docstring had named the shape and left it unbuilt: "a value this library refuses is not a
+ * vector about agreement, it is a vector about refusal, and `e v = none` is the theorem for that."
+ *
+ * **It needs neither the comparator nor fuel, and that is not an optimisation.** The gap positive
+ * vectors fight is `Attr.m`'s payload — a function under a binder, pointwise equal to the emitted
+ * lambda and not definitionally equal — so they need `check`, or `funext` and a case split. A
+ * refusal's answer is `none`, which carries no payload, so `rfl` closes it outright at every
+ * codec including the map-shaped ones.
+ *
+ * **And it reaches `number`**, where no positive vector can: `Term.number` is a closed term and
+ * only its *values* are unwritable, so `(denote Term.number).e (Value.str "x") = none` is `rfl`.
+ * A numeric `literal` stays out, its alternatives being `NEFinset Double`.
+ */
+export type Refusal = {
+    /** A Lean identifier; anything else is sanitized, because a bad name loses the whole file. */
+    readonly name: string
+    readonly codec: AnyCodec
+    readonly value: unknown
+}
+
+/**
+ * One refusal, as a Lean `theorem` — and the `src/` side is checked here rather than emitted.
+ *
+ * A refusal vector claims *both* sides refuse. The model's half is the theorem; this library's
+ * half cannot be a theorem in a Lean file, so it is asserted at emit time and throws. Emitting a
+ * refusal for a value this library admits would write a Lean theorem that is *true* about a
+ * disagreement — the worst possible artifact, a green check over a real divergence.
+ */
+export const leanRefusal = ({ name, codec, value }: Refusal): string => {
+    if (admits(codec, value)) {
+        throw new LeanUnemittable(
+            name,
+            'this codec admits this value, so a refusal vector about it would assert the model refuses what `src/` writes — pass it as a `Vector` instead',
+        )
+    }
+    return [
+        `/-- \`${name}\` — refused on both sides -/`,
+        `theorem ${leanIdent(name)} :`,
+        `    (denote (${leanTermOf(codec, name)})).e`,
+        `      (${leanValueOf(value, name)}) = none := rfl`,
+    ].join('\n')
+}
+
+/**
  * How much fuel the `check` protocol's comparator needs for this attribute.
  *
  * `aeq` recurses on a `Nat` rather than on the attribute, because only a *structurally* recursive
@@ -815,6 +881,11 @@ equation. A failure here is a disagreement between \`src/codec.ts\` and \`Calcul
 theorem's name says which vector.
 -/
 
+/-! A key function is emitted total on the membership subtype, so a single-declared-name object
+binds a \`k\` it never reads. \`Calculus/\` itself builds warning-free and so should this file; the
+binder cannot be \`_\` because a multi-name object *does* read \`k.1\`. -/
+set_option linter.unusedVariables false
+
 namespace Calculus
 
 /-- The one tactic every vector uses.
@@ -865,6 +936,11 @@ generator — an under-fuelled line reduces to \`.exhausted\`, which matches nei
 \`.differ\`, so it fails to compile rather than passing quietly.
 -/
 
+/-! A key function is emitted total on the membership subtype, so a single-declared-name object
+binds a \`k\` it never reads. \`Calculus/\` itself builds warning-free and so should this file; the
+binder cannot be \`_\` because a multi-name object *does* read \`k.1\`. -/
+set_option linter.unusedVariables false
+
 namespace Calculus
 `
 
@@ -876,7 +952,31 @@ namespace Calculus
 export const leanVectorModule = (
     vectors: readonly Vector[],
     protocol: Protocol = 'check',
-): string =>
-    `${protocol === 'equation' ? preamble : checkPreamble}\n${vectors
+    refusals: readonly Refusal[] = [],
+    /**
+     * How many refusals the *gate* checks, where this file carries a readable subset.
+     *
+     * Stated in the header so the committed sample cannot be mistaken for the coverage. A subset
+     * that does not say it is one is the same defect as a count nobody can reproduce.
+     */
+    refusalsChecked = refusals.length,
+): string => {
+    const body = vectors
         .map((vector) => leanVector(vector, protocol))
-        .join('\n\n')}\n\nend Calculus\n`
+        .join('\n\n')
+    if (refusals.length === 0) {
+        return `${protocol === 'equation' ? preamble : checkPreamble}\n${body}\n\nend Calculus\n`
+    }
+    const refused = refusals.map(leanRefusal).join('\n\n')
+    const heading = [
+        '',
+        '/-! ## Refusals — neither side writes anything for these',
+        '',
+        `${refusals.length} of ${refusalsChecked} shown; \`scripts/gate.sh\` elaborates all`,
+        `${refusalsChecked}. One \`rfl\` each, no comparator and no fuel: the answer is \`none\`,`,
+        'which carries no function for the funext gap to open under.',
+        '-/',
+        '',
+    ].join('\n')
+    return `${protocol === 'equation' ? preamble : checkPreamble}\n${body}\n${heading}\n${refused}\n\nend Calculus\n`
+}

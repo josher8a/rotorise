@@ -8,7 +8,7 @@
 # gated on nothing and the printed output was true while the verdict was false.
 # Printing an exit code is not checking it. This script checks it.
 #
-#   scripts/gate.sh              all six checks
+#   scripts/gate.sh              all seven checks
 #   scripts/gate.sh --no-build   the four Python guards only
 #
 # `--no-build` skips the two checks that need the container — the build and the vector
@@ -39,6 +39,10 @@ FORMAL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$FORMAL_DIR" || exit 2
 
 CONTAINER=rotorise-lean-dev
+REPO_DIR="$(cd "$FORMAL_DIR/.." && pwd)"
+# the TS toolchain is not on this host's PATH and neither is `node`; the bridge's generator is
+# TypeScript, so the gate needs both images — this one to emit and the Lean one to elaborate
+TS_IMAGE=mcr.microsoft.com/devcontainers/typescript-node:0-20
 RUN_BUILD=1
 
 for arg in "$@"; do
@@ -85,10 +89,25 @@ if [ "$RUN_BUILD" -eq 1 ]; then
   # emitter, so `lean.spec.ts`'s byte comparison agreed with a stale generator, and no gate ran
   # a generated file through Lean. A test that compares a generator against its own output
   # cannot see the generator being wrong. This runs the emitted theorems against `Calculus/`.
+  # Emit the full refusal cross product, then elaborate it beside the two committed samples.
+  # The committed samples are a readable subset and say so in their header; what is *verified*
+  # is all of it, which is the distinction the broken bridge was hiding — a sample regenerated
+  # from a stale emitter agrees with itself, so only elaboration is evidence.
+  run 'vector emit' docker run --rm -v "$REPO_DIR:/w" -w /w "$TS_IMAGE" \
+    bash -lc 'EMIT_LEAN_REFUSALS=1 npx --no-install vitest run src/lean.spec.ts --reporter=dot'
   run 'vector bridge' docker exec "$CONTAINER" bash -lc \
-    'cd /workspaces/Rotorise/formal && lake env lean ../src/lean.sample.check.lean && lake env lean ../src/lean.sample.lean'
+    'cd /workspaces/Rotorise/formal &&
+     for f in ../src/lean.sample.check.lean ../src/lean.sample.lean .vectors.full.lean; do
+       [ -f "$f" ] || { echo "missing $f"; exit 1; }
+       out=$(lake env lean "$f" 2>&1) || { echo "$out"; exit 1; }
+       # warnings are failures here: the generated files are machine-written, so a warning is
+       # the emitter being sloppy rather than a human judgement call, and `Calculus/` itself
+       # builds warning-free
+       [ -z "$out" ] || { echo "$f: $out"; exit 1; }
+     done'
 else
   printf 'SKIP  %-28s (--no-build)\n' 'lake build'
+  printf 'SKIP  %-28s (--no-build)\n' 'vector emit'
   printf 'SKIP  %-28s (--no-build)\n' 'vector bridge'
 fi
 
