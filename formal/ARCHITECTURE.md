@@ -385,10 +385,32 @@ counter-intuitive:
   (`objReqStr`, `objReqNum`), both derivable, both closed, both lawful — so no other premise is
   what declines them.
 
-**The boundary, and it is sharp:** the `object` row is the *whole* obstruction.
-`admitV_Adm_nonObject` and `admitA_AdmA_nonObject` are the containments the discharger needs,
-and they hold from exactness alone for every term whose `specOf` is `none` — which is every term
-but an `object`.
+**The boundary on the value side, and there it is sharp:** the `object` row is the whole of
+*that* obstruction. `admitV_Adm_nonObject` and `admitA_AdmA_nonObject` are the containments the
+discharger needs, and they hold from exactness alone for every term whose `specOf` is `none` —
+which is every term but an `object`.
+
+**The read side carries a second obstruction, independent of the first, and this section used to
+claim the `object` row was the only one.** `SepJA` keeps its member disjunct because `AdmA` does
+not bound `μSyn`, and `sepJA_needs_member` is the witness: `legacy` over `string` with a read
+channel firing at `N` stores `S` while the channel reads an `.n`, widening `p` past the member
+the term claims, and `decimal` admits that same attribute. The pair is separated by `μSyn` and
+not by `AdmA`. So a discharger that repaired the `object` row would still be missing something
+the exact rows do not carry, and the two obstructions sit at different constructors — neither
+subsumes the other, and a migration has to answer both.
+
+**And the repair the `object` row invites — ask what the resolver consults, not what the row
+says — is already made, in `Orthogonality.lean` rather than here.** `OrthSV` and `OrthSA` are
+occupancy conjoined with `admitOptV`/`admitOptA`, and `admitOptV_eq` is the identification of
+that second conjunct with option admission itself, so `uAtCan_of_separates` is already the
+discharger stated on what `select` actually decides by. Restating it on option admission
+*alone*, dropping the occupancy conjunct, is measurably weaker rather than new: it is
+`uAtCan_of_separates` with one conjunct deleted from each family and factors back through it in
+one line; it loses `sepJA_needs_member`'s pair on the read side, exactly as `SepJA` predicts;
+and at an `object` it reduces to `keysOk` disjointness, which `OrthM`'s `reqNotDeclared`
+disjunct already delivers through `orthSV_disjoint`. Kernel-checked, not argued — the four
+results and the negative are in this paragraph's commit. **The move that looks open here was
+made in the next file, and what is left to take from it is a conjunct.**
 
 So: do not delete `Discharge.lean`, and if you sharpen an `adm` row at a container, check
 whether you have just broken a discharge that was relying on the slack.

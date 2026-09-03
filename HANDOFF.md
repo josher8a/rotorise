@@ -165,10 +165,17 @@ often than you expect. Use `cases h : decide P` and `Decidable.byContradiction`.
 and is not. Extracting an element from a `Finset` is where it turns — `Finset.card_eq_one` is an
 existential, so getting the witness inside a `def` is choice.
 
-**`grep` has two blind spots.** A pattern anchored on a qualified name misses an
+**`grep` has three blind spots.** A pattern anchored on a qualified name misses an
 anonymous-constructor pattern — changing `Typed.held`'s arity missed a consumer written
 `| _, _, _, .held h' _ =>`, and only the build found it. And **a grep piped into `head` is not
 a measurement**: a truncated pipe twice produced a false reading here.
+
+And **a declaration pattern anchored at column 0 misses everything inside a `mutual` block**,
+because those are indented. `adm`, `admA` and `κ` are all in one, so a census of
+`Discharge.lean` read 114 declarations where there are 125, and reported the three functions
+the census was *about* as referenced from nowhere — a false negative that reads exactly like
+a retirement being cheap. Anchor on `^\s*`, and sanity-check the count against the names you
+already know are in the file.
 
 ---
 
