@@ -474,7 +474,31 @@ the hand proofs and 24 too harsh on `Orth`.
 
 And **nothing was deleted** — `6daa5e3`, `0335cdb` and `5763b6d` touch only the new module and
 two import lines — so <!-- count:orth_file_lines -->967<!-- /count --> lines stand *beside* the <!-- count:orth_reachable_lines -->145<!-- /count --> they could replace. It stays anyway,
-because its value moved. The classifier framing did not pay; but confluent admission —
+because its value moved — **twice**, and the second is the one that pays.
+
+**`Orth` is the specification of `src/`'s only declaration-time guard, and now a checked one.**
+`src/`'s `union` refuses a pair of options no *value* can choose between — `identifying`,
+`separatedByElements` and the kind/member comparison beside them — which is the ∀-value question
+`Orth` answers by `decide`. The bridge is `src/lean.ts`'s `Separation`: one theorem per pair
+`src/` refuses, asserting `Orth x y = false`, generated and elaborated by `scripts/gate.sh`.
+
+Measured over the emittable pairs of the vector corpus — 351 of them — the two agree everywhere
+they can both speak: **268** where `Orth` certifies and `src/` accepts, **17** where both decline,
+and **0** where `src/` refuses a pair the model certifies. That last number is the law, and it is
+the only direction the bridge runs: `Orth` is *sufficient* and not necessary, so the remaining
+**66** — where `src/` accepts and `Orth` declines — are not disagreements. Every one lands in a
+documented exemption: a literal, which identifies its own values; an object option, chosen by
+names; or an option whose kind is unknown (`opaque`, `lazy`, an adapter). Asserting the converse
+would produce 66 false findings.
+
+**And the law caught a real over-refusal before it was found another way.**
+`Orth (.set .string) (.set .number)` is `true` — the model *proves* those two separable, because
+their occupancies are `strSet`/`numSet` and `SS`/`NS`, disjoint on both sides. `src/` refused that
+declaration until `ff75c6b`, on the ground that "neither checks what it is given", which stopped
+being true when its rows started validating. The pair is not in the corpus (a numeric wire set is
+`NEFinset Double`, so no vector can name one) — so it is written out by hand in §5's own bridge
+notes rather than generated, which is the shape of every gap this classifier has: decidable, and
+bounded by what has closed terms. The classifier framing did not pay; but confluent admission —
 the weaker rule proved monotone and continuous and **not adopted** (§7) — needs its obligation
 to be an *invariant of the unrolling* (`string_decimal_not_confluent`), which is vacuous exactly
 where the options are pairwise disjoint. So a syntactic disjointness test is what would license
