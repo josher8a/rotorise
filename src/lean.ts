@@ -52,7 +52,7 @@
 import type { AttributeValue } from './attribute'
 import { isNumeral, isStoredNumeral, memberOf } from './attribute'
 import type { AnyCodec, CodecDef } from './codec'
-import { admits, setBase } from './codec'
+import { admits, setBase, union } from './codec'
 
 /**
  * A term, value or attribute the Lean model has no closed expression for.
@@ -821,6 +821,89 @@ export const leanRefusal = ({ name, codec, value }: Refusal): string => {
         `      (${leanValueOf(value, name)}) = none := rfl`,
     ].join('\n')
 }
+
+/**
+ * One proposed **separation verdict**: `src/` refuses this pair at the declaration, and the model
+ * must not certify it.
+ *
+ * **The bridge from `src/`'s declaration-time guard to `Orth`, and it runs one way only.** `Orth`
+ * is a *sufficient* decidable condition for a fragment of (U) — `formal/ARCHITECTURE.md` §5's own
+ * by-phase table puts it at six of twenty-five hand discharges directly — so `Orth x y = false`
+ * does **not** mean the model cannot separate the pair. It means the cheap syntactic test
+ * declines. Measured over the corpus, 66 of 351 pairs are exactly that and every one is
+ * legitimate, each landing in one of the guard's three documented exemptions: a literal (which
+ * identifies its own values), an object option (chosen by names), or an option whose kind is
+ * unknown (`opaque`, `lazy`, an adapter).
+ *
+ * So the checkable law is the converse. **If the model certifies a pair, `src/` must accept it** —
+ * refusing a declaration the model *proves* separable is `src/` rejecting a union that works.
+ * Stated as a theorem per refusal: `Orth x y = false`, which stops compiling the moment `Orth`
+ * starts certifying a pair `src/` turns down. Zero counterexamples today, and the pair that
+ * motivated `ff75c6b` is the reason the law is worth gating rather than asserting once:
+ * `Orth (Term.set .string) (Term.set .number) = true`, which `src/` refused until that commit.
+ */
+export type Separation = {
+    /** A Lean identifier; anything else is sanitized, because a bad name loses the whole file. */
+    readonly name: string
+    readonly left: AnyCodec
+    readonly right: AnyCodec
+}
+
+/**
+ * One separation verdict, as a Lean `theorem` — and the `src/` side is checked here, as with
+ * {@link leanRefusal}.
+ *
+ * `union([left, right])` must throw. Emitting this for a pair `src/` *accepts* would assert the
+ * model declines a pair nobody is refusing, which says nothing about either side.
+ */
+export const leanSeparation = ({ name, left, right }: Separation): string => {
+    let refused = false
+    try {
+        union([left, right] as never)
+    } catch {
+        refused = true
+    }
+    if (!refused) {
+        throw new LeanUnemittable(
+            name,
+            '`src/` accepts this pair at the declaration, so there is no refusal for the model to contradict — the law is one-directional and this is the direction it does not run',
+        )
+    }
+    return [
+        `/-- \`${name}\` — \`src/\` refuses this pair; the model must not certify it -/`,
+        `theorem ${leanIdent(name)} :`,
+        `    Orth (${leanTermOf(left, name)})`,
+        `      (${leanTermOf(right, name)}) = false := by decide`,
+    ].join('\n')
+}
+
+/**
+ * The separation verdicts as a module of their own, because they need `Orth`.
+ *
+ * `Calculus.Vectors` reaches `Denote` and not `Orthogonality`, and adding the import to the
+ * committed vector samples would make them depend on a module they have nothing to say about.
+ * Generated at gate time and elaborated, never committed — the counts are in
+ * `formal/ARCHITECTURE.md` §5, which is where the verdict this checks is written down.
+ */
+export const leanSeparationModule = (
+    separations: readonly Separation[],
+): string =>
+    `import Calculus.Orthogonality
+
+/-!
+# Declaration-guard verdicts, proposed to the classifier
+
+**Generated — do not edit.** One theorem per option pair \`src/\`'s \`union\` refuses at the
+declaration. \`Orth\` is *sufficient* and not necessary, so this runs one way: a pair the model
+certifies must not be refused by \`src/\`. See \`src/lean.ts\`'s \`Separation\`.
+-/
+
+namespace Calculus
+
+${separations.map(leanSeparation).join('\n\n')}
+
+end Calculus
+`
 
 /**
  * How much fuel the `check` protocol's comparator needs for this attribute.

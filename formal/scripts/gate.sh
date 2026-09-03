@@ -89,7 +89,10 @@ if [ "$RUN_BUILD" -eq 1 ]; then
   # emitter, so `lean.spec.ts`'s byte comparison agreed with a stale generator, and no gate ran
   # a generated file through Lean. A test that compares a generator against its own output
   # cannot see the generator being wrong. This runs the emitted theorems against `Calculus/`.
-  # Emit the full refusal cross product, then elaborate it beside the two committed samples.
+  # Emit the full refusal cross product and the declaration-guard verdicts, then elaborate them
+  # beside the two committed samples. `.separations.lean` is one theorem per option pair `src/`'s
+  # `union` refuses, asserting the model does not certify it — the law runs that way only, `Orth`
+  # being sufficient and not necessary (`ARCHITECTURE.md` §5).
   # The committed samples are a readable subset and say so in their header; what is *verified*
   # is all of it, which is the distinction the broken bridge was hiding — a sample regenerated
   # from a stale emitter agrees with itself, so only elaboration is evidence.
@@ -97,7 +100,8 @@ if [ "$RUN_BUILD" -eq 1 ]; then
     bash -lc 'EMIT_LEAN_REFUSALS=1 npx --no-install vitest run src/lean.spec.ts --reporter=dot'
   run 'vector bridge' docker exec "$CONTAINER" bash -lc \
     'cd /workspaces/Rotorise/formal &&
-     for f in ../src/lean.sample.check.lean ../src/lean.sample.lean .vectors.full.lean; do
+     for f in ../src/lean.sample.check.lean ../src/lean.sample.lean .vectors.full.lean \
+              .separations.lean; do
        [ -f "$f" ] || { echo "missing $f"; exit 1; }
        out=$(lake env lean "$f" 2>&1) || { echo "$out"; exit 1; }
        # warnings are failures here: the generated files are machine-written, so a warning is

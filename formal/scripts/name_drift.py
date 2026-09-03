@@ -161,8 +161,16 @@ EXPECTED = {
 HOST = {
     "opaque": "`src/`'s codec, analysed here as a well-behaved `custom` — same analysis, "
               "opposite warranty (§7). `opaqCodec` is the model's, and is not the same name",
-    "admits": "`src/codec.ts`'s method, §10's open question about wiring it into `union`'s "
-              "resolver. The model's predicate is `adm`",
+    "admits": "`src/codec.ts`'s reader, and §10's open question about wiring it into `union`'s "
+              "resolver is closed — `ff75c6b` did, on the write side. The model's predicate is "
+              "`adm`, proved exact, which is what made the swap behaviour-preserving",
+    "identifying": "`src/codec.ts`'s declaration-time guard: whether an option decides its own "
+                   "membership. §5 cites it because `Orth` is its specification, and because "
+                   "`admits` cannot replace it — a \u2200-value question is not a per-value one",
+    "separatedByElements": "`src/codec.ts`'s companion to `identifying`, the exemption for a "
+                           "container with no empty inhabitant. Cited by §5's bridge notes",
+    "Separation": "`src/lean.ts`'s vector class carrying §5's bridge: one theorem per pair "
+                  "`src/` refuses, asserting `Orth` does not certify it",
     "discriminatedUnion": "`src/`'s combinator; the calculus has no such codec — it is the sum "
                           "over tag-admission, which is why `(dunion)` is a rule and not a row",
     "EveryOptionTagged": "`src/codec.ts`'s type-level check, cited by §8's arity-one row",

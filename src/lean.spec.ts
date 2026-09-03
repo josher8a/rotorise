@@ -52,10 +52,12 @@ import {
     tuple,
     union,
 } from './codec'
-import type { Refusal, Vector } from './lean'
+import type { Refusal, Separation, Vector } from './lean'
 import {
     LeanUnemittable,
     leanAttrOf,
+    leanSeparation,
+    leanSeparationModule,
     leanTermOf,
     leanValueOf,
     leanVector,
@@ -702,6 +704,84 @@ describe('the `check` protocol', () => {
         const module = leanVectorModule([], 'check')
         expect(module).toContain('import Calculus.Vectors')
         expect(module).not.toContain('macro "vector"')
+    })
+})
+
+/**
+ * Every option pair the corpus offers, with `src/`'s declaration verdict.
+ *
+ * `leanTermOf` is what bounds it: a pair either side of which is term-inexpressible cannot be put
+ * to the model at all. Over the emittable pairs the split measured 268 both-certify, 17
+ * both-refuse, **0** where `src/` refuses and `Orth` certifies, and 66 where `src/` accepts and
+ * `Orth` declines — the last being `Orth`'s sufficiency rather than a disagreement.
+ */
+const separationPairs = (): readonly Separation[] => {
+    const codecs: readonly (readonly [string, AnyCodec])[] = [
+        ...sampleVectors.map((v) => [v.name, v.codec] as const),
+        ['scalar_number', erase(number)] as const,
+    ]
+    const out: Separation[] = []
+    for (let x = 0; x < codecs.length; x++) {
+        for (let y = x + 1; y < codecs.length; y++) {
+            const [an, left] = codecs[x] as readonly [string, AnyCodec]
+            const [bn, right] = codecs[y] as readonly [string, AnyCodec]
+            try {
+                leanTermOf(left, an)
+                leanTermOf(right, bn)
+            } catch {
+                continue
+            }
+            try {
+                union([left, right] as never)
+                continue // accepted: the law does not run in this direction
+            } catch {
+                out.push({ name: `${an}__vs__${bn}`, left, right })
+            }
+        }
+    }
+    return out
+}
+
+describe("the declaration guard, against the model's classifier", () => {
+    /**
+     * **`src/` refuses seventeen pairs and the model certifies none of them.** That is the whole
+     * law, and it is one-directional on purpose: `Orth` is sufficient and not necessary, so a
+     * pair it declines may still be separable and 66 of the 351 are. What would be a defect is
+     * `src/` refusing a declaration the model *proves* works — which is what it did to
+     * `union([string.set(), number.set()])` until `ff75c6b`, and what `Orth` certifies.
+     */
+    it('refuses only pairs the classifier also declines', () => {
+        const separations = separationPairs()
+        expect(separations.length).toBe(17)
+        // each one emits, which is where `leanSeparation` re-checks that `src/` really refuses
+        for (const one of separations) {
+            expect(leanSeparation(one)).toContain('= false := by decide')
+        }
+    })
+
+    it('emits them for the gate to elaborate', () => {
+        if (process.env.EMIT_LEAN_REFUSALS) {
+            writeFileSync(
+                join(process.cwd(), 'formal', '.separations.lean'),
+                leanSeparationModule(separationPairs()),
+            )
+        }
+        expect(leanSeparationModule([])).toContain(
+            'import Calculus.Orthogonality',
+        )
+    })
+
+    /** And the direction the law does not run, refused rather than emitted as a vacuous claim. */
+    it('refuses to state a verdict about a pair src accepts', () => {
+        expect(
+            refusal(() =>
+                leanSeparation({
+                    name: 'accepted',
+                    left: erase(string),
+                    right: erase(boolean),
+                }),
+            ).reason,
+        ).toContain('one-directional')
     })
 })
 
