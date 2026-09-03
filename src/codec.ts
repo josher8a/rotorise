@@ -1378,9 +1378,26 @@ export type StringCodec = AttributeCodec<string, Attribute<'S'>> & {
     }
 }
 
+/**
+ * A value's kind, for a message about a value that should not have arrived.
+ *
+ * The five ground `encode`s all refuse the same way and want to say the same thing about what they
+ * were handed. `shapeOf` answers `undefined` for what it cannot place — a `bigint`, a `Map`, a
+ * function — and `typeof` is the honest fallback there rather than a guess.
+ */
+const describeShape = (value: unknown): string =>
+    `${shapeOf(value) ?? typeof value} \`${String(value)}\``
+
 const stringCodec: AttributeCodec<string, Attribute<'S'>> = codec({
     def: { kind: 'string' },
-    encode: (value) => carrying('S', value),
+    // the shape test is `admits`', not a second one: `shapeOf` is the function that row calls, so
+    // the two cannot drift into disagreeing about what a string is
+    encode: (value) =>
+        shapeOf(value) === 'string'
+            ? carrying('S', value)
+            : new CodecError(
+                  `${describeShape(value)} is not a string, and \`string\` writes an 'S' — a codec's input is typed, so this is a value that reached \`encode\` past its type`,
+              ),
     decode: (attribute) => expect('S', attribute),
 })
 
@@ -1431,8 +1448,10 @@ export type DecimalCodec = AttributeCodec<string, Attribute<'N'>> & {
 
 const decimalCodec: AttributeCodec<string, Attribute<'N'>> = codec({
     def: { kind: 'decimal' },
+    // `isStoredNumeral` stringifies what it is given — `isStoredNumeral(['1'])` is `true` — so the
+    // kind is checked first, which is exactly what `admits`' `decimal` row says and this did not
     encode: (value) =>
-        isStoredNumeral(value)
+        typeof value === 'string' && isStoredNumeral(value)
             ? carrying('N', value)
             : new CodecError(
                   `'${value}' is not a numeral DynamoDB stores unchanged; it accepts at most 38 significant digits, magnitude 1e-130 to 9.9e125, and returns the normalised form (no leading or trailing zeros, no exponent, no '+')`,
@@ -1479,8 +1498,10 @@ export type NumberCodec = AttributeCodec<number, Attribute<'N'>> & {
 
 const numberCodec: AttributeCodec<number, Attribute<'N'>> = codec({
     def: { kind: 'number' },
+    // `value.toString()` is defined on everything, so the numeral gate alone accepted the *string*
+    // `'5'` as readily as the number `5`. `admits`' `number` row asks the kind first; now so does this
     encode: (value) =>
-        isNumeral(value.toString())
+        typeof value === 'number' && isNumeral(value.toString())
             ? carrying('N', value.toString())
             : new CodecError(
                   `${value} is not a number DynamoDB stores: it takes at most 38 significant digits and magnitude 1e-130 to 9.9e125, and has no NaN or Infinity`,
@@ -1530,7 +1551,12 @@ export type BooleanCodec = AttributeCodec<boolean, Attribute<'BOOL'>> & {
 
 const booleanCodec: AttributeCodec<boolean, Attribute<'BOOL'>> = codec({
     def: { kind: 'boolean' },
-    encode: (value) => carrying('BOOL', value),
+    encode: (value) =>
+        shapeOf(value) === 'boolean'
+            ? carrying('BOOL', value)
+            : new CodecError(
+                  `${describeShape(value)} is not a boolean, and \`boolean\` writes a 'BOOL' — a codec's input is typed, so this is a value that reached \`encode\` past its type`,
+              ),
     decode: (attribute) => expect('BOOL', attribute),
 })
 
@@ -1594,7 +1620,12 @@ export type BinaryCodec = AttributeCodec<Uint8Array, Attribute<'B'>> & {
 
 const binaryCodec: AttributeCodec<Uint8Array, Attribute<'B'>> = codec({
     def: { kind: 'binary' },
-    encode: (value) => carrying('B', value),
+    encode: (value) =>
+        shapeOf(value) === 'binary'
+            ? carrying('B', value)
+            : new CodecError(
+                  `${describeShape(value)} is not a \`Uint8Array\`, and \`binary\` writes a 'B' — a codec's input is typed, so this is a value that reached \`encode\` past its type`,
+              ),
     decode: (attribute) => expect('B', attribute),
 })
 

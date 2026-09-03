@@ -190,12 +190,13 @@ describe('an object option with attributes it does not declare', () => {
 
 describe('the defect (U) found: an option with no κ on the write side', () => {
     /**
-     * **A union this library builds, decodes from, and cannot encode into.**
+     * **A union this library built, decoded from, and could not encode into — closed, and by
+     * neither of the two fixes that were on the table.**
      *
      * `union([held(decimal, dateAdapter), string])` is a natural thing to write — a timestamp or a
-     * raw string — and it is accepted at the declaration, reads back correctly from both `N` and
-     * `S`, and throws on **every** `Date` handed to `encode`. Measured, not inferred; the two calls
-     * below are the measurement.
+     * raw string — and it was accepted at the declaration, read back correctly from both `N` and
+     * `S`, and threw on **every** `Date` handed to `encode`. The κ asymmetry below is unchanged
+     * and still worth pinning; what changed is the sentence it used to end on.
      *
      * The cause is one asymmetry in `κ`, and both of this library's guards exempt exactly the same
      * options:
@@ -206,20 +207,22 @@ describe('the defect (U) found: an option with no κ on the write side', () => {
      *   §1's `Value` has no point for a `Date`. So there is no `κ` on the write side, and
      *   `shapeOf(new Date())` is `undefined` too: the filter cannot even be applied to the value.
      *
-     * With no `κ`, admission falls back to the attempt — and `string.encode(new Date())` *succeeds*,
-     * because encoding does not validate. Two options admit, and the union reports ambiguity rather
-     * than choosing, which is the correct behaviour for a union that genuinely cannot tell them
-     * apart. The declaration-time guard would have caught it, except that it skips an option whose
-     * `carries` is unknown for the same reason — and it must, or it would refuse
-     * `union([held(…), object({ … })])`, which works, because names decide there.
+     * With no `κ`, admission falls back to the attempt — and `string.encode(new Date())` used to
+     * *succeed*, because encoding did not validate. Two options admitted, and the union reported
+     * ambiguity rather than choosing, which was the correct behaviour for a union that genuinely
+     * could not tell them apart.
      *
-     * So neither guard is wrong on its own. The gap is that they are exempt on the same options, and
-     * nothing at either time is left to notice. That is what (U) sees and a round-trip cannot: no
-     * generated value reaches this, because the value that breaks it is one `encode` never produces.
+     * **The ambiguity was never real; it was `encode`'s looseness wearing an ambiguity's clothes.**
+     * `string`'s row now refuses what `admits(string, …)` refuses, so a `Date` is admitted by the
+     * `held` option alone and the union resolves. The two repairs this block used to name — refuse
+     * the declaration, or give `held` a write-side `κ` — were both about supplying the missing
+     * `κ`. Neither was needed. The option that had no `κ` still has none; what it no longer has is
+     * a rival that admitted everything.
      *
-     * Recorded rather than repaired — the fix is a choice between refusing the declaration and
-     * giving `held` a write-side `κ`, and both are the specification's call. See
-     * `docs/codec-formalization.md` §4.
+     * Worth keeping for the shape of the mistake: a resolver that decides by *trying* inherits
+     * every looseness of everything it tries, and reports the result as a property of the
+     * declaration. That is also the argument for wiring `admits` into the resolver rather than
+     * leaving it to attempt — HANDOFF's fourth item.
      */
     const asDate = {
         encode: (at: Date) => String(at.getTime()),
@@ -237,18 +240,18 @@ describe('the defect (U) found: an option with no κ on the write side', () => {
         expect(either.unsafeDecode({ S: 'hi' })).toBe('hi')
     })
 
-    it('cannot encode a Date at all', () => {
+    it('encodes a Date, now that `string` refuses one', () => {
         const either = union([held(decimal, asDate), string])
-        expect(() => either.unsafeEncode(new Date(0) as never)).toThrow(
-            /both admit this value/,
-        )
+        expect(either.unsafeEncode(new Date(0) as never)).toEqual({ N: '0' })
+        // and the raw-string arm is untouched
+        expect(either.unsafeEncode('hi' as never)).toEqual({ S: 'hi' })
     })
 
-    it('is what checkUniqueAdmission reports, on the write side', () => {
+    it('and (U) holds on the write side, where it used to fail', () => {
         expect(() =>
             checkUniqueAdmission(union([held(decimal, asDate), string]), {
                 seed,
             }),
-        ).toThrow(/\(U\) fails on the write side/)
+        ).not.toThrow()
     })
 })
