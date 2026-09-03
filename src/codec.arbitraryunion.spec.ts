@@ -6,9 +6,13 @@
  * "match" means has to be stated twice, because encoding and decoding know different things.
  *
  * Decoding knows the member the attribute carries, which is a fact about the data. Encoding knows
- * only the JavaScript value, and it cannot ask the codecs directly: **encoding does not validate**.
- * A codec's input is typed, so `number` given `'x'` writes `{ N: 'x' }` rather than failing. That is
- * the whole reason `carries` exists.
+ * only the JavaScript value — and it could not once ask the codecs directly, because **encoding did
+ * not validate**: a codec's input is typed, so `number` given `'x'` wrote `{ N: 'x' }` rather than
+ * failing. That was the whole reason `carries` exists.
+ *
+ * It asks now. Every row validates, `admits` is an iff with `encode`, and the write side resolves by
+ * asking each option rather than by writing through it. `carries` survives as the *declaration*'s
+ * filter, which is a question about two codecs rather than about a value.
  */
 import { describe, expect, it } from 'vitest'
 import type { AnyCodec, UnionCodec } from './codec'

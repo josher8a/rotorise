@@ -375,23 +375,41 @@ describe('the laws that do NOT hold', () => {
     })
 
     /**
-     * A union of sets is refused for the same reason, and the asymmetry is worth seeing.
+     * **A union of sets was refused and is not any more, and an empty container is what decides it.**
      *
-     * `SS` and `NS` say which option a *stored* attribute belongs to, so reading was never ambiguous.
-     * A `Set` says nothing about what is in it, and neither option checks — so the direction that
-     * cannot be resolved is the one that decides whether the declaration is allowed at all.
+     * The old reason was that "a `Set` says nothing about what is in it, and neither option checks",
+     * so the value side could not be resolved and the declaration was refused. Both halves of that
+     * are now false: the elements check, and the declaration guard asks whether the two are
+     * separated by what they hold.
+     *
+     * The asymmetry that survives is the sharper one, and it is `admits`' own: `[]` is admitted by
+     * every `array` and an empty `Set` is admitted by none, because **DynamoDB has no empty set**.
+     * So `union([array(string), array(number)])` stays refused — one shared value, and it is the
+     * one carrying nothing to tell them apart — while these two sets share no value at all.
      */
-    it('a union of sets is refused, though reading it would have worked', () => {
-        expect(() => union([string.set(), number.set()])).toThrow(
-            /both take the same kind of value — set — and neither checks/,
+    it('a union of sets resolves, now that its elements check', () => {
+        const either = union([string.set(), number.set()])
+        expect(either.unsafeEncode(new Set(['a']) as never)).toEqual({
+            SS: ['a'],
+        })
+        expect(either.unsafeEncode(new Set([1]) as never)).toEqual({
+            NS: ['1'],
+        })
+        // a mixed set is admitted by neither, and says so rather than writing half of it
+        expect(() => either.unsafeEncode(new Set(['a', 1]) as never)).toThrow(
+            /no option admits/,
         )
 
-        // the stored side always knew which: the two write different members, and that is what the
-        // decode filter reads. It is the value side that cannot tell one `Set` from another
+        // the stored side always knew which, and that has not changed
         expect(writes(string.set())).toBe('SS')
         expect(writes(number.set())).toBe('NS')
-        expect(string.set().unsafeDecode({ SS: ['a'] })).toEqual(new Set(['a']))
-        expect(number.set().unsafeDecode({ NS: ['1'] })).toEqual(new Set([1]))
+        expect(either.unsafeDecode({ SS: ['a'] })).toEqual(new Set(['a']))
+        expect(either.unsafeDecode({ NS: ['1'] })).toEqual(new Set([1]))
+
+        // and the container *with* an empty inhabitant is still refused, for that reason
+        expect(() => union([array(string), array(number)])).toThrow(
+            /both take the same kind of value — array/,
+        )
     })
 
     /**

@@ -4194,8 +4194,14 @@ type Option = {
  *
  * A `literal` does, by construction: it checks the value against its admissible set in *both*
  * directions, so being able to encode a value is real evidence the value was meant for it. Almost
- * nothing else does — encoding does not validate — which is why a union cannot generally resolve by
- * trying.
+ * nothing else did — encoding did not validate — which was why a union could not generally resolve
+ * by trying.
+ *
+ * **Every row validates now and the resolver decides by {@link admits}, so this is no longer about
+ * trying.** What it is still about is the *declaration*: whether two options can be told apart at
+ * all, asked with no value in hand. That question is why `admits` cannot replace this function —
+ * `admits` takes a value, and there is none at import time — and it is the shape of the answer
+ * HANDOFF's fourth item expected and did not get.
  *
  * It **propagates through containers**, and it has to. `number.set(1)` refuses a set of strings,
  * because the element refuses each one — so `union([string.set('a'), number.set(1)])` is perfectly
@@ -4609,9 +4615,13 @@ export const union = <const Options extends readonly AnyCodec[]>(
      * `ValidateOptions` refuses the pairs that no stored attribute can choose between, at compile
      * time, by asking whether they read back as the same type. This is the other direction, and the
      * types cannot see it: `array(string)` and `array(number)` read back as different types and are
-     * handed the same array — and neither checks what is in it, because **encoding does not validate**
-     * (see {@link carries}). So they are ambiguous for every value, which makes it a fact about the
-     * declaration rather than about a row, and reporting it per-encode reported it once per write
+     * handed the same array.
+     *
+     * **The reason they are ambiguous has changed, and narrowed.** It used to be that neither
+     * checked what was in it, because encoding did not validate. Both check now, and the pair is
+     * still refused — over exactly one value, `[]`, the one array carrying nothing to tell them
+     * apart. `set` has no such value and separates; see {@link separatedByElements}, which is the
+     * exemption that follows. Reporting any of this per-encode would report it once per write
      * forever instead of once at import.
      *
      * Two exemptions, and both are options that identify themselves:
@@ -4632,12 +4642,55 @@ export const union = <const Options extends readonly AnyCodec[]>(
      * refused, and it was invisible only because the mirror `union([string, decimal])` *is* refused,
      * by the kind check, one line up.
      */
+    /**
+     * Whether two options of the same container kind are told apart by what they hold — and the
+     * answer turns on whether the container has an **empty inhabitant**.
+     *
+     * The loop below refuses a pair sharing a carried kind, on the stated ground that "neither
+     * checks what it is given". That was true and is not: every row validates now, so
+     * `array(string)` refuses `[1]` and `array(number)` refuses `['a']`. Measured, the pairs that
+     * used to be refused wholesale share these values and no others:
+     *
+     *     array(string) / array(number)     `[]`
+     *     record(string) / record(number)   `{}`
+     *     set(string) / set(number)         nothing
+     *
+     * So `array` and `record` stay refused, and the reason is sharper than the old one: it is not
+     * that neither checks, it is the one value that carries nothing to check. `set` separates,
+     * because **DynamoDB has no empty set** — the asymmetry `admits`' own rows record, where `[]`
+     * is admitted and an empty `Set` is not, deciding a question about declarations.
+     *
+     * **A sufficient condition, deliberately.** "No value can choose between these two" is not
+     * decidable from two definitions in general, so this answers `false` wherever it cannot show
+     * separation and the pair stays refused. Widening it is a matter of adding a container that
+     * provably has no empty inhabitant, not of weakening what is here.
+     *
+     * **And this is not `identifying` being retired.** HANDOFF's fourth item expected `admits` to
+     * replace it; it cannot. `admits` answers a question about a *value*, and both `identifying`
+     * and this function answer a question about a *declaration* — there is no value in hand at
+     * import time to ask about. The resolver is where `admits` replaced trying; the declaration
+     * guard is where it structurally cannot.
+     */
+    const separatedByElements = (first: Option, second: Option): boolean => {
+        const one = first.codec.def
+        const other = second.codec.def
+        if (one?.kind !== 'set' || other?.kind !== 'set') return false
+        const held = carries(one.element)
+        const alsoHeld = carries(other.element)
+        return (
+            !!held &&
+            !!alsoHeld &&
+            !held.some((kind) => alsoHeld.includes(kind))
+        )
+    }
+
     for (let i = 0; i < all.length; i++) {
         for (let j = i + 1; j < all.length; j++) {
             const first = all[i] as Option
             const second = all[j] as Option
             if (first.declares || second.declares) continue
             if (identifies(first) || identifies(second)) continue
+            if (separatedByElements(first, second)) continue
             const shared = first.carries?.find((kind) =>
                 second.carries?.includes(kind),
             )
@@ -4687,10 +4740,14 @@ export const union = <const Options extends readonly AnyCodec[]>(
      * — so a failure past that point is its error, reported as itself rather than swallowed into "no
      * option matched".
      *
-     * If it leaves several, they are **tried**, and exactly one must succeed. That step alone would
-     * not do: encoding does not validate (see {@link carries}), so several permissive options would
-     * all "succeed" on a value only one of them means. And the first step alone would not do either:
-     * `string('A')` and `string('B')` take the same kind of value and are never ambiguous.
+     * If it leaves several, they are **tried**, and exactly one must succeed. The first step alone
+     * would not do: `string('A')` and `string('B')` take the same kind of value and are never
+     * ambiguous.
+     *
+     * **This is the read side only now.** Attempting was once the only thing available on both
+     * sides, because encoding did not validate and a permissive option would "succeed" on a value
+     * only its neighbour meant. The write side decides instead — {@link onlyAdmitting} — and this
+     * one still attempts because there is no `AdmA` in `src/` to decide a stored attribute with.
      */
     const only = <A>(
         survives: (option: Option) => boolean,
@@ -4711,6 +4768,48 @@ export const union = <const Options extends readonly AnyCodec[]>(
             carried = attempt
         }
         return first ? (carried as Result<A>) : unmatched(named)
+    }
+
+    /**
+     * The same, **decided rather than attempted** — the write side only.
+     *
+     * `only` finds its answer by encoding through every survivor and keeping the one that did not
+     * fail. That was the only thing available while `encode` did not validate, and it is why this
+     * union used to report ambiguity that was not there: a resolver that decides by *trying*
+     * inherits every looseness of everything it tries, and then reports the result as a property of
+     * the declaration. `union([held(decimal, dateAdapter), string])` could not encode a `Date` for
+     * exactly that reason, and the fix was `string` refusing one.
+     *
+     * `admits` is the decision. It is §3's `Adm`, proved exact at all 21 constructors, and
+     * `codec.laws.spec.ts` now holds `admits(c, v) ⟺ !failed(c.encode(v))` over its whole table —
+     * so on the values in play this selects the same option `only` would have found by attempting,
+     * and says *why* rather than discovering it. Two differences that are improvements rather than
+     * equivalences: a `held` option whose adapter **throws** on a value it does not own is filtered
+     * out here instead of propagating, and an ambiguity is reported without first writing one of
+     * the two answers.
+     *
+     * **The read side keeps attempting**, because there is nothing to decide with: the model has
+     * `AdmA` on the attribute side and `src/` has no port of it. That asymmetry is the reason this
+     * is a second function rather than a flag on the first.
+     */
+    const onlyAdmitting = <A>(
+        survives: (option: Option) => boolean,
+        named: string,
+        value: unknown,
+        through: (option: Option) => Result<A>,
+    ): Result<A> => {
+        const candidates = all.filter(
+            (option) => survives(option) && admits(option.codec, value),
+        )
+        if (candidates.length === 0) return unmatched(named)
+        if (candidates.length > 1) {
+            return ambiguous(
+                candidates[0] as Option,
+                candidates[1] as Option,
+                named,
+            )
+        }
+        return through(candidates[0] as Option)
     }
 
     /** Which options a value could be for: an object option by its names, anything else by kind. */
@@ -4758,9 +4857,10 @@ export const union = <const Options extends readonly AnyCodec[]>(
 
     const writeItem = (item: T): Result<AttributeMap> => {
         const names = namesOf(item as Record<string, unknown>)
-        return only(
+        return onlyAdmitting(
             (option) => namesFit(option, names),
             naming('this entity', names),
+            item,
             (option) =>
                 (
                     option.item as ItemCodec<Record<string, unknown>, unknown>
@@ -4797,9 +4897,10 @@ export const union = <const Options extends readonly AnyCodec[]>(
     // call can be narrowed to from inside
     const write = (value: T): Result<WrittenBy<Options>> => {
         const held = asRecord(value)
-        return only(
+        return onlyAdmitting(
             forValue(shapeOf(value), held ? namesOf(held) : undefined),
             naming('this value', held ? namesOf(held) : undefined),
+            value,
             (option) => option.codec.encode(value as never),
         ) as Result<WrittenBy<Options>>
     }

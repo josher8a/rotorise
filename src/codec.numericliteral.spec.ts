@@ -175,13 +175,17 @@ describe('a set of a literal', () => {
     })
 
     /**
-     * And a union of two such sets is allowed, which is the interesting part.
+     * And a union of two such sets is allowed, which used to be the interesting part.
      *
      * Both options are given a `Set`, so the kind cannot choose between them — but a literal element
-     * *refuses* a value that is not its own, so trying can. `union(string.set(), number.set())` stays
-     * refused for exactly the reason this one is not: those elements check nothing.
+     * *refuses* a value that is not its own, so the resolver can. This was the contrast:
+     * `union(string.set(), number.set())` was refused because "those elements check nothing".
+     *
+     * They check now, so the contrast is gone and the plain pair resolves too. What is left worth
+     * pinning here is that a **literal** element narrows further than its base — `string.set('a','b')`
+     * refuses `'c'`, which `string.set()` admits — so the two are still not the same codec.
      */
-    it('and a union of two literal sets resolves, where a union of plain sets cannot', () => {
+    it('and a union of two literal sets resolves, narrowing further than its base', () => {
         const either = union([string.set('a', 'b'), number.set(1, 2)])
         expect(either.unsafeEncode(new Set<'a' | 'b'>(['a']))).toEqual({
             SS: ['a'],
@@ -189,9 +193,13 @@ describe('a set of a literal', () => {
         expect(either.unsafeEncode(new Set<1 | 2>([2]))).toEqual({ NS: ['2'] })
         expect(either.unsafeDecode({ NS: ['1'] })).toEqual(new Set([1]))
 
-        expect(() => union([string.set(), number.set()])).toThrow(
-            /both take the same kind of value — set — and neither checks/,
+        // the literal is the narrowing: a value outside `ℓ` is admitted by neither option
+        expect(() => either.unsafeEncode(new Set(['c']) as never)).toThrow(
+            /no option admits/,
         )
+
+        // and the plain pair, which this test used to contrast against, is allowed now
+        expect(() => union([string.set(), number.set()])).not.toThrow()
     })
 })
 
@@ -269,7 +277,9 @@ describe('the admissible set is what DynamoDB stores', () => {
     })
 
     it('names all of them when several are outside', () => {
-        expect(() => number(NaN, 1e400)).toThrow(/NaN, Infinity are not numbers/)
+        expect(() => number(NaN, 1e400)).toThrow(
+            /NaN, Infinity are not numbers/,
+        )
     })
 
     /** The magnitude range is DynamoDB's, not JavaScript's — `1e200` is a fine double. */
@@ -337,7 +347,15 @@ describe('the read side reads through the same gate as number', () => {
     })
 
     it('agrees with number on every one of them', () => {
-        for (const text of ['', ' ', '0x10', '0b11', 'Infinity', 'NaN', 'abc']) {
+        for (const text of [
+            '',
+            ' ',
+            '0x10',
+            '0b11',
+            'Infinity',
+            'NaN',
+            'abc',
+        ]) {
             expect(() => number.unsafeDecode({ N: text })).toThrow()
             expect(() => number(0, 1, 2).unsafeDecode({ N: text })).toThrow()
         }
