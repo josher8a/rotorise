@@ -1090,7 +1090,7 @@ export type ReadResolution = {
  */
 export const readResolutionIsUnstatable = (
     one: ReadResolution,
-): 'no Value comparator' | 'Double' | undefined => {
+): 'Double' | undefined => {
     let read: unknown
     try {
         const out = one.union.decode(one.attribute as never)
@@ -1099,12 +1099,13 @@ export const readResolutionIsUnstatable = (
     } catch {
         return undefined
     }
-    if (shapeOf(read) === 'map') return 'no Value comparator'
     try {
         leanValueOf(read)
     } catch {
         return 'Double'
     }
+    // a map-valued read was unstatable until `veq` — `Calculus/Vectors.lean` has the `Value`
+    // twin of `aeq` now, so the funext gap is crossed on this side too
     return undefined
 }
 
@@ -1120,12 +1121,26 @@ export const leanReadResolution = (one: ReadResolution): string => {
     } catch {
         did = false
     }
-    return [
+    const head = [
         `/-- \`${name}\` — the option the union read it back through -/`,
         `theorem ${leanIdent(name)} :`,
-        `    (denote (${leanTermOf(u, name)})).p`,
-        `      (${leanAttrOf(attribute, name)}) = ${did ? `some (${leanValueOf(read, name)})` : 'none'} := rfl`,
-    ].join('\n')
+    ]
+    // `vcheck` where something was read, for the reason the write side uses `check`: a `Value.map`
+    // carries a function, so `rfl` on the assembled closure does not close. A refusal answers
+    // `none`, which carries nothing, so it needs no comparator.
+    return did
+        ? [
+              ...head,
+              `    vcheck ${fuelForValue(read)}`,
+              `      ((denote (${leanTermOf(u, name)})).p`,
+              `        (${leanAttrOf(attribute, name)}))`,
+              `      (some (${leanValueOf(read, name)})) = .same := rfl`,
+          ].join('\n')
+        : [
+              ...head,
+              `    (denote (${leanTermOf(u, name)})).p`,
+              `      (${leanAttrOf(attribute, name)}) = none := rfl`,
+          ].join('\n')
 }
 
 /**
@@ -1139,9 +1154,6 @@ export const leanResolutionModule = (
     reads: readonly ReadResolution[],
 ): string => {
     const statable = reads.filter((one) => !readResolutionIsUnstatable(one))
-    const unstatable = reads.filter(
-        (one) => readResolutionIsUnstatable(one) === 'no Value comparator',
-    )
     const doubled = reads.filter(
         (one) => readResolutionIsUnstatable(one) === 'Double',
     )
@@ -1154,13 +1166,11 @@ export const leanResolutionModule = (
 option the model's \`select\` resolves to, against the one this library's resolver picked.
 ${writes.length} on the write side, ${statable.length} on the read side.
 
-${unstatable.length} read pairs **cannot be stated for want of a comparator**, which is a gap in the
-machinery rather than in either side: a union reading an attribute back to a map produces a
-\`Value.map\`, which carries a function, and \`aeq\`/\`check\` compare \`Attr\` only. A \`veq\`
-built the way \`aeq\` is would make them statable.
-${unstatable.map((one) => `  * \`${one.name}\``).join('\n')}
+A map-valued read is stated like the others: it goes through \`vcheck\`, the \`Value\` twin of
+\`check\`, because \`Value.map\` carries a function and \`rfl\` on the assembled closure does not
+close. Five of these were recorded as unstatable until \`veq\` existed.
 
-${doubled.length} more **cannot be written down at all**: the value read back is a set of numbers,
+${doubled.length} **cannot be written down at all**: the value read back is a set of numbers,
 so its Lean form is \`Value.numSet\` over a \`NEFinset Double\`, and \`Double\` is an axiom with no
 closed terms. That is the same axiom the numeric \`literal\` and \`AdmA .number\` meet, arriving a
 third way — at the *decoded value* rather than the term or the row — and it has no repair.
@@ -1194,6 +1204,28 @@ end Calculus
  * `.differ`, so the file fails to compile — but it does produce a puzzling failure, and there is no
  * reason to risk one when the number is right here.
  */
+/**
+ * The same budget on the value side, for `veq`.
+ *
+ * `fuelFor` walks an attribute's `L`/`M` nesting; this walks a value's arrays and plain objects,
+ * which is the same document depth read off the other half of the pair. A set is one layer: its
+ * members are scalars by construction.
+ */
+const fuelForValue = (value: unknown): number => {
+    if (Array.isArray(value)) {
+        return 1 + Math.max(0, ...value.map(fuelForValue))
+    }
+    const held = asRecordish(value)
+    if (held) {
+        return 1 + Math.max(0, ...Object.values(held).map(fuelForValue))
+    }
+    return 1
+}
+
+/** A plain object, as `shapeOf` recognises one — a map's payload and nothing else. */
+const asRecordish = (value: unknown): Record<string, unknown> | undefined =>
+    shapeOf(value) === 'map' ? (value as Record<string, unknown>) : undefined
+
 const fuelFor = (attribute: AttributeValue): number => {
     const member = memberOf(attribute)
     if (member === 'L') {

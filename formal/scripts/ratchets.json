@@ -21,7 +21,7 @@
     "Calculus/Soundness.lean": 340,
     "Calculus/Term.lean": 55,
     "Calculus/Typing.lean": 67,
-    "Calculus/Vectors.lean": 105
+    "Calculus/Vectors.lean": 201
   },
   "retirement_marks": {
     "../docs/codec-calculus.md": 0,
