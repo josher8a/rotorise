@@ -31,7 +31,7 @@ argument it rewrites the blocks, which is how you fix a disagreement.
   If a third limit joins them and nobody adds it, the total goes quietly wrong — that is this
   instrument's own blind spot and it is the same shape as the one it exists to close.
 
-Deliberately not computed: the value/attribute twin pair count. §8 now records that the pair
+Deliberately not computed: the value/attribute twin pair count. §10 now records that the pair
 count is an artifact of its transform and is not the dimension that decides the merge, so
 generating one would re-establish exactly the false precision that section removed.
 
