@@ -152,11 +152,18 @@ did not think to look.
 *warning* as a failure, machine-written files having no judgement calls to make. Seven checks,
 about twenty seconds.
 
-**The `src/` numbers, measured at `a41f874` in
-`mcr.microsoft.com/devcontainers/typescript-node:0-20` against the host `node_modules`:**
-`tsc --noEmit` clean, `biome ci src` **6**, `vitest run` **876 passed, 9 skipped**. HANDOFF said
-biome was at 8 and a session note said 9; it was 7 before this arc and neither number had been
-run. **Re-measure; do not quote this paragraph either.**
+**The `src/` checks run in `mcr.microsoft.com/devcontainers/typescript-node:0-20` against the
+host `node_modules`: `tsc --noEmit`, `biome ci src`, `vitest run`. Their numbers are not here.**
+
+**A number in a summary has no owner; a number a script prints does.** That is the rule behind
+the omission and it was learned the hard way, twice over. The biome count was written in this
+file as 8 and in a session note as 9 while measuring 7, and nobody had run it. And this
+paragraph used to carry `876 passed` beside an instruction not to quote it — which went stale
+within the hour, in an arc where three other counts here did the same: `branches`, the gate's
+checks, and the bridge's artifacts, each by a commit that changed the thing and not the
+sentence. None of those was carelessness about arithmetic. A summary is where a number goes to
+have no maintainer, so **run the check and read its output**, and when you want a figure in
+prose, put it behind a `doc_counts` marker or point at the script that computes it.
 
 **Closed this arc, do not re-open:** unifying `κ` with `occV`/`occA` (§4a — the computability
 gate passes and the ⊤ encodings are incompatible; the cost shape kills it); collapsing the four

@@ -843,6 +843,34 @@ including (U) on both sides through `uniqueAdmission_of_sharedBase` — and not 
 union route cannot carry `ℓ` as a `Finset`. Read that module before proposing the collapse
 again.
 
+**A `Double` with no closed terms.** §1 axiomatizes the host's number rather than modelling
+IEEE-754, because rounding is not a theorem of the calculus. The price is paid in four distinct
+places, and they are collected here because each is met by someone doing something reasonable
+and finding it impossible, at which point the question is *which* impossibility this is — they
+close differently, and only one of them closed.
+
+- **Term-inexpressible** — a numeric `literal`. `Term.literal GroundKind.number ls` needs
+  `ls : NEFinset Double`, so there is no alternatives set to write and **no vector of either
+  direction** names the term. Permanent.
+- **Row-irreducible** — `AdmA .number`'s `.n` row goes through `Double.ofDec`, an axiom with no
+  computation rule, so it reduces to neither `true` nor `false` and *both* assertions fail. That
+  is how it is told apart from a disagreement: `AdmA .decimal` and `AdmA .string` reduce on the
+  same attribute. Permanent.
+- **Value-inexpressible** — a decoded numeric set. `union([string.set(), number.set()])` reads an
+  `NS` back to a `Set<number>`, whose Lean form is `Value.numSet` over a `NEFinset Double`. The
+  term and the attribute are both writable; the *answer* is not. Permanent.
+- **Verdict-undecidable** — `veq` at `.num` and `.numSet`. `Double.decEq` is an axiom, so
+  comparing two of them would neither reduce nor stay choice-free; the comparator answers
+  `.exhausted`, which already means "carries no information". Permanent.
+
+**And a fifth that was not this at all**, which is why the four are worth naming. A read landing
+on a *map* also failed to close, and it looked like the same wall — it was the funext gap, `aeq`
+having no `Value` twin, and `veq` closed it. `Term.number` itself was likewise refused by the
+vector emitter for years on the ground that no value could be named at it: true of a positive
+vector, false of a refusal, and deleting that guard gave `number` vectors. **Two of the six
+apparent walls here were not the axiom.** Check which one you are at before recording it as
+permanent.
+
 **Non-malleability.** `Malleability.lean` records that we deliberately fail it, and why the
 relational-format proposal that would have entailed it is refuted (`fmt_forced`): `Fmt` is the
 fibre of `p`, so a relational presentation is the same model addressed by fibre, and one cannot
