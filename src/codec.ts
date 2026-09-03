@@ -686,12 +686,17 @@ export const setBase = (codec: AnyCodec): SetBase | undefined => {
  * proved this exact at all 21 constructors (`Adm_exact`), which is what makes the port sound rather
  * than a second description of the same thing drifting from it.
  *
- * **This is narrower than "encode succeeds", and deliberately.** Encoding does not validate — a
- * codec's input is typed, so `string.encode(5)` writes `{ S: 5 }` — so the law that holds is one
- * way round: `admits(c, v)` implies `encode` succeeds, and the converse fails at exactly the
- * codecs whose `encode` trusts its type. `src/codec.laws.spec.ts` states the implication and lists
- * the codecs where the converse fails, which is the useful part: that list is the set of places
- * `encode` would start rejecting if it were made to consult this.
+ * **This is exactly "encode succeeds", both ways**, and it was not always. Encoding did not
+ * validate — a codec's input is typed, so `string.encode(5)` wrote `{ S: 5 }` — and the law held
+ * one way round, failing at twenty-three of the thirty-two codecs in `codec.laws.spec.ts`'s table.
+ * Every row runs the predicate this function runs now, so `admits(c, v) ⟺ !isError(c.encode(v))`
+ * is the law that file states, over the whole table and pool.
+ *
+ * **The predicates live here and `encode` calls them, rather than the reverse**, at every row but
+ * the two below. That direction is forced: `admits` reaches `opaque` and `custom` *by* calling
+ * `encode`, so an `encode` that consulted `admits` there would not terminate. Those two need no
+ * consulting — asking a codec cannot disagree with its answer — and the carve-out is the whole of
+ * it.
  *
  * **Two rows ask their codec instead of describing it**, which is the model's own move (`adm
  * (.custom ce _) = fun v => (ce v).isSome`, and `opaque`'s rows were converted to match):
@@ -1704,21 +1709,28 @@ const set = <const C extends AnyCodec>(
     // the member is decided above, from the element; the cast carries that decision into the type
     return codec<ReadonlySet<T>, SetOf<C>>({
         def: { kind: 'set', element: inner },
+        // `value.size` is `undefined` on anything that is not a `Set`, so `=== 0` was false for a
+        // string and `[...value]` then spread it into its characters — `string.set()` wrote
+        // `{ SS: ['a','b','c'] }` for `'abc'`. `admits`' `set` row asks `instanceof Set` first
         encode: (value) =>
-            value.size === 0
+            !(value instanceof Set)
                 ? new CodecError(
-                      `DynamoDB has no empty ${setMember}; omit the attribute or use array(...)`,
+                      `${describeShape(value)} is not a \`Set\`, and a ${setMember} is written from one — a codec's input is typed, so this is a value that reached \`encode\` past its type`,
                   )
-                : andThen(
-                      every([...value], carried),
-                      (written) =>
-                          // sorted so what is stored does not depend on insertion order; deduplicated
-                          // already, because a `Set` is
-                          carrying(
-                              setMember,
-                              [...new Set(written)].sort() as never,
-                          ) as SetOf<C>,
-                  ),
+                : value.size === 0
+                  ? new CodecError(
+                        `DynamoDB has no empty ${setMember}; omit the attribute or use array(...)`,
+                    )
+                  : andThen(
+                        every([...value], carried),
+                        (written) =>
+                            // sorted so what is stored does not depend on insertion order; deduplicated
+                            // already, because a `Set` is
+                            carrying(
+                                setMember,
+                                [...new Set(written)].sort() as never,
+                            ) as SetOf<C>,
+                    ),
         // the empty set is refused in *both* directions, and the read side is the one that
         // matters: DynamoDB never stores an empty `SS`, so an item carrying one was written by
         // something else. Decoding it would hand back a value this codec's own `encode` refuses —
@@ -1748,11 +1760,17 @@ export const array = <const C extends AnyCodec>(
         def: { kind: 'array', element: items },
         // the codec's own methods rather than a wrapper around them: a closure per call to encode
         // a list is a closure per list in every item written
+        // `every` iterates whatever is iterable, so a string arrived as its characters. `admits`'
+        // `array` row asks `Array.isArray` first, and now so does this
         encode: (value) =>
-            andThen(
-                every(value, items.encode),
-                (written) => carrying('L', written) as L<AttributeOf<C>>,
-            ),
+            !Array.isArray(value)
+                ? (new CodecError(
+                      `${describeShape(value)} is not an array, and \`array\` writes an 'L' — a codec's input is typed, so this is a value that reached \`encode\` past its type`,
+                  ) as never)
+                : andThen(
+                      every(value, items.encode),
+                      (written) => carrying('L', written) as L<AttributeOf<C>>,
+                  ),
         decode: (attribute) =>
             andThen(expect('L', attribute), (carried) =>
                 every(carried, items.decode),
@@ -1797,6 +1815,14 @@ export const tuple = <const Cs extends readonly AnyCodec[]>(
         def: { kind: 'tuple', elements: items, tail },
         encode: (value) => {
             const held = value as readonly unknown[]
+            // a `Uint8Array` of the right length has the right `length` and is not a tuple, which
+            // is what the two length tests alone could not say. `admits`' `tuple` row asks
+            // `Array.isArray` before it counts, and the arity messages below now mean what they say
+            if (!Array.isArray(held)) {
+                return new CodecError(
+                    `${describeShape(value)} is not an array, and \`tuple\` writes an 'L' — a codec's input is typed, so this is a value that reached \`encode\` past its type`,
+                )
+            }
             if (!tail && held.length !== items.length) {
                 return new CodecError(
                     `expected ${items.length} elements, found ${held.length}`,
@@ -1959,10 +1985,16 @@ export const record = <const C extends AnyCodec>(
     // "some map" — the same reason `map` casts
     return codec({
         def: { kind: 'record', value: values },
+        // `Object.entries('abc')` is `[['0','a'],…]`, so a string was written as a map keyed by
+        // index. `asRecord` is the test `admits`' `record` row uses
         encode: (value: Record<string, Decoded<C>>) =>
-            andThen(everyEntry(value, values.encode), (written) =>
-                carrying('M', written),
-            ),
+            asRecord(value) === undefined
+                ? new CodecError(
+                      `${describeShape(value)} is not a plain object, and \`record\` writes an 'M' — a codec's input is typed, so this is a value that reached \`encode\` past its type`,
+                  )
+                : andThen(everyEntry(value, values.encode), (written) =>
+                      carrying('M', written),
+                  ),
         decode: (attribute) =>
             andThen(expect('M', attribute), (carried) =>
                 everyEntry(carried, values.decode),
@@ -2123,7 +2155,20 @@ export const refine = <Wide, Narrow extends Wide, A extends AttributeValue>(
                     onThinSearch: options.onThinSearch,
                 },
             },
-            encode: (value) => inner.encode(value),
+            /**
+             * **The predicate runs on the way in too**, which is what closed the last row of
+             * `admits ⟺ encode`.
+             *
+             * It used to run on `decode` only, on the argument that a row is data somebody else
+             * wrote while an argument is typed — and the type is `Narrow`, so a value failing `is`
+             * arrived past it. That is true of every gate added here and was not a reason to skip
+             * this one: a brand whose predicate is not checked is a brand that can be forged by a
+             * cast, and `admits(refine(c, is), v)` said so all along by running `is` itself.
+             */
+            encode: (value) =>
+                is(value as Wide)
+                    ? inner.encode(value)
+                    : new CodecError(`${JSON.stringify(value)} is not ${what}`),
             decode: (attribute) =>
                 andThen(inner.decode(attribute), (decoded) =>
                     is(decoded)

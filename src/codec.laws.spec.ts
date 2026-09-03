@@ -526,25 +526,27 @@ describe('(C): what a codec reads, it can write', () => {
  *
  * `admits` is §3's `Adm : Term → Value → Bool`, and the model proved it exact at all 21
  * constructors. The obvious law here is therefore `admits(c, v) ⟺ !failed(c.encode(v))`, and half
- * of it is false — not because the port is wrong, but because **encoding does not validate**. A
- * codec's input is typed, so `string.encode(5)` writes `{ S: 5 }` and `array(string).encode([5])`
- * writes `{ L: [{ S: 5 }] }`. `carries`'s own docstring has said this for as long as it has existed;
- * what was missing was anything that measured how far it goes.
+ * of it used to be false — not because the port was wrong, but because **encoding did not
+ * validate**. A codec's input is typed, so `string.encode(5)` wrote `{ S: 5 }` and
+ * `array(string).encode([5])` wrote `{ L: [{ S: 5 }] }`. `carries`'s own docstring said this for
+ * as long as it existed; what was missing was anything that measured how far it went.
  *
- * So the law landed is the implication, and the measurement is the second test: **the exact list of
- * codecs where the converse fails.** That list is the deliverable. It is the set of places `encode`
- * would begin rejecting values it currently writes if it were made to consult `admits` — which is a
- * behaviour change, and JH's call, not this file's.
+ * **That was true and is not any more.** The list of codecs where the converse failed was this
+ * file's deliverable while the question was open — twenty-three of thirty-two — and the question
+ * was whether `encode` should consult `admits`, which is a behaviour change and was JH's call.
+ * It was taken: every row now runs the predicate `admits` runs, so the law below is the iff.
  *
- * The nine that *are* exact say what exactness costs, and it is the same fact twice:
+ * What the old nine exact rows were exact *for* is still the interesting part, because it is what
+ * the other twenty-three had to be given:
  *
- * - the five literals and `null` validate because their admissible set is **data this library
- *   owns** — `ℓ` is frozen at construction, so the check is decidable and `encode` runs it.
+ * - the five literals and `null` validated because their admissible set is **data this library
+ *   owns** — `ℓ` is frozen at construction, so the check is decidable and `encode` ran it.
  * - `opaque` and `custom` are exact because their rows **ask the codec** rather than describing it.
  *   A question cannot disagree with its answer. That is the model's own move at `custom`, and the
- *   reason `opaque`'s rows were converted to match.
+ *   reason `opaque`'s rows were converted to match — and it is why those two are the one pair
+ *   `encode` must *not* consult `admits` for: `admits` reaches them by calling `encode`.
  *
- * Everything else in the table is loose, at the value kinds it was handed but never checked.
+ * Everything else was loose at the value kinds it was handed but never checked, and now checks.
  */
 describe('`admits`, and the direction of the law that is true', () => {
     const isTag = (v: string): v is `t-${string}` => v.startsWith('t-')
@@ -688,81 +690,40 @@ describe('`admits`, and the direction of the law that is true', () => {
     })
 
     /**
-     * **The measurement, pinned so it cannot rot — and it was twenty-three.** Gating the five
-     * ground rows on the predicates `admits` already used closed **seventeen** of them, because
-     * twelve were loose only through their elements: a `tuple` took a `Uint8Array` of the right
-     * length because its positions did, `attributes` and the four wrappers and `lazy` and the two
-     * unions all inherited it. One gate per ground kind, and the containers came with them.
+     * **The law, both ways, at every codec in the table over every value in the pool.**
      *
-     * These six are what is left, and each is loose in its **own** row rather than through a
-     * child: `set` and `array` spread a string into members, `tuple(rest)` accepts what its rest
-     * positions are handed, `record` treats a string as a map with no keys, and `refine` does not
-     * run its predicate on the way in. Closing them is a second decision, not this one.
+     * This was two tests and a list. The list was twenty-three codecs whose `encode` wrote a value
+     * `admits` rejects, and it was the deliverable while the question "should `encode` validate?"
+     * was open. It is closed, so the list is empty and the two halves are one assertion.
      *
-     * Adding a codec to this list is not a failure. *Removing* one without changing `encode` means
-     * `admits` has been loosened, which is the drift the whole apparatus exists to catch.
+     * How it went: gating the five **ground** rows on the predicates `admits` already used closed
+     * seventeen, because twelve of the twenty-three were loose only through their elements — a
+     * `tuple` took a `Uint8Array` of the right length because its positions did, and `attributes`,
+     * the wrappers, `legacy`, `held`, `lazy` and both unions inherited the same way. The remaining
+     * six were loose in their own row and got their own gate: `set` asked `instanceof Set` before
+     * spreading, `array` and `tuple` asked `Array.isArray`, `record` asked `asRecord`, and `refine`
+     * started running its predicate on the way in.
+     *
+     * **Every gate is the predicate `admits` was already using**, not a second description of it.
+     * That is the whole reason this can be an iff rather than two lists kept in agreement: there is
+     * one test per kind and two callers of it.
+     *
+     * If this fails, one of the two moved. A failure naming a codec on the `admits`-accepts side
+     * means `encode` got stricter than the row; on the `encode`-writes side, that `admits` was
+     * loosened — which is the drift the whole apparatus exists to catch.
      */
-    it('is strictly narrower, and these are the codecs where', () => {
-        const loose = codecs
-            .filter(([, one]) =>
-                pool.some(
-                    (value) => !admits(one, value) && writesIt(one, value),
-                ),
-            )
-            .map(([name]) => name)
-        expect(loose).toEqual([
-            'set',
-            'set(decimal)',
-            'array',
-            'tuple(rest)',
-            'record',
-            'refine',
-        ])
-    })
-
-    /**
-     * And the complement, which used to be the interesting half and is now the bulk of the table:
-     * twenty-six of thirty-two. The five that ask or own their data were exact before — the
-     * literals and `null` because `ℓ` is this library's own frozen data, `opaque` and `custom`
-     * because their rows ask the codec rather than describing it — and the rest are exact because
-     * the ground rows they are built from now refuse what they always claimed to.
-     */
-    it('is exact everywhere the ground rows reach', () => {
-        const exact = codecs
-            .filter(([, one]) =>
-                pool.every(
-                    (value) => admits(one, value) === writesIt(one, value),
-                ),
-            )
-            .map(([name]) => name)
-        expect(exact).toEqual([
-            'string',
-            'string(...)',
-            'decimal',
-            "decimal('1')",
-            'number',
-            'number(...)',
-            'boolean',
-            'boolean(true)',
-            'null',
-            'binary',
-            'binary(...)',
-            'opaque',
-            "opaque('lossy')",
-            'tuple',
-            'attributes',
-            'attributes(open)',
-            'optional',
-            'fallback',
-            'restOf',
-            'nullable',
-            'legacy',
-            'held',
-            'lazy',
-            'custom',
-            'tagged',
-            'untagged',
-        ])
+    it('holds both ways, everywhere', () => {
+        const disagree: string[] = []
+        for (const [name, one] of codecs) {
+            for (const value of pool) {
+                if (admits(one, value) !== writesIt(one, value)) {
+                    disagree.push(
+                        `${name} @ ${String(value)}: admits=${admits(one, value)} writes=${writesIt(one, value)}`,
+                    )
+                }
+            }
+        }
+        expect(disagree).toEqual([])
     })
 
     /** The rows the brief called out, spelled as the one-liners they are. */
@@ -781,9 +742,13 @@ describe('`admits`, and the direction of the law that is true', () => {
         expect(admits(decimal, ['1'])).toBe(false)
         expect(failed(decimal.encode(['1'] as never))).toBe(true)
 
-        // `array` is still loose in its own row: the element gate does not make the container
-        // check that it *is* an array
+        // and the containers, which needed their own gate rather than their elements'
         expect(admits(array(string), [5])).toBe(false)
+        expect(failed(array(string).encode([5] as never))).toBe(true)
+        expect(admits(array(string), 'abc')).toBe(false)
+        expect(failed(array(string).encode('abc' as never))).toBe(true)
+        expect(admits(string.set(), 'abc')).toBe(false)
+        expect(failed(string.set().encode('abc' as never))).toBe(true)
 
         // an empty array is admitted and an empty set is not, and both are right: `L` has an empty
         // inhabitant and DynamoDB's sets do not
@@ -798,11 +763,12 @@ describe('`admits`, and the direction of the law that is true', () => {
         expect(admits(asSet, ['a', 'b'])).toBe(true)
         expect(admits(asSet, 5)).toBe(false)
 
-        // `refine` runs its predicate, which is the direction `encode` deliberately does not
+        // `refine` runs its predicate in both directions now, which was the last row to close
         const tagged = refine(string, isTag)
         expect(admits(tagged, 't-1')).toBe(true)
         expect(admits(tagged, 'x')).toBe(false)
-        expect(failed(tagged.encode('x' as never))).toBe(false)
+        expect(failed(tagged.encode('x' as never))).toBe(true)
+        expect(failed(tagged.encode('t-1'))).toBe(false)
 
         // a codec with no definition makes no claim
         expect(admits({} as AnyCodec, 'anything')).toBe(false)
