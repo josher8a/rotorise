@@ -2,10 +2,10 @@
 
 **Branch `wip/map-types`. `lake build` green and warning-free, `#assert_axioms_all` and
 `#lint_calculus` over 21 modules, and all four Python guards — `guard_reach.py`,
-`name_drift.py`, `doc_counts.py --check`, `ratchet.py` — exit 0.** Verify with the block at
-the end of §Landmines, by exit code and not by eye. `complexity.py`, `complexity.lean`,
-`twins.py`, `vocab_audit.py` and `fidelity_audit.py` report and never fail; they are not in
-the gate.
+`name_drift.py`, `doc_counts.py --check`, `ratchet.py` — exit 0.** Verify with
+`formal/scripts/gate.sh`, which runs all five and exits nonzero on any failure — by exit code
+and not by eye. `complexity.py`, `complexity.lean`, `twins.py`, `vocab_audit.py` and
+`fidelity_audit.py` report and never fail; they are not in the gate.
 
 Delete this file once read. The commit messages are the record; `git log` is now the only
 change log there is.
@@ -121,17 +121,18 @@ a peer-authored commit to reclaim authorship. For parallel work, use a separate 
 
 **Gate on exit codes, not on printed output.** I shipped two commits claiming all guards pass
 over a red tree (`eed1b58`, `e3bd71f`) because I ran them as `…; echo "$g=$?"; done && git
-commit` — `echo` always succeeds, so the chain gated on nothing. Use:
+commit` — `echo` always succeeds, so the chain gated on nothing. The gate is
+`formal/scripts/gate.sh` now, for the reason that block was easy to run wrong: it lived in the
+file you are told to delete once you have read it.
 
 ```sh
-fail=0
-python3 scripts/guard_reach.py >/dev/null 2>&1 || fail=1
-python3 scripts/name_drift.py  >/dev/null 2>&1 || fail=1
-python3 scripts/doc_counts.py --check >/dev/null 2>&1 || fail=1
-python3 scripts/ratchet.py     >/dev/null 2>&1 || fail=1
-docker exec rotorise-lean-dev bash -lc 'cd /workspaces/Rotorise/formal && lake build' >/dev/null 2>&1 || fail=1
-echo "ALL_GREEN=$([ $fail -eq 0 ] && echo yes || echo NO)"
+formal/scripts/gate.sh              # the four guards and the Docker build
+formal/scripts/gate.sh --no-build   # guards only — see its header for when that is honest
 ```
+
+It runs the five checks in the order below, prints one line each, and exits nonzero if any
+failed, so `gate.sh && git commit` gates on something. Every check runs even after one fails,
+so one invocation reports the whole state of the tree rather than its first symptom.
 
 Editing *any* `Calculus/*.lean` can move a `doc_counts` count, because §5 and §8 cite file
 lengths — a comments-only edit is not exempt. **And a count can move in a file you did not

@@ -1062,6 +1062,13 @@ docstring and §-tag coverage, and the site count is `vocab_audit.py`'s.)
   *difference*.
 - Touching a normative document, the advertised axiom base, or `src/` behaviour → that is the
   user's decision. Deliver the measurement and stop.
+- Committing anything → `scripts/gate.sh`, and gate on its **exit code**. It runs the four
+  Python guards on the host and `lake build` in the container, prints one line per check and
+  exits nonzero if any failed. `--no-build` drops the build and is honest only when nothing you
+  touched can reach the elaborator — a `.lean` docstring can, and a comments-only edit still
+  moves the counts `doc_counts.py` guards, so it is not the "docs" flag it looks like. Two commits (`eed1b58`,
+  `e3bd71f`) claimed a green tree over a red one by printing exit codes instead of testing
+  them; that is the defect the script exists to make unavailable.
 
 ### …and on the `src/` side, per structural guarantee (§8)
 
