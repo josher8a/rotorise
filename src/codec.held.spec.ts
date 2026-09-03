@@ -211,24 +211,25 @@ describe('composing with the rest', () => {
     })
 
     /**
-     * And the limit, which is where a union stops being able to help.
+     * **And the limit that turned out not to be one.**
      *
-     * `readonly string[]` and `readonly number[]` are disjoint *types*, so the declaration is
-     * allowed — but they are the same kind of runtime value, and neither `array(number)` nor the
-     * adapter validates what it is given. So both succeed on `['a']` and the ambiguity is real.
+     * This asserted ambiguity: `readonly string[]` and `readonly number[]` are disjoint *types*, so
+     * the declaration is allowed, but they are the same kind of runtime value and — the load-bearing
+     * clause — "neither `array(number)` nor the adapter validates what it is given". So both
+     * succeeded on `['1']`, numeric text being the sharper witness than `['a']`.
      *
-     * Reported rather than guessed, which is the only useful thing left to do about it. The way out
-     * is a discriminator, as the message says.
+     * `number`'s row validates now, so `array(number).encode(['1'])` refuses a *string* element and
+     * the `held` option answers alone. The premise was a fact about `encode`, not about the two
+     * types, and the ambiguity went with it. What is left of the limit is the honest part: these two
+     * are told apart by their elements, so a pair whose elements do not separate still needs a
+     * discriminator.
      */
-    it('cannot be told apart from a list of another element', () => {
+    it('is told apart from a list of another element, by its elements', () => {
         const Either = union([tags, array(number)])
-        // `'1'` and not `'a'`: since `number` gates on what DynamoDB stores, `'a'` is refused by
-        // the array option and the union resolves. The ambiguity is real for numeric text, which
-        // is the sharper witness anyway — both options genuinely admit it
-        expect(() => Either.unsafeEncode(['1'])).toThrow(
-            /held and array both admit this value/,
-        )
-        // and reading is fine, because `SS` and `L` say which
+        expect(Either.unsafeEncode(['1'])).toEqual({ SS: ['1'] })
+        // and the array arm still writes what it owns
+        expect(Either.unsafeEncode([1] as never)).toEqual({ L: [{ N: '1' }] })
+        // reading was never the problem, because `SS` and `L` say which
         expect(Either.unsafeDecode({ SS: ['a'] })).toEqual(['a'])
         expect(Either.unsafeDecode({ L: [{ N: '1' }] })).toEqual([1])
     })

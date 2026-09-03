@@ -688,13 +688,16 @@ describe('`admits`, and the direction of the law that is true', () => {
     })
 
     /**
-     * **The measurement, pinned so it cannot rot.** These are the codecs whose `encode` writes a
-     * value `admits` rejects — every one of them a place where `encode` trusts its argument's type.
+     * **The measurement, pinned so it cannot rot — and it was twenty-three.** Gating the five
+     * ground rows on the predicates `admits` already used closed **seventeen** of them, because
+     * twelve were loose only through their elements: a `tuple` took a `Uint8Array` of the right
+     * length because its positions did, `attributes` and the four wrappers and `lazy` and the two
+     * unions all inherited it. One gate per ground kind, and the containers came with them.
      *
-     * Read it as a list of what would change if `encode` consulted `admits`: `number` would stop
-     * accepting a numeral as a *string*, `set` would stop spreading a string into its members,
-     * `tuple` would stop taking a `Uint8Array` of the right length, `record` would stop treating a
-     * string as a map with no keys, and `refine` would start running its predicate on the way in.
+     * These six are what is left, and each is loose in its **own** row rather than through a
+     * child: `set` and `array` spread a string into members, `tuple(rest)` accepts what its rest
+     * positions are handed, `record` treats a string as a map with no keys, and `refine` does not
+     * run its predicate on the way in. Closing them is a second decision, not this one.
      *
      * Adding a codec to this list is not a failure. *Removing* one without changing `encode` means
      * `admits` has been loosened, which is the drift the whole apparatus exists to catch.
@@ -708,34 +711,23 @@ describe('`admits`, and the direction of the law that is true', () => {
             )
             .map(([name]) => name)
         expect(loose).toEqual([
-            'string',
-            'decimal',
-            'number',
-            'boolean',
-            'binary',
             'set',
             'set(decimal)',
             'array',
-            'tuple',
             'tuple(rest)',
             'record',
-            'attributes',
-            'attributes(open)',
-            'optional',
-            'fallback',
-            'restOf',
-            'nullable',
-            'legacy',
             'refine',
-            'held',
-            'lazy',
-            'tagged',
-            'untagged',
         ])
     })
 
-    /** And the complement, which is the interesting half: what exactness costs. */
-    it('is exact at the literals, at `null`, and at the two rows that ask', () => {
+    /**
+     * And the complement, which used to be the interesting half and is now the bulk of the table:
+     * twenty-six of thirty-two. The five that ask or own their data were exact before — the
+     * literals and `null` because `ℓ` is this library's own frozen data, `opaque` and `custom`
+     * because their rows ask the codec rather than describing it — and the rest are exact because
+     * the ground rows they are built from now refuse what they always claimed to.
+     */
+    it('is exact everywhere the ground rows reach', () => {
         const exact = codecs
             .filter(([, one]) =>
                 pool.every(
@@ -744,25 +736,53 @@ describe('`admits`, and the direction of the law that is true', () => {
             )
             .map(([name]) => name)
         expect(exact).toEqual([
+            'string',
             'string(...)',
+            'decimal',
             "decimal('1')",
+            'number',
             'number(...)',
+            'boolean',
             'boolean(true)',
             'null',
+            'binary',
             'binary(...)',
             'opaque',
             "opaque('lossy')",
+            'tuple',
+            'attributes',
+            'attributes(open)',
+            'optional',
+            'fallback',
+            'restOf',
+            'nullable',
+            'legacy',
+            'held',
+            'lazy',
             'custom',
+            'tagged',
+            'untagged',
         ])
     })
 
     /** The rows the brief called out, spelled as the one-liners they are. */
     it('answers the specific rows the model states', () => {
-        // encoding does not validate, and these are the four measured cases
+        // the ground rows validate now, so `admits` and `encode` agree at all five
         expect(admits(string, 5)).toBe(false)
-        expect(failed(string.encode(5 as never))).toBe(false)
+        expect(failed(string.encode(5 as never))).toBe(true)
         expect(admits(boolean, 'yes')).toBe(false)
+        expect(failed(boolean.encode('yes' as never))).toBe(true)
         expect(admits(binary, 'bytes')).toBe(false)
+        expect(failed(binary.encode('bytes' as never))).toBe(true)
+        // `toString` is defined on everything, which is what the numeral gate alone did not catch
+        expect(admits(number, '5')).toBe(false)
+        expect(failed(number.encode('5' as never))).toBe(true)
+        // and `isStoredNumeral` stringifies, so a one-element array read as a numeral
+        expect(admits(decimal, ['1'])).toBe(false)
+        expect(failed(decimal.encode(['1'] as never))).toBe(true)
+
+        // `array` is still loose in its own row: the element gate does not make the container
+        // check that it *is* an array
         expect(admits(array(string), [5])).toBe(false)
 
         // an empty array is admitted and an empty set is not, and both are right: `L` has an empty
