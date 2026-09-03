@@ -133,9 +133,17 @@ two are the ones to read first.
    and gains nothing here. Three pairs are stuck rather than divergent — `AdmA .number`'s `.n`
    row goes through `Double.ofDec`, an axiom with no computation rule, so *both* assertions
    fail, which is how it was told apart from a disagreement. §10 has it, with the instruction:
-   **do not re-open as a port without first showing a pair where the two disagree.** A public
-   one-line read-side twin of `admits` was put to JH separately and **declined**; §10 records
-   that too, and why a twin must not be a def-reader even if one is ever wanted.
+   **do not re-open as a port without first showing a pair where the two disagree.**
+
+   **The twin landed after all, internal, because a different question was the right one.**
+   Declined as *API* first; JH's reading then moved it — *"`admits` should not be a public api in
+   the first place. Those and the proposed one are internal utils."* So the **six definition
+   readers** left the published surface (`a1effb5`), which is what made the twin expressible:
+   `codec.ts` can export freely once `Rotorise.ts` enumerates instead of starring. Two places had
+   already written the function — `testing.ts` as `reads`, `lean.ts`'s read-verdict generator
+   inlined — so `admitsAttribute` is those two, once. It **asks the codec** and is not a
+   def-reader; the read side validates already, and §10 says why the next proposal here should
+   not reach for twenty-one rows.
 
 **The bridge is three artifacts now, all generated at gate time and none committed:** the refusal
 cross product (599), the declaration-guard verdicts (17), and the read-side differential (861).
@@ -214,6 +222,13 @@ them twice.** It said biome was at 8, a session note said 9, and it was **7** �
 0 alone is not proof either — a run that collects nothing exits 0, so require the
 `Tests N passed` line. And `biome format --write` on a file that is already dirty produces a
 diff nobody asked for mixed into the commit, so format only the files your own change touched.
+
+**Do not touch `CHANGELOG.md` on this branch.** JH writes it at release time from `git log`, so
+it carries only what is in `main` — six commits had added 85 lines of `Unreleased` entries and
+they were all reverted at his call (*"delete change log changes of this branch and keep only what
+is in main. i will fill it when we were ready"*). The commit message **is** the record; an entry
+here is a second copy of it that nobody asked for and that goes stale between arcs. If a change
+feels like it needs one, that is a sign the commit message is not carrying its weight.
 
 **`tuple` is variadic.** `tuple([x])` passes an array as one element and every reader of
 `def.elements[0].def` then sees `undefined`.
