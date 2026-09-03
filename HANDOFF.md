@@ -137,18 +137,17 @@ two are the ones to read first.
    fail, which is how it was told apart from a disagreement. §10 has it, with the instruction:
    **do not re-open as a port without first showing a pair where the two disagree.**
 
-   **The twin landed after all, internal, because a different question was the right one.**
-   Declined as *API* first; JH's reading then moved it — *"`admits` should not be a public api in
-   the first place. Those and the proposed one are internal utils."* So the **six definition
-   readers** left the published surface (`a1effb5`), which is what made the twin expressible:
-   `codec.ts` can export freely once `Rotorise.ts` enumerates instead of starring. Two places had
-   already written the function — `testing.ts` as `reads`, `lean.ts`'s read-verdict generator
-   inlined — so `admitsAttribute` is those two, once. It **asks the codec** and is not a
-   def-reader; the read side validates already, and §10 says why the next proposal here should
-   not reach for twenty-one rows.
+   **The twin landed after all, internal** (`a1effb5`), because a different question was the
+   right one: JH's reading moved it from "should this be API?" to *"`admits` should not be a
+   public api in the first place"*, and the six definition readers left the surface with it.
+   **§10 has the mechanism and the reasons**; this file does not repeat them, having twice this
+   arc been the second copy that went stale.
 
-**The bridge is three artifacts now, all generated at gate time and none committed:** the refusal
-cross product (599), the declaration-guard verdicts (17), and the read-side differential (861).
+**The bridge is four artifacts now, all generated at gate time and none committed:** the refusal
+cross product, the declaration-guard verdicts, the read-side differential, and union resolution.
+**Their sizes are in each generated file's own header**, not here — this said "three" until
+`b10470d` added the fourth, which is the third count in this file to go stale by a commit that
+did not think to look.
 `scripts/gate.sh` elaborates all three beside the two committed vector samples, and treats a
 *warning* as a failure, machine-written files having no judgement calls to make. Seven checks,
 about twenty seconds.
