@@ -36,7 +36,9 @@ The judgement carries both of §3's indices, and both are checked against the
 denotation. `typed_e_mem` and `typed_p_mem` are §3's `e : T ⇀ 𝔸` and `p : 𝔸 ⇀ T` at the
 judgement's own index — a derivable term writes and reads only values of the held set it
 names — factored through `Carrier` (per combinator) and `typed_TSub` (the denotation's
-held set is inside the judgement's). The
+held set is inside the judgement's) — and the containment is an **identity** in both
+directions, `typed_T_identity`, so the index describes the denotation exactly rather than
+bounding it. The
 member index is fuel-free (`μSyn`, with `denote_μ` and `typed_μSyn` tying the denotation
 and the judgement to it), and `lazy` concludes `⊤` in the model exactly as the doc's
 `(lazy)` rule demands.
@@ -190,9 +192,10 @@ A numeric literal's read side goes through the axiomatized `Double.ofDec`, so no
 set bounds it — and the row does not have to name its set, it can ask its codec, `ofDec` being
 a function is enough to make the answer unique. `admA number` and `admA literalN` are `dom(p)`
 exactly (`sepA_number_opaque`, `sepA_literalN_disjoint`). The store observation survives on the
-other side of the pair: a literal's stored texts are known at the declaration, but `10²¹` is
-written `1e+21` and handed back normalised, so a row testing the *text* would refuse a row the
-codec itself wrote. That is why the row tests the codec.
+other side of the pair — `Lawful.retract_through_store`, which is (R) asked through any
+transformation the store may apply: a literal's stored texts are known at the declaration, but
+`10²¹` is written `1e+21` and handed back normalised, so a row testing the *text* would refuse a
+row the codec itself wrote. That is why the row tests the codec.
 
 ## Building
 

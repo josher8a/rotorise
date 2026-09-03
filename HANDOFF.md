@@ -76,18 +76,33 @@ Eleven commits since `93f44d2`. Four instruments, two wins, three negative resul
 
 ## Pick up here
 
-**One decision is open and it is JH's.** The three `src/` items are done — JH's words were
+**Nothing is queued.** All four decisions are answered — JH's words on the `src/` three were
 *"send them to solve `src/`"* — and each is struck below with its commit and its result, because
 every one of them was wrong about something load-bearing and the correction is the part worth
 inheriting.
 
-1. **The 13 citations — with JH, unanswered, and the only thing queued.** 172 declarations are
-   named by a document this arc deleted and by no surviving one, in three bins: 12 §2 laws,
-   **10 where a surviving document already makes the claim and cites nothing**, 150 plumbing.
-   The proposal is 13 citations — six non-normative bin (ii) anchors, three of the four normative
-   ones, four of the twelve §2 laws, nothing from bin (iii). Reproduce with the five deleted
-   documents against `README.md`, `ARCHITECTURE.md` and `docs/codec-calculus.md`; the four
-   alternative readings and their counts are in `9f1be62`.
+1. ~~**The 13 citations**~~ — **ten landed, three refused on principle.** Eight names in
+   `ARCHITECTURE.md`, two in `README.md`, each the theorem's name added to the sentence that
+   already made its claim, so `name_drift.py` guards the correspondence from now on.
+
+   **The three normative ones are refused, not deferred**, and `docs/codec-calculus.md`'s own
+   second paragraph is why: *"it names no implementation of one… nothing here is true because
+   something elsewhere checks it."* It cites **zero** `Calculus/` names, deliberately. The two §2
+   corollaries the proposal wanted anchored — (Q — stability) and (read-side W) — are already
+   cited **in the other direction**, by `Lawful.stable`'s and `Lawful.reads`'s docstrings naming
+   the section they mechanize, which costs the document nothing. Where that document makes a
+   claim and cites nothing, **that is the policy working, not a gap.** Do not re-open it without
+   deciding to amend that paragraph first.
+
+   **And the count still does not reproduce — three readings, none of them 172.** HANDOFF and
+   `9f1be62` both say "the five deleted documents"; **three** were deleted, in `b163c17`, whose
+   own message names them: the audit, the change log and the `src/` discipline. A code-only
+   reading against those three gives **273** orphaned citations, `9f1be62`'s table gives 172 gross
+   and 90 net, and the item before it said 78. The reading was never pinned, which is the defect
+   `9f1be62` was written to fix, recurring inside the commit that fixed it. The ten below were
+   therefore chosen by **anchor** — an orphaned theorem whose claim a surviving non-normative
+   document already makes in a specific sentence — and not by filling a quota. **A number here is
+   worth nothing without its reading; if you need one, compute it and say which reading.**
 2. ~~**`src/`'s arity-one check**~~ — **`999b877`.** `EveryOptionTagged` and the runtime both
    refuse a discriminator literal admitting several values. It cost **four deliberate tests**,
    one of them labelled "the feature the refusal must not take with it" and written to prevent
