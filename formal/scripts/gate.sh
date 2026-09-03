@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# The commit gate: the five checks of HANDOFF's Landmines, in order, gated on
-# exit codes.
+# The commit gate: HANDOFF's Landmines checks, in order, gated on exit codes.
 #
 # It exists because the gate used to be a paste block in a file that is deleted
 # once read, and pasting it wrong is not hypothetical: `eed1b58` and `e3bd71f`
@@ -9,11 +8,11 @@
 # gated on nothing and the printed output was true while the verdict was false.
 # Printing an exit code is not checking it. This script checks it.
 #
-#   scripts/gate.sh              all five checks
+#   scripts/gate.sh              all six checks
 #   scripts/gate.sh --no-build   the four Python guards only
 #
-# `--no-build` is NOT for comments-only commits in the sense of "docs are
-# exempt". Editing any `Calculus/*.lean`, comments included, can move a
+# `--no-build` skips the two checks that need the container — the build and the vector
+# bridge — and is NOT for comments-only commits in the sense of "docs are exempt". Editing any `Calculus/*.lean`, comments included, can move a
 # `doc_counts` count, because §5 and §8 cite file lengths and a span runs to the
 # last non-blank line before the next declaration — so a re-wrapped signature
 # moves a number in a file you did not edit. `doc_counts.py --check` runs under
@@ -22,6 +21,8 @@
 # elaborator: a change confined to `docs/`, `README.md`, `ARCHITECTURE.md`,
 # `HANDOFF.md` or `scripts/`. If you edited a `.lean` file at all — even a
 # docstring, even a blank line — run the full gate. A docstring is elaborated.
+# And if you edited `src/lean.ts` or a `Calculus/` *constructor*, the bridge is
+# what will tell you, so do not skip it there either.
 #
 # The four Python guards run on the HOST, from `formal/`. There is no Python in
 # `rotorise-lean-dev` at all. The build runs in the container, and only one
@@ -78,8 +79,17 @@ run 'ratchet.py'            python3 scripts/ratchet.py
 
 if [ "$RUN_BUILD" -eq 1 ]; then
   run 'lake build' docker exec "$CONTAINER" bash -lc 'cd /workspaces/Rotorise/formal && lake build'
+  # The vector bridge, and it is here because it was broken for a day with every other check
+  # green. `src/lean.ts` emitted the pre-`Body` three-argument `Term.object` after `db444e3`
+  # changed the arity, and nothing reported it: the committed samples are generated *by* that
+  # emitter, so `lean.spec.ts`'s byte comparison agreed with a stale generator, and no gate ran
+  # a generated file through Lean. A test that compares a generator against its own output
+  # cannot see the generator being wrong. This runs the emitted theorems against `Calculus/`.
+  run 'vector bridge' docker exec "$CONTAINER" bash -lc \
+    'cd /workspaces/Rotorise/formal && lake env lean ../src/lean.sample.check.lean && lake env lean ../src/lean.sample.lean'
 else
   printf 'SKIP  %-28s (--no-build)\n' 'lake build'
+  printf 'SKIP  %-28s (--no-build)\n' 'vector bridge'
 fi
 
 echo

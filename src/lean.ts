@@ -579,7 +579,14 @@ const leanTermOfDef = (def: CodecDef, at: string, forced: number): string => {
                 typeof def.rest === 'string'
                     ? `Rest.${def.rest}`
                     : `(Rest.codec (${leanTermOf(def.rest, `${at}.rest`, forced)}))`
-            return `Term.object ${leanFinset(names)} (${fields}) ${rest}`
+            // **One argument, a `Body`.** `db444e3` made the object payload a stratum, so
+            // `Term.object` takes `Body.mk names fields rest` where it used to take the three
+            // separately — and this row kept emitting the three, which typechecked against no
+            // `Calculus/` after that commit. Nothing caught it for a day: the committed samples
+            // are generated *by this function*, so `lean.spec.ts`'s byte comparison agreed with a
+            // stale emitter, and no gate ran a generated file through Lean. Both are fixed; see
+            // `ARCHITECTURE.md` §2, where the emitter is now the ninth companion a stratum owes.
+            return `Term.object (Body.mk ${leanFinset(names)} (${fields}) ${rest})`
         }
         case 'tagged': {
             // One option, one tag: `discriminatedUnion` refuses a literal admitting several

@@ -197,14 +197,14 @@ describe('terms', () => {
         expect(
             leanTermOf(erase(object({ a: string, b: optional(boolean) }))),
         ).toBe(
-            'Term.object {"a", "b"} (fun k => if k.1 = "a" then Field.req (Term.string) else Field.optional (Term.boolean)) Rest.drop',
+            'Term.object (Body.mk {"a", "b"} (fun k => if k.1 = "a" then Field.req (Term.string) else Field.optional (Term.boolean)) Rest.drop)',
         )
     })
 
     /** The empty key set has no `else` to fall through to, so the function is the absurd one. */
     it('emits an object with no fields as the absurd function', () => {
         expect(leanTermOf(erase(object({})))).toBe(
-            'Term.object ∅ (fun k => absurd k.2 (Finset.not_mem_empty k.1)) Rest.drop',
+            'Term.object (Body.mk ∅ (fun k => absurd k.2 (Finset.not_mem_empty k.1)) Rest.drop)',
         )
     })
 
@@ -212,13 +212,13 @@ describe('terms', () => {
         expect(
             leanTermOf(erase(object({ a: fallback(string, () => 'd') }))),
         ).toBe(
-            'Term.object {"a"} (fun k => Field.fallback (Term.string) (Value.str "d")) Rest.drop',
+            'Term.object (Body.mk {"a"} (fun k => Field.fallback (Term.string) (Value.str "d")) Rest.drop)',
         )
     })
 
     it('emits an open object as `Rest.codec`', () => {
         expect(leanTermOf(erase(object({ a: string }, boolean)))).toBe(
-            'Term.object {"a"} (fun k => Field.req (Term.string)) (Rest.codec (Term.boolean))',
+            'Term.object (Body.mk {"a"} (fun k => Field.req (Term.string)) (Rest.codec (Term.boolean)))',
         )
     })
 
@@ -235,10 +235,10 @@ describe('terms', () => {
      */
     it('tells `refuse` from `drop`, which a decode vector would need', () => {
         expect(leanTermOf(erase(object({ a: string }, 'refuse')))).toBe(
-            'Term.object {"a"} (fun k => Field.req (Term.string)) Rest.refuse',
+            'Term.object (Body.mk {"a"} (fun k => Field.req (Term.string)) Rest.refuse)',
         )
         expect(leanTermOf(erase(object({ a: string }, 'drop')))).toBe(
-            'Term.object {"a"} (fun k => Field.req (Term.string)) Rest.drop',
+            'Term.object (Body.mk {"a"} (fun k => Field.req (Term.string)) Rest.drop)',
         )
     })
 

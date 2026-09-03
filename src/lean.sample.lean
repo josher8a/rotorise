@@ -150,35 +150,35 @@ theorem record_empty :
 
 /-- `object_two_fields` -/
 theorem object_two_fields :
-    (denote (Term.object {"a", "b"} (fun k => if k.1 = "a" then Field.req (Term.string) else Field.req (Term.boolean)) Rest.drop)).e
+    (denote (Term.object (Body.mk {"a", "b"} (fun k => if k.1 = "a" then Field.req (Term.string) else Field.req (Term.boolean)) Rest.drop))).e
       (Value.map {"a", "b"} (fun k => if k.1 = "a" then Value.str "x" else Value.bool true))
     = some (Attr.m {"a", "b"} (fun k => if k.1 = "a" then Attr.s "x" else Attr.bool true)) := by
   vector
 
 /-- `object_optional_absent` -/
 theorem object_optional_absent :
-    (denote (Term.object {"a", "b"} (fun k => if k.1 = "a" then Field.req (Term.string) else Field.optional (Term.boolean)) Rest.drop)).e
+    (denote (Term.object (Body.mk {"a", "b"} (fun k => if k.1 = "a" then Field.req (Term.string) else Field.optional (Term.boolean)) Rest.drop))).e
       (Value.map {"a"} (fun k => Value.str "x"))
     = some (Attr.m {"a"} (fun k => Attr.s "x")) := by
   vector
 
 /-- `object_fallback_present` -/
 theorem object_fallback_present :
-    (denote (Term.object {"a"} (fun k => Field.fallback (Term.string) (Value.str "stand-in")) Rest.drop)).e
+    (denote (Term.object (Body.mk {"a"} (fun k => Field.fallback (Term.string) (Value.str "stand-in")) Rest.drop))).e
       (Value.map {"a"} (fun k => Value.str "x"))
     = some (Attr.m {"a"} (fun k => Attr.s "x")) := by
   vector
 
 /-- `object_open` -/
 theorem object_open :
-    (denote (Term.object {"a"} (fun k => Field.req (Term.string)) (Rest.codec (Term.boolean)))).e
+    (denote (Term.object (Body.mk {"a"} (fun k => Field.req (Term.string)) (Rest.codec (Term.boolean))))).e
       (Value.map {"a", "z"} (fun k => if k.1 = "a" then Value.str "x" else Value.bool true))
     = some (Attr.m {"a", "z"} (fun k => if k.1 = "a" then Attr.s "x" else Attr.bool true)) := by
   vector
 
 /-- `object_nested` -/
 theorem object_nested :
-    (denote (Term.object {"a"} (fun k => Field.req (Term.object {"b"} (fun k => Field.req (Term.string)) Rest.drop)) Rest.drop)).e
+    (denote (Term.object (Body.mk {"a"} (fun k => Field.req (Term.object (Body.mk {"b"} (fun k => Field.req (Term.string)) Rest.drop))) Rest.drop))).e
       (Value.map {"a"} (fun k => Value.map {"b"} (fun k => Value.str "x")))
     = some (Attr.m {"a"} (fun k => Attr.m {"b"} (fun k => Attr.s "x"))) := by
   vector
@@ -206,7 +206,7 @@ theorem nullable_null :
 
 /-- `discriminated_union` -/
 theorem discriminated_union :
-    (denote (Term.dunion "kind" [Term.object {"kind", "x"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string (NEFinset.of "a" ∅)) else Field.req (Term.string)) Rest.drop, Term.object {"kind", "y"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string (NEFinset.of "b" ∅)) else Field.req (Term.boolean)) Rest.drop])).e
+    (denote (Term.dunion "kind" [Term.object (Body.mk {"kind", "x"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string (NEFinset.of "a" ∅)) else Field.req (Term.string)) Rest.drop), Term.object (Body.mk {"kind", "y"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string (NEFinset.of "b" ∅)) else Field.req (Term.boolean)) Rest.drop)])).e
       (Value.map {"kind", "x"} (fun k => if k.1 = "kind" then Value.str "a" else Value.str "v"))
     = some (Attr.m {"kind", "x"} (fun k => if k.1 = "kind" then Attr.s "a" else Attr.s "v")) := by
   vector
