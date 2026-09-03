@@ -114,7 +114,7 @@ The first thing to settle when adding a rule, and `Typing.lean`'s module header 
 | A premise that is… | goes in | consumed by |
 | --- | --- | --- |
 | decidable from the term | `Typed` (`Typing.lean`) — `(union)`'s is `hD : DIncomp Ts` | the judgement itself |
-| about what a codec *does* — `e`, `p`, an iso, a resolution | `Obligations` (`Soundness.lean`) — `UAtAct opts`, `IsoCancels`, `ReadsCoherently` | both soundness theorems |
+| about what a codec *does* — `e`, `p`, an iso, a resolution | `Obligations` (`Soundness.lean`) — `UAtAct opts` (reached from the canonical form by `uAtAct_of_uAtCan`), `IsoCancels`, `ReadsCoherently` | both soundness theorems |
 | §2's `(MP)`, which `legacy` is exempt from | `MPOk` (`Soundness.lean`) — `.legacy _ _ => False`, structural elsewhere | `soundness` alone |
 
 `MPOk` is not a rule premise at all: it is a predicate on the *term* saying the derivation is
@@ -329,7 +329,8 @@ Two shapes sit over them, and the second is the load-bearing one:
 - `carriedCodec (V : Ctor γ Value) (A : Ctor δ Attr)` — a payload *pair* between two prisms,
   the shape underneath every product (`entrywise`, hence `arrayCodec`/`recordCodec`;
   `tupleCodec`; `objectCodec`). **The model states a codec once for both sides**, which is why
-  §10's twin question is askable at all: the doubling is in the analyses, not the algebra.
+  §10's twin question is askable at all: the doubling is in the analyses, not the algebra. Its
+  two inversions, `carried_e` and `carried_p`, are what every product's proof goes through.
 - `set` is the one deliberate non-instance: its attribute side is a choice among three wire
   constructors rather than one prism (`setCodec`, `Combinators.lean`), so its inversion names all
   three families (`setCodec_p_eq`).
@@ -364,6 +365,12 @@ as a refactor estimate (`scripts/blast_radius.lean`). None of them was added spe
 aspect, `μSyn`, is `Denote.lean`'s, because `denote` needs the member index itself — with the
 separation predicates `SepV` and `SepA`, each a **two-disjunct** disjunction (labels
 disjoint, *or* admissible sets disjoint).
+
+Every discharger in this section is one appeal to `uniqueAdmission_of_disjoint`
+(`Combinators.lean`), which takes two families of allowed values, one per side, and asks only
+that each be pairwise disjoint. Kinds, members, tags and admissible sets are *ways of building*
+those families rather than four conditions, and `Adm_le_adm` is the containment that lets the
+exact generation feed the older one's.
 
 `Exactness.lean` holds the joint predicate `Adm`/`AdmA`, exact at **all twenty-one**
 constructors: `Adm_exact : ∀ t, ExactV t` and `AdmA_exact : ∀ t, ExactA t`, no hypothesis, no
@@ -470,7 +477,7 @@ The blind spot is the part that matters; the check is the part you can read off 
 **`#assert_axioms_all`** (`Axioms.lean`) — the advertised base is
 `[propext, Quot.sound, Calculus.Double, Calculus.numericHost]`, four names where there were
 seven, because the `Double` facts now project out of one `NumericHost` interface rather than
-being five independent assertions. It is a *build error*, not an assertion in prose; that is the
+being five independent assertions — `Double.roundtrip` is the one every numeric row leans on. It is a *build error*, not an assertion in prose; that is the
 whole design. Two blind spots:
 - It walks **imported** modules only — hence `scripts/guard_reach.py` (§1).
 - Its filter is `ci.isTheorem`, so **a `def` that acquires an axiom is not checked at all.**
@@ -902,8 +909,9 @@ the past tense wants the marker. §6 has the measurement and the shapes that los
 Two further conventions, both load-bearing:
 
 - **The core lemma is not a second proof.** `lawfulCore_X` and `lawful_X` share their clauses
-  and differ only where the content differs. Today that is one place: `set`'s (C), where (MP)'s
-  member-uniformity is replaced by the `(set)` rule's own premise.
+  and differ only where the content differs, and `Lawful.core` is the projection that makes the
+  weaker one a corollary rather than a parallel development. Today the difference is one place:
+  `set`'s (C), where (MP)'s member-uniformity is replaced by the `(set)` rule's own premise.
 - **An identity stated in prose gets cashed as an equation.** `arrayCodec_eq`, `tupleCodec_eq`
   and `objectCodecCore_eq` each say "this construction *is* that one" and carry every lemma
   across by `▸`; `record` gets the same service from a directional pair,
@@ -1046,8 +1054,8 @@ nowhere; this paragraph is now the only place it is, which is why it is here rat
 held-set index is a **pure description of the denotation** — it carries nothing the pair does
 not already determine. (`§3` throughout this paragraph is `docs/codec-calculus.md`'s, not this
 file's.) `HeldSet.lean` separates the two claims the row ran together: (A) `T = (denote t).T`,
-now proved, and (B) `T = dom(e)`, which is false at a `union` and keeps
-`not_TIsDomE_unionLiteralString` as its witness. **(B) is what is still open; (A) is not.**
+now proved — and definitional at a `union`, which is `altCodec_T` — and (B) `T = dom(e)`, which
+is false there and keeps `not_TIsDomE_unionLiteralString` as its witness. **(B) is what is still open; (A) is not.**
 
 The obvious consequence — the index is redundant, delete it and index the judgement by
 `(denote t).T` — is **declined, and not on cost.** The rules are the model's transcription of
