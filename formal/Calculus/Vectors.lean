@@ -384,11 +384,24 @@ Linear in the number of vectors — 100 two-field object vectors cost the same p
 where the same 200 written out as separate lines compile in 19 s. Each `rfl` gets its own
 heartbeat budget, and distinct vectors share no structure for a batch to exploit.
 
-`number` has no vectors and can have none: `Value.num` carries a `Double`, `Double` is an
-axiom with no closed terms, so there is no value to write. `decimal` is the numeric escape
-hatch — `WFNumeral` is a `String` subtype and reduces like one. The same axiom is why
-`Attr.n`'s row here compares the underlying text rather than reaching for a numeric
-equality.
+`number` has no **positive** vectors and can have none: `Value.num` carries a `Double`,
+`Double` is an axiom with no closed terms, so there is no value to write down and propose an
+agreement about. `decimal` is the numeric escape hatch — `WFNumeral` is a `String` subtype and
+reduces like one. The same axiom is why `Attr.n`'s row here compares the underlying text rather
+than reaching for a numeric equality.
+
+**It has refusal vectors, and that took the impossibility being put in the right place.** A
+refusal names the term and a value the term *rejects*, so it needs no inhabitant of the codec's
+own carrier: `(denote Term.number).e (Value.str "x") = none` is `rfl`. `Term.number` is a closed
+term and always was; the generator refused to emit it, on the ground that no value could be named
+at it — true of an agreement, false of a refusal, and stated as a fact about the syntax. The
+generator's own value emitter already reported the real impossibility, at `Value.num`, so moving
+nothing and *deleting* the term-level refusal was the whole fix.
+
+A numeric `literal` is the case that does not follow, and the contrast is the useful part:
+`Term.literal GroundKind.number ls` needs `ls : NEFinset Double`, so **the term itself** has no
+closed expression and no vector of either kind reaches it. Term-inexpressible and
+value-inexpressible are two boundaries, and this file's old sentence had them as one.
 -/
 
 end Calculus

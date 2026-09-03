@@ -324,7 +324,7 @@ already.
 ### 4c. One codec, stated once for both sides of the pair
 
 `Combinators.lean` is <!-- count:combinators_lines -->4001<!-- /count --> lines of the tree's
-<!-- count:tree_lines -->17606<!-- /count -->, and this is its organizing idea; without it
+<!-- count:tree_lines -->17619<!-- /count -->, and this is its organizing idea; without it
 the file reads as the inventory `README.md` already has. A constructor is a **prism** —
 `Ctor α β`, with `into`/`out` and the laws `out_into` (matching what was built returns it) and
 `into_out` (anything that matches was built) — and those two *are* §2's (R) and (C) at a
@@ -558,6 +558,20 @@ ungated numeric base, `Attr.n` carrying `Numeral.WF`.
 `term_depth_wf`" being false while all five names exist. It also clears a dotted name
 component-wise, so a dotted citation passes whenever both halves occur anywhere.
 **This document is in its `CURRENT` list.**
+
+**The vector bridge** (`src/lean.ts` → `Calculus/Vectors.lean`) — the differential check
+between this model and `src/`: the generator emits one theorem per encode the library actually
+performed, and the *kernel* decides whether the model agrees. Blind spot, and it cost a day:
+**regeneration is not verification.** `src/lean.spec.ts` compares the emitter's bytes against the
+committed samples, and those samples are generated *by that emitter* — so a stale generator
+agrees with its own stale output and the test passes on the defect it exists to catch. A test
+that compares a generator against what it produced cannot see the generator being wrong. It took
+`db444e3` changing `Term.object`'s arity, ten commits of green, and `e9f5b31` to find it. What
+verifies the bridge is elaboration, which is why `scripts/gate.sh` runs the samples and the full
+refusal cross product through Lean rather than trusting the byte comparison. **Refusal vectors
+are the other half of the same blind spot**: a positive vector is an agreement about what the
+library wrote, so every value it *refuses* produced no vector at all — the half of the pair where
+the two sides could disagree unobserved.
 
 **`scripts/doc_counts.py`** — computes the counts this document rests on and rewrites them
 between `<!-- count:NAME -->` markers; `--check` exits 1 on disagreement. It exists because

@@ -29,6 +29,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { AnyCodec, AttributeCodec } from './codec'
 import {
+    admits,
     array,
     binary,
     boolean,
@@ -51,7 +52,7 @@ import {
     tuple,
     union,
 } from './codec'
-import type { Vector } from './lean'
+import type { Refusal, Vector } from './lean'
 import {
     LeanUnemittable,
     leanAttrOf,
@@ -285,23 +286,31 @@ describe('terms', () => {
 
 describe('what cannot be emitted', () => {
     /**
-     * The permanent one. `Double` is axiomatized with a round trip and a decidable equality and *no
-     * constructor* — see `formal/Calculus/Domain.lean:236` — so no closed term inhabits it, `#eval`
-     * cannot print one, and there is no text a generator could emit. This is not a gap to be filled
-     * later: filling it would mean adding a numeral-to-double literal the model deliberately omits,
+     * The permanent one, **and it is a fact about values, not about the term.** `Double` is
+     * axiomatized with a round trip and a decidable equality and *no constructor* — see
+     * `formal/Calculus/Domain.lean:236` — so no closed term inhabits it, `#eval` cannot print one,
+     * and there is no text a generator could emit for one. This is not a gap to be filled later:
+     * filling it would mean adding a numeral-to-double literal the model deliberately omits,
      * because IEEE-754 rounding is not a theorem of the calculus.
+     *
+     * `Term.number` used to be refused here too, which read the impossibility one level too high.
+     * The term is closed and emits; `Value.num` is what cannot be written. Refusal vectors are
+     * what made the difference visible, because they need the term and *not* a value at it.
      */
-    it('refuses `number`, and says why it is permanent', () => {
-        expect(refusal(() => leanTermOf(erase(number))).reason).toContain(
-            'Double',
-        )
+    it('refuses every numeric value, and emits the term', () => {
+        expect(leanTermOf(erase(number))).toBe('Term.number')
         expect(refusal(() => leanValueOf(1.5)).reason).toContain('decimal')
         expect(refusal(() => leanValueOf(new Set([1, 2]))).reason).toContain(
             'NEFinset Double',
         )
     })
 
-    it('refuses a numeric literal, which is the same fact one level up', () => {
+    /**
+     * And the numeric literal, which really *is* term-inexpressible and so did not move with
+     * `Term.number`: its alternatives are `NEFinset Double`, so there is no set to write. No
+     * vector reaches this term in either direction.
+     */
+    it('refuses a numeric literal, which is the term and not the value', () => {
         expect(refusal(() => leanTermOf(erase(number(1, 2)))).reason).toContain(
             'GroundKind.number',
         )
@@ -601,6 +610,58 @@ export const sampleVectors: readonly Vector[] = [
     { name: 'lazy_string', codec: erase(lazy(() => string)), value: 'x' },
 ]
 
+/**
+ * The refusal corpus, both readings of it.
+ *
+ * {@link allRefusals} is every pair from the positive corpus the codec refuses — the full cross
+ * product, which `scripts/gate.sh` generates and elaborates. {@link sampleRefusals} is the
+ * readable subset committed to `lean.sample*.lean`: **one per codec kind**, the first corpus value
+ * that codec turns down. The subset says its own size against the full count in the file header,
+ * because a subset that does not say it is one is the same defect as a count nobody can reproduce.
+ *
+ * `number` is in the codec list and in no positive vector, which is the point: `Term.number` is a
+ * closed term whose *values* are unwritable, so it has refusals and no agreements.
+ *
+ * `opaque` is the one codec with **no** refusal, and that is a result rather than a gap: it is the
+ * fixpoint of everything self-identifying, so it admits every value in this corpus. A codec that
+ * refuses nothing contributes no refusal vector, and the subset says twenty-six of twenty-seven
+ * for that reason.
+ */
+const refusalCodecs: readonly (readonly [string, AnyCodec])[] = [
+    ...sampleVectors.map((v) => [v.name, v.codec] as const),
+    ['scalar_number', erase(number)] as const,
+]
+
+export const allRefusals = (): readonly Refusal[] => {
+    const out: Refusal[] = []
+    for (const [cn, codec] of refusalCodecs) {
+        for (const vector of sampleVectors) {
+            if (admits(codec, vector.value)) continue
+            out.push({
+                name: `${cn}__refuses__${vector.name}`,
+                codec,
+                value: vector.value,
+            })
+        }
+    }
+    return out
+}
+
+export const sampleRefusals: readonly Refusal[] = refusalCodecs.flatMap(
+    ([cn, codec]) => {
+        const first = sampleVectors.find((v) => !admits(codec, v.value))
+        return first
+            ? [
+                  {
+                      name: `${cn}__refuses__${first.name}`,
+                      codec,
+                      value: first.value,
+                  },
+              ]
+            : []
+    },
+)
+
 describe('the `check` protocol', () => {
     /**
      * The second protocol exists because `formal/Calculus/Vectors.lean` does — a hand-written
@@ -644,12 +705,46 @@ describe('the `check` protocol', () => {
     })
 })
 
+describe('the full refusal set, for the gate', () => {
+    /**
+     * **The subset is committed for reading; this is what gets verified.**
+     *
+     * `scripts/gate.sh` runs this with `EMIT_LEAN_REFUSALS=1` and elaborates the file it writes,
+     * which is why the file is gitignored rather than committed: a 599-line artifact regenerated
+     * on every gate run has nothing to gain from being in the tree, and a diff nobody reads is a
+     * diff nobody checks. The committed sample is the readable half and says so in its header.
+     */
+    it('emits every refusal the corpus produces', () => {
+        const refusals = allRefusals()
+        expect(refusals.length).toBeGreaterThan(sampleRefusals.length)
+        if (process.env.EMIT_LEAN_REFUSALS) {
+            writeFileSync(
+                join(process.cwd(), 'formal', '.vectors.full.lean'),
+                leanVectorModule([], 'check', refusals),
+            )
+        }
+        // every corpus value is refused by some codec, which is what makes the cross product a
+        // corpus rather than a sample of one
+        const values = new Set(
+            refusals.map((r) => r.name.split('__refuses__')[1]),
+        )
+        expect(values.size).toBe(sampleVectors.length)
+    })
+})
+
 describe('the committed sample', () => {
     /**
-     * A sample that is not regenerated is a sample that lies. This is the whole of the check: emit
-     * the same vectors again and compare bytes. If it fails, the emitter changed and
-     * `src/lean.sample.lean` needs rewriting — and, since the sample was verified against a real
-     * `Calculus` build, so does that verification.
+     * A sample that is not regenerated is a sample that lies — **and a regenerated one lies just
+     * as well, because regeneration is not verification.** This compares the emitter's bytes
+     * against files the emitter produced, so a *stale generator agrees with its own stale
+     * output*: it cannot see the generator being wrong, and for a day it did not. `db444e3`
+     * changed `Term.object` from three arguments to one, this test stayed green, and both sample
+     * files typechecked against no `Calculus/` for ten commits (`e9f5b31`).
+     *
+     * What this test *can* see is the emitter changing without the sample being rewritten, which
+     * is worth keeping. What says the samples are **true** is `scripts/gate.sh`, which elaborates
+     * them — and the full refusal cross product — against `Calculus/`. Do not read a pass here as
+     * the bridge working.
      */
     it('is what the emitter produces today', () => {
         // `process.cwd()` rather than `import.meta.url`: `tsconfig.json` targets a module setting
@@ -659,7 +754,12 @@ describe('the committed sample', () => {
             ['lean.sample.check.lean', 'check'],
         ] as const) {
             const at = join(process.cwd(), 'src', file)
-            const emitted = leanVectorModule(sampleVectors, protocol)
+            const emitted = leanVectorModule(
+                sampleVectors,
+                protocol,
+                sampleRefusals,
+                allRefusals().length,
+            )
             // `UPDATE_LEAN_SAMPLE=1 vitest run src/lean.spec.ts` rewrites them — and then they have
             // to go through Lean again, because nothing here can say the new theorems are true
             if (process.env.UPDATE_LEAN_SAMPLE) writeFileSync(at, emitted)
