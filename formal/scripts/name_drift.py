@@ -171,6 +171,9 @@ HOST = {
                            "container with no empty inhabitant. Cited by §5's bridge notes",
     "Separation": "`src/lean.ts`'s vector class carrying §5's bridge: one theorem per pair "
                   "`src/` refuses, asserting `Orth` does not certify it",
+    "ReadVerdict": "`src/lean.ts`'s vector class carrying §10's read-side differential: "
+                   "`AdmA t a` against whether the library's read accepted `a`. Cited because "
+                   "§10 records the `AdmA` port as rejected and this as what landed instead",
     "discriminatedUnion": "`src/`'s combinator; the calculus has no such codec — it is the sum "
                           "over tag-admission, which is why `(dunion)` is a rule and not a row",
     "EveryOptionTagged": "`src/codec.ts`'s type-level check, cited by §8's arity-one row",

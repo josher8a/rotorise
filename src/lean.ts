@@ -53,6 +53,7 @@ import type { AttributeValue } from './attribute'
 import { isNumeral, isStoredNumeral, memberOf } from './attribute'
 import type { AnyCodec, CodecDef } from './codec'
 import { admits, setBase, union } from './codec'
+import { failed } from './result'
 
 /**
  * A term, value or attribute the Lean model has no closed expression for.
@@ -898,12 +899,112 @@ declaration. \`Orth\` is *sufficient* and not necessary, so this runs one way: a
 certifies must not be refused by \`src/\`. See \`src/lean.ts\`'s \`Separation\`.
 -/
 
+/-! The emitted key function is total on a membership subtype, so a single-name object binds a
+\`k\` it never reads; the binder cannot be \`_\` because a multi-name object reads \`k.1\`. -/
+set_option linter.unusedVariables false
+
 namespace Calculus
 
 ${separations.map(leanSeparation).join('\n\n')}
 
 end Calculus
 `
+
+/**
+ * One proposed **read verdict**: this codec, given this attribute, decodes exactly when the
+ * model's read row admits it.
+ *
+ * **The differential that replaced a port.** HANDOFF's fourth item was to give the resolver's
+ * read side a decision through a port of `AdmA`, in the style `admits` ports `Adm`. Measured
+ * first: over 864 (codec, attribute) pairs the two agree at **861 of 861 checkable** ones and
+ * disagree at none. `decode` validates — it parses data somebody else wrote, which is its job —
+ * where `encode` trusted its argument's *type*, and that asymmetry is the whole reason wiring
+ * `admits` into the write side changed real answers and a read-side port would change none. So a
+ * def-reading port would be a second description of what `decode` already computes exactly, and
+ * two descriptions of one thing need a guard between them. **The guard is what landed.**
+ *
+ * `AdmA` is `noncomputable` — it consults `Double.ofDec` and `ownsNull` — so this cannot be
+ * `#eval`. The kernel unfolds it anyway, which is the same fact `Vectors.lean` opens with, so the
+ * verdict is asserted and elaboration is the test.
+ */
+export type ReadVerdict = {
+    /** A Lean identifier; anything else is sanitized, because a bad name loses the whole file. */
+    readonly name: string
+    readonly codec: AnyCodec
+    readonly attribute: AttributeValue
+}
+
+/**
+ * Whether the model's read row is **stuck** on this pair rather than answering.
+ *
+ * `AdmA .number`'s `.n` row is `match Double.ofDec x.1 with | some d => …`, and `Double.ofDec` is
+ * an axiom with **no computation rule** — so the row reduces to neither `true` nor `false` for
+ * any concrete numeral. Both assertions fail, which is how it was told apart from a
+ * disagreement; `AdmA .decimal` and `AdmA .string` on the same attribute reduce fine.
+ *
+ * Recorded rather than skipped: three pairs in today's corpus match, they are named in the
+ * generated module's header, and a *new* stuck pair outside this shape does not slip through —
+ * it fails to elaborate, and the reason gets read.
+ *
+ * The shape is the mirror of `number`'s other boundary and worth the contrast: a positive
+ * *vector* at `number` is impossible because no `Value.num` can be **written**, while here the
+ * term and the attribute are both writable and the **row** will not compute.
+ */
+export const readRowIsStuck = ({ codec, attribute }: ReadVerdict): boolean =>
+    codec.def?.kind === 'number' &&
+    Object.hasOwn(attribute as Record<string, unknown>, 'N')
+
+/** One read verdict, as a Lean `theorem`; `src/`'s answer is taken by running `decode`. */
+export const leanReadVerdict = (one: ReadVerdict): string => {
+    const { name, codec, attribute } = one
+    let decodes: boolean
+    try {
+        decodes = !failed(codec.decode(attribute as never))
+    } catch {
+        decodes = false
+    }
+    return [
+        `/-- \`${name}\` — \`src/\` ${decodes ? 'decodes' : 'refuses'} this attribute -/`,
+        `theorem ${leanIdent(name)} :`,
+        `    AdmA (${leanTermOf(codec, name)})`,
+        `      (${leanAttrOf(attribute, name)}) = ${decodes} := rfl`,
+    ].join('\n')
+}
+
+/**
+ * The read verdicts as a module of their own, because they need `AdmA`.
+ *
+ * Generated at gate time and elaborated, never committed — the counts are in
+ * `formal/ARCHITECTURE.md` §10, where the rejected port is recorded.
+ */
+export const leanReadModule = (verdicts: readonly ReadVerdict[]): string => {
+    const stuck = verdicts.filter(readRowIsStuck)
+    const live = verdicts.filter((one) => !readRowIsStuck(one))
+    return `import Calculus.Exactness
+
+/-!
+# Read verdicts, proposed to the model's read row
+
+**Generated — do not edit.** One theorem per (codec, attribute) pair: \`AdmA t a\` equals whether
+\`src/\`'s \`decode\` accepted it. ${live.length} of ${verdicts.length} pairs are asserted here.
+
+The other ${stuck.length} are **stuck, not skipped**: \`AdmA .number\`'s \`.n\` row goes through
+\`Double.ofDec\`, an axiom with no computation rule, so it reduces to neither \`true\` nor
+\`false\` and *both* assertions fail. That is how it was told apart from a disagreement.
+${stuck.map((one) => `  * \`${one.name}\``).join('\n')}
+-/
+
+/-! The emitted key function is total on a membership subtype, so a single-name object binds a
+\`k\` it never reads; the binder cannot be \`_\` because a multi-name object reads \`k.1\`. -/
+set_option linter.unusedVariables false
+
+namespace Calculus
+
+${live.map(leanReadVerdict).join('\n\n')}
+
+end Calculus
+`
+}
 
 /**
  * How much fuel the `check` protocol's comparator needs for this attribute.

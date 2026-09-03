@@ -1166,8 +1166,43 @@ shipped. **The bar above is still the right target; it is not the right instrume
 section also said `fidelity_audit.py` reports both numbers, and it does not: it reports
 docstring and §-tag coverage, and the site count is `vocab_audit.py`'s.)
 
-**`admits`' violation list and wiring it into `union`'s resolver** — both behaviour changes in
-`src/`, both the user's call. See the handoff.
+**~~`admits`' violation list and wiring it into `union`'s resolver~~ — done, at JH's call, and
+the list was six times longer than the item said.** `admits(c, v) ⟺ !isError(c.encode(v))` was
+false one way because encoding did not validate. The item named four codecs; the repo's own
+pinned test said **twenty-three of thirty-two** and had since it was written. Eleven gates closed
+all of them, because **twelve were loose only through their elements** — a `tuple` took a byte
+array of the right length because its positions did, and the wrappers, the field table,
+`legacy`, `held`, `lazy` and both unions inherited the same way. Five ground gates closed
+seventeen; only the six loose in their *own* row needed one each. `opaque` and `custom` are
+carved out, because `admits` reaches them **by asking the codec to write**, so consulting it
+there would not terminate.
+
+The resolver's write side decides through `admits` now, and the swap changed no test — which is
+the evidence the law had to land first. It also closed a recorded defect neither of its two
+candidate repairs would have needed: a union of a date adapter over `decimal` with `string`
+could not write a date at all, and the cause was in the defect's own prose — with no `κ` the
+resolver falls back to attempting, and `string` wrote whatever it was handed. **The ambiguity was never real; it
+was the write side's looseness wearing an ambiguity's clothes.**
+
+**~~The resolver's read side, through a port of `AdmA`~~ — rejected on measurement, and the
+guard a port would have needed is what landed instead.** The read side **already validates**,
+because it parses data somebody else wrote; the write side trusted its argument's *type*, and
+that asymmetry is the whole of why wiring gained there and would gain nothing here. Measured
+over 864 (codec, attribute) pairs from the vector corpus: `AdmA t a` and whether the library's
+read accepted it agree at **861 of 861 checkable pairs** and disagree at none.
+
+The remaining three are **stuck, not divergent**: `AdmA .number`'s `.n` row goes through
+`Double.ofDec`, an axiom with no computation rule, so it reduces to neither `true` nor `false`
+and *both* assertions fail — which is how it was told apart from a disagreement, `AdmA .decimal`
+and `AdmA .string` reducing fine on the same attribute. Note the shape against `number`'s other
+boundary (§6): a positive *vector* there is impossible because no `Value.num` can be **written**,
+while here the term and the attribute are both writable and the **row** will not compute.
+
+So a def-reading port would be a second description of what the read side already computes
+exactly, and two descriptions of one thing need a guard between them. The differential is that guard —
+`src/lean.ts`'s `ReadVerdict`, generated and elaborated by `scripts/gate.sh` beside the refusal
+and separation artifacts. **Do not re-open this as a port without first showing a pair where the
+two disagree.**
 
 ---
 
