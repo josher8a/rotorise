@@ -582,11 +582,11 @@ const leanTermOfDef = (def: CodecDef, at: string, forced: number): string => {
             return `Term.object ${leanFinset(names)} (${fields}) ${rest}`
         }
         case 'tagged': {
-            // the table is keyed by *tag*, and an option may answer to several — so the same codec
-            // appears more than once in it. `Term.dunion` takes the option list, and repeating an
-            // option there would make its own tag set overlap itself, which is exactly the premise
-            // `Typed.dunion` carries. Deduplicated by identity, which is what the table did to it
-            const options = [...new Set(Object.values(def.variants))]
+            // One option, one tag: `discriminatedUnion` refuses a literal admitting several
+            // values at the declaration, so the table cannot hold one codec twice and the option
+            // list cannot repeat one. `Typed.dunion`'s `hdisj` is answered upstream of here — this
+            // used to dedup by identity, which was the same invariant enforced in two places
+            const options = Object.values(def.variants)
                 .map((variant, index) =>
                     leanTermOf(variant, `${at}.variants[${index}]`, forced),
                 )

@@ -56,39 +56,43 @@ describe('two options answering to the same tag', () => {
     })
 
     /**
-     * A variant may answer to several tags, and this codebase relies on it, so the overlap can be
-     * partial: one option covering `ACME` and `GLOBEX` beside one covering `GLOBEX` leaves the
-     * first working at one of its own tags and shadowed at the other. That is the case a check
-     * written against whole options would miss.
+     * **Two tests stood here and are gone, and what removed them is a premise rather than a
+     * repair.** One exhibited a *partial* collision — an option covering `ACME` and `GLOBEX`
+     * beside one covering `GLOBEX`, the first working at one of its own tags and shadowed at the
+     * other — and the second was labelled "the feature the refusal must not take with it",
+     * asserting that a multi-tag variant colliding with nothing still encodes.
+     *
+     * Arity one at the discriminator (`36df8e7`, `Typed.dunion`'s `hone`) makes neither
+     * expressible: an option's literal admits one value, so an overlap cannot be partial and
+     * there is no multi-tag variant to accept. The same closure `HOpaque`'s `set []` got — a
+     * witness that a case is handled is worth having exactly while the case can be written down,
+     * and when the type stops admitting it the witness stops being a theorem and becomes the
+     * refusal below.
+     *
+     * The `@ts-expect-error` on the first of them is the reason this is a deletion and not an
+     * update: under arity one that annotation is satisfied by the *arity* error, not the
+     * collision error it names, so the test would have gone on passing while checking something
+     * else. A silent pass is worse than a missing test.
      */
-    it('is refused when only one tag of a multi-tag variant collides', () => {
+    it('refuses a literal admitting several values at the discriminator', () => {
         const _wrong = () =>
-            // @ts-expect-error 'GLOBEX' is already taken by the option above
+            // @ts-expect-error one option, two tags — a variant answers to exactly one
             discriminatedUnion('carrierId', [
                 object({ carrierId: string('ACME', 'GLOBEX'), at: string }),
-                object({ carrierId: string('GLOBEX'), depot: string }),
+                object({ carrierId: string('LOCAL'), depot: string }),
             ])
         expect(typeof _wrong).toBe('function')
+    })
+
+    it('and the runtime refuses it too, where the declaration is', () => {
         expect(() =>
             declare('carrierId', [
                 object({ carrierId: string('ACME', 'GLOBEX'), at: string }),
-                object({ carrierId: string('GLOBEX'), depot: string }),
+                object({ carrierId: string('LOCAL'), depot: string }),
             ]),
-        ).toThrow(/two options answer to 'carrierId' = 'GLOBEX'/)
-    })
-
-    /** And the feature the refusal must not take with it. */
-    it('still accepts a multi-tag variant that collides with nothing', () => {
-        const u = discriminatedUnion('carrierId', [
-            object({ carrierId: string('ACME', 'GLOBEX'), at: string }),
-            object({ carrierId: string('LOCAL'), depot: string }),
-        ])
-        expect(u.encode({ carrierId: 'ACME', at: 'x' })).toEqual({
-            M: { carrierId: { S: 'ACME' }, at: { S: 'x' } },
-        })
-        expect(u.encode({ carrierId: 'GLOBEX', at: 'x' })).toEqual({
-            M: { carrierId: { S: 'GLOBEX' }, at: { S: 'x' } },
-        })
+        ).toThrow(
+            /'carrierId' names 2 values at one option \(ACME, GLOBEX\), and a variant answers to exactly one tag/,
+        )
     })
 })
 
