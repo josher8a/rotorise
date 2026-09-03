@@ -147,15 +147,139 @@ theorem opaq_T_identity (lossy : Bool) (v : Value) :
   · intro h
     exact ⟨Value.depth v, hopaque_T lossy v (Value.depth v) h (Nat.le_refl _)⟩
 
+/-! ## …and in general, at every rule
+
+`opaq_T_identity` closes (A) at the constructor §3 says it bites hardest at. The general
+statement lives **here rather than beside `typed_TSub`**, which is where its mirror is and
+where it belongs by shape, for one reason that is not a preference: its `opaque` case is
+`opaq_T_identity`, and this module imports `Soundness.lean`. Moving the theorem up would
+mean moving `hopaque_T`'s mutual block with it, and that block is about `Value.depth` — a
+recursion on the *input*, `Opaque.lean`'s, not `denote`'s on the term. The four list and
+table helpers the other rules need did stay beside their converses in `Soundness.lean`;
+only the two theorems that reach `opaque` are here.
+
+So `term_depth_wf`'s users are **no longer all in one module** — see `ARCHITECTURE.md` §3,
+whose count moves with this.
+-/
+
+-- the shared `term_depth_wf` block has alternatives this theorem's goals do not use
+set_option linter.unreachableTactic false in
+/-- **The judgement's held set is inside the denotation's** — `typed_TSub` the other way, and
+    the direction that was open.
+
+    `HeldSet.lean` names this claim (A) and had it only at `opaque` (`opaq_T_identity`); the
+    general statement is here because it is `typed_TSub`'s mirror and recurses the same way.
+    Every rule closes: the ground rules, `literal` and `custom` are `exact hv`, the two
+    containers and the four wrappers reduce past their constructor, `opaque` is the existing
+    iff, and `set` is `SetBase.elem_T`. Only four rules need anything new, and each needs the
+    converse of a helper that was already here for the other direction.
+
+    **What this does *not* say is `T = dom(e)`**, which is a different claim, is false at a
+    `union`, and is the one `HeldSet.lean`'s `TIsDomE` and `not_TIsDomE_unionLiteralString`
+    are about. Reading (A) as (B) is the mistake §6's row made. Held is not written. -/
+theorem typed_T_eq : ∀ {t T μ}, Typed t T μ → ∀ v, T v → (denote t).T v
+  | t, T, μ, h, v, hv => by
+    cases h with
+    | string | number | decimal | boolean | binary | null => exact hv
+    -- the carrier is gated, so the rule's `HLit k ls` and the denotation's are one
+    -- expression — the same fact that removed `typed_TSub`'s five-way split here
+    | literal _ _ => exact hv
+    | custom _ _ => exact hv
+    | opaq lossy => exact (opaq_T_identity lossy v).mpr hv
+    | set b =>
+      rcases hv with ⟨S, rfl, hall⟩ | ⟨S, rfl, hall⟩ | ⟨S, rfl, hall⟩ <;>
+        simp only [denote, setCodec, SetBase.elem_T] <;> exact hall
+    | @array t' T' μ' h' =>
+      obtain ⟨vs, rfl, hall⟩ := hv
+      exact fun x hx => typed_T_eq h' x (hall x hx)
+    | @record t' T' μ' h' =>
+      obtain ⟨keys, f, rfl, hall⟩ := hv
+      exact fun k => typed_T_eq h' _ (hall k)
+    | @tuple ts Ts tail Tt hlist hopt =>
+      obtain ⟨vs, rfl, hall⟩ := hv
+      rw [denote, denoteList_eq, denoteOpt_eq]
+      exact align_T_of_HTuple hopt (fun t' _ _ _ hty w hw => typed_T_eq hty w hw) hlist
+        (fun t' _ _ _ hty w hw => typed_T_eq hty w hw) vs hall
+    | @held t' I' μ' f g h' => exact typed_T_eq h' (f v) hv
+    | @refine t' T' μ' q h' => exact ⟨typed_T_eq h' v hv.1, hv.2⟩
+    | @legacy t' T' μ' r h' => exact typed_T_eq h' v hv
+    | @nullable t' T' μ' h' =>
+      rcases hv with hv' | rfl
+      · exact Or.inl (typed_T_eq h' v hv')
+      · exact Or.inr rfl
+    | @lazy t' T' μ' h' => exact typed_T_eq h' v hv
+    | @object body bind R μs hfields hrest =>
+      cases body with | mk fields ff rest =>
+      simp only [Body.fields_mk, Body.at_mk, Body.rest_mk] at hfields hrest hv ⊢
+      obtain ⟨keys, f, rfl, hreq, hall⟩ := hv
+      refine ⟨⟨keys, f⟩, rfl, ?_, ?_⟩
+      · refine valPresentB_of fun k fs hm hno => ?_
+        obtain ⟨hk, rfl⟩ := MapOf.at_eq_some.mp hm
+        refine hreq ⟨k, hk⟩ (TypedField.true_of_not_optional (hfields ⟨k, hk⟩) ?_)
+        intro t' hc
+        exact hno (denote t') (congrArg fieldSem hc)
+      · intro k
+        have hentry := hall k
+        by_cases hk : k.1 ∈ fields
+        · rw [dif_pos hk] at hentry
+          simp only [objEntryT,
+            MapOf.at_of_mem (m := (⟨fields, fun k => fieldSem (ff k)⟩ :
+              MapOf FieldSem)) ⟨k.1, hk⟩]
+          obtain ⟨t', hty', hshape⟩ := TypedField.term (hfields ⟨k.1, hk⟩)
+          rcases hshape with heq | heq | ⟨v₀, heq⟩ <;> rw [heq] <;>
+            exact typed_T_eq hty' _ hentry
+        -- an undeclared name under `drop` or `refuse` is refused by *both* sides: `R` is
+        -- `none` by `TypedRest` and `rcOf` is `none` by definition, so the two branches are
+        -- the same `False` and the case closes on their agreement rather than despite it
+        · rw [dif_neg hk] at hentry
+          obtain ⟨T'', hR, hT''⟩ := hentry
+          simp only [objEntryT, MapOf.at, dif_neg hk]
+          cases hrest with
+          | drop => exact nomatch hR
+          | refuse => exact nomatch hR
+          | @codec t' T''' μ'' hty' =>
+            obtain rfl : T''' = T'' := Option.some.inj hR
+            exact ⟨denote t', rfl, typed_T_eq hty' _ hT''⟩
+    | @union opts Ts μs h' hD =>
+      obtain ⟨T', hT', hTv⟩ := hv
+      obtain ⟨tx, htx, hd⟩ :=
+        unionT_of_mem h' (fun t' _ _ _ hty w hw => typed_T_eq hty w hw) v T' hT' hTv
+      simp only [denote, optionSems_eq]
+      refine ⟨optionSemOf (denote tx) (specOf tx), ?_, ?_⟩
+      · simp only [List.mem_map]; exact ⟨tx, htx, rfl⟩
+      · rw [optionSemOf_c]; exact hd
+    | @dunion d opts Ts hlistM hone hdisj =>
+      obtain ⟨T', hT', hTv⟩ := hv
+      obtain ⟨tx, htx, hd⟩ :=
+        unionMT_of_mem hlistM (fun t' _ _ _ hty w hw => typed_T_eq hty w hw) v T' hT' hTv
+      simp only [denote, denoteTagged_eq]
+      refine ⟨.byTag d (tagsOf d tx) (denote tx), ?_, hd⟩
+      simp only [List.mem_map]
+      exact ⟨(tagsOf d tx, denote tx), ⟨tx, htx, rfl⟩, rfl⟩
+termination_by t _ _ _ _ => Term.depth t
+decreasing_by term_depth_wf
+
+/-- **§3's `⊢ c : T ⇝ μ` names the denotation's held set exactly**, at every rule.
+
+    So the index is a description and carries nothing the pair does not. It stays anyway:
+    the rules are the model's transcription of §3, and a judgement whose held set is spelled
+    `(denote t).T` cannot be read against the document it transcribes. What the identity buys
+    is that the reading is now checked rather than advertised. -/
+theorem typed_T_identity {t T μ} (h : Typed t T μ) (v : Value) : (denote t).T v ↔ T v :=
+  ⟨typed_TSub h v, typed_T_eq h v⟩
+
 /-! ## Which identity? §6's row is two of them
 
 * **(A)** `(denote t).T = T` for a derivable `⊢ t : T ⇝ μ` — §3's "`Uν` *is* `opaque`'s held
-  set", which `opaq_T_identity` proves and `typed_TSub` half-proves in general.
+  set", which `opaq_T_identity` proves at `opaque` and `typed_T_identity` now proves at every
+  rule. **Closed**, and it was the half `typed_TSub` left.
 * **(B)** `T = dom(e)` — what makes `: T` an honest index rather than an upper bound.
   `Carrier.domE` is its other half.
 
 §6's row asserted (A) and then justified it with a sentence about (B). (A) is not false at
-`union`; it is definitional. (B) is the one that fails. -/
+`union`; it is definitional — and it is now proved everywhere else too, so **(B) is the whole
+of what is left open**, and `not_TIsDomE_unionLiteralString` is its witness. Reading a proof of
+(A) as a claim about (B) is the mistake the row made, and the reason both are named here. -/
 
 /-- **(A) at a union is definitional.** `altCodec`'s held set *is* the union of its options'
     — no (U), no premise, nothing to prove. So the union case of (A) is exactly the options'

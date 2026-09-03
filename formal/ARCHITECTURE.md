@@ -145,11 +145,15 @@ What matters is that it is **derived from the term**, so it appears in no statem
 `Obligations`, and no rule. That is the whole difference between it and the `fuel` parameter it
 replaced.
 
-`term_depth_wf` is the shared `decreasing_by` tactic. **<!-- count:term_depth_wf_users -->Three<!-- /count -->** declarations use it, all in
-`Soundness.lean`: `soundness_both`, `typed_TSub`, `carrier_denote`. Their goal sets differ, so
-some alternatives in the block are dead at each site — that is what `unreachableTactic` reports
-there, and it is why the option is disabled at those declarations rather than the block being
-specialised three ways.
+`term_depth_wf` is the shared `decreasing_by` tactic. **<!-- count:term_depth_wf_users -->Four<!-- /count -->** declarations use it:
+`soundness_both`, `typed_TSub` and `carrier_denote` in `Soundness.lean`, and `typed_T_eq` in
+`HeldSet.lean` — which is not where it belongs by shape. It is `typed_TSub`'s mirror and wants
+to sit beside it; its `opaque` case is `opaq_T_identity`, and that module imports
+`Soundness.lean`. Its four list and table helpers did stay beside their converses.
+
+Their goal sets differ, so some alternatives in the block are dead at each site — that is what
+`unreachableTactic` reports there, and it is why the option is disabled at those declarations
+rather than the block being specialised per site.
 
 **Its docstring said *five* until `7a91de8`**, naming `Adm_sound` and `AdmA_sound`. Those do not
 recurse: `Adm_exact`/`AdmA_exact` are structural mutual recursions with no `termination_by`, and
@@ -307,7 +311,7 @@ already.
 ### 4c. One codec, stated once for both sides of the pair
 
 `Combinators.lean` is <!-- count:combinators_lines -->4001<!-- /count --> lines of the tree's
-<!-- count:tree_lines -->17382<!-- /count -->, and this is its organizing idea; without it
+<!-- count:tree_lines -->17606<!-- /count -->, and this is its organizing idea; without it
 the file reads as the inventory `README.md` already has. A constructor is a **prism** —
 `Ctor α β`, with `into`/`out` and the laws `out_into` (matching what was built returns it) and
 `into_out` (anything that matches was built) — and those two *are* §2's (R) and (C) at a
@@ -1036,6 +1040,30 @@ input**. So the two widenings are load-bearing on each other: tightening either 
 breaks `lawful_setCodec`. This project has already paid for that class of error once, at
 `HOpaque` admitting `set []`. The audit that found the coupling said the coupling was stated
 nowhere; this paragraph is now the only place it is, which is why it is here rather than gone.
+
+**§6's held-set row is closed on one of its two readings, and the other is the open half.**
+`typed_T_identity` proves `(denote t).T v ↔ T v` at all twenty-one rules, so the judgement's
+held-set index is a **pure description of the denotation** — it carries nothing the pair does
+not already determine. (`§3` throughout this paragraph is `docs/codec-calculus.md`'s, not this
+file's.) `HeldSet.lean` separates the two claims the row ran together: (A) `T = (denote t).T`,
+now proved, and (B) `T = dom(e)`, which is false at a `union` and keeps
+`not_TIsDomE_unionLiteralString` as its witness. **(B) is what is still open; (A) is not.**
+
+The obvious consequence — the index is redundant, delete it and index the judgement by
+`(denote t).T` — is **declined, and not on cost.** The rules are the model's transcription of
+§3, and a rule whose held set is spelled `(denote t).T` cannot be read against the document it
+transcribes; the identity is what makes the transcription checked rather than advertised, and
+it only means that because the two sides are written independently. Deleting one side would
+delete the claim, not prove it. The line cost is in the commit that landed it.
+
+*What the probe expected to fail and did not is worth recording, because in each case an
+earlier move had already closed it.* `literal` at `number`: the rule's `HLit k ls` and the
+denotation's are one expression, because the carrier is gated (§4a) — the same fact that
+removed `typed_TSub`'s five-way split there. `object`'s open part: an undeclared key under
+`drop` or `refuse` is refused by **both** sides, `R` being `none` by `TypedRest` and `rcOf`
+`none` by definition, so the branches agree rather than diverge. `opaque` at numerals: closed
+when `HOpaque`'s `num` row gained its `D` premise. Three predicted obstructions, three already
+paid for — which is the argument for probing a claim about the tree before costing it.
 
 **§6's commutativity row is the adjacent transposition, not the permutation.**
 `equiv_altCodec_swap` proves the adjacent case, which generates every permutation — but the
