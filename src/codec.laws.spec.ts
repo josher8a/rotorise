@@ -13,6 +13,7 @@
  * The laws that **fail** are as much of the record as the ones that hold, and they are at the bottom.
  */
 import { describe, expect, it } from 'vitest'
+import type { AttributeMap } from './attribute'
 import type { AnyCodec } from './codec'
 import {
     admits,
@@ -47,6 +48,7 @@ import {
     checkDecodesAreWritable,
     checkEquivalent,
     checkIso,
+    checkStable,
     rngFrom,
 } from './testing'
 
@@ -289,6 +291,22 @@ describe('nullable', () => {
      * lives beside the rows it belongs to rather than under the laws that do not hold. It is a law
      * that must hold.
      */
+    /**
+     * **§6's idempotence row.** `nullable(nullable(c)) ≡ nullable(c)`.
+     *
+     * The specification proves this by *construction* rather than as an equation the proof has to
+     * earn: `owns(nullable(c))` holds for every `c`, so the outer wrapper finds the point already
+     * owned and is the inner codec's pair. The test is here because that reasoning is about the
+     * guard, and the guard is one `||` — an implementation could satisfy every other law in this
+     * file and still shadow the inner wrapper's `NULL` branch with its own.
+     */
+    it('is idempotent', () => {
+        checkEquivalent(nullable(nullable(string)), nullable(string), { seed })
+        checkEquivalent(nullable(nullable(decimal)), nullable(decimal), {
+            seed,
+        })
+    })
+
     it('and nullable defers to an inner term that owns NULL', () => {
         const sentinel = held(nullable(string), {
             encode: (v: string) => (v === 'SENTINEL' ? null : v),
@@ -527,6 +545,64 @@ describe('(C): what a codec reads, it can write', () => {
             nul: nullable(string),
         }).item
         checkDecodesAreWritable(Ground, { count: 40, seed: 20260829 })
+    })
+
+    /**
+     * **(Q), stability, over the same two entities.**
+     *
+     * `decode ∘ encode ∘ decode = decode` — §2's corollary, and what **(R)** becomes when the values
+     * come from a *table* rather than from a generator. The two differ exactly by **(C)**, which is
+     * the containment most likely to be untrue, so asking (R) of generated values and never asking
+     * (Q) of stored ones leaves the gap this file exists to close.
+     *
+     * It was exercised in two files, both of them about one entity apiece. Here it runs over the
+     * whole table the other laws use, and over stored forms a generator cannot produce: DynamoDB
+     * normalises `N`, so `'1.50'` comes back `'1.5'` and only a fixed point survives one pass.
+     */
+    const itemsOf = <T>(
+        subject: { encode: (v: T) => unknown },
+        source: AnyCodec,
+        count: number,
+        itemSeed: number,
+    ): AttributeMap[] => {
+        const rng = rngFrom(itemSeed)
+        const items: AttributeMap[] = []
+        for (let i = 0; i < count; i++) {
+            const written = subject.encode(arbitraryOf(source, rng, 4) as T)
+            if (!failed(written)) items.push(written as AttributeMap)
+        }
+        return items
+    }
+
+    it('is stable for a wide entity, over items it wrote itself', () => {
+        checkStable(Pet, itemsOf(Pet, Pet as unknown as AnyCodec, 40, 20260829))
+    })
+
+    /**
+     * And over a row where **(Q) and (R) actually part company**, which is the only kind that says
+     * anything the round-trip tests do not. A set is stored unordered, so `encode ∘ decode` is free
+     * to return the members in another order: the *item* is not recovered, and the *value* is. That
+     * is the whole content of stability — one pass through storage reaches a fixed point, and the
+     * fixed point is a value rather than an attribute.
+     *
+     * Not `decimal`: `'1.50'` is *refused*, not normalised. Closing the (C) defect below made a
+     * numeral outside DynamoDB's stored form unreadable rather than readable-and-unwritable, so
+     * there is no lossy numeral left to make the point with.
+     */
+    it('is stable where the stored form is not recovered exactly', () => {
+        const Stored = object({ tags: string.set() }).item
+        const stored = { tags: { SS: ['c', 'a', 'b'] } }
+
+        checkStable(Stored, [stored])
+
+        // (Q) holds because the value is a set; (R) on the *item* is what does not hold
+        const once = Stored.unsafeDecode(stored)
+        expect(once).toEqual({ tags: new Set(['c', 'a', 'b']) })
+        expect(Stored.unsafeDecode(Stored.unsafeEncode(once))).toEqual(once)
+        expect(Stored.unsafeEncode(once)).not.toEqual(stored)
+        expect(Stored.unsafeEncode(once)).toEqual({
+            tags: { SS: ['a', 'b', 'c'] },
+        })
     })
 
     /**
