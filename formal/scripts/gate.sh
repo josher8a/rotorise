@@ -95,8 +95,12 @@ if [ "$RUN_BUILD" -eq 1 ]; then
   # being sufficient and not necessary (`ARCHITECTURE.md` §5). `.readverdicts.lean` is the
   # read-side differential: `AdmA t a` against whether `decode` accepted it, 861 of 864 pairs,
   # the other three stuck on the `Double` axiom and named in its header (§10).
-  # `.resolutions.lean` widens the two pinned union vectors to 208 write and 226 read pairs —
-  # which option the model's `select` picks against the one the library's resolver did.
+  # `.resolutions.lean` widens the two pinned union vectors to every (union, value) and
+  # (union, attribute) pair — which option the model's `select` picks against the one the
+  # library's resolver did. The counts, and which pairs cannot be stated at all, are in that
+  # file's own header, where the emitter that produces them keeps them true; `lean.spec.ts`
+  # asserts the same numbers. A count copied to here is a count that goes stale unread, and
+  # this one had: it said 226 reads against the header's 231 statable of 232.
   # The committed samples are a readable subset and say so in their header; what is *verified*
   # is all of it, which is the distinction the broken bridge was hiding — a sample regenerated
   # from a stale emitter agrees with itself, so only elaboration is evidence.

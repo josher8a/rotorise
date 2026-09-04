@@ -238,8 +238,11 @@ export const MAX_DOCUMENT_NESTING = 32
  * `lazy`, where a recursive entity's depth comes from the data: a self-nesting `object` holding an
  * `array` of itself costs two levels a turn and passes 32 at the sixteenth. That case is a real
  * gap and is queued rather than fixed here, because closing it means threading a level through
- * every container codec, which is a different change from guarding the two escape hatches. See
- * item 19 of `docs/codec-audit.md`.
+ * every container codec, which is a different change from guarding the two escape hatches. It is
+ * measured: a self-nesting entity reaches `depth 82` at forty levels. The repair that would be
+ * compositional is stated in `formal/Calculus/Nesting.lean`, which also says why it cannot cover
+ * the whole language — `opaque` and `lazy` take their depth from the value, so no syntactic bound
+ * exists for them and the theorem there is about the fragment that excludes them.
  */
 export const tooDeeplyNested = (enclosing: number): string | undefined =>
     enclosing >= MAX_DOCUMENT_NESTING

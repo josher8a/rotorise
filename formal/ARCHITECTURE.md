@@ -1247,7 +1247,8 @@ because `src/Rotorise.ts` said `export * from './codec'`; this library has no pa
 no `@internal` convention and nothing testing its surface, so "internal but importable" did not
 exist. Moving the function to its own module hits a real import cycle — it needs `codec.ts`'s
 helpers and `codec.ts`'s resolver needs it. What remained was to **enumerate**: `export type *`
-for the sixty-six types and a list for the twenty-four values that are API. Adding a codec is a
+for the sixty-six types and a list for the thirty values that are API, twenty-three of them
+pinned by name in `Rotorise.spec.ts`. Adding a codec is a
 line in that list now, which is the cost, and the point — an export becomes a decision rather
 than a consequence of where a function happens to live. `46cb950` shipped `admits` public with
 no such decision taken.
