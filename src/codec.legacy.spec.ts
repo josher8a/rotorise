@@ -146,18 +146,17 @@ describe('an attribute the row does not have', () => {
     })
 
     /**
-     * **The stand-in is shared, and this is the trade the construction-time check cost.**
+     * **A copy per read, so a mutable stand-in cannot be shared between entities.**
      *
-     * It used to be a thunk, run per read, so a mutable stand-in could not leak between entities.
-     * §3 `(fallback)` asks that the stand-in be *writable* by the inner codec, and a thunk defers
-     * the only question worth asking about it — so the parameter is a value now and the premise is
-     * checked at the declaration. The consequence is here rather than in a comment: two rows
-     * missing the attribute read back the *same object*, and mutating one is mutating the other.
+     * The declaration holds one value — that is what makes §3 `(fallback)`'s premise checkable
+     * where the declaration is, rather than on whichever read reaches it first — and each read
+     * that needs one gets a `structuredClone`. Both halves matter and this asserts both: the
+     * value is right, and it is not the *same* value twice.
      *
-     * A caller who needs a fresh one per read wants a codec that produces it, not a default that
-     * is copied — `held` over the inner codec is where that goes.
+     * The failure this pins is a caller mutating what they decoded. It shipped once as the
+     * opposite behaviour and the two assertions below were `toEqual(['x'])` and `toBe(a.tags)`.
      */
-    it('is one shared value, not one per read', () => {
+    it('is a copy per read, not one shared value', () => {
         const C = object({
             id: string,
             tags: fallback({ ...listOfStrings }, []),
@@ -165,8 +164,38 @@ describe('an attribute the row does not have', () => {
         const a = C.unsafeDecode({ id: { S: 'a' } })
         const b = C.unsafeDecode({ id: { S: 'b' } })
         a.tags.push('x')
-        expect(b.tags).toEqual(['x'])
-        expect(b.tags).toBe(a.tags)
+        expect(b.tags).toEqual([])
+        expect(b.tags).not.toBe(a.tags)
+    })
+
+    /** A primitive is handed over as it is: there is nothing to copy and nothing to leak. */
+    it('does not copy a primitive stand-in', () => {
+        const C = object({ id: string, tier: fallback(string, 'FREE') }).item
+        expect(C.unsafeDecode({ id: { S: 'a' } }).tier).toBe('FREE')
+    })
+
+    /**
+     * **And the one value that cannot be copied is shared, rather than throwing on a read.**
+     *
+     * `structuredClone` refuses anything holding a function. No declared codec admits such a
+     * value — a stand-in comes from the value language, and all of that clones — but `custom`'s
+     * `admits` row asks the caller's own pair, so a hand-written codec can admit one. The
+     * cloneability is settled at the declaration, so this is a shared stand-in and not a
+     * `DataCloneError` arriving out of a `decode` months later.
+     */
+    it('shares a stand-in structuredClone refuses, rather than failing the read', () => {
+        type Holder = { tag: string; run: () => number }
+        const holding = custom<Holder>({
+            encode: (value) => ({ S: value.tag }) as never,
+            decode: () => ({ tag: 'x', run: () => 1 }),
+        })
+        const stand: Holder = { tag: 'x', run: () => 1 }
+        expect(() => structuredClone(stand)).toThrow()
+
+        const C = object({ id: string, h: fallback(holding, stand) }).item
+        const a = C.unsafeDecode({ id: { S: 'a' } })
+        const b = C.unsafeDecode({ id: { S: 'b' } })
+        expect(a.h).toBe(b.h)
     })
 })
 

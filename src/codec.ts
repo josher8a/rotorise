@@ -334,8 +334,8 @@ export type CodecDef =
           /**
            * The stand-in. A value, not a thunk: §3 `(fallback)` asks that it be *writable* by the
            * inner term, which is decidable at the declaration, and a thunk defers the only question
-           * worth asking about it. One consequence, stated because it is a real one — the value is
-           * shared across every read, so a mutable stand-in is one object rather than one per read.
+           * worth asking about it. One value is held here and a *copy* is handed to each read that
+           * needs one, so the check happens once and nothing is shared — see `copiedPerRead`.
            */
           readonly value: unknown
       }
@@ -2281,9 +2281,10 @@ export type FallbackCodec<
  * declaration responsible for it. `fallback(string('A'), 'B')` is the whole of it.
  *
  * The stand-in is a **value and not a thunk**, which is what makes the check possible here rather
- * than on whichever read happens to need it first. The cost is that a mutable stand-in is one
- * object shared by every read instead of one per read; give a codec that holds a mutable value its
- * own {@link held} adapter if that matters.
+ * than on whichever read happens to need it first. It does not become shared state for that: the
+ * declaration holds one value and each read that needs one gets a `structuredClone` of it, so a
+ * mutable stand-in still cannot leak between entities. Primitives are handed over as they are,
+ * being unable to leak anything.
  */
 export const fallback = <const C extends AnyCodec>(
     // the *argument's own* type, not a re-declared `AttributeCodec<T, A>`: the guard has to see the
@@ -2315,8 +2316,41 @@ export const fallback = <const C extends AnyCodec>(
 // `fallback(number, 0)` — and the read site tests *presence*, which a bare value cannot carry
 const fallbackOf = (
     codec: AnyCodec,
-): { readonly value: unknown } | undefined =>
-    codec.def?.kind === 'fallback' ? { value: codec.def.value } : undefined
+): { readonly value: unknown; readonly copy: boolean } | undefined =>
+    codec.def?.kind === 'fallback'
+        ? { value: codec.def.value, copy: copiedPerRead(codec.def.value) }
+        : undefined
+
+/**
+ * Whether this stand-in has to be *copied* on each read that uses it, decided once.
+ *
+ * The declaration holds **one** value — that is what makes §3 `(fallback)`'s premise checkable
+ * where the declaration is — so handing that object out is handing every row the same object, and
+ * one caller's `.push` becomes every other caller's default. `structuredClone` is the platform's,
+ * so a copy costs no dependency.
+ *
+ * Two reasons not to copy, and both are settled here rather than per read.
+ *
+ * A **primitive** cannot be mutated, so sharing one is safe and copying it is waste — and most
+ * stand-ins are primitives.
+ *
+ * And a value `structuredClone` **refuses**. Ordinarily there is none: a stand-in is a value the
+ * inner codec `admits`, so it comes from the value language — arrays, plain objects, `Set`,
+ * `Uint8Array` — and all of those clone. {@link custom} is the exception, because its `admits` row
+ * asks the caller's own pair, so a hand-written codec can legitimately admit a class instance with
+ * methods or anything else holding a function. Rather than throw a `DataCloneError` out of a
+ * `decode` months later, the clone is attempted once at the declaration; where it fails the value
+ * is shared, which is the old behaviour confined to the one case that forces it.
+ */
+const copiedPerRead = (value: unknown): boolean => {
+    if (typeof value !== 'object' || value === null) return false
+    try {
+        structuredClone(value)
+        return true
+    } catch {
+        return false
+    }
+}
 
 /**
  * The same stored attribute, held as something else.
@@ -3452,7 +3486,9 @@ type Declared = {
     readonly name: string
     readonly codec: AnyCodec
     readonly optional: boolean
-    readonly absent: { readonly value: unknown } | undefined
+    readonly absent:
+        | { readonly value: unknown; readonly copy: boolean }
+        | undefined
 }
 
 /**
@@ -3575,7 +3611,9 @@ export const object = <
                 if (attribute === undefined) {
                     if (optional) continue
                     if (absent) {
-                        out[name] = absent.value
+                        out[name] = absent.copy
+                            ? structuredClone(absent.value)
+                            : absent.value
                         continue
                     }
                     return new CodecError(
