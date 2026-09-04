@@ -1111,12 +1111,22 @@ not an equation the proof has to earn.
 
 _custom._ The laws are the premises, verbatim; **(W)** is vacuous at `⊤`.
 
-_lazy._ The pair of `γ(∗)`. The induction needs a word, since `γ(∗)`'s derivation may contain
-`lazy(γ)` again: induct on the pair (input size, derivation size), lexicographically. Containers
-strictly shrink the input; the wrappers shrink the derivation and never grow the input; and a
-`lazy` that re-enters itself without passing a container defines nothing at that input — the laws
-quantify over `dom`, and hold over an empty one. Partiality is doing the termination argument's
-work.
+_lazy._ The pair of `γ(∗)`. This case is **two arguments and not one**, and saying so is the
+correction: the induction covers a `γ` whose unfolding passes a container before re-entering
+itself, and partiality covers the rest.
+
+Where it does pass one, induct on the pair (input size, derivation size), lexicographically.
+Containers strictly shrink the input; the wrappers shrink the derivation and never grow the input.
+Where it does not, **the measure does not decrease** — `γ(∗)`'s derivation contains `lazy(γ)`
+again, at the same input, so neither component falls and the induction has nothing to say. What
+covers that `γ` is not the induction but the fixpoint: a `lazy` re-entering itself without passing
+a container defines nothing at that input, and the laws quantify over `dom`, so they hold over an
+empty one.
+
+Partiality is doing the termination argument's work — which is exactly why it must be stated as its
+own step. The theorem's scope is unaffected, since between them the two arguments reach every
+derivable `lazy`; what was wrong was presenting one lexicographic induction as though it reached
+them both.
 
 **Fields.** A field denotes a pair over presence-extended domains — `e♭ : T ⇀ 𝔸 ∪ {ε}`,
 `p♭ : (𝔸 ∪ {ε}) ⇀ T`, `ε` the absent binding — with `member(ε)` undefined and the laws read over
