@@ -241,8 +241,17 @@ inductive Typed : Term → Held → Option Member → Prop where
       a key that does not identify its variant. `src/` still permits several and narrowing it there
       is a separate call.
 
-      `hdisj` stays a premise because distinctness relates one option to *others* at a shared key —
-      §4a's criterion puts that on the wrong side of the boundary, where arity is on the right one. -/
+      **Why arity is a premise even so.** §4a's criterion puts it on the *carrier* side of the
+      boundary — a property of one option against its own field — and it stays a premise
+      regardless, which the criterion does not decide. `tagsOf` is a function **on** `Term`, so
+      the subtype that would carry it cannot be written where `Term.dunion` is declared: the same
+      obstruction `{b : Body // d ∉ b.fields}` met (§4a). Refining only *this rule's* `opts` does
+      not evade it, since the conclusion must still name a plain `.dunion d opts` and the arity
+      returns as a side condition on the coercion.
+
+      `hdisj` stays a premise for the other reason: distinctness relates one option to *others* at
+      a shared key — §4a's criterion puts that on the wrong side of the boundary, where arity is
+      on the right one. -/
   | dunion {d opts Ts} (h : TypedListM opts Ts)
       (hone : ∀ t' ∈ opts, (tagsOf d t').card = 1)
       (hdisj : List.Pairwise (fun a b => ∀ tag ∈ tagsOf d a, tag ∉ tagsOf d b) opts) :
