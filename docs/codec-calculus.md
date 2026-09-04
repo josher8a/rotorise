@@ -1019,11 +1019,13 @@ question about attributes.
 ### Theorem (soundness)
 
 Every derivable `⊢ c : T ⇝ μ`, and every `⊢ f : T ⊗ π ⇝ μ`, denotes a pair satisfying **(R)**,
-**(C)**, **(W)**, and **(MP)** in the strong form `e(p(a)) ≼ a` defined below — with two residues,
-both named exactly: **(MP)** is off on the attributes a `legacy` in the derivation rereads, and
-every `(union)` in the derivation carries **(U)** _where the union acts_ as an obligation, which
-the dischargers of this section settle at the declaration wherever they decide a pair — `(dunion)`
-and `opaque` outright.
+**(C)**, **(W)**, and **(MP)** in the strong form `e(p(a)) ≼ a` defined below — with three residues,
+all named exactly: **(MP)** is off on the attributes a `legacy` in the derivation rereads; every
+`(union)` in the derivation carries **(U)** _where the union acts_ as an obligation, which the
+dischargers of this section settle at the declaration wherever they decide a pair — `(dunion)` and
+`opaque` outright; and a `(lazy)` whose unfolding re-enters itself **through a union** is outside
+the theorem entirely, for the reason §5 gives under confluent admission and the `(lazy)` case
+below repeats: there is no fixpoint there to prove anything about.
 
 Three premises in §3–§4 — `ran(r) ⊆ dom(e)` and coherence on `(legacy)`, `v(∗) ∈ dom(e)` on
 `(fallback)` — exist because this proof failed without them. That is the theorem earning its keep:
@@ -1111,22 +1113,29 @@ not an equation the proof has to earn.
 
 _custom._ The laws are the premises, verbatim; **(W)** is vacuous at `⊤`.
 
-_lazy._ The pair of `γ(∗)`. This case is **two arguments and not one**, and saying so is the
-correction: the induction covers a `γ` whose unfolding passes a container before re-entering
-itself, and partiality covers the rest.
+_lazy._ The pair of `γ(∗)`. This case is **three arguments and not one**, and separating them is
+the correction — what a `γ` re-enters itself through decides which one applies.
 
-Where it does pass one, induct on the pair (input size, derivation size), lexicographically.
+**Through a container.** Induct on the pair (input size, derivation size), lexicographically.
 Containers strictly shrink the input; the wrappers shrink the derivation and never grow the input.
-Where it does not, **the measure does not decrease** — `γ(∗)`'s derivation contains `lazy(γ)`
-again, at the same input, so neither component falls and the induction has nothing to say. What
-covers that `γ` is not the induction but the fixpoint: a `lazy` re-entering itself without passing
-a container defines nothing at that input, and the laws quantify over `dom`, so they hold over an
-empty one.
 
-Partiality is doing the termination argument's work — which is exactly why it must be stated as its
-own step. The theorem's scope is unaffected, since between them the two arguments reach every
-derivable `lazy`; what was wrong was presenting one lexicographic induction as though it reached
-them both.
+**Through wrappers alone.** The measure does not decrease: `γ(∗)`'s derivation contains `lazy(γ)`
+again, at the same input, so neither component falls and the induction has nothing to say. What
+covers this `γ` is not the induction but partiality — each wrapper moves one way in the information
+order, so the unfolding never gains a definedness it did not start with, and it defines nothing at
+that input. The laws quantify over `dom` and hold over an empty one.
+
+**Through a union.** Outside the theorem, and this is the third residue. Unique admission is a
+_negative_ condition on the other options, so it is anti-monotone in exactly the argument a
+fixpoint must grow: as the recursive options grow, admission grows, and the answer collapses from
+`some` to `none`. There is no least fixpoint, so there is no pair here to prove the laws of — not a
+pair with an empty domain, which is what the wrapper case has, but no semantics at all. That is the
+same exclusion §5 records under confluent admission when it says `lazy` under `union` is
+unmodelled, and it is a residue of this theorem rather than a remark elsewhere.
+
+Partiality is doing the termination argument's work in the second case, which is why it has to be
+its own step. The first draft of this paragraph ran the three together and claimed the second
+case's answer for the third — asserting an empty pair where §5 says there is no pair.
 
 **Fields.** A field denotes a pair over presence-extended domains — `e♭ : T ⇀ 𝔸 ∪ {ε}`,
 `p♭ : (𝔸 ∪ {ε}) ⇀ T`, `ε` the absent binding — with `member(ε)` undefined and the laws read over
