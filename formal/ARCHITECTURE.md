@@ -437,6 +437,32 @@ disjunct already delivers through `orthSV_disjoint`. Kernel-checked, not argued 
 results and the negative are in this paragraph's commit. **The move that looks open here was
 made in the next file, and what is left to take from it is a conjunct.**
 
+**And nothing downstream depends on it, which is a different fact from the two above —
+measured.** `scripts/blast_radius.lean` rooted on `SepV`, on `SepA` and on
+`uAtCan_of_separated`, each against the replacement that would supersede it — `SepJV`, `SepJA`,
+`uAtCan_of_separates`. Old-only 16, 16 and 5; both 1, 1 and 0. Every dependent falls into one of
+three classes and there is no fourth: a hand discharge in the same family
+(`sepV_number_opaque`, `uAtCan_string_null` and nine more, then eleven, then five), a refutation
+of one of those separations (`not_sepV_literal_heldLiteral` and four more, twice, then none), or
+a bridge — and the single `both` entry in each of the first two probes is exactly
+`sepJV_of_sepV` and `sepJA_of_sepA`. All 24 distinct dependents are in `Discharge.lean` (18) or
+`Refutations.lean` (6). **Nothing in `Soundness`, `Denote` or `Exactness`'s positive results
+consumes any of the three, and neither does `Orthogonality`.**
+
+So what keeps this file is not a dependency. The older generation **is** this section's
+discharge table and its refutation set — those are the results, and nothing is standing on top of
+them. What `not_uAtCan_of_sepJ` and `sepJA_needs_member` establish is that the table cannot be
+*restated* on the joint predicate: one restatement is false and the other loses a pair. That
+bounds how the table could be **ported**, which is not the same claim as anything still needing
+it. So the cost of retirement is the discharges and the refutations themselves, and that is a
+question about what this specification advertises rather than a dependency to unpick.
+
+Two citations the walk overturned, both the shape its own header warns about.
+`uAtCan_of_separated` appears in `Exactness.lean` five times and `uAtCan_of_disjoint` in
+`Soundness.lean` once, and **every one of those is prose or a docstring** — no proof outside
+`Discharge.lean` uses either, so a grep for them is counting sentences. The one real use outside
+`Discharge.lean` is `SepA`'s, in `sepJA_of_sepA`, and that is the bridge.
+
 So: do not delete `Discharge.lean`, and if you sharpen an `adm` row at a container, check
 whether you have just broken a discharge that was relying on the slack.
 
@@ -446,7 +472,15 @@ before and after — 75 old-only, 19 both, 136 new-only, 1433 neither — and th
 unchanged name for name. It has to be: the walk measures dependence on a **name**, and
 sharpening a row changes a definition's *body*, not who depends on it. The instrument costs
 deleting or replacing a declaration; it is blind to a row that stays and says something
-different. What caught the consequence was the build (`AdmA_le_admA`'s `legacy` case stopped
+different.
+
+**And its root set is incomplete, against its own stated method.** The header says every member
+of a mutual family is named as a root by hand, because mutual members reference each other in no
+constant's value — and `genOld` names the `adm` family and omits `κ`, `κList`, `ident` and
+`identList`. Adding those four moves the partition to 85 old-only, 22 both, 135 new-only, 1467
+neither. The numbers above are what the current roots measure and the §4b comparison holds
+either way, being a before-and-after of the same roots; what the four buy is that the *size* of
+the older generation stops being understated by ten declarations. What caught the consequence was the build (`AdmA_le_admA`'s `legacy` case stopped
 being `rfl`), and what caught the *hazard* was reading this section. Neither is an instrument.
 
 ### And a third machine, `Orth`, which does not pay — measured
