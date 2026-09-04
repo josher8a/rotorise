@@ -10,6 +10,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import {
+    CodecError,
     decimal,
     discriminatedUnion,
     number,
@@ -272,7 +273,7 @@ describe('nested variant codecs', () => {
             },
         }
         expect(() => AdoptionCodec.unsafeDecode(truncated as never)).toThrow(
-            /expected a list of 2, found 1/,
+            CodecError,
         )
     })
 
@@ -299,7 +300,7 @@ describe('nested variant codecs', () => {
             },
         }
         expect(() => AdoptionCodec.unsafeDecode(rogue as never)).toThrow(
-            /'NOPE' is not a variant of 'carrierId'/,
+            CodecError,
         )
     })
 

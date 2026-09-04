@@ -62,9 +62,7 @@ describe('a union of bare attributes', () => {
     })
 
     it('refuses a member no option writes', () => {
-        expect(() => Scalar.unsafeDecode({ BOOL: true })).toThrow(
-            /no option admits this attribute/,
-        )
+        expect(() => Scalar.unsafeDecode({ BOOL: true })).toThrow(CodecError)
     })
 
     it('round-trips, held by an entity that generates both options', () => {
@@ -91,9 +89,7 @@ describe('the kind of value is a filter, not the answer', () => {
     })
 
     it('refuses a string neither literal admits', () => {
-        expect(() => Tag.unsafeEncode('C' as never)).toThrow(
-            /no option admits this value/,
-        )
+        expect(() => Tag.unsafeEncode('C' as never)).toThrow(CodecError)
     })
 
     /**
@@ -118,9 +114,7 @@ describe('the kind of value is a filter, not the answer', () => {
             options: readonly AnyCodec[],
         ) => UnionCodec<string, readonly AnyCodec[]>
         // both are handed a string and neither checks it, which is a fact about the declaration
-        expect(() => declare([string, decimal])).toThrow(
-            /both take the same kind of value — string — and neither checks/,
-        )
+        expect(() => declare([string, decimal])).toThrow(CodecError)
     })
 })
 

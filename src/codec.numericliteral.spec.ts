@@ -304,6 +304,7 @@ describe('the admissible set is what DynamoDB stores', () => {
         expect(() => number(0, 1, NaN)).toThrow(/NaN is not a number/)
     })
 
+    /** **Pins wording no law has, deliberately** — the same reason as the test above it. */
     it('names all of them when several are outside', () => {
         expect(() => number(NaN, 1e400)).toThrow(
             /NaN, Infinity are not numbers/,

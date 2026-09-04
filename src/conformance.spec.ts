@@ -387,6 +387,9 @@ describe('a codec against the SDK itself', () => {
             id: { S: 'p' },
             price: { N: wide },
         })
+        // **Not a `CodecError`** — this is the SDK refusing, not this library, so the assertion
+        // stays on its message. There is no type of ours to name here, and asserting a bare throw
+        // would not distinguish the digit limit from any other way `marshall` can fail.
         expect(() => sdk.marshall({ price: Number(wide) })).toThrow(
             /greater than Number.MAX_SAFE_INTEGER/,
         )

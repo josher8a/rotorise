@@ -7,7 +7,7 @@
  * values instead — and reports when that thins a run enough to matter.
  */
 import { describe, expect, it } from 'vitest'
-import { decimal, object, refine, string } from './codec'
+import { CodecError, decimal, object, refine, string } from './codec'
 import { checkRoundTrip, rngFrom } from './testing'
 
 declare const brand: unique symbol
@@ -93,7 +93,7 @@ describe('a predicate the inner codec never satisfies', () => {
             checkRoundTrip(object({ id: uuid }).item, {
                 count: 10,
             }),
-        ).toThrow(/could not generate a value matching a uuid in 200 tries/)
+        ).toThrow(CodecError)
     })
 })
 

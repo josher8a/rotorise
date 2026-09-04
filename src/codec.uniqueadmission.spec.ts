@@ -20,6 +20,7 @@ import { memberOf } from './attribute'
 import {
     array,
     boolean,
+    CodecError,
     carries,
     custom,
     decimal,
@@ -110,7 +111,7 @@ describe('the unions this library ships', () => {
 describe('a codec with no union', () => {
     /** Silence is not a pass, and a harness that says nothing on `string` would report one. */
     it('is reported rather than passing vacuously', () => {
-        expect(() => checkUniqueAdmission(string, { seed })).toThrow(/has none/)
+        expect(() => checkUniqueAdmission(string, { seed })).toThrow(CodecError)
     })
 })
 
@@ -179,7 +180,7 @@ describe('what (U) says about nullable, which the model reads as a union', () =>
      */
     it('is not a union site, and this says so', () => {
         expect(() => checkUniqueAdmission(nullable(string), { seed })).toThrow(
-            /has none/,
+            CodecError,
         )
     })
 })

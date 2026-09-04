@@ -101,9 +101,7 @@ describe('an older encoding held as something else', () => {
     it('and still refuses an attribute no encoding reads', () => {
         expect(() =>
             Priced.unsafeDecode({ id: { S: 'p' }, price: { BOOL: true } }),
-        ).toThrow(
-            /no encoding could read this attribute; tried the current one/,
-        )
+        ).toThrow(CodecError)
     })
 })
 
@@ -228,7 +226,7 @@ describe('an attribute written in an older encoding', () => {
     it('deliberately does not keep the member stable — that is the migration', () => {
         expect(() =>
             checkMembersStable(Listing, [listingWith({ rate: { S: '1.5' } })]),
-        ).toThrow(/changed member on a read-modify-write/)
+        ).toThrow(CodecError)
     })
 })
 

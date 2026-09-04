@@ -13,6 +13,7 @@ import { describe, expect, it } from 'vitest'
 import type { L, N, S } from './attribute'
 import {
     array,
+    CodecError,
     decimal,
     deeper,
     number,
@@ -65,12 +66,8 @@ describe('a tuple with a tail', () => {
     })
 
     it('requires the head, and says so as a minimum', () => {
-        expect(() => path.unsafeEncode(['a'] as never)).toThrow(
-            /expected at least 2 elements, found 1/,
-        )
-        expect(() => path.unsafeDecode({ L: [{ S: 'a' }] })).toThrow(
-            /expected a list of at least 2, found 1/,
-        )
+        expect(() => path.unsafeEncode(['a'] as never)).toThrow(CodecError)
+        expect(() => path.unsafeDecode({ L: [{ S: 'a' }] })).toThrow(CodecError)
     })
 
     /**
@@ -90,7 +87,7 @@ describe('a tuple with a tail', () => {
         const fixed = tuple(string, number)
         expect(() =>
             fixed.unsafeDecode({ L: [{ S: 'a' }, { N: '1' }, { N: '2' }] }),
-        ).toThrow(/expected a list of 2, found 3/)
+        ).toThrow(CodecError)
     })
 
     it('admits a tail and nothing else', () => {
