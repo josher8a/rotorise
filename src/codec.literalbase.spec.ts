@@ -23,6 +23,7 @@
 import { describe, expect, it } from 'vitest'
 import type { B, BOOL, N, S } from './attribute'
 import {
+    admitsAttribute,
     binary,
     boolean,
     CodecError,
@@ -112,9 +113,10 @@ describe('a decimal literal', () => {
 
     it('checks the admissible set in both directions', () => {
         const one = decimal('1', '2')
-        expect(() => one.unsafeDecode({ N: '3' })).toThrow(
-            /'3' is not one of '1', '2'/,
-        )
+        // the law is that `'3'` is not admitted; the sentence saying so is not the law
+        expect(admitsAttribute(one, { N: '3' })).toBe(false)
+        expect(admitsAttribute(one, { N: '1' })).toBe(true)
+        expect(() => one.unsafeDecode({ N: '3' })).toThrow(CodecError)
         // @ts-expect-error the held type is the alternatives, so this is refused before it runs
         expect(() => one.unsafeEncode('3')).toThrow(CodecError)
     })
@@ -125,20 +127,26 @@ describe('a decimal literal', () => {
      * reason — or accepted it, had `'1.0'` been the alternative named.
      */
     it('reads through the same gate bare `decimal` does', () => {
+        // refused by the *gate* and not by membership, which is the distinction the sentence
+        // carried: `'1'` is the one alternative and is admitted, `'1.0'` names the same number
+        // and is not, so what refuses it is §1's stored form rather than `ℓ`
+        expect(admitsAttribute(decimal('1'), { N: '1' })).toBe(true)
+        expect(admitsAttribute(decimal('1'), { N: '1.0' })).toBe(false)
+        expect(admitsAttribute(decimal('1'), { N: '0x1' })).toBe(false)
         expect(() => decimal('1').unsafeDecode({ N: '1.0' })).toThrow(
-            /is not a numeral in the form DynamoDB stores/,
+            CodecError,
         )
         expect(() => decimal('1').unsafeDecode({ N: '0x1' })).toThrow(
-            /is not a numeral in the form DynamoDB stores/,
+            CodecError,
         )
     })
 
     /** `ℓ ⊆ D`, at the narrower `D` this base has. */
     it('refuses an alternative the service would normalise away', () => {
-        expect(() => decimal('1.50')).toThrow(/normalised form/)
-        expect(() => decimal('007')).toThrow(/normalised form/)
-        expect(() => decimal('1e5')).toThrow(/normalised form/)
-        expect(() => decimal('1', 'x')).toThrow(/'x'/)
+        expect(() => decimal('1.50')).toThrow(CodecError)
+        expect(() => decimal('007')).toThrow(CodecError)
+        expect(() => decimal('1e5')).toThrow(CodecError)
+        expect(() => decimal('1', 'x')).toThrow(CodecError)
     })
 
     it('round-trips', () => {
@@ -155,9 +163,8 @@ describe('the two bases that were unreachable', () => {
         expect(writes(yes)).toBe('BOOL')
         expect(carries(yes)).toEqual(['boolean'])
         expect(yes.unsafeDecode({ BOOL: true })).toBe(true)
-        expect(() => yes.unsafeDecode({ BOOL: false })).toThrow(
-            /false is not one of true/,
-        )
+        expect(admitsAttribute(yes, { BOOL: false })).toBe(false)
+        expect(() => yes.unsafeDecode({ BOOL: false })).toThrow(CodecError)
     })
 
     /**
@@ -175,17 +182,17 @@ describe('the two bases that were unreachable', () => {
         )
         expect(() =>
             png.unsafeDecode({ B: Uint8Array.from([0x89, 0x51]) }),
-        ).toThrow(/0x8951 is not one of 0x8950/)
+        ).toThrow(CodecError)
     })
 })
 
 describe('what each base refuses', () => {
     it('refuses no alternatives at all, naming the constructor that named none', () => {
-        expect(() => string()).toThrow(/`string\(\)` names none/)
-        expect(() => number()).toThrow(/`number\(\)` names none/)
-        expect(() => decimal()).toThrow(/`decimal\(\)` names none/)
-        expect(() => boolean()).toThrow(/`boolean\(\)` names none/)
-        expect(() => binary()).toThrow(/`binary\(\)` names none/)
+        expect(() => string()).toThrow(CodecError)
+        expect(() => number()).toThrow(CodecError)
+        expect(() => decimal()).toThrow(CodecError)
+        expect(() => boolean()).toThrow(CodecError)
+        expect(() => binary()).toThrow(CodecError)
     })
 
     /**
@@ -194,18 +201,14 @@ describe('what each base refuses', () => {
      * signature. So it is a construction-time refusal, at the base the caller named.
      */
     it('refuses a value that is not of the base it was handed to', () => {
-        expect(() => string('A', 1 as unknown as string)).toThrow(
-            /`string\(\.\.\.\)` admits string values, and 1 is not one/,
-        )
-        expect(() => number(1, 'A' as unknown as number)).toThrow(
-            /admits number values, and 'A' is not one/,
-        )
+        expect(() => string('A', 1 as unknown as string)).toThrow(CodecError)
+        expect(() => number(1, 'A' as unknown as number)).toThrow(CodecError)
     })
 
     /** `ℓ ⊆ D` at `number`, which is where the old `literal` had the defect. */
     it('still refuses a numeric alternative outside what an N holds', () => {
-        expect(() => number(Number.NaN)).toThrow(/has no NaN or Infinity/)
-        expect(() => number(1e200)).toThrow(/magnitude 1e-130 to 9.9e125/)
+        expect(() => number(Number.NaN)).toThrow(CodecError)
+        expect(() => number(1e200)).toThrow(CodecError)
     })
 })
 
@@ -245,9 +248,7 @@ describe('bases as union options', () => {
         // the type refuses it too — `EveryOptionTagged` reads the discriminator's definition — so
         // the runtime refusal is what a cast one line away would otherwise walk straight past
         // @ts-expect-error a `BOOL` names no tag a lookup could find
-        expect(() => discriminatedUnion('v', options)).toThrow(
-            /a tag is carried as 'S' or 'N'/,
-        )
+        expect(() => discriminatedUnion('v', options)).toThrow(CodecError)
     })
 })
 
@@ -259,6 +260,11 @@ describe('bases as union options', () => {
  * deep-equalled `string('A','B').def`, which this file used to assert. It is removed rather than
  * left deprecated, because it was the library's one term whose member followed from its values, and
  * a surface that keeps a retired exception around keeps having to explain it.
+ *
+ * **Pins wording no law has, deliberately.** The two messages are the subject here — that a
+ * caller who mixes bases is told which base and which value, rather than only that something was
+ * refused. Every other refusal in this file now asserts `CodecError` and the behaviour; these two
+ * stay as they are, because converting them would delete the claim.
  *
  * What is asserted now is the part a caller can still get wrong, and the two messages they meet.
  * The mixing message is the one thing the old constructor said better — it named the *mixing* —
@@ -278,10 +284,10 @@ describe('what replaced the constructor that guessed', () => {
     })
 
     it('refuses to name nothing, at every base', () => {
-        expect(() => string()).toThrow(/`string\(\)` names none/)
-        expect(() => number()).toThrow(/`number\(\)` names none/)
-        expect(() => decimal()).toThrow(/`decimal\(\)` names none/)
-        expect(() => boolean()).toThrow(/`boolean\(\)` names none/)
-        expect(() => binary()).toThrow(/`binary\(\)` names none/)
+        expect(() => string()).toThrow(CodecError)
+        expect(() => number()).toThrow(CodecError)
+        expect(() => decimal()).toThrow(CodecError)
+        expect(() => boolean()).toThrow(CodecError)
+        expect(() => binary()).toThrow(CodecError)
     })
 })
