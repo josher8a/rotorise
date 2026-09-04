@@ -11,8 +11,8 @@ import type { AttributeValue } from './attribute'
 import type { AttributeCodec } from './codec'
 import { CodecError, opaque } from './codec'
 import {
-    checkDecodesAreWritable,
     type Checkable,
+    checkDecodesAreWritable,
     checkMembersStable,
     checkRoundTrip,
     checkStable,

@@ -149,6 +149,90 @@ describe('held', () => {
     })
 })
 
+/**
+ * **The five obligations the model carries as premises and this library does not type.**
+ *
+ * Each is a side condition §3 or §2 asks of a constructor that takes a caller's function or value.
+ * Three are decidable from what the caller hands over and are now refused where the declaration is
+ * — `fallback`'s stand-in, `legacy`'s `ran(r) ⊆ dom(e)`, and a `rest` out of position. Two are not
+ * decidable at all, so what is pinned here is the failure mode, which is the only thing a test can
+ * say about an obligation nothing enforces.
+ */
+describe('the obligations a caller owes', () => {
+    /**
+     * `held`'s `IsoCancels`, unrefused. An adapter that *normalises* is not an isomorphism, and
+     * every read-modify-write on such a row rewrites the value: `'a'` is written `'A'` and read
+     * back `'A'`, so the row drifts once and then sticks.
+     *
+     * `checkIso` is the discharge route and does catch it, which is what makes this a written
+     * obligation rather than an unknown one.
+     */
+    it('held: an adapter that normalises breaks (R), and nothing refuses it', () => {
+        const normalising = held(string, {
+            encode: (v: string) => v.toUpperCase(),
+            decode: (v: string) => v,
+        })
+        expect(normalising.unsafeEncode('a')).toEqual({ S: 'A' })
+        expect(normalising.unsafeDecode({ S: 'A' })).toBe('A')
+
+        // (R) asks for 'a' back, and the pair is lawful-looking at every other test in this file
+        expect(
+            normalising.unsafeDecode(normalising.unsafeEncode('a')),
+        ).not.toBe('a')
+        expect(() =>
+            checkIso(string, {
+                encode: (v: string) => v.toUpperCase(),
+                decode: (v: string) => v,
+            }),
+        ).toThrow(CodecError)
+    })
+
+    /**
+     * `legacy`'s coherence half, which has **no observable witness** — and that is the finding
+     * rather than a gap in the test. The current encoding is tried first and the older one only on
+     * its failure, so where both could read an attribute the older one is never consulted. A
+     * reader that disagrees outright is invisible.
+     */
+    it('legacy: a disagreeing older reader is never consulted, so nothing can see it', () => {
+        const disagreeing = legacy({
+            current: string,
+            older: { decode: () => 'DISAGREE' as string },
+        })
+        expect(disagreeing.unsafeDecode({ S: 'hi' })).toBe('hi')
+        // and it is consulted only where the current encoding refuses
+        expect(disagreeing.unsafeDecode({ N: '1' })).toBe('DISAGREE')
+    })
+
+    /** `legacy`'s first half, now refused at the read that produces the unwritable value. */
+    it('legacy: an older reading the current encoding cannot write is refused', () => {
+        const migrating = legacy({
+            current: string('A'),
+            older: { decode: () => 'B' as 'A' },
+        })
+        expect(() => migrating.unsafeDecode({ N: '1' })).toThrow(CodecError)
+        expect(() => migrating.unsafeDecode({ N: '1' })).toThrow(
+            /has to land on values that can be written back/,
+        )
+    })
+
+    /** `fallback`'s stand-in, now refused at the declaration. */
+    it('fallback: a stand-in the codec cannot write is refused at construction', () => {
+        expect(() => fallback(string('A'), 'B' as 'A')).toThrow(CodecError)
+        expect(() => fallback(string('A'), 'A' as const)).not.toThrow()
+    })
+
+    /** `RestGoesLast`, past the cast that defeats the type. */
+    it('tuple: a rest out of position is refused at construction', () => {
+        // the whole call is cast, because `RestGoesLast` constrains the parameter list rather
+        // than any one element — which is the type doing its job, and the cast is the witness
+        const unchecked = tuple as unknown as (
+            ...elements: readonly unknown[]
+        ) => unknown
+        expect(() => unchecked(rest(string), number)).toThrow(/must be last/)
+        expect(() => tuple(string, rest(number))).not.toThrow()
+    })
+})
+
 describe('refine', () => {
     const nonEmpty = (v: string): v is string => v.length > 0
     const short = (v: string): v is string => v.length < 6
@@ -259,9 +343,9 @@ describe('optional', () => {
             // @ts-expect-error a name is marked once
             optional(optional(string)),
             // @ts-expect-error and `fallback` is what "absent, with a stand-in" is called
-            optional(fallback(string, () => 'x')),
+            optional(fallback(string, 'x')),
             // @ts-expect-error in either order
-            fallback(optional(string), () => 'x'),
+            fallback(optional(string), 'x'),
         ]
         expect(typeof _wrong).toBe('function')
     })
@@ -487,7 +571,7 @@ describe('the laws that do NOT hold', () => {
             // @ts-expect-error nor is a union option a name
             union([optional(string), number]),
             // @ts-expect-error and a fallback says the same thing about absence
-            array(fallback(string, () => 'x')),
+            array(fallback(string, 'x')),
         ]
         expect(typeof _wrong).toBe('function')
     })
@@ -526,7 +610,7 @@ describe('(C): what a codec reads, it can write', () => {
         tags: string.set(),
         steps: array(string),
         note: optional(string),
-        nick: fallback(string, () => 'anon'),
+        nick: fallback(string, 'anon'),
     }).item
 
     it('holds for a wide entity, over every mutation of every attribute', () => {
@@ -704,7 +788,7 @@ describe('`admits`, and the direction of the law that is true', () => {
         ['attributes', object({ a: string, b: number }).item],
         ['attributes(open)', object({ a: string }, decimal).item],
         ['optional', optional(string)],
-        ['fallback', fallback(string, () => 'x')],
+        ['fallback', fallback(string, 'x')],
         ['restOf', rest(string)],
         ['nullable', nullable(string)],
         ['legacy', legacy({ current: decimal, older: string })],

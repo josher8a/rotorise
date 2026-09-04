@@ -225,9 +225,7 @@ describe('terms', () => {
     })
 
     it('emits a fallback field with its stand-in value', () => {
-        expect(
-            leanTermOf(erase(object({ a: fallback(string, () => 'd') }))),
-        ).toBe(
+        expect(leanTermOf(erase(object({ a: fallback(string, 'd') })))).toBe(
             'Term.object (Body.mk {"a"} (fun k => Field.fallback (Term.string) (Value.str "d")) Rest.drop)',
         )
     })
@@ -381,8 +379,7 @@ describe('what cannot be emitted', () => {
             refusal(() => leanTermOf(erase(optional(string)))).reason,
         ).toContain('§4 *field*')
         expect(
-            refusal(() => leanTermOf(erase(fallback(string, () => 'd'))))
-                .reason,
+            refusal(() => leanTermOf(erase(fallback(string, 'd')))).reason,
         ).toContain('§4 *field*')
     })
 
@@ -587,7 +584,7 @@ export const sampleVectors: readonly Vector[] = [
     },
     {
         name: 'object_fallback_present',
-        codec: erase(object({ a: fallback(string, () => 'stand-in') })),
+        codec: erase(object({ a: fallback(string, 'stand-in') })),
         value: { a: 'x' },
     },
     {

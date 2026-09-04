@@ -694,7 +694,7 @@ const leanFieldOf = (codec: AnyCodec, at: string, forced: number): string => {
     }
     if (def?.kind === 'fallback') {
         return `Field.fallback (${leanTermOf(def.inner, at, forced)}) (${leanValueOf(
-            def.value(),
+            def.value,
             `${at}.fallback`,
         )})`
     }
