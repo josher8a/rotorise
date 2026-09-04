@@ -49,6 +49,11 @@ describe('a union of bare attributes', () => {
         expect('S' in written ? written.S : written.N).toBe('x')
     })
 
+    /**
+     * **Pins wording no law has, deliberately.** The refusal is asserted as a `CodecError` beside
+     * it; what the regex adds is the diagnostic, which is this test's subject. Here it is that the refusal
+     * *lists the options*, so a caller of a generated union learns what it could have passed.
+     */
     it('refuses a value no option takes, naming the options', () => {
         expect(() => Scalar.unsafeEncode(true as never)).toThrow(CodecError)
         expect(() => Scalar.unsafeEncode(true as never)).toThrow(

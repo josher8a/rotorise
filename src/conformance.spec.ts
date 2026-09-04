@@ -71,6 +71,12 @@ describe('a codec that does not', () => {
     })
 
     /** A list and a set hold the same strings and are not the same attribute. */
+    /**
+     * **Pins wording, because the *message* is the only channel this fact travels on.** Write
+     * parity and read parity are the two directions `checkAgainst` compares, both reported as one
+     * `CodecError`; asserting the type alone would make this test and its sibling
+     * indistinguishable. Same reason as `codec.uniqueadmission.spec.ts`'s (U) pair.
+     */
     it('reports a set stored as a list', () => {
         const asList: Reference<Pet> = {
             marshall: (pet) => ({
@@ -86,6 +92,12 @@ describe('a codec that does not', () => {
     /**
      * The half that matters more: a codec can be right about every future write and still be
      * unable to read the rows that are already there.
+     */
+    /**
+     * **Pins wording, because the *message* is the only channel this fact travels on.** Write
+     * parity and read parity are the two directions `checkAgainst` compares, both reported as one
+     * `CodecError`; asserting the type alone would make this test and its sibling
+     * indistinguishable. Same reason as `codec.uniqueadmission.spec.ts`'s (U) pair.
      */
     it('reports where an existing row reads back differently', () => {
         const readsDifferently: Reference<Pet> = {

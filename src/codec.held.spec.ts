@@ -132,6 +132,12 @@ describe('failure belongs to the inner codec', () => {
         decode: (at) => new Date(at),
     })
 
+    /**
+     * **Pins wording no law has, deliberately.** The refusal is asserted as a `CodecError` beside
+     * it; what the regex adds is the diagnostic, which is this test's subject. Here it is which of the two
+     * halves is blamed: an adapter's failure has to name the value that was *stored*, because the
+     * conversion is the caller's code and its own message would say nothing about the row.
+     */
     it('reports the stored value, not the conversion', () => {
         expect(() => when.unsafeDecode({ S: 'not a date' })).toThrow(CodecError)
         expect(() => when.unsafeDecode({ S: 'not a date' })).toThrow(
