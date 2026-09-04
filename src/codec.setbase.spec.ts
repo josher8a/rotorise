@@ -69,6 +69,11 @@ describe('a set at each base', () => {
      * One combinator, reached from four places. The definition records the *element codec*, and it
      * is the public base itself — not a copy of it — which is what makes two spellings of the same
      * set compare equal and a schema pin stable.
+     *
+     * **Pins a fact no law has, deliberately.** Identity of the recorded element is not something
+     * §2 or §6 asks for — two codecs that behave alike satisfy every law here whether or not their
+     * definitions are the same object. It is asserted because `toEqual` on `def` is what schema
+     * comparison rests on, and a copy would pass every behavioural test and break that. It stays.
      */
     it('records the base itself as its element', () => {
         expect(string.set().def).toEqual({ kind: 'set', element: string })
