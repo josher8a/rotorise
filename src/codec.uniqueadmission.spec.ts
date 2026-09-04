@@ -124,6 +124,13 @@ describe('the harness, against planted violations', () => {
      * and it declares no `carries`, so it is not compared. What it actually does at runtime is
      * accept any string, which is the situation both guards exist to prevent and neither sees.
      */
+    /**
+     * **Pins wording, and not because no law has it — because the *message* is the only channel
+     * this fact travels on.** Which side of (U) fails is an algebraic distinction, and both
+     * failures are one `CodecError`: swapping these to the type would collapse this test and its
+     * sibling into the same assertion and lose the write/read split that is the pair's whole
+     * point. Kept for the opposite reason to the diagnostics elsewhere in this batch.
+     */
     it('reports a value two options admit', () => {
         const loose = custom<number, Attribute<'S'>>({
             encode: (v) => ({ S: String(v) }),
@@ -141,6 +148,13 @@ describe('the harness, against planted violations', () => {
      * The value side is fine — `never` writes an `S` and only it is asked — but what it writes is
      * an `S` no option reads back, so the attribute has no admitter at all. That is the shape (R)
      * loses at a canonical attribute, which is exactly the residue `uAtCan_of_separated` names.
+     */
+    /**
+     * **Pins wording, and not because no law has it — because the *message* is the only channel
+     * this fact travels on.** Which side of (U) fails is an algebraic distinction, and both
+     * failures are one `CodecError`: swapping these to the type would collapse this test and its
+     * sibling into the same assertion and lose the write/read split that is the pair's whole
+     * point. Kept for the opposite reason to the diagnostics elsewhere in this batch.
      */
     it('reports an attribute no option admits', () => {
         const writeOnly = custom<string, Attribute<'S'>>({

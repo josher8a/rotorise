@@ -73,6 +73,11 @@ describe('a tuple with a tail', () => {
         )
     })
 
+    /**
+     * **Pins wording no law has, deliberately.** That a tail element's failure carries its
+     * *index* is the claim — `at [2]`, not merely that the tuple refused — so the position is the
+     * subject rather than a stand-in for a refusal.
+     */
     it('checks a tail element, naming its position', () => {
         expect(() =>
             path.unsafeDecode({

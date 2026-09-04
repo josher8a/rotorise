@@ -192,6 +192,12 @@ describe('an attribute written in an older encoding', () => {
         expect(Listing.unsafeEncode(fromOld).rate).toEqual({ N: '1.5' })
     })
 
+    /**
+     * **Pins wording no law has, deliberately.** The refusal is asserted as a `CodecError` beside
+     * it; what the regex adds is the diagnostic, which is this test's subject. Here it is that the refusal
+     * says *how many* encodings were tried, which is what tells a caller the migration ran at all
+     * rather than the current reader having failed alone.
+     */
     it('reports when no encoding can read it', () => {
         expect(() =>
             Listing.unsafeDecode(listingWith({ rate: { BOOL: true } })),

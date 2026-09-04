@@ -125,6 +125,12 @@ describe("what 'drop' means, said out loud", () => {
 describe("'refuse', for a service that owns its table", () => {
     const Strict = object({ id: string }, 'refuse').item
 
+    /**
+     * **Pins wording no law has, deliberately.** The refusal is asserted as a `CodecError` beside
+     * it; what the regex adds is the diagnostic, which is this test's subject. Here it is that `'refuse'`
+     * says the schema and the data have *drifted*, which is the whole difference between this
+     * policy and `'drop'` — both refuse nothing silently, and only one explains why.
+     */
     it('reports drift instead of ignoring it', () => {
         expect(() =>
             Strict.unsafeDecode({ id: { S: 'w1' }, addedLastWeek: { S: 'x' } }),
