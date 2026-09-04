@@ -8,7 +8,7 @@
     "Calculus/Denote.lean": 93,
     "Calculus/Discharge.lean": 461,
     "Calculus/Domain.lean": 127,
-    "Calculus/Equations.lean": 159,
+    "Calculus/Equations.lean": 167,
     "Calculus/Exactness.lean": 783,
     "Calculus/HeldSet.lean": 89,
     "Calculus/Lists.lean": 66,

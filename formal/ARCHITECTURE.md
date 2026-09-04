@@ -325,7 +325,7 @@ already.
 ### 4c. One codec, stated once for both sides of the pair
 
 `Combinators.lean` is <!-- count:combinators_lines -->4002<!-- /count --> lines of the tree's
-<!-- count:tree_lines -->17798<!-- /count -->, and this is its organizing idea; without it
+<!-- count:tree_lines -->17854<!-- /count -->, and this is its organizing idea; without it
 the file reads as the inventory `README.md` already has. A constructor is a **prism** —
 `Ctor α β`, with `into`/`out` and the laws `out_into` (matching what was built returns it) and
 `into_out` (anything that matches was built) — and those two *are* §2's (R) and (C) at a
@@ -1179,12 +1179,17 @@ removed `typed_TSub`'s five-way split there. `object`'s open part: an undeclared
 when `HOpaque`'s `num` row gained its `D` premise. Three predicted obstructions, three already
 paid for — which is the argument for probing a claim about the tree before costing it.
 
-**§6's commutativity row is the adjacent transposition, not the permutation.**
-`equiv_altCodec_swap` proves the adjacent case, which generates every permutation — but the
-`List.Perm` lift is not written down, so the table's "all" is worth what one transposition is
-worth. `README.md` was always honest about this and the change log's "twenty of twenty" was
-not. The row also inherits the `≡`-is-not-transitive caveat, which bounds what a table of
-rewrites licenses at all. The `List.Perm` lift is the next probe.
+**§6's commutativity row was the adjacent transposition, and is now the permutation.**
+`equiv_altCodec_swap` proved the adjacent case only, and the table's "all" was worth what one
+transposition is worth: the generating argument needs `≡` to compose, which
+`Refutations.not_equiv_trans` refutes. `README.md` was always honest about this and the change
+log's "twenty of twenty" was not. `altCodec_perm` closes it at any `List.Perm`, and closes it
+at a claim the row did not ask for — reordering the options yields the **same codec**, not an
+equivalent one, so the lift never enters `≡` and never meets its failure of transitivity. The
+whole of it is `select_perm`: `select` reads its list only through the filter, `List.Perm`
+carries the filter along, and the two lengths at which `select` answers at all — none and one
+— are the two a permutation pins. The `≡`-is-not-transitive caveat still bounds what a table of rewrites licenses; it no
+longer bounds this row.
 
 **Two guards on `Axioms.lean`'s principle — built, and one of them is not the shape this
 section asked for.** `scripts/ratchet.py` (§6) holds `vocab_audit.py`'s site count and fails
