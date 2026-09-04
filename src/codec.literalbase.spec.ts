@@ -25,8 +25,8 @@ import type { B, BOOL, N, S } from './attribute'
 import {
     binary,
     boolean,
-    carries,
     CodecError,
+    carries,
     decides,
     decimal,
     discriminatedUnion,

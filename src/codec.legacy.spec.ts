@@ -34,11 +34,8 @@ type Listing = {
 
 const Listing = object({
     id: string,
-    holding: fallback(
-        string('STORE_V1', 'STORE_V2'),
-        () => 'STORE_V1' as const,
-    ),
-    vendorId: fallback(string('PICKUP', 'ACME'), () => 'PICKUP' as const),
+    holding: fallback(string('STORE_V1', 'STORE_V2'), 'STORE_V1' as const),
+    vendorId: fallback(string('PICKUP', 'ACME'), 'PICKUP' as const),
     rate: legacy({ current: decimal, older: string }),
 }).item
 
@@ -150,16 +147,28 @@ describe('an attribute the row does not have', () => {
         expect(back.holding).toBeDefined()
     })
 
-    it('builds the value per read, so a mutable one cannot be shared', () => {
-        type WithList = { id: string; tags: string[] }
+    /**
+     * **The stand-in is shared, and this is the trade the construction-time check cost.**
+     *
+     * It used to be a thunk, run per read, so a mutable stand-in could not leak between entities.
+     * §3 `(fallback)` asks that the stand-in be *writable* by the inner codec, and a thunk defers
+     * the only question worth asking about it — so the parameter is a value now and the premise is
+     * checked at the declaration. The consequence is here rather than in a comment: two rows
+     * missing the attribute read back the *same object*, and mutating one is mutating the other.
+     *
+     * A caller who needs a fresh one per read wants a codec that produces it, not a default that
+     * is copied — `held` over the inner codec is where that goes.
+     */
+    it('is one shared value, not one per read', () => {
         const C = object({
             id: string,
-            tags: fallback({ ...listOfStrings }, () => []),
+            tags: fallback({ ...listOfStrings }, []),
         }).item
         const a = C.unsafeDecode({ id: { S: 'a' } })
         const b = C.unsafeDecode({ id: { S: 'b' } })
         a.tags.push('x')
-        expect(b.tags).toEqual([])
+        expect(b.tags).toEqual(['x'])
+        expect(b.tags).toBe(a.tags)
     })
 })
 

@@ -331,8 +331,13 @@ export type CodecDef =
     | {
           readonly kind: 'fallback'
           readonly inner: AnyCodec
-          /** The stand-in, produced per read so a mutable default cannot leak between entities. */
-          readonly value: () => unknown
+          /**
+           * The stand-in. A value, not a thunk: §3 `(fallback)` asks that it be *writable* by the
+           * inner term, which is decidable at the declaration, and a thunk defers the only question
+           * worth asking about it. One consequence, stated because it is a real one — the value is
+           * shared across every read, so a mutable stand-in is one object rather than one per read.
+           */
+          readonly value: unknown
       }
     | { readonly kind: 'legacy'; readonly current: AnyCodec }
     | { readonly kind: 'restOf'; readonly inner: AnyCodec }
@@ -1091,6 +1096,23 @@ type AttributeCarriesOf<K extends AttributeName> = Attribute<K>[K]
  *
  * The two directions are given as the `Result` pair, the same way every codec in this file is built,
  * and the throwing pair is derived — so a hand-written codec cannot end up with the two disagreeing.
+ *
+ * **What the caller owes, and it is the whole of §2.** Every other constructor here has its laws
+ * *proved* from the terms it is built out of; this one takes two foreign functions, so the model
+ * discharges it by assumption — `Lawful (denote t)` as a premise
+ * (`formal/Calculus/Soundness.lean:74`). No gate is possible and none is attempted: the pair is
+ * arbitrary code, and there is no definition to read. The four:
+ *
+ * 1. **(R)** retraction — `decode(encode(t))` is `t`, exactly, for every `t` you write.
+ * 2. **(C)** canonizability — everything `decode` accepts, `encode` can write back.
+ * 3. **(W)** member-naming — every `encode` writes the same member, or the codec names none.
+ * 4. **(MP)** — reading an attribute and writing it back never changes its member.
+ *
+ * They are checkable, just not from here. `checkRoundTrip` is (R) over generated values,
+ * `checkDecodesAreWritable` is (C) against attributes nobody would write — which is the direction
+ * a round trip cannot reach, and where three of this library's shipped defects lived — and
+ * `checkMembersStable` is (W) and (MP). All three are in `./testing`, and a `custom` without them
+ * is a codec whose laws nobody has asserted.
  */
 export const custom = <T, A extends AttributeValue = AttributeValue>(raw: {
     readonly encode: (value: T) => Result<A>
@@ -1837,6 +1859,24 @@ export const tuple = <const Cs extends readonly AnyCodec[]>(
     ) as readonly AnyCodec[]
 
     /**
+     * `RestGoesLast` refuses a misplaced `rest` in the *type*, and a cast defeats the type.
+     *
+     * Past one, nothing looked: the split below reads only the last element, so a `rest` anywhere
+     * else was read as a fixed element and written as one — `tuple(rest(string) as any, number)`
+     * encoded `['a', 1]` as a two-element tuple and reported nothing. This is §8 case (b): the
+     * condition is decidable from the declaration, so it is refused where the declaration is,
+     * beside `set`'s two refusals for the same reason.
+     */
+    const misplaced = all.findIndex(
+        (element, at) => at < all.length - 1 && element.def?.kind === 'restOf',
+    )
+    if (misplaced !== -1) {
+        throw new CodecError(
+            `\`rest\` is at position ${misplaced} of ${all.length} elements and a tuple's rest must be last — everything after it would have no fixed position. The type says so too; this call reached here past a cast`,
+        )
+    }
+
+    /**
      * The tail is split off once, here, rather than asked for per row.
      *
      * `RestGoesLast` has already refused it anywhere but the end, so the last element is the only one
@@ -2225,14 +2265,25 @@ export const refine = <Wide, Narrow extends Wide, A extends AttributeValue>(
 export type FallbackCodec<
     T,
     A extends AttributeValue = AttributeValue,
-> = AttributeCodec<T, A> & { readonly [fallbackMarker]: () => T }
+> = AttributeCodec<T, A> & { readonly [fallbackMarker]: T }
 
 /**
  * Reads a missing attribute as a value, and writes the attribute always.
  *
  * Not {@link optional}: the entity always has it, the *data* may not — a row written before the
- * attribute existed. Replaces `item.channel ?? 'IN_STORE'` at every read site. The value is
- * produced per read, so a mutable default cannot leak between entities.
+ * attribute existed. Replaces `item.channel ?? 'IN_STORE'` at every read site.
+ *
+ * **The stand-in must be writable by the codec it stands in for**, and that is checked here, at the
+ * declaration. §3 `(fallback)` carries it as a premise (`formal/Calculus/Soundness.lean:89`) and it
+ * exists because the proof failed without it: a row missing the attribute reads back as the
+ * stand-in, and if the inner codec cannot write that value the item cannot be written back —
+ * **(C)** broken at the read, with the refusal surfacing on some later write rather than at the
+ * declaration responsible for it. `fallback(string('A'), 'B')` is the whole of it.
+ *
+ * The stand-in is a **value and not a thunk**, which is what makes the check possible here rather
+ * than on whichever read happens to need it first. The cost is that a mutable stand-in is one
+ * object shared by every read instead of one per read; give a codec that holds a mutable value its
+ * own {@link held} adapter if that matters.
  */
 export const fallback = <const C extends AnyCodec>(
     // the *argument's own* type, not a re-declared `AttributeCodec<T, A>`: the guard has to see the
@@ -2240,18 +2291,32 @@ export const fallback = <const C extends AnyCodec>(
     // a plain codec that never carries one
     inner: C & NotAlreadyMarked<C>,
     // `NoInfer` so the codec is the only thing that says what it holds. Inferring from both sites
-    // unified them, and a thunk returning `'A'` widens to `string`, which then refused the very
+    // unified them, and a stand-in written `'A'` widens to `string`, which then refused the very
     // codec it stands in for — invisible while the entity was declared first and pinned it itself
-    value: () => NoInfer<Decoded<C>>,
-): FallbackCodec<Decoded<C>, AttributeOf<C> & AttributeValue> =>
-    described(inner as unknown as AttributeCodec<Decoded<C>>, {
+    value: NoInfer<Decoded<C>>,
+): FallbackCodec<Decoded<C>, AttributeOf<C> & AttributeValue> => {
+    // §3 `(fallback)`: the stand-in must be *writable*, or a row missing the name decodes to a
+    // value the item cannot be written back as — (C) broken at the read, with the refusal arriving
+    // on the next write instead of at the declaration that caused it. Decidable here, from the
+    // declaration alone, which is why the stand-in is a value and not a thunk.
+    if (!admits(inner as unknown as AnyCodec, value)) {
+        throw new CodecError(
+            `\`fallback\`'s stand-in must be a value the codec it stands in for can write, and ${describeShape(value)} is not one this \`${(inner as unknown as AnyCodec).def?.kind ?? 'codec'}\` writes. A row missing the attribute would read back as it and then refuse on the way out`,
+        )
+    }
+    return described(inner as unknown as AttributeCodec<Decoded<C>>, {
         kind: 'fallback',
         inner: inner as unknown as AnyCodec,
         value,
     }) as unknown as FallbackCodec<Decoded<C>, AttributeOf<C> & AttributeValue>
+}
 
-const fallbackOf = (codec: AnyCodec): (() => unknown) | undefined =>
-    codec.def?.kind === 'fallback' ? codec.def.value : undefined
+// wrapped rather than returned bare: a stand-in may itself be falsy — `fallback(boolean, false)`,
+// `fallback(number, 0)` — and the read site tests *presence*, which a bare value cannot carry
+const fallbackOf = (
+    codec: AnyCodec,
+): { readonly value: unknown } | undefined =>
+    codec.def?.kind === 'fallback' ? { value: codec.def.value } : undefined
 
 /**
  * The same stored attribute, held as something else.
@@ -2296,6 +2361,22 @@ const fallbackOf = (codec: AnyCodec): (() => unknown) | undefined =>
  * or the codec's own law does not hold either. `checkRoundTrip` over a spec holding one is what
  * establishes it, and generation reaches through: values are generated for the inner codec and
  * handed out through `decode`, so what is generated is always something the pair produced.
+ *
+ * **Nothing here checks it, and nothing here can.** The model carries it as `IsoCancels`
+ * (`formal/Calculus/Codec.lean:157`) — a premise, in both directions: `g(f v) = v` wherever `f v`
+ * lands writable, and `f(g v) = v` on the writable values themselves. It is a premise there for
+ * the same reason it is unchecked here. One direction quantifies over the *held* type, which has
+ * no generator except `decode` itself, so every value this library could make is already in the
+ * pair's image; and probing the other at construction is worse than not probing it, because a
+ * legitimate adapter is an isomorphism on the values its inner codec describes and *throws* off
+ * them — `held(string, dateAdapter)` would be refused for `new Date('<anything>')`, which is
+ * exactly the narrowing the example above asks for rather than a defect.
+ *
+ * So this is a written obligation, and `checkIso` is how a caller discharges it: it generates for
+ * the inner codec and checks `encode(decode(y))`, which is the half a table depends on. The
+ * failure mode it catches, unrefused today and pinned in `codec.laws.spec.ts`, is an adapter that
+ * *normalises* — `{ encode: v => v.toUpperCase(), decode: v => v }` reads `'a'` back as `'A'`,
+ * and every read-modify-write on that row rewrites the value.
  */
 export const held = <T, const C extends AnyCodec>(
     inner: C,
@@ -2405,6 +2486,23 @@ export type Reader<T> = {
  * // stored as N today, and as S in rows written before that; always written as N
  * rate: legacy({ current: decimal, older: string })
  * ```
+ *
+ * **Two things §3 asks of the older reader** (`ReadsCoherently`,
+ * `formal/Calculus/Codec.lean:163`), and only one of them is checkable.
+ *
+ * `ran(r) ⊆ dom(e)` — a migration lands on values the current encoding can *write*. This is
+ * checked, per read, as soon as the older reader has answered, because that is the earliest
+ * anything can know what it returns. Unchecked it read a row and refused on the way out, which is
+ * **(C)** broken at the migrated row and reported at some later write.
+ *
+ * Coherence — where both readers read an attribute, they agree — is **not** checkable, and the
+ * reason is sharper than that. The current encoding is tried first and the older one only on its
+ * failure, here and in the model (`Codec.extendRead`), so on `dom(p_current)` the older reader is
+ * never consulted and a disagreement has no observable consequence at all. What the premise buys
+ * is that the *ordering does not matter*: with it, this presentation equals the order-free
+ * `p ∪ r`. Without it the reading depends on declaration order, which is the one thing §5 says
+ * resolution never does. So it is a written obligation, and the thing to check is that two
+ * readers of one attribute agree — nothing in this library will tell you they do not.
  */
 export const legacy = <T, A extends AttributeValue>({
     current,
@@ -2425,7 +2523,19 @@ export const legacy = <T, A extends AttributeValue>({
             const read = current.decode(attribute)
             if (!failed(read)) return read
             const older_ = older.decode(attribute)
-            if (!failed(older_)) return older_ as T
+            if (!failed(older_)) {
+                // §3 `(legacy)`'s first premise, `ran(r) ⊆ dom(e)`: a migration must land on
+                // values the *current* encoding can write. Decidable here and nowhere earlier —
+                // `older` is a function, so what it returns is known only once it has answered.
+                // Without this the row decodes and the write-back refuses, which is (C) broken at
+                // the migrated row and reported at the next write instead of at this read.
+                if (!admits(current as unknown as AnyCodec, older_)) {
+                    return new CodecError(
+                        `an older encoding read this attribute as ${describeShape(older_)}, which the current encoding cannot write. A migration has to land on values that can be written back, or the row reads and then refuses on the way out`,
+                    )
+                }
+                return older_ as T
+            }
             return new CodecError(
                 `no encoding could read this attribute; tried the current one and one older: ${read} | ${older_}`,
             )
@@ -3342,7 +3452,7 @@ type Declared = {
     readonly name: string
     readonly codec: AnyCodec
     readonly optional: boolean
-    readonly absent: (() => unknown) | undefined
+    readonly absent: { readonly value: unknown } | undefined
 }
 
 /**
@@ -3465,7 +3575,7 @@ export const object = <
                 if (attribute === undefined) {
                     if (optional) continue
                     if (absent) {
-                        out[name] = absent()
+                        out[name] = absent.value
                         continue
                     }
                     return new CodecError(

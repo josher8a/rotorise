@@ -63,7 +63,7 @@ describe('the member a codec writes', () => {
     it('a wrapper writes what it wraps', () => {
         expect(writes(refine(decimal, isTag as never))).toBe('N')
         expect(writes(optional(decimal))).toBe('N')
-        expect(writes(fallback(decimal, () => '0'))).toBe('N')
+        expect(writes(fallback(decimal, '0'))).toBe('N')
         expect(writes(legacy({ current: decimal, older: string }))).toBe('N')
     })
 
@@ -109,9 +109,7 @@ describe('the value a codec decides', () => {
 
     /** `fallback` always writes the attribute, and its replacement is typed to the same value. */
     it('survives fallback, which is the one that keeps it', () => {
-        expect(decides(fallback(string('ONLY'), () => 'ONLY' as const))).toBe(
-            'ONLY',
-        )
+        expect(decides(fallback(string('ONLY'), 'ONLY' as const))).toBe('ONLY')
     })
 })
 

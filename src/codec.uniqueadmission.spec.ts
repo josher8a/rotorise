@@ -22,8 +22,8 @@ import {
     carries,
     custom,
     decimal,
-    held,
     discriminatedUnion,
+    held,
     nullable,
     number,
     object,
@@ -33,8 +33,8 @@ import {
     union,
     writes,
 } from './codec'
-import { checkUniqueAdmission } from './testing'
 import { Attribute } from './Rotorise'
+import { checkUniqueAdmission } from './testing'
 
 const seed = 20260829
 
@@ -109,9 +109,7 @@ describe('the unions this library ships', () => {
 describe('a codec with no union', () => {
     /** Silence is not a pass, and a harness that says nothing on `string` would report one. */
     it('is reported rather than passing vacuously', () => {
-        expect(() => checkUniqueAdmission(string, { seed })).toThrow(
-            /has none/,
-        )
+        expect(() => checkUniqueAdmission(string, { seed })).toThrow(/has none/)
     })
 })
 

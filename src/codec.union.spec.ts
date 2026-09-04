@@ -235,8 +235,10 @@ describe('the NULL point', () => {
     })
 
     it('round-trips as an option, over generated values', () => {
-        const Pet = object({ id: string, deletedAt: union([string, nullValue]) })
-            .item
+        const Pet = object({
+            id: string,
+            deletedAt: union([string, nullValue]),
+        }).item
         checkRoundTrip(Pet, { count: 100, seed: 20260829 })
     })
 
