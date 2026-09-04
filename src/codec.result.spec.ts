@@ -78,6 +78,8 @@ describe('the safe pair returns the failure', () => {
         expect(decoded.name).toBe('Rex')
     })
 
+    // PINS A FACT NO LAW HAS, deliberately: that the safe pair reports the *same* assembled
+    // message as the throwing one is the claim, so the string is the subject here too. It stays.
     it('carries the path through nesting, as the thrown one does', () => {
         const Order = object({
             lines: array(object({ note: string })),

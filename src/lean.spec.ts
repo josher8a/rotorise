@@ -986,6 +986,11 @@ describe("the declaration guard, against the model's classifier", () => {
      * pair it declines may still be separable and 66 of the 351 are. What would be a defect is
      * `src/` refusing a declaration the model *proves* works — which is what it did to
      * `union([string.set(), number.set()])` until `ff75c6b`, and what `Orth` certifies.
+     *
+     * **The count pins a fact no law has, deliberately.** That it is seventeen is a property of
+     * this corpus, so widening the corpus is meant to fail here and be looked at; the *law* is
+     * the loop below, that every refusal the model also declines. Both are kept, and the number
+     * stays.
      */
     it('refuses only pairs the classifier also declines', () => {
         const separations = separationPairs()

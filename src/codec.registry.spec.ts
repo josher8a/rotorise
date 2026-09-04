@@ -122,6 +122,10 @@ describe('a definition generates what the codec generated', () => {
     // 19: `numeric` was removed (it was `number` with an unchecked cast, and its two call sites
     // here are now `number` and `number(0, 1, 2)`, whose kinds were already covered), and
     // `nullValue` was added, giving the `NULL` point a codec for the first time
+    //
+    // PINS A FACT NO LAW HAS, deliberately: the *number* of kinds is a property of this
+    // library's inventory, not of the calculus, so adding a constructor is meant to fail here
+    // and be looked at. It stays as it is.
     it('covers every kind a codec can be', () => {
         const kinds = new Set(codecs.map(([, c]) => c.def?.kind))
         expect(kinds.size).toBe(19)
