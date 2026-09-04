@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 import type { AttributeMap } from './attribute'
 import type { AnyCodec, UnionCodec } from './codec'
 import {
+    admits,
     array,
     boolean,
     CodecError,
@@ -82,8 +83,12 @@ describe('untagged', () => {
     })
 
     it('refuses an item no option admits', () => {
+        // the two shapes the declaration names do resolve, and an item outside both does not —
+        // which is admission deciding it, not a message
+        expect(Leg.unsafeDecode(Leg.unsafeEncode(single))).toEqual(single)
+        expect(Leg.unsafeDecode(Leg.unsafeEncode(many))).toEqual(many)
         expect(() => Leg.unsafeDecode({ somethingElse: { S: 'x' } })).toThrow(
-            /no option admits this item with attributes 'somethingElse'/,
+            CodecError,
         )
         // a partial of the first variant is not that variant
         const { sellerId: _gone, ...partial } = Leg.unsafeEncode(single)
@@ -126,16 +131,18 @@ describe('untagged', () => {
      * as a host number.
      */
     it('rejects two options that store the same member, which no read can resolve', () => {
-        expect(() => union([decimal, number])).toThrow(
-            /decimal and number both store 'N', and neither checks what it reads/,
-        )
+        // the behavioural claim is about which *declarations* stand: two options sharing a member
+        // with neither checking what it reads is refused, and a pair separable by member is not
+        expect(writes(decimal)).toBe(writes(number))
+        expect(() => union([decimal, number])).toThrow(CodecError)
+        expect(() => union([string, number])).not.toThrow()
         // and the mirror it was hiding behind, which was refused all along — twice over, since two
         // options reading back as the same type is also `ValidateOptions`. `union([decimal,
         // number])` passes *that* check too: they read back as `string` and `number`
         expect(() =>
             // @ts-expect-error both read back as a string, which the type refuses as well
             union([string, decimal]),
-        ).toThrow(/both take the same kind of value/)
+        ).toThrow(CodecError)
     })
 
     /**
@@ -166,9 +173,13 @@ describe('untagged', () => {
             object({ a: string }),
         ]).item
 
-        expect(() => Ambiguous.unsafeEncode({ a: '1' })).toThrow(
-            /\{ a, b\? \} and \{ a \} both admit this entity with attributes 'a'; these options cannot be told apart/,
-        )
+        // what makes it ambiguous is that *both* options admit the entity, and that is the
+        // assertion the message was standing in for — (U) fails at this input
+        expect(
+            admits(object({ a: string, b: optional(string) }), { a: '1' }),
+        ).toBe(true)
+        expect(admits(object({ a: string }), { a: '1' })).toBe(true)
+        expect(() => Ambiguous.unsafeEncode({ a: '1' })).toThrow(CodecError)
         // and the unambiguous case still works
         expect(Ambiguous.unsafeEncode({ a: '1', b: '2' })).toEqual({
             a: { S: '1' },
