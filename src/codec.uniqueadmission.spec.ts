@@ -16,6 +16,7 @@
  * failing on a union that genuinely has two admitters, and on one that has none.
  */
 import { describe, expect, it } from 'vitest'
+import { memberOf } from './attribute'
 import {
     array,
     boolean,
@@ -228,8 +229,12 @@ describe('the defect (U) found: an option with no κ on the write side', () => {
     }
 
     it('has a κ on the read side and none on the write side', () => {
-        expect(writes(held(decimal, asDate))).toBe('N')
-        expect(carries(held(decimal, asDate))).toBeUndefined()
+        // the member is asked of the attribute, because that is the law; `carries` stays a reader
+        // call because the *reader's answer* is the subject here — κ on the write side is exactly
+        // what `carries` reports, and that it reports nothing is the claim
+        const at = held(decimal, asDate)
+        expect(memberOf(at.encode(new Date(0)) as never)).toBe('N')
+        expect(carries(at)).toBeUndefined()
     })
 
     it('reads back from either member', () => {

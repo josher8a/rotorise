@@ -14,6 +14,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import type { AttributeMap } from './attribute'
+import { memberOf } from './attribute'
 import type { AnyCodec } from './codec'
 import {
     admits,
@@ -41,7 +42,6 @@ import {
     string,
     tuple,
     union,
-    writes,
 } from './codec'
 import {
     arbitraryOf,
@@ -53,6 +53,20 @@ import {
 } from './testing'
 
 const seed = 20260828
+
+/**
+ * The member a codec actually **writes**, read off the attribute rather than out of the
+ * declaration.
+ *
+ * `writes` is a definition reader: it walks the `CodecDef` and reports what the term says it
+ * stores. That is the right answer for the resolver, which has only a declaration to go on, and
+ * the wrong assertion for a law — §6's member-preservation row is a claim about `e`, so a test
+ * that asks `writes` passes on a codec whose reader is right and whose `encode` is wrong, and
+ * fails a rewrite that keeps every behaviour and reorganises the definitions. Where the claim is
+ * the law, this is what to ask.
+ */
+const memberWritten = (codec: AnyCodec, value: unknown): string | undefined =>
+    memberOf(codec.encode(value as never) as never)
 
 describe('held', () => {
     const identity = { encode: (v: string) => v, decode: (v: string) => v }
@@ -83,16 +97,23 @@ describe('held', () => {
 
     it('leaves what is stored alone, which is the whole of what it claims', () => {
         expect(
-            writes(
+            memberWritten(
                 held(string.set(), {
                     encode: (tags: readonly string[]) => new Set(tags),
                     decode: (tags) => [...tags],
-                }),
+                }) as AnyCodec,
+                ['a', 'b'],
             ),
         ).toBe('SS')
-        expect(writes(held(decimal, { encode: String, decode: Number }))).toBe(
-            'N',
-        )
+        expect(
+            memberWritten(
+                held(decimal, {
+                    encode: String,
+                    decode: Number,
+                }) as AnyCodec,
+                1.5,
+            ),
+        ).toBe('N')
     })
 
     it('is an isomorphism where it says it is', () => {
@@ -255,7 +276,9 @@ describe('refine', () => {
     })
 
     it('leaves what is stored alone', () => {
-        expect(writes(refine(decimal, nonEmpty))).toBe('N')
+        expect(
+            memberWritten(refine(decimal, nonEmpty) as AnyCodec, '1.5'),
+        ).toBe('N')
     })
 })
 
@@ -351,8 +374,10 @@ describe('optional', () => {
     })
 
     it('leaves what is stored alone', () => {
-        expect(writes(optional(decimal))).toBe('N')
-        expect(writes(optional(string.set()))).toBe('SS')
+        expect(memberWritten(optional(decimal) as AnyCodec, '1.5')).toBe('N')
+        expect(
+            memberWritten(optional(string.set()) as AnyCodec, new Set(['a'])),
+        ).toBe('SS')
     })
 })
 
@@ -413,20 +438,34 @@ describe('what the wrappers preserve', () => {
      * honest: an index key's attribute type cannot change because somebody wrapped it.
      */
     it.each([
-        ['held', held(decimal, { encode: String, decode: Number })],
-        ['refine', refine(decimal, (v): v is string => true)],
-        ['optional', optional(decimal)],
-        ['fallbackless legacy', legacy({ current: decimal, older: decimal })],
-        ['nested', optional(refine(decimal, (v): v is string => true))],
-    ])('%s writes N, as decimal does', (_name, codec) => {
-        expect(writes(codec)).toBe('N')
-    })
+        ['held', held(decimal, { encode: String, decode: Number }), 1.5],
+        ['refine', refine(decimal, (v): v is string => true), '1.5'],
+        ['optional', optional(decimal), '1.5'],
+        [
+            'fallbackless legacy',
+            legacy({ current: decimal, older: decimal }),
+            '1.5',
+        ],
+        ['nested', optional(refine(decimal, (v): v is string => true)), '1.5'],
+    ] as readonly (readonly [string, AnyCodec, unknown])[])(
+        '%s writes N, as decimal does',
+        (_name, codec, value) => {
+            expect(memberWritten(codec, value)).toBe('N')
+        },
+    )
 
     it('and a set keeps the member its element decides', () => {
-        expect(writes(string.set())).toBe('SS')
-        expect(writes(number.set())).toBe('NS')
-        expect(writes(binary.set())).toBe('BS')
-        expect(writes(array(string))).toBe('L')
+        expect(memberWritten(string.set() as AnyCodec, new Set(['a']))).toBe(
+            'SS',
+        )
+        expect(memberWritten(number.set() as AnyCodec, new Set([1]))).toBe('NS')
+        expect(
+            memberWritten(
+                binary.set() as AnyCodec,
+                new Set([new Uint8Array([1])]),
+            ),
+        ).toBe('BS')
+        expect(memberWritten(array(string) as AnyCodec, ['a'])).toBe('L')
     })
 })
 
@@ -538,8 +577,10 @@ describe('the laws that do NOT hold', () => {
         )
 
         // the stored side always knew which, and that has not changed
-        expect(writes(string.set())).toBe('SS')
-        expect(writes(number.set())).toBe('NS')
+        expect(memberWritten(string.set() as AnyCodec, new Set(['a']))).toBe(
+            'SS',
+        )
+        expect(memberWritten(number.set() as AnyCodec, new Set([1]))).toBe('NS')
         expect(either.unsafeDecode({ SS: ['a'] })).toEqual(new Set(['a']))
         expect(either.unsafeDecode({ NS: ['1'] })).toEqual(new Set([1]))
 
@@ -586,8 +627,10 @@ describe('the laws that do NOT hold', () => {
 
     /** A set is not a list held as an array, however similar the two look. */
     it('a set is not an array', () => {
-        expect(writes(string.set())).toBe('SS')
-        expect(writes(array(string))).toBe('L')
+        expect(memberWritten(string.set() as AnyCodec, new Set(['a']))).toBe(
+            'SS',
+        )
+        expect(memberWritten(array(string) as AnyCodec, ['a'])).toBe('L')
     })
 })
 
