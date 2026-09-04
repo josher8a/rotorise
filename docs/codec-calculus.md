@@ -735,7 +735,7 @@ k ∈ Kind ::= string | number | boolean | binary | set | array | map | null
 | `string`, `decimal`                               | `{string}` — a decimal is _held_ as a string |
 | `number`                                          | `{number}`                                   |
 | `boolean` / `binary`                              | `{boolean}` / `{binary}`                     |
-| `literal(ℓ₁ … ℓₙ)`                                | `{string}` or `{number}`, by the values      |
+| `literal(ℓ₁ … ℓₙ)`                                | the kind of its base                         |
 | `set(c)`                                          | `{set}`                                      |
 | `array(c)`, `tuple(…)`                            | `{array}`                                    |
 | `record(c)`, `object(…)`, `discriminatedUnion(…)` | `{map}`                                      |
@@ -765,9 +765,9 @@ evidence, because the term checks the value against its own admissible set in **
 
 |            |                                                                                                                                                                                                            |
 | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| holds      | `literal` — the admissible set is checked; `discriminatedUnion` — a tag lookup fails honestly; `refine` — `q` is checked on the way in _and_ on the way out, which is what deciding your own membership is; `number` and `decimal`, for the same reason: each gates §1's bound on both halves |
-| propagates | `set`, `array`, `record` through the element; `tuple` and `union` when _every_ subterm has it; `optional`, `fallback`, `legacy`, `nullable` through the subterm                                            |
-| never      | everything else — the _ungated_ ground scalars, `custom`, `opaque`, `lazy`; and `held`, whose functions are the caller's                                                                                                |
+| holds      | `literal` — the admissible set is checked; `discriminatedUnion` — a tag lookup fails honestly; `refine` — `q` is checked on the way in _and_ on the way out, which is what deciding your own membership is; `number` and `decimal`, for the same reason: each gates §1's bound on both halves; and `custom` and `opaque`, whose rows ask their own pair — a `custom`'s `T` _is_ `dom(ce)` |
+| propagates | `set`, `array`, `record` through the element; `tuple` and `union` when _every_ subterm has it; `optional`, `fallback`, `legacy`, `nullable` through the subterm; and `lazy` and `held`, whose pairs *are* the subterm's — `held` applies `f` and asks it, exactly as `refine` does                                            |
+| never      | everything else — the _ungated_ ground scalars `string`, `boolean`, `binary` and `null`, which accept their whole carrier and so decide nothing; and `object`, which decides, but not by attempting — see below                                                |
 
 `object` is the other self-deciding term, and it decides by a different device: **names, not
 attempts**. A name set `N` admits `object(s, ρ)` when every name in `N` is one `s` declares and every
@@ -888,14 +888,14 @@ accept. They agree on most terms and part on four — and the partings go both w
 | `number`                    | `D`                  | `dom(p)`, asked of the codec      |
 | `decimal`                   | `Stored`             | `Stored`, as stored `N`           |
 | `refine(c, q)`              | `adm(c) ∩ q`         | `admA(c) ∩ q∘p` — `refineReads`   |
-| `legacy(c, r)`              | `adm(c)`             | **`⊤`**                           |
+| `legacy(c, r)`              | `adm(c)`             | `admA(c) ∪ dom(r)`                |
 | `union(c₁ … cₙ)`            | `⋃ adm(cᵢ)`          | `⋃ admA(cᵢ)`                      |
 | `nullable(c)`               | `adm(c) ∪ {null}`    | `admA(c) ∪ {⟨NULL, ∗⟩}`           |
 | `held(c, f, g)`             | `adm(c) ∘ f`         | `admA(c)`                         |
 | anything else               | `⊤`                  | `⊤`                               |
 
-**One parting into `⊤` remains, and the rest of the table asks its codec.** Why each row parts
-the way it does is below — the reasons are the rows' content, not their history.
+**No row parts into `⊤` any more; every one of them asks its codec.** Why each row reads the way
+it does is below — the reasons are the rows' content, not their history.
 
 Each `⊤` was bought with the observation that **no syntactic set of attributes bounds the readable
 side** — true of `number`, of a numeric `literal`, and of `refine`. The inference does not follow: a
@@ -905,19 +905,23 @@ produces the value in question. `admA .number` is `dom(numberCodec.p)`; `admALit
 (`refineReads`). Each is `dom(p)` on the nose rather than a description of it, and each was
 previously recorded as impossible. `held`'s value side went the same way for a different reason: `f`
 is *data the term carries*, and a row is a function that may apply it, so `adm(c) ∘ f` is the
-pullback rather than a `⊤`.
+pullback rather than a `⊤`. `legacy`'s read side is that second reason again — `r` is data the term
+carries just as `f` is, so the row may ask it.
 
-What survives is **one** parting into `⊤` — `legacy` on the read side — and one asymmetry of *shape*
-without a `⊤`: `held` pulls back along `f` where `admA` passes through, because `g` is total and
-post-processes while `f` gates the write.
+What survives is no parting into `⊤` at all, and one asymmetry of *shape* without one: `held` pulls
+back along `f` where `admA` passes through, because `g` is total and post-processes while `f` gates
+the write.
 
 Row by row, and the reason in each case is a fact about the term rather than about the table:
 
 - **`legacy(c, r)`.** The whole content of `legacy` is that `p` reads attributes `c` does not, so a
   passthrough `admA` would claim a bound on exactly the direction `r` widens. `legacy(literal("A"), r)`
   with `r` reading `⟨N, "1"⟩` to `"A"` reads an attribute `admA(literal("A"))` refuses, so the
-  passthrough is **unsound**, not merely coarse. The value side is untouched:
-  `legacy` adds no way to *write*, so `adm` passes through.
+  passthrough is **unsound**, not merely coarse. What that refutes is the passthrough and not the
+  row: the attributes `r` widens by are `dom(r)`, and `r` is data the term carries, so the row asks
+  it — `admA(c) ∪ dom(r)` is exactly the two directions a `legacy` reads, and neither is a guess
+  about syntax. The value side is untouched: `legacy` adds no way to *write*, so `adm` passes
+  through.
 - **A numeric `literal`.** Its read side goes through the numeral-to-double reading of §1, which is
   not a membership test on the stored text: distinct numerals read to the same double, so a
   syntactic set of values bounds no set of attributes. This is the one place the two literal rules
@@ -960,9 +964,9 @@ Row by row, and the reason in each case is a fact about the term rather than abo
   the discharger table above and not here: `adm` and `admA` answer about one term at a time, and
   this answer is about two.
 - **`held(c, f, g)`**, and this one parts the other way — the only row where `admA` sees further
-  than `adm`. An adapter is opaque on the side its functions gate, and they gate one side only: `f`
-  sits in front of `e`, so what the term will *write* is unknowable and `adm` is `⊤`; `g` sits
-  behind `p` and is total, so it changes which value comes out and never which attributes go in.
+  than `adm`. An adapter gates one side only: `f` sits in front of `e`, so `adm` pulls back
+  along it; `g` sits behind `p` and is total, so it changes which value comes out and never which
+  attributes go in.
   `dom(p)` is the subterm's exactly, and `admA` passes through.
 
   What this buys is a pair no other row reaches. `union(literal("A"), held(literal("B"), f, g))`
