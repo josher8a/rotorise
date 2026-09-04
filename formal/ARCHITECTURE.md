@@ -623,6 +623,28 @@ are the other half of the same blind spot**: a positive vector is an agreement a
 library wrote, so every value it *refuses* produced no vector at all — the half of the pair where
 the two sides could disagree unobserved.
 
+Two more, and both are about *which claims can reach the kernel at all* rather than about the
+generator being stale.
+
+**No vector asserts a decoded value, so (R) and (C) are tested on the `src/` side and never
+elaborated.** Every emitted theorem is `(denote t).e v = some a` or `= none`; `.readverdicts.lean`
+is a read-side differential but it compares `AdmA t a` against whether the library *accepted* the
+attribute, which is a `Bool`, not the value that came back. So the kernel has never been shown a `p a = some v`.
+The two laws most of this library's shipped defects lived in are the two the bridge cannot state.
+`veq` (`Vectors.lean:379`, sound by `veq_sound`) is what would make them statable, and
+`.resolutions.lean` already uses it for map-valued reads — the cost is a decode corpus and a
+`Value` emitter for what comes back, and the same `Double` wall as everywhere else, since a
+decoded numeral is a `Value.num` and that axiom has no closed terms. Not built here.
+
+**And the terms the emitter refuses are exactly the terms whose laws a caller owes.** `held`,
+`legacy`, `custom` and `lazy` — the four §7 names as carrying a caller's function — plus a
+`refine` holding a JavaScript predicate rather than a `Value → Bool`, are unemittable because
+nothing translates a closure into a Lean term, and emitting a *different* predicate would compile
+and prove the wrong theorem. That refusal is right. What it means is that the bridge is blind
+precisely where the model discharges an obligation the host cannot check either — `IsoCancels`,
+`ReadsCoherently`, `custom`'s `Lawful` — so for those terms neither instrument is looking, and the
+guarantee is a written premise on both sides.
+
 **`scripts/doc_counts.py`** — computes the counts this document rests on and rewrites them
 between `<!-- count:NAME -->` markers; `--check` exits 1 on disagreement. It exists because
 **every count that drifted this month was a number typed by hand**, and `name_drift.py`
