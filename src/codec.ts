@@ -841,8 +841,12 @@ export const admits = (codec: AnyCodec, value: unknown): boolean => {
         // a read widening writes what it currently is, and the older readings are read-side only
         case 'legacy':
             return admits(def.current, value)
+        // the same ownership question the constructor asks: where the inner term owns the null
+        // point, `nullable` is that term and `null` is admitted only if the term admits it
         case 'nullable':
-            return value === null || admits(def.inner, value)
+            return ownsNull(def.inner)
+                ? admits(def.inner, value)
+                : value === null || admits(def.inner, value)
         // §4's positions: the mark is about the name, and what may be held is the inner term's
         case 'optional':
         case 'fallback':
@@ -2481,19 +2485,70 @@ export const optional = <const C extends AnyCodec>(
     }) as OptionalCodec<Decoded<C>, AttributeOf<C>>
 }
 
-/** A value that may be null, stored as `NULL` when it is. */
+/**
+ * Does `inner` already reach the null point, at *either* end?
+ *
+ * `null ∈ dom(e)` or `⟨NULL, ∗⟩ ∈ dom(p)`, which is the specification's `owns(c)`. The
+ * disjunction is not a convenience: asked per side, a codec could decline to write `null` while
+ * still reading `⟨NULL, ∗⟩`, the point's two ends would belong to different codecs, and a round
+ * trip would go out through one and back through the other with nothing looking ambiguous on
+ * either side taken alone.
+ *
+ * Two probes at two points. A throw is a refusal like any other — {@link held}'s adapter is
+ * arbitrary user code and may throw rather than return a `CodecError`, which is the same reason
+ * {@link admits} wraps its `held` row.
+ */
+const ownsNull = (inner: AnyCodec): boolean =>
+    reaches(() => inner.encode(null as never)) ||
+    reaches(() => inner.decode(carrying('NULL', true)))
+
+const reaches = (probe: () => unknown): boolean => {
+    try {
+        return !failed(probe())
+    } catch {
+        return false
+    }
+}
+
+/**
+ * A value that may be null, stored as `NULL` when it is — **unless `inner` already owns the null
+ * point**, in which case this is `inner`'s own pair, untouched.
+ *
+ * Without the guard the wrapper's `NULL` branch shadows the inner codec, and **(R)** fails on a
+ * term the specification proves lawful: `nullable(held(nullable(string), adapter))`, where the
+ * adapter maps `'SENTINEL'` to `null`, writes `{ NULL: true }` for `'SENTINEL'` and reads back
+ * `null`. The value written is not the value read. No declaration in this repository builds that
+ * term and `held` is unemittable, so no generated vector could ever have found it.
+ *
+ * Where the guard does *not* fire, null-honesty is a theorem rather than an assumption: an
+ * `inner` that wrote `⟨NULL, ∗⟩` would read it straight back by **(R)** and so would own the
+ * point, and one that read some attribute to `null` would write the point by **(C)** and own it
+ * again. Both hypotheses are refuted by the guard rather than required of the caller.
+ *
+ * **The question is asked once, at first use rather than at construction.** `owns` is a property
+ * of the pair and the probes are two calls, so asking repeatedly would be a walk with a known
+ * answer. It is not asked *at* construction because {@link lazy} exists: a recursive declaration
+ * forces its thunk when probed, and at module-evaluation time that is a reference to a binding
+ * that does not exist yet. Deferring costs one boolean test per call and is the difference
+ * between answering the question and catching an error from having asked it too early.
+ */
 export const nullable = <T, A extends AttributeValue>(
     inner: AttributeCodec<T, A>,
-): AttributeCodec<T | null, A | Attribute<'NULL'>> =>
-    derive<T | null, A | Attribute<'NULL'>>(inner, {
+): AttributeCodec<T | null, A | Attribute<'NULL'>> => {
+    let owns: boolean | undefined
+    const ownsInner = () => (owns ??= ownsNull(inner as AnyCodec))
+    return derive<T | null, A | Attribute<'NULL'>>(inner, {
         def: { kind: 'nullable', inner: inner as AnyCodec },
         encode: (value) =>
-            value === null
+            value === null && !ownsInner()
                 ? (carrying('NULL', true) as A | Attribute<'NULL'>)
-                : (inner.encode(value) as Result<A | Attribute<'NULL'>>),
+                : (inner.encode(value as T) as Result<A | Attribute<'NULL'>>),
         decode: (attribute) =>
-            memberOf(attribute) === 'NULL' ? null : inner.decode(attribute),
+            memberOf(attribute) === 'NULL' && !ownsInner()
+                ? null
+                : inner.decode(attribute),
     })
+}
 
 const isOptional = (codec: AnyCodec): boolean => codec.def?.kind === 'optional'
 
