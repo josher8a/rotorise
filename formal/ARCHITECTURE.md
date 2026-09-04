@@ -14,7 +14,7 @@ Where something is already written down, this cites it instead of restating it:
 | What changed and why, historically | `git log` — see §6 |
 | Module table, modelling decisions, how to build | `README.md` |
 
-One standing rule from `WORKING-AGREEMENT.md` governs this file too: **record why, not what**,
+Two standing rules govern this file too: **record why, not what**,
 and **a documented verdict is a hypothesis**. Everything below was re-checked against the
 sources rather than inherited; where a recorded claim did not survive, the correction is
 stated inline.
