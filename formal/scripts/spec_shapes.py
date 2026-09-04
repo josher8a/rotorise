@@ -21,6 +21,14 @@ That is a proxy and it is stated as one. It cannot see a file that asserts an eq
 hand without the harness, and it will call a file algebra-law for one incidental
 `checkRoundTrip`. What it can do is be rerun.
 
+**Its one known false positive, measured rather than supposed.** `opaque.types.spec.ts`
+imports a law checker and is not algebra-law: it is type reflection, and the refusals it
+pins are about what the *type* rejects. Tier (i) excluded it by hand for that reason. The
+whole of `src/` was read against this classification while doing so, and it is the only
+file the proxy gets wrong — which is a better rate than the docstring above implies, and
+the reason to leave the proxy alone rather than special-case it. A caller that wants the
+tier's scope should exclude that one file, not adjust the counts.
+
 `toThrow` sites are counted by argument shape after joining the file into one line, so a
 call split across lines is not missed — the shapes are BARE, REGEX, CODECERROR, STRING and
 OTHER, and only REGEX pins wording.

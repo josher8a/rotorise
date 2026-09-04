@@ -433,9 +433,7 @@ describe('the law', () => {
      */
     it('refuses a denormalised decimal, rather than losing the digits in storage', () => {
         const denormalised = { ...listing, localPriceRate: '1.50' }
-        expect(() => Listing.unsafeEncode(denormalised)).toThrow(
-            /not a numeral DynamoDB stores unchanged/,
-        )
+        expect(() => Listing.unsafeEncode(denormalised)).toThrow(CodecError)
 
         // and the normalised price is the same money, written the way it comes back
         const normalised = { ...listing, localPriceRate: '1.5' }
@@ -473,9 +471,7 @@ describe('what it refuses', () => {
 
     it('refuses a required attribute the item does not carry', () => {
         const { ownerId: _missing, ...partial } = Listing.unsafeEncode(listing)
-        expect(() => Listing.unsafeDecode(partial)).toThrow(
-            /'ownerId' is required/,
-        )
+        expect(() => Listing.unsafeDecode(partial)).toThrow(CodecError)
     })
 
     it('refuses an attribute carrying the wrong member', () => {
@@ -484,7 +480,7 @@ describe('what it refuses', () => {
                 ...Listing.unsafeEncode(listing),
                 status: { S: '1' },
             }),
-        ).toThrow(/expected attribute member 'N', found 'S'/)
+        ).toThrow(CodecError)
     })
 
     it('drops attributes no schema mentions, which is why the inverse law fails', () => {

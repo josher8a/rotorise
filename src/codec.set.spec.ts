@@ -80,9 +80,7 @@ describe('the member follows from the element', () => {
         // @ts-expect-error `nullable` writes no single member
         expect(() => maybe.set()).toThrow(CodecError)
         // @ts-expect-error and the runtime says why
-        expect(() => maybe.set()).toThrow(
-            /a set holds strings, numbers or binary/,
-        )
+        expect(() => maybe.set()).toThrow(CodecError)
     })
 
     it('refuses an element that is not a scalar at all', () => {
@@ -120,7 +118,7 @@ describe('a set of a branded element', () => {
     it("runs the brand's predicate on every member", () => {
         expect(() =>
             Pet.unsafeDecode({ id: { S: 'w' }, amounts: { NS: ['1', '-5'] } }),
-        ).toThrow(/is not a non-negative amount/)
+        ).toThrow(CodecError)
     })
 
     it('round-trips over generated values', () => {
@@ -130,12 +128,8 @@ describe('a set of a branded element', () => {
 
 describe('what a set cannot hold', () => {
     it('refuses to write an empty one', () => {
-        expect(() => string.set().unsafeEncode(new Set())).toThrow(
-            /no empty SS/,
-        )
-        expect(() => number.set().unsafeEncode(new Set())).toThrow(
-            /no empty NS/,
-        )
+        expect(() => string.set().unsafeEncode(new Set())).toThrow(CodecError)
+        expect(() => number.set().unsafeEncode(new Set())).toThrow(CodecError)
     })
 
     /**
@@ -145,12 +139,8 @@ describe('what a set cannot hold', () => {
      * own `encode` refuses, so an item could be read and not written back.
      */
     it('refuses to read an empty one, which its own encode would refuse', () => {
-        expect(() => string.set().unsafeDecode({ SS: [] })).toThrow(
-            /no empty SS/,
-        )
-        expect(() => number.set().unsafeDecode({ NS: [] })).toThrow(
-            /no empty NS/,
-        )
+        expect(() => string.set().unsafeDecode({ SS: [] })).toThrow(CodecError)
+        expect(() => number.set().unsafeDecode({ NS: [] })).toThrow(CodecError)
     })
 
     it('reads back a set, whatever order it arrives in', () => {

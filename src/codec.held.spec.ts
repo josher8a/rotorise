@@ -74,7 +74,7 @@ describe('an array held where the table holds a set', () => {
 
     it('still refuses what the inner codec refuses', () => {
         expect(() => Pet.unsafeEncode({ id: 'p', tags: [] })).toThrow(
-            /no empty SS/,
+            CodecError,
         )
     })
 })

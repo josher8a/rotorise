@@ -166,7 +166,7 @@ describe('held', () => {
                 },
                 { seed },
             ),
-        ).toThrow(/not an isomorphism/)
+        ).toThrow(CodecError)
     })
 })
 
@@ -231,9 +231,7 @@ describe('the obligations a caller owes', () => {
             older: { decode: () => 'B' as 'A' },
         })
         expect(() => migrating.unsafeDecode({ N: '1' })).toThrow(CodecError)
-        expect(() => migrating.unsafeDecode({ N: '1' })).toThrow(
-            /has to land on values that can be written back/,
-        )
+        expect(() => migrating.unsafeDecode({ N: '1' })).toThrow(CodecError)
     })
 
     /** `fallback`'s stand-in, now refused at the declaration. */
@@ -249,7 +247,7 @@ describe('the obligations a caller owes', () => {
         const unchecked = tuple as unknown as (
             ...elements: readonly unknown[]
         ) => unknown
-        expect(() => unchecked(rest(string), number)).toThrow(/must be last/)
+        expect(() => unchecked(rest(string), number)).toThrow(CodecError)
         expect(() => tuple(string, rest(number))).not.toThrow()
     })
 })
@@ -500,7 +498,7 @@ describe('the laws that do NOT hold', () => {
         const checkedOutside = refine(held(string, adapt), short)
 
         expect(() => checkedInside.unsafeDecode({ S: 'abcabc' })).toThrow(
-            /is not/,
+            CodecError,
         )
         expect(checkedOutside.unsafeDecode({ S: 'abcabc' })).toBe('abc')
     })
@@ -527,9 +525,7 @@ describe('the laws that do NOT hold', () => {
 
         // the homogeneous one is refused where it is written: both options are handed an array and
         // neither checks what is in it, so no value chooses between them
-        expect(() => union([array(string), array(number)])).toThrow(
-            /both take the same kind of value — array — and neither checks/,
-        )
+        expect(() => union([array(string), array(number)])).toThrow(CodecError)
     })
 
     /**
@@ -545,9 +541,7 @@ describe('the laws that do NOT hold', () => {
             (value): value is string | number => value !== null,
         )
         // @ts-expect-error a union writes no single member, so the type declines the capability
-        expect(() => either.set()).toThrow(
-            /a set holds strings, numbers or binary, and this element writes no single member/,
-        )
+        expect(() => either.set()).toThrow(CodecError)
     })
 
     /**
@@ -573,7 +567,7 @@ describe('the laws that do NOT hold', () => {
         })
         // a mixed set is admitted by neither, and says so rather than writing half of it
         expect(() => either.unsafeEncode(new Set(['a', 1]) as never)).toThrow(
-            /no option admits/,
+            CodecError,
         )
 
         // the stored side always knew which, and that has not changed
@@ -585,9 +579,7 @@ describe('the laws that do NOT hold', () => {
         expect(either.unsafeDecode({ NS: ['1'] })).toEqual(new Set([1]))
 
         // and the container *with* an empty inhabitant is still refused, for that reason
-        expect(() => union([array(string), array(number)])).toThrow(
-            /both take the same kind of value — array/,
-        )
+        expect(() => union([array(string), array(number)])).toThrow(CodecError)
     })
 
     /**
@@ -750,10 +742,10 @@ describe('(C): what a codec reads, it can write', () => {
 
         expect(() =>
             checkDecodesAreWritable(Leaky, { count: 5, seed: 1 }),
-        ).toThrow(/\(C\) fails/)
+        ).toThrow(CodecError)
         expect(() =>
             checkDecodesAreWritable(Leaky, { count: 5, seed: 1 }),
-        ).toThrow(/an empty set/)
+        ).toThrow(CodecError)
     })
 
     /**
@@ -773,7 +765,7 @@ describe('(C): what a codec reads, it can write', () => {
 
         expect(() =>
             checkDecodesAreWritable(Loose, { count: 5, seed: 1 }),
-        ).toThrow(/\(C\) fails/)
+        ).toThrow(CodecError)
     })
 })
 

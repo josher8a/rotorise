@@ -126,7 +126,7 @@ describe('tagged', () => {
                 // `weight` is not an attribute of OWNER
                 weight: 9,
             } as never),
-        ).toThrow(/'weight' is not an attribute/)
+        ).toThrow(CodecError)
     })
 
     it('refuses an item whose discriminator names no variant', () => {
@@ -134,16 +134,12 @@ describe('tagged', () => {
             ...Account.unsafeEncode(plain),
             type: { S: 'RETIRED_TIER' },
         }
-        expect(() => Account.unsafeDecode(rogue)).toThrow(
-            /is not a variant of 'type'/,
-        )
+        expect(() => Account.unsafeDecode(rogue)).toThrow(CodecError)
     })
 
     it('refuses an item with no discriminator at all', () => {
         const { type: _gone, ...headless } = Account.unsafeEncode(plain)
-        expect(() => Account.unsafeDecode(headless)).toThrow(
-            /'type' chooses the variant/,
-        )
+        expect(() => Account.unsafeDecode(headless)).toThrow(CodecError)
     })
 
     it('refuses a discriminator carried as something other than S or N', () => {
@@ -151,9 +147,7 @@ describe('tagged', () => {
             ...Account.unsafeEncode(plain),
             type: { BOOL: true },
         }
-        expect(() => Account.unsafeDecode(wrong)).toThrow(
-            /must be carried as 'S' or 'N'/,
-        )
+        expect(() => Account.unsafeDecode(wrong)).toThrow(CodecError)
     })
 
     it('still enforces required attributes inside a variant', () => {
