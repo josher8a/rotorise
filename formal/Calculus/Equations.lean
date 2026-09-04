@@ -254,14 +254,15 @@ theorem orNull_eq_self {c : Codec} (hl : Lawful c) (hc : Carrier c)
 /-! ## `union` is commutative, at every permutation
 
     Resolution is unique admission, never declaration order (§5) — so reordering the
-    options changes nothing. Stated twice: at the adjacent swap, which is the case §6's
-    own justification names, and at any `List.Perm`, which is the case §6 claims.
+    options changes nothing.
 
-    The second does not follow from the first. "Adjacent swaps generate every permutation"
-    is an argument about *composing* rewrites, and `≡` does not compose —
-    `Refutations.not_equiv_trans` exhibits three lawful codecs on their carriers where it
-    fails. So the general case is proved directly, and what it proves is stronger than the
-    row asks: the two codecs are **equal**, not equivalent. `select` reads its option list
+    The direction of the argument is the point. §6 justifies the row by the adjacent swap
+    plus "transpositions generate every permutation", and that argument is unavailable: it
+    composes rewrites, and `≡` does not compose — `Refutations.not_equiv_trans` exhibits
+    three lawful codecs on their carriers where it fails. So the general case is proved
+    first and directly, and the adjacent one falls out of it at `List.Perm.swap`. What the
+    general case proves is stronger than the row asks: the two codecs are **equal**, not
+    equivalent. `select` reads its option list
     only through the filter; a permutation permutes the filter; and the only two lengths at
     which `select` answers at all — none and one — are the two a permutation pins. The held
     set follows by `propext` from `Perm.mem_iff`.
@@ -269,43 +270,6 @@ theorem orNull_eq_self {c : Codec} (hl : Lawful c) (hc : Carrier c)
     That is why nothing here needs transitivity: an equality composes whether or not `≡`
     does. -/
 
-/-- The filter of a swapped pair is the swap of the filter, and in the one case that
-    matters — a singleton, where `altCodec` acts — the two are equal. -/
-theorem filter_swap_singleton {α : Type} (P : α → Bool) (x y : α) (l : List α) :
-    ∀ {o}, (x :: y :: l).filter P = [o] → (y :: x :: l).filter P = [o] := by
-  intro o h
-  cases hx : P x <;> cases hy : P y <;> simp only [List.filter, hx, hy] at h ⊢
-  · exact h
-  · exact h
-  · exact h
-  · exact nomatch h
-
-/-- §6: `union(c₁, c₂, …) ≡ union(c₂, c₁, …)`. The pair is literally the same on every
-    input at which either side is defined, since `altCodec` reads the option list only
-    through "exactly one admits". -/
-theorem equiv_altCodec_swap (o₁ o₂ : OptionSem) (os : List OptionSem)
-    (μA : Option Member) :
-    Codec.Equiv (altCodec (o₁ :: o₂ :: os) μA) (altCodec (o₂ :: o₁ :: os) μA) := by
-  refine ⟨?_, rfl, ?_, ?_⟩
-  · intro v
-    constructor <;> rintro ⟨o, ho, hT⟩ <;>
-      · rcases List.mem_cons.mp ho with rfl | ho'
-        · exact ⟨o, List.mem_cons_of_mem _ (List.mem_cons_self _ _), hT⟩
-        · rcases List.mem_cons.mp ho' with rfl | ho''
-          · exact ⟨o, List.mem_cons_self _ _, hT⟩
-          · exact ⟨o, List.mem_cons_of_mem _ (List.mem_cons_of_mem _ ho''), hT⟩
-  · intro v a a' h h'
-    obtain ⟨o, hf, hoe⟩ := altCodec_e.mp h
-    obtain ⟨o', hf', hoe'⟩ := altCodec_e.mp h'
-    rw [filter_swap_singleton _ _ _ _ hf] at hf'
-    obtain rfl : o = o' := by simpa using hf'
-    exact Option.some.inj (hoe.symm.trans hoe')
-  · intro a v v' h h'
-    obtain ⟨o, hf, hop⟩ := altCodec_p.mp h
-    obtain ⟨o', hf', hop'⟩ := altCodec_p.mp h'
-    rw [filter_swap_singleton _ _ _ _ hf] at hf'
-    obtain rfl : o = o' := by simpa using hf'
-    exact Option.some.inj (hop.symm.trans hop')
 
 /-- **`select` does not read its list's order.** The one lemma behind the permutation
     lift, and it is about `select` rather than about `union`: both halves of `altCodec`
@@ -349,6 +313,14 @@ theorem altCodec_perm {os os' : List OptionSem} (h : os.Perm os') (μA : Option 
 theorem equiv_altCodec_perm {os os' : List OptionSem} (h : os.Perm os') (μA : Option Member) :
     Codec.Equiv (altCodec os μA) (altCodec os' μA) :=
   altCodec_perm h μA ▸ Codec.Equiv.refl _
+
+/-- §6: `union(c₁, c₂, …) ≡ union(c₂, c₁, …)`, the adjacent case §6's own justification
+    names. It is the general theorem at `List.Perm.swap` — the transposition was never a
+    separate fact, only the one the table's argument happened to reach for. -/
+theorem equiv_altCodec_swap (o₁ o₂ : OptionSem) (os : List OptionSem)
+    (μA : Option Member) :
+    Codec.Equiv (altCodec (o₁ :: o₂ :: os) μA) (altCodec (o₂ :: o₁ :: os) μA) :=
+  equiv_altCodec_perm (List.Perm.swap o₂ o₁ os) μA
 
 /-! ## `held` is an identity, and composes
 
