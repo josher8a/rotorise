@@ -18,9 +18,159 @@ same member, `e` and `p` agreeing *where both are defined*. So the cheapest hone
 refutation is usually a held-set separation: one side holds a value the other does not.
 That is stronger than an `e`/`p` disagreement would be, because `≡` deliberately tolerates
 a shrinking domain but never a differing `T`.
+
+§2's independence claim is here too, and for the same reason: it is a claim that something
+*fails*, so its evidence is a counter-model and not a proof.
 -/
 
 namespace Calculus
+
+/-! ## §2's four laws are independent
+
+§2 asserts "The four are independent" and offers no witness. Independence *is* a family of
+counter-models — for each law, a codec satisfying the other three and failing that one — so
+the claim was four objects, and four objects were what the specification did not have.
+
+They are stated at `Codec`, not at `Term`, which is what makes this independence rather than
+a remark about the terms that happen to exist: a law the language cannot violate is still a
+law the definition does not imply. Each is as small as `𝔸` allows — a pair of partial
+functions on strings, `T` everything, and a member named only where the law needs one.
+
+The `cM` case is the one worth reading twice. (W) and (MP) both constrain members, and it is
+tempting to take one for a special case of the other. `cM` declares no member at all, so (W)
+holds for the only reason it can hold without saying anything, and (MP) fails regardless. Its
+three positive halves are exactly `LawfulCore` — which is not a coincidence but the same
+residue `legacy` leaves (§5), arriving from the other direction. -/
+
+/-- **(R) fails alone.** Every string is written to one attribute, so the write forgets which
+    string it was; nothing else notices. -/
+def cR : Codec where
+  T := fun _ => True
+  μ := some Member.S
+  e := fun v => (match v with | .str _ => some (.s "x") | _ => none)
+  p := fun a => (match a with | .s "x" => some (.str "a") | _ => none)
+
+/-- `cR` loses the value: `"b"` is written and `"a"` is read back. -/
+theorem cR_notR : ¬ (∀ {t a}, cR.e t = some a → cR.p a = some t) := by
+  intro h; have := @h (.str "b") (.s "x") rfl; simp [cR] at this
+/-- …but everything readable re-encodes. -/
+theorem cR_C : ∀ {a t}, cR.p a = some t → (cR.e t).isSome := by
+  intro a t h; cases a <;> simp [cR] at h; split at h <;> simp_all [cR]; subst_vars; rfl
+/-- …the declared member is the only one written. -/
+theorem cR_W : ∀ {μ}, cR.μ = some μ → ∀ {t a}, cR.e t = some a → a.member = μ := by
+  intro μ hμ t a h; cases t <;> simp [cR] at h hμ; subst h; subst hμ; rfl
+/-- …and a read re-written lands on the attribute it was read from. Losing the *value* is
+    not losing the *member*, which is the distance between (R) and (MP). -/
+theorem cR_MP : ∀ {a t a'}, cR.p a = some t → cR.e t = some a' → Agree a' a := by
+  intro a t a' hp he; cases a <;> simp [cR] at hp; split at hp <;> simp_all [cR]; subst_vars
+  simp [cR] at he; subst_vars; exact .s _ _
+
+/-- **(C) fails alone.** Reads every `S`, writes only `"a"` — so `p` escapes `dom(e)`. -/
+def cC : Codec where
+  T := fun _ => True
+  μ := some Member.S
+  e := fun v => (match v with | .str "a" => some (.s "a") | _ => none)
+  p := fun a => (match a with | .s s => some (.str s) | _ => none)
+
+/-- `cC` retracts on the one value it writes. -/
+theorem cC_R : ∀ {t a}, cC.e t = some a → cC.p a = some t := by
+  intro t a h; cases t <;> simp [cC] at h; split at h <;> simp_all [cC]; subst_vars; rfl
+/-- …and names its member. -/
+theorem cC_W : ∀ {μ}, cC.μ = some μ → ∀ {t a}, cC.e t = some a → a.member = μ := by
+  intro μ hμ t a h; cases t <;> simp [cC] at h hμ; split at h <;> simp_all [cC]; subst_vars; rfl
+/-- …but `"b"` is readable and not writable, which is (C) and nothing else. -/
+theorem cC_notC : ¬ (∀ {a t}, cC.p a = some t → (cC.e t).isSome) := by
+  intro h; have := @h (.s "b") (.str "b") rfl; simp [cC] at this
+/-- …and (MP) survives, being quantified over what `e` actually returns. -/
+theorem cC_MP : ∀ {a t a'}, cC.p a = some t → cC.e t = some a' → Agree a' a := by
+  intro a t a' hp he; cases a <;> simp [cC] at hp; subst hp; simp [cC] at he
+  split at he <;> simp_all; subst he; exact .s _ _
+
+/-- **(W) fails alone.** A bijection on its domain that declares `μ = S` and writes `"z"` to
+    `BOOL`. The pair is as well behaved as a pair can be; only the *declaration* is a lie. -/
+def cW : Codec where
+  T := fun _ => True
+  μ := some Member.S
+  e := fun v =>
+    (match v with | .str s => if s = "z" then some (.bool true) else some (.s s) | _ => none)
+  p := fun a =>
+    (match a with
+     | .bool true => some (.str "z")
+     | .s s => if s = "z" then none else some (.str s)
+     | _ => none)
+
+/-- `cW` writes `⟨BOOL, true⟩` while naming `S`. -/
+theorem cW_notW : ¬ (∀ {μ}, cW.μ = some μ → ∀ {t a}, cW.e t = some a → a.member = μ) := by
+  intro h; have := @h .S rfl (.str "z") (.bool true) (by simp [cW]); simp [Attr.member] at this
+/-- …and is a retraction all the same: the two branches are disjoint by construction. -/
+theorem cW_R : ∀ {t a}, cW.e t = some a → cW.p a = some t := by
+  intro t a h
+  cases t <;> simp only [cW] at h
+  case str s =>
+    split at h
+    · next hz => subst hz; cases h; rfl
+    · next hz => cases h; simp only [cW]; rw [if_neg hz]
+  all_goals exact absurd h (by simp)
+/-- …everything readable re-encodes… -/
+theorem cW_C : ∀ {a t}, cW.p a = some t → (cW.e t).isSome := by
+  intro a t h
+  cases a <;> simp only [cW] at h
+  case s s =>
+    split at h
+    · exact absurd h (by simp)
+    · next hz => cases h; simp only [cW]; rw [if_neg hz]; rfl
+  case bool b =>
+    cases b
+    · exact absurd h (by simp)
+    · cases h; simp only [cW]; rfl
+  all_goals exact absurd h (by simp)
+/-- …and no read re-written changes a stored member. (W) constrains the *declaration*
+    against `ran(e)`; (MP) constrains `ran(e)` against `dom(p)`, and only the first is
+    broken here. -/
+theorem cW_MP : ∀ {a t a'}, cW.p a = some t → cW.e t = some a' → Agree a' a := by
+  intro a t a' hp he
+  cases a <;> simp only [cW] at hp
+  case s s =>
+    split at hp
+    · exact absurd hp (by simp)
+    · next hz => cases hp; simp only [cW] at he; rw [if_neg hz] at he; cases he; exact .s _ _
+  case bool b =>
+    cases b
+    · exact absurd hp (by simp)
+    · cases hp; simp only [cW] at he; simp at he; subst he; exact .bool _ _
+  all_goals exact absurd hp (by simp)
+
+/-- **(MP) fails alone.** Declares no member, and reads `⟨BOOL, true⟩` back as a string it
+    writes to `S` — so a stored `BOOL` becomes an `S` on the way through. -/
+def cM : Codec where
+  T := fun _ => True
+  μ := none
+  e := fun v => (match v with | .str s => some (.s s) | _ => none)
+  p := fun a =>
+    (match a with | .s s => some (.str s) | .bool true => some (.str "z") | _ => none)
+
+/-- `cM` retracts. -/
+theorem cM_R : ∀ {t a}, cM.e t = some a → cM.p a = some t := by
+  intro t a h; cases t <;> simp [cM] at h; subst h; rfl
+/-- …and everything readable re-encodes. -/
+theorem cM_C : ∀ {a t}, cM.p a = some t → (cM.e t).isSome := by
+  intro a t h
+  cases a <;> simp only [cM] at h
+  case s s => cases h; rfl
+  case bool b =>
+    cases b
+    · exact absurd h (by simp)
+    · cases h; rfl
+  all_goals exact absurd h (by simp)
+/-- (W) holds vacuously, which is the only way a `⊤`-membered codec can satisfy it. -/
+theorem cM_W : ∀ {μ}, cM.μ = some μ → ∀ {t a}, cM.e t = some a → a.member = μ := by
+  intro μ hμ; exact absurd hμ (by simp [cM])
+/-- So the three that hold are exactly `LawfulCore` — the same residue `legacy` leaves. -/
+theorem cM_core : LawfulCore cM := ⟨cM_R, cM_C, cM_W⟩
+/-- …and (MP) is what is left to break: `⟨BOOL, true⟩` reads as `"z"` and re-writes to
+    `⟨S, "z"⟩`, which `Agree` does not relate. -/
+theorem cM_notMP : ¬ (∀ {a t a'}, cM.p a = some t → cM.e t = some a' → Agree a' a) := by
+  intro h; have := @h (.bool true) (.str "z") (.s "z") rfl rfl; cases this
 
 /-! ## `lazy(γ) ≢ γ(∗)`
 

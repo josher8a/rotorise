@@ -17,7 +17,7 @@
     "Calculus/Nesting.lean": 27,
     "Calculus/Opaque.lean": 204,
     "Calculus/Orthogonality.lean": 288,
-    "Calculus/Refutations.lean": 52,
+    "Calculus/Refutations.lean": 109,
     "Calculus/Soundness.lean": 340,
     "Calculus/Term.lean": 55,
     "Calculus/Typing.lean": 67,
