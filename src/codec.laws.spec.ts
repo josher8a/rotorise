@@ -270,6 +270,41 @@ describe('optional', () => {
     })
 })
 
+/**
+ * `nullable` is the one wrapper that changes the *pair* and not only the declaration, so it is the
+ * one with a law about what it wraps.
+ */
+describe('nullable', () => {
+    /**
+     * **(R) over an inner term that already owns the null point.**
+     *
+     * `nullable(c)` adds the null point *unless `c` already reaches it* — the specification's
+     * `owns(c)`, asked of both halves at once. Without that guard the wrapper's `NULL` branch
+     * shadows the inner codec: the adapter here maps `'SENTINEL'` to `null`, so the inner term
+     * writes and reads `{ NULL: true }` itself, and an unguarded wrapper reads that attribute as
+     * `null` before the inner term is consulted. The value written is not the value read.
+     *
+     * This is a public-API term. No declaration in this repository builds it and `held` is
+     * unemittable, so no generated vector could reach it — which is why it is written by hand and
+     * lives beside the rows it belongs to rather than under the laws that do not hold. It is a law
+     * that must hold.
+     */
+    it('and nullable defers to an inner term that owns NULL', () => {
+        const sentinel = held(nullable(string), {
+            encode: (v: string) => (v === 'SENTINEL' ? null : v),
+            decode: (v: string | null) => (v === null ? 'SENTINEL' : v),
+        })
+        const outer = nullable(sentinel)
+
+        const written = outer.unsafeEncode('SENTINEL')
+        expect(written).toEqual({ NULL: true })
+        expect(outer.unsafeDecode(written)).toBe('SENTINEL')
+
+        // and the point still round-trips at the values the inner term does not claim
+        expect(outer.unsafeDecode(outer.unsafeEncode('a'))).toBe('a')
+    })
+})
+
 describe('what the wrappers preserve', () => {
     /**
      * Every wrapper answers the member of what it wraps, and this is the property that keeps a schema
