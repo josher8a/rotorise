@@ -617,7 +617,7 @@ const leanTermOfDef = (def: CodecDef, at: string, forced: number): string => {
                 )
                 .join(', ')}]`
         case 'nullable':
-            return `Term.nullable (${leanTermOf(def.inner, `${at}.inner`, forced)})`
+            return `Term.nullable (${leanTermOfDef(def.inner, `${at}.inner`, forced)})`
         case 'opaque':
             return `Term.opaq ${def.numbers === 'lossy'}`
         case 'lazy': {
