@@ -51,7 +51,13 @@
  */
 import type { AttributeValue } from './attribute'
 import { isNumeral, isStoredNumeral, memberOf } from './attribute'
-import type { AnyCodec, CodecDef, Field } from './codec'
+import type {
+    AnyCodec,
+    AnyDeclaration,
+    CodecDef,
+    Field,
+    TermDef,
+} from './codec'
 import {
     admits,
     admitsAttribute,
@@ -448,14 +454,24 @@ const lazyLimit = 16
  * carries the policy rather than only its codec, and this emits all three.
  */
 export const leanTermOf = (
-    codec: AnyCodec,
+    declared: AnyDeclaration,
     at = 'codec',
     forced = 0,
 ): string => {
-    return leanTermOfDef(codec.def, at, forced)
+    // the entry takes a declaration and the printer below takes a term, so the refusal has a place
+    // to live and stays reachable. A codec's definition is a term in the type, and the caller this
+    // is for is the one that arrived past a cast — `termOf` draws the same line for the same reason
+    const def: CodecDef = declared.def
+    if (def.kind === 'optional' || def.kind === 'fallback') {
+        return refuse(
+            at,
+            'a §4 *field*, not a term — `optional`/`fallback` denote `Field`, and no `Term` position accepts one',
+        )
+    }
+    return leanTermOfDef(def, at, forced)
 }
 
-const leanTermOfDef = (def: CodecDef, at: string, forced: number): string => {
+const leanTermOfDef = (def: TermDef, at: string, forced: number): string => {
     switch (def.kind) {
         case 'string':
             return 'Term.string'
@@ -671,12 +687,6 @@ const leanTermOfDef = (def: CodecDef, at: string, forced: number): string => {
             return refuse(
                 at,
                 '`Term.custom` carries `ce : Value → Option Attr` and `cp : Attr → Option Value`; the definition now carries the pair, and the pair is two JS closures, which no `Term` prints',
-            )
-        case 'optional':
-        case 'fallback':
-            return refuse(
-                at,
-                'a §4 *field*, not a term — `optional`/`fallback` denote `Field`, and no `Term` position accepts one',
             )
     }
 }
