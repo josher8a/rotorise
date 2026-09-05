@@ -199,7 +199,7 @@ describe('the rest policy a definition records', () => {
         const restOfNested = (codec: AnyCodec): unknown => {
             const def = codec.def
             if (def?.kind !== 'attributes') throw new Error('not an object')
-            const inner = def.of.inner as AnyCodec
+            const inner = def.of.inner?.codec as AnyCodec
             const innerDef = inner.def
             if (innerDef?.kind !== 'attributes') throw new Error('not nested')
             return innerDef.rest
