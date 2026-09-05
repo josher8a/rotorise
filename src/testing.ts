@@ -51,7 +51,6 @@ import { memberOf } from './attribute'
 import type {
     AnyCodec,
     AttributeCodec,
-    CodecDef,
     Field,
     ItemCodec,
     RestPolicy,
@@ -97,8 +96,14 @@ export const roundTrip = <T>(
 export type Checkable<T> = {
     unsafeEncode: (item: T) => AttributeMap
     unsafeDecode: (item: AttributeMap) => T
-    /** What the codec is, which is what {@link arbitraryOf} generates from. */
-    def?: CodecDef
+    /**
+     * What the codec is, which is what {@link arbitraryOf} generates from.
+     *
+     * A {@link TermDef}: a checkable is generated for and round tripped, which is a codec's pair,
+     * and a field has none — so handing one here is the defect the type refuses rather than a case
+     * the generator would have to answer.
+     */
+    def?: TermDef
 }
 
 /**
@@ -737,7 +742,7 @@ export const structuralEquals = (a: unknown, b: unknown): boolean => {
 
 // ── generating, by what a codec is ──────────────────────────────────
 //
-// The codecs carry a {@link CodecDef} saying what they are; the generators live here and dispatch
+// The codecs carry a {@link TermDef} saying what they are; the generators live here and dispatch
 // on it. That is the whole reason for the def: a generator baked into every codec ships to
 // production whether or not anything ever runs a property test, and no bundler can shake a closure
 // out of an object that is always constructed.
@@ -940,7 +945,7 @@ const samplers = new WeakMap<object, (rng: Rng, size: number) => unknown>()
 /**
  * A value the codec can carry.
  *
- * Dispatches on {@link CodecDef}, so a codec kind that grows a generator grows it here rather than
+ * Dispatches on {@link TermDef}, so a codec kind that grows a generator grows it here rather than
  * in the codec itself. `size` bounds recursion.
  */
 export const arbitraryOf = (
@@ -1133,7 +1138,7 @@ export const arbitraryOf = (
 /**
  * Values simpler than this one, cheapest reduction first.
  *
- * The counterpart of {@link arbitraryOf}, dispatching on the same {@link CodecDef}.
+ * The counterpart of {@link arbitraryOf}, dispatching on the same {@link TermDef}.
  */
 export const shrinkOf = (
     codec: AnyCodec,

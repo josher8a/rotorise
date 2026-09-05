@@ -135,7 +135,13 @@ type CodecShape<In, Out, A extends AttributeValue> = {
      * Values simpler than `value`, cheapest first. Must be finite and never yield `value` itself.
      */
     readonly shrink?: (value: In) => readonly Out[]
-    /** What this codec is — see {@link CodecDef}. */
+    /**
+     * What this codec is — see {@link TermDef}.
+     *
+     * A term and not a declaration: the two field kinds denote a §4 field, a field is not a codec,
+     * and so no codec's definition is one. It is what makes each reader total over the kinds it can
+     * be handed rather than over the kinds that exist.
+     */
     readonly def: TermDef
 }
 
@@ -4555,7 +4561,7 @@ export type ItemCodec<T, Spec = unknown, Rest = 'drop'> = {
     readonly spec: Spec
     /** What this codec does with an attribute the spec does not declare. */
     readonly rest: RestPolicy<unknown>
-    /** What this codec is — see {@link CodecDef}. */
+    /** What this codec is — see {@link TermDef}. */
     readonly def: TermDef
     /** The row this codec writes, pinnable with {@link Writes}. Type-level only. */
     readonly [writesMarker]?: WritesPin<Spec, Rest>
@@ -5098,7 +5104,7 @@ export type Tagged<T, D extends string = keyof T & string, Spec = unknown> = {
     ) => ItemCodec<VariantOf<T, D & keyof T, V>, Spec[V]>
     readonly discriminator: D
     readonly spec: Spec
-    /** What this codec is — see {@link CodecDef}. */
+    /** What this codec is — see {@link TermDef}. */
     readonly def: TermDef
     /** The row this codec writes, pinnable with {@link Writes}. Type-level only. */
     readonly [writesMarker]?: WritesVariantsPin<Spec>
@@ -5429,7 +5435,7 @@ export type Untagged<T, Specs extends readonly unknown[] = UntaggedSpec<T>> = {
         index: I,
     ) => ItemCodec<show<ObjectOf<NonNullable<Specs[I]>>>, NonNullable<Specs[I]>>
     readonly spec: Specs
-    /** What this codec is — see {@link CodecDef}. */
+    /** What this codec is — see {@link TermDef}. */
     readonly def: TermDef
     /** The row this codec writes, pinnable with {@link Writes}. Type-level only. */
     readonly [writesMarker]?: WritesVariantsPin<Specs>
