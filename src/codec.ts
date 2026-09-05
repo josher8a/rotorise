@@ -1930,10 +1930,13 @@ const denote = (def: TermDef): Pair => {
             return heldThrough(def.inner, def.adapt)
         /** §3 `(refine)`. `lawful_restrict` is the lemma; `q` is data the term carries. */
         case 'refine':
-            return restrict(def.inner, def.refined.is, (value) =>
-                new CodecError(
-                    `${JSON.stringify(value)} is not ${def.refined.what}`,
-                ),
+            return restrict(
+                def.inner,
+                def.refined.is,
+                (value) =>
+                    new CodecError(
+                        `${JSON.stringify(value)} is not ${def.refined.what}`,
+                    ),
             )
         /**
          * §3 `(literal)`, and it is **not** a sixth ground term: `literalCodec k ls` is
