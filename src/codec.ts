@@ -51,8 +51,8 @@ export {
 /**
  * Marks a codec whose attribute may be absent.
  *
- * Type-level only. Whether an attribute may be absent is read at runtime from the codec's
- * {@link CodecDef} — `optional` is one of the kinds — so there is nothing for a symbol to carry
+ * Type-level only. Whether an attribute may be absent is read at runtime from the field's
+ * {@link FieldDef} — `optional` is one of the two kinds — so there is nothing for a symbol to carry
  * and nothing for a wrapper to forget to copy. The declaration stays because the *type* needs a
  * brand: {@link ItemSpec} and {@link ObjectOf} decide required from optional by it.
  */
@@ -1297,9 +1297,6 @@ export type Refinement = {
     readonly arbitrary?: (rng: Rng, size: number) => unknown
     readonly onThinSearch?: (what: string, rate: number) => void
 }
-
-/** The same codec, described differently — all a marker wrapper ever does. */
-const described = <C>(inner: C, def: CodecDef): C => ({ ...inner, def })
 
 /**
  * Many attributes, as the one `M` that carries them.
@@ -3298,7 +3295,7 @@ export type Refined<T, A extends AttributeValue> = AttributeCodec<T, A> &
  *
  * The capability {@link setBase} decides at runtime, stated at the type as far as the type can see
  * it — which is not all the way. A codec's *type* is not generic in its definition — every codec
- * carries a `CodecDef`, and none of them carries *which* one at the type — so `refine(...)`'s type
+ * carries a `TermDef`, and none of them carries *which* one at the type — so `refine(...)`'s type
  * knows the attribute and never the base it reduced through. So the gate here is the attribute — `S`, `N` or `B`, the three a stored set is built
  * from — and `refine(held(string, f, g), p).set()` type-checks and throws, because `held` writes
  * `S` and reduces to no base. That gap closes only by making the codec type generic in its
@@ -3586,12 +3583,12 @@ export const held = <T, const C extends AnyCodec>(
     return codecOfTerm<T, AttributeOf<C>>({
         kind: 'held',
         inner: termOf(inner as unknown as AnyCodec),
-        adapt: adapt as CodecDefHeldAdapt,
+        adapt: adapt as TermDefHeldAdapt,
     })
 }
 
-/** The erased shape {@link CodecDef} carries for a {@link held} adapter. */
-type CodecDefHeldAdapt = {
+/** The erased shape a {@link TermDef} carries for a {@link held} adapter. */
+type TermDefHeldAdapt = {
     readonly encode: (value: never) => unknown
     readonly decode: (held: never) => unknown
 }
@@ -4592,10 +4589,10 @@ type Declared = {
 /**
  * The marker taken off, once, at the declaration.
  *
- * A marker is `described(inner, …)` — the inner codec with a different definition — so the two
- * halves are the inner's and unwrapping changes nothing about what the field encodes or decodes.
- * What it changes is that the mark is *named* rather than left to be recovered from a definition
- * kind, which is what {@link Field} is for.
+ * A field names the codec it marks, so the two halves are that codec's and taking the mark off
+ * changes nothing about what the member encodes or decodes. What it changes is that the mark is
+ * *named* rather than left to be recovered from a definition kind, which is what {@link Field} is
+ * for.
  */
 const fieldOf = (declared: AnyDeclaration): Field => {
     const def = declared.def
