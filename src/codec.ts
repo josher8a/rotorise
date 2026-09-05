@@ -407,6 +407,17 @@ export type CodecDef =
            * {@link failed} of what comes back, exactly as it does of the codec's own `decode`.
            */
           readonly decode: (attribute: AttributeValue) => unknown
+          /**
+           * How to generate and to shrink one, where the caller said.
+           *
+           * They are here rather than beside the codec for the reason `refine`'s generator is in
+           * `refined.arbitrary`: a term's definition is what a reader has, and a fact about the
+           * term that lives anywhere else is a second fact that can drift from the first. A
+           * hand-written codec's generator is data the caller supplied about *this* term, so it
+           * belongs in the term.
+           */
+          readonly arbitrary?: (rng: Rng, size: number) => unknown
+          readonly shrink?: (value: never) => readonly unknown[]
       }
 
 /* ── §4's stratification, as three named strata over a flat `kind` ─────────────────── */
@@ -1174,19 +1185,17 @@ export const custom = <T, A extends AttributeValue = AttributeValue>(raw: {
     readonly arbitrary?: (rng: Rng, size: number) => T
     readonly shrink?: (value: T) => readonly T[]
 }): AttributeCodec<T, A> =>
-    codec({
-        encode: raw.encode,
+    // the pair *and* the generators, as data: a hand-written codec's definition is everything
+    // the caller said about it. `writes`, `carries` and `deeper` are still told nothing, because
+    // two foreign functions have no member, no kind of value and no shape beneath to tell them of
+    codecOfTerm<T, A>({
+        kind: 'custom',
+        encode: raw.encode as (value: never) => Result<AttributeValue>,
         decode: raw.decode,
-        // the pair, as data: a hand-written codec's definition *is* its two functions. `writes`,
-        // `carries` and `deeper` are still told nothing, because two foreign functions have no
-        // member, no kind of value and no shape beneath to tell them about
-        def: {
-            kind: 'custom',
-            encode: raw.encode as (value: never) => Result<AttributeValue>,
-            decode: raw.decode,
-        },
         arbitrary: raw.arbitrary,
-        shrink: raw.shrink,
+        shrink: raw.shrink as
+            | ((value: never) => readonly unknown[])
+            | undefined,
     })
 
 // ── scalars ─────────────────────────────────────────────────────────
@@ -2021,6 +2030,13 @@ const denote = (def: TermDef): Pair => {
                 decode: (attribute) => def.get().decode(attribute),
             }
         /**
+         * §3 `(custom)`: the pair the term carries, returned. The row does not describe the set
+         * the codec admits — the two functions *are* what decides it, which is the model's own
+         * move at `custom` and the reason `admits` asks them rather than reading a row.
+         */
+        case 'custom':
+            return { encode: def.encode, decode: def.decode }
+        /**
          * §3 `(literal)`, and it is **not** a sixth ground term: `literalCodec k ls` is
          * `(baseCodec k).restrict (inL k ls)`, the base's pair narrowed to membership of `ℓ`. The
          * base is the index, so the row reaches it by denoting `{ kind: base }` — the five bases
@@ -2190,6 +2206,21 @@ const codecOfTerm = <T, A extends AttributeValue>(
     codec<T, A>({
         def,
         ...(denote(def) as Pick<Codec<T, A>, 'encode' | 'decode'>),
+        // **Derived, not a second fact.** `arbitrary` and `shrink` are on the published codec, and
+        // a caller may reasonably read one — building a second `custom` from the first's generator
+        // is what `codec.shrink.spec.ts` does. The definition owns them; this exposes what it owns.
+        // Only `custom` carries them, because only `custom` is a term whose generation is the
+        // caller's to state: `refine`'s lives in `refined.arbitrary`, where the def readers find it.
+        ...(def.kind === 'custom'
+            ? {
+                  arbitrary: def.arbitrary as
+                      | ((rng: Rng, size: number) => T)
+                      | undefined,
+                  shrink: def.shrink as
+                      | ((value: T) => readonly T[])
+                      | undefined,
+              }
+            : {}),
     })
 
 const stringCodec: AttributeCodec<string, Attribute<'S'>> = codecOfTerm({
