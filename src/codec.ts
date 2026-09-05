@@ -342,7 +342,7 @@ export type CodecDef =
            */
           readonly variants: Readonly<Record<string, TermDef>>
       }
-    | { readonly kind: 'untagged'; readonly variants: readonly AnyCodec[] }
+    | { readonly kind: 'untagged'; readonly variants: readonly TermDef[] }
     | {
           readonly kind: 'refine'
           readonly inner: TermDef
@@ -570,7 +570,7 @@ export const writes = (codec: AnyCodec): AttributeName | undefined => {
         case 'untagged': {
             let one: AttributeName | undefined
             for (const variant of def.variants) {
-                const member = writes(variant)
+                const member = writes(codecOfTerm(variant))
                 if (!member) return undefined
                 if (!one) one = member
                 else if (one !== member) return undefined
@@ -651,7 +651,7 @@ export const carries = (codec: AnyCodec): readonly Shape[] | undefined => {
         case 'untagged': {
             const shapes = new Set<Shape>()
             for (const variant of def.variants) {
-                const of = carries(variant)
+                const of = carries(codecOfTerm(variant))
                 if (!of) return undefined
                 for (const shape of of) shapes.add(shape)
             }
@@ -736,7 +736,7 @@ export const occupies = (codec: AnyCodec): readonly Slot[] | undefined => {
         case 'untagged': {
             const slots = new Set<Slot>()
             for (const variant of def.variants) {
-                const of = occupies(variant)
+                const of = occupies(codecOfTerm(variant))
                 if (!of) return undefined
                 for (const slot of of) slots.add(slot)
             }
@@ -814,7 +814,7 @@ export const reads = (
         case 'untagged': {
             const members = new Set<AttributeName>()
             for (const variant of def.variants) {
-                const of = reads(variant)
+                const of = reads(codecOfTerm(variant))
                 if (!of) return undefined
                 for (const member of of) members.add(member)
             }
@@ -1068,7 +1068,9 @@ export const admits = (codec: AnyCodec, value: unknown): boolean => {
          * it to this is a behaviour change out of scope here.
          */
         case 'untagged':
-            return def.variants.some((variant) => admits(variant, value))
+            return def.variants.some((variant) =>
+                admits(codecOfTerm(variant), value),
+            )
         case 'refine':
             return (
                 admits(codecOfTerm(def.inner), value) &&
@@ -1212,7 +1214,10 @@ const childrenOf = (
                 segment,
             )
         case 'untagged':
-            return acrossVariants(def.variants, segment)
+            return acrossVariants(
+                def.variants.map((variant) => codecOfTerm(variant)),
+                segment,
+            )
         case 'optional':
         case 'fallback':
             return childrenOf(def.inner, segment)
@@ -2564,7 +2569,7 @@ const denote = (def: TermDef): Pair => {
          * and a pair separated on one side only is not separated.
          */
         case 'untagged':
-            return altSem(def.variants.map(optionOf)).pair
+            return altSem(def.variants.map(optionOfTerm)).pair
         /**
          * §3 `(dunion)`: the variants' lookup, carried into an `M`. The tag is read off the item on
          * both sides — `tagOfV` and `tagOfA` in the model — so neither half attempts a variant it
@@ -3794,8 +3799,6 @@ export const nullable = <T, A extends AttributeValue>(
         inner: termOf(inner as unknown as AnyCodec),
     })
 }
-
-const isOptional = (codec: AnyCodec): boolean => codec.def?.kind === 'optional'
 
 // ── the escape hatch ────────────────────────────────────────────────
 
@@ -5502,7 +5505,9 @@ const identifying = (codec: AnyCodec): boolean => {
         case 'record':
             return identifying(codecOfTerm(def.value))
         case 'untagged':
-            return def.variants.every(identifying)
+            return def.variants.every((variant) =>
+                identifying(codecOfTerm(variant)),
+            )
         case 'optional':
         case 'fallback':
             return identifying(def.inner)
@@ -5524,12 +5529,45 @@ const optionOf = (codec: AnyCodec): Option => {
      * that list as though `0` and `1` were attribute names. `attributes` is the definition of an
      * object codec and of nothing else.
      */
+    const base = optionOfTerm(termOf(codec))
     const asObject =
         codec.def?.kind === 'attributes'
             ? (codec as unknown as Partial<AnyObjectCodec>).item
             : undefined
-    const spec = asObject?.spec
-    if (!spec) {
+    return asObject
+        ? {
+              ...base,
+              item: asObject as unknown as ItemCodec<
+                  Record<string, unknown>,
+                  unknown
+              >,
+          }
+        : base
+}
+
+/**
+ * Everything about an option that the **term** decides, which is everything but `item`.
+ *
+ * `denote`'s `untagged` row builds its options from the definition and asks {@link altSem} for the
+ * attribute pair, and that pair reads `codec`, `member`, `carries`, `declares` and `requires` — it
+ * never reads `item`. So the resolution is a function of the terms, and this is it.
+ *
+ * **The names come from the fields, not from a `spec`.** An object option's `declares` and
+ * `requires` used to be read off `.item.spec`, asking each declared codec whether its definition
+ * kind was `optional`. A `spec` is a caller's argument and a `Field`'s `mark` is what that argument
+ * became, so the same two sets are read from the term here — `fieldOf` is the function that turns
+ * one into the other, and a mark is closed where a definition kind is not. That question had its
+ * own predicate, and this was its last caller, so the predicate goes too.
+ *
+ * That is also what makes this safe on a term-built codec, and the old form was not. It classified
+ * an option as an object by finding `.item` on the codec, and only the object a *constructor*
+ * returns carries one; a codec built from a term has none, so every object variant would have been
+ * classified as a ground option and the union would have resolved by attempting instead of by
+ * names. Nothing would have failed loudly. Here the term decides, and every codec has one.
+ */
+const optionOfTerm = (def: TermDef): Option => {
+    const codec = codecOfTerm(def)
+    if (def.kind !== 'attributes') {
         return {
             codec,
             member: writes(codec),
@@ -5537,28 +5575,25 @@ const optionOf = (codec: AnyCodec): Option => {
             item: undefined,
             declares: undefined,
             requires: [],
-            describe: codec.def?.kind ?? 'a codec',
+            describe: def.kind,
         }
     }
     const declares = new Set<string>()
     const requires: string[] = []
-    for (const name in spec) {
+    for (const name in def.of) {
         declares.add(name)
-        if (!isOptional(spec[name] as AnyCodec)) requires.push(name)
+        if (def.of[name]?.mark !== 'optional') requires.push(name)
     }
     return {
         codec,
         member: 'M',
         carries: ['map'],
-        item: asObject as unknown as ItemCodec<
-            Record<string, unknown>,
-            unknown
-        >,
+        item: undefined,
         declares,
         requires,
         describe: `{ ${[...declares]
             .map((name) =>
-                isOptional(spec[name] as AnyCodec) ? `${name}?` : name,
+                def.of[name]?.mark === 'optional' ? `${name}?` : name,
             )
             .join(', ')} }`,
     }
@@ -6044,7 +6079,7 @@ export const union = <const Options extends readonly AnyCodec[]>(
         ) as never,
         def: {
             kind: 'untagged',
-            variants: all.map((option) => option.codec),
+            variants: all.map((option) => termOf(option.codec)),
         },
     }
 
@@ -6061,7 +6096,7 @@ export const union = <const Options extends readonly AnyCodec[]>(
         unsafeDecode: (attribute) => orThrow(decode(attribute)),
         def: {
             kind: 'untagged',
-            variants: all.map((option) => option.codec),
+            variants: all.map((option) => termOf(option.codec)),
         },
         item: self as never,
     }
