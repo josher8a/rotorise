@@ -396,10 +396,6 @@ describe('a record and a tuple keep their shape', () => {
  * lands in an index rather than in a field.
  */
 describe('a union pins the shape it writes', () => {
-    type Visit =
-        | { TAG: 'VISIT'; kind: 'CHECKUP'; petId: string; vetId: string }
-        | { TAG: 'VISIT'; kind: 'SHOT'; petId: string; dose: string }
-
     /** One variant or the other, never the merge — a row is exactly one of them. */
     type VisitItem =
         | { TAG: S; kind: S; petId: S; vetId: S }
@@ -443,9 +439,6 @@ describe('a union pins the shape it writes', () => {
     })
 
     it('pins an untagged union by position', () => {
-        type Line =
-            | { petId: string; price: string }
-            | { petIds: readonly string[] }
         type LineItem = { petId: S; price: N } | { petIds: L<S> }
 
         const ok = union([

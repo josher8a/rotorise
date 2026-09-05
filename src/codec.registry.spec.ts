@@ -35,12 +35,6 @@ import { arbitraryOf, rngFrom, shrinkOf } from './testing'
 
 const isTag = (v: string): v is `t-${string}` => v.startsWith('t-')
 
-type Pet = { TAG: 'PET'; id: string; name?: string }
-type Visit =
-    | { type: 'CHECKUP'; petId: string }
-    | { type: 'SHOT'; petId: string; vaccine: string }
-type Line = { petId: string; price: string } | { petIds: readonly string[] }
-
 const codecs: readonly (readonly [string, AnyCodec])[] = [
     ['string', string],
     ['literal', string('A', 'B', 'C')],

@@ -16,7 +16,6 @@ import {
     decimal,
     fallback,
     legacy,
-    number,
     object,
     string,
 } from './codec'

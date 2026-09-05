@@ -54,7 +54,7 @@ describe('a predicate the inner codec rarely satisfies', () => {
         const thin: string[] = []
         const anything = refine(
             string,
-            (v): v is Brand<string, 'any'> => true,
+            (_v): _v is Brand<string, 'any'> => true,
             {
                 describe: 'anything',
                 onThinSearch: (what) => thin.push(what),

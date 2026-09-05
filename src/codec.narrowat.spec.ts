@@ -21,10 +21,6 @@ import {
     writes,
 } from './codec'
 
-type Op =
-    | { type: 'SHIPMENT'; amount: string; note: string }
-    | { type: 'COUNTER'; amount: string; note: string }
-
 const OpCodec = discriminatedUnion('type', [
     object({ type: string('SHIPMENT'), amount: decimal, note: string }),
     object({ type: string('COUNTER'), amount: string, note: string }),
@@ -93,7 +89,6 @@ describe('where they agree, or only one declares it', () => {
     })
 
     it('resolves an attribute only one variant has', () => {
-        type Mixed = { tag: 'A'; only: number } | { tag: 'B'; shared: string }
         const M = object({
             m: discriminatedUnion('tag', [
                 object({ tag: string('A'), only: number }),
