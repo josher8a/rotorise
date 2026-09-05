@@ -729,6 +729,61 @@ export const occupies = (codec: AnyCodec): readonly Slot[] | undefined => {
     }
 }
 
+/**
+ * Which members a term can read, or `undefined` for "any of them" — the model's `occA`.
+ *
+ * The mirror of {@link occupies}, and **not a symmetric one**: `held` and `legacy` swap sides.
+ *
+ * - `held` reads through. Its `g` sits behind `p` and is total, so it changes which value comes
+ *   out and never which attributes go in — the one term whose readable side sees further than its
+ *   writable one, which §5 states as the asymmetry the two sides of a term part in.
+ * - `legacy` is `⊤` here where it is the subterm's on the write side, and the reason is the
+ *   *reading*: `p` falls back to a channel the term carries as data, so what it accepts is not
+ *   bounded by the member the subterm claims. A lawful `r` does respect the member — `μSyn` is
+ *   sharper — but only under an obligation this answer does not take as a premise, which is
+ *   exactly what `Orthogonality.lean` records about the same row.
+ *
+ * {@link writes} is the sharper question where a term stores exactly one member; this is the set,
+ * which is what a pair of options has to compare.
+ */
+export const reads = (
+    codec: AnyCodec,
+): readonly AttributeName[] | undefined => {
+    const def = codec.def
+    switch (def.kind) {
+        case 'refine':
+        case 'optional':
+        case 'fallback':
+        case 'held':
+            return reads(def.inner)
+        case 'lazy':
+            return reads(def.get())
+        case 'legacy':
+        case 'custom':
+        case 'opaque':
+            return undefined
+        case 'nullable': {
+            const inner = reads(def.inner)
+            return inner && [...inner, 'NULL']
+        }
+        case 'untagged': {
+            const members = new Set<AttributeName>()
+            for (const variant of def.variants) {
+                const of = reads(variant)
+                if (!of) return undefined
+                for (const member of of) members.add(member)
+            }
+            return [...members]
+        }
+        default: {
+            // everywhere else a term stores exactly one member, which is the question `writes`
+            // already answers — asked of the definition rather than re-tabulated here
+            const one = writes(codec)
+            return one && [one]
+        }
+    }
+}
+
 /** Which kind of value each kind of codec takes, where the kind alone decides. */
 const carriedBy: { readonly [K in TermKind]?: Shape } = {
     string: 'string',
