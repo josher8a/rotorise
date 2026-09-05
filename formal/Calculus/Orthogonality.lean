@@ -822,7 +822,7 @@ theorem admALit_disjoint {k : GroundKind} {ls ls' : NEFinset k.Carrier}
     exact absurd hin' (by simp)
 
 /-- **Phase *alternatives*.** Uniform in the base, both sides, no lawfulness premise and no
-    `ident` conjunct — where §5 states (K)'s second disjunct as
+    `ident` conjunct — where §5 stated its second disjunct as
     `ident(cᵢ) ∧ ident(cⱼ) ∧ adm(cᵢ) ∩ adm(cⱼ) = ∅`. -/
 theorem separates_literal_disjoint {k : GroundKind} {ls ls' : NEFinset k.Carrier}
     (hd : ∀ x ∈ ls.1, x ∉ ls'.1) :

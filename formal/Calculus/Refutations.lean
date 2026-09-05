@@ -193,7 +193,7 @@ theorem not_equiv_lazy : ¬ Codec.Equiv (denote (.lazy .string)) (denote .string
 
 /-! ## `union(c₁ … cₙ) ≢ union(c₁ … cₙ, c)`
 
-Not closed under extension. The held set grows, so `≡` fails before (D) or (K) are even
+Not closed under extension. The held set grows, so `≡` fails before (D) or any discharger is
 consulted — which is the stronger statement, since §6 justifies the row by well-formedness
 and the model shows it fails for a more basic reason. -/
 
@@ -356,7 +356,7 @@ theorem typed_union_string_boolean :
 /-! ## What `≡` cannot see about associativity
 
 `Equations.equiv_altCodec_assoc` proves §6's associativity row *unconditionally* — no (D),
-no (K), no (U). That is not a contradiction of §6's hedge; it is a fact about `≡`.
+no discharger, no (U). That is not a contradiction of §6's hedge; it is a fact about `≡`.
 
 `≡` requires `e` and `p` to agree only where **both** are defined. At an input where the
 nested option is ambiguous, the left side's inner union fails and the outer one resolves
@@ -385,7 +385,7 @@ theorem assoc_right_e :
         altCodec, select, stringCodec, literalCodec, baseCodec, Codec.restrict, inL]
 
 /-- The two associativity forms are `≡` but not interchangeable: one writes where the
-    other refuses. §6's (D)/(K)/(U) hedge is about this, not about `≡`. -/
+    other refuses. §6's (D)/discharger/(U) hedge is about this, not about `≡`. -/
 theorem not_eq_altCodec_assoc :
     ∃ (l r : Term) (v : Value) (a : Attr),
       (denote l).e v = some a ∧ (denote r).e v = none :=

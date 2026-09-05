@@ -292,7 +292,8 @@ theorem altCodec_T (os : List OptionSem) (μA : Option Member) (v : Value) :
     is the direction that fails. -/
 def TIsDomE (c : Codec) : Prop := ∀ v, c.T v ↔ (c.e v).isSome
 
-/-- §4's counterexample pair: both options admit `"A"`, which is what refuted (K). -/
+/-- §4's counterexample pair: both options admit `"A"`, which is what refuted §5's withdrawn
+    discharger. -/
 noncomputable def unionLiteralString : Codec :=
   altCodec [.byAttempt (literalCodec .string (.of "A" ∅)), .byAttempt stringCodec] (some .S)
 
