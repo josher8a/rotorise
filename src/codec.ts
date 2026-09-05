@@ -1336,74 +1336,7 @@ const literalCodec = <T extends LiteralValue>(
         }
     }
 
-    /**
-     * Checked both ways. An unchecked `encode` makes {@link ConstantCodec.constant} a lie — claim
-     * one value, write another — which the type misses where the entity is a union and the codec
-     * describes one variant of it.
-     *
-     * Answers with the *stored* alternative rather than the one it was handed, which matters at
-     * `binary`: two `Uint8Array`s with the same bytes are different objects, so returning the
-     * member of `ℓ` is what keeps a decoded value identical to the one the schema names.
-     */
-    const admits = (value: LiteralValue): Result<T> => {
-        const found = allowed.find((one) => sameLiteral(one, value))
-        return found === undefined
-            ? new CodecError(
-                  `${namedLiteral(value)} is not one of ${allowed
-                      .map(namedLiteral)
-                      .join(', ')}`,
-              )
-            : found
-    }
-
-    // `N` carries digits, so a numeric literal is written as text and read back as the number it is
-    return codec<T, AttributeValue>({
-        def: { kind: 'literal', base, allowed },
-        encode: (value) =>
-            andThen(admits(value), (ok) =>
-                carrying(
-                    member,
-                    (base === 'number' ? String(ok) : ok) as never,
-                ),
-            ),
-        /**
-         * **The same gate the base's own codec reads through, and for the same reason.**
-         *
-         * `Number` is far more permissive than an `N`: it reads `''`, whitespace, `0x10` and
-         * `0b11`, none of which DynamoDB will ever hand back. Membership in `ℓ` does not filter
-         * them out — it only rejects the ones whose numeric value happens to miss the set, so
-         * `number(0, 1, 2)` read `{ N: '' }` as `0` and `number(0, 16)` read `{ N: '0x10' }`
-         * as `16`. An attribute no store wrote, decoded to a value the type says is legitimate.
-         *
-         * The premise `ℓ ⊆ D` does not cover this and it was wrong to say it did. A premise
-         * bounds the values **this library owns**; a stored attribute is outside anything it
-         * owns, which is the whole reason `decode` re-checks what `encode` was trusted on.
-         *
-         * `number`'s *second* gate — the round-tripped value, not the digits — is genuinely
-         * subsumed here, and that one is safe to say: a numeral that rounds past the maximum
-         * lands outside `D`, and `ℓ ⊆ D`, so `admits` refuses it.
-         */
-        decode: (attribute) =>
-            andThen(expect(member, attribute), (carried) => {
-                if (base === 'number') {
-                    const text = carried as string
-                    return isNumeral(text)
-                        ? admits(Number(text))
-                        : new CodecError(
-                              `'${text}' is not a numeral, so this attribute was not written by DynamoDB`,
-                          )
-                }
-                if (base === 'decimal') {
-                    const text = carried as string
-                    return isStoredNumeral(text)
-                        ? admits(text)
-                        : new CodecError(
-                              `'${text}' is not a numeral in the form DynamoDB stores, so this attribute was not written by it`,
-                          )
-                }
-                return admits(carried as LiteralValue)
-            }),
-    })
+    return codecOfTerm<T, AttributeValue>({ kind: 'literal', base, allowed })
 }
 
 /** `ℓ` non-empty, refused where the caller can see which constructor named nothing. */
@@ -1577,6 +1510,56 @@ const denote = (def: TermDef): Pair => {
             return groundCodec('boolean', 'BOOL', 'a boolean', "a 'BOOL'")
         case 'binary':
             return groundCodec('binary', 'B', 'a `Uint8Array`', "a 'B'")
+        /**
+         * §3 `(literal)`, and it is **not** a sixth ground term: `literalCodec k ls` is
+         * `(baseCodec k).restrict (inL k ls)`, the base's pair narrowed to membership of `ℓ`. The
+         * base is the index, so the row reaches it by denoting `{ kind: base }` — the five bases
+         * are exactly five term kinds.
+         *
+         * **What the base's own read gate buys, stated where it is now free.** The hand-written
+         * row re-checked `isNumeral` before consulting `ℓ`, because `Number` is far more permissive
+         * than an `N` — it reads `''`, whitespace, `0x10` and `0b11`, none of which DynamoDB hands
+         * back, and membership in `ℓ` does not filter them out: `number(0, 1, 2)` read `{ N: '' }`
+         * as `0`. Going through the base means that gate is the base's, asked once, and the row no
+         * longer restates it.
+         *
+         * **At `number` the predicate is on the read value and not on the stored text**, which is
+         * the model's `inL` at that base and the one place §5's two literal rules part: a string
+         * literal's stored text *is* its value, a numeric literal's is not.
+         */
+        case 'literal': {
+            const allowed = def.allowed
+            /**
+             * `inL`, answering with the **member of `ℓ`** rather than with `true`.
+             *
+             * The model's is a `Bool` and it does not need to be more: Lean has no reference
+             * identity, so two `ByteArray`s with the same octets *are* one value and `p` returning
+             * "the value" is unambiguous. JS has two objects for that one value, and returning the
+             * declared one is how this language spells the model's answer — a `decode` that handed
+             * back the array off the wire would answer with a value the type says is one of `ℓ`
+             * and `===` says is not.
+             */
+            const member = (value: unknown): LiteralValue | undefined =>
+                allowed.find((one) => sameLiteral(one, value as LiteralValue))
+            const refuse = (value: unknown) =>
+                new CodecError(
+                    `${namedLiteral(value as LiteralValue)} is not one of ${allowed
+                        .map(namedLiteral)
+                        .join(', ')}`,
+                )
+            const base = denote({ kind: def.base })
+            return {
+                encode: (value: unknown) =>
+                    member(value) === undefined
+                        ? refuse(value)
+                        : base.encode(value as never),
+                decode: (attribute) =>
+                    andThen(base.decode(attribute), (read) => {
+                        const found = member(read)
+                        return found === undefined ? refuse(read) : found
+                    }),
+            }
+        }
         /**
          * §3 `(decimal)`. The held set is §1's `Numerals` and not every string: the grammar, the
          * 38 significant digits and the magnitude range are checked on **both** halves.
