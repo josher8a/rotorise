@@ -161,7 +161,7 @@ describe('what is still refused', () => {
     /**
      * `legacy` is stuck on the closure, and on that alone now.
      *
-     * It used to be stuck twice over, and this asserted the second reason: `CodecDef['legacy']`
+     * It used to be stuck twice over, and this asserted the second reason: `Def['legacy']`
      * recorded only `current` and dropped the older readers at construction, so there was no `r`
      * in this library to recognise even if the model named one. The definition carries the reader
      * now, so that half is gone and the assertion moved to the half that remains — `r` is a JS

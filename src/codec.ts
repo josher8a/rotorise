@@ -288,7 +288,7 @@ export type Decoded<C> = C extends {
  * which is `Decoded<C>` and `AttributeOf<C>` — plus the equations between terms, which are checked in
  * `codec.laws.spec.ts`.
  */
-export type CodecDef =
+export type Def =
     | { readonly kind: 'string' }
     | {
           readonly kind: 'literal'
@@ -458,7 +458,7 @@ export type CodecDef =
 /* ── §4's stratification, as three named strata over a flat `kind` ─────────────────── */
 
 /**
- * `CodecDef['kind']` is flat, and the calculus is not.
+ * `Def['kind']` is flat, and the calculus is not.
  *
  * §4 of `docs/codec-calculus.md` puts three different things at three different levels — a **codec**
  * denotes a `Term`, a **field** denotes a `Field`, and a **rest policy** denotes a `Rest` — and says
@@ -509,7 +509,7 @@ type FieldKind = 'optional' | 'fallback'
  * Every kind is classified, and the lists above are written out rather than derived so that adding
  * one is a decision rather than a default.
  *
- * A new `CodecDef` member that no stratum claims stops the build here. That is the same move as
+ * A new `Def` member that no stratum claims stops the build here. That is the same move as
  * `#assert_axioms` in the formalization: a fact the documents assert, turned into a build error
  * instead of something a reader is asked to re-derive.
  */
@@ -518,15 +518,14 @@ type Classified<Whole, Parts> = [Whole] extends [Parts]
         ? true
         : never
     : never
-const _everyKindHasALevel: Classified<CodecDef['kind'], TermKind | FieldKind> =
-    true
+const _everyKindHasALevel: Classified<Def['kind'], TermKind | FieldKind> = true
 void _everyKindHasALevel
 
 /** A definition that denotes a §3 `Term`. */
-export type TermDef = Extract<CodecDef, { readonly kind: TermKind }>
+export type TermDef = Extract<Def, { readonly kind: TermKind }>
 
 /** A definition that denotes a §4 `Field`. */
-export type FieldDef = Extract<CodecDef, { readonly kind: FieldKind }>
+export type FieldDef = Extract<Def, { readonly kind: FieldKind }>
 
 /* ── the readers ──────────────────────────────────────────────────────────────────────── */
 
@@ -1175,7 +1174,7 @@ export const deeper = (
  * disagree about it.
  *
  * A union is the only definition that branches, and what it branches into is a *set of codecs* —
- * not a codec. This used to be a `CodecDef` kind, a pseudo-codec whose `encode` and `decode` both
+ * not a codec. This used to be a `Def` kind, a pseudo-codec whose `encode` and `decode` both
  * threw, which meant every reader of a definition had to know about a definition that was not one.
  * The disagreement belongs to the walk, so it is the walk that carries it.
  */
@@ -1241,7 +1240,7 @@ const acrossVariants = (
  * half is missing, so only the codec half fails.
  *
  * It says **`custom`**, which is the definition for a pair of functions with no structure beneath
- * them, and that is what this is. It used to be a `CodecDef` kind of its own called `branch`, so a
+ * them, and that is what this is. It used to be a `Def` kind of its own called `branch`, so a
  * definition language for codecs contained an entry that was not a codec and every reader had to
  * know about it; and it used to carry no definition at all, which stopped being available when
  * `def` became required. `custom` costs no reader a case and changes no answer: `writes`, `carries`

@@ -157,7 +157,7 @@ describe("'refuse', for a service that owns its table", () => {
 /**
  * **The policy, in the definition.**
  *
- * `CodecDef` is this library's own abstract syntax, and `src/lean.ts` reads it to reconstruct the
+ * `Def` is this library's own abstract syntax, and `src/lean.ts` reads it to reconstruct the
  * equivalent term in `formal/`. It used to record the rest *codec* alone — `undefined` for both
  * `'drop'` and `'refuse'` — on the argument that neither contributes an attribute to generate. That
  * argument covers the write half and only the write half: the two policies disagree about whether an

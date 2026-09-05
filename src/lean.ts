@@ -51,13 +51,7 @@
  */
 import type { AttributeValue } from './attribute'
 import { isNumeral, isStoredNumeral, memberOf } from './attribute'
-import type {
-    AnyCodec,
-    AnyDeclaration,
-    CodecDef,
-    Field,
-    TermDef,
-} from './codec'
+import type { AnyCodec, AnyDeclaration, Def, Field, TermDef } from './codec'
 import {
     admits,
     admitsAttribute,
@@ -435,7 +429,7 @@ const lazyLimit = 16
  * - **`held`, `legacy`, `custom`.** Three of §3's constructors carry *functions* —
  *   `f g : Value → Value`, `r : Attr → Option Value`, `ce`/`cp` — and this library carries
  *   JavaScript closures in the same positions. There is no expression in Lean for an arbitrary
- *   closure. `legacy` is the worst of the three and for a second reason: `CodecDef` keeps only the
+ *   closure. `legacy` is the worst of the three and for a second reason: `Def` keeps only the
  *   *current* codec, so the older readers are not even recorded to be refused about.
  * - **`refine`, unless the predicate is one this library shipped.** The fourth
  *   function-carrying constructor, and the one where the line has moved. See
@@ -445,7 +439,7 @@ const lazyLimit = 16
  *   the honest line — and it is only two predicates wide, because `src/` constructs none of these
  *   four internally.
  *
- * `Rest.drop` vs `Rest.refuse` used to be a fourth entry here: `CodecDef` recorded the rest *codec*
+ * `Rest.drop` vs `Rest.refuse` used to be a fourth entry here: `Def` recorded the rest *codec*
  * and nothing when the policy was a string, so this wrote `Rest.drop` for either. It was sound for
  * the vectors this module writes and only for them — `objectCodec`'s `e` is `objWrite`, which takes
  * `rc?` and not the `kn` filter (`formal/Calculus/Combinators.lean:1691`), and `rcOf` is `none` for
@@ -461,7 +455,7 @@ export const leanTermOf = (
     // the entry takes a declaration and the printer below takes a term, so the refusal has a place
     // to live and stays reachable. A codec's definition is a term in the type, and the caller this
     // is for is the one that arrived past a cast — `termOf` draws the same line for the same reason
-    const def: CodecDef = declared.def
+    const def: Def = declared.def
     if (def.kind === 'optional' || def.kind === 'fallback') {
         return refuse(
             at,

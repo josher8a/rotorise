@@ -260,12 +260,12 @@ describe('terms', () => {
     /**
      * **The place the emitter used to guess.**
      *
-     * `CodecDef` recorded the rest *codec*, and both `'drop'` and `'refuse'` recorded nothing — so
+     * `Def` recorded the rest *codec*, and both `'drop'` and `'refuse'` recorded nothing — so
      * the definition alone could not tell them apart and this wrote `Rest.drop` for either. It was
      * not wrong for the vectors this module writes: `objectCodec`'s `e` is `objWrite sems rc?`,
      * which never sees the `kn` filter the policy decides, and `rcOf` is `none` for both, so the two
      * denote the *same* `e`. It was wrong about the codec, and a decode-direction vector — whose `p`
-     * is exactly where they differ — would have been silently false. `CodecDef['rest']` now carries
+     * is exactly where they differ — would have been silently false. `Def['rest']` now carries
      * the policy, and the emitter reads it rather than guessing.
      */
     it('tells `refuse` from `drop`, which a decode vector would need', () => {
