@@ -1490,6 +1490,40 @@ const groundCodec = (
 })
 
 /**
+ * **A pair between a value shape and a member, with the payload transformed on the way.**
+ *
+ * The model calls this `carriedCodec`, and so does this file: `carrying` is already the word here
+ * for building an attribute out of a payload, and this is the codec that word describes.
+ * {@link groundCodec} is the degenerate case, where the payload passes through untouched.
+ *
+ * The transform is the whole of what distinguishes the products from each other. `array` and
+ * `record` hand it {@link every}, a traversal — the model's `entrywise` — and differ only in what
+ * they traverse. `tuple` aligns first. `object` guards and filters first. `set` is the one product
+ * that is not an instance, because its attribute side is a choice among three wire sets rather than
+ * one member.
+ */
+const carriedCodec = <Payload, Written, Read>(
+    holds: (value: unknown) => value is Payload,
+    member: AttributeName,
+    refuse: (value: unknown) => CodecError,
+    into: (payload: Payload) => Result<Written>,
+    outOf: (carried: Read) => Result<unknown>,
+): Pair => ({
+    // two casts, one reason: `member` is a *value* here, so the type checker cannot tie it to the
+    // payload types either side of it. The model takes the two prisms as arguments and gets that
+    // tie for free; this takes a member and a pair of transforms, and the row is what says they
+    // agree — `'L'` with a list, `'M'` with a map
+    encode: (value: unknown) =>
+        holds(value)
+            ? andThen(into(value), (written) =>
+                  carrying(member, written as never),
+              )
+            : refuse(value),
+    decode: (attribute) =>
+        andThen(expect(member, attribute), (carried) => outOf(carried as Read)),
+})
+
+/**
  * **What a term means**, as one function on the definition.
  *
  * Every constructor's pair comes from here, so there is one description of what a term denotes
@@ -1510,6 +1544,30 @@ const denote = (def: TermDef): Pair => {
             return groundCodec('boolean', 'BOOL', 'a boolean', "a 'BOOL'")
         case 'binary':
             return groundCodec('binary', 'B', 'a `Uint8Array`', "a 'B'")
+        /**
+         * §3 `(array)`: a list carried into an `L`, with the element's pair run entrywise.
+         * `arrayCodec_eq` is the lemma, and the traversal is `every` here where the model writes
+         * `entrywise` — one word for one concept, and this file already had it.
+         *
+         * The element's own methods are handed over rather than a closure around them: a closure
+         * per call to encode a list is a closure per list in every item written. And `every`
+         * iterates whatever is iterable, so a string arrived as its characters until the shape was
+         * asked first — which is what `admits`' `array` row asks, and now what this asks too.
+         */
+        case 'array': {
+            const items = def.element
+            return carriedCodec(
+                (value): value is readonly never[] => Array.isArray(value),
+                'L',
+                (value) =>
+                    new CodecError(
+                        `${describeShape(value)} is not an array, and \`array\` writes an 'L' — a codec's input is typed, so this is a value that reached \`encode\` past its type`,
+                    ),
+                (list) => every(list, items.encode),
+                (carried: readonly AttributeValue[]) =>
+                    every(carried, items.decode),
+            )
+        }
         /**
          * §3 `(literal)`, and it is **not** a sixth ground term: `literalCodec k ls` is
          * `(baseCodec k).restrict (inL k ls)`, the base's pair narrowed to membership of `ℓ`. The
@@ -1967,26 +2025,9 @@ export const array = <const C extends AnyCodec>(
     element: C & NotAboutAbsence<C>,
 ): AttributeCodec<readonly Decoded<C>[], L<AttributeOf<C>>> => {
     type T = Decoded<C>
-    const items = element as unknown as AttributeCodec<T>
-    return codec<readonly T[], L<AttributeOf<C>>>({
-        def: { kind: 'array', element: items },
-        // the codec's own methods rather than a wrapper around them: a closure per call to encode
-        // a list is a closure per list in every item written
-        // `every` iterates whatever is iterable, so a string arrived as its characters. `admits`'
-        // `array` row asks `Array.isArray` first, and now so does this
-        encode: (value) =>
-            !Array.isArray(value)
-                ? (new CodecError(
-                      `${describeShape(value)} is not an array, and \`array\` writes an 'L' — a codec's input is typed, so this is a value that reached \`encode\` past its type`,
-                  ) as never)
-                : andThen(
-                      every(value, items.encode),
-                      (written) => carrying('L', written) as L<AttributeOf<C>>,
-                  ),
-        decode: (attribute) =>
-            andThen(expect('L', attribute), (carried) =>
-                every(carried, items.decode),
-            ),
+    return codecOfTerm<readonly T[], L<AttributeOf<C>>>({
+        kind: 'array',
+        element: element as unknown as AttributeCodec<T>,
     })
 }
 
