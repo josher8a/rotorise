@@ -166,7 +166,7 @@ type CodecShape<In, Out, A extends AttributeValue> = {
      */
     readonly shrink?: (value: In) => readonly Out[]
     /** What this codec is — see {@link CodecDef}. */
-    readonly def: CodecDef
+    readonly def: TermDef
 }
 
 /**
@@ -181,11 +181,25 @@ type CodecShape<In, Out, A extends AttributeValue> = {
  */
 export type Nestable<T> = AttributeCodec<T>
 
-/** An attribute that may be absent from the item entirely. */
-export type OptionalCodec<
-    T,
-    A extends AttributeValue = AttributeValue,
-> = AttributeCodec<T, A> & { readonly [optionalMarker]: true }
+/**
+ * An attribute that may be absent from the item entirely.
+ *
+ * **Not a codec, and it used to say it was.** This was `AttributeCodec<T, A>` intersected with the
+ * marker, so it claimed a field has an `encode` and a `decode` — true only because {@link optional}
+ * built its answer by spreading the codec it marks. §4 refuses it: a field is a statement about a
+ * *name*, the name belongs to the object, and the pair a member is read and written through is the
+ * one the field marks. `rest` stopped making the same claim at `931c29c`.
+ *
+ * The definition is carried because {@link fieldOf} reads the mark off `def.kind` at run time, and a
+ * type that did not name it would be a type that does not say what the value holds.
+ */
+export type OptionalCodec<T, A extends AttributeValue = AttributeValue> = {
+    readonly [optionalMarker]: true
+    readonly codec: AttributeCodec<T, A>
+    // the mark's own kind and not the whole of `FieldDef`, so a reader that must tell the two marks
+    // apart can, without the symbols — which are `declare const` and reach no consumer
+    readonly def: Extract<FieldDef, { readonly kind: 'optional' }>
+}
 
 /** Any codec, both directions erased — `never` in and `unknown` out, so every codec fits. */
 export type AnyCodec = CodecShape<never, unknown, AttributeValue>
@@ -211,15 +225,27 @@ export type AnyRest = { readonly [restMarker]: true; readonly rest: AnyCodec }
  * Written as the definition alone, because the definition is the whole of what both cases carry that
  * an object reads: `fieldOf` takes the mark off `def.kind` and the child term out of the same record.
  */
-type AnyDeclaration = AnyCodec | { readonly def: FieldDef }
+export type AnyDeclaration = AnyCodec | { readonly def: FieldDef }
+
+/**
+ * The codec a declaration marks, and the declaration itself where it is already one.
+ *
+ * A body hands out codecs and never fields. The mark is a statement about a name, the name is the
+ * body's, and a caller that asked for the attribute at a name wants the thing that reads and writes
+ * it — so this is what {@link ItemCodec.field} answers with.
+ */
+export type Marks<C> = C extends { readonly codec: infer Marked } ? Marked : C
 
 export type Decoded<C> = C extends {
     readonly attribute: AttributeCodec<infer T>
 }
     ? T
-    : C extends AttributeCodec<infer T, AttributeValue>
+    : // a field marks a codec and has none of its own, so the value it carries is the marked one's
+      C extends { readonly codec: AttributeCodec<infer T> }
       ? T
-      : never
+      : C extends AttributeCodec<infer T, AttributeValue>
+        ? T
+        : never
 
 /**
  * What a codec *is*, as data rather than as closures.
@@ -551,9 +577,6 @@ export const writes = (codec: AnyCodec): AttributeName | undefined => {
     const def = codec.def
     switch (def.kind) {
         // a wrapper writes what it wraps
-        case 'optional':
-        case 'fallback':
-            return writes(def.inner)
         case 'refine':
             return writes(codecOfTerm(def.inner))
         case 'legacy':
@@ -642,9 +665,6 @@ const writtenBy: { readonly [K in TermKind]?: AttributeName } = {
 export const carries = (codec: AnyCodec): readonly Shape[] | undefined => {
     const def = codec.def
     switch (def.kind) {
-        case 'optional':
-        case 'fallback':
-            return carries(def.inner)
         case 'refine':
             return carries(codecOfTerm(def.inner))
         case 'legacy':
@@ -721,9 +741,6 @@ export type Slot = Exclude<Shape, 'set'> | 'strSet' | 'numSet' | 'binSet'
 export const occupies = (codec: AnyCodec): readonly Slot[] | undefined => {
     const def = codec.def
     switch (def.kind) {
-        case 'optional':
-        case 'fallback':
-            return occupies(def.inner)
         case 'refine':
             return occupies(codecOfTerm(def.inner))
         case 'legacy':
@@ -805,10 +822,6 @@ export const reads = (
 ): readonly AttributeName[] | undefined => {
     const def = codec.def
     switch (def.kind) {
-        case 'optional':
-        case 'fallback':
-            return reads(def.inner)
-        // the two §4 fields above still hold codecs; the two terms below hold terms
         case 'refine':
         case 'held':
             return reads(codecOfTerm(def.inner))
@@ -892,8 +905,6 @@ export const decides = (codec: AnyCodec): unknown => {
         case 'literal':
             // two admissible values narrow what may be stored without deciding it
             return def.allowed.length === 1 ? def.allowed[0] : undefined
-        case 'fallback':
-            return decides(def.inner)
         default:
             return undefined
     }
@@ -1113,10 +1124,6 @@ export const admits = (codec: AnyCodec, value: unknown): boolean => {
                 ? admits(inner, value)
                 : value === null || admits(inner, value)
         }
-        // §4's fields: the mark is about the name, and what may be held is the inner term's
-        case 'optional':
-        case 'fallback':
-            return admits(def.inner, value)
         case 'lazy':
             return admits(codecOfTerm(def.get()), value)
         // the two that ask — see the note above. They ask different things, and the difference
@@ -1230,9 +1237,6 @@ const childrenOf = (
                 def.variants.map((variant) => codecOfTerm(variant)),
                 segment,
             )
-        case 'optional':
-        case 'fallback':
-            return childrenOf(def.inner, segment)
         case 'refine':
         case 'nullable':
             return childrenOf(codecOfTerm(def.inner), segment)
@@ -1332,7 +1336,7 @@ const described = <C>(inner: C, def: CodecDef): C => ({ ...inner, def })
 const asOneAttribute = <T>(self: {
     encode: (value: T) => Result<AttributeMap>
     decode: (item: AttributeMap) => Result<T>
-    def: CodecDef
+    def: TermDef
 }): AttributeCodec<T, Attribute<'M'>> =>
     codec({
         encode: (value) =>
@@ -2804,8 +2808,11 @@ const codecs = new WeakMap<TermDef, AttributeCodec<never, AttributeValue>>()
  * the positional guards refuse in the *type* at every site that could go wrong. This is the runtime
  * half, at the one place a child is taken from a codec a caller handed over.
  */
-export const termOf = (codec: AnyCodec): TermDef => {
-    const def = codec.def
+export const termOf = (declared: AnyDeclaration): TermDef => {
+    // a declaration and not a codec, which is what keeps the refusal below reachable: a codec's
+    // definition is a term now, so a parameter of `AnyCodec` would make this a branch the checker
+    // says cannot be taken, and the caller it is for is the one that arrived past a cast
+    const def = declared.def
     if (def.kind === 'optional' || def.kind === 'fallback') {
         throw new CodecError(
             `\`${def.kind}\` marks a *field* — whether a name may be absent — and this position takes a term. The type says so too; this call reached here past a cast`,
@@ -3451,11 +3458,18 @@ export const refine = <Wide, Narrow extends Wide, A extends AttributeValue>(
 
 /** Type-level only, for the same reason as {@link optionalMarker}: the def carries the fact. */
 
-/** A codec that stands in a value where the attribute is absent. */
-export type FallbackCodec<
-    T,
-    A extends AttributeValue = AttributeValue,
-> = AttributeCodec<T, A> & { readonly [fallbackMarker]: T }
+/**
+ * A field that stands in a value where the attribute is absent.
+ *
+ * Not a codec, for the reason {@link OptionalCodec} records. The stand-in is the marker's payload at
+ * the type level and `def.value` at run time, and the run-time side is the one {@link fallback}
+ * checks against §3 `(fallback)`.
+ */
+export type FallbackCodec<T, A extends AttributeValue = AttributeValue> = {
+    readonly [fallbackMarker]: T
+    readonly codec: AttributeCodec<T, A>
+    readonly def: Extract<FieldDef, { readonly kind: 'fallback' }>
+}
 
 /**
  * Reads a missing attribute as a value, and writes the attribute always.
@@ -3495,11 +3509,11 @@ export const fallback = <const C extends AnyCodec>(
             `\`fallback\`'s stand-in must be a value the codec it stands in for can write, and ${describeShape(value)} is not one this \`${(inner as unknown as AnyCodec).def?.kind ?? 'codec'}\` writes. A row missing the attribute would read back as it and then refuse on the way out`,
         )
     }
-    return described(inner as unknown as AttributeCodec<Decoded<C>>, {
-        kind: 'fallback',
-        inner: inner as unknown as AnyCodec,
-        value,
-    }) as unknown as FallbackCodec<Decoded<C>, AttributeOf<C> & AttributeValue>
+    const attribute = inner as unknown as AttributeCodec<Decoded<C>>
+    return {
+        codec: attribute,
+        def: { kind: 'fallback', inner: attribute as AnyCodec, value },
+    } as unknown as FallbackCodec<Decoded<C>, AttributeOf<C> & AttributeValue>
 }
 
 /**
@@ -3755,11 +3769,13 @@ export const lazy = <T, A extends AttributeValue = AttributeValue>(
 export const optional = <const C extends AnyCodec>(
     inner: C & NotAlreadyMarked<C>,
 ): OptionalCodec<Decoded<C>, AttributeOf<C>> => {
+    // the marked codec beside the definition, not a copy of the codec with a definition stamped on
+    // it: a field has no pair of its own, and spreading one gave it the pair of the codec it marks
     const attribute = inner as unknown as AttributeCodec<Decoded<C>>
-    return described(attribute, {
-        kind: 'optional',
-        inner: attribute as AnyCodec,
-    }) as OptionalCodec<Decoded<C>, AttributeOf<C>>
+    return {
+        codec: attribute,
+        def: { kind: 'optional', inner: attribute as AnyCodec },
+    } as unknown as OptionalCodec<Decoded<C>, AttributeOf<C>>
 }
 
 /**
@@ -4479,7 +4495,7 @@ export type ObjectCodec<
     readonly unsafeDecode: (
         attribute: AttributeValue,
     ) => DerivedItem<Spec, Rest>
-    readonly def: CodecDef
+    readonly def: TermDef
     /**
      * The same declaration, read as a whole item: the same two directions without the top-level map,
      * and the things only a top-level codec can offer — `encodePartial`, `field`, `at`, `path`.
@@ -4507,7 +4523,7 @@ export type DiscriminatedCodec<T, D extends string, Spec> = {
     readonly decode: (attribute: AttributeValue) => Result<T>
     readonly unsafeEncode: (value: T) => Attribute<'M'>
     readonly unsafeDecode: (attribute: AttributeValue) => T
-    readonly def: CodecDef
+    readonly def: TermDef
     readonly item: Tagged<T, D, Spec>
     /** The row this codec writes, pinnable with {@link Writes}. Type-level only. */
     readonly [writesMarker]?: WritesVariantsPin<Spec>
@@ -4518,7 +4534,7 @@ export type UnionCodec<T, Options extends readonly unknown[]> = {
     readonly decode: (attribute: AttributeValue) => Result<T>
     readonly unsafeEncode: (value: T) => WrittenBy<Options>
     readonly unsafeDecode: (attribute: AttributeValue) => T
-    readonly def: CodecDef
+    readonly def: TermDef
     /**
      * The same union read as a whole item — only where every option is an object.
      *
@@ -4552,7 +4568,7 @@ export type ItemCodec<T, Spec = unknown, Rest = 'drop'> = {
     readonly decode: (item: StoredItem) => Result<T>
     readonly unsafeDecode: (item: StoredItem) => T
     /** One attribute's codec, for building `ExpressionAttributeValues` by hand. */
-    readonly field: <K extends keyof Spec>(name: K) => Spec[K]
+    readonly field: <K extends keyof Spec>(name: K) => Marks<Spec[K]>
     /**
      * The codec at a path, together with the path.
      *
@@ -4582,7 +4598,7 @@ export type ItemCodec<T, Spec = unknown, Rest = 'drop'> = {
     /** What this codec does with an attribute the spec does not declare. */
     readonly rest: RestPolicy<unknown>
     /** What this codec is — see {@link CodecDef}. */
-    readonly def: CodecDef
+    readonly def: TermDef
     /** The row this codec writes, pinnable with {@link Writes}. Type-level only. */
     readonly [writesMarker]?: WritesPin<Spec, Rest>
 }
@@ -4617,8 +4633,8 @@ type Declared = {
  * What it changes is that the mark is *named* rather than left to be recovered from a definition
  * kind, which is what {@link Field} is for.
  */
-const fieldOf = (codec: AnyCodec): Field => {
-    const def = codec.def
+const fieldOf = (declared: AnyDeclaration): Field => {
+    const def = declared.def
     if (def.kind === 'optional')
         return { mark: 'optional', codec: termOf(def.inner) }
     if (def.kind === 'fallback')
@@ -4627,7 +4643,7 @@ const fieldOf = (codec: AnyCodec): Field => {
             codec: termOf(def.inner),
             value: def.value,
         }
-    return { mark: 'required', codec: termOf(codec) }
+    return { mark: 'required', codec: termOf(declared) }
 }
 
 /**
@@ -4675,9 +4691,9 @@ export const object = <
     // not: whether a stand-in has to be copied per read, a fact about this runtime and not about
     // the declaration.
     const fields: Record<string, Field> = {}
-    const declaredSpec = spec as unknown as Record<string, Nestable<never>>
+    const declaredSpec = spec as unknown as Record<string, AnyDeclaration>
     for (const name in declaredSpec) {
-        fields[name] = fieldOf(declaredSpec[name] as AnyCodec)
+        fields[name] = fieldOf(declaredSpec[name] as AnyDeclaration)
     }
     const declaredRest = rest as RestDeclaration
     const restTerm =
@@ -4760,7 +4776,12 @@ export const object = <
                 segments,
             }
         },
-        field: (name) => spec[name],
+        // the codec the member declares, never the field that marks it: a field has no pair, and a
+        // caller that asked for the attribute at a name asked for the thing that reads and writes it
+        field: <K extends keyof Spec>(name: K) => {
+            const declared = fields[name as string]
+            return (declared && codecOfTerm(declared.codec)) as Marks<Spec[K]>
+        },
         spec: spec as Spec,
         rest: rest as RestPolicy<unknown>,
         def: itemDef,
@@ -4949,9 +4970,12 @@ export type AttributeOf<C> = C extends {
     readonly attribute: AttributeCodec<infer _Nested, infer Nesting>
 }
     ? Nesting
-    : C extends AttributeCodec<infer _Held, infer Written>
-      ? Written
-      : never
+    : // the same for a field: the attribute is the one the codec it marks writes
+      C extends { readonly codec: AttributeCodec<infer _Marked, infer Marks> }
+      ? Marks
+      : C extends AttributeCodec<infer _Held, infer Written>
+        ? Written
+        : never
 
 /**
  * The item a spec writes, as a shape you could have written by hand.
@@ -5117,7 +5141,7 @@ export type Tagged<T, D extends string = keyof T & string, Spec = unknown> = {
     readonly discriminator: D
     readonly spec: Spec
     /** What this codec is — see {@link CodecDef}. */
-    readonly def: CodecDef
+    readonly def: TermDef
     /** The row this codec writes, pinnable with {@link Writes}. Type-level only. */
     readonly [writesMarker]?: WritesVariantsPin<Spec>
 }
@@ -5360,7 +5384,7 @@ export type AnyObjectCodec = {
         // fits and none of them has to be named
         readonly encode: (item: never) => unknown
         readonly decode: (item: StoredItem) => unknown
-        readonly spec: Record<string, AnyCodec>
+        readonly spec: Record<string, AnyDeclaration>
     }
 }
 
@@ -5448,7 +5472,7 @@ export type Untagged<T, Specs extends readonly unknown[] = UntaggedSpec<T>> = {
     ) => ItemCodec<show<ObjectOf<NonNullable<Specs[I]>>>, NonNullable<Specs[I]>>
     readonly spec: Specs
     /** What this codec is — see {@link CodecDef}. */
-    readonly def: CodecDef
+    readonly def: TermDef
     /** The row this codec writes, pinnable with {@link Writes}. Type-level only. */
     readonly [writesMarker]?: WritesVariantsPin<Specs>
 }
@@ -5526,9 +5550,6 @@ const identifying = (codec: AnyCodec): boolean => {
             return def.variants.every((variant) =>
                 identifying(codecOfTerm(variant)),
             )
-        case 'optional':
-        case 'fallback':
-            return identifying(def.inner)
         case 'refine':
             return identifying(codecOfTerm(def.inner))
         case 'legacy':

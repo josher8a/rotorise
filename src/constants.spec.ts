@@ -15,8 +15,8 @@
  */
 import { attest } from '@ark/attest'
 import { describe, expect, it } from 'vitest'
-import type { AnyCodec, ConstantCodec } from './codec'
-import { decides, decimal, optional, refine, string } from './codec'
+import type { AnyCodec, AnyDeclaration, ConstantCodec } from './codec'
+import { decides, decimal, fallback, optional, refine, string } from './codec'
 import type { ConstantAttributes } from './Rotorise'
 
 /**
@@ -29,11 +29,24 @@ import type { ConstantAttributes } from './Rotorise'
  * Wrapped in tuples so that `never` is expressible: `attest`'s second parameter defaults to `never`
  * and it refuses that as an explicit argument, since it cannot tell it from the default.
  */
-const decided = (spec: Record<string, AnyCodec>): readonly string[] =>
+const decided = (spec: Record<string, AnyDeclaration>): readonly string[] =>
     Object.entries(spec)
-        .filter(([, codec]) => decides(codec) !== undefined)
+        .filter(([, declared]) => constantOf(declared) !== undefined)
         .map(([name]) => name)
         .sort()
+
+/**
+ * The runtime half, with §4's two marks read.
+ *
+ * A mirror of `Rotorise.ts`'s `constantOf`, which is not exported, and a mirror to the same degree
+ * the walk above always was. `keycomponents.spec.ts` is the test that runs the real one.
+ */
+const constantOf = (declared: AnyDeclaration): unknown => {
+    const def = declared.def
+    if (def.kind === 'optional') return undefined
+    if (def.kind === 'fallback') return decides(def.inner)
+    return decides(declared as AnyCodec)
+}
 
 describe('the type and the function agree on what is decided', () => {
     it('on a single-valued literal, which is the whole point', () => {
@@ -94,5 +107,26 @@ describe('the type and the function agree on what is decided', () => {
         }
         attest<[ConstantAttributes<typeof refined>], [never]>()
         expect(decided(refined)).toEqual([])
+    })
+
+    /**
+     * The pairing where the two do **not** agree, pinned so the next reader sees it.
+     *
+     * A stand-in is written on every write, so the function calls the attribute decided. The type
+     * does not, and cannot as written: a field names the codec it marks as an `AttributeCodec`, which
+     * carries no `constant`, so the brand is gone by the time the derivation asks. This predates R4 —
+     * `FallbackCodec` erased the brand the same way when it was an intersection — and R4 moved both
+     * halves without changing either answer.
+     *
+     * It is the quiet direction. The caller is asked for a component the runtime could have supplied,
+     * which costs an argument rather than a throw. The loud direction is what this file exists for.
+     */
+    it('on a fallback over a literal, where the two disagree', () => {
+        const stood = {
+            TAG: fallback(string('PET'), 'PET' as const),
+            id: string,
+        }
+        attest<[ConstantAttributes<typeof stood>], [never]>()
+        expect(decided(stood)).toEqual(['TAG'])
     })
 })

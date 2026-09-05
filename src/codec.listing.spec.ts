@@ -342,6 +342,17 @@ describe('a wide entity, encoded', () => {
         })
         expect(Listing.field('ownerId').unsafeEncode('u1')).toEqual({ S: 'u1' })
     })
+
+    /**
+     * A body hands out codecs and never the field that marks one.
+     *
+     * `optional(string)` is a statement about the *name*, and it carries no pair — so a caller given
+     * the declaration back would have nothing to encode with, and building an
+     * `ExpressionAttributeValues` entry for an optional attribute is exactly what this member is for.
+     */
+    it('hands back the codec an optional attribute marks, not the mark', () => {
+        expect(Listing.field('handle').unsafeEncode('h1')).toEqual({ S: 'h1' })
+    })
 })
 
 describe('the law', () => {

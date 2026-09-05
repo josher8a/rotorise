@@ -62,9 +62,21 @@ describe('the member a codec writes', () => {
     /** The rule `inherited` used to state, now a recursive case rather than a list entry. */
     it('a wrapper writes what it wraps', () => {
         expect(writes(refine(decimal, isTag as never))).toBe('N')
-        expect(writes(optional(decimal))).toBe('N')
-        expect(writes(fallback(decimal, '0'))).toBe('N')
         expect(writes(legacy({ current: decimal, older: string }))).toBe('N')
+    })
+
+    /**
+     * A field is not a wrapper, and marking a name changes nothing about the attribute.
+     *
+     * `writes(optional(c))` used to answer because a field was a codec that had been spread from the
+     * one it marks. It is the codec the field marks that writes, and the field hands that back
+     * unchanged — the same codec object, not a copy, which is what lets a body read it back.
+     */
+    it('a field marks an attribute and leaves it alone', () => {
+        expect(optional(decimal).codec).toBe(decimal)
+        expect(fallback(decimal, '0').codec).toBe(decimal)
+        expect(writes(optional(decimal).codec)).toBe('N')
+        expect(writes(fallback(decimal, '0').codec)).toBe('N')
     })
 
     it('is none where more than one member is written, or none is known', () => {
@@ -104,12 +116,20 @@ describe('the value a codec decides', () => {
             decides(legacy({ current: string('ONLY'), older: string('ONLY') })),
         ).toBeUndefined()
         expect(decides(nullable(string('ONLY')))).toBeUndefined()
-        expect(decides(optional(string('ONLY')))).toBeUndefined()
     })
 
-    /** `fallback` always writes the attribute, and its replacement is typed to the same value. */
-    it('survives fallback, which is the one that keeps it', () => {
-        expect(decides(fallback(string('ONLY'), 'ONLY' as const))).toBe('ONLY')
+    /**
+     * A field is not asked, and the two marks are read where a body holds them.
+     *
+     * `optional` and `fallback` answer differently — a name that may be absent decides nothing, a
+     * stand-in is written always — and neither answer is the codec's. `constants.spec.ts` holds both,
+     * against the type that must agree with them.
+     */
+    it('is not a question a field answers', () => {
+        expect(decides(optional(string('ONLY')).codec)).toBe('ONLY')
+        expect(decides(fallback(string('ONLY'), 'ONLY' as const).codec)).toBe(
+            'ONLY',
+        )
     })
 })
 
@@ -132,7 +152,6 @@ describe('what is one segment deeper', () => {
     })
 
     it('descends through a wrapper to what it wraps', () => {
-        expect(deeper(optional(array(decimal)), 0)?.def?.kind).toBe('decimal')
         expect(deeper(nullable(array(decimal)), 0)?.def?.kind).toBe('decimal')
     })
 

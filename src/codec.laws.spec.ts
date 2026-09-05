@@ -372,9 +372,14 @@ describe('optional', () => {
     })
 
     it('leaves what is stored alone', () => {
-        expect(memberWritten(optional(decimal) as AnyCodec, '1.5')).toBe('N')
+        expect(memberWritten(optional(decimal).codec as AnyCodec, '1.5')).toBe(
+            'N',
+        )
         expect(
-            memberWritten(optional(string.set()) as AnyCodec, new Set(['a'])),
+            memberWritten(
+                optional(string.set()).codec as AnyCodec,
+                new Set(['a']),
+            ),
         ).toBe('SS')
     })
 })
@@ -438,13 +443,19 @@ describe('what the wrappers preserve', () => {
     it.each([
         ['held', held(decimal, { encode: String, decode: Number }), 1.5],
         ['refine', refine(decimal, (v): v is string => true), '1.5'],
-        ['optional', optional(decimal), '1.5'],
         [
             'fallbackless legacy',
             legacy({ current: decimal, older: decimal }),
             '1.5',
         ],
-        ['nested', optional(refine(decimal, (v): v is string => true)), '1.5'],
+        [
+            'nested',
+            refine(
+                refine(decimal, (v): v is string => true),
+                (v): v is string => true,
+            ),
+            '1.5',
+        ],
     ] as readonly (readonly [string, AnyCodec, unknown])[])(
         '%s writes N, as decimal does',
         (_name, codec, value) => {
@@ -822,8 +833,6 @@ describe('`admits`, and the direction of the law that is true', () => {
         ['record', record(decimal)],
         ['attributes', object({ a: string, b: number }).item],
         ['attributes(open)', object({ a: string }, decimal).item],
-        ['optional', optional(string)],
-        ['fallback', fallback(string, 'x')],
         ['nullable', nullable(string)],
         ['legacy', legacy({ current: decimal, older: string })],
         ['refine', refine(string, isTag, { arbitrary: () => 't-x' as const })],

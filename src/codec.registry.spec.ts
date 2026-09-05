@@ -57,7 +57,6 @@ const codecs: readonly (readonly [string, AnyCodec])[] = [
     ['tuple', tuple(string, number)],
     ['record', record(decimal)],
     ['map', object({ a: string, b: number })],
-    ['optional', optional(string)],
     ['nullable', nullable(string)],
     ['legacy', legacy({ current: decimal, older: string })],
     ['refine', refine(string, isTag, { arbitrary: () => 't-x' as const })],
@@ -128,7 +127,7 @@ describe('a definition generates what the codec generated', () => {
     // and be looked at. It stays as it is.
     it('covers every kind a codec can be', () => {
         const kinds = new Set(codecs.map(([, c]) => c.def?.kind))
-        expect(kinds.size).toBe(19)
+        expect(kinds.size).toBe(18)
         expect([...kinds].every(Boolean)).toBe(true)
     })
 })
