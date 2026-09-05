@@ -297,7 +297,7 @@ export type CodecDef =
     | { readonly kind: 'null' }
     | { readonly kind: 'opaque'; readonly numbers: opaque.Numbers }
     | { readonly kind: 'set'; readonly element: AnyCodec }
-    | { readonly kind: 'array'; readonly element: AnyCodec }
+    | { readonly kind: 'array'; readonly element: TermDef }
     | {
           readonly kind: 'tuple'
           readonly elements: readonly TermDef[]
@@ -1002,7 +1002,9 @@ export const admits = (codec: AnyCodec, value: unknown): boolean => {
         case 'array':
             return (
                 Array.isArray(value) &&
-                value.every((element) => admits(def.element, element))
+                value.every((element) =>
+                    admits(codecOfTerm(def.element), element),
+                )
             )
         case 'tuple': {
             if (!Array.isArray(value)) return false
@@ -1196,7 +1198,7 @@ const childrenOf = (
         case 'record':
             return one(def.value)
         case 'array':
-            return one(def.element)
+            return one(codecOfTerm(def.element))
         // a set is unordered, so no document path addresses a member of one — `set` never offered
         // a child either, and refusing here is what keeps a meaningless path from compiling
         case 'tuple': {
@@ -2184,7 +2186,7 @@ const denote = (def: TermDef): Pair => {
          * asked first — which is what `admits`' `array` row asks, and now what this asks too.
          */
         case 'array': {
-            const items = def.element
+            const items = codecOfTerm(def.element)
             return carriedCodec(
                 (value): value is readonly never[] => Array.isArray(value),
                 'L',
@@ -2987,7 +2989,7 @@ export const array = <const C extends AnyCodec>(
     type T = Decoded<C>
     return codecOfTerm<readonly T[], L<AttributeOf<C>>>({
         kind: 'array',
-        element: element as unknown as AttributeCodec<T>,
+        element: termOf(element as unknown as AnyCodec),
     })
 }
 
@@ -5406,8 +5408,10 @@ const identifying = (codec: AnyCodec): boolean => {
         case 'tagged':
             return true
         case 'set':
-        case 'array':
             return identifying(def.element)
+        // its own row until `set`'s element is a term too, at P11
+        case 'array':
+            return identifying(codecOfTerm(def.element))
         case 'tuple':
             return def.elements.every((element) =>
                 identifying(codecOfTerm(element)),

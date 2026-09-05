@@ -1014,7 +1014,11 @@ export const arbitraryOf = (
         }
         case 'array':
             return Array.from({ length: Math.floor(rng() * 3) }, () =>
-                arbitraryOf(def.element, rng, Math.max(0, size - 1)),
+                arbitraryOf(
+                    codecOfTerm(def.element),
+                    rng,
+                    Math.max(0, size - 1),
+                ),
             )
         case 'tuple': {
             const fixed = def.elements.map((element) =>
@@ -1177,7 +1181,7 @@ export const shrinkOf = (
         case 'array':
             return shrinkSequence(
                 value as readonly unknown[],
-                shrinkAt(def.element),
+                shrinkAt(codecOfTerm(def.element)),
                 0,
             )
         case 'tuple':
@@ -1890,8 +1894,9 @@ const unionsIn = (subject: AnyCodec): readonly UnionSite[] => {
                 return
             }
             case 'set':
-            case 'array':
                 return inner(def.element)
+            case 'array':
+                return inner(codecOfTerm(def.element))
             case 'record':
                 return inner(def.value)
             case 'tuple':
