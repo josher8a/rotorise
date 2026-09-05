@@ -998,14 +998,16 @@ export const arbitraryOf = (
              * `O(n log n)` times — as did re-asking `writes` which member the element writes, a
              * recursive walk of the element's definition, once per value.
              */
-            const member = writes(def.element)
+            const element = codecOfTerm(def.element)
+            const member = writes(element)
             const count = 1 + Math.floor(rng() * 3)
             const byStored = new Map<string, unknown>()
             for (let i = 0; i < count; i++) {
-                const value = arbitraryOf(def.element, rng, size)
-                const written = def.element.unsafeEncode(
-                    value as never,
-                ) as Record<string, unknown>
+                const value = arbitraryOf(element, rng, size)
+                const written = element.unsafeEncode(value as never) as Record<
+                    string,
+                    unknown
+                >
                 byStored.set(String(member ? written[member] : written), value)
             }
             return new Set(
@@ -1180,7 +1182,7 @@ export const shrinkOf = (
             // shrunk as a sequence and handed back as a set, which is what it is
             return shrinkSequence(
                 [...(value as ReadonlySet<unknown>)],
-                shrinkAt(def.element),
+                shrinkAt(codecOfTerm(def.element)),
                 1,
             ).map((shrunk) => new Set(shrunk as readonly unknown[]))
         case 'array':
@@ -1907,7 +1909,6 @@ const unionsIn = (subject: AnyCodec): readonly UnionSite[] => {
                 return
             }
             case 'set':
-                return inner(def.element)
             case 'array':
                 return inner(codecOfTerm(def.element))
             case 'record':

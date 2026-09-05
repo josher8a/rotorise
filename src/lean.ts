@@ -52,7 +52,14 @@
 import type { AttributeValue } from './attribute'
 import { isNumeral, isStoredNumeral, memberOf } from './attribute'
 import type { AnyCodec, CodecDef, Field } from './codec'
-import { admits, admitsAttribute, setBase, shapeOf, union } from './codec'
+import {
+    admits,
+    admitsAttribute,
+    codecOfTerm,
+    setBase,
+    shapeOf,
+    union,
+} from './codec'
 import { failed } from './result'
 
 /**
@@ -542,12 +549,12 @@ const leanTermOfDef = (def: CodecDef, at: string, forced: number): string => {
          * base — which would denote a codec that admits members this one rejects.
          */
         case 'set': {
-            const base = setBase(def.element)
-            if (!base || def.element.def?.kind !== base) {
+            const base = setBase(codecOfTerm(def.element))
+            if (!base || def.element.kind !== base) {
                 return refuse(
                     `${at}.element`,
                     base
-                        ? `a set of a *restricted* element — this one is a \`${def.element.def?.kind}\` over \`${base}\`. \`Term.set\` is indexed by a bare \`SetBase\`, and the lift \`setCodec_restrict\` is an equation between codecs rather than a term`
+                        ? `a set of a *restricted* element — this one is a \`${def.element.kind}\` over \`${base}\`. \`Term.set\` is indexed by a bare \`SetBase\`, and the lift \`setCodec_restrict\` is an equation between codecs rather than a term`
                         : 'a set whose element is not one of the four `SetBase` bases',
                 )
             }
