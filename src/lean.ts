@@ -630,7 +630,7 @@ const leanTermOfDef = (def: CodecDef, at: string, forced: number): string => {
                     ),
                 )
             }
-            return `Term.lazy (${leanTermOf(def.get(), `${at}.inner`, forced + 1)})`
+            return `Term.lazy (${leanTermOfDef(def.get(), `${at}.inner`, forced + 1)})`
         }
         case 'refine': {
             // recognised by reference against the function this package exported, so a rename or a

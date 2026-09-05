@@ -377,7 +377,18 @@ export type CodecDef =
               readonly decode: (held: never) => unknown
           }
       }
-    | { readonly kind: 'lazy'; readonly get: () => AnyCodec }
+    | {
+          readonly kind: 'lazy'
+          /**
+           * The term the thunk resolves to — a term, not a codec, as `Term.lazy`'s child is.
+           *
+           * **The memo key is what this returns**, so a declaration whose two forcings answered two
+           * different term objects would be one codec per forcing rather than one per term. That
+           * would be a defect in `lazy` and not a cache miss; `lazy` resolves once and holds the
+           * answer, which is what makes the key stable.
+           */
+          readonly get: () => TermDef
+      }
     /**
      * A codec written by hand, saying so.
      *
@@ -1070,7 +1081,7 @@ export const admits = (codec: AnyCodec, value: unknown): boolean => {
         case 'fallback':
             return admits(def.inner, value)
         case 'lazy':
-            return admits(def.get(), value)
+            return admits(codecOfTerm(def.get()), value)
         // the two that ask — see the note above. They ask different things, and the difference
         // is where the pair lives: `custom`'s two functions are data the definition carries, so
         // the definition answers; `opaque`'s codec is this library's own, reached through the
@@ -1178,7 +1189,7 @@ const childrenOf = (
         case 'legacy':
             return childrenOf(def.current, segment)
         case 'lazy':
-            return childrenOf(def.get(), segment)
+            return childrenOf(codecOfTerm(def.get()), segment)
         default:
             return []
     }
@@ -2418,8 +2429,8 @@ const denote = (def: TermDef): Pair => {
          */
         case 'lazy':
             return {
-                encode: (value) => def.get().encode(value),
-                decode: (attribute) => def.get().decode(attribute),
+                encode: (value) => codecOfTerm(def.get()).encode(value),
+                decode: (attribute) => codecOfTerm(def.get()).decode(attribute),
             }
         /**
          * §3 `(custom)`: the pair the term carries, returned. The row does not describe the set
@@ -2648,7 +2659,46 @@ const denote = (def: TermDef): Pair => {
  * with one reason between them is one reason nobody reads. `build.ts`'s `codec` is still the single
  * construction site: this hands it a pair instead of two hand-written halves.
  */
-const codecOfTerm = <T, A extends AttributeValue>(
+/**
+ * **One codec per term, for the life of the term.**
+ *
+ * A term is immutable by design and frozen at construction, so a codec built from one is a function
+ * of it and can be built once. The tree already assumes identity per term in at least one place —
+ * `testing.ts`'s `unionsIn` is "keyed on the *definition* rather than the codec, which is what stops
+ * a `lazy` cycle: a recursive entity hands back the codec it already walked, and its def is the same
+ * object" — and this makes that true rather than probable. The freeze is what the cache rests on: a
+ * mutation fails loudly instead of poisoning it.
+ */
+const codecs = new WeakMap<TermDef, AttributeCodec<never, AttributeValue>>()
+
+/**
+ * A declaration's term, refusing a §4 field where a term is wanted.
+ *
+ * `optional(c)` and `fallback(c, v)` denote a `Field`, and no `Term` position accepts one — which
+ * the positional guards refuse in the *type* at every site that could go wrong. This is the runtime
+ * half, at the one place a child is taken from a codec a caller handed over.
+ */
+export const termOf = (codec: AnyCodec): TermDef => {
+    const def = codec.def
+    if (def.kind === 'optional' || def.kind === 'fallback') {
+        throw new CodecError(
+            `\`${def.kind}\` marks a *field* — whether a name may be absent — and this position takes a term. The type says so too; this call reached here past a cast`,
+        )
+    }
+    return def
+}
+
+export const codecOfTerm = <T, A extends AttributeValue>(
+    def: TermDef,
+): AttributeCodec<T, A> => {
+    const built = codecs.get(def)
+    if (built) return built as unknown as AttributeCodec<T, A>
+    const made = buildCodec<T, A>(Object.freeze(def))
+    codecs.set(def, made as unknown as AttributeCodec<never, AttributeValue>)
+    return made
+}
+
+const buildCodec = <T, A extends AttributeValue>(
     def: TermDef,
 ): AttributeCodec<T, A> =>
     codec<T, A>({
@@ -3564,7 +3614,7 @@ export const lazy = <T, A extends AttributeValue = AttributeValue>(
     }
     return codecOfTerm<T, A>({
         kind: 'lazy',
-        get: () => inner() as AnyCodec,
+        get: () => termOf(inner()),
     })
 }
 
