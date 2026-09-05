@@ -358,7 +358,7 @@ export type CodecDef =
       }
     | {
           readonly kind: 'legacy'
-          readonly current: AnyCodec
+          readonly current: TermDef
           /**
            * The older reading, erased — `Term.legacy` carries `r : Attr → Option Value` and this
            * is that.
@@ -515,29 +515,11 @@ export type FieldDef = Extract<CodecDef, { readonly kind: FieldKind }>
  * **Every reader below answers from the definition and nothing else**, which is what makes the
  * definition determine the codec rather than describe it.
  *
- * They take a *codec* and read its definition, rather than taking the definition. That is not a
- * leftover: a definition's children **are codecs** — `array.element`, `refine.inner`,
- * `legacy.current` are each an `AnyCodec` — so a walk over a term goes term, codec, term, codec
- * whatever the parameter says. Measured when the question came up: giving these functions a
- * `TermDef` parameter moves the `.def` read from one place inside each of them to the forty-six
- * call sites outside, and adds five more where each recurses into a child. The count goes *up*.
- *
- * What would make them functions on the term is the children being terms, which is a change to the
- * definition rather than to the readers.
- *
- * **That change is scoped and not taken, and the reason is a measurement rather than a preference.**
- * A definition's children are codecs at **thirteen** positions, read at **138** sites across
- * `codec.ts`, `testing.ts` and `lean.ts`. Turning them into terms forces every one of those sites
- * to choose between rebuilding a codec — which reads `.def` straight back off what it just built —
- * and taking a term, which flips the readers' parameters and every call site outside them. The two
- * are one change, not two, and `3466409` took the first of the thirteen because `lazy`'s child is
- * computed rather than stored and carries the cache the rest would need.
- *
- * What the change is *for* is not the reader parameters: it is that twelve of `denote`'s
- * twenty-one rows reach into a child codec's **pair** rather than denoting a child term, which is
- * the codec round trip still sitting inside the semantics. That count — twelve — is the measure
- * for whoever takes it, not the `.def` count, which moves in both directions at once and settles
- * nowhere useful.
+ * They take a *codec* and read its definition rather than taking the definition, and that is the
+ * decision rather than a leftover. A child position holds a term, so a reader recursing into one
+ * calls `codecOfTerm`, which memoises on the frozen term and answers the codec that was already
+ * built. Giving the readers a `TermDef` parameter instead moves the `.def` read from one place
+ * inside each of them out to every call site.
  */
 
 /**
@@ -557,7 +539,7 @@ export const writes = (codec: AnyCodec): AttributeName | undefined => {
         case 'fallback':
             return writes(def.inner)
         case 'legacy':
-            return writes(def.current)
+            return writes(codecOfTerm(def.current))
         // an adapter changes what the value is *held* as and leaves what it is *stored* as alone,
         // which is the whole of it — so the member is the inner term's, unchanged
         case 'held':
@@ -647,7 +629,7 @@ export const carries = (codec: AnyCodec): readonly Shape[] | undefined => {
         case 'fallback':
             return carries(def.inner)
         case 'legacy':
-            return carries(def.current)
+            return carries(codecOfTerm(def.current))
         // and this one deliberately does *not* read through. An adapter exists precisely to change
         // the kind of value held — `held(string.set(), ...)` takes an array where `string.set()` takes
         // a `Set` — so the inner codec's answer would be the wrong one. Nothing about the definition
@@ -725,7 +707,7 @@ export const occupies = (codec: AnyCodec): readonly Slot[] | undefined => {
         case 'fallback':
             return occupies(def.inner)
         case 'legacy':
-            return occupies(def.current)
+            return occupies(codecOfTerm(def.current))
         // an adapter's `f` runs *before* the subterm and can move the value into any constructor,
         // so there is nothing here to read — the same reason `carries` declines, one row down
         case 'held':
@@ -1098,7 +1080,7 @@ export const admits = (codec: AnyCodec, value: unknown): boolean => {
             }
         // a read widening writes what it currently is, and the older readings are read-side only
         case 'legacy':
-            return admits(def.current, value)
+            return admits(codecOfTerm(def.current), value)
         // the same ownership question the constructor asks: where the inner term owns the null
         // point, `nullable` is that term and `null` is admitted only if the term admits it
         case 'nullable':
@@ -1218,7 +1200,7 @@ const childrenOf = (
         case 'nullable':
             return childrenOf(def.inner, segment)
         case 'legacy':
-            return childrenOf(def.current, segment)
+            return childrenOf(codecOfTerm(def.current), segment)
         case 'lazy':
             return childrenOf(codecOfTerm(def.get()), segment)
         default:
@@ -2395,7 +2377,7 @@ const denote = (def: TermDef): Pair => {
          * migrated row and reported at the next write instead of at this read.
          */
         case 'legacy': {
-            const current = def.current
+            const current = codecOfTerm(def.current)
             const older = def.older
             return {
                 encode: (value) => current.encode(value),
@@ -3612,7 +3594,7 @@ export const legacy = <T, A extends AttributeValue>({
     // because an older reader can decode this attribute into something else entirely
     codecOfTerm<T, A>({
         kind: 'legacy',
-        current: current as AnyCodec,
+        current: termOf(current as unknown as AnyCodec),
         older,
     })
 
@@ -5427,7 +5409,7 @@ const identifying = (codec: AnyCodec): boolean => {
         case 'fallback':
             return identifying(def.inner)
         case 'legacy':
-            return identifying(def.current)
+            return identifying(codecOfTerm(def.current))
         default:
             return false
     }
