@@ -1575,6 +1575,8 @@ const denote = (def: TermDef): Pair => {
             return groundCodec('string', 'S', 'a string', "an 'S'")
         case 'boolean':
             return groundCodec('boolean', 'BOOL', 'a boolean', "a 'BOOL'")
+        case 'binary':
+            return groundCodec('binary', 'B', 'a `Uint8Array`', "a 'B'")
         default:
             throw new CodecError(
                 `\`${def.kind}\` is not ported to \`denote\` yet — this is reachable only from a constructor that has not been switched, and no such constructor calls it`,
@@ -1812,15 +1814,8 @@ export type BinaryCodec = AttributeCodec<Uint8Array, Attribute<'B'>> & {
     }
 }
 
-const binaryCodec: AttributeCodec<Uint8Array, Attribute<'B'>> = codec({
-    def: { kind: 'binary' },
-    encode: (value) =>
-        shapeOf(value) === 'binary'
-            ? carrying('B', value)
-            : new CodecError(
-                  `${describeShape(value)} is not a \`Uint8Array\`, and \`binary\` writes a 'B' — a codec's input is typed, so this is a value that reached \`encode\` past its type`,
-              ),
-    decode: (attribute) => expect('B', attribute),
+const binaryCodec: AttributeCodec<Uint8Array, Attribute<'B'>> = codecOfTerm({
+    kind: 'binary',
 })
 
 /** @see {@link BinaryCodec} */
