@@ -679,13 +679,18 @@ export const occupies = (codec: AnyCodec): readonly Slot[] | undefined => {
             return occupies(def.inner)
         case 'legacy':
             return occupies(def.current)
-        case 'lazy':
-            return occupies(def.get())
         // an adapter's `f` runs *before* the subterm and can move the value into any constructor,
         // so there is nothing here to read — the same reason `carries` declines, one row down
         case 'held':
         case 'custom':
         case 'opaque':
+            return undefined
+        // **and `lazy` answers `⊤` rather than the subterm's**, where the model reads through.
+        // `Term.lazy` carries a plain `Term`, so `occV (.lazy t) = occV t` costs the model nothing;
+        // this carries a *thunk*, and forcing one at declaration time is a reference to a binding
+        // that may not exist yet — the reason {@link nullable} defers its ownership probe to first
+        // use. {@link carries} declines for the same reason and says so.
+        case 'lazy':
             return undefined
         case 'nullable': {
             const inner = occupies(def.inner)
@@ -756,8 +761,9 @@ export const reads = (
         case 'fallback':
         case 'held':
             return reads(def.inner)
+        // `⊤`, and not the subterm's: forcing a thunk at declaration time is what
+        // {@link occupies} declines to do, for the reason recorded there
         case 'lazy':
-            return reads(def.get())
         case 'legacy':
         case 'custom':
         case 'opaque':
@@ -5700,9 +5706,10 @@ export const union = <const Options extends readonly AnyCodec[]>(
      * **The reason they are ambiguous has changed, and narrowed.** It used to be that neither
      * checked what was in it, because encoding did not validate. Both check now, and the pair is
      * still refused — over exactly one value, `[]`, the one array carrying nothing to tell them
-     * apart. `set` has no such value and separates; see {@link separatedByElements}, which is the
-     * exemption that follows. Reporting any of this per-encode would report it once per write
-     * forever instead of once at import.
+     * apart. `set` has no such value and separates, and it separates by the *occupancy* rather than
+     * by an exemption: `set(string)` writes a `strSet` where `set(number)` writes a `numSet`.
+     * Reporting any of this per-encode would report it once per write forever instead of once at
+     * import.
      *
      * Two exemptions, and both are options that identify themselves:
      *
@@ -5751,37 +5758,43 @@ export const union = <const Options extends readonly AnyCodec[]>(
      * import time to ask about. The resolver is where `admits` replaced trying; the declaration
      * guard is where it structurally cannot.
      */
-    const separatedByElements = (first: Option, second: Option): boolean => {
-        const one = first.codec.def
-        const other = second.codec.def
-        if (one?.kind !== 'set' || other?.kind !== 'set') return false
-        const held = carries(one.element)
-        const alsoHeld = carries(other.element)
-        return (
-            !!held &&
-            !!alsoHeld &&
-            !held.some((kind) => alsoHeld.includes(kind))
-        )
-    }
+    /**
+     * Where two answers meet, with `⊤` on either side meaning "not compared".
+     *
+     * `undefined` is the third exemption: an option whose occupancy is unknown — an adapter, a
+     * `custom`, an `opaque` — could be anything, and refusing it against everything would refuse
+     * unions that work. The model takes the same direction for the same reason: over-approximating
+     * an occupancy is safe, so a pair involving one is simply not certified rather than refused.
+     */
+    const meeting = <A>(
+        one: readonly A[] | undefined,
+        other: readonly A[] | undefined,
+    ): A | undefined =>
+        one && other ? one.find((x) => other.includes(x)) : undefined
 
     for (let i = 0; i < all.length; i++) {
         for (let j = i + 1; j < all.length; j++) {
             const first = all[i] as Option
             const second = all[j] as Option
+            // exemption two: an object option is chosen by the names present, never by being tried
             if (first.declares || second.declares) continue
+            // exemption one: a literal knows which values are its own, so trying it is a real
+            // question — and it propagates through containers, which is what keeps
+            // `union([array(string('A')), array(string('B'))])` declarable
             if (identifies(first) || identifies(second)) continue
-            if (separatedByElements(first, second)) continue
-            const shared = first.carries?.find((kind) =>
-                second.carries?.includes(kind),
+            const bothWrite = meeting(
+                occupies(first.codec),
+                occupies(second.codec),
             )
-            if (shared) {
+            if (bothWrite) {
                 throw new CodecError(
-                    `${first.describe} and ${second.describe} both take the same kind of value — ${shared} — and neither checks what it is given, so no value can choose between them; give the entity a discriminator and use discriminatedUnion`,
+                    `${first.describe} and ${second.describe} both take the same kind of value — ${bothWrite} — and neither checks what it is given, so no value can choose between them; give the entity a discriminator and use discriminatedUnion`,
                 )
             }
-            if (first.member !== undefined && first.member === second.member) {
+            const bothRead = meeting(reads(first.codec), reads(second.codec))
+            if (bothRead) {
                 throw new CodecError(
-                    `${first.describe} and ${second.describe} both store '${first.member}', and neither checks what it reads, so no stored attribute can choose between them; give the entity a discriminator and use discriminatedUnion`,
+                    `${first.describe} and ${second.describe} both store '${bothRead}', and neither checks what it reads, so no stored attribute can choose between them; give the entity a discriminator and use discriminatedUnion`,
                 )
             }
         }
