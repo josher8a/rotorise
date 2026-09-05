@@ -984,7 +984,9 @@ export const arbitraryOf = (
              * construction, so a throw is a bug in the adapter and belongs at the top of a property
              * run rather than folded into a value.
              */
-            return def.adapt.decode(arbitraryOf(def.inner, rng, size) as never)
+            return def.adapt.decode(
+                arbitraryOf(codecOfTerm(def.inner), rng, size) as never,
+            )
         case 'set': {
             /**
              * Deduplicated by what is *stored*, as the codec does — two values that write the same
@@ -1161,9 +1163,10 @@ export const shrinkOf = (
             return shrinkUnknown(value)
         case 'held':
             // shrunk on the inner side, where the definition knows how, and handed back out
-            return shrinkOf(def.inner, def.adapt.encode(value as never)).map(
-                (shrunk) => def.adapt.decode(shrunk as never),
-            )
+            return shrinkOf(
+                codecOfTerm(def.inner),
+                def.adapt.encode(value as never),
+            ).map((shrunk) => def.adapt.decode(shrunk as never))
         case 'set':
             // shrunk as a sequence and handed back as a set, which is what it is
             return shrinkSequence(
@@ -1904,8 +1907,9 @@ const unionsIn = (subject: AnyCodec): readonly UnionSite[] => {
             case 'optional':
             case 'nullable':
             case 'fallback':
-            case 'held':
                 return inner(def.inner)
+            case 'held':
+                return inner(codecOfTerm(def.inner))
             case 'legacy':
                 return inner(def.current)
             case 'lazy':

@@ -375,7 +375,7 @@ export type CodecDef =
       }
     | {
           readonly kind: 'held'
-          readonly inner: AnyCodec
+          readonly inner: TermDef
           /** The two halves of the isomorphism, erased — see {@link held}. */
           readonly adapt: {
               readonly encode: (value: never) => unknown
@@ -559,9 +559,9 @@ export const writes = (codec: AnyCodec): AttributeName | undefined => {
         case 'legacy':
             return writes(def.current)
         // an adapter changes what the value is *held* as and leaves what it is *stored* as alone,
-        // which is the whole of it — so the member is the inner codec's, unchanged
+        // which is the whole of it — so the member is the inner term's, unchanged
         case 'held':
-            return writes(def.inner)
+            return writes(codecOfTerm(def.inner))
         /**
          * A set's member follows from its element, which the definition carries — so this is derived
          * rather than absent.
@@ -806,8 +806,10 @@ export const reads = (
         case 'refine':
         case 'optional':
         case 'fallback':
-        case 'held':
             return reads(def.inner)
+        // its own row while the other three still carry codecs; the four rejoin when they do
+        case 'held':
+            return reads(codecOfTerm(def.inner))
         // `⊤`, and not the subterm's: forcing a thunk at declaration time is what
         // {@link occupies} declines to do, for the reason recorded there
         case 'lazy':
@@ -1086,7 +1088,10 @@ export const admits = (codec: AnyCodec, value: unknown): boolean => {
          */
         case 'held':
             try {
-                return admits(def.inner, def.adapt.encode(value as never))
+                return admits(
+                    codecOfTerm(def.inner),
+                    def.adapt.encode(value as never),
+                )
             } catch {
                 return false
             }
@@ -2363,7 +2368,7 @@ const denote = (def: TermDef): Pair => {
         }
         /** §3 `(held)`. `lawful_through` is the lemma; the adapter is data the term carries. */
         case 'held':
-            return heldThrough(def.inner, def.adapt)
+            return heldThrough(codecOfTerm(def.inner), def.adapt)
         /** §3 `(refine)`. `lawful_restrict` is the lemma; `q` is data the term carries. */
         case 'refine':
             return restrict(
@@ -3518,7 +3523,7 @@ export const held = <T, const C extends AnyCodec>(
      */
     return codecOfTerm<T, AttributeOf<C>>({
         kind: 'held',
-        inner: inner as unknown as AnyCodec,
+        inner: termOf(inner as unknown as AnyCodec),
         adapt: adapt as CodecDefHeldAdapt,
     })
 }
