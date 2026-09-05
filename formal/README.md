@@ -23,7 +23,7 @@ definition it touches.
 | `Calculus/Nesting.lean`     | §1          | **The one place `𝔸` is bigger in the model than in the store.** `Attr.Storable` (`Domain.lean`) is §1's 32-level bound, counting `L` and `M` only — a different function from `Attr.depth`, which is a termination measure and charges a wire set a layer. The ground fragment writes nesting `0`, containers add exactly one, and `not_storable_of_typed` exhibits a **derivable** term whose encoding the store refuses: the bound is absent from §3's rules rather than a premise someone failed to discharge |
 | `Calculus/Refutations.lean` | §6          | §6's "Do not hold" table, all nine settled: `not_equiv_lazy` (the row where `≡`'s member index matters), `not_equiv_union_array`, `not_equiv_union_extend`, the two `tuple`-tail rows, `not_equiv_refine_held`, `legacy_breaks_MP`, `e_comp_p_ne_id` — plus `optional` nesting and `set(union(…))`, both of which the syntax rules out |
 | `Calculus/Axioms.lean`      | §3          | `#assert_axioms`, and the headline theorems run through it — the advertised axiom base (`propext`, `Quot.sound`, the `Double` axioms; **no `Classical.choice`**) as a build error rather than a claim in prose |
-| `Calculus/Discharge.lean`   | §5          | The machinery of (K): `κ`, `ident`, `adm`/`admA` as structural recursions (`Kind` itself is §1, and lives in `Domain.lean` on both sides of the pair), `κ_sound`/`adm_sound`/`admA_sound`, and `uAtCan_of_separated` — the dischargers of (U), proved, with witnesses and the two counterexamples that repaired (K)                       |
+| `Calculus/Discharge.lean`   | §5          | The machinery of (K): `κ`, `ident`, `adm`/`admA` as structural recursions (`Kind` itself is §1, and lives in `Domain.lean` on both sides of the pair), `κ_sound`/`adm_sound`/`admA_sound`, and the discharges of (U) that no phase of `Orth` reaches, with the two counterexamples that repaired (K). The per-aspect separation layer this file carried is retired; `Calculus/Orthogonality.lean` states the discharge on what `select` consults |
 
 **The mechanization is complete: the project builds with zero `sorry`.** Both halves
 of §5's soundness theorem are machine-checked — `soundness` (all four laws, (MP) with
@@ -116,9 +116,9 @@ and the judgement to it), and `lazy` concludes `⊤` in the model exactly as the
   became structural. `(nullable)` is not in the list either: `NullHonest` left `Obligations`
   when §3's guard made it derivable.
 - **(U) is a premise, not a conclusion** (`UAtCan`), matching the doc's theorem residue.
-  Its disjointness dischargers are proved (`Calculus/Discharge.lean`): pairwise-disjoint
-  `κ` settles the value side, pairwise-distinct named members the attribute side.
-  `uAtCan_string_boolean` witnesses that the six premises are jointly satisfiable.
+  Its disjointness dischargers are proved: pairwise-disjoint `κ` settles the value side,
+  pairwise-distinct named members the attribute side, and `Calculus/Orthogonality.lean`
+  decides both for the phases a syntactic certificate can reach.
 - **§5's (D) is not a discharger of (U), and the doc is fixed.** (D) is a condition on
   held sets — sets of *values* — while (U)'s readable side quantifies over *attributes*,
   and `held`'s adapter relabels between them. `not_uAtCan_literal_held` exhibits
@@ -134,9 +134,8 @@ and the judgement to it), and `lazy` concludes `⊤` in the model exactly as the
   `not_uAtCan_array_literals` (two-sided `ident` — `ident` propagates through `array`,
   but disjointness of the admissible sets does not, and both options admit `[]`). §5 now
   states (K) with `adm`, the set an `ident` term checks against, disjoint on both sides;
-  `adm`/`admA` and the combined `uAtCan_of_separated` mechanize it, with
-  `uAtCan_of_disjoint` its kind/member half and `uAtCan_literal_literal` discharging
-  §5's own worked example — a pair that shares both `κ` and `⇝`, so only `adm` reaches
+  `adm`/`admA` mechanize the tables, and `Calculus/Orthogonality.lean` discharges §5's own
+  worked example — a pair that shares both `κ` and `⇝`, so only the admissible sets reach
   it.
 
 ## Is the model the specification?
@@ -193,7 +192,8 @@ A numeric literal's read side goes through the axiomatized `Double.ofDec`, so no
 set bounds it — and the row does not have to name its set, it can ask its codec, `ofDec` being
 a function is enough to make the answer unique. `admA`'s `number` row and `admALit`'s `.number`
 row are `dom(p)`
-exactly (`sepA_number_opaque`, `sepA_literalN_disjoint`). The store observation survives on the
+exactly, which is what separates `opaque` from `number` and two disjoint numeric literals from
+each other. The store observation survives on the
 other side of the pair — `Lawful.retract_through_store`, which is (R) asked through any
 transformation the store may apply: a literal's stored texts are known at the declaration, but
 `10²¹` is written `1e+21` and handed back normalised, so a row testing the *text* would refuse a

@@ -31,8 +31,9 @@ noncomputable def semsOf (opts : List Term) : List OptionSem :=
   opts.map fun t' => optionSemOf (denote t') (specOf t')
 
 /-- §5 (U) at canonical inputs: every canonical attribute of an option is admitted by
-    that option alone, on both sides. The strong form, and what the disjointness
-    dischargers of `Calculus.Discharge` produce (`uAtCan_of_disjoint`). -/
+    that option alone, on both sides. The strong form, and what the dischargers produce —
+    `Calculus.Orthogonality`'s `uAtCan_of_orth` and `uAtCan_of_separates`, and the hand
+    proofs in `Calculus.Discharge` that no phase of the classifier reaches. -/
 def UAtCan (opts : List Term) : Prop :=
   UniqueAdmission (semsOf opts)
 
