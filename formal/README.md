@@ -23,7 +23,7 @@ definition it touches.
 | `Calculus/Nesting.lean`     | §1          | **The one place `𝔸` is bigger in the model than in the store.** `Attr.Storable` (`Domain.lean`) is §1's 32-level bound, counting `L` and `M` only — a different function from `Attr.depth`, which is a termination measure and charges a wire set a layer. The ground fragment writes nesting `0`, containers add exactly one, and `not_storable_of_typed` exhibits a **derivable** term whose encoding the store refuses: the bound is absent from §3's rules rather than a premise someone failed to discharge |
 | `Calculus/Refutations.lean` | §6          | §6's "Do not hold" table, all nine settled: `not_equiv_lazy` (the row where `≡`'s member index matters), `not_equiv_union_array`, `not_equiv_union_extend`, the two `tuple`-tail rows, `not_equiv_refine_held`, `legacy_breaks_MP`, `e_comp_p_ne_id` — plus `optional` nesting and `set(union(…))`, both of which the syntax rules out |
 | `Calculus/Axioms.lean`      | §3          | `#assert_axioms`, and the headline theorems run through it — the advertised axiom base (`propext`, `Quot.sound`, the `Double` axioms; **no `Classical.choice`**) as a build error rather than a claim in prose |
-| `Calculus/Discharge.lean`   | §5          | The **withdrawn** machinery of (K): `κ`, `ident`, `adm`/`admA` as structural recursions (`Kind` itself is §1, and lives in `Domain.lean` on both sides of the pair), `κ_sound`/`adm_sound`/`admA_sound`, and the discharges of (U) that no phase of `Orth` reaches, with the two counterexamples that repaired (K). §5 states (K) on option admission and occupancy now, so the four tables are a record and not a transcription; the per-aspect separation layer this file carried is retired, and `Calculus/Orthogonality.lean` states the discharge on what `select` consults |
+| `Calculus/Discharge.lean`   | §5          | The discharges of (U) that no phase of `Orth` reaches — an arbitrary `q` inside a `refine`, a union of numeric literals, `(dunion)` and `opaque`, and `uAtAct_array_literals` where `UAtCan` is outright false — with the two counterexamples that repaired (K) and the refutation of (D) as a discharger. The four per-aspect tables this file used to carry are retired: §5 states (K) on option admission and occupancy, `Calculus/Exactness.lean` proves those rows exact, and `Calculus/Orthogonality.lean` decides the pairs a declaration can decide |
 
 **The mechanization is complete: the project builds with zero `sorry`.** Both halves
 of §5's soundness theorem are machine-checked — `soundness` (all four laws, (MP) with
@@ -190,7 +190,7 @@ soundness. `union`'s commutativity is proved for the adjacent transposition, whi
 generates every permutation, and lifting it to `List.Perm` is the obvious next step.
 A numeric literal's read side goes through the axiomatized `Double.ofDec`, so no *syntactic*
 set bounds it — and the row does not have to name its set, it can ask its codec, `ofDec` being
-a function is enough to make the answer unique. `admA`'s `number` row and `admALit`'s `.number`
+a function is enough to make the answer unique. `AdmA`'s `number` row and `AdmALit`'s `.number`
 row are `dom(p)`
 exactly, which is what separates `opaque` from `number` and two disjoint numeric literals from
 each other. The store observation survives on the

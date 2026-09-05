@@ -253,9 +253,8 @@ so `T` must stay `dom(ce)` or a `Carrier` field must ride along too, and `μSyn`
 fix `μ := none`. What it buys is the `Obligations` row (2 lines) joining the `True` list and one
 3-line accessor — **five lines, against ~33 pattern and statement sites in 8 files**. Only one of
 the four `Soundness` custom cases actually shrinks; `carrier_denote`'s still builds `Carrier` by
-hand. And it would strip the arbitrary pair out of `adm_custom`, `admA_custom` and
-`adm_custom_exact`, whose content *is* the arbitrariness — `adm_custom`'s docstring says so:
-"not a bound on the pair but the pair itself". Last, it is the one instance of this move that
+hand. And it would strip the arbitrary pair out of the `custom` rows, whose content *is* the
+arbitrariness: not a bound on the pair but the pair itself. Last, it is the one instance of this move that
 crosses a stated decision rather than realizing one: `Term.lean:11` says `custom` "carries its
 pair as data; its *laws* are premises of the typing rule (§3), exactly as in the doc", and
 `Typing.lean`'s header puts the *syntactic* premises in `Typed` and the *semantic* ones —
@@ -282,11 +281,11 @@ killed it is the shape of that cost, not its size.
 
 ### 4b. A row asks its codec instead of describing it
 
-The analysis tables in `Discharge.lean` (`κ`, `ident`, `adm`, `admA`) approximate what a codec
-writes and reads. **`docs/codec-calculus.md` no longer states them**: §5 states (K) on option
-admission and occupancy, and the four tables stay in the model until the pass that retires them.
-The rows below are still the pattern this section is about, and the newest of them —
-`AdmA`'s — is in the generation that survives. A row can either *describe* the set or *call the codec and ask*. `custom`
+A row can either *describe* the set it stands for or **call the codec and ask**. The pattern is
+this section's subject, and the table below is every row that converted. Four of the rows named
+in it were rows of the per-aspect tables that `Discharge.lean` carried; those tables are gone,
+and the rows that survive are `Adm`'s and `AdmA`'s. The pattern is what survives them, and it
+is the reason the exact generation could be written at all. A row can either *describe* the set or *call the codec and ask*. `custom`
 always asked (`(cp a).isSome`, because `p := cp`). Over two arcs **seven** more converted —
 `admA .legacy` is the newest and the last of that shape — and one row below,
 `admALit .decimal`, was written that way from the start:
@@ -300,15 +299,15 @@ always asked (`(cp a).isSome`, because `p := cp`). Over two arcs **seven** more 
 | `refine` (read side) | `refineReads t q a` | "`q` tests the value a read produces" |
 | `nullable` | `Codec.ownsNull` | "`ownsNull` is a disjunction over both halves of the pair" |
 | `union` | the count, given the options' exactness | "a count is anti-monotone" — true of the *table*, recorded as a fact about the row |
-| `admA .legacy` | `admA t a \|\| (r a).isSome` — the subterm's row, or `r` | "`extendRead` widens `p` past the subterm's admissible set, which is the direction `admA` bounds" |
+| `AdmA .legacy` | `AdmA t a \|\| (r a).isSome` — the subterm's row, or `r` | "`extendRead` widens `p` past the subterm's admissible set, which is the direction the read row bounds" |
 
 **The last row is the odd one and the difference matters.** It does not ask its codec; it names
 both of `r`'s and the subterm's channels and takes the union, keeping the subterm's
 *over-approximation* rather than reaching past it. Asking was probed — the row
 `((denote (.legacy t r)).p a).isSome` is exact and compiles at a one-line cost — and **refused**,
 because it sees through `admA (.object _) = ⊤`, which §5 records as load-bearing slack rather
-than looseness. Two objects cannot be separated by a disjointness test on `admA` (both rows are
-`⊤`); wrapped in a `legacy` they could be, while `select` still attempts both options, which is
+than looseness. Two objects cannot be separated by a disjointness test on the read-side row of
+the retired table (both were `⊤`); wrapped in a `legacy` they could be, while `select` still attempts both options, which is
 `not_uAtCan_of_sepJ`'s failure one wrapper out. So this row is as sharp as it can be *without* becoming unsound, and
 the excuse it retired was still a correct observation reaching a wrong conclusion: what
 `extendRead` widens *by* is `r`, data the term carries. `Exactness.lean`'s "why `legacy` was in
@@ -328,7 +327,7 @@ already.
 ### 4c. One codec, stated once for both sides of the pair
 
 `Combinators.lean` is <!-- count:combinators_lines -->4002<!-- /count --> lines of the tree's
-<!-- count:tree_lines -->17613<!-- /count -->, and this is its organizing idea; without it
+<!-- count:tree_lines -->16230<!-- /count -->, and this is its organizing idea; without it
 the file reads as the inventory `README.md` already has. A constructor is a **prism** —
 `Ctor α β`, with `into`/`out` and the laws `out_into` (matching what was built returns it) and
 `into_out` (anything that matches was built) — and those two *are* §2's (R) and (C) at a
@@ -378,19 +377,17 @@ as a refactor estimate (`scripts/blast_radius.lean`). None of them was added spe
 
 ## 5. Generations of analysis: two that stay, one that does not pay
 
-`Discharge.lean` holds the per-aspect approximations `κ`, `ident`, `adm` and `admA`; the fifth
-aspect, `μSyn`, is `Denote.lean`'s, because `denote` needs the member index itself. The separation
-predicates ~~SepV~~ and ~~SepA~~ that ran on them, each a **two-disjunct** disjunction (labels
-disjoint, *or* admissible sets disjoint), went with the layer at `f5fc4a6`, and this sentence said
-they were still here.
+`Discharge.lean` used to hold four per-aspect approximations — a kind table, a
+decides-its-own-membership table, and one admissible-set table per side — with the separation
+predicates ~~SepV~~ and ~~SepA~~ running on them, each a **two-disjunct** disjunction (labels
+disjoint, *or* admissible sets disjoint). The predicates went at `f5fc4a6` and the four tables
+went with the pass that retired them from the model. The fifth aspect, `μSyn`, is
+`Denote.lean`'s, because `denote` needs the member index itself, and it stays.
 
 Every discharger in this section is one appeal to `uniqueAdmission_of_disjoint`
 (`Combinators.lean`), which takes two families of allowed values, one per side, and asks only
 that each be pairwise disjoint. Kinds, members, tags and admissible sets are *ways of building*
-those families rather than four conditions. `Adm_le_adm` is the containment between the two
-generations of the tables — it fed the older generation's dischargers until those were retired,
-and it now relates `adm` to `Adm` and nothing else. It is kept because the older generation is
-kept, not because anything reads it.
+those families rather than four conditions.
 
 `Exactness.lean` holds the joint predicate `Adm`/`AdmA`, exact at **all twenty-one**
 constructors: `Adm_exact : ∀ t, ExactV t` and `AdmA_exact : ∀ t, ExactA t`, no hypothesis, no
@@ -456,68 +453,63 @@ Nothing was lost that anything else can state. What the layer proved by hand in 
 and *alternatives*, `Orthogonality.lean` reaches by `decide`, and its by-phase table now lists
 what only exists by hand rather than what is duplicated. The discharges no phase reaches —
 an arbitrary `q` inside a `refine`, and `uAtAct_array_literals` where `UAtCan` is outright
-false — were never phrased in the retired vocabulary and stay where they were. So do the four
-tables `κ`, `ident`, `adm` and `admA`, which the exact generation still reaches through
-`Adm_le_adm` and `AdmA_le_admA`. **`docs/codec-calculus.md` has stopped specifying them**: §5
-states (K) on option admission and occupancy, so what the four hold is the record of the
-analysis the section withdrew. Retiring them from the model is the pass that follows, and it
-is a deletion nobody has made yet.
+false — were never phrased in the retired vocabulary and stay where they were. **The four
+tables are gone**, with the containments that related them to
+the exact generation. §5 stopped specifying them, and a transcription of an analysis nothing
+states and nothing consumes is a description with nothing keeping it honest.
 
 Two citations the walk overturned on the way, both the shape its own header warns about. The
 combined discharger appeared in `Exactness.lean` five times and its kind/member half in
 `Soundness.lean` once, and **every one of those was prose or a docstring** — no proof outside
-`Discharge.lean` used either, so a grep for them was counting sentences. The one real use
-outside `Discharge.lean` was the read-side bridge, which is deleted with the rest.
+`Discharge.lean` used either, so a grep for them was counting sentences.
 
-So: `Discharge.lean` keeps the tables and loses the layer, and if you sharpen an `adm` row at a
-container, check whether you have just broken a discharge that was relying on the slack.
+**Three things the walk got right and one it got wrong.** It costs a *declaration*, never a
+change to a row's body: measured on the `admA .legacy` sharpening (§4b), the partition was
+identical before and after, name for name, because the walk measures dependence on a **name**.
+It reported no positive result in `Soundness` or `Exactness` naming the retired tables in a
+statement, and the deletion bore that out. And where it did report a dependent, the dependent
+was real.
 
-**And do not expect `scripts/blast_radius.lean` to cost that**, which this section used to say
-it did. Measured on the `admA .legacy` sharpening (§4b): the four-way partition is *identical*
-before and after — 75 old-only, 19 both, 136 new-only, 1433 neither — and the old-only set is
-unchanged name for name. It has to be: the walk measures dependence on a **name**, and
-sharpening a row changes a definition's *body*, not who depends on it. The instrument costs
-deleting or replacing a declaration; it is blind to a row that stays and says something
-different.
-
-**Its root set was incomplete, against its own stated method, and is not now.** The header says
-every member of a mutual family is named as a root by hand, because mutual members reference each
-other in no constant's value — and `genOld` named the `adm` family while omitting `κ`, `κList`,
-`ident` and `identList`, which understated the older generation by ten declarations. It also still
-named ~~SepV~~ and ~~SepA~~ after those were deleted. The list is now the nine members of the four
-tables, and the partition it measures is **55 old-only, 20 both, 135 new-only, 1467 neither**. The
-numbers quoted above the §4b comparison are the *older* roots' and are kept only because that
-comparison is a before-and-after of one root set. What caught the consequence of the omission was
-the build (`AdmA_le_admA`'s `legacy` case stopped being `rfl`), and what caught the *hazard* was
-reading this section. Neither is an instrument.
+What it got wrong is that its own root list is a declaration too. The list named two
+declarations that `f5fc4a6` had deleted and omitted four that it had not, which understated
+the older generation by ten. Worse, `name_drift.py` reads `scripts/*.lean`: the two dead
+entries were *clearing* every prose citation of those two names across the tree, so the guard
+that exists to catch dangling names was answering with a dangling name of its own. Correcting
+the list surfaced 21 citations at once. **An instrument's inputs go stale exactly as prose
+does, and nothing was checking these.** The file now says so where the lists are, and the
+lists are an example question rather than a standing one: the two-generation question they
+were written for is answered and gone.
 
 ### And a third machine, `Orth`, which does not pay — measured
 
-`Orthogonality.lean` is the fifth-largest file at <!-- count:orth_file_lines -->984<!-- /count --> lines — `Soundness.lean` is 1032 —: a decidable certificate for a
+`Orthogonality.lean` is the fourth-largest file at <!-- count:orth_file_lines -->987<!-- /count --> lines — `Soundness.lean` is 1033 —: a decidable certificate for a
 fragment of (U), over-approximating each term's occupancy per side (`occV`/`occA`) and
 certifying a pair whose occupancies are disjoint, `by decide`. **Measured against what it
-replaces it does not pay**, and its own by-phase table is the measurement — the <!-- count:orth_total_theorems -->13<!-- /count --> hand
-discharges it names, 23 as rows and 2 in the prose beneath them, out of a
-<!-- count:sep_family -->16<!-- /count -->-theorem `sep*`/`uAtCan_*`/`uAtAct_*` family:
+replaces it does not pay**, and its own by-phase table is the measurement — the <!-- count:orth_total_theorems -->10<!-- /count --> hand
+discharges it names, eight as rows and two in the prose beneath them, out of a
+<!-- count:sep_family -->13<!-- /count -->-theorem `sep*`/`uAtCan_*`/`uAtAct_*` family:
 
 | | theorems | lines of proof |
 | --- | --- | --- |
 | reachable by `Orth` itself — phase *slot* | <!-- count:orth_slot_theorems -->0<!-- /count --> | <!-- count:orth_slot_lines -->0<!-- /count --> |
-| reachable only through `Separates`, the `Prop` interface — phase *alternatives*, where `DecidableEq Double` makes a `Bool` test noncomputable | <!-- count:orth_alt_theorems -->4<!-- /count --> | <!-- count:orth_alt_lines -->34<!-- /count --> |
+| reachable only through `Separates`, the `Prop` interface — phase *alternatives*, where `DecidableEq Double` makes a `Bool` test noncomputable | <!-- count:orth_alt_theorems -->1<!-- /count --> | <!-- count:orth_alt_lines -->25<!-- /count --> |
 | unreachable on principle — an arbitrary `q` or `f`, a different constructor, `SepJA`'s member disjunct, or `UAtCan` itself failing (`uAtAct_array_literals`) | <!-- count:orth_unreach_theorems -->9<!-- /count --> | <!-- count:orth_unreach_lines -->145<!-- /count --> |
 
 *This table counted the hand proofs against what `Orth` reaches, and the layer it was
 counting is gone.* Every theorem it found **reachable** was phrased in the retired per-aspect
 vocabulary and was deleted with it, `Orth` being what certifies those pairs now — which is why
-the reachable total is <!-- count:orth_reachable_lines -->34<!-- /count --> lines rather than the
+the reachable total is <!-- count:orth_reachable_lines -->25<!-- /count --> lines rather than the
 145 measured before the deletion. What is left in the unreachable column is the answer the
 table was built to produce: the discharges that exist by hand because no phase of the
 classifier can reach them, and `uAtAct_array_literals`, which holds where `UAtCan` is outright
 false and so has nothing to certify.
 
-And **nothing was deleted** — `6daa5e3`, `0335cdb` and `5763b6d` touch only the new module and
-two import lines — so <!-- count:orth_file_lines -->984<!-- /count --> lines stand *beside* the <!-- count:orth_reachable_lines -->34<!-- /count --> they could replace. It stays anyway,
-because its value moved — **twice**, and the second is the one that pays.
+When this was written **nothing had been deleted**, and the sentence was the finding: 983
+lines stood *beside* the <!-- count:orth_reachable_lines -->25<!-- /count --> they could
+replace. Two passes have deleted since, and neither deleted for this reason — the per-aspect
+layer went because nothing consumed it, and the four tables went because §5 stopped stating
+them. `Orth` still does not pay for itself as a replacement. It stays anyway, because its
+value moved — **twice**, and the second is the one that pays.
 
 **`Orth` is the specification of `src/`'s only declaration-time guard, and now a checked one.**
 `src/`'s `union` refuses a pair of options no *value* can choose between — `identifying`,
@@ -746,8 +738,8 @@ the wrong question and shape is the right one. Two blind spots:
   one side rewrites where the other unfolds, and it selects the two real candidates out of 15.
 - **It ranks nothing by itself.** A missing twin matters in proportion to the fan it would
   remove, which only `complexity.lean`'s `fanOf` can say. Run today: the two `@[simp]`-flagged
-  candidates' consumer `admA_refine_ground_eq_admALit` has no fan — 2838 nodes at 10×, inside
-  the band — so the actionable list is empty and `restrict_p_isSome` stays the only instance
+  candidates' one consumer went with the retired tables, so the actionable list is empty and
+  `restrict_p_isSome` stays the only instance
   that cost anything. The instrument is prospective, not a backlog.
 
 **`scripts/complexity.py`** — decision points per declaration and per file: pattern rows, `if`,
@@ -1042,7 +1034,7 @@ one. What it replaces is the eight-line hand unfolding, repeated per site.
 | `X_eq` | `X` **is** an instance of a named construction, on the nose |
 | `lawfulCore_X` / `lawful_X` / `carrier_X` | the three obligations, in that order |
 | `Lawful.X` / `LawfulCore.X` | the same where the construction is itself namespaced; `Lawful.through` reads "`through` preserves `Lawful`", which is the better name. Both forms are sanctioned and `vocab_audit.py` prints the split rather than absorbing it |
-| `f_sound` | a syntactic function agrees with the denotation (`κ_sound`, `adm_sound`) |
+| `f_sound` | a syntactic function agrees with the denotation (`Adm_sound`, `AdmA_sound`) |
 | `equiv_X` | a §6 row |
 | `not_X` | a refutation — a "Do not hold" row, or a repaired discharger |
 | `onKind_X` | `X` is pinned to a kind (§3's "self-identifying") |
@@ -1124,7 +1116,7 @@ each value-side declaration to its attribute-side twin, then compare the two bod
 - The **12 pairs of ≥15 attribute-side lines hold 363 of the 648** — more than half the twin
   mass — and average **0.67**, with the largest being the least alike: `ExactV_set`/`ExactA_set`
   **59 lines at 0.16**, `occV`/`occA` 22 at **0.06**, `occV_sound`/`occA_sound` 45 at 0.32,
-  `adm`/`admA` 45 at 0.47, `AdmLit`/`AdmALit` 14 at 0.33, `Adm`/`AdmA` 38 at 0.58.
+  `AdmLit`/`AdmALit` 14 at 0.33, `Adm`/`AdmA` 38 at 0.58.
 
 So the twins that are cheap to merge are cheap because there is nothing in them, and the twins
 holding the bulk are twins in name only — which is §4c's point arriving from the other side:
@@ -1173,11 +1165,10 @@ Sixteen lines changed, no behaviour, `Orthogonality.lean` untouched.
 
 **~~`adm (.literal .number ls)` is not exact~~ — closed at JH's call, by the carrier route.**
 `GroundKind.number.Carrier` is now `{d : Double // Numeral.WF d.toDec = true}`, so `inL` splits
-on the element's own gate, ~~LiteralD~~ is deleted, and `adm`'s literal row and the joint row are
-the same function (`adm_literal_eq_Adm`) — which makes the older generation exact at this row
-with **nothing added to it** (`adm_literal_exact`). The alternative route, tightening the row,
-would have broken `adm_literal_num`'s `rfl` and every ~~SepV~~ over literals; the carrier route
-broke `adm_literal_num`'s `rfl` too, and nothing else.
+on the element's own gate and ~~LiteralD~~ is deleted, which made the per-aspect literal row
+exact with **nothing added to it** — the two rows were the same function. The alternative
+route, tightening the row, would have broken that row's `rfl` and every ~~SepV~~ over
+literals; the carrier route broke the `rfl` too, and nothing else.
 
 *And the reason it was a fidelity call turned out to be misstated, in this file and in three
 docstrings.* The witness `literalNRule_holds_what_it_cannot_write` was said to record a defect in
