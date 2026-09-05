@@ -1746,14 +1746,7 @@ const carriedCodec = <Payload, Written, Read>(
 const bodySem = (
     of: Readonly<Record<string, Field>>,
     rest: 'drop' | 'refuse' | TermDef,
-): {
-    readonly encode: (
-        held: Record<string, unknown>,
-    ) => Result<Record<string, AttributeValue>>
-    readonly decode: (
-        item: Readonly<Record<string, AttributeValue>>,
-    ) => Result<Record<string, unknown>>
-} => {
+): ItemPair => {
     const declared: Declared[] = []
     for (const name in of) {
         const field = of[name]
@@ -2113,18 +2106,16 @@ const altSem = (
  * and it surfaced as a raw `TypeError` — the one thing every other failure here is careful not to
  * be.
  */
-const byTagSem = (
+const byTagSem = <V>(
     discriminator: string,
-    byVariant: Readonly<
-        Record<string, ItemCodec<Record<string, unknown>, unknown>>
-    >,
+    byVariant: Readonly<Record<string, V>>,
 ): {
-    readonly pick: (tag: string) => Result<ItemCodec<never, unknown>>
+    readonly pick: (tag: string) => Result<V>
     readonly tagOf: (item: Readonly<Record<string, unknown>>) => Result<string>
 } => ({
     pick: (tag) => {
         const variant = Object.hasOwn(byVariant, tag)
-            ? (byVariant[tag] as ItemCodec<never, unknown> | undefined)
+            ? (byVariant[tag] as V | undefined)
             : undefined
         return (
             variant ??
@@ -2146,6 +2137,93 @@ const byTagSem = (
             : String(tag)
     },
 })
+
+/**
+ * The two directions over a bare attribute map — a term's reading with the top-level `M` taken off.
+ *
+ * §5's split, as a type: a codec writes the attributes of that codec, and the top-level map belongs
+ * to the *view* rather than to the codec. This is the view's half, and `denote`'s rows are that
+ * half carried into an `'M'`.
+ */
+type ItemPair = {
+    readonly encode: (
+        held: Record<string, unknown>,
+    ) => Result<Record<string, AttributeValue>>
+    readonly decode: (
+        item: Readonly<Record<string, AttributeValue>>,
+    ) => Result<Record<string, unknown>>
+}
+
+/**
+ * The terms that have a whole-item reading: an object, and a union of objects by tag.
+ *
+ * Not `untagged`. An undiscriminated union's item reading is built by {@link union} from its
+ * resolved options, and `denote`'s `untagged` row asks {@link altSem} for the *attribute* pair, so
+ * nothing here needs one.
+ */
+type ItemTerm = Extract<TermDef, { readonly kind: 'attributes' | 'tagged' }>
+
+/**
+ * **One item pair per term, for the life of the term** — {@link codecOfTerm}'s counterpart.
+ *
+ * Every `object(...)` used to build **two** body pairs and keep both: one in the constructor for
+ * `.item`, and a second inside `denote` when the codec was first used. They were separate objects,
+ * `item.encode === codec.encode` answered `false`, and nothing said which of the two a caller was
+ * running. Both come from here now, so a term has one item reading and the map-writing pair wraps
+ * that one.
+ *
+ * The memo is keyed on the frozen term for the reason `codecOfTerm`'s is: the term is the datum, a
+ * pair built from it is a function of it, and the freeze is what makes the key stable rather than
+ * probable.
+ */
+const itemPairs = new WeakMap<ItemTerm, ItemPair>()
+
+const itemSem = (def: ItemTerm): ItemPair => {
+    const built = itemPairs.get(def)
+    if (built) return built
+    const made =
+        def.kind === 'attributes'
+            ? bodySem(def.of, def.rest)
+            : taggedItemSem(def)
+    itemPairs.set(Object.freeze(def), made)
+    return made
+}
+
+/**
+ * §3 `(dunion)`'s item reading: the tag chooses the variant, and the variant reads the whole item.
+ *
+ * **Every variant is an object**, which is why this recurses into {@link itemSem} rather than
+ * asking a codec for its `.item`. {@link discriminatedUnion} refuses an option whose `spec` does
+ * not name the discriminator with a literal, and only an object codec has a `spec` shaped that way
+ * — so a variant's term is an `attributes` term at every tag. The throw below is that invariant,
+ * not a case a declaration can reach.
+ */
+const taggedItemSem = (
+    def: Extract<TermDef, { readonly kind: 'tagged' }>,
+): ItemPair => {
+    const byTag: Record<string, ItemPair> = {}
+    for (const tag in def.variants) {
+        const variant = termOf(def.variants[tag] as AnyCodec)
+        if (variant.kind !== 'attributes') {
+            throw new CodecError(
+                `a discriminated union's variants are object codecs, and the variant at '${tag}' is a \`${variant.kind}\`. \`discriminatedUnion\` refuses that at the declaration, so this term was not built by it`,
+            )
+        }
+        byTag[tag] = itemSem(variant)
+    }
+    const { pick, tagOf } = byTagSem(def.discriminator, byTag)
+    return {
+        encode: (held) =>
+            andThen(andThen(tagOf(held), pick), (variant) =>
+                variant.encode(held),
+            ),
+        decode: (item) =>
+            andThen(
+                andThen(readTag(item, def.discriminator), pick),
+                (variant) => variant.decode(item),
+            ),
+    }
+}
 
 /**
  * **What a term means**, as one function on the definition.
@@ -2344,7 +2422,7 @@ const denote = (def: TermDef): Pair => {
          * and `.item` is the one place that writes no map.
          */
         case 'attributes': {
-            const body = bodySem(def.of, def.rest)
+            const body = itemSem(def)
             return carriedCodec(
                 (value): value is Record<string, unknown> =>
                     asRecord(value) !== undefined,
@@ -2483,10 +2561,7 @@ const denote = (def: TermDef): Pair => {
          * was not sent to.
          */
         case 'tagged': {
-            const variants = def.variants as unknown as Readonly<
-                Record<string, ItemCodec<Record<string, unknown>, unknown>>
-            >
-            const { pick, tagOf } = byTagSem(def.discriminator, variants)
+            const body = itemSem(def)
             return carriedCodec(
                 (value): value is Record<string, unknown> =>
                     asRecord(value) !== undefined,
@@ -2495,15 +2570,9 @@ const denote = (def: TermDef): Pair => {
                     new CodecError(
                         `${describeShape(value)} is not a plain object, and a discriminated union writes an 'M' — a codec's input is typed, so this is a value that reached \`encode\` past its type`,
                     ),
-                (held) =>
-                    andThen(andThen(tagOf(held), pick), (variant) =>
-                        variant.encode(held as never),
-                    ),
+                body.encode,
                 (carried: Readonly<Record<string, AttributeValue>>) =>
-                    andThen(
-                        andThen(readTag(carried, def.discriminator), pick),
-                        (variant) => variant.decode(carried),
-                    ),
+                    body.decode(carried),
             )
         }
         /**
@@ -4582,12 +4651,14 @@ export const object = <
     const declaredRest = rest as RestDeclaration
     const restTerm =
         typeof declaredRest === 'string' ? declaredRest : termOf(declaredRest)
-    const body = bodySem(fields, restTerm)
     const itemDef = {
         kind: 'attributes',
         of: fields,
         rest: restTerm,
     } as const
+    // the term's item pair, not a second one built beside it — `denote`'s row asks `itemSem` for
+    // the same object, so `.item` and the codec run one body rather than two that agree
+    const body = itemSem(itemDef)
 
     type T = DerivedItem<Spec, Rest>
     const self: ItemCodec<T, Spec, Rest> = {
