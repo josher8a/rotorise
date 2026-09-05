@@ -1640,6 +1640,78 @@ const denote = (def: TermDef): Pair => {
             )
         }
         /**
+         * §3 `(set)`, and the one product that is **not** a {@link carriedCodec}. The model says
+         * why: its attribute side is a choice among three wire sets rather than one member, so
+         * there is no single `A` prism to carry a payload into. `setCodec_restrict` is the lemma
+         * that keeps `refine` and a literal readable through — a restriction of the elements is a
+         * restriction of the set, and the two write the same attribute.
+         *
+         * Which set follows from the element's member, so the row asks {@link writes} rather than
+         * being told. §3 `(set)`'s premise is checked at the declaration, in {@link set}, where a
+         * caller can see which element failed it.
+         *
+         * **Empty is refused in both directions, and the read side is the one that matters.**
+         * DynamoDB never stores an empty `SS`, so an item carrying one was written by something
+         * else; decoding it would hand back a value this codec's own `encode` refuses, which is
+         * the pair's two halves disagreeing about what it holds — **(C)** failing.
+         *
+         * `value.size` is `undefined` on anything that is not a `Set`, so `=== 0` was false for a
+         * string and `[...value]` then spread it into its characters: `string.set()` wrote
+         * `{ SS: ['a','b','c'] }` for `'abc'`. `admits`' `set` row asks `instanceof Set` first.
+         */
+        case 'set': {
+            const inner = def.element
+            const member = writes(inner)
+            if (member !== 'S' && member !== 'N' && member !== 'B') {
+                throw new CodecError(
+                    `a set holds strings, numbers or binary, and this element writes ${member ? `'${member}'` : 'no single member'}`,
+                )
+            }
+            const setMember = `${member}S` as 'SS' | 'NS' | 'BS'
+            const carried = (value: unknown): Result<string | Uint8Array> =>
+                andThen(
+                    inner.encode(value as never),
+                    (written) =>
+                        (written as Record<string, unknown>)[member] as
+                            | string
+                            | Uint8Array,
+                )
+            return {
+                encode: (value: unknown) =>
+                    !(value instanceof Set)
+                        ? new CodecError(
+                              `${describeShape(value)} is not a \`Set\`, and a ${setMember} is written from one — a codec's input is typed, so this is a value that reached \`encode\` past its type`,
+                          )
+                        : value.size === 0
+                          ? new CodecError(
+                                `DynamoDB has no empty ${setMember}; omit the attribute or use array(...)`,
+                            )
+                          : andThen(every([...value], carried), (written) =>
+                                // sorted so what is stored does not depend on insertion order;
+                                // deduplicated already, because a `Set` is
+                                carrying(
+                                    setMember,
+                                    [...new Set(written)].sort() as never,
+                                ),
+                            ),
+                decode: (attribute) =>
+                    andThen(
+                        andThen(expect(setMember, attribute), (members) =>
+                            (members as readonly unknown[]).length === 0
+                                ? new CodecError(
+                                      `DynamoDB has no empty ${setMember}, so this attribute was not written by it; a set this codec would refuse to write is not one it can read`,
+                                  )
+                                : every(members as readonly unknown[], (raw) =>
+                                      inner.decode(
+                                          carrying(member, raw as never),
+                                      ),
+                                  ),
+                        ),
+                        (read) => new Set(read),
+                    ),
+            }
+        }
+        /**
          * §3 `(literal)`, and it is **not** a sixth ground term: `literalCodec k ls` is
          * `(baseCodec k).restrict (inL k ls)`, the base's pair narrowed to membership of `ℓ`. The
          * base is the index, so the row reaches it by denoting `{ kind: base }` — the five bases
@@ -2036,59 +2108,10 @@ const set = <const C extends AnyCodec>(
             `a set's element must be one of the four bases a stored set is built from — \`string\`, \`number\`, \`decimal\` or \`binary\`, narrowed by \`refine\` or by a literal — and this element is a \`${inner.def?.kind ?? 'codec with no definition'}\`, which writes '${member}' by reading through to something else. A set of it has nothing DynamoDB stores`,
         )
     }
-    const setMember = `${member}S` as 'SS' | 'NS' | 'BS'
-
-    const carried = (value: T): Result<string | Uint8Array> =>
-        andThen(
-            inner.encode(value),
-            (written) =>
-                (written as Record<string, unknown>)[member] as
-                    | string
-                    | Uint8Array,
-        )
-
     // the member is decided above, from the element; the cast carries that decision into the type
-    return codec<ReadonlySet<T>, SetOf<C>>({
-        def: { kind: 'set', element: inner },
-        // `value.size` is `undefined` on anything that is not a `Set`, so `=== 0` was false for a
-        // string and `[...value]` then spread it into its characters — `string.set()` wrote
-        // `{ SS: ['a','b','c'] }` for `'abc'`. `admits`' `set` row asks `instanceof Set` first
-        encode: (value) =>
-            !(value instanceof Set)
-                ? new CodecError(
-                      `${describeShape(value)} is not a \`Set\`, and a ${setMember} is written from one — a codec's input is typed, so this is a value that reached \`encode\` past its type`,
-                  )
-                : value.size === 0
-                  ? new CodecError(
-                        `DynamoDB has no empty ${setMember}; omit the attribute or use array(...)`,
-                    )
-                  : andThen(
-                        every([...value], carried),
-                        (written) =>
-                            // sorted so what is stored does not depend on insertion order; deduplicated
-                            // already, because a `Set` is
-                            carrying(
-                                setMember,
-                                [...new Set(written)].sort() as never,
-                            ) as SetOf<C>,
-                    ),
-        // the empty set is refused in *both* directions, and the read side is the one that
-        // matters: DynamoDB never stores an empty `SS`, so an item carrying one was written by
-        // something else. Decoding it would hand back a value this codec's own `encode` refuses —
-        // the pair's two halves disagreeing about what it holds, which is (C) failing
-        decode: (attribute) =>
-            andThen(
-                andThen(expect(setMember, attribute), (members) =>
-                    (members as readonly unknown[]).length === 0
-                        ? new CodecError(
-                              `DynamoDB has no empty ${setMember}, so this attribute was not written by it; a set this codec would refuse to write is not one it can read`,
-                          )
-                        : every(members as readonly unknown[], (raw) =>
-                              inner.decode(carrying(member, raw as never)),
-                          ),
-                ),
-                (read) => new Set(read) as ReadonlySet<T>,
-            ),
+    return codecOfTerm<ReadonlySet<T>, SetOf<C>>({
+        kind: 'set',
+        element: inner,
     })
 }
 
