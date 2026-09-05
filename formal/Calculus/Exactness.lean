@@ -1805,8 +1805,8 @@ that carries a name. On `{"a" ↦ "x"}` the first option answers `true` and the 
 `false`, with equal domains behind both.
 
 This is not a defect in the rows and not one in `select`; it is the price of deciding an
-object option syntactically, which `docs/codec-calculus.md:713` argues for on other
-grounds ("an open object that must be an option should declare what it means to keep").
+object option syntactically, which §5 argues for on other grounds ("an open object that must
+be an option should declare what it means to keep").
 What that passage does not observe is this consequence: **term equivalence is not a
 congruence for `union`**, so no rewrite that replaces a subterm by a domain-equal one is
 sound inside a `union`. Anything that wants to normalize `record` to `object` — or `array`
@@ -1919,8 +1919,8 @@ theorem specOf_object_isSome (c : Term) :
 
     So a normalization pass over `Term` may not replace `record c` by its `object` inside a
     `union` — nor, in general, replace any subterm by a domain-equal one there. See the
-    section note above; `docs/codec-calculus.md:713` gives the reason `ρ` goes unread and
-    does not draw this corollary. -/
+    section note above; §5 gives the reason `ρ` goes unread and does not draw this
+    corollary. -/
 theorem union_not_congruent :
     admitOptV (specOf (.record .string), Adm (.record .string))
         (.map {"a"} (fun _ => .str "x")) = true
@@ -2286,8 +2286,10 @@ by `SepV`. `ident_of_adm` pins it, `admDisj_ident` recovers the repaired form, a
 wrong.
 
 So `ident` stays where it is, defined on `adm`, and `adm` stays with it. The pair supersedes
-`κ`/`adm`/`admA` **for the discharge**; it does not supersede the transcription of §5, and
-deleting that would delete the record of what §5 got wrong. -/
+`κ`/`adm`/`admA` **for the discharge**, and §5 no longer transcribes the three: the section
+states (K) on option admission and occupancy, which is what this file and `Orthogonality.lean`
+carry. What the four tables hold now is the record of what §5 got wrong, and retiring them
+from the model is the pass that follows this one. -/
 
 /-- A refinement by the trivially-true predicate: same pair, same `Adm`, different `ident`. -/
 def qTop : Value → Bool := fun _ => true
