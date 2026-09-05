@@ -325,7 +325,7 @@ already.
 ### 4c. One codec, stated once for both sides of the pair
 
 `Combinators.lean` is <!-- count:combinators_lines -->4002<!-- /count --> lines of the tree's
-<!-- count:tree_lines -->17985<!-- /count -->, and this is its organizing idea; without it
+<!-- count:tree_lines -->17596<!-- /count -->, and this is its organizing idea; without it
 the file reads as the inventory `README.md` already has. A constructor is a **prism** —
 `Ctor α β`, with `into`/`out` and the laws `out_into` (matching what was built returns it) and
 `into_out` (anything that matches was built) — and those two *are* §2's (R) and (C) at a
@@ -383,8 +383,10 @@ disjoint, *or* admissible sets disjoint).
 Every discharger in this section is one appeal to `uniqueAdmission_of_disjoint`
 (`Combinators.lean`), which takes two families of allowed values, one per side, and asks only
 that each be pairwise disjoint. Kinds, members, tags and admissible sets are *ways of building*
-those families rather than four conditions, and `Adm_le_adm` is the containment that lets the
-exact generation feed the older one's.
+those families rather than four conditions. `Adm_le_adm` is the containment between the two
+generations of the tables — it fed the older generation's dischargers until those were retired,
+and it now relates `adm` to `Adm` and nothing else. It is kept because §5 specifies both
+tables, not because anything reads it.
 
 `Exactness.lean` holds the joint predicate `Adm`/`AdmA`, exact at **all twenty-one**
 constructors: `Adm_exact : ∀ t, ExactV t` and `AdmA_exact : ∀ t, ExactA t`, no hypothesis, no
@@ -437,34 +439,32 @@ disjunct already delivers through `orthSV_disjoint`. Kernel-checked, not argued 
 results and the negative are in this paragraph's commit. **The move that looks open here was
 made in the next file, and what is left to take from it is a conjunct.**
 
-**And nothing downstream depends on it, which is a different fact from the two above —
-measured.** `scripts/blast_radius.lean` rooted on `SepV`, on `SepA` and on
-`uAtCan_of_separated`, each against the replacement that would supersede it — `SepJV`, `SepJA`,
-`uAtCan_of_separates`. Old-only 16, 16 and 5; both 1, 1 and 0. Every dependent falls into one of
-three classes and there is no fourth: a hand discharge in the same family
-(`sepV_number_opaque`, `uAtCan_string_null` and nine more, then eleven, then five), a refutation
-of one of those separations (`not_sepV_literal_heldLiteral` and four more, twice, then none), or
-a bridge — and the single `both` entry in each of the first two probes is exactly
-`sepJV_of_sepV` and `sepJA_of_sepA`. All 24 distinct dependents are in `Discharge.lean` (18) or
-`Refutations.lean` (6). **Nothing in `Soundness`, `Denote` or `Exactness`'s positive results
-consumes any of the three, and neither does `Orthogonality`.**
+**And the per-aspect separation layer is gone, which is what the measurement was for.**
+`scripts/blast_radius.lean` rooted on the four definitions that layer was built from partitions
+as 28 old-only, 0 both, and every dependent inside `Discharge.lean` or `Refutations.lean` —
+nothing in `Soundness`, `Denote`, or `Exactness`'s positive results, and nothing in
+`Orthogonality`. Those 28 plus their four roots were deleted: the two separation predicates and
+their footprint definitions, the discharger stated on them and its kind/member half, the hand
+discharges phrased in that vocabulary, the eight refutations of those separations, and the two
+bridges into the joint predicate. JH's call.
 
-So what keeps this file is not a dependency. The older generation **is** this section's
-discharge table and its refutation set — those are the results, and nothing is standing on top of
-them. What `not_uAtCan_of_sepJ` and `sepJA_needs_member` establish is that the table cannot be
-*restated* on the joint predicate: one restatement is false and the other loses a pair. That
-bounds how the table could be **ported**, which is not the same claim as anything still needing
-it. So the cost of retirement is the discharges and the refutations themselves, and that is a
-question about what this specification advertises rather than a dependency to unpick.
+Nothing was lost that anything else can state. What the layer proved by hand in phases *slot*
+and *alternatives*, `Orthogonality.lean` reaches by `decide`, and its by-phase table now lists
+what only exists by hand rather than what is duplicated. The discharges no phase reaches —
+an arbitrary `q` inside a `refine`, and `uAtAct_array_literals` where `UAtCan` is outright
+false — were never phrased in the retired vocabulary and stay where they were. So do the four
+tables `κ`, `ident`, `adm` and `admA`, which §5 specifies and which the exact generation still
+reaches through `Adm_le_adm` and `AdmA_le_admA`; retiring *those* is a separate question and
+has not been taken.
 
-Two citations the walk overturned, both the shape its own header warns about.
-`uAtCan_of_separated` appears in `Exactness.lean` five times and `uAtCan_of_disjoint` in
-`Soundness.lean` once, and **every one of those is prose or a docstring** — no proof outside
-`Discharge.lean` uses either, so a grep for them is counting sentences. The one real use outside
-`Discharge.lean` is `SepA`'s, in `sepJA_of_sepA`, and that is the bridge.
+Two citations the walk overturned on the way, both the shape its own header warns about. The
+combined discharger appeared in `Exactness.lean` five times and its kind/member half in
+`Soundness.lean` once, and **every one of those was prose or a docstring** — no proof outside
+`Discharge.lean` used either, so a grep for them was counting sentences. The one real use
+outside `Discharge.lean` was the read-side bridge, which is deleted with the rest.
 
-So: do not delete `Discharge.lean`, and if you sharpen an `adm` row at a container, check
-whether you have just broken a discharge that was relying on the slack.
+So: `Discharge.lean` keeps the tables and loses the layer, and if you sharpen an `adm` row at a
+container, check whether you have just broken a discharge that was relying on the slack.
 
 **And do not expect `scripts/blast_radius.lean` to cost that**, which this section used to say
 it did. Measured on the `admA .legacy` sharpening (§4b): the four-way partition is *identical*
@@ -485,30 +485,30 @@ being `rfl`), and what caught the *hazard* was reading this section. Neither is 
 
 ### And a third machine, `Orth`, which does not pay — measured
 
-`Orthogonality.lean` is the fifth-largest file at <!-- count:orth_file_lines -->967<!-- /count --> lines — `Soundness.lean` is 1032 —: a decidable certificate for a
+`Orthogonality.lean` is the fifth-largest file at <!-- count:orth_file_lines -->976<!-- /count --> lines — `Soundness.lean` is 1032 —: a decidable certificate for a
 fragment of (U), over-approximating each term's occupancy per side (`occV`/`occA`) and
 certifying a pair whose occupancies are disjoint, `by decide`. **Measured against what it
-replaces it does not pay**, and its own by-phase table is the measurement — the <!-- count:orth_total_theorems -->25<!-- /count --> hand
+replaces it does not pay**, and its own by-phase table is the measurement — the <!-- count:orth_total_theorems -->13<!-- /count --> hand
 discharges it names, 23 as rows and 2 in the prose beneath them, out of a
-<!-- count:sep_family -->32<!-- /count -->-theorem `sep*`/`uAtCan_*`/`uAtAct_*` family:
+<!-- count:sep_family -->16<!-- /count -->-theorem `sep*`/`uAtCan_*`/`uAtAct_*` family:
 
 | | theorems | lines of proof |
 | --- | --- | --- |
-| reachable by `Orth` itself — phase *slot* | <!-- count:orth_slot_theorems -->6<!-- /count --> | <!-- count:orth_slot_lines -->70<!-- /count --> |
-| reachable only through `Separates`, the `Prop` interface — phase *alternatives*, where `DecidableEq Double` makes a `Bool` test noncomputable | <!-- count:orth_alt_theorems -->7<!-- /count --> | <!-- count:orth_alt_lines -->75<!-- /count --> |
-| unreachable on principle — an arbitrary `q` or `f`, a different constructor, `SepJA`'s member disjunct, or `UAtCan` itself failing (`uAtAct_array_literals`) | <!-- count:orth_unreach_theorems -->12<!-- /count --> | <!-- count:orth_unreach_lines -->169<!-- /count --> |
+| reachable by `Orth` itself — phase *slot* | <!-- count:orth_slot_theorems -->0<!-- /count --> | <!-- count:orth_slot_lines -->0<!-- /count --> |
+| reachable only through `Separates`, the `Prop` interface — phase *alternatives*, where `DecidableEq Double` makes a `Bool` test noncomputable | <!-- count:orth_alt_theorems -->4<!-- /count --> | <!-- count:orth_alt_lines -->34<!-- /count --> |
+| unreachable on principle — an arbitrary `q` or `f`, a different constructor, `SepJA`'s member disjunct, or `UAtCan` itself failing (`uAtAct_array_literals`) | <!-- count:orth_unreach_theorems -->9<!-- /count --> | <!-- count:orth_unreach_lines -->145<!-- /count --> |
 
-*Re-measured, and the previous version of this table was wrong in three ways.* It said 23
-where the section names 25; it counted 11 unreachable theorems against a line total of 162
-that silently included a twelfth (`uAtAct_array_literals`, 53 lines, named in the row's own
-description but in no row); and `uAtCan_number_opaque` (24 lines) was reachable — the pair
-form of two *slot* discharges, and `orth_number_opaque` certifies it `by decide` — while
-appearing in no row at all. The reachable total is therefore **<!-- count:orth_reachable_lines -->145<!-- /count --> lines, not 116** — the
-verdict below does not move, but it was being stated with a number 24 lines too kind to
-the hand proofs and 24 too harsh on `Orth`.
+*This table counted the hand proofs against what `Orth` reaches, and the layer it was
+counting is gone.* Every theorem it found **reachable** was phrased in the retired per-aspect
+vocabulary and was deleted with it, `Orth` being what certifies those pairs now — which is why
+the reachable total is <!-- count:orth_reachable_lines -->34<!-- /count --> lines rather than the
+145 measured before the deletion. What is left in the unreachable column is the answer the
+table was built to produce: the discharges that exist by hand because no phase of the
+classifier can reach them, and `uAtAct_array_literals`, which holds where `UAtCan` is outright
+false and so has nothing to certify.
 
 And **nothing was deleted** — `6daa5e3`, `0335cdb` and `5763b6d` touch only the new module and
-two import lines — so <!-- count:orth_file_lines -->967<!-- /count --> lines stand *beside* the <!-- count:orth_reachable_lines -->145<!-- /count --> they could replace. It stays anyway,
+two import lines — so <!-- count:orth_file_lines -->976<!-- /count --> lines stand *beside* the <!-- count:orth_reachable_lines -->34<!-- /count --> they could replace. It stays anyway,
 because its value moved — **twice**, and the second is the one that pays.
 
 **`Orth` is the specification of `src/`'s only declaration-time guard, and now a checked one.**

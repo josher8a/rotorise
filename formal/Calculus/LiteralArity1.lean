@@ -23,8 +23,9 @@ of one `numberCodec` at disjoint predicates, which is all `uniqueAdmission_of_sh
 needs.
 `uAtCan_of_literalN_disjoint` already made that argument for a union of n-ary numeric literals
 and never used the n-ary constructor to make it — only the shared base — so it holds for
-singletons too. The table now agrees (`sepA_literalN_disjoint`); the correction is recorded
-below and it does not change a line of this file's proofs, which never appealed to the table.
+singletons too. The table now agrees, its `admA` row asking the codec rather than answering
+`⊤`; the correction is recorded below and it does not change a line of this file's proofs,
+which never appealed to the table.
 
 **So why is the constructor n-ary?** Because the union route cannot carry `ℓ` as a `Finset`.
 `Term.union` takes a `List Term`; bridging from a `NEFinset` is `Finset.toList`, which is
@@ -145,9 +146,9 @@ syntactic set of attributes names the numerals reading into a given value. That 
 double cannot inhabit two disjoint sets — so the answer is unique without being nameable, and
 the row obtains it by calling the codec.
 
-So `admALit`'s `.number` row is `((literalCodec .number ls).p ·).isSome`, and
-`sepA_literalN_disjoint` separates two disjoint numeric literals in the table, with
-`admA_literalN_sees` stating what an `N` attribute must satisfy to be admitted.
+So `admALit`'s `.number` row is `((literalCodec .number ls).p ·).isSome`, which separates two
+disjoint numeric literals in the table, with `admA_literalN_sees` stating what an `N`
+attribute must satisfy to be admitted.
 
 The pair reading is not superseded and is the one used below: `uniqueAdmission_of_sharedBase`
 settles an `n`-ary family on both sides in one step where the table settles a pair at a time.
@@ -175,7 +176,7 @@ theorem uAtCan_map_literal_str {l : List String} (hnd : l.Nodup) :
     cases v <;> simp_all [inL, NEFinset.of]
 
 /-- …and at the numeric base, by the same shared-base route: `n`-ary and both sides in one
-    step, which is what this route buys over the table's pairwise `sepA_literalN_disjoint`. -/
+    step, which is what this route buys over a pairwise separation read off the table. -/
 theorem uAtCan_map_literal_num {l : List WFDouble} (hnd : l.Nodup) :
     UAtCan (l.map fun d => .literal .number (.of d ∅)) := by
   show UniqueAdmission (semsOf _)

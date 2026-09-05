@@ -481,7 +481,6 @@ theorem alignP_iff (tail : Option Term) (htl : ∀ t ∈ tail, ExactV t) :
         rw [traverse_cons_isSome, Bool.and_eq_true, ← ht v, ← ih]
 
 
-
 /-- **`tuple` is exact** once its components are. -/
 theorem ExactV_tuple {ts : List Term} {tail : Option Term}
     (h : ∀ t ∈ ts, ExactV t) (htl : ∀ t ∈ tail, ExactV t) : ExactV (.tuple ts tail) := by
@@ -1936,14 +1935,17 @@ on `κ`/`adm`/`admA`. Before any of that can move to `Adm`/`AdmA`, two things ha
 true: the joint predicate must be at least as tight as the row it replaces, and every
 discharge §5 already has must survive.
 
-`Adm_le_adm` and `AdmA_le_admA` are the first. `sepJV_of_sepV` and `sepJA_of_sepA` are the
-second — nothing is lost.
+`Adm_le_adm` and `AdmA_le_admA` are the first, and they remain. The second were the two
+separation bridges, and they are gone with the per-aspect layer they ran from: once nothing
+outside that layer consumed it, a bridge out of it had nothing left to carry.
 
-**And that is not enough to move `uAtCan_of_separated`, which is the third thing.** Both
-bridges run from `SepV` to `SepJV`, the direction a *producer* wants; a consumer needs the
-opposite, and at an `object` option it is unavailable — `not_uAtCan_of_sepJ`, at the end of
-this section, is the discharger restated on the pair and refuted. The migration this section
-was written to prepare does not go through.
+**And the third thing is why the layer could not simply be restated here.** Both bridges ran
+from the per-aspect separation to the joint one, the direction a *producer* wants; a consumer
+needs the opposite, and at an `object` option it is unavailable — `not_uAtCan_of_sepJ`, at the
+end of this section, is the discharger restated on the joint predicate and refuted. So the
+migration this section was written to prepare never went through, and the layer was retired
+rather than moved: `Orthogonality.lean` states the discharge on what `select` consults, which
+is the repair the `object` row actually invites.
 
 The interesting result is that the two sides do **not** re-derive the same way. On the value
 side `κ`'s disjunct is subsumed: `Adm` folds the kind gate into its own rows and
@@ -1987,7 +1989,15 @@ theorem selTagV_mem {d : Name} {opts : List Term} {v : Value}
       exact mem_allTags (List.mem_filter.mp hmem).1 (by simpa using (List.mem_filter.mp hmem).2)
 
 /-- **`Adm` refines `adm`.** Every row of the joint predicate is at least as tight as the
-    row it replaces, which is what lets every existing discharge carry over unchanged. -/
+    row it replaces.
+
+    **Nothing consumes this, and it is stated anyway.** It was written to carry the older
+    dischargers over unchanged, and those are gone — the per-aspect separation layer was
+    retired once nothing outside it depended on it. What survives the retirement is the
+    *relation*: `adm` is §5's table and `Adm` is the exact generation of the same question, and
+    the containment between them is a fact about the two tables rather than about any theorem
+    built on either. §5 specifies both, so this stays advertised with no consumer, which is
+    what a specification library is for. -/
 theorem Adm_le_adm : ∀ (t : Term) (v : Value), Adm t v = true → adm t v = true
   | .string, _, _ => rfl
   | .boolean, _, _ => rfl
@@ -2147,7 +2157,9 @@ theorem selTagA_mem {d : Name} {opts : List Term} {a : Attr}
         rw [hL]; simp
       exact mem_allTags (List.mem_filter.mp hmem).1 (by simpa using (List.mem_filter.mp hmem).2)
 
-/-- **`AdmA` refines `admA`**, the attribute-side counterpart of `Adm_le_adm`. -/
+/-- **`AdmA` refines `admA`**, the attribute-side counterpart of `Adm_le_adm`, and stated on
+    the same terms: the containment relates the two tables §5 specifies, and no longer feeds a
+    discharger, there being none left that reads the older side. -/
 theorem AdmA_le_admA : ∀ (t : Term) (a : Attr), AdmA t a = true → admA t a = true
   | .string, _, _ => rfl
   | .boolean, _, _ => rfl
@@ -2229,32 +2241,6 @@ def SepJA (x y : Term) : Prop :=
   (∃ μx μy, μSyn x = some μx ∧ μSyn y = some μy ∧ μx ≠ μy) ∨
   (∀ a, AdmA x a = true → AdmA y a = false)
 
-/-- **Every §5 value-side discharge carries over**, from either disjunct. -/
-theorem sepJV_of_sepV {x y : Term} (h : SepV x y) : SepJV x y := by
-  intro v hv
-  cases hy : Adm y v with
-  | false => rfl
-  | true =>
-    exfalso
-    rcases h with ⟨kx, ky, hkx, hky, hdisj⟩ | hd
-    · exact hdisj _ (Adm_kind x kx v hkx hv) (Adm_kind y ky v hky hy)
-    · have := hd v (Adm_le_adm x v hv)
-      rw [Adm_le_adm y v hy] at this
-      exact absurd this (by simp)
-
-/-- …and every attribute-side one. -/
-theorem sepJA_of_sepA {x y : Term} (h : SepA x y) : SepJA x y := by
-  rcases h with hμ | hd
-  · exact Or.inl hμ
-  · refine Or.inr fun a ha => ?_
-    cases hy : AdmA y a with
-    | false => rfl
-    | true =>
-      exfalso
-      have := hd a (AdmA_le_admA x a ha)
-      rw [AdmA_le_admA y a hy] at this
-      exact absurd this (by simp)
-
 /-- A read channel that fires at `N` and nowhere else — `legacy`'s widening, minimal. -/
 def rNum : Attr → Option Value := fun a => match a with | .n _ => some (.str "x") | _ => none
 
@@ -2334,9 +2320,9 @@ theorem ident_not_determined_by_adm :
     the rows it replaces, so `SepJV` is a *weaker* statement — but `Adm_sound` connects it
     straight to the denotation: where `x` writes, `y` refuses.
 
-    This said "and that is all the discharge needs", which is where it over-claimed. What
-    `uAtCan_of_separated` consumes is disjointness of the *options* `select` builds, and an
-    object option is admitted by `keysOk` rather than by attempting its codec. The section
+    This said "and that is all the discharge needs", which is where it over-claimed. What a
+    discharger consumes is disjointness of the *options* `select` builds, and an object option
+    is admitted by `keysOk` rather than by attempting its codec. The section
     below is that gap, with the pair that refutes the stronger reading. -/
 theorem admitV_of_sepJV {x y : Term} (h : SepJV x y) (v : Value) (a : Attr)
     (hx : (denote x).e v = some a) : ((denote y).e v).isSome = false := by
@@ -2364,8 +2350,8 @@ and the difference is worth being precise about because the whole retirement of 
 on it.
 
 `admitV_of_sepJV` is a claim about the **codec**: where `x`'s `e` writes, `y`'s `e` refuses.
-`uAtCan_of_separated` is a claim about the **options `select` builds**, and at an `object`
-those are not the same test. `admitOptV` records the asymmetry already — an object option is
+A discharger is a claim about the **options `select` builds**, and at an `object` those are not
+the same test. `admitOptV` records the asymmetry already — an object option is
 admitted by `keysOk`, which reads which names a map carries and never what they hold — but
 the corollary was not drawn: `Adm` is not an over-approximation of `OptionSem.admitV` at an
 object, it is strictly *tighter*, and disjointness of a tighter predicate does not imply
@@ -2379,8 +2365,8 @@ pair separates — while `select` attempts both options, so (U) genuinely fails.
 gets *stronger* and the theorem becomes *false*.
 
 The witness is two objects with the same names and different field terms. Both are derivable
-(`Typed.object`), both closed (`rest = drop`), and both lawful, so no other premise of
-`uAtCan_of_separated` is what declines them — which is what makes `not_uAtCan_of_sepJ` a
+(`Typed.object`), both closed (`rest = drop`), and both lawful, so no other premise of the
+discharger is what declines them — which is what makes `not_uAtCan_of_sepJ` a
 refutation of the migration rather than a failure to find its proof.
 
 And the `object` row is the *only* obstruction: `admitV_Adm_nonObject` and
@@ -2485,10 +2471,12 @@ theorem not_admitV_le_Adm :
       (optionSemOf (denote t) (specOf t)).admitV v = true → Adm t v = true := fun h =>
   absurd (h objReqNum mapReqStr rfl) (by simp [Adm_objReqNum])
 
-/-- **`uAtCan_of_separated`, restated on the joint predicate, is false.** Every premise
-    holds of `[objReqStr, objReqNum]` and the conclusion does not. This is the theorem that
-    would have to survive for `adm`, `admA`, `SepV` and `SepA` to be retired in favour of
-    `Adm`, `AdmA`, `SepJV` and `SepJA`; it does not, and the reason is a row rather than a
+/-- **The discharger, restated on the joint predicate, is false.** Every premise holds of
+    `[objReqStr, objReqNum]` and the conclusion does not. This is the theorem that would have
+    had to survive for the per-aspect tables and their separation to be retired *in favour of*
+    `Adm`, `AdmA`, `SepJV` and `SepJA`; it does not, which is why the separation layer was
+    retired in favour of `Orthogonality.lean` instead and the tables stayed. The reason is a
+    row rather than a
     proof — see the section note above, which is wider than this theorem: the `object` row is
     the whole obstruction on the *value* side only, and `sepJA_needs_member` is a second one on
     the read side, at a different constructor and reached by no premise here. -/

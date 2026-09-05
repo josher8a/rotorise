@@ -566,8 +566,8 @@ end
 /-! ## Discharging (U)
 
 The families each option is confined to are the occupancy **intersected with the option's own
-admission**. That is the same move `SVof`/`SAof` make, and it is what lets one pair of
-families serve every phase: disjointness in either factor makes the intersection disjoint, so
+admission**. That is the move the retired per-aspect layer made with its own footprint
+definitions, and it is what lets one pair of families serve every phase: disjointness in either factor makes the intersection disjoint, so
 phase *slot* separates through the occupancy and phase *names* through the admission, with no
 second family and no case analysis at the discharger. -/
 
@@ -709,9 +709,10 @@ theorem uAtAct_of_orth {opts : List Term}
 
 Two literals at one base with disjoint held sets. This is the one phase whose test is a
 `Prop` rather than a `Bool`, for the reason given at the top of the file, and it is the
-generalization of `sepA_literalN_disjoint` and `sepV_refine_disjoint`'s literal instances:
-`uAtCan_literal_literal` and `uAtCan_of_literalN_disjoint` in `Discharge.lean` are two bases
-of the *same* rule, and this is that rule once, uniform in the base. -/
+generalization of the hand instances at one base: `uAtCan_of_literalN_disjoint` in
+`Discharge.lean` is one of them, and this is that rule once, uniform in the base. Its
+siblings at the string base went with the per-aspect layer, this phase being what reaches
+them. -/
 
 /-- Disjoint held sets make `inL` disjoint, at every base. Two bases are not the pattern
     match:
@@ -791,9 +792,10 @@ theorem admALit_iff {k : GroundKind} {ls : NEFinset k.Carrier} {a : Attr} :
 /-- …and so the read side is the same `inL` disjointness, one level up: the base reads the
     attribute to *one* value, and one value cannot be in two disjoint held sets.
 
-    This is `sepA_refine_disjoint`'s argument at a literal, and the reason §5 recorded the
-    readable side as "undischargeable from the tables alone" was that the old `admALit .number`
-    row was `⊤`. The row asks now. -/
+    This was the read-side argument the retired `SepA` instance made at a literal, and the
+    reason §5 recorded the readable side as "undischargeable from the tables alone" was that
+    the old `admALit .number` row was `⊤`. The row asks now, and this is where the argument
+    lives. -/
 theorem admALit_disjoint {k : GroundKind} {ls ls' : NEFinset k.Carrier}
     (hd : ∀ x ∈ ls.1, x ∉ ls'.1) (a : Attr)
     (h : AdmALit k ls a = true) : AdmALit k ls' a = false := by
@@ -892,12 +894,12 @@ theorem not_orth_array_literals :
     base's. -/
 theorem not_orth_literal_string : Orth (.literal .string lsA) .string = false := by decide
 
-/-- `not_sep_opaq_lossy_string`, `not_sep_opaq_strict_string`: `opaque` writes strings at
-    either numeric policy. -/
+/-- `opaque` writes strings at either numeric policy — the fact the retired layer's two
+    `opaque`-against-`string` refutations carried, kept here where it is decidable. -/
 theorem not_orth_opaq_string_lossy : Orth (.opaq true) .string = false := by decide
 theorem not_orth_opaq_string_strict : Orth (.opaq false) .string = false := by decide
 
-/-- `not_sepV_literal_heldLiteral`, `not_uAtCan_literal_held`: `held`'s `f` runs *before* the
+/-- `not_uAtCan_literal_held`: `held`'s `f` runs *before* the
     subterm's row, so it can move the value into any constructor and the write occupancy is
     `⊤`. Holds for every `f` and `g`, which is what makes it a phase-*opaque* case rather
     than a gap in the tables. -/
@@ -912,10 +914,11 @@ theorem not_orth_literal_held (f g : Value → Value) :
 theorem not_orth_literal_literal :
     Orth (.literal .string lsA) (.literal .string lsB) = false := by decide
 
-/-- …and the pair, discharged — `uAtCan_literal_literal` again, with the base-specific
-    reasoning replaced by one appeal to the uniform rule. At `.number` the same theorem
-    applies with the premise proved by hand rather than by `decide`, `DecidableEq Double`
-    being noncomputable; that is `uAtCan_of_literalN_disjoint`'s content, generalized. -/
+/-- …and the pair, discharged: the hand proof at the string base said this with
+    base-specific reasoning and was retired with the per-aspect layer, so this is now the
+    only statement of it. At `.number` the same theorem applies with the premise proved by
+    hand rather than by `decide`, `DecidableEq Double` being noncomputable; that is
+    `uAtCan_of_literalN_disjoint`'s content, generalized. -/
 theorem uAtCan_literal_literal_by_orth :
     UAtCan [Term.literal .string lsA, Term.literal .string lsB] :=
   uAtCan_of_separates (forall_mem_pair (lawful_literal _ _) (lawful_literal _ _))
@@ -929,17 +932,21 @@ Where the hand proofs sit, and the two that sit nowhere. `Orth` is the decidable
 
 | theorem | phase | reached |
 | --- | --- | --- |
-| `sepV_string_dunion_nil` | slot | `Orth1` |
-| `sepV_number_opaque`, `sepA_number_opaque` | slot | `Orth1` |
-| `uAtCan_string_null`, `uAtCan_string_boolean`, `uAtCan_number_opaque` | slot | `Orth1` |
-| `uAtCan_literal_literal`, `uAtCan_of_literalN_disjoint` | alternatives | `separates_literal_disjoint` |
-| `sepA_literalN_disjoint`, `sepA_literal_heldLiteral` | alternatives | read half of the same |
+| `uAtCan_of_literalN_disjoint` | alternatives | `separates_literal_disjoint` |
 | `sep_lazy_literal`, `sepA_lazy_literal`, `sep_nullable_plain` | alternatives | the same, under a transparent wrapper |
-| `sepV_refine_disjoint`, `sepA_refine_disjoint`, `uAtCan_of_refine_disjoint`, `uAtCan_boolLiterals`, `uAtCan_refine_container` | opaque predicate | never — `q` is arbitrary |
-| `sepV_literal_heldLiteral`, `sepJV_set_literals` | opaque predicate | never — `f`, and a `q` inside a `refine` |
+| `uAtCan_of_refine_disjoint`, `uAtCan_boolLiterals`, `uAtCan_refine_container` | opaque predicate | never — `q` is arbitrary |
+| `sepJV_set_literals` | opaque predicate | never — a `q` inside a `refine` |
 | `uAtCan_dunion` | tag | a different constructor; already a theorem |
 | `uAtCan_opaque` | kind | one level below the term language |
 | `uAtAct_array_literals` | none: `UAtCan` itself is false | never — there is nothing to certify |
+
+**The rows that are gone were the reason this table was worth having.** Every discharge in
+phase *slot*, and the string-base half of phase *alternatives*, was a hand proof stated on the
+per-aspect `SepV`/`SepA` and reached here by `decide` — so when that layer was retired the
+hand proofs went with it and this file is what certifies those pairs now. What is left is the
+three phases `Orth` does *not* reach and the two constructors below the term language: the
+table has stopped being a map of duplicated work and is now a list of what only exists by
+hand.
 
 **Two fit no phase of the classifier, and each is a limit worth naming** — a different limit
 from the row above them, where the phase is `none` because `UAtCan` is false and there is no
@@ -958,7 +965,9 @@ admit `[]`) while meeting `UAtAct`, because the *union* declines the empty array
 holds only where the union acts can be certified per-option, which is what a syntactic
 certificate on a pair of terms is. That gap is where the working container schemas sit. -/
 
-/-- The end-to-end shape: `uAtCan_string_null` again, from one `decide`. -/
+/-- The end-to-end shape, from one `decide` — and since the hand proof it used to restate
+    was retired with the per-aspect layer, this is now where `UAtCan [string, null]` is
+    established rather than a second route to it. -/
 theorem uAtCan_string_null_by_orth : UAtCan [Term.string, Term.null] :=
   uAtCan_of_orth (forall_mem_pair lawful_string lawful_null)
     (forall_mem_pair rfl rfl)
