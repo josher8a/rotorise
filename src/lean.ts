@@ -567,7 +567,7 @@ const leanTermOfDef = (def: CodecDef, at: string, forced: number): string => {
             return `Term.tuple [${elements}] ${tail}`
         }
         case 'record':
-            return `Term.record (${leanTermOf(def.value, `${at}.value`, forced)})`
+            return `Term.record (${leanTermOfDef(def.value, `${at}.value`, forced)})`
         case 'attributes': {
             const names = Object.keys(def.of)
             const fields = leanKeyFunction(

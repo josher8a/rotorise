@@ -304,7 +304,7 @@ export type CodecDef =
           /** The term for everything past `elements`, where the tuple has a tail. */
           readonly tail?: TermDef
       }
-    | { readonly kind: 'record'; readonly value: AnyCodec }
+    | { readonly kind: 'record'; readonly value: TermDef }
     | {
           readonly kind: 'attributes'
           /** The declared attributes, each with its presence mark — see {@link Field}. */
@@ -1021,7 +1021,9 @@ export const admits = (codec: AnyCodec, value: unknown): boolean => {
             const held = asRecord(value)
             return (
                 held !== undefined &&
-                Object.values(held).every((one) => admits(def.value, one))
+                Object.values(held).every((one) =>
+                    admits(codecOfTerm(def.value), one),
+                )
             )
         }
         /**
@@ -1196,7 +1198,7 @@ const childrenOf = (
         case 'attributes':
             return one(def.of[String(segment)]?.codec)
         case 'record':
-            return one(def.value)
+            return one(codecOfTerm(def.value))
         case 'array':
             return one(codecOfTerm(def.element))
         // a set is unordered, so no document path addresses a member of one — `set` never offered
@@ -2211,7 +2213,7 @@ const denote = (def: TermDef): Pair => {
          * uses, so the two cannot drift about what a plain object is.
          */
         case 'record': {
-            const values = def.value
+            const values = codecOfTerm(def.value)
             return carriedCodec(
                 (value): value is Record<string, never> =>
                     asRecord(value) !== undefined,
@@ -3192,7 +3194,7 @@ export const record = <const C extends AnyCodec>(
     // "some map" — the same reason `map` casts
     return codecOfTerm({
         kind: 'record',
-        value: element as unknown as AttributeCodec<Decoded<C>>,
+        value: termOf(element as unknown as AnyCodec),
     }) as unknown as AttributeCodec<
         Readonly<Record<string, Decoded<C>>>,
         M<{ readonly [key: string]: AttributeOf<C> }>
@@ -5417,7 +5419,7 @@ const identifying = (codec: AnyCodec): boolean => {
                 identifying(codecOfTerm(element)),
             )
         case 'record':
-            return identifying(def.value)
+            return identifying(codecOfTerm(def.value))
         case 'untagged':
             return def.variants.every(identifying)
         case 'refine':
