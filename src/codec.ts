@@ -2496,24 +2496,6 @@ const denote = (def: TermDef): Pair => {
             )
         }
         /**
-         * §3 `(literal)`,        /**
-         * §3 `(literal)`, and it is **not** a sixth ground term: `literalCodec k ls` is
-         * `(baseCodec k).restrict (inL k ls)`, the base's pair narrowed to membership of `ℓ`. The
-         * base is the index, so the row reaches it by denoting `{ kind: base }` — the five bases
-         * are exactly five term kinds.
-         *
-         * **What the base's own read gate buys, stated where it is now free.** The hand-written
-         * row re-checked `isNumeral` before consulting `ℓ`, because `Number` is far more permissive
-         * than an `N` — it reads `''`, whitespace, `0x10` and `0b11`, none of which DynamoDB hands
-         * back, and membership in `ℓ` does not filter them out: `number(0, 1, 2)` read `{ N: '' }`
-         * as `0`. Going through the base means that gate is the base's, asked once, and the row no
-         * longer restates it.
-         *
-         * **At `number` the predicate is on the read value and not on the stored text**, which is
-         * the model's `inL` at that base and the one place §5's two literal rules part: a string
-         * literal's stored text *is* its value, a numeric literal's is not.
-         */
-        /**
          * §3 `(opaque)`: the recursive union of everything self-identifying, at whichever numeric
          * policy the term names. `lawful_opaqCodecω` is the lemma, and it is a *theorem* rather
          * than an obligation — the model's `Obligations (.opaq _)` is `True`, which is what makes
@@ -2530,6 +2512,23 @@ const denote = (def: TermDef): Pair => {
                 encode: (value: unknown) => encodeUnknown(value, def.numbers),
                 decode: (attribute) => decodeUnknown(attribute, def.numbers),
             }
+        /**
+         * §3 `(literal)`, and it is **not** a sixth ground term: `literalCodec k ls` is
+         * `(baseCodec k).restrict (inL k ls)`, the base's pair narrowed to membership of `ℓ`. The
+         * base is the index, so the row reaches it by denoting `{ kind: base }` — the five bases
+         * are exactly five term kinds.
+         *
+         * **What the base's own read gate buys, stated where it is now free.** The hand-written
+         * row re-checked `isNumeral` before consulting `ℓ`, because `Number` is far more permissive
+         * than an `N` — it reads `''`, whitespace, `0x10` and `0b11`, none of which DynamoDB hands
+         * back, and membership in `ℓ` does not filter them out: `number(0, 1, 2)` read `{ N: '' }`
+         * as `0`. Going through the base means that gate is the base's, asked once, and the row no
+         * longer restates it.
+         *
+         * **At `number` the predicate is on the read value and not on the stored text**, which is
+         * the model's `inL` at that base and the one place §5's two literal rules part: a string
+         * literal's stored text *is* its value, a numeric literal's is not.
+         */
         case 'literal': {
             const allowed = def.allowed
             /**
