@@ -23,7 +23,7 @@ definition it touches.
 | `Calculus/Nesting.lean`     | §1          | **The one place `𝔸` is bigger in the model than in the store.** `Attr.Storable` (`Domain.lean`) is §1's 32-level bound, counting `L` and `M` only — a different function from `Attr.depth`, which is a termination measure and charges a wire set a layer. The ground fragment writes nesting `0`, containers add exactly one, and `not_storable_of_typed` exhibits a **derivable** term whose encoding the store refuses: the bound is absent from §3's rules rather than a premise someone failed to discharge |
 | `Calculus/Refutations.lean` | §6          | §6's "Do not hold" table, all nine settled: `not_equiv_lazy` (the row where `≡`'s member index matters), `not_equiv_union_array`, `not_equiv_union_extend`, the two `tuple`-tail rows, `not_equiv_refine_held`, `legacy_breaks_MP`, `e_comp_p_ne_id` — plus `optional` nesting and `set(union(…))`, both of which the syntax rules out |
 | `Calculus/Axioms.lean`      | §3          | `#assert_axioms`, and the headline theorems run through it — the advertised axiom base (`propext`, `Quot.sound`, the `Double` axioms; **no `Classical.choice`**) as a build error rather than a claim in prose |
-| `Calculus/Discharge.lean`   | §5          | The discharges of (U) that no phase of `Orth` reaches — an arbitrary `q` inside a `refine`, a union of numeric literals, `(dunion)` and `opaque`, and `uAtAct_array_literals` where `UAtCan` is outright false — with the two counterexamples that repaired (K) and the refutation of (D) as a discharger. The four per-aspect tables this file used to carry are retired: §5 states (K) on option admission and occupancy, `Calculus/Exactness.lean` proves those rows exact, and `Calculus/Orthogonality.lean` decides the pairs a declaration can decide |
+| `Calculus/Discharge.lean`   | §5          | The discharges of (U) that no phase of `Orth` reaches — an arbitrary `q` inside a `refine`, a union of numeric literals, `(dunion)` and `opaque`, and `uAtAct_array_literals` where `UAtCan` is outright false — with the two counterexamples that repaired §5's admission row and the refutation of (D) as a discharger. The four per-aspect tables this file used to carry are retired: §5 states that row on option admission and occupancy, `Calculus/Exactness.lean` proves those rows exact, and `Calculus/Orthogonality.lean` decides the pairs a declaration can decide |
 
 **The mechanization is complete: the project builds with zero `sorry`.** Both halves
 of §5's soundness theorem are machine-checked — `soundness` (all four laws, (MP) with
@@ -126,14 +126,15 @@ and the judgement to it), and `lazy` concludes `⊤` in the model exactly as the
   disjoint on the nose, both options reading `S "A"`. So (D) is well-formedness on the `T`
   index, and the readable side is decided on stored attributes — distinct `μ`, or disjoint
   readable-side admission.
-- **§5's `ident` half of (K) was unsound as stated; the mechanization found it and the
-  doc is fixed.** §5 used to write (K) as `κ(cᵢ) ∩ κ(cⱼ) = ∅ ∨ ident(cᵢ) ∨ ident(cⱼ)`
+- **§5's decides-its-own-membership disjunct was unsound as stated; the mechanization
+  found it and the doc is fixed.** §5 used to write its writable-side discharger as
+  `κ(cᵢ) ∩ κ(cⱼ) = ∅ ∨ ident(cᵢ) ∨ ident(cⱼ)`
   and call it sufficient for (U). Neither disjunct carries it, and both counterexamples
   are proved in `Discharge.lean`: `not_uAtCan_literal_string` (one-sided `ident` —
-  `union(literal("A"), string)` passed (K), and both options admit `"A"`) and
+  `union(literal("A"), string)` passed it, and both options admit `"A"`) and
   `not_uAtCan_array_literals` (two-sided `ident` — `ident` propagates through `array`,
   but disjointness of the admissible sets does not, and both options admit `[]`). §5 keeps
-  both counterexamples and states (K) on option admission, disjoint per side — `Adm`/`AdmA`
+  both counterexamples and states the discharger on option admission, disjoint per side — `Adm`/`AdmA`
   are `dom(e)`/`dom(p)` on the nose, and admission by names is what a `union` asks of an
   object option. `Calculus/Orthogonality.lean` discharges §5's own worked example, a pair
   that shares its occupancy on both sides, so only the admissible sets reach it.

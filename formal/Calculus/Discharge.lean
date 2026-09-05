@@ -10,7 +10,7 @@ need.
 **The four tables are gone.** The per-aspect kind, decides-its-own-membership and
 admissible-set recursions were §5's
 approximations, transcribed here clause for clause while the section stated them. The
-section states (K) on option admission and occupancy now, `Exactness.lean` proves
+section states its discharger on option admission and occupancy now, `Exactness.lean` proves
 `Adm`/`AdmA` exact at every constructor, and `Orthogonality.lean` decides the pairs a
 declaration can decide. A transcription of an analysis nothing states and nothing consumes
 is a description with nothing keeping it honest, so it went.
@@ -32,7 +32,8 @@ well-formedness condition on the `T` index and lives there — `DIncomp`, a prem
 `Typed.union` (`Typing.lean`). `DDisj` below is the *stronger* reading §5 considered and
 withdrew, kept only to be refuted.
 
-The two counterexamples that repaired (K) are at the foot of the file. §5 keeps both, and
+The two counterexamples that repaired §5's discharger are at the foot of the file. §5 keeps
+both, and
 they are the machine-checked half of a correction the document has already made.
 -/
 
@@ -237,7 +238,8 @@ theorem pairwise_imp_mem {α : Type} {R S : α → α → Prop} :
 
     Disjointness of admissible sets is not on its own a discharge, and the reason is a term
     whose set is *empty*: it is disjoint from everything, including from itself, so it would
-    separate from options (K) refuses. `discriminatedUnion(d)` with no options is that term,
+    separate from options the discharger refuses. `discriminatedUnion(d)` with no options is
+    that term,
     and `(dunion)`'s premises are quantified over the option list, so it is derivable. -/
 
 
@@ -481,13 +483,13 @@ theorem pairwise_pair {α : Type} {R : α → α → Prop} {x y : α} (h : R x y
   · exact h
   · exact absurd hz (by simp)
 
-/-! ## Why "one option decides its own membership" was never an exemption from (K)
+/-! ## Why "one option decides its own membership" was never an exemption
 
-    An earlier §5 stated **(K)** as a disjunction over whether an option *decides its own
-    membership* — a `literal` does, a bare `string` does not — and called it sufficient for
+    An earlier §5 stated its writable-side discharger as a disjunction over whether an option
+    *decides its own membership* — a `literal` does, a bare `string` does not — and called it sufficient for
     (U). It is not, and the two counterexamples below are why no discharger here or in
-    `Orthogonality.lean` carries that disjunct. §5 keeps both counterexamples and states (K)
-    on the admissible sets themselves, so what follows is the machine-checked half of a
+    `Orthogonality.lean` carries that disjunct. §5 keeps both counterexamples and states the
+    discharger on the admissible sets themselves, so what follows is the machine-checked half of a
     correction the document has already made, not a live disagreement with it.
 
     The withdrawn rule was right about what deciding buys: attempted admission on a

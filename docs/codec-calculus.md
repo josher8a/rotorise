@@ -630,7 +630,7 @@ unions it covers:
 | Discharger                          | Decides                                               | From                           |
 | ----------------------------------- | ----------------------------------------------------- | ------------------------------ |
 | distinct members                    | the readable side, where the stored attributes differ | `μ`, the judgement's own index |
-| **(K)** — disjoint option admission | either side, each side asked on its own               | admission and occupancy, below |
+| disjoint option admission           | either side, each side asked on its own               | admission and occupancy, below |
 | tag disjointness                    | `(dunion)`, outright — both sides                     | the discriminator literals     |
 | disjoint predicates over one base   | refinements of a common `c`, outright — both sides    | the predicates `q`             |
 | kind disjointness                   | `opaque`'s fixpoint (§3), outright                    | one option per kind of §1      |
@@ -647,7 +647,7 @@ allows, `μ` the attributes whose member it allows, a discriminator's tag the it
 its tags — and **option admission** is the family itself, the finest there is: the set the union
 consults when it asks whether an option could take the input.
 
-Read that way **(K)** stops offering a _choice_ between a shape and a set. The two constraints
+Read that way the admission row stops offering a _choice_ between a shape and a set. The two constraints
 simply **intersect** — an option may write `v` only if its shape allows the constructor of `v` _and_
 it admits `v` — and disjointness of the intersections follows from disjointness in either factor. A
 coarse shape and an exact set are two factors of one family rather than two mechanisms, which is why
@@ -658,8 +658,8 @@ member, and nothing has to reconcile the two.
 What is left to distinguish the rows is one thing only: whether a row constrains _both_ families or
 one. `μ` labels attributes and nothing else, so the member row settles the readable side and never
 the writable one. A discriminator's tag and §1's kind label both, which is why those two settle
-**(U)** outright. **(K)** is asked once per side and may settle one side or both; a union is
-resolved when both sides are resolved, by whatever combination of rows reaches them.
+**(U)** outright. The admission row is asked once per side and may settle one side or both; a
+union is resolved when both sides are resolved, by whatever combination of rows reaches them.
 
 Read that way, `(dunion)` below is not a second kind of sum. It is `(union)` with admission **read
 off** the discriminator instead of attempted, and its `(U)` is a theorem because reading a label
@@ -667,8 +667,8 @@ off an input is something an option cannot be wrong about.
 
 What no discharger covers stays an obligation the semantics enforces per input by failing — safe for
 every law except **(R)** at a canonical attribute, and that residue is exactly what the theorem
-below names. An option whose shape is `⊤` is one **(K)** never separates, for the same reason it
-cannot be checked: it could be anything. That costs nothing, because failing to discharge is not
+below names. An option whose shape is `⊤` is one the admission row never separates, for the same
+reason it cannot be checked: it could be anything. That costs nothing, because failing to discharge is not
 refusing — **(U)**
 still guards each value the option is actually given.
 
@@ -721,9 +721,9 @@ license it.
 **Normatively, the rule is unique admission as stated above.** This subsection records a proved
 alternative and the trade, not a change to the judgement.
 
-### The machinery of (K)
+### The machinery of admission
 
-**(K)** asks, of each option and each side, which inputs the option may be given: which values it may
+The admission row asks, of each option and each side, which inputs the option may be given: which values it may
 be asked to write, and which attributes it may be asked to read. Write `V(c) ⊆ Value` and `A(c) ⊆ 𝔸`
 for those two sets. Two things build them, both by structural recursion over the terms of §3–§4, and
 both total.
@@ -764,7 +764,7 @@ object option by its **names**: a name set `N` admits `object(s, ρ)` when every
 option's codec. So `V(c)` and `A(c)` are _option_ admission — admission by names at an object, and
 `dom(e)` and `dom(p)` at every other term.
 
-Stating **(K)** on a term's own admissible sets instead is unsound and not merely coarse, and one
+Stating the row on a term's own admissible sets instead is unsound and not merely coarse, and one
 pair shows it. Take two objects declaring the same single `req` name and different field terms,
 `⟨a : String⟩` against `⟨a : Number⟩`. Their admissible sets are disjoint on both sides, a map the
 first writes carrying a string at `a` which the second's field term refuses. Both are derivable,
@@ -798,13 +798,13 @@ index already computes.
 
 `⊤` covers two situations the check treats alike and the semantics does not: **unknown** — `held`,
 `custom` and `lazy`, whose answer exists but cannot be read without forcing — and **everything** —
-`opaque`, which accepts every kind by design. **(K)** separates neither, and both fall to **(U)**
+`opaque`, which accepts every kind by design. The row separates neither, and both fall to **(U)**
 per input. The difference resurfaces only inside `opaque`'s own derivation, where "everything" is
 precisely what makes its fixpoint's options pairwise kind-disjoint (§3).
 
 **The two, conjoined, are the family.** An option's set of values is its occupancy intersected with
 its option admission, and its set of attributes likewise. Disjointness in either factor is enough,
-which is what leaves **(K)** decidable where it decides at all: **on one side, two options separate
+which is what leaves the row decidable where it decides at all: **on one side, two options separate
 when their occupancies on that side are disjoint; on both sides at once, when one option requires a
 name the other does not declare.** That is a question about two terms, answered by computation at
 the declaration. What it declines is an obligation and not a refusal.
@@ -859,11 +859,13 @@ constraint is a statement about the language, not a lever on the model.
 |       |                                                                                |                                                                                                                                                        |
 | ----- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **D** | `∀ i ≠ j. ¬(Tᵢ ⊆ Tⱼ) ∧ ¬(Tⱼ ⊆ Tᵢ)`                                             | Well-formedness: no option's held set subsumes another's. Decidable from the held sets alone. It does **not** discharge the readable side — see below. |
-| **K** | `∀ i ≠ j. V(cᵢ) ∩ V(cⱼ) = ∅` on the writable side, `A(cᵢ) ∩ A(cⱼ) = ∅` on the readable one | No input reaches two options. A **discharger**, not a premise — it settles the side it decides at the declaration, and where it fails the obligation stands. Needs option admission, which the held sets do not determine. |
+| admission | `∀ i ≠ j. V(cᵢ) ∩ V(cⱼ) = ∅` on the writable side, `A(cᵢ) ∩ A(cⱼ) = ∅` on the readable one | No input reaches two options. A **discharger**, not a premise — it settles the side it decides at the declaration, and where it fails the obligation stands. Needs option admission, which the held sets do not determine. |
 
-Only **(D)** is a premise. **(K)** is the discharger, and the asymmetry is not an oversight: **(D)**
-is a condition on the judgement's own index, so the rule can demand it, while **(K)** answers a
-question about inputs that the rule states as **(U)** and settles where it can.
+Only **(D)** is a premise, and it is the only condition here with a letter, because it appears in
+a rule. Everything in the discharger table is a discharger, and the asymmetry is not an
+oversight: **(D)** is a condition on the judgement's own index, so the rule can demand it, while
+a discharger answers a question about inputs that the rule states as **(U)** and settles where it
+can.
 A union no discharger covers is still a term — `union(array(literal("A")), array(literal("B")))`
 and its `record` twin are ones people write — and what such a union lacks is not derivability but
 the theorem: its **(U)** is unsettled at the declaration, and the semantics enforces it per input by
@@ -874,10 +876,10 @@ nor reads once they collide, so the loss is that the union declines the empty ca
 The same union built from `object`s is decided outright, by names: a `req` binding is a name the
 empty item lacks, so there is no empty case to collide at.
 
-**(D)** and **(K)** ask the same kind of question of the two sides of the pair, and neither implies
-the other. `union(array(string), array(number))` satisfies **(D)** — the held sets are incomparable
-— and is not discharged by **(K)**: both options write a sequence, both store `L`, and both admit
-the empty array.
+**(D)** and the admission row ask the same kind of question of the two sides of the pair, and
+neither implies the other. `union(array(string), array(number))` satisfies **(D)** — the held sets
+are incomparable — and is discharged by nothing: both options write a sequence, both store `L`,
+and both admit the empty array.
 
 `union(set(string), set(number))` _is_ discharged, and on both sides, which is worth seeing because
 the writable side is the one that labels by constructor. Those options store `SS` and `NS`, so
@@ -1175,7 +1177,7 @@ everywhere both are defined.
 
 | Equation                                                            |                                                                                                                                                                                                                                   |
 | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `union(array(c₁), array(c₂)) ≢ array(union(c₁, c₂))`                | Left: a sequence homogeneous in one option. Right: a sequence of either, elementwise. Different held sets, and only the right has (K) to discharge its (U).                                                                           |
+| `union(array(c₁), array(c₂)) ≢ array(union(c₁, c₂))`                | Left: a sequence homogeneous in one option. Right: a sequence of either, elementwise. Different held sets, and only the right has a discharger for its (U).                                                                           |
 | `tuple(c₁ … cₙ, rest(c)) ≢ tuple(c₁ … cₙ) ` and `≢ array(union(…))` | A fixed head with a repeating tail is neither: a tuple has no tail and an array has no head.                                                                                                                                      |
 | `set(union(c₁, c₂))` — not derivable                                | The premise on `set` demands a member, and a union of options writing different members has none.                                                                                                                                 |
 | `refine(held(c, f, g), q) ≢ held(refine(c, q), f, g)`               | The refinement applies on opposite sides of the iso, so `q` is a subset of different sets. Two different terms, both meaningful.                                                                                                  |
@@ -1193,7 +1195,7 @@ Three layers answer different questions, and conflating them is what makes a sid
 optional. A grammar over the terms — a regular tree grammar, with nonterminals indexed by `μ` — says
 which terms can be _written_. It cannot express **(D)**, which relates siblings rather than a term to
 its subterms, so well-formedness needs the judgement of §3 and §5 rather than a production — nor
-**(K)** and **(U)**, which are not about the term at all but about the inputs it is given.
+the dischargers and **(U)**, which are not about the term at all but about the inputs it is given.
 And the judgement in turn says nothing about what a term _means_; that is §2, the pair and its laws —
 a connection §5's soundness theorem proves rather than leaves implied.
 

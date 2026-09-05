@@ -464,7 +464,7 @@ theorem fallback_μ (t : Term) (v : Value) :
 /-! ## `union` is associative
 
 §6's last row, and the only conditional one in the table: "associative, where both sides
-satisfy (D) and (K) — and only on inputs satisfying (U): an ambiguity *inside* the nested
+satisfy (D) and a discharger — and only on inputs satisfying (U): an ambiguity *inside* the nested
 option fails locally on the left, where the outer union may still resolve, and globally on
 the right."
 

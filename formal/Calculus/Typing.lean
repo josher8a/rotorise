@@ -23,8 +23,8 @@ Mechanization choices, and where they diverge from the doc (each is routine to s
   values share a kind. `literal (k : GroundKind) (ls : NEFinset k.Carrier)` gets that from the
   *type*: with the base as an index, homogeneity, nonemptiness and pairwise distinctness are
   Lean's. `GroundKind` covers all six bases, so nothing §3 admits is spelled `refine`.
-* **§5's (K) is in neither list, and that is the rule.** `(union)`'s premises are the
-  option judgements and (D); (K) is a *discharger* of the (U) obligation, and lives with
+* **§5's dischargers are in neither list, and that is the rule.** `(union)`'s premises are
+  the option judgements and (D); a discharger settles the (U) obligation, and lives with
   `κ`/`ident`/`adm` in `Discharge.lean` — downstream of this file, which is why it could
   not be a premise here even if it were one. Failing to discharge is not refusing:
   `union(array(literal "A"), array(literal "B"))` is `Typed`, and `UAtCan` is false of it
