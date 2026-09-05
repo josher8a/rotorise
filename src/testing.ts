@@ -1112,9 +1112,6 @@ export const arbitraryOf = (
             return rng() < 0.25
                 ? null
                 : arbitraryOf(codecOfTerm(def.inner), rng, size)
-        case 'optional':
-        case 'fallback':
-            return arbitraryOf(def.inner, rng, size)
         case 'legacy':
             return arbitraryOf(codecOfTerm(def.current), rng, size)
         case 'lazy':
@@ -1277,9 +1274,6 @@ export const shrinkOf = (
             return value === null
                 ? []
                 : [null, ...shrinkOf(codecOfTerm(def.inner), value)]
-        case 'optional':
-        case 'fallback':
-            return shrinkOf(def.inner, value)
         case 'legacy':
             return shrinkOf(codecOfTerm(def.current), value)
         case 'lazy':
@@ -1935,9 +1929,6 @@ const unionsIn = (subject: AnyCodec): readonly UnionSite[] => {
                         ? undefined
                         : codecOfTerm(def.rest),
                 )
-            case 'optional':
-            case 'fallback':
-                return inner(def.inner)
             case 'refine':
             case 'nullable':
             case 'held':

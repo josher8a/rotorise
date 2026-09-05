@@ -11,7 +11,7 @@
  * erased at build time and there is no import cycle at runtime.
  */
 import type { AttributeValue } from './attribute'
-import type { AttributeCodec, CodecDef, Rng } from './codec'
+import type { AttributeCodec, Rng, TermDef } from './codec'
 import type { Result } from './result'
 import { orThrow } from './result'
 
@@ -27,7 +27,7 @@ export type Codec<T, A extends AttributeValue> = {
     readonly decode: (attribute: AttributeValue) => Result<T>
     readonly arbitrary?: (rng: Rng, size: number) => T
     readonly shrink?: (value: T) => readonly T[]
-    readonly def: CodecDef
+    readonly def: TermDef
 }
 
 /**

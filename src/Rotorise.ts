@@ -7,8 +7,10 @@ import type {
 import { carrying } from './attribute'
 import type {
     AnyCodec,
+    AnyDeclaration,
     Encoded,
     EncodedBy,
+    FieldDef,
     IsUnion,
     ItemCodec,
     ItemSpec,
@@ -1078,9 +1080,8 @@ export type ConstantAttributes<Spec> = [Spec] extends [undefined]
             // them decides neither — which is what `decides` answers at runtime. Asking only whether
             // a `constant` was declared had the type promise a component nobody needed to pass,
             // while the implementation went on to demand it
-            [K in keyof Spec]: Spec[K] extends {
-                readonly constant: infer Only extends string
-            }
+            [K in keyof Spec]: ConstantValue<Spec[K]> extends infer Only extends
+                string
                 ? IsUnion<Only> extends true
                     ? never
                     : K
@@ -1095,7 +1096,10 @@ export type ConstantAttributes<Spec> = [Spec] extends [undefined]
  * does not.
  */
 type IsVariantSpec<Spec> = [Spec[keyof Spec]] extends [
-    { readonly unsafeEncode: unknown; readonly unsafeDecode: unknown },
+    // a member declares one attribute either way, and the two say so differently: a codec by its
+    // pair, a field by its definition. A variant is a spec rather than a declaration and has neither
+    | { readonly unsafeEncode: unknown; readonly unsafeDecode: unknown }
+    | { readonly def: FieldDef },
 ]
     ? false
     : true
@@ -1107,9 +1111,29 @@ type IsVariantSpec<Spec> = [Spec[keyof Spec]] extends [
  * would let a variant that decides nothing be outvoted, where `unknown` absorbs. One silent variant
  * is enough.
  */
-type ConstantOrAny<C> = C extends { readonly constant: infer V extends string }
+type ConstantOrAny<C> = ConstantValue<C> extends infer V extends string
     ? V
     : unknown
+
+/**
+ * What one declared attribute decides, at the type level, with §4's two marks read.
+ *
+ * The type half of {@link constantOf}, and it must give the same answer: a name that may be absent
+ * decides nothing, a stand-in is written always so what it stands in for still decides, and the
+ * constants spec is what holds the two together.
+ */
+type ConstantValue<C> = C extends {
+    readonly def: { readonly kind: 'optional' }
+}
+    ? unknown
+    : C extends {
+            readonly def: { readonly kind: 'fallback' }
+            readonly codec: infer Marked
+        }
+      ? ConstantValue<Marked>
+      : C extends { readonly constant: infer V extends string }
+        ? V
+        : unknown
 
 /** What the variants say about one attribute, collapsed. */
 type AcrossVariants<Variants, K> = {
@@ -1177,7 +1201,7 @@ const callable = <T>(
 /** An erased item codec — what {@link isItemCodec} narrows to, and all this layer uses. */
 type ItemCodecRuntime = ItemCodec<
     Record<string, unknown>,
-    Record<string, AnyCodec>
+    Record<string, AnyDeclaration>
 >
 
 /**
@@ -1220,11 +1244,28 @@ const isTagged = (value: unknown): value is TaggedRuntime =>
  * variant that decides nothing, one that lacks the attribute, and two that disagree all answer the
  * same way — nothing is decided, so the caller is asked, as it was before any of this.
  */
+/**
+ * What one declared attribute decides, read where the field is held.
+ *
+ * §4's two marks answer differently and neither is the codec's answer. A name that may be absent
+ * decides nothing about a key, because a key built from it would have no value to build from in the
+ * rows that omit it. A stand-in is written always, so what it stands in for still decides.
+ *
+ * The readers do not answer this. `decides` takes a codec, a field is not one, and the body is what
+ * holds a field — so the body is where the mark is read.
+ */
+const constantOf = (declared: AnyDeclaration): unknown => {
+    const def = declared.def
+    if (def.kind === 'optional') return undefined
+    if (def.kind === 'fallback') return decides(def.inner)
+    return decides(declared as AnyCodec)
+}
+
 const agreedConstant = (codec: TaggedRuntime, component: string): unknown => {
     let agreed: unknown
     for (const name of Object.keys(codec.spec)) {
-        const found = codec.variant(name)?.field(component)
-        const value = found && decides(found)
+        const found = codec.variant(name)?.spec[component]
+        const value = found && constantOf(found)
         if (value === undefined) return undefined
         if (agreed === undefined) agreed = value
         else if (agreed !== value) return undefined
@@ -1472,8 +1513,10 @@ export const tableEntry =
                 : isTagged(attributes)
                   ? (component: string) => agreedConstant(attributes, component)
                   : (component: string) => {
-                        const found = attributes.field(component)
-                        return found && decides(found)
+                        // the spec and not `field`, which hands back the codec a member marks:
+                        // the two marks are the answer here, so the declaration is what is read
+                        const found = attributes.spec[component]
+                        return found && constantOf(found)
                     }
 
         /**
