@@ -10,8 +10,10 @@ import type { AnyCodec } from './codec'
 import {
     CodecError,
     codecOfTerm,
+    fallback,
     object,
     opaque,
+    optional,
     refine,
     string,
     termOf,
@@ -202,6 +204,24 @@ describe('the rest policy a definition records', () => {
         expect(codecOfTerm(termOf(scalar)).encode('x' as never)).toEqual(
             scalar.encode('x'),
         )
+    })
+
+    /**
+     * The refusal that only a cast can reach, and it had no test.
+     *
+     * `termOf` is the one place a child is taken from something a caller handed over, and since a
+     * codec's definition became a term the checker refuses a field before the call is written. That
+     * makes the branch look dead and it is not: a brand is not a proof and a cast defeats a brand.
+     * Deleting the branch keeps the whole suite green and `tsc` alone objects, which is how this test
+     * came to be written — the refusal is load bearing for the type and was unpinned for behaviour.
+     */
+    it('refuses a field where a term is taken, reached past a cast', () => {
+        expect(() => termOf(optional(string) as unknown as AnyCodec)).toThrow(
+            /marks a \*field\*/,
+        )
+        expect(() =>
+            termOf(fallback(string, 'x') as unknown as AnyCodec),
+        ).toThrow(/this position takes a term/)
     })
 
     it('agrees with the policy the item codec reports', () => {
