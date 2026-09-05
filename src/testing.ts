@@ -1897,7 +1897,6 @@ const unionsIn = (subject: AnyCodec): readonly UnionSite[] => {
             case 'nullable':
             case 'fallback':
             case 'held':
-            case 'restOf':
                 return inner(def.inner)
             case 'legacy':
                 return inner(def.current)

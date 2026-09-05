@@ -190,6 +190,17 @@ export type OptionalCodec<
 /** Any codec, both directions erased — `never` in and `unknown` out, so every codec fits. */
 export type AnyCodec = CodecShape<never, unknown, AttributeValue>
 
+/**
+ * Anything a {@link rest} produced, whatever it marks — {@link AnyCodec}'s counterpart for the one
+ * thing that is a position rather than a codec, and the only element type {@link tuple} accepts that
+ * is not a codec.
+ *
+ * Written as the marked shape rather than as `RestCodec<unknown, AttributeValue>`, for the reason
+ * {@link TupleWrites} records: `AttributeCodec` names its value on both sides, so it is invariant
+ * and the `unknown` instantiation matches no real one.
+ */
+export type AnyRest = { readonly [restMarker]: true; readonly rest: AnyCodec }
+
 export type Decoded<C> = C extends {
     readonly attribute: AttributeCodec<infer T>
 }
@@ -341,7 +352,6 @@ export type CodecDef =
           readonly value: unknown
       }
     | { readonly kind: 'legacy'; readonly current: AnyCodec }
-    | { readonly kind: 'restOf'; readonly inner: AnyCodec }
     | {
           readonly kind: 'held'
           readonly inner: AnyCodec
@@ -396,8 +406,14 @@ export type CodecDef =
  * wrong, so the level a kind belongs to was never written down anywhere.
  *
  * These are that, written down. They are also what C3's mapping is stated over: a `TermDef` has a
- * `Term`, a `FieldDef` and a `RestDef` deliberately do not, and reporting the last two as "no
- * corresponding term" would be reporting the stratification as a gap.
+ * `Term` and a `FieldDef` deliberately does not, so reporting a field as "no corresponding term"
+ * would be reporting the stratification as a gap.
+ *
+ * **There are two levels here and §4 has three, which is the point rather than an omission.** A
+ * rest policy denotes a `Rest`, and a `Rest` is not something a *codec* can be: it is a payload of
+ * the two things that have one, a tuple's `tail` and an object's `rest`, exactly as `Body` carries
+ * it in the model. `rest(c)` is a marker those two unwrap at construction and never a codec, so
+ * there is no definition kind for it and nothing for a third stratum to classify.
  */
 
 /** §3's terms: the kinds that denote a codec. */
@@ -427,9 +443,6 @@ type TermKind =
 /** §4's fields: a *position* in an item — whether a name may be absent — and not a codec. */
 type FieldKind = 'optional' | 'fallback'
 
-/** §4's rest policy: what a tuple's tail is, which is likewise a position and not a codec. */
-type RestKind = 'restOf'
-
 /**
  * Every kind is classified, and the lists above are written out rather than derived so that adding
  * one is a decision rather than a default.
@@ -443,10 +456,8 @@ type Classified<Whole, Parts> = [Whole] extends [Parts]
         ? true
         : never
     : never
-const _everyKindHasALevel: Classified<
-    CodecDef['kind'],
-    TermKind | FieldKind | RestKind
-> = true
+const _everyKindHasALevel: Classified<CodecDef['kind'], TermKind | FieldKind> =
+    true
 void _everyKindHasALevel
 
 /** A definition that denotes a §3 `Term`. */
@@ -454,9 +465,6 @@ export type TermDef = Extract<CodecDef, { readonly kind: TermKind }>
 
 /** A definition that denotes a §4 `Field`. */
 export type FieldDef = Extract<CodecDef, { readonly kind: FieldKind }>
-
-/** A definition that denotes a §4 `Rest`. */
-export type RestDef = Extract<CodecDef, { readonly kind: RestKind }>
 
 /**
  * The member this codec writes, when it writes exactly one.
@@ -479,8 +487,6 @@ export const writes = (codec: AnyCodec): AttributeName | undefined => {
         // an adapter changes what the value is *held* as and leaves what it is *stored* as alone,
         // which is the whole of it — so the member is the inner codec's, unchanged
         case 'held':
-        // a marked element writes and takes exactly what it wraps; the mark is about position
-        case 'restOf':
             return writes(def.inner)
         /**
          * A set's member follows from its element, which the definition carries — so this is derived
@@ -565,7 +571,6 @@ export const carries = (codec: AnyCodec): readonly Shape[] | undefined => {
         case 'refine':
         case 'optional':
         case 'fallback':
-        case 'restOf':
             return carries(def.inner)
         case 'legacy':
             return carries(def.current)
@@ -869,10 +874,9 @@ export const admits = (codec: AnyCodec, value: unknown): boolean => {
             return ownsNull(def.inner)
                 ? admits(def.inner, value)
                 : value === null || admits(def.inner, value)
-        // §4's positions: the mark is about the name, and what may be held is the inner term's
+        // §4's fields: the mark is about the name, and what may be held is the inner term's
         case 'optional':
         case 'fallback':
-        case 'restOf':
             return admits(def.inner, value)
         case 'lazy':
             return admits(def.get(), value)
@@ -1900,7 +1904,7 @@ export const array = <const C extends AnyCodec>(
  * `list` gives `readonly T[]`, which cannot say that a route is one step or exactly two. Decode
  * checks the length, because a tuple whose arity is wrong is not the type it claims to be.
  */
-export const tuple = <const Cs extends readonly AnyCodec[]>(
+export const tuple = <const Cs extends readonly (AnyCodec | AnyRest)[]>(
     // asked of the union of the elements rather than mapped over them: one instantiation instead of
     // one per position, and the diagnostic lands on the call either way. Mapping cost +10% across
     // this repo, measured. `rest` is exempt, and checked for position separately
@@ -1912,9 +1916,7 @@ export const tuple = <const Cs extends readonly AnyCodec[]>(
         > &
         RestGoesLast<Cs>
 ): AttributeCodec<TupleOf<Cs>, L<TupleWrites<Cs>>> => {
-    const all = elements.map(
-        (element) => element as unknown as AnyCodec,
-    ) as readonly AnyCodec[]
+    const all = elements as readonly unknown[]
 
     /**
      * `RestGoesLast` refuses a misplaced `rest` in the *type*, and a cast defeats the type.
@@ -1926,7 +1928,7 @@ export const tuple = <const Cs extends readonly AnyCodec[]>(
      * beside `set`'s two refusals for the same reason.
      */
     const misplaced = all.findIndex(
-        (element, at) => at < all.length - 1 && element.def?.kind === 'restOf',
+        (element, at) => at < all.length - 1 && isTail(element),
     )
     if (misplaced !== -1) {
         throw new CodecError(
@@ -1941,9 +1943,8 @@ export const tuple = <const Cs extends readonly AnyCodec[]>(
      * that can be marked and looking at it is enough.
      */
     const last = all[all.length - 1]
-    const tail =
-        last?.def?.kind === 'restOf' ? (last.def.inner as AnyCodec) : undefined
-    const items = tail ? all.slice(0, -1) : all
+    const tail = isTail(last) ? last.rest : undefined
+    const items = (tail ? all.slice(0, -1) : all) as readonly AnyCodec[]
 
     return codec({
         def: { kind: 'tuple', elements: items, tail },
@@ -2007,11 +2008,8 @@ export type TupleOf<Cs extends readonly unknown[]> = Cs extends readonly [
     ...infer Head,
     infer Last,
 ]
-    ? Last extends { readonly [restMarker]: true }
-        ? readonly [
-              ...{ [I in keyof Head]: Decoded<Head[I]> },
-              ...Decoded<Last>[],
-          ]
+    ? Last extends { readonly [restMarker]: true; readonly rest: infer R }
+        ? readonly [...{ [I in keyof Head]: Decoded<Head[I]> }, ...Decoded<R>[]]
         : { readonly [I in keyof Cs]: Decoded<Cs[I]> }
     : { readonly [I in keyof Cs]: Decoded<Cs[I]> }
 
@@ -2028,10 +2026,10 @@ export type TupleWrites<Cs extends readonly unknown[]> = Cs extends readonly [
     ...infer Head,
     infer Last,
 ]
-    ? Last extends { readonly [restMarker]: true }
+    ? Last extends { readonly [restMarker]: true; readonly rest: infer R }
         ? readonly [
               ...{ [I in keyof Head]: AttributeOf<Head[I]> },
-              ...(AttributeOf<Last> & AttributeValue)[],
+              ...(AttributeOf<R> & AttributeValue)[],
           ]
         : { readonly [I in keyof Cs]: AttributeOf<Cs[I]> }
     : { readonly [I in keyof Cs]: AttributeOf<Cs[I]> }
@@ -2096,16 +2094,40 @@ export type RestGoesLast<Cs extends readonly unknown[]> = Cs extends readonly [
 export const rest = <const C extends AnyCodec>(
     element: C & NotAboutAbsence<C>,
 ): RestCodec<Decoded<C>, AttributeOf<C> & AttributeValue> =>
-    ({
-        ...(element as object),
-        def: { kind: 'restOf', inner: element as unknown as AnyCodec },
-    }) as unknown as RestCodec<Decoded<C>, AttributeOf<C> & AttributeValue>
+    ({ rest: element as unknown as AnyCodec }) as unknown as RestCodec<
+        Decoded<C>,
+        AttributeOf<C> & AttributeValue
+    >
 
-/** A codec marked for a tuple's tail. Carries what it holds and what it writes, unchanged. */
-export type RestCodec<
-    T,
-    A extends AttributeValue = AttributeValue,
-> = AttributeCodec<T, A> & { readonly [restMarker]: true }
+/**
+ * Whether this is a tail marker rather than an element — the runtime half of `restMarker`.
+ *
+ * `restMarker` is a `declare const` symbol, so it exists in the type and nowhere else, and
+ * {@link tuple} needs an answer at run time. One own property, checked by name.
+ */
+const isTail = (element: unknown): element is { readonly rest: AnyCodec } =>
+    typeof element === 'object' &&
+    element !== null &&
+    'rest' in element &&
+    // and it is not a codec, which is decidable now that every codec carries a definition. An
+    // `ItemCodec` has a `rest` of its own — its open-part policy — so the first test alone would
+    // take one for a tail
+    !('def' in element)
+
+/**
+ * A tuple's tail: the element codec, marked for a position.
+ *
+ * **Not a codec, and it used to say it was.** This was `AttributeCodec<T, A> & { …marker }`, which
+ * claimed a rest has an `encode` and a `decode` — true only because `rest(c)` was built by spreading
+ * `c`, so a bare rest encoded as its element by accident. A rest is a *position*, `Rest` in §4's
+ * third stratum, and the only two things that have one are a tuple's tail and an object's open part.
+ * Both unwrap it at construction. Nothing else may be given one, and the type no longer offers a
+ * caller the two halves to call.
+ */
+export type RestCodec<T, A extends AttributeValue = AttributeValue> = {
+    readonly [restMarker]: true
+    readonly rest: AttributeCodec<T, A>
+}
 
 /** A homogeneous string-keyed record, as `M`. */
 export const record = <const C extends AnyCodec>(

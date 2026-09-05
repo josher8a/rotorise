@@ -824,7 +824,6 @@ describe('`admits`, and the direction of the law that is true', () => {
         ['attributes(open)', object({ a: string }, decimal).item],
         ['optional', optional(string)],
         ['fallback', fallback(string, 'x')],
-        ['restOf', rest(string)],
         ['nullable', nullable(string)],
         ['legacy', legacy({ current: decimal, older: string })],
         ['refine', refine(string, isTag, { arbitrary: () => 't-x' as const })],

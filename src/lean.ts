@@ -671,11 +671,6 @@ const leanTermOfDef = (def: CodecDef, at: string, forced: number): string => {
                 at,
                 'a §4 *field*, not a term — `optional`/`fallback` denote `Field`, and no `Term` position accepts one',
             )
-        case 'restOf':
-            return refuse(
-                at,
-                'a §4 *rest policy*, not a term — it denotes `Rest`, which is a third stratum',
-            )
     }
 }
 
