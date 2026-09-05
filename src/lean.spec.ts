@@ -205,6 +205,27 @@ describe('terms', () => {
     })
 
     /**
+     * The refusal that had no test, and it needs a cast to reach.
+     *
+     * A codec's definition is a term, so nothing well typed hands the emitter a field and the branch
+     * reads as dead. It is not: a brand is not a proof and a cast defeats a brand, which is why the
+     * entry takes a declaration and refuses one, and why this is asserted through `erase` rather than
+     * left to the type. `Field.optional` is emitted where a field belongs — in an object's table —
+     * and the two spellings are what §4's strata mean.
+     */
+    it('refuses a field where a term belongs, reached past a cast', () => {
+        expect(() => leanTermOf(erase(optional(string)))).toThrow(
+            /a §4 \*field\*, not a term/,
+        )
+        expect(() => leanTermOf(erase(fallback(string, 'x')))).toThrow(
+            /`optional`\/`fallback` denote `Field`/,
+        )
+        expect(leanTermOf(erase(object({ a: optional(string) })))).toContain(
+            'Field.optional',
+        )
+    })
+
+    /**
      * §4's field table is a `Finset Name` with a function on it, not a list of pairs — so an object
      * emits a key set and a chain of key tests, and the last field is the `else`. That is total
      * because the subtype's inhabitants are exactly the declared keys.
