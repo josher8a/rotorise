@@ -190,9 +190,9 @@ mutual
       already occupies the slot.
     * `opaq lossy` — a closed form, because `opaque` is a fixed list of options: every slot,
       minus `num` when the numeric option is `Codec.empty`. This is itself an
-      over-approximation in one place — `adm_opaq_false_numSet` shows a non-lossy `opaque`
-      refuses a `numSet` too, since `opaqCodecω` budgets by the input's own depth and its
-      element codec refuses numbers — and the sound direction is to keep `numSet`.
+      over-approximation in one place: a non-lossy `opaque` refuses a `numSet` too, since
+      `opaqCodecω` budgets by the input's own depth and its element codec refuses numbers,
+      and the sound direction is to keep `numSet`.
     * `union opts` — the union of the options'. `select` admits only where *exactly one*
       option does, so the union of the options' occupancies is an over-approximation. -/
 def occV : Term → Slot → Bool
@@ -305,7 +305,7 @@ def Orth (x y : Term) : Bool := Orth1 x y || OrthM x y
 
 Two structural recursions, one per side, each mutual with a list companion for `union`. The
 statement is about the **rows** (`Adm`/`AdmA`) and about `admitOptV`/`admitOptA`, never about
-`adm`/`admA`: `select` filters by the *option* semantics, and for an object option that is
+the term's own rows: `select` filters by the *option* semantics, and for an object option that is
 `keysOk` — names, not contents — so a certificate stated on `Adm` alone would not transfer.
 See `admitOptV`. -/
 
@@ -392,10 +392,9 @@ theorem occV_admitOpt {t : Term} (h : OccSoundV t) (v : Value)
 /-- **A refusing `opaque` writes no numeral**, off the joint row.
 
     The occupancy proofs below are the only consumers, and they used to reach this fact
-    through ~~Adm_opaq_eq_adm~~ into `Discharge.lean`'s `adm_opaq_false_num` — which made the
-    whole `Orth` chain a dependent of the older tables, in the proof rather than in any
-    statement. The row asks `opaqCodecω` either way, so the fact is stated here now and the
-    chain owes the tables nothing. -/
+    through ~~Adm_opaq_eq_adm~~ into the retired per-aspect tables — which made the whole
+    `Orth` chain a dependent of them, in the proof rather than in any statement. Both rows
+    ask `opaqCodecω`, so the fact is stated here now and the chain owes them nothing. -/
 theorem Adm_opaq_false_num (d : Double) : Adm (.opaq false) (.num d) = false := by
   show ((opaqCodec (0+1) false).e (.num d)).isSome = false
   rw [opaqCodec_e_num]; rfl
@@ -420,8 +419,9 @@ mutual
     `GroundKind.slot`; `decimal`'s `dif` on `Numeral.Stored` does not change which
     constructor it matches.
 
-    `opaq false` is the one appeal to a `⊤`-row lemma from the table (`adm_opaq_false_num`),
-    and it is available because the row asks the codec. -/
+    `opaq false` is the one case that appeals to a lemma rather than to the row directly
+    (`Adm_opaq_false_num` above), and the lemma is available because the row asks the
+    codec. -/
 theorem occV_sound : ∀ (t : Term), OccSoundV t
   -- The rows whose `Adm` is a kind test and nothing more: one group, because a per-row
   -- proof here would be seven copies of one simp set. `number` and `decimal` are separate
@@ -941,7 +941,6 @@ Where the hand proofs sit, and the two that sit nowhere. `Orth` is the decidable
 | theorem | phase | reached |
 | --- | --- | --- |
 | `uAtCan_of_literalN_disjoint` | alternatives | `separates_literal_disjoint` |
-| `sep_lazy_literal`, `sepA_lazy_literal`, `sep_nullable_plain` | alternatives | the same, under a transparent wrapper |
 | `uAtCan_of_refine_disjoint`, `uAtCan_boolLiterals`, `uAtCan_refine_container` | opaque predicate | never — `q` is arbitrary |
 | `sepJV_set_literals` | opaque predicate | never — a `q` inside a `refine` |
 | `uAtCan_dunion` | tag | a different constructor; already a theorem |
@@ -951,10 +950,14 @@ Where the hand proofs sit, and the two that sit nowhere. `Orth` is the decidable
 **The rows that are gone were the reason this table was worth having.** Every discharge in
 phase *slot*, and the string-base half of phase *alternatives*, was a hand proof stated on the
 per-aspect ~~SepV~~/~~SepA~~ and reached here by `decide` — so when that layer was retired the
-hand proofs went with it and this file is what certifies those pairs now. What is left is the
-three phases `Orth` does *not* reach and the two constructors below the term language: the
-table has stopped being a map of duplicated work and is now a list of what only exists by
-hand.
+hand proofs went with it and this file is what certifies those pairs now. Three more went with
+the four tables: ~~sep_lazy_literal~~, ~~sepA_lazy_literal~~ and ~~sep_nullable_plain~~ were
+stated on the retired rows, and each said that a transparent wrapper — `lazy`, `nullable` over a
+literal — separates from a plain literal exactly as the subterm does. Nothing consumed them,
+and `Adm` and `AdmA` pass through both wrappers by definition, so the fact is the rows' rather
+than a theorem's. What is left is the three phases `Orth` does *not* reach and the two
+constructors below the term language: the table has stopped being a map of duplicated work and
+is now a list of what only exists by hand.
 
 **Two fit no phase of the classifier, and each is a limit worth naming** — a different limit
 from the row above them, where the phase is `none` because `UAtCan` is false and there is no

@@ -132,14 +132,14 @@ are one union seen by both residues: `UAtCan` refutes it at an input it never wr
 total, so `dom(p)` is the subterm's exactly. It is cited as a result now, so it is guarded
 like one. -/
 
-/-! `admA`'s `held` row, both directions. §5 gave `held` one `⊤` row on both sides; its
+/-! `AdmA`'s `held` row, both directions. §5 gave `held` one `⊤` row on both sides; its
 opacity is one-sided — `f` gates the write, `g` only post-processes the read — so the
 readable side passes through, and these two are the pair it separates and the pair it
 still does not. -/
 
-/-! The three lemmas that pin §5's declaration-time devices to the denotation. Without
-these, `κ`, `adm` and `admA` are transcriptions of a table rather than claims about the
-model, so their axiom base is part of what the soundness statements rest on. -/
+/-! The lemmas that pin §5's declaration-time devices to the denotation. Without them a row
+is a transcription of a table rather than a claim about the model, so their axiom base is
+part of what the soundness statements rest on. -/
 
 /-! The fuel-free twins. They meet §6's table through `Codec.Equiv` rather than through a
 shared transport constant — ~~denote_eq~~ was the ω-layer's and went with the layer
