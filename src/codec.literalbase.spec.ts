@@ -16,7 +16,7 @@
  * 2. `boolean(true)` — a literal at `BOOL`, which no spelling reached.
  * 3. `binary(bytes)` — a literal at `B`, compared by bytes rather than by reference.
  *
- * The definition records the base (`CodecDef['literal']['base']`) rather than leaving `writes` and
+ * The definition records the base (`Def['literal']['base']`) rather than leaving `writes` and
  * `carries` to recover it, because at `decimal` there is nothing to recover it *from*: the values are
  * strings and the member is `N`, and no reading of either says so.
  */

@@ -56,7 +56,7 @@ describe('where the variants disagree', () => {
 
     /**
      * And it says nothing about *what* is there, because there is no single thing. This used to be
-     * a `CodecDef` kind — a definition, in a language of codec definitions, for something that was
+     * a `Def` kind — a definition, in a language of codec definitions, for something that was
      * not a codec — so every reader of a definition had to carry a case for it.
      *
      * **The rule is that no reader learns anything here, and the assertion on `writes` is that

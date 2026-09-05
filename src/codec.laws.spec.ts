@@ -58,7 +58,7 @@ const seed = 20260828
  * The member a codec actually **writes**, read off the attribute rather than out of the
  * declaration.
  *
- * `writes` is a definition reader: it walks the `CodecDef` and reports what the term says it
+ * `writes` is a definition reader: it walks the `Def` and reports what the term says it
  * stores. That is the right answer for the resolver, which has only a declaration to go on, and
  * the wrong assertion for a law — §6's member-preservation row is a claim about `e`, so a test
  * that asks `writes` passes on a codec whose reader is right and whose `encode` is wrong, and
@@ -810,7 +810,7 @@ describe('(C): what a codec reads, it can write', () => {
 describe('`admits`, and the direction of the law that is true', () => {
     const isTag = (v: string): v is `t-${string}` => v.startsWith('t-')
 
-    /** One entry per `CodecDef` kind, plus the literal at each base and the two `opaque` policies. */
+    /** One entry per `Def` kind, plus the literal at each base and the two `opaque` policies. */
     const codecs: readonly (readonly [string, AnyCodec])[] = [
         ['string', string],
         ['string(...)', string('A', 'B')],
