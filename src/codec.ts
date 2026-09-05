@@ -1642,6 +1642,55 @@ const bodySem = (
 }
 
 /**
+ * §3 `(held)`: a pair reached through an adapter — the model's `Codec.through`.
+ *
+ * The word is `held`'s, because that is what this library calls the term. `f` sits in front of `e`
+ * and `g` sits behind `p`, so the adapter changes what the value is *held* as and leaves what it is
+ * *stored* as alone. §5 turns on the asymmetry: the readable side sees through it and the writable
+ * one cannot, which is the one row where the two sides of a term part in that direction.
+ *
+ * **A throw is a refusal like any other.** The two functions are the caller's, so either may throw
+ * rather than return, and the guard is what makes that a value the way §2's error channel is one
+ * rather than an exception escaping a codec.
+ */
+const heldThrough = (
+    inner: AnyCodec,
+    adapt: {
+        readonly encode: (value: never) => unknown
+        readonly decode: (held: never) => unknown
+    },
+): Pair => {
+    const guarded =
+        <A, B>(convert: (value: A) => B, direction: 'writing' | 'reading') =>
+        (value: A): Result<B> => {
+            try {
+                return convert(value)
+            } catch (thrown) {
+                return new CodecError(
+                    `the conversion for ${direction} this attribute threw: ${
+                        thrown instanceof Error
+                            ? thrown.message
+                            : String(thrown)
+                    }`,
+                )
+            }
+        }
+    const into = guarded(adapt.encode, 'writing')
+    const outOf = guarded(adapt.decode, 'reading')
+    return {
+        encode: (value) =>
+            andThen(into(value), (held) => inner.encode(held as never)),
+        decode: (attribute) => {
+            // `failed` rather than `andThen`, because a {@link Pair}'s read answers `unknown` and
+            // `Result<unknown>` *is* `unknown` — the failure channel is not visible in that type,
+            // so the test has to be made rather than inferred
+            const read = inner.decode(attribute)
+            return failed(read) ? read : outOf(read as never)
+        },
+    }
+}
+
+/**
  * **What a term means**, as one function on the definition.
  *
  * Every constructor's pair comes from here, so there is one description of what a term denotes
@@ -1849,6 +1898,9 @@ const denote = (def: TermDef): Pair => {
                     body.decode(carried),
             )
         }
+        /** §3 `(held)`. `lawful_through` is the lemma; the adapter is data the term carries. */
+        case 'held':
+            return heldThrough(def.inner, def.adapt)
         /**
          * §3 `(literal)`, and it is **not** a sixth ground term: `literalCodec k ls` is
          * `(baseCodec k).restrict (inL k ls)`, the base's pair narrowed to membership of `ℓ`. The
@@ -2813,34 +2865,10 @@ export const held = <T, const C extends AnyCodec>(
      *
      * A `CodecError` is what every caller already handles, so that is what a throw becomes.
      */
-    const guarded =
-        <A, B>(convert: (value: A) => B, direction: 'writing' | 'reading') =>
-        (value: A): Result<B> => {
-            try {
-                return convert(value)
-            } catch (thrown) {
-                return new CodecError(
-                    `the conversion for ${direction} this attribute threw: ${
-                        thrown instanceof Error
-                            ? thrown.message
-                            : String(thrown)
-                    }`,
-                )
-            }
-        }
-
-    const into = guarded(adapt.encode, 'writing')
-    const outOf = guarded(adapt.decode, 'reading')
-
-    return codec<T, AttributeOf<C>>({
-        def: {
-            kind: 'held',
-            inner: inner as unknown as AnyCodec,
-            adapt: adapt as CodecDefHeldAdapt,
-        },
-        encode: (value) =>
-            andThen(into(value), held.encode) as Result<AttributeOf<C>>,
-        decode: (attribute) => andThen(held.decode(attribute), outOf),
+    return codecOfTerm<T, AttributeOf<C>>({
+        kind: 'held',
+        inner: inner as unknown as AnyCodec,
+        adapt: adapt as CodecDefHeldAdapt,
     })
 }
 
