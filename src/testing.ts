@@ -1018,7 +1018,7 @@ export const arbitraryOf = (
             )
         case 'tuple': {
             const fixed = def.elements.map((element) =>
-                arbitraryOf(element, rng, Math.max(0, size - 1)),
+                arbitraryOf(codecOfTerm(element), rng, Math.max(0, size - 1)),
             )
             if (!def.tail) return fixed
             // a tail has no arity to hit, so its length is generated like a list's
@@ -1185,13 +1185,14 @@ export const shrinkOf = (
             // and does not: dropping one changes the length, which the fixed part forbids reasoning
             // about here — the elements are where a counterexample actually lives
             return def.elements.flatMap((element, i) =>
-                shrinkOf(element, (value as readonly unknown[])[i]).map(
-                    (smaller) => {
-                        const copy = [...(value as readonly unknown[])]
-                        copy[i] = smaller
-                        return copy
-                    },
-                ),
+                shrinkOf(
+                    codecOfTerm(element),
+                    (value as readonly unknown[])[i],
+                ).map((smaller) => {
+                    const copy = [...(value as readonly unknown[])]
+                    copy[i] = smaller
+                    return copy
+                }),
             )
         case 'record': {
             const held = value as Record<string, unknown>
@@ -1894,7 +1895,7 @@ const unionsIn = (subject: AnyCodec): readonly UnionSite[] => {
             case 'record':
                 return inner(def.value)
             case 'tuple':
-                def.elements.forEach(inner)
+                def.elements.forEach((element) => inner(codecOfTerm(element)))
                 return inner(def.tail && codecOfTerm(def.tail))
             case 'attributes':
                 Object.values(def.of).forEach((field) => inner(field.codec))

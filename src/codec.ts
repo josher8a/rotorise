@@ -300,7 +300,7 @@ export type CodecDef =
     | { readonly kind: 'array'; readonly element: AnyCodec }
     | {
           readonly kind: 'tuple'
-          readonly elements: readonly AnyCodec[]
+          readonly elements: readonly TermDef[]
           /** The term for everything past `elements`, where the tuple has a tail. */
           readonly tail?: TermDef
       }
@@ -1011,11 +1011,8 @@ export const admits = (codec: AnyCodec, value: unknown): boolean => {
             if (tail ? value.length < fixed : value.length !== fixed) {
                 return false
             }
-            // the cast here used to read `tail` as a codec, and the tail is a term. A cast
-            // defeats the checker, so this row was the one site the retyping did not report
-            const tailItems = tail ? codecOfTerm(tail) : undefined
             return value.every((one, at) =>
-                admits(def.elements[at] ?? (tailItems as AnyCodec), one),
+                admits(codecOfTerm(def.elements[at] ?? (tail as TermDef)), one),
             )
         }
         case 'record': {
@@ -1202,12 +1199,11 @@ const childrenOf = (
             return one(def.element)
         // a set is unordered, so no document path addresses a member of one — `set` never offered
         // a child either, and refusing here is what keeps a meaningless path from compiling
-        case 'tuple':
+        case 'tuple': {
             // a position past the fixed part is a tail element, where there is a tail
-            return one(
-                def.elements[Number(segment)] ??
-                    (def.tail ? codecOfTerm(def.tail) : undefined),
-            )
+            const at = def.elements[Number(segment)] ?? def.tail
+            return one(at ? codecOfTerm(at) : undefined)
+        }
         case 'tagged':
             return acrossVariants(Object.values(def.variants), segment)
         case 'untagged':
@@ -2241,7 +2237,7 @@ const denote = (def: TermDef): Pair => {
          * they say.
          */
         case 'tuple': {
-            const items = def.elements
+            const items = def.elements.map((element) => codecOfTerm(element))
             const tail = def.tail
             /** `align`: the arity test, which comes before any position is read. */
             const aligned = (
@@ -3047,7 +3043,7 @@ export const tuple = <const Cs extends readonly (AnyCodec | AnyRest)[]>(
     // `Attribute<'L'>` would flatten to "some list"
     return codecOfTerm({
         kind: 'tuple',
-        elements: items,
+        elements: items.map(termOf),
         tail,
     }) as unknown as AttributeCodec<TupleOf<Cs>, L<TupleWrites<Cs>>>
 }
@@ -5413,7 +5409,9 @@ const identifying = (codec: AnyCodec): boolean => {
         case 'array':
             return identifying(def.element)
         case 'tuple':
-            return def.elements.every(identifying)
+            return def.elements.every((element) =>
+                identifying(codecOfTerm(element)),
+            )
         case 'record':
             return identifying(def.value)
         case 'untagged':
