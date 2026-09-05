@@ -344,7 +344,7 @@ export type CodecDef =
           readonly refined: Refinement
       }
     | { readonly kind: 'optional'; readonly inner: AnyCodec }
-    | { readonly kind: 'nullable'; readonly inner: AnyCodec }
+    | { readonly kind: 'nullable'; readonly inner: TermDef }
     | {
           readonly kind: 'fallback'
           readonly inner: AnyCodec
@@ -638,7 +638,7 @@ export const carries = (codec: AnyCodec): readonly Shape[] | undefined => {
         case 'held':
             return undefined
         case 'nullable': {
-            const inner = carries(def.inner)
+            const inner = carries(codecOfTerm(def.inner))
             return inner && [...inner, 'null']
         }
         case 'untagged': {
@@ -722,7 +722,7 @@ export const occupies = (codec: AnyCodec): readonly Slot[] | undefined => {
         case 'lazy':
             return undefined
         case 'nullable': {
-            const inner = occupies(def.inner)
+            const inner = occupies(codecOfTerm(def.inner))
             return inner && [...inner, 'null']
         }
         case 'untagged': {
@@ -800,7 +800,7 @@ export const reads = (
         case 'opaque':
             return undefined
         case 'nullable': {
-            const inner = reads(def.inner)
+            const inner = reads(codecOfTerm(def.inner))
             return inner && [...inner, 'NULL']
         }
         case 'untagged': {
@@ -1083,10 +1083,12 @@ export const admits = (codec: AnyCodec, value: unknown): boolean => {
             return admits(codecOfTerm(def.current), value)
         // the same ownership question the constructor asks: where the inner term owns the null
         // point, `nullable` is that term and `null` is admitted only if the term admits it
-        case 'nullable':
-            return ownsNull(def.inner)
-                ? admits(def.inner, value)
-                : value === null || admits(def.inner, value)
+        case 'nullable': {
+            const inner = codecOfTerm(def.inner)
+            return ownsNull(inner)
+                ? admits(inner, value)
+                : value === null || admits(inner, value)
+        }
         // §4's fields: the mark is about the name, and what may be held is the inner term's
         case 'optional':
         case 'fallback':
@@ -1199,8 +1201,10 @@ const childrenOf = (
         case 'refine':
         case 'optional':
         case 'fallback':
-        case 'nullable':
             return childrenOf(def.inner, segment)
+        // its own row until `refine`'s inner is a term too, at P12
+        case 'nullable':
+            return childrenOf(codecOfTerm(def.inner), segment)
         case 'legacy':
             return childrenOf(codecOfTerm(def.current), segment)
         case 'lazy':
@@ -2420,7 +2424,7 @@ const denote = (def: TermDef): Pair => {
          * module-evaluation time that is a reference to a binding that does not exist yet.
          */
         case 'nullable': {
-            const inner = def.inner
+            const inner = codecOfTerm(def.inner)
             let owns: boolean | undefined
             const ownsInner = () => (owns ??= ownsNull(inner))
             return {
@@ -3704,7 +3708,7 @@ export const nullable = <T, A extends AttributeValue>(
 ): AttributeCodec<T | null, A | Attribute<'NULL'>> => {
     return codecOfTerm<T | null, A | Attribute<'NULL'>>({
         kind: 'nullable',
-        inner: inner as AnyCodec,
+        inner: termOf(inner as unknown as AnyCodec),
     })
 }
 

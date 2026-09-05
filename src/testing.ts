@@ -1101,7 +1101,9 @@ export const arbitraryOf = (
             return sample(rng, size)
         }
         case 'nullable':
-            return rng() < 0.25 ? null : arbitraryOf(def.inner, rng, size)
+            return rng() < 0.25
+                ? null
+                : arbitraryOf(codecOfTerm(def.inner), rng, size)
         case 'optional':
         case 'fallback':
             return arbitraryOf(def.inner, rng, size)
@@ -1264,7 +1266,9 @@ export const shrinkOf = (
                 def.refined.is as (x: unknown) => boolean,
             )
         case 'nullable':
-            return value === null ? [] : [null, ...shrinkOf(def.inner, value)]
+            return value === null
+                ? []
+                : [null, ...shrinkOf(codecOfTerm(def.inner), value)]
         case 'optional':
         case 'fallback':
             return shrinkOf(def.inner, value)
@@ -1922,9 +1926,9 @@ const unionsIn = (subject: AnyCodec): readonly UnionSite[] => {
                 )
             case 'refine':
             case 'optional':
-            case 'nullable':
             case 'fallback':
                 return inner(def.inner)
+            case 'nullable':
             case 'held':
                 return inner(codecOfTerm(def.inner))
             case 'legacy':
