@@ -558,7 +558,7 @@ const leanTermOfDef = (def: CodecDef, at: string, forced: number): string => {
         case 'tuple': {
             const elements = def.elements
                 .map((element, index) =>
-                    leanTermOf(element, `${at}[${index}]`, forced),
+                    leanTermOfDef(element, `${at}[${index}]`, forced),
                 )
                 .join(', ')
             const tail = def.tail
