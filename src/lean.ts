@@ -398,7 +398,7 @@ const shippedPredicates: ReadonlyMap<unknown, ShippedPredicate> = new Map<
  * accepted *value* is a string — `held` is the counterexample, and `opaque` writes whatever it is
  * handed. Recurses through `refine`, because a refinement writes where its inner term does.
  */
-const writesOnlyStrings = (def: CodecDef | undefined): boolean => {
+const writesOnlyStrings = (def: TermDef | undefined): boolean => {
     if (!def) return false
     if (def.kind === 'string' || def.kind === 'decimal') return true
     // read off the base rather than off the values, which is the same change the definition made:
@@ -450,8 +450,8 @@ const lazyLimit = 16
  * the vectors this module writes and only for them — `objectCodec`'s `e` is `objWrite`, which takes
  * `rc?` and not the `kn` filter (`formal/Calculus/Combinators.lean:1691`), and `rcOf` is `none` for
  * both policies, so the two denote the same `e` and differ only under `p`. A decode-direction
- * vector would have needed them apart and would have been silently wrong. `CodecDef['rest']` now
- * carries the policy rather than only its codec, and this emits all three.
+ * vector would have needed them apart and would have been silently wrong. The `attributes` term
+ * carries the policy now rather than only its codec, and this emits all three.
  */
 export const leanTermOf = (
     declared: AnyDeclaration,
@@ -606,8 +606,8 @@ const leanTermOfDef = (def: TermDef, at: string, forced: number): string => {
                         ] as const,
                 ),
             )
-            // three policies, three terms — `CodecDef` records the policy itself, so nothing here
-            // has to guess which of `drop` and `refuse` an absent codec meant
+            // three policies, three terms — the definition records the policy itself, so nothing
+            // here has to guess which of `drop` and `refuse` an absent codec meant
             const rest =
                 typeof def.rest === 'string'
                     ? `Rest.${def.rest}`
