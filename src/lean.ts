@@ -612,7 +612,7 @@ const leanTermOfDef = (def: CodecDef, at: string, forced: number): string => {
             // used to dedup by identity, which was the same invariant enforced in two places
             const options = Object.values(def.variants)
                 .map((variant, index) =>
-                    leanTermOf(variant, `${at}.variants[${index}]`, forced),
+                    leanTermOfDef(variant, `${at}.variants[${index}]`, forced),
                 )
                 .join(', ')
             return `Term.dunion ${leanString(def.discriminator)} [${options}]`

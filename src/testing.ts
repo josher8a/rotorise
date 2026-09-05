@@ -56,6 +56,7 @@ import type {
     ItemCodec,
     RestPolicy,
     Rng,
+    TermDef,
 } from './codec'
 import {
     admitsAttribute,
@@ -1081,7 +1082,7 @@ export const arbitraryOf = (
         case 'tagged': {
             const names = Object.keys(def.variants)
             return arbitraryOf(
-                def.variants[pickFrom(rng, names)] as AnyCodec,
+                codecOfTerm(def.variants[pickFrom(rng, names)] as TermDef),
                 rng,
                 size,
             )
@@ -1249,7 +1250,7 @@ export const shrinkOf = (
         case 'tagged': {
             const held = value as Record<string, unknown>
             const chosen = def.variants[String(held[def.discriminator])]
-            return chosen ? shrinkOf(chosen, value) : []
+            return chosen ? shrinkOf(codecOfTerm(chosen), value) : []
         }
         case 'untagged': {
             const names = new Set(
@@ -1780,12 +1781,16 @@ const byTag = (
     },
     admitsAttribute: (attribute) => {
         /**
-         * A `(dunion)` option is an **item** codec: it writes an item, not an `M` attribute, so the
-         * discriminator sits at the top of what `e` produced rather than under an `M`. That is the
-         * one place a union's options are read at a different level from the value they carry, and
-         * reading it through `mapOf` said no option admitted a pair its own option had just written.
+         * The discriminator sits under the `M`, where every other option's attributes sit.
+         *
+         * This used to read it at the *top* of what `e` produced, and had to: a `(dunion)`
+         * definition carried its variants as **item** codecs, so the option here wrote an item
+         * rather than an `'M'`, and reading through `mapOf` found nothing. The definition carries
+         * terms now and the option is the codec the term denotes, which writes its map like any
+         * other codec — so a union's options are all read at one level and the exception is gone.
          */
-        const carried = (attribute as unknown as AttributeMap)[discriminator]
+        const map = mapOf(attribute)
+        const carried = map?.[discriminator]
         if (!carried) return false
         const member = memberOf(carried)
         if (member !== 'S' && member !== 'N') return false
@@ -1880,8 +1885,8 @@ const unionsIn = (subject: AnyCodec): readonly UnionSite[] => {
                 def.variants.forEach(inner)
                 return
             case 'tagged': {
-                const entries = Object.entries(
-                    def.variants as Record<string, AnyCodec>,
+                const entries = Object.entries(def.variants).map(
+                    ([tag, variant]) => [tag, codecOfTerm(variant)] as const,
                 )
                 /**
                  * One option per *variant*, carrying every tag it answers to.

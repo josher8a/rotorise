@@ -335,7 +335,12 @@ export type CodecDef =
     | {
           readonly kind: 'tagged'
           readonly discriminator: string
-          readonly variants: Attributes
+          /**
+           * The variant at each tag, as terms. Written out rather than said as {@link Attributes},
+           * which names the *constructor's* argument and still names codecs: a caller hands
+           * `discriminatedUnion` a map of object codecs, and the definition holds their terms.
+           */
+          readonly variants: Readonly<Record<string, TermDef>>
       }
     | { readonly kind: 'untagged'; readonly variants: readonly AnyCodec[] }
     | {
@@ -1053,7 +1058,7 @@ export const admits = (codec: AnyCodec, value: unknown): boolean => {
             const name = String(tag)
             return (
                 Object.hasOwn(def.variants, name) &&
-                admits(def.variants[name] as AnyCodec, value)
+                admits(codecOfTerm(def.variants[name] as TermDef), value)
             )
         }
         /**
@@ -1200,7 +1205,12 @@ const childrenOf = (
             return one(at ? codecOfTerm(at) : undefined)
         }
         case 'tagged':
-            return acrossVariants(Object.values(def.variants), segment)
+            return acrossVariants(
+                Object.values(def.variants).map((variant) =>
+                    codecOfTerm(variant),
+                ),
+                segment,
+            )
         case 'untagged':
             return acrossVariants(def.variants, segment)
         case 'optional':
@@ -2203,7 +2213,7 @@ const taggedItemSem = (
 ): ItemPair => {
     const byTag: Record<string, ItemPair> = {}
     for (const tag in def.variants) {
-        const variant = termOf(def.variants[tag] as AnyCodec)
+        const variant = def.variants[tag] as TermDef
         if (variant.kind !== 'attributes') {
             throw new CodecError(
                 `a discriminated union's variants are object codecs, and the variant at '${tag}' is a \`${variant.kind}\`. \`discriminatedUnion\` refuses that at the declaration, so this term was not built by it`,
@@ -5132,7 +5142,12 @@ const tagged = <T extends Record<string, unknown>>(
     const taggedDef = {
         kind: 'tagged',
         discriminator,
-        variants: byVariant as unknown as Attributes,
+        variants: Object.fromEntries(
+            Object.entries(byVariant).map(([tag, variant]) => [
+                tag,
+                termOf(variant as unknown as AnyCodec),
+            ]),
+        ),
     } as const
     const { pick, tagOf } = byTagSem(discriminator, byVariant) as {
         pick: (tag: string) => Result<ItemCodec<T, unknown>>
