@@ -1569,6 +1569,32 @@ const denote = (def: TermDef): Pair => {
             )
         }
         /**
+         * §3 `(record)`: the same construction as `array` at the other product.
+         * `recordCodec_e_eq` is the lemma, and the two rows differ in exactly three things — the
+         * shape they test, the member they carry, and whether the traversal walks positions or
+         * entries. `every` and `everyEntry` are the two traversals; the model writes `entrywise`
+         * once and instantiates it twice.
+         *
+         * `Object.entries('abc')` is `[['0','a'], …]`, so a string was written as a map keyed by
+         * index until the shape was asked first. `asRecord` is the test `admits`' `record` row
+         * uses, so the two cannot drift about what a plain object is.
+         */
+        case 'record': {
+            const values = def.value
+            return carriedCodec(
+                (value): value is Record<string, never> =>
+                    asRecord(value) !== undefined,
+                'M',
+                (value) =>
+                    new CodecError(
+                        `${describeShape(value)} is not a plain object, and \`record\` writes an 'M' — a codec's input is typed, so this is a value that reached \`encode\` past its type`,
+                    ),
+                (held) => everyEntry(held, values.encode),
+                (carried: Readonly<Record<string, AttributeValue>>) =>
+                    everyEntry(carried, values.decode),
+            )
+        }
+        /**
          * §3 `(literal)`, and it is **not** a sixth ground term: `literalCodec k ls` is
          * `(baseCodec k).restrict (inL k ls)`, the base's pair narrowed to membership of `ℓ`. The
          * base is the index, so the row reaches it by denoting `{ kind: base }` — the five bases
@@ -2269,25 +2295,11 @@ export const record = <const C extends AnyCodec>(
     Readonly<Record<string, Decoded<C>>>,
     M<{ readonly [key: string]: AttributeOf<C> }>
 > => {
-    const values = element as unknown as AttributeCodec<Decoded<C>>
     // the cast keeps the *shape* the values write, which `Attribute<'M'>` would flatten to
     // "some map" — the same reason `map` casts
-    return codec({
-        def: { kind: 'record', value: values },
-        // `Object.entries('abc')` is `[['0','a'],…]`, so a string was written as a map keyed by
-        // index. `asRecord` is the test `admits`' `record` row uses
-        encode: (value: Record<string, Decoded<C>>) =>
-            asRecord(value) === undefined
-                ? new CodecError(
-                      `${describeShape(value)} is not a plain object, and \`record\` writes an 'M' — a codec's input is typed, so this is a value that reached \`encode\` past its type`,
-                  )
-                : andThen(everyEntry(value, values.encode), (written) =>
-                      carrying('M', written),
-                  ),
-        decode: (attribute) =>
-            andThen(expect('M', attribute), (carried) =>
-                everyEntry(carried, values.decode),
-            ),
+    return codecOfTerm({
+        kind: 'record',
+        value: element as unknown as AttributeCodec<Decoded<C>>,
     }) as unknown as AttributeCodec<
         Readonly<Record<string, Decoded<C>>>,
         M<{ readonly [key: string]: AttributeOf<C> }>
