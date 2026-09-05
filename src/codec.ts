@@ -340,7 +340,7 @@ export type CodecDef =
     | { readonly kind: 'untagged'; readonly variants: readonly AnyCodec[] }
     | {
           readonly kind: 'refine'
-          readonly inner: AnyCodec
+          readonly inner: TermDef
           readonly refined: Refinement
       }
     | { readonly kind: 'optional'; readonly inner: AnyCodec }
@@ -534,10 +534,11 @@ export const writes = (codec: AnyCodec): AttributeName | undefined => {
     const def = codec.def
     switch (def.kind) {
         // a wrapper writes what it wraps
-        case 'refine':
         case 'optional':
         case 'fallback':
             return writes(def.inner)
+        case 'refine':
+            return writes(codecOfTerm(def.inner))
         case 'legacy':
             return writes(codecOfTerm(def.current))
         // an adapter changes what the value is *held* as and leaves what it is *stored* as alone,
@@ -624,10 +625,11 @@ const writtenBy: { readonly [K in TermKind]?: AttributeName } = {
 export const carries = (codec: AnyCodec): readonly Shape[] | undefined => {
     const def = codec.def
     switch (def.kind) {
-        case 'refine':
         case 'optional':
         case 'fallback':
             return carries(def.inner)
+        case 'refine':
+            return carries(codecOfTerm(def.inner))
         case 'legacy':
             return carries(codecOfTerm(def.current))
         // and this one deliberately does *not* read through. An adapter exists precisely to change
@@ -702,10 +704,11 @@ export type Slot = Exclude<Shape, 'set'> | 'strSet' | 'numSet' | 'binSet'
 export const occupies = (codec: AnyCodec): readonly Slot[] | undefined => {
     const def = codec.def
     switch (def.kind) {
-        case 'refine':
         case 'optional':
         case 'fallback':
             return occupies(def.inner)
+        case 'refine':
+            return occupies(codecOfTerm(def.inner))
         case 'legacy':
             return occupies(codecOfTerm(def.current))
         // an adapter's `f` runs *before* the subterm and can move the value into any constructor,
@@ -785,11 +788,11 @@ export const reads = (
 ): readonly AttributeName[] | undefined => {
     const def = codec.def
     switch (def.kind) {
-        case 'refine':
         case 'optional':
         case 'fallback':
             return reads(def.inner)
-        // its own row while the other three still carry codecs; the four rejoin when they do
+        // the two §4 fields above still hold codecs; the two terms below hold terms
+        case 'refine':
         case 'held':
             return reads(codecOfTerm(def.inner))
         // `⊤`, and not the subterm's: forcing a thunk at declaration time is what
@@ -904,7 +907,7 @@ export const setBase = (codec: AnyCodec): SetBase | undefined => {
         case 'literal':
             return def.base === 'boolean' ? undefined : def.base
         case 'refine':
-            return setBase(def.inner)
+            return setBase(codecOfTerm(def.inner))
         default:
             return undefined
     }
@@ -1063,7 +1066,7 @@ export const admits = (codec: AnyCodec, value: unknown): boolean => {
             return def.variants.some((variant) => admits(variant, value))
         case 'refine':
             return (
-                admits(def.inner, value) &&
+                admits(codecOfTerm(def.inner), value) &&
                 def.refined.is(value as never) === true
             )
         /**
@@ -1200,11 +1203,10 @@ const childrenOf = (
             return acrossVariants(Object.values(def.variants), segment)
         case 'untagged':
             return acrossVariants(def.variants, segment)
-        case 'refine':
         case 'optional':
         case 'fallback':
             return childrenOf(def.inner, segment)
-        // its own row until `refine`'s inner is a term too, at P12
+        case 'refine':
         case 'nullable':
             return childrenOf(codecOfTerm(def.inner), segment)
         case 'legacy':
@@ -2362,7 +2364,7 @@ const denote = (def: TermDef): Pair => {
         /** §3 `(refine)`. `lawful_restrict` is the lemma; `q` is data the term carries. */
         case 'refine':
             return restrict(
-                def.inner,
+                codecOfTerm(def.inner),
                 def.refined.is,
                 (value) =>
                     new CodecError(
@@ -3330,7 +3332,7 @@ export const refine = <Wide, Narrow extends Wide, A extends AttributeValue>(
     return setCapable(
         codecOfTerm<Narrow, A>({
             kind: 'refine',
-            inner: inner as AnyCodec,
+            inner: termOf(inner as unknown as AnyCodec),
             refined: {
                 is: is as (value: never) => boolean,
                 what,
@@ -5415,10 +5417,11 @@ const identifying = (codec: AnyCodec): boolean => {
             return identifying(codecOfTerm(def.value))
         case 'untagged':
             return def.variants.every(identifying)
-        case 'refine':
         case 'optional':
         case 'fallback':
             return identifying(def.inner)
+        case 'refine':
+            return identifying(codecOfTerm(def.inner))
         case 'legacy':
             return identifying(codecOfTerm(def.current))
         default:

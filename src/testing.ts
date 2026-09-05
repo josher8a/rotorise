@@ -1093,7 +1093,8 @@ export const arbitraryOf = (
             let sample = samplers.get(def)
             if (!sample) {
                 sample = bySampling(
-                    (r: Rng, sz: number) => arbitraryOf(def.inner, r, sz),
+                    (r: Rng, sz: number) =>
+                        arbitraryOf(codecOfTerm(def.inner), r, sz),
                     def.refined.is as (value: unknown) => value is unknown,
                     def.refined.what,
                     def.refined.onThinSearch,
@@ -1264,7 +1265,7 @@ export const shrinkOf = (
             return chosen ? shrinkOf(chosen, value) : []
         }
         case 'refine':
-            return shrinkOf(def.inner, value).filter(
+            return shrinkOf(codecOfTerm(def.inner), value).filter(
                 def.refined.is as (x: unknown) => boolean,
             )
         case 'nullable':
@@ -1925,10 +1926,10 @@ const unionsIn = (subject: AnyCodec): readonly UnionSite[] => {
                         ? undefined
                         : codecOfTerm(def.rest),
                 )
-            case 'refine':
             case 'optional':
             case 'fallback':
                 return inner(def.inner)
+            case 'refine':
             case 'nullable':
             case 'held':
                 return inner(codecOfTerm(def.inner))
