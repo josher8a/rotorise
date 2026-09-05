@@ -1018,7 +1018,10 @@ describe('`admits`, and the direction of the law that is true', () => {
         expect(failed(tagged.encode('x' as never))).toBe(true)
         expect(failed(tagged.encode('t-1'))).toBe(false)
 
-        // a codec with no definition makes no claim
-        expect(admits({} as AnyCodec, 'anything')).toBe(false)
+        // There is no longer a case for "a codec with no definition makes no claim", and the
+        // assertion that used to sit here is gone with it. It read
+        // `admits({} as AnyCodec, 'anything')` — a cast manufacturing a value the type forbids, to
+        // check a branch reachable only by making it. `def` is required, so the branch is gone and
+        // the cast would be the only thing keeping it alive.
     })
 })

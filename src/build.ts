@@ -27,7 +27,7 @@ export type Codec<T, A extends AttributeValue> = {
     readonly decode: (attribute: AttributeValue) => Result<T>
     readonly arbitrary?: (rng: Rng, size: number) => T
     readonly shrink?: (value: T) => readonly T[]
-    readonly def?: CodecDef
+    readonly def: CodecDef
 }
 
 /**

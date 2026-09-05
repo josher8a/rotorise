@@ -934,16 +934,6 @@ const bySampling = <Wide, Narrow extends Wide>(
  */
 const samplers = new WeakMap<object, (rng: Rng, size: number) => unknown>()
 
-const definitionOf = (codec: AnyCodec): CodecDef => {
-    const def = codec.def
-    if (!def) {
-        throw new CodecError(
-            'this codec carries neither a generator of its own nor a definition to generate from',
-        )
-    }
-    return def
-}
-
 /**
  * A value the codec can carry.
  *
@@ -957,7 +947,7 @@ export const arbitraryOf = (
 ): unknown => {
     // a codec may carry its own, which is the escape hatch for one built by hand
     if (codec.arbitrary) return codec.arbitrary(rng, size)
-    const def = definitionOf(codec)
+    const def = codec.def
     switch (def.kind) {
         case 'string':
             return someString(rng)
@@ -1133,7 +1123,7 @@ export const shrinkOf = (
     value: unknown,
 ): readonly unknown[] => {
     if (codec.shrink) return codec.shrink(value as never)
-    const def = definitionOf(codec)
+    const def = codec.def
     const shrinkAt = (inner: AnyCodec) => (x: unknown) => shrinkOf(inner, x)
 
     switch (def.kind) {
