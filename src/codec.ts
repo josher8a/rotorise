@@ -296,7 +296,7 @@ export type CodecDef =
     | { readonly kind: 'binary' }
     | { readonly kind: 'null' }
     | { readonly kind: 'opaque'; readonly numbers: opaque.Numbers }
-    | { readonly kind: 'set'; readonly element: AnyCodec }
+    | { readonly kind: 'set'; readonly element: TermDef }
     | { readonly kind: 'array'; readonly element: TermDef }
     | {
           readonly kind: 'tuple'
@@ -577,7 +577,7 @@ export const writes = (codec: AnyCodec): AttributeName | undefined => {
         case 'literal':
             return literalMember[def.base]
         case 'set': {
-            const element = writes(def.element)
+            const element = writes(codecOfTerm(def.element))
             return element === 'S' || element === 'N' || element === 'B'
                 ? (`${element}S` as AttributeName)
                 : undefined
@@ -744,7 +744,7 @@ export const occupies = (codec: AnyCodec): readonly Slot[] | undefined => {
         // and the row the finer partition exists for: which set family follows from the element's
         // own constructor, not from the fact that it is a set
         case 'set': {
-            const element = occupies(def.element)
+            const element = occupies(codecOfTerm(def.element))
             const only = element?.length === 1 ? element[0] : undefined
             return only === 'string'
                 ? ['strSet']
@@ -977,7 +977,9 @@ export const admits = (codec: AnyCodec, value: unknown): boolean => {
             return (
                 value instanceof Set &&
                 value.size > 0 &&
-                [...value].every((member) => admits(def.element, member))
+                [...value].every((member) =>
+                    admits(codecOfTerm(def.element), member),
+                )
             )
         // and `[]` **is** admitted, which is the mirror of that and is correct: `L` has an empty
         // inhabitant where the set members do not
@@ -2283,7 +2285,7 @@ const denote = (def: TermDef): Pair => {
          * `{ SS: ['a','b','c'] }` for `'abc'`. `admits`' `set` row asks `instanceof Set` first.
          */
         case 'set': {
-            const inner = def.element
+            const inner = codecOfTerm(def.element)
             const member = writes(inner)
             if (member !== 'S' && member !== 'N' && member !== 'B') {
                 throw new CodecError(
@@ -2969,7 +2971,7 @@ const set = <const C extends AnyCodec>(
     // the member is decided above, from the element; the cast carries that decision into the type
     return codecOfTerm<ReadonlySet<T>, SetOf<C>>({
         kind: 'set',
-        element: inner,
+        element: termOf(inner),
     })
 }
 
@@ -5403,8 +5405,6 @@ const identifying = (codec: AnyCodec): boolean => {
         case 'tagged':
             return true
         case 'set':
-            return identifying(def.element)
-        // its own row until `set`'s element is a term too, at P11
         case 'array':
             return identifying(codecOfTerm(def.element))
         case 'tuple':

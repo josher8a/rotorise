@@ -37,6 +37,7 @@ import {
     refine,
     setBase,
     string,
+    termOf,
     union,
     writes,
 } from './codec'
@@ -66,20 +67,33 @@ describe('a set at each base', () => {
     })
 
     /**
-     * One combinator, reached from four places. The definition records the *element codec*, and it
-     * is the public base itself — not a copy of it — which is what makes two spellings of the same
-     * set compare equal and a schema pin stable.
+     * One combinator, reached from four places. The definition records the element's *term*, and
+     * it is the public base's own term — not a copy of it — which is what makes two spellings of
+     * the same set compare equal and a schema pin stable.
      *
      * **Pins a fact no law has, deliberately.** Identity of the recorded element is not something
      * §2 or §6 asks for — two codecs that behave alike satisfy every law here whether or not their
      * definitions are the same object. It is asserted because `toEqual` on `def` is what schema
      * comparison rests on, and a copy would pass every behavioural test and break that. It stays.
+     *
+     * **`toEqual` alone stopped pinning it when the element became a term, so `toBe` says it.**
+     * The element used to be a codec, whose members are functions, and `toEqual` compares a
+     * function by reference — so a copied element failed the shape assertion for free. A term is
+     * plain data, and a copy of `{ kind: 'string' }` is `toEqual` to the original. The identity
+     * claim is the one this test is for, so it is now asserted rather than obtained as a
+     * side effect of comparing closures.
      */
     it('records the base itself as its element', () => {
-        expect(string.set().def).toEqual({ kind: 'set', element: string })
-        expect(number.set().def).toEqual({ kind: 'set', element: number })
-        expect(decimal.set().def).toEqual({ kind: 'set', element: decimal })
-        expect(binary.set().def).toEqual({ kind: 'set', element: binary })
+        expect(string.set().def).toEqual({
+            kind: 'set',
+            element: termOf(string),
+        })
+        const elementOf = (codec: { def: unknown }) =>
+            (codec.def as { element: unknown }).element
+        expect(elementOf(string.set())).toBe(termOf(string))
+        expect(elementOf(number.set())).toBe(termOf(number))
+        expect(elementOf(decimal.set())).toBe(termOf(decimal))
+        expect(elementOf(binary.set())).toBe(termOf(binary))
     })
 
     it('encodes and decodes at the type the base holds', () => {
