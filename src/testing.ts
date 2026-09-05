@@ -1047,7 +1047,7 @@ export const arbitraryOf = (
             // only a rest *codec* puts undeclared names in the entity; `drop` and `refuse` both
             // leave nothing to generate, and are now told apart from a codec rather than guessed
             const restCodec =
-                typeof def.rest === 'string' ? undefined : def.rest
+                typeof def.rest === 'string' ? undefined : codecOfTerm(def.rest)
             if (restCodec) {
                 for (let extra = Math.floor(rng() * 3); extra > 0; extra--) {
                     out[`rest${extra}`] = arbitraryOf(
@@ -1896,7 +1896,9 @@ const unionsIn = (subject: AnyCodec): readonly UnionSite[] => {
             case 'attributes':
                 Object.values(def.of).forEach((field) => inner(field.codec))
                 return inner(
-                    typeof def.rest === 'string' ? undefined : def.rest,
+                    typeof def.rest === 'string'
+                        ? undefined
+                        : codecOfTerm(def.rest),
                 )
             case 'refine':
             case 'optional':
