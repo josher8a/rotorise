@@ -307,9 +307,9 @@ both of `r`'s and the subterm's channels and takes the union, keeping the subter
 *over-approximation* rather than reaching past it. Asking was probed — the row
 `((denote (.legacy t r)).p a).isSome` is exact and compiles at a one-line cost — and **refused**,
 because it sees through `admA (.object _) = ⊤`, which §5 records as load-bearing slack rather
-than looseness. Two objects cannot be separated by `SepA` (both rows `⊤`); wrapped in a `legacy`
-they could be, while `select` still attempts both options, which is `not_uAtCan_of_sepJ`'s
-failure one wrapper out. So this row is as sharp as it can be *without* becoming unsound, and
+than looseness. Two objects cannot be separated by a disjointness test on `admA` (both rows are
+`⊤`); wrapped in a `legacy` they could be, while `select` still attempts both options, which is
+`not_uAtCan_of_sepJ`'s failure one wrapper out. So this row is as sharp as it can be *without* becoming unsound, and
 the excuse it retired was still a correct observation reaching a wrong conclusion: what
 `extendRead` widens *by* is `r`, data the term carries. `Exactness.lean`'s "why `legacy` was in
 the wrong family" reached this first, for the joint predicate.
@@ -328,7 +328,7 @@ already.
 ### 4c. One codec, stated once for both sides of the pair
 
 `Combinators.lean` is <!-- count:combinators_lines -->4002<!-- /count --> lines of the tree's
-<!-- count:tree_lines -->17605<!-- /count -->, and this is its organizing idea; without it
+<!-- count:tree_lines -->17613<!-- /count -->, and this is its organizing idea; without it
 the file reads as the inventory `README.md` already has. A constructor is a **prism** —
 `Ctor α β`, with `into`/`out` and the laws `out_into` (matching what was built returns it) and
 `into_out` (anything that matches was built) — and those two *are* §2's (R) and (C) at a
@@ -378,10 +378,11 @@ as a refactor estimate (`scripts/blast_radius.lean`). None of them was added spe
 
 ## 5. Generations of analysis: two that stay, one that does not pay
 
-`Discharge.lean` holds §5's per-aspect approximations — `κ`, `ident`, `adm`, `admA`; the fifth
-aspect, `μSyn`, is `Denote.lean`'s, because `denote` needs the member index itself — with the
-separation predicates `SepV` and `SepA`, each a **two-disjunct** disjunction (labels
-disjoint, *or* admissible sets disjoint).
+`Discharge.lean` holds the per-aspect approximations `κ`, `ident`, `adm` and `admA`; the fifth
+aspect, `μSyn`, is `Denote.lean`'s, because `denote` needs the member index itself. The separation
+predicates ~~SepV~~ and ~~SepA~~ that ran on them, each a **two-disjunct** disjunction (labels
+disjoint, *or* admissible sets disjoint), went with the layer at `f5fc4a6`, and this sentence said
+they were still here.
 
 Every discharger in this section is one appeal to `uniqueAdmission_of_disjoint`
 (`Combinators.lean`), which takes two families of allowed values, one per side, and asks only
@@ -407,8 +408,8 @@ counter-intuitive:
   **tighter**, and disjointness of a tighter predicate does not imply disjointness of admission.
 - Therefore **`adm (.object _) = ⊤` is load-bearing, not slack.** It is exactly the
   over-approximation that turns `adm`-disjointness into admission-disjointness. Two objects can
-  never be separated by `SepV` (both `κ`s are `[map]`, both `adm`s are `⊤`, so neither disjunct
-  is available) — and that is the point.
+  never be separated by a per-aspect test (both `κ`s are `[map]`, both `adm`s are `⊤`, so neither
+  disjunct is available) — and that is the point.
 - Restate the discharger on `SepJV` and the pair *does* separate, while `select` still attempts
   both options, so (U) genuinely fails. **The premise gets stronger and the theorem becomes
   false.** The witness is two objects with the same names and different field terms
@@ -479,18 +480,20 @@ sharpening a row changes a definition's *body*, not who depends on it. The instr
 deleting or replacing a declaration; it is blind to a row that stays and says something
 different.
 
-**And its root set is incomplete, against its own stated method.** The header says every member
-of a mutual family is named as a root by hand, because mutual members reference each other in no
-constant's value — and `genOld` names the `adm` family and omits `κ`, `κList`, `ident` and
-`identList`. Adding those four moves the partition to 85 old-only, 22 both, 135 new-only, 1467
-neither. The numbers above are what the current roots measure and the §4b comparison holds
-either way, being a before-and-after of the same roots; what the four buy is that the *size* of
-the older generation stops being understated by ten declarations. What caught the consequence was the build (`AdmA_le_admA`'s `legacy` case stopped
-being `rfl`), and what caught the *hazard* was reading this section. Neither is an instrument.
+**Its root set was incomplete, against its own stated method, and is not now.** The header says
+every member of a mutual family is named as a root by hand, because mutual members reference each
+other in no constant's value — and `genOld` named the `adm` family while omitting `κ`, `κList`,
+`ident` and `identList`, which understated the older generation by ten declarations. It also still
+named ~~SepV~~ and ~~SepA~~ after those were deleted. The list is now the nine members of the four
+tables, and the partition it measures is **55 old-only, 20 both, 135 new-only, 1467 neither**. The
+numbers quoted above the §4b comparison are the *older* roots' and are kept only because that
+comparison is a before-and-after of one root set. What caught the consequence of the omission was
+the build (`AdmA_le_admA`'s `legacy` case stopped being `rfl`), and what caught the *hazard* was
+reading this section. Neither is an instrument.
 
 ### And a third machine, `Orth`, which does not pay — measured
 
-`Orthogonality.lean` is the fifth-largest file at <!-- count:orth_file_lines -->976<!-- /count --> lines — `Soundness.lean` is 1032 —: a decidable certificate for a
+`Orthogonality.lean` is the fifth-largest file at <!-- count:orth_file_lines -->984<!-- /count --> lines — `Soundness.lean` is 1032 —: a decidable certificate for a
 fragment of (U), over-approximating each term's occupancy per side (`occV`/`occA`) and
 certifying a pair whose occupancies are disjoint, `by decide`. **Measured against what it
 replaces it does not pay**, and its own by-phase table is the measurement — the <!-- count:orth_total_theorems -->13<!-- /count --> hand
@@ -513,7 +516,7 @@ classifier can reach them, and `uAtAct_array_literals`, which holds where `UAtCa
 false and so has nothing to certify.
 
 And **nothing was deleted** — `6daa5e3`, `0335cdb` and `5763b6d` touch only the new module and
-two import lines — so <!-- count:orth_file_lines -->976<!-- /count --> lines stand *beside* the <!-- count:orth_reachable_lines -->34<!-- /count --> they could replace. It stays anyway,
+two import lines — so <!-- count:orth_file_lines -->984<!-- /count --> lines stand *beside* the <!-- count:orth_reachable_lines -->34<!-- /count --> they could replace. It stays anyway,
 because its value moved — **twice**, and the second is the one that pays.
 
 **`Orth` is the specification of `src/`'s only declaration-time guard, and now a checked one.**
@@ -1173,7 +1176,7 @@ Sixteen lines changed, no behaviour, `Orthogonality.lean` untouched.
 on the element's own gate, ~~LiteralD~~ is deleted, and `adm`'s literal row and the joint row are
 the same function (`adm_literal_eq_Adm`) — which makes the older generation exact at this row
 with **nothing added to it** (`adm_literal_exact`). The alternative route, tightening the row,
-would have broken `adm_literal_num`'s `rfl` and every `SepV` over literals; the carrier route
+would have broken `adm_literal_num`'s `rfl` and every ~~SepV~~ over literals; the carrier route
 broke `adm_literal_num`'s `rfl` too, and nothing else.
 
 *And the reason it was a fidelity call turned out to be misstated, in this file and in three

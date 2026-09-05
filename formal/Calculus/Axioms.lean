@@ -104,7 +104,7 @@ that had no witness until it had this one. -/
 rather than about a row of it. -/
 
 /-! `ident` has no denotational content to pin — what it has is its relation to `adm`,
-which is what §5 uses it for, and `SepV`'s right to drop §5's two `ident` conjuncts
+which is what §5 uses it for, and ~~SepV~~'s right to drop §5's two `ident` conjuncts
 rests on it. -/
 
 /-! §2's ideal: `e` and `p` are mutually inverse between `dom(e)` and `Can(c)`. `retract`

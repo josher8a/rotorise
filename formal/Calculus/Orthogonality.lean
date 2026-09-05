@@ -8,7 +8,7 @@ model has been discharging by hand, once per shape: `DIncomp` (§5's (D)) and `U
 residual (U)). Thirty-two `sep*`/`uAtCan_*`/`uAtAct_*` theorems live in `Discharge.lean` and
 `Exactness.lean` — not in `Refutations.lean`, whose separation theorems are all `not_sep*` and
 are refutations rather than discharges. Twenty-five of the thirty-two are the per-shape hand
-discharges; the other seven are the two generic dischargers, the `SepV`→`SepJV` bridges, the
+discharges; the other seven are the two generic dischargers, the ~~SepV~~→`SepJV` bridges, the
 `refine`-family discharger, and the two `object` witnesses that exist in order to *fail*
 (`not_uAtCan_of_sepJ`). **Thirteen of the twenty-five are the *same rule* at different
 constructors**, and the by-phase table at the end of this file is that count, measured rather
@@ -53,7 +53,7 @@ where "its options write different members, so reading was never in doubt".
 ## The write-side slot is the `Value` constructor, not `Kind`
 
 `Kind` collapses `strSet`, `numSet` and `binSet` to `.set`, so `κ (set string)` and
-`κ (set number)` are equal and the kind disjunct of `SepV` cannot separate them. The ten
+`κ (set number)` are equal and the kind disjunct of ~~SepV~~ cannot separate them. The ten
 `Value` constructors can, and `Adm (.set b)` is exact, so the sharper partition is *available
 in the model*: the row for `set b` matches the payload's wire family and asks `b.adm` of its
 elements, and `℘⁺fin` has no empty inhabitant, so a base admits exactly one family. `Slot`
@@ -389,13 +389,21 @@ theorem occV_admitOpt {t : Term} (h : OccSoundV t) (v : Value)
       obtain ⟨b, rfl⟩ := specOf_some_object hs
       cases v <;> simp_all [admitOptV, specOf, occV, occOnly, Value.slot]
 
-/-- `Adm` and `adm` are the same function at `opaq` — both ask `opaqCodecω` — so the table's
-    `opaque` lemmas apply to the joint row verbatim. -/
-theorem Adm_opaq_eq_adm (lossy : Bool) (v : Value) :
-    Adm (.opaq lossy) v = adm (.opaq lossy) v := rfl
+/-- **A refusing `opaque` writes no numeral**, off the joint row.
 
-theorem AdmA_opaq_eq_admA (lossy : Bool) (a : Attr) :
-    AdmA (.opaq lossy) a = admA (.opaq lossy) a := rfl
+    The occupancy proofs below are the only consumers, and they used to reach this fact
+    through ~~Adm_opaq_eq_adm~~ into `Discharge.lean`'s `adm_opaq_false_num` — which made the
+    whole `Orth` chain a dependent of the older tables, in the proof rather than in any
+    statement. The row asks `opaqCodecω` either way, so the fact is stated here now and the
+    chain owes the tables nothing. -/
+theorem Adm_opaq_false_num (d : Double) : Adm (.opaq false) (.num d) = false := by
+  show ((opaqCodec (0+1) false).e (.num d)).isSome = false
+  rw [opaqCodec_e_num]; rfl
+
+/-- …and its twin on the read side. -/
+theorem AdmA_opaq_false_n (x : WFNumeral) : AdmA (.opaq false) (.n x) = false := by
+  show ((opaqCodec (0+1) false).p (.n x)).isSome = false
+  rw [opaqCodec_p_n]; rfl
 
 mutual
 
@@ -464,7 +472,7 @@ theorem occV_sound : ∀ (t : Term), OccSoundV t
         cases v <;> simp only [occV, occBut, Value.slot, if_false, Bool.false_eq_true] <;>
           first
             | rfl
-            | (exact absurd h (by simp [Adm_opaq_eq_adm, adm_opaq_false_num]))
+            | (exact absurd h (by simp [Adm_opaq_false_num]))
 
 theorem occV_soundL : ∀ (ts : List Term), OccSoundVL ts
   | [] => trivial
@@ -556,7 +564,7 @@ theorem occA_sound : ∀ (t : Term), OccSoundA t
         cases a <;> simp only [occA, occBut, Attr.member, if_false, Bool.false_eq_true] <;>
           first
             | rfl
-            | (exact absurd h (by simp [AdmA_opaq_eq_admA, admA_opaq_false_n]))
+            | (exact absurd h (by simp [AdmA_opaq_false_n]))
 
 theorem occA_soundL : ∀ (ts : List Term), OccSoundAL ts
   | [] => trivial
@@ -792,7 +800,7 @@ theorem admALit_iff {k : GroundKind} {ls : NEFinset k.Carrier} {a : Attr} :
 /-- …and so the read side is the same `inL` disjointness, one level up: the base reads the
     attribute to *one* value, and one value cannot be in two disjoint held sets.
 
-    This was the read-side argument the retired `SepA` instance made at a literal, and the
+    This was the read-side argument the retired ~~SepA~~ instance made at a literal, and the
     reason §5 recorded the readable side as "undischargeable from the tables alone" was that
     the old `admALit .number` row was `⊤`. The row asks now, and this is where the argument
     lives. -/
@@ -848,7 +856,7 @@ theorem orth_string_boolean : Orth .string .boolean = true := by decide
 theorem orth_string_dunion : Orth .string (.dunion "k" []) = true := by decide
 theorem orth_array_record : Orth (.array .string) (.record .string) = true := by decide
 
-/-- §5's worked `(set)` example, and out of reach of `SepV`'s kind disjunct: `κ` collapses
+/-- §5's worked `(set)` example, and out of reach of ~~SepV~~'s kind disjunct: `κ` collapses
     both options to `.set`. The `Value` constructor does not. -/
 theorem orth_set_string_number : Orth (.set .string) (.set .number) = true := by decide
 
@@ -942,7 +950,7 @@ Where the hand proofs sit, and the two that sit nowhere. `Orth` is the decidable
 
 **The rows that are gone were the reason this table was worth having.** Every discharge in
 phase *slot*, and the string-base half of phase *alternatives*, was a hand proof stated on the
-per-aspect `SepV`/`SepA` and reached here by `decide` — so when that layer was retired the
+per-aspect ~~SepV~~/~~SepA~~ and reached here by `decide` — so when that layer was retired the
 hand proofs went with it and this file is what certifies those pairs now. What is left is the
 three phases `Orth` does *not* reach and the two constructors below the term language: the
 table has stopped being a map of duplicated work and is now a list of what only exists by

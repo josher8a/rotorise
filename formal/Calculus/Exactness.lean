@@ -1930,7 +1930,7 @@ theorem union_not_congruent :
 
 /-! ## Re-deriving §5's separations on the pair
 
-`SepV` and `SepA` are what the discharge machinery actually consumes, and they are stated
+~~SepV~~ and ~~SepA~~ are what the discharge machinery actually consumes, and they are stated
 on `κ`/`adm`/`admA`. Before any of that can move to `Adm`/`AdmA`, two things have to be
 true: the joint predicate must be at least as tight as the row it replaces, and every
 discharge §5 already has must survive.
@@ -2081,7 +2081,7 @@ theorem AdmAny_kind : ∀ (ts : List Term) (ks : List Kind) (v : Value),
             exact List.mem_append.mpr (Or.inr (AdmAny_kind ts k1 v h1 this h))
 
 /-- **`Adm` lands in `κ`.** Wherever `κ` names a kind list at all, an `Adm`-admitted value
-    has one of those kinds — so the kind gate `Adm` folds in really is `κ`'s, and `SepV`'s
+    has one of those kinds — so the kind gate `Adm` folds in really is `κ`'s, and ~~SepV~~'s
     first disjunct is subsumed by its second. -/
 theorem Adm_kind : ∀ (t : Term) (ks : List Kind) (v : Value),
     κ t = some ks → Adm t v = true → v.kind ∈ ks
@@ -2221,7 +2221,7 @@ theorem AdmA_le_admA : ∀ (t : Term) (a : Attr), AdmA t a = true → admA t a =
       exact AdmAAny_le_admAList opts a (fun t' _ => AdmA_le_admA t' a)
         (selOptA_le_AdmAAny (by rw [AdmA] at h; exact h))
 
-/-- **Separation on the joint predicate, value side — one clause.** §5's `SepV` offers a
+/-- **Separation on the joint predicate, value side — one clause.** §5's ~~SepV~~ offers a
     choice between disjoint kinds and disjoint admissible sets; `Adm` carries the kind gate
     in its own rows, so the first disjunct is subsumed (`Adm_kind`) and the definition
     collapses. -/
@@ -2281,7 +2281,7 @@ is written*, not about which values it admits, and no predicate on values can re
 That is not a gap, because nothing consumes it. `ident` appears in no discharge: none of the
 seventeen `uAtCan_*` theorems mentions it. What it does is carry §5's **(K)** — the rule
 that was stated as `κ(cᵢ) ∩ κ(cⱼ) = ∅ ∨ ident(cᵢ) ∨ ident(cⱼ)`, found unsound, and replaced
-by `SepV`. `ident_of_adm` pins it, `admDisj_ident` recovers the repaired form, and
+by ~~SepV~~. `ident_of_adm` pins it, `admDisj_ident` recovers the repaired form, and
 `not_uAtCan_literal_string` / the two-sided refutation record why the withdrawn form was
 wrong.
 
@@ -2361,7 +2361,7 @@ disjointness of admission.
 
 `adm (.object _) = ⊤` is what makes §5's generation sound here, and it is not slack. It is
 exactly the over-approximation that turns `adm`-disjointness into admission-disjointness,
-and it is why `SepV` cannot separate two objects at all: both `κ`s are `[map]` and both
+and it is why ~~SepV~~ cannot separate two objects at all: both `κ`s are `[map]` and both
 `adm`s are `⊤`, so neither disjunct is available. Restate the discharger on `SepJV` and the
 pair separates — while `select` attempts both options, so (U) genuinely fails. The premise
 gets *stronger* and the theorem becomes *false*.
