@@ -518,7 +518,21 @@ export type FieldDef = Extract<CodecDef, { readonly kind: FieldKind }>
  * call sites outside, and adds five more where each recurses into a child. The count goes *up*.
  *
  * What would make them functions on the term is the children being terms, which is a change to the
- * definition rather than to the readers, and it is its own phase.
+ * definition rather than to the readers.
+ *
+ * **That change is scoped and not taken, and the reason is a measurement rather than a preference.**
+ * A definition's children are codecs at **thirteen** positions, read at **138** sites across
+ * `codec.ts`, `testing.ts` and `lean.ts`. Turning them into terms forces every one of those sites
+ * to choose between rebuilding a codec — which reads `.def` straight back off what it just built —
+ * and taking a term, which flips the readers' parameters and every call site outside them. The two
+ * are one change, not two, and `3466409` took the first of the thirteen because `lazy`'s child is
+ * computed rather than stored and carries the cache the rest would need.
+ *
+ * What the change is *for* is not the reader parameters: it is that twelve of `denote`'s
+ * twenty-one rows reach into a child codec's **pair** rather than denoting a child term, which is
+ * the codec round trip still sitting inside the semantics. That count — twelve — is the measure
+ * for whoever takes it, not the `.def` count, which moves in both directions at once and settles
+ * nowhere useful.
  */
 
 /**
