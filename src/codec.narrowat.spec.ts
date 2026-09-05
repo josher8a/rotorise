@@ -63,12 +63,14 @@ describe('where the variants disagree', () => {
      * rule.** It used to be asserted as `def === undefined`, which was the implementation of the
      * rule rather than the rule: a definition is now required of every codec, and the one that says
      * "a pair of functions, nothing beneath" is `custom`. Every reader answers what it answered.
+     * The `kind` is asserted rather than the whole definition, because `custom` carries the two
+     * functions themselves and comparing closures pins the construction rather than the rule.
      */
     it('describes nothing readable, because there is no one codec to describe', () => {
         const ambiguous = Entity.at((p) => p.op.amount)
         expect(writes(ambiguous)).toBeUndefined()
         expect(carries(ambiguous)).toBeUndefined()
-        expect(ambiguous.def).toEqual({ kind: 'custom' })
+        expect(ambiguous.def.kind).toBe('custom')
         // the path half is untouched, which is what `at` is most often for
         expect(ambiguous.path()).toBe('op.amount')
     })

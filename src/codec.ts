@@ -361,7 +361,26 @@ export type CodecDef =
      * takes no definition at all. The library's own marshallers describe themselves as `opaque`, and
      * reach the construction site directly to do it — which is a thing only this package can do.
      */
-    | { readonly kind: 'custom' }
+    | {
+          readonly kind: 'custom'
+          /**
+           * The pair itself, erased — `Term.custom` carries `ce` and `cp` as data and this is that.
+           *
+           * It used to carry nothing, on the ground that a definition should not claim a member, a
+           * kind of value or a shape beneath that a pair of foreign functions does not have. That
+           * ground is intact and this does not touch it: the two functions *are* the term, not a
+           * description of one, so `writes`, `carries` and `deeper` still answer nothing here.
+           * What it buys is that the definition now determines the codec at every constructor —
+           * `admits` asks the pair the definition carries rather than the codec beside it.
+           */
+          readonly encode: (value: never) => Result<AttributeValue>
+          /**
+           * Erased as {@link held}'s adapter is. Not `Result<unknown>`, which *is* `unknown` —
+           * `Result<T>` is `T | CodecError` — so the annotation would say nothing. A caller asks
+           * {@link failed} of what comes back, exactly as it does of the codec's own `decode`.
+           */
+          readonly decode: (attribute: AttributeValue) => unknown
+      }
 
 /* ── §4's stratification, as three named strata over a flat `kind` ─────────────────── */
 
@@ -704,8 +723,8 @@ export const setBase = (codec: AnyCodec): SetBase | undefined => {
  * **Two rows ask their codec instead of describing it**, which is the model's own move (`adm
  * (.custom ce _) = fun v => (ce v).isSome`, and `opaque`'s rows were converted to match):
  *
- * - `custom` carries no payload at all — `{ kind: 'custom' }` — so there is nothing to read and
- *   asking is the only option.
+ * - `custom` carries the pair itself, which is not a description of a set but the thing that
+ *   decides it, so asking is the only option.
  * - `opaque` carries only `numbers`, and its domain is everything else it checks: nesting depth,
  *   plain-object-ness, no empty set, no `NS`, no `Map`, no `bigint`. A hand-written recursion
  *   stating that a second time is a description that must be kept in agreement with what it
@@ -855,9 +874,17 @@ export const admits = (codec: AnyCodec, value: unknown): boolean => {
             return admits(def.inner, value)
         case 'lazy':
             return admits(def.get(), value)
-        // the two that ask — see the note above
-        case 'opaque':
+        // the two that ask — see the note above. They ask different things, and the difference
+        // is where the pair lives: `custom`'s two functions are data the definition carries, so
+        // the definition answers; `opaque`'s codec is this library's own, reached through the
+        // codec beside the definition because `numbers` is all the definition needs to carry
         case 'custom':
+            try {
+                return !failed(def.encode(value as never))
+            } catch {
+                return false
+            }
+        case 'opaque':
             try {
                 return !failed(codec.encode(value as never))
             } catch {
@@ -991,7 +1018,7 @@ const unresolvedAt = (path: string): AnyCodec => {
         )
     }
     return codec<never, AttributeValue>({
-        def: { kind: 'custom' },
+        def: { kind: 'custom', encode: unresolved, decode: unresolved },
         encode: unresolved,
         decode: unresolved,
     })
@@ -1123,10 +1150,14 @@ export const custom = <T, A extends AttributeValue = AttributeValue>(raw: {
     codec({
         encode: raw.encode,
         decode: raw.decode,
-        // stamped, not taken: a hand-written codec says it is one. With no definition to hand in,
-        // `writes`, `carries` and `deeper` cannot be told a member, a kind of value or a shape
-        // beneath that a pair of foreign functions does not actually have
-        def: { kind: 'custom' },
+        // the pair, as data: a hand-written codec's definition *is* its two functions. `writes`,
+        // `carries` and `deeper` are still told nothing, because two foreign functions have no
+        // member, no kind of value and no shape beneath to tell them about
+        def: {
+            kind: 'custom',
+            encode: raw.encode as (value: never) => Result<AttributeValue>,
+            decode: raw.decode,
+        },
         arbitrary: raw.arbitrary,
         shrink: raw.shrink,
     })
