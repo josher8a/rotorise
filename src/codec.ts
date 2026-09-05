@@ -1903,6 +1903,53 @@ const altSem = (
     }
 }
 /**
+ * §3 `(dunion)`: the tag chooses the variant, and the choice is a **lookup** rather than an attempt.
+ *
+ * The model's `OptionSem.byTag`, and `lawful_dunionCodec` is the lemma. Its (U) is a theorem rather
+ * than an obligation, which §5 states as the reason `(dunion)` is not a second kind of sum: reading
+ * a label off an input is something an option cannot be wrong about.
+ *
+ * `Object.hasOwn` and not a truthiness test: `byVariant` is a plain object, so a tag of `toString`
+ * or `constructor` reaches `Object.prototype` and comes back as a variant that has no `decode`. The
+ * tag is read off the *stored* item, so that is reachable from data this library does not control,
+ * and it surfaced as a raw `TypeError` — the one thing every other failure here is careful not to
+ * be.
+ */
+const byTagSem = (
+    discriminator: string,
+    byVariant: Readonly<
+        Record<string, ItemCodec<Record<string, unknown>, unknown>>
+    >,
+): {
+    readonly pick: (tag: string) => Result<ItemCodec<never, unknown>>
+    readonly tagOf: (item: Readonly<Record<string, unknown>>) => Result<string>
+} => ({
+    pick: (tag) => {
+        const variant = Object.hasOwn(byVariant, tag)
+            ? (byVariant[tag] as ItemCodec<never, unknown> | undefined)
+            : undefined
+        return (
+            variant ??
+            new CodecError(
+                `'${tag}' is not a variant of '${discriminator}'; expected ${Object.keys(
+                    byVariant,
+                )
+                    .map((x) => `'${x}'`)
+                    .join(', ')}`,
+            )
+        )
+    },
+    tagOf: (item) => {
+        const tag = item[discriminator]
+        return tag === undefined
+            ? new CodecError(
+                  `'${String(discriminator)}' chooses the variant and was not given`,
+              )
+            : String(tag)
+    },
+})
+
+/**
  * **What a term means**, as one function on the definition.
  *
  * Every constructor's pair comes from here, so there is one description of what a term denotes
@@ -2230,6 +2277,36 @@ const denote = (def: TermDef): Pair => {
         case 'untagged':
             return altSem(def.variants.map(optionOf)).pair
         /**
+         * §3 `(dunion)`: the variants' lookup, carried into an `M`. The tag is read off the item on
+         * both sides — `tagOfV` and `tagOfA` in the model — so neither half attempts a variant it
+         * was not sent to.
+         */
+        case 'tagged': {
+            const variants = def.variants as unknown as Readonly<
+                Record<string, ItemCodec<Record<string, unknown>, unknown>>
+            >
+            const { pick, tagOf } = byTagSem(def.discriminator, variants)
+            return carriedCodec(
+                (value): value is Record<string, unknown> =>
+                    asRecord(value) !== undefined,
+                'M',
+                (value) =>
+                    new CodecError(
+                        `${describeShape(value)} is not a plain object, and a discriminated union writes an 'M' — a codec's input is typed, so this is a value that reached \`encode\` past its type`,
+                    ),
+                (held) =>
+                    andThen(andThen(tagOf(held), pick), (variant) =>
+                        variant.encode(held as never),
+                    ),
+                (carried: Readonly<Record<string, AttributeValue>>) =>
+                    andThen(
+                        andThen(readTag(carried, def.discriminator), pick),
+                        (variant) => variant.decode(carried),
+                    ),
+            )
+        }
+        /**
+         * §3 `(literal)`,        /**
          * §3 `(literal)`, and it is **not** a sixth ground term: `literalCodec k ls` is
          * `(baseCodec k).restrict (inL k ls)`, the base's pair narrowed to membership of `ℓ`. The
          * base is the index, so the row reaches it by denoting `{ kind: base }` — the five bases
@@ -4725,34 +4802,14 @@ const tagged = <T extends Record<string, unknown>>(
     discriminator: string,
     byVariant: Record<string, ItemCodec<Record<string, unknown>, unknown>>,
 ): DiscriminatedCodec<T, string, Record<string, unknown>> => {
-    const pick = (tag: string): Result<ItemCodec<T, unknown>> => {
-        // `Object.hasOwn` and not a truthiness test: `byVariant` is a plain object, so a tag of
-        // `toString` or `constructor` reaches `Object.prototype` and comes back as a variant that
-        // has no `decode`. The tag is read off the *stored* item, so that is reachable from data
-        // this library does not control, and it surfaced as a raw `TypeError` — the one thing
-        // every other failure here is careful not to be.
-        const variant = Object.hasOwn(byVariant, tag)
-            ? (byVariant[tag] as ItemCodec<T, unknown> | undefined)
-            : undefined
-        return (
-            variant ??
-            new CodecError(
-                `'${tag}' is not a variant of '${discriminator}'; expected ${Object.keys(
-                    byVariant,
-                )
-                    .map((x) => `'${x}'`)
-                    .join(', ')}`,
-            )
-        )
-    }
-
-    const tagOf = (item: Partial<T>): Result<string> => {
-        const tag = item[discriminator]
-        return tag === undefined
-            ? new CodecError(
-                  `'${String(discriminator)}' chooses the variant and was not given`,
-              )
-            : String(tag)
+    const taggedDef = {
+        kind: 'tagged',
+        discriminator,
+        variants: byVariant as unknown as Attributes,
+    } as const
+    const { pick, tagOf } = byTagSem(discriminator, byVariant) as {
+        pick: (tag: string) => Result<ItemCodec<T, unknown>>
+        tagOf: (item: Partial<T>) => Result<string>
     }
 
     const self: Tagged<T, string, Record<string, unknown>> = {
@@ -4782,14 +4839,10 @@ const tagged = <T extends Record<string, unknown>>(
                 variant.spec,
             ]),
         ),
-        def: {
-            kind: 'tagged',
-            discriminator,
-            variants: byVariant as unknown as Attributes,
-        },
+        def: taggedDef,
     }
 
-    const nested = asOneAttribute(self)
+    const nested = codecOfTerm<T, Attribute<'M'>>(taggedDef)
     return {
         encode: nested.encode,
         decode: nested.decode,
