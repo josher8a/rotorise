@@ -351,7 +351,23 @@ export type CodecDef =
            */
           readonly value: unknown
       }
-    | { readonly kind: 'legacy'; readonly current: AnyCodec }
+    | {
+          readonly kind: 'legacy'
+          readonly current: AnyCodec
+          /**
+           * The older reading, erased — `Term.legacy` carries `r : Attr → Option Value` and this
+           * is that.
+           *
+           * **The definition used to drop it**, recording only the current codec, and `src/lean.ts`
+           * said so in its refusal: "records only the *current* codec and drops the older readers
+           * entirely, so there is nothing here to emit even for a reader this library recognised".
+           * A definition that drops a half of what its term denotes does not determine the codec,
+           * which is the one thing this definition is for.
+           */
+          readonly older: {
+              readonly decode: (attribute: AttributeValue) => unknown
+          }
+      }
     | {
           readonly kind: 'held'
           readonly inner: AnyCodec
@@ -1939,6 +1955,44 @@ const denote = (def: TermDef): Pair => {
                     ),
             )
         /**
+         * §3 `(legacy)`: the current reading, extended by an older one — the model's
+         * `Codec.extendRead`, and `lawful_extendRead` is the lemma. The write side is untouched,
+         * which is the whole of what makes it a migration rather than a union: `legacy` adds no
+         * way to *write*, only a second way to read.
+         *
+         * The current encoding is tried first and on its own, so the path every row written since
+         * the migration takes allocates nothing — no `[current, ...older]` to walk and no list of
+         * reasons collected for a failure that did not happen.
+         *
+         * §3 `(legacy)`'s first premise, `ran(r) ⊆ dom(e)`, is checked here and nowhere earlier:
+         * `older` is a function, so what it returns is known only once it has answered. Without
+         * the check the row decodes and the write-back refuses, which is **(C)** broken at the
+         * migrated row and reported at the next write instead of at this read.
+         */
+        case 'legacy': {
+            const current = def.current
+            const older = def.older
+            return {
+                encode: (value) => current.encode(value),
+                decode: (attribute) => {
+                    const read = current.decode(attribute)
+                    if (!failed(read)) return read
+                    const older_ = older.decode(attribute)
+                    if (!failed(older_)) {
+                        if (!admits(current, older_)) {
+                            return new CodecError(
+                                `an older encoding read this attribute as ${describeShape(older_)}, which the current encoding cannot write. A migration has to land on values that can be written back, or the row reads and then refuses on the way out`,
+                            )
+                        }
+                        return older_
+                    }
+                    return new CodecError(
+                        `no encoding could read this attribute; tried the current one and one older: ${read} | ${older_}`,
+                    )
+                },
+            }
+        }
+        /**
          * §3 `(literal)`, and it is **not** a sixth ground term: `literalCodec k ls` is
          * `(baseCodec k).restrict (inL k ls)`, the base's pair narrowed to membership of `ℓ`. The
          * base is the index, so the row reaches it by denoting `{ kind: base }` — the five bases
@@ -2967,33 +3021,10 @@ export const legacy = <T, A extends AttributeValue>({
 }): AttributeCodec<T, A> =>
     // `writes` reads through to `current`, the encoding every write produces; `decides` does not,
     // because an older reader can decode this attribute into something else entirely
-    derive<T, A>(current, {
-        def: { kind: 'legacy', current: current as AnyCodec },
-        encode: (value) => current.encode(value),
-        decode: (attribute) => {
-            // the current encoding is tried first and on its own, so the path every row written
-            // since the migration takes allocates nothing: no `[current, ...older]` to walk and no
-            // list of reasons to collect for a failure that did not happen
-            const read = current.decode(attribute)
-            if (!failed(read)) return read
-            const older_ = older.decode(attribute)
-            if (!failed(older_)) {
-                // §3 `(legacy)`'s first premise, `ran(r) ⊆ dom(e)`: a migration must land on
-                // values the *current* encoding can write. Decidable here and nowhere earlier —
-                // `older` is a function, so what it returns is known only once it has answered.
-                // Without this the row decodes and the write-back refuses, which is (C) broken at
-                // the migrated row and reported at the next write instead of at this read.
-                if (!admits(current as unknown as AnyCodec, older_)) {
-                    return new CodecError(
-                        `an older encoding read this attribute as ${describeShape(older_)}, which the current encoding cannot write. A migration has to land on values that can be written back, or the row reads and then refuses on the way out`,
-                    )
-                }
-                return older_ as T
-            }
-            return new CodecError(
-                `no encoding could read this attribute; tried the current one and one older: ${read} | ${older_}`,
-            )
-        },
+    codecOfTerm<T, A>({
+        kind: 'legacy',
+        current: current as AnyCodec,
+        older,
     })
 
 /**

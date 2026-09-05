@@ -159,17 +159,21 @@ describe('what is still refused', () => {
     })
 
     /**
-     * `legacy` is stuck twice over. Beyond the closure, `CodecDef['legacy']` records only
-     * `current` — the older readers are dropped at construction, so there is no `r` in this
-     * library to recognise even if the model named one.
+     * `legacy` is stuck on the closure, and on that alone now.
+     *
+     * It used to be stuck twice over, and this asserted the second reason: `CodecDef['legacy']`
+     * recorded only `current` and dropped the older readers at construction, so there was no `r`
+     * in this library to recognise even if the model named one. The definition carries the reader
+     * now, so that half is gone and the assertion moved to the half that remains — `r` is a JS
+     * closure, and no `Term` prints one. The rule is unchanged: the emitter refuses a `legacy`.
      */
-    it('refuses `legacy`, which does not even record its readers', () => {
+    it('refuses `legacy`, whose reader is a closure', () => {
         const older = legacy({
             current: string,
             older: { decode: () => 'older' as string },
         })
         expect(refusal(() => leanTermOf(erase(older))).reason).toContain(
-            'drops the older readers',
+            'no `Term` prints',
         )
     })
 })
