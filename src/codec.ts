@@ -2247,6 +2247,12 @@ const taggedItemSem = (
  * rather than one per constructor beside a definition that says the same thing. The model's
  * `denote` is this function and the rows below answer to its combinators one for one.
  *
+ * **A definition's children are terms, and no row here reaches into a child codec's pair.** Where a
+ * row needs one it calls `codecOfTerm`, which memoises on the frozen term and answers the codec
+ * that was already built, so recovering a child costs a lookup rather than a construction. The
+ * checker holds this rather than a reader: every child position of a `TermDef` is a `TermDef`, so
+ * `def.element.encode` is a type error and not a habit to avoid.
+ *
  * **There is no `default`, and that is the guard.** Every `TermDef` kind has a row, so the switch
  * is exhaustive and the type checker knows it — a new kind with no row makes `def` something other
  * than `never` at the end of the switch and stops the build. A thrown default would replace that
