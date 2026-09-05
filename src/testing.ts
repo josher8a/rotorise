@@ -1038,7 +1038,10 @@ export const arbitraryOf = (
             return Object.fromEntries(
                 Array.from(
                     { length: size <= 0 ? 0 : Math.floor(rng() * 3) },
-                    (_, i) => [`k${i}`, arbitraryOf(def.value, rng, size - 1)],
+                    (_, i) => [
+                        `k${i}`,
+                        arbitraryOf(codecOfTerm(def.value), rng, size - 1),
+                    ],
                 ),
             )
         case 'attributes': {
@@ -1207,7 +1210,10 @@ export const shrinkOf = (
                 out.push(rest)
             }
             for (const k of keys) {
-                for (const smaller of shrinkOf(def.value, held[k])) {
+                for (const smaller of shrinkOf(
+                    codecOfTerm(def.value),
+                    held[k],
+                )) {
                     out.push({ ...held, [k]: smaller })
                 }
             }
@@ -1898,7 +1904,7 @@ const unionsIn = (subject: AnyCodec): readonly UnionSite[] => {
             case 'array':
                 return inner(codecOfTerm(def.element))
             case 'record':
-                return inner(def.value)
+                return inner(codecOfTerm(def.value))
             case 'tuple':
                 def.elements.forEach((element) => inner(codecOfTerm(element)))
                 return inner(def.tail && codecOfTerm(def.tail))
