@@ -1513,17 +1513,90 @@ export type StringCodec = AttributeCodec<string, Attribute<'S'>> & {
 const describeShape = (value: unknown): string =>
     `${shapeOf(value) ?? typeof value} \`${String(value)}\``
 
-const stringCodec: AttributeCodec<string, Attribute<'S'>> = codec({
-    def: { kind: 'string' },
-    // the shape test is `admits`', not a second one: `shapeOf` is the function that row calls, so
-    // the two cannot drift into disagreeing about what a string is
+/* ── §3's terms, denoted ──────────────────────────────────────────────────────────────── */
+
+/**
+ * The two halves a term denotes, with neither half's type known.
+ *
+ * A term does not carry the TypeScript type its codec has — `{ kind: 'string' }` says `S` and says
+ * nothing about `string` — so {@link denote} answers in the erased pair and {@link codecOfTerm}
+ * puts the type back on, once, where the constructor knows it.
+ */
+type Pair = {
+    readonly encode: (value: never) => Result<AttributeValue>
+    readonly decode: (attribute: AttributeValue) => Result<unknown>
+}
+
+/**
+ * §3's ground terms, as one construction — the model's `pointCodec` under this library's word.
+ *
+ * A prism pair, which `src/` has no name of its own for; §3 calls what it builds a *ground term*,
+ * so that is the word here.
+ *
+ * A payload carried between a value constructor and an attribute constructor, both prisms. The
+ * prism laws are §2's laws in disguise, which is why `lawful_pointCodec` needs no hypothesis about
+ * either side beyond the member it stamps: `out_into` is the round trip **(R)** and `into_out` is
+ * canonizability **(C)**.
+ *
+ * The shape test is {@link admits}', not a second one: `shapeOf` is the function that row calls, so
+ * the two cannot drift into disagreeing about what a string is.
+ */
+const groundCodec = (
+    shape: Shape,
+    member: AttributeName,
+    writes: string,
+): Pair => ({
     encode: (value) =>
-        shapeOf(value) === 'string'
-            ? carrying('S', value)
+        shapeOf(value) === shape
+            ? carrying(member, value as never)
             : new CodecError(
-                  `${describeShape(value)} is not a string, and \`string\` writes an 'S' — a codec's input is typed, so this is a value that reached \`encode\` past its type`,
+                  `${describeShape(value)} is not a ${shape}, and \`${shape}\` writes ${writes} — a codec's input is typed, so this is a value that reached \`encode\` past its type`,
               ),
-    decode: (attribute) => expect('S', attribute),
+    decode: (attribute) => expect(member, attribute),
+})
+
+/**
+ * **What a term means**, as one function on the definition.
+ *
+ * Every constructor's pair comes from here, so there is one description of what a term denotes
+ * rather than one per constructor beside a definition that says the same thing. The model's
+ * `denote` is this function and the rows below answer to its combinators one for one.
+ *
+ * **The `default` is temporary and this is the exit condition.** Rows arrive one constructor per
+ * commit, each deleting that constructor's hand-written halves as it lands, and the branch is
+ * unreachable from any constructor that has been switched. The pass that switches the last one
+ * deletes the branch and adds the guard that makes a row-less kind a build error, the way
+ * `_everyKindHasALevel` makes an unclassified kind one.
+ */
+const denote = (def: TermDef): Pair => {
+    switch (def.kind) {
+        case 'string':
+            return groundCodec('string', 'S', "an 'S'")
+        default:
+            throw new CodecError(
+                `\`${def.kind}\` is not ported to \`denote\` yet — this is reachable only from a constructor that has not been switched, and no such constructor calls it`,
+            )
+    }
+}
+
+/**
+ * A term, as the codec it denotes — the one place the erased pair gets its type back.
+ *
+ * `denote` answers about the term, and a term does not carry the type its codec has, so exactly one
+ * cast stands between the two. It is here rather than at each constructor because twenty-one casts
+ * with one reason between them is one reason nobody reads. `build.ts`'s `codec` is still the single
+ * construction site: this hands it a pair instead of two hand-written halves.
+ */
+const codecOfTerm = <T, A extends AttributeValue>(
+    def: TermDef,
+): AttributeCodec<T, A> =>
+    codec<T, A>({
+        def,
+        ...(denote(def) as Pick<Codec<T, A>, 'encode' | 'decode'>),
+    })
+
+const stringCodec: AttributeCodec<string, Attribute<'S'>> = codecOfTerm({
+    kind: 'string',
 })
 
 /** @see {@link StringCodec} */
