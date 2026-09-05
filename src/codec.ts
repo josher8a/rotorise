@@ -1578,10 +1578,55 @@ const denote = (def: TermDef): Pair => {
         case 'binary':
             return groundCodec('binary', 'B', 'a `Uint8Array`', "a 'B'")
         /**
-         * **The `NULL` point, and it is not a {@link groundCodec}.** The model keeps `nullCodec`
-         * as its own construction for the reason §1 gives: `NULL`'s payload is `∗`, so there is no
-         * payload to carry between two prisms and nothing for the shared construction to be
-         * generic over. One value, one attribute.
+         * §3 `(number)`. The held set is `D` — §1's numeral domain — and not every double, so
+         * both halves gate. `lawful_numberCodec` is its own lemma rather than the ground one's,
+         * and the model's row is written out for the same reason this one is.
+         *
+         * **The second gate is not redundant**, and the model records the same fact from the same
+         * direction: `p` gates on the **round-tripped** value rather than on the stored digits,
+         * because `ofDec` rounds and a numeral at the top of the range can round *up* past it.
+         * Gating on the digits would admit a value `e` then refuses, which is **(C)** failing.
+         * `Number('9.9999999999999999999999999999999999999E+125')` is that numeral here.
+         */
+        case 'number':
+            return {
+                // `value.toString()` is defined on everything, so the numeral gate alone accepted
+                // the *string* `'5'` as readily as the number `5`. `admits`' `number` row asks the
+                // kind first; so does this
+                // annotated `unknown` rather than left to infer `never` from {@link Pair}: the
+                // erased pair says a caller may pass anything, and this row narrows what it is
+                encode: (value: unknown) =>
+                    typeof value === 'number' && isNumeral(value.toString())
+                        ? carrying('N', value.toString())
+                        : new CodecError(
+                              `${value} is not a number DynamoDB stores: it takes at most 38 significant digits and magnitude 1e-130 to 9.9e125, and has no NaN or Infinity`,
+                          ),
+                decode: (attribute) =>
+                    andThen(expect('N', attribute), (carried) => {
+                        if (!isNumeral(carried)) {
+                            return new CodecError(
+                                `'${carried}' is not a numeral, so this attribute was not written by DynamoDB`,
+                            )
+                        }
+                        const read = Number(carried)
+                        return isNumeral(read.toString())
+                            ? read
+                            : new CodecError(
+                                  `'${carried}' reads back as ${read}, which is outside the range DynamoDB stores`,
+                              )
+                    }),
+            }
+        /**
+         * **The `NULL` point, and it is not a {@link groundCodec} here.** The reason is this
+         * library's and not the model's: `lawful_nullCodec` *is* `lawful_pointCodec`, at the
+         * prisms `nullV` and `nullA`, whose payload is `Unit` — "a prism with a trivial payload,
+         * which is what makes `null` an instance of the same shape as the three that carry data".
+         * So the model has one construction for all four.
+         *
+         * `groundCodec` is not that construction. It is a shape test and a `carrying`, which
+         * carries the *value* into the member — and `NULL`'s payload is the constant `true`, which
+         * no value supplies. Being generic over it would mean taking the prism pair as arguments
+         * rather than a shape and a member, which is a larger construction than four rows.
          *
          * `encode` checks, though the type already says so: the admissible set is one value and
          * this library owns it, so an unchecked `encode` would write `NULL` for anything that
@@ -1721,36 +1766,8 @@ export type NumberCodec = AttributeCodec<number, Attribute<'N'>> & {
     }
 }
 
-const numberCodec: AttributeCodec<number, Attribute<'N'>> = codec({
-    def: { kind: 'number' },
-    // `value.toString()` is defined on everything, so the numeral gate alone accepted the *string*
-    // `'5'` as readily as the number `5`. `admits`' `number` row asks the kind first; now so does this
-    encode: (value) =>
-        typeof value === 'number' && isNumeral(value.toString())
-            ? carrying('N', value.toString())
-            : new CodecError(
-                  `${value} is not a number DynamoDB stores: it takes at most 38 significant digits and magnitude 1e-130 to 9.9e125, and has no NaN or Infinity`,
-              ),
-    /**
-     * Both gates, and the second is not redundant. `Number('9.9999999999999999999999999999999999999E+125')`
-     * rounds *up* to `1e126`, which is past the maximum — so a numeral DynamoDB stores can read
-     * back as a number this codec cannot write. Checking only the stored digits would leave `decode`
-     * accepting a value `encode` refuses, which is `(C)` failing.
-     */
-    decode: (attribute) =>
-        andThen(expect('N', attribute), (carried) => {
-            if (!isNumeral(carried)) {
-                return new CodecError(
-                    `'${carried}' is not a numeral, so this attribute was not written by DynamoDB`,
-                )
-            }
-            const read = Number(carried)
-            return isNumeral(read.toString())
-                ? read
-                : new CodecError(
-                      `'${carried}' reads back as ${read}, which is outside the range DynamoDB stores`,
-                  )
-        }),
+const numberCodec: AttributeCodec<number, Attribute<'N'>> = codecOfTerm({
+    kind: 'number',
 })
 
 /** @see {@link NumberCodec} */
