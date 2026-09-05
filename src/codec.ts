@@ -1577,6 +1577,28 @@ const denote = (def: TermDef): Pair => {
             return groundCodec('boolean', 'BOOL', 'a boolean', "a 'BOOL'")
         case 'binary':
             return groundCodec('binary', 'B', 'a `Uint8Array`', "a 'B'")
+        /**
+         * **The `NULL` point, and it is not a {@link groundCodec}.** The model keeps `nullCodec`
+         * as its own construction for the reason §1 gives: `NULL`'s payload is `∗`, so there is no
+         * payload to carry between two prisms and nothing for the shared construction to be
+         * generic over. One value, one attribute.
+         *
+         * `encode` checks, though the type already says so: the admissible set is one value and
+         * this library owns it, so an unchecked `encode` would write `NULL` for anything that
+         * reached it — a pair whose `e` is defined outside its own held set. A literal checks for
+         * the same reason.
+         */
+        case 'null':
+            return {
+                encode: (value) =>
+                    value === null
+                        ? carrying('NULL', true)
+                        : new CodecError(
+                              `${JSON.stringify(value)} is not null, and this codec holds nothing else`,
+                          ),
+                decode: (attribute) =>
+                    andThen(expect('NULL', attribute), () => null),
+            }
         default:
             throw new CodecError(
                 `\`${def.kind}\` is not ported to \`denote\` yet — this is reachable only from a constructor that has not been switched, and no such constructor calls it`,
@@ -1780,18 +1802,8 @@ export const boolean: BooleanCodec = Object.assign(
  * Not callable, and there is nothing for it to be: the model's `GroundKind.null` has carrier `Unit`,
  * so `literal .null` can say nothing this codec does not already say.
  */
-export const nullValue: AttributeCodec<null, Attribute<'NULL'>> = codec({
-    def: { kind: 'null' },
-    // checked, though the type already says so: the admissible set is one value and this library
-    // owns it, so an unchecked `encode` would write `NULL` for anything that reached it — a pair
-    // whose `e` is defined outside its own held set. A literal checks for the same reason
-    encode: (value) =>
-        value === null
-            ? carrying('NULL', true)
-            : new CodecError(
-                  `${JSON.stringify(value)} is not null, and this codec holds nothing else`,
-              ),
-    decode: (attribute) => andThen(expect('NULL', attribute), () => null),
+export const nullValue: AttributeCodec<null, Attribute<'NULL'>> = codecOfTerm({
+    kind: 'null',
 })
 
 /**
