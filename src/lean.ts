@@ -400,7 +400,7 @@ const writesOnlyStrings = (def: CodecDef | undefined): boolean => {
     if (def.kind === 'literal') {
         return def.base === 'string' || def.base === 'decimal'
     }
-    if (def.kind === 'refine') return writesOnlyStrings(def.inner.def)
+    if (def.kind === 'refine') return writesOnlyStrings(def.inner)
     return false
 }
 
@@ -649,13 +649,13 @@ const leanTermOfDef = (def: CodecDef, at: string, forced: number): string => {
                     `\`Term.refine\` carries \`q : Value → Bool\`, and this predicate is not one this library ships — it is the caller's closure for ${JSON.stringify(def.refined.what)}. The recognised ones are \`isNumeral\` and \`isStoredNumeral\` from \`src/attribute.ts\`, passed by reference`,
                 )
             }
-            if (!writesOnlyStrings(def.inner.def)) {
+            if (!writesOnlyStrings(def.inner)) {
                 return refuse(
                     at,
                     `${known.what} decides a *string*, and this refinement's inner term writes values that are not strings — where JavaScript would coerce and the model would not, so the two predicates would part company`,
                 )
             }
-            return `Term.refine (${leanTermOf(def.inner, `${at}.inner`, forced)}) ${known.lean}`
+            return `Term.refine (${leanTermOfDef(def.inner, `${at}.inner`, forced)}) ${known.lean}`
         }
         case 'held':
             return refuse(
