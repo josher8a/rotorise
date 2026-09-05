@@ -643,6 +643,92 @@ export type Shape =
     | 'map'
     | 'null'
 
+/**
+ * The `Value` **constructor** a term can write — {@link Shape} with the three set families split.
+ *
+ * The model's `Slot`, and the split is the whole of its content: `Kind` collapses `strSet`, `numSet`
+ * and `binSet` to one label, so `set(string)` and `set(number)` are indistinguishable to it, while
+ * the ten constructors tell them apart. `union(set(string), set(number))` is certified by this and
+ * was not by the coarser label — which is the correction §5 recorded when the kind tables went, and
+ * this is that correction reaching `src/`.
+ */
+export type Slot = Exclude<Shape, 'set'> | 'strSet' | 'numSet' | 'binSet'
+
+/**
+ * Which value constructors a term can write, or `undefined` for "any of them".
+ *
+ * The model's `occV`, and an **over-approximation on purpose**: if `X ⊆ X'`, `Y ⊆ Y'` and
+ * `X' ∩ Y' = ∅` then `X ∩ Y = ∅`, so a coarse answer costs a certificate and never buys a wrong
+ * one. `undefined` is the model's `⊤` — every slot — and a pair involving one is simply not
+ * certified.
+ *
+ * **This is not {@link carries}, and the difference is which side of the pair asks.** `carries`
+ * answers about a *value* a caller might hand over, and is compared against {@link shapeOf}, which
+ * classifies a runtime value; a JS `Set` carries no element type, and an empty one carries nothing
+ * at all, so no runtime classification can name its family. This answers about a *term*, where the
+ * family is a fact the declaration has. §5 says the same thing from the other end: the finer
+ * partition "is a statement about `Term`, not about any implementation — a runtime `Set` that
+ * carries no element type has no such partition".
+ */
+export const occupies = (codec: AnyCodec): readonly Slot[] | undefined => {
+    const def = codec.def
+    switch (def.kind) {
+        case 'refine':
+        case 'optional':
+        case 'fallback':
+            return occupies(def.inner)
+        case 'legacy':
+            return occupies(def.current)
+        case 'lazy':
+            return occupies(def.get())
+        // an adapter's `f` runs *before* the subterm and can move the value into any constructor,
+        // so there is nothing here to read — the same reason `carries` declines, one row down
+        case 'held':
+        case 'custom':
+        case 'opaque':
+            return undefined
+        case 'nullable': {
+            const inner = occupies(def.inner)
+            return inner && [...inner, 'null']
+        }
+        case 'untagged': {
+            const slots = new Set<Slot>()
+            for (const variant of def.variants) {
+                const of = occupies(variant)
+                if (!of) return undefined
+                for (const slot of of) slots.add(slot)
+            }
+            return [...slots]
+        }
+        // a decimal is *held* as a string, so it occupies `string` while storing `N` — which is why
+        // `union(number, decimal)` separates on the write side and not on the read side
+        case 'literal': {
+            // a literal's base is one of the five ground terms, none of which is a `set`
+            const shape = literalShape[def.base]
+            return shape === 'set' ? undefined : [shape]
+        }
+        // and the row the finer partition exists for: which set family follows from the element's
+        // own constructor, not from the fact that it is a set
+        case 'set': {
+            const element = occupies(def.element)
+            const only = element?.length === 1 ? element[0] : undefined
+            return only === 'string'
+                ? ['strSet']
+                : only === 'number'
+                  ? ['numSet']
+                  : only === 'binary'
+                    ? ['binSet']
+                    : undefined
+        }
+        default: {
+            // every remaining kind takes one coarse shape, and none of them is `set` — that row is
+            // above, and it is the only place the two partitions differ
+            const one = carriedBy[def.kind]
+            return one === undefined || one === 'set' ? undefined : [one]
+        }
+    }
+}
+
 /** Which kind of value each kind of codec takes, where the kind alone decides. */
 const carriedBy: { readonly [K in TermKind]?: Shape } = {
     string: 'string',
