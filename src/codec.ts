@@ -1595,6 +1595,51 @@ const denote = (def: TermDef): Pair => {
             )
         }
         /**
+         * §3 `(tuple)` and `(tuple-tail)` in one row, which is what the constructor carries.
+         * `tupleCodec_eq` is the lemma and `align_eq_some` is what settles the tail: the arity
+         * test comes **before** the positions, because a list of the wrong length has no
+         * entrywise reading at all. `align` is the model's name for that step; here it is the two
+         * length tests, and they are the same fact — a tuple with a tail aligns at *at least* its
+         * fixed arity, one without at exactly it.
+         *
+         * A `Uint8Array` of the right length has the right `length` and is not a tuple, which is
+         * what the length tests alone could not say. `admits`' `tuple` row asks `Array.isArray`
+         * before it counts, and so does this, which is what makes the arity messages mean what
+         * they say.
+         */
+        case 'tuple': {
+            const items = def.elements
+            const tail = def.tail
+            /** `align`: the arity test, which comes before any position is read. */
+            const aligned = (
+                length: number,
+                say: (arity: number) => string,
+            ): CodecError | undefined =>
+                (tail ? length < items.length : length !== items.length)
+                    ? new CodecError(`${say(items.length)}, found ${length}`)
+                    : undefined
+            const atLeast = tail ? 'at least ' : ''
+            const at = (index: number) => items[index] ?? (tail as AnyCodec)
+            return carriedCodec(
+                (value): value is readonly never[] => Array.isArray(value),
+                'L',
+                (value) =>
+                    new CodecError(
+                        `${describeShape(value)} is not an array, and \`tuple\` writes an 'L' — a codec's input is typed, so this is a value that reached \`encode\` past its type`,
+                    ),
+                (held) =>
+                    aligned(
+                        held.length,
+                        (arity) => `expected ${atLeast}${arity} elements`,
+                    ) ?? every(held, (one, index) => at(index).encode(one)),
+                (carried: readonly AttributeValue[]) =>
+                    aligned(
+                        carried.length,
+                        (arity) => `expected a list of ${atLeast}${arity}`,
+                    ) ?? every(carried, (one, index) => at(index).decode(one)),
+            )
+        }
+        /**
          * §3 `(literal)`, and it is **not** a sixth ground term: `literalCodec k ls` is
          * `(baseCodec k).restrict (inL k ls)`, the base's pair narrowed to membership of `ℓ`. The
          * base is the index, so the row reaches it by denoting `{ kind: base }` — the five bases
@@ -2105,55 +2150,12 @@ export const tuple = <const Cs extends readonly (AnyCodec | AnyRest)[]>(
     const tail = isTail(last) ? last.rest : undefined
     const items = (tail ? all.slice(0, -1) : all) as readonly AnyCodec[]
 
-    return codec({
-        def: { kind: 'tuple', elements: items, tail },
-        encode: (value) => {
-            const held = value as readonly unknown[]
-            // a `Uint8Array` of the right length has the right `length` and is not a tuple, which
-            // is what the two length tests alone could not say. `admits`' `tuple` row asks
-            // `Array.isArray` before it counts, and the arity messages below now mean what they say
-            if (!Array.isArray(held)) {
-                return new CodecError(
-                    `${describeShape(value)} is not an array, and \`tuple\` writes an 'L' — a codec's input is typed, so this is a value that reached \`encode\` past its type`,
-                )
-            }
-            if (!tail && held.length !== items.length) {
-                return new CodecError(
-                    `expected ${items.length} elements, found ${held.length}`,
-                )
-            }
-            if (tail && held.length < items.length) {
-                return new CodecError(
-                    `expected at least ${items.length} elements, found ${held.length}`,
-                )
-            }
-            return andThen(
-                every(held, (one, index) =>
-                    (items[index] ?? (tail as AnyCodec)).encode(one as never),
-                ),
-                (written) => carrying('L', written),
-            )
-        },
-        decode: (attribute) =>
-            andThen(expect('L', attribute), (carried) => {
-                if (!tail && carried.length !== items.length) {
-                    return new CodecError(
-                        `expected a list of ${items.length}, found ${carried.length}`,
-                    )
-                }
-                if (tail && carried.length < items.length) {
-                    return new CodecError(
-                        `expected a list of at least ${items.length}, found ${carried.length}`,
-                    )
-                }
-                return every(carried, (one, index) =>
-                    (items[index] ?? (tail as AnyCodec)).decode(
-                        one as AttributeValue,
-                    ),
-                ) as never
-            }),
-        // as with `record` and `map`, the cast keeps the shape each position writes, which
-        // `Attribute<'L'>` would flatten to "some list"
+    // as with `record` and `map`, the cast keeps the shape each position writes, which
+    // `Attribute<'L'>` would flatten to "some list"
+    return codecOfTerm({
+        kind: 'tuple',
+        elements: items,
+        tail,
     }) as unknown as AttributeCodec<TupleOf<Cs>, L<TupleWrites<Cs>>>
 }
 
