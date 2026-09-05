@@ -1102,6 +1102,7 @@ export const arbitraryOf = (
             // forever: the optional attribute that recurses is dropped once the budget runs out
             return arbitraryOf(def.get(), rng, size - 1)
         case 'custom':
+            if (def.arbitrary) return def.arbitrary(rng, size)
             throw new CodecError(
                 'a codec written by hand generates nothing unless it says how; give it `arbitrary`',
             )
@@ -1255,6 +1256,10 @@ export const shrinkOf = (
             return shrinkOf(def.get(), value)
         // a branch has no one codec to shrink through, which is why `at` refuses it; a hand-written
         // codec shrinks only if it said how, and `shrink` above is where that was read
+        // a hand-written codec shrinks only where the caller said how, and the caller said it in
+        // the definition — the same place its pair and its generator live
+        case 'custom':
+            return def.shrink ? def.shrink(value as never) : []
         default:
             return []
     }

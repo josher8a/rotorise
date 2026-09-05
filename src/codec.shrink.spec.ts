@@ -105,9 +105,22 @@ describe('shrinking', () => {
         )
     })
 
+    /**
+     * Declared without a `shrink` rather than spread over one and overridden.
+     *
+     * This used to read `{ ...truncating, shrink: undefined }`, which worked because the field
+     * beside the definition won over the definition. It does not any more: a codec's generation is
+     * read from the term, so a spread that contradicts the term is a codec saying two things. The
+     * rule under test is unchanged — with nothing to shrink with, the report says nothing about
+     * shrinking.
+     */
     it('says nothing about shrinking when the first case is already minimal', () => {
         const Broken = object({
-            c: { ...truncating, shrink: undefined },
+            c: custom<string, Attribute<'S'>>({
+                encode: truncating.encode,
+                decode: truncating.decode,
+                arbitrary: truncating.arbitrary,
+            }),
         }).item
         expect(
             messageOf(() => checkRoundTrip(Broken, { seed: 5 })),
