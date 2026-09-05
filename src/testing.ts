@@ -1024,7 +1024,7 @@ export const arbitraryOf = (
             return [
                 ...fixed,
                 ...Array.from({ length: Math.floor(rng() * 3) }, () =>
-                    arbitraryOf(tail, rng, Math.max(0, size - 1)),
+                    arbitraryOf(codecOfTerm(tail), rng, Math.max(0, size - 1)),
                 ),
             ]
         }
@@ -1892,7 +1892,7 @@ const unionsIn = (subject: AnyCodec): readonly UnionSite[] => {
                 return inner(def.value)
             case 'tuple':
                 def.elements.forEach(inner)
-                return inner(def.tail)
+                return inner(def.tail && codecOfTerm(def.tail))
             case 'attributes':
                 Object.values(def.of).forEach((field) => inner(field.codec))
                 return inner(

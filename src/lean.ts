@@ -562,7 +562,7 @@ const leanTermOfDef = (def: CodecDef, at: string, forced: number): string => {
                 )
                 .join(', ')
             const tail = def.tail
-                ? `(some (${leanTermOf(def.tail, `${at}.tail`, forced)}))`
+                ? `(some (${leanTermOfDef(def.tail, `${at}.tail`, forced)}))`
                 : 'none'
             return `Term.tuple [${elements}] ${tail}`
         }
