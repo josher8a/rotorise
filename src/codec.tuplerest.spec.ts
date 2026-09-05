@@ -138,9 +138,19 @@ describe('where a tail cannot go', () => {
         expect(typeof _wrong).toBe('function')
     })
 
-    it('but the codec underneath is untouched by the mark', () => {
-        // the mark is about position; what it wraps still writes what it wrote
-        expect(writes(rest(decimal))).toBe('N')
-        expect(writes(rest(string))).toBe('S')
+    /**
+     * The rule is that marking an element changes nothing about the element, and the tuple is
+     * where it can be seen — a rest is a *position*, so it means nothing anywhere else.
+     *
+     * This used to read `writes(rest(decimal))`, asking a marker what it writes. That worked
+     * because `rest(c)` was `c` with a definition stamped on it, so a bare rest had an `encode`
+     * and answered as its element. It is a marker now and answers nothing, which is the point:
+     * asking a position what it writes is a question with no subject.
+     */
+    it('but the element underneath is untouched by the mark', () => {
+        expect(writes(tuple(rest(decimal)))).toBe('L')
+        expect(
+            tuple(string, rest(decimal)).unsafeEncode(['a', '1.5', '2']),
+        ).toEqual({ L: [{ S: 'a' }, { N: '1.5' }, { N: '2' }] })
     })
 })
