@@ -1297,26 +1297,6 @@ export type Refinement = {
     readonly onThinSearch?: (what: string, rate: number) => void
 }
 
-/**
- * Many attributes, as the one `M` that carries them.
- *
- * What `item`, `tagged` and `untagged` each expose as `.attribute` so they can nest inside another
- * entity. All three wrapped themselves identically and differed only in how a path descends, so
- * that difference is the parameter and the rest is written once — including the `'M'`, which all
- * three used to leave unsaid.
- */
-const asOneAttribute = <T>(self: {
-    encode: (value: T) => Result<AttributeMap>
-    decode: (item: AttributeMap) => Result<T>
-    def: TermDef
-}): AttributeCodec<T, Attribute<'M'>> =>
-    codec({
-        encode: (value) =>
-            andThen(self.encode(value), (ok) => carrying('M', ok)),
-        decode: (attribute) => andThen(expect('M', attribute), self.decode),
-        def: self.def,
-    })
-
 const expect = <K extends AttributeName>(
     name: K,
     attribute: AttributeValue,
@@ -1490,8 +1470,6 @@ const literalCodec = <T extends LiteralValue>(
     base: LiteralBase,
     allowed: readonly T[],
 ): AttributeCodec<T, AttributeValue> => {
-    const member = literalMember[base]
-
     const wrong = allowed.filter((one) => shapeOf(one) !== literalShape[base])
     if (wrong.length) {
         throw new CodecError(
@@ -3566,8 +3544,6 @@ export const held = <T, const C extends AnyCodec>(
         readonly decode: (held: Decoded<C>) => NoInfer<T>
     },
 ): AttributeCodec<T, AttributeOf<C>> => {
-    const held = inner as unknown as AttributeCodec<Decoded<C>>
-
     /**
      * The two halves are the one place in a codec where code this library did not write runs.
      *

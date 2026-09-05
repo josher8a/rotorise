@@ -65,6 +65,7 @@ const noInventedOptions: NoInventedOptions = true
  */
 type UnrepresentedOptions = Exclude<keyof marshallOptions, keyof native.Options>
 const unrepresented: UnrepresentedOptions = 'convertTopLevelContainer'
+void unrepresented
 
 /** Values chosen for the branches, not for realism. */
 const values: readonly [string, unknown][] = [

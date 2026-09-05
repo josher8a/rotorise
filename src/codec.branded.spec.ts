@@ -67,8 +67,6 @@ type StaffParty = Omit<OwnerParty, 'type'> & {
     type: 'STAFF'
     branchId: string
 }
-type Party = OwnerParty | StaffParty
-
 type AccountBalance = {
     balance: Price
     sequence: SequenceValue

@@ -70,6 +70,7 @@ describe('a numeric literal', () => {
         // value back at runtime, and is what a key component is built from
         type Only = typeof draft.constant
         const _narrowed: 0 = null as unknown as Only
+        void _narrowed
         expect(decides(draft)).toBe(0)
         // and two admissible values decide nothing, which is the point of `decides`
         expect(decides(status)).toBeUndefined()

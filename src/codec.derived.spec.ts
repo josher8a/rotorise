@@ -171,9 +171,6 @@ describe('what is one segment deeper', () => {
     })
 
     it('branches where the variants disagree, and agrees where they do not', () => {
-        type Visit =
-            | { type: 'CHECKUP'; petId: string }
-            | { type: 'SHOT'; petId: string }
         const Visits = discriminatedUnion('type', [
             object({ type: string('CHECKUP'), petId: string }),
             object({ type: string('SHOT'), petId: string }),
@@ -194,7 +191,6 @@ describe('what is one segment deeper', () => {
     })
 
     it('reaches a member-specific attribute of an untagged union', () => {
-        type Line = { petId: string } | { petIds: readonly string[] }
         const Lines = union([
             object({ petId: string }),
             object({ petIds: array(string) }),

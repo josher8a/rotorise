@@ -474,13 +474,6 @@ describe('DynamoDB Utils', () => {
             | { a: 'a1'; b: 1n; c: true; z: 'never' }
             | { a: 'a2'; b: 2; c: 0; z: 'never' }
         >()
-        type t = Extract<
-            Parameters<typeof base>[0][string],
-            {
-                discriminator: 'a'
-            }
-        >['spec']['a1']
-
         attest<
             [
                 schema: Record<
@@ -688,7 +681,7 @@ describe('DynamoDB Utils', () => {
                 b: 1n,
             }),
         ).toBe(1n)
-        const r = testTableEntry.key(
+        void testTableEntry.key(
             'GSI1SK',
             {
                 a: 'a1',
@@ -700,7 +693,7 @@ describe('DynamoDB Utils', () => {
             },
         )
 
-        const d = testTableEntry.key('GSI1PK', {
+        void testTableEntry.key('GSI1PK', {
             z: 'never', // required to discriminate
             b: 1n,
         })
@@ -907,7 +900,7 @@ describe('DynamoDB Utils', () => {
             >
         >(null as any as RealEntry)
 
-        const expect_key = RealEntry.key(
+        void (RealEntry.key(
             'PK',
             {
                 id1: 'client',
@@ -916,9 +909,9 @@ describe('DynamoDB Utils', () => {
             {
                 allowPartial: true,
             },
-        ) satisfies 'ID1#client#USER#user' | 'ID1#client'
+        ) satisfies 'ID1#client#USER#user' | 'ID1#client')
 
-        const expect_key_ = RealEntry.key(
+        void (RealEntry.key(
             'PK',
             {
                 id1: 'client',
@@ -927,12 +920,12 @@ describe('DynamoDB Utils', () => {
             {
                 // allowPartial: true,
             },
-        ) satisfies 'ID1#client#USER#user'
+        ) satisfies 'ID1#client#USER#user')
 
-        const expect_key2 = RealEntry.key('GSI1SK', {
+        void (RealEntry.key('GSI1SK', {
             type: 'TypeA',
             tag: 'A',
-        }) satisfies 'TYPE#TypeA'
+        }) satisfies 'TYPE#TypeA')
 
         // @ts-expect-error
         const expect_key2_ = RealEntry.key('GSI1SK', {
@@ -941,7 +934,7 @@ describe('DynamoDB Utils', () => {
             // biome-ignore lint/complexity/noBannedTypes: test case
         } as {})
 
-        const expect_key_depth = RealEntry.key(
+        void (RealEntry.key(
             'PK',
             {
                 id1: 'client',
@@ -951,7 +944,7 @@ describe('DynamoDB Utils', () => {
                 allowPartial: true,
                 depth: 1,
             },
-        ) satisfies 'ID1#client'
+        ) satisfies 'ID1#client')
 
         const expect_key_depth_partial_discriminator = RealEntry.key(
             'SK',
@@ -963,11 +956,11 @@ describe('DynamoDB Utils', () => {
             expect_key_depth_partial_discriminator,
         )
 
-        const expect_key_depth_discriminator = RealEntry.key(
+        void (RealEntry.key(
             'SK',
             { tag: 'A', id2: 'yolo' },
             { depth: 2 },
-        ) satisfies 'TAG#A#ID2#yolo'
+        ) satisfies 'TAG#A#ID2#yolo')
 
         attest.instantiations([32508, 'instantiations'])
     })

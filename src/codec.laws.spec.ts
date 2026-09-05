@@ -267,7 +267,7 @@ describe('refine', () => {
 
     it('by a predicate nothing fails is the codec itself', () => {
         checkEquivalent(
-            refine(string, (v): v is string => true),
+            refine(string, (_v): _v is string => true),
             string,
             { seed },
         )
@@ -442,7 +442,7 @@ describe('what the wrappers preserve', () => {
      */
     it.each([
         ['held', held(decimal, { encode: String, decode: Number }), 1.5],
-        ['refine', refine(decimal, (v): v is string => true), '1.5'],
+        ['refine', refine(decimal, (_v): _v is string => true), '1.5'],
         [
             'fallbackless legacy',
             legacy({ current: decimal, older: decimal }),
@@ -451,8 +451,8 @@ describe('what the wrappers preserve', () => {
         [
             'nested',
             refine(
-                refine(decimal, (v): v is string => true),
-                (v): v is string => true,
+                refine(decimal, (_v): _v is string => true),
+                (_v): _v is string => true,
             ),
             '1.5',
         ],

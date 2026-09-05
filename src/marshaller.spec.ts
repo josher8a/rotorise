@@ -10,7 +10,7 @@
  * difference as a type — so it can be written down, diffed, and tested rather than discovered.
  */
 import { describe, expect, it } from 'vitest'
-import type { M, N, S, SS } from './attribute'
+import type { M, N, S } from './attribute'
 import { CodecError, failed } from './codec'
 import { native } from './native'
 import { checkAgainst } from './testing'

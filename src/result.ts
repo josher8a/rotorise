@@ -5,7 +5,6 @@
  * are written in, and keeping it here is what lets the one construction site live outside `codec.ts`
  * — which is what keeps that site out of the package's public surface. See {@link build}.
  */
-import type { AttributeMap } from './attribute'
 
 /**
  * Encoding for DynamoDB is not a bijection, and no library can make it one.

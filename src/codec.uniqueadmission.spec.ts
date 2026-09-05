@@ -33,7 +33,6 @@ import {
     record,
     string,
     union,
-    writes,
 } from './codec'
 import { Attribute } from './Rotorise'
 import { checkUniqueAdmission } from './testing'

@@ -7,7 +7,7 @@
  * to change for that, so nothing about what is written does either.
  */
 import { describe, expect, it } from 'vitest'
-import type { N, S, SS } from './attribute'
+import type { S, SS } from './attribute'
 import type { Encoded } from './codec'
 import {
     array,

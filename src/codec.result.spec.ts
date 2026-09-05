@@ -10,7 +10,7 @@
  * has: nothing to unwrap, nothing allocated, and `instanceof Error` tells the two apart.
  */
 import { describe, expect, it } from 'vitest'
-import { type Attribute, carrying } from './attribute'
+import type { Attribute } from './attribute'
 import type { AttributeCodec } from './codec'
 import {
     array,
@@ -41,12 +41,10 @@ const Tree: AttributeCodec<Tree, Attribute<'M'>> = lazy(() =>
     object({ name: string, children: optional(array(Tree)) }),
 )
 
-type Visit = { type: 'CHECKUP'; petId: string }
 const Visits = discriminatedUnion('type', [
     object({ type: string('CHECKUP'), petId: string }),
 ]).item
 
-type Line = { petId: string } | { petIds: readonly string[] }
 const Lines = union([
     object({ petId: string }),
     object({ petIds: array(string) }),
