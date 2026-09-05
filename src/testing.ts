@@ -1072,7 +1072,7 @@ export const arbitraryOf = (
                 if (field.mark === 'optional' && (size <= 0 || rng() < 0.5)) {
                     continue
                 }
-                out[name] = arbitraryOf(field.codec, rng, size)
+                out[name] = arbitraryOf(codecOfTerm(field.codec), rng, size)
             }
             return out
         }
@@ -1232,7 +1232,10 @@ export const shrinkOf = (
             for (const name in def.of) {
                 const field = def.of[name]
                 if (field === undefined || !(name in held)) continue
-                for (const smaller of shrinkOf(field.codec, held[name])) {
+                for (const smaller of shrinkOf(
+                    codecOfTerm(field.codec),
+                    held[name],
+                )) {
                     out.push({ ...held, [name]: smaller })
                 }
             }
@@ -1909,7 +1912,9 @@ const unionsIn = (subject: AnyCodec): readonly UnionSite[] => {
                 def.elements.forEach((element) => inner(codecOfTerm(element)))
                 return inner(def.tail && codecOfTerm(def.tail))
             case 'attributes':
-                Object.values(def.of).forEach((field) => inner(field.codec))
+                Object.values(def.of).forEach((field) =>
+                    inner(codecOfTerm(field.codec)),
+                )
                 return inner(
                     typeof def.rest === 'string'
                         ? undefined

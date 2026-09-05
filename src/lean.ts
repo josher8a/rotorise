@@ -678,15 +678,15 @@ const leanTermOfDef = (def: CodecDef, at: string, forced: number): string => {
 const leanFieldOf = (field: Field, at: string, forced: number): string => {
     switch (field.mark) {
         case 'optional':
-            return `Field.optional (${leanTermOf(field.codec, at, forced)})`
+            return `Field.optional (${leanTermOfDef(field.codec, at, forced)})`
         case 'fallback':
-            return `Field.fallback (${leanTermOf(
+            return `Field.fallback (${leanTermOfDef(
                 field.codec,
                 at,
                 forced,
             )}) (${leanValueOf(field.value, `${at}.fallback`)})`
         case 'required':
-            return `Field.req (${leanTermOf(field.codec, at, forced)})`
+            return `Field.req (${leanTermOfDef(field.codec, at, forced)})`
     }
 }
 

@@ -215,15 +215,17 @@ describe('the rest policy a definition records', () => {
      * The defect, as a consumer would have met it: two specs differing only in a *nested* policy.
      *
      * Before the fix both definitions walked to the same value, so nothing downstream could choose
-     * between `Rest.drop` and `Rest.refuse` — and reaching for `.item` is not available here, because
-     * a definition walk hands out `AnyCodec`.
+     * between `Rest.drop` and `Rest.refuse` — and reaching for `.item` is not available here,
+     * because a definition walk hands out a term, and a term has no `.item`.
+     *
+     * The walk is one step shorter than it was: a field holds the child's *term*, so descending
+     * into a nested object is a field lookup rather than a field lookup and then a `.def` read.
      */
     it('survives a walk into a nested object, where `.item` is not offered', () => {
         const restOfNested = (codec: AnyCodec): unknown => {
             const def = codec.def
             if (def?.kind !== 'attributes') throw new Error('not an object')
-            const inner = def.of.inner?.codec as AnyCodec
-            const innerDef = inner.def
+            const innerDef = def.of.inner?.codec
             if (innerDef?.kind !== 'attributes') throw new Error('not nested')
             return innerDef.rest
         }
