@@ -13,7 +13,7 @@ record of the analysis §5 withdrew rather than a transcription of the analysis 
 stay here until the pass that retires them from the model, which is a separate decision and
 has been taken as a plan and not yet as a deletion.
 
-**The per-aspect separation layer this file used to carry is gone.** `SepV`, `SepA`, their
+**The per-aspect separation layer this file used to carry is gone.** ~~SepV~~, ~~SepA~~, their
 footprint definitions and the discharger stated on them — the combined theorem and its
 kind/member half — were retired once the walk showed nothing outside this file and
 `Refutations.lean` depended on them, and once `Orthogonality.lean`'s `uAtCan_of_separates`
@@ -784,7 +784,7 @@ machine-checked witness.
 Asking the codec — `((denote (.legacy t r)).p a).isSome` — is exact and costs one line, and is
 **refused**: it replaces the subterm's over-approximation with its exact read domain, so it
 sees through `admA (.object _) = ⊤`, which `ARCHITECTURE.md` §5 records as load-bearing slack.
-Two objects cannot be separated by `SepA` since both rows are `⊤`; wrapped in a `legacy` they
+Two objects cannot be separated by ~~SepA~~ since both rows are `⊤`; wrapped in a `legacy` they
 could be, while `select` still attempts both — `not_uAtCan_of_sepJ`'s failure one wrapper out. -/
 
 /-- A migration that reads a numeral into the literal's value — the shape `legacy` exists
@@ -1057,7 +1057,7 @@ theorem identList_of_admList : ∀ {opts : List Term} {v : Value},
 
 end
 
-/-- **§5's (K), recovered from `SepV`'s second disjunct.** Disjoint `adm` implies both
+/-- **§5's (K), recovered from ~~SepV~~'s second disjunct.** Disjoint `adm` implies both
     `ident` conjuncts — given that each option admits *something*.
 
     That side condition is not bookkeeping: `dunion(d)` with no options is derivable, admits
@@ -1402,12 +1402,12 @@ theorem uAtCan_of_literalN_disjoint {lss : List (NEFinset WFDouble)}
 
 /-! ### Separation, as one set per option per side
 
-    `SepV` and `SepA` each offer a *choice* — a disjoint kind or a disjoint admissible
+    ~~SepV~~ and ~~SepA~~ each offer a *choice* — a disjoint kind or a disjoint admissible
     set, a distinct member or a disjoint `admA` — and the choice is made per pair. That
     shape is an artifact of asking the question pairwise. Asked per *option*, the two
     sources of constraint simply **intersect**: an option admits a value only if `κ`
     allows its kind and `adm` allows the value. Disjointness of the intersections is
-    implied by disjointness in either factor, so `SepV` and `SepA` are exactly what makes
+    implied by disjointness in either factor, so ~~SepV~~ and ~~SepA~~ are exactly what makes
     these families pairwise disjoint — and `uniqueAdmission_of_disjoint` finishes it,
     once, for both sides. -/
 
@@ -1513,7 +1513,7 @@ theorem admA_opaq_false_n (x : WFNumeral) : admA (.opaq false) (.n x) = false :=
     fails at the first element the element codec refuses, and every element is refused.
 
     `adm (.set .number)` is itself `⊤` (the empty-container argument), so this does not by
-    itself hand `set(number)` a `SepV`; what it removes is the *asymmetry* — the analysis
+    itself hand `set(number)` a ~~SepV~~; what it removes is the *asymmetry* — the analysis
     of `opaque` no longer stops at depth zero, and any option whose own row is informative
     at a set now meets a matching refusal here. -/
 theorem adm_opaq_false_numSet (S : NEFinset Double) :

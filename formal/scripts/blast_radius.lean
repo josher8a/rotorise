@@ -56,10 +56,15 @@ import Calculus.Axioms
 
 open Lean Elab Command
 
-/-- §5's per-aspect analysis: the older generation, every mutual member named. -/
+/-- §5's per-aspect analysis: the older generation, every mutual member named.
+
+    `SepV` and `SepA` left this list when `f5fc4a6` deleted them with the per-aspect
+    separation layer. `κ`, `κList`, `ident` and `identList` joined it: the four tables are
+    what the list is about, and omitting those four understated the older generation by ten
+    declarations, which `ARCHITECTURE.md` §5 recorded and no pass had fixed. -/
 def genOld : List Name :=
   [`Calculus.adm, `Calculus.admA, `Calculus.admList, `Calculus.admAList, `Calculus.admALit,
-   `Calculus.SepV, `Calculus.SepA]
+   `Calculus.κ, `Calculus.κList, `Calculus.ident, `Calculus.identList]
 
 /-- The joint exact analysis that replaced it, every mutual member named. -/
 def genNew : List Name :=
