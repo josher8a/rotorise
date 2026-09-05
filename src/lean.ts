@@ -663,7 +663,7 @@ const leanTermOfDef = (def: CodecDef, at: string, forced: number): string => {
         case 'custom':
             return refuse(
                 at,
-                '`Term.custom` carries its pair as data, and a hand-written codec has no data to give',
+                '`Term.custom` carries `ce : Value → Option Attr` and `cp : Attr → Option Value`; the definition now carries the pair, and the pair is two JS closures, which no `Term` prints',
             )
         case 'optional':
         case 'fallback':
