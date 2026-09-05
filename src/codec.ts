@@ -1956,11 +1956,12 @@ const byTagSem = (
  * rather than one per constructor beside a definition that says the same thing. The model's
  * `denote` is this function and the rows below answer to its combinators one for one.
  *
- * **The `default` is temporary and this is the exit condition.** Rows arrive one constructor per
- * commit, each deleting that constructor's hand-written halves as it lands, and the branch is
- * unreachable from any constructor that has been switched. The pass that switches the last one
- * deletes the branch and adds the guard that makes a row-less kind a build error, the way
- * `_everyKindHasALevel` makes an unclassified kind one.
+ * **There is no `default`, and that is the guard.** Every `TermDef` kind has a row, so the switch
+ * is exhaustive and the type checker knows it — a new kind with no row makes `def` something other
+ * than `never` at the end of the switch and stops the build. A thrown default would replace that
+ * with a runtime message, which is the weaker of the two and the one a test has to go looking for.
+ * It is the same move as `_everyKindHasALevel`: a fact the documents assert, turned into a build
+ * error instead of something a reader is asked to re-derive.
  */
 const denote = (def: TermDef): Pair => {
     switch (def.kind) {
@@ -2323,6 +2324,23 @@ const denote = (def: TermDef): Pair => {
          * the model's `inL` at that base and the one place §5's two literal rules part: a string
          * literal's stored text *is* its value, a numeric literal's is not.
          */
+        /**
+         * §3 `(opaque)`: the recursive union of everything self-identifying, at whichever numeric
+         * policy the term names. `lawful_opaqCodecω` is the lemma, and it is a *theorem* rather
+         * than an obligation — the model's `Obligations (.opaq _)` is `True`, which is what makes
+         * `opaque` a well-behaved `custom`: the same analysis with the opposite warranty. A
+         * `custom` carries a premise its author owes; this carries none, because the calculus
+         * proves the laws for it.
+         *
+         * The pair is this library's own recursion rather than a fixpoint built here, and the row
+         * asks it. §5's rows do the same for the same reason: no syntactic set names
+         * `opaqCodecω`'s domain, because it recurses on the *input's own depth*.
+         */
+        case 'opaque':
+            return {
+                encode: (value: unknown) => encodeUnknown(value, def.numbers),
+                decode: (attribute) => decodeUnknown(attribute, def.numbers),
+            }
         case 'literal': {
             const allowed = def.allowed
             /**
@@ -2455,10 +2473,6 @@ const denote = (def: TermDef): Pair => {
                 decode: (attribute) =>
                     andThen(expect('NULL', attribute), () => null),
             }
-        default:
-            throw new CodecError(
-                `\`${def.kind}\` is not ported to \`denote\` yet — this is reachable only from a constructor that has not been switched, and no such constructor calls it`,
-            )
     }
 }
 
@@ -3480,11 +3494,7 @@ const isOptional = (codec: AnyCodec): boolean => codec.def?.kind === 'optional'
  * one case that cannot be decided without being told.
  */
 const withNumbers = (numbers: opaque.Numbers): AttributeCodec<unknown> =>
-    codec({
-        def: { kind: 'opaque', numbers },
-        encode: (value) => encodeUnknown(value, numbers),
-        decode: (attribute) => decodeUnknown(attribute, numbers),
-    })
+    codecOfTerm({ kind: 'opaque', numbers })
 
 /**
  * Any attribute, with numbers refused — which guesses nothing.
