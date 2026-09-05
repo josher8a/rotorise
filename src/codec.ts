@@ -1691,6 +1691,33 @@ const heldThrough = (
 }
 
 /**
+ * §3 `(refine)`: a pair narrowed by a predicate on **values** — the model's `Codec.restrict`.
+ *
+ * Both halves gate on the *same* predicate applied to the same value, which is what makes each law
+ * restrict rather than need re-proving. The read side asks *after* the base has read, because §5
+ * says `q` tests the value a read **produces**: no set of attributes bounds it, so the gate cannot
+ * be moved in front of the base's own row.
+ *
+ * **The predicate runs on the way in too**, which is what closed the last row of
+ * `admits ⟺ encode`. It used to run on `decode` only, on the argument that a row is data somebody
+ * else wrote while an argument is typed — and the type is the narrow one, so a value failing the
+ * predicate arrived past it. That is true of every gate here and was not a reason to skip this one:
+ * a brand whose predicate is not checked is a brand a cast can forge, and `admits` ran the
+ * predicate itself all along.
+ */
+const restrict = (
+    base: AnyCodec,
+    holds: (value: never) => boolean,
+    refuse: (value: unknown) => CodecError,
+): Pair => ({
+    encode: (value) => (holds(value) ? base.encode(value) : refuse(value)),
+    decode: (attribute) => {
+        const read = base.decode(attribute)
+        return failed(read) || holds(read as never) ? read : refuse(read)
+    },
+})
+
+/**
  * **What a term means**, as one function on the definition.
  *
  * Every constructor's pair comes from here, so there is one description of what a term denotes
@@ -1901,6 +1928,13 @@ const denote = (def: TermDef): Pair => {
         /** §3 `(held)`. `lawful_through` is the lemma; the adapter is data the term carries. */
         case 'held':
             return heldThrough(def.inner, def.adapt)
+        /** §3 `(refine)`. `lawful_restrict` is the lemma; `q` is data the term carries. */
+        case 'refine':
+            return restrict(def.inner, def.refined.is, (value) =>
+                new CodecError(
+                    `${JSON.stringify(value)} is not ${def.refined.what}`,
+                ),
+            )
         /**
          * §3 `(literal)`, and it is **not** a sixth ground term: `literalCodec k ls` is
          * `(baseCodec k).restrict (inL k ls)`, the base's pair narrowed to membership of `ℓ`. The
@@ -2658,41 +2692,17 @@ export const refine = <Wide, Narrow extends Wide, A extends AttributeValue>(
     // brand survives: `amount.set()` decodes as `ReadonlySet<Price>` because the set is built from
     // `amount`, where the predicate that produces a `Price` already lives.
     return setCapable(
-        derive<Narrow, A>(inner, {
-            def: {
-                kind: 'refine',
-                inner: inner as AnyCodec,
-                refined: {
-                    is: is as (value: never) => boolean,
-                    what,
-                    arbitrary: options.arbitrary as
-                        | ((rng: Rng, size: number) => unknown)
-                        | undefined,
-                    onThinSearch: options.onThinSearch,
-                },
+        codecOfTerm<Narrow, A>({
+            kind: 'refine',
+            inner: inner as AnyCodec,
+            refined: {
+                is: is as (value: never) => boolean,
+                what,
+                arbitrary: options.arbitrary as
+                    | ((rng: Rng, size: number) => unknown)
+                    | undefined,
+                onThinSearch: options.onThinSearch,
             },
-            /**
-             * **The predicate runs on the way in too**, which is what closed the last row of
-             * `admits ⟺ encode`.
-             *
-             * It used to run on `decode` only, on the argument that a row is data somebody else
-             * wrote while an argument is typed — and the type is `Narrow`, so a value failing `is`
-             * arrived past it. That is true of every gate added here and was not a reason to skip
-             * this one: a brand whose predicate is not checked is a brand that can be forged by a
-             * cast, and `admits(refine(c, is), v)` said so all along by running `is` itself.
-             */
-            encode: (value) =>
-                is(value as Wide)
-                    ? inner.encode(value)
-                    : new CodecError(`${JSON.stringify(value)} is not ${what}`),
-            decode: (attribute) =>
-                andThen(inner.decode(attribute), (decoded) =>
-                    is(decoded)
-                        ? decoded
-                        : new CodecError(
-                              `${JSON.stringify(decoded)} is not ${what}`,
-                          ),
-                ),
         }),
     )
 }
