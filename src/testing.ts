@@ -1106,7 +1106,7 @@ export const arbitraryOf = (
         case 'fallback':
             return arbitraryOf(def.inner, rng, size)
         case 'legacy':
-            return arbitraryOf(def.current, rng, size)
+            return arbitraryOf(codecOfTerm(def.current), rng, size)
         case 'lazy':
             // one level shallower each time, which is what stops a recursive entity generating
             // forever: the optional attribute that recurses is dropped once the budget runs out
@@ -1266,7 +1266,7 @@ export const shrinkOf = (
         case 'fallback':
             return shrinkOf(def.inner, value)
         case 'legacy':
-            return shrinkOf(def.current, value)
+            return shrinkOf(codecOfTerm(def.current), value)
         case 'lazy':
             return shrinkOf(codecOfTerm(def.get()), value)
         // a branch has no one codec to shrink through, which is why `at` refuses it; a hand-written
@@ -1923,7 +1923,7 @@ const unionsIn = (subject: AnyCodec): readonly UnionSite[] => {
             case 'held':
                 return inner(codecOfTerm(def.inner))
             case 'legacy':
-                return inner(def.current)
+                return inner(codecOfTerm(def.current))
             case 'lazy':
                 return inner(codecOfTerm(def.get()))
             default:
