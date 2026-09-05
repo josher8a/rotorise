@@ -1088,7 +1088,11 @@ export const arbitraryOf = (
             )
         }
         case 'untagged':
-            return arbitraryOf(pickFrom(rng, def.variants), rng, size)
+            return arbitraryOf(
+                codecOfTerm(pickFrom(rng, def.variants)),
+                rng,
+                size,
+            )
         case 'refine': {
             if (def.refined.arbitrary) return def.refined.arbitrary(rng, size)
             let sample = samplers.get(def)
@@ -1258,12 +1262,12 @@ export const shrinkOf = (
                     (k) => (value as Record<string, unknown>)[k] !== undefined,
                 ),
             )
-            const chosen = def.variants.find((variant) => {
-                const of = variant.def
-                if (of?.kind !== 'attributes') return false
-                return [...names].every((name) => name in of.of)
-            })
-            return chosen ? shrinkOf(chosen, value) : []
+            const chosen = def.variants.find(
+                (variant) =>
+                    variant.kind === 'attributes' &&
+                    [...names].every((name) => name in variant.of),
+            )
+            return chosen ? shrinkOf(codecOfTerm(chosen), value) : []
         }
         case 'refine':
             return shrinkOf(codecOfTerm(def.inner), value).filter(
@@ -1852,9 +1856,9 @@ const byKindThenAttempt = (codec: AnyCodec): UnionOption => {
 }
 
 /** `optionSemOf`: an object option decides by names, anything else by attempt. */
-const optionOfDef = (codec: AnyCodec): UnionOption => {
-    const def = codec.def
-    return def?.kind === 'attributes'
+const optionOfDef = (def: TermDef): UnionOption => {
+    const codec = codecOfTerm(def)
+    return def.kind === 'attributes'
         ? byNames(codec, def.of)
         : byKindThenAttempt(codec)
 }
@@ -1878,11 +1882,11 @@ const unionsIn = (subject: AnyCodec): readonly UnionSite[] => {
             case 'untagged':
                 out.push({
                     describe: `union(${def.variants
-                        .map((v) => v.def?.kind ?? 'a codec')
+                        .map((v) => v.kind)
                         .join(', ')})`,
                     options: def.variants.map(optionOfDef),
                 })
-                def.variants.forEach(inner)
+                def.variants.forEach((variant) => inner(codecOfTerm(variant)))
                 return
             case 'tagged': {
                 const entries = Object.entries(def.variants).map(

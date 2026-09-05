@@ -620,7 +620,7 @@ const leanTermOfDef = (def: CodecDef, at: string, forced: number): string => {
         case 'untagged':
             return `Term.union [${def.variants
                 .map((variant, index) =>
-                    leanTermOf(variant, `${at}[${index}]`, forced),
+                    leanTermOfDef(variant, `${at}[${index}]`, forced),
                 )
                 .join(', ')}]`
         case 'nullable':
