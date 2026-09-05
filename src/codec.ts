@@ -1029,7 +1029,7 @@ export const admits = (codec: AnyCodec, value: unknown): boolean => {
                     if (field.mark === 'optional') continue
                     return false
                 }
-                if (!admits(field.codec, at)) return false
+                if (!admits(codecOfTerm(field.codec), at)) return false
             }
             const rest = def.rest
             if (typeof rest === 'string') return true
@@ -1177,8 +1177,10 @@ const childrenOf = (
     const def = codec.def
     const one = (child: AnyCodec | undefined) => (child ? [child] : [])
     switch (def.kind) {
-        case 'attributes':
-            return one(def.of[String(segment)]?.codec)
+        case 'attributes': {
+            const field = def.of[String(segment)]
+            return one(field ? codecOfTerm(field.codec) : undefined)
+        }
         case 'record':
             return one(codecOfTerm(def.value))
         case 'array':
@@ -1264,11 +1266,11 @@ export type Attributes = Readonly<Record<string, AnyCodec>>
  * rules for its own encode and decode.
  */
 export type Field =
-    | { readonly mark: 'required'; readonly codec: AnyCodec }
-    | { readonly mark: 'optional'; readonly codec: AnyCodec }
+    | { readonly mark: 'required'; readonly codec: TermDef }
+    | { readonly mark: 'optional'; readonly codec: TermDef }
     | {
           readonly mark: 'fallback'
-          readonly codec: AnyCodec
+          readonly codec: TermDef
           /** The stand-in — see {@link fallback}, which checks it is writable at construction. */
           readonly value: unknown
       }
@@ -1750,7 +1752,7 @@ const bodySem = (
         if (field === undefined) continue
         declared.push({
             name,
-            codec: field.codec,
+            codec: codecOfTerm(field.codec),
             optional: field.mark === 'optional',
             absent:
                 field.mark === 'fallback'
@@ -4509,10 +4511,15 @@ type Declared = {
  */
 const fieldOf = (codec: AnyCodec): Field => {
     const def = codec.def
-    if (def.kind === 'optional') return { mark: 'optional', codec: def.inner }
+    if (def.kind === 'optional')
+        return { mark: 'optional', codec: termOf(def.inner) }
     if (def.kind === 'fallback')
-        return { mark: 'fallback', codec: def.inner, value: def.value }
-    return { mark: 'required', codec }
+        return {
+            mark: 'fallback',
+            codec: termOf(def.inner),
+            value: def.value,
+        }
+    return { mark: 'required', codec: termOf(codec) }
 }
 
 /**
@@ -4591,7 +4598,7 @@ export const object = <
                 if (!field) {
                     return new CodecError(`'${name}' is not an attribute`)
                 }
-                const written = field.codec.encode(value as never)
+                const written = codecOfTerm(field.codec).encode(value as never)
                 if (failed(written)) return written.under(name)
                 out[name] = written
             }
