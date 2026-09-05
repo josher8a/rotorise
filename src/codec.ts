@@ -2006,6 +2006,21 @@ const denote = (def: TermDef): Pair => {
             }
         }
         /**
+         * §3 `(lazy)`: the pair of the term the thunk resolves to, forced on use.
+         *
+         * The row recurses on the **value**, never on the term, which is what makes it terminate:
+         * `def.get()` is forced once per level of the value, and a value is finite. The model's
+         * `Term.lazy` carries a plain `Term` rather than a thunk — a closure adds no constructible
+         * term and defeats the termination checker — so the two constructors are not the same
+         * object, and §5 keeps the document's `lazy` unanalysable for that reason while the model's
+         * answers the subterm's.
+         */
+        case 'lazy':
+            return {
+                encode: (value) => def.get().encode(value),
+                decode: (attribute) => def.get().decode(attribute),
+            }
+        /**
          * §3 `(literal)`, and it is **not** a sixth ground term: `literalCodec k ls` is
          * `(baseCodec k).restrict (inL k ls)`, the base's pair narrowed to membership of `ℓ`. The
          * base is the index, so the row reaches it by denoting `{ kind: base }` — the five bases
@@ -3068,10 +3083,9 @@ export const lazy = <T, A extends AttributeValue = AttributeValue>(
         resolved ??= get()
         return resolved
     }
-    return codec<T, A>({
-        def: { kind: 'lazy', get: () => inner() as AnyCodec },
-        encode: (value) => inner().encode(value) as Result<A>,
-        decode: (attribute) => inner().decode(attribute),
+    return codecOfTerm<T, A>({
+        kind: 'lazy',
+        get: () => inner() as AnyCodec,
     })
 }
 
