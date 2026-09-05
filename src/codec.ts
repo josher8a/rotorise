@@ -493,6 +493,23 @@ export type TermDef = Extract<CodecDef, { readonly kind: TermKind }>
 /** A definition that denotes a §4 `Field`. */
 export type FieldDef = Extract<CodecDef, { readonly kind: FieldKind }>
 
+/* ── the readers ──────────────────────────────────────────────────────────────────────── */
+
+/**
+ * **Every reader below answers from the definition and nothing else**, which is what makes the
+ * definition determine the codec rather than describe it.
+ *
+ * They take a *codec* and read its definition, rather than taking the definition. That is not a
+ * leftover: a definition's children **are codecs** — `array.element`, `refine.inner`,
+ * `legacy.current` are each an `AnyCodec` — so a walk over a term goes term, codec, term, codec
+ * whatever the parameter says. Measured when the question came up: giving these functions a
+ * `TermDef` parameter moves the `.def` read from one place inside each of them to the forty-six
+ * call sites outside, and adds five more where each recurses into a child. The count goes *up*.
+ *
+ * What would make them functions on the term is the children being terms, which is a change to the
+ * definition rather than to the readers, and it is its own phase.
+ */
+
 /**
  * The member this codec writes, when it writes exactly one.
  *
