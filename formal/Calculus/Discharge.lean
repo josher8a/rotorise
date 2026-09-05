@@ -3,9 +3,15 @@ import Calculus.Soundness
 /-!
 # §5 — The decidable dischargers of (U)
 
-The machinery of (K): `κ`, `ident`, `adm` and `admA` as total structural recursions over the
-term language, exactly as §5's tables state them — `Kind` is §1's and lives in `Domain.lean`,
-which this paragraph had among the recursions.
+The withdrawn machinery of (K): `κ`, `ident`, `adm` and `admA` as total structural
+recursions over the term language — `Kind` is §1's and lives in `Domain.lean`, which this
+paragraph had among the recursions.
+
+**§5 no longer states these four tables.** The section now states (K) on option admission and
+occupancy, which is what `Exactness.lean` and `Orthogonality.lean` carry, so the four are a
+record of the analysis §5 withdrew rather than a transcription of the analysis §5 makes. They
+stay here until the pass that retires them from the model, which is a separate decision and
+has been taken as a plan and not yet as a deletion.
 
 **The per-aspect separation layer this file used to carry is gone.** `SepV`, `SepA`, their
 footprint definitions and the discharger stated on them — the combined theorem and its
@@ -13,8 +19,8 @@ kind/member half — were retired once the walk showed nothing outside this file
 `Refutations.lean` depended on them, and once `Orthogonality.lean`'s `uAtCan_of_separates`
 turned out to state the same discharge on what `select` actually consults. What that layer
 proved by hand in phases *slot* and *alternatives*, `Orth` reaches by `decide`; those hand
-proofs went with it. The tables above stay: §5 specifies them, and the exact generation still
-depends on them through `Adm_le_adm` and `AdmA_le_admA`.
+proofs went with it. The tables above stay for now, and `Adm_le_adm` and `AdmA_le_admA` are
+what still relates them to the exact generation.
 
 What is left here is the four tables, their row lemmas, and the discharges no phase of the
 classifier reaches — the ones whose premise is an arbitrary `q` inside a `refine`, and
@@ -27,7 +33,8 @@ well-formedness condition on the `T` index and lives there — `DIncomp`, a prem
 `Typed.union` (Typing.lean); the readable side is decided on stored attributes. `DDisj`
 below is the *stronger* reading §5 considered and withdrew, kept only to be refuted.
 
-The `ident` exemption is here in its repaired form. An earlier §5 stated (K) as
+The `ident` exemption is here in its repaired form, and §5 states neither form now. An
+earlier §5 stated (K) as
 `κ(cᵢ) ∩ κ(cⱼ) = ∅ ∨ ident(cᵢ) ∨ ident(cⱼ)` and called it sufficient for (U); it is
 not, on either disjunct, and the two counterexamples at the foot of this file are
 machine-checked. What carries the exemption is `adm` — the set an `ident` term checks

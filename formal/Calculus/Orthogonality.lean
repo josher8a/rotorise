@@ -173,8 +173,8 @@ mutual
 /-- **Which value constructors this term can write.** An over-approximation of
     `{v.slot | Adm t v}`, and `occV_sound` is that containment.
 
-    The `⊤` rows, and why each is `⊤` rather than sharper — `docs/codec-calculus.md:786-806`
-    tabulates the same four:
+    The `⊤` rows, and why each is `⊤` rather than sharper — §5's occupancy paragraph names
+    the same terms:
 
     * `held t f _` — `f` is an arbitrary `Value → Value` applied *before* the subterm's row,
       so it can move the value into any constructor. `⊤`. (The read side is not: `g`
@@ -288,9 +288,9 @@ def reqNotDeclared (sx sy : MapOf Bool) : Bool :=
     no shared attribute at all — and it is invisible to phases based on slots, since both
     options occupy `map` and `M` and nothing else.
 
-    **An optional binding widens admission**, which is the ambiguity
-    `docs/codec-calculus.md:711` names: two objects declaring only *optional* names both
-    admit the empty map, so they are never separated here however disjoint their names.
+    **An optional binding widens admission**, which is the ambiguity §5 names in the same
+    words: two objects declaring only *optional* names both admit the empty map, so they are
+    never separated here however disjoint their names.
     `orth_objects_optional_only` is that check, and it answers `false`. -/
 def OrthM (x y : Term) : Bool :=
   match specOf x, specOf y with
@@ -662,9 +662,9 @@ theorem separates_of_orth {x y : Term} (h : Orth x y = true) : Separates x y :=
     premise used to be three quantifiers and a disequality against a three-argument
     constructor. It is not a defect being worked around: an object option with an open rest
     (`.codec t`) has `Adm t v = true` where `admitOptV … v = false` — the option refuses maps
-    its own `e` accepts — and `docs/codec-calculus.md:713` argues that this is the intended
-    reading ("an object's open part is unreachable through a union — the price of deciding by
-    names"). `optionSem_self_admit` takes the same premise for the same reason. `Orth`
+    its own `e` accepts — and §5 argues that this is the intended reading ("an object's open
+    part is unreachable through a union — the price of deciding by names").
+    `optionSem_self_admit` takes the same premise for the same reason. `Orth`
     declines to certify such an option rather than proposing a repair. -/
 theorem uAtCan_of_separates {opts : List Term}
     (hlaw : ∀ t ∈ opts, Lawful (denote t))
@@ -871,9 +871,9 @@ theorem orth_objects_no_shared_name :
     Orth (.object (.mk {"petId", "price"} (fun _ => .req .string) .refuse))
          (.object (.mk {"petIds"} (fun _ => .req .string) .refuse)) = true := by decide
 
-/-- …and the ambiguity `docs/codec-calculus.md:711` names: **an optional binding widens
-    admission**, so two objects declaring only optional names both admit the empty map and
-    are not separated however disjoint their names are. -/
+/-- …and the ambiguity §5 names: **an optional binding widens admission**, so two objects
+    declaring only optional names both admit the empty map and are not separated however
+    disjoint their names are. -/
 theorem orth_objects_optional_only :
     Orth (.object (.mk {"a"} (fun _ => .optional .string) .refuse))
          (.object (.mk {"b"} (fun _ => .optional .string) .refuse)) = false := by decide

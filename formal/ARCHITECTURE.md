@@ -283,7 +283,10 @@ killed it is the shape of that cost, not its size.
 ### 4b. A row asks its codec instead of describing it
 
 The analysis tables in `Discharge.lean` (`κ`, `ident`, `adm`, `admA`) approximate what a codec
-writes and reads. A row can either *describe* the set or *call the codec and ask*. `custom`
+writes and reads. **`docs/codec-calculus.md` no longer states them**: §5 states (K) on option
+admission and occupancy, and the four tables stay in the model until the pass that retires them.
+The rows below are still the pattern this section is about, and the newest of them —
+`AdmA`'s — is in the generation that survives. A row can either *describe* the set or *call the codec and ask*. `custom`
 always asked (`(cp a).isSome`, because `p := cp`). Over two arcs **seven** more converted —
 `admA .legacy` is the newest and the last of that shape — and one row below,
 `admALit .decimal`, was written that way from the start:
@@ -325,7 +328,7 @@ already.
 ### 4c. One codec, stated once for both sides of the pair
 
 `Combinators.lean` is <!-- count:combinators_lines -->4002<!-- /count --> lines of the tree's
-<!-- count:tree_lines -->17596<!-- /count -->, and this is its organizing idea; without it
+<!-- count:tree_lines -->17605<!-- /count -->, and this is its organizing idea; without it
 the file reads as the inventory `README.md` already has. A constructor is a **prism** —
 `Ctor α β`, with `into`/`out` and the laws `out_into` (matching what was built returns it) and
 `into_out` (anything that matches was built) — and those two *are* §2's (R) and (C) at a
@@ -385,8 +388,8 @@ Every discharger in this section is one appeal to `uniqueAdmission_of_disjoint`
 that each be pairwise disjoint. Kinds, members, tags and admissible sets are *ways of building*
 those families rather than four conditions. `Adm_le_adm` is the containment between the two
 generations of the tables — it fed the older generation's dischargers until those were retired,
-and it now relates `adm` to `Adm` and nothing else. It is kept because §5 specifies both
-tables, not because anything reads it.
+and it now relates `adm` to `Adm` and nothing else. It is kept because the older generation is
+kept, not because anything reads it.
 
 `Exactness.lean` holds the joint predicate `Adm`/`AdmA`, exact at **all twenty-one**
 constructors: `Adm_exact : ∀ t, ExactV t` and `AdmA_exact : ∀ t, ExactA t`, no hypothesis, no
@@ -453,9 +456,11 @@ and *alternatives*, `Orthogonality.lean` reaches by `decide`, and its by-phase t
 what only exists by hand rather than what is duplicated. The discharges no phase reaches —
 an arbitrary `q` inside a `refine`, and `uAtAct_array_literals` where `UAtCan` is outright
 false — were never phrased in the retired vocabulary and stay where they were. So do the four
-tables `κ`, `ident`, `adm` and `admA`, which §5 specifies and which the exact generation still
-reaches through `Adm_le_adm` and `AdmA_le_admA`; retiring *those* is a separate question and
-has not been taken.
+tables `κ`, `ident`, `adm` and `admA`, which the exact generation still reaches through
+`Adm_le_adm` and `AdmA_le_admA`. **`docs/codec-calculus.md` has stopped specifying them**: §5
+states (K) on option admission and occupancy, so what the four hold is the record of the
+analysis the section withdrew. Retiring them from the model is the pass that follows, and it
+is a deletion nobody has made yet.
 
 Two citations the walk overturned on the way, both the shape its own header warns about. The
 combined discharger appeared in `Exactness.lean` five times and its kind/member half in
