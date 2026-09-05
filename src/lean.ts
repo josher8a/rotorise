@@ -554,7 +554,7 @@ const leanTermOfDef = (def: CodecDef, at: string, forced: number): string => {
             return `Term.set SetBase.${base}`
         }
         case 'array':
-            return `Term.array (${leanTermOf(def.element, `${at}.element`, forced)})`
+            return `Term.array (${leanTermOfDef(def.element, `${at}.element`, forced)})`
         case 'tuple': {
             const elements = def.elements
                 .map((element, index) =>
