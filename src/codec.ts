@@ -58,36 +58,6 @@ export {
  */
 declare const optionalMarker: unique symbol
 
-/**
- * Nothing, or why this element cannot be about absence.
- *
- * `optional` and `fallback` are statements about a *name*: the attribute called this may be missing
- * from the item. A list, a set, a tuple, a record and a union option have no name at that position
- * for anything to be missing from — so one of these there is not a weaker element, it is a category
- * error, and it was a silent one: `array(optional(string))` compiled and wrote `{}` into the list, an
- * attribute carrying no member at all, which DynamoDB rejects on arrival.
- *
- * Intersected with the parameter rather than checked on the result, the same way every other refusal
- * in this file is, so the message lands on the element that is wrong.
- */
-type AboutAbsence =
-    | { readonly [optionalMarker]: true }
-    | { readonly [fallbackMarker]: unknown }
-    // a rest element is a position marker too: it says "and then any number of these", which only a
-    // tuple's tail can mean. `tuple` exempts it and checks its position itself
-    | { readonly [restMarker]: true }
-
-/**
- * `Extract`, not `extends`, and that is the whole of why this works over a tuple.
- *
- * A bare conditional distributes, so asked of `Cs[number]` — the union of a tuple's elements — it
- * answers `unknown | ErrorMessage<…>`, which is `unknown`: one good element absolves every bad one.
- * `Extract` asks whether *any* member is about absence, which is the question.
- */
-type NotAboutAbsence<C> = [Extract<C, AboutAbsence>] extends [never]
-    ? unknown
-    : ErrorMessage<'this element is a position marker, not an attribute: `optional` and `fallback` say a name may be missing from an item and `rest` says a tuple continues, and none of those is a thing an element here can be — use `nullable(...)` for a member that may be stored as NULL'>
-
 declare const fallbackMarker: unique symbol
 
 /**
@@ -292,7 +262,7 @@ export type Decoded<C> = C extends {
  *
  * 1. **The two levels are a stratification, not a convention.** `⟨member⟩` and `⟨attr⟩` are different
  *    nonterminals, so `array(optional(string))` is *ungrammatical* — which is what it always was, and
- *    what it silently was not until `NotAboutAbsence` made the types say so.
+ *    what it silently was not until a field stopped being a codec.
  * 2. **`⟨set⟩` is why the index has to exist.** A set of a term that writes no single member names no
  *    set, and the grammar says that structurally rather than by throwing.
  * 3. **`⟨attr:?⟩` is the honest home for the terms whose member is not structural** — `opaque` and
@@ -488,8 +458,8 @@ export type CodecDef =
  * denotes a `Term`, a **field** denotes a `Field`, and a **rest policy** denotes a `Rest` — and says
  * so normatively: "`optional` and `fallback` are fields, not codecs. If your library lets
  * `optional(c)` appear where a codec is expected, C3 fails at that constructor." This library does
- * enforce that, but with branded markers and `NotAboutAbsence` guards at each site that could go
- * wrong, so the level a kind belongs to was never written down anywhere.
+ * enforce that, but with branded markers and guards at each site that could go wrong, so the level a
+ * kind belongs to was never written down anywhere.
  *
  * These are that, written down. They are also what C3's mapping is stated over: a `TermDef` has a
  * `Term` and a `FieldDef` deliberately does not, so reporting a field as "no corresponding term"
@@ -3048,7 +3018,7 @@ export const binary: BinaryCodec = Object.assign(
  * **Empty is not representable** — encode throws rather than writing what the service refuses.
  */
 const set = <const C extends AnyCodec>(
-    element: C & NotAboutAbsence<C>,
+    element: C,
 ): AttributeCodec<ReadonlySet<Decoded<C>>, SetOf<C>> => {
     type T = Decoded<C>
     const inner = element as unknown as AttributeCodec<T>
@@ -3087,7 +3057,7 @@ const set = <const C extends AnyCodec>(
 }
 
 export const array = <const C extends AnyCodec>(
-    element: C & NotAboutAbsence<C>,
+    element: C,
 ): AttributeCodec<readonly Decoded<C>[], L<AttributeOf<C>>> => {
     type T = Decoded<C>
     return codecOfTerm<readonly T[], L<AttributeOf<C>>>({
@@ -3106,13 +3076,7 @@ export const tuple = <const Cs extends readonly (AnyCodec | AnyRest)[]>(
     // asked of the union of the elements rather than mapped over them: one instantiation instead of
     // one per position, and the diagnostic lands on the call either way. Mapping cost +10% across
     // this repo, measured. `rest` is exempt, and checked for position separately
-    ...elements: Cs &
-        NotAboutAbsence<
-            // matched on the marker alone, never on `RestCodec<unknown, …>`: `AttributeCodec` names
-            // its value on both sides, so it is invariant and the wider one does not match
-            Exclude<Cs[number], { readonly [restMarker]: true }>
-        > &
-        RestGoesLast<Cs>
+    ...elements: Cs & RestGoesLast<Cs>
 ): AttributeCodec<TupleOf<Cs>, L<TupleWrites<Cs>>> => {
     const all = elements as readonly unknown[]
 
@@ -3190,22 +3154,6 @@ export type TupleWrites<Cs extends readonly unknown[]> = Cs extends readonly [
     : { readonly [I in keyof Cs]: AttributeOf<Cs[I]> }
 
 /**
- * Nothing, or why a marker cannot wrap another marker.
- *
- * `optional` and `fallback` are both statements about a *name*, so one wrapping the other says the
- * same thing twice — and said it wrongly. Only the outermost mark was read: `optional(fallback(c, v))`
- * dropped the stand-in entirely and left the attribute simply absent, while
- * `fallback(optional(c), v)` stood in on the way out and then *required* the value on the way back.
- * Both spellings mean `fallback(c, v)`, which is the one that works.
- *
- * `rest` is refused for the same reason from the other direction: it marks a position, and a name is
- * not one.
- */
-type NotAlreadyMarked<C> = [Extract<C, AboutAbsence>] extends [never]
-    ? unknown
-    : ErrorMessage<'this codec is already marked: `optional`, `fallback` and `rest` each mark a declaration once, and nesting them reads only the outermost — `fallback(c, v)` is the attribute that may be absent and has a stand-in'>
-
-/**
  * Nothing, or why a tuple's tail is not an attribute.
  *
  * An item's members are reached by *name*, so `optional` and `fallback` belong here — both are
@@ -3247,7 +3195,7 @@ export type RestGoesLast<Cs extends readonly unknown[]> = Cs extends readonly [
  * ```
  */
 export const rest = <const C extends AnyCodec>(
-    element: C & NotAboutAbsence<C>,
+    element: C,
 ): RestCodec<Decoded<C>, AttributeOf<C> & AttributeValue> =>
     ({ rest: element as unknown as AnyCodec }) as unknown as RestCodec<
         Decoded<C>,
@@ -3286,7 +3234,7 @@ export type RestCodec<T, A extends AttributeValue = AttributeValue> = {
 
 /** A homogeneous string-keyed record, as `M`. */
 export const record = <const C extends AnyCodec>(
-    element: C & NotAboutAbsence<C>,
+    element: C,
 ): AttributeCodec<
     Readonly<Record<string, Decoded<C>>>,
     M<{ readonly [key: string]: AttributeOf<C> }>
@@ -3494,7 +3442,7 @@ export const fallback = <const C extends AnyCodec>(
     // the *argument's own* type, not a re-declared `AttributeCodec<T, A>`: the guard has to see the
     // marker the caller passed, and a parameter written in terms of inferred `T` and `A` reconstructs
     // a plain codec that never carries one
-    inner: C & NotAlreadyMarked<C>,
+    inner: C,
     // `NoInfer` so the codec is the only thing that says what it holds. Inferring from both sites
     // unified them, and a stand-in written `'A'` widens to `string`, which then refused the very
     // codec it stands in for — invisible while the entity was declared first and pinned it itself
@@ -3765,17 +3713,27 @@ export const lazy = <T, A extends AttributeValue = AttributeValue>(
  * DynamoDB *has*; use {@link nullable} for that.
  *
  * `undefined` is not injective in: `{ a: undefined }` and `{}` both encode without `a`.
+ *
+ * **A name is the only thing this can be said of**, so the result goes in an object's spec and
+ * nowhere else. A list, a set, a tuple, a record and a union option have no name at that position for
+ * anything to be missing from, and each of those refuses this because a field is not a codec — the
+ * member for a value that may be stored as `NULL` in one of them is {@link nullable}. Marking a
+ * marked declaration is refused the same way: `fallback(c, v)` is the attribute that may be absent
+ * and has a stand-in, and it is what both nestings meant.
  */
 export const optional = <const C extends AnyCodec>(
-    inner: C & NotAlreadyMarked<C>,
+    inner: C,
 ): OptionalCodec<Decoded<C>, AttributeOf<C>> => {
     // the marked codec beside the definition, not a copy of the codec with a definition stamped on
     // it: a field has no pair of its own, and spreading one gave it the pair of the codec it marks
     const attribute = inner as unknown as AttributeCodec<Decoded<C>>
+    // one assertion, and it cannot come off. `optionalMarker` is a `declare const` symbol, so it
+    // exists in the type and nowhere a literal can write it: removing the assertion reports
+    // "Property '[optionalMarker]' is missing". It is `rest`'s spelling for `rest`'s reason
     return {
         codec: attribute,
         def: { kind: 'optional', inner: attribute as AnyCodec },
-    } as unknown as OptionalCodec<Decoded<C>, AttributeOf<C>>
+    } as OptionalCodec<Decoded<C>, AttributeOf<C>>
 }
 
 /**
@@ -5951,9 +5909,7 @@ export const discriminatedUnion = <
  * ```
  */
 export const union = <const Options extends readonly AnyCodec[]>(
-    options: Options &
-        ValidateOptions<Options> &
-        NotAboutAbsence<Options[number]>,
+    options: Options & ValidateOptions<Options>,
 ): UnionCodec<DerivedUnion<Options>, Options> => {
     const all = (options as readonly AnyCodec[]).map(optionOf)
 
