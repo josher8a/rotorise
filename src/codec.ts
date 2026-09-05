@@ -1524,6 +1524,124 @@ const carriedCodec = <Payload, Written, Read>(
 })
 
 /**
+ * §4's body: the declared fields and the policy for everything else, as one pair over a bare item.
+ *
+ * The model's `objectCodecCore`, and `objectCodecCore_eq` is the lemma. It is *not* a
+ * {@link carriedCodec} instance on its own — it writes a bare map rather than an `M` — which is
+ * exactly the distinction `.item` exposes: §5 says a codec writes the attributes of that codec, and
+ * `object` writes the members of `object` like any other, offering `.item` for the one place that
+ * writes no map. So `denote`'s row wraps this in the member and `.item` takes it as it is.
+ *
+ * **A field's mark is read here and nowhere else.** `fieldSem` in the model is the function that
+ * turns `Field` into a presence rule; here it is the three-way `mark`, read once per field per
+ * direction, and there is no second place that asks what `optional` means.
+ *
+ * Whether a stand-in must be *copied* per read is settled once, at the declaration, rather than
+ * asked per item: {@link copiedPerRead} is a fact about this runtime and not about the term, which
+ * is why it lives in the compiled form and not in {@link Field}.
+ */
+const bodySem = (
+    of: Readonly<Record<string, Field>>,
+    rest: RestDeclaration,
+): {
+    readonly encode: (
+        held: Record<string, unknown>,
+    ) => Result<Record<string, AttributeValue>>
+    readonly decode: (
+        item: Readonly<Record<string, AttributeValue>>,
+    ) => Result<Record<string, unknown>>
+} => {
+    const declared: Declared[] = []
+    for (const name in of) {
+        const field = of[name]
+        if (field === undefined) continue
+        declared.push({
+            name,
+            codec: field.codec,
+            optional: field.mark === 'optional',
+            absent:
+                field.mark === 'fallback'
+                    ? {
+                          value: field.value,
+                          copy: copiedPerRead(field.value),
+                      }
+                    : undefined,
+        })
+    }
+    const restCodec = typeof rest === 'string' ? undefined : rest
+    return {
+        encode: (held) => {
+            const out: Record<string, AttributeValue> = {}
+            for (const { name, codec: attribute, optional } of declared) {
+                const value = held[name]
+                if (value === undefined) {
+                    if (optional) continue
+                    return new CodecError(
+                        `'${name}' is required and was not given`,
+                    )
+                }
+                const written = attribute.encode(value as never)
+                if (failed(written)) return written.under(name)
+                out[name] = written
+            }
+            if (restCodec) {
+                for (const name in held) {
+                    const value = held[name]
+                    if (name in of || value === undefined) continue
+                    const written = restCodec.encode(value as never)
+                    if (failed(written)) return written.under(name)
+                    out[name] = written
+                }
+            }
+            return out
+        },
+        /**
+         * Attributes the spec does not mention are dropped. A row written before a field existed
+         * decodes without it, which is why `encode ∘ decode` is not identity on items.
+         */
+        decode: (item) => {
+            const out: Record<string, unknown> = {}
+            for (const {
+                name,
+                codec: attributeCodec,
+                optional,
+                absent,
+            } of declared) {
+                const attribute = item[name]
+                if (attribute === undefined) {
+                    if (optional) continue
+                    if (absent) {
+                        out[name] = absent.copy
+                            ? structuredClone(absent.value)
+                            : absent.value
+                        continue
+                    }
+                    return new CodecError(
+                        `'${name}' is required and the item has no such attribute`,
+                    )
+                }
+                const read = attributeCodec.decode(attribute)
+                if (failed(read)) return read.under(name)
+                out[name] = read
+            }
+            if (rest === 'drop') return out
+            for (const name in item) {
+                if (name in of) continue
+                if (!restCodec) {
+                    return new CodecError(
+                        `'${name}' is not an attribute this codec declares; the schema and the data have drifted apart`,
+                    )
+                }
+                const read = restCodec.decode(item[name] as AttributeValue)
+                if (failed(read)) return read.under(name)
+                out[name] = read
+            }
+            return out
+        },
+    }
+}
+
+/**
  * **What a term means**, as one function on the definition.
  *
  * Every constructor's pair comes from here, so there is one description of what a term denotes
@@ -1710,6 +1828,26 @@ const denote = (def: TermDef): Pair => {
                         (read) => new Set(read),
                     ),
             }
+        }
+        /**
+         * §4's object: {@link bodySem} carried into an `M`. The row is the wrapper and the body is
+         * the content, which is the split §5 states — a codec writes the attributes of that codec,
+         * and `.item` is the one place that writes no map.
+         */
+        case 'attributes': {
+            const body = bodySem(def.of, def.rest)
+            return carriedCodec(
+                (value): value is Record<string, unknown> =>
+                    asRecord(value) !== undefined,
+                'M',
+                (value) =>
+                    new CodecError(
+                        `${describeShape(value)} is not a plain object, and an object writes an 'M' — a codec's input is typed, so this is a value that reached \`encode\` past its type`,
+                    ),
+                body.encode,
+                (carried: Readonly<Record<string, AttributeValue>>) =>
+                    body.decode(carried),
+            )
         }
         /**
          * §3 `(literal)`, and it is **not** a sixth ground term: `literalCodec k ls` is
@@ -3788,61 +3926,28 @@ export const object = <
     spec: Spec & NoTail<Spec>,
     rest: Rest = 'drop' as Rest,
 ): ObjectCodec<Spec, Rest> => {
-    // one pass, and the presence rules resolved with it. A mark is an answer about the
-    // *declaration*, so asking it per attribute per item — which is what walking bare entries
-    // meant — asks the same question once per row for the life of the table.
-    //
-    // Two records, from one source and for two readers. `fields` is the term: the mark named,
-    // beside the codec it marks. `declared` is the compiled form the two directions below walk,
-    // and it carries one thing the term does not — whether a stand-in has to be copied per read,
-    // which is a fact about this runtime rather than about the declaration.
+    // the marker off each declared attribute, once — the term. What the two directions walk is
+    // the *compiled* form of it, which `bodySem` builds and which carries one thing the term does
+    // not: whether a stand-in has to be copied per read, a fact about this runtime and not about
+    // the declaration.
     const fields: Record<string, Field> = {}
-    const declared: Declared[] = []
     const declaredSpec = spec as unknown as Record<string, Nestable<never>>
-    const restCodec = typeof rest === 'string' ? undefined : (rest as AnyCodec)
     for (const name in declaredSpec) {
-        const attribute = declaredSpec[name] as AnyCodec
-        const field = fieldOf(attribute)
-        fields[name] = field
-        declared.push({
-            name,
-            codec: field.codec,
-            optional: field.mark === 'optional',
-            absent:
-                field.mark === 'fallback'
-                    ? { value: field.value, copy: copiedPerRead(field.value) }
-                    : undefined,
-        })
+        fields[name] = fieldOf(declaredSpec[name] as AnyCodec)
     }
+    const body = bodySem(fields, rest as RestDeclaration)
+    const itemDef = {
+        kind: 'attributes',
+        of: fields,
+        rest: rest as RestDeclaration,
+    } as const
 
     type T = DerivedItem<Spec, Rest>
     const self: ItemCodec<T, Spec, Rest> = {
-        encode: (item) => {
-            const held = item as Record<string, unknown>
-            const out: Record<string, AttributeValue> = {}
-            for (const { name, codec: attribute, optional } of declared) {
-                const value = held[name]
-                if (value === undefined) {
-                    if (optional) continue
-                    return new CodecError(
-                        `'${name}' is required and was not given`,
-                    )
-                }
-                const written = attribute.encode(value as never)
-                if (failed(written)) return written.under(name)
-                out[name] = written
-            }
-            if (restCodec) {
-                for (const name in held) {
-                    const value = held[name]
-                    if (name in fields || value === undefined) continue
-                    const written = restCodec.encode(value as never)
-                    if (failed(written)) return written.under(name)
-                    out[name] = written
-                }
-            }
-            return out as EncodedBy<Spec, Rest>
-        },
+        encode: (item) =>
+            body.encode(item as Record<string, unknown>) as Result<
+                EncodedBy<Spec, Rest>
+            >,
 
         encodePartial: (patch) => {
             const held = patch as Record<string, unknown>
@@ -3861,50 +3966,10 @@ export const object = <
             return out as never
         },
 
-        /**
-         * Attributes the spec does not mention are dropped. A row written before a field existed
-         * decodes without it, which is why `encode ∘ decode` is not identity on items.
-         */
-        decode: (item) => {
-            const out: Record<string, unknown> = {}
-            for (const {
-                name,
-                codec: attributeCodec,
-                optional,
-                absent,
-            } of declared) {
-                const attribute = item[name]
-                if (attribute === undefined) {
-                    if (optional) continue
-                    if (absent) {
-                        out[name] = absent.copy
-                            ? structuredClone(absent.value)
-                            : absent.value
-                        continue
-                    }
-                    return new CodecError(
-                        `'${name}' is required and the item has no such attribute`,
-                    )
-                }
-                const read = attributeCodec.decode(attribute)
-                if (failed(read)) return read.under(name)
-                out[name] = read
-            }
-
-            if (rest === 'drop') return out as T
-            for (const name in item) {
-                if (name in fields) continue
-                if (!restCodec) {
-                    return new CodecError(
-                        `'${name}' is not an attribute this codec declares; the schema and the data have drifted apart`,
-                    )
-                }
-                const read = restCodec.decode(item[name] as AttributeValue)
-                if (failed(read)) return read.under(name)
-                out[name] = read
-            }
-            return out as T
-        },
+        decode: (item) =>
+            body.decode(
+                item as Readonly<Record<string, AttributeValue>>,
+            ) as Result<T>,
 
         unsafeEncode: (item) => orThrow(self.encode(item)),
         unsafeDecode: (item) => orThrow(self.decode(item)),
@@ -3949,18 +4014,14 @@ export const object = <
         field: (name) => spec[name],
         spec: spec as Spec,
         rest: rest as RestPolicy<unknown>,
-        def: {
-            kind: 'attributes',
-            of: fields,
-            rest: rest as RestDeclaration,
-        },
+        def: itemDef,
     }
 
     // the `M` is what this codec writes; `.item` is the same two directions with the wrapper taken
     // off. Named member by member rather than spread so the cast keeps the *shape* the map carries —
     // `Attribute<'M'>` would flatten it to "some map" — and so that a call to `object` stays a plain
     // object literal, which is what lets a bundler drop an unused one
-    const nested = asOneAttribute(self) as unknown as AttributeCodec<
+    const nested = codecOfTerm(itemDef) as unknown as AttributeCodec<
         DerivedItem<Spec, Rest>,
         M<Encoded<Spec>>
     >
