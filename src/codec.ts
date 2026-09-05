@@ -166,7 +166,7 @@ type CodecShape<In, Out, A extends AttributeValue> = {
      */
     readonly shrink?: (value: In) => readonly Out[]
     /** What this codec is — see {@link CodecDef}. */
-    readonly def?: CodecDef
+    readonly def: CodecDef
 }
 
 /**
@@ -448,7 +448,6 @@ export type RestDef = Extract<CodecDef, { readonly kind: RestKind }>
  */
 export const writes = (codec: AnyCodec): AttributeName | undefined => {
     const def = codec.def
-    if (!def) return undefined
     switch (def.kind) {
         // a wrapper writes what it wraps
         case 'refine':
@@ -542,7 +541,6 @@ const writtenBy: { readonly [K in TermKind]?: AttributeName } = {
  */
 export const carries = (codec: AnyCodec): readonly Shape[] | undefined => {
     const def = codec.def
-    if (!def) return undefined
     switch (def.kind) {
         case 'refine':
         case 'optional':
@@ -640,7 +638,7 @@ export const shapeOf = (value: unknown): Shape | undefined =>
  */
 export const decides = (codec: AnyCodec): unknown => {
     const def = codec.def
-    switch (def?.kind) {
+    switch (def.kind) {
         case 'literal':
             // two admissible values narrow what may be stored without deciding it
             return def.allowed.length === 1 ? def.allowed[0] : undefined
@@ -666,7 +664,7 @@ export const decides = (codec: AnyCodec): unknown => {
  */
 export const setBase = (codec: AnyCodec): SetBase | undefined => {
     const def = codec.def
-    switch (def?.kind) {
+    switch (def.kind) {
         case 'string':
         case 'number':
         case 'decimal':
@@ -719,8 +717,6 @@ export const setBase = (codec: AnyCodec): SetBase | undefined => {
  */
 export const admits = (codec: AnyCodec, value: unknown): boolean => {
     const def = codec.def
-    // no definition is no claim: nothing says which term this is, so nothing says what it admits
-    if (!def) return false
     switch (def.kind) {
         case 'string':
         case 'boolean':
@@ -933,7 +929,6 @@ const childrenOf = (
     segment: string | number,
 ): readonly AnyCodec[] => {
     const def = codec.def
-    if (!def) return []
     const one = (child: AnyCodec | undefined) => (child ? [child] : [])
     switch (def.kind) {
         case 'attributes':
@@ -980,10 +975,14 @@ const acrossVariants = (
  * does not require knowing what writes it, and that is what `at` is most often for. Only the codec
  * half is missing, so only the codec half fails.
  *
- * It carries **no definition**, and that is the whole of the fix: this used to be a `CodecDef` kind
- * called `branch`, so a definition language for codecs contained an entry that was not a codec, and
- * every reader of a definition had to know about it. Now `writes`, `carries` and `deeper` are asked
- * what this is and give the honest answer, which is nothing.
+ * It says **`custom`**, which is the definition for a pair of functions with no structure beneath
+ * them, and that is what this is. It used to be a `CodecDef` kind of its own called `branch`, so a
+ * definition language for codecs contained an entry that was not a codec and every reader had to
+ * know about it; and it used to carry no definition at all, which stopped being available when
+ * `def` became required. `custom` costs no reader a case and changes no answer: `writes`, `carries`
+ * and `deeper` say nothing at a `custom`, exactly as they said nothing at a missing definition, and
+ * `admits` reaches the same `false` by attempting the pair and catching the throw rather than by
+ * declining to claim.
  */
 const unresolvedAt = (path: string): AnyCodec => {
     const unresolved = () => {
@@ -992,6 +991,7 @@ const unresolvedAt = (path: string): AnyCodec => {
         )
     }
     return codec<never, AttributeValue>({
+        def: { kind: 'custom' },
         encode: unresolved,
         decode: unresolved,
     })
@@ -2122,9 +2122,9 @@ export type Refined<T, A extends AttributeValue> = AttributeCodec<T, A> &
  * `.set()`, where the codec it sits on can be a set's element.
  *
  * The capability {@link setBase} decides at runtime, stated at the type as far as the type can see
- * it — which is not all the way. `CodecShape` declares `def?: CodecDef`, so a codec's *type* is not
- * generic in its definition: `refine(...)`'s type knows the attribute and never the base it reduced
- * through. So the gate here is the attribute — `S`, `N` or `B`, the three a stored set is built
+ * it — which is not all the way. A codec's *type* is not generic in its definition — every codec
+ * carries a `CodecDef`, and none of them carries *which* one at the type — so `refine(...)`'s type
+ * knows the attribute and never the base it reduced through. So the gate here is the attribute — `S`, `N` or `B`, the three a stored set is built
  * from — and `refine(held(string, f, g), p).set()` type-checks and throws, because `held` writes
  * `S` and reduces to no base. That gap closes only by making the codec type generic in its
  * definition, which was measured at 481 of 968 signatures and rejected; the runtime refusal in
@@ -3361,7 +3361,7 @@ export type ObjectCodec<
     readonly unsafeDecode: (
         attribute: AttributeValue,
     ) => DerivedItem<Spec, Rest>
-    readonly def?: CodecDef
+    readonly def: CodecDef
     /**
      * The same declaration, read as a whole item: the same two directions without the top-level map,
      * and the things only a top-level codec can offer — `encodePartial`, `field`, `at`, `path`.
@@ -3389,7 +3389,7 @@ export type DiscriminatedCodec<T, D extends string, Spec> = {
     readonly decode: (attribute: AttributeValue) => Result<T>
     readonly unsafeEncode: (value: T) => Attribute<'M'>
     readonly unsafeDecode: (attribute: AttributeValue) => T
-    readonly def?: CodecDef
+    readonly def: CodecDef
     readonly item: Tagged<T, D, Spec>
     /** The row this codec writes, pinnable with {@link Writes}. Type-level only. */
     readonly [writesMarker]?: WritesVariantsPin<Spec>
@@ -3400,7 +3400,7 @@ export type UnionCodec<T, Options extends readonly unknown[]> = {
     readonly decode: (attribute: AttributeValue) => Result<T>
     readonly unsafeEncode: (value: T) => WrittenBy<Options>
     readonly unsafeDecode: (attribute: AttributeValue) => T
-    readonly def?: CodecDef
+    readonly def: CodecDef
     /**
      * The same union read as a whole item — only where every option is an object.
      *

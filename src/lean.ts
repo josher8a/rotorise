@@ -445,14 +445,7 @@ export const leanTermOf = (
     at = 'codec',
     forced = 0,
 ): string => {
-    const def = codec.def
-    if (!def) {
-        return refuse(
-            at,
-            'a codec with no definition — nothing says which term it is',
-        )
-    }
-    return leanTermOfDef(def, at, forced)
+    return leanTermOfDef(codec.def, at, forced)
 }
 
 const leanTermOfDef = (def: CodecDef, at: string, forced: number): string => {

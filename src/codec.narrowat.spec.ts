@@ -12,6 +12,7 @@
 import { describe, expect, it } from 'vitest'
 import {
     CodecError,
+    carries,
     decimal,
     discriminatedUnion,
     number,
@@ -57,11 +58,17 @@ describe('where the variants disagree', () => {
      * And it says nothing about *what* is there, because there is no single thing. This used to be
      * a `CodecDef` kind — a definition, in a language of codec definitions, for something that was
      * not a codec — so every reader of a definition had to carry a case for it.
+     *
+     * **The rule is that no reader learns anything here, and the assertion on `writes` is that
+     * rule.** It used to be asserted as `def === undefined`, which was the implementation of the
+     * rule rather than the rule: a definition is now required of every codec, and the one that says
+     * "a pair of functions, nothing beneath" is `custom`. Every reader answers what it answered.
      */
-    it('carries no definition, because there is no one codec to describe', () => {
+    it('describes nothing readable, because there is no one codec to describe', () => {
         const ambiguous = Entity.at((p) => p.op.amount)
-        expect(ambiguous.def).toBeUndefined()
         expect(writes(ambiguous)).toBeUndefined()
+        expect(carries(ambiguous)).toBeUndefined()
+        expect(ambiguous.def).toEqual({ kind: 'custom' })
         // the path half is untouched, which is what `at` is most often for
         expect(ambiguous.path()).toBe('op.amount')
     })
