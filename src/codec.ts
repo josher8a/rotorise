@@ -1544,13 +1544,14 @@ type Pair = {
 const groundCodec = (
     shape: Shape,
     member: AttributeName,
+    noun: string,
     writes: string,
 ): Pair => ({
     encode: (value) =>
         shapeOf(value) === shape
             ? carrying(member, value as never)
             : new CodecError(
-                  `${describeShape(value)} is not a ${shape}, and \`${shape}\` writes ${writes} — a codec's input is typed, so this is a value that reached \`encode\` past its type`,
+                  `${describeShape(value)} is not ${noun}, and \`${shape}\` writes ${writes} — a codec's input is typed, so this is a value that reached \`encode\` past its type`,
               ),
     decode: (attribute) => expect(member, attribute),
 })
@@ -1571,7 +1572,9 @@ const groundCodec = (
 const denote = (def: TermDef): Pair => {
     switch (def.kind) {
         case 'string':
-            return groundCodec('string', 'S', "an 'S'")
+            return groundCodec('string', 'S', 'a string', "an 'S'")
+        case 'boolean':
+            return groundCodec('boolean', 'BOOL', 'a boolean', "a 'BOOL'")
         default:
             throw new CodecError(
                 `\`${def.kind}\` is not ported to \`denote\` yet — this is reachable only from a constructor that has not been switched, and no such constructor calls it`,
@@ -1747,15 +1750,8 @@ export type BooleanCodec = AttributeCodec<boolean, Attribute<'BOOL'>> & {
     ): AttributeCodec<T, Attribute<'BOOL'>>
 }
 
-const booleanCodec: AttributeCodec<boolean, Attribute<'BOOL'>> = codec({
-    def: { kind: 'boolean' },
-    encode: (value) =>
-        shapeOf(value) === 'boolean'
-            ? carrying('BOOL', value)
-            : new CodecError(
-                  `${describeShape(value)} is not a boolean, and \`boolean\` writes a 'BOOL' — a codec's input is typed, so this is a value that reached \`encode\` past its type`,
-              ),
-    decode: (attribute) => expect('BOOL', attribute),
+const booleanCodec: AttributeCodec<boolean, Attribute<'BOOL'>> = codecOfTerm({
+    kind: 'boolean',
 })
 
 /** @see {@link BooleanCodec} */
