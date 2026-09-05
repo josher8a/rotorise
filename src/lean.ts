@@ -658,7 +658,7 @@ const leanTermOfDef = (def: CodecDef, at: string, forced: number): string => {
         case 'legacy':
             return refuse(
                 at,
-                "`Term.legacy` carries `r : Attr → Option Value`; `CodecDef['legacy']` records only the *current* codec and drops the older readers entirely, so there is nothing here to emit even for a reader this library recognised",
+                '`Term.legacy` carries `r : Attr → Option Value`; the definition carries the older reading now, and it is a JS closure, which no `Term` prints — the same wall `custom` meets',
             )
         case 'custom':
             return refuse(
