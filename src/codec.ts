@@ -1723,6 +1723,186 @@ const restrict = (
 })
 
 /**
+ * §3 `(union)`'s resolution: which option an input is for, and the pair that follows.
+ *
+ * The model's `altCodec` over `select`, and `lawful_altCodec` is the lemma. It takes the
+ * options already read as {@link Option} records because two views need the same answer —
+ * the attribute pair `denote` returns, and the *item* pair an all-object union also offers —
+ * and a sum resolved twice by two copies of one rule is the drift this phase exists to end.
+ * So the resolution is the return value and the pair is one of its uses.
+ */
+const altSem = (
+    all: readonly Option[],
+): {
+    readonly pair: Pair
+    readonly only: <A>(
+        survives: (option: Option) => boolean,
+        named: string,
+        through: (option: Option) => Result<A>,
+    ) => Result<A>
+    readonly onlyAdmitting: <A>(
+        survives: (option: Option) => boolean,
+        named: string,
+        value: unknown,
+        through: (option: Option) => Result<A>,
+    ) => Result<A>
+    readonly naming: (
+        label: string,
+        names: ReadonlySet<string> | undefined,
+    ) => string
+} => {
+    /** Every option, for a message that says what was available. */
+    const listed = () => all.map((option) => option.describe).join(' | ')
+
+    const ambiguous = (first: Option, second: Option, what: string) =>
+        new CodecError(
+            `${first.describe} and ${second.describe} both admit ${what}; these options cannot be told apart, so give them a discriminator and use discriminatedUnion`,
+        )
+
+    const unmatched = (what: string) =>
+        new CodecError(`no option admits ${what}; options are ${listed()}`)
+
+    /**
+     * What was being matched, named by the names it had.
+     *
+     * The names are the actionable half of both messages — "no option admits this item" says nothing
+     * a reader can act on, while the set of attributes it turned up with says exactly which option
+     * was expected to declare them. A value that is not a record has no names, and then there is
+     * nothing to add.
+     */
+    const naming = (label: string, names: ReadonlySet<string> | undefined) =>
+        names
+            ? `${label} with attributes ${[...names].map((x) => `'${x}'`).join(', ') || '(none)'}`
+            : label
+
+    /**
+     * The one option this could be, or why there is not exactly one.
+     *
+     * Two steps, and both are needed. The **kind** filter comes first and is the only step that can
+     * be trusted on its own: an option that takes a string cannot be the one for a number, and an
+     * option that writes `S` cannot read an `N`. If it leaves one option, that option *is* the answer
+     * — so a failure past that point is its error, reported as itself rather than swallowed into "no
+     * option matched".
+     *
+     * If it leaves several, they are **tried**, and exactly one must succeed. The first step alone
+     * would not do: `string('A')` and `string('B')` take the same kind of value and are never
+     * ambiguous.
+     *
+     * **This is the read side only now.** Attempting was once the only thing available on both
+     * sides, because encoding did not validate and a permissive option would "succeed" on a value
+     * only its neighbour meant. The write side decides instead — {@link onlyAdmitting} — and this
+     * one still attempts because there is no `AdmA` in `src/` to decide a stored attribute with.
+     */
+    const only = <A>(
+        survives: (option: Option) => boolean,
+        named: string,
+        through: (option: Option) => Result<A>,
+    ): Result<A> => {
+        const candidates = all.filter(survives)
+        if (candidates.length === 0) return unmatched(named)
+        if (candidates.length === 1) return through(candidates[0] as Option)
+
+        let first: Option | undefined
+        let carried: Result<A> | undefined
+        for (const option of candidates) {
+            const attempt = through(option)
+            if (failed(attempt)) continue
+            if (first) return ambiguous(first, option, named)
+            first = option
+            carried = attempt
+        }
+        return first ? (carried as Result<A>) : unmatched(named)
+    }
+
+    /**
+     * The same, **decided rather than attempted** — the write side only.
+     *
+     * `only` finds its answer by encoding through every survivor and keeping the one that did not
+     * fail. That was the only thing available while `encode` did not validate, and it is why this
+     * union used to report ambiguity that was not there: a resolver that decides by *trying*
+     * inherits every looseness of everything it tries, and then reports the result as a property of
+     * the declaration. `union([held(decimal, dateAdapter), string])` could not encode a `Date` for
+     * exactly that reason, and the fix was `string` refusing one.
+     *
+     * `admits` is the decision. It is §3's `Adm`, proved exact at all 21 constructors, and
+     * `codec.laws.spec.ts` now holds `admits(c, v) ⟺ !failed(c.encode(v))` over its whole table —
+     * so on the values in play this selects the same option `only` would have found by attempting,
+     * and says *why* rather than discovering it. Two differences that are improvements rather than
+     * equivalences: a `held` option whose adapter **throws** on a value it does not own is filtered
+     * out here instead of propagating, and an ambiguity is reported without first writing one of
+     * the two answers.
+     *
+     * **The read side keeps attempting**, because there is nothing to decide with: the model has
+     * `AdmA` on the attribute side and `src/` has no port of it. That asymmetry is the reason this
+     * is a second function rather than a flag on the first.
+     */
+    const onlyAdmitting = <A>(
+        survives: (option: Option) => boolean,
+        named: string,
+        value: unknown,
+        through: (option: Option) => Result<A>,
+    ): Result<A> => {
+        const candidates = all.filter(
+            (option) => survives(option) && admits(option.codec, value),
+        )
+        if (candidates.length === 0) return unmatched(named)
+        if (candidates.length > 1) {
+            return ambiguous(
+                candidates[0] as Option,
+                candidates[1] as Option,
+                named,
+            )
+        }
+        return through(candidates[0] as Option)
+    }
+
+    /** Which options a value could be for: an object option by its names, anything else by kind. */
+    const forValue =
+        (shape: Shape | undefined, names: ReadonlySet<string> | undefined) =>
+        (option: Option) =>
+            option.declares
+                ? shape === 'map' && !!names && namesFit(option, names)
+                : !option.carries || !shape || option.carries.includes(shape)
+
+    type T = unknown
+
+    /** The same, from the stored side, where the member carried is what filters. */
+    const read = (attribute: AttributeValue): Result<T> => {
+        const member = memberOf(attribute)
+        const carriedMap =
+            member === 'M'
+                ? (attribute as { readonly M: AttributeMap }).M
+                : undefined
+        const names = carriedMap ? namesOf(carriedMap) : undefined
+        return only(
+            (option) =>
+                option.declares
+                    ? member === 'M' && !!names && namesFit(option, names)
+                    : option.member === undefined ||
+                      member === undefined ||
+                      option.member === member,
+            naming('this attribute', names),
+            (option) => option.codec.decode(attribute) as Result<T>,
+        )
+    }
+    const write = (value: unknown): Result<AttributeValue> => {
+        const held = asRecord(value)
+        return onlyAdmitting(
+            forValue(shapeOf(value), held ? namesOf(held) : undefined),
+            naming('this value', held ? namesOf(held) : undefined),
+            value,
+            (option) => option.codec.encode(value as never),
+        ) as Result<AttributeValue>
+    }
+
+    return {
+        pair: { encode: write as Pair['encode'], decode: read },
+        only,
+        onlyAdmitting,
+        naming,
+    }
+}
+/**
  * **What a term means**, as one function on the definition.
  *
  * Every constructor's pair comes from here, so there is one description of what a term denotes
@@ -2036,6 +2216,19 @@ const denote = (def: TermDef): Pair => {
          */
         case 'custom':
             return { encode: def.encode, decode: def.decode }
+        /**
+         * §3 `(union)`: the sum, resolved by unique admission. `lawful_altCodec` is the lemma and
+         * `altSem` is the resolution — one rule, serving both the attribute pair here and the item
+         * pair an all-object union also offers.
+         *
+         * **The write side decides and the read side attempts**, and that asymmetry is the model's.
+         * `admits` is `Adm`, proved exact at every constructor, so the writable side selects by
+         * asking rather than by trying; the readable side has no `AdmA` in this library to ask, so
+         * it tries. §5 says the same thing from the other end — the two families are independent,
+         * and a pair separated on one side only is not separated.
+         */
+        case 'untagged':
+            return altSem(def.variants.map(optionOf)).pair
         /**
          * §3 `(literal)`, and it is **not** a sixth ground term: `literalCodec k ls` is
          * `(baseCodec k).restrict (inL k ls)`, the base's pair narrowed to membership of `ℓ`. The
@@ -5390,140 +5583,14 @@ export const union = <const Options extends readonly AnyCodec[]>(
         }
     }
 
-    /** Every option, for a message that says what was available. */
-    const listed = () => all.map((option) => option.describe).join(' | ')
-
-    const ambiguous = (first: Option, second: Option, what: string) =>
-        new CodecError(
-            `${first.describe} and ${second.describe} both admit ${what}; these options cannot be told apart, so give them a discriminator and use discriminatedUnion`,
-        )
-
-    const unmatched = (what: string) =>
-        new CodecError(`no option admits ${what}; options are ${listed()}`)
-
-    /**
-     * What was being matched, named by the names it had.
-     *
-     * The names are the actionable half of both messages — "no option admits this item" says nothing
-     * a reader can act on, while the set of attributes it turned up with says exactly which option
-     * was expected to declare them. A value that is not a record has no names, and then there is
-     * nothing to add.
-     */
-    const naming = (label: string, names: ReadonlySet<string> | undefined) =>
-        names
-            ? `${label} with attributes ${[...names].map((x) => `'${x}'`).join(', ') || '(none)'}`
-            : label
-
-    /**
-     * The one option this could be, or why there is not exactly one.
-     *
-     * Two steps, and both are needed. The **kind** filter comes first and is the only step that can
-     * be trusted on its own: an option that takes a string cannot be the one for a number, and an
-     * option that writes `S` cannot read an `N`. If it leaves one option, that option *is* the answer
-     * — so a failure past that point is its error, reported as itself rather than swallowed into "no
-     * option matched".
-     *
-     * If it leaves several, they are **tried**, and exactly one must succeed. The first step alone
-     * would not do: `string('A')` and `string('B')` take the same kind of value and are never
-     * ambiguous.
-     *
-     * **This is the read side only now.** Attempting was once the only thing available on both
-     * sides, because encoding did not validate and a permissive option would "succeed" on a value
-     * only its neighbour meant. The write side decides instead — {@link onlyAdmitting} — and this
-     * one still attempts because there is no `AdmA` in `src/` to decide a stored attribute with.
-     */
-    const only = <A>(
-        survives: (option: Option) => boolean,
-        named: string,
-        through: (option: Option) => Result<A>,
-    ): Result<A> => {
-        const candidates = all.filter(survives)
-        if (candidates.length === 0) return unmatched(named)
-        if (candidates.length === 1) return through(candidates[0] as Option)
-
-        let first: Option | undefined
-        let carried: Result<A> | undefined
-        for (const option of candidates) {
-            const attempt = through(option)
-            if (failed(attempt)) continue
-            if (first) return ambiguous(first, option, named)
-            first = option
-            carried = attempt
-        }
-        return first ? (carried as Result<A>) : unmatched(named)
-    }
-
-    /**
-     * The same, **decided rather than attempted** — the write side only.
-     *
-     * `only` finds its answer by encoding through every survivor and keeping the one that did not
-     * fail. That was the only thing available while `encode` did not validate, and it is why this
-     * union used to report ambiguity that was not there: a resolver that decides by *trying*
-     * inherits every looseness of everything it tries, and then reports the result as a property of
-     * the declaration. `union([held(decimal, dateAdapter), string])` could not encode a `Date` for
-     * exactly that reason, and the fix was `string` refusing one.
-     *
-     * `admits` is the decision. It is §3's `Adm`, proved exact at all 21 constructors, and
-     * `codec.laws.spec.ts` now holds `admits(c, v) ⟺ !failed(c.encode(v))` over its whole table —
-     * so on the values in play this selects the same option `only` would have found by attempting,
-     * and says *why* rather than discovering it. Two differences that are improvements rather than
-     * equivalences: a `held` option whose adapter **throws** on a value it does not own is filtered
-     * out here instead of propagating, and an ambiguity is reported without first writing one of
-     * the two answers.
-     *
-     * **The read side keeps attempting**, because there is nothing to decide with: the model has
-     * `AdmA` on the attribute side and `src/` has no port of it. That asymmetry is the reason this
-     * is a second function rather than a flag on the first.
-     */
-    const onlyAdmitting = <A>(
-        survives: (option: Option) => boolean,
-        named: string,
-        value: unknown,
-        through: (option: Option) => Result<A>,
-    ): Result<A> => {
-        const candidates = all.filter(
-            (option) => survives(option) && admits(option.codec, value),
-        )
-        if (candidates.length === 0) return unmatched(named)
-        if (candidates.length > 1) {
-            return ambiguous(
-                candidates[0] as Option,
-                candidates[1] as Option,
-                named,
-            )
-        }
-        return through(candidates[0] as Option)
-    }
-
-    /** Which options a value could be for: an object option by its names, anything else by kind. */
-    const forValue =
-        (shape: Shape | undefined, names: ReadonlySet<string> | undefined) =>
-        (option: Option) =>
-            option.declares
-                ? shape === 'map' && !!names && namesFit(option, names)
-                : !option.carries || !shape || option.carries.includes(shape)
-
     type T = DerivedUnion<Options>
 
-    /** The same, from the stored side, where the member carried is what filters. */
-    const read = (attribute: AttributeValue): Result<T> => {
-        const member = memberOf(attribute)
-        const carriedMap =
-            member === 'M'
-                ? (attribute as { readonly M: AttributeMap }).M
-                : undefined
-        const names = carriedMap ? namesOf(carriedMap) : undefined
-        return only(
-            (option) =>
-                option.declares
-                    ? member === 'M' && !!names && namesFit(option, names)
-                    : option.member === undefined ||
-                      member === undefined ||
-                      option.member === member,
-            naming('this attribute', names),
-            (option) => option.codec.decode(attribute) as Result<T>,
-        )
-    }
+    const {
+        pair: { encode: write, decode: read },
+        only,
+        onlyAdmitting,
+        naming,
+    } = altSem(all)
 
     /** The item reading's own matcher: the value is always a record, so only names filter. */
     const readItem = (item: StoredItem): Result<T> => {
@@ -5578,21 +5645,15 @@ export const union = <const Options extends readonly AnyCodec[]>(
 
     // the option chosen writes what it writes; `WrittenBy` is the union of those, which no single
     // call can be narrowed to from inside
-    const write = (value: T): Result<WrittenBy<Options>> => {
-        const held = asRecord(value)
-        return onlyAdmitting(
-            forValue(shapeOf(value), held ? namesOf(held) : undefined),
-            naming('this value', held ? namesOf(held) : undefined),
-            value,
-            (option) => option.codec.encode(value as never),
-        ) as Result<WrittenBy<Options>>
-    }
-
+    // the resolution is erased — a sum's rule is about options, not about the type they carry —
+    // so the two halves get their types back here, once, the way `codecOfTerm` does for a term
+    const encode = write as (value: T) => Result<WrittenBy<Options>>
+    const decode = read as (attribute: AttributeValue) => Result<T>
     return {
-        encode: write,
-        decode: read,
-        unsafeEncode: (value) => orThrow(write(value)),
-        unsafeDecode: (attribute) => orThrow(read(attribute)),
+        encode,
+        decode,
+        unsafeEncode: (value) => orThrow(encode(value)),
+        unsafeDecode: (attribute) => orThrow(decode(attribute)),
         def: {
             kind: 'untagged',
             variants: all.map((option) => option.codec),
