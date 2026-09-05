@@ -7,7 +7,15 @@
  */
 import { describe, expect, it } from 'vitest'
 import type { AnyCodec } from './codec'
-import { CodecError, object, opaque, refine, string } from './codec'
+import {
+    CodecError,
+    codecOfTerm,
+    object,
+    opaque,
+    refine,
+    string,
+    termOf,
+} from './codec'
 import { tableEntry } from './Rotorise'
 import { checkMembersStable, checkRoundTrip } from './testing'
 
@@ -175,10 +183,25 @@ describe('the rest policy a definition records', () => {
         })
     })
 
-    it('records a rest codec as itself, not as a flag', () => {
+    /**
+     * The policy is recorded as the rest codec's **term**, and identity is what is asserted.
+     *
+     * A definition's children are terms, so the third policy is `scalar`'s term rather than
+     * `scalar`. What the rule needs is unchanged and is what this checks: the three policies are
+     * three values, and the third is enough to rebuild the codec a consumer must run. `codecOfTerm`
+     * memoises on the frozen term, so rebuilding it runs what was declared.
+     *
+     * The rebuilt codec is not `scalar` itself, and that is the design rather than a loss:
+     * `refine` returns `setCapable(codecOfTerm(...))`, so `.set` is a capability sitting *above*
+     * the term's codec. What the walk owes is the behaviour, which is what the second line asks.
+     */
+    it('records a rest codec as its term, not as a flag', () => {
         const def = object({ vendorId: string('ACME', 'GLOBEX') }, scalar).def
         expect(def).toMatchObject({ kind: 'attributes' })
-        expect((def as { rest: unknown }).rest).toBe(scalar)
+        expect((def as { rest: unknown }).rest).toBe(scalar.def)
+        expect(codecOfTerm(termOf(scalar)).encode('x' as never)).toEqual(
+            scalar.encode('x'),
+        )
     })
 
     it('agrees with the policy the item codec reports', () => {

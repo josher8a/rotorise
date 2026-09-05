@@ -324,8 +324,13 @@ export type CodecDef =
            * consumer reading a definition to reconstruct the codec could not reconstruct that, and
            * `src/lean.ts` was silently writing `Rest.drop` for both. The field now carries the
            * policy itself, so the three cases are three values rather than two.
+           *
+           * Written out rather than said as {@link RestDeclaration}, which is the *constructor's*
+           * parameter and still names a codec. One side owns the fact and the other declares an
+           * expectancy: a caller hands {@link object} a codec, `object` takes its term, and this is
+           * what the definition holds. A shared alias would make the two agree by having to.
            */
-          readonly rest: RestDeclaration
+          readonly rest: 'drop' | 'refuse' | TermDef
       }
     | {
           readonly kind: 'tagged'
@@ -1043,9 +1048,10 @@ export const admits = (codec: AnyCodec, value: unknown): boolean => {
             }
             const rest = def.rest
             if (typeof rest === 'string') return true
+            const restCodec = codecOfTerm(rest)
             for (const name in held) {
                 if (name in def.of || held[name] === undefined) continue
-                if (!admits(rest, held[name])) return false
+                if (!admits(restCodec, held[name])) return false
             }
             return true
         }
@@ -1742,7 +1748,7 @@ const carriedCodec = <Payload, Written, Read>(
  */
 const bodySem = (
     of: Readonly<Record<string, Field>>,
-    rest: RestDeclaration,
+    rest: 'drop' | 'refuse' | TermDef,
 ): {
     readonly encode: (
         held: Record<string, unknown>,
@@ -1768,7 +1774,7 @@ const bodySem = (
                     : undefined,
         })
     }
-    const restCodec = typeof rest === 'string' ? undefined : rest
+    const restCodec = typeof rest === 'string' ? undefined : codecOfTerm(rest)
     return {
         encode: (held) => {
             const out: Record<string, AttributeValue> = {}
@@ -4571,11 +4577,14 @@ export const object = <
     for (const name in declaredSpec) {
         fields[name] = fieldOf(declaredSpec[name] as AnyCodec)
     }
-    const body = bodySem(fields, rest as RestDeclaration)
+    const declaredRest = rest as RestDeclaration
+    const restTerm =
+        typeof declaredRest === 'string' ? declaredRest : termOf(declaredRest)
+    const body = bodySem(fields, restTerm)
     const itemDef = {
         kind: 'attributes',
         of: fields,
-        rest: rest as RestDeclaration,
+        rest: restTerm,
     } as const
 
     type T = DerivedItem<Spec, Rest>

@@ -588,7 +588,7 @@ const leanTermOfDef = (def: CodecDef, at: string, forced: number): string => {
             const rest =
                 typeof def.rest === 'string'
                     ? `Rest.${def.rest}`
-                    : `(Rest.codec (${leanTermOf(def.rest, `${at}.rest`, forced)}))`
+                    : `(Rest.codec (${leanTermOfDef(def.rest, `${at}.rest`, forced)}))`
             // **One argument, a `Body`.** `db444e3` made the object payload a stratum, so
             // `Term.object` takes `Body.mk names fields rest` where it used to take the three
             // separately — and this row kept emitting the three, which typechecked against no
