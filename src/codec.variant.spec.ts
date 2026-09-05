@@ -154,6 +154,53 @@ describe('tagged', () => {
         const { balance: _missing, ...partial } = Account.unsafeEncode(plain)
         expect(() => Account.unsafeDecode(partial)).toThrow(CodecError)
     })
+
+    /**
+     * **Every variant is an object, and this is the refusal that makes it so.**
+     *
+     * `taggedItemSem` reads each variant's term and takes its item pair, which exists only for an
+     * `attributes` term. It is entitled to that because the declaration refuses anything else: an
+     * option with no object `spec` has no attribute naming the discriminator, so there is no tag to
+     * select on. The refusal was in the code and in no test, which §8's case (c) is about — a gate
+     * with no test beside it reads as a gate nobody migrated.
+     *
+     * Asserted at the *declaration* rather than at a read, which is the whole point: a union built
+     * from a bare codec cannot be used at all, rather than failing on the first item that reaches it.
+     *
+     * **Reached past a cast, deliberately.** `EveryOptionTagged` refuses both of these in the
+     * *type*, landing on the option that is wrong, and that is the gate a caller meets. The cast is
+     * how this test gets to the second one. Both are needed and neither is redundant: a cast defeats
+     * the type and nothing defeats the throw, which is why `taggedItemSem` may take every variant's
+     * item pair without asking again.
+     */
+    const past = <T>(options: T) => options as never
+
+    it('refuses an option that is not an object codec, at the declaration', () => {
+        const bare = past([
+            object({ type: string('OWNER'), balance: decimal }),
+            // a bare codec: no `spec`, so no attribute names the discriminator
+            string,
+        ])
+        expect(() => discriminatedUnion('type', bare)).toThrow(CodecError)
+        expect(() => discriminatedUnion('type', bare)).toThrow(
+            /every option must be an object codec/,
+        )
+    })
+
+    /**
+     * The other half of the same guarantee: an object option that does not *name* the discriminator
+     * with a literal is refused too, so a variant's term always carries the tag the lookup reads.
+     */
+    it('refuses an object option that does not name the discriminator with a literal', () => {
+        const untagged = past([
+            object({ type: string('OWNER'), balance: decimal }),
+            // `type` is a plain string here, so it names no single variant
+            object({ type: string, weight: number }),
+        ])
+        expect(() => discriminatedUnion('type', untagged)).toThrow(
+            /must name 'type' with a literal/,
+        )
+    })
 })
 
 describe('the law, over generated values', () => {
