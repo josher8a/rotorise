@@ -52,6 +52,7 @@ import type {
     AnyCodec,
     AttributeCodec,
     CodecDef,
+    Field,
     ItemCodec,
     RestPolicy,
     Rng,
@@ -1056,14 +1057,12 @@ export const arbitraryOf = (
                 }
             }
             for (const name in def.of) {
-                const attribute = def.of[name] as AnyCodec
-                if (
-                    attribute.def?.kind === 'optional' &&
-                    (size <= 0 || rng() < 0.5)
-                ) {
+                const field = def.of[name]
+                if (field === undefined) continue
+                if (field.mark === 'optional' && (size <= 0 || rng() < 0.5)) {
                     continue
                 }
-                out[name] = arbitraryOf(attribute, rng, size)
+                out[name] = arbitraryOf(field.codec, rng, size)
             }
             return out
         }
@@ -1209,18 +1208,15 @@ export const shrinkOf = (
             const out: Record<string, unknown>[] = []
             // dropping a whole attribute is the bigger reduction, so try it first
             for (const name in def.of) {
-                if ((def.of[name] as AnyCodec).def?.kind !== 'optional')
-                    continue
+                if (def.of[name]?.mark !== 'optional') continue
                 if (!(name in held)) continue
                 const { [name]: _dropped, ...rest } = held
                 out.push(rest)
             }
             for (const name in def.of) {
-                if (!(name in held)) continue
-                for (const smaller of shrinkOf(
-                    def.of[name] as AnyCodec,
-                    held[name],
-                )) {
+                const field = def.of[name]
+                if (field === undefined || !(name in held)) continue
+                for (const smaller of shrinkOf(field.codec, held[name])) {
                     out.push({ ...held, [name]: smaller })
                 }
             }
@@ -1697,12 +1693,12 @@ const keysOk = (
     requires.every((name) => names.includes(name))
 
 /** An object option's spec, as the pair `keysOk` needs. */
-const declaration = (of: Record<string, AnyCodec>) => {
+const declaration = (of: Readonly<Record<string, Field>>) => {
     const declares = new Set<string>()
     const requires: string[] = []
     for (const name in of) {
         declares.add(name)
-        if (of[name]?.def?.kind !== 'optional') requires.push(name)
+        if (of[name]?.mark !== 'optional') requires.push(name)
     }
     return { declares, requires }
 }
@@ -1710,7 +1706,7 @@ const declaration = (of: Record<string, AnyCodec>) => {
 /** `OptionSem.byNames` — an object option decides by names, never by being attempted. */
 const byNames = (
     codec: AnyCodec,
-    of: Record<string, AnyCodec>,
+    of: Readonly<Record<string, Field>>,
 ): UnionOption => {
     const { declares, requires } = declaration(of)
     return {
@@ -1824,7 +1820,7 @@ const byKindThenAttempt = (codec: AnyCodec): UnionOption => {
 const optionOfDef = (codec: AnyCodec): UnionOption => {
     const def = codec.def
     return def?.kind === 'attributes'
-        ? byNames(codec, def.of as Record<string, AnyCodec>)
+        ? byNames(codec, def.of)
         : byKindThenAttempt(codec)
 }
 
@@ -1892,7 +1888,7 @@ const unionsIn = (subject: AnyCodec): readonly UnionSite[] => {
                 def.elements.forEach(inner)
                 return inner(def.tail)
             case 'attributes':
-                Object.values(def.of as Record<string, AnyCodec>).forEach(inner)
+                Object.values(def.of).forEach((field) => inner(field.codec))
                 return inner(
                     typeof def.rest === 'string' ? undefined : def.rest,
                 )

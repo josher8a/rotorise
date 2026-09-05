@@ -296,7 +296,8 @@ export type CodecDef =
     | { readonly kind: 'record'; readonly value: AnyCodec }
     | {
           readonly kind: 'attributes'
-          readonly of: Attributes
+          /** The declared attributes, each with its presence mark — see {@link Field}. */
+          readonly of: Readonly<Record<string, Field>>
           /**
            * The policy for what the spec does not name — the constructor's own argument, verbatim.
            *
@@ -807,13 +808,14 @@ export const admits = (codec: AnyCodec, value: unknown): boolean => {
             const held = asRecord(value)
             if (!held) return false
             for (const name in def.of) {
-                const field = def.of[name] as AnyCodec
+                const field = def.of[name]
+                if (field === undefined) continue
                 const at = held[name]
                 if (at === undefined) {
-                    if (field.def?.kind === 'optional') continue
+                    if (field.mark === 'optional') continue
                     return false
                 }
-                if (!admits(field, at)) return false
+                if (!admits(field.codec, at)) return false
             }
             const rest = def.rest
             if (typeof rest === 'string') return true
@@ -959,7 +961,7 @@ const childrenOf = (
     const one = (child: AnyCodec | undefined) => (child ? [child] : [])
     switch (def.kind) {
         case 'attributes':
-            return one(def.of[String(segment)])
+            return one(def.of[String(segment)]?.codec)
         case 'record':
             return one(def.value)
         case 'array':
@@ -1026,6 +1028,31 @@ const unresolvedAt = (path: string): AnyCodec => {
 
 /** A map of attribute name to codec — what `item`, `map` and each `tagged` variant hold. */
 export type Attributes = Readonly<Record<string, AnyCodec>>
+
+/**
+ * One declared attribute of an object, with the mark that says when it may be absent.
+ *
+ * §4's `Field`, and the model's `Field` is these same three cases. **Not {@link FieldDef}**, which
+ * is a different thing one level up: `FieldDef` is the *definition of a codec* that marks a field —
+ * what `optional(string)` is when a caller holds it on its own — while this is a *position in a
+ * body*, which is what §4 means by a field and what has a mark at all.
+ *
+ * **The mark used to be the wrapping codec's definition kind, and reading a field meant walking
+ * two definitions**: `def.of[name].def.kind === 'optional'`, at six sites, each of which had to
+ * know that `optional` and `fallback` are the only two kinds that count as marks. The mark sits
+ * beside the codec now, so the walk is one lookup and the set of marks is closed by this type.
+ * `object` unwraps the marker at construction, which is where it already resolved the presence
+ * rules for its own encode and decode.
+ */
+export type Field =
+    | { readonly mark: 'required'; readonly codec: AnyCodec }
+    | { readonly mark: 'optional'; readonly codec: AnyCodec }
+    | {
+          readonly mark: 'fallback'
+          readonly codec: AnyCodec
+          /** The stand-in — see {@link fallback}, which checks it is writable at construction. */
+          readonly value: unknown
+      }
 
 /** What {@link refine} narrowed with, for a generator that has to satisfy it. */
 export type Refinement = {
@@ -2343,15 +2370,6 @@ export const fallback = <const C extends AnyCodec>(
     }) as unknown as FallbackCodec<Decoded<C>, AttributeOf<C> & AttributeValue>
 }
 
-// wrapped rather than returned bare: a stand-in may itself be falsy — `fallback(boolean, false)`,
-// `fallback(number, 0)` — and the read site tests *presence*, which a bare value cannot carry
-const fallbackOf = (
-    codec: AnyCodec,
-): { readonly value: unknown; readonly copy: boolean } | undefined =>
-    codec.def?.kind === 'fallback'
-        ? { value: codec.def.value, copy: copiedPerRead(codec.def.value) }
-        : undefined
-
 /**
  * Whether this stand-in has to be *copied* on each read that uses it, decided once.
  *
@@ -3523,6 +3541,22 @@ type Declared = {
 }
 
 /**
+ * The marker taken off, once, at the declaration.
+ *
+ * A marker is `described(inner, …)` — the inner codec with a different definition — so the two
+ * halves are the inner's and unwrapping changes nothing about what the field encodes or decodes.
+ * What it changes is that the mark is *named* rather than left to be recovered from a definition
+ * kind, which is what {@link Field} is for.
+ */
+const fieldOf = (codec: AnyCodec): Field => {
+    const def = codec.def
+    if (def.kind === 'optional') return { mark: 'optional', codec: def.inner }
+    if (def.kind === 'fallback')
+        return { mark: 'fallback', codec: def.inner, value: def.value }
+    return { mark: 'required', codec }
+}
+
+/**
  * Declares how an entity is stored, once, in both directions.
  *
  * The spec is the declaration, and the entity is derived from it. Nothing has to be named twice, and
@@ -3562,21 +3596,30 @@ export const object = <
     spec: Spec & NoTail<Spec>,
     rest: Rest = 'drop' as Rest,
 ): ObjectCodec<Spec, Rest> => {
-    // one pass, and the presence rules resolved with it. `isOptional` and `fallbackOf` are
-    // answers about the *declaration*, so asking them per attribute per item — which is what
-    // walking bare entries meant — asks the same question once per row for the life of the table
-    const attributes: Record<string, AnyCodec> = {}
+    // one pass, and the presence rules resolved with it. A mark is an answer about the
+    // *declaration*, so asking it per attribute per item — which is what walking bare entries
+    // meant — asks the same question once per row for the life of the table.
+    //
+    // Two records, from one source and for two readers. `fields` is the term: the mark named,
+    // beside the codec it marks. `declared` is the compiled form the two directions below walk,
+    // and it carries one thing the term does not — whether a stand-in has to be copied per read,
+    // which is a fact about this runtime rather than about the declaration.
+    const fields: Record<string, Field> = {}
     const declared: Declared[] = []
     const declaredSpec = spec as unknown as Record<string, Nestable<never>>
     const restCodec = typeof rest === 'string' ? undefined : (rest as AnyCodec)
     for (const name in declaredSpec) {
         const attribute = declaredSpec[name] as AnyCodec
-        attributes[name] = attribute
+        const field = fieldOf(attribute)
+        fields[name] = field
         declared.push({
             name,
-            codec: attribute,
-            optional: isOptional(attribute),
-            absent: fallbackOf(attribute),
+            codec: field.codec,
+            optional: field.mark === 'optional',
+            absent:
+                field.mark === 'fallback'
+                    ? { value: field.value, copy: copiedPerRead(field.value) }
+                    : undefined,
         })
     }
 
@@ -3600,7 +3643,7 @@ export const object = <
             if (restCodec) {
                 for (const name in held) {
                     const value = held[name]
-                    if (name in attributes || value === undefined) continue
+                    if (name in fields || value === undefined) continue
                     const written = restCodec.encode(value as never)
                     if (failed(written)) return written.under(name)
                     out[name] = written
@@ -3615,11 +3658,11 @@ export const object = <
             for (const name in held) {
                 const value = held[name]
                 if (value === undefined) continue
-                const attribute = attributes[name]
-                if (!attribute) {
+                const field = fields[name]
+                if (!field) {
                     return new CodecError(`'${name}' is not an attribute`)
                 }
-                const written = attribute.encode(value as never)
+                const written = field.codec.encode(value as never)
                 if (failed(written)) return written.under(name)
                 out[name] = written
             }
@@ -3658,7 +3701,7 @@ export const object = <
 
             if (rest === 'drop') return out as T
             for (const name in item) {
-                if (name in attributes) continue
+                if (name in fields) continue
                 if (!restCodec) {
                     return new CodecError(
                         `'${name}' is not an attribute this codec declares; the schema and the data have drifted apart`,
@@ -3711,12 +3754,12 @@ export const object = <
                 segments,
             }
         },
-        field: (name) => (attributes as Spec)[name],
-        spec: attributes as Spec,
+        field: (name) => spec[name],
+        spec: spec as Spec,
         rest: rest as RestPolicy<unknown>,
         def: {
             kind: 'attributes',
-            of: attributes as unknown as Attributes,
+            of: fields,
             rest: rest as RestDeclaration,
         },
     }

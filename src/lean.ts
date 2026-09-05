@@ -51,7 +51,7 @@
  */
 import type { AttributeValue } from './attribute'
 import { isNumeral, isStoredNumeral, memberOf } from './attribute'
-import type { AnyCodec, CodecDef } from './codec'
+import type { AnyCodec, CodecDef, Field } from './codec'
 import { admits, admitsAttribute, setBase, shapeOf, union } from './codec'
 import { failed } from './result'
 
@@ -576,7 +576,7 @@ const leanTermOfDef = (def: CodecDef, at: string, forced: number): string => {
                         [
                             name,
                             leanFieldOf(
-                                def.of[name] as AnyCodec,
+                                def.of[name] as Field,
                                 `${at}.${name}`,
                                 forced,
                             ),
@@ -680,18 +680,19 @@ const leanTermOfDef = (def: CodecDef, at: string, forced: number): string => {
 }
 
 /** A `Field` — §4's stratum, which is a *position* in a map and not a codec. */
-const leanFieldOf = (codec: AnyCodec, at: string, forced: number): string => {
-    const def = codec.def
-    if (def?.kind === 'optional') {
-        return `Field.optional (${leanTermOf(def.inner, at, forced)})`
+const leanFieldOf = (field: Field, at: string, forced: number): string => {
+    switch (field.mark) {
+        case 'optional':
+            return `Field.optional (${leanTermOf(field.codec, at, forced)})`
+        case 'fallback':
+            return `Field.fallback (${leanTermOf(
+                field.codec,
+                at,
+                forced,
+            )}) (${leanValueOf(field.value, `${at}.fallback`)})`
+        case 'required':
+            return `Field.req (${leanTermOf(field.codec, at, forced)})`
     }
-    if (def?.kind === 'fallback') {
-        return `Field.fallback (${leanTermOf(def.inner, at, forced)}) (${leanValueOf(
-            def.value,
-            `${at}.fallback`,
-        )})`
-    }
-    return `Field.req (${leanTermOf(codec, at, forced)})`
 }
 
 /* ── vectors ─────────────────────────────────────────────────────────────────────────────── */
