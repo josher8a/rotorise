@@ -1578,6 +1578,38 @@ const denote = (def: TermDef): Pair => {
         case 'binary':
             return groundCodec('binary', 'B', 'a `Uint8Array`', "a 'B'")
         /**
+         * §3 `(decimal)`. The held set is §1's `Numerals` and not every string: the grammar, the
+         * 38 significant digits and the magnitude range are checked on **both** halves.
+         * `lawful_decimalCodec` is its own lemma, and the model gives the read side's check the
+         * same reason this one has — an ill-formed numeral admitted by `p` would name a value `e`
+         * then refuses, and that is **(C)** failing.
+         *
+         * This is the term whose *value* is text and whose *member* is `N`, which is why §5 has it
+         * writing `.str` while storing `N`, and why the write occupancy of `set(decimal)` is a set
+         * of strings. The row carries the value across unchanged; only the member differs.
+         *
+         * `isStoredNumeral` stringifies what it is given — `isStoredNumeral(['1'])` is `true` — so
+         * the kind is checked first, which is what `admits`' `decimal` row says and what this row
+         * did not say before it moved here.
+         */
+        case 'decimal':
+            return {
+                encode: (value: unknown) =>
+                    typeof value === 'string' && isStoredNumeral(value)
+                        ? carrying('N', value)
+                        : new CodecError(
+                              `'${value}' is not a numeral DynamoDB stores unchanged; it accepts at most 38 significant digits, magnitude 1e-130 to 9.9e125, and returns the normalised form (no leading or trailing zeros, no exponent, no '+')`,
+                          ),
+                decode: (attribute) =>
+                    andThen(expect('N', attribute), (carried) =>
+                        isStoredNumeral(carried)
+                            ? carried
+                            : new CodecError(
+                                  `'${carried}' is not a numeral in the form DynamoDB stores, so this attribute was not written by it`,
+                              ),
+                    ),
+            }
+        /**
          * §3 `(number)`. The held set is `D` — §1's numeral domain — and not every double, so
          * both halves gate. `lawful_numberCodec` is its own lemma rather than the ground one's,
          * and the model's row is written out for the same reason this one is.
@@ -1716,24 +1748,8 @@ export type DecimalCodec = AttributeCodec<string, Attribute<'N'>> & {
     }
 }
 
-const decimalCodec: AttributeCodec<string, Attribute<'N'>> = codec({
-    def: { kind: 'decimal' },
-    // `isStoredNumeral` stringifies what it is given — `isStoredNumeral(['1'])` is `true` — so the
-    // kind is checked first, which is exactly what `admits`' `decimal` row says and this did not
-    encode: (value) =>
-        typeof value === 'string' && isStoredNumeral(value)
-            ? carrying('N', value)
-            : new CodecError(
-                  `'${value}' is not a numeral DynamoDB stores unchanged; it accepts at most 38 significant digits, magnitude 1e-130 to 9.9e125, and returns the normalised form (no leading or trailing zeros, no exponent, no '+')`,
-              ),
-    decode: (attribute) =>
-        andThen(expect('N', attribute), (carried) =>
-            isStoredNumeral(carried)
-                ? carried
-                : new CodecError(
-                      `'${carried}' is not a numeral in the form DynamoDB stores, so this attribute was not written by it`,
-                  ),
-        ),
+const decimalCodec: AttributeCodec<string, Attribute<'N'>> = codecOfTerm({
+    kind: 'decimal',
 })
 
 /** @see {@link DecimalCodec} */
