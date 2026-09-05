@@ -301,8 +301,8 @@ export type CodecDef =
     | {
           readonly kind: 'tuple'
           readonly elements: readonly AnyCodec[]
-          /** The codec for everything past `elements`, where the tuple has a tail. */
-          readonly tail?: AnyCodec
+          /** The term for everything past `elements`, where the tuple has a tail. */
+          readonly tail?: TermDef
       }
     | { readonly kind: 'record'; readonly value: AnyCodec }
     | {
@@ -1004,8 +1004,11 @@ export const admits = (codec: AnyCodec, value: unknown): boolean => {
             if (tail ? value.length < fixed : value.length !== fixed) {
                 return false
             }
+            // the cast here used to read `tail` as a codec, and the tail is a term. A cast
+            // defeats the checker, so this row was the one site the retyping did not report
+            const tailItems = tail ? codecOfTerm(tail) : undefined
             return value.every((one, at) =>
-                admits((def.elements[at] ?? tail) as AnyCodec, one),
+                admits(def.elements[at] ?? (tailItems as AnyCodec), one),
             )
         }
         case 'record': {
@@ -1190,7 +1193,10 @@ const childrenOf = (
         // a child either, and refusing here is what keeps a meaningless path from compiling
         case 'tuple':
             // a position past the fixed part is a tail element, where there is a tail
-            return one(def.elements[Number(segment)] ?? def.tail)
+            return one(
+                def.elements[Number(segment)] ??
+                    (def.tail ? codecOfTerm(def.tail) : undefined),
+            )
         case 'tagged':
             return acrossVariants(Object.values(def.variants), segment)
         case 'untagged':
@@ -2235,7 +2241,9 @@ const denote = (def: TermDef): Pair => {
                     ? new CodecError(`${say(items.length)}, found ${length}`)
                     : undefined
             const atLeast = tail ? 'at least ' : ''
-            const at = (index: number) => items[index] ?? (tail as AnyCodec)
+            const tailItems = tail ? codecOfTerm(tail) : undefined
+            const at = (index: number) =>
+                items[index] ?? (tailItems as AnyCodec)
             return carriedCodec(
                 (value): value is readonly never[] => Array.isArray(value),
                 'L',
@@ -3021,7 +3029,7 @@ export const tuple = <const Cs extends readonly (AnyCodec | AnyRest)[]>(
      * that can be marked and looking at it is enough.
      */
     const last = all[all.length - 1]
-    const tail = isTail(last) ? last.rest : undefined
+    const tail = isTail(last) ? termOf(last.rest) : undefined
     const items = (tail ? all.slice(0, -1) : all) as readonly AnyCodec[]
 
     // as with `record` and `map`, the cast keeps the shape each position writes, which
