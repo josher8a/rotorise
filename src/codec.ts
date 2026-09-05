@@ -201,6 +201,18 @@ export type AnyCodec = CodecShape<never, unknown, AttributeValue>
  */
 export type AnyRest = { readonly [restMarker]: true; readonly rest: AnyCodec }
 
+/**
+ * Anything an object member can be declared as: a codec, or a §4 field that marks one.
+ *
+ * `optional` and `fallback` state that the attribute at a *name* may be absent, and the name belongs
+ * to the object rather than to the thing declared at it. So a field is not a codec, and the pair a
+ * member is read and written through is the one the field marks.
+ *
+ * Written as the definition alone, because the definition is the whole of what both cases carry that
+ * an object reads: `fieldOf` takes the mark off `def.kind` and the child term out of the same record.
+ */
+type AnyDeclaration = AnyCodec | { readonly def: FieldDef }
+
 export type Decoded<C> = C extends {
     readonly attribute: AttributeCodec<infer T>
 }
@@ -4451,7 +4463,7 @@ export type ItemSpec<T> = T extends unknown
  * writes to bypass a declaration-time check no longer compiles.
  */
 export type ObjectCodec<
-    Spec extends Record<string, AnyCodec>,
+    Spec extends Record<string, AnyDeclaration>,
     Rest = 'drop',
 > = {
     // spelled out rather than intersected with `AttributeCodec`, for the reason recorded on
@@ -4652,7 +4664,7 @@ const fieldOf = (codec: AnyCodec): Field => {
  * ```
  */
 export const object = <
-    const Spec extends Record<string, AnyCodec>,
+    const Spec extends Record<string, AnyDeclaration>,
     const Rest extends RestDeclaration = 'drop',
 >(
     spec: Spec & NoTail<Spec>,
