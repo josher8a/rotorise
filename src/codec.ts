@@ -1082,26 +1082,6 @@ export type Refinement = {
     readonly onThinSearch?: (what: string, rate: number) => void
 }
 
-/**
- * A codec built from another, inheriting what a wrapper does not change.
- *
- * `arbitrary` and `shrink` are the two: they describe what the inner codec can carry, and a wrapper
- * that narrows or defers is usually still carrying it. Everything else is the wrapper's own —
- * `def` in particular, because a wrapper is a *different* codec from the one it wraps.
- *
- * A spread rather than the list of names it used to be, so overriding with an explicit `undefined`
- * still opts out: the key is present, so it wins. What is not mentioned is not there to win with.
- */
-const derive = <T, A extends AttributeValue>(
-    inner: AnyCodec,
-    over: Codec<T, A>,
-): AttributeCodec<T, A> =>
-    codec({
-        arbitrary: inner.arbitrary,
-        shrink: inner.shrink,
-        ...over,
-    } as Codec<T, A>)
-
 /** The same codec, described differently — all a marker wrapper ever does. */
 const described = <C>(inner: C, def: CodecDef): C => ({ ...inner, def })
 
@@ -1990,6 +1970,39 @@ const denote = (def: TermDef): Pair => {
                         `no encoding could read this attribute; tried the current one and one older: ${read} | ${older_}`,
                     )
                 },
+            }
+        }
+        /**
+         * §3 `(nullable)`: the null point adjoined, **unless the subterm already owns it** —
+         * `Codec.withNull` with the guard, and `lawful_withNull` is the lemma.
+         *
+         * Without the guard the wrapper's `NULL` branch shadows the subterm and **(R)** fails on a
+         * term the specification proves lawful: `nullable(held(nullable(string), adapter))`, where
+         * the adapter maps `'SENTINEL'` to `null`, writes `{ NULL: true }` for `'SENTINEL'` and
+         * reads back `null`. The value written is not the value read.
+         *
+         * Where the guard does *not* fire, null-honesty is a theorem rather than an assumption: an
+         * inner that wrote `⟨NULL, ∗⟩` would read it straight back by **(R)** and so would own the
+         * point, and one that read some attribute to `null` would write the point by **(C)** and
+         * own it again. §3's guard is what turned two premises into consequences.
+         *
+         * **The question is asked once, at first use rather than at construction**, because
+         * `lazy` exists: a recursive declaration forces its thunk when probed, and at
+         * module-evaluation time that is a reference to a binding that does not exist yet.
+         */
+        case 'nullable': {
+            const inner = def.inner
+            let owns: boolean | undefined
+            const ownsInner = () => (owns ??= ownsNull(inner))
+            return {
+                encode: (value) =>
+                    value === null && !ownsInner()
+                        ? carrying('NULL', true)
+                        : inner.encode(value),
+                decode: (attribute) =>
+                    memberOf(attribute) === 'NULL' && !ownsInner()
+                        ? null
+                        : inner.decode(attribute),
             }
         }
         /**
@@ -3130,18 +3143,9 @@ const reaches = (probe: () => unknown): boolean => {
 export const nullable = <T, A extends AttributeValue>(
     inner: AttributeCodec<T, A>,
 ): AttributeCodec<T | null, A | Attribute<'NULL'>> => {
-    let owns: boolean | undefined
-    const ownsInner = () => (owns ??= ownsNull(inner as AnyCodec))
-    return derive<T | null, A | Attribute<'NULL'>>(inner, {
-        def: { kind: 'nullable', inner: inner as AnyCodec },
-        encode: (value) =>
-            value === null && !ownsInner()
-                ? (carrying('NULL', true) as A | Attribute<'NULL'>)
-                : (inner.encode(value as T) as Result<A | Attribute<'NULL'>>),
-        decode: (attribute) =>
-            memberOf(attribute) === 'NULL' && !ownsInner()
-                ? null
-                : inner.decode(attribute),
+    return codecOfTerm<T | null, A | Attribute<'NULL'>>({
+        kind: 'nullable',
+        inner: inner as AnyCodec,
     })
 }
 
