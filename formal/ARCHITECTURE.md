@@ -1469,27 +1469,8 @@ proposal reaching for twenty-one rows here is repeating that rejection.
 
 ### The white-room arc's open findings, triaged
 
-Four findings from the arc that made a codec carry its `Term`. Each is stated in the present
+Two findings from the arc that made a codec carry its `Term`. Each is stated in the present
 tense, because each is true of the tree as it stands.
-
-**`union([opaque, X])` is accepted by `src/` and certified by nothing, and the model reads it as
-resolving no value.** `opaque` admits every kind by design, so it meets every other option, and
-the host's declaration guard exempts it rather than refusing it. Fifteen corpus pairs have
-`opaque` on a side. Measured by porting `Orth`'s row without that exemption: the refusal set
-moves from 17 pairs to 32, all fifteen new ones have `opaque` on a side, and every one of the
-fifteen theorems would hold — `Orth (Term.opaq false) Term.string` is `false` — so the
-one-directional law `.separations.lean` pins is untouched either way. The row answers `true`
-because tightening it refuses declarations that work today.
-
-**The same divergence reaches the resolver, and there `occV` is the sharper answer.** `carries`
-reads `opaque` as *unknown* and answers nothing; the model takes it as a closed form, and
-`occV (.opaq lossy)` is `occTop` at `lossy` and `occBut .num` at `refuse`. Measured over 35
-constructors, `carries` and a collapse of `occV` to the value alphabet agree at 34 and differ at
-exactly this one, where the collapse is right: `opaque.encode(1)` fails and
-`opaque('lossy').encode(1)` does not. Adopting it is a **behaviour change** — an `opaque` option
-would be filtered by kind where today it is always attempted — so it is a named pass and not a
-refactor. Every corpus union resolves the same either way; what moves is the work, and the
-message where `opaque` is the only option.
 
 **The generators have left the codec object.** A `custom`'s generator and shrinker were a
 projection of the term, written by `denote` at `custom` alone and read by the two derivers in
@@ -1507,6 +1488,36 @@ seam now. There is no total renderer to write instead, because the conversion me
 arbitrary user code.
 
 ### What the arc closed
+
+**A union cannot hold an option no value can select, and `union([opaque, X])` is refused.** JH's
+ruling. It is not `opaque` with `X` beside it: §5's `select` acts only where *exactly one* option
+admits, and `opaque` admits every value `X` does, so the union is **undefined** wherever `X`
+admits and `opaque` everywhere else. `X` is declared and can never be chosen. That is §5's
+failure rather than a question of precedence — no ranking resolves it, because ranking would
+choose an option the model says is not chosen.
+
+The guard exempted an `opaque` option instead of comparing it, on the ground that its occupancy is
+`⊤`. §5 separates the two things a `⊤` covers: *unknown*, which is an adapter, a `custom` and a
+host `lazy`, and *everything*, which is what `opaque` is by design. The model states the second as
+a **closed form**, and the host now does too — `occV` and `occA` answer every constructor at
+`lossy` and every one but the numeric at `refuse`, where they used to answer nothing. `Orth1` then
+finds the meeting and the pair is refused at the declaration.
+
+**The corpus's refusal set moves from 17 pairs to 32**, all fifteen new ones with `opaque` on a
+side, every one of the fifteen theorems holding — `Orth (Term.opaq false) Term.string` is `false`
+— so the one-directional law `.separations.lean` pins is untouched. The resolver is not touched
+either: `.resolutions.lean` stays at 455 and `.readverdicts.lean` at 921, which is the check that
+this changed a declaration and not a resolution. With the declaration refused, an `opaque` option
+reaches a union only alone, so the resolver's reading of `opaque` no longer decides anything and
+the value-kind reader keeps it.
+
+**The type level already refused the pair, and had before this rule.** `opaque` reads back as
+`unknown`, which absorbs every other option's type, so the type-level option check reports
+"options 0 and 1 read back as the same type" at compile time. What this adds is the runtime half, reached by a
+caller who casts past that type or writes plain JavaScript. So the change is breaking for those
+callers and for no one else, and the refusal names `opaque` as the option to remove, in the
+caller's vocabulary rather than the term's.
+
 
 **The host's two value alphabets are not two vocabularies for one thing.** `1060c01` recorded
 them as a merge

@@ -407,9 +407,14 @@ export const occV = (t: Term): readonly Slot[] | undefined => {
             return withOne<Slot>('null', occV(t.inner))
         case 'union':
             return joined(t.options.map(occV))
+        // **A closed form, not `⊤`.** §5 separates the two things a `⊤` covers: *unknown*, which is
+        // `held`, `custom` and a host `lazy`, and *everything*, which is `opaque` by design. The
+        // model takes the second as data — `occV (.opaq lossy)` is `occTop` and `occBut .num` at
+        // `refuse` — so answering `undefined` here would say "cannot be read" about the one term
+        // whose occupancy is fully known, and {@link separable} would then decline to compare it.
         case 'opaq':
             return t.lossy
-                ? undefined
+                ? everySlot
                 : everySlot.filter((slot) => slot !== 'number')
     }
 }
@@ -463,9 +468,10 @@ export const occA = (t: Term): readonly AttributeName[] | undefined => {
             return withOne<AttributeName>('NULL', occA(t.inner))
         case 'union':
             return joined(t.options.map(occA))
+        // the closed form again, for the reason {@link occV}'s `opaq` row gives
         case 'opaq':
             return t.lossy
-                ? undefined
+                ? everyMember
                 : everyMember.filter((one) => one !== 'N')
     }
 }
@@ -573,7 +579,8 @@ export const identifies = (t: Term): boolean => {
  * theorem per pair this function refuses: **it never answers `false` where `Orth` answers `true`.**
  * Refusing a declaration the model proves separable would be refusing a union that works.
  *
- * Four rows, and each carries its own warrant.
+ * Four rows, and each carries its own warrant. A fifth exempted an `opaque` option and is gone;
+ * the paragraph below the fourth says why.
  *
  * **An object option, either side.** A union admits an object by the names present, never by being
  * attempted, and the collision check is `Collides` — which is `OrthM` written in the type:
@@ -592,19 +599,18 @@ export const identifies = (t: Term): boolean => {
  * owns that case: `union` skips a pair with an absent term before it asks, so this takes two terms
  * and has no row for one that is missing.
  *
- * **An `opaque` option.** §5 separates the two things a `⊤` covers: *unknown* — `held`, `custom`
- * and a host `lazy`, whose answer exists and cannot be read — and *everything*, which is
- * `opaque`, accepting every kind by design. The model takes the second as a **closed form**:
- * `occV (.opaq lossy)` is `occTop` at `lossy` and `occBut .num` at `refuse`, which is sharper than
- * `⊤` and sharp enough for `Orth1` to find a meeting. The host has always read it as `⊤`.
+ * **There is no `opaque` row, and its removal is the rule this function most recently learned.**
+ * §5 separates the two things a `⊤` covers: *unknown* — `held`, `custom` and a host `lazy`, whose
+ * answer exists and cannot be read — and *everything*, which is `opaque`, accepting every kind by
+ * design. The model states the second as a **closed form**, `occTop` at `lossy` and `occBut .num`
+ * at `refuse`, so it can be compared; this library read it as `⊤` and exempted it instead, which
+ * meant `union([opaque, X])` declared.
  *
- * Measured when the model's row was ported without this exemption: the corpus's refusal set moved
- * from 17 pairs to 32, and all fifteen new ones have `opaque` on a side. Every one of the fifteen
- * theorems would hold — `Orth (Term.opaq false) Term.string` evaluates to `false`, so the
- * one-directional law is untouched either way — and every one is a declaration this library
- * accepts today. The model's reading is that no value resolves such a union. That is a finding for
- * §10 and the owner's to triage, not a change this guard makes on its own, so the row answers
- * `true` and (U) guards each input as it does for the other three exemptions.
+ * **JH ruled that union unacceptable, and the model says why.** It is not equal to `opaque`: it is
+ * *undefined* wherever `X` admits, because `opaque` admits every value `X` does and `select` acts
+ * only where exactly one option does. Everywhere else it is `opaque`. So `X` is a declared option
+ * that no value can ever choose — §5's failure, not a rank. `occV` and `occA` answer the closed
+ * form now, `Orth1` finds the meeting, and the pair is refused at the declaration.
  *
  * **Otherwise `Orth1`, both sides conjoined.** A pair separated on one side only is not separated:
  * the loosened form ships `union([decimal, number])`, which writes `'1.5'` to an `N` and cannot read
@@ -613,7 +619,6 @@ export const identifies = (t: Term): boolean => {
 export const separable = (x: Term, y: Term): boolean => {
     if (x.kind === 'object' || y.kind === 'object') return true
     if (identifies(x) || identifies(y)) return true
-    if (x.kind === 'opaq' || y.kind === 'opaq') return true
     const writable = meet(occV(x), occV(y))
     const readable = meet(occA(x), occA(y))
     return writable === undefined && readable === undefined
