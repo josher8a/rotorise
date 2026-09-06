@@ -261,7 +261,19 @@ export type Decoded<C> = C extends {
  * inside each of them out to every call site.
  */
 
-/** The kinds of value a codec can be given, as coarsely as a runtime check can tell them apart. */
+/**
+ * The kinds of value a codec can be given, as coarsely as a runtime check can tell them apart.
+ *
+ * **The codomain of {@link shapeOf}, which classifies a *value*.** That is what fixes the alphabet
+ * and why it cannot be finer: `shapeOf` sees a `Set` and answers `'set'`, because telling `strSet`
+ * from `numSet` means inspecting the elements, and **an empty `Set` belongs to no family at all**.
+ * The same asymmetry decides which containers separate at `union`.
+ *
+ * {@link Slot} is the finer alphabet and is not a replacement. A term knows its base, so `occV` can
+ * answer `strSet`; a value does not carry one, so **no total function takes a value to a `Slot`**.
+ * The two are the codomains of two different functions rather than two spellings of one, which is
+ * the answer to the question `1060c01` left open.
+ */
 export type Shape =
     | 'string'
     | 'number'
@@ -280,6 +292,10 @@ export type Shape =
  * the ten constructors tell them apart. `union(set(string), set(number))` is certified by this and
  * was not by the coarser label — which is the correction §5 recorded when the kind tables went, and
  * this is that correction reaching `src/`.
+ *
+ * **The codomain of `occV`, which reads a *term*.** The split is available here precisely because a
+ * term carries its base. {@link Shape} is the value side's alphabet and stays coarse for the reason
+ * written there, so this does not replace it: the two answer different questions.
  */
 export type Slot = Exclude<Shape, 'set'> | 'strSet' | 'numSet' | 'binSet'
 

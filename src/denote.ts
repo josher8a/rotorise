@@ -1696,6 +1696,19 @@ export const decodeUnknown = (
  *
  * `undefined` means the kind does not decide: `opaque` takes anything, and asking a `lazy` would
  * force the resolution it exists to defer.
+ *
+ * **Not replaced by `occV`, and the reason is one row.** `occV` reads the term and this reads the
+ * codec, so the obvious deletion is to collapse `occV`'s three set families to `'set'` and delete
+ * this. Measured at 35 constructors, the two agree at 34. The row that differs is `opaque` at the
+ * `refuse` policy: this answers `undefined` and the collapse answers every kind but `number`, which
+ * is **sharper and correct** — `opaque.encode(1)` genuinely fails and `opaque('lossy').encode(1)`
+ * does not. §5 is where that distinction is drawn: a `⊤` covers *unknown* and *everything*, and the
+ * model takes `opaque` as a closed form while this reads it as unknown.
+ *
+ * So the substitution is not a refactor, it is a behaviour change at the union resolver — an
+ * `opaque` option would be filtered by kind where today it is always attempted. Same answer on
+ * every union in the corpus, different work and a different message where it is the only option.
+ * That is a decision about resolution, not about vocabulary, and it is the owner's.
  */
 export const carries = (codec: AnyCodec): readonly Shape[] | undefined => {
     const def = codec.def
