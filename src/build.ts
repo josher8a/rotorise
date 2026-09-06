@@ -26,6 +26,19 @@ import type { Term } from './term'
 export type Codec<T, A extends AttributeValue> = {
     readonly encode: (value: T) => Result<A>
     readonly decode: (attribute: AttributeValue) => Result<T>
+    /**
+     * **A projection of the term, and not a second fact.**
+     *
+     * `denote` writes these two onto the codec object at `custom` and nowhere else, copying what
+     * the term already carries — `custom` being the one term whose generation is the caller's to
+     * state. `refine`'s lives in its `Refinement` and rides in the term the same way.
+     *
+     * **No library code reads them.** `arbitraryOf` and `shrinkOf` dispatch on the term alone, so
+     * the fact has one path rather than two and a stray codec object cannot answer differently
+     * from the term it was built from. They stay because they are on the published codec object
+     * and a caller may read one — building a second `custom` from the first's generator is what
+     * `codec.shrink.spec.ts` does. Removing them from the surface is a decision for the owner.
+     */
     readonly arbitrary?: (rng: Rng, size: number) => T
     readonly shrink?: (value: T) => readonly T[]
     readonly def: Term

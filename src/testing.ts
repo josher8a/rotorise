@@ -948,8 +948,6 @@ export const arbitraryOf = (
     rng: Rng,
     size: number,
 ): unknown => {
-    // a codec may carry its own, which is the escape hatch for one built by hand
-    if (codec.arbitrary) return codec.arbitrary(rng, size)
     const def = codec.def
     switch (def.kind) {
         case 'string':
@@ -1205,7 +1203,6 @@ export const shrinkOf = (
     codec: AnyCodec,
     value: unknown,
 ): readonly unknown[] => {
-    if (codec.shrink) return codec.shrink(value as never)
     const def = codec.def
     const shrinkAt = (inner: AnyCodec) => (x: unknown) => shrinkOf(inner, x)
 
@@ -1343,9 +1340,8 @@ export const shrinkOf = (
         case 'lazy':
             return shrinkOf(codecOfTerm(def.get()), value)
         // a branch has no one codec to shrink through, which is why `at` refuses it; a hand-written
-        // codec shrinks only if it said how, and `shrink` above is where that was read
-        // a hand-written codec shrinks only where the caller said how, and the caller said it in
-        // the definition — the same place its pair and its generator live
+        // codec shrinks only where the caller said how, and the caller said it in the term — the
+        // same place its pair and its generator live
         case 'custom':
             return def.shrink ? def.shrink(value as never) : []
         default:
