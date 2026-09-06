@@ -898,6 +898,23 @@ export const decides = (codec: AnyCodec): unknown => {
  * adapter (`held`), a read widening (`legacy`) or a union is not a restriction of anything, has no
  * base, and gets `undefined`.
  */
+/**
+ * What one declared attribute decides, read where the field is held.
+ *
+ * §4's two marks answer differently and neither is the codec's answer. A name that may be absent
+ * decides nothing about a key, because a key built from it would have no value to build from in the
+ * rows that omit it. A stand-in is written always, so what it stands in for still decides.
+ *
+ * The readers do not answer this. `decides` takes a codec, a field is not one, and the body is what
+ * holds a field — so the body is where the mark is read.
+ */
+export const constantOf = (declared: AnyDeclaration): unknown => {
+    const def = declared.def
+    if (def.kind === 'optional') return undefined
+    if (def.kind === 'fallback') return decides(def.inner)
+    return decides(declared as AnyCodec)
+}
+
 export const setBase = (codec: AnyCodec): SetBase | undefined => {
     const def = codec.def
     switch (def.kind) {
