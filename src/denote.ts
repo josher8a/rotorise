@@ -933,8 +933,8 @@ export const denote = (def: Term): Pair => {
          * once and instantiates it twice.
          *
          * `Object.entries('abc')` is `[['0','a'], …]`, so a string was written as a map keyed by
-         * index until the shape was asked first. `asRecord` is the test `admits`' `record` row
-         * uses, so the two cannot drift about what a plain object is.
+         * index until the shape was asked first. `asRecord` is the test the `record` row uses on
+         * both sides, so the two cannot drift about what a plain object is.
          */
         case 'record': {
             const values = codecOfTerm(def.val)

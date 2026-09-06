@@ -18,7 +18,7 @@
  *
  * The premise was right and the conclusion was wrong. The brand rides on `amount`, so the
  * capability belongs on `amount` — `amount.set()`, which is `ReadonlySet<Price>` for exactly the
- * reason the old argument gave. {@link SetCapable} is the type and {@link setBase} is the runtime
+ * reason the old argument gave. {@link SetCapable} is the type and {@link setBaseOf} is the runtime
  * reduction; a set of a refinement of a literal of a base is still a set of that base, which is
  * `setCodec_restrict`. So the general form did not need to be free-standing, and the free
  * `set(...)` is no longer exported: `.set()` is the whole surface, and the builder is internal.
@@ -185,7 +185,7 @@ describe('branding survives, and it survives through the capability', () => {
     })
 
     /**
-     * The capability propagates as far as {@link setBase} reduces, which is through any number of
+     * The capability propagates as far as {@link setBaseOf} reduces, which is through any number of
      * refinements and through a literal — the two the model keeps under `setCodec_restrict`. So a
      * set whose members are checked twice, by the literal and by the predicate, is one `.set()`
      * call, where before it needed the free builder and a codec argument.
@@ -240,8 +240,8 @@ describe('branding survives, and it survives through the capability', () => {
  * `formal/Calculus/Term.lean:60` replaced the element term with a `SetBase` index, making the
  * refusal a type error, and states what that gives up: a set of a `held` and of a `legacy`.
  *
- * This library had the same hole and it was reachable. `writes` reads *through* an adapter — `held`
- * writes where its inner term does — so a set of `held(string, …)` was accepted, and its two
+ * This library had the same hole and it was reachable. The member reader read *through* an adapter
+ * — `held` writes where its inner term does — so a set of `held(string, …)` was accepted, and its two
  * functions then ran once per member of an attribute whose stored form records no adapter at all.
  * The refusal now lives beside the member check, which is where the other half of the premise
  * already was.

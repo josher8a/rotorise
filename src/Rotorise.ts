@@ -1077,7 +1077,7 @@ export type ConstantAttributes<Spec> = [Spec] extends [undefined]
       ? AgreedAttributes<Spec>
       : {
             // the constant's *value* and not merely its presence, so that a codec admitting two of
-            // them decides neither — which is what `decides` answers at runtime. Asking only whether
+            // them decides neither — which is what `constantOf` answers at runtime. Asking only whether
             // a `constant` was declared had the type promise a component nobody needed to pass,
             // while the implementation went on to demand it
             [K in keyof Spec]: ConstantValue<Spec[K]> extends infer Only extends
@@ -1687,14 +1687,13 @@ export * from './attribute'
  * The codec surface, **enumerated rather than starred**, because not everything `codec.ts` exports
  * is API.
  *
- * `admits`, `carries`, `writes`, `decides`, `setBase` and `deeper` are the definition *readers* —
- * `admits`' own docstring calls it "the sixth reader of a definition, beside `writes`, `carries`,
- * `decides`, `setBase` and `deeper`". They exist so this library's own resolver and declaration
- * guards can ask what a term is; a caller has the codec's behaviour instead, which is the thing
- * they are derived from. `admitsAttribute` is held back with them and is not one of them: it asks
- * the codec rather than reading the declaration. All seven reached the published surface only
- * because this was `export * from './codec'`, and `46cb950` shipped `admits` that way without the
- * export being a decision anyone took.
+ * `carries`, `member`, `occV`, `occA`, `specOf`, `tagsOf`, `separable`, `identifies`, `setBaseOf`
+ * and `constantOf` read a **term**, and `accepts` and `readsBack` ask the **pair**. Both kinds exist
+ * so this library's own resolver, declaration guard and emitter can ask what a codec is; a caller
+ * has the codec's behaviour instead, which is the thing they are derived from. Every one of them
+ * reached the published surface once, because this was `export * from './codec'`, and `46cb950`
+ * shipped the reader then called `admits` that way without the export being a decision anyone took.
+ * `Rotorise.spec.ts` holds the list, and holds it at the live names for the reason written there.
  *
  * Six of the listed values reach here *through* `codec.ts` from `result.ts`, which is where the
  * pair's error and its combinators live — `CodecError`, `andThen`, `every`, `everyEntry`,

@@ -157,10 +157,11 @@ describe("'refuse', for a service that owns its table", () => {
 })
 
 /**
- * **The policy, in the definition.**
+ * **The policy, in the term.**
  *
- * `Def` is this library's own abstract syntax, and `src/lean.ts` reads it to reconstruct the
- * equivalent term in `formal/`. It used to record the rest *codec* alone — `undefined` for both
+ * `Term` is this library's own abstract syntax, and `src/lean.ts` reads it to reconstruct the
+ * equivalent term in `formal/`. The definition it replaced used to record the rest *codec* alone —
+ * `undefined` for both
  * `'drop'` and `'refuse'` — on the argument that neither contributes an attribute to generate. That
  * argument covers the write half and only the write half: the two policies disagree about whether an
  * undeclared name is an error, which is the read half, so two codecs that behave differently had

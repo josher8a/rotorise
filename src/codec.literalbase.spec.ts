@@ -16,7 +16,7 @@
  * 2. `boolean(true)` — a literal at `BOOL`, which no spelling reached.
  * 3. `binary(bytes)` — a literal at `B`, compared by bytes rather than by reference.
  *
- * The definition records the base (`Literal['base']`) rather than leaving `writes` and
+ * The term records the base (`Literal['base']`) rather than leaving `member` and
  * `carries` to recover it, because at `decimal` there is nothing to recover it *from*: the values are
  * strings and the member is `N`, and no reading of either says so.
  */
@@ -195,7 +195,7 @@ describe('what each base refuses', () => {
 /**
  * Two literals at different bases are a union that resolves, and the interesting pair is the one
  * the old surface could not build: `number(1)` and `decimal('1')` write the *same member* and take
- * different kinds of value, so `carries` separates them where `writes` cannot.
+ * different kinds of value, so `carries` separates them where `member` cannot.
  */
 describe('bases as union options', () => {
     it('resolves a numeric literal against a decimal one by what each takes', () => {

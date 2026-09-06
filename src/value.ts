@@ -100,7 +100,7 @@ export const namesOf = (held: Record<string, unknown>) => {
  * (otherwise encoding would drop data), and every attribute it requires must be present (otherwise
  * it is simply not this one).
  *
- * Named for what it is, which used to be `admits` — and it is emphatically **not** {@link admits},
+ * Named for what it is, which used to be `admits` — and it is emphatically **not** {@link accepts},
  * §3's `Adm`. It is a test on *names* alone, the `keysOk` the model's `optionSemOf` uses for object
  * options, and it says nothing about whether the values at those names are admissible. Two things
  * called `admits` in one file was one name for two questions.
@@ -162,7 +162,7 @@ export const reaches = (probe: () => unknown): boolean => {
  *
  * Two probes at two points. A throw is a refusal like any other — {@link held}'s adapter is
  * arbitrary user code and may throw rather than return a `CodecError`, which is the same reason
- * {@link admits} wraps its `held` row.
+ * {@link accepts} catches.
  */
 export const ownsNull = (inner: AnyCodec): boolean =>
     reaches(() => inner.encode(null as never)) ||
@@ -182,8 +182,8 @@ export const ownsNull = (inner: AnyCodec): boolean =>
  * stand-ins are primitives.
  *
  * And a value `structuredClone` **refuses**. Ordinarily there is none: a stand-in is a value the
- * inner codec `admits`, so it comes from the value language — arrays, plain objects, `Set`,
- * `Uint8Array` — and all of those clone. {@link custom} is the exception, because its `admits` row
+ * inner codec accepts, so it comes from the value language — arrays, plain objects, `Set`,
+ * `Uint8Array` — and all of those clone. {@link custom} is the exception, because its admission
  * asks the caller's own pair, so a hand-written codec can legitimately admit a class instance with
  * methods or anything else holding a function. Rather than throw a `DataCloneError` out of a
  * `decode` months later, the clone is attempted once at the declaration; where it fails the value

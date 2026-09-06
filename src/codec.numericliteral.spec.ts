@@ -62,12 +62,12 @@ describe('a numeric literal', () => {
 
     it('keeps the constant brand for a single value', () => {
         const draft = number(0)
-        // the brand is type-level, and the annotation is the assertion; `decides` is what reads the
-        // value back at runtime, and is what a key component is built from
+        // the brand is type-level, and the annotation is the assertion; `constantOf` is what reads
+        // the value back at runtime, and is what a key component is built from
         type Only = typeof draft.constant
         const _narrowed: 0 = null as unknown as Only
         void _narrowed
-        // and two admissible values decide nothing, which is the point of `decides`
+        // and two admissible values decide nothing, which is the point of `constantOf`
     })
 
     it('takes a number, which is what a union filters on', () => {
