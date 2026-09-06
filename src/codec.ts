@@ -303,8 +303,8 @@ export type Slot = Exclude<Shape, 'set'> | 'strSet' | 'numSet' | 'binSet'
  * decides nothing about a key, because a key built from it would have no value to build from in the
  * rows that omit it. A stand-in is written always, so what it stands in for still decides.
  *
- * The readers do not answer this. `decides` takes a codec, a field is not one, and the body is what
- * holds a field — so the body is where the mark is read.
+ * A reader of the term alone does not answer this. A term is what a codec has, a field is not a
+ * codec, and the body is what holds a field — so this reads the mark first and the term second.
  */
 export const constantOf = (declared: AnyDeclaration): unknown => {
     const def = declared.def
@@ -527,8 +527,8 @@ export type SetBase = Exclude<LiteralBase, 'boolean'>
  *
  * Distinctness is not tidiness. `NEFinset` is a *set*, so `literal(k, {'A','A'})` and
  * `literal(k, {'A'})` are one term in the model and two definitions here — and the second names a
- * cardinality the first does not, which is what `decides` reads to answer whether a literal has
- * exactly one value. A repeated alternative makes a two-element `allowed` that admits one value,
+ * cardinality the first does not, which is what {@link constantOf} reads to answer whether a literal
+ * has exactly one value. A repeated alternative makes a two-element `ls` that admits one value,
  * and the constant would go unrecognised.
  *
  * Compared with {@link sameLiteral}, which compares the way the base compares: bytes for `binary`,
@@ -582,7 +582,7 @@ export type LiteralAttribute<T> = [T] extends [string]
  * or more values is an ordinary {@link AttributeCodec}: it narrows what is admissible without
  * deciding it.
  *
- * `constant` is a **type-level** brand and carries no runtime property; {@link decides} is what
+ * `constant` is a **type-level** brand and carries no runtime property; {@link constantOf} is what
  * reads the value back at runtime.
  */
 export type ConstantCodec<
@@ -1130,7 +1130,7 @@ export type Refined<T, A extends AttributeValue> = AttributeCodec<T, A> &
 /**
  * `.set()`, where the codec it sits on can be a set's element.
  *
- * The capability {@link setBase} decides at runtime, stated at the type as far as the type can see
+ * The capability {@link setBaseOf} decides at runtime, stated at the type as far as the type can see
  * it — which is not all the way. A codec's *type* is not generic in its definition — every codec
  * carries a `Term`, and none of them carries *which* one at the type — so `refine(...)`'s type
  * knows the attribute and never the base it reduced through. So the gate here is the attribute — `S`, `N` or `B`, the three a stored set is built
@@ -1220,7 +1220,7 @@ export const refine = <Wide, Narrow extends Wide, A extends AttributeValue>(
      * without saying so is worth a word, and this can only be reached from a generator, so the word
      * only ever lands in a test.
      */
-    // `member` reads through a refinement, which is what lets a set of a brand work; `decides`
+    // `member` reads through a refinement, which is what lets a set of a brand work; `constantOf`
     // does not, because the predicate may be exactly what rejects the constant.
     //
     // `setCapable` is what carries `.set()` across the refinement, and it is the whole of why the
@@ -1480,7 +1480,7 @@ export const legacy = <T, A extends AttributeValue>({
     readonly current: AttributeCodec<T, A>
     readonly older: Reader<T>
 }): AttributeCodec<T, A> =>
-    // `member` reads through to `current`, the encoding every write produces; `decides` does not,
+    // `member` reads through to `current`, the encoding every write produces; `constantOf` does not,
     // because an older reader can decode this attribute into something else entirely
     codecOfTerm<T, A>({
         kind: 'legacy',
@@ -3247,7 +3247,7 @@ export const discriminatedUnion = <
             )
         }
         // one value, not the whole admissible set: a variant answers to exactly one tag, so the
-        // `allowed` set below is read for its single member and refused if it has more
+        // `ls` set below is read for its single member and refused if it has more
         const declared = option.item.spec[discriminator]?.def
         // a term and not a field: a mark on the discriminator would let the tag be absent
         const def = declared && !('mark' in declared) ? declared : undefined
@@ -3377,11 +3377,11 @@ export const union = <const Options extends readonly AnyCodec[]>(
      * separation and the pair stays refused. Widening it is a matter of adding a container that
      * provably has no empty inhabitant, not of weakening what is here.
      *
-     * **And this is not `identifying` being retired.** HANDOFF's fourth item expected `admits` to
-     * replace it; it cannot. `accepts` answers a question about a *value*, and both `identifying`
-     * and this function answer a question about a *declaration* — there is no value in hand at
-     * import time to ask about. The resolver is where `admits` replaced trying; the declaration
-     * guard is where it structurally cannot.
+     * **And this is not the declaration guard being retired.** HANDOFF's fourth item expected
+     * admission to replace it; it cannot. `accepts` answers a question about a *value*, and both
+     * `identifies` and `separable` answer a question about a *declaration* — there is no value in
+     * hand at import time to ask about. The resolver is where admission replaced trying; the
+     * declaration guard is where it structurally cannot.
      */
     /**
      * Where two answers meet, with `⊤` on either side meaning "not compared".

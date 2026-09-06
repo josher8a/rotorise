@@ -54,7 +54,7 @@ describe('where the variants disagree', () => {
      * a `Def` kind — a definition, in a language of codec definitions, for something that was
      * not a codec — so every reader of a definition had to carry a case for it.
      *
-     * **The rule is that no reader learns anything here, and the assertion on `writes` is that
+     * **The rule is that no reader learns anything here, and the assertion on `carries` is that
      * rule.** It used to be asserted as `def === undefined`, which was the implementation of the
      * rule rather than the rule: a definition is now required of every codec, and the one that says
      * "a pair of functions, nothing beneath" is `custom`. Every reader answers what it answered.

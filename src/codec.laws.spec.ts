@@ -58,12 +58,11 @@ const seed = 20260828
  * The member a codec actually **writes**, read off the attribute rather than out of the
  * declaration.
  *
- * `writes` is a definition reader: it walks the `Def` and reports what the term says it
- * stores. That is the right answer for the resolver, which has only a declaration to go on, and
- * the wrong assertion for a law — §6's member-preservation row is a claim about `e`, so a test
- * that asks `writes` passes on a codec whose reader is right and whose `encode` is wrong, and
- * fails a rewrite that keeps every behaviour and reorganises the definitions. Where the claim is
- * the law, this is what to ask.
+ * `member` reads the term and reports what the term says it stores. That is the right answer for
+ * the resolver, which has only a declaration to go on, and the wrong assertion for a law — §6's
+ * member-preservation row is a claim about `e`, so a test that asks `member` passes on a codec
+ * whose term is right and whose `encode` is wrong, and fails a rewrite that keeps every behaviour
+ * and reorganises the terms. Where the claim is the law, this is what to ask.
  */
 const memberWritten = (codec: AnyCodec, value: unknown): string | undefined =>
     memberOf(codec.encode(value as never) as never)
@@ -563,7 +562,7 @@ describe('the laws that do NOT hold', () => {
      * are now false: the elements check, and the declaration guard asks whether the two are
      * separated by what they hold.
      *
-     * The asymmetry that survives is the sharper one, and it is `admits`' own: `[]` is admitted by
+     * The asymmetry that survives is the sharper one, and it is admission's own: `[]` is admitted by
      * every `array` and an empty `Set` is admitted by none, because **DynamoDB has no empty set**.
      * So `union([array(string), array(number)])` stays refused — one shared value, and it is the
      * one carrying nothing to tell them apart — while these two sets share no value at all.
@@ -781,9 +780,10 @@ describe('(C): what a codec reads, it can write', () => {
 })
 
 /**
- * **`admits` against `encode`, in the one direction that is true.**
+ * **Admission against `encode`, in the one direction that is true.**
  *
- * `admits` is §3's `Adm : Term → Value → Bool`, and the model proved it exact at all 21
+ * `accepts` is §3's `Adm : Term → Value → Bool` asked of the pair, and the model proved `Adm` exact
+ * at all 21
  * constructors. The obvious law here is therefore `accepts(c, v) ⟺ !failed(c.encode(v))`, and half
  * of it used to be false — not because the port was wrong, but because **encoding did not
  * validate**. A codec's input is typed, so `string.encode(5)` wrote `{ S: 5 }` and
@@ -793,7 +793,7 @@ describe('(C): what a codec reads, it can write', () => {
  * **That was true and is not any more.** The list of codecs where the converse failed was this
  * file's deliverable while the question was open — twenty-three of thirty-two — and the question
  * was whether `encode` should consult `admits`, which is a behaviour change and was JH's call.
- * It was taken: every row now runs the predicate `admits` runs, so the law below is the iff.
+ * It was taken: every row now runs the predicate admission runs, so the law below is the iff.
  *
  * What the old nine exact rows were exact *for* is still the interesting part, because it is what
  * the other twenty-three had to be given:
@@ -803,14 +803,14 @@ describe('(C): what a codec reads, it can write', () => {
  * - `opaque` and `custom` are exact because their rows **ask the codec** rather than describing it.
  *   A question cannot disagree with its answer. That is the model's own move at `custom`, and the
  *   reason `opaque`'s rows were converted to match — and it is why those two are the one pair
- *   `encode` must *not* consult `admits` for: `admits` reaches them by calling `encode`.
+ *   `encode` must *not* consult admission for: admission reaches them by calling `encode`.
  *
  * Everything else was loose at the value kinds it was handed but never checked, and now checks.
  */
-describe('`admits`, and the direction of the law that is true', () => {
+describe('`accepts`, and the direction of the law that is true', () => {
     const isTag = (v: string): v is `t-${string}` => v.startsWith('t-')
 
-    /** One entry per `Def` kind, plus the literal at each base and the two `opaque` policies. */
+    /** One entry per `Term` kind, plus the literal at each base and the two `opaque` policies. */
     const codecs: readonly (readonly [string, AnyCodec])[] = [
         ['string', string],
         ['string(...)', string('A', 'B')],
@@ -928,8 +928,8 @@ describe('`admits`, and the direction of the law that is true', () => {
     }
 
     /**
-     * **The law.** Nothing `admits` accepts is refused by `encode`, at any codec in the table over
-     * any value in the pool. This is the half that makes `admits` usable as a *filter*: a union
+     * **The law.** Nothing `accepts` accepts is refused by `encode`, at any codec in the table over
+     * any value in the pool. This is the half that makes `accepts` usable as a *filter*: a union
      * resolver, or an `encode` that validated, could rely on it without narrowing what either
      * writes today.
      */
@@ -964,8 +964,8 @@ describe('`admits`, and the direction of the law that is true', () => {
      * That is the whole reason this can be an iff rather than two lists kept in agreement: there is
      * one test per kind and two callers of it.
      *
-     * If this fails, one of the two moved. A failure naming a codec on the `admits`-accepts side
-     * means `encode` got stricter than the row; on the `encode`-writes side, that `admits` was
+     * If this fails, one of the two moved. A failure naming a codec on the `accepts`-accepts side
+     * means `encode` got stricter than the row; on the `encode`-writes side, that `accepts` was
      * loosened — which is the drift the whole apparatus exists to catch.
      */
     it('holds both ways, everywhere', () => {
@@ -984,7 +984,7 @@ describe('`admits`, and the direction of the law that is true', () => {
 
     /** The rows the brief called out, spelled as the one-liners they are. */
     it('answers the specific rows the model states', () => {
-        // the ground rows validate now, so `admits` and `encode` agree at all five
+        // the ground rows validate now, so `accepts` and `encode` agree at all five
         expect(accepts(string, 5)).toBe(false)
         expect(failed(string.encode(5 as never))).toBe(true)
         expect(accepts(boolean, 'yes')).toBe(false)

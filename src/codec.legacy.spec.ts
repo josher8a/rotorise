@@ -178,7 +178,7 @@ describe('an attribute the row does not have', () => {
      *
      * `structuredClone` refuses anything holding a function. No declared codec admits such a
      * value — a stand-in comes from the value language, and all of that clones — but `custom`'s
-     * `admits` row asks the caller's own pair, so a hand-written codec can admit one. The
+     * admission asks the caller's own pair, so a hand-written codec can admit one. The
      * cloneability is settled at the declaration, so this is a shared stand-in and not a
      * `DataCloneError` arriving out of a `decode` months later.
      */

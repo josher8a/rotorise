@@ -10,7 +10,7 @@
  * not validate**: a codec's input is typed, so `number` given `'x'` wrote `{ N: 'x' }` rather than
  * failing. That was the whole reason `carries` exists.
  *
- * It asks now. Every row validates, `admits` is an iff with `encode`, and the write side resolves by
+ * It asks now. Every row validates, `accepts` is an iff with `encode`, and the write side resolves by
  * asking each option rather than by writing through it. `carries` survives as the *declaration*'s
  * filter, which is a question about two codecs rather than about a value.
  */

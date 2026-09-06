@@ -234,7 +234,7 @@ describe('the defect (U) found: an option with no κ on the write side', () => {
      *
      * Worth keeping for the shape of the mistake: a resolver that decides by *trying* inherits
      * every looseness of everything it tries, and reports the result as a property of the
-     * declaration. That is also the argument for wiring `admits` into the resolver rather than
+     * declaration. That is also the argument for wiring admission into the resolver rather than
      * leaving it to attempt — HANDOFF's fourth item.
      */
     const asDate = {

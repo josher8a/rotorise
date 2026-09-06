@@ -7,7 +7,7 @@
  * `constant` it had no business keeping. There was a list — `inherited` — naming which survived a
  * wrapper, and it existed only because they were stored.
  *
- * `writes`, `decides` and `deeper` read them off `def` instead, so there is nothing to forget.
+ * `member` and `constantOf` read them off the term instead, so there is nothing to forget.
  * `inherited` is down to `arbitrary` and `shrink`, which are the escape hatch and not facts.
  */
 import { describe, expect, it } from 'vitest'

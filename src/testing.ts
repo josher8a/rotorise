@@ -1892,8 +1892,8 @@ const byTag = (
  * specification's form because the first conjunct is what a union's declaration guard is made of
  * — not because the two forms are known to select differently.
  *
- * `κ` is read off the definition, which is where it lives: {@link carries} is the kinds of value a
- * term takes and {@link writes} the member it stores them in, both computed from the term and
+ * `κ` is read off the term, which is where it lives: {@link carries} is the kinds of value a
+ * term takes and {@link member} the member it stores them in, both computed from the term and
  * neither from the union's matcher. Where a term answers neither, the filter is `⊤` and admission
  * is the attempt alone — which is the honest answer for a `custom` and is how one gets caught.
  */

@@ -1320,29 +1320,44 @@ describe('DynamoDB Utils', () => {
  *
  * `Rotorise.ts` enumerates the codec values rather than starring them, so that an export is a
  * decision rather than a consequence of where a function happens to live. That only holds if
- * something notices when the two lists drift, and nothing did: `admits` reached the surface in
- * `46cb950` because the re-export was `export * from './codec'`, and no test could have said so.
+ * something notices when the two lists drift, and nothing did: the reader then called `admits`
+ * reached the surface in `46cb950` because the re-export was `export * from './codec'`, and no test
+ * could have said so.
  *
- * The absent half is the load-bearing one. The six definition *readers* — `admits`, `carries`,
- * `writes`, `decides`, `setBase`, `deeper` — exist for this library's own resolver and
- * declaration guards to ask what a term is. A caller has the codec's behaviour, which is what
- * they are derived from. Re-adding one is a decision; this makes it a visible one.
+ * The absent half is the load-bearing one. The names below read a **term** for this library's own
+ * resolver, declaration guard and emitter to ask what a codec is; a caller has the codec's
+ * behaviour, which is what they are derived from. Re-adding one is a decision, and this makes it a
+ * visible one.
+ *
+ * **The list is the live names, and that is a rule this test learned the hard way.** It held eight
+ * names that had been deleted — `admits`, `writes`, `decides`, `setBase`, `deeper`, `occupies`,
+ * `reads`, `admitsAttribute` — and `Object.hasOwn` answers `false` for a name nothing declares, so
+ * eight of its twelve rows passed by asserting nothing while their replacements went unguarded. A
+ * deleted name cannot leak. Only a live one can, so a row for a dead name is a row that has stopped
+ * being a test, and a deletion pass moves the row to the name that replaced it.
  */
 describe('the published surface', () => {
     const internal = [
-        // the six definition readers
-        'admits',
+        // the two that ask the pair, which is what admission is: `accepts` replaced `admits` and
+        // `readsBack` replaced `admitsAttribute`, both asking the codec rather than reading a term
+        'accepts',
+        'readsBack',
+        // the five functions of a term the model computes, which `writes` and `decides` became
+        'member',
+        'occV',
+        'occA',
+        'specOf',
+        'tagsOf',
+        // the declaration guard and what it reads, which `identifying` and `deeper` became
+        'separable',
+        'identifies',
+        'meet',
+        // the set reduction, which `setBase` became, and the predicate the elements of a set carry
+        'setBaseOf',
+        'elementPredicates',
+        'holds',
+        // the value kinds a term takes, the two halves of the term cache, and the mark reader
         'carries',
-        'writes',
-        'decides',
-        'setBase',
-        'deeper',
-        // and the read-side predicate, which is not a reader at all — it asks the codec
-        'admitsAttribute',
-        // the rest of what `export type *` used to carry: three more readers of a definition, the
-        // two halves of the term cache, and the walk that reads a field's mark
-        'occupies',
-        'reads',
         'termOf',
         'codecOfTerm',
         'constantOf',

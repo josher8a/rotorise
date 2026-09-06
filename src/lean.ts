@@ -384,7 +384,7 @@ const shippedPredicates: ReadonlyMap<unknown, ShippedPredicate> = new Map<
  * Whether every value this term writes is a `Value.str`.
  *
  * The side condition on {@link shippedPredicates}. Deliberately a short whitelist rather than a
- * walk over `writes`: a term whose written *attribute* is `S` is not the same as a term whose
+ * walk over `member`: a term whose written *attribute* is `S` is not the same as a term whose
  * accepted *value* is a string — `held` is the counterexample, and `opaque` writes whatever it is
  * handed. Recurses through `refine`, because a refinement writes where its inner term does.
  */
@@ -911,7 +911,8 @@ end Calculus
  * model's read row admits it.
  *
  * **The differential that replaced a port.** HANDOFF's fourth item was to give the resolver's
- * read side a decision through a port of `AdmA`, in the style `admits` ports `Adm`. Measured
+ * read side a decision through a port of `AdmA`, in the style the deleted reader ported `Adm`.
+ * Measured
  * first: over 864 (codec, attribute) pairs the two agree at **861 of 861 checkable** ones and
  * disagree at none. `decode` validates — it parses data somebody else wrote, which is its job —
  * where `encode` trusted its argument's *type*, and that asymmetry is the whole reason wiring
