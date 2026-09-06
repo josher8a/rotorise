@@ -58,16 +58,10 @@ import type {
     LiteralValue,
     TermDef,
 } from './codec'
-import {
-    admits,
-    admitsAttribute,
-    NoTerm,
-    shapeOf,
-    termFromDef,
-    union,
-} from './codec'
+import { admits, admitsAttribute, NoTerm, termFromDef, union } from './codec'
 import { failed } from './result'
 import type { Term, Field as TermField } from './term'
+import { shapeOf } from './value'
 
 /**
  * A term, value or attribute the Lean model has no closed expression for.
