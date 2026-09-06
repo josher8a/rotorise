@@ -147,13 +147,26 @@ describe('the occupancies a declaration is separated by', () => {
      * §3 `(opaque)`: `refuse` is the **absence of the `number` option**, and (MP) is why — a bare
      * `N` cannot say whether it was written as a number, so a codec that guesses changes the stored
      * member on a read-modify-write.
+     *
+     * **Both policies answer a closed form, and `undefined` would be the wrong answer.** §5
+     * separates the two things a `⊤` covers: *unknown*, which is `held`, `custom` and a host
+     * `lazy`, and *everything*, which is what `opaque` is by design. The model states the second
+     * as data — `occTop` at `lossy`, `occBut .num` at `refuse` — so a `lossy` answering
+     * `undefined` would claim its occupancy cannot be read, about the one term whose occupancy is
+     * completely known, and the declaration guard would decline to compare it.
      */
-    it('a refusing opaque is every slot but the number one, and every member but N', () => {
-        expect(occV({ kind: 'opaq', lossy: true })).toBe(undefined)
-        expect(occA({ kind: 'opaq', lossy: true })).toBe(undefined)
+    it('an opaque answers a closed occupancy at both policies, never `⊤`', () => {
+        // lossy is every constructor there is, which is the model's `occTop`
+        expect(occV({ kind: 'opaq', lossy: true })).toContain('number')
+        expect(occV({ kind: 'opaq', lossy: true })).toContain('string')
+        expect(occA({ kind: 'opaq', lossy: true })).toContain('N')
+        // and refuse is that, less the one option it declines
         expect(occV({ kind: 'opaq', lossy: false })).not.toContain('number')
         expect(occV({ kind: 'opaq', lossy: false })).toContain('string')
         expect(occA({ kind: 'opaq', lossy: false })).not.toContain('N')
+        // neither is `⊤`: an occupancy that cannot be read is what `held` and `custom` answer
+        expect(occV({ kind: 'opaq', lossy: true })).not.toBe(undefined)
+        expect(occV({ kind: 'opaq', lossy: false })).not.toBe(undefined)
     })
 
     /** §3 `(nullable)`: the wrapper inserts the null point, so both sides gain it. */

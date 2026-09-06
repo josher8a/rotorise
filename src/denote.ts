@@ -1687,18 +1687,20 @@ export const decodeUnknown = (
  * `undefined` means the kind does not decide: `opaque` takes anything, and asking a `lazy` would
  * force the resolution it exists to defer.
  *
- * **Not replaced by `occV`, and the reason is one row.** `occV` reads the term and this reads the
- * codec, so the obvious deletion is to collapse `occV`'s three set families to `'set'` and delete
- * this. Measured at 35 constructors, the two agree at 34. The row that differs is `opaque` at the
- * `refuse` policy: this answers `undefined` and the collapse answers every kind but `number`, which
- * is **sharper and correct** — `opaque.encode(1)` genuinely fails and `opaque('lossy').encode(1)`
- * does not. §5 is where that distinction is drawn: a `⊤` covers *unknown* and *everything*, and the
- * model takes `opaque` as a closed form while this reads it as unknown.
+ * **Not replaced by `occV`, and the one row where they differed no longer reaches a union.**
+ * `occV` reads the term and this reads the codec, so the obvious deletion is to collapse `occV`'s
+ * three set families to `'set'` and delete this. Measured at 35 constructors, the two agree at 34.
+ * The row that differed was `opaque`: this answers `undefined` where `occV` gives the model's
+ * closed form.
  *
- * So the substitution is not a refactor, it is a behaviour change at the union resolver — an
- * `opaque` option would be filtered by kind where today it is always attempted. Same answer on
- * every union in the corpus, different work and a different message where it is the only option.
- * That is a decision about resolution, not about vocabulary, and it is the owner's.
+ * **That row is moot for a union now.** The declaration guard refuses `union([opaque, X])`, because
+ * an option `opaque` swallows can never be selected, so an `opaque` option only ever appears in a
+ * union of one — where there is nothing to filter between. The difference cost a resolution
+ * decision while such a union was declarable; it costs nothing now.
+ *
+ * What is left is a vocabulary question rather than a behaviour one, and the answer is that these
+ * are two alphabets: this is `Shape`, the codomain of a value classifier, and `occV` is `Slot`,
+ * the codomain of a term function. No total function takes a value to a `Slot`.
  */
 export const carries = (codec: AnyCodec): readonly Shape[] | undefined => {
     const def = codec.def
@@ -1783,6 +1785,20 @@ export const readsBack = (
 }
 
 /**
+ * A term's kind, as the **constructor the caller wrote**.
+ *
+ * A refusal names the option to remove, so it has to use the caller's vocabulary rather than the
+ * model's. Two kinds differ: `Term.opaq` is written `opaque(...)` and `Term.dunion` is written
+ * `discriminatedUnion(...)`. Everything else is spelled the same on both sides.
+ *
+ * Reached by `union`'s refusal, which is the one message that names an option by its kind. The
+ * `opaq` row became reachable when the guard stopped exempting an `opaque` option: the message
+ * read "opaq and string both take the same kind of value", naming something no caller had typed.
+ */
+const namedKind = (kind: Term['kind']): string =>
+    kind === 'opaq' ? 'opaque' : kind === 'dunion' ? 'discriminatedUnion' : kind
+
+/**
  * Everything about an option that the **term** decides, which is everything but `item`.
  *
  * `denote`'s `untagged` row builds its options from the definition and asks {@link altSem} for the
@@ -1812,7 +1828,7 @@ export const optionOfTerm = (def: Term): Option => {
             item: undefined,
             declares: undefined,
             requires: [],
-            describe: def.kind,
+            describe: namedKind(def.kind),
         }
     }
     const declares = new Set<string>()

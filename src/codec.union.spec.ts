@@ -12,6 +12,7 @@ import {
     nullValue,
     number,
     object,
+    opaque,
     optional,
     string,
     union,
@@ -281,5 +282,41 @@ describe('the declaration guard, where a term is what the guard reads', () => {
         expect(either.unsafeEncode(new Set(['a']) as never)).toEqual({
             SS: ['a'],
         })
+    })
+
+    /**
+     * **An option no value can select is not an option.**
+     *
+     * `opaque` admits every value every other option admits, and §5's `select` acts only where
+     * *exactly one* option does. So `union([opaque, X])` is not `opaque` with `X` beside it: it is
+     * **undefined** wherever `X` admits, and `opaque` everywhere else. `X` is declared and can
+     * never be chosen, which is §5's failure rather than a precedence question — there is no rank
+     * that resolves it, because ranking would be choosing an option the model says is not chosen.
+     *
+     * The guard used to exempt an `opaque` option instead of comparing it, reading its occupancy
+     * as `⊤`. §5 separates the two things a `⊤` covers, and `opaque` is the *everything* one: the
+     * model states it as a closed form, so it is comparable and it meets every option. Refusing
+     * these is JH's ruling, recorded in `ARCHITECTURE.md` §10, and it moved the corpus's refusal
+     * set from 17 pairs to 32 with every new theorem holding.
+     */
+    it('refuses a union where one option can never be selected', () => {
+        // @ts-expect-error `ValidateOptions` refuses this pair at the type level already, and has
+        // since before this rule: `opaque` reads back as `unknown`, which absorbs `string`, so the
+        // two "read back as the same type". This asserts the *runtime* half, which is what a
+        // caller reaches past that type — a cast, or plain JavaScript.
+        expect(() => union([opaque, string])).toThrow(CodecError)
+        // the message names the option that swallows the other, because that is the one to remove,
+        // and it names it as the caller wrote it rather than as the term spells it
+        // @ts-expect-error the same type-level refusal
+        expect(() => union([opaque, string])).toThrow(/opaque/)
+        // both policies: `lossy` admits a number too, so it swallows strictly more
+        // @ts-expect-error the same type-level refusal
+        expect(() => union([opaque('lossy'), string])).toThrow(CodecError)
+        // @ts-expect-error and the order of the options does not matter
+        expect(() => union([string, opaque])).toThrow(CodecError)
+
+        // and the refusal is about being unselectable, not about `opaque` being unusable
+        expect(() => opaque.encode('a')).not.toThrow()
+        expect(() => union([string, boolean])).not.toThrow()
     })
 })

@@ -1021,20 +1021,28 @@ describe("the read side, against the model's read row", () => {
 
 describe("the declaration guard, against the model's classifier", () => {
     /**
-     * **`src/` refuses seventeen pairs and the model certifies none of them.** That is the whole
+     * **`src/` refuses thirty-two pairs and the model certifies none of them.** That is the whole
      * law, and it is one-directional on purpose: `Orth` is sufficient and not necessary, so a
-     * pair it declines may still be separable and 66 of the 351 are. What would be a defect is
-     * `src/` refusing a declaration the model *proves* works — which is what it did to
+     * pair it declines may still be separable. What would be a defect is `src/` refusing a
+     * declaration the model *proves* works — which is what it did to
      * `union([string.set(), number.set()])` until `ff75c6b`, and what `Orth` certifies.
      *
-     * **The count pins a fact no law has, deliberately.** That it is seventeen is a property of
+     * **It was seventeen, and the fifteen that arrived all have `opaque` on a side.** The guard
+     * exempted an `opaque` option rather than comparing it, on the ground that its occupancy is
+     * `⊤`. §5 separates the two things a `⊤` covers, and `opaque` is the *everything* one: the
+     * model states it as a closed form, so it can be compared and it meets every option. Every one
+     * of the fifteen new theorems holds — `Orth (Term.opaq false) Term.string` is `false` — so the
+     * law was untouched either way, and what moved is that a union no value can resolve is now
+     * refused where it used to be declared. JH's ruling; `ARCHITECTURE.md` §10 carries it.
+     *
+     * **The count pins a fact no law has, deliberately.** That it is thirty-two is a property of
      * this corpus, so widening the corpus is meant to fail here and be looked at; the *law* is
      * the loop below, that every refusal the model also declines. Both are kept, and the number
      * stays.
      */
     it('refuses only pairs the classifier also declines', () => {
         const separations = separationPairs()
-        expect(separations.length).toBe(17)
+        expect(separations.length).toBe(32)
         // each one emits, which is where `leanSeparation` re-checks that `src/` really refuses
         for (const one of separations) {
             expect(leanSeparation(one)).toContain('= false := by decide')
