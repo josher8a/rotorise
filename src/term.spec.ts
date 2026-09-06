@@ -9,48 +9,11 @@
 
 import { describe, expect, it } from 'vitest'
 import type { AnyCodec } from './codec'
-import {
-    array,
-    binary as binaryOf,
-    boolean as booleanOf,
-    decimal,
-    discriminatedUnion,
-    held,
-    lazy,
-    legacy,
-    nullable,
-    nullValue,
-    number as numberOf,
-    object,
-    opaque,
-    record,
-    refine,
-    string,
-    tuple,
-    union,
-} from './codec'
+import { decimal, refine, string } from './codec'
 import type { Term } from './term'
-import {
-    identifies,
-    member,
-    occA,
-    occV,
-    specOf,
-    tagsOf,
-    termFromDef,
-} from './term'
+import { identifies, member, occA, occV, specOf, tagsOf } from './term'
 
 const erase = (codec: unknown): AnyCodec => codec as AnyCodec
-
-const isText = (value: string): value is string => typeof value === 'string'
-const tagged = discriminatedUnion('kind', [
-    object({ kind: string('a'), x: string }),
-    object({ kind: string('b'), y: string }),
-] as never)
-const heldPair = held(string, {
-    encode: (value: readonly string[]) => value.join(','),
-    decode: (stored: string) => stored.split(','),
-})
 
 const str: Term = { kind: 'string' }
 const bool: Term = { kind: 'boolean' }
@@ -343,7 +306,7 @@ describe('the tags a variant answers to', () => {
     })
 })
 
-describe('the seam from a definition to its term', () => {
+describe('the term `.set()` writes', () => {
     /**
      * §3 `(set)` is indexed by a base, so a set over a restricted element is spelled as a
      * restriction of the **set** — which is not a loss, and the model proves it is not:
@@ -356,7 +319,7 @@ describe('the seam from a definition to its term', () => {
             (value: string): value is string => !value.startsWith('-'),
             { describe: 'non-negative' },
         )
-        const term = termFromDef(erase(positive.set()).def as never)
+        const term = erase(positive.set()).def
         expect(term.kind).toBe('refine')
         expect((term as { inner: Term }).inner).toEqual({
             kind: 'set',
@@ -374,7 +337,7 @@ describe('the seam from a definition to its term', () => {
      * `NEFinset` and not a function — a closure decides nothing a declaration can see.
      */
     it('a set over a literal carries the alternatives, so the declaration can read them', () => {
-        const term = termFromDef(erase(string.set('a', 'b')).def as never)
+        const term = erase(string.set('a', 'b')).def
         expect(term).toEqual({
             kind: 'refine',
             inner: { kind: 'set', base: 'string' },
@@ -396,83 +359,27 @@ describe('the seam from a definition to its term', () => {
 
     /** …and a bare base does have one, which is the whole of what `SetBase` indexes. */
     it('a set over a bare base is the base, and nothing about the element survives', () => {
-        expect(termFromDef(erase(string.set()).def as never)).toEqual({
+        expect(erase(string.set()).def).toEqual({
             kind: 'set',
             base: 'string',
         })
     })
 
     /**
-     * `Def` carries `base` beside `allowed` with nothing relating them; the term indexes the
-     * alternatives by the base. A decimal literal is the pair that shows why: its alternatives are
-     * text and it stores `N`, so neither the member nor the JS type of the values recovers the base.
+     * The term indexes the alternatives by the base. A decimal literal is the pair that shows why:
+     * its alternatives are text and it stores `N`, so neither the member nor the JS type of the
+     * values recovers the base.
      */
     it("a literal's alternatives are indexed by the base that stores them", () => {
-        expect(termFromDef(erase(decimal('1', '2.5')).def as never)).toEqual({
+        expect(erase(decimal('1', '2.5')).def).toEqual({
             kind: 'literal',
             base: 'decimal',
             ls: ['1', '2.5'],
         })
-        expect(termFromDef(erase(string('A')).def as never)).toEqual({
+        expect(erase(string('A')).def).toEqual({
             kind: 'literal',
             base: 'string',
             ls: ['A'],
         })
-    })
-})
-
-/**
- * **The progress meter for the pass that makes a codec carry its term.**
- *
- * `termFromDef` converts the definition a constructor writes into the §3 term it denotes. Once a
- * constructor writes the term itself, that conversion is the **identity** on it — so
- * `termFromDef(c.def)` deep-equal to `c.def` is exactly "this constructor has been flipped", one
- * row per constructor, and the checker cannot give that answer because both are the same type
- * today only by accident of shape.
- *
- * Each row records where that constructor stands. The six ground kinds are already identical in
- * both languages and answer `true` without anyone having moved them. The rest answer `false`, and
- * the pass that flips them turns this column all-true.
- *
- * **This table and `termFromDef` are deleted together in the last step of that pass**, the
- * conversion having served as its own test.
- */
-describe('a codec carries the term it denotes', () => {
-    const flipped = (codec: AnyCodec): boolean => {
-        const def = codec.def
-        try {
-            return JSON.stringify(termFromDef(def)) === JSON.stringify(def)
-        } catch {
-            return false
-        }
-    }
-
-    it.each([
-        ['string', string, true],
-        ['decimal', decimal, true],
-        ['number', numberOf, true],
-        ['boolean', booleanOf, true],
-        ['binary', binaryOf, true],
-        ['null', nullValue, true],
-        ['literal', string('A'), false],
-        ['set', string.set(), false],
-        ['array', array(string), false],
-        ['tuple', tuple(string), false],
-        ['record', record(string), false],
-        ['object', object({ a: string }), false],
-        ['union', union([string, booleanOf]), false],
-        ['dunion', tagged, false],
-        // `nullable` is `{ kind, inner }` in both languages already, like the six ground kinds
-        ['nullable', nullable(string), true],
-        // a thunk on both sides, and the difference is what it *returns*; the comparison
-        // cannot see through a function, so this row answers `true` without meaning it and the
-        // forced term is covered by the row for whatever the thunk resolves to
-        ['lazy', lazy(() => string), true],
-        ['opaque', opaque, false],
-        ['refine', refine(string, isText), false],
-        ['held', heldPair, false],
-        ['legacy', legacy({ current: decimal, older: string }), false],
-    ] as const)('%s carries its term: %s', (_name, codec, expected) => {
-        expect(flipped(erase(codec))).toBe(expected)
     })
 })

@@ -36,7 +36,6 @@ import {
     object,
     refine,
     string,
-    termOf,
     union,
 } from './codec'
 import { checkRoundTrip } from './testing'
@@ -74,17 +73,11 @@ describe('a set at each base', () => {
      * claim is the one this test is for, so it is now asserted rather than obtained as a
      * side effect of comparing closures.
      */
-    it('records the base itself as its element', () => {
-        expect(string.set().def).toEqual({
-            kind: 'set',
-            element: termOf(string),
-        })
-        const elementOf = (codec: { def: unknown }) =>
-            (codec.def as { element: unknown }).element
-        expect(elementOf(string.set())).toBe(termOf(string))
-        expect(elementOf(number.set())).toBe(termOf(number))
-        expect(elementOf(decimal.set())).toBe(termOf(decimal))
-        expect(elementOf(binary.set())).toBe(termOf(binary))
+    it('records the base itself as its index', () => {
+        expect(string.set().def).toEqual({ kind: 'set', base: 'string' })
+        expect(number.set().def).toEqual({ kind: 'set', base: 'number' })
+        expect(decimal.set().def).toEqual({ kind: 'set', base: 'decimal' })
+        expect(binary.set().def).toEqual({ kind: 'set', base: 'binary' })
     })
 
     it('encodes and decodes at the type the base holds', () => {
@@ -209,6 +202,33 @@ describe('branding survives, and it survives through the capability', () => {
         expect(tags.decode({ SS: ['b'] })).toBeInstanceOf(CodecError)
         // and by the literal, which the predicate alone would not have seen
         expect(tags.decode({ SS: ['z'] })).toBeInstanceOf(CodecError)
+    })
+
+    /**
+     * The same rule on the write side, which the test above states only for the accepted value.
+     *
+     * A set over a restricted element is `refine(set(b), each(p))` per predicate the element
+     * carries, so both restrictions have to run on every member and neither may be dropped. Only
+     * the read side was asserted, and the two halves are one pair — `setCodec_restrict` on `e` and
+     * `setCodec_restrict_p` on `p` — so a spelling that keeps one and loses the other is a codec
+     * that writes what it cannot read back.
+     */
+    it('encodes a set only where every member is in the literal and passes the predicate', () => {
+        const first = refine(
+            string('a', 'b'),
+            (value): value is 'a' => value === 'a',
+            { describe: 'the a tag' },
+        )
+        const tags = first.set()
+        expect(tags.encode(new Set(['a'] as const))).toEqual({ SS: ['a'] })
+        // in the literal, refused by the predicate
+        expect(tags.encode(new Set(['b'] as never))).toBeInstanceOf(CodecError)
+        // passes nothing: outside the literal, and outside the predicate with it
+        expect(tags.encode(new Set(['z'] as never))).toBeInstanceOf(CodecError)
+        // one bad member refuses the whole set, which is what `each` says
+        expect(tags.encode(new Set(['a', 'b'] as never))).toBeInstanceOf(
+            CodecError,
+        )
     })
 })
 

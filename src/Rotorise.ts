@@ -10,7 +10,6 @@ import type {
     AnyDeclaration,
     Encoded,
     EncodedBy,
-    FieldDef,
     IsUnion,
     ItemCodec,
     ItemSpec,
@@ -19,6 +18,7 @@ import type {
     TaggedCodec,
 } from './codec'
 import { andThen, constantOf, object, orThrow, pathBuilder } from './codec'
+import type { Field } from './term'
 import type {
     DistributiveOmit,
     DistributivePick,
@@ -1099,7 +1099,7 @@ type IsVariantSpec<Spec> = [Spec[keyof Spec]] extends [
     // a member declares one attribute either way, and the two say so differently: a codec by its
     // pair, a field by its definition. A variant is a spec rather than a declaration and has neither
     | { readonly unsafeEncode: unknown; readonly unsafeDecode: unknown }
-    | { readonly def: FieldDef },
+    | { readonly def: Field },
 ]
     ? false
     : true
@@ -1123,11 +1123,11 @@ type ConstantOrAny<C> = ConstantValue<C> extends infer V extends string
  * constants spec is what holds the two together.
  */
 type ConstantValue<C> = C extends {
-    readonly def: { readonly kind: 'optional' }
+    readonly def: { readonly mark: 'optional' }
 }
     ? unknown
     : C extends {
-            readonly def: { readonly kind: 'fallback' }
+            readonly def: { readonly mark: 'fallback' }
             readonly codec: infer Marked
         }
       ? ConstantValue<Marked>
@@ -1721,7 +1721,6 @@ export type {
     ConstantCodec,
     DecimalCodec,
     Decoded,
-    Def,
     DerivedItem,
     DerivedUnion,
     DerivedVariants,
@@ -1731,8 +1730,6 @@ export type {
     EncodedPatch,
     EncodedVariants,
     FallbackCodec,
-    Field,
-    FieldDef,
     IsUnion,
     ItemCodec,
     ItemSpec,
@@ -1768,7 +1765,6 @@ export type {
     Tagged,
     TaggedCodec,
     TaggedSpec,
-    TermDef,
     TupleOf,
     TupleWrites,
     UnionCodec,
@@ -1811,6 +1807,7 @@ export {
     tuple,
     union,
 } from './codec'
+export type { Field, Term } from './term'
 // `shapeOf` classifies a *value* and reaches no term, so it moved to `value.ts` with the twelve
 // others `denote.ts` needs. The name on the surface is unchanged; only the module that declares
 // it moved, which is why this is a second `export` rather than an entry in the list above.

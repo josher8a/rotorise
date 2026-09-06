@@ -51,15 +51,16 @@ import { memberOf } from './attribute'
 import type {
     AnyCodec,
     AttributeCodec,
-    Field,
     ItemCodec,
+    LiteralValue,
     RestPolicy,
     Rng,
-    TermDef,
+    SetBase,
 } from './codec'
 import { CodecError, carries, codecOfTerm, failed, opaque } from './codec'
-import { readsBack } from './denote'
-import { termFromDef, member as termMember } from './term'
+import { holds, readsBack, variantTag } from './denote'
+import type { Field, Predicate, Term } from './term'
+import { member as termMember } from './term'
 import { shapeOf } from './value'
 
 /** mulberry32 — small, fast, and good enough to search a value space. */
@@ -93,11 +94,11 @@ export type Checkable<T> = {
     /**
      * What the codec is, which is what {@link arbitraryOf} generates from.
      *
-     * A {@link TermDef}: a checkable is generated for and round tripped, which is a codec's pair,
+     * A {@link Term}: a checkable is generated for and round tripped, which is a codec's pair,
      * and a field has none — so handing one here is the defect the type refuses rather than a case
      * the generator would have to answer.
      */
-    def?: TermDef
+    def?: Term
 }
 
 /**
@@ -736,7 +737,7 @@ export const structuralEquals = (a: unknown, b: unknown): boolean => {
 
 // ── generating, by what a codec is ──────────────────────────────────
 //
-// The codecs carry a {@link TermDef} saying what they are; the generators live here and dispatch
+// The codecs carry a {@link Term} saying what they are; the generators live here and dispatch
 // on it. That is the whole reason for the def: a generator baked into every codec ships to
 // production whether or not anything ever runs a property test, and no bundler can shake a closure
 // out of an object that is always constructed.
@@ -939,7 +940,7 @@ const samplers = new WeakMap<object, (rng: Rng, size: number) => unknown>()
 /**
  * A value the codec can carry.
  *
- * Dispatches on {@link TermDef}, so a codec kind that grows a generator grows it here rather than
+ * Dispatches on {@link Term}, so a codec kind that grows a generator grows it here rather than
  * in the codec itself. `size` bounds recursion.
  */
 export const arbitraryOf = (
@@ -955,8 +956,10 @@ export const arbitraryOf = (
             return someString(rng)
         // `ℓ` is non-empty by construction now — every constructor that builds one refuses
         // an empty admissible set — so there is no fallback branch to take
-        case 'literal':
-            return pickFrom(rng, def.allowed)
+        case 'literal': {
+            const ls: readonly LiteralValue[] = def.ls
+            return pickFrom(rng, ls)
+        }
         case 'decimal':
             return someDecimal(rng)
         case 'number':
@@ -971,8 +974,8 @@ export const arbitraryOf = (
                     Math.floor(rng() * 256),
                 ),
             )
-        case 'opaque':
-            return someUnknown(rng, size, def.numbers)
+        case 'opaq':
+            return someUnknown(rng, size, def.lossy ? 'lossy' : 'refuse')
         case 'held':
             /**
              * Generated for the inner codec and handed out through `decode`, so what is generated is
@@ -984,7 +987,7 @@ export const arbitraryOf = (
              * construction, so a throw is a bug in the adapter and belongs at the top of a property
              * run rather than folded into a value.
              */
-            return def.adapt.decode(
+            return def.g(
                 arbitraryOf(codecOfTerm(def.inner), rng, size) as never,
             )
         case 'set': {
@@ -998,32 +1001,15 @@ export const arbitraryOf = (
              * `O(n log n)` times — as did re-asking `writes` which member the element writes, a
              * recursive walk of the element's definition, once per value.
              */
-            const element = codecOfTerm(def.element)
-            const member = termMember(termFromDef(element.def))
-            const count = 1 + Math.floor(rng() * 3)
-            const byStored = new Map<string, unknown>()
-            for (let i = 0; i < count; i++) {
-                const value = arbitraryOf(element, rng, size)
-                const written = element.unsafeEncode(value as never) as Record<
-                    string,
-                    unknown
-                >
-                byStored.set(String(member ? written[member] : written), value)
-            }
-            return new Set(
-                [...byStored.keys()].sort().map((key) => byStored.get(key)),
-            )
+            const element = codecOfTerm({ kind: def.base })
+            return someSet(rng, element, () => arbitraryOf(element, rng, size))
         }
         case 'array':
             return Array.from({ length: Math.floor(rng() * 3) }, () =>
-                arbitraryOf(
-                    codecOfTerm(def.element),
-                    rng,
-                    Math.max(0, size - 1),
-                ),
+                arbitraryOf(codecOfTerm(def.elem), rng, Math.max(0, size - 1)),
             )
         case 'tuple': {
-            const fixed = def.elements.map((element) =>
+            const fixed = def.elems.map((element) =>
                 arbitraryOf(codecOfTerm(element), rng, Math.max(0, size - 1)),
             )
             if (!def.tail) return fixed
@@ -1042,11 +1028,12 @@ export const arbitraryOf = (
                     { length: size <= 0 ? 0 : Math.floor(rng() * 3) },
                     (_, i) => [
                         `k${i}`,
-                        arbitraryOf(codecOfTerm(def.value), rng, size - 1),
+                        arbitraryOf(codecOfTerm(def.val), rng, size - 1),
                     ],
                 ),
             )
-        case 'attributes': {
+        case 'object': {
+            const { fields, rest } = def.body
             const out: Record<string, unknown> = {}
             /**
              * The attributes the spec does not name, where a policy says what they hold.
@@ -1058,7 +1045,7 @@ export const arbitraryOf = (
             // only a rest *codec* puts undeclared names in the entity; `drop` and `refuse` both
             // leave nothing to generate, and are now told apart from a codec rather than guessed
             const restCodec =
-                typeof def.rest === 'string' ? undefined : codecOfTerm(def.rest)
+                typeof rest === 'string' ? undefined : codecOfTerm(rest.t)
             if (restCodec) {
                 for (let extra = Math.floor(rng() * 3); extra > 0; extra--) {
                     out[`rest${extra}`] = arbitraryOf(
@@ -1068,40 +1055,51 @@ export const arbitraryOf = (
                     )
                 }
             }
-            for (const name in def.of) {
-                const field = def.of[name]
+            for (const name in fields) {
+                const field = fields[name]
                 if (field === undefined) continue
                 if (field.mark === 'optional' && (size <= 0 || rng() < 0.5)) {
                     continue
                 }
-                out[name] = arbitraryOf(codecOfTerm(field.codec), rng, size)
+                out[name] = arbitraryOf(codecOfTerm(field.t), rng, size)
             }
             return out
         }
-        case 'tagged': {
-            const names = Object.keys(def.variants)
+        case 'dunion':
+        case 'union':
             return arbitraryOf(
-                codecOfTerm(def.variants[pickFrom(rng, names)] as TermDef),
-                rng,
-                size,
-            )
-        }
-        case 'untagged':
-            return arbitraryOf(
-                codecOfTerm(pickFrom(rng, def.variants)),
+                codecOfTerm(pickFrom(rng, def.options)),
                 rng,
                 size,
             )
         case 'refine': {
-            if (def.refined.arbitrary) return def.refined.arbitrary(rng, size)
+            const q = def.q
+            /**
+             * A set over a restricted element is `refine(set(b), each(p))`, one `refine` per
+             * predicate. Sampling whole sets against membership would almost never land, so the
+             * elements are generated against the element predicates and the set is assembled the
+             * way the `set` row assembles one.
+             */
+            if (q.kind === 'each') {
+                const { base, elements } = restrictedSet(def)
+                const element = codecOfTerm({ kind: base })
+                return someSet(rng, element, () =>
+                    someElement(rng, size, element, elements),
+                )
+            }
+            if (q.kind === 'members') {
+                const ls: readonly LiteralValue[] = q.literal.ls
+                return pickFrom(rng, ls)
+            }
+            if (q.q.arbitrary) return q.q.arbitrary(rng, size)
             let sample = samplers.get(def)
             if (!sample) {
                 sample = bySampling(
                     (r: Rng, sz: number) =>
                         arbitraryOf(codecOfTerm(def.inner), r, sz),
-                    def.refined.is as (value: unknown) => value is unknown,
-                    def.refined.what,
-                    def.refined.onThinSearch,
+                    q.q.is as (value: unknown) => value is unknown,
+                    q.q.what,
+                    q.q.onThinSearch,
                 )
                 samplers.set(def, sample)
             }
@@ -1112,7 +1110,7 @@ export const arbitraryOf = (
                 ? null
                 : arbitraryOf(codecOfTerm(def.inner), rng, size)
         case 'legacy':
-            return arbitraryOf(codecOfTerm(def.current), rng, size)
+            return arbitraryOf(codecOfTerm(def.inner), rng, size)
         case 'lazy':
             // one level shallower each time, which is what stops a recursive entity generating
             // forever: the optional attribute that recurses is dropped once the budget runs out
@@ -1122,17 +1120,86 @@ export const arbitraryOf = (
             throw new CodecError(
                 'a codec written by hand generates nothing unless it says how; give it `arbitrary`',
             )
-        default:
-            throw new CodecError(
-                'a branch has no one codec to generate from; reach for the variant you mean',
-            )
     }
+}
+
+/**
+ * A set, deduplicated by what is *stored*, as the codec does — two values that write the same
+ * member are one member of the set, so a generator that did not deduplicate by the stored form
+ * would produce a set the codec cannot carry back unchanged.
+ */
+const someSet = (
+    rng: Rng,
+    element: AnyCodec,
+    one: () => unknown,
+): ReadonlySet<unknown> => {
+    const member = termMember(element.def)
+    const count = 1 + Math.floor(rng() * 3)
+    const byStored = new Map<string, unknown>()
+    for (let i = 0; i < count; i++) {
+        const value = one()
+        const written = element.unsafeEncode(value as never) as Record<
+            string,
+            unknown
+        >
+        byStored.set(String(member ? written[member] : written), value)
+    }
+    return new Set([...byStored.keys()].sort().map((key) => byStored.get(key)))
+}
+
+/**
+ * The base and the element predicates of a restricted set, peeled from `refine(…, each(p))` down
+ * to the `set` the refinements wrap. `.set()` builds nothing else with an `each`.
+ */
+const restrictedSet = (
+    t: Term,
+): { readonly base: SetBase; readonly elements: readonly Predicate[] } => {
+    if (t.kind === 'set') return { base: t.base, elements: [] }
+    if (t.kind === 'refine' && t.q.kind === 'each') {
+        const inner = restrictedSet(t.inner)
+        return { base: inner.base, elements: [t.q.of, ...inner.elements] }
+    }
+    throw new CodecError(
+        `\`each\` restricts a set, and this \`${t.kind}\` is not one; \`.set()\` builds every \`each\`, so this term was not built by it`,
+    )
+}
+
+/**
+ * One element of a restricted set: a member of the literal where there is one, the closure's own
+ * generator where it gave one, and the base sampled against every predicate otherwise.
+ */
+const someElement = (
+    rng: Rng,
+    size: number,
+    base: AnyCodec,
+    elements: readonly Predicate[],
+): unknown => {
+    const admitted = (value: unknown) => elements.every((q) => holds(q)(value))
+    for (const q of elements) {
+        if (q.kind === 'members') {
+            const ls: readonly LiteralValue[] = q.literal.ls
+            return pickFrom(rng, ls.filter(admitted))
+        }
+    }
+    for (const q of elements) {
+        if (q.kind === 'closure' && q.q.arbitrary)
+            return q.q.arbitrary(rng, size)
+    }
+    const what = elements
+        .map((q) => (q.kind === 'closure' ? q.q.what : q.kind))
+        .join(' and ')
+    return bySampling(
+        (r: Rng, sz: number) => arbitraryOf(base, r, sz),
+        (value: unknown): value is unknown => admitted(value),
+        what,
+        undefined,
+    )(rng, size)
 }
 
 /**
  * Values simpler than this one, cheapest reduction first.
  *
- * The counterpart of {@link arbitraryOf}, dispatching on the same {@link TermDef}.
+ * The counterpart of {@link arbitraryOf}, dispatching on the same {@link Term}.
  */
 export const shrinkOf = (
     codec: AnyCodec,
@@ -1154,8 +1221,8 @@ export const shrinkOf = (
          * smaller is admissible.
          */
         case 'literal': {
-            const at = (def.allowed as readonly unknown[]).indexOf(value)
-            return def.allowed.slice(0, Math.max(0, at))
+            const ls: readonly unknown[] = def.ls
+            return ls.slice(0, Math.max(0, ls.indexOf(value)))
         }
         case 'decimal':
             return shrinkDecimal(value as string)
@@ -1172,32 +1239,31 @@ export const shrinkOf = (
                 ? []
                 : [new Uint8Array(0), bytes.slice(0, bytes.length - 1)]
         }
-        case 'opaque':
+        case 'opaq':
             return shrinkUnknown(value)
         case 'held':
             // shrunk on the inner side, where the definition knows how, and handed back out
-            return shrinkOf(
-                codecOfTerm(def.inner),
-                def.adapt.encode(value as never),
-            ).map((shrunk) => def.adapt.decode(shrunk as never))
+            return shrinkOf(codecOfTerm(def.inner), def.f(value as never)).map(
+                (shrunk) => def.g(shrunk as never),
+            )
         case 'set':
             // shrunk as a sequence and handed back as a set, which is what it is
             return shrinkSequence(
                 [...(value as ReadonlySet<unknown>)],
-                shrinkAt(codecOfTerm(def.element)),
+                shrinkAt(codecOfTerm({ kind: def.base })),
                 1,
             ).map((shrunk) => new Set(shrunk as readonly unknown[]))
         case 'array':
             return shrinkSequence(
                 value as readonly unknown[],
-                shrinkAt(codecOfTerm(def.element)),
+                shrinkAt(codecOfTerm(def.elem)),
                 0,
             )
         case 'tuple':
             // the fixed arity cannot reduce, so only those elements do. A tail could also shorten,
             // and does not: dropping one changes the length, which the fixed part forbids reasoning
             // about here — the elements are where a counterexample actually lives
-            return def.elements.flatMap((element, i) =>
+            return def.elems.flatMap((element, i) =>
                 shrinkOf(
                     codecOfTerm(element),
                     (value as readonly unknown[])[i],
@@ -1216,30 +1282,28 @@ export const shrinkOf = (
                 out.push(rest)
             }
             for (const k of keys) {
-                for (const smaller of shrinkOf(
-                    codecOfTerm(def.value),
-                    held[k],
-                )) {
+                for (const smaller of shrinkOf(codecOfTerm(def.val), held[k])) {
                     out.push({ ...held, [k]: smaller })
                 }
             }
             return out
         }
-        case 'attributes': {
+        case 'object': {
+            const fields = def.body.fields
             const held = value as Record<string, unknown>
             const out: Record<string, unknown>[] = []
             // dropping a whole attribute is the bigger reduction, so try it first
-            for (const name in def.of) {
-                if (def.of[name]?.mark !== 'optional') continue
+            for (const name in fields) {
+                if (fields[name]?.mark !== 'optional') continue
                 if (!(name in held)) continue
                 const { [name]: _dropped, ...rest } = held
                 out.push(rest)
             }
-            for (const name in def.of) {
-                const field = def.of[name]
+            for (const name in fields) {
+                const field = fields[name]
                 if (field === undefined || !(name in held)) continue
                 for (const smaller of shrinkOf(
-                    codecOfTerm(field.codec),
+                    codecOfTerm(field.t),
                     held[name],
                 )) {
                     out.push({ ...held, [name]: smaller })
@@ -1247,34 +1311,35 @@ export const shrinkOf = (
             }
             return out
         }
-        case 'tagged': {
+        case 'dunion': {
             const held = value as Record<string, unknown>
-            const chosen = def.variants[String(held[def.discriminator])]
+            const tag = String(held[def.d])
+            const chosen = def.options.find(
+                (option) => variantTag(def.d, option) === tag,
+            )
             return chosen ? shrinkOf(codecOfTerm(chosen), value) : []
         }
-        case 'untagged': {
+        case 'union': {
             const names = new Set(
                 Object.keys(value as Record<string, unknown>).filter(
                     (k) => (value as Record<string, unknown>)[k] !== undefined,
                 ),
             )
-            const chosen = def.variants.find(
-                (variant) =>
-                    variant.kind === 'attributes' &&
-                    [...names].every((name) => name in variant.of),
+            const chosen = def.options.find(
+                (option) =>
+                    option.kind === 'object' &&
+                    [...names].every((name) => name in option.body.fields),
             )
             return chosen ? shrinkOf(codecOfTerm(chosen), value) : []
         }
         case 'refine':
-            return shrinkOf(codecOfTerm(def.inner), value).filter(
-                def.refined.is as (x: unknown) => boolean,
-            )
+            return shrinkOf(codecOfTerm(def.inner), value).filter(holds(def.q))
         case 'nullable':
             return value === null
                 ? []
                 : [null, ...shrinkOf(codecOfTerm(def.inner), value)]
         case 'legacy':
-            return shrinkOf(codecOfTerm(def.current), value)
+            return shrinkOf(codecOfTerm(def.inner), value)
         case 'lazy':
             return shrinkOf(codecOfTerm(def.get()), value)
         // a branch has no one codec to shrink through, which is why `at` refuses it; a hand-written
@@ -1834,7 +1899,7 @@ const byTag = (
  */
 const byKindThenAttempt = (codec: AnyCodec): UnionOption => {
     const takes = carries(codec)
-    const member = termMember(termFromDef(codec.def))
+    const member = termMember(codec.def)
     return {
         codec,
         describe: codec.def?.kind ?? 'a codec',
@@ -1852,10 +1917,10 @@ const byKindThenAttempt = (codec: AnyCodec): UnionOption => {
 }
 
 /** `optionSemOf`: an object option decides by names, anything else by attempt. */
-const optionOfDef = (def: TermDef): UnionOption => {
+const optionOfDef = (def: Term): UnionOption => {
     const codec = codecOfTerm(def)
-    return def.kind === 'attributes'
-        ? byNames(codec, def.of)
+    return def.kind === 'object'
+        ? byNames(codec, def.body.fields)
         : byKindThenAttempt(codec)
 }
 
@@ -1875,68 +1940,56 @@ const unionsIn = (subject: AnyCodec): readonly UnionSite[] => {
         seen.add(def)
         const inner = (child: AnyCodec | undefined) => walk(child, depth - 1)
         switch (def.kind) {
-            case 'untagged':
+            case 'union':
                 out.push({
-                    describe: `union(${def.variants
+                    describe: `union(${def.options
                         .map((v) => v.kind)
                         .join(', ')})`,
-                    options: def.variants.map(optionOfDef),
+                    options: def.options.map(optionOfDef),
                 })
-                def.variants.forEach((variant) => inner(codecOfTerm(variant)))
+                def.options.forEach((option) => inner(codecOfTerm(option)))
                 return
-            case 'tagged': {
-                const entries = Object.entries(def.variants).map(
-                    ([tag, variant]) => [tag, codecOfTerm(variant)] as const,
-                )
-                /**
-                 * One option per *variant*, carrying every tag it answers to.
-                 *
-                 * `dunionCodec`'s options are `(List String × Codec)` — a tag *set* per option, not
-                 * one tag — and this library relies on it: `carrierId: string('ACME', 'GLOBEX')`
-                 * is one variant registered under two keys. Split per key it would be two options
-                 * over one codec, and a value one of them generated would be admitted by the other,
-                 * which is a fact about the index and not about the union.
-                 */
-                const variants = new Map<AnyCodec, string[]>()
-                for (const [tag, variant] of entries) {
-                    const tags = variants.get(variant)
-                    if (tags) tags.push(tag)
-                    else variants.set(variant, [tag])
-                }
+            case 'dunion': {
+                // one option per variant, and the tag is read off the variant's own `d` field —
+                // `dunionCodec`'s options are `(List String × Codec)`, and a variant answers to one
+                const tagged = def.options.map((option) => ({
+                    tag: variantTag(def.d, option),
+                    option,
+                }))
                 out.push({
-                    describe: `discriminatedUnion('${def.discriminator}', ${entries
-                        .map(([tag]) => `'${tag}'`)
+                    describe: `discriminatedUnion('${def.d}', ${tagged
+                        .map(({ tag }) => `'${tag}'`)
                         .join(', ')})`,
-                    options: [...variants].map(([variant, tags]) =>
-                        byTag(variant, def.discriminator, tags),
+                    options: tagged.map(({ tag, option }) =>
+                        byTag(codecOfTerm(option), def.d, [tag]),
                     ),
                 })
-                entries.forEach(([, variant]) => inner(variant))
+                def.options.forEach((option) => inner(codecOfTerm(option)))
                 return
             }
             case 'set':
+                return inner(codecOfTerm({ kind: def.base }))
             case 'array':
-                return inner(codecOfTerm(def.element))
+                return inner(codecOfTerm(def.elem))
             case 'record':
-                return inner(codecOfTerm(def.value))
+                return inner(codecOfTerm(def.val))
             case 'tuple':
-                def.elements.forEach((element) => inner(codecOfTerm(element)))
+                def.elems.forEach((element) => inner(codecOfTerm(element)))
                 return inner(def.tail && codecOfTerm(def.tail))
-            case 'attributes':
-                Object.values(def.of).forEach((field) =>
-                    inner(codecOfTerm(field.codec)),
+            case 'object': {
+                const { fields, rest } = def.body
+                Object.values(fields).forEach((field) =>
+                    inner(codecOfTerm(field.t)),
                 )
                 return inner(
-                    typeof def.rest === 'string'
-                        ? undefined
-                        : codecOfTerm(def.rest),
+                    typeof rest === 'string' ? undefined : codecOfTerm(rest.t),
                 )
+            }
             case 'refine':
             case 'nullable':
             case 'held':
-                return inner(codecOfTerm(def.inner))
             case 'legacy':
-                return inner(codecOfTerm(def.current))
+                return inner(codecOfTerm(def.inner))
             case 'lazy':
                 return inner(codecOfTerm(def.get()))
             default:

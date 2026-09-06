@@ -6,26 +6,22 @@
  * variant per model constructor, under the model's own names, so a reader holding the two files
  * side by side is reading one language twice rather than two languages that agree.
  *
- * **Why the term is its own module.** `Def` in `codec.ts` grew as the record a codec keeps about
- * itself, and it kept what each reader happened to need: a `set` holds an element *term* where the
- * model indexes by a base, a literal's alternatives are not indexed by their base, and a field
- * marker's `inner` is a codec where an object's field holds a term. Each of those is a state the
- * model cannot represent and this library can. Here the type is the model's, so the illegal states
- * stop being reachable rather than being checked for.
+ * **Why the term is its own module.** Every constructor in `codec.ts` writes one of these as its
+ * `def`, and `denote.ts` reads one to build the pair. The type is the model's, so a state the model
+ * cannot represent — a `set` indexed by an element term, a literal whose alternatives are not
+ * indexed by their base, a field where a term is wanted — is unreachable rather than checked for.
  *
  * The one place this language is **wider** than the model is `lazy`, and the row says why.
  */
 
 import type { AttributeName, AttributeValue } from './attribute'
 import type {
-    Field as CodecField,
     LiteralBase,
-    LiteralValue,
     Refinement,
     Result,
+    Rng,
     SetBase,
     Slot,
-    TermDef,
 } from './codec'
 
 /* ── the term ─────────────────────────────────────────────────────────────────────────── */
@@ -43,12 +39,11 @@ export type NonEmpty<T> = readonly [T, ...T[]]
 /**
  * §3 `(literal)`: a ground base, and a nonempty set of that base's alternatives.
  *
- * **Five variants rather than one with a `base` field**, and that is the whole content. `Def`'s
- * literal carries `base: LiteralBase` beside `allowed: readonly LiteralValue[]`, so
- * `{ base: 'decimal', allowed: [1, 2] }` is a value of the type — a decimal literal whose
- * alternatives are numbers, which nothing can encode. The model has no such term: `ls` is a
- * `NEFinset k.Carrier`, so the base *indexes* the alternatives. This is that indexing, in the one
- * form TypeScript has for it.
+ * **Five variants rather than one with a `base` field**, and that is the whole content. One
+ * variant with `base: LiteralBase` beside `ls: readonly LiteralValue[]` admits
+ * `{ base: 'decimal', ls: [1, 2] }` — a decimal literal whose alternatives are numbers, which
+ * nothing can encode. The model has no such term: `ls` is a `NEFinset k.Carrier`, so the base
+ * *indexes* the alternatives. This is that indexing, in the one form TypeScript has for it.
  *
  * `decimal` carries text, which is the reason the base is recorded at all: a decimal literal's
  * alternatives are strings and it stores `N`, so neither the member nor the JS type of the values
@@ -119,8 +114,8 @@ export type Term =
      * terms the rule then refused. Four bases survive it, so the base is an index and the refusal is
      * a type error. `set(refine(b, q))` and `set(literal k ls)` are not lost as *codecs* —
      * `setCodec_restrict` and `setCodec_restrict_p` prove the set of a restriction and the
-     * restriction of a set are one pair, on both halves — but they have no `set` term, and the
-     * conversion refuses them until the pass that spells them as the refinement they are.
+     * restriction of a set are one pair, on both halves — so `.set()` spells them as
+     * `refine(set(b), each(…))`, with {@link elementPredicates} naming the restriction.
      */
     | { readonly kind: 'set'; readonly base: SetBase }
     | { readonly kind: 'array'; readonly elem: Term }
@@ -171,7 +166,7 @@ export type Term =
           readonly kind: 'custom'
           readonly ce: (value: never) => Result<AttributeValue>
           readonly cp: (attribute: AttributeValue) => unknown
-          readonly arbitrary?: (rng: never, size: number) => unknown
+          readonly arbitrary?: (rng: Rng, size: number) => unknown
           readonly shrink?: (value: never) => readonly unknown[]
       }
     /** §3 `(opaque)`: `lossy = false` is the `refuse` policy — the absence of the `number` option. */
@@ -530,12 +525,9 @@ export const tagsOf = (d: string, t: Term): readonly string[] => {
  * the warrant for the container case are two different theorems, and only the first is about
  * literals.
  *
- * `set` answers `false` here where the definition-walking form answered `true` for
- * `string.set('a','b')`: {@link Term}'s `set` carries a **base** and has no element to read. That is
- * the same gap {@link Term}'s `set` row names, and the pass that respells `.set()` over a restricted
- * ground as a refinement of the set is what closes it — after which this row sees the literal
- * through the `refine`. Until then such a set has no term at all and {@link separable} answers on
- * `undefined` instead, which reaches the same verdict by the other route.
+ * A bare `set` answers `false`: {@link Term}'s `set` carries a **base** and has no element to read.
+ * `string.set('a','b')` is `refine(set(string), each(members …))`, so this row sees the literal
+ * through the `refine`.
  *
  * `nullable` is left out deliberately: two nullable literals both accept `null`, so the wrapper
  * admits a value neither literal decides. `held` is left out because the conversion is a caller's
@@ -640,31 +632,13 @@ export const meet = <A>(
 ): A | undefined =>
     one && other ? one.find((label) => other.includes(label)) : undefined
 /**
- * A `Def` this library can build and §3 has no term for.
+ * Which of the four set bases a term's values sit at, or `undefined` where the term is not one.
  *
- * There is exactly one such shape today — a `set` over a restricted element — and it is not a
- * defect on either side. `refine(decimal, q).set()` is a lawful codec, and `Term.set` is indexed by
- * a bare `SetBase`, so the model says the same pair as `refine(set(b), liftQ q)` and not as a
- * `set` term. The obstruction carries `at` and `reason` so a caller that has a path can report
- * where, and `src/lean.ts` is the caller that does.
- *
- * Not a {@link CodecError}: a codec is not being refused. The codec is fine and the *term* is
- * missing, which is a different fact and reaches a different consumer.
+ * `member` cannot answer this: `decimal.set()` and `number.set()` both write `NS`. This reads the
+ * term, and reads through `refine` and a literal only — both are *restrictions* of a base, so the set
+ * they build is a restriction of the base's set (`setCodec_restrict`). An adapter (`held`), a read
+ * widening (`legacy`) or a union is not a restriction of anything, and gets `undefined`.
  */
-export class NoTerm extends Error {
-    /** Where in the definition the obstruction is, as a dotted path. */
-    readonly at: string
-    /** Why §3 has no term for it. */
-    readonly reason: string
-    constructor(at: string, reason: string) {
-        super(`no §3 term for ${at}: ${reason}`)
-        this.name = 'NoTerm'
-        this.at = at
-        this.reason = reason
-    }
-}
-
-/** {@link setBase}, asked of a term rather than of a codec — the same walk, one level up. */
 export const setBaseOf = (t: Term): SetBase | undefined => {
     switch (t.kind) {
         case 'string':
@@ -682,265 +656,22 @@ export const setBaseOf = (t: Term): SetBase | undefined => {
 }
 
 /**
- * What a set's element restricts by, or nothing where it restricts by nothing.
+ * What a set's element restricts by, outermost first — empty where the element restricts by nothing.
  *
  * The element of a `set` is a bare base, a literal at that base, or a refinement over either. The
  * first restricts nothing and the set is a plain `Term.set`. The other two restrict, and the set
  * is a refinement of the plain one — which is what `setCodec_restrict` and `setCodec_restrict_p`
- * license, on both halves of the pair.
- *
- * A refinement over a literal contributes **both**: the closure and the membership, conjoined the
- * way `refine(refine(c, q), q′) ≡ refine(c, q ∩ q′)` conjoins them, and spelled here as the outer
- * `closure` over the inner `members` rather than as a meet the term language has no node for.
+ * license, on both halves of the pair. `.set()` wraps the plain set in one `refine(…, each(p))`
+ * per predicate listed here, so a refinement over a literal contributes **both** the closure and
+ * the membership, conjoined the way `refine(refine(c, q), q′) ≡ refine(c, q ∩ q′)` conjoins them.
  */
-const elementPredicate = (elem: Term): Predicate | undefined => {
+export const elementPredicates = (elem: Term): readonly Predicate[] => {
     switch (elem.kind) {
         case 'literal':
-            return { kind: 'members', literal: elem }
-        case 'refine': {
-            const inner = elementPredicate(elem.inner)
-            return inner === undefined ? elem.q : { kind: 'each', of: inner }
-        }
-        default:
-            return undefined
-    }
-}
-
-/**
- * A literal's alternatives, checked against the base that indexes them.
- *
- * `Def` carries `base` beside `allowed` and nothing relates the two, so `{ base: 'decimal',
- * allowed: [1] }` is a value of that type. {@link Literal} indexes the alternatives by the base, so
- * the mismatch is unrepresentable there and this is where it stops.
- *
- * **A throw, not a refusal.** No constructor builds such a definition — `literal`'s three entries
- * derive the base from the values it was given — so a mismatch here is a broken invariant rather
- * than a codec the model cannot say. Rule 14's line: a failure you can expect is a value, and this
- * is not one.
- */
-const literalTerm = (
-    base: LiteralBase,
-    allowed: readonly LiteralValue[],
-    at: string,
-): Literal => {
-    const [first, ...rest] = allowed
-    if (first === undefined) {
-        throw new Error(
-            `${at}: a literal with no alternatives, which \`literal\` does not build`,
-        )
-    }
-    const wrong = (): never => {
-        throw new Error(
-            `${at}: a \`${base}\` literal whose alternatives are not that base's carrier`,
-        )
-    }
-    /**
-     * The tail, at the carrier the base indexes — and the check is what narrows it.
-     *
-     * A loop that tests each element and then spreads the array teaches the checker nothing, so it
-     * ends in a cast. A type predicate is the same test with the narrowing kept, and the count is
-     * how the refusal survives: `filter` drops what fails, so a shorter answer is an alternative
-     * that was not this base's.
-     */
-    const tail = <T extends LiteralValue>(
-        is: (one: LiteralValue) => one is T,
-    ): readonly T[] => {
-        const kept = rest.filter(is)
-        return kept.length === rest.length ? kept : wrong()
-    }
-    switch (base) {
-        case 'string':
-        case 'decimal': {
-            if (typeof first !== 'string') return wrong()
-            const ls = tail((one): one is string => typeof one === 'string')
-            return { kind: 'literal', base, ls: [first, ...ls] }
-        }
-        case 'number': {
-            if (typeof first !== 'number') return wrong()
-            const ls = tail((one): one is number => typeof one === 'number')
-            return { kind: 'literal', base, ls: [first, ...ls] }
-        }
-        case 'boolean': {
-            if (typeof first !== 'boolean') return wrong()
-            const ls = tail((one): one is boolean => typeof one === 'boolean')
-            return { kind: 'literal', base, ls: [first, ...ls] }
-        }
-        case 'binary': {
-            if (!(first instanceof Uint8Array)) return wrong()
-            const ls = tail(
-                (one): one is Uint8Array => one instanceof Uint8Array,
-            )
-            return { kind: 'literal', base, ls: [first, ...ls] }
-        }
-    }
-}
-
-/** §4's field, as the term language holds one: the mark, and the term it marks. */
-const fieldTerm = (field: CodecField, at: string): Field =>
-    field.mark === 'fallback'
-        ? { mark: 'fallback', t: termFromDef(field.codec, at), v: field.value }
-        : field.mark === 'optional'
-          ? { mark: 'optional', t: termFromDef(field.codec, at) }
-          : { mark: 'req', t: termFromDef(field.codec, at) }
-
-/**
- * **The seam.** A definition, as the §3 term it denotes.
- *
- * `Def` is the record a codec keeps about itself and it grew a row at a time; {@link Term} is the
- * model's language. Where the two disagree the term wins, because the term is what the calculus
- * proves things about, and the disagreements are all one shape: `Def` can say something §3 cannot.
- * Each is handled here and nowhere else, which is the point of having one conversion.
- *
- * The one that has no term at all is a `set` over a restricted element, and it raises
- * {@link NoTerm}. Everything else is a rename, a re-indexing, or a recursion.
- */
-export const termFromDef = (def: TermDef, at = 'codec'): Term => {
-    switch (def.kind) {
-        case 'string':
-        case 'number':
-        case 'decimal':
-        case 'boolean':
-        case 'binary':
-        case 'null':
-            return { kind: def.kind }
-        case 'literal':
-            return literalTerm(def.base, def.allowed, at)
-        /**
-         * §3 `(set)` is indexed by a **base**, so a restricted element is not lost — it is spelled
-         * as a restriction of the *set*.
-         *
-         * `setCodec_restrict` and `setCodec_restrict_p` prove the set of a restriction and the
-         * restriction of a set are one pair, on `e` and on `p`. So `string.set('a','b')` is
-         * `refine(set(string), each(members …))` and `refine(decimal, q).set()` is
-         * `refine(set(decimal), each(closure q))`, which is `liftQ` at the term level: every
-         * element of the wire set satisfies the element's own predicate.
-         *
-         * A set whose element reduces to no base at all still has no term. `.set()` refuses to
-         * build one at construction, so this is reachable past a cast and nowhere else.
-         */
-        case 'set': {
-            const elem = termFromDef(def.element, `${at}.element`)
-            const base = setBaseOf(elem)
-            if (base === undefined) {
-                throw new NoTerm(
-                    `${at}.element`,
-                    'a set whose element is not one of the four `SetBase` bases',
-                )
-            }
-            const bare: Term = { kind: 'set', base }
-            const lifted = elementPredicate(elem)
-            return lifted === undefined
-                ? bare
-                : {
-                      kind: 'refine',
-                      inner: bare,
-                      q: { kind: 'each', of: lifted },
-                  }
-        }
-        case 'array':
-            return {
-                kind: 'array',
-                elem: termFromDef(def.element, `${at}.element`),
-            }
-        case 'tuple':
-            return {
-                kind: 'tuple',
-                elems: def.elements.map((element, index) =>
-                    termFromDef(element, `${at}[${index}]`),
-                ),
-                ...(def.tail === undefined
-                    ? {}
-                    : { tail: termFromDef(def.tail, `${at}.tail`) }),
-            }
-        case 'record':
-            return {
-                kind: 'record',
-                val: termFromDef(def.value, `${at}.value`),
-            }
-        case 'attributes': {
-            const fields: Record<string, Field> = {}
-            for (const [name, field] of Object.entries(def.of)) {
-                fields[name] = fieldTerm(field, `${at}.${name}`)
-            }
-            const rest = def.rest
-            return {
-                kind: 'object',
-                body: {
-                    fields,
-                    rest:
-                        rest === 'drop' || rest === 'refuse'
-                            ? rest
-                            : {
-                                  kind: 'codec',
-                                  t: termFromDef(rest, `${at}.rest`),
-                              },
-                },
-            }
-        }
-        // the model reads a variant's tag off the variant's own `d` field, so the table's key is
-        // dropped rather than carried: two statements of one fact are two things that can disagree
-        case 'tagged':
-            return {
-                kind: 'dunion',
-                d: def.discriminator,
-                options: Object.values(def.variants).map((variant, index) =>
-                    termFromDef(variant, `${at}.variants[${index}]`),
-                ),
-            }
-        case 'untagged':
-            return {
-                kind: 'union',
-                options: def.variants.map((variant, index) =>
-                    termFromDef(variant, `${at}.variants[${index}]`),
-                ),
-            }
+            return [{ kind: 'members', literal: elem }]
         case 'refine':
-            return {
-                kind: 'refine',
-                inner: termFromDef(def.inner, `${at}.inner`),
-                q: { kind: 'closure', q: def.refined },
-            }
-        case 'nullable':
-            return {
-                kind: 'nullable',
-                inner: termFromDef(def.inner, `${at}.inner`),
-            }
-        case 'legacy':
-            return {
-                kind: 'legacy',
-                inner: termFromDef(def.current, `${at}.current`),
-                r: def.older.decode,
-            }
-        case 'held':
-            return {
-                kind: 'held',
-                inner: termFromDef(def.inner, `${at}.inner`),
-                f: def.adapt.encode,
-                g: def.adapt.decode,
-            }
-        // the thunk resolves once on this side too, so a term forced twice is one term — which is
-        // what `codecOfTerm`'s memo already rests on one level down
-        case 'lazy': {
-            let resolved: Term | undefined
-            return {
-                kind: 'lazy',
-                get: () => {
-                    resolved ??= termFromDef(def.get(), `${at}.get()`)
-                    return resolved
-                },
-            }
-        }
-        case 'opaque':
-            return { kind: 'opaq', lossy: def.numbers === 'lossy' }
-        case 'custom':
-            return {
-                kind: 'custom',
-                ce: def.encode,
-                cp: def.decode,
-                ...(def.arbitrary === undefined
-                    ? {}
-                    : { arbitrary: def.arbitrary }),
-                ...(def.shrink === undefined ? {} : { shrink: def.shrink }),
-            }
+            return [elem.q, ...elementPredicates(elem.inner)]
+        default:
+            return []
     }
 }

@@ -383,7 +383,7 @@ const configured = (
     // hand-written codec cannot claim another kind's definition. This is inside the library, so it
     // has the site that can
     return codec<unknown, AttributeValue>({
-        def: { kind: 'opaque', numbers: 'lossy' },
+        def: { kind: 'opaq', lossy: true },
         encode: (value) => toNative(value, options, write),
         decode: (attribute) => fromNative(attribute, read),
     })
