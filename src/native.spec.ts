@@ -165,6 +165,7 @@ describe('the port agrees with the SDK it was ported from', () => {
  *
  * Refusal is compared as carefully as success. A port that accepts what the SDK refuses writes rows
  * the SDK cannot read back, which is worse than one that merely stores them differently.
+ * @anchored
  */
 /**
  * The sixteen constructor names `isBinary` accepts, not just the one anybody uses.

@@ -6,22 +6,35 @@
  */
 import { describe, expect, it } from 'vitest'
 import type { Attribute, AttributeValue } from './attribute'
+import type { Rng } from './codec'
 import { type AttributeCodec, custom, object, optional, string } from './codec'
 import { checkRoundTrip } from './testing'
+
+/**
+ * The generator and the shrinker, named once because three codecs here state the same two.
+ *
+ * They were read back off the first codec — `truncating.arbitrary` — until `arbitrary` and `shrink`
+ * left the codec object. A caller states a generator, the term carries it, and nothing reads it
+ * back off the pair, so the way to share one is to name it.
+ */
+const someTruncatable = (rng: Rng) =>
+    'abcdefgh'.slice(0, 1 + Math.floor(rng() * 8))
+
+const shrinkTruncatable = (value: string): readonly string[] =>
+    value === ''
+        ? []
+        : [
+              '',
+              value.slice(0, Math.floor(value.length / 2)),
+              value.slice(0, -1),
+          ].filter((x) => x !== value)
 
 /** Round-trips only strings of three characters or fewer. */
 const truncating: AttributeCodec<string, Attribute<'S'>> = custom({
     encode: (value: string) => ({ S: value }) as Attribute<'S'>,
     decode: (attribute) => ((attribute as { S: string }).S ?? '').slice(0, 3),
-    arbitrary: (rng) => 'abcdefgh'.slice(0, 1 + Math.floor(rng() * 8)),
-    shrink: (value) =>
-        value === ''
-            ? []
-            : [
-                  '',
-                  value.slice(0, Math.floor(value.length / 2)),
-                  value.slice(0, -1),
-              ].filter((x) => x !== value),
+    arbitrary: someTruncatable,
+    shrink: shrinkTruncatable,
 })
 
 /** Same, but empty throws — a *different* failure mode that shrinking must not drift into. */
@@ -30,8 +43,8 @@ const truncatingButEmptyThrows: AttributeCodec<string, Attribute<'S'>> = custom<
     Attribute<'S'>
 >({
     encode: truncating.encode,
-    arbitrary: truncating.arbitrary,
-    shrink: truncating.shrink,
+    arbitrary: someTruncatable,
+    shrink: shrinkTruncatable,
     decode: (attribute: AttributeValue) => {
         const carried = (attribute as { S: string }).S ?? ''
         // deliberately *thrown*, not returned: a bug in a caller's own codec is not a decoding
@@ -119,7 +132,7 @@ describe('shrinking', () => {
             c: custom<string, Attribute<'S'>>({
                 encode: truncating.encode,
                 decode: truncating.decode,
-                arbitrary: truncating.arbitrary,
+                arbitrary: someTruncatable,
             }),
         }).item
         expect(

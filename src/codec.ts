@@ -79,6 +79,7 @@ export {
  */
 declare const optionalMarker: unique symbol
 
+/** Type-level only, for the same reason as {@link optionalMarker}: the term carries the fact. */
 declare const fallbackMarker: unique symbol
 
 /**
@@ -145,17 +146,6 @@ type CodecShape<In, Out, A extends AttributeValue> = {
     readonly unsafeEncode: (value: In) => A
     /** The same, throwing. */
     readonly unsafeDecode: (attribute: AttributeValue) => Out
-    /**
-     * A value this codec can faithfully carry, for property testing.
-     *
-     * Per codec, not derived from the type: `decimal` is a `string` but only a *normalised* one
-     * survives, and `string.set()` must not be empty. `size` bounds recursion.
-     */
-    readonly arbitrary?: (rng: Rng, size: number) => Out
-    /**
-     * Values simpler than `value`, cheapest first. Must be finite and never yield `value` itself.
-     */
-    readonly shrink?: (value: In) => readonly Out[]
     /**
      * What this codec is — see {@link Term}.
      *
@@ -250,15 +240,21 @@ export type Decoded<C> = C extends {
 
 /* ── the readers ──────────────────────────────────────────────────────────────────────── */
 
-/**
- * **Every reader below answers from the definition and nothing else**, which is what makes the
- * definition determine the codec rather than describe it.
+/*
+ * A reader here answers from the **term** and nothing else, which is what makes the term determine
+ * the codec rather than describe it. `constantOf` is the one left in this file; `member`, `occV`,
+ * `occA`, `specOf`, `tagsOf`, `identifies`, `separable` and `setBaseOf` are `term.ts`'s, and
+ * `carries`, `accepts` and `readsBack` ask the pair in `denote.ts`.
  *
- * They take a *codec* and read its definition rather than taking the definition, and that is the
- * decision rather than a leftover. A child position holds a term, so a reader recursing into one
- * calls `codecOfTerm`, which memoises on the frozen term and answers the codec that was already
- * built. Giving the readers a `Term` parameter instead moves the `.def` read from one place
- * inside each of them out to every call site.
+ * They take a *codec* and read its term rather than taking the term, and that is the decision
+ * rather than a leftover. A child position holds a term, so a reader recursing into one calls
+ * `codecOfTerm`, which memoises on the frozen term and answers the codec that was already built.
+ * A `Term` parameter instead moves the `.def` read from one place inside each of them out to
+ * every call site.
+ *
+ * This is a section note and deliberately not a docstring: it binds to no declaration, so it
+ * opens with one star rather than two. `docstring_anchor.py` is the check a doc comment here
+ * would trip.
  */
 
 /**
@@ -1249,8 +1245,6 @@ export const refine = <Wide, Narrow extends Wide, A extends AttributeValue>(
 }
 
 // ── reading what is already there ───────────────────────────────────
-
-/** Type-level only, for the same reason as {@link optionalMarker}: the def carries the fact. */
 
 /**
  * A field that stands in a value where the attribute is absent.
