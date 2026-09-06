@@ -389,20 +389,6 @@ describe('optional', () => {
  */
 describe('nullable', () => {
     /**
-     * **(R) over an inner term that already owns the null point.**
-     *
-     * `nullable(c)` adds the null point *unless `c` already reaches it* — the specification's
-     * `owns(c)`, asked of both halves at once. Without that guard the wrapper's `NULL` branch
-     * shadows the inner codec: the adapter here maps `'SENTINEL'` to `null`, so the inner term
-     * writes and reads `{ NULL: true }` itself, and an unguarded wrapper reads that attribute as
-     * `null` before the inner term is consulted. The value written is not the value read.
-     *
-     * This is a public-API term. No declaration in this repository builds it and `held` is
-     * unemittable, so no generated vector could reach it — which is why it is written by hand and
-     * lives beside the rows it belongs to rather than under the laws that do not hold. It is a law
-     * that must hold.
-     */
-    /**
      * **§6's idempotence row.** `nullable(nullable(c)) ≡ nullable(c)`.
      *
      * The specification proves this by *construction* rather than as an equation the proof has to
@@ -418,6 +404,20 @@ describe('nullable', () => {
         })
     })
 
+    /**
+     * **(R) over an inner term that already owns the null point.**
+     *
+     * `nullable(c)` adds the null point *unless `c` already reaches it* — the specification's
+     * `owns(c)`, asked of both halves at once. Without that guard the wrapper's `NULL` branch
+     * shadows the inner codec: the adapter here maps `'SENTINEL'` to `null`, so the inner term
+     * writes and reads `{ NULL: true }` itself, and an unguarded wrapper reads that attribute as
+     * `null` before the inner term is consulted. The value written is not the value read.
+     *
+     * This is a public-API term. No declaration in this repository builds it and `held` is
+     * unemittable, so no generated vector could reach it — which is why it is written by hand and
+     * lives beside the rows it belongs to rather than under the laws that do not hold. It is a law
+     * that must hold.
+     */
     it('and nullable defers to an inner term that owns NULL', () => {
         const sentinel = held(nullable(string), {
             encode: (v: string) => (v === 'SENTINEL' ? null : v),
