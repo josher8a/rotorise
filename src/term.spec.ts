@@ -9,9 +9,17 @@
 
 import { describe, expect, it } from 'vitest'
 import type { AnyCodec } from './codec'
-import { decimal, refine, string, termFromDef } from './codec'
+import { decimal, refine, string } from './codec'
 import type { Term } from './term'
-import { identifies, member, occA, occV, specOf, tagsOf } from './term'
+import {
+    identifies,
+    member,
+    occA,
+    occV,
+    specOf,
+    tagsOf,
+    termFromDef,
+} from './term'
 
 const erase = (codec: unknown): AnyCodec => codec as AnyCodec
 

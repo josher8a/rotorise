@@ -11,77 +11,45 @@
  * `inherited` is down to `arbitrary` and `shrink`, which are the escape hatch and not facts.
  */
 import { describe, expect, it } from 'vitest'
-import type { Attribute } from './attribute'
-import type { AttributeCodec } from './codec'
+import { memberOf } from './attribute'
 import {
-    array,
-    binary,
-    boolean,
     CodecError,
     decides,
-    decimal,
-    deeper,
-    discriminatedUnion,
     fallback,
-    lazy,
     legacy,
     nullable,
-    nullValue,
     number,
-    object,
-    opaque,
     optional,
-    record,
     refine,
     string,
-    tuple,
-    union,
-    writes,
 } from './codec'
 
 const isTag = (v: string): v is `t-${string}` => v.startsWith('t-')
 
 describe('the member a codec writes', () => {
-    it.each([
-        { kind: 'string', codec: string, member: 'S' },
-        { kind: 'literal', codec: string('A'), member: 'S' },
-        { kind: 'decimal', codec: decimal, member: 'N' },
-        { kind: 'number', codec: number, member: 'N' },
-        { kind: 'literal(N)', codec: number(0, 1), member: 'N' },
-        { kind: 'boolean', codec: boolean, member: 'BOOL' },
-        { kind: 'null', codec: nullValue, member: 'NULL' },
-        { kind: 'binary', codec: binary, member: 'B' },
-        { kind: 'array', codec: array(string), member: 'L' },
-        { kind: 'tuple', codec: tuple(string), member: 'L' },
-        { kind: 'record', codec: record(string), member: 'M' },
-        { kind: 'attributes', codec: object({ a: string }), member: 'M' },
-    ])('$kind writes $member', ({ codec, member }) => {
-        expect(writes(codec)).toBe(member)
-    })
-
-    /** The rule `inherited` used to state, now a recursive case rather than a list entry. */
-    it('a wrapper writes what it wraps', () => {
-        expect(writes(refine(decimal, isTag as never))).toBe('N')
-        expect(writes(legacy({ current: decimal, older: string }))).toBe('N')
-    })
-
     /**
-     * A field is not a wrapper, and marking a name changes nothing about the attribute.
+     * **`number` writes `N`, and the Lean corpus structurally cannot say so.**
      *
-     * `writes(optional(c))` used to answer because a field was a codec that had been spread from the
-     * one it marks. It is the codec the field marks that writes, and the field hands that back
-     * unchanged — the same codec object, not a copy, which is what lets a body read it back.
+     * `src/lean.ts` refuses every numeric *value*: `Double` is an axiom with no closed terms, so
+     * `Value.num` is unconstructible and no positive vector at `number` can be stated. The term is
+     * emittable — `Term.number` appears in the refusal cross product and in the separation pairs —
+     * and only the value side is blocked, which is enough to block the vector.
+     *
+     * So this is one of exactly **two** members the corpus cannot pin, and the member is read off
+     * the attribute rather than off a reader, which is the only instrument left.
+     *
+     * A trap for whoever tries to close it by adding a vector: `scalar_number` is already a
+     * twenty-seventh codec, added by hand at three sites in `lean.spec.ts` with no value. Putting
+     * it in `sampleVectors` would list it twice and move the pair count from 351 to 378, taking
+     * the separation and refusal counts with it.
      */
-    it('a field marks an attribute and leaves it alone', () => {
-        expect(optional(decimal).codec).toBe(decimal)
-        expect(fallback(decimal, '0').codec).toBe(decimal)
-        expect(writes(optional(decimal).codec)).toBe('N')
-        expect(writes(fallback(decimal, '0').codec)).toBe('N')
+    it('is `N` for `number`, which no vector in the corpus can state', () => {
+        expect(memberOf(number.unsafeEncode(1))).toBe('N')
     })
 
-    it('is none where more than one member is written, or none is known', () => {
-        expect(writes(nullable(string))).toBeUndefined()
-        expect(writes(opaque)).toBeUndefined()
+    /** …and for a numeric literal, refused one level up at `GroundKind.number`'s carrier. */
+    it('is `N` for a numeric literal, refused at the same axiom', () => {
+        expect(memberOf(number(0, 1).unsafeEncode(1))).toBe('N')
     })
 
     /** What the set builder reads, and the reason a codec has to be able to say it at all. */
@@ -89,14 +57,6 @@ describe('the member a codec writes', () => {
         expect(() => refine(string, isTag).set()).not.toThrow()
         // @ts-expect-error `nullable` writes no single member, so the type declines the capability
         expect(() => refine(nullable(string), isTag).set()).toThrow(CodecError)
-    })
-
-    /**
-     * `item`, `map`, `tagged` and `untagged` all left this blank while writing an `M`, so a set of
-     * one reported "no single member" instead of naming what it found.
-     */
-    it('is `M` for every composite, which none of them used to say', () => {
-        expect(writes(object({ a: string }))).toBe('M')
     })
 })
 
@@ -130,72 +90,5 @@ describe('the value a codec decides', () => {
         expect(decides(fallback(string('ONLY'), 'ONLY' as const).codec)).toBe(
             'ONLY',
         )
-    })
-})
-
-describe('what is one segment deeper', () => {
-    it('finds an attribute of an item, and nothing past the schema', () => {
-        const Pet = object({ id: string })
-        expect(deeper(Pet, 'id')?.def?.kind).toBe('string')
-        expect(deeper(Pet, 'nope')).toBeUndefined()
-    })
-
-    it('descends a list by index, a record by key, a tuple by position', () => {
-        expect(deeper(array(decimal), 0)?.def?.kind).toBe('decimal')
-        expect(deeper(record(decimal), 'anything')?.def?.kind).toBe('decimal')
-        expect(deeper(tuple(string, decimal), 1)?.def?.kind).toBe('decimal')
-    })
-
-    /** A set is unordered, so no document path addresses a member of one. */
-    it('refuses to descend a set', () => {
-        expect(deeper(string.set(), 0)).toBeUndefined()
-    })
-
-    it('descends through a wrapper to what it wraps', () => {
-        expect(deeper(nullable(array(decimal)), 0)?.def?.kind).toBe('decimal')
-    })
-
-    it('descends into a recursive entity without forcing it early', () => {
-        type Tree = { name: string; children?: readonly Tree[] }
-        let built = 0
-        const Tree: AttributeCodec<Tree, Attribute<'M'>> = lazy(() => {
-            built++
-            return object({
-                name: string,
-                children: optional(array(Tree)),
-            })
-        })
-        expect(built).toBe(0)
-        expect(deeper(Tree, 'name')?.def?.kind).toBe('string')
-        expect(built).toBe(1)
-    })
-
-    it('branches where the variants disagree, and agrees where they do not', () => {
-        const Visits = discriminatedUnion('type', [
-            object({ type: string('CHECKUP'), petId: string }),
-            object({ type: string('SHOT'), petId: string }),
-        ])
-        // both variants declare `petId` the same way, so there is nothing to choose between
-        expect(deeper(Visits, 'petId')?.def?.kind).toBe('string')
-        expect(deeper(Visits, 'nope')).toBeUndefined()
-    })
-
-    it('gives no answer where the variants disagree, rather than a fabricated one', () => {
-        const Ops = discriminatedUnion('type', [
-            object({ type: string('A'), amount: number }),
-            object({ type: string('B'), amount: string }),
-        ])
-        // two codecs are one segment down and neither is *the* one, so there is nothing to return.
-        // `ItemCodec.at` carries the disagreement instead, and reports it if the path ends on it
-        expect(deeper(Ops, 'amount')).toBeUndefined()
-    })
-
-    it('reaches a member-specific attribute of an untagged union', () => {
-        const Lines = union([
-            object({ petId: string }),
-            object({ petIds: array(string) }),
-        ])
-        expect(deeper(Lines, 'petId')?.def?.kind).toBe('string')
-        expect(deeper(Lines, 'petIds')?.def?.kind).toBe('array')
     })
 })

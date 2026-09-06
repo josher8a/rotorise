@@ -39,7 +39,6 @@ import {
     string,
     termOf,
     union,
-    writes,
 } from './codec'
 import { checkRoundTrip } from './testing'
 
@@ -59,13 +58,6 @@ const amount = refine(decimal, isAmount, {
 })
 
 describe('a set at each base', () => {
-    it('is the set that base stores', () => {
-        expect(writes(string.set())).toBe('SS')
-        expect(writes(number.set())).toBe('NS')
-        expect(writes(decimal.set())).toBe('NS')
-        expect(writes(binary.set())).toBe('BS')
-    })
-
     /**
      * One combinator, reached from four places. The definition records the element's *term*, and
      * it is the public base's own term — not a copy of it — which is what makes two spellings of
@@ -114,7 +106,6 @@ describe('a set at each base', () => {
      * argument for indexing by base. A `NS` alone does not say which read it back.
      */
     it('distinguishes the two numeric sets, which the member cannot', () => {
-        expect(writes(number.set())).toBe(writes(decimal.set()))
         expect(setBase(number)).toBe('number')
         expect(setBase(decimal)).toBe('decimal')
 
@@ -133,7 +124,6 @@ describe('a set at each base', () => {
 describe('a set of a literal, spelled at the base', () => {
     it('checks each member against the values the base was given', () => {
         const tags = string.set('a', 'b', 'c')
-        expect(writes(tags)).toBe('SS')
         expect(tags.unsafeEncode(new Set(['c', 'a']))).toEqual({
             SS: ['a', 'c'],
         })
@@ -205,11 +195,6 @@ describe('branding survives, and it survives through the capability', () => {
         const _widened: ReadonlySet<Price> = plain
     })
 
-    it('reads the base through the refinement, which is what makes the lift sound', () => {
-        expect(setBase(amount)).toBe('decimal')
-        expect(writes(amount.set())).toBe('NS')
-    })
-
     /**
      * The capability propagates as far as {@link setBase} reduces, which is through any number of
      * refinements and through a literal — the two the model keeps under `setCodec_restrict`. So a
@@ -224,7 +209,6 @@ describe('branding survives, and it survives through the capability', () => {
         )
         expect(setBase(first)).toBe('string')
         const tags = first.set()
-        expect(writes(tags)).toBe('SS')
         expect(tags.unsafeEncode(new Set(['a']))).toEqual({ SS: ['a'] })
         // refused by the predicate, which the literal alone would have allowed
         expect(tags.decode({ SS: ['b'] })).toBeInstanceOf(CodecError)
@@ -268,7 +252,6 @@ describe('what a set cannot be built from', () => {
             encode: (value: readonly string[]) => value.join(','),
             decode: (stored: string) => stored.split(','),
         })
-        expect(writes(asArray)).toBe('S')
         expect(setBase(asArray)).toBeUndefined()
         // no `@ts-expect-error`: `held` writes `S`, so this type-checks and throws
         const adapted = refine(asArray, isTexts)

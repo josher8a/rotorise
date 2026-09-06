@@ -226,7 +226,7 @@ describe('the defect (U) found: an option with no κ on the write side', () => {
      * could not tell them apart.
      *
      * **The ambiguity was never real; it was `encode`'s looseness wearing an ambiguity's clothes.**
-     * `string`'s row now refuses what `admits(string, …)` refuses, so a `Date` is admitted by the
+     * `string`'s row now refuses what `accepts(string, …)` refuses, so a `Date` is admitted by the
      * `held` option alone and the union resolves. The two repairs this block used to name — refuse
      * the declaration, or give `held` a write-side `κ` — were both about supplying the missing
      * `κ`. Neither was needed. The option that had no `κ` still has none; what it no longer has is

@@ -11,8 +11,6 @@
 import { describe, expect, it } from 'vitest'
 import type { N, NS, S, SS } from './attribute'
 import {
-    admits,
-    admitsAttribute,
     CodecError,
     carries,
     decides,
@@ -21,8 +19,8 @@ import {
     object,
     string,
     union,
-    writes,
 } from './codec'
+import { accepts, readsBack } from './denote'
 import { checkRoundTrip } from './testing'
 
 /** The shape these are usually written in. */
@@ -33,7 +31,6 @@ const status = number(...(Object.values(Status) as Status[]))
 
 describe('a numeric literal', () => {
     it('is stored as N', () => {
-        expect(writes(status)).toBe('N')
         expect(status.unsafeEncode(1)).toEqual({ N: '1' })
     })
 
@@ -50,8 +47,8 @@ describe('a numeric literal', () => {
     })
 
     it('checks the admissible set in both directions', () => {
-        expect(admitsAttribute(status, { N: '1' })).toBe(true)
-        expect(admitsAttribute(status, { N: '7' })).toBe(false)
+        expect(readsBack(status, { N: '1' })).toBe(true)
+        expect(readsBack(status, { N: '7' })).toBe(false)
         expect(() => status.unsafeDecode({ N: '7' })).toThrow(CodecError)
         expect(() => status.unsafeEncode(7 as Status)).toThrow(CodecError)
     })
@@ -59,8 +56,8 @@ describe('a numeric literal', () => {
     it('refuses the digits stored as text', () => {
         // (W) is the content: `1` is admissible and `⟨S, '1'⟩` is not the attribute it is
         // admissible *at*, so the member decides this before the set is consulted
-        expect(admitsAttribute(status, { N: '1' })).toBe(true)
-        expect(admitsAttribute(status, { S: '1' })).toBe(false)
+        expect(readsBack(status, { N: '1' })).toBe(true)
+        expect(readsBack(status, { S: '1' })).toBe(false)
         expect(() => status.unsafeDecode({ S: '1' })).toThrow(CodecError)
     })
 
@@ -145,8 +142,6 @@ describe('a set of a literal', () => {
     const codes = number.set(1, 2, 3, 4)
 
     it('writes SS for text and NS for digits', () => {
-        expect(writes(tags)).toBe('SS')
-        expect(writes(codes)).toBe('NS')
         const asSS: SS = tags.unsafeEncode(new Set(['c', 'a']))
         const asNS: NS = codes.unsafeEncode(new Set([3, 1]))
         expect(asSS).toEqual({ SS: ['a', 'c'] })
@@ -213,8 +208,8 @@ describe('a set of a literal', () => {
         expect(either.unsafeDecode({ NS: ['1'] })).toEqual(new Set([1]))
 
         // the literal is the narrowing: a value outside `ℓ` is admitted by neither option
-        expect(admits(either, new Set(['a']))).toBe(true)
-        expect(admits(either, new Set(['c']))).toBe(false)
+        expect(accepts(either, new Set(['a']))).toBe(true)
+        expect(accepts(either, new Set(['c']))).toBe(false)
         expect(() => either.unsafeEncode(new Set(['c']) as never)).toThrow(
             CodecError,
         )
@@ -326,17 +321,8 @@ describe('the admissible set is what DynamoDB stores', () => {
      */
     it('refuses the denormal the specification named as the unchecked case', () => {
         expect(() => number(5e-324)).toThrow(CodecError)
-        expect(admits(number, 5e-324)).toBe(false)
+        expect(accepts(number, 5e-324)).toBe(false)
         expect(() => number.unsafeEncode(5e-324)).toThrow(CodecError)
-    })
-
-    it('admits the range that is actually stored, including the ends', () => {
-        expect(writes(number(0, 1, -1, 1e125, 1e-130))).toBe('N')
-    })
-
-    /** A string literal is unaffected: `S` carries any text, and the premise is `(literal-N)`'s. */
-    it('says nothing about a string literal', () => {
-        expect(writes(string('NaN', 'Infinity'))).toBe('S')
     })
 })
 
@@ -368,10 +354,10 @@ describe('the read side reads through the same gate as number', () => {
         for (const text of ['', ' ', '\n', '0b11', '0o7', '1_0']) {
             // not admitted at all, which is the §1 claim — `Number` would have made a value of
             // each of these and membership would then have let some through
-            expect(admitsAttribute(status, { N: text })).toBe(false)
+            expect(readsBack(status, { N: text })).toBe(false)
             expect(() => status.unsafeDecode({ N: text })).toThrow(CodecError)
         }
-        expect(admitsAttribute(number(0, 16), { N: '0x10' })).toBe(false)
+        expect(readsBack(number(0, 16), { N: '0x10' })).toBe(false)
         expect(() => number(0, 16).unsafeDecode({ N: '0x10' })).toThrow(
             CodecError,
         )
@@ -412,8 +398,8 @@ describe('the read side reads through the same gate as number', () => {
         expect(Number(past)).toBe(1e126)
         // refused by `ℓ` and not by a second gate: the rounded value is outside a set fixed at
         // construction, so membership is what declines it
-        expect(admitsAttribute(number(1e125), { N: '1e125' })).toBe(true)
-        expect(admitsAttribute(number(1e125), { N: past })).toBe(false)
+        expect(readsBack(number(1e125), { N: '1e125' })).toBe(true)
+        expect(readsBack(number(1e125), { N: past })).toBe(false)
         expect(() => number(1e125).unsafeDecode({ N: past })).toThrow(
             CodecError,
         )

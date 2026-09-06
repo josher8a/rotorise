@@ -58,9 +58,11 @@ import type {
     LiteralValue,
     TermDef,
 } from './codec'
-import { admits, admitsAttribute, NoTerm, termFromDef, union } from './codec'
+import { union } from './codec'
+import { accepts, readsBack } from './denote'
 import { failed } from './result'
 import type { Term, Field as TermField } from './term'
+import { NoTerm, termFromDef } from './term'
 import { shapeOf } from './value'
 
 /**
@@ -788,7 +790,7 @@ export type Refusal = {
  * disagreement — the worst possible artifact, a green check over a real divergence.
  */
 export const leanRefusal = ({ name, codec, value }: Refusal): string => {
-    if (admits(codec, value)) {
+    if (accepts(codec, value)) {
         throw new LeanUnemittable(
             name,
             'this codec admits this value, so a refusal vector about it would assert the model refuses what `src/` writes — pass it as a `Vector` instead',
@@ -936,7 +938,7 @@ export const readRowIsStuck = ({ codec, attribute }: ReadVerdict): boolean =>
 /** One read verdict, as a Lean `theorem`; `src/`'s answer is taken by running `decode`. */
 export const leanReadVerdict = (one: ReadVerdict): string => {
     const { name, codec, attribute } = one
-    const decodes = admitsAttribute(codec, attribute)
+    const decodes = readsBack(codec, attribute)
     return [
         `/-- \`${name}\` — \`src/\` ${decodes ? 'decodes' : 'refuses'} this attribute -/`,
         `theorem ${leanIdent(name)} :`,

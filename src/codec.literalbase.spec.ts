@@ -23,7 +23,6 @@
 import { describe, expect, it } from 'vitest'
 import type { B, BOOL, N, S } from './attribute'
 import {
-    admitsAttribute,
     binary,
     boolean,
     CodecError,
@@ -34,26 +33,11 @@ import {
     object,
     string,
     union,
-    writes,
 } from './codec'
+import { readsBack } from './denote'
 import { checkRoundTrip } from './testing'
 
 describe('the base is named, not inferred', () => {
-    /**
-     * The whole finding in one assertion: two literals whose *values* are the same JS type and
-     * whose stored members differ, and two whose values differ and whose members agree. No function
-     * of the values decides this. Only the name does.
-     */
-    it('separates what the values cannot: decimal is text stored as N', () => {
-        expect(writes(decimal('1'))).toBe('N')
-        expect(carries(decimal('1'))).toEqual(['string'])
-        expect(writes(string('1'))).toBe('S')
-        expect(carries(string('1'))).toEqual(['string'])
-
-        expect(writes(number(1))).toBe('N')
-        expect(carries(number(1))).toEqual(['number'])
-    })
-
     it('writes each base into the member that base stores', () => {
         expect(string('A').unsafeEncode('A')).toEqual({ S: 'A' })
         expect(number(1).unsafeEncode(1)).toEqual({ N: '1' })
@@ -79,7 +63,6 @@ describe('the base is named, not inferred', () => {
 
     /** The primitive is still the primitive: calling it is what narrows. */
     it('leaves the uncalled codec exactly what it was', () => {
-        expect(writes(string)).toBe('S')
         expect(string.unsafeEncode('anything')).toEqual({ S: 'anything' })
         expect(decimal.unsafeEncode('1.5')).toEqual({ N: '1.5' })
         expect(number.unsafeDecode({ N: '3' })).toBe(3)
@@ -113,8 +96,8 @@ describe('a decimal literal', () => {
     it('checks the admissible set in both directions', () => {
         const one = decimal('1', '2')
         // the law is that `'3'` is not admitted; the sentence saying so is not the law
-        expect(admitsAttribute(one, { N: '3' })).toBe(false)
-        expect(admitsAttribute(one, { N: '1' })).toBe(true)
+        expect(readsBack(one, { N: '3' })).toBe(false)
+        expect(readsBack(one, { N: '1' })).toBe(true)
         expect(() => one.unsafeDecode({ N: '3' })).toThrow(CodecError)
         // @ts-expect-error the held type is the alternatives, so this is refused before it runs
         expect(() => one.unsafeEncode('3')).toThrow(CodecError)
@@ -129,9 +112,9 @@ describe('a decimal literal', () => {
         // refused by the *gate* and not by membership, which is the distinction the sentence
         // carried: `'1'` is the one alternative and is admitted, `'1.0'` names the same number
         // and is not, so what refuses it is §1's stored form rather than `ℓ`
-        expect(admitsAttribute(decimal('1'), { N: '1' })).toBe(true)
-        expect(admitsAttribute(decimal('1'), { N: '1.0' })).toBe(false)
-        expect(admitsAttribute(decimal('1'), { N: '0x1' })).toBe(false)
+        expect(readsBack(decimal('1'), { N: '1' })).toBe(true)
+        expect(readsBack(decimal('1'), { N: '1.0' })).toBe(false)
+        expect(readsBack(decimal('1'), { N: '0x1' })).toBe(false)
         expect(() => decimal('1').unsafeDecode({ N: '1.0' })).toThrow(
             CodecError,
         )
@@ -159,10 +142,9 @@ describe('a decimal literal', () => {
 describe('the two bases that were unreachable', () => {
     it('holds a boolean literal, which the guessing form had no spelling for', () => {
         const yes = boolean(true)
-        expect(writes(yes)).toBe('BOOL')
         expect(carries(yes)).toEqual(['boolean'])
         expect(yes.unsafeDecode({ BOOL: true })).toBe(true)
-        expect(admitsAttribute(yes, { BOOL: false })).toBe(false)
+        expect(readsBack(yes, { BOOL: false })).toBe(false)
         expect(() => yes.unsafeDecode({ BOOL: false })).toThrow(CodecError)
     })
 
@@ -175,7 +157,6 @@ describe('the two bases that were unreachable', () => {
     it('compares a binary literal by its octets, and answers with the declared array', () => {
         const magic = Uint8Array.from([0x89, 0x50])
         const png = binary(magic)
-        expect(writes(png)).toBe('B')
         expect(png.unsafeDecode({ B: Uint8Array.from([0x89, 0x50]) })).toBe(
             magic,
         )
