@@ -634,8 +634,9 @@ export const meet = <A>(
 /**
  * Which of the four set bases a term's values sit at, or `undefined` where the term is not one.
  *
- * `member` cannot answer this: `decimal.set()` and `number.set()` both write `NS`. This reads the
- * term, and reads through `refine` and a literal only — both are *restrictions* of a base, so the set
+ * `member` cannot answer this: `decimal.set()` and `number.set()` both write `NS`, so the member
+ * cannot tell them apart and the term can — which is why `formal/Calculus/Domain.lean:602` indexes
+ * a set by a base rather than by a `Member`. Reads through `refine` and a literal only — both are *restrictions* of a base, so the set
  * they build is a restriction of the base's set (`setCodec_restrict`). An adapter (`held`), a read
  * widening (`legacy`) or a union is not a restriction of anything, and gets `undefined`.
  */

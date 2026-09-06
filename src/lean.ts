@@ -1189,19 +1189,6 @@ end Calculus
 }
 
 /**
- * How much fuel the `check` protocol's comparator needs for this attribute.
- *
- * `aeq` recurses on a `Nat` rather than on the attribute, because only a *structurally* recursive
- * function reduces in the kernel — a well-founded one elaborates to `WellFounded.fix` and no `rfl`
- * would close a vector line. So the budget is the generator's job, and it is exactly the
- * attribute's document nesting: one layer per `L` or `M`, one for the scalar at the bottom.
- *
- * Computed rather than fixed at a generous constant. Under-fuelling does not produce a false
- * theorem — `Verdict` has a third constructor, and an exhausted run matches neither `.same` nor
- * `.differ`, so the file fails to compile — but it does produce a puzzling failure, and there is no
- * reason to risk one when the number is right here.
- */
-/**
  * The same budget on the value side, for `veq`.
  *
  * `fuelFor` walks an attribute's `L`/`M` nesting; this walks a value's arrays and plain objects,
@@ -1223,6 +1210,19 @@ const fuelForValue = (value: unknown): number => {
 const asRecordish = (value: unknown): Record<string, unknown> | undefined =>
     shapeOf(value) === 'map' ? (value as Record<string, unknown>) : undefined
 
+/**
+ * How much fuel the `check` protocol's comparator needs for this attribute.
+ *
+ * `aeq` recurses on a `Nat` rather than on the attribute, because only a *structurally* recursive
+ * function reduces in the kernel — a well-founded one elaborates to `WellFounded.fix` and no `rfl`
+ * would close a vector line. So the budget is the generator's job, and it is exactly the
+ * attribute's document nesting: one layer per `L` or `M`, one for the scalar at the bottom.
+ *
+ * Computed rather than fixed at a generous constant. Under-fuelling does not produce a false
+ * theorem — `Verdict` has a third constructor, and an exhausted run matches neither `.same` nor
+ * `.differ`, so the file fails to compile — but it does produce a puzzling failure, and there is no
+ * reason to risk one when the number is right here.
+ */
 const fuelFor = (attribute: AttributeValue): number => {
     const member = memberOf(attribute)
     if (member === 'L') {

@@ -284,19 +284,6 @@ export type Shape =
 export type Slot = Exclude<Shape, 'set'> | 'strSet' | 'numSet' | 'binSet'
 
 /**
- * Which of the four set bases this codec's elements sit at, or `undefined` if it is not one.
- *
- * The companion of `member` for {@link set}, and the two answer different questions. `member`
- * is a fact about the *attribute*: `decimal.set()` and `number.set()` both write `NS`, so the member
- * cannot tell them apart. This is a fact about the *term*, and it can — which is exactly why
- * `formal/Calculus/Domain.lean:602` indexes a set by a base rather than by a `Member`.
- *
- * Reads through `refine` and a literal, and through nothing else. Both of those are *restrictions*
- * of a base, so the set they build is a restriction of the base's set — `setCodec_restrict`. An
- * adapter (`held`), a read widening (`legacy`) or a union is not a restriction of anything, has no
- * base, and gets `undefined`.
- */
-/**
  * What one declared attribute decides, read where the field is held.
  *
  * §4's two marks answer differently and neither is the codec's answer. A name that may be absent
@@ -2514,26 +2501,6 @@ export type AttributeOf<C> = C extends {
         : never
 
 /**
- * The item a spec writes, as a shape you could have written by hand.
- *
- * The fixed point. `Encoded<typeof Pet>` is what the codec puts in the table; a `PetItem` written
- * out by hand is what the table is believed to hold; pinning one against the other is what makes a
- * migration checkable rather than hoped for. Optional attributes are optional keys, because an
- * attribute a codec may omit is one the item may not have.
- */
-/**
- * What an item writes: the attributes the spec declares, plus whatever a rest policy adds.
- *
- * {@link Encoded} alone is a *lower bound* rather than the answer. Under `'drop'` and `'refuse'`
- * nothing else is written and the two agree; a rest codec emits attributes the spec never named, so
- * claiming `Encoded<Spec>` exactly would be a promise the compiler then enforces against the
- * caller — refusing to read an attribute the codec really did write.
- *
- * The two string policies are named rather than the codec matched: an {@link AttributeCodec} is
- * invariant in its value, so `Rest extends AttributeCodec<unknown, infer A>` fails for every codec
- * of a narrower value and quietly takes the wrong branch.
- */
-/**
  * The attributes a patch writes, read off the patch rather than off the whole spec.
  *
  * `Partial<Encoded<Spec>>` is the weaker answer and it loses the thing a patch knows: which
@@ -2576,10 +2543,30 @@ export type EncodedPatch<Spec, Patch> = Encoded<Spec> extends infer Full
  */
 type Written<Full, K> = Exclude<Full[K & keyof Full], undefined>
 
+/**
+ * What an item writes: the attributes the spec declares, plus whatever a rest policy adds.
+ *
+ * {@link Encoded} alone is a *lower bound* rather than the answer. Under `'drop'` and `'refuse'`
+ * nothing else is written and the two agree; a rest codec emits attributes the spec never named, so
+ * claiming `Encoded<Spec>` exactly would be a promise the compiler then enforces against the
+ * caller — refusing to read an attribute the codec really did write.
+ *
+ * The two string policies are named rather than the codec matched: an {@link AttributeCodec} is
+ * invariant in its value, so `Rest extends AttributeCodec<unknown, infer A>` fails for every codec
+ * of a narrower value and quietly takes the wrong branch.
+ */
 export type EncodedBy<Spec, Rest> = [Rest] extends ['drop' | 'refuse']
     ? Encoded<Spec>
     : Encoded<Spec> & { readonly [name: string]: AttributeValue }
 
+/**
+ * The item a spec writes, as a shape you could have written by hand.
+ *
+ * The fixed point. `Encoded<typeof Pet>` is what the codec puts in the table; a `PetItem` written
+ * out by hand is what the table is believed to hold; pinning one against the other is what makes a
+ * migration checkable rather than hoped for. Optional attributes are optional keys, because an
+ * attribute a codec may omit is one the item may not have.
+ */
 export type Encoded<Spec> = show<
     {
         [K in keyof Spec as Spec[K] extends {
@@ -3050,28 +3037,6 @@ const optionOf = (codec: AnyCodec): Option => {
 }
 
 /**
- * A union of objects with no discriminator — `{ petId, price } | { petIds }`.
- *
- * **A unique structural match; ambiguity is refused rather than scored.** A variant admits a set of
- * attribute names when it declares all of them and requires none that are missing. Exactly one
- * match is used; none or several throw.
- *
- * That is what keeps `decode ∘ encode = id`, which first-match-wins does not: the matcher reads only
- * names, never positions, so both directions reach the same variant. Scoring widest or narrowest
- * would preserve the law too, but every candidate declares all the names present, so it would be an
- * arbitrary tie-break silently committing to a shape nobody named.
- *
- * Prefer {@link tagged} wherever a discriminator exists.
- *
- * @example
- * ```ts
- * const LineItem = union([
- *     { gift: optional(boolean), petId: string, price: decimal },
- *     { petIds: array(string) },
- * ])
- * ```
- */
-/**
  * The tag values a variant answers to — its discriminator's whole admissible set, not one value.
  *
  * A variant may span several tags, and this codebase relies on it: a carrier declared
@@ -3306,6 +3271,12 @@ export const discriminatedUnion = <
  * particular value cannot be known until that value turns up, because `string('A')` and
  * `string('B')` both write `S` and are never ambiguous — so that one is reported when it happens.
  *
+ * **Refused rather than scored**, and that is what keeps `decode ∘ encode = id` where first-match
+ * wins does not: the matcher reads only names, never positions, so both directions reach the same
+ * variant. Scoring widest or narrowest would preserve the law too, but every candidate declares all
+ * the names present, so it would be an arbitrary tie-break committing in silence to a shape nobody
+ * named.
+ *
  * @example
  * ```ts
  * union([object({ petId: string, price: decimal }), object({ petIds: array(string) })])
@@ -3323,73 +3294,28 @@ export const union = <const Options extends readonly AnyCodec[]>(
     /**
      * Two options that no *value* can choose between, refused where the declaration is.
      *
-     * `ValidateOptions` refuses the pairs that no stored attribute can choose between, at compile
-     * time, by asking whether they read back as the same type. This is the other direction, and the
-     * types cannot see it: `array(string)` and `array(number)` read back as different types and are
-     * handed the same array.
+     * {@link separable} is the rule and states its own four exemptions; this is why the question is
+     * asked *here*. `ValidateOptions` refuses the pairs no stored attribute can choose between at
+     * compile time, by asking whether they read back as the same type. This is the other direction,
+     * and the types cannot see it: `array(string)` and `array(number)` read back as different types
+     * and are handed the same array. Asking once at the declaration reports it once, where asking
+     * per encode would report it once per write forever.
      *
-     * **The reason they are ambiguous has changed, and narrowed.** It used to be that neither
-     * checked what was in it, because encoding did not validate. Both check now, and the pair is
-     * still refused — over exactly one value, `[]`, the one array carrying nothing to tell them
-     * apart. `set` has no such value and separates, and it separates by the *occupancy* rather than
-     * by an exemption: `set(string)` writes a `strSet` where `set(number)` writes a `numSet`.
-     * Reporting any of this per-encode would report it once per write forever instead of once at
-     * import.
-     *
-     * Two exemptions, and both are options that identify themselves:
-     *
-     * - an **object** option is chosen by the attribute names present, never by being tried
-     * - a **literal** knows which values are its own, so trying it is a real question — which is why
-     *   `union([string('A'), string('B')])` is not ambiguous and never was
-     *
-     * An option whose kind is unknown — an adapter, an `opaque` — is not compared: it could be
-     * anything, and refusing it against everything would refuse unions that work.
-     *
-     * **Both directions, because the condition has two sides.** This loop compared `carries` — value
-     * kinds — and nothing compared `writes`, so `union([decimal, number])` was accepted: `decimal`
-     * takes a string and `number` takes a number, no shared kind, declaration allowed. Both store
-     * `'N'`. It encoded `'1.5'` to `{ N: '1.5' }` and then *could not read back what it had
-     * written* — the decode filter kept both options and reported "decimal and number both admit
-     * this attribute". A union that writes a row no reader can resolve is worse than one that is
-     * refused, and it was invisible only because the mirror `union([string, decimal])` *is* refused,
-     * by the kind check, one line up.
-     */
-    /**
-     * Whether two options of the same container kind are told apart by what they hold — and the
-     * answer turns on whether the container has an **empty inhabitant**.
-     *
-     * The loop below refuses a pair sharing a carried kind, on the stated ground that "neither
-     * checks what it is given". That was true and is not: every row validates now, so
-     * `array(string)` refuses `[1]` and `array(number)` refuses `['a']`. Measured, the pairs that
-     * used to be refused wholesale share these values and no others:
+     * **Which containers separate turns on whether the container has an empty inhabitant**, and the
+     * pairs that share a value share only that one:
      *
      *     array(string) / array(number)     `[]`
      *     record(string) / record(number)   `{}`
      *     set(string) / set(number)         nothing
      *
-     * So `array` and `record` stay refused, and the reason is sharper than the old one: it is not
-     * that neither checks, it is the one value that carries nothing to check. `set` separates,
-     * because **DynamoDB has no empty set** — the asymmetry the term's own rows record, where `[]`
-     * is admitted and an empty `Set` is not, deciding a question about declarations.
+     * So `array` and `record` stay refused and `set` does not, because **DynamoDB has no empty
+     * set**. That is the asymmetry the term's own rows record — `[]` is admitted and an empty `Set`
+     * is not — deciding a question about declarations. `codec.laws.spec.ts` pins both halves.
      *
      * **A sufficient condition, deliberately.** "No value can choose between these two" is not
-     * decidable from two definitions in general, so this answers `false` wherever it cannot show
-     * separation and the pair stays refused. Widening it is a matter of adding a container that
-     * provably has no empty inhabitant, not of weakening what is here.
-     *
-     * **And this is not the declaration guard being retired.** HANDOFF's fourth item expected
-     * admission to replace it; it cannot. `accepts` answers a question about a *value*, and both
-     * `identifies` and `separable` answer a question about a *declaration* — there is no value in
-     * hand at import time to ask about. The resolver is where admission replaced trying; the
-     * declaration guard is where it structurally cannot.
-     */
-    /**
-     * Where two answers meet, with `⊤` on either side meaning "not compared".
-     *
-     * `undefined` is the third exemption: an option whose occupancy is unknown — an adapter, a
-     * `custom`, an `opaque` — could be anything, and refusing it against everything would refuse
-     * unions that work. The model takes the same direction for the same reason: over-approximating
-     * an occupancy is safe, so a pair involving one is simply not certified rather than refused.
+     * decidable from two terms in general, so this refuses wherever it cannot show separation.
+     * Widening it means adding a container that provably has no empty inhabitant, not weakening
+     * what is here.
      */
     // **Every option has a term.** A `set` over a restricted element is spelled as a restriction
     // of the set, and a `set` whose element reduces to no base is refused by `.set()` at
