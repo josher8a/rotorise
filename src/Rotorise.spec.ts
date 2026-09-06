@@ -1339,6 +1339,13 @@ describe('the published surface', () => {
         'deeper',
         // and the read-side predicate, which is not a reader at all — it asks the codec
         'admitsAttribute',
+        // the rest of what `export type *` used to carry: three more readers of a definition, the
+        // two halves of the term cache, and the walk that reads a field's mark
+        'occupies',
+        'reads',
+        'termOf',
+        'codecOfTerm',
+        'constantOf',
     ] as const
 
     it('does not carry the internal utilities', async () => {
@@ -1346,6 +1353,24 @@ describe('the published surface', () => {
         for (const name of internal) {
             expect(Object.hasOwn(surface, name)).toBe(false)
         }
+    })
+
+    /**
+     * **The other half of the same fact, and it was unpinned while twelve names leaked.**
+     *
+     * The list above is a run-time check, and a run-time check cannot see a type. `export type *
+     * from './codec'` re-exported every one of that module's exports — the values among them as
+     * *types* — so `import { decides } from 'rotorise'` type-checked and was `undefined` when it
+     * ran. The value list was a decision and the type surface was still a consequence of where a
+     * function lived, which is the thing `46cb950` was supposed to have ended.
+     *
+     * Written as one rule rather than as twelve suppressions: no name held back at run time is a
+     * key of the module's type either. A thirteenth added to `internal` is checked by both halves
+     * without a line here.
+     */
+    it('does not carry them at the type level either', () => {
+        type Entry = typeof import('./Rotorise')
+        attest<[Extract<keyof Entry, (typeof internal)[number]>], [never]>()
     })
 
     it('carries the constructors and combinators', async () => {
