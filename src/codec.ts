@@ -54,7 +54,7 @@ import {
 export { carries, codecOfTerm, termOf } from './denote'
 
 import type { ErrorMessage, show } from './utils'
-import { describeShape, namesFit, namesOf, readTag } from './value'
+import { describeShape, namesFit, namesOf, readTag, sameLiteral } from './value'
 
 // the failure algebra lives in `./result`, and is re-exported because it is part of the surface a
 // caller works in: a `Result` is what every direction returns
@@ -587,25 +587,6 @@ export type Shape =
 export type Slot = Exclude<Shape, 'set'> | 'strSet' | 'numSet' | 'binSet'
 
 /**
- * The only value this codec can carry, when there is exactly one.
- *
- * Deliberately *not* recursive through the wrappers that `member` descends: a constant is a
- * claim about the value, and `refine` can reject it, `legacy` can decode an older encoding into
- * something else, and `optional` admits absence, which is not the value. `fallback` is the one that
- * keeps it — it always writes the attribute, and its replacement is typed to the same value.
- */
-export const decides = (codec: AnyCodec): unknown => {
-    const def = codec.def
-    switch (def.kind) {
-        case 'literal':
-            // two admissible values narrow what may be stored without deciding it
-            return def.allowed.length === 1 ? def.allowed[0] : undefined
-        default:
-            return undefined
-    }
-}
-
-/**
  * Which of the four set bases this codec's elements sit at, or `undefined` if it is not one.
  *
  * The companion of `member` for {@link set}, and the two answer different questions. `member`
@@ -631,26 +612,15 @@ export const decides = (codec: AnyCodec): unknown => {
 export const constantOf = (declared: AnyDeclaration): unknown => {
     const def = declared.def
     if (def.kind === 'optional') return undefined
-    if (def.kind === 'fallback') return decides(def.inner)
-    return decides(declared as AnyCodec)
-}
-
-export const setBase = (codec: AnyCodec): SetBase | undefined => {
-    const def = codec.def
-    switch (def.kind) {
-        case 'string':
-        case 'number':
-        case 'decimal':
-        case 'binary':
-            return def.kind
-        // a literal at `boolean` is the one that has no set: there is no `BOOLS`
-        case 'literal':
-            return def.base === 'boolean' ? undefined : def.base
-        case 'refine':
-            return setBase(codecOfTerm(def.inner))
-        default:
-            return undefined
-    }
+    const marked = def.kind === 'fallback' ? termOf(def.inner) : def
+    const t = termFromDef(marked)
+    // **A single-valued literal decides; two admissible values narrow without deciding.** This was
+    // `decides`, a reader that walked the definition to answer it, and the term answers the same
+    // row — deliberately *not* through the wrappers `member` descends: a constant is a claim about
+    // the value, and `refine` can reject it, `legacy` can decode an older encoding into something
+    // else, and `optional` admits absence, which is not the value. `fallback` is the one that keeps
+    // it, always writing the attribute at a value typed to the same alternative.
+    return t.kind === 'literal' && t.ls.length === 1 ? t.ls[0] : undefined
 }
 
 /* ── the seam: a definition, as the term it denotes ───────────────────────────────────── */
@@ -882,7 +852,24 @@ export type LiteralValue = string | number | boolean | Uint8Array
  */
 export type SetBase = Exclude<LiteralBase, 'boolean'>
 
-/** `ℓ` non-empty, refused where the caller can see which constructor named nothing. */
+/**
+ * §3 `(literal)`'s `ℓ`, checked: non-empty and pairwise distinct.
+ *
+ * **The model gets three guarantees from a type and the host's type gives two.** `ls` is a
+ * `NEFinset k.Carrier`, so the base indexes the alternatives, `n ≥ 1` holds, and no two are equal —
+ * all three from `NEFinset`. `term.ts`'s {@link Literal} buys the first from a discriminated union
+ * over the base and the second from a tuple head. **TypeScript cannot say the third**, so it is a
+ * refusal at construction, and this is where it lives.
+ *
+ * Distinctness is not tidiness. `NEFinset` is a *set*, so `literal(k, {'A','A'})` and
+ * `literal(k, {'A'})` are one term in the model and two definitions here — and the second names a
+ * cardinality the first does not, which is what `decides` reads to answer whether a literal has
+ * exactly one value. A repeated alternative makes a two-element `allowed` that admits one value,
+ * and the constant would go unrecognised.
+ *
+ * Compared with {@link sameLiteral}, which compares the way the base compares: bytes for `binary`,
+ * `===` otherwise.
+ */
 const someAlternatives = <T extends LiteralValue>(
     base: LiteralBase,
     allowed: readonly T[],
@@ -891,6 +878,18 @@ const someAlternatives = <T extends LiteralValue>(
         throw new CodecError(
             `a literal admits one of a non-empty set of values, and \`${base}()\` names none; pass the values, or use \`${base}\` itself if anything is admissible`,
         )
+    }
+    // the values rather than the indices, so the pair is two `T`s and not two lookups the checker
+    // has to be told about; `at` recovers the position the message names
+    for (const [i, one] of allowed.entries()) {
+        for (const [after, other] of allowed.slice(i + 1).entries()) {
+            if (sameLiteral(one, other)) {
+                const at = i + 1 + after
+                throw new CodecError(
+                    `a literal's alternatives are a *set*, and \`${base}()\` names the same value at positions ${i} and ${at}; the model's \`NEFinset\` cannot hold it twice, and a repeat makes a two-value literal that admits one — which stops it reading as a constant`,
+                )
+            }
+        }
     }
     return allowed
 }

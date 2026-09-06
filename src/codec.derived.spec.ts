@@ -12,17 +12,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { memberOf } from './attribute'
-import {
-    CodecError,
-    decides,
-    fallback,
-    legacy,
-    nullable,
-    number,
-    optional,
-    refine,
-    string,
-} from './codec'
+import { CodecError, nullable, number, refine, string } from './codec'
 
 const isTag = (v: string): v is `t-${string}` => v.startsWith('t-')
 
@@ -57,38 +47,5 @@ describe('the member a codec writes', () => {
         expect(() => refine(string, isTag).set()).not.toThrow()
         // @ts-expect-error `nullable` writes no single member, so the type declines the capability
         expect(() => refine(nullable(string), isTag).set()).toThrow(CodecError)
-    })
-})
-
-describe('the value a codec decides', () => {
-    it('is the one a single-valued literal admits', () => {
-        expect(decides(string('ONLY'))).toBe('ONLY')
-        expect(decides(string('A', 'B'))).toBeUndefined()
-    })
-
-    /**
-     * Not recursive through the wrappers `writes` descends: a constant is a claim about the value,
-     * and each of these may change values or admit absence.
-     */
-    it('does not survive a wrapper that may change the value', () => {
-        expect(decides(refine(string('ONLY'), isTag as never))).toBeUndefined()
-        expect(
-            decides(legacy({ current: string('ONLY'), older: string('ONLY') })),
-        ).toBeUndefined()
-        expect(decides(nullable(string('ONLY')))).toBeUndefined()
-    })
-
-    /**
-     * A field is not asked, and the two marks are read where a body holds them.
-     *
-     * `optional` and `fallback` answer differently — a name that may be absent decides nothing, a
-     * stand-in is written always — and neither answer is the codec's. `constants.spec.ts` holds both,
-     * against the type that must agree with them.
-     */
-    it('is not a question a field answers', () => {
-        expect(decides(optional(string('ONLY')).codec)).toBe('ONLY')
-        expect(decides(fallback(string('ONLY'), 'ONLY' as const).codec)).toBe(
-            'ONLY',
-        )
     })
 })
