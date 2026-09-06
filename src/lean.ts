@@ -429,8 +429,9 @@ const lazyLimit = 16
  * - **`held`, `legacy`, `custom`.** Three of §3's constructors carry *functions* —
  *   `f g : Value → Value`, `r : Attr → Option Value`, `ce`/`cp` — and this library carries
  *   JavaScript closures in the same positions. There is no expression in Lean for an arbitrary
- *   closure. `legacy` is the worst of the three and for a second reason: `Def` keeps only the
- *   *current* codec, so the older readers are not even recorded to be refused about.
+ *   closure. `legacy` used to be the worst of the three for a second reason, and is not any more:
+ *   the definition dropped the older readers entirely, so there was nothing to be refused about.
+ *   It carries `older` now, and the refusal below names it.
  * - **`refine`, unless the predicate is one this library shipped.** The fourth
  *   function-carrying constructor, and the one where the line has moved. See
  *   {@link ShippedPredicate}: `isNumeral` and `isStoredNumeral` are recognised by reference and
