@@ -952,7 +952,48 @@ For every structural guarantee the model makes, a host is in exactly one of thre
 | --- | --- | --- |
 | **(a)** carries it structurally | **nothing** — verify by types and move on | the host type is doing the work; there is no gate to own and nothing to test that the type does not already say |
 | **(b)** must gate | a **named** gate, in the module that owns the carrier, and a test that asserts **both** sides | *one owner*: a gate mirroring a carrier refinement belongs to the module that *is* the unrefined carrier, not the module that first needed it — a sibling entry point that must not import the first module will otherwise write a second answer to the same question. And a test that checks only our behaviour cannot tell a deliberate divergence from a reference implementation apart from a regression |
-| **(c)** cannot express it | a construction-time **refusal**, a test that pins it, and a written **reason** | the reason is the part that gets skipped and the part that matters: an unexplained gate is indistinguishable from an un-migrated one, and the next reader "fixes" the signature |
+| **(c)** cannot express it | a construction-time **refusal**, a test that pins it, and a written **reason** | **the test is the half that goes missing.** An unexplained gate is indistinguishable from an un-migrated one and the next reader "fixes" the signature, so the reason is what the row was written to protect — and measured over this arc, the reason was written both times and the test was absent both times |
+
+### The test is the half that goes missing, and both cases were found by deletion
+
+The row above used to say the *reason* is the part that gets skipped. Two refusals in the
+TypeScript host say otherwise, and neither was found by review.
+
+`src/lean.ts`'s emitter refused a §4 field where a `Term` belongs, with the reason written
+beside it, and had no test for the four months it existed. It has one now, reached through a
+deliberate cast, asserting the message rather than the throw.
+
+`termOf(...)` is the one place a child is taken from a codec a caller handed over, and it refuses a
+field for the same reason. Deleting the refusal gives **one** type error — the narrowing is
+what makes the return type-check — and a **completely green suite**. So the branch was load
+bearing for the type and unobserved for behaviour, and the deletion is what said so; the test
+written afterwards was verified by removing the refusal again and watching it fail.
+
+The instruction that follows is not "write the reason", which both of these did. It is: **a
+(c) refusal is not finished until a test reaches it past a cast.** A brand is not a proof and
+a cast defeats a brand, so the caller the refusal exists for is exactly the caller the type
+cannot see — and that caller is the one a test must impersonate.
+
+### A guarantee moving from (c) to (a), and what the gate owes on the way out
+
+The three cases are not a permanent assignment. A host that had to gate can later carry the
+guarantee structurally, and when it does, **the gate stops refusing anything**: the constraint
+already refuses it, and the gate's remaining content is its message.
+
+The TypeScript host moved four this arc, all of them the same guarantee — a field is not a
+codec. Once a field's type stopped claiming the two directions of a pair, and a codec's own
+definition became a term rather than a declaration, two positional guards that had refused
+`array(optional(string))` and `optional(optional(string))` refused nothing new. The measure was
+the suppressions, not the reading: removing all six uses left every one of the eleven
+`@ts-expect-error` directives across the element and marker tests with an error still to
+suppress, so the type was doing the whole job.
+
+**What such a gate owes on the way out is its message's content, moved where a refused caller
+reads it.** The constraint's own diagnostic names the offending type and says a codec was
+wanted; it does not say what to write instead. That sentence — here, that a name is the only
+thing absence can be said of, and that `nullable` is the member for a value stored as `NULL` —
+belongs on the constructor whose call was refused. A gate deleted without moving its sentence
+loses the only part of it that was not already carried by the type.
 
 ### The exception: a gate a refutation depends on stays — and it is narrower than it was written
 
@@ -998,6 +1039,22 @@ in TypeScript, easy to widen by accident, and in Rust an enum with a distinct pa
 variant — which *is* the indexed family, and is the clearest case where the model's newest shape
 ports better than its old one. `Attr.n : WFNumeral` wants a checked newtype in both; TypeScript
 has no nominal typing, so the branded-type trick is the closest thing and a cast defeats it.
+
+A binary literal is the case where the *host* has the sharper instrument. `Attr.b` carries
+bytes, and two byte arrays holding the same bytes are the same value in the model, which has no
+reference identity to distinguish them. JavaScript does, so a binary literal's read side answers
+with the **declared** array rather than with a copy: that is how the host spells "the value the
+model means" where the model needs no spelling at all. A target with value semantics for byte
+arrays owes nothing here, and one without owes the identity.
+
+`legacy` is the opposite direction, and it was invisible until the emitter had to refuse it.
+`Term.legacy` carries `r : Attr → Option Value` (`Calculus/Term.lean:73`); the host's definition
+recorded only the current codec and dropped `r` entirely, so a term the host built did not
+determine the codec the host ran. Nothing failed, and no test could have said so, because the
+half that was missing was the half nothing read. **The emitter's refusal text was the only
+record**: it said the definition drops the older readers, and it was right, and it was the
+only place that fact was written down. A host obligation that no host code reads is found by
+whatever has to serialise the host's own definition, or it is not found.
 
 **So a guarantee that must be a gate in one target may be structural in another.** The three
 cases are re-answered per target, at the time that target is certified — not in advance, and not
