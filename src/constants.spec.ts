@@ -104,23 +104,21 @@ describe('the type and the function agree on what is decided', () => {
     })
 
     /**
-     * The pairing where the two do **not** agree, pinned so the next reader sees it.
+     * A stand-in is written on **every** write, so the attribute still holds one value, and both
+     * halves say so.
      *
-     * A stand-in is written on every write, so the function calls the attribute decided. The type
-     * does not, and cannot as written: a field names the codec it marks as an `AttributeCodec`, which
-     * carries no `constant`, so the brand is gone by the time the derivation asks. This predates R4 —
-     * `FallbackCodec` erased the brand the same way when it was an intersection — and R4 moved both
-     * halves without changing either answer.
-     *
-     * It is the quiet direction. The caller is asked for a component the runtime could have supplied,
-     * which costs an argument rather than a throw. The loud direction is what this file exists for.
+     * They did not until the mark carried the codec it marks. A field named that codec as an
+     * `AttributeCodec`, which has no `constant`, so the brand was gone before the derivation asked
+     * and the type answered `never` while the walk answered the value. It was the quiet direction —
+     * the caller was asked for a component the runtime could have supplied — and it predated the
+     * field types becoming declarations rather than being caused by it.
      */
-    it('on a fallback over a literal, where the two disagree', () => {
+    it('on a fallback over a literal, which both call decided', () => {
         const stood = {
             TAG: fallback(string('PET'), 'PET' as const),
             id: string,
         }
-        attest<[ConstantAttributes<typeof stood>], [never]>()
+        attest<[ConstantAttributes<typeof stood>], ['TAG']>()
         expect(decided(stood)).toEqual(['TAG'])
     })
 })
