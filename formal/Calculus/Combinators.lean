@@ -1218,9 +1218,14 @@ theorem encSet_restrict {α : Type} (c : Codec) (q : Value → Bool) (inj : α �
     This is what makes indexing `set` by a base non-lossy. Restricting the *elements* and
     restricting the *set* by the lifted predicate produce the same `e`, so
     `set(literal k ls)` and `set(refine(b, q))` — the two shapes `src/` actually uses
-    (`src/codec.set.spec.ts:76`) — are still expressible, as refinements of the set. The
-    read side follows from `434e54d`: `restrict`'s `p` decodes and then applies `q`, so
-    a set read is admitted exactly when every element it produced passes. -/
+    (`src/codec.set.spec.ts:76`) — are still expressible, as refinements of the set.
+
+    **This theorem is the write side, and only the write side.** The read side is
+    `setCodec_restrict_p` below, and it was prose here until it was proved: the sentence said
+    the read side "follows", which is a claim about a pair whose halves fail for different
+    reasons. `e` splits on the elements; `p` splits on which of the three wire families
+    `decSet` lands in, and the restriction can move that landing. Naming the half each theorem
+    covers is what stops the next reader spending the citation twice. -/
 theorem setCodec_restrict (c : Codec) (q : Value → Bool) :
     (setCodec (c.restrict q)).e = ((setCodec c).restrict (liftQ q)).e := by
   funext v
@@ -1230,6 +1235,146 @@ theorem setCodec_restrict (c : Codec) (q : Value → Bool) :
   | strSet S => exact encSet_restrict c q Value.str S
   | numSet S => exact encSet_restrict c q Value.num S
   | binSet S => exact encSet_restrict c q Value.bin S
+  | _ => rfl
+
+/-- **The lifted predicate, read at one element.** A value the set read produced passes
+    `liftQ q` only if every element it read passes `q`.
+
+    This runs the direction `decSet_mem` cannot. `decSet_mem` goes from a member of the answer
+    back to an element of the wire set; the restriction turns on an element whose value the
+    answer would *hold*, and asks whether the lifted predicate saw it. -/
+theorem decSet_liftQ {α : Type} {c : Codec} {q : Value → Bool} {inj : α → Attr}
+    {S : NEFinset α} {v : Value} (h : decSet c inj S = some v) (hl : liftQ q v = true)
+    {x : α} (hx : x ∈ S.1) {w : Value} (hw : c.p (inj x) = some w) : q w = true := by
+  unfold decSet at h
+  split at h
+  · next T hT =>
+      injection h with h; subst h
+      obtain ⟨s, hs⟩ :=
+        Option.isSome_iff_exists.mp (setImage_some (neSetImage_eq_setImage.mp hT) x hx)
+      have hws : w = .str s := by
+        have := bind_vStr hs; rw [hw] at this; exact Option.some.inj this
+      have hmem : s ∈ T.1 :=
+        (mem_setImage (neSetImage_eq_setImage.mp hT) s).mpr ⟨x, hx, hs⟩
+      simp only [liftQ, decide_eq_true_eq] at hl
+      rw [hws]; exact hl s hmem
+  · split at h
+    · next T hT =>
+        injection h with h; subst h
+        obtain ⟨d, hs⟩ :=
+          Option.isSome_iff_exists.mp (setImage_some (neSetImage_eq_setImage.mp hT) x hx)
+        have hws : w = .num d := by
+          have := bind_vNum hs; rw [hw] at this; exact Option.some.inj this
+        have hmem : d ∈ T.1 :=
+          (mem_setImage (neSetImage_eq_setImage.mp hT) d).mpr ⟨x, hx, hs⟩
+        simp only [liftQ, decide_eq_true_eq] at hl
+        rw [hws]; exact hl d hmem
+    · next =>
+        obtain ⟨T, hT, hv⟩ := Option.map_eq_some'.mp h
+        subst hv
+        obtain ⟨b, hs⟩ :=
+          Option.isSome_iff_exists.mp (setImage_some (neSetImage_eq_setImage.mp hT) x hx)
+        have hws : w = .bin b := by
+          have := bind_vBin hs; rw [hw] at this; exact Option.some.inj this
+        have hmem : b ∈ T.1 :=
+          (mem_setImage (neSetImage_eq_setImage.mp hT) b).mpr ⟨x, hx, hs⟩
+        simp only [liftQ, decide_eq_true_eq] at hl
+        rw [hws]; exact hl b hmem
+
+/-- **Reading a restricted element set is reading the set and then applying the lift.**
+
+    The split is on a `decide` over the key set, not on the proposition: `by_cases` reaches
+    `Classical.em`, which would put `Classical.choice` under `setCodec_restrict_p` and under
+    everything that cites it. The guard is `Option.elim true q`, so an element the base codec
+    declines contributes `true` and the split stays about the predicate. -/
+theorem decSet_restrict {α : Type} (c : Codec) (q : Value → Bool) (inj : α → Attr)
+    (S : NEFinset α) :
+    decSet (c.restrict q) inj S =
+      (decSet c inj S).bind (fun v => if liftQ q v then some v else none) := by
+  cases hd : decide (∀ x ∈ S.1, ((c.p (inj x)).elim true q) = true) with
+  | true =>
+    have hq : ∀ x ∈ S.1, ((c.p (inj x)).elim true q) = true := of_decide_eq_true hd
+    have hpe : ∀ x ∈ S.1, (c.restrict q).p (inj x) = c.p (inj x) := by
+      intro x hx
+      have := hq x hx
+      simp only [Codec.restrict]
+      cases hp : c.p (inj x) with
+      | none => rfl
+      | some w =>
+        rw [hp] at this
+        simp only [Option.elim] at this
+        simp [this]
+    have hds : decSet (c.restrict q) inj S = decSet c inj S := by
+      unfold decSet
+      rw [neSetImage_congr (f := fun x => ((c.restrict q).p (inj x)).bind vStr)
+            (g := fun x => (c.p (inj x)).bind vStr) (fun x hx => by simp only [hpe x hx]),
+          neSetImage_congr (f := fun x => ((c.restrict q).p (inj x)).bind vNum)
+            (g := fun x => (c.p (inj x)).bind vNum) (fun x hx => by simp only [hpe x hx]),
+          neSetImage_congr (f := fun x => ((c.restrict q).p (inj x)).bind vBin)
+            (g := fun x => (c.p (inj x)).bind vBin) (fun x hx => by simp only [hpe x hx])]
+    rw [hds]
+    cases hv : decSet c inj S with
+    | none => rfl
+    | some v =>
+      have hl : liftQ q v = true := by
+        rcases decSet_mem hv with ⟨T, rfl, hT⟩ | ⟨T, rfl, hT⟩ | ⟨T, rfl, hT⟩ <;>
+          · simp only [liftQ, decide_eq_true_eq]
+            intro y hy
+            obtain ⟨x, hx, hpx⟩ := hT y hy
+            have := hq x hx
+            rw [hpx] at this
+            simpa only [Option.elim] using this
+      simp [hl]
+  | false =>
+    have hq : ¬ ∀ x ∈ S.1, ((c.p (inj x)).elim true q) = true := of_decide_eq_false hd
+    obtain ⟨x₀, hx₀, hbad⟩ : ∃ x ∈ S.1, ((c.p (inj x)).elim true q) ≠ true :=
+      Decidable.byContradiction fun hc =>
+        hq fun x hx => Decidable.byContradiction fun h' => hc ⟨x, hx, h'⟩
+    obtain ⟨w₀, hw₀⟩ : ∃ w, c.p (inj x₀) = some w := by
+      cases hp : c.p (inj x₀) with
+      | none => rw [hp] at hbad; exact absurd rfl hbad
+      | some w => exact ⟨w, rfl⟩
+    have hqw : q w₀ ≠ true := by
+      rw [hw₀] at hbad; simpa only [Option.elim] using hbad
+    have hqf : q w₀ = false := by
+      cases hb : q w₀ with
+      | false => rfl
+      | true => exact absurd hb hqw
+    have hnone : (c.restrict q).p (inj x₀) = none := by
+      simp only [Codec.restrict, hw₀]
+      simp [hqf]
+    have hL : decSet (c.restrict q) inj S = none := by
+      unfold decSet
+      rw [neSetImage_none (setImage_none_of hx₀ (by simp [hnone])),
+          neSetImage_none (setImage_none_of hx₀ (by simp [hnone])),
+          neSetImage_none (setImage_none_of hx₀ (by simp [hnone]))]
+      rfl
+    rw [hL]
+    cases hv : decSet c inj S with
+    | none => rfl
+    | some v =>
+      have hl : liftQ q v ≠ true := fun hl => hqw (decSet_liftQ hv hl hx₀ hw₀)
+      simp [hl]
+
+/-- **`set(refine(b, q))` is `refine(set(b), liftQ q)` on the read side too — on the nose.**
+
+    The twin of `setCodec_restrict`, and the half `Term.set` taking a bare `SetBase` actually
+    rests on: a host that spells `.set()` over a restricted ground as `refine(set(b), liftQ q)`
+    is claiming both halves of the pair agree, and only `e` was proved.
+
+    `decSet` tries `strSet`, then `numSet`, then `binSet`, and takes the first that answers, so
+    the restriction could in principle move which family the read lands in. It cannot:
+    a restricted read is the base read at every element or nowhere, so a family that answers
+    under the restriction answers under the base with the same image, and a family that stops
+    answering stops because some element failed `q` — which is exactly what `liftQ` then
+    reports on the base's own answer. -/
+theorem setCodec_restrict_p (c : Codec) (q : Value → Bool) :
+    (setCodec (c.restrict q)).p = ((setCodec c).restrict (liftQ q)).p := by
+  funext a
+  cases a with
+  | ss S => exact decSet_restrict c q Attr.s S
+  | ns S => exact decSet_restrict c q Attr.n S
+  | bs S => exact decSet_restrict c q Attr.b S
   | _ => rfl
 
 /-! ### A codec carried between two prisms
