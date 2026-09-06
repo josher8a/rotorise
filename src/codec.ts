@@ -34,6 +34,7 @@ import {
     orThrow,
     type Result,
 } from './result'
+import type { Literal, Term, Field as TermField } from './term'
 import type { ErrorMessage, show } from './utils'
 
 // the failure algebra lives in `./result`, and is re-exported because it is part of the surface a
@@ -934,6 +935,270 @@ export const setBase = (codec: AnyCodec): SetBase | undefined => {
             return setBase(codecOfTerm(def.inner))
         default:
             return undefined
+    }
+}
+
+/* ── the seam: a definition, as the term it denotes ───────────────────────────────────── */
+
+/**
+ * A `Def` this library can build and §3 has no term for.
+ *
+ * There is exactly one such shape today — a `set` over a restricted element — and it is not a
+ * defect on either side. `refine(decimal, q).set()` is a lawful codec, and `Term.set` is indexed by
+ * a bare `SetBase`, so the model says the same pair as `refine(set(b), liftQ q)` and not as a
+ * `set` term. The obstruction carries `at` and `reason` so a caller that has a path can report
+ * where, and `src/lean.ts` is the caller that does.
+ *
+ * Not a {@link CodecError}: a codec is not being refused. The codec is fine and the *term* is
+ * missing, which is a different fact and reaches a different consumer.
+ */
+export class NoTerm extends Error {
+    /** Where in the definition the obstruction is, as a dotted path. */
+    readonly at: string
+    /** Why §3 has no term for it. */
+    readonly reason: string
+    constructor(at: string, reason: string) {
+        super(`no §3 term for ${at}: ${reason}`)
+        this.name = 'NoTerm'
+        this.at = at
+        this.reason = reason
+    }
+}
+
+/** {@link setBase}, asked of a term rather than of a codec — the same walk, one level up. */
+const setBaseOf = (t: Term): SetBase | undefined => {
+    switch (t.kind) {
+        case 'string':
+        case 'number':
+        case 'decimal':
+        case 'binary':
+            return t.kind
+        case 'literal':
+            return t.base === 'boolean' ? undefined : t.base
+        case 'refine':
+            return setBaseOf(t.inner)
+        default:
+            return undefined
+    }
+}
+
+/**
+ * A literal's alternatives, checked against the base that indexes them.
+ *
+ * `Def` carries `base` beside `allowed` and nothing relates the two, so `{ base: 'decimal',
+ * allowed: [1] }` is a value of that type. {@link Literal} indexes the alternatives by the base, so
+ * the mismatch is unrepresentable there and this is where it stops.
+ *
+ * **A throw, not a refusal.** No constructor builds such a definition — `literal`'s three entries
+ * derive the base from the values it was given — so a mismatch here is a broken invariant rather
+ * than a codec the model cannot say. Rule 14's line: a failure you can expect is a value, and this
+ * is not one.
+ */
+const literalTerm = (
+    base: LiteralBase,
+    allowed: readonly LiteralValue[],
+    at: string,
+): Literal => {
+    const [first, ...rest] = allowed
+    if (first === undefined) {
+        throw new Error(
+            `${at}: a literal with no alternatives, which \`literal\` does not build`,
+        )
+    }
+    const wrong = (): never => {
+        throw new Error(
+            `${at}: a \`${base}\` literal whose alternatives are not that base's carrier`,
+        )
+    }
+    /**
+     * The tail, at the carrier the base indexes — and the check is what narrows it.
+     *
+     * A loop that tests each element and then spreads the array teaches the checker nothing, so it
+     * ends in a cast. A type predicate is the same test with the narrowing kept, and the count is
+     * how the refusal survives: `filter` drops what fails, so a shorter answer is an alternative
+     * that was not this base's.
+     */
+    const tail = <T extends LiteralValue>(
+        is: (one: LiteralValue) => one is T,
+    ): readonly T[] => {
+        const kept = rest.filter(is)
+        return kept.length === rest.length ? kept : wrong()
+    }
+    switch (base) {
+        case 'string':
+        case 'decimal': {
+            if (typeof first !== 'string') return wrong()
+            const ls = tail((one): one is string => typeof one === 'string')
+            return { kind: 'literal', base, ls: [first, ...ls] }
+        }
+        case 'number': {
+            if (typeof first !== 'number') return wrong()
+            const ls = tail((one): one is number => typeof one === 'number')
+            return { kind: 'literal', base, ls: [first, ...ls] }
+        }
+        case 'boolean': {
+            if (typeof first !== 'boolean') return wrong()
+            const ls = tail((one): one is boolean => typeof one === 'boolean')
+            return { kind: 'literal', base, ls: [first, ...ls] }
+        }
+        case 'binary': {
+            if (!(first instanceof Uint8Array)) return wrong()
+            const ls = tail(
+                (one): one is Uint8Array => one instanceof Uint8Array,
+            )
+            return { kind: 'literal', base, ls: [first, ...ls] }
+        }
+    }
+}
+
+/** §4's field, as the term language holds one: the mark, and the term it marks. */
+const fieldTerm = (field: Field, at: string): TermField =>
+    field.mark === 'fallback'
+        ? { mark: 'fallback', t: termFromDef(field.codec, at), v: field.value }
+        : field.mark === 'optional'
+          ? { mark: 'optional', t: termFromDef(field.codec, at) }
+          : { mark: 'req', t: termFromDef(field.codec, at) }
+
+/**
+ * **The seam.** A definition, as the §3 term it denotes.
+ *
+ * `Def` is the record a codec keeps about itself and it grew a row at a time; {@link Term} is the
+ * model's language. Where the two disagree the term wins, because the term is what the calculus
+ * proves things about, and the disagreements are all one shape: `Def` can say something §3 cannot.
+ * Each is handled here and nowhere else, which is the point of having one conversion.
+ *
+ * The one that has no term at all is a `set` over a restricted element, and it raises
+ * {@link NoTerm}. Everything else is a rename, a re-indexing, or a recursion.
+ */
+export const termFromDef = (def: TermDef, at = 'codec'): Term => {
+    switch (def.kind) {
+        case 'string':
+        case 'number':
+        case 'decimal':
+        case 'boolean':
+        case 'binary':
+        case 'null':
+            return { kind: def.kind }
+        case 'literal':
+            return literalTerm(def.base, def.allowed, at)
+        case 'set': {
+            const elem = termFromDef(def.element, `${at}.element`)
+            const base = setBaseOf(elem)
+            if (base === undefined || elem.kind !== base) {
+                throw new NoTerm(
+                    `${at}.element`,
+                    base
+                        ? `a set of a *restricted* element — this one is a \`${def.element.kind}\` over \`${base}\`. \`Term.set\` is indexed by a bare \`SetBase\`, and the lift \`setCodec_restrict\` is an equation between codecs rather than a term`
+                        : 'a set whose element is not one of the four `SetBase` bases',
+                )
+            }
+            return { kind: 'set', base }
+        }
+        case 'array':
+            return {
+                kind: 'array',
+                elem: termFromDef(def.element, `${at}.element`),
+            }
+        case 'tuple':
+            return {
+                kind: 'tuple',
+                elems: def.elements.map((element, index) =>
+                    termFromDef(element, `${at}[${index}]`),
+                ),
+                ...(def.tail === undefined
+                    ? {}
+                    : { tail: termFromDef(def.tail, `${at}.tail`) }),
+            }
+        case 'record':
+            return {
+                kind: 'record',
+                val: termFromDef(def.value, `${at}.value`),
+            }
+        case 'attributes': {
+            const fields: Record<string, TermField> = {}
+            for (const [name, field] of Object.entries(def.of)) {
+                fields[name] = fieldTerm(field, `${at}.${name}`)
+            }
+            const rest = def.rest
+            return {
+                kind: 'object',
+                body: {
+                    fields,
+                    rest:
+                        rest === 'drop' || rest === 'refuse'
+                            ? rest
+                            : {
+                                  kind: 'codec',
+                                  t: termFromDef(rest, `${at}.rest`),
+                              },
+                },
+            }
+        }
+        // the model reads a variant's tag off the variant's own `d` field, so the table's key is
+        // dropped rather than carried: two statements of one fact are two things that can disagree
+        case 'tagged':
+            return {
+                kind: 'dunion',
+                d: def.discriminator,
+                options: Object.values(def.variants).map((variant, index) =>
+                    termFromDef(variant, `${at}.variants[${index}]`),
+                ),
+            }
+        case 'untagged':
+            return {
+                kind: 'union',
+                options: def.variants.map((variant, index) =>
+                    termFromDef(variant, `${at}.variants[${index}]`),
+                ),
+            }
+        case 'refine':
+            return {
+                kind: 'refine',
+                inner: termFromDef(def.inner, `${at}.inner`),
+                q: def.refined,
+            }
+        case 'nullable':
+            return {
+                kind: 'nullable',
+                inner: termFromDef(def.inner, `${at}.inner`),
+            }
+        case 'legacy':
+            return {
+                kind: 'legacy',
+                inner: termFromDef(def.current, `${at}.current`),
+                r: def.older.decode,
+            }
+        case 'held':
+            return {
+                kind: 'held',
+                inner: termFromDef(def.inner, `${at}.inner`),
+                f: def.adapt.encode,
+                g: def.adapt.decode,
+            }
+        // the thunk resolves once on this side too, so a term forced twice is one term — which is
+        // what `codecOfTerm`'s memo already rests on one level down
+        case 'lazy': {
+            let resolved: Term | undefined
+            return {
+                kind: 'lazy',
+                get: () => {
+                    resolved ??= termFromDef(def.get(), `${at}.get()`)
+                    return resolved
+                },
+            }
+        }
+        case 'opaque':
+            return { kind: 'opaq', lossy: def.numbers === 'lossy' }
+        case 'custom':
+            return {
+                kind: 'custom',
+                ce: def.encode,
+                cp: def.decode,
+                ...(def.arbitrary === undefined
+                    ? {}
+                    : { arbitrary: def.arbitrary }),
+                ...(def.shrink === undefined ? {} : { shrink: def.shrink }),
+            }
     }
 }
 

@@ -238,8 +238,11 @@ inductive Typed : Term → Held → Option Member → Prop where
 
       **The arity buys the language, not the proofs**: no proof over `(dunion)` consults it, they
       all want only nonemptiness. A `dunion` is a *lookup*, and an option answering to two tags is
-      a key that does not identify its variant. `src/` still permits several and narrowing it there
-      is a separate call.
+      a key that does not identify its variant. `src/` refuses one too, since `999b877`: the
+      constructor answers *"'kind' names 2 values at one option, and a variant answers to exactly
+      one tag"*, and the type reports it before the sharing check. This said `src/` still permits
+      several, which stopped being true the day the host was aligned and was left saying so —
+      the sentence cites no deleted name, so `name_drift.py` had nothing to catch.
 
       **Why arity is a premise even so.** §4a's criterion puts it on the *carrier* side of the
       boundary — a property of one option against its own field — and it stays a premise

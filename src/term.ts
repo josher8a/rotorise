@@ -1,0 +1,483 @@
+/**
+ * §3's term language, and the five functions of a term that the model computes.
+ *
+ * Derived from `formal/Calculus/Term.lean`, with `member` from `Denote.lean`'s `μSyn`, `specOf`
+ * and `tagsOf` from `Denote.lean`, and {@link occV}/{@link occA} from `Orthogonality.lean`. One
+ * variant per model constructor, under the model's own names, so a reader holding the two files
+ * side by side is reading one language twice rather than two languages that agree.
+ *
+ * **Why the term is its own module.** `Def` in `codec.ts` grew as the record a codec keeps about
+ * itself, and it kept what each reader happened to need: a `set` holds an element *term* where the
+ * model indexes by a base, a literal's alternatives are not indexed by their base, and a field
+ * marker's `inner` is a codec where an object's field holds a term. Each of those is a state the
+ * model cannot represent and this library can. Here the type is the model's, so the illegal states
+ * stop being reachable rather than being checked for.
+ *
+ * The one place this language is **wider** than the model is `lazy`, and the row says why.
+ */
+
+import type { AttributeName, AttributeValue } from './attribute'
+import type { LiteralBase, Refinement, Result, SetBase, Slot } from './codec'
+
+/* ── the term ─────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * A nonempty list, which is what `NEFinset` buys the model at a literal.
+ *
+ * Two of `NEFinset`'s three guarantees are here: the element type, from the base that indexes
+ * {@link Literal}, and non-emptiness, from the tuple's head. **Pairwise distinctness is not**, and
+ * TypeScript cannot say it — so it stays a refusal at the constructor, with a test that pins it and
+ * the reason written above the refusal.
+ */
+export type NonEmpty<T> = readonly [T, ...T[]]
+
+/**
+ * §3 `(literal)`: a ground base, and a nonempty set of that base's alternatives.
+ *
+ * **Five variants rather than one with a `base` field**, and that is the whole content. `Def`'s
+ * literal carries `base: LiteralBase` beside `allowed: readonly LiteralValue[]`, so
+ * `{ base: 'decimal', allowed: [1, 2] }` is a value of the type — a decimal literal whose
+ * alternatives are numbers, which nothing can encode. The model has no such term: `ls` is a
+ * `NEFinset k.Carrier`, so the base *indexes* the alternatives. This is that indexing, in the one
+ * form TypeScript has for it.
+ *
+ * `decimal` carries text, which is the reason the base is recorded at all: a decimal literal's
+ * alternatives are strings and it stores `N`, so neither the member nor the JS type of the values
+ * recovers the base.
+ */
+export type Literal =
+    | {
+          readonly kind: 'literal'
+          readonly base: 'string'
+          readonly ls: NonEmpty<string>
+      }
+    | {
+          readonly kind: 'literal'
+          readonly base: 'decimal'
+          readonly ls: NonEmpty<string>
+      }
+    | {
+          readonly kind: 'literal'
+          readonly base: 'number'
+          readonly ls: NonEmpty<number>
+      }
+    | {
+          readonly kind: 'literal'
+          readonly base: 'boolean'
+          readonly ls: NonEmpty<boolean>
+      }
+    | {
+          readonly kind: 'literal'
+          readonly base: 'binary'
+          readonly ls: NonEmpty<Uint8Array>
+      }
+
+/** §3's terms. One variant per `Term.lean` constructor, under the model's names. */
+export type Term =
+    | { readonly kind: 'string' }
+    | { readonly kind: 'number' }
+    | { readonly kind: 'decimal' }
+    | { readonly kind: 'boolean' }
+    | { readonly kind: 'binary' }
+    | { readonly kind: 'null' }
+    | Literal
+    /**
+     * §3 `(set)`, indexed by its element **base** and not by an element term.
+     *
+     * The premise `setMember μ = some μS` was partial, so a constructor over element terms accepted
+     * terms the rule then refused. Four bases survive it, so the base is an index and the refusal is
+     * a type error. `set(refine(b, q))` and `set(literal k ls)` are not lost as *codecs* —
+     * `setCodec_restrict` and `setCodec_restrict_p` prove the set of a restriction and the
+     * restriction of a set are one pair, on both halves — but they have no `set` term, and the
+     * conversion refuses them until the pass that spells them as the refinement they are.
+     */
+    | { readonly kind: 'set'; readonly base: SetBase }
+    | { readonly kind: 'array'; readonly elem: Term }
+    /** `(tuple)` and `(tuple-tail)` in one variant; no tail is the plain tuple. */
+    | {
+          readonly kind: 'tuple'
+          readonly elems: readonly Term[]
+          readonly tail?: Term
+      }
+    | { readonly kind: 'record'; readonly val: Term }
+    /** §3 `(held)`: the iso, both halves, as the caller supplied them. */
+    | {
+          readonly kind: 'held'
+          readonly inner: Term
+          readonly f: (value: never) => unknown
+          readonly g: (held: never) => unknown
+      }
+    /**
+     * §3 `(refine)`. The model carries `q : Value → Bool` and this carries the whole
+     * {@link Refinement}: only `is` has a counterpart, and `what` is the refusal text while
+     * `arbitrary` is what a generator derived from the term reads.
+     */
+    | { readonly kind: 'refine'; readonly inner: Term; readonly q: Refinement }
+    /** §3 `(legacy)`: `r : Attr ⇀ Value`, the older reading, which widens `p` and never `e`. */
+    | {
+          readonly kind: 'legacy'
+          readonly inner: Term
+          readonly r: (attribute: AttributeValue) => unknown
+      }
+    | { readonly kind: 'nullable'; readonly inner: Term }
+    /**
+     * §3 `(lazy)`, and **the one row where this language is wider than the model's.**
+     *
+     * `Term.lazy` carries a plain `Term`, and `Term.lean` says why in as many words: a closure adds
+     * no constructible term, every `Term` being finite either way, and recursive codecs are not
+     * modelled and cannot be — `union`'s admission is anti-monotone, so a genuinely recursive union
+     * has no fixpoint semantics in any system.
+     *
+     * This library supports a recursive entity through a thunk, and `codec.recursive.spec.ts`
+     * declares one. So the thunk stays, the emitter refuses a `lazy`, and {@link occV} and
+     * {@link occA} answer `undefined` here rather than the subterm's — because reading through
+     * forces a binding that may not exist at declaration time, and a declaration-time guard that
+     * forces is a guard that throws on the entity it exists to allow.
+     */
+    | { readonly kind: 'lazy'; readonly get: () => Term }
+    /** §3 `(custom)`: the pair as data. The two generators are the caller's and ride here too. */
+    | {
+          readonly kind: 'custom'
+          readonly ce: (value: never) => Result<AttributeValue>
+          readonly cp: (attribute: AttributeValue) => unknown
+          readonly arbitrary?: (rng: never, size: number) => unknown
+          readonly shrink?: (value: never) => readonly unknown[]
+      }
+    /** §3 `(opaque)`: `lossy = false` is the `refuse` policy — the absence of the `number` option. */
+    | { readonly kind: 'opaq'; readonly lossy: boolean }
+    | { readonly kind: 'object'; readonly body: Body }
+    | { readonly kind: 'union'; readonly options: readonly Term[] }
+    | {
+          readonly kind: 'dunion'
+          readonly d: string
+          readonly options: readonly Term[]
+      }
+
+/**
+ * §4's object payload: the declared names with the field at each, and the policy for the rest.
+ *
+ * A record from name to {@link Field} **is** the model's `Finset Name` paired with a function on
+ * it: no repeats, no ordering for a statement to have to ignore. The model spends a paragraph
+ * arguing that shape against a list of pairs, and TypeScript gives it for nothing.
+ */
+export type Body = {
+    readonly fields: Readonly<Record<string, Field>>
+    readonly rest: Rest
+}
+
+/**
+ * §4's field: a term with a presence mark, and **not a term**.
+ *
+ * No member of {@link Term} holds one, which is §4's stratification as a type rather than a check.
+ * `array(optional(c))` is not a thing this type can express.
+ */
+export type Field =
+    | { readonly mark: 'req'; readonly t: Term }
+    | { readonly mark: 'optional'; readonly t: Term }
+    /** `fallback` concludes `req` (§4): the absence is in the row, never in the value. */
+    | { readonly mark: 'fallback'; readonly t: Term; readonly v: unknown }
+
+/** §4's rest policy. `codec` is the one that holds an undeclared name; the two others refuse it. */
+export type Rest =
+    | 'drop'
+    | 'refuse'
+    | { readonly kind: 'codec'; readonly t: Term }
+
+/* ── the member index ─────────────────────────────────────────────────────────────────── */
+
+/** Which member each ground base stores. Not injective: `number` and `decimal` both store `N`. */
+const baseMember: { readonly [B in LiteralBase]: AttributeName } = {
+    string: 'S',
+    number: 'N',
+    decimal: 'N',
+    boolean: 'BOOL',
+    binary: 'B',
+}
+
+/** …and which member a set of that base stores. Four bases onto three wire members. */
+const setMember: { readonly [B in SetBase]: AttributeName } = {
+    string: 'SS',
+    number: 'NS',
+    decimal: 'NS',
+    binary: 'BS',
+}
+
+/**
+ * §5 `(union)`'s member: `μ` where every option agrees, and `⊤` otherwise.
+ *
+ * An empty list answers `⊤`, as the model's `unanimous` does. A list of `⊤`s answers `⊤` too, and
+ * by agreement rather than by default — which is the same answer and not the same reason.
+ */
+export const unanimous = (
+    members: readonly (AttributeName | undefined)[],
+): AttributeName | undefined => {
+    const [first, ...rest] = members
+    return first !== undefined && rest.every((one) => one === first)
+        ? first
+        : undefined
+}
+
+/**
+ * `μSyn`: the member a term stores, read off the term.
+ *
+ * `undefined` is the model's `⊤` — *not determined by the term* — and the four rows that answer it
+ * do so for four different reasons (§3): `nullable` writes its subterm's member or `NULL` and so
+ * names neither, `lazy` could be asked but answering forces the thunk, `custom` is a pair of opaque
+ * functions with nothing to ask, and `opaque` writes whatever the value turns out to be.
+ */
+export const member = (t: Term): AttributeName | undefined => {
+    switch (t.kind) {
+        case 'string':
+            return 'S'
+        case 'number':
+        case 'decimal':
+            return 'N'
+        case 'boolean':
+            return 'BOOL'
+        case 'binary':
+            return 'B'
+        case 'null':
+            return 'NULL'
+        case 'literal':
+            return baseMember[t.base]
+        case 'set':
+            return setMember[t.base]
+        case 'array':
+        case 'tuple':
+            return 'L'
+        case 'record':
+        case 'object':
+        case 'dunion':
+            return 'M'
+        // a wrapper preserves the member (§6), which is what keeps a key's attribute type stable
+        case 'held':
+        case 'refine':
+        case 'legacy':
+            return member(t.inner)
+        case 'nullable':
+        case 'lazy':
+        case 'custom':
+        case 'opaq':
+            return undefined
+        case 'union':
+            return unanimous(t.options.map(member))
+    }
+}
+
+/* ── occupancy ────────────────────────────────────────────────────────────────────────── */
+
+/** A ground base's value slot. `decimal` is held as text, which is why it lands on `string`. */
+const baseSlot: { readonly [B in LiteralBase]: Slot } = {
+    string: 'string',
+    number: 'number',
+    decimal: 'string',
+    boolean: 'boolean',
+    binary: 'binary',
+}
+
+/**
+ * …and a set base's. Four bases onto three slots, colliding at `string`/`decimal`, where
+ * {@link setMember} collides at `number`/`decimal` instead. The two collisions are disjoint, which
+ * is why the pair of families separates all four bases and neither family does alone.
+ */
+const setSlot: { readonly [B in SetBase]: Slot } = {
+    string: 'strSet',
+    number: 'numSet',
+    decimal: 'strSet',
+    binary: 'binSet',
+}
+
+const everySlot: readonly Slot[] = [
+    'string',
+    'number',
+    'boolean',
+    'binary',
+    'null',
+    'strSet',
+    'numSet',
+    'binSet',
+    'array',
+    'map',
+]
+
+const everyMember: readonly AttributeName[] = [
+    'S',
+    'N',
+    'B',
+    'BOOL',
+    'NULL',
+    'SS',
+    'NS',
+    'BS',
+    'L',
+    'M',
+]
+
+/** `⊤` is `undefined`, so a union of occupancies is `undefined` as soon as one side is. */
+const joined = <A>(
+    parts: readonly (readonly A[] | undefined)[],
+): readonly A[] | undefined => {
+    const out: A[] = []
+    for (const part of parts) {
+        if (part === undefined) return undefined
+        for (const one of part) if (!out.includes(one)) out.push(one)
+    }
+    return out
+}
+
+const withOne = <A>(
+    one: A,
+    rest: readonly A[] | undefined,
+): readonly A[] | undefined => joined([[one], rest])
+
+/**
+ * `occV`: which value constructors a term may write, or `undefined` for every one of them.
+ *
+ * An over-approximation on purpose. If `X ⊆ X′`, `Y ⊆ Y′` and `X′ ∩ Y′ = ∅` then `X ∩ Y = ∅`, so a
+ * coarse answer costs a certificate and never buys a wrong one.
+ *
+ * The `undefined` rows, and why each: `held`'s `f` runs *before* the subterm and can move a value
+ * into any constructor; `custom` is arbitrary in both directions; `opaque` at `lossy` accepts every
+ * kind by design, and at `refuse` every kind but `number`.
+ *
+ * **`lazy` diverges from the model, deliberately.** `occV (.lazy t)` is the subterm's there, because
+ * the model's thunk carries a finite `Term`. Here it carries a closure over a binding that may not
+ * exist when a declaration asks, so reading through would force it. `undefined` is the sound
+ * direction: an over-approximation costs a certificate and never buys a wrong one, and the
+ * alternative throws on the recursive entity the thunk exists to allow.
+ */
+export const occV = (t: Term): readonly Slot[] | undefined => {
+    switch (t.kind) {
+        case 'string':
+        case 'decimal':
+            return ['string']
+        case 'number':
+            return ['number']
+        case 'boolean':
+            return ['boolean']
+        case 'binary':
+            return ['binary']
+        case 'null':
+            return ['null']
+        case 'literal':
+            return [baseSlot[t.base]]
+        case 'set':
+            return [setSlot[t.base]]
+        case 'array':
+        case 'tuple':
+            return ['array']
+        case 'record':
+        case 'object':
+        case 'dunion':
+            return ['map']
+        case 'held':
+        case 'custom':
+        case 'lazy':
+            return undefined
+        case 'refine':
+        case 'legacy':
+            return occV(t.inner)
+        case 'nullable':
+            return withOne<Slot>('null', occV(t.inner))
+        case 'union':
+            return joined(t.options.map(occV))
+        case 'opaq':
+            return t.lossy
+                ? undefined
+                : everySlot.filter((slot) => slot !== 'number')
+    }
+}
+
+/**
+ * `occA`: which members a term may read, or `undefined` for every one of them.
+ *
+ * The mirror of {@link occV}, and **not a symmetric mirror**: `held` and `legacy` swap sides.
+ * `held`'s `g` sits *behind* `p`, so it changes which value comes out and never which attributes go
+ * in, and the read occupancy is the subterm's. `legacy`'s `r` is arbitrary data the term carries and
+ * widens exactly the reading, so it is `⊤` here where it was the subterm's on the write side.
+ *
+ * A lawful `r` does respect the member, and the model records that this is the one place `μSyn` is
+ * sharper than `occA` — sharper only under an obligation no declaration-time certificate takes as a
+ * premise.
+ *
+ * `lazy` diverges from the model for the reason {@link occV} gives.
+ */
+export const occA = (t: Term): readonly AttributeName[] | undefined => {
+    switch (t.kind) {
+        case 'string':
+            return ['S']
+        case 'number':
+        case 'decimal':
+            return ['N']
+        case 'boolean':
+            return ['BOOL']
+        case 'binary':
+            return ['B']
+        case 'null':
+            return ['NULL']
+        case 'literal':
+            return [baseMember[t.base]]
+        case 'set':
+            return [setMember[t.base]]
+        case 'array':
+        case 'tuple':
+            return ['L']
+        case 'record':
+        case 'object':
+        case 'dunion':
+            return ['M']
+        case 'legacy':
+        case 'custom':
+        case 'lazy':
+            return undefined
+        case 'refine':
+        case 'held':
+            return occA(t.inner)
+        case 'nullable':
+            return withOne<AttributeName>('NULL', occA(t.inner))
+        case 'union':
+            return joined(t.options.map(occA))
+        case 'opaq':
+            return t.lossy
+                ? undefined
+                : everyMember.filter((one) => one !== 'N')
+    }
+}
+
+/* ── the name spec, and the discriminator ─────────────────────────────────────────────── */
+
+/**
+ * The names an object option answers to, each with whether the item must carry it.
+ *
+ * `undefined` for a non-object, which is what makes an object option the one kind chosen by names
+ * rather than by being attempted. An `optional` binding is declared and not required, and that is
+ * the ambiguity §5 names in the same words: two objects declaring only optional names both admit
+ * the empty map, however disjoint their names.
+ */
+export const specOf = (
+    t: Term,
+): Readonly<Record<string, boolean>> | undefined => {
+    if (t.kind !== 'object') return undefined
+    const spec: Record<string, boolean> = {}
+    for (const [name, field] of Object.entries(t.body.fields)) {
+        spec[name] = field.mark !== 'optional'
+    }
+    return spec
+}
+
+/**
+ * The tags an object option answers to on discriminator `d` — empty for everything else.
+ *
+ * **`req` only, and a string literal only.** A `fallback` discriminator would fill an absent tag
+ * with an arbitrary value the tag sets never vouched for, and (C) would then re-encode a variant no
+ * tag selects; an `optional` one would let the tag be absent altogether. So four facts are read off
+ * one question, exactly as the model's `tagsOf` reads them: the term is an object, `d` is declared,
+ * the field is `req`, and its term is a literal at the string base.
+ */
+export const tagsOf = (d: string, t: Term): readonly string[] => {
+    if (t.kind !== 'object') return []
+    const field = t.body.fields[d]
+    if (field === undefined || field.mark !== 'req') return []
+    const inner = field.t
+    return inner.kind === 'literal' && inner.base === 'string' ? inner.ls : []
+}
