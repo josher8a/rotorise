@@ -183,16 +183,19 @@ describe('terms', () => {
     })
 
     /**
-     * And a *restricted* element is refused rather than emitted as its base.
+     * A *restricted* element **has a term now**, and the emitter still declines to print it.
      *
-     * `setCodec_restrict` says the set of a restriction writes what the restriction of a set writes,
-     * so nothing is lost as a **codec** — but it is an equation between codecs, and `Term.set` has
-     * no room for the predicate. Emitting `Term.set SetBase.string` for `string('a','b')` would
-     * state a theorem about a term that admits `'z'`, which this one does not.
+     * The two are different refusals and the difference is the whole of this pass.
+     * `setCodec_restrict` and `setCodec_restrict_p` prove the set of a restriction and the
+     * restriction of a set are one pair on both halves, so `string.set('a','b')` is
+     * `refine(set(string), each(members …))` — a term, where before there was none. What is left
+     * is that the *emitter* has no row for a predicate yet: `members` is `inL k ls` and `each` is
+     * `liftQ`, both printable, and printing them turns these two into vectors and moves the corpus
+     * counts. That is its own pass, and the refusal says so rather than reading as an oversight.
      */
-    it('refuses a set of a restricted element rather than widening it', () => {
+    it('declines to print a set of a restricted element, naming the pass that will', () => {
         expect(() => leanTermOf(erase(string.set('a', 'b')))).toThrow(
-            /\*restricted\* element/,
+            /this predicate is \*\*data\*\*/,
         )
         const positive = refine(
             decimal,
@@ -200,7 +203,7 @@ describe('terms', () => {
             { describe: 'non-negative' },
         )
         expect(() => leanTermOf(erase(positive.set()))).toThrow(
-            /\*restricted\* element/,
+            /this predicate is \*\*data\*\*/,
         )
     })
 
