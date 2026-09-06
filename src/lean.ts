@@ -61,7 +61,7 @@ import type {
 import { union } from './codec'
 import { accepts, readsBack } from './denote'
 import { failed } from './result'
-import type { Term, Field as TermField } from './term'
+import type { Literal, Predicate, Term, Field as TermField } from './term'
 import { NoTerm, termFromDef } from './term'
 import { shapeOf } from './value'
 
@@ -488,6 +488,74 @@ const termOrRefuse = (def: TermDef, at: string): Term => {
     }
 }
 
+/**
+ * A literal's base and alternatives, as the two arguments `Term.literal` and `inL` both take.
+ *
+ * Factored out because `inL k ls` is those two arguments and nothing else — the model writes the
+ * membership predicate over exactly the pair the term carries, which is what makes a `members`
+ * predicate printable where a closure never will be.
+ */
+const leanGround = (literal: Literal, at: string): string => {
+    const base = literal.base
+    if (base === 'number') {
+        return refuse(
+            at,
+            'a numeric literal sits at `GroundKind.number`, whose carrier is `Double`',
+        )
+    }
+    // an annotation rather than a cast: widening to the union's supertype is something
+    // the checker can do on its own, and `as` here would only hide it doing so
+    const alternatives: readonly LiteralValue[] = literal.ls
+    const alternative = (one: unknown): string =>
+        base === 'boolean'
+            ? String(one)
+            : base === 'binary'
+              ? leanBytes(one as Uint8Array)
+              : base === 'decimal'
+                ? `⟨${leanString(one as string)}, by decide⟩`
+                : leanString(one as string)
+    return `GroundKind.${base} (${leanNonEmptySet(
+        [...new Set(alternatives)].map(alternative),
+        at,
+    )})`
+}
+
+/**
+ * §3 `(refine)`'s predicate, where the model has an expression for it.
+ *
+ * Two of the three are data and the model names both: `members` is `inL k ls`, membership of a
+ * literal's alternatives, and `each` is `liftQ`, which lifts an element predicate to the wire set
+ * whose every element satisfies it. `Exactness.lean` writes the pair together —
+ * `liftQ (inL .string (.of "A" ∅))` — which is exactly what a set over a literal denotes.
+ *
+ * A data predicate comes back parenthesised, because `inL k ls` and `liftQ p` are applications
+ * and `Term.refine` takes its second argument juxtaposed. A recognised closure comes back bare,
+ * because the two this library ships are identifiers.
+ *
+ * The third has no expression and never will. A `closure` is a caller's JavaScript function; the
+ * registry below recognises two of them **by reference**, and everything else is refused.
+ */
+const leanPredicate = (q: Predicate, at: string, forced: number): string => {
+    switch (q.kind) {
+        case 'members':
+            return `(inL ${leanGround(q.literal, at)})`
+        case 'each':
+            return `(liftQ ${leanPredicate(q.of, at, forced)})`
+        case 'closure': {
+            // recognised by reference against the function this package exported, so a rename or a
+            // reimplementation of the predicate is a type error here rather than a silent misemission
+            const known = shippedPredicates.get(q.q.is)
+            if (!known) {
+                return refuse(
+                    at,
+                    `\`Term.refine\` carries \`q : Value → Bool\`, and this predicate is not one this library ships — it is the caller's closure for ${JSON.stringify(q.q.what)}. The recognised ones are \`isNumeral\` and \`isStoredNumeral\` from \`src/attribute.ts\`, passed by reference`,
+                )
+            }
+            return known.lean
+        }
+    }
+}
+
 const leanTermOfTerm = (t: Term, at: string, forced: number): string => {
     switch (t.kind) {
         case 'string':
@@ -509,31 +577,8 @@ const leanTermOfTerm = (t: Term, at: string, forced: number): string => {
          */
         case 'number':
             return 'Term.number'
-        case 'literal': {
-            const base = t.base
-            if (base === 'number') {
-                return refuse(
-                    at,
-                    'a numeric literal sits at `GroundKind.number`, whose carrier is `Double`',
-                )
-            }
-            // an annotation rather than a cast: widening to the union's supertype is something
-            // the checker can do on its own, and `as` here would only hide it doing so
-            const alternatives: readonly LiteralValue[] = t.ls
-            const allowed = [...new Set(alternatives)]
-            const alternative = (one: unknown): string =>
-                base === 'boolean'
-                    ? String(one)
-                    : base === 'binary'
-                      ? leanBytes(one as Uint8Array)
-                      : base === 'decimal'
-                        ? `⟨${leanString(one as string)}, by decide⟩`
-                        : leanString(one as string)
-            return `Term.literal GroundKind.${base} (${leanNonEmptySet(
-                allowed.map(alternative),
-                at,
-            )})`
-        }
+        case 'literal':
+            return `Term.literal ${leanGround(t, at)}`
         /**
          * `Term.set` is indexed by a **`SetBase`**, and by the time the printer sees one it holds a
          * base rather than an element term.
@@ -624,29 +669,25 @@ const leanTermOfTerm = (t: Term, at: string, forced: number): string => {
             }
             return `Term.lazy (${leanTermOfTerm(t.get(), `${at}.inner`, forced + 1)})`
         }
+        /**
+         * §3 `(refine)`. The predicate is printed by {@link leanPredicate}, and the side condition
+         * below applies to a **closure** only.
+         *
+         * `writesOnlyStrings` exists because the two shipped predicates take a `string` and a
+         * `Value → Bool` takes anything: they disagree where JavaScript coerces, so the emission is
+         * confined to inner terms that write nowhere else. `members` and `each` are the model's own
+         * `inL` and `liftQ` over data the term carries, so they agree at every value by
+         * construction and the gate has nothing to say about them.
+         */
         case 'refine': {
-            // recognised by reference against the function this package exported, so a rename or a
-            // reimplementation of the predicate is a type error here rather than a silent misemission
-            if (t.q.kind !== 'closure') {
+            const q = leanPredicate(t.q, at, forced)
+            if (t.q.kind === 'closure' && !writesOnlyStrings(t.inner)) {
                 return refuse(
                     at,
-                    `\`Term.refine\` carries \`q : Value → Bool\` and this predicate is **data** — a \`${t.q.kind}\`, which the model spells \`inL k ls\` and \`liftQ\`. So it is emittable and this row does not emit it yet: the pass that prints the two of them turns the restricted-element refusals into vectors and moves the corpus counts, which is why it is its own pass and not a line here`,
+                    `${shippedPredicates.get(t.q.q.is)?.what ?? 'this predicate'} decides a *string*, and this refinement's inner term writes values that are not strings — where JavaScript would coerce and the model would not, so the two predicates would part company`,
                 )
             }
-            const known = shippedPredicates.get(t.q.q.is)
-            if (!known) {
-                return refuse(
-                    at,
-                    `\`Term.refine\` carries \`q : Value → Bool\`, and this predicate is not one this library ships — it is the caller's closure for ${JSON.stringify(t.q.q.what)}. The recognised ones are \`isNumeral\` and \`isStoredNumeral\` from \`src/attribute.ts\`, passed by reference`,
-                )
-            }
-            if (!writesOnlyStrings(t.inner)) {
-                return refuse(
-                    at,
-                    `${known.what} decides a *string*, and this refinement's inner term writes values that are not strings — where JavaScript would coerce and the model would not, so the two predicates would part company`,
-                )
-            }
-            return `Term.refine (${leanTermOfTerm(t.inner, `${at}.inner`, forced)}) ${known.lean}`
+            return `Term.refine (${leanTermOfTerm(t.inner, `${at}.inner`, forced)}) ${q}`
         }
         case 'held':
             return refuse(
