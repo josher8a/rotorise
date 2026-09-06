@@ -825,7 +825,16 @@ The first is a habit, not a limitation: **a `grep` piped into `head` is not a me
 Twice in one session a truncated pipe produced a false reading here — once nearly asserting in
 a commit message that `filter_map_AdmSpecs` and `filter_AdmSpecs` no longer existed, when the
 `| head -10` had simply filled with `AdmSpecs` hits first. If a claim rests on a grep, run the
-grep without a limit, or count it.
+grep without a limit, or count it. The same pipe hides an exit code as readily as a line:
+running each of these two guards into `tail` and reading the result reported both clean over a
+tree the gate then failed, because what `$?` held was `tail`'s status and not the guard's.
+
+The same habit has a second form on the writing side, and it cost more: **an edit anchor that
+is not unique is not an anchor.** A scripted replacement in `src/codec.ts` matched in more
+places than the one intended and removed **2300 lines** in a single pass. The suite caught it,
+which is the only reason it is a paragraph here rather than a released defect. Anchor every
+scripted edit on a whole block that occurs once, and check the line delta before writing —
+a diff that is the wrong size is visible in one number and invisible in a review.
 
 The second is real: **anonymous-constructor patterns.** Changing `Typed.held`'s arity
 (`c66d493`) missed a consumer because `typed_μSyn` destructures it as `| _, _, _, .held h' _ =>`,
@@ -833,6 +842,50 @@ which matches neither `Typed.held` nor `@held` nor `case held`; only the build f
 costing a constructor change, grep the bare `.<name>` as well as the qualified form, and expect
 the arity to be implicit in a positional match. The control experiment is in its docstring;
 `86d3a42`'s commit message claimed otherwise and is wrong.
+
+### The host's instruments, and what each of those is blind to
+
+The TypeScript side has five instruments of its own, and this arc measured a blind spot for
+each. They are here because §8 makes the host's obligations part of the correspondence, and an
+instrument the host trusts wrongly is how one of those obligations goes unmet.
+
+**The type checker's error count is a lower bound, not a measure.** Retyping a position and
+counting the errors under-reports the sites four times over. Three were found in one arc: a
+cast standing on the position, so the checker had nothing to say; a test whose subject rode on
+a type it did not name, which kept passing while the fact it pinned stopped being checked; and
+a comparison at the wrong level of nesting. The fourth is the sharpest, because it is a
+deletion rather than a retyping: collapsing a union's option builder to the term-only form
+type-checks **cleanly**, because the member's type already admits the absent case and there is
+nothing to report,
+and fails **eleven** tests. The suite is what closes the gap every time.
+
+**`scripts/name_drift.py` cannot see a name that stops being the right one.** It chases a
+declaration that was deleted, so every citation of it dangles and the guard fires. A
+declaration that still exists while ceasing to be the one a passage cites is invisible: four
+docstrings in `src/codec.ts` pointed at the definition union over a member whose type had
+become the *term* half of it, and the guard was green from the change that moved them until the
+pass that read them. Renaming is checked; re-pointing is not.
+
+**The strictest checker mode existed and was switched off**, which is a blindness the tool
+cannot report because nobody asked it anything. `tsconfig.json` set three strictness flags and
+neither of the two that report an unused local or an unused parameter. Asking, with no file
+changed, returned **39**
+findings the same day — one dead helper in shipped code, one dead import, two dead bindings,
+thirteen entity types in specs that asserted nothing, and the rest unused imports. A second
+dead helper had been found by reading a week earlier, which is the argument: a checker that is
+asked answers every time, and a reader answers when a reader happens to look.
+
+**The type-level snapshot proves negatives, and sees only what a spec asserts.** `@ark/attest`
+records an instantiation count and a resolved type per assertion, so a change that moves
+neither moved nothing that any assertion covers — which is how a widened constraint was shown
+to have changed no derivation, and how a whole-name rename was shown to be a rename. What it
+cannot say is anything about a type no spec names, and the population it covers is a choice
+somebody made rather than the surface.
+
+**A red `vector emit` that returns in about a second has read nothing.** The bridge shares a
+build cache, and a racing run fails immediately over an unchanged tree; the same tree passes on
+re-run at twelve to fourteen seconds. Judge that check by its duration before judging it by its
+exit code — a genuine failure costs the full elaboration first.
 
 One more blind spot common to all of them: **none looks at `src/`.** `Vectors.lean` is the
 only bridge between the model and the shipped TypeScript, and it checks generated vector lines
@@ -1123,6 +1176,12 @@ companion, which the map row has no list to need — and the mark says the same 
 there. Sixty citations were relabelled when this came in and eighteen turned out to be
 genuinely stale, so the ratio is roughly three to one: assume a name you are about to write in
 the past tense wants the marker. §6 has the measurement and the shapes that lost.
+
+**A backtick in this file means a Lean name, so a host identifier is written as a call, as a
+path, or in prose.** The guard reads every backticked single word as a name `Calculus/` should
+define, and it is right to: the alternative is a fifth category in `EXPECTED`, which would make
+that table's entries stop meaning "this absence is deliberate". §6's host paragraphs are the
+first passage here to need the distinction and they keep it.
 
 Two further conventions, both load-bearing:
 
