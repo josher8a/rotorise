@@ -85,6 +85,13 @@ theorem set_of_string :
         (Value.strSet (NEFinset.of "b" {"a"})))
       (some (Attr.ss (NEFinset.of "a" {"b"}))) = .same := rfl
 
+/-- `set_of_literal` -/
+theorem set_of_literal :
+    check 1
+      ((denote (Term.refine (Term.set SetBase.string) (liftQ (inL GroundKind.string (NEFinset.of "a" {"b"}))))).e
+        (Value.strSet (NEFinset.of "b" {"a"})))
+      (some (Attr.ss (NEFinset.of "a" {"b"}))) = .same := rfl
+
 /-- `set_of_decimal` -/
 theorem set_of_decimal :
     check 1
@@ -206,8 +213,8 @@ theorem lazy_string :
 
 /-! ## Refusals — neither side writes anything for these
 
-26 of 599 shown; `scripts/gate.sh` elaborates all
-599. One `rfl` each, no comparator and no fuel: the answer is `none`,
+27 of 649 shown; `scripts/gate.sh` elaborates all
+649. One `rfl` each, no comparator and no fuel: the answer is `none`,
 which carries no function for the funext gap to open under.
 -/
 
@@ -254,6 +261,11 @@ theorem literal_binary__refuses__scalar_string :
 /-- `set_of_string__refuses__scalar_string` — refused on both sides -/
 theorem set_of_string__refuses__scalar_string :
     (denote (Term.set SetBase.string)).e
+      (Value.str "hello") = none := rfl
+
+/-- `set_of_literal__refuses__scalar_string` — refused on both sides -/
+theorem set_of_literal__refuses__scalar_string :
+    (denote (Term.refine (Term.set SetBase.string) (liftQ (inL GroundKind.string (NEFinset.of "a" {"b"}))))).e
       (Value.str "hello") = none := rfl
 
 /-- `set_of_decimal__refuses__scalar_string` — refused on both sides -/

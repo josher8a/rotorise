@@ -183,19 +183,20 @@ describe('terms', () => {
     })
 
     /**
-     * A *restricted* element **has a term now**, and the emitter still declines to print it.
+     * A *restricted* element is printed as the restriction of the set it is.
      *
-     * The two are different refusals and the difference is the whole of this pass.
-     * `setCodec_restrict` and `setCodec_restrict_p` prove the set of a restriction and the
-     * restriction of a set are one pair on both halves, so `string.set('a','b')` is
-     * `refine(set(string), each(members …))` — a term, where before there was none. What is left
-     * is that the *emitter* has no row for a predicate yet: `members` is `inL k ls` and `each` is
-     * `liftQ`, both printable, and printing them turns these two into vectors and moves the corpus
-     * counts. That is its own pass, and the refusal says so rather than reading as an oversight.
+     * `string.set('a','b')` is `refine(set(string), each(members …))` and the model spells that
+     * predicate `liftQ (inL k ls)` — `Exactness.lean` writes exactly this pair. Both halves are
+     * data the term carries, so both print, and the equation licensing the spelling is
+     * `setCodec_restrict` on `e` and `setCodec_restrict_p` on `p`.
+     *
+     * **A closure element is still refused, and permanently.** The predicate is a caller's
+     * JavaScript function; the registry recognises two by reference and there is no expression for
+     * any other. That refusal is not waiting on a pass.
      */
-    it('declines to print a set of a restricted element, naming the pass that will', () => {
-        expect(() => leanTermOf(erase(string.set('a', 'b')))).toThrow(
-            /this predicate is \*\*data\*\*/,
+    it('prints a set of a literal element, and refuses one over a closure', () => {
+        expect(leanTermOf(erase(string.set('a', 'b')))).toBe(
+            'Term.refine (Term.set SetBase.string) (liftQ (inL GroundKind.string (NEFinset.of "a" {"b"})))',
         )
         const positive = refine(
             decimal,
@@ -203,7 +204,7 @@ describe('terms', () => {
             { describe: 'non-negative' },
         )
         expect(() => leanTermOf(erase(positive.set()))).toThrow(
-            /this predicate is \*\*data\*\*/,
+            /not one this library ships/,
         )
     })
 
@@ -578,6 +579,19 @@ export const sampleVectors: readonly Vector[] = [
         codec: erase(string.set()),
         value: new Set(['b', 'a']),
     },
+    /**
+     * A set over a **literal** element, which is a restriction of the set and not a `set` term.
+     *
+     * Added when the emitter learned to print a data predicate. The model reads it as
+     * `refine (set string) (liftQ (inL …))`, which is the equation `setCodec_restrict` proves on
+     * `e` and `setCodec_restrict_p` on `p` — so this vector is the differential asking the model
+     * about the one shape that took three passes to spell.
+     */
+    {
+        name: 'set_of_literal',
+        codec: erase(string.set('a', 'b')),
+        value: new Set(['b', 'a']),
+    },
     {
         name: 'set_of_decimal',
         codec: erase(decimal.set()),
@@ -912,12 +926,14 @@ describe('union resolution, model against library', () => {
      * **Coverage, and it is worth being exact about that.** Two resolutions were pinned before —
      * a positive vector *is* an agreement about which option answered, since the attribute it
      * names is the one that option produced — and the refusal set carries 88 more union lines.
-     * This widens two to 208, and the value is the corpus rather than the question.
+     * This widens two to 208, and the value is the corpus rather than the question. 216 with
+     * `set_of_literal`, the twenty-eighth codec: the eight it adds are the resolutions of the
+     * unions the new entry takes part in.
      */
-    it('offers 208 write pairs and 231 statable of 232 read pairs', () => {
-        expect(writeResolutions().length).toBe(208)
+    it('offers 216 write pairs and 239 statable of 240 read pairs', () => {
+        expect(writeResolutions().length).toBe(216)
         const reads = readResolutions()
-        expect(reads.length).toBe(232)
+        expect(reads.length).toBe(240)
         // one pair only, and it is the `Double` axiom reaching the decoded value; the five
         // map-valued reads beside it are stated through `vcheck` now
         expect(
@@ -977,9 +993,9 @@ describe("the read side, against the model's read row", () => {
      * description of one thing, and this differential is the guard that a second description
      * would have needed anyway.
      */
-    it('offers 864 pairs, three of them stuck on the `Double` axiom', () => {
+    it('offers 924 pairs, three of them stuck on the `Double` axiom', () => {
         const verdicts = readVerdicts()
-        expect(verdicts.length).toBe(864)
+        expect(verdicts.length).toBe(924)
         const stuck = verdicts.filter(readRowIsStuck)
         expect(stuck.map((one) => one.name)).toEqual([
             'scalar_number__reads__scalar_decimal',
