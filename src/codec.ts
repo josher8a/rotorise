@@ -3410,9 +3410,16 @@ export const refine = <Wide, Narrow extends Wide, A extends AttributeValue>(
  * the type level and `def.value` at run time, and the run-time side is the one {@link fallback}
  * checks against §3 `(fallback)`.
  */
-export type FallbackCodec<T, A extends AttributeValue = AttributeValue> = {
+export type FallbackCodec<
+    T,
+    A extends AttributeValue = AttributeValue,
+    // the codec the mark is about, carried rather than erased to `AttributeCodec<T, A>`. A brand
+    // sits on the codec — `constant` is the one that matters here — and erasing to the two type
+    // arguments drops it before a derivation over the spec can ask
+    C = AttributeCodec<T, A>,
+> = {
     readonly [fallbackMarker]: T
-    readonly codec: AttributeCodec<T, A>
+    readonly codec: C
     readonly def: Extract<FieldDef, { readonly kind: 'fallback' }>
 }
 
@@ -3444,7 +3451,7 @@ export const fallback = <const C extends AnyCodec>(
     // unified them, and a stand-in written `'A'` widens to `string`, which then refused the very
     // codec it stands in for — invisible while the entity was declared first and pinned it itself
     value: NoInfer<Decoded<C>>,
-): FallbackCodec<Decoded<C>, AttributeOf<C> & AttributeValue> => {
+): FallbackCodec<Decoded<C>, AttributeOf<C> & AttributeValue, C> => {
     // §3 `(fallback)`: the stand-in must be *writable*, or a row missing the name decodes to a
     // value the item cannot be written back as — (C) broken at the read, with the refusal arriving
     // on the next write instead of at the declaration that caused it. Decidable here, from the
@@ -3458,7 +3465,11 @@ export const fallback = <const C extends AnyCodec>(
     return {
         codec: attribute,
         def: { kind: 'fallback', inner: attribute as AnyCodec, value },
-    } as unknown as FallbackCodec<Decoded<C>, AttributeOf<C> & AttributeValue>
+    } as unknown as FallbackCodec<
+        Decoded<C>,
+        AttributeOf<C> & AttributeValue,
+        C
+    >
 }
 
 /**
