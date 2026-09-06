@@ -269,7 +269,7 @@ describe('terms', () => {
      * not wrong for the vectors this module writes: `objectCodec`'s `e` is `objWrite sems rc?`,
      * which never sees the `kn` filter the policy decides, and `rcOf` is `none` for both, so the two
      * denote the *same* `e`. It was wrong about the codec, and a decode-direction vector — whose `p`
-     * is exactly where they differ — would have been silently false. `Def['rest']` now carries
+     * is exactly where they differ — would have been silently false. `Body['rest']` now carries
      * the policy, and the emitter reads it rather than guessing.
      */
     it('tells `refuse` from `drop`, which a decode vector would need', () => {

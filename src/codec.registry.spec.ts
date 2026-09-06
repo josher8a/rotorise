@@ -1,7 +1,7 @@
 /**
  * Every kind of codec can be generated from its definition alone.
  *
- * The codecs no longer carry generators; `arbitraryOf` and `shrinkOf` build from {@link Def}
+ * The codecs no longer carry generators; `arbitraryOf` and `shrinkOf` build from the `Term`
  * instead, which is what keeps a property-testing harness out of the production bundle. That is 19
  * branches of dispatch, and a kind nobody covers here is one that throws the first time somebody
  * property-tests it.
@@ -11,7 +11,7 @@
  * worth keeping is coverage and determinism.
  */
 import { describe, expect, it } from 'vitest'
-import type { AnyCodec, Def } from './codec'
+import type { AnyCodec } from './codec'
 import {
     array,
     binary,

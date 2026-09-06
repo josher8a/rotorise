@@ -33,19 +33,19 @@ import type {
     AnyDeclaration,
     AttributeCodec,
     Declared,
-    Field,
     LiteralBase,
     LiteralValue,
     Option,
     opaque,
+    Refinement,
     Rng,
+    SetBase,
     Shape,
-    TermDef,
-    TermKind,
 } from './codec'
 import type { Result } from './result'
 import { andThen, CodecError, every, everyEntry, failed } from './result'
-import { termFromDef, member as termMember } from './term'
+import type { Body, Literal, Predicate, Term } from './term'
+import { member as termMember } from './term'
 import {
     asRecord,
     copiedPerRead,
@@ -104,14 +104,7 @@ export const literalCodec = <T extends LiteralValue>(
     base: LiteralBase,
     allowed: readonly T[],
 ): AttributeCodec<T, AttributeValue> => {
-    const wrong = allowed.filter((one) => shapeOf(one) !== literalShape[base])
-    if (wrong.length) {
-        throw new CodecError(
-            `\`${base}(...)\` admits ${literalShape[base]} values, and ${wrong
-                .map(namedLiteral)
-                .join(', ')} ${wrong.length === 1 ? 'is' : 'are'} not one`,
-        )
-    }
+    const term = literalTerm(base, allowed)
 
     /**
      * **`ℓ ⊆ D`** — the premise on the numeric bases, and the defect that made it more than
@@ -154,7 +147,164 @@ export const literalCodec = <T extends LiteralValue>(
         }
     }
 
-    return codecOfTerm<T, AttributeValue>({ kind: 'literal', base, allowed })
+    return codecOfTerm<T, AttributeValue>(term)
+}
+
+/**
+ * A literal's alternatives, indexed by the base that carries them — {@link Literal}'s five variants.
+ *
+ * **`ℓ` is homogeneous at the base**, and the check is what narrows: a loop that tests each element
+ * and then spreads the array teaches the checker nothing, so it ends in a cast. A type predicate is
+ * the same test with the narrowing kept, and the count is how the refusal survives — `filter` drops
+ * what fails, so a shorter answer is an alternative that was not this base's.
+ *
+ * Non-emptiness is a throw and not a refusal: every caller checks it first, so that the message can
+ * name the constructor the caller wrote.
+ */
+const literalTerm = (
+    base: LiteralBase,
+    allowed: readonly LiteralValue[],
+): Literal => {
+    const [first, ...rest] = allowed
+    if (first === undefined) {
+        throw new Error(
+            `\`${base}()\` names no alternative, and every caller refuses that first`,
+        )
+    }
+    const wrong = (): never => {
+        const outside = allowed.filter(
+            (one) => shapeOf(one) !== literalShape[base],
+        )
+        throw new CodecError(
+            `\`${base}(...)\` admits ${literalShape[base]} values, and ${outside
+                .map(namedLiteral)
+                .join(', ')} ${outside.length === 1 ? 'is' : 'are'} not one`,
+        )
+    }
+    const tail = <T extends LiteralValue>(
+        is: (one: LiteralValue) => one is T,
+    ): readonly T[] => {
+        const kept = rest.filter(is)
+        return kept.length === rest.length ? kept : wrong()
+    }
+    switch (base) {
+        case 'string':
+        case 'decimal': {
+            if (typeof first !== 'string') return wrong()
+            const ls = tail((one): one is string => typeof one === 'string')
+            return { kind: 'literal', base, ls: [first, ...ls] }
+        }
+        case 'number': {
+            if (typeof first !== 'number') return wrong()
+            const ls = tail((one): one is number => typeof one === 'number')
+            return { kind: 'literal', base, ls: [first, ...ls] }
+        }
+        case 'boolean': {
+            if (typeof first !== 'boolean') return wrong()
+            const ls = tail((one): one is boolean => typeof one === 'boolean')
+            return { kind: 'literal', base, ls: [first, ...ls] }
+        }
+        case 'binary': {
+            if (!(first instanceof Uint8Array)) return wrong()
+            const ls = tail(
+                (one): one is Uint8Array => one instanceof Uint8Array,
+            )
+            return { kind: 'literal', base, ls: [first, ...ls] }
+        }
+    }
+}
+
+/**
+ * A caller's {@link Refinement}, asked of a value that arrived from outside its type.
+ *
+ * **One cast, and it is the same crossing {@link accepts} makes.** `Refinement.is` is published as
+ * `(value: never) => boolean`, because a refinement's input type is existential at this position:
+ * the caller wrote the predicate at the codec's held type, and the question here is whether an
+ * `unknown` belongs to that type. The type cannot prove it, because that is the question. So the
+ * cast is written once, where the crossing happens, rather than at each caller.
+ */
+const satisfies = (q: Refinement, value: unknown): boolean =>
+    q.is(value as never)
+
+/**
+ * §3 `(refine)`'s `q`, run: whether a value satisfies a {@link Predicate}.
+ *
+ * `members` is `inL`, compared the way the base compares. `each` is `liftQ`: the value is a `Set`
+ * and every element satisfies the element's predicate. `closure` is the caller's function.
+ */
+export const holds = (q: Predicate): ((value: unknown) => boolean) => {
+    switch (q.kind) {
+        case 'members': {
+            const ls: readonly LiteralValue[] = q.literal.ls
+            return (value) => ls.some((one) => sameLiteral(one, value))
+        }
+        case 'each': {
+            const element = holds(q.of)
+            return (value) => value instanceof Set && [...value].every(element)
+        }
+        case 'closure':
+            return (value) => satisfies(q.q, value)
+    }
+}
+
+/** …and why a value does not, naming the element that failed where the predicate is `each`. */
+const refusedBy = (q: Predicate, value: unknown): CodecError => {
+    switch (q.kind) {
+        case 'members': {
+            const ls: readonly LiteralValue[] = q.literal.ls
+            return new CodecError(
+                `${namedLiteral(value)} is not one of ${ls
+                    .map(namedLiteral)
+                    .join(', ')}`,
+            )
+        }
+        case 'each': {
+            if (!(value instanceof Set)) {
+                return new CodecError(
+                    `${describeShape(value)} is not a \`Set\`, and a set is written from one — a codec's input is typed, so this is a value that reached \`encode\` past its type`,
+                )
+            }
+            // labelled where it failed, as `every` labels a list: the position is the subject
+            const elements = [...value]
+            const at = elements.findIndex((one) => !holds(q.of)(one))
+            return refusedBy(q.of, elements[at]).under(at)
+        }
+        case 'closure':
+            return new CodecError(`${JSON.stringify(value)} is not ${q.q.what}`)
+    }
+}
+
+/** The wire set and the element member a set base stores — four bases onto three wire sets. */
+const setWire: {
+    readonly [B in SetBase]: readonly ['S' | 'N' | 'B', 'SS' | 'NS' | 'BS']
+} = {
+    string: ['S', 'SS'],
+    number: ['N', 'NS'],
+    decimal: ['N', 'NS'],
+    binary: ['B', 'BS'],
+}
+
+/**
+ * The one tag a `dunion` option answers to, read off the option's own `d` field.
+ *
+ * `discriminatedUnion` refuses an option that does not name `d` with a one-valued literal at
+ * `string`, `number` or `decimal`, so the throw below is that invariant and not a case a
+ * declaration can reach. `readTag` reads a stored tag back as text, so a numeric tag is its text.
+ */
+export const variantTag = (d: string, option: Term): string => {
+    const field = option.kind === 'object' ? option.body.fields[d] : undefined
+    const t = field?.mark === 'req' ? field.t : undefined
+    if (
+        t?.kind !== 'literal' ||
+        t.base === 'boolean' ||
+        t.base === 'binary' ||
+        t.ls.length !== 1
+    ) {
+        throw new CodecError(
+            `a discriminated union's options each name '${d}' with a one-valued literal, and this option does not. \`discriminatedUnion\` refuses that at the declaration, so this term was not built by it`,
+        )
+    }
+    return String(t.ls[0])
 }
 
 /**
@@ -249,28 +399,22 @@ export const carriedCodec = <Payload, Written, Read>(
  * asked per item: {@link copiedPerRead} is a fact about this runtime and not about the term, which
  * is why it lives in the compiled form and not in {@link Field}.
  */
-export const bodySem = (
-    of: Readonly<Record<string, Field>>,
-    rest: 'drop' | 'refuse' | TermDef,
-): ItemPair => {
+export const bodySem = ({ fields: of, rest }: Body): ItemPair => {
     const declared: Declared[] = []
     for (const name in of) {
         const field = of[name]
         if (field === undefined) continue
         declared.push({
             name,
-            codec: codecOfTerm(field.codec),
+            codec: codecOfTerm(field.t),
             optional: field.mark === 'optional',
             absent:
                 field.mark === 'fallback'
-                    ? {
-                          value: field.value,
-                          copy: copiedPerRead(field.value),
-                      }
+                    ? { value: field.v, copy: copiedPerRead(field.v) }
                     : undefined,
         })
     }
-    const restCodec = typeof rest === 'string' ? undefined : codecOfTerm(rest)
+    const restCodec = typeof rest === 'string' ? undefined : codecOfTerm(rest.t)
     return {
         encode: (held) => {
             const out: Record<string, AttributeValue> = {}
@@ -670,10 +814,7 @@ export type ItemPair = {
  * resolved options, and `denote`'s `untagged` row asks {@link altSem} for the *attribute* pair, so
  * nothing here needs one.
  */
-export type ItemTerm = Extract<
-    TermDef,
-    { readonly kind: 'attributes' | 'tagged' }
->
+export type ItemTerm = Extract<Term, { readonly kind: 'object' | 'dunion' }>
 
 /**
  * **One item pair per term, for the life of the term** — {@link codecOfTerm}'s counterpart.
@@ -693,10 +834,7 @@ const itemPairs = new WeakMap<ItemTerm, ItemPair>()
 export const itemSem = (def: ItemTerm): ItemPair => {
     const built = itemPairs.get(def)
     if (built) return built
-    const made =
-        def.kind === 'attributes'
-            ? bodySem(def.of, def.rest)
-            : taggedItemSem(def)
+    const made = def.kind === 'object' ? bodySem(def.body) : taggedItemSem(def)
     itemPairs.set(Object.freeze(def), made)
     return made
 }
@@ -711,28 +849,26 @@ export const itemSem = (def: ItemTerm): ItemPair => {
  * not a case a declaration can reach.
  */
 export const taggedItemSem = (
-    def: Extract<TermDef, { readonly kind: 'tagged' }>,
+    def: Extract<Term, { readonly kind: 'dunion' }>,
 ): ItemPair => {
     const byTag: Record<string, ItemPair> = {}
-    for (const tag in def.variants) {
-        const variant = def.variants[tag] as TermDef
-        if (variant.kind !== 'attributes') {
+    for (const option of def.options) {
+        if (option.kind !== 'object') {
             throw new CodecError(
-                `a discriminated union's variants are object codecs, and the variant at '${tag}' is a \`${variant.kind}\`. \`discriminatedUnion\` refuses that at the declaration, so this term was not built by it`,
+                `a discriminated union's variants are object codecs, and one option is a \`${option.kind}\`. \`discriminatedUnion\` refuses that at the declaration, so this term was not built by it`,
             )
         }
-        byTag[tag] = itemSem(variant)
+        byTag[variantTag(def.d, option)] = itemSem(option)
     }
-    const { pick, tagOf } = byTagSem(def.discriminator, byTag)
+    const { pick, tagOf } = byTagSem(def.d, byTag)
     return {
         encode: (held) =>
             andThen(andThen(tagOf(held), pick), (variant) =>
                 variant.encode(held),
             ),
         decode: (item) =>
-            andThen(
-                andThen(readTag(item, def.discriminator), pick),
-                (variant) => variant.decode(item),
+            andThen(andThen(readTag(item, def.d), pick), (variant) =>
+                variant.decode(item),
             ),
     }
 }
@@ -747,17 +883,17 @@ export const taggedItemSem = (
  * **A definition's children are terms, and no row here reaches into a child codec's pair.** Where a
  * row needs one it calls `codecOfTerm`, which memoises on the frozen term and answers the codec
  * that was already built, so recovering a child costs a lookup rather than a construction. The
- * checker holds this rather than a reader: every child position of a `TermDef` is a `TermDef`, so
- * `def.element.encode` is a type error and not a habit to avoid.
+ * checker holds this rather than a reader: every child position of a `Term` is a `Term`, so
+ * `def.elem.encode` is a type error and not a habit to avoid.
  *
- * **There is no `default`, and that is the guard.** Every `TermDef` kind has a row, so the switch
+ * **There is no `default`, and that is the guard.** Every `Term` kind has a row, so the switch
  * is exhaustive and the type checker knows it — a new kind with no row makes `def` something other
  * than `never` at the end of the switch and stops the build. A thrown default would replace that
  * with a runtime message, which is the weaker of the two and the one a test has to go looking for.
  * It is the same move as `_everyKindHasALevel`: a fact the documents assert, turned into a build
  * error instead of something a reader is asked to re-derive.
  */
-export const denote = (def: TermDef): Pair => {
+export const denote = (def: Term): Pair => {
     switch (def.kind) {
         case 'string':
             return groundCodec('string', 'S', 'a string', "an 'S'")
@@ -776,7 +912,7 @@ export const denote = (def: TermDef): Pair => {
          * asked first — which is what the term's `array` row asks, and now what this asks too.
          */
         case 'array': {
-            const items = codecOfTerm(def.element)
+            const items = codecOfTerm(def.elem)
             return carriedCodec(
                 (value): value is readonly never[] => Array.isArray(value),
                 'L',
@@ -801,7 +937,7 @@ export const denote = (def: TermDef): Pair => {
          * uses, so the two cannot drift about what a plain object is.
          */
         case 'record': {
-            const values = codecOfTerm(def.value)
+            const values = codecOfTerm(def.val)
             return carriedCodec(
                 (value): value is Record<string, never> =>
                     asRecord(value) !== undefined,
@@ -829,7 +965,7 @@ export const denote = (def: TermDef): Pair => {
          * they say.
          */
         case 'tuple': {
-            const items = def.elements.map((element) => codecOfTerm(element))
+            const items = def.elems.map((element) => codecOfTerm(element))
             const tail = def.tail
             /** `align`: the arity test, which comes before any position is read. */
             const aligned = (
@@ -869,9 +1005,8 @@ export const denote = (def: TermDef): Pair => {
          * that keeps `refine` and a literal readable through — a restriction of the elements is a
          * restriction of the set, and the two write the same attribute.
          *
-         * Which set follows from the element's member, so the row asks `member` rather than
-         * being told. §3 `(set)`'s premise is checked at the declaration, in {@link set}, where a
-         * caller can see which element failed it.
+         * Which set follows from the base that indexes the term, and the element's pair is the
+         * base's own. A restricted element is a `refine` around this row, never inside it.
          *
          * **Empty is refused in both directions, and the read side is the one that matters.**
          * DynamoDB never stores an empty `SS`, so an item carrying one was written by something
@@ -883,14 +1018,8 @@ export const denote = (def: TermDef): Pair => {
          * `{ SS: ['a','b','c'] }` for `'abc'`. The `set` row asks `instanceof Set` first.
          */
         case 'set': {
-            const inner = codecOfTerm(def.element)
-            const member = termMember(termFromDef(def.element))
-            if (member !== 'S' && member !== 'N' && member !== 'B') {
-                throw new CodecError(
-                    `a set holds strings, numbers or binary, and this element writes ${member ? `'${member}'` : 'no single member'}`,
-                )
-            }
-            const setMember = `${member}S` as 'SS' | 'NS' | 'BS'
+            const inner = codecOfTerm({ kind: def.base })
+            const [member, setMember] = setWire[def.base]
             const carried = (value: unknown): Result<string | Uint8Array> =>
                 andThen(
                     inner.encode(value as never),
@@ -939,7 +1068,7 @@ export const denote = (def: TermDef): Pair => {
          * the content, which is the split §5 states — a codec writes the attributes of that codec,
          * and `.item` is the one place that writes no map.
          */
-        case 'attributes': {
+        case 'object': {
             const body = itemSem(def)
             return carriedCodec(
                 (value): value is Record<string, unknown> =>
@@ -956,16 +1085,14 @@ export const denote = (def: TermDef): Pair => {
         }
         /** §3 `(held)`. `lawful_through` is the lemma; the adapter is data the term carries. */
         case 'held':
-            return heldThrough(codecOfTerm(def.inner), def.adapt)
+            return heldThrough(codecOfTerm(def.inner), {
+                encode: def.f,
+                decode: def.g,
+            })
         /** §3 `(refine)`. `lawful_restrict` is the lemma; `q` is data the term carries. */
         case 'refine':
-            return restrict(
-                codecOfTerm(def.inner),
-                def.refined.is,
-                (value) =>
-                    new CodecError(
-                        `${JSON.stringify(value)} is not ${def.refined.what}`,
-                    ),
+            return restrict(codecOfTerm(def.inner), holds(def.q), (value) =>
+                refusedBy(def.q, value),
             )
         /**
          * §3 `(legacy)`: the current reading, extended by an older one — the model's
@@ -983,14 +1110,14 @@ export const denote = (def: TermDef): Pair => {
          * migrated row and reported at the next write instead of at this read.
          */
         case 'legacy': {
-            const current = codecOfTerm(def.current)
-            const older = def.older
+            const current = codecOfTerm(def.inner)
+            const older = def.r
             return {
                 encode: (value) => current.encode(value),
                 decode: (attribute) => {
                     const read = current.decode(attribute)
                     if (!failed(read)) return read
-                    const older_ = older.decode(attribute)
+                    const older_ = older(attribute)
                     if (!failed(older_)) {
                         if (!accepts(current, older_)) {
                             return new CodecError(
@@ -1059,7 +1186,7 @@ export const denote = (def: TermDef): Pair => {
          * move at `custom` and the reason admission asks them rather than reading a row.
          */
         case 'custom':
-            return { encode: def.encode, decode: def.decode }
+            return { encode: def.ce, decode: def.cp }
         /**
          * §3 `(union)`: the sum, resolved by unique admission. `lawful_altCodec` is the lemma and
          * `altSem` is the resolution — one rule, serving both the attribute pair here and the item
@@ -1071,14 +1198,14 @@ export const denote = (def: TermDef): Pair => {
          * it tries. §5 says the same thing from the other end — the two families are independent,
          * and a pair separated on one side only is not separated.
          */
-        case 'untagged':
-            return altSem(def.variants.map(optionOfTerm)).pair
+        case 'union':
+            return altSem(def.options.map(optionOfTerm)).pair
         /**
          * §3 `(dunion)`: the variants' lookup, carried into an `M`. The tag is read off the item on
          * both sides — `tagOfV` and `tagOfA` in the model — so neither half attempts a variant it
          * was not sent to.
          */
-        case 'tagged': {
+        case 'dunion': {
             const body = itemSem(def)
             return carriedCodec(
                 (value): value is Record<string, unknown> =>
@@ -1105,11 +1232,13 @@ export const denote = (def: TermDef): Pair => {
          * asks it. §5's rows do the same for the same reason: no syntactic set names
          * `opaqCodecω`'s domain, because it recurses on the *input's own depth*.
          */
-        case 'opaque':
+        case 'opaq': {
+            const numbers = def.lossy ? 'lossy' : 'refuse'
             return {
-                encode: (value: unknown) => encodeUnknown(value, def.numbers),
-                decode: (attribute) => decodeUnknown(attribute, def.numbers),
+                encode: (value: unknown) => encodeUnknown(value, numbers),
+                decode: (attribute) => decodeUnknown(attribute, numbers),
             }
+        }
         /**
          * §3 `(literal)`, and it is **not** a sixth ground term: `literalCodec k ls` is
          * `(baseCodec k).restrict (inL k ls)`, the base's pair narrowed to membership of `ℓ`. The
@@ -1128,7 +1257,7 @@ export const denote = (def: TermDef): Pair => {
          * literal's stored text *is* its value, a numeric literal's is not.
          */
         case 'literal': {
-            const allowed = def.allowed
+            const allowed: readonly LiteralValue[] = def.ls
             /**
              * `inL`, answering with the **member of `ℓ`** rather than with `true`.
              *
@@ -1280,7 +1409,7 @@ export const denote = (def: TermDef): Pair => {
  * object" — and this makes that true rather than probable. The freeze is what the cache rests on: a
  * mutation fails loudly instead of poisoning it.
  */
-const codecs = new WeakMap<TermDef, AttributeCodec<never, AttributeValue>>()
+const codecs = new WeakMap<Term, AttributeCodec<never, AttributeValue>>()
 
 /**
  * A declaration's term, refusing a §4 field where a term is wanted.
@@ -1289,21 +1418,21 @@ const codecs = new WeakMap<TermDef, AttributeCodec<never, AttributeValue>>()
  * the positional guards refuse in the *type* at every site that could go wrong. This is the runtime
  * half, at the one place a child is taken from a codec a caller handed over.
  */
-export const termOf = (declared: AnyDeclaration): TermDef => {
+export const termOf = (declared: AnyDeclaration): Term => {
     // a declaration and not a codec, which is what keeps the refusal below reachable: a codec's
-    // definition is a term now, so a parameter of `AnyCodec` would make this a branch the checker
+    // definition is a term, so a parameter of `AnyCodec` would make this a branch the checker
     // says cannot be taken, and the caller it is for is the one that arrived past a cast
     const def = declared.def
-    if (def.kind === 'optional' || def.kind === 'fallback') {
+    if ('mark' in def) {
         throw new CodecError(
-            `\`${def.kind}\` marks a *field* — whether a name may be absent — and this position takes a term. The type says so too; this call reached here past a cast`,
+            `\`${def.mark}\` marks a *field* — whether a name may be absent — and this position takes a term. The type says so too; this call reached here past a cast`,
         )
     }
     return def
 }
 
 export const codecOfTerm = <T, A extends AttributeValue>(
-    def: TermDef,
+    def: Term,
 ): AttributeCodec<T, A> => {
     const built = codecs.get(def)
     if (built) return built as unknown as AttributeCodec<T, A>
@@ -1313,7 +1442,7 @@ export const codecOfTerm = <T, A extends AttributeValue>(
 }
 
 const buildCodec = <T, A extends AttributeValue>(
-    def: TermDef,
+    def: Term,
 ): AttributeCodec<T, A> =>
     codec<T, A>({
         def,
@@ -1574,7 +1703,7 @@ export const carries = (codec: AnyCodec): readonly Shape[] | undefined => {
         case 'refine':
             return carries(codecOfTerm(def.inner))
         case 'legacy':
-            return carries(codecOfTerm(def.current))
+            return carries(codecOfTerm(def.inner))
         // and this one deliberately does *not* read through. An adapter exists precisely to change
         // the kind of value held — `held(string.set(), ...)` takes an array where `string.set()` takes
         // a `Set` — so the inner codec's answer would be the wrong one. Nothing about the definition
@@ -1586,9 +1715,9 @@ export const carries = (codec: AnyCodec): readonly Shape[] | undefined => {
             const inner = carries(codecOfTerm(def.inner))
             return inner && [...inner, 'null']
         }
-        case 'untagged': {
+        case 'union': {
             const shapes = new Set<Shape>()
-            for (const variant of def.variants) {
+            for (const variant of def.options) {
                 const of = carries(codecOfTerm(variant))
                 if (!of) return undefined
                 for (const shape of of) shapes.add(shape)
@@ -1670,12 +1799,12 @@ export const readsBack = (
  * classified as a ground option and the union would have resolved by attempting instead of by
  * names. Nothing would have failed loudly. Here the term decides, and every codec has one.
  */
-export const optionOfTerm = (def: TermDef): Option => {
+export const optionOfTerm = (def: Term): Option => {
     const codec = codecOfTerm(def)
-    if (def.kind !== 'attributes') {
+    if (def.kind !== 'object') {
         return {
             codec,
-            member: termMember(termFromDef(def)),
+            member: termMember(def),
             carries: carries(codec),
             item: undefined,
             declares: undefined,
@@ -1685,9 +1814,10 @@ export const optionOfTerm = (def: TermDef): Option => {
     }
     const declares = new Set<string>()
     const requires: string[] = []
-    for (const name in def.of) {
+    const fields = def.body.fields
+    for (const name in fields) {
         declares.add(name)
-        if (def.of[name]?.mark !== 'optional') requires.push(name)
+        if (fields[name]?.mark !== 'optional') requires.push(name)
     }
     return {
         codec,
@@ -1698,29 +1828,14 @@ export const optionOfTerm = (def: TermDef): Option => {
         requires,
         describe: `{ ${[...declares]
             .map((name) =>
-                def.of[name]?.mark === 'optional' ? `${name}?` : name,
+                fields[name]?.mark === 'optional' ? `${name}?` : name,
             )
             .join(', ')} }`,
     }
 }
 
-/** Which member each kind of codec puts a value in, where the kind alone decides. */
-export const writtenBy: { readonly [K in TermKind]?: AttributeName } = {
-    string: 'S',
-    decimal: 'N',
-    number: 'N',
-    boolean: 'BOOL',
-    binary: 'B',
-    null: 'NULL',
-    array: 'L',
-    tuple: 'L',
-    record: 'M',
-    attributes: 'M',
-    tagged: 'M',
-}
-
 /** Which kind of value each kind of codec takes, where the kind alone decides. */
-export const carriedBy: { readonly [K in TermKind]?: Shape } = {
+export const carriedBy: { readonly [K in Term['kind']]?: Shape } = {
     string: 'string',
     // a decimal is stored as `N` and *held* as a string, which is the whole point of it
     decimal: 'string',
@@ -1732,6 +1847,6 @@ export const carriedBy: { readonly [K in TermKind]?: Shape } = {
     array: 'array',
     tuple: 'array',
     record: 'map',
-    attributes: 'map',
-    tagged: 'map',
+    object: 'map',
+    dunion: 'map',
 }

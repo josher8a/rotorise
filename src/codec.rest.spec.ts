@@ -176,12 +176,12 @@ describe("'refuse', for a service that owns its table", () => {
 describe('the rest policy a definition records', () => {
     it('tells the two string policies apart', () => {
         expect(object({ id: string }, 'drop').def).toMatchObject({
-            kind: 'attributes',
-            rest: 'drop',
+            kind: 'object',
+            body: { rest: 'drop' },
         })
         expect(object({ id: string }, 'refuse').def).toMatchObject({
-            kind: 'attributes',
-            rest: 'refuse',
+            kind: 'object',
+            body: { rest: 'refuse' },
         })
     })
 
@@ -199,8 +199,15 @@ describe('the rest policy a definition records', () => {
      */
     it('records a rest codec as its term, not as a flag', () => {
         const def = object({ vendorId: string('ACME', 'GLOBEX') }, scalar).def
-        expect(def).toMatchObject({ kind: 'attributes' })
-        expect((def as { rest: unknown }).rest).toBe(scalar.def)
+        expect(def).toMatchObject({ kind: 'object' })
+        expect(def.kind === 'object' && def.body.rest).toMatchObject({
+            kind: 'codec',
+        })
+        expect(
+            def.kind === 'object' &&
+                typeof def.body.rest !== 'string' &&
+                def.body.rest.t,
+        ).toBe(scalar.def)
         expect(codecOfTerm(termOf(scalar)).encode('x' as never)).toEqual(
             scalar.encode('x'),
         )
@@ -227,7 +234,9 @@ describe('the rest policy a definition records', () => {
     it('agrees with the policy the item codec reports', () => {
         for (const policy of ['drop', 'refuse'] as const) {
             const built = object({ id: string }, policy)
-            expect((built.def as { rest: unknown }).rest).toBe(built.item.rest)
+            expect(built.def.kind === 'object' && built.def.body.rest).toBe(
+                built.item.rest,
+            )
         }
     })
 
@@ -244,10 +253,10 @@ describe('the rest policy a definition records', () => {
     it('survives a walk into a nested object, where `.item` is not offered', () => {
         const restOfNested = (codec: AnyCodec): unknown => {
             const def = codec.def
-            if (def?.kind !== 'attributes') throw new Error('not an object')
-            const innerDef = def.of.inner?.codec
-            if (innerDef?.kind !== 'attributes') throw new Error('not nested')
-            return innerDef.rest
+            if (def?.kind !== 'object') throw new Error('not an object')
+            const innerDef = def.body.fields.inner?.t
+            if (innerDef?.kind !== 'object') throw new Error('not nested')
+            return innerDef.body.rest
         }
 
         expect(

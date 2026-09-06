@@ -51,18 +51,11 @@
  */
 import type { AttributeValue } from './attribute'
 import { isNumeral, isStoredNumeral, memberOf } from './attribute'
-import type {
-    AnyCodec,
-    AnyDeclaration,
-    Def,
-    LiteralValue,
-    TermDef,
-} from './codec'
+import type { AnyCodec, AnyDeclaration, LiteralValue } from './codec'
 import { union } from './codec'
 import { accepts, readsBack } from './denote'
 import { failed } from './result'
 import type { Literal, Predicate, Term, Field as TermField } from './term'
-import { NoTerm, termFromDef } from './term'
 import { shapeOf } from './value'
 
 /**
@@ -459,33 +452,14 @@ export const leanTermOf = (
     // the entry takes a declaration and the printer below takes a term, so the refusal has a place
     // to live and stays reachable. A codec's definition is a term in the type, and the caller this
     // is for is the one that arrived past a cast — `termOf` draws the same line for the same reason
-    const def: Def = declared.def
-    if (def.kind === 'optional' || def.kind === 'fallback') {
+    const def = declared.def
+    if ('mark' in def) {
         return refuse(
             at,
             'a §4 *field*, not a term — `optional`/`fallback` denote `Field`, and no `Term` position accepts one',
         )
     }
-    return leanTermOfTerm(termOrRefuse(def, at), at, forced)
-}
-
-/**
- * The definition as its §3 term, with the one shape that has none reported as a refusal.
- *
- * `termFromDef` raises {@link NoTerm} where `Def` says something §3 cannot — a `set` over a
- * restricted element, and nothing else today. It carries the path and the reason already, so this
- * is a rewrap and not a second message: the text a caller sees is unchanged, and so is the vector
- * corpus, which is what makes moving the refusal off the printer invisible from outside.
- */
-const termOrRefuse = (def: TermDef, at: string): Term => {
-    try {
-        return termFromDef(def, at)
-    } catch (obstruction) {
-        if (obstruction instanceof NoTerm) {
-            return refuse(obstruction.at, obstruction.reason)
-        }
-        throw obstruction
-    }
+    return leanTermOfTerm(def, at, forced)
 }
 
 /**
@@ -584,7 +558,7 @@ const leanTermOfTerm = (t: Term, at: string, forced: number): string => {
          * base rather than an element term.
          *
          * The refusal for a restricted element — `refine(b, q).set()`, `string.set('a','b')` — used
-         * to live here, and it lives at the seam now ({@link NoTerm}), because it is not a fact
+         * to live here, and it lives at `.set()` now, because it is not a fact
          * about emission. Such a codec is lawful and simply has no `set` term:
          * `setCodec_restrict` and `setCodec_restrict_p` prove the set of a restriction and the
          * restriction of a set are one pair on both halves, and that is an equation between codecs

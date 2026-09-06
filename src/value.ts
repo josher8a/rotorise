@@ -128,7 +128,7 @@ export const expect = <K extends AttributeName>(
 }
 
 /** Two alternatives, compared the way the base compares them: bytes for `binary`, `===` otherwise. */
-export const sameLiteral = (one: LiteralValue, other: LiteralValue): boolean =>
+export const sameLiteral = (one: LiteralValue, other: unknown): boolean =>
     one instanceof Uint8Array
         ? other instanceof Uint8Array &&
           one.length === other.length &&
@@ -136,7 +136,7 @@ export const sameLiteral = (one: LiteralValue, other: LiteralValue): boolean =>
         : one === other
 
 /** An alternative as a message names it: text in quotes, digits bare, bytes in hex. */
-export const namedLiteral = (one: LiteralValue): string =>
+export const namedLiteral = (one: unknown): string =>
     typeof one === 'string'
         ? `'${one}'`
         : one instanceof Uint8Array
