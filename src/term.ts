@@ -481,3 +481,124 @@ export const tagsOf = (d: string, t: Term): readonly string[] => {
     const inner = field.t
     return inner.kind === 'literal' && inner.base === 'string' ? inner.ls : []
 }
+
+/* ── the declaration guard ────────────────────────────────────────────────────────────── */
+
+/**
+ * Whether a term decides which values are its own.
+ *
+ * §5's fourth discharger row: two refinements of one base read an attribute to the *same* value, so
+ * at most one predicate accepts it and both sides separate. A literal is that with the predicate
+ * written as data, which is why `union([string('A'), string('B')])` is not ambiguous and never was.
+ *
+ * **It propagates through the containers**, which is what keeps
+ * `union([array(string('A')), array(string('B'))])` declarable — lawful where the union acts, and
+ * proved so. Note what that costs: the pair fails `UAtCan` outright at `[]`
+ * (`not_uAtCan_array_literals`) and meets only `UAtAct` (`uAtAct_array_literals`), because a
+ * container admits its empty case whatever its element admits. So the warrant for the flat case and
+ * the warrant for the container case are two different theorems, and only the first is about
+ * literals.
+ *
+ * `set` answers `false` here where the definition-walking form answered `true` for
+ * `string.set('a','b')`: {@link Term}'s `set` carries a **base** and has no element to read. That is
+ * the same gap {@link Term}'s `set` row names, and the pass that respells `.set()` over a restricted
+ * ground as a refinement of the set is what closes it — after which this row sees the literal
+ * through the `refine`. Until then such a set has no term at all and {@link separable} answers on
+ * `undefined` instead, which reaches the same verdict by the other route.
+ *
+ * `nullable` is left out deliberately: two nullable literals both accept `null`, so the wrapper
+ * admits a value neither literal decides. `held` is left out because the conversion is a caller's
+ * function and there is nothing to read.
+ */
+export const identifies = (t: Term): boolean => {
+    switch (t.kind) {
+        case 'literal':
+        // a tag lookup fails for a value carrying no tag it knows, which is the same evidence
+        case 'dunion':
+            return true
+        case 'array':
+            return identifies(t.elem)
+        case 'tuple':
+            return t.elems.every(identifies)
+        case 'record':
+            return identifies(t.val)
+        case 'union':
+            return t.options.every(identifies)
+        case 'refine':
+            return identifies(t.inner)
+        case 'legacy':
+            return identifies(t.inner)
+        default:
+            return false
+    }
+}
+
+/**
+ * **Whether a union may hold these two options**, asked at the declaration.
+ *
+ * **This is not a port of `Orth`, and the difference is the direction.** `Orth` is a *certificate*:
+ * `true` means the model proved the two cannot both admit one input. This is the complement of a
+ * *refutation*: it answers `false` only where both occupancies are known, they meet on a side, and
+ * no exemption applies. Where `Orth` declines for want of a proof, this accepts. One row is shared
+ * — `Orth1`, below — and the law that ties them is what `formal/.separations.lean` pins, one
+ * theorem per pair this function refuses: **it never answers `false` where `Orth` answers `true`.**
+ * Refusing a declaration the model proves separable would be refusing a union that works.
+ *
+ * Four rows, and each carries its own warrant.
+ *
+ * **An object option, either side.** A union admits an object by the names present, never by being
+ * attempted, and the collision check is `Collides` — which is `OrthM` written in the type:
+ * `[Exclude<RequiredKeysOf<A>, keyof B>] extends [never]` on both sides is exactly "neither side
+ * requires a name the other does not declare". So the model's certificate for objects already runs,
+ * one level up, and the type-level snapshot pins it. Answering `true` here is deferring to it, not
+ * skipping it.
+ *
+ * **An option that identifies its own values.** {@link identifies}, whose two warrants are on it.
+ *
+ * **An occupancy that is unknown.** `held`'s `f` runs before the subterm and can move a value into
+ * any constructor, `custom` is arbitrary both ways, and a host `lazy` cannot be read without
+ * forcing a binding that may not exist. The model takes the same direction for the same reason:
+ * over-approximating an occupancy is safe, so a pair involving one is not certified rather than
+ * A term the model cannot spell at all takes the same answer by the same argument, and the caller
+ * owns that case: `union` skips a pair with an absent term before it asks, so this takes two terms
+ * and has no row for one that is missing.
+ *
+ * **An `opaque` option.** §5 separates the two things a `⊤` covers: *unknown* — `held`, `custom`
+ * and a host `lazy`, whose answer exists and cannot be read — and *everything*, which is
+ * `opaque`, accepting every kind by design. The model takes the second as a **closed form**:
+ * `occV (.opaq lossy)` is `occTop` at `lossy` and `occBut .num` at `refuse`, which is sharper than
+ * `⊤` and sharp enough for `Orth1` to find a meeting. The host has always read it as `⊤`.
+ *
+ * Measured when the model's row was ported without this exemption: the corpus's refusal set moved
+ * from 17 pairs to 32, and all fifteen new ones have `opaque` on a side. Every one of the fifteen
+ * theorems would hold — `Orth (Term.opaq false) Term.string` evaluates to `false`, so the
+ * one-directional law is untouched either way — and every one is a declaration this library
+ * accepts today. The model's reading is that no value resolves such a union. That is a finding for
+ * §10 and the owner's to triage, not a change this guard makes on its own, so the row answers
+ * `true` and (U) guards each input as it does for the other three exemptions.
+ *
+ * **Otherwise `Orth1`, both sides conjoined.** A pair separated on one side only is not separated:
+ * the loosened form ships `union([decimal, number])`, which writes `'1.5'` to an `N` and cannot read
+ * back what it wrote, because `decimal` takes a string and `number` a number while both store `N`.
+ */
+export const separable = (x: Term, y: Term): boolean => {
+    if (x.kind === 'object' || y.kind === 'object') return true
+    if (identifies(x) || identifies(y)) return true
+    if (x.kind === 'opaq' || y.kind === 'opaq') return true
+    const writable = meet(occV(x), occV(y))
+    const readable = meet(occA(x), occA(y))
+    return writable === undefined && readable === undefined
+}
+
+/**
+ * Where two occupancies meet, or nothing — and `⊤` on either side means "not compared".
+ *
+ * The label is what a refusal reports, so this answers the meeting rather than a boolean. `union`
+ * asks again on the path it is about to throw on, which costs one walk of a term nobody will use
+ * and keeps {@link separable} the `Bool` the model's `Orth` is.
+ */
+export const meet = <A>(
+    one: readonly A[] | undefined,
+    other: readonly A[] | undefined,
+): A | undefined =>
+    one && other ? one.find((label) => other.includes(label)) : undefined

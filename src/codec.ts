@@ -38,6 +38,7 @@ import {
     type Result,
 } from './result'
 import type { Literal, Term, Field as TermField } from './term'
+import { meet, occA, occV, separable } from './term'
 
 /**
  * Forwarded for the consumers that still name them here.
@@ -912,6 +913,28 @@ const fieldTerm = (field: Field, at: string): TermField =>
  * The one that has no term at all is a `set` over a restricted element, and it raises
  * {@link NoTerm}. Everything else is a rename, a re-indexing, or a recursion.
  */
+/**
+ * The term a definition denotes, where §3 has one — and `undefined` where it has none.
+ *
+ * **The one place a {@link NoTerm} becomes a value**, which is where it belongs: a throw is for a
+ * broken invariant, and this is a failure a caller can expect. `union` is the caller, and it reads
+ * the answer the way the model reads an unknown occupancy — *a term the model cannot spell is not
+ * certified rather than refused*. Over-approximating costs a certificate and never buys a wrong
+ * one, so the pair stays declarable and (U) guards it per input instead.
+ *
+ * Today there is exactly one shape that answers `undefined`: a `set` over a restricted element.
+ * The pass that spells `.set()` over a restricted ground as `refine(set(b), liftQ q)` closes it,
+ * and this function survives that pass answering `undefined` for nothing.
+ */
+export const termIfAny = (def: TermDef): Term | undefined => {
+    try {
+        return termFromDef(def)
+    } catch (obstruction) {
+        if (obstruction instanceof NoTerm) return undefined
+        throw obstruction
+    }
+}
+
 export const termFromDef = (def: TermDef, at = 'codec'): Term => {
     switch (def.kind) {
         case 'string':
@@ -3789,60 +3812,6 @@ export type Option = {
     readonly describe: string
 }
 
-/**
- * Whether a term knows which values are its own.
- *
- * A `literal` does, by construction: it checks the value against its admissible set in *both*
- * directions, so being able to encode a value is real evidence the value was meant for it. Almost
- * nothing else did — encoding did not validate — which was why a union could not generally resolve
- * by trying.
- *
- * **Every row validates now and the resolver decides by {@link admits}, so this is no longer about
- * trying.** What it is still about is the *declaration*: whether two options can be told apart at
- * all, asked with no value in hand. That question is why `admits` cannot replace this function —
- * `admits` takes a value, and there is none at import time — and it is the shape of the answer
- * HANDOFF's fourth item expected and did not get.
- *
- * It **propagates through containers**, and it has to. `number.set(1)` refuses a set of strings,
- * because the element refuses each one — so `union([string.set('a'), number.set(1)])` is perfectly
- * resolvable, and reading the property off the option alone refused it. The same for a wrapper that
- * encodes straight through its inner codec.
- *
- * `nullable` is left out on purpose: two nullable literals both accept `null`, so the wrapper admits
- * a value neither literal decides. `held` is left out because the conversion is a caller's function
- * and there is nothing to read.
- */
-const identifies = (option: Option) => identifying(option.codec)
-
-const identifying = (codec: AnyCodec): boolean => {
-    const def = codec.def
-    switch (def?.kind) {
-        case 'literal':
-        // a tag lookup fails for a value carrying no tag it knows, which is the same evidence
-        case 'tagged':
-            return true
-        case 'set':
-        case 'array':
-            return identifying(codecOfTerm(def.element))
-        case 'tuple':
-            return def.elements.every((element) =>
-                identifying(codecOfTerm(element)),
-            )
-        case 'record':
-            return identifying(codecOfTerm(def.value))
-        case 'untagged':
-            return def.variants.every((variant) =>
-                identifying(codecOfTerm(variant)),
-            )
-        case 'refine':
-            return identifying(codecOfTerm(def.inner))
-        case 'legacy':
-            return identifying(codecOfTerm(def.current))
-        default:
-            return false
-    }
-}
-
 const optionOf = (codec: AnyCodec): Option => {
     /**
      * Read from the definition, not from the presence of `.item`.
@@ -4133,7 +4102,9 @@ export const discriminatedUnion = <
 export const union = <const Options extends readonly AnyCodec[]>(
     options: Options & ValidateOptions<Options>,
 ): UnionCodec<DerivedUnion<Options>, Options> => {
-    const all = (options as readonly AnyCodec[]).map(optionOf)
+    const all: readonly Option[] = (options as readonly AnyCodec[]).map(
+        optionOf,
+    )
 
     /**
      * Two options that no *value* can choose between, refused where the declaration is.
@@ -4206,32 +4177,30 @@ export const union = <const Options extends readonly AnyCodec[]>(
      * unions that work. The model takes the same direction for the same reason: over-approximating
      * an occupancy is safe, so a pair involving one is simply not certified rather than refused.
      */
-    const meeting = <A>(
-        one: readonly A[] | undefined,
-        other: readonly A[] | undefined,
-    ): A | undefined =>
-        one && other ? one.find((x) => other.includes(x)) : undefined
+    const terms = all.map((option) => termIfAny(option.codec.def))
 
     for (let i = 0; i < all.length; i++) {
         for (let j = i + 1; j < all.length; j++) {
             const first = all[i] as Option
             const second = all[j] as Option
-            // exemption two: an object option is chosen by the names present, never by being tried
-            if (first.declares || second.declares) continue
-            // exemption one: a literal knows which values are its own, so trying it is a real
-            // question — and it propagates through containers, which is what keeps
-            // `union([array(string('A')), array(string('B'))])` declarable
-            if (identifies(first) || identifies(second)) continue
-            const bothWrite = meeting(
-                occupies(first.codec),
-                occupies(second.codec),
-            )
+            const x = terms[i]
+            const y = terms[j]
+            // an option §3 has no term for is not compared: the same direction the unknown
+            // occupancy takes, and the same reason — over-approximating costs a certificate and
+            // never buys a wrong one, so the pair stays declarable and (U) guards it per input.
+            // Today that is a `set` over a restricted element and nothing else
+            if (x === undefined || y === undefined) continue
+            if (separable(x, y)) continue
+            // the label the refusal names, asked again on the path that is about to throw:
+            // `separable` answers the `Bool` the model's `Orth` answers, so the meeting is
+            // recomputed here rather than carried back through it
+            const bothWrite = meet(occV(x), occV(y))
             if (bothWrite) {
                 throw new CodecError(
                     `${first.describe} and ${second.describe} both take the same kind of value — ${bothWrite} — and neither checks what it is given, so no value can choose between them; give the entity a discriminator and use discriminatedUnion`,
                 )
             }
-            const bothRead = meeting(reads(first.codec), reads(second.codec))
+            const bothRead = meet(occA(x), occA(y))
             if (bothRead) {
                 throw new CodecError(
                     `${first.describe} and ${second.describe} both store '${bothRead}', and neither checks what it reads, so no stored attribute can choose between them; give the entity a discriminator and use discriminatedUnion`,
