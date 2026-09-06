@@ -258,3 +258,31 @@ describe('the NULL point', () => {
         expect(() => nullValue.unsafeEncode('x' as never)).toThrow(CodecError)
     })
 })
+
+describe('the declaration guard, where a term is what the guard reads', () => {
+    /**
+     * Two literal sets with disjoint alphabets are separable, and the declaration must stand.
+     *
+     * The model's warrant is `Exactness.lean`'s `SepJV` over
+     * `refine (set string) (liftQ (inL string …))` at two disjoint alphabets: a set of a
+     * restriction *is* a restriction of the set, which `setCodec_restrict` and
+     * `setCodec_restrict_p` prove on both halves of the pair. So the pair separates, and refusing
+     * it would refuse a union the model proves works.
+     *
+     * **Today it stands for the weaker reason**, and that is what this test is pinning against.
+     * `Term.set` is indexed by a bare `SetBase`, so a set over a literal has no term at all, and
+     * the guard answers on `undefined` — not certified rather than refused. The pass that respells
+     * `.set()` over a restricted ground as `refine(set(b), liftQ q)` gives it a term, and then
+     * `identifies` has to see the literal *through* the refinement or this test goes red. That is
+     * the pin that pass must keep.
+     */
+    it('declares a union of two literal sets whose alphabets do not meet', () => {
+        expect(() =>
+            union([string.set('a', 'b'), string.set('c')]),
+        ).not.toThrow()
+        const either = union([string.set('a', 'b'), string.set('c')])
+        expect(either.unsafeEncode(new Set(['a']) as never)).toEqual({
+            SS: ['a'],
+        })
+    })
+})
