@@ -12,7 +12,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import type { Attribute, AttributeMap } from './attribute'
-import type { ItemCodec, OptionalCodec } from './codec'
+import type { ItemCodec, OptionalCodec, StringCodec } from './codec'
 import {
     array,
     boolean,
@@ -125,7 +125,11 @@ const statusLog = Object.fromEntries(
         [`status_${name}_setAt`, optional(string)],
         [`status_${name}_byStaffId`, optional(string)],
     ]),
-) as { [k in ListingStatusLog]: OptionalCodec<string, Attribute<'S'>> }
+) as {
+    // the third argument is the codec the mark is about, and `string` is a `StringCodec`: writing
+    // the two-argument form here would default it to the erased codec and refuse the real one
+    [k in ListingStatusLog]: OptionalCodec<string, Attribute<'S'>, StringCodec>
+}
 
 const Listing = object({
     id: string,

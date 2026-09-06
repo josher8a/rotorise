@@ -169,9 +169,13 @@ export type Nestable<T> = AttributeCodec<T>
  * The definition is carried because {@link fieldOf} reads the mark off `def.kind` at run time, and a
  * type that did not name it would be a type that does not say what the value holds.
  */
-export type OptionalCodec<T, A extends AttributeValue = AttributeValue> = {
+export type OptionalCodec<
+    T,
+    A extends AttributeValue = AttributeValue,
+    C = AttributeCodec<T, A>,
+> = {
     readonly [optionalMarker]: true
-    readonly codec: AttributeCodec<T, A>
+    readonly codec: C
     // the mark's own kind and not the whole of `FieldDef`, so a reader that must tell the two marks
     // apart can, without the symbols — which are `declare const` and reach no consumer
     readonly def: Extract<FieldDef, { readonly kind: 'optional' }>
@@ -3729,17 +3733,17 @@ export const lazy = <T, A extends AttributeValue = AttributeValue>(
  */
 export const optional = <const C extends AnyCodec>(
     inner: C,
-): OptionalCodec<Decoded<C>, AttributeOf<C>> => {
+): OptionalCodec<Decoded<C>, AttributeOf<C>, C> => {
     // the marked codec beside the definition, not a copy of the codec with a definition stamped on
-    // it: a field has no pair of its own, and spreading one gave it the pair of the codec it marks
-    const attribute = inner as unknown as AttributeCodec<Decoded<C>>
+    // it: a field has no pair of its own, and spreading one gave it the pair of the codec it marks.
+    // `inner` itself, so the mark carries the codec the caller passed and not its erasure
     // one assertion, and it cannot come off. `optionalMarker` is a `declare const` symbol, so it
     // exists in the type and nowhere a literal can write it: removing the assertion reports
     // "Property '[optionalMarker]' is missing". It is `rest`'s spelling for `rest`'s reason
     return {
-        codec: attribute,
-        def: { kind: 'optional', inner: attribute as AnyCodec },
-    } as OptionalCodec<Decoded<C>, AttributeOf<C>>
+        codec: inner,
+        def: { kind: 'optional', inner: inner as unknown as AnyCodec },
+    } as unknown as OptionalCodec<Decoded<C>, AttributeOf<C>, C>
 }
 
 /**
