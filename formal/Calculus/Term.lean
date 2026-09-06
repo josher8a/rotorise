@@ -56,8 +56,10 @@ inductive Term where
 
       **What this gives up, deliberately.** `set(refine(b, q))` and `set(literal k ls)` are
       *not* lost: a restriction of the elements is a restriction of the set, and
-      `setCodec_restrict` (`Combinators.lean`) proves the two write the same attribute on
-      the nose, with `liftQ` carrying the predicate through. What is lost is
+      `setCodec_restrict` and `setCodec_restrict_p` (`Combinators.lean`) prove the two are
+      one pair on the nose, the first on `e` and the second on `p`, with `liftQ` carrying
+      the predicate through. This cited the write-side theorem for both halves, and the
+      read side was a sentence in its docstring until it was proved. What is lost is
       `set(held b f g)` and `set(legacy b r)` — an element-level adapter and an
       element-level read widening. Neither appears in `src/`, and neither has a set-level
       spelling: a set-level `held` would need `setImage` rather than the classical

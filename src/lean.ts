@@ -51,16 +51,23 @@
  */
 import type { AttributeValue } from './attribute'
 import { isNumeral, isStoredNumeral, memberOf } from './attribute'
-import type { AnyCodec, AnyDeclaration, Def, Field, TermDef } from './codec'
+import type {
+    AnyCodec,
+    AnyDeclaration,
+    Def,
+    LiteralValue,
+    TermDef,
+} from './codec'
 import {
     admits,
     admitsAttribute,
-    codecOfTerm,
-    setBase,
+    NoTerm,
     shapeOf,
+    termFromDef,
     union,
 } from './codec'
 import { failed } from './result'
+import type { Term, Field as TermField } from './term'
 
 /**
  * A term, value or attribute the Lean model has no closed expression for.
@@ -392,15 +399,15 @@ const shippedPredicates: ReadonlyMap<unknown, ShippedPredicate> = new Map<
  * accepted *value* is a string — `held` is the counterexample, and `opaque` writes whatever it is
  * handed. Recurses through `refine`, because a refinement writes where its inner term does.
  */
-const writesOnlyStrings = (def: TermDef | undefined): boolean => {
-    if (!def) return false
-    if (def.kind === 'string' || def.kind === 'decimal') return true
+const writesOnlyStrings = (t: Term | undefined): boolean => {
+    if (!t) return false
+    if (t.kind === 'string' || t.kind === 'decimal') return true
     // read off the base rather than off the values, which is the same change the definition made:
     // a `decimal` literal's alternatives are text, and so is what it writes
-    if (def.kind === 'literal') {
-        return def.base === 'string' || def.base === 'decimal'
+    if (t.kind === 'literal') {
+        return t.base === 'string' || t.base === 'decimal'
     }
-    if (def.kind === 'refine') return writesOnlyStrings(def.inner)
+    if (t.kind === 'refine') return writesOnlyStrings(t.inner)
     return false
 }
 
@@ -463,11 +470,30 @@ export const leanTermOf = (
             'a §4 *field*, not a term — `optional`/`fallback` denote `Field`, and no `Term` position accepts one',
         )
     }
-    return leanTermOfDef(def, at, forced)
+    return leanTermOfTerm(termOrRefuse(def, at), at, forced)
 }
 
-const leanTermOfDef = (def: TermDef, at: string, forced: number): string => {
-    switch (def.kind) {
+/**
+ * The definition as its §3 term, with the one shape that has none reported as a refusal.
+ *
+ * `termFromDef` raises {@link NoTerm} where `Def` says something §3 cannot — a `set` over a
+ * restricted element, and nothing else today. It carries the path and the reason already, so this
+ * is a rewrap and not a second message: the text a caller sees is unchanged, and so is the vector
+ * corpus, which is what makes moving the refusal off the printer invisible from outside.
+ */
+const termOrRefuse = (def: TermDef, at: string): Term => {
+    try {
+        return termFromDef(def, at)
+    } catch (obstruction) {
+        if (obstruction instanceof NoTerm) {
+            return refuse(obstruction.at, obstruction.reason)
+        }
+        throw obstruction
+    }
+}
+
+const leanTermOfTerm = (t: Term, at: string, forced: number): string => {
+    switch (t.kind) {
         case 'string':
             return 'Term.string'
         case 'decimal':
@@ -478,59 +504,27 @@ const leanTermOfDef = (def: TermDef, at: string, forced: number): string => {
             return 'Term.binary'
         case 'null':
             return 'Term.null'
-        // **Emittable, and it took refusal vectors to see that.** `Term.number` is a closed term;
-        // what has no closed inhabitant is `Value.num`, and `leanValueOf` refuses that with an
-        // accurate message. So a *positive* vector here still fails, at the value where the
-        // impossibility actually is, and a *refusal* vector — `(denote Term.number).e
-        // (Value.str "x") = none` — is `rfl`. The refusal used to sit here and made the whole
-        // term unmentionable, which is a fact about positive vectors written as a fact about the
-        // syntax. Contrast `literal` at `number` below, which really is unemittable.
+        /**
+         * **Emittable, and it took refusal vectors to see that.** `Term.number` is a closed term;
+         * what is unconstructible is a `Value.num`, `Double` being an axiom with no closed terms.
+         * So a positive vector at `number` cannot be stated and a *refusal* at `number` can, since
+         * the value it refuses is some other constructor. {@link leanValueOf} is where the wall is,
+         * and this row was refusing on its behalf one level too early.
+         */
         case 'number':
             return 'Term.number'
-        /**
-         * `Term.literal` is indexed by a `GroundKind`, and this emits every base whose carrier has
-         * closed terms — which, since `decimal` became one, is four of the six.
-         *
-         * - `string` → `GroundKind.string`, carrier `String`.
-         * - `boolean` → `GroundKind.boolean`, carrier `Bool`.
-         * - `decimal` → `GroundKind.decimal`, carrier `StoredNumeral`, a **subtype** of `Numeral`
-         *   gated on `Numeral.Stored`. So an alternative is `⟨"1", by decide⟩` and not `"1"`: the
-         *   gate is §1's grammar run at elaboration time, exactly as `WFNumeral.of` runs it on the
-         *   attribute side. A numeral this library would write and §1 refuses does not produce a
-         *   false theorem — it produces a file that will not elaborate, naming the numeral. The
-         *   constructor already refuses a non-stored alternative (`literalCodec`'s `ℓ ⊆ D` at
-         *   `decimal`), so in practice the two gates agree and `lean.predicates.spec.ts` is what
-         *   says they are the same predicate.
-         * - `binary` → `GroundKind.binary`, carrier `Bytes`, which is §1's `List UInt8` and emits
-         *   as one.
-         * - `number` → `GroundKind.number`, carrier `Double`, which is an axiom. Permanent — and
-         *   **not** the same refusal `Term.number` used to get, which is the distinction refusal
-         *   vectors forced. `Term.number` is a closed term whose *values* are unwritable; this one
-         *   has no closed term at all, because the alternatives set is `NEFinset Double`. The first
-         *   moved to the value side and the second cannot.
-         *
-         * `binary` was refused here too, on the ground that "`leanValue` has no `B` case". It has
-         * one — `leanValueOf` emits `Value.bin` for a `Uint8Array`, and has for as long as the
-         * refusal has been there — so the refusal was reachable only by never being tried. The
-         * kernel accepts the term and both directions of its admission.
-         *
-         * `decimal` was refused here until `decimal` became a `GroundKind`, on the ground that
-         * `GroundKind` was `string | number | boolean | binary | null`. That was true when written
-         * and stopped being true; the base and its `StoredNumeral` carrier are in `Domain.lean`'s
-         * `GroundKind.Carrier`, and `GroundKind.toValue` sends a decimal alternative to `.str x.1`,
-         * so the value side needed no change at all. The old note also reasoned that emitting it as
-         * `GroundKind.string` would denote a codec writing `S` and `GroundKind.number` would lose
-         * the exactness — both still true, and both now beside the point.
-         */
         case 'literal': {
-            const base = def.base
+            const base = t.base
             if (base === 'number') {
                 return refuse(
                     at,
                     'a numeric literal sits at `GroundKind.number`, whose carrier is `Double`',
                 )
             }
-            const allowed = [...new Set(def.allowed as readonly unknown[])]
+            // an annotation rather than a cast: widening to the union's supertype is something
+            // the checker can do on its own, and `as` here would only hide it doing so
+            const alternatives: readonly LiteralValue[] = t.ls
+            const allowed = [...new Set(alternatives)]
             const alternative = (one: unknown): string =>
                 base === 'boolean'
                     ? String(one)
@@ -545,68 +539,52 @@ const leanTermOfDef = (def: TermDef, at: string, forced: number): string => {
             )})`
         }
         /**
-         * `Term.set` is indexed by a **`SetBase`**, not by an element term.
+         * `Term.set` is indexed by a **`SetBase`**, and by the time the printer sees one it holds a
+         * base rather than an element term.
          *
-         * This emitted `Term.set (<element term>)` and stopped compiling the day
-         * `formal/Calculus/Term.lean:60` changed: the rule's premise `setMember μ = some μS` was
-         * partial, so the old constructor accepted element terms the rule then refused, and the
-         * index makes that refusal a type error instead.
-         *
-         * A **restricted** element — `refine(b, q).set()`, `string.set('a','b')` — is still a
-         * perfectly good codec and still has no *term*. `setCodec_restrict` says the set of a
-         * restriction and the restriction of a set write the same attribute, but that is an
-         * equation between `Codec`s, and the restriction it lifts is not itself a `Term.set`. So a
-         * bare base is emitted and everything else is named and refused, rather than emitted as its
-         * base — which would denote a codec that admits members this one rejects.
+         * The refusal for a restricted element — `refine(b, q).set()`, `string.set('a','b')` — used
+         * to live here, and it lives at the seam now ({@link NoTerm}), because it is not a fact
+         * about emission. Such a codec is lawful and simply has no `set` term:
+         * `setCodec_restrict` and `setCodec_restrict_p` prove the set of a restriction and the
+         * restriction of a set are one pair on both halves, and that is an equation between codecs
+         * rather than a term.
          */
-        case 'set': {
-            const base = setBase(codecOfTerm(def.element))
-            if (!base || def.element.kind !== base) {
-                return refuse(
-                    `${at}.element`,
-                    base
-                        ? `a set of a *restricted* element — this one is a \`${def.element.kind}\` over \`${base}\`. \`Term.set\` is indexed by a bare \`SetBase\`, and the lift \`setCodec_restrict\` is an equation between codecs rather than a term`
-                        : 'a set whose element is not one of the four `SetBase` bases',
-                )
-            }
-            return `Term.set SetBase.${base}`
-        }
+        case 'set':
+            return `Term.set SetBase.${t.base}`
         case 'array':
-            return `Term.array (${leanTermOfDef(def.element, `${at}.element`, forced)})`
+            return `Term.array (${leanTermOfTerm(t.elem, `${at}.element`, forced)})`
         case 'tuple': {
-            const elements = def.elements
+            const elements = t.elems
                 .map((element, index) =>
-                    leanTermOfDef(element, `${at}[${index}]`, forced),
+                    leanTermOfTerm(element, `${at}[${index}]`, forced),
                 )
                 .join(', ')
-            const tail = def.tail
-                ? `(some (${leanTermOfDef(def.tail, `${at}.tail`, forced)}))`
+            const tail = t.tail
+                ? `(some (${leanTermOfTerm(t.tail, `${at}.tail`, forced)}))`
                 : 'none'
             return `Term.tuple [${elements}] ${tail}`
         }
         case 'record':
-            return `Term.record (${leanTermOfDef(def.value, `${at}.value`, forced)})`
-        case 'attributes': {
-            const names = Object.keys(def.of)
+            return `Term.record (${leanTermOfTerm(t.val, `${at}.value`, forced)})`
+        case 'object': {
+            const declared = Object.entries(t.body.fields)
+            const names = declared.map(([name]) => name)
             const fields = leanKeyFunction(
-                names.map(
-                    (name) =>
+                declared.map(
+                    ([name, field]) =>
                         [
                             name,
-                            leanFieldOf(
-                                def.of[name] as Field,
-                                `${at}.${name}`,
-                                forced,
-                            ),
+                            leanFieldOf(field, `${at}.${name}`, forced),
                         ] as const,
                 ),
             )
             // three policies, three terms — the definition records the policy itself, so nothing
             // here has to guess which of `drop` and `refuse` an absent codec meant
-            const rest =
-                typeof def.rest === 'string'
-                    ? `Rest.${def.rest}`
-                    : `(Rest.codec (${leanTermOfDef(def.rest, `${at}.rest`, forced)}))`
+            const rest = t.body.rest
+            const restTerm =
+                typeof rest === 'string'
+                    ? `Rest.${rest}`
+                    : `(Rest.codec (${leanTermOfTerm(rest.t, `${at}.rest`, forced)}))`
             // **One argument, a `Body`.** `db444e3` made the object payload a stratum, so
             // `Term.object` takes `Body.mk names fields rest` where it used to take the three
             // separately — and this row kept emitting the three, which typechecked against no
@@ -614,30 +592,30 @@ const leanTermOfDef = (def: TermDef, at: string, forced: number): string => {
             // are generated *by this function*, so `lean.spec.ts`'s byte comparison agreed with a
             // stale emitter, and no gate ran a generated file through Lean. Both are fixed; see
             // `ARCHITECTURE.md` §2, where the emitter is now the ninth companion a stratum owes.
-            return `Term.object (Body.mk ${leanFinset(names)} (${fields}) ${rest})`
+            return `Term.object (Body.mk ${leanFinset(names)} (${fields}) ${restTerm})`
         }
-        case 'tagged': {
+        case 'dunion': {
             // One option, one tag: `discriminatedUnion` refuses a literal admitting several
             // values at the declaration, so the table cannot hold one codec twice and the option
             // list cannot repeat one. `Typed.dunion`'s `hdisj` is answered upstream of here — this
             // used to dedup by identity, which was the same invariant enforced in two places
-            const options = Object.values(def.variants)
+            const options = t.options
                 .map((variant, index) =>
-                    leanTermOfDef(variant, `${at}.variants[${index}]`, forced),
+                    leanTermOfTerm(variant, `${at}.variants[${index}]`, forced),
                 )
                 .join(', ')
-            return `Term.dunion ${leanString(def.discriminator)} [${options}]`
+            return `Term.dunion ${leanString(t.d)} [${options}]`
         }
-        case 'untagged':
-            return `Term.union [${def.variants
+        case 'union':
+            return `Term.union [${t.options
                 .map((variant, index) =>
-                    leanTermOfDef(variant, `${at}[${index}]`, forced),
+                    leanTermOfTerm(variant, `${at}[${index}]`, forced),
                 )
                 .join(', ')}]`
         case 'nullable':
-            return `Term.nullable (${leanTermOfDef(def.inner, `${at}.inner`, forced)})`
-        case 'opaque':
-            return `Term.opaq ${def.numbers === 'lossy'}`
+            return `Term.nullable (${leanTermOfTerm(t.inner, `${at}.inner`, forced)})`
+        case 'opaq':
+            return `Term.opaq ${t.lossy}`
         case 'lazy': {
             if (forced >= lazyLimit) {
                 return refuse(
@@ -648,25 +626,25 @@ const leanTermOfDef = (def: TermDef, at: string, forced: number): string => {
                     ),
                 )
             }
-            return `Term.lazy (${leanTermOfDef(def.get(), `${at}.inner`, forced + 1)})`
+            return `Term.lazy (${leanTermOfTerm(t.get(), `${at}.inner`, forced + 1)})`
         }
         case 'refine': {
             // recognised by reference against the function this package exported, so a rename or a
             // reimplementation of the predicate is a type error here rather than a silent misemission
-            const known = shippedPredicates.get(def.refined.is)
+            const known = shippedPredicates.get(t.q.is)
             if (!known) {
                 return refuse(
                     at,
-                    `\`Term.refine\` carries \`q : Value → Bool\`, and this predicate is not one this library ships — it is the caller's closure for ${JSON.stringify(def.refined.what)}. The recognised ones are \`isNumeral\` and \`isStoredNumeral\` from \`src/attribute.ts\`, passed by reference`,
+                    `\`Term.refine\` carries \`q : Value → Bool\`, and this predicate is not one this library ships — it is the caller's closure for ${JSON.stringify(t.q.what)}. The recognised ones are \`isNumeral\` and \`isStoredNumeral\` from \`src/attribute.ts\`, passed by reference`,
                 )
             }
-            if (!writesOnlyStrings(def.inner)) {
+            if (!writesOnlyStrings(t.inner)) {
                 return refuse(
                     at,
                     `${known.what} decides a *string*, and this refinement's inner term writes values that are not strings — where JavaScript would coerce and the model would not, so the two predicates would part company`,
                 )
             }
-            return `Term.refine (${leanTermOfDef(def.inner, `${at}.inner`, forced)}) ${known.lean}`
+            return `Term.refine (${leanTermOfTerm(t.inner, `${at}.inner`, forced)}) ${known.lean}`
         }
         case 'held':
             return refuse(
@@ -687,18 +665,18 @@ const leanTermOfDef = (def: TermDef, at: string, forced: number): string => {
 }
 
 /** A `Field` — §4's stratum, which is a *position* in a map and not a codec. */
-const leanFieldOf = (field: Field, at: string, forced: number): string => {
+const leanFieldOf = (field: TermField, at: string, forced: number): string => {
     switch (field.mark) {
         case 'optional':
-            return `Field.optional (${leanTermOfDef(field.codec, at, forced)})`
+            return `Field.optional (${leanTermOfTerm(field.t, at, forced)})`
         case 'fallback':
-            return `Field.fallback (${leanTermOfDef(
-                field.codec,
+            return `Field.fallback (${leanTermOfTerm(
+                field.t,
                 at,
                 forced,
-            )}) (${leanValueOf(field.value, `${at}.fallback`)})`
-        case 'required':
-            return `Field.req (${leanTermOfDef(field.codec, at, forced)})`
+            )}) (${leanValueOf(field.v, `${at}.fallback`)})`
+        case 'req':
+            return `Field.req (${leanTermOfTerm(field.t, at, forced)})`
     }
 }
 
