@@ -5,7 +5,6 @@ import { describe, expect, it } from 'vitest'
 import type { AttributeMap } from './attribute'
 import type { AnyCodec, UnionCodec } from './codec'
 import {
-    admits,
     array,
     boolean,
     CodecError,
@@ -16,8 +15,8 @@ import {
     optional,
     string,
     union,
-    writes,
 } from './codec'
+import { accepts } from './denote'
 import { checkRoundTrip, roundTrip } from './testing'
 
 type LineItem =
@@ -133,7 +132,6 @@ describe('untagged', () => {
     it('rejects two options that store the same member, which no read can resolve', () => {
         // the behavioural claim is about which *declarations* stand: two options sharing a member
         // with neither checking what it reads is refused, and a pair separable by member is not
-        expect(writes(decimal)).toBe(writes(number))
         expect(() => union([decimal, number])).toThrow(CodecError)
         expect(() => union([string, number])).not.toThrow()
         // and the mirror it was hiding behind, which was refused all along — twice over, since two
@@ -151,7 +149,6 @@ describe('untagged', () => {
      * numeric literals below share `'N'` and are still perfectly resolvable.
      */
     it('keeps the two exemptions the write side has', () => {
-        expect(writes(number(0, 1))).toBe(writes(decimal('2', '3')))
         const either = union([number(0, 1), decimal('2', '3')])
         expect(either.unsafeDecode({ N: '2' })).toBe('2')
         expect(either.unsafeDecode({ N: '1' })).toBe(1)
@@ -176,9 +173,9 @@ describe('untagged', () => {
         // what makes it ambiguous is that *both* options admit the entity, and that is the
         // assertion the message was standing in for — (U) fails at this input
         expect(
-            admits(object({ a: string, b: optional(string) }), { a: '1' }),
+            accepts(object({ a: string, b: optional(string) }), { a: '1' }),
         ).toBe(true)
-        expect(admits(object({ a: string }), { a: '1' })).toBe(true)
+        expect(accepts(object({ a: string }), { a: '1' })).toBe(true)
         expect(() => Ambiguous.unsafeEncode({ a: '1' })).toThrow(CodecError)
         // and the unambiguous case still works
         expect(Ambiguous.unsafeEncode({ a: '1', b: '2' })).toEqual({

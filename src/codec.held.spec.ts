@@ -21,7 +21,6 @@ import {
     refine,
     string,
     union,
-    writes,
 } from './codec'
 import { checkEncodePaths, checkRoundTrip } from './testing'
 
@@ -58,10 +57,6 @@ describe('an array held where the table holds a set', () => {
             tags: typeof tags
         }>
         expect(typeof written).toBe('object')
-    })
-
-    it('is still an SS to everything that asks the definition', () => {
-        expect(writes(tags)).toBe('SS')
     })
 
     it('round-trips, with values generated through the adapter', () => {

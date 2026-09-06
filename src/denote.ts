@@ -45,6 +45,7 @@ import type {
 } from './codec'
 import type { Result } from './result'
 import { andThen, CodecError, every, everyEntry, failed } from './result'
+import { termFromDef, member as termMember } from './term'
 import {
     asRecord,
     copiedPerRead,
@@ -179,7 +180,7 @@ export type Pair = {
  * either side beyond the member it stamps: `out_into` is the round trip **(R)** and `into_out` is
  * canonizability **(C)**.
  *
- * The shape test is {@link admits}', not a second one: `shapeOf` is the function that row calls, so
+ * The shape test is `accepts`', not a second one: `shapeOf` is the function that row calls, so
  * the two cannot drift into disagreeing about what a string is.
  */
 export const groundCodec = (
@@ -403,7 +404,7 @@ export const heldThrough = (
  * `admits ⟺ encode`. It used to run on `decode` only, on the argument that a row is data somebody
  * else wrote while an argument is typed — and the type is the narrow one, so a value failing the
  * predicate arrived past it. That is true of every gate here and was not a reason to skip this one:
- * a brand whose predicate is not checked is a brand a cast can forge, and `admits` ran the
+ * a brand whose predicate is not checked is a brand a cast can forge, and admission ran the
  * predicate itself all along.
  */
 export const restrict = (
@@ -520,8 +521,8 @@ export const altSem = (
      * the declaration. `union([held(decimal, dateAdapter), string])` could not encode a `Date` for
      * exactly that reason, and the fix was `string` refusing one.
      *
-     * `admits` is the decision. It is §3's `Adm`, proved exact at all 21 constructors, and
-     * `codec.laws.spec.ts` now holds `admits(c, v) ⟺ !failed(c.encode(v))` over its whole table —
+     * {@link accepts} is the decision. §3's `Adm`, proved exact at all 21 constructors, and
+     * `codec.laws.spec.ts` holds `accepts(c, v) ⟺ !failed(c.encode(v))` over its whole table —
      * so on the values in play this selects the same option `only` would have found by attempting,
      * and says *why* rather than discovering it. Two differences that are improvements rather than
      * equivalences: a `held` option whose adapter **throws** on a value it does not own is filtered
@@ -539,7 +540,10 @@ export const altSem = (
         through: (option: Option) => Result<A>,
     ): Result<A> => {
         const candidates = all.filter(
-            (option) => survives(option) && admits(option.codec, value),
+            // admission **is** "encode succeeds", which is the law `codec.laws.spec.ts` states
+            // over the whole table. Asking the option's own encode terminates: it is one level
+            // down, and the direction that would not is an `encode` consulting admission
+            (option) => survives(option) && accepts(option.codec, value),
         )
         if (candidates.length === 0) return unmatched(named)
         if (candidates.length > 1) {
@@ -769,7 +773,7 @@ export const denote = (def: TermDef): Pair => {
          * The element's own methods are handed over rather than a closure around them: a closure
          * per call to encode a list is a closure per list in every item written. And `every`
          * iterates whatever is iterable, so a string arrived as its characters until the shape was
-         * asked first — which is what `admits`' `array` row asks, and now what this asks too.
+         * asked first — which is what the term's `array` row asks, and now what this asks too.
          */
         case 'array': {
             const items = codecOfTerm(def.element)
@@ -820,7 +824,7 @@ export const denote = (def: TermDef): Pair => {
          * fixed arity, one without at exactly it.
          *
          * A `Uint8Array` of the right length has the right `length` and is not a tuple, which is
-         * what the length tests alone could not say. `admits`' `tuple` row asks `Array.isArray`
+         * what the length tests alone could not say. The term's `tuple` row asks `Array.isArray`
          * before it counts, and so does this, which is what makes the arity messages mean what
          * they say.
          */
@@ -865,7 +869,7 @@ export const denote = (def: TermDef): Pair => {
          * that keeps `refine` and a literal readable through — a restriction of the elements is a
          * restriction of the set, and the two write the same attribute.
          *
-         * Which set follows from the element's member, so the row asks {@link writes} rather than
+         * Which set follows from the element's member, so the row asks `member` rather than
          * being told. §3 `(set)`'s premise is checked at the declaration, in {@link set}, where a
          * caller can see which element failed it.
          *
@@ -876,11 +880,11 @@ export const denote = (def: TermDef): Pair => {
          *
          * `value.size` is `undefined` on anything that is not a `Set`, so `=== 0` was false for a
          * string and `[...value]` then spread it into its characters: `string.set()` wrote
-         * `{ SS: ['a','b','c'] }` for `'abc'`. `admits`' `set` row asks `instanceof Set` first.
+         * `{ SS: ['a','b','c'] }` for `'abc'`. The `set` row asks `instanceof Set` first.
          */
         case 'set': {
             const inner = codecOfTerm(def.element)
-            const member = writes(inner)
+            const member = termMember(termFromDef(def.element))
             if (member !== 'S' && member !== 'N' && member !== 'B') {
                 throw new CodecError(
                     `a set holds strings, numbers or binary, and this element writes ${member ? `'${member}'` : 'no single member'}`,
@@ -988,7 +992,7 @@ export const denote = (def: TermDef): Pair => {
                     if (!failed(read)) return read
                     const older_ = older.decode(attribute)
                     if (!failed(older_)) {
-                        if (!admits(current, older_)) {
+                        if (!accepts(current, older_)) {
                             return new CodecError(
                                 `an older encoding read this attribute as ${describeShape(older_)}, which the current encoding cannot write. A migration has to land on values that can be written back, or the row reads and then refuses on the way out`,
                             )
@@ -1052,7 +1056,7 @@ export const denote = (def: TermDef): Pair => {
         /**
          * §3 `(custom)`: the pair the term carries, returned. The row does not describe the set
          * the codec admits — the two functions *are* what decides it, which is the model's own
-         * move at `custom` and the reason `admits` asks them rather than reading a row.
+         * move at `custom` and the reason admission asks them rather than reading a row.
          */
         case 'custom':
             return { encode: def.encode, decode: def.decode }
@@ -1062,7 +1066,7 @@ export const denote = (def: TermDef): Pair => {
          * pair an all-object union also offers.
          *
          * **The write side decides and the read side attempts**, and that asymmetry is the model's.
-         * `admits` is `Adm`, proved exact at every constructor, so the writable side selects by
+         * Admission is `Adm`, proved exact at every constructor, so the writable side selects by
          * asking rather than by trying; the readable side has no `AdmA` in this library to ask, so
          * it tries. §5 says the same thing from the other end — the two families are independent,
          * and a pair separated on one side only is not separated.
@@ -1168,7 +1172,7 @@ export const denote = (def: TermDef): Pair => {
          * of strings. The row carries the value across unchanged; only the member differs.
          *
          * `isStoredNumeral` stringifies what it is given — `isStoredNumeral(['1'])` is `true` — so
-         * the kind is checked first, which is what `admits`' `decimal` row says and what this row
+         * the kind is checked first, which is what the term's `decimal` row says and what this row
          * did not say before it moved here.
          */
         case 'decimal':
@@ -1202,7 +1206,7 @@ export const denote = (def: TermDef): Pair => {
         case 'number':
             return {
                 // `value.toString()` is defined on everything, so the numeral gate alone accepted
-                // the *string* `'5'` as readily as the number `5`. `admits`' `number` row asks the
+                // the *string* `'5'` as readily as the number `5`. The `number` row asks the
                 // kind first; so does this
                 // annotated `unknown` rather than left to infer `never` from {@link Pair}: the
                 // erased pair says a caller may pass anything, and this row narrows what it is
@@ -1547,76 +1551,11 @@ export const decodeUnknown = (
             return new CodecError('an AttributeValue carrying no member')
     }
 }
-/**
- * The member this codec writes, when it writes exactly one.
- *
- * Read from the definition rather than stored beside it. A stored field has to be set by every
- * constructor and carried by every wrapper, and the ones that forgot were silent: `refine` lost it
- * for a while, and `item`, `map`, `tagged` and `untagged` all left it blank while writing an `M`.
- * There is nothing to forget in a function.
- */
-export const writes = (codec: AnyCodec): AttributeName | undefined => {
-    const def = codec.def
-    switch (def.kind) {
-        // a wrapper writes what it wraps
-        case 'refine':
-            return writes(codecOfTerm(def.inner))
-        case 'legacy':
-            return writes(codecOfTerm(def.current))
-        // an adapter changes what the value is *held* as and leaves what it is *stored* as alone,
-        // which is the whole of it — so the member is the inner term's, unchanged
-        case 'held':
-            return writes(codecOfTerm(def.inner))
-        /**
-         * A set's member follows from its element, which the definition carries — so this is derived
-         * rather than absent.
-         *
-         * It used to answer `undefined`, on the grounds that the *kind* `set` does not decide between
-         * `SS`, `NS` and `BS`. True, and beside the point: the element decides, and the element is
-         * right here. Leaving it unanswered cost a union the ability to tell a set option apart by
-         * what it writes, which is the one thing that distinguishes it from a list in the table.
-         */
-        /**
-         * A union writes one member only if every option writes the same one.
-         *
-         * `'M'` was the answer while a union could only hold objects, and it survived the change that
-         * let it hold anything — so a `union([string, boolean])` claimed to write `M`, and nesting one
-         * inside another union then filtered it out of every attribute it could actually read. The
-         * mirror of {@link carries}, which was already derived this way.
-         */
-        case 'untagged': {
-            let one: AttributeName | undefined
-            for (const variant of def.variants) {
-                const member = writes(codecOfTerm(variant))
-                if (!member) return undefined
-                if (!one) one = member
-                else if (one !== member) return undefined
-            }
-            return one
-        }
-        // a literal's member follows from its **base**, which the definition now names. It used to
-        // follow from `typeof allowed[0]`, and that reading has a counterexample: `decimal('1')`
-        // holds text and stores `N`
-        case 'literal':
-            return literalMember[def.base]
-        case 'set': {
-            const element = writes(codecOfTerm(def.element))
-            return element === 'S' || element === 'N' || element === 'B'
-                ? (`${element}S` as AttributeName)
-                : undefined
-        }
-        // `nullable` writes `NULL` as well, `opaque` writes whatever the value turns out to be, and
-        // asking a `lazy` would force the resolution it exists to defer — all three answer
-        // `undefined`, which the table gives by not naming them
-        default:
-            return writtenBy[def.kind]
-    }
-}
 
 /**
  * The kind of JavaScript value this codec encodes from, where the kind alone decides.
  *
- * The mirror of {@link writes}, and it exists for a reason worth stating: **encoding does not
+ * The mirror of `member`, and it exists for a reason worth stating: **encoding does not
  * validate**. A codec's input is typed, so `number` given `'x'` writes `{ N: 'x' }` rather than
  * failing — which means "it encoded" is no evidence that an option was the right one, and a union
  * cannot be resolved by trying each option and seeing what sticks.
@@ -1668,206 +1607,46 @@ export const carries = (codec: AnyCodec): readonly Shape[] | undefined => {
 }
 
 /**
- * Whether this codec admits this value — §3's `Adm : Term → Value → Bool`, ported.
+ * **Admission is "encode succeeds"**, and that is the law rather than a shortcut.
  *
- * The sixth reader of a definition, beside {@link writes}, {@link carries}, {@link decides},
- * {@link setBase} and {@link deeper}, and it is a *function of the term* rather than a field of the
- * codec for the same reason they all are: there is nothing to forget in a function. The model
- * proved this exact at all 21 constructors (`Adm_exact`), which is what makes the port sound rather
- * than a second description of the same thing drifting from it.
+ * `codec.laws.spec.ts` states `accepts(c, v) ⟺ !failed(c.encode(v))` over its whole table and pool,
+ * both ways, and the reader this replaces existed only because encoding did not validate — a
+ * codec's input is typed, so `string.encode(5)` once wrote `{ S: 5 }`. Every row validates now, so
+ * the description and the thing described are one question and asking it is the only honest form.
  *
- * **This is exactly "encode succeeds", both ways**, and it was not always. Encoding did not
- * validate — a codec's input is typed, so `string.encode(5)` wrote `{ S: 5 }` — and the law held
- * one way round, failing at twenty-three of the thirty-two codecs in `codec.laws.spec.ts`'s table.
- * Every row runs the predicate this function runs now, so `admits(c, v) ⟺ !isError(c.encode(v))`
- * is the law that file states, over the whole table and pool.
+ * **One cast, at the one place it belongs.** A codec's `encode` is typed to its own held set and
+ * this takes an `unknown`, which is precisely a value arriving from outside that type — the
+ * question being whether it belongs. Four callers share this cast rather than writing it four
+ * times.
  *
- * **The predicates live here and `encode` calls them, rather than the reverse**, at every row but
- * the two below. That direction is forced: `admits` reaches `opaque` and `custom` *by* calling
- * `encode`, so an `encode` that consulted `admits` there would not terminate. Those two need no
- * consulting — asking a codec cannot disagree with its answer — and the carve-out is the whole of
- * it.
- *
- * **Two rows ask their codec instead of describing it**, which is the model's own move (`adm
- * (.custom ce _) = fun v => (ce v).isSome`, and `opaque`'s rows were converted to match):
- *
- * - `custom` carries the pair itself, which is not a description of a set but the thing that
- *   decides it, so asking is the only option.
- * - `opaque` carries only `numbers`, and its domain is everything else it checks: nesting depth,
- *   plain-object-ness, no empty set, no `NS`, no `Map`, no `bigint`. A hand-written recursion
- *   stating that a second time is a description that must be kept in agreement with what it
- *   describes; a question cannot drift. The brief for this asked for a closed form here and it
- *   would have been the weaker choice.
- *
- * `lazy` terminates because it recurses on the **value**, not on the term: `def.get()` is forced
- * once per level of the value, and a value is finite.
+ * Asking terminates: an option's `encode` is one level below the union's. The direction that would
+ * not is an `encode` that consults admission, which is why `opaque` and `custom` always asked their
+ * pair instead of describing it.
  */
-export const admits = (codec: AnyCodec, value: unknown): boolean => {
-    const def = codec.def
-    switch (def.kind) {
-        case 'string':
-        case 'boolean':
-        case 'binary':
-            return shapeOf(value) === def.kind
-        // the gate already inside `encode`, lifted out: writing an `N` means writing a numeral, and
-        // `Number.isFinite` is not that test
-        case 'number':
-            return typeof value === 'number' && isNumeral(String(value))
-        // `isStoredNumeral` stringifies what it is given — `isStoredNumeral(['1'])` is `true` — so
-        // the kind is checked first rather than relying on the regexp to do it
-        case 'decimal':
-            return typeof value === 'string' && isStoredNumeral(value)
-        case 'null':
-            return value === null
-        // dispatched on the base, because the base is what says which JS kind the alternatives are;
-        // `sameLiteral` is what compares binary by its octets rather than by reference
-        case 'literal':
-            return (
-                shapeOf(value) === literalShape[def.base] &&
-                def.allowed.some((one) =>
-                    sameLiteral(one, value as LiteralValue),
-                )
-            )
-        // non-emptiness is part of it: DynamoDB has no empty `SS`, so `encode` refuses one and this
-        // has to as well or the implication fails at the empty set
-        case 'set':
-            return (
-                value instanceof Set &&
-                value.size > 0 &&
-                [...value].every((member) =>
-                    admits(codecOfTerm(def.element), member),
-                )
-            )
-        // and `[]` **is** admitted, which is the mirror of that and is correct: `L` has an empty
-        // inhabitant where the set members do not
-        case 'array':
-            return (
-                Array.isArray(value) &&
-                value.every((element) =>
-                    admits(codecOfTerm(def.element), element),
-                )
-            )
-        case 'tuple': {
-            if (!Array.isArray(value)) return false
-            const fixed = def.elements.length
-            const tail = def.tail
-            if (tail ? value.length < fixed : value.length !== fixed) {
-                return false
-            }
-            return value.every((one, at) =>
-                admits(codecOfTerm(def.elements[at] ?? (tail as TermDef)), one),
-            )
-        }
-        case 'record': {
-            const held = asRecord(value)
-            return (
-                held !== undefined &&
-                Object.values(held).every((one) =>
-                    admits(codecOfTerm(def.value), one),
-                )
-            )
-        }
-        /**
-         * §4's field table, read the way `encode` reads it: a declared name must be there and be
-         * admitted unless the field is `optional`, and an undeclared name is checked only where
-         * there is a rest codec to check it with — `drop` and `refuse` both ignore it on the way
-         * in, which is what `encode` does.
-         *
-         * A `fallback` field is **not** absence-tolerant here, and that matches `encode`: the
-         * stand-in is what a *read* supplies when the attribute is missing, not what a write may
-         * leave out.
-         */
-        case 'attributes': {
-            const held = asRecord(value)
-            if (!held) return false
-            for (const name in def.of) {
-                const field = def.of[name]
-                if (field === undefined) continue
-                const at = held[name]
-                if (at === undefined) {
-                    if (field.mark === 'optional') continue
-                    return false
-                }
-                if (!admits(codecOfTerm(field.codec), at)) return false
-            }
-            const rest = def.rest
-            if (typeof rest === 'string') return true
-            const restCodec = codecOfTerm(rest)
-            for (const name in held) {
-                if (name in def.of || held[name] === undefined) continue
-                if (!admits(restCodec, held[name])) return false
-            }
-            return true
-        }
-        /** The tag lookup, `Object.hasOwn` for the reason {@link discriminatedUnion} gives. */
-        case 'tagged': {
-            const held = asRecord(value)
-            const tag = held?.[def.discriminator]
-            if (tag === undefined) return false
-            const name = String(tag)
-            return (
-                Object.hasOwn(def.variants, name) &&
-                admits(codecOfTerm(def.variants[name] as TermDef), value)
-            )
-        }
-        /**
-         * The disjunction, which is what the *value* side of a union is: an option admits it or
-         * none does. Left as a disjunction on purpose — the resolver `union` actually runs is a
-         * different question (it counts, and refuses where two options both admit), and rewiring
-         * it to this is a behaviour change out of scope here.
-         */
-        case 'untagged':
-            return def.variants.some((variant) =>
-                admits(codecOfTerm(variant), value),
-            )
-        case 'refine':
-            return (
-                admits(codecOfTerm(def.inner), value) &&
-                def.refined.is(value as never) === true
-            )
-        /**
-         * An adapter is asked about the value it *holds*, so the value is put through the adapter
-         * first — and the adapter is a caller's function, which throws on a value it does not own
-         * (`(value as readonly string[]).join` on a number). A throw is not an admission.
-         */
-        case 'held':
-            try {
-                return admits(
-                    codecOfTerm(def.inner),
-                    def.adapt.encode(value as never),
-                )
-            } catch {
-                return false
-            }
-        // a read widening writes what it currently is, and the older readings are read-side only
-        case 'legacy':
-            return admits(codecOfTerm(def.current), value)
-        // the same ownership question the constructor asks: where the inner term owns the null
-        // point, `nullable` is that term and `null` is admitted only if the term admits it
-        case 'nullable': {
-            const inner = codecOfTerm(def.inner)
-            return ownsNull(inner)
-                ? admits(inner, value)
-                : value === null || admits(inner, value)
-        }
-        case 'lazy':
-            return admits(codecOfTerm(def.get()), value)
-        // the two that ask — see the note above. They ask different things, and the difference
-        // is where the pair lives: `custom`'s two functions are data the definition carries, so
-        // the definition answers; `opaque`'s codec is this library's own, reached through the
-        // codec beside the definition because `numbers` is all the definition needs to carry
-        case 'custom':
-            try {
-                return !failed(def.encode(value as never))
-            } catch {
-                return false
-            }
-        case 'opaque':
-            try {
-                return !failed(codec.encode(value as never))
-            } catch {
-                return false
-            }
+export const accepts = (codec: AnyCodec, value: unknown): boolean => {
+    try {
+        return !failed(codec.encode(value as never))
+    } catch {
+        // **The catch is what makes this equal to the reader it replaces**, and it was found by
+        // running the law's own table: `admits` classified the value's shape *before* dispatching,
+        // so it answered `false` for a `null` handed to an object codec. `encode` is typed to its
+        // held set and reaches for `value.a`, which throws. A `TypeError` here is a value outside
+        // the codec's type arriving past that type, which is exactly "not admitted" — Rule 14's
+        // boundary: a throw from code that assumes its input becomes a value in the code that does
+        // not.
+        return false
+    }
+}
+
+/** …and the read side, which the deleted reader asked of the definition and this asks of the pair. */
+export const readsBack = (
+    codec: AnyCodec,
+    attribute: AttributeValue,
+): boolean => {
+    try {
+        return !failed(codec.decode(attribute as never))
+    } catch {
+        return false
     }
 }
 
@@ -1896,7 +1675,7 @@ export const optionOfTerm = (def: TermDef): Option => {
     if (def.kind !== 'attributes') {
         return {
             codec,
-            member: writes(codec),
+            member: termMember(termFromDef(def)),
             carries: carries(codec),
             item: undefined,
             declares: undefined,

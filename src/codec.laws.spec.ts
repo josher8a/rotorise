@@ -17,7 +17,6 @@ import type { AttributeMap } from './attribute'
 import { memberOf } from './attribute'
 import type { AnyCodec } from './codec'
 import {
-    admits,
     array,
     binary,
     boolean,
@@ -43,6 +42,7 @@ import {
     tuple,
     union,
 } from './codec'
+import { accepts } from './denote'
 import {
     arbitraryOf,
     checkDecodesAreWritable,
@@ -784,7 +784,7 @@ describe('(C): what a codec reads, it can write', () => {
  * **`admits` against `encode`, in the one direction that is true.**
  *
  * `admits` is §3's `Adm : Term → Value → Bool`, and the model proved it exact at all 21
- * constructors. The obvious law here is therefore `admits(c, v) ⟺ !failed(c.encode(v))`, and half
+ * constructors. The obvious law here is therefore `accepts(c, v) ⟺ !failed(c.encode(v))`, and half
  * of it used to be false — not because the port was wrong, but because **encoding did not
  * validate**. A codec's input is typed, so `string.encode(5)` wrote `{ S: 5 }` and
  * `array(string).encode([5])` wrote `{ L: [{ S: 5 }] }`. `carries`'s own docstring said this for
@@ -937,7 +937,7 @@ describe('`admits`, and the direction of the law that is true', () => {
         const unsound: string[] = []
         for (const [name, one] of codecs) {
             for (const value of pool) {
-                if (admits(one, value) && !writesIt(one, value)) {
+                if (accepts(one, value) && !writesIt(one, value)) {
                     unsound.push(`${name} @ ${String(value)}`)
                 }
             }
@@ -972,9 +972,9 @@ describe('`admits`, and the direction of the law that is true', () => {
         const disagree: string[] = []
         for (const [name, one] of codecs) {
             for (const value of pool) {
-                if (admits(one, value) !== writesIt(one, value)) {
+                if (accepts(one, value) !== writesIt(one, value)) {
                     disagree.push(
-                        `${name} @ ${String(value)}: admits=${admits(one, value)} writes=${writesIt(one, value)}`,
+                        `${name} @ ${String(value)}: admits=${accepts(one, value)} writes=${writesIt(one, value)}`,
                     )
                 }
             }
@@ -985,50 +985,50 @@ describe('`admits`, and the direction of the law that is true', () => {
     /** The rows the brief called out, spelled as the one-liners they are. */
     it('answers the specific rows the model states', () => {
         // the ground rows validate now, so `admits` and `encode` agree at all five
-        expect(admits(string, 5)).toBe(false)
+        expect(accepts(string, 5)).toBe(false)
         expect(failed(string.encode(5 as never))).toBe(true)
-        expect(admits(boolean, 'yes')).toBe(false)
+        expect(accepts(boolean, 'yes')).toBe(false)
         expect(failed(boolean.encode('yes' as never))).toBe(true)
-        expect(admits(binary, 'bytes')).toBe(false)
+        expect(accepts(binary, 'bytes')).toBe(false)
         expect(failed(binary.encode('bytes' as never))).toBe(true)
         // `toString` is defined on everything, which is what the numeral gate alone did not catch
-        expect(admits(number, '5')).toBe(false)
+        expect(accepts(number, '5')).toBe(false)
         expect(failed(number.encode('5' as never))).toBe(true)
         // and `isStoredNumeral` stringifies, so a one-element array read as a numeral
-        expect(admits(decimal, ['1'])).toBe(false)
+        expect(accepts(decimal, ['1'])).toBe(false)
         expect(failed(decimal.encode(['1'] as never))).toBe(true)
 
         // and the containers, which needed their own gate rather than their elements'
-        expect(admits(array(string), [5])).toBe(false)
+        expect(accepts(array(string), [5])).toBe(false)
         expect(failed(array(string).encode([5] as never))).toBe(true)
-        expect(admits(array(string), 'abc')).toBe(false)
+        expect(accepts(array(string), 'abc')).toBe(false)
         expect(failed(array(string).encode('abc' as never))).toBe(true)
-        expect(admits(string.set(), 'abc')).toBe(false)
+        expect(accepts(string.set(), 'abc')).toBe(false)
         expect(failed(string.set().encode('abc' as never))).toBe(true)
 
         // an empty array is admitted and an empty set is not, and both are right: `L` has an empty
         // inhabitant and DynamoDB's sets do not
-        expect(admits(array(string), [])).toBe(true)
-        expect(admits(string.set(), new Set())).toBe(false)
+        expect(accepts(array(string), [])).toBe(true)
+        expect(accepts(string.set(), new Set())).toBe(false)
 
         // `held` is asked about the value it holds, and its adapter throws on one it does not own
         const asSet = held(string.set(), {
             encode: (tags: readonly string[]) => new Set(tags),
             decode: (tags: ReadonlySet<string>) => [...tags],
         })
-        expect(admits(asSet, ['a', 'b'])).toBe(true)
-        expect(admits(asSet, 5)).toBe(false)
+        expect(accepts(asSet, ['a', 'b'])).toBe(true)
+        expect(accepts(asSet, 5)).toBe(false)
 
         // `refine` runs its predicate in both directions now, which was the last row to close
         const tagged = refine(string, isTag)
-        expect(admits(tagged, 't-1')).toBe(true)
-        expect(admits(tagged, 'x')).toBe(false)
+        expect(accepts(tagged, 't-1')).toBe(true)
+        expect(accepts(tagged, 'x')).toBe(false)
         expect(failed(tagged.encode('x' as never))).toBe(true)
         expect(failed(tagged.encode('t-1'))).toBe(false)
 
         // There is no longer a case for "a codec with no definition makes no claim", and the
         // assertion that used to sit here is gone with it. It read
-        // `admits({} as AnyCodec, 'anything')` — a cast manufacturing a value the type forbids, to
+        // `accepts({} as AnyCodec, 'anything')` — a cast manufacturing a value the type forbids, to
         // check a branch reachable only by making it. `def` is required, so the branch is gone and
         // the cast would be the only thing keeping it alive.
     })

@@ -57,15 +57,9 @@ import type {
     Rng,
     TermDef,
 } from './codec'
-import {
-    admitsAttribute,
-    CodecError,
-    carries,
-    codecOfTerm,
-    failed,
-    opaque,
-    writes,
-} from './codec'
+import { CodecError, carries, codecOfTerm, failed, opaque } from './codec'
+import { readsBack } from './denote'
+import { termFromDef, member as termMember } from './term'
 import { shapeOf } from './value'
 
 /** mulberry32 — small, fast, and good enough to search a value space. */
@@ -1005,7 +999,7 @@ export const arbitraryOf = (
              * recursive walk of the element's definition, once per value.
              */
             const element = codecOfTerm(def.element)
-            const member = writes(element)
+            const member = termMember(termFromDef(element.def))
             const count = 1 + Math.floor(rng() * 3)
             const byStored = new Map<string, unknown>()
             for (let i = 0; i < count; i++) {
@@ -1696,11 +1690,14 @@ const written = (
 /**
  * Whether a codec reads an attribute at all — `p a` is defined.
  *
- * The body moved to `codec.ts` as `admitsAttribute`, because `lean.ts`'s read-verdict generator
- * had written the same six lines and neither file could see the other's. Kept as a local name
- * because this file reads better with `reads` beside `written`.
+ * **Asking the codec, which is what the question is.** This was `admitsAttribute`, a reader that
+ * walked the definition and answered the same thing; the reader is gone, and the six lines it
+ * shared with `lean.ts`'s read-verdict generator are one call in each place. The cast is the
+ * mirror of `accepts`': a codec's `decode` is typed to its own attribute and this asks about one
+ * that may not be, and a `decode` that throws on it answers `false` rather than escaping — which
+ * is what `checkUniqueAdmission`'s planted write-only option depends on.
  */
-const reads = admitsAttribute
+const reads = readsBack
 
 /** A value read as a bare record of names, as the object matcher reads one. */
 const recordOf = (value: unknown): Record<string, unknown> | undefined => {
@@ -1837,7 +1834,7 @@ const byTag = (
  */
 const byKindThenAttempt = (codec: AnyCodec): UnionOption => {
     const takes = carries(codec)
-    const member = writes(codec)
+    const member = termMember(termFromDef(codec.def))
     return {
         codec,
         describe: codec.def?.kind ?? 'a codec',

@@ -15,14 +15,12 @@ import {
     array,
     CodecError,
     decimal,
-    deeper,
     number,
     object,
     rest,
     string,
     tuple,
     union,
-    writes,
 } from './codec'
 import { checkEncodePaths, checkRoundTrip } from './testing'
 
@@ -30,7 +28,6 @@ const path = tuple(string, number, rest(decimal))
 
 describe('a tuple with a tail', () => {
     it('is still an L', () => {
-        expect(writes(path)).toBe('L')
         const written = path.unsafeEncode(['a', 1])
         attest<L<readonly [S, N, ...N[]]>>(written)
         expect(written).toEqual({ L: [{ S: 'a' }, { N: '1' }] })
@@ -98,12 +95,6 @@ describe('a tuple with a tail', () => {
         expect(every.unsafeDecode({ L: [] })).toEqual([])
     })
 
-    it('walks to the tail by any position past the head', () => {
-        expect(deeper(path, 0)?.def?.kind).toBe('string')
-        expect(deeper(path, 2)?.def?.kind).toBe('decimal')
-        expect(deeper(path, 9)?.def?.kind).toBe('decimal')
-    })
-
     it('round-trips, tails included', () => {
         checkRoundTrip(object({ path }).item, { count: 200, seed: 20260828 })
         checkEncodePaths(object({ path }).item, { count: 100, seed: 20260828 })
@@ -148,7 +139,6 @@ describe('where a tail cannot go', () => {
      * asking a position what it writes is a question with no subject.
      */
     it('but the element underneath is untouched by the mark', () => {
-        expect(writes(tuple(rest(decimal)))).toBe('L')
         expect(
             tuple(string, rest(decimal)).unsafeEncode(['a', '1.5', '2']),
         ).toEqual({ L: [{ S: 'a' }, { N: '1.5' }, { N: '2' }] })

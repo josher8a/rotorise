@@ -18,7 +18,6 @@ import {
     number,
     object,
     string,
-    writes,
 } from './codec'
 
 const OpCodec = discriminatedUnion('type', [
@@ -64,7 +63,6 @@ describe('where the variants disagree', () => {
      */
     it('describes nothing readable, because there is no one codec to describe', () => {
         const ambiguous = Entity.at((p) => p.op.amount)
-        expect(writes(ambiguous)).toBeUndefined()
         expect(carries(ambiguous)).toBeUndefined()
         expect(ambiguous.def.kind).toBe('custom')
         // the path half is untouched, which is what `at` is most often for

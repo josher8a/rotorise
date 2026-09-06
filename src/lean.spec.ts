@@ -30,7 +30,6 @@ import { describe, expect, it } from 'vitest'
 import type { AttributeValue } from './attribute'
 import type { AnyCodec, AttributeCodec } from './codec'
 import {
-    admits,
     array,
     binary,
     boolean,
@@ -53,6 +52,7 @@ import {
     tuple,
     union,
 } from './codec'
+import { accepts } from './denote'
 import type {
     ReadResolution,
     ReadVerdict,
@@ -672,7 +672,7 @@ export const allRefusals = (): readonly Refusal[] => {
     const out: Refusal[] = []
     for (const [cn, codec] of refusalCodecs) {
         for (const vector of sampleVectors) {
-            if (admits(codec, vector.value)) continue
+            if (accepts(codec, vector.value)) continue
             out.push({
                 name: `${cn}__refuses__${vector.name}`,
                 codec,
@@ -685,7 +685,7 @@ export const allRefusals = (): readonly Refusal[] => {
 
 export const sampleRefusals: readonly Refusal[] = refusalCodecs.flatMap(
     ([cn, codec]) => {
-        const first = sampleVectors.find((v) => !admits(codec, v.value))
+        const first = sampleVectors.find((v) => !accepts(codec, v.value))
         return first
             ? [
                   {
