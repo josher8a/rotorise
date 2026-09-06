@@ -9,9 +9,9 @@
 
 import { describe, expect, it } from 'vitest'
 import type { AnyCodec } from './codec'
-import { decimal, NoTerm, refine, string, termFromDef } from './codec'
+import { decimal, refine, string, termFromDef } from './codec'
 import type { Term } from './term'
-import { member, occA, occV, specOf, tagsOf } from './term'
+import { identifies, member, occA, occV, specOf, tagsOf } from './term'
 
 const erase = (codec: unknown): AnyCodec => codec as AnyCodec
 
@@ -69,7 +69,7 @@ describe('the member a term stores', () => {
             member({
                 kind: 'refine',
                 inner: dec,
-                q: { is: () => true, what: 'any' },
+                q: { kind: 'closure', q: { is: () => true, what: 'any' } },
             }),
         ).toBe('N')
         expect(member({ kind: 'legacy', inner: dec, r: () => undefined })).toBe(
@@ -308,26 +308,53 @@ describe('the tags a variant answers to', () => {
 
 describe('the seam from a definition to its term', () => {
     /**
-     * §3 `(set)` is indexed by a base, so a set over a restricted element has no term — and the
-     * codec is lawful, which is why this is not a `CodecError`. `setCodec_restrict` and
-     * `setCodec_restrict_p` prove the set of a restriction and the restriction of a set are one
-     * pair on both halves; that is an equation between codecs and not a `set` term.
+     * §3 `(set)` is indexed by a base, so a set over a restricted element is spelled as a
+     * restriction of the **set** — which is not a loss, and the model proves it is not:
+     * `setCodec_restrict` and `setCodec_restrict_p` say the set of a restriction and the
+     * restriction of a set are one pair, on `e` and on `p`. `each` is `liftQ` at the term level.
      */
-    it('a set over a restricted element has no term, and the obstruction names the base', () => {
+    it('a set over a restricted element is a restriction of the set, not a loss', () => {
         const positive = refine(
             decimal,
             (value: string): value is string => !value.startsWith('-'),
             { describe: 'non-negative' },
         )
-        let caught: unknown
-        try {
-            termFromDef(erase(positive.set()).def as never)
-        } catch (obstruction) {
-            caught = obstruction
-        }
-        expect(caught).toBeInstanceOf(NoTerm)
-        expect((caught as NoTerm).reason).toContain('*restricted* element')
-        expect((caught as NoTerm).reason).toContain('decimal')
+        const term = termFromDef(erase(positive.set()).def as never)
+        expect(term.kind).toBe('refine')
+        expect((term as { inner: Term }).inner).toEqual({
+            kind: 'set',
+            base: 'decimal',
+        })
+        expect((term as { q: { kind: string } }).q.kind).toBe('each')
+        // the member is the set's and reaches no element, which is what `Term.set` being indexed
+        // by a base buys: `refine` preserves the member (§6)
+        expect(member(term)).toBe('NS')
+    })
+
+    /**
+     * …and a set over a *literal* element carries the alternatives as data, which is what makes
+     * `identifies` able to read them. The model's spelling is `liftQ (inL k ls)`, where `ls` is a
+     * `NEFinset` and not a function — a closure decides nothing a declaration can see.
+     */
+    it('a set over a literal carries the alternatives, so the declaration can read them', () => {
+        const term = termFromDef(erase(string.set('a', 'b')).def as never)
+        expect(term).toEqual({
+            kind: 'refine',
+            inner: { kind: 'set', base: 'string' },
+            q: {
+                kind: 'each',
+                of: {
+                    kind: 'members',
+                    literal: {
+                        kind: 'literal',
+                        base: 'string',
+                        ls: ['a', 'b'],
+                    },
+                },
+            },
+        })
+        expect(identifies(term)).toBe(true)
+        expect(member(term)).toBe('SS')
     })
 
     /** …and a bare base does have one, which is the whole of what `SetBase` indexes. */

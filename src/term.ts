@@ -72,6 +72,28 @@ export type Literal =
           readonly ls: NonEmpty<Uint8Array>
       }
 
+/**
+ * §3 `(refine)`'s `q`, as the term carries it.
+ *
+ * The model's `q` is a bare `Value → Bool` and the host's used to be the caller's closure. Neither
+ * is enough, because **`identifies` has to read the predicate as data**: §5's fourth discharger row
+ * is about a term deciding which values are its own, and a closure decides nothing a declaration
+ * can see. `Exactness.lean` writes the case that forced this — `liftQ (inL k ls)`, where `ls` is a
+ * `NEFinset` and not a function.
+ *
+ * So three cases. `members` is membership of a {@link Literal}'s alternatives — the whole literal
+ * and not a base beside a list, so a `decimal` membership over numeric alternatives is
+ * unrepresentable here for the same reason it is unrepresentable as a term. `each` is
+ * `liftQ`: every element of a wire set satisfies the element's predicate, which is what makes
+ * `set(literal …)` expressible as a refinement of the set — the equation `setCodec_restrict` and
+ * `setCodec_restrict_p` prove on both halves of the pair. `closure` is the caller's function, which
+ * no declaration reads and no `Term` prints.
+ */
+export type Predicate =
+    | { readonly kind: 'members'; readonly literal: Literal }
+    | { readonly kind: 'each'; readonly of: Predicate }
+    | { readonly kind: 'closure'; readonly q: Refinement }
+
 /** §3's terms. One variant per `Term.lean` constructor, under the model's names. */
 export type Term =
     | { readonly kind: 'string' }
@@ -108,11 +130,11 @@ export type Term =
           readonly g: (held: never) => unknown
       }
     /**
-     * §3 `(refine)`. The model carries `q : Value → Bool` and this carries the whole
-     * {@link Refinement}: only `is` has a counterpart, and `what` is the refusal text while
-     * `arbitrary` is what a generator derived from the term reads.
+     * §3 `(refine)`. The model carries `q : Value → Bool`; this carries a {@link Predicate}, so a
+     * declaration can read the ones that are data. The caller's closure rides in `closure`, with
+     * `what` as the refusal text and `arbitrary` as what a generator derived from the term reads.
      */
-    | { readonly kind: 'refine'; readonly inner: Term; readonly q: Refinement }
+    | { readonly kind: 'refine'; readonly inner: Term; readonly q: Predicate }
     /** §3 `(legacy)`: `r : Attr ⇀ Value`, the older reading, which widens `p` and never `e`. */
     | {
           readonly kind: 'legacy'
@@ -510,6 +532,9 @@ export const tagsOf = (d: string, t: Term): readonly string[] => {
  * admits a value neither literal decides. `held` is left out because the conversion is a caller's
  * function and there is nothing to read.
  */
+const decidesOwn = (q: Predicate): boolean =>
+    q.kind === 'members' ? true : q.kind === 'each' ? decidesOwn(q.of) : false
+
 export const identifies = (t: Term): boolean => {
     switch (t.kind) {
         case 'literal':
@@ -524,8 +549,11 @@ export const identifies = (t: Term): boolean => {
             return identifies(t.val)
         case 'union':
             return t.options.every(identifies)
+        // a predicate that is data decides on its own — `refine(set(b), each(members …))` is how
+        // `set(literal …)` is spelled, and the literal is inside the predicate rather than inside
+        // a subterm, so reading only `inner` would miss it
         case 'refine':
-            return identifies(t.inner)
+            return decidesOwn(t.q) || identifies(t.inner)
         case 'legacy':
             return identifies(t.inner)
         default:

@@ -625,11 +625,17 @@ const leanTermOfTerm = (t: Term, at: string, forced: number): string => {
         case 'refine': {
             // recognised by reference against the function this package exported, so a rename or a
             // reimplementation of the predicate is a type error here rather than a silent misemission
-            const known = shippedPredicates.get(t.q.is)
+            if (t.q.kind !== 'closure') {
+                return refuse(
+                    at,
+                    `\`Term.refine\` carries \`q : Value → Bool\` and this predicate is **data** — a \`${t.q.kind}\`, which the model spells \`inL k ls\` and \`liftQ\`. So it is emittable and this row does not emit it yet: the pass that prints the two of them turns the restricted-element refusals into vectors and moves the corpus counts, which is why it is its own pass and not a line here`,
+                )
+            }
+            const known = shippedPredicates.get(t.q.q.is)
             if (!known) {
                 return refuse(
                     at,
-                    `\`Term.refine\` carries \`q : Value → Bool\`, and this predicate is not one this library ships — it is the caller's closure for ${JSON.stringify(t.q.what)}. The recognised ones are \`isNumeral\` and \`isStoredNumeral\` from \`src/attribute.ts\`, passed by reference`,
+                    `\`Term.refine\` carries \`q : Value → Bool\`, and this predicate is not one this library ships — it is the caller's closure for ${JSON.stringify(t.q.q.what)}. The recognised ones are \`isNumeral\` and \`isStoredNumeral\` from \`src/attribute.ts\`, passed by reference`,
                 )
             }
             if (!writesOnlyStrings(t.inner)) {

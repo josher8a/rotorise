@@ -37,7 +37,7 @@ import {
     orThrow,
     type Result,
 } from './result'
-import type { Literal, Term, Field as TermField } from './term'
+import type { Literal, Predicate, Term, Field as TermField } from './term'
 import { meet, occA, occV, separable } from './term'
 
 /**
@@ -826,6 +826,31 @@ const setBaseOf = (t: Term): SetBase | undefined => {
 }
 
 /**
+ * What a set's element restricts by, or nothing where it restricts by nothing.
+ *
+ * The element of a `set` is a bare base, a literal at that base, or a refinement over either. The
+ * first restricts nothing and the set is a plain `Term.set`. The other two restrict, and the set
+ * is a refinement of the plain one — which is what `setCodec_restrict` and `setCodec_restrict_p`
+ * license, on both halves of the pair.
+ *
+ * A refinement over a literal contributes **both**: the closure and the membership, conjoined the
+ * way `refine(refine(c, q), q′) ≡ refine(c, q ∩ q′)` conjoins them, and spelled here as the outer
+ * `closure` over the inner `members` rather than as a meet the term language has no node for.
+ */
+const elementPredicate = (elem: Term): Predicate | undefined => {
+    switch (elem.kind) {
+        case 'literal':
+            return { kind: 'members', literal: elem }
+        case 'refine': {
+            const inner = elementPredicate(elem.inner)
+            return inner === undefined ? elem.q : { kind: 'each', of: inner }
+        }
+        default:
+            return undefined
+    }
+}
+
+/**
  * A literal's alternatives, checked against the base that indexes them.
  *
  * `Def` carries `base` beside `allowed` and nothing relates the two, so `{ base: 'decimal',
@@ -913,28 +938,6 @@ const fieldTerm = (field: Field, at: string): TermField =>
  * The one that has no term at all is a `set` over a restricted element, and it raises
  * {@link NoTerm}. Everything else is a rename, a re-indexing, or a recursion.
  */
-/**
- * The term a definition denotes, where §3 has one — and `undefined` where it has none.
- *
- * **The one place a {@link NoTerm} becomes a value**, which is where it belongs: a throw is for a
- * broken invariant, and this is a failure a caller can expect. `union` is the caller, and it reads
- * the answer the way the model reads an unknown occupancy — *a term the model cannot spell is not
- * certified rather than refused*. Over-approximating costs a certificate and never buys a wrong
- * one, so the pair stays declarable and (U) guards it per input instead.
- *
- * Today there is exactly one shape that answers `undefined`: a `set` over a restricted element.
- * The pass that spells `.set()` over a restricted ground as `refine(set(b), liftQ q)` closes it,
- * and this function survives that pass answering `undefined` for nothing.
- */
-export const termIfAny = (def: TermDef): Term | undefined => {
-    try {
-        return termFromDef(def)
-    } catch (obstruction) {
-        if (obstruction instanceof NoTerm) return undefined
-        throw obstruction
-    }
-}
-
 export const termFromDef = (def: TermDef, at = 'codec'): Term => {
     switch (def.kind) {
         case 'string':
@@ -946,18 +949,37 @@ export const termFromDef = (def: TermDef, at = 'codec'): Term => {
             return { kind: def.kind }
         case 'literal':
             return literalTerm(def.base, def.allowed, at)
+        /**
+         * §3 `(set)` is indexed by a **base**, so a restricted element is not lost — it is spelled
+         * as a restriction of the *set*.
+         *
+         * `setCodec_restrict` and `setCodec_restrict_p` prove the set of a restriction and the
+         * restriction of a set are one pair, on `e` and on `p`. So `string.set('a','b')` is
+         * `refine(set(string), each(members …))` and `refine(decimal, q).set()` is
+         * `refine(set(decimal), each(closure q))`, which is `liftQ` at the term level: every
+         * element of the wire set satisfies the element's own predicate.
+         *
+         * A set whose element reduces to no base at all still has no term. `.set()` refuses to
+         * build one at construction, so this is reachable past a cast and nowhere else.
+         */
         case 'set': {
             const elem = termFromDef(def.element, `${at}.element`)
             const base = setBaseOf(elem)
-            if (base === undefined || elem.kind !== base) {
+            if (base === undefined) {
                 throw new NoTerm(
                     `${at}.element`,
-                    base
-                        ? `a set of a *restricted* element — this one is a \`${def.element.kind}\` over \`${base}\`. \`Term.set\` is indexed by a bare \`SetBase\`, and the lift \`setCodec_restrict\` is an equation between codecs rather than a term`
-                        : 'a set whose element is not one of the four `SetBase` bases',
+                    'a set whose element is not one of the four `SetBase` bases',
                 )
             }
-            return { kind: 'set', base }
+            const bare: Term = { kind: 'set', base }
+            const lifted = elementPredicate(elem)
+            return lifted === undefined
+                ? bare
+                : {
+                      kind: 'refine',
+                      inner: bare,
+                      q: { kind: 'each', of: lifted },
+                  }
         }
         case 'array':
             return {
@@ -1020,7 +1042,7 @@ export const termFromDef = (def: TermDef, at = 'codec'): Term => {
             return {
                 kind: 'refine',
                 inner: termFromDef(def.inner, `${at}.inner`),
-                q: def.refined,
+                q: { kind: 'closure', q: def.refined },
             }
         case 'nullable':
             return {
@@ -1659,10 +1681,14 @@ const set = <const C extends AnyCodec>(
      * `src/`. This is the same refusal, at the same place the other one lives.
      *
      * `refine` and a literal are **not** given up: a restriction of the elements is a restriction of
-     * the set, and `setCodec_restrict` (`formal/Calculus/Combinators.lean`) proves the two write the
-     * same attribute. So {@link setBase} reads through those two and nothing else.
+     * the set, and `setCodec_restrict` and `setCodec_restrict_p` prove the two are one pair on both
+     * halves. So the walk reads through those two and nothing else.
+     *
+     * **Asked of the element's term, not of the element's codec.** `set` takes a base now, and the
+     * base is a fact about the term — the same walk that decides how the conversion spells this
+     * set, so the guard and the spelling cannot answer differently.
      */
-    if (!setBase(inner)) {
+    if (!setBaseOf(termFromDef(inner.def))) {
         throw new CodecError(
             `a set's element must be one of the four bases a stored set is built from — \`string\`, \`number\`, \`decimal\` or \`binary\`, narrowed by \`refine\` or by a literal — and this element is a \`${inner.def?.kind ?? 'codec with no definition'}\`, which writes '${member}' by reading through to something else. A set of it has nothing DynamoDB stores`,
         )
@@ -4177,19 +4203,17 @@ export const union = <const Options extends readonly AnyCodec[]>(
      * unions that work. The model takes the same direction for the same reason: over-approximating
      * an occupancy is safe, so a pair involving one is simply not certified rather than refused.
      */
-    const terms = all.map((option) => termIfAny(option.codec.def))
+    // **Every option has a term.** A `set` over a restricted element is spelled as a restriction
+    // of the set, and a `set` whose element reduces to no base is refused by `.set()` at
+    // construction — so the conversion is total here. This carried a `Term | undefined` and a row
+    // for the absent case until the suite was run with the catch removed and stayed green
+    const pairs = all.map((option) => ({
+        option,
+        term: termFromDef(option.codec.def),
+    }))
 
-    for (let i = 0; i < all.length; i++) {
-        for (let j = i + 1; j < all.length; j++) {
-            const first = all[i] as Option
-            const second = all[j] as Option
-            const x = terms[i]
-            const y = terms[j]
-            // an option §3 has no term for is not compared: the same direction the unknown
-            // occupancy takes, and the same reason — over-approximating costs a certificate and
-            // never buys a wrong one, so the pair stays declarable and (U) guards it per input.
-            // Today that is a `set` over a restricted element and nothing else
-            if (x === undefined || y === undefined) continue
+    for (const [at, { option: first, term: x }] of pairs.entries()) {
+        for (const { option: second, term: y } of pairs.slice(at + 1)) {
             if (separable(x, y)) continue
             // the label the refusal names, asked again on the path that is about to throw:
             // `separable` answers the `Bool` the model's `Orth` answers, so the meeting is
