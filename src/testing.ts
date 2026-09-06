@@ -59,14 +59,14 @@ import type {
 } from './codec'
 import {
     admitsAttribute,
-    carries,
     CodecError,
+    carries,
     codecOfTerm,
     failed,
     opaque,
-    shapeOf,
     writes,
 } from './codec'
+import { shapeOf } from './value'
 
 /** mulberry32 — small, fast, and good enough to search a value space. */
 export const rngFrom = (seed: number): Rng => {

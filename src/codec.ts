@@ -36,6 +36,19 @@ import {
 } from './result'
 import type { Literal, Term, Field as TermField } from './term'
 import type { ErrorMessage, show } from './utils'
+import {
+    asRecord,
+    copiedPerRead,
+    describeShape,
+    expect,
+    namedLiteral,
+    namesFit,
+    namesOf,
+    ownsNull,
+    readTag,
+    sameLiteral,
+    shapeOf,
+} from './value'
 
 // the failure algebra lives in `./result`, and is re-exported because it is part of the surface a
 // caller works in: a `Result` is what every direction returns
@@ -851,26 +864,6 @@ const carriedBy: { readonly [K in TermKind]?: Shape } = {
     tagged: 'map',
 }
 
-/** The kind of a value, read as coarsely as {@link carries} declares it. */
-export const shapeOf = (value: unknown): Shape | undefined =>
-    typeof value === 'string'
-        ? 'string'
-        : typeof value === 'number'
-          ? 'number'
-          : typeof value === 'boolean'
-            ? 'boolean'
-            : value === null
-              ? 'null'
-              : value instanceof Uint8Array
-                ? 'binary'
-                : value instanceof Set
-                  ? 'set'
-                  : Array.isArray(value)
-                    ? 'array'
-                    : asRecord(value)
-                      ? 'map'
-                      : undefined
-
 /**
  * The only value this codec can carry, when there is exactly one.
  *
@@ -1583,20 +1576,6 @@ export type Refinement = {
     readonly onThinSearch?: (what: string, rate: number) => void
 }
 
-const expect = <K extends AttributeName>(
-    name: K,
-    attribute: AttributeValue,
-): Result<AttributeCarriesOf<K>> => {
-    const carried = (attribute as Record<string, unknown>)[name]
-    return carried === undefined
-        ? new CodecError(
-              `expected attribute member '${name}', found '${memberOf(attribute) ?? 'none'}'`,
-          )
-        : (carried as AttributeCarriesOf<K>)
-}
-
-type AttributeCarriesOf<K extends AttributeName> = Attribute<K>[K]
-
 /**
  * A codec built by hand, at the level of the attribute itself.
  *
@@ -1720,22 +1699,6 @@ const literalShape: { readonly [B in LiteralBase]: Shape } = {
  * legacy spelling of the other.
  */
 export type SetBase = Exclude<LiteralBase, 'boolean'>
-
-/** Two alternatives, compared the way the base compares them: bytes for `binary`, `===` otherwise. */
-const sameLiteral = (one: LiteralValue, other: LiteralValue): boolean =>
-    one instanceof Uint8Array
-        ? other instanceof Uint8Array &&
-          one.length === other.length &&
-          one.every((byte, at) => byte === other[at])
-        : one === other
-
-/** An alternative as a message names it: text in quotes, digits bare, bytes in hex. */
-const namedLiteral = (one: LiteralValue): string =>
-    typeof one === 'string'
-        ? `'${one}'`
-        : one instanceof Uint8Array
-          ? `0x${[...one].map((byte) => byte.toString(16).padStart(2, '0')).join('')}`
-          : String(one)
 
 /**
  * A literal at a named base — the one builder every literal in this library goes through.
@@ -1905,16 +1868,6 @@ export type StringCodec = AttributeCodec<string, Attribute<'S'>> & {
         ): AttributeCodec<ReadonlySet<T>, SS>
     }
 }
-
-/**
- * A value's kind, for a message about a value that should not have arrived.
- *
- * The five ground `encode`s all refuse the same way and want to say the same thing about what they
- * were handed. `shapeOf` answers `undefined` for what it cannot place — a `bigint`, a `Map`, a
- * function — and `typeof` is the honest fallback there rather than a guess.
- */
-const describeShape = (value: unknown): string =>
-    `${shapeOf(value) ?? typeof value} \`${String(value)}\``
 
 /* ── §3's terms, denoted ──────────────────────────────────────────────────────────────── */
 
@@ -3742,37 +3695,6 @@ export const fallback = <const C extends AnyCodec>(
 }
 
 /**
- * Whether this stand-in has to be *copied* on each read that uses it, decided once.
- *
- * The declaration holds **one** value — that is what makes §3 `(fallback)`'s premise checkable
- * where the declaration is — so handing that object out is handing every row the same object, and
- * one caller's `.push` becomes every other caller's default. `structuredClone` is the platform's,
- * so a copy costs no dependency.
- *
- * Two reasons not to copy, and both are settled here rather than per read.
- *
- * A **primitive** cannot be mutated, so sharing one is safe and copying it is waste — and most
- * stand-ins are primitives.
- *
- * And a value `structuredClone` **refuses**. Ordinarily there is none: a stand-in is a value the
- * inner codec `admits`, so it comes from the value language — arrays, plain objects, `Set`,
- * `Uint8Array` — and all of those clone. {@link custom} is the exception, because its `admits` row
- * asks the caller's own pair, so a hand-written codec can legitimately admit a class instance with
- * methods or anything else holding a function. Rather than throw a `DataCloneError` out of a
- * `decode` months later, the clone is attempted once at the declaration; where it fails the value
- * is shared, which is the old behaviour confined to the one case that forces it.
- */
-const copiedPerRead = (value: unknown): boolean => {
-    if (typeof value !== 'object' || value === null) return false
-    try {
-        structuredClone(value)
-        return true
-    } catch {
-        return false
-    }
-}
-
-/**
  * The same stored attribute, held as something else.
  *
  * Two words this library keeps apart: an attribute is **stored** as `S`, `N`, `SS` — and it is
@@ -4009,31 +3931,6 @@ export const optional = <const C extends AnyCodec>(
         codec: inner,
         def: { kind: 'optional', inner: inner as unknown as AnyCodec },
     } as unknown as OptionalCodec<Decoded<C>, AttributeOf<C>, C>
-}
-
-/**
- * Does `inner` already reach the null point, at *either* end?
- *
- * `null ∈ dom(e)` or `⟨NULL, ∗⟩ ∈ dom(p)`, which is the specification's `owns(c)`. The
- * disjunction is not a convenience: asked per side, a codec could decline to write `null` while
- * still reading `⟨NULL, ∗⟩`, the point's two ends would belong to different codecs, and a round
- * trip would go out through one and back through the other with nothing looking ambiguous on
- * either side taken alone.
- *
- * Two probes at two points. A throw is a refusal like any other — {@link held}'s adapter is
- * arbitrary user code and may throw rather than return a `CodecError`, which is the same reason
- * {@link admits} wraps its `held` row.
- */
-const ownsNull = (inner: AnyCodec): boolean =>
-    reaches(() => inner.encode(null as never)) ||
-    reaches(() => inner.decode(carrying('NULL', true)))
-
-const reaches = (probe: () => unknown): boolean => {
-    try {
-        return !failed(probe())
-    } catch {
-        return false
-    }
 }
 
 /**
@@ -5379,22 +5276,6 @@ export type Tagged<T, D extends string = keyof T & string, Spec = unknown> = {
     readonly [writesMarker]?: WritesVariantsPin<Spec>
 }
 
-const readTag = (item: StoredItem, discriminator: string): Result<string> => {
-    const attribute = item[discriminator]
-    if (attribute === undefined) {
-        return new CodecError(
-            `'${discriminator}' chooses the variant and the item has no such attribute`,
-        )
-    }
-    const member = memberOf(attribute)
-    if (member !== 'S' && member !== 'N') {
-        return new CodecError(
-            `'${discriminator}' chooses the variant, so it must be carried as 'S' or 'N', not '${member ?? 'none'}'`,
-        )
-    }
-    return attribute[member] as string
-}
-
 /**
  * How an entity that is a union of objects is stored.
  *
@@ -5723,7 +5604,7 @@ export type Untagged<T, Specs extends readonly unknown[] = UntaggedSpec<T>> = {
  * would happily encode `{ a, b }` and silently lose `b`, so "it encoded" is not evidence that it is
  * the right option. Its names are.
  */
-type Option = {
+export type Option = {
     readonly codec: AnyCodec
     /** The member it writes, where the kind alone decides — a cheap filter on decode. */
     readonly member: AttributeName | undefined
@@ -5869,56 +5750,6 @@ const optionOfTerm = (def: TermDef): Option => {
             )
             .join(', ')} }`,
     }
-}
-
-/**
- * Whether an object option can describe exactly this set of attribute names.
- *
- * Two conditions, and both matter for the law: every name present must be one the option declares
- * (otherwise encoding would drop data), and every attribute it requires must be present (otherwise
- * it is simply not this one).
- *
- * Named for what it is, which used to be `admits` — and it is emphatically **not** {@link admits},
- * §3's `Adm`. It is a test on *names* alone, the `keysOk` the model's `optionSemOf` uses for object
- * options, and it says nothing about whether the values at those names are admissible. Two things
- * called `admits` in one file was one name for two questions.
- */
-const namesFit = (option: Option, names: ReadonlySet<string>) => {
-    const declares = option.declares
-    if (!declares) return false
-    for (const name of names) if (!declares.has(name)) return false
-    for (const name of option.requires) if (!names.has(name)) return false
-    return true
-}
-
-/**
- * A value read as a bare record of attributes, or nothing.
- *
- * Only a plain object can be an object option's value. An array, a `Set`, a `Uint8Array` and a class
- * instance all have keys `Object.keys` will happily list, and matching an object option on those
- * would pick one that cannot encode them.
- */
-const asRecord = (value: unknown): Record<string, unknown> | undefined => {
-    if (typeof value !== 'object' || value === null) return undefined
-    const proto = Object.getPrototypeOf(value) as object | null
-    return proto === Object.prototype || proto === null
-        ? (value as Record<string, unknown>)
-        : undefined
-}
-
-/**
- * The names a value has, which is all the object matcher reads.
- *
- * A key whose value is `undefined` is not a name. That is the same rule in both directions —
- * `{ gift: undefined }` encodes without `gift`, and an item with no `gift` attribute decodes without
- * it — so matching an option on it would pick one the other direction cannot reach.
- */
-const namesOf = (held: Record<string, unknown>) => {
-    const names = new Set<string>()
-    for (const name in held) {
-        if (held[name] !== undefined) names.add(name)
-    }
-    return names
 }
 
 /**

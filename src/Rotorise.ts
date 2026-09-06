@@ -1807,8 +1807,11 @@ export {
     record,
     refine,
     rest,
-    shapeOf,
     string,
     tuple,
     union,
 } from './codec'
+// `shapeOf` classifies a *value* and reaches no term, so it moved to `value.ts` with the twelve
+// others `denote.ts` needs. The name on the surface is unchanged; only the module that declares
+// it moved, which is why this is a second `export` rather than an entry in the list above.
+export { shapeOf } from './value'
