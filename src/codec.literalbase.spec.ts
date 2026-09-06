@@ -271,3 +271,37 @@ describe('what replaced the constructor that guessed', () => {
         expect(() => binary()).toThrow(CodecError)
     })
 })
+
+describe("a literal's alternatives are a set", () => {
+    /**
+     * **Section 8 case (c): a refusal, a test that reaches it, and the reason.**
+     *
+     * The model's `ls` is a `NEFinset k.Carrier` and gets three guarantees from that type — the
+     * base indexes the alternatives, `n ≥ 1`, and no two are equal. `term.ts`'s `Literal` buys the
+     * first from a discriminated union over the base and the second from a tuple head.
+     * **TypeScript cannot say the third**, so it is a refusal at construction.
+     *
+     * It is not tidiness. `NEFinset` is a set, so `literal(k, {'A','A'})` and `literal(k, {'A'})`
+     * are one term in the model and would be two definitions here — and the second names a
+     * cardinality the first does not. A repeat makes a two-value literal that admits one value,
+     * and the constant would go unrecognised by everything that asks whether a literal decides.
+     */
+    it('refuses a repeated alternative, which the model has no way to hold', () => {
+        expect(() => string('A', 'A')).toThrow(CodecError)
+        expect(() => string('A', 'A')).toThrow(/positions 0 and 1/)
+        // compared the way the base compares: bytes for `binary`, `===` otherwise
+        expect(() =>
+            binary(Uint8Array.from([1, 2]), Uint8Array.from([1, 2])),
+        ).toThrow(CodecError)
+        // and two that differ are fine, which is what makes the refusal about repetition
+        expect(() => string('A', 'B')).not.toThrow()
+        expect(() =>
+            binary(Uint8Array.from([1]), Uint8Array.from([2])),
+        ).not.toThrow()
+    })
+
+    /** A single alternative still decides, which is the cardinality the repeat would have hidden. */
+    it('keeps a single alternative readable as the constant it is', () => {
+        expect(string('ONLY').unsafeEncode('ONLY')).toEqual({ S: 'ONLY' })
+    })
+})

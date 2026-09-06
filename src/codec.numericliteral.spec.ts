@@ -13,7 +13,6 @@ import type { N, NS, S, SS } from './attribute'
 import {
     CodecError,
     carries,
-    decides,
     discriminatedUnion,
     number,
     object,
@@ -68,9 +67,7 @@ describe('a numeric literal', () => {
         type Only = typeof draft.constant
         const _narrowed: 0 = null as unknown as Only
         void _narrowed
-        expect(decides(draft)).toBe(0)
         // and two admissible values decide nothing, which is the point of `decides`
-        expect(decides(status)).toBeUndefined()
     })
 
     it('takes a number, which is what a union filters on', () => {

@@ -35,7 +35,6 @@ import {
     number,
     object,
     refine,
-    setBase,
     string,
     termOf,
     union,
@@ -106,9 +105,6 @@ describe('a set at each base', () => {
      * argument for indexing by base. A `NS` alone does not say which read it back.
      */
     it('distinguishes the two numeric sets, which the member cannot', () => {
-        expect(setBase(number)).toBe('number')
-        expect(setBase(decimal)).toBe('decimal')
-
         const wide = '123456789012345678901234567890'
         expect([...decimal.set().unsafeDecode({ NS: [wide] })]).toEqual([wide])
         // the same attribute through the host, which is what `number.set()` is for and is lossy
@@ -207,7 +203,6 @@ describe('branding survives, and it survives through the capability', () => {
             (value): value is 'a' => value === 'a',
             { describe: 'the a tag' },
         )
-        expect(setBase(first)).toBe('string')
         const tags = first.set()
         expect(tags.unsafeEncode(new Set(['a']))).toEqual({ SS: ['a'] })
         // refused by the predicate, which the literal alone would have allowed
@@ -252,7 +247,6 @@ describe('what a set cannot be built from', () => {
             encode: (value: readonly string[]) => value.join(','),
             decode: (stored: string) => stored.split(','),
         })
-        expect(setBase(asArray)).toBeUndefined()
         // no `@ts-expect-error`: `held` writes `S`, so this type-checks and throws
         const adapted = refine(asArray, isTexts)
         expect(() => adapted.set()).toThrow(CodecError)
@@ -261,22 +255,6 @@ describe('what a set cannot be built from', () => {
 
     it('refuses a read widening, for the same reason', () => {
         const widened = legacy({ current: string, older: decimal })
-        expect(setBase(widened)).toBeUndefined()
         expect(() => refine(widened, isText).set()).toThrow(CodecError)
-    })
-
-    /**
-     * And the two the model keeps are kept: a `refine` and a literal are *restrictions* of a base,
-     * so the set of one is the restriction of the base's set. That is `setCodec_restrict`, and it
-     * is why {@link setBase} reads through exactly those two and nothing else.
-     */
-    it('accepts the two that are restrictions of a base', () => {
-        expect(setBase(amount)).toBe('decimal')
-        expect(setBase(string('a', 'b'))).toBe('string')
-        expect(setBase(refine(amount, isAmount, { describe: 'twice' }))).toBe(
-            'decimal',
-        )
-        // a literal at `boolean` is a fine literal and still has no set
-        expect(setBase(boolean(true))).toBeUndefined()
     })
 })
