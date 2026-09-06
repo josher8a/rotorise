@@ -8,8 +8,8 @@
 # gated on nothing and the printed output was true while the verdict was false.
 # Printing an exit code is not checking it. This script checks it.
 #
-#   scripts/gate.sh              all seven checks
-#   scripts/gate.sh --no-build   the four Python guards only
+#   scripts/gate.sh              all eight checks
+#   scripts/gate.sh --no-build   the five Python guards only
 #
 # `--no-build` skips the two checks that need the container — the build and the vector
 # bridge — and is NOT for comments-only commits in the sense of "docs are exempt". Editing any `Calculus/*.lean`, comments included, can move a
@@ -24,7 +24,7 @@
 # And if you edited `src/lean.ts` or a `Calculus/` *constructor*, the bridge is
 # what will tell you, so do not skip it there either.
 #
-# The four Python guards run on the HOST, from `formal/`. There is no Python in
+# The five Python guards run on the HOST, from `formal/`. There is no Python in
 # `rotorise-lean-dev` at all. The build runs in the container, and only one
 # `lake build` may run at a time across the sessions sharing this tree — your
 # build rewrites oleans under someone else's `lake env lean`.
@@ -80,6 +80,7 @@ run 'guard_reach.py'        python3 scripts/guard_reach.py
 run 'name_drift.py'         python3 scripts/name_drift.py
 run 'doc_counts.py --check' python3 scripts/doc_counts.py --check
 run 'ratchet.py'            python3 scripts/ratchet.py
+run 'docstring_anchor.py'   python3 scripts/docstring_anchor.py
 
 if [ "$RUN_BUILD" -eq 1 ]; then
   run 'lake build' docker exec "$CONTAINER" bash -lc 'cd /workspaces/Rotorise/formal && lake build'

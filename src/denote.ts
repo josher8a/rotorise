@@ -38,7 +38,6 @@ import type {
     Option,
     opaque,
     Refinement,
-    Rng,
     SetBase,
     Shape,
 } from './codec'
@@ -56,6 +55,7 @@ import {
     namesOf,
     ownsNull,
     readTag,
+    rendered,
     sameLiteral,
     shapeOf,
 } from './value'
@@ -1310,7 +1310,7 @@ export const denote = (def: Term): Pair => {
                     typeof value === 'string' && isStoredNumeral(value)
                         ? carrying('N', value)
                         : new CodecError(
-                              `'${value}' is not a numeral DynamoDB stores unchanged; it accepts at most 38 significant digits, magnitude 1e-130 to 9.9e125, and returns the normalised form (no leading or trailing zeros, no exponent, no '+')`,
+                              `'${rendered(value)}' is not a numeral DynamoDB stores unchanged; it accepts at most 38 significant digits, magnitude 1e-130 to 9.9e125, and returns the normalised form (no leading or trailing zeros, no exponent, no '+')`,
                           ),
                 decode: (attribute) =>
                     andThen(expect('N', attribute), (carried) =>
@@ -1343,7 +1343,7 @@ export const denote = (def: Term): Pair => {
                     typeof value === 'number' && isNumeral(value.toString())
                         ? carrying('N', value.toString())
                         : new CodecError(
-                              `${value} is not a number DynamoDB stores: it takes at most 38 significant digits and magnitude 1e-130 to 9.9e125, and has no NaN or Infinity`,
+                              `${rendered(value)} is not a number DynamoDB stores: it takes at most 38 significant digits and magnitude 1e-130 to 9.9e125, and has no NaN or Infinity`,
                           ),
                 decode: (attribute) =>
                     andThen(expect('N', attribute), (carried) => {
@@ -1398,6 +1398,7 @@ export const denote = (def: Term): Pair => {
  * cast stands between the two. It is here rather than at each constructor because twenty-one casts
  * with one reason between them is one reason nobody reads. `build.ts`'s `codec` is still the single
  * construction site: this hands it a pair instead of two hand-written halves.
+ * @anchored
  */
 /**
  * **One codec per term, for the life of the term.**
@@ -1444,24 +1445,13 @@ export const codecOfTerm = <T, A extends AttributeValue>(
 const buildCodec = <T, A extends AttributeValue>(
     def: Term,
 ): AttributeCodec<T, A> =>
+    // **A codec is its pair and its term, and nothing else.** `arbitrary` and `shrink` were copied
+    // onto the object here for `custom`, which made one fact reachable two ways; they are on the
+    // term, `arbitraryOf` and `shrinkOf` read them there, and a caller that wants to share a
+    // generator names it rather than reading it back off a pair.
     codec<T, A>({
         def,
         ...(denote(def) as Pick<Codec<T, A>, 'encode' | 'decode'>),
-        // **Derived, not a second fact.** `arbitrary` and `shrink` are on the published codec, and
-        // a caller may reasonably read one — building a second `custom` from the first's generator
-        // is what `codec.shrink.spec.ts` does. The definition owns them; this exposes what it owns.
-        // Only `custom` carries them, because only `custom` is a term whose generation is the
-        // caller's to state: `refine`'s lives in `refined.arbitrary`, where the def readers find it.
-        ...(def.kind === 'custom'
-            ? {
-                  arbitrary: def.arbitrary as
-                      | ((rng: Rng, size: number) => T)
-                      | undefined,
-                  shrink: def.shrink as
-                      | ((value: T) => readonly T[])
-                      | undefined,
-              }
-            : {}),
     })
 
 /** Only plain objects round-trip; anything with a prototype loses it. */

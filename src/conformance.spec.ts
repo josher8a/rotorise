@@ -70,7 +70,10 @@ describe('a codec that does not', () => {
         }
     })
 
-    /** A list and a set hold the same strings and are not the same attribute. */
+    /**
+     * A list and a set hold the same strings and are not the same attribute.
+     * @anchored
+     */
     /**
      * **Pins wording, because the *message* is the only channel this fact travels on.** Write
      * parity and read parity are the two directions `checkAgainst` compares, both reported as one
@@ -92,6 +95,7 @@ describe('a codec that does not', () => {
     /**
      * The half that matters more: a codec can be right about every future write and still be
      * unable to read the rows that are already there.
+     * @anchored
      */
     /**
      * **Pins wording, because the *message* is the only channel this fact travels on.** Write

@@ -158,32 +158,29 @@ EXPECTED = {
 
 # The shipped TypeScript's names, at §8's boundary. The host has codecs and methods the model
 # deliberately does not: §8 records what the host owes, and naming the thing that owes it is how.
+#
+# AN ENTRY LEAVES WHEN ITS DECLARATION DOES. This table exempts a name from the drift check, so
+# an entry outliving its declaration is an exemption for a name nothing declares: the document
+# may then cite it forever and every guard stays green. That is not hypothetical — seven of the
+# thirteen entries here had no declaration in `src/` when this was written, and two of them,
+# `identifying` and `separatedByElements`, are exactly what `ARCHITECTURE.md` §5 was still
+# naming. `separatedByElements` never had a declaration at all.
+#
+# The check below is an *anchored* one, and it has to be: a name can be live in `src/` as a
+# local variable while the declaration it was whitelisted for is gone. `deeper` was, in
+# `testing.ts`'s `firstDifference`. Asking "does this name appear in `src/`" passes it and
+# reproduces the hole; asking for a declaration at the start of a line does not.
 HOST = {
     "opaque": "`src/`'s codec, analysed here as a well-behaved `custom` — same analysis, "
               "opposite warranty (§7). `opaqCodec` is the model's, and is not the same name",
-    "admits": "`src/codec.ts`'s reader — **internal** as of the surface enumeration, with the "
-              "other five definition readers. §10's question about wiring it into `union`'s "
-              "resolver is closed (`ff75c6b`, write side). The model's predicate is `adm`, "
-              "proved exact, which is what made that swap behaviour-preserving",
-    "admitsAttribute": "`src/codec.ts`'s read-side predicate, internal, and deliberately not a "
-                       "reader of the definition — it asks the codec, because the read side "
-                       "validates already. §10 records why a row-by-row port was rejected",
-    # The other four of the six definition readers. `writes` needs no entry: it occurs in
-    # `Calculus/` on its own account. Cited together by §10's record of the surface enumeration,
-    # which is the decision these four are the subject of.
+    "separable": "`src/term.ts`'s declaration-time guard: whether a union may hold two options. "
+                 "§5 cites it because `Orth` is its specification, and the two run opposite "
+                 "directions — `Orth` certifies, this refutes, so where `Orth` declines this "
+                 "accepts. `.separations.lean` pins the one-directional law between them",
+    "identifies": "`src/term.ts`'s reader of whether a term decides which values are its own — "
+                  "§5's fourth discharger row, and the exemption `separable` consults first",
     "carries": "`src/codec.ts`'s reader of which value kinds a term takes — the union's "
                "declaration filter. Internal since the surface enumeration (§10)",
-    "decides": "`src/codec.ts`'s reader of whether a term pins one value; internal, and what "
-               "`ident` is to the model",
-    "setBase": "`src/codec.ts`'s reader of a set's element base; internal. The model indexes "
-               "`set` by `SetBase` instead, which is §4a's premise-becomes-an-index",
-    "deeper": "`src/codec.ts`'s one-segment path walk; internal, and the reason a path through "
-              "a variant that disagrees has no single honest answer",
-    "identifying": "`src/codec.ts`'s declaration-time guard: whether an option decides its own "
-                   "membership. §5 cites it because `Orth` is its specification, and because "
-                   "`admits` cannot replace it — a \u2200-value question is not a per-value one",
-    "separatedByElements": "`src/codec.ts`'s companion to `identifying`, the exemption for a "
-                           "container with no empty inhabitant. Cited by §5's bridge notes",
     "Separation": "`src/lean.ts`'s vector class carrying §5's bridge: one theorem per pair "
                   "`src/` refuses, asserting `Orth` does not certify it",
     "ReadVerdict": "`src/lean.ts`'s vector class carrying §10's read-side differential: "
@@ -371,6 +368,32 @@ def scan(path, present):
     return hits, stale, false_retirements
 
 
+def host_without_declarations():
+    """`HOST` entries that no longer name a declaration in `src/`.
+
+    Anchored to the start of a line, because a name can be live as a local variable while the
+    declaration it was whitelisted for is gone — `deeper` was, in `testing.ts`. A `grep` for the
+    bare name passes such an entry and leaves the exemption standing.
+    """
+    src = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "src")
+    if not os.path.isdir(src):
+        return []
+    text = ""
+    for name in os.listdir(src):
+        if name.endswith(".ts"):
+            with open(os.path.join(src, name), encoding="utf-8") as handle:
+                text += handle.read() + "\n"
+    declared = set(
+        re.findall(
+            r"^(?:export )?(?:declare )?(?:const|function|type|class|interface) "
+            r"([A-Za-z_][A-Za-z0-9_]*)",
+            text,
+            re.M,
+        )
+    )
+    return sorted(n for n in HOST if n not in declared)
+
+
 def main():
     if not glob.glob("Calculus/*.lean"):
         sys.exit("run from formal/")
@@ -403,6 +426,13 @@ def main():
             print(f"  {label:38s} {n} false retirement{'' if n == 1 else 's'}")
             for lineno, name in false_retirements:
                 print(f"      {lineno:6d}  ~~{name}~~  (still in the sources — unmark it)")
+    orphaned = host_without_declarations()
+    if orphaned:
+        failed = True
+        n = len(orphaned)
+        print(f"\n  {n} HOST entr{'y' if n == 1 else 'ies'} naming no declaration in src/")
+        for name in orphaned:
+            print(f"              {name}  (exempts a name nothing declares — drop the entry)")
     if LOG and "--all" not in sys.argv:
         print(f"\n  (--all also scans {', '.join(os.path.normpath(p) for p in LOG)})")
     return 1 if failed else 0

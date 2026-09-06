@@ -69,6 +69,34 @@ export const shapeOf = (value: unknown): Shape | undefined =>
                       : undefined
 
 /**
+ * A value rendered for a message, where **rendering it is the part that can fail**.
+ *
+ * `String(value)` reaches the value's own `toString`, `valueOf` or `Symbol.toPrimitive`, and all
+ * three are the caller's code. `Object.create(null)` has none of them and `String` throws
+ * `TypeError: Cannot convert object to primitive value`; an object whose `toString` throws does the
+ * same. Measured before this was written: a null-prototype value reached `string`, `number`,
+ * `decimal`, `boolean`, `binary` and both literal forms, and **all seven threw a `TypeError` out of
+ * `encode`** rather than returning a `CodecError`.
+ *
+ * That is Rule 14 inverted at the one place whose whole job is to describe a failure: an expected
+ * refusal became a throw, and it became one *inside the refusal path*. So the conversion is caught
+ * here, at the seam that runs the caller's code, and a value that cannot render is named by its
+ * shape alone. No total renderer exists to write instead — `toString` is arbitrary user code.
+ */
+export const rendered = (value: unknown): string => {
+    try {
+        return String(value)
+    } catch {
+        // its own `toString` threw, or it has none; `JSON.stringify` reads the properties directly
+        try {
+            return JSON.stringify(value) ?? 'a value that cannot be rendered'
+        } catch {
+            return 'a value that cannot be rendered'
+        }
+    }
+}
+
+/**
  * A value's kind, for a message about a value that should not have arrived.
  *
  * The five ground `encode`s all refuse the same way and want to say the same thing about what they
@@ -76,7 +104,7 @@ export const shapeOf = (value: unknown): Shape | undefined =>
  * function — and `typeof` is the honest fallback there rather than a guess.
  */
 export const describeShape = (value: unknown): string =>
-    `${shapeOf(value) ?? typeof value} \`${String(value)}\``
+    `${shapeOf(value) ?? typeof value} \`${rendered(value)}\``
 
 /**
  * The names a value has, which is all the object matcher reads.
@@ -135,13 +163,20 @@ export const sameLiteral = (one: LiteralValue, other: unknown): boolean =>
           one.every((byte, at) => byte === other[at])
         : one === other
 
-/** An alternative as a message names it: text in quotes, digits bare, bytes in hex. */
+/**
+ * An alternative as a message names it: text in quotes, digits bare, bytes in hex.
+ *
+ * **The last arm cannot be `String(one)`.** This takes an `unknown`, because it names the value
+ * that *failed* a literal as well as the alternatives that literal admits, and a value reaching
+ * `encode` past its type can be anything. `rendered` is where that conversion is made safe, and
+ * its docstring carries the measurement.
+ */
 export const namedLiteral = (one: unknown): string =>
     typeof one === 'string'
         ? `'${one}'`
         : one instanceof Uint8Array
           ? `0x${[...one].map((byte) => byte.toString(16).padStart(2, '0')).join('')}`
-          : String(one)
+          : rendered(one)
 
 export const reaches = (probe: () => unknown): boolean => {
     try {

@@ -123,6 +123,7 @@ describe('the harness, against planted violations', () => {
      * kind of value. A `custom` slips both: it reads back as `number`, so the types are told apart,
      * and it declares no `carries`, so it is not compared. What it actually does at runtime is
      * accept any string, which is the situation both guards exist to prevent and neither sees.
+     * @anchored
      */
     /**
      * **Pins wording, and not because no law has it — because the *message* is the only channel
@@ -148,6 +149,7 @@ describe('the harness, against planted violations', () => {
      * The value side is fine — `never` writes an `S` and only it is asked — but what it writes is
      * an `S` no option reads back, so the attribute has no admitter at all. That is the shape (R)
      * loses at a canonical attribute, which is exactly the residue `uAtCan_of_separated` names.
+     * @anchored
      */
     /**
      * **Pins wording, and not because no law has it — because the *message* is the only channel

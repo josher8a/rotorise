@@ -29,6 +29,7 @@ import {
     carries,
     decimal,
     discriminatedUnion,
+    failed,
     number,
     object,
     string,
@@ -303,5 +304,38 @@ describe("a literal's alternatives are a set", () => {
     /** A single alternative still decides, which is the cardinality the repeat would have hidden. */
     it('keeps a single alternative readable as the constant it is', () => {
         expect(string('ONLY').unsafeEncode('ONLY')).toEqual({ S: 'ONLY' })
+    })
+
+    /**
+     * **A refusal reports a bad value; it does not throw on one.**
+     *
+     * The refusal path names the value it rejected, and naming a value runs the value's own
+     * `toString`. `Object.create(null)` has none, so `String(value)` throws
+     * `TypeError: Cannot convert object to primitive value` — and it threw from *inside* the
+     * refusal, turning an expected failure into an exception at the one place whose job is to
+     * describe a failure. Measured before the fix: a null-prototype value reached `string`,
+     * `number`, `decimal`, `boolean`, `binary` and both literal forms, and all seven threw.
+     *
+     * A codec's input is typed, so such a value arrives past its type. Rule 14's line is that the
+     * throw is caught where the caller's code runs and becomes a value in the code that follows.
+     */
+    it('refuses a value whose own rendering throws, rather than throwing with it', () => {
+        const bare = Object.create(null) as never
+        for (const codec of [
+            string,
+            number,
+            decimal,
+            boolean,
+            binary,
+            string('A'),
+            number(1),
+        ]) {
+            expect(failed(codec.encode(bare))).toBe(true)
+        }
+        // and the message still names the shape, which is what it was rendering the value for
+        const refused = string.encode(bare)
+        expect(failed(refused) && (refused as CodecError).message).toMatch(
+            /map/,
+        )
     })
 })

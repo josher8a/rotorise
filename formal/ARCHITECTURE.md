@@ -512,8 +512,8 @@ them. `Orth` still does not pay for itself as a replacement. It stays anyway, be
 value moved — **twice**, and the second is the one that pays.
 
 **`Orth` is the specification of `src/`'s only declaration-time guard, and now a checked one.**
-`src/`'s `union` refuses a pair of options no *value* can choose between — `identifying`,
-`separatedByElements` and the kind/member comparison beside them — which is the ∀-value question
+`src/`'s `union` refuses a pair of options no *value* can choose between — `separable`, which reads
+`identifies` and the two occupancies beside it — which is the ∀-value question
 `Orth` answers by `decide`. The bridge is `src/lean.ts`'s `Separation`: one theorem per pair
 `src/` refuses, asserting `Orth x y = false`, generated and elaborated by `scripts/gate.sh`.
 
@@ -621,8 +621,9 @@ component-wise, so a dotted citation passes whenever both halves occur anywhere.
 **This document is in its `CURRENT` list.**
 
 **And a second blind spot in its own tables: an entry fails when it stops being *cited* and
-cannot fail when its *reason* goes stale.** `HOST`'s `admits` entry read "§10's open question
-about wiring it into `union`'s resolver" for as long as that question was open and for a while
+cannot fail when its *reason* goes stale.** `HOST`'s entry for the admission reader read "§10's
+open question about wiring it into `union`'s resolver" for as long as that question was open and
+for a while
 after `ff75c6b` closed it — cited, so green, and describing a decision that had been taken. The
 citation half is checkable and the prose half is not, which is the same asymmetry §9's docstring
 rule has and the reason both are conventions rather than guards.
@@ -637,7 +638,7 @@ declines `src/` rightly accepts.
 **It is also the first case where the model had an answer by `decide` that `src/` reached by
 measurement.** `Orth (.set .string) (.set .number) = true` was true before `ff75c6b` was written;
 `src/` refused that declaration, and the way the over-refusal was actually found was measuring
-`admits` over a value corpus. Two instruments, one cheap and exact and already present, the other
+admission over a value corpus. Two instruments, one cheap and exact and already present, the other
 statistical over whatever the corpus happened to contain — and the cheap one was not consulted
 because nothing connected it to `src/`. That connection is what the bridge is; the lesson is that
 a decidable model-side answer is worth wiring to the host guard it specifies *before* reaching
@@ -1109,6 +1110,29 @@ record**: it said the definition drops the older readers, and it was right, and 
 only place that fact was written down. A host obligation that no host code reads is found by
 whatever has to serialise the host's own definition, or it is not found.
 
+**A codec carries a `Term`, and that is case (a) reached by deletion.** `src/` kept two
+descriptions of a codec: `Term`, the model's language, and a definition record that grew a row at
+a time and kept what each reader needed. Three of that record's rows said something §3 cannot — a
+`set`
+holding an element *term* where the model indexes by a base, a literal's alternatives not indexed
+by their base, a field marker's `inner` a codec where an object's field holds a term — so those
+states were reachable here and unrepresentable there. That record is gone. A codec's `def` is a
+`Term`, `denote` dispatches on it, and the conversion between the two is deleted with the language
+it
+converted from. The states stopped being reachable rather than being checked for, which is what
+(a) buys: no gate to own and nothing to test that the type does not already say.
+
+The flip had to be one commit, because `denote` dispatches on the one type: the moment the field
+changes type, every constructor's literal is a type error and every row reads a shape nothing
+writes. Two staged alternatives were refused and are worth naming, because both are the shape a
+migration reaches for. A `Def | Term` union on the field compiles just as well half-migrated, so
+nothing in the checker says when the transition has finished. A reverse conversion at the
+construction site is a second conversion written in order to be deleted. What replaced them was a
+meter: a table asserting `termFromDef(c.def)` deep-equal to `c.def`, one row per constructor,
+which is exactly "this constructor has been flipped" and which no checker can answer. It read 8
+of 20 before the pass and 20 of 20 after, at which point the conversion is the identity and the
+table asserts nothing, so both were deleted together.
+
 **So a guarantee that must be a gate in one target may be structural in another.** The three
 cases are re-answered per target, at the time that target is certified — not in advance, and not
 as a reason to shape the model around one language. The model's job is to make the guarantee
@@ -1374,7 +1398,8 @@ shipped. **The bar above is still the right target; it is not the right instrume
 section also said `fidelity_audit.py` reports both numbers, and it does not: it reports
 docstring and §-tag coverage, and the site count is `vocab_audit.py`'s.)
 
-**~~`admits`' violation list and wiring it into `union`'s resolver~~ — done, at JH's call, and
+**~~The admission reader's violation list, and wiring it into `union`'s resolver~~ — done, at JH's
+call, and
 the list was six times longer than the item said.** `admits(c, v) ⟺ !isError(c.encode(v))` was
 false one way because encoding did not validate. The item named four codecs; the repo's own
 pinned test said **twenty-three of thirty-two** and had since it was written. Eleven gates closed
@@ -1382,10 +1407,10 @@ all of them, because **twelve were loose only through their elements** — a `tu
 array of the right length because its positions did, and the wrappers, the field table,
 `legacy`, `held`, `lazy` and both unions inherited the same way. Five ground gates closed
 seventeen; only the six loose in their *own* row needed one each. `opaque` and `custom` are
-carved out, because `admits` reaches them **by asking the codec to write**, so consulting it
+carved out, because admission reaches them **by asking the codec to write**, so consulting it
 there would not terminate.
 
-The resolver's write side decides through `admits` now, and the swap changed no test — which is
+The resolver's write side decides through admission now, and the swap changed no test — which is
 the evidence the law had to land first. It also closed a recorded defect neither of its two
 candidate repairs would have needed: a union of a date adapter over `decimal` with `string`
 could not write a date at all, and the cause was in the defect's own prose — with no `κ` the
@@ -1412,13 +1437,15 @@ exactly, and two descriptions of one thing need a guard between them. The differ
 and separation artifacts. **Do not re-open this as a port without first showing a pair where the
 two disagree.**
 
-**And the read-side twin — built, internal, after `admits` itself stopped being public.** The
-first answer was to decline it as API, and then JH's reading changed the question: *"`admits`
+**And the read-side twin — built, internal, after the admission reader itself stopped being
+public.** The
+first answer was to decline it as API, and then JH's reading changed the question: *"admits
 should not be a public api in the first place. Those and the proposed one are internal utils."*
-So the **six definition readers** — `admits`, `carries`, `writes`, `decides`, `setBase`, `deeper`
-— left the published surface, and the twin arrived as an internal one.
+So the **six definition readers** — admission, the value-kind and member readers, the constant
+reader, the set-base reduction and the path walk — left the published surface, and the twin arrived
+as an internal one.
 
-The mechanism is the finding, because those two were not separable. `admits` was public **only**
+The mechanism is the finding, because those two were not separable. It was public **only**
 because `src/Rotorise.ts` said `export * from './codec'`; this library has no package-private,
 no `@internal` convention and nothing testing its surface, so "internal but importable" did not
 exist. Moving the function to its own module hits a real import cycle — it needs `codec.ts`'s
@@ -1426,16 +1453,84 @@ helpers and `codec.ts`'s resolver needs it. What remained was to **enumerate**: 
 for the sixty-six types and a list for the thirty values that are API, twenty-three of them
 pinned by name in `Rotorise.spec.ts`. Adding a codec is a
 line in that list now, which is the cost, and the point — an export becomes a decision rather
-than a consequence of where a function happens to live. `46cb950` shipped `admits` public with
+than a consequence of where a function happens to live. `46cb950` shipped it public with
 no such decision taken.
 
 **And the enumeration is what made the twin expressible**, which is the only reason it was
 built: `codec.ts` can export freely now without reaching the surface. Two places had already
 written it — `testing.ts` as `reads`, `lean.ts`'s read-verdict generator as the same six lines
-inlined — and neither could see the other's. `admitsAttribute` is those two, once. It **asks the
-codec** and is not a reader of the definition: `admits` had to read rows because the write side
+inlined — and neither could see the other's. The read-side predicate is those two, once. It
+**asks the codec** and is not a reader of the definition: admission had to read rows because the
+write side
 was loose, and this must not, because the read side is already exact (`a41f874`). A future
 proposal reaching for twenty-one rows here is repeating that rejection.
+
+---
+
+### The white-room arc's open findings, triaged
+
+Four findings from the arc that made a codec carry its `Term`. Each is stated in the present
+tense, because each is true of the tree as it stands.
+
+**`union([opaque, X])` is accepted by `src/` and certified by nothing, and the model reads it as
+resolving no value.** `opaque` admits every kind by design, so it meets every other option, and
+the host's declaration guard exempts it rather than refusing it. Fifteen corpus pairs have
+`opaque` on a side. Measured by porting `Orth`'s row without that exemption: the refusal set
+moves from 17 pairs to 32, all fifteen new ones have `opaque` on a side, and every one of the
+fifteen theorems would hold — `Orth (Term.opaq false) Term.string` is `false` — so the
+one-directional law `.separations.lean` pins is untouched either way. The row answers `true`
+because tightening it refuses declarations that work today.
+
+**The same divergence reaches the resolver, and there `occV` is the sharper answer.** `carries`
+reads `opaque` as *unknown* and answers nothing; the model takes it as a closed form, and
+`occV (.opaq lossy)` is `occTop` at `lossy` and `occBut .num` at `refuse`. Measured over 35
+constructors, `carries` and a collapse of `occV` to the value alphabet agree at 34 and differ at
+exactly this one, where the collapse is right: `opaque.encode(1)` fails and
+`opaque('lossy').encode(1)` does not. Adopting it is a **behaviour change** — an `opaque` option
+would be filtered by kind where today it is always attempted — so it is a named pass and not a
+refactor. Every corpus union resolves the same either way; what moves is the work, and the
+message where `opaque` is the only option.
+
+**The generators have left the codec object.** A `custom`'s generator and shrinker were a
+projection of the term, written by `denote` at `custom` alone and read by the two derivers in
+`src/testing.ts` before the term was consulted — one fact on two paths. The term is the only source now, `custom`'s parameter
+record still states them because that is how a hand-written codec says how it generates, and a
+caller that wants to share a generator names it rather than reading it back off a pair.
+
+**A refusal renders the value it rejects, and rendering runs the caller's code.** Converting a
+value to a string reaches that value's own conversion methods, which the caller wrote. An object
+made with a null prototype has none, so the conversion throws: a value of that shape reaching
+`string`, `number`, `decimal`, `boolean`, `binary` or either literal form raised the host
+language's type error out of the write half instead of returning the pair's own error — an
+expected refusal becoming an exception inside the refusal path. The conversion is caught at that
+seam now. There is no total renderer to write instead, because the conversion methods are
+arbitrary user code.
+
+### What the arc closed
+
+**The host's two value alphabets are not two vocabularies for one thing.** `1060c01` recorded
+them as a merge
+for a later pass. They are the codomains of two different functions: the first is what the value
+classifier in `src/value.ts` answers about a **value**, coarse because an empty set belongs to no
+family and telling `strSet` from `numSet` means inspecting elements; the second is what `occV`
+answers about a **term**, where the base is in hand. **No total function takes a value to a `Slot`**, so neither replaces
+the other and the merge is not available.
+
+**A guard's own table goes stale, and two did.** `name_drift.py`'s `HOST` exempts a name from the
+drift check, and seven of its thirteen entries named declarations that no longer existed —
+including one this tree never declared at all. That is why §5 could name two dead functions with
+every check green. `Rotorise.spec.ts`'s surface guard had the same shape: eight of twelve rows
+named deleted functions, and the host's own-property test answers false for a name nothing
+declares, so they asserted nothing while their live replacements went unguarded. Both tables are
+the live names now, and `name_drift.py` checks its own with an **anchored** declaration grep,
+because a name can be live as a local variable while its declaration is gone — the path walk was.
+
+**A deleted declaration leaves its docstring behind.** Three passes running, ten sites in total.
+`scripts/docstring_anchor.py` is the check: a docstring that another docstring immediately
+follows binds to nothing, since JSDoc takes the last. Deliberate two-part prose marks the earlier
+block `@anchored`. It found a type-level marker's docstring stranded 1,176 lines from its
+declaration, and it found a hole in its own first version — a doc comment opening and closing on
+one line was invisible to it — by failing to report a planted orphan.
 
 ---
 
@@ -1462,7 +1557,7 @@ proposal reaching for twenty-one rows here is repeating that rejection.
   *difference*.
 - Touching a normative document, the advertised axiom base, or `src/` behaviour → that is the
   user's decision. Deliver the measurement and stop.
-- Committing anything → `scripts/gate.sh`, and gate on its **exit code**. Seven checks: the four
+- Committing anything → `scripts/gate.sh`, and gate on its **exit code**. Eight checks: the five
   Python guards on the host, `lake build` in the container, then **vector emit** (generating the
   four bridge artifacts) and **vector bridge** (elaborating them beside the two committed vector
   samples). It prints one line per check and exits nonzero if any failed. `--no-build` drops the
