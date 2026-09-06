@@ -18,7 +18,7 @@ import type {
     Result,
     TaggedCodec,
 } from './codec'
-import { andThen, decides, object, orThrow, pathBuilder } from './codec'
+import { andThen, constantOf, object, orThrow, pathBuilder } from './codec'
 import type {
     DistributiveOmit,
     DistributivePick,
@@ -1244,23 +1244,6 @@ const isTagged = (value: unknown): value is TaggedRuntime =>
  * variant that decides nothing, one that lacks the attribute, and two that disagree all answer the
  * same way — nothing is decided, so the caller is asked, as it was before any of this.
  */
-/**
- * What one declared attribute decides, read where the field is held.
- *
- * §4's two marks answer differently and neither is the codec's answer. A name that may be absent
- * decides nothing about a key, because a key built from it would have no value to build from in the
- * rows that omit it. A stand-in is written always, so what it stands in for still decides.
- *
- * The readers do not answer this. `decides` takes a codec, a field is not one, and the body is what
- * holds a field — so the body is where the mark is read.
- */
-const constantOf = (declared: AnyDeclaration): unknown => {
-    const def = declared.def
-    if (def.kind === 'optional') return undefined
-    if (def.kind === 'fallback') return decides(def.inner)
-    return decides(declared as AnyCodec)
-}
-
 const agreedConstant = (codec: TaggedRuntime, component: string): unknown => {
     let agreed: unknown
     for (const name of Object.keys(codec.spec)) {

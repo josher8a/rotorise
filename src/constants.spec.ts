@@ -15,12 +15,19 @@
  */
 import { attest } from '@ark/attest'
 import { describe, expect, it } from 'vitest'
-import type { AnyCodec, AnyDeclaration, ConstantCodec } from './codec'
-import { decides, decimal, fallback, optional, refine, string } from './codec'
+import type { AnyDeclaration, ConstantCodec } from './codec'
+import {
+    constantOf,
+    decimal,
+    fallback,
+    optional,
+    refine,
+    string,
+} from './codec'
 import type { ConstantAttributes } from './Rotorise'
 
 /**
- * What `decides` answers, for the runtime half of each pairing.
+ * What the shipped walk answers, for the runtime half of each pairing.
  *
  * The type half is `attest<[Expected], [Actual]>()`, written at each call rather than in here.
  * `attest` reads its own source position, so a type-only assertion inside a helper would compare
@@ -34,19 +41,6 @@ const decided = (spec: Record<string, AnyDeclaration>): readonly string[] =>
         .filter(([, declared]) => constantOf(declared) !== undefined)
         .map(([name]) => name)
         .sort()
-
-/**
- * The runtime half, with §4's two marks read.
- *
- * A mirror of `Rotorise.ts`'s `constantOf`, which is not exported, and a mirror to the same degree
- * the walk above always was. `keycomponents.spec.ts` is the test that runs the real one.
- */
-const constantOf = (declared: AnyDeclaration): unknown => {
-    const def = declared.def
-    if (def.kind === 'optional') return undefined
-    if (def.kind === 'fallback') return decides(def.inner)
-    return decides(declared as AnyCodec)
-}
 
 describe('the type and the function agree on what is decided', () => {
     it('on a single-valued literal, which is the whole point', () => {
