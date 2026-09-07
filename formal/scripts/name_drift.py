@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Find names the documents cite that `Calculus/` no longer defines.
 
-`fidelity_audit.py` measures whether a theorem can be reviewed in isolation;
-`vocab_audit.py` measures whether a proof reads in codec vocabulary. Neither asks
-the question that a refactoring arc actually breaks:
+`ratchet.py` holds four counts to the state they were in and fails when one rises.
+Neither it nor any other guard here asks the question that a refactoring arc actually
+breaks:
 
     does every Lean name a document names still exist?
 
@@ -315,10 +315,10 @@ def occurring():
     archaeology sweep deleted the prose that was clearing them. Comments are 45.1% of
     `Calculus/` by character; a citation now has to be answered by code.
     """
-    # `scripts/*.lean` as well as `Calculus/*.lean`: `blast_radius.lean` and `complexity.lean`
-    # are Lean code in this development, and §6 cites the definitions inside them (`dagSize`,
-    # `fanOf`). A citation of an instrument's own API is not drift, and leaving them out made
-    # the guard fail on §6's description of the guard's siblings.
+    # `scripts/*.lean` as well as `Calculus/*.lean`: a script written in Lean is Lean code in
+    # this development, and a document citing the definitions inside one is citing real names.
+    # No such script exists today — the audit instruments that were written in Lean are deleted
+    # — and the glob stays so that the next one is covered without anyone remembering to add it.
     src = "".join(strip_comments(open(f).read())
                   for f in sorted(glob.glob("Calculus/*.lean"))
                           + sorted(glob.glob("scripts/*.lean")))
