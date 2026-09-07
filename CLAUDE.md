@@ -250,7 +250,7 @@ Name the command, and quote the output. A report without both is a claim.
 | type checker clean | `npm run check`, which runs `tsc --noEmit` |
 | suite green in the real environment | `npx vitest --run`. `npm test` opens watch mode. A stubbed runner reports a false green |
 | linter clean | `npm run format:ci`, which runs `biome ci ./src` |
-| public contract byte identical | `npm run build`, then compare `dist/Rotorise.d.ts` and `dist/Rotorise.d.cts` against the same two files from before the pass |
+| published name set | `npm run build`, then compare the export set of `dist/Rotorise.d.ts`, `dist/testing.d.ts` and `dist/native.d.ts` against the previous pass, and name each move in the commit message |
 | type-level surface | the attest snapshots in `src/Rotorise.attest.test.ts`, against `.attest/assertions/typescript.json` |
 | the Lean side | `formal/scripts/gate.sh`, which gates on the exit code, and reports every check rather than the first failure |
 
