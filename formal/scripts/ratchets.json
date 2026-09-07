@@ -3,7 +3,7 @@
   "branches": {
     "Calculus/Axioms.lean": 1,
     "Calculus/Codec.lean": 21,
-    "Calculus/Combinators.lean": 1015,
+    "Calculus/Combinators.lean": 1072,
     "Calculus/Continuity.lean": 49,
     "Calculus/Denote.lean": 97,
     "Calculus/Discharge.lean": 138,
@@ -75,7 +75,7 @@
   "unfolding_sites": {
     "Calculus/Axioms.lean": 0,
     "Calculus/Codec.lean": 1,
-    "Calculus/Combinators.lean": 69,
+    "Calculus/Combinators.lean": 75,
     "Calculus/Continuity.lean": 7,
     "Calculus/Denote.lean": 1,
     "Calculus/Discharge.lean": 25,
