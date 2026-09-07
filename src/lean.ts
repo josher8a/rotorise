@@ -1035,6 +1035,119 @@ end Calculus
 }
 
 /**
+ * One **read vector**: this codec, given the attribute it wrote, reads that value back.
+ *
+ * The write vectors assert `(denote t).e v = some a` and the refusal vectors assert `= none`, so
+ * one half of every pair was proposed to the model and the other half was not — for the corpus at
+ * large. The read side *was* asserted, but only where a union had to choose:
+ * {@link leanReadResolution} states `(denote t).p a = some v` for each read resolution. This is
+ * that assertion over every corpus codec rather than over the unions alone.
+ *
+ * **The attribute comes from the library and so does the value.** `a` is what this codec's
+ * `encode` wrote for `v`, and `v'` is what its own `decode` read back from `a` — both taken by
+ * running them, never supplied. So the theorem says: the model's `p`, given what this library
+ * wrote, answers what this library read. A change to either half stops the file compiling.
+ *
+ * **`vcheck`, for the reason the read resolutions use it.** A `Value.map` carries a function, so
+ * `rfl` on the assembled closure does not close and `isDefEq` runs to the heartbeat limit.
+ * `veq` is `aeq`'s construction over `Value.map`, with `veq_sound` proved, so a `.same` verdict
+ * cashes to the equation.
+ *
+ * A value the emitter cannot spell is skipped by {@link readVectorIsUnstatable} rather than
+ * guessed at — the `Double` axiom again, on the value side. Measured when this landed: **none of
+ * the 27 corpus codecs is blocked**, because the corpus carries no numeric value; `scalar_number`
+ * is the twenty-eighth codec added by hand at three sites and is not in it.
+ */
+export const leanReadVector = ({ name, codec, value }: Vector): string => {
+    const attribute = codec.unsafeEncode(value as never)
+    const out = codec.decode(attribute as never)
+    if (failed(out)) {
+        return refuse(
+            name,
+            'this codec cannot read back the attribute its own `encode` wrote, so there is no agreement to propose — `readVectorIsUnstatable` filters it, and reaching here means the filter and the emitter disagree',
+        )
+    }
+    const read = out
+    return [
+        `/-- \`${name}\` — read back through the term that wrote it -/`,
+        `theorem ${leanIdent(name)}__reads :`,
+        `    vcheck ${fuelForValue(read)}`,
+        `      ((denote (${leanTermOf(codec, name)})).p`,
+        `        (${leanAttrOf(attribute, name)}))`,
+        `      (some (${leanValueOf(read, name)})) = .same := rfl`,
+    ].join('\n')
+}
+
+/**
+ * Whether a read vector **cannot be stated**, and the one reason it can be.
+ *
+ * The value the codec reads back has to have a Lean form. `Value.num` is `Double`, an axiom with
+ * no closed terms, so any numeric value on the read side is unspellable — the same wall
+ * {@link readResolutionIsUnstatable} meets, at the same constructor. A codec that refuses its own
+ * encode, or that cannot read its own attribute back, is not a read vector either: there is no
+ * agreement to proposeif nothing round trips.
+ */
+export const readVectorIsUnstatable = (
+    one: Vector,
+): 'Double' | 'no round trip' | undefined => {
+    let read: unknown
+    try {
+        const attribute = one.codec.unsafeEncode(one.value as never)
+        const out = one.codec.decode(attribute as never)
+        if (failed(out)) return 'no round trip'
+        read = out
+    } catch {
+        return 'no round trip'
+    }
+    try {
+        leanValueOf(read)
+    } catch {
+        return 'Double'
+    }
+    return undefined
+}
+
+/** The read vectors as a module, with what it could not state named in the header. */
+export const leanReadVectorModule = (vectors: readonly Vector[]): string => {
+    const blocked = vectors
+        .map((one) => [one, readVectorIsUnstatable(one)] as const)
+        .filter(([, why]) => why !== undefined)
+    const live = vectors.filter(
+        (one) => readVectorIsUnstatable(one) === undefined,
+    )
+    return `import Calculus.Vectors
+
+/-!
+# Read vectors, proposed to the model's \`p\`
+
+**Generated — do not edit.** One theorem per corpus codec: the model's \`p\`, given the attribute
+this library wrote, answers the value this library read back. ${live.length} of ${vectors.length}
+codecs are asserted here.
+
+Both halves are taken by running the library, never supplied: \`a\` is what \`encode\` wrote and
+\`v\` is what \`decode\` read from it. So a change to either direction stops this file compiling,
+which is the half the write vectors could not reach.
+${
+    blocked.length === 0
+        ? '\nNothing is skipped: every corpus codec round trips to a value Lean can spell.\n'
+        : `\nThe other ${blocked.length} cannot be stated:\n${blocked
+              .map(([one, why]) => `  * \`${one.name}\` — ${why}`)
+              .join('\n')}\n`
+}-/
+
+/-! The emitted key function is total on a membership subtype, so a single-name object binds a
+\`k\` it never reads; the binder cannot be \`_\` because a multi-name object reads \`k.1\`. -/
+set_option linter.unusedVariables false
+
+namespace Calculus
+
+${live.map(leanReadVector).join('\n\n')}
+
+end Calculus
+`
+}
+
+/**
  * One proposed **resolution**: this union, given this value or attribute, picks what the model's
  * `select` picks.
  *
@@ -1384,10 +1497,31 @@ export const leanVectorModule = (
      * that does not say it is one is the same defect as a count nobody can reproduce.
      */
     refusalsChecked = refusals.length,
+    /**
+     * A readable subset of the **read** vectors, for the `check` sample alone.
+     *
+     * A read vector has one form and it is `vcheck`: its answer is a `Value`, `Value.map` carries
+     * a function, and `rfl` on the assembled closure diverges rather than failing. So it cannot be
+     * written in the `equation` protocol at all, and the `equation` sample's whole premise is
+     * depending on nothing beyond `denote` — putting a `vcheck` in it would cost that.
+     *
+     * The two samples are otherwise the same vectors in two protocols, and this is the one place
+     * they part. The gate elaborates all of `.readvectors.lean` either way; what the sample
+     * carries is the readable half.
+     */
+    reads: readonly Vector[] = [],
 ): string => {
-    const body = vectors
+    const written = vectors
         .map((vector) => leanVector(vector, protocol))
         .join('\n\n')
+    const readBack =
+        reads.length === 0
+            ? ''
+            : `\n\n/-! ### Read back, through the same term\n\nThe model's \`p\`, given the attribute the library wrote, against the value the library read. Only\nthe \`check\` sample carries these: a read vector's answer is a \`Value\`, so it needs \`vcheck\`, and\nthe \`equation\` sample depends on nothing beyond \`denote\` by design. -/\n\n${reads
+                  .filter((one) => readVectorIsUnstatable(one) === undefined)
+                  .map(leanReadVector)
+                  .join('\n\n')}`
+    const body = `${written}${readBack}`
     if (refusals.length === 0) {
         return `${protocol === 'equation' ? preamble : checkPreamble}\n${body}\n\nend Calculus\n`
     }

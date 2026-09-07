@@ -211,6 +211,54 @@ theorem lazy_string :
         (Value.str "x"))
       (some (Attr.s "x")) = .same := rfl
 
+/-! ### Read back, through the same term
+
+The model's `p`, given the attribute the library wrote, against the value the library read. Only
+the `check` sample carries these: a read vector's answer is a `Value`, so it needs `vcheck`, and
+the `equation` sample depends on nothing beyond `denote` by design. -/
+
+/-- `scalar_string` — read back through the term that wrote it -/
+theorem scalar_string__reads :
+    vcheck 1
+      ((denote (Term.string)).p
+        (Attr.s "hello"))
+      (some (Value.str "hello")) = .same := rfl
+
+/-- `scalar_boolean` — read back through the term that wrote it -/
+theorem scalar_boolean__reads :
+    vcheck 1
+      ((denote (Term.boolean)).p
+        (Attr.bool true))
+      (some (Value.bool true)) = .same := rfl
+
+/-- `set_of_string` — read back through the term that wrote it -/
+theorem set_of_string__reads :
+    vcheck 1
+      ((denote (Term.set SetBase.string)).p
+        (Attr.ss (NEFinset.of "a" {"b"})))
+      (some (Value.strSet (NEFinset.of "a" {"b"}))) = .same := rfl
+
+/-- `array_of_string` — read back through the term that wrote it -/
+theorem array_of_string__reads :
+    vcheck 2
+      ((denote (Term.array (Term.string))).p
+        (Attr.l [Attr.s "a", Attr.s "b"]))
+      (some (Value.arr [Value.str "a", Value.str "b"])) = .same := rfl
+
+/-- `object_two_fields` — read back through the term that wrote it -/
+theorem object_two_fields__reads :
+    vcheck 2
+      ((denote (Term.object (Body.mk {"a", "b"} (fun k => if k.1 = "a" then Field.req (Term.string) else Field.req (Term.boolean)) Rest.drop))).p
+        (Attr.m {"a", "b"} (fun k => if k.1 = "a" then Attr.s "x" else Attr.bool true)))
+      (some (Value.map {"a", "b"} (fun k => if k.1 = "a" then Value.str "x" else Value.bool true))) = .same := rfl
+
+/-- `union_of_two` — read back through the term that wrote it -/
+theorem union_of_two__reads :
+    vcheck 1
+      ((denote (Term.union [Term.string, Term.boolean])).p
+        (Attr.bool true))
+      (some (Value.bool true)) = .same := rfl
+
 /-! ## Refusals — neither side writes anything for these
 
 27 of 649 shown; `scripts/gate.sh` elaborates all
