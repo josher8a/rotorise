@@ -123,7 +123,7 @@ def matrix(names):
     for (d, k), why in EXEMPT.items():
         print(f"\n  – {d}/{k}: {why}")
     print("\n  Name-based: a lemma proved under a different name reads as missing —")
-    print("  which is the point. The scheme of ARCHITECTURE.md §9 is what makes the")
+    print("  which is the point. `docs/architecture.md`'s naming scheme is what makes the")
     print("  matrix meaningful, so a violation must show as a gap, not be absorbed.")
     dot = sorted(n for n in names
                  if re.match(r'(Lawful|LawfulCore|Carrier)\.(through|restrict|extendRead|orNull)$', n))

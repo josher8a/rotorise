@@ -69,9 +69,8 @@ nothing about *why* any entry is in it:
 When this split was first measured the four absorbed 99 of 169 hits between them, the marks
 took 60, and 18 stale pointers were left — which is the number the guard exists to report.
 
-Hits in the current-state documents — `formal/README.md`, `formal/ARCHITECTURE.md`,
-`docs/codec-calculus.md`,
-`docs/structural-discipline.md` —
+Hits in the current-state documents — `formal/README.md`, `docs/architecture.md`,
+`docs/roadmap.md`, `docs/defects.md`, `docs/codec-calculus.md` —
 are broken pointers and should be fixed or explicitly marked superseded.
 
 Usage:  python3 scripts/name_drift.py            (run from formal/)
@@ -81,7 +80,7 @@ Exit code 1 if any current-state document has a hit, a stale `EXPECTED` entry, o
 """
 import re, sys, os, glob
 
-CURRENT = ["README.md", "ARCHITECTURE.md", "../docs/codec-calculus.md",
+CURRENT = ["README.md", "../docs/codec-calculus.md",
            "../docs/architecture.md", "../docs/roadmap.md", "../docs/defects.md"]
 # **The docstrings, which this guard never read.** Every module here is dense with backticked
 # names and none of them was checked — 763 distinct citations, invisible. Demonstrated rather
@@ -109,7 +108,7 @@ BACKTICKED = re.compile(r"`([^`\n]{1,80})`")
 LEANISH = re.compile(r"^[^\W\d][\w'!?⁺₀-₉]*(?:\.[^\W\d][\w'!?⁺₀-₉]*)*$", re.UNICODE)
 # **A name the sources do not define is marked, not backticked** — `~~oldName~~` — and this
 # guard reads only the unmarked citations. Usually the name is retired; sometimes it never
-# existed (`depthP`, a companion `Value.depth`'s map row has no list to need). That convention is `ARCHITECTURE.md` §9's, and it exists because the check
+# existed (`depthP`, a companion `Value.depth`'s map row has no list to need). That convention is `docs/architecture.md`'s, and it exists because the check
 # below cannot work without it: once the source set is code, a docstring that names a deleted
 # declaration *on purpose* — "Was `denoteωF`", "`encPair`/`decPair` are gone with the traversal",
 # "`record_e_keeps_duplicate_keys` became unstatable when `M`'s keys became a `Finset`" — is
@@ -137,14 +136,6 @@ EXPECTED = {
         "List.Perm": "mathlib; named as the next probe, not as something proved here",
         "mono": "the ccpo/`partial_fixpoint` obligation's conventional name; `altCodec_not_monotone` is ours",
     },
-    "ARCHITECTURE.md": {
-        "orth_unreach_lines": "a `doc_counts.py` marker key, not a Lean name — §6 cites it to "
-                              "name the count that moved in `7fff6e8`",
-        "mono": "same as `README.md`'s — the ccpo obligation's conventional name, at §7's "
-                "not-modelled row",
-        "List.Perm": "mathlib; §9's commutativity row names it as the next probe, not as "
-                     "something proved here — inherited from the deleted representation audit",
-    },
     "../docs/codec-calculus.md": {
         "e_c": "the specification's own notation for a component codec, not a Lean name",
         "Encoded": "§1's own wire type, named by the specification; the model has no Lean type for it",
@@ -164,7 +155,7 @@ EXPECTED = {
 # an entry outliving its declaration is an exemption for a name nothing declares: the document
 # may then cite it forever and every guard stays green. That is not hypothetical — seven of the
 # thirteen entries here had no declaration in `src/` when this was written, and two of them,
-# `identifying` and `separatedByElements`, are exactly what `ARCHITECTURE.md` §5 was still
+# `identifying` and `separatedByElements`, are exactly what the architecture was still
 # naming. `separatedByElements` never had a declaration at all.
 #
 # The check below is an *anchored* one, and it has to be: a name can be live in `src/` as a

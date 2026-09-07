@@ -646,7 +646,7 @@ const leanTermOfTerm = (t: Term, at: string, forced: number): string => {
             // `Calculus/` after that commit. Nothing caught it for a day: the committed samples
             // are generated *by this function*, so `lean.spec.ts`'s byte comparison agreed with a
             // stale emitter, and no gate ran a generated file through Lean. Both are fixed; see
-            // `ARCHITECTURE.md` §2, where the emitter is now the ninth companion a stratum owes.
+            // `docs/architecture.md`, where the emitter is a companion every stratum owes.
             //
             // A `dunion`'s variants are `Body`s too, so the payload is emitted by
             // {@link leanBodyOf} and both rows print the same thing.
@@ -905,7 +905,7 @@ export const leanRefusal = ({ name, codec, value }: Refusal): string => {
  * must not certify it.
  *
  * **The bridge from `src/`'s declaration-time guard to `Orth`, and it runs one way only.** `Orth`
- * is a *sufficient* decidable condition for a fragment of (U) — `formal/ARCHITECTURE.md` §5's own
+ * is a *sufficient* decidable condition for a fragment of (U) — `docs/architecture.md`'s own
  * by-phase table puts it at six of twenty-five hand discharges directly — so `Orth x y = false`
  * does **not** mean the model cannot separate the pair. It means the cheap syntactic test
  * declines. Measured over the corpus, 66 of 351 pairs are exactly that and every one is
@@ -961,7 +961,7 @@ export const leanSeparation = ({ name, left, right }: Separation): string => {
  * `Calculus.Vectors` reaches `Denote` and not `Orthogonality`, and adding the import to the
  * committed vector samples would make them depend on a module they have nothing to say about.
  * Generated at gate time and elaborated, never committed — the counts are in
- * `formal/ARCHITECTURE.md` §5, which is where the verdict this checks is written down.
+ * `docs/architecture.md`, which is where the verdict this checks is written down.
  */
 export const leanSeparationModule = (
     separations: readonly Separation[],
@@ -1048,7 +1048,7 @@ export const leanReadVerdict = (one: ReadVerdict): string => {
  * The read verdicts as a module of their own, because they need `AdmA`.
  *
  * Generated at gate time and elaborated, never committed — the counts are in
- * `formal/ARCHITECTURE.md` §10, where the rejected port is recorded.
+ * `docs/defects.md`, where the numeric wall this rests on is recorded as an issue.
  */
 export const leanReadModule = (verdicts: readonly ReadVerdict[]): string => {
     const stuck = verdicts.filter(readRowIsStuck)
@@ -1338,7 +1338,7 @@ export const leanReadResolution = (one: ReadResolution): string => {
  * The resolutions as a module of their own.
  *
  * Generated at gate time and elaborated, never committed — the counts are in
- * `formal/ARCHITECTURE.md` §5, beside the classifier this is the other half of.
+ * `docs/architecture.md`, beside the classifier this is the other half of.
  */
 export const leanResolutionModule = (
     writes: readonly Resolution[],

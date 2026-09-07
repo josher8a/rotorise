@@ -24,8 +24,10 @@
     "Calculus/Vectors.lean": 201
   },
   "retirement_marks": {
+    "../docs/architecture.md": 0,
     "../docs/codec-calculus.md": 0,
-    "ARCHITECTURE.md": 18,
+    "../docs/defects.md": 0,
+    "../docs/roadmap.md": 0,
     "Calculus/Axioms.lean": 2,
     "Calculus/Codec.lean": 0,
     "Calculus/Combinators.lean": 13,

@@ -331,11 +331,6 @@ are conventions rather than guards. And it cannot see a name that stops being *t
 declaration that still exists while ceasing to be the one a passage cites is invisible. Renaming
 is checked; re-pointing is not.
 
-**`scripts/doc_counts.py`** computes the counts a document rests on and holds the document to
-them, because a count typed by hand drifts and the name guard cannot see it. It measures the tree
-and not the argument: it can say how many theorems sit in a row and not whether the row is the
-right one.
-
 **`scripts/ratchet.py`** holds per-file counts to the state they were in and fails when one rises.
 It exists because the bars this development wanted could not be bars: a coverage bar set at a
 number nobody can satisfy is a bar that gets switched off, where a ratchet asks nothing on the day
@@ -658,8 +653,9 @@ convention: they are proof waypoints, which is the one thing a name cannot suppl
 - Sharpening a row that answers "everything" at a container → find what relied on the slack, and
   cost it with the dependents instrument rather than with grep.
 - Citing a Lean name in a current-state document → the name guard must exit 0.
-- Stating a count in a document → put it between the count markers and add it to the count
-  script. An unmarked count is unguarded.
+- Reaching for a count in a document → do not. No guard holds a document to a number any
+  more, so a count in prose is unguarded by construction. It belongs in the commit that
+  measured it, in `defects.md` where it pins an issue, or in a guard's output.
 - Deleting a declaration → snapshot the reference instrument before and after and read the
   difference. Then resolve every path and every name the deletion leaves cited, because no guard
   resolves a cited path.

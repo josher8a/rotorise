@@ -158,8 +158,8 @@ recursion on the *input*, `Opaque.lean`'s, not `denote`'s on the term. The four 
 table helpers the other rules need did stay beside their converses in `Soundness.lean`;
 only the two theorems that reach `opaque` are here.
 
-So `term_depth_wf`'s users are **no longer all in one module** — see `ARCHITECTURE.md` §3,
-whose count moves with this.
+So `term_depth_wf`'s users are **no longer all in one module**. The reason they are not is
+written above, and no document carries a count of them.
 -/
 
 -- the shared `term_depth_wf` block has alternatives this theorem's goals do not use

@@ -25,6 +25,11 @@ definition it touches.
 | `Calculus/Axioms.lean`      | §3          | `#assert_axioms`, and the headline theorems run through it — the advertised axiom base (`propext`, `Quot.sound`, the `Double` axioms; **no `Classical.choice`**) as a build error rather than a claim in prose |
 | `Calculus/Discharge.lean`   | §5          | The discharges of (U) that no phase of `Orth` reaches — an arbitrary `q` inside a `refine`, a union of numeric literals, `(dunion)` and `opaque`, and `uAtAct_array_literals` where `UAtCan` is outright false — with the two counterexamples that repaired §5's admission row and the refutation of (D) as a discharger. The four per-aspect tables this file used to carry are retired: §5 states that row on option admission and occupancy, `Calculus/Exactness.lean` proves those rows exact, and `Calculus/Orthogonality.lean` decides the pairs a declaration can decide |
 
+This table has a row of its own for sixteen of the modules under `Calculus/`.
+`Exactness.lean`, `Orthogonality.lean`, `Malleability.lean`, `LiteralArity1.lean` and
+`Vectors.lean` have none, and each opens with a module docstring that says what it is for.
+Read those.
+
 **The mechanization is complete: the project builds with zero `sorry`.** Both halves
 of §5's soundness theorem are machine-checked — `soundness` (all four laws, (MP) with
 the legacy exemption as the `MPOk` hypothesis) and `soundness_core` ((R), (C), (W)
@@ -159,7 +164,8 @@ reviewer cannot read against the specification without a detour.
 Prose does not typecheck. Deleting a declaration leaves the build green and every citation
 of it dangling.
 `python3 scripts/name_drift.py` closes that: it reports every backticked Lean name in the
-current-state documents — this file, `ARCHITECTURE.md`, `docs/codec-calculus.md` — and
+current-state documents — this file, `docs/architecture.md`, `docs/roadmap.md`,
+`docs/defects.md`, `docs/codec-calculus.md` — and
 every module docstring, that no longer occurs in `Calculus/`,
 and exits
 non-zero if there is one. Deliberate citations live in an `EXPECTED` table with a reason
@@ -171,9 +177,9 @@ a claim in prose.
 
 ## How the proofs are meant to read
 
-The convention is `ARCHITECTURE.md` §9: a definition is unfolded once, in its own inversion
-lemma, and every proof downstream cites the lemma. §9 carries the naming scheme, which is
-normative, and what a docstring is for. Where the vocabulary is still incomplete is a
+The convention is `docs/architecture.md`'s: a definition is unfolded once, in its own
+inversion lemma, and every proof downstream cites the lemma. That document carries the naming
+scheme, which is normative, and what a docstring is for. Where the vocabulary is still incomplete is a
 measurement, and it regenerates: `python3 scripts/vocab_audit.py`.
 
 The short version: the *obligation* half of the vocabulary is done (20/22 carriers,
