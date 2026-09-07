@@ -209,8 +209,8 @@ inductive Typed : Term → Held → Option Member → Prop where
       rule whose index its term does not determine. -/
   | held {t I μ f g} (h : Typed t I μ) :
       Typed (.held t f g) (fun v => I (f v)) μ
-  | refine {t T μ q} (h : Typed t T μ) :
-      Typed (.refine t q) (fun v => T v ∧ q v) μ
+  | refine {t T μ p} (h : Typed t T μ) :
+      Typed (.refine t p) (fun v => T v ∧ p.eval v) μ
   | legacy {t T μ r} (h : Typed t T μ) : Typed (.legacy t r) T μ
   | nullable {t T μ} (h : Typed t T μ) : Typed (.nullable t) (HNull T) none
   | lazy {t T μ} (h : Typed t T μ) : Typed (.lazy t) T none

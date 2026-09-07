@@ -494,8 +494,9 @@ theorem soundness_both : ∀ {t T μ}, Typed t T μ → Obligations t → Sound 
       exact sound_wrap (t := t') (soundness_both h' hob) lawfulCore_arrayCodec lawful_arrayCodec
     | @record t' T' μ' h' =>
       exact sound_wrap (t := t') (soundness_both h' hob) lawfulCore_recordCodec lawful_recordCodec
-    | @refine t' T' μ' q h' =>
-      exact sound_wrap (t := t') (soundness_both h' hob) (LawfulCore.restrict · q) (Lawful.restrict · q)
+    | @refine t' T' μ' p h' =>
+      exact sound_wrap (t := t') (soundness_both h' hob)
+        (LawfulCore.restrict · p.eval) (Lawful.restrict · p.eval)
     | @lazy γ T' μ' h' =>
       exact sound_wrap (t := γ) (soundness_both h' hob) LawfulCore.μNone Lawful.μNone
     | @held t' I' μ' f g h' =>
@@ -949,8 +950,8 @@ theorem carrier_denote : ∀ {t T μ}, Typed t T μ → Obligations t → Carrie
     | @held t' I' μ' f g h' =>
       exact carrier_through (carrier_denote h' hob.1)
         (soundness_both h' hob.1).1 hob.2.2
-    | @refine t' T' μ' q h' =>
-      exact carrier_restrict (carrier_denote h' hob.refine) q
+    | @refine t' T' μ' p h' =>
+      exact carrier_restrict (carrier_denote h' hob.refine) p.eval
     | @legacy t' T' μ' r h' =>
       exact carrier_extendRead (carrier_denote h' hob.1) hob.2.1
     | @nullable t' T' μ' h' =>

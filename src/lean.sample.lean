@@ -113,7 +113,7 @@ theorem set_of_string :
 
 /-- `set_of_literal` -/
 theorem set_of_literal :
-    (denote (Term.refine (Term.set SetBase.string) (liftQ (inL GroundKind.string (NEFinset.of "a" {"b"}))))).e
+    (denote (Term.refine (Term.set SetBase.string) (Pred.each (Pred.members GroundKind.string (NEFinset.of "a" {"b"}))))).e
       (Value.strSet (NEFinset.of "b" {"a"}))
     = some (Attr.ss (NEFinset.of "a" {"b"})) := by
   vector
@@ -291,7 +291,7 @@ theorem set_of_string__refuses__scalar_string :
 
 /-- `set_of_literal__refuses__scalar_string` — refused on both sides -/
 theorem set_of_literal__refuses__scalar_string :
-    (denote (Term.refine (Term.set SetBase.string) (liftQ (inL GroundKind.string (NEFinset.of "a" {"b"}))))).e
+    (denote (Term.refine (Term.set SetBase.string) (Pred.each (Pred.members GroundKind.string (NEFinset.of "a" {"b"}))))).e
       (Value.str "hello") = none := rfl
 
 /-- `set_of_decimal__refuses__scalar_string` — refused on both sides -/

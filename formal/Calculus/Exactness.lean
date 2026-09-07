@@ -252,7 +252,7 @@ noncomputable def Adm : Term → Value → Bool
   -- rows are one `decide` over theirs.
   | .record c => fun v =>
       match v with | .map _ f => decide (∀ k, Adm c (f k) = true) | _ => false
-  | .refine t q => fun v => Adm t v && q v
+  | .refine t p => fun v => Adm t v && p.eval v
   | .legacy t _ => Adm t
   | .lazy t     => Adm t
   | .held t f _ => fun v => Adm t (f v)
@@ -925,9 +925,9 @@ theorem Adm_exact : ∀ (t : Term), ExactV t
       -- `funImage` to see it is more work than reading it off the two `false`s
       all_goals simp only [Adm, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, recordCodec, Option.map_none',
         Option.isSome_none, Bool.false_eq_true]
-  | .refine c q => by
+  | .refine c p => by
       have hc := Adm_exact c
-      intro v; cases hq : q v <;> simp [Adm, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, Codec.restrict, hq, hc v]
+      intro v; cases hq : p.eval v <;> simp [Adm, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, Codec.restrict, hq, hc v]
   | .legacy c r => by
       have hc := Adm_exact c
       intro v; simpa [Adm, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, Codec.extendRead] using hc v
@@ -1170,7 +1170,7 @@ noncomputable def AdmA : Term → Attr → Bool
       match a with | .m _ g => decide (∀ k, AdmA c (g k) = true) | _ => false
   | .held t _ _ => AdmA t
   | .lazy t   => AdmA t
-  | .refine t q => fun a => AdmA t a && refineReads t q a
+  | .refine t p => fun a => AdmA t a && refineReads t p.eval a
   -- hatch
   | .legacy t r => fun a => AdmA t a || (r a).isSome
   -- the read side of the same question; see the `Adm` row. `withNull` guards *both* halves
@@ -1777,7 +1777,7 @@ theorem AdmA_exact : ∀ (t : Term), ExactA t
   -- **the row this file said could not exist.** `restrict`'s `p` is the base's `bind`ed
   -- through `q`, so `dom(p)` is `dom` of the base's intersected with `q` of what it decodes
   -- to — and that is what the row computes, term for term.
-  | .refine c q => by
+  | .refine c p => by
       have hc := AdmA_exact c
       intro a
       simp only [AdmA, refineReads, denote_refine, Codec.restrict, Bool.and_eq_true, hc a]
@@ -1819,8 +1819,8 @@ theorem AdmA_sound (t : Term) {a v} (hp : (denote t).p a = some v) : AdmA t a = 
 /-- **The witness that is now a theorem the other way.** `refine(string, ⊥)` reads nothing,
     and `AdmA` says so: the row decodes with `stringCodec` and applies `⊥`. This used to be
     ~~not_ExactA_refine~~, stated as "`AdmA` cannot see it". -/
-theorem AdmA_refine_bot (a : Attr) : AdmA (.refine .string (fun _ => false)) a = false := by
-  simp [AdmA, refineReads]
+theorem AdmA_refine_bot (a : Attr) : AdmA (.refine .string (.closure (fun _ => false))) a = false := by
+  simp [AdmA, refineReads, Pred.eval]
   cases a <;> simp [denote, stringCodec]
 
 /-! ## Two of the twenty-one constructors are derivable
@@ -2103,8 +2103,8 @@ def qTop : Value → Bool := fun _ => true
 
 /-- **How a term is written is not a function of what it admits.** Two terms, one a
     refinement of the other, agreeing on the joint predicate at every value. -/
-theorem Adm_string_eq_refine : Adm .string = Adm (.refine .string qTop) := by
-  funext v; simp [Adm, qTop]
+theorem Adm_string_eq_refine : Adm .string = Adm (.refine .string (.closure qTop)) := by
+  funext v; simp [Adm, Pred.eval, qTop]
 
 
 
@@ -2362,11 +2362,11 @@ theorem not_decides_string : ¬ Decides .string := by
   cases v <;> cases w <;> simp_all [denote, stringCodec, Value.kind]
 
 
-theorem not_decides_refine_top : ¬ Decides (.refine .string qTop) := by
+theorem not_decides_refine_top : ¬ Decides (.refine .string (.closure qTop)) := by
   rintro ⟨v, w, hv, hk, hw⟩
   simp only [denote, denote] at hv hw
   cases v <;> cases w <;>
-    simp_all [denote, Codec.restrict, stringCodec, qTop, Value.kind]
+    simp_all [denote, Codec.restrict, Pred.eval, stringCodec, qTop, Value.kind]
 
 /-- **And too stingy.** An object with a required field refuses the empty map and writes a
     populated one — two `map`s differing in admission — while `ident` calls it `false`. -/
@@ -2418,9 +2418,9 @@ theorem decides_held : Decides (.held .string fSplit (fun v => v)) := by
 
 
 /-- `Adm` treats the two adapters uniformly: apply it, then ask the subterm. -/
-theorem Adm_refine_adapt (t : Term) (q : Value → Bool) (v : Value) :
-    Adm (.refine t q) v = ((partialId q v).elim false (Adm t)) := by
-  cases hq : q v <;> simp [Adm, partialId, hq]
+theorem Adm_refine_adapt (t : Term) (p : Pred) (v : Value) :
+    Adm (.refine t p) v = ((partialId p.eval v).elim false (Adm t)) := by
+  cases hq : p.eval v <;> simp [Adm, partialId, hq]
 
 theorem Adm_held_adapt (t : Term) (f g : Value → Value) (v : Value) :
     Adm (.held t f g) v = ((some (f v)).elim false (Adm t)) := by
@@ -2483,17 +2483,17 @@ theorem AdmA_legacy_union (t : Term) (r : Attr → Option Value) (a : Attr) :
     literal element is a **restriction of the set**, and `setCodec_restrict` proves the two
     write the same attribute on the nose. Same separation, one spelling further out. -/
 theorem sepJV_set_literals :
-    SepJV (.refine (.set .string) (liftQ (inL .string (.of "A" ∅))))
-          (.refine (.set .string) (liftQ (inL .string (.of "B" ∅)))) := by
+    SepJV (.refine (.set .string) (.each (.members .string (.of "A" ∅))))
+          (.refine (.set .string) (.each (.members .string (.of "B" ∅)))) := by
   intro v hv
   cases v
   case strSet S =>
     obtain ⟨x, hx⟩ := S.2
-    simp only [Adm, Bool.and_eq_true, liftQ, decide_eq_true_eq] at hv
+    simp only [Adm, Bool.and_eq_true, Pred.eval, liftQ, decide_eq_true_eq] at hv
     have hxA : x = "A" := by
       have h1 := hv.2 x hx
       simpa [inL, NEFinset.of] using h1
-    simp only [Adm, liftQ, Bool.and_eq_false_iff, decide_eq_false_iff_not]
+    simp only [Adm, Pred.eval, liftQ, Bool.and_eq_false_iff, decide_eq_false_iff_not]
     refine Or.inr (fun hall => ?_)
     have h2 := hall x hx
     rw [hxA] at h2
@@ -2508,7 +2508,7 @@ theorem sepJV_set_literals :
     obtain ⟨x, hx⟩ := S.2
     simp only [Adm, Bool.and_eq_false_iff, decide_eq_false_iff_not]
     exact Or.inl (fun hall => by have h := hall x hx; simp [SetBase.adm] at h)
-  all_goals simp [Adm, liftQ]
+  all_goals simp [Adm, Pred.eval, liftQ]
 
 /-- …and the contrast that shows what the non-emptiness is doing: the *array* pair does not
     separate, because both options admit `[]`. This is §5's empty-container argument in its

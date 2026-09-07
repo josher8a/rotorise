@@ -261,14 +261,14 @@ theorem typed_dunion_nil (d : Name) : Typed (.dunion d []) (HUnion []) (some .M)
     here has to be syntactic: the attribute family is `∃ v, base.p a = some v ∧ q v`, which
     is exactly what `refineReads` computes, and disjointness is the base reading `a` to one
     value. -/
-theorem uAtCan_of_refine_disjoint {base : Term} {qs : List (Value → Bool)}
+theorem uAtCan_of_refine_disjoint {base : Term} {ps : List Pred}
     (hlaw : LawfulCore (denote base))
-    (hdisj : List.Pairwise (fun q q' => ∀ v, q v = true → q' v = false) qs) :
-    UAtCan (qs.map (fun q => Term.refine base q)) := by
-  show UniqueAdmission (semsOf (qs.map (fun q => Term.refine base q)))
+    (hdisj : List.Pairwise (fun p p' => ∀ v, p.eval v = true → p'.eval v = false) ps) :
+    UAtCan (ps.map (fun p => Term.refine base p)) := by
+  show UniqueAdmission (semsOf (ps.map (fun p => Term.refine base p)))
   refine uniqueAdmission_of_disjoint
-    (SVs := qs.map (fun q v => q v = true))
-    (SAs := qs.map (fun q a => ∃ v, (denote base).p a = some v ∧ q v = true))
+    (SVs := ps.map (fun p v => p.eval v = true))
+    (SAs := ps.map (fun p a => ∃ v, (denote base).p a = some v ∧ p.eval v = true))
     ?_ ?_ ?_ ?_ ?_
   · rw [semsOf, List.map_map, List.forall₂_map_left_iff, List.forall₂_map_right_iff]
     refine List.forall₂_same.mpr fun q _ v hv => ?_
@@ -290,15 +290,15 @@ theorem uAtCan_of_refine_disjoint {base : Term} {qs : List (Value → Bool)}
     rw [hv] at hv'; cases hv'
     rw [h v hqv] at hqv'; exact nomatch hqv'
   · rw [semsOf, List.map_map]
-    refine forall_mem_map fun q _ t a he => ?_
+    refine forall_mem_map fun p _ t a he => ?_
     simp only [Function.comp_apply] at he ⊢
     rw [optionSemOf_c] at he
     obtain ⟨hq, hb⟩ := restrict_e.mp he
     refine ⟨?_, ?_⟩
-    · show ((denote (.refine base q)).e t).isSome = true
-      rw [show (denote (.refine base q)).e t = some a from he]; rfl
-    · show ((denote (.refine base q)).p a).isSome = true
-      rw [show (denote (.refine base q)).p a = some t from
+    · show ((denote (.refine base p)).e t).isSome = true
+      rw [show (denote (.refine base p)).e t = some a from he]; rfl
+    · show ((denote (.refine base p)).p a).isSome = true
+      rw [show (denote (.refine base p)).p a = some t from
         restrict_p.mpr ⟨hlaw.retract hb, hq⟩]
       rfl
 
@@ -313,9 +313,9 @@ theorem uAtCan_of_refine_disjoint {base : Term} {qs : List (Value → Bool)}
     `object`, or of one `union`, discharges by the same theorem. There was never a
     per-member argument to make. -/
 theorem uAtCan_of_refine_disjoint_of_typed {base : Term} {T μ}
-    {qs : List (Value → Bool)} (h : Typed base T μ) (hob : Obligations base)
-    (hdisj : List.Pairwise (fun q q' => ∀ v, q v = true → q' v = false) qs) :
-    UAtCan (qs.map (fun q => Term.refine base q)) :=
+    {ps : List Pred} (h : Typed base T μ) (hob : Obligations base)
+    (hdisj : List.Pairwise (fun p p' => ∀ v, p.eval v = true → p'.eval v = false) ps) :
+    UAtCan (ps.map (fun p => Term.refine base p)) :=
   uAtCan_of_refine_disjoint (soundness_both h hob).1 hdisj
 
 /-! ### Literals over a primitive §3 gives no `literal` rule for
@@ -333,26 +333,26 @@ def isTrueV : Value → Bool := fun v => match v with | .bool b => b | _ => fals
 def isFalseV : Value → Bool := fun v => match v with | .bool b => !b | _ => false
 
 /-- It is derivable, with the member the base names — no rule of its own. -/
-theorem typed_boolLiteral : ∃ T, Typed (.refine .boolean isTrueV) T (some .BOOL) :=
+theorem typed_boolLiteral : ∃ T, Typed (.refine .boolean (.closure isTrueV)) T (some .BOOL) :=
   ⟨_, Typed.refine Typed.boolean⟩
 
 /-- A base that is not ground at all, to show the theorem does not care. Two disjoint
     refinements of one `array(string)` separate exactly as two literals over `string` do —
     "literal" was never the operative word, "one base, disjoint predicates" was. -/
-theorem uAtCan_refine_container {q q' : Value → Bool}
-    (hd : List.Pairwise (fun a b => ∀ v, a v = true → b v = false) [q, q']) :
-    UAtCan [Term.refine (.array .string) q, Term.refine (.array .string) q'] :=
+theorem uAtCan_refine_container {p p' : Pred}
+    (hd : List.Pairwise (fun a b => ∀ v, a.eval v = true → b.eval v = false) [p, p']) :
+    UAtCan [Term.refine (.array .string) p, Term.refine (.array .string) p'] :=
   uAtCan_of_refine_disjoint_of_typed (Typed.array Typed.string)
     trivial hd
 
 /-- And a union of two discharges on **both** sides, by the same shared-base argument that
     settles numeric literals — a primitive §3 never wrote a `literal` rule for. -/
 theorem uAtCan_boolLiterals :
-    UAtCan [Term.refine .boolean isTrueV, Term.refine .boolean isFalseV] := by
+    UAtCan [Term.refine .boolean (.closure isTrueV), Term.refine .boolean (.closure isFalseV)] := by
   have h : ∀ v, isTrueV v = true → isFalseV v = false := by
     intro v hv; cases v <;> simp_all [isTrueV, isFalseV]
-  exact uAtCan_of_refine_disjoint (qs := [isTrueV, isFalseV])
-    lawful_booleanCodec.core (by simpa using h)
+  exact uAtCan_of_refine_disjoint (ps := [.closure isTrueV, .closure isFalseV])
+    lawful_booleanCodec.core (by simpa [Pred.eval] using h)
 
 /-! ### What the unified `literal` carries
 

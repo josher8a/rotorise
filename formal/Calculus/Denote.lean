@@ -119,6 +119,17 @@ and nothing here does.
 
 Fuel was a termination device and never a cost measure; it is not even that any more. -/
 
+/-- **What a `Pred` means.** The type is in `Term.lean`, and the meaning is here, because `inL`
+    and `liftQ` are in `Combinators.lean` and `Term.lean` does not import it.
+
+    `noncomputable`, because `inL` is: the numeric base's carrier gate reaches `numericHost`.
+    That costs nothing new. `denote` is noncomputable for the same reason, and `Orth` never
+    calls this — a classifier reads a `Pred`'s constructors, which are data. -/
+noncomputable def Pred.eval : Pred → Value → Bool
+  | .members k ls => inL k ls
+  | .each p       => liftQ p.eval
+  | .closure q    => q
+
 mutual
 
 def denote : Term → Codec
@@ -134,7 +145,7 @@ def denote : Term → Codec
   | .tuple elems tail => tupleCodec (denoteList elems) (denoteOpt tail)
   | .record val => recordCodec (denote val)
   | .held inner f g => (denote inner).through f g
-  | .refine inner q => (denote inner).restrict q
+  | .refine inner p => (denote inner).restrict p.eval
   | .legacy inner r => (denote inner).extendRead r
   | .nullable inner => (denote inner).withNull
   -- `(lazy)` concludes `⊤`: the pair is the thunk's, the member is not.
@@ -259,9 +270,12 @@ theorem denote_tuple (ts : List Term) (tail : Option Term) :
 theorem denote_held (t : Term) (f g : Value → Value) :
     denote (.held t f g) = (denote t).through f g := rfl
 
-/-- `refine` denotes `restrict`. -/
-theorem denote_refine (t : Term) (q : Value → Bool) :
-    denote (.refine t q) = (denote t).restrict q := rfl
+/-- `refine` denotes `restrict`, of the predicate's meaning.
+
+    This is the whole of what `Pred` cost the codec layer: one `.eval`. `restrict` still takes
+    a `Value → Bool`, so every theorem in `Combinators.lean` about it is untouched. -/
+theorem denote_refine (t : Term) (p : Pred) :
+    denote (.refine t p) = (denote t).restrict p.eval := rfl
 
 /-- `legacy` denotes `extendRead`. -/
 theorem denote_legacy (t : Term) (r : Attr → Option Value) :

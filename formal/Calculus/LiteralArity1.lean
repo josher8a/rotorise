@@ -311,7 +311,7 @@ theorem denote_groundTerm (k : GroundKind) : denote (groundTerm k) = baseCodec k
 /-- **`literal k ℓ` and `refine(base k, ∈ ℓ)` denote the same pair**, up to the held set the
     literal carries — which `restrict` cannot know and `T` is not consulted by either row. -/
 theorem denote_refine_ground_p (k : GroundKind) (ls : NEFinset k.Carrier) (a : Attr) :
-    (denote (.refine (groundTerm k) (inL k ls))).p a = (denote (.literal k ls)).p a := by
+    (denote (.refine (groundTerm k) (.members k ls))).p a = (denote (.literal k ls)).p a := by
   cases k <;> rfl
 
 

@@ -7,7 +7,8 @@ import Mathlib.Data.Finset.Lattice.Fold
 Deep embedding. Notes:
 
 * Predicates carried by terms (`refine`) are `Bool`-valued so the denotation
-  needs no classical choice; the doc's subsets are their coercions.
+  needs no classical choice; the doc's subsets are their coercions. `Pred` below is that
+  predicate **as data** where the data exists, and a function only where it does not.
 * `custom` carries its pair as data; its *laws* are premises of the typing rule (§3),
   exactly as in the doc.
 * `opaque` is a Lean keyword, hence `opaq`.
@@ -22,6 +23,33 @@ Deep embedding. Notes:
 -/
 
 namespace Calculus
+
+/-- §3 `(refine)`'s predicate, as far as it can be read.
+
+    A bare `Value → Bool` decides nothing a table can see, and two things wanted to see it.
+    `Orth` cannot certify `set(literal k ls)` against another one while the predicate is a
+    function, so the pair keeps a host exemption that the model proves nothing about. And
+    `src/term.ts` had already made the same move for the same reason: its predicate type is
+    `members | each | closure`, and its docstring says the declaration guard has to read the
+    predicate as data. These are the same three cases, so the two sides are now one shape.
+
+    * `members` is membership of a literal's alternatives, `inL k ls`. The base indexes the
+      carrier, exactly as `Term.literal` does.
+    * `each` lifts an element predicate to a wire set, `liftQ`. It is what makes
+      `set(literal k ls)` expressible: `set` takes a base, so a restricted element is a
+      restriction of the *set*, and `setCodec_restrict` proves the two are one pair.
+    * `closure` is a caller's function. It is the case that stays opaque, and it is why this
+      is a wider type and not a narrower one: `refine` still carries an arbitrary predicate,
+      and every theorem that quantifies over one still runs.
+
+    `Pred` mentions no `Term`, so it is not in the mutual block below. Its `eval` is not here
+    either: `inL` and `liftQ` are in `Combinators.lean`, which `Term.lean` does not import, so
+    `Pred.eval` sits beside `denote`. The type is the term language's; the meaning is the
+    denotation's. -/
+inductive Pred where
+  | members (k : GroundKind) (ls : NEFinset k.Carrier)
+  | each    (p : Pred)
+  | closure (q : Value → Bool)
 
 mutual
 
@@ -71,7 +99,7 @@ inductive Term where
   | tuple    (elems : List Term) (tail : Option Term)
   | record   (val : Term)
   | held     (inner : Term) (f : Value → Value) (g : Value → Value)
-  | refine   (inner : Term) (q : Value → Bool)
+  | refine   (inner : Term) (p : Pred)
   | legacy   (inner : Term) (r : Attr → Option Value)
   | nullable (inner : Term)
   /-- §3 `(lazy)`. The thunk is *not* `Unit → Term`: a closure adds no constructible

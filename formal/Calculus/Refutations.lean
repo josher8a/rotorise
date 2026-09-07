@@ -268,11 +268,11 @@ def predA : Value → Bool
 /-- At `"B"`: the outer refinement rejects it, the inner one never sees it — `f` has
     already replaced it with `"A"`. -/
 theorem not_equiv_refine_held :
-    ¬ Codec.Equiv (denote (.refine (.held .string isoF id) predA))
-                  (denote (.held (.refine .string predA) isoF id)) := by
+    ¬ Codec.Equiv (denote (.refine (.held .string isoF id) (.closure predA)))
+                  (denote (.held (.refine .string (.closure predA)) isoF id)) := by
   intro h
   have hv := (h.heldSet (.str "B")).mpr
-  simp [denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, Codec.through, Codec.restrict, stringCodec, isoF, predA] at hv
+  simp [denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, Codec.through, Codec.restrict, Pred.eval, stringCodec, isoF, predA] at hv
 
 /-! ## `legacy(c, r)` breaks (MP), and `e ∘ p ≢ id`
 
