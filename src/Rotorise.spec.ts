@@ -1357,7 +1357,7 @@ describe('the published surface', () => {
         'elementPredicates',
         'holds',
         // the value kinds a term takes, the two halves of the term cache, and the mark reader
-        'carries',
+        'valueKinds',
         'termOf',
         'codecOfTerm',
         'constantOf',

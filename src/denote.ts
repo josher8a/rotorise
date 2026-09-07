@@ -44,7 +44,7 @@ import type {
 import type { Result } from './result'
 import { andThen, CodecError, every, everyEntry, failed } from './result'
 import type { Body, Literal, Predicate, Term } from './term'
-import { member as termMember } from './term'
+import { occV, member as termMember } from './term'
 import {
     asRecord,
     copiedPerRead,
@@ -1672,72 +1672,35 @@ export const decodeUnknown = (
 }
 
 /**
- * The kind of JavaScript value this codec encodes from, where the kind alone decides.
+ * `occV`'s answer, coarsened to the alphabet a **value** can be classified into.
  *
- * The mirror of `member`, and it exists for a reason worth stating: **encoding does not
- * validate**. A codec's input is typed, so `number` given `'x'` writes `{ N: 'x' }` rather than
- * failing — which means "it encoded" is no evidence that an option was the right one, and a union
- * cannot be resolved by trying each option and seeing what sticks.
+ * `occV` reads a term and answers a {@link Slot}, which splits the three wire set families because
+ * a term carries its base. A value does not: `shapeOf` sees a `Set` and answers `'set'`, since
+ * telling `strSet` from `numSet` means inspecting the elements and **an empty `Set` belongs to no
+ * family at all**. So the two alphabets stay two, and this is the one-way map between them — from
+ * the term's to the value's, which is the only direction that is total.
  *
- * What it *can* be resolved by is this, first: `union([string, number])` given `'x'` has one option
- * that takes a string. Trying is still needed after it, because two options can take the same kind of
- * value and still be disjoint — `string('A')` and `string('B')` both take a string, and exactly one
- * of them accepts `'A'`.
- *
- * `undefined` means the kind does not decide: `opaque` takes anything, and asking a `lazy` would
- * force the resolution it exists to defer.
- *
- * **Not replaced by `occV`, and the one row where they differed no longer reaches a union.**
- * `occV` reads the term and this reads the codec, so the obvious deletion is to collapse `occV`'s
- * three set families to `'set'` and delete this. Measured at 35 constructors, the two agree at 34.
- * The row that differed was `opaque`: this answers `undefined` where `occV` gives the model's
- * closed form.
- *
- * **That row is moot for a union now.** The declaration guard refuses `union([opaque, X])`, because
- * an option `opaque` swallows can never be selected, so an `opaque` option only ever appears in a
- * union of one — where there is nothing to filter between. The difference cost a resolution
- * decision while such a union was declarable; it costs nothing now.
- *
- * What is left is a vocabulary question rather than a behaviour one, and the answer is that these
- * are two alphabets: this is `Shape`, the codomain of a value classifier, and `occV` is `Slot`,
- * the codomain of a term function. No total function takes a value to a `Slot`.
+ * **This replaced a second walk of the term.** `carries` answered the same question by recursing
+ * over the definition itself, and the two were kept in agreement by hand. Measured at 35
+ * constructors before the swap, they agreed at 34. The row that differed was `opaque`: the reader
+ * answered `undefined` — *unknown* — where `occV` gives the model's closed form, every constructor
+ * at `lossy` and every one but the numeric at `refuse`. `occV` is right, and the difference is now
+ * the desired behaviour rather than a divergence: a lone `opaque` that refuses numbers is filtered
+ * out on a number instead of attempted and failed, and `f083188` refused the unions where that
+ * filtering would have decided anything else.
  */
-export const carries = (codec: AnyCodec): readonly Shape[] | undefined => {
-    const def = codec.def
-    switch (def.kind) {
-        case 'refine':
-            return carries(codecOfTerm(def.inner))
-        case 'legacy':
-            return carries(codecOfTerm(def.inner))
-        // and this one deliberately does *not* read through. An adapter exists precisely to change
-        // the kind of value held — `held(string.set(), ...)` takes an array where `string.set()` takes
-        // a `Set` — so the inner codec's answer would be the wrong one. Nothing about the definition
-        // says what the outer kind is, so it says so by not answering, and a union falls back to
-        // trying it
-        case 'held':
-            return undefined
-        case 'nullable': {
-            const inner = carries(codecOfTerm(def.inner))
-            return inner && [...inner, 'null']
-        }
-        case 'union': {
-            const shapes = new Set<Shape>()
-            for (const variant of def.options) {
-                const of = carries(codecOfTerm(variant))
-                if (!of) return undefined
-                for (const shape of of) shapes.add(shape)
-            }
-            return [...shapes]
-        }
-        // the same fact from the other side of the pair, and the two sides do not agree base for
-        // base: `decimal(...)` takes a string and writes an `N`, exactly as bare `decimal` does
-        case 'literal':
-            return [literalShape[def.base]]
-        default: {
-            const one = carriedBy[def.kind]
-            return one && [one]
-        }
+export const valueKinds = (t: Term): readonly Shape[] | undefined => {
+    const slots = occV(t)
+    if (slots === undefined) return undefined
+    const out: Shape[] = []
+    for (const slot of slots) {
+        const shape: Shape =
+            slot === 'strSet' || slot === 'numSet' || slot === 'binSet'
+                ? 'set'
+                : slot
+        if (!out.includes(shape)) out.push(shape)
     }
+    return out
 }
 
 /**
@@ -1824,7 +1787,7 @@ export const optionOfTerm = (def: Term): Option => {
         return {
             codec,
             member: termMember(def),
-            carries: carries(codec),
+            carries: valueKinds(def),
             item: undefined,
             declares: undefined,
             requires: [],
@@ -1851,21 +1814,4 @@ export const optionOfTerm = (def: Term): Option => {
             )
             .join(', ')} }`,
     }
-}
-
-/** Which kind of value each kind of codec takes, where the kind alone decides. */
-export const carriedBy: { readonly [K in Term['kind']]?: Shape } = {
-    string: 'string',
-    // a decimal is stored as `N` and *held* as a string, which is the whole point of it
-    decimal: 'string',
-    number: 'number',
-    boolean: 'boolean',
-    binary: 'binary',
-    null: 'null',
-    set: 'set',
-    array: 'array',
-    tuple: 'array',
-    record: 'map',
-    object: 'map',
-    dunion: 'map',
 }

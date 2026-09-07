@@ -12,12 +12,12 @@
 import { describe, expect, it } from 'vitest'
 import {
     CodecError,
-    carries,
     decimal,
     discriminatedUnion,
     number,
     object,
     string,
+    valueKinds,
 } from './codec'
 
 const OpCodec = discriminatedUnion('type', [
@@ -63,7 +63,7 @@ describe('where the variants disagree', () => {
      */
     it('describes nothing readable, because there is no one codec to describe', () => {
         const ambiguous = Entity.at((p) => p.op.amount)
-        expect(carries(ambiguous)).toBeUndefined()
+        expect(valueKinds(ambiguous.def)).toBeUndefined()
         expect(ambiguous.def.kind).toBe('custom')
         // the path half is untouched, which is what `at` is most often for
         expect(ambiguous.path()).toBe('op.amount')

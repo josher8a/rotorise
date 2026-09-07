@@ -179,8 +179,10 @@ HOST = {
                  "accepts. `.separations.lean` pins the one-directional law between them",
     "identifies": "`src/term.ts`'s reader of whether a term decides which values are its own — "
                   "§5's fourth discharger row, and the exemption `separable` consults first",
-    "carries": "`src/codec.ts`'s reader of which value kinds a term takes — the union's "
-               "declaration filter. Internal since the surface enumeration (§10)",
+    "valueKinds": "`src/denote.ts`'s coarsening of `occV` to the alphabet a *value* can be "
+                  "classified into — the reader `carries` became. §5 cites the value-kind filter "
+                  "because a union's write side reads it; the model's `κ` is over `Kind`, which "
+                  "is the same coarsening one level up",
     "Separation": "`src/lean.ts`'s vector class carrying §5's bridge: one theorem per pair "
                   "`src/` refuses, asserting `Orth` does not certify it",
     "ReadVerdict": "`src/lean.ts`'s vector class carrying §10's read-side differential: "

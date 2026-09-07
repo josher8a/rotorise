@@ -12,12 +12,12 @@ import { describe, expect, it } from 'vitest'
 import type { N, NS, S, SS } from './attribute'
 import {
     CodecError,
-    carries,
     discriminatedUnion,
     number,
     object,
     string,
     union,
+    valueKinds,
 } from './codec'
 import { accepts, readsBack } from './denote'
 import { checkRoundTrip } from './testing'
@@ -71,7 +71,7 @@ describe('a numeric literal', () => {
     })
 
     it('takes a number, which is what a union filters on', () => {
-        expect(carries(status)).toEqual(['number'])
+        expect(valueKinds(status.def)).toEqual(['number'])
     })
 
     it('round-trips', () => {

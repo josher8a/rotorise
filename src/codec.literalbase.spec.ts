@@ -26,7 +26,6 @@ import {
     binary,
     boolean,
     CodecError,
-    carries,
     decimal,
     discriminatedUnion,
     failed,
@@ -34,6 +33,7 @@ import {
     object,
     string,
     union,
+    valueKinds,
 } from './codec'
 import { readsBack } from './denote'
 import { checkRoundTrip } from './testing'
@@ -143,7 +143,7 @@ describe('a decimal literal', () => {
 describe('the two bases that were unreachable', () => {
     it('holds a boolean literal, which the guessing form had no spelling for', () => {
         const yes = boolean(true)
-        expect(carries(yes)).toEqual(['boolean'])
+        expect(valueKinds(yes.def)).toEqual(['boolean'])
         expect(yes.unsafeDecode({ BOOL: true })).toBe(true)
         expect(readsBack(yes, { BOOL: false })).toBe(false)
         expect(() => yes.unsafeDecode({ BOOL: false })).toThrow(CodecError)
