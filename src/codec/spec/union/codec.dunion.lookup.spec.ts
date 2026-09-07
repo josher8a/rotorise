@@ -8,11 +8,12 @@
  * properties of the table rather than of the options, which is why neither showed up in a
  * round-trip test: each option round-trips perfectly on its own.
  *
- * The model states the first as a premise. `Calculus.Typed.dunion` carries `hdisj`, that the
- * options' tag sets are pairwise disjoint, so a union with two options answering to one tag is not
- * a `dunion` the calculus types. The library built it anyway and let the earlier option be
- * overwritten — the same shape as the four `native.ts` findings in §9 of `docs/codec-audit.md`: a
- * model premise the host did not check.
+ * The model makes the first unstatable rather than refusing it. `Calculus.Typed.dunion` keys its
+ * variants by tag, so a table cannot hold two entries for one key and there is no tag set left to
+ * compare; the one premise that remains, `hone`, says a variant's own discriminator field agrees
+ * with its key. So a union with two options answering to one tag is not a `dunion` the calculus
+ * types. The library built it anyway and let the earlier option be overwritten: a model fact the
+ * host did not carry.
  */
 import { describe, expect, it } from 'vitest'
 import { CodecError } from '../../../Rotorise'
