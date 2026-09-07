@@ -614,26 +614,23 @@ const leanTermOfTerm = (t: Term, at: string, forced: number): string => {
         }
         case 'dunion': {
             /**
-             * **The model reads a string tag and this host stores three bases in one.**
+             * **The two sides agree about what a tag is now, at two of the three bases.**
              *
              * `readTag` accepts `S` or `N`, so `discriminatedUnion` admits a discriminator at
              * `string`, `number` or `decimal` and refuses one at `boolean` or `binary` — a `BOOL`
-             * or a `B` names no tag a lookup could reach. `codec.numericliteral.spec.ts` declares
-             * a numeric enum as a union and reads the tag back as a number, deliberately.
+             * or a `B` names no tag a lookup could reach.
              *
-             * `Denote.lean`'s `tagsOfField` is `Finset String` and matches
-             * `some (.req (.literal .string ls))` alone, so the model reads a numeric tag's set as
-             * **empty**. Such a term emits and elaborates; what it loses is `Discharge.lean`'s
-             * `htags`, which needs every option's tag set non-empty, so the fourth-row discharge
-             * is unavailable for it. Nothing is unsound and nothing fails — the option simply
-             * stops being one the model can select by tag.
+             * `Denote.lean`'s `tagsOfField` used to match `some (.req (.literal .string ls))`
+             * alone, so the model read every other base's tag set as **empty** and this row
+             * refused all of them. It matches the decimal base too now, reading the literal's
+             * carrier as the text it is, and `Combinators.lean`'s stored-side tag reader takes an
+             * `.n` as well as an `.s`. So a decimal tag emits.
              *
-             * That is a gap between the two sides, and the emitter is where the two sides meet, so
-             * the emitter is where it is named. Measured when this was written: all four corpus
-             * unions use a string tag, so no vector was asserting anything about the other two.
-             * **Whether the host narrows to `string` or the model widens to the stored bases is a
-             * decision above this refusal**, and until it is taken a numeric tag is a codec this
-             * library builds and this bridge declines to state.
+             * **`number` stays refused, and the reason changed from a disagreement to a limit.**
+             * `Calculus.Double` is an axiom with no closed terms, so no numeric tag can appear in
+             * a term the model can state at all — the same reason the corpus carries no numeric
+             * value. The host builds one and reads it back as its text; that is a gap in what the
+             * bridge can propose, not a gap between the two rules.
              */
             const numeric = t.options.find((variant) => {
                 const field =
@@ -641,12 +638,12 @@ const leanTermOfTerm = (t: Term, at: string, forced: number): string => {
                         ? variant.body.fields[t.d]
                         : undefined
                 const tag = field?.mark === 'req' ? field.t : undefined
-                return tag?.kind === 'literal' && tag.base !== 'string'
+                return tag?.kind === 'literal' && tag.base === 'number'
             })
             if (numeric !== undefined) {
                 return refuse(
                     at,
-                    `this union's discriminator '${t.d}' is a literal at a base other than \`string\`, and \`Denote.lean\`'s \`tagsOfField\` reads a tag set from a string literal alone — so the model would read this option's tags as empty and \`Discharge.lean\`'s \`htags\` would not hold. \`readTag\` carries a tag as \`S\` or \`N\`, which is why the host admits it; the two sides disagree about what a tag is, and that is not the emitter's to guess`,
+                    `this union's discriminator '${t.d}' is a literal at the \`number\` base, and \`Calculus.Double\` is an axiom with no closed terms — so the model has no expression for this tag and never will. A tag at \`string\` or \`decimal\` emits: both carry their tag as text, which is what the model's tag readers answer. The same limit is why the corpus carries no numeric value`,
                 )
             }
             // One option, one tag: `discriminatedUnion` refuses a literal admitting several

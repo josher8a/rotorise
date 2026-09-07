@@ -47,6 +47,19 @@ def specOf : Term → Option (MapOf Bool)
     (`discriminatedUnion` demands a bare `literal`). -/
 def tagsOfField : Option Field → Finset String
   | some (.req (.literal .string ls)) => ls.1
+  -- A decimal literal holds its numeral as *text* and stores it as `N`, and the host's tag reader
+  -- accepts `S` or `N` and keys on the text either way. So the two bases are two ways of writing
+  -- one tag, not two tag types, and the set is `String` at both.
+  --
+  -- `Finset.map` and not `Finset.image`: the image needs `DecidableEq` on the codomain through a
+  -- route that reaches `Classical.choice`, measured, and `Subtype.val` is injective so the
+  -- embedding is free.
+  | some (.req (.literal .decimal ls)) =>
+      ls.1.map ⟨Subtype.val, fun _ _ h => Subtype.ext h⟩
+  -- **`number` is the base the model cannot spell a tag at.** `Double` is an axiom with no closed
+  -- terms, so no numeric tag can appear in a term this development can state, and
+  -- `DecidableEq WFDouble` is a field of `numericHost` besides. The host builds one and reads it
+  -- back as its text; `src/lean.ts` refuses to emit it and says so. That gap is written, not fixed.
   | _ => ∅
 
 /-- A body's tags on discriminator `d`: the field declared at `d`, if any, read as a tag set. -/

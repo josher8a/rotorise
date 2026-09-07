@@ -3,9 +3,9 @@
   "branches": {
     "Calculus/Axioms.lean": 1,
     "Calculus/Codec.lean": 21,
-    "Calculus/Combinators.lean": 1018,
+    "Calculus/Combinators.lean": 1021,
     "Calculus/Continuity.lean": 49,
-    "Calculus/Denote.lean": 96,
+    "Calculus/Denote.lean": 97,
     "Calculus/Discharge.lean": 138,
     "Calculus/Domain.lean": 127,
     "Calculus/Equations.lean": 153,
@@ -18,7 +18,7 @@
     "Calculus/Opaque.lean": 204,
     "Calculus/Orthogonality.lean": 316,
     "Calculus/Refutations.lean": 109,
-    "Calculus/Soundness.lean": 340,
+    "Calculus/Soundness.lean": 343,
     "Calculus/Term.lean": 55,
     "Calculus/Typing.lean": 67,
     "Calculus/Vectors.lean": 201
@@ -90,7 +90,7 @@
     "Calculus/Opaque.lean": 43,
     "Calculus/Orthogonality.lean": 16,
     "Calculus/Refutations.lean": 1,
-    "Calculus/Soundness.lean": 27,
+    "Calculus/Soundness.lean": 25,
     "Calculus/Term.lean": 1,
     "Calculus/Typing.lean": 0,
     "Calculus/Vectors.lean": 0
