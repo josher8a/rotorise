@@ -57,8 +57,8 @@ import type {
     Rng,
     SetBase,
 } from './codec'
-import { CodecError, carries, codecOfTerm, failed, opaque } from './codec'
-import { holds, readsBack, variantTag } from './denote'
+import { CodecError, codecOfTerm, failed, opaque } from './codec'
+import { holds, readsBack, valueKinds, variantTag } from './denote'
 import type { Field, Predicate, Term } from './term'
 import { member as termMember } from './term'
 import { shapeOf } from './value'
@@ -1894,7 +1894,7 @@ const byTag = (
  * is the attempt alone — which is the honest answer for a `custom` and is how one gets caught.
  */
 const byKindThenAttempt = (codec: AnyCodec): UnionOption => {
-    const takes = carries(codec)
+    const takes = valueKinds(codec.def)
     const member = termMember(codec.def)
     return {
         codec,

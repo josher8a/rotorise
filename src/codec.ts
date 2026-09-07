@@ -52,7 +52,7 @@ import {
  * pass. Six of the eight go in the pass that deletes the readers; `codecOfTerm` and `termOf` stay,
  * and their callers move to the module that owns them there.
  */
-export { carries, codecOfTerm, termOf } from './denote'
+export { codecOfTerm, termOf, valueKinds } from './denote'
 
 import type { ErrorMessage, show } from './utils'
 import { describeShape, namesFit, namesOf, readTag, sameLiteral } from './value'

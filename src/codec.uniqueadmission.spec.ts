@@ -21,7 +21,6 @@ import {
     array,
     boolean,
     CodecError,
-    carries,
     custom,
     decimal,
     discriminatedUnion,
@@ -33,6 +32,7 @@ import {
     record,
     string,
     union,
+    valueKinds,
 } from './codec'
 import { Attribute } from './Rotorise'
 import { checkUniqueAdmission } from './testing'
@@ -218,7 +218,7 @@ describe('the defect (U) found: an option with no κ on the write side', () => {
      *
      * - `writes(held(decimal, …))` is `'N'` — the stored member is the *inner* codec's, so the read
      *   side has a `κ` and tells the two options apart.
-     * - `carries(held(decimal, …))` is `undefined` — the adapter's carrier is a caller's type, and
+     * - the value kinds of `held(decimal, …)` are unknown — the adapter's carrier is a caller's type, and
      *   §1's `Value` has no point for a `Date`. So there is no `κ` on the write side, and
      *   `shapeOf(new Date())` is `undefined` too: the filter cannot even be applied to the value.
      *
@@ -250,7 +250,7 @@ describe('the defect (U) found: an option with no κ on the write side', () => {
         // what `carries` reports, and that it reports nothing is the claim
         const at = held(decimal, asDate)
         expect(memberOf(at.encode(new Date(0)) as never)).toBe('N')
-        expect(carries(at)).toBeUndefined()
+        expect(valueKinds(at.def)).toBeUndefined()
     })
 
     it('reads back from either member', () => {
