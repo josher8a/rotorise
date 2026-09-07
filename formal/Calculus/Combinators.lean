@@ -2217,15 +2217,38 @@ abbrev nullOption : OptionSem := .byAttempt nullCodec
 /-- §5's discriminator projection: the tag an item carries at `d`, where it carries one.
     A membership decision and a function application, where the list representation needed
     a `lookup`. -/
-def tagOfV (d : Name) : Value → Option String
-  | .map keys f =>
-    if h : d ∈ keys then (match f ⟨d, h⟩ with | .str s => some s | _ => none) else none
+def Value.tagText : Value → Option String
+  | .str s => some s
   | _ => none
 
-/-- …and on the stored side. -/
+/-- …and its stored twin, which reads **two** members. A decimal tag writes a `.str` and stores
+    an `.n`, so the value side has one row and the stored side has two. The host's tag reader
+    accepts `S` or `N` and returns the text carried by either; this is that rule.
+
+    Named beside `Value.tagText` rather than written inline in `tagOfV`/`tagOfA`, because a
+    lemma about a tag is then a lemma about these and not about a match under a `dif`. -/
+def Attr.tagText : Attr → Option String
+  -- the binders are not `s` and `n`: this definition opens the `Attr` namespace, where those
+  -- two names are the constructors themselves
+  | .s text => some text
+  | .n num => some num.1
+  | _ => none
+
+def tagOfV (d : Name) : Value → Option String
+  | .map keys f => if h : d ∈ keys then (f ⟨d, h⟩).tagText else none
+  | _ => none
+
+/-- …and on the stored side, where the field may be `S` **or** `N`.
+
+    A decimal tag writes a `.str` and stores an `N`, so the value side is covered by the `.str`
+    row above and the stored side needs this one. Without it a decimal-tagged variant would be
+    selectable on write and unreachable on read, which is the asymmetry `GroundKind.decimal`
+    creates everywhere: its value is text and its member is numeric.
+
+    The host reads a tag from the stored item and accepts `S` or `N`, returning the text carried
+    by either. This is that rule. -/
 def tagOfA (d : Name) : Attr → Option String
-  | .m keys g =>
-    if h : d ∈ keys then (match g ⟨d, h⟩ with | .s s => some s | _ => none) else none
+  | .m keys g => if h : d ∈ keys then (g ⟨d, h⟩).tagText else none
   | _ => none
 
 /-- A `(dunion)` option is admitted by its discriminator tag. -/

@@ -333,15 +333,24 @@ end
 /-! ## The `(dunion)` stamp -/
 
 /-- Typing's nonempty-tags premise **is** a shape constraint: `tagsOf` is empty for
-    everything except an object whose `d` field is a `req literal` **at the string base**, so a
-    term with tags is one, and its tags are that literal's set. Stated once, it replaces the
+    everything except an object whose `d` field is a `req literal` at a base that names a tag, so
+    a term with tags is one, and its tags are that literal's set. Stated once, it replaces the
     outer case analysis in `dunion_stamp` below.
 
-    The base is now part of the shape rather than part of the constructor's name, which is the
-    one place the collapse shows up as a change of statement rather than a deletion. -/
+    **Two bases name a tag, and the base stays existential.** `string` and `decimal`, because the
+    host's tag reader accepts `S` or `N` and keys on the text either way, and a decimal literal
+    holds its numeral as text. `number` does not, and the reason is not policy: `Double` is an
+    axiom with no closed terms, so no numeric tag can appear in a term this development can state.
+    The remaining three name no tag a lookup could reach.
+
+    The conclusion is stated through `tagsOfField` rather than through the literal's own set,
+    which is what lets the base stay existential: at `string` the set is `ls.1` and at `decimal`
+    it is that set's texts, and no consumer needs to know which. -/
 theorem tagsOf_ne_nil {d : Name} {t : Term} (h : (tagsOf d t).Nonempty) :
-    ∃ b ls, t = .object b ∧
-      b.map.at d = some (.req (.literal .string ls)) ∧ tagsOf d t = ls.1 := by
+    ∃ (b : Body) (k : GroundKind) (ls : NEFinset k.Carrier), t = .object b ∧
+      (k = .string ∨ k = .decimal) ∧
+      b.map.at d = some (.req (.literal k ls)) ∧
+      tagsOf d t = tagsOfField (some (.req (.literal k ls))) := by
   cases t
   case object body =>
     cases hlk : MapOf.at (α := Field) body.map d with
@@ -354,11 +363,53 @@ theorem tagsOf_ne_nil {d : Name} {t : Term} (h : (tagsOf d t).Nonempty) :
         cases tlit
         case literal k ls =>
           cases k
-          case string => exact ⟨body, ls, rfl, hlk, by
-            simp only [tagsOf, Body.tags]; rw [hlk]; rfl⟩
+          case string => exact ⟨body, .string, ls, rfl, Or.inl rfl, hlk, by
+            simp only [tagsOf, Body.tags]; rw [hlk]⟩
+          case decimal => exact ⟨body, .decimal, ls, rfl, Or.inr rfl, hlk, by
+            simp only [tagsOf, Body.tags]; rw [hlk]⟩
           all_goals exact absurd h (by simp only [tagsOf, Body.tags]; rw [hlk]; simp [tagsOfField])
         all_goals exact absurd h (by simp only [tagsOf, Body.tags]; rw [hlk]; simp [tagsOfField])
   all_goals exact absurd h (by simp [tagsOf])
+
+/-- **A literal at a tag base stamps its tag on both sides**, and the two bases are one lemma
+    because the *readers* are uniform where the codecs are not.
+
+    `tagOfV` reads a `.str` and `tagOfA` reads an `.s` or an `.n`, and both answer the text. A
+    string literal writes `.str s` and stores `.s s`; a decimal literal writes `.str x.1` and
+    stores `.n ⟨x.1, _⟩`. So the value side is one row for both bases and the stored side is the
+    two rows `tagOfA` has, which is why `dunion_stamp` below no longer names a base. -/
+theorem literalCodec_tag {k : GroundKind} (hk : k = .string ∨ k = .decimal)
+    {ls : NEFinset k.Carrier} {v : Value} {a : Attr}
+    (h : (literalCodec k ls).e v = some a) :
+    ∃ tag ∈ tagsOfField (some (.req (.literal k ls))),
+      v.tagText = some tag ∧ a.tagText = some tag := by
+  rcases hk with rfl | rfl
+  · cases v
+    case str tagv =>
+      replace h : (if tagv ∈ ls.1 then some (Attr.s tagv) else none) = some a := by
+        simpa [literalCodec, baseCodec, Codec.restrict, inL, stringCodec] using h
+      split at h
+      · rename_i hin
+        refine ⟨tagv, by simpa [tagsOfField] using hin, rfl, ?_⟩
+        rw [← Option.some.inj h]; rfl
+      · exact nomatch h
+    all_goals exact absurd h (by
+      simp [literalCodec, baseCodec, Codec.restrict, inL, stringCodec])
+  · cases v
+    case str tagv =>
+      simp only [literalCodec, baseCodec, Codec.restrict, decimalCodec, inL] at h
+      split at h
+      · rename_i hst
+        split at h
+        · rename_i hin
+          refine ⟨tagv, ?_, rfl, ?_⟩
+          · simp only [tagsOfField, Finset.mem_map, Function.Embedding.coeFn_mk]
+            exact ⟨⟨tagv, hst⟩, of_decide_eq_true hin, rfl⟩
+          · rw [← Option.some.inj h]; rfl
+        · exact nomatch h
+      · exact nomatch h
+    all_goals exact absurd h (by
+      simp [literalCodec, baseCodec, Codec.restrict, inL, decimalCodec])
 
 /-- **Arity one is nonemptiness**, which is all the four-jobs inversion needs. `(dunion)`'s
     premise narrowed from `Nonempty` to `card = 1` when the discriminator became arity one, and
@@ -379,20 +430,19 @@ theorem dunion_stamp {d : Name} {opts : List Term}
       ∃ tag ∈ o.1, tagOfA d a = some tag ∧ tagOfV d t' = some tag := by
   refine forall_mem_map fun tx htx t' a he' => ?_
   replace he' : (denote tx).e t' = some a := he'
-  obtain ⟨body, ls, rfl, hlk, htagsls⟩ := tagsOf_ne_nil (htags tx htx)
+  obtain ⟨body, kb, ls, rfl, hkb, hlk, htagsls⟩ := tagsOf_ne_nil (htags tx htx)
   -- the payload's three components are what `objectCodecCore_e_inv` reads, so it is taken
   -- apart once, here, rather than threaded through the statement above
   obtain ⟨fields, ff, rest⟩ := body
-  -- no `cases fuel` any more: there is no dead denotation to rule out first
   replace he' : (objectCodec ⟨fields, fun k => fieldSem (ff k)⟩ (restSem rest)).e t' = some a :=
     he'
   obtain ⟨keys, fv, g, rfl, rfl, hval, hfi⟩ := objectCodecCore_e_inv he'
   -- the discriminator is declared and non-`opt`, so the key set carries it. Denoting
   -- the table does not touch its key set, so the term's lookup *is* the semantics'.
   have hslk : MapOf.at (⟨fields, fun k => fieldSem (ff k)⟩ : MapOf FieldSem) d
-      = some (FieldSem.req (denote (Term.literal .string ls))) := by
+      = some (FieldSem.req (denote (Term.literal kb ls))) := by
     obtain ⟨hdf, hfd⟩ := MapOf.at_eq_some.mp hlk
-    replace hfd : ff ⟨d, hdf⟩ = Field.req (Term.literal .string ls) := hfd
+    replace hfd : ff ⟨d, hdf⟩ = Field.req (Term.literal kb ls) := hfd
     refine MapOf.at_eq_some.mpr ⟨hdf, ?_⟩
     show fieldSem (ff ⟨d, hdf⟩) = _
     rw [hfd]; rfl
@@ -403,24 +453,15 @@ theorem dunion_stamp {d : Name} {opts : List Term}
   -- where the list representation had to find `d` in each row separately.
   have hw := funImage_some hfi ⟨d, hd⟩
   rw [show entryCodec ⟨fields, fun k => fieldSem (ff k)⟩
-        (rcOf (restSem rest)) d = some (denote (Term.literal .string ls)) by
+        (rcOf (restSem rest)) d = some (denote (Term.literal kb ls)) by
       simp only [entryCodec, hslk]; rfl] at hw
-  replace hw : (literalCodec .string ls).e (fv ⟨d, hd⟩) = some (g ⟨d, hd⟩) := hw
-  cases hfv : fv ⟨d, hd⟩ <;> rw [hfv] at hw
-  case str tagv =>
-    -- the literal codec is now `string`'s pair restricted rather than a hand-written
-    -- one, so the `if` is a step away instead of being the definition
-    replace hw : (if tagv ∈ ls.1 then some (Attr.s tagv) else none)
-        = some (g ⟨d, hd⟩) := by
-      simpa [literalCodec, baseCodec, Codec.restrict, inL, stringCodec] using hw
-    split at hw
-    · rename_i hin
-      replace hw : Attr.s tagv = g ⟨d, hd⟩ := by simpa using hw
-      exact ⟨tagv, htagsls ▸ hin,
-        by simp only [tagOfA, dif_pos hd, ← hw],
-        by simp only [tagOfV, dif_pos hd, hfv]⟩
-    · exact nomatch hw
-  all_goals exact nomatch hw
+  replace hw : (literalCodec kb ls).e (fv ⟨d, hd⟩) = some (g ⟨d, hd⟩) := hw
+  -- the base is existential from here: `literalCodec_tag` answers both of them, because the
+  -- two *readers* are uniform where the two codecs are not
+  obtain ⟨tag, htag, hv, ha⟩ := literalCodec_tag hkb hw
+  exact ⟨tag, htagsls ▸ htag,
+    by simp only [tagOfA, dif_pos hd]; exact ha,
+    by simp only [tagOfV, dif_pos hd]; exact hv⟩
 
 /-! ## The theorem
 

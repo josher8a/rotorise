@@ -438,25 +438,21 @@ describe('what cannot be emitted', () => {
     })
 
     /**
-     * **The two sides disagree about what a tag is, and the emitter is where they meet.**
+     * **The two sides agree about what a tag is now, at two of the three bases.**
      *
-     * `readTag` carries a tag as `S` or `N`, so `discriminatedUnion` admits a discriminator at
-     * `string`, `number` or `decimal` and refuses `boolean` and `binary` —
-     * `codec.numericliteral.spec.ts` declares a numeric enum as a union and reads the tag back as
-     * a number, on purpose. `Denote.lean`'s `tagsOfField` is `Finset String` and matches
-     * `some (.req (.literal .string ls))` alone, so the model reads a numeric tag's set as empty
-     * and `Discharge.lean`'s `htags` stops holding for that option.
+     * The host carries a tag as `S` or `N`, so `discriminatedUnion` admits a discriminator at
+     * `string`, `number` or `decimal` and refuses `boolean` and `binary`. `Denote.lean`'s
+     * `tagsOfField` used to match `some (.req (.literal .string ls))` alone, so the model read
+     * every other base's tag set as empty and this row refused all of them. It reads the decimal
+     * base too now — a decimal literal holds its numeral as text — and the model's stored-side
+     * tag reader takes an `.n` as well as an `.s`, so a decimal tag emits on both halves.
      *
-     * Nothing is unsound: the term emits and elaborates, and what it loses is a discharge, not a
-     * guarantee. But a vector asserting a tag selection the model reads as untagged would be
-     * asserting nothing, so the emitter declines rather than emitting it. **Measured when this
-     * was written: all four corpus unions use a string tag**, so no vector moved and no count did.
-     *
-     * Whether the host narrows to `string` or the model widens to the stored bases is a decision
-     * above this refusal. Until it is taken, the refusal is where the disagreement is written
-     * down, which is the same place `held`, `legacy` and a closure `refine` are written down.
+     * **`number` stays refused and the reason changed.** It was a disagreement between two rules;
+     * it is a limit on what the model can say. `Calculus.Double` is an axiom with no closed terms,
+     * so no numeric tag appears in any term the model can state — the same reason the corpus
+     * carries no numeric value. The host builds one and reads it back as text.
      */
-    it('refuses a discriminator the model reads no tags from', () => {
+    it('refuses a tag at the numeric base, which the model cannot spell', () => {
         const numeric = erase(
             discriminatedUnion('kind', [
                 object({ kind: number(0), a: string }),
@@ -464,21 +460,21 @@ describe('what cannot be emitted', () => {
             ]),
         )
         const why = refusal(() => leanTermOf(numeric)).reason
-        expect(why).toContain('tagsOfField')
-        expect(why).toContain('htags')
+        expect(why).toContain('no closed terms')
+        expect(why).toContain('number')
 
-        // a decimal tag is the same disagreement, because a decimal is stored in an `N` too
+        // **a decimal tag emits now**, which is the half of the disagreement that closed: it is
+        // stored in an `N` and carried as text, and both of the model's tag readers answer that
         const decimals = erase(
             discriminatedUnion('v', [
                 object({ v: decimal('1'), a: string }),
                 object({ v: decimal('2'), b: string }),
             ]),
         )
-        expect(refusal(() => leanTermOf(decimals)).reason).toContain(
-            'tagsOfField',
-        )
+        expect(leanTermOf(decimals)).toContain('Term.dunion')
+        expect(leanTermOf(decimals)).toContain('GroundKind.decimal')
 
-        // and a string tag emits, which is what makes the refusal about the base
+        // and a string tag emits, which it always did
         expect(
             leanTermOf(
                 erase(
