@@ -197,31 +197,3 @@ separates the two claims so that neither can be read as the other.
 `docs/codec-calculus.md`, and a rule whose held set is spelled as the denotation's cannot be read
 against the document it transcribes. The identity is what makes the transcription checked rather
 than advertised, and it means that only because the two sides are written independently.
-
----
-
-## Known: `npm ci` fails, because the lockfile is out of sync with `package.json`
-
-**Observation.** `npm ci` refuses to install. Measured 2026-09-07, in the container the repository
-declares:
-
-    npm ci
-    npm error Missing: obliterator@1.6.1 from lock file
-
-The package obliterator appears nowhere in `package-lock.json` and nowhere in `node_modules/`.
-npm 10.9.2 names the missing package; npm 9.6.6 reports the same refusal as EUSAGE, "npm ci can
-only install packages when your package.json and package-lock.json are in sync". So the refusal
-is the lockfile rather than the npm version or the image. `package.json` last changed in
-`e75cfe9` and `package-lock.json` in `6062b41`, which is earlier.
-
-**Effect.** A fresh clone gets no working container. The dev container runs `npm ci` when it is
-created, so the command exits nonzero and the container reports a failed create. An
-existing `node_modules/` is unaffected, because `npm ci` refuses before it deletes anything, which
-is why every check in this tree still passes.
-
-**Pin.** None. No check runs `npm ci`, and the four checks that need `node_modules/` read the tree
-that is already installed. The command above is the instrument.
-
-**Open.** The repair is `npm install --package-lock-only`, which touches the lockfile alone and
-rewrites the resolved dependency graph of a published library. That is JH's decision rather than a
-pass's.

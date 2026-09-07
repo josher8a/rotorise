@@ -127,14 +127,18 @@ describe('the port agrees with the SDK it was ported from', () => {
 
     it('agrees on a whole item, both directions', () => {
         const entity = { id: 'p1', price: 10.5, tags: new Set(['a']) }
-        const theirs = sdk.marshall(entity) as AttributeMap
+        const theirs = sdk.marshall(entity)
         const ours = Object.fromEntries(
             Object.entries(entity).map(([k, v]) => [k, native.encode(v)]),
         )
         expect(ours).toEqual(theirs)
         expect(sdk.unmarshall(theirs)).toEqual(
             Object.fromEntries(
-                Object.entries(theirs).map(([k, v]) => [k, native.decode(v)]),
+                // the SDK's wire type, read by this library's decoder
+                Object.entries(theirs as AttributeMap).map(([k, v]) => [
+                    k,
+                    native.decode(v),
+                ]),
             ),
         )
     })
