@@ -17,12 +17,8 @@ import {
     number,
     object,
     string,
-    writes,
+    valueKinds,
 } from './codec'
-
-type Op =
-    | { type: 'SHIPMENT'; amount: string; note: string }
-    | { type: 'COUNTER'; amount: string; note: string }
 
 const OpCodec = discriminatedUnion('type', [
     object({ type: string('SHIPMENT'), amount: decimal, note: string }),
@@ -55,13 +51,20 @@ describe('where the variants disagree', () => {
 
     /**
      * And it says nothing about *what* is there, because there is no single thing. This used to be
-     * a `CodecDef` kind — a definition, in a language of codec definitions, for something that was
+     * a `Def` kind — a definition, in a language of codec definitions, for something that was
      * not a codec — so every reader of a definition had to carry a case for it.
+     *
+     * **The rule is that no reader learns anything here, and the assertion on `carries` is that
+     * rule.** It used to be asserted as `def === undefined`, which was the implementation of the
+     * rule rather than the rule: a definition is now required of every codec, and the one that says
+     * "a pair of functions, nothing beneath" is `custom`. Every reader answers what it answered.
+     * The `kind` is asserted rather than the whole definition, because `custom` carries the two
+     * functions themselves and comparing closures pins the construction rather than the rule.
      */
-    it('carries no definition, because there is no one codec to describe', () => {
+    it('describes nothing readable, because there is no one codec to describe', () => {
         const ambiguous = Entity.at((p) => p.op.amount)
-        expect(ambiguous.def).toBeUndefined()
-        expect(writes(ambiguous)).toBeUndefined()
+        expect(valueKinds(ambiguous.def)).toBeUndefined()
+        expect(ambiguous.def.kind).toBe('custom')
         // the path half is untouched, which is what `at` is most often for
         expect(ambiguous.path()).toBe('op.amount')
     })
@@ -84,7 +87,6 @@ describe('where they agree, or only one declares it', () => {
     })
 
     it('resolves an attribute only one variant has', () => {
-        type Mixed = { tag: 'A'; only: number } | { tag: 'B'; shared: string }
         const M = object({
             m: discriminatedUnion('tag', [
                 object({ tag: string('A'), only: number }),

@@ -42,7 +42,7 @@ CONSTRUCTIONS = [
     ("setCodec", "setCodec"), ("arrayCodec", "arrayCodec"),
     ("recordCodec", "recordCodec"), ("tupleCodec", "tupleCodec"),
     ("objectCodecCore", "objWrite"), ("altCodec", "altCodec"),
-    ("dunionCodec", "dunionCodec"), ("opaqCodec", "opaqCodec"),
+    ("dunionTable", "dunionTable"), ("opaqCodec", "opaqCodec"),
 ]
 # constructions whose slot is deliberately empty, with the reason
 EXEMPT = {("extendRead", "lawful"): "(MP) is the sanctioned breach — §5's first residue"}

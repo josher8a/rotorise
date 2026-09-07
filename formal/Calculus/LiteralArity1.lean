@@ -23,8 +23,9 @@ of one `numberCodec` at disjoint predicates, which is all `uniqueAdmission_of_sh
 needs.
 `uAtCan_of_literalN_disjoint` already made that argument for a union of n-ary numeric literals
 and never used the n-ary constructor to make it — only the shared base — so it holds for
-singletons too. The table now agrees (`sepA_literalN_disjoint`); the correction is recorded
-below and it does not change a line of this file's proofs, which never appealed to the table.
+singletons too. The read-side row agrees, asking the codec rather than answering
+`⊤`; the correction is recorded below and it does not change a line of this file's proofs,
+which never appealed to the table.
 
 **So why is the constructor n-ary?** Because the union route cannot carry `ℓ` as a `Finset`.
 `Term.union` takes a `List Term`; bridging from a `NEFinset` is `Finset.toList`, which is
@@ -138,16 +139,15 @@ theorem dincomp_map_literal_num {l : List WFDouble} (hnd : l.Nodup) :
 
 /-! ## (U) at the numeric base
 
-**`admA` does not need to *name* the attributes that read into `ℓ`, only to decide one.** The
+**`AdmA` does not need to *name* the attributes that read into `ℓ`, only to decide one.** The
 tempting inference is that it does: the stored text goes through `Double.ofDec`, and no
 syntactic set of attributes names the numerals reading into a given value. That is a fact about
 *values*. `ofDec` is a **function** — a stored numeral reads to at most one double, and one
 double cannot inhabit two disjoint sets — so the answer is unique without being nameable, and
 the row obtains it by calling the codec.
 
-So `admALit`'s `.number` row is `((literalCodec .number ls).p ·).isSome`, and
-`sepA_literalN_disjoint` separates two disjoint numeric literals in the table, with
-`admA_literalN_sees` stating what an `N` attribute must satisfy to be admitted.
+So `AdmALit`'s `.number` row is `((literalCodec .number ls).p ·).isSome`, which separates two
+disjoint numeric literals term by term.
 
 The pair reading is not superseded and is the one used below: `uniqueAdmission_of_sharedBase`
 settles an `n`-ary family on both sides in one step where the table settles a pair at a time.
@@ -175,7 +175,7 @@ theorem uAtCan_map_literal_str {l : List String} (hnd : l.Nodup) :
     cases v <;> simp_all [inL, NEFinset.of]
 
 /-- …and at the numeric base, by the same shared-base route: `n`-ary and both sides in one
-    step, which is what this route buys over the table's pairwise `sepA_literalN_disjoint`. -/
+    step, which is what this route buys over a pairwise separation read off the table. -/
 theorem uAtCan_map_literal_num {l : List WFDouble} (hnd : l.Nodup) :
     UAtCan (l.map fun d => .literal .number (.of d ∅)) := by
   show UniqueAdmission (semsOf _)
@@ -283,11 +283,11 @@ theorem mem_tagStringsOf_union (l : List String) (x : String) :
 
 `refine(base, · ∈ ℓ)` is the second derivation of `literal`, and until now it cost precision:
 `admA (.refine t q)` dropped `q`, so the refinement form was **blind on the read side** where
-`admALit` was not. That was the argument against a literal API in which every primitive codec
+the read-side literal row was not. That was the argument against a literal API in which every primitive codec
 accepts its own alternatives — `string('A')`, `number(1)`, `decimal('1')` — since the natural
 encoding of that API is a refinement.
 
-The argument is gone with the row. `admA` at a `refine` decodes with the base and applies `q`,
+The argument is gone with the row. `AdmA` at a `refine` decodes with the base and applies `q`,
 and `literalCodec k ls` **is** `(baseCodec k).restrict (inL k ls)`, so the two terms denote the
 same read and the two rows now compute the same answer, at every base including `number`.
 
@@ -311,75 +311,11 @@ theorem denote_groundTerm (k : GroundKind) : denote (groundTerm k) = baseCodec k
 /-- **`literal k ℓ` and `refine(base k, ∈ ℓ)` denote the same pair**, up to the held set the
     literal carries — which `restrict` cannot know and `T` is not consulted by either row. -/
 theorem denote_refine_ground_p (k : GroundKind) (ls : NEFinset k.Carrier) (a : Attr) :
-    (denote (.refine (groundTerm k) (inL k ls))).p a = (denote (.literal k ls)).p a := by
+    (denote (.refine (groundTerm k) (.members k ls))).p a = (denote (.literal k ls)).p a := by
   cases k <;> rfl
 
-/-- **The question the row was changed to settle: yes.** `refine(base, ∈ ℓ)` is exactly as
-    precise on the readable side as `literal base ℓ`, at every ground base — the numeric one
-    included, where both rows ask the codec and get the same answer. A uniform
-    `string('A')` / `number(1)` / `decimal('1')` API pays nothing for being uniform. -/
-theorem admA_refine_ground_eq_admALit (k : GroundKind) (ls : NEFinset k.Carrier) (a : Attr) :
-    admA (.refine (groundTerm k) (inL k ls)) a = admALit k ls a := by
-  cases k
-  case string => cases a <;> simp [admA, admALit, refineReads, groundTerm, denote,
-                                   stringCodec, inL]
-  case boolean => cases a <;> simp [admA, admALit, refineReads, groundTerm, denote,
-                                    booleanCodec, inL]
-  case binary => cases a <;> simp [admA, admALit, refineReads, groundTerm, denote,
-                                   binaryCodec, inL]
-  case null => cases a <;> simp [admA, admALit, refineReads, groundTerm, denote,
-                                 nullCodec, inL]
-  case decimal =>
-    show (admA .decimal a && refineReads (groundTerm .decimal) (inL .decimal ls) a)
-        = ((literalCodec .decimal ls).p a).isSome
-    rw [show ((literalCodec .decimal ls).p a)
-          = (decimalCodec.p a).bind (fun v => if inL .decimal ls v then some v else none) from rfl]
-    show (admA .decimal a &&
-        (match decimalCodec.p a with | some v => inL .decimal ls v | none => false)) = _
-    cases h : decimalCodec.p a <;> cases a <;> simp_all [admA, decimalCodec]
-    split <;> simp_all
-  case number =>
-    show (admA .number a && refineReads (groundTerm .number) (inL .number ls) a)
-        = ((literalCodec .number ls).p a).isSome
-    rw [show ((literalCodec .number ls).p a)
-          = (numberCodec.p a).bind (fun v => if inL .number ls v then some v else none) from rfl]
-    show (((numberCodec.p a).isSome : Bool) &&
-        (match numberCodec.p a with | some v => inL .number ls v | none => false)) = _
-    cases h : numberCodec.p a <;> simp [h]
-    split <;> simp_all
 
-/-- On the write side the refinement is **at least** as precise, and at `number` strictly:
-    `adm (.literal .number ls)` is `inL` alone. -/
-theorem adm_refine_ground_le_adm_literal (k : GroundKind) (ls : NEFinset k.Carrier)
-    (v : Value) :
-    adm (.refine (groundTerm k) (inL k ls)) v = true → adm (.literal k ls) v = true := by
-  cases k <;> · intro h; rw [adm] at h; exact (Bool.and_eq_true _ _ ▸ h).2
 
-/-- …and every base but `number` is an equality — for two different reasons, and the second
-    is why `decimal` is worth a base of its own.
 
-    At `string`, `boolean`, `binary` and `null` the base's own row is `⊤`, so the refinement adds
-    nothing and the two coincide trivially. At `decimal` the row is *not* `⊤` — `isStored` gates
-    it — and the equality holds anyway, because **membership in the alternatives implies the
-    gate**: the carrier is `StoredNumeral`, so there is no alternative that fails `Stored`.
-
-    That is exactly what fails at `number`. There the carrier is `Double` and §1's `D` is a
-    predicate on its *text*, so `ls` may hold a double outside `D`, `inL` admits it and the
-    base refuses it — which is why `adm (.literal .number ls)` over-approximates by precisely
-    the conjunct `adm (.refine …)` carries. Typing the carrier is the whole difference. -/
-theorem adm_refine_ground_eq_adm_literal (k : GroundKind) (ls : NEFinset k.Carrier)
-    (v : Value) (hk : k ≠ .number) :
-    adm (.refine (groundTerm k) (inL k ls)) v = adm (.literal k ls) v := by
-  cases k
-  case number => exact absurd rfl hk
-  -- the gate is in the carrier, so `inL` already carries it
-  case decimal =>
-    cases v <;> simp only [adm, groundTerm, inL, isStored] <;> (try split) <;> simp_all
-  all_goals simp [adm, groundTerm]
-
-/-- The numeric row, written out: the refinement carries §1's `D` gate that the literal's row
-    drops. -/
-theorem adm_refine_ground_number (ls : NEFinset WFDouble) (v : Value) :
-    adm (.refine (groundTerm .number) (inL .number ls)) v = (inD v && inL .number ls v) := rfl
 
 end Calculus

@@ -70,7 +70,16 @@ describe('a codec that does not', () => {
         }
     })
 
-    /** A list and a set hold the same strings and are not the same attribute. */
+    /**
+     * A list and a set hold the same strings and are not the same attribute.
+     * @anchored
+     */
+    /**
+     * **Pins wording, because the *message* is the only channel this fact travels on.** Write
+     * parity and read parity are the two directions `checkAgainst` compares, both reported as one
+     * `CodecError`; asserting the type alone would make this test and its sibling
+     * indistinguishable. Same reason as `codec.uniqueadmission.spec.ts`'s (U) pair.
+     */
     it('reports a set stored as a list', () => {
         const asList: Reference<Pet> = {
             marshall: (pet) => ({
@@ -86,6 +95,13 @@ describe('a codec that does not', () => {
     /**
      * The half that matters more: a codec can be right about every future write and still be
      * unable to read the rows that are already there.
+     * @anchored
+     */
+    /**
+     * **Pins wording, because the *message* is the only channel this fact travels on.** Write
+     * parity and read parity are the two directions `checkAgainst` compares, both reported as one
+     * `CodecError`; asserting the type alone would make this test and its sibling
+     * indistinguishable. Same reason as `codec.uniqueadmission.spec.ts`'s (U) pair.
      */
     it('reports where an existing row reads back differently', () => {
         const readsDifferently: Reference<Pet> = {
@@ -375,6 +391,9 @@ describe('a codec against the SDK itself', () => {
             id: { S: 'p' },
             price: { N: wide },
         })
+        // **Not a `CodecError`** — this is the SDK refusing, not this library, so the assertion
+        // stays on its message. There is no type of ours to name here, and asserting a bare throw
+        // would not distinguish the digit limit from any other way `marshall` can fail.
         expect(() => sdk.marshall({ price: Number(wide) })).toThrow(
             /greater than Number.MAX_SAFE_INTEGER/,
         )

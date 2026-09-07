@@ -6,22 +6,35 @@
  */
 import { describe, expect, it } from 'vitest'
 import type { Attribute, AttributeValue } from './attribute'
+import type { Rng } from './codec'
 import { type AttributeCodec, custom, object, optional, string } from './codec'
 import { checkRoundTrip } from './testing'
+
+/**
+ * The generator and the shrinker, named once because three codecs here state the same two.
+ *
+ * They were read back off the first codec — `truncating.arbitrary` — until `arbitrary` and `shrink`
+ * left the codec object. A caller states a generator, the term carries it, and nothing reads it
+ * back off the pair, so the way to share one is to name it.
+ */
+const someTruncatable = (rng: Rng) =>
+    'abcdefgh'.slice(0, 1 + Math.floor(rng() * 8))
+
+const shrinkTruncatable = (value: string): readonly string[] =>
+    value === ''
+        ? []
+        : [
+              '',
+              value.slice(0, Math.floor(value.length / 2)),
+              value.slice(0, -1),
+          ].filter((x) => x !== value)
 
 /** Round-trips only strings of three characters or fewer. */
 const truncating: AttributeCodec<string, Attribute<'S'>> = custom({
     encode: (value: string) => ({ S: value }) as Attribute<'S'>,
     decode: (attribute) => ((attribute as { S: string }).S ?? '').slice(0, 3),
-    arbitrary: (rng) => 'abcdefgh'.slice(0, 1 + Math.floor(rng() * 8)),
-    shrink: (value) =>
-        value === ''
-            ? []
-            : [
-                  '',
-                  value.slice(0, Math.floor(value.length / 2)),
-                  value.slice(0, -1),
-              ].filter((x) => x !== value),
+    arbitrary: someTruncatable,
+    shrink: shrinkTruncatable,
 })
 
 /** Same, but empty throws — a *different* failure mode that shrinking must not drift into. */
@@ -30,8 +43,8 @@ const truncatingButEmptyThrows: AttributeCodec<string, Attribute<'S'>> = custom<
     Attribute<'S'>
 >({
     encode: truncating.encode,
-    arbitrary: truncating.arbitrary,
-    shrink: truncating.shrink,
+    arbitrary: someTruncatable,
+    shrink: shrinkTruncatable,
     decode: (attribute: AttributeValue) => {
         const carried = (attribute as { S: string }).S ?? ''
         // deliberately *thrown*, not returned: a bug in a caller's own codec is not a decoding
@@ -105,9 +118,22 @@ describe('shrinking', () => {
         )
     })
 
+    /**
+     * Declared without a `shrink` rather than spread over one and overridden.
+     *
+     * This used to read `{ ...truncating, shrink: undefined }`, which worked because the field
+     * beside the definition won over the definition. It does not any more: a codec's generation is
+     * read from the term, so a spread that contradicts the term is a codec saying two things. The
+     * rule under test is unchanged — with nothing to shrink with, the report says nothing about
+     * shrinking.
+     */
     it('says nothing about shrinking when the first case is already minimal', () => {
         const Broken = object({
-            c: { ...truncating, shrink: undefined },
+            c: custom<string, Attribute<'S'>>({
+                encode: truncating.encode,
+                decode: truncating.decode,
+                arbitrary: someTruncatable,
+            }),
         }).item
         expect(
             messageOf(() => checkRoundTrip(Broken, { seed: 5 })),

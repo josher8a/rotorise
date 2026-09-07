@@ -7,7 +7,17 @@
  */
 import { describe, expect, it } from 'vitest'
 import type { AnyCodec } from './codec'
-import { CodecError, object, opaque, refine, string } from './codec'
+import {
+    CodecError,
+    codecOfTerm,
+    fallback,
+    object,
+    opaque,
+    optional,
+    refine,
+    string,
+    termOf,
+} from './codec'
 import { tableEntry } from './Rotorise'
 import { checkMembersStable, checkRoundTrip } from './testing'
 
@@ -125,6 +135,12 @@ describe("what 'drop' means, said out loud", () => {
 describe("'refuse', for a service that owns its table", () => {
     const Strict = object({ id: string }, 'refuse').item
 
+    /**
+     * **Pins wording no law has, deliberately.** The refusal is asserted as a `CodecError` beside
+     * it; what the regex adds is the diagnostic, which is this test's subject. Here it is that `'refuse'`
+     * says the schema and the data have *drifted*, which is the whole difference between this
+     * policy and `'drop'` — both refuse nothing silently, and only one explains why.
+     */
     it('reports drift instead of ignoring it', () => {
         expect(() =>
             Strict.unsafeDecode({ id: { S: 'w1' }, addedLastWeek: { S: 'x' } }),
@@ -141,10 +157,11 @@ describe("'refuse', for a service that owns its table", () => {
 })
 
 /**
- * **The policy, in the definition.**
+ * **The policy, in the term.**
  *
- * `CodecDef` is this library's own abstract syntax, and `src/lean.ts` reads it to reconstruct the
- * equivalent term in `formal/`. It used to record the rest *codec* alone — `undefined` for both
+ * `Term` is this library's own abstract syntax, and `src/lean.ts` reads it to reconstruct the
+ * equivalent term in `formal/`. The definition it replaced used to record the rest *codec* alone —
+ * `undefined` for both
  * `'drop'` and `'refuse'` — on the argument that neither contributes an attribute to generate. That
  * argument covers the write half and only the write half: the two policies disagree about whether an
  * undeclared name is an error, which is the read half, so two codecs that behave differently had
@@ -160,25 +177,67 @@ describe("'refuse', for a service that owns its table", () => {
 describe('the rest policy a definition records', () => {
     it('tells the two string policies apart', () => {
         expect(object({ id: string }, 'drop').def).toMatchObject({
-            kind: 'attributes',
-            rest: 'drop',
+            kind: 'object',
+            body: { rest: 'drop' },
         })
         expect(object({ id: string }, 'refuse').def).toMatchObject({
-            kind: 'attributes',
-            rest: 'refuse',
+            kind: 'object',
+            body: { rest: 'refuse' },
         })
     })
 
-    it('records a rest codec as itself, not as a flag', () => {
+    /**
+     * The policy is recorded as the rest codec's **term**, and identity is what is asserted.
+     *
+     * A definition's children are terms, so the third policy is `scalar`'s term rather than
+     * `scalar`. What the rule needs is unchanged and is what this checks: the three policies are
+     * three values, and the third is enough to rebuild the codec a consumer must run. `codecOfTerm`
+     * memoises on the frozen term, so rebuilding it runs what was declared.
+     *
+     * The rebuilt codec is not `scalar` itself, and that is the design rather than a loss:
+     * `refine` returns `setCapable(codecOfTerm(...))`, so `.set` is a capability sitting *above*
+     * the term's codec. What the walk owes is the behaviour, which is what the second line asks.
+     */
+    it('records a rest codec as its term, not as a flag', () => {
         const def = object({ vendorId: string('ACME', 'GLOBEX') }, scalar).def
-        expect(def).toMatchObject({ kind: 'attributes' })
-        expect((def as { rest: unknown }).rest).toBe(scalar)
+        expect(def).toMatchObject({ kind: 'object' })
+        expect(def.kind === 'object' && def.body.rest).toMatchObject({
+            kind: 'codec',
+        })
+        expect(
+            def.kind === 'object' &&
+                typeof def.body.rest !== 'string' &&
+                def.body.rest.t,
+        ).toBe(scalar.def)
+        expect(codecOfTerm(termOf(scalar)).encode('x' as never)).toEqual(
+            scalar.encode('x'),
+        )
+    })
+
+    /**
+     * The refusal that only a cast can reach, and it had no test.
+     *
+     * `termOf` is the one place a child is taken from something a caller handed over, and since a
+     * codec's definition became a term the checker refuses a field before the call is written. That
+     * makes the branch look dead and it is not: a brand is not a proof and a cast defeats a brand.
+     * Deleting the branch keeps the whole suite green and `tsc` alone objects, which is how this test
+     * came to be written — the refusal is load bearing for the type and was unpinned for behaviour.
+     */
+    it('refuses a field where a term is taken, reached past a cast', () => {
+        expect(() => termOf(optional(string) as unknown as AnyCodec)).toThrow(
+            /marks a \*field\*/,
+        )
+        expect(() =>
+            termOf(fallback(string, 'x') as unknown as AnyCodec),
+        ).toThrow(/this position takes a term/)
     })
 
     it('agrees with the policy the item codec reports', () => {
         for (const policy of ['drop', 'refuse'] as const) {
             const built = object({ id: string }, policy)
-            expect((built.def as { rest: unknown }).rest).toBe(built.item.rest)
+            expect(built.def.kind === 'object' && built.def.body.rest).toBe(
+                built.item.rest,
+            )
         }
     })
 
@@ -186,17 +245,19 @@ describe('the rest policy a definition records', () => {
      * The defect, as a consumer would have met it: two specs differing only in a *nested* policy.
      *
      * Before the fix both definitions walked to the same value, so nothing downstream could choose
-     * between `Rest.drop` and `Rest.refuse` — and reaching for `.item` is not available here, because
-     * a definition walk hands out `AnyCodec`.
+     * between `Rest.drop` and `Rest.refuse` — and reaching for `.item` is not available here,
+     * because a definition walk hands out a term, and a term has no `.item`.
+     *
+     * The walk is one step shorter than it was: a field holds the child's *term*, so descending
+     * into a nested object is a field lookup rather than a field lookup and then a `.def` read.
      */
     it('survives a walk into a nested object, where `.item` is not offered', () => {
         const restOfNested = (codec: AnyCodec): unknown => {
             const def = codec.def
-            if (def?.kind !== 'attributes') throw new Error('not an object')
-            const inner = def.of.inner as AnyCodec
-            const innerDef = inner.def
-            if (innerDef?.kind !== 'attributes') throw new Error('not nested')
-            return innerDef.rest
+            if (def?.kind !== 'object') throw new Error('not an object')
+            const innerDef = def.body.fields.inner?.t
+            if (innerDef?.kind !== 'object') throw new Error('not nested')
+            return innerDef.body.rest
         }
 
         expect(

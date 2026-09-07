@@ -16,7 +16,6 @@ import {
     decimal,
     fallback,
     legacy,
-    number,
     object,
     string,
 } from './codec'
@@ -34,11 +33,8 @@ type Listing = {
 
 const Listing = object({
     id: string,
-    holding: fallback(
-        string('STORE_V1', 'STORE_V2'),
-        () => 'STORE_V1' as const,
-    ),
-    vendorId: fallback(string('PICKUP', 'ACME'), () => 'PICKUP' as const),
+    holding: fallback(string('STORE_V1', 'STORE_V2'), 'STORE_V1' as const),
+    vendorId: fallback(string('PICKUP', 'ACME'), 'PICKUP' as const),
     rate: legacy({ current: decimal, older: string }),
 }).item
 
@@ -104,9 +100,7 @@ describe('an older encoding held as something else', () => {
     it('and still refuses an attribute no encoding reads', () => {
         expect(() =>
             Priced.unsafeDecode({ id: { S: 'p' }, price: { BOOL: true } }),
-        ).toThrow(
-            /no encoding could read this attribute; tried the current one/,
-        )
+        ).toThrow(CodecError)
     })
 })
 
@@ -150,16 +144,57 @@ describe('an attribute the row does not have', () => {
         expect(back.holding).toBeDefined()
     })
 
-    it('builds the value per read, so a mutable one cannot be shared', () => {
-        type WithList = { id: string; tags: string[] }
+    /**
+     * **A copy per read, so a mutable stand-in cannot be shared between entities.**
+     *
+     * The declaration holds one value — that is what makes §3 `(fallback)`'s premise checkable
+     * where the declaration is, rather than on whichever read reaches it first — and each read
+     * that needs one gets a `structuredClone`. Both halves matter and this asserts both: the
+     * value is right, and it is not the *same* value twice.
+     *
+     * The failure this pins is a caller mutating what they decoded. It shipped once as the
+     * opposite behaviour and the two assertions below were `toEqual(['x'])` and `toBe(a.tags)`.
+     */
+    it('is a copy per read, not one shared value', () => {
         const C = object({
             id: string,
-            tags: fallback({ ...listOfStrings }, () => []),
+            tags: fallback({ ...listOfStrings }, []),
         }).item
         const a = C.unsafeDecode({ id: { S: 'a' } })
         const b = C.unsafeDecode({ id: { S: 'b' } })
         a.tags.push('x')
         expect(b.tags).toEqual([])
+        expect(b.tags).not.toBe(a.tags)
+    })
+
+    /** A primitive is handed over as it is: there is nothing to copy and nothing to leak. */
+    it('does not copy a primitive stand-in', () => {
+        const C = object({ id: string, tier: fallback(string, 'FREE') }).item
+        expect(C.unsafeDecode({ id: { S: 'a' } }).tier).toBe('FREE')
+    })
+
+    /**
+     * **And the one value that cannot be copied is shared, rather than throwing on a read.**
+     *
+     * `structuredClone` refuses anything holding a function. No declared codec admits such a
+     * value — a stand-in comes from the value language, and all of that clones — but `custom`'s
+     * admission asks the caller's own pair, so a hand-written codec can admit one. The
+     * cloneability is settled at the declaration, so this is a shared stand-in and not a
+     * `DataCloneError` arriving out of a `decode` months later.
+     */
+    it('shares a stand-in structuredClone refuses, rather than failing the read', () => {
+        type Holder = { tag: string; run: () => number }
+        const holding = custom<Holder>({
+            encode: (value) => ({ S: value.tag }) as never,
+            decode: () => ({ tag: 'x', run: () => 1 }),
+        })
+        const stand: Holder = { tag: 'x', run: () => 1 }
+        expect(() => structuredClone(stand)).toThrow()
+
+        const C = object({ id: string, h: fallback(holding, stand) }).item
+        const a = C.unsafeDecode({ id: { S: 'a' } })
+        const b = C.unsafeDecode({ id: { S: 'b' } })
+        expect(a.h).toBe(b.h)
     })
 })
 
@@ -183,6 +218,12 @@ describe('an attribute written in an older encoding', () => {
         expect(Listing.unsafeEncode(fromOld).rate).toEqual({ N: '1.5' })
     })
 
+    /**
+     * **Pins wording no law has, deliberately.** The refusal is asserted as a `CodecError` beside
+     * it; what the regex adds is the diagnostic, which is this test's subject. Here it is that the refusal
+     * says *how many* encodings were tried, which is what tells a caller the migration ran at all
+     * rather than the current reader having failed alone.
+     */
     it('reports when no encoding can read it', () => {
         expect(() =>
             Listing.unsafeDecode(listingWith({ rate: { BOOL: true } })),
@@ -213,7 +254,7 @@ describe('an attribute written in an older encoding', () => {
     it('deliberately does not keep the member stable — that is the migration', () => {
         expect(() =>
             checkMembersStable(Listing, [listingWith({ rate: { S: '1.5' } })]),
-        ).toThrow(/changed member on a read-modify-write/)
+        ).toThrow(CodecError)
     })
 })
 

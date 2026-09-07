@@ -337,6 +337,178 @@ theorem check_differ {n : Nat} {x y : Option Attr} (h : check n x y = .differ) :
   | some a, some b => exact fun hq => aeq_differ h (Option.some.inj hq)
   | none, some _ | some _, none => exact fun hq => by cases hq
 
+/-! ## The `Value` twin, for the read side
+
+`aeq` compares `Attr`. A read-side vector's answer is a `Value`, and `Value.map` carries a
+function exactly as `Attr.m` does — so a read resolution landing on a map met the same funext
+gap `aeq` was built to cross, with nothing to cross it. Five of the union bridge's read pairs
+were recorded as unstatable for want of this.
+
+**The construction transfers unchanged**, which is the result rather than the code: the same
+fuel, the same `Verdict`, the same two-quantifier `map` case, the same `mapAt` trick of comparing
+two closures only at names. Both rules `aeq`'s docstring records carry over and are not
+re-derived here — ask the `∀` before the `∃`, and **quantify over the expected side's key set,
+not the codec's**, which is the 10× nobody can see in the statement.
+
+**One row differs, and it is the `Double` axiom again.** `veq` answers `.exhausted` at `.num`
+and `.numSet` rather than deciding them: `Double.decEq` is an axiom, so the comparison would
+neither reduce nor stay choice-free — and `Verdict.exhausted` already means "carries no
+information", which is exactly the honest answer. Soundness is *easier* for it: a row that never
+says `.same` has nothing to prove. What it costs is that a read resolving to a value containing a
+double cannot be certified, which is the one read pair still recorded as unstatable and the third
+place this axiom bites (the numeric literal's term, `AdmA .number`'s row, and here). -/
+
+def zipAllV (r : Value → Value → Verdict) : List Value → List Value → Verdict
+  | [], [] => .same
+  | a :: as, b :: bs => Verdict.and (r a b) (zipAllV r as bs)
+  | _, _ => .differ
+
+def mapAtV (keys : Finset Name) (f : {k // k ∈ keys} → Value) (k : Name) : Option Value :=
+  if h : k ∈ keys then some (f ⟨k, h⟩) else none
+
+def mapRowV (r : Value → Value → Verdict)
+    (ka : Finset Name) (fa : {k // k ∈ ka} → Value)
+    (kb : Finset Name) (fb : {k // k ∈ kb} → Value) (k : Name) : Verdict :=
+  match mapAtV ka fa k, mapAtV kb fb k with
+  | some x, some y => r x y
+  | none, none => .same
+  | _, _ => .differ
+
+/-- `aeq`'s construction over `Value`. The two `Double`-carrying rows answer `.exhausted`:
+    `Double.decEq` is an axiom, so deciding them would neither reduce nor stay choice-free. -/
+def veq : Nat → Value → Value → Verdict
+  | 0, _, _ => .exhausted
+  | _ + 1, .str a,  .str b  => if a = b then .same else .differ
+  | _ + 1, .bool a, .bool b => if a = b then .same else .differ
+  | _ + 1, .bin a,  .bin b  => if a = b then .same else .differ
+  | _ + 1, .null,   .null   => .same
+  | _ + 1, .num _,  .num _  => .exhausted
+  | _ + 1, .numSet _, .numSet _ => .exhausted
+  | _ + 1, .strSet a, .strSet b => if fsetEq a.1 b.1 then .same else .differ
+  | _ + 1, .binSet a, .binSet b => if fsetEq a.1 b.1 then .same else .differ
+  | n + 1, .arr a,  .arr b  => zipAllV (veq n) a b
+  | n + 1, .map ka fa, .map kb fb =>
+      if fsetEq ka kb then
+        if decide (∀ k ∈ kb, mapRowV (veq n) ka fa kb fb k = .same) then .same
+        else if decide (∃ k ∈ kb, mapRowV (veq n) ka fa kb fb k = .differ) then .differ
+        else .exhausted
+      else .differ
+  | _ + 1, _, _ => .differ
+
+def vcheck (n : Nat) : Option Value → Option Value → Verdict
+  | none, none => .same
+  | some a, some b => veq n a b
+  | _, _ => .differ
+
+/-- `zipAll_sound` over `Value`: an elementwise verdict lifts to the list, both ways. -/
+theorem zipAllV_sound {r : Value → Value → Verdict}
+    (hs : ∀ x y, r x y = .same → x = y) (hd : ∀ x y, r x y = .differ → x ≠ y) :
+    ∀ as bs : List Value,
+      (zipAllV r as bs = .same → as = bs) ∧ (zipAllV r as bs = .differ → as ≠ bs)
+  | [], [] => ⟨fun _ => rfl, fun h => by simp [zipAllV] at h⟩
+  | [], _ :: _ => ⟨fun h => by simp [zipAllV] at h, fun _ h => by cases h⟩
+  | _ :: _, [] => ⟨fun h => by simp [zipAllV] at h, fun _ h => by cases h⟩
+  | a :: as, b :: bs => by
+    obtain ⟨ihs, ihd⟩ := zipAllV_sound hs hd as bs
+    refine ⟨fun h => ?_, fun h heq => ?_⟩
+    · simp only [zipAllV, Verdict.and_same_iff] at h
+      exact congrArg₂ List.cons (hs _ _ h.1) (ihs h.2)
+    · obtain ⟨ha, hb⟩ := List.cons.inj heq
+      simp only [zipAllV, Verdict.and_differ_iff] at h
+      exact h.elim (fun h' => hd _ _ h' ha) (fun h' => ihd h' hb)
+
+/-- **The certificate**, `aeq_sound`'s twin: `.same` is equality and `.differ` is disequality.
+    `.exhausted` says nothing, which is what the two `Double` rows answer and why they need no
+    case here — a row that never says `.same` has nothing to prove. -/
+theorem veq_sound : ∀ (n : Nat) (a b : Value),
+    (veq n a b = .same → a = b) ∧ (veq n a b = .differ → a ≠ b)
+  | 0, _, _ => ⟨fun h => by simp [veq] at h, fun h => by simp [veq] at h⟩
+  | n + 1, a, b => by
+    have ihs : ∀ x y, veq n x y = .same → x = y := fun x y => (veq_sound n x y).1
+    have ihd : ∀ x y, veq n x y = .differ → x ≠ y := fun x y => (veq_sound n x y).2
+    match a, b with
+    | .str _, .str _ | .bin _, .bin _ | .bool _, .bool _ =>
+      refine ⟨fun h => ?_, fun h hq => ?_⟩ <;>
+        · simp only [veq] at h; split at h <;> simp_all
+    | .strSet _, .strSet _ | .binSet _, .binSet _ =>
+      refine ⟨fun h => ?_, fun h hq => ?_⟩ <;>
+        · simp only [veq] at h; split at h <;> simp_all [Subtype.ext_iff]
+    | .null, .null => exact ⟨fun _ => rfl, fun h => by simp [veq] at h⟩
+    -- the two `Double` rows answer `.exhausted`, so both obligations are vacuous
+    | .num _, .num _ | .numSet _, .numSet _ =>
+      exact ⟨fun h => by simp [veq] at h, fun h => by simp [veq] at h⟩
+    | .arr as, .arr bs =>
+      obtain ⟨hs, hd⟩ := zipAllV_sound ihs ihd as bs
+      exact ⟨fun h => congrArg Value.arr (hs h), fun h hq => hd h (by cases hq; rfl)⟩
+    | .map ka fa, .map kb fb =>
+      refine ⟨fun h => ?_, fun h hq => ?_⟩
+      · simp only [veq] at h
+        split at h
+        · next hk =>
+          obtain rfl := fsetEq_iff.mp hk
+          split at h
+          · next hall =>
+            have hall' := of_decide_eq_true hall
+            refine congrArg (Value.map ka) (funext fun k => ?_)
+            have := hall' k.1 k.2
+            simp only [mapRowV, mapAtV, dif_pos k.2] at this
+            exact ihs _ _ this
+          · split at h <;> exact absurd h (by simp)
+        · exact absurd h (by simp)
+      · simp only [veq] at h
+        split at h
+        · next hk =>
+          obtain rfl := fsetEq_iff.mp hk
+          split at h
+          · exact absurd h (by simp)
+          · split at h
+            · next hex =>
+              obtain ⟨k, hk, hrow⟩ := of_decide_eq_true hex
+              cases hq
+              simp only [mapRowV, mapAtV, dif_pos hk] at hrow
+              exact ihd _ _ hrow rfl
+            · exact absurd h (by simp)
+        · next hk => cases hq; exact hk (by simp [fsetEq])
+    | .str _, .num _ | .str _, .bool _ | .str _, .bin _ | .str _, .null
+    | .str _, .strSet _ | .str _, .numSet _ | .str _, .binSet _ | .str _, .arr _
+    | .str _, .map _ _
+    | .num _, .str _ | .num _, .bool _ | .num _, .bin _ | .num _, .null
+    | .num _, .strSet _ | .num _, .numSet _ | .num _, .binSet _ | .num _, .arr _
+    | .num _, .map _ _
+    | .bool _, .str _ | .bool _, .num _ | .bool _, .bin _ | .bool _, .null
+    | .bool _, .strSet _ | .bool _, .numSet _ | .bool _, .binSet _ | .bool _, .arr _
+    | .bool _, .map _ _
+    | .bin _, .str _ | .bin _, .num _ | .bin _, .bool _ | .bin _, .null
+    | .bin _, .strSet _ | .bin _, .numSet _ | .bin _, .binSet _ | .bin _, .arr _
+    | .bin _, .map _ _
+    | .null, .str _ | .null, .num _ | .null, .bool _ | .null, .bin _
+    | .null, .strSet _ | .null, .numSet _ | .null, .binSet _ | .null, .arr _
+    | .null, .map _ _
+    | .strSet _, .str _ | .strSet _, .num _ | .strSet _, .bool _ | .strSet _, .bin _
+    | .strSet _, .null | .strSet _, .numSet _ | .strSet _, .binSet _ | .strSet _, .arr _
+    | .strSet _, .map _ _
+    | .numSet _, .str _ | .numSet _, .num _ | .numSet _, .bool _ | .numSet _, .bin _
+    | .numSet _, .null | .numSet _, .strSet _ | .numSet _, .binSet _ | .numSet _, .arr _
+    | .numSet _, .map _ _
+    | .binSet _, .str _ | .binSet _, .num _ | .binSet _, .bool _ | .binSet _, .bin _
+    | .binSet _, .null | .binSet _, .strSet _ | .binSet _, .numSet _ | .binSet _, .arr _
+    | .binSet _, .map _ _
+    | .arr _, .str _ | .arr _, .num _ | .arr _, .bool _ | .arr _, .bin _
+    | .arr _, .null | .arr _, .strSet _ | .arr _, .numSet _ | .arr _, .binSet _
+    | .arr _, .map _ _
+    | .map _ _, .str _ | .map _ _, .num _ | .map _ _, .bool _ | .map _ _, .bin _
+    | .map _ _, .null | .map _ _, .strSet _ | .map _ _, .numSet _ | .map _ _, .binSet _
+    | .map _ _, .arr _ =>
+      exact ⟨fun h => by simp [veq] at h, fun _ hq => by cases hq⟩
+
+/-- `.same` lifted to the `Option Value` a codec's read actually returns — what a generated
+    read-resolution line is cashed against, as `check_same` is on the write side. -/
+theorem vcheck_same {n : Nat} {x y : Option Value} (h : vcheck n x y = .same) : x = y := by
+  match x, y with
+  | none, none => rfl
+  | some a, some b => exact congrArg some ((veq_sound n a b).1 h)
+  | none, some _ | some _, none => simp [vcheck] at h
+
 /-! ## The shape of a generated vector
 
 A vector file emitted by the generator is one line per case, and reads:
@@ -384,11 +556,24 @@ Linear in the number of vectors — 100 two-field object vectors cost the same p
 where the same 200 written out as separate lines compile in 19 s. Each `rfl` gets its own
 heartbeat budget, and distinct vectors share no structure for a batch to exploit.
 
-`number` has no vectors and can have none: `Value.num` carries a `Double`, `Double` is an
-axiom with no closed terms, so there is no value to write. `decimal` is the numeric escape
-hatch — `WFNumeral` is a `String` subtype and reduces like one. The same axiom is why
-`Attr.n`'s row here compares the underlying text rather than reaching for a numeric
-equality.
+`number` has no **positive** vectors and can have none: `Value.num` carries a `Double`,
+`Double` is an axiom with no closed terms, so there is no value to write down and propose an
+agreement about. `decimal` is the numeric escape hatch — `WFNumeral` is a `String` subtype and
+reduces like one. The same axiom is why `Attr.n`'s row here compares the underlying text rather
+than reaching for a numeric equality.
+
+**It has refusal vectors, and that took the impossibility being put in the right place.** A
+refusal names the term and a value the term *rejects*, so it needs no inhabitant of the codec's
+own carrier: `(denote Term.number).e (Value.str "x") = none` is `rfl`. `Term.number` is a closed
+term and always was; the generator refused to emit it, on the ground that no value could be named
+at it — true of an agreement, false of a refusal, and stated as a fact about the syntax. The
+generator's own value emitter already reported the real impossibility, at `Value.num`, so moving
+nothing and *deleting* the term-level refusal was the whole fix.
+
+A numeric `literal` is the case that does not follow, and the contrast is the useful part:
+`Term.literal GroundKind.number ls` needs `ls : NEFinset Double`, so **the term itself** has no
+closed expression and no vector of either kind reaches it. Term-inexpressible and
+value-inexpressible are two boundaries, and this file's old sentence had them as one.
 -/
 
 end Calculus

@@ -11,9 +11,10 @@
  * erased at build time and there is no import cycle at runtime.
  */
 import type { AttributeValue } from './attribute'
-import type { AttributeCodec, CodecDef, Rng } from './codec'
+import type { AttributeCodec } from './codec'
 import type { Result } from './result'
 import { orThrow } from './result'
+import type { Term } from './term'
 
 /**
  * What has to be said to build a codec; the rest of {@link CodecShape} follows from it.
@@ -25,9 +26,7 @@ import { orThrow } from './result'
 export type Codec<T, A extends AttributeValue> = {
     readonly encode: (value: T) => Result<A>
     readonly decode: (attribute: AttributeValue) => Result<T>
-    readonly arbitrary?: (rng: Rng, size: number) => T
-    readonly shrink?: (value: T) => readonly T[]
-    readonly def?: CodecDef
+    readonly def: Term
 }
 
 /**
@@ -40,15 +39,11 @@ export type Codec<T, A extends AttributeValue> = {
 export const codec = <T, A extends AttributeValue>({
     encode,
     decode,
-    arbitrary,
-    shrink,
     def,
 }: Codec<T, A>): AttributeCodec<T, A> => ({
     encode,
     decode,
     unsafeEncode: (value) => orThrow(encode(value)),
     unsafeDecode: (attribute) => orThrow(decode(attribute)),
-    arbitrary,
-    shrink,
     def,
 })

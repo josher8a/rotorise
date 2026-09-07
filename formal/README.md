@@ -11,32 +11,34 @@ definition it touches.
 | `Calculus/Lists.lean`       | —           | The list plumbing: `traverse` and its laws off the pivot `traverse_eq_some` (a successful traversal *is* `List.Forall₂ (f · = some ·)`), the keyed clause `traverse_fst`, and the `filter` facts mathlib states in the wrong shape — everything with no codec in it, kept apart so `Combinators.lean` reads as codec vocabulary |
 | `Calculus/Domain.lean`      | §1          | `Member`, `Attr`, the value language, `Kind` with `Value.kind`/`Attr.kind` (the ten members collapsing onto eight), `Double` axioms, and `Numeral.WF` — §1's numeral grammar, 38 significant digits and magnitude range, as a decidable predicate                                                                                            |
 | `Calculus/Codec.lean`       | §2, §5      | `Codec`, `Agree` (`≼`), `Lawful`/`LawfulCore`, corollaries (Q, read-side W), injectivity lemma — **proved**                                                                                                                                                           |
-| `Calculus/Combinators.lean` | §3–§5       | The certified combinator algebra, opening with `Ctor` — a constructor as a partial iso onto its image, the prism §7 names. The point ground codecs (`string`, `boolean`, `binary`, `null`) are `pointCodec` at four pairs of prisms and share one lawfulness proof; the wire-set payload projections are the same shape again. Then `through`/`restrict` (iso/prism), `extendRead` (legacy), `orNull` (nullable), `carriedCodec` — a payload pair carried between two prisms, the shape underneath every product: `entrywise` is it at a traversal (`array`, `record`, left with only the shape of `≼` at their attribute constructor), `tupleCodec` it at `align` + a traversal, over `slots` — the codec row a shape assigns to a row of *n* positions, which is what makes alignment depend on length alone; the remaining products, `altCodec`+`UniqueAdmission` and `dunionCodec` (sums), `opaqCodec` — with one lawfulness lemma each |
+| `Calculus/Combinators.lean` | §3–§5       | The certified combinator algebra, opening with `Ctor` — a constructor as a partial iso onto its image, the prism §7 names. The point ground codecs (`string`, `boolean`, `binary`, `null`) are `pointCodec` at four pairs of prisms and share one lawfulness proof; the wire-set payload projections are the same shape again. Then `through`/`restrict` (iso/prism), `extendRead` (legacy), `orNull` (nullable), `carriedCodec` — a payload pair carried between two prisms, the shape underneath every product: `entrywise` is it at a traversal (`array`, `record`, left with only the shape of `≼` at their attribute constructor), `tupleCodec` it at `align` + a traversal, over `slots` — the codec row a shape assigns to a row of *n* positions, which is what makes alignment depend on length alone; the remaining products, `altCodec`+`UniqueAdmission` (the sum) and `dunionTable` (the lookup a `dunion` is), `opaqCodec` — with one lawfulness lemma each |
 | `Calculus/Term.lean`        | §3–§4       | Deep-embedded terms (including §3's `null` point), fields, rest policies                                                                                                                                                                                                                            |
 | `Calculus/Denote.lean`      | —           | `denote : Term → Codec`, structural, pure dispatch into the combinators                                                                                                                                                                                                     |
 | `Calculus/Typing.lean`      | §3–§5       | The judgement `⊢ c : T ⇝ μ`, both indices, with the held-set formers (`HSet`, `HStar`, `HProd`, `HMap`, `HNull`, `HObject`, `HUnion`, `HOpaque`); syntactic premises only                                                                                             |
 | `Calculus/Soundness.lean`   | §5          | `Obligations` (semantic premises, structural), `UAtCan := UniqueAdmission ∘ semsOf`, `MPOk` (legacy exemption), theorem statements, and the held-set bridge `carrier_denote`/`typed_TSub`/`typed_e_mem`/`typed_p_mem`                                                    |
 | `Calculus/Equations.lean`   | §6          | `Codec.Equiv` (§6's `≡`), `Can`, and all eleven of §6's "Hold" rows — `held`'s identity and composition, `refine`'s meet and full case, `legacy` with its own reading and `≈` on `Can(c)`, `union` of one, its commutativity and its associativity (which needs none of §6's stated conditions), `nullable`'s idempotence, wrapper member preservation |
-| `Calculus/Opaque.lean`      | §3, §7      | `opaque` without fuel: `Value.depth`/`Attr.depth`, the eighteen kind-disjoint unfoldings (one `simp` set for the section, one line each), `opaq_e_agree`/`opaq_p_agree` (stabilization), `opaq_e_depth`/`opaq_p_depth` (depth preservation), and `opaqCodecω` with `lawful_opaqCodecω`/`carrier_opaqCodecω` |
+| `Calculus/Opaque.lean`      | §3, §7      | `opaque` without fuel: `Value.depth`/`Attr.depth`, the kind-disjoint unfoldings — one per constructor each side, counted in that file's own header (one `simp` set for the section, one line each), `opaq_e_agree`/`opaq_p_agree` (stabilization), `opaq_e_depth`/`opaq_p_depth` (depth preservation), and `opaqCodecω` with `lawful_opaqCodecω`/`carrier_opaqCodecω` |
 | `Calculus/HeldSet.lean`     | §1, §3, §6  | `T` as an identity: `opaq_T_identity` (`Uν` *is* `opaque`'s held set), `not_TIsDomE_unionLiteralString` (§6's row is two identities and `union` has only the weaker one), and the numeral-domain report — `decimal_writes_stored`/`decimal_reads_stored` with worked boundary cases |
 | `Calculus/Continuity.lean`  | §5, §7      | Why `union` admits no fixpoint semantics: `Codec.Approx` (the information order any ccpo must extend), `altCodec_not_monotone` (unique admission is anti-monotone in the options) and `stage_not_monotone` — the same collapse over a staging defined locally, since `denote` is structural and no longer stages |
 | `Calculus/Nesting.lean`     | §1          | **The one place `𝔸` is bigger in the model than in the store.** `Attr.Storable` (`Domain.lean`) is §1's 32-level bound, counting `L` and `M` only — a different function from `Attr.depth`, which is a termination measure and charges a wire set a layer. The ground fragment writes nesting `0`, containers add exactly one, and `not_storable_of_typed` exhibits a **derivable** term whose encoding the store refuses: the bound is absent from §3's rules rather than a premise someone failed to discharge |
 | `Calculus/Refutations.lean` | §6          | §6's "Do not hold" table, all nine settled: `not_equiv_lazy` (the row where `≡`'s member index matters), `not_equiv_union_array`, `not_equiv_union_extend`, the two `tuple`-tail rows, `not_equiv_refine_held`, `legacy_breaks_MP`, `e_comp_p_ne_id` — plus `optional` nesting and `set(union(…))`, both of which the syntax rules out |
 | `Calculus/Axioms.lean`      | §3          | `#assert_axioms`, and the headline theorems run through it — the advertised axiom base (`propext`, `Quot.sound`, the `Double` axioms; **no `Classical.choice`**) as a build error rather than a claim in prose |
-| `Calculus/Discharge.lean`   | §5          | The machinery of (K): `κ`, `ident`, `adm`/`admA` as structural recursions (`Kind` itself is §1, and lives in `Domain.lean` on both sides of the pair), `κ_sound`/`adm_sound`/`admA_sound`, and `uAtCan_of_separated` — the dischargers of (U), proved, with witnesses and the two counterexamples that repaired (K)                       |
+| `Calculus/Discharge.lean`   | §5          | The discharges of (U) that no phase of `Orth` reaches — an arbitrary `q` inside a `refine`, a union of numeric literals, `(dunion)` and `opaque`, and `uAtAct_array_literals` where `UAtCan` is outright false — with the two counterexamples that repaired §5's admission row and the refutation of (D) as a discharger. The four per-aspect tables this file used to carry are retired: §5 states that row on option admission and occupancy, `Calculus/Exactness.lean` proves those rows exact, and `Calculus/Orthogonality.lean` decides the pairs a declaration can decide |
 
 **The mechanization is complete: the project builds with zero `sorry`.** Both halves
 of §5's soundness theorem are machine-checked — `soundness` (all four laws, (MP) with
 the legacy exemption as the `MPOk` hypothesis) and `soundness_core` ((R), (C), (W)
 through `legacy`-containing derivations) — by induction on the judgement, dispatching
 each case to its certified combinator lemma, with the `(dunion)` stamps derived from
-typing and (U) discharged by `uniqueAdmission_byTag`, and `opaque`'s by
+typing and (U) a fact of the variant table's key set rather than a discharge, and `opaque`'s by
 `uniqueAdmission_of_kinds`.
 The judgement carries both of §3's indices, and both are checked against the
 denotation. `typed_e_mem` and `typed_p_mem` are §3's `e : T ⇀ 𝔸` and `p : 𝔸 ⇀ T` at the
 judgement's own index — a derivable term writes and reads only values of the held set it
 names — factored through `Carrier` (per combinator) and `typed_TSub` (the denotation's
-held set is inside the judgement's). The
+held set is inside the judgement's) — and the containment is an **identity** in both
+directions, `typed_T_identity`, so the index describes the denotation exactly rather than
+bounding it. The
 member index is fuel-free (`μSyn`, with `denote_μ` and `typed_μSyn` tying the denotation
 and the judgement to it), and `lazy` concludes `⊤` in the model exactly as the doc's
 `(lazy)` rule demands.
@@ -114,28 +116,28 @@ and the judgement to it), and `lazy` concludes `⊤` in the model exactly as the
   became structural. `(nullable)` is not in the list either: `NullHonest` left `Obligations`
   when §3's guard made it derivable.
 - **(U) is a premise, not a conclusion** (`UAtCan`), matching the doc's theorem residue.
-  Its disjointness dischargers are proved (`Calculus/Discharge.lean`): pairwise-disjoint
-  `κ` settles the value side, pairwise-distinct named members the attribute side.
-  `uAtCan_string_boolean` witnesses that the six premises are jointly satisfiable.
+  Its disjointness dischargers are proved: pairwise-disjoint occupancy settles the value
+  side, pairwise-distinct named members the attribute side, and `Calculus/Orthogonality.lean`
+  decides both for the phases a syntactic certificate can reach.
 - **§5's (D) is not a discharger of (U), and the doc is fixed.** (D) is a condition on
   held sets — sets of *values* — while (U)'s readable side quantifies over *attributes*,
   and `held`'s adapter relabels between them. `not_uAtCan_literal_held` exhibits
   `union(literal("A"), held(literal("A"), f, g))`: held sets `{"A"}` and `{"B"}`,
   disjoint on the nose, both options reading `S "A"`. So (D) is well-formedness on the `T`
   index, and the readable side is decided on stored attributes — distinct `μ`, or disjoint
-  `adm`.
-- **§5's `ident` half of (K) was unsound as stated; the mechanization found it and the
-  doc is fixed.** §5 used to write (K) as `κ(cᵢ) ∩ κ(cⱼ) = ∅ ∨ ident(cᵢ) ∨ ident(cⱼ)`
+  readable-side admission.
+- **§5's decides-its-own-membership disjunct was unsound as stated; the mechanization
+  found it and the doc is fixed.** §5 used to write its writable-side discharger as
+  `κ(cᵢ) ∩ κ(cⱼ) = ∅ ∨ ident(cᵢ) ∨ ident(cⱼ)`
   and call it sufficient for (U). Neither disjunct carries it, and both counterexamples
   are proved in `Discharge.lean`: `not_uAtCan_literal_string` (one-sided `ident` —
-  `union(literal("A"), string)` passed (K), and both options admit `"A"`) and
+  `union(literal("A"), string)` passed it, and both options admit `"A"`) and
   `not_uAtCan_array_literals` (two-sided `ident` — `ident` propagates through `array`,
-  but disjointness of the admissible sets does not, and both options admit `[]`). §5 now
-  states (K) with `adm`, the set an `ident` term checks against, disjoint on both sides;
-  `adm`/`admA` and the combined `uAtCan_of_separated` mechanize it, with
-  `uAtCan_of_disjoint` its kind/member half and `uAtCan_literal_literal` discharging
-  §5's own worked example — a pair that shares both `κ` and `⇝`, so only `adm` reaches
-  it.
+  but disjointness of the admissible sets does not, and both options admit `[]`). §5 keeps
+  both counterexamples and states the discharger on option admission, disjoint per side — `Adm`/`AdmA`
+  are `dom(e)`/`dom(p)` on the nose, and admission by names is what a `union` asks of an
+  object option. `Calculus/Orthogonality.lean` discharges §5's own worked example, a pair
+  that shares its occupancy on both sides, so only the admissible sets reach it.
 
 ## Is the model the specification?
 
@@ -143,12 +145,13 @@ Two independent readings, in opposite directions, asked whether every normative 
 `docs/codec-calculus.md` has an exact counterpart here and whether a reviewer could check one
 in isolation. They found seven specification defects, five claims true but unlocatable, and two
 corrections to this package's own artifacts. **Eleven of the fourteen are closed**; the three
-still open are `ARCHITECTURE.md` §10's last three bullets — `(held)`'s over-strong iso premise,
-the `℘⁺fin`/`⇀fin` coupling that nothing else states, and what §6's commutativity row is
-actually worth.
+still open are named rather than positioned, §10 having gained bullets since — `(held)`'s
+over-strong iso premise, the `℘⁺fin`/`⇀fin` coupling that nothing else states, and what §6's
+commutativity row is actually worth.
 
 The measurement regenerates: `python3 scripts/fidelity_audit.py`. What is worth watching in it
-is that **41% of theorem statements name a definition documented nowhere** — a statement a
+is the share of **theorem statements naming a definition documented nowhere** — the script
+prints it; it is not typed here, having been 41% when it was — a statement a
 reviewer cannot read against the specification without a detour.
 
 ## Do the documents still name what exists?
@@ -188,11 +191,14 @@ soundness. `union`'s commutativity is proved for the adjacent transposition, whi
 generates every permutation, and lifting it to `List.Perm` is the obvious next step.
 A numeric literal's read side goes through the axiomatized `Double.ofDec`, so no *syntactic*
 set bounds it — and the row does not have to name its set, it can ask its codec, `ofDec` being
-a function is enough to make the answer unique. `admA number` and `admA literalN` are `dom(p)`
-exactly (`sepA_number_opaque`, `sepA_literalN_disjoint`). The store observation survives on the
-other side of the pair: a literal's stored texts are known at the declaration, but `10²¹` is
-written `1e+21` and handed back normalised, so a row testing the *text* would refuse a row the
-codec itself wrote. That is why the row tests the codec.
+a function is enough to make the answer unique. `AdmA`'s `number` row and `AdmALit`'s `.number`
+row are `dom(p)`
+exactly, which is what separates `opaque` from `number` and two disjoint numeric literals from
+each other. The store observation survives on the
+other side of the pair — `Lawful.retract_through_store`, which is (R) asked through any
+transformation the store may apply: a literal's stored texts are known at the declaration, but
+`10²¹` is written `1e+21` and handed back normalised, so a row testing the *text* would refuse a
+row the codec itself wrote. That is why the row tests the codec.
 
 ## Building
 

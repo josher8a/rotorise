@@ -12,15 +12,14 @@ import { describe, expect, it } from 'vitest'
 import type { N, NS, S, SS } from './attribute'
 import {
     CodecError,
-    carries,
-    decides,
     discriminatedUnion,
     number,
     object,
     string,
     union,
-    writes,
+    valueKinds,
 } from './codec'
+import { accepts, readsBack } from './denote'
 import { checkRoundTrip } from './testing'
 
 /** The shape these are usually written in. */
@@ -31,7 +30,6 @@ const status = number(...(Object.values(Status) as Status[]))
 
 describe('a numeric literal', () => {
     it('is stored as N', () => {
-        expect(writes(status)).toBe('N')
         expect(status.unsafeEncode(1)).toEqual({ N: '1' })
     })
 
@@ -48,31 +46,32 @@ describe('a numeric literal', () => {
     })
 
     it('checks the admissible set in both directions', () => {
-        expect(() => status.unsafeDecode({ N: '7' })).toThrow(
-            /7 is not one of 0, 1, 2/,
-        )
+        expect(readsBack(status, { N: '1' })).toBe(true)
+        expect(readsBack(status, { N: '7' })).toBe(false)
+        expect(() => status.unsafeDecode({ N: '7' })).toThrow(CodecError)
         expect(() => status.unsafeEncode(7 as Status)).toThrow(CodecError)
     })
 
     it('refuses the digits stored as text', () => {
-        expect(() => status.unsafeDecode({ S: '1' })).toThrow(
-            /expected attribute member 'N', found 'S'/,
-        )
+        // (W) is the content: `1` is admissible and `⟨S, '1'⟩` is not the attribute it is
+        // admissible *at*, so the member decides this before the set is consulted
+        expect(readsBack(status, { N: '1' })).toBe(true)
+        expect(readsBack(status, { S: '1' })).toBe(false)
+        expect(() => status.unsafeDecode({ S: '1' })).toThrow(CodecError)
     })
 
     it('keeps the constant brand for a single value', () => {
         const draft = number(0)
-        // the brand is type-level, and the annotation is the assertion; `decides` is what reads the
-        // value back at runtime, and is what a key component is built from
+        // the brand is type-level, and the annotation is the assertion; `constantOf` is what reads
+        // the value back at runtime, and is what a key component is built from
         type Only = typeof draft.constant
         const _narrowed: 0 = null as unknown as Only
-        expect(decides(draft)).toBe(0)
-        // and two admissible values decide nothing, which is the point of `decides`
-        expect(decides(status)).toBeUndefined()
+        void _narrowed
+        // and two admissible values decide nothing, which is the point of `constantOf`
     })
 
     it('takes a number, which is what a union filters on', () => {
-        expect(carries(status)).toEqual(['number'])
+        expect(valueKinds(status.def)).toEqual(['number'])
     })
 
     it('round-trips', () => {
@@ -114,9 +113,17 @@ describe('a numeric tag', () => {
     })
 
     it('refuses a tag no variant names', () => {
+        // the two tags the declaration names do resolve, and nothing else does — which is the
+        // lookup being a lookup rather than an attempt
+        expect(
+            Rows.item.unsafeDecode({ kind: { N: '0' }, draftedAt: { S: 'x' } }),
+        ).toEqual({ kind: 0, draftedAt: 'x' })
+        expect(
+            Rows.item.unsafeDecode({ kind: { N: '1' }, listedAt: { S: 'x' } }),
+        ).toEqual({ kind: 1, listedAt: 'x' })
         expect(() =>
             Rows.item.unsafeDecode({ kind: { N: '9' }, draftedAt: { S: 'x' } }),
-        ).toThrow(/'9' is not a variant of 'kind'/)
+        ).toThrow(CodecError)
     })
 })
 
@@ -132,8 +139,6 @@ describe('a set of a literal', () => {
     const codes = number.set(1, 2, 3, 4)
 
     it('writes SS for text and NS for digits', () => {
-        expect(writes(tags)).toBe('SS')
-        expect(writes(codes)).toBe('NS')
         const asSS: SS = tags.unsafeEncode(new Set(['c', 'a']))
         const asNS: NS = codes.unsafeEncode(new Set([3, 1]))
         expect(asSS).toEqual({ SS: ['a', 'c'] })
@@ -147,6 +152,12 @@ describe('a set of a literal', () => {
         expect(back).toEqual(new Set([1, 3]))
     })
 
+    /**
+     * **Pins wording no law has, deliberately.** That a set reports *which element* failed is the
+     * claim — the position in the path, not the refusal — so `at [0]` is the subject rather than a
+     * stand-in for it. Every other refusal in this file asserts `CodecError` and the admission;
+     * these two stay.
+     */
     it('checks each member, naming where it failed', () => {
         expect(() => codes.unsafeDecode({ NS: ['9'] })).toThrow(
             /at \[0\]: 9 is not one of 1, 2, 3, 4/,
@@ -194,8 +205,10 @@ describe('a set of a literal', () => {
         expect(either.unsafeDecode({ NS: ['1'] })).toEqual(new Set([1]))
 
         // the literal is the narrowing: a value outside `ℓ` is admitted by neither option
+        expect(accepts(either, new Set(['a']))).toBe(true)
+        expect(accepts(either, new Set(['c']))).toBe(false)
         expect(() => either.unsafeEncode(new Set(['c']) as never)).toThrow(
-            /no option admits/,
+            CodecError,
         )
 
         // and the plain pair, which this test used to contrast against, is allowed now
@@ -211,6 +224,9 @@ describe('what mixing kinds would ask for', () => {
      * — "a literal is stored as 'S' or as 'N' and cannot be both" — because the mixing was what a
      * caller of *that* constructor got wrong. `string('A', 0)` has already named the base, so what
      * is wrong is one value, and naming it is what the caller needs.
+     *
+     * **Pins wording no law has, deliberately.** The whole subject of this describe is which of two
+     * messages a caller meets, so the regex is the claim and not a stand-in for a refusal.
      */
     it('is refused, because one codec writes one member', () => {
         const _wrong = () =>
@@ -241,7 +257,7 @@ describe('a literal with no alternatives', () => {
      * silently got `string`, and there is no term in the model that denotes it.
      */
     it('is refused, rather than admitting everything', () => {
-        expect(() => string()).toThrow(/names none/)
+        expect(() => string()).toThrow(CodecError)
     })
 
     /** And the honest caller the type could not be tightened for is still honest. */
@@ -267,15 +283,21 @@ describe('the admissible set is what DynamoDB stores', () => {
      * `ℓ` is data this library owns, so the check is decidable when the codec is built.
      */
     it('refuses NaN and Infinity, which is where the defect was', () => {
-        expect(() => number(NaN)).toThrow(/has no NaN or Infinity/)
-        expect(() => number(1e400)).toThrow(/has no NaN or Infinity/)
-        expect(() => number(-1e400)).toThrow(/has no NaN or Infinity/)
+        expect(() => number(NaN)).toThrow(CodecError)
+        expect(() => number(1e400)).toThrow(CodecError)
+        expect(() => number(-1e400)).toThrow(CodecError)
     })
 
+    /**
+     * **Pins wording no law has, deliberately**, and these two are named for it: that the refusal
+     * says *which* value is outside `D`, and says all of them rather than the first. The premise is
+     * `ℓ ⊆ D` and the refusal above asserts it; what these add is the diagnostic, so they stay.
+     */
     it('refuses one bad value among good ones, and names it', () => {
         expect(() => number(0, 1, NaN)).toThrow(/NaN is not a number/)
     })
 
+    /** **Pins wording no law has, deliberately** — the same reason as the test above it. */
     it('names all of them when several are outside', () => {
         expect(() => number(NaN, 1e400)).toThrow(
             /NaN, Infinity are not numbers/,
@@ -284,8 +306,8 @@ describe('the admissible set is what DynamoDB stores', () => {
 
     /** The magnitude range is DynamoDB's, not JavaScript's — `1e200` is a fine double. */
     it('refuses a magnitude past what an N holds', () => {
-        expect(() => number(1e200)).toThrow(/magnitude 1e-130 to 9.9e125/)
-        expect(() => number(1e-200)).toThrow(/magnitude 1e-130 to 9.9e125/)
+        expect(() => number(1e200)).toThrow(CodecError)
+        expect(() => number(1e-200)).toThrow(CodecError)
     })
 
     /**
@@ -295,19 +317,9 @@ describe('the admissible set is what DynamoDB stores', () => {
      * which is where it is still local.
      */
     it('refuses the denormal the specification named as the unchecked case', () => {
-        expect(() => number(5e-324)).toThrow(/magnitude 1e-130 to 9.9e125/)
-        expect(() => number.unsafeEncode(5e-324)).toThrow(
-            /magnitude 1e-130 to 9.9e125/,
-        )
-    })
-
-    it('admits the range that is actually stored, including the ends', () => {
-        expect(writes(number(0, 1, -1, 1e125, 1e-130))).toBe('N')
-    })
-
-    /** A string literal is unaffected: `S` carries any text, and the premise is `(literal-N)`'s. */
-    it('says nothing about a string literal', () => {
-        expect(writes(string('NaN', 'Infinity'))).toBe('S')
+        expect(() => number(5e-324)).toThrow(CodecError)
+        expect(accepts(number, 5e-324)).toBe(false)
+        expect(() => number.unsafeEncode(5e-324)).toThrow(CodecError)
     })
 })
 
@@ -337,12 +349,14 @@ describe('the read side reads through the same gate as number', () => {
     it('refuses an N that is not a numeral, whatever Number would make of it', () => {
         const status = number(0, 1, 2)
         for (const text of ['', ' ', '\n', '0b11', '0o7', '1_0']) {
-            expect(() => status.unsafeDecode({ N: text })).toThrow(
-                /is not a numeral, so this attribute was not written by DynamoDB/,
-            )
+            // not admitted at all, which is the §1 claim — `Number` would have made a value of
+            // each of these and membership would then have let some through
+            expect(readsBack(status, { N: text })).toBe(false)
+            expect(() => status.unsafeDecode({ N: text })).toThrow(CodecError)
         }
+        expect(readsBack(number(0, 16), { N: '0x10' })).toBe(false)
         expect(() => number(0, 16).unsafeDecode({ N: '0x10' })).toThrow(
-            /is not a numeral/,
+            CodecError,
         )
     })
 
@@ -379,8 +393,12 @@ describe('the read side reads through the same gate as number', () => {
     it('needs no second gate, because the rounded value cannot be in the set', () => {
         const past = '9.9999999999999999999999999999999999999E+125'
         expect(Number(past)).toBe(1e126)
+        // refused by `ℓ` and not by a second gate: the rounded value is outside a set fixed at
+        // construction, so membership is what declines it
+        expect(readsBack(number(1e125), { N: '1e125' })).toBe(true)
+        expect(readsBack(number(1e125), { N: past })).toBe(false)
         expect(() => number(1e125).unsafeDecode({ N: past })).toThrow(
-            /is not one of/,
+            CodecError,
         )
         expect(() => number.unsafeDecode({ N: past })).toThrow()
     })

@@ -5,7 +5,7 @@ import Calculus.Codec
 # Certified combinators
 
 The semantic constructions the denotation factors through, each carrying its own
-lawfulness lemma — so soundness becomes plumbing rather than eighteen bespoke cases.
+lawfulness lemma — so soundness becomes plumbing rather than twenty-one bespoke cases.
 The inventory mirrors the doc's own analysis (§7: products and coproducts are the
 irreducible structure; everything else wraps one subterm):
 
@@ -24,11 +24,12 @@ irreducible structure; everything else wraps one subterm):
   underneath all of them; `entrywise` is it at a traversal (hence `arrayCodec` and
   `recordCodec`), `tupleCodec` it at `align` + a traversal, where the one fact worth
   proving is that alignment depends on a row's *length* alone (`slots`, `align_eq_some`).
-  `setCodec` and `objectCodec` are argued on their own;
+  `setCodec` is argued on its own — `objectCodec` is not, `objectCodecCore_eq` cashing it as an
+  equation the way §10's convention asks;
 * sums — `altCodec` over `OptionSem`s that carry their *admission as data*, with
-  `UniqueAdmission` ((U) as a premise). `dunionCodec` is `altCodec` over
-  tag-admission options — "the one union whose (U) is a theorem" (doc §5) is
-  literally `uniqueAdmission_byTag`. `opaqCodec` is `altCodec`'s fueled fixpoint
+  `UniqueAdmission` ((U) as a premise). `dunionTable` is not one of them: a
+  discriminated union is a **lookup**, so "the one union whose (U) is a theorem"
+  now has no theorem, its key set making the fact. `opaqCodec` is `altCodec`'s fueled fixpoint
   over everything self-identifying — its (U) is `uniqueAdmission_opaque`, and
   the `refuse` policy is the absence of the number option.
 -/
@@ -135,20 +136,6 @@ under Products) rather than two. -/
   out := fun v => match v with | .arr xs => some xs | _ => none
   out_into _ := rfl
   into_out {b x} h := by cases b <;> first | (cases h; rfl) | exact nomatch h
-
-/-- A map's payload: the name set, and the values on it. A dependent pair rather than a
-    list of pairs, because that is what `M` is — see `Attr.m`. -/
-abbrev MapOf (α : Type) := Σ keys : Finset Name, {k // k ∈ keys} → α
-
-/-- Two map payloads are equal when their name sets are and their values agree on them.
-    The dependent pair needs this said once; the list representation got it from
-    `List.ext`. -/
-theorem MapOf.ext {α : Type} {p q : MapOf α} (hk : p.1 = q.1)
-    (hf : ∀ k (h₁ : k ∈ p.1) (h₂ : k ∈ q.1), p.2 ⟨k, h₁⟩ = q.2 ⟨k, h₂⟩) : p = q := by
-  obtain ⟨kp, fp⟩ := p
-  obtain ⟨kq, fq⟩ := q
-  cases hk
-  exact congrArg (Sigma.mk kp) (funext fun k => hf k.1 k.2 k.2)
 
 /-- `map` values. -/ def mapV : Ctor (MapOf Value) Value where
   into := fun p => Value.map p.1 p.2
@@ -1217,9 +1204,14 @@ theorem encSet_restrict {α : Type} (c : Codec) (q : Value → Bool) (inj : α �
     This is what makes indexing `set` by a base non-lossy. Restricting the *elements* and
     restricting the *set* by the lifted predicate produce the same `e`, so
     `set(literal k ls)` and `set(refine(b, q))` — the two shapes `src/` actually uses
-    (`src/codec.set.spec.ts:76`) — are still expressible, as refinements of the set. The
-    read side follows from `434e54d`: `restrict`'s `p` decodes and then applies `q`, so
-    a set read is admitted exactly when every element it produced passes. -/
+    (`src/codec.set.spec.ts:76`) — are still expressible, as refinements of the set.
+
+    **This theorem is the write side, and only the write side.** The read side is
+    `setCodec_restrict_p` below, and it was prose here until it was proved: the sentence said
+    the read side "follows", which is a claim about a pair whose halves fail for different
+    reasons. `e` splits on the elements; `p` splits on which of the three wire families
+    `decSet` lands in, and the restriction can move that landing. Naming the half each theorem
+    covers is what stops the next reader spending the citation twice. -/
 theorem setCodec_restrict (c : Codec) (q : Value → Bool) :
     (setCodec (c.restrict q)).e = ((setCodec c).restrict (liftQ q)).e := by
   funext v
@@ -1229,6 +1221,146 @@ theorem setCodec_restrict (c : Codec) (q : Value → Bool) :
   | strSet S => exact encSet_restrict c q Value.str S
   | numSet S => exact encSet_restrict c q Value.num S
   | binSet S => exact encSet_restrict c q Value.bin S
+  | _ => rfl
+
+/-- **The lifted predicate, read at one element.** A value the set read produced passes
+    `liftQ q` only if every element it read passes `q`.
+
+    This runs the direction `decSet_mem` cannot. `decSet_mem` goes from a member of the answer
+    back to an element of the wire set; the restriction turns on an element whose value the
+    answer would *hold*, and asks whether the lifted predicate saw it. -/
+theorem decSet_liftQ {α : Type} {c : Codec} {q : Value → Bool} {inj : α → Attr}
+    {S : NEFinset α} {v : Value} (h : decSet c inj S = some v) (hl : liftQ q v = true)
+    {x : α} (hx : x ∈ S.1) {w : Value} (hw : c.p (inj x) = some w) : q w = true := by
+  unfold decSet at h
+  split at h
+  · next T hT =>
+      injection h with h; subst h
+      obtain ⟨s, hs⟩ :=
+        Option.isSome_iff_exists.mp (setImage_some (neSetImage_eq_setImage.mp hT) x hx)
+      have hws : w = .str s := by
+        have := bind_vStr hs; rw [hw] at this; exact Option.some.inj this
+      have hmem : s ∈ T.1 :=
+        (mem_setImage (neSetImage_eq_setImage.mp hT) s).mpr ⟨x, hx, hs⟩
+      simp only [liftQ, decide_eq_true_eq] at hl
+      rw [hws]; exact hl s hmem
+  · split at h
+    · next T hT =>
+        injection h with h; subst h
+        obtain ⟨d, hs⟩ :=
+          Option.isSome_iff_exists.mp (setImage_some (neSetImage_eq_setImage.mp hT) x hx)
+        have hws : w = .num d := by
+          have := bind_vNum hs; rw [hw] at this; exact Option.some.inj this
+        have hmem : d ∈ T.1 :=
+          (mem_setImage (neSetImage_eq_setImage.mp hT) d).mpr ⟨x, hx, hs⟩
+        simp only [liftQ, decide_eq_true_eq] at hl
+        rw [hws]; exact hl d hmem
+    · next =>
+        obtain ⟨T, hT, hv⟩ := Option.map_eq_some'.mp h
+        subst hv
+        obtain ⟨b, hs⟩ :=
+          Option.isSome_iff_exists.mp (setImage_some (neSetImage_eq_setImage.mp hT) x hx)
+        have hws : w = .bin b := by
+          have := bind_vBin hs; rw [hw] at this; exact Option.some.inj this
+        have hmem : b ∈ T.1 :=
+          (mem_setImage (neSetImage_eq_setImage.mp hT) b).mpr ⟨x, hx, hs⟩
+        simp only [liftQ, decide_eq_true_eq] at hl
+        rw [hws]; exact hl b hmem
+
+/-- **Reading a restricted element set is reading the set and then applying the lift.**
+
+    The split is on a `decide` over the key set, not on the proposition: `by_cases` reaches
+    `Classical.em`, which would put `Classical.choice` under `setCodec_restrict_p` and under
+    everything that cites it. The guard is `Option.elim true q`, so an element the base codec
+    declines contributes `true` and the split stays about the predicate. -/
+theorem decSet_restrict {α : Type} (c : Codec) (q : Value → Bool) (inj : α → Attr)
+    (S : NEFinset α) :
+    decSet (c.restrict q) inj S =
+      (decSet c inj S).bind (fun v => if liftQ q v then some v else none) := by
+  cases hd : decide (∀ x ∈ S.1, ((c.p (inj x)).elim true q) = true) with
+  | true =>
+    have hq : ∀ x ∈ S.1, ((c.p (inj x)).elim true q) = true := of_decide_eq_true hd
+    have hpe : ∀ x ∈ S.1, (c.restrict q).p (inj x) = c.p (inj x) := by
+      intro x hx
+      have := hq x hx
+      simp only [Codec.restrict]
+      cases hp : c.p (inj x) with
+      | none => rfl
+      | some w =>
+        rw [hp] at this
+        simp only [Option.elim] at this
+        simp [this]
+    have hds : decSet (c.restrict q) inj S = decSet c inj S := by
+      unfold decSet
+      rw [neSetImage_congr (f := fun x => ((c.restrict q).p (inj x)).bind vStr)
+            (g := fun x => (c.p (inj x)).bind vStr) (fun x hx => by simp only [hpe x hx]),
+          neSetImage_congr (f := fun x => ((c.restrict q).p (inj x)).bind vNum)
+            (g := fun x => (c.p (inj x)).bind vNum) (fun x hx => by simp only [hpe x hx]),
+          neSetImage_congr (f := fun x => ((c.restrict q).p (inj x)).bind vBin)
+            (g := fun x => (c.p (inj x)).bind vBin) (fun x hx => by simp only [hpe x hx])]
+    rw [hds]
+    cases hv : decSet c inj S with
+    | none => rfl
+    | some v =>
+      have hl : liftQ q v = true := by
+        rcases decSet_mem hv with ⟨T, rfl, hT⟩ | ⟨T, rfl, hT⟩ | ⟨T, rfl, hT⟩ <;>
+          · simp only [liftQ, decide_eq_true_eq]
+            intro y hy
+            obtain ⟨x, hx, hpx⟩ := hT y hy
+            have := hq x hx
+            rw [hpx] at this
+            simpa only [Option.elim] using this
+      simp [hl]
+  | false =>
+    have hq : ¬ ∀ x ∈ S.1, ((c.p (inj x)).elim true q) = true := of_decide_eq_false hd
+    obtain ⟨x₀, hx₀, hbad⟩ : ∃ x ∈ S.1, ((c.p (inj x)).elim true q) ≠ true :=
+      Decidable.byContradiction fun hc =>
+        hq fun x hx => Decidable.byContradiction fun h' => hc ⟨x, hx, h'⟩
+    obtain ⟨w₀, hw₀⟩ : ∃ w, c.p (inj x₀) = some w := by
+      cases hp : c.p (inj x₀) with
+      | none => rw [hp] at hbad; exact absurd rfl hbad
+      | some w => exact ⟨w, rfl⟩
+    have hqw : q w₀ ≠ true := by
+      rw [hw₀] at hbad; simpa only [Option.elim] using hbad
+    have hqf : q w₀ = false := by
+      cases hb : q w₀ with
+      | false => rfl
+      | true => exact absurd hb hqw
+    have hnone : (c.restrict q).p (inj x₀) = none := by
+      simp only [Codec.restrict, hw₀]
+      simp [hqf]
+    have hL : decSet (c.restrict q) inj S = none := by
+      unfold decSet
+      rw [neSetImage_none (setImage_none_of hx₀ (by simp [hnone])),
+          neSetImage_none (setImage_none_of hx₀ (by simp [hnone])),
+          neSetImage_none (setImage_none_of hx₀ (by simp [hnone]))]
+      rfl
+    rw [hL]
+    cases hv : decSet c inj S with
+    | none => rfl
+    | some v =>
+      have hl : liftQ q v ≠ true := fun hl => hqw (decSet_liftQ hv hl hx₀ hw₀)
+      simp [hl]
+
+/-- **`set(refine(b, q))` is `refine(set(b), liftQ q)` on the read side too — on the nose.**
+
+    The twin of `setCodec_restrict`, and the half `Term.set` taking a bare `SetBase` actually
+    rests on: a host that spells `.set()` over a restricted ground as `refine(set(b), liftQ q)`
+    is claiming both halves of the pair agree, and only `e` was proved.
+
+    `decSet` tries `strSet`, then `numSet`, then `binSet`, and takes the first that answers, so
+    the restriction could in principle move which family the read lands in. It cannot:
+    a restricted read is the base read at every element or nowhere, so a family that answers
+    under the restriction answers under the base with the same image, and a family that stops
+    answering stops because some element failed `q` — which is exactly what `liftQ` then
+    reports on the base's own answer. -/
+theorem setCodec_restrict_p (c : Codec) (q : Value → Bool) :
+    (setCodec (c.restrict q)).p = ((setCodec c).restrict (liftQ q)).p := by
+  funext a
+  cases a with
+  | ss S => exact decSet_restrict c q Attr.s S
+  | ns S => exact decSet_restrict c q Attr.n S
+  | bs S => exact decSet_restrict c q Attr.b S
   | _ => rfl
 
 /-! ### A codec carried between two prisms
@@ -1826,35 +1958,10 @@ two orderings of one object and a repeated name, and the `Nodup` premise that us
 travel with every object law existed to make the first harmless and rule out the second.
 Both are now properties of the type, and that premise is gone from all five of them.
 
-`MapOf.at` is the lookup a `MapOf` has: a membership decision and a function application.
-It is deliberately shaped like `List.lookup` so that everything downstream — `entryCodec`,
-`objEntryT`, `fbValue`, `keepB` and every proof that splits on them — reads unchanged. -/
-
-/-- The value a `MapOf` gives a name, where it gives one — the lookup a key set with a
-    function on it has. Generic because the *term*'s field table needs it too. -/
-def MapOf.at {α : Type} (m : MapOf α) (k : Name) : Option α :=
-  if h : k ∈ m.1 then some (m.2 ⟨k, h⟩) else none
-
-/-- A declared name is one the table's key set carries, and conversely. -/
-theorem MapOf.at_eq_some {α : Type} {m : MapOf α} {k : Name} {x : α} :
-    m.at k = some x ↔ ∃ h : k ∈ m.1, m.2 ⟨k, h⟩ = x := by
-  simp only [MapOf.at]
-  by_cases h : k ∈ m.1
-  · rw [dif_pos h]
-    exact ⟨fun he => ⟨h, Option.some.inj he⟩, fun ⟨_, he⟩ => by rw [← he]⟩
-  · rw [dif_neg h]
-    exact Iff.intro (fun he => nomatch he) (fun ⟨h', _⟩ => absurd h' h)
-
-/-- Every key of the table is declared, at the value the table gives it. -/
-theorem MapOf.at_of_mem {α : Type} {m : MapOf α} (k : {k // k ∈ m.1}) :
-    m.at k.1 = some (m.2 k) := by
-  simp only [MapOf.at, dif_pos k.2]
-
-/-- A property of every value is a property of every declared name's value. -/
-theorem MapOf.at_forall {α : Type} {m : MapOf α} {Q : α → Prop}
-    (h : ∀ k, Q (m.2 k)) {k x} (hm : m.at k = some x) : Q x := by
-  obtain ⟨hk, rfl⟩ := MapOf.at_eq_some.mp hm
-  exact h ⟨k, hk⟩
+The type and its lookup are in `Domain.lean`, because three strata need them and the lowest is
+the term language. The lookup is deliberately shaped like `List.lookup`, so everything downstream
+— `entryCodec`, `objEntryT`, `fbValue`, `keepB` and every proof that splits on them — reads
+unchanged. -/
 
 /-- `fb`'s absent case, `p♭(ε) = v(∗)`: the stand-ins for the fallback names a row
     omits. Empty on canonical items, where every `fb` name is present.
@@ -2071,40 +2178,39 @@ abbrev nullOption : OptionSem := .byAttempt nullCodec
 /-- §5's discriminator projection: the tag an item carries at `d`, where it carries one.
     A membership decision and a function application, where the list representation needed
     a `lookup`. -/
+def Value.tagText : Value → Option String
+  | .str s => some s
+  | _ => none
+
+/-- …and its stored twin, which reads **two** members. A decimal tag writes a `.str` and stores
+    an `.n`, so the value side has one row and the stored side has two. The host's tag reader
+    accepts `S` or `N` and returns the text carried by either; this is that rule.
+
+    Named beside `Value.tagText` rather than written inline in `tagOfV`/`tagOfA`, because a
+    lemma about a tag is then a lemma about these and not about a match under a `dif`. -/
+def Attr.tagText : Attr → Option String
+  -- the binders are not `s` and `n`: this definition opens the `Attr` namespace, where those
+  -- two names are the constructors themselves
+  | .s text => some text
+  | .n num => some num.1
+  | _ => none
+
 def tagOfV (d : Name) : Value → Option String
-  | .map keys f =>
-    if h : d ∈ keys then (match f ⟨d, h⟩ with | .str s => some s | _ => none) else none
+  | .map keys f => if h : d ∈ keys then (f ⟨d, h⟩).tagText else none
   | _ => none
 
-/-- …and on the stored side. -/
+/-- …and on the stored side, where the field may be `S` **or** `N`.
+
+    A decimal tag writes a `.str` and stores an `N`, so the value side is covered by the `.str`
+    row above and the stored side needs this one. Without it a decimal-tagged variant would be
+    selectable on write and unreachable on read, which is the asymmetry `GroundKind.decimal`
+    creates everywhere: its value is text and its member is numeric.
+
+    The host reads a tag from the stored item and accepts `S` or `N`, returning the text carried
+    by either. This is that rule. -/
 def tagOfA (d : Name) : Attr → Option String
-  | .m keys g =>
-    if h : d ∈ keys then (match g ⟨d, h⟩ with | .s s => some s | _ => none) else none
+  | .m keys g => if h : d ∈ keys then (g ⟨d, h⟩).tagText else none
   | _ => none
-
-/-- A `(dunion)` option is admitted by its discriminator tag. -/
-def OptionSem.byTag (d : Name) (tags : Finset String) (c : Codec) : OptionSem :=
-  { admitA := fun a => match tagOfA d a with | some tag => decide (tag ∈ tags) | none => false
-    admitV := fun v => match tagOfV d v with | some tag => decide (tag ∈ tags) | none => false
-    c := c }
-
-/-- A tag option admits exactly the items whose discriminator carries one of its tags. -/
-theorem byTag_admitA {d : Name} {tags : Finset String} {c : Codec} {a : Attr} :
-    (OptionSem.byTag d tags c).admitA a = true ↔
-      ∃ tag, tagOfA d a = some tag ∧ tag ∈ tags := by
-  simp only [OptionSem.byTag]
-  cases h : tagOfA d a with
-  | none => simp
-  | some tag => simp
-
-/-- …and the values whose discriminator carries one, on the way in. -/
-theorem byTag_admitV {d : Name} {tags : Finset String} {c : Codec} {v : Value} :
-    (OptionSem.byTag d tags c).admitV v = true ↔
-      ∃ tag, tagOfV d v = some tag ∧ tag ∈ tags := by
-  simp only [OptionSem.byTag]
-  cases h : tagOfV d v with
-  | none => simp
-  | some tag => simp
 
 /-- The builder `denote` uses for a union option. -/
 def optionSemOf (c : Codec) : Option (MapOf Bool) → OptionSem
@@ -2170,12 +2276,6 @@ def altCodec (os : List OptionSem) (μA : Option Member) : Codec :=
     μ := μA
     e := select os (·.admitV) (·.c.e)
     p := select os (·.admitA) (·.c.p) }
-
-/-- `discriminatedUnion` is not its own codec: it is the sum over tag-admission
-    options. Its (U) is `uniqueAdmission_byTag` — a theorem, which is what the term
-    is for. -/
-def dunionCodec (d : Name) (os : List (Finset String × Codec)) : Codec :=
-  altCodec (os.map fun o => .byTag d o.1 o.2) (some .M)
 
 /-! ## Unknown values (§3 `(opaque)`) -/
 
@@ -3808,83 +3908,168 @@ theorem uniqueAdmission_of_kinds {os : List OptionSem} {ks : List Kind}
   · rw [List.pairwise_map]
     exact hnd.imp fun hne l hl hl' => hne (hl.symm.trans hl')
 
-/-- A tag option is `Labelled` by its own tag set, definitionally. -/
-theorem labelled_byTag {d : Name} {tags : Finset String} {c : Codec} :
-    OptionSem.Labelled (tagOfV d) (tagOfA d) (.byTag d tags c) (· ∈ tags) := by
-  refine ⟨fun v hv => ?_, fun a ha => ?_⟩
-  · obtain ⟨tag, htv, htag⟩ := byTag_admitV.mp hv
-    exact ⟨tag, htv, htag⟩
-  · obtain ⟨tag, hta, htag⟩ := byTag_admitA.mp ha
-    exact ⟨tag, hta, htag⟩
-
 /-- An option that decides by attempting admits what it writes, on both sides — the
     read side by (R), which is the only thing `hw` above ever needs. -/
 theorem byAttempt_write {c : Codec} (h : Lawful c) {t a} (he : c.e t = some a) :
     (OptionSem.byAttempt c).admitV t = true ∧ (OptionSem.byAttempt c).admitA a = true :=
   ⟨by simp [OptionSem.byAttempt, he], by simp [OptionSem.byAttempt, h.retract he]⟩
 
-/-- §5's "the one union whose (U) is a theorem", literally: disjoint tags on stamped
-    options give unique admission. `hstamp` is what object-encode of a `req literalS`
-    discriminator provides — the tag on the attribute side and the same tag on the
-    value side, since a literal writes its value verbatim. (An earlier statement split
-    this into an encode-side and a decode-side stamp; the proof showed the value side
-    of the *canonical pair* is what admission reads, and only the combined form
-    supplies it without assuming (R).) -/
-theorem uniqueAdmission_byTag {d : Name} {os : List (Finset String × Codec)}
-    (hstamp : ∀ o ∈ os, ∀ t a, o.2.e t = some a →
-      ∃ tag ∈ o.1, tagOfA d a = some tag ∧ tagOfV d t = some tag)
-    (hdisj : List.Pairwise (fun x y => ∀ tag ∈ x.1, tag ∉ y.1) os) :
-    UniqueAdmission (os.map fun o => .byTag d o.1 o.2) := by
-  refine uniqueAdmission_of_labels (πV := tagOfV d) (πA := tagOfA d)
-    (Ss := os.map (fun o l => l ∈ o.1)) ?_ ?_ ?_
-  · rw [List.forall₂_map_left_iff, List.forall₂_map_right_iff]
-    exact List.forall₂_same.mpr fun o _ => labelled_byTag
-  · rw [List.pairwise_map]
-    exact hdisj.imp fun h l hl => h l hl
-  · refine forall_mem_map fun o ho t a he => ?_
-    replace he : o.2.e t = some a := he
-    obtain ⟨tag, htag, hA, hV⟩ := hstamp o ho t a he
-    exact ⟨byTag_admitV.mpr ⟨tag, hV, htag⟩, byTag_admitA.mpr ⟨tag, hA, htag⟩⟩
+/-! ### `(dunion)` as a lookup
 
-/-- Every option of a `(dunion)` writes an `M` — the stamp says so, and the stamp is
-    all either strength consults. -/
-private theorem dunion_writes {d : Name} {os : List (Finset String × Codec)}
-    (hstamp : ∀ o ∈ os, ∀ t a, o.2.e t = some a →
-      ∃ tag ∈ o.1, tagOfA d a = some tag ∧ tagOfV d t = some tag) :
-    ∀ m, some Member.M = some m →
-      ∀ o ∈ os.map fun o => OptionSem.byTag d o.1 o.2,
-        ∀ t a, o.c.e t = some a → a.member = m := by
-  rintro m hm
-  cases hm
-  refine forall_mem_map fun x hx t a he => ?_
-  replace he : x.2.e t = some a := he
-  obtain ⟨tag, htag, hA, -⟩ := hstamp x hx t a he
-  -- only an `M` carries a tag at all, so the stamp fixes the member
-  cases a <;> simp only [tagOfA] at hA <;> first | rfl | exact nomatch hA
+A discriminated union is a **lookup**, and the list of tag-labelled options is that lookup with
+its key set spread over a list and its uniqueness left as an obligation. A `MapOf Codec` is the
+same thing with the key set as a key set, and it changes what has to be proved rather than how.
 
-/-- `(dunion)` soundness is a corollary: the sum lemma composed with its (U) theorem;
-    the member law comes from the stamp itself — a stamped canonical attribute is an
-    `M`. -/
-theorem lawful_dunionCodec {d : Name} {os : List (Finset String × Codec)}
-    (h : ∀ o ∈ os, Lawful o.2)
-    (hstamp : ∀ o ∈ os, ∀ t a, o.2.e t = some a →
-      ∃ tag ∈ o.1, tagOfA d a = some tag ∧ tagOfV d t = some tag)
-    (hdisj : List.Pairwise (fun x y => ∀ tag ∈ x.1, tag ∉ y.1) os) :
-    Lawful (dunionCodec d os) :=
-  lawful_altCodec (forall_mem_map h)
-    (uniqueBothWays_of_uniqueAdmission (uniqueAdmission_byTag hstamp hdisj))
-    (dunion_writes hstamp)
+**`hdisj` goes and the whole uniqueness chain goes with it.** ~~uniqueAdmission_byTag~~,
+`uniqueBothWays_of_uniqueAdmission` at this site, ~~labelled_byTag~~ and ~~OptionSem.byTag~~ existed to
+establish that at most one option answers to a tag. A key set says it, so there is nothing left
+to discharge: `lawful_dunionTable` below takes two premises where ~~lawful_dunionCodec~~ took three.
 
-/-- Core `(dunion)`: the same corollary, with core options. -/
-theorem lawfulCore_dunionCodec {d : Name} {os : List (Finset String × Codec)}
-    (h : ∀ o ∈ os, LawfulCore o.2)
-    (hstamp : ∀ o ∈ os, ∀ t a, o.2.e t = some a →
-      ∃ tag ∈ o.1, tagOfA d a = some tag ∧ tagOfV d t = some tag)
-    (hdisj : List.Pairwise (fun x y => ∀ tag ∈ x.1, tag ∉ y.1) os) :
-    LawfulCore (dunionCodec d os) :=
-  lawfulCore_altCodec (forall_mem_map h)
-    (uniqueBothWays_of_uniqueAdmission (uniqueAdmission_byTag hstamp hdisj))
-    (dunion_writes hstamp)
+**`hstamp` stays, per key, and it is what makes the lookup lawful at all.** `e` routes through
+`tagOfV` and `p` routes through `tagOfA`, so the two halves reach the same variant only if that
+variant writes its own tag onto the attribute it produces. Without it the codec would encode
+through one key and decode through another. It is the semantic twin of the coherence premise the
+term carries, and `dunion_stamp` is what supplies it. -/
+
+/-- The stamp a lookup needs, keyed rather than listed: every variant writes its own key, on both
+    halves of every pair it produces. -/
+def StampedAt (d : Name) (m : MapOf Codec) : Prop :=
+  ∀ (k : {k // k ∈ m.1}) v a, (m.2 k).e v = some a →
+    tagOfA d a = some k.1 ∧ tagOfV d v = some k.1
+
+/-- §5 `(dunion)`, as the lookup it is: read the tag, index the table, run that one variant.
+
+    No `altCodec`, no filtered list, and no enumeration of the key set — which is the point, since
+    enumerating a `Finset` is `Finset.toList` and that reaches `Classical.choice`. The two readers
+    are the ones a decimal tag widened, so this works at `string` and `decimal` alike. -/
+def dunionTable (d : Name) (m : MapOf Codec) : Codec :=
+  -- **`T` is the disjunction over the key set and says nothing about the tag.** The sharper
+  -- reading — "the value's own tag picks the variant" — is true and costs two premises on
+  -- `Carrier`: `ranP` gives a value from the *attribute*'s key, and recovering the *value*'s key
+  -- needs (C) and the stamp. `T` is an upper bound that `Carrier` keeps `e` and `p` inside, so
+  -- the looser one is the right one, and the fact stays where it is used rather than declared.
+  { T := fun v => ∃ k : {k // k ∈ m.1}, (m.2 k).T v
+    μ := some .M
+    e := fun v => match tagOfV d v with
+      | some tag => if h : tag ∈ m.1 then (m.2 ⟨tag, h⟩).e v else none
+      | none => none
+    p := fun a => match tagOfA d a with
+      | some tag => if h : tag ∈ m.1 then (m.2 ⟨tag, h⟩).p a else none
+      | none => none }
+
+/-- The write half, as the rewrite every proof over it names rather than unfolding. -/
+theorem dunionTable_e {d : Name} {m : MapOf Codec} {v : Value} {a : Attr} :
+    (dunionTable d m).e v = some a ↔
+      ∃ (tag : String) (h : tag ∈ m.1),
+        tagOfV d v = some tag ∧ (m.2 ⟨tag, h⟩).e v = some a := by
+  show (match tagOfV d v with
+        | some tag => if h : tag ∈ m.1 then (m.2 ⟨tag, h⟩).e v else none
+        | none => none) = some a ↔ _
+  cases htv : tagOfV d v with
+  | none => exact Iff.intro (fun he => nomatch he) (fun ⟨_, _, ht, _⟩ => nomatch ht)
+  | some tag =>
+    show (if h : tag ∈ m.1 then (m.2 ⟨tag, h⟩).e v else none) = some a ↔ _
+    by_cases hk : tag ∈ m.1
+    · rw [dif_pos hk]
+      refine Iff.intro (fun he => ⟨tag, hk, rfl, he⟩) ?_
+      rintro ⟨tag', hk', ht, he⟩
+      obtain rfl : tag' = tag := (Option.some.inj ht).symm
+      exact he
+    · rw [dif_neg hk]
+      refine Iff.intro (fun he => nomatch he) ?_
+      rintro ⟨tag', hk', ht, -⟩
+      obtain rfl : tag' = tag := (Option.some.inj ht).symm
+      exact absurd hk' hk
+
+/-- …and the read half. -/
+theorem dunionTable_p {d : Name} {m : MapOf Codec} {a : Attr} {v : Value} :
+    (dunionTable d m).p a = some v ↔
+      ∃ (tag : String) (h : tag ∈ m.1),
+        tagOfA d a = some tag ∧ (m.2 ⟨tag, h⟩).p a = some v := by
+  show (match tagOfA d a with
+        | some tag => if h : tag ∈ m.1 then (m.2 ⟨tag, h⟩).p a else none
+        | none => none) = some v ↔ _
+  cases hta : tagOfA d a with
+  | none => exact Iff.intro (fun hp => nomatch hp) (fun ⟨_, _, ht, _⟩ => nomatch ht)
+  | some tag =>
+    show (if h : tag ∈ m.1 then (m.2 ⟨tag, h⟩).p a else none) = some v ↔ _
+    by_cases hk : tag ∈ m.1
+    · rw [dif_pos hk]
+      refine Iff.intro (fun hp => ⟨tag, hk, rfl, hp⟩) ?_
+      rintro ⟨tag', hk', ht, hp⟩
+      obtain rfl : tag' = tag := (Option.some.inj ht).symm
+      exact hp
+    · rw [dif_neg hk]
+      refine Iff.intro (fun hp => nomatch hp) ?_
+      rintro ⟨tag', hk', ht, -⟩
+      obtain rfl : tag' = tag := (Option.some.inj ht).symm
+      exact absurd hk' hk
+
+/-- **Two premises, where the list form takes three.** The variants' own laws and the stamp; the
+    disjointness premise has nowhere to go, because the key set is where it went. -/
+theorem lawful_dunionTable {d : Name} {m : MapOf Codec}
+    (h : ∀ k, Lawful (m.2 k)) (hstamp : StampedAt d m) :
+    Lawful (dunionTable d m) := by
+  refine ⟨?_, ?_, ?_, ?_⟩
+  · intro v a he
+    obtain ⟨tag, hk, htv, hve⟩ := dunionTable_e.mp he
+    obtain ⟨hA, -⟩ := hstamp ⟨tag, hk⟩ v a hve
+    exact dunionTable_p.mpr ⟨tag, hk, hA, (h ⟨tag, hk⟩).retract hve⟩
+  · intro a v hp
+    obtain ⟨tag, hk, hta, hvp⟩ := dunionTable_p.mp hp
+    obtain ⟨a', hae⟩ := Option.isSome_iff_exists.mp ((h ⟨tag, hk⟩).canon hvp)
+    obtain ⟨-, hV⟩ := hstamp ⟨tag, hk⟩ v a' hae
+    exact Option.isSome_iff_exists.mpr ⟨a', dunionTable_e.mpr ⟨tag, hk, hV, hae⟩⟩
+  · rintro μ hμ v a he
+    cases hμ
+    obtain ⟨tag, hk, -, hve⟩ := dunionTable_e.mp he
+    obtain ⟨hA, -⟩ := hstamp ⟨tag, hk⟩ v a hve
+    -- only an `M` carries a tag at all, so the stamp fixes the member
+    cases a <;> simp only [tagOfA] at hA <;> first | rfl | exact nomatch hA
+  · intro a v a' hp he
+    obtain ⟨tag, hk, hta, hvp⟩ := dunionTable_p.mp hp
+    obtain ⟨tag', hk', htv, hve⟩ := dunionTable_e.mp he
+    -- **the value carries one tag**, so the write half lands on the key the read half came from:
+    -- the variant the read half chose writes *something* by (C), and the stamp says that
+    -- something carries the read half's key
+    obtain ⟨a'', hae⟩ := Option.isSome_iff_exists.mp ((h ⟨tag, hk⟩).canon hvp)
+    obtain ⟨-, hV⟩ := hstamp ⟨tag, hk⟩ v a'' hae
+    obtain rfl : tag' = tag := by rw [hV] at htv; exact (Option.some.inj htv).symm
+    exact (h ⟨_, hk⟩).agree hvp hve
+
+/-- **On its carrier from the variants' alone**, one premise, as `altCodec` takes one. `T` is the
+    disjunction over the key set, so a value either half produces sits under the key it came
+    from — and neither half has to know it is the *same* key, which is what dropping the tag
+    conjunct from `T` bought. -/
+theorem carrier_dunionTable {d : Name} {m : MapOf Codec}
+    (h : ∀ k, Carrier (m.2 k)) : Carrier (dunionTable d m) := by
+  refine ⟨?_, ?_⟩
+  · intro v a he
+    obtain ⟨tag, hk, -, hve⟩ := dunionTable_e.mp he
+    exact ⟨⟨tag, hk⟩, (h ⟨tag, hk⟩).domE hve⟩
+  · intro a v hp
+    obtain ⟨tag, hk, -, hvp⟩ := dunionTable_p.mp hp
+    exact ⟨⟨tag, hk⟩, (h ⟨tag, hk⟩).ranP hvp⟩
+
+/-- Core `(dunion)`: the same two premises, with core variants. -/
+theorem lawfulCore_dunionTable {d : Name} {m : MapOf Codec}
+    (h : ∀ k, LawfulCore (m.2 k)) (hstamp : StampedAt d m) :
+    LawfulCore (dunionTable d m) := by
+  refine ⟨?_, ?_, ?_⟩
+  · intro v a he
+    obtain ⟨tag, hk, htv, hve⟩ := dunionTable_e.mp he
+    obtain ⟨hA, -⟩ := hstamp ⟨tag, hk⟩ v a hve
+    exact dunionTable_p.mpr ⟨tag, hk, hA, (h ⟨tag, hk⟩).retract hve⟩
+  · intro a v hp
+    obtain ⟨tag, hk, hta, hvp⟩ := dunionTable_p.mp hp
+    obtain ⟨a', hae⟩ := Option.isSome_iff_exists.mp ((h ⟨tag, hk⟩).canon hvp)
+    obtain ⟨-, hV⟩ := hstamp ⟨tag, hk⟩ v a' hae
+    exact Option.isSome_iff_exists.mpr ⟨a', dunionTable_e.mpr ⟨tag, hk, hV, hae⟩⟩
+  · rintro μ hμ v a he
+    cases hμ
+    obtain ⟨tag, hk, -, hve⟩ := dunionTable_e.mp he
+    obtain ⟨hA, -⟩ := hstamp ⟨tag, hk⟩ v a hve
+    cases a <;> simp only [tagOfA] at hA <;> first | rfl | exact nomatch hA
 
 /-! ### `opaque`'s options, each pinned to its kind -/
 

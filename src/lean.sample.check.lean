@@ -15,6 +15,11 @@ generator — an under-fuelled line reduces to `.exhausted`, which matches neith
 `.differ`, so it fails to compile rather than passing quietly.
 -/
 
+/-! A key function is emitted total on the membership subtype, so a single-declared-name object
+binds a `k` it never reads. `Calculus/` itself builds warning-free and so should this file; the
+binder cannot be `_` because a multi-name object *does* read `k.1`. -/
+set_option linter.unusedVariables false
+
 namespace Calculus
 
 /-- `scalar_string` -/
@@ -80,6 +85,13 @@ theorem set_of_string :
         (Value.strSet (NEFinset.of "b" {"a"})))
       (some (Attr.ss (NEFinset.of "a" {"b"}))) = .same := rfl
 
+/-- `set_of_literal` -/
+theorem set_of_literal :
+    check 1
+      ((denote (Term.refine (Term.set SetBase.string) (Pred.each (Pred.members GroundKind.string (NEFinset.of "a" {"b"}))))).e
+        (Value.strSet (NEFinset.of "b" {"a"})))
+      (some (Attr.ss (NEFinset.of "a" {"b"}))) = .same := rfl
+
 /-- `set_of_decimal` -/
 theorem set_of_decimal :
     check 1
@@ -125,35 +137,35 @@ theorem record_empty :
 /-- `object_two_fields` -/
 theorem object_two_fields :
     check 2
-      ((denote (Term.object {"a", "b"} (fun k => if k.1 = "a" then Field.req (Term.string) else Field.req (Term.boolean)) Rest.drop)).e
+      ((denote (Term.object (Body.mk {"a", "b"} (fun k => if k.1 = "a" then Field.req (Term.string) else Field.req (Term.boolean)) Rest.drop))).e
         (Value.map {"a", "b"} (fun k => if k.1 = "a" then Value.str "x" else Value.bool true)))
       (some (Attr.m {"a", "b"} (fun k => if k.1 = "a" then Attr.s "x" else Attr.bool true))) = .same := rfl
 
 /-- `object_optional_absent` -/
 theorem object_optional_absent :
     check 2
-      ((denote (Term.object {"a", "b"} (fun k => if k.1 = "a" then Field.req (Term.string) else Field.optional (Term.boolean)) Rest.drop)).e
+      ((denote (Term.object (Body.mk {"a", "b"} (fun k => if k.1 = "a" then Field.req (Term.string) else Field.optional (Term.boolean)) Rest.drop))).e
         (Value.map {"a"} (fun k => Value.str "x")))
       (some (Attr.m {"a"} (fun k => Attr.s "x"))) = .same := rfl
 
 /-- `object_fallback_present` -/
 theorem object_fallback_present :
     check 2
-      ((denote (Term.object {"a"} (fun k => Field.fallback (Term.string) (Value.str "stand-in")) Rest.drop)).e
+      ((denote (Term.object (Body.mk {"a"} (fun k => Field.fallback (Term.string) (Value.str "stand-in")) Rest.drop))).e
         (Value.map {"a"} (fun k => Value.str "x")))
       (some (Attr.m {"a"} (fun k => Attr.s "x"))) = .same := rfl
 
 /-- `object_open` -/
 theorem object_open :
     check 2
-      ((denote (Term.object {"a"} (fun k => Field.req (Term.string)) (Rest.codec (Term.boolean)))).e
+      ((denote (Term.object (Body.mk {"a"} (fun k => Field.req (Term.string)) (Rest.codec (Term.boolean))))).e
         (Value.map {"a", "z"} (fun k => if k.1 = "a" then Value.str "x" else Value.bool true)))
       (some (Attr.m {"a", "z"} (fun k => if k.1 = "a" then Attr.s "x" else Attr.bool true))) = .same := rfl
 
 /-- `object_nested` -/
 theorem object_nested :
     check 3
-      ((denote (Term.object {"a"} (fun k => Field.req (Term.object {"b"} (fun k => Field.req (Term.string)) Rest.drop)) Rest.drop)).e
+      ((denote (Term.object (Body.mk {"a"} (fun k => Field.req (Term.object (Body.mk {"b"} (fun k => Field.req (Term.string)) Rest.drop))) Rest.drop))).e
         (Value.map {"a"} (fun k => Value.map {"b"} (fun k => Value.str "x"))))
       (some (Attr.m {"a"} (fun k => Attr.m {"b"} (fun k => Attr.s "x")))) = .same := rfl
 
@@ -181,7 +193,7 @@ theorem nullable_null :
 /-- `discriminated_union` -/
 theorem discriminated_union :
     check 2
-      ((denote (Term.dunion "kind" [Term.object {"kind", "x"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string (NEFinset.of "a" ∅)) else Field.req (Term.string)) Rest.drop, Term.object {"kind", "y"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string (NEFinset.of "b" ∅)) else Field.req (Term.boolean)) Rest.drop])).e
+      ((denote (Term.dunion "kind" ⟨{"a", "b"}, fun k => if k.1 = "a" then (Body.mk {"kind", "x"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string (NEFinset.of "a" ∅)) else Field.req (Term.string)) Rest.drop) else (Body.mk {"kind", "y"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string (NEFinset.of "b" ∅)) else Field.req (Term.boolean)) Rest.drop)⟩)).e
         (Value.map {"kind", "x"} (fun k => if k.1 = "kind" then Value.str "a" else Value.str "v")))
       (some (Attr.m {"kind", "x"} (fun k => if k.1 = "kind" then Attr.s "a" else Attr.s "v"))) = .same := rfl
 
@@ -198,5 +210,195 @@ theorem lazy_string :
       ((denote (Term.lazy (Term.string))).e
         (Value.str "x"))
       (some (Attr.s "x")) = .same := rfl
+
+/-! ### Read back, through the same term
+
+The model's `p`, given the attribute the library wrote, against the value the library read. Only
+the `check` sample carries these: a read vector's answer is a `Value`, so it needs `vcheck`, and
+the `equation` sample depends on nothing beyond `denote` by design. -/
+
+/-- `scalar_string` — read back through the term that wrote it -/
+theorem scalar_string__reads :
+    vcheck 1
+      ((denote (Term.string)).p
+        (Attr.s "hello"))
+      (some (Value.str "hello")) = .same := rfl
+
+/-- `scalar_boolean` — read back through the term that wrote it -/
+theorem scalar_boolean__reads :
+    vcheck 1
+      ((denote (Term.boolean)).p
+        (Attr.bool true))
+      (some (Value.bool true)) = .same := rfl
+
+/-- `set_of_string` — read back through the term that wrote it -/
+theorem set_of_string__reads :
+    vcheck 1
+      ((denote (Term.set SetBase.string)).p
+        (Attr.ss (NEFinset.of "a" {"b"})))
+      (some (Value.strSet (NEFinset.of "a" {"b"}))) = .same := rfl
+
+/-- `array_of_string` — read back through the term that wrote it -/
+theorem array_of_string__reads :
+    vcheck 2
+      ((denote (Term.array (Term.string))).p
+        (Attr.l [Attr.s "a", Attr.s "b"]))
+      (some (Value.arr [Value.str "a", Value.str "b"])) = .same := rfl
+
+/-- `object_two_fields` — read back through the term that wrote it -/
+theorem object_two_fields__reads :
+    vcheck 2
+      ((denote (Term.object (Body.mk {"a", "b"} (fun k => if k.1 = "a" then Field.req (Term.string) else Field.req (Term.boolean)) Rest.drop))).p
+        (Attr.m {"a", "b"} (fun k => if k.1 = "a" then Attr.s "x" else Attr.bool true)))
+      (some (Value.map {"a", "b"} (fun k => if k.1 = "a" then Value.str "x" else Value.bool true))) = .same := rfl
+
+/-- `union_of_two` — read back through the term that wrote it -/
+theorem union_of_two__reads :
+    vcheck 1
+      ((denote (Term.union [Term.string, Term.boolean])).p
+        (Attr.bool true))
+      (some (Value.bool true)) = .same := rfl
+
+/-! ## Refusals — neither side writes anything for these
+
+27 of 649 shown; `scripts/gate.sh` elaborates all
+649. One `rfl` each, no comparator and no fuel: the answer is `none`,
+which carries no function for the funext gap to open under.
+-/
+
+/-- `scalar_string__refuses__scalar_boolean` — refused on both sides -/
+theorem scalar_string__refuses__scalar_boolean :
+    (denote (Term.string)).e
+      (Value.bool true) = none := rfl
+
+/-- `scalar_decimal__refuses__scalar_string` — refused on both sides -/
+theorem scalar_decimal__refuses__scalar_string :
+    (denote (Term.decimal)).e
+      (Value.str "hello") = none := rfl
+
+/-- `scalar_boolean__refuses__scalar_string` — refused on both sides -/
+theorem scalar_boolean__refuses__scalar_string :
+    (denote (Term.boolean)).e
+      (Value.str "hello") = none := rfl
+
+/-- `scalar_binary__refuses__scalar_string` — refused on both sides -/
+theorem scalar_binary__refuses__scalar_string :
+    (denote (Term.binary)).e
+      (Value.str "hello") = none := rfl
+
+/-- `scalar_null__refuses__scalar_string` — refused on both sides -/
+theorem scalar_null__refuses__scalar_string :
+    (denote (Term.null)).e
+      (Value.str "hello") = none := rfl
+
+/-- `literal_alternatives__refuses__scalar_string` — refused on both sides -/
+theorem literal_alternatives__refuses__scalar_string :
+    (denote (Term.literal GroundKind.string (NEFinset.of "A" {"B"}))).e
+      (Value.str "hello") = none := rfl
+
+/-- `literal_decimal__refuses__scalar_string` — refused on both sides -/
+theorem literal_decimal__refuses__scalar_string :
+    (denote (Term.literal GroundKind.decimal (NEFinset.of ⟨"1", by decide⟩ {⟨"2.5", by decide⟩}))).e
+      (Value.str "hello") = none := rfl
+
+/-- `literal_binary__refuses__scalar_string` — refused on both sides -/
+theorem literal_binary__refuses__scalar_string :
+    (denote (Term.literal GroundKind.binary (NEFinset.of [0, 127, 255] ∅))).e
+      (Value.str "hello") = none := rfl
+
+/-- `set_of_string__refuses__scalar_string` — refused on both sides -/
+theorem set_of_string__refuses__scalar_string :
+    (denote (Term.set SetBase.string)).e
+      (Value.str "hello") = none := rfl
+
+/-- `set_of_literal__refuses__scalar_string` — refused on both sides -/
+theorem set_of_literal__refuses__scalar_string :
+    (denote (Term.refine (Term.set SetBase.string) (Pred.each (Pred.members GroundKind.string (NEFinset.of "a" {"b"}))))).e
+      (Value.str "hello") = none := rfl
+
+/-- `set_of_decimal__refuses__scalar_string` — refused on both sides -/
+theorem set_of_decimal__refuses__scalar_string :
+    (denote (Term.set SetBase.decimal)).e
+      (Value.str "hello") = none := rfl
+
+/-- `array_of_string__refuses__scalar_string` — refused on both sides -/
+theorem array_of_string__refuses__scalar_string :
+    (denote (Term.array (Term.string))).e
+      (Value.str "hello") = none := rfl
+
+/-- `array_empty__refuses__scalar_string` — refused on both sides -/
+theorem array_empty__refuses__scalar_string :
+    (denote (Term.array (Term.string))).e
+      (Value.str "hello") = none := rfl
+
+/-- `tuple_pair__refuses__scalar_string` — refused on both sides -/
+theorem tuple_pair__refuses__scalar_string :
+    (denote (Term.tuple [Term.string, Term.boolean] none)).e
+      (Value.str "hello") = none := rfl
+
+/-- `record_of_string__refuses__scalar_string` — refused on both sides -/
+theorem record_of_string__refuses__scalar_string :
+    (denote (Term.record (Term.string))).e
+      (Value.str "hello") = none := rfl
+
+/-- `record_empty__refuses__scalar_string` — refused on both sides -/
+theorem record_empty__refuses__scalar_string :
+    (denote (Term.record (Term.string))).e
+      (Value.str "hello") = none := rfl
+
+/-- `object_two_fields__refuses__scalar_string` — refused on both sides -/
+theorem object_two_fields__refuses__scalar_string :
+    (denote (Term.object (Body.mk {"a", "b"} (fun k => if k.1 = "a" then Field.req (Term.string) else Field.req (Term.boolean)) Rest.drop))).e
+      (Value.str "hello") = none := rfl
+
+/-- `object_optional_absent__refuses__scalar_string` — refused on both sides -/
+theorem object_optional_absent__refuses__scalar_string :
+    (denote (Term.object (Body.mk {"a", "b"} (fun k => if k.1 = "a" then Field.req (Term.string) else Field.optional (Term.boolean)) Rest.drop))).e
+      (Value.str "hello") = none := rfl
+
+/-- `object_fallback_present__refuses__scalar_string` — refused on both sides -/
+theorem object_fallback_present__refuses__scalar_string :
+    (denote (Term.object (Body.mk {"a"} (fun k => Field.fallback (Term.string) (Value.str "stand-in")) Rest.drop))).e
+      (Value.str "hello") = none := rfl
+
+/-- `object_open__refuses__scalar_string` — refused on both sides -/
+theorem object_open__refuses__scalar_string :
+    (denote (Term.object (Body.mk {"a"} (fun k => Field.req (Term.string)) (Rest.codec (Term.boolean))))).e
+      (Value.str "hello") = none := rfl
+
+/-- `object_nested__refuses__scalar_string` — refused on both sides -/
+theorem object_nested__refuses__scalar_string :
+    (denote (Term.object (Body.mk {"a"} (fun k => Field.req (Term.object (Body.mk {"b"} (fun k => Field.req (Term.string)) Rest.drop))) Rest.drop))).e
+      (Value.str "hello") = none := rfl
+
+/-- `map_inside_a_list__refuses__scalar_string` — refused on both sides -/
+theorem map_inside_a_list__refuses__scalar_string :
+    (denote (Term.array (Term.record (Term.string)))).e
+      (Value.str "hello") = none := rfl
+
+/-- `union_of_two__refuses__scalar_binary` — refused on both sides -/
+theorem union_of_two__refuses__scalar_binary :
+    (denote (Term.union [Term.string, Term.boolean])).e
+      (Value.bin [0, 127, 255]) = none := rfl
+
+/-- `nullable_null__refuses__scalar_boolean` — refused on both sides -/
+theorem nullable_null__refuses__scalar_boolean :
+    (denote (Term.nullable (Term.string))).e
+      (Value.bool true) = none := rfl
+
+/-- `discriminated_union__refuses__scalar_string` — refused on both sides -/
+theorem discriminated_union__refuses__scalar_string :
+    (denote (Term.dunion "kind" ⟨{"a", "b"}, fun k => if k.1 = "a" then (Body.mk {"kind", "x"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string (NEFinset.of "a" ∅)) else Field.req (Term.string)) Rest.drop) else (Body.mk {"kind", "y"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string (NEFinset.of "b" ∅)) else Field.req (Term.boolean)) Rest.drop)⟩)).e
+      (Value.str "hello") = none := rfl
+
+/-- `lazy_string__refuses__scalar_boolean` — refused on both sides -/
+theorem lazy_string__refuses__scalar_boolean :
+    (denote (Term.lazy (Term.string))).e
+      (Value.bool true) = none := rfl
+
+/-- `scalar_number__refuses__scalar_string` — refused on both sides -/
+theorem scalar_number__refuses__scalar_string :
+    (denote (Term.number)).e
+      (Value.str "hello") = none := rfl
 
 end Calculus

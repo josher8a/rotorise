@@ -16,14 +16,15 @@
  * failing on a union that genuinely has two admitters, and on one that has none.
  */
 import { describe, expect, it } from 'vitest'
+import { memberOf } from './attribute'
 import {
     array,
     boolean,
-    carries,
+    CodecError,
     custom,
     decimal,
-    held,
     discriminatedUnion,
+    held,
     nullable,
     number,
     object,
@@ -31,10 +32,10 @@ import {
     record,
     string,
     union,
-    writes,
+    valueKinds,
 } from './codec'
-import { checkUniqueAdmission } from './testing'
 import { Attribute } from './Rotorise'
+import { checkUniqueAdmission } from './testing'
 
 const seed = 20260829
 
@@ -109,9 +110,7 @@ describe('the unions this library ships', () => {
 describe('a codec with no union', () => {
     /** Silence is not a pass, and a harness that says nothing on `string` would report one. */
     it('is reported rather than passing vacuously', () => {
-        expect(() => checkUniqueAdmission(string, { seed })).toThrow(
-            /has none/,
-        )
+        expect(() => checkUniqueAdmission(string, { seed })).toThrow(CodecError)
     })
 })
 
@@ -124,6 +123,14 @@ describe('the harness, against planted violations', () => {
      * kind of value. A `custom` slips both: it reads back as `number`, so the types are told apart,
      * and it declares no `carries`, so it is not compared. What it actually does at runtime is
      * accept any string, which is the situation both guards exist to prevent and neither sees.
+     * @anchored
+     */
+    /**
+     * **Pins wording, and not because no law has it — because the *message* is the only channel
+     * this fact travels on.** Which side of (U) fails is an algebraic distinction, and both
+     * failures are one `CodecError`: swapping these to the type would collapse this test and its
+     * sibling into the same assertion and lose the write/read split that is the pair's whole
+     * point. Kept for the opposite reason to the diagnostics elsewhere in this batch.
      */
     it('reports a value two options admit', () => {
         const loose = custom<number, Attribute<'S'>>({
@@ -142,6 +149,14 @@ describe('the harness, against planted violations', () => {
      * The value side is fine — `never` writes an `S` and only it is asked — but what it writes is
      * an `S` no option reads back, so the attribute has no admitter at all. That is the shape (R)
      * loses at a canonical attribute, which is exactly the residue `uAtCan_of_separated` names.
+     * @anchored
+     */
+    /**
+     * **Pins wording, and not because no law has it — because the *message* is the only channel
+     * this fact travels on.** Which side of (U) fails is an algebraic distinction, and both
+     * failures are one `CodecError`: swapping these to the type would collapse this test and its
+     * sibling into the same assertion and lose the write/read split that is the pair's whole
+     * point. Kept for the opposite reason to the diagnostics elsewhere in this batch.
      */
     it('reports an attribute no option admits', () => {
         const writeOnly = custom<string, Attribute<'S'>>({
@@ -166,7 +181,7 @@ describe('what (U) says about nullable, which the model reads as a union', () =>
      */
     it('is not a union site, and this says so', () => {
         expect(() => checkUniqueAdmission(nullable(string), { seed })).toThrow(
-            /has none/,
+            CodecError,
         )
     })
 })
@@ -203,7 +218,7 @@ describe('the defect (U) found: an option with no κ on the write side', () => {
      *
      * - `writes(held(decimal, …))` is `'N'` — the stored member is the *inner* codec's, so the read
      *   side has a `κ` and tells the two options apart.
-     * - `carries(held(decimal, …))` is `undefined` — the adapter's carrier is a caller's type, and
+     * - the value kinds of `held(decimal, …)` are unknown — the adapter's carrier is a caller's type, and
      *   §1's `Value` has no point for a `Date`. So there is no `κ` on the write side, and
      *   `shapeOf(new Date())` is `undefined` too: the filter cannot even be applied to the value.
      *
@@ -213,7 +228,7 @@ describe('the defect (U) found: an option with no κ on the write side', () => {
      * could not tell them apart.
      *
      * **The ambiguity was never real; it was `encode`'s looseness wearing an ambiguity's clothes.**
-     * `string`'s row now refuses what `admits(string, …)` refuses, so a `Date` is admitted by the
+     * `string`'s row now refuses what `accepts(string, …)` refuses, so a `Date` is admitted by the
      * `held` option alone and the union resolves. The two repairs this block used to name — refuse
      * the declaration, or give `held` a write-side `κ` — were both about supplying the missing
      * `κ`. Neither was needed. The option that had no `κ` still has none; what it no longer has is
@@ -221,7 +236,7 @@ describe('the defect (U) found: an option with no κ on the write side', () => {
      *
      * Worth keeping for the shape of the mistake: a resolver that decides by *trying* inherits
      * every looseness of everything it tries, and reports the result as a property of the
-     * declaration. That is also the argument for wiring `admits` into the resolver rather than
+     * declaration. That is also the argument for wiring admission into the resolver rather than
      * leaving it to attempt — HANDOFF's fourth item.
      */
     const asDate = {
@@ -230,8 +245,12 @@ describe('the defect (U) found: an option with no κ on the write side', () => {
     }
 
     it('has a κ on the read side and none on the write side', () => {
-        expect(writes(held(decimal, asDate))).toBe('N')
-        expect(carries(held(decimal, asDate))).toBeUndefined()
+        // the member is asked of the attribute, because that is the law; `carries` stays a reader
+        // call because the *reader's answer* is the subject here — κ on the write side is exactly
+        // what `carries` reports, and that it reports nothing is the claim
+        const at = held(decimal, asDate)
+        expect(memberOf(at.encode(new Date(0)) as never)).toBe('N')
+        expect(valueKinds(at.def)).toBeUndefined()
     })
 
     it('reads back from either member', () => {

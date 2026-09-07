@@ -82,6 +82,9 @@ describe('a failure carries the path it took', () => {
                 L: [{ M: { tender: { M: { note: { N: '7' } } } } }],
             },
         }
+        // PINS A FACT NO LAW HAS, deliberately: the assembled path *is* what this file is for,
+        // so the exact string is the subject rather than a stand-in for a refusal. A rewrite that
+        // changed it would be changing the thing under test. It stays as it is.
         try {
             Order.unsafeDecode(broken)
             expect.unreachable()

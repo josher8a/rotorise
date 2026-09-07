@@ -13,9 +13,10 @@
  * The laws that **fail** are as much of the record as the ones that hold, and they are at the bottom.
  */
 import { describe, expect, it } from 'vitest'
+import type { AttributeMap } from './attribute'
+import { memberOf } from './attribute'
 import type { AnyCodec } from './codec'
 import {
-    admits,
     array,
     binary,
     boolean,
@@ -40,17 +41,31 @@ import {
     string,
     tuple,
     union,
-    writes,
 } from './codec'
+import { accepts } from './denote'
 import {
     arbitraryOf,
     checkDecodesAreWritable,
     checkEquivalent,
     checkIso,
+    checkStable,
     rngFrom,
 } from './testing'
 
 const seed = 20260828
+
+/**
+ * The member a codec actually **writes**, read off the attribute rather than out of the
+ * declaration.
+ *
+ * `member` reads the term and reports what the term says it stores. That is the right answer for
+ * the resolver, which has only a declaration to go on, and the wrong assertion for a law — §6's
+ * member-preservation row is a claim about `e`, so a test that asks `member` passes on a codec
+ * whose term is right and whose `encode` is wrong, and fails a rewrite that keeps every behaviour
+ * and reorganises the terms. Where the claim is the law, this is what to ask.
+ */
+const memberWritten = (codec: AnyCodec, value: unknown): string | undefined =>
+    memberOf(codec.encode(value as never) as never)
 
 describe('held', () => {
     const identity = { encode: (v: string) => v, decode: (v: string) => v }
@@ -81,16 +96,23 @@ describe('held', () => {
 
     it('leaves what is stored alone, which is the whole of what it claims', () => {
         expect(
-            writes(
+            memberWritten(
                 held(string.set(), {
                     encode: (tags: readonly string[]) => new Set(tags),
                     decode: (tags) => [...tags],
-                }),
+                }) as AnyCodec,
+                ['a', 'b'],
             ),
         ).toBe('SS')
-        expect(writes(held(decimal, { encode: String, decode: Number }))).toBe(
-            'N',
-        )
+        expect(
+            memberWritten(
+                held(decimal, {
+                    encode: String,
+                    decode: Number,
+                }) as AnyCodec,
+                1.5,
+            ),
+        ).toBe('N')
     })
 
     it('is an isomorphism where it says it is', () => {
@@ -143,7 +165,89 @@ describe('held', () => {
                 },
                 { seed },
             ),
-        ).toThrow(/not an isomorphism/)
+        ).toThrow(CodecError)
+    })
+})
+
+/**
+ * **The five obligations the model carries as premises and this library does not type.**
+ *
+ * Each is a side condition §3 or §2 asks of a constructor that takes a caller's function or value.
+ * Three are decidable from what the caller hands over and are now refused where the declaration is
+ * — `fallback`'s stand-in, `legacy`'s `ran(r) ⊆ dom(e)`, and a `rest` out of position. Two are not
+ * decidable at all, so what is pinned here is the failure mode, which is the only thing a test can
+ * say about an obligation nothing enforces.
+ */
+describe('the obligations a caller owes', () => {
+    /**
+     * `held`'s `IsoCancels`, unrefused. An adapter that *normalises* is not an isomorphism, and
+     * every read-modify-write on such a row rewrites the value: `'a'` is written `'A'` and read
+     * back `'A'`, so the row drifts once and then sticks.
+     *
+     * `checkIso` is the discharge route and does catch it, which is what makes this a written
+     * obligation rather than an unknown one.
+     */
+    it('held: an adapter that normalises breaks (R), and nothing refuses it', () => {
+        const normalising = held(string, {
+            encode: (v: string) => v.toUpperCase(),
+            decode: (v: string) => v,
+        })
+        expect(normalising.unsafeEncode('a')).toEqual({ S: 'A' })
+        expect(normalising.unsafeDecode({ S: 'A' })).toBe('A')
+
+        // (R) asks for 'a' back, and the pair is lawful-looking at every other test in this file
+        expect(
+            normalising.unsafeDecode(normalising.unsafeEncode('a')),
+        ).not.toBe('a')
+        expect(() =>
+            checkIso(string, {
+                encode: (v: string) => v.toUpperCase(),
+                decode: (v: string) => v,
+            }),
+        ).toThrow(CodecError)
+    })
+
+    /**
+     * `legacy`'s coherence half, which has **no observable witness** — and that is the finding
+     * rather than a gap in the test. The current encoding is tried first and the older one only on
+     * its failure, so where both could read an attribute the older one is never consulted. A
+     * reader that disagrees outright is invisible.
+     */
+    it('legacy: a disagreeing older reader is never consulted, so nothing can see it', () => {
+        const disagreeing = legacy({
+            current: string,
+            older: { decode: () => 'DISAGREE' as string },
+        })
+        expect(disagreeing.unsafeDecode({ S: 'hi' })).toBe('hi')
+        // and it is consulted only where the current encoding refuses
+        expect(disagreeing.unsafeDecode({ N: '1' })).toBe('DISAGREE')
+    })
+
+    /** `legacy`'s first half, now refused at the read that produces the unwritable value. */
+    it('legacy: an older reading the current encoding cannot write is refused', () => {
+        const migrating = legacy({
+            current: string('A'),
+            older: { decode: () => 'B' as 'A' },
+        })
+        expect(() => migrating.unsafeDecode({ N: '1' })).toThrow(CodecError)
+        expect(() => migrating.unsafeDecode({ N: '1' })).toThrow(CodecError)
+    })
+
+    /** `fallback`'s stand-in, now refused at the declaration. */
+    it('fallback: a stand-in the codec cannot write is refused at construction', () => {
+        expect(() => fallback(string('A'), 'B' as 'A')).toThrow(CodecError)
+        expect(() => fallback(string('A'), 'A' as const)).not.toThrow()
+    })
+
+    /** `RestGoesLast`, past the cast that defeats the type. */
+    it('tuple: a rest out of position is refused at construction', () => {
+        // the whole call is cast, because `RestGoesLast` constrains the parameter list rather
+        // than any one element — which is the type doing its job, and the cast is the witness
+        const unchecked = tuple as unknown as (
+            ...elements: readonly unknown[]
+        ) => unknown
+        expect(() => unchecked(rest(string), number)).toThrow(CodecError)
+        expect(() => tuple(string, rest(number))).not.toThrow()
     })
 })
 
@@ -162,14 +266,16 @@ describe('refine', () => {
 
     it('by a predicate nothing fails is the codec itself', () => {
         checkEquivalent(
-            refine(string, (v): v is string => true),
+            refine(string, (_v): _v is string => true),
             string,
             { seed },
         )
     })
 
     it('leaves what is stored alone', () => {
-        expect(writes(refine(decimal, nonEmpty))).toBe('N')
+        expect(
+            memberWritten(refine(decimal, nonEmpty) as AnyCodec, '1.5'),
+        ).toBe('N')
     })
 })
 
@@ -257,16 +363,74 @@ describe('optional', () => {
             // @ts-expect-error a name is marked once
             optional(optional(string)),
             // @ts-expect-error and `fallback` is what "absent, with a stand-in" is called
-            optional(fallback(string, () => 'x')),
+            optional(fallback(string, 'x')),
             // @ts-expect-error in either order
-            fallback(optional(string), () => 'x'),
+            fallback(optional(string), 'x'),
         ]
         expect(typeof _wrong).toBe('function')
     })
 
     it('leaves what is stored alone', () => {
-        expect(writes(optional(decimal))).toBe('N')
-        expect(writes(optional(string.set()))).toBe('SS')
+        expect(memberWritten(optional(decimal).codec as AnyCodec, '1.5')).toBe(
+            'N',
+        )
+        expect(
+            memberWritten(
+                optional(string.set()).codec as AnyCodec,
+                new Set(['a']),
+            ),
+        ).toBe('SS')
+    })
+})
+
+/**
+ * `nullable` is the one wrapper that changes the *pair* and not only the declaration, so it is the
+ * one with a law about what it wraps.
+ */
+describe('nullable', () => {
+    /**
+     * **§6's idempotence row.** `nullable(nullable(c)) ≡ nullable(c)`.
+     *
+     * The specification proves this by *construction* rather than as an equation the proof has to
+     * earn: `owns(nullable(c))` holds for every `c`, so the outer wrapper finds the point already
+     * owned and is the inner codec's pair. The test is here because that reasoning is about the
+     * guard, and the guard is one `||` — an implementation could satisfy every other law in this
+     * file and still shadow the inner wrapper's `NULL` branch with its own.
+     */
+    it('is idempotent', () => {
+        checkEquivalent(nullable(nullable(string)), nullable(string), { seed })
+        checkEquivalent(nullable(nullable(decimal)), nullable(decimal), {
+            seed,
+        })
+    })
+
+    /**
+     * **(R) over an inner term that already owns the null point.**
+     *
+     * `nullable(c)` adds the null point *unless `c` already reaches it* — the specification's
+     * `owns(c)`, asked of both halves at once. Without that guard the wrapper's `NULL` branch
+     * shadows the inner codec: the adapter here maps `'SENTINEL'` to `null`, so the inner term
+     * writes and reads `{ NULL: true }` itself, and an unguarded wrapper reads that attribute as
+     * `null` before the inner term is consulted. The value written is not the value read.
+     *
+     * This is a public-API term. No declaration in this repository builds it and `held` is
+     * unemittable, so no generated vector could reach it — which is why it is written by hand and
+     * lives beside the rows it belongs to rather than under the laws that do not hold. It is a law
+     * that must hold.
+     */
+    it('and nullable defers to an inner term that owns NULL', () => {
+        const sentinel = held(nullable(string), {
+            encode: (v: string) => (v === 'SENTINEL' ? null : v),
+            decode: (v: string | null) => (v === null ? 'SENTINEL' : v),
+        })
+        const outer = nullable(sentinel)
+
+        const written = outer.unsafeEncode('SENTINEL')
+        expect(written).toEqual({ NULL: true })
+        expect(outer.unsafeDecode(written)).toBe('SENTINEL')
+
+        // and the point still round-trips at the values the inner term does not claim
+        expect(outer.unsafeDecode(outer.unsafeEncode('a'))).toBe('a')
     })
 })
 
@@ -276,20 +440,40 @@ describe('what the wrappers preserve', () => {
      * honest: an index key's attribute type cannot change because somebody wrapped it.
      */
     it.each([
-        ['held', held(decimal, { encode: String, decode: Number })],
-        ['refine', refine(decimal, (v): v is string => true)],
-        ['optional', optional(decimal)],
-        ['fallbackless legacy', legacy({ current: decimal, older: decimal })],
-        ['nested', optional(refine(decimal, (v): v is string => true))],
-    ])('%s writes N, as decimal does', (_name, codec) => {
-        expect(writes(codec)).toBe('N')
-    })
+        ['held', held(decimal, { encode: String, decode: Number }), 1.5],
+        ['refine', refine(decimal, (_v): _v is string => true), '1.5'],
+        [
+            'fallbackless legacy',
+            legacy({ current: decimal, older: decimal }),
+            '1.5',
+        ],
+        [
+            'nested',
+            refine(
+                refine(decimal, (_v): _v is string => true),
+                (_v): _v is string => true,
+            ),
+            '1.5',
+        ],
+    ] as readonly (readonly [string, AnyCodec, unknown])[])(
+        '%s writes N, as decimal does',
+        (_name, codec, value) => {
+            expect(memberWritten(codec, value)).toBe('N')
+        },
+    )
 
     it('and a set keeps the member its element decides', () => {
-        expect(writes(string.set())).toBe('SS')
-        expect(writes(number.set())).toBe('NS')
-        expect(writes(binary.set())).toBe('BS')
-        expect(writes(array(string))).toBe('L')
+        expect(memberWritten(string.set() as AnyCodec, new Set(['a']))).toBe(
+            'SS',
+        )
+        expect(memberWritten(number.set() as AnyCodec, new Set([1]))).toBe('NS')
+        expect(
+            memberWritten(
+                binary.set() as AnyCodec,
+                new Set([new Uint8Array([1])]),
+            ),
+        ).toBe('BS')
+        expect(memberWritten(array(string) as AnyCodec, ['a'])).toBe('L')
     })
 })
 
@@ -324,7 +508,7 @@ describe('the laws that do NOT hold', () => {
         const checkedOutside = refine(held(string, adapt), short)
 
         expect(() => checkedInside.unsafeDecode({ S: 'abcabc' })).toThrow(
-            /is not/,
+            CodecError,
         )
         expect(checkedOutside.unsafeDecode({ S: 'abcabc' })).toBe('abc')
     })
@@ -351,9 +535,7 @@ describe('the laws that do NOT hold', () => {
 
         // the homogeneous one is refused where it is written: both options are handed an array and
         // neither checks what is in it, so no value chooses between them
-        expect(() => union([array(string), array(number)])).toThrow(
-            /both take the same kind of value — array — and neither checks/,
-        )
+        expect(() => union([array(string), array(number)])).toThrow(CodecError)
     })
 
     /**
@@ -369,9 +551,7 @@ describe('the laws that do NOT hold', () => {
             (value): value is string | number => value !== null,
         )
         // @ts-expect-error a union writes no single member, so the type declines the capability
-        expect(() => either.set()).toThrow(
-            /a set holds strings, numbers or binary, and this element writes no single member/,
-        )
+        expect(() => either.set()).toThrow(CodecError)
     })
 
     /**
@@ -382,7 +562,7 @@ describe('the laws that do NOT hold', () => {
      * are now false: the elements check, and the declaration guard asks whether the two are
      * separated by what they hold.
      *
-     * The asymmetry that survives is the sharper one, and it is `admits`' own: `[]` is admitted by
+     * The asymmetry that survives is the sharper one, and it is admission's own: `[]` is admitted by
      * every `array` and an empty `Set` is admitted by none, because **DynamoDB has no empty set**.
      * So `union([array(string), array(number)])` stays refused — one shared value, and it is the
      * one carrying nothing to tell them apart — while these two sets share no value at all.
@@ -397,19 +577,19 @@ describe('the laws that do NOT hold', () => {
         })
         // a mixed set is admitted by neither, and says so rather than writing half of it
         expect(() => either.unsafeEncode(new Set(['a', 1]) as never)).toThrow(
-            /no option admits/,
+            CodecError,
         )
 
         // the stored side always knew which, and that has not changed
-        expect(writes(string.set())).toBe('SS')
-        expect(writes(number.set())).toBe('NS')
+        expect(memberWritten(string.set() as AnyCodec, new Set(['a']))).toBe(
+            'SS',
+        )
+        expect(memberWritten(number.set() as AnyCodec, new Set([1]))).toBe('NS')
         expect(either.unsafeDecode({ SS: ['a'] })).toEqual(new Set(['a']))
         expect(either.unsafeDecode({ NS: ['1'] })).toEqual(new Set([1]))
 
         // and the container *with* an empty inhabitant is still refused, for that reason
-        expect(() => union([array(string), array(number)])).toThrow(
-            /both take the same kind of value — array/,
-        )
+        expect(() => union([array(string), array(number)])).toThrow(CodecError)
     })
 
     /**
@@ -434,7 +614,7 @@ describe('the laws that do NOT hold', () => {
             // @ts-expect-error nor is a union option a name
             union([optional(string), number]),
             // @ts-expect-error and a fallback says the same thing about absence
-            array(fallback(string, () => 'x')),
+            array(fallback(string, 'x')),
         ]
         expect(typeof _wrong).toBe('function')
     })
@@ -449,8 +629,10 @@ describe('the laws that do NOT hold', () => {
 
     /** A set is not a list held as an array, however similar the two look. */
     it('a set is not an array', () => {
-        expect(writes(string.set())).toBe('SS')
-        expect(writes(array(string))).toBe('L')
+        expect(memberWritten(string.set() as AnyCodec, new Set(['a']))).toBe(
+            'SS',
+        )
+        expect(memberWritten(array(string) as AnyCodec, ['a'])).toBe('L')
     })
 })
 
@@ -473,7 +655,7 @@ describe('(C): what a codec reads, it can write', () => {
         tags: string.set(),
         steps: array(string),
         note: optional(string),
-        nick: fallback(string, () => 'anon'),
+        nick: fallback(string, 'anon'),
     }).item
 
     it('holds for a wide entity, over every mutation of every attribute', () => {
@@ -495,6 +677,64 @@ describe('(C): what a codec reads, it can write', () => {
     })
 
     /**
+     * **(Q), stability, over the same two entities.**
+     *
+     * `decode ∘ encode ∘ decode = decode` — §2's corollary, and what **(R)** becomes when the values
+     * come from a *table* rather than from a generator. The two differ exactly by **(C)**, which is
+     * the containment most likely to be untrue, so asking (R) of generated values and never asking
+     * (Q) of stored ones leaves the gap this file exists to close.
+     *
+     * It was exercised in two files, both of them about one entity apiece. Here it runs over the
+     * whole table the other laws use, and over stored forms a generator cannot produce: DynamoDB
+     * normalises `N`, so `'1.50'` comes back `'1.5'` and only a fixed point survives one pass.
+     */
+    const itemsOf = <T>(
+        subject: { encode: (v: T) => unknown },
+        source: AnyCodec,
+        count: number,
+        itemSeed: number,
+    ): AttributeMap[] => {
+        const rng = rngFrom(itemSeed)
+        const items: AttributeMap[] = []
+        for (let i = 0; i < count; i++) {
+            const written = subject.encode(arbitraryOf(source, rng, 4) as T)
+            if (!failed(written)) items.push(written as AttributeMap)
+        }
+        return items
+    }
+
+    it('is stable for a wide entity, over items it wrote itself', () => {
+        checkStable(Pet, itemsOf(Pet, Pet as unknown as AnyCodec, 40, 20260829))
+    })
+
+    /**
+     * And over a row where **(Q) and (R) actually part company**, which is the only kind that says
+     * anything the round-trip tests do not. A set is stored unordered, so `encode ∘ decode` is free
+     * to return the members in another order: the *item* is not recovered, and the *value* is. That
+     * is the whole content of stability — one pass through storage reaches a fixed point, and the
+     * fixed point is a value rather than an attribute.
+     *
+     * Not `decimal`: `'1.50'` is *refused*, not normalised. Closing the (C) defect below made a
+     * numeral outside DynamoDB's stored form unreadable rather than readable-and-unwritable, so
+     * there is no lossy numeral left to make the point with.
+     */
+    it('is stable where the stored form is not recovered exactly', () => {
+        const Stored = object({ tags: string.set() }).item
+        const stored = { tags: { SS: ['c', 'a', 'b'] } }
+
+        checkStable(Stored, [stored])
+
+        // (Q) holds because the value is a set; (R) on the *item* is what does not hold
+        const once = Stored.unsafeDecode(stored)
+        expect(once).toEqual({ tags: new Set(['c', 'a', 'b']) })
+        expect(Stored.unsafeDecode(Stored.unsafeEncode(once))).toEqual(once)
+        expect(Stored.unsafeEncode(once)).not.toEqual(stored)
+        expect(Stored.unsafeEncode(once)).toEqual({
+            tags: { SS: ['a', 'b', 'c'] },
+        })
+    })
+
+    /**
      * The `set` defect, planted: encode refuses the empty set, decode returns it. This is what the
      * library did until the read side was closed, and no value-driven generator could reach it.
      */
@@ -512,10 +752,10 @@ describe('(C): what a codec reads, it can write', () => {
 
         expect(() =>
             checkDecodesAreWritable(Leaky, { count: 5, seed: 1 }),
-        ).toThrow(/\(C\) fails/)
+        ).toThrow(CodecError)
         expect(() =>
             checkDecodesAreWritable(Leaky, { count: 5, seed: 1 }),
-        ).toThrow(/an empty set/)
+        ).toThrow(CodecError)
     })
 
     /**
@@ -535,15 +775,16 @@ describe('(C): what a codec reads, it can write', () => {
 
         expect(() =>
             checkDecodesAreWritable(Loose, { count: 5, seed: 1 }),
-        ).toThrow(/\(C\) fails/)
+        ).toThrow(CodecError)
     })
 })
 
 /**
- * **`admits` against `encode`, in the one direction that is true.**
+ * **Admission against `encode`, in the one direction that is true.**
  *
- * `admits` is §3's `Adm : Term → Value → Bool`, and the model proved it exact at all 21
- * constructors. The obvious law here is therefore `admits(c, v) ⟺ !failed(c.encode(v))`, and half
+ * `accepts` is §3's `Adm : Term → Value → Bool` asked of the pair, and the model proved `Adm` exact
+ * at all 21
+ * constructors. The obvious law here is therefore `accepts(c, v) ⟺ !failed(c.encode(v))`, and half
  * of it used to be false — not because the port was wrong, but because **encoding did not
  * validate**. A codec's input is typed, so `string.encode(5)` wrote `{ S: 5 }` and
  * `array(string).encode([5])` wrote `{ L: [{ S: 5 }] }`. `carries`'s own docstring said this for
@@ -552,7 +793,7 @@ describe('(C): what a codec reads, it can write', () => {
  * **That was true and is not any more.** The list of codecs where the converse failed was this
  * file's deliverable while the question was open — twenty-three of thirty-two — and the question
  * was whether `encode` should consult `admits`, which is a behaviour change and was JH's call.
- * It was taken: every row now runs the predicate `admits` runs, so the law below is the iff.
+ * It was taken: every row now runs the predicate admission runs, so the law below is the iff.
  *
  * What the old nine exact rows were exact *for* is still the interesting part, because it is what
  * the other twenty-three had to be given:
@@ -562,14 +803,14 @@ describe('(C): what a codec reads, it can write', () => {
  * - `opaque` and `custom` are exact because their rows **ask the codec** rather than describing it.
  *   A question cannot disagree with its answer. That is the model's own move at `custom`, and the
  *   reason `opaque`'s rows were converted to match — and it is why those two are the one pair
- *   `encode` must *not* consult `admits` for: `admits` reaches them by calling `encode`.
+ *   `encode` must *not* consult admission for: admission reaches them by calling `encode`.
  *
  * Everything else was loose at the value kinds it was handed but never checked, and now checks.
  */
-describe('`admits`, and the direction of the law that is true', () => {
+describe('`accepts`, and the direction of the law that is true', () => {
     const isTag = (v: string): v is `t-${string}` => v.startsWith('t-')
 
-    /** One entry per `CodecDef` kind, plus the literal at each base and the two `opaque` policies. */
+    /** One entry per `Term` kind, plus the literal at each base and the two `opaque` policies. */
     const codecs: readonly (readonly [string, AnyCodec])[] = [
         ['string', string],
         ['string(...)', string('A', 'B')],
@@ -592,9 +833,6 @@ describe('`admits`, and the direction of the law that is true', () => {
         ['record', record(decimal)],
         ['attributes', object({ a: string, b: number }).item],
         ['attributes(open)', object({ a: string }, decimal).item],
-        ['optional', optional(string)],
-        ['fallback', fallback(string, () => 'x')],
-        ['restOf', rest(string)],
         ['nullable', nullable(string)],
         ['legacy', legacy({ current: decimal, older: string })],
         ['refine', refine(string, isTag, { arbitrary: () => 't-x' as const })],
@@ -690,8 +928,8 @@ describe('`admits`, and the direction of the law that is true', () => {
     }
 
     /**
-     * **The law.** Nothing `admits` accepts is refused by `encode`, at any codec in the table over
-     * any value in the pool. This is the half that makes `admits` usable as a *filter*: a union
+     * **The law.** Nothing `accepts` accepts is refused by `encode`, at any codec in the table over
+     * any value in the pool. This is the half that makes `accepts` usable as a *filter*: a union
      * resolver, or an `encode` that validated, could rely on it without narrowing what either
      * writes today.
      */
@@ -699,7 +937,7 @@ describe('`admits`, and the direction of the law that is true', () => {
         const unsound: string[] = []
         for (const [name, one] of codecs) {
             for (const value of pool) {
-                if (admits(one, value) && !writesIt(one, value)) {
+                if (accepts(one, value) && !writesIt(one, value)) {
                     unsound.push(`${name} @ ${String(value)}`)
                 }
             }
@@ -726,17 +964,17 @@ describe('`admits`, and the direction of the law that is true', () => {
      * That is the whole reason this can be an iff rather than two lists kept in agreement: there is
      * one test per kind and two callers of it.
      *
-     * If this fails, one of the two moved. A failure naming a codec on the `admits`-accepts side
-     * means `encode` got stricter than the row; on the `encode`-writes side, that `admits` was
+     * If this fails, one of the two moved. A failure naming a codec on the `accepts`-accepts side
+     * means `encode` got stricter than the row; on the `encode`-writes side, that `accepts` was
      * loosened — which is the drift the whole apparatus exists to catch.
      */
     it('holds both ways, everywhere', () => {
         const disagree: string[] = []
         for (const [name, one] of codecs) {
             for (const value of pool) {
-                if (admits(one, value) !== writesIt(one, value)) {
+                if (accepts(one, value) !== writesIt(one, value)) {
                     disagree.push(
-                        `${name} @ ${String(value)}: admits=${admits(one, value)} writes=${writesIt(one, value)}`,
+                        `${name} @ ${String(value)}: admits=${accepts(one, value)} writes=${writesIt(one, value)}`,
                     )
                 }
             }
@@ -746,49 +984,52 @@ describe('`admits`, and the direction of the law that is true', () => {
 
     /** The rows the brief called out, spelled as the one-liners they are. */
     it('answers the specific rows the model states', () => {
-        // the ground rows validate now, so `admits` and `encode` agree at all five
-        expect(admits(string, 5)).toBe(false)
+        // the ground rows validate now, so `accepts` and `encode` agree at all five
+        expect(accepts(string, 5)).toBe(false)
         expect(failed(string.encode(5 as never))).toBe(true)
-        expect(admits(boolean, 'yes')).toBe(false)
+        expect(accepts(boolean, 'yes')).toBe(false)
         expect(failed(boolean.encode('yes' as never))).toBe(true)
-        expect(admits(binary, 'bytes')).toBe(false)
+        expect(accepts(binary, 'bytes')).toBe(false)
         expect(failed(binary.encode('bytes' as never))).toBe(true)
         // `toString` is defined on everything, which is what the numeral gate alone did not catch
-        expect(admits(number, '5')).toBe(false)
+        expect(accepts(number, '5')).toBe(false)
         expect(failed(number.encode('5' as never))).toBe(true)
         // and `isStoredNumeral` stringifies, so a one-element array read as a numeral
-        expect(admits(decimal, ['1'])).toBe(false)
+        expect(accepts(decimal, ['1'])).toBe(false)
         expect(failed(decimal.encode(['1'] as never))).toBe(true)
 
         // and the containers, which needed their own gate rather than their elements'
-        expect(admits(array(string), [5])).toBe(false)
+        expect(accepts(array(string), [5])).toBe(false)
         expect(failed(array(string).encode([5] as never))).toBe(true)
-        expect(admits(array(string), 'abc')).toBe(false)
+        expect(accepts(array(string), 'abc')).toBe(false)
         expect(failed(array(string).encode('abc' as never))).toBe(true)
-        expect(admits(string.set(), 'abc')).toBe(false)
+        expect(accepts(string.set(), 'abc')).toBe(false)
         expect(failed(string.set().encode('abc' as never))).toBe(true)
 
         // an empty array is admitted and an empty set is not, and both are right: `L` has an empty
         // inhabitant and DynamoDB's sets do not
-        expect(admits(array(string), [])).toBe(true)
-        expect(admits(string.set(), new Set())).toBe(false)
+        expect(accepts(array(string), [])).toBe(true)
+        expect(accepts(string.set(), new Set())).toBe(false)
 
         // `held` is asked about the value it holds, and its adapter throws on one it does not own
         const asSet = held(string.set(), {
             encode: (tags: readonly string[]) => new Set(tags),
             decode: (tags: ReadonlySet<string>) => [...tags],
         })
-        expect(admits(asSet, ['a', 'b'])).toBe(true)
-        expect(admits(asSet, 5)).toBe(false)
+        expect(accepts(asSet, ['a', 'b'])).toBe(true)
+        expect(accepts(asSet, 5)).toBe(false)
 
         // `refine` runs its predicate in both directions now, which was the last row to close
         const tagged = refine(string, isTag)
-        expect(admits(tagged, 't-1')).toBe(true)
-        expect(admits(tagged, 'x')).toBe(false)
+        expect(accepts(tagged, 't-1')).toBe(true)
+        expect(accepts(tagged, 'x')).toBe(false)
         expect(failed(tagged.encode('x' as never))).toBe(true)
         expect(failed(tagged.encode('t-1'))).toBe(false)
 
-        // a codec with no definition makes no claim
-        expect(admits({} as AnyCodec, 'anything')).toBe(false)
+        // There is no longer a case for "a codec with no definition makes no claim", and the
+        // assertion that used to sit here is gone with it. It read
+        // `accepts({} as AnyCodec, 'anything')` — a cast manufacturing a value the type forbids, to
+        // check a branch reachable only by making it. `def` is required, so the branch is gone and
+        // the cast would be the only thing keeping it alive.
     })
 })

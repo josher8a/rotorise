@@ -14,7 +14,7 @@ Where something is already written down, this cites it instead of restating it:
 | What changed and why, historically | `git log` — see §6 |
 | Module table, modelling decisions, how to build | `README.md` |
 
-One standing rule from `WORKING-AGREEMENT.md` governs this file too: **record why, not what**,
+Two standing rules govern this file too: **record why, not what**,
 and **a documented verdict is a hypothesis**. Everything below was re-checked against the
 sources rather than inherited; where a recorded claim did not survive, the correction is
 stated inline.
@@ -82,12 +82,13 @@ Two things follow, and both are the reason to do it again:
   second. Both are now properties of the type. `Field` sits in the function's *codomain*,
   which is strictly positive — the same factoring `Attr.m` and `Value.map` use one level down.
 
-**The pattern, so a fifth stratum is written correctly.** A stratum owes eight companions —
-seven kinds, with the admission row counted on both sides — and `db444e3`'s own table is the
-list. `Term` and `Body` have all eight; `Field` has no spec projection (`Body.spec` matches on
-the field inline) and `Rest` has neither spec nor tags, because a policy answers to no name and
-carries no tag. So the two name-reading projections are owed only by a stratum that holds
-names; the other five are owed unconditionally:
+**The pattern, so a fifth stratum is written correctly.** A stratum owes **nine** companions —
+seven kinds with the admission row counted on both sides, and the emitter clause the ninth —
+and `db444e3`'s own table was the list of the first eight. `Term` and `Body` have all nine;
+`Field` has no spec projection (`Body.spec` matches on the field inline) and `Rest` has neither
+spec nor tags, because a policy answers to no name and carries no tag. So the two name-reading
+projections are owed only by a stratum that holds names; the other **six** rows are owed
+unconditionally, which is seven companions with the admission row counted on both sides:
 
 | Companion | For `Body` | Why it is owed |
 | --- | --- | --- |
@@ -98,9 +99,22 @@ names; the other five are owed unconditionally:
 | an admission row, per side | `AdmBody`/`AdmABody` | exactness is per-row; a stratum with no row cannot be exact |
 | a premise carrier | `ObligationsBody` | semantic side conditions are structural, not global |
 | a law exemption | `MPOkBody` | `legacy`'s (MP) exemption propagates through the stratum |
+| an emitter clause | the term emitter's object row (`src/lean.ts`) | the vector bridge writes terms in this language; a constructor it cannot spell breaks it |
 
-Miss one and the failure is not a build error but a silent `⊤`: the analysis will still be
-*sound* and will have stopped saying anything. That asymmetry is the subject of §5.
+Miss one of the first eight and the failure is not a build error but a silent `⊤`: the analysis
+will still be *sound* and will have stopped saying anything. That asymmetry is the subject of §5.
+
+**The ninth is `db444e3`'s own debt, and it went unpaid for a day with every guard green.**
+Making the payload a stratum changed `Term.object` from three arguments to one, and `src/lean.ts`
+kept emitting three — so `src/lean.sample.lean` and its `check` twin, the committed output of the
+bridge, typechecked against no `Calculus/` for ten commits. **Nothing could have reported it.**
+`src/lean.spec.ts` compares the emitter's bytes against those files, and the files are generated
+*by that emitter*, so a stale generator agrees with its own stale output; a test that compares a
+generator against what it produced cannot see the generator being wrong. And no gate ran a
+generated file through Lean: this repository's build is `Calculus/` and the samples live in
+`src/`, which the build does not reach. `scripts/gate.sh` now has a check that elaborates
+both, which is the only thing that closes it — and the reason a stratum's debt to the emitter is
+a row in this table rather than a sentence in a commit message.
 
 `Body`'s projections (`Body.fields`, `Body.at`, `Body.rest`) are written by hand — a `mutual`
 block admits no `structure`. Rows needing all three still pattern-match on `.mk`, which keeps
@@ -114,7 +128,7 @@ The first thing to settle when adding a rule, and `Typing.lean`'s module header 
 | A premise that is… | goes in | consumed by |
 | --- | --- | --- |
 | decidable from the term | `Typed` (`Typing.lean`) — `(union)`'s is `hD : DIncomp Ts` | the judgement itself |
-| about what a codec *does* — `e`, `p`, an iso, a resolution | `Obligations` (`Soundness.lean`) — `UAtAct opts`, `IsoCancels`, `ReadsCoherently` | both soundness theorems |
+| about what a codec *does* — `e`, `p`, an iso, a resolution | `Obligations` (`Soundness.lean`) — `UAtAct opts` (reached from the canonical form by `uAtAct_of_uAtCan`), `IsoCancels`, `ReadsCoherently` | both soundness theorems |
 | §2's `(MP)`, which `legacy` is exempt from | `MPOk` (`Soundness.lean`) — `.legacy _ _ => False`, structural elsewhere | `soundness` alone |
 
 `MPOk` is not a rule premise at all: it is a predicate on the *term* saying the derivation is
@@ -224,7 +238,7 @@ variant's three components are inlined instead of taking a `Body` (`{s : Finset 
 needs only `Finset` and `d`, both in scope), and **that is rejected on the same criterion in the
 same direction as the `custom` bundling below**: it re-threads the three components `Body` exists
 to bundle, at one constructor, and every table over terms grows a three-argument row — to buy one
-decidable premise. §2's rule about a new stratum costing all eight companions is the same
+decidable premise. §2's rule about a new stratum costing all nine companions is the same
 observation from the other end.
 
 **One move that passes the criterion and still does not pay: bundling `Lawful` into `custom`.**
@@ -239,9 +253,8 @@ so `T` must stay `dom(ce)` or a `Carrier` field must ride along too, and `μSyn`
 fix `μ := none`. What it buys is the `Obligations` row (2 lines) joining the `True` list and one
 3-line accessor — **five lines, against ~33 pattern and statement sites in 8 files**. Only one of
 the four `Soundness` custom cases actually shrinks; `carrier_denote`'s still builds `Carrier` by
-hand. And it would strip the arbitrary pair out of `adm_custom`, `admA_custom` and
-`adm_custom_exact`, whose content *is* the arbitrariness — `adm_custom`'s docstring says so:
-"not a bound on the pair but the pair itself". Last, it is the one instance of this move that
+hand. And it would strip the arbitrary pair out of the `custom` rows, whose content *is* the
+arbitrariness: not a bound on the pair but the pair itself. Last, it is the one instance of this move that
 crosses a stated decision rather than realizing one: `Term.lean:11` says `custom` "carries its
 pair as data; its *laws* are premises of the typing rule (§3), exactly as in the doc", and
 `Typing.lean`'s header puts the *syntactic* premises in `Typed` and the *semantic* ones —
@@ -268,8 +281,11 @@ killed it is the shape of that cost, not its size.
 
 ### 4b. A row asks its codec instead of describing it
 
-The analysis tables in `Discharge.lean` (`κ`, `ident`, `adm`, `admA`) approximate what a codec
-writes and reads. A row can either *describe* the set or *call the codec and ask*. `custom`
+A row can either *describe* the set it stands for or **call the codec and ask**. The pattern is
+this section's subject, and the table below is every row that converted. Four of the rows named
+in it were rows of the per-aspect tables that `Discharge.lean` carried; those tables are gone,
+and the rows that survive are `Adm`'s and `AdmA`'s. The pattern is what survives them, and it
+is the reason the exact generation could be written at all. A row can either *describe* the set or *call the codec and ask*. `custom`
 always asked (`(cp a).isSome`, because `p := cp`). Over two arcs **seven** more converted —
 `admA .legacy` is the newest and the last of that shape — and one row below,
 `admALit .decimal`, was written that way from the start:
@@ -283,16 +299,16 @@ always asked (`(cp a).isSome`, because `p := cp`). Over two arcs **seven** more 
 | `refine` (read side) | `refineReads t q a` | "`q` tests the value a read produces" |
 | `nullable` | `Codec.ownsNull` | "`ownsNull` is a disjunction over both halves of the pair" |
 | `union` | the count, given the options' exactness | "a count is anti-monotone" — true of the *table*, recorded as a fact about the row |
-| `admA .legacy` | `admA t a \|\| (r a).isSome` — the subterm's row, or `r` | "`extendRead` widens `p` past the subterm's admissible set, which is the direction `admA` bounds" |
+| `AdmA .legacy` | `AdmA t a \|\| (r a).isSome` — the subterm's row, or `r` | "`extendRead` widens `p` past the subterm's admissible set, which is the direction the read row bounds" |
 
 **The last row is the odd one and the difference matters.** It does not ask its codec; it names
 both of `r`'s and the subterm's channels and takes the union, keeping the subterm's
 *over-approximation* rather than reaching past it. Asking was probed — the row
 `((denote (.legacy t r)).p a).isSome` is exact and compiles at a one-line cost — and **refused**,
 because it sees through `admA (.object _) = ⊤`, which §5 records as load-bearing slack rather
-than looseness. Two objects cannot be separated by `SepA` (both rows `⊤`); wrapped in a `legacy`
-they could be, while `select` still attempts both options, which is `not_uAtCan_of_sepJ`'s
-failure one wrapper out. So this row is as sharp as it can be *without* becoming unsound, and
+than looseness. Two objects cannot be separated by a disjointness test on the read-side row of
+the retired table (both were `⊤`); wrapped in a `legacy` they could be, while `select` still attempts both options, which is
+`not_uAtCan_of_sepJ`'s failure one wrapper out. So this row is as sharp as it can be *without* becoming unsound, and
 the excuse it retired was still a correct observation reaching a wrong conclusion: what
 `extendRead` widens *by* is `r`, data the term carries. `Exactness.lean`'s "why `legacy` was in
 the wrong family" reached this first, for the joint predicate.
@@ -310,8 +326,8 @@ already.
 
 ### 4c. One codec, stated once for both sides of the pair
 
-`Combinators.lean` is <!-- count:combinators_lines -->4001<!-- /count --> lines of the tree's
-<!-- count:tree_lines -->17606<!-- /count -->, and this is its organizing idea; without it
+`Combinators.lean` is <!-- count:combinators_lines -->4186<!-- /count --> lines of the tree's
+<!-- count:tree_lines -->16768<!-- /count -->, and this is its organizing idea; without it
 the file reads as the inventory `README.md` already has. A constructor is a **prism** —
 `Ctor α β`, with `into`/`out` and the laws `out_into` (matching what was built returns it) and
 `into_out` (anything that matches was built) — and those two *are* §2's (R) and (C) at a
@@ -329,7 +345,8 @@ Two shapes sit over them, and the second is the load-bearing one:
 - `carriedCodec (V : Ctor γ Value) (A : Ctor δ Attr)` — a payload *pair* between two prisms,
   the shape underneath every product (`entrywise`, hence `arrayCodec`/`recordCodec`;
   `tupleCodec`; `objectCodec`). **The model states a codec once for both sides**, which is why
-  §10's twin question is askable at all: the doubling is in the analyses, not the algebra.
+  §10's twin question is askable at all: the doubling is in the analyses, not the algebra. Its
+  two inversions, `carried_e` and `carried_p`, are what every product's proof goes through.
 - `set` is the one deliberate non-instance: its attribute side is a choice among three wire
   constructors rather than one prism (`setCodec`, `Combinators.lean`), so its inversion names all
   three families (`setCodec_p_eq`).
@@ -360,10 +377,17 @@ as a refactor estimate (`scripts/blast_radius.lean`). None of them was added spe
 
 ## 5. Generations of analysis: two that stay, one that does not pay
 
-`Discharge.lean` holds §5's per-aspect approximations — `κ`, `ident`, `adm`, `admA`; the fifth
-aspect, `μSyn`, is `Denote.lean`'s, because `denote` needs the member index itself — with the
-separation predicates `SepV` and `SepA`, each a **two-disjunct** disjunction (labels
-disjoint, *or* admissible sets disjoint).
+`Discharge.lean` used to hold four per-aspect approximations — a kind table, a
+decides-its-own-membership table, and one admissible-set table per side — with the separation
+predicates ~~SepV~~ and ~~SepA~~ running on them, each a **two-disjunct** disjunction (labels
+disjoint, *or* admissible sets disjoint). The predicates went at `f5fc4a6` and the four tables
+went with the pass that retired them from the model. The fifth aspect, `μSyn`, is
+`Denote.lean`'s, because `denote` needs the member index itself, and it stays.
+
+Every discharger in this section is one appeal to `uniqueAdmission_of_disjoint`
+(`Combinators.lean`), which takes two families of allowed values, one per side, and asks only
+that each be pairwise disjoint. Kinds, members, tags and admissible sets are *ways of building*
+those families rather than four conditions.
 
 `Exactness.lean` holds the joint predicate `Adm`/`AdmA`, exact at **all twenty-one**
 constructors: `Adm_exact : ∀ t, ExactV t` and `AdmA_exact : ∀ t, ExactA t`, no hypothesis, no
@@ -381,8 +405,8 @@ counter-intuitive:
   **tighter**, and disjointness of a tighter predicate does not imply disjointness of admission.
 - Therefore **`adm (.object _) = ⊤` is load-bearing, not slack.** It is exactly the
   over-approximation that turns `adm`-disjointness into admission-disjointness. Two objects can
-  never be separated by `SepV` (both `κ`s are `[map]`, both `adm`s are `⊤`, so neither disjunct
-  is available) — and that is the point.
+  never be separated by a per-aspect test (both `κ`s are `[map]`, both `adm`s are `⊤`, so neither
+  disjunct is available) — and that is the point.
 - Restate the discharger on `SepJV` and the pair *does* separate, while `select` still attempts
   both options, so (U) genuinely fails. **The premise gets stronger and the theorem becomes
   false.** The witness is two objects with the same names and different field terms
@@ -406,55 +430,110 @@ subsumes the other, and a migration has to answer both.
 **And the repair the `object` row invites — ask what the resolver consults, not what the row
 says — is already made, in `Orthogonality.lean` rather than here.** `OrthSV` and `OrthSA` are
 occupancy conjoined with `admitOptV`/`admitOptA`, and `admitOptV_eq` is the identification of
-that second conjunct with option admission itself, so `uAtCan_of_separates` is already the
+that second conjunct with option admission itself, so `uAtCan_of_separated` is already the
 discharger stated on what `select` actually decides by. Restating it on option admission
 *alone*, dropping the occupancy conjunct, is measurably weaker rather than new: it is
-`uAtCan_of_separates` with one conjunct deleted from each family and factors back through it in
+`uAtCan_of_separated` with one conjunct deleted from each family and factors back through it in
 one line; it loses `sepJA_needs_member`'s pair on the read side, exactly as `SepJA` predicts;
 and at an `object` it reduces to `keysOk` disjointness, which `OrthM`'s `reqNotDeclared`
 disjunct already delivers through `orthSV_disjoint`. Kernel-checked, not argued — the four
 results and the negative are in this paragraph's commit. **The move that looks open here was
 made in the next file, and what is left to take from it is a conjunct.**
 
-So: do not delete `Discharge.lean`, and if you sharpen an `adm` row at a container, check
-whether you have just broken a discharge that was relying on the slack.
+**And the per-aspect separation layer is gone, which is what the measurement was for.**
+`scripts/blast_radius.lean` rooted on the four definitions that layer was built from partitions
+as 28 old-only, 0 both, and every dependent inside `Discharge.lean` or `Refutations.lean` —
+nothing in `Soundness`, `Denote`, or `Exactness`'s positive results, and nothing in
+`Orthogonality`. Those 28 plus their four roots were deleted: the two separation predicates and
+their footprint definitions, the discharger stated on them and its kind/member half, the hand
+discharges phrased in that vocabulary, the eight refutations of those separations, and the two
+bridges into the joint predicate. JH's call.
 
-**And do not expect `scripts/blast_radius.lean` to cost that**, which this section used to say
-it did. Measured on the `admA .legacy` sharpening (§4b): the four-way partition is *identical*
-before and after — 75 old-only, 19 both, 136 new-only, 1433 neither — and the old-only set is
-unchanged name for name. It has to be: the walk measures dependence on a **name**, and
-sharpening a row changes a definition's *body*, not who depends on it. The instrument costs
-deleting or replacing a declaration; it is blind to a row that stays and says something
-different. What caught the consequence was the build (`AdmA_le_admA`'s `legacy` case stopped
-being `rfl`), and what caught the *hazard* was reading this section. Neither is an instrument.
+Nothing was lost that anything else can state. What the layer proved by hand in phases *slot*
+and *alternatives*, `Orthogonality.lean` reaches by `decide`, and its by-phase table now lists
+what only exists by hand rather than what is duplicated. The discharges no phase reaches —
+an arbitrary `q` inside a `refine`, and `uAtAct_array_literals` where `UAtCan` is outright
+false — were never phrased in the retired vocabulary and stay where they were. **The four
+tables are gone**, with the containments that related them to
+the exact generation. §5 stopped specifying them, and a transcription of an analysis nothing
+states and nothing consumes is a description with nothing keeping it honest.
+
+Two citations the walk overturned on the way, both the shape its own header warns about. The
+combined discharger appeared in `Exactness.lean` five times and its kind/member half in
+`Soundness.lean` once, and **every one of those was prose or a docstring** — no proof outside
+`Discharge.lean` used either, so a grep for them was counting sentences.
+
+**Three things the walk got right and one it got wrong.** It costs a *declaration*, never a
+change to a row's body: measured on the `admA .legacy` sharpening (§4b), the partition was
+identical before and after, name for name, because the walk measures dependence on a **name**.
+It reported no positive result in `Soundness` or `Exactness` naming the retired tables in a
+statement, and the deletion bore that out. And where it did report a dependent, the dependent
+was real.
+
+What it got wrong is that its own root list is a declaration too. The list named two
+declarations that `f5fc4a6` had deleted and omitted four that it had not, which understated
+the older generation by ten. Worse, `name_drift.py` reads `scripts/*.lean`: the two dead
+entries were *clearing* every prose citation of those two names across the tree, so the guard
+that exists to catch dangling names was answering with a dangling name of its own. Correcting
+the list surfaced 21 citations at once. **An instrument's inputs go stale exactly as prose
+does, and nothing was checking these.** The file now says so where the lists are, and the
+lists are an example question rather than a standing one: the two-generation question they
+were written for is answered and gone.
 
 ### And a third machine, `Orth`, which does not pay — measured
 
-`Orthogonality.lean` is the fourth-largest file at <!-- count:orth_file_lines -->967<!-- /count --> lines: a decidable certificate for a
+`Orthogonality.lean` is the fourth-largest file at <!-- count:orth_file_lines -->1241<!-- /count --> lines — `Soundness.lean` is 1033 —: a decidable certificate for a
 fragment of (U), over-approximating each term's occupancy per side (`occV`/`occA`) and
 certifying a pair whose occupancies are disjoint, `by decide`. **Measured against what it
-replaces it does not pay**, and its own by-phase table is the measurement — the <!-- count:orth_total_theorems -->25<!-- /count --> hand
-discharges it names, 23 as rows and 2 in the prose beneath them, out of a
-<!-- count:sep_family -->32<!-- /count -->-theorem `sep*`/`uAtCan_*`/`uAtAct_*` family:
+replaces it does not pay**, and its own by-phase table is the measurement — the <!-- count:orth_total_theorems -->9<!-- /count --> hand
+discharges it names, eight as rows and two in the prose beneath them, out of a
+<!-- count:sep_family -->12<!-- /count -->-theorem `sep*`/`uAtCan_*`/`uAtAct_*` family:
 
 | | theorems | lines of proof |
 | --- | --- | --- |
-| reachable by `Orth` itself — phase *slot* | <!-- count:orth_slot_theorems -->6<!-- /count --> | <!-- count:orth_slot_lines -->70<!-- /count --> |
-| reachable only through `Separates`, the `Prop` interface — phase *alternatives*, where `DecidableEq Double` makes a `Bool` test noncomputable | <!-- count:orth_alt_theorems -->7<!-- /count --> | <!-- count:orth_alt_lines -->75<!-- /count --> |
-| unreachable on principle — an arbitrary `q` or `f`, a different constructor, `SepJA`'s member disjunct, or `UAtCan` itself failing (`uAtAct_array_literals`) | <!-- count:orth_unreach_theorems -->12<!-- /count --> | <!-- count:orth_unreach_lines -->169<!-- /count --> |
+| reachable by `Orth` itself — phase *slot* | <!-- count:orth_slot_theorems -->0<!-- /count --> | <!-- count:orth_slot_lines -->0<!-- /count --> |
+| reachable by `Orth` since `OrthL` — phase *alternatives*, at every base but `number`, where `DecidableEq Double` makes a `Bool` test noncomputable and the caller supplies the premise to `Separates` by hand | <!-- count:orth_alt_theorems -->2<!-- /count --> | <!-- count:orth_alt_lines -->52<!-- /count --> |
+| unreachable on principle — an arbitrary `q` or `f`, a different constructor, `SepJA`'s member disjunct, or `UAtCan` itself failing (`uAtAct_array_literals`) | <!-- count:orth_unreach_theorems -->7<!-- /count --> | <!-- count:orth_unreach_lines -->113<!-- /count --> |
 
-*Re-measured, and the previous version of this table was wrong in three ways.* It said 23
-where the section names 25; it counted 11 unreachable theorems against a line total of 162
-that silently included a twelfth (`uAtAct_array_literals`, 53 lines, named in the row's own
-description but in no row); and `uAtCan_number_opaque` (24 lines) was reachable — the pair
-form of two *slot* discharges, and `orth_number_opaque` certifies it `by decide` — while
-appearing in no row at all. The reachable total is therefore **<!-- count:orth_reachable_lines -->145<!-- /count --> lines, not 116** — the
-verdict below does not move, but it was being stated with a number 24 lines too kind to
-the hand proofs and 24 too harsh on `Orth`.
+*This table counted the hand proofs against what `Orth` reaches, and the layer it was
+counting is gone.* Every theorem it found **reachable** was phrased in the retired per-aspect
+vocabulary and was deleted with it, `Orth` being what certifies those pairs now — which is why
+the reachable total is <!-- count:orth_reachable_lines -->52<!-- /count --> lines rather than the
+145 measured before the deletion. What is left in the unreachable column is the answer the
+table was built to produce: the discharges that exist by hand because no phase of the
+classifier can reach them, and `uAtAct_array_literals`, which holds where `UAtCan` is outright
+false and so has nothing to certify.
 
-And **nothing was deleted** — `6daa5e3`, `0335cdb` and `5763b6d` touch only the new module and
-two import lines — so <!-- count:orth_file_lines -->967<!-- /count --> lines stand *beside* the <!-- count:orth_reachable_lines -->145<!-- /count --> they could replace. It stays anyway,
-because its value moved. The classifier framing did not pay; but confluent admission —
+When this was written **nothing had been deleted**, and the sentence was the finding: 983
+lines stood *beside* the <!-- count:orth_reachable_lines -->52<!-- /count --> they could
+replace. Two passes have deleted since, and neither deleted for this reason — the per-aspect
+layer went because nothing consumed it, and the four tables went because §5 stopped stating
+them. `Orth` still does not pay for itself as a replacement. It stays anyway, because its
+value moved — **twice**, and the second is the one that pays.
+
+**`Orth` is the specification of `src/`'s only declaration-time guard, and now a checked one.**
+`src/`'s `union` refuses a pair of options no *value* can choose between — `separable`, which reads
+`identifies` and the two occupancies beside it — which is the ∀-value question
+`Orth` answers by `decide`. The bridge is `src/lean.ts`'s `Separation`: one theorem per pair
+`src/` refuses, asserting `Orth x y = false`, generated and elaborated by `scripts/gate.sh`.
+
+Measured over the emittable pairs of the vector corpus — 351 of them — the two agree everywhere
+they can both speak: **268** where `Orth` certifies and `src/` accepts, **17** where both decline,
+and **0** where `src/` refuses a pair the model certifies. That last number is the law, and it is
+the only direction the bridge runs: `Orth` is *sufficient* and not necessary, so the remaining
+**66** — where `src/` accepts and `Orth` declines — are not disagreements. Every one lands in a
+documented exemption: a literal, which identifies its own values; an object option, chosen by
+names; or an option whose kind is unknown (`opaque`, `lazy`, an adapter). Asserting the converse
+would produce 66 false findings.
+
+**And the law caught a real over-refusal before it was found another way.**
+`Orth (.set .string) (.set .number)` is `true` — the model *proves* those two separable, because
+their occupancies are `strSet`/`numSet` and `SS`/`NS`, disjoint on both sides. `src/` refused that
+declaration until `ff75c6b`, on the ground that "neither checks what it is given", which stopped
+being true when its rows started validating. The pair is not in the corpus (a numeric wire set is
+`NEFinset Double`, so no vector can name one) — so it is written out by hand in §5's own bridge
+notes rather than generated, which is the shape of every gap this classifier has: decidable, and
+bounded by what has closed terms. The classifier framing did not pay; but confluent admission —
 the weaker rule proved monotone and continuous and **not adopted** (§7) — needs its obligation
 to be an *invariant of the unrolling* (`string_decimal_not_confluent`), which is vacuous exactly
 where the options are pairwise disjoint. So a syntactic disjointness test is what would license
@@ -470,7 +549,7 @@ The blind spot is the part that matters; the check is the part you can read off 
 **`#assert_axioms_all`** (`Axioms.lean`) — the advertised base is
 `[propext, Quot.sound, Calculus.Double, Calculus.numericHost]`, four names where there were
 seven, because the `Double` facts now project out of one `NumericHost` interface rather than
-being five independent assertions. It is a *build error*, not an assertion in prose; that is the
+being five independent assertions — `Double.roundtrip` is the one every numeric row leans on. It is a *build error*, not an assertion in prose; that is the
 whole design. Two blind spots:
 - It walks **imported** modules only — hence `scripts/guard_reach.py` (§1).
 - Its filter is `ci.isTheorem`, so **a `def` that acquires an axiom is not checked at all.**
@@ -492,8 +571,10 @@ it says nothing about whether the elaborator is correct, whether `sanctionedAxio
 the documents claim, or whether the walk's filters let something through.
 
 **`scripts/name_drift.py`** — every backticked Lean-looking name in the current-state documents
-must occur somewhere in `Calculus/` — where *Lean-looking* means it carries a `_` or a `.`, so a
-one-word citation (`Adm`, `Orth`, `Fmt`) is never checked at all — with an `EXPECTED` table
+must occur somewhere in `Calculus/` — where *Lean-looking* means it carries a `_` or a `.`, **or
+is a single word that is not one of four shapes the script skips** (`83d61df`; the four and the
+reason for each are in `single_word_checkable`), so `Adm` and `Orth` are checked and a filename
+or a naming pattern is not — with an `EXPECTED` table
 carrying a reason per deliberate
 exception (and failing if an entry there stops being cited, so the table cannot rot quietly).
 **The docstring check was partly vacuous, and the fix needed a convention before it could
@@ -539,6 +620,66 @@ ungated numeric base, `Attr.n` carrying `Numeral.WF`.
 component-wise, so a dotted citation passes whenever both halves occur anywhere.
 **This document is in its `CURRENT` list.**
 
+**And a second blind spot in its own tables: an entry fails when it stops being *cited* and
+cannot fail when its *reason* goes stale.** `HOST`'s entry for the admission reader read "§10's
+open question about wiring it into `union`'s resolver" for as long as that question was open and
+for a while
+after `ff75c6b` closed it — cited, so green, and describing a decision that had been taken. The
+citation half is checkable and the prose half is not, which is the same asymmetry §9's docstring
+rule has and the reason both are conventions rather than guards.
+
+**`Orth` as an instrument, not only a classifier** (§5) — `Orth x y` is decidable, so it answers
+`src/`'s declaration-time separation question by `decide`, and `src/lean.ts`'s `Separation`
+carries the one direction that is a law: `src/` never refuses a pair the model certifies. What
+it is blind to is the converse, and stating that plainly is the whole of using it — `Orth` is
+*sufficient*, so its `false` is a decline and not a refutation, and 66 of 351 corpus pairs are
+declines `src/` rightly accepts.
+
+**It is also the first case where the model had an answer by `decide` that `src/` reached by
+measurement.** `Orth (.set .string) (.set .number) = true` was true before `ff75c6b` was written;
+`src/` refused that declaration, and the way the over-refusal was actually found was measuring
+admission over a value corpus. Two instruments, one cheap and exact and already present, the other
+statistical over whatever the corpus happened to contain — and the cheap one was not consulted
+because nothing connected it to `src/`. That connection is what the bridge is; the lesson is that
+a decidable model-side answer is worth wiring to the host guard it specifies *before* reaching
+for a corpus.
+
+**The vector bridge** (`src/lean.ts` → `Calculus/Vectors.lean`) — the differential check
+between this model and `src/`: the generator emits one theorem per encode the library actually
+performed, and the *kernel* decides whether the model agrees. Blind spot, and it cost a day:
+**regeneration is not verification.** `src/lean.spec.ts` compares the emitter's bytes against the
+committed samples, and those samples are generated *by that emitter* — so a stale generator
+agrees with its own stale output and the test passes on the defect it exists to catch. A test
+that compares a generator against what it produced cannot see the generator being wrong. It took
+`db444e3` changing `Term.object`'s arity, ten commits of green, and `e9f5b31` to find it. What
+verifies the bridge is elaboration, which is why `scripts/gate.sh` runs the samples and the full
+refusal cross product through Lean rather than trusting the byte comparison. **Refusal vectors
+are the other half of the same blind spot**: a positive vector is an agreement about what the
+library wrote, so every value it *refuses* produced no vector at all — the half of the pair where
+the two sides could disagree unobserved.
+
+Two more, and both are about *which claims can reach the kernel at all* rather than about the
+generator being stale.
+
+**No vector asserts a decoded value, so (R) and (C) are tested on the `src/` side and never
+elaborated.** Every emitted theorem is `(denote t).e v = some a` or `= none`; `.readverdicts.lean`
+is a read-side differential but it compares `AdmA t a` against whether the library *accepted* the
+attribute, which is a `Bool`, not the value that came back. So the kernel has never been shown a `p a = some v`.
+The two laws most of this library's shipped defects lived in are the two the bridge cannot state.
+`veq` (`Vectors.lean:379`, sound by `veq_sound`) is what would make them statable, and
+`.resolutions.lean` already uses it for map-valued reads — the cost is a decode corpus and a
+`Value` emitter for what comes back, and the same `Double` wall as everywhere else, since a
+decoded numeral is a `Value.num` and that axiom has no closed terms. Not built here.
+
+**And the terms the emitter refuses are exactly the terms whose laws a caller owes.** `held`,
+`legacy`, `custom` and `lazy` — the four §7 names as carrying a caller's function — plus a
+`refine` holding a JavaScript predicate rather than a `Value → Bool`, are unemittable because
+nothing translates a closure into a Lean term, and emitting a *different* predicate would compile
+and prove the wrong theorem. That refusal is right. What it means is that the bridge is blind
+precisely where the model discharges an obligation the host cannot check either — `IsoCancels`,
+`ReadsCoherently`, `custom`'s `Lawful` — so for those terms neither instrument is looking, and the
+guarantee is a written premise on both sides.
+
 **`scripts/doc_counts.py`** — computes the counts this document rests on and rewrites them
 between `<!-- count:NAME -->` markers; `--check` exits 1 on disagreement. It exists because
 **every count that drifted this month was a number typed by hand**, and `name_drift.py`
@@ -554,7 +695,7 @@ Two blind spots, and the second is the same shape as the gap it closes:
 
 **`scripts/ratchet.py`** — four per-file counts held to the state they were in, failing when
 one *rises*: hand-unfolding sites (332), retirement marks (72), public theorems with no
-docstring (269 of 896), and decision points (5260). It exists because §10's two guards could not be bars: a docstring
+docstring (269 of 896), and decision points. The counts live in `scripts/ratchets.json` and are quoted here by *name* rather than by value, because three places typed this one by hand and gave 3972, 4042 and 5260. It exists because §10's two guards could not be bars: a docstring
 coverage bar at 269 is a bar nobody can satisfy, so it would be switched off, where a ratchet
 asks nothing on the day it lands and makes the next docstring cheaper than the argument for
 skipping it. Baselines live in `scripts/ratchets.json` rather than in the script, so that the
@@ -598,8 +739,8 @@ the wrong question and shape is the right one. Two blind spots:
   one side rewrites where the other unfolds, and it selects the two real candidates out of 15.
 - **It ranks nothing by itself.** A missing twin matters in proportion to the fan it would
   remove, which only `complexity.lean`'s `fanOf` can say. Run today: the two `@[simp]`-flagged
-  candidates' consumer `admA_refine_ground_eq_admALit` has no fan — 2838 nodes at 10×, inside
-  the band — so the actionable list is empty and `restrict_p_isSome` stays the only instance
+  candidates' one consumer went with the retired tables, so the actionable list is empty and
+  `restrict_p_isSome` stays the only instance
   that cost anything. The instrument is prospective, not a backlog.
 
 **`scripts/complexity.py`** — decision points per declaration and per file: pattern rows, `if`,
@@ -685,7 +826,16 @@ The first is a habit, not a limitation: **a `grep` piped into `head` is not a me
 Twice in one session a truncated pipe produced a false reading here — once nearly asserting in
 a commit message that `filter_map_AdmSpecs` and `filter_AdmSpecs` no longer existed, when the
 `| head -10` had simply filled with `AdmSpecs` hits first. If a claim rests on a grep, run the
-grep without a limit, or count it.
+grep without a limit, or count it. The same pipe hides an exit code as readily as a line:
+running each of these two guards into `tail` and reading the result reported both clean over a
+tree the gate then failed, because what `$?` held was `tail`'s status and not the guard's.
+
+The same habit has a second form on the writing side, and it cost more: **an edit anchor that
+is not unique is not an anchor.** A scripted replacement in `src/codec.ts` matched in more
+places than the one intended and removed **2300 lines** in a single pass. The suite caught it,
+which is the only reason it is a paragraph here rather than a released defect. Anchor every
+scripted edit on a whole block that occurs once, and check the line delta before writing —
+a diff that is the wrong size is visible in one number and invisible in a review.
 
 The second is real: **anonymous-constructor patterns.** Changing `Typed.held`'s arity
 (`c66d493`) missed a consumer because `typed_μSyn` destructures it as `| _, _, _, .held h' _ =>`,
@@ -693,6 +843,50 @@ which matches neither `Typed.held` nor `@held` nor `case held`; only the build f
 costing a constructor change, grep the bare `.<name>` as well as the qualified form, and expect
 the arity to be implicit in a positional match. The control experiment is in its docstring;
 `86d3a42`'s commit message claimed otherwise and is wrong.
+
+### The host's instruments, and what each of those is blind to
+
+The TypeScript side has five instruments of its own, and this arc measured a blind spot for
+each. They are here because §8 makes the host's obligations part of the correspondence, and an
+instrument the host trusts wrongly is how one of those obligations goes unmet.
+
+**The type checker's error count is a lower bound, not a measure.** Retyping a position and
+counting the errors under-reports the sites four times over. Three were found in one arc: a
+cast standing on the position, so the checker had nothing to say; a test whose subject rode on
+a type it did not name, which kept passing while the fact it pinned stopped being checked; and
+a comparison at the wrong level of nesting. The fourth is the sharpest, because it is a
+deletion rather than a retyping: collapsing a union's option builder to the term-only form
+type-checks **cleanly**, because the member's type already admits the absent case and there is
+nothing to report,
+and fails **eleven** tests. The suite is what closes the gap every time.
+
+**`scripts/name_drift.py` cannot see a name that stops being the right one.** It chases a
+declaration that was deleted, so every citation of it dangles and the guard fires. A
+declaration that still exists while ceasing to be the one a passage cites is invisible: four
+docstrings in `src/codec.ts` pointed at the definition union over a member whose type had
+become the *term* half of it, and the guard was green from the change that moved them until the
+pass that read them. Renaming is checked; re-pointing is not.
+
+**The strictest checker mode existed and was switched off**, which is a blindness the tool
+cannot report because nobody asked it anything. `tsconfig.json` set three strictness flags and
+neither of the two that report an unused local or an unused parameter. Asking, with no file
+changed, returned **39**
+findings the same day — one dead helper in shipped code, one dead import, two dead bindings,
+thirteen entity types in specs that asserted nothing, and the rest unused imports. A second
+dead helper had been found by reading a week earlier, which is the argument: a checker that is
+asked answers every time, and a reader answers when a reader happens to look.
+
+**The type-level snapshot proves negatives, and sees only what a spec asserts.** `@ark/attest`
+records an instantiation count and a resolved type per assertion, so a change that moves
+neither moved nothing that any assertion covers — which is how a widened constraint was shown
+to have changed no derivation, and how a whole-name rename was shown to be a rename. What it
+cannot say is anything about a type no spec names, and the population it covers is a choice
+somebody made rather than the surface.
+
+**A red `vector emit` that returns in about a second has read nothing.** The bridge shares a
+build cache, and a racing run fails immediately over an unchanged tree; the same tree passes on
+re-run at twelve to fourteen seconds. Judge that check by its duration before judging it by its
+exit code — a genuine failure costs the full elaboration first.
 
 One more blind spot common to all of them: **none looks at `src/`.** `Vectors.lean` is the
 only bridge between the model and the shipped TypeScript, and it checks generated vector lines
@@ -759,6 +953,34 @@ including (U) on both sides through `uniqueAdmission_of_sharedBase` — and not 
 union route cannot carry `ℓ` as a `Finset`. Read that module before proposing the collapse
 again.
 
+**A `Double` with no closed terms.** §1 axiomatizes the host's number rather than modelling
+IEEE-754, because rounding is not a theorem of the calculus. The price is paid in four distinct
+places, and they are collected here because each is met by someone doing something reasonable
+and finding it impossible, at which point the question is *which* impossibility this is — they
+close differently, and only one of them closed.
+
+- **Term-inexpressible** — a numeric `literal`. `Term.literal GroundKind.number ls` needs
+  `ls : NEFinset Double`, so there is no alternatives set to write and **no vector of either
+  direction** names the term. Permanent.
+- **Row-irreducible** — `AdmA .number`'s `.n` row goes through `Double.ofDec`, an axiom with no
+  computation rule, so it reduces to neither `true` nor `false` and *both* assertions fail. That
+  is how it is told apart from a disagreement: `AdmA .decimal` and `AdmA .string` reduce on the
+  same attribute. Permanent.
+- **Value-inexpressible** — a decoded numeric set. `union([string.set(), number.set()])` reads an
+  `NS` back to a `Set<number>`, whose Lean form is `Value.numSet` over a `NEFinset Double`. The
+  term and the attribute are both writable; the *answer* is not. Permanent.
+- **Verdict-undecidable** — `veq` at `.num` and `.numSet`. `Double.decEq` is an axiom, so
+  comparing two of them would neither reduce nor stay choice-free; the comparator answers
+  `.exhausted`, which already means "carries no information". Permanent.
+
+**And a fifth that was not this at all**, which is why the four are worth naming. A read landing
+on a *map* also failed to close, and it looked like the same wall — it was the funext gap, `aeq`
+having no `Value` twin, and `veq` closed it. `Term.number` itself was likewise refused by the
+vector emitter for years on the ground that no value could be named at it: true of a positive
+vector, false of a refusal, and deleting that guard gave `number` vectors. **Two of the six
+apparent walls here were not the axiom.** Check which one you are at before recording it as
+permanent.
+
 **Non-malleability.** `Malleability.lean` records that we deliberately fail it, and why the
 relational-format proposal that would have entailed it is refuted (`fmt_forced`): `Fmt` is the
 fibre of `p`, so a relational presentation is the same model addressed by fibre, and one cannot
@@ -784,7 +1006,48 @@ For every structural guarantee the model makes, a host is in exactly one of thre
 | --- | --- | --- |
 | **(a)** carries it structurally | **nothing** — verify by types and move on | the host type is doing the work; there is no gate to own and nothing to test that the type does not already say |
 | **(b)** must gate | a **named** gate, in the module that owns the carrier, and a test that asserts **both** sides | *one owner*: a gate mirroring a carrier refinement belongs to the module that *is* the unrefined carrier, not the module that first needed it — a sibling entry point that must not import the first module will otherwise write a second answer to the same question. And a test that checks only our behaviour cannot tell a deliberate divergence from a reference implementation apart from a regression |
-| **(c)** cannot express it | a construction-time **refusal**, a test that pins it, and a written **reason** | the reason is the part that gets skipped and the part that matters: an unexplained gate is indistinguishable from an un-migrated one, and the next reader "fixes" the signature |
+| **(c)** cannot express it | a construction-time **refusal**, a test that pins it, and a written **reason** | **the test is the half that goes missing.** An unexplained gate is indistinguishable from an un-migrated one and the next reader "fixes" the signature, so the reason is what the row was written to protect — and measured over this arc, the reason was written both times and the test was absent both times |
+
+### The test is the half that goes missing, and both cases were found by deletion
+
+The row above used to say the *reason* is the part that gets skipped. Two refusals in the
+TypeScript host say otherwise, and neither was found by review.
+
+`src/lean.ts`'s emitter refused a §4 field where a `Term` belongs, with the reason written
+beside it, and had no test for the four months it existed. It has one now, reached through a
+deliberate cast, asserting the message rather than the throw.
+
+`termOf(...)` is the one place a child is taken from a codec a caller handed over, and it refuses a
+field for the same reason. Deleting the refusal gives **one** type error — the narrowing is
+what makes the return type-check — and a **completely green suite**. So the branch was load
+bearing for the type and unobserved for behaviour, and the deletion is what said so; the test
+written afterwards was verified by removing the refusal again and watching it fail.
+
+The instruction that follows is not "write the reason", which both of these did. It is: **a
+(c) refusal is not finished until a test reaches it past a cast.** A brand is not a proof and
+a cast defeats a brand, so the caller the refusal exists for is exactly the caller the type
+cannot see — and that caller is the one a test must impersonate.
+
+### A guarantee moving from (c) to (a), and what the gate owes on the way out
+
+The three cases are not a permanent assignment. A host that had to gate can later carry the
+guarantee structurally, and when it does, **the gate stops refusing anything**: the constraint
+already refuses it, and the gate's remaining content is its message.
+
+The TypeScript host moved four this arc, all of them the same guarantee — a field is not a
+codec. Once a field's type stopped claiming the two directions of a pair, and a codec's own
+definition became a term rather than a declaration, two positional guards that had refused
+`array(optional(string))` and `optional(optional(string))` refused nothing new. The measure was
+the suppressions, not the reading: removing all six uses left every one of the eleven
+`@ts-expect-error` directives across the element and marker tests with an error still to
+suppress, so the type was doing the whole job.
+
+**What such a gate owes on the way out is its message's content, moved where a refused caller
+reads it.** The constraint's own diagnostic names the offending type and says a codec was
+wanted; it does not say what to write instead. That sentence — here, that a name is the only
+thing absence can be said of, and that `nullable` is the member for a value stored as `NULL` —
+belongs on the constructor whose call was refused. A gate deleted without moving its sentence
+loses the only part of it that was not already carried by the type.
 
 ### The exception: a gate a refutation depends on stays — and it is narrower than it was written
 
@@ -831,6 +1094,55 @@ variant — which *is* the indexed family, and is the clearest case where the mo
 ports better than its old one. `Attr.n : WFNumeral` wants a checked newtype in both; TypeScript
 has no nominal typing, so the branded-type trick is the closest thing and a cast defeats it.
 
+A binary literal is the case where the *host* has the sharper instrument. `Attr.b` carries
+bytes, and two byte arrays holding the same bytes are the same value in the model, which has no
+reference identity to distinguish them. JavaScript does, so a binary literal's read side answers
+with the **declared** array rather than with a copy: that is how the host spells "the value the
+model means" where the model needs no spelling at all. A target with value semantics for byte
+arrays owes nothing here, and one without owes the identity.
+
+**A tag is stored as `S` or `N`, and the model reads a tag from a string literal only.** So the
+host admits a discriminator at `string`, `number` or `decimal` — the tag reader carries all three — and
+refuses `boolean` and `binary`, which name no tag a lookup could reach. `Denote.lean`'s
+`tagsOfField` matches a string literal alone, so the model reads a numeric tag's set as empty and
+the fourth-row discharge stops applying to that option. Nothing is unsound; a discharge is lost,
+not a guarantee. The emitter refuses such a union rather than emitting a vector about a selection
+the model reads as untagged, which is where the disagreement is written down until the host
+narrows or the model widens. Measured when the refusal landed: every corpus union uses a string
+tag, so no vector moved.
+
+`legacy` is the opposite direction, and it was invisible until the emitter had to refuse it.
+`Term.legacy` carries `r : Attr → Option Value` (`Calculus/Term.lean:73`); the host's definition
+recorded only the current codec and dropped `r` entirely, so a term the host built did not
+determine the codec the host ran. Nothing failed, and no test could have said so, because the
+half that was missing was the half nothing read. **The emitter's refusal text was the only
+record**: it said the definition drops the older readers, and it was right, and it was the
+only place that fact was written down. A host obligation that no host code reads is found by
+whatever has to serialise the host's own definition, or it is not found.
+
+**A codec carries a `Term`, and that is case (a) reached by deletion.** `src/` kept two
+descriptions of a codec: `Term`, the model's language, and a definition record that grew a row at
+a time and kept what each reader needed. Three of that record's rows said something §3 cannot — a
+`set`
+holding an element *term* where the model indexes by a base, a literal's alternatives not indexed
+by their base, a field marker's `inner` a codec where an object's field holds a term — so those
+states were reachable here and unrepresentable there. That record is gone. A codec's `def` is a
+`Term`, `denote` dispatches on it, and the conversion between the two is deleted with the language
+it
+converted from. The states stopped being reachable rather than being checked for, which is what
+(a) buys: no gate to own and nothing to test that the type does not already say.
+
+The flip had to be one commit, because `denote` dispatches on the one type: the moment the field
+changes type, every constructor's literal is a type error and every row reads a shape nothing
+writes. Two staged alternatives were refused and are worth naming, because both are the shape a
+migration reaches for. A `Def | Term` union on the field compiles just as well half-migrated, so
+nothing in the checker says when the transition has finished. A reverse conversion at the
+construction site is a second conversion written in order to be deleted. What replaced them was a
+meter: a table asserting `termFromDef(c.def)` deep-equal to `c.def`, one row per constructor,
+which is exactly "this constructor has been flipped" and which no checker can answer. It read 8
+of 20 before the pass and 20 of 20 after, at which point the conversion is the identity and the
+table asserts nothing, so both were deleted together.
+
 **So a guarantee that must be a gate in one target may be structural in another.** The three
 cases are re-answered per target, at the time that target is certified — not in advance, and not
 as a reason to shape the model around one language. The model's job is to make the guarantee
@@ -866,7 +1178,7 @@ one. What it replaces is the eight-line hand unfolding, repeated per site.
 | `X_eq` | `X` **is** an instance of a named construction, on the nose |
 | `lawfulCore_X` / `lawful_X` / `carrier_X` | the three obligations, in that order |
 | `Lawful.X` / `LawfulCore.X` | the same where the construction is itself namespaced; `Lawful.through` reads "`through` preserves `Lawful`", which is the better name. Both forms are sanctioned and `vocab_audit.py` prints the split rather than absorbing it |
-| `f_sound` | a syntactic function agrees with the denotation (`κ_sound`, `adm_sound`) |
+| `f_sound` | a syntactic function agrees with the denotation (`Adm_sound`, `AdmA_sound`) |
 | `equiv_X` | a §6 row |
 | `not_X` | a refutation — a "Do not hold" row, or a repaired discharger |
 | `onKind_X` | `X` is pinned to a kind (§3's "self-identifying") |
@@ -899,11 +1211,18 @@ there. Sixty citations were relabelled when this came in and eighteen turned out
 genuinely stale, so the ratio is roughly three to one: assume a name you are about to write in
 the past tense wants the marker. §6 has the measurement and the shapes that lost.
 
+**A backtick in this file means a Lean name, so a host identifier is written as a call, as a
+path, or in prose.** The guard reads every backticked single word as a name `Calculus/` should
+define, and it is right to: the alternative is a fifth category in `EXPECTED`, which would make
+that table's entries stop meaning "this absence is deliberate". §6's host paragraphs are the
+first passage here to need the distinction and they keep it.
+
 Two further conventions, both load-bearing:
 
 - **The core lemma is not a second proof.** `lawfulCore_X` and `lawful_X` share their clauses
-  and differ only where the content differs. Today that is one place: `set`'s (C), where (MP)'s
-  member-uniformity is replaced by the `(set)` rule's own premise.
+  and differ only where the content differs, and `Lawful.core` is the projection that makes the
+  weaker one a corollary rather than a parallel development. Today the difference is one place:
+  `set`'s (C), where (MP)'s member-uniformity is replaced by the `(set)` rule's own premise.
 - **An identity stated in prose gets cashed as an equation.** `arrayCodec_eq`, `tupleCodec_eq`
   and `objectCodecCore_eq` each say "this construction *is* that one" and carry every lemma
   across by `▸`; `record` gets the same service from a directional pair,
@@ -924,6 +1243,30 @@ it would cost the reader the correspondence with §3–§5.
 ## 10. Open architectural questions
 
 One line each, with the number or name that decides it.
+
+**A union carrying its own separation witness. Closed as no, for now.** The ask was that
+`Term.union` carry evidence of a discharge, so that a union no value can resolve is a *type* error
+rather than a runtime refusal. **Lean 4 cannot express it.** A witness indexed by the option list
+it constrains is induction-induction and the elaborator answers `unknown identifier` on the type
+being defined; a field whose type is computed from the term is induction-recursion and the
+elaborator answers `invalid mutual block: either all elements of the block must be
+inductive/structure declarations, or they must all be definitions`. Both were run rather than
+argued. A `Prop` premise on the judgement is no substitute, because `Separates` is stated on `Adm`
+and `admitOptV` and the import chain runs `Typing`, `Soundness`, `Discharge`, `Exactness`, then
+`Orthogonality` — the premise sits four modules above the rule it would constrain.
+
+The one shape that works is a pre-term with a well-formedness subtype:
+`def Tm := {t : PreTerm // wf t = true}`, where `wf` recurses after the inductive rather than
+inside it. It elaborates, it is axiom-free, and a union with no discharge has no inhabitant. It
+costs a re-founding of the term language: **248 signature sites name `Term` across twelve files,
+and `Term` has seventeen constructors**, each becoming a smart constructor with a proof
+obligation and each match going through `.1`. JH's ruling is no for now, on the ground that the
+model's `Typed` already makes an undischarged union underivable and the host already refuses it
+in the type, so the re-founding buys the model a stronger statement about itself and buys the
+host nothing it lacks.
+
+What names the guarantee instead is `Separated`, one `Prop` over the option list, with
+`separated_of_orth` as the classifier's bridge into it.
 
 **The value/attribute doubling.** Nearly every analysis declaration has an attribute twin, and
 the question is whether the two sides should be one parametrised development. A probe found the
@@ -947,7 +1290,7 @@ each value-side declaration to its attribute-side twin, then compare the two bod
 - The **12 pairs of ≥15 attribute-side lines hold 363 of the 648** — more than half the twin
   mass — and average **0.67**, with the largest being the least alike: `ExactV_set`/`ExactA_set`
   **59 lines at 0.16**, `occV`/`occA` 22 at **0.06**, `occV_sound`/`occA_sound` 45 at 0.32,
-  `adm`/`admA` 45 at 0.47, `AdmLit`/`AdmALit` 14 at 0.33, `Adm`/`AdmA` 38 at 0.58.
+  `AdmLit`/`AdmALit` 14 at 0.33, `Adm`/`AdmA` 38 at 0.58.
 
 So the twins that are cheap to merge are cheap because there is nothing in them, and the twins
 holding the bulk are twins in name only — which is §4c's point arriving from the other side:
@@ -996,11 +1339,10 @@ Sixteen lines changed, no behaviour, `Orthogonality.lean` untouched.
 
 **~~`adm (.literal .number ls)` is not exact~~ — closed at JH's call, by the carrier route.**
 `GroundKind.number.Carrier` is now `{d : Double // Numeral.WF d.toDec = true}`, so `inL` splits
-on the element's own gate, ~~LiteralD~~ is deleted, and `adm`'s literal row and the joint row are
-the same function (`adm_literal_eq_Adm`) — which makes the older generation exact at this row
-with **nothing added to it** (`adm_literal_exact`). The alternative route, tightening the row,
-would have broken `adm_literal_num`'s `rfl` and every `SepV` over literals; the carrier route
-broke `adm_literal_num`'s `rfl` too, and nothing else.
+on the element's own gate and ~~LiteralD~~ is deleted, which made the per-aspect literal row
+exact with **nothing added to it** — the two rows were the same function. The alternative
+route, tightening the row, would have broken that row's `rfl` and every ~~SepV~~ over
+literals; the carrier route broke the `rfl` too, and nothing else.
 
 *And the reason it was a fidelity call turned out to be misstated, in this file and in three
 docstrings.* The witness `literalNRule_holds_what_it_cannot_write` was said to record a defect in
@@ -1015,13 +1357,14 @@ deliberately not a `Term`. `docs/codec-calculus.md` needed no change; the rule i
 mechanical.** The discriminator's literal is arity one; n-ary literals stay everywhere else. **The
 expectation was proof simplification and there was none**, which is the result worth recording:
 every proof over `(dunion)` consumes only the tag set's *nonemptiness* — `tagsOf_ne_nil`'s
-four-job inversion, `dunion_stamp`, `uniqueAdmission_byTag`, `ExactV_dunion`/`ExactA_dunion` — and
+four-job inversion, `dunion_stamp`, `ExactV_dunion`/`ExactA_dunion` — and
 not one of them consults the arity. The premise went from `Nonempty` to `card = 1`, one three-line
 bridge recovers the weaker fact, and the machinery measured 39 declarations / 350 lines before and
 40 / 353 after. Nothing shrank because nothing was ever waiting on it. The payoff is that the
 language no longer admits a variant answering to two tags, which is a statement about what a
-lookup is and not a lever on the model. `src/` is not aligned and that is a separate call
-(`codec.ts:4415` records multi-tag options as deliberate).
+lookup is and not a lever on the model. **`src/` is aligned as of `999b877`**: `EveryOptionTagged`
+refuses a multi-valued discriminator literal at compile time and the constructor refuses one at
+construction. It cost four deliberate tests, which that commit records.
 
 **`(held)`'s iso premise is stronger than the proof consumes.** The doc demands total
 cancellation on the carriers; `IsoCancels` restricts both directions to `(c.e ·).isSome`, and
@@ -1046,8 +1389,8 @@ nowhere; this paragraph is now the only place it is, which is why it is here rat
 held-set index is a **pure description of the denotation** — it carries nothing the pair does
 not already determine. (`§3` throughout this paragraph is `docs/codec-calculus.md`'s, not this
 file's.) `HeldSet.lean` separates the two claims the row ran together: (A) `T = (denote t).T`,
-now proved, and (B) `T = dom(e)`, which is false at a `union` and keeps
-`not_TIsDomE_unionLiteralString` as its witness. **(B) is what is still open; (A) is not.**
+now proved — and definitional at a `union`, which is `altCodec_T` — and (B) `T = dom(e)`, which
+is false there and keeps `not_TIsDomE_unionLiteralString` as its witness. **(B) is what is still open; (A) is not.**
 
 The obvious consequence — the index is redundant, delete it and index the judgement by
 `(denote t).T` — is **declined, and not on cost.** The rules are the model's transcription of
@@ -1065,12 +1408,17 @@ removed `typed_TSub`'s five-way split there. `object`'s open part: an undeclared
 when `HOpaque`'s `num` row gained its `D` premise. Three predicted obstructions, three already
 paid for — which is the argument for probing a claim about the tree before costing it.
 
-**§6's commutativity row is the adjacent transposition, not the permutation.**
-`equiv_altCodec_swap` proves the adjacent case, which generates every permutation — but the
-`List.Perm` lift is not written down, so the table's "all" is worth what one transposition is
-worth. `README.md` was always honest about this and the change log's "twenty of twenty" was
-not. The row also inherits the `≡`-is-not-transitive caveat, which bounds what a table of
-rewrites licenses at all. The `List.Perm` lift is the next probe.
+**§6's commutativity row was the adjacent transposition, and is now the permutation.**
+`equiv_altCodec_swap` proved the adjacent case only, and the table's "all" was worth what one
+transposition is worth: the generating argument needs `≡` to compose, which
+`Refutations.not_equiv_trans` refutes. `README.md` was always honest about this and the change
+log's "twenty of twenty" was not. `altCodec_perm` closes it at any `List.Perm`, and closes it
+at a claim the row did not ask for — reordering the options yields the **same codec**, not an
+equivalent one, so the lift never enters `≡` and never meets its failure of transitivity. The
+whole of it is `select_perm`: `select` reads its list only through the filter, `List.Perm`
+carries the filter along, and the two lengths at which `select` answers at all — none and one
+— are the two a permutation pins. The `≡`-is-not-transitive caveat still bounds what a table of rewrites licenses; it no
+longer bounds this row.
 
 **Two guards on `Axioms.lean`'s principle — built, and one of them is not the shape this
 section asked for.** `scripts/ratchet.py` (§6) holds `vocab_audit.py`'s site count and fails
@@ -1084,8 +1432,150 @@ shipped. **The bar above is still the right target; it is not the right instrume
 section also said `fidelity_audit.py` reports both numbers, and it does not: it reports
 docstring and §-tag coverage, and the site count is `vocab_audit.py`'s.)
 
-**`admits`' violation list and wiring it into `union`'s resolver** — both behaviour changes in
-`src/`, both the user's call. See the handoff.
+**~~The admission reader's violation list, and wiring it into `union`'s resolver~~ — done, at JH's
+call, and
+the list was six times longer than the item said.** `admits(c, v) ⟺ !isError(c.encode(v))` was
+false one way because encoding did not validate. The item named four codecs; the repo's own
+pinned test said **twenty-three of thirty-two** and had since it was written. Eleven gates closed
+all of them, because **twelve were loose only through their elements** — a `tuple` took a byte
+array of the right length because its positions did, and the wrappers, the field table,
+`legacy`, `held`, `lazy` and both unions inherited the same way. Five ground gates closed
+seventeen; only the six loose in their *own* row needed one each. `opaque` and `custom` are
+carved out, because admission reaches them **by asking the codec to write**, so consulting it
+there would not terminate.
+
+The resolver's write side decides through admission now, and the swap changed no test — which is
+the evidence the law had to land first. It also closed a recorded defect neither of its two
+candidate repairs would have needed: a union of a date adapter over `decimal` with `string`
+could not write a date at all, and the cause was in the defect's own prose — with no `κ` the
+resolver falls back to attempting, and `string` wrote whatever it was handed. **The ambiguity was never real; it
+was the write side's looseness wearing an ambiguity's clothes.**
+
+**~~The resolver's read side, through a port of `AdmA`~~ — rejected on measurement, and the
+guard a port would have needed is what landed instead.** The read side **already validates**,
+because it parses data somebody else wrote; the write side trusted its argument's *type*, and
+that asymmetry is the whole of why wiring gained there and would gain nothing here. Measured
+over 864 (codec, attribute) pairs from the vector corpus: `AdmA t a` and whether the library's
+read accepted it agree at **861 of 861 checkable pairs** and disagree at none.
+
+The remaining three are **stuck, not divergent**: `AdmA .number`'s `.n` row goes through
+`Double.ofDec`, an axiom with no computation rule, so it reduces to neither `true` nor `false`
+and *both* assertions fail — which is how it was told apart from a disagreement, `AdmA .decimal`
+and `AdmA .string` reducing fine on the same attribute. Note the shape against `number`'s other
+boundary (§6): a positive *vector* there is impossible because no `Value.num` can be **written**,
+while here the term and the attribute are both writable and the **row** will not compute.
+
+So a def-reading port would be a second description of what the read side already computes
+exactly, and two descriptions of one thing need a guard between them. The differential is that guard —
+`src/lean.ts`'s `ReadVerdict`, generated and elaborated by `scripts/gate.sh` beside the refusal
+and separation artifacts. **Do not re-open this as a port without first showing a pair where the
+two disagree.**
+
+**And the read-side twin — built, internal, after the admission reader itself stopped being
+public.** The
+first answer was to decline it as API, and then JH's reading changed the question: *"admits
+should not be a public api in the first place. Those and the proposed one are internal utils."*
+So the **six definition readers** — admission, the value-kind and member readers, the constant
+reader, the set-base reduction and the path walk — left the published surface, and the twin arrived
+as an internal one.
+
+The mechanism is the finding, because those two were not separable. It was public **only**
+because `src/Rotorise.ts` said `export * from './codec'`; this library has no package-private,
+no `@internal` convention and nothing testing its surface, so "internal but importable" did not
+exist. Moving the function to its own module hits a real import cycle — it needs `codec.ts`'s
+helpers and `codec.ts`'s resolver needs it. What remained was to **enumerate**: `export type *`
+for the sixty-six types and a list for the thirty values that are API, twenty-three of them
+pinned by name in `Rotorise.spec.ts`. Adding a codec is a
+line in that list now, which is the cost, and the point — an export becomes a decision rather
+than a consequence of where a function happens to live. `46cb950` shipped it public with
+no such decision taken.
+
+**And the enumeration is what made the twin expressible**, which is the only reason it was
+built: `codec.ts` can export freely now without reaching the surface. Two places had already
+written it — `testing.ts` as `reads`, `lean.ts`'s read-verdict generator as the same six lines
+inlined — and neither could see the other's. The read-side predicate is those two, once. It
+**asks the codec** and is not a reader of the definition: admission had to read rows because the
+write side
+was loose, and this must not, because the read side is already exact (`a41f874`). A future
+proposal reaching for twenty-one rows here is repeating that rejection.
+
+---
+
+### The white-room arc's open findings, triaged
+
+Two findings from the arc that made a codec carry its `Term`. Each is stated in the present
+tense, because each is true of the tree as it stands.
+
+**The generators have left the codec object.** A `custom`'s generator and shrinker were a
+projection of the term, written by `denote` at `custom` alone and read by the two derivers in
+`src/testing.ts` before the term was consulted — one fact on two paths. The term is the only source now, `custom`'s parameter
+record still states them because that is how a hand-written codec says how it generates, and a
+caller that wants to share a generator names it rather than reading it back off a pair.
+
+**A refusal renders the value it rejects, and rendering runs the caller's code.** Converting a
+value to a string reaches that value's own conversion methods, which the caller wrote. An object
+made with a null prototype has none, so the conversion throws: a value of that shape reaching
+`string`, `number`, `decimal`, `boolean`, `binary` or either literal form raised the host
+language's type error out of the write half instead of returning the pair's own error — an
+expected refusal becoming an exception inside the refusal path. The conversion is caught at that
+seam now. There is no total renderer to write instead, because the conversion methods are
+arbitrary user code.
+
+### What the arc closed
+
+**A union cannot hold an option no value can select, and `union([opaque, X])` is refused.** JH's
+ruling. It is not `opaque` with `X` beside it: §5's `select` acts only where *exactly one* option
+admits, and `opaque` admits every value `X` does, so the union is **undefined** wherever `X`
+admits and `opaque` everywhere else. `X` is declared and can never be chosen. That is §5's
+failure rather than a question of precedence — no ranking resolves it, because ranking would
+choose an option the model says is not chosen.
+
+The guard exempted an `opaque` option instead of comparing it, on the ground that its occupancy is
+`⊤`. §5 separates the two things a `⊤` covers: *unknown*, which is an adapter, a `custom` and a
+host `lazy`, and *everything*, which is what `opaque` is by design. The model states the second as
+a **closed form**, and the host now does too — `occV` and `occA` answer every constructor at
+`lossy` and every one but the numeric at `refuse`, where they used to answer nothing. `Orth1` then
+finds the meeting and the pair is refused at the declaration.
+
+**The corpus's refusal set moves from 17 pairs to 32**, all fifteen new ones with `opaque` on a
+side, every one of the fifteen theorems holding — `Orth (Term.opaq false) Term.string` is `false`
+— so the one-directional law `.separations.lean` pins is untouched. The resolver is not touched
+either: `.resolutions.lean` stays at 455 and `.readverdicts.lean` at 921, which is the check that
+this changed a declaration and not a resolution. With the declaration refused, an `opaque` option
+reaches a union only alone, so the resolver's reading of `opaque` no longer decides anything and
+the value-kind reader keeps it.
+
+**The type level already refused the pair, and had before this rule.** `opaque` reads back as
+`unknown`, which absorbs every other option's type, so the type-level option check reports
+"options 0 and 1 read back as the same type" at compile time. What this adds is the runtime half, reached by a
+caller who casts past that type or writes plain JavaScript. So the change is breaking for those
+callers and for no one else, and the refusal names `opaque` as the option to remove, in the
+caller's vocabulary rather than the term's.
+
+
+**The host's two value alphabets are not two vocabularies for one thing.** `1060c01` recorded
+them as a merge
+for a later pass. They are the codomains of two different functions: the first is what the value
+classifier in `src/value.ts` answers about a **value**, coarse because an empty set belongs to no
+family and telling `strSet` from `numSet` means inspecting elements; the second is what `occV`
+answers about a **term**, where the base is in hand. **No total function takes a value to a `Slot`**, so neither replaces
+the other and the merge is not available.
+
+**A guard's own table goes stale, and two did.** `name_drift.py`'s `HOST` exempts a name from the
+drift check, and seven of its thirteen entries named declarations that no longer existed —
+including one this tree never declared at all. That is why §5 could name two dead functions with
+every check green. `Rotorise.spec.ts`'s surface guard had the same shape: eight of twelve rows
+named deleted functions, and the host's own-property test answers false for a name nothing
+declares, so they asserted nothing while their live replacements went unguarded. Both tables are
+the live names now, and `name_drift.py` checks its own with an **anchored** declaration grep,
+because a name can be live as a local variable while its declaration is gone — the path walk was.
+
+**A deleted declaration leaves its docstring behind.** Three passes running, ten sites in total.
+`scripts/docstring_anchor.py` is the check: a docstring that another docstring immediately
+follows binds to nothing, since JSDoc takes the last. Deliberate two-part prose marks the earlier
+block `@anchored`. It found a type-level marker's docstring stranded 1,176 lines from its
+declaration, and it found a hole in its own first version — a doc comment opening and closing on
+one line was invisible to it — by failing to report a planted orphan.
 
 ---
 
@@ -1094,7 +1584,7 @@ docstring and §-tag coverage, and the site count is `vocab_audit.py`'s.)
 - New module under `Calculus/` → reachable from `Axioms.lean` (§1), and `ratchet.py
   --accept` to admit its counts (§6) — a new module has no prior state, so it is
   baselined rather than judged.
-- New stratum in the term family → all eight companions (§2), counted per side.
+- New stratum in the term family → all nine companions (§2), counted per side.
 - New rule → put each premise in one of the three places, `Typed`/`Obligations`/`MPOk` (§2).
 - New term recursion → `term_depth_wf`, and new inequalities beside `Term.depth` (§3).
 - New analysis row → prefer asking the codec over describing the set (§4b); then prove its
@@ -1112,10 +1602,12 @@ docstring and §-tag coverage, and the site count is `vocab_audit.py`'s.)
   *difference*.
 - Touching a normative document, the advertised axiom base, or `src/` behaviour → that is the
   user's decision. Deliver the measurement and stop.
-- Committing anything → `scripts/gate.sh`, and gate on its **exit code**. It runs the four
-  Python guards on the host and `lake build` in the container, prints one line per check and
-  exits nonzero if any failed. `--no-build` drops the build and is honest only when nothing you
-  touched can reach the elaborator — a `.lean` docstring can, and a comments-only edit still
+- Committing anything → `scripts/gate.sh`, and gate on its **exit code**. Eight checks: the five
+  Python guards on the host, `lake build` in the container, then **vector emit** (generating the
+  four bridge artifacts) and **vector bridge** (elaborating them beside the two committed vector
+  samples). It prints one line per check and exits nonzero if any failed. `--no-build` drops the
+  three that need the container and is honest only when nothing you touched can reach the
+  elaborator — a `.lean` docstring can, and a comments-only edit still
   moves the counts `doc_counts.py` guards, so it is not the "docs" flag it looks like. Two commits (`eed1b58`,
   `e3bd71f`) claimed a green tree over a red one by printing exit codes instead of testing
   them; that is the defect the script exists to make unavailable.

@@ -23,8 +23,8 @@ Mechanization choices, and where they diverge from the doc (each is routine to s
   values share a kind. `literal (k : GroundKind) (ls : NEFinset k.Carrier)` gets that from the
   *type*: with the base as an index, homogeneity, nonemptiness and pairwise distinctness are
   Lean's. `GroundKind` covers all six bases, so nothing §3 admits is spelled `refine`.
-* **§5's (K) is in neither list, and that is the rule.** `(union)`'s premises are the
-  option judgements and (D); (K) is a *discharger* of the (U) obligation, and lives with
+* **§5's dischargers are in neither list, and that is the rule.** `(union)`'s premises are
+  the option judgements and (D); a discharger settles the (U) obligation, and lives with
   `κ`/`ident`/`adm` in `Discharge.lean` — downstream of this file, which is why it could
   not be a premise here even if it were one. Failing to discharge is not refusing:
   `union(array(literal "A"), array(literal "B"))` is `Typed`, and `UAtCan` is false of it
@@ -105,6 +105,19 @@ def HNull (T : Held) : Held :=
 /-- `⋃ Tᵢ` (§5 `(union)`, `(dunion)`). -/
 def HUnion (Ts : List Held) : Held :=
   fun v => ∃ T ∈ Ts, T v
+
+/-- `(dunion)`'s held set: some variant holds the value.
+
+    **`HUnion` over a key set, and not `HUnion` itself.** `HUnion` is a disjunction over a *list*
+    and a tag-keyed table has no list — building one needs `Finset.toList`, which reaches
+    `Classical.choice`. This is the same disjunction, indexed.
+
+    It does *not* say that the value's own tag picks the variant, though a lookup does. That
+    reading is true and belongs where it is used: `T` is an upper bound `Carrier` keeps `e` and
+    `p` inside, and asking it of `T` would cost `Carrier` two premises it does not otherwise
+    need. -/
+def HVariants (variants : MapOf Body) (Ts : {k // k ∈ variants.1} → Held) : Held :=
+  fun v => ∃ k, Ts k v
 
 /-- §5's **(D)**, `(union)`'s well-formedness side condition, pairwise over the held sets.
 
@@ -209,8 +222,8 @@ inductive Typed : Term → Held → Option Member → Prop where
       rule whose index its term does not determine. -/
   | held {t I μ f g} (h : Typed t I μ) :
       Typed (.held t f g) (fun v => I (f v)) μ
-  | refine {t T μ q} (h : Typed t T μ) :
-      Typed (.refine t q) (fun v => T v ∧ q v) μ
+  | refine {t T μ p} (h : Typed t T μ) :
+      Typed (.refine t p) (fun v => T v ∧ p.eval v) μ
   | legacy {t T μ r} (h : Typed t T μ) : Typed (.legacy t r) T μ
   | nullable {t T μ} (h : Typed t T μ) : Typed (.nullable t) (HNull T) none
   | lazy {t T μ} (h : Typed t T μ) : Typed (.lazy t) T none
@@ -227,26 +240,28 @@ inductive Typed : Term → Held → Option Member → Prop where
   /-- `(union)`: the option judgements, and §5's **(D)** on their held sets. -/
   | union {opts Ts μs} (h : TypedListμ opts Ts μs) (hD : DIncomp Ts) :
       Typed (.union opts) (HUnion Ts) (unanimous μs)
-  /-- §5 `(dunion)`, **arity one at the discriminator**. JH's call, in his words: *"go with the
-      middle, arity one at the discriminator only"*.
+  /-- §5 `(dunion)`, **keyed by the tag**, where the premises used to carry what the key set
+      now carries.
 
-      `hone` does five jobs, and only the fifth is about arity. `tagsOf` is empty for everything
-      but an object whose `d` field is `req (literal .string ls)`, so asking anything of it forces
-      *object*, *`d` declared*, *`req` rather than `optional`/`fallback`*, and *a literal at the
-      string base* — see `tagsOf_ne_nil`, which is the inversion that extracts all four. `card = 1`
-      adds that `ls` is a singleton, so a variant answers to exactly one tag.
+      `hone` did five jobs. `tagsOf` is empty for everything but an object whose `d` field is a
+      `req` literal at a tag base, so asking anything of it forced *object*, *`d` declared*,
+      *`req` rather than `optional`/`fallback`*, and *a literal at a tag base*; `card = 1` added
+      that the literal is a singleton. `hdisj` did a sixth, that no two options answer to one tag.
 
-      **The arity buys the language, not the proofs**: no proof over `(dunion)` consults it, they
-      all want only nonemptiness. A `dunion` is a *lookup*, and an option answering to two tags is
-      a key that does not identify its variant. `src/` still permits several and narrowing it there
-      is a separate call.
+      The table does four of the six. *Object* is the codomain. *Arity one* is a function on a key
+      set. *Distinctness* is `Finset`. And the key is the tag, so there is no tag set to compare.
 
-      `hdisj` stays a premise because distinctness relates one option to *others* at a shared key —
-      §4a's criterion puts that on the wrong side of the boundary, where arity is on the right one. -/
-  | dunion {d opts Ts} (h : TypedListM opts Ts)
-      (hone : ∀ t' ∈ opts, (tagsOf d t').card = 1)
-      (hdisj : List.Pairwise (fun a b => ∀ tag ∈ tagsOf d a, tag ∉ tagsOf d b) opts) :
-      Typed (.dunion d opts) (HUnion Ts) (some .M)
+      **What is left is one fact, and it is the one a table cannot state**: that a variant's own
+      `d` field agrees with its key. The field cannot go — the codec writes the tag out of it, and
+      the host's variant declares it — so the agreement is a premise. `hone` is that, and
+      `tagsOf_ne_nil` is still the inversion that unpacks it.
+
+      The conclusion moved too. `HUnion` is a disjunction over a list and there is no list;
+      `HVariants` is the same disjunction over the key set. -/
+  | dunion {d} {variants : MapOf Body} {Ts : {k // k ∈ variants.1} → Held}
+      (h : ∀ k, Typed (.object (variants.2 k)) (Ts k) (some .M))
+      (hone : ∀ k, (variants.2 k).tags d = {k.1}) :
+      Typed (.dunion d variants) (HVariants variants Ts) (some .M)
 
 inductive TypedList : List Term → List Held → Prop where
   | nil : TypedList [] []

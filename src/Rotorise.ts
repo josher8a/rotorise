@@ -7,6 +7,7 @@ import type {
 import { carrying } from './attribute'
 import type {
     AnyCodec,
+    AnyDeclaration,
     Encoded,
     EncodedBy,
     IsUnion,
@@ -16,7 +17,8 @@ import type {
     Result,
     TaggedCodec,
 } from './codec'
-import { andThen, decides, object, orThrow, pathBuilder } from './codec'
+import { andThen, constantOf, object, orThrow, pathBuilder } from './codec'
+import type { Field } from './term'
 import type {
     DistributiveOmit,
     DistributivePick,
@@ -1075,12 +1077,11 @@ export type ConstantAttributes<Spec> = [Spec] extends [undefined]
       ? AgreedAttributes<Spec>
       : {
             // the constant's *value* and not merely its presence, so that a codec admitting two of
-            // them decides neither — which is what `decides` answers at runtime. Asking only whether
+            // them decides neither — which is what `constantOf` answers at runtime. Asking only whether
             // a `constant` was declared had the type promise a component nobody needed to pass,
             // while the implementation went on to demand it
-            [K in keyof Spec]: Spec[K] extends {
-                readonly constant: infer Only extends string
-            }
+            [K in keyof Spec]: ConstantValue<Spec[K]> extends infer Only extends
+                string
                 ? IsUnion<Only> extends true
                     ? never
                     : K
@@ -1095,7 +1096,10 @@ export type ConstantAttributes<Spec> = [Spec] extends [undefined]
  * does not.
  */
 type IsVariantSpec<Spec> = [Spec[keyof Spec]] extends [
-    { readonly unsafeEncode: unknown; readonly unsafeDecode: unknown },
+    // a member declares one attribute either way, and the two say so differently: a codec by its
+    // pair, a field by its definition. A variant is a spec rather than a declaration and has neither
+    | { readonly unsafeEncode: unknown; readonly unsafeDecode: unknown }
+    | { readonly def: Field },
 ]
     ? false
     : true
@@ -1107,9 +1111,29 @@ type IsVariantSpec<Spec> = [Spec[keyof Spec]] extends [
  * would let a variant that decides nothing be outvoted, where `unknown` absorbs. One silent variant
  * is enough.
  */
-type ConstantOrAny<C> = C extends { readonly constant: infer V extends string }
+type ConstantOrAny<C> = ConstantValue<C> extends infer V extends string
     ? V
     : unknown
+
+/**
+ * What one declared attribute decides, at the type level, with §4's two marks read.
+ *
+ * The type half of {@link constantOf}, and it must give the same answer: a name that may be absent
+ * decides nothing, a stand-in is written always so what it stands in for still decides, and the
+ * constants spec is what holds the two together.
+ */
+type ConstantValue<C> = C extends {
+    readonly def: { readonly mark: 'optional' }
+}
+    ? unknown
+    : C extends {
+            readonly def: { readonly mark: 'fallback' }
+            readonly codec: infer Marked
+        }
+      ? ConstantValue<Marked>
+      : C extends { readonly constant: infer V extends string }
+        ? V
+        : unknown
 
 /** What the variants say about one attribute, collapsed. */
 type AcrossVariants<Variants, K> = {
@@ -1177,7 +1201,7 @@ const callable = <T>(
 /** An erased item codec — what {@link isItemCodec} narrows to, and all this layer uses. */
 type ItemCodecRuntime = ItemCodec<
     Record<string, unknown>,
-    Record<string, AnyCodec>
+    Record<string, AnyDeclaration>
 >
 
 /**
@@ -1223,8 +1247,8 @@ const isTagged = (value: unknown): value is TaggedRuntime =>
 const agreedConstant = (codec: TaggedRuntime, component: string): unknown => {
     let agreed: unknown
     for (const name of Object.keys(codec.spec)) {
-        const found = codec.variant(name)?.field(component)
-        const value = found && decides(found)
+        const found = codec.variant(name)?.spec[component]
+        const value = found && constantOf(found)
         if (value === undefined) return undefined
         if (agreed === undefined) agreed = value
         else if (agreed !== value) return undefined
@@ -1472,8 +1496,10 @@ export const tableEntry =
                 : isTagged(attributes)
                   ? (component: string) => agreedConstant(attributes, component)
                   : (component: string) => {
-                        const found = attributes.field(component)
-                        return found && decides(found)
+                        // the spec and not `field`, which hands back the codec a member marks:
+                        // the two marks are the answer here, so the declaration is what is read
+                        const found = attributes.spec[component]
+                        return found && constantOf(found)
                     }
 
         /**
@@ -1656,4 +1682,132 @@ export const tableEntry =
     }
 
 export * from './attribute'
-export * from './codec'
+
+/**
+ * The codec surface, **enumerated rather than starred**, because not everything `codec.ts` exports
+ * is API.
+ *
+ * `carries`, `member`, `occV`, `occA`, `specOf`, `tagsOf`, `separable`, `identifies`, `setBaseOf`
+ * and `constantOf` read a **term**, and `accepts` and `readsBack` ask the **pair**. Both kinds exist
+ * so this library's own resolver, declaration guard and emitter can ask what a codec is; a caller
+ * has the codec's behaviour instead, which is the thing they are derived from. Every one of them
+ * reached the published surface once, because this was `export * from './codec'`, and `46cb950`
+ * shipped the reader then called `admits` that way without the export being a decision anyone took.
+ * `Rotorise.spec.ts` holds the list, and holds it at the live names for the reason written there.
+ *
+ * Six of the listed values reach here *through* `codec.ts` from `result.ts`, which is where the
+ * pair's error and its combinators live — `CodecError`, `andThen`, `every`, `everyEntry`,
+ * `failed`, `orThrow`. They were starred before and are listed now like the rest.
+ *
+ * So the values are listed and the types are starred. **Adding a codec means adding a line here**,
+ * which is the cost of the list and the point of it: an export becomes a decision rather than a
+ * consequence of where a function happens to live. `Rotorise.spec.ts` pins both halves, the names
+ * that are API and the names that are not, so a name cannot rejoin the surface by accident either
+ * — and the counts live there, in the lists the test actually walks, rather than here where
+ * nothing would keep them true.
+ */
+export type {
+    AllObjects,
+    AnyCodec,
+    AnyDeclaration,
+    AnyObjectCodec,
+    AnyRest,
+    AttributeCodec,
+    AttributeOf,
+    Attributes,
+    BinaryCodec,
+    BooleanCodec,
+    ConstantCodec,
+    DecimalCodec,
+    Decoded,
+    DerivedItem,
+    DerivedUnion,
+    DerivedVariants,
+    DiscriminatedCodec,
+    Encoded,
+    EncodedBy,
+    EncodedPatch,
+    EncodedVariants,
+    FallbackCodec,
+    IsUnion,
+    ItemCodec,
+    ItemSpec,
+    LiteralAttribute,
+    LiteralBase,
+    LiteralValue,
+    LocatedCodec,
+    Marks,
+    Nestable,
+    NumberCodec,
+    ObjectCodec,
+    ObjectOf,
+    ObjectSpecsOf,
+    OptionalCodec,
+    PathOf,
+    PathTerminal,
+    Reader,
+    Refined,
+    Refinement,
+    RestCodec,
+    RestDeclaration,
+    RestGoesLast,
+    RestPolicy,
+    Result,
+    Rng,
+    SetBase,
+    SetCapable,
+    SetOf,
+    Shape,
+    Slot,
+    SpecsOf,
+    StringCodec,
+    Tagged,
+    TaggedCodec,
+    TaggedSpec,
+    TupleOf,
+    TupleWrites,
+    UnionCodec,
+    Untagged,
+    UntaggedSpec,
+    ValidateOptions,
+    ValidateVariants,
+    VariantOf,
+    Writes,
+    WrittenBy,
+} from './codec'
+export {
+    andThen,
+    array,
+    binary,
+    boolean,
+    CodecError,
+    custom,
+    decimal,
+    discriminatedUnion,
+    every,
+    everyEntry,
+    failed,
+    fallback,
+    held,
+    lazy,
+    legacy,
+    nullable,
+    nullValue,
+    number,
+    object,
+    opaque,
+    optional,
+    orThrow,
+    pathBuilder,
+    record,
+    refine,
+    rest,
+    string,
+    tuple,
+    union,
+} from './codec'
+export type { Field, Term } from './term'
+// `shapeOf` classifies a *value* and reaches no term, so it moved to `value.ts` with the twelve
+// others `denote.ts` needs. The name on the surface is unchanged; only the module that declares
+// it moved, which is why this is a second `export` rather than an entry in the list above.
+export { shapeOf } from './value'

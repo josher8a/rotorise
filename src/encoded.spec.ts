@@ -134,14 +134,16 @@ describe('the shape a codec writes', () => {
     })
 })
 
+/**
+ * The message lands where the codec is *used*, not where it is built: a parameter whose type
+ * depends on the spec being inferred stops the spec being inferred, so the check is on the
+ * result. Reading anything off it is what surfaces it.
+ */
 describe('the pin refuses a codec that writes something else', () => {
     /**
-     * The message lands where the codec is *used*, not where it is built: a parameter whose type
-     * depends on the spec being inferred stops the spec being inferred, so the check is on the
-     * result. Reading anything off it is what surfaces it.
+     * `price` as a string is the migration this exists to catch.
+     * @anchored
      */
-
-    /** `price` as a string is the migration this exists to catch. */
     /**
      * Reported on the declaration, which is why none of these reach for the codec afterwards.
      *
@@ -396,10 +398,6 @@ describe('a record and a tuple keep their shape', () => {
  * lands in an index rather than in a field.
  */
 describe('a union pins the shape it writes', () => {
-    type Visit =
-        | { TAG: 'VISIT'; kind: 'CHECKUP'; petId: string; vetId: string }
-        | { TAG: 'VISIT'; kind: 'SHOT'; petId: string; dose: string }
-
     /** One variant or the other, never the merge — a row is exactly one of them. */
     type VisitItem =
         | { TAG: S; kind: S; petId: S; vetId: S }
@@ -443,9 +441,6 @@ describe('a union pins the shape it writes', () => {
     })
 
     it('pins an untagged union by position', () => {
-        type Line =
-            | { petId: string; price: string }
-            | { petIds: readonly string[] }
         type LineItem = { petId: S; price: N } | { petIds: L<S> }
 
         const ok = union([

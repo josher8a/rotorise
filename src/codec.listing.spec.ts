@@ -12,7 +12,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import type { Attribute, AttributeMap } from './attribute'
-import type { ItemCodec, OptionalCodec } from './codec'
+import type { ItemCodec, OptionalCodec, StringCodec } from './codec'
 import {
     array,
     boolean,
@@ -125,7 +125,11 @@ const statusLog = Object.fromEntries(
         [`status_${name}_setAt`, optional(string)],
         [`status_${name}_byStaffId`, optional(string)],
     ]),
-) as { [k in ListingStatusLog]: OptionalCodec<string, Attribute<'S'>> }
+) as {
+    // the third argument is the codec the mark is about, and `string` is a `StringCodec`: writing
+    // the two-argument form here would default it to the erased codec and refuse the real one
+    [k in ListingStatusLog]: OptionalCodec<string, Attribute<'S'>, StringCodec>
+}
 
 const Listing = object({
     id: string,
@@ -342,6 +346,17 @@ describe('a wide entity, encoded', () => {
         })
         expect(Listing.field('ownerId').unsafeEncode('u1')).toEqual({ S: 'u1' })
     })
+
+    /**
+     * A body hands out codecs and never the field that marks one.
+     *
+     * `optional(string)` is a statement about the *name*, and it carries no pair — so a caller given
+     * the declaration back would have nothing to encode with, and building an
+     * `ExpressionAttributeValues` entry for an optional attribute is exactly what this member is for.
+     */
+    it('hands back the codec an optional attribute marks, not the mark', () => {
+        expect(Listing.field('handle').unsafeEncode('h1')).toEqual({ S: 'h1' })
+    })
 })
 
 describe('the law', () => {
@@ -433,9 +448,7 @@ describe('the law', () => {
      */
     it('refuses a denormalised decimal, rather than losing the digits in storage', () => {
         const denormalised = { ...listing, localPriceRate: '1.50' }
-        expect(() => Listing.unsafeEncode(denormalised)).toThrow(
-            /not a numeral DynamoDB stores unchanged/,
-        )
+        expect(() => Listing.unsafeEncode(denormalised)).toThrow(CodecError)
 
         // and the normalised price is the same money, written the way it comes back
         const normalised = { ...listing, localPriceRate: '1.5' }
@@ -473,9 +486,7 @@ describe('what it refuses', () => {
 
     it('refuses a required attribute the item does not carry', () => {
         const { ownerId: _missing, ...partial } = Listing.unsafeEncode(listing)
-        expect(() => Listing.unsafeDecode(partial)).toThrow(
-            /'ownerId' is required/,
-        )
+        expect(() => Listing.unsafeDecode(partial)).toThrow(CodecError)
     })
 
     it('refuses an attribute carrying the wrong member', () => {
@@ -484,7 +495,7 @@ describe('what it refuses', () => {
                 ...Listing.unsafeEncode(listing),
                 status: { S: '1' },
             }),
-        ).toThrow(/expected attribute member 'N', found 'S'/)
+        ).toThrow(CodecError)
     })
 
     it('drops attributes no schema mentions, which is why the inverse law fails', () => {

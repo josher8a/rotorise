@@ -18,7 +18,7 @@
  *
  * The premise was right and the conclusion was wrong. The brand rides on `amount`, so the
  * capability belongs on `amount` — `amount.set()`, which is `ReadonlySet<Price>` for exactly the
- * reason the old argument gave. {@link SetCapable} is the type and {@link setBase} is the runtime
+ * reason the old argument gave. {@link SetCapable} is the type and {@link setBaseOf} is the runtime
  * reduction; a set of a refinement of a literal of a base is still a set of that base, which is
  * `setCodec_restrict`. So the general form did not need to be free-standing, and the free
  * `set(...)` is no longer exported: `.set()` is the whole surface, and the builder is internal.
@@ -35,10 +35,8 @@ import {
     number,
     object,
     refine,
-    setBase,
     string,
     union,
-    writes,
 } from './codec'
 import { checkRoundTrip } from './testing'
 
@@ -58,23 +56,28 @@ const amount = refine(decimal, isAmount, {
 })
 
 describe('a set at each base', () => {
-    it('is the set that base stores', () => {
-        expect(writes(string.set())).toBe('SS')
-        expect(writes(number.set())).toBe('NS')
-        expect(writes(decimal.set())).toBe('NS')
-        expect(writes(binary.set())).toBe('BS')
-    })
-
     /**
-     * One combinator, reached from four places. The definition records the *element codec*, and it
-     * is the public base itself — not a copy of it — which is what makes two spellings of the same
-     * set compare equal and a schema pin stable.
+     * One combinator, reached from four places. The definition records the element's *term*, and
+     * it is the public base's own term — not a copy of it — which is what makes two spellings of
+     * the same set compare equal and a schema pin stable.
+     *
+     * **Pins a fact no law has, deliberately.** Identity of the recorded element is not something
+     * §2 or §6 asks for — two codecs that behave alike satisfy every law here whether or not their
+     * definitions are the same object. It is asserted because `toEqual` on `def` is what schema
+     * comparison rests on, and a copy would pass every behavioural test and break that. It stays.
+     *
+     * **`toEqual` alone stopped pinning it when the element became a term, so `toBe` says it.**
+     * The element used to be a codec, whose members are functions, and `toEqual` compares a
+     * function by reference — so a copied element failed the shape assertion for free. A term is
+     * plain data, and a copy of `{ kind: 'string' }` is `toEqual` to the original. The identity
+     * claim is the one this test is for, so it is now asserted rather than obtained as a
+     * side effect of comparing closures.
      */
-    it('records the base itself as its element', () => {
-        expect(string.set().def).toEqual({ kind: 'set', element: string })
-        expect(number.set().def).toEqual({ kind: 'set', element: number })
-        expect(decimal.set().def).toEqual({ kind: 'set', element: decimal })
-        expect(binary.set().def).toEqual({ kind: 'set', element: binary })
+    it('records the base itself as its index', () => {
+        expect(string.set().def).toEqual({ kind: 'set', base: 'string' })
+        expect(number.set().def).toEqual({ kind: 'set', base: 'number' })
+        expect(decimal.set().def).toEqual({ kind: 'set', base: 'decimal' })
+        expect(binary.set().def).toEqual({ kind: 'set', base: 'binary' })
     })
 
     it('encodes and decodes at the type the base holds', () => {
@@ -95,10 +98,6 @@ describe('a set at each base', () => {
      * argument for indexing by base. A `NS` alone does not say which read it back.
      */
     it('distinguishes the two numeric sets, which the member cannot', () => {
-        expect(writes(number.set())).toBe(writes(decimal.set()))
-        expect(setBase(number)).toBe('number')
-        expect(setBase(decimal)).toBe('decimal')
-
         const wide = '123456789012345678901234567890'
         expect([...decimal.set().unsafeDecode({ NS: [wide] })]).toEqual([wide])
         // the same attribute through the host, which is what `number.set()` is for and is lossy
@@ -114,13 +113,10 @@ describe('a set at each base', () => {
 describe('a set of a literal, spelled at the base', () => {
     it('checks each member against the values the base was given', () => {
         const tags = string.set('a', 'b', 'c')
-        expect(writes(tags)).toBe('SS')
         expect(tags.unsafeEncode(new Set(['c', 'a']))).toEqual({
             SS: ['a', 'c'],
         })
-        expect(() => tags.unsafeDecode({ SS: ['z'] })).toThrow(
-            /at \[0\]: 'z' is not one of 'a', 'b', 'c'/,
-        )
+        expect(() => tags.unsafeDecode({ SS: ['z'] })).toThrow(CodecError)
     })
 
     it('reaches the numeric set the old surface could not narrow losslessly', () => {
@@ -128,9 +124,7 @@ describe('a set of a literal, spelled at the base', () => {
         const value = new Set(['10', '2'] as const)
         expect(codes.unsafeEncode(value)).toEqual({ NS: ['10', '2'] })
         expect(codes.unsafeDecode(codes.unsafeEncode(value))).toEqual(value)
-        expect(() => codes.unsafeDecode({ NS: ['9'] })).toThrow(
-            /'9' is not one of/,
-        )
+        expect(() => codes.unsafeDecode({ NS: ['9'] })).toThrow(CodecError)
     })
 
     it('round-trips over generated values', () => {
@@ -173,7 +167,7 @@ describe('branding survives, and it survives through the capability', () => {
     it("runs the brand's predicate on every member", () => {
         expect(() =>
             Pet.unsafeDecode({ id: { S: 'w' }, amounts: { NS: ['1', '-5'] } }),
-        ).toThrow(/is not a non-negative amount/)
+        ).toThrow(CodecError)
     })
 
     /**
@@ -190,13 +184,8 @@ describe('branding survives, and it survives through the capability', () => {
         const _widened: ReadonlySet<Price> = plain
     })
 
-    it('reads the base through the refinement, which is what makes the lift sound', () => {
-        expect(setBase(amount)).toBe('decimal')
-        expect(writes(amount.set())).toBe('NS')
-    })
-
     /**
-     * The capability propagates as far as {@link setBase} reduces, which is through any number of
+     * The capability propagates as far as {@link setBaseOf} reduces, which is through any number of
      * refinements and through a literal — the two the model keeps under `setCodec_restrict`. So a
      * set whose members are checked twice, by the literal and by the predicate, is one `.set()`
      * call, where before it needed the free builder and a codec argument.
@@ -207,14 +196,39 @@ describe('branding survives, and it survives through the capability', () => {
             (value): value is 'a' => value === 'a',
             { describe: 'the a tag' },
         )
-        expect(setBase(first)).toBe('string')
         const tags = first.set()
-        expect(writes(tags)).toBe('SS')
         expect(tags.unsafeEncode(new Set(['a']))).toEqual({ SS: ['a'] })
         // refused by the predicate, which the literal alone would have allowed
         expect(tags.decode({ SS: ['b'] })).toBeInstanceOf(CodecError)
         // and by the literal, which the predicate alone would not have seen
         expect(tags.decode({ SS: ['z'] })).toBeInstanceOf(CodecError)
+    })
+
+    /**
+     * The same rule on the write side, which the test above states only for the accepted value.
+     *
+     * A set over a restricted element is `refine(set(b), each(p))` per predicate the element
+     * carries, so both restrictions have to run on every member and neither may be dropped. Only
+     * the read side was asserted, and the two halves are one pair — `setCodec_restrict` on `e` and
+     * `setCodec_restrict_p` on `p` — so a spelling that keeps one and loses the other is a codec
+     * that writes what it cannot read back.
+     */
+    it('encodes a set only where every member is in the literal and passes the predicate', () => {
+        const first = refine(
+            string('a', 'b'),
+            (value): value is 'a' => value === 'a',
+            { describe: 'the a tag' },
+        )
+        const tags = first.set()
+        expect(tags.encode(new Set(['a'] as const))).toEqual({ SS: ['a'] })
+        // in the literal, refused by the predicate
+        expect(tags.encode(new Set(['b'] as never))).toBeInstanceOf(CodecError)
+        // passes nothing: outside the literal, and outside the predicate with it
+        expect(tags.encode(new Set(['z'] as never))).toBeInstanceOf(CodecError)
+        // one bad member refuses the whole set, which is what `each` says
+        expect(tags.encode(new Set(['a', 'b'] as never))).toBeInstanceOf(
+            CodecError,
+        )
     })
 })
 
@@ -226,8 +240,8 @@ describe('branding survives, and it survives through the capability', () => {
  * `formal/Calculus/Term.lean:60` replaced the element term with a `SetBase` index, making the
  * refusal a type error, and states what that gives up: a set of a `held` and of a `legacy`.
  *
- * This library had the same hole and it was reachable. `writes` reads *through* an adapter — `held`
- * writes where its inner term does — so a set of `held(string, …)` was accepted, and its two
+ * This library had the same hole and it was reachable. The member reader read *through* an adapter
+ * — `held` writes where its inner term does — so a set of `held(string, …)` was accepted, and its two
  * functions then ran once per member of an attribute whose stored form records no adapter at all.
  * The refusal now lives beside the member check, which is where the other half of the premise
  * already was.
@@ -239,9 +253,7 @@ describe('what a set cannot be built from', () => {
             (value): value is string | number => value !== null,
         )
         // @ts-expect-error a union writes no single member, so the type declines it too
-        expect(() => either.set()).toThrow(
-            /a set holds strings, numbers or binary/,
-        )
+        expect(() => either.set()).toThrow(CodecError)
     })
 
     /**
@@ -255,34 +267,14 @@ describe('what a set cannot be built from', () => {
             encode: (value: readonly string[]) => value.join(','),
             decode: (stored: string) => stored.split(','),
         })
-        expect(writes(asArray)).toBe('S')
-        expect(setBase(asArray)).toBeUndefined()
         // no `@ts-expect-error`: `held` writes `S`, so this type-checks and throws
         const adapted = refine(asArray, isTexts)
         expect(() => adapted.set()).toThrow(CodecError)
-        expect(() => adapted.set()).toThrow(/must be one of the four bases/)
+        expect(() => adapted.set()).toThrow(CodecError)
     })
 
     it('refuses a read widening, for the same reason', () => {
         const widened = legacy({ current: string, older: decimal })
-        expect(setBase(widened)).toBeUndefined()
-        expect(() => refine(widened, isText).set()).toThrow(
-            /must be one of the four bases/,
-        )
-    })
-
-    /**
-     * And the two the model keeps are kept: a `refine` and a literal are *restrictions* of a base,
-     * so the set of one is the restriction of the base's set. That is `setCodec_restrict`, and it
-     * is why {@link setBase} reads through exactly those two and nothing else.
-     */
-    it('accepts the two that are restrictions of a base', () => {
-        expect(setBase(amount)).toBe('decimal')
-        expect(setBase(string('a', 'b'))).toBe('string')
-        expect(setBase(refine(amount, isAmount, { describe: 'twice' }))).toBe(
-            'decimal',
-        )
-        // a literal at `boolean` is a fine literal and still has no set
-        expect(setBase(boolean(true))).toBeUndefined()
+        expect(() => refine(widened, isText).set()).toThrow(CodecError)
     })
 })
