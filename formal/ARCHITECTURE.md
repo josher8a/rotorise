@@ -327,7 +327,7 @@ already.
 ### 4c. One codec, stated once for both sides of the pair
 
 `Combinators.lean` is <!-- count:combinators_lines -->4147<!-- /count --> lines of the tree's
-<!-- count:tree_lines -->16522<!-- /count -->, and this is its organizing idea; without it
+<!-- count:tree_lines -->16664<!-- /count -->, and this is its organizing idea; without it
 the file reads as the inventory `README.md` already has. A constructor is a **prism** —
 `Ctor α β`, with `into`/`out` and the laws `out_into` (matching what was built returns it) and
 `into_out` (anything that matches was built) — and those two *are* §2's (R) and (C) at a
@@ -482,7 +482,7 @@ were written for is answered and gone.
 
 ### And a third machine, `Orth`, which does not pay — measured
 
-`Orthogonality.lean` is the fourth-largest file at <!-- count:orth_file_lines -->1070<!-- /count --> lines — `Soundness.lean` is 1033 —: a decidable certificate for a
+`Orthogonality.lean` is the fourth-largest file at <!-- count:orth_file_lines -->1212<!-- /count --> lines — `Soundness.lean` is 1033 —: a decidable certificate for a
 fragment of (U), over-approximating each term's occupancy per side (`occV`/`occA`) and
 certifying a pair whose occupancies are disjoint, `by decide`. **Measured against what it
 replaces it does not pay**, and its own by-phase table is the measurement — the <!-- count:orth_total_theorems -->10<!-- /count --> hand
@@ -492,20 +492,20 @@ discharges it names, eight as rows and two in the prose beneath them, out of a
 | | theorems | lines of proof |
 | --- | --- | --- |
 | reachable by `Orth` itself — phase *slot* | <!-- count:orth_slot_theorems -->0<!-- /count --> | <!-- count:orth_slot_lines -->0<!-- /count --> |
-| reachable only through `Separates`, the `Prop` interface — phase *alternatives*, where `DecidableEq Double` makes a `Bool` test noncomputable | <!-- count:orth_alt_theorems -->1<!-- /count --> | <!-- count:orth_alt_lines -->25<!-- /count --> |
-| unreachable on principle — an arbitrary `q` or `f`, a different constructor, `SepJA`'s member disjunct, or `UAtCan` itself failing (`uAtAct_array_literals`) | <!-- count:orth_unreach_theorems -->9<!-- /count --> | <!-- count:orth_unreach_lines -->145<!-- /count --> |
+| reachable by `Orth` since `OrthL` — phase *alternatives*, at every base but `number`, where `DecidableEq Double` makes a `Bool` test noncomputable and the caller supplies the premise to `Separates` by hand | <!-- count:orth_alt_theorems -->2<!-- /count --> | <!-- count:orth_alt_lines -->52<!-- /count --> |
+| unreachable on principle — an arbitrary `q` or `f`, a different constructor, `SepJA`'s member disjunct, or `UAtCan` itself failing (`uAtAct_array_literals`) | <!-- count:orth_unreach_theorems -->8<!-- /count --> | <!-- count:orth_unreach_lines -->118<!-- /count --> |
 
 *This table counted the hand proofs against what `Orth` reaches, and the layer it was
 counting is gone.* Every theorem it found **reachable** was phrased in the retired per-aspect
 vocabulary and was deleted with it, `Orth` being what certifies those pairs now — which is why
-the reachable total is <!-- count:orth_reachable_lines -->25<!-- /count --> lines rather than the
+the reachable total is <!-- count:orth_reachable_lines -->52<!-- /count --> lines rather than the
 145 measured before the deletion. What is left in the unreachable column is the answer the
 table was built to produce: the discharges that exist by hand because no phase of the
 classifier can reach them, and `uAtAct_array_literals`, which holds where `UAtCan` is outright
 false and so has nothing to certify.
 
 When this was written **nothing had been deleted**, and the sentence was the finding: 983
-lines stood *beside* the <!-- count:orth_reachable_lines -->25<!-- /count --> they could
+lines stood *beside* the <!-- count:orth_reachable_lines -->52<!-- /count --> they could
 replace. Two passes have deleted since, and neither deleted for this reason — the per-aspect
 layer went because nothing consumed it, and the four tables went because §5 stopped stating
 them. `Orth` still does not pay for itself as a replacement. It stays anyway, because its
