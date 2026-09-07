@@ -531,6 +531,17 @@ export const tagsOf = (d: string, t: Term): readonly string[] => {
  * the warrant for the container case are two different theorems, and only the first is about
  * literals.
  *
+ * **`Orth` certifies two of these cases now and this row is still not redundant.** Since `OrthL`,
+ * the model certifies two literals at one base with disjoint alternatives, and two
+ * `refine(set b, each(members …))` at one base with disjoint alternatives. Measured over the 378
+ * corpus pairs, removing this row and porting `OrthL` in its place loses twenty pairs and gains
+ * none, in three groups: a `dunion` against anything, which no phase of `Orth` reaches; a literal
+ * against an occupancy that is `⊤`, which is the over-approximation refusing to certify; and a
+ * literal against its own base, where the union really is ambiguous at the literal's values and
+ * the model's decline is correct rather than incomplete. So this row is not an exemption waiting
+ * for a certificate. It is a wider rule than `Orth`'s, and the last group is a question about the
+ * rule rather than about the proof.
+ *
  * A bare `set` answers `false`: {@link Term}'s `set` carries a **base** and has no element to read.
  * `string.set('a','b')` is `refine(set(string), each(members …))`, so this row sees the literal
  * through the `refine`.
@@ -589,11 +600,11 @@ export const identifies = (t: Term): boolean => {
  * one level up, and the type-level snapshot pins it. Answering `true` here is deferring to it, not
  * skipping it.
  *
- * **An option that identifies its own values.** {@link identifies}, whose two warrants are on it.
- * The flat case no longer needs the exemption. `Orth` carries a phase `OrthL` now, and it
- * certifies two literals at one base with disjoint alternatives. The row stays until this guard
- * ports `OrthL`, which waits on the model's `refine` carrying its predicate as data, so that one
- * pass moves the flat case and the set case together and this guard changes one time.
+ * **An option that identifies its own values.** {@link identifies}, whose warrants are on it, and
+ * the row is permanent rather than pending. `Orth` carries a phase `OrthL` now, so the flat
+ * literal case and the literal-set case are certified. Porting `OrthL` here would be dead code:
+ * every pair it certifies, this row already accepts, and the row accepts twenty corpus pairs the
+ * model does not certify. {@link identifies} names the three groups.
  *
  * **An occupancy that is unknown.** `held`'s `f` runs before the subterm and can move a value into
  * any constructor, `custom` is arbitrary both ways, and a host `lazy` cannot be read without
