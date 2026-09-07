@@ -76,7 +76,8 @@ def Obligations : Term → Prop
     Lawful { T := fun v => (ce v).isSome, μ := none, e := ce, p := cp }
   | .object b => ObligationsBody b
   | .union opts => ObligationsList opts ∧ UAtAct opts
-  | .dunion _ opts => ObligationsList opts
+  -- one premise per variant, indexed by the key rather than by a list position
+  | .dunion _ variants => ∀ k, ObligationsBody (variants.2 k)
 
 /-- The payload's premises: every declared field's, and the rest policy's. The companion
     `Field` and `Rest` already had and the object row inlined. -/
@@ -117,7 +118,7 @@ def MPOk : Term → Prop
   | .lazy t' => MPOk t'
   | .object b => MPOkBody b
   | .union opts => MPOkList opts
-  | .dunion _ opts => MPOkList opts
+  | .dunion _ variants => ∀ k, MPOkBody (variants.2 k)
 
 def MPOkBody : Body → Prop
   | .mk _ f rest => (∀ k, MPOkField (f k)) ∧ MPOkRest rest
@@ -210,9 +211,10 @@ theorem union {opts} (h : Obligations (.union opts)) :
     (∀ t ∈ opts, Obligations t) ∧ UAtAct opts :=
   ⟨obligationsList_iff.mp h.1, h.2⟩
 
-/-- §5 `(dunion)`: one premise per option; (U) is a theorem here, not a premise. -/
-theorem dunion {d opts} (h : Obligations (.dunion d opts)) :
-    ∀ t ∈ opts, Obligations t := obligationsList_iff.mp h
+/-- §5 `(dunion)`: one premise per variant. (U) is not a premise and is no longer a theorem
+    either — a lookup reaches one variant by construction, so there is nothing to discharge. -/
+theorem dunion {d} {variants : MapOf Body} (h : Obligations (.dunion d variants)) :
+    ∀ k, ObligationsBody (variants.2 k) := h
 
 /-- The `fallback` field's own premise, `v(∗) ∈ dom(e)`. -/
 theorem fallback {t v} (h : ObligationsField (Field.fallback t v)) :
@@ -320,7 +322,7 @@ theorem typed_μSyn : ∀ {t T μ}, Typed t T μ → μSyn t = μ
   | _, _, _, .union h _ => by
       show unanimous (μSynList _) = unanimous _
       rw [typedListμ_μSyn h]
-  | _, _, _, .dunion _ _ _ => rfl
+  | _, _, _, .dunion _ _ => rfl
 
 theorem typedListμ_μSyn : ∀ {ts Ts μs}, TypedListμ ts Ts μs → μSynList ts = μs
   | _, _, _, .nil => rfl
@@ -411,26 +413,21 @@ theorem literalCodec_tag {k : GroundKind} (hk : k = .string ∨ k = .decimal)
     all_goals exact absurd h (by
       simp [literalCodec, baseCodec, Codec.restrict, inL, decimalCodec])
 
-/-- **Arity one is nonemptiness**, which is all the four-jobs inversion needs. `(dunion)`'s
-    premise narrowed from `Nonempty` to `card = 1` when the discriminator became arity one, and
-    every proof below wants the weaker fact — so the narrowing costs exactly this one line and
-    changes no proof under it. That is the measurement, not a hope: `dunion_stamp`,
-    `tagsOf_ne_nil` and `uniqueAdmission_byTag` are untouched by the change. -/
-theorem tagsOf_nonempty_of_card_one {d : Name} {t : Term} (h : (tagsOf d t).card = 1) :
-    (tagsOf d t).Nonempty :=
-  Finset.card_pos.mp (by rw [h]; exact Nat.one_pos)
+/-! ~~tagsOf_nonempty_of_card_one~~ bridged `(dunion)`'s old `card = 1` premise to the
+nonemptiness the inversion wanted. The premise is now `tags d = {k.1}`, which gives the
+nonemptiness directly and gives the tag's identity besides, so the bridge has nothing to cross. -/
 
-/-- Typing's nonempty-tags premise forces each `(dunion)` option to be an object whose
-    discriminator is a `req literal` at the string base, and object-encode then stamps it on both
-    sides of every canonical pair — exactly the `hstamp` the sum lemmas consume.
-    Shared by both halves of the theorem. -/
-theorem dunion_stamp {d : Name} {opts : List Term}
-    (htags : ∀ t' ∈ opts, (tagsOf d t').Nonempty) :
-    ∀ o ∈ opts.map fun t' => (tagsOf d t', denote t'), ∀ t' a, o.2.e t' = some a →
-      ∃ tag ∈ o.1, tagOfA d a = some tag ∧ tagOfV d t' = some tag := by
-  refine forall_mem_map fun tx htx t' a he' => ?_
-  replace he' : (denote tx).e t' = some a := he'
-  obtain ⟨body, kb, ls, rfl, hkb, hlk, htagsls⟩ := tagsOf_ne_nil (htags tx htx)
+/-- **A body with a tag stamps it on both sides of every canonical pair it writes.** Nonempty
+    tags force the discriminator to be a `req` literal at a tag base, and object-encode writes a
+    literal verbatim, so the attribute carries the tag the value does.
+
+    Stated over a `Body` rather than over a list of options, because that is what a variant is. -/
+theorem body_stamp {d : Name} {b : Body} (hne : (b.tags d).Nonempty)
+    {t' : Value} {a : Attr} (he' : (bodySem b).e t' = some a) :
+    ∃ tag ∈ b.tags d, tagOfA d a = some tag ∧ tagOfV d t' = some tag := by
+  obtain ⟨body, kb, ls, hbe, hkb, hlk, htagsls⟩ :=
+    tagsOf_ne_nil (t := Term.object b) hne
+  obtain rfl : body = b := (Term.object.inj hbe).symm
   -- the payload's three components are what `objectCodecCore_e_inv` reads, so it is taken
   -- apart once, here, rather than threaded through the statement above
   obtain ⟨fields, ff, rest⟩ := body
@@ -459,9 +456,26 @@ theorem dunion_stamp {d : Name} {opts : List Term}
   -- the base is existential from here: `literalCodec_tag` answers both of them, because the
   -- two *readers* are uniform where the two codecs are not
   obtain ⟨tag, htag, hv, ha⟩ := literalCodec_tag hkb hw
+  -- `tagsOf` at an object *is* `Body.tags`, and the goal is stated at the payload
+  replace htagsls : Body.tags d ⟨fields, ff, rest⟩
+      = tagsOfField (some (.req (.literal kb ls))) := htagsls
   exact ⟨tag, htagsls ▸ htag,
     by simp only [tagOfA, dif_pos hd]; exact ha,
     by simp only [tagOfV, dif_pos hd]; exact hv⟩
+
+/-- **The stamp a lookup needs**, from the one premise the table cannot carry. `hone` says a
+    variant's own tag set is the singleton of its key, so the tag `body_stamp` produces *is* the
+    key, and the lookup's two halves reach the same variant. -/
+theorem dunion_stamp {d : Name} {variants : MapOf Body}
+    (hone : ∀ k, (variants.2 k).tags d = {k.1}) :
+    StampedAt d ⟨variants.1, fun k => bodySem (variants.2 k)⟩ := by
+  intro k v a he
+  have hne : ((variants.2 k).tags d).Nonempty := by
+    rw [hone k]; exact ⟨k.1, Finset.mem_singleton_self _⟩
+  obtain ⟨tag, htag, hA, hV⟩ := body_stamp hne he
+  rw [hone k, Finset.mem_singleton] at htag
+  subst htag
+  exact ⟨hA, hV⟩
 
 /-! ## The theorem
 
@@ -622,19 +636,15 @@ theorem soundness_both : ∀ {t T μ}, Typed t T μ → Obligations t → Sound 
         fun hmp => lawful_altCodec
           (forall_mem_map fun t' ht' => (optionSemOf_c _ _) ▸ (ihs t' ht').2 (mpOkList_iff.mp hmp t' ht'))
           hU hW⟩
-    | @dunion d opts Ts hlistM hone hdisj =>
-      have ihs : ∀ t' ∈ opts, Sound t' := fun t' ht' => by
-        obtain ⟨T', hty⟩ := TypedListM.forall hlistM t' ht'
-        exact soundness_both hty (obligationsList_iff.mp hob t' ht')
-      have hstamp := dunion_stamp fun t' ht' => tagsOf_nonempty_of_card_one (hone t' ht')
-      have hdisj' : List.Pairwise (fun x y => ∀ tag ∈ x.1, tag ∉ y.1)
-          (opts.map fun t' => (tagsOf d t', denote t')) :=
-        List.pairwise_map.mpr hdisj
-      rw [Sound, denote_dunion_tags, denoteTagged_eq]
-      exact ⟨lawfulCore_dunionCodec
-          (forall_mem_map fun t' ht' => (ihs t' ht').1) hstamp hdisj',
-        fun hmp => lawful_dunionCodec
-          (forall_mem_map fun t' ht' => (ihs t' ht').2 (mpOkList_iff.mp hmp t' ht')) hstamp hdisj'⟩
+    | @dunion d variants Ts hty hone =>
+      -- **no uniqueness premise.** A lookup reaches one variant by construction, so where the
+      -- filtered sum needed `hdisj` and `UniqueAdmission`, there is nothing to supply
+      have ihs : ∀ k, Sound (Term.object (variants.2 k)) := fun k =>
+        soundness_both (hty k) (hob k)
+      have hstamp := dunion_stamp hone
+      rw [Sound, denote_dunion_tags]
+      exact ⟨lawfulCore_dunionTable (fun k => (ihs k).1) hstamp,
+        fun hmp => lawful_dunionTable (fun k => (ihs k).2 (hmp k)) hstamp⟩
 
 termination_by t _ _ _ _ => Term.depth t
 decreasing_by term_depth_wf
@@ -943,13 +953,11 @@ theorem typed_TSub : ∀ {t T μ}, Typed t T μ → ∀ v, (denote t).T v → T 
       obtain ⟨T', hT', μ', hty⟩ := TypedListμ.mem hlist tx htx
       rw [optionSemOf_c] at hT
       exact ⟨T', hT', typed_TSub hty v hT⟩
-    | @dunion d opts Ts hlistM hone hdisj =>
-      simp only [denote, denoteTagged_eq] at hv
-      obtain ⟨o, ho, hT⟩ := hv
-      simp only [List.mem_map] at ho
-      obtain ⟨-, ⟨tx, htx, rfl⟩, rfl⟩ := ho
-      obtain ⟨T', hT', hty⟩ := TypedListM.mem hlistM tx htx
-      exact ⟨T', hT', typed_TSub hty v hT⟩
+    | @dunion d variants Ts hty hone =>
+      -- the codec's held set is the variants' disjunction over the key set, and so is the
+      -- judgement's, so this is the induction hypothesis at whichever key the value landed on
+      obtain ⟨k, hTv⟩ := hv
+      exact ⟨k, typed_TSub (hty k) v hTv⟩
 
 termination_by t _ _ _ _ _ => Term.depth t
 decreasing_by term_depth_wf
@@ -1039,11 +1047,9 @@ theorem carrier_denote : ∀ {t T μ}, Typed t T μ → Obligations t → Carrie
       refine carrier_altCodec (forall_mem_map fun t' ht' => ?_)
       obtain ⟨T', μ', hty⟩ := TypedListμ.forall hlist t' ht'
       exact (optionSemOf_c _ _) ▸ carrier_denote hty ((Obligations.union hob).1 t' ht')
-    | @dunion d opts Ts hlistM hone hdisj =>
-      rw [denote_dunion_tags, denoteTagged_eq]
-      refine carrier_altCodec (forall_mem_map (forall_mem_map fun t' ht' => ?_))
-      obtain ⟨T', hty⟩ := TypedListM.forall hlistM t' ht'
-      exact carrier_denote hty (Obligations.dunion hob t' ht')
+    | @dunion d variants Ts hty hone =>
+      rw [denote_dunion_tags]
+      exact carrier_dunionTable fun k => carrier_denote (hty k) (Obligations.dunion hob k)
 
 termination_by t _ _ _ _ => Term.depth t
 decreasing_by term_depth_wf

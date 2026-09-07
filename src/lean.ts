@@ -53,9 +53,9 @@ import type { AttributeValue } from './attribute'
 import { isNumeral, isStoredNumeral, memberOf } from './attribute'
 import type { AnyCodec, AnyDeclaration, LiteralValue } from './codec'
 import { union } from './codec'
-import { accepts, readsBack } from './denote'
+import { accepts, readsBack, variantTag } from './denote'
 import { failed } from './result'
-import type { Literal, Predicate, Term, Field as TermField } from './term'
+import type { Body, Literal, Predicate, Term, Field as TermField } from './term'
 import { shapeOf } from './value'
 
 /**
@@ -533,6 +533,61 @@ const leanPredicate = (q: Predicate, at: string, forced: number): string => {
     }
 }
 
+/**
+ * §4's object payload, as the model's `Body.mk`.
+ *
+ * Two rows print one: an object's payload, and each of a `dunion`'s variants. `Term.dunion`
+ * carries a `MapOf Body` now, so a variant is a `Body` and not a `Term` that wraps one, and this
+ * is what both of them name.
+ */
+const leanBodyOf = (body: Body, at: string, forced: number): string => {
+    const declared = Object.entries(body.fields)
+    const names = declared.map(([name]) => name)
+    const fields = leanKeyFunction(
+        declared.map(
+            ([name, field]) =>
+                [name, leanFieldOf(field, `${at}.${name}`, forced)] as const,
+        ),
+    )
+    // three policies, three terms — the definition records the policy itself, so nothing
+    // here has to guess which of `drop` and `refuse` an absent codec meant
+    const rest = body.rest
+    const restTerm =
+        typeof rest === 'string'
+            ? `Rest.${rest}`
+            : `(Rest.codec (${leanTermOfTerm(rest.t, `${at}.rest`, forced)}))`
+    return `(Body.mk ${leanFinset(names)} (${fields}) ${restTerm})`
+}
+
+/**
+ * One variant of a `dunion`, as the key and the `Body` it maps to.
+ *
+ * **One narrowing serves both halves**, which is why this returns the pair rather than the tag:
+ * the kind check that produces the refusal is the same check that gives `variant.body` its type,
+ * so reading the payload after it needs no cast.
+ *
+ * `discriminatedUnion` refuses both failures at the declaration — a non-object variant, and one
+ * that does not name `d` with a one-valued literal — so neither is a case a declaration reaches.
+ * The emitter takes a `Term` past the type through `erase`, so it says so rather than assuming.
+ */
+const leanVariantOf = (
+    d: string,
+    variant: Term,
+    at: string,
+    forced: number,
+): readonly [string, string] => {
+    if (variant.kind !== 'object') {
+        return refuse(
+            at,
+            `a discriminated union's variants are object codecs and this one is a \`${variant.kind}\`; \`Term.dunion\` carries a table of \`Body\`, so there is nothing to emit for it`,
+        )
+    }
+    return [
+        variantTag(d, variant),
+        leanBodyOf(variant.body, at, forced),
+    ] as const
+}
+
 const leanTermOfTerm = (t: Term, at: string, forced: number): string => {
     switch (t.kind) {
         case 'string':
@@ -585,24 +640,6 @@ const leanTermOfTerm = (t: Term, at: string, forced: number): string => {
         case 'record':
             return `Term.record (${leanTermOfTerm(t.val, `${at}.value`, forced)})`
         case 'object': {
-            const declared = Object.entries(t.body.fields)
-            const names = declared.map(([name]) => name)
-            const fields = leanKeyFunction(
-                declared.map(
-                    ([name, field]) =>
-                        [
-                            name,
-                            leanFieldOf(field, `${at}.${name}`, forced),
-                        ] as const,
-                ),
-            )
-            // three policies, three terms — the definition records the policy itself, so nothing
-            // here has to guess which of `drop` and `refuse` an absent codec meant
-            const rest = t.body.rest
-            const restTerm =
-                typeof rest === 'string'
-                    ? `Rest.${rest}`
-                    : `(Rest.codec (${leanTermOfTerm(rest.t, `${at}.rest`, forced)}))`
             // **One argument, a `Body`.** `db444e3` made the object payload a stratum, so
             // `Term.object` takes `Body.mk names fields rest` where it used to take the three
             // separately — and this row kept emitting the three, which typechecked against no
@@ -610,7 +647,10 @@ const leanTermOfTerm = (t: Term, at: string, forced: number): string => {
             // are generated *by this function*, so `lean.spec.ts`'s byte comparison agreed with a
             // stale emitter, and no gate ran a generated file through Lean. Both are fixed; see
             // `ARCHITECTURE.md` §2, where the emitter is now the ninth companion a stratum owes.
-            return `Term.object (Body.mk ${leanFinset(names)} (${fields}) ${restTerm})`
+            //
+            // A `dunion`'s variants are `Body`s too, so the payload is emitted by
+            // {@link leanBodyOf} and both rows print the same thing.
+            return `Term.object ${leanBodyOf(t.body, at, forced)}`
         }
         case 'dunion': {
             /**
@@ -650,12 +690,16 @@ const leanTermOfTerm = (t: Term, at: string, forced: number): string => {
             // values at the declaration, so the table cannot hold one codec twice and the option
             // list cannot repeat one. `Typed.dunion`'s `hdisj` is answered upstream of here — this
             // used to dedup by identity, which was the same invariant enforced in two places
-            const options = t.options
-                .map((variant, index) =>
-                    leanTermOfTerm(variant, `${at}.variants[${index}]`, forced),
-                )
-                .join(', ')
-            return `Term.dunion ${leanString(t.d)} [${options}]`
+            const options = t.options.map((variant, index) =>
+                leanVariantOf(t.d, variant, `${at}.variants[${index}]`, forced),
+            )
+            // **A `MapOf Body`, keyed by the tag.** The same pair the object row prints one
+            // stratum up: a key set, and a function on membership in it. `Term.dunion` carries
+            // that instead of a list because arity one and tag distinctness are then the type
+            // rather than two premises of the rule.
+            return `Term.dunion ${leanString(t.d)} ⟨${leanFinset(
+                options.map(([tag]) => tag),
+            )}, ${leanKeyFunction(options)}⟩`
         }
         case 'union':
             return `Term.union [${t.options

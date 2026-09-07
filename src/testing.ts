@@ -1644,7 +1644,8 @@ export const checkIso = <C extends AnyCodec, T>(
  * - an **object** option admits by *names* — every name present declared, every required name
  *   present (`keysOk`, `OptionSem.byNames`). It is never tried, because `object({ a })` will happily
  *   encode `{ a, b }` and lose `b`, so "it encoded" is not evidence.
- * - a **tagged** option admits by its discriminator's stored value (`OptionSem.byTag`).
+ * - a **tagged** option admits by its discriminator's stored value. The model spells that as a
+ *   lookup now: `Term.dunion` carries a table keyed by the tag, and `dunionTable` indexes it.
  * - anything else admits by *being defined* on the input (`OptionSem.byAttempt`) — not by the kind
  *   filter the implementation uses first. Where the two differ, this reports it, and that difference
  *   is the whole reason to run it.
@@ -1824,7 +1825,7 @@ const byNames = (
     }
 }
 
-/** `OptionSem.byTag` — a `(dunion)` option is admitted by its discriminator. */
+/** A `(dunion)` variant is admitted by its discriminator, which the model's table uses as a key. */
 const byTag = (
     codec: AnyCodec,
     discriminator: string,
@@ -1947,7 +1948,7 @@ const unionsIn = (subject: AnyCodec): readonly UnionSite[] => {
                 return
             case 'dunion': {
                 // one option per variant, and the tag is read off the variant's own `d` field —
-                // `dunionCodec`'s options are `(List String × Codec)`, and a variant answers to one
+                // the model's variants are a table keyed by the tag, and a variant answers to one
                 const tagged = def.options.map((option) => ({
                     tag: variantTag(def.d, option),
                     option,

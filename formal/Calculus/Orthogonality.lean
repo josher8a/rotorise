@@ -96,7 +96,7 @@ same alternative and are never disjoint.
 *names* the map carries — so `select` never looks at any field's contents, discriminator
 included. Two object options with disjoint `req`-literal discriminators on the same name are
 therefore **not** separated at a `union`; they are separated at a `dunion`, whose options are
-`OptionSem.byTag` and whose (U) is already the theorem `uAtCan_dunion`. So the tag row of
+~~OptionSem.byTag~~ and whose (U) is a fact of its key set rather than a theorem. So the tag row of
 §5's table belongs to a different constructor, not to a phase here.
 -/
 
@@ -511,7 +511,7 @@ theorem occV_sound : ∀ (t : Term), OccSoundV t
   | .array _ | .tuple _ _ | .record _ =>
       fun v h => by cases v <;> simp_all [Adm, occV, occOnly, Value.slot]
   | .dunion _ _ => fun v h => by
-      cases v <;> simp_all [Adm, selTagV, tagOfV, occV, occOnly, Value.slot]
+      cases v <;> simp_all [Adm, tagOfV, occV, occOnly, Value.slot]
   | .object (.mk _ _ _) => fun v h => by
       cases v <;> simp_all [Adm, AdmBody, occV, occOnly, Value.slot]
   | .held _ _ _ => fun _ _ => rfl
@@ -605,7 +605,7 @@ theorem occA_sound : ∀ (t : Term), OccSoundA t
   | .object (.mk _ _ _) => fun a h => by
       cases a <;> simp_all [AdmA, AdmABody, occA, occOnly, Attr.member]
   | .dunion _ _ => fun a h => by
-      cases a <;> simp_all [AdmA, selTagA, tagOfA, occA, occOnly, Attr.member]
+      cases a <;> simp_all [AdmA, tagOfA, occA, occOnly, Attr.member]
   | .legacy _ _ => fun _ _ => rfl
   | .custom _ _ => fun _ _ => rfl
   | .refine t _ => fun a h => by
@@ -1057,7 +1057,8 @@ private def lsB : NEFinset String := ⟨{"B"}, Finset.singleton_nonempty _⟩
 theorem orth_string_number : Orth .string .number = true := by decide
 theorem orth_string_null : Orth .string .null = true := by decide
 theorem orth_string_boolean : Orth .string .boolean = true := by decide
-theorem orth_string_dunion : Orth .string (.dunion "k" []) = true := by decide
+theorem orth_string_dunion :
+    Orth .string (.dunion "k" ⟨∅, fun k => nomatch k.2⟩) = true := by decide
 theorem orth_array_record : Orth (.array .string) (.record .string) = true := by decide
 
 /-- §5's worked `(set)` example, and out of reach of ~~SepV~~'s kind disjunct: `κ` collapses
@@ -1196,7 +1197,7 @@ Where the hand proofs sit, and the two that sit nowhere. `Orth` is the decidable
 | `uAtCan_of_literalN_disjoint` | alternatives | `separates_literal_disjoint`, the base `OrthL` declines |
 | `uAtCan_of_refine_disjoint`, `uAtCan_boolLiterals`, `uAtCan_refine_container` | opaque predicate | never — `q` is arbitrary |
 | `sepJV_set_literals` | alternatives | `OrthL`'s set rows, and on both halves where the hand proof is `SepJV` |
-| `uAtCan_dunion` | tag | a different constructor; already a theorem |
+| ~~uAtCan_dunion~~ | tag | a different constructor, and no longer a theorem: its key set makes the fact |
 | `uAtCan_opaque` | kind | one level below the term language |
 | `uAtAct_array_literals` | none: `UAtCan` itself is false | never — there is nothing to certify |
 

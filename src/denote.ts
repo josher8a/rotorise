@@ -749,7 +749,7 @@ export const altSem = (
 /**
  * §3 `(dunion)`: the tag chooses the variant, and the choice is a **lookup** rather than an attempt.
  *
- * The model's `OptionSem.byTag`, and `lawful_dunionCodec` is the lemma. Its (U) is a theorem rather
+ * The model's `dunionTable`, and `lawful_dunionTable` is the lemma. Its (U) is a fact of the key set rather
  * than an obligation, which §5 states as the reason `(dunion)` is not a second kind of sum: reading
  * a label off an input is something an option cannot be wrong about.
  *

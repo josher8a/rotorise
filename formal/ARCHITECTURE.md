@@ -326,8 +326,8 @@ already.
 
 ### 4c. One codec, stated once for both sides of the pair
 
-`Combinators.lean` is <!-- count:combinators_lines -->4269<!-- /count --> lines of the tree's
-<!-- count:tree_lines -->16919<!-- /count -->, and this is its organizing idea; without it
+`Combinators.lean` is <!-- count:combinators_lines -->4186<!-- /count --> lines of the tree's
+<!-- count:tree_lines -->16768<!-- /count -->, and this is its organizing idea; without it
 the file reads as the inventory `README.md` already has. A constructor is a **prism** —
 `Ctor α β`, with `into`/`out` and the laws `out_into` (matching what was built returns it) and
 `into_out` (anything that matches was built) — and those two *are* §2's (R) and (C) at a
@@ -482,18 +482,18 @@ were written for is answered and gone.
 
 ### And a third machine, `Orth`, which does not pay — measured
 
-`Orthogonality.lean` is the fourth-largest file at <!-- count:orth_file_lines -->1240<!-- /count --> lines — `Soundness.lean` is 1033 —: a decidable certificate for a
+`Orthogonality.lean` is the fourth-largest file at <!-- count:orth_file_lines -->1241<!-- /count --> lines — `Soundness.lean` is 1033 —: a decidable certificate for a
 fragment of (U), over-approximating each term's occupancy per side (`occV`/`occA`) and
 certifying a pair whose occupancies are disjoint, `by decide`. **Measured against what it
-replaces it does not pay**, and its own by-phase table is the measurement — the <!-- count:orth_total_theorems -->10<!-- /count --> hand
+replaces it does not pay**, and its own by-phase table is the measurement — the <!-- count:orth_total_theorems -->9<!-- /count --> hand
 discharges it names, eight as rows and two in the prose beneath them, out of a
-<!-- count:sep_family -->13<!-- /count -->-theorem `sep*`/`uAtCan_*`/`uAtAct_*` family:
+<!-- count:sep_family -->12<!-- /count -->-theorem `sep*`/`uAtCan_*`/`uAtAct_*` family:
 
 | | theorems | lines of proof |
 | --- | --- | --- |
 | reachable by `Orth` itself — phase *slot* | <!-- count:orth_slot_theorems -->0<!-- /count --> | <!-- count:orth_slot_lines -->0<!-- /count --> |
 | reachable by `Orth` since `OrthL` — phase *alternatives*, at every base but `number`, where `DecidableEq Double` makes a `Bool` test noncomputable and the caller supplies the premise to `Separates` by hand | <!-- count:orth_alt_theorems -->2<!-- /count --> | <!-- count:orth_alt_lines -->52<!-- /count --> |
-| unreachable on principle — an arbitrary `q` or `f`, a different constructor, `SepJA`'s member disjunct, or `UAtCan` itself failing (`uAtAct_array_literals`) | <!-- count:orth_unreach_theorems -->8<!-- /count --> | <!-- count:orth_unreach_lines -->118<!-- /count --> |
+| unreachable on principle — an arbitrary `q` or `f`, a different constructor, `SepJA`'s member disjunct, or `UAtCan` itself failing (`uAtAct_array_literals`) | <!-- count:orth_unreach_theorems -->7<!-- /count --> | <!-- count:orth_unreach_lines -->113<!-- /count --> |
 
 *This table counted the hand proofs against what `Orth` reaches, and the layer it was
 counting is gone.* Every theorem it found **reachable** was phrased in the retired per-aspect
@@ -1357,7 +1357,7 @@ deliberately not a `Term`. `docs/codec-calculus.md` needed no change; the rule i
 mechanical.** The discriminator's literal is arity one; n-ary literals stay everywhere else. **The
 expectation was proof simplification and there was none**, which is the result worth recording:
 every proof over `(dunion)` consumes only the tag set's *nonemptiness* — `tagsOf_ne_nil`'s
-four-job inversion, `dunion_stamp`, `uniqueAdmission_byTag`, `ExactV_dunion`/`ExactA_dunion` — and
+four-job inversion, `dunion_stamp`, `ExactV_dunion`/`ExactA_dunion` — and
 not one of them consults the arity. The premise went from `Nonempty` to `card = 1`, one three-line
 bridge recovers the weaker fact, and the machinery measured 39 declarations / 350 lines before and
 40 / 353 after. Nothing shrank because nothing was ever waiting on it. The payoff is that the
