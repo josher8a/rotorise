@@ -1321,7 +1321,7 @@ describe('DynamoDB Utils', () => {
  * `Rotorise.ts` enumerates the codec values rather than starring them, so that an export is a
  * decision rather than a consequence of where a function happens to live. That only holds if
  * something notices when the two lists drift, and nothing did: the reader then called `admits`
- * reached the surface in `46cb950` because the re-export was `export * from './codec'`, and no test
+ * reached the surface in `46cb950` because the re-export was `export * from './codec/codec'`, and no test
  * could have said so.
  *
  * The absent half is the load-bearing one. The names below read a **term** for this library's own
@@ -1374,7 +1374,7 @@ describe('the published surface', () => {
      * **The other half of the same fact, and it was unpinned while twelve names leaked.**
      *
      * The list above is a run-time check, and a run-time check cannot see a type. `export type *
-     * from './codec'` re-exported every one of that module's exports — the values among them as
+     * from './codec/codec'` re-exported every one of that module's exports — the values among them as
      * *types* — so `import { decides } from 'rotorise'` type-checked and was `undefined` when it
      * ran. The value list was a decision and the type surface was still a consequence of where a
      * function lived, which is the thing `46cb950` was supposed to have ended.

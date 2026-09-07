@@ -118,7 +118,9 @@ def main():
     if not os.path.isdir(SRC):
         sys.exit(f"no src/ at {SRC} — run from formal/scripts or formal/")
 
-    files = sorted(f for f in os.listdir(SRC) if f.endswith(".ts"))
+    # recursive: `src/` nests its directories, and a flat listing passes over a nested file in silence
+    files = sorted(os.path.relpath(os.path.join(root, f), SRC)
+                   for root, _, names in os.walk(SRC) for f in names if f.endswith(".ts"))
     hits = [(f, w) for f in files for w in [unanchored(os.path.join(SRC, f))] if w]
 
     total = sum(len(w) for _, w in hits)

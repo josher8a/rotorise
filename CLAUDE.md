@@ -7,7 +7,7 @@ evidence behind the rules. `formal/ARCHITECTURE.md` holds what the Lean developm
 change to something that already looks decided.
 
 The repository is two things at one time. `src/` is a published TypeScript library.
-`formal/` is a Lean development that models part of the library. `src/lean.ts` emits the
+`formal/` is a Lean development that models part of the library. `src/codec/lean.ts` emits the
 vectors that tie the two sides together. A pass usually touches one side. A pass that
 touches the bridge touches both sides.
 

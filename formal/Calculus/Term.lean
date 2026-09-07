@@ -29,7 +29,7 @@ namespace Calculus
     A bare `Value → Bool` decides nothing a table can see, and two things wanted to see it.
     `Orth` cannot certify `set(literal k ls)` against another one while the predicate is a
     function, so the pair keeps a host exemption that the model proves nothing about. And
-    `src/term.ts` had already made the same move for the same reason: its predicate type is
+    `src/codec/term.ts` had already made the same move for the same reason: its predicate type is
     `members | each | closure`, and its docstring says the declaration guard has to read the
     predicate as data. These are the same three cases, so the two sides are now one shape.
 

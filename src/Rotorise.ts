@@ -3,8 +3,8 @@ import type {
     AttributeMap,
     AttributeValue,
     StoredItem,
-} from './attribute'
-import { carrying } from './attribute'
+} from './codec/attribute'
+import { carrying } from './codec/attribute'
 import type {
     AnyCodec,
     AnyDeclaration,
@@ -16,9 +16,15 @@ import type {
     PathOf,
     Result,
     TaggedCodec,
-} from './codec'
-import { andThen, constantOf, object, orThrow, pathBuilder } from './codec'
-import type { Field } from './term'
+} from './codec/codec'
+import {
+    andThen,
+    constantOf,
+    object,
+    orThrow,
+    pathBuilder,
+} from './codec/codec'
+import type { Field } from './codec/term'
 import type {
     DistributiveOmit,
     DistributivePick,
@@ -1681,7 +1687,7 @@ export const tableEntry =
         } as never
     }
 
-export * from './attribute'
+export * from './codec/attribute'
 
 /**
  * The codec surface, **enumerated rather than starred**, because not everything `codec.ts` exports
@@ -1691,7 +1697,7 @@ export * from './attribute'
  * and `constantOf` read a **term**, and `accepts` and `readsBack` ask the **pair**. Both kinds exist
  * so this library's own resolver, declaration guard and emitter can ask what a codec is; a caller
  * has the codec's behaviour instead, which is the thing they are derived from. Every one of them
- * reached the published surface once, because this was `export * from './codec'`, and `46cb950`
+ * reached the published surface once, because this was `export * from './codec/codec'`, and `46cb950`
  * shipped the reader then called `admits` that way without the export being a decision anyone took.
  * `Rotorise.spec.ts` holds the list, and holds it at the live names for the reason written there.
  *
@@ -1774,7 +1780,7 @@ export type {
     VariantOf,
     Writes,
     WrittenBy,
-} from './codec'
+} from './codec/codec'
 export {
     andThen,
     array,
@@ -1805,9 +1811,9 @@ export {
     string,
     tuple,
     union,
-} from './codec'
-export type { Field, Term } from './term'
+} from './codec/codec'
+export type { Field, Term } from './codec/term'
 // `shapeOf` classifies a *value* and reaches no term, so it moved to `value.ts` with the twelve
 // others `denote.ts` needs. The name on the surface is unchanged; only the module that declares
 // it moved, which is why this is a second `export` rather than an entry in the list above.
-export { shapeOf } from './value'
+export { shapeOf } from './codec/value'

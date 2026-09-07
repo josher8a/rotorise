@@ -1,6 +1,6 @@
 import { attest } from '@ark/attest'
 import { describe, it } from 'vitest'
-import { object, opaque, string, union } from './codec'
+import { object, opaque, string, union } from './codec/codec'
 import { tableEntry } from './Rotorise'
 
 describe('Rotorise Performance Baseline', () => {

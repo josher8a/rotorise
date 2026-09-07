@@ -1204,7 +1204,7 @@ theorem encSet_restrict {α : Type} (c : Codec) (q : Value → Bool) (inj : α �
     This is what makes indexing `set` by a base non-lossy. Restricting the *elements* and
     restricting the *set* by the lifted predicate produce the same `e`, so
     `set(literal k ls)` and `set(refine(b, q))` — the two shapes `src/` actually uses
-    (`src/codec.set.spec.ts:76`) — are still expressible, as refinements of the set.
+    (`src/codec/spec/literal/codec.set.spec.ts:76`) — are still expressible, as refinements of the set.
 
     **This theorem is the write side, and only the write side.** The read side is
     `setCodec_restrict_p` below, and it was prose here until it was proved: the sentence said
