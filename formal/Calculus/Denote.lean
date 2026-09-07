@@ -169,7 +169,9 @@ def denote : Term → Codec
   | .opaq lossy => opaqCodecω lossy
   | .object b => bodySem b
   | .union opts => altCodec (optionSems opts) (unanimous (denoteμs opts))
-  | .dunion d opts => dunionCodec d (denoteTagged d opts)
+  -- **the lookup, not a filtered sum.** The variants are a table keyed by tag, so the codec
+  -- reads the tag and indexes; ~~denoteTagged~~ and its list are gone with the sum.
+  | .dunion d variants => dunionTable d ⟨variants.1, fun k => bodySem (variants.2 k)⟩
 
 /-- The payload's semantics: the field table and the rest policy, each through its own
     companion. This is the third companion of `denote`, alongside `fieldSem` and `restSem`, and
@@ -207,10 +209,6 @@ def optionSems : List Term → List OptionSem
 def denoteμs : List Term → List (Option Member)
   | [] => []
   | t :: ts => (denote t).μ :: denoteμs ts
-
-def denoteTagged (d : Name) : List Term → List (Finset String × Codec)
-  | [] => []
-  | t :: ts => (tagsOf d t, denote t) :: denoteTagged d ts
 
 end
 
@@ -302,9 +300,10 @@ theorem denote_union_sems (opts : List Term) :
     denote (.union opts) =
       altCodec (optionSems opts) (unanimous (denoteμs opts)) := rfl
 
-/-- `discriminatedUnion` denotes `dunionCodec`. -/
-theorem denote_dunion_tags (d : Name) (opts : List Term) :
-    denote (.dunion d opts) = dunionCodec d (denoteTagged d opts) := rfl
+/-- `discriminatedUnion` denotes the lookup, over the variants' own codecs. -/
+theorem denote_dunion_tags (d : Name) (variants : MapOf Body) :
+    denote (.dunion d variants)
+      = dunionTable d ⟨variants.1, fun k => bodySem (variants.2 k)⟩ := rfl
 
 /-- `opaque` denotes `opaqCodecω` — the fuel-free one, which is why §5's discharger table has
     a row about `opaqCodec` at a fuel and a reason rather than a term-level twin. -/
@@ -345,11 +344,6 @@ has to know the companions exist. -/
     denoteμs opts = opts.map fun t => (denote t).μ
   | [] => rfl
   | t :: ts => by simp only [denoteμs, List.map]; rw [denoteμs_eq_map ts]
-
-@[simp] theorem denoteTagged_eq : ∀ (d : Name) (opts : List Term),
-    denoteTagged d opts = opts.map fun t => (tagsOf d t, denote t)
-  | _, [] => rfl
-  | d, t :: ts => by simp only [denoteTagged, List.map]; rw [denoteTagged_eq d ts]
 
 end
 

@@ -111,8 +111,8 @@ rests on it. -/
 is one half and this is the other, so the bijection is a theorem rather than a reading. -/
 
 /-! §5's two outright dischargers, as one theorem: label each side by a projection of the
-input, keep the options' label sets disjoint. `uniqueAdmission_of_kinds` and
-`uniqueAdmission_byTag` are its two instances. -/
+input, keep the options' label sets disjoint. `uniqueAdmission_of_kinds` is its one instance
+now; the tagged one went with the filtered sum. -/
 
 /-! §3's `held`/`refine` split, checked rather than asserted: both are one partial-iso
 combinator, and the pair agrees on the nose. -/

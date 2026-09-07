@@ -296,13 +296,18 @@ describe('terms', () => {
     })
 
     /**
-     * **This checked that one codec occupying two table entries is emitted once**, because
-     * repeating an option in `Term.dunion`'s list would give it a tag set overlapping itself and
-     * `Typed.dunion` carries `hdisj` against exactly that. Arity one refuses the two-entry option
-     * at the declaration, so the emitter's dedup went with the test and the invariant is answered
-     * in one place instead of two. What is left worth pinning is that the list is emitted at all.
+     * **A tag-keyed table of `Body`, which is the pair the object row prints one stratum up.**
+     *
+     * `Term.dunion` carried a `List Term` under three side conditions — each variant an object,
+     * each answering to one tag, no two answering to the same. A `MapOf Body` says all three: the
+     * codomain is the object-ness, a function on a key set is the arity, and `Finset` is the
+     * distinctness. So there is no `Term.object` in the emission at all, and no list.
+     *
+     * The tag is the *key*, and the variant still declares it as a field — the codec writes the
+     * tag out of that field, so it cannot go, and the agreement between the two is the one
+     * premise `Typed.dunion` keeps.
      */
-    it('emits a discriminated union as its option list', () => {
+    it('emits a discriminated union as a table keyed by its tags', () => {
         const emitted = leanTermOf(
             erase(
                 discriminatedUnion('kind', [
@@ -311,8 +316,11 @@ describe('terms', () => {
                 ]),
             ),
         )
-        expect(emitted).toContain('Term.dunion "kind" [Term.object')
-        expect(emitted.split('Term.object')).toHaveLength(3)
+        expect(emitted).toContain('Term.dunion "kind" ⟨{"a", "b"}, fun k =>')
+        expect(emitted).toContain('if k.1 = "a" then (Body.mk')
+        // the variants are `Body`s, so no `Term.object` wraps them
+        expect(emitted).not.toContain('Term.object')
+        expect(emitted.split('Body.mk')).toHaveLength(3)
     })
 
     it('forces a lazy and emits what it finds', () => {

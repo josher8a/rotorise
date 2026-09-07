@@ -119,7 +119,19 @@ inductive Term where
       `Attr.m` and `Value.map` use one level down. -/
   | object   (b : Body)
   | union    (options : List Term)
-  | dunion   (d : Name) (options : List Term)
+  /-- §5 `(dunion)`, **keyed by the tag**. The variants were a `List Term` under three side
+      conditions: each an object, each answering to exactly one tag, no two answering to the
+      same one. A tag-keyed table over `Body` says all three.
+
+      *Object* is the codomain. *Arity one* is a function on a key set: one key reaches one
+      variant. *Distinctness* is `Finset`, which is why the keys are a set and not a list — the
+      same reason the field table one stratum up is one.
+
+      What the table cannot say is that a variant's own `d` field agrees with its key, and that
+      stays a premise. It cannot go: the host's variant *declares* the discriminator and the
+      codec writes the tag out of that field, so the field is not the table's to remove.
+      `Typed.dunion`'s `hone` is that one fact now, where it used to be five. -/
+  | dunion   (d : Name) (variants : MapOf Body)
 
 /-- §4's object payload: the declared names, the field at each, and the policy for
     everything else. A `mutual` block admits no `structure`, so this is `inductive … | mk`
@@ -230,7 +242,11 @@ def Term.depth : Term → Nat
   -- one companion, like every other non-leaf row
   | .object b => Body.depth b + 1
   | .union opts => Term.depthL opts + 1
-  | .dunion _ opts => Term.depthL opts + 1
+  -- one more than the deepest variant **term**, which is the `union` row's shape: a variant is
+  -- an object, so its term costs `Body.depth + 1`, and writing that here is what makes the
+  -- recursion to `.object (variants.2 k)` strictly decrease rather than merely not increase
+  | .dunion _ variants =>
+      (variants.1.attach.sup fun k => Body.depth (variants.2 k) + 1) + 1
 
 /-- The payload's own budget: the field table is a key *set* with a function on it, so its
     layer is the largest field budget over the key set — a `Finset.sup`, where a list would be
@@ -326,6 +342,15 @@ theorem Term.depth_lt_object_rest {b : Body} {t : Term} (h : b.rest = .codec t) 
     Term.depth t < Term.depth (.object b) :=
   lt_trans (Body.depth_lt_rest b h) (Term.depth_lt_object_body b)
 
+/-- A variant's term is strictly below the `dunion`'s, which is the inequality a `Finset.sup`
+    needs and a fold does not: `le_sup` gives `≤`, so the row counts the variant's **term** and
+    not its payload, and the successor does the rest. -/
+theorem Term.depth_lt_dunion {d : Name} {variants : MapOf Body}
+    (k : {k // k ∈ variants.1}) :
+    Term.depth (.object (variants.2 k)) < Term.depth (.dunion d variants) :=
+  Nat.lt_succ_of_le (Finset.le_sup (f := fun k => Body.depth (variants.2 k) + 1)
+    (Finset.mem_attach _ k))
+
 /-- The termination argument every `Term.depth` recursion in this development uses, written
     once. **Three** theorems share it, all in `Soundness.lean` — `soundness_both`,
     `typed_TSub`, `carrier_denote` — and their goal sets differ, so some alternatives are dead
@@ -360,6 +385,8 @@ macro "term_depth_wf" : tactic => `(tactic|
        | exact Term.depth_lt_object_req _ (by assumption)
        | exact Term.depth_lt_object_opt _ (by assumption)
        | exact Term.depth_lt_object_fb _ (by assumption)
+       -- a variant's term, where the layer is a `Finset.sup` rather than a fold
+       | exact Term.depth_lt_dunion _
        -- the rest policy's codec
        | exact Term.depth_lt_object_rest (by assumption)
        | exact Term.depth_lt_object_rest rfl

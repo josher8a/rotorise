@@ -248,14 +248,10 @@ theorem typed_T_eq : ∀ {t T μ}, Typed t T μ → ∀ v, T v → (denote t).T 
       refine ⟨optionSemOf (denote tx) (specOf tx), ?_, ?_⟩
       · simp only [List.mem_map]; exact ⟨tx, htx, rfl⟩
       · rw [optionSemOf_c]; exact hd
-    | @dunion d opts Ts hlistM hone hdisj =>
-      obtain ⟨T', hT', hTv⟩ := hv
-      obtain ⟨tx, htx, hd⟩ :=
-        unionMT_of_mem hlistM (fun t' _ _ _ hty w hw => typed_T_eq hty w hw) v T' hT' hTv
-      simp only [denote, denoteTagged_eq]
-      refine ⟨.byTag d (tagsOf d tx) (denote tx), ?_, hd⟩
-      simp only [List.mem_map]
-      exact ⟨(tagsOf d tx, denote tx), ⟨tx, htx, rfl⟩, rfl⟩
+    | @dunion d variants Ts hty hone =>
+      -- the held set is the disjunction over the key set, so the witness is a key
+      obtain ⟨k, hTv⟩ := hv
+      exact ⟨k, typed_T_eq (hty k) v hTv⟩
 termination_by t _ _ _ _ => Term.depth t
 decreasing_by term_depth_wf
 

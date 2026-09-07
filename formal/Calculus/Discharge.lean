@@ -243,9 +243,13 @@ theorem pairwise_imp_mem {α : Type} {R S : α → α → Prop} :
     and `(dunion)`'s premises are quantified over the option list, so it is derivable. -/
 
 
-/-- And it is derivable — `(dunion)`'s premises are quantified over the option list. -/
-theorem typed_dunion_nil (d : Name) : Typed (.dunion d []) (HUnion []) (some .M) :=
-  .dunion .nil (by simp) (by simp)
+/-- And it is derivable — `(dunion)`'s premises are quantified over the key set, so the empty
+    table satisfies both vacuously and the held set is `False`, which is what a variant table
+    with no variants holds. -/
+theorem typed_dunion_nil (d : Name) :
+    Typed (.dunion d ⟨∅, fun k => nomatch k.2⟩)
+      (HVariants ⟨∅, fun k => nomatch k.2⟩ (fun k => nomatch k.2)) (some .M) :=
+  .dunion (fun k => nomatch k.2) (fun k => nomatch k.2)
 
 
 /-- **The pair reading of the same fact**, and it is not superseded: it discharges the whole
@@ -386,7 +390,7 @@ theorem uAtCan_of_literalN_disjoint {lss : List (NEFinset WFDouble)}
   show UniqueAdmission (semsOf (lss.map (Term.literal .number)))
   have hs : semsOf (lss.map (Term.literal .number))
       = (lss.map (literalCodec .number)).map OptionSem.byAttempt := by
-    simp [semsOf, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, List.map_map, specOf, optionSemOf, denote]
+    simp [semsOf, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, List.map_map, specOf, optionSemOf, denote]
   rw [hs]
   refine uniqueAdmission_of_sharedBase (base := numberCodec) (qs := lss.map (inL .number))
     lawful_numberCodec.core ?_ ?_
@@ -412,7 +416,7 @@ theorem uAtCan_of_literalN_disjoint {lss : List (NEFinset WFDouble)}
     vocabulary halfway across: two rows are about `UAtCan opts` — a list of
     **terms** — and two are about `UniqueAdmission os`, a list of `OptionSem`. Worse,
     `(dunion)`'s row was never stated at all: it appeared only inside
-    `lawful_dunionCodec`, where it is an argument rather than a claim.
+    ~~lawful_dunionCodec~~, where it is an argument rather than a claim.
 
     `(dunion)`'s row moves to term level here, so three of the four are one vocabulary.
     The fourth cannot follow, and the reason is worth stating rather than working
@@ -421,33 +425,13 @@ theorem uAtCan_of_literalN_disjoint {lss : List (NEFinset WFDouble)}
     is therefore a statement about `opaqCodec` at a fuel, one level below the term
     language. That is a fact about `opaque`, not a gap in the table. -/
 
-/-- The options of a `(dunion)`, exactly as `denote`'s dunion case builds them: tag
-    admission on `d`, where `(union)`'s `semsOf` uses name admission. -/
-noncomputable def semsOfD (d : Name) (opts : List Term) : List OptionSem :=
-  (opts.map fun t' => (tagsOf d t', denote t')).map fun o => .byTag d o.1 o.2
-
-/-- And it really is the denotation's option list — the `rfl` that keeps `semsOfD` from
-    drifting away from `denote`. -/
-theorem denote_dunion_semsOfD (d : Name) (opts : List Term) :
-    denote (.dunion d opts) = altCodec (semsOfD d opts) (some .M) := by
-  simp only [denote_dunion_tags, denoteTagged_eq, semsOfD, dunionCodec, List.map_map]
-
-/-- §5 (U) for a `(dunion)`, in `UAtCan`'s vocabulary. -/
-def UAtCanD (d : Name) (opts : List Term) : Prop :=
-  UniqueAdmission (semsOfD d opts)
-
-/-- **Row three: `(dunion)`'s (U) is a theorem, not a premise** — §5's "the one union
-    whose (U) is discharged by the rule itself". The premises are exactly `Typed.dunion`'s
-    two syntactic side conditions, so a derivable `discriminatedUnion` never carries an
-    obligation — `Obligations.dunion` is the other half of that claim, and says the
-    rule's obligation list has no (U) entry to begin with. Stated here because inside
-    `lawful_dunionCodec` it is an argument to a lemma, and a reviewer checking §5's table
-    has nothing to point at. -/
-theorem uAtCan_dunion {d : Name} {opts : List Term}
-    (htags : ∀ t' ∈ opts, (tagsOf d t').Nonempty)
-    (hdisj : List.Pairwise (fun a b => ∀ tag ∈ tagsOf d a, tag ∉ tagsOf d b) opts) :
-    UAtCanD d opts :=
-  uniqueAdmission_byTag (dunion_stamp htags) (List.pairwise_map.mpr hdisj)
+/-! **Row three is gone, and that is the row's answer.** §5 called `(dunion)` "the one union
+whose (U) is discharged by the rule itself", and the discharge was ~~uAtCan_dunion~~ over
+~~semsOfD~~, the option list `denote`'s dunion case used to build. There is no option list now:
+the variants are a table keyed by tag and the denotation is a lookup, so at most one variant is
+reached by construction and there is no unique-admission statement left to make. ~~uAtCan_dunion~~,
+~~UAtCanD~~ and ~~semsOfD~~ are deleted rather than restated, which is the strongest form the row's
+claim can take. -/
 
 /-- **Row four: `(opaque)`'s (U), unconditionally.** `uniqueAdmission_opaque` asks for the
     recursive option's lawfulness; `lawful_opaqCodec` supplies it, so the row has no

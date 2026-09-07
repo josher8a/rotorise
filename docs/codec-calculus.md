@@ -850,7 +850,7 @@ Three alternatives were declined, and each for a reason worth recording:
 **Mechanization note, and it is a negative result.** The narrowing bought no proof simplification
 whatsoever — the expectation going in was that it would. Every proof over `(dunion)` consumes only
 the *nonemptiness* of the tag set (`tagsOf_ne_nil`'s four-job inversion, `dunion_stamp`,
-`uniqueAdmission_byTag`, `ExactV_dunion`/`ExactA_dunion`), and none of them consults the arity. So
+`ExactV_dunion`/`ExactA_dunion`), and none of them consults the arity. So
 the premise changed from `Nonempty` to `card = 1`, one three-line bridge lemma was added to recover
 the weaker fact, and the `dunion` machinery went from 39 declarations / 350 lines to 40 / 353
 — the three lines being that bridge, with no proof changing length. The

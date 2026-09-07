@@ -54,7 +54,9 @@ and not `Combinators`. Nothing about it is codec-shaped — a `Finset`, a functi
 
 /-- A map's payload: the name set, and the values on it. A dependent pair rather than a
     list of pairs, because that is what `M` is — see `Attr.m`. -/
-abbrev MapOf (α : Type) := Σ keys : Finset Name, {k // k ∈ keys} → α
+structure MapOf (α : Type) where
+  keys : Finset Name
+  get  : {k // k ∈ keys} → α
 
 /-- Two map payloads are equal when their name sets are and their values agree on them.
     The dependent pair needs this said once; the list representation got it from
@@ -64,7 +66,7 @@ theorem MapOf.ext {α : Type} {p q : MapOf α} (hk : p.1 = q.1)
   obtain ⟨kp, fp⟩ := p
   obtain ⟨kq, fq⟩ := q
   cases hk
-  exact congrArg (Sigma.mk kp) (funext fun k => hf k.1 k.2 k.2)
+  exact congrArg (MapOf.mk kp) (funext fun k => hf k.1 k.2 k.2)
 
 /-- The value a `MapOf` gives a name, where it gives one — the lookup a key set with a
     function on it has. Generic because the *term*'s field table needs it too. -/
