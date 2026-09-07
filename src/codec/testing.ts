@@ -1626,8 +1626,8 @@ export const checkIso = <C extends AnyCodec, T>(
 /**
  * **(U), the last row of the conformance table.**
  *
- * `docs/codec-formalization.md` §5 states it as *for each union input: exactly one option admits it,
- * per side*, and `Calculus.UniqueAdmission` is that sentence in the model:
+ * `docs/codec-calculus.md` states it as *for each union input: exactly one option admits it, per
+ * side*, and `Calculus.UniqueAdmission` is that sentence in the model:
  *
  * ```
  * ∀ o ∈ os, ∀ t a, o.e t = some a → os.filter (·.admitA a) = [o] ∧ os.filter (·.admitV t) = [o]

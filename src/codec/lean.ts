@@ -3,8 +3,9 @@
  *
  * `formal/` is a mechanization of the codec calculus; this library is what it is supposed to
  * certify. The correspondence between the two is a *paper* obligation — somebody reads `denote`
- * and reads `src/codec/codec.ts` and believes they agree — and `docs/codec-audit.md` records it as the
- * largest remaining risk. This module is the machine-checkable half of that belief.
+ * and reads `src/codec/codec.ts` and believes they agree — and no instrument closes it, which is
+ * the third of the three warranties `docs/architecture.md` keeps apart. This module is the
+ * machine-checkable half of that belief.
  *
  * ── why the traffic goes this way ───────────────────────────────────────────────────────────────
  *
