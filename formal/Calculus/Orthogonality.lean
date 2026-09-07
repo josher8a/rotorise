@@ -720,7 +720,7 @@ theorem orthSA_disjoint {x y : Term} (h : (Orth1 x y || OrthM x y) = true) :
     that cannot be.
 
     Naming it is what keeps one discharger: a new phase is a new theorem producing
-    `Separates`, not a new case in `uAtCan_of_separates`. -/
+    `Separates`, not a new case in `uAtCan_of_separated`. -/
 def Separates (x y : Term) : Prop :=
   (∀ v, OrthSV x v → ¬ OrthSV y v) ∧ (∀ a, OrthSA x a → ¬ OrthSA y a)
 
@@ -959,6 +959,28 @@ theorem separates_of_orthL {x y : Term} (h : OrthL x y = true) : Separates x y :
     exact separates_setLiteral_disjoint (disjAlts_sound hdis)
   · exact absurd h (by simp)
 
+/-- **The whole premise the discharger takes**, as one name: every pair of options separated.
+
+    `Separates` is the rule for a pair and this is the rule for a list, so a phase produces the
+    first and a caller supplies the second. `separated_of_orth` below is the only bridge the
+    classifier needs, where before every discharger wrote `h.imp separates_of_orth` itself.
+
+    **It names the guarantee where the guarantee already lives, and moves nothing.** `Typed.union`
+    cannot take it: `Separates` is stated on `Adm` and `admitOptV`, both in `Exactness.lean`, and
+    the import chain is `Typing` then `Soundness` then `Discharge` then `Exactness` then this
+    file. A premise here is four modules above the judgement it would constrain. So an undischarged
+    union stays *underivable* through `Obligations`, which is where it was, rather than becoming
+    unrepresentable.
+
+    **And unrepresentable is not available anyway.** A `Term.union` carrying its own witness needs
+    either an inductive indexed by the option list it constrains, which is induction-induction, or
+    a field whose type is computed from the term, which is induction-recursion. Lean 4 rejects both:
+    the first as `unknown identifier` on the type being defined, the second as `invalid mutual
+    block: either all elements of the block must be inductive/structure declarations, or they must
+    all be definitions`. The one shape that works is a pre-term with a well-formedness subtype, and
+    that re-founds the term language. -/
+def Separated (opts : List Term) : Prop := List.Pairwise Separates opts
+
 theorem separates_of_orth {x y : Term} (h : Orth x y = true) : Separates x y := by
   rcases Bool.or_eq_true_iff.mp h with h' | hl
   · exact ⟨orthSV_disjoint h', orthSA_disjoint h'⟩
@@ -976,10 +998,10 @@ theorem separates_of_orth {x y : Term} (h : Orth x y = true) : Separates x y := 
     part is unreachable through a union — the price of deciding by names").
     `optionSem_self_admit` takes the same premise for the same reason. `Orth`
     declines to certify such an option rather than proposing a repair. -/
-theorem uAtCan_of_separates {opts : List Term}
+theorem uAtCan_of_separated {opts : List Term}
     (hlaw : ∀ t ∈ opts, Lawful (denote t))
     (hcl : ∀ t ∈ opts, t.isOpenObject = false)
-    (h : List.Pairwise Separates opts) :
+    (h : Separated opts) :
     UAtCan opts := by
   refine uniqueAdmission_of_disjoint
     (SVs := opts.map OrthSV) (SAs := opts.map OrthSA) ?_ ?_ ?_ ?_ ?_
@@ -997,15 +1019,21 @@ theorem uAtCan_of_separates {opts : List Term}
     rw [optionSemOf_c] at he
     exact optionSem_self_admit t (hcl t ht) (hlaw t ht) he
 
+/-- The classifier's answer for a whole option list, which is the one bridge from the decidable
+    phase to the `Prop` the discharger takes. -/
+theorem separated_of_orth {opts : List Term}
+    (h : List.Pairwise (fun x y => Orth x y = true) opts) : Separated opts :=
+  h.imp separates_of_orth
+
 /-- …and from the decidable premise alone, which reaches six of the twenty-five hand
-    discharges; seven more need `Separates` and `uAtCan_of_separates` above, for thirteen of
+    discharges; seven more need `Separates` and `uAtCan_of_separated` above, for thirteen of
     twenty-five between them. The by-phase table at the end of the file is the measurement. -/
 theorem uAtCan_of_orth {opts : List Term}
     (hlaw : ∀ t ∈ opts, Lawful (denote t))
     (hcl : ∀ t ∈ opts, t.isOpenObject = false)
     (h : List.Pairwise (fun x y => Orth x y = true) opts) :
     UAtCan opts :=
-  uAtCan_of_separates hlaw hcl (h.imp separates_of_orth)
+  uAtCan_of_separated hlaw hcl (separated_of_orth h)
 
 /-- …and the residue the laws actually need. -/
 theorem uAtAct_of_orth {opts : List Term}

@@ -327,7 +327,7 @@ already.
 ### 4c. One codec, stated once for both sides of the pair
 
 `Combinators.lean` is <!-- count:combinators_lines -->4147<!-- /count --> lines of the tree's
-<!-- count:tree_lines -->16664<!-- /count -->, and this is its organizing idea; without it
+<!-- count:tree_lines -->16692<!-- /count -->, and this is its organizing idea; without it
 the file reads as the inventory `README.md` already has. A constructor is a **prism** —
 `Ctor α β`, with `into`/`out` and the laws `out_into` (matching what was built returns it) and
 `into_out` (anything that matches was built) — and those two *are* §2's (R) and (C) at a
@@ -430,10 +430,10 @@ subsumes the other, and a migration has to answer both.
 **And the repair the `object` row invites — ask what the resolver consults, not what the row
 says — is already made, in `Orthogonality.lean` rather than here.** `OrthSV` and `OrthSA` are
 occupancy conjoined with `admitOptV`/`admitOptA`, and `admitOptV_eq` is the identification of
-that second conjunct with option admission itself, so `uAtCan_of_separates` is already the
+that second conjunct with option admission itself, so `uAtCan_of_separated` is already the
 discharger stated on what `select` actually decides by. Restating it on option admission
 *alone*, dropping the occupancy conjunct, is measurably weaker rather than new: it is
-`uAtCan_of_separates` with one conjunct deleted from each family and factors back through it in
+`uAtCan_of_separated` with one conjunct deleted from each family and factors back through it in
 one line; it loses `sepJA_needs_member`'s pair on the read side, exactly as `SepJA` predicts;
 and at an `object` it reduces to `keysOk` disjointness, which `OrthM`'s `reqNotDeclared`
 disjunct already delivers through `orthSV_disjoint`. Kernel-checked, not argued — the four
@@ -482,7 +482,7 @@ were written for is answered and gone.
 
 ### And a third machine, `Orth`, which does not pay — measured
 
-`Orthogonality.lean` is the fourth-largest file at <!-- count:orth_file_lines -->1212<!-- /count --> lines — `Soundness.lean` is 1033 —: a decidable certificate for a
+`Orthogonality.lean` is the fourth-largest file at <!-- count:orth_file_lines -->1240<!-- /count --> lines — `Soundness.lean` is 1033 —: a decidable certificate for a
 fragment of (U), over-approximating each term's occupancy per side (`occV`/`occA`) and
 certifying a pair whose occupancies are disjoint, `by decide`. **Measured against what it
 replaces it does not pay**, and its own by-phase table is the measurement — the <!-- count:orth_total_theorems -->10<!-- /count --> hand
@@ -1243,6 +1243,30 @@ it would cost the reader the correspondence with §3–§5.
 ## 10. Open architectural questions
 
 One line each, with the number or name that decides it.
+
+**A union carrying its own separation witness. Closed as no, for now.** The ask was that
+`Term.union` carry evidence of a discharge, so that a union no value can resolve is a *type* error
+rather than a runtime refusal. **Lean 4 cannot express it.** A witness indexed by the option list
+it constrains is induction-induction and the elaborator answers `unknown identifier` on the type
+being defined; a field whose type is computed from the term is induction-recursion and the
+elaborator answers `invalid mutual block: either all elements of the block must be
+inductive/structure declarations, or they must all be definitions`. Both were run rather than
+argued. A `Prop` premise on the judgement is no substitute, because `Separates` is stated on `Adm`
+and `admitOptV` and the import chain runs `Typing`, `Soundness`, `Discharge`, `Exactness`, then
+`Orthogonality` — the premise sits four modules above the rule it would constrain.
+
+The one shape that works is a pre-term with a well-formedness subtype:
+`def Tm := {t : PreTerm // wf t = true}`, where `wf` recurses after the inductive rather than
+inside it. It elaborates, it is axiom-free, and a union with no discharge has no inhabitant. It
+costs a re-founding of the term language: **248 signature sites name `Term` across twelve files,
+and `Term` has seventeen constructors**, each becoming a smart constructor with a proof
+obligation and each match going through `.1`. JH's ruling is no for now, on the ground that the
+model's `Typed` already makes an undischarged union underivable and the host already refuses it
+in the type, so the re-founding buys the model a stronger statement about itself and buys the
+host nothing it lacks.
+
+What names the guarantee instead is `Separated`, one `Prop` over the option list, with
+`separated_of_orth` as the classifier's bridge into it.
 
 **The value/attribute doubling.** Nearly every analysis declaration has an attribute twin, and
 the question is whether the two sides should be one parametrised development. A probe found the
