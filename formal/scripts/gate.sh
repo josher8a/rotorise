@@ -1,51 +1,31 @@
 #!/usr/bin/env bash
-# The commit gate: HANDOFF's Landmines checks, in order, gated on exit codes.
-#
-# It exists because the gate used to be a paste block in a file that is deleted
-# once read, and pasting it wrong is not hypothetical: `eed1b58` and `e3bd71f`
-# both claim all guards pass over a red tree. They ran the checks as
-# `…; echo "$g=$?"; done && git commit` — `echo` always succeeds, so the chain
-# gated on nothing and the printed output was true while the verdict was false.
-# Printing an exit code is not checking it. This script checks it.
+# The commit gate: every check, in order, gated on exit codes.
 #
 #   scripts/gate.sh              all seven checks
 #   scripts/gate.sh --no-build   the four Python guards only
 #
-# `--no-build` skips the three checks that need a container — the build, the vector emit
-# and the vector bridge — and is NOT for comments-only commits in the sense of "docs are
-# exempt". What it skips is the ~12-minute Docker build, and it is honest only when
-# nothing you touched can reach the elaborator: a change confined to `docs/`,
-# `README.md` or `scripts/`. If you edited a `.lean` file at all — even a docstring, even
-# a blank line — run the full gate. **A docstring is elaborated**, which is the whole of
-# the rule now that no guard reads a count out of a document.
-# And if you edited `src/codec/lean.ts` or a `Calculus/` *constructor*, the bridge is
-# what will tell you, so do not skip it there either.
+# `--no-build` skips the build, the emit and the bridge, and is honest only when no `.lean`
+# file changed.
 #
-# The four Python guards run on the HOST, from `formal/`. There is no Python in
-# `rotorise-lean-dev` at all. The build runs in the container, and only one
-# `lake build` may run at a time across the sessions sharing this tree — your
-# build rewrites oleans under someone else's `lake env lean`.
+# Run the gate inside the devcontainer. Only one `lake build` may run at a time across the
+# sessions sharing this tree.
 #
-# Every check runs even after one fails, so one invocation reports the whole
-# state of the tree rather than its first symptom. The exit code is 1 if any
-# check failed and 0 only when all of them passed.
+# Every check runs even after one fails, so one invocation reports the whole state of the
+# tree rather than its first symptom. The exit code is 1 if any check failed and 0 only when
+# all of them passed.
 
 set -uo pipefail
 
 FORMAL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$FORMAL_DIR" || exit 2
 
-CONTAINER=rotorise-lean-dev
 REPO_DIR="$(cd "$FORMAL_DIR/.." && pwd)"
-# the TS toolchain is not on this host's PATH and neither is `node`; the bridge's generator is
-# TypeScript, so the gate needs both images — this one to emit and the Lean one to elaborate
-TS_IMAGE=mcr.microsoft.com/devcontainers/typescript-node:0-20
 RUN_BUILD=1
 
 for arg in "$@"; do
   case "$arg" in
     --no-build) RUN_BUILD=0 ;;
-    -h|--help)  sed -n '2,40p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help)  sed -n '2,15p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "gate.sh: unknown argument: $arg" >&2
        echo "usage: gate.sh [--no-build]" >&2
        exit 2 ;;
@@ -79,39 +59,11 @@ run 'ratchet.py'            python3 scripts/ratchet.py
 run 'docstring_anchor.py'   python3 scripts/docstring_anchor.py
 
 if [ "$RUN_BUILD" -eq 1 ]; then
-  run 'lake build' docker exec "$CONTAINER" bash -lc 'cd /workspaces/Rotorise/formal && lake build'
-  # The vector bridge, and it is here because it was broken for a day with every other check
-  # green. `src/codec/lean.ts` emitted the pre-`Body` three-argument `Term.object` after `db444e3`
-  # changed the arity, and nothing reported it: the committed samples are generated *by* that
-  # emitter, so `lean.spec.ts`'s byte comparison agreed with a stale generator, and no gate ran
-  # a generated file through Lean. A test that compares a generator against its own output
-  # cannot see the generator being wrong. This runs the emitted theorems against `Calculus/`.
-  # Emit the full refusal cross product and the declaration-guard verdicts, then elaborate them
-  # beside the two committed samples. `.separations.lean` is one theorem per option pair `src/`'s
-  # `union` refuses, asserting the model does not certify it — the law runs that way only, `Orth`
-  # being sufficient and not necessary (`docs/architecture.md`). `.readverdicts.lean` is the
-  # read-side differential: `AdmA t a` against whether `decode` accepted it, 861 of 864 pairs,
-  # the other three stuck on the `Double` axiom and named in its header; `docs/defects.md`
-  # carries that as an issue.
-  # `.readvectors.lean` is the read side of every corpus codec: the model's `p`, given the
-  # attribute the library wrote, against the value the library read back. The write vectors and
-  # the refusal vectors are both about `e`, and `p` was asserted only where a union had to choose,
-  # so for the corpus at large one half of each pair went unproposed. Both halves here come from
-  # running the library, so a change to either direction stops the file compiling.
-  # `.resolutions.lean` widens the two pinned union vectors to every (union, value) and
-  # (union, attribute) pair — which option the model's `select` picks against the one the
-  # library's resolver did. The counts, and which pairs cannot be stated at all, are in that
-  # file's own header, where the emitter that produces them keeps them true; `lean.spec.ts`
-  # asserts the same numbers. A count copied to here is a count that goes stale unread, and
-  # this one had: it said 226 reads against the header's 231 statable of 232.
-  # The committed samples are a readable subset and say so in their header; what is *verified*
-  # is all of it, which is the distinction the broken bridge was hiding — a sample regenerated
-  # from a stale emitter agrees with itself, so only elaboration is evidence.
-  run 'vector emit' docker run --rm -v "$REPO_DIR:/w" -w /w "$TS_IMAGE" \
-    bash -lc 'EMIT_LEAN_REFUSALS=1 npx --no-install vitest run src/codec/lean/lean.spec.ts --reporter=dot'
-  run 'vector bridge' docker exec "$CONTAINER" bash -lc \
-    'cd /workspaces/Rotorise/formal &&
-     for f in lean.sample.check.lean lean.sample.lean .vectors.full.lean \
+  run 'lake build' lake build
+  run 'vector emit' bash -c \
+    "cd \"$REPO_DIR\" && EMIT_LEAN_REFUSALS=1 npx --no-install vitest run src/codec/lean/lean.spec.ts --reporter=dot"
+  run 'vector bridge' bash -c \
+    'for f in lean.sample.check.lean lean.sample.lean .vectors.full.lean \
               .separations.lean .readverdicts.lean .resolutions.lean \
               .readvectors.lean; do
        [ -f "$f" ] || { echo "missing $f"; exit 1; }

@@ -1,15 +1,8 @@
 #!/usr/bin/env bash
-# The published name set, as an instrument rather than a count somebody ran by hand.
-#
-# `CLAUDE.md`'s surface row asks a pass to compare the export set of the three entries against
-# the previous pass. Two sessions ran that row with two methods and got 138 and 215 for the same
-# unchanged file, so the row detected nothing. The methods differed on one character:
-# `dist/Rotorise.d.ts` carries **two** `export { … };` statements and the first one aliases every
-# name (`k as AllObjects`), so an extraction that keeps the left of ` as ` counts the bundler's
-# mangled locals. The published name is the right of ` as `.
+# The published name set: the export set of the three entries, against a baseline.
 #
 #   scripts/surface-names.sh            read `dist/` as it stands, compare, print
-#   scripts/surface-names.sh --build    run `npm run build` in the container first
+#   scripts/surface-names.sh --build    run `npm run build` first
 #   scripts/surface-names.sh --accept   rewrite the baselines, printing every move first
 #
 # The baselines are `scripts/surface/*.txt`, one name per line, sorted. A move is a decision:
@@ -21,8 +14,6 @@ cd "$ROOT" || exit 2
 
 ENTRIES=(Rotorise testing native)
 BASE_DIR=scripts/surface
-# the TS toolchain is not on this host's PATH and neither is `node`; the same image `gate.sh` uses
-TS_IMAGE=mcr.microsoft.com/devcontainers/typescript-node:0-20
 DO_BUILD=0
 ACCEPT=0
 
@@ -30,7 +21,7 @@ for arg in "$@"; do
   case "$arg" in
     --build)  DO_BUILD=1 ;;
     --accept) ACCEPT=1 ;;
-    -h|--help) sed -n '2,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,9p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "surface-names.sh: unknown argument: $arg" >&2
        echo "usage: surface-names.sh [--build] [--accept]" >&2
        exit 2 ;;
@@ -38,7 +29,7 @@ for arg in "$@"; do
 done
 
 if [ "$DO_BUILD" -eq 1 ]; then
-  docker run --rm -v "$ROOT:/w" -w /w "$TS_IMAGE" bash -lc 'npm run build' >/dev/null 2>&1 || {
+  npm run build >/dev/null 2>&1 || {
     echo 'surface-names.sh: the build failed; run `npm run build` alone to see why' >&2; exit 2; }
 fi
 

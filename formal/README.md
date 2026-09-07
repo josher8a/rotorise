@@ -207,8 +207,7 @@ row the codec itself wrote. That is why the row tests the codec.
 
 ## Building
 
-Open the repo in the **Lean 4 — codec calculus** devcontainer
-(`.devcontainer/lean/devcontainer.json`) and run:
+Open the repository in the devcontainer and run this from `formal/`:
 
 ```sh
 lake build
