@@ -59,7 +59,7 @@ def tagsOfField : Option Field → Finset String
   -- **`number` is the base the model cannot spell a tag at.** `Double` is an axiom with no closed
   -- terms, so no numeric tag can appear in a term this development can state, and
   -- `DecidableEq WFDouble` is a field of `numericHost` besides. The host builds one and reads it
-  -- back as its text; `src/lean.ts` refuses to emit it and says so. That gap is written, not fixed.
+  -- back as its text; `src/codec/lean.ts` refuses to emit it and says so. That gap is written, not fixed.
   | _ => ∅
 
 /-- A body's tags on discriminator `d`: the field declared at `d`, if any, read as a tag set. -/

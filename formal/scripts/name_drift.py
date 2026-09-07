@@ -173,24 +173,24 @@ EXPECTED = {
 HOST = {
     "opaque": "`src/`'s codec, analysed here as a well-behaved `custom` — same analysis, "
               "opposite warranty (§7). `opaqCodec` is the model's, and is not the same name",
-    "separable": "`src/term.ts`'s declaration-time guard: whether a union may hold two options. "
+    "separable": "`src/codec/term.ts`'s declaration-time guard: whether a union may hold two options. "
                  "§5 cites it because `Orth` is its specification, and the two run opposite "
                  "directions — `Orth` certifies, this refutes, so where `Orth` declines this "
                  "accepts. `.separations.lean` pins the one-directional law between them",
-    "identifies": "`src/term.ts`'s reader of whether a term decides which values are its own — "
+    "identifies": "`src/codec/term.ts`'s reader of whether a term decides which values are its own — "
                   "§5's fourth discharger row, and the exemption `separable` consults first",
-    "valueKinds": "`src/denote.ts`'s coarsening of `occV` to the alphabet a *value* can be "
+    "valueKinds": "`src/codec/denote.ts`'s coarsening of `occV` to the alphabet a *value* can be "
                   "classified into — the reader `carries` became. §5 cites the value-kind filter "
                   "because a union's write side reads it; the model's `κ` is over `Kind`, which "
                   "is the same coarsening one level up",
-    "Separation": "`src/lean.ts`'s vector class carrying §5's bridge: one theorem per pair "
+    "Separation": "`src/codec/lean.ts`'s vector class carrying §5's bridge: one theorem per pair "
                   "`src/` refuses, asserting `Orth` does not certify it",
-    "ReadVerdict": "`src/lean.ts`'s vector class carrying §10's read-side differential: "
+    "ReadVerdict": "`src/codec/lean.ts`'s vector class carrying §10's read-side differential: "
                    "`AdmA t a` against whether the library's read accepted `a`. Cited because "
                    "§10 records the `AdmA` port as rejected and this as what landed instead",
     "discriminatedUnion": "`src/`'s combinator; the calculus has no such codec — it is the sum "
                           "over tag-admission, which is why `(dunion)` is a rule and not a row",
-    "EveryOptionTagged": "`src/codec.ts`'s type-level check, cited by §8's arity-one row",
+    "EveryOptionTagged": "`src/codec/codec.ts`'s type-level check, cited by §8's arity-one row",
 }
 
 # The specification's own notation, from `docs/codec-calculus.md`. §1 names sets and §5 names
@@ -381,10 +381,12 @@ def host_without_declarations():
     if not os.path.isdir(src):
         return []
     text = ""
-    for name in os.listdir(src):
-        if name.endswith(".ts"):
-            with open(os.path.join(src, name), encoding="utf-8") as handle:
-                text += handle.read() + "\n"
+    # recursive: `src/` nests its directories, and a flat listing passes over a nested file in silence
+    for root, _, names in os.walk(src):
+        for name in names:
+            if name.endswith(".ts"):
+                with open(os.path.join(root, name), encoding="utf-8") as handle:
+                    text += handle.read() + "\n"
     declared = set(
         re.findall(
             r"^(?:export )?(?:declare )?(?:const|function|type|class|interface) "

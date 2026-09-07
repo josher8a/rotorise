@@ -60,8 +60,9 @@ def classify(path: str, text: str) -> str:
     return "implementation"
 
 def main() -> int:
-    files = sorted(glob.glob(os.path.join(SRC, "*.spec.ts")) +
-                   glob.glob(os.path.join(SRC, "*.test.ts")))
+    # recursive: `src/` nests its directories, and a flat glob passes over a nested file in silence
+    files = sorted(glob.glob(os.path.join(SRC, "**", "*.spec.ts"), recursive=True) +
+                   glob.glob(os.path.join(SRC, "**", "*.test.ts"), recursive=True))
     kinds = collections.Counter()
     shapes = collections.Counter()
     per_file = []

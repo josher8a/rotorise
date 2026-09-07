@@ -21,7 +21,7 @@
 # elaborator: a change confined to `docs/`, `README.md`, `ARCHITECTURE.md`,
 # `HANDOFF.md` or `scripts/`. If you edited a `.lean` file at all — even a
 # docstring, even a blank line — run the full gate. A docstring is elaborated.
-# And if you edited `src/lean.ts` or a `Calculus/` *constructor*, the bridge is
+# And if you edited `src/codec/lean.ts` or a `Calculus/` *constructor*, the bridge is
 # what will tell you, so do not skip it there either.
 #
 # The five Python guards run on the HOST, from `formal/`. There is no Python in
@@ -85,7 +85,7 @@ run 'docstring_anchor.py'   python3 scripts/docstring_anchor.py
 if [ "$RUN_BUILD" -eq 1 ]; then
   run 'lake build' docker exec "$CONTAINER" bash -lc 'cd /workspaces/Rotorise/formal && lake build'
   # The vector bridge, and it is here because it was broken for a day with every other check
-  # green. `src/lean.ts` emitted the pre-`Body` three-argument `Term.object` after `db444e3`
+  # green. `src/codec/lean.ts` emitted the pre-`Body` three-argument `Term.object` after `db444e3`
   # changed the arity, and nothing reported it: the committed samples are generated *by* that
   # emitter, so `lean.spec.ts`'s byte comparison agreed with a stale generator, and no gate ran
   # a generated file through Lean. A test that compares a generator against its own output
@@ -111,10 +111,10 @@ if [ "$RUN_BUILD" -eq 1 ]; then
   # is all of it, which is the distinction the broken bridge was hiding — a sample regenerated
   # from a stale emitter agrees with itself, so only elaboration is evidence.
   run 'vector emit' docker run --rm -v "$REPO_DIR:/w" -w /w "$TS_IMAGE" \
-    bash -lc 'EMIT_LEAN_REFUSALS=1 npx --no-install vitest run src/lean.spec.ts --reporter=dot'
+    bash -lc 'EMIT_LEAN_REFUSALS=1 npx --no-install vitest run src/codec/lean/lean.spec.ts --reporter=dot'
   run 'vector bridge' docker exec "$CONTAINER" bash -lc \
     'cd /workspaces/Rotorise/formal &&
-     for f in ../src/lean.sample.check.lean ../src/lean.sample.lean .vectors.full.lean \
+     for f in ../src/codec/lean/lean.sample.check.lean ../src/codec/lean/lean.sample.lean .vectors.full.lean \
               .separations.lean .readverdicts.lean .resolutions.lean \
               .readvectors.lean; do
        [ -f "$f" ] || { echo "missing $f"; exit 1; }

@@ -368,7 +368,7 @@ still true of `Numeral.WF`, which is what DynamoDB *accepts*. It is not true of 
 because DynamoDB hands `1e+21` back as `1000000000000000000000`, and `decimal`'s `p` is the
 identity on the digits — so the round trip fails at the one point §2 cannot see, between
 `e` and `p`. `Numeral.Stored` is that set, and the measurements it is read off are in
-`src/codec.dynamodb.spec.ts`. -/
+`src/codec/spec/surface/codec.dynamodb.spec.ts`. -/
 
 theorem decimal_refuses_nonNumeral : (denote .decimal).e (.str "abc") = none := rfl
 

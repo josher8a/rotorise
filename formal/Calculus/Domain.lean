@@ -114,7 +114,7 @@ grammar is forced onto both halves by the laws, not by taste.
 
 One narrowing, and it is a narrowing of §1 rather than a transcription of it: a bare integer
 part is required, so `".5"` and `"1."` are rejected where DynamoDB *accepts* both and
-normalises them (`src/codec.dynamodb.spec.ts`). It stands because `Stored` below rejects them
+normalises them (`src/codec/spec/surface/codec.dynamodb.spec.ts`). It stands because `Stored` below rejects them
 anyway. Significance is counted between the first and last
 nonzero digit, which is the trimming DynamoDB documents.
 
@@ -209,7 +209,7 @@ def WF (s : Numeral) : Bool :=
 §2 composes a codec's `e` and `p` directly. In use there is a **store** between them, and
 it is not the identity on attributes: DynamoDB normalises every `N` it accepts — trimming
 leading and trailing zeros, dropping `+`, expanding exponents, and keeping one spelling of
-zero. Measured rather than assumed: `src/codec.dynamodb.spec.ts` puts each of these forms into a
+zero. Measured rather than assumed: `src/codec/spec/surface/codec.dynamodb.spec.ts` puts each of these forms into a
 real table and reads it back, and the two theorems below are that measurement.
 
 Write `η` for the store's normalisation. A codec survives the round trip through the store

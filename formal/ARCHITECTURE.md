@@ -99,16 +99,16 @@ unconditionally, which is seven companions with the admission row counted on bot
 | an admission row, per side | `AdmBody`/`AdmABody` | exactness is per-row; a stratum with no row cannot be exact |
 | a premise carrier | `ObligationsBody` | semantic side conditions are structural, not global |
 | a law exemption | `MPOkBody` | `legacy`'s (MP) exemption propagates through the stratum |
-| an emitter clause | the term emitter's object row (`src/lean.ts`) | the vector bridge writes terms in this language; a constructor it cannot spell breaks it |
+| an emitter clause | the term emitter's object row (`src/codec/lean.ts`) | the vector bridge writes terms in this language; a constructor it cannot spell breaks it |
 
 Miss one of the first eight and the failure is not a build error but a silent `⊤`: the analysis
 will still be *sound* and will have stopped saying anything. That asymmetry is the subject of §5.
 
 **The ninth is `db444e3`'s own debt, and it went unpaid for a day with every guard green.**
-Making the payload a stratum changed `Term.object` from three arguments to one, and `src/lean.ts`
-kept emitting three — so `src/lean.sample.lean` and its `check` twin, the committed output of the
+Making the payload a stratum changed `Term.object` from three arguments to one, and `src/codec/lean.ts`
+kept emitting three — so `src/codec/lean/lean.sample.lean` and its `check` twin, the committed output of the
 bridge, typechecked against no `Calculus/` for ten commits. **Nothing could have reported it.**
-`src/lean.spec.ts` compares the emitter's bytes against those files, and the files are generated
+`src/codec/lean/lean.spec.ts` compares the emitter's bytes against those files, and the files are generated
 *by that emitter*, so a stale generator agrees with its own stale output; a test that compares a
 generator against what it produced cannot see the generator being wrong. And no gate ran a
 generated file through Lean: this repository's build is `Calculus/` and the samples live in
@@ -514,7 +514,7 @@ value moved — **twice**, and the second is the one that pays.
 **`Orth` is the specification of `src/`'s only declaration-time guard, and now a checked one.**
 `src/`'s `union` refuses a pair of options no *value* can choose between — `separable`, which reads
 `identifies` and the two occupancies beside it — which is the ∀-value question
-`Orth` answers by `decide`. The bridge is `src/lean.ts`'s `Separation`: one theorem per pair
+`Orth` answers by `decide`. The bridge is `src/codec/lean.ts`'s `Separation`: one theorem per pair
 `src/` refuses, asserting `Orth x y = false`, generated and elaborated by `scripts/gate.sh`.
 
 Measured over the emittable pairs of the vector corpus — 351 of them — the two agree everywhere
@@ -629,7 +629,7 @@ citation half is checkable and the prose half is not, which is the same asymmetr
 rule has and the reason both are conventions rather than guards.
 
 **`Orth` as an instrument, not only a classifier** (§5) — `Orth x y` is decidable, so it answers
-`src/`'s declaration-time separation question by `decide`, and `src/lean.ts`'s `Separation`
+`src/`'s declaration-time separation question by `decide`, and `src/codec/lean.ts`'s `Separation`
 carries the one direction that is a law: `src/` never refuses a pair the model certifies. What
 it is blind to is the converse, and stating that plainly is the whole of using it — `Orth` is
 *sufficient*, so its `false` is a decline and not a refutation, and 66 of 351 corpus pairs are
@@ -644,10 +644,10 @@ because nothing connected it to `src/`. That connection is what the bridge is; t
 a decidable model-side answer is worth wiring to the host guard it specifies *before* reaching
 for a corpus.
 
-**The vector bridge** (`src/lean.ts` → `Calculus/Vectors.lean`) — the differential check
+**The vector bridge** (`src/codec/lean.ts` → `Calculus/Vectors.lean`) — the differential check
 between this model and `src/`: the generator emits one theorem per encode the library actually
 performed, and the *kernel* decides whether the model agrees. Blind spot, and it cost a day:
-**regeneration is not verification.** `src/lean.spec.ts` compares the emitter's bytes against the
+**regeneration is not verification.** `src/codec/lean/lean.spec.ts` compares the emitter's bytes against the
 committed samples, and those samples are generated *by that emitter* — so a stale generator
 agrees with its own stale output and the test passes on the defect it exists to catch. A test
 that compares a generator against what it produced cannot see the generator being wrong. It took
@@ -831,7 +831,7 @@ running each of these two guards into `tail` and reading the result reported bot
 tree the gate then failed, because what `$?` held was `tail`'s status and not the guard's.
 
 The same habit has a second form on the writing side, and it cost more: **an edit anchor that
-is not unique is not an anchor.** A scripted replacement in `src/codec.ts` matched in more
+is not unique is not an anchor.** A scripted replacement in `src/codec/codec.ts` matched in more
 places than the one intended and removed **2300 lines** in a single pass. The suite caught it,
 which is the only reason it is a paragraph here rather than a released defect. Anchor every
 scripted edit on a whole block that occurs once, and check the line delta before writing —
@@ -863,7 +863,7 @@ and fails **eleven** tests. The suite is what closes the gap every time.
 **`scripts/name_drift.py` cannot see a name that stops being the right one.** It chases a
 declaration that was deleted, so every citation of it dangles and the guard fires. A
 declaration that still exists while ceasing to be the one a passage cites is invisible: four
-docstrings in `src/codec.ts` pointed at the definition union over a member whose type had
+docstrings in `src/codec/codec.ts` pointed at the definition union over a member whose type had
 become the *term* half of it, and the guard was green from the change that moved them until the
 pass that read them. Renaming is checked; re-pointing is not.
 
@@ -1013,7 +1013,7 @@ For every structural guarantee the model makes, a host is in exactly one of thre
 The row above used to say the *reason* is the part that gets skipped. Two refusals in the
 TypeScript host say otherwise, and neither was found by review.
 
-`src/lean.ts`'s emitter refused a §4 field where a `Term` belongs, with the reason written
+`src/codec/lean.ts`'s emitter refused a §4 field where a `Term` belongs, with the reason written
 beside it, and had no test for the four months it existed. It has one now, reached through a
 deliberate cast, asserting the message rather than the throw.
 
@@ -1467,7 +1467,7 @@ while here the term and the attribute are both writable and the **row** will not
 
 So a def-reading port would be a second description of what the read side already computes
 exactly, and two descriptions of one thing need a guard between them. The differential is that guard —
-`src/lean.ts`'s `ReadVerdict`, generated and elaborated by `scripts/gate.sh` beside the refusal
+`src/codec/lean.ts`'s `ReadVerdict`, generated and elaborated by `scripts/gate.sh` beside the refusal
 and separation artifacts. **Do not re-open this as a port without first showing a pair where the
 two disagree.**
 
@@ -1508,7 +1508,7 @@ tense, because each is true of the tree as it stands.
 
 **The generators have left the codec object.** A `custom`'s generator and shrinker were a
 projection of the term, written by `denote` at `custom` alone and read by the two derivers in
-`src/testing.ts` before the term was consulted — one fact on two paths. The term is the only source now, `custom`'s parameter
+`src/codec/testing.ts` before the term was consulted — one fact on two paths. The term is the only source now, `custom`'s parameter
 record still states them because that is how a hand-written codec says how it generates, and a
 caller that wants to share a generator names it rather than reading it back off a pair.
 
@@ -1556,7 +1556,7 @@ caller's vocabulary rather than the term's.
 **The host's two value alphabets are not two vocabularies for one thing.** `1060c01` recorded
 them as a merge
 for a later pass. They are the codomains of two different functions: the first is what the value
-classifier in `src/value.ts` answers about a **value**, coarse because an empty set belongs to no
+classifier in `src/codec/value.ts` answers about a **value**, coarse because an empty set belongs to no
 family and telling `strSet` from `numSet` means inspecting elements; the second is what `occV`
 answers about a **term**, where the base is in hand. **No total function takes a value to a `Slot`**, so neither replaces
 the other and the merge is not available.
