@@ -1583,6 +1583,23 @@ export const nullable = <T, A extends AttributeValue>(
 // ── the escape hatch ────────────────────────────────────────────────
 
 /**
+ * `opaque`'s codec, with its **term's kind visible in the type**.
+ *
+ * The narrowing exists for one caller: {@link ValidateOptions} refuses a union holding an `opaque`
+ * option, and to do that at compile time the type has to say which term this is. `AttributeCodec`
+ * declares `def` as the whole of {@link Term}, so `opaque.def.kind` was the full twenty-one-member
+ * union and no clause could match on it.
+ *
+ * **Matching on the kind and not on the decoded type**, deliberately: `custom<unknown>` also
+ * decodes to `unknown`, and it is not `opaque` — it admits exactly what its own `encode` admits,
+ * which may be one value. The rule is about a term that admits *everything*, and the term is what
+ * says so.
+ */
+type OpaqueCodec = AttributeCodec<unknown> & {
+    readonly def: { readonly kind: 'opaq' }
+}
+
+/**
  * Any attribute, decoded to `unknown`.
  *
  * The honest default. Where no schema states which member a value takes, the decoded type is not
@@ -1593,8 +1610,13 @@ export const nullable = <T, A extends AttributeValue>(
  * everything accepted and everything else is named and refused. See {@link opaque.Numbers} for the
  * one case that cannot be decided without being told.
  */
-const withNumbers = (numbers: opaque.Numbers): AttributeCodec<unknown> =>
-    codecOfTerm({ kind: 'opaq', lossy: numbers === 'lossy' })
+const withNumbers = (numbers: opaque.Numbers): OpaqueCodec =>
+    // **One cast, and it recovers what the construction site erases.** `codecOfTerm` takes a
+    // `Term` and returns a codec whose `def` is `Term`, so the kind of the term it was *given* is
+    // not in its result type. The literal one line up is that kind; nothing else can be. Making
+    // `codecOfTerm` generic in its term would push a type parameter through twenty-one
+    // constructors to narrow one.
+    codecOfTerm({ kind: 'opaq', lossy: numbers === 'lossy' }) as OpaqueCodec
 
 /**
  * Any attribute, with numbers refused — which guesses nothing.
@@ -1612,8 +1634,8 @@ const withNumbers = (numbers: opaque.Numbers): AttributeCodec<unknown> =>
  * Callable *and* a codec, which is what lets `opaque.encode` and {@link opaque.Encode} keep the same
  * name.
  */
-export const opaque: AttributeCodec<unknown> & {
-    (numbers?: opaque.Numbers): AttributeCodec<unknown>
+export const opaque: OpaqueCodec & {
+    (numbers?: opaque.Numbers): OpaqueCodec
 } = Object.assign(
     (numbers: opaque.Numbers = 'refuse') => withNumbers(numbers),
     withNumbers('refuse'),
@@ -2876,16 +2898,44 @@ type Overlapping<
     : never
 
 /**
- * Both rules, in the order that gives the more specific message.
+ * Whether any option is an `opaque` — the one option that cannot share a union.
  *
- * An overlap is the deeper problem — the union cannot round-trip at all — so it is reported first.
- * A name collision between two object options is reported by {@link ValidateVariants}.
+ * Matched on the **term's kind**, which is why {@link opaque} narrows its `def`. Not on the decoded
+ * type: `custom<unknown>` also reads back as `unknown` and is not `opaque`, because it admits
+ * exactly what its own `encode` admits and that may be a single value. What this rule is about is
+ * a term that admits *everything*, and only the term says so.
  */
-export type ValidateOptions<Options extends readonly unknown[]> = [
-    Overlapping<Options>,
-] extends [never]
-    ? ValidateVariants<ObjectSpecsOf<Options>>
-    : ErrorMessage<`[union] ${Overlapping<Options>} read back as the same type, so nothing about a value says which one it came from — give them a discriminator and use discriminatedUnion`>
+type HasOpaque<Options extends readonly unknown[]> = Options extends readonly [
+    infer Head,
+    ...infer Rest extends readonly unknown[],
+]
+    ? Head extends { readonly def: { readonly kind: 'opaq' } }
+        ? true
+        : HasOpaque<Rest>
+    : false
+
+/**
+ * Three rules, in the order that gives the more specific message.
+ *
+ * **An `opaque` option is reported first, because it is the one whose advice differs.** The other
+ * two failures are both ambiguity, and the answer to ambiguity is a discriminator. This one is not
+ * ambiguity: `opaque` admits every value the other options admit, and §5's `select` acts only
+ * where *exactly one* option does, so the union is undefined wherever another option admits and
+ * `opaque` everywhere else. That other option can never be selected. No discriminator fixes it and
+ * no ranking resolves it — the option has to go, and the message has to say so.
+ *
+ * It reads back as `unknown`, so the overlap clause below would fire on it and offer the
+ * discriminator advice, which is why the order is load-bearing rather than cosmetic.
+ *
+ * An overlap is the deeper of the remaining two — the union cannot round-trip at all — so it is
+ * reported before a name collision, which {@link ValidateVariants} reports.
+ */
+export type ValidateOptions<Options extends readonly unknown[]> =
+    HasOpaque<Options> extends true
+        ? ErrorMessage<`[union] one option is \`opaque\`, which admits every value the others admit — so no value can select between them and the others can never be chosen. Remove the \`opaque\` option; a discriminator does not fix this`>
+        : [Overlapping<Options>] extends [never]
+          ? ValidateVariants<ObjectSpecsOf<Options>>
+          : ErrorMessage<`[union] ${Overlapping<Options>} read back as the same type, so nothing about a value says which one it came from — give them a discriminator and use discriminatedUnion`>
 
 /**
  * An object codec with its spec forgotten — the constraint form, as {@link AnyCodec} is for codecs.
