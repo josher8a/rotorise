@@ -431,6 +431,60 @@ describe('what cannot be emitted', () => {
             'no fixpoint semantics',
         )
     })
+
+    /**
+     * **The two sides disagree about what a tag is, and the emitter is where they meet.**
+     *
+     * `readTag` carries a tag as `S` or `N`, so `discriminatedUnion` admits a discriminator at
+     * `string`, `number` or `decimal` and refuses `boolean` and `binary` —
+     * `codec.numericliteral.spec.ts` declares a numeric enum as a union and reads the tag back as
+     * a number, on purpose. `Denote.lean`'s `tagsOfField` is `Finset String` and matches
+     * `some (.req (.literal .string ls))` alone, so the model reads a numeric tag's set as empty
+     * and `Discharge.lean`'s `htags` stops holding for that option.
+     *
+     * Nothing is unsound: the term emits and elaborates, and what it loses is a discharge, not a
+     * guarantee. But a vector asserting a tag selection the model reads as untagged would be
+     * asserting nothing, so the emitter declines rather than emitting it. **Measured when this
+     * was written: all four corpus unions use a string tag**, so no vector moved and no count did.
+     *
+     * Whether the host narrows to `string` or the model widens to the stored bases is a decision
+     * above this refusal. Until it is taken, the refusal is where the disagreement is written
+     * down, which is the same place `held`, `legacy` and a closure `refine` are written down.
+     */
+    it('refuses a discriminator the model reads no tags from', () => {
+        const numeric = erase(
+            discriminatedUnion('kind', [
+                object({ kind: number(0), a: string }),
+                object({ kind: number(1), b: string }),
+            ]),
+        )
+        const why = refusal(() => leanTermOf(numeric)).reason
+        expect(why).toContain('tagsOfField')
+        expect(why).toContain('htags')
+
+        // a decimal tag is the same disagreement, because a decimal is stored in an `N` too
+        const decimals = erase(
+            discriminatedUnion('v', [
+                object({ v: decimal('1'), a: string }),
+                object({ v: decimal('2'), b: string }),
+            ]),
+        )
+        expect(refusal(() => leanTermOf(decimals)).reason).toContain(
+            'tagsOfField',
+        )
+
+        // and a string tag emits, which is what makes the refusal about the base
+        expect(
+            leanTermOf(
+                erase(
+                    discriminatedUnion('kind', [
+                        object({ kind: string('A'), a: string }),
+                        object({ kind: string('B'), b: string }),
+                    ]),
+                ),
+            ),
+        ).toContain('Term.dunion')
+    })
 })
 
 describe('values and attributes', () => {

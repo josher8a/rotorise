@@ -1101,6 +1101,16 @@ with the **declared** array rather than with a copy: that is how the host spells
 model means" where the model needs no spelling at all. A target with value semantics for byte
 arrays owes nothing here, and one without owes the identity.
 
+**A tag is stored as `S` or `N`, and the model reads a tag from a string literal only.** So the
+host admits a discriminator at `string`, `number` or `decimal` — the tag reader carries all three — and
+refuses `boolean` and `binary`, which name no tag a lookup could reach. `Denote.lean`'s
+`tagsOfField` matches a string literal alone, so the model reads a numeric tag's set as empty and
+the fourth-row discharge stops applying to that option. Nothing is unsound; a discharge is lost,
+not a guarantee. The emitter refuses such a union rather than emitting a vector about a selection
+the model reads as untagged, which is where the disagreement is written down until the host
+narrows or the model widens. Measured when the refusal landed: every corpus union uses a string
+tag, so no vector moved.
+
 `legacy` is the opposite direction, and it was invisible until the emitter had to refuse it.
 `Term.legacy` carries `r : Attr → Option Value` (`Calculus/Term.lean:73`); the host's definition
 recorded only the current codec and dropped `r` entirely, so a term the host built did not
