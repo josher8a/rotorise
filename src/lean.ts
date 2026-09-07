@@ -318,7 +318,7 @@ export const leanAttrOf = (
  *
  * ── why this is a registry of two, and not of everything ───────────────────────────────────────
  *
- * `Term.refine` carries `q : Value → Bool` and this library carries a JavaScript closure, so the
+ * `Pred.closure` carries `q : Value → Bool` and this library carries a JavaScript closure, so the
  * general case has no emission and never will. What makes *some* cases emittable is that a closure
  * this library itself exported is not arbitrary: it is a function with a specification, and the
  * model has the same specification under a name. Recognition is by **reference** against the
@@ -354,7 +354,7 @@ export const leanAttrOf = (
  * none` and `c.e v` is already `none` off the strings, so `q`'s verdict there cannot be observed.
  */
 type ShippedPredicate = {
-    /** The Lean expression, parenthesised where it is not an identifier. */
+    /** The `Value → Bool` the model names, which the emitter wraps in `Pred.closure`. */
     readonly lean: string
     /** What it is, for the refusal message when the side condition fails. */
     readonly what: string
@@ -495,26 +495,29 @@ const leanGround = (literal: Literal, at: string): string => {
 }
 
 /**
- * §3 `(refine)`'s predicate, where the model has an expression for it.
+ * §3 `(refine)`'s predicate, as the model's `Pred`.
  *
- * Two of the three are data and the model names both: `members` is `inL k ls`, membership of a
- * literal's alternatives, and `each` is `liftQ`, which lifts an element predicate to the wire set
- * whose every element satisfies it. `Exactness.lean` writes the pair together —
- * `liftQ (inL .string (.of "A" ∅))` — which is exactly what a set over a literal denotes.
+ * **The two sides are one shape now.** {@link Predicate} is `members | each | closure` and
+ * `Calculus.Pred` is the same three constructors, so this is a rename and not a translation:
+ * `members` to `Pred.members`, `each` to `Pred.each`, a recognised closure to `Pred.closure`.
+ * The emitter used to print the *meaning* — `inL k ls`, `liftQ p` — because `Term.refine` carried
+ * a `Value → Bool` and a constructor was not available to print. `Pred.eval` is where those two
+ * expressions live in the model now, and this prints the data instead.
  *
- * A data predicate comes back parenthesised, because `inL k ls` and `liftQ p` are applications
- * and `Term.refine` takes its second argument juxtaposed. A recognised closure comes back bare,
- * because the two this library ships are identifiers.
+ * Every case comes back parenthesised, because each is an application and `Term.refine` takes its
+ * second argument juxtaposed. That includes the recognised closures, which used to come back bare
+ * because they were identifiers and are now wrapped.
  *
- * The third has no expression and never will. A `closure` is a caller's JavaScript function; the
- * registry below recognises two of them **by reference**, and everything else is refused.
+ * The third case has no data and never will. A `closure` is a caller's JavaScript function; the
+ * registry below recognises two of them **by reference**, and everything else is refused. That is
+ * the case `Pred` keeps rather than removes: `refine` still carries an arbitrary predicate.
  */
 const leanPredicate = (q: Predicate, at: string, forced: number): string => {
     switch (q.kind) {
         case 'members':
-            return `(inL ${leanGround(q.literal, at)})`
+            return `(Pred.members ${leanGround(q.literal, at)})`
         case 'each':
-            return `(liftQ ${leanPredicate(q.of, at, forced)})`
+            return `(Pred.each ${leanPredicate(q.of, at, forced)})`
         case 'closure': {
             // recognised by reference against the function this package exported, so a rename or a
             // reimplementation of the predicate is a type error here rather than a silent misemission
@@ -522,10 +525,10 @@ const leanPredicate = (q: Predicate, at: string, forced: number): string => {
             if (!known) {
                 return refuse(
                     at,
-                    `\`Term.refine\` carries \`q : Value → Bool\`, and this predicate is not one this library ships — it is the caller's closure for ${JSON.stringify(q.q.what)}. The recognised ones are \`isNumeral\` and \`isStoredNumeral\` from \`src/attribute.ts\`, passed by reference`,
+                    `\`Pred.closure\` carries \`q : Value → Bool\`, and this predicate is not one this library ships — it is the caller's closure for ${JSON.stringify(q.q.what)}. The recognised ones are \`isNumeral\` and \`isStoredNumeral\` from \`src/attribute.ts\`, passed by reference`,
                 )
             }
-            return known.lean
+            return `(Pred.closure ${known.lean})`
         }
     }
 }
@@ -685,9 +688,10 @@ const leanTermOfTerm = (t: Term, at: string, forced: number): string => {
          *
          * `writesOnlyStrings` exists because the two shipped predicates take a `string` and a
          * `Value → Bool` takes anything: they disagree where JavaScript coerces, so the emission is
-         * confined to inner terms that write nowhere else. `members` and `each` are the model's own
-         * `inL` and `liftQ` over data the term carries, so they agree at every value by
-         * construction and the gate has nothing to say about them.
+         * confined to inner terms that write nowhere else. `members` and `each` are `Pred`
+         * constructors over data the term carries, and `Pred.eval` sends them to the model's own
+         * `inL` and `liftQ`, so they agree at every value by construction and the gate has nothing
+         * to say about them.
          */
         case 'refine': {
             const q = leanPredicate(t.q, at, forced)

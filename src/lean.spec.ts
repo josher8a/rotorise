@@ -189,9 +189,11 @@ describe('terms', () => {
      * A *restricted* element is printed as the restriction of the set it is.
      *
      * `string.set('a','b')` is `refine(set(string), each(members …))` and the model spells that
-     * predicate `liftQ (inL k ls)` — `Exactness.lean` writes exactly this pair. Both halves are
-     * data the term carries, so both print, and the equation licensing the spelling is
-     * `setCodec_restrict` on `e` and `setCodec_restrict_p` on `p`.
+     * predicate the same way, `Pred.each (Pred.members k ls)` — the two `Predicate` types are one
+     * shape. It used to print the predicate's *meaning*, `liftQ (inL k ls)`, because `Term.refine`
+     * carried a function and there was no constructor to print; `Pred.eval` is where those two
+     * expressions live now. Both halves are data the term carries, so both print, and the equation
+     * licensing the spelling is `setCodec_restrict` on `e` and `setCodec_restrict_p` on `p`.
      *
      * **A closure element is still refused, and permanently.** The predicate is a caller's
      * JavaScript function; the registry recognises two by reference and there is no expression for
@@ -199,7 +201,7 @@ describe('terms', () => {
      */
     it('prints a set of a literal element, and refuses one over a closure', () => {
         expect(leanTermOf(erase(string.set('a', 'b')))).toBe(
-            'Term.refine (Term.set SetBase.string) (liftQ (inL GroundKind.string (NEFinset.of "a" {"b"})))',
+            'Term.refine (Term.set SetBase.string) (Pred.each (Pred.members GroundKind.string (NEFinset.of "a" {"b"})))',
         )
         const positive = refine(
             decimal,

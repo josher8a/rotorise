@@ -677,16 +677,29 @@ theorem equiv_denote_held_comp (t : Term) (f g f' g' : Value → Value) :
     Codec.Equiv (denote (.held (.held t f g) f' g'))
       (denote (.held t (f ∘ f') (g' ∘ g))) := equiv_through_comp _ _ _ _ _
 
-/-- §6: `refine(refine(c, q), q′) ≡ refine(c, q ∩ q′)`. -/
-theorem equiv_denote_refine_meet (t : Term) (q q' : Value → Bool) :
-    Codec.Equiv (denote (.refine (.refine t q) q'))
-      (denote (.refine t (fun v => q v && q' v))) := equiv_restrict_meet _ _ _
+/-- §6: `refine(refine(c, q), q′) ≡ refine(c, q ∩ q′)`.
+
+    **The meet is a `closure`, and that is what `Pred` costs.** The equation is about codecs
+    and it holds: `equiv_restrict_meet` is unchanged, because `restrict` still takes a
+    `Value → Bool` and `denote` hands it `p.eval`. What the reified predicate cannot do is
+    keep the *shape*. Two `members` meet in a term the classifier no longer reads, so `Orth`
+    declines the right-hand side where it certifies the left. That is the sound direction: a
+    declined certificate is a missing proof, never a wrong one.
+
+    For the reader who reaches for a fourth constructor: two `members` at one base meet in a
+    `members` over the intersection, where the intersection is nonempty. A discharger that
+    needs that reduction states it as a lemma about `Pred`, and `Pred` stays one to one with
+    the host's three cases, which is the whole reason it has three. -/
+theorem equiv_denote_refine_meet (t : Term) (p p' : Pred) :
+    Codec.Equiv (denote (.refine (.refine t p) p'))
+      (denote (.refine t (.closure (fun v => p.eval v && p'.eval v)))) :=
+  equiv_restrict_meet _ _ _
 
 /-- §6: `refine(c, T) ≡ c` for `⊢ c : T ⇝ μ`. The premise is the row's, read off the
     denotation rather than the judgement — `typed_TSub` is what connects the two. -/
-theorem equiv_denote_refine_full (t : Term) (q : Value → Bool)
-    (hq : ∀ v, (denote t).T v ↔ q v = true) :
-    Codec.Equiv (denote (.refine t q)) (denote t) := equiv_restrict_full _ _ hq
+theorem equiv_denote_refine_full (t : Term) (p : Pred)
+    (hq : ∀ v, (denote t).T v ↔ p.eval v = true) :
+    Codec.Equiv (denote (.refine t p)) (denote t) := equiv_restrict_full _ _ hq
 
 /-- §6: `legacy(c, p_c) ≡ c`. -/
 theorem equiv_denote_legacy_self (t : Term) :
@@ -709,8 +722,8 @@ theorem equiv_denote_nullable_idem (t : Term) :
 theorem denote_held_μ (t : Term) (f g : Value → Value) :
     (denote (.held t f g)).μ = (denote t).μ := rfl
 
-theorem denote_refine_μ (t : Term) (q : Value → Bool) :
-    (denote (.refine t q)).μ = (denote t).μ := rfl
+theorem denote_refine_μ (t : Term) (p : Pred) :
+    (denote (.refine t p)).μ = (denote t).μ := rfl
 
 theorem denote_legacy_μ (t : Term) (r : Attr → Option Value) :
     (denote (.legacy t r)).μ = (denote t).μ := rfl

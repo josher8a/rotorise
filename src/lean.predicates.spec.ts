@@ -1,7 +1,7 @@
 /**
  * **The refinement predicates the Lean bridge recognises, and the much larger set it still refuses.**
  *
- * `src/lean.ts` used to refuse every `refine`, on the ground that `Term.refine` carries
+ * `src/lean.ts` used to refuse every `refine`, on the ground that `Pred.closure` carries
  * `q : Value → Bool` and this library carries a JavaScript closure. That ground is sound for an
  * arbitrary closure and unsound as a blanket: a predicate *this package exported* is not arbitrary,
  * it is a function with a specification, and the model has the same specification under a name. The
@@ -64,7 +64,7 @@ describe('the predicates this library ships', () => {
     it('emits `isStored` for `isStoredNumeral`', () => {
         const stored = refine(decimal, narrowing(isStoredNumeral))
         expect(leanTermOf(erase(stored))).toBe(
-            'Term.refine (Term.decimal) isStored',
+            'Term.refine (Term.decimal) (Pred.closure isStored)',
         )
     })
 
@@ -78,7 +78,7 @@ describe('the predicates this library ships', () => {
     it('emits `Numeral.WF` at the text carrier for `isNumeral`', () => {
         const wf = refine(string, narrowing(isNumeral))
         expect(leanTermOf(erase(wf))).toBe(
-            'Term.refine (Term.string) (fun v => match v with | .str s => Numeral.WF s | _ => false)',
+            'Term.refine (Term.string) (Pred.closure (fun v => match v with | .str s => Numeral.WF s | _ => false))',
         )
     })
 
@@ -107,7 +107,9 @@ describe('the predicates this library ships', () => {
             codec: erase(refine(decimal, narrowing(isStoredNumeral))),
             value: '1.5',
         })
-        expect(emitted).toContain('Term.refine (Term.decimal) isStored')
+        expect(emitted).toContain(
+            'Term.refine (Term.decimal) (Pred.closure isStored)',
+        )
         expect(emitted).toContain('Attr.n (WFNumeral.of "1.5")')
     })
 })
