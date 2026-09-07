@@ -81,7 +81,8 @@ Exit code 1 if any current-state document has a hit, a stale `EXPECTED` entry, o
 """
 import re, sys, os, glob
 
-CURRENT = ["README.md", "ARCHITECTURE.md", "../docs/codec-calculus.md"]
+CURRENT = ["README.md", "ARCHITECTURE.md", "../docs/codec-calculus.md",
+           "../docs/architecture.md", "../docs/roadmap.md", "../docs/defects.md"]
 # **The docstrings, which this guard never read.** Every module here is dense with backticked
 # names and none of them was checked — 763 distinct citations, invisible. Demonstrated rather
 # than assumed: writing `nullHonest_of_ownsNull_false` for `nullHonest_of_not_ownsNull` in a
