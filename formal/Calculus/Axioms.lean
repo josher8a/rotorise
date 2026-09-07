@@ -58,7 +58,7 @@ def elabAssertAxioms : CommandElab := fun stx => do
   let stray := axs.filter (· ∉ sanctionedAxioms)
   unless stray.isEmpty do
     throwError "{name} depends on unsanctioned axiom(s): {stray.toList}\n\
-      The sanctioned base is {sanctionedAxioms}. See ARCHITECTURE.md §6."
+      The sanctioned base is {sanctionedAxioms}. See docs/architecture.md."
 
 /-- `#assert_axioms_all` is `#assert_axioms` over the whole `Calculus` namespace, found by
     walking the environment instead of by naming constants one at a time.
@@ -84,7 +84,7 @@ def elabAssertAxiomsAll : CommandElab := fun _ => do
   unless bad.isEmpty do
     throwError "unsanctioned axiom(s) outside {sanctionedAxioms}:\n\
       {bad.toList.map (fun p => m!"  {p.1}: {p.2}")}\n\
-      See ARCHITECTURE.md §6."
+      See docs/architecture.md."
 
 /-! ## The theorems the documentation makes claims about
 

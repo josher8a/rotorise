@@ -26,13 +26,14 @@ import re, sys, os, glob, collections
 SRC = sorted(glob.glob(os.path.join("Calculus", "*.lean")))
 # **Re-baselined twice as the archaeology went, and the trail matters more than the number.**
 # 204 with `docs/codec-formalization.md` in the list; that change log alone supplied 88 of them,
-# 43%. Removing it gave 116. `ARCHITECTURE.md` had never been scanned despite being a
+# 43%. Removing it gave 116. The architecture had never been scanned despite being a
 # current-state document, so it went in at the same time: 159. Then `FIDELITY.md` was deleted
 # too, and the figure is **130**. Each step measures what the *surviving* current-state
 # documents name, which is the honest question. `VOCABULARY.md` went too, taking it to
 # **116** — the same figure as step two by coincidence, from a different set of documents. None of the four drops is a regression, and without this comment every one of them
 # would have looked like one — which is the whole reason the trail is here and not in a message.
-DOCS = ["README.md", "ARCHITECTURE.md"]
+DOCS = ["README.md", "../docs/architecture.md", "../docs/roadmap.md",
+        "../docs/defects.md"]
 if not SRC:
     sys.exit("no Calculus/*.lean found — run from formal/")
 

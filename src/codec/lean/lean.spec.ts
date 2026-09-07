@@ -1121,7 +1121,7 @@ describe("the declaration guard, against the model's classifier", () => {
      * model states it as a closed form, so it can be compared and it meets every option. Every one
      * of the fifteen new theorems holds — `Orth (Term.opaq false) Term.string` is `false` — so the
      * law was untouched either way, and what moved is that a union no value can resolve is now
-     * refused where it used to be declared. JH's ruling; `ARCHITECTURE.md` §10 carries it.
+     * refused where it used to be declared. JH's ruling, landed in `ff75c6b`.
      *
      * **The count pins a fact no law has, deliberately.** That it is thirty-six is a property of
      * this corpus, so widening the corpus is meant to fail here and be looked at; the *law* is

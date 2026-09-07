@@ -2,7 +2,7 @@
 
 This file loads at the start of every session. The file has two layers.
 The rules apply to every task. The repository section holds the facts of this tree, and the
-evidence behind the rules. `formal/ARCHITECTURE.md` holds what the Lean development is.
+evidence behind the rules. `docs/architecture.md` holds what the Lean development is.
 `git log` holds why the code has its present shape. Read `git log` before you propose a
 change to something that already looks decided.
 
@@ -48,7 +48,7 @@ The rules below use these terms with one fixed meaning.
 
 **A pass**: the work between one commit and the next commit. A pass has one subject and one message.
 
-**A normative document**: a document that other work must obey. `CLAUDE.md`, `formal/ARCHITECTURE.md`, and the advertised axiom base are each a normative document.
+**A normative document**: a document that other work must obey. `CLAUDE.md`, `docs/architecture.md`, and the advertised axiom base are each a normative document.
 
 ## The rules
 
@@ -303,11 +303,16 @@ These are the rulings of the owner, in the terms of this repository.
 
 ### Documents
 
-- `formal/ARCHITECTURE.md` says what the system is, in the present tense: the epistemic
-  structure, the invariants, the coarse models, and the mechanics of an operation. The
-  document holds nothing that goes stale. Section 10 of the document holds the open
-  questions and the known defects. This tree has no separate `roadmap.md` and no separate
-  `defects.md`. Ask for the three-file split, and one pass makes the split.
+- Three files hold the system, and each answers one question. `docs/architecture.md` says
+  what the system **is**: the epistemic structure, the invariants, the coarse models, and the
+  mechanics of an operation. `docs/roadmap.md` says what the system **would be in the
+  future**: one entry per future state, with what decides it. `docs/defects.md` holds the
+  **known issues, the suspected ones, and the partially mitigated ones**, and each entry
+  opens with one of those three words.
+- The architecture holds no count and no measurement, and cites no section number. A count is
+  short lived: it belongs in the commit that measured it, in `docs/defects.md` where it pins
+  an issue, or in the output of a guard. A figure appears in the roadmap only where the figure
+  is the threshold that decides an entry.
 - An audit is not load bearing. A finding reaches a normative document only after the owner
   triages the finding.
 - Write no cross citation. A comment or a section states the rule that the comment needs, or
@@ -352,8 +357,8 @@ These are measured facts. The facts are the reason for several rules above.
 ### What this file cannot do
 
 Most of the rigour sits in the repository rather than in this file. `#assert_axioms_all`
-fails the build rather than asserting cleanliness. `guard_reach.py`, `name_drift.py`,
-`doc_counts.py` and `ratchet.py` check what prose cannot check. Above all, the commit
+fails the build rather than asserting cleanliness. `guard_reach.py`, `name_drift.py` and
+`ratchet.py` check what prose cannot check. Above all, the commit
 messages are the real record. A session that reads `git log` inherits the reasoning with
 the result.
 

@@ -154,7 +154,7 @@ def measure():
     The two proof measures range over `Calculus/*.lean`. The mark count ranges over
     **`name_drift.py`'s whole `CURRENT` list**, documents included, because the hole it closes
     is not specific to docstrings: a session that deletes a declaration and marks its citations
-    in `ARCHITECTURE.md` in the same commit gets exactly as little checking as one that does it
+    in a document in the same commit gets exactly as little checking as one that does it
     in a docstring.
     """
     out = {m: {} for m in ("unfolding_sites", "retirement_marks",

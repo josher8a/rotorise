@@ -8,23 +8,20 @@
 # gated on nothing and the printed output was true while the verdict was false.
 # Printing an exit code is not checking it. This script checks it.
 #
-#   scripts/gate.sh              all eight checks
-#   scripts/gate.sh --no-build   the five Python guards only
+#   scripts/gate.sh              all seven checks
+#   scripts/gate.sh --no-build   the four Python guards only
 #
-# `--no-build` skips the two checks that need the container — the build and the vector
-# bridge — and is NOT for comments-only commits in the sense of "docs are exempt". Editing any `Calculus/*.lean`, comments included, can move a
-# `doc_counts` count, because §4c and §5 cite file lengths and a span runs to the
-# last non-blank line before the next declaration — so a re-wrapped signature
-# moves a number in a file you did not edit. `doc_counts.py --check` runs under
-# `--no-build` for exactly that reason. What `--no-build` skips is the ~12-minute
-# Docker build, and it is honest only when nothing you touched can reach the
-# elaborator: a change confined to `docs/`, `README.md`, `ARCHITECTURE.md`,
-# `HANDOFF.md` or `scripts/`. If you edited a `.lean` file at all — even a
-# docstring, even a blank line — run the full gate. A docstring is elaborated.
+# `--no-build` skips the three checks that need a container — the build, the vector emit
+# and the vector bridge — and is NOT for comments-only commits in the sense of "docs are
+# exempt". What it skips is the ~12-minute Docker build, and it is honest only when
+# nothing you touched can reach the elaborator: a change confined to `docs/`,
+# `README.md` or `scripts/`. If you edited a `.lean` file at all — even a docstring, even
+# a blank line — run the full gate. **A docstring is elaborated**, which is the whole of
+# the rule now that no guard reads a count out of a document.
 # And if you edited `src/codec/lean.ts` or a `Calculus/` *constructor*, the bridge is
 # what will tell you, so do not skip it there either.
 #
-# The five Python guards run on the HOST, from `formal/`. There is no Python in
+# The four Python guards run on the HOST, from `formal/`. There is no Python in
 # `rotorise-lean-dev` at all. The build runs in the container, and only one
 # `lake build` may run at a time across the sessions sharing this tree — your
 # build rewrites oleans under someone else's `lake env lean`.
@@ -78,7 +75,6 @@ run() {
 
 run 'guard_reach.py'        python3 scripts/guard_reach.py
 run 'name_drift.py'         python3 scripts/name_drift.py
-run 'doc_counts.py --check' python3 scripts/doc_counts.py --check
 run 'ratchet.py'            python3 scripts/ratchet.py
 run 'docstring_anchor.py'   python3 scripts/docstring_anchor.py
 
@@ -93,9 +89,10 @@ if [ "$RUN_BUILD" -eq 1 ]; then
   # Emit the full refusal cross product and the declaration-guard verdicts, then elaborate them
   # beside the two committed samples. `.separations.lean` is one theorem per option pair `src/`'s
   # `union` refuses, asserting the model does not certify it — the law runs that way only, `Orth`
-  # being sufficient and not necessary (`ARCHITECTURE.md` §5). `.readverdicts.lean` is the
+  # being sufficient and not necessary (`docs/architecture.md`). `.readverdicts.lean` is the
   # read-side differential: `AdmA t a` against whether `decode` accepted it, 861 of 864 pairs,
-  # the other three stuck on the `Double` axiom and named in its header (§10).
+  # the other three stuck on the `Double` axiom and named in its header; `docs/defects.md`
+  # carries that as an issue.
   # `.readvectors.lean` is the read side of every corpus codec: the model's `p`, given the
   # attribute the library wrote, against the value the library read back. The write vectors and
   # the refusal vectors are both about `e`, and `p` was asserted only where a union had to choose,

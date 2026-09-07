@@ -296,7 +296,7 @@ describe('the declaration guard, where a term is what the guard reads', () => {
      * The guard used to exempt an `opaque` option instead of comparing it, reading its occupancy
      * as `⊤`. §5 separates the two things a `⊤` covers, and `opaque` is the *everything* one: the
      * model states it as a closed form, so it is comparable and it meets every option. Refusing
-     * these is JH's ruling, recorded in `ARCHITECTURE.md` §10, and it moved the corpus's refusal
+     * these is JH's ruling, landed in `ff75c6b`, and it moved the corpus's refusal
      * set from 17 pairs to 32 with every new theorem holding.
      */
     it('refuses a union where one option can never be selected', () => {

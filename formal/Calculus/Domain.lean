@@ -514,7 +514,7 @@ and the kernel refuses it, exactly as it refuses `Finset Attr`. So `Attr` above 
 *unbounded* closure and the bound is stated about it rather than inside it. It was once
 recorded as "not typeable" and filed as disposed of on that answer alone; being un-typeable
 never made it un-checkable, and `src/` had to gate on it in the end. That failure mode is a
-checklist item in `ARCHITECTURE.md` §11.
+checklist item in `docs/architecture.md`.
 
 **It counts `L` and `M` and nothing else.** A scalar is not a document type. Neither is a
 wire set: `SS`/`NS`/`BS` carry payloads rather than attributes, so a set can neither nest
