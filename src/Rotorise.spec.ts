@@ -474,13 +474,6 @@ describe('DynamoDB Utils', () => {
             | { a: 'a1'; b: 1n; c: true; z: 'never' }
             | { a: 'a2'; b: 2; c: 0; z: 'never' }
         >()
-        type t = Extract<
-            Parameters<typeof base>[0][string],
-            {
-                discriminator: 'a'
-            }
-        >['spec']['a1']
-
         attest<
             [
                 schema: Record<
@@ -688,7 +681,7 @@ describe('DynamoDB Utils', () => {
                 b: 1n,
             }),
         ).toBe(1n)
-        const r = testTableEntry.key(
+        void testTableEntry.key(
             'GSI1SK',
             {
                 a: 'a1',
@@ -700,7 +693,7 @@ describe('DynamoDB Utils', () => {
             },
         )
 
-        const d = testTableEntry.key('GSI1PK', {
+        void testTableEntry.key('GSI1PK', {
             z: 'never', // required to discriminate
             b: 1n,
         })
@@ -907,7 +900,7 @@ describe('DynamoDB Utils', () => {
             >
         >(null as any as RealEntry)
 
-        const expect_key = RealEntry.key(
+        void (RealEntry.key(
             'PK',
             {
                 id1: 'client',
@@ -916,9 +909,9 @@ describe('DynamoDB Utils', () => {
             {
                 allowPartial: true,
             },
-        ) satisfies 'ID1#client#USER#user' | 'ID1#client'
+        ) satisfies 'ID1#client#USER#user' | 'ID1#client')
 
-        const expect_key_ = RealEntry.key(
+        void (RealEntry.key(
             'PK',
             {
                 id1: 'client',
@@ -927,12 +920,12 @@ describe('DynamoDB Utils', () => {
             {
                 // allowPartial: true,
             },
-        ) satisfies 'ID1#client#USER#user'
+        ) satisfies 'ID1#client#USER#user')
 
-        const expect_key2 = RealEntry.key('GSI1SK', {
+        void (RealEntry.key('GSI1SK', {
             type: 'TypeA',
             tag: 'A',
-        }) satisfies 'TYPE#TypeA'
+        }) satisfies 'TYPE#TypeA')
 
         // @ts-expect-error
         const expect_key2_ = RealEntry.key('GSI1SK', {
@@ -941,7 +934,7 @@ describe('DynamoDB Utils', () => {
             // biome-ignore lint/complexity/noBannedTypes: test case
         } as {})
 
-        const expect_key_depth = RealEntry.key(
+        void (RealEntry.key(
             'PK',
             {
                 id1: 'client',
@@ -951,7 +944,7 @@ describe('DynamoDB Utils', () => {
                 allowPartial: true,
                 depth: 1,
             },
-        ) satisfies 'ID1#client'
+        ) satisfies 'ID1#client')
 
         const expect_key_depth_partial_discriminator = RealEntry.key(
             'SK',
@@ -963,11 +956,11 @@ describe('DynamoDB Utils', () => {
             expect_key_depth_partial_discriminator,
         )
 
-        const expect_key_depth_discriminator = RealEntry.key(
+        void (RealEntry.key(
             'SK',
             { tag: 'A', id2: 'yolo' },
             { depth: 2 },
-        ) satisfies 'TAG#A#ID2#yolo'
+        ) satisfies 'TAG#A#ID2#yolo')
 
         attest.instantiations([32508, 'instantiations'])
     })
@@ -1319,5 +1312,110 @@ describe('DynamoDB Utils', () => {
         expect(table.key('PK', { id: 'x', data: undefined })).toBe(
             'ID#x#DATA#fallback',
         )
+    })
+})
+
+/**
+ * **The published surface, pinned — both what is on it and what is deliberately not.**
+ *
+ * `Rotorise.ts` enumerates the codec values rather than starring them, so that an export is a
+ * decision rather than a consequence of where a function happens to live. That only holds if
+ * something notices when the two lists drift, and nothing did: the reader then called `admits`
+ * reached the surface in `46cb950` because the re-export was `export * from './codec'`, and no test
+ * could have said so.
+ *
+ * The absent half is the load-bearing one. The names below read a **term** for this library's own
+ * resolver, declaration guard and emitter to ask what a codec is; a caller has the codec's
+ * behaviour, which is what they are derived from. Re-adding one is a decision, and this makes it a
+ * visible one.
+ *
+ * **The list is the live names, and that is a rule this test learned the hard way.** It held eight
+ * names that had been deleted — `admits`, `writes`, `decides`, `setBase`, `deeper`, `occupies`,
+ * `reads`, `admitsAttribute` — and `Object.hasOwn` answers `false` for a name nothing declares, so
+ * eight of its twelve rows passed by asserting nothing while their replacements went unguarded. A
+ * deleted name cannot leak. Only a live one can, so a row for a dead name is a row that has stopped
+ * being a test, and a deletion pass moves the row to the name that replaced it.
+ */
+describe('the published surface', () => {
+    const internal = [
+        // the two that ask the pair, which is what admission is: `accepts` replaced `admits` and
+        // `readsBack` replaced `admitsAttribute`, both asking the codec rather than reading a term
+        'accepts',
+        'readsBack',
+        // the five functions of a term the model computes, which `writes` and `decides` became
+        'member',
+        'occV',
+        'occA',
+        'specOf',
+        'tagsOf',
+        // the declaration guard and what it reads, which `identifying` and `deeper` became
+        'separable',
+        'identifies',
+        'meet',
+        // the set reduction, which `setBase` became, and the predicate the elements of a set carry
+        'setBaseOf',
+        'elementPredicates',
+        'holds',
+        // the value kinds a term takes, the two halves of the term cache, and the mark reader
+        'valueKinds',
+        'termOf',
+        'codecOfTerm',
+        'constantOf',
+    ] as const
+
+    it('does not carry the internal utilities', async () => {
+        const surface = await import('./Rotorise')
+        for (const name of internal) {
+            expect(Object.hasOwn(surface, name)).toBe(false)
+        }
+    })
+
+    /**
+     * **The other half of the same fact, and it was unpinned while twelve names leaked.**
+     *
+     * The list above is a run-time check, and a run-time check cannot see a type. `export type *
+     * from './codec'` re-exported every one of that module's exports — the values among them as
+     * *types* — so `import { decides } from 'rotorise'` type-checked and was `undefined` when it
+     * ran. The value list was a decision and the type surface was still a consequence of where a
+     * function lived, which is the thing `46cb950` was supposed to have ended.
+     *
+     * Written as one rule rather than as twelve suppressions: no name held back at run time is a
+     * key of the module's type either. A thirteenth added to `internal` is checked by both halves
+     * without a line here.
+     */
+    it('does not carry them at the type level either', () => {
+        type Entry = typeof import('./Rotorise')
+        attest<[Extract<keyof Entry, (typeof internal)[number]>], [never]>()
+    })
+
+    it('carries the constructors and combinators', async () => {
+        const surface = await import('./Rotorise')
+        for (const name of [
+            'array',
+            'binary',
+            'boolean',
+            'custom',
+            'decimal',
+            'discriminatedUnion',
+            'fallback',
+            'held',
+            'lazy',
+            'legacy',
+            'nullValue',
+            'nullable',
+            'number',
+            'object',
+            'opaque',
+            'optional',
+            'record',
+            'refine',
+            'rest',
+            'string',
+            'tuple',
+            'union',
+            'CodecError',
+        ]) {
+            expect(Object.hasOwn(surface, name)).toBe(true)
+        }
     })
 })

@@ -7,14 +7,7 @@
  * that tends to appear in every key of a single-table design.
  */
 import { describe, expect, it } from 'vitest'
-import {
-    CodecError,
-    discriminatedUnion,
-    number,
-    object,
-    optional,
-    string,
-} from './codec'
+import { CodecError, discriminatedUnion, number, object, string } from './codec'
 import { RotoriseError, tableEntry } from './Rotorise'
 
 describe('shipments', () => {

@@ -306,15 +306,15 @@ that names the subset:
 This is not a resemblance. A predicate wanted on **both** halves _is_ `refine`, because `e` and `p`
 are partial and refusing is what the error channel does; a rule that gates one half and not the
 other is the shape §3 spends a paragraph refusing at `(number)`. So a gate is never a rule's private
-business, and its predicate belongs in `adm` — which is why the table in §5 now carries `D` and
-`Stored` beside a literal's `ℓ`, and why `number` and `decimal` are `ident`: gating both ways is
-deciding your own membership.
+business, and its predicate belongs in the term's admissible set — which is why a `number`'s
+admissible values are `D` and a `decimal`'s are `Stored`, beside a literal's `ℓ` (§5): gating both
+ways is deciding your own membership.
 
 **Containers are the other kind, and they are not refinements.** `set`, `array`, `tuple`, `record`
 and `object` narrow by their _subterms_ and their _names_, never by a predicate on the whole value,
-so there is no `q` for `adm` to carry. §5 records the same fact from the other side: `adm` does not
-propagate through a container, because it would have to contain the empty array whatever the element
-is. Scalars are refined by predicates; containers are refined structurally, and only the first kind
+so there is no `q` for an admissible set to carry. §5 records the same fact from the other side: a
+container admits its empty case whatever its element admits, so no set of one container's own values
+separates it from another. Scalars are refined by predicates; containers are refined structurally, and only the first kind
 has a gate to record.
 
 `literal` is the one ground term whose member follows from its _values_ rather than from its name,
@@ -334,8 +334,8 @@ literal union is one statement rather than a rule per member:
 `literal` at `string` and at `number` are two instantiations; `boolean` and `binary` are two more;
 and the base need not be ground at all — two disjoint refinements of one `array(string)` separate by
 the same argument. "Literal" was never the operative word — _one base, disjoint predicates_ was.
-What `literal` adds over writing `refine` is that `ℓ` is data the term owns, so `adm` and `admA`
-carry it (§5) and a reader sees the enumeration.
+What `literal` adds over writing `refine` is that `ℓ` is data the term owns, so both admissible
+sets carry it (§5) and a reader sees the enumeration.
 
 There is deliberately no derivation for a mixed set: a codec writes one member, and one `g` cannot
 hold both a string and a double, so `literal(ℓ, k)` with `ℓ ∈ String` and `k ∈ D` has none. That is **(W)** and not an omission, and it is not
@@ -525,7 +525,7 @@ property of insertion rather than a fact about `𝟙`. The one term outside both
 dichotomy is `nullable(null)`, which under the guard is simply `null`.
 
 It is kept as a term for compatibility, and **not** because `union(c, null)` cannot replace it at
-a `κ = ⊤` subterm — `held`, `custom`, `lazy`. It can: no discharger means an **obligation**, not a
+a subterm whose shape is unknown — `held`, `custom`, `lazy`. It can: no discharger means an **obligation**, not a
 refusal (§5), so `union(c, null)` is derivable there and carries **(U)** per input, which is what
 `nullable`'s honesty premises were doing by hand.
 
@@ -627,13 +627,13 @@ calculus would be a union resolved by rank, exactly what **(U)** refuses.
 this section is its **dischargers** — decidable conditions, each sufficient for **(U)** on the
 unions it covers:
 
-| Discharger                                         | Decides                                               | From                          |
-| -------------------------------------------------- | ----------------------------------------------------- | ----------------------------- |
-| distinct members, or disjoint `admA`               | the readable side, where the stored attributes differ | `μ`, and `admA` below         |
-| **(K)** — disjoint kinds, or disjoint `ident` sets | the writable side, where the runtime shapes differ    | `κ`, `ident` and `adm`, below |
-| tag disjointness                                   | `(dunion)`, outright — both sides                     | the discriminator literals    |
-| disjoint predicates over one base                  | refinements of a common `c`, outright — both sides    | the predicates `q`            |
-| kind disjointness                                  | `opaque`'s fixpoint (§3), outright                    | one option per kind of §1     |
+| Discharger                          | Decides                                               | From                           |
+| ----------------------------------- | ----------------------------------------------------- | ------------------------------ |
+| distinct members                    | the readable side, where the stored attributes differ | `μ`, the judgement's own index |
+| disjoint option admission           | either side, each side asked on its own               | admission and occupancy, below |
+| tag disjointness                    | `(dunion)`, outright — both sides                     | the discriminator literals     |
+| disjoint predicates over one base   | refinements of a common `c`, outright — both sides    | the predicates `q`             |
+| kind disjointness                   | `opaque`'s fixpoint (§3), outright                    | one option per kind of §1      |
 
 **Every row is one condition at a different projection.** Fix a partial map from inputs to labels —
 a stored member, a runtime kind, a discriminator's tag — and give each option the set of labels it
@@ -642,22 +642,24 @@ label is a property of the _input_ and lands in at most one set. That is the who
 
 Said more directly, without projections at all: **each option gets one set of values it may write
 and one set of attributes it may read, and separation is disjointness of those two families.** A
-projection is a way of _building_ such a set — `κ` gives the values whose kind it allows, `μ` the
-attributes whose member it allows, a discriminator's tag the items carrying one of its tags — and
-`adm`/`admA` are the sets themselves, the finest the table has.
+projection is a way of _building_ such a set — a runtime shape gives the values whose shape it
+allows, `μ` the attributes whose member it allows, a discriminator's tag the items carrying one of
+its tags — and **option admission** is the family itself, the finest there is: the set the union
+consults when it asks whether an option could take the input.
 
-Read that way the first two rows stop offering a _choice_. "Disjoint kinds **or** disjoint `adm`" is
-a pairwise question; asked per option instead, the two constraints simply **intersect** — an option
-may write `v` only if `κ` allows its kind _and_ `adm` allows the value. Disjointness of the
-intersections follows from disjointness in either constraint, so the disjunction is what makes the
-families disjoint, not a second mechanism. The two families are also independent, which is the point
-the pairwise reading obscures: the writable side may be separated by a kind while the readable side
-is separated by a member, and nothing has to reconcile the two.
+Read that way the admission row stops offering a _choice_ between a shape and a set. The two constraints
+simply **intersect** — an option may write `v` only if its shape allows the constructor of `v` _and_
+it admits `v` — and disjointness of the intersections follows from disjointness in either factor. A
+coarse shape and an exact set are two factors of one family rather than two mechanisms, which is why
+one row carries both. The two families are also independent, which is the point the pairwise reading
+obscures: the writable side may be separated by a shape while the readable side is separated by a
+member, and nothing has to reconcile the two.
 
 What is left to distinguish the rows is one thing only: whether a row constrains _both_ families or
-one. `μ` and `admA` label attributes; `κ` and `adm` label values; only a
-discriminator's tag and §1's kind label both — which is exactly why only those two settle **(U)**
-outright and the first two have to be combined.
+one. `μ` labels attributes and nothing else, so the member row settles the readable side and never
+the writable one. A discriminator's tag and §1's kind label both, which is why those two settle
+**(U)** outright. The admission row is asked once per side and may settle one side or both; a
+union is resolved when both sides are resolved, by whatever combination of rows reaches them.
 
 Read that way, `(dunion)` below is not a second kind of sum. It is `(union)` with admission **read
 off** the discriminator instead of attempted, and its `(U)` is a theorem because reading a label
@@ -665,8 +667,9 @@ off an input is something an option cannot be wrong about.
 
 What no discharger covers stays an obligation the semantics enforces per input by failing — safe for
 every law except **(R)** at a canonical attribute, and that residue is exactly what the theorem
-below names. A `⊤` option is one **(K)** never separates, for the same reason it cannot be checked:
-it could be anything. That costs nothing, because failing to discharge is not refusing — **(U)**
+below names. An option whose shape is `⊤` is one the admission row never separates, for the same
+reason it cannot be checked: it could be anything. That costs nothing, because failing to discharge is not
+refusing — **(U)**
 still guards each value the option is actually given.
 
 ### A weaker condition, proved and not adopted
@@ -718,66 +721,93 @@ license it.
 **Normatively, the rule is unique admission as stated above.** This subsection records a proved
 alternative and the trade, not a change to the judgement.
 
-### The machinery of (K)
+### The machinery of admission
 
-Three auxiliary functions, defined by structural recursion so that **(K)** is decidable rather than
-judged. All are total over the terms of §3–§4.
+The admission row asks, of each option and each side, which inputs the option may be given: which values it may
+be asked to write, and which attributes it may be asked to read. Write `V(c) ⊆ Value` and `A(c) ⊆ 𝔸`
+for those two sets. Two things build them, both by structural recursion over the terms of §3–§4, and
+both total.
 
-`κ(c) ∈ ℘(Kind) ∪ {⊤}` is the kinds of _value_ a term accepts — a coarse partition of `Value` by
-runtime shape, and the mirror of `μ` on the other side of the pair:
+**A term's admissible sets are exact.** A codec is a pair, and an admissible set is a claim about one
+half of it at a time, so there are two and not one: the values `e` accepts, and the attributes `p`
+accepts. Each is a **domain rather than a description of one** — `dom(e)` and `dom(p)` — at every
+term of the calculus, with no hypothesis and no term excepted. Nothing is over-approximated, and no
+term's answer is `⊤`.
 
-```
-k ∈ Kind ::= string | number | boolean | binary | set | array | map | null
-```
+That is available only because a row may **ask the codec** rather than describe it, and the four
+terms that force the point are worth naming, three of them having been recorded as impossible:
 
-| `c`                                               | `κ(c)`                                       |
-| ------------------------------------------------- | -------------------------------------------- |
-| `string`, `decimal`                               | `{string}` — a decimal is _held_ as a string |
-| `number`                                          | `{number}`                                   |
-| `boolean` / `binary`                              | `{boolean}` / `{binary}`                     |
-| `literal(ℓ₁ … ℓₙ)`                                | `{string}` or `{number}`, by the values      |
-| `set(c)`                                          | `{set}`                                      |
-| `array(c)`, `tuple(…)`                            | `{array}`                                    |
-| `record(c)`, `object(…)`, `discriminatedUnion(…)` | `{map}`                                      |
-| `null`                                            | `{null}`                                     |
-| `nullable(c)`                                     | `κ(c) ∪ {null}`                              |
-| `refine`, `optional`, `fallback`, `legacy`        | of the subterm                               |
-| `union(c₁ … cₙ)`                                  | `⋃ κ(cᵢ)`                                    |
-| `held`, `lazy`, `custom`, `opaque`                | `⊤`                                          |
+- **A numeric literal's readable side.** Distinct numerals read to the same double, so no set of
+  values bounds a set of attributes. Nor do the stored texts, which _are_ known at the declaration:
+  `literal(10²¹)` is written `⟨N, "1e+21"⟩` and handed back `⟨N, "1000000000000000000000"⟩`, which
+  only the numeral-to-double read recovers, so a syntactic set would refuse a row the codec itself
+  wrote — `ker p` shrinking below `η`. The set is `dom(p)` of the very pair the rule builds.
+- **`refine(c, q)`.** `q` is a predicate on values, so the writable side is `V(c) ∩ q` directly. The
+  readable side cannot follow syntactically, `q` testing the value a read _produces_, so it decodes
+  with the base and applies `q` to the result.
+- **`legacy(c, r)`.** `p` reads attributes `c` does not, so a passthrough would claim a bound on
+  exactly the direction `r` widens: `legacy(literal("A"), r)` with `r` reading `⟨N, "1"⟩` to `"A"`
+  reads an attribute `A(literal("A"))` refuses, which is unsound rather than coarse. The attributes
+  `r` widens by are `dom(r)`, and `r` is data the term carries, so the set is `A(c) ∪ dom(r)`. The
+  writable side passes through: `legacy` adds no way to write.
+- **`held(c, f, g)`**, the one term whose readable side sees further than its writable one. `f` sits
+  in front of `e`, so `V` pulls back along it; `g` sits behind `p` and is total, so it changes which
+  value comes out and never which attributes go in, and `A` passes through.
 
-`⊤` **absorbs**: wherever a row combines a subterm's answer — the pass-throughs, `nullable`'s `∪`,
-`union`'s `⋃` — a subterm answering `⊤` makes the whole answer `⊤`. Not knowing part of what a term
-accepts is not knowing what it accepts.
+What exactness costs is decidability. `custom` carries a pair of partial functions, `held` an
+arbitrary `f`, `refine` an arbitrary `q`, so membership of an admissible set is not a question the
+declaration can answer. Admission **specifies** the two families. It does not decide them.
 
-`held` is `⊤` deliberately, not by omission: an adapter exists precisely to change the kind of value
-held — `held(set(string), …)` takes an array where `set(string)` takes a set — and its functions are
-the caller's, so there is nothing to read an answer from. `lazy` again cannot be asked without
-forcing.
+**Admission is not what a union consults, and the object is where the two part.** A union admits an
+object option by its **names**: a name set `N` admits `object(s, ρ)` when every name in `N` is one
+`s` declares and every `req`-marked name of `s` is in `N`. The union never attempts an object
+option's codec. So `V(c)` and `A(c)` are _option_ admission — admission by names at an object, and
+`dom(e)` and `dom(p)` at every other term.
+
+Stating the row on a term's own admissible sets instead is unsound and not merely coarse, and one
+pair shows it. Take two objects declaring the same single `req` name and different field terms,
+`⟨a : String⟩` against `⟨a : Number⟩`. Their admissible sets are disjoint on both sides, a map the
+first writes carrying a string at `a` which the second's field term refuses. Both are derivable,
+both closed, both lawful, so no other condition declines them. And both options admit
+`⟨a ↦ "1"⟩`, because the union reads the names and never the contents. At an object a term's own
+admission is strictly _tighter_ than what the union consults, and disjointness of a tighter
+predicate implies nothing about disjointness of admission. Off an object the two coincide — being
+admitted there _is_ being written — so the object is the whole of the difference.
+
+Note what admission by names does _not_ read: `ρ`. An undeclared name disqualifies the option even
+where its rest codec would hold it, so an object's open part is unreachable through a union — the
+price of deciding by names is that only declared names decide, and an open object that must be an
+option should declare what it means to keep. An `opt` binding **widens** admission, which makes two
+options differing only in optional names the ambiguity to watch: two objects declaring only optional
+names both admit the empty map, however disjoint their names. `(dunion)`'s disjoint-literal premise
+below is the special case where the discriminator's names decide alone.
+
+**Occupancy is what decides at the declaration.** It is one coarse label per term per side: which
+constructor of `Value` the term may write, and which member of §1 it may store. Both
+over-approximate, and over-approximating is the safe direction — if `X ⊆ X′`, `Y ⊆ Y′` and
+`X′ ∩ Y′ = ∅` then `X ∩ Y = ∅` — so a coarse answer costs a discharge and never buys a wrong one.
+Where a term carries an arbitrary function the answer is `⊤`, every label: `held`'s `f` runs before
+the subterm and can move a value into any constructor, `custom` is arbitrary in both directions, and
+`legacy`'s `r` is arbitrary on the reading side.
+
+**The writable side's label is the constructor of the value, not the runtime kind**, and the
+difference does work. A kind collapses the three set families into one; the constructors do not, and
+`set(string)` writes a set of strings where `set(number)` writes a set of doubles. Ten constructors
+separate what eight kinds cannot. The readable side's label is the member, which the judgement's `μ`
+index already computes.
 
 `⊤` covers two situations the check treats alike and the semantics does not: **unknown** — `held`,
-`lazy`, `custom`, whose answer exists but cannot be read — and **everything** — `opaque`, which
-accepts every kind by design. **(K)** separates neither, and both fall to **(U)** per input. The
-difference resurfaces only inside `opaque`'s own derivation, where "everything" is precisely what
-makes its fixpoint's options pairwise kind-disjoint (§3).
+`custom` and `lazy`, whose answer exists but cannot be read without forcing — and **everything** —
+`opaque`, which accepts every kind by design. The row separates neither, and both fall to **(U)**
+per input. The difference resurfaces only inside `opaque`'s own derivation, where "everything" is
+precisely what makes its fixpoint's options pairwise kind-disjoint (§3).
 
-`ident(c)` holds when a term decides its own membership — when "this option accepted the value" is
-evidence, because the term checks the value against its own admissible set in **both** directions:
-
-|            |                                                                                                                                                                                                            |
-| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| holds      | `literal` — the admissible set is checked; `discriminatedUnion` — a tag lookup fails honestly; `refine` — `q` is checked on the way in _and_ on the way out, which is what deciding your own membership is; `number` and `decimal`, for the same reason: each gates §1's bound on both halves |
-| propagates | `set`, `array`, `record` through the element; `tuple` and `union` when _every_ subterm has it; `optional`, `fallback`, `legacy`, `nullable` through the subterm                                            |
-| never      | everything else — the _ungated_ ground scalars, `custom`, `opaque`, `lazy`; and `held`, whose functions are the caller's                                                                                                |
-
-`object` is the other self-deciding term, and it decides by a different device: **names, not
-attempts**. A name set `N` admits `object(s, ρ)` when every name in `N` is one `s` declares and every
-`req`-marked name of `s` is in `N` — an `opt` binding widens admission, which makes two options
-differing only in optional names the ambiguity to watch. Note what admission does _not_ read: `ρ`.
-An undeclared name disqualifies the option even where its rest codec would hold it, so an object's
-open part is unreachable through a union — the price of deciding by names is that only declared names
-decide, and an open object that must be an option should declare what it means to keep.
-`(dunion)`'s disjoint-literal premise below is the special case where the discriminator's names
-decide alone.
+**The two, conjoined, are the family.** An option's set of values is its occupancy intersected with
+its option admission, and its set of attributes likewise. Disjointness in either factor is enough,
+which is what leaves the row decidable where it decides at all: **on one side, two options separate
+when their occupancies on that side are disjoint; on both sides at once, when one option requires a
+name the other does not declare.** That is a question about two terms, answered by computation at
+the declaration. What it declines is an obligation and not a refusal.
 
 ```
 ⊢ cᵢ : Tᵢ ⇝ μᵢ  (i ∈ 1…n)    (D)
@@ -820,182 +850,96 @@ Three alternatives were declined, and each for a reason worth recording:
 **Mechanization note, and it is a negative result.** The narrowing bought no proof simplification
 whatsoever — the expectation going in was that it would. Every proof over `(dunion)` consumes only
 the *nonemptiness* of the tag set (`tagsOf_ne_nil`'s four-job inversion, `dunion_stamp`,
-`uniqueAdmission_byTag`, `ExactV_dunion`/`ExactA_dunion`), and none of them consults the arity. So
+`ExactV_dunion`/`ExactA_dunion`), and none of them consults the arity. So
 the premise changed from `Nonempty` to `card = 1`, one three-line bridge lemma was added to recover
 the weaker fact, and the `dunion` machinery went from 39 declarations / 350 lines to 40 / 353
 — the three lines being that bridge, with no proof changing length. The
 constraint is a statement about the language, not a lever on the model.
 
-`src/` is not aligned to this and aligning it is a separate call. `codec.ts:4415` records the
-opposite as deliberate — *"the whole admissible set, not one value: an option may answer to
-several tags"* — and `discriminatedUnion` takes a list of options (`codec.ts:4394`) rather than a
-table keyed by tag. The change there is one type-level check plus that comment; it is JH's.
-
 |       |                                                                                |                                                                                                                                                        |
 | ----- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **D** | `∀ i ≠ j. ¬(Tᵢ ⊆ Tⱼ) ∧ ¬(Tⱼ ⊆ Tᵢ)`                                             | Well-formedness: no option's held set subsumes another's. Decidable from the held sets alone. It does **not** discharge the readable side — see below. |
-| **K** | `∀ i ≠ j. κ(cᵢ) ∩ κ(cⱼ) = ∅ ∨ (ident(cᵢ) ∧ ident(cⱼ) ∧ adm(cᵢ) ∩ adm(cⱼ) = ∅)` | Writable: no value belongs to two options. A **discharger**, not a premise — it settles **(U)**'s writable side at the declaration where it holds, and where it fails the obligation stands. Needs `κ`, which the held sets do not determine. |
+| admission | `∀ i ≠ j. V(cᵢ) ∩ V(cⱼ) = ∅` on the writable side, `A(cᵢ) ∩ A(cⱼ) = ∅` on the readable one | No input reaches two options. A **discharger**, not a premise — it settles the side it decides at the declaration, and where it fails the obligation stands. Needs option admission, which the held sets do not determine. |
 
-Only **(D)** is a premise. **(K)** is the writable side's discharger, and the asymmetry is not an
+Only **(D)** is a premise, and it is the only condition here with a letter, because it appears in
+a rule. Everything in the discharger table is a discharger, and the asymmetry is not an
 oversight: **(D)** is a condition on the judgement's own index, so the rule can demand it, while
-**(K)** answers a question about inputs that the rule states as **(U)** and settles where it can.
+a discharger answers a question about inputs that the rule states as **(U)** and settles where it
+can.
 A union no discharger covers is still a term — `union(array(literal("A")), array(literal("B")))`
 and its `record` twin are ones people write — and what such a union lacks is not derivability but
 the theorem: its **(U)** is unsettled at the declaration, and the semantics enforces it per input by
-failing. Note where the failing lands. `adm` does not propagate through a container (below), so the
-options collide at exactly one input — the empty array, the empty map — which is also the one input
-neither writes nor reads once they collide, so the loss is that the union declines the empty case
-and nothing else. The same union built from `object`s is decided outright, by names rather than by
-`adm`: a `req` binding is a name the empty item lacks, so there is no empty case to collide at.
+failing. Note where the failing lands, and that it is a fact about the two terms rather than a limit
+of any table: a container admits its empty case whatever its element admits, so the options collide
+at exactly one input — the empty array, the empty map — which is also the one input neither writes
+nor reads once they collide, so the loss is that the union declines the empty case and nothing else.
+The same union built from `object`s is decided outright, by names: a `req` binding is a name the
+empty item lacks, so there is no empty case to collide at.
 
-**(D)** and **(K)** ask the same kind of question of the two sides of the pair, and neither implies
-the other. `union(array(string), array(number))` satisfies **(D)** — the held sets are incomparable —
-and is not discharged by **(K)**: both accept a sequence, and neither is `ident`.
-`union(set(string), set(number))` is the same story with a twist worth naming: its options write
-_different members_, so reading was never in doubt. Only the direction that cannot be resolved is
-left to **(U)** — and it is degraded twice over, because a set's member is computed from its element, so those
-options are `⇝ SS` and `⇝ NS` and the union's own `μ` is `⊤` by the `(union)` rule. That is a second,
-independent loss: a `⊤` term is one only **(MP)** constrains, where a `⇝ SS` term is pinned by
-**(W)** and its read-side corollary.
+**(D)** and the admission row ask the same kind of question of the two sides of the pair, and
+neither implies the other. `union(array(string), array(number))` satisfies **(D)** — the held sets
+are incomparable — and is discharged by nothing: both options write a sequence, both store `L`,
+and both admit the empty array.
 
-Why `ident` exempts a pair is the interesting half. **Encoding does not validate.** A term's `e` is
-defined on `T` and does whatever it does off it, so "this option encoded the value" carries no
-information about whether the value was meant for it. Only a term that knows its own membership
-answers a real question when attempted — which is why **(K)** discharges
-`union(literal("A"), literal("B"))` although both accept a string.
+`union(set(string), set(number))` _is_ discharged, and on both sides, which is worth seeing because
+the writable side is the one that labels by constructor. Those options store `SS` and `NS`, so
+reading was never in doubt; and they write a set of strings and a set of doubles, which are two
+constructors, so the writing is settled as well. What remains is a loss of a different kind: a set's
+member is computed from its element, so the options are `⇝ SS` and `⇝ NS` and the union's own `μ` is
+`⊤` by the `(union)` rule. A `⊤` term is one only **(MP)** constrains, where a `⇝ SS` term is pinned
+by **(W)** and its read-side corollary. That loss is the union's and not the discharger's.
 
-But `ident` is only half of that exemption, and **(K)** cannot be weakened to
-`κ(cᵢ) ∩ κ(cⱼ) = ∅ ∨ ident(cᵢ) ∨ ident(cⱼ)`. Two counterexamples:
+Two pairs show the two families failing independently, one each way. `union(set(string),
+set(decimal))` writes a set of strings at both options — a decimal is _held_ as a string — and
+stores `SS` at one and `NS` at the other, so the readable side separates and the writable one does
+not. `union(number, decimal)` is the mirror: a number writes a double and a decimal a string, and
+both store `N`, so the writable side separates and the readable one does not. Neither union is
+resolved, and each fails on a different half, which is why the two families are asked separately and
+never reconciled.
 
-- **One side is not enough.** `union(literal("A"), string)` has `ident` on the left, so the disjunction
-  is satisfied — and both options admit `"A"`. A real answer from one option does not resolve a pair;
-  the other option is still answering, and still meaninglessly.
-- **Two sides are not enough either.** `ident` propagates through `array`, so
-  `union(array(literal("A")), array(literal("B")))` has it on both — and both admit `[]`. Propagating
-  `ident` through a container does not propagate _disjointness_ of what the options accept: every
-  container admits its empty case, which no element ever sees.
+**Attempting an option answers a real question, and that is what changed.** The rule this section
+replaces asked, before it compared any set, whether a term _decides its own membership_ — whether
+"this option accepted the value" is evidence at all — on the ground that a term's `e` is defined on
+`T` and does whatever it does off it. An admissible set that _is_ `dom(e)` answers that question and
+leaves nothing for a second condition to add. `union(literal("A"), literal("B"))` is discharged
+because `{"A"}` and `{"B"}` do not meet; `union(literal("A"), string)` is not, because `{"A"}` sits
+inside every string. A term that decides nothing about its values has the widest domain, and the
+widest domain is the one that fails to be disjoint.
 
-What the exemption actually needs is what the worked example above quietly has: `ident` on **both**
-sides, and admissible sets that do not meet. So the third auxiliary is the set a term checks against
-when `ident(c)` holds — a `literal`'s values, a `discriminatedUnion`'s tags. It is deliberately _not_
-propagated through the containers: it would have to contain the empty array whatever the element is,
-so container options are never separated this way and the second counterexample stays refused.
+Two counterexamples are kept, because the rule that was tried in place of the sets is a disjunction
+over that same question, and each refutes one form of it:
 
-**It is two functions, not one.** A codec is a pair, and a term's admissible set is a claim about one
-half of it at a time: `adm(c) ⊆ Value` is what `e` will accept, `admA(c) ⊆ 𝔸` is what `p` will
-accept. They agree on most terms and part on four — and the partings go both ways.
+- **One side is not enough.** `union(literal("A"), string)` has the left option deciding its own
+  membership, so "either option decides" is satisfied — and both options admit `"A"`. A real answer
+  from one option does not resolve a pair; the other option is still answering, and still
+  meaninglessly.
+- **Two sides are not enough either.** `union(array(literal("A")), array(literal("B")))` has both
+  options as decisive as a term can be — and both admit `[]`. Deciding at the element does not
+  decide at the container: every container admits its empty case, which no element ever sees.
 
-| term                        | `adm` — value side   | `admA` — attribute side           |
-| --------------------------- | -------------------- | --------------------------------- |
-| `literal(ℓ)` at base `string` | `ℓ`                | `ℓ`, as stored `S`                |
-| `literal(ℓ)` at base `number` | `ℓ`                | `ℓ`, one read out — `admALit`     |
-| `discriminatedUnion(d, o…)` | the pooled tags of the `oᵢ`, found by looking `d` up | the same, in the stored item |
-| `number`                    | `D`                  | `dom(p)`, asked of the codec      |
-| `decimal`                   | `Stored`             | `Stored`, as stored `N`           |
-| `refine(c, q)`              | `adm(c) ∩ q`         | `admA(c) ∩ q∘p` — `refineReads`   |
-| `legacy(c, r)`              | `adm(c)`             | **`⊤`**                           |
-| `union(c₁ … cₙ)`            | `⋃ adm(cᵢ)`          | `⋃ admA(cᵢ)`                      |
-| `nullable(c)`               | `adm(c) ∪ {null}`    | `admA(c) ∪ {⟨NULL, ∗⟩}`           |
-| `held(c, f, g)`             | `adm(c) ∘ f`         | `admA(c)`                         |
-| anything else               | `⊤`                  | `⊤`                               |
+**A pair sharing a base separates where neither term's own sets do**, which is the discharger
+table's fourth row rather than this section's, and the reason is worth stating once. `number` and
+every numeric literal are the **same base** under different predicates — the base being every finite
+double written as its shortest text, and the predicates `D` and `∈ ℓ`. Two literals over disjoint
+value sets are two refinements of one base; refinements of one base read an attribute to the _same_
+value, so at most one predicate accepts it, and both sides separate.
+`refine(number, positive)` against `refine(number, negative)` is the same argument outside `literal`.
+What carries it is the pair: `V` and `A` answer about one term at a time, and this answer is about
+two.
 
-**One parting into `⊤` remains, and the rest of the table asks its codec.** Why each row parts
-the way it does is below — the reasons are the rows' content, not their history.
+`held` reaches a pair no other row does, and on one side only.
+`union(literal("A"), held(literal("B"), f, g))` separates on the readable side for _every_ `f` and
+`g`, the two sets being `{⟨S, "A"⟩}` and `{⟨S, "B"⟩}`: the wrapper never decides, the subterm does,
+and reading through the wrapper is what lets the question be asked of it. The writable side stays an
+obligation, `f` being free to move a value into any constructor. And
+`union(literal("A"), held(literal("A"), f, g))`, the counterexample below, separates on neither
+side. Note that the member disjunct is no help in either case: both options are `⇝ S`.
 
-Each `⊤` was bought with the observation that **no syntactic set of attributes bounds the readable
-side** — true of `number`, of a numeric `literal`, and of `refine`. The inference does not follow: a
-row is not confined to syntax. It may **ask the denotation**, and the denotation is exactly what
-produces the value in question. `admA .number` is `dom(numberCodec.p)`; `admALit .number` is
-`dom((literalCodec .number ℓ).p)`; `refine`'s row decodes with the base and applies `q` to the result
-(`refineReads`). Each is `dom(p)` on the nose rather than a description of it, and each was
-previously recorded as impossible. `held`'s value side went the same way for a different reason: `f`
-is *data the term carries*, and a row is a function that may apply it, so `adm(c) ∘ f` is the
-pullback rather than a `⊤`.
-
-What survives is **one** parting into `⊤` — `legacy` on the read side — and one asymmetry of *shape*
-without a `⊤`: `held` pulls back along `f` where `admA` passes through, because `g` is total and
-post-processes while `f` gates the write.
-
-Row by row, and the reason in each case is a fact about the term rather than about the table:
-
-- **`legacy(c, r)`.** The whole content of `legacy` is that `p` reads attributes `c` does not, so a
-  passthrough `admA` would claim a bound on exactly the direction `r` widens. `legacy(literal("A"), r)`
-  with `r` reading `⟨N, "1"⟩` to `"A"` reads an attribute `admA(literal("A"))` refuses, so the
-  passthrough is **unsound**, not merely coarse. The value side is untouched:
-  `legacy` adds no way to *write*, so `adm` passes through.
-- **A numeric `literal`.** Its read side goes through the numeral-to-double reading of §1, which is
-  not a membership test on the stored text: distinct numerals read to the same double, so a
-  syntactic set of values bounds no set of attributes. This is the one place the two literal rules
-  part, and the reason is §1's and not §3's: a **string** literal's stored text _is_ its value, so
-  `ℓ` bounds both sides and the table separates such a union unaided; a numeric literal's is not,
-  so only the value side is bounded. Both rules are otherwise the same term — `refine` over the
-  ground codec of their member, at `∈ ℓ`.
-
-  The stored texts *are* known at the declaration, so `admA = { ⟨N, text(ℓᵢ)⟩ }` looks available. It
-  is not, and the store is why: `literal(10²¹)` is written `⟨N, "1e+21"⟩` and handed back
-  `⟨N, "1000000000000000000000"⟩`, which only the numeral-to-double read recovers. A syntactic `admA`
-  would refuse a row the codec itself wrote — `ker p` shrinking below `η`. So no _table_ row bounds a
-  numeric literal's attribute side, while its value side separates as a string literal's does.
-
-  That is a limit of the table, not of the calculus, and the difference matters because it is the
-  whole shape of a numeric literal set. `number` and every numeric literal are the **same base**
-  under different predicates — the base being every finite double written as its shortest text, and
-  the predicates `D` and `∈ ℓ`. Two literals over disjoint value sets are therefore two refinements
-  of one base, and refinements of one base read an attribute to the _same_ value, so at most one
-  predicate accepts it. Both sides separate. A numeric literal union is options told apart by the
-  value a read produces, never by the text the store holds — and the table cannot see it because a
-  table answers about one term at a time, where this is a fact about a family sharing a base.
-- **`refine(c, q)`**, which parts because `q` is a predicate on **values**. It tightens what the
-  term will write — `e` is defined only where `q` holds, so `adm(c) ∩ q` is a sound bound and a
-  strictly better one than passing `adm(c)` through. The reading side cannot follow: `q` tests the
-  value a read _produces_, and no syntactic set of attributes bounds that. Without the intersection
-  a refinement's predicate is invisible to every discharger, and two refinements of one base with
-  disjoint predicates — `refine(number, positive)` against `refine(number, negative)` — fall to
-  **(U)** per input despite being disjoint by construction. With it they separate on the writable
-  side, which is the only side `q` can speak for.
-
-  This is also why `refine` _holds_ `ident` rather than propagating it: a term that checks its own
-  set in both directions is the definition of deciding its own membership, and §3 already argues
-  the point — a `p` returning the value it read without verifying `q` would break **(C)**.
-
-  The readable side is not lost, though it cannot be recovered from this table. Two refinements of
-  **one base** read an attribute to the _same_ value, so at most one predicate accepts it, and the
-  readable side separates for exactly the reason the writable side does. That is a condition on a
-  _pair sharing a base_ rather than on either option's admissible set, which is why it appears in
-  the discharger table above and not here: `adm` and `admA` answer about one term at a time, and
-  this answer is about two.
-- **`held(c, f, g)`**, and this one parts the other way — the only row where `admA` sees further
-  than `adm`. An adapter is opaque on the side its functions gate, and they gate one side only: `f`
-  sits in front of `e`, so what the term will *write* is unknowable and `adm` is `⊤`; `g` sits
-  behind `p` and is total, so it changes which value comes out and never which attributes go in.
-  `dom(p)` is the subterm's exactly, and `admA` passes through.
-
-  What this buys is a pair no other row reaches. `union(literal("A"), held(literal("B"), f, g))`
-  separates on the readable side for *every* `f` and `g` — the footprints are `{S "A"}` and
-  `{S "B"}` — while `union(literal("A"), held(literal("A"), f, g))`, the counterexample below,
-  still does not. The wrapper never decides; the subterm does, and reading through the wrapper is
-  what lets the question be asked of it. Note that the member disjunct is no help in either case:
-  both options are `⇝ S`.
-
-A union takes the `⋃` of its options', for the same reason `κ` does: a union admits what some
-option admits. Without that row the union _spelling_ of a set of literals would forget both sets
-where the single n-ary term keeps them, and the two would separate differently for no reason the
-semantics gives. With it they do not — which is what makes `literal(ℓ₁, ℓ₂)` and
-`union(literal(ℓ₁), literal(ℓ₂))` interchangeable rather than merely equal as pairs, and so what
-makes `union` an honest escape hatch rather than a lossy one.
-
-Two notes on what is _not_ in the table. `optional` and `fallback` are **fields** (§4), not terms,
-so nothing passes through them: `adm` is a function on terms and has no case to give them. And the
-`⊤` default makes **(K)**'s `ident` conjuncts mostly redundant rather than decorative — two terms
-whose sets are both `⊤` can never be disjoint, so disjointness already implies each side carries a
-real set, which is what `ident` says. They are kept because the
-recovery needs a side condition, holding only where each option admits *something*, and a derivable
-term admits nothing: `discriminatedUnion(d)` with no options is disjoint from every term, including
-those carrying no set at all. A stated premise is easier to check than a recovered one.
-
-The residue of the old rule is the honest one: the pairs `ident` genuinely resolves are the pairs of
-`literal`s with disjoint values, and the pairs of `discriminatedUnion`s with disjoint tags — the
-latter being the tag-disjointness row of the discharger table, arrived at from the other direction.
+Two notes on what has no set of its own. `optional` and `fallback` are **fields** (§4), not terms,
+so nothing passes through them: admission is a function on terms and has no case to give them. And a
+union's own admission is not the join of its options' — it is the set where **exactly one** option
+admits, which is `select` written as a set. Where two options both admit, the union writes nothing,
+which is the empty array above stated the other way round.
 
 **(D)** as written is _incomparability_, not disjointness. Two object options `⟨a : String⟩` and
 `⟨b : String⟩` are incomparable yet share the inhabitant `⟨a ↦ "1", b ↦ "2"⟩` — so **(D)** admits
@@ -1013,18 +957,20 @@ disjoint sets of values and still read one attribute, each to its own value.
 
 So **(D)** is a well-formedness condition on the judgement's `T` index and not a discharger of
 **(U)**: no condition on held sets can be one. What decides the readable side is a condition on
-_stored attributes_ — distinct members `μᵢ ≠ μⱼ`, or disjoint `admA` — which is what the first row
-of the discharger table takes. `admA` rather than `adm` is the point: a condition on values cannot decide a
-question about attributes.
+_stored attributes_ — distinct members `μᵢ ≠ μⱼ`, or disjoint readable-side admission — which is
+what the first two rows of the discharger table take. Attributes rather than values is the point: a
+condition on values cannot decide a question about attributes.
 
 ### Theorem (soundness)
 
 Every derivable `⊢ c : T ⇝ μ`, and every `⊢ f : T ⊗ π ⇝ μ`, denotes a pair satisfying **(R)**,
-**(C)**, **(W)**, and **(MP)** in the strong form `e(p(a)) ≼ a` defined below — with two residues,
-both named exactly: **(MP)** is off on the attributes a `legacy` in the derivation rereads, and
-every `(union)` in the derivation carries **(U)** _where the union acts_ as an obligation, which
-the dischargers of this section settle at the declaration wherever they decide a pair — `(dunion)`
-and `opaque` outright.
+**(C)**, **(W)**, and **(MP)** in the strong form `e(p(a)) ≼ a` defined below — with three residues,
+all named exactly: **(MP)** is off on the attributes a `legacy` in the derivation rereads; every
+`(union)` in the derivation carries **(U)** _where the union acts_ as an obligation, which the
+dischargers of this section settle at the declaration wherever they decide a pair — `(dunion)` and
+`opaque` outright; and a `(lazy)` whose unfolding re-enters itself **through a union** is outside
+the theorem entirely, for the reason §5 gives under confluent admission and the `(lazy)` case
+below repeats: there is no fixpoint there to prove anything about.
 
 Three premises in §3–§4 — `ran(r) ⊆ dom(e)` and coherence on `(legacy)`, `v(∗) ∈ dom(e)` on
 `(fallback)` — exist because this proof failed without them. That is the theorem earning its keep:
@@ -1112,12 +1058,29 @@ not an equation the proof has to earn.
 
 _custom._ The laws are the premises, verbatim; **(W)** is vacuous at `⊤`.
 
-_lazy._ The pair of `γ(∗)`. The induction needs a word, since `γ(∗)`'s derivation may contain
-`lazy(γ)` again: induct on the pair (input size, derivation size), lexicographically. Containers
-strictly shrink the input; the wrappers shrink the derivation and never grow the input; and a
-`lazy` that re-enters itself without passing a container defines nothing at that input — the laws
-quantify over `dom`, and hold over an empty one. Partiality is doing the termination argument's
-work.
+_lazy._ The pair of `γ(∗)`. This case is **three arguments and not one**, and separating them is
+the correction — what a `γ` re-enters itself through decides which one applies.
+
+**Through a container.** Induct on the pair (input size, derivation size), lexicographically.
+Containers strictly shrink the input; the wrappers shrink the derivation and never grow the input.
+
+**Through wrappers alone.** The measure does not decrease: `γ(∗)`'s derivation contains `lazy(γ)`
+again, at the same input, so neither component falls and the induction has nothing to say. What
+covers this `γ` is not the induction but partiality — each wrapper moves one way in the information
+order, so the unfolding never gains a definedness it did not start with, and it defines nothing at
+that input. The laws quantify over `dom` and hold over an empty one.
+
+**Through a union.** Outside the theorem, and this is the third residue. Unique admission is a
+_negative_ condition on the other options, so it is anti-monotone in exactly the argument a
+fixpoint must grow: as the recursive options grow, admission grows, and the answer collapses from
+`some` to `none`. There is no least fixpoint, so there is no pair here to prove the laws of — not a
+pair with an empty domain, which is what the wrapper case has, but no semantics at all. That is the
+same exclusion §5 records under confluent admission when it says `lazy` under `union` is
+unmodelled, and it is a residue of this theorem rather than a remark elsewhere.
+
+Partiality is doing the termination argument's work in the second case, which is why it has to be
+its own step. The first draft of this paragraph ran the three together and claimed the second
+case's answer for the third — asserting an empty pair where §5 says there is no pair.
 
 **Fields.** A field denotes a pair over presence-extended domains — `e♭ : T ⇀ 𝔸 ∪ {ε}`,
 `p♭ : (𝔸 ∪ {ε}) ⇀ T`, `ε` the absent binding — with `member(ε)` undefined and the laws read over
@@ -1156,7 +1119,7 @@ a set has no interior members — the container fixes its elements' member, whic
 element's own **(MP)** is never even invoked inside one.
 
 **Sums.** Admission, per side: option `i` admits attribute `a` when the member/name filter passes
-and `pᵢ(a)` is defined, and admits value `t` when the `κ`/name filter passes and `eᵢ(t)` is
+and `pᵢ(a)` is defined, and admits value `t` when the shape/name filter passes and `eᵢ(t)` is
 defined. `p(a) = pᵢ(a)` for the unique admitting `i`, else undefined; `e(t)` dually — **(U)** as
 semantics rather than aspiration. The laws, and where each needs **(U)**:
 
@@ -1214,7 +1177,7 @@ everywhere both are defined.
 
 | Equation                                                            |                                                                                                                                                                                                                                   |
 | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `union(array(c₁), array(c₂)) ≢ array(union(c₁, c₂))`                | Left: a sequence homogeneous in one option. Right: a sequence of either, elementwise. Different held sets, and only the right has (K) to discharge its (U).                                                                           |
+| `union(array(c₁), array(c₂)) ≢ array(union(c₁, c₂))`                | Left: a sequence homogeneous in one option. Right: a sequence of either, elementwise. Different held sets, and only the right has a discharger for its (U).                                                                           |
 | `tuple(c₁ … cₙ, rest(c)) ≢ tuple(c₁ … cₙ) ` and `≢ array(union(…))` | A fixed head with a repeating tail is neither: a tuple has no tail and an array has no head.                                                                                                                                      |
 | `set(union(c₁, c₂))` — not derivable                                | The premise on `set` demands a member, and a union of options writing different members has none.                                                                                                                                 |
 | `refine(held(c, f, g), q) ≢ held(refine(c, q), f, g)`               | The refinement applies on opposite sides of the iso, so `q` is a subset of different sets. Two different terms, both meaningful.                                                                                                  |
@@ -1232,7 +1195,7 @@ Three layers answer different questions, and conflating them is what makes a sid
 optional. A grammar over the terms — a regular tree grammar, with nonterminals indexed by `μ` — says
 which terms can be _written_. It cannot express **(D)**, which relates siblings rather than a term to
 its subterms, so well-formedness needs the judgement of §3 and §5 rather than a production — nor
-**(K)** and **(U)**, which are not about the term at all but about the inputs it is given.
+the dischargers and **(U)**, which are not about the term at all but about the inputs it is given.
 And the judgement in turn says nothing about what a term _means_; that is §2, the pair and its laws —
 a connection §5's soundness theorem proves rather than leaves implied.
 
@@ -1241,7 +1204,8 @@ Which places the calculus: **§1** a universal domain, **§2** types as quotient
 equational theory. And the terms are generated by a small algebra, which the soundness proof's
 grouping makes official: **points** (the ground terms); one **partial iso** (`held`, with `refine`
 its prism); one **agreeing read-extension** (`legacy`); three **products** — positional (`array`,
-`tuple`), keyed (`record`, `object`), unordered (`set`) — all instances of one traversal argument;
+`tuple`) and keyed (`record`, `object`), instances of one traversal argument, and unordered (`set`),
+which is the image argument, with injectivity from **(R)**;
 one **sum** (`union`), resolved by unique admission, with `(dunion)` and `opaque` the two whose (U)
 is a theorem; and a **fixpoint** (`lazy`, and `opaque` again). Fields are the keyed product's
 presence decoration, and `nullable` is that sum's guarded insertion (§3) rather than a term of its own.
@@ -1249,15 +1213,15 @@ presence decoration, and `nullable` is that sum's guarded insertion (§3) rather
 One more thing the algebra makes visible, and it is worth stating because it is not obvious from
 the rules. **The two halves of the pair are the same construction at two carriers, everywhere the
 calculus builds something itself.** A sum filters by the admission _that side_ reads and acts
-through the option answering alone — the same sentence for `e` and for `p`, with `κ`-admission
-swapped for member-admission. Adjoining the null point is the same construction on values and on
+through the option answering alone — the same sentence for `e` and for `p`, with value-admission
+swapped for attribute-admission. Adjoining the null point is the same construction on values and on
 attributes. A product traverses. Reading a discriminator's tag is one lookup, spelled once per
 carrier.
 
 Exactly three terms break it, and they are the same three every time: `held`, `refine` and
 `legacy` — the wrappers carrying a **caller's function that is not itself a codec**. `held`'s `f`
-gates the writing while `g` only post-processes the reading, which is why `admA` sees through it and
-`adm` cannot (§5). `legacy`'s `r` widens the reading and touches the writing not at all. `refine`'s
+gates the writing while `g` only post-processes the reading, which is why the readable side sees
+through it and the writable one cannot (§5). `legacy`'s `r` widens the reading and touches the writing not at all. `refine`'s
 `q` is a predicate on _values_, so it gates one carrier directly and the other only after a read.
 `custom` is the degenerate case: both halves are the caller's, so there is no shared construction to
 be symmetric about.

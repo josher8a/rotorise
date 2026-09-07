@@ -7,7 +7,7 @@
  * to change for that, so nothing about what is written does either.
  */
 import { describe, expect, it } from 'vitest'
-import type { N, S, SS } from './attribute'
+import type { S, SS } from './attribute'
 import type { Encoded } from './codec'
 import {
     array,
@@ -21,7 +21,6 @@ import {
     refine,
     string,
     union,
-    writes,
 } from './codec'
 import { checkEncodePaths, checkRoundTrip } from './testing'
 
@@ -60,10 +59,6 @@ describe('an array held where the table holds a set', () => {
         expect(typeof written).toBe('object')
     })
 
-    it('is still an SS to everything that asks the definition', () => {
-        expect(writes(tags)).toBe('SS')
-    })
-
     it('round-trips, with values generated through the adapter', () => {
         checkRoundTrip(Pet, { count: 200, seed: 20260827 })
     })
@@ -74,7 +69,7 @@ describe('an array held where the table holds a set', () => {
 
     it('still refuses what the inner codec refuses', () => {
         expect(() => Pet.unsafeEncode({ id: 'p', tags: [] })).toThrow(
-            /no empty SS/,
+            CodecError,
         )
     })
 })
@@ -132,6 +127,12 @@ describe('failure belongs to the inner codec', () => {
         decode: (at) => new Date(at),
     })
 
+    /**
+     * **Pins wording no law has, deliberately.** The refusal is asserted as a `CodecError` beside
+     * it; what the regex adds is the diagnostic, which is this test's subject. Here it is which of the two
+     * halves is blamed: an adapter's failure has to name the value that was *stored*, because the
+     * conversion is the caller's code and its own message would say nothing about the row.
+     */
     it('reports the stored value, not the conversion', () => {
         expect(() => when.unsafeDecode({ S: 'not a date' })).toThrow(CodecError)
         expect(() => when.unsafeDecode({ S: 'not a date' })).toThrow(

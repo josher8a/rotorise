@@ -36,7 +36,7 @@
   This exists because a claim in `fa9ce05`'s commit message — "a reachability pass over the file
   reports 30 unreferenced declarations against 34 at HEAD" — was a *regex* over the source text,
   counting occurrences inside docstrings and comments, and was wrong by an order of magnitude.
-  `WORKING-AGREEMENT.md` says grep is not verification; this is what verification costs.
+  Grep is not verification; this is what verification costs.
 -/
 import Calculus.Orthogonality
 import Calculus.Axioms

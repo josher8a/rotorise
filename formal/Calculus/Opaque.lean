@@ -31,13 +31,19 @@ Structure:
   each side ranges over. Each collapses `altCodec`'s filter to a single option by
   kind-disjointness, and is where the "at most one admits" argument is actually cashed.
 
-  **Eight on the write side and ten on the read side**, and the asymmetry is §1's rather
-  than an oversight: `Value` has eight constructors and `Attr` has ten, because the three
-  wire sets `SS`/`NS`/`BS` are one *kind* and three *members* (`Kind`, `Domain.lean`).
-  Kind-disjointness is what the (U) argument needs, so the write side has one unfolding per
-  option; the read side has one per member it can be handed, three of which route to the
-  same option. An earlier version of this header called them "the eight unfoldings, one per
-  kind", which is true of `e` and false of `p`.
+  **Ten a side**, one per constructor of the domain that side ranges over: `Value` has ten
+  and so does `Attr`, the three wire sets appearing on both (`strSet`/`numSet`/`binSet`
+  against `ss`/`ns`/`bs`).
+
+  **There is no asymmetry here, and this header used to explain one.** It said eight on the
+  write side against ten on the read side, and grounded the difference in the wire sets
+  being "one *kind* and three *members*" — which is the very reason `Value` has three of
+  them too, so the explanation refuted its own premise. The counts were wrong and the
+  argument was wrong about a fact that could be counted; both are corrected here, and what
+  survives is the part that was never about a count. Kind-disjointness is what the (U)
+  argument needs, so what each unfolding does is collapse `altCodec`'s filter to a single
+  option — and on the read side three members route to one option, which is a fact about
+  `Kind` (`Domain.lean`) and not about how many lemmas there are.
 -/
 
 namespace Calculus

@@ -10,7 +10,7 @@
  * has: nothing to unwrap, nothing allocated, and `instanceof Error` tells the two apart.
  */
 import { describe, expect, it } from 'vitest'
-import { type Attribute, carrying } from './attribute'
+import type { Attribute } from './attribute'
 import type { AttributeCodec } from './codec'
 import {
     array,
@@ -41,12 +41,10 @@ const Tree: AttributeCodec<Tree, Attribute<'M'>> = lazy(() =>
     object({ name: string, children: optional(array(Tree)) }),
 )
 
-type Visit = { type: 'CHECKUP'; petId: string }
 const Visits = discriminatedUnion('type', [
     object({ type: string('CHECKUP'), petId: string }),
 ]).item
 
-type Line = { petId: string } | { petIds: readonly string[] }
 const Lines = union([
     object({ petId: string }),
     object({ petIds: array(string) }),
@@ -78,6 +76,8 @@ describe('the safe pair returns the failure', () => {
         expect(decoded.name).toBe('Rex')
     })
 
+    // PINS A FACT NO LAW HAS, deliberately: that the safe pair reports the *same* assembled
+    // message as the throwing one is the claim, so the string is the subject here too. It stays.
     it('carries the path through nesting, as the thrown one does', () => {
         const Order = object({
             lines: array(object({ note: string })),

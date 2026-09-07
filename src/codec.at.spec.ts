@@ -9,7 +9,6 @@
 import { describe, expect, it } from 'vitest'
 import {
     array,
-    CodecError,
     discriminatedUnion,
     number,
     object,

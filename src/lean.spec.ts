@@ -27,6 +27,7 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import type { AttributeValue } from './attribute'
 import type { AnyCodec, AttributeCodec } from './codec'
 import {
     array,
@@ -51,14 +52,32 @@ import {
     tuple,
     union,
 } from './codec'
-import type { Vector } from './lean'
+import { accepts } from './denote'
+import type {
+    ReadResolution,
+    ReadVerdict,
+    Refusal,
+    Resolution,
+    Separation,
+    Vector,
+} from './lean'
 import {
     LeanUnemittable,
     leanAttrOf,
+    leanReadModule,
+    leanReadResolution,
+    leanReadVector,
+    leanReadVectorModule,
+    leanResolutionModule,
+    leanSeparation,
+    leanSeparationModule,
     leanTermOf,
     leanValueOf,
     leanVector,
     leanVectorModule,
+    readResolutionIsUnstatable,
+    readRowIsStuck,
+    readVectorIsUnstatable,
 } from './lean'
 
 /** The emitter takes the erased codec; the constructors return precise ones. */
@@ -167,16 +186,22 @@ describe('terms', () => {
     })
 
     /**
-     * And a *restricted* element is refused rather than emitted as its base.
+     * A *restricted* element is printed as the restriction of the set it is.
      *
-     * `setCodec_restrict` says the set of a restriction writes what the restriction of a set writes,
-     * so nothing is lost as a **codec** — but it is an equation between codecs, and `Term.set` has
-     * no room for the predicate. Emitting `Term.set SetBase.string` for `string('a','b')` would
-     * state a theorem about a term that admits `'z'`, which this one does not.
+     * `string.set('a','b')` is `refine(set(string), each(members …))` and the model spells that
+     * predicate the same way, `Pred.each (Pred.members k ls)` — the two `Predicate` types are one
+     * shape. It used to print the predicate's *meaning*, `liftQ (inL k ls)`, because `Term.refine`
+     * carried a function and there was no constructor to print; `Pred.eval` is where those two
+     * expressions live now. Both halves are data the term carries, so both print, and the equation
+     * licensing the spelling is `setCodec_restrict` on `e` and `setCodec_restrict_p` on `p`.
+     *
+     * **A closure element is still refused, and permanently.** The predicate is a caller's
+     * JavaScript function; the registry recognises two by reference and there is no expression for
+     * any other. That refusal is not waiting on a pass.
      */
-    it('refuses a set of a restricted element rather than widening it', () => {
-        expect(() => leanTermOf(erase(string.set('a', 'b')))).toThrow(
-            /\*restricted\* element/,
+    it('prints a set of a literal element, and refuses one over a closure', () => {
+        expect(leanTermOf(erase(string.set('a', 'b')))).toBe(
+            'Term.refine (Term.set SetBase.string) (Pred.each (Pred.members GroundKind.string (NEFinset.of "a" {"b"})))',
         )
         const positive = refine(
             decimal,
@@ -184,7 +209,28 @@ describe('terms', () => {
             { describe: 'non-negative' },
         )
         expect(() => leanTermOf(erase(positive.set()))).toThrow(
-            /\*restricted\* element/,
+            /not one this library ships/,
+        )
+    })
+
+    /**
+     * The refusal that had no test, and it needs a cast to reach.
+     *
+     * A codec's definition is a term, so nothing well typed hands the emitter a field and the branch
+     * reads as dead. It is not: a brand is not a proof and a cast defeats a brand, which is why the
+     * entry takes a declaration and refuses one, and why this is asserted through `erase` rather than
+     * left to the type. `Field.optional` is emitted where a field belongs — in an object's table —
+     * and the two spellings are what §4's strata mean.
+     */
+    it('refuses a field where a term belongs, reached past a cast', () => {
+        expect(() => leanTermOf(erase(optional(string)))).toThrow(
+            /a §4 \*field\*, not a term/,
+        )
+        expect(() => leanTermOf(erase(fallback(string, 'x')))).toThrow(
+            /`optional`\/`fallback` denote `Field`/,
+        )
+        expect(leanTermOf(erase(object({ a: optional(string) })))).toContain(
+            'Field.optional',
         )
     })
 
@@ -197,48 +243,46 @@ describe('terms', () => {
         expect(
             leanTermOf(erase(object({ a: string, b: optional(boolean) }))),
         ).toBe(
-            'Term.object {"a", "b"} (fun k => if k.1 = "a" then Field.req (Term.string) else Field.optional (Term.boolean)) Rest.drop',
+            'Term.object (Body.mk {"a", "b"} (fun k => if k.1 = "a" then Field.req (Term.string) else Field.optional (Term.boolean)) Rest.drop)',
         )
     })
 
     /** The empty key set has no `else` to fall through to, so the function is the absurd one. */
     it('emits an object with no fields as the absurd function', () => {
         expect(leanTermOf(erase(object({})))).toBe(
-            'Term.object ∅ (fun k => absurd k.2 (Finset.not_mem_empty k.1)) Rest.drop',
+            'Term.object (Body.mk ∅ (fun k => absurd k.2 (Finset.not_mem_empty k.1)) Rest.drop)',
         )
     })
 
     it('emits a fallback field with its stand-in value', () => {
-        expect(
-            leanTermOf(erase(object({ a: fallback(string, () => 'd') }))),
-        ).toBe(
-            'Term.object {"a"} (fun k => Field.fallback (Term.string) (Value.str "d")) Rest.drop',
+        expect(leanTermOf(erase(object({ a: fallback(string, 'd') })))).toBe(
+            'Term.object (Body.mk {"a"} (fun k => Field.fallback (Term.string) (Value.str "d")) Rest.drop)',
         )
     })
 
     it('emits an open object as `Rest.codec`', () => {
         expect(leanTermOf(erase(object({ a: string }, boolean)))).toBe(
-            'Term.object {"a"} (fun k => Field.req (Term.string)) (Rest.codec (Term.boolean))',
+            'Term.object (Body.mk {"a"} (fun k => Field.req (Term.string)) (Rest.codec (Term.boolean)))',
         )
     })
 
     /**
      * **The place the emitter used to guess.**
      *
-     * `CodecDef` recorded the rest *codec*, and both `'drop'` and `'refuse'` recorded nothing — so
+     * `Def` recorded the rest *codec*, and both `'drop'` and `'refuse'` recorded nothing — so
      * the definition alone could not tell them apart and this wrote `Rest.drop` for either. It was
      * not wrong for the vectors this module writes: `objectCodec`'s `e` is `objWrite sems rc?`,
      * which never sees the `kn` filter the policy decides, and `rcOf` is `none` for both, so the two
      * denote the *same* `e`. It was wrong about the codec, and a decode-direction vector — whose `p`
-     * is exactly where they differ — would have been silently false. `CodecDef['rest']` now carries
+     * is exactly where they differ — would have been silently false. `Body['rest']` now carries
      * the policy, and the emitter reads it rather than guessing.
      */
     it('tells `refuse` from `drop`, which a decode vector would need', () => {
         expect(leanTermOf(erase(object({ a: string }, 'refuse')))).toBe(
-            'Term.object {"a"} (fun k => Field.req (Term.string)) Rest.refuse',
+            'Term.object (Body.mk {"a"} (fun k => Field.req (Term.string)) Rest.refuse)',
         )
         expect(leanTermOf(erase(object({ a: string }, 'drop')))).toBe(
-            'Term.object {"a"} (fun k => Field.req (Term.string)) Rest.drop',
+            'Term.object (Body.mk {"a"} (fun k => Field.req (Term.string)) Rest.drop)',
         )
     })
 
@@ -252,13 +296,18 @@ describe('terms', () => {
     })
 
     /**
-     * **This checked that one codec occupying two table entries is emitted once**, because
-     * repeating an option in `Term.dunion`'s list would give it a tag set overlapping itself and
-     * `Typed.dunion` carries `hdisj` against exactly that. Arity one refuses the two-entry option
-     * at the declaration, so the emitter's dedup went with the test and the invariant is answered
-     * in one place instead of two. What is left worth pinning is that the list is emitted at all.
+     * **A tag-keyed table of `Body`, which is the pair the object row prints one stratum up.**
+     *
+     * `Term.dunion` carried a `List Term` under three side conditions — each variant an object,
+     * each answering to one tag, no two answering to the same. A `MapOf Body` says all three: the
+     * codomain is the object-ness, a function on a key set is the arity, and `Finset` is the
+     * distinctness. So there is no `Term.object` in the emission at all, and no list.
+     *
+     * The tag is the *key*, and the variant still declares it as a field — the codec writes the
+     * tag out of that field, so it cannot go, and the agreement between the two is the one
+     * premise `Typed.dunion` keeps.
      */
-    it('emits a discriminated union as its option list', () => {
+    it('emits a discriminated union as a table keyed by its tags', () => {
         const emitted = leanTermOf(
             erase(
                 discriminatedUnion('kind', [
@@ -267,8 +316,11 @@ describe('terms', () => {
                 ]),
             ),
         )
-        expect(emitted).toContain('Term.dunion "kind" [Term.object')
-        expect(emitted.split('Term.object')).toHaveLength(3)
+        expect(emitted).toContain('Term.dunion "kind" ⟨{"a", "b"}, fun k =>')
+        expect(emitted).toContain('if k.1 = "a" then (Body.mk')
+        // the variants are `Body`s, so no `Term.object` wraps them
+        expect(emitted).not.toContain('Term.object')
+        expect(emitted.split('Body.mk')).toHaveLength(3)
     })
 
     it('forces a lazy and emits what it finds', () => {
@@ -285,23 +337,31 @@ describe('terms', () => {
 
 describe('what cannot be emitted', () => {
     /**
-     * The permanent one. `Double` is axiomatized with a round trip and a decidable equality and *no
-     * constructor* — see `formal/Calculus/Domain.lean:236` — so no closed term inhabits it, `#eval`
-     * cannot print one, and there is no text a generator could emit. This is not a gap to be filled
-     * later: filling it would mean adding a numeral-to-double literal the model deliberately omits,
+     * The permanent one, **and it is a fact about values, not about the term.** `Double` is
+     * axiomatized with a round trip and a decidable equality and *no constructor* — see
+     * `formal/Calculus/Domain.lean:236` — so no closed term inhabits it, `#eval` cannot print one,
+     * and there is no text a generator could emit for one. This is not a gap to be filled later:
+     * filling it would mean adding a numeral-to-double literal the model deliberately omits,
      * because IEEE-754 rounding is not a theorem of the calculus.
+     *
+     * `Term.number` used to be refused here too, which read the impossibility one level too high.
+     * The term is closed and emits; `Value.num` is what cannot be written. Refusal vectors are
+     * what made the difference visible, because they need the term and *not* a value at it.
      */
-    it('refuses `number`, and says why it is permanent', () => {
-        expect(refusal(() => leanTermOf(erase(number))).reason).toContain(
-            'Double',
-        )
+    it('refuses every numeric value, and emits the term', () => {
+        expect(leanTermOf(erase(number))).toBe('Term.number')
         expect(refusal(() => leanValueOf(1.5)).reason).toContain('decimal')
         expect(refusal(() => leanValueOf(new Set([1, 2]))).reason).toContain(
             'NEFinset Double',
         )
     })
 
-    it('refuses a numeric literal, which is the same fact one level up', () => {
+    /**
+     * And the numeric literal, which really *is* term-inexpressible and so did not move with
+     * `Term.number`: its alternatives are `NEFinset Double`, so there is no set to write. No
+     * vector reaches this term in either direction.
+     */
+    it('refuses a numeric literal, which is the term and not the value', () => {
         expect(refusal(() => leanTermOf(erase(number(1, 2)))).reason).toContain(
             'GroundKind.number',
         )
@@ -357,8 +417,7 @@ describe('what cannot be emitted', () => {
             refusal(() => leanTermOf(erase(optional(string)))).reason,
         ).toContain('§4 *field*')
         expect(
-            refusal(() => leanTermOf(erase(fallback(string, () => 'd'))))
-                .reason,
+            refusal(() => leanTermOf(erase(fallback(string, 'd')))).reason,
         ).toContain('§4 *field*')
     })
 
@@ -384,6 +443,56 @@ describe('what cannot be emitted', () => {
         expect(refusal(() => leanTermOf(recursive)).reason).toContain(
             'no fixpoint semantics',
         )
+    })
+
+    /**
+     * **The two sides agree about what a tag is now, at two of the three bases.**
+     *
+     * The host carries a tag as `S` or `N`, so `discriminatedUnion` admits a discriminator at
+     * `string`, `number` or `decimal` and refuses `boolean` and `binary`. `Denote.lean`'s
+     * `tagsOfField` used to match `some (.req (.literal .string ls))` alone, so the model read
+     * every other base's tag set as empty and this row refused all of them. It reads the decimal
+     * base too now — a decimal literal holds its numeral as text — and the model's stored-side
+     * tag reader takes an `.n` as well as an `.s`, so a decimal tag emits on both halves.
+     *
+     * **`number` stays refused and the reason changed.** It was a disagreement between two rules;
+     * it is a limit on what the model can say. `Calculus.Double` is an axiom with no closed terms,
+     * so no numeric tag appears in any term the model can state — the same reason the corpus
+     * carries no numeric value. The host builds one and reads it back as text.
+     */
+    it('refuses a tag at the numeric base, which the model cannot spell', () => {
+        const numeric = erase(
+            discriminatedUnion('kind', [
+                object({ kind: number(0), a: string }),
+                object({ kind: number(1), b: string }),
+            ]),
+        )
+        const why = refusal(() => leanTermOf(numeric)).reason
+        expect(why).toContain('no closed terms')
+        expect(why).toContain('number')
+
+        // **a decimal tag emits now**, which is the half of the disagreement that closed: it is
+        // stored in an `N` and carried as text, and both of the model's tag readers answer that
+        const decimals = erase(
+            discriminatedUnion('v', [
+                object({ v: decimal('1'), a: string }),
+                object({ v: decimal('2'), b: string }),
+            ]),
+        )
+        expect(leanTermOf(decimals)).toContain('Term.dunion')
+        expect(leanTermOf(decimals)).toContain('GroundKind.decimal')
+
+        // and a string tag emits, which it always did
+        expect(
+            leanTermOf(
+                erase(
+                    discriminatedUnion('kind', [
+                        object({ kind: string('A'), a: string }),
+                        object({ kind: string('B'), b: string }),
+                    ]),
+                ),
+            ),
+        ).toContain('Term.dunion')
     })
 })
 
@@ -533,6 +642,19 @@ export const sampleVectors: readonly Vector[] = [
         codec: erase(string.set()),
         value: new Set(['b', 'a']),
     },
+    /**
+     * A set over a **literal** element, which is a restriction of the set and not a `set` term.
+     *
+     * Added when the emitter learned to print a data predicate. The model reads it as
+     * `refine (set string) (liftQ (inL …))`, which is the equation `setCodec_restrict` proves on
+     * `e` and `setCodec_restrict_p` on `p` — so this vector is the differential asking the model
+     * about the one shape that took three passes to spell.
+     */
+    {
+        name: 'set_of_literal',
+        codec: erase(string.set('a', 'b')),
+        value: new Set(['b', 'a']),
+    },
     {
         name: 'set_of_decimal',
         codec: erase(decimal.set()),
@@ -563,7 +685,7 @@ export const sampleVectors: readonly Vector[] = [
     },
     {
         name: 'object_fallback_present',
-        codec: erase(object({ a: fallback(string, () => 'stand-in') })),
+        codec: erase(object({ a: fallback(string, 'stand-in') })),
         value: { a: 'x' },
     },
     {
@@ -600,6 +722,76 @@ export const sampleVectors: readonly Vector[] = [
     { name: 'opaque_map', codec: erase(opaque), value: { a: 'x' } },
     { name: 'lazy_string', codec: erase(lazy(() => string)), value: 'x' },
 ]
+
+/**
+ * The refusal corpus, both readings of it.
+ *
+ * {@link allRefusals} is every pair from the positive corpus the codec refuses — the full cross
+ * product, which `scripts/gate.sh` generates and elaborates. {@link sampleRefusals} is the
+ * readable subset committed to `lean.sample*.lean`: **one per codec kind**, the first corpus value
+ * that codec turns down. The subset says its own size against the full count in the file header,
+ * because a subset that does not say it is one is the same defect as a count nobody can reproduce.
+ *
+ * `number` is in the codec list and in no positive vector, which is the point: `Term.number` is a
+ * closed term whose *values* are unwritable, so it has refusals and no agreements.
+ *
+ * `opaque` is the one codec with **no** refusal, and that is a result rather than a gap: it is the
+ * fixpoint of everything self-identifying, so it admits every value in this corpus. A codec that
+ * refuses nothing contributes no refusal vector, and the subset says twenty-six of twenty-seven
+ * for that reason.
+ */
+const refusalCodecs: readonly (readonly [string, AnyCodec])[] = [
+    ...sampleVectors.map((v) => [v.name, v.codec] as const),
+    ['scalar_number', erase(number)] as const,
+]
+
+export const allRefusals = (): readonly Refusal[] => {
+    const out: Refusal[] = []
+    for (const [cn, codec] of refusalCodecs) {
+        for (const vector of sampleVectors) {
+            if (accepts(codec, vector.value)) continue
+            out.push({
+                name: `${cn}__refuses__${vector.name}`,
+                codec,
+                value: vector.value,
+            })
+        }
+    }
+    return out
+}
+
+/**
+ * The **read** vectors the committed sample carries: the same "one per kind" rule the refusals use.
+ *
+ * `.readvectors.lean` holds all 27 and the gate elaborates every one. A sample is for reading, so
+ * it takes the ground scalars, one container, one object and one union — enough that a reader sees
+ * what the shape of a read vector is without scrolling through the corpus.
+ */
+const readSample: readonly Vector[] = sampleVectors.filter((one) =>
+    [
+        'scalar_string',
+        'scalar_boolean',
+        'set_of_string',
+        'array_of_string',
+        'object_two_fields',
+        'union_of_two',
+    ].includes(one.name),
+)
+
+export const sampleRefusals: readonly Refusal[] = refusalCodecs.flatMap(
+    ([cn, codec]) => {
+        const first = sampleVectors.find((v) => !accepts(codec, v.value))
+        return first
+            ? [
+                  {
+                      name: `${cn}__refuses__${first.name}`,
+                      codec,
+                      value: first.value,
+                  },
+              ]
+            : []
+    },
+)
 
 describe('the `check` protocol', () => {
     /**
@@ -644,12 +836,423 @@ describe('the `check` protocol', () => {
     })
 })
 
+/**
+ * Every option pair the corpus offers, with `src/`'s declaration verdict.
+ *
+ * `leanTermOf` is what bounds it: a pair either side of which is term-inexpressible cannot be put
+ * to the model at all. Over the emittable pairs the split measured 268 both-certify, 17
+ * both-refuse, **0** where `src/` refuses and `Orth` certifies, and 66 where `src/` accepts and
+ * `Orth` declines — the last being `Orth`'s sufficiency rather than a disagreement.
+ */
+const separationPairs = (): readonly Separation[] => {
+    const codecs: readonly (readonly [string, AnyCodec])[] = [
+        ...sampleVectors.map((v) => [v.name, v.codec] as const),
+        ['scalar_number', erase(number)] as const,
+    ]
+    const out: Separation[] = []
+    for (let x = 0; x < codecs.length; x++) {
+        for (let y = x + 1; y < codecs.length; y++) {
+            const [an, left] = codecs[x] as readonly [string, AnyCodec]
+            const [bn, right] = codecs[y] as readonly [string, AnyCodec]
+            try {
+                leanTermOf(left, an)
+                leanTermOf(right, bn)
+            } catch {
+                continue
+            }
+            try {
+                union([left, right] as never)
+                continue // accepted: the law does not run in this direction
+            } catch {
+                out.push({ name: `${an}__vs__${bn}`, left, right })
+            }
+        }
+    }
+    return out
+}
+
+/**
+ * Every (codec, attribute) pair the corpus offers, for the read-side differential.
+ *
+ * The attributes are what the corpus actually *writes*, plus six raw shapes for the members no
+ * corpus vector produces alone. Bounded by `leanAttrOf` the way the pairs are bounded by
+ * `leanTermOf`: an attribute the model has no closed expression for cannot be put to it.
+ */
+const readVerdicts = (): readonly ReadVerdict[] => {
+    const codecs: readonly (readonly [string, AnyCodec])[] = [
+        ...sampleVectors.map((v) => [v.name, v.codec] as const),
+        ['scalar_number', erase(number)] as const,
+    ]
+    const attributes: [string, AttributeValue][] = []
+    for (const v of sampleVectors) {
+        try {
+            attributes.push([
+                v.name,
+                v.codec.unsafeEncode(v.value as never) as AttributeValue,
+            ])
+        } catch {
+            // a value its own codec refuses writes no attribute to read back
+        }
+    }
+    attributes.push(['raw_S', { S: 'x' } as AttributeValue])
+    attributes.push(['raw_N', { N: '1.5' } as AttributeValue])
+    attributes.push(['raw_BOOL', { BOOL: true } as AttributeValue])
+    attributes.push(['raw_NULL', { NULL: true } as AttributeValue])
+    attributes.push(['raw_L_empty', { L: [] } as AttributeValue])
+    attributes.push(['raw_M_empty', { M: {} } as AttributeValue])
+
+    const out: ReadVerdict[] = []
+    for (const [cn, codec] of codecs) {
+        try {
+            leanTermOf(codec, cn)
+        } catch {
+            continue
+        }
+        for (const [an, attribute] of attributes) {
+            try {
+                leanAttrOf(attribute, an)
+            } catch {
+                continue
+            }
+            out.push({ name: `${cn}__reads__${an}`, codec, attribute })
+        }
+    }
+    return out
+}
+
+/**
+ * The unions this bridge resolves, and why they are a list rather than the corpus.
+ *
+ * `sampleVectors` carries two — `union_of_two` and `discriminated_union` — and both are already
+ * pinned in the committed sample. These widen that: the pair `ff75c6b` un-refused
+ * (`set(string)`/`set(number)`, which `Orth` certifies), objects chosen by name, two literals,
+ * a `nullValue` arm, an `optional` inside a variant, and a three-way `dunion`. Every one is legal
+ * at the declaration and emittable.
+ */
+const resolutionUnions = (): readonly (readonly [string, AnyCodec])[] => [
+    ['u_string_boolean', erase(union([string, boolean]))],
+    ['u_string_null', erase(union([string, nullValue]))],
+    ['u_setstring_setnumber', erase(union([string.set(), number.set()]))],
+    [
+        'u_objects_by_name',
+        erase(union([object({ a: string }), object({ b: boolean })])),
+    ],
+    ['u_literal_pair', erase(union([string('A'), string('B')]))],
+    [
+        'u_optional_inner',
+        erase(union([string, object({ z: optional(boolean) })])),
+    ],
+    [
+        'd_two_variants',
+        erase(
+            discriminatedUnion('kind', [
+                object({ kind: string('a'), x: string }),
+                object({ kind: string('b'), y: boolean }),
+            ]),
+        ),
+    ],
+    [
+        'd_three_variants',
+        erase(
+            discriminatedUnion('t', [
+                object({ t: string('p'), v: string }),
+                object({ t: string('q'), v: boolean }),
+                object({ t: string('r'), v: decimal }),
+            ]),
+        ),
+    ],
+]
+
+const writeResolutions = (): readonly Resolution[] =>
+    resolutionUnions().flatMap(([un, u]) =>
+        sampleVectors.flatMap((v) => {
+            try {
+                leanValueOf(v.value, v.name)
+            } catch {
+                return []
+            }
+            return [{ name: `ur_${un}__${v.name}`, union: u, value: v.value }]
+        }),
+    )
+
+const readResolutions = (): readonly ReadResolution[] => {
+    const attributes: [string, AttributeValue][] = []
+    for (const v of sampleVectors) {
+        try {
+            attributes.push([
+                v.name,
+                v.codec.unsafeEncode(v.value as never) as AttributeValue,
+            ])
+        } catch {
+            // a value its own codec refuses writes no attribute to read back
+        }
+    }
+    attributes.push(['raw_S', { S: 'x' } as AttributeValue])
+    attributes.push(['raw_BOOL', { BOOL: true } as AttributeValue])
+    attributes.push(['raw_NULL', { NULL: true } as AttributeValue])
+    return resolutionUnions().flatMap(([un, u]) =>
+        attributes.flatMap(([an, attribute]) => {
+            try {
+                leanAttrOf(attribute, an)
+            } catch {
+                return []
+            }
+            return [{ name: `rr_${un}__${an}`, union: u, attribute }]
+        }),
+    )
+}
+
+describe('union resolution, model against library', () => {
+    /**
+     * **Coverage, and it is worth being exact about that.** Two resolutions were pinned before —
+     * a positive vector *is* an agreement about which option answered, since the attribute it
+     * names is the one that option produced — and the refusal set carries 88 more union lines.
+     * This widens two to 208, and the value is the corpus rather than the question. 216 with
+     * `set_of_literal`, the twenty-eighth codec: the eight it adds are the resolutions of the
+     * unions the new entry takes part in.
+     */
+    it('offers 216 write pairs and 239 statable of 240 read pairs', () => {
+        expect(writeResolutions().length).toBe(216)
+        const reads = readResolutions()
+        expect(reads.length).toBe(240)
+        // one pair only, and it is the `Double` axiom reaching the decoded value; the five
+        // map-valued reads beside it are stated through `vcheck` now
+        expect(
+            reads
+                .filter((one) => readResolutionIsUnstatable(one) === 'Double')
+                .map((one) => one.name),
+        ).toEqual(['rr_u_setstring_setnumber__set_of_decimal'])
+    })
+
+    /**
+     * The five a `Value` comparator closed, named — they read back to a map, whose `Value.map`
+     * carries a function, and `aeq`/`check` compare `Attr` only. `veq` is that comparator and
+     * these are the pairs it was built for, so they are pinned as **statable** rather than as a
+     * shortfall, and pinned by the fact that they go through `vcheck`.
+     */
+    it('states the five map-valued reads that wanted `veq`', () => {
+        const byName = new Map(
+            readResolutions().map((one) => [one.name, one] as const),
+        )
+        for (const name of [
+            'rr_u_objects_by_name__object_optional_absent',
+            'rr_u_objects_by_name__object_fallback_present',
+            'rr_u_objects_by_name__opaque_map',
+            'rr_u_optional_inner__record_empty',
+            'rr_d_two_variants__discriminated_union',
+        ]) {
+            const one = byName.get(name) as ReadResolution
+            expect(readResolutionIsUnstatable(one)).toBeUndefined()
+            expect(leanReadResolution(one)).toContain('vcheck')
+        }
+    })
+
+    it('emits them for the gate to elaborate', () => {
+        if (process.env.EMIT_LEAN_REFUSALS) {
+            writeFileSync(
+                join(process.cwd(), 'formal', '.resolutions.lean'),
+                leanResolutionModule(writeResolutions(), readResolutions()),
+            )
+        }
+        const module = leanResolutionModule(
+            writeResolutions(),
+            readResolutions(),
+        )
+        expect(module).toContain('import Calculus.Vectors')
+        // the one pair that stays out, and the reason, both in the header
+        expect(module).toContain('cannot be written down at all')
+        expect(module).toContain('vcheck')
+    })
+})
+
+describe("the read side, against the model's read row", () => {
+    /**
+     * **The measurement that rejected a port.** HANDOFF's fourth item wanted the resolver's read
+     * side decided through a port of `AdmA`. `decode` already agrees with `AdmA` at every pair
+     * the kernel can check, because `decode` validates — it parses data somebody else wrote —
+     * where `encode` trusted its argument's type. So the port would have been a second
+     * description of one thing, and this differential is the guard that a second description
+     * would have needed anyway.
+     */
+    it('offers 924 pairs, three of them stuck on the `Double` axiom', () => {
+        const verdicts = readVerdicts()
+        expect(verdicts.length).toBe(924)
+        const stuck = verdicts.filter(readRowIsStuck)
+        expect(stuck.map((one) => one.name)).toEqual([
+            'scalar_number__reads__scalar_decimal',
+            'scalar_number__reads__literal_decimal',
+            'scalar_number__reads__raw_N',
+        ])
+    })
+
+    it('emits them for the gate to elaborate', () => {
+        if (process.env.EMIT_LEAN_REFUSALS) {
+            writeFileSync(
+                join(process.cwd(), 'formal', '.readverdicts.lean'),
+                leanReadModule(readVerdicts()),
+            )
+        }
+        const module = leanReadModule(readVerdicts())
+        expect(module).toContain('import Calculus.Exactness')
+        // the stuck ones are named in the header rather than dropped in silence
+        expect(module).toContain('stuck, not skipped')
+        expect(module).toContain('scalar_number__reads__raw_N')
+    })
+})
+
+describe("the declaration guard, against the model's classifier", () => {
+    /**
+     * **`src/` refuses thirty-six pairs and the model certifies none of them.** That is the whole
+     * law, and it is one-directional on purpose: `Orth` is sufficient and not necessary, so a
+     * pair it declines may still be separable. What would be a defect is `src/` refusing a
+     * declaration the model *proves* works — which is what it did to
+     * `union([string.set(), number.set()])` until `ff75c6b`, and what `Orth` certifies.
+     *
+     * **The four most recent all have a *restriction* on a side**, which is `opaque`'s rule at a
+     * narrower width: a literal against its own base's ground term, three of them, and a set of a
+     * literal against the plain set at that base. Every value the narrower option admits, the
+     * wider one admits too, so `select` acts nowhere on the narrower and it can never be chosen.
+     * The type level already refused all four; this is the runtime agreeing with it. `Orth`
+     * declines every one, `not_orth_literal_string` on purpose, so the law is untouched.
+     *
+     * **It was seventeen, and the fifteen that arrived all have `opaque` on a side.** The guard
+     * exempted an `opaque` option rather than comparing it, on the ground that its occupancy is
+     * `⊤`. §5 separates the two things a `⊤` covers, and `opaque` is the *everything* one: the
+     * model states it as a closed form, so it can be compared and it meets every option. Every one
+     * of the fifteen new theorems holds — `Orth (Term.opaq false) Term.string` is `false` — so the
+     * law was untouched either way, and what moved is that a union no value can resolve is now
+     * refused where it used to be declared. JH's ruling; `ARCHITECTURE.md` §10 carries it.
+     *
+     * **The count pins a fact no law has, deliberately.** That it is thirty-six is a property of
+     * this corpus, so widening the corpus is meant to fail here and be looked at; the *law* is
+     * the loop below, that every refusal the model also declines. Both are kept, and the number
+     * stays.
+     */
+    it('refuses only pairs the classifier also declines', () => {
+        const separations = separationPairs()
+        expect(separations.length).toBe(36)
+        // each one emits, which is where `leanSeparation` re-checks that `src/` really refuses
+        for (const one of separations) {
+            expect(leanSeparation(one)).toContain('= false := by decide')
+        }
+    })
+
+    it('emits them for the gate to elaborate', () => {
+        if (process.env.EMIT_LEAN_REFUSALS) {
+            writeFileSync(
+                join(process.cwd(), 'formal', '.separations.lean'),
+                leanSeparationModule(separationPairs()),
+            )
+        }
+        expect(leanSeparationModule([])).toContain(
+            'import Calculus.Orthogonality',
+        )
+    })
+
+    /** And the direction the law does not run, refused rather than emitted as a vacuous claim. */
+    it('refuses to state a verdict about a pair src accepts', () => {
+        expect(
+            refusal(() =>
+                leanSeparation({
+                    name: 'accepted',
+                    left: erase(string),
+                    right: erase(boolean),
+                }),
+            ).reason,
+        ).toContain('one-directional')
+    })
+})
+
+describe('the full refusal set, for the gate', () => {
+    /**
+     * **The subset is committed for reading; this is what gets verified.**
+     *
+     * `scripts/gate.sh` runs this with `EMIT_LEAN_REFUSALS=1` and elaborates the file it writes,
+     * which is why the file is gitignored rather than committed: a 599-line artifact regenerated
+     * on every gate run has nothing to gain from being in the tree, and a diff nobody reads is a
+     * diff nobody checks. The committed sample is the readable half and says so in its header.
+     */
+    it('emits every refusal the corpus produces', () => {
+        const refusals = allRefusals()
+        expect(refusals.length).toBeGreaterThan(sampleRefusals.length)
+        if (process.env.EMIT_LEAN_REFUSALS) {
+            writeFileSync(
+                join(process.cwd(), 'formal', '.vectors.full.lean'),
+                leanVectorModule([], 'check', refusals),
+            )
+        }
+        // every corpus value is refused by some codec, which is what makes the cross product a
+        // corpus rather than a sample of one
+        const values = new Set(
+            refusals.map((r) => r.name.split('__refuses__')[1]),
+        )
+        expect(values.size).toBe(sampleVectors.length)
+    })
+})
+
+/**
+ * **The read side of every corpus codec, which the write vectors could not reach.**
+ *
+ * A write vector asserts `(denote t).e v = some a` and a refusal vector asserts `= none`. Both are
+ * about `e`. The model's `p` was asserted only where a union had to choose — `.resolutions.lean`
+ * states `(denote t).p a = some v` per read resolution — so for the corpus at large one half of
+ * every pair was proposed to the model and the other half was not.
+ *
+ * These close that. Both halves come from running the library: `a` is what `encode` wrote for the
+ * corpus value, `v` is what the same codec's `decode` read back from `a`. So the theorem says the
+ * model's `p`, given what this library wrote, answers what this library read — and a change to
+ * either direction stops the file compiling.
+ */
+describe("the read side of every corpus codec, against the model's `p`", () => {
+    /**
+     * **Nothing is skipped, and that is a fact about this corpus rather than about the emitter.**
+     * A numeric value on the read side is unspellable — `Value.num` is `Double`, an axiom with no
+     * closed terms — and the corpus carries none: `scalar_number` is the twenty-eighth codec,
+     * added by hand at three sites, and is not in `sampleVectors`. So the count is the corpus
+     * size, and a corpus that grows a numeric value is meant to move it and be looked at.
+     */
+    it('states a read vector for every codec whose value Lean can spell', () => {
+        const statable = sampleVectors.filter(
+            (one) => readVectorIsUnstatable(one) === undefined,
+        )
+        expect(statable.length).toBe(sampleVectors.length)
+        expect(statable.length).toBe(27)
+        // each asserts the model's `p`, through the comparator that crosses `Value.map`'s binder
+        for (const one of statable) {
+            const vector = leanReadVector(one)
+            expect(vector).toContain('vcheck')
+            expect(vector).toContain('.p')
+            expect(vector).toContain('= .same := rfl')
+        }
+    })
+
+    it('emits them for the gate to elaborate', () => {
+        if (process.env.EMIT_LEAN_REFUSALS) {
+            writeFileSync(
+                join(process.cwd(), 'formal', '.readvectors.lean'),
+                leanReadVectorModule(sampleVectors),
+            )
+        }
+        const module = leanReadVectorModule(sampleVectors)
+        expect(module).toContain('import Calculus.Vectors')
+        // the header states what it could not state, which for this corpus is nothing
+        expect(module).toContain('every corpus codec round trips')
+    })
+})
+
 describe('the committed sample', () => {
     /**
-     * A sample that is not regenerated is a sample that lies. This is the whole of the check: emit
-     * the same vectors again and compare bytes. If it fails, the emitter changed and
-     * `src/lean.sample.lean` needs rewriting — and, since the sample was verified against a real
-     * `Calculus` build, so does that verification.
+     * A sample that is not regenerated is a sample that lies — **and a regenerated one lies just
+     * as well, because regeneration is not verification.** This compares the emitter's bytes
+     * against files the emitter produced, so a *stale generator agrees with its own stale
+     * output*: it cannot see the generator being wrong, and for a day it did not. `db444e3`
+     * changed `Term.object` from three arguments to one, this test stayed green, and both sample
+     * files typechecked against no `Calculus/` for ten commits (`e9f5b31`).
+     *
+     * What this test *can* see is the emitter changing without the sample being rewritten, which
+     * is worth keeping. What says the samples are **true** is `scripts/gate.sh`, which elaborates
+     * them — and the full refusal cross product — against `Calculus/`. Do not read a pass here as
+     * the bridge working.
      */
     it('is what the emitter produces today', () => {
         // `process.cwd()` rather than `import.meta.url`: `tsconfig.json` targets a module setting
@@ -659,7 +1262,15 @@ describe('the committed sample', () => {
             ['lean.sample.check.lean', 'check'],
         ] as const) {
             const at = join(process.cwd(), 'src', file)
-            const emitted = leanVectorModule(sampleVectors, protocol)
+            const emitted = leanVectorModule(
+                sampleVectors,
+                protocol,
+                sampleRefusals,
+                allRefusals().length,
+                // the read subset is the `check` sample's alone: a read vector needs `vcheck`, and
+                // the `equation` sample depends on nothing beyond `denote` by design
+                protocol === 'check' ? readSample : [],
+            )
             // `UPDATE_LEAN_SAMPLE=1 vitest run src/lean.spec.ts` rewrites them — and then they have
             // to go through Lean again, because nothing here can say the new theorems are true
             if (process.env.UPDATE_LEAN_SAMPLE) writeFileSync(at, emitted)

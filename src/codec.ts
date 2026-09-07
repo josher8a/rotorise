@@ -15,26 +15,48 @@ import type {
     SS,
     StoredItem,
 } from './attribute'
-import {
-    carrying,
-    isNumeral,
-    isStoredNumeral,
-    memberOf,
-    tooDeeplyNested,
-} from './attribute'
-import type { Codec } from './build'
 import { codec } from './build'
+import {
+    accepts,
+    altSem,
+    byTagSem,
+    codecOfTerm,
+    itemSem,
+    literalCodec,
+    optionOfTerm,
+    termOf,
+} from './denote'
 import {
     andThen,
     asPath,
     CodecError,
-    every,
-    everyEntry,
     failed,
     orThrow,
     type Result,
 } from './result'
+import type { Body, Field, Term } from './term'
+import {
+    elementPredicates,
+    meet,
+    member as memberOf,
+    occA,
+    occV,
+    restricts,
+    separable,
+    setBaseOf,
+} from './term'
+
+/**
+ * Forwarded for the consumers that still name them here.
+ *
+ * They are `denote.ts`'s now — each answers about a term's *pair* — and this keeps the move to one
+ * pass. Six of the eight go in the pass that deletes the readers; `codecOfTerm` and `termOf` stay,
+ * and their callers move to the module that owns them there.
+ */
+export { codecOfTerm, termOf, valueKinds } from './denote'
+
 import type { ErrorMessage, show } from './utils'
+import { describeShape, namesFit, namesOf, readTag, sameLiteral } from './value'
 
 // the failure algebra lives in `./result`, and is re-exported because it is part of the surface a
 // caller works in: a `Result` is what every direction returns
@@ -51,43 +73,14 @@ export {
 /**
  * Marks a codec whose attribute may be absent.
  *
- * Type-level only. Whether an attribute may be absent is read at runtime from the codec's
- * {@link CodecDef} — `optional` is one of the kinds — so there is nothing for a symbol to carry
+ * Type-level only. Whether an attribute may be absent is read at runtime from the field's
+ * {@link Field} — `optional` is one of the two marks — so there is nothing for a symbol to carry
  * and nothing for a wrapper to forget to copy. The declaration stays because the *type* needs a
  * brand: {@link ItemSpec} and {@link ObjectOf} decide required from optional by it.
  */
 declare const optionalMarker: unique symbol
 
-/**
- * Nothing, or why this element cannot be about absence.
- *
- * `optional` and `fallback` are statements about a *name*: the attribute called this may be missing
- * from the item. A list, a set, a tuple, a record and a union option have no name at that position
- * for anything to be missing from — so one of these there is not a weaker element, it is a category
- * error, and it was a silent one: `array(optional(string))` compiled and wrote `{}` into the list, an
- * attribute carrying no member at all, which DynamoDB rejects on arrival.
- *
- * Intersected with the parameter rather than checked on the result, the same way every other refusal
- * in this file is, so the message lands on the element that is wrong.
- */
-type AboutAbsence =
-    | { readonly [optionalMarker]: true }
-    | { readonly [fallbackMarker]: unknown }
-    // a rest element is a position marker too: it says "and then any number of these", which only a
-    // tuple's tail can mean. `tuple` exempts it and checks its position itself
-    | { readonly [restMarker]: true }
-
-/**
- * `Extract`, not `extends`, and that is the whole of why this works over a tuple.
- *
- * A bare conditional distributes, so asked of `Cs[number]` — the union of a tuple's elements — it
- * answers `unknown | ErrorMessage<…>`, which is `unknown`: one good element absolves every bad one.
- * `Extract` asks whether *any* member is about absence, which is the question.
- */
-type NotAboutAbsence<C> = [Extract<C, AboutAbsence>] extends [never]
-    ? unknown
-    : ErrorMessage<'this element is a position marker, not an attribute: `optional` and `fallback` say a name may be missing from an item and `rest` says a tuple continues, and none of those is a thing an element here can be — use `nullable(...)` for a member that may be stored as NULL'>
-
+/** Type-level only, for the same reason as {@link optionalMarker}: the term carries the fact. */
 declare const fallbackMarker: unique symbol
 
 /**
@@ -155,18 +148,13 @@ type CodecShape<In, Out, A extends AttributeValue> = {
     /** The same, throwing. */
     readonly unsafeDecode: (attribute: AttributeValue) => Out
     /**
-     * A value this codec can faithfully carry, for property testing.
+     * What this codec is — see {@link Term}.
      *
-     * Per codec, not derived from the type: `decimal` is a `string` but only a *normalised* one
-     * survives, and `string.set()` must not be empty. `size` bounds recursion.
+     * A term and not a declaration: the two field kinds denote a §4 field, a field is not a codec,
+     * and so no codec's definition is one. It is what makes each reader total over the kinds it can
+     * be handed rather than over the kinds that exist.
      */
-    readonly arbitrary?: (rng: Rng, size: number) => Out
-    /**
-     * Values simpler than `value`, cheapest first. Must be finite and never yield `value` itself.
-     */
-    readonly shrink?: (value: In) => readonly Out[]
-    /** What this codec is — see {@link CodecDef}. */
-    readonly def?: CodecDef
+    readonly def: Term
 }
 
 /**
@@ -181,403 +169,108 @@ type CodecShape<In, Out, A extends AttributeValue> = {
  */
 export type Nestable<T> = AttributeCodec<T>
 
-/** An attribute that may be absent from the item entirely. */
+/**
+ * An attribute that may be absent from the item entirely.
+ *
+ * **Not a codec, and it used to say it was.** This was `AttributeCodec<T, A>` intersected with the
+ * marker, so it claimed a field has an `encode` and a `decode` — true only because {@link optional}
+ * built its answer by spreading the codec it marks. §4 refuses it: a field is a statement about a
+ * *name*, the name belongs to the object, and the pair a member is read and written through is the
+ * one the field marks. `rest` stopped making the same claim at `931c29c`.
+ *
+ * The definition is carried because {@link fieldOf} reads the mark off `def.kind` at run time, and a
+ * type that did not name it would be a type that does not say what the value holds.
+ */
 export type OptionalCodec<
     T,
     A extends AttributeValue = AttributeValue,
-> = AttributeCodec<T, A> & { readonly [optionalMarker]: true }
+    C = AttributeCodec<T, A>,
+> = {
+    readonly [optionalMarker]: true
+    readonly codec: C
+    // the mark's own case and not the whole of `Field`, so a reader that must tell the two marks
+    // apart can, without the symbols — which are `declare const` and reach no consumer
+    readonly def: Extract<Field, { readonly mark: 'optional' }>
+}
 
 /** Any codec, both directions erased — `never` in and `unknown` out, so every codec fits. */
 export type AnyCodec = CodecShape<never, unknown, AttributeValue>
+
+/**
+ * Anything a {@link rest} produced, whatever it marks — {@link AnyCodec}'s counterpart for the one
+ * thing that is a position rather than a codec, and the only element type {@link tuple} accepts that
+ * is not a codec.
+ *
+ * Written as the marked shape rather than as `RestCodec<unknown, AttributeValue>`, for the reason
+ * {@link TupleWrites} records: `AttributeCodec` names its value on both sides, so it is invariant
+ * and the `unknown` instantiation matches no real one.
+ */
+export type AnyRest = { readonly [restMarker]: true; readonly rest: AnyCodec }
+
+/**
+ * Anything an object member can be declared as: a codec, or a §4 field that marks one.
+ *
+ * `optional` and `fallback` state that the attribute at a *name* may be absent, and the name belongs
+ * to the object rather than to the thing declared at it. So a field is not a codec, and the pair a
+ * member is read and written through is the one the field marks.
+ *
+ * Written as the definition alone, because the definition is the whole of what both cases carry that
+ * an object reads: `fieldOf` takes the mark off `def.mark` and the child term out of the same record.
+ */
+export type AnyDeclaration = AnyCodec | { readonly def: Field }
+
+/**
+ * The codec a declaration marks, and the declaration itself where it is already one.
+ *
+ * A body hands out codecs and never fields. The mark is a statement about a name, the name is the
+ * body's, and a caller that asked for the attribute at a name wants the thing that reads and writes
+ * it — so this is what {@link ItemCodec.field} answers with.
+ */
+export type Marks<C> = C extends { readonly codec: infer Marked } ? Marked : C
 
 export type Decoded<C> = C extends {
     readonly attribute: AttributeCodec<infer T>
 }
     ? T
-    : C extends AttributeCodec<infer T, AttributeValue>
+    : // a field marks a codec and has none of its own, so the value it carries is the marked one's
+      C extends { readonly codec: AttributeCodec<infer T> }
       ? T
-      : never
-
-/**
- * What a codec *is*, as data rather than as closures.
- *
- * The closures say how to encode and decode; this says which codec it is and what it was built
- * from. Anything that wants to reason about a codec instead of run it reads this — `rotorise/testing`
- * dispatches its generators on `kind`, so they live there rather than being baked into every codec
- * and shipped to production.
- *
- * Not inherited by {@link derive}: a wrapper is a different codec from the one it wraps.
- *
- * ── the grammar ────────────────────────────────────────────────────────────────────────────────
- *
- * This union *is* the abstract syntax, so the term language has a grammar and it is this one, with
- * the nonterminals indexed by the member each term writes. The index is not decoration: it is what
- * makes `⟨set⟩` expressible at all, and it is exactly what {@link writes} computes.
- *
- * ```bnf
- * ⟨member⟩   ::= ⟨attr⟩ | optional(⟨attr⟩) | fallback(⟨attr⟩, ⟨thunk⟩)
- *
- * ⟨attr⟩     ::= ⟨attr:S⟩ | ⟨attr:N⟩ | ⟨attr:BOOL⟩ | ⟨attr:B⟩
- *              | ⟨attr:SS⟩ | ⟨attr:NS⟩ | ⟨attr:BS⟩
- *              | ⟨attr:L⟩  | ⟨attr:M⟩  | ⟨attr:?⟩
- *
- * ⟨attr:S⟩    ::= string | literal(⟨text⟩ +) | ⟨wrap S⟩
- * ⟨attr:N⟩    ::= decimal | number | ⟨wrap N⟩
- * ⟨attr:BOOL⟩ ::= boolean | ⟨wrap BOOL⟩
- * ⟨attr:NULL⟩ ::= nullValue | ⟨wrap NULL⟩
- * ⟨attr:B⟩    ::= binary | ⟨wrap B⟩
- * ⟨attr:kS⟩   ::= set(⟨attr:k⟩)                       for k ∈ { S, N, B }
- * ⟨attr:L⟩    ::= array(⟨attr⟩) | tuple(⟨attr⟩ *) | ⟨wrap L⟩
- * ⟨attr:M⟩    ::= record(⟨attr⟩)
- *               | object({ (⟨name⟩ : ⟨member⟩) * } , ⟨rest⟩)
- *               | discriminatedUnion(⟨name⟩, ⟨object⟩ +)
- *               | ⟨wrap M⟩
- * ⟨attr:?⟩    ::= opaque | custom | lazy(⟨thunk⟩) | held(⟨attr⟩, ⟨iso⟩)
- *               | nullable(⟨attr⟩) | union(⟨attr⟩ +)
- *
- * ⟨wrap k⟩    ::= refine(⟨attr:k⟩, ⟨pred⟩) | legacy(⟨attr:k⟩, ⟨reader⟩) | union(⟨attr:k⟩ +)
- * ⟨rest⟩      ::= 'drop' | 'refuse' | ⟨attr⟩
- * ```
- *
- * Three things it buys, and one it cannot:
- *
- * 1. **The two levels are a stratification, not a convention.** `⟨member⟩` and `⟨attr⟩` are different
- *    nonterminals, so `array(optional(string))` is *ungrammatical* — which is what it always was, and
- *    what it silently was not until `NotAboutAbsence` made the types say so.
- * 2. **`⟨set⟩` is why the index has to exist.** A set of a term that writes no single member names no
- *    set, and the grammar says that structurally rather than by throwing.
- * 3. **`⟨attr:?⟩` is the honest home for the terms whose member is not structural** — `opaque` and
- *    `custom` write what the value turns out to be, `union` writes what its chosen option writes,
- *    `held` writes its inner's, `lazy` cannot be asked without forcing. `writes` returns `undefined`
- *    for exactly this nonterminal.
- *
- * What a grammar cannot state is every constraint *between siblings*, and those are the two side
- * conditions this library checks separately:
- *
- * - `union(c₁ … cₙ)` requires the `cᵢ` pairwise distinguishable — by decoded type for reading
- *   ({@link ValidateOptions}, at compile time) and by kind-of-value for writing (at construction).
- * - `discriminatedUnion(d, o₁ … oₙ)` requires every `oᵢ` to name `d` with a `literal`.
- *
- * Which is the useful conclusion: a grammar is the right formalism for the *terms*, and not for the
- * *codec*. What a codec means needs the two indices as a judgement — `c` holds `T` and stores `A`,
- * which is `Decoded<C>` and `AttributeOf<C>` — plus the equations between terms, which are checked in
- * `codec.laws.spec.ts`.
- */
-export type CodecDef =
-    | { readonly kind: 'string' }
-    | {
-          readonly kind: 'literal'
-          /**
-           * Which ground term the alternatives belong to — **named, not inferred**.
-           *
-           * This used to be absent, and every reader worked it out from `typeof allowed[0]`: digits
-           * were `N`, text was `S`. That guess is exactly what `decimal('1')` refutes — its
-           * alternatives are text and it stores `N` — so the base is recorded rather than recovered.
-           * `formal/Calculus/Domain.lean:539` carries the same decision as `GroundKind`, an *index*
-           * on `Term.literal` rather than a premise read off the values.
-           */
-          readonly base: LiteralBase
-          readonly allowed: readonly LiteralValue[]
-      }
-    | { readonly kind: 'decimal' }
-    | { readonly kind: 'number' }
-    | { readonly kind: 'boolean' }
-    | { readonly kind: 'binary' }
-    | { readonly kind: 'null' }
-    | { readonly kind: 'opaque'; readonly numbers: opaque.Numbers }
-    | { readonly kind: 'set'; readonly element: AnyCodec }
-    | { readonly kind: 'array'; readonly element: AnyCodec }
-    | {
-          readonly kind: 'tuple'
-          readonly elements: readonly AnyCodec[]
-          /** The codec for everything past `elements`, where the tuple has a tail. */
-          readonly tail?: AnyCodec
-      }
-    | { readonly kind: 'record'; readonly value: AnyCodec }
-    | {
-          readonly kind: 'attributes'
-          readonly of: Attributes
-          /**
-           * The policy for what the spec does not name — the constructor's own argument, verbatim.
-           *
-           * Recorded because a definition that left it out did not determine the codec: two objects
-           * differing only in their rest policy had the same definition, and a harness reading it
-           * generated only the declared attributes — so an open entity's round-trip law was checked
-           * on its closed part and nowhere else.
-           *
-           * This used to record the rest *codec* alone, and `undefined` for either string policy, on
-           * the argument that neither puts anything in the entity so a generator has nothing to make
-           * of them. That argument is about the *write* half only. `drop` and `refuse` disagree about
-           * whether an undeclared name is an error, which is the read half — §4's `p` — so a
-           * consumer reading a definition to reconstruct the codec could not reconstruct that, and
-           * `src/lean.ts` was silently writing `Rest.drop` for both. The field now carries the
-           * policy itself, so the three cases are three values rather than two.
-           */
-          readonly rest: RestDeclaration
-      }
-    | {
-          readonly kind: 'tagged'
-          readonly discriminator: string
-          readonly variants: Attributes
-      }
-    | { readonly kind: 'untagged'; readonly variants: readonly AnyCodec[] }
-    | {
-          readonly kind: 'refine'
-          readonly inner: AnyCodec
-          readonly refined: Refinement
-      }
-    | { readonly kind: 'optional'; readonly inner: AnyCodec }
-    | { readonly kind: 'nullable'; readonly inner: AnyCodec }
-    | {
-          readonly kind: 'fallback'
-          readonly inner: AnyCodec
-          /** The stand-in, produced per read so a mutable default cannot leak between entities. */
-          readonly value: () => unknown
-      }
-    | { readonly kind: 'legacy'; readonly current: AnyCodec }
-    | { readonly kind: 'restOf'; readonly inner: AnyCodec }
-    | {
-          readonly kind: 'held'
-          readonly inner: AnyCodec
-          /** The two halves of the isomorphism, erased — see {@link held}. */
-          readonly adapt: {
-              readonly encode: (value: never) => unknown
-              readonly decode: (held: never) => unknown
-          }
-      }
-    | { readonly kind: 'lazy'; readonly get: () => AnyCodec }
-    /**
-     * A codec written by hand, saying so.
-     *
-     * What {@link custom} stamps when it is not told otherwise. It answers nothing to {@link writes},
-     * {@link carries} or {@link deeper}, which is the truth about a pair of functions this library did
-     * not write: the member could be any of them, the value could be anything, and there is no shape
-     * beneath it to walk into. There is no way to claim otherwise: {@link custom} stamps this and
-     * takes no definition at all. The library's own marshallers describe themselves as `opaque`, and
-     * reach the construction site directly to do it — which is a thing only this package can do.
-     */
-    | { readonly kind: 'custom' }
-
-/* ── §4's stratification, as three named strata over a flat `kind` ─────────────────── */
-
-/**
- * `CodecDef['kind']` is flat, and the calculus is not.
- *
- * §4 of `docs/codec-calculus.md` puts three different things at three different levels — a **codec**
- * denotes a `Term`, a **field** denotes a `Field`, and a **rest policy** denotes a `Rest` — and says
- * so normatively: "`optional` and `fallback` are fields, not codecs. If your library lets
- * `optional(c)` appear where a codec is expected, C3 fails at that constructor." This library does
- * enforce that, but with branded markers and `NotAboutAbsence` guards at each site that could go
- * wrong, so the level a kind belongs to was never written down anywhere.
- *
- * These are that, written down. They are also what C3's mapping is stated over: a `TermDef` has a
- * `Term`, a `FieldDef` and a `RestDef` deliberately do not, and reporting the last two as "no
- * corresponding term" would be reporting the stratification as a gap.
- */
-
-/** §3's terms: the kinds that denote a codec. */
-type TermKind =
-    | 'string'
-    | 'literal'
-    | 'decimal'
-    | 'number'
-    | 'boolean'
-    | 'binary'
-    | 'null'
-    | 'set'
-    | 'array'
-    | 'tuple'
-    | 'record'
-    | 'attributes'
-    | 'tagged'
-    | 'untagged'
-    | 'refine'
-    | 'nullable'
-    | 'legacy'
-    | 'held'
-    | 'lazy'
-    | 'opaque'
-    | 'custom'
-
-/** §4's fields: a *position* in an item — whether a name may be absent — and not a codec. */
-type FieldKind = 'optional' | 'fallback'
-
-/** §4's rest policy: what a tuple's tail is, which is likewise a position and not a codec. */
-type RestKind = 'restOf'
-
-/**
- * Every kind is classified, and the lists above are written out rather than derived so that adding
- * one is a decision rather than a default.
- *
- * A new `CodecDef` member that no stratum claims stops the build here. That is the same move as
- * `#assert_axioms` in the formalization: a fact the documents assert, turned into a build error
- * instead of something a reader is asked to re-derive.
- */
-type Classified<Whole, Parts> = [Whole] extends [Parts]
-    ? [Parts] extends [Whole]
-        ? true
+      : C extends AttributeCodec<infer T, AttributeValue>
+        ? T
         : never
-    : never
-const _everyKindHasALevel: Classified<
-    CodecDef['kind'],
-    TermKind | FieldKind | RestKind
-> = true
-void _everyKindHasALevel
 
-/** A definition that denotes a §3 `Term`. */
-export type TermDef = Extract<CodecDef, { readonly kind: TermKind }>
+/* ── the readers ──────────────────────────────────────────────────────────────────────── */
 
-/** A definition that denotes a §4 `Field`. */
-export type FieldDef = Extract<CodecDef, { readonly kind: FieldKind }>
-
-/** A definition that denotes a §4 `Rest`. */
-export type RestDef = Extract<CodecDef, { readonly kind: RestKind }>
+/*
+ * A reader here answers from the **term** and nothing else, which is what makes the term determine
+ * the codec rather than describe it. `constantOf` is the one left in this file; `member`, `occV`,
+ * `occA`, `specOf`, `tagsOf`, `identifies`, `separable` and `setBaseOf` are `term.ts`'s, and
+ * `carries`, `accepts` and `readsBack` ask the pair in `denote.ts`.
+ *
+ * They take a *codec* and read its term rather than taking the term, and that is the decision
+ * rather than a leftover. A child position holds a term, so a reader recursing into one calls
+ * `codecOfTerm`, which memoises on the frozen term and answers the codec that was already built.
+ * A `Term` parameter instead moves the `.def` read from one place inside each of them out to
+ * every call site.
+ *
+ * This is a section note and deliberately not a docstring: it binds to no declaration, so it
+ * opens with one star rather than two. `docstring_anchor.py` is the check a doc comment here
+ * would trip.
+ */
 
 /**
- * The member this codec writes, when it writes exactly one.
+ * The kinds of value a codec can be given, as coarsely as a runtime check can tell them apart.
  *
- * Read from the definition rather than stored beside it. A stored field has to be set by every
- * constructor and carried by every wrapper, and the ones that forgot were silent: `refine` lost it
- * for a while, and `item`, `map`, `tagged` and `untagged` all left it blank while writing an `M`.
- * There is nothing to forget in a function.
+ * **The codomain of {@link shapeOf}, which classifies a *value*.** That is what fixes the alphabet
+ * and why it cannot be finer: `shapeOf` sees a `Set` and answers `'set'`, because telling `strSet`
+ * from `numSet` means inspecting the elements, and **an empty `Set` belongs to no family at all**.
+ * The same asymmetry decides which containers separate at `union`.
+ *
+ * {@link Slot} is the finer alphabet and is not a replacement. A term knows its base, so `occV` can
+ * answer `strSet`; a value does not carry one, so **no total function takes a value to a `Slot`**.
+ * The two are the codomains of two different functions rather than two spellings of one, which is
+ * the answer to the question `1060c01` left open.
  */
-export const writes = (codec: AnyCodec): AttributeName | undefined => {
-    const def = codec.def
-    if (!def) return undefined
-    switch (def.kind) {
-        // a wrapper writes what it wraps
-        case 'refine':
-        case 'optional':
-        case 'fallback':
-            return writes(def.inner)
-        case 'legacy':
-            return writes(def.current)
-        // an adapter changes what the value is *held* as and leaves what it is *stored* as alone,
-        // which is the whole of it — so the member is the inner codec's, unchanged
-        case 'held':
-        // a marked element writes and takes exactly what it wraps; the mark is about position
-        case 'restOf':
-            return writes(def.inner)
-        /**
-         * A set's member follows from its element, which the definition carries — so this is derived
-         * rather than absent.
-         *
-         * It used to answer `undefined`, on the grounds that the *kind* `set` does not decide between
-         * `SS`, `NS` and `BS`. True, and beside the point: the element decides, and the element is
-         * right here. Leaving it unanswered cost a union the ability to tell a set option apart by
-         * what it writes, which is the one thing that distinguishes it from a list in the table.
-         */
-        /**
-         * A union writes one member only if every option writes the same one.
-         *
-         * `'M'` was the answer while a union could only hold objects, and it survived the change that
-         * let it hold anything — so a `union([string, boolean])` claimed to write `M`, and nesting one
-         * inside another union then filtered it out of every attribute it could actually read. The
-         * mirror of {@link carries}, which was already derived this way.
-         */
-        case 'untagged': {
-            let one: AttributeName | undefined
-            for (const variant of def.variants) {
-                const member = writes(variant)
-                if (!member) return undefined
-                if (!one) one = member
-                else if (one !== member) return undefined
-            }
-            return one
-        }
-        // a literal's member follows from its **base**, which the definition now names. It used to
-        // follow from `typeof allowed[0]`, and that reading has a counterexample: `decimal('1')`
-        // holds text and stores `N`
-        case 'literal':
-            return literalMember[def.base]
-        case 'set': {
-            const element = writes(def.element)
-            return element === 'S' || element === 'N' || element === 'B'
-                ? (`${element}S` as AttributeName)
-                : undefined
-        }
-        // `nullable` writes `NULL` as well, `opaque` writes whatever the value turns out to be, and
-        // asking a `lazy` would force the resolution it exists to defer — all three answer
-        // `undefined`, which the table gives by not naming them
-        default:
-            return writtenBy[def.kind]
-    }
-}
-
-/** Which member each kind of codec puts a value in, where the kind alone decides. */
-const writtenBy: { readonly [K in TermKind]?: AttributeName } = {
-    string: 'S',
-    decimal: 'N',
-    number: 'N',
-    boolean: 'BOOL',
-    binary: 'B',
-    null: 'NULL',
-    array: 'L',
-    tuple: 'L',
-    record: 'M',
-    attributes: 'M',
-    tagged: 'M',
-}
-
-/**
- * The kind of JavaScript value this codec encodes from, where the kind alone decides.
- *
- * The mirror of {@link writes}, and it exists for a reason worth stating: **encoding does not
- * validate**. A codec's input is typed, so `number` given `'x'` writes `{ N: 'x' }` rather than
- * failing — which means "it encoded" is no evidence that an option was the right one, and a union
- * cannot be resolved by trying each option and seeing what sticks.
- *
- * What it *can* be resolved by is this, first: `union([string, number])` given `'x'` has one option
- * that takes a string. Trying is still needed after it, because two options can take the same kind of
- * value and still be disjoint — `string('A')` and `string('B')` both take a string, and exactly one
- * of them accepts `'A'`.
- *
- * `undefined` means the kind does not decide: `opaque` takes anything, and asking a `lazy` would
- * force the resolution it exists to defer.
- */
-export const carries = (codec: AnyCodec): readonly Shape[] | undefined => {
-    const def = codec.def
-    if (!def) return undefined
-    switch (def.kind) {
-        case 'refine':
-        case 'optional':
-        case 'fallback':
-        case 'restOf':
-            return carries(def.inner)
-        case 'legacy':
-            return carries(def.current)
-        // and this one deliberately does *not* read through. An adapter exists precisely to change
-        // the kind of value held — `held(string.set(), ...)` takes an array where `string.set()` takes
-        // a `Set` — so the inner codec's answer would be the wrong one. Nothing about the definition
-        // says what the outer kind is, so it says so by not answering, and a union falls back to
-        // trying it
-        case 'held':
-            return undefined
-        case 'nullable': {
-            const inner = carries(def.inner)
-            return inner && [...inner, 'null']
-        }
-        case 'untagged': {
-            const shapes = new Set<Shape>()
-            for (const variant of def.variants) {
-                const of = carries(variant)
-                if (!of) return undefined
-                for (const shape of of) shapes.add(shape)
-            }
-            return [...shapes]
-        }
-        // the same fact from the other side of the pair, and the two sides do not agree base for
-        // base: `decimal(...)` takes a string and writes an `N`, exactly as bare `decimal` does
-        case 'literal':
-            return [literalShape[def.base]]
-        default: {
-            const one = carriedBy[def.kind]
-            return one && [one]
-        }
-    }
-}
-
-/** The kinds of value a codec can be given, as coarsely as a runtime check can tell them apart. */
 export type Shape =
     | 'string'
     | 'number'
@@ -588,302 +281,52 @@ export type Shape =
     | 'map'
     | 'null'
 
-/** Which kind of value each kind of codec takes, where the kind alone decides. */
-const carriedBy: { readonly [K in TermKind]?: Shape } = {
-    string: 'string',
-    // a decimal is stored as `N` and *held* as a string, which is the whole point of it
-    decimal: 'string',
-    number: 'number',
-    boolean: 'boolean',
-    binary: 'binary',
-    null: 'null',
-    set: 'set',
-    array: 'array',
-    tuple: 'array',
-    record: 'map',
-    attributes: 'map',
-    tagged: 'map',
-}
-
-/** The kind of a value, read as coarsely as {@link carries} declares it. */
-export const shapeOf = (value: unknown): Shape | undefined =>
-    typeof value === 'string'
-        ? 'string'
-        : typeof value === 'number'
-          ? 'number'
-          : typeof value === 'boolean'
-            ? 'boolean'
-            : value === null
-              ? 'null'
-              : value instanceof Uint8Array
-                ? 'binary'
-                : value instanceof Set
-                  ? 'set'
-                  : Array.isArray(value)
-                    ? 'array'
-                    : asRecord(value)
-                      ? 'map'
-                      : undefined
+/**
+ * The `Value` **constructor** a term can write — {@link Shape} with the three set families split.
+ *
+ * The model's `Slot`, and the split is the whole of its content: `Kind` collapses `strSet`, `numSet`
+ * and `binSet` to one label, so `set(string)` and `set(number)` are indistinguishable to it, while
+ * the ten constructors tell them apart. `union(set(string), set(number))` is certified by this and
+ * was not by the coarser label — which is the correction §5 recorded when the kind tables went, and
+ * this is that correction reaching `src/`.
+ *
+ * **The codomain of `occV`, which reads a *term*.** The split is available here precisely because a
+ * term carries its base. {@link Shape} is the value side's alphabet and stays coarse for the reason
+ * written there, so this does not replace it: the two answer different questions.
+ */
+export type Slot = Exclude<Shape, 'set'> | 'strSet' | 'numSet' | 'binSet'
 
 /**
- * The only value this codec can carry, when there is exactly one.
+ * What one declared attribute decides, read where the field is held.
  *
- * Deliberately *not* recursive through the wrappers that {@link writes} descends: a constant is a
- * claim about the value, and `refine` can reject it, `legacy` can decode an older encoding into
- * something else, and `optional` admits absence, which is not the value. `fallback` is the one that
- * keeps it — it always writes the attribute, and its replacement is typed to the same value.
+ * §4's two marks answer differently and neither is the codec's answer. A name that may be absent
+ * decides nothing about a key, because a key built from it would have no value to build from in the
+ * rows that omit it. A stand-in is written always, so what it stands in for still decides.
+ *
+ * A reader of the term alone does not answer this. A term is what a codec has, a field is not a
+ * codec, and the body is what holds a field — so this reads the mark first and the term second.
  */
-export const decides = (codec: AnyCodec): unknown => {
-    const def = codec.def
-    switch (def?.kind) {
-        case 'literal':
-            // two admissible values narrow what may be stored without deciding it
-            return def.allowed.length === 1 ? def.allowed[0] : undefined
-        case 'fallback':
-            return decides(def.inner)
-        default:
-            return undefined
-    }
+export const constantOf = (declared: AnyDeclaration): unknown => {
+    const def = declared.def
+    if ('mark' in def && def.mark === 'optional') return undefined
+    const t = 'mark' in def ? def.t : def
+    // **A single-valued literal decides; two admissible values narrow without deciding.** This was
+    // `decides`, a reader that walked the definition to answer it, and the term answers the same
+    // row — deliberately *not* through the wrappers `member` descends: a constant is a claim about
+    // the value, and `refine` can reject it, `legacy` can decode an older encoding into something
+    // else, and `optional` admits absence, which is not the value. `fallback` is the one that keeps
+    // it, always writing the attribute at a value typed to the same alternative.
+    return t.kind === 'literal' && t.ls.length === 1 ? t.ls[0] : undefined
 }
 
-/**
- * Which of the four set bases this codec's elements sit at, or `undefined` if it is not one.
- *
- * The companion of {@link writes} for {@link set}, and the two answer different questions. `writes`
- * is a fact about the *attribute*: `decimal.set()` and `number.set()` both write `NS`, so the member
- * cannot tell them apart. This is a fact about the *term*, and it can — which is exactly why
- * `formal/Calculus/Domain.lean:602` indexes a set by a base rather than by a `Member`.
- *
- * Reads through `refine` and a literal, and through nothing else. Both of those are *restrictions*
- * of a base, so the set they build is a restriction of the base's set — `setCodec_restrict`. An
- * adapter (`held`), a read widening (`legacy`) or a union is not a restriction of anything, has no
- * base, and gets `undefined`.
- */
-export const setBase = (codec: AnyCodec): SetBase | undefined => {
-    const def = codec.def
-    switch (def?.kind) {
-        case 'string':
-        case 'number':
-        case 'decimal':
-        case 'binary':
-            return def.kind
-        // a literal at `boolean` is the one that has no set: there is no `BOOLS`
-        case 'literal':
-            return def.base === 'boolean' ? undefined : def.base
-        case 'refine':
-            return setBase(def.inner)
-        default:
-            return undefined
-    }
-}
-
-/**
- * Whether this codec admits this value — §3's `Adm : Term → Value → Bool`, ported.
- *
- * The sixth reader of a definition, beside {@link writes}, {@link carries}, {@link decides},
- * {@link setBase} and {@link deeper}, and it is a *function of the term* rather than a field of the
- * codec for the same reason they all are: there is nothing to forget in a function. The model
- * proved this exact at all 21 constructors (`Adm_exact`), which is what makes the port sound rather
- * than a second description of the same thing drifting from it.
- *
- * **This is exactly "encode succeeds", both ways**, and it was not always. Encoding did not
- * validate — a codec's input is typed, so `string.encode(5)` wrote `{ S: 5 }` — and the law held
- * one way round, failing at twenty-three of the thirty-two codecs in `codec.laws.spec.ts`'s table.
- * Every row runs the predicate this function runs now, so `admits(c, v) ⟺ !isError(c.encode(v))`
- * is the law that file states, over the whole table and pool.
- *
- * **The predicates live here and `encode` calls them, rather than the reverse**, at every row but
- * the two below. That direction is forced: `admits` reaches `opaque` and `custom` *by* calling
- * `encode`, so an `encode` that consulted `admits` there would not terminate. Those two need no
- * consulting — asking a codec cannot disagree with its answer — and the carve-out is the whole of
- * it.
- *
- * **Two rows ask their codec instead of describing it**, which is the model's own move (`adm
- * (.custom ce _) = fun v => (ce v).isSome`, and `opaque`'s rows were converted to match):
- *
- * - `custom` carries no payload at all — `{ kind: 'custom' }` — so there is nothing to read and
- *   asking is the only option.
- * - `opaque` carries only `numbers`, and its domain is everything else it checks: nesting depth,
- *   plain-object-ness, no empty set, no `NS`, no `Map`, no `bigint`. A hand-written recursion
- *   stating that a second time is a description that must be kept in agreement with what it
- *   describes; a question cannot drift. The brief for this asked for a closed form here and it
- *   would have been the weaker choice.
- *
- * `lazy` terminates because it recurses on the **value**, not on the term: `def.get()` is forced
- * once per level of the value, and a value is finite.
- */
-export const admits = (codec: AnyCodec, value: unknown): boolean => {
-    const def = codec.def
-    // no definition is no claim: nothing says which term this is, so nothing says what it admits
-    if (!def) return false
-    switch (def.kind) {
-        case 'string':
-        case 'boolean':
-        case 'binary':
-            return shapeOf(value) === def.kind
-        // the gate already inside `encode`, lifted out: writing an `N` means writing a numeral, and
-        // `Number.isFinite` is not that test
-        case 'number':
-            return typeof value === 'number' && isNumeral(String(value))
-        // `isStoredNumeral` stringifies what it is given — `isStoredNumeral(['1'])` is `true` — so
-        // the kind is checked first rather than relying on the regexp to do it
-        case 'decimal':
-            return typeof value === 'string' && isStoredNumeral(value)
-        case 'null':
-            return value === null
-        // dispatched on the base, because the base is what says which JS kind the alternatives are;
-        // `sameLiteral` is what compares binary by its octets rather than by reference
-        case 'literal':
-            return (
-                shapeOf(value) === literalShape[def.base] &&
-                def.allowed.some((one) =>
-                    sameLiteral(one, value as LiteralValue),
-                )
-            )
-        // non-emptiness is part of it: DynamoDB has no empty `SS`, so `encode` refuses one and this
-        // has to as well or the implication fails at the empty set
-        case 'set':
-            return (
-                value instanceof Set &&
-                value.size > 0 &&
-                [...value].every((member) => admits(def.element, member))
-            )
-        // and `[]` **is** admitted, which is the mirror of that and is correct: `L` has an empty
-        // inhabitant where the set members do not
-        case 'array':
-            return (
-                Array.isArray(value) &&
-                value.every((element) => admits(def.element, element))
-            )
-        case 'tuple': {
-            if (!Array.isArray(value)) return false
-            const fixed = def.elements.length
-            const tail = def.tail
-            if (tail ? value.length < fixed : value.length !== fixed) {
-                return false
-            }
-            return value.every((one, at) =>
-                admits((def.elements[at] ?? tail) as AnyCodec, one),
-            )
-        }
-        case 'record': {
-            const held = asRecord(value)
-            return (
-                held !== undefined &&
-                Object.values(held).every((one) => admits(def.value, one))
-            )
-        }
-        /**
-         * §4's field table, read the way `encode` reads it: a declared name must be there and be
-         * admitted unless the field is `optional`, and an undeclared name is checked only where
-         * there is a rest codec to check it with — `drop` and `refuse` both ignore it on the way
-         * in, which is what `encode` does.
-         *
-         * A `fallback` field is **not** absence-tolerant here, and that matches `encode`: the
-         * stand-in is what a *read* supplies when the attribute is missing, not what a write may
-         * leave out.
-         */
-        case 'attributes': {
-            const held = asRecord(value)
-            if (!held) return false
-            for (const name in def.of) {
-                const field = def.of[name] as AnyCodec
-                const at = held[name]
-                if (at === undefined) {
-                    if (field.def?.kind === 'optional') continue
-                    return false
-                }
-                if (!admits(field, at)) return false
-            }
-            const rest = def.rest
-            if (typeof rest === 'string') return true
-            for (const name in held) {
-                if (name in def.of || held[name] === undefined) continue
-                if (!admits(rest, held[name])) return false
-            }
-            return true
-        }
-        /** The tag lookup, `Object.hasOwn` for the reason {@link discriminatedUnion} gives. */
-        case 'tagged': {
-            const held = asRecord(value)
-            const tag = held?.[def.discriminator]
-            if (tag === undefined) return false
-            const name = String(tag)
-            return (
-                Object.hasOwn(def.variants, name) &&
-                admits(def.variants[name] as AnyCodec, value)
-            )
-        }
-        /**
-         * The disjunction, which is what the *value* side of a union is: an option admits it or
-         * none does. Left as a disjunction on purpose — the resolver `union` actually runs is a
-         * different question (it counts, and refuses where two options both admit), and rewiring
-         * it to this is a behaviour change out of scope here.
-         */
-        case 'untagged':
-            return def.variants.some((variant) => admits(variant, value))
-        case 'refine':
-            return (
-                admits(def.inner, value) &&
-                def.refined.is(value as never) === true
-            )
-        /**
-         * An adapter is asked about the value it *holds*, so the value is put through the adapter
-         * first — and the adapter is a caller's function, which throws on a value it does not own
-         * (`(value as readonly string[]).join` on a number). A throw is not an admission.
-         */
-        case 'held':
-            try {
-                return admits(def.inner, def.adapt.encode(value as never))
-            } catch {
-                return false
-            }
-        // a read widening writes what it currently is, and the older readings are read-side only
-        case 'legacy':
-            return admits(def.current, value)
-        case 'nullable':
-            return value === null || admits(def.inner, value)
-        // §4's positions: the mark is about the name, and what may be held is the inner term's
-        case 'optional':
-        case 'fallback':
-        case 'restOf':
-            return admits(def.inner, value)
-        case 'lazy':
-            return admits(def.get(), value)
-        // the two that ask — see the note above
-        case 'opaque':
-        case 'custom':
-            try {
-                return !failed(codec.encode(value as never))
-            } catch {
-                return false
-            }
-    }
-}
-
-/**
- * The codec one segment deeper, or `undefined` where the path runs past the schema.
- *
- * How {@link ItemCodec.at} walks. Defined here beside {@link writes} and {@link decides} because it
- * is the same fact in a different direction: what the definition says is beneath this.
- */
-export const deeper = (
-    codec: AnyCodec,
-    segment: string | number,
-): AnyCodec | undefined => {
-    const [only, ...rest] = childrenOf(codec, segment)
-    // a segment several variants declare *differently* is not one codec, and there is no honest
-    // single answer to give for it. `ItemCodec.at` carries the disagreement along instead, because
-    // a path may pass through such a segment and arrive somewhere the variants agree
-    return rest.length === 0 ? only : undefined
-}
+/* ── the seam: a definition, as the term it denotes ───────────────────────────────────── */
 
 /**
  * Every codec a segment can reach, which is more than one exactly where a union's variants
  * disagree about it.
  *
  * A union is the only definition that branches, and what it branches into is a *set of codecs* —
- * not a codec. This used to be a `CodecDef` kind, a pseudo-codec whose `encode` and `decode` both
+ * not a codec. This used to be a `Def` kind, a pseudo-codec whose `encode` and `decode` both
  * threw, which meant every reader of a definition had to know about a definition that was not one.
  * The disagreement belongs to the walk, so it is the walk that carries it.
  */
@@ -892,33 +335,35 @@ const childrenOf = (
     segment: string | number,
 ): readonly AnyCodec[] => {
     const def = codec.def
-    if (!def) return []
     const one = (child: AnyCodec | undefined) => (child ? [child] : [])
     switch (def.kind) {
-        case 'attributes':
-            return one(def.of[String(segment)])
+        case 'object': {
+            const field = def.body.fields[String(segment)]
+            return one(field ? codecOfTerm(field.t) : undefined)
+        }
         case 'record':
-            return one(def.value)
+            return one(codecOfTerm(def.val))
         case 'array':
-            return one(def.element)
+            return one(codecOfTerm(def.elem))
         // a set is unordered, so no document path addresses a member of one — `set` never offered
         // a child either, and refusing here is what keeps a meaningless path from compiling
-        case 'tuple':
+        case 'tuple': {
             // a position past the fixed part is a tail element, where there is a tail
-            return one(def.elements[Number(segment)] ?? def.tail)
-        case 'tagged':
-            return acrossVariants(Object.values(def.variants), segment)
-        case 'untagged':
-            return acrossVariants(def.variants, segment)
+            const at = def.elems[Number(segment)] ?? def.tail
+            return one(at ? codecOfTerm(at) : undefined)
+        }
+        case 'dunion':
+        case 'union':
+            return acrossVariants(
+                def.options.map((option) => codecOfTerm(option)),
+                segment,
+            )
         case 'refine':
-        case 'optional':
-        case 'fallback':
         case 'nullable':
-            return childrenOf(def.inner, segment)
         case 'legacy':
-            return childrenOf(def.current, segment)
+            return childrenOf(codecOfTerm(def.inner), segment)
         case 'lazy':
-            return childrenOf(def.get(), segment)
+            return childrenOf(codecOfTerm(def.get()), segment)
         default:
             return []
     }
@@ -939,10 +384,14 @@ const acrossVariants = (
  * does not require knowing what writes it, and that is what `at` is most often for. Only the codec
  * half is missing, so only the codec half fails.
  *
- * It carries **no definition**, and that is the whole of the fix: this used to be a `CodecDef` kind
- * called `branch`, so a definition language for codecs contained an entry that was not a codec, and
- * every reader of a definition had to know about it. Now `writes`, `carries` and `deeper` are asked
- * what this is and give the honest answer, which is nothing.
+ * It says **`custom`**, which is the definition for a pair of functions with no structure beneath
+ * them, and that is what this is. It used to be a `Def` kind of its own called `branch`, so a
+ * definition language for codecs contained an entry that was not a codec and every reader had to
+ * know about it; and it used to carry no definition at all, which stopped being available when
+ * `def` became required. `custom` costs no reader a case and changes no answer: `member` and `carries`
+ * say nothing at a `custom`, exactly as they said nothing at a missing definition, and
+ * `accepts` reaches the same `false` by attempting the pair and catching the throw rather than by
+ * declining to claim.
  */
 const unresolvedAt = (path: string): AnyCodec => {
     const unresolved = () => {
@@ -951,6 +400,7 @@ const unresolvedAt = (path: string): AnyCodec => {
         )
     }
     return codec<never, AttributeValue>({
+        def: { kind: 'custom', ce: unresolved, cp: unresolved },
         encode: unresolved,
         decode: unresolved,
     })
@@ -966,63 +416,6 @@ export type Refinement = {
     readonly arbitrary?: (rng: Rng, size: number) => unknown
     readonly onThinSearch?: (what: string, rate: number) => void
 }
-
-/**
- * A codec built from another, inheriting what a wrapper does not change.
- *
- * `arbitrary` and `shrink` are the two: they describe what the inner codec can carry, and a wrapper
- * that narrows or defers is usually still carrying it. Everything else is the wrapper's own —
- * `def` in particular, because a wrapper is a *different* codec from the one it wraps.
- *
- * A spread rather than the list of names it used to be, so overriding with an explicit `undefined`
- * still opts out: the key is present, so it wins. What is not mentioned is not there to win with.
- */
-const derive = <T, A extends AttributeValue>(
-    inner: AnyCodec,
-    over: Codec<T, A>,
-): AttributeCodec<T, A> =>
-    codec({
-        arbitrary: inner.arbitrary,
-        shrink: inner.shrink,
-        ...over,
-    } as Codec<T, A>)
-
-/** The same codec, described differently — all a marker wrapper ever does. */
-const described = <C>(inner: C, def: CodecDef): C => ({ ...inner, def })
-
-/**
- * Many attributes, as the one `M` that carries them.
- *
- * What `item`, `tagged` and `untagged` each expose as `.attribute` so they can nest inside another
- * entity. All three wrapped themselves identically and differed only in how a path descends, so
- * that difference is the parameter and the rest is written once — including the `'M'`, which all
- * three used to leave unsaid.
- */
-const asOneAttribute = <T>(self: {
-    encode: (value: T) => Result<AttributeMap>
-    decode: (item: AttributeMap) => Result<T>
-    def: CodecDef
-}): AttributeCodec<T, Attribute<'M'>> =>
-    codec({
-        encode: (value) =>
-            andThen(self.encode(value), (ok) => carrying('M', ok)),
-        decode: (attribute) => andThen(expect('M', attribute), self.decode),
-        def: self.def,
-    })
-
-const expect = <K extends AttributeName>(
-    name: K,
-    attribute: AttributeValue,
-): Result<AttributeCarriesOf<K>> => {
-    const carried = (attribute as Record<string, unknown>)[name]
-    return carried === undefined
-        ? new CodecError(
-              `expected attribute member '${name}', found '${memberOf(attribute) ?? 'none'}'`,
-          )
-        : (carried as AttributeCarriesOf<K>)
-}
-
-type AttributeCarriesOf<K extends AttributeName> = Attribute<K>[K]
 
 /**
  * A codec built by hand, at the level of the attribute itself.
@@ -1055,6 +448,23 @@ type AttributeCarriesOf<K extends AttributeName> = Attribute<K>[K]
  *
  * The two directions are given as the `Result` pair, the same way every codec in this file is built,
  * and the throwing pair is derived — so a hand-written codec cannot end up with the two disagreeing.
+ *
+ * **What the caller owes, and it is the whole of §2.** Every other constructor here has its laws
+ * *proved* from the terms it is built out of; this one takes two foreign functions, so the model
+ * discharges it by assumption — `Lawful (denote t)` as a premise
+ * (`formal/Calculus/Soundness.lean:74`). No gate is possible and none is attempted: the pair is
+ * arbitrary code, and there is no definition to read. The four:
+ *
+ * 1. **(R)** retraction — `decode(encode(t))` is `t`, exactly, for every `t` you write.
+ * 2. **(C)** canonizability — everything `decode` accepts, `encode` can write back.
+ * 3. **(W)** member-naming — every `encode` writes the same member, or the codec names none.
+ * 4. **(MP)** — reading an attribute and writing it back never changes its member.
+ *
+ * They are checkable, just not from here. `checkRoundTrip` is (R) over generated values,
+ * `checkDecodesAreWritable` is (C) against attributes nobody would write — which is the direction
+ * a round trip cannot reach, and where three of this library's shipped defects lived — and
+ * `checkMembersStable` is (W) and (MP). All three are in `./testing`, and a `custom` without them
+ * is a codec whose laws nobody has asserted.
  */
 export const custom = <T, A extends AttributeValue = AttributeValue>(raw: {
     readonly encode: (value: T) => Result<A>
@@ -1062,15 +472,17 @@ export const custom = <T, A extends AttributeValue = AttributeValue>(raw: {
     readonly arbitrary?: (rng: Rng, size: number) => T
     readonly shrink?: (value: T) => readonly T[]
 }): AttributeCodec<T, A> =>
-    codec({
-        encode: raw.encode,
-        decode: raw.decode,
-        // stamped, not taken: a hand-written codec says it is one. With no definition to hand in,
-        // `writes`, `carries` and `deeper` cannot be told a member, a kind of value or a shape
-        // beneath that a pair of foreign functions does not actually have
-        def: { kind: 'custom' },
+    // the pair *and* the generators, as data: a hand-written codec's definition is everything
+    // the caller said about it. `member` and `carries` are still told nothing, because
+    // two foreign functions have no member, no kind of value and no shape beneath to tell them of
+    codecOfTerm<T, A>({
+        kind: 'custom',
+        ce: raw.encode as (value: never) => Result<AttributeValue>,
+        cp: raw.decode,
         arbitrary: raw.arbitrary,
-        shrink: raw.shrink,
+        shrink: raw.shrink as
+            | ((value: never) => readonly unknown[])
+            | undefined,
     })
 
 // ── scalars ─────────────────────────────────────────────────────────
@@ -1096,31 +508,6 @@ export type LiteralBase = 'string' | 'number' | 'decimal' | 'boolean' | 'binary'
 export type LiteralValue = string | number | boolean | Uint8Array
 
 /**
- * Which member each base stores a literal in.
- *
- * Not injective: `number` and `decimal` both store `N`. That is exactly why the base has to be
- * recorded — the member cannot recover it, and neither can the JS type of the values, since a
- * `decimal` literal's alternatives are text.
- */
-const literalMember: { readonly [B in LiteralBase]: AttributeName } = {
-    string: 'S',
-    number: 'N',
-    decimal: 'N',
-    boolean: 'BOOL',
-    binary: 'B',
-}
-
-/** Which kind of JS value each base's alternatives are — the mirror, and not the same partition. */
-const literalShape: { readonly [B in LiteralBase]: Shape } = {
-    string: 'string',
-    number: 'number',
-    // a decimal is held as a string and stored as `N`, which is the whole point of it
-    decimal: 'string',
-    boolean: 'boolean',
-    binary: 'binary',
-}
-
-/**
  * The bases a native set can be built from — `formal/Calculus/Domain.lean:602`'s `SetBase`.
  *
  * `boolean` is the one base with no set: DynamoDB has `SS`, `NS` and `BS`, and no `BOOLS`. Four
@@ -1129,164 +516,24 @@ const literalShape: { readonly [B in LiteralBase]: Shape } = {
  */
 export type SetBase = Exclude<LiteralBase, 'boolean'>
 
-/** Two alternatives, compared the way the base compares them: bytes for `binary`, `===` otherwise. */
-const sameLiteral = (one: LiteralValue, other: LiteralValue): boolean =>
-    one instanceof Uint8Array
-        ? other instanceof Uint8Array &&
-          one.length === other.length &&
-          one.every((byte, at) => byte === other[at])
-        : one === other
-
-/** An alternative as a message names it: text in quotes, digits bare, bytes in hex. */
-const namedLiteral = (one: LiteralValue): string =>
-    typeof one === 'string'
-        ? `'${one}'`
-        : one instanceof Uint8Array
-          ? `0x${[...one].map((byte) => byte.toString(16).padStart(2, '0')).join('')}`
-          : String(one)
-
 /**
- * A literal at a named base — the one builder every literal in this library goes through.
+ * §3 `(literal)`'s `ℓ`, checked: non-empty and pairwise distinct.
  *
- * The premises §3 states on `(literal)`, checked where the rule states them:
+ * **The model gets three guarantees from a type and the host's type gives two.** `ls` is a
+ * `NEFinset k.Carrier`, so the base indexes the alternatives, `n ≥ 1` holds, and no two are equal —
+ * all three from `NEFinset`. `term.ts`'s {@link Literal} buys the first from a discriminated union
+ * over the base and the second from a tuple head. **TypeScript cannot say the third**, so it is a
+ * refusal at construction, and this is where it lives.
  *
- * - **`ℓ` is non-empty.** Checked by each caller, because the message wants to name the
- *   constructor the caller actually wrote.
- * - **`ℓ` is homogeneous at the base.** Free in the model — `NEFinset k.Carrier` — and not free
- *   here, because a spread of a plain array defeats the type. So it is a construction-time refusal.
- * - **`ℓ ⊆ D`** at the two bases that write an `N`. `number` reads through `Number.prototype
- *   .toString`; `decimal` is text already and has to be in the form the service returns, or the
- *   literal is one this codec could write and never read back.
+ * Distinctness is not tidiness. `NEFinset` is a *set*, so `literal(k, {'A','A'})` and
+ * `literal(k, {'A'})` are one term in the model and two definitions here — and the second names a
+ * cardinality the first does not, which is what {@link constantOf} reads to answer whether a literal
+ * has exactly one value. A repeated alternative makes a two-element `ls` that admits one value,
+ * and the constant would go unrecognised.
  *
- * All three are decided when the codec is built, because `ℓ` is data this library owns.
+ * Compared with {@link sameLiteral}, which compares the way the base compares: bytes for `binary`,
+ * `===` otherwise.
  */
-const literalCodec = <T extends LiteralValue>(
-    base: LiteralBase,
-    allowed: readonly T[],
-): AttributeCodec<T, AttributeValue> => {
-    const member = literalMember[base]
-
-    const wrong = allowed.filter((one) => shapeOf(one) !== literalShape[base])
-    if (wrong.length) {
-        throw new CodecError(
-            `\`${base}(...)\` admits ${literalShape[base]} values, and ${wrong
-                .map(namedLiteral)
-                .join(', ')} ${wrong.length === 1 ? 'is' : 'are'} not one`,
-        )
-    }
-
-    /**
-     * **`ℓ ⊆ D`** — the premise on the numeric bases, and the defect that made it more than
-     * bookkeeping. `literal(NaN)` produced `{ N: 'NaN' }` and `literal(1e400)` produced
-     * `{ N: 'Infinity' }`, both reachable with no cast and both rejected by the service.
-     */
-    if (base === 'number') {
-        const outside = (allowed as readonly number[]).filter(
-            (one) => !isNumeral(String(one)),
-        )
-        if (outside.length) {
-            throw new CodecError(
-                `a numeric literal is stored as 'N', and ${outside
-                    .map(namedLiteral)
-                    .join(
-                        ', ',
-                    )} ${outside.length === 1 ? 'is not a number' : 'are not numbers'} DynamoDB stores: it takes at most 38 significant digits and magnitude 1e-130 to 9.9e125, and has no NaN or Infinity`,
-            )
-        }
-    }
-
-    /**
-     * The same premise at `decimal`, and it is *narrower* than `number`'s, for the reason
-     * {@link decimal} gives: the service normalises what it accepts, and this codec's read side is
-     * the identity on the digits, so an alternative in any other form is one that could be written
-     * and would come back as a different string.
-     */
-    if (base === 'decimal') {
-        const outside = (allowed as readonly string[]).filter(
-            (one) => !isStoredNumeral(one),
-        )
-        if (outside.length) {
-            throw new CodecError(
-                `a decimal literal is stored as 'N' in the form DynamoDB returns, and ${outside
-                    .map(namedLiteral)
-                    .join(
-                        ', ',
-                    )} ${outside.length === 1 ? 'is' : 'are'} not: it accepts at most 38 significant digits, magnitude 1e-130 to 9.9e125, and returns the normalised form (no leading or trailing zeros, no exponent, no '+')`,
-            )
-        }
-    }
-
-    /**
-     * Checked both ways. An unchecked `encode` makes {@link ConstantCodec.constant} a lie — claim
-     * one value, write another — which the type misses where the entity is a union and the codec
-     * describes one variant of it.
-     *
-     * Answers with the *stored* alternative rather than the one it was handed, which matters at
-     * `binary`: two `Uint8Array`s with the same bytes are different objects, so returning the
-     * member of `ℓ` is what keeps a decoded value identical to the one the schema names.
-     */
-    const admits = (value: LiteralValue): Result<T> => {
-        const found = allowed.find((one) => sameLiteral(one, value))
-        return found === undefined
-            ? new CodecError(
-                  `${namedLiteral(value)} is not one of ${allowed
-                      .map(namedLiteral)
-                      .join(', ')}`,
-              )
-            : found
-    }
-
-    // `N` carries digits, so a numeric literal is written as text and read back as the number it is
-    return codec<T, AttributeValue>({
-        def: { kind: 'literal', base, allowed },
-        encode: (value) =>
-            andThen(admits(value), (ok) =>
-                carrying(
-                    member,
-                    (base === 'number' ? String(ok) : ok) as never,
-                ),
-            ),
-        /**
-         * **The same gate the base's own codec reads through, and for the same reason.**
-         *
-         * `Number` is far more permissive than an `N`: it reads `''`, whitespace, `0x10` and
-         * `0b11`, none of which DynamoDB will ever hand back. Membership in `ℓ` does not filter
-         * them out — it only rejects the ones whose numeric value happens to miss the set, so
-         * `number(0, 1, 2)` read `{ N: '' }` as `0` and `number(0, 16)` read `{ N: '0x10' }`
-         * as `16`. An attribute no store wrote, decoded to a value the type says is legitimate.
-         *
-         * The premise `ℓ ⊆ D` does not cover this and it was wrong to say it did. A premise
-         * bounds the values **this library owns**; a stored attribute is outside anything it
-         * owns, which is the whole reason `decode` re-checks what `encode` was trusted on.
-         *
-         * `number`'s *second* gate — the round-tripped value, not the digits — is genuinely
-         * subsumed here, and that one is safe to say: a numeral that rounds past the maximum
-         * lands outside `D`, and `ℓ ⊆ D`, so `admits` refuses it.
-         */
-        decode: (attribute) =>
-            andThen(expect(member, attribute), (carried) => {
-                if (base === 'number') {
-                    const text = carried as string
-                    return isNumeral(text)
-                        ? admits(Number(text))
-                        : new CodecError(
-                              `'${text}' is not a numeral, so this attribute was not written by DynamoDB`,
-                          )
-                }
-                if (base === 'decimal') {
-                    const text = carried as string
-                    return isStoredNumeral(text)
-                        ? admits(text)
-                        : new CodecError(
-                              `'${text}' is not a numeral in the form DynamoDB stores, so this attribute was not written by it`,
-                          )
-                }
-                return admits(carried as LiteralValue)
-            }),
-    })
-}
-
-/** `ℓ` non-empty, refused where the caller can see which constructor named nothing. */
 const someAlternatives = <T extends LiteralValue>(
     base: LiteralBase,
     allowed: readonly T[],
@@ -1295,6 +542,18 @@ const someAlternatives = <T extends LiteralValue>(
         throw new CodecError(
             `a literal admits one of a non-empty set of values, and \`${base}()\` names none; pass the values, or use \`${base}\` itself if anything is admissible`,
         )
+    }
+    // the values rather than the indices, so the pair is two `T`s and not two lookups the checker
+    // has to be told about; `at` recovers the position the message names
+    for (const [i, one] of allowed.entries()) {
+        for (const [after, other] of allowed.slice(i + 1).entries()) {
+            if (sameLiteral(one, other)) {
+                const at = i + 1 + after
+                throw new CodecError(
+                    `a literal's alternatives are a *set*, and \`${base}()\` names the same value at positions ${i} and ${at}; the model's \`NEFinset\` cannot hold it twice, and a repeat makes a two-value literal that admits one — which stops it reading as a constant`,
+                )
+            }
+        }
     }
     return allowed
 }
@@ -1323,7 +582,7 @@ export type LiteralAttribute<T> = [T] extends [string]
  * or more values is an ordinary {@link AttributeCodec}: it narrows what is admissible without
  * deciding it.
  *
- * `constant` is a **type-level** brand and carries no runtime property; {@link decides} is what
+ * `constant` is a **type-level** brand and carries no runtime property; {@link constantOf} is what
  * reads the value back at runtime.
  */
 export type ConstantCodec<
@@ -1383,27 +642,10 @@ export type StringCodec = AttributeCodec<string, Attribute<'S'>> & {
     }
 }
 
-/**
- * A value's kind, for a message about a value that should not have arrived.
- *
- * The five ground `encode`s all refuse the same way and want to say the same thing about what they
- * were handed. `shapeOf` answers `undefined` for what it cannot place — a `bigint`, a `Map`, a
- * function — and `typeof` is the honest fallback there rather than a guess.
- */
-const describeShape = (value: unknown): string =>
-    `${shapeOf(value) ?? typeof value} \`${String(value)}\``
+/* ── §3's terms, denoted ──────────────────────────────────────────────────────────────── */
 
-const stringCodec: AttributeCodec<string, Attribute<'S'>> = codec({
-    def: { kind: 'string' },
-    // the shape test is `admits`', not a second one: `shapeOf` is the function that row calls, so
-    // the two cannot drift into disagreeing about what a string is
-    encode: (value) =>
-        shapeOf(value) === 'string'
-            ? carrying('S', value)
-            : new CodecError(
-                  `${describeShape(value)} is not a string, and \`string\` writes an 'S' — a codec's input is typed, so this is a value that reached \`encode\` past its type`,
-              ),
-    decode: (attribute) => expect('S', attribute),
+const stringCodec: AttributeCodec<string, Attribute<'S'>> = codecOfTerm({
+    kind: 'string',
 })
 
 /** @see {@link StringCodec} */
@@ -1451,24 +693,8 @@ export type DecimalCodec = AttributeCodec<string, Attribute<'N'>> & {
     }
 }
 
-const decimalCodec: AttributeCodec<string, Attribute<'N'>> = codec({
-    def: { kind: 'decimal' },
-    // `isStoredNumeral` stringifies what it is given — `isStoredNumeral(['1'])` is `true` — so the
-    // kind is checked first, which is exactly what `admits`' `decimal` row says and this did not
-    encode: (value) =>
-        typeof value === 'string' && isStoredNumeral(value)
-            ? carrying('N', value)
-            : new CodecError(
-                  `'${value}' is not a numeral DynamoDB stores unchanged; it accepts at most 38 significant digits, magnitude 1e-130 to 9.9e125, and returns the normalised form (no leading or trailing zeros, no exponent, no '+')`,
-              ),
-    decode: (attribute) =>
-        andThen(expect('N', attribute), (carried) =>
-            isStoredNumeral(carried)
-                ? carried
-                : new CodecError(
-                      `'${carried}' is not a numeral in the form DynamoDB stores, so this attribute was not written by it`,
-                  ),
-        ),
+const decimalCodec: AttributeCodec<string, Attribute<'N'>> = codecOfTerm({
+    kind: 'decimal',
 })
 
 /** @see {@link DecimalCodec} */
@@ -1501,36 +727,8 @@ export type NumberCodec = AttributeCodec<number, Attribute<'N'>> & {
     }
 }
 
-const numberCodec: AttributeCodec<number, Attribute<'N'>> = codec({
-    def: { kind: 'number' },
-    // `value.toString()` is defined on everything, so the numeral gate alone accepted the *string*
-    // `'5'` as readily as the number `5`. `admits`' `number` row asks the kind first; now so does this
-    encode: (value) =>
-        typeof value === 'number' && isNumeral(value.toString())
-            ? carrying('N', value.toString())
-            : new CodecError(
-                  `${value} is not a number DynamoDB stores: it takes at most 38 significant digits and magnitude 1e-130 to 9.9e125, and has no NaN or Infinity`,
-              ),
-    /**
-     * Both gates, and the second is not redundant. `Number('9.9999999999999999999999999999999999999E+125')`
-     * rounds *up* to `1e126`, which is past the maximum — so a numeral DynamoDB stores can read
-     * back as a number this codec cannot write. Checking only the stored digits would leave `decode`
-     * accepting a value `encode` refuses, which is `(C)` failing.
-     */
-    decode: (attribute) =>
-        andThen(expect('N', attribute), (carried) => {
-            if (!isNumeral(carried)) {
-                return new CodecError(
-                    `'${carried}' is not a numeral, so this attribute was not written by DynamoDB`,
-                )
-            }
-            const read = Number(carried)
-            return isNumeral(read.toString())
-                ? read
-                : new CodecError(
-                      `'${carried}' reads back as ${read}, which is outside the range DynamoDB stores`,
-                  )
-        }),
+const numberCodec: AttributeCodec<number, Attribute<'N'>> = codecOfTerm({
+    kind: 'number',
 })
 
 /** @see {@link NumberCodec} */
@@ -1554,15 +752,8 @@ export type BooleanCodec = AttributeCodec<boolean, Attribute<'BOOL'>> & {
     ): AttributeCodec<T, Attribute<'BOOL'>>
 }
 
-const booleanCodec: AttributeCodec<boolean, Attribute<'BOOL'>> = codec({
-    def: { kind: 'boolean' },
-    encode: (value) =>
-        shapeOf(value) === 'boolean'
-            ? carrying('BOOL', value)
-            : new CodecError(
-                  `${describeShape(value)} is not a boolean, and \`boolean\` writes a 'BOOL' — a codec's input is typed, so this is a value that reached \`encode\` past its type`,
-              ),
-    decode: (attribute) => expect('BOOL', attribute),
+const booleanCodec: AttributeCodec<boolean, Attribute<'BOOL'>> = codecOfTerm({
+    kind: 'boolean',
 })
 
 /** @see {@link BooleanCodec} */
@@ -1589,18 +780,8 @@ export const boolean: BooleanCodec = Object.assign(
  * Not callable, and there is nothing for it to be: the model's `GroundKind.null` has carrier `Unit`,
  * so `literal .null` can say nothing this codec does not already say.
  */
-export const nullValue: AttributeCodec<null, Attribute<'NULL'>> = codec({
-    def: { kind: 'null' },
-    // checked, though the type already says so: the admissible set is one value and this library
-    // owns it, so an unchecked `encode` would write `NULL` for anything that reached it — a pair
-    // whose `e` is defined outside its own held set. A literal checks for the same reason
-    encode: (value) =>
-        value === null
-            ? carrying('NULL', true)
-            : new CodecError(
-                  `${JSON.stringify(value)} is not null, and this codec holds nothing else`,
-              ),
-    decode: (attribute) => andThen(expect('NULL', attribute), () => null),
+export const nullValue: AttributeCodec<null, Attribute<'NULL'>> = codecOfTerm({
+    kind: 'null',
 })
 
 /**
@@ -1623,15 +804,8 @@ export type BinaryCodec = AttributeCodec<Uint8Array, Attribute<'B'>> & {
     }
 }
 
-const binaryCodec: AttributeCodec<Uint8Array, Attribute<'B'>> = codec({
-    def: { kind: 'binary' },
-    encode: (value) =>
-        shapeOf(value) === 'binary'
-            ? carrying('B', value)
-            : new CodecError(
-                  `${describeShape(value)} is not a \`Uint8Array\`, and \`binary\` writes a 'B' — a codec's input is typed, so this is a value that reached \`encode\` past its type`,
-              ),
-    decode: (attribute) => expect('B', attribute),
+const binaryCodec: AttributeCodec<Uint8Array, Attribute<'B'>> = codecOfTerm({
+    kind: 'binary',
 })
 
 /** @see {@link BinaryCodec} */
@@ -1664,11 +838,13 @@ export const binary: BinaryCodec = Object.assign(
  * **Empty is not representable** — encode throws rather than writing what the service refuses.
  */
 const set = <const C extends AnyCodec>(
-    element: C & NotAboutAbsence<C>,
+    element: C,
 ): AttributeCodec<ReadonlySet<Decoded<C>>, SetOf<C>> => {
     type T = Decoded<C>
     const inner = element as unknown as AttributeCodec<T>
-    const member = writes(inner)
+    // the member the element stores, read off its term — the deleted reader asked the definition and the
+    // two answer the same rows, but only the term's answer survives the reader going
+    const member = memberOf(inner.def)
     if (member !== 'S' && member !== 'N' && member !== 'B') {
         throw new CodecError(
             `a set holds strings, numbers or binary, and this element writes ${member ? `'${member}'` : 'no single member'}`,
@@ -1678,7 +854,7 @@ const set = <const C extends AnyCodec>(
      * …and the element reduces to one of the four bases a stored set is built from.
      *
      * The member check above is §3 `(set)`'s premise as it *was* — `setMember μ = some μS` — and it
-     * is not enough, because `writes` reads through wrappers that a set has no way to record.
+     * is not enough, because `member` reads through wrappers that a set has no way to record.
      * a set of `held(string, f, g)` passed it: `held` writes where its inner term does, so the member
      * was `'S'`, and the adapter's two functions then ran per member of an attribute that stores no
      * such thing. The model closed this by indexing `Term.set` with a `SetBase`
@@ -1687,94 +863,46 @@ const set = <const C extends AnyCodec>(
      * `src/`. This is the same refusal, at the same place the other one lives.
      *
      * `refine` and a literal are **not** given up: a restriction of the elements is a restriction of
-     * the set, and `setCodec_restrict` (`formal/Calculus/Combinators.lean`) proves the two write the
-     * same attribute. So {@link setBase} reads through those two and nothing else.
+     * the set, and `setCodec_restrict` and `setCodec_restrict_p` prove the two are one pair on both
+     * halves. So the walk reads through those two and nothing else.
+     *
+     * **Asked of the element's term, not of the element's codec.** `set` takes a base now, and the
+     * base is a fact about the term — the same walk that decides how the conversion spells this
+     * set, so the guard and the spelling cannot answer differently.
      */
-    if (!setBase(inner)) {
+    const base = setBaseOf(inner.def)
+    if (base === undefined) {
         throw new CodecError(
             `a set's element must be one of the four bases a stored set is built from — \`string\`, \`number\`, \`decimal\` or \`binary\`, narrowed by \`refine\` or by a literal — and this element is a \`${inner.def?.kind ?? 'codec with no definition'}\`, which writes '${member}' by reading through to something else. A set of it has nothing DynamoDB stores`,
         )
     }
-    const setMember = `${member}S` as 'SS' | 'NS' | 'BS'
-
-    const carried = (value: T): Result<string | Uint8Array> =>
-        andThen(
-            inner.encode(value),
-            (written) =>
-                (written as Record<string, unknown>)[member] as
-                    | string
-                    | Uint8Array,
-        )
-
-    // the member is decided above, from the element; the cast carries that decision into the type
-    return codec<ReadonlySet<T>, SetOf<C>>({
-        def: { kind: 'set', element: inner },
-        // `value.size` is `undefined` on anything that is not a `Set`, so `=== 0` was false for a
-        // string and `[...value]` then spread it into its characters — `string.set()` wrote
-        // `{ SS: ['a','b','c'] }` for `'abc'`. `admits`' `set` row asks `instanceof Set` first
-        encode: (value) =>
-            !(value instanceof Set)
-                ? new CodecError(
-                      `${describeShape(value)} is not a \`Set\`, and a ${setMember} is written from one — a codec's input is typed, so this is a value that reached \`encode\` past its type`,
-                  )
-                : value.size === 0
-                  ? new CodecError(
-                        `DynamoDB has no empty ${setMember}; omit the attribute or use array(...)`,
-                    )
-                  : andThen(
-                        every([...value], carried),
-                        (written) =>
-                            // sorted so what is stored does not depend on insertion order; deduplicated
-                            // already, because a `Set` is
-                            carrying(
-                                setMember,
-                                [...new Set(written)].sort() as never,
-                            ) as SetOf<C>,
-                    ),
-        // the empty set is refused in *both* directions, and the read side is the one that
-        // matters: DynamoDB never stores an empty `SS`, so an item carrying one was written by
-        // something else. Decoding it would hand back a value this codec's own `encode` refuses —
-        // the pair's two halves disagreeing about what it holds, which is (C) failing
-        decode: (attribute) =>
-            andThen(
-                andThen(expect(setMember, attribute), (members) =>
-                    (members as readonly unknown[]).length === 0
-                        ? new CodecError(
-                              `DynamoDB has no empty ${setMember}, so this attribute was not written by it; a set this codec would refuse to write is not one it can read`,
-                          )
-                        : every(members as readonly unknown[], (raw) =>
-                              inner.decode(carrying(member, raw as never)),
-                          ),
-                ),
-                (read) => new Set(read) as ReadonlySet<T>,
-            ),
-    })
+    /**
+     * §3 `(set)` is indexed by the **base**, so a restricted element is spelled as a restriction of
+     * the *set*: `string.set('a','b')` is `refine(set(string), each(members …))` and
+     * `refine(decimal, q).set()` is `refine(set(decimal), each(closure q))`. `each` is `liftQ` at
+     * the term level — every element of the wire set satisfies the element's own predicate — and
+     * `setCodec_restrict` and `setCodec_restrict_p` prove the two spellings are one pair on both
+     * halves. One `refine` per predicate the element carries, outermost first.
+     */
+    const bare: Term = { kind: 'set', base }
+    const term = elementPredicates(inner.def).reduceRight<Term>(
+        (restricted, of) => ({
+            kind: 'refine',
+            inner: restricted,
+            q: { kind: 'each', of },
+        }),
+        bare,
+    )
+    return codecOfTerm<ReadonlySet<T>, SetOf<C>>(term)
 }
 
 export const array = <const C extends AnyCodec>(
-    element: C & NotAboutAbsence<C>,
+    element: C,
 ): AttributeCodec<readonly Decoded<C>[], L<AttributeOf<C>>> => {
     type T = Decoded<C>
-    const items = element as unknown as AttributeCodec<T>
-    return codec<readonly T[], L<AttributeOf<C>>>({
-        def: { kind: 'array', element: items },
-        // the codec's own methods rather than a wrapper around them: a closure per call to encode
-        // a list is a closure per list in every item written
-        // `every` iterates whatever is iterable, so a string arrived as its characters. `admits`'
-        // `array` row asks `Array.isArray` first, and now so does this
-        encode: (value) =>
-            !Array.isArray(value)
-                ? (new CodecError(
-                      `${describeShape(value)} is not an array, and \`array\` writes an 'L' — a codec's input is typed, so this is a value that reached \`encode\` past its type`,
-                  ) as never)
-                : andThen(
-                      every(value, items.encode),
-                      (written) => carrying('L', written) as L<AttributeOf<C>>,
-                  ),
-        decode: (attribute) =>
-            andThen(expect('L', attribute), (carried) =>
-                every(carried, items.decode),
-            ),
+    return codecOfTerm<readonly T[], L<AttributeOf<C>>>({
+        kind: 'array',
+        elem: termOf(element as unknown as AnyCodec),
     })
 }
 
@@ -1784,21 +912,31 @@ export const array = <const C extends AnyCodec>(
  * `list` gives `readonly T[]`, which cannot say that a route is one step or exactly two. Decode
  * checks the length, because a tuple whose arity is wrong is not the type it claims to be.
  */
-export const tuple = <const Cs extends readonly AnyCodec[]>(
+export const tuple = <const Cs extends readonly (AnyCodec | AnyRest)[]>(
     // asked of the union of the elements rather than mapped over them: one instantiation instead of
     // one per position, and the diagnostic lands on the call either way. Mapping cost +10% across
     // this repo, measured. `rest` is exempt, and checked for position separately
-    ...elements: Cs &
-        NotAboutAbsence<
-            // matched on the marker alone, never on `RestCodec<unknown, …>`: `AttributeCodec` names
-            // its value on both sides, so it is invariant and the wider one does not match
-            Exclude<Cs[number], { readonly [restMarker]: true }>
-        > &
-        RestGoesLast<Cs>
+    ...elements: Cs & RestGoesLast<Cs>
 ): AttributeCodec<TupleOf<Cs>, L<TupleWrites<Cs>>> => {
-    const all = elements.map(
-        (element) => element as unknown as AnyCodec,
-    ) as readonly AnyCodec[]
+    const all = elements as readonly unknown[]
+
+    /**
+     * `RestGoesLast` refuses a misplaced `rest` in the *type*, and a cast defeats the type.
+     *
+     * Past one, nothing looked: the split below reads only the last element, so a `rest` anywhere
+     * else was read as a fixed element and written as one — `tuple(rest(string) as any, number)`
+     * encoded `['a', 1]` as a two-element tuple and reported nothing. This is §8 case (b): the
+     * condition is decidable from the declaration, so it is refused where the declaration is,
+     * beside `set`'s two refusals for the same reason.
+     */
+    const misplaced = all.findIndex(
+        (element, at) => at < all.length - 1 && isTail(element),
+    )
+    if (misplaced !== -1) {
+        throw new CodecError(
+            `\`rest\` is at position ${misplaced} of ${all.length} elements and a tuple's rest must be last — everything after it would have no fixed position. The type says so too; this call reached here past a cast`,
+        )
+    }
 
     /**
      * The tail is split off once, here, rather than asked for per row.
@@ -1807,59 +945,15 @@ export const tuple = <const Cs extends readonly AnyCodec[]>(
      * that can be marked and looking at it is enough.
      */
     const last = all[all.length - 1]
-    const tail =
-        last?.def?.kind === 'restOf' ? (last.def.inner as AnyCodec) : undefined
-    const items = tail ? all.slice(0, -1) : all
+    const tail = isTail(last) ? termOf(last.rest) : undefined
+    const items = (tail ? all.slice(0, -1) : all) as readonly AnyCodec[]
 
-    return codec({
-        def: { kind: 'tuple', elements: items, tail },
-        encode: (value) => {
-            const held = value as readonly unknown[]
-            // a `Uint8Array` of the right length has the right `length` and is not a tuple, which
-            // is what the two length tests alone could not say. `admits`' `tuple` row asks
-            // `Array.isArray` before it counts, and the arity messages below now mean what they say
-            if (!Array.isArray(held)) {
-                return new CodecError(
-                    `${describeShape(value)} is not an array, and \`tuple\` writes an 'L' — a codec's input is typed, so this is a value that reached \`encode\` past its type`,
-                )
-            }
-            if (!tail && held.length !== items.length) {
-                return new CodecError(
-                    `expected ${items.length} elements, found ${held.length}`,
-                )
-            }
-            if (tail && held.length < items.length) {
-                return new CodecError(
-                    `expected at least ${items.length} elements, found ${held.length}`,
-                )
-            }
-            return andThen(
-                every(held, (one, index) =>
-                    (items[index] ?? (tail as AnyCodec)).encode(one as never),
-                ),
-                (written) => carrying('L', written),
-            )
-        },
-        decode: (attribute) =>
-            andThen(expect('L', attribute), (carried) => {
-                if (!tail && carried.length !== items.length) {
-                    return new CodecError(
-                        `expected a list of ${items.length}, found ${carried.length}`,
-                    )
-                }
-                if (tail && carried.length < items.length) {
-                    return new CodecError(
-                        `expected a list of at least ${items.length}, found ${carried.length}`,
-                    )
-                }
-                return every(carried, (one, index) =>
-                    (items[index] ?? (tail as AnyCodec)).decode(
-                        one as AttributeValue,
-                    ),
-                ) as never
-            }),
-        // as with `record` and `map`, the cast keeps the shape each position writes, which
-        // `Attribute<'L'>` would flatten to "some list"
+    // as with `record` and `map`, the cast keeps the shape each position writes, which
+    // `Attribute<'L'>` would flatten to "some list"
+    return codecOfTerm({
+        kind: 'tuple',
+        elems: items.map(termOf),
+        tail,
     }) as unknown as AttributeCodec<TupleOf<Cs>, L<TupleWrites<Cs>>>
 }
 
@@ -1873,11 +967,8 @@ export type TupleOf<Cs extends readonly unknown[]> = Cs extends readonly [
     ...infer Head,
     infer Last,
 ]
-    ? Last extends { readonly [restMarker]: true }
-        ? readonly [
-              ...{ [I in keyof Head]: Decoded<Head[I]> },
-              ...Decoded<Last>[],
-          ]
+    ? Last extends { readonly [restMarker]: true; readonly rest: infer R }
+        ? readonly [...{ [I in keyof Head]: Decoded<Head[I]> }, ...Decoded<R>[]]
         : { readonly [I in keyof Cs]: Decoded<Cs[I]> }
     : { readonly [I in keyof Cs]: Decoded<Cs[I]> }
 
@@ -1894,29 +985,13 @@ export type TupleWrites<Cs extends readonly unknown[]> = Cs extends readonly [
     ...infer Head,
     infer Last,
 ]
-    ? Last extends { readonly [restMarker]: true }
+    ? Last extends { readonly [restMarker]: true; readonly rest: infer R }
         ? readonly [
               ...{ [I in keyof Head]: AttributeOf<Head[I]> },
-              ...(AttributeOf<Last> & AttributeValue)[],
+              ...(AttributeOf<R> & AttributeValue)[],
           ]
         : { readonly [I in keyof Cs]: AttributeOf<Cs[I]> }
     : { readonly [I in keyof Cs]: AttributeOf<Cs[I]> }
-
-/**
- * Nothing, or why a marker cannot wrap another marker.
- *
- * `optional` and `fallback` are both statements about a *name*, so one wrapping the other says the
- * same thing twice — and said it wrongly. Only the outermost mark was read: `optional(fallback(c, v))`
- * dropped the stand-in entirely and left the attribute simply absent, while
- * `fallback(optional(c), v)` stood in on the way out and then *required* the value on the way back.
- * Both spellings mean `fallback(c, v)`, which is the one that works.
- *
- * `rest` is refused for the same reason from the other direction: it marks a position, and a name is
- * not one.
- */
-type NotAlreadyMarked<C> = [Extract<C, AboutAbsence>] extends [never]
-    ? unknown
-    : ErrorMessage<'this codec is already marked: `optional`, `fallback` and `rest` each mark a declaration once, and nesting them reads only the outermost — `fallback(c, v)` is the attribute that may be absent and has a stand-in'>
 
 /**
  * Nothing, or why a tuple's tail is not an attribute.
@@ -1960,45 +1035,55 @@ export type RestGoesLast<Cs extends readonly unknown[]> = Cs extends readonly [
  * ```
  */
 export const rest = <const C extends AnyCodec>(
-    element: C & NotAboutAbsence<C>,
+    element: C,
 ): RestCodec<Decoded<C>, AttributeOf<C> & AttributeValue> =>
-    ({
-        ...(element as object),
-        def: { kind: 'restOf', inner: element as unknown as AnyCodec },
-    }) as unknown as RestCodec<Decoded<C>, AttributeOf<C> & AttributeValue>
+    ({ rest: element as unknown as AnyCodec }) as unknown as RestCodec<
+        Decoded<C>,
+        AttributeOf<C> & AttributeValue
+    >
 
-/** A codec marked for a tuple's tail. Carries what it holds and what it writes, unchanged. */
-export type RestCodec<
-    T,
-    A extends AttributeValue = AttributeValue,
-> = AttributeCodec<T, A> & { readonly [restMarker]: true }
+/**
+ * Whether this is a tail marker rather than an element — the runtime half of `restMarker`.
+ *
+ * `restMarker` is a `declare const` symbol, so it exists in the type and nowhere else, and
+ * {@link tuple} needs an answer at run time. One own property, checked by name.
+ */
+const isTail = (element: unknown): element is { readonly rest: AnyCodec } =>
+    typeof element === 'object' &&
+    element !== null &&
+    'rest' in element &&
+    // and it is not a codec, which is decidable now that every codec carries a definition. An
+    // `ItemCodec` has a `rest` of its own — its open-part policy — so the first test alone would
+    // take one for a tail
+    !('def' in element)
+
+/**
+ * A tuple's tail: the element codec, marked for a position.
+ *
+ * **Not a codec, and it used to say it was.** This was `AttributeCodec<T, A> & { …marker }`, which
+ * claimed a rest has an `encode` and a `decode` — true only because `rest(c)` was built by spreading
+ * `c`, so a bare rest encoded as its element by accident. A rest is a *position*, `Rest` in §4's
+ * third stratum, and the only two things that have one are a tuple's tail and an object's open part.
+ * Both unwrap it at construction. Nothing else may be given one, and the type no longer offers a
+ * caller the two halves to call.
+ */
+export type RestCodec<T, A extends AttributeValue = AttributeValue> = {
+    readonly [restMarker]: true
+    readonly rest: AttributeCodec<T, A>
+}
 
 /** A homogeneous string-keyed record, as `M`. */
 export const record = <const C extends AnyCodec>(
-    element: C & NotAboutAbsence<C>,
+    element: C,
 ): AttributeCodec<
     Readonly<Record<string, Decoded<C>>>,
     M<{ readonly [key: string]: AttributeOf<C> }>
 > => {
-    const values = element as unknown as AttributeCodec<Decoded<C>>
     // the cast keeps the *shape* the values write, which `Attribute<'M'>` would flatten to
     // "some map" — the same reason `map` casts
-    return codec({
-        def: { kind: 'record', value: values },
-        // `Object.entries('abc')` is `[['0','a'],…]`, so a string was written as a map keyed by
-        // index. `asRecord` is the test `admits`' `record` row uses
-        encode: (value: Record<string, Decoded<C>>) =>
-            asRecord(value) === undefined
-                ? new CodecError(
-                      `${describeShape(value)} is not a plain object, and \`record\` writes an 'M' — a codec's input is typed, so this is a value that reached \`encode\` past its type`,
-                  )
-                : andThen(everyEntry(value, values.encode), (written) =>
-                      carrying('M', written),
-                  ),
-        decode: (attribute) =>
-            andThen(expect('M', attribute), (carried) =>
-                everyEntry(carried, values.decode),
-            ),
+    return codecOfTerm({
+        kind: 'record',
+        val: termOf(element as unknown as AnyCodec),
     }) as unknown as AttributeCodec<
         Readonly<Record<string, Decoded<C>>>,
         M<{ readonly [key: string]: AttributeOf<C> }>
@@ -2045,10 +1130,10 @@ export type Refined<T, A extends AttributeValue> = AttributeCodec<T, A> &
 /**
  * `.set()`, where the codec it sits on can be a set's element.
  *
- * The capability {@link setBase} decides at runtime, stated at the type as far as the type can see
- * it — which is not all the way. `CodecShape` declares `def?: CodecDef`, so a codec's *type* is not
- * generic in its definition: `refine(...)`'s type knows the attribute and never the base it reduced
- * through. So the gate here is the attribute — `S`, `N` or `B`, the three a stored set is built
+ * The capability {@link setBaseOf} decides at runtime, stated at the type as far as the type can see
+ * it — which is not all the way. A codec's *type* is not generic in its definition — every codec
+ * carries a `Term`, and none of them carries *which* one at the type — so `refine(...)`'s type
+ * knows the attribute and never the base it reduced through. So the gate here is the attribute — `S`, `N` or `B`, the three a stored set is built
  * from — and `refine(held(string, f, g), p).set()` type-checks and throws, because `held` writes
  * `S` and reduces to no base. That gap closes only by making the codec type generic in its
  * definition, which was measured at 481 of 968 signatures and rejected; the runtime refusal in
@@ -2135,18 +1220,19 @@ export const refine = <Wide, Narrow extends Wide, A extends AttributeValue>(
      * without saying so is worth a word, and this can only be reached from a generator, so the word
      * only ever lands in a test.
      */
-    // `writes` reads through a refinement, which is what lets a set of a brand work; `decides`
+    // `member` reads through a refinement, which is what lets a set of a brand work; `constantOf`
     // does not, because the predicate may be exactly what rejects the constant.
     //
     // `setCapable` is what carries `.set()` across the refinement, and it is the whole of why the
     // brand survives: `amount.set()` decodes as `ReadonlySet<Price>` because the set is built from
     // `amount`, where the predicate that produces a `Price` already lives.
     return setCapable(
-        derive<Narrow, A>(inner, {
-            def: {
-                kind: 'refine',
-                inner: inner as AnyCodec,
-                refined: {
+        codecOfTerm<Narrow, A>({
+            kind: 'refine',
+            inner: termOf(inner as unknown as AnyCodec),
+            q: {
+                kind: 'closure',
+                q: {
                     is: is as (value: never) => boolean,
                     what,
                     arbitrary: options.arbitrary as
@@ -2155,67 +1241,80 @@ export const refine = <Wide, Narrow extends Wide, A extends AttributeValue>(
                     onThinSearch: options.onThinSearch,
                 },
             },
-            /**
-             * **The predicate runs on the way in too**, which is what closed the last row of
-             * `admits ⟺ encode`.
-             *
-             * It used to run on `decode` only, on the argument that a row is data somebody else
-             * wrote while an argument is typed — and the type is `Narrow`, so a value failing `is`
-             * arrived past it. That is true of every gate added here and was not a reason to skip
-             * this one: a brand whose predicate is not checked is a brand that can be forged by a
-             * cast, and `admits(refine(c, is), v)` said so all along by running `is` itself.
-             */
-            encode: (value) =>
-                is(value as Wide)
-                    ? inner.encode(value)
-                    : new CodecError(`${JSON.stringify(value)} is not ${what}`),
-            decode: (attribute) =>
-                andThen(inner.decode(attribute), (decoded) =>
-                    is(decoded)
-                        ? decoded
-                        : new CodecError(
-                              `${JSON.stringify(decoded)} is not ${what}`,
-                          ),
-                ),
         }),
     )
 }
 
 // ── reading what is already there ───────────────────────────────────
 
-/** Type-level only, for the same reason as {@link optionalMarker}: the def carries the fact. */
-
-/** A codec that stands in a value where the attribute is absent. */
+/**
+ * A field that stands in a value where the attribute is absent.
+ *
+ * Not a codec, for the reason {@link OptionalCodec} records. The stand-in is the marker's payload at
+ * the type level and `def.value` at run time, and the run-time side is the one {@link fallback}
+ * checks against §3 `(fallback)`.
+ */
 export type FallbackCodec<
     T,
     A extends AttributeValue = AttributeValue,
-> = AttributeCodec<T, A> & { readonly [fallbackMarker]: () => T }
+    // the codec the mark is about, carried rather than erased to `AttributeCodec<T, A>`. A brand
+    // sits on the codec — `constant` is the one that matters here — and erasing to the two type
+    // arguments drops it before a derivation over the spec can ask
+    C = AttributeCodec<T, A>,
+> = {
+    readonly [fallbackMarker]: T
+    readonly codec: C
+    readonly def: Extract<Field, { readonly mark: 'fallback' }>
+}
 
 /**
  * Reads a missing attribute as a value, and writes the attribute always.
  *
  * Not {@link optional}: the entity always has it, the *data* may not — a row written before the
- * attribute existed. Replaces `item.channel ?? 'IN_STORE'` at every read site. The value is
- * produced per read, so a mutable default cannot leak between entities.
+ * attribute existed. Replaces `item.channel ?? 'IN_STORE'` at every read site.
+ *
+ * **The stand-in must be writable by the codec it stands in for**, and that is checked here, at the
+ * declaration. §3 `(fallback)` carries it as a premise (`formal/Calculus/Soundness.lean:89`) and it
+ * exists because the proof failed without it: a row missing the attribute reads back as the
+ * stand-in, and if the inner codec cannot write that value the item cannot be written back —
+ * **(C)** broken at the read, with the refusal surfacing on some later write rather than at the
+ * declaration responsible for it. `fallback(string('A'), 'B')` is the whole of it.
+ *
+ * The stand-in is a **value and not a thunk**, which is what makes the check possible here rather
+ * than on whichever read happens to need it first. It does not become shared state for that: the
+ * declaration holds one value and each read that needs one gets a `structuredClone` of it, so a
+ * mutable stand-in still cannot leak between entities. Primitives are handed over as they are,
+ * being unable to leak anything.
  */
 export const fallback = <const C extends AnyCodec>(
     // the *argument's own* type, not a re-declared `AttributeCodec<T, A>`: the guard has to see the
     // marker the caller passed, and a parameter written in terms of inferred `T` and `A` reconstructs
     // a plain codec that never carries one
-    inner: C & NotAlreadyMarked<C>,
+    inner: C,
     // `NoInfer` so the codec is the only thing that says what it holds. Inferring from both sites
-    // unified them, and a thunk returning `'A'` widens to `string`, which then refused the very
+    // unified them, and a stand-in written `'A'` widens to `string`, which then refused the very
     // codec it stands in for — invisible while the entity was declared first and pinned it itself
-    value: () => NoInfer<Decoded<C>>,
-): FallbackCodec<Decoded<C>, AttributeOf<C> & AttributeValue> =>
-    described(inner as unknown as AttributeCodec<Decoded<C>>, {
-        kind: 'fallback',
-        inner: inner as unknown as AnyCodec,
-        value,
-    }) as unknown as FallbackCodec<Decoded<C>, AttributeOf<C> & AttributeValue>
-
-const fallbackOf = (codec: AnyCodec): (() => unknown) | undefined =>
-    codec.def?.kind === 'fallback' ? codec.def.value : undefined
+    value: NoInfer<Decoded<C>>,
+): FallbackCodec<Decoded<C>, AttributeOf<C> & AttributeValue, C> => {
+    // §3 `(fallback)`: the stand-in must be *writable*, or a row missing the name decodes to a
+    // value the item cannot be written back as — (C) broken at the read, with the refusal arriving
+    // on the next write instead of at the declaration that caused it. Decidable here, from the
+    // declaration alone, which is why the stand-in is a value and not a thunk.
+    if (!accepts(inner as unknown as AnyCodec, value)) {
+        throw new CodecError(
+            `\`fallback\`'s stand-in must be a value the codec it stands in for can write, and ${describeShape(value)} is not one this \`${(inner as unknown as AnyCodec).def?.kind ?? 'codec'}\` writes. A row missing the attribute would read back as it and then refuse on the way out`,
+        )
+    }
+    const attribute = inner as unknown as AttributeCodec<Decoded<C>>
+    return {
+        codec: attribute,
+        def: { mark: 'fallback', t: termOf(inner), v: value },
+    } as unknown as FallbackCodec<
+        Decoded<C>,
+        AttributeOf<C> & AttributeValue,
+        C
+    >
+}
 
 /**
  * The same stored attribute, held as something else.
@@ -2260,6 +1359,22 @@ const fallbackOf = (codec: AnyCodec): (() => unknown) | undefined =>
  * or the codec's own law does not hold either. `checkRoundTrip` over a spec holding one is what
  * establishes it, and generation reaches through: values are generated for the inner codec and
  * handed out through `decode`, so what is generated is always something the pair produced.
+ *
+ * **Nothing here checks it, and nothing here can.** The model carries it as `IsoCancels`
+ * (`formal/Calculus/Codec.lean:157`) — a premise, in both directions: `g(f v) = v` wherever `f v`
+ * lands writable, and `f(g v) = v` on the writable values themselves. It is a premise there for
+ * the same reason it is unchecked here. One direction quantifies over the *held* type, which has
+ * no generator except `decode` itself, so every value this library could make is already in the
+ * pair's image; and probing the other at construction is worse than not probing it, because a
+ * legitimate adapter is an isomorphism on the values its inner codec describes and *throws* off
+ * them — `held(string, dateAdapter)` would be refused for `new Date('<anything>')`, which is
+ * exactly the narrowing the example above asks for rather than a defect.
+ *
+ * So this is a written obligation, and `checkIso` is how a caller discharges it: it generates for
+ * the inner codec and checks `encode(decode(y))`, which is the half a table depends on. The
+ * failure mode it catches, unrefused today and pinned in `codec.laws.spec.ts`, is an adapter that
+ * *normalises* — `{ encode: v => v.toUpperCase(), decode: v => v }` reads `'a'` back as `'A'`,
+ * and every read-modify-write on that row rewrites the value.
  */
 export const held = <T, const C extends AnyCodec>(
     inner: C,
@@ -2270,8 +1385,6 @@ export const held = <T, const C extends AnyCodec>(
         readonly decode: (held: Decoded<C>) => NoInfer<T>
     },
 ): AttributeCodec<T, AttributeOf<C>> => {
-    const held = inner as unknown as AttributeCodec<Decoded<C>>
-
     /**
      * The two halves are the one place in a codec where code this library did not write runs.
      *
@@ -2283,41 +1396,12 @@ export const held = <T, const C extends AnyCodec>(
      *
      * A `CodecError` is what every caller already handles, so that is what a throw becomes.
      */
-    const guarded =
-        <A, B>(convert: (value: A) => B, direction: 'writing' | 'reading') =>
-        (value: A): Result<B> => {
-            try {
-                return convert(value)
-            } catch (thrown) {
-                return new CodecError(
-                    `the conversion for ${direction} this attribute threw: ${
-                        thrown instanceof Error
-                            ? thrown.message
-                            : String(thrown)
-                    }`,
-                )
-            }
-        }
-
-    const into = guarded(adapt.encode, 'writing')
-    const outOf = guarded(adapt.decode, 'reading')
-
-    return codec<T, AttributeOf<C>>({
-        def: {
-            kind: 'held',
-            inner: inner as unknown as AnyCodec,
-            adapt: adapt as CodecDefHeldAdapt,
-        },
-        encode: (value) =>
-            andThen(into(value), held.encode) as Result<AttributeOf<C>>,
-        decode: (attribute) => andThen(held.decode(attribute), outOf),
+    return codecOfTerm<T, AttributeOf<C>>({
+        kind: 'held',
+        inner: termOf(inner as unknown as AnyCodec),
+        f: adapt.encode,
+        g: adapt.decode,
     })
-}
-
-/** The erased shape {@link CodecDef} carries for a {@link held} adapter. */
-type CodecDefHeldAdapt = {
-    readonly encode: (value: never) => unknown
-    readonly decode: (held: never) => unknown
 }
 
 /**
@@ -2369,6 +1453,23 @@ export type Reader<T> = {
  * // stored as N today, and as S in rows written before that; always written as N
  * rate: legacy({ current: decimal, older: string })
  * ```
+ *
+ * **Two things §3 asks of the older reader** (`ReadsCoherently`,
+ * `formal/Calculus/Codec.lean:163`), and only one of them is checkable.
+ *
+ * `ran(r) ⊆ dom(e)` — a migration lands on values the current encoding can *write*. This is
+ * checked, per read, as soon as the older reader has answered, because that is the earliest
+ * anything can know what it returns. Unchecked it read a row and refused on the way out, which is
+ * **(C)** broken at the migrated row and reported at some later write.
+ *
+ * Coherence — where both readers read an attribute, they agree — is **not** checkable, and the
+ * reason is sharper than that. The current encoding is tried first and the older one only on its
+ * failure, here and in the model (`Codec.extendRead`), so on `dom(p_current)` the older reader is
+ * never consulted and a disagreement has no observable consequence at all. What the premise buys
+ * is that the *ordering does not matter*: with it, this presentation equals the order-free
+ * `p ∪ r`. Without it the reading depends on declaration order, which is the one thing §5 says
+ * resolution never does. So it is a written obligation, and the thing to check is that two
+ * readers of one attribute agree — nothing in this library will tell you they do not.
  */
 export const legacy = <T, A extends AttributeValue>({
     current,
@@ -2377,23 +1478,12 @@ export const legacy = <T, A extends AttributeValue>({
     readonly current: AttributeCodec<T, A>
     readonly older: Reader<T>
 }): AttributeCodec<T, A> =>
-    // `writes` reads through to `current`, the encoding every write produces; `decides` does not,
+    // `member` reads through to `current`, the encoding every write produces; `constantOf` does not,
     // because an older reader can decode this attribute into something else entirely
-    derive<T, A>(current, {
-        def: { kind: 'legacy', current: current as AnyCodec },
-        encode: (value) => current.encode(value),
-        decode: (attribute) => {
-            // the current encoding is tried first and on its own, so the path every row written
-            // since the migration takes allocates nothing: no `[current, ...older]` to walk and no
-            // list of reasons to collect for a failure that did not happen
-            const read = current.decode(attribute)
-            if (!failed(read)) return read
-            const older_ = older.decode(attribute)
-            if (!failed(older_)) return older_ as T
-            return new CodecError(
-                `no encoding could read this attribute; tried the current one and one older: ${read} | ${older_}`,
-            )
-        },
+    codecOfTerm<T, A>({
+        kind: 'legacy',
+        inner: termOf(current as unknown as AnyCodec),
+        r: older.decode,
     })
 
 /**
@@ -2424,10 +1514,9 @@ export const lazy = <T, A extends AttributeValue = AttributeValue>(
         resolved ??= get()
         return resolved
     }
-    return codec<T, A>({
-        def: { kind: 'lazy', get: () => inner() as AnyCodec },
-        encode: (value) => inner().encode(value) as Result<A>,
-        decode: (attribute) => inner().decode(attribute),
+    return codecOfTerm<T, A>({
+        kind: 'lazy',
+        get: () => termOf(inner()),
     })
 }
 
@@ -2438,34 +1527,78 @@ export const lazy = <T, A extends AttributeValue = AttributeValue>(
  * DynamoDB *has*; use {@link nullable} for that.
  *
  * `undefined` is not injective in: `{ a: undefined }` and `{}` both encode without `a`.
+ *
+ * **A name is the only thing this can be said of**, so the result goes in an object's spec and
+ * nowhere else. A list, a set, a tuple, a record and a union option have no name at that position for
+ * anything to be missing from, and each of those refuses this because a field is not a codec — the
+ * member for a value that may be stored as `NULL` in one of them is {@link nullable}. Marking a
+ * marked declaration is refused the same way: `fallback(c, v)` is the attribute that may be absent
+ * and has a stand-in, and it is what both nestings meant.
  */
 export const optional = <const C extends AnyCodec>(
-    inner: C & NotAlreadyMarked<C>,
-): OptionalCodec<Decoded<C>, AttributeOf<C>> => {
-    const attribute = inner as unknown as AttributeCodec<Decoded<C>>
-    return described(attribute, {
-        kind: 'optional',
-        inner: attribute as AnyCodec,
-    }) as OptionalCodec<Decoded<C>, AttributeOf<C>>
+    inner: C,
+): OptionalCodec<Decoded<C>, AttributeOf<C>, C> => {
+    // the marked codec beside the definition, not a copy of the codec with a definition stamped on
+    // it: a field has no pair of its own, and spreading one gave it the pair of the codec it marks.
+    // `inner` itself, so the mark carries the codec the caller passed and not its erasure
+    // one assertion, and it cannot come off. `optionalMarker` is a `declare const` symbol, so it
+    // exists in the type and nowhere a literal can write it: removing the assertion reports
+    // "Property '[optionalMarker]' is missing". It is `rest`'s spelling for `rest`'s reason
+    return {
+        codec: inner,
+        def: { mark: 'optional', t: termOf(inner) },
+    } as unknown as OptionalCodec<Decoded<C>, AttributeOf<C>, C>
 }
 
-/** A value that may be null, stored as `NULL` when it is. */
+/**
+ * A value that may be null, stored as `NULL` when it is — **unless `inner` already owns the null
+ * point**, in which case this is `inner`'s own pair, untouched.
+ *
+ * Without the guard the wrapper's `NULL` branch shadows the inner codec, and **(R)** fails on a
+ * term the specification proves lawful: `nullable(held(nullable(string), adapter))`, where the
+ * adapter maps `'SENTINEL'` to `null`, writes `{ NULL: true }` for `'SENTINEL'` and reads back
+ * `null`. The value written is not the value read. No declaration in this repository builds that
+ * term and `held` is unemittable, so no generated vector could ever have found it.
+ *
+ * Where the guard does *not* fire, null-honesty is a theorem rather than an assumption: an
+ * `inner` that wrote `⟨NULL, ∗⟩` would read it straight back by **(R)** and so would own the
+ * point, and one that read some attribute to `null` would write the point by **(C)** and own it
+ * again. Both hypotheses are refuted by the guard rather than required of the caller.
+ *
+ * **The question is asked once, at first use rather than at construction.** `owns` is a property
+ * of the pair and the probes are two calls, so asking repeatedly would be a walk with a known
+ * answer. It is not asked *at* construction because {@link lazy} exists: a recursive declaration
+ * forces its thunk when probed, and at module-evaluation time that is a reference to a binding
+ * that does not exist yet. Deferring costs one boolean test per call and is the difference
+ * between answering the question and catching an error from having asked it too early.
+ */
 export const nullable = <T, A extends AttributeValue>(
     inner: AttributeCodec<T, A>,
-): AttributeCodec<T | null, A | Attribute<'NULL'>> =>
-    derive<T | null, A | Attribute<'NULL'>>(inner, {
-        def: { kind: 'nullable', inner: inner as AnyCodec },
-        encode: (value) =>
-            value === null
-                ? (carrying('NULL', true) as A | Attribute<'NULL'>)
-                : (inner.encode(value) as Result<A | Attribute<'NULL'>>),
-        decode: (attribute) =>
-            memberOf(attribute) === 'NULL' ? null : inner.decode(attribute),
+): AttributeCodec<T | null, A | Attribute<'NULL'>> => {
+    return codecOfTerm<T | null, A | Attribute<'NULL'>>({
+        kind: 'nullable',
+        inner: termOf(inner as unknown as AnyCodec),
     })
-
-const isOptional = (codec: AnyCodec): boolean => codec.def?.kind === 'optional'
+}
 
 // ── the escape hatch ────────────────────────────────────────────────
+
+/**
+ * `opaque`'s codec, with its **term's kind visible in the type**.
+ *
+ * The narrowing exists for one caller: {@link ValidateOptions} refuses a union holding an `opaque`
+ * option, and to do that at compile time the type has to say which term this is. `AttributeCodec`
+ * declares `def` as the whole of {@link Term}, so `opaque.def.kind` was the full twenty-one-member
+ * union and no clause could match on it.
+ *
+ * **Matching on the kind and not on the decoded type**, deliberately: `custom<unknown>` also
+ * decodes to `unknown`, and it is not `opaque` — it admits exactly what its own `encode` admits,
+ * which may be one value. The rule is about a term that admits *everything*, and the term is what
+ * says so.
+ */
+type OpaqueCodec = AttributeCodec<unknown> & {
+    readonly def: { readonly kind: 'opaq' }
+}
 
 /**
  * Any attribute, decoded to `unknown`.
@@ -2478,12 +1611,13 @@ const isOptional = (codec: AnyCodec): boolean => codec.def?.kind === 'optional'
  * everything accepted and everything else is named and refused. See {@link opaque.Numbers} for the
  * one case that cannot be decided without being told.
  */
-const withNumbers = (numbers: opaque.Numbers): AttributeCodec<unknown> =>
-    codec({
-        def: { kind: 'opaque', numbers },
-        encode: (value) => encodeUnknown(value, numbers),
-        decode: (attribute) => decodeUnknown(attribute, numbers),
-    })
+const withNumbers = (numbers: opaque.Numbers): OpaqueCodec =>
+    // **One cast, and it recovers what the construction site erases.** `codecOfTerm` takes a
+    // `Term` and returns a codec whose `def` is `Term`, so the kind of the term it was *given* is
+    // not in its result type. The literal one line up is that kind; nothing else can be. Making
+    // `codecOfTerm` generic in its term would push a type parameter through twenty-one
+    // constructors to narrow one.
+    codecOfTerm({ kind: 'opaq', lossy: numbers === 'lossy' }) as OpaqueCodec
 
 /**
  * Any attribute, with numbers refused — which guesses nothing.
@@ -2501,8 +1635,8 @@ const withNumbers = (numbers: opaque.Numbers): AttributeCodec<unknown> =>
  * Callable *and* a codec, which is what lets `opaque.encode` and {@link opaque.Encode} keep the same
  * name.
  */
-export const opaque: AttributeCodec<unknown> & {
-    (numbers?: opaque.Numbers): AttributeCodec<unknown>
+export const opaque: OpaqueCodec & {
+    (numbers?: opaque.Numbers): OpaqueCodec
 } = Object.assign(
     (numbers: opaque.Numbers = 'refuse') => withNumbers(numbers),
     withNumbers('refuse'),
@@ -2714,223 +1848,6 @@ export namespace opaque {
     }>
 }
 
-/** Only plain objects round-trip; anything with a prototype loses it. */
-const isPlainObject = (value: object) => {
-    const prototype = Object.getPrototypeOf(value)
-    return prototype === Object.prototype || prototype === null
-}
-
-const unrecoverable = (what: string, instead: string) =>
-    new CodecError(
-        `${what} cannot be stored as an unknown attribute, because decoding could not tell it apart from what it decodes to. ${instead}`,
-    )
-
-/**
- * Encodes a value whose type is recoverable from what is stored, and refuses one whose is not.
- *
- * The domain is deliberately narrow, so that `decode ∘ encode = id` holds for everything accepted.
- * Accepted: `null`, `string`, `boolean`, `Uint8Array`, a non-empty `Set` of strings or of binary,
- * arrays, and plain objects — recursively. A `number` only under `'lossy'`; see
- * {@link opaque.Numbers} for why that one cannot be decided here.
- */
-const encodeUnknown = (
-    value: unknown,
-    numbers: opaque.Numbers,
-    /** How many `L`/`M` this value already sits inside. See {@link MAX_DOCUMENT_NESTING}. */
-    enclosing = 0,
-): Result<AttributeValue> => {
-    if (value === null) return carrying('NULL', true)
-    if (typeof value === 'string') return carrying('S', value)
-    if (typeof value === 'boolean') return carrying('BOOL', value)
-    if (value instanceof Uint8Array) return carrying('B', value)
-
-    if (typeof value === 'number') {
-        if (!Number.isFinite(value)) {
-            return new CodecError(`DynamoDB has no number for ${value}`)
-        }
-        if (numbers === 'refuse') {
-            return unrecoverable(
-                'a number',
-                "Reading it back is undecidable without a schema: as a `number` it rounds, and as a `string` it re-encodes as `S`, changing the attribute's stored type. Declare the attribute with `number` or `decimal`, or opt in with `opaque('lossy')`.",
-            )
-        }
-        /**
-         * **Writing an `N` means writing a numeral.** `Number.isFinite` is not that test: §1's
-         * `Carries('N')` is `Numerals`, bounded by 38 significant digits and magnitude
-         * `1e-130 … 9.9…e125`, and `5e-324` is a perfectly finite double outside it — the
-         * specification's own example of the bound going unchecked.
-         *
-         * `number` has gated on this since the numeral domain was tightened and `literal` since
-         * its `ℓ ⊆ D` premise. `opaque` is the third term that writes an `N` from a JS number and
-         * it was checking only that the number existed, which let it write an attribute §1's `𝔸`
-         * has no point for. Same obligation, same gate: `ran(e) ⊆ 𝔸`.
-         */
-        return isNumeral(String(value))
-            ? carrying('N', String(value))
-            : new CodecError(
-                  `${value} is not a number DynamoDB stores: it takes at most 38 significant digits and magnitude 1e-130 to 9.9e125`,
-              )
-    }
-
-    if (typeof value === 'bigint') {
-        return unrecoverable(
-            'a bigint',
-            'It shares `N` with `number` and decodes as one, so `1n` would come back as `1`. Use `decimal` and pass `value.toString()`.',
-        )
-    }
-
-    if (Array.isArray(value)) {
-        const deep = tooDeeplyNested(enclosing)
-        if (deep) return new CodecError(deep)
-        return andThen(
-            every(value, (x) => encodeUnknown(x, numbers, enclosing + 1)),
-            (written) => carrying('L', written),
-        )
-    }
-
-    if (value instanceof Set) {
-        const members = [...value]
-        if (members.length === 0) {
-            return new CodecError('DynamoDB has no empty set')
-        }
-        if (members.every((x) => typeof x === 'string')) {
-            return carrying('SS', (members as string[]).sort())
-        }
-        if (members.every((x) => x instanceof Uint8Array)) {
-            return carrying('BS', members as Uint8Array[])
-        }
-        return unrecoverable(
-            'a set of numbers',
-            'NS decodes as strings, because its members are decimal strings. Use a set of strings, or `array(number)` if the order does not matter to you.',
-        )
-    }
-
-    if (value instanceof Map) {
-        return unrecoverable(
-            'a Map',
-            'DynamoDB has one map member, `M`, and it decodes as a plain object. Pass an object, or use `record(...)` to state the value type.',
-        )
-    }
-
-    if (typeof value === 'object') {
-        if (!isPlainObject(value)) {
-            return unrecoverable(
-                `an instance of ${value.constructor?.name ?? 'a class'}`,
-                'Only plain objects survive: `M` carries the own enumerable properties and nothing that says how to rebuild the instance. Convert it first — a `Date`, for example, is faithful as an ISO string.',
-            )
-        }
-        const deep = tooDeeplyNested(enclosing)
-        if (deep) return new CodecError(deep)
-        return andThen(
-            everyEntry(value as Record<string, unknown>, (v, k) =>
-                v === undefined
-                    ? new CodecError(
-                          `'${k}' is undefined, and DynamoDB has no attribute holding undefined. Omit the key, or use \`optional(...)\` on a declared attribute.`,
-                      )
-                    : encodeUnknown(v, numbers, enclosing + 1),
-            ),
-            (written) => carrying('M', written),
-        )
-    }
-
-    return unrecoverable(`a ${typeof value}`, 'No DynamoDB member carries it.')
-}
-
-const decodeUnknown = (
-    attribute: AttributeValue,
-    numbers: opaque.Numbers,
-): Result<unknown> => {
-    const member = memberOf(attribute)
-    switch (member) {
-        case 'NULL':
-            return null
-        case 'S':
-            return attribute[member]
-
-        /**
-         * A number exactly when the stored digits are that number's own shortest form, and the raw
-         * string otherwise.
-         *
-         * `String(n)` is the shortest representation that reads back as `n`, so everything this
-         * codec wrote comes back as the number it was. Anything wider — `'1.50'`, a
-         * thirty-eight-digit decimal, `'9007199254740993'` — was written by something else with more
-         * precision than a float holds, and is handed back untouched rather than quietly rounded.
-         */
-        case 'N': {
-            const carried = attribute.N as string
-            if (numbers === 'refuse') {
-                return unrecoverable(
-                    `the stored number '${carried}'`,
-                    "Declare the attribute with `number` or `decimal`, or opt in with `opaque('lossy')`.",
-                )
-            }
-            /**
-             * The same two gates `number` reads through, and the second is not redundant for
-             * the same reason: `Number('9.9…E+125')` rounds *up* past the maximum, so a numeral
-             * the store holds can read back as a value nothing here can write.
-             *
-             * Without them this decoded `{ N: 'abc' }` to `NaN` and `{ N: '1e400' }` to
-             * `Infinity` — values its own `encode` refuses, which is **(C)** failing. `Number`
-             * reads far more than an `N` carries: `''` and whitespace are `0`, `'0x10'` is `16`.
-             */
-            if (!isNumeral(carried)) {
-                return new CodecError(
-                    `'${carried}' is not a numeral, so this attribute was not written by DynamoDB`,
-                )
-            }
-            const read = Number(carried)
-            return isNumeral(String(read))
-                ? read
-                : new CodecError(
-                      `'${carried}' reads back as ${read}, which is outside what DynamoDB stores, so it cannot be written again`,
-                  )
-        }
-        case 'B':
-        case 'BOOL':
-            return attribute[member]
-
-        /**
-         * **A member this codec cannot write is a member it cannot read.**
-         *
-         * `opaque` has no `NS` write path at all — a numeric `Set` is refused, because reading
-         * one back is undecidable without a schema. Reading `NS` anyway produced a
-         * `Set<string>`, and re-encoding that wrote `SS`: a numeric set attribute silently
-         * becoming a string one on a read-modify-write, which is **(MP)** — the law `opaque`'s
-         * `N` refusal already exists to protect, one member over.
-         *
-         * The general form is a corollary of §2 and is proved in the model
-         * (`Calculus.Lawful.no_read_without_write`): a codec is a *pair*, and (MP) holds the
-         * halves together, so if `e` never produces a member then no attribute carrying it can
-         * be in `dom(p)`. Note which law does the work — (C) is satisfied here, the value
-         * round-trips, and only the stored type changes. `μ = ⊤` is exactly where (MP) is the
-         * only law left watching.
-         */
-        case 'NS':
-            return unrecoverable(
-                'a stored set of numbers',
-                "`NS` has no counterpart this codec can write — a set of numbers is refused on the way in, because nothing without a schema says which of its members a JS number holds faithfully. Reading it would mean re-encoding it as `SS` and changing the attribute's stored type. Declare the attribute with `number.set()` or `decimal.set()`.",
-            )
-        case 'SS':
-        case 'BS': {
-            // as in `set`: encode has no empty set to offer, so decode has none to return
-            const members = attribute[member] as readonly unknown[]
-            return members.length === 0
-                ? new CodecError(
-                      `DynamoDB has no empty ${member}, so this attribute was not written by it`,
-                  )
-                : new Set(members)
-        }
-        case 'L':
-            return every(attribute.L ?? [], (x) => decodeUnknown(x, numbers))
-        case 'M':
-            return everyEntry(attribute.M ?? {}, (v) =>
-                decodeUnknown(v, numbers),
-            )
-        default:
-            return new CodecError('an AttributeValue carrying no member')
-    }
-}
-
 /**
  * An attribute path, which is a string and exists whether or not the attribute does.
  *
@@ -3114,7 +2031,7 @@ export type ItemSpec<T> = T extends unknown
  * writes to bypass a declaration-time check no longer compiles.
  */
 export type ObjectCodec<
-    Spec extends Record<string, AnyCodec>,
+    Spec extends Record<string, AnyDeclaration>,
     Rest = 'drop',
 > = {
     // spelled out rather than intersected with `AttributeCodec`, for the reason recorded on
@@ -3130,7 +2047,7 @@ export type ObjectCodec<
     readonly unsafeDecode: (
         attribute: AttributeValue,
     ) => DerivedItem<Spec, Rest>
-    readonly def?: CodecDef
+    readonly def: Term
     /**
      * The same declaration, read as a whole item: the same two directions without the top-level map,
      * and the things only a top-level codec can offer — `encodePartial`, `field`, `at`, `path`.
@@ -3158,7 +2075,7 @@ export type DiscriminatedCodec<T, D extends string, Spec> = {
     readonly decode: (attribute: AttributeValue) => Result<T>
     readonly unsafeEncode: (value: T) => Attribute<'M'>
     readonly unsafeDecode: (attribute: AttributeValue) => T
-    readonly def?: CodecDef
+    readonly def: Term
     readonly item: Tagged<T, D, Spec>
     /** The row this codec writes, pinnable with {@link Writes}. Type-level only. */
     readonly [writesMarker]?: WritesVariantsPin<Spec>
@@ -3169,7 +2086,7 @@ export type UnionCodec<T, Options extends readonly unknown[]> = {
     readonly decode: (attribute: AttributeValue) => Result<T>
     readonly unsafeEncode: (value: T) => WrittenBy<Options>
     readonly unsafeDecode: (attribute: AttributeValue) => T
-    readonly def?: CodecDef
+    readonly def: Term
     /**
      * The same union read as a whole item — only where every option is an object.
      *
@@ -3203,7 +2120,7 @@ export type ItemCodec<T, Spec = unknown, Rest = 'drop'> = {
     readonly decode: (item: StoredItem) => Result<T>
     readonly unsafeDecode: (item: StoredItem) => T
     /** One attribute's codec, for building `ExpressionAttributeValues` by hand. */
-    readonly field: <K extends keyof Spec>(name: K) => Spec[K]
+    readonly field: <K extends keyof Spec>(name: K) => Marks<Spec[K]>
     /**
      * The codec at a path, together with the path.
      *
@@ -3232,8 +2149,8 @@ export type ItemCodec<T, Spec = unknown, Rest = 'drop'> = {
     readonly spec: Spec
     /** What this codec does with an attribute the spec does not declare. */
     readonly rest: RestPolicy<unknown>
-    /** What this codec is — see {@link CodecDef}. */
-    readonly def: CodecDef
+    /** What this codec is — see {@link Term}. */
+    readonly def: Term
     /** The row this codec writes, pinnable with {@link Writes}. Type-level only. */
     readonly [writesMarker]?: WritesPin<Spec, Rest>
 }
@@ -3251,11 +2168,26 @@ export type LocatedCodec<T> = AttributeCodec<T> & {
  * Whether an attribute may be absent and what stands in for it are facts about the spec, not about
  * the row being read, so they are settled once when the codec is built.
  */
-type Declared = {
+export type Declared = {
     readonly name: string
     readonly codec: AnyCodec
     readonly optional: boolean
-    readonly absent: (() => unknown) | undefined
+    readonly absent:
+        | { readonly value: unknown; readonly copy: boolean }
+        | undefined
+}
+
+/**
+ * The marker taken off, once, at the declaration.
+ *
+ * A field names the codec it marks, so the two halves are that codec's and taking the mark off
+ * changes nothing about what the member encodes or decodes. What it changes is that the mark is
+ * *named* rather than left to be recovered from a definition kind, which is what {@link Field} is
+ * for.
+ */
+const fieldOf = (declared: AnyDeclaration): Field => {
+    const def = declared.def
+    return 'mark' in def ? def : { mark: 'req', t: def }
 }
 
 /**
@@ -3292,58 +2224,51 @@ type Declared = {
  * ```
  */
 export const object = <
-    const Spec extends Record<string, AnyCodec>,
+    const Spec extends Record<string, AnyDeclaration>,
     const Rest extends RestDeclaration = 'drop',
 >(
     spec: Spec & NoTail<Spec>,
     rest: Rest = 'drop' as Rest,
 ): ObjectCodec<Spec, Rest> => {
-    // one pass, and the presence rules resolved with it. `isOptional` and `fallbackOf` are
-    // answers about the *declaration*, so asking them per attribute per item — which is what
-    // walking bare entries meant — asks the same question once per row for the life of the table
-    const attributes: Record<string, AnyCodec> = {}
-    const declared: Declared[] = []
-    const declaredSpec = spec as unknown as Record<string, Nestable<never>>
-    const restCodec = typeof rest === 'string' ? undefined : (rest as AnyCodec)
+    // the marker off each declared attribute, once — the term. What the two directions walk is
+    // the *compiled* form of it, which `bodySem` builds and which carries one thing the term does
+    // not: whether a stand-in has to be copied per read, a fact about this runtime and not about
+    // the declaration.
+    const fields: Record<string, Field> = {}
+    const declaredSpec = spec as unknown as Record<string, AnyDeclaration>
     for (const name in declaredSpec) {
-        const attribute = declaredSpec[name] as AnyCodec
-        attributes[name] = attribute
-        declared.push({
-            name,
-            codec: attribute,
-            optional: isOptional(attribute),
-            absent: fallbackOf(attribute),
-        })
+        fields[name] = fieldOf(declaredSpec[name] as AnyDeclaration)
     }
+    const declaredRest = rest as RestDeclaration
+    const declaredBody: Body = {
+        fields,
+        rest:
+            typeof declaredRest === 'string'
+                ? declaredRest
+                : { kind: 'codec', t: termOf(declaredRest) },
+    }
+    const itemDef = { kind: 'object', body: declaredBody } as const
+    // the term's item pair, not a second one built beside it — `denote`'s row asks `itemSem` for
+    // the same object, so `.item` and the codec run one body rather than two that agree
+    /**
+     * **The view, and this is where it starts.**
+     *
+     * The owner's ruling: the top-level map belongs to the view, not to the codec. An `object`
+     * codec writes an `M` like any other term, and `.item` is the one reading that writes no map —
+     * the same pair, one level in.
+     *
+     * So the pair is not built here. `denote.ts` builds one item pair per term and this hands out
+     * that one, which is what makes `item.encode === codec.encode`'s body the same function. They
+     * were two objects before `579ed89`, and nothing said which of them a caller was running.
+     */
+    const body = itemSem(itemDef)
 
     type T = DerivedItem<Spec, Rest>
     const self: ItemCodec<T, Spec, Rest> = {
-        encode: (item) => {
-            const held = item as Record<string, unknown>
-            const out: Record<string, AttributeValue> = {}
-            for (const { name, codec: attribute, optional } of declared) {
-                const value = held[name]
-                if (value === undefined) {
-                    if (optional) continue
-                    return new CodecError(
-                        `'${name}' is required and was not given`,
-                    )
-                }
-                const written = attribute.encode(value as never)
-                if (failed(written)) return written.under(name)
-                out[name] = written
-            }
-            if (restCodec) {
-                for (const name in held) {
-                    const value = held[name]
-                    if (name in attributes || value === undefined) continue
-                    const written = restCodec.encode(value as never)
-                    if (failed(written)) return written.under(name)
-                    out[name] = written
-                }
-            }
-            return out as EncodedBy<Spec, Rest>
-        },
+        encode: (item) =>
+            body.encode(item as Record<string, unknown>) as Result<
+                EncodedBy<Spec, Rest>
+            >,
 
         encodePartial: (patch) => {
             const held = patch as Record<string, unknown>
@@ -3351,59 +2276,21 @@ export const object = <
             for (const name in held) {
                 const value = held[name]
                 if (value === undefined) continue
-                const attribute = attributes[name]
-                if (!attribute) {
+                const field = fields[name]
+                if (!field) {
                     return new CodecError(`'${name}' is not an attribute`)
                 }
-                const written = attribute.encode(value as never)
+                const written = codecOfTerm(field.t).encode(value as never)
                 if (failed(written)) return written.under(name)
                 out[name] = written
             }
             return out as never
         },
 
-        /**
-         * Attributes the spec does not mention are dropped. A row written before a field existed
-         * decodes without it, which is why `encode ∘ decode` is not identity on items.
-         */
-        decode: (item) => {
-            const out: Record<string, unknown> = {}
-            for (const {
-                name,
-                codec: attributeCodec,
-                optional,
-                absent,
-            } of declared) {
-                const attribute = item[name]
-                if (attribute === undefined) {
-                    if (optional) continue
-                    if (absent) {
-                        out[name] = absent()
-                        continue
-                    }
-                    return new CodecError(
-                        `'${name}' is required and the item has no such attribute`,
-                    )
-                }
-                const read = attributeCodec.decode(attribute)
-                if (failed(read)) return read.under(name)
-                out[name] = read
-            }
-
-            if (rest === 'drop') return out as T
-            for (const name in item) {
-                if (name in attributes) continue
-                if (!restCodec) {
-                    return new CodecError(
-                        `'${name}' is not an attribute this codec declares; the schema and the data have drifted apart`,
-                    )
-                }
-                const read = restCodec.decode(item[name] as AttributeValue)
-                if (failed(read)) return read.under(name)
-                out[name] = read
-            }
-            return out as T
-        },
+        decode: (item) =>
+            body.decode(
+                item as Readonly<Record<string, AttributeValue>>,
+            ) as Result<T>,
 
         unsafeEncode: (item) => orThrow(self.encode(item)),
         unsafeDecode: (item) => orThrow(self.decode(item)),
@@ -3445,21 +2332,22 @@ export const object = <
                 segments,
             }
         },
-        field: (name) => (attributes as Spec)[name],
-        spec: attributes as Spec,
-        rest: rest as RestPolicy<unknown>,
-        def: {
-            kind: 'attributes',
-            of: attributes as unknown as Attributes,
-            rest: rest as RestDeclaration,
+        // the codec the member declares, never the field that marks it: a field has no pair, and a
+        // caller that asked for the attribute at a name asked for the thing that reads and writes it
+        field: <K extends keyof Spec>(name: K) => {
+            const declared = fields[name as string]
+            return (declared && codecOfTerm(declared.t)) as Marks<Spec[K]>
         },
+        spec: spec as Spec,
+        rest: rest as RestPolicy<unknown>,
+        def: itemDef,
     }
 
     // the `M` is what this codec writes; `.item` is the same two directions with the wrapper taken
     // off. Named member by member rather than spread so the cast keeps the *shape* the map carries —
     // `Attribute<'M'>` would flatten it to "some map" — and so that a call to `object` stays a plain
     // object literal, which is what lets a bundler drop an unused one
-    const nested = asOneAttribute(self) as unknown as AttributeCodec<
+    const nested = codecOfTerm(itemDef) as unknown as AttributeCodec<
         DerivedItem<Spec, Rest>,
         M<Encoded<Spec>>
     >
@@ -3615,7 +2503,7 @@ export type EncodedVariants<Variants> = Variants extends readonly unknown[]
 /**
  * Which set an element reaches, from what the element writes.
  *
- * The runtime asks {@link writes}; this is the same question of the type, so a spec can pin `SS`
+ * The runtime asks `term.ts`'s `member`; this is the same question of the type, so a spec can pin `SS`
  * and be told when the element stops being a string. `L` and `SS` are the distinction a marshaller
  * that guesses gets wrong, so a shape that could not tell them apart would pin very little.
  */
@@ -3638,30 +2526,13 @@ export type AttributeOf<C> = C extends {
     readonly attribute: AttributeCodec<infer _Nested, infer Nesting>
 }
     ? Nesting
-    : C extends AttributeCodec<infer _Held, infer Written>
-      ? Written
-      : never
+    : // the same for a field: the attribute is the one the codec it marks writes
+      C extends { readonly codec: AttributeCodec<infer _Marked, infer Marks> }
+      ? Marks
+      : C extends AttributeCodec<infer _Held, infer Written>
+        ? Written
+        : never
 
-/**
- * The item a spec writes, as a shape you could have written by hand.
- *
- * The fixed point. `Encoded<typeof Pet>` is what the codec puts in the table; a `PetItem` written
- * out by hand is what the table is believed to hold; pinning one against the other is what makes a
- * migration checkable rather than hoped for. Optional attributes are optional keys, because an
- * attribute a codec may omit is one the item may not have.
- */
-/**
- * What an item writes: the attributes the spec declares, plus whatever a rest policy adds.
- *
- * {@link Encoded} alone is a *lower bound* rather than the answer. Under `'drop'` and `'refuse'`
- * nothing else is written and the two agree; a rest codec emits attributes the spec never named, so
- * claiming `Encoded<Spec>` exactly would be a promise the compiler then enforces against the
- * caller — refusing to read an attribute the codec really did write.
- *
- * The two string policies are named rather than the codec matched: an {@link AttributeCodec} is
- * invariant in its value, so `Rest extends AttributeCodec<unknown, infer A>` fails for every codec
- * of a narrower value and quietly takes the wrong branch.
- */
 /**
  * The attributes a patch writes, read off the patch rather than off the whole spec.
  *
@@ -3705,10 +2576,30 @@ export type EncodedPatch<Spec, Patch> = Encoded<Spec> extends infer Full
  */
 type Written<Full, K> = Exclude<Full[K & keyof Full], undefined>
 
+/**
+ * What an item writes: the attributes the spec declares, plus whatever a rest policy adds.
+ *
+ * {@link Encoded} alone is a *lower bound* rather than the answer. Under `'drop'` and `'refuse'`
+ * nothing else is written and the two agree; a rest codec emits attributes the spec never named, so
+ * claiming `Encoded<Spec>` exactly would be a promise the compiler then enforces against the
+ * caller — refusing to read an attribute the codec really did write.
+ *
+ * The two string policies are named rather than the codec matched: an {@link AttributeCodec} is
+ * invariant in its value, so `Rest extends AttributeCodec<unknown, infer A>` fails for every codec
+ * of a narrower value and quietly takes the wrong branch.
+ */
 export type EncodedBy<Spec, Rest> = [Rest] extends ['drop' | 'refuse']
     ? Encoded<Spec>
     : Encoded<Spec> & { readonly [name: string]: AttributeValue }
 
+/**
+ * The item a spec writes, as a shape you could have written by hand.
+ *
+ * The fixed point. `Encoded<typeof Pet>` is what the codec puts in the table; a `PetItem` written
+ * out by hand is what the table is believed to hold; pinning one against the other is what makes a
+ * migration checkable rather than hoped for. Optional attributes are optional keys, because an
+ * attribute a codec may omit is one the item may not have.
+ */
 export type Encoded<Spec> = show<
     {
         [K in keyof Spec as Spec[K] extends {
@@ -3805,26 +2696,10 @@ export type Tagged<T, D extends string = keyof T & string, Spec = unknown> = {
     ) => ItemCodec<VariantOf<T, D & keyof T, V>, Spec[V]>
     readonly discriminator: D
     readonly spec: Spec
-    /** What this codec is — see {@link CodecDef}. */
-    readonly def: CodecDef
+    /** What this codec is — see {@link Term}. */
+    readonly def: Term
     /** The row this codec writes, pinnable with {@link Writes}. Type-level only. */
     readonly [writesMarker]?: WritesVariantsPin<Spec>
-}
-
-const readTag = (item: StoredItem, discriminator: string): Result<string> => {
-    const attribute = item[discriminator]
-    if (attribute === undefined) {
-        return new CodecError(
-            `'${discriminator}' chooses the variant and the item has no such attribute`,
-        )
-    }
-    const member = memberOf(attribute)
-    if (member !== 'S' && member !== 'N') {
-        return new CodecError(
-            `'${discriminator}' chooses the variant, so it must be carried as 'S' or 'N', not '${member ?? 'none'}'`,
-        )
-    }
-    return attribute[member] as string
 }
 
 /**
@@ -3849,34 +2724,18 @@ const tagged = <T extends Record<string, unknown>>(
     discriminator: string,
     byVariant: Record<string, ItemCodec<Record<string, unknown>, unknown>>,
 ): DiscriminatedCodec<T, string, Record<string, unknown>> => {
-    const pick = (tag: string): Result<ItemCodec<T, unknown>> => {
-        // `Object.hasOwn` and not a truthiness test: `byVariant` is a plain object, so a tag of
-        // `toString` or `constructor` reaches `Object.prototype` and comes back as a variant that
-        // has no `decode`. The tag is read off the *stored* item, so that is reachable from data
-        // this library does not control, and it surfaced as a raw `TypeError` — the one thing
-        // every other failure here is careful not to be.
-        const variant = Object.hasOwn(byVariant, tag)
-            ? (byVariant[tag] as ItemCodec<T, unknown> | undefined)
-            : undefined
-        return (
-            variant ??
-            new CodecError(
-                `'${tag}' is not a variant of '${discriminator}'; expected ${Object.keys(
-                    byVariant,
-                )
-                    .map((x) => `'${x}'`)
-                    .join(', ')}`,
-            )
-        )
-    }
-
-    const tagOf = (item: Partial<T>): Result<string> => {
-        const tag = item[discriminator]
-        return tag === undefined
-            ? new CodecError(
-                  `'${String(discriminator)}' chooses the variant and was not given`,
-              )
-            : String(tag)
+    // the model reads a variant's tag off the variant's own `d` field, so the table's key is
+    // dropped rather than carried: two statements of one fact are two things that can disagree
+    const taggedDef = {
+        kind: 'dunion',
+        d: discriminator,
+        options: Object.values(byVariant).map((variant) =>
+            termOf(variant as unknown as AnyCodec),
+        ),
+    } as const
+    const { pick, tagOf } = byTagSem(discriminator, byVariant) as {
+        pick: (tag: string) => Result<ItemCodec<T, unknown>>
+        tagOf: (item: Partial<T>) => Result<string>
     }
 
     const self: Tagged<T, string, Record<string, unknown>> = {
@@ -3906,14 +2765,10 @@ const tagged = <T extends Record<string, unknown>>(
                 variant.spec,
             ]),
         ),
-        def: {
-            kind: 'tagged',
-            discriminator,
-            variants: byVariant as unknown as Attributes,
-        },
+        def: taggedDef,
     }
 
-    const nested = asOneAttribute(self)
+    const nested = codecOfTerm<T, Attribute<'M'>>(taggedDef)
     return {
         encode: nested.encode,
         decode: nested.decode,
@@ -4016,6 +2871,55 @@ type BothObjects<A, B> = A extends AnyObjectCodec
         : false
     : false
 
+/**
+ * **One option's decoded type is a strict subtype of another's**, so every value it admits, the
+ * other admits too.
+ *
+ * `Overlaps` above answers assignability *either* way round and reports ambiguity. This is the
+ * half of it where the containment is one-directional, and it is a different failure with
+ * different advice: §5's `select` acts only where exactly one option admits, so the narrower
+ * option is never selected and no discriminator reaches it.
+ *
+ * Mutual assignability answers `false` here and falls through to `Overlaps`, which is the right
+ * split: two options that read back as the *same* type are ambiguous, and one inside the other is
+ * dead. `union([string('A'), string('B')])` answers `false` on both counts, neither literal being
+ * assignable to the other, and declares.
+ */
+type Restricts<A, B> = [Decoded<A>] extends [Decoded<B>]
+    ? [Decoded<B>] extends [Decoded<A>]
+        ? false
+        : true
+    : false
+
+type RestrictsFrom<
+    Head,
+    Rest extends readonly unknown[],
+    At extends number,
+    Cursor extends readonly unknown[],
+> = Rest extends readonly [infer Next, ...infer Tail extends readonly unknown[]]
+    ?
+          | (BothObjects<Head, Next> extends true
+                ? never
+                : Restricts<Head, Next> extends true
+                  ? `option ${At} inside option ${Cursor['length']}`
+                  : Restricts<Next, Head> extends true
+                    ? `option ${Cursor['length']} inside option ${At}`
+                    : never)
+          | RestrictsFrom<Head, Tail, At, [...Cursor, unknown]>
+    : never
+
+type Restricting<
+    Options extends readonly unknown[],
+    Cursor extends readonly unknown[] = [],
+> = Options extends readonly [
+    infer Head,
+    ...infer Rest extends readonly unknown[],
+]
+    ?
+          | RestrictsFrom<Head, Rest, Cursor['length'], [...Cursor, unknown]>
+          | Restricting<Rest, [...Cursor, unknown]>
+    : never
+
 type OverlapsFrom<
     Head,
     Rest extends readonly unknown[],
@@ -4044,16 +2948,52 @@ type Overlapping<
     : never
 
 /**
- * Both rules, in the order that gives the more specific message.
+ * Whether any option is an `opaque` — the one option that cannot share a union.
  *
- * An overlap is the deeper problem — the union cannot round-trip at all — so it is reported first.
- * A name collision between two object options is reported by {@link ValidateVariants}.
+ * Matched on the **term's kind**, which is why {@link opaque} narrows its `def`. Not on the decoded
+ * type: `custom<unknown>` also reads back as `unknown` and is not `opaque`, because it admits
+ * exactly what its own `encode` admits and that may be a single value. What this rule is about is
+ * a term that admits *everything*, and only the term says so.
  */
-export type ValidateOptions<Options extends readonly unknown[]> = [
-    Overlapping<Options>,
-] extends [never]
-    ? ValidateVariants<ObjectSpecsOf<Options>>
-    : ErrorMessage<`[union] ${Overlapping<Options>} read back as the same type, so nothing about a value says which one it came from — give them a discriminator and use discriminatedUnion`>
+type HasOpaque<Options extends readonly unknown[]> = Options extends readonly [
+    infer Head,
+    ...infer Rest extends readonly unknown[],
+]
+    ? Head extends { readonly def: { readonly kind: 'opaq' } }
+        ? true
+        : HasOpaque<Rest>
+    : false
+
+/**
+ * Four rules, in the order that gives the more specific message.
+ *
+ * **The two containment rules are reported first, because their advice differs.** The other two
+ * failures are ambiguity, and the answer to ambiguity is a discriminator. Containment is not
+ * ambiguity: where one option admits every value another admits, §5's `select` acts nowhere on the
+ * narrower one, so it is a declared option no value reaches. No discriminator fixes it and no
+ * ranking resolves it — the option has to go, and the message has to say so.
+ *
+ * **`opaque` is the containment rule at its widest**, and it is matched on the term's kind rather
+ * than on the decoded type, because it reads back as `unknown`. {@link Restricting} is the same
+ * rule where the decoded types say it: a literal inside its base, a set of a literal inside the
+ * plain set. Both would otherwise fall to the overlap clause and be offered the discriminator
+ * advice, which is why the order is load-bearing rather than cosmetic.
+ *
+ * The runtime carries the same two rules in the same order — `term.ts`'s `restricts` ahead of the
+ * occupancy rows — so a cast that reaches past this gets the same sentence rather than a different
+ * one.
+ *
+ * An overlap is the deeper of the remaining two — the union cannot round-trip at all — so it is
+ * reported before a name collision, which {@link ValidateVariants} reports.
+ */
+export type ValidateOptions<Options extends readonly unknown[]> =
+    HasOpaque<Options> extends true
+        ? ErrorMessage<`[union] one option is \`opaque\`, which admits every value the others admit — so no value can select between them and the others can never be chosen. Remove the \`opaque\` option; a discriminator does not fix this`>
+        : [Restricting<Options>] extends [never]
+          ? [Overlapping<Options>] extends [never]
+              ? ValidateVariants<ObjectSpecsOf<Options>>
+              : ErrorMessage<`[union] ${Overlapping<Options>} read back as the same type, so nothing about a value says which one it came from — give them a discriminator and use discriminatedUnion`>
+          : ErrorMessage<`[union] ${Restricting<Options>}: every value the narrower option admits, the wider one admits too, so no value can ever select it. Remove the narrower option; a discriminator does not fix this`>
 
 /**
  * An object codec with its spec forgotten — the constraint form, as {@link AnyCodec} is for codecs.
@@ -4068,7 +3008,7 @@ export type AnyObjectCodec = {
         // fits and none of them has to be named
         readonly encode: (item: never) => unknown
         readonly decode: (item: StoredItem) => unknown
-        readonly spec: Record<string, AnyCodec>
+        readonly spec: Record<string, AnyDeclaration>
     }
 }
 
@@ -4155,8 +3095,8 @@ export type Untagged<T, Specs extends readonly unknown[] = UntaggedSpec<T>> = {
         index: I,
     ) => ItemCodec<show<ObjectOf<NonNullable<Specs[I]>>>, NonNullable<Specs[I]>>
     readonly spec: Specs
-    /** What this codec is — see {@link CodecDef}. */
-    readonly def: CodecDef
+    /** What this codec is — see {@link Term}. */
+    readonly def: Term
     /** The row this codec writes, pinnable with {@link Writes}. Type-level only. */
     readonly [writesMarker]?: WritesVariantsPin<Specs>
 }
@@ -4174,7 +3114,7 @@ export type Untagged<T, Specs extends readonly unknown[] = UntaggedSpec<T>> = {
  * would happily encode `{ a, b }` and silently lose `b`, so "it encoded" is not evidence that it is
  * the right option. Its names are.
  */
-type Option = {
+export type Option = {
     readonly codec: AnyCodec
     /** The member it writes, where the kind alone decides — a cheap filter on decode. */
     readonly member: AttributeName | undefined
@@ -4189,58 +3129,6 @@ type Option = {
     readonly describe: string
 }
 
-/**
- * Whether a term knows which values are its own.
- *
- * A `literal` does, by construction: it checks the value against its admissible set in *both*
- * directions, so being able to encode a value is real evidence the value was meant for it. Almost
- * nothing else did — encoding did not validate — which was why a union could not generally resolve
- * by trying.
- *
- * **Every row validates now and the resolver decides by {@link admits}, so this is no longer about
- * trying.** What it is still about is the *declaration*: whether two options can be told apart at
- * all, asked with no value in hand. That question is why `admits` cannot replace this function —
- * `admits` takes a value, and there is none at import time — and it is the shape of the answer
- * HANDOFF's fourth item expected and did not get.
- *
- * It **propagates through containers**, and it has to. `number.set(1)` refuses a set of strings,
- * because the element refuses each one — so `union([string.set('a'), number.set(1)])` is perfectly
- * resolvable, and reading the property off the option alone refused it. The same for a wrapper that
- * encodes straight through its inner codec.
- *
- * `nullable` is left out on purpose: two nullable literals both accept `null`, so the wrapper admits
- * a value neither literal decides. `held` is left out because the conversion is a caller's function
- * and there is nothing to read.
- */
-const identifies = (option: Option) => identifying(option.codec)
-
-const identifying = (codec: AnyCodec): boolean => {
-    const def = codec.def
-    switch (def?.kind) {
-        case 'literal':
-        // a tag lookup fails for a value carrying no tag it knows, which is the same evidence
-        case 'tagged':
-            return true
-        case 'set':
-        case 'array':
-            return identifying(def.element)
-        case 'tuple':
-            return def.elements.every(identifying)
-        case 'record':
-            return identifying(def.value)
-        case 'untagged':
-            return def.variants.every(identifying)
-        case 'refine':
-        case 'optional':
-        case 'fallback':
-            return identifying(def.inner)
-        case 'legacy':
-            return identifying(def.current)
-        default:
-            return false
-    }
-}
-
 const optionOf = (codec: AnyCodec): Option => {
     /**
      * Read from the definition, not from the presence of `.item`.
@@ -4250,118 +3138,22 @@ const optionOf = (codec: AnyCodec): Option => {
      * that list as though `0` and `1` were attribute names. `attributes` is the definition of an
      * object codec and of nothing else.
      */
+    const base = optionOfTerm(termOf(codec))
     const asObject =
-        codec.def?.kind === 'attributes'
+        codec.def?.kind === 'object'
             ? (codec as unknown as Partial<AnyObjectCodec>).item
             : undefined
-    const spec = asObject?.spec
-    if (!spec) {
-        return {
-            codec,
-            member: writes(codec),
-            carries: carries(codec),
-            item: undefined,
-            declares: undefined,
-            requires: [],
-            describe: codec.def?.kind ?? 'a codec',
-        }
-    }
-    const declares = new Set<string>()
-    const requires: string[] = []
-    for (const name in spec) {
-        declares.add(name)
-        if (!isOptional(spec[name] as AnyCodec)) requires.push(name)
-    }
-    return {
-        codec,
-        member: 'M',
-        carries: ['map'],
-        item: asObject as unknown as ItemCodec<
-            Record<string, unknown>,
-            unknown
-        >,
-        declares,
-        requires,
-        describe: `{ ${[...declares]
-            .map((name) =>
-                isOptional(spec[name] as AnyCodec) ? `${name}?` : name,
-            )
-            .join(', ')} }`,
-    }
+    return asObject
+        ? {
+              ...base,
+              item: asObject as unknown as ItemCodec<
+                  Record<string, unknown>,
+                  unknown
+              >,
+          }
+        : base
 }
 
-/**
- * Whether an object option can describe exactly this set of attribute names.
- *
- * Two conditions, and both matter for the law: every name present must be one the option declares
- * (otherwise encoding would drop data), and every attribute it requires must be present (otherwise
- * it is simply not this one).
- *
- * Named for what it is, which used to be `admits` — and it is emphatically **not** {@link admits},
- * §3's `Adm`. It is a test on *names* alone, the `keysOk` the model's `optionSemOf` uses for object
- * options, and it says nothing about whether the values at those names are admissible. Two things
- * called `admits` in one file was one name for two questions.
- */
-const namesFit = (option: Option, names: ReadonlySet<string>) => {
-    const declares = option.declares
-    if (!declares) return false
-    for (const name of names) if (!declares.has(name)) return false
-    for (const name of option.requires) if (!names.has(name)) return false
-    return true
-}
-
-/**
- * A value read as a bare record of attributes, or nothing.
- *
- * Only a plain object can be an object option's value. An array, a `Set`, a `Uint8Array` and a class
- * instance all have keys `Object.keys` will happily list, and matching an object option on those
- * would pick one that cannot encode them.
- */
-const asRecord = (value: unknown): Record<string, unknown> | undefined => {
-    if (typeof value !== 'object' || value === null) return undefined
-    const proto = Object.getPrototypeOf(value) as object | null
-    return proto === Object.prototype || proto === null
-        ? (value as Record<string, unknown>)
-        : undefined
-}
-
-/**
- * The names a value has, which is all the object matcher reads.
- *
- * A key whose value is `undefined` is not a name. That is the same rule in both directions —
- * `{ gift: undefined }` encodes without `gift`, and an item with no `gift` attribute decodes without
- * it — so matching an option on it would pick one the other direction cannot reach.
- */
-const namesOf = (held: Record<string, unknown>) => {
-    const names = new Set<string>()
-    for (const name in held) {
-        if (held[name] !== undefined) names.add(name)
-    }
-    return names
-}
-
-/**
- * A union of objects with no discriminator — `{ petId, price } | { petIds }`.
- *
- * **A unique structural match; ambiguity is refused rather than scored.** A variant admits a set of
- * attribute names when it declares all of them and requires none that are missing. Exactly one
- * match is used; none or several throw.
- *
- * That is what keeps `decode ∘ encode = id`, which first-match-wins does not: the matcher reads only
- * names, never positions, so both directions reach the same variant. Scoring widest or narrowest
- * would preserve the law too, but every candidate declares all the names present, so it would be an
- * arbitrary tie-break silently committing to a shape nobody named.
- *
- * Prefer {@link tagged} wherever a discriminator exists.
- *
- * @example
- * ```ts
- * const LineItem = union([
- *     { gift: optional(boolean), petId: string, price: decimal },
- *     { petIds: array(string) },
- * ])
- * ```
- */
 /**
  * The tag values a variant answers to — its discriminator's whole admissible set, not one value.
  *
@@ -4538,8 +3330,10 @@ export const discriminatedUnion = <
             )
         }
         // one value, not the whole admissible set: a variant answers to exactly one tag, so the
-        // `allowed` set below is read for its single member and refused if it has more
-        const def = option.item.spec[discriminator]?.def
+        // `ls` set below is read for its single member and refused if it has more
+        const declared = option.item.spec[discriminator]?.def
+        // a term and not a field: a mark on the discriminator would let the tag be absent
+        const def = declared && !('mark' in declared) ? declared : undefined
         /**
          * A tag is read back by {@link readTag}, which accepts `S` or `N` and nothing else — so the
          * bases that can carry one are exactly the three that write those two members. A literal at
@@ -4550,7 +3344,7 @@ export const discriminatedUnion = <
             def?.kind === 'literal' &&
             def.base !== 'boolean' &&
             def.base !== 'binary'
-                ? (def.allowed as readonly (string | number)[])
+                ? def.ls
                 : undefined
         if (!tags?.length) {
             throw new CodecError(
@@ -4595,6 +3389,12 @@ export const discriminatedUnion = <
  * particular value cannot be known until that value turns up, because `string('A')` and
  * `string('B')` both write `S` and are never ambiguous — so that one is reported when it happens.
  *
+ * **Refused rather than scored**, and that is what keeps `decode ∘ encode = id` where first-match
+ * wins does not: the matcher reads only names, never positions, so both directions reach the same
+ * variant. Scoring widest or narrowest would preserve the law too, but every candidate declares all
+ * the names present, so it would be an arbitrary tie-break committing in silence to a shape nobody
+ * named.
+ *
  * @example
  * ```ts
  * union([object({ petId: string, price: decimal }), object({ petIds: array(string) })])
@@ -4603,244 +3403,92 @@ export const discriminatedUnion = <
  * ```
  */
 export const union = <const Options extends readonly AnyCodec[]>(
-    options: Options &
-        ValidateOptions<Options> &
-        NotAboutAbsence<Options[number]>,
+    options: Options & ValidateOptions<Options>,
 ): UnionCodec<DerivedUnion<Options>, Options> => {
-    const all = (options as readonly AnyCodec[]).map(optionOf)
+    const all: readonly Option[] = (options as readonly AnyCodec[]).map(
+        optionOf,
+    )
 
     /**
      * Two options that no *value* can choose between, refused where the declaration is.
      *
-     * `ValidateOptions` refuses the pairs that no stored attribute can choose between, at compile
-     * time, by asking whether they read back as the same type. This is the other direction, and the
-     * types cannot see it: `array(string)` and `array(number)` read back as different types and are
-     * handed the same array.
+     * {@link separable} is the rule and states its own four exemptions; this is why the question is
+     * asked *here*. `ValidateOptions` refuses the pairs no stored attribute can choose between at
+     * compile time, by asking whether they read back as the same type. This is the other direction,
+     * and the types cannot see it: `array(string)` and `array(number)` read back as different types
+     * and are handed the same array. Asking once at the declaration reports it once, where asking
+     * per encode would report it once per write forever.
      *
-     * **The reason they are ambiguous has changed, and narrowed.** It used to be that neither
-     * checked what was in it, because encoding did not validate. Both check now, and the pair is
-     * still refused — over exactly one value, `[]`, the one array carrying nothing to tell them
-     * apart. `set` has no such value and separates; see {@link separatedByElements}, which is the
-     * exemption that follows. Reporting any of this per-encode would report it once per write
-     * forever instead of once at import.
-     *
-     * Two exemptions, and both are options that identify themselves:
-     *
-     * - an **object** option is chosen by the attribute names present, never by being tried
-     * - a **literal** knows which values are its own, so trying it is a real question — which is why
-     *   `union([string('A'), string('B')])` is not ambiguous and never was
-     *
-     * An option whose kind is unknown — an adapter, an `opaque` — is not compared: it could be
-     * anything, and refusing it against everything would refuse unions that work.
-     *
-     * **Both directions, because the condition has two sides.** This loop compared `carries` — value
-     * kinds — and nothing compared `writes`, so `union([decimal, number])` was accepted: `decimal`
-     * takes a string and `number` takes a number, no shared kind, declaration allowed. Both store
-     * `'N'`. It encoded `'1.5'` to `{ N: '1.5' }` and then *could not read back what it had
-     * written* — the decode filter kept both options and reported "decimal and number both admit
-     * this attribute". A union that writes a row no reader can resolve is worse than one that is
-     * refused, and it was invisible only because the mirror `union([string, decimal])` *is* refused,
-     * by the kind check, one line up.
-     */
-    /**
-     * Whether two options of the same container kind are told apart by what they hold — and the
-     * answer turns on whether the container has an **empty inhabitant**.
-     *
-     * The loop below refuses a pair sharing a carried kind, on the stated ground that "neither
-     * checks what it is given". That was true and is not: every row validates now, so
-     * `array(string)` refuses `[1]` and `array(number)` refuses `['a']`. Measured, the pairs that
-     * used to be refused wholesale share these values and no others:
+     * **Which containers separate turns on whether the container has an empty inhabitant**, and the
+     * pairs that share a value share only that one:
      *
      *     array(string) / array(number)     `[]`
      *     record(string) / record(number)   `{}`
      *     set(string) / set(number)         nothing
      *
-     * So `array` and `record` stay refused, and the reason is sharper than the old one: it is not
-     * that neither checks, it is the one value that carries nothing to check. `set` separates,
-     * because **DynamoDB has no empty set** — the asymmetry `admits`' own rows record, where `[]`
-     * is admitted and an empty `Set` is not, deciding a question about declarations.
+     * So `array` and `record` stay refused and `set` does not, because **DynamoDB has no empty
+     * set**. That is the asymmetry the term's own rows record — `[]` is admitted and an empty `Set`
+     * is not — deciding a question about declarations. `codec.laws.spec.ts` pins both halves.
      *
      * **A sufficient condition, deliberately.** "No value can choose between these two" is not
-     * decidable from two definitions in general, so this answers `false` wherever it cannot show
-     * separation and the pair stays refused. Widening it is a matter of adding a container that
-     * provably has no empty inhabitant, not of weakening what is here.
-     *
-     * **And this is not `identifying` being retired.** HANDOFF's fourth item expected `admits` to
-     * replace it; it cannot. `admits` answers a question about a *value*, and both `identifying`
-     * and this function answer a question about a *declaration* — there is no value in hand at
-     * import time to ask about. The resolver is where `admits` replaced trying; the declaration
-     * guard is where it structurally cannot.
+     * decidable from two terms in general, so this refuses wherever it cannot show separation.
+     * Widening it means adding a container that provably has no empty inhabitant, not weakening
+     * what is here.
      */
-    const separatedByElements = (first: Option, second: Option): boolean => {
-        const one = first.codec.def
-        const other = second.codec.def
-        if (one?.kind !== 'set' || other?.kind !== 'set') return false
-        const held = carries(one.element)
-        const alsoHeld = carries(other.element)
-        return (
-            !!held &&
-            !!alsoHeld &&
-            !held.some((kind) => alsoHeld.includes(kind))
-        )
-    }
+    // **Every option has a term.** A `set` over a restricted element is spelled as a restriction
+    // of the set, and a `set` whose element reduces to no base is refused by `.set()` at
+    // construction — so the conversion is total here. This carried a `Term | undefined` and a row
+    // for the absent case until the suite was run with the catch removed and stayed green
+    const pairs = all.map((option) => ({
+        option,
+        term: option.codec.def,
+    }))
 
-    for (let i = 0; i < all.length; i++) {
-        for (let j = i + 1; j < all.length; j++) {
-            const first = all[i] as Option
-            const second = all[j] as Option
-            if (first.declares || second.declares) continue
-            if (identifies(first) || identifies(second)) continue
-            if (separatedByElements(first, second)) continue
-            const shared = first.carries?.find((kind) =>
-                second.carries?.includes(kind),
-            )
-            if (shared) {
+    for (const [at, { option: first, term: x }] of pairs.entries()) {
+        for (const { option: second, term: y } of pairs.slice(at + 1)) {
+            if (separable(x, y)) continue
+            // **The restriction refusal comes first, because its advice differs.** The two below
+            // are ambiguity and the answer to ambiguity is a discriminator. This one is not:
+            // every value the narrower option admits, the wider one admits too, so `select` acts
+            // nowhere on the narrower and it can never be chosen. The option has to go. The
+            // `opaque` refusal is the same sentence and `ValidateOptions` orders its clauses the
+            // same way, for the same reason.
+            const narrow = restricts(x, y)
+                ? ([first, second] as const)
+                : restricts(y, x)
+                  ? ([second, first] as const)
+                  : undefined
+            if (narrow) {
                 throw new CodecError(
-                    `${first.describe} and ${second.describe} both take the same kind of value — ${shared} — and neither checks what it is given, so no value can choose between them; give the entity a discriminator and use discriminatedUnion`,
+                    `${narrow[0].describe} admits only values that ${narrow[1].describe} also admits, so no value can ever select it and the option can never be chosen. Remove it; a discriminator does not fix this`,
                 )
             }
-            if (first.member !== undefined && first.member === second.member) {
+            // the label the refusal names, asked again on the path that is about to throw:
+            // `separable` answers the `Bool` the model's `Orth` answers, so the meeting is
+            // recomputed here rather than carried back through it
+            const bothWrite = meet(occV(x), occV(y))
+            if (bothWrite) {
                 throw new CodecError(
-                    `${first.describe} and ${second.describe} both store '${first.member}', and neither checks what it reads, so no stored attribute can choose between them; give the entity a discriminator and use discriminatedUnion`,
+                    `${first.describe} and ${second.describe} both take the same kind of value — ${bothWrite} — and neither checks what it is given, so no value can choose between them; give the entity a discriminator and use discriminatedUnion`,
+                )
+            }
+            const bothRead = meet(occA(x), occA(y))
+            if (bothRead) {
+                throw new CodecError(
+                    `${first.describe} and ${second.describe} both store '${bothRead}', and neither checks what it reads, so no stored attribute can choose between them; give the entity a discriminator and use discriminatedUnion`,
                 )
             }
         }
     }
-
-    /** Every option, for a message that says what was available. */
-    const listed = () => all.map((option) => option.describe).join(' | ')
-
-    const ambiguous = (first: Option, second: Option, what: string) =>
-        new CodecError(
-            `${first.describe} and ${second.describe} both admit ${what}; these options cannot be told apart, so give them a discriminator and use discriminatedUnion`,
-        )
-
-    const unmatched = (what: string) =>
-        new CodecError(`no option admits ${what}; options are ${listed()}`)
-
-    /**
-     * What was being matched, named by the names it had.
-     *
-     * The names are the actionable half of both messages — "no option admits this item" says nothing
-     * a reader can act on, while the set of attributes it turned up with says exactly which option
-     * was expected to declare them. A value that is not a record has no names, and then there is
-     * nothing to add.
-     */
-    const naming = (label: string, names: ReadonlySet<string> | undefined) =>
-        names
-            ? `${label} with attributes ${[...names].map((x) => `'${x}'`).join(', ') || '(none)'}`
-            : label
-
-    /**
-     * The one option this could be, or why there is not exactly one.
-     *
-     * Two steps, and both are needed. The **kind** filter comes first and is the only step that can
-     * be trusted on its own: an option that takes a string cannot be the one for a number, and an
-     * option that writes `S` cannot read an `N`. If it leaves one option, that option *is* the answer
-     * — so a failure past that point is its error, reported as itself rather than swallowed into "no
-     * option matched".
-     *
-     * If it leaves several, they are **tried**, and exactly one must succeed. The first step alone
-     * would not do: `string('A')` and `string('B')` take the same kind of value and are never
-     * ambiguous.
-     *
-     * **This is the read side only now.** Attempting was once the only thing available on both
-     * sides, because encoding did not validate and a permissive option would "succeed" on a value
-     * only its neighbour meant. The write side decides instead — {@link onlyAdmitting} — and this
-     * one still attempts because there is no `AdmA` in `src/` to decide a stored attribute with.
-     */
-    const only = <A>(
-        survives: (option: Option) => boolean,
-        named: string,
-        through: (option: Option) => Result<A>,
-    ): Result<A> => {
-        const candidates = all.filter(survives)
-        if (candidates.length === 0) return unmatched(named)
-        if (candidates.length === 1) return through(candidates[0] as Option)
-
-        let first: Option | undefined
-        let carried: Result<A> | undefined
-        for (const option of candidates) {
-            const attempt = through(option)
-            if (failed(attempt)) continue
-            if (first) return ambiguous(first, option, named)
-            first = option
-            carried = attempt
-        }
-        return first ? (carried as Result<A>) : unmatched(named)
-    }
-
-    /**
-     * The same, **decided rather than attempted** — the write side only.
-     *
-     * `only` finds its answer by encoding through every survivor and keeping the one that did not
-     * fail. That was the only thing available while `encode` did not validate, and it is why this
-     * union used to report ambiguity that was not there: a resolver that decides by *trying*
-     * inherits every looseness of everything it tries, and then reports the result as a property of
-     * the declaration. `union([held(decimal, dateAdapter), string])` could not encode a `Date` for
-     * exactly that reason, and the fix was `string` refusing one.
-     *
-     * `admits` is the decision. It is §3's `Adm`, proved exact at all 21 constructors, and
-     * `codec.laws.spec.ts` now holds `admits(c, v) ⟺ !failed(c.encode(v))` over its whole table —
-     * so on the values in play this selects the same option `only` would have found by attempting,
-     * and says *why* rather than discovering it. Two differences that are improvements rather than
-     * equivalences: a `held` option whose adapter **throws** on a value it does not own is filtered
-     * out here instead of propagating, and an ambiguity is reported without first writing one of
-     * the two answers.
-     *
-     * **The read side keeps attempting**, because there is nothing to decide with: the model has
-     * `AdmA` on the attribute side and `src/` has no port of it. That asymmetry is the reason this
-     * is a second function rather than a flag on the first.
-     */
-    const onlyAdmitting = <A>(
-        survives: (option: Option) => boolean,
-        named: string,
-        value: unknown,
-        through: (option: Option) => Result<A>,
-    ): Result<A> => {
-        const candidates = all.filter(
-            (option) => survives(option) && admits(option.codec, value),
-        )
-        if (candidates.length === 0) return unmatched(named)
-        if (candidates.length > 1) {
-            return ambiguous(
-                candidates[0] as Option,
-                candidates[1] as Option,
-                named,
-            )
-        }
-        return through(candidates[0] as Option)
-    }
-
-    /** Which options a value could be for: an object option by its names, anything else by kind. */
-    const forValue =
-        (shape: Shape | undefined, names: ReadonlySet<string> | undefined) =>
-        (option: Option) =>
-            option.declares
-                ? shape === 'map' && !!names && namesFit(option, names)
-                : !option.carries || !shape || option.carries.includes(shape)
 
     type T = DerivedUnion<Options>
 
-    /** The same, from the stored side, where the member carried is what filters. */
-    const read = (attribute: AttributeValue): Result<T> => {
-        const member = memberOf(attribute)
-        const carriedMap =
-            member === 'M'
-                ? (attribute as { readonly M: AttributeMap }).M
-                : undefined
-        const names = carriedMap ? namesOf(carriedMap) : undefined
-        return only(
-            (option) =>
-                option.declares
-                    ? member === 'M' && !!names && namesFit(option, names)
-                    : option.member === undefined ||
-                      member === undefined ||
-                      option.member === member,
-            naming('this attribute', names),
-            (option) => option.codec.decode(attribute) as Result<T>,
-        )
-    }
+    const {
+        pair: { encode: write, decode: read },
+        only,
+        onlyAdmitting,
+        naming,
+    } = altSem(all)
 
     /** The item reading's own matcher: the value is always a record, so only names filter. */
     const readItem = (item: StoredItem): Result<T> => {
@@ -4888,31 +3536,25 @@ export const union = <const Options extends readonly AnyCodec[]>(
                 (option as unknown as Partial<AnyObjectCodec>).item?.spec,
         ) as never,
         def: {
-            kind: 'untagged',
-            variants: all.map((option) => option.codec),
+            kind: 'union',
+            options: all.map((option) => termOf(option.codec)),
         },
     }
 
     // the option chosen writes what it writes; `WrittenBy` is the union of those, which no single
     // call can be narrowed to from inside
-    const write = (value: T): Result<WrittenBy<Options>> => {
-        const held = asRecord(value)
-        return onlyAdmitting(
-            forValue(shapeOf(value), held ? namesOf(held) : undefined),
-            naming('this value', held ? namesOf(held) : undefined),
-            value,
-            (option) => option.codec.encode(value as never),
-        ) as Result<WrittenBy<Options>>
-    }
-
+    // the resolution is erased — a sum's rule is about options, not about the type they carry —
+    // so the two halves get their types back here, once, the way `codecOfTerm` does for a term
+    const encode = write as (value: T) => Result<WrittenBy<Options>>
+    const decode = read as (attribute: AttributeValue) => Result<T>
     return {
-        encode: write,
-        decode: read,
-        unsafeEncode: (value) => orThrow(write(value)),
-        unsafeDecode: (attribute) => orThrow(read(attribute)),
+        encode,
+        decode,
+        unsafeEncode: (value) => orThrow(encode(value)),
+        unsafeDecode: (attribute) => orThrow(decode(attribute)),
         def: {
-            kind: 'untagged',
-            variants: all.map((option) => option.codec),
+            kind: 'union',
+            options: all.map((option) => termOf(option.codec)),
         },
         item: self as never,
     }

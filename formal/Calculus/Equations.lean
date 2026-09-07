@@ -17,8 +17,9 @@ load-bearing and came first:
   unchanged — null-honesty is what makes each `nullable` lawful, and so what makes the
   idempotence lawful rather than lucky; it is just not what the rewrite itself needs.
 * `union(c₁ … cₙ) ≡ union(c_σ(1) … c_σ(n))` — §5 leans on this for "declaration order is
-  never consulted". Proved in its generating case, the adjacent transposition, since
-  those generate every permutation.
+  never consulted". Proved at *every* permutation and as an **equality** of the pair
+  (`altCodec_perm`), not merely `≡`. Deriving the general case from the adjacent one would
+  need `≡` to compose, and `Refutations.not_equiv_trans` says it does not.
 
 The remaining rows: `held`'s identity and composition, `refine`'s meet and its full case,
 `legacy` with its own reading (and `≈` on `Can(c)`), `union` of one, and the member
@@ -250,49 +251,76 @@ theorem orNull_eq_self {c : Codec} (hl : Lawful c) (hc : Carrier c)
   · funext v; cases v <;> simp [Codec.orNull, addPoint, ha]
   · funext x; cases x <;> simp [Codec.orNull, addPoint, hp]
 
-/-! ## `union` is commutative
+/-! ## `union` is commutative, at every permutation
 
-    Resolution is unique admission, never declaration order (§5) — so swapping two
-    options changes nothing. Proved for an adjacent swap, which generates every
-    permutation. -/
+    Resolution is unique admission, never declaration order (§5) — so reordering the
+    options changes nothing.
 
-/-- The filter of a swapped pair is the swap of the filter, and in the one case that
-    matters — a singleton, where `altCodec` acts — the two are equal. -/
-theorem filter_swap_singleton {α : Type} (P : α → Bool) (x y : α) (l : List α) :
-    ∀ {o}, (x :: y :: l).filter P = [o] → (y :: x :: l).filter P = [o] := by
-  intro o h
-  cases hx : P x <;> cases hy : P y <;> simp only [List.filter, hx, hy] at h ⊢
-  · exact h
-  · exact h
-  · exact h
-  · exact nomatch h
+    The direction of the argument is the point. §6 justifies the row by the adjacent swap
+    plus "transpositions generate every permutation", and that argument is unavailable: it
+    composes rewrites, and `≡` does not compose — `Refutations.not_equiv_trans` exhibits
+    three lawful codecs on their carriers where it fails. So the general case is proved
+    first and directly, and the adjacent one falls out of it at `List.Perm.swap`. What the
+    general case proves is stronger than the row asks: the two codecs are **equal**, not
+    equivalent. `select` reads its option list
+    only through the filter; a permutation permutes the filter; and the only two lengths at
+    which `select` answers at all — none and one — are the two a permutation pins. The held
+    set follows by `propext` from `Perm.mem_iff`.
 
-/-- §6: `union(c₁, c₂, …) ≡ union(c₂, c₁, …)`. The pair is literally the same on every
-    input at which either side is defined, since `altCodec` reads the option list only
-    through "exactly one admits". -/
+    That is why nothing here needs transitivity: an equality composes whether or not `≡`
+    does. -/
+
+
+/-- **`select` does not read its list's order.** The one lemma behind the permutation
+    lift, and it is about `select` rather than about `union`: both halves of `altCodec`
+    are instances, so the write and read sides are this theorem twice rather than two
+    proofs. `select` answers only when the filter is a singleton and is `none` at every
+    other length — and a permutation preserves both the singleton and its element. -/
+theorem select_perm {A B : Type} {os os' : List OptionSem} (h : os.Perm os')
+    (adm : OptionSem → A → Bool) (run : OptionSem → A → Option B) (x : A) :
+    select os adm run x = select os' adm run x := by
+  simp only [select]
+  have hp : (os.filter (adm · x)).Perm (os'.filter (adm · x)) := h.filter _
+  generalize os.filter (adm · x) = l at hp ⊢
+  generalize os'.filter (adm · x) = l' at hp ⊢
+  match l, l', hp with
+  | [], l', hp => rw [List.nil_perm] at hp; subst hp; rfl
+  | [o], l', hp => rw [List.singleton_perm] at hp; subst hp; rfl
+  | _ :: _ :: _, l', hp =>
+      -- neither side answers; that the two `none`s agree is all the row needs
+      have hlen := hp.length_eq
+      match l', hlen with
+      | [], hlen => simp at hlen
+      | [_], hlen => simp at hlen
+      | _ :: _ :: _, _ => rfl
+
+/-- §6: `union(c₁ … cₙ) ≡ union(c_σ(1) … c_σ(n))`, **on the nose**. Reordering the options
+    does not produce an equivalent codec, it produces the same one — the held set by
+    `propext`, the member by hypothesis, and the pair by `select_perm`. -/
+theorem altCodec_perm {os os' : List OptionSem} (h : os.Perm os') (μA : Option Member) :
+    altCodec os μA = altCodec os' μA := by
+  refine Codec.ext ?_ rfl ?_ ?_
+  · funext v
+    exact propext ⟨fun ⟨o, ho, hT⟩ => ⟨o, h.mem_iff.mp ho, hT⟩,
+      fun ⟨o, ho, hT⟩ => ⟨o, h.mem_iff.mpr ho, hT⟩⟩
+  · funext v; exact select_perm h _ _ v
+  · funext a; exact select_perm h _ _ a
+
+/-- The row as §6 states it, in `≡`. It is `Codec.Equiv.refl` transported along an
+    equality, which is the whole content of the remark above: the general case never
+    enters the equivalence, so it never meets the failure of transitivity that would sink
+    the generating argument. -/
+theorem equiv_altCodec_perm {os os' : List OptionSem} (h : os.Perm os') (μA : Option Member) :
+    Codec.Equiv (altCodec os μA) (altCodec os' μA) :=
+  altCodec_perm h μA ▸ Codec.Equiv.refl _
+
+/-- §6: `union(c₁, c₂, …) ≡ union(c₂, c₁, …)`, the adjacent case §6's own justification
+    names. It is the general theorem at `List.Perm.swap` — the transposition was never a
+    separate fact, only the one the table's argument happened to reach for. -/
 theorem equiv_altCodec_swap (o₁ o₂ : OptionSem) (os : List OptionSem)
     (μA : Option Member) :
-    Codec.Equiv (altCodec (o₁ :: o₂ :: os) μA) (altCodec (o₂ :: o₁ :: os) μA) := by
-  refine ⟨?_, rfl, ?_, ?_⟩
-  · intro v
-    constructor <;> rintro ⟨o, ho, hT⟩ <;>
-      · rcases List.mem_cons.mp ho with rfl | ho'
-        · exact ⟨o, List.mem_cons_of_mem _ (List.mem_cons_self _ _), hT⟩
-        · rcases List.mem_cons.mp ho' with rfl | ho''
-          · exact ⟨o, List.mem_cons_self _ _, hT⟩
-          · exact ⟨o, List.mem_cons_of_mem _ (List.mem_cons_of_mem _ ho''), hT⟩
-  · intro v a a' h h'
-    obtain ⟨o, hf, hoe⟩ := altCodec_e.mp h
-    obtain ⟨o', hf', hoe'⟩ := altCodec_e.mp h'
-    rw [filter_swap_singleton _ _ _ _ hf] at hf'
-    obtain rfl : o = o' := by simpa using hf'
-    exact Option.some.inj (hoe.symm.trans hoe')
-  · intro a v v' h h'
-    obtain ⟨o, hf, hop⟩ := altCodec_p.mp h
-    obtain ⟨o', hf', hop'⟩ := altCodec_p.mp h'
-    rw [filter_swap_singleton _ _ _ _ hf] at hf'
-    obtain rfl : o = o' := by simpa using hf'
-    exact Option.some.inj (hop.symm.trans hop')
+    Codec.Equiv (altCodec (o₁ :: o₂ :: os) μA) (altCodec (o₂ :: o₁ :: os) μA) :=
+  equiv_altCodec_perm (List.Perm.swap o₂ o₁ os) μA
 
 /-! ## `held` is an identity, and composes
 
@@ -436,7 +464,7 @@ theorem fallback_μ (t : Term) (v : Value) :
 /-! ## `union` is associative
 
 §6's last row, and the only conditional one in the table: "associative, where both sides
-satisfy (D) and (K) — and only on inputs satisfying (U): an ambiguity *inside* the nested
+satisfy (D) and a discharger — and only on inputs satisfying (U): an ambiguity *inside* the nested
 option fails locally on the left, where the outer union may still resolve, and globally on
 the right."
 
@@ -649,16 +677,29 @@ theorem equiv_denote_held_comp (t : Term) (f g f' g' : Value → Value) :
     Codec.Equiv (denote (.held (.held t f g) f' g'))
       (denote (.held t (f ∘ f') (g' ∘ g))) := equiv_through_comp _ _ _ _ _
 
-/-- §6: `refine(refine(c, q), q′) ≡ refine(c, q ∩ q′)`. -/
-theorem equiv_denote_refine_meet (t : Term) (q q' : Value → Bool) :
-    Codec.Equiv (denote (.refine (.refine t q) q'))
-      (denote (.refine t (fun v => q v && q' v))) := equiv_restrict_meet _ _ _
+/-- §6: `refine(refine(c, q), q′) ≡ refine(c, q ∩ q′)`.
+
+    **The meet is a `closure`, and that is what `Pred` costs.** The equation is about codecs
+    and it holds: `equiv_restrict_meet` is unchanged, because `restrict` still takes a
+    `Value → Bool` and `denote` hands it `p.eval`. What the reified predicate cannot do is
+    keep the *shape*. Two `members` meet in a term the classifier no longer reads, so `Orth`
+    declines the right-hand side where it certifies the left. That is the sound direction: a
+    declined certificate is a missing proof, never a wrong one.
+
+    For the reader who reaches for a fourth constructor: two `members` at one base meet in a
+    `members` over the intersection, where the intersection is nonempty. A discharger that
+    needs that reduction states it as a lemma about `Pred`, and `Pred` stays one to one with
+    the host's three cases, which is the whole reason it has three. -/
+theorem equiv_denote_refine_meet (t : Term) (p p' : Pred) :
+    Codec.Equiv (denote (.refine (.refine t p) p'))
+      (denote (.refine t (.closure (fun v => p.eval v && p'.eval v)))) :=
+  equiv_restrict_meet _ _ _
 
 /-- §6: `refine(c, T) ≡ c` for `⊢ c : T ⇝ μ`. The premise is the row's, read off the
     denotation rather than the judgement — `typed_TSub` is what connects the two. -/
-theorem equiv_denote_refine_full (t : Term) (q : Value → Bool)
-    (hq : ∀ v, (denote t).T v ↔ q v = true) :
-    Codec.Equiv (denote (.refine t q)) (denote t) := equiv_restrict_full _ _ hq
+theorem equiv_denote_refine_full (t : Term) (p : Pred)
+    (hq : ∀ v, (denote t).T v ↔ p.eval v = true) :
+    Codec.Equiv (denote (.refine t p)) (denote t) := equiv_restrict_full _ _ hq
 
 /-- §6: `legacy(c, p_c) ≡ c`. -/
 theorem equiv_denote_legacy_self (t : Term) :
@@ -681,8 +722,8 @@ theorem equiv_denote_nullable_idem (t : Term) :
 theorem denote_held_μ (t : Term) (f g : Value → Value) :
     (denote (.held t f g)).μ = (denote t).μ := rfl
 
-theorem denote_refine_μ (t : Term) (q : Value → Bool) :
-    (denote (.refine t q)).μ = (denote t).μ := rfl
+theorem denote_refine_μ (t : Term) (p : Pred) :
+    (denote (.refine t p)).μ = (denote t).μ := rfl
 
 theorem denote_legacy_μ (t : Term) (r : Attr → Option Value) :
     (denote (.legacy t r)).μ = (denote t).μ := rfl

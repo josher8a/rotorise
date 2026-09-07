@@ -47,6 +47,19 @@ def specOf : Term → Option (MapOf Bool)
     (`discriminatedUnion` demands a bare `literal`). -/
 def tagsOfField : Option Field → Finset String
   | some (.req (.literal .string ls)) => ls.1
+  -- A decimal literal holds its numeral as *text* and stores it as `N`, and the host's tag reader
+  -- accepts `S` or `N` and keys on the text either way. So the two bases are two ways of writing
+  -- one tag, not two tag types, and the set is `String` at both.
+  --
+  -- `Finset.map` and not `Finset.image`: the image needs `DecidableEq` on the codomain through a
+  -- route that reaches `Classical.choice`, measured, and `Subtype.val` is injective so the
+  -- embedding is free.
+  | some (.req (.literal .decimal ls)) =>
+      ls.1.map ⟨Subtype.val, fun _ _ h => Subtype.ext h⟩
+  -- **`number` is the base the model cannot spell a tag at.** `Double` is an axiom with no closed
+  -- terms, so no numeric tag can appear in a term this development can state, and
+  -- `DecidableEq WFDouble` is a field of `numericHost` besides. The host builds one and reads it
+  -- back as its text; `src/lean.ts` refuses to emit it and says so. That gap is written, not fixed.
   | _ => ∅
 
 /-- A body's tags on discriminator `d`: the field declared at `d`, if any, read as a tag set. -/
@@ -119,6 +132,17 @@ and nothing here does.
 
 Fuel was a termination device and never a cost measure; it is not even that any more. -/
 
+/-- **What a `Pred` means.** The type is in `Term.lean`, and the meaning is here, because `inL`
+    and `liftQ` are in `Combinators.lean` and `Term.lean` does not import it.
+
+    `noncomputable`, because `inL` is: the numeric base's carrier gate reaches `numericHost`.
+    That costs nothing new. `denote` is noncomputable for the same reason, and `Orth` never
+    calls this — a classifier reads a `Pred`'s constructors, which are data. -/
+noncomputable def Pred.eval : Pred → Value → Bool
+  | .members k ls => inL k ls
+  | .each p       => liftQ p.eval
+  | .closure q    => q
+
 mutual
 
 def denote : Term → Codec
@@ -134,7 +158,7 @@ def denote : Term → Codec
   | .tuple elems tail => tupleCodec (denoteList elems) (denoteOpt tail)
   | .record val => recordCodec (denote val)
   | .held inner f g => (denote inner).through f g
-  | .refine inner q => (denote inner).restrict q
+  | .refine inner p => (denote inner).restrict p.eval
   | .legacy inner r => (denote inner).extendRead r
   | .nullable inner => (denote inner).withNull
   -- `(lazy)` concludes `⊤`: the pair is the thunk's, the member is not.
@@ -145,7 +169,9 @@ def denote : Term → Codec
   | .opaq lossy => opaqCodecω lossy
   | .object b => bodySem b
   | .union opts => altCodec (optionSems opts) (unanimous (denoteμs opts))
-  | .dunion d opts => dunionCodec d (denoteTagged d opts)
+  -- **the lookup, not a filtered sum.** The variants are a table keyed by tag, so the codec
+  -- reads the tag and indexes; ~~denoteTagged~~ and its list are gone with the sum.
+  | .dunion d variants => dunionTable d ⟨variants.1, fun k => bodySem (variants.2 k)⟩
 
 /-- The payload's semantics: the field table and the rest policy, each through its own
     companion. This is the third companion of `denote`, alongside `fieldSem` and `restSem`, and
@@ -183,10 +209,6 @@ def optionSems : List Term → List OptionSem
 def denoteμs : List Term → List (Option Member)
   | [] => []
   | t :: ts => (denote t).μ :: denoteμs ts
-
-def denoteTagged (d : Name) : List Term → List (Finset String × Codec)
-  | [] => []
-  | t :: ts => (tagsOf d t, denote t) :: denoteTagged d ts
 
 end
 
@@ -259,9 +281,12 @@ theorem denote_tuple (ts : List Term) (tail : Option Term) :
 theorem denote_held (t : Term) (f g : Value → Value) :
     denote (.held t f g) = (denote t).through f g := rfl
 
-/-- `refine` denotes `restrict`. -/
-theorem denote_refine (t : Term) (q : Value → Bool) :
-    denote (.refine t q) = (denote t).restrict q := rfl
+/-- `refine` denotes `restrict`, of the predicate's meaning.
+
+    This is the whole of what `Pred` cost the codec layer: one `.eval`. `restrict` still takes
+    a `Value → Bool`, so every theorem in `Combinators.lean` about it is untouched. -/
+theorem denote_refine (t : Term) (p : Pred) :
+    denote (.refine t p) = (denote t).restrict p.eval := rfl
 
 /-- `legacy` denotes `extendRead`. -/
 theorem denote_legacy (t : Term) (r : Attr → Option Value) :
@@ -275,9 +300,10 @@ theorem denote_union_sems (opts : List Term) :
     denote (.union opts) =
       altCodec (optionSems opts) (unanimous (denoteμs opts)) := rfl
 
-/-- `discriminatedUnion` denotes `dunionCodec`. -/
-theorem denote_dunion_tags (d : Name) (opts : List Term) :
-    denote (.dunion d opts) = dunionCodec d (denoteTagged d opts) := rfl
+/-- `discriminatedUnion` denotes the lookup, over the variants' own codecs. -/
+theorem denote_dunion_tags (d : Name) (variants : MapOf Body) :
+    denote (.dunion d variants)
+      = dunionTable d ⟨variants.1, fun k => bodySem (variants.2 k)⟩ := rfl
 
 /-- `opaque` denotes `opaqCodecω` — the fuel-free one, which is why §5's discharger table has
     a row about `opaqCodec` at a fuel and a reason rather than a term-level twin. -/
@@ -318,11 +344,6 @@ has to know the companions exist. -/
     denoteμs opts = opts.map fun t => (denote t).μ
   | [] => rfl
   | t :: ts => by simp only [denoteμs, List.map]; rw [denoteμs_eq_map ts]
-
-@[simp] theorem denoteTagged_eq : ∀ (d : Name) (opts : List Term),
-    denoteTagged d opts = opts.map fun t => (tagsOf d t, denote t)
-  | _, [] => rfl
-  | d, t :: ts => by simp only [denoteTagged, List.map]; rw [denoteTagged_eq d ts]
 
 end
 

@@ -104,15 +104,15 @@ that had no witness until it had this one. -/
 rather than about a row of it. -/
 
 /-! `ident` has no denotational content to pin — what it has is its relation to `adm`,
-which is what §5 uses it for, and `SepV`'s right to drop §5's two `ident` conjuncts
+which is what §5 uses it for, and ~~SepV~~'s right to drop §5's two `ident` conjuncts
 rests on it. -/
 
 /-! §2's ideal: `e` and `p` are mutually inverse between `dom(e)` and `Can(c)`. `retract`
 is one half and this is the other, so the bijection is a theorem rather than a reading. -/
 
 /-! §5's two outright dischargers, as one theorem: label each side by a projection of the
-input, keep the options' label sets disjoint. `uniqueAdmission_of_kinds` and
-`uniqueAdmission_byTag` are its two instances. -/
+input, keep the options' label sets disjoint. `uniqueAdmission_of_kinds` is its one instance
+now; the tagged one went with the filtered sum. -/
 
 /-! §3's `held`/`refine` split, checked rather than asserted: both are one partial-iso
 combinator, and the pair agrees on the nose. -/
@@ -132,14 +132,14 @@ are one union seen by both residues: `UAtCan` refutes it at an input it never wr
 total, so `dom(p)` is the subterm's exactly. It is cited as a result now, so it is guarded
 like one. -/
 
-/-! `admA`'s `held` row, both directions. §5 gave `held` one `⊤` row on both sides; its
+/-! `AdmA`'s `held` row, both directions. §5 gave `held` one `⊤` row on both sides; its
 opacity is one-sided — `f` gates the write, `g` only post-processes the read — so the
 readable side passes through, and these two are the pair it separates and the pair it
 still does not. -/
 
-/-! The three lemmas that pin §5's declaration-time devices to the denotation. Without
-these, `κ`, `adm` and `admA` are transcriptions of a table rather than claims about the
-model, so their axiom base is part of what the soundness statements rest on. -/
+/-! The lemmas that pin §5's declaration-time devices to the denotation. Without them a row
+is a transcription of a table rather than a claim about the model, so their axiom base is
+part of what the soundness statements rest on. -/
 
 /-! The fuel-free twins. They meet §6's table through `Codec.Equiv` rather than through a
 shared transport constant — ~~denote_eq~~ was the ω-layer's and went with the layer

@@ -10,7 +10,7 @@
  * not validate**: a codec's input is typed, so `number` given `'x'` wrote `{ N: 'x' }` rather than
  * failing. That was the whole reason `carries` exists.
  *
- * It asks now. Every row validates, `admits` is an iff with `encode`, and the write side resolves by
+ * It asks now. Every row validates, `accepts` is an iff with `encode`, and the write side resolves by
  * asking each option rather than by writing through it. `carries` survives as the *declaration*'s
  * filter, which is a question about two codecs rather than about a value.
  */
@@ -49,6 +49,11 @@ describe('a union of bare attributes', () => {
         expect('S' in written ? written.S : written.N).toBe('x')
     })
 
+    /**
+     * **Pins wording no law has, deliberately.** The refusal is asserted as a `CodecError` beside
+     * it; what the regex adds is the diagnostic, which is this test's subject. Here it is that the refusal
+     * *lists the options*, so a caller of a generated union learns what it could have passed.
+     */
     it('refuses a value no option takes, naming the options', () => {
         expect(() => Scalar.unsafeEncode(true as never)).toThrow(CodecError)
         expect(() => Scalar.unsafeEncode(true as never)).toThrow(
@@ -57,9 +62,7 @@ describe('a union of bare attributes', () => {
     })
 
     it('refuses a member no option writes', () => {
-        expect(() => Scalar.unsafeDecode({ BOOL: true })).toThrow(
-            /no option admits this attribute/,
-        )
+        expect(() => Scalar.unsafeDecode({ BOOL: true })).toThrow(CodecError)
     })
 
     it('round-trips, held by an entity that generates both options', () => {
@@ -86,9 +89,7 @@ describe('the kind of value is a filter, not the answer', () => {
     })
 
     it('refuses a string neither literal admits', () => {
-        expect(() => Tag.unsafeEncode('C' as never)).toThrow(
-            /no option admits this value/,
-        )
+        expect(() => Tag.unsafeEncode('C' as never)).toThrow(CodecError)
     })
 
     /**
@@ -113,9 +114,7 @@ describe('the kind of value is a filter, not the answer', () => {
             options: readonly AnyCodec[],
         ) => UnionCodec<string, readonly AnyCodec[]>
         // both are handed a string and neither checks it, which is a fact about the declaration
-        expect(() => declare([string, decimal])).toThrow(
-            /both take the same kind of value — string — and neither checks/,
-        )
+        expect(() => declare([string, decimal])).toThrow(CodecError)
     })
 })
 

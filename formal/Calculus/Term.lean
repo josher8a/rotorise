@@ -7,7 +7,8 @@ import Mathlib.Data.Finset.Lattice.Fold
 Deep embedding. Notes:
 
 * Predicates carried by terms (`refine`) are `Bool`-valued so the denotation
-  needs no classical choice; the doc's subsets are their coercions.
+  needs no classical choice; the doc's subsets are their coercions. `Pred` below is that
+  predicate **as data** where the data exists, and a function only where it does not.
 * `custom` carries its pair as data; its *laws* are premises of the typing rule (§3),
   exactly as in the doc.
 * `opaque` is a Lean keyword, hence `opaq`.
@@ -22,6 +23,33 @@ Deep embedding. Notes:
 -/
 
 namespace Calculus
+
+/-- §3 `(refine)`'s predicate, as far as it can be read.
+
+    A bare `Value → Bool` decides nothing a table can see, and two things wanted to see it.
+    `Orth` cannot certify `set(literal k ls)` against another one while the predicate is a
+    function, so the pair keeps a host exemption that the model proves nothing about. And
+    `src/term.ts` had already made the same move for the same reason: its predicate type is
+    `members | each | closure`, and its docstring says the declaration guard has to read the
+    predicate as data. These are the same three cases, so the two sides are now one shape.
+
+    * `members` is membership of a literal's alternatives, `inL k ls`. The base indexes the
+      carrier, exactly as `Term.literal` does.
+    * `each` lifts an element predicate to a wire set, `liftQ`. It is what makes
+      `set(literal k ls)` expressible: `set` takes a base, so a restricted element is a
+      restriction of the *set*, and `setCodec_restrict` proves the two are one pair.
+    * `closure` is a caller's function. It is the case that stays opaque, and it is why this
+      is a wider type and not a narrower one: `refine` still carries an arbitrary predicate,
+      and every theorem that quantifies over one still runs.
+
+    `Pred` mentions no `Term`, so it is not in the mutual block below. Its `eval` is not here
+    either: `inL` and `liftQ` are in `Combinators.lean`, which `Term.lean` does not import, so
+    `Pred.eval` sits beside `denote`. The type is the term language's; the meaning is the
+    denotation's. -/
+inductive Pred where
+  | members (k : GroundKind) (ls : NEFinset k.Carrier)
+  | each    (p : Pred)
+  | closure (q : Value → Bool)
 
 mutual
 
@@ -56,8 +84,10 @@ inductive Term where
 
       **What this gives up, deliberately.** `set(refine(b, q))` and `set(literal k ls)` are
       *not* lost: a restriction of the elements is a restriction of the set, and
-      `setCodec_restrict` (`Combinators.lean`) proves the two write the same attribute on
-      the nose, with `liftQ` carrying the predicate through. What is lost is
+      `setCodec_restrict` and `setCodec_restrict_p` (`Combinators.lean`) prove the two are
+      one pair on the nose, the first on `e` and the second on `p`, with `liftQ` carrying
+      the predicate through. This cited the write-side theorem for both halves, and the
+      read side was a sentence in its docstring until it was proved. What is lost is
       `set(held b f g)` and `set(legacy b r)` — an element-level adapter and an
       element-level read widening. Neither appears in `src/`, and neither has a set-level
       spelling: a set-level `held` would need `setImage` rather than the classical
@@ -69,7 +99,7 @@ inductive Term where
   | tuple    (elems : List Term) (tail : Option Term)
   | record   (val : Term)
   | held     (inner : Term) (f : Value → Value) (g : Value → Value)
-  | refine   (inner : Term) (q : Value → Bool)
+  | refine   (inner : Term) (p : Pred)
   | legacy   (inner : Term) (r : Attr → Option Value)
   | nullable (inner : Term)
   /-- §3 `(lazy)`. The thunk is *not* `Unit → Term`: a closure adds no constructible
@@ -89,7 +119,19 @@ inductive Term where
       `Attr.m` and `Value.map` use one level down. -/
   | object   (b : Body)
   | union    (options : List Term)
-  | dunion   (d : Name) (options : List Term)
+  /-- §5 `(dunion)`, **keyed by the tag**. The variants were a `List Term` under three side
+      conditions: each an object, each answering to exactly one tag, no two answering to the
+      same one. A tag-keyed table over `Body` says all three.
+
+      *Object* is the codomain. *Arity one* is a function on a key set: one key reaches one
+      variant. *Distinctness* is `Finset`, which is why the keys are a set and not a list — the
+      same reason the field table one stratum up is one.
+
+      What the table cannot say is that a variant's own `d` field agrees with its key, and that
+      stays a premise. It cannot go: the host's variant *declares* the discriminator and the
+      codec writes the tag out of that field, so the field is not the table's to remove.
+      `Typed.dunion`'s `hone` is that one fact now, where it used to be five. -/
+  | dunion   (d : Name) (variants : MapOf Body)
 
 /-- §4's object payload: the declared names, the field at each, and the policy for
     everything else. A `mutual` block admits no `structure`, so this is `inductive … | mk`
@@ -200,7 +242,11 @@ def Term.depth : Term → Nat
   -- one companion, like every other non-leaf row
   | .object b => Body.depth b + 1
   | .union opts => Term.depthL opts + 1
-  | .dunion _ opts => Term.depthL opts + 1
+  -- one more than the deepest variant **term**, which is the `union` row's shape: a variant is
+  -- an object, so its term costs `Body.depth + 1`, and writing that here is what makes the
+  -- recursion to `.object (variants.2 k)` strictly decrease rather than merely not increase
+  | .dunion _ variants =>
+      (variants.1.attach.sup fun k => Body.depth (variants.2 k) + 1) + 1
 
 /-- The payload's own budget: the field table is a key *set* with a function on it, so its
     layer is the largest field budget over the key set — a `Finset.sup`, where a list would be
@@ -296,6 +342,15 @@ theorem Term.depth_lt_object_rest {b : Body} {t : Term} (h : b.rest = .codec t) 
     Term.depth t < Term.depth (.object b) :=
   lt_trans (Body.depth_lt_rest b h) (Term.depth_lt_object_body b)
 
+/-- A variant's term is strictly below the `dunion`'s, which is the inequality a `Finset.sup`
+    needs and a fold does not: `le_sup` gives `≤`, so the row counts the variant's **term** and
+    not its payload, and the successor does the rest. -/
+theorem Term.depth_lt_dunion {d : Name} {variants : MapOf Body}
+    (k : {k // k ∈ variants.1}) :
+    Term.depth (.object (variants.2 k)) < Term.depth (.dunion d variants) :=
+  Nat.lt_succ_of_le (Finset.le_sup (f := fun k => Body.depth (variants.2 k) + 1)
+    (Finset.mem_attach _ k))
+
 /-- The termination argument every `Term.depth` recursion in this development uses, written
     once. **Three** theorems share it, all in `Soundness.lean` — `soundness_both`,
     `typed_TSub`, `carrier_denote` — and their goal sets differ, so some alternatives are dead
@@ -330,6 +385,8 @@ macro "term_depth_wf" : tactic => `(tactic|
        | exact Term.depth_lt_object_req _ (by assumption)
        | exact Term.depth_lt_object_opt _ (by assumption)
        | exact Term.depth_lt_object_fb _ (by assumption)
+       -- a variant's term, where the layer is a `Finset.sup` rather than a fold
+       | exact Term.depth_lt_dunion _
        -- the rest policy's codec
        | exact Term.depth_lt_object_rest (by assumption)
        | exact Term.depth_lt_object_rest rfl

@@ -56,16 +56,30 @@ import Calculus.Axioms
 
 open Lean Elab Command
 
-/-- §5's per-aspect analysis: the older generation, every mutual member named. -/
-def genOld : List Name :=
-  [`Calculus.adm, `Calculus.admA, `Calculus.admList, `Calculus.admAList, `Calculus.admALit,
-   `Calculus.SepV, `Calculus.SepA]
+/-! ## The two root sets are the question, and they are meant to be edited
 
-/-- The joint exact analysis that replaced it, every mutual member named. -/
-def genNew : List Name :=
+    The question this file was written for is answered and gone: the tree carried two
+    generations of admission analysis, the walk partitioned them, and the older generation
+    was deleted. The lists below are therefore an *example* of a live question rather than a
+    standing one — what depends on a term's own rows, and what depends on the admission a
+    `union` actually consults. Edit them, run the file, read the partition.
+
+    Whatever you put in them, name **every member of a mutual family by hand**: mutual
+    members reference each other in no constant's value, so the closure from one of them
+    misses the rest. The list this file shipped with was wrong in both directions for a
+    while — it named two declarations that had been deleted and omitted four that had not —
+    and `name_drift.py` reads `scripts/*.lean`, so the two dead entries were *clearing*
+    every prose citation of those two names across the tree. A root list is not inert. -/
+
+/-- What a term's own rows are: admission per term, per side. -/
+def rootsA : List Name :=
   [`Calculus.Adm, `Calculus.AdmA, `Calculus.AdmList, `Calculus.AdmAList,
-   `Calculus.AdmField, `Calculus.AdmAField, `Calculus.AdmRest, `Calculus.AdmARest,
-   `Calculus.SepJV, `Calculus.SepJA]
+   `Calculus.AdmField, `Calculus.AdmAField, `Calculus.AdmRest, `Calculus.AdmARest]
+
+/-- What a `union` consults: admission by names at an object, the row everywhere else. -/
+def rootsB : List Name :=
+  [`Calculus.admitOptV, `Calculus.admitOptA, `Calculus.occV, `Calculus.occA,
+   `Calculus.occVL, `Calculus.occAL]
 
 syntax (name := blastRadius) "#blast_radius" : command
 
@@ -100,8 +114,8 @@ def elabBlastRadius : CommandElab := fun _ => do
           seen := seen.insert d
           work := work.push d
     seen
-  let old := closure genOld
-  let new := closure genNew
+  let old := closure rootsA
+  let new := closure rootsB
   let mut oldOnly : Array Name := #[]
   let mut both : Array Name := #[]
   let mut newOnly := 0
@@ -113,10 +127,10 @@ def elabBlastRadius : CommandElab := fun _ => do
     | false, true  => newOnly := newOnly + 1
     | false, false => neither := neither + 1
   logInfo m!"source declarations: {source.length}\n\
-    depends on OLD only (the refactor cost): {oldOnly.size}\n\
-    depends on BOTH (the bridges):           {both.size}\n\
-    depends on NEW only (already migrated):  {newOnly}\n\
-    depends on neither:                      {neither}\n\
-    \n-- OLD only, sorted:\n{String.intercalate "\n" ((oldOnly.map (·.toString)).toList.mergeSort (· ≤ ·))}"
+    depends on A only: {oldOnly.size}\n\
+    depends on both:   {both.size}\n\
+    depends on B only: {newOnly}\n\
+    depends on neither: {neither}\n\
+    \n-- A only, sorted:\n{String.intercalate "\n" ((oldOnly.map (·.toString)).toList.mergeSort (· ≤ ·))}"
 
 #blast_radius

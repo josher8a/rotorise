@@ -1,217 +1,50 @@
 import Calculus.Soundness
 
 /-!
-# §5 — The decidable dischargers of (U)
+# §5 — the discharges of (U) that no phase of `Orth` reaches
 
-The machinery of (K): `κ`, `ident`, `adm` and `admA` as total structural recursions over the
-term language, exactly as §5's tables state them — `Kind` is §1's and lives in `Domain.lean`,
-which this paragraph had among the recursions — plus the theorem that puts them to
-work — `uAtCan_of_separated`, discharging `(union)`'s residual (U) at the declaration.
+What is left here after the four tables went: the discharges whose premise no syntactic
+certificate can supply, the refutations that bound them, and the handful of utilities both
+need.
 
-Separation is asked of each side of the pair. On the writable side: disjoint `κ`
-(no `⊤`), or disjoint `adm`. On the readable side: distinct named members, or disjoint
-`admA`. Open object options are excluded, since an undeclared name disqualifies the
-option even where its rest codec would hold it — so an open object never admits its own
-canonical pairs.
+**The four tables are gone.** The per-aspect kind, decides-its-own-membership and
+admissible-set recursions were §5's
+approximations, transcribed here clause for clause while the section stated them. The
+section states its discharger on option admission and occupancy now, `Exactness.lean` proves
+`Adm`/`AdmA` exact at every constructor, and `Orthogonality.lean` decides the pairs a
+declaration can decide. A transcription of an analysis nothing states and nothing consumes
+is a description with nothing keeping it honest, so it went.
 
-§5's (D) is *not* among these, and `not_uAtCan_literal_held` is why: held sets are sets
-of values, (U)'s readable side quantifies over attributes, and `held`'s adapter relabels
+**The per-aspect separation layer went before them**, at `f5fc4a6`: ~~SepV~~, ~~SepA~~,
+their footprint definitions, the discharger stated on them, and the hand discharges phrased
+in that vocabulary. What that layer proved by hand in phases *slot* and *alternatives*,
+`Orth` reaches by `decide`.
+
+So the discharges that remain are the ones no phase reaches: an arbitrary `q` inside a
+`refine`, a union of numeric literals at a base whose `DecidableEq` is axiomatized,
+`(dunion)` and `opaque` — whose (U) is a theorem one level below the term language — and
+`uAtAct_array_literals`, which holds where `UAtCan` is outright false.
+
+§5's (D) is not among them, and `not_uAtCan_literal_held` is why: held sets are sets of
+values, (U)'s readable side quantifies over attributes, and `held`'s adapter relabels
 between them. Two options can hold disjoint sets and read one attribute. (D) is a
 well-formedness condition on the `T` index and lives there — `DIncomp`, a premise of
-`Typed.union` (Typing.lean); the readable side is decided on stored attributes. `DDisj`
-below is the *stronger* reading §5 considered and withdrew, kept only to be refuted.
+`Typed.union` (`Typing.lean`). `DDisj` below is the *stronger* reading §5 considered and
+withdrew, kept only to be refuted.
 
-The `ident` exemption is here in its repaired form. An earlier §5 stated (K) as
-`κ(cᵢ) ∩ κ(cⱼ) = ∅ ∨ ident(cᵢ) ∨ ident(cⱼ)` and called it sufficient for (U); it is
-not, on either disjunct, and the two counterexamples at the foot of this file are
-machine-checked. What carries the exemption is `adm` — the set an `ident` term checks
-against — disjoint on *both* sides, which is what §5's worked example,
-`union(literal("A"), literal("B"))`, actually has and what `uAtCan_literal_literal`
-now discharges. `uAtCan_of_separated` is the combined theorem; `uAtCan_of_disjoint`
-is its kind/member half.
+The two counterexamples that repaired §5's discharger are at the foot of the file. §5 keeps
+both, and
+they are the machine-checked half of a correction the document has already made.
 -/
 
 namespace Calculus
 
-/-! ## `κ` — the kinds a term accepts
+/-! ## Two utilities the discharges below need
 
-    `Kind` itself is §1 vocabulary and lives in `Domain.lean`, on both sides of the
-    pair (`Value.kind`, `Attr.kind`). What is §5's is `κ`: which of those kinds a
-    *term* accepts. -/
-
-mutual
-
-/-- §5's `κ`: the kinds of value a term accepts. `none` is the table's `⊤`, and it
-    absorbs — `nullable`'s `∪` and `union`'s `⋃` answer `⊤` whenever a subterm does. -/
-def κ : Term → Option (List Kind)
-  -- §3 `(literal)`: the kind is the base's, which is the index.
-  | .literal k _ => some [k.kind]
-  | .string | .decimal => some [.string]
-  | .number => some [.number]
-  | .boolean => some [.boolean]
-  | .null => some [.null]
-  | .binary => some [.binary]
-  | .set _ => some [.set]
-  | .array _ | .tuple _ _ => some [.array]
-  | .record _ | .object _ | .dunion _ _ => some [.map]
-  | .refine t _ | .legacy t _ => κ t
-  | .nullable t => (κ t).map (.null :: ·)
-  | .union opts => κList opts
-  -- `lazy` is the *most* transparent wrapper in the language, not an opaque one:
-  -- `denote (.lazy t) = { denote t with μ := none }`, so `e` and `p` are the
-  -- subterm's definitionally and only the member is erased. §5 calls it unanalysable
-  -- because the doc's thunk was `Unit → Term`; this `Term` is not that thunk, and the
-  -- opacity was the residue of that change rather than a fact about `lazy`.
-  | .lazy t => κ t
-  | .held _ _ _ | .custom _ _ | .opaq _ => none
-
-/-- `⋃ κ(cᵢ)`, `⊤`-absorbing. -/
-def κList : List Term → Option (List Kind)
-  | [] => some []
-  | t :: ts =>
-    match κ t, κList ts with
-    | some ks, some ks' => some (ks ++ ks')
-    | _, _ => none
-
-end
-
-/-- Whether a set's **base** decides its own membership — what `ident` used to read off the
-    element term. `number` and `decimal` check §1's gate on the way in and on the way out, so
-    an attempted admission is evidence; `string` and `binary` accept their whole carrier and
-    so decide nothing. Indexing `set` turns a propagation into this table, and the four
-    answers are the four the propagation gave. -/
-def SetBase.ident : SetBase → Bool
-  | .string | .binary => false
-  | .number | .decimal => true
-
-mutual
-
-/-- §5's `ident`: the term decides its own membership — attempted admission is
-    evidence. Holds of `literal` and `dunion`; propagates through the containers and
-    the transparent wrappers; never otherwise (`nullable` deliberately: two nullable
-    options both admit the null neither subterm decides). -/
-def ident : Term → Bool
-  | .dunion _ _ => true
-  -- `number` and `decimal` decide their own membership: each checks §1's gate on the way
-  -- in and on the way out (§3 `(number)` "gates both halves"). The other four ground
-  -- scalars accept their whole carrier and so decide nothing.
-  | .number | .decimal => true
-  -- `(literal)` checks its one value on both halves — the definition of deciding your
-  -- own membership, and the reason the constructor is worth having over `refine`.
-  | .literal _ _ => true
-  -- `nullable` propagates rather than refusing. §5 made it refuse outright, to stop two
-  -- nullable options separating on a null neither subterm decides — but with `adm` precise
-  -- that refusal is carried by the sets *overlapping at null*, which is the honest reason.
-  | .nullable t => ident t
-  | .set b => b.ident
-  | .array t | .record t => ident t
-  -- `refine` *holds* it rather than propagating: `q` is checked on the way in and on the
-  -- way out, which is what deciding your own membership means. §3 argues the same — a `p`
-  -- returning the value it read without verifying `q` would break (C).
-  | .refine _ _ => true
-  | .legacy t _ => ident t
-  | .tuple ts tail =>
-    identList ts && (match tail with | some t => ident t | none => true)
-  | .union opts => identList opts
-  -- The remaining rows are `false`, and are written out because a row that decides
-  -- nothing is a claim like any other. The four ground scalars accept their whole
-  -- carrier, so an admission is no evidence about which term admitted.
-  | .string | .boolean | .binary | .null => false
-  -- `object` is the one container that does not propagate: its admission tests *names*,
-  -- and the field terms' own sets are not what the option checks a value against.
-  | .object _ => false
-  -- `lazy` propagates, for the reason given at `κ`: its pair *is* the subterm's.
-  | .lazy t => ident t
-  -- `held` propagates: `adm` applies `f` and asks the subterm, so the subterm is what
-  -- decides, exactly as it does under `refine`.
-  | .held t _ _ => ident t
-  -- `custom` decides its own membership outright — its `T` *is* `dom(ce)`.
-  | .custom _ _ => true
-  -- `opaq` decides its own membership for the same reason `custom` does, and the rows
-  -- below are why: `adm (.opaq _)` **is** `dom((opaqCodecω _).e)`, so an admission is an
-  -- answer from the codec rather than a syntactic guess. The old row was `!lossy`, forced
-  -- by `ident_of_adm` when a scalar-prefix row refused only at `.num`; the semantic row
-  -- refuses far more (a `numSet`, an array holding a numeral the store will not take),
-  -- and at *every* policy — `Numeral.WF (Double.toDec d)` is not a theorem — so `!lossy`
-  -- is no longer sound and `true` is what `ident_of_adm` now forces.
-  | .opaq _ => true
-
-def identList : List Term → Bool
-  | [] => true
-  | t :: ts => ident t && identList ts
-
-end
-
-/-! ## `adm` — the sets an `ident` term checks against
-
-    §5's third auxiliary, and the specification now states it as the two functions below
-    rather than as one: its table is term-by-term and matches these definitions clause for
-    clause, so a reviewer can read the two side by side. `ident` says a term decides its own
-    membership; `adm` says *against what*. Only two terms carry a real set — a `literal`'s values and a
-    `discriminatedUnion`'s tags — and `refine`/`legacy` pass one through. Everywhere
-    else `adm` is `true`: **no information**, which is what makes two such options
-    never separable this way.
-
-    In particular `adm` does *not* propagate through the containers, though `ident`
-    does. `adm(array(c))` would have to contain the empty array whatever `c` is, so
-    propagating it would claim a separation that is false — see
-    `not_uAtCan_array_literals` below.
-
-    ### The two rows that ask their own codec
-
-    `custom` and `opaque` are the language's two escape hatches, and they are the two
-    rows here that **do not describe a set at all**. Each one asks the codec it denotes:
-
-        adm  (.custom ce _)   v = (ce v).isSome
-        adm  (.opaq lossy)    v = ((opaqCodecω lossy).e v).isSome
-        admA (.custom _ cp)   a = (cp a).isSome
-        admA (.opaq lossy)    a = ((opaqCodecω lossy).p a).isSome
-
-    Three things follow, and they are the same three for both.
-
-    *They are exact by construction.* `denote`'s rows set `e := ce` and
-    `e := (opaqCodecω lossy).e` — the `custom` row definitionally, `opaque` by
-    `denote_opaq` — so the row and `dom(e)`
-    are the same function and `ExactV`/`ExactA` at either term is `Iff.rfl`. That is not a
-    sharp analysis of an escape hatch; it is the analysis *declining* to be one, and the
-    exactness is the codec's, borrowed. `Exactness.lean` says so again where the two
-    `Exact` rows are proved.
-
-    *They are as precise as the semantics is.* No syntactic set could name
-    `opaqCodecω`'s domain: it recurses on the *input's own depth*, refusing a `numSet` of
-    numerals the store will not take, or an array with one such numeral at any depth. A
-    row over the term cannot see past the top constructor — the row this one replaced saw
-    exactly that far, which gave `number` a separation `set(number)` could not have for no
-    reason in the semantics. Deferring sees all of it, because it does not look.
-
-    *Nothing here knows anything about either implementation.* Swap `opaqCodecω` for a
-    different `opaque` — a different numeric policy, a different set of options, a
-    different fuel discipline — and every theorem downstream of these rows is still true
-    and still proved, because none of them ever mentions what the codec answers. That is
-    what `custom` has always had and what this buys `opaque`: the analysis is decoupled
-    from the hatch. Precision is the consequence, not the goal.
-
-    ### …and the one respect in which they are opposite
-
-    The likeness is **the analysis, and only the analysis**. `opaque` is not a `custom`,
-    and the difference is the warranty behind the codec each row asks:
-
-    * `custom` carries a real premise. `Obligations (.custom ce cp)` (`Soundness.lean`) is
-      `Lawful ⟨dom(ce), none, ce, cp⟩` — a proof obligation on whoever writes the term, and
-      nothing in the calculus discharges it. The row asks a codec **the user warrants**.
-    * `opaque` carries none. `Obligations (.opaq _) = True`, and it is `True` because the
-      laws are *theorems* here: `lawful_opaqCodecω` and `carrier_opaqCodecω`
-      (`Opaque.lean`), off the stabilization and depth-preservation lemmas. The row asks a
-      codec **the calculus warrants**.
-
-    So `opaque` is strictly the stronger of the two — same decoupling, no premise — and
-    that is what "a *well-behaved* `custom`" means. A reading of these rows as "`opaque` is
-    a `custom`" gets the obligation exactly backwards.
-
-    The price is paid and worth naming. Neither row can be *read* to learn what the term
-    admits — a reviewer wanting that reads the codec — and `admA` had to become
-    `noncomputable`, which `adm` already was (`opaqCodecω` is, and `custom` carries
-    arbitrary functions). Nothing in §5 evaluates these; every use is a proof. -/
+    `allTags` pools a `discriminatedUnion`'s tags, and `refineReads` is `refine`'s
+    read-side test: decode with the base, then ask `q` of the result. Both were rows of the
+    retired tables before they were anything else, and both survive because the discharges
+    at the foot of this file use them. -/
 
 /-- The tags a `(dunion)`'s options answer to, pooled. Spelled out rather than a
     `flatMap` so the membership lemma is one induction. -/
@@ -228,124 +61,7 @@ theorem mem_allTags {d : Name} {ts : List Term} {t tag} (ht : t ∈ ts)
     · exact Finset.mem_union.mpr (Or.inl htag)
     · exact Finset.mem_union.mpr (Or.inr (ih ht'))
 
-/-- `admA`'s literal row: what the *stored attribute* tells you about `ℓ`.
 
-    For every base but `number` the stored attribute **is** the value, so `ℓ` bounds the readable
-    side outright in one `decide`. At `number` it does not — the numeral goes through
-    `Double.ofDec` — and this row used to be `⊤` on that ground, which is what §5 called the
-    `literal-S`/`literal-N` split. **The ground did not support the conclusion.** No syntactic
-    set of attributes names the numerals that read into `ℓ`, and the row does not need one: it
-    can *ask*, since `ofDec` is a function it may call and `denote (.literal .number ls)` is
-    `literalCodec .number ls`. What survives of the split is that the numeric answer costs a
-    `bind` through an axiom where the others cost a `decide` — a difference in how the row is
-    computed, not in what it decides. With one rule that is a *case of the definition* rather
-    than two constructors, which is the honest place for it: it was never a difference between
-    two rules, only between two bases of one.
-
-    Not `inL`'s mirror, and that asymmetry is the content: `adm` is `inL` exactly, because the
-    write side sees the value. -/
-noncomputable def admALit : (k : GroundKind) → NEFinset k.Carrier → Attr → Bool
-  | .string,  ls, .s s    => decide (s ∈ ls.1)
-  | .boolean, ls, .bool b => decide (b ∈ ls.1)
-  | .binary,  ls, .b b    => decide (b ∈ ls.1)
-  | .null,    _,  .null   => true
-  -- **The row that used to be `⊤`, asking its codec instead.** The old justification was
-  -- that `Double.ofDec` is axiomatized, so no syntactic set of *attributes* bounds which
-  -- numerals a numeric literal reads. True, and beside the point: the row does not have to
-  -- name the set, it can ask, and `denote (.literal .number ls)` **is**
-  -- `literalCodec .number ls` (`rfl`), so this is `dom(p)` on the nose. What the analysis
-  -- ever needed was not *which* numerals a stored text reads to but whether the answer is
-  -- **unique**, and `Double.ofDec` being a function gives that for free — which is why
-  -- disjoint alternative sets now separate in the table (`sepA_literalN_disjoint`) and not
-  -- only in the pair.
-  | .number,  ls, a       => ((literalCodec .number ls).p a).isSome
-  -- `decimal` asks for the same reason and gets a sharper answer. Its alternatives *are*
-  -- stored numerals, so unlike `number` the row could in principle be spelled out — but
-  -- asking keeps one definition of what the base reads instead of two that must agree, and
-  -- a different `decimal` codec would need no edit here.
-  | .decimal, ls, a       => ((literalCodec .decimal ls).p a).isSome
-  | _, _, _ => false
-
-mutual
-
-/-- `adm`, value side. `noncomputable` only because the `literal` row at `number` compares
-    `Double`s, whose
-    `DecidableEq` is axiomatized (§1) — the recursion itself is structural. -/
-noncomputable def adm : Term → Value → Bool
-  -- **`inL`, the codec's own predicate** — where three rows used to spell it out twice for the
-  -- n-ary bases and once more, case by case, for arity one. `adm` bounding the write is
-  -- exactly what `Codec.restrict` restricts by, so there was never a second definition to
-  -- give; there were three constructors making it look like there was.
-  | .literal k ls => inL k ls
-  -- The discriminator projection is `OptionSem.byTag`'s own (`tagOfV`), so this table
-  -- and the admission it bounds read the same function rather than two copies of one
-  -- lookup-and-match.
-  | .dunion d opts => fun v =>
-    match tagOfV d v with
-    | some tag => decide (tag ∈ allTags d opts)
-    | none => false
-  -- `q` is a predicate on *values*, so it applies here without ceremony: `refine`'s `e` is
-  -- defined only where `q` holds, so `adm t ∩ q` is a sound bound and a strictly better one
-  -- than the passthrough. `admA` was long said not to be able to follow — "`q` tests the
-  -- value a read *produces*, and no syntactic set of attributes bounds that" — which is a
-  -- reason to stop being *syntactic*, not a reason to drop `q`. It now follows, one decode
-  -- out; see `refineReads`. `held` is the row that is still one-sided.
-  | .refine t q => fun v => adm t v && q v
-  | .legacy t _ => adm t
-  -- §1's two number gates, recorded for the same reason a literal's set is: a gate the term
-  -- owns is exactly what `adm` is for. Only `decimal` is a `refine` over an ungated base
-  -- (`decimalCodec_e_restrict`, over `wfDecimalCodec`). At `number` there is none to refine:
-  -- `Attr.n` carries `Numeral.WF`, so `numberCodec` **is** §1's set — `Combinators.lean`'s
-  -- "The base at `N` is §1's own set, not an ungated one", and the reason `decimal`'s
-  -- restriction lemma has no numeric counterpart to cite beside it.
-  | .nullable t => fun v => adm t v || (match v with | .null => true | _ => false)
-  | .number => inD
-  | .decimal => isStored
-  -- A union admits what some option admits — the same `⋃` `κ` already takes. Without it
-  -- the union spelling of a literal set forgets both sets, where the n-ary literal keeps
-  -- them, which would make `union(literal a, literal b)` strictly weaker than
-  -- `literal(a, b)` for no reason the semantics gives.
-  | .union opts => fun v => admList opts v
-  -- Everything below is `⊤` — **no information** — and each row says why, so that a `⊤`
-  -- is a recorded decision rather than the residue of a catch-all.
-  --
-  -- The four ground scalars whose codec accepts the whole carrier of their kind. (`number`
-  -- and `decimal` are the two that do not, and they are rows above.)
-  | .string | .boolean | .binary | .null => fun _ => true
-  -- The containers. `adm (array c)` would have to contain the empty array whatever `c`
-  -- is, so propagating the element's set would claim a separation that is false —
-  -- `not_uAtCan_array_literals` is the witness. Same argument for the other four.
-  | .set _ | .array _ | .tuple _ _ | .record _ | .object _ => fun _ => true
-  -- `held` is transparent here too, and `f` is what makes it so rather than what blocks
-  -- it: `(c.through f g).e v = c.e (f v)` by `Iff.rfl`, so the writable set is the
-  -- subterm's pulled back along `f`. `f` is *data the term carries*, and `adm` is a
-  -- function that can apply it — nothing here needs `held`'s iso obligation.
-  | .held t f _ => fun v => adm t (f v)
-  -- `lazy` propagates, for the reason given at `κ`.
-  | .lazy t => adm t
-  -- `custom` carries its pair as data, which is the reason it is *analysable*, not the
-  -- reason it is not: `denote`'s `custom` row sets `e := ce`, so `dom(e)` is `ce`'s and
-  -- this row is exact. The first of the two rows that ask their own codec; see the
-  -- section header.
-  | .custom ce _ => fun v => (ce v).isSome
-  -- `opaq` is the second member of that family, and this row is the whole of the change
-  -- that made it one. `denote (.opaq lossy)` **is** `opaqCodecω lossy` (`denote_opaq`), so
-  -- asking the codec is asking the denotation, and the row is `dom(e)` on the nose.
-  --
-  -- What it replaces was a scalar-prefix approximation — `.num ↦ lossy`, everything else
-  -- `⊤` — which saw only the top constructor of the hole. A non-lossy `opaque` also refuses
-  -- a `.numSet`, and an array or map carrying a numeral anywhere inside; so does a *lossy*
-  -- one, at any numeral whose text is not `Numeral.WF`. None of that is syntax, and none of
-  -- it needs to be: `opaqCodecω` recurses on the value's own depth, and so does this row,
-  -- by deferring to it.
-  | .opaq lossy => fun v => ((opaqCodecω lossy).e v).isSome
-
-/-- `adm`'s union row, as the list recursion the kernel needs. -/
-noncomputable def admList : List Term → Value → Bool
-  | [], _ => false
-  | t :: ts, v => adm t v || admList ts v
-
-end
 
 /-- **`refine`'s read-side gate**: decode with the base, then apply `q` to what comes out.
 
@@ -356,8 +72,8 @@ end
     syntax. It may call the denotation, and the denotation is what produces the value `q`
     tests. `(denote t).p a` is that value, or `none`; the gate is `q` of it.
 
-    Shared verbatim by §5's `admA` and §5.5's `AdmA`, so the two rows are the *same*
-    function at `refine` and `AdmA_le_admA` is a containment rather than a coincidence. -/
+    `AdmA`'s `refine` row is this function, which is why the row survived the retirement of
+    the per-aspect tables it was first written for. -/
 noncomputable def refineReads (t : Term) (q : Value → Bool) (a : Attr) : Bool :=
   match (denote t).p a with
   | some v => q v
@@ -373,453 +89,9 @@ theorem refineReads_none {t : Term} {q : Value → Bool} {a : Attr}
     (h : (denote t).p a = none) : refineReads t q a = false := by
   simp [refineReads, h]
 
-mutual
-
-/-- `adm`, attribute side. The two wrappers that are `⊤` for `adm` part company here,
-    and the reason is which half of the pair each one touches.
-
-    `legacy` is **not** transparent: `extendRead` widens `p` past the subterm's admissible set,
-    which is the direction `admA` bounds. So the row names both channels —
-    `admA t a || (r a).isSome` — rather than passing the subterm's through, and
-    `not_admA_legacy` refutes that passthrough, one disjunct of this row and not the row.
-
-    `held` **is** transparent, and this is the one case where `admA` sees further than `adm`.
-    `through`'s `g` post-processes a read and is total, so `dom(p)` is the subterm's *exactly*
-    (`through_p`): the adapter changes which value comes out, never which attributes go in.
-    Only `f` is opaque and `f` gates the write, which is why `adm` stays `⊤`.
-    `sepA_literal_heldLiteral` is a pair this separates and §5's single `⊤` row could not.
-
-    Both sides now see through `held`, by different routes: this one because `g` is total
-    and post-processes, the value side because `f` is *applied* rather than guessed at.
-    What stays asymmetric is the shape of the answer — `admA` passes the subterm's set
-    through unchanged, `adm` pulls it back along `f`.
-
-    `number` and a numeric `literal` are the **third and fourth rows that ask their own
-    codec**, and
-    they arrived by the same correction `opaq` did. Both were `⊤`, and both `⊤`s were bought
-    with one non-argument: `Double.ofDec` is axiomatized, therefore no syntactic set of
-    attributes bounds the read. The premise is true; the conclusion confuses *cannot bound
-    which values* with *cannot bound which option*. `numberCodec.p` answers `none` at every
-    attribute constructor but `.n`, and at an `.n` it answers at most one value, because
-    `ofDec` is a **function**. Uniqueness is all `admA` ever needed, and it is free. The rows
-    are `(numberCodec.p ·).isSome` and `((literalCodec .number ls).p ·).isSome`, both `dom(p)`
-    on the nose; `sepA_number_opaque` and `sepA_literalN_disjoint` are the two separations that
-    were previously refuted or deferred to the pair reading.
-
-    **`refine` is the fifth, and the same mistake bought it.** Its row was `admA t` with `q`
-    discarded, on the ground that `q` tests the value a read produces and no *syntactic* set
-    of attributes bounds that. True of syntax, and the row is not syntax: it decodes with the
-    base and applies `q` to the result (`refineReads`). That is not merely sound, it is
-    exact whenever the base's row is — `dom((c.restrict q).p) = {a | ∃ v, c.p a = some v ∧ q v}`
-    is what the row computes — and `sepA_refine_disjoint` is the separation it buys. -/
-noncomputable def admA : Term → Attr → Bool
-  | .dunion d opts => fun a =>
-    match tagOfA d a with
-    | some tag => decide (tag ∈ allTags d opts)
-    | none => false
-  -- `refine` asks its base to decode and then applies `q` — the fifth row to ask rather
-  -- than describe, and the last of the family. See `refineReads`.
-  | .refine t q => fun a => admA t a && refineReads t q a
-  | .held t _ _ => admA t
-  | .union opts => fun a => admAList opts a
-  -- `decimal` holds numerals *as their text*, so its gate is a plain test on the stored
-  -- attribute. `number`'s gate is not — the numeral goes through `Double.ofDec` — which is
-  -- why its row asks the codec below instead of testing anything.
-  | .nullable t => fun a => admA t a || (match a with | .null => true | _ => false)
-  | .decimal => fun a => match a with | .n x => Numeral.Stored x | _ => false
-  -- The payoff over `refine`: for every base but `number` the stored attribute *is* the
-  -- value, so `ℓ` bounds the readable side in a `decide`. At `number` `ℓ` still bounds it,
-  -- one indirection out, through the codec — see `admALit`'s `.number` row.
-  | .literal k ls => admALit k ls
-  -- As on the value side, the `⊤` rows are written out with their reasons.
-  --
-  -- Ground scalars accepting their whole carrier.
-  | .string | .boolean | .binary | .null => fun _ => true
-  -- **`number` is no longer one of them.** It sat in that group on the ground that
-  -- `Double.ofDec` is an axiom, so no syntactic set of attributes bounds which numerals
-  -- are readable. That is true and it is not what the row needed: `numberCodec.p` answers
-  -- `none` at every attribute constructor but `.n`, so *which member* is bounded even
-  -- though *which values* is not. Asking the codec gets both — `denote .number` **is**
-  -- `numberCodec` (`rfl`), so this row is `dom(p)`, exactly, and it is the third of the
-  -- rows that ask rather than describe.
-  | .number => fun a => (numberCodec.p a).isSome
-  -- The containers, by the empty-container argument on the value side.
-  | .set _ | .array _ | .tuple _ _ | .record _ | .object _ => fun _ => true
-  -- **`legacy` asks too now, and it is the last row that parted into `⊤`.** The excuse was
-  -- that `extendRead` widens `p` past the subterm's admissible set, which is the direction
-  -- `admA` bounds — true, and the wrong conclusion, because the thing it widens *by* is `r`,
-  -- which the term carries. Both channels are named, so the row is their union.
-  --
-  -- `not_admA_legacy` still stands and is about something else: §5's *passthrough*, `admA t`
-  -- alone, really is unsound here. A union is not a passthrough. `Exactness.lean`'s section
-  -- "why `legacy` was in the wrong family" is the analysis, and reached it first for `AdmA`.
-  | .legacy t r => fun a => admA t a || (r a).isSome
-  -- `lazy` propagates here too, and for the same reason: `p` is the subterm's.
-  | .lazy t => admA t
-  -- `custom`'s read side, exact for the same reason: `p := cp`.
-  | .custom _ cp => fun a => (cp a).isSome
-  -- `opaq`'s read side, deferring the same way: `p := (opaqCodecω lossy).p`, so the row is
-  -- `dom(p)` exactly — the refused `.ns`, and the `.l`/`.m` carrying an unreadable numeral
-  -- somewhere inside, are all seen, and none of them by a rule about `opaque`.
-  | .opaq lossy => fun a => ((opaqCodecω lossy).p a).isSome
-
-/-- …and on the attribute side. -/
-noncomputable def admAList : List Term → Attr → Bool
-  | [], _ => false
-  | t :: ts, a => admA t a || admAList ts a
-
-end
-
-/-! ### Tag admission, on both sides
-
-`(dunion)`'s admission and `adm`/`admA` at a `dunion` are the same shape — a lookup of the
-discriminator, and a membership test on the tag it carries. Stating that shape once is
-what lets the `dunion` cases below say the one thing they are about: the tag the
-admitting option matched is one of the union's tags. -/
-
-/-- `adm` at a `dunion` is the same test, against the union's whole tag set. -/
-theorem adm_dunion {d : Name} {opts : List Term} {v : Value} :
-    adm (.dunion d opts) v = true ↔
-      ∃ tag, tagOfV d v = some tag ∧ tag ∈ allTags d opts := by
-  simp only [adm]
-  cases tagOfV d v with
-  | none => simp
-  | some tag => simp
-
-/-- …and `admA` likewise. -/
-theorem admA_dunion {d : Name} {opts : List Term} {a : Attr} :
-    admA (.dunion d opts) a = true ↔
-      ∃ tag, tagOfA d a = some tag ∧ tag ∈ allTags d opts := by
-  simp only [admA]
-  cases tagOfA d a with
-  | none => simp
-  | some tag => simp
-
-/-! ## κ is sound for the denotation -/
-
-/-- Every option of a `⋃` is a sublist of it. -/
-theorem κList_mem : ∀ {ts : List Term} {ks}, κList ts = some ks →
-    ∀ t ∈ ts, ∃ ks', κ t = some ks' ∧ ∀ k ∈ ks', k ∈ ks
-  | [], _, _, t, ht => absurd ht (by simp)
-  | t₀ :: ts, ks, h, t, ht => by
-      replace h : (match κ t₀, κList ts with
-        | some ks₀, some ks' => some (ks₀ ++ ks') | _, _ => none) = some ks := h
-      cases hk₀ : κ t₀ with
-      | none => rw [hk₀] at h; exact nomatch h
-      | some ks₀ =>
-        cases hks : κList ts with
-        | none => rw [hk₀, hks] at h; exact nomatch h
-        | some ks' =>
-          rw [hk₀, hks] at h
-          replace h : some (ks₀ ++ ks') = some ks := h
-          cases h
-          rcases List.mem_cons.mp ht with rfl | ht'
-          · exact ⟨ks₀, hk₀, fun k hk => List.mem_append.mpr (Or.inl hk)⟩
-          · obtain ⟨ks₁, hκ₁, hsub⟩ := κList_mem hks t ht'
-            exact ⟨ks₁, hκ₁, fun k hk => List.mem_append.mpr (Or.inr (hsub k hk))⟩
-
-/-- Fourteen of `κ`'s rules name a **single kind**, and are settled by the same two
-    moves: `κ` reduces to that singleton, and the codec's own `e` refuses every value of
-    another kind. Written out that is five lines fourteen times; here it is once. -/
-local macro "single_kind" hk:ident hv:ident he:ident : tactic =>
-  `(tactic| (cases $hk:ident
-             cases $hv:ident <;> first
-               | exact List.mem_cons_self _ _
-               | exact nomatch $he:ident))
-
-/-- Encoding lands in `κ`: a term's writable values have the kinds its `κ` names.
-    (Where `κ` answers `⊤` there is nothing to say — the table's point.)
-
-    The rules that are not `single_kind` are exactly the ones where `κ` is *computed*
-    from a subterm's: the two transparent wrappers, `nullable`'s `∪`, `union`'s `⋃`,
-    and `dunion`, whose kind comes from the option that admitted rather than from its
-    own syntax. Four more answer `⊤`, where the hypothesis is unsatisfiable. -/
-theorem κ_sound : ∀ (t : Term) {ks : List Kind} {v a},
-    κ t = some ks → (denote t).e v = some a → Value.kind v ∈ ks
-  | t, ks, v, a, hκ, he => by
-    cases t with
-    | string => single_kind hκ v he
-    | decimal => single_kind hκ v he
-    | literal k ls =>
-      -- `(literal)` is the one single-kind rule whose kind comes from *data*, so the macro
-      -- cannot serve. What it needs is only the *prism*: `e` is defined exactly where `inL`
-      -- holds, and `inL` holds only at the base's own kind. `numberCodec` never has to be
-      -- unfolded — its gate is a `dite` on `Numeral.WF`, whose decision is a string parser.
-      cases hκ
-      have hq : inL k ls v = true := (restrict_e.mp he).1
-      cases k <;> cases v <;> simp_all [inL, Value.kind]
-    | number => single_kind hκ v he
-    | boolean => single_kind hκ v he
-    | null => single_kind hκ v he
-    | binary => single_kind hκ v he
-    | set t' => single_kind hκ v he
-    | array t' => single_kind hκ v he
-    | tuple ts tail => single_kind hκ v he
-    | record t' => single_kind hκ v he
-    -- the payload is matched because `single_kind` refutes the non-`map` values *by
-    -- reduction*: `bodySem` is a companion, so it reduces only at a constructor
-    | object body => cases body with | mk fields ff rest => single_kind hκ v he
-    | dunion d opts =>
-      -- a stamped option writes a `map`, so the kind is `map` however it was reached
-      cases hκ
-      obtain ⟨o, ho, hadm, -⟩ := altCodec_e_admits he
-      simp only [optionSems_eq, denoteTagged_eq] at ho
-      obtain ⟨x, hx, rfl⟩ := List.mem_map.mp ho
-      cases v <;> first
-        | exact List.mem_cons_self _ _
-        | exact nomatch hadm
-    | refine t' q => exact κ_sound t' hκ (restrict_e.mp he).2
-    | legacy t' r => exact κ_sound t' hκ he
-    | nullable t' =>
-      -- `nullable`'s `∪`: `null` is the wrapper's own kind, everything else the
-      -- subterm's, and `orNull` sends every non-`null` value straight to it
-      replace hκ : (κ t').map (Kind.null :: ·) = some ks := hκ
-      obtain ⟨ks', hκt, rfl⟩ := Option.map_eq_some'.mp hκ
-      cases hw : (denote t').ownsNull with
-      | true =>
-        -- the guard declined: the wrapper writes exactly what the subterm writes
-        rw [show (denote (.nullable t')).e = (denote t').e from
-          withNull_e_of_owns hw] at he
-        exact List.mem_cons_of_mem _ (κ_sound t' hκt he)
-      | false =>
-        rw [show denote (.nullable t') = (denote t').withNull from rfl,
-          withNull_eq_orNull hw] at he
-        cases v
-        case null => exact List.mem_cons_self _ _
-        all_goals exact List.mem_cons_of_mem _ (κ_sound t' hκt he)
-    | union opts =>
-      -- `union`'s `⋃`: the kind is the admitting option's, and `κList` contains it
-      obtain ⟨o, ho, -, hoe⟩ := altCodec_e_admits he
-      simp only [optionSems_eq, denoteTagged_eq] at ho
-      obtain ⟨tx, htx, rfl⟩ := List.mem_map.mp ho
-      rw [optionSemOf_c] at hoe
-      obtain ⟨ksx, hκx, hsub⟩ := κList_mem hκ tx htx
-      exact hsub _ (κ_sound tx hκx hoe)
-    -- `κ` is `⊤` here: nothing is claimed, and the hypothesis is unsatisfiable
-    | held t' f g => exact nomatch hκ
-    | lazy γ => exact κ_sound γ hκ he
-    | custom ce cp => exact nomatch hκ
-    | opaq lossy => exact nomatch hκ
-/-- An option's admission lifts to the list — the `⋃` of `adm`'s union row. -/
-theorem admList_of_mem : ∀ {opts : List Term} {t : Term} {v : Value},
-    t ∈ opts → adm t v = true → admList opts v = true
-  | t' :: ts, t, v, hm, h => by
-    rcases List.mem_cons.mp hm with rfl | hm'
-    · simp [admList, h]
-    · simp [admList, admList_of_mem hm' h]
-
-/-- …and on the attribute side. -/
-theorem admAList_of_mem : ∀ {opts : List Term} {t : Term} {a : Attr},
-    t ∈ opts → admA t a = true → admAList opts a = true
-  | t' :: ts, t, a, hm, h => by
-    rcases List.mem_cons.mp hm with rfl | hm'
-    · simp [admAList, h]
-    · simp [admAList, admAList_of_mem hm' h]
-
-theorem adm_sound : ∀ (t : Term) {v a},
-    (denote t).e v = some a → adm t v = true
-  | t, v, a, he => by
-    cases t
-    -- `adm` at a literal **is** the codec's own prism, so soundness is the prism's first
-    -- projection and nothing else. This was three cases — a `simp_all` for strings, a
-    -- `Double.ofDec` split for numbers, and a five-way one for arity one.
-    case literal k ls => exact (restrict_e.mp he).1
-    case dunion d opts =>
-      -- the admitting option's tag check is exactly `adm`'s, at one option
-      obtain ⟨o, ho, hadm, -⟩ := altCodec_e_admits he
-      simp only [optionSems_eq, denoteTagged_eq] at ho
-      simp only [List.mem_map] at ho
-      obtain ⟨-, ⟨tx, htx, rfl⟩, rfl⟩ := ho
-      obtain ⟨tag, hV, htag⟩ := byTag_admitV.mp hadm
-      exact adm_dunion.mpr ⟨tag, hV,
-        mem_allTags htx htag⟩
-    case refine t' q =>
-      obtain ⟨hq, hc⟩ := restrict_e.mp he
-      simp only [adm, adm_sound t' hc, hq, Bool.and_self]
-    case nullable t' =>
-      cases hw : (denote t').ownsNull with
-      | true =>
-        rw [show (denote (.nullable t')).e = (denote t').e from
-          withNull_e_of_owns hw] at he
-        simp [adm, adm_sound t' he]
-      | false =>
-        rw [show denote (.nullable t') = (denote t').orNull from
-          withNull_eq_orNull hw] at he
-        rcases orNull_e.mp he with ⟨rfl, -⟩ | ⟨-, hc⟩
-        · simp [adm]
-        · simp [adm, adm_sound t' hc]
-    case number =>
-      cases v with
-      | num d =>
-        rw [show (denote .number).e (.num d) = numberCodec.e (.num d) from rfl,
-          numberCodec_e_num] at he
-        by_cases hw : Numeral.WF d.toDec = true
-        · simp [adm, inD, hw]
-        · rw [dif_neg hw] at he; exact nomatch he
-      | _ => exact nomatch he
-    case decimal =>
-      cases v with
-      | str s =>
-        rw [show (denote .decimal).e (.str s) = decimalCodec.e (.str s) from rfl,
-          decimalCodec_e_str] at he
-        by_cases hs : Numeral.Stored s = true
-        · simp [adm, isStored, hs]
-        · rw [dif_neg hs] at he; exact nomatch he
-      | _ => exact nomatch he
-    case legacy t' r => exact adm_sound t' (extendRead_e.mp he)
-    case lazy t' => exact adm_sound t' he
-    case held t' f g => exact adm_sound t' he
-    case custom ce cp => simp_all [adm, denote]
-    case union opts =>
-      obtain ⟨o, ho, -, hoe⟩ := altCodec_e_admits he
-      simp only [optionSems_eq, denoteTagged_eq] at ho
-      simp only [List.mem_map] at ho
-      obtain ⟨tx, htx, rfl⟩ := ho
-      rw [optionSemOf_c] at hoe
-      exact admList_of_mem htx (adm_sound tx hoe)
-    -- the row *is* the definedness being asserted, exactly as at `custom` one line up
-    case opaq lossy => simp_all [adm, denote]
-    all_goals rfl
-
-/-- Reading lands in `admA`. -/
-theorem admA_sound : ∀ (t : Term) {a v},
-    (denote t).p a = some v → admA t a = true
-  | t, a, v, hp => by
-    cases t
-    case literal k ls =>
-      -- The read side is the prism's second projection *plus* the base's own reading. Two
-      -- shapes of row, and they split here: the four bases whose stored attribute *is* the
-      -- value are spelled out and close through `restrict_p`, while the two numeric bases ask
-      -- their codec, so `hp` **is** the answer being asked for —
-      -- `denote (.literal k ls)` is `literalCodec k ls` by `rfl` at either.
-      cases k
-      case number  => cases a <;> simp_all [admA, admALit, denote]
-      case decimal => cases a <;> simp_all [admA, admALit, denote]
-      all_goals
-        obtain ⟨hb, hq⟩ := restrict_p.mp hp
-        cases a <;>
-          simp only [baseCodec, stringCodec, booleanCodec, binaryCodec, nullCodec,
-                     Option.some.injEq] at hb <;>
-          first
-            | (subst hb; simp [admA, admALit, inL] at hq ⊢; exact hq)
-            | exact absurd hb (by simp)
-            | simp [admA, admALit]
-    case dunion d opts =>
-      obtain ⟨o, ho, hadm, -⟩ := altCodec_p_admits hp
-      simp only [optionSems_eq, denoteTagged_eq] at ho
-      simp only [List.mem_map] at ho
-      obtain ⟨-, ⟨tx, htx, rfl⟩, rfl⟩ := ho
-      obtain ⟨tag, hA, htag⟩ := byTag_admitA.mp hadm
-      exact admA_dunion.mpr ⟨tag, hA,
-        mem_allTags htx htag⟩
-    case refine t' q =>
-      obtain ⟨hp', hq⟩ := restrict_p.mp hp
-      rw [admA, Bool.and_eq_true]
-      exact ⟨admA_sound t' hp', by rw [refineReads_some hp']; exact hq⟩
-    case nullable t' =>
-      cases hw : (denote t').ownsNull with
-      | true =>
-        rw [show (denote (.nullable t')).p = (denote t').p from
-          withNull_p_of_owns hw] at hp
-        simp [admA, admA_sound t' hp]
-      | false =>
-        rw [show denote (.nullable t') = (denote t').orNull from
-          withNull_eq_orNull hw] at hp
-        rcases orNull_p.mp hp with ⟨rfl, -⟩ | ⟨-, hc⟩
-        · simp [admA]
-        · simp [admA, admA_sound t' hc]
-    case decimal => cases a <;> simp_all [denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, decimalCodec, admA]
-    case held t' f g =>
-      obtain ⟨w, hw, -⟩ := through_p.mp hp
-      exact admA_sound t' hw
-    case lazy t' => exact admA_sound t' hp
-    case custom ce cp => simp_all [admA, denote]
-    case union opts =>
-      obtain ⟨o, ho, -, hop⟩ := altCodec_p_admits hp
-      simp only [optionSems_eq, denoteTagged_eq] at ho
-      simp only [List.mem_map] at ho
-      obtain ⟨tx, htx, rfl⟩ := ho
-      rw [optionSemOf_c] at hop
-      exact admAList_of_mem htx (admA_sound tx hop)
-    case opaq lossy => simp_all [admA, denote]
-    -- `number` joined them: the row is `dom(p)`, and `hp` says `p` is defined here
-    case number => simp_all [admA, denote]
-    -- `legacy` is the union of two named channels, so the read landed in one of them
-    case legacy t' r =>
-      rw [denote_legacy] at hp
-      simp only [admA, Bool.or_eq_true]
-      rcases extendRead_p.mp hp with hcv | ⟨-, hrv⟩
-      · exact Or.inl (admA_sound t' hcv)
-      · exact Or.inr (by simp [hrv])
-    all_goals rfl
-
-/-! ### `admA`'s `legacy` row, and why it is not the passthrough
-
-§5 lists `refine`, `optional`, `fallback` and `legacy` as passing `adm` through on one `adm`.
-The value side does; the attribute side cannot, because `extendRead` widens `p` by `r`. That
-rules out the *passthrough* and not a row: `r` is data the term carries, so `dom(p)` is
-`dom((denote t).p) ∪ dom(r)`, both halves named, and the row is `admA t a || (r a).isSome`.
-`Exactness.lean`'s "why `legacy` was in the wrong family" has the fuller argument.
-
-**The witness below refutes the passthrough, which is one disjunct and not the row.**
-`admA_sound` would break for `admA t` alone: the witness reads an `N` attribute out of a
-`legacy` over a string literal, so a passthrough would claim the read is inside
-`literal("A")`'s admissible set. This is the specification defect with no other
-machine-checked witness.
-
-Asking the codec — `((denote (.legacy t r)).p a).isSome` — is exact and costs one line, and is
-**refused**: it replaces the subterm's over-approximation with its exact read domain, so it
-sees through `admA (.object _) = ⊤`, which `ARCHITECTURE.md` §5 records as load-bearing slack.
-Two objects cannot be separated by `SepA` since both rows are `⊤`; wrapped in a `legacy` they
-could be, while `select` still attempts both — `not_uAtCan_of_sepJ`'s failure one wrapper out. -/
-
-/-- A migration that reads a numeral into the literal's value — the shape `legacy` exists
-    for, and the shape no syntactic set over the subterm can bound. -/
-def rNumeral : Attr → Option Value
-  | .n _ => some (.str "A")
-  | _ => none
-
-/-- The read really does land outside the subterm's `admA`. -/
-theorem legacy_p_outside_admA :
-    (denote (.legacy (.literal .string (.of "A" ∅)) rNumeral)).p (.n (.of "1")) = some (.str "A") ∧
-      admA (.literal .string (.of "A" ∅)) (.n (.of "1")) = false := ⟨rfl, rfl⟩
-
-/-- **§5's `adm` cannot pass through `legacy` on the read side.** Stated as the row's
-    refutation rather than as an omission, so the divergence between the document's one
-    `adm` and the model's two is a theorem rather than a comment. -/
-theorem not_admA_legacy :
-    ¬ ∀ (t : Term) (r : Attr → Option Value) (a : Attr) (v : Value),
-      (denote (.legacy t r)).p a = some v → admA t a = true := by
-  intro h
-  have hbad := h (.literal .string (.of "A" ∅)) rNumeral (.n (.of "1")) (.str "A")
-    legacy_p_outside_admA.1
-  rw [legacy_p_outside_admA.2] at hbad
-  exact nomatch hbad
 
 /-! ## Admission is guarded -/
 
-/-- Any option's value admission is `κ`-guarded: an admitted value has a kind the
-    option's (non-`⊤`) `κ` names. -/
-theorem admitV_kind (t : Term) {ks : List Kind} {v}
-    (hκ : κ t = some ks)
-    (h : (optionSemOf (denote t) (specOf t)).admitV v = true) :
-    Value.kind v ∈ ks := by
-  cases hs : specOf t with
-  | none =>
-    rw [hs] at h
-    replace h : ((denote t).e v).isSome = true := h
-    obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp h
-    exact κ_sound t hκ ha
-  | some spec =>
-    rw [hs] at h
-    cases t
-    case object body =>
-      replace hκ : some [Kind.map] = some ks := hκ
-      cases hκ
-      cases v <;> first
-        | exact List.mem_cons_self _ _
-        | exact nomatch h
-    all_goals exact nomatch hs
 
 /-- Any option's attribute admission is member-guarded: with a lawful pair and a
     named member, an admitted attribute carries that member — §5's read-side (W),
@@ -945,33 +217,7 @@ theorem optionSem_self_admit (t : Term)
       exact ⟨keysOk_of_encode hval hfi, keysOk_of_encode hval hfi⟩
     all_goals exact nomatch hs
 
-/-- Any option's value admission is `adm`-guarded. -/
-theorem admitV_adm (t : Term) {v}
-    (h : (optionSemOf (denote t) (specOf t)).admitV v = true) : adm t v = true := by
-  cases hs : specOf t with
-  | none =>
-    rw [hs] at h
-    replace h : ((denote t).e v).isSome = true := h
-    obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp h
-    exact adm_sound t ha
-  | some spec =>
-    cases t
-    case object body => rfl
-    all_goals exact nomatch hs
 
-/-- Any option's attribute admission is `admA`-guarded. -/
-theorem admitA_admA (t : Term) {a}
-    (h : (optionSemOf (denote t) (specOf t)).admitA a = true) : admA t a = true := by
-  cases hs : specOf t with
-  | none =>
-    rw [hs] at h
-    replace h : ((denote t).p a).isSome = true := h
-    obtain ⟨v, hv⟩ := Option.isSome_iff_exists.mp h
-    exact admA_sound t hv
-  | some spec =>
-    cases t
-    case object body => rfl
-    all_goals exact nomatch hs
 
 /-! ## The discharger -/
 
@@ -988,122 +234,27 @@ theorem pairwise_imp_mem {α : Type} {R S : α → α → Prop} :
         (fun x hx y hy => h x (List.mem_cons_of_mem a hx) y (List.mem_cons_of_mem a hy))
         htail
 
-/-- §5 (K), repaired and decidable: two options are separated on the writable side by
-    disjoint kinds, **or** by disjoint admissible sets. The second disjunct is the
-    honest form of the doc's `ident` exemption — see the counterexamples below for why
-    `ident` on one side, or even on both, is not it. -/
-def SepV (x y : Term) : Prop :=
-  (∃ kx ky, κ x = some kx ∧ κ y = some ky ∧ ∀ k ∈ kx, k ∉ ky) ∨
-  (∀ v, adm x v = true → adm y v = false)
+/-! ### A term that admits nothing, and is derivable
 
-/-! ### Why `SepV` may drop §5's two `ident` conjuncts
+    Disjointness of admissible sets is not on its own a discharge, and the reason is a term
+    whose set is *empty*: it is disjoint from everything, including from itself, so it would
+    separate from options the discharger refuses. `discriminatedUnion(d)` with no options is
+    that term,
+    and `(dunion)`'s premises are quantified over the option list, so it is derivable. -/
 
-    §5 states (K)'s second disjunct as `ident(cᵢ) ∧ ident(cⱼ) ∧ adm(cᵢ) ∩ adm(cⱼ) = ∅`;
-    `SepV` keeps only the `adm` clause. Dropping a conjunct from a premise *weakens* the
-    discharger, so `uAtCan_of_separated` is the stronger theorem either way — but it
-    leaves `ident` asserting nothing, which is how a faithful transcription becomes an
-    unlocatable claim. Here is the argument that the two conjuncts are redundant, which
-    until now lived only in prose.
 
-    It turns on `adm`'s default: every term that is not a `literal`, a
-    `discriminatedUnion`, or a transparent wrapper over one answers `true` everywhere,
-    and those are exactly the terms `ident` holds of at the leaves. So a term whose `adm`
-    ever *refuses* is `ident` — and two options with disjoint `adm` must each refuse
-    somewhere, provided each also admits somewhere. -/
+/-- And it is derivable — `(dunion)`'s premises are quantified over the key set, so the empty
+    table satisfies both vacuously and the held set is `False`, which is what a variant table
+    with no variants holds. -/
+theorem typed_dunion_nil (d : Name) :
+    Typed (.dunion d ⟨∅, fun k => nomatch k.2⟩)
+      (HVariants ⟨∅, fun k => nomatch k.2⟩ (fun k => nomatch k.2)) (some .M) :=
+  .dunion (fun k => nomatch k.2) (fun k => nomatch k.2)
 
-mutual
-
-/-- **`adm` is informative only where `ident` holds.** If `adm` refuses a single value,
-    the term is `ident`. This is the pinning `ident` otherwise lacks: `κ`, `adm` and
-    `admA` each have a soundness lemma tying them to the denotation, and `ident` has no
-    denotational content to tie — what it has is this relation to `adm`, which is what
-    §5 actually uses it for. -/
-theorem ident_of_adm : ∀ {t : Term} {v : Value}, adm t v = false → ident t = true
-
-  | .dunion _ _, _, _ => rfl
-  | .refine _ _, _, _ => rfl
-  | .literal _ _, _, _ => rfl
-  | .number, _, _ => rfl
-  | .decimal, _, _ => rfl
-  | .legacy t _, v, h => ident_of_adm (t := t) (v := v) h
-  | .union opts, v, h => identList_of_admList (opts := opts) (v := v) h
-  | .nullable t, v, h => ident_of_adm (t := t) (v := v) (by
-      simp only [adm, Bool.or_eq_false_iff] at h; exact h.1)
-  | .lazy t, v, h => ident_of_adm (t := t) (v := v) h
-  | .held t f _, v, h => ident_of_adm (t := t) (v := f v) h
-  -- the two rows that ask their own codec: a refusal is the codec's, and both terms are
-  -- `ident` unconditionally for exactly that reason
-  | .custom _ _, _, _ => rfl
-  | .opaq _, _, _ => rfl
-  | .string, _, h | .boolean, _, h | .binary, _, h
-  | .null, _, h | .set _, _, h | .array _, _, h | .tuple _ _, _, h
-  | .record _, _, h | .object _, _, h => nomatch h
-
-/-- A union all of whose options refuse a value is one all of whose options decide their
-    own membership — `ident_of_adm` lifted to the list, which `adm`'s union row makes
-    necessary. -/
-theorem identList_of_admList : ∀ {opts : List Term} {v : Value},
-    admList opts v = false → identList opts = true
-  | [], _, _ => rfl
-  | t :: ts, v, h => by
-    simp only [admList, Bool.or_eq_false_iff] at h
-    simp [identList, ident_of_adm h.1, identList_of_admList h.2]
-
-end
-
-/-- **§5's (K), recovered from `SepV`'s second disjunct.** Disjoint `adm` implies both
-    `ident` conjuncts — given that each option admits *something*.
-
-    That side condition is not bookkeeping: `dunion(d)` with no options is derivable, admits
-    nothing, and is therefore `adm`-disjoint from `string`, which is not `ident`. -/
-theorem admDisj_ident {x y : Term} (hdisj : ∀ v, adm x v = true → adm y v = false)
-    (hx : ∃ v, adm x v = true) (hy : ∃ v, adm y v = true) :
-    ident x = true ∧ ident y = true := by
-  obtain ⟨vx, hvx⟩ := hx
-  obtain ⟨vy, hvy⟩ := hy
-  refine ⟨ident_of_adm (v := vy) ?_, ident_of_adm (v := vx) (hdisj vx hvx)⟩
-  by_contra hc
-  exact absurd (hdisj vy (by simpa using hc)) (by simp [hvy])
-
-/-! ### The gap that remains, exhibited
-
-    `admDisj_ident`'s two side conditions are not bookkeeping. A term whose admissible
-    set is *empty* is `adm`-disjoint from everything, so it separates itself from options
-    §5's (K) would refuse — and one such term is derivable. -/
-
-/-- A `discriminatedUnion` with no options refuses every value: `allTags` is empty. -/
-theorem adm_dunion_nil (d : Name) (v : Value) : adm (.dunion d []) v = false := by
-  simp only [adm, allTags]
-  cases tagOfV d v <;> rfl
-
-/-- And it is derivable — `(dunion)`'s premises are quantified over the option list. -/
-theorem typed_dunion_nil (d : Name) : Typed (.dunion d []) (HUnion []) (some .M) :=
-  .dunion .nil (by simp) (by simp)
-
-/-- **`SepV` is strictly weaker than §5's (K)**, at a derivable pair. `string` is not
-    `ident`, so (K) refuses this pair on both of its disjuncts; `SepV` accepts it,
-    because `dunion(d)` admits nothing to collide with. Weaker is the safe direction —
-    `uAtCan_of_separated` takes `SepV` as a premise, so it discharges strictly more —
-    but it means `SepV` and (K) are not the same condition, and the difference is here
-    rather than in prose. -/
-theorem sepV_string_dunion_nil (d : Name) : SepV .string (.dunion d []) :=
-  Or.inr fun v _ => adm_dunion_nil d v
-
-theorem not_ident_string : ident .string = false := rfl
-
-/-- **What `q` in `adm` buys**, on §5's writable side. `Or.inr` and not `Or.inl` because the
-    `κ` disjunct cannot reach this pair whatever `t` is: two refinements of one base have the
-    same `κ`, so `adm` is the only disjunct that can separate them — and before `q` entered
-    `adm` it could not either, both rows having been `⊤`. -/
-theorem sepV_refine_disjoint {t : Term} {q q' : Value → Bool}
-    (h : ∀ v, q v = true → q' v = false) :
-    SepV (.refine t q) (.refine t q') :=
-  Or.inr fun v hv => by
-    rw [adm, Bool.and_eq_true] at hv
-    simp only [adm, h v hv.2, Bool.and_false]
 
 /-- **The pair reading of the same fact**, and it is not superseded: it discharges the whole
-    `UAtCan` for an `n`-ary family in one step, where `sepA_refine_disjoint` separates a pair.
+    `UAtCan` for an `n`-ary family in one step, where the retired per-aspect route separated a
+    pair at a time.
     Two refinements of one base read an attribute to the **same** value, so at most one
     predicate accepts it, and the readable side separates for the same reason the writable
     side does.
@@ -1114,14 +265,14 @@ theorem sepV_refine_disjoint {t : Term} {q q' : Value → Bool}
     here has to be syntactic: the attribute family is `∃ v, base.p a = some v ∧ q v`, which
     is exactly what `refineReads` computes, and disjointness is the base reading `a` to one
     value. -/
-theorem uAtCan_of_refine_disjoint {base : Term} {qs : List (Value → Bool)}
+theorem uAtCan_of_refine_disjoint {base : Term} {ps : List Pred}
     (hlaw : LawfulCore (denote base))
-    (hdisj : List.Pairwise (fun q q' => ∀ v, q v = true → q' v = false) qs) :
-    UAtCan (qs.map (fun q => Term.refine base q)) := by
-  show UniqueAdmission (semsOf (qs.map (fun q => Term.refine base q)))
+    (hdisj : List.Pairwise (fun p p' => ∀ v, p.eval v = true → p'.eval v = false) ps) :
+    UAtCan (ps.map (fun p => Term.refine base p)) := by
+  show UniqueAdmission (semsOf (ps.map (fun p => Term.refine base p)))
   refine uniqueAdmission_of_disjoint
-    (SVs := qs.map (fun q v => q v = true))
-    (SAs := qs.map (fun q a => ∃ v, (denote base).p a = some v ∧ q v = true))
+    (SVs := ps.map (fun p v => p.eval v = true))
+    (SAs := ps.map (fun p a => ∃ v, (denote base).p a = some v ∧ p.eval v = true))
     ?_ ?_ ?_ ?_ ?_
   · rw [semsOf, List.map_map, List.forall₂_map_left_iff, List.forall₂_map_right_iff]
     refine List.forall₂_same.mpr fun q _ v hv => ?_
@@ -1143,15 +294,15 @@ theorem uAtCan_of_refine_disjoint {base : Term} {qs : List (Value → Bool)}
     rw [hv] at hv'; cases hv'
     rw [h v hqv] at hqv'; exact nomatch hqv'
   · rw [semsOf, List.map_map]
-    refine forall_mem_map fun q _ t a he => ?_
+    refine forall_mem_map fun p _ t a he => ?_
     simp only [Function.comp_apply] at he ⊢
     rw [optionSemOf_c] at he
     obtain ⟨hq, hb⟩ := restrict_e.mp he
     refine ⟨?_, ?_⟩
-    · show ((denote (.refine base q)).e t).isSome = true
-      rw [show (denote (.refine base q)).e t = some a from he]; rfl
-    · show ((denote (.refine base q)).p a).isSome = true
-      rw [show (denote (.refine base q)).p a = some t from
+    · show ((denote (.refine base p)).e t).isSome = true
+      rw [show (denote (.refine base p)).e t = some a from he]; rfl
+    · show ((denote (.refine base p)).p a).isSome = true
+      rw [show (denote (.refine base p)).p a = some t from
         restrict_p.mpr ⟨hlaw.retract hb, hq⟩]
       rfl
 
@@ -1166,17 +317,17 @@ theorem uAtCan_of_refine_disjoint {base : Term} {qs : List (Value → Bool)}
     `object`, or of one `union`, discharges by the same theorem. There was never a
     per-member argument to make. -/
 theorem uAtCan_of_refine_disjoint_of_typed {base : Term} {T μ}
-    {qs : List (Value → Bool)} (h : Typed base T μ) (hob : Obligations base)
-    (hdisj : List.Pairwise (fun q q' => ∀ v, q v = true → q' v = false) qs) :
-    UAtCan (qs.map (fun q => Term.refine base q)) :=
+    {ps : List Pred} (h : Typed base T μ) (hob : Obligations base)
+    (hdisj : List.Pairwise (fun p p' => ∀ v, p.eval v = true → p'.eval v = false) ps) :
+    UAtCan (ps.map (fun p => Term.refine base p)) :=
   uAtCan_of_refine_disjoint (soundness_both h hob).1 hdisj
 
 /-! ### Literals over a primitive §3 gives no `literal` rule for
 
     §3 names two `literal` rules, at `S` and at `N`. Nothing makes those two special: a
     literal over any ground term is `refine(base, ∈ ℓ)`, which is derivable already, and
-    since `adm` now carries `q` and refinements of one base separate on both sides, such a
-    union discharges exactly as a string literal's does. The two rules are the two someone
+    since refinements of one base separate on both sides, such a union discharges exactly as
+    a string literal's does. The two rules are the two someone
     bothered to name, not the two that are possible. -/
 
 /-- A boolean "literal", as the refinement it is. -/
@@ -1186,222 +337,46 @@ def isTrueV : Value → Bool := fun v => match v with | .bool b => b | _ => fals
 def isFalseV : Value → Bool := fun v => match v with | .bool b => !b | _ => false
 
 /-- It is derivable, with the member the base names — no rule of its own. -/
-theorem typed_boolLiteral : ∃ T, Typed (.refine .boolean isTrueV) T (some .BOOL) :=
+theorem typed_boolLiteral : ∃ T, Typed (.refine .boolean (.closure isTrueV)) T (some .BOOL) :=
   ⟨_, Typed.refine Typed.boolean⟩
 
 /-- A base that is not ground at all, to show the theorem does not care. Two disjoint
     refinements of one `array(string)` separate exactly as two literals over `string` do —
     "literal" was never the operative word, "one base, disjoint predicates" was. -/
-theorem uAtCan_refine_container {q q' : Value → Bool}
-    (hd : List.Pairwise (fun a b => ∀ v, a v = true → b v = false) [q, q']) :
-    UAtCan [Term.refine (.array .string) q, Term.refine (.array .string) q'] :=
+theorem uAtCan_refine_container {p p' : Pred}
+    (hd : List.Pairwise (fun a b => ∀ v, a.eval v = true → b.eval v = false) [p, p']) :
+    UAtCan [Term.refine (.array .string) p, Term.refine (.array .string) p'] :=
   uAtCan_of_refine_disjoint_of_typed (Typed.array Typed.string)
     trivial hd
 
 /-- And a union of two discharges on **both** sides, by the same shared-base argument that
     settles numeric literals — a primitive §3 never wrote a `literal` rule for. -/
 theorem uAtCan_boolLiterals :
-    UAtCan [Term.refine .boolean isTrueV, Term.refine .boolean isFalseV] := by
+    UAtCan [Term.refine .boolean (.closure isTrueV), Term.refine .boolean (.closure isFalseV)] := by
   have h : ∀ v, isTrueV v = true → isFalseV v = false := by
     intro v hv; cases v <;> simp_all [isTrueV, isFalseV]
-  exact uAtCan_of_refine_disjoint (qs := [isTrueV, isFalseV])
-    lawful_booleanCodec.core (by simpa using h)
-
-/-! ### `nullable`, and a refusal that stopped being stipulated
-
-    §5 makes `nullable` *never* `ident`, deliberately — "two nullable options both admit the
-    null neither subterm decides". That was `adm` being `⊤` doing the work. With `adm`
-    precise the same pair is still refused, but for the reason that was always the true
-    one: their admissible sets **overlap at null**. So `ident` can propagate, and the
-    refusal is derived rather than stipulated. -/
-
-/-- Two nullable options still fail to separate — and now because their sets meet. -/
-theorem not_sep_nullable_pair :
-    ¬ (∀ v, adm (.nullable (.literal .string (.of "A" ∅))) v = true →
-            adm (.nullable (.literal .string (.of "B" ∅))) v = false) := by
-  intro h; exact absurd (h .null (by simp [adm, inL])) (by simp [adm, inL])
-
-/-- But a nullable option separates from a plain one, which it could not while `adm` said
-    `⊤` — the whole of what the row buys. -/
-theorem sep_nullable_plain (v : Value) :
-    adm (.nullable (.literal .string (.of "A" ∅))) v = true → adm (Term.literal .string (.of "C" ∅)) v = false := by
-  cases v <;> simp_all [adm, inL]
-
-/-! ### `lazy` is transparent, and all four tables now say so
-
-    `denote (.lazy t) = { denote t with μ := none }`: the pair is the subterm's
-    and only the member is erased. §5 lists `lazy` with `custom` and `opaque` as
-    unanalysable, but that is inherited from the doc's thunk, which was `Unit → Term`.
-    `Term.lazy` carries a plain `Term` — a deliberate change, made because a closure adds
-    no constructible term and defeats the termination checker (`Term.lean`) — and the
-    opacity in `κ`/`ident`/`adm`/`admA` was left behind by it.
-
-    The four soundness cases are each a one-line appeal to the subterm's, which is the
-    evidence that the propagation is definitional rather than argued. -/
-
-/-- A `lazy` over a literal separates from a plain literal — the wrapper is invisible. -/
-theorem sep_lazy_literal (v : Value) :
-    adm (.lazy (.literal .string (.of "A" ∅))) v = true → adm (Term.literal .string (.of "C" ∅)) v = false := by
-  cases v <;> simp_all [adm, inL]
-
-/-- …and on the attribute side, where `lazy` is as transparent as it is on the writable
-    one — unlike `legacy`, whose opacity really is one-sided. -/
-theorem sepA_lazy_literal (a : Attr) :
-    admA (.lazy (.literal .string (.of "A" ∅))) a = true → admA (Term.literal .string (.of "C" ∅)) a = false := by
-  cases a <;> simp_all [admA, admALit]
-
-/-- Nesting does not dim it: `κ` reaches a doubly-`lazy` scalar. -/
-theorem kappa_lazy_lazy : κ (.lazy (.lazy .string)) = some [.string] := rfl
-
-/-- And `ident` reaches through too, so a `lazy` option is `adm`-informative at all. -/
-theorem ident_lazy : ident (.lazy (.literal .string (.of "A" ∅))) = true := rfl
-
-/-! ### What "unanalysable" turned out to mean
-
-    `held` and `custom` were on the unanalysable list because they carry Lean functions,
-    and a function is not something a reader can look inside. But `adm` is not a reader:
-    it is a function with the term in hand, and the term *carries* `f`, `ce` and `cp` as
-    data. It can apply them.
-
-    `(c.through f g).e v = c.e (f v)` holds by `Iff.rfl`, so `held`'s writable set is the
-    subterm's pulled back along `f` — exactly, and with no appeal to `held`'s iso
-    obligation, which is about `T` and roundtripping rather than about the domain.
-    `custom` is starker still: `denote` sets `e := ce` and `p := cp`, so both rows are
-    `isSome` of the very function the term carries, and `custom`'s `T` is *defined* as
-    `dom(ce)`.
-
-    And `opaq` is no longer the exception. It was called *largely* unanalysable on the
-    ground that `opaqCodecω`'s domain is a recursion over the *input's* own depth, so no
-    set the syntax names is precise about it. True, and the wrong conclusion: the row does
-    not have to name the set, it can ask. `adm (.opaq lossy)` is now
-    `((opaqCodecω lossy).e ·).isSome`, so the recursion the syntax cannot bound is the
-    recursion the row runs, and `opaq` sits beside `custom` rather than after it.
-
-    Three senses had been running together: (i) the term does not carry the information —
-    true of nothing here, and `opaq` was the last row where it was still assumed;
-    (ii) the domain cannot be computed without running the codec — true of `opaq` and of
-    `custom`, and the reason both rows *do* run it, at the price of being
-    `noncomputable`; (iii) a reader cannot see through it — true of `held`, `custom` and
-    `opaq`, and not a property of the calculus. -/
-
-/-- `held`'s writable set, exactly: the subterm's, pulled back along `f`. -/
-theorem adm_held (t : Term) (f g : Value → Value) (v : Value) :
-    adm (.held t f g) v = adm t (f v) := rfl
-
-/-- So a `held` literal separates from a plain one on the **writable** side, which §5
-    could not say at all. The condition is on `f`, and it is the honest one: separation
-    fails exactly when the adapter sends the one value to the other. -/
-theorem sepV_literal_heldLiteral {f g : Value → Value} (hf : f (.str "A") ≠ .str "B") :
-    SepV (.literal .string (.of "A" ∅)) (.held (.literal .string (.of "B" ∅)) f g) :=
-  Or.inr fun v hv => by
-    have hv' : v = .str "A" := by cases v <;> simp_all [adm, inL]
-    subst hv'
-    show adm (.literal .string (.of "B" ∅)) (f (.str "A")) = false
-    cases h : f (.str "A") <;> simp_all [adm, inL]
-
-/-- And when the adapter *does* relabel, separation genuinely fails — the row is precise,
-    not merely tighter. The exact converse of the theorem above: both options write the
-    same value, and `adm` says so. -/
-theorem not_sepV_literal_heldLiteral {f g : Value → Value} (hf : f (.str "A") = .str "B") :
-    ¬ SepV (.literal .string (.of "A" ∅)) (.held (.literal .string (.of "B" ∅)) f g) := by
-  rintro (⟨kx, ky, -, hy, -⟩ | hdisj)
-  · exact absurd hy (by simp [κ])
-  · have h1 : adm (Term.literal .string (.of "A" ∅)) (.str "A") = true := by simp [adm, inL]
-    have h2 := hdisj (.str "A") h1
-    rw [adm_held, hf] at h2
-    simp [adm, inL] at h2
-
-/-- `custom`'s rows are `dom(ce)` and `dom(cp)` on the nose — the sharpest form of
-    "analysable": not a bound on the pair but the pair itself. -/
-theorem adm_custom (ce : Value → Option Attr) (cp : Attr → Option Value) (v : Value) :
-    adm (.custom ce cp) v = (ce v).isSome := rfl
-
-/-- …and the read side likewise. -/
-theorem admA_custom (ce : Value → Option Attr) (cp : Attr → Option Value) (a : Attr) :
-    admA (.custom ce cp) a = (cp a).isSome := rfl
-
-/-- Exact against the denotation, **both directions**. This is the statement a
-    soundness-only bundling could never force: an over-approximation is sound however
-    loose, and only the converse pins it. -/
-theorem adm_custom_exact (ce : Value → Option Attr) (cp : Attr → Option Value) (v : Value)
-    :
-    adm (.custom ce cp) v = true ↔ ∃ a, (denote (.custom ce cp)).e v = some a := by
-  simp [adm, denote, Option.isSome_iff_exists]
+  exact uAtCan_of_refine_disjoint (ps := [.closure isTrueV, .closure isFalseV])
+    lawful_booleanCodec.core (by simpa [Pred.eval] using h)
 
 /-! ### What the unified `literal` carries
 
     At arity one `literal(v)` and `refine(g, · = v)` denote the same pair, so it is fair to
-    ask why the constructor exists. `adm` is the same either way. `admA` is not: `ℓ` is data
-    the *term* owns, so it can be tested against the stored attribute, where `refine`'s `q`
-    is a value predicate and cannot be pushed there. That is the whole of it, and it holds
-    at every base but one. -/
+    ask why the constructor exists. The writable side is the same either way. The readable
+    side is not: `ℓ` is data the *term* owns, so it can be tested against the stored
+    attribute, where `refine`'s `q` is a value predicate and cannot be pushed there. That is
+    the whole of it, and it holds at every base but one. -/
 
-/-- `admA` sees the value at a boolean base, which §3 never wrote a `literal` rule for at all
-    and which the model could not express before the base became an index. -/
-theorem admA_literal_bool (ls : NEFinset Bool) (b : Bool) :
-    admA (.literal .boolean ls) (.bool b) = decide (b ∈ ls.1) := rfl
 
-/-- …and at a binary one, likewise. -/
-theorem admA_literal_bin (ls : NEFinset Bytes) (b : Bytes) :
-    admA (.literal .binary ls) (.b b) = decide (b ∈ ls.1) := rfl
 
-/-- The writable side sees `ℓ` everywhere, `number` included — it is `inL`, the codec's prism.
 
-    No longer `rfl`: `inL`'s `number` row splits on the carrier's gate, and the alternative is
-    named by the element's own `d.2`. That is the whole cost of ~~LiteralD~~'s deletion on this
-    side, and `adm_literal_exact` is what it bought. -/
-theorem adm_literal_num (ls : NEFinset WFDouble) (d : WFDouble) :
-    adm (.literal .number ls) (.num d.1) = decide (d ∈ ls.1) := by
-  simp [adm, inL, d.2]
 
-/-- **Where the two bases part — and they part by *how much work the row does*, not by
-    whether it can be written.** A string literal's stored text *is* its value, so `ℓ` is
-    visible in one `decide`. A numeric literal's is not: the stored numeral goes through
-    `Double.ofDec`, and no syntactic set of *attributes* names the ones that read into `ℓ`.
 
-    That used to be recorded as `admA_literalN_blind : admA (.literal .number ls) (.n x) =
-    true` — the read side is `⊤` — and the conclusion was wrong. The row never needed to
-    *name* the set; it only needed to be able to *decide* membership, and it can, by
-    asking the codec (`denote (.literal .number ls)` is `literalCodec .number ls`, by
-    `rfl`). What is left of the asymmetry is that the numeric answer is a `bind` through an
-    axiomatized function rather than a `decide` — which is a statement about how the row is
-    computed, not about what it knows. -/
-theorem admA_literalS_sees (ls : NEFinset String) (s : String) :
-    admA (.literal .string ls) (.s s) = decide (s ∈ ls.1) := rfl
-
-/-- …and the numeric side sees `ℓ` as well, one indirection further out: an `N` attribute is
-    admitted exactly when the numeral it holds reads to a well-formed member of `ℓ`. -/
-theorem admA_literalN_sees (ls : NEFinset WFDouble) (x : WFNumeral) :
-    admA (.literal .number ls) (.n x) = true ↔
-      ∃ d : WFDouble, Double.ofDec x.1 = some d.1 ∧ d ∈ ls.1 := by
-  show ((literalCodec .number ls).p (.n x)).isSome = true ↔ _
-  rw [literalNCodec_p_n, numberCodec_p_n]
-  cases hd : Double.ofDec x.1 with
-  | none => simp
-  | some d =>
-    constructor
-    · intro h
-      cases hw : Numeral.WF d.toDec with
-      | false => simp [hw] at h
-      | true =>
-        refine ⟨⟨d, hw⟩, rfl, ?_⟩
-        -- `cases hm : decide` rather than `by_contra`, which reaches `Classical.em`
-        cases hm : decide ((⟨d, hw⟩ : WFDouble) ∈ ls.1) with
-        | false => simp [hw, inL, hm] at h
-        | true => exact of_decide_eq_true hm
-    · rintro ⟨d', hof, hmem⟩
-      obtain rfl : d = d'.1 := Option.some.inj hof
-      simp [d'.2, inL, hmem]
-
-/-- …and every other attribute constructor is refused outright, because `numberCodec.p` is:
-    the row bounds *which member* even where it cannot bound which values. -/
-theorem admA_literalN_notN (ls : NEFinset WFDouble) (s : String) :
-    admA (.literal .number ls) (.s s) = false := rfl
 
 /-- **A union of numeric literals discharges on both sides — in one step, for any arity.**
-    This used to be advertised as the *only* route, on the ground that §5's `admA` row sent a
-    numeric literal to `⊤` and the table therefore could not tell two of them apart. The
-    second half of that was wrong (`sepA_literalN_disjoint`), and the correction does not cost
+    This used to be advertised as the *only* route, on the ground that a numeric literal's
+    readable side went to `⊤` and no row could therefore tell two of them apart. The second
+    half of that was wrong — the row asks the codec and tells two literals apart — and the
+    correction does not cost
     this theorem anything: read from the *pair*, the options are refinements of a single
     `numberCodec` with disjoint predicates, and `uniqueAdmission_of_sharedBase` settles an
     `n`-ary family and both sides at once, where the table settles a pair at a time.
@@ -1415,7 +390,7 @@ theorem uAtCan_of_literalN_disjoint {lss : List (NEFinset WFDouble)}
   show UniqueAdmission (semsOf (lss.map (Term.literal .number)))
   have hs : semsOf (lss.map (Term.literal .number))
       = (lss.map (literalCodec .number)).map OptionSem.byAttempt := by
-    simp [semsOf, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteTagged_eq, List.map_map, specOf, optionSemOf, denote]
+    simp [semsOf, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, List.map_map, specOf, optionSemOf, denote]
   rw [hs]
   refine uniqueAdmission_of_sharedBase (base := numberCodec) (qs := lss.map (inL .number))
     lawful_numberCodec.core ?_ ?_
@@ -1435,181 +410,13 @@ theorem uAtCan_of_literalN_disjoint {lss : List (NEFinset WFDouble)}
         exact h ⟨d, hw⟩ hv
     all_goals exact Bool.noConfusion hv
 
-/-- §5 (D)'s stand-in, likewise widened: two options are separated on the readable side
-    by distinct named members, **or** by disjoint admissible sets. The `adm` disjunct is
-    what carries `union(literal("A"), literal("B"))`, whose options share `⇝ S`. -/
-def SepA (x y : Term) : Prop :=
-  (∃ μx μy, μSyn x = some μx ∧ μSyn y = some μy ∧ μx ≠ μy) ∨
-  (∀ a, admA x a = true → admA y a = false)
-
-/-- **`held`'s one-sided opacity, discharging a pair §5's table could not.**
-    `union(literal("A"), held(literal("B"), f, g))` separates on the readable side for
-    *every* `f` and `g`: the adapter post-processes a read, so it cannot move which
-    attributes the option accepts, and the two footprints are `{S "A"}` and `{S "B"}`.
-    The member disjunct is no help — both options are `⇝ S` — so this is the new `admA`
-    row doing the work alone. -/
-theorem sepA_literal_heldLiteral (f g : Value → Value) :
-    SepA (.literal .string (.of "A" ∅)) (.held (.literal .string (.of "B" ∅)) f g) :=
-  Or.inr fun a ha => by cases a <;> simp_all [admA, admALit, NEFinset.of]
-
-/-- **Two numeric literals with disjoint sets separate in the table.** §5 recorded the
-    opposite — that only the *pair* reading (`uAtCan_of_literalN_disjoint`, via
-    `uniqueAdmission_of_sharedBase`) could tell them apart, because `admA` at a numeric
-    literal was `⊤`. The refutation is one line of the semantics: `Double.ofDec` is a
-    **function**, so a stored numeral reads to at most one double, and one double cannot
-    inhabit two disjoint sets. The row never had to know which numerals read into `ℓ`, only
-    that the answer is unique.
-
-    The pair reading is not superseded — it discharges the whole `UAtCan` for an `n`-ary
-    family in one step, and on both sides — but it is no longer the only route. -/
-theorem sepA_literalN_disjoint {ls ls' : NEFinset WFDouble} (hd : ∀ d ∈ ls.1, d ∉ ls'.1) :
-    SepA (.literal .number ls) (.literal .number ls') :=
-  Or.inr fun a ha => by
-    cases a
-    case n x =>
-      obtain ⟨d, hof, hm⟩ := (admA_literalN_sees ls x).mp ha
-      cases hcon : admA (.literal .number ls') (.n x) with
-      | false => rfl
-      | true =>
-        obtain ⟨d', hof', hm'⟩ := (admA_literalN_sees ls' x).mp hcon
-        rw [hof] at hof'
-        obtain rfl : d = d' := Subtype.ext (Option.some.inj hof')
-        exact absurd hm' (hd d hm)
-    all_goals exact nomatch (ha : (false : Bool) = true)
-
-/-- And it is the *subterm* that decides, not the wrapper: with the same inner literal
-    the two footprints coincide and `SepA` fails on both disjuncts. That is the pair of
-    `not_uAtCan_literal_held`, still refused — §5's `held` counterexample survives the
-    row that discharges its neighbour. -/
-theorem not_sepA_literal_heldLiteral (f g : Value → Value) :
-    ¬ SepA (.literal .string (.of "A" ∅)) (.held (.literal .string (.of "A" ∅)) f g) := by
-  rintro (⟨μx, μy, hx, hy, hne⟩ | hdisj)
-  · cases hx; cases hy; exact hne rfl
-  · exact absurd (hdisj (.s "A") (by simp [admA, admALit, NEFinset.of]))
-      (by simp [admA, admALit, NEFinset.of])
-
-/-- **…and what `q` in `admA` buys, which is the same thing.** Two refinements of one base
-    with disjoint predicates separate on the *readable* side too, at **any** base and with
-    no lawfulness premise: the base reads `a` to one value, and one value cannot satisfy two
-    disjoint predicates.
-
-    This is the general form of `sepA_literalN_disjoint`, and it is the theorem the old row
-    made unstatable. §5 recorded that the readable side was "undischargeable from the tables
-    alone" because `q` tests the value a read produces and no syntactic set of attributes
-    bounds it — so only the *pair* reading (`uAtCan_of_refine_disjoint`, below) could tell two
-    refinements apart. The premise was about syntax and the conclusion was about rows. The row
-    decodes, and the table separates them. -/
-theorem sepA_refine_disjoint {base : Term} {q q' : Value → Bool}
-    (h : ∀ v, q v = true → q' v = false) :
-    SepA (.refine base q) (.refine base q') :=
-  Or.inr fun a ha => by
-    rw [admA, Bool.and_eq_true] at ha
-    show (admA base a && refineReads base q' a) = false
-    cases hx : (denote base).p a with
-    | none => rw [refineReads_none hx, Bool.and_false]
-    | some v =>
-      rw [refineReads_some hx] at ha
-      rw [refineReads_some hx, h v ha.2, Bool.and_false]
-
-/-! ### Separation, as one set per option per side
-
-    `SepV` and `SepA` each offer a *choice* — a disjoint kind or a disjoint admissible
-    set, a distinct member or a disjoint `admA` — and the choice is made per pair. That
-    shape is an artifact of asking the question pairwise. Asked per *option*, the two
-    sources of constraint simply **intersect**: an option admits a value only if `κ`
-    allows its kind and `adm` allows the value. Disjointness of the intersections is
-    implied by disjointness in either factor, so `SepV` and `SepA` are exactly what makes
-    these families pairwise disjoint — and `uniqueAdmission_of_disjoint` finishes it,
-    once, for both sides. -/
-
-/-- What `κ` and `adm` between them allow an option to write. -/
-def SVof (t : Term) : Value → Prop :=
-  fun v => (∀ ks, κ t = some ks → Value.kind v ∈ ks) ∧ adm t v = true
-
-/-- What `μ` and `admA` between them allow an option to read. -/
-def SAof (t : Term) : Attr → Prop :=
-  fun a => (∀ μ, μSyn t = some μ → a.member = μ) ∧ admA t a = true
-
-/-- Admission lands in the value family — `κ` and `adm`'s soundness lemmas, together. -/
-theorem admitV_SVof (t : Term) {v}
-    (h : (optionSemOf (denote t) (specOf t)).admitV v = true) : SVof t v :=
-  ⟨fun _ hκ => admitV_kind t hκ h, admitV_adm t h⟩
-
-/-- …and in the attribute family. Lawfulness is what `μ`'s bridge needs. -/
-theorem admitA_SAof (t : Term) (hlaw : Lawful (denote t)) {a}
-    (h : (optionSemOf (denote t) (specOf t)).admitA a = true) : SAof t a :=
-  ⟨fun _ hμ => admitA_member t hμ hlaw h, admitA_admA t h⟩
-
-/-- **§5's `SepV` is disjointness of the value families.** Either disjunct gives it,
-    because a disjoint factor makes the intersection disjoint. -/
-theorem SVof_disjoint {x y : Term} (h : SepV x y) : ∀ v, SVof x v → ¬ SVof y v := by
-  rintro v ⟨hkx, hax⟩ ⟨hky, hay⟩
-  rcases h with ⟨kx, ky, hkxe, hkye, hne⟩ | hdisj
-  · exact hne _ (hkx kx hkxe) (hky ky hkye)
-  · rw [hdisj v hax] at hay; exact nomatch hay
-
-/-- …and `SepA` of the attribute families. -/
-theorem SAof_disjoint {x y : Term} (h : SepA x y) : ∀ a, SAof x a → ¬ SAof y a := by
-  rintro a ⟨hmx, hax⟩ ⟨hmy, hay⟩
-  rcases h with ⟨μx, μy, hμx, hμy, hne⟩ | hdisj
-  · exact hne ((hmx μx hμx).symm.trans (hmy μy hμy))
-  · rw [hdisj a hax] at hay; exact nomatch hay
-
-/-- §5's dischargers, combined: pairwise separation on each side of the pair, and closed
-    options admitting their own canonicals — so admission is unique at every canonical
-    input, which is exactly the theorem's residue `UAtCan`. Every premise is decidable
-    from the syntax except lawfulness, which soundness supplies.
-
-    The proof is now one appeal to `uniqueAdmission_of_disjoint`: the two families are
-    `SVof`/`SAof`, their disjointness is what `SepV`/`SepA` say, and neither side needs an
-    argument of its own. -/
-theorem uAtCan_of_separated {opts : List Term}
-    (hlaw : ∀ t ∈ opts, Lawful (denote t))
-    (hcl : ∀ t ∈ opts, t.isOpenObject = false)
-    (hV : List.Pairwise SepV opts)
-    (hA : List.Pairwise SepA opts) :
-    UAtCan opts := by
-  refine uniqueAdmission_of_disjoint
-    (SVs := opts.map SVof) (SAs := opts.map SAof) ?_ ?_ ?_ ?_ ?_
-  · rw [semsOf, List.forall₂_map_left_iff, List.forall₂_map_right_iff]
-    exact List.forall₂_same.mpr fun t _ v hv => admitV_SVof t hv
-  · rw [semsOf, List.forall₂_map_left_iff, List.forall₂_map_right_iff]
-    exact List.forall₂_same.mpr fun t ht a ha => admitA_SAof t (hlaw t ht) ha
-  · rw [List.pairwise_map]; exact hV.imp SVof_disjoint
-  · rw [List.pairwise_map]; exact hA.imp SAof_disjoint
-  · refine forall_mem_map fun t ht v a he => ?_
-    rw [optionSemOf_c] at he
-    exact optionSem_self_admit t (hcl t ht) (hlaw t ht) he
-
-/-- The kind/member half on its own — the original disjointness discharger, now a
-    corollary of `uAtCan_of_separated`. -/
-theorem uAtCan_of_disjoint {opts : List Term}
-    (hlaw : ∀ t ∈ opts, Lawful (denote t))
-    (hcl : ∀ t ∈ opts, t.isOpenObject = false)
-    (hκ : ∀ t ∈ opts, (κ t).isSome)
-    (hμ : ∀ t ∈ opts, (μSyn t).isSome)
-    (hκd : List.Pairwise (fun x y => ∀ kx ky, κ x = some kx → κ y = some ky →
-      ∀ k ∈ kx, k ∉ ky) opts)
-    (hμd : List.Pairwise (fun x y => μSyn x ≠ μSyn y) opts) :
-    UAtCan opts := by
-  refine uAtCan_of_separated hlaw hcl (pairwise_imp_mem ?_ hκd)
-    (pairwise_imp_mem ?_ hμd)
-  · intro x hx y hy hxy
-    obtain ⟨kx, hkx⟩ := Option.isSome_iff_exists.mp (hκ x hx)
-    obtain ⟨ky, hky⟩ := Option.isSome_iff_exists.mp (hκ y hy)
-    exact Or.inl ⟨kx, ky, hkx, hky, hxy kx ky hkx hky⟩
-  · intro x hx y hy hxy
-    obtain ⟨μx, hμx⟩ := Option.isSome_iff_exists.mp (hμ x hx)
-    obtain ⟨μy, hμy⟩ := Option.isSome_iff_exists.mp (hμ y hy)
-    exact Or.inl ⟨μx, μy, hμx, hμy, fun h => hxy (by rw [hμx, hμy, h])⟩
-
 /-! ## The other two rows of §5's table
 
     §5's discharger table has four rows, and until now a reviewer checking it changed
     vocabulary halfway across: two rows are about `UAtCan opts` — a list of
     **terms** — and two are about `UniqueAdmission os`, a list of `OptionSem`. Worse,
     `(dunion)`'s row was never stated at all: it appeared only inside
-    `lawful_dunionCodec`, where it is an argument rather than a claim.
+    ~~lawful_dunionCodec~~, where it is an argument rather than a claim.
 
     `(dunion)`'s row moves to term level here, so three of the four are one vocabulary.
     The fourth cannot follow, and the reason is worth stating rather than working
@@ -1618,33 +425,13 @@ theorem uAtCan_of_disjoint {opts : List Term}
     is therefore a statement about `opaqCodec` at a fuel, one level below the term
     language. That is a fact about `opaque`, not a gap in the table. -/
 
-/-- The options of a `(dunion)`, exactly as `denote`'s dunion case builds them: tag
-    admission on `d`, where `(union)`'s `semsOf` uses name admission. -/
-noncomputable def semsOfD (d : Name) (opts : List Term) : List OptionSem :=
-  (opts.map fun t' => (tagsOf d t', denote t')).map fun o => .byTag d o.1 o.2
-
-/-- And it really is the denotation's option list — the `rfl` that keeps `semsOfD` from
-    drifting away from `denote`. -/
-theorem denote_dunion_semsOfD (d : Name) (opts : List Term) :
-    denote (.dunion d opts) = altCodec (semsOfD d opts) (some .M) := by
-  simp only [denote_dunion_tags, denoteTagged_eq, semsOfD, dunionCodec, List.map_map]
-
-/-- §5 (U) for a `(dunion)`, in `UAtCan`'s vocabulary. -/
-def UAtCanD (d : Name) (opts : List Term) : Prop :=
-  UniqueAdmission (semsOfD d opts)
-
-/-- **Row three: `(dunion)`'s (U) is a theorem, not a premise** — §5's "the one union
-    whose (U) is discharged by the rule itself". The premises are exactly `Typed.dunion`'s
-    two syntactic side conditions, so a derivable `discriminatedUnion` never carries an
-    obligation — `Obligations.dunion` is the other half of that claim, and says the
-    rule's obligation list has no (U) entry to begin with. Stated here because inside
-    `lawful_dunionCodec` it is an argument to a lemma, and a reviewer checking §5's table
-    has nothing to point at. -/
-theorem uAtCan_dunion {d : Name} {opts : List Term}
-    (htags : ∀ t' ∈ opts, (tagsOf d t').Nonempty)
-    (hdisj : List.Pairwise (fun a b => ∀ tag ∈ tagsOf d a, tag ∉ tagsOf d b) opts) :
-    UAtCanD d opts :=
-  uniqueAdmission_byTag (dunion_stamp htags) (List.pairwise_map.mpr hdisj)
+/-! **Row three is gone, and that is the row's answer.** §5 called `(dunion)` "the one union
+whose (U) is discharged by the rule itself", and the discharge was ~~uAtCan_dunion~~ over
+~~semsOfD~~, the option list `denote`'s dunion case used to build. There is no option list now:
+the variants are a table keyed by tag and the denotation is a lookup, so at most one variant is
+reached by construction and there is no unique-admission statement left to make. ~~uAtCan_dunion~~,
+~~UAtCanD~~ and ~~semsOfD~~ are deleted rather than restated, which is the strongest form the row's
+claim can take. -/
 
 /-- **Row four: `(opaque)`'s (U), unconditionally.** `uniqueAdmission_opaque` asks for the
     recursive option's lawfulness; `lawful_opaqCodec` supplies it, so the row has no
@@ -1655,161 +442,11 @@ theorem uAtCan_opaque (lossy : Bool) :
     UniqueAdmission (opaqOptions lossy (opaqCodec fuel lossy)) :=
   uniqueAdmission_opaque fuel lossy (lawful_opaqCodec fuel lossy)
 
-/-! ## What asking the codec buys
+/-! ## Premises checked at a pair
 
-    Before the rows above, `adm (.opaq _)` and `admA (.opaq _)` were `⊤` and `κ (.opaq _)`
-    is `none`. `SepV` and `SepA` each offer exactly two routes — a disjoint kind (resp. a
-    distinct member) or a disjoint admissible set — and an `opaque` option had **neither**
-    on either side. So `union(opaque, c)` was never separable, for any `c` that admits
-    anything at all; `not_sepV_opaq_lossy_left` (`Refutations.lean`) is what remains of
-    that fact.
-
-    It was an artifact of the analysis rather than of the semantics: `opaqCodec`'s `N`
-    option is `Codec.empty` when `numbers = 'refuse'`, so a non-lossy `opaque` writes no
-    number and reads no `N`, and `union(opaque false, number)` really is disjoint on both
-    sides. The rows see the writable half of that — and, since they ask the codec rather
-    than reading the policy bit, they see the nested half too (`adm_opaq_false_numSet`).
-    Nothing below mentions the policy bit; it is the codec that answers. -/
-
-/-- `opaque` admits every string, at either policy — the one absorption that survived the
-    semantic row, and the witness the refutations are instantiated at.
-
-    Its predecessor was `adm (.opaq true) v = true` for **every** `v`, and that is no
-    longer true: `adm` asks `opaqCodecω`, and a lossy `opaque` still refuses `.num d`
-    whenever `Numeral.WF (Double.toDec d)` fails. `Double.toDec` is axiomatized
-    (`Domain.lean`) with no such guarantee, so the blanket `⊤` was a claim the row made and
-    the codec does not. Nothing downstream wanted it: the refutations below want a value
-    *both* options admit, and a string is one. -/
-theorem adm_opaq_str (b : Bool) (s : String) : adm (.opaq b) (.str s) = true := by
-  show ((opaqCodec (0+1) b).e (.str s)).isSome = true
-  rw [opaqCodec_e_str]; rfl
-
-theorem admA_opaq_s (b : Bool) (s : String) : admA (.opaq b) (.s s) = true := by
-  show ((opaqCodec (0+1) b).p (.s s)).isSome = true
-  rw [opaqCodec_p_s]; rfl
-
-/-- A refusing policy writes no numeral — the fact the old scalar-prefix row carried, now
-    read off the codec rather than off a `match`. -/
-theorem adm_opaq_false_num (d : Double) : adm (.opaq false) (.num d) = false := by
-  show ((opaqCodec (0+1) false).e (.num d)).isSome = false
-  rw [opaqCodec_e_num]; rfl
-
-theorem admA_opaq_false_n (x : WFNumeral) : admA (.opaq false) (.n x) = false := by
-  show ((opaqCodec (0+1) false).p (.n x)).isSome = false
-  rw [opaqCodec_p_n]; rfl
-
-/-- **And the refusal the old row could not state.** A non-lossy `opaque` refuses a *set*
-    of numbers too, and a `numSet` is not a `.num`: the row this replaces matched on the
-    top constructor and so gave `number` a separation `set(number)` could not have, for no
-    reason in the semantics. The semantic row sees it because it does not look — `encSet`
-    fails at the first element the element codec refuses, and every element is refused.
-
-    `adm (.set .number)` is itself `⊤` (the empty-container argument), so this does not by
-    itself hand `set(number)` a `SepV`; what it removes is the *asymmetry* — the analysis
-    of `opaque` no longer stops at depth zero, and any option whose own row is informative
-    at a set now meets a matching refusal here. -/
-theorem adm_opaq_false_numSet (S : NEFinset Double) :
-    adm (.opaq false) (.numSet S) = false := by
-  show ((opaqCodec (1+1) false).e (.numSet S)).isSome = false
-  rw [opaqCodec_e_numSet]
-  cases he : (setCodec (opaqCodec 1 false)).e (.numSet S) with
-  | none => rfl
-  | some a =>
-    obtain ⟨x, hx⟩ := S.2
-    have := encSet_elem (c := opaqCodec 1 false) (inj := Value.num) (S := S) (a := a) he x hx
-    rw [show (opaqCodec 1 false).e (.num x) = _ from opaqCodec_e_num false 0 x] at this
-    exact nomatch this
-
-/-- **The row buys a writable-side separation from `number`.** `κ (.opaq _)` is `⊤`, so
-    `SepV`'s kind disjunct is unavailable for every pair containing an `opaque`: the whole
-    of the work is the `adm` disjunct, which was `⊤` before and is the codec's answer now. -/
-theorem sepV_number_opaque : SepV .number (.opaq false) :=
-  Or.inr fun v hv => by
-    cases v
-    case num d => exact adm_opaq_false_num d
-    all_goals exact nomatch (by simpa only [adm, inD] using hv : (false : Bool) = true)
-
-/-- **And `union(opaque false, number)` separates on the readable side too.** This
-    replaces ~~not_sepA_number_opaque~~, which recorded the pair as unseparable and named
-    `number`'s row as the obstruction: `admA .number` was `⊤` on the ground that the stored
-    numeral goes through `Double.ofDec`, so no syntactic set of attributes bounds the read.
-    The premise was true and the conclusion did not follow. `admA` never needed to know
-    *which* numerals a stored text reads to — only that no attribute other than an `N` is
-    readable at all, which `numberCodec.p` answers by returning `none` at every other
-    constructor. The row asks it, and the ⊤ is gone.
-
-    `μSyn (.opaq _)` is still `⊤`, so as with `SepV` the whole of the work is the `admA`
-    disjunct, and both disjuncts of the *pair* are now the codecs' own answers. -/
-theorem sepA_number_opaque : SepA .number (.opaq false) :=
-  Or.inr fun a ha => by
-    cases a
-    case n x => exact admA_opaq_false_n x
-    all_goals exact nomatch (ha : (false : Bool) = true)
-
-/-- **`union(number, opaque false)` discharges (U) at the declaration.** The positive
-    result the whole change is for, and it is stated at `number` itself rather than at a
-    `custom` stand-in: the block this replaces defined `numberCustom := .custom
-    numberCodec.e numberCodec.p` and proved four theorems about it, for the sole reason
-    that `custom`'s rows asked their codec and `number`'s did not. Semantically the two
-    terms were always the same codec; the detour was a fact about §5's table, not about the
-    language. With `admA .number` asking as well, the stand-in has nothing left to stand
-    in for. -/
-theorem uAtCan_number_opaque : UAtCan [.number, .opaq false] := by
-  refine uAtCan_of_separated ?_ ?_ ?_ ?_
-  · intro t ht
-    rcases List.mem_cons.mp ht with rfl | ht
-    · exact lawful_numberCodec
-    · rcases List.mem_cons.mp ht with rfl | ht
-      · exact lawful_opaqCodecω false
-      · exact nomatch ht
-  -- `isOpenObject` is a `Bool` off the syntax, so a non-object discharges it by `rfl`
-  -- where the three-quantifier disequality needed `Term.noConfusion`
-  · intro t ht
-    rcases List.mem_cons.mp ht with rfl | ht
-    · rfl
-    · rcases List.mem_cons.mp ht with rfl | ht
-      · rfl
-      · exact nomatch ht
-  · refine List.pairwise_cons.mpr ⟨fun y hy => ?_, List.pairwise_singleton _ _⟩
-    rcases List.mem_cons.mp hy with rfl | hy
-    · exact sepV_number_opaque
-    · exact nomatch hy
-  · refine List.pairwise_cons.mpr ⟨fun y hy => ?_, List.pairwise_singleton _ _⟩
-    rcases List.mem_cons.mp hy with rfl | hy
-    · exact sepA_number_opaque
-    · exact nomatch hy
-
-/-- **`held` of an `opaque` is that `opaque`, on the stored side.** `through`'s `g` is
-    total and post-processes a read, so it changes which value comes out and never which
-    attributes go in.
-
-    `refine` was stated here alongside it — `admA (.refine (.opaq b) q) = admA (.opaq b)`,
-    "no wrapper the language has rescues an `opaque` option's read-side footprint" — and
-    that half is **false**. It was true of the old row, which dropped `q`; it is not true of
-    the read. `refine_opaq_narrows` below is the general form, and `admA_refine_bot` the
-    sharpest instance: a refinement can shrink an `opaque`'s footprint to nothing. -/
-theorem admA_held_opaq (b : Bool) (f g : Value → Value) :
-    admA (.held (.opaq b) f g) = admA (.opaq b) := rfl
-
-/-- The corrected statement: the footprint is the `opaque`'s **intersected** with `q` of
-    what it decodes to. -/
-theorem refine_opaq_narrows (b : Bool) (q : Value → Bool) (a : Attr) :
-    admA (.refine (.opaq b) q) a
-      = (((opaqCodecω b).p a).isSome && refineReads (.opaq b) q a) := rfl
-
-/-- **A refinement by `⊥` reads nothing, at any base.** The row sees it, which is the whole
-    of the change: the old row answered `admA t` here and claimed the read was unnarrowed. -/
-theorem admA_refine_bot (t : Term) : admA (.refine t (fun _ => false)) = fun _ => false := by
-  funext a
-  simp only [admA, refineReads]
-  cases h : (denote t).p a <;> simp [h]
-
-/-! ## The premises are jointly inhabited
-
-    `uAtCan_of_disjoint` takes six premises, and a theorem whose premises cannot all
-    hold discharges nothing. `union(string, boolean)` satisfies every one of them —
-    disjoint kinds, distinct members, closed, lawful — so the discharger really does
-    decide unions. -/
+    Two helpers for instantiating a discharger's `∀ t ∈ opts` and `Pairwise` premises at a
+    two-option union. They outlived the discharger they were written for: `Orthogonality.lean`
+    uses both, which is why they are here rather than deleted with it. -/
 
 /-- A premise of the form `∀ t ∈ [x, y], P t`, checked at the two options. -/
 theorem forall_mem_pair {α : Type} {P : α → Prop} {x y : α} (hx : P x) (hy : P y) :
@@ -1830,93 +467,21 @@ theorem pairwise_pair {α : Type} {R : α → α → Prop} {x y : α} (h : R x y
   · exact h
   · exact absurd hz (by simp)
 
-/-- Satisfiability witness for `uAtCan_of_disjoint` at the new ground term:
-    `union(string, null)` — the explicit spelling of a nullable string, and the one
-    §3's `(null)` rule exists for. Kinds settle it at the declaration: `κ(null)` is
-    `{null}`, disjoint from every other ground kind, and `NULL` is a member no other
-    ground term names. -/
-theorem uAtCan_string_null :
-    UAtCan [Term.string, Term.null] := by
-  refine uAtCan_of_disjoint
-    (forall_mem_pair (lawful_string) (lawful_null))
-    (forall_mem_pair rfl rfl)
-    (forall_mem_pair rfl rfl) (forall_mem_pair rfl rfl)
-    (pairwise_pair ?_) (pairwise_pair ?_)
-  · intro kx ky hx hy k hk
-    replace hx : some [Kind.string] = some kx := hx
-    replace hy : some [Kind.null] = some ky := hy
-    cases hx; cases hy
-    simp only [List.mem_singleton] at hk
-    subst hk
-    simp
-  · intro h
-    replace h : some Member.S = some Member.NULL := h
-    exact nomatch h
+/-! ## Why "one option decides its own membership" was never an exemption
 
-/-- Satisfiability witness for `uAtCan_of_disjoint`: `union(string, boolean)` is
-    discharged at the declaration, at every fuel. -/
-theorem uAtCan_string_boolean :
-    UAtCan [Term.string, Term.boolean] := by
-  refine uAtCan_of_disjoint
-    (forall_mem_pair (lawful_string) (lawful_boolean))
-    (forall_mem_pair rfl rfl)
-    (forall_mem_pair rfl rfl) (forall_mem_pair rfl rfl)
-    (pairwise_pair ?_) (pairwise_pair ?_)
-  · intro kx ky hx hy k hk
-    replace hx : some [Kind.string] = some kx := hx
-    replace hy : some [Kind.boolean] = some ky := hy
-    cases hx; cases hy
-    simp only [List.mem_singleton] at hk
-    subst hk
-    simp
-  · intro h
-    replace h : some Member.S = some Member.BOOL := h
-    exact nomatch h
+    An earlier §5 stated its writable-side discharger as a disjunction over whether an option
+    *decides its own membership* — a `literal` does, a bare `string` does not — and called it sufficient for
+    (U). It is not, and the two counterexamples below are why no discharger here or in
+    `Orthogonality.lean` carries that disjunct. §5 keeps both counterexamples and states the
+    discharger on the admissible sets themselves, so what follows is the machine-checked half of a
+    correction the document has already made, not a live disagreement with it.
 
-/-- §5's worked example, discharged — and out of reach of `uAtCan_of_disjoint`. The two
-    options share `κ = {string}` *and* share `⇝ S`, so neither kinds nor members
-    separate them; the `adm` disjunct on both sides is what carries it. This is the
-    pair §5 claims for `ident`, and `adm` is what makes the claim good. -/
-theorem uAtCan_literal_literal :
-    UAtCan [Term.literal .string (.of "A" ∅), Term.literal .string (.of "B" ∅)] := by
-  refine uAtCan_of_separated
-    (forall_mem_pair (lawful_literal _ _) (lawful_literal _ _))
-    (forall_mem_pair rfl rfl)
-    (pairwise_pair (Or.inr ?_)) (pairwise_pair (Or.inr ?_))
-  · intro v hv
-    cases v
-    case str s =>
-      replace hv : decide (s ∈ ["A"]) = true := hv
-      show decide (s ∈ ["B"]) = false
-      have : s = "A" := by simpa using of_decide_eq_true hv
-      subst this
-      simp
-    all_goals exact nomatch hv
-  · intro a ha
-    cases a
-    case s s =>
-      replace ha : decide (s ∈ ["A"]) = true := ha
-      show decide (s ∈ ["B"]) = false
-      have : s = "A" := by simpa using of_decide_eq_true ha
-      subst this
-      simp
-    all_goals exact nomatch ha
-
-/-! ## Why one-sided `ident` was never an exemption from (K)
-
-    An earlier §5 stated **(K)** as `∀ i ≠ j. κ(cᵢ) ∩ κ(cⱼ) = ∅ ∨ ident(cᵢ) ∨ ident(cⱼ)`
-    and called it *sufficient* for (U). It is not, and the two counterexamples below are
-    why the `ident` half is absent from `uAtCan_of_disjoint`. §5 now carries the repaired
-    form — `ident` on both sides **and** disjoint `adm` — and cites these two as its
-    reason, so what follows is the machine-checked half of a correction the doc has
-    already made, not a live disagreement with it.
-
-    The withdrawn rule was right about what `ident` buys: attempted admission on a
-    `literal` is evidence, where attempted admission on `string` is not. What it dropped
-    is that evidence only *resolves* a pair when it is available on **both** sides and
-    the two admissible sets are **disjoint**. §5's own worked example,
-    `union(literal("A"), literal("B"))`, has both; the rule offered in support of it
-    demanded neither. -/
+    The withdrawn rule was right about what deciding buys: attempted admission on a
+    `literal` is evidence, where attempted admission on `string` is not. What it dropped is
+    that evidence only *resolves* a pair when it is available on **both** sides and the two
+    admissible sets are **disjoint**. §5's own worked example,
+    `union(literal("A"), literal("B"))`, has both; the rule offered in support of it demanded
+    neither. -/
 
 /-- A helper: two options of a two-element union that both admit one value refute (U).
     `hne` separates the options at some other value, so the singleton filter fails. -/
@@ -1940,10 +505,10 @@ theorem not_uAtCan_pair {t₁ t₂ : Term} {v w : Value} {a : Attr}
   · exact hne (congrArg (fun o => OptionSem.admitV o w) heq.symm)
   · exact absurd hnil (by simp)
 
-/-- **One-sided `ident` does not discharge (U).** `union(literal("A"), string)` passes
-    the exemption §5 withdrew — `ident(literal("A"))` holds — and violates (U) at the
-    value `"A"`, which both options admit. `literal`'s attempt *is* evidence; `string`'s is not, and one
-    honest answer does not resolve a pair. -/
+/-- **One option deciding its own membership does not discharge (U).**
+    `union(literal("A"), string)` passes the exemption §5 withdrew — the literal decides —
+    and violates (U) at the value `"A"`, which both options admit. `literal`'s attempt *is*
+    evidence; `string`'s is not, and one honest answer does not resolve a pair. -/
 theorem not_uAtCan_literal_string :
     ¬ UAtCan [Term.literal .string (.of "A" ∅), Term.string] := by
   have hA : (denote (Term.literal .string (.of "A" ∅))).e (Value.str "A") = some (Attr.s "A") := by
@@ -1958,11 +523,11 @@ theorem not_uAtCan_literal_string :
     rw [hB]
     exact fun h => nomatch h
 
-/-- **Two-sided `ident` does not discharge (U) either.** `ident` propagates through
-    `array` (§5's table), so `union(array(literal("A")), array(literal("B")))` has it on
-    both sides — and both options admit the empty array, which neither literal ever
-    sees. Propagating `ident` through a container does not propagate disjointness of
-    the admissible sets: every container admits its empty case. -/
+/-- **Both options deciding does not discharge (U) either.** Deciding propagates through
+    `array`, so `union(array(literal("A")), array(literal("B")))` has it on both sides — and
+    both options admit the empty array, which neither literal ever sees. Propagating the
+    property through a container does not propagate disjointness of the admissible sets:
+    every container admits its empty case. -/
 theorem not_uAtCan_array_literals :
     ¬ UAtCan [Term.array (.literal .string (.of "A" ∅)), Term.array (.literal .string (.of "B" ∅))] := by
   refine not_uAtCan_pair (v := .arr []) (a := Attr.l []) (w := .arr [.str "A"])
@@ -2175,13 +740,6 @@ theorem uAtAct_array_literals :
       · rw [OptionSem.byAttempt_admitV, arrayLiteral_e_none hp hAp]; rfl
       · rw [OptionSem.byAttempt_admitV, h']; rfl
 
-/-- Both counterexamples are `ident` on the side(s) the withdrawn exemption appealed to
-    — so it admitted them outright, rather than excluding them by a side condition. The
-    `adm`-disjointness §5 now demands is what excludes them. -/
-example : ident (.literal .string (.of "A" ∅)) = true := rfl
-example : ident (.array (.literal .string (.of "A" ∅))) = true := rfl
-example : ident (.array (.literal .string (.of "B" ∅))) = true := rfl
-
 /-! ## Why (D) does not discharge the readable side either
 
     An earlier §5 listed **(D)** — incomparable held sets — as a discharger of (U)'s
@@ -2198,7 +756,7 @@ example : ident (.array (.literal .string (.of "B" ∅))) = true := rfl
     passes in the strongest form ever proposed for it — and both options read the
     attribute `S "A"`, the first to `"A"` and the second to `"B"`. What decides the
     readable side is a condition on stored attributes: distinct members, or disjoint
-    `admA`. -/
+    readable-side admission. -/
 
 /-- (D) in its held-set form, as the disjointness §5 proposes: no value is held by two
     options. Stated so the counterexample below can be about it.

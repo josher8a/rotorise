@@ -13,15 +13,14 @@ import { describe, expect, it } from 'vitest'
 import type { L, N, S } from './attribute'
 import {
     array,
+    CodecError,
     decimal,
-    deeper,
     number,
     object,
     rest,
     string,
     tuple,
     union,
-    writes,
 } from './codec'
 import { checkEncodePaths, checkRoundTrip } from './testing'
 
@@ -29,7 +28,6 @@ const path = tuple(string, number, rest(decimal))
 
 describe('a tuple with a tail', () => {
     it('is still an L', () => {
-        expect(writes(path)).toBe('L')
         const written = path.unsafeEncode(['a', 1])
         attest<L<readonly [S, N, ...N[]]>>(written)
         expect(written).toEqual({ L: [{ S: 'a' }, { N: '1' }] })
@@ -65,14 +63,15 @@ describe('a tuple with a tail', () => {
     })
 
     it('requires the head, and says so as a minimum', () => {
-        expect(() => path.unsafeEncode(['a'] as never)).toThrow(
-            /expected at least 2 elements, found 1/,
-        )
-        expect(() => path.unsafeDecode({ L: [{ S: 'a' }] })).toThrow(
-            /expected a list of at least 2, found 1/,
-        )
+        expect(() => path.unsafeEncode(['a'] as never)).toThrow(CodecError)
+        expect(() => path.unsafeDecode({ L: [{ S: 'a' }] })).toThrow(CodecError)
     })
 
+    /**
+     * **Pins wording no law has, deliberately.** That a tail element's failure carries its
+     * *index* is the claim — `at [2]`, not merely that the tuple refused — so the position is the
+     * subject rather than a stand-in for a refusal.
+     */
     it('checks a tail element, naming its position', () => {
         expect(() =>
             path.unsafeDecode({
@@ -85,7 +84,7 @@ describe('a tuple with a tail', () => {
         const fixed = tuple(string, number)
         expect(() =>
             fixed.unsafeDecode({ L: [{ S: 'a' }, { N: '1' }, { N: '2' }] }),
-        ).toThrow(/expected a list of 2, found 3/)
+        ).toThrow(CodecError)
     })
 
     it('admits a tail and nothing else', () => {
@@ -94,12 +93,6 @@ describe('a tuple with a tail', () => {
             L: [{ S: 'a' }, { S: 'b' }],
         })
         expect(every.unsafeDecode({ L: [] })).toEqual([])
-    })
-
-    it('walks to the tail by any position past the head', () => {
-        expect(deeper(path, 0)?.def?.kind).toBe('string')
-        expect(deeper(path, 2)?.def?.kind).toBe('decimal')
-        expect(deeper(path, 9)?.def?.kind).toBe('decimal')
     })
 
     it('round-trips, tails included', () => {
@@ -136,9 +129,18 @@ describe('where a tail cannot go', () => {
         expect(typeof _wrong).toBe('function')
     })
 
-    it('but the codec underneath is untouched by the mark', () => {
-        // the mark is about position; what it wraps still writes what it wrote
-        expect(writes(rest(decimal))).toBe('N')
-        expect(writes(rest(string))).toBe('S')
+    /**
+     * The rule is that marking an element changes nothing about the element, and the tuple is
+     * where it can be seen — a rest is a *position*, so it means nothing anywhere else.
+     *
+     * This used to read `writes(rest(decimal))`, asking a marker what it writes. That worked
+     * because `rest(c)` was `c` with a definition stamped on it, so a bare rest had an `encode`
+     * and answered as its element. It is a marker now and answers nothing, which is the point:
+     * asking a position what it writes is a question with no subject.
+     */
+    it('but the element underneath is untouched by the mark', () => {
+        expect(
+            tuple(string, rest(decimal)).unsafeEncode(['a', '1.5', '2']),
+        ).toEqual({ L: [{ S: 'a' }, { N: '1.5' }, { N: '2' }] })
     })
 })

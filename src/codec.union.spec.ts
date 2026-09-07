@@ -12,11 +12,12 @@ import {
     nullValue,
     number,
     object,
+    opaque,
     optional,
     string,
     union,
-    writes,
 } from './codec'
+import { accepts } from './denote'
 import { checkRoundTrip, roundTrip } from './testing'
 
 type LineItem =
@@ -82,8 +83,12 @@ describe('untagged', () => {
     })
 
     it('refuses an item no option admits', () => {
+        // the two shapes the declaration names do resolve, and an item outside both does not —
+        // which is admission deciding it, not a message
+        expect(Leg.unsafeDecode(Leg.unsafeEncode(single))).toEqual(single)
+        expect(Leg.unsafeDecode(Leg.unsafeEncode(many))).toEqual(many)
         expect(() => Leg.unsafeDecode({ somethingElse: { S: 'x' } })).toThrow(
-            /no option admits this item with attributes 'somethingElse'/,
+            CodecError,
         )
         // a partial of the first variant is not that variant
         const { sellerId: _gone, ...partial } = Leg.unsafeEncode(single)
@@ -126,16 +131,17 @@ describe('untagged', () => {
      * as a host number.
      */
     it('rejects two options that store the same member, which no read can resolve', () => {
-        expect(() => union([decimal, number])).toThrow(
-            /decimal and number both store 'N', and neither checks what it reads/,
-        )
+        // the behavioural claim is about which *declarations* stand: two options sharing a member
+        // with neither checking what it reads is refused, and a pair separable by member is not
+        expect(() => union([decimal, number])).toThrow(CodecError)
+        expect(() => union([string, number])).not.toThrow()
         // and the mirror it was hiding behind, which was refused all along — twice over, since two
         // options reading back as the same type is also `ValidateOptions`. `union([decimal,
         // number])` passes *that* check too: they read back as `string` and `number`
         expect(() =>
             // @ts-expect-error both read back as a string, which the type refuses as well
             union([string, decimal]),
-        ).toThrow(/both take the same kind of value/)
+        ).toThrow(CodecError)
     })
 
     /**
@@ -144,7 +150,6 @@ describe('untagged', () => {
      * numeric literals below share `'N'` and are still perfectly resolvable.
      */
     it('keeps the two exemptions the write side has', () => {
-        expect(writes(number(0, 1))).toBe(writes(decimal('2', '3')))
         const either = union([number(0, 1), decimal('2', '3')])
         expect(either.unsafeDecode({ N: '2' })).toBe('2')
         expect(either.unsafeDecode({ N: '1' })).toBe(1)
@@ -166,9 +171,13 @@ describe('untagged', () => {
             object({ a: string }),
         ]).item
 
-        expect(() => Ambiguous.unsafeEncode({ a: '1' })).toThrow(
-            /\{ a, b\? \} and \{ a \} both admit this entity with attributes 'a'; these options cannot be told apart/,
-        )
+        // what makes it ambiguous is that *both* options admit the entity, and that is the
+        // assertion the message was standing in for — (U) fails at this input
+        expect(
+            accepts(object({ a: string, b: optional(string) }), { a: '1' }),
+        ).toBe(true)
+        expect(accepts(object({ a: string }), { a: '1' })).toBe(true)
+        expect(() => Ambiguous.unsafeEncode({ a: '1' })).toThrow(CodecError)
         // and the unambiguous case still works
         expect(Ambiguous.unsafeEncode({ a: '1', b: '2' })).toEqual({
             a: { S: '1' },
@@ -235,13 +244,128 @@ describe('the NULL point', () => {
     })
 
     it('round-trips as an option, over generated values', () => {
-        const Pet = object({ id: string, deletedAt: union([string, nullValue]) })
-            .item
+        const Pet = object({
+            id: string,
+            deletedAt: union([string, nullValue]),
+        }).item
         checkRoundTrip(Pet, { count: 100, seed: 20260829 })
     })
 
     /** Distinct from `nullable`, which *adds* `null` to another codec's held set. */
     it('is not `nullable`, which holds its subject too', () => {
         expect(() => nullValue.unsafeEncode('x' as never)).toThrow(CodecError)
+    })
+})
+
+describe('the declaration guard, where a term is what the guard reads', () => {
+    /**
+     * Two literal sets with disjoint alphabets are separable, and the declaration must stand.
+     *
+     * The model's warrant is `Exactness.lean`'s `SepJV` over
+     * `refine (set string) (liftQ (inL string …))` at two disjoint alphabets: a set of a
+     * restriction *is* a restriction of the set, which `setCodec_restrict` and
+     * `setCodec_restrict_p` prove on both halves of the pair. So the pair separates, and refusing
+     * it would refuse a union the model proves works.
+     *
+     * **Today it stands for the weaker reason**, and that is what this test is pinning against.
+     * `Term.set` is indexed by a bare `SetBase`, so a set over a literal has no term at all, and
+     * the guard answers on `undefined` — not certified rather than refused. The pass that respells
+     * `.set()` over a restricted ground as `refine(set(b), liftQ q)` gives it a term, and then
+     * `identifies` has to see the literal *through* the refinement or this test goes red. That is
+     * the pin that pass must keep.
+     */
+    it('declares a union of two literal sets whose alphabets do not meet', () => {
+        expect(() =>
+            union([string.set('a', 'b'), string.set('c')]),
+        ).not.toThrow()
+        const either = union([string.set('a', 'b'), string.set('c')])
+        expect(either.unsafeEncode(new Set(['a']) as never)).toEqual({
+            SS: ['a'],
+        })
+    })
+
+    /**
+     * **An option no value can select is not an option.**
+     *
+     * `opaque` admits every value every other option admits, and §5's `select` acts only where
+     * *exactly one* option does. So `union([opaque, X])` is not `opaque` with `X` beside it: it is
+     * **undefined** wherever `X` admits, and `opaque` everywhere else. `X` is declared and can
+     * never be chosen, which is §5's failure rather than a precedence question — there is no rank
+     * that resolves it, because ranking would be choosing an option the model says is not chosen.
+     *
+     * The guard used to exempt an `opaque` option instead of comparing it, reading its occupancy
+     * as `⊤`. §5 separates the two things a `⊤` covers, and `opaque` is the *everything* one: the
+     * model states it as a closed form, so it is comparable and it meets every option. Refusing
+     * these is JH's ruling, recorded in `ARCHITECTURE.md` §10, and it moved the corpus's refusal
+     * set from 17 pairs to 32 with every new theorem holding.
+     */
+    it('refuses a union where one option can never be selected', () => {
+        // @ts-expect-error the type refuses this pair too, and now **for the right reason**: the
+        // clause naming `opaque` fires ahead of the read-back one, so a caller is told to remove
+        // the option rather than to add a discriminator that cannot help.
+        // `Rotorise.attest.test.ts` pins the message. This asserts the *runtime* half, which is
+        // what a caller reaches past the type — a cast, or plain JavaScript.
+        expect(() => union([opaque, string])).toThrow(CodecError)
+        // the message names the option that swallows the other, because that is the one to remove,
+        // and it names it as the caller wrote it rather than as the term spells it
+        // @ts-expect-error the same type-level refusal
+        expect(() => union([opaque, string])).toThrow(/opaque/)
+        // both policies: `lossy` admits a number too, so it swallows strictly more
+        // @ts-expect-error the same type-level refusal
+        expect(() => union([opaque('lossy'), string])).toThrow(CodecError)
+        // @ts-expect-error and the order of the options does not matter
+        expect(() => union([string, opaque])).toThrow(CodecError)
+
+        // and the refusal is about being unselectable, not about `opaque` being unusable
+        expect(() => opaque.encode('a')).not.toThrow()
+        expect(() => union([string, boolean])).not.toThrow()
+    })
+
+    /**
+     * **The same rule, two widths narrower**, and it is the rule rather than a second exemption:
+     * an option whose admitted values are all admitted by another can never be selected. `opaque`
+     * is the widest instance, where "another" is every option. These two are the narrowest, where
+     * one option is a *restriction of the thing it restricts*: a literal against its own base's
+     * ground term, and a set of a literal against the plain set at that base.
+     *
+     * **The type level already refused both**, and with the discriminator advice, which is the
+     * advice that cannot help. So what moves here is the runtime, which used to accept them
+     * through the `identifies` exemption, and the message, which now names the option to remove.
+     * A typed caller cannot have shipped one of these; what reaches the runtime is a cast, plain
+     * JavaScript, or an erased path.
+     *
+     * JH ruled it, on the ground that it is `opaque`'s failure at a narrower width. The corpus's
+     * refusal set moved from 32 to 36 and `Orth` declines all four, `not_orth_literal_string` on
+     * purpose.
+     */
+    it('refuses an option that is a restriction of another option', () => {
+        // @ts-expect-error the type refuses this pair too, and `Rotorise.attest.test.ts` pins the
+        // message; this asserts the runtime half, which is what a cast reaches past
+        expect(() => union([string, string('A')])).toThrow(CodecError)
+        // @ts-expect-error the same refusal, and the order of the options does not matter
+        expect(() => union([string('A'), string])).toThrow(CodecError)
+        // the message names the narrower option first, because that is the one to remove
+        // @ts-expect-error the same type-level refusal
+        expect(() => union([string, string('A')])).toThrow(
+            /admits only values that/,
+        )
+        // …and it says the thing a discriminator cannot be the answer to
+        // @ts-expect-error the same type-level refusal
+        expect(() => union([string, string('A')])).toThrow(
+            /a discriminator does not fix this/,
+        )
+        // a set of a literal is a restriction of the plain set at its base, one spelling out
+        // @ts-expect-error the same type-level refusal
+        expect(() => union([string.set(), string.set('a', 'b')])).toThrow(
+            CodecError,
+        )
+
+        // **and two restrictions of one base still declare**, which is the shape this is not
+        // about: neither literal contains the other, and `Orth` certifies the pair since `OrthL`
+        expect(() => union([string('A'), string('B')])).not.toThrow()
+        expect(() => union([string('A'), number])).not.toThrow()
+        expect(() =>
+            union([string.set('a', 'b'), string.set('c')]),
+        ).not.toThrow()
     })
 })
