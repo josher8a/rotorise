@@ -19,7 +19,7 @@
  *
  * ── the sample ─────────────────────────────────────────────────────────────────────────────────
  *
- * `src/codec/lean/lean.sample.lean` is a committed file of generated output, and the last test here regenerates
+ * `formal/lean.sample.lean` is a committed file of generated output, and the last test here regenerates
  * it and compares. It exists so a human can read the *shape* of what gets proposed without running
  * anything, and the comparison exists so it cannot rot: change the emitter and this test tells you
  * the sample is stale. Every theorem in it has been checked against the real `Calculus` build.
@@ -1261,7 +1261,7 @@ describe('the committed sample', () => {
             ['lean.sample.lean', 'equation'],
             ['lean.sample.check.lean', 'check'],
         ] as const) {
-            const at = join(process.cwd(), 'src', 'codec', 'lean', file)
+            const at = join(process.cwd(), 'formal', file)
             const emitted = leanVectorModule(
                 sampleVectors,
                 protocol,

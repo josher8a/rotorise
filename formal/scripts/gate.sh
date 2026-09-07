@@ -111,7 +111,7 @@ if [ "$RUN_BUILD" -eq 1 ]; then
     bash -lc 'EMIT_LEAN_REFUSALS=1 npx --no-install vitest run src/codec/lean/lean.spec.ts --reporter=dot'
   run 'vector bridge' docker exec "$CONTAINER" bash -lc \
     'cd /workspaces/Rotorise/formal &&
-     for f in ../src/codec/lean/lean.sample.check.lean ../src/codec/lean/lean.sample.lean .vectors.full.lean \
+     for f in lean.sample.check.lean lean.sample.lean .vectors.full.lean \
               .separations.lean .readverdicts.lean .resolutions.lean \
               .readvectors.lean; do
        [ -f "$f" ] || { echo "missing $f"; exit 1; }
