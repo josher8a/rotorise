@@ -590,6 +590,10 @@ export const identifies = (t: Term): boolean => {
  * skipping it.
  *
  * **An option that identifies its own values.** {@link identifies}, whose two warrants are on it.
+ * The flat case no longer needs the exemption. `Orth` carries a phase `OrthL` now, and it
+ * certifies two literals at one base with disjoint alternatives. The row stays until this guard
+ * ports `OrthL`, which waits on the model's `refine` carrying its predicate as data, so that one
+ * pass moves the flat case and the set case together and this guard changes one time.
  *
  * **An occupancy that is unknown.** `held`'s `f` runs before the subterm and can move a value into
  * any constructor, `custom` is arbitrary both ways, and a host `lazy` cannot be read without
