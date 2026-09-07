@@ -3,11 +3,11 @@
   "branches": {
     "Calculus/Axioms.lean": 1,
     "Calculus/Codec.lean": 21,
-    "Calculus/Combinators.lean": 1021,
+    "Calculus/Combinators.lean": 1015,
     "Calculus/Continuity.lean": 49,
     "Calculus/Denote.lean": 97,
     "Calculus/Discharge.lean": 138,
-    "Calculus/Domain.lean": 127,
+    "Calculus/Domain.lean": 133,
     "Calculus/Equations.lean": 153,
     "Calculus/Exactness.lean": 649,
     "Calculus/HeldSet.lean": 89,

@@ -137,20 +137,6 @@ under Products) rather than two. -/
   out_into _ := rfl
   into_out {b x} h := by cases b <;> first | (cases h; rfl) | exact nomatch h
 
-/-- A map's payload: the name set, and the values on it. A dependent pair rather than a
-    list of pairs, because that is what `M` is — see `Attr.m`. -/
-abbrev MapOf (α : Type) := Σ keys : Finset Name, {k // k ∈ keys} → α
-
-/-- Two map payloads are equal when their name sets are and their values agree on them.
-    The dependent pair needs this said once; the list representation got it from
-    `List.ext`. -/
-theorem MapOf.ext {α : Type} {p q : MapOf α} (hk : p.1 = q.1)
-    (hf : ∀ k (h₁ : k ∈ p.1) (h₂ : k ∈ q.1), p.2 ⟨k, h₁⟩ = q.2 ⟨k, h₂⟩) : p = q := by
-  obtain ⟨kp, fp⟩ := p
-  obtain ⟨kq, fq⟩ := q
-  cases hk
-  exact congrArg (Sigma.mk kp) (funext fun k => hf k.1 k.2 k.2)
-
 /-- `map` values. -/ def mapV : Ctor (MapOf Value) Value where
   into := fun p => Value.map p.1 p.2
   out := fun v => match v with | .map keys f => some ⟨keys, f⟩ | _ => none
@@ -1972,35 +1958,10 @@ two orderings of one object and a repeated name, and the `Nodup` premise that us
 travel with every object law existed to make the first harmless and rule out the second.
 Both are now properties of the type, and that premise is gone from all five of them.
 
-`MapOf.at` is the lookup a `MapOf` has: a membership decision and a function application.
-It is deliberately shaped like `List.lookup` so that everything downstream — `entryCodec`,
-`objEntryT`, `fbValue`, `keepB` and every proof that splits on them — reads unchanged. -/
-
-/-- The value a `MapOf` gives a name, where it gives one — the lookup a key set with a
-    function on it has. Generic because the *term*'s field table needs it too. -/
-def MapOf.at {α : Type} (m : MapOf α) (k : Name) : Option α :=
-  if h : k ∈ m.1 then some (m.2 ⟨k, h⟩) else none
-
-/-- A declared name is one the table's key set carries, and conversely. -/
-theorem MapOf.at_eq_some {α : Type} {m : MapOf α} {k : Name} {x : α} :
-    m.at k = some x ↔ ∃ h : k ∈ m.1, m.2 ⟨k, h⟩ = x := by
-  simp only [MapOf.at]
-  by_cases h : k ∈ m.1
-  · rw [dif_pos h]
-    exact ⟨fun he => ⟨h, Option.some.inj he⟩, fun ⟨_, he⟩ => by rw [← he]⟩
-  · rw [dif_neg h]
-    exact Iff.intro (fun he => nomatch he) (fun ⟨h', _⟩ => absurd h' h)
-
-/-- Every key of the table is declared, at the value the table gives it. -/
-theorem MapOf.at_of_mem {α : Type} {m : MapOf α} (k : {k // k ∈ m.1}) :
-    m.at k.1 = some (m.2 k) := by
-  simp only [MapOf.at, dif_pos k.2]
-
-/-- A property of every value is a property of every declared name's value. -/
-theorem MapOf.at_forall {α : Type} {m : MapOf α} {Q : α → Prop}
-    (h : ∀ k, Q (m.2 k)) {k x} (hm : m.at k = some x) : Q x := by
-  obtain ⟨hk, rfl⟩ := MapOf.at_eq_some.mp hm
-  exact h ⟨k, hk⟩
+The type and its lookup are in `Domain.lean`, because three strata need them and the lowest is
+the term language. The lookup is deliberately shaped like `List.lookup`, so everything downstream
+— `entryCodec`, `objEntryT`, `fbValue`, `keepB` and every proof that splits on them — reads
+unchanged. -/
 
 /-- `fb`'s absent case, `p♭(ε) = v(∗)`: the stand-ins for the fallback names a row
     omits. Empty on canonical items, where every `fb` name is present.
