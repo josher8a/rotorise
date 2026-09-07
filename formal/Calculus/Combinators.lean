@@ -332,7 +332,7 @@ noncomputable def inL : (k : GroundKind) → NEFinset k.Carrier → Value → Bo
 
 Without these a `simp` that needs `inL` at one base unfolds `inL.match_1` — the matcher Lean
 derives for the whole ten-row table — and pays for all ten rows at every rewrite. That is what
-`fanOf` found behind `AdmA_exact`'s duplication. `number` and `decimal` get no equation here:
+~~fanOf~~ found behind `AdmA_exact`'s duplication. `number` and `decimal` get no equation here:
 their rows are a `dite` on a gate, so the useful statement is about the gate rather than about
 the row, and `hLit_of_inL`'s two `cases hs :` branches are where that is done. -/
 

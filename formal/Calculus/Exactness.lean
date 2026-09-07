@@ -1964,7 +1964,7 @@ lemmas are where it is read off now. -/
 
 /-- **Separation on the joint predicate, value side — one clause.** §5's ~~SepV~~ offers a
     choice between disjoint kinds and disjoint admissible sets; `Adm` carries the kind gate
-    in its own rows, so the first disjunct is subsumed (`Adm_kind`) and the definition
+    in its own rows, so the first disjunct is subsumed (~~Adm_kind~~) and the definition
     collapses. -/
 def SepJV (x y : Term) : Prop := ∀ v, Adm x v = true → Adm y v = false
 

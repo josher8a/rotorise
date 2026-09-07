@@ -23,17 +23,17 @@ Three counts, none of which can be *fixed* in one arc and all of which can quiet
                                 a reader who knows the specification can tell what a theorem
                                 says from its name and one line. 269 of 896 today, 30%.
   branches                      decision points — pattern rows, `if`, `cases`, `<;>` and the
-                                rest of `complexity.py`'s list. The case-analysis measure that
-                                `unfolding_sites` is blind to: per file the two rank at Spearman
-                                0.56, so this is a second number and not a restatement.
-                                5260 today.
+                                rest of `POINTS` below. The case-analysis measure that
+                                `unfolding_sites` is blind to, and the two do not track each
+                                other per file, so this is a second number and not a
+                                restatement.
 
 **The branch count and not the branch *density*.** Density is the sharper reading —
 `occV_sound` at 1.48 a line against `soundness_both`'s 0.36 over 122 — but its denominator
 moves when a signature is re-wrapped, and this repo has paid for a formatting-sensitive metric
 once already: `7fff6e8` moved `orth_unreach_lines` 168 → 169 by splitting one signature onto
-two lines. A count of `|` and `cases` does not move for that. `complexity.py` prints the
-density and nothing ratchets it.
+two lines. A count of `|` and `cases` does not move for that. Nothing prints the density now,
+and nothing ratchets it.
 
 **A bar and a ratchet fail differently, and only one of them was available.** A coverage bar
 at 269 undocumented theorems would be decoration: nobody can satisfy it, so it would be
@@ -86,17 +86,54 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 # handling that file's docstring argues for. `name_drift.py` globs `Calculus/` at import, so
 # both scripts have the same "run from formal/" requirement.
 from name_drift import strip_comments, LEANISH, NOISE, RETIRED, CURRENT
-# `complexity.py` owns the branch definition and the argument for it; this file only holds
-# the number to its baseline. Same reason `strip_comments` is imported and not copied.
-from complexity import decision_points, DECL
+
+# ── the branch metric ────────────────────────────────────────────────────────────────────────
+# The definition of a ratcheted count belongs with the guard that ratchets it. These three
+# patterns and the counter are the part a guard needs; the audit instrument that used to print
+# the wider reading is gone, and the commit that removed it says why.
+
+DECL = re.compile(r'^(?:@\[[^\]]*\]\s*)*'
+                  r'(?:private\s+|protected\s+|noncomputable\s+|partial\s+|unsafe\s+)*'
+                  r'(theorem|lemma|def|abbrev|instance)\s+([^\s({\[:]+)')
+
+# one match per row, counted by line
+ROW = re.compile(r'^\s*\|')
+# these may occur more than once on a line, so they are counted by occurrence
+POINTS = [re.compile(p) for p in (
+    r'\bif\b.*?\bthen\b', r'\bdite\b', r'\bite\b', r'\bmatch\b.*?\bwith\b',
+    r'\bcases\b', r'\brcases\b', r'\bobtain\b', r'\binduction\b',
+    r'\bby_cases\b', r'<;>', r'\ball_goals\b', r'\bany_goals\b', r'\.elim\b')]
+
+
+def decision_points(lines):
+    """The decision points alone, with no +1 for the declaration itself.
+
+    **The +1 is deliberately not here, and its absence is the whole of what makes the per-file
+    total usable as a ratchet.** The textbook cyclomatic number is `1 + decisions` per unit, and
+    summing that over a file adds one per declaration — so extracting a lemma raises the total
+    by one even when it strictly reduces the work. That is backwards for this repo, whose proof
+    convention wants a proof to cite a lemma rather than inline it: the first real use of this
+    metric was `AdmA_exact`'s fan, where pulling two cases into named lemmas cut the proof term
+    by an order of magnitude and the ratchet called it a rise. A guard that fires on the
+    refactor it exists to encourage is a guard nobody keeps.
+    """
+    n = 0
+    for line in lines:
+        if ROW.match(line):
+            n += 1
+        for rx in POINTS:
+            n += len(rx.findall(line))
+    return n
+
+# This file owns the branch definition above and holds the number to its baseline. It did not
+# own the definition until the audit instruments were deleted, and owning it is the point: a
+# ratcheted count whose definition lives in a file nobody runs is a count nobody can read.
 
 BASELINE = os.path.join("scripts", "ratchets.json")
 
-# `vocab_audit.py`'s, and it must stay `vocab_audit.py`'s: the two scripts report the same
-# quantity to different audiences, and a ratchet on a number nobody else prints is a number
-# nobody checks. **Applied to stripped source, which `vocab_audit.py` does not do** — one
-# commented-out `show` in `Orthogonality.lean` is counted by that script and not by this one,
-# which is the whole of the 333/332 difference.
+# the hand-unfolding count, and this file is the only thing that reports it now. **Applied to
+# stripped source**, so a commented-out `show` is not a site — which is why this number and the
+# one the deleted vocabulary audit printed were never quite equal.
 SITE = re.compile(r'\breplace \w+ :|^\s*(?:show|cases h\w* :)')
 
 # A public theorem: `theorem` or `lemma`, attributes and the other modifiers allowed, `private`
@@ -166,7 +203,7 @@ def measure():
         out["undocumented_public_theorems"][path] = len(undocumented(path))
         heads = [i for i, l in enumerate(lines) if DECL.match(l)]
         # decision points, not per-declaration cyclomatic numbers: summing `1 + decisions`
-        # would make extracting a lemma a rise. `complexity.py`'s `decision_points` says why.
+        # would make extracting a lemma a rise. `decision_points` above says why.
         out["branches"][path] = sum(
             decision_points(lines[i:(heads[k + 1] if k + 1 < len(heads) else len(lines))])
             for k, i in enumerate(heads))

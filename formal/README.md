@@ -148,16 +148,16 @@ and the judgement to it), and `lazy` concludes `⊤` in the model exactly as the
 
 Two independent readings, in opposite directions, asked whether every normative element of
 `docs/codec-calculus.md` has an exact counterpart here and whether a reviewer could check one
-in isolation. They found seven specification defects, five claims true but unlocatable, and two
-corrections to this package's own artifacts. **Eleven of the fourteen are closed**; the three
-still open are named rather than positioned, §10 having gained bullets since — `(held)`'s
-over-strong iso premise, the `℘⁺fin`/`⇀fin` coupling that nothing else states, and what §6's
-commutativity row is actually worth.
+in isolation. That reading is finished and its record is in the commits, which is where an
+audit's findings belong: an audit is not load bearing.
 
-The measurement regenerates: `python3 scripts/fidelity_audit.py`. What is worth watching in it
-is the share of **theorem statements naming a definition documented nowhere** — the script
-prints it; it is not typed here, having been 41% when it was — a statement a
-reviewer cannot read against the specification without a detour.
+**One of its findings is still open, and it lives in `docs/defects.md`**: the wrapper rule
+demands a total iso where the proof consumes only the domain-restricted one. Two others closed
+in the tree rather than on paper. The set carrier's nonemptiness and uniqueness are properties
+of its own type, so the omission the reading found is not there to state. And the commutativity
+row holds at any permutation, by `select_perm` and `altCodec_perm`, which is a stronger claim
+than the row asked for: reordering the options yields the same codec rather than an equivalent
+one.
 
 ## Do the documents still name what exists?
 
@@ -179,8 +179,7 @@ a claim in prose.
 
 The convention is `docs/architecture.md`'s: a definition is unfolded once, in its own
 inversion lemma, and every proof downstream cites the lemma. That document carries the naming
-scheme, which is normative, and what a docstring is for. Where the vocabulary is still incomplete is a
-measurement, and it regenerates: `python3 scripts/vocab_audit.py`.
+scheme, which is normative, and what a docstring is for.
 
 The short version: the *obligation* half of the vocabulary is done (20/22 carriers,
 20/22 lawfulness lemmas); the *observation* half — `X_e`/`X_p`, what a construction

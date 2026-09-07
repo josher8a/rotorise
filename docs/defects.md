@@ -61,11 +61,10 @@ then a test that each path exists. Nothing runs that sweep on a schedule, so any
 true at the commit that measured it and is not maintained.
 
 **Addendum: the sweep reads a path, not a claim.** Three documents this repository once had are
-cited by nine sites and exist at none of them. Six of those citations were pointers and are
-corrected; three are sentences recording that the documents were deleted, and those are right as
-they stand — `formal/scripts/name_drift.py` twice and `formal/scripts/fidelity_audit.py` once. So
-the sweep reports three unresolved paths on a tree with no dangling pointer in it, and it will keep
-doing so.
+still cited, and exist at none of those citations. Every pointer among them is corrected; what
+remains is two sentences in `formal/scripts/name_drift.py` recording that the documents were
+deleted, and those are right as they stand. So the sweep reports three unresolved paths on a tree
+with no dangling pointer in it, and it will keep doing so.
 
 That is the limit worth writing down rather than engineering around. The names convention already
 draws this line — a name the sources do not define is marked, and the mark says the sentence is in

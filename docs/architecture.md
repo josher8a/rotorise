@@ -338,45 +338,18 @@ it lands. Baselines live beside the script rather than in it, so a change to one
 **A ratchet accepts the state it was born in, so it cannot see a defect older than itself** — it
 guards the derivative, not the value. Lowering a baseline is the only move that should be routine.
 
-**`scripts/twins.py`** finds one-sided inversions, pairing on stem and suffix. Most of what it
-reports is not a pair, because a suffix naming a constructor of one carrier cannot exist on the
-other side. The attribute that marks a rewriting lemma is the filter that works, because it means
-one side rewrites where the other unfolds. **It ranks nothing by itself**: a missing twin matters
-in proportion to the fan it would remove, which only the proof-term instrument can say.
+**`scripts/docstring_anchor.py`** checks that no docstring in the library sits above a declaration
+that is not its own. The host's documentation convention binds the *last* docstring before a
+declaration, so where two blocks close and open with nothing between them, every block but the
+last describes nothing a reader can reach: it renders in no tooltip, no link resolves to it, and no
+other check here reads it. That is the shape a scripted deletion leaves behind — the declaration
+goes and its prose drifts down onto whatever follows. **Nothing else can see it**: the type checker
+and the formatter read no comment, the name guard reads the model's side, and the suite passes
+either way. Its blind spot is that the signature is structural rather than semantic. It finds two
+blocks with nothing between them; whether a stranded block is deliberate two-part prose is a
+judgement, so such a block carries a marker and the guard takes it at its word.
 
-**`scripts/complexity.py`** counts decision points, because a vocabulary measure says nothing
-about a proof that does its work by wide case analysis. Its per-file total counts decision points
-and not per-declaration numbers, so **extracting a lemma raises the total even when it strictly
-reduces the work** — which is backwards for a convention whose goal is a proof that cites a lemma.
-A guard that fires on the refactor it exists to encourage is a guard nobody keeps. And a
-definition's branch count is usually its rule's row count rather than a design choice, which is
-why theorems and definitions are reported apart.
-
-**`scripts/complexity.lean`** reports what the kernel holds. **Count the DAG, not the tree**: an
-expression is a DAG, a naive recursive size counts every occurrence of a shared subterm, and the
-tree number can read as three hundred times the largest thing in the development while the kernel
-stores a fraction of it. The sharing ratio is the sharpest signal available, because a tactic
-duplicating one large subterm across every branch is calm by every textual measure. The
-occurrence walk is what turns a ratio into a location, since a size reports a number and never a
-place. Elaboration heartbeats are not deterministic — the counter measures the cost of checking
-under a cache state — so they are a tripwire at an order of magnitude and never a ratchet.
-Transitive dependency count is a dead end: it measures which layer of the spine a declaration sits
-in, and its largest values are the simplest proofs.
-
-**`scripts/unreferenced.lean`** is a diff instrument, not a verdict. In a specification library
-the advertised results are unreferenced by construction, so there is no root set to measure
-against. And members of a `mutual` block reference each other in no constant's value, being
-distinct projections of one induction principle, so there is no edge to follow. Both defects are
-stable across revisions, which is what makes the difference sound where the absolute number is
-not.
-
-**`scripts/blast_radius.lean`** gives transitive dependents of a named declaration, closing over
-each declaration's type and value. It costs a declaration and **cannot cost a constructor**: the
-auto-generated case analysis mentions every constructor in its type, so the closure from any one
-of them is everything that touches the family. A constructor-shape change is a syntactic question
-wanting a syntactic instrument.
-
-**And the syntactic instrument has two blind spots of its own.** A grep piped into a pager is not
+**Grep is the instrument that is left, and it has two blind spots of its own.** A grep piped into a pager is not
 a measurement, and the same pipe hides an exit code as readily as a line — reading a status
 through a pager reports the pager's success. And an edit anchor that is not unique is not an
 anchor: anchor a scripted edit on a whole block that occurs once, and read the line delta before
@@ -650,15 +623,16 @@ convention: they are proof waypoints, which is the one thing a name cannot suppl
 - New term recursion → `term_depth_wf`, and any new inequality beside `Term.depth`.
 - New analysis row → prefer asking the codec over describing the set, then prove its exactness
   clause, because a missing row is silent and silence is sound.
-- Sharpening a row that answers "everything" at a container → find what relied on the slack, and
-  cost it with the dependents instrument rather than with grep.
+- Sharpening a row that answers "everything" at a container → find what relied on the slack
+  before you sharpen it. Nothing measures transitive dependents any more, so the cost is a grep
+  with the two blind spots above, read against what the analyses say the slack is carrying.
 - Citing a Lean name in a current-state document → the name guard must exit 0.
 - Reaching for a count in a document → do not. No guard holds a document to a number any
   more, so a count in prose is unguarded by construction. It belongs in the commit that
   measured it, in `defects.md` where it pins an issue, or in a guard's output.
-- Deleting a declaration → snapshot the reference instrument before and after and read the
-  difference. Then resolve every path and every name the deletion leaves cited, because no guard
-  resolves a cited path.
+- Deleting a declaration → resolve every path and every name the deletion leaves cited, because
+  no guard resolves a cited path and the name guard clears a citation that any file in its source
+  set happens to mention. `git log -S` on the name is what says whether it was ever declared.
 - Touching a normative document, the advertised axiom base, or the library's behaviour → that is
   the owner's decision. Deliver the measurement and stop.
 - Committing anything → run the gate, and gate on its **exit code**. Printing an exit code is not
