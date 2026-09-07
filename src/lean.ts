@@ -610,6 +610,42 @@ const leanTermOfTerm = (t: Term, at: string, forced: number): string => {
             return `Term.object (Body.mk ${leanFinset(names)} (${fields}) ${restTerm})`
         }
         case 'dunion': {
+            /**
+             * **The model reads a string tag and this host stores three bases in one.**
+             *
+             * `readTag` accepts `S` or `N`, so `discriminatedUnion` admits a discriminator at
+             * `string`, `number` or `decimal` and refuses one at `boolean` or `binary` — a `BOOL`
+             * or a `B` names no tag a lookup could reach. `codec.numericliteral.spec.ts` declares
+             * a numeric enum as a union and reads the tag back as a number, deliberately.
+             *
+             * `Denote.lean`'s `tagsOfField` is `Finset String` and matches
+             * `some (.req (.literal .string ls))` alone, so the model reads a numeric tag's set as
+             * **empty**. Such a term emits and elaborates; what it loses is `Discharge.lean`'s
+             * `htags`, which needs every option's tag set non-empty, so the fourth-row discharge
+             * is unavailable for it. Nothing is unsound and nothing fails — the option simply
+             * stops being one the model can select by tag.
+             *
+             * That is a gap between the two sides, and the emitter is where the two sides meet, so
+             * the emitter is where it is named. Measured when this was written: all four corpus
+             * unions use a string tag, so no vector was asserting anything about the other two.
+             * **Whether the host narrows to `string` or the model widens to the stored bases is a
+             * decision above this refusal**, and until it is taken a numeric tag is a codec this
+             * library builds and this bridge declines to state.
+             */
+            const numeric = t.options.find((variant) => {
+                const field =
+                    variant.kind === 'object'
+                        ? variant.body.fields[t.d]
+                        : undefined
+                const tag = field?.mark === 'req' ? field.t : undefined
+                return tag?.kind === 'literal' && tag.base !== 'string'
+            })
+            if (numeric !== undefined) {
+                return refuse(
+                    at,
+                    `this union's discriminator '${t.d}' is a literal at a base other than \`string\`, and \`Denote.lean\`'s \`tagsOfField\` reads a tag set from a string literal alone — so the model would read this option's tags as empty and \`Discharge.lean\`'s \`htags\` would not hold. \`readTag\` carries a tag as \`S\` or \`N\`, which is why the host admits it; the two sides disagree about what a tag is, and that is not the emitter's to guess`,
+                )
+            }
             // One option, one tag: `discriminatedUnion` refuses a literal admitting several
             // values at the declaration, so the table cannot hold one codec twice and the option
             // list cannot repeat one. `Typed.dunion`'s `hdisj` is answered upstream of here — this
