@@ -260,7 +260,7 @@ that count.
 `biome --write` reformats a file that you did not edit. Name the files that you changed
 when you format.
 
-`gate.sh --no-build` runs the four Python guards, and takes about forty seconds.
+`gate.sh --no-build` runs the four Python guards, and takes about one second.
 `--no-build` is honest only when nothing that you touched reaches the elaborator. Run the
 full gate when you edit any `.lean` file, a docstring included.
 
@@ -326,13 +326,14 @@ These are the rulings of the owner, in the terms of this repository.
 - `lake env lean` reads the existing olean of a dependency. Edit `Domain.lean`, check
   `Combinators.lean`, and the new constructor reports as an unknown identifier until
   `lake build Calculus.Domain` runs.
-- A write on the host takes about one second to reach the container mount. Wait two seconds
-  after you edit, and before you build.
+- A write reaches the container mount at once, measured on single-line writes in both
+  directions. A VS Code save and a large write are unmeasured.
 - Run one `lake build` at a time across the sessions that share this tree. Your build
   rewrites the oleans under the `lake env lean` of the other session. A parallel agent may
   run `lake env lean`, which writes nothing.
-- A full rebuild costs about twelve minutes. A change to `Domain.lean` rebuilds every
-  module.
+- A change to `Domain.lean` rebuilds every module. A cold build of `Calculus/` from the
+  mathlib cache costs about 144 seconds over 592 targets. A build that compiles mathlib
+  itself is unmeasured.
 - `by_cases` and `by_contra` reach `Classical.em`. Use `cases h : decide P` and
   `Decidable.byContradiction` instead.
 - Run `#print axioms` on a definition, not on a theorem alone. One classical leak entered
