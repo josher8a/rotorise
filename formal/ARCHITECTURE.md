@@ -327,7 +327,7 @@ already.
 ### 4c. One codec, stated once for both sides of the pair
 
 `Combinators.lean` is <!-- count:combinators_lines -->4147<!-- /count --> lines of the tree's
-<!-- count:tree_lines -->16383<!-- /count -->, and this is its organizing idea; without it
+<!-- count:tree_lines -->16466<!-- /count -->, and this is its organizing idea; without it
 the file reads as the inventory `README.md` already has. A constructor is a **prism** —
 `Ctor α β`, with `into`/`out` and the laws `out_into` (matching what was built returns it) and
 `into_out` (anything that matches was built) — and those two *are* §2's (R) and (C) at a
@@ -482,7 +482,7 @@ were written for is answered and gone.
 
 ### And a third machine, `Orth`, which does not pay — measured
 
-`Orthogonality.lean` is the fourth-largest file at <!-- count:orth_file_lines -->987<!-- /count --> lines — `Soundness.lean` is 1033 —: a decidable certificate for a
+`Orthogonality.lean` is the fourth-largest file at <!-- count:orth_file_lines -->1070<!-- /count --> lines — `Soundness.lean` is 1033 —: a decidable certificate for a
 fragment of (U), over-approximating each term's occupancy per side (`occV`/`occA`) and
 certifying a pair whose occupancies are disjoint, `by decide`. **Measured against what it
 replaces it does not pay**, and its own by-phase table is the measurement — the <!-- count:orth_total_theorems -->10<!-- /count --> hand
