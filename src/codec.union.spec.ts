@@ -300,10 +300,11 @@ describe('the declaration guard, where a term is what the guard reads', () => {
      * set from 17 pairs to 32 with every new theorem holding.
      */
     it('refuses a union where one option can never be selected', () => {
-        // @ts-expect-error `ValidateOptions` refuses this pair at the type level already, and has
-        // since before this rule: `opaque` reads back as `unknown`, which absorbs `string`, so the
-        // two "read back as the same type". This asserts the *runtime* half, which is what a
-        // caller reaches past that type — a cast, or plain JavaScript.
+        // @ts-expect-error the type refuses this pair too, and now **for the right reason**: the
+        // clause naming `opaque` fires ahead of the read-back one, so a caller is told to remove
+        // the option rather than to add a discriminator that cannot help.
+        // `Rotorise.attest.test.ts` pins the message. This asserts the *runtime* half, which is
+        // what a caller reaches past the type — a cast, or plain JavaScript.
         expect(() => union([opaque, string])).toThrow(CodecError)
         // the message names the option that swallows the other, because that is the one to remove,
         // and it names it as the caller wrote it rather than as the term spells it
