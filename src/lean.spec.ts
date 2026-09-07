@@ -66,6 +66,8 @@ import {
     leanAttrOf,
     leanReadModule,
     leanReadResolution,
+    leanReadVector,
+    leanReadVectorModule,
     leanResolutionModule,
     leanSeparation,
     leanSeparationModule,
@@ -75,6 +77,7 @@ import {
     leanVectorModule,
     readResolutionIsUnstatable,
     readRowIsStuck,
+    readVectorIsUnstatable,
 } from './lean'
 
 /** The emitter takes the erased codec; the constructors return precise ones. */
@@ -751,6 +754,24 @@ export const allRefusals = (): readonly Refusal[] => {
     return out
 }
 
+/**
+ * The **read** vectors the committed sample carries: the same "one per kind" rule the refusals use.
+ *
+ * `.readvectors.lean` holds all 27 and the gate elaborates every one. A sample is for reading, so
+ * it takes the ground scalars, one container, one object and one union — enough that a reader sees
+ * what the shape of a read vector is without scrolling through the corpus.
+ */
+const readSample: readonly Vector[] = sampleVectors.filter((one) =>
+    [
+        'scalar_string',
+        'scalar_boolean',
+        'set_of_string',
+        'array_of_string',
+        'object_two_fields',
+        'union_of_two',
+    ].includes(one.name),
+)
+
 export const sampleRefusals: readonly Refusal[] = refusalCodecs.flatMap(
     ([cn, codec]) => {
         const first = sampleVectors.find((v) => !accepts(codec, v.value))
@@ -1156,6 +1177,56 @@ describe('the full refusal set, for the gate', () => {
     })
 })
 
+/**
+ * **The read side of every corpus codec, which the write vectors could not reach.**
+ *
+ * A write vector asserts `(denote t).e v = some a` and a refusal vector asserts `= none`. Both are
+ * about `e`. The model's `p` was asserted only where a union had to choose — `.resolutions.lean`
+ * states `(denote t).p a = some v` per read resolution — so for the corpus at large one half of
+ * every pair was proposed to the model and the other half was not.
+ *
+ * These close that. Both halves come from running the library: `a` is what `encode` wrote for the
+ * corpus value, `v` is what the same codec's `decode` read back from `a`. So the theorem says the
+ * model's `p`, given what this library wrote, answers what this library read — and a change to
+ * either direction stops the file compiling.
+ */
+describe("the read side of every corpus codec, against the model's `p`", () => {
+    /**
+     * **Nothing is skipped, and that is a fact about this corpus rather than about the emitter.**
+     * A numeric value on the read side is unspellable — `Value.num` is `Double`, an axiom with no
+     * closed terms — and the corpus carries none: `scalar_number` is the twenty-eighth codec,
+     * added by hand at three sites, and is not in `sampleVectors`. So the count is the corpus
+     * size, and a corpus that grows a numeric value is meant to move it and be looked at.
+     */
+    it('states a read vector for every codec whose value Lean can spell', () => {
+        const statable = sampleVectors.filter(
+            (one) => readVectorIsUnstatable(one) === undefined,
+        )
+        expect(statable.length).toBe(sampleVectors.length)
+        expect(statable.length).toBe(27)
+        // each asserts the model's `p`, through the comparator that crosses `Value.map`'s binder
+        for (const one of statable) {
+            const vector = leanReadVector(one)
+            expect(vector).toContain('vcheck')
+            expect(vector).toContain('.p')
+            expect(vector).toContain('= .same := rfl')
+        }
+    })
+
+    it('emits them for the gate to elaborate', () => {
+        if (process.env.EMIT_LEAN_REFUSALS) {
+            writeFileSync(
+                join(process.cwd(), 'formal', '.readvectors.lean'),
+                leanReadVectorModule(sampleVectors),
+            )
+        }
+        const module = leanReadVectorModule(sampleVectors)
+        expect(module).toContain('import Calculus.Vectors')
+        // the header states what it could not state, which for this corpus is nothing
+        expect(module).toContain('every corpus codec round trips')
+    })
+})
+
 describe('the committed sample', () => {
     /**
      * A sample that is not regenerated is a sample that lies — **and a regenerated one lies just
@@ -1183,6 +1254,9 @@ describe('the committed sample', () => {
                 protocol,
                 sampleRefusals,
                 allRefusals().length,
+                // the read subset is the `check` sample's alone: a read vector needs `vcheck`, and
+                // the `equation` sample depends on nothing beyond `denote` by design
+                protocol === 'check' ? readSample : [],
             )
             // `UPDATE_LEAN_SAMPLE=1 vitest run src/lean.spec.ts` rewrites them — and then they have
             // to go through Lean again, because nothing here can say the new theorems are true

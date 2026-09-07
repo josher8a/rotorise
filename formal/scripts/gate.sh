@@ -96,6 +96,11 @@ if [ "$RUN_BUILD" -eq 1 ]; then
   # being sufficient and not necessary (`ARCHITECTURE.md` §5). `.readverdicts.lean` is the
   # read-side differential: `AdmA t a` against whether `decode` accepted it, 861 of 864 pairs,
   # the other three stuck on the `Double` axiom and named in its header (§10).
+  # `.readvectors.lean` is the read side of every corpus codec: the model's `p`, given the
+  # attribute the library wrote, against the value the library read back. The write vectors and
+  # the refusal vectors are both about `e`, and `p` was asserted only where a union had to choose,
+  # so for the corpus at large one half of each pair went unproposed. Both halves here come from
+  # running the library, so a change to either direction stops the file compiling.
   # `.resolutions.lean` widens the two pinned union vectors to every (union, value) and
   # (union, attribute) pair — which option the model's `select` picks against the one the
   # library's resolver did. The counts, and which pairs cannot be stated at all, are in that
@@ -110,7 +115,8 @@ if [ "$RUN_BUILD" -eq 1 ]; then
   run 'vector bridge' docker exec "$CONTAINER" bash -lc \
     'cd /workspaces/Rotorise/formal &&
      for f in ../src/lean.sample.check.lean ../src/lean.sample.lean .vectors.full.lean \
-              .separations.lean .readverdicts.lean .resolutions.lean; do
+              .separations.lean .readverdicts.lean .resolutions.lean \
+              .readvectors.lean; do
        [ -f "$f" ] || { echo "missing $f"; exit 1; }
        out=$(lake env lean "$f" 2>&1) || { echo "$out"; exit 1; }
        # warnings are failures here: the generated files are machine-written, so a warning is
