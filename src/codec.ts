@@ -41,6 +41,7 @@ import {
     member as memberOf,
     occA,
     occV,
+    restricts,
     separable,
     setBaseOf,
 } from './term'
@@ -2870,6 +2871,55 @@ type BothObjects<A, B> = A extends AnyObjectCodec
         : false
     : false
 
+/**
+ * **One option's decoded type is a strict subtype of another's**, so every value it admits, the
+ * other admits too.
+ *
+ * `Overlaps` above answers assignability *either* way round and reports ambiguity. This is the
+ * half of it where the containment is one-directional, and it is a different failure with
+ * different advice: §5's `select` acts only where exactly one option admits, so the narrower
+ * option is never selected and no discriminator reaches it.
+ *
+ * Mutual assignability answers `false` here and falls through to `Overlaps`, which is the right
+ * split: two options that read back as the *same* type are ambiguous, and one inside the other is
+ * dead. `union([string('A'), string('B')])` answers `false` on both counts, neither literal being
+ * assignable to the other, and declares.
+ */
+type Restricts<A, B> = [Decoded<A>] extends [Decoded<B>]
+    ? [Decoded<B>] extends [Decoded<A>]
+        ? false
+        : true
+    : false
+
+type RestrictsFrom<
+    Head,
+    Rest extends readonly unknown[],
+    At extends number,
+    Cursor extends readonly unknown[],
+> = Rest extends readonly [infer Next, ...infer Tail extends readonly unknown[]]
+    ?
+          | (BothObjects<Head, Next> extends true
+                ? never
+                : Restricts<Head, Next> extends true
+                  ? `option ${At} inside option ${Cursor['length']}`
+                  : Restricts<Next, Head> extends true
+                    ? `option ${Cursor['length']} inside option ${At}`
+                    : never)
+          | RestrictsFrom<Head, Tail, At, [...Cursor, unknown]>
+    : never
+
+type Restricting<
+    Options extends readonly unknown[],
+    Cursor extends readonly unknown[] = [],
+> = Options extends readonly [
+    infer Head,
+    ...infer Rest extends readonly unknown[],
+]
+    ?
+          | RestrictsFrom<Head, Rest, Cursor['length'], [...Cursor, unknown]>
+          | Restricting<Rest, [...Cursor, unknown]>
+    : never
+
 type OverlapsFrom<
     Head,
     Rest extends readonly unknown[],
@@ -2915,17 +2965,23 @@ type HasOpaque<Options extends readonly unknown[]> = Options extends readonly [
     : false
 
 /**
- * Three rules, in the order that gives the more specific message.
+ * Four rules, in the order that gives the more specific message.
  *
- * **An `opaque` option is reported first, because it is the one whose advice differs.** The other
- * two failures are both ambiguity, and the answer to ambiguity is a discriminator. This one is not
- * ambiguity: `opaque` admits every value the other options admit, and §5's `select` acts only
- * where *exactly one* option does, so the union is undefined wherever another option admits and
- * `opaque` everywhere else. That other option can never be selected. No discriminator fixes it and
- * no ranking resolves it — the option has to go, and the message has to say so.
+ * **The two containment rules are reported first, because their advice differs.** The other two
+ * failures are ambiguity, and the answer to ambiguity is a discriminator. Containment is not
+ * ambiguity: where one option admits every value another admits, §5's `select` acts nowhere on the
+ * narrower one, so it is a declared option no value reaches. No discriminator fixes it and no
+ * ranking resolves it — the option has to go, and the message has to say so.
  *
- * It reads back as `unknown`, so the overlap clause below would fire on it and offer the
- * discriminator advice, which is why the order is load-bearing rather than cosmetic.
+ * **`opaque` is the containment rule at its widest**, and it is matched on the term's kind rather
+ * than on the decoded type, because it reads back as `unknown`. {@link Restricting} is the same
+ * rule where the decoded types say it: a literal inside its base, a set of a literal inside the
+ * plain set. Both would otherwise fall to the overlap clause and be offered the discriminator
+ * advice, which is why the order is load-bearing rather than cosmetic.
+ *
+ * The runtime carries the same two rules in the same order — `term.ts`'s `restricts` ahead of the
+ * occupancy rows — so a cast that reaches past this gets the same sentence rather than a different
+ * one.
  *
  * An overlap is the deeper of the remaining two — the union cannot round-trip at all — so it is
  * reported before a name collision, which {@link ValidateVariants} reports.
@@ -2933,9 +2989,11 @@ type HasOpaque<Options extends readonly unknown[]> = Options extends readonly [
 export type ValidateOptions<Options extends readonly unknown[]> =
     HasOpaque<Options> extends true
         ? ErrorMessage<`[union] one option is \`opaque\`, which admits every value the others admit — so no value can select between them and the others can never be chosen. Remove the \`opaque\` option; a discriminator does not fix this`>
-        : [Overlapping<Options>] extends [never]
-          ? ValidateVariants<ObjectSpecsOf<Options>>
-          : ErrorMessage<`[union] ${Overlapping<Options>} read back as the same type, so nothing about a value says which one it came from — give them a discriminator and use discriminatedUnion`>
+        : [Restricting<Options>] extends [never]
+          ? [Overlapping<Options>] extends [never]
+              ? ValidateVariants<ObjectSpecsOf<Options>>
+              : ErrorMessage<`[union] ${Overlapping<Options>} read back as the same type, so nothing about a value says which one it came from — give them a discriminator and use discriminatedUnion`>
+          : ErrorMessage<`[union] ${Restricting<Options>}: every value the narrower option admits, the wider one admits too, so no value can ever select it. Remove the narrower option; a discriminator does not fix this`>
 
 /**
  * An object codec with its spec forgotten — the constraint form, as {@link AnyCodec} is for codecs.
@@ -3389,6 +3447,22 @@ export const union = <const Options extends readonly AnyCodec[]>(
     for (const [at, { option: first, term: x }] of pairs.entries()) {
         for (const { option: second, term: y } of pairs.slice(at + 1)) {
             if (separable(x, y)) continue
+            // **The restriction refusal comes first, because its advice differs.** The two below
+            // are ambiguity and the answer to ambiguity is a discriminator. This one is not:
+            // every value the narrower option admits, the wider one admits too, so `select` acts
+            // nowhere on the narrower and it can never be chosen. The option has to go. The
+            // `opaque` refusal is the same sentence and `ValidateOptions` orders its clauses the
+            // same way, for the same reason.
+            const narrow = restricts(x, y)
+                ? ([first, second] as const)
+                : restricts(y, x)
+                  ? ([second, first] as const)
+                  : undefined
+            if (narrow) {
+                throw new CodecError(
+                    `${narrow[0].describe} admits only values that ${narrow[1].describe} also admits, so no value can ever select it and the option can never be chosen. Remove it; a discriminator does not fix this`,
+                )
+            }
             // the label the refusal names, asked again on the path that is about to throw:
             // `separable` answers the `Bool` the model's `Orth` answers, so the meeting is
             // recomputed here rather than carried back through it

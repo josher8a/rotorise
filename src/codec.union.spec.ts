@@ -320,4 +320,52 @@ describe('the declaration guard, where a term is what the guard reads', () => {
         expect(() => opaque.encode('a')).not.toThrow()
         expect(() => union([string, boolean])).not.toThrow()
     })
+
+    /**
+     * **The same rule, two widths narrower**, and it is the rule rather than a second exemption:
+     * an option whose admitted values are all admitted by another can never be selected. `opaque`
+     * is the widest instance, where "another" is every option. These two are the narrowest, where
+     * one option is a *restriction of the thing it restricts*: a literal against its own base's
+     * ground term, and a set of a literal against the plain set at that base.
+     *
+     * **The type level already refused both**, and with the discriminator advice, which is the
+     * advice that cannot help. So what moves here is the runtime, which used to accept them
+     * through the `identifies` exemption, and the message, which now names the option to remove.
+     * A typed caller cannot have shipped one of these; what reaches the runtime is a cast, plain
+     * JavaScript, or an erased path.
+     *
+     * JH ruled it, on the ground that it is `opaque`'s failure at a narrower width. The corpus's
+     * refusal set moved from 32 to 36 and `Orth` declines all four, `not_orth_literal_string` on
+     * purpose.
+     */
+    it('refuses an option that is a restriction of another option', () => {
+        // @ts-expect-error the type refuses this pair too, and `Rotorise.attest.test.ts` pins the
+        // message; this asserts the runtime half, which is what a cast reaches past
+        expect(() => union([string, string('A')])).toThrow(CodecError)
+        // @ts-expect-error the same refusal, and the order of the options does not matter
+        expect(() => union([string('A'), string])).toThrow(CodecError)
+        // the message names the narrower option first, because that is the one to remove
+        // @ts-expect-error the same type-level refusal
+        expect(() => union([string, string('A')])).toThrow(
+            /admits only values that/,
+        )
+        // …and it says the thing a discriminator cannot be the answer to
+        // @ts-expect-error the same type-level refusal
+        expect(() => union([string, string('A')])).toThrow(
+            /a discriminator does not fix this/,
+        )
+        // a set of a literal is a restriction of the plain set at its base, one spelling out
+        // @ts-expect-error the same type-level refusal
+        expect(() => union([string.set(), string.set('a', 'b')])).toThrow(
+            CodecError,
+        )
+
+        // **and two restrictions of one base still declare**, which is the shape this is not
+        // about: neither literal contains the other, and `Orth` certifies the pair since `OrthL`
+        expect(() => union([string('A'), string('B')])).not.toThrow()
+        expect(() => union([string('A'), number])).not.toThrow()
+        expect(() =>
+            union([string.set('a', 'b'), string.set('c')]),
+        ).not.toThrow()
+    })
 })

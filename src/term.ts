@@ -580,6 +580,41 @@ export const identifies = (t: Term): boolean => {
 }
 
 /**
+ * **One option's values are all admitted by the other**, so the narrower one can never be chosen.
+ *
+ * §5's `select` acts only where *exactly one* option admits. If every value `X` admits is also
+ * admitted by `Y`, then the union is undefined on all of `X` and is `Y` everywhere else, so `X` is
+ * a declared option no value reaches. That is not ambiguity and no discriminator fixes it. The
+ * option has to go.
+ *
+ * `opaque` was the first instance and `f083188` refused it. These are the other two, and they are
+ * the same sentence: a **restriction against the thing it restricts**. A literal against its own
+ * base's ground term, and a set of a literal against the plain set at that base — which is spelled
+ * `refine(set b, each(members …))`, so this reads the predicate rather than a subterm.
+ *
+ * Two restrictions of one base are a different shape and still declare:
+ * `union([string('A'), string('B')])` is two options neither of which contains the other, and
+ * `Orth` certifies it since `OrthL`. So this row asks containment, never disjointness.
+ *
+ * The type level says the same thing already — `Overlaps` fires on a subtype either way round —
+ * so a typed caller never reaches this. What reaches it is a cast, a JavaScript caller, or an
+ * erased path. This is the runtime agreeing with the type rather than a new refusal.
+ */
+export const restricts = (x: Term, y: Term): boolean => {
+    // a literal is a refinement of its base: every value it admits, the base admits
+    if (x.kind === 'literal' && y.kind === x.base) return true
+    // …and a set of a literal is a restriction of the plain set at that base
+    return (
+        x.kind === 'refine' &&
+        x.inner.kind === 'set' &&
+        x.q.kind === 'each' &&
+        x.q.of.kind === 'members' &&
+        y.kind === 'set' &&
+        y.base === x.inner.base
+    )
+}
+
+/**
  * **Whether a union may hold these two options**, asked at the declaration.
  *
  * **This is not a port of `Orth`, and the difference is the direction.** `Orth` is a *certificate*:
@@ -599,6 +634,11 @@ export const identifies = (t: Term): boolean => {
  * requires a name the other does not declare". So the model's certificate for objects already runs,
  * one level up, and the type-level snapshot pins it. Answering `true` here is deferring to it, not
  * skipping it.
+ *
+ * **An option that is a restriction of another.** {@link restricts}, and it *refuses* where every
+ * other row accepts, so it sits ahead of them. `opaque` was the first instance of the rule and had
+ * its own paragraph below; a literal against its base and a literal set against its base's plain
+ * set are the other two.
  *
  * **An option that identifies its own values.** {@link identifies}, whose warrants are on it, and
  * the row is permanent rather than pending. `Orth` carries a phase `OrthL` now, so the flat
@@ -633,6 +673,7 @@ export const identifies = (t: Term): boolean => {
  */
 export const separable = (x: Term, y: Term): boolean => {
     if (x.kind === 'object' || y.kind === 'object') return true
+    if (restricts(x, y) || restricts(y, x)) return false
     if (identifies(x) || identifies(y)) return true
     const writable = meet(occV(x), occV(y))
     const readable = meet(occA(x), occA(y))
