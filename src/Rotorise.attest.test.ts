@@ -101,6 +101,30 @@ describe('the union refusals a caller reads at compile time', () => {
         )
     })
 
+    /**
+     * **The same rule two widths narrower**, and the clause order is what this pins: a literal is
+     * assignable to its base, so the overlap clause would fire and offer a discriminator, which is
+     * the advice that cannot help. `Restricting` sits ahead of it and names the option to remove.
+     */
+    it('names a literal inside its own base as the option to remove', () => {
+        attest(() =>
+            // @ts-expect-error the clause under test
+            union([string, string('A')]),
+        ).type.errors.snap(
+            'Argument of type \'[StringCodec, ConstantCodec<"A", Attribute<"S">>]\' is not assignable to parameter of type \'readonly [StringCodec, ConstantCodec<"A", Attribute<"S">>] & ErrorMessage<"[union] option 1 inside option 0: every value the narrower option admits, the wider one admits too, so no value can ever select it. Remove the narrower option; a discriminator does not fix this">\'.Property \'[errorMessage]\' is missing in type \'[StringCodec, ConstantCodec<"A", Attribute<"S">>]\' but required in type \'ErrorMessage<"[union] option 1 inside option 0: every value the narrower option admits, the wider one admits too, so no value can ever select it. Remove the narrower option; a discriminator does not fix this">\'.',
+        )
+    })
+
+    /** …and the same at one spelling out: a set of a literal inside the plain set at its base. */
+    it('names a set of a literal inside the plain set at its base', () => {
+        attest(() =>
+            // @ts-expect-error the clause under test
+            union([string.set(), string.set('a', 'b')]),
+        ).type.errors.snap(
+            'Argument of type \'[AttributeCodec<ReadonlySet<string>, SS>, AttributeCodec<ReadonlySet<"a" | "b">, SS>]\' is not assignable to parameter of type \'readonly [AttributeCodec<ReadonlySet<string>, SS>, AttributeCodec<ReadonlySet<"a" | "b">, SS>] & ErrorMessage<"[union] option 1 inside option 0: every value the narrower option admits, the wider one admits too, so no value can ever select it. Remove the narrower option; a discriminator does not fix this">\'.Property \'[errorMessage]\' is missing in type \'[AttributeCodec<ReadonlySet<string>, SS>, AttributeCodec<ReadonlySet<"a" | "b">, SS>]\' but required in type \'ErrorMessage<"[union] option 1 inside option 0: every value the narrower option admits, the wider one admits too, so no value can ever select it. Remove the narrower option; a discriminator does not fix this">\'.',
+        )
+    })
+
     /** And a pair that is merely ambiguous still gets the advice that does apply. */
     it('still offers a discriminator where a discriminator is the answer', () => {
         attest(() =>
