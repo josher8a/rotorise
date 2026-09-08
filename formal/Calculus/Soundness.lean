@@ -405,7 +405,7 @@ theorem literalCodec_tag {k : GroundKind} (hk : k = .string ∨ k = .decimal)
         split at h
         · rename_i hin
           refine ⟨tagv, ?_, rfl, ?_⟩
-          · simp only [tagsOfField, Finset.mem_map, Function.Embedding.coeFn_mk]
+          · simp only [tagsOfField, Finset.mem_map]
             exact ⟨⟨tagv, hst⟩, of_decide_eq_true hin, rfl⟩
           · rw [← Option.some.inj h]; rfl
         · exact nomatch h

@@ -63,7 +63,7 @@ theorem cR_W : ∀ {μ}, cR.μ = some μ → ∀ {t a}, cR.e t = some a → a.me
     not losing the *member*, which is the distance between (R) and (MP). -/
 theorem cR_MP : ∀ {a t a'}, cR.p a = some t → cR.e t = some a' → Agree a' a := by
   intro a t a' hp he; cases a <;> simp [cR] at hp; split at hp <;> simp_all [cR]; subst_vars
-  simp [cR] at he; subst_vars; exact .s _ _
+  simp [] at he; subst_vars; exact .s _ _
 
 /-- **(C) fails alone.** Reads every `S`, writes only `"a"` — so `p` escapes `dom(e)`. -/
 def cC : Codec where
@@ -77,7 +77,7 @@ theorem cC_R : ∀ {t a}, cC.e t = some a → cC.p a = some t := by
   intro t a h; cases t <;> simp [cC] at h; split at h <;> simp_all [cC]; subst_vars; rfl
 /-- …and names its member. -/
 theorem cC_W : ∀ {μ}, cC.μ = some μ → ∀ {t a}, cC.e t = some a → a.member = μ := by
-  intro μ hμ t a h; cases t <;> simp [cC] at h hμ; split at h <;> simp_all [cC]; subst_vars; rfl
+  intro μ hμ t a h; cases t <;> simp [cC] at h hμ; split at h <;> simp_all []; subst_vars; rfl
 /-- …but `"b"` is readable and not writable, which is (C) and nothing else. -/
 theorem cC_notC : ¬ (∀ {a t}, cC.p a = some t → (cC.e t).isSome) := by
   intro h; have := @h (.s "b") (.str "b") rfl; simp [cC] at this
@@ -185,7 +185,7 @@ theorem lazy_p_eq (t : Term) : (denote (.lazy t)).p = (denote t).p := rfl
 
 /-- And the index really does differ: `lazy` concludes `⊤`, `string` names `S`. -/
 theorem lazy_μ_ne : (denote (.lazy .string)).μ ≠ (denote .string).μ := by
-  simp [denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, stringCodec]
+  simp [denote, denote, stringCodec]
 
 /-- §6: `lazy(γ) ≢ γ(∗)` — refuted on the member index, with the pair identical. -/
 theorem not_equiv_lazy : ¬ Codec.Equiv (denote (.lazy .string)) (denote .string) :=
@@ -201,8 +201,8 @@ theorem not_equiv_union_extend :
     ¬ Codec.Equiv (denote (.union [.string])) (denote (.union [.string, .boolean])) := by
   intro h
   have hb := (h.heldSet (.bool true)).mpr
-  simp [denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, optionSems, denoteμs, optionSemOf, specOf, OptionSem.byAttempt,
-        altCodec, select, stringCodec, booleanCodec] at hb
+  simp [denote, denote, optionSems, denoteμs, optionSemOf, specOf, OptionSem.byAttempt,
+        altCodec, stringCodec, booleanCodec] at hb
 
 /-! ## `union(array(c₁), array(c₂)) ≢ array(union(c₁, c₂))`
 
@@ -216,8 +216,8 @@ theorem not_equiv_union_array :
         (denote (.array (.union [.literal .string (.of "A" ∅), .literal .string (.of "B" ∅)]))) := by
   intro h
   have hv := (h.heldSet (.arr [.str "A", .str "B"])).mpr
-  simp [denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, optionSems, denoteμs, optionSemOf, specOf, OptionSem.byAttempt,
-        altCodec, select, arrayCodec, literalCodec, baseCodec, Codec.restrict, inL,
+  simp [denote, denote, optionSems, denoteμs, optionSemOf, specOf, OptionSem.byAttempt,
+        altCodec, arrayCodec, literalCodec, baseCodec, Codec.restrict, inL,
         stringCodec, NEFinset.of, HLit] at hv
 
 /-! ## `tuple(c₁ … cₙ, rest(c))` is neither a tuple nor an array of unions
@@ -235,10 +235,9 @@ theorem not_equiv_tupleTail_tuple :
   have hv := (h.heldSet (.arr [.str "a", .str "b"])).mp
   -- `simp`'s classical push-neg turned this into an existential and pulled
   -- `Classical.choice` in with it; the implication is the constructive shape.
-  simp only [denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteList, denoteOpt, tupleCodec, align, stringCodec,
-    Option.map_some, List.all_cons, List.all_nil, Bool.and_true, Bool.true_and,
-    Option.some.injEq, exists_eq_left', List.mem_cons, List.not_mem_nil, or_false,
-    Prod.mk.injEq] at hv
+  simp only [denote, denote, denoteList, denoteOpt, tupleCodec, align, stringCodec,
+    Option.map_some, 
+    Option.some.injEq, exists_eq_left', List.mem_cons, List.not_mem_nil, or_false] at hv
   exact absurd (hv (by rintro p (rfl | rfl) <;> exact ⟨_, rfl⟩))
     (by rintro ⟨ps, hps, -⟩; simp at hps)
 
@@ -248,8 +247,8 @@ theorem not_equiv_tupleTail_array :
                   (denote (.array (.union [.string]))) := by
   intro h
   have hv := (h.heldSet (.arr [])).mpr
-  simp [denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteList, denoteOpt, optionSems, denoteμs, optionSemOf, specOf,
-        OptionSem.byAttempt, altCodec, select, tupleCodec, align, arrayCodec, stringCodec] at hv
+  simp [denote, denote, denoteList, denoteOpt, optionSems, denoteμs, optionSemOf, specOf,
+        OptionSem.byAttempt, altCodec, tupleCodec, align, arrayCodec, stringCodec] at hv
 
 /-! ## `refine(held(c, f, g), q) ≢ held(refine(c, q), f, g)`
 
@@ -272,7 +271,7 @@ theorem not_equiv_refine_held :
                   (denote (.held (.refine .string (.closure predA)) isoF id)) := by
   intro h
   have hv := (h.heldSet (.str "B")).mpr
-  simp [denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, Codec.through, Codec.restrict, Pred.eval, stringCodec, isoF, predA] at hv
+  simp [denote, denote, Codec.through, Codec.restrict, Pred.eval, stringCodec, isoF, predA] at hv
 
 /-! ## `legacy(c, r)` breaks (MP), and `e ∘ p ≢ id`
 
@@ -375,13 +374,13 @@ the model shows the condition is needed for *interchangeability*, not for `≡`.
 theorem assoc_left_e :
     (denote (.union [.string, .union [.literal .string (.of "A" ∅), .literal .string (.of "A" ∅)]])).e (.str "A")
       = some (.s "A") := by
-  simp [denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, optionSems, denoteμs, optionSemOf, specOf, OptionSem.byAttempt,
+  simp [denote, denote, optionSems, denoteμs, optionSemOf, specOf, OptionSem.byAttempt,
         altCodec, select, stringCodec, literalCodec, baseCodec, Codec.restrict, inL]
 
 /-- Right: three options admit, so the union refuses globally. -/
 theorem assoc_right_e :
     (denote (.union [.string, .literal .string (.of "A" ∅), .literal .string (.of "A" ∅)])).e (.str "A") = none := by
-  simp [denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, optionSems, denoteμs, optionSemOf, specOf, OptionSem.byAttempt,
+  simp [denote, denote, optionSems, denoteμs, optionSemOf, specOf, OptionSem.byAttempt,
         altCodec, select, stringCodec, literalCodec, baseCodec, Codec.restrict, inL]
 
 /-- The two associativity forms are `≡` but not interchangeable: one writes where the
@@ -565,7 +564,7 @@ theorem literalNRule_holds_what_it_cannot_write {d : Double}
     (literalNRule (.of d ∅)).T (.num d) ∧ (literalNRule (.of d ∅)).e (.num d) = none := by
   refine ⟨⟨d, NEFinset.mem_of d ∅, rfl⟩, ?_⟩
   show (if inLNRule (.of d ∅) (.num d) = true then numberCodec.e (.num d) else none) = none
-  rw [if_pos (by simp [inLNRule, NEFinset.mem_of]), numberCodec_e_num,
+  rw [if_pos (by simp [inLNRule]), numberCodec_e_num,
     dif_neg (by rw [hw]; exact Bool.noConfusion)]
 
 /-! Two theorems here quantified over a derivation only to read `hD` back off it. With the gate

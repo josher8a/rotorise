@@ -163,7 +163,7 @@ structure Parsed where
   exp : Int
 
 def parse (s : Numeral) : Option Parsed :=
-  let cs := stripSign s.data
+  let cs := stripSign s.toList
   let (ip, r1) := spanDigits cs
   if ip.isEmpty then none
   else
@@ -256,7 +256,7 @@ def normalMag (cs : List Char) : Bool :=
 /-- **What DynamoDB stores.** `WF` says the service accepts the string; this says it hands
     the same string back. The sign is refused on zero, because `"-0"` comes back `"0"`. -/
 def Normal (s : Numeral) : Bool :=
-  match s.data with
+  match s.toList with
   | '-' :: cs => normalMag cs && !(cs == ['0'])
   | cs => normalMag cs
 
@@ -331,7 +331,7 @@ theorem Double.roundtrip : ∀ d : Double, Double.ofDec (Double.toDec d) = some 
   numericHost.roundtrip
 
 /-- Equality of doubles is decidable (bit patterns; NaN excluded from the model). -/
-noncomputable def Double.decEq : DecidableEq Double := numericHost.decEq
+@[instance_reducible] noncomputable def Double.decEq : DecidableEq Double := numericHost.decEq
 
 attribute [instance] Double.decEq
 

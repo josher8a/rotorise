@@ -1539,7 +1539,7 @@ def arrayCodec (c : Codec) : Codec :=
     equation is what carries the three lemmas across. -/
 theorem arrayCodec_eq {c : Codec} :
     arrayCodec c = entrywise arrV lA .L (fun vs => ∀ x ∈ vs, c.T x) c.e c.p := by
-  ext v <;> cases v <;> simp_all [arrayCodec, entrywise, carriedCodec, arrV, lA, Ctor.into, Ctor.out]
+  ext v <;> cases v <;> simp_all [arrayCodec, entrywise, carriedCodec, arrV, lA]
 
 /-- (R), (C), (W) — `L` is the member every `arr` writes. -/
 theorem lawfulCore_arrayCodec {c : Codec} (h : LawfulCore c) :
@@ -1867,7 +1867,7 @@ theorem tupleCodec_eq :
       (fun vs => (align cs tail vs).bind (traverse fun cv => cv.1.e cv.2))
       (fun as => (align cs tail as).bind (traverse fun ca => ca.1.p ca.2)) := by
   refine Codec.ext ?_ rfl ?_ ?_ <;> funext v <;> cases v <;>
-    simp [tupleCodec, carriedCodec, arrV, lA, Ctor.into, Ctor.out]
+    simp [tupleCodec, carriedCodec, arrV, lA]
 
 /-- (R) for the payload pair: realign the written row against the same codecs, then
     read back position by position. -/
@@ -3461,7 +3461,7 @@ theorem valPresentB_of {sems : MapOf FieldSem} {names : Finset Name}
     valPresentB sems names = true := by
   refine decide_eq_true fun k => ?_
   cases hs : sems.2 k with
-  | opt c => simp [valPresentAt, hs]
+  | opt c => simp [valPresentAt]
   | req c =>
     simpa [valPresentAt, hs] using
       h k.1 (.req c) (by rw [MapOf.at_of_mem k, hs]) (fun _ h' => nomatch h')
@@ -3483,8 +3483,8 @@ theorem reqPresentB_of {sems : MapOf FieldSem} {names : Finset Name}
   refine decide_eq_true fun k => ?_
   cases hs : sems.2 k with
   | req c => simpa [reqPresentAt, hs] using h k.1 c (by rw [MapOf.at_of_mem k, hs])
-  | opt c => simp [reqPresentAt, hs]
-  | fb c v => simp [reqPresentAt, hs]
+  | opt c => simp [reqPresentAt]
+  | fb c v => simp [reqPresentAt]
 
 
 /-! ### The keyed steps: round trip, definedness, agreement, and name preservation -/
