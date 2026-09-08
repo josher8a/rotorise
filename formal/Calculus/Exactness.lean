@@ -521,7 +521,7 @@ theorem alignP_iff (tail : Option Term) (htl : ∀ t ∈ tail, ExactV t) :
           simp [hal, ih]
         | some ps =>
           rw [hal] at ih
-          simp only [hal, Option.map_some', Option.some_bind, Option.bind_some] at ih ⊢
+          simp only [hal, Option.map_some, Option.bind_some] at ih ⊢
           rw [traverse_cons_isSome, Bool.and_eq_true, ← ht v, ← ih]
   | t :: ts, [], _ => by
       cases tail <;> simp [alignP, AdmList, AdmOptT, align, denoteList, denoteOpt]
@@ -531,11 +531,11 @@ theorem alignP_iff (tail : Option Term) (htl : ∀ t ∈ tail, ExactV t) :
       simp only [alignP, AdmList, AdmOptT, align, denoteList, denoteOpt, Bool.and_eq_true]
       cases hal : align (denoteList ts) (denoteOpt tail) vs with
       | none =>
-        simp only [hal, Option.map_none', Option.bind_none, Option.isSome_none] at ih ⊢
+        simp only [hal, Option.map_none, Option.bind_none, Option.isSome_none] at ih ⊢
         simp at ih
         simp [ih]
       | some ps =>
-        simp only [hal, Option.map_some', Option.some_bind, Option.bind_some] at ih ⊢
+        simp only [hal, Option.map_some, Option.bind_some] at ih ⊢
         rw [traverse_cons_isSome, Bool.and_eq_true, ← ht v, ← ih]
 
 
@@ -628,11 +628,11 @@ theorem ExactV_object {fields : Finset Name} {fld : {k // k ∈ fields} → Fiel
         = true
     rw [valPresentT_eq]
     simp only [objectCodec, objectCodecCore, carriedCodec, mapV, Ctor.out, objWrite,
-      objAdmV, Bool.and_eq_true, decide_eq_true_eq, Option.isSome_map',
-      Option.some_bind, Option.bind_some]
+      objAdmV, Bool.and_eq_true, decide_eq_true_eq, Option.isSome_map,
+      Option.bind_some]
     by_cases hv : valPresentB ⟨fields, fun k => fieldSem (fld k)⟩ keys = true
     · rw [if_pos hv]
-      simp only [hv, true_and, Option.isSome_map', funImage_isSome_iff]
+      simp only [hv, true_and, Option.isSome_map, funImage_isSome_iff]
       exact forall_congr' fun k => entry_iff hf hr k.1 (g k)
     · rw [if_neg hv]
       simp [hv]
@@ -886,7 +886,6 @@ theorem Adm_exact : ∀ (t : Term), ExactV t
       case arr xs =>
         simp only [Adm, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, arrayCodec, Option.isSome_map]
         rw [AdmAll_iff hc, ← traverse_isSome_iff]
-        cases traverse (denote c).e xs <;> simp
       all_goals simp [Adm, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, arrayCodec]
   | .record c => by
       have hc := Adm_exact c
@@ -895,12 +894,12 @@ theorem Adm_exact : ∀ (t : Term), ExactV t
       -- The entry-key transport is gone with the traversal: `funImage` is defined
       -- exactly where every entry's `e` is, which is the row verbatim.
       case map keys f =>
-        simp only [Adm, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, recordCodec, Option.isSome_map', decide_eq_true_eq,
+        simp only [Adm, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, recordCodec, Option.isSome_map, decide_eq_true_eq,
           funImage_isSome_iff]
         exact forall_congr' fun k => hc (f k)
       -- the other nine rows are refused on both sides, and unfolding `recordCodec`'s
       -- `funImage` to see it is more work than reading it off the two `false`s
-      all_goals simp only [Adm, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, recordCodec, Option.map_none',
+      all_goals simp only [Adm, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, recordCodec, Option.map_none,
         Option.isSome_none, Bool.false_eq_true]
   | .refine c p => by
       have hc := Adm_exact c
@@ -1383,7 +1382,7 @@ theorem ExactA_set (b : SetBase) : ExactA (.set b) := by
     case string =>
       have h : (decSet stringCodec Attr.s S).isSome = true :=
         decSet_isSome_str (fun _ _ => rfl) (fun _ _ _ _ _ h1 h2 => by
-          simp only [stringCodec, Option.some_bind, vStr] at h1 h2
+          simp only [stringCodec, Option.bind_some, vStr] at h1 h2
           exact (Option.some.inj h1).trans (Option.some.inj h2).symm)
       exact Iff.intro (fun _ => h) (fun _ => rfl)
     all_goals
@@ -1425,7 +1424,7 @@ theorem ExactA_set (b : SetBase) : ExactA (.set b) := by
       obtain ⟨x₀, hx₀⟩ := S.2
       have h : (decSet binaryCodec Attr.b S).isSome = true :=
         decSet_isSome_bin hx₀ rfl rfl (fun _ _ => rfl) (fun _ _ _ _ _ h1 h2 => by
-          simp only [binaryCodec, Option.some_bind, vBin] at h1 h2
+          simp only [binaryCodec, Option.bind_some, vBin] at h1 h2
           exact (Option.some.inj h1).trans (Option.some.inj h2).symm)
       exact Iff.intro (fun _ => h) (fun _ => rfl)
     all_goals
@@ -1458,7 +1457,7 @@ theorem alignPA_iff (tail : Option Term) (htl : ∀ t ∈ tail, ExactA t) :
           simp [hal, ih]
         | some ps =>
           rw [hal] at ih
-          simp only [hal, Option.map_some', Option.some_bind, Option.bind_some] at ih ⊢
+          simp only [hal, Option.map_some, Option.bind_some] at ih ⊢
           rw [traverse_cons_isSome, Bool.and_eq_true, ← ht a, ← ih]
   | t :: ts, [], _ => by
       cases tail <;> simp [alignPA, AdmAList, AdmAOptT, align, denoteList, denoteOpt]
@@ -1468,11 +1467,11 @@ theorem alignPA_iff (tail : Option Term) (htl : ∀ t ∈ tail, ExactA t) :
       simp only [alignPA, AdmAList, AdmAOptT, align, denoteList, denoteOpt, Bool.and_eq_true]
       cases hal : align (denoteList ts) (denoteOpt tail) as with
       | none =>
-        simp only [hal, Option.map_none', Option.bind_none, Option.isSome_none] at ih ⊢
+        simp only [hal, Option.map_none, Option.bind_none, Option.isSome_none] at ih ⊢
         simp at ih
         simp [ih]
       | some ps =>
-        simp only [hal, Option.map_some', Option.some_bind, Option.bind_some] at ih ⊢
+        simp only [hal, Option.map_some, Option.bind_some] at ih ⊢
         rw [traverse_cons_isSome, Bool.and_eq_true, ← ht a, ← ih]
 
 theorem ExactA_tuple {ts : List Term} {tail : Option Term}
@@ -1570,11 +1569,11 @@ theorem ExactA_object {fields : Finset Name} {fld : {k // k ∈ fields} → Fiel
         = true
     rw [reqPresentT_eq]
     simp only [objectCodec, objectCodecCore, carriedCodec, mA, Ctor.out, objRead,
-      objAdmA, Bool.and_eq_true, decide_eq_true_eq, Option.isSome_map',
-      Option.some_bind, Option.bind_some]
+      objAdmA, Bool.and_eq_true, decide_eq_true_eq, Option.isSome_map,
+      Option.bind_some]
     by_cases hv : reqPresentB ⟨fields, fun k => fieldSem (fld k)⟩ keys = true
     · rw [if_pos hv]
-      simp only [hv, true_and, Option.isSome_map', funImage_isSome_iff]
+      simp only [hv, true_and, Option.isSome_map, funImage_isSome_iff]
       constructor
       · intro h k
         refine (entryA_iff hf hr k.1 _).mp ?_
@@ -1723,10 +1722,10 @@ theorem AdmA_exact : ∀ (t : Term), ExactA t
       intro a
       cases a
       case m keys g =>
-        simp only [AdmA, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, recordCodec, Option.isSome_map', decide_eq_true_eq,
+        simp only [AdmA, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, recordCodec, Option.isSome_map, decide_eq_true_eq,
           funImage_isSome_iff]
         exact forall_congr' fun k => hc (g k)
-      all_goals simp only [AdmA, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, recordCodec, Option.map_none',
+      all_goals simp only [AdmA, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, recordCodec, Option.map_none,
         Option.isSome_none, Bool.false_eq_true]
   | .held c f g => by
       have hc := AdmA_exact c
@@ -1829,9 +1828,9 @@ domain. -/
 
 /-- The empty field table. Not `by simp`: `simp`'s route to a vacuous `Finset ∅` goal reaches
     `Classical.choice`, and this is a *definition*, so it would put the axiom under every
-    theorem below rather than under a proof. `Finset.not_mem_empty` is the direct term. -/
+    theorem below rather than under a proof. `Finset.notMem_empty` is the direct term. -/
 def noFields : {k // k ∈ (∅ : Finset Name)} → Field :=
-  fun k => absurd k.2 (Finset.not_mem_empty k.1)
+  fun k => absurd k.2 (Finset.notMem_empty k.1)
 
 /-- `array`'s fold is its `tuple`'s alignment. The induction is on the value's list, not the
     term: `alignP [] (some P)` recurses with the same `(([], some P))`, so there is nothing
@@ -1869,10 +1868,10 @@ theorem recordRow (c : Term) (v : Value) :
   cases v with
   | map keys f =>
     have hv : valPresentT ∅ noFields keys = true :=
-      decide_eq_true (fun k => absurd k.2 (Finset.not_mem_empty k.1))
+      decide_eq_true (fun k => absurd k.2 (Finset.notMem_empty k.1))
     have he : ∀ k : Name, entryP ⟨∅, fun k => AdmField (noFields k)⟩ (some (Adm c)) k
         = some (Adm c) := fun k => by
-      simp only [entryP, MapOf.at, dif_neg (Finset.not_mem_empty k)]
+      simp only [entryP, MapOf.at, dif_neg (Finset.notMem_empty k)]
     simp only [Adm, AdmBody, hv, Bool.true_and, objAdmV, AdmRest, he]
   | _ => rfl
 
@@ -1883,10 +1882,10 @@ theorem recordRowA (c : Term) (a : Attr) :
   cases a with
   | m keys g =>
     have hv : reqPresentT ∅ noFields keys = true :=
-      decide_eq_true (fun k => absurd k.2 (Finset.not_mem_empty k.1))
+      decide_eq_true (fun k => absurd k.2 (Finset.notMem_empty k.1))
     have he : ∀ k : Name, entryPA ⟨∅, fun k => AdmAField (noFields k)⟩ (some (AdmA c)) k
         = some (AdmA c) := fun k => by
-      simp only [entryPA, MapOf.at, dif_neg (Finset.not_mem_empty k)]
+      simp only [entryPA, MapOf.at, dif_neg (Finset.notMem_empty k)]
     simp only [AdmA, AdmABody, hv, Bool.true_and, objAdmA, AdmARest, keepT, he, true_implies]
   | _ => rfl
 
@@ -2292,8 +2291,8 @@ theorem not_decides_refine_top : ¬ Decides (.refine .string (.closure qTop)) :=
 theorem decides_object :
     Decides (.object (.mk {"k"} (fun _ => .req .string) .refuse)) := by
   refine ⟨.map {"k"} (fun _ => .str "a"),
-          .map ∅ (fun k => absurd k.2 (Finset.not_mem_empty k.1)), ?_, rfl, ?_⟩
-  · simp [denote, denote, bodySem, fieldTable, restSem, fieldSem, restSem,
+          .map ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)), ?_, rfl, ?_⟩
+  · simp +contextual [denote, denote, bodySem, fieldTable, restSem, fieldSem, restSem,
           objectCodec, objectCodecCore, stringCodec,
           valPresentB, valPresentAt, fieldSem, rcOf, FieldSem.codec, carriedCodec,
           mapV, mA, Ctor.out, Ctor.into, objWrite, entryCodec, MapOf.at, funImage,
@@ -2410,10 +2409,10 @@ theorem sepJV_set_literals :
     obtain ⟨x, hx⟩ := S.2
     simp only [Adm, Bool.and_eq_true, Pred.eval, liftQ, decide_eq_true_eq] at hv
     have hxA : x = "A" := by
-      have h1 := hv.2 x hx
+      have h1 := (of_decide_eq_true hv.2) x hx
       simpa [inL, NEFinset.of] using h1
     simp only [Adm, Pred.eval, liftQ, Bool.and_eq_false_iff, decide_eq_false_iff_not]
-    refine Or.inr (fun hall => ?_)
+    refine Or.inr (decide_eq_false (fun hall => ?_))
     have h2 := hall x hx
     rw [hxA] at h2
     simp [inL, NEFinset.of] at h2
@@ -2480,7 +2479,7 @@ theorem set_no_duplicates :
     (Value.strSet (.of "a" {"a"})) = (Value.strSet (.of "a" ∅)) :=
   congrArg Value.strSet (Subtype.ext (Finset.ext fun x => by
     simp only [NEFinset.of, Finset.mem_insert, Finset.mem_singleton,
-      Finset.not_mem_empty, or_false]
+      Finset.notMem_empty, or_false]
     exact ⟨fun h => h.elim id id, fun h => Or.inl h⟩))
 
 /-! ### What (R) would have forced, had the type not settled it

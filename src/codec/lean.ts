@@ -147,7 +147,7 @@ const leanKeyFunction = (
     entries: readonly (readonly [string, string])[],
 ): string => {
     if (entries.length === 0) {
-        return 'fun k => absurd k.2 (Finset.not_mem_empty k.1)'
+        return 'fun k => absurd k.2 (Finset.notMem_empty k.1)'
     }
     const last = entries[entries.length - 1] as readonly [string, string]
     const tests = entries
@@ -980,6 +980,8 @@ certifies must not be refused by \`src/\`. See \`src/codec/lean.ts\`'s \`Separat
 /-! The emitted key function is total on a membership subtype, so a single-name object binds a
 \`k\` it never reads; the binder cannot be \`_\` because a multi-name object reads \`k.1\`. -/
 set_option linter.unusedVariables false
+/-! A vector's name spells the codec pair it came from, so it carries \`__\`. -/
+set_option linter.style.nameCheck false
 
 namespace Calculus
 
@@ -1071,6 +1073,8 @@ ${stuck.map((one) => `  * \`${one.name}\``).join('\n')}
 /-! The emitted key function is total on a membership subtype, so a single-name object binds a
 \`k\` it never reads; the binder cannot be \`_\` because a multi-name object reads \`k.1\`. -/
 set_option linter.unusedVariables false
+/-! A vector's name spells the codec pair it came from, so it carries \`__\`. -/
+set_option linter.style.nameCheck false
 
 namespace Calculus
 
@@ -1184,6 +1188,8 @@ ${
 /-! The emitted key function is total on a membership subtype, so a single-name object binds a
 \`k\` it never reads; the binder cannot be \`_\` because a multi-name object reads \`k.1\`. -/
 set_option linter.unusedVariables false
+/-! A vector's name spells the codec pair it came from, so it carries \`__\`. -/
+set_option linter.style.nameCheck false
 
 namespace Calculus
 
@@ -1372,6 +1378,8 @@ ${doubled.map((one) => `  * \`${one.name}\``).join('\n')}
 /-! The emitted key function is total on a membership subtype, so a single-name object binds a
 \`k\` it never reads; the binder cannot be \`_\` because a multi-name object reads \`k.1\`. -/
 set_option linter.unusedVariables false
+/-! A vector's name spells the codec pair it came from, so it carries \`__\`. -/
+set_option linter.style.nameCheck false
 
 namespace Calculus
 
@@ -1468,6 +1476,8 @@ theorem's name says which vector.
 binds a \`k\` it never reads. \`Calculus/\` itself builds warning-free and so should this file; the
 binder cannot be \`_\` because a multi-name object *does* read \`k.1\`. -/
 set_option linter.unusedVariables false
+/-! A vector's name spells the codec pair it came from, so it carries \`__\`. -/
+set_option linter.style.nameCheck false
 
 namespace Calculus
 
@@ -1523,6 +1533,8 @@ generator — an under-fuelled line reduces to \`.exhausted\`, which matches nei
 binds a \`k\` it never reads. \`Calculus/\` itself builds warning-free and so should this file; the
 binder cannot be \`_\` because a multi-name object *does* read \`k.1\`. -/
 set_option linter.unusedVariables false
+/-! A vector's name spells the codec pair it came from, so it carries \`__\`. -/
+set_option linter.style.nameCheck false
 
 namespace Calculus
 `

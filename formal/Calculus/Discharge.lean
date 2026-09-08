@@ -229,7 +229,7 @@ theorem pairwise_imp_mem {α : Type} {R S : α → α → Prop} :
   | a :: l, h, hp => by
       obtain ⟨hhead, htail⟩ := List.pairwise_cons.mp hp
       refine List.Pairwise.cons (fun y hy =>
-          h a (List.mem_cons_self a l) y (List.mem_cons_of_mem a hy) (hhead y hy)) ?_
+          h a (List.mem_cons_self) y (List.mem_cons_of_mem a hy) (hhead y hy)) ?_
       exact pairwise_imp_mem
         (fun x hx y hy => h x (List.mem_cons_of_mem a hx) y (List.mem_cons_of_mem a hy))
         htail
@@ -493,14 +493,14 @@ theorem not_uAtCan_pair {t₁ t₂ : Term} {v w : Value} {a : Attr}
     ¬ UAtCan [t₁, t₂] := by
   intro h
   have ho : optionSemOf (denote t₁) (specOf t₁) ∈ semsOf [t₁, t₂] :=
-    List.mem_cons_self _ _
+    List.mem_cons_self
   have hfilt := (h _ ho v a (by rw [optionSemOf_c]; exact he)).2
   -- the second option survives the filter too, so the filter cannot be `[o₁]`
   have hmem : optionSemOf (denote t₂) (specOf t₂) ∈
       [optionSemOf (denote t₁) (specOf t₁)] := by
     rw [← hfilt]
     exact List.mem_filter.mpr
-      ⟨List.mem_cons_of_mem _ (List.mem_cons_self _ _), h₂⟩
+      ⟨List.mem_cons_of_mem _ (List.mem_cons_self), h₂⟩
   rcases List.mem_cons.mp hmem with heq | hnil
   · exact hne (congrArg (fun o => OptionSem.admitV o w) heq.symm)
   · exact absurd hnil (by simp)
@@ -513,7 +513,7 @@ theorem not_uAtCan_literal_string :
     ¬ UAtCan [Term.literal .string (.of "A" ∅), Term.string] := by
   have hA : (denote (Term.literal .string (.of "A" ∅))).e (Value.str "A") = some (Attr.s "A") := by
     show (if "A" ∈ ["A"] then some (Attr.s "A") else none) = some (Attr.s "A")
-    rw [if_pos (List.mem_cons_self _ _)]
+    rw [if_pos (List.mem_cons_self)]
   have hB : (denote (Term.literal .string (.of "A" ∅))).e (Value.str "B") = none := by
     show (if "B" ∈ ["A"] then some (Attr.s "B") else none) = none
     rw [if_neg (by simp)]
@@ -540,7 +540,7 @@ theorem not_uAtCan_array_literals :
     ((match (if "A" ∈ ["B"] then some (Attr.s "A") else none),
       some ([] : List Attr) with
       | some y, some ys => some (y :: ys) | _, _ => none).map Attr.l).isSome
-  rw [if_pos (List.mem_cons_self _ _), if_neg (by simp)]
+  rw [if_pos (List.mem_cons_self), if_neg (by simp)]
   exact fun h => nomatch h
 
 /-! ### …and the same union meets the residue the laws actually carry
@@ -649,7 +649,7 @@ theorem arrayLiteral_p_none {ls ls' : NEFinset String} {t : Value} {a : Attr}
     (arrayCodec (literalCodec .string ls')).p a = none := by
   cases t with
   | arr vs =>
-    simp only [arrayCodec, Option.map_eq_some'] at he
+    simp only [arrayCodec, Option.map_eq_some_iff] at he
     obtain ⟨as, has, rfl⟩ := he
     simp only [arrayCodec] at hne ⊢
     cases h2 : traverse (literalCodec .string ls').e vs with
@@ -664,7 +664,7 @@ theorem arrayLiteral_e_none {ls ls' : NEFinset String} {t : Value} {a : Attr}
     (arrayCodec (literalCodec .string ls')).e t = none := by
   cases a with
   | l as =>
-    simp only [arrayCodec, Option.map_eq_some'] at hp
+    simp only [arrayCodec, Option.map_eq_some_iff] at hp
     obtain ⟨vs, hvs, rfl⟩ := hp
     simp only [arrayCodec] at hne ⊢
     cases h2 : traverse (literalCodec .string ls').p as with
@@ -785,13 +785,13 @@ theorem not_uAtCan_pair_A {t₁ t₂ : Term} {v w : Value} {a : Attr}
     ¬ UAtCan [t₁, t₂] := by
   intro h
   have ho : optionSemOf (denote t₁) (specOf t₁) ∈ semsOf [t₁, t₂] :=
-    List.mem_cons_self _ _
+    List.mem_cons_self
   have hfilt := (h _ ho v a (by rw [optionSemOf_c]; exact he)).1
   have hmem : optionSemOf (denote t₂) (specOf t₂) ∈
       [optionSemOf (denote t₁) (specOf t₁)] := by
     rw [← hfilt]
     exact List.mem_filter.mpr
-      ⟨List.mem_cons_of_mem _ (List.mem_cons_self _ _), h₂⟩
+      ⟨List.mem_cons_of_mem _ (List.mem_cons_self), h₂⟩
   rcases List.mem_cons.mp hmem with heq | hnil
   · exact hne (congrArg (fun o => OptionSem.admitV o w) heq.symm)
   · exact absurd hnil (by simp)
@@ -822,10 +822,10 @@ theorem not_uAtCan_literal_held :
     ¬ UAtCan [Term.literal .string (.of "A" ∅), tRel] := by
   have hA : (denote (Term.literal .string (.of "A" ∅))).e (Value.str "A") = some (Attr.s "A") := by
     show (if "A" ∈ ["A"] then some (Attr.s "A") else none) = some (Attr.s "A")
-    rw [if_pos (List.mem_cons_self _ _)]
+    rw [if_pos (List.mem_cons_self)]
   refine not_uAtCan_pair_A (v := .str "A") (a := Attr.s "A") (w := .str "A") hA ?_ ?_
   · show (((if "A" ∈ ["A"] then some (Value.str "A") else none).map gRel)).isSome = true
-    rw [if_pos (List.mem_cons_self _ _)]
+    rw [if_pos (List.mem_cons_self)]
     rfl
   · show ((denote (Term.literal .string (.of "A" ∅))).e (Value.str "A")).isSome ≠
       ((denote (Term.literal .string (.of "A" ∅))).e (fRel (Value.str "A"))).isSome

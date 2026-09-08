@@ -34,7 +34,7 @@ theorem Forall₂.mem_right {α β : Type _} {R : α → β → Prop} :
     ∀ {xs : List α} {ys : List β}, Forall₂ R xs ys → ∀ {y}, y ∈ ys → ∃ x ∈ xs, R x y
   | _, _, .cons hxy hxs, _, hy => by
       rcases List.mem_cons.mp hy with rfl | hy'
-      · exact ⟨_, List.mem_cons_self _ _, hxy⟩
+      · exact ⟨_, List.mem_cons_self, hxy⟩
       · obtain ⟨x, hx, hR⟩ := hxs.mem_right hy'
         exact ⟨x, List.mem_cons_of_mem _ hx, hR⟩
 
@@ -43,7 +43,7 @@ theorem Forall₂.mem_left {α β : Type _} {R : α → β → Prop} :
     ∀ {xs : List α} {ys : List β}, Forall₂ R xs ys → ∀ {x}, x ∈ xs → ∃ y ∈ ys, R x y
   | _, _, .cons hxy hxs, _, hx => by
       rcases List.mem_cons.mp hx with rfl | hx'
-      · exact ⟨_, List.mem_cons_self _ _, hxy⟩
+      · exact ⟨_, List.mem_cons_self, hxy⟩
       · obtain ⟨y, hy, hR⟩ := hxs.mem_left hx'
         exact ⟨y, List.mem_cons_of_mem _ hy, hR⟩
 
@@ -111,8 +111,8 @@ theorem traverse_eq_some {xs : List α} {ys : List β} :
   induction xs generalizing ys with
   | nil => cases ys <;> simp [eq_comm]
   | cons x xs ih => cases ys with
-    | nil => simp [traverse_cons, Option.bind_eq_some, ih]
-    | cons y ys => simp [traverse_cons, Option.bind_eq_some, ih, List.forall₂_cons]
+    | nil => simp [traverse_cons, Option.bind_eq_some_iff, ih]
+    | cons y ys => simp [traverse_cons, Option.bind_eq_some_iff, ih, List.forall₂_cons]
 
 /-- §5, Lemma (traversal): "lengths survive both directions". This is one of them; the
     other is this applied to `traverse_roundTrip`'s conclusion. -/
@@ -184,7 +184,7 @@ theorem traverse_fst {f : Name × α → Option (Name × β)}
   induction kvs generalizing ds with
   | nil => cases traverse_eq_some.mp h; rfl
   | cons kv kvs ih =>
-      simp only [traverse_cons, Option.bind_eq_some, Option.map_eq_some'] at h
+      simp only [traverse_cons, Option.bind_eq_some_iff, Option.map_eq_some_iff] at h
       obtain ⟨kb, hkb, ds', hds', rfl⟩ := h
       simp [hf kv kb hkb, ih hds']
 
@@ -204,7 +204,7 @@ theorem filter_nil_of {α : Type _} {p : α → Bool} :
     ∀ {l : List α}, (∀ y ∈ l, p y = false) → l.filter p = []
   | [], _ => rfl
   | a :: l, h => by
-      have ha := h a (List.mem_cons_self a l)
+      have ha := h a (List.mem_cons_self)
       simp only [List.filter, ha]
       exact filter_nil_of fun y hy => h y (List.mem_cons_of_mem a hy)
 
@@ -267,7 +267,7 @@ theorem filter_eq_singleton_of_labels {β α ι : Type}
     predicate — how a resolved choice is read back. -/
 theorem mem_of_filter_eq_singleton {α : Type} {l : List α} {p : α → Bool} {x : α}
     (h : l.filter p = [x]) : x ∈ l ∧ p x = true :=
-  List.mem_filter.mp (h ▸ List.mem_cons_self x [])
+  List.mem_filter.mp (h ▸ List.mem_cons_self)
 
 /-! Two options resolve to four cases, and a two-option union is where §5's conditions
     are argued. These four state that split once, in both directions. Distinctness is

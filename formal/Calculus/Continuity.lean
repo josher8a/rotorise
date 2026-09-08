@@ -370,7 +370,7 @@ theorem selectF_mono_list {os : List OptionSem} {g : OptionSem → OptionSem}
     (hc : ConfluentAt (os.map g) v)
     (h : selectF os v = some a) : selectF (os.map g) v = some a := by
   obtain ⟨o, ho, hoadm, hoe⟩ := selectF_mem h
-  have hmem : g o ∈ os.map g := List.mem_map_of_mem g ho
+  have hmem : g o ∈ os.map g := List.mem_map_of_mem ho
   rw [selectF_of_mem hc hmem (hadm o ho hoadm)]
   exact (hap o ho).e hoe
 
@@ -386,7 +386,7 @@ theorem selectF_continuous_list {os : List OptionSem} {F : Nat → OptionSem →
   obtain ⟨o, ho, hoadm, hoe⟩ := selectF_mem h
   obtain ⟨i, hi⟩ := hleast o ho a hoe
   refine ⟨i, ?_⟩
-  have hmem : F i o ∈ os.map (F i) := List.mem_map_of_mem (F i) ho
+  have hmem : F i o ∈ os.map (F i) := List.mem_map_of_mem ho
   rw [selectF_of_mem (hc i) hmem (hself i o ho a hi)]
   exact hi
 

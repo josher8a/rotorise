@@ -303,12 +303,15 @@ Asserting the converse would manufacture findings.
 The blind spot is the part that matters. The check is the part anyone can read off the script.
 
 **The axiom assertion** in `Axioms.lean` makes the advertised base a build error rather than a
-claim in prose. It walks imported modules only, which is why the reachability guard exists. Its
+claim in prose. The base admits `Classical.choice`, because mathlib resolves membership in a
+`Finset` through an instance whose injectivity field is proved classically, so no theorem here
+carries a constructive warranty that this guard checks. It walks imported modules only, which is why the reachability guard exists. Its
 filter admits theorems, so **a definition that acquires an axiom is not checked at all** — run the
 axiom query on definitions, not only on theorems.
 
-**The environment linters** over the `Calculus` namespace have two sanctioned hits, `qTop` and
-`occTop`, both constant-true predicates where the unused argument is the content. The docstring
+**The environment linters** over the `Calculus` namespace have sanctioned hits: `qTop` and
+`occTop`, both constant-true predicates where the unused argument is the content, and three
+declarations whose names carry an underscore the naming linter refuses. The docstring
 linter is excluded rather than sanctioned, because whether the docstring convention reaches helper
 definitions is a judgement and not a defect, and an exclusion is visible where a mass sanction
 would not be.

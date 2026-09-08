@@ -15,4 +15,4 @@ leanOptions = { autoImplicit = false, relaxedAutoImplicit = false }
 [[require]]
 name = "mathlib"
 scope = "leanprover-community"
-version = "git#v4.15.0"
+version = "git#v4.33.0"

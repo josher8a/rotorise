@@ -250,7 +250,7 @@ describe('terms', () => {
     /** The empty key set has no `else` to fall through to, so the function is the absurd one. */
     it('emits an object with no fields as the absurd function', () => {
         expect(leanTermOf(erase(object({})))).toBe(
-            'Term.object (Body.mk ∅ (fun k => absurd k.2 (Finset.not_mem_empty k.1)) Rest.drop)',
+            'Term.object (Body.mk ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) Rest.drop)',
         )
     })
 
@@ -515,7 +515,7 @@ describe('values and attributes', () => {
             'Value.map {"a", "b"} (fun k => if k.1 = "a" then Value.str "x" else Value.str "y")',
         )
         expect(leanValueOf({})).toBe(
-            'Value.map ∅ (fun k => absurd k.2 (Finset.not_mem_empty k.1))',
+            'Value.map ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1))',
         )
     })
 

@@ -146,8 +146,8 @@ theorem traverse_maxOf_le {α β : Type} {f : α → Option β} {mα : α → Na
   | [], ys, htr => by cases (by simpa using htr : [] = ys); simp [maxOf]
   | x :: xs, ys, htr => by
       rw [traverse_cons] at htr
-      obtain ⟨y, hy, hrest⟩ := Option.bind_eq_some.mp htr
-      obtain ⟨ys', hys', rfl⟩ := Option.map_eq_some'.mp hrest
+      obtain ⟨y, hy, hrest⟩ := Option.bind_eq_some_iff.mp htr
+      obtain ⟨ys', hys', rfl⟩ := Option.map_eq_some_iff.mp hrest
       have := h x y hy
       have := traverse_maxOf_le h xs ys' hys'
       simp only [maxOf]; omega
@@ -530,7 +530,7 @@ theorem encSet_depth {α : Type} {c : Codec} {vinj : α → Value} {S : NEFinset
   · cases h; rfl
   · split at h
     · cases h; rfl
-    · obtain ⟨T, -, hT⟩ := Option.map_eq_some'.mp h
+    · obtain ⟨T, -, hT⟩ := Option.map_eq_some_iff.mp h
       cases hT; rfl
 
 /-- …and a value set likewise: its elements are scalars. -/
@@ -541,7 +541,7 @@ theorem decSet_depth {α : Type} {c : Codec} {inj : α → Attr} {S : NEFinset �
   · cases h; rfl
   · split at h
     · cases h; rfl
-    · obtain ⟨T, -, hT⟩ := Option.map_eq_some'.mp h
+    · obtain ⟨T, -, hT⟩ := Option.map_eq_some_iff.mp h
       cases hT; rfl
 
 mutual

@@ -672,7 +672,7 @@ theorem alignTail_TSub {c : Codec} {T' : Held} (ih : ∀ v, c.T v → T' v) :
         replace hal : some ((c, v) :: ps') = some ps := hal
         cases hal
         rcases List.mem_cons.mp hx with rfl | hx'
-        · exact ih x (hall (c, x) (List.mem_cons_self _ _))
+        · exact ih x (hall (c, x) (List.mem_cons_self))
         · exact alignTail_TSub ih hal'
             (fun p hp => hall p (List.mem_cons_of_mem _ hp)) x hx'
 
@@ -688,10 +688,10 @@ theorem alignTail_T {c : Codec} {T' : Held} (ih : ∀ v, T' v → c.T v) :
       obtain ⟨ps, hal, hps⟩ :=
         alignTail_T ih vs (fun x hx => hall x (List.mem_cons_of_mem _ hx))
       refine ⟨(c, v) :: ps, ?_, ?_⟩
-      · simp only [align, hal, Option.map_some']
+      · simp only [align, hal, Option.map_some]
       · intro p hp
         rcases List.mem_cons.mp hp with rfl | hp'
-        · exact ih v (hall v (List.mem_cons_self _ _))
+        · exact ih v (hall v (List.mem_cons_self))
         · exact hps p hp'
 
 /-- `align`'s positional pairing is §3's `T₁ × … × Tₙ`, one position at a time. -/
@@ -725,7 +725,7 @@ theorem align_TSub {tail Tt} (hopt : TypedOpt tail Tt)
           rw [hal'] at hal
           replace hal : some ((denote _, v) :: ps') = some ps := hal
           cases hal
-          refine ⟨ih _ (List.mem_cons_self _ _) _ _ hty v (hall _ (List.mem_cons_self _ _)), ?_⟩
+          refine ⟨ih _ (List.mem_cons_self) _ _ hty v (hall _ (List.mem_cons_self)), ?_⟩
           exact align_TSub hopt ihTail hs
             (fun t' ht' => ih t' (List.mem_cons_of_mem _ ht')) hal'
             (fun p hp => hall p (List.mem_cons_of_mem _ hp))
@@ -759,10 +759,10 @@ theorem align_T_of_HTuple {tail Tt} (hopt : TypedOpt tail Tt)
           align_T_of_HTuple hopt ihTail hs
             (fun x hx => ih x (List.mem_cons_of_mem _ hx)) vs' hall.2
         refine ⟨(denote tx, v) :: ps, ?_, ?_⟩
-        · simp only [List.map_cons, align, hal, Option.map_some']
+        · simp only [List.map_cons, align, hal, Option.map_some]
         · intro p hp
           rcases List.mem_cons.mp hp with rfl | hp'
-          · exact ih tx (List.mem_cons_self _ _) _ _ hty v hall.1
+          · exact ih tx (List.mem_cons_self) _ _ hty v hall.1
           · exact hps p hp'
 
 /-- `opaque`'s fixpoint carries §3's `Uν` at every fuel.
@@ -812,7 +812,7 @@ theorem TypedListμ.mem : ∀ {ts Ts μs}, TypedListμ ts Ts μs →
   | _, _, _, .nil, t, ht => absurd ht (by simp)
   | _, _, _, .cons h hs, t, ht => by
       rcases List.mem_cons.mp ht with rfl | ht'
-      · exact ⟨_, List.mem_cons_self _ _, _, h⟩
+      · exact ⟨_, List.mem_cons_self, _, h⟩
       · obtain ⟨T', hT', μ', hty⟩ := TypedListμ.mem hs t ht'
         exact ⟨T', List.mem_cons_of_mem _ hT', μ', hty⟩
 
@@ -821,7 +821,7 @@ theorem TypedListM.mem : ∀ {ts Ts}, TypedListM ts Ts →
   | _, _, .nil, t, ht => absurd ht (by simp)
   | _, _, .cons h hs, t, ht => by
       rcases List.mem_cons.mp ht with rfl | ht'
-      · exact ⟨_, List.mem_cons_self _ _, h⟩
+      · exact ⟨_, List.mem_cons_self, h⟩
       · obtain ⟨T', hT', hty⟩ := TypedListM.mem hs t ht'
         exact ⟨T', List.mem_cons_of_mem _ hT', hty⟩
 
@@ -839,7 +839,7 @@ theorem unionT_of_mem : ∀ {opts : List Term} {Ts μs}, TypedListμ opts Ts μs
   | _, _, _, .nil, _, _, _, hT, _ => nomatch hT
   | _, _, _, .cons hty hs, ih, v, T, hT, hv => by
     rcases List.mem_cons.mp hT with rfl | hT'
-    · exact ⟨_, List.mem_cons_self _ _, ih _ (List.mem_cons_self _ _) _ _ hty v hv⟩
+    · exact ⟨_, List.mem_cons_self, ih _ (List.mem_cons_self) _ _ hty v hv⟩
     · obtain ⟨t'', ht'', hd⟩ :=
         unionT_of_mem hs (fun x hx => ih x (List.mem_cons_of_mem _ hx)) v T hT' hv
       exact ⟨t'', List.mem_cons_of_mem _ ht'', hd⟩
@@ -851,7 +851,7 @@ theorem unionMT_of_mem : ∀ {opts : List Term} {Ts}, TypedListM opts Ts →
   | _, _, .nil, _, _, _, hT, _ => nomatch hT
   | _, _, .cons hty hs, ih, v, T, hT, hv => by
     rcases List.mem_cons.mp hT with rfl | hT'
-    · exact ⟨_, List.mem_cons_self _ _, ih _ (List.mem_cons_self _ _) _ _ hty v hv⟩
+    · exact ⟨_, List.mem_cons_self, ih _ (List.mem_cons_self) _ _ hty v hv⟩
     · obtain ⟨t'', ht'', hd⟩ :=
         unionMT_of_mem hs (fun x hx => ih x (List.mem_cons_of_mem _ hx)) v T hT' hv
       exact ⟨t'', List.mem_cons_of_mem _ ht'', hd⟩

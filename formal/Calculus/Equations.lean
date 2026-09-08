@@ -156,7 +156,7 @@ theorem equiv_orNull_altCodec (c : Codec) :
   · intro v
     refine ⟨?_, ?_⟩
     · rintro (hT | rfl)
-      · exact ⟨.byAttempt c, List.mem_cons_self _ _, hT⟩
+      · exact ⟨.byAttempt c, List.mem_cons_self, hT⟩
       · exact ⟨nullOption, by simp, rfl⟩
     · rintro ⟨o, ho, hT⟩
       rcases List.mem_cons.mp ho with rfl | ho'
@@ -194,7 +194,7 @@ theorem orNull_eq_altCodec {c : Codec} (he : c.e .null = none) (hp : c.p .null =
   · funext v
     refine propext ⟨?_, ?_⟩
     · rintro (hT | rfl)
-      · exact ⟨.byAttempt c, List.mem_cons_self _ _, hT⟩
+      · exact ⟨.byAttempt c, List.mem_cons_self, hT⟩
       · exact ⟨nullOption, by simp, rfl⟩
     · rintro ⟨o, ho, hT⟩
       rcases List.mem_cons.mp ho with rfl | ho'
@@ -423,7 +423,7 @@ theorem equiv_altCodec_single (o : OptionSem) :
       rcases List.mem_cons.mp hx with rfl | hx'
       · exact hT
       · exact absurd hx' (by simp)
-    · exact fun h => ⟨o, List.mem_cons_self _ _, h⟩
+    · exact fun h => ⟨o, List.mem_cons_self, h⟩
   · intro v a a' h h'
     obtain ⟨x, hf, hxe⟩ := altCodec_e.mp h
     obtain rfl : x = o := by simpa using (mem_of_filter_eq_singleton hf).1
@@ -592,15 +592,15 @@ theorem altCodec_assoc_heldSet (o₁ o₂ o₃ : OptionSem) (μa μb : Option Me
   constructor
   · rintro ⟨x, hx, hT⟩
     rcases List.mem_cons.mp hx with rfl | hx'
-    · exact ⟨x, List.mem_cons_self _ _, hT⟩
+    · exact ⟨x, List.mem_cons_self, hT⟩
     · rcases List.mem_cons.mp hx' with rfl | hx''
       · obtain ⟨y, hy, hTy⟩ := hT
         exact ⟨y, List.mem_cons_of_mem _ hy, hTy⟩
       · exact absurd hx'' (by simp)
   · rintro ⟨x, hx, hT⟩
     rcases List.mem_cons.mp hx with rfl | hx'
-    · exact ⟨x, List.mem_cons_self _ _, hT⟩
-    · exact ⟨_, List.mem_cons_of_mem _ (List.mem_cons_self _ _), ⟨x, hx', hT⟩⟩
+    · exact ⟨x, List.mem_cons_self, hT⟩
+    · exact ⟨_, List.mem_cons_of_mem _ (List.mem_cons_self), ⟨x, hx', hT⟩⟩
 
 /-- **Associativity, with the codecs abstracted away.** Three admission flags, three
     per-option results, and the two ways of resolving them. Whenever both resolve, they

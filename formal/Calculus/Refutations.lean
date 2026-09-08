@@ -236,7 +236,7 @@ theorem not_equiv_tupleTail_tuple :
   -- `simp`'s classical push-neg turned this into an existential and pulled
   -- `Classical.choice` in with it; the implication is the constructive shape.
   simp only [denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, denoteList, denoteOpt, tupleCodec, align, stringCodec,
-    Option.map_some', List.all_cons, List.all_nil, Bool.and_true, Bool.true_and,
+    Option.map_some, List.all_cons, List.all_nil, Bool.and_true, Bool.true_and,
     Option.some.injEq, exists_eq_left', List.mem_cons, List.not_mem_nil, or_false,
     Prod.mk.injEq] at hv
   exact absurd (hv (by rintro p (rfl | rfl) <;> exact ⟨_, rfl⟩))
