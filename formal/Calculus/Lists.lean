@@ -200,7 +200,7 @@ theorem mem_of_contains {l : List String} {s : String} (h : l.contains s = true)
 /-- Constructive on purpose: mathlib's `filter_eq_nil_iff` routes through
     `Classical.choice`, and §3 of the formalization doc advertises an axiom base without
     it. `Calculus/Axioms.lean` is what keeps that claim honest. -/
-theorem filter_nil_of {p : α → Bool} :
+theorem filter_nil_of {α : Type _} {p : α → Bool} :
     ∀ {l : List α}, (∀ y ∈ l, p y = false) → l.filter p = []
   | [], _ => rfl
   | a :: l, h => by

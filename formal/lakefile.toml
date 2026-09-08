@@ -6,6 +6,7 @@ lintDriverArgs = ["Calculus"]
 
 [[lean_lib]]
 name = "Calculus"
+leanOptions = { autoImplicit = false, relaxedAutoImplicit = false }
 
 # mathlib, pinned to the tag matching lean-toolchain (v4.15.0). It retires the hand-rolled
 # list/option plumbing that used to live in Combinators.lean; what mathlib does not supply
