@@ -70,6 +70,12 @@ jobs:
       - run: lake exe cache get
         working-directory: formal
       - run: formal/scripts/gate.sh
+      - name: leanchecker
+        working-directory: formal
+        run: |
+          for f in Calculus/*.lean; do
+            lake env leanchecker "Calculus.$(basename "$f" .lean)"
+          done
 
   publish:
     needs: [check, test, build, gate]
