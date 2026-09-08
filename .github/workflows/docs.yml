@@ -1,0 +1,52 @@
+name: docs
+
+# The library's API documentation, published to GitHub Pages on `main`.
+# A Pages deploy needs `pages: write` and `id-token: write`, granted on this job alone while the
+# workflow default stays `contents: read`; the owner enables Pages with source "GitHub Actions"
+# in the repository settings.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install elan
+        run: |
+          curl -sSf https://elan.lean-lang.org/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      # No `lake update`: the committed manifest is the pin, and four deps name a branch.
+      - name: Fetch mathlib's build cache
+        working-directory: formal/docs
+        run: lake exe cache get
+
+      - name: Build the documentation
+        working-directory: formal/docs
+        run: lake build Calculus:docs
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: formal/docs/.lake/build/doc
+
+      - id: deploy
+        uses: actions/deploy-pages@v4
