@@ -193,9 +193,9 @@ attribute asserting something about behaviour that had quietly stopped being tru
 failure class as a description drifting from what it describes, and the reason this guard is
 here rather than a note saying someone should lint occasionally.
 
-`docBlame` is **excluded**, not sanctioned: its 90 hits are helper definitions (`allPA`,
+`docBlame` is **excluded**, not sanctioned: its hits are helper definitions (`allPA`,
 `Term.depthL`, `Codec.e`), and whether this development's docstring convention reaches them is
-a judgement, not a defect. Excluding it is visible here; sanctioning 90 hits would not be.
+a judgement, not a defect. Excluding it is visible here; sanctioning each hit would not be.
 -/
 
 /-- Linters not run. One entry, and it owes the reason above. -/
