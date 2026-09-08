@@ -1,8 +1,6 @@
 name = "calculus"
 version = "0.1.0"
 defaultTargets = ["Calculus"]
-lintDriver = "batteries/runLinter"
-lintDriverArgs = ["Calculus"]
 
 [[lean_lib]]
 name = "Calculus"
