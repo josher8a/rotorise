@@ -49,8 +49,30 @@ jobs:
       - run: npm ci
       - run: npm run build
 
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Install elan
+        run: |
+          curl -sSf https://elan.lean-lang.org/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - uses: actions/cache@v4
+        with:
+          path: formal/.lake/build
+          key: lake-build-${{ hashFiles('formal/lean-toolchain', 'formal/lake-manifest.json', 'formal/Calculus/**') }}
+          restore-keys: lake-build-
+      - run: lake exe cache get
+        working-directory: formal
+      - run: formal/scripts/gate.sh
+
   publish:
-    needs: [check, test, build]
+    needs: [check, test, build, gate]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
