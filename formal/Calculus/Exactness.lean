@@ -142,7 +142,7 @@ def selOptV (os : List (Option (MapOf Bool) × VP)) (v : Value) : Bool :=
     lean on. `GroundKind.number.Carrier` is `WFDouble`, so `inL`'s own row splits on the gate
     and there is no alternative left for the conjunct to catch.
 
-    What that closes is §8's third open question. The retired per-aspect row was always `inL`
+    The retired per-aspect row was always `inL`
     and was therefore inexact at `number` by exactly this conjunct, while the joint row carried
     it and so `Adm_exact` covered the literal. The defect is closed rather than patched:
     nothing was added to make the two agree. -/
@@ -1067,7 +1067,7 @@ noncomputable def AdmALit : (k : GroundKind) → NEFinset k.Carrier → Attr →
   | .binary,  ls, .b b    => decide (b ∈ ls.1)
   | .null,    _,  .null   => true
   -- **The `&& Numeral.WF d.toDec` conjunct used to be written out here**, and it was the
-  -- reason this row was exact while the table's `adm` row was not (§8). It is now the
+  -- reason this row was exact while the table's `adm` row was not. It is now the
   -- carrier's: `ls : NEFinset WFDouble`, so the gate is what names the alternative.
   | .number,  ls, .n x    => (match Double.ofDec x.1 with
                               | some d =>

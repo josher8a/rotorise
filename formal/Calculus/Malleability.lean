@@ -163,7 +163,7 @@ theorem agree_not_transitive : ∃ x y z : Attr, Agree x y ∧ Agree y z ∧ ¬ 
 coarse — `survivesStore_numberCodec` (`Calculus/Combinators.lean:2292`) is that coarseness put
 to work. Non-malleability survives it untouched, because `Agree.n` is unconditional: agreement
 never inspects a numeral's digits. So the property costs nothing at the one place §1 gives
-something up, which is precisely why reading §10.3 and §5.6 item 4 separately looks harmless. -/
+something up, which is precisely why reading §5.6 item 4 on its own looks harmless. -/
 
 /-- `number` reads nothing but an `N`. -/
 theorem numberCodec_p_n_inv {a : Attr} {v : Value} (h : numberCodec.p a = some v) :
@@ -259,8 +259,8 @@ theorem dropAll_p (keys : Finset Name) (f : {k // k ∈ keys} → Attr) :
     attributes carry the key `"z"`, so `Agree.m`'s premise bites there, and they disagree.
 
     What this rules out is not a hypothetical: `objectCodec` under `.drop` is what `src/`
-    ships for an open object. Adopting the fibre condition — as §5.6 item 4 proposes, and as
-    §10.3 independently rejects — would not constrain that codec, it would delete it. -/
+    ships for an open object. Adopting the fibre condition — as §5.6 item 4 proposes — would
+    not constrain that codec, it would delete it. -/
 theorem not_nonMalleable_dropAll : ¬ NonMalleable dropAll := by
   intro h
   have hz := h (mapV.into noEntries)

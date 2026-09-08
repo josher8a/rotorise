@@ -271,8 +271,8 @@ theorem mem_tagStringsOf_fold (l : List String) (x : String) :
     rw [Finset.mem_singleton]
     exact List.mem_cons.symm
 
-/-- **`tagsOf` recovers the tag set from the union form, with no premise** — the objection I
-    raised in §11.4 of the audit and had not checked. A non-conforming option contributes `∅`,
+/-- **`tagsOf` recovers the tag set from the union form, with no premise** — an objection
+    raised against it and never checked. A non-conforming option contributes `∅`,
     which is what `tagsOfField`'s existing `| _ => ∅` already does; heterogeneity is an empty
     contribution, not an error, and the error it *should* be is `(dunion)`'s arity premise. -/
 theorem mem_tagStringsOf_union (l : List String) (x : String) :

@@ -60,9 +60,9 @@ document, and there are far more of them; the only reason they were not checked 
 them apart is most of this file, because a single undifferentiated exception list would say
 nothing about *why* any entry is in it:
 
-    ~~marked~~   retired: the declaration is gone and the prose says so (`RETIRED`, §9)
+    ~~marked~~   retired: the declaration is gone and the prose says so (`RETIRED`)
     PRELUDE      the language: Lean, mathlib, Batteries — judged by root namespace
-    HOST         `src/`'s names, at §8's boundary — live, just not here
+    HOST         `src/`'s names, at the host boundary — live, just not here
     SPEC         the specification's own notation, from `docs/codec-calculus.md`
     EXPECTED     a genuine one-off, keyed to the document that makes it
 
@@ -73,10 +73,18 @@ Hits in the current-state documents — `formal/README.md`, `docs/architecture.m
 `docs/roadmap.md`, `docs/defects.md`, `docs/codec-calculus.md` —
 are broken pointers and should be fixed or explicitly marked superseded.
 
+**A second pass checks `§N`, because a section number is a citation too.** The specification is
+section-numbered on purpose and its `## §N` headings are the authority, so a `§N` naming a number
+it does not have points at nothing. That is not hypothetical: `ARCHITECTURE.md` and the
+representation audit were section-numbered as well, and both are deleted, so their citations
+outlived the documents. The major number is what is checked, because `§5.6` is a citation of `§5`.
+The Python guards are in this pass's read set as well as the documents and the modules: a guard's
+own prose is prose.
+
 Usage:  python3 scripts/name_drift.py            (run from formal/)
         python3 scripts/name_drift.py --all      (include the change log)
-Exit code 1 if any current-state document has a hit, a stale `EXPECTED` entry, or a
-`~~name~~` whose name is still in the sources.
+Exit code 1 if any current-state document has a hit, a stale `EXPECTED` entry, a `~~name~~` whose
+name is still in the sources, or a `§N` the specification does not have.
 """
 import re, sys, os, glob
 
@@ -114,8 +122,8 @@ LEANISH = re.compile(r"^[^\W\d][\w'!?⁺₀-₉]*(?:\.[^\W\d][\w'!?⁺₀-₉]*)
 # "`record_e_keeps_duplicate_keys` became unstatable when `M`'s keys became a `Finset`" — is
 # indistinguishable from one that names a renamed declaration by accident. Both are a backticked
 # token absent from code; the difference is the tense of the sentence, and no parser reads tense.
-# §9 tells a docstring to record what the forced choice cost, so those citations are the
-# convention working, not drift: 49 of them, against 13 real stale pointers, when this was first
+# The docstring convention tells a docstring to record what the forced choice cost, so those
+# citations are the convention working, not drift: 49 of them, against 13 real stale pointers, when this was first
 # measured. Marking them moves the judgement to where the judgement is — the person writing the
 # sentence, who knows whether the thing is dead.
 #
@@ -123,6 +131,11 @@ LEANISH = re.compile(r"^[^\W\d][\w'!?⁺₀-₉]*(?:\.[^\W\d][\w'!?⁺₀-₉]*)
 # a failure (`false retirement`), so the marks cannot quietly rot into decoration as names come
 # back or get reused.
 RETIRED = re.compile(r"~~([^~\n]{1,80})~~")
+# A section citation. The major number only: `§5.6` cites `§5`, and the specification numbers
+# sections and not items.
+SECTION = re.compile(r"§(\d+)")
+SPEC_DOC = "../docs/codec-calculus.md"
+SECTION_HEADING = re.compile(r"^## §(\d+)", re.M)
 # naming patterns and filenames, not citations
 # `.match_1`, `.eq_def`, `.proof_3`: **auto-generated names, real constants, never in source.**
 # `inL.match_1` is the matcher Lean derives for `inL`'s pattern match — §6 names it as the fan
@@ -148,8 +161,8 @@ EXPECTED = {
 # per-document because each recurs across many targets — `opaque` alone is cited in 17 places —
 # and an `EXPECTED` entry repeated 17 times is a table nobody reads.
 
-# The shipped TypeScript's names, at §8's boundary. The host has codecs and methods the model
-# deliberately does not: §8 records what the host owes, and naming the thing that owes it is how.
+# The shipped TypeScript's names, at the host boundary. The host has codecs and methods the
+# model deliberately does not, and naming the thing that owes them is how that is recorded.
 #
 # AN ENTRY LEAVES WHEN ITS DECLARATION DOES. This table exempts a name from the drift check, so
 # an entry outliving its declaration is an exemption for a name nothing declares: the document
@@ -177,12 +190,12 @@ HOST = {
                   "is the same coarsening one level up",
     "Separation": "`src/codec/lean.ts`'s vector class carrying §5's bridge: one theorem per pair "
                   "`src/` refuses, asserting `Orth` does not certify it",
-    "ReadVerdict": "`src/codec/lean.ts`'s vector class carrying §10's read-side differential: "
+    "ReadVerdict": "`src/codec/lean.ts`'s vector class carrying the read-side differential: "
                    "`AdmA t a` against whether the library's read accepted `a`. Cited because "
-                   "§10 records the `AdmA` port as rejected and this as what landed instead",
+                   "the `AdmA` port was rejected and this is what landed instead",
     "discriminatedUnion": "`src/`'s combinator; the calculus has no such codec — it is the sum "
                           "over tag-admission, which is why `(dunion)` is a rule and not a row",
-    "EveryOptionTagged": "`src/codec/codec.ts`'s type-level check, cited by §8's arity-one row",
+    "EveryOptionTagged": "`src/codec/codec.ts`'s type-level check, cited by the arity-one row",
 }
 
 # The specification's own notation, from `docs/codec-calculus.md`. §1 names sets and §5 names
@@ -196,7 +209,7 @@ SPEC = {
     "dom": "§2's notation for a partial function's domain, written `dom(e)`; `domE` is the Lean "
            "lemma about it",
     "p_c": "§2's notation for a component codec's read half, paired with `e_c`",
-    "ground": "§9's table block, named by the convention rather than by the model — the codecs "
+    "ground": "a table block, named by the convention rather than by the model — the codecs "
               "in it are `pointCodec`'s four",
     "Exact": "the `ExactV`/`ExactA` family under one name, as §5's table heads the two rows",
 }
@@ -331,6 +344,23 @@ def occurring():
     return out
 
 
+def spec_sections():
+    """The section numbers the specification declares, read from its own headings."""
+    return {int(n) for n in SECTION_HEADING.findall(open(SPEC_DOC).read())}
+
+
+def dangling_sections(paths, known):
+    """Every `§N` citing a section the specification does not have, by path and line."""
+    out = {}
+    for path in paths:
+        if not os.path.exists(path):
+            continue
+        for lineno, line in enumerate(open(path).read().split("\n"), 1):
+            for n in sorted({int(n) for n in SECTION.findall(line)} - known):
+                out.setdefault(path, []).append((lineno, n))
+    return out
+
+
 def scan(path, present):
     expected = EXPECTED.get(path, {})
     hits, seen, stale, false_retirements = [], set(), [], []
@@ -422,6 +452,16 @@ def main():
             print(f"  {label:38s} {n} false retirement{'' if n == 1 else 's'}")
             for lineno, name in false_retirements:
                 print(f"      {lineno:6d}  ~~{name}~~  (still in the sources — unmark it)")
+    known = spec_sections()
+    dangling = dangling_sections(CURRENT + sorted(glob.glob("scripts/*.py")), known)
+    if dangling:
+        failed = True
+        total = sum(len(v) for v in dangling.values())
+        print(f"\n  {total} section citation{'' if total == 1 else 's'} naming a § the "
+              f"specification does not have (it has {min(known)}-{max(known)})")
+        for path in sorted(dangling):
+            for lineno, n in dangling[path]:
+                print(f"      {os.path.normpath(path)}:{lineno}  §{n}")
     orphaned = host_without_declarations()
     if orphaned:
         failed = True

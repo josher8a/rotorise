@@ -25,7 +25,7 @@ irreducible structure; everything else wraps one subterm):
   `recordCodec`), `tupleCodec` it at `align` + a traversal, where the one fact worth
   proving is that alignment depends on a row's *length* alone (`slots`, `align_eq_some`).
   `setCodec` is argued on its own — `objectCodec` is not, `objectCodecCore_eq` cashing it as an
-  equation the way §10's convention asks;
+  equation;
 * sums — `altCodec` over `OptionSem`s that carry their *admission as data*, with
   `UniqueAdmission` ((U) as a premise). `dunionTable` is not one of them: a
   discriminated union is a **lookup**, so "the one union whose (U) is a theorem"
