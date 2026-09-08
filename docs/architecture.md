@@ -309,11 +309,10 @@ carries a constructive warranty that this guard checks. It walks imported module
 filter admits theorems, so **a definition that acquires an axiom is not checked at all** — run the
 axiom query on definitions, not only on theorems.
 
-**The environment linters** over the `Calculus` namespace have sanctioned hits: `qTop` and
-`occTop`, both constant-true predicates where the unused argument is the content, and three
-declarations whose names carry an underscore the naming linter refuses. The docstring
-linter is excluded rather than sanctioned, because whether the docstring convention reaches helper
-definitions is a judgement and not a defect, and an exclusion is visible where a mass sanction
+**The environment linters** over the `Calculus` namespace have no sanctioned hit today: the list is
+empty, and the mechanism stays, because a hit this tree keeps owes a row and a reason beside it. The
+docstring linter is excluded rather than sanctioned, because whether the docstring convention reaches
+helper definitions is a judgement and not a defect, and an exclusion is visible where a mass sanction
 would not be.
 
 **`scripts/guard_reach.py`** is textual and necessary-only. It says the declarations are in the
