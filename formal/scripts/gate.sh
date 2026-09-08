@@ -7,8 +7,8 @@
 # `--no-build` skips the build, the emit and the bridge, and is honest only when no `.lean`
 # file changed.
 #
-# Run the gate inside the devcontainer. Only one `lake build` may run at a time across the
-# sessions sharing this tree.
+# Run the gate inside the devcontainer or on CI. Only one `lake build` may run at a time
+# across the sessions sharing this tree.
 #
 # Every check runs even after one fails, so one invocation reports the whole state of the
 # tree rather than its first symptom. The exit code is 1 if any check failed and 0 only when
