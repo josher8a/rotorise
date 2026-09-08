@@ -6,12 +6,6 @@ defaultTargets = ["Calculus"]
 name = "Calculus"
 leanOptions = { autoImplicit = false, relaxedAutoImplicit = false }
 
-# mathlib, pinned to the tag matching lean-toolchain (v4.15.0). It retires the hand-rolled
-# list/option plumbing that used to live in Combinators.lean; what mathlib does not supply
-# is now gathered in Calculus/Lists.lean, whose module docstring says which groups and why.
-#
-# Note that mathlib proves a great deal classically, so a careless appeal widens the axiom
-# base §3 advertises. Calculus/Axioms.lean is the guard that makes that a build error.
 [[require]]
 name = "mathlib"
 scope = "leanprover-community"
