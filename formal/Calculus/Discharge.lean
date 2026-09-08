@@ -438,7 +438,7 @@ claim can take. -/
     premises at all. It is stated about `opaqCodec` at a fuel rather than about the term
     `opaque` for the reason given above — `denote` of `opaque` is not a sum over one
     list. -/
-theorem uAtCan_opaque (lossy : Bool) :
+theorem uAtCan_opaque {fuel : Nat} (lossy : Bool) :
     UniqueAdmission (opaqOptions lossy (opaqCodec fuel lossy)) :=
   uniqueAdmission_opaque fuel lossy (lawful_opaqCodec fuel lossy)
 
