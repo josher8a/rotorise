@@ -123,6 +123,7 @@ theorem hopaque_T (lossy : Bool) :
         exact ⟨.byAttempt (recordCodec (opaqCodec n' lossy)), by simp [opaqOptions],
                fun k => hopaque_T lossy (f k) n' (hall k)
                  (by have := Value.depth_map_entry (f := f) k; omega)⟩
+termination_by v n => (n, sizeOf v)
 
 theorem hopaque_TL (lossy : Bool) :
     ∀ (vs : List Value) (n : Nat), (∀ x ∈ vs, HOpaque lossy x) ->
@@ -134,6 +135,7 @@ theorem hopaque_TL (lossy : Bool) :
           (by simp only [Value.depthL] at hd; omega)
       · exact hopaque_TL lossy vs n (fun y hy => hall y (by simp [hy]))
           (by simp only [Value.depthL] at hd; omega) x hx'
+termination_by vs n => (n, sizeOf vs)
 
 end
 

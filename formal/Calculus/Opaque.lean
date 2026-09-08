@@ -314,6 +314,7 @@ theorem opaq_e_agree (lossy : Bool) :
       show (funImage (fun k => (opaqCodec n' lossy).e (f k))).map (Attr.m keys)
          = (funImage (fun k => (opaqCodec m' lossy).e (f k))).map (Attr.m keys)
       rw [funext fun k => opaq_e_agree lossy (f k) n' m' (hn' k) (hm' k)]
+termination_by v n => (n, sizeOf v)
 
 theorem opaq_e_agreeL (lossy : Bool) :
     ∀ (vs : List Value) (n m : Nat), Value.depthL vs <= n -> Value.depthL vs <= m ->
@@ -327,6 +328,7 @@ theorem opaq_e_agreeL (lossy : Bool) :
       have hv := opaq_e_agree lossy v n m hvn hvm
       have hvs := opaq_e_agreeL lossy vs n m hsn hsm
       simp only [traverse, hv, hvs]
+termination_by vs n => (n, sizeOf vs)
 
 end
 
@@ -611,6 +613,7 @@ theorem opaq_e_depth (lossy : Bool) :
         refine Attr.depth_m_le fun k => ?_
         exact le_trans (opaq_e_depth lossy (f k) n' (g k) (funImage_some hfi k))
           (Finset.le_sup (f := fun k => Value.depth (f k)) (Finset.mem_attach _ k))
+termination_by _ n => (n, 0)
 
 theorem opaq_e_depthL (lossy : Bool) :
     ∀ (vs : List Value) (n : Nat) (as : List Attr),
@@ -619,6 +622,7 @@ theorem opaq_e_depthL (lossy : Bool) :
   | vs, n, as, htr => by
       rw [Attr.depthL_eq, Value.depthL_eq]
       exact traverse_maxOf_le (fun v a hv => opaq_e_depth lossy v n a hv) vs as htr
+termination_by _ n => (n, 1)
 
 end
 
@@ -710,6 +714,7 @@ theorem opaq_p_depth (lossy : Bool) :
         refine Value.depth_map_le fun k => ?_
         exact le_trans (opaq_p_depth lossy (g k) n' (f k) (funImage_some hfi k))
           (Finset.le_sup (f := fun k => Attr.depth (g k)) (Finset.mem_attach _ k))
+termination_by _ n => (n, 0)
 
 theorem opaq_p_depthL (lossy : Bool) :
     ∀ (as : List Attr) (n : Nat) (vs : List Value),
@@ -718,6 +723,7 @@ theorem opaq_p_depthL (lossy : Bool) :
   | as, n, vs, htr => by
       rw [Value.depthL_eq, Attr.depthL_eq]
       exact traverse_maxOf_le (fun a v ha => opaq_p_depth lossy a n v ha) as vs htr
+termination_by _ n => (n, 1)
 
 end
 
