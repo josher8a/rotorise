@@ -173,12 +173,12 @@ def ConfluentAt (os : List OptionSem) (v : Value) : Prop :=
 /-- `selectF`, reduced at an admitting head. -/
 theorem selectF_admit {o : OptionSem} {os : List OptionSem} {v : Value}
     (h : o.admitV v = true) : selectF (o :: os) v = o.c.e v := by
-  simp [selectF, List.filter_cons, h]
+  simp [selectF, h]
 
 /-- …and at a non-admitting one. -/
 theorem selectF_skip {o : OptionSem} {os : List OptionSem} {v : Value}
     (h : o.admitV v = false) : selectF (o :: os) v = selectF os v := by
-  simp [selectF, List.filter_cons, h]
+  simp [selectF, h]
 
 /-- **`altCodec_not_monotone`'s witness does not refute confluence.** The growing option is
     `string` and the fixed one is `literal("A")`; at `"A"` both admit and **both write

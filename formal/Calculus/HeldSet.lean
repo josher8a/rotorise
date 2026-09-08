@@ -299,7 +299,7 @@ noncomputable def unionLiteralString : Codec :=
 theorem not_TIsDomE_unionLiteralString : ¬ TIsDomE unionLiteralString := by
   intro h
   have hT : unionLiteralString.T (.str "A") :=
-    ⟨.byAttempt (literalCodec .string (.of "A" ∅)), by simp [unionLiteralString], ⟨"A", by simp, rfl⟩⟩
+    ⟨.byAttempt (literalCodec .string (.of "A" ∅)), by simp [], ⟨"A", by simp, rfl⟩⟩
   have he : unionLiteralString.e (.str "A") = none := by
     simp [unionLiteralString, altCodec, select, OptionSem.byAttempt, literalCodec, baseCodec,
       Codec.restrict, inL, stringCodec]

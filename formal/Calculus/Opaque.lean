@@ -206,7 +206,7 @@ theorem opaqCodec_e_num (lossy : Bool) (n : Nat) (d : Double) :
     (opaqCodec (n+1) lossy).e (.num d)
       = (if lossy then numberCodec else Codec.empty).e (.num d) := by
   by_cases hw : Numeral.WF d.toDec = true <;> cases lossy <;>
-    simp [numberCodec_e_num, hw]
+    simp [hw]
 
 /-- §3 `(opaque)`, write side at kind `set`: the wire member is computed from the elements (`setCodec`), which is why one option covers `SS`, `NS` and `BS`. -/
 theorem opaqCodec_e_strSet (lossy : Bool) (n : Nat) (S : NEFinset String) :
@@ -371,10 +371,10 @@ theorem opaqCodec_p_n (lossy : Bool) (n : Nat) (x : WFNumeral) :
     (opaqCodec (n+1) lossy).p (.n x)
       = (if lossy then numberCodec else Codec.empty).p (.n x) := by
   cases hd : Double.ofDec x with
-  | none => cases lossy <;> simp [numberCodec_p_n, hd]
+  | none => cases lossy <;> simp [hd]
   | some d =>
     by_cases hw : Numeral.WF d.toDec = true <;> cases lossy <;>
-      simp [-recordCodec, recordCodec_p_n, numberCodec_p_n, hd, hw]
+      simp [-recordCodec, recordCodec_p_n, hd, hw]
 
 /-- §3 `(opaque)`, read side at member `SS` — one of the three members routing to the single `set` option, which is the ten-versus-eight asymmetry in the header. -/
 theorem opaqCodec_p_ss (lossy : Bool) (n : Nat) (vs : NEFinset String) :

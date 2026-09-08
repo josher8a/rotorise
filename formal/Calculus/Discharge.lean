@@ -390,7 +390,7 @@ theorem uAtCan_of_literalN_disjoint {lss : List (NEFinset WFDouble)}
   show UniqueAdmission (semsOf (lss.map (Term.literal .number)))
   have hs : semsOf (lss.map (Term.literal .number))
       = (lss.map (literalCodec .number)).map OptionSem.byAttempt := by
-    simp [semsOf, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, List.map_map, specOf, optionSemOf, denote]
+    simp [semsOf, List.map_map, specOf, optionSemOf, denote]
   rw [hs]
   refine uniqueAdmission_of_sharedBase (base := numberCodec) (qs := lss.map (inL .number))
     lawful_numberCodec.core ?_ ?_
