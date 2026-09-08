@@ -44,8 +44,10 @@ namespace Calculus
     provably different decimal images (`numericHost_images_differ`), and the first is built
     with no `Double` axiom at all.
 
-    `Classical.choice` is here because mathlib resolves `k ∈ (s : Finset α)` through
-    `Finset.instSetLike`, whose injectivity field is proved classically; the axiom is
+    `Classical.choice` is here by more than one route. Mathlib resolves `k ∈ (s : Finset α)`
+    through `Finset.instSetLike`, whose injectivity field is proved classically, and core
+    Lean's string and arithmetic lemmas reach `Classical.propDecidable` in their own proofs.
+    `scripts/classical_gateways.txt` is the set of routes and `gate.sh` holds it. The axiom is
     computationally inert and the guard reads axioms transitively. -/
 def sanctionedAxioms : List Lean.Name :=
   [``propext, ``Classical.choice, ``Quot.sound, `Calculus.Double, `Calculus.numericHost]

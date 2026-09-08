@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # The commit gate: every check, in order, gated on exit codes.
 #
-#   scripts/gate.sh              all seven checks
+#   scripts/gate.sh              all eight checks
 #   scripts/gate.sh --no-build   the four Python guards only
 #
-# `--no-build` skips the build, the emit and the bridge, and is honest only when no `.lean`
-# file changed.
+# `--no-build` skips the build, the gateway check, the emit and the bridge, and is honest only
+# when no `.lean` file changed.
 #
 # Run the gate inside the devcontainer or on CI. Only one `lake build` may run at a time
 # across the sessions sharing this tree.
@@ -60,6 +60,14 @@ run 'docstring_anchor.py'   python3 scripts/docstring_anchor.py
 
 if [ "$RUN_BUILD" -eq 1 ]; then
   run 'lake build' lake build
+  # The routes by which this development reaches `Classical.choice`, against the baseline.
+  # A name in the output and not in the baseline is a new classical route and fails. A name
+  # in the baseline and not in the output is a fall and passes.
+  run 'classical gateways' bash -c \
+    'out=$(lake env lean scripts/classical.lean 2>&1) || { echo "$out"; exit 1; }
+     new=$(comm -23 <(printf "%s\n" "$out" | sort) \
+                    <(grep -v "^#" scripts/classical_gateways.txt | sort))
+     [ -z "$new" ] || { echo "new classical route(s):"; echo "$new"; exit 1; }'
   run 'vector emit' bash -c \
     "cd \"$REPO_DIR\" && EMIT_LEAN_REFUSALS=1 npx --no-install vitest run src/codec/lean/lean.spec.ts --reporter=dot"
   run 'vector bridge' bash -c \
@@ -75,6 +83,7 @@ if [ "$RUN_BUILD" -eq 1 ]; then
      done'
 else
   printf 'SKIP  %-28s (--no-build)\n' 'lake build'
+  printf 'SKIP  %-28s (--no-build)\n' 'classical gateways'
   printf 'SKIP  %-28s (--no-build)\n' 'vector emit'
   printf 'SKIP  %-28s (--no-build)\n' 'vector bridge'
 fi
