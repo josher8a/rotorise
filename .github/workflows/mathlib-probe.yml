@@ -1,0 +1,118 @@
+name: mathlib probe
+
+# What the newest stable mathlib would cost. It moves the pin and the toolchain in a throwaway
+# checkout, builds cold, and reports the diagnostics by class. It never writes to the repository:
+# `contents: read` is the only permission, so it cannot push and cannot open a pull request, and
+# the move it measures is applied by a person in a commit of their own.
+on:
+  schedule:
+    - cron: "0 6 1 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve the newest stable mathlib
+        id: target
+        run: |
+          set -euo pipefail
+          latest=$(git ls-remote --tags --refs https://github.com/leanprover-community/mathlib4 'v4.*' \
+                   | sed 's|.*refs/tags/||' \
+                   | grep -E '^v4\.[0-9]+\.[0-9]+$' \
+                   | sort -V | tail -1)
+          toolchain=$(curl -sSf "https://raw.githubusercontent.com/leanprover-community/mathlib4/$latest/lean-toolchain")
+          current=$(grep -oE 'git#v4\.[0-9]+\.[0-9]+' formal/lakefile.toml)
+          {
+            echo "latest=$latest"
+            echo "toolchain=$toolchain"
+            echo "current=${current#git#}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Move the pin and the toolchain together
+        if: steps.target.outputs.latest != steps.target.outputs.current
+        # Through `env`: an expression is substituted before the shell parses the line.
+        env:
+          TOOLCHAIN: ${{ steps.target.outputs.toolchain }}
+          LATEST: ${{ steps.target.outputs.latest }}
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$TOOLCHAIN" > formal/lean-toolchain
+          sed -i "s|^version = \"git#v4\\..*\"$|version = \"git#$LATEST\"|" formal/lakefile.toml
+          grep -o 'git#v4[^"]*' formal/lakefile.toml
+          cat formal/lean-toolchain
+
+      - name: Install elan
+        if: steps.target.outputs.latest != steps.target.outputs.current
+        run: |
+          curl -sSf https://elan.lean-lang.org/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: Update, fetch and build cold
+        id: build
+        if: steps.target.outputs.latest != steps.target.outputs.current
+        working-directory: formal
+        run: |
+          set -uo pipefail
+          lake update            > "$RUNNER_TEMP/update.log" 2>&1; echo "update=$?"   >> "$GITHUB_OUTPUT"
+          lake exe cache get     > "$RUNNER_TEMP/cache.log"  2>&1; echo "cache=$?"    >> "$GITHUB_OUTPUT"
+          lake build             > "$RUNNER_TEMP/build.log"  2>&1; echo "build=$?"    >> "$GITHUB_OUTPUT"
+
+      - name: Report
+        if: always()
+        env:
+          CURRENT: ${{ steps.target.outputs.current }}
+          LATEST: ${{ steps.target.outputs.latest }}
+          TOOLCHAIN: ${{ steps.target.outputs.toolchain }}
+          UPDATE_RC: ${{ steps.build.outputs.update }}
+          CACHE_RC: ${{ steps.build.outputs.cache }}
+          BUILD_RC: ${{ steps.build.outputs.build }}
+        run: |
+          set -uo pipefail
+          {
+            echo "## mathlib probe"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| pinned today | \`$CURRENT\` |"
+            echo "| newest stable | \`$LATEST\` |"
+            echo "| its toolchain | \`$TOOLCHAIN\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$LATEST" = "$CURRENT" ]; then
+            printf '\nThe pin is current. Nothing was built.\n' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          {
+            echo "| \`lake update\` | exit $UPDATE_RC |"
+            echo "| \`lake exe cache get\` | exit $CACHE_RC |"
+            echo "| \`lake build\` | exit $BUILD_RC |"
+            echo
+            echo "### Diagnostics by class"
+            echo
+            echo '```'
+            # Anchored on the position prefix: the word alone counts a hint as a diagnostic.
+            grep -oE '^[^ ]+:[0-9]+:[0-9]+: (error|warning)(\([a-zA-Z0-9._]+\))?' \
+              "$RUNNER_TEMP/build.log" | sed 's|^.*: ||' | sort | uniq -c | sort -rn \
+              || echo "none"
+            echo '```'
+            echo
+            printf 'errors %s, warnings %s, over %s lines of build output.\n' \
+              "$(grep -cE '^[^ ]+:[0-9]+:[0-9]+: error' "$RUNNER_TEMP/build.log")" \
+              "$(grep -cE '^[^ ]+:[0-9]+:[0-9]+: warning' "$RUNNER_TEMP/build.log")" \
+              "$(wc -l < "$RUNNER_TEMP/build.log")"
+            echo
+            echo "The counts are a reading of the log, and the log is the artifact beside this run."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep the logs
+        if: always() && steps.target.outputs.latest != steps.target.outputs.current
+        uses: actions/upload-artifact@v4
+        with:
+          name: mathlib-probe-${{ steps.target.outputs.latest }}
+          path: ${{ runner.temp }}/*.log
+          if-no-files-found: warn
