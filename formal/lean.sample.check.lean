@@ -19,6 +19,8 @@ generator — an under-fuelled line reduces to `.exhausted`, which matches neith
 binds a `k` it never reads. `Calculus/` itself builds warning-free and so should this file; the
 binder cannot be `_` because a multi-name object *does* read `k.1`. -/
 set_option linter.unusedVariables false
+/-! A vector's name spells the codec pair it came from, so it carries `__`. -/
+set_option linter.style.nameCheck false
 
 namespace Calculus
 
@@ -131,8 +133,8 @@ theorem record_of_string :
 theorem record_empty :
     check 1
       ((denote (Term.record (Term.string))).e
-        (Value.map ∅ (fun k => absurd k.2 (Finset.not_mem_empty k.1))))
-      (some (Attr.m ∅ (fun k => absurd k.2 (Finset.not_mem_empty k.1)))) = .same := rfl
+        (Value.map ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1))))
+      (some (Attr.m ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)))) = .same := rfl
 
 /-- `object_two_fields` -/
 theorem object_two_fields :

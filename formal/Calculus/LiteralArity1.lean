@@ -199,9 +199,9 @@ theorem uAtCan_map_literal_num {l : List WFDouble} (hnd : l.Nodup) :
       | false => simp [inL, hw] at hv
       | true =>
         simp only [inL, hw, dite_true, NEFinset.of, Finset.mem_insert,
-          Finset.not_mem_empty, or_false, decide_eq_true_eq] at hv
+          Finset.notMem_empty, or_false, decide_eq_true_eq] at hv
         simp only [inL, hw, dite_true, NEFinset.of, Finset.mem_insert,
-          Finset.not_mem_empty, or_false, decide_eq_false_iff_not, hv]
+          Finset.notMem_empty, or_false, decide_eq_false_iff_not, hv]
         exact hab
     all_goals simp_all [inL, NEFinset.of]
 

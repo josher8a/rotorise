@@ -97,3 +97,22 @@ size-against-similarity ordering is the dimension; no single count is.
 
 **What decides it.** An ordering that survives a change of transform and puts the bulk of the twin
 mass at high similarity. Until then the merge abstracts what does not matter.
+
+---
+
+## The development carries its own constructive `Finset` layer, and the base drops choice
+
+Mathlib resolves `k ∈ (s : Finset α)` through `Finset.instSetLike`, whose injectivity field
+is proved classically, so every statement that mentions membership in a key set carries
+`Classical.choice`. The base admits the axiom today for that reason and no other: no proof in
+`Calculus/` appeals to choice, and none needs it.
+
+The state this entry names is a membership and decision layer of this development's own, over
+`Multiset.Mem` rather than the coercion to `Set`, with the mathlib lemmas the tree uses restated or
+bridged against it. `MapOf` in `Domain.lean` is where it starts, because the key set is a
+`Finset Name` and `MapOf.at` is the first declaration that decides membership.
+
+**What decides it.** Two local instances, membership and its decision, were measured against the
+whole tree and moved a small fraction of the declarations that reach the axiom. So the entry arrives
+only with the restated lemmas, not with an instance. It arrives sooner if mathlib makes the set-like
+route constructive upstream, and the entry closes with no work here if that happens.

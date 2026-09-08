@@ -188,7 +188,7 @@ empty field table discards everything it is given. Its `M` fragment is a single 
 
 /-- The empty binding, at any payload type: `∅` names no key, so the payload function is
     total by vacuity. -/
-def noEntries {α : Type} : MapOf α := ⟨∅, fun k => (Finset.not_mem_empty _ k.2).elim⟩
+def noEntries {α : Type} : MapOf α := ⟨∅, fun k => (Finset.notMem_empty _ k.2).elim⟩
 
 /-- **The object that declares nothing and drops everything.** Chosen because it makes the
     failure minimal: no field is involved, so nothing about any particular field's codec is
@@ -199,8 +199,8 @@ noncomputable def dropAll : Codec := objectCodec noEntries .drop
     three hypotheses are all quantified over the declared names, so at the empty table they
     are vacuous — no proof obligation is being dodged. -/
 theorem lawful_dropAll : Lawful dropAll :=
-  lawful_objectCodec (fun k => (Finset.not_mem_empty _ k.2).elim)
-    (fun k => (Finset.not_mem_empty _ k.2).elim) (fun _ h => nomatch h)
+  lawful_objectCodec (fun k => (Finset.notMem_empty _ k.2).elim)
+    (fun k => (Finset.notMem_empty _ k.2).elim) (fun _ h => nomatch h)
 
 /-- No name survives the `drop` filter when nothing is declared. -/
 theorem keepB_noEntries (k : Name) : keepB .drop (noEntries (α := FieldSem)) k = false := by
@@ -212,8 +212,8 @@ theorem keepB_noEntries (k : Name) : keepB .drop (noEntries (α := FieldSem)) k 
 theorem mapOf_of_keys_empty {α : Type} {s : Finset Name} (h : s = ∅)
     (g : {k // k ∈ s} → α) : (⟨s, g⟩ : MapOf α) = noEntries := by
   subst h
-  have hg : g = fun k => (Finset.not_mem_empty _ k.2).elim :=
-    funext fun k => (Finset.not_mem_empty _ k.2).elim
+  have hg : g = fun k => (Finset.notMem_empty _ k.2).elim :=
+    funext fun k => (Finset.notMem_empty _ k.2).elim
   rw [hg]
   rfl
 
@@ -233,7 +233,7 @@ theorem fbNames_noEntries (keys : Finset Name) :
 theorem reqPresentB_noEntries (keys : Finset Name) :
     reqPresentB (noEntries (α := FieldSem)) keys = true := by
   unfold reqPresentB
-  exact decide_eq_true fun k => (Finset.not_mem_empty _ k.2).elim
+  exact decide_eq_true fun k => (Finset.notMem_empty _ k.2).elim
 
 /-- **Every `M` attribute reads to the empty map.** The guard is vacuous, the filter is empty,
     and there are no fallback names to reinstate, so nothing whatever of the stored item

@@ -417,7 +417,7 @@ theorem restrict_e_adapt {c : Codec} (q : Value → Bool) :
 /-- …and reads as one. -/
 theorem restrict_p_adapt {c : Codec} (q : Value → Bool) :
     (c.restrict q).p = (c.adapt (partialId q) (partialId q)).p := by
-  funext a; simp only [Codec.restrict, Codec.adapt, partialId]
+  funext a; simp only [Codec.restrict, Codec.adapt, partialId]; rfl
 
 /-! ### §1's number gates are that combinator too
 
@@ -619,7 +619,7 @@ theorem through_e {f g : Value → Value} {v a} :
 /-- …and reads what its base reads, transported back. -/
 theorem through_p {f g : Value → Value} {a v} :
     (c.through f g).p a = some v ↔ ∃ w, c.p a = some w ∧ v = g w := by
-  simp [Codec.through, Option.map_eq_some', eq_comm (a := v)]
+  simp [Codec.through, Option.map_eq_some_iff, eq_comm (a := v)]
 
 /-- The read side of `restrict_e_isSome`, and its absence is why every literal row unfolded
     `Codec.restrict` by hand. §4c asks for one codec stated once for both sides; the write half
@@ -639,7 +639,7 @@ theorem restrict_e {q : Value → Bool} {v a} :
 /-- …and reads only into it. -/
 theorem restrict_p {q : Value → Bool} {a v} :
     (c.restrict q).p a = some v ↔ c.p a = some v ∧ q v = true := by
-  simp only [Codec.restrict, Option.bind_eq_some]
+  simp only [Codec.restrict, Option.bind_eq_some_iff]
   constructor
   · rintro ⟨w, hw, h⟩; split at h <;> simp_all
   · rintro ⟨h, hq⟩; exact ⟨v, h, by simp [hq]⟩
@@ -858,7 +858,7 @@ theorem setImage_roundTrip {α β : Type} [DecidableEq α] [DecidableEq β]
     (hI : setImage (fun x => (c.e (vinj x)).bind aout) S = some T) :
     setImage (fun y => (c.p (ainj y)).bind vout) T = some S := by
   refine setImage_inv (fun x y hxy => ?_) hI
-  simp only [Option.bind_eq_some] at hxy
+  simp only [Option.bind_eq_some_iff] at hxy
   obtain ⟨a, hea, hoa⟩ := hxy
   rw [hA a y hoa] at hea
   rw [h.retract hea]
@@ -989,7 +989,7 @@ theorem encSet_elem {α : Type} {c : Codec} {inj : α → Value} {S : NEFinset �
     · next T hT =>
         exact fun x hx => bind_isSome_left (setImage_some (neSetImage_eq_setImage.mp hT) x hx)
     · next =>
-      obtain ⟨T, hT, -⟩ := Option.map_eq_some'.mp h
+      obtain ⟨T, hT, -⟩ := Option.map_eq_some_iff.mp h
       exact fun x hx => bind_isSome_left (setImage_some (neSetImage_eq_setImage.mp hT) x hx)
 
 /-- …and reading one needs every element to read. -/
@@ -1003,7 +1003,7 @@ theorem decSet_elem {α : Type} {c : Codec} {inj : α → Attr} {S : NEFinset α
     · next T hT =>
         exact fun x hx => bind_isSome_left (setImage_some (neSetImage_eq_setImage.mp hT) x hx)
     · next =>
-      obtain ⟨T, hT, -⟩ := Option.map_eq_some'.mp h
+      obtain ⟨T, hT, -⟩ := Option.map_eq_some_iff.mp h
       exact fun x hx => bind_isSome_left (setImage_some (neSetImage_eq_setImage.mp hT) x hx)
 
 /-- What a read produces: one of the three value sets, each element read from an element
@@ -1030,7 +1030,7 @@ theorem decSet_mem {α : Type} {c : Codec} {inj : α → Attr} {S : NEFinset α}
       obtain ⟨x, hx, hxy⟩ := (mem_setImage (neSetImage_eq_setImage.mp hT) y).mp hy
       exact ⟨x, hx, bind_vNum hxy⟩
     · next =>
-      obtain ⟨T, hT, hv⟩ := Option.map_eq_some'.mp h
+      obtain ⟨T, hT, hv⟩ := Option.map_eq_some_iff.mp h
       refine Or.inr (Or.inr ⟨T, hv.symm, fun y hy => ?_⟩)
       obtain ⟨x, hx, hxy⟩ := (mem_setImage (neSetImage_eq_setImage.mp hT) y).mp hy
       exact ⟨x, hx, bind_vBin hxy⟩
@@ -1256,7 +1256,7 @@ theorem decSet_liftQ {α : Type} {c : Codec} {q : Value → Bool} {inj : α → 
         simp only [liftQ, decide_eq_true_eq] at hl
         rw [hws]; exact hl d hmem
     · next =>
-        obtain ⟨T, hT, hv⟩ := Option.map_eq_some'.mp h
+        obtain ⟨T, hT, hv⟩ := Option.map_eq_some_iff.mp h
         subst hv
         obtain ⟨b, hs⟩ :=
           Option.isSome_iff_exists.mp (setImage_some (neSetImage_eq_setImage.mp hT) x hx)
@@ -1396,13 +1396,13 @@ variable {γ δ : Type} {V : Ctor γ Value} {A : Ctor δ Attr} {μ₀ : Member}
 theorem carried_e {v a} :
     (carriedCodec V A μ₀ P E D).e v = some a ↔
       ∃ x y, V.out v = some x ∧ E x = some y ∧ a = A.into y := by
-  simp [carriedCodec, Option.bind_eq_some, Option.map_eq_some', eq_comm (a := a)]
+  simp [carriedCodec, Option.bind_eq_some_iff, Option.map_eq_some_iff, eq_comm (a := a)]
 
 /-- What it reads: the mirror. -/
 theorem carried_p {a v} :
     (carriedCodec V A μ₀ P E D).p a = some v ↔
       ∃ y x, A.out a = some y ∧ D y = some x ∧ v = V.into x := by
-  simp [carriedCodec, Option.bind_eq_some, Option.map_eq_some', eq_comm (a := v)]
+  simp [carriedCodec, Option.bind_eq_some_iff, Option.map_eq_some_iff, eq_comm (a := v)]
 
 /-- (R), (C) and (W) are the payload pair's own, plus the member the attribute
     constructor stamps. The prisms contribute nothing but their two laws. -/
@@ -1590,7 +1590,7 @@ theorem recordCodec_e_eq {c : Codec} {v : Value} {a : Attr} :
   case map keys f =>
     constructor
     · intro h
-      obtain ⟨g, hg, rfl⟩ := Option.map_eq_some'.mp h
+      obtain ⟨g, hg, rfl⟩ := Option.map_eq_some_iff.mp h
       exact ⟨keys, f, g, rfl, hg, rfl⟩
     · rintro ⟨keys', f', g, hv, hg, rfl⟩
       cases hv
@@ -1611,7 +1611,7 @@ theorem recordCodec_p_eq {c : Codec} {a : Attr} {v : Value} :
   case m keys g =>
     constructor
     · intro h
-      obtain ⟨f, hf, rfl⟩ := Option.map_eq_some'.mp h
+      obtain ⟨f, hf, rfl⟩ := Option.map_eq_some_iff.mp h
       exact ⟨keys, g, f, rfl, hf, rfl⟩
     · rintro ⟨keys', g', f, ha, hf, rfl⟩
       cases ha
@@ -1726,10 +1726,10 @@ theorem slots_length : ∀ (cs : List Codec) (tail : Option Codec) (n : Nat) (ds
     slots cs tail n = some ds → ds.length = n
   | [], tail, 0, _, h => by cases tail <;> (simp [slots] at h; simp [← h])
   | [], some c, n + 1, ds, h => by
-      obtain ⟨ds', h', rfl⟩ := Option.map_eq_some'.mp h
+      obtain ⟨ds', h', rfl⟩ := Option.map_eq_some_iff.mp h
       simp [slots_length [] (some c) n ds' h']
   | c :: cs, tail, n + 1, ds, h => by
-      obtain ⟨ds', h', rfl⟩ := Option.map_eq_some'.mp h
+      obtain ⟨ds', h', rfl⟩ := Option.map_eq_some_iff.mp h
       simp [slots_length cs tail n ds' h']
 
 /-- Every codec in the row is one the shape declared. -/
@@ -1738,14 +1738,14 @@ theorem slots_mem : ∀ (cs : List Codec) (tail : Option Codec) (n : Nat) (ds),
   | [], tail, 0, _, h, _, hm => by
       cases tail <;> (simp [slots] at h; subst h; exact nomatch hm)
   | [], some c, n + 1, ds, h, d, hm => by
-      obtain ⟨ds', h', rfl⟩ := Option.map_eq_some'.mp h
+      obtain ⟨ds', h', rfl⟩ := Option.map_eq_some_iff.mp h
       rcases List.mem_cons.mp hm with rfl | hm'
       · exact .inr rfl
       · exact slots_mem [] (some c) n ds' h' d hm'
   | c :: cs, tail, n + 1, ds, h, d, hm => by
-      obtain ⟨ds', h', rfl⟩ := Option.map_eq_some'.mp h
+      obtain ⟨ds', h', rfl⟩ := Option.map_eq_some_iff.mp h
       rcases List.mem_cons.mp hm with rfl | hm'
-      · exact .inl (List.mem_cons_self _ _)
+      · exact .inl (List.mem_cons_self)
       · exact (slots_mem cs tail n ds' h' d hm').imp (List.mem_cons_of_mem _) id
 
 /-- A property of the shape's codecs is a property of every codec in every row. -/
@@ -1763,7 +1763,7 @@ theorem align_eq_some {α : Type} {cs : List Codec} {tail : Option Codec}
   rw [align_eq_zip]
   constructor
   · intro h
-    obtain ⟨ds, h', rfl⟩ := Option.map_eq_some'.mp h
+    obtain ⟨ds, h', rfl⟩ := Option.map_eq_some_iff.mp h
     exact ⟨ds, h', slots_length _ _ _ _ h', rfl⟩
   · rintro ⟨ds, h', _, rfl⟩
     rw [h']; rfl
@@ -1784,8 +1784,8 @@ theorem zip_roundTrip : ∀ (ds : List Codec) (vs : List Value) (as : List Attr)
   | _ :: _, [], as, _, hlen, h => by simp_all
   | d :: ds, v :: vs, as, hd, hlen, h => by
       rw [List.zip_cons_cons, traverse_cons] at h
-      obtain ⟨a, ha, has⟩ := Option.bind_eq_some.mp h
-      obtain ⟨as', has', rfl⟩ := Option.map_eq_some'.mp has
+      obtain ⟨a, ha, has⟩ := Option.bind_eq_some_iff.mp h
+      obtain ⟨as', has', rfl⟩ := Option.map_eq_some_iff.mp has
       rw [List.zip_cons_cons, traverse_cons, (hd d (by simp)).retract ha,
         zip_roundTrip ds vs as' (fun c hc => hd c (by simp [hc])) (by simpa using hlen) has']
       rfl
@@ -1798,8 +1798,8 @@ theorem zip_canon : ∀ (ds : List Codec) (as : List Attr) (vs : List Value),
   | _ :: _, [], vs, _, h => by simp_all
   | d :: ds, a :: as, vs, hd, h => by
       rw [List.zip_cons_cons, traverse_cons] at h
-      obtain ⟨v, hv, hvs⟩ := Option.bind_eq_some.mp h
-      obtain ⟨vs', hvs', rfl⟩ := Option.map_eq_some'.mp hvs
+      obtain ⟨v, hv, hvs⟩ := Option.bind_eq_some_iff.mp h
+      obtain ⟨vs', hvs', rfl⟩ := Option.map_eq_some_iff.mp hvs
       obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp ((hd d (by simp)).canon hv)
       obtain ⟨as', has'⟩ := Option.isSome_iff_exists.mp
         (zip_canon ds as vs' (fun c hc => hd c (by simp [hc])) hvs')
@@ -1814,11 +1814,11 @@ theorem zip_agree : ∀ (ds : List Codec) (as : List Attr) (vs : List Value) (as
   | _ :: _, [], vs, as', _, h, h' => by simp_all
   | d :: ds, a :: as, vs, as', hd, h, h' => by
       rw [List.zip_cons_cons, traverse_cons] at h
-      obtain ⟨v, hv, hvs⟩ := Option.bind_eq_some.mp h
-      obtain ⟨vs', hvs', rfl⟩ := Option.map_eq_some'.mp hvs
+      obtain ⟨v, hv, hvs⟩ := Option.bind_eq_some_iff.mp h
+      obtain ⟨vs', hvs', rfl⟩ := Option.map_eq_some_iff.mp hvs
       rw [List.zip_cons_cons, traverse_cons] at h'
-      obtain ⟨a₁, ha₁, has⟩ := Option.bind_eq_some.mp h'
-      obtain ⟨as₁, has₁, rfl⟩ := Option.map_eq_some'.mp has
+      obtain ⟨a₁, ha₁, has⟩ := Option.bind_eq_some_iff.mp h'
+      obtain ⟨as₁, has₁, rfl⟩ := Option.map_eq_some_iff.mp has
       intro q hq
       rcases List.mem_cons.mp (by simpa using hq) with rfl | hq'
       · exact (hd d (by simp)).agree hv ha₁
@@ -1833,8 +1833,8 @@ theorem zip_domE : ∀ (ds : List Codec) (vs : List Value) (as : List Attr),
   | _ :: _, [], as, _, h => by simp_all
   | d :: ds, v :: vs, as, hd, h => by
       rw [List.zip_cons_cons, traverse_cons] at h
-      obtain ⟨a, ha, has⟩ := Option.bind_eq_some.mp h
-      obtain ⟨as', has', rfl⟩ := Option.map_eq_some'.mp has
+      obtain ⟨a, ha, has⟩ := Option.bind_eq_some_iff.mp h
+      obtain ⟨as', has', rfl⟩ := Option.map_eq_some_iff.mp has
       intro q hq
       rcases List.mem_cons.mp (by simpa using hq) with rfl | hq'
       · exact (hd d (by simp)).domE ha
@@ -1849,8 +1849,8 @@ theorem zip_ranP : ∀ (ds : List Codec) (as : List Attr) (vs : List Value),
   | _ :: _, [], vs, _, h => by simp_all
   | d :: ds, a :: as, vs, hd, h => by
       rw [List.zip_cons_cons, traverse_cons] at h
-      obtain ⟨v, hv, hvs⟩ := Option.bind_eq_some.mp h
-      obtain ⟨vs', hvs', rfl⟩ := Option.map_eq_some'.mp hvs
+      obtain ⟨v, hv, hvs⟩ := Option.bind_eq_some_iff.mp h
+      obtain ⟨vs', hvs', rfl⟩ := Option.map_eq_some_iff.mp hvs
       intro q hq
       rcases List.mem_cons.mp (by simpa using hq) with rfl | hq'
       · exact (hd d (by simp)).ranP hv
@@ -1875,11 +1875,11 @@ theorem tuple_retract (hd : ∀ c ∈ cs, LawfulCore c) (htl : ∀ c ∈ tail, L
     ∀ vs as, (align cs tail vs).bind (traverse fun cv => cv.1.e cv.2) = some as →
       (align cs tail as).bind (traverse fun ca => ca.1.p ca.2) = some vs := by
   intro vs as hE
-  obtain ⟨ps, hal, htr⟩ := Option.bind_eq_some.mp hE
+  obtain ⟨ps, hal, htr⟩ := Option.bind_eq_some_iff.mp hE
   obtain ⟨ds, hs, hlen, rfl⟩ := align_eq_some.mp hal
   have hn : as.length = vs.length := by
     rw [← traverse_length _ _ htr, List.length_zip, hlen, Nat.min_self]
-  exact Option.bind_eq_some.mpr ⟨_, align_of_slots hs hn,
+  exact Option.bind_eq_some_iff.mpr ⟨_, align_of_slots hs hn,
     zip_roundTrip ds vs as (slots_all hd htl hs) hlen htr⟩
 
 /-- (C) for the payload pair, the same way round. -/
@@ -1887,7 +1887,7 @@ theorem tuple_canon (hd : ∀ c ∈ cs, LawfulCore c) (htl : ∀ c ∈ tail, Law
     ∀ as vs, (align cs tail as).bind (traverse fun ca => ca.1.p ca.2) = some vs →
       ((align cs tail vs).bind (traverse fun cv => cv.1.e cv.2)).isSome := by
   intro as vs hD
-  obtain ⟨ps, hal, htr⟩ := Option.bind_eq_some.mp hD
+  obtain ⟨ps, hal, htr⟩ := Option.bind_eq_some_iff.mp hD
   obtain ⟨ds, hs, hlen, rfl⟩ := align_eq_some.mp hal
   have hn : vs.length = as.length := by
     rw [← traverse_length _ _ htr, List.length_zip, hlen, Nat.min_self]
@@ -1907,11 +1907,11 @@ theorem lawful_tupleCodec (hcs : ∀ c ∈ cs, Lawful c) (htl : ∀ c ∈ tail, 
     (tuple_retract (fun c h => (hcs c h).core) (fun c h => (htl c h).core))
     (tuple_canon (fun c h => (hcs c h).core) (fun c h => (htl c h).core)) ?_
   intro as vs as' hD hE
-  obtain ⟨ps, hal, htr⟩ := Option.bind_eq_some.mp hD
+  obtain ⟨ps, hal, htr⟩ := Option.bind_eq_some_iff.mp hD
   obtain ⟨ds, hs, hlen, rfl⟩ := align_eq_some.mp hal
   have hn : vs.length = as.length := by
     rw [← traverse_length _ _ htr, List.length_zip, hlen, Nat.min_self]
-  obtain ⟨ps', hal', htr'⟩ := Option.bind_eq_some.mp hE
+  obtain ⟨ps', hal', htr'⟩ := Option.bind_eq_some_iff.mp hE
   rw [align_of_slots hs hn] at hal'
   cases hal'
   exact .l as' as (zip_agree ds as vs as' (slots_all hcs htl hs) htr htr')
@@ -1920,11 +1920,11 @@ theorem carrier_tupleCodec (hcs : ∀ c ∈ cs, Carrier c) (htl : ∀ c ∈ tail
     Carrier (tupleCodec cs tail) := by
   refine tupleCodec_eq ▸ carrier_carried ?_ ?_
   · intro vs as hE
-    obtain ⟨ps, hal, htr⟩ := Option.bind_eq_some.mp hE
+    obtain ⟨ps, hal, htr⟩ := Option.bind_eq_some_iff.mp hE
     obtain ⟨ds, hs, hlen, rfl⟩ := align_eq_some.mp hal
     exact ⟨_, hal, zip_domE ds vs as (slots_all hcs htl hs) htr⟩
   · intro as vs hD
-    obtain ⟨ps, hal, htr⟩ := Option.bind_eq_some.mp hD
+    obtain ⟨ps, hal, htr⟩ := Option.bind_eq_some_iff.mp hD
     obtain ⟨ds, hs, hlen, rfl⟩ := align_eq_some.mp hal
     have hn : vs.length = as.length := by
       rw [← traverse_length _ _ htr, List.length_zip, hlen, Nat.min_self]
@@ -2087,7 +2087,7 @@ theorem objWrite_eq {p : MapOf Value} {q : MapOf Attr} :
         q = ⟨p.1, g⟩ := by
   simp only [objWrite]
   split
-  · next hg => simp [hg, Option.map_eq_some', eq_comm (a := q)]
+  · next hg => simp [hg, Option.map_eq_some_iff, eq_comm (a := q)]
   · next hg => simp [hg]
 
 theorem objRead_eq {q : MapOf Attr} {p : MapOf Value} :
@@ -2101,7 +2101,7 @@ theorem objRead_eq {q : MapOf Attr} {p : MapOf Value} :
               else (fbValue sems k.1).getD .null⟩ := by
   simp only [objRead]
   split
-  · next hg => simp [hg, Option.map_eq_some', eq_comm (a := p)]
+  · next hg => simp [hg, Option.map_eq_some_iff, eq_comm (a := p)]
   · next hg => simp [hg]
 
 /-- The object is `carriedCodec` between `map` and `M`, at that pair. -/
@@ -2311,10 +2311,10 @@ theorem carrier_pointCodec {α : Type} {V : Ctor α Value} {A : Ctor α Attr} {�
     Carrier (pointCodec V A μ₀) := by
   refine ⟨?_, ?_⟩
   · intro v a h
-    obtain ⟨x, hx, _⟩ := Option.map_eq_some'.mp h
+    obtain ⟨x, hx, _⟩ := Option.map_eq_some_iff.mp h
     exact ⟨x, V.into_out hx⟩
   · intro a v h
-    obtain ⟨x, _, rfl⟩ := Option.map_eq_some'.mp h
+    obtain ⟨x, _, rfl⟩ := Option.map_eq_some_iff.mp h
     exact ⟨x, rfl⟩
 
 /-- The four point ground codecs are on their carriers for one reason, the same one that
@@ -2572,20 +2572,20 @@ theorem lawful_pointCodec {α : Type} {V : Ctor α Value} {A : Ctor α Attr} {μ
   refine ⟨?_, ?_, ?_, ?_⟩
   · -- (R): match, rebuild, match again — `out_into` on each side.
     intro t a he
-    obtain ⟨x, hx, rfl⟩ := Option.map_eq_some'.mp he
+    obtain ⟨x, hx, rfl⟩ := Option.map_eq_some_iff.mp he
     simp [pointCodec, A.out_into, ← V.into_out hx]
   · -- (C): what `p` produced was built by `V`, so `V.out` matches it.
     intro a t hp
-    obtain ⟨x, _, rfl⟩ := Option.map_eq_some'.mp hp
+    obtain ⟨x, _, rfl⟩ := Option.map_eq_some_iff.mp hp
     simp [pointCodec, V.out_into]
   · -- (W): everything written is `A.into` of something.
     intro μ hm t a he
-    obtain ⟨x, _, rfl⟩ := Option.map_eq_some'.mp he
+    obtain ⟨x, _, rfl⟩ := Option.map_eq_some_iff.mp he
     cases hm; exact hμ x
   · -- (MP): the re-encoding is the attribute itself, not merely an agreeing one.
     intro a t a' hp he
-    obtain ⟨x, hx, rfl⟩ := Option.map_eq_some'.mp hp
-    simp only [pointCodec, V.out_into, Option.map_some'] at he
+    obtain ⟨x, hx, rfl⟩ := Option.map_eq_some_iff.mp hp
+    simp only [pointCodec, V.out_into, Option.map_some] at he
     cases he
     rw [A.into_out hx]
     exact hrefl x
@@ -2726,7 +2726,7 @@ theorem lawful_numberCodec : Lawful numberCodec := by
         rw [numberCodec_p_n]
         show ((Double.ofDec (⟨d.toDec, hw⟩ : WFNumeral).1).bind
           (fun e => if Numeral.WF e.toDec then some (Value.num e) else none)) = some (.num d)
-        rw [Double.roundtrip, Option.some_bind, if_pos hw]
+        rw [Double.roundtrip, Option.bind_some, if_pos hw]
       · rw [dif_neg hw] at he; exact nomatch he
     | _ => exact nomatch he
   · intro a t hp
@@ -3020,7 +3020,7 @@ theorem setImage_read {α β : Type} [DecidableEq β] {c : Codec} (h : LawfulCor
     ∀ y ∈ T, ∃ x ∈ S, c.p (ainj y) = some (vinj x) := by
   intro y hy
   obtain ⟨x, hx, hxy⟩ := (mem_setImage hI y).mp hy
-  simp only [Option.bind_eq_some] at hxy
+  simp only [Option.bind_eq_some_iff] at hxy
   obtain ⟨a, hea, hoa⟩ := hxy
   rw [hA a y hoa] at hea
   exact ⟨x, hx, h.retract hea⟩
@@ -3107,7 +3107,7 @@ theorem set_retract {c : Codec} (h : LawfulCore c) :
              (miss (vinj := Value.bin) (vout := vNum) nC_out_inj (fun _ => rfl) hT)
              (key (vinj := Value.bin) (vout := vBin) nC_out_inj (fun _ => rfl) hT)
        · next =>
-         obtain ⟨T, hT, hA⟩ := Option.map_eq_some'.mp hE
+         obtain ⟨T, hT, hA⟩ := Option.map_eq_some_iff.mp hE
          subst hA
          first
          | exact decSet_strBranch
@@ -3152,7 +3152,7 @@ theorem set_writes {c : Codec} (h : LawfulCore c) :
             rw [← hm₀, member_of_nC hs] at hμ
             simpa [Attr.member] using Option.some.inj hμ
           · next =>
-            obtain ⟨T, hT, hA⟩ := Option.map_eq_some'.mp hE
+            obtain ⟨T, hT, hA⟩ := Option.map_eq_some_iff.mp hE
             subst hA
             have hs := setImage_some (neSetImage_eq_setImage.mp hT) x₀ hx₀
             rw [ha₀] at hs
@@ -3182,7 +3182,7 @@ theorem encSet_isSome_of {α : Type} {c : Codec} (h : LawfulCore c)
         (c.e (vinj x₁)).bind sC.out = some y → (c.e (vinj x₂)).bind sC.out = some y →
         x₁ = x₂ := by
       intro x₁ _ x₂ _ y h1 h2
-      simp only [Option.bind_eq_some] at h1 h2
+      simp only [Option.bind_eq_some_iff] at h1 h2
       obtain ⟨a₁, he₁, ho₁⟩ := h1
       obtain ⟨a₂, he₂, ho₂⟩ := h2
       rw [sC_out_inj a₁ y ho₁] at he₁
@@ -3206,7 +3206,7 @@ theorem encSet_isSome_of {α : Type} {c : Codec} (h : LawfulCore c)
         (c.e (vinj x₁)).bind nC.out = some y → (c.e (vinj x₂)).bind nC.out = some y →
         x₁ = x₂ := by
       intro x₁ _ x₂ _ y h1 h2
-      simp only [Option.bind_eq_some] at h1 h2
+      simp only [Option.bind_eq_some_iff] at h1 h2
       obtain ⟨a₁, he₁, ho₁⟩ := h1
       obtain ⟨a₂, he₂, ho₂⟩ := h2
       rw [nC_out_inj a₁ y ho₁] at he₁
@@ -3240,7 +3240,7 @@ theorem encSet_isSome_of {α : Type} {c : Codec} (h : LawfulCore c)
         (c.e (vinj x₁)).bind bC.out = some y → (c.e (vinj x₂)).bind bC.out = some y →
         x₁ = x₂ := by
       intro x₁ _ x₂ _ y h1 h2
-      simp only [Option.bind_eq_some] at h1 h2
+      simp only [Option.bind_eq_some_iff] at h1 h2
       obtain ⟨a₁, he₁, ho₁⟩ := h1
       obtain ⟨a₂, he₂, ho₂⟩ := h2
       rw [bC_out_inj a₁ y ho₁] at he₁
@@ -3330,7 +3330,7 @@ theorem encSet_bs_of {α : Type} {c : Codec} {vinj : α → Value} {S : NEFinset
     neSetImage_none (setImage_none_of hx₀ (by cases b <;> simp_all [nC, Attr.member]))
   unfold encSet at h
   rw [hS, hN] at h
-  obtain ⟨T, -, hTa⟩ := Option.map_eq_some'.mp h
+  obtain ⟨T, -, hTa⟩ := Option.map_eq_some_iff.mp h
   exact ⟨T, hTa.symm⟩
 
 
@@ -3442,7 +3442,7 @@ theorem fbNames_empty {sems : MapOf FieldSem} {names : Finset Name}
     (h : ∀ k c v, sems.at k = some (.fb c v) → k ∈ names) : fbNames names sems = ∅ :=
   Finset.ext fun k =>
     ⟨fun hk => by obtain ⟨⟨c, v, hm⟩, hn⟩ := mem_fbNames.mp hk; exact absurd (h k c v hm) hn,
-     fun hk => absurd hk (Finset.not_mem_empty k)⟩
+     fun hk => absurd hk (Finset.notMem_empty k)⟩
 
 /-- The guard characterizations. One `decide` over the key set replaces the `List.all`,
     and the `Nodup` premise that used to accompany every use of them is gone. -/

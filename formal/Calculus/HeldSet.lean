@@ -129,8 +129,8 @@ theorem hopaque_TL (lossy : Bool) :
       Value.depthL vs <= n -> ∀ x ∈ vs, (opaqCodec n lossy).T x
   | [], _, _, _, x, hx => absurd hx (by simp)
   | v :: vs, n, hall, hd, x, hx => by
-      rcases List.mem_cons.mp hx with rfl | hx'
-      · exact hopaque_T lossy x n (hall x (by simp))
+      rcases List.mem_cons.mp hx with h | hx'
+      · exact h ▸ hopaque_T lossy v n (hall v (by simp))
           (by simp only [Value.depthL] at hd; omega)
       · exact hopaque_TL lossy vs n (fun y hy => hall y (by simp [hy]))
           (by simp only [Value.depthL] at hd; omega) x hx'

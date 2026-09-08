@@ -15,8 +15,8 @@ import Lean
 /-!
 # The axiom base, as a checked claim
 
-**The whole development stands on `propext`, `Quot.sound`, and §1's numeric host — no
-`Classical.choice`, no `sorryAx`.** `sanctionedAxioms` below is that claim, and this file turns
+**The whole development stands on `propext`, `Classical.choice`, `Quot.sound`, and §1's
+numeric host — no `sorryAx`.** `sanctionedAxioms` below is that claim, and this file turns
 it from a sentence a reader had to verify by hand with `#print axioms` into a build error.
 
 Here it is a build error instead. `#assert_axioms` collects the axioms a constant actually
@@ -42,9 +42,13 @@ namespace Calculus
     it is an interface and not a disguised claim about binary64 is itself checked:
     `numericHost_wfNumeral` and `numericHost_unit` inhabit `NumericHost` at two types with
     provably different decimal images (`numericHost_images_differ`), and the first is built
-    with no `Double` axiom at all. -/
+    with no `Double` axiom at all.
+
+    `Classical.choice` is here because mathlib resolves `k ∈ (s : Finset α)` through
+    `Finset.instSetLike`, whose injectivity field is proved classically; the axiom is
+    computationally inert and the guard reads axioms transitively. -/
 def sanctionedAxioms : List Lean.Name :=
-  [``propext, ``Quot.sound, `Calculus.Double, `Calculus.numericHost]
+  [``propext, ``Classical.choice, ``Quot.sound, `Calculus.Double, `Calculus.numericHost]
 
 /-- `#assert_axioms c` errors unless every axiom `c` depends on is in
     `Calculus.sanctionedAxioms`. -/
@@ -207,7 +211,12 @@ def unrunLinters : List Lean.Name := [`docBlame]
     *is* the content. Two entries, named individually, for the reason `sanctionedAxioms` is a
     list rather than a policy: an exception nobody can see is an exception nobody rechecks. -/
 def sanctionedLintHits : List (Lean.Name × Lean.Name) :=
-  [(`unusedArguments, `Calculus.qTop), (`unusedArguments, `Calculus.occTop)]
+  [(`unusedArguments, `Calculus.qTop), (`unusedArguments, `Calculus.occTop),
+   -- the underscore is the tactic name a `decreasing_by` clause cites
+   (`defsWithUnderscore, `Calculus.tacticTerm_depth_wf),
+   -- both inhabit `NumericHost` and the name says which instance
+   (`defsWithUnderscore, `Calculus.numericHost_unit),
+   (`defsWithUnderscore, `Calculus.numericHost_wfNumeral)]
 
 open Batteries.Tactic.Lint
 
