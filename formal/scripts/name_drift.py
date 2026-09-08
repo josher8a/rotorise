@@ -38,7 +38,7 @@ in `EXPECTED` without amending the reason is the failure this file exists to cat
 
 **What it cannot catch is an entry keyed to a document that no longer exists.** `scan()` runs
 per target, so the stale check only fires for documents still in `CURRENT`; three entries keyed
-to `docs/structural-discipline.md` became unreachable the moment that file left the list, and
+to a document `b163c17` deleted became unreachable the moment that file left the list, and
 nothing reported them. They were removed by hand. If a document is dropped from `CURRENT`, drop
 its `EXPECTED` block in the same edit.
 
@@ -73,20 +73,33 @@ Hits in the current-state documents — `formal/README.md`, `docs/architecture.m
 `docs/roadmap.md`, `docs/defects.md`, `docs/codec-calculus.md` —
 are broken pointers and should be fixed or explicitly marked superseded.
 
+**A third pass checks a backticked file path, because `NOISE` drops the whole class from the name
+pass.** A path is not a Lean name, so the name pass is right to drop it, and nothing else was
+reading it: `ratchet.py`'s own docstring named a deleted instrument in the present tense until
+`8cc01e1` repaired it, and a docstring in `src/` named a deleted document as the record of a fact
+until this pass read it. Each citation is resolved against the files the tree holds, by full path
+and by basename. What the tree *produces* rather than holds is a short list of prefixes with a
+producer named beside each, because a citation of `dist/Rotorise.d.ts` is honest on a machine
+that has run the build and would otherwise depend on whether anyone had. The read set is wider
+than the name pass's: `src/**/*.ts` is in it, because the only live defect the pass found on the
+day it landed was there.
+
 **A second pass checks `§N`, because a section number is a citation too.** The specification is
 section-numbered on purpose and its `## §N` headings are the authority, so a `§N` naming a number
-it does not have points at nothing. That is not hypothetical: `ARCHITECTURE.md` and the
-representation audit were section-numbered as well, and both are deleted, so their citations
-outlived the documents. The major number is what is checked, because `§5.6` is a citation of `§5`.
+it does not have points at nothing. That is not hypothetical: the architecture document and the
+representation audit were section-numbered as well, and `a3c1006` and `2f567c0` deleted them, so
+their citations outlived the documents. The major number is what is checked, because `§5.6` is a
+citation of `§5`.
 The Python guards are in this pass's read set as well as the documents and the modules: a guard's
 own prose is prose.
 
 Usage:  python3 scripts/name_drift.py            (run from formal/)
         python3 scripts/name_drift.py --all      (include the change log)
 Exit code 1 if any current-state document has a hit, a stale `EXPECTED` entry, a `~~name~~` whose
-name is still in the sources, or a `§N` the specification does not have.
+name is still in the sources, a `§N` the specification does not have, or a file path nothing
+holds.
 """
-import re, sys, os, glob
+import re, sys, os, glob, fnmatch
 
 CURRENT = ["README.md", "../docs/codec-calculus.md",
            "../docs/architecture.md", "../docs/roadmap.md", "../docs/defects.md"]
@@ -97,11 +110,11 @@ CURRENT = ["README.md", "../docs/codec-calculus.md",
 # list, because at the time of adding them none dangled — so the bar is "keep it at zero",
 # which is only meaningful if breaking it fails the build.
 CURRENT += sorted(glob.glob("Calculus/*.lean"))
-# `LOG` held `docs/codec-formalization.md` and `docs/codec-audit.md` — scanned under `--all`,
-# reported, never failing, because a name missing from a change log may be a deliberate record
-# of a deletion rather than drift and no check can tell those apart. Both files are deleted;
-# `git log` is the change log now, and a commit message is not a document to scan. The list
-# stays as the hook for any future reported-only target.
+# `LOG` held two change logs — scanned under `--all`, reported, never failing, because a name
+# missing from a change log may be a deliberate record of a deletion rather than drift and no
+# check can tell those apart. `b163c17` deleted both; `git log` is the change log now, and a
+# commit message is not a document to scan. The list stays as the hook for any future
+# reported-only target.
 LOG = []
 
 IDENT = re.compile(r"[^\W\d][\w'!?⁺₀-₉]*(?:\.[^\W\d][\w'!?⁺₀-₉]*)*", re.UNICODE)
@@ -134,6 +147,14 @@ RETIRED = re.compile(r"~~([^~\n]{1,80})~~")
 # A section citation. The major number only: `§5.6` cites `§5`, and the specification numbers
 # sections and not items.
 SECTION = re.compile(r"§(\d+)")
+# A backticked token naming a file rather than a declaration. `NOISE` keeps these out of the name
+# pass, where they would be nonsense; `dangling_paths` is what checks them.
+PATHISH = re.compile(r"\.(md|py|ts|lean|json|toml|sh|yml|yaml)$")
+# What the tree produces rather than holds. One entry per producer, and no more: a prefix here
+# exempts every path under it, so a fourth entry would need a fourth producer.
+GENERATED = ("dist/",      # npm run build
+             ".attest/")   # the attest snapshot run
+# and the five vector artifacts, cited by path or by their leading-dot basename (the vector emit)
 SPEC_DOC = "../docs/codec-calculus.md"
 SECTION_HEADING = re.compile(r"^## §(\d+)", re.M)
 # naming patterns and filenames, not citations
@@ -344,6 +365,47 @@ def occurring():
     return out
 
 
+def tree_files():
+    """Every path the tree holds, by full path and by basename, from the repository root.
+
+    The generated directories are skipped rather than walked, so a citation of a build output
+    resolves through `GENERATED` and not through whether this machine has built.
+    """
+    skip = {".git", "node_modules", ".lake", "dist", ".attest", "__pycache__", ".venv"}
+    full, base = set(), set()
+    for root, dirs, files in os.walk(".."):
+        dirs[:] = [d for d in dirs if d not in skip]
+        for f in files:
+            full.add(os.path.relpath(os.path.join(root, f), "..").replace(os.sep, "/"))
+            base.add(f)
+    return full, base
+
+
+def path_resolves(tok, full, base):
+    """Whether a cited path names a file the tree holds, or one a producer writes."""
+    if any(tok.startswith(pre) for pre in GENERATED) or os.path.basename(tok).startswith("."):
+        return True
+    if "*" in tok:
+        return any(fnmatch.fnmatch(p, tok) or fnmatch.fnmatch(p, "formal/" + tok) for p in full)
+    return os.path.basename(tok) in base or any(p.endswith(tok) for p in full)
+
+
+def dangling_paths(paths, full, base):
+    """Every backticked file path citing a file nothing holds and no producer writes."""
+    out = {}
+    for path in paths:
+        if not os.path.exists(path):
+            continue
+        for lineno, line in enumerate(open(path).read().split("\n"), 1):
+            for tok in BACKTICKED.findall(line):
+                tok = tok.strip()
+                if " " in tok or not PATHISH.search(tok):
+                    continue
+                if not path_resolves(tok, full, base):
+                    out.setdefault(path, []).append((lineno, tok))
+    return out
+
+
 def spec_sections():
     """The section numbers the specification declares, read from its own headings."""
     return {int(n) for n in SECTION_HEADING.findall(open(SPEC_DOC).read())}
@@ -452,6 +514,20 @@ def main():
             print(f"  {label:38s} {n} false retirement{'' if n == 1 else 's'}")
             for lineno, name in false_retirements:
                 print(f"      {lineno:6d}  ~~{name}~~  (still in the sources — unmark it)")
+    full, base = tree_files()
+    path_targets = (CURRENT + sorted(glob.glob("scripts/*.py")) + ["scripts/gate.sh",
+                    "scripts/classical.lean", "../CLAUDE.md"]
+                    + sorted(glob.glob("../src/**/*.ts", recursive=True))
+                    + sorted(glob.glob("../.github/workflows/*.yml")))
+    broken_paths = dangling_paths(path_targets, full, base)
+    if broken_paths:
+        failed = True
+        total = sum(len(v) for v in broken_paths.values())
+        print(f"\n  {total} file citation{'' if total == 1 else 's'} naming a path the tree "
+              f"does not hold and no producer writes")
+        for path in sorted(broken_paths):
+            for lineno, tok in broken_paths[path]:
+                print(f"      {os.path.normpath(path)}:{lineno}  {tok}")
     known = spec_sections()
     dangling = dangling_sections(CURRENT + sorted(glob.glob("scripts/*.py")), known)
     if dangling:

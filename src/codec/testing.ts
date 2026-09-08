@@ -1867,7 +1867,7 @@ const byTag = (
  *
  * `codec-calculus.md` §5 is explicit that an option admits `t` when "the `κ`/name filter passes
  * **and** `eᵢ(t)` is defined", and that is what this reads. The model's `OptionSem.byAttempt` drops
- * the first conjunct — `FIDELITY.md` D1 records that `κ` is never consulted by the denotation — and
+ * the first conjunct — `κ` is never consulted by the denotation — and
  * the difference used to be visible: **`union([string, number])` violated (U) under the model's
  * reading and satisfied it under the specification's**, because `number.encode('-1')` succeeded.
  *
