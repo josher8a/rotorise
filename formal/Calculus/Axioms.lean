@@ -40,7 +40,7 @@ namespace Calculus
     projecting out of `numericHost : NumericHost Double` (`Domain.lean`), so what this list
     sanctions is one interface rather than five assertions that happen to fit together. That
     it is an interface and not a disguised claim about binary64 is itself checked:
-    `numericHost_wfNumeral` and `numericHost_unit` inhabit `NumericHost` at two types with
+    `numericHostWFNumeral` and `numericHostUnit` inhabit `NumericHost` at two types with
     provably different decimal images (`numericHost_images_differ`), and the first is built
     with no `Double` axiom at all.
 
@@ -211,12 +211,7 @@ def unrunLinters : List Lean.Name := [`docBlame]
     *is* the content. Two entries, named individually, for the reason `sanctionedAxioms` is a
     list rather than a policy: an exception nobody can see is an exception nobody rechecks. -/
 def sanctionedLintHits : List (Lean.Name × Lean.Name) :=
-  [(`unusedArguments, `Calculus.qTop), (`unusedArguments, `Calculus.occTop),
-   -- the underscore is the tactic name a `decreasing_by` clause cites
-   (`defsWithUnderscore, `Calculus.tacticTerm_depth_wf),
-   -- both inhabit `NumericHost` and the name says which instance
-   (`defsWithUnderscore, `Calculus.numericHost_unit),
-   (`defsWithUnderscore, `Calculus.numericHost_wfNumeral)]
+  [(`unusedArguments, `Calculus.qTop), (`unusedArguments, `Calculus.occTop)]
 
 open Batteries.Tactic.Lint
 
