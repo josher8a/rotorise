@@ -109,7 +109,7 @@ and both assertions fail rather than one — which is how a stuck row was told a
 disagreement, `AdmA .decimal` and `AdmA .string` reducing on the same attribute.
 
 **What is mitigated.** The axiom block is checkably an interface rather than binary64 under another
-name. `numericHost_wfNumeral` and `numericHost_unit` inhabit `NumericHost` at two types with
+name. `numericHostWFNumeral` and `numericHostUnit` inhabit `NumericHost` at two types with
 provably different decimal images, by `numericHost_images_differ`, and the first is built with no
 `Double` axiom at all. So every theorem that is really about the interface holds of a host with no
 rounding. The gate travels as the element's own second component through `WFDouble`, so admission at

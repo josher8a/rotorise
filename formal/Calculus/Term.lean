@@ -363,7 +363,7 @@ theorem Term.depth_lt_dunion {d : Name} {variants : MapOf Body}
     The claim was true before the exactness rewrite replaced a measured recursion with a
     structural one, and nothing was keeping it honest — `name_drift.py` checks that cited
     names *exist*, and all five do. -/
-macro "term_depth_wf" : tactic => `(tactic|
+macro (name := termDepthWf) "term_depth_wf" : tactic => `(tactic|
   (all_goals simp_wf
    all_goals subst_vars
    all_goals

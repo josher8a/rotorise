@@ -298,8 +298,8 @@ a type, and the claim that it carries the interface — and the `Double.*` names
 `def`s projecting out of it, so every call site is unchanged. What this buys is not the
 count. It is that the assumption is now a **first-class object**, so the claim the block
 was always making — *the calculus does not depend on binary64, only on a host with a
-decimal spelling that re-reads* — becomes checkable. `numericHost_wfNumeral` and
-`numericHost_unit` below are two inhabitants with provably different decimal images, and
+decimal spelling that re-reads* — becomes checkable. `numericHostWFNumeral` and
+`numericHostUnit` below are two inhabitants with provably different decimal images, and
 the first needs no `Double` axiom at all. -/
 
 /-- **What §1 assumes of the numeric host, and all it assumes.** A decimal spelling, a
@@ -419,7 +419,7 @@ programs against* — rather than binary64 under another name. -/
     adapter is the identity and the round trip is `dif_pos` on the subtype's own proof.
     Note what is *not* imported here: this model needs no `Double` axiom, so every theorem
     of §1 that is really about the interface holds of a host with no rounding at all. -/
-def numericHost_wfNumeral : NumericHost WFNumeral where
+def numericHostWFNumeral : NumericHost WFNumeral where
   toDec := Subtype.val
   ofDec := fun x => if h : Numeral.WF x = true then some ⟨x, h⟩ else none
   roundtrip := fun d => by simp [d.2]
@@ -427,7 +427,7 @@ def numericHost_wfNumeral : NumericHost WFNumeral where
 
 /-- **The one-number host**, at the other extreme: a single element, spelled `"0"`. Total
     on nothing but its own spelling, and still a lawful `NumericHost`. -/
-def numericHost_unit : NumericHost Unit where
+def numericHostUnit : NumericHost Unit where
   toDec := fun _ => "0"
   ofDec := fun x => if x = "0" then some () else none
   roundtrip := fun _ => rfl
@@ -439,9 +439,9 @@ def numericHost_unit : NumericHost Unit where
     many numbers the host has, nor which decimals it spells — which is exactly the
     independence the axiom block asserts and could not previously exhibit. -/
 theorem numericHost_images_differ :
-    (∃ d, numericHost_wfNumeral.toDec d = "1.5") ∧
-      (∀ u, numericHost_unit.toDec u ≠ "1.5") :=
-  ⟨⟨WFNumeral.of "1.5", rfl⟩, fun _ => by simp [numericHost_unit]⟩
+    (∃ d, numericHostWFNumeral.toDec d = "1.5") ∧
+      (∀ u, numericHostUnit.toDec u ≠ "1.5") :=
+  ⟨⟨WFNumeral.of "1.5", rfl⟩, fun _ => by simp [numericHostUnit]⟩
 
 /-- A literal `℘⁺fin`, written as one element and the rest: `insert` is never empty, so
     the proof is discharged by construction rather than at each use site. -/
