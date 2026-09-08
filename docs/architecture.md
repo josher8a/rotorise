@@ -303,7 +303,7 @@ Asserting the converse would manufacture findings.
 The blind spot is the part that matters. The check is the part anyone can read off the script.
 
 **The axiom assertion** in `Axioms.lean` makes the advertised base a build error rather than a
-claim in prose. The base admits `Classical.choice`, because mathlib resolves membership in a
+claim in prose. The base admits `Classical.choice`, in part because mathlib resolves membership in a
 `Finset` through an instance whose injectivity field is proved classically, so no theorem here
 carries a constructive warranty that this guard checks. It walks imported modules only, which is why the reachability guard exists. Its
 filter admits theorems, so **a definition that acquires an axiom is not checked at all** — run the

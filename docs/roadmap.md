@@ -100,12 +100,19 @@ mass at high similarity. Until then the merge abstracts what does not matter.
 
 ---
 
-## The development carries its own constructive `Finset` layer, and the base drops choice
+## The development carries its own constructive `Finset` layer
 
 Mathlib resolves `k ∈ (s : Finset α)` through `Finset.instSetLike`, whose injectivity field
 is proved classically, so every statement that mentions membership in a key set carries
-`Classical.choice`. The base admits the axiom today for that reason and no other: no proof in
-`Calculus/` appeals to choice, and none needs it.
+`Classical.choice`. No proof in `Calculus/` appeals to choice, and none needs it.
+
+**The layer alone does not drop the axiom, and that is measured rather than expected.** The
+`Finset` route is one of several. Core Lean's own string lemmas reach `Classical.propDecidable`
+through the UTF-8 decoding proofs, and theorems across five modules reach choice that way; cut
+`Finset.instSetLike` out of the citation graph and those theorems still reach it. One arithmetic
+simp lemma is a third route. `scripts/classical_gateways.txt` holds the set, and the gate fails
+on a route that is not in it. So this entry delivers a constructive membership layer, and a
+constructive *base* is a further state that needs the other routes closed as well.
 
 The state this entry names is a membership and decision layer of this development's own, over
 `Multiset.Mem` rather than the coercion to `Set`, with the mathlib lemmas the tree uses restated or

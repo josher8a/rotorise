@@ -1,0 +1,93 @@
+# The external constants this development cites that reach `Classical.choice`.
+# `scripts/classical.lean` prints this set and `gate.sh` fails on a name that is not here.
+# A name that leaves the output is a fall and passes. To re-baseline, copy the output over
+# this file's name rows.
+#
+# Four groups, and the reason no rule filters any of them: a filter is a second policy, and
+# a policy rots where a name does not.
+#
+#   Finset and Fintype   membership in a `Finset` resolves through `Finset.instSetLike`,
+#                        whose injectivity field is proved classically.
+#   String and Nat       core Lean's own proofs reach `Classical.propDecidable`. The shortest
+#                        path from `String.ofList_injective` runs through
+#                        `List.utf8Decode?_utf8Encode` and the UTF-8 decoding lemmas. This
+#                        route is independent of the Finset one: cut `Finset.instSetLike` and
+#                        choice is still reachable from here.
+#   Lean and Batteries   the guard's own elaborators in `Axioms.lean`, not proof appeals.
+#                        `#lint_calculus` and `#assert_axioms_all` are `CommandElabM`, and the
+#                        monad plumbing under them carries choice.
+Batteries.Tactic.Lint.getChecks
+Batteries.Tactic.Lint.lintCore
+Finset.Nonempty
+Finset.Subset.antisymm
+Finset.Subtype.fintype
+Finset.attach
+Finset.decidableDforallFinset
+Finset.decidableExistsAndFinsetCoe
+Finset.decidableMem
+Finset.empty_union
+Finset.ext
+Finset.filter_eq_self
+Finset.filter_false_of_mem
+Finset.insert_nonempty
+Finset.instSetLike
+Finset.instUnion
+Finset.instUniqueSubtypeMemSingleton
+Finset.le_sup
+Finset.mem_attach
+Finset.mem_filter
+Finset.mem_filter._simp_1
+Finset.mem_insert
+Finset.mem_insert_self
+Finset.mem_map
+Finset.mem_mk
+Finset.mem_singleton
+Finset.mem_singleton._simp_1
+Finset.mem_singleton_self
+Finset.mem_union
+Finset.notMem_empty
+Finset.notMem_empty._simp_1
+Finset.not_nonempty_empty._simp_1
+Finset.singleton_nonempty
+Finset.sup_le
+Finset.union_empty
+Fintype.decidableExistsFintype
+Fintype.decidableForallFintype
+Lean.Core.CoreM
+Lean.Core.instMonadCoreM
+Lean.Core.instMonadEnvCoreM
+Lean.Elab.Command.CommandElab
+Lean.Elab.Command.CommandElabM
+Lean.Elab.Command.Context
+Lean.Elab.Command.State
+Lean.Elab.Command.instAddErrorMessageContextCommandElabM
+Lean.Elab.Command.instMonadCommandElabM
+Lean.Elab.Command.instMonadEnvCommandElabM
+Lean.Elab.Command.instMonadExceptOfExceptionCommandElabM
+Lean.Elab.Command.instMonadRefCommandElabM
+Lean.Elab.Command.liftCoreM
+Lean.Environment
+Lean.Environment.constants
+Lean.Exception
+Lean.MessageData
+Lean.MessageData.instAppend
+Lean.MonadEnv.getEnv
+Lean.MonadError.mk
+Lean.Name.isInternal
+Lean.Name.isInternalDetail
+Lean.ToMessageData.toMessageData
+Lean.collectAxioms
+Lean.instToMessageDataList
+Lean.instToMessageDataMessageData
+Lean.instToMessageDataName
+Lean.instToMessageDataString
+Lean.realizeGlobalConstNoOverload
+Lean.throwError
+Nat.add_eq_right._simp_1
+String.Slice.Pattern.ForwardSliceSearcher.instForwardPattern_1
+String.instLawfulEqOrd
+String.instOrd
+String.instTransOrd
+String.ofList_injective
+String.startsWith
+String.toList
