@@ -360,8 +360,7 @@ abbrev NEFinset (α : Type) := {S : Finset α // S.Nonempty}
 canonical representative, hence a sort, hence an order — and `LinearOrder String` and
 `List.sorted_insertionSort` both depend on `Classical.choice`, which `sanctionedAxioms`
 (`Calculus/Axioms.lean`) does not include. `#assert_axioms_all` is what
-caught it, and `Calculus/WireOrder.lean` was 247 lines of axiom-free order built to get around
-it.
+caught it, and `f3bb956` deleted the 247 lines of axiom-free order built to get around it.
 
 None of that is needed any more, and the reason is this abbreviation: both sides of every wire
 set are now a `Finset` of a *concrete element type* — `NEFinset String`, `NEFinset Double`,
