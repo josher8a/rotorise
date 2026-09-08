@@ -1,45 +1,43 @@
 #!/usr/bin/env python3
-"""Hold three counts to the state they were in, per file, and fail when one rises.
+"""Hold four counts to the state they were in, per file, and fail when one rises.
 
-`name_drift.py` asks whether a cited name exists and `doc_counts.py` asks whether a number
-in prose matches the tree. Neither can ask the question §10's two guards are about:
+`name_drift.py` asks whether a cited name exists, and nothing here holds a number in prose to
+the tree. This script asks a different question:
 
     is this getting worse?
 
-Three counts, none of which can be *fixed* in one arc and all of which can quietly rot:
+Four counts, none of which can be *fixed* in one arc and all of which can quietly rot:
 
   unfolding_sites               a `replace h : … := h`, a `show …` or a `cases h… :` — the
                                 three ways a proof takes a definition apart by hand instead
-                                of citing a lemma. §9's rule is that a proof reads in codec
+                                of citing a lemma. The rule is that a proof reads in codec
                                 vocabulary; this is the count that makes it enforceable
-                                rather than aspirational. 332 today.
-  retirement_marks              `~~oldName~~` citations (§9). Not a defect — the convention
+                                rather than aspirational.
+  retirement_marks              `~~oldName~~` citations. Not a defect — the convention
                                 working — but the mark is the one thing `name_drift.py`
                                 takes on trust, so a session that deletes a declaration and
                                 marks its citations in the same commit gets no check at all.
-                                A rise in the count is where that shows. 72 today, 57 of them
-                                in docstrings and 15 in the three documents.
-  undocumented_public_theorems  public `theorem`/`lemma` with no docstring. §10's bar is that
+                                A rise in the count is where that shows.
+  undocumented_public_theorems  public `theorem`/`lemma` with no docstring. The bar is that
                                 a reader who knows the specification can tell what a theorem
-                                says from its name and one line. 269 of 896 today, 30%.
+                                says from its name and one line.
   branches                      decision points — pattern rows, `if`, `cases`, `<;>` and the
                                 rest of `POINTS` below. The case-analysis measure that
                                 `unfolding_sites` is blind to, and the two do not track each
                                 other per file, so this is a second number and not a
                                 restatement.
 
-**The branch count and not the branch *density*.** Density is the sharper reading —
-`occV_sound` at 1.48 a line against `soundness_both`'s 0.36 over 122 — but its denominator
-moves when a signature is re-wrapped, and this repo has paid for a formatting-sensitive metric
-once already: `7fff6e8` moved `orth_unreach_lines` 168 → 169 by splitting one signature onto
-two lines. A count of `|` and `cases` does not move for that. Nothing prints the density now,
-and nothing ratchets it.
+**The branch count and not the branch *density*.** Density is the sharper reading, but its
+denominator moves when a signature is re-wrapped, and this repo has paid for a
+formatting-sensitive metric once already: `7fff6e8` moved `orth_unreach_lines` 168 → 169 by
+splitting one signature onto two lines. A count of `|` and `cases` does not move for that.
+Nothing prints the density now, and nothing ratchets it.
 
 **A bar and a ratchet fail differently, and only one of them was available.** A coverage bar
-at 269 undocumented theorems would be decoration: nobody can satisfy it, so it would be
+on the undocumented theorems would be decoration: nobody can satisfy it, so it would be
 switched off or exempted into meaninglessness. A ratchet asks nothing on the day it lands —
 its bar *is* today's number — and from then on the next docstring is cheaper than the
-argument for skipping it. That is why all three are ratchets and none is a bar.
+argument for skipping it. That is why all four are ratchets and none is a bar.
 
 WHY THE BASELINE IS A JSON FILE AND NOT A DICT IN THIS SCRIPT
 
@@ -47,8 +45,7 @@ Both were probed. These numbers move on nearly every commit that touches `Calcul
 baseline living here would mean the *guard's own source* is edited by every such commit — and
 "did someone weaken the guard?" becomes invisible in a diff that is mostly guard edits. With
 the baseline in `scripts/ratchets.json` this file stays still, which is what makes a change to
-it worth reading. It is also the pattern `doc_counts.py` already established: a computed number
-belongs somewhere a reviewer expects to find a number.
+it worth reading.
 
 The cost of a separate file is the rot `EXPECTED` demonstrated — entries keyed to something
 that no longer exists, unreachable and unreported. It gets the same treatment: **a baseline key
@@ -66,11 +63,10 @@ its current count on the next `--accept`. A new module has no prior state to hav
 than. The exposure is a module arriving with a large count already in it, which is a code
 review's job and not a ratchet's.
 
-Blind spot, and it is the same shape for all three: **a ratchet accepts the state it was born
-in, so it cannot see a defect older than itself.** 269 undocumented theorems and 332 hand
-unfoldings are invisible to it by construction — it guards the derivative, not the value, and
-`--accept` with a *lowered* number is the only way a baseline should ever move. §6 records this
-beside the other instruments.
+Blind spot, and it is the same shape for all four: **a ratchet accepts the state it was born
+in, so it cannot see a defect older than itself.** Every undocumented theorem and every hand
+unfolding that exists today is invisible to it by construction — it guards the derivative, and
+`--accept` with a *lowered* number is the only way a baseline should ever move.
 
 Usage:  python3 scripts/ratchet.py                      (run from formal/; exit 1 on a rise)
         python3 scripts/ratchet.py --accept              (write falls)
@@ -148,7 +144,7 @@ def docstring_ends(lines):
     """Line indices where a `/-- … -/` docstring closes.
 
     `/-! … -/` is module documentation and deliberately does not count: it explains a section,
-    not a declaration, and §10's bar is about what a reader can tell from *this theorem*.
+    not a declaration, and the bar is about what a reader can tell from *this theorem*.
     Nesting is tracked because a docstring may contain `/- … -/`.
     """
     out, depth, is_doc = set(), 0, False
