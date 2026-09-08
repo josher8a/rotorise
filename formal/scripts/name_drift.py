@@ -231,7 +231,7 @@ deriving instance structure inductive theorem lemma abbrev mutual noncomputable 
 def example where match with fun let have show this at using
 dite dif whnf native native_decide with_unfolding_all maxHeartbeats partial_function
 choose iff head lookup zipWith flatMap not_forall filter_eq_nil_iff sorryAx unknown
-docBlame unreachableTactic simpNF synTaut dupNamespace checkType
+docBlame unreachableTactic simpNF synTaut dupNamespace checkType unusedArguments
 EXPECTED CURRENT PRELUDE LOG HEAD HOST SPEC MODULE_NAMES single_word_checkable defaultTargets grep
 """.split())
 # The last four rows are the ones the stripped source set made necessary, and they are a

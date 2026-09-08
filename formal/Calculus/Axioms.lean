@@ -185,7 +185,7 @@ the environment, and a module it does not import is not in the environment. -/
 
 /-! ## …and the environment linters, for the same reason
 
-`#assert_axioms_all` guards one property of the environment. Batteries ships fifteen more —
+`#assert_axioms_all` guards one property of the environment. Batteries ships more —
 `simpNF`, `unusedArguments`, `synTaut`, `dupNamespace`, `checkType` and the rest — and this
 development had **never run them**, because `Batteries.Tactic.Lint` is not imported by
 anything `Calculus` needed and so was never built.
@@ -205,13 +205,11 @@ a judgement, not a defect. Excluding it is visible here; sanctioning each hit wo
 /-- Linters not run. One entry, and it owes the reason above. -/
 def unrunLinters : List Lean.Name := [`docBlame]
 
-/-- Hits this development sanctions, as `(linter, declaration)`.
+/-- Hits this development keeps, as `(linter, declaration)`, each with its reason beside it.
 
-    Both are `fun _ => true` — the ⊤ predicate and the ⊤ occupancy — so the unused argument
-    *is* the content. Two entries, named individually, for the reason `sanctionedAxioms` is a
-    list rather than a policy: an exception nobody can see is an exception nobody rechecks. -/
-def sanctionedLintHits : List (Lean.Name × Lean.Name) :=
-  [(`unusedArguments, `Calculus.qTop), (`unusedArguments, `Calculus.occTop)]
+    Empty today. A list rather than a policy, for the reason `sanctionedAxioms` is one: an
+    exception nobody can see is an exception nobody rechecks. -/
+def sanctionedLintHits : List (Lean.Name × Lean.Name) := []
 
 open Batteries.Tactic.Lint
 
