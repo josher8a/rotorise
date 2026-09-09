@@ -82,16 +82,36 @@ undetermined is settled in §3.
 \hypertarget{laws}{%
 \subsubsection{Laws}\label{laws}}
 
-\begin{tabular}{@{}lll@{}}
-\toprule
-& & \\
-\midrule
-\textbf{R} & \texttt{∀\ t\ ∈\ dom(e).\ p(e(t))\ =\ t} & Retraction. Writing then reading returns the value written, exactly. \\
-\textbf{C} & \texttt{∀\ a\ ∈\ dom(p).\ p(a)\ ∈\ dom(e)} & Canonizability. Whatever was read can be written back. \\
-\textbf{W} & \texttt{μ\ ≠\ ⊤\ ⟹\ ∀\ t\ ∈\ dom(e).\ e(t)\ =\ ⟨μ,\ \_⟩} & A term that names its member writes that member and no other. \\
-\textbf{MP} & \texttt{∀\ a\ ∈\ dom(p).\ member(e(p(a)))\ =\ member(a)} & Reading and writing back never changes a stored member. \\
-\bottomrule
-\end{tabular}
+\begin{definition}[(R) retraction]
+\label{cond:R}
+\lean{Calculus.Lawful.retract}
+\leanok
+\texttt{∀\ t\ ∈\ dom(e).\ p(e(t))\ =\ t}. Writing then reading returns the value written, exactly.
+\end{definition}
+
+\begin{definition}[(C) canonizability]
+\label{cond:C}
+\lean{Calculus.Lawful.canon}
+\leanok
+\texttt{∀\ a\ ∈\ dom(p).\ p(a)\ ∈\ dom(e)}. Whatever was read can be written back.
+\end{definition}
+
+\begin{definition}[(W) a term writes its member]
+\label{cond:W}
+\lean{Calculus.Lawful.writes}
+\leanok
+\texttt{μ\ ≠\ ⊤\ ⟹\ ∀\ t\ ∈\ dom(e).\ e(t)\ =\ ⟨μ,\ \_⟩}. A term that names its member writes that member
+and no other.
+\end{definition}
+
+\begin{definition}[(MP) member preservation]
+\label{cond:MP}
+\uses{cond:C}
+\lean{Calculus.Lawful.agree, Calculus.Agree.member_eq}
+\leanok
+\texttt{∀\ a\ ∈\ dom(p).\ member(e(p(a)))\ =\ member(a)}. Reading and writing back never changes a stored
+member. The model states this in the strong form \texttt{e(p(a))\ ≼\ a} of §5, which implies it.
+\end{definition}
 
 The four are independent, and \textbf{(MP)} is well defined only because \textbf{(C)} holds — \texttt{e(p(a))} is an
 attribute at all because everything readable re-encodes. One term is exempt from \textbf{(MP)} and only
@@ -108,10 +128,19 @@ a programmer chooses: it is \texttt{ker\ p}, forced by the reading itself. Write
 \hypertarget{corollary-q--stability}{%
 \subsubsection{Corollary (Q — stability)}\label{corollary-q--stability}}
 
+\begin{corollary}[Q — stability]
+\label{cor:Q}
+\lean{Calculus.Lawful.stable}
+\leanok
 \texttt{∀\ a\ ∈\ dom(p).\ e(p(a))\ ≈c\ a}.
+\end{corollary}
 
-\emph{Proof.} By \textbf{(C)}, \texttt{p(a)\ ∈\ dom(e)}. Put \texttt{t\ =\ p(a)}. By \textbf{(R)}, \texttt{p(e(t))\ =\ t}. Substituting,
-\texttt{p(e(p(a)))\ =\ p(a)}, which is \texttt{e(p(a))\ ≈c\ a} by definition of \texttt{≈c}. ∎
+\begin{proof}
+\uses{cond:C,cond:R}
+\leanok
+By \textbf{(C)}, \texttt{p(a)\ ∈\ dom(e)}. Put \texttt{t\ =\ p(a)}. By \textbf{(R)}, \texttt{p(e(t))\ =\ t}. Substituting,
+\texttt{p(e(p(a)))\ =\ p(a)}, which is \texttt{e(p(a))\ ≈c\ a} by definition of \texttt{≈c}.
+\end{proof}
 
 So stability is retraction asked at a different \emph{source of values}: \textbf{(R)} at values a generator
 produced, \textbf{(Q)} at values a table returned. Both are worth checking, because what \textbf{(Q)} adds to
@@ -120,10 +149,19 @@ produced, \textbf{(Q)} at values a table returned. Both are worth checking, beca
 \hypertarget{corollary-read-side-w}{%
 \subsubsection{Corollary (read-side W)}\label{corollary-read-side-w}}
 
+\begin{corollary}[read-side W]
+\label{cor:readW}
+\lean{Calculus.Lawful.reads}
+\leanok
 \texttt{μ\ ≠\ ⊤\ ⟹\ ∀\ a\ ∈\ dom(p).\ member(a)\ =\ μ}.
+\end{corollary}
 
-\emph{Proof.} \texttt{p(a)\ ∈\ dom(e)} by \textbf{(C)}, so \texttt{e(p(a))\ =\ ⟨μ,\ \_⟩} by \textbf{(W)}, and
-\texttt{member(a)\ =\ member(e(p(a)))\ =\ μ} by \textbf{(MP)}. ∎
+\begin{proof}
+\uses{cond:C,cond:W,cond:MP}
+\leanok
+\texttt{p(a)\ ∈\ dom(e)} by \textbf{(C)}, so \texttt{e(p(a))\ =\ ⟨μ,\ \_⟩} by \textbf{(W)}, and
+\texttt{member(a)\ =\ member(e(p(a)))\ =\ μ} by \textbf{(MP)}.
+\end{proof}
 
 \textbf{(W)} constrains only the writing half; this corollary is what makes the reading half follow. A
 \texttt{⇝\ S} term does not merely write \texttt{S} — it \emph{accepts} nothing else, or a read-modify-write could
