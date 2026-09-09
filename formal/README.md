@@ -1,6 +1,6 @@
 # Codec calculus — Lean 4 mechanization
 
-Mechanizes `docs/codec-calculus.md`. The doc stays normative; this package is the proof
+Mechanizes the specification in `docs/blueprint/src/content.tex`. The doc stays normative; this package is the proof
 assistant checking it, and every deliberate divergence from the doc is commented at the
 definition it touches.
 
@@ -153,7 +153,7 @@ and the judgement to it), and `lazy` concludes `⊤` in the model exactly as the
 ## Is the model the specification?
 
 Two independent readings, in opposite directions, asked whether every normative element of
-`docs/codec-calculus.md` has an exact counterpart here and whether a reviewer could check one
+the specification has an exact counterpart here and whether a reviewer could check one
 in isolation. That reading is finished and its record is in the commits, which is where an
 audit's findings belong: an audit is not load bearing.
 
@@ -171,7 +171,7 @@ Prose does not typecheck. Deleting a declaration leaves the build green and ever
 of it dangling.
 `python3 scripts/name_drift.py` closes that: it reports every backticked Lean name in the
 current-state documents — this file, `docs/architecture.md`, `docs/roadmap.md`,
-`docs/defects.md`, `docs/codec-calculus.md` — and
+`docs/defects.md`, the blueprint's `content.tex` — and
 every module docstring, that no longer occurs in `Calculus/`,
 and exits
 non-zero if there is one. Deliberate citations live in an `EXPECTED` table with a reason

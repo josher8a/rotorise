@@ -1,5 +1,5 @@
 {
-  "_comment": "Per-file ratchet baselines. See scripts/ratchet.py \u2014 a rise fails the build; move a number only with --accept.",
+  "_comment": "Per-file ratchet baselines. See scripts/ratchet.py — a rise fails the build; move a number only with --accept.",
   "branches": {
     "Calculus/Axioms.lean": 1,
     "Calculus/Carriers.lean": 83,
@@ -33,7 +33,6 @@
   },
   "retirement_marks": {
     "../docs/architecture.md": 0,
-    "../docs/codec-calculus.md": 0,
     "../docs/defects.md": 0,
     "../docs/roadmap.md": 0,
     "Calculus/Axioms.lean": 2,
@@ -65,7 +64,8 @@
     "Calculus/Term.lean": 2,
     "Calculus/Typing.lean": 0,
     "Calculus/Vectors.lean": 0,
-    "README.md": 0
+    "README.md": 0,
+    "docs/blueprint/src/content.tex": 0
   },
   "undocumented_public_theorems": {
     "Calculus/Axioms.lean": 0,

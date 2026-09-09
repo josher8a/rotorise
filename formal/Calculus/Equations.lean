@@ -661,7 +661,7 @@ theorem equiv_altCodec_assoc (o₁ o₂ o₃ : OptionSem) :
 
 /-! ## §6's Hold rows, at term level
 
-Each row's twin, stated where a reader of `codec-calculus.md` §6 would look for it: about a
+Each row's twin, stated where a reader of the specification's §6 would look for it: about a
 `Term`, the way `Refutations.lean`'s "Do not hold" rows already are. Every one is its
 combinator row through the bridge above, so they cost a line each and buy the property
 the representation audit asked for — both halves of §6 in one language. -/

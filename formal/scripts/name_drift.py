@@ -63,14 +63,14 @@ nothing about *why* any entry is in it:
     ~~marked~~   retired: the declaration is gone and the prose says so (`RETIRED`)
     PRELUDE      the language: Lean, mathlib, Batteries — judged by root namespace
     HOST         `src/`'s names, at the host boundary — live, just not here
-    SPEC         the specification's own notation, from `docs/codec-calculus.md`
+    SPEC         the specification's own notation, from the blueprint's `content.tex`
     EXPECTED     a genuine one-off, keyed to the document that makes it
 
 When this split was first measured the four absorbed 99 of 169 hits between them, the marks
 took 60, and 18 stale pointers were left — which is the number the guard exists to report.
 
 Hits in the current-state documents — `formal/README.md`, `docs/architecture.md`,
-`docs/roadmap.md`, `docs/defects.md`, `docs/codec-calculus.md` —
+`docs/roadmap.md`, `docs/defects.md`, the blueprint's `content.tex` —
 are broken pointers and should be fixed or explicitly marked superseded.
 
 **A third pass checks a backticked file path, because `NOISE` drops the whole class from the name
@@ -101,7 +101,7 @@ holds.
 """
 import re, sys, os, glob, fnmatch
 
-CURRENT = ["README.md", "../docs/codec-calculus.md",
+CURRENT = ["README.md", "docs/blueprint/src/content.tex",
            "../docs/architecture.md", "../docs/roadmap.md", "../docs/defects.md"]
 # **The docstrings, which this guard never read.** Every module here is dense with backticked
 # names and none of them was checked — 763 distinct citations, invisible. Demonstrated rather
@@ -144,12 +144,24 @@ LEANISH = re.compile(r"^[^\W\d][\w'!?⁺₀-₉]*(?:\.[^\W\d][\w'!?⁺₀-₉]*)
 # a failure (`false retirement`), so the marks cannot quietly rot into decoration as names come
 # back or get reused.
 RETIRED = re.compile(r"~~([^~\n]{1,80})~~")
+# A LaTeX document cites in `\texttt{}` and carries no backticks, so the specification
+# would read as clean because nothing matched rather than because nothing was wrong.
+TEXTTT = re.compile(r"\\texttt\{([^}]{1,80})\}")
+
+
+def cited(line, path):
+    """The citations on one line: backticks everywhere, `\\texttt{}` in a `.tex`."""
+    out = BACKTICKED.findall(line)
+    if path.endswith(".tex"):
+        out += [t.replace("\\_", "_").replace("\\ ", " ").replace("\\%", "%")
+               for t in TEXTTT.findall(line)]
+    return out
 # A section citation. The major number only: `§5.6` cites `§5`, and the specification numbers
 # sections and not items.
 SECTION = re.compile(r"§(\d+)")
 # A backticked token naming a file rather than a declaration. `NOISE` keeps these out of the name
 # pass, where they would be nonsense; `dangling_paths` is what checks them.
-PATHISH = re.compile(r"\.(md|py|ts|lean|json|toml|sh|yml|yaml)$")
+PATHISH = re.compile(r"\.(md|py|ts|lean|json|toml|sh|yml|yaml|tex)$")
 # A Lean path with a line suffix. A line is what an edit moves and a declaration name is not,
 # and `Calculus/` is what these guards already hold to their names, so a citation names the
 # declaration. Refused as a class rather than resolved.
@@ -159,13 +171,13 @@ LINE_ANCHOR = re.compile(r"^[A-Za-z0-9_./-]+\.lean:[0-9]+$")
 GENERATED = ("dist/",      # npm run build
              ".attest/")   # the attest snapshot run
 # and the five vector artifacts, cited by path or by their leading-dot basename (the vector emit)
-SPEC_DOC = "../docs/codec-calculus.md"
-SECTION_HEADING = re.compile(r"^## §(\d+)", re.M)
+SPEC_DOC = "docs/blueprint/src/content.tex"
+SECTION_HEADING = re.compile(r"^\\subsection\{§(\d+)", re.M)
 # naming patterns and filenames, not citations
 # `.match_1`, `.eq_def`, `.proof_3`: **auto-generated names, real constants, never in source.**
 # `inL.match_1` is the matcher Lean derives for `inL`'s pattern match — §6 names it as the fan
 # `fanOf` found — and no amount of grepping `Calculus/` will locate it, because nobody wrote it.
-NOISE = re.compile(r"\.(md|py|ts|lean|json|toml|sh)$|(^|[._])X([._]|$)|^_|^f_sound$"
+NOISE = re.compile(r"\.(md|py|ts|lean|json|toml|sh|tex)$|(^|[._])X([._]|$)|^_|^f_sound$"
                    r"|\.(match|proof|eq)_\d+$|\.eq_def$")
 
 # Cited on purpose, with the reason. Keyed by document, then name.
@@ -174,7 +186,7 @@ EXPECTED = {
         "List.Perm": "mathlib; named as the next probe, not as something proved here",
         "mono": "the ccpo/`partial_fixpoint` obligation's conventional name; `altCodec_not_monotone` is ours",
     },
-    "../docs/codec-calculus.md": {
+    "docs/blueprint/src/content.tex": {
         "e_c": "the specification's own notation for a component codec, not a Lean name",
         "Encoded": "§1's own wire type, named by the specification; the model has no Lean type for it",
     },
@@ -223,7 +235,7 @@ HOST = {
     "EveryOptionTagged": "`src/codec/codec.ts`'s type-level check, cited by the arity-one row",
 }
 
-# The specification's own notation, from `docs/codec-calculus.md`. §1 names sets and §5 names
+# The specification's own notation, from the blueprint's `content.tex`. §1 names sets and §5 names
 # policies in a vocabulary the model realises under other names, and a document quoting the
 # specification is quoting it correctly.
 SPEC = {
@@ -448,7 +460,7 @@ def scan(path, present):
         for tok in RETIRED.findall(line):
             if LEANISH.match(tok) and not NOISE.search(tok) and tok in present:
                 false_retirements.append((lineno, tok))
-        for tok in BACKTICKED.findall(line):
+        for tok in cited(line, path):
             t = tok
             if not LEANISH.match(t) or NOISE.search(t):
                 continue
