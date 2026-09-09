@@ -3,7 +3,7 @@ import Calculus.Discharge
 import Calculus.Continuity
 import Calculus.Refutations
 import Calculus.HeldSet
-import Calculus.Exactness
+import Calculus.Separation
 import Batteries.Tactic.Lint
 import Calculus.LiteralArity1
 import Calculus.Nesting

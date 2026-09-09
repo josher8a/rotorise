@@ -1,7 +1,13 @@
 import Calculus.Lists
 import Calculus.Domain
 import Calculus.Codec
-import Calculus.Combinators
+import Calculus.Prisms
+import Calculus.Products
+import Calculus.Objects
+import Calculus.Sums
+import Calculus.Carriers
+import Calculus.Lawful
+import Calculus.Frontier
 import Calculus.Term
 import Calculus.Denote
 import Calculus.Typing
@@ -14,7 +20,9 @@ import Calculus.HeldSet
 import Calculus.Nesting
 import Calculus.Malleability
 import Calculus.Refutations
-import Calculus.Exactness
+import Calculus.ExactV
+import Calculus.ExactA
+import Calculus.Separation
 import Calculus.LiteralArity1
 import Calculus.Orthogonality
 import Calculus.Vectors

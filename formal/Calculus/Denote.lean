@@ -1,11 +1,11 @@
 import Calculus.Term
-import Calculus.Combinators
+import Calculus.Frontier
 import Calculus.Opaque
 
 /-!
 # Denotation
 
-`denote t` dispatches each term to its certified combinator (Combinators.lean), and the
+`denote t` dispatches each term to its certified combinator, and the
 recursion is **structural** — `Term.lazy` carries a plain `Term`, so there is nothing to
 stage.
 
@@ -72,7 +72,7 @@ def tagsOf (d : Name) : Term → Finset String
 /-! ### Where ~~literalMember~~ went
 
 `(literal)`'s member is its base's — `literalCodec` and `GroundKind.member` agree case for case,
-which is `Combinators.literalCodec_μ`, stated where the codec is.
+which is `Prisms.literalCodec_μ`, stated where the codec is.
 
 The `Option` in `Codec.μ` is `Codec.μ`'s own — a codec that writes no attribute — and never
 "this payload had no base", the member being a function of the index. -/
@@ -133,7 +133,7 @@ and nothing here does.
 Fuel was a termination device and never a cost measure; it is not even that any more. -/
 
 /-- **What a `Pred` means.** The type is in `Term.lean`, and the meaning is here, because `inL`
-    and `liftQ` are in `Combinators.lean` and `Term.lean` does not import it.
+    is in `Prisms.lean` and `liftQ` in `Products.lean`, and `Term.lean` imports neither.
 
     `noncomputable`, because `inL` is: the numeric base's carrier gate reaches `numericHost`.
     That costs nothing new. `denote` is noncomputable for the same reason, and `Orth` never
@@ -284,7 +284,7 @@ theorem denote_held (t : Term) (f g : Value → Value) :
 /-- `refine` denotes `restrict`, of the predicate's meaning.
 
     This is the whole of what `Pred` cost the codec layer: one `.eval`. `restrict` still takes
-    a `Value → Bool`, so every theorem in `Combinators.lean` about it is untouched. -/
+    a `Value → Bool`, so every theorem about it in the combinator modules is untouched. -/
 theorem denote_refine (t : Term) (p : Pred) :
     denote (.refine t p) = (denote t).restrict p.eval := rfl
 

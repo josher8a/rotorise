@@ -530,7 +530,7 @@ about, not an ungated `Term`, which `GroundKind.number.Carrier = WFDouble` no lo
 
 `literalNRule` is that prism. It is deliberately not a `Term`, no constructor builds it, and it
 exists only to carry the two theorems below — which is why it is here and not in
-`Combinators.lean` with the codecs the calculus uses. -/
+`Prisms.lean` with the codecs the calculus uses. -/
 
 /-- `(literal)`'s prism at base `number`, over an ungated `ℓ` — §3's, not ours. -/
 noncomputable def inLNRule (ls : NEFinset Double) : Value → Bool

@@ -43,7 +43,8 @@ namespace Calculus
       and every theorem that quantifies over one still runs.
 
     `Pred` mentions no `Term`, so it is not in the mutual block below. Its `eval` is not here
-    either: `inL` and `liftQ` are in `Combinators.lean`, which `Term.lean` does not import, so
+    either: `inL` is in `Prisms.lean` and `liftQ` in `Products.lean`, neither of which
+    `Term.lean` imports, so
     `Pred.eval` sits beside `denote`. The type is the term language's; the meaning is the
     denotation's. -/
 inductive Pred where
@@ -84,7 +85,7 @@ inductive Term where
 
       **What this gives up, deliberately.** `set(refine(b, q))` and `set(literal k ls)` are
       *not* lost: a restriction of the elements is a restriction of the set, and
-      `setCodec_restrict` and `setCodec_restrict_p` (`Combinators.lean`) prove the two are
+      `setCodec_restrict` and `setCodec_restrict_p` (`Products.lean`) prove the two are
       one pair on the nose, the first on `e` and the second on `p`, with `liftQ` carrying
       the predicate through. This cited the write-side theorem for both halves, and the
       read side was a sentence in its docstring until it was proved. What is lost is

@@ -1,4 +1,4 @@
-import Calculus.Combinators
+import Calculus.Frontier
 import Mathlib.Data.Finset.Lattice.Fold
 
 /-!

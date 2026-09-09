@@ -49,10 +49,11 @@ here is silence rather than error, and silence does not fail a build.
 
 ## The layering, and the one property the build enforces
 
-The import graph of `Calculus/` is an almost-linear spine: `Domain`, then `Codec`, then
-`Combinators` and `Term`, then `Denote`, `Typing`, `Soundness`, then the analyses `Discharge`,
-`HeldSet`, `Nesting` and `Equations`, then `Exactness`, then `Orthogonality`, with `Axioms` as the
-sink. `Malleability` is the one analysis off the spine.
+The import graph of `Calculus/` is an almost-linear spine: `Domain`, then `Codec`, then the
+combinator algebra as `Prisms`, `Products`, `Objects`, `Sums`, `Carriers`, `Lawful` and
+`Frontier`, and `Term`, then `Denote`, `Typing`, `Soundness`, then the analyses `Discharge`,
+`HeldSet`, `Nesting` and `Equations`, then `ExactV`, `ExactA` and `Separation`, then
+`Orthogonality`, with `Axioms` as the sink. `Malleability` is the one analysis off the spine.
 
 **The layering is a convenience. One property of it is checked.** `Axioms.lean` walks the
 environment, and the environment is what `Axioms.lean` imports, which is a hand-maintained list. A
@@ -243,7 +244,7 @@ Every discharger is one appeal to `uniqueAdmission_of_disjoint`, which takes two
 allowed values, one per side, and asks only that each be pairwise disjoint. Kinds, members, tags
 and admissible sets are ways of building those families rather than four separate conditions.
 
-`Exactness.lean` holds the joint predicate `Adm` and `AdmA`, exact at every constructor, with no
+`ExactV.lean` holds `Adm` and `ExactA.lean` holds `AdmA`, exact at every constructor, with no
 hypothesis and no escape hatch. Its value-side separation predicate is one clause, because the
 joint predicate absorbs what a kind table used to carry. The attribute-side predicate keeps a
 member disjunct, because `AdmA` does not bound the member index.

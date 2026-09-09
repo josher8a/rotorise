@@ -82,7 +82,7 @@ export type Literal =
  * The model's `q` is a bare `Value → Bool` and the host's used to be the caller's closure. Neither
  * is enough, because **`identifies` has to read the predicate as data**: §5's fourth discharger row
  * is about a term deciding which values are its own, and a closure decides nothing a declaration
- * can see. `Exactness.lean` writes the case that forced this — `liftQ (inL k ls)`, where `ls` is a
+ * can see. `ExactV.lean` writes the case that forced this — `liftQ (inL k ls)`, where `ls` is a
  * `NEFinset` and not a function.
  *
  * So three cases. `members` is membership of a {@link Literal}'s alternatives — the whole literal

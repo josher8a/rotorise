@@ -324,7 +324,7 @@ These are the rulings of the owner, in the terms of this repository.
 ### Operational notes for `formal/`
 
 - `lake env lean` reads the existing olean of a dependency. Edit `Domain.lean`, check
-  `Combinators.lean`, and the new constructor reports as an unknown identifier until
+  `Prisms.lean`, and the new constructor reports as an unknown identifier until
   `lake build Calculus.Domain` runs.
 - A write reaches the container mount at once, measured on single-line writes in both
   directions. A VS Code save and a large write are unmeasured.

@@ -50,7 +50,7 @@ name; both are properties of this type instead.
 
 It sits here rather than beside the codecs because three strata need it and the lowest of them is
 the term language: `Term.dunion`'s variants are a `MapOf Body`, and `Term.lean` reaches `Domain`
-and not `Combinators`. Nothing about it is codec-shaped — a `Finset`, a function, and a lookup. -/
+and not `Prisms`. Nothing about it is codec-shaped — a `Finset`, a function, and a lookup. -/
 
 /-- A map's payload: the name set, and the values on it. A dependent pair rather than a
     list of pairs, because that is what `M` is — see `Attr.m`. -/

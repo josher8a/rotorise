@@ -34,7 +34,7 @@ block must be inductive/structure declarations, or they must all be definitions`
 elaborates and is axiom-free, so the obstruction is not expressibility but cost.
 
 **A `Prop` premise on the judgement is no substitute.** `Separates` is stated on `Adm` and
-`admitOptV`, and the import chain runs `Typing`, `Soundness`, `Discharge`, `Exactness`, then
+`admitOptV`, and the import chain runs `Typing`, `Soundness`, `Discharge`, `ExactV`, then
 `Orthogonality`. The premise would sit above the rule it constrains, in a module the rule cannot
 reach.
 
@@ -86,7 +86,7 @@ boilerplate and leave the content untouched.
 **This is the same fact the codec algebra states from the other side.** `carriedCodec` states one
 codec for both sides precisely where the two sides are the same. Where they are not, the doubling is
 content rather than repetition. The side split stays local: it does not thread through the codec
-algebra. `setCodec` in `Combinators.lean` is the standing exception, the one product that is not an
+algebra. `setCodec` in `Products.lean` is the standing exception, the one product that is not an
 instance.
 
 **Do not cost this on a pair count.** A pair count is an artifact of the transform that produces it,

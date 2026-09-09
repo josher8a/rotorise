@@ -52,15 +52,15 @@ Markdown file.
 
 **Effect.** Six citations carry a line number that nothing checks: `docs/dynamo-datatypes.md:130`
 from `Calculus/Domain.lean`, `src/codec/attribute.ts` and `src/codec/spec/laws/codec.depth.spec.ts`;
-`src/codec/spec/literal/codec.set.spec.ts:76` from `Calculus/Combinators.lean`; and
+`src/codec/spec/literal/codec.set.spec.ts:76` from `Calculus/Products.lean`; and
 `src/codec/attribute.ts:138` and `src/codec/codec.ts:1466` from
 `src/codec/lean/lean.predicates.spec.ts`. Any edit above one of those lines moves it, and every
 check stays green.
 
 **And the rot is not hypothetical.** Of the 29 line-anchored citations this repository held before
 the guard landed, **19 pointed at something that was not a declaration**: a blank line, a tactic
-step, a match arm, or a different concept entirely. In `Combinators.lean`, line 174 was cited as
-`funImage` and read `· exact nomatch h`; line 409 was cited as `isStored` and read a
+step, a match arm, or a different concept entirely. In the combinator algebra, line 174 was cited
+as `funImage` and read `· exact nomatch h`; line 409 was cited as `isStored` and read a
 `funext`/`simp only` line; line 2292 was cited as `survivesStore_numberCodec` and was blank. The 23
 aimed at Lean files are rewritten to declaration names; these six are what the class leaves behind.
 

@@ -1,5 +1,5 @@
 import Calculus.Denote
-import Calculus.Combinators
+import Calculus.Frontier
 import Mathlib.Tactic.FinCases
 
 /-!

@@ -261,7 +261,7 @@ describe('the declaration guard, where a term is what the guard reads', () => {
     /**
      * Two literal sets with disjoint alphabets are separable, and the declaration must stand.
      *
-     * The model's warrant is `Exactness.lean`'s `SepJV` over
+     * The model's warrant is `Separation.lean`'s `SepJV` over
      * `refine (set string) (liftQ (inL string …))` at two disjoint alphabets: a set of a
      * restriction *is* a restriction of the set, which `setCodec_restrict` and
      * `setCodec_restrict_p` prove on both halves of the pair. So the pair separates, and refusing
