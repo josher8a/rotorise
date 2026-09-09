@@ -275,27 +275,77 @@ Both are needed, and neither determines the other.
 \hypertarget{ground-terms}{%
 \subsubsection{Ground terms}\label{ground-terms}}
 
+\begin{definition}[(string)]
+\label{rule:string}
+\lean{Calculus.Typed.string}
+\leanok
 \begin{verbatim}
-──────────────────────────────           ──────────────────────────────
-⊢ string : String ⇝ S      (string)      ⊢ decimal : Stored ⇝ N (decimal)
+──────────────────────────────
+⊢ string : String ⇝ S      (string)
+\end{verbatim}
+\end{definition}
 
+\begin{definition}[(decimal)]
+\label{rule:decimal}
+\lean{Calculus.Typed.decimal}
+\leanok
+\begin{verbatim}
+──────────────────────────────
+⊢ decimal : Stored ⇝ N     (decimal)
+\end{verbatim}
+\end{definition}
+
+\begin{definition}[(number)]
+\label{rule:number}
+\lean{Calculus.Typed.number}
+\leanok
+\begin{verbatim}
 D = { x ∈ Double : x = 0 ∨ 1e-130 ≤ |x| ≤ 9.9…e125 }
 ────────────────────────────────────────────────────── (number)
 ⊢ number : D ⇝ N
+\end{verbatim}
+\end{definition}
 
+\begin{definition}[(boolean)]
+\label{rule:boolean}
+\lean{Calculus.Typed.boolean}
+\leanok
+\begin{verbatim}
 ──────────────────────────────
 ⊢ boolean : Bool ⇝ BOOL    (boolean)
+\end{verbatim}
+\end{definition}
 
+\begin{definition}[(binary)]
+\label{rule:binary}
+\lean{Calculus.Typed.binary}
+\leanok
+\begin{verbatim}
 ──────────────────────────────
 ⊢ binary : Bytes ⇝ B       (binary)
+\end{verbatim}
+\end{definition}
 
+\begin{definition}[(null)]
+\label{rule:null}
+\lean{Calculus.Typed.null}
+\leanok
+\begin{verbatim}
 ──────────────────────────────
 ⊢ null : {null} ⇝ NULL     (null)
+\end{verbatim}
+\end{definition}
 
+\begin{definition}[(literal)]
+\label{rule:literal}
+\lean{Calculus.Typed.literal}
+\leanok
+\begin{verbatim}
 ⊢ g : T ⇝ μ,  g ground    ℓ₁ … ℓₙ ∈ T,  n ≥ 1,  pairwise distinct
 ───────────────────────────────────────────────────────────────── (literal)
 ⊢ literal(ℓ₁ … ℓₙ) : {ℓ₁ … ℓₙ} ⇝ μ
 \end{verbatim}
+\end{definition}
 
 \texttt{number} is \textbf{not} restricted to integers, and not to \texttt{2⁵³}. Every finite double satisfies \textbf{(R)},
 because \texttt{String} on a double is by definition the shortest text reading back as that same double — so
@@ -437,23 +487,61 @@ restriction of the elements is a restriction of the set, which is \texttt{setCod
 \texttt{set(held(…))} and \texttt{set(legacy(…))} are, having no set-level spelling and no appearance in any
 schema.
 
+\begin{definition}[(set)]
+\label{rule:set}
+\uses{rule:string,rule:number,rule:decimal,rule:binary}
+\lean{Calculus.Typed.set}
+\leanok
 \begin{verbatim}
 b ∈ {string, number, decimal, binary}
 ─────────────────────────────────────── (set)
 ⊢ set(b) : ℘⁺fin(b.held) ⇝ b.member
+\end{verbatim}
+\end{definition}
 
-⊢ c : T ⇝ μ                          ⊢ cᵢ : Tᵢ ⇝ μᵢ    i ∈ 1…n
-──────────────────────── (array)     ───────────────────────────────────── (tuple)
-⊢ array(c) : T* ⇝ L                  ⊢ tuple(c₁ … cₙ) : T₁ × … × Tₙ ⇝ L
+\begin{definition}[(array)]
+\label{rule:array}
+\lean{Calculus.Typed.array}
+\leanok
+\begin{verbatim}
+⊢ c : T ⇝ μ
+──────────────────────── (array)
+⊢ array(c) : T* ⇝ L
+\end{verbatim}
+\end{definition}
 
+\begin{definition}[(tuple)]
+\label{rule:tuple}
+\lean{Calculus.Typed.tuple}
+\leanok
+\begin{verbatim}
+⊢ cᵢ : Tᵢ ⇝ μᵢ    i ∈ 1…n
+───────────────────────────────────── (tuple)
+⊢ tuple(c₁ … cₙ) : T₁ × … × Tₙ ⇝ L
+\end{verbatim}
+\end{definition}
+
+\begin{definition}[(tuple-tail)]
+\label{rule:tuple-tail}
+\lean{Calculus.Typed.tuple}
+\leanok
+\begin{verbatim}
 ⊢ cᵢ : Tᵢ ⇝ μᵢ  (i ∈ 1…n)    ⊢ c : T ⇝ μ
 ───────────────────────────────────────────────────────── (tuple-tail)
 ⊢ tuple(c₁ … cₙ, rest(c)) : T₁ × … × Tₙ × T* ⇝ L
+\end{verbatim}
+\end{definition}
 
+\begin{definition}[(record)]
+\label{rule:record}
+\lean{Calculus.Typed.record}
+\leanok
+\begin{verbatim}
 ⊢ c : T ⇝ μ
 ──────────────────────────────── (record)
 ⊢ record(c) : Name ⇀fin T ⇝ M
 \end{verbatim}
+\end{definition}
 
 \texttt{rest} has no rule of its own, which is the point: it is not a term but a \emph{position marker}, like
 \texttt{optional} in §4. It appears only in the premise of \texttt{(tuple-tail)}, and once — so
@@ -469,35 +557,82 @@ subterm's member this way.
 \hypertarget{wrappers}{%
 \subsubsection{Wrappers}\label{wrappers}}
 
+\begin{definition}[(held)]
+\label{rule:held}
+\lean{Calculus.Typed.held, Calculus.IsoCancels}
 \begin{verbatim}
 ⊢ c : I ⇝ μ    f : T → I    g : I → T    g ∘ f = id_T    f ∘ g = id_I
 ─────────────────────────────────────────────────────────────────────── (held)
 ⊢ held(c, f, g) : T ⇝ μ
+\end{verbatim}
+\end{definition}
 
+\begin{definition}[(refine)]
+\label{rule:refine}
+\lean{Calculus.Typed.refine}
+\leanok
+\begin{verbatim}
 ⊢ c : T ⇝ μ    q ⊆ T
 ──────────────────────── (refine)
 ⊢ refine(c, q) : q ⇝ μ
+\end{verbatim}
+\end{definition}
 
+\begin{definition}[(legacy)]
+\label{rule:legacy}
+\lean{Calculus.Typed.legacy, Calculus.ReadsCoherently}
+\leanok
+\begin{verbatim}
 ⊢ c : T ⇝ μ    r : 𝔸 ⇀ T    ran(r) ⊆ dom(e)    a ∈ dom(r) ∩ dom(p) ⟹ r(a) = p(a)
 ──────────────────────────────────────────────────────────────────────────────────── (legacy)
 ⊢ legacy(c, r) : T ⇝ μ
+\end{verbatim}
+\end{definition}
 
+\begin{definition}[(nullable)]
+\label{rule:nullable}
+\lean{Calculus.Typed.nullable}
+\leanok
+\begin{verbatim}
 ⊢ c : T ⇝ μ
 ──────────────────────── (nullable)
 ⊢ nullable(c) : T + 𝟙 ⇝ ⊤
+\end{verbatim}
+\end{definition}
 
+\begin{definition}[(lazy)]
+\label{rule:lazy}
+\lean{Calculus.Typed.lazy}
+\leanok
+\begin{verbatim}
 γ : 𝟙 → Codec    ⊢ γ(∗) : T ⇝ μ
 ─────────────────────────────── (lazy)
 ⊢ lazy(γ) : T ⇝ ⊤
+\end{verbatim}
+\end{definition}
 
+\begin{definition}[(custom)]
+\label{rule:custom}
+\uses{cond:R,cond:C,cond:MP}
+\lean{Calculus.Typed.custom, Calculus.Obligations}
+\leanok
+\begin{verbatim}
 e : T ⇀ 𝔸    p : 𝔸 ⇀ T    (R), (C), (MP) hold of (e, p)
 ───────────────────────────────────────────────────────── (custom)
 ⊢ custom(e, p) : T ⇝ ⊤
+\end{verbatim}
+\end{definition}
 
+\begin{definition}[(opaque)]
+\label{rule:opaque}
+\lean{Calculus.Typed.opaq}
+\leanok
+\begin{verbatim}
 ν ∈ {refuse, lossy}
 ─────────────────────────── (opaque)
 ⊢ opaque(ν) : Uν ⇝ ⊤
 \end{verbatim}
+\end{definition}
 
 These \texttt{⊤}s are forced for different reasons, and the distinction matters. \texttt{nullable} writes \texttt{μ} or
 \texttt{NULL} and so names neither — and it is idempotent: the value language has one null, so the second
