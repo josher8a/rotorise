@@ -41,36 +41,33 @@ reports that the linter did nothing.
 
 ---
 
-## Known: no guard resolves a path this repository cites
+## Known: a citation anchored to a line has no guard, and most of them were already wrong
 
-**Observation.** Prose, docstrings and guard tables cite files by path. `scripts/name_drift.py`
-compares names of declarations, `scripts/docstring_anchor.py` checks that a docstring binds to the
-declaration below it, and neither asks whether a cited path exists. Neither does the type checker or
-the formatter, because both read no comment.
+**Observation.** Prose, docstrings and guard tables cite files by path, and some cite a path with a
+line number. `scripts/name_drift.py` resolves the plain form: a backticked path is checked against
+the files the tree holds, with a short list of prefixes for what the tree produces rather than
+holds. It also refuses a `<lean file>:<line>` token as a class, because a Lean line is what an edit
+moves and a declaration name is not. What has no guard is the same form aimed at a `.ts` file or a
+Markdown file.
 
-**Effect.** A file that moves leaves every citation of its old path behind, and every check stays
-green. The move of the codec feature into `src/codec/` left four cited paths unresolved of 18 cited,
-across five files of `Calculus/` and one runnable command in a spec docstring, with the whole gate
-reporting ALL_GREEN.
+**Effect.** Six citations carry a line number that nothing checks: `docs/dynamo-datatypes.md:130`
+from `Calculus/Domain.lean`, `src/codec/attribute.ts` and `src/codec/spec/laws/codec.depth.spec.ts`;
+`src/codec/spec/literal/codec.set.spec.ts:76` from `Calculus/Combinators.lean`; and
+`src/codec/attribute.ts:138` and `src/codec/codec.ts:1466` from
+`src/codec/lean/lean.predicates.spec.ts`. Any edit above one of those lines moves it, and every
+check stays green.
 
-**Pin.** None as a guard. The sweep that finds it is one command:
+**And the rot is not hypothetical.** Of the 29 line-anchored citations this repository held before
+the guard landed, **19 pointed at something that was not a declaration**: a blank line, a tactic
+step, a match arm, or a different concept entirely. In `Combinators.lean`, line 174 was cited as
+`funImage` and read `· exact nomatch h`; line 409 was cited as `isStored` and read a
+`funext`/`simp only` line; line 2292 was cited as `survivesStore_numberCodec` and was blank. The 23
+aimed at Lean files are rewritten to declaration names; these six are what the class leaves behind.
 
-    git grep -hoE '(src|docs|formal)/[A-Za-z0-9._/-]+\.(ts|lean|md|py|sh|json)' -- . | sort -u
-
-then a test that each path exists. Nothing runs that sweep on a schedule, so any count from it is
-true at the commit that measured it and is not maintained.
-
-**Addendum: the sweep reads a path, not a claim.** Three documents this repository once had are
-still cited, and exist at none of those citations. Every pointer among them is corrected; what
-remains is two sentences in `formal/scripts/name_drift.py` recording that the documents were
-deleted, and those are right as they stand. So the sweep reports three unresolved paths on a tree
-with no dangling pointer in it, and it will keep doing so.
-
-That is the limit worth writing down rather than engineering around. The names convention already
-draws this line — a name the sources do not define is marked, and the mark says the sentence is in
-the past tense — and no such convention exists for a path. Marking the three would satisfy the
-sweep and cost a ratcheted rise, which is weakening a guard to quiet an instrument. The sweep stays
-honest and imprecise, and the count is read with this entry beside it.
+**Pin.** The Lean form is pinned by `name_drift.py`, which fails on it. The six above are pinned by
+this entry and by nothing else. The reason they are not rewritten with the rest: three of them
+point at a row of a table in `docs/dynamo-datatypes.md`, which has no declaration to name, and a
+guard that refused them would demand a name that does not exist.
 
 ---
 

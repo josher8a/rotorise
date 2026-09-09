@@ -12,9 +12,9 @@
  * The obvious design is the other one: let Lean produce the expected attribute and compare it here.
  * That is not available, and the reason is structural rather than a missing feature.
  *
- * `denote` is `noncomputable` — `funImage` (`formal/Calculus/Combinators.lean:174`) is a `dite` on
- * a `Decidable` instance the kernel does not evaluate for free, and `Double` is an *axiom* with no
- * closed terms at all. So `#eval` fails on every denoted codec, and Lean can generate nothing.
+ * `denote` is `noncomputable` — `funImage` is a `dite` on a `Decidable` instance the kernel does
+ * not evaluate for free, and `Double` is an *axiom* with no closed terms at all. So `#eval` fails
+ * on every denoted codec, and Lean can generate nothing.
  *
  * What Lean *can* do is check. `(denote t).e v = some a` is a closed proposition, and for every
  * term form this library can express it is provable by kernel reduction — see the `vector` tactic
@@ -25,7 +25,7 @@
  * ── the tactic, and why it is not `rfl` ────────────────────────────────────────────────────────
  *
  * `rfl` closes a scalar vector and dies on every map-shaped one, which was the surprise. `M`'s
- * payload is a `Finset Name` with a *function* on it (`formal/Calculus/Domain.lean:377`), so the
+ * payload is a `Finset Name` with a *function* on it (`MapOf`), so the
  * attribute the model computes is `fun k => (c.e (f k)).get _` — a lambda whose body is stuck on
  * the bound key. It is pointwise equal to the lambda emitted here and not definitionally equal to
  * it, and no amount of reduction closes that gap: it needs `funext` plus a case split on the key
@@ -122,7 +122,7 @@ const leanFinset = (names: readonly string[]): string =>
 /**
  * A `℘⁺fin` literal, as `NEFinset.of` wants it: one element and the rest.
  *
- * The helper (`formal/Calculus/Domain.lean:271`) exists so the non-emptiness proof is discharged by
+ * The helper exists so the non-emptiness proof is discharged by
  * `insert` rather than at the call site, which is why this can be pure text.
  */
 const leanNonEmptySet = (elements: readonly string[], at: string): string => {
@@ -177,7 +177,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
  * kind held — and `held` is unemittable for a different reason anyway.
  *
  * A `number` is refused here rather than approximated. `Double` is an axiom
- * (`formal/Calculus/Domain.lean:236`) with `toDec`, `ofDec` and a round-trip law but no
+ * with `toDec`, `ofDec` and a round-trip law but no
  * constructor, so `Value.num` has no closed term and no `#print`able spelling. This is permanent,
  * not a gap: writing one would need a numeral-to-double literal the model deliberately does not
  * have.
@@ -336,14 +336,13 @@ export const leanAttrOf = (
  *
  * ── the correspondence, and what checked it ────────────────────────────────────────────────────
  *
- * `isStoredNumeral` ↦ `isStored` (`formal/Calculus/Combinators.lean:409`) and `isNumeral` ↦ the
- * same shape over `Numeral.WF`, which the model spells only at the `.num` carrier (`inD`,
- * `Combinators.lean:405`) and so is written out here. Both were checked against the kernel rather
- * than read across: a corpus of numeral spellings was run through the TypeScript predicates, the
- * verdicts emitted as `Numeral.WF s = b` / `Numeral.Stored s = b` rows, and all of them closed by
- * `rfl`. `inD` is deliberately *not* used for `isNumeral`: it decides `Numeral.WF d.toDec` for a
- * **double**, which is a different predicate on a different carrier, and it is `noncomputable`, so
- * a vector mentioning it would not reduce.
+ * `isStoredNumeral` ↦ `isStored` and `isNumeral` ↦ the same shape over `Numeral.WF`, which the
+ * model spells only at the `.num` carrier (`inD`) and so is written out here. Both were checked
+ * against the kernel rather than read across: a corpus of numeral spellings was run through the
+ * TypeScript predicates, the verdicts emitted as `Numeral.WF s = b` / `Numeral.Stored s = b` rows,
+ * and all of them closed by `rfl`. `inD` is deliberately *not* used for `isNumeral`: it decides
+ * `Numeral.WF d.toDec` for a **double**, which is a different predicate on a different carrier, and
+ * it is `noncomputable`, so a vector mentioning it would not reduce.
  *
  * ── the side condition, which is not decoration ────────────────────────────────────────────────
  *
@@ -440,8 +439,8 @@ const lazyLimit = 16
  * `Rest.drop` vs `Rest.refuse` used to be a fourth entry here: `Def` recorded the rest *codec*
  * and nothing when the policy was a string, so this wrote `Rest.drop` for either. It was sound for
  * the vectors this module writes and only for them — `objectCodec`'s `e` is `objWrite`, which takes
- * `rc?` and not the `kn` filter (`formal/Calculus/Combinators.lean:1691`), and `rcOf` is `none` for
- * both policies, so the two denote the same `e` and differ only under `p`. A decode-direction
+ * `rc?` and not the `kn` filter, and `rcOf` is `none` for both policies, so the two denote the
+ * same `e` and differ only under `p`. A decode-direction
  * vector would have needed them apart and would have been silently wrong. The `attributes` term
  * carries the policy now rather than only its codec, and this emits all three.
  */
