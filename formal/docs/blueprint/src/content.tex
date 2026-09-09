@@ -763,22 +763,60 @@ A field carries a member like anything else — an optional attribute is still s
 the \texttt{⊗\ π}, and that is the whole stratification: a rule demanding \texttt{⊢\ c\ :\ T\ ⇝\ μ} cannot be given
 something whose judgement has a \texttt{⊗}.
 
+\begin{definition}[(field)]
+\label{rule:field}
+\lean{Calculus.TypedField.req}
+\leanok
 \begin{verbatim}
-⊢ c : T ⇝ μ                    ⊢ c : T ⇝ μ
-────────────────── (field)     ────────────────────────────── (optional)
-⊢ c : T ⊗ req ⇝ μ              ⊢ optional(c) : T ⊗ opt ⇝ μ
+⊢ c : T ⇝ μ
+────────────────── (field)
+⊢ c : T ⊗ req ⇝ μ
+\end{verbatim}
+\end{definition}
 
+\begin{definition}[(optional)]
+\label{rule:optional}
+\lean{Calculus.TypedField.optional}
+\leanok
+\begin{verbatim}
+⊢ c : T ⇝ μ
+────────────────────────────── (optional)
+⊢ optional(c) : T ⊗ opt ⇝ μ
+\end{verbatim}
+\end{definition}
+
+\begin{definition}[(fallback)]
+\label{rule:fallback}
+\lean{Calculus.TypedField.fallback, Calculus.ObligationsField}
+\leanok
+\begin{verbatim}
 ⊢ c : T ⇝ μ    v : 𝟙 → T    v(∗) ∈ dom(e)
 ────────────────────────────────────────────── (fallback)
 ⊢ fallback(c, v) : T ⊗ req ⇝ μ
+\end{verbatim}
+\end{definition}
 
+\begin{definition}[(object)]
+\label{rule:object}
+\uses{rule:field,rule:optional,rule:fallback,rule:rest}
+\lean{Calculus.Typed.object}
+\leanok
+\begin{verbatim}
 ⊢ fᵢ : Tᵢ ⊗ πᵢ  (i ∈ 1…n)    n₁ … nₙ distinct    ⊢ ρ : rest
 ───────────────────────────────────────────────────────────────────────── (object)
 ⊢ object({n₁ : f₁ … nₙ : fₙ}, ρ) : ⟨n₁ :^π₁ T₁ … nₙ :^πₙ Tₙ⟩ ⊕ R(ρ) ⇝ M
+\end{verbatim}
+\end{definition}
 
+\begin{definition}[(rest)]
+\label{rule:rest}
+\lean{Calculus.TypedRest}
+\leanok
+\begin{verbatim}
 ────────────────────────────────────────────────────────── (rest)
 ⊢ ρ : rest  ⟸  ρ = drop | ρ = refuse | ⊢ ρ : T ⇝ μ
 \end{verbatim}
+\end{definition}
 
 Here \texttt{n\ :\^{}opt\ T} is a binding the record may omit, \texttt{n\ :\^{}req\ T} one it may not, and \texttt{R(ρ)} is the open
 part: \texttt{∅} for \texttt{drop} and \texttt{refuse}, and \texttt{Name\ ⇀fin\ T} for a rest codec holding \texttt{T}. The two string
