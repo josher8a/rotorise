@@ -1,4 +1,4 @@
-import Calculus.Exactness
+import Calculus.ExactA
 
 /-!
 # Orthogonality — a decidable certificate for §5's (U)
@@ -6,7 +6,8 @@ import Calculus.Exactness
 `Typed.union` and `Obligations (.union opts)` between them carry two side conditions the
 model has been discharging by hand, once per shape: `DIncomp` (§5's (D)) and `UAtAct` (§5's
 residual (U)). Thirty-two `sep*`/`uAtCan_*`/`uAtAct_*` theorems live in `Discharge.lean` and
-`Exactness.lean` — not in `Refutations.lean`, whose separation theorems are all `not_sep*` and
+`ExactV.lean` and `ExactA.lean` — not in `Refutations.lean`, whose separation theorems are all
+`not_sep*` and
 are refutations rather than discharges. Twenty-five of the thirty-two are the per-shape hand
 discharges; the other seven are the two generic dischargers, the ~~SepV~~→`SepJV` bridges, the
 `refine`-family discharger, and the two `object` witnesses that exist in order to *fail*
@@ -966,8 +967,8 @@ theorem separates_of_orthL {x y : Term} (h : OrthL x y = true) : Separates x y :
     classifier needs, where before every discharger wrote `h.imp separates_of_orth` itself.
 
     **It names the guarantee where the guarantee already lives, and moves nothing.** `Typed.union`
-    cannot take it: `Separates` is stated on `Adm` and `admitOptV`, both in `Exactness.lean`, and
-    the import chain is `Typing` then `Soundness` then `Discharge` then `Exactness` then this
+    cannot take it: `Separates` is stated on `Adm` and `admitOptV`, both in `ExactV.lean`, and
+    the import chain is `Typing` then `Soundness` then `Discharge` then `ExactA` then this
     file. A premise here is four modules above the judgement it would constrain. So an undischarged
     union stays *underivable* through `Obligations`, which is where it was, rather than becoming
     unrepresentable.
@@ -1148,7 +1149,7 @@ theorem not_orth_literal_null (ls ls' : NEFinset GroundKind.null.Carrier) :
   simp [Orth, Orth1, OrthM, OrthL, occV, occA, occOnly, Slot.all, Member.all, specOf,
     GroundKind.slot, GroundKind.member]
 
-/-- **The same rule at a set**, which is the pair `Exactness.lean` discharges by hand as
+/-- **The same rule at a set**, which is the pair `Separation.lean` discharges by hand as
     `sepJV_set_literals` — and only on the write side, `SepJV` being about `Adm`. The
     certificate answers both halves. `℘⁺fin` is what makes it a `set` fact: the payload has an
     element, and one element is not in two disjoint held sets. -/

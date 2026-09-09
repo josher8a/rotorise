@@ -10,7 +10,8 @@ need.
 **The four tables are gone.** The per-aspect kind, decides-its-own-membership and
 admissible-set recursions were §5's
 approximations, transcribed here clause for clause while the section stated them. The
-section states its discharger on option admission and occupancy now, `Exactness.lean` proves
+section states its discharger on option admission and occupancy now, `ExactV.lean` and
+`ExactA.lean` prove
 `Adm`/`AdmA` exact at every constructor, and `Orthogonality.lean` decides the pairs a
 declaration can decide. A transcription of an analysis nothing states and nothing consumes
 is a description with nothing keeping it honest, so it went.

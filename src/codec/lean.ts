@@ -663,7 +663,7 @@ const leanTermOfTerm = (t: Term, at: string, forced: number): string => {
              * `Denote.lean`'s `tagsOfField` used to match `some (.req (.literal .string ls))`
              * alone, so the model read every other base's tag set as **empty** and this row
              * refused all of them. It matches the decimal base too now, reading the literal's
-             * carrier as the text it is, and `Combinators.lean`'s stored-side tag reader takes an
+             * carrier as the text it is, and `Prisms.lean`'s stored-side tag reader takes an
              * `.n` as well as an `.s`. So a decimal tag emits.
              *
              * **`number` stays refused, and the reason changed from a disagreement to a limit.**
@@ -1055,7 +1055,7 @@ export const leanReadVerdict = (one: ReadVerdict): string => {
 export const leanReadModule = (verdicts: readonly ReadVerdict[]): string => {
     const stuck = verdicts.filter(readRowIsStuck)
     const live = verdicts.filter((one) => !readRowIsStuck(one))
-    return `import Calculus.Exactness
+    return `import Calculus.Separation
 
 /-!
 # Read verdicts, proposed to the model's read row
@@ -1459,7 +1459,7 @@ const fuelFor = (attribute: AttributeValue): number => {
  * file.
  */
 const preamble = `import Calculus.Denote
-import Calculus.Combinators
+import Calculus.Frontier
 import Mathlib.Tactic.FinCases
 
 /-!

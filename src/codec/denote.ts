@@ -1,7 +1,7 @@
 /**
  * What a term means: every constructor's pair, and the memo that keeps one per term.
  *
- * `Combinators.lean`'s combinators, one for one, plus the two devices the host has and the model
+ * the combinator modules' combinators, one for one, plus the two devices the host has and the model
  * does not — the **item view**, which is a pair over a map's contents rather than over an
  * attribute, and the codec cache that makes a term's codec unique.
  *

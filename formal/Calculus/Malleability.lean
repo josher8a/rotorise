@@ -1,4 +1,4 @@
-import Calculus.Combinators
+import Calculus.Frontier
 
 /-!
 # Non-malleability: the property we are asked to adopt, and the two places it dies
@@ -42,7 +42,7 @@ being equality:
 
 * **`drop` discarding names is fatal** (`not_nonMalleable_dropAll`). `objectCodec` under
   `.drop` with an empty field table reads *every* `M` attribute to the empty map, because
-  `keepB .drop` (`Calculus/Combinators.lean`) filters away every undeclared name. Its
+  `keepB .drop` (`Calculus/Objects.lean`) filters away every undeclared name. Its
   whole `M` fragment is one fibre, and two attributes in it disagree at a shared key. That
   codec is `Lawful`, so this is not a pathology outside the theory: **a lawful shipped codec
   has no relational format at all.**

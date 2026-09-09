@@ -6,7 +6,7 @@ import Calculus.Domain
 # The list plumbing
 
 Everything in this file is a statement about lists and `Option` — no codec, no law, no
-member. It lives apart so that `Combinators.lean` reads as codec vocabulary and nothing
+member. It lives apart so that `Prisms.lean` reads as codec vocabulary and nothing
 else: when a proof there cites a name from this file, that is the signal that the step is
 plumbing rather than content.
 
