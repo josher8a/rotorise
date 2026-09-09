@@ -862,13 +862,16 @@ A union's pair is defined by \textbf{unique admission}. Each option answers, per
 whether the input could be its — an attribute on the way out, a value on the way in — and the union
 acts through the option that answers alone:
 
-\begin{tabular}{@{}lll@{}}
-\toprule
-& & \\
-\midrule
-\textbf{U} & resolving one side alone resolves the other, the same option & Asked where the union \emph{acts}: at each value it writes, and each attribute it reads. Ambiguity is a failure, never a rank. \\
-\bottomrule
-\end{tabular}
+\begin{definition}[(U) unique admission]
+\label{cond:U}
+\lean{Calculus.UAtCan, Calculus.UAtAct}
+\leanok
+Resolving one side alone resolves the other, the same option. Asked where the union \emph{acts}: at
+each value it writes, and each attribute it reads. Ambiguity is a failure, never a rank. The letter
+names the strong form, over every canonical pair of every option, and the laws consume the
+restriction to the inputs the union itself resolves; the model carries both, and the scope
+paragraph below is the difference.
+\end{definition}
 
 Read \textbf{(U)} carefully, because the scope is the whole content. \texttt{∣\{i\ :\ cᵢ\ admits\ it\}∣\ =\ 1} at
 \emph{every} input would be a stronger demand, and a wrong one: where two options both admit, the union
@@ -1003,11 +1006,15 @@ be asked to write, and which attributes it may be asked to read. Write \texttt{V
 for those two sets. Two things build them, both by structural recursion over the terms of §3–§4, and
 both total.
 
-\textbf{A term's admissible sets are exact.} A codec is a pair, and an admissible set is a claim about one
-half of it at a time, so there are two and not one: the values \texttt{e} accepts, and the attributes \texttt{p}
-accepts. Each is a \textbf{domain rather than a description of one} — \texttt{dom(e)} and \texttt{dom(p)} — at every
-term of the calculus, with no hypothesis and no term excepted. Nothing is over-approximated, and no
-term's answer is \texttt{⊤}.
+\begin{theorem}[a term's admissible sets are exact]
+\label{thm:admissible-exact}
+\lean{Calculus.Adm_exact, Calculus.ExactV, Calculus.AdmA_exact, Calculus.ExactA}
+\leanok
+A codec is a pair, and an admissible set is a claim about one half of it at a time, so there are two
+and not one: the values \texttt{e} accepts, and the attributes \texttt{p} accepts. Each is a \textbf{domain
+rather than a description of one} — \texttt{dom(e)} and \texttt{dom(p)} — at every term of the calculus, with
+no hypothesis and no term excepted. Nothing is over-approximated, and no term's answer is \texttt{⊤}.
+\end{theorem}
 
 That is available only because a row may \textbf{ask the codec} rather than describe it, and the four
 terms that force the point are worth naming, three of them having been recorded as impossible:
@@ -1091,15 +1098,29 @@ when their occupancies on that side are disjoint; on both sides at once, when on
 name the other does not declare.} That is a question about two terms, answered by computation at
 the declaration. What it declines is an obligation and not a refusal.
 
+\begin{definition}[(union)]
+\label{rule:union}
+\uses{cond:D}
+\lean{Calculus.Typed.union}
+\leanok
 \begin{verbatim}
 ⊢ cᵢ : Tᵢ ⇝ μᵢ  (i ∈ 1…n)    (D)
 ─────────────────────────────────────────────────────────────────── (union)
 ⊢ union(c₁ … cₙ) : ⋃ Tᵢ ⇝ (μ if ∀i. μᵢ = μ;  else ⊤)
+\end{verbatim}
+\end{definition}
 
+\begin{definition}[(dunion)]
+\label{rule:dunion}
+\uses{rule:object,rule:literal}
+\lean{Calculus.Typed.dunion}
+\leanok
+\begin{verbatim}
 ⊢ oᵢ = object(sᵢ, ρᵢ) : Tᵢ ⇝ M    sᵢ(d) = literal(tᵢ)    tᵢ pairwise distinct
 ─────────────────────────────────────────────────────────────────────────────── (dunion)
 ⊢ discriminatedUnion(d, o₁ … oₙ) : ⋃ Tᵢ ⇝ M
 \end{verbatim}
+\end{definition}
 
 Note that \texttt{(dunion)}'s premise asks \texttt{sᵢ(d)} to \emph{be} the literal — an attribute term, hence a \texttt{req}
 field. A \texttt{fallback} around it has no derivation, and the proof says why rather than leaving it to
@@ -1144,11 +1165,19 @@ the weaker fact, and the \texttt{dunion} machinery went from 39 declarations / 3
 — the three lines being that bridge, with no proof changing length. The
 constraint is a statement about the language, not a lever on the model.
 
+\begin{definition}[(D) incomparable held sets]
+\label{cond:D}
+\lean{Calculus.DIncomp}
+\leanok
+\texttt{∀\ i\ ≠\ j.\ ¬(Tᵢ\ ⊆\ Tⱼ)\ ∧\ ¬(Tⱼ\ ⊆\ Tᵢ)}. Well-formedness: no option's held set subsumes
+another's. Decidable from the held sets alone. It does \textbf{not} discharge the readable side, for
+the reason below.
+\end{definition}
+
 \begin{tabular}{@{}lll@{}}
 \toprule
 & & \\
 \midrule
-\textbf{D} & \texttt{∀\ i\ ≠\ j.\ ¬(Tᵢ\ ⊆\ Tⱼ)\ ∧\ ¬(Tⱼ\ ⊆\ Tᵢ)} & Well-formedness: no option's held set subsumes another's. Decidable from the held sets alone. It does \textbf{not} discharge the readable side — see below. \\
 admission & \texttt{∀\ i\ ≠\ j.\ V(cᵢ)\ ∩\ V(cⱼ)\ =\ ∅} on the writable side, \texttt{A(cᵢ)\ ∩\ A(cⱼ)\ =\ ∅} on the readable one & No input reaches two options. A \textbf{discharger}, not a premise — it settles the side it decides at the declaration, and where it fails the obligation stands. Needs option admission, which the held sets do not determine. \\
 \bottomrule
 \end{tabular}
@@ -1260,6 +1289,11 @@ condition on values cannot decide a question about attributes.
 \hypertarget{theorem-soundness}{%
 \subsubsection{Theorem (soundness)}\label{theorem-soundness}}
 
+\begin{theorem}[soundness]
+\label{thm:soundness}
+\uses{cond:R,cond:C,cond:W,cond:MP,cond:U,rule:legacy,rule:lazy,rule:union,rule:dunion,rule:opaque}
+\lean{Calculus.soundness, Calculus.soundness_core, Calculus.carrier_denote}
+\leanok
 Every derivable \texttt{⊢\ c\ :\ T\ ⇝\ μ}, and every \texttt{⊢\ f\ :\ T\ ⊗\ π\ ⇝\ μ}, denotes a pair satisfying \textbf{(R)},
 \textbf{(C)}, \textbf{(W)}, and \textbf{(MP)} in the strong form \texttt{e(p(a))\ ≼\ a} defined below — with three residues,
 all named exactly: \textbf{(MP)} is off on the attributes a \texttt{legacy} in the derivation rereads; every
@@ -1268,6 +1302,7 @@ dischargers of this section settle at the declaration wherever they decide a pai
 \texttt{opaque} outright; and a \texttt{(lazy)} whose unfolding re-enters itself \textbf{through a union} is outside
 the theorem entirely, for the reason §5 gives under confluent admission and the \texttt{(lazy)} case
 below repeats: there is no fixpoint there to prove anything about.
+\end{theorem}
 
 Three premises in §3–§4 — \texttt{ran(r)\ ⊆\ dom(e)} and coherence on \texttt{(legacy)}, \texttt{v(∗)\ ∈\ dom(e)} on
 \texttt{(fallback)} — exist because this proof failed without them. That is the theorem earning its keep:
@@ -1302,7 +1337,10 @@ no extra clause: \texttt{M} is a name set with a function on it, so keys are uni
 clause compares at a shared key with no first occurrence to prefer. Proved once; every product case
 below is an instantiation. ∎
 
-\textbf{Proof.} By induction on the derivation, with one refinement recorded at \texttt{(lazy)}. Each case
+\begin{proof}
+\uses{rule:string,rule:boolean,rule:binary,rule:null,rule:decimal,rule:number,rule:literal,rule:held,rule:refine,rule:legacy,rule:nullable,rule:custom,rule:lazy,rule:field,rule:optional,rule:fallback,rule:array,rule:tuple,rule:tuple-tail,rule:record,rule:object,rule:set,rule:union,rule:dunion,rule:opaque}
+\leanok
+By induction on the derivation, with one refinement recorded at \texttt{(lazy)}. Each case
 first says what the pair \emph{is} — the denotation is part of the rule — then discharges the laws. The
 grouping is the algebra of §7: points, wrappers, products, sums.
 
@@ -1448,7 +1486,8 @@ whose \textbf{(U)} is a theorem, which is what the term is \emph{for}.
 
 \emph{opaque.} The fixpoint of §3: one option per kind, each self-identifying by construction — kinds
 partition the values and members partition the attributes — so admission is unique on both sides at
-every depth of the fixpoint, and the sum case closes with no residue here either. ∎
+every depth of the fixpoint, and the sum case closes with no residue here either.
+\end{proof}
 
 What remains outside the theorem is exactly what §3 already names: \texttt{(custom)}'s premises are the
 caller's to keep, and each \texttt{(union)}'s residual \textbf{(U)}. \texttt{D} is not among them — it is a gate on
