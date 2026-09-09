@@ -183,7 +183,7 @@ noncomputable def AdmLit (k : GroundKind) (ls : NEFinset k.Carrier) (v : Value) 
     ### And `lazy` is transparent, on both sides
 
     `denote (.lazy t) = { denote t with μ := none }`: the pair is the subterm's and only the
-    member is erased, so both rows below pass straight through. `docs/codec-calculus.md` §5
+    member is erased, so both rows below pass straight through. The specification's §5
     lists `lazy` with `custom` as unanalysable, and that is inherited from the document's
     thunk, which is `∗ → term`. `Term.lazy` carries a plain `Term` — a deliberate change,
     made because a closure adds no constructible term and defeats the termination checker

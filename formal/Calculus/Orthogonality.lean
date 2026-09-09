@@ -46,7 +46,7 @@ witnesses, in opposite directions, are why both families are carried here:
   `SetBase.decimal.member = .NS`. So `union(set(string), set(decimal))` separates on the read
   side and not on the write side. `orth_set_string_decimal` is the check.
 
-Neither pair is orthogonal, and each fails on a different half. `docs/codec-calculus.md`'s
+Neither pair is orthogonal, and each fails on a different half. The specification's
 (U) discussion
 states the asymmetry for the case that *does* separate — `union(set(string), set(number))`,
 where "its options write different members, so reading was never in doubt".

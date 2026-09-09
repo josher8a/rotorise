@@ -1626,7 +1626,7 @@ export const checkIso = <C extends AnyCodec, T>(
 /**
  * **(U), the last row of the conformance table.**
  *
- * `docs/codec-calculus.md` states it as *for each union input: exactly one option admits it, per
+ * The specification states it as *for each union input: exactly one option admits it, per
  * side*, and `Calculus.UniqueAdmission` is that sentence in the model:
  *
  * ```
@@ -1865,7 +1865,7 @@ const byTag = (
 /**
  * A ground option: the `κ` filter, and then the attempt.
  *
- * `codec-calculus.md` §5 is explicit that an option admits `t` when "the `κ`/name filter passes
+ * The specification's §5 is explicit that an option admits `t` when "the `κ`/name filter passes
  * **and** `eᵢ(t)` is defined", and that is what this reads. The model's `OptionSem.byAttempt` drops
  * the first conjunct — `κ` is never consulted by the denotation — and
  * the difference used to be visible: **`union([string, number])` violated (U) under the model's

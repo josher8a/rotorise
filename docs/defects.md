@@ -191,6 +191,6 @@ what remains open.
 separates the two claims so that neither can be read as the other.
 
 **Not a candidate for closure by deleting the index.** The rules are the model's transcription of
-`docs/codec-calculus.md`, and a rule whose held set is spelled as the denotation's cannot be read
+the blueprint's `content.tex`, and a rule whose held set is spelled as the denotation's cannot be read
 against the document it transcribes. The identity is what makes the transcription checked rather
 than advertised, and it means that only because the two sides are written independently.

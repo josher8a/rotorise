@@ -1,7 +1,7 @@
 /**
  * **(U), as a property test.**
  *
- * The last law of `docs/codec-calculus.md`, and the only one with no harness.
+ * The last law of the specification, and the only one with no harness.
  * `Calculus.UniqueAdmission` says it for the model; {@link checkUniqueAdmission} says it for a
  * shipped codec, reading admission off the *definition* rather than off the union's own matcher —
  * a test that asked `union` which option it picked would be checking the implementation against
