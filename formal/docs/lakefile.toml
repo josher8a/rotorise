@@ -2,6 +2,9 @@ name = "calculus-docs"
 version = "0.1.0"
 defaultTargets = []
 
+[[lean_lib]]
+name = "Docs"
+
 [[require]]
 name = "calculus"
 path = ".."
@@ -10,3 +13,8 @@ path = ".."
 name = "doc-gen4"
 scope = "leanprover"
 version = "git#v4.33.0"
+
+[[require]]
+name = "checkdecls"
+git = "https://github.com/PatrickMassot/checkdecls.git"
+rev = "3d425859e73fcfbef85b9638c2a91708ef4a22d4"
