@@ -451,8 +451,8 @@ export type Refinement = {
  *
  * **What the caller owes, and it is the whole of §2.** Every other constructor here has its laws
  * *proved* from the terms it is built out of; this one takes two foreign functions, so the model
- * discharges it by assumption — `Lawful (denote t)` as a premise
- * (`formal/Calculus/Soundness.lean:74`). No gate is possible and none is attempted: the pair is
+ * discharges it by assumption — `Lawful (denote t)` as a premise, which is `Obligations`'
+ * `.lazy` row. No gate is possible and none is attempted: the pair is
  * arbitrary code, and there is no definition to read. The four:
  *
  * 1. **(R)** retraction — `decode(encode(t))` is `t`, exactly, for every `t` you write.
@@ -508,7 +508,7 @@ export type LiteralBase = 'string' | 'number' | 'decimal' | 'boolean' | 'binary'
 export type LiteralValue = string | number | boolean | Uint8Array
 
 /**
- * The bases a native set can be built from — `formal/Calculus/Domain.lean:602`'s `SetBase`.
+ * The bases a native set can be built from — `SetBase`.
  *
  * `boolean` is the one base with no set: DynamoDB has `SS`, `NS` and `BS`, and no `BOOLS`. Four
  * bases onto three wire members, because `number` and `decimal` are both real and neither is a
@@ -711,7 +711,7 @@ export const decimal: DecimalCodec = Object.assign(
  * `number.set()` and `decimal.set()` are **both first-class**, and neither is the other's legacy
  * spelling: `number.set()` is what a caller who means their platform's numbers means, and
  * `decimal.set()` is the host-independent one. They write the same member, `NS`, and hold different
- * things — which is why `formal/Calculus/Domain.lean:602` indexes a set by a base rather than by
+ * things — which is why `SetBase` indexes a set by a base rather than by
  * `Member`.
  */
 export type NumberCodec = AttributeCodec<number, Attribute<'N'>> & {
@@ -858,7 +858,7 @@ const set = <const C extends AnyCodec>(
      * a set of `held(string, f, g)` passed it: `held` writes where its inner term does, so the member
      * was `'S'`, and the adapter's two functions then ran per member of an attribute that stores no
      * such thing. The model closed this by indexing `Term.set` with a `SetBase`
-     * (`formal/Calculus/Term.lean:60`) and says outright what that gives up — a set of a `held` and
+     * and says outright what that gives up — a set of a `held` and
      * of a `legacy`, neither of which has a set-level spelling and neither of which appears in
      * `src/`. This is the same refusal, at the same place the other one lives.
      *
@@ -1274,7 +1274,7 @@ export type FallbackCodec<
  * attribute existed. Replaces `item.channel ?? 'IN_STORE'` at every read site.
  *
  * **The stand-in must be writable by the codec it stands in for**, and that is checked here, at the
- * declaration. §3 `(fallback)` carries it as a premise (`formal/Calculus/Soundness.lean:89`) and it
+ * declaration. §3 `(fallback)` carries it as a premise, `ObligationsField`'s `.req` row, and it
  * exists because the proof failed without it: a row missing the attribute reads back as the
  * stand-in, and if the inner codec cannot write that value the item cannot be written back —
  * **(C)** broken at the read, with the refusal surfacing on some later write rather than at the
@@ -1360,15 +1360,15 @@ export const fallback = <const C extends AnyCodec>(
  * establishes it, and generation reaches through: values are generated for the inner codec and
  * handed out through `decode`, so what is generated is always something the pair produced.
  *
- * **Nothing here checks it, and nothing here can.** The model carries it as `IsoCancels`
- * (`formal/Calculus/Codec.lean:157`) — a premise, in both directions: `g(f v) = v` wherever `f v`
- * lands writable, and `f(g v) = v` on the writable values themselves. It is a premise there for
- * the same reason it is unchecked here. One direction quantifies over the *held* type, which has
- * no generator except `decode` itself, so every value this library could make is already in the
- * pair's image; and probing the other at construction is worse than not probing it, because a
- * legitimate adapter is an isomorphism on the values its inner codec describes and *throws* off
- * them — `held(string, dateAdapter)` would be refused for `new Date('<anything>')`, which is
- * exactly the narrowing the example above asks for rather than a defect.
+ * **Nothing here checks it, and nothing here can.** The model carries it as `IsoCancels` — a
+ * premise, in both directions: `g(f v) = v` wherever `f v` lands writable, and `f(g v) = v` on the
+ * writable values themselves. It is a premise there for the same reason it is unchecked here. One
+ * direction quantifies over the *held* type, which has no generator except `decode` itself, so
+ * every value this library could make is already in the pair's image; and probing the other at
+ * construction is worse than not probing it, because a legitimate adapter is an isomorphism on the
+ * values its inner codec describes and *throws* off them — `held(string, dateAdapter)` would be
+ * refused for `new Date('<anything>')`, which is exactly the narrowing the example above asks for
+ * rather than a defect.
  *
  * So this is a written obligation, and `checkIso` is how a caller discharges it: it generates for
  * the inner codec and checks `encode(decode(y))`, which is the half a table depends on. The
@@ -1454,8 +1454,8 @@ export type Reader<T> = {
  * rate: legacy({ current: decimal, older: string })
  * ```
  *
- * **Two things §3 asks of the older reader** (`ReadsCoherently`,
- * `formal/Calculus/Codec.lean:163`), and only one of them is checkable.
+ * **Two things §3 asks of the older reader** (`ReadsCoherently`), and only one of them is
+ * checkable.
  *
  * `ran(r) ⊆ dom(e)` — a migration lands on values the current encoding can *write*. This is
  * checked, per read, as soon as the older reader has answered, because that is the earliest

@@ -150,6 +150,10 @@ SECTION = re.compile(r"§(\d+)")
 # A backticked token naming a file rather than a declaration. `NOISE` keeps these out of the name
 # pass, where they would be nonsense; `dangling_paths` is what checks them.
 PATHISH = re.compile(r"\.(md|py|ts|lean|json|toml|sh|yml|yaml)$")
+# A Lean path with a line suffix. A line is what an edit moves and a declaration name is not,
+# and `Calculus/` is what these guards already hold to their names, so a citation names the
+# declaration. Refused as a class rather than resolved.
+LINE_ANCHOR = re.compile(r"^[A-Za-z0-9_./-]+\.lean:[0-9]+$")
 # What the tree produces rather than holds. One entry per producer, and no more: a prefix here
 # exempts every path under it, so a fourth entry would need a fourth producer.
 GENERATED = ("dist/",      # npm run build
@@ -390,6 +394,19 @@ def path_resolves(tok, full, base):
     return os.path.basename(tok) in base or any(p.endswith(tok) for p in full)
 
 
+def line_anchored(paths):
+    """Every backticked `<lean file>:<line>` citation, by path and line."""
+    out = {}
+    for path in paths:
+        if not os.path.exists(path):
+            continue
+        for lineno, line in enumerate(open(path).read().split("\n"), 1):
+            for tok in BACKTICKED.findall(line):
+                if LINE_ANCHOR.match(tok.strip()):
+                    out.setdefault(path, []).append((lineno, tok.strip()))
+    return out
+
+
 def dangling_paths(paths, full, base):
     """Every backticked file path citing a file nothing holds and no producer writes."""
     out = {}
@@ -527,6 +544,15 @@ def main():
               f"does not hold and no producer writes")
         for path in sorted(broken_paths):
             for lineno, tok in broken_paths[path]:
+                print(f"      {os.path.normpath(path)}:{lineno}  {tok}")
+    anchored = line_anchored(path_targets)
+    if anchored:
+        failed = True
+        total = sum(len(v) for v in anchored.values())
+        print(f"\n  {total} citation{'' if total == 1 else 's'} anchored to a Lean line rather "
+              f"than to a declaration name")
+        for path in sorted(anchored):
+            for lineno, tok in anchored[path]:
                 print(f"      {os.path.normpath(path)}:{lineno}  {tok}")
     known = spec_sections()
     dangling = dangling_sections(CURRENT + sorted(glob.glob("scripts/*.py")), known)

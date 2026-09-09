@@ -58,8 +58,8 @@ describe('the predicates this library ships', () => {
     /**
      * `isStoredNumeral` is what DynamoDB hands back, and `Numeral.Stored` is the same set —
      * `src/codec/attribute.ts:138` claims it and the two were checked against each other in the kernel
-     * over a corpus of numeral spellings before this emission was allowed. `isStored`
-     * (`formal/Calculus/Combinators.lean:409`) is that predicate lifted to a `Value`.
+     * over a corpus of numeral spellings before this emission was allowed. `isStored` is that
+     * predicate lifted to a `Value`.
      */
     it('emits `isStored` for `isStoredNumeral`', () => {
         const stored = refine(decimal, narrowing(isStoredNumeral))

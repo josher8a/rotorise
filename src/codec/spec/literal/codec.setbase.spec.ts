@@ -237,7 +237,7 @@ describe('branding survives, and it survives through the capability', () => {
  *
  * §3 `(set)`'s premise used to be `setMember μ = some μS`, read off an arbitrary element term, and
  * `setMember` is partial — so the constructor accepted elements the rule then refused.
- * `formal/Calculus/Term.lean:60` replaced the element term with a `SetBase` index, making the
+ * `Term.set`'s `SetBase` index replaced the element term, making the
  * refusal a type error, and states what that gives up: a set of a `held` and of a `legacy`.
  *
  * This library had the same hole and it was reachable. The member reader read *through* an adapter

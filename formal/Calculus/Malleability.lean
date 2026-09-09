@@ -13,7 +13,7 @@ Three things are here, and the reason each is here rather than in `Codec.lean` i
 of them is a new primitive.
 
 * **`Fmt` is derived, not assumed.** It is the fibre of `p`, so it is `Codec.Ker`
-  (`Calculus/Codec.lean:37`) seen from the other side: `Ker` is the relation "these two
+  seen from the other side: `Ker` is the relation "these two
   attributes are in one fibre", `Fmt` names the fibre. A relational presentation of a codec
   is therefore not a different model — it is the same model, addressed by fibre. Anything a
   `fmt` could express about reading, `p` already expresses.
@@ -36,7 +36,7 @@ facts about it, and they are the two reasons `docs/codec-calculus.md` gives for 
 being equality:
 
 * **`η` normalising an `N` costs nothing** (`nonMalleable_numberCodec`). `number` reads only
-  `.n` attributes and `Agree.n` is unconditional (`Calculus/Codec.lean:60`) — agreement never
+  `.n` attributes and `Agree.n` is unconditional — agreement never
   looks inside a numeral. So the store may rewrite `"1.500"` to `"1.5"` and the fibre
   condition still holds. Where `η` lives, non-malleability is *free*.
 
@@ -101,7 +101,7 @@ theorem fmt_forced {c : Codec} {fmt : Value → Set Attr}
 
 /-! ## The store premise, restated against fibres
 
-`SurvivesStore` (`Calculus/Codec.lean:231`) is §1's concession: the store is not the identity
+`SurvivesStore` is §1's concession: the store is not the identity
 on attributes, and all a codec needs is that it moves within a fibre. Under a relational
 format that sentence is unchanged — which is the point. -/
 
@@ -159,11 +159,11 @@ theorem agree_not_transitive : ∃ x y z : Attr, Agree x y ∧ Agree y z ∧ ¬ 
 
 /-! ### Where it is free: the numeral
 
-§1's concession is that the store rewrites numerals, so `number`'s `ker p` is deliberately
-coarse — `survivesStore_numberCodec` (`Calculus/Combinators.lean:2292`) is that coarseness put
-to work. Non-malleability survives it untouched, because `Agree.n` is unconditional: agreement
-never inspects a numeral's digits. So the property costs nothing at the one place §1 gives
-something up, which is precisely why reading §5.6 item 4 on its own looks harmless. -/
+§1's concession is that the store rewrites numerals, so `number`'s `ker p` is deliberately coarse
+— `survivesStore_numberCodec` is that coarseness put to work. Non-malleability survives it
+untouched, because `Agree.n` is unconditional: agreement never inspects a numeral's digits. So the
+property costs nothing at the one place §1 gives something up, which is precisely why reading §5.6
+item 4 on its own looks harmless. -/
 
 /-- `number` reads nothing but an `N`. -/
 theorem numberCodec_p_n_inv {a : Attr} {v : Value} (h : numberCodec.p a = some v) :

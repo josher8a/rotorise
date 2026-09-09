@@ -169,9 +169,9 @@ describe('terms', () => {
     })
 
     /**
-     * A set is **not** structural, and stopped being so the day `Term.set` took a `SetBase`
-     * (`formal/Calculus/Term.lean:60`). This emitted `Term.set (<element term>)` until then, and
-     * the generated file stopped compiling — which is the defect this test now guards.
+     * A set is **not** structural, and stopped being so the day `Term.set` took a `SetBase`. This
+     * emitted `Term.set (<element term>)` until then, and the generated file stopped compiling —
+     * which is the defect this test now guards.
      *
      * Both numeric bases are emitted, and they are different terms writing the same member: `NS`
      * cannot tell `number` from `decimal`, and the index can.
@@ -338,8 +338,8 @@ describe('terms', () => {
 describe('what cannot be emitted', () => {
     /**
      * The permanent one, **and it is a fact about values, not about the term.** `Double` is
-     * axiomatized with a round trip and a decidable equality and *no constructor* — see
-     * `formal/Calculus/Domain.lean:236` — so no closed term inhabits it, `#eval` cannot print one,
+     * axiomatized with a round trip and a decidable equality and *no constructor* — so no closed
+     * term inhabits it, `#eval` cannot print one,
      * and there is no text a generator could emit for one. This is not a gap to be filled later:
      * filling it would mean adding a numeral-to-double literal the model deliberately omits,
      * because IEEE-754 rounding is not a theorem of the calculus.
