@@ -134,9 +134,11 @@ totality the specification asks for is never appealed to. This is the mirror of 
 too weak, and the same defect class: a rule and its mechanization disagree about the strength of
 an obligation, and the disagreement is in the direction that costs a user rather than the model.
 
-**Pin.** None asserts the gap. `IsoCancels` is the restricted statement and the two `through`
-theorems are the evidence that the restriction suffices, but no theorem states that the total form
-is unnecessary, and nothing fails if the specification and the definition drift further apart.
+**Pin.** The blueprint asserts the gap and no theorem does. The `(held)` node in
+`formal/docs/blueprint/src/content.tex` shows the total premise, links `IsoCancels`, and carries no
+`\leanok`, so the rendered graph marks the rule stated rather than formalised as written.
+`IsoCancels` is the restricted statement and the two `through` theorems are the evidence that the
+restriction suffices, but no theorem states that the total form is unnecessary.
 
 **Open.** Either the specification's premise is loosened to what the proof uses, or the model is
 asked to discharge the stronger one. That is a specification decision.
