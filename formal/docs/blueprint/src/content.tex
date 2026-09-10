@@ -6,8 +6,7 @@ checks it.
 
 \begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
 
-\hypertarget{1-the-attribute-domain}{%
-\section{§1 The attribute domain}\label{1-the-attribute-domain}}
+\section{§1 The attribute domain}\label{1-the-attribute-domain}
 
 A store holds items under names, and every value it holds, whatever type a schema gives it, is
 drawn from one shared domain of attributes. This section fixes that domain.
@@ -53,8 +52,7 @@ domain identifies them. Every claim later about telling a set from an array trac
 
 \begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
 
-\hypertarget{2-what-a-codec-is}{%
-\section{§2 What a codec is}\label{2-what-a-codec-is}}
+\section{§2 What a codec is}\label{2-what-a-codec-is}
 
 A partial retraction of the attribute domain onto a set of values, together with the equivalence its
 own reading induces.
@@ -69,8 +67,7 @@ c = (T, μ, e, p)      T ⊆ Value     μ ∈ Member ∪ {⊤}
 \emph{not determined by the term}, not as \emph{anything}. Which terms may leave it
 undetermined is settled in §3.
 
-\hypertarget{laws}{%
-\subsection{Laws}\label{laws}}
+\subsection{Laws}\label{laws}
 
 \begin{definition}[(R) retraction]
 \label{cond:R}
@@ -124,8 +121,7 @@ it does not declare. In the language of quotient lenses \cite{quotient-lenses} \
 \textbf{canonizer} — total on \texttt{dom(p)} by \rulelink{cond:C}{\textbf{(C)}} — and the equivalence it works modulo is not a parameter
 a programmer chooses: it is \texttt{ker\ p}, forced by the reading itself. Write \texttt{a\ ≈c\ a′\ ⟺\ p(a)\ =\ p(a′)}.
 
-\hypertarget{corollary-q--stability}{%
-\subsection{Corollary (Q — stability)}\label{corollary-q--stability}}
+\subsection{Stability under a generator}\label{corollary-q--stability}
 
 \begin{corollary}[Q — stability]
 \label{cor:Q}
@@ -145,8 +141,7 @@ So stability is retraction asked at a different \emph{source of values}: \ruleli
 produced, \rulelink{cor:Q}{\textbf{(Q)}} at values a table returned. What \rulelink{cor:Q}{\textbf{(Q)}} adds to
 \rulelink{cond:R}{\textbf{(R)}} is exactly \rulelink{cond:C}{\textbf{(C)}}, and that containment is the thing most likely to be untrue.
 
-\hypertarget{corollary-read-side-w}{%
-\subsection{Corollary (read-side W)}\label{corollary-read-side-w}}
+\subsection{What the readable side owes}\label{corollary-read-side-w}
 
 \begin{corollary}[read-side W]
 \label{cor:readW}
@@ -182,8 +177,7 @@ is then the canonizer, mapping any readable attribute to the canonical represent
 codec is total on \texttt{Can(c)} and merely partial on \texttt{𝔸}, which is the precise sense in which a table is
 more permissive than the schema describing it.
 
-\hypertarget{what-a-codec-ideally-is}{%
-\subsection{What a codec ideally is}\label{what-a-codec-ideally-is}}
+\subsection{What a codec ideally is}\label{what-a-codec-ideally-is}
 
 Those pieces assemble into something simpler than the four laws suggest, and that is where the
 complexity lives.
@@ -217,8 +211,7 @@ an iso and \texttt{refine} its prism, and §6's \texttt{legacy(c,\ r)\ ≈\ c} o
 term level. That is not a coincidence but it is not a theorem either: the algebra that builds
 codecs relaxes an iso in the two ways a codec itself does.
 
-\hypertarget{when-the-deviations-vanish}{%
-\subsection{When the deviations vanish}\label{when-the-deviations-vanish}}
+\subsection{When the deviations vanish}\label{when-the-deviations-vanish}
 
 Both extensions can be driven to zero, and asking what it takes is the cleanest way to see what
 each one is really for. They do not have the same answer, and in this calculus they cannot be
@@ -264,8 +257,7 @@ collapse is available by declaring the discriminator.
 
 \begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
 
-\hypertarget{3-the-judgement}{%
-\section{§3 The judgement}\label{3-the-judgement}}
+\section{§3 The judgement}\label{3-the-judgement}
 
 Two indices, because a codec has two sides: the values it holds, and the member it stores them in.
 Both are needed, and neither determines the other.
@@ -274,8 +266,7 @@ Both are needed, and neither determines the other.
 ⊢ c : T ⇝ μ        c holds T, and stores it as μ
 \end{verbatim}
 
-\hypertarget{ground-terms}{%
-\subsection{Ground terms}\label{ground-terms}}
+\subsection{Ground terms}\label{ground-terms}
 
 \begin{definition}[(string)]
 \label{rule:string}
@@ -410,8 +401,7 @@ same double; \texttt{decimal} cannot, because its \texttt{ker\ p} is equality. S
 fixed points of \texttt{η}, which is what \texttt{Stored} is. \texttt{η} is observed, not stipulated: it is the store's
 behaviour, and the calculus can only be arranged around it.
 
-\hypertarget{a-ground-term-either-takes-its-member-whole-or-it-is-a-refinement}{%
-\subsection{A ground term either takes its member whole, or it is a refinement}\label{a-ground-term-either-takes-its-member-whole-or-it-is-a-refinement}}
+\subsection{A ground term either takes its member whole, or it is a refinement}\label{a-ground-term-either-takes-its-member-whole-or-it-is-a-refinement}
 
 Read the ground terms together and they fall into two kinds, with nothing in between. \texttt{string},
 \texttt{boolean}, \texttt{binary} and \texttt{null} take their member's carrier \textbf{whole} — every string is a \texttt{String},
@@ -475,20 +465,7 @@ what makes this the term for an enum indexed by number — the held set is the l
 stored member is \texttt{N}, checked in both directions — and note that \texttt{⇝\ N} carries \texttt{Numerals} on the wire
 while the held set is numeric, so \rulelink{cond:R}{\texttt{(R)}} obliges the reading to return the number and not its text.
 
-\hypertarget{containers}{%
-\subsection{Containers}\label{containers}}
-
-\rulelink{rule:set}{\texttt{(set)}}'s premise line is \textbf{an index}, not a hypothesis: the element's
-member is read off the base rather than tested, so the four bases the rule admits are exactly those that carry one,
-\texttt{b.held} and \texttt{b.member} are functions of the index, and an element that names no member is a
-type error. \textbf{Four bases onto three wire
-members}: \texttt{number} and \texttt{decimal} both store \texttt{NS} and are not the same base: one holds
-machine doubles, the other the numeral text.
-
-What a base rather than a term costs: \texttt{set(refine(b,\ q))} and \texttt{set(literal(…))} are \textbf{not} lost — a
-restriction of the elements is a restriction of the set — but
-\texttt{set(held(…))} and \texttt{set(legacy(…))} are, having no set-level spelling and no appearance in any
-schema.
+\subsection{Containers}\label{containers}
 
 \begin{definition}[(set)]
 \label{rule:set}
@@ -501,6 +478,18 @@ b ∈ {string, number, decimal, binary}
 ⊢ set(b) : ℘⁺fin(b.held) ⇝ b.member
 \end{verbatim}
 \end{definition}
+
+\rulelink{rule:set}{\texttt{(set)}}'s premise line is \textbf{an index}, not a hypothesis: the element's
+member is read off the base rather than tested, so the four bases the rule admits are exactly those that carry one,
+\texttt{b.held} and \texttt{b.member} are functions of the index, and an element that names no member is a
+type error. \textbf{Four bases onto three wire
+members}: \texttt{number} and \texttt{decimal} both store \texttt{NS} and are not the same base: one holds
+machine doubles, the other the numeral text.
+
+What a base rather than a term costs: \texttt{set(refine(b,\ q))} and \texttt{set(literal(…))} are \textbf{not} lost — a
+restriction of the elements is a restriction of the set — but
+\texttt{set(held(…))} and \texttt{set(legacy(…))} are, having no set-level spelling and no appearance in any
+schema.
 
 \begin{definition}[(array)]
 \label{rule:array}
@@ -557,8 +546,7 @@ member is \emph{computed} from its element's, so an element that does not name o
 rule refuses it rather than a runtime check discovering it. Nothing else in the calculus reads its
 subterm's member this way.
 
-\hypertarget{wrappers}{%
-\subsection{Wrappers}\label{wrappers}}
+\subsection{Wrappers}\label{wrappers}
 
 \begin{definition}[(held)]
 \label{rule:held}
@@ -750,8 +738,7 @@ derivable there and carries \rulelink{cond:U}{\textbf{(U)}} per input.
 
 \begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
 
-\hypertarget{4-fields-are-not-codecs}{%
-\section{§4 Fields are not codecs}\label{4-fields-are-not-codecs}}
+\section{§4 Fields are not codecs}\label{4-fields-are-not-codecs}
 
 A second judgement, and the stratification is the point: presence is a property of a name binding,
 never of an attribute.
@@ -830,8 +817,7 @@ the round trip through the declared names is untouched by what was discarded. Th
 of §2 again — an item is \texttt{≈c} itself minus its undeclared names — and, \texttt{SS}/\texttt{NS}/\texttt{BS} carrying
 no ordering to lose, one of only two places \texttt{ker\ p} is not equality. The other is \texttt{η}.
 
-\hypertarget{the-stratification-does-work}{%
-\subsection{The stratification does work}\label{the-stratification-does-work}}
+\subsection{The stratification does work}\label{the-stratification-does-work}
 
 No rule derives \texttt{⊢\ optional(c)\ :\ T\ ⇝\ μ}. Presence lives in \texttt{⊗\ π} and nowhere else, so \texttt{optional} and
 \texttt{fallback} are fields and never attributes, which makes \texttt{array(optional(c))} \textbf{not derivable}, since
@@ -851,15 +837,13 @@ and then \emph{required} the value on the way back. Both spellings mean \texttt{
 
 \begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
 
-\hypertarget{5-choice-and-its-side-conditions}{%
-\section{§5 Choice, and its side conditions}\label{5-choice-and-its-side-conditions}}
+\section{§5 Choice, and its side conditions}\label{5-choice-and-its-side-conditions}
 
 The rules a grammar cannot state, because they relate siblings rather than a term to its subterms,
 and, before them, the one semantic condition even the judgement cannot decide, which everything else
 in this section exists to approximate.
 
-\hypertarget{unique-admission}{%
-\subsection{Unique admission}\label{unique-admission}}
+\subsection{Unique admission}\label{unique-admission}
 
 A union's pair is defined by \textbf{unique admission}. Each option answers, per input and per side,
 whether the input could be its — an attribute on the way out, a value on the way in — and the union
@@ -874,6 +858,53 @@ each value it writes, and each attribute it reads. Ambiguity is a failure, never
 names the strong form, over every canonical pair of every option. The laws consume the
 restriction to the inputs the union itself resolves, and both forms stand.
 \end{definition}
+
+\begin{definition}[(D) incomparable held sets]
+\label{cond:D}
+\lean{Calculus.DIncomp}
+\leanok
+\texttt{∀\ i\ ≠\ j.\ ¬(Tᵢ\ ⊆\ Tⱼ)\ ∧\ ¬(Tⱼ\ ⊆\ Tᵢ)}. Well-formedness: no option's held set subsumes
+another's. Decidable from the held sets alone. It does \textbf{not} discharge the readable side, for
+the reason the machinery of admission gives.
+\end{definition}
+
+\begin{definition}[(union)]
+\label{rule:union}
+\uses{cond:D}
+\lean{Calculus.Typed.union}
+\leanok
+\begin{verbatim}
+⊢ cᵢ : Tᵢ ⇝ μᵢ  (i ∈ 1…n)    (D)
+─────────────────────────────────────────────────────────────────── (union)
+⊢ union(c₁ … cₙ) : ⋃ Tᵢ ⇝ (μ if ∀i. μᵢ = μ;  else ⊤)
+\end{verbatim}
+\end{definition}
+
+\begin{definition}[(dunion)]
+\label{rule:dunion}
+\uses{rule:object,rule:literal}
+\lean{Calculus.Typed.dunion}
+\leanok
+\begin{verbatim}
+⊢ oᵢ = object(sᵢ, ρᵢ) : Tᵢ ⇝ M    sᵢ(d) = literal(tᵢ)    tᵢ pairwise distinct
+─────────────────────────────────────────────────────────────────────────────── (dunion)
+⊢ discriminatedUnion(d, o₁ … oₙ) : ⋃ Tᵢ ⇝ M
+\end{verbatim}
+\end{definition}
+
+Note that \rulelink{rule:dunion}{\texttt{(dunion)}}'s premise asks \texttt{sᵢ(d)} to \emph{be} the literal — an attribute term, hence a \texttt{req}
+field. A \texttt{fallback} around it has no derivation, and the proof says why rather than leaving it to
+taste: a row omitting the discriminator would read to the fallback's stand-in, an arbitrary value
+the tag sets never vouched for, and \rulelink{cond:C}{\textbf{(C)}} would then re-encode a variant no tag selects.
+
+\textbf{Arity one at the discriminator}, and n-ary literals everywhere else. The rule asks for a single
+tag \texttt{tᵢ} per variant, and disjointness of singletons is distinctness. Soundness does not need the
+restriction: \rulelink{rule:literal}{\texttt{(literal)}} is n-ary, a set of tags is a perfectly good
+admissible set, and pairwise disjointness is the condition (U) needs.
+
+What required it is what a discriminated union \emph{is}. It is a \textbf{lookup}: the stored tag chooses
+the variant. A variant answering to two tags is a key that does not identify its variant, and a
+reader who has the tag still cannot say which shape they hold without consulting the table twice.
 
 Read \rulelink{cond:U}{\textbf{(U)}} carefully, because the scope is the whole content. \texttt{∣\{i\ :\ cᵢ\ admits\ it\}∣\ =\ 1} at
 \emph{every} input would be a stronger demand, and a wrong one: where two options both admit, the union
@@ -901,7 +932,7 @@ unions it covers:
 Discharger & Decides & From \\
 \midrule
 distinct members & the readable side, where the stored attributes differ & \texttt{μ}, the judgement's own index \\
-disjoint option admission & either side, each side asked on its own & admission and occupancy (one coarse label per term per side), below \\
+disjoint option admission, \texttt{∀\ i\ ≠\ j.\ V(cᵢ)\ ∩\ V(cⱼ)\ =\ ∅} on the writable side and \texttt{A(cᵢ)\ ∩\ A(cⱼ)\ =\ ∅} on the readable one & either side, each side asked on its own & admission and occupancy (one coarse label per term per side), below \\
 tag disjointness & \rulelink{rule:dunion}{\texttt{(dunion)}}, outright — both sides & the discriminator literals \\
 disjoint predicates over one base & refinements of a common \texttt{c}, outright — both sides & the predicates \texttt{q} \\
 kind disjointness & \texttt{opaque}'s fixpoint (§3), outright & one option per kind of §1 \\
@@ -945,8 +976,7 @@ reason it cannot be checked: it could be anything. That costs nothing, because f
 refusing: \rulelink{cond:U}{\textbf{(U)}}
 still guards each value the option is actually given.
 
-\hypertarget{a-weaker-condition-proved-and-not-adopted}{%
-\subsection{A weaker condition, and what it costs}\label{a-weaker-condition-proved-and-not-adopted}}
+\subsection{A weaker condition, and what it costs}\label{a-weaker-condition-proved-and-not-adopted}
 
 The reading above rejects \texttt{∣\{i\ :\ cᵢ\ admits\ it\}∣\ =\ 1} as too strong and settles for \emph{undefined at the
 overlap}. There is a third position between them.
@@ -1012,8 +1042,7 @@ vacuous, so a syntactic disjointness test on the options is what would license i
 \textbf{Normatively, the rule is unique admission as stated above.} This subsection records a proved
 alternative and the trade, not a change to the judgement.
 
-\hypertarget{the-machinery-of-admission}{%
-\subsection{The machinery of admission}\label{the-machinery-of-admission}}
+\subsection{The machinery of admission}\label{the-machinery-of-admission}
 
 The admission row asks, of each option and each side, which inputs the option may be given: which values it may
 be asked to write, and which attributes it may be asked to read. Write \texttt{V(c)\ ⊆\ Value} and \texttt{A(c)\ ⊆\ 𝔸}
@@ -1110,62 +1139,9 @@ its option admission, and its set of attributes likewise. Disjointness in either
 which is what leaves the row decidable where it decides at all: \textbf{on one side, two options separate
 when their occupancies on that side are disjoint. On both sides at once, they separate when one
 option requires a name the other does not declare.} That is a question about two terms, answered by computation at
-the declaration. What it declines is an obligation and not a refusal.
-
-\begin{definition}[(union)]
-\label{rule:union}
-\uses{cond:D}
-\lean{Calculus.Typed.union}
-\leanok
-\begin{verbatim}
-⊢ cᵢ : Tᵢ ⇝ μᵢ  (i ∈ 1…n)    (D)
-─────────────────────────────────────────────────────────────────── (union)
-⊢ union(c₁ … cₙ) : ⋃ Tᵢ ⇝ (μ if ∀i. μᵢ = μ;  else ⊤)
-\end{verbatim}
-\end{definition}
-
-\begin{definition}[(dunion)]
-\label{rule:dunion}
-\uses{rule:object,rule:literal}
-\lean{Calculus.Typed.dunion}
-\leanok
-\begin{verbatim}
-⊢ oᵢ = object(sᵢ, ρᵢ) : Tᵢ ⇝ M    sᵢ(d) = literal(tᵢ)    tᵢ pairwise distinct
-─────────────────────────────────────────────────────────────────────────────── (dunion)
-⊢ discriminatedUnion(d, o₁ … oₙ) : ⋃ Tᵢ ⇝ M
-\end{verbatim}
-\end{definition}
-
-Note that \rulelink{rule:dunion}{\texttt{(dunion)}}'s premise asks \texttt{sᵢ(d)} to \emph{be} the literal — an attribute term, hence a \texttt{req}
-field. A \texttt{fallback} around it has no derivation, and the proof says why rather than leaving it to
-taste: a row omitting the discriminator would read to the fallback's stand-in, an arbitrary value
-the tag sets never vouched for, and \rulelink{cond:C}{\textbf{(C)}} would then re-encode a variant no tag selects.
-
-\textbf{Arity one at the discriminator}, and n-ary literals everywhere else. The rule asks for a single
-tag \texttt{tᵢ} per variant, and disjointness of singletons is distinctness. Soundness does not need the
-restriction: \rulelink{rule:literal}{\texttt{(literal)}} is n-ary, a set of tags is a perfectly good
-admissible set, and pairwise disjointness is the condition (U) needs.
-
-What required it is what a discriminated union \emph{is}. It is a \textbf{lookup}: the stored tag chooses
-the variant. A variant answering to two tags is a key that does not identify its variant, and a
-reader who has the tag still cannot say which shape they hold without consulting the table twice.
-
-\begin{definition}[(D) incomparable held sets]
-\label{cond:D}
-\lean{Calculus.DIncomp}
-\leanok
-\texttt{∀\ i\ ≠\ j.\ ¬(Tᵢ\ ⊆\ Tⱼ)\ ∧\ ¬(Tⱼ\ ⊆\ Tᵢ)}. Well-formedness: no option's held set subsumes
-another's. Decidable from the held sets alone. It does \textbf{not} discharge the readable side, for
-the reason below.
-\end{definition}
-
-\begin{tabular}{@{}lll@{}}
-\toprule
-& & \\
-\midrule
-admission & \texttt{∀\ i\ ≠\ j.\ V(cᵢ)\ ∩\ V(cⱼ)\ =\ ∅} on the writable side, \texttt{A(cᵢ)\ ∩\ A(cⱼ)\ =\ ∅} on the readable one & No input reaches two options. A \textbf{discharger}, not a premise — it settles the side it decides at the declaration, and where it fails the obligation stands. Needs option admission, which the held sets do not determine. \\
-\bottomrule
-\end{tabular}
+the declaration. What it declines is an obligation and not a refusal. No input reaches two
+options where option admission is disjoint, and that needs option admission itself, which the held
+sets do not determine.
 
 Only \rulelink{cond:D}{\textbf{(D)}} is a premise, and it is the only condition here with a letter, because it appears in
 a rule. Everything in the discharger table is a discharger, and the asymmetry is not an
@@ -1267,30 +1243,7 @@ So \rulelink{cond:D}{\textbf{(D)}} is a well-formedness condition on the judgeme
 what the first two rows of the discharger table take. Attributes rather than values is the point: a
 condition on values cannot decide a question about attributes.
 
-\hypertarget{theorem-soundness}{%
-\subsection{Theorem (soundness)}\label{theorem-soundness}}
-
-\begin{theorem}[soundness]
-\label{thm:soundness}
-\uses{cond:R,cond:C,cond:W,cond:MP,cond:U,rule:legacy,rule:lazy,rule:union,rule:dunion,rule:opaque}
-\lean{Calculus.soundness, Calculus.soundness_core, Calculus.carrier_denote}
-\leanok
-Every derivable \texttt{⊢\ c\ :\ T\ ⇝\ μ}, and every \texttt{⊢\ f\ :\ T\ ⊗\ π\ ⇝\ μ}, denotes a pair satisfying \rulelink{cond:R}{\textbf{(R)}},
-\rulelink{cond:C}{\textbf{(C)}}, \rulelink{cond:W}{\textbf{(W)}}, and \rulelink{cond:MP}{\textbf{(MP)}} in the strong form \texttt{e(p(a))\ ≼\ a} defined below, with three residues,
-all named: \rulelink{cond:MP}{\textbf{(MP)}} is off on the attributes a \texttt{legacy} in the derivation rereads; every
-\rulelink{rule:union}{\texttt{(union)}} in the derivation carries \rulelink{cond:U}{\textbf{(U)}} \emph{where the union acts} as an obligation, which the
-dischargers of this section settle at the declaration wherever they decide a pair, \rulelink{rule:dunion}{\texttt{(dunion)}} and
-\texttt{opaque} outright; and a \rulelink{rule:lazy}{\texttt{(lazy)}} whose unfolding re-enters itself \textbf{through a union} is outside
-the theorem entirely, for the reason §5 gives under confluent admission and the \rulelink{rule:lazy}{\texttt{(lazy)}} case
-below repeats: there is no fixpoint there to prove anything about.
-\end{theorem}
-
-Three premises in §3–§4 — \texttt{ran(r)\ ⊆\ dom(e)} and coherence on \rulelink{rule:legacy}{\texttt{(legacy)}}, \texttt{v(∗)\ ∈\ dom(e)} on
-\rulelink{rule:fallback}{\texttt{(fallback)}} — exist because this proof failed without them. That is the theorem earning its keep:
-each names a term the calculus would otherwise derive and the laws refuse. Null-honesty on
-\rulelink{rule:nullable}{\texttt{(nullable)}} is not among them: the wrapper's guard (§3) makes it a consequence
-of lawfulness, which is available there and not for the other three, since those constrain
-functions the caller supplies.
+\subsection{Soundness of the judgement}\label{theorem-soundness}
 
 \textbf{Member agreement, recursively.} §2 states \rulelink{cond:MP}{\textbf{(MP)}} per attribute "and recursively"; the proof
 needs that as a relation. Define \texttt{a\ ≼\ a′} by recursion on \texttt{a}:
@@ -1305,6 +1258,28 @@ Set members compare no deeper — an \texttt{SS} carries payloads, not attribute
 inside one to disagree on. Shared names, because a reading may drop what a writing then omits: the
 discard is the quotient of §2, not a member change. The strong law is \texttt{e(p(a))\ ≼\ a} on \texttt{dom(p)},
 and it implies \rulelink{cond:MP}{\textbf{(MP)}} as stated.
+
+\begin{theorem}[soundness]
+\label{thm:soundness}
+\uses{cond:R,cond:C,cond:W,cond:MP,cond:U,rule:legacy,rule:lazy,rule:union,rule:dunion,rule:opaque}
+\lean{Calculus.soundness, Calculus.soundness_core, Calculus.carrier_denote}
+\leanok
+Every derivable \texttt{⊢\ c\ :\ T\ ⇝\ μ}, and every \texttt{⊢\ f\ :\ T\ ⊗\ π\ ⇝\ μ}, denotes a pair satisfying \rulelink{cond:R}{\textbf{(R)}},
+\rulelink{cond:C}{\textbf{(C)}}, \rulelink{cond:W}{\textbf{(W)}}, and \rulelink{cond:MP}{\textbf{(MP)}} in the strong form \texttt{e(p(a))\ ≼\ a}, with three residues,
+all named: \rulelink{cond:MP}{\textbf{(MP)}} is off on the attributes a \texttt{legacy} in the derivation rereads; every
+\rulelink{rule:union}{\texttt{(union)}} in the derivation carries \rulelink{cond:U}{\textbf{(U)}} \emph{where the union acts} as an obligation, which the
+dischargers of this section settle at the declaration wherever they decide a pair, \rulelink{rule:dunion}{\texttt{(dunion)}} and
+\texttt{opaque} outright; and a \rulelink{rule:lazy}{\texttt{(lazy)}} whose unfolding re-enters itself \textbf{through a union} is outside
+the theorem entirely, for the reason §5 gives under confluent admission and the \rulelink{rule:lazy}{\texttt{(lazy)}} case
+below repeats: there is no fixpoint there to prove anything about.
+\end{theorem}
+
+Three premises in §3–§4 — \texttt{ran(r)\ ⊆\ dom(e)} and coherence on \rulelink{rule:legacy}{\texttt{(legacy)}}, \texttt{v(∗)\ ∈\ dom(e)} on
+\rulelink{rule:fallback}{\texttt{(fallback)}} — exist because this proof failed without them. That is the theorem earning its keep:
+each names a term the calculus would otherwise derive and the laws refuse. Null-honesty on
+\rulelink{rule:nullable}{\texttt{(nullable)}} is not among them: the wrapper's guard (§3) makes it a consequence
+of lawfulness, which is available there and not for the other three, since those constrain
+functions the caller supplies.
 
 \textbf{Lemma (injectivity).}\label{lem:injectivity} \rulelink{cond:R}{\textbf{(R)}} makes \texttt{e} injective on \texttt{dom(e)}: if \texttt{e(t)\ =\ e(t′)} then
 \texttt{t\ =\ p(e(t))\ =\ p(e(t′))\ =\ t′}. ∎
@@ -1474,14 +1449,12 @@ both halves of \rulelink{rule:number}{\texttt{(number)}}, and a numeric \texttt{
 
 \begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
 
-\hypertarget{6-equations}{%
-\section{§6 Equations}\label{6-equations}}
+\section{§6 Equations}\label{6-equations}
 
 Which rewrites preserve the pair. Read \texttt{≡} as: the same \texttt{T}, the same \texttt{μ}, and \texttt{e} and \texttt{p} agreeing
 everywhere both are defined.
 
-\hypertarget{hold}{%
-\subsection{Hold}\label{hold}}
+\subsection{Hold}\label{hold}
 
 \begin{theorem}[held(c, id, id) ≡ c]
 \label{eq:held-id}
@@ -1583,8 +1556,7 @@ preserve the member: a field's member is its attribute's (§4).
 
 So wrapping a term never changes the member a key stores.
 
-\hypertarget{do-not-hold}{%
-\subsection{Do not hold}\label{do-not-hold}}
+\subsection{Do not hold}\label{do-not-hold}
 
 \begin{theorem}[a union of arrays is not an array of unions]
 \label{eq:union-array}
@@ -1656,7 +1628,7 @@ This is §2's quotient.
 
 \begin{tabular}{@{}ll@{}}
 \toprule
-Equation & \\
+Equation & Why it is not derivable \\
 \midrule
 \texttt{set(union(c₁,\ c₂))} — not derivable & The premise on \texttt{set} demands a member, and a union of options writing different members has none. \\
 \texttt{optional(optional(c))} — not derivable & A marker marks once, and nesting read only the outermost. \texttt{optional(fallback(c,\ v))} and \texttt{fallback(optional(c),\ v)} likewise. \\
@@ -1665,8 +1637,7 @@ Equation & \\
 
 \begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
 
-\hypertarget{7-the-three-layers-and-the-algebra}{%
-\section{§7 The three layers, and the algebra}\label{7-the-three-layers-and-the-algebra}}
+\section{§7 The three layers, and the algebra}\label{7-the-three-layers-and-the-algebra}
 
 Three layers answer different questions, and conflating them is what makes a side condition look
 optional. A grammar over the terms — a regular tree grammar, with nonterminals indexed by \texttt{μ} — says
@@ -1710,8 +1681,7 @@ decidable \cite{divisible-decidable} skeleton, read invariantly because both dir
 
 \begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
 
-\hypertarget{sources}{%
-\section{Sources}\label{sources}}
+\section{Sources}\label{sources}
 
 \begin{thebibliography}{9}
 \bibitem{quotient-lenses}
