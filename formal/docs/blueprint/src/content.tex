@@ -113,7 +113,16 @@ and no other.
 member. The model states this in the strong form \texttt{e(p(a))\ ≼\ a} of §5, which implies it.
 \end{definition}
 
-The four are independent, and \textbf{(MP)} is well defined only because \textbf{(C)} holds — \texttt{e(p(a))} is an
+\begin{theorem}[the four laws are independent]
+\label{thm:laws-independent}
+\uses{cond:R,cond:C,cond:W,cond:MP}
+\lean{Calculus.cR_notR, Calculus.cR_C, Calculus.cR_W, Calculus.cR_MP, Calculus.cC_R, Calculus.cC_notC, Calculus.cC_W, Calculus.cC_MP, Calculus.cW_notW, Calculus.cW_R, Calculus.cW_C, Calculus.cW_MP, Calculus.cM_R, Calculus.cM_C, Calculus.cM_W, Calculus.cM_notMP}
+\leanok
+No one of \textbf{(R)}, \textbf{(C)}, \textbf{(W)} and \textbf{(MP)} follows from the other three: for each
+there is a pair satisfying the other three and failing that one.
+\end{theorem}
+
+And \textbf{(MP)} is well defined only because \textbf{(C)} holds — \texttt{e(p(a))} is an
 attribute at all because everything readable re-encodes. One term is exempt from \textbf{(MP)} and only
 one: \texttt{legacy}, whose entire purpose is to change what is stored (§3, §6) — and since \textbf{(MP)} is
 recursive, a term \emph{containing} a \texttt{legacy} inherits the exemption on exactly the attributes the
@@ -1505,40 +1514,178 @@ everywhere both are defined.
 \hypertarget{hold}{%
 \subsubsection{Hold}\label{hold}}
 
-\begin{tabular}{@{}ll@{}}
-\toprule
-Equation & \\
-\midrule
-\texttt{held(c,\ id,\ id)\ ≡\ c} & Identity. \\
-\texttt{held(held(c,\ f,\ g),\ f′,\ g′)\ ≡\ held(c,\ f\ ∘\ f′,\ g′\ ∘\ g)} & Isos compose; note the reversal on the reading half. \\
-\texttt{refine(refine(c,\ q),\ q′)\ ≡\ refine(c,\ q\ ∩\ q′)} & Prisms meet. \\
-\texttt{refine(c,\ T)\ ≡\ c} for \texttt{⊢\ c\ :\ T\ ⇝\ μ} & A refinement admitting everything is no refinement. \\
-\texttt{legacy(c,\ p\_c)\ ≡\ c} & An older reading that is the current one adds nothing. \\
-\texttt{legacy(c,\ r)\ ≈\ c} on \texttt{Can(c)} & A migration differs from its current encoding only off the canonical set. \\
-\texttt{union(c)\ ≡\ c} & Choice of one. \\
-\texttt{union(c₁,\ union(c₂,\ c₃))\ ≡\ union(c₁,\ c₂,\ c₃)} & Associative, where both sides satisfy (D) — and only on inputs satisfying (U): an ambiguity \emph{inside} the nested option fails locally on the left, where the outer union may still resolve, and globally on the right. \\
-\texttt{union(c₁\ …\ cₙ)\ ≡\ union(c\_σ(1)\ …\ c\_σ(n))} for any permutation \texttt{σ} & Commutative: resolution is unique admission (§5), never declaration order. \\
-\texttt{nullable(nullable(c))\ ≡\ nullable(c)} & Idempotent, by construction: \texttt{nullable} inserts the null option unless the pair has it, and after one insertion it has it. The value language has one null, so there is nothing for a second \texttt{𝟙} to be. \\
-\texttt{μ(w(c))\ =\ μ(c)} for \texttt{w\ ∈\ \{held,\ refine,\ legacy,\ optional,\ fallback\}} & Wrappers preserve the member — a field's member is its attribute's (§4). What keeps a key's attribute type stable under refactoring. \\
-\bottomrule
-\end{tabular}
+\begin{theorem}[held(c, id, id) ≡ c]
+\label{eq:held-id}
+\uses{rule:held}
+\lean{Calculus.equiv_through_id, Calculus.equiv_denote_held_id}
+\leanok
+\texttt{held(c,\ id,\ id)\ ≡\ c}. Identity.
+\end{theorem}
+
+\begin{theorem}[isos compose]
+\label{eq:held-comp}
+\uses{rule:held}
+\lean{Calculus.equiv_through_comp, Calculus.equiv_denote_held_comp}
+\leanok
+\texttt{held(held(c,\ f,\ g),\ f′,\ g′)\ ≡\ held(c,\ f\ ∘\ f′,\ g′\ ∘\ g)}. Isos compose; note the
+reversal on the reading half.
+\end{theorem}
+
+\begin{theorem}[prisms meet]
+\label{eq:refine-meet}
+\uses{rule:refine}
+\lean{Calculus.equiv_restrict_meet, Calculus.equiv_denote_refine_meet}
+\leanok
+\texttt{refine(refine(c,\ q),\ q′)\ ≡\ refine(c,\ q\ ∩\ q′)}. Prisms meet.
+\end{theorem}
+
+\begin{theorem}[a full refinement is none]
+\label{eq:refine-full}
+\uses{rule:refine}
+\lean{Calculus.equiv_restrict_full, Calculus.equiv_denote_refine_full}
+\leanok
+\texttt{refine(c,\ T)\ ≡\ c} for \texttt{⊢\ c\ :\ T\ ⇝\ μ}. A refinement admitting everything is no
+refinement.
+\end{theorem}
+
+\begin{theorem}[a legacy reading that is the current one]
+\label{eq:legacy-self}
+\uses{rule:legacy}
+\lean{Calculus.equiv_extendRead_self, Calculus.equiv_denote_legacy_self}
+\leanok
+\texttt{legacy(c,\ p\_c)\ ≡\ c}. An older reading that is the current one adds nothing.
+\end{theorem}
+
+\begin{theorem}[a migration agrees on the canonical set]
+\label{eq:legacy-can}
+\uses{rule:legacy}
+\lean{Calculus.extendRead_eq_on_can, Calculus.denote_legacy_eq_on_can}
+\leanok
+\texttt{legacy(c,\ r)\ ≈\ c} on \texttt{Can(c)}. A migration differs from its current encoding only off
+the canonical set.
+\end{theorem}
+
+\begin{theorem}[choice of one]
+\label{eq:union-single}
+\uses{rule:union}
+\lean{Calculus.equiv_altCodec_single}
+\leanok
+\texttt{union(c)\ ≡\ c}. Choice of one.
+\end{theorem}
+
+\begin{theorem}[union is associative]
+\label{eq:union-assoc}
+\uses{rule:union,cond:D,cond:U}
+\lean{Calculus.equiv_altCodec_assoc}
+\leanok
+\texttt{union(c₁,\ union(c₂,\ c₃))\ ≡\ union(c₁,\ c₂,\ c₃)}. Associative, where both sides satisfy
+\textbf{(D)}, and only on inputs satisfying \textbf{(U)}: an ambiguity \emph{inside} the nested option
+fails locally on the left, where the outer union may still resolve, and globally on the right.
+\end{theorem}
+
+\begin{theorem}[union is commutative]
+\label{eq:union-perm}
+\uses{rule:union,cond:U}
+\lean{Calculus.equiv_altCodec_perm, Calculus.altCodec_perm, Calculus.equiv_altCodec_swap}
+\leanok
+\texttt{union(c₁\ …\ cₙ)\ ≡\ union(c\_σ(1)\ …\ c\_σ(n))} for any permutation \texttt{σ}. Commutative:
+resolution is unique admission (§5), never declaration order.
+\end{theorem}
+
+\begin{theorem}[nullable is idempotent]
+\label{eq:nullable-idem}
+\uses{rule:nullable}
+\lean{Calculus.equiv_orNull_idem, Calculus.equiv_withNull_idem, Calculus.equiv_denote_nullable_idem}
+\leanok
+\texttt{nullable(nullable(c))\ ≡\ nullable(c)}. Idempotent, by construction: \texttt{nullable} inserts the
+null option unless the pair has it, and after one insertion it has it. The value language has one
+null, so there is nothing for a second \texttt{𝟙} to be.
+\end{theorem}
+
+\begin{theorem}[wrappers preserve the member]
+\label{eq:wrapper-mu}
+\uses{rule:held,rule:refine,rule:legacy,rule:optional,rule:fallback}
+\lean{Calculus.through_μ, Calculus.restrict_μ, Calculus.extendRead_μ, Calculus.optional_μ, Calculus.fallback_μ, Calculus.denote_held_μ, Calculus.denote_refine_μ, Calculus.denote_legacy_μ}
+\leanok
+\texttt{μ(w(c))\ =\ μ(c)} for \texttt{w\ ∈\ \{held,\ refine,\ legacy,\ optional,\ fallback\}}. Wrappers
+preserve the member: a field's member is its attribute's (§4). What keeps a key's attribute type
+stable under refactoring.
+\end{theorem}
 
 \hypertarget{do-not-hold}{%
 \subsubsection{Do not hold}\label{do-not-hold}}
 
+\begin{theorem}[a union of arrays is not an array of unions]
+\label{eq:union-array}
+\uses{rule:union,rule:array,cond:U}
+\lean{Calculus.not_equiv_union_array}
+\leanok
+\texttt{union(array(c₁),\ array(c₂))\ ≢\ array(union(c₁,\ c₂))}. Left: a sequence homogeneous in one
+option. Right: a sequence of either, elementwise. Different held sets, and only the right has a
+discharger for its \textbf{(U)}.
+\end{theorem}
+
+\begin{theorem}[a tuple with a tail is neither a tuple nor an array]
+\label{eq:tuple-tail-neither}
+\uses{rule:tuple-tail,rule:tuple,rule:array}
+\lean{Calculus.not_equiv_tupleTail_tuple, Calculus.not_equiv_tupleTail_array}
+\leanok
+\texttt{tuple(c₁\ …\ cₙ,\ rest(c))\ ≢\ tuple(c₁\ …\ cₙ)\ } and \texttt{≢\ array(union(…))}. A fixed head
+with a repeating tail is neither: a tuple has no tail and an array has no head.
+\end{theorem}
+
+\begin{theorem}[a refinement does not commute with an iso]
+\label{eq:refine-held}
+\uses{rule:refine,rule:held}
+\lean{Calculus.not_equiv_refine_held}
+\leanok
+\texttt{refine(held(c,\ f,\ g),\ q)\ ≢\ held(refine(c,\ q),\ f,\ g)}. The refinement applies on opposite
+sides of the iso, so \texttt{q} is a subset of different sets. Two different terms, both meaningful.
+\end{theorem}
+
+\begin{theorem}[a union is not closed under extension]
+\label{eq:union-extend}
+\uses{rule:union,cond:D,cond:U}
+\lean{Calculus.not_equiv_union_extend}
+\leanok
+\texttt{union(c₁\ …\ cₙ)\ ≢\ union(c₁\ …\ cₙ,\ c)}. Not closed under extension: a further option can
+violate \textbf{(D)} and make the term ill formed, or leave \textbf{(U)} unresolved where it was
+discharged before.
+\end{theorem}
+
+\begin{theorem}[lazy is not its own unfolding]
+\label{eq:lazy-unfold}
+\uses{rule:lazy,rule:set}
+\lean{Calculus.not_equiv_lazy}
+\leanok
+\texttt{lazy(γ)\ ≢\ γ(∗)}. The pair is the same and the μ is not: \texttt{lazy} concludes \texttt{⊤} where
+\texttt{γ(∗)} may name its member, so \texttt{set(lazy(γ))} has no derivation. \texttt{≡} compares the index
+too, and this is the row where that matters.
+\end{theorem}
+
+\begin{theorem}[legacy breaks (MP), on purpose]
+\label{eq:legacy-mp}
+\uses{rule:legacy,cond:MP,cor:readW}
+\lean{Calculus.legacy_breaks_MP}
+\leanok
+\texttt{legacy(c,\ r)} breaks \textbf{(MP)}. On purpose, and it is the only term licensed to: changing
+what is stored \emph{is} the migration, and §2's read-side corollary falls with it. So a
+\texttt{legacy} attribute cannot be an index key, which is the price and is worth stating.
+\end{theorem}
+
+\begin{theorem}[the canonizer is not the identity]
+\label{eq:canonizer}
+\lean{Calculus.e_comp_p_ne_id}
+\leanok
+\texttt{e\ ∘\ p\ ≢\ id}. The quotient, from §2. Equality holds only on \texttt{Can(c)}.
+\end{theorem}
+
 \begin{tabular}{@{}ll@{}}
 \toprule
 Equation & \\
 \midrule
-\texttt{union(array(c₁),\ array(c₂))\ ≢\ array(union(c₁,\ c₂))} & Left: a sequence homogeneous in one option. Right: a sequence of either, elementwise. Different held sets, and only the right has a discharger for its (U). \\
-\texttt{tuple(c₁\ …\ cₙ,\ rest(c))\ ≢\ tuple(c₁\ …\ cₙ)\ } and \texttt{≢\ array(union(…))} & A fixed head with a repeating tail is neither: a tuple has no tail and an array has no head. \\
 \texttt{set(union(c₁,\ c₂))} — not derivable & The premise on \texttt{set} demands a member, and a union of options writing different members has none. \\
-\texttt{refine(held(c,\ f,\ g),\ q)\ ≢\ held(refine(c,\ q),\ f,\ g)} & The refinement applies on opposite sides of the iso, so \texttt{q} is a subset of different sets. Two different terms, both meaningful. \\
-\texttt{union(c₁\ …\ cₙ)\ ≢\ union(c₁\ …\ cₙ,\ c)} & Not closed under extension: a further option can violate (D) and make the term ill formed, or leave (U) unresolved where it was discharged before. \\
 \texttt{optional(optional(c))} — not derivable & A marker marks once, and nesting read only the outermost. \texttt{optional(fallback(c,\ v))} and \texttt{fallback(optional(c),\ v)} likewise. \\
-\texttt{lazy(γ)\ ≢\ γ(∗)} & The pair is the same and the μ is not: \texttt{lazy} concludes \texttt{⊤} where \texttt{γ(∗)} may name its member, so \texttt{set(lazy(γ))} has no derivation. \texttt{≡} compares the index too, and this is the row where that matters. \\
-\texttt{legacy(c,\ r)} breaks \textbf{(MP)} & On purpose, and it is the only term licensed to: changing what is stored \emph{is} the migration, and §2's read-side corollary falls with it. So a \texttt{legacy} attribute cannot be an index key, which is the price and is worth stating. \\
-\texttt{e\ ∘\ p\ ≢\ id} & The quotient, from §2. Equality holds only on \texttt{Can(c)}. \\
 \bottomrule
 \end{tabular}
 
