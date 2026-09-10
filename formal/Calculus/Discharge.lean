@@ -295,7 +295,7 @@ theorem uAtCan_of_refine_disjoint {base : Term} {ps : List Pred}
     rw [hv] at hv'; cases hv'
     rw [h v hqv] at hqv'; exact nomatch hqv'
   · rw [semsOf, List.map_map]
-    refine forall_mem_map fun p _ t a he => ?_
+    refine List.forall_mem_map.mpr fun p _ t a he => ?_
     simp only [Function.comp_apply] at he ⊢
     rw [optionSemOf_c] at he
     obtain ⟨hq, hb⟩ := restrict_e.mp he
@@ -458,15 +458,6 @@ theorem forall_mem_pair {α : Type} {P : α → Prop} {x y : α} (hx : P x) (hy 
   · rcases List.mem_cons.mp hz with rfl | hz
     · exact hy
     · exact absurd hz (by simp)
-
-/-- A pairwise premise over two options, checked at the single unordered pair. -/
-theorem pairwise_pair {α : Type} {R : α → α → Prop} {x y : α} (h : R x y) :
-    List.Pairwise R [x, y] := by
-  refine List.Pairwise.cons ?_ (List.Pairwise.cons (by simp) List.Pairwise.nil)
-  intro z hz
-  rcases List.mem_cons.mp hz with rfl | hz
-  · exact h
-  · exact absurd hz (by simp)
 
 /-! ## Why "one option decides its own membership" was never an exemption
 

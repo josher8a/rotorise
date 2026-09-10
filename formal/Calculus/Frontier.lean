@@ -877,7 +877,7 @@ theorem uniqueAdmission_of_sharedBase {base : Codec} {cs : List Codec}
     obtain ⟨v', hv', hqv'⟩ := hy
     rw [hv] at hv'; cases hv'
     rw [h v hqv] at hqv'; exact nomatch hqv'
-  · refine forall_mem_map fun ci hci t a he => ?_
+  · refine List.forall_mem_map.mpr fun ci hci t a he => ?_
     obtain ⟨q, -, hq⟩ := hz.mem_left hci
     have he' : (base.restrict q).e t = some a := hq.1 ▸ he
     obtain ⟨hqt, hb⟩ := restrict_e.mp he'

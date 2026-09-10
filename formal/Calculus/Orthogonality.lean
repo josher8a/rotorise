@@ -1016,7 +1016,7 @@ theorem uAtCan_of_separated {opts : List Term}
     exact ⟨occA_admitOpt (occA_sound t) a ha, ha⟩
   · rw [List.pairwise_map]; exact h.imp (fun hs => hs.1)
   · rw [List.pairwise_map]; exact h.imp (fun hs => hs.2)
-  · refine forall_mem_map fun t ht v a he => ?_
+  · refine List.forall_mem_map.mpr fun t ht v a he => ?_
     rw [optionSemOf_c] at he
     exact optionSem_self_admit t (hcl t ht) (hlaw t ht) he
 
@@ -1186,7 +1186,7 @@ theorem uAtCan_literal_literal_by_orth :
     UAtCan [Term.literal .string lsA, Term.literal .string lsB] :=
   uAtCan_of_orth (forall_mem_pair (lawful_literal _ _) (lawful_literal _ _))
     (forall_mem_pair rfl rfl)
-    (pairwise_pair (by decide))
+    (List.pairwise_pair.mpr (by decide))
 
 /-! ### The existing discharges, by phase
 
@@ -1237,6 +1237,6 @@ certificate on a pair of terms is. That gap is where the working container schem
 theorem uAtCan_string_null_by_orth : UAtCan [Term.string, Term.null] :=
   uAtCan_of_orth (forall_mem_pair lawful_string lawful_null)
     (forall_mem_pair rfl rfl)
-    (pairwise_pair (by decide))
+    (List.pairwise_pair.mpr (by decide))
 
 end Calculus
