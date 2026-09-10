@@ -230,14 +230,15 @@ value. That fails for exactly two reasons, and one of them is about the medium:
 \begin{itemize}
 \tightlist
 \item
-  \textbf{\texttt{η} normalises \texttt{N}} (§3). This is the medium, and it is the calculus's one concession to
+  \textbf{\texttt{η}, the store's own normalisation of a stored numeral (§3), normalises \texttt{N}}. This is the medium, and it is the calculus's one concession to
   something it does not model.
 \item
   \textbf{\texttt{drop} discards undeclared names} (§4). This is a schema's own decision, taken deliberately.
 \end{itemize}
 
 So a codec collapses the quotient by holding no set, reading no normalised numeral, and declaring
-every name it means to keep. \texttt{decimal} is the witness that this is reachable: its \texttt{ker\ p} is
+every name it means to keep. \texttt{decimal} is the witness that this is reachable: its held set is \texttt{Stored}, the numerals
+\texttt{η} leaves alone (§3), and its \texttt{ker\ p} is
 equality, which is precisely why its held set had to be narrowed to \texttt{Stored}.
 
 \textbf{Partiality collapses} when \texttt{dom(p)\ =\ 𝔸} — when every attribute the domain admits is one this
@@ -256,7 +257,8 @@ numeral-to-double reading. No term of this calculus has both at once, and §1 is
 One deviation \emph{does} have a clean term-level answer, and it is worth separating from the other two
 because it is often mistaken for them. Ambiguity in a \texttt{union} is not a property of the medium at
 all — it is what happens when a choice is written without a tag. \rulelink{rule:dunion}{\texttt{(dunion)}} is the tagged case, and
-its \rulelink{cond:U}{\textbf{(U)}} is neither an obligation nor a theorem (§5): the tag reaches one variant by
+its \rulelink{cond:U}{\textbf{(U)}} is neither an obligation — a condition the semantics enforces per
+input by refusing (§5) — nor a theorem: the tag reaches one variant by
 construction. Whatever the storage looks like, that
 collapse is available by declaring the discriminator.
 
@@ -741,7 +743,8 @@ property of insertion rather than a fact about \texttt{𝟙}. The one term outsi
 dichotomy is \texttt{nullable(null)}, which under the guard is simply \texttt{null}.
 
 \texttt{union(c,\ null)} replaces it at a subterm whose shape is unknown — \texttt{held}, \texttt{custom},
-\texttt{lazy}: no discharger means an \textbf{obligation}, not a refusal (§5), so \texttt{union(c,\ null)} is
+\texttt{lazy}: no discharger — no decidable condition sufficient for \rulelink{cond:U}{\textbf{(U)}} at the
+declaration (§5) — means an \textbf{obligation}, not a refusal, so \texttt{union(c,\ null)} is
 derivable there and carries \rulelink{cond:U}{\textbf{(U)}} per input.
 
 \begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
@@ -898,7 +901,7 @@ unions it covers:
 Discharger & Decides & From \\
 \midrule
 distinct members & the readable side, where the stored attributes differ & \texttt{μ}, the judgement's own index \\
-disjoint option admission & either side, each side asked on its own & admission and occupancy, below \\
+disjoint option admission & either side, each side asked on its own & admission and occupancy (one coarse label per term per side), below \\
 tag disjointness & \rulelink{rule:dunion}{\texttt{(dunion)}}, outright — both sides & the discriminator literals \\
 disjoint predicates over one base & refinements of a common \texttt{c}, outright — both sides & the predicates \texttt{q} \\
 kind disjointness & \texttt{opaque}'s fixpoint (§3), outright & one option per kind of §1 \\
