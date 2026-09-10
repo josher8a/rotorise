@@ -1558,10 +1558,11 @@ refinement.
 
 \begin{theorem}[a migration agrees on the canonical set]
 \label{eq:legacy-can}
-\uses{rule:legacy}
+\uses{rule:legacy,cond:R}
 \lean{Calculus.extendRead_eq_on_can, Calculus.denote_legacy_eq_on_can}
-\texttt{legacy(c,\ r)\ ≈\ c} on \texttt{Can(c)}. A migration differs from its current encoding only off
-the canonical set.
+\leanok
+\texttt{legacy(c,\ r)\ ≈\ c} on \texttt{Can(c)}, for lawful \texttt{c}. A migration differs from a
+lawful current encoding only off the canonical set, and the premise it needs is \textbf{(R)}.
 \end{theorem}
 
 \begin{theorem}[choice of one]
@@ -1574,11 +1575,13 @@ the canonical set.
 
 \begin{theorem}[union is associative]
 \label{eq:union-assoc}
-\uses{rule:union,cond:D,cond:U}
+\uses{rule:union}
 \lean{Calculus.equiv_altCodec_assoc}
-\texttt{union(c₁,\ union(c₂,\ c₃))\ ≡\ union(c₁,\ c₂,\ c₃)}. Associative, where both sides satisfy
-\textbf{(D)}, and only on inputs satisfying \textbf{(U)}: an ambiguity \emph{inside} the nested option
-fails locally on the left, where the outer union may still resolve, and globally on the right.
+\leanok
+\texttt{union(c₁,\ union(c₂,\ c₃))\ ≡\ union(c₁,\ c₂,\ c₃)}. Associative. An ambiguity \emph{inside}
+the nested option fails locally on the left and leaves the right side undefined, and \texttt{≡}
+compares \texttt{e} and \texttt{p} only where both are defined, so the two sides cannot disagree
+there.
 \end{theorem}
 
 \begin{theorem}[union is commutative]
