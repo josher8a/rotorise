@@ -192,8 +192,8 @@ end Traverse
 
 
 /-- Constructive on purpose: mathlib's `filter_eq_nil_iff` routes through
-    `Classical.choice`, and §3 of the formalization doc advertises an axiom base without
-    it. `Calculus/Axioms.lean` is what keeps that claim honest. -/
+    `Classical.choice`, and this module keeps choice out even though the advertised base
+    admits it through `Finset`. -/
 theorem filter_nil_of {α : Type _} {p : α → Bool} :
     ∀ {l : List α}, (∀ y ∈ l, p y = false) → l.filter p = []
   | [], _ => rfl
