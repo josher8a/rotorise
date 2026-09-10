@@ -188,7 +188,6 @@ EXPECTED = {
     },
     "docs/blueprint/src/content.tex": {
         "e_c": "the specification's own notation for a component codec, not a Lean name",
-        "Encoded": "§1's own wire type, named by the specification; the model has no Lean type for it",
     },
 }
 

@@ -9,6 +9,9 @@ checks it.
 \hypertarget{1-the-attribute-domain}{%
 \section{§1 The attribute domain}\label{1-the-attribute-domain}}
 
+A store holds items under names, and every value it holds — whatever type a schema gives it — is
+drawn from one shared domain of attributes. This section fixes that domain.
+
 Everything a table holds lives in one set. Types are read as retracts of it, which is the device
 this whole specification rests on.
 
@@ -62,7 +65,8 @@ c = (T, μ, e, p)      T ⊆ Value     μ ∈ Member ∪ {⊤}
                       p : 𝔸 ⇀ T    decode — may fail
 \end{verbatim}
 
-\texttt{μ\ =\ ⊤} reads as \emph{not determined by the term}, not as \emph{anything}. Which terms may leave it
+\texttt{T} is a set of values, the language of things a codec holds. \texttt{μ\ =\ ⊤} reads as
+\emph{not determined by the term}, not as \emph{anything}. Which terms may leave it
 undetermined is settled in §3.
 
 \hypertarget{laws}{%
@@ -343,6 +347,7 @@ D = { x ∈ Double : x = 0 ∨ 1e-130 ≤ |x| ≤ 9.9…e125 }
 \end{verbatim}
 \end{definition}
 
+\texttt{D} is a set of doubles; the numeric host is taken as given and not modelled here.
 \texttt{number} is \textbf{not} restricted to integers, and not to \texttt{2⁵³}. Every finite double satisfies \rulelink{cond:R}{\textbf{(R)}},
 because \texttt{String} on a double is by definition the shortest text reading back as that same double — so
 \texttt{1.5} round-trips, and so does \texttt{2⁵³\ +\ 1}, which \emph{is} \texttt{2⁵³} and round-trips as that. What bounds \texttt{D} is
@@ -368,7 +373,7 @@ the shape is the argument: an ad-hoc \texttt{if} can gate one half and a \texttt
 at the \textbf{declaration}, alongside \texttt{n\ ≥\ 1} and pairwise distinctness, because \texttt{ℓ} is data the term
 owns and a premise on data is decidable when the codec is built.
 
-That premise discharges the \textbf{write} side and only the write side: \texttt{ℓ} is fixed when the codec is
+That premise discharges the \textbf{writable} side and only the writable side: \texttt{ℓ} is fixed when the codec is
 built, so every value \texttt{e} will ever accept has been checked already. It discharges nothing on the
 read side. Reading an \texttt{N} as a value is wider than membership in \texttt{ℓ}, so an attribute that is not a
 numeral at all can land on a value the set contains, and the check passes on something §1 has no
@@ -417,7 +422,7 @@ that names the subset:
 term & base & predicate \\
 \midrule
 \texttt{number} & §1's \texttt{Numerals} & \texttt{D} (§1) \\
-\texttt{decimal} & numerals at \texttt{WF} & \texttt{Stored} (§1) \\
+\texttt{decimal} & numerals that are well-formed by §1's grammar & \texttt{Stored} (§1) \\
 \texttt{literal(g,\ ℓ)} & the ground term \texttt{g} & \texttt{∈\ ℓ} \\
 \bottomrule
 \end{tabular}
@@ -426,7 +431,7 @@ This is not a resemblance. A predicate wanted on \textbf{both} halves \emph{is} 
 are partial and refusing is what the error channel does; a rule that gates one half and not the
 other is the shape §3 spends a paragraph refusing at \rulelink{rule:number}{\texttt{(number)}}. So a gate is never a rule's private
 business, and its predicate belongs in the term's admissible set — which is why a \texttt{number}'s
-admissible values are \texttt{D} and a \texttt{decimal}'s are \texttt{Stored}, beside a literal's \texttt{ℓ} (§5): gating both
+held values are \texttt{D} and a \texttt{decimal}'s are \texttt{Stored}, beside a literal's \texttt{ℓ} (§5): gating both
 ways is deciding your own membership.
 
 \textbf{Containers are the other kind, and they are not refinements.} \texttt{set}, \texttt{array}, \texttt{tuple}, \texttt{record}
@@ -752,7 +757,7 @@ never of an attribute.
 \end{verbatim}
 
 A field carries a member like anything else — an optional attribute is still stored somewhere, and
-\texttt{Encoded} and every index key need to know where. What a field carries that an attribute does not is
+An index key needs to know where. What a field carries that an attribute does not is
 the \texttt{⊗\ π}, and that is the whole stratification: a rule demanding \texttt{⊢\ c\ :\ T\ ⇝\ μ} cannot be given
 something whose judgement has a \texttt{⊗}.
 
@@ -812,7 +817,8 @@ something whose judgement has a \texttt{⊗}.
 \end{definition}
 
 Here \texttt{n\ :\^{}opt\ T} is a binding the record may omit, \texttt{n\ :\^{}req\ T} one it may not, and \texttt{R(ρ)} is the open
-part: \texttt{∅} for \texttt{drop} and \texttt{refuse}, and \texttt{Name\ ⇀fin\ T} for a rest codec holding \texttt{T}. The two string
+part, joined to the declared names by \texttt{⊕}, which adds bindings no declared name claims:
+\texttt{∅} for \texttt{drop} and \texttt{refuse}, and \texttt{Name\ ⇀fin\ T} for a rest codec holding \texttt{T}. The two string
 policies differ only in what \texttt{p} does with an undeclared name — drop it, or fail — which is a
 difference in \texttt{dom(p)} and not in \texttt{T}. And \texttt{drop} is a \textbf{filter, never a traversal mode}: the
 discard is decided by the name alone, before anything is decoded, so it cannot depend on a value and
@@ -882,7 +888,8 @@ Declaration order is never consulted — which is what puts commutativity in §6
 coherence premise (§3) matters beyond \texttt{legacy}: a precedence between readings anywhere in the
 calculus would be a union resolved by rank, exactly what \rulelink{cond:U}{\textbf{(U)}} refuses.
 
-\rulelink{cond:U}{\textbf{(U)}} quantifies over inputs, so it is not decidable at the declaration in general. The rest of
+\rulelink{cond:U}{\textbf{(U)}} quantifies over inputs, so it is not decidable at the declaration, where a
+codec is built and its subterms are known but no input is. The rest of
 this section is its \textbf{dischargers} — decidable conditions, each sufficient for \rulelink{cond:U}{\textbf{(U)}} on the
 unions it covers:
 
@@ -1050,7 +1057,7 @@ Stating the row on a term's own admissible sets instead is unsound and not merel
 pair shows it. Take two objects declaring the same single \texttt{req} name and different field terms,
 \texttt{⟨a\ :\ String⟩} against \texttt{⟨a\ :\ Number⟩}. Their admissible sets are disjoint on both sides, a map the
 first writes carrying a string at \texttt{a} which the second's field term refuses. Both are derivable,
-both closed, both lawful, so no other condition declines them. And both options admit
+both closed — no free subterm — both lawful, so no other condition declines them. And both options admit
 \texttt{⟨a\ ↦\ "1"⟩}, because the union reads the names and never the contents. At an object a term's own
 admission is strictly \emph{tighter} than what the union consults, and disjointness of a tighter
 predicate implies nothing about disjointness of admission. Off an object the two coincide — being
@@ -1225,7 +1232,7 @@ side. Note that the member disjunct is no help in either case: both options are 
 Two notes on what has no set of its own. \texttt{optional} and \texttt{fallback} are \textbf{fields} (§4), not terms,
 so nothing passes through them: admission is a function on terms and has no case to give them. And a
 union's own admission is not the join of its options' — it is the set where \textbf{exactly one} option
-admits, which is \texttt{select} written as a set. Where two options both admit, the union writes nothing,
+admits, which is \texttt{select}, the union's own resolution, written as a set. Where two options both admit, the union writes nothing,
 which is the empty array above stated the other way round.
 
 \rulelink{cond:D}{\textbf{(D)}} as written is \emph{incomparability}, not disjointness. Two object options \texttt{⟨a\ :\ String⟩} and
@@ -1287,10 +1294,10 @@ inside one to disagree on. Shared names, because a reading may drop what a writi
 discard is the quotient of §2, not a member change. The strong law is \texttt{e(p(a))\ ≼\ a} on \texttt{dom(p)},
 and it implies \rulelink{cond:MP}{\textbf{(MP)}} as stated.
 
-\textbf{Lemma (injectivity).} \rulelink{cond:R}{\textbf{(R)}} makes \texttt{e} injective on \texttt{dom(e)}: if \texttt{e(t)\ =\ e(t′)} then
+\textbf{Lemma (injectivity).}\label{lem:injectivity} \rulelink{cond:R}{\textbf{(R)}} makes \texttt{e} injective on \texttt{dom(e)}: if \texttt{e(t)\ =\ e(t′)} then
 \texttt{t\ =\ p(e(t))\ =\ p(e(t′))\ =\ t′}. ∎
 
-\textbf{Lemma (traversal).} One proof shape serves every product. Let a \emph{step} be an entrywise pair
+\textbf{Lemma (traversal).}\label{lem:traversal} One proof shape serves every product. Let a \emph{step} be an entrywise pair
 between the entries of two lists, and lift it entrywise — defined where every entry is, positions
 preserved. If the step satisfies a law pointwise, the lift satisfies it listwise: \rulelink{cond:R}{\textbf{(R)}} because
 positions re-read in place, \rulelink{cond:C}{\textbf{(C)}} because each entry re-encodes, \texttt{≼} because a shared position
@@ -1387,9 +1394,9 @@ construction. \rulelink{rule:fallback}{\texttt{(fallback)}} adds \texttt{p♭(ε
 \texttt{≼} quantifies over \texttt{𝔸}, so \texttt{ε} asks nothing — that the canonizer materialises the attribute is
 quotient, not member change.
 
-\textbf{Products} — each an instantiation of the traversal Lemma.
+\textbf{Products} — each an instantiation of the \rulelink{lem:traversal}{traversal Lemma}.
 
-\emph{array, tuple, tuple‑tail, record.} The step is the subterm's pair at each position or name — a
+\emph{array, tuple, tuple-tail, record.} The step is the subterm's pair at each position or name — a
 tuple first aligns positions with their codecs, head positionally and tail uniformly, length
 mismatches refusing. The Lemma gives all four laws from the induction hypotheses; a \texttt{legacy}
 element is where the \rulelink{cond:MP}{\textbf{(MP)}} exemption propagates — pointwise, on the positions it rereads, per
@@ -1405,8 +1412,8 @@ stand-ins \texttt{fallback} materialises are each on one side only, and \texttt{
 quotient again.
 
 \emph{set.} The premise gives \texttt{e\_c(x)\ =\ ⟨μ,\ w(x)⟩}; the step is \texttt{w} outward and \texttt{p\_c(⟨μ,\ ·⟩)} back, and
-the wire set is the image of the held set under it. \rulelink{cond:R}{\textbf{(R)}}: \texttt{w} is injective by the injectivity Lemma (member fixed,
-\texttt{e\_c} injective), so the written set holds one payload per element and the traversal Lemma reads
+the wire set is the image of the held set under it. \rulelink{cond:R}{\textbf{(R)}}: \texttt{w} is injective by the \rulelink{lem:injectivity}{injectivity Lemma} (member fixed,
+\texttt{e\_c} injective), so the written set holds one payload per element and the \rulelink{lem:traversal}{traversal Lemma} reads
 each back; non-emptiness survives both directions. \rulelink{cond:C}{\textbf{(C)}}: entrywise, and the re-encoded elements
 keep their member by \texttt{≼}, so the same payload projection re-succeeds. \texttt{p} need \emph{not} be injective —
 two payloads reading to one value shrink the set, which is the quotient again and touches \rulelink{cond:R}{\textbf{(R)}}
