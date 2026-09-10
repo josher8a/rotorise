@@ -1723,6 +1723,14 @@ where a caller's function enters, and it stays local to the four terms that admi
 That is the divisible /
 decidable \cite{divisible-decidable} skeleton, read invariantly because both directions are present at once.
 
+The judgement settles the laws for every term the calculus builds itself. What it leaves to the
+caller is the premise on a function that is not a codec: \rulelink{rule:held}{\texttt{(held)}}'s inverse pair,
+\rulelink{rule:refine}{\texttt{(refine)}}'s predicate, \rulelink{rule:legacy}{\texttt{(legacy)}}'s agreement with the reading it
+extends, and \rulelink{rule:custom}{\texttt{(custom)}}'s two halves outright. What no derivation settles is each
+\texttt{union}'s residual \rulelink{cond:U}{\textbf{(U)}} where no discharger decides it, and how much of any of this an
+implementation carries in its own types, which is a question about that implementation and not
+about the calculus.
+
 \begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
 
 \section{Sources}\label{sources}
