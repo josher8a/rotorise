@@ -76,7 +76,7 @@ undetermined is settled in §3.
 \label{cond:R}
 \lean{Calculus.Lawful.retract}
 \leanok
-\texttt{∀\ t\ ∈\ dom(e).\ p(e(t))\ =\ t}. Writing then reading returns the value written, exactly.
+\texttt{∀\ t\ ∈\ dom(e).\ p(e(t))\ =\ t}. Writing then reading returns the value written.
 \end{definition}
 
 \begin{definition}[(C) canonizability]
@@ -142,7 +142,7 @@ By \rulelink{cond:C}{\textbf{(C)}}, \texttt{p(a)\ ∈\ dom(e)}. Put \texttt{t\ =
 \end{proof}
 
 So stability is retraction asked at a different \emph{source of values}: \rulelink{cond:R}{\textbf{(R)}} at values a generator
-produced, \rulelink{cor:Q}{\textbf{(Q)}} at values a table returned. Both are worth checking, because what \rulelink{cor:Q}{\textbf{(Q)}} adds to
+produced, \rulelink{cor:Q}{\textbf{(Q)}} at values a table returned. What \rulelink{cor:Q}{\textbf{(Q)}} adds to
 \rulelink{cond:R}{\textbf{(R)}} is exactly \rulelink{cond:C}{\textbf{(C)}} — and that containment is the thing most likely to be untrue.
 
 \hypertarget{corollary-read-side-w}{%
@@ -185,8 +185,8 @@ more permissive than the schema describing it.
 \hypertarget{what-a-codec-ideally-is}{%
 \subsection{What a codec ideally is}\label{what-a-codec-ideally-is}}
 
-Those pieces assemble into something simpler than the four laws suggest, and it is worth stating
-because it says where the complexity actually lives.
+Those pieces assemble into something simpler than the four laws suggest, and that is where the
+complexity lives.
 
 \textbf{Between \texttt{dom(e)} and \texttt{Can(c)}, a codec is a bijection.} \texttt{p\ ∘\ e\ =\ id} there is \rulelink{cond:R}{\textbf{(R)}}; \texttt{e\ ∘\ p\ =\ id}
 there follows from it, since a canonical attribute is \texttt{e(t)} for some \texttt{t} and \rulelink{cond:R}{\textbf{(R)}} sends it back
@@ -254,8 +254,8 @@ better encoding.
 comes closest to reading all of \texttt{𝔸} and keeps the quotient, since its \texttt{N} option reads through the
 numeral-to-double reading. No term of this calculus has both at once, and §1 is why.
 
-One deviation \emph{does} have a clean term-level answer, and it is worth separating from the other two
-because it is often mistaken for them. Ambiguity in a \texttt{union} is not a property of the medium at
+One deviation \emph{does} have a clean term-level answer, and it is often mistaken for the other
+two. Ambiguity in a \texttt{union} is not a property of the medium at
 all — it is what happens when a choice is written without a tag. \rulelink{rule:dunion}{\texttt{(dunion)}} is the tagged case, and
 its \rulelink{cond:U}{\textbf{(U)}} is neither an obligation — a condition the semantics enforces per
 input by refusing (§5) — nor a theorem: the tag reaches one variant by
@@ -434,7 +434,7 @@ are partial and refusing is what the error channel does; a rule that gates one h
 other is the shape §3 spends a paragraph refusing at \rulelink{rule:number}{\texttt{(number)}}. So a gate is never a rule's private
 business, and its predicate belongs in the term's admissible set — which is why a \texttt{number}'s
 held values are \texttt{D} and a \texttt{decimal}'s are \texttt{Stored}, beside a literal's \texttt{ℓ} (§5): gating both
-ways is deciding your own membership.
+ways is a term deciding its own membership.
 
 \textbf{Containers are the other kind, and they are not refinements.} \texttt{set}, \texttt{array}, \texttt{tuple}, \texttt{record}
 and \texttt{object} narrow by their \emph{subterms} and their \emph{names}, never by a predicate on the whole value,
@@ -450,7 +450,7 @@ what that term stores is what the literal stores. One rule covers \texttt{S} and
 base is determined by \texttt{ℓ}'s kind, \texttt{string} being the base for strings; \texttt{decimal} is what to write
 when strings are wanted stored as \texttt{N}.
 
-The rule is also not doing anything \texttt{refine} does not, and it is worth seeing why so that \texttt{literal}
+The rule is also not doing anything \texttt{refine} does not, which is why \texttt{literal}
 reads as the abbreviation it is. \texttt{literal(ℓ)} is \texttt{refine(g,\ ∈\ ℓ)}, and the general fact behind every
 literal union is one statement rather than a rule per member:
 
@@ -461,7 +461,8 @@ uniquely on both sides.
 
 \texttt{literal} at \texttt{string} and at \texttt{number} are two instantiations; \texttt{boolean} and \texttt{binary} are two more;
 and the base need not be ground at all — two disjoint refinements of one \texttt{array(string)} separate by
-the same argument. "Literal" was never the operative word — \emph{one base, disjoint predicates} was.
+the same argument. \emph{One base with disjoint predicates} is what the rule turns on, not the
+literal.
 What \texttt{literal} adds over writing \texttt{refine} is that \texttt{ℓ} is data the term owns, so both admissible
 sets carry it (§5) and a reader sees the enumeration.
 
@@ -659,9 +660,9 @@ fit a double.
 
 \texttt{held} and \texttt{refine} are the same shape at different strengths: an \textbf{iso} and a \textbf{prism}. The
 literature collapses them — invertible syntax descriptions \cite{invertible-syntax} builds everything from an algebra of
-partial isomorphisms, which is exactly the merged combinator.
+partial isomorphisms, which is the merged combinator.
 
-They really are one term, and it is worth being exact about the sense. Write the merged combinator
+They are one term, in the following sense. Write the merged combinator
 as an adapter that may refuse on either half — \texttt{f} in front of the writing, \texttt{g} behind the reading:
 
 \begin{verbatim}
@@ -714,7 +715,7 @@ out through one and back through the other, and \rulelink{cond:R}{\textbf{(R)}} 
 on either side taken alone.
 
 None of this is a new kind of condition. \texttt{nullable(c)} is structurally the two-option union
-\texttt{union(c,\ ⟨NULL⟩-point)}, and its honesty conditions are exactly that pair's §5 side conditions —
+\texttt{union(c,\ ⟨NULL⟩-point)}, and its honesty conditions are that pair's §5 side conditions —
 uniqueness of admission on the way in, on the way out — which the guard makes hold rather than
 demand.
 
@@ -870,9 +871,8 @@ acts through the option that answers alone:
 \leanok
 Resolving one side alone resolves the other, the same option. Asked where the union \emph{acts}: at
 each value it writes, and each attribute it reads. Ambiguity is a failure, never a rank. The letter
-names the strong form, over every canonical pair of every option, and the laws consume the
-restriction to the inputs the union itself resolves; both forms stand, and the scope
-paragraph below is the difference.
+names the strong form, over every canonical pair of every option. The laws consume the
+restriction to the inputs the union itself resolves, and both forms stand.
 \end{definition}
 
 Read \rulelink{cond:U}{\textbf{(U)}} carefully, because the scope is the whole content. \texttt{∣\{i\ :\ cᵢ\ admits\ it\}∣\ =\ 1} at
@@ -882,14 +882,14 @@ the laws need is that ambiguity never appears \emph{on the far side of a round t
 \texttt{e(t)} unambiguous on the way out obliges \texttt{e(t)} to be unambiguous on the way back. An input the
 union refuses outright asks nothing of anyone.
 
-The difference is not idle, and it is where working schemas sit.
+The difference decides real schemas, and the next example is one.
 \texttt{union(array(literal("A")),\ array(literal("B")))} has both options admitting \texttt{{[}{]}}, so it declines to
 write the empty array — but every value it does write is read back by the one option that wrote it.
 Under the stronger reading the union is refused; under this one it is lawful, minus the empty case.
 
 Declaration order is never consulted — which is what puts commutativity in §6, and why \texttt{legacy}'s
 coherence premise (§3) matters beyond \texttt{legacy}: a precedence between readings anywhere in the
-calculus would be a union resolved by rank, exactly what \rulelink{cond:U}{\textbf{(U)}} refuses.
+calculus would be a union resolved by rank, which is what \rulelink{cond:U}{\textbf{(U)}} refuses.
 
 \rulelink{cond:U}{\textbf{(U)}} quantifies over inputs, so it is not decidable at the declaration, where a
 codec is built and its subterms are known but no input is. The rest of
@@ -917,7 +917,7 @@ Said more directly, without projections at all: \textbf{each option gets one set
 and one set of attributes it may read, and separation is disjointness of those two families.} A
 projection is a way of \emph{building} such a set — a runtime shape gives the values whose shape it
 allows, \texttt{μ} the attributes whose member it allows, a discriminator's tag the items carrying one of
-its tags — and \textbf{option admission} is the family itself, the finest there is: the set the union
+its tags. \textbf{Option admission} is the family itself, the finest there is: the set the union
 consults when it asks whether an option could take the input.
 
 Read that way the admission row stops offering a \emph{choice} between a shape and a set. The two constraints
@@ -939,7 +939,7 @@ off} the discriminator instead of attempted, and its \rulelink{cond:U}{\texttt{(
 label off an input reaches one variant by construction.
 
 What no discharger covers stays an obligation the semantics enforces per input by failing — safe for
-every law except \rulelink{cond:R}{\textbf{(R)}} at a canonical attribute, and that residue is exactly what the theorem
+every law except \rulelink{cond:R}{\textbf{(R)}} at a canonical attribute, and that residue is what the theorem
 below names. An option whose shape is \texttt{⊤} is one the admission row never separates, for the same
 reason it cannot be checked: it could be anything. That costs nothing, because failing to discharge is not
 refusing — \rulelink{cond:U}{\textbf{(U)}}
@@ -1031,7 +1031,7 @@ no hypothesis and no term excepted. Nothing is over-approximated, and no term's 
 \end{theorem}
 
 That is available only because a row may \textbf{ask the codec} rather than describe it, and the four
-terms that force the point are worth naming:
+terms force the point:
 
 \begin{itemize}
 \tightlist
@@ -1108,8 +1108,8 @@ precisely what makes its fixpoint's options pairwise kind-disjoint (§3).
 \textbf{The two, conjoined, are the family.} An option's set of values is its occupancy intersected with
 its option admission, and its set of attributes likewise. Disjointness in either factor is enough,
 which is what leaves the row decidable where it decides at all: \textbf{on one side, two options separate
-when their occupancies on that side are disjoint; on both sides at once, when one option requires a
-name the other does not declare.} That is a question about two terms, answered by computation at
+when their occupancies on that side are disjoint. On both sides at once, they separate when one
+option requires a name the other does not declare.} That is a question about two terms, answered by computation at
 the declaration. What it declines is an obligation and not a refusal.
 
 \begin{definition}[(union)]
@@ -1144,7 +1144,7 @@ the tag sets never vouched for, and \rulelink{cond:C}{\textbf{(C)}} would then r
 \textbf{Arity one at the discriminator}, and n-ary literals everywhere else. The rule asks for a single
 tag \texttt{tᵢ} per variant, and disjointness of singletons is distinctness. Soundness does not need the
 restriction: \rulelink{rule:literal}{\texttt{(literal)}} is n-ary, a set of tags is a perfectly good
-admissible set, and pairwise disjointness is exactly the condition (U) needs.
+admissible set, and pairwise disjointness is the condition (U) needs.
 
 What required it is what a discriminated union \emph{is}. It is a \textbf{lookup}: the stored tag chooses
 the variant. A variant answering to two tags is a key that does not identify its variant, and a
@@ -1186,7 +1186,7 @@ neither implies the other. \texttt{union(array(string),\ array(number))} satisfi
 are incomparable — and is discharged by nothing: both options write a sequence, both store \texttt{L},
 and both admit the empty array.
 
-\texttt{union(set(string),\ set(number))} \emph{is} discharged, and on both sides, which is worth seeing because
+\texttt{union(set(string),\ set(number))} \emph{is} discharged, and on both sides, because
 the writable side is the one that labels by constructor. Those options store \texttt{SS} and \texttt{NS}, so
 reading was never in doubt; and they write a set of strings and a set of doubles, which are two
 constructors, so the writing is settled as well. What remains is a loss of a different kind: a set's
@@ -1224,7 +1224,7 @@ Two counterexamples bound the question, and each refutes one form of it:
 \end{itemize}
 
 \textbf{A pair sharing a base separates where neither term's own sets do}, which is the discharger
-table's fourth row rather than this section's, and the reason is worth stating once. \texttt{number} and
+table's fourth row rather than this section's. \texttt{number} and
 every numeric literal are the \textbf{same base} under different predicates — the base being every finite
 double written as its shortest text, and the predicates \texttt{D} and \texttt{∈\ ℓ}. Two literals over disjoint
 value sets are two refinements of one base; refinements of one base read an attribute to the \emph{same}
@@ -1249,7 +1249,7 @@ which is the empty array above stated the other way round.
 
 \rulelink{cond:D}{\textbf{(D)}} as written is \emph{incomparability}, not disjointness. Two object options \texttt{⟨a\ :\ String⟩} and
 \texttt{⟨b\ :\ String⟩} are incomparable yet share the inhabitant \texttt{⟨a\ ↦\ "1",\ b\ ↦\ "2"⟩} — so \rulelink{cond:D}{\textbf{(D)}} admits
-them, and resolution falls to the name-set device above. The gap between the two is exactly the set
+them, and resolution falls to the name-set device above. The gap between the two is the set
 of unions resolved structurally rather than by type — and \rulelink{cond:U}{\textbf{(U)}} is what fills it.
 
 Stating \rulelink{cond:D}{\textbf{(D)}} as genuine \emph{disjointness} would not be sound either, and the reason is the same
@@ -1277,7 +1277,7 @@ condition on values cannot decide a question about attributes.
 \leanok
 Every derivable \texttt{⊢\ c\ :\ T\ ⇝\ μ}, and every \texttt{⊢\ f\ :\ T\ ⊗\ π\ ⇝\ μ}, denotes a pair satisfying \rulelink{cond:R}{\textbf{(R)}},
 \rulelink{cond:C}{\textbf{(C)}}, \rulelink{cond:W}{\textbf{(W)}}, and \rulelink{cond:MP}{\textbf{(MP)}} in the strong form \texttt{e(p(a))\ ≼\ a} defined below — with three residues,
-all named exactly: \rulelink{cond:MP}{\textbf{(MP)}} is off on the attributes a \texttt{legacy} in the derivation rereads; every
+all named: \rulelink{cond:MP}{\textbf{(MP)}} is off on the attributes a \texttt{legacy} in the derivation rereads; every
 \rulelink{rule:union}{\texttt{(union)}} in the derivation carries \rulelink{cond:U}{\textbf{(U)}} \emph{where the union acts} as an obligation, which the
 dischargers of this section settle at the declaration wherever they decide a pair — \rulelink{rule:dunion}{\texttt{(dunion)}} and
 \texttt{opaque} outright; and a \rulelink{rule:lazy}{\texttt{(lazy)}} whose unfolding re-enters itself \textbf{through a union} is outside
@@ -1347,7 +1347,7 @@ privileged write path, the resolution order \rulelink{cond:U}{\textbf{(U)}} exis
 by the premise's \rulelink{cond:R}{\textbf{(R)}}, and coherence makes any overlap with \texttt{dom(r)} agree, so the composite
 reads it to \texttt{t}. \rulelink{cond:C}{\textbf{(C)}}: on \texttt{dom(p\_c)} by the premise; on the extension it \emph{is}
 \texttt{ran(r)\ ⊆\ dom(e)} — without it a migrated attribute reads and the write-back is the failure.
-\rulelink{cond:W}{\textbf{(W)}}: unchanged. \texttt{≼}: on \texttt{dom(p\_c)} by hypothesis; on the extension it is exactly what the term
+\rulelink{cond:W}{\textbf{(W)}}: unchanged. \texttt{≼}: on \texttt{dom(p\_c)} by hypothesis; on the extension it is what the term
 is licensed to break, and no further — \texttt{e(r(a))} is canonical, so the breach does not survive its
 own round trip, which is the precise sense in which a migrated row behaves like a current one from
 the first rewrite on.
@@ -1468,7 +1468,7 @@ partition the values and members partition the attributes — so admission is un
 every depth of the fixpoint, and the sum case closes with no residue here either.
 \end{proof}
 
-What remains outside the theorem is exactly what §3 already names: \rulelink{rule:custom}{\texttt{(custom)}}'s premises are the
+What remains outside the theorem is what §3 already names: \rulelink{rule:custom}{\texttt{(custom)}}'s premises are the
 caller's to keep, and each \rulelink{rule:union}{\texttt{(union)}}'s residual \rulelink{cond:U}{\textbf{(U)}}. \texttt{D} is not among them — it is a gate on
 both halves of \rulelink{rule:number}{\texttt{(number)}}, and a numeric \texttt{literal}'s base \emph{is} \texttt{number}, so it is inside the theorem.
 
@@ -1578,9 +1578,10 @@ null, so there is nothing for a second \texttt{𝟙} to be.
 \lean{Calculus.through_μ, Calculus.restrict_μ, Calculus.extendRead_μ, Calculus.optional_μ, Calculus.fallback_μ, Calculus.denote_held_μ, Calculus.denote_refine_μ, Calculus.denote_legacy_μ}
 \leanok
 \texttt{μ(w(c))\ =\ μ(c)} for \texttt{w\ ∈\ \{held,\ refine,\ legacy,\ optional,\ fallback\}}. Wrappers
-preserve the member: a field's member is its attribute's (§4). So wrapping a term never changes
-the member a key stores.
+preserve the member: a field's member is its attribute's (§4).
 \end{theorem}
+
+So wrapping a term never changes the member a key stores.
 
 \hypertarget{do-not-hold}{%
 \subsection{Do not hold}\label{do-not-hold}}
@@ -1630,7 +1631,7 @@ discharged before.
 \leanok
 \texttt{lazy(γ)\ ≢\ γ(∗)}. The pair is the same and the μ is not: \texttt{lazy} concludes \texttt{⊤} where
 \texttt{γ(∗)} may name its member, so \texttt{set(lazy(γ))} has no derivation. \texttt{≡} compares the index
-too, and this is the row where that matters.
+too.
 \end{theorem}
 
 \begin{theorem}[legacy breaks (MP), on purpose]
@@ -1639,16 +1640,19 @@ too, and this is the row where that matters.
 \lean{Calculus.legacy_breaks_MP}
 \leanok
 \texttt{legacy(c,\ r)} breaks \rulelink{cond:MP}{\textbf{(MP)}}. On purpose, and it is the only term licensed to: changing
-what is stored \emph{is} the migration, and §2's read-side corollary falls with it. So a
-\texttt{legacy} attribute cannot be an index key, which is the price and is worth stating.
+what is stored \emph{is} the migration, and §2's read-side corollary falls with it.
 \end{theorem}
+
+So a \texttt{legacy} attribute cannot be an index key, which is the price.
 
 \begin{theorem}[the canonizer is not the identity]
 \label{eq:canonizer}
 \lean{Calculus.e_comp_p_ne_id}
 \leanok
-\texttt{e\ ∘\ p\ ≢\ id}. The quotient, from §2. Equality holds only on \texttt{Can(c)}.
+\texttt{e\ ∘\ p\ ≢\ id}. Equality holds only on \texttt{Can(c)}.
 \end{theorem}
+
+This is §2's quotient.
 
 \begin{tabular}{@{}ll@{}}
 \toprule
@@ -1684,8 +1688,7 @@ by construction and \texttt{opaque} the one whose (U) is a theorem; and a \textb
 and \texttt{opaque} again). Fields are the keyed product's
 presence decoration, and \texttt{nullable} is that sum's guarded insertion (§3) rather than a term of its own.
 
-One more thing the algebra makes visible, and it is worth stating because it is not obvious from
-the rules. \textbf{The two halves of the pair are the same construction at two carriers, everywhere the
+The algebra makes one more thing visible, which the rules do not show. \textbf{The two halves of the pair are the same construction at two carriers, everywhere the
 calculus builds something itself.} A sum filters by the admission \emph{that side} reads and acts
 through the option answering alone — the same sentence for \texttt{e} and for \texttt{p}, with value-admission
 swapped for attribute-admission. Adjoining the null point is the same construction on values and on
