@@ -2,14 +2,7 @@ This document is normative for the semantics, and it names no implementation of 
 below stands on the argument written beside it; nothing here is true because something elsewhere
 checks it.
 
-\textbf{It states what is true now, and carries no history.} Several rules here were corrected once a
-counterexample refuted them, and one term was removed; what was claimed before, what refuted it, and
-what the correction cost are in the commit history:
-\texttt{git\ log\ -\/-follow\ -\/-M20\%\ formal/docs/blueprint/src/content.tex}, and the
-messages of the commits it names. The \texttt{-\/-M20\%} is needed because this file was Markdown
-through \texttt{ad9d294}, and git's default rename threshold does not span the conversion. A reader
-of this document should never need either to understand a rule, only to learn how it came to be
-one.
+\textbf{It states what is true now, and carries no history.}
 
 \begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
 
@@ -477,15 +470,14 @@ while the held set is numeric, so \rulelink{cond:R}{\texttt{(R)}} obliges the re
 \hypertarget{containers}{%
 \subsection{Containers}\label{containers}}
 
-\rulelink{rule:set}{\texttt{(set)}}'s premise line is \textbf{an index}, not a hypothesis. It read \texttt{⊢\ c\ :\ T\ ⇝\ μ} together with
-\texttt{μ\ ∈\ \{S,\ N,\ B\}}, and that second premise was the whole content: the member test was partial, so the
-constructor accepted element terms the rule then refused — \texttt{set(union(string,\ boolean))} was the
-standing witness. Four element terms survive it, so \texttt{SetBase} is those four, \texttt{b.held} and
-\texttt{b.member} are functions of the index, and the refusal is a type error. \textbf{Four bases onto three wire
+\rulelink{rule:set}{\texttt{(set)}}'s premise line is \textbf{an index}, not a hypothesis: the element's
+member is read off the base rather than tested, so \texttt{SetBase} is the four bases that carry one,
+\texttt{b.held} and \texttt{b.member} are functions of the index, and an element that names no member is a
+type error. \textbf{Four bases onto three wire
 members}: \texttt{number} and \texttt{decimal} both store \texttt{NS} and are not the same base, one being the caller's
 platform number and the other the host-independent spelling.
 
-What that gives up, deliberately: \texttt{set(refine(b,\ q))} and \texttt{set(literal(…))} are \textbf{not} lost — a
+What a base rather than a term costs: \texttt{set(refine(b,\ q))} and \texttt{set(literal(…))} are \textbf{not} lost — a
 restriction of the elements is a restriction of the set, which is \texttt{setCodec\_restrict} — but
 \texttt{set(held(…))} and \texttt{set(legacy(…))} are, having no set-level spelling and no appearance in any
 schema.
@@ -693,7 +685,7 @@ path, resolved by a precedence between its two readings, which is precisely the 
 and a migrated row behaves \emph{by law} like a current one at the surface — how the migration achieves
 that is the migration's duty, but that it must is the calculus's.
 
-\texttt{nullable} carries \textbf{no side premise}, and that is worth stating because it once carried two. The
+\texttt{nullable} carries \textbf{no side premise}. The
 danger is real — a subterm moving \texttt{null} onto another member, or another member onto \texttt{null}, would
 let the wrapper's \texttt{NULL} branch shadow a real value, failing \rulelink{cond:R}{\textbf{(R)}} in one direction and \rulelink{cond:MP}{\textbf{(MP)}}
 in the other — and the fix is not a premise but the wrapper's own definition. \texttt{nullable(c)} adds the
@@ -704,7 +696,7 @@ owns(c)  ⟺  null ∈ dom(e_c)  ∨  ⟨NULL, ∗⟩ ∈ dom(p_c)
 \end{verbatim}
 
 Where \texttt{owns(c)}, the pair is \texttt{c}'s untouched. Where it does not, \texttt{c} reaches neither end of the null
-point, and then \textbf{null-honesty is a theorem rather than an assumption}: if \texttt{e\_c} wrote
+point, and then \textbf{null-honesty is a theorem}: if \texttt{e\_c} wrote
 \texttt{⟨NULL,\ ∗⟩}, \rulelink{cond:R}{\textbf{(R)}} would make \texttt{p\_c} read it straight back, and \texttt{owns(c)} would hold; if \texttt{p\_c} read
 some attribute to \texttt{null}, \rulelink{cond:C}{\textbf{(C)}} would make \texttt{e\_c} write the point, and \texttt{owns(c)} would hold again.
 Both hypotheses are refuted, not required.
@@ -715,13 +707,12 @@ out through one and back through the other, and \rulelink{cond:R}{\textbf{(R)}} 
 on either side taken alone.
 
 None of this is a new kind of condition. \texttt{nullable(c)} is structurally the two-option union
-\texttt{union(c,\ ⟨NULL⟩-point)}, the honesty conditions were exactly that pair's §5 side conditions —
-uniqueness of admission on the way in, on the way out — and the guard is what makes them hold
-instead of demanding that they do.
+\texttt{union(c,\ ⟨NULL⟩-point)}, and its honesty conditions are exactly that pair's §5 side conditions —
+uniqueness of admission on the way in, on the way out — which the guard makes hold rather than
+demand.
 
 \rulelink{rule:null}{\texttt{(null)}} above makes \texttt{union(c,\ null)} a term, so both spellings exist — and the relation between
-them is a \textbf{dichotomy}, not a trade-off. It is now the wrapper's definition rather than a result
-about it:
+them is a \textbf{dichotomy}, not a trade-off. It is the wrapper's definition:
 
 \begin{itemize}
 \tightlist
@@ -744,10 +735,9 @@ that may already have it. It expresses nothing new, it costs no premise, and its
 property of insertion rather than a fact about \texttt{𝟙}. The one term outside both branches of the
 dichotomy is \texttt{nullable(null)}, which under the guard is simply \texttt{null}.
 
-It is kept as a term for compatibility, and \textbf{not} because \texttt{union(c,\ null)} cannot replace it at
-a subterm whose shape is unknown — \texttt{held}, \texttt{custom}, \texttt{lazy}. It can: no discharger means an \textbf{obligation}, not a
-refusal (§5), so \texttt{union(c,\ null)} is derivable there and carries \rulelink{cond:U}{\textbf{(U)}} per input, which is what
-\texttt{nullable}'s honesty premises were doing by hand.
+\texttt{union(c,\ null)} replaces it at a subterm whose shape is unknown — \texttt{held}, \texttt{custom},
+\texttt{lazy}: no discharger means an \textbf{obligation}, not a refusal (§5), so \texttt{union(c,\ null)} is
+derivable there and carries \rulelink{cond:U}{\textbf{(U)}} per input.
 
 \begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
 
@@ -827,7 +817,7 @@ policies differ only in what \texttt{p} does with an undeclared name — drop it
 difference in \texttt{dom(p)} and not in \texttt{T}. And \texttt{drop} is a \textbf{filter, never a traversal mode}: the
 discard is decided by the name alone, before anything is decoded, so it cannot depend on a value and
 the round trip through the declared names is untouched by what was discarded. That is the quotient
-of §2 again — an item is \texttt{≈c} itself minus its undeclared names — and, now that \texttt{SS}/\texttt{NS}/\texttt{BS} carry
+of §2 again — an item is \texttt{≈c} itself minus its undeclared names — and, \texttt{SS}/\texttt{NS}/\texttt{BS} carrying
 no ordering to lose, one of only two places \texttt{ker\ p} is not equality. The other is \texttt{η}.
 
 \hypertarget{the-stratification-does-work}{%
@@ -946,7 +936,7 @@ refusing — \rulelink{cond:U}{\textbf{(U)}}
 still guards each value the option is actually given.
 
 \hypertarget{a-weaker-condition-proved-and-not-adopted}{%
-\subsection{A weaker condition, proved and not adopted}\label{a-weaker-condition-proved-and-not-adopted}}
+\subsection{A weaker condition, and what it costs}\label{a-weaker-condition-proved-and-not-adopted}}
 
 The reading above rejects \texttt{∣\{i\ :\ cᵢ\ admits\ it\}∣\ =\ 1} as too strong and settles for \emph{undefined at the
 overlap}. There is a third position between them, and it is worth recording because the model now
@@ -1020,7 +1010,7 @@ no hypothesis and no term excepted. Nothing is over-approximated, and no term's 
 \end{theorem}
 
 That is available only because a row may \textbf{ask the codec} rather than describe it, and the four
-terms that force the point are worth naming, three of them having been recorded as impossible:
+terms that force the point are worth naming:
 
 \begin{itemize}
 \tightlist
@@ -1130,43 +1120,15 @@ field. A \texttt{fallback} around it has no derivation, and the proof says why r
 taste: a row omitting the discriminator would read to the fallback's stand-in, an arbitrary value
 the tag sets never vouched for, and \rulelink{cond:C}{\textbf{(C)}} would then re-encode a variant no tag selects.
 
-\textbf{Arity one at the discriminator}, and n-ary literals everywhere else. The rule above read
-\texttt{sᵢ(d)\ =\ literal(Lᵢ)} with \texttt{Lᵢ} a \emph{set} of tags, pairwise disjoint; it now asks for a single tag
-\texttt{tᵢ}, and disjointness of singletons is distinctness. \textbf{Nothing about the soundness of the
-calculus required narrowing this}, and that is worth stating rather than leaving implicit:
-\rulelink{rule:literal}{\texttt{(literal)}} is n-ary, a set of tags is a perfectly good admissible set, and pairwise disjointness
-is exactly the condition (U) needs.
+\textbf{Arity one at the discriminator}, and n-ary literals everywhere else. The rule asks for a single
+tag \texttt{tᵢ} per variant, and disjointness of singletons is distinctness. Soundness does not need the
+restriction: \rulelink{rule:literal}{\texttt{(literal)}} is n-ary, a set of tags is a perfectly good
+admissible set, and pairwise disjointness is exactly the condition (U) needs.
 
 What required it is what a discriminated union \emph{is}. It is a \textbf{lookup}: the stored tag chooses
 the variant. A variant answering to two tags is a key that does not identify its variant, and a
 reader who has the tag still cannot say which shape they hold without consulting the table twice.
 JH's call, in his words — \emph{"go with the middle, arity one at the discriminator only"}.
-
-Three alternatives were declined, and each for a reason worth recording:
-
-\begin{itemize}
-\tightlist
-\item
-  \textbf{Keying the union by tag, with the discriminator injected from the key and absent from the
-  variant body.} Declined for reuse and declaration flexibility: a variant would stop being an
-  ordinary \texttt{object} term the user can name, reuse elsewhere and read on its own.
-\item
-  \textbf{A variant helper in the implementation} to build the tagged object for you. Declined for the
-  same reason, one level up — it makes the tagged shape the library's rather than the caller's.
-\item
-  \textbf{Arity one for literals generally.} Declined because a set of alternatives is the natural
-  spelling of an enum member and because the carrier is a \texttt{Finset}; the constraint belongs at the
-  discriminator, where the lookup is, and nowhere else.
-\end{itemize}
-
-\textbf{Mechanization note, and it is a negative result.} The narrowing bought no proof simplification
-whatsoever — the expectation going in was that it would. Every proof over \rulelink{rule:dunion}{\texttt{(dunion)}} consumes only
-the \emph{nonemptiness} of the tag set (\texttt{tagsOf\_ne\_nil}'s four-job inversion, \texttt{dunion\_stamp},
-\texttt{ExactV\_dunion}/\texttt{ExactA\_dunion}), and none of them consults the arity. So
-the premise changed from \texttt{Nonempty} to \texttt{card\ =\ 1}, one three-line bridge lemma was added to recover
-the weaker fact, and the \texttt{dunion} machinery went from 39 declarations / 350 lines to 40 / 353
-— the three lines being that bridge, with no proof changing length. The
-constraint is a statement about the language, not a lever on the model.
 
 \begin{definition}[(D) incomparable held sets]
 \label{cond:D}
@@ -1220,17 +1182,14 @@ both store \texttt{N}, so the writable side separates and the readable one does 
 resolved, and each fails on a different half, which is why the two families are asked separately and
 never reconciled.
 
-\textbf{Attempting an option answers a real question, and that is what changed.} The rule this section
-replaces asked, before it compared any set, whether a term \emph{decides its own membership} — whether
-"this option accepted the value" is evidence at all — on the ground that a term's \texttt{e} is defined on
-\texttt{T} and does whatever it does off it. An admissible set that \emph{is} \texttt{dom(e)} answers that question and
-leaves nothing for a second condition to add. \texttt{union(literal("A"),\ literal("B"))} is discharged
+\textbf{Attempting an option answers a real question.} Whether a term \emph{decides its own membership} —
+whether "this option accepted the value" is evidence at all — is answered by an admissible set that
+\emph{is} \texttt{dom(e)}, and nothing is left for a second condition to add. \texttt{union(literal("A"),\ literal("B"))} is discharged
 because \texttt{\{"A"\}} and \texttt{\{"B"\}} do not meet; \texttt{union(literal("A"),\ string)} is not, because \texttt{\{"A"\}} sits
 inside every string. A term that decides nothing about its values has the widest domain, and the
 widest domain is the one that fails to be disjoint.
 
-Two counterexamples are kept, because the rule that was tried in place of the sets is a disjunction
-over that same question, and each refutes one form of it:
+Two counterexamples bound the question, and each refutes one form of it:
 
 \begin{itemize}
 \tightlist
@@ -1309,9 +1268,9 @@ below repeats: there is no fixpoint there to prove anything about.
 
 Three premises in §3–§4 — \texttt{ran(r)\ ⊆\ dom(e)} and coherence on \rulelink{rule:legacy}{\texttt{(legacy)}}, \texttt{v(∗)\ ∈\ dom(e)} on
 \rulelink{rule:fallback}{\texttt{(fallback)}} — exist because this proof failed without them. That is the theorem earning its keep:
-each names a term the calculus used to derive and the laws refuse. A fourth, null-honesty on
-\rulelink{rule:nullable}{\texttt{(nullable)}}, was one of them until the wrapper's guard (§3) made it a consequence of lawfulness;
-that is the better outcome, and the only one of the four available, since the other three constrain
+each names a term the calculus would otherwise derive and the laws refuse. Null-honesty on
+\rulelink{rule:nullable}{\texttt{(nullable)}} is not among them: the wrapper's guard (§3) makes it a consequence
+of lawfulness, which is available there and not for the other three, since those constrain
 functions the caller supplies.
 
 \textbf{Member agreement, recursively.} §2 states \rulelink{cond:MP}{\textbf{(MP)}} per attribute "and recursively"; the proof
@@ -1343,7 +1302,7 @@ below is an instantiation. ∎
 \begin{proof}
 \uses{rule:string,rule:boolean,rule:binary,rule:null,rule:decimal,rule:number,rule:literal,rule:held,rule:refine,rule:legacy,rule:nullable,rule:custom,rule:lazy,rule:field,rule:optional,rule:fallback,rule:array,rule:tuple,rule:tuple-tail,rule:record,rule:object,rule:set,rule:union,rule:dunion,rule:opaque}
 \leanok
-By induction on the derivation, with one refinement recorded at \rulelink{rule:lazy}{\texttt{(lazy)}}. Each case
+By induction on the derivation, with one refinement at \rulelink{rule:lazy}{\texttt{(lazy)}}. Each case
 first says what the pair \emph{is} — the denotation is part of the rule — then discharges the laws. The
 grouping is the algebra of §7: points, wrappers, products, sums.
 
@@ -1396,8 +1355,8 @@ not an equation the proof has to earn.
 
 \emph{custom.} The laws are the premises, verbatim; \rulelink{cond:W}{\textbf{(W)}} is vacuous at \texttt{⊤}.
 
-\emph{lazy.} The pair of \texttt{γ(∗)}. This case is \textbf{three arguments and not one}, and separating them is
-the correction — what a \texttt{γ} re-enters itself through decides which one applies.
+\emph{lazy.} The pair of \texttt{γ(∗)}. This case is \textbf{three arguments and not one}: what a \texttt{γ}
+re-enters itself through decides which one applies.
 
 \textbf{Through a container.} Induct on the pair (input size, derivation size), lexicographically.
 Containers strictly shrink the input; the wrappers shrink the derivation and never grow the input.
@@ -1414,11 +1373,10 @@ fixpoint must grow: as the recursive options grow, admission grows, and the answ
 \texttt{some} to \texttt{none}. There is no least fixpoint, so there is no pair here to prove the laws of — not a
 pair with an empty domain, which is what the wrapper case has, but no semantics at all. That is the
 same exclusion §5 records under confluent admission when it says \texttt{lazy} under \texttt{union} is
-unmodelled, and it is a residue of this theorem rather than a remark elsewhere.
+unmodelled, and it is a residue of this theorem.
 
 Partiality is doing the termination argument's work in the second case, which is why it has to be
-its own step. The first draft of this paragraph ran the three together and claimed the second
-case's answer for the third — asserting an empty pair where §5 says there is no pair.
+its own step.
 
 \textbf{Fields.} A field denotes a pair over presence-extended domains — \texttt{e♭\ :\ T\ ⇀\ 𝔸\ ∪\ \{ε\}},
 \texttt{p♭\ :\ (𝔸\ ∪\ \{ε\})\ ⇀\ T}, \texttt{ε} the absent binding — with \texttt{member(ε)} undefined and the laws read over
