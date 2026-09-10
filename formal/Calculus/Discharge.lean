@@ -23,7 +23,7 @@ in that vocabulary. What that layer proved by hand in phases *slot* and *alterna
 
 So the discharges that remain are the ones no phase reaches: an arbitrary `q` inside a
 `refine`, a union of numeric literals at a base whose `DecidableEq` is axiomatized,
-`(dunion)` and `opaque` — whose (U) is a theorem one level below the term language — and
+`opaque`, whose (U) is a theorem one level below the term language, and
 `uAtAct_array_literals`, which holds where `UAtCan` is outright false.
 
 §5's (D) is not among them, and `not_uAtCan_literal_held` is why: held sets are sets of
