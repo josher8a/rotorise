@@ -1,6 +1,6 @@
 name: docs
 
-# The library's API documentation, published to GitHub Pages on `main`.
+# The library's API documentation and the blueprint, published to GitHub Pages on `main`.
 # A Pages deploy needs `pages: write` and `id-token: write`, granted on this job alone while the
 # workflow default stays `contents: read`; the owner enables Pages with source "GitHub Actions"
 # in the repository settings.
@@ -33,20 +33,66 @@ jobs:
           curl -sSf https://elan.lean-lang.org/elan-init.sh | sh -s -- -y --default-toolchain none
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
 
+      - name: Install the blueprint toolchain
+        run: |
+          python3 -m venv "$HOME/.bp"
+          "$HOME/.bp/bin/pip" install --quiet leanblueprint==0.0.20
+          echo "$HOME/.bp/bin" >> "$GITHUB_PATH"
+
       # No `lake update`: the committed manifest is the pin, and four deps name a branch.
       - name: Fetch mathlib's build cache
         working-directory: formal/docs
         run: lake exe cache get
 
-      - name: Build the documentation
+      - name: Build the API documentation
         working-directory: formal/docs
         run: lake build Calculus:docs
+
+      - name: Render the blueprint
+        working-directory: formal/docs/blueprint/src
+        run: |
+          plastex -c plastex.cfg web.tex 2>&1 | tee "$RUNNER_TEMP/plastex.log"
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            echo "::error::plastex exited $status"
+            exit "$status"
+          fi
+          for pattern in \
+            'File not found' \
+            'unrecognized command/environment' \
+            'could not be resolved'
+          do
+            if grep -qF "$pattern" "$RUNNER_TEMP/plastex.log"; then
+              echo "::error::plastex reported: $pattern"
+              grep -F "$pattern" "$RUNNER_TEMP/plastex.log"
+              exit 1
+            fi
+          done
+
+      - name: Build the environment checkdecls reads
+        working-directory: formal/docs
+        run: lake build Docs
+
+      - name: Check the blueprint's declarations
+        working-directory: formal/docs
+        run: |
+          if [ ! -s blueprint/lean_decls ]; then
+            echo "::error::blueprint/lean_decls is empty, so checkdecls would pass over nothing"
+            exit 1
+          fi
+          lake exe checkdecls blueprint/lean_decls
+
+      - name: Assemble the site
+        run: |
+          mkdir -p site/blueprint
+          cp -r formal/docs/.lake/build/doc/. site/
+          cp -r formal/docs/blueprint/web/. site/blueprint/
 
       - uses: actions/configure-pages@v5
 
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: formal/docs/.lake/build/doc
+          path: site
 
       - id: deploy
         uses: actions/deploy-pages@v4
