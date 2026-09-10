@@ -453,21 +453,6 @@ theorem traverse_cons_isSome {α β : Type} (f : α → Option β) (x : α) (xs 
   simp only [traverse]
   cases hx : f x <;> cases hxs : traverse f xs <;> simp
 
-/-- A filter whose predicate never fires is empty. Written out rather than taken from
-    `List.filter_eq_nil_iff`, which is proved classically — see `Calculus/Axioms.lean`, where
-    that exact lemma is the example of how the base gets widened by accident. -/
-theorem filter_eq_nil_of_all_false {α : Type} (p : α → Bool) (l : List α)
-    (h : ∀ x, p x = false) : l.filter p = [] := by
-  induction l with
-  | nil => rfl
-  | cons a l ih => simp [h a, ih]
-
-theorem filter_map_comm {α β : Type} (f : α → β) (p : β → Bool) (l : List α) :
-    (l.map f).filter p = (l.filter (fun a => p (f a))).map f := by
-  induction l with
-  | nil => rfl
-  | cons a l ih => by_cases h : p (f a) <;> simp [h, ih]
-
 /-- `alignP` is `align`'s row: the same length discipline, the same per-position test. -/
 theorem alignP_iff (tail : Option Term) (htl : ∀ t ∈ tail, ExactV t) :
     ∀ (ts : List Term) (vs : List Value), (∀ t ∈ ts, ExactV t) →

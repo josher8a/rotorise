@@ -235,11 +235,6 @@ theorem neSetImage_congr {α β : Type} [DecidableEq β] {f g : α → Option β
     rw [(neSetImage_eq_setImage (T := ⟨T, setImage_nonempty hs S.2⟩)).mpr hs,
       (neSetImage_eq_setImage (T := ⟨T, setImage_nonempty hs S.2⟩)).mpr hT]
 
-/-- A successful `bind` needs a successful left. -/
-theorem bind_isSome_left {α β : Type} {o : Option α} {f : α → Option β}
-    (h : (o.bind f).isSome = true) : o.isSome = true := by
-  cases o <;> simp_all
-
 /-- Reading a value's scalar payload, the mirror of `sC`/`nC`/`bC` on the value side. -/
 def vStr : Value → Option String := fun v => match v with | .str s => some s | _ => none
 def vNum : Value → Option Double := fun v => match v with | .num d => some d | _ => none
@@ -298,13 +293,13 @@ theorem encSet_elem {α : Type} {c : Codec} {inj : α → Value} {S : NEFinset �
   unfold encSet at h
   split at h
   · next T hT =>
-      exact fun x hx => bind_isSome_left (setImage_some (neSetImage_eq_setImage.mp hT) x hx)
+      exact fun x hx => Option.isSome_of_isSome_bind (setImage_some (neSetImage_eq_setImage.mp hT) x hx)
   · split at h
     · next T hT =>
-        exact fun x hx => bind_isSome_left (setImage_some (neSetImage_eq_setImage.mp hT) x hx)
+        exact fun x hx => Option.isSome_of_isSome_bind (setImage_some (neSetImage_eq_setImage.mp hT) x hx)
     · next =>
       obtain ⟨T, hT, -⟩ := Option.map_eq_some_iff.mp h
-      exact fun x hx => bind_isSome_left (setImage_some (neSetImage_eq_setImage.mp hT) x hx)
+      exact fun x hx => Option.isSome_of_isSome_bind (setImage_some (neSetImage_eq_setImage.mp hT) x hx)
 
 /-- …and reading one needs every element to read. -/
 theorem decSet_elem {α : Type} {c : Codec} {inj : α → Attr} {S : NEFinset α} {v : Value}
@@ -312,13 +307,13 @@ theorem decSet_elem {α : Type} {c : Codec} {inj : α → Attr} {S : NEFinset α
   unfold decSet at h
   split at h
   · next T hT =>
-      exact fun x hx => bind_isSome_left (setImage_some (neSetImage_eq_setImage.mp hT) x hx)
+      exact fun x hx => Option.isSome_of_isSome_bind (setImage_some (neSetImage_eq_setImage.mp hT) x hx)
   · split at h
     · next T hT =>
-        exact fun x hx => bind_isSome_left (setImage_some (neSetImage_eq_setImage.mp hT) x hx)
+        exact fun x hx => Option.isSome_of_isSome_bind (setImage_some (neSetImage_eq_setImage.mp hT) x hx)
     · next =>
       obtain ⟨T, hT, -⟩ := Option.map_eq_some_iff.mp h
-      exact fun x hx => bind_isSome_left (setImage_some (neSetImage_eq_setImage.mp hT) x hx)
+      exact fun x hx => Option.isSome_of_isSome_bind (setImage_some (neSetImage_eq_setImage.mp hT) x hx)
 
 /-- What a read produces: one of the three value sets, each element read from an element
     of the wire set. -/

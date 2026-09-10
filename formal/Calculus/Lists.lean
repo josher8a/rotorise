@@ -190,12 +190,6 @@ theorem traverse_fst {f : Name × α → Option (Name × β)}
 
 end Traverse
 
-theorem contains_of_mem {l : List String} {s : String} (h : s ∈ l) : l.contains s = true :=
-  List.contains_iff_mem.mpr h
-
-theorem mem_of_contains {l : List String} {s : String} (h : l.contains s = true) : s ∈ l :=
-  List.contains_iff_mem.mp h
-
 
 /-- Constructive on purpose: mathlib's `filter_eq_nil_iff` routes through
     `Classical.choice`, and §3 of the formalization doc advertises an axiom base without
@@ -295,14 +289,6 @@ theorem filter_pair_right_inv {α : Type} {p : α → Bool} {x y : α} (hne : x 
     (h : List.filter p [x, y] = [y]) : p x = false ∧ p y = true := by
   cases hx : p x <;> cases hy : p y <;>
     simp only [List.filter, hx, hy] at h <;> simp_all
-
-/-- A property of every image is a property of every member of the mapped list — the
-    step every case over a list of subterms begins with. -/
-theorem forall_mem_map {α β : Type} {xs : List α} {g : α → β} {P : β → Prop}
-    (h : ∀ x ∈ xs, P (g x)) : ∀ y ∈ xs.map g, P y := by
-  rintro y hy
-  obtain ⟨x, hx, rfl⟩ := List.mem_map.mp hy
-  exact h x hx
 
 /-- …and the same for `Option.map`, which is how a uniform tail is carried. -/
 theorem forall_mem_map_option {α β : Type} {x? : Option α} {g : α → β} {P : β → Prop}
