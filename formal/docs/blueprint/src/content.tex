@@ -100,7 +100,7 @@ and no other.
 \lean{Calculus.Lawful.agree, Calculus.Agree.member_eq}
 \leanok
 \texttt{∀\ a\ ∈\ dom(p).\ member(e(p(a)))\ =\ member(a)}. Reading and writing back never changes a stored
-member. The model states this in the strong form \texttt{e(p(a))\ ≼\ a} of §5, which implies it.
+member. §5's strong form \texttt{e(p(a))\ ≼\ a} implies this.
 \end{definition}
 
 \begin{theorem}[the four laws are independent]
@@ -174,7 +174,7 @@ the way back. A codec reading \texttt{⟨N,\ "1.5"⟩} to a string and writing \
 typed index rejects the write. It holds per attribute and recursively: a member change three levels
 inside an \texttt{M} is the same failure.
 
-This is why \texttt{opaque} refuses \texttt{N} by default. Its refusal is \rulelink{cond:MP}{\textbf{(MP)}}, and §2 without it could not say
+This is why \texttt{opaque} refuses \texttt{N} unless \texttt{ν} admits it. Its refusal is \rulelink{cond:MP}{\textbf{(MP)}}, and §2 without it could not say
 so.
 
 Write \texttt{Can(c)\ =\ e{[}T{]}} for the \textbf{canonical} attributes: those a codec will actually produce. \texttt{e\ ∘\ p}
@@ -384,15 +384,15 @@ So a numeric \texttt{literal} reads through the same gate as \rulelink{rule:numb
 its base \textbf{is} \texttt{number}, and \texttt{ℓ\ ⊆\ T} is the rule's premise, so the stored text must be a numeral
 before it is read as a value.
 
-A subset of \texttt{D} chosen by the caller — a numeric enum member — is \texttt{refine(number,\ T)}, and has no
+A subset of \texttt{D} chosen by the caller — a finite set of admitted numbers — is \texttt{refine(number,\ T)}, and has no
 rule of its own because it needs none. A term whose \texttt{p} returned the double it read \emph{without}
 verifying membership in \texttt{T} would break \rulelink{cond:C}{\textbf{(C)}}, and with it the claim that \texttt{:\ T} says anything; a
 term that does verify is \texttt{refine(number,\ T)} on all four fields. An unchecked narrowing of a read is
 a cast, and a cast belongs to \texttt{refine} — which does
 the check — or to \texttt{held}, which is where the caller's own functions live.
 
-\texttt{decimal} holds numerals, not a machine number. That is the one ground term whose held set is chosen
-against the grain of the host language, and the reason is in the table in §1: \texttt{N} carries 38
+\texttt{decimal} holds numerals, not a machine number. That is the one ground term whose held set is the
+stored text rather than the machine number, and §1's table is the reason: \texttt{N} carries 38
 significant digits and a double carries 15.
 
 Its held set is \texttt{Stored}, and not §1's \texttt{Numerals}, because those are \textbf{different sets}. \texttt{Numerals}
@@ -478,14 +478,14 @@ while the held set is numeric, so \rulelink{cond:R}{\texttt{(R)}} obliges the re
 \subsection{Containers}\label{containers}}
 
 \rulelink{rule:set}{\texttt{(set)}}'s premise line is \textbf{an index}, not a hypothesis: the element's
-member is read off the base rather than tested, so \texttt{SetBase} is the four bases that carry one,
+member is read off the base rather than tested, so the four bases the rule admits are exactly those that carry one,
 \texttt{b.held} and \texttt{b.member} are functions of the index, and an element that names no member is a
 type error. \textbf{Four bases onto three wire
-members}: \texttt{number} and \texttt{decimal} both store \texttt{NS} and are not the same base, one being the caller's
-platform number and the other the host-independent spelling.
+members}: \texttt{number} and \texttt{decimal} both store \texttt{NS} and are not the same base: one holds
+machine doubles, the other the numeral text.
 
 What a base rather than a term costs: \texttt{set(refine(b,\ q))} and \texttt{set(literal(…))} are \textbf{not} lost — a
-restriction of the elements is a restriction of the set, which is \texttt{setCodec\_restrict} — but
+restriction of the elements is a restriction of the set — but
 \texttt{set(held(…))} and \texttt{set(legacy(…))} are, having no set-level spelling and no appearance in any
 schema.
 
@@ -646,7 +646,7 @@ Demanding \rulelink{cond:R}{\textbf{(R)}} alone would under-demand, deriving a \
 exact term §2's argument for \texttt{opaque} says cannot exist. (\rulelink{cond:W}{\textbf{(W)}} is vacuous at \texttt{⊤}, so the three
 named are the whole obligation.)
 
-\texttt{opaque} is the custom-class term the calculus ships, and it is primitive only in presentation: it
+\texttt{opaque} is the calculus's custom-class term, and it is primitive only in presentation: it
 unfolds to the \textbf{union of everything self-identifying, closed under the containers} — a fixpoint of shape
 \texttt{union(string,\ boolean,\ binary,\ ⟨NULL⟩,\ number?,\ set(opaque),\ array(opaque),\ record(opaque))} —
 whose \rulelink{cond:U}{\textbf{(U)}} holds because the options' kinds and members are pairwise disjoint. \texttt{Uν} is \emph{defined}
@@ -871,7 +871,7 @@ acts through the option that answers alone:
 Resolving one side alone resolves the other, the same option. Asked where the union \emph{acts}: at
 each value it writes, and each attribute it reads. Ambiguity is a failure, never a rank. The letter
 names the strong form, over every canonical pair of every option, and the laws consume the
-restriction to the inputs the union itself resolves; the model carries both, and the scope
+restriction to the inputs the union itself resolves; both forms stand, and the scope
 paragraph below is the difference.
 \end{definition}
 
@@ -949,14 +949,13 @@ still guards each value the option is actually given.
 \subsection{A weaker condition, and what it costs}\label{a-weaker-condition-proved-and-not-adopted}}
 
 The reading above rejects \texttt{∣\{i\ :\ cᵢ\ admits\ it\}∣\ =\ 1} as too strong and settles for \emph{undefined at the
-overlap}. There is a third position between them, and it is worth recording because the model now
-proves what it costs and what it buys.
+overlap}. There is a third position between them.
 
 \textbf{Confluent admission.} Where several options admit, require only that they \textbf{agree} — and then
 act. Stated as \emph{first-match plus an obligation}, which is what makes it usable: the rule takes the
 first admitter and never compares attributes, while the obligation says the choice did not matter.
-So declaration order enters the definition and leaves again as a theorem. \texttt{selectF} and
-\texttt{ConfluentAt} (\texttt{Continuity.lean}) are the two halves.
+So declaration order enters the definition and leaves again as a theorem: the first-match rule is
+one half, the agreement obligation the other.
 
 It is strictly weaker than \rulelink{cond:U}{\textbf{(U)}}, so strictly more total, and the case it gains is the one this
 section already named as the price: \texttt{union(array(literal("A")),\ array(literal("B")))} writes \texttt{{[}{]}},
@@ -969,34 +968,46 @@ hypotheses. Under confluence it holds \emph{given the obligation}, and a specifi
 rests on a premise is weaker as a specification, whatever it gains in totality. That trade is the
 reason this is recorded here and not adopted.
 
-And it changes what the fixpoint argument says. The non-continuity result
-(\texttt{Continuity.lean}, and commit \texttt{7ed4e5e}) — \emph{"a union whose options are genuinely
-recursive has no fixpoint semantics"} — is a refutation of \textbf{counting}, not of \texttt{union}:
+And it changes what the fixpoint argument says. That a union whose options are genuinely recursive
+has no fixpoint semantics is a refutation of \textbf{counting}, not of \texttt{union}:
 
-\begin{itemize}
-\tightlist
-\item
-  \texttt{confluent\_survives\_the\_refutation} — the recorded witness has both options writing \texttt{⟨S,"A"⟩}, so
-  the weaker rule still resolves where counting collapses to \texttt{none};
-\item
-  \texttt{selectF\_mono} — monotone given the obligation, which counting provably lacks;
-\item
-  \texttt{selectF\_continuous\_list} — continuous, and in general this needs the obligation \textbf{at each
-  stage} too. (\texttt{selectF\_continuous}, the two-option case, escapes it by putting the growing option
-  first, which makes it automatically the first admitter.) Counting's continuity \emph{is}
-  unconditional — its singleton requirement at the limit forces uniqueness at every earlier stage —
-  and counting cannot be monotone at all. So one requirement, the obligation holding at every
-  stage, buys both; what unique admission cannot buy at any price is monotonicity, being a
-  \emph{negative} condition on the other options.
-\end{itemize}
+\begin{theorem}[confluent admission survives the refutation]
+\label{thm:confluent-survives}
+\uses{cond:U}
+\lean{Calculus.confluent_survives_the_refutation}
+\leanok
+In the witness both options write \texttt{⟨S,"A"⟩}, so the weaker rule still resolves where counting
+collapses to \texttt{none}.
+\end{theorem}
 
-Two things that are \textbf{not} established, and the second is why \texttt{lazy} under \texttt{union} stays
-unmodelled. A fixpoint is not shown to exist — monotonicity and continuity are its obligations, not
+\begin{theorem}[confluent admission is monotone]
+\label{thm:confluent-mono}
+\uses{cond:U}
+\lean{Calculus.selectF_mono}
+\leanok
+Monotone given the obligation, which counting provably lacks.
+\end{theorem}
+
+\begin{theorem}[confluent admission is continuous]
+\label{thm:confluent-continuous}
+\uses{cond:U}
+\lean{Calculus.selectF_continuous_list, Calculus.selectF_continuous}
+\leanok
+Continuous, and in general this needs the obligation \textbf{at each stage} too. The two-option case
+escapes it by putting the growing option first, which makes it automatically the first admitter.
+\end{theorem}
+
+Counting's continuity \emph{is} unconditional — its singleton requirement at the limit forces
+uniqueness at every earlier stage — and counting cannot be monotone at all. So one requirement, the
+obligation holding at every stage, buys both; what unique admission cannot buy at any price is
+monotonicity, being a \emph{negative} condition on the other options.
+
+Two things that are \textbf{not} established, and the second is why \texttt{lazy} under \texttt{union} is
+outside the theorem. A fixpoint is not shown to exist — monotonicity and continuity are its obligations, not
 its construction, and both theorems are the two-option case. And the obligation must hold at every
-stage of an unrolling, which is not automatic: \texttt{string\_decimal\_not\_confluent} is two \emph{ground} terms
-that both take \texttt{.str\ "1.5"} and store it differently. Where the options are pairwise disjoint it is
-vacuous, so a syntactic disjointness test — \texttt{Orth1} and \texttt{OrthM}, \texttt{Orthogonality.lean} — is what would
-license it.
+stage of an unrolling, which is not automatic: two \emph{ground} terms both take \texttt{.str\ "1.5"}
+and store it differently. Where the options are pairwise disjoint it is
+vacuous, so a syntactic disjointness test on the options is what would license it.
 
 \textbf{Normatively, the rule is unique admission as stated above.} This subsection records a proved
 alternative and the trade, not a change to the judgement.
@@ -1138,7 +1149,6 @@ admissible set, and pairwise disjointness is exactly the condition (U) needs.
 What required it is what a discriminated union \emph{is}. It is a \textbf{lookup}: the stored tag chooses
 the variant. A variant answering to two tags is a key that does not identify its variant, and a
 reader who has the tag still cannot say which shape they hold without consulting the table twice.
-JH's call, in his words — \emph{"go with the middle, arity one at the discriminator only"}.
 
 \begin{definition}[(D) incomparable held sets]
 \label{cond:D}
@@ -1162,8 +1172,7 @@ a rule. Everything in the discharger table is a discharger, and the asymmetry is
 oversight: \rulelink{cond:D}{\textbf{(D)}} is a condition on the judgement's own index, so the rule can demand it, while
 a discharger answers a question about inputs that the rule states as \rulelink{cond:U}{\textbf{(U)}} and settles where it
 can.
-A union no discharger covers is still a term — \texttt{union(array(literal("A")),\ array(literal("B")))}
-and its \texttt{record} twin are ones people write — and what such a union lacks is not derivability but
+A union no discharger covers is still a term, and what such a union lacks is not derivability but
 the theorem: its \rulelink{cond:U}{\textbf{(U)}} is unsettled at the declaration, and the semantics enforces it per input by
 failing. Note where the failing lands, and that it is a fact about the two terms rather than a limit
 of any table: a container admits its empty case whatever its element admits, so the options collide
@@ -1235,7 +1244,7 @@ side. Note that the member disjunct is no help in either case: both options are 
 Two notes on what has no set of its own. \texttt{optional} and \texttt{fallback} are \textbf{fields} (§4), not terms,
 so nothing passes through them: admission is a function on terms and has no case to give them. And a
 union's own admission is not the join of its options' — it is the set where \textbf{exactly one} option
-admits, which is \texttt{select}, the union's own resolution, written as a set. Where two options both admit, the union writes nothing,
+admits, which is the union's own resolution, written as a set. Where two options both admit, the union writes nothing,
 which is the empty array above stated the other way round.
 
 \rulelink{cond:D}{\textbf{(D)}} as written is \emph{incomparability}, not disjointness. Two object options \texttt{⟨a\ :\ String⟩} and
@@ -1382,8 +1391,7 @@ that input. The laws quantify over \texttt{dom} and hold over an empty one.
 fixpoint must grow: as the recursive options grow, admission grows, and the answer collapses from
 \texttt{some} to \texttt{none}. There is no least fixpoint, so there is no pair here to prove the laws of — not a
 pair with an empty domain, which is what the wrapper case has, but no semantics at all. That is the
-same exclusion §5 records under confluent admission when it says \texttt{lazy} under \texttt{union} is
-unmodelled, and it is a residue of this theorem.
+same exclusion §5 records under confluent admission, and it is a residue of this theorem.
 
 Partiality is doing the termination argument's work in the second case, which is why it has to be
 its own step.
@@ -1570,8 +1578,8 @@ null, so there is nothing for a second \texttt{𝟙} to be.
 \lean{Calculus.through_μ, Calculus.restrict_μ, Calculus.extendRead_μ, Calculus.optional_μ, Calculus.fallback_μ, Calculus.denote_held_μ, Calculus.denote_refine_μ, Calculus.denote_legacy_μ}
 \leanok
 \texttt{μ(w(c))\ =\ μ(c)} for \texttt{w\ ∈\ \{held,\ refine,\ legacy,\ optional,\ fallback\}}. Wrappers
-preserve the member: a field's member is its attribute's (§4). What keeps a key's attribute type
-stable under refactoring.
+preserve the member: a field's member is its attribute's (§4). So wrapping a term never changes
+the member a key stores.
 \end{theorem}
 
 \hypertarget{do-not-hold}{%
