@@ -44,7 +44,7 @@ Member & \texttt{Carries(m)} & \\
 \bottomrule
 \end{tabular}
 
-\texttt{Numerals} admits an exponent — DynamoDB states its own range as \texttt{1E-130} to \texttt{9.9999…E+125}, so
+\texttt{Numerals} admits an exponent — DynamoDB states its own range \cite{dynamodb-types} as \texttt{1E-130} to \texttt{9.9999…E+125}, so
 \texttt{"1e+21"} is a well-formed \texttt{N} and not a defect. The bound that bites is \emph{magnitude}, not notation.
 
 Note where \texttt{℘} appears and where it does not. \texttt{SS} is a \emph{set} and \texttt{L} is a \emph{sequence}; nothing in the
@@ -204,7 +204,8 @@ So \texttt{e\ ∘\ p\ =\ id} being false is not a defect of the pair, and not a 
 first extension, seen from outside: on \texttt{Can(c)} the equation \emph{does} hold, and off it the canonizer
 maps each class to its representative. The literature has a name for each — quotient lenses \cite{quotient-lenses} for
 the first, partial isomorphisms \cite{invertible-syntax} for the second — and this calculus needs both, which is why
-neither reference alone is the right one.
+neither reference alone is the right one. The quotient reading refines the asymmetric lens of
+\cite{tree-transformations}, and \cite{lens-laws} is where the variants are told apart.
 
 The same two relaxations reappear one level up, in the terms rather than in the pair: §3's \texttt{held} is
 an iso and \texttt{refine} its prism, and §6's \texttt{legacy(c,\ r)\ ≈\ c} on \texttt{Can(c)} is the quotient again at the
@@ -1114,9 +1115,16 @@ options differing only in optional names the ambiguity to watch: two objects dec
 names both admit the empty map, however disjoint their names. \rulelink{rule:dunion}{\texttt{(dunion)}}'s disjoint-literal premise
 below is the special case where the discriminator's names decide alone.
 
-\textbf{Occupancy is what decides at the declaration.} It is one coarse label per term per side: which
-constructor of \texttt{Value} the term may write, and which member of §1 it may store. Both
-over-approximate, and over-approximating is the safe direction — if \texttt{X\ ⊆\ X′}, \texttt{Y\ ⊆\ Y′} and
+\begin{definition}[occupancy]
+\label{def:occupancy}
+\uses{cond:U}
+\lean{Calculus.occV, Calculus.occA}
+\leanok
+One coarse label per term per side: which constructor of \texttt{Value} the term may write, and
+which member of §1 it may store. Occupancy is what decides at the declaration.
+\end{definition}
+
+Both over-approximate, and over-approximating is the safe direction — if \texttt{X\ ⊆\ X′}, \texttt{Y\ ⊆\ Y′} and
 \texttt{X′\ ∩\ Y′\ =\ ∅} then \texttt{X\ ∩\ Y\ =\ ∅} — so a coarse answer costs a discharge and never buys a wrong one.
 Where a term carries an arbitrary function the answer is \texttt{⊤}, every label: \texttt{held}'s \texttt{f} runs before
 the subterm and can move a value into any constructor, \texttt{custom} is arbitrary in both directions, and
@@ -1134,8 +1142,16 @@ index already computes.
 per input. The difference resurfaces only inside \texttt{opaque}'s own derivation, where "everything" is
 precisely what makes its fixpoint's options pairwise kind-disjoint (§3).
 
-\textbf{The two, conjoined, are the family.} An option's set of values is its occupancy intersected with
-its option admission, and its set of attributes likewise. Disjointness in either factor is enough,
+\begin{definition}[the family, conjoined]
+\label{def:family}
+\uses{def:occupancy,cond:U}
+\lean{Calculus.OrthSV, Calculus.OrthSA}
+\leanok
+An option's set of values is its occupancy intersected with
+its option admission, and its set of attributes likewise.
+\end{definition}
+
+Disjointness in either factor is enough,
 which is what leaves the row decidable where it decides at all: \textbf{on one side, two options separate
 when their occupancies on that side are disjoint. On both sides at once, they separate when one
 option requires a name the other does not declare.} That is a question about two terms, answered by computation at
@@ -1245,14 +1261,19 @@ condition on values cannot decide a question about attributes.
 
 \subsection{Soundness of the judgement}\label{theorem-soundness}
 
-\textbf{Member agreement, recursively.} §2 states \rulelink{cond:MP}{\textbf{(MP)}} per attribute "and recursively"; the proof
+\begin{definition}[≼, member agreement]
+\label{def:agree}
+\uses{cond:MP}
+\lean{Calculus.Agree}
+\leanok
+§2 states \rulelink{cond:MP}{\textbf{(MP)}} per attribute "and recursively"; the proof
 needs that as a relation. Define \texttt{a\ ≼\ a′} by recursion on \texttt{a}:
-
 \begin{verbatim}
 a ≼ a′  ⟺  member(a) = member(a′)
            ∧  member(a) = L ⟹ pointwise ≼ on shared positions
            ∧  member(a) = M ⟹ pointwise ≼ on shared names
 \end{verbatim}
+\end{definition}
 
 Set members compare no deeper — an \texttt{SS} carries payloads, not attributes, so there is no member
 inside one to disagree on. Shared names, because a reading may drop what a writing then omits: the
@@ -1281,17 +1302,40 @@ each names a term the calculus would otherwise derive and the laws refuse. Null-
 of lawfulness, which is available there and not for the other three, since those constrain
 functions the caller supplies.
 
-\textbf{Lemma (injectivity).}\label{lem:injectivity} \rulelink{cond:R}{\textbf{(R)}} makes \texttt{e} injective on \texttt{dom(e)}: if \texttt{e(t)\ =\ e(t′)} then
-\texttt{t\ =\ p(e(t))\ =\ p(e(t′))\ =\ t′}. ∎
+\begin{lemma}[injectivity]
+\label{lem:injectivity}
+\uses{cond:R}
+\lean{Calculus.Lawful.e_injective}
+\leanok
+\rulelink{cond:R}{\textbf{(R)}} makes \texttt{e} injective on \texttt{dom(e)}.
+\end{lemma}
 
-\textbf{Lemma (traversal).}\label{lem:traversal} One proof shape serves every product. Let a \emph{step} be an entrywise pair
+\begin{proof}
+\uses{cond:R}
+\leanok
+If \texttt{e(t)\ =\ e(t′)} then \texttt{t\ =\ p(e(t))\ =\ p(e(t′))\ =\ t′}.
+\end{proof}
+
+\begin{lemma}[traversal]
+\label{lem:traversal}
+\uses{cond:R,cond:C}
+\lean{Calculus.entrywise, Calculus.lawfulCore_entrywise, Calculus.lawful_entrywise, Calculus.carrier_entrywise}
+\leanok
+One proof shape serves every product. Let a \emph{step} be an entrywise pair
 between the entries of two lists, and lift it entrywise — defined where every entry is, positions
-preserved. If the step satisfies a law pointwise, the lift satisfies it listwise: \rulelink{cond:R}{\textbf{(R)}} because
+preserved. If the step satisfies a law pointwise, the lift satisfies it listwise.
+\end{lemma}
+
+\begin{proof}
+\uses{cond:R,cond:C}
+\leanok
+\rulelink{cond:R}{\textbf{(R)}} because
 positions re-read in place, \rulelink{cond:C}{\textbf{(C)}} because each entry re-encodes, \texttt{≼} because a shared position
 decodes and re-encodes through the same step, and lengths survive both directions. Keyed products need
 no extra clause: \texttt{M} is a name set with a function on it, so keys are unique by type and \texttt{≼}'s \texttt{M}
 clause compares at a shared key with no first occurrence to prefer. Proved once; every product case
-below is an instantiation. ∎
+below is an instantiation.
+\end{proof}
 
 \begin{proof}
 \uses{rule:string,rule:boolean,rule:binary,rule:null,rule:decimal,rule:number,rule:literal,rule:held,rule:refine,rule:legacy,rule:nullable,rule:custom,rule:lazy,rule:field,rule:optional,rule:fallback,rule:array,rule:tuple,rule:tuple-tail,rule:record,rule:object,rule:set,rule:union,rule:dunion,rule:opaque}
