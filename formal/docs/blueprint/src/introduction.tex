@@ -1,0 +1,23 @@
+\section*{Introduction}
+
+A key-value store holds items under names, and every value in every item is drawn from one shared
+domain of attributes rather than from a type of its own. A schema names types, so a type is a
+subset of that one domain, and the code that moves values into it and back out is a retract of it.
+
+Three questions about such code are separate, and conflating them is what makes a side condition
+look optional: which terms can be written, which terms are well formed, and what a term means. A
+grammar answers the first; the judgement of §3 to §5 answers the second, because a side condition
+relates siblings rather than a term to its subterms; and §2's pair and its laws answer the third.
+
+Soundness proves that every derivable term denotes a pair satisfying the four laws, with three
+residues named exactly, and §6's second half refutes the equations a reader would expect to hold,
+each with a witness.
+
+The sections take it in turn. §1 fixes the attribute domain, in which every value a store holds is
+drawn from one shared set. §2 says what a codec is: a partial retraction of that domain onto a set
+of values, together with the equivalence its own reading induces. §3 gives the judgement two
+indices, because a codec has two sides, the values it holds and the member it stores them in. §4
+adds a second judgement for fields, where presence is a property of a name binding and never of an
+attribute. §5 states the rules a grammar cannot state, because they relate siblings rather than a
+term to its subterms. §6 settles which rewrites preserve the pair. §7 separates the three layers,
+and closes on what the calculus leaves to the caller.

@@ -102,6 +102,7 @@ holds.
 import re, sys, os, glob, fnmatch
 
 CURRENT = ["README.md", "docs/blueprint/src/content.tex", "docs/blueprint/src/abstract.tex",
+           "docs/blueprint/src/introduction.tex",
            "../docs/architecture.md", "../docs/roadmap.md", "../docs/defects.md"]
 # **The docstrings, which this guard never read.** Every module here is dense with backticked
 # names and none of them was checked — 763 distinct citations, invisible. Demonstrated rather
