@@ -1,5 +1,13 @@
 \begin{abstract}
-What a codec \emph{is}, stated without reference to any implementation of one: a quotient
-embedding-projection pair \cite{ep-pairs} into the attribute domain, a typing judgement with two indices, and the
-equations between terms.
+A store holds every type in one attribute domain, so a schema is a retract of it, and the
+round-trip law a retract would satisfy on the nose is false: stored digits normalise, and a schema
+discards names it does not declare. A codec is what survives that: a partial retraction of the
+domain onto a set of values, taken modulo the equivalence its own reading induces, which is the
+quotient embedding-projection pair \cite{ep-pairs} of the lens literature. Four laws fix what such
+a pair owes, a judgement with two indices derives the terms, soundness proves every derivable term
+satisfies the laws with three residues named exactly, and an equational theory settles which
+rewrites preserve the pair. What the calculus does not settle is the premise on a function that is
+not itself a codec, which belongs to the caller, and how much of the structure an implementation
+carries in its own types. Every statement here links the declaration that proves it in a Lean
+development of the same calculus.
 \end{abstract}
