@@ -130,7 +130,7 @@ migration rereads, and on no others. Nothing is exempt from the other three.
 
 Only \textbf{(R)} is an equality on the nose. Taken as one, \texttt{e\ ∘\ p\ =\ id} is \emph{false} and must be: digits have
 a normal form, so writing back what was read is free to normalise it, and a schema may discard names
-it does not declare. In the language of quotient lenses {[}1{]} \texttt{e\ ∘\ p} is a
+it does not declare. In the language of quotient lenses \cite{quotient-lenses} \texttt{e\ ∘\ p} is a
 \textbf{canonizer} — total on \texttt{dom(p)} by \textbf{(C)} — and the equivalence it works modulo is not a parameter
 a programmer chooses: it is \texttt{ker\ p}, forced by the reading itself. Write \texttt{a\ ≈c\ a′\ ⟺\ p(a)\ =\ p(a′)}.
 
@@ -218,8 +218,8 @@ it can be extended:
 
 So \texttt{e\ ∘\ p\ =\ id} being false is not a defect of the pair, and not a weakening of the iso. It is the
 first extension, seen from outside: on \texttt{Can(c)} the equation \emph{does} hold, and off it the canonizer
-maps each class to its representative. The literature has a name for each — quotient lenses {[}1{]} for
-the first, partial isomorphisms {[}2{]} for the second — and this calculus needs both, which is why
+maps each class to its representative. The literature has a name for each — quotient lenses \cite{quotient-lenses} for
+the first, partial isomorphisms \cite{invertible-syntax} for the second — and this calculus needs both, which is why
 neither reference alone is the right one.
 
 The same two relaxations reappear one level up, in the terms rather than in the pair: §3's \texttt{held} is
@@ -666,7 +666,7 @@ is guessed, because there is nothing present to guess with. Under \texttt{lossy}
 fit a double.
 
 \texttt{held} and \texttt{refine} are the same shape at different strengths: an \textbf{iso} and a \textbf{prism}. The
-literature collapses them — invertible syntax descriptions {[}2{]} builds everything from an algebra of
+literature collapses them — invertible syntax descriptions \cite{invertible-syntax} builds everything from an algebra of
 partial isomorphisms, which is exactly the merged combinator.
 
 They really are one term, and it is worth being exact about the sense. Write the merged combinator
@@ -1734,44 +1734,48 @@ be symmetric about.
 So the asymmetry in this calculus is not a property of encoding-versus-decoding. It is the mark of
 where a caller's function enters, and it stays local to the four terms that admit one.
 That is the divisible /
-decidable {[}4{]} skeleton, read invariantly because both directions are present at once.
+decidable \cite{divisible-decidable} skeleton, read invariantly because both directions are present at once.
 
 \begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
 
 \hypertarget{sources}{%
 \subsection{Sources}\label{sources}}
 
-\begin{enumerate}
-\def\labelenumi{\arabic{enumi}.}
-\tightlist
-\item
+\begin{thebibliography}{9}
+\bibitem{quotient-lenses}
   \textbf{Quotient Lenses.} J. Nathan Foster, Alexandre Pilkiewicz, Benjamin C. Pierce. ICFP 2008. —
   bidirectional transformations well behaved modulo a programmer-controlled equivalence, and
   canonizers.
   \url{https://www.cs.cornell.edu/~jnfoster/papers/quotient-lenses.pdf}
-\item
+
+\bibitem{invertible-syntax}
   \textbf{Invertible Syntax Descriptions: Unifying Parsing and Pretty Printing.} Tillmann Rendel, Klaus
   Ostermann. Haskell Symposium 2010. — one description, both directions, over an algebra of partial
   isomorphisms.
   \url{https://www.semanticscholar.org/paper/Invertible-syntax-descriptions:-unifying-parsing-Rendel-Ostermann/44c0cf69d73e4a0673dd04b7da477f7a74f0b735}
-\item
+
+\bibitem{ep-pairs}
   \textbf{Embedding-projection pairs.} Retracts of a universal domain, after Scott (1972); standard in
   denotational semantics and in the semantics of gradual types.
   \url{https://www.pls-lab.org/en/Embedding_projection_pair}
-\item
+
+\bibitem{divisible-decidable}
   \textbf{Divisible and Decidable.} The contravariant analogues of Applicative and Alternative — products
   and sums on the writing side.
   \url{https://hackage.haskell.org/package/contravariant-1.5.5/docs/Data-Functor-Contravariant-Divisible.html}
-\item
+
+\bibitem{tree-transformations}
   \textbf{Combinators for Bidirectional Tree Transformations: A Linguistic Approach to the View-Update
   Problem.} Foster, Greenwald, Moore, Pierce, Schmitt. TOPLAS 29(3), 2007. — the GetPut / PutGet
   laws, and the asymmetric lens the quotient version refines.
   \url{https://dl.acm.org/doi/10.1145/1232420.1232424}
-\item
+
+\bibitem{lens-laws}
   \textbf{A Tangled Web of 12 Lens Laws.} A taxonomy of the variants, where the distinctions matter.
   \url{https://link.springer.com/chapter/10.1007/978-3-030-79837-6_11}
-\item
+
+\bibitem{dynamodb-types}
   \textbf{Supported data types and naming rules in Amazon DynamoDB.} The \texttt{N} range, stated in exponent
   notation.
   \url{https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.NamingRulesDataTypes.html}
-\end{enumerate}
+\end{thebibliography}
