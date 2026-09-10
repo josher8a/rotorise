@@ -1,6 +1,3 @@
-\hypertarget{rotorise-codec-calculus}{%
-\section{Rotorise Codec Calculus}\label{rotorise-codec-calculus}}
-
 What a codec \emph{is}, stated without reference to any implementation of one: a quotient
 embedding-projection pair into the attribute domain, a typing judgement with two indices, and the
 equations between terms.
@@ -21,7 +18,7 @@ one.
 \begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
 
 \hypertarget{1-the-attribute-domain}{%
-\subsection{§1 The attribute domain}\label{1-the-attribute-domain}}
+\section{§1 The attribute domain}\label{1-the-attribute-domain}}
 
 Everything a table holds lives in one set. Types are read as retracts of it, which is the device
 this whole specification rests on.
@@ -65,7 +62,7 @@ domain identifies them. Every claim later about telling a set from an array trac
 \begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
 
 \hypertarget{2-what-a-codec-is}{%
-\subsection{§2 What a codec is}\label{2-what-a-codec-is}}
+\section{§2 What a codec is}\label{2-what-a-codec-is}}
 
 A partial retraction of the attribute domain onto a set of values, together with the equivalence its
 own reading induces.
@@ -80,7 +77,7 @@ c = (T, μ, e, p)      T ⊆ Value     μ ∈ Member ∪ {⊤}
 undetermined is settled in §3.
 
 \hypertarget{laws}{%
-\subsubsection{Laws}\label{laws}}
+\subsection{Laws}\label{laws}}
 
 \begin{definition}[(R) retraction]
 \label{cond:R}
@@ -135,7 +132,7 @@ it does not declare. In the language of quotient lenses \cite{quotient-lenses} \
 a programmer chooses: it is \texttt{ker\ p}, forced by the reading itself. Write \texttt{a\ ≈c\ a′\ ⟺\ p(a)\ =\ p(a′)}.
 
 \hypertarget{corollary-q--stability}{%
-\subsubsection{Corollary (Q — stability)}\label{corollary-q--stability}}
+\subsection{Corollary (Q — stability)}\label{corollary-q--stability}}
 
 \begin{corollary}[Q — stability]
 \label{cor:Q}
@@ -156,7 +153,7 @@ produced, \textbf{(Q)} at values a table returned. Both are worth checking, beca
 \textbf{(R)} is exactly \textbf{(C)} — and that containment is the thing most likely to be untrue.
 
 \hypertarget{corollary-read-side-w}{%
-\subsubsection{Corollary (read-side W)}\label{corollary-read-side-w}}
+\subsection{Corollary (read-side W)}\label{corollary-read-side-w}}
 
 \begin{corollary}[read-side W]
 \label{cor:readW}
@@ -193,7 +190,7 @@ codec is total on \texttt{Can(c)} and merely partial on \texttt{𝔸}, which is 
 more permissive than the schema describing it.
 
 \hypertarget{what-a-codec-ideally-is}{%
-\subsubsection{What a codec ideally is}\label{what-a-codec-ideally-is}}
+\subsection{What a codec ideally is}\label{what-a-codec-ideally-is}}
 
 Those pieces assemble into something simpler than the four laws suggest, and it is worth stating
 because it says where the complexity actually lives.
@@ -228,7 +225,7 @@ term level. That is not a coincidence but it is not a theorem either — the alg
 codecs relaxes an iso in the two ways a codec itself does.
 
 \hypertarget{when-the-deviations-vanish}{%
-\subsubsection{When the deviations vanish}\label{when-the-deviations-vanish}}
+\subsection{When the deviations vanish}\label{when-the-deviations-vanish}}
 
 Both extensions can be driven to zero, and asking what it takes is the cleanest way to see what
 each one is really for. They do not have the same answer, and in this calculus they cannot be
@@ -273,7 +270,7 @@ collapse is available by declaring the discriminator.
 \begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
 
 \hypertarget{3-the-judgement}{%
-\subsection{§3 The judgement}\label{3-the-judgement}}
+\section{§3 The judgement}\label{3-the-judgement}}
 
 Two indices, because a codec has two sides: the values it holds, and the member it stores them in.
 Both are needed, and neither determines the other.
@@ -283,7 +280,7 @@ Both are needed, and neither determines the other.
 \end{verbatim}
 
 \hypertarget{ground-terms}{%
-\subsubsection{Ground terms}\label{ground-terms}}
+\subsection{Ground terms}\label{ground-terms}}
 
 \begin{definition}[(string)]
 \label{rule:string}
@@ -418,7 +415,7 @@ fixed points of \texttt{η}, which is what \texttt{Stored} is. \texttt{η} is ob
 behaviour, and the calculus can only be arranged around it.
 
 \hypertarget{a-ground-term-either-takes-its-member-whole-or-it-is-a-refinement}{%
-\subsubsection{A ground term either takes its member whole, or it is a refinement}\label{a-ground-term-either-takes-its-member-whole-or-it-is-a-refinement}}
+\subsection{A ground term either takes its member whole, or it is a refinement}\label{a-ground-term-either-takes-its-member-whole-or-it-is-a-refinement}}
 
 Read the ground terms together and they fall into two kinds, with nothing in between. \texttt{string},
 \texttt{boolean}, \texttt{binary} and \texttt{null} take their member's carrier \textbf{whole} — every string is a \texttt{String},
@@ -482,7 +479,7 @@ stored member is \texttt{N}, checked in both directions — and note that \textt
 while the held set is numeric, so \texttt{(R)} obliges the reading to return the number and not its text.
 
 \hypertarget{containers}{%
-\subsubsection{Containers}\label{containers}}
+\subsection{Containers}\label{containers}}
 
 \texttt{(set)}'s premise line is \textbf{an index}, not a hypothesis. It read \texttt{⊢\ c\ :\ T\ ⇝\ μ} together with
 \texttt{μ\ ∈\ \{S,\ N,\ B\}}, and that second premise was the whole content: the member test was partial, so the
@@ -565,7 +562,7 @@ rule refuses it rather than a runtime check discovering it. Nothing else in the 
 subterm's member this way.
 
 \hypertarget{wrappers}{%
-\subsubsection{Wrappers}\label{wrappers}}
+\subsection{Wrappers}\label{wrappers}}
 
 \begin{definition}[(held)]
 \label{rule:held}
@@ -759,7 +756,7 @@ refusal (§5), so \texttt{union(c,\ null)} is derivable there and carries \textb
 \begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
 
 \hypertarget{4-fields-are-not-codecs}{%
-\subsection{§4 Fields are not codecs}\label{4-fields-are-not-codecs}}
+\section{§4 Fields are not codecs}\label{4-fields-are-not-codecs}}
 
 A second judgement, and the stratification is the point: presence is a property of a name binding,
 never of an attribute.
@@ -838,7 +835,7 @@ of §2 again — an item is \texttt{≈c} itself minus its undeclared names — 
 no ordering to lose, one of only two places \texttt{ker\ p} is not equality. The other is \texttt{η}.
 
 \hypertarget{the-stratification-does-work}{%
-\subsubsection{The stratification does work}\label{the-stratification-does-work}}
+\subsection{The stratification does work}\label{the-stratification-does-work}}
 
 No rule derives \texttt{⊢\ optional(c)\ :\ T\ ⇝\ μ}. Presence lives in \texttt{⊗\ π} and nowhere else, so \texttt{optional} and
 \texttt{fallback} are fields and never attributes — which makes \texttt{array(optional(c))} \textbf{not derivable}, since
@@ -859,14 +856,14 @@ and then \emph{required} the value on the way back. Both spellings mean \texttt{
 \begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
 
 \hypertarget{5-choice-and-its-side-conditions}{%
-\subsection{§5 Choice, and its side conditions}\label{5-choice-and-its-side-conditions}}
+\section{§5 Choice, and its side conditions}\label{5-choice-and-its-side-conditions}}
 
 The rules a grammar cannot state, because they relate siblings rather than a term to its subterms —
 and, before them, the one semantic condition even the judgement cannot decide, which everything else
 in this section exists to approximate.
 
 \hypertarget{unique-admission}{%
-\subsubsection{Unique admission}\label{unique-admission}}
+\subsection{Unique admission}\label{unique-admission}}
 
 A union's pair is defined by \textbf{unique admission}. Each option answers, per input and per side,
 whether the input could be its — an attribute on the way out, a value on the way in — and the union
@@ -953,7 +950,7 @@ refusing — \textbf{(U)}
 still guards each value the option is actually given.
 
 \hypertarget{a-weaker-condition-proved-and-not-adopted}{%
-\subsubsection{A weaker condition, proved and not adopted}\label{a-weaker-condition-proved-and-not-adopted}}
+\subsection{A weaker condition, proved and not adopted}\label{a-weaker-condition-proved-and-not-adopted}}
 
 The reading above rejects \texttt{∣\{i\ :\ cᵢ\ admits\ it\}∣\ =\ 1} as too strong and settles for \emph{undefined at the
 overlap}. There is a third position between them, and it is worth recording because the model now
@@ -1009,7 +1006,7 @@ license it.
 alternative and the trade, not a change to the judgement.
 
 \hypertarget{the-machinery-of-admission}{%
-\subsubsection{The machinery of admission}\label{the-machinery-of-admission}}
+\subsection{The machinery of admission}\label{the-machinery-of-admission}}
 
 The admission row asks, of each option and each side, which inputs the option may be given: which values it may
 be asked to write, and which attributes it may be asked to read. Write \texttt{V(c)\ ⊆\ Value} and \texttt{A(c)\ ⊆\ 𝔸}
@@ -1297,7 +1294,7 @@ what the first two rows of the discharger table take. Attributes rather than val
 condition on values cannot decide a question about attributes.
 
 \hypertarget{theorem-soundness}{%
-\subsubsection{Theorem (soundness)}\label{theorem-soundness}}
+\subsection{Theorem (soundness)}\label{theorem-soundness}}
 
 \begin{theorem}[soundness]
 \label{thm:soundness}
@@ -1506,13 +1503,13 @@ both halves of \texttt{(number)}, and a numeric \texttt{literal}'s base \emph{is
 \begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
 
 \hypertarget{6-equations}{%
-\subsection{§6 Equations}\label{6-equations}}
+\section{§6 Equations}\label{6-equations}}
 
 Which rewrites preserve the pair. Read \texttt{≡} as: the same \texttt{T}, the same \texttt{μ}, and \texttt{e} and \texttt{p} agreeing
 everywhere both are defined.
 
 \hypertarget{hold}{%
-\subsubsection{Hold}\label{hold}}
+\subsection{Hold}\label{hold}}
 
 \begin{theorem}[held(c, id, id) ≡ c]
 \label{eq:held-id}
@@ -1614,7 +1611,7 @@ stable under refactoring.
 \end{theorem}
 
 \hypertarget{do-not-hold}{%
-\subsubsection{Do not hold}\label{do-not-hold}}
+\subsection{Do not hold}\label{do-not-hold}}
 
 \begin{theorem}[a union of arrays is not an array of unions]
 \label{eq:union-array}
@@ -1693,7 +1690,7 @@ Equation & \\
 \begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
 
 \hypertarget{7-the-three-layers-and-the-algebra}{%
-\subsection{§7 The three layers, and the algebra}\label{7-the-three-layers-and-the-algebra}}
+\section{§7 The three layers, and the algebra}\label{7-the-three-layers-and-the-algebra}}
 
 Three layers answer different questions, and conflating them is what makes a side condition look
 optional. A grammar over the terms — a regular tree grammar, with nonterminals indexed by \texttt{μ} — says
@@ -1739,7 +1736,7 @@ decidable \cite{divisible-decidable} skeleton, read invariantly because both dir
 \begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
 
 \hypertarget{sources}{%
-\subsection{Sources}\label{sources}}
+\section{Sources}\label{sources}}
 
 \begin{thebibliography}{9}
 \bibitem{quotient-lenses}

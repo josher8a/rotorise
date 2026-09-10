@@ -172,7 +172,7 @@ GENERATED = ("dist/",      # npm run build
              ".attest/")   # the attest snapshot run
 # and the five vector artifacts, cited by path or by their leading-dot basename (the vector emit)
 SPEC_DOC = "docs/blueprint/src/content.tex"
-SECTION_HEADING = re.compile(r"^\\subsection\{§(\d+)", re.M)
+SECTION_HEADING = re.compile(r"^\\section\{§(\d+)", re.M)
 # naming patterns and filenames, not citations
 # `.match_1`, `.eq_def`, `.proof_3`: **auto-generated names, real constants, never in source.**
 # `inL.match_1` is the matcher Lean derives for `inL`'s pattern match — §6 names it as the fan
