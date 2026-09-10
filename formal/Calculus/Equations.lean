@@ -463,20 +463,14 @@ theorem fallback_μ (t : Term) (v : Value) :
 
 /-! ## `union` is associative
 
-§6's last row, and the only conditional one in the table: "associative, where both sides
-satisfy (D) and a discharger — and only on inputs satisfying (U): an ambiguity *inside* the nested
-option fails locally on the left, where the outer union may still resolve, and globally on
-the right."
+§6's row, stated outright: "Associative. An ambiguity *inside* the nested option fails
+locally on the left and leaves the right side undefined, and `≡` compares `e` and `p` only
+where both are defined, so the two sides cannot disagree there."
 
-The behaviour is exactly as described. What the mechanization adds is that under §6's own
-`≡` the conditions are **not needed** — the row holds outright. The reason is the clause
-`≡` is defined with: `e` and `p` agree *where both are defined*. In precisely the case the
-hedge describes the right side is undefined, so the obligation is vacuous and the two sides
-cannot disagree.
-
-That cuts both ways, and both halves are on the record: the row is stronger than §6 claims,
-and `≡` is weaker than the hedge's prose suggests. `Refutations.not_eq_altCodec_assoc`
-exhibits the difference `≡` cannot see. -/
+A condition on this row would be vacuous under `≡`, which is why it carries none: the case a
+condition would exclude is the case the right side leaves undefined, and `≡` does not reach
+it. The two forms are still not interchangeable, and `Refutations.not_eq_altCodec_assoc`
+exhibits the difference `≡` cannot see: one writes where the other refuses. -/
 
 /-- The member index nests the same way it flattens. Both sides conclude the head member
     or `⊤`, so the content is entirely in whether the condition agrees. -/
