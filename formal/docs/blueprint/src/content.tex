@@ -538,7 +538,7 @@ schema.
 \begin{verbatim}
 ⊢ cᵢ : Tᵢ ⇝ μᵢ  (i ∈ 1…n)    ⊢ c : T ⇝ μ
 ───────────────────────────────────────────────────────── (tuple-tail)
-⊢ tuple(c₁ … cₙ, rest(c)) : T₁ × … × Tₙ × T* ⇝ L
+⊢ tuple(c₁ … cₙ, tail(c)) : T₁ × … × Tₙ × T* ⇝ L
 \end{verbatim}
 \end{definition}
 
@@ -553,10 +553,10 @@ schema.
 \end{verbatim}
 \end{definition}
 
-\texttt{rest} has no rule of its own, which is the point: it is not a term but a \emph{position marker}, like
-\texttt{optional} in §4. It appears only in the premise of \rulelink{rule:tuple-tail}{\texttt{(tuple-tail)}}, and once — so
-\texttt{tuple(rest(c),\ c′)} and \texttt{tuple(rest(c),\ rest(c′))} have no derivation, and neither does
-\texttt{array(rest(c))} nor a \texttt{rest} in any position §4 or §5 admits. A list is already every element; a map
+\texttt{tail} has no rule of its own, which is the point: it is not a term but a \emph{position marker}.
+It appears only in the premise of \rulelink{rule:tuple-tail}{\texttt{(tuple-tail)}}, and once — so
+\texttt{tuple(tail(c),\ c′)} and \texttt{tuple(tail(c),\ tail(c′))} have no derivation, and neither does
+\texttt{array(tail(c))} nor a \texttt{tail} in any position §4 or §5 admits. A list is already every element; a map
 has names and not positions.
 
 The premise on \texttt{set} is the whole reason \texttt{μ} has to be an index and not an afterthought. A set's
@@ -1650,7 +1650,7 @@ discharger for its \rulelink{cond:U}{\textbf{(U)}}.
 \uses{rule:tuple-tail,rule:tuple,rule:array}
 \lean{Calculus.not_equiv_tupleTail_tuple, Calculus.not_equiv_tupleTail_array}
 \leanok
-\texttt{tuple(c₁\ …\ cₙ,\ rest(c))\ ≢\ tuple(c₁\ …\ cₙ)\ } and \texttt{≢\ array(union(…))}. A fixed head
+\texttt{tuple(c₁\ …\ cₙ,\ tail(c))\ ≢\ tuple(c₁\ …\ cₙ)\ } and \texttt{≢\ array(union(…))}. A fixed head
 with a repeating tail is neither: a tuple has no tail and an array has no head.
 \end{theorem}
 
