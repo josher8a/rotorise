@@ -231,7 +231,7 @@ each one is really for. They do not have the same answer, and in this calculus t
 answered at once.
 
 \textbf{The quotient collapses} when \texttt{ker\ p} is equality — when no two distinct attributes read to one
-value. That fails for exactly two reasons, and one of them is about the medium:
+value. That fails for exactly three reasons, and one of them is about the medium:
 
 \begin{itemize}
 \tightlist
@@ -240,6 +240,10 @@ value. That fails for exactly two reasons, and one of them is about the medium:
   something it does not model.
 \item
   \textbf{\texttt{drop} discards undeclared names} (§4). This is a schema's own decision, taken deliberately.
+\item
+  \textbf{A set loses a payload} when two of its payloads read to one value (§5). This is the
+  container's own, and \rulelink{cond:R}{\textbf{(R)}} is untouched, because the canonical payloads are the ones the
+  codec wrote.
 \end{itemize}
 
 So a codec collapses the quotient by holding no set, reading no normalised numeral, and declaring
@@ -473,8 +477,8 @@ There is deliberately no derivation for a mixed set: a codec writes one member, 
 hold both a string and a double, so \texttt{literal(ℓ,\ k)} with \texttt{ℓ\ ∈\ String} and \texttt{k\ ∈\ D} has none. That is \rulelink{cond:W}{\textbf{(W)}} and not an omission, and it is not
 a limitation either — the spelling is \texttt{union(literal(ℓ),\ literal(k))}, whose options separate on
 both sides for free, by distinct members on the readable one and disjoint kinds on the writable.
-What the union concludes is \texttt{⊤}, which is the honest index for a term that writes two members. That is
-what makes this the term for an enum indexed by number — the held set is the literal union and the
+What the union concludes is \texttt{⊤}, which is the honest index for a term that writes two members. A union of
+literals all at the number base is what gives the term for an enum indexed by number — the held set is the literal union and the
 stored member is \texttt{N}, checked in both directions — and note that \texttt{⇝\ N} carries \texttt{Numerals} on the wire
 while the held set is numeric, so \rulelink{cond:R}{\texttt{(R)}} obliges the reading to return the number and not its text.
 
@@ -821,14 +825,16 @@ something whose judgement has a \texttt{⊗}.
 \end{definition}
 
 Here \texttt{n\ :\^{}opt\ T} is a binding the record may omit, \texttt{n\ :\^{}req\ T} one it may not, and \texttt{R(ρ)} is the open
-part, joined to the declared names by \texttt{⊕}, which adds bindings no declared name claims:
+part, joined to the declared names by \texttt{⊕}, which adds bindings no declared name claims: a
+declared name is always held by its own set, so \texttt{⊕} is total and there is no collision to resolve.
+The open part is
 \texttt{∅} for \texttt{drop} and \texttt{refuse}, and \texttt{Name\ ⇀fin\ T} for a rest codec holding \texttt{T}. \texttt{drop} and
 \texttt{refuse} differ only in what \texttt{p} does with an undeclared name — drop it, or fail — which is a
 difference in \texttt{dom(p)} and not in \texttt{T}. And \texttt{drop} is a \textbf{filter, never a traversal mode}: the
 discard is decided by the name alone, before anything is decoded, so it cannot depend on a value and
 the round trip through the declared names is untouched by what was discarded. That is the quotient
 of §2 again — an item is \texttt{≈c} itself minus its undeclared names — and, \texttt{SS}/\texttt{NS}/\texttt{BS} carrying
-no ordering to lose, one of only two places \texttt{ker\ p} is not equality. The other is \texttt{η}.
+no ordering to lose, one of only three places \texttt{ker\ p} is not equality. The others are \texttt{η} and a set.
 
 \subsection{The stratification does work}\label{the-stratification-does-work}
 
@@ -1113,7 +1119,8 @@ terms force the point:
 
 What exactness costs is decidability. \texttt{custom} carries a pair of partial functions, \texttt{held} an
 arbitrary \texttt{f}, \texttt{refine} an arbitrary \texttt{q}, so membership of an admissible set is not a question the
-declaration can answer. Admission \textbf{specifies} the two families. It does not decide them.
+declaration can answer. Admission \textbf{specifies} the two families. It does not decide them. What the
+discharger row runs is occupancy and option admission, and those are decided.
 
 \textbf{Admission is not what a union consults, and the object is where the two part.} A union admits an
 object option by its \textbf{names}: a name set \texttt{N} admits \texttt{object(s,\ ρ)} when every name in \texttt{N} is one
@@ -1316,7 +1323,8 @@ all named: \rulelink{cond:MP}{\textbf{(MP)}} is off on the attributes a \texttt{
 dischargers of this section settle at the declaration wherever they decide a pair, \rulelink{rule:dunion}{\texttt{(dunion)}} and
 \texttt{opaque} outright; and a \rulelink{rule:lazy}{\texttt{(lazy)}} whose unfolding re-enters itself \textbf{through a union} is outside
 the theorem entirely, for the reason §5 gives under confluent admission and the \rulelink{rule:lazy}{\texttt{(lazy)}} case
-below repeats: there is no fixpoint there to prove anything about.
+below repeats: there is no fixpoint there to prove anything about. Such a union is still derivable.
+What it lacks is the theorem, not a rule.
 \end{theorem}
 
 Three premises in §3–§4 — \texttt{ran(r)\ ⊆\ dom(e)} and coherence on \rulelink{rule:legacy}{\texttt{(legacy)}}, \texttt{v(∗)\ ∈\ dom(e)} on
@@ -1745,7 +1753,8 @@ be symmetric about.
 So the asymmetry in this calculus is not a property of encoding-versus-decoding. It is the mark of
 where a caller's function enters, and it stays local to the four terms that admit one.
 That is the divisible /
-decidable \cite{divisible-decidable} skeleton, read invariantly because both directions are present at once.
+decidable \cite{divisible-decidable} skeleton, read invariantly — as Invariant rather than as a
+contravariant functor — because both directions are present at once.
 
 The judgement settles the laws for every term the calculus builds itself. What it leaves to the
 caller is the premise on a function that is not a codec: \rulelink{rule:held}{\texttt{(held)}}'s inverse pair,
