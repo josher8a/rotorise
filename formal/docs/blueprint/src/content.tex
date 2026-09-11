@@ -749,7 +749,7 @@ never of an attribute.
 \end{verbatim}
 
 A field carries a member like anything else — an optional attribute is still stored somewhere, and
-An index key needs to know where. What a field carries that an attribute does not is
+an index key needs to know where. What a field carries that an attribute does not is
 the \texttt{⊗\ π}, and that is the whole stratification: a rule demanding \texttt{⊢\ c\ :\ T\ ⇝\ μ} cannot be given
 something whose judgement has a \texttt{⊗}.
 
@@ -810,8 +810,8 @@ something whose judgement has a \texttt{⊗}.
 
 Here \texttt{n\ :\^{}opt\ T} is a binding the record may omit, \texttt{n\ :\^{}req\ T} one it may not, and \texttt{R(ρ)} is the open
 part, joined to the declared names by \texttt{⊕}, which adds bindings no declared name claims:
-\texttt{∅} for \texttt{drop} and \texttt{refuse}, and \texttt{Name\ ⇀fin\ T} for a rest codec holding \texttt{T}. The two string
-policies differ only in what \texttt{p} does with an undeclared name — drop it, or fail — which is a
+\texttt{∅} for \texttt{drop} and \texttt{refuse}, and \texttt{Name\ ⇀fin\ T} for a rest codec holding \texttt{T}. \texttt{drop} and
+\texttt{refuse} differ only in what \texttt{p} does with an undeclared name — drop it, or fail — which is a
 difference in \texttt{dom(p)} and not in \texttt{T}. And \texttt{drop} is a \textbf{filter, never a traversal mode}: the
 discard is decided by the name alone, before anything is decoded, so it cannot depend on a value and
 the round trip through the declared names is untouched by what was discarded. That is the quotient
@@ -856,8 +856,10 @@ acts through the option that answers alone:
 \leanok
 Resolving one side alone resolves the other, the same option. Asked where the union \emph{acts}: at
 each value it writes, and each attribute it reads. Ambiguity is a failure, never a rank. The letter
-names the strong form, over every canonical pair of every option. The laws consume the
-restriction to the inputs the union itself resolves, and both forms stand.
+names the strong form: at every canonical pair of every option, that option alone admits the
+value, and that option alone admits the attribute. What \rulelink{rule:union}{\texttt{(union)}} carries as an
+obligation is weaker, the same demand restricted to the inputs the union itself resolves, and the
+strong form implies it.
 \end{definition}
 
 \begin{definition}[(D) incomparable held sets]
@@ -966,7 +968,7 @@ the writable one. A discriminator's tag and §1's kind label both, which is why 
 \rulelink{cond:U}{\textbf{(U)}} outright. The admission row is asked once per side and may settle one side or both; a
 union is resolved when both sides are resolved, by whatever combination of rows reaches them.
 
-Read that way, \rulelink{rule:dunion}{\texttt{(dunion)}} below is not a second kind of sum. It is \rulelink{rule:union}{\texttt{(union)}} with admission \textbf{read
+Read that way, \rulelink{rule:dunion}{\texttt{(dunion)}} is not a second kind of sum. It is \rulelink{rule:union}{\texttt{(union)}} with admission \textbf{read
 off} the discriminator instead of attempted, and its \rulelink{cond:U}{\texttt{(U)}} needs no discharge, because reading a
 label off an input reaches one variant by construction.
 
@@ -1113,7 +1115,7 @@ price of deciding by names is that only declared names decide, and an open objec
 option should declare what it means to keep. An \texttt{opt} binding \textbf{widens} admission, which makes two
 options differing only in optional names the ambiguity to watch: two objects declaring only optional
 names both admit the empty map, however disjoint their names. \rulelink{rule:dunion}{\texttt{(dunion)}}'s disjoint-literal premise
-below is the special case where the discriminator's names decide alone.
+is the special case where the discriminator's names decide alone.
 
 \begin{definition}[occupancy]
 \label{def:occupancy}
