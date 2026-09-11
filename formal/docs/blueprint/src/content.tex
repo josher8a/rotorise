@@ -848,12 +848,23 @@ in this section exists to approximate.
 
 A union's pair is defined by \textbf{unique admission}. Each option answers, per input and per side,
 whether the input could be its — an attribute on the way out, a value on the way in — and the union
-acts through the option that answers alone:
+acts through the option that answers alone. Write \texttt{V(c)\ ⊆\ Value} for the values an option may be
+asked to write and \texttt{A(c)\ ⊆\ 𝔸} for the attributes it may be asked to read.
 
 \begin{definition}[(U) unique admission]
 \label{cond:U}
 \lean{Calculus.UAtCan, Calculus.UAtAct}
 \leanok
+\begin{verbatim}
+strong      ∀ i. ∀ t ∈ dom(eᵢ).  {j : t ∈ V(cⱼ)} = {i}
+                              ∧  {j : eᵢ(t) ∈ A(cⱼ)} = {i}
+
+restricted  ∀ i. ∀ t ∈ dom(eᵢ).  {j : t ∈ V(cⱼ)} = {i}
+                              ⟹  {j : eᵢ(t) ∈ A(cⱼ)} = {i}
+            ∀ i. ∀ a ∈ dom(pᵢ).  {j : a ∈ A(cⱼ)} = {i}
+                              ∧  pᵢ(a) ∈ dom(eᵢ)
+                              ⟹  {j : pᵢ(a) ∈ V(cⱼ)} = {i}
+\end{verbatim}
 Resolving one side alone resolves the other, the same option. Asked where the union \emph{acts}: at
 each value it writes, and each attribute it reads. Ambiguity is a failure, never a rank. The letter
 names the strong form: at every canonical pair of every option, that option alone admits the
@@ -1047,9 +1058,8 @@ alternative and the trade, not a change to the judgement.
 
 \subsection{The machinery of admission}\label{the-machinery-of-admission}
 
-The admission row asks, of each option and each side, which inputs the option may be given: which values it may
-be asked to write, and which attributes it may be asked to read. Write \texttt{V(c)\ ⊆\ Value} and \texttt{A(c)\ ⊆\ 𝔸}
-for those two sets. Two things build them, both by structural recursion over the terms of §3–§4, and
+The admission row asks, of each option and each side, which inputs the option may be given:
+\texttt{V(c)} and \texttt{A(c)} above. Two things build them, both by structural recursion over the terms of §3–§4, and
 both total.
 
 \begin{theorem}[a term's admissible sets are exact]
