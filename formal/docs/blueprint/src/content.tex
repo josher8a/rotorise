@@ -63,7 +63,19 @@ c = (T, μ, e, p)      T ⊆ Value     μ ∈ Member ∪ {⊤}
                       p : 𝔸 ⇀ T    decode — may fail
 \end{verbatim}
 
-\texttt{T} is a set of values, the language of things a codec holds. \texttt{μ\ =\ ⊤} reads as
+\begin{verbatim}
+v ∈ Value ::= str(String) | num(D) | bool(Bool) | bin(Bytes) | null
+            | strSet(℘⁺fin(String)) | numSet(℘⁺fin(D)) | binSet(℘⁺fin(Bytes))
+            | arr(Value*) | map(Name ⇀fin Value)
+
+k ∈ Kind  ::= string | number | boolean | binary | set | array | map | null
+\end{verbatim}
+
+\texttt{T} is a set of values, the language of things a codec holds. Ten constructors, and eight
+kinds: the three set constructors are all of kind \texttt{set}, and every other constructor is a kind
+of its own. \texttt{D} is the doubles, fixed in §3. \texttt{Value} is not §1's \texttt{Member}: an \texttt{N} carries
+\texttt{Numerals}, which is text, where \texttt{num} carries a double, and §3's \texttt{decimal} is the term that
+closes the gap. \texttt{μ\ =\ ⊤} reads as
 \emph{not determined by the term}, not as \emph{anything}. Which terms may leave it
 undetermined is settled in §3.
 
@@ -949,7 +961,7 @@ distinct members & the readable side, where the stored attributes differ & \text
 disjoint option admission, \texttt{∀\ i\ ≠\ j.\ V(cᵢ)\ ∩\ V(cⱼ)\ =\ ∅} on the writable side and \texttt{A(cᵢ)\ ∩\ A(cⱼ)\ =\ ∅} on the readable one & either side, each side asked on its own & admission and occupancy (one coarse label per term per side), below \\
 tag disjointness & \rulelink{rule:dunion}{\texttt{(dunion)}}, outright — both sides & the discriminator literals \\
 disjoint predicates over one base & refinements of a common \texttt{c}, outright — both sides & the predicates \texttt{q} \\
-kind disjointness & \texttt{opaque}'s fixpoint (§3), outright & one option per kind of §1 \\
+kind disjointness & \texttt{opaque}'s fixpoint (§3), outright & one option per kind of §2 \\
 \bottomrule
 \end{tabular}
 
