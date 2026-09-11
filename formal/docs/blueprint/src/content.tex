@@ -430,9 +430,9 @@ that names the subset:
 \toprule
 term & base & predicate \\
 \midrule
-\texttt{number} & §1's \texttt{Numerals} & \texttt{D} (§1) \\
-\texttt{decimal} & numerals that are well-formed by §1's grammar & \texttt{Stored} (§1) \\
-\texttt{literal(g,\ ℓ)} & the ground term \texttt{g} & \texttt{∈\ ℓ} \\
+\texttt{number} & §1's \texttt{Numerals} & \texttt{D} (§3) \\
+\texttt{decimal} & numerals that are well-formed by §1's grammar & \texttt{Stored} (§3) \\
+\texttt{literal(ℓ)} & the ground term \texttt{g} & \texttt{∈\ ℓ} \\
 \bottomrule
 \end{tabular}
 
@@ -454,8 +454,9 @@ has a gate to record.
 and the rule says so by reading both off a base: \texttt{ℓ} must lie in some ground term's held set, and
 what that term stores is what the literal stores. One rule covers \texttt{S} and \texttt{N}, and covers \texttt{BOOL},
 \texttt{B} and \texttt{NULL} with nothing added — a boolean literal is \texttt{literal(true)}, at base \texttt{boolean}. The
-base is determined by \texttt{ℓ}'s kind, \texttt{string} being the base for strings; \texttt{decimal} is what to write
-when strings are wanted stored as \texttt{N}.
+base is an index the derivation carries and the term does not write. An alternative's kind determines
+it, except between \texttt{string} and \texttt{decimal}, which both hold text: \texttt{decimal} is what to write when text
+is wanted stored as \texttt{N}, and the two derivations of one written literal differ in nothing else.
 
 The rule is also not doing anything \texttt{refine} does not, which is why \texttt{literal}
 reads as the abbreviation it is. \texttt{literal(ℓ)} is \texttt{refine(g,\ ∈\ ℓ)}, and the general fact behind every
