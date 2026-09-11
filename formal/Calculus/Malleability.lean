@@ -32,7 +32,7 @@ of them is a new primitive.
 
 `NonMalleable` is the fibre condition — every two attributes in one fibre agree — and it is
 **stated in order to be refuted**, which is why it is defined here and used by nothing. Two
-facts about it, and they are the two reasons the specification gives for `ker p` not
+facts about it, and they are two of the three reasons the specification gives for `ker p` not
 being equality:
 
 * **`η` normalising an `N` costs nothing** (`nonMalleable_numberCodec`). `number` reads only
