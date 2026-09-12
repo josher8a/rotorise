@@ -775,6 +775,15 @@ const leanFieldOf = (field: TermField, at: string, forced: number): string => {
             )}) (${leanValueOf(field.v, `${at}.fallback`)})`
         case 'req':
             return `Field.req (${leanTermOfTerm(field.t, at, forced)})`
+        /**
+         * `Field.optional`, because that is what it denotes rather than an approximation of it.
+         *
+         * `Value` has no `undefined` and `Value.map` is a key set with a total function on it, so
+         * `{ k: undefined }` and `{}` are one `Value` and there is no second thing to mean. The
+         * quotient that rests on is {@link leanValueOf}'s, which was already there for `optional`.
+         */
+        case 'undefinable':
+            return `Field.optional (${leanTermOfTerm(field.t, at, forced)})`
     }
 }
 

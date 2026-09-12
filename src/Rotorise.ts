@@ -1772,6 +1772,7 @@ export type {
     TaggedSpec,
     TupleOf,
     TupleWrites,
+    UndefinableCodec,
     UnionCodec,
     Untagged,
     UntaggedSpec,
@@ -1810,6 +1811,7 @@ export {
     rest,
     string,
     tuple,
+    undefinable,
     union,
 } from './codec/codec'
 export type { Field, Term } from './codec/term'
