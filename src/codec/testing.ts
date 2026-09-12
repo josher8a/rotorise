@@ -60,7 +60,7 @@ import type {
 import { CodecError, codecOfTerm, failed, opaque } from './codec'
 import { holds, readsBack, valueKinds, variantTag } from './denote'
 import type { Field, Predicate, Term } from './term'
-import { member as termMember } from './term'
+import { alwaysWritten, member as termMember } from './term'
 import { shapeOf } from './value'
 
 /** mulberry32 — small, fast, and good enough to search a value space. */
@@ -1056,7 +1056,11 @@ export const arbitraryOf = (
             for (const name in fields) {
                 const field = fields[name]
                 if (field === undefined) continue
-                if (field.mark === 'optional' && (size <= 0 || rng() < 0.5)) {
+                const sparse = size <= 0 || rng() < 0.5
+                if (field.mark === 'optional' && sparse) continue
+                // the key is always emitted; what varies is whether it holds a value
+                if (field.mark === 'undefinable' && sparse) {
+                    out[name] = undefined
                     continue
                 }
                 out[name] = arbitraryOf(codecOfTerm(field.t), rng, size)
@@ -1291,8 +1295,14 @@ export const shrinkOf = (
             const out: Record<string, unknown>[] = []
             // dropping a whole attribute is the bigger reduction, so try it first
             for (const name in fields) {
-                if (fields[name]?.mark !== 'optional') continue
+                const mark = fields[name]?.mark
+                if (mark !== 'optional' && mark !== 'undefinable') continue
                 if (!(name in held)) continue
+                if (mark === 'undefinable') {
+                    if (held[name] === undefined) continue
+                    out.push({ ...held, [name]: undefined })
+                    continue
+                }
                 const { [name]: _dropped, ...rest } = held
                 out.push(rest)
             }
@@ -1457,27 +1467,69 @@ export const checkAgainst = <T>(
         )
         if (!filter(entity)) continue
 
-        // the throwing pair, as the rest of this file uses: a codec that cannot encode what it
-        // generated is a failure of the run, not a difference to report
-        const ours = subject.unsafeEncode(entity)
-        const theirs = reference.marshall(entity)
+        // Refusals are part of the comparison, for the reason `checkEquivalent` gives: two
+        // marshallers that store the same bytes but disagree about which values they *refuse* are
+        // not the same marshaller, and that disagreement is the migration's problem — one of them
+        // writes a row where the other raised. So neither side's failure ends the run; both are
+        // outcomes to compare.
+        const ours = attempt(() => subject.unsafeEncode(entity))
+        const theirs = attempt(() => reference.marshall(entity))
 
-        const written = firstDifference(ours, theirs)
+        if (ours.refused !== theirs.refused) {
+            throw new CodecError(
+                `write parity: ${ours.refused ? 'the codec refuses what the reference stores' : 'the codec stores what the reference refuses'}\n  entity  = ${show(entity)}\n  ours    = ${ours.refused ? `refused: ${ours.why}` : show(ours.value)}\n  theirs  = ${theirs.refused ? `refused: ${theirs.why}` : show(theirs.value)}`,
+            )
+        }
+        if (ours.refused) continue
+
+        const written = firstDifference(ours.value, theirs.value)
         if (written) {
             throw new CodecError(
-                `write parity: the codec and the reference store this differently${where(written)}\n  entity  = ${JSON.stringify(entity)}\n  ours    = ${JSON.stringify(written.ours)}\n  theirs  = ${JSON.stringify(written.theirs)}`,
+                `write parity: the codec and the reference store this differently${where(written)}\n  entity  = ${show(entity)}\n  ours    = ${show(written.ours)}\n  theirs  = ${show(written.theirs)}`,
             )
         }
 
         if (!reference.unmarshall) continue
-        const read = firstDifference(
-            subject.unsafeDecode(theirs),
-            reference.unmarshall(theirs),
-        )
+        const row = theirs.value as AttributeMap
+        const oursRead = attempt(() => subject.unsafeDecode(row))
+        const theirsRead = attempt(() => reference.unmarshall?.(row))
+
+        if (oursRead.refused !== theirsRead.refused) {
+            throw new CodecError(
+                `read parity: ${oursRead.refused ? 'the codec refuses a row the reference reads' : 'the codec reads a row the reference refuses'}\n  row     = ${show(row)}\n  ours    = ${oursRead.refused ? `refused: ${oursRead.why}` : show(oursRead.value)}\n  theirs  = ${theirsRead.refused ? `refused: ${theirsRead.why}` : show(theirsRead.value)}`,
+            )
+        }
+        if (oursRead.refused) continue
+
+        const read = firstDifference(oursRead.value, theirsRead.value)
         if (read) {
             throw new CodecError(
-                `read parity: the codec and the reference read this row differently${where(read)}\n  ours    = ${JSON.stringify(read.ours)}\n  theirs  = ${JSON.stringify(read.theirs)}`,
+                `read parity: the codec and the reference read this row differently${where(read)}\n  row     = ${show(row)}\n  ours    = ${show(read.ours)}\n  theirs  = ${show(read.theirs)}`,
             )
+        }
+    }
+}
+
+/**
+ * One side's answer, as a value either way: a reference throws where a codec returns a
+ * {@link CodecError}, and the comparison branches on `refused` alone.
+ */
+const attempt = (
+    run: () => unknown,
+): {
+    readonly refused: boolean
+    readonly value?: unknown
+    readonly why?: string
+} => {
+    try {
+        const value = run()
+        return failed(value)
+            ? { refused: true, why: value.message }
+            : { refused: false, value }
+    } catch (error) {
+        return {
+            refused: true,
+            why: error instanceof Error ? error.message : String(error),
         }
     }
 }
@@ -1791,7 +1843,8 @@ const declaration = (of: Readonly<Record<string, Field>>) => {
     const requires: string[] = []
     for (const name in of) {
         declares.add(name)
-        if (of[name]?.mark !== 'optional') requires.push(name)
+        const field = of[name]
+        if (field && alwaysWritten(field)) requires.push(name)
     }
     return { declares, requires }
 }

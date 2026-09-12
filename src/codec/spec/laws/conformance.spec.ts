@@ -118,6 +118,58 @@ describe('a codec that does not', () => {
     })
 })
 
+/**
+ * Which values a marshaller refuses is part of what it is: two that store the same bytes for
+ * everything they accept, and disagree about what they accept, are not interchangeable. So a throw
+ * from either side is an outcome to compare, never the end of the run.
+ */
+describe('refusals are compared, not fatal', () => {
+    it('passes when both refuse the same entity', () => {
+        /** Refuses exactly what the codec refuses: a price that is not digits. */
+        const refusesToo: Reference<Pet> = {
+            ...agreeing,
+            marshall: (pet) => {
+                if (!/^-?\d+(\.\d+)?$/.test(pet.price)) {
+                    throw new Error('price is not a number')
+                }
+                return agreeing.marshall(pet)
+            },
+        }
+        expect(() =>
+            checkAgainst(Pet, refusesToo, {
+                count: 50,
+                seed: 1,
+                // both sides refuse this price, so the run must reach the end rather than die on it
+                refine: (pet) => ({ ...pet, price: 'not-a-number' }),
+            }),
+        ).not.toThrow()
+    })
+
+    it('reports a reference that refuses what the codec stores', () => {
+        const refusesEverything: Reference<Pet> = {
+            ...agreeing,
+            marshall: () => {
+                throw new Error('this marshaller will not store a pet')
+            },
+        }
+        expect(() =>
+            checkAgainst(Pet, refusesEverything, { count: 50, seed: 1 }),
+        ).toThrow(/write parity.*stores what the reference refuses/s)
+    })
+
+    it('reports a reference that refuses a row the codec reads', () => {
+        const cannotRead: Reference<Pet> = {
+            ...agreeing,
+            unmarshall: () => {
+                throw new Error('this marshaller will not read a pet back')
+            },
+        }
+        expect(() =>
+            checkAgainst(Pet, cannotRead, { count: 50, seed: 1 }),
+        ).toThrow(/read parity.*reads a row the reference refuses/s)
+    })
+})
+
 describe('the difference is reported as a path', () => {
     const at = (ours: unknown, theirs: unknown) =>
         firstDifference(ours, theirs)?.path
