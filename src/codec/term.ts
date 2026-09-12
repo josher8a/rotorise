@@ -202,6 +202,12 @@ export type Field =
     | { readonly mark: 'optional'; readonly t: Term }
     /** `fallback` concludes `req` (§4): the absence is in the row, never in the value. */
     | { readonly mark: 'fallback'; readonly t: Term; readonly v: unknown }
+    /** The absence is in the row *and* in the value, and the key is still there. */
+    | { readonly mark: 'undefinable'; readonly t: Term }
+
+/** Whether the row always carries this field's attribute. */
+export const alwaysWritten = (field: Field): boolean =>
+    field.mark === 'req' || field.mark === 'fallback'
 
 /** §4's rest policy. `codec` is the one that holds an undeclared name; the two others refuse it. */
 export type Rest =
@@ -492,7 +498,7 @@ export const specOf = (
     if (t.kind !== 'object') return undefined
     const spec: Record<string, boolean> = {}
     for (const [name, field] of Object.entries(t.body.fields)) {
-        spec[name] = field.mark !== 'optional'
+        spec[name] = alwaysWritten(field)
     }
     return spec
 }

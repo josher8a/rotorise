@@ -83,6 +83,9 @@ declare const optionalMarker: unique symbol
 /** Type-level only, for the same reason as {@link optionalMarker}: the term carries the fact. */
 declare const fallbackMarker: unique symbol
 
+/** Type-level only, for the same reason as {@link optionalMarker}. */
+declare const undefinableMarker: unique symbol
+
 /**
  * Marks the codec for a tuple's trailing elements.
  *
@@ -191,6 +194,22 @@ export type OptionalCodec<
     // the mark's own case and not the whole of `Field`, so a reader that must tell the two marks
     // apart can, without the symbols — which are `declare const` and reach no consumer
     readonly def: Extract<Field, { readonly mark: 'optional' }>
+}
+
+/**
+ * Carries {@link optionalMarker} as well as its own: the attribute is omitted either way, so every
+ * reader that asks about the stored row is correct for this mark by being unchanged. The second
+ * marker is what {@link ObjectOf} reads to keep the key required.
+ */
+export type UndefinableCodec<
+    T,
+    A extends AttributeValue = AttributeValue,
+    C = AttributeCodec<T, A>,
+> = {
+    readonly [optionalMarker]: true
+    readonly [undefinableMarker]: true
+    readonly codec: C
+    readonly def: Extract<Field, { readonly mark: 'undefinable' }>
 }
 
 /** Any codec, both directions erased — `never` in and `unknown` out, so every codec fits. */
@@ -308,7 +327,11 @@ export type Slot = Exclude<Shape, 'set'> | 'strSet' | 'numSet' | 'binSet'
  */
 export const constantOf = (declared: AnyDeclaration): unknown => {
     const def = declared.def
-    if ('mark' in def && def.mark === 'optional') return undefined
+    if (
+        'mark' in def &&
+        (def.mark === 'optional' || def.mark === 'undefinable')
+    )
+        return undefined
     const t = 'mark' in def ? def.t : def
     // **A single-valued literal decides; two admissible values narrow without deciding.** This was
     // `decides`, a reader that walked the definition to answer it, and the term answers the same
@@ -1551,6 +1574,34 @@ export const optional = <const C extends AnyCodec>(
 }
 
 /**
+ * A key that is always present, holding `undefined` when the row carries no such attribute.
+ *
+ * The mark for a model that writes `k: T | undefined` rather than `k?: T`. Both describe the same
+ * row, and they are different TypeScript types, which is the whole of the difference from
+ * {@link optional}.
+ *
+ * ```ts
+ * object({ tags: undefinable(string.set()) })   // { tags: ReadonlySet<string> | undefined }
+ * object({ tags: optional(string.set()) })      // { tags?: ReadonlySet<string> }
+ * ```
+ *
+ * **It stores nothing, and never `NULL`** — {@link nullable} is the codec for a value that *is*
+ * null and writes an attribute; this writes none.
+ *
+ * It is the stricter of the pair: `optional` reads both `{}` and `{ k: undefined }` back as `{}`,
+ * so **(R)** holds for it modulo that identification, while here the round trip is an equality. It
+ * takes on no premise of its own — unlike {@link fallback}, which must check its stand-in is
+ * writable because it writes one.
+ */
+export const undefinable = <const C extends AnyCodec>(
+    inner: C,
+): UndefinableCodec<Decoded<C>, AttributeOf<C>, C> =>
+    ({
+        codec: inner,
+        def: { mark: 'undefinable', t: termOf(inner) },
+    }) as unknown as UndefinableCodec<Decoded<C>, AttributeOf<C>, C>
+
+/**
  * A value that may be null, stored as `NULL` when it is — **unless `inner` already owns the null
  * point**, in which case this is `inner`'s own pair, untouched.
  *
@@ -2171,7 +2222,10 @@ export type LocatedCodec<T> = AttributeCodec<T> & {
 export type Declared = {
     readonly name: string
     readonly codec: AnyCodec
+    /** The attribute may be omitted — true for both `optional` and `undefinable`. */
     readonly optional: boolean
+    /** On decode, an omitted attribute still gets its key, holding `undefined`. */
+    readonly keyed: boolean
     readonly absent:
         | { readonly value: unknown; readonly copy: boolean }
         | undefined
@@ -2617,13 +2671,24 @@ export type Encoded<Spec> = show<
 >
 
 export type ObjectOf<Spec> = {
-    [K in keyof Spec as Spec[K] extends { readonly [optionalMarker]: true }
+    // required key, and the attribute is always there
+    [K in keyof Spec as Spec[K] extends { readonly [undefinableMarker]: true }
         ? never
-        : K]: Decoded<Spec[K]>
+        : Spec[K] extends { readonly [optionalMarker]: true }
+          ? never
+          : K]: Decoded<Spec[K]>
 } & {
-    [K in keyof Spec as Spec[K] extends { readonly [optionalMarker]: true }
+    // required key, and the attribute may not be there — so `undefined` joins the value
+    [K in keyof Spec as Spec[K] extends { readonly [undefinableMarker]: true }
         ? K
-        : never]?: Decoded<Spec[K]>
+        : never]: Decoded<Spec[K]> | undefined
+} & {
+    // the key itself may not be there
+    [K in keyof Spec as Spec[K] extends { readonly [undefinableMarker]: true }
+        ? never
+        : Spec[K] extends { readonly [optionalMarker]: true }
+          ? K
+          : never]?: Decoded<Spec[K]>
 }
 
 // ── unions ─────────────────────────────────────────────────────────

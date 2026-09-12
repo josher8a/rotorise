@@ -43,8 +43,8 @@ import type {
 } from './codec'
 import type { Result } from './result'
 import { andThen, CodecError, every, everyEntry, failed } from './result'
-import type { Body, Literal, Predicate, Term } from './term'
-import { occV, member as termMember } from './term'
+import type { Body, Field, Literal, Predicate, Term } from './term'
+import { alwaysWritten, occV, member as termMember } from './term'
 import {
     asRecord,
     copiedPerRead,
@@ -407,7 +407,8 @@ export const bodySem = ({ fields: of, rest }: Body): ItemPair => {
         declared.push({
             name,
             codec: codecOfTerm(field.t),
-            optional: field.mark === 'optional',
+            optional: !alwaysWritten(field),
+            keyed: field.mark === 'undefinable',
             absent:
                 field.mark === 'fallback'
                     ? { value: field.v, copy: copiedPerRead(field.v) }
@@ -451,10 +452,16 @@ export const bodySem = ({ fields: of, rest }: Body): ItemPair => {
                 name,
                 codec: attributeCodec,
                 optional,
+                keyed,
                 absent,
             } of declared) {
                 const attribute = item[name]
                 if (attribute === undefined) {
+                    // before the skip: the key survives an omitted attribute
+                    if (keyed) {
+                        out[name] = undefined
+                        continue
+                    }
                     if (optional) continue
                     if (absent) {
                         out[name] = absent.copy
@@ -1799,7 +1806,8 @@ export const optionOfTerm = (def: Term): Option => {
     const fields = def.body.fields
     for (const name in fields) {
         declares.add(name)
-        if (fields[name]?.mark !== 'optional') requires.push(name)
+        const field = fields[name]
+        if (field && alwaysWritten(field)) requires.push(name)
     }
     return {
         codec,
@@ -1810,7 +1818,7 @@ export const optionOfTerm = (def: Term): Option => {
         requires,
         describe: `{ ${[...declares]
             .map((name) =>
-                fields[name]?.mark === 'optional' ? `${name}?` : name,
+                alwaysWritten(fields[name] as Field) ? name : `${name}?`,
             )
             .join(', ')} }`,
     }
