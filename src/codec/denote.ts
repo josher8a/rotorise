@@ -1790,6 +1790,48 @@ const namedKind = (kind: Term['kind']): string =>
  */
 export const optionOfTerm = (def: Term): Option => {
     const codec = codecOfTerm(def)
+    /**
+     * A tagged option carries names too, and they are its variants' taken together.
+     *
+     * Its own body is the tag map, so there is no one `Body` to read. A variant admits every name
+     * set between its required keys and its declared keys (see `Collides`), so the option admits
+     * every set between the **intersection** of its variants' required names — the ones present
+     * whichever variant it turns out to be — and the **union** of their declared names.
+     *
+     * Without this an option like `discriminatedUnion('side', …)` reached {@link namesFit} with no
+     * `declares`, which answers `false`, so a `union` holding one had no whole-item reading: every
+     * option was filtered out and the row matched nothing. The attribute-level path never showed it,
+     * because that one falls back to matching on the value's kind and then attempts.
+     */
+    if (
+        def.kind === 'dunion' &&
+        def.options.every((o) => o.kind === 'object')
+    ) {
+        const bodies = def.options.map(
+            (o) => (o as Extract<Term, { kind: 'object' }>).body,
+        )
+        const declares = new Set<string>()
+        for (const body of bodies) {
+            for (const name in body.fields) declares.add(name)
+        }
+        const requires = [...declares].filter((name) =>
+            bodies.every((body) => {
+                const field = body.fields[name]
+                return !!field && alwaysWritten(field)
+            }),
+        )
+        return {
+            codec,
+            member: 'M',
+            carries: ['map'],
+            item: undefined,
+            declares,
+            requires,
+            describe: `${namedKind(def.kind)} { ${[...declares]
+                .map((name) => (requires.includes(name) ? name : `${name}?`))
+                .join(', ')} }`,
+        }
+    }
     if (def.kind !== 'object') {
         return {
             codec,

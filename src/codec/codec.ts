@@ -3085,10 +3085,27 @@ export type AllObjects<Options extends readonly unknown[]> =
         infer Head,
         ...infer Rest extends readonly unknown[],
     ]
-        ? Head extends AnyObjectCodec
+        ? Head extends AnyObjectCodec | AnyTaggedCodec
             ? AllObjects<Rest>
             : false
         : true
+
+/**
+ * A tagged codec with its variants forgotten — {@link AnyObjectCodec} for a `discriminatedUnion`.
+ *
+ * A tagged option reads a whole item as readily as an object one: its `Tagged` carries the same
+ * `encode` and `decode` over an item, and the union's item path delegates to it unchanged. What it
+ * does not carry is a record of attributes at `spec` — that position holds the tag map — so
+ * `AnyObjectCodec` does not match it and a union holding one was told it had no whole-item
+ * reading. `discriminator` is the member that says which of the two this is.
+ */
+type AnyTaggedCodec = {
+    readonly item: {
+        readonly encode: (item: never) => unknown
+        readonly decode: (item: StoredItem) => unknown
+        readonly discriminator: string
+    }
+}
 
 /**
  * The specs of the object options, with the others dropped.
@@ -3096,15 +3113,37 @@ export type AllObjects<Options extends readonly unknown[]> =
  * Only object options can collide on attribute names, so only they are checked. Positions in the
  * message {@link ValidateVariants} produces therefore count object options — the same thing for the
  * all-object union that is the common case.
+ *
+ * **A tagged option is one of the others, and its `spec` is the trap that says why.** A
+ * {@link Tagged} carries its variants keyed by tag, so `item.spec` there is the *tag map* —
+ * `{ placed: …, delivered: … }` — and not a record of attributes. Read as one, two tagged options
+ * both "require" `placed` and `delivered`, {@link Collides} answers true, and a union of two
+ * tagged options was refused whatever names its variants carried. That refusal was wrong in both halves: the specs
+ * compared are not attribute specs, and the question is not asked of a tagged option at all.
+ *
+ * {@link identifies} is why it is not asked. A tag lookup fails for a value carrying no tag it
+ * knows, so a tagged option identifies its own values and {@link separable} certifies it against
+ * anything — the runtime selects it by attempting, never by names. Dropping it here is what makes
+ * the two halves agree.
+ *
+ * Nothing is lost. Ambiguity between tagged options is still refused by the two clauses ahead of
+ * this one: {@link Restricting} where one option's entity is a subtype of another's, and
+ * {@link Overlapping} where they read back as the same type.
+ *
+ * This is what lets the two axes of a product nest — the outer {@link union} picking a group, an
+ * inner {@link discriminatedUnion} picking the variant by tag — where neither combinator spans
+ * both axes alone.
  */
 export type ObjectSpecsOf<Options extends readonly unknown[]> =
     Options extends readonly [
         infer Head,
         ...infer Rest extends readonly unknown[],
     ]
-        ? Head extends { readonly item: { readonly spec: infer S } }
-            ? [S, ...ObjectSpecsOf<Rest>]
-            : ObjectSpecsOf<Rest>
+        ? Head extends { readonly item: { readonly discriminator: string } }
+            ? ObjectSpecsOf<Rest>
+            : Head extends { readonly item: { readonly spec: infer S } }
+              ? [S, ...ObjectSpecsOf<Rest>]
+              : ObjectSpecsOf<Rest>
         : []
 
 /** The entity a list of options describes: whatever any one of them reads back. */
@@ -3204,8 +3243,10 @@ const optionOf = (codec: AnyCodec): Option => {
      * object codec and of nothing else.
      */
     const base = optionOfTerm(termOf(codec))
+    // a `dunion` carries a whole-item reading of its own — its `Tagged` — and the union's item
+    // path delegates to it exactly as it does to an object's `ItemCodec`
     const asObject =
-        codec.def?.kind === 'object'
+        codec.def?.kind === 'object' || codec.def?.kind === 'dunion'
             ? (codec as unknown as Partial<AnyObjectCodec>).item
             : undefined
     return asObject
