@@ -99,6 +99,13 @@ theorem literal_decimal :
     = some (Attr.n (WFNumeral.of "2.5")) := by
   vector
 
+/-- `literal_non_ascii` -/
+theorem literal_non_ascii :
+    (denote (Term.literal GroundKind.string (NEFinset.of "⊥" {"𝔸"}))).e
+      (Value.str "𝔸")
+    = some (Attr.s "𝔸") := by
+  vector
+
 /-- `literal_binary` -/
 theorem literal_binary :
     (denote (Term.literal GroundKind.binary (NEFinset.of [0, 127, 255] ∅))).e
@@ -225,6 +232,13 @@ theorem discriminated_union :
     = some (Attr.m {"kind", "x"} (fun k => if k.1 = "kind" then Attr.s "a" else Attr.s "v")) := by
   vector
 
+/-- `product_two_objects` -/
+theorem product_two_objects :
+    (denote (Term.object (Body.mk {"a", "n"} (fun k => if k.1 = "a" then Field.req (Term.string) else Field.req (Term.boolean)) Rest.drop))).e
+      (Value.map {"a", "n"} (fun k => if k.1 = "a" then Value.str "x" else Value.bool true))
+    = some (Attr.m {"a", "n"} (fun k => if k.1 = "a" then Attr.s "x" else Attr.bool true)) := by
+  vector
+
 /-- `opaque_map` -/
 theorem opaque_map :
     (denote (Term.opaq false)).e
@@ -241,8 +255,8 @@ theorem lazy_string :
 
 /-! ## Refusals — neither side writes anything for these
 
-28 of 676 shown; `scripts/gate.sh` elaborates all
-676. One `rfl` each, no comparator and no fuel: the answer is `none`,
+30 of 781 shown; `scripts/gate.sh` elaborates all
+781. One `rfl` each, no comparator and no fuel: the answer is `none`,
 which carries no function for the funext gap to open under.
 -/
 
@@ -279,6 +293,11 @@ theorem literal_alternatives__refuses__scalar_string :
 /-- `literal_decimal__refuses__scalar_string` — refused on both sides -/
 theorem literal_decimal__refuses__scalar_string :
     (denote (Term.literal GroundKind.decimal (NEFinset.of ⟨"1", by decide⟩ {⟨"2.5", by decide⟩}))).e
+      (Value.str "hello") = none := rfl
+
+/-- `literal_non_ascii__refuses__scalar_string` — refused on both sides -/
+theorem literal_non_ascii__refuses__scalar_string :
+    (denote (Term.literal GroundKind.string (NEFinset.of "⊥" {"𝔸"}))).e
       (Value.str "hello") = none := rfl
 
 /-- `literal_binary__refuses__scalar_string` — refused on both sides -/
@@ -369,6 +388,11 @@ theorem nullable_null__refuses__scalar_boolean :
 /-- `discriminated_union__refuses__scalar_string` — refused on both sides -/
 theorem discriminated_union__refuses__scalar_string :
     (denote (Term.dunion "kind" ⟨{"a", "b"}, fun k => if k.1 = "a" then (Body.mk {"kind", "x"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string (NEFinset.of "a" ∅)) else Field.req (Term.string)) Rest.drop) else (Body.mk {"kind", "y"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string (NEFinset.of "b" ∅)) else Field.req (Term.boolean)) Rest.drop)⟩)).e
+      (Value.str "hello") = none := rfl
+
+/-- `product_two_objects__refuses__scalar_string` — refused on both sides -/
+theorem product_two_objects__refuses__scalar_string :
+    (denote (Term.object (Body.mk {"a", "n"} (fun k => if k.1 = "a" then Field.req (Term.string) else Field.req (Term.boolean)) Rest.drop))).e
       (Value.str "hello") = none := rfl
 
 /-- `lazy_string__refuses__scalar_boolean` — refused on both sides -/

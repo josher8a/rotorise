@@ -89,11 +89,15 @@ const refuse = (at: string, reason: string): never => {
 /**
  * A Lean string literal.
  *
- * Not `JSON.stringify`: the two escape languages overlap but do not agree, and the disagreements
- * are silent. Lean 4 takes `\n`, `\t`, `\\`, `\"` and `\u{...}`; JSON emits `\uXXXX` for the
- * control range, which Lean reads as a *different* escape (`\u` there wants braces), and neither
- * escapes DEL. Everything outside the printable ASCII range is written as `\u{...}` here, which is
- * unambiguous in Lean and survives a copy-paste through any editor.
+ * Not `JSON.stringify`, and **not `\u{...}`**, which Lean answers with `invalid hexadecimal
+ * numeral`: it takes exactly four hex digits after `\u`, and neither language escapes DEL.
+ *
+ * **A code point above `U+FFFF` has no escape that is correct**, and the two spellings that look
+ * like one fail in silence: `\u1d538` lexes as `\u1d53` then `8`, and the surrogate pair
+ * `\ud835\udd38` lexes as two characters. Both elaborate, and both build the wrong string. So a
+ * printable character is emitted raw, which is right at every code point and is what this emitter
+ * already does with `∅` and `⟨⟩`. `\uHHHH` is kept for the control range and DEL, where a raw
+ * character would be invisible in the generated file.
  */
 export const leanString = (value: string): string => {
     let out = '"'
@@ -108,8 +112,8 @@ export const leanString = (value: string): string => {
                     ? '\\n'
                     : ch === '\t'
                       ? '\\t'
-                      : code < 0x20 || code === 0x7f || code > 0x7e
-                        ? `\\u{${code.toString(16)}}`
+                      : code < 0x20 || code === 0x7f
+                        ? `\\u${code.toString(16).padStart(4, '0')}`
                         : ch
     }
     return `${out}"`

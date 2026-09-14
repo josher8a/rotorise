@@ -1807,6 +1807,7 @@ export {
     optional,
     orThrow,
     pathBuilder,
+    product,
     record,
     refine,
     rest,

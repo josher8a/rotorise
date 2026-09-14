@@ -2415,6 +2415,94 @@ export const object = <
     }
 }
 
+/** A name both factors declare, which is the one thing a product cannot have. */
+type SharedName<A, B> = Extract<keyof A, keyof B> & string
+
+/**
+ * Nothing, or why these two factors have no product.
+ *
+ * Two rules, and the shared name comes first because its message names the name. The open
+ * factor is the second: a `rest` codec holds an undeclared name through a codec of its own, and
+ * the product would have to hold it through both. The model says the same thing by making
+ * `Rest.merge` answer `none` there, and a product declares no meet of two codecs.
+ */
+export type ValidateProduct<A, B, RA, RB> = [SharedName<A, B>] extends [never]
+    ? [RA | RB] extends ['drop' | 'refuse']
+        ? unknown
+        : ErrorMessage<'[product] a factor holds undeclared names through a `rest` codec, and a product declares no meet of two of them. Close both factors with `drop` or `refuse`'>
+    : ErrorMessage<`[product] both factors declare '${SharedName<A, B>}', and a product needs disjoint names. Rename it, or drop it from one factor`>
+
+/** `Rest.merge`: `refuse` wins, because a name neither factor declares is one the product refuses. */
+type MergedRest<RA, RB> = [RA] extends ['refuse']
+    ? 'refuse'
+    : [RB] extends ['refuse']
+      ? 'refuse'
+      : 'drop'
+
+/**
+ * **The product of two closed objects: the object of their merged spec.**
+ *
+ * The founding operation of the Cartesian product over codecs. `Body.merge` is the model's, and
+ * `typed_merge` is the corollary that makes the result derivable from the two factors' own
+ * judgements: the field tables are a disjoint union, and the rest policies merge.
+ *
+ * **Built by calling {@link object} on the merged spec, rather than by assembling a body.**
+ * `object` computes a field table by running `fieldOf` over each declaration, so the table it
+ * builds from `{...a, ...b}` is the union of the two tables it built from `a` and `b` alone. That
+ * is the merged term, arrived at without a second copy of the constructor, and the law test pins
+ * the `def` against a body assembled by hand rather than taking it on this paragraph's word.
+ *
+ * @example
+ * ```ts
+ * product(object({ petId: string }), object({ price: decimal }))
+ * ```
+ */
+export const product = <
+    const A extends Record<string, AnyDeclaration>,
+    const RA extends RestDeclaration,
+    const B extends Record<string, AnyDeclaration>,
+    const RB extends RestDeclaration,
+>(
+    first: ObjectCodec<A, RA>,
+    second: ObjectCodec<B, RB> & ValidateProduct<A, B, RA, RB>,
+): ObjectCodec<A & B, MergedRest<RA, RB>> => {
+    const factors = [first, second] as readonly ObjectCodec<
+        Record<string, AnyDeclaration>,
+        RestDeclaration
+    >[]
+    for (const factor of factors) {
+        // a factor past the type is a cast or a JavaScript caller, and `.item.spec` is what says
+        // this is an object codec at all
+        if (!factor?.item?.spec) {
+            throw new CodecError(
+                'a product is taken of two object codecs, and one of these is not — a product merges declared names, and only an object declares any',
+            )
+        }
+        if (factor.item.rest !== 'drop' && factor.item.rest !== 'refuse') {
+            throw new CodecError(
+                'a factor holds undeclared names through a `rest` codec, and a product declares no meet of two of them — close both factors with `drop` or `refuse`',
+            )
+        }
+    }
+    const left = first.item.spec as Record<string, AnyDeclaration>
+    const right = second.item.spec as Record<string, AnyDeclaration>
+    for (const name in right) {
+        if (Object.hasOwn(left, name)) {
+            throw new CodecError(
+                `both factors declare '${name}', and a product needs disjoint names — rename it, or drop it from one factor`,
+            )
+        }
+    }
+    const rest: RestDeclaration =
+        first.item.rest === 'refuse' || second.item.rest === 'refuse'
+            ? 'refuse'
+            : 'drop'
+    return object({ ...left, ...right }, rest) as unknown as ObjectCodec<
+        A & B,
+        MergedRest<RA, RB>
+    >
+}
+
 /**
  * A builder for document paths into `T`.
  *

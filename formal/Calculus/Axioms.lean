@@ -1,4 +1,5 @@
 import Calculus.Soundness
+import Calculus.Merge
 import Calculus.Discharge
 import Calculus.Continuity
 import Calculus.Refutations
