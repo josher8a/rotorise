@@ -1236,6 +1236,23 @@ export const denote = (def: Term): Pair => {
             )
         }
         /**
+         * §5's bottom: the codec that admits no value.
+         *
+         * `Codec.empty` on the model's side, whose laws hold vacuously because both domains are
+         * empty. A refusal in both directions and a value rather than a throw, as every other row.
+         */
+        case 'never':
+            return {
+                encode: () =>
+                    new CodecError(
+                        '`never` admits no value, so there is nothing to write through it',
+                    ),
+                decode: () =>
+                    new CodecError(
+                        '`never` admits no value, so no stored attribute reads back through it',
+                    ),
+            }
+        /**
          * §3 `(opaque)`: the recursive union of everything self-identifying, at whichever numeric
          * policy the term names. `lawful_opaqCodecω` is the lemma, and it is a *theorem* rather
          * than an obligation — the model's `Obligations (.opaq _)` is `True`, which is what makes

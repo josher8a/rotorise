@@ -210,6 +210,8 @@ noncomputable def Adm : Term → Value → Bool
   | .decimal  => isStored
   | .literal k ls => AdmLit k ls
   | .custom ce _ => fun v => (ce v).isSome
+  -- the bottom admits nothing, and the row is that sentence
+  | .never => fun _ => false
   | .array c  => fun v => match v with | .arr xs => allP (Adm c) xs | _ => false
   -- `record` needs no list companion either: `M`'s entries are a function on the key
   -- set, so "every entry admits" is one `decide` over that set, the way the three `set`
@@ -806,6 +808,8 @@ theorem Adm_exact : ∀ (t : Term), ExactV t
   | .dunion _ variants => ExactV_dunion fun k => Adm_exactB (variants.2 k)
   | .object b => Adm_exactB b
   | .opaq lossy => ExactV_opaq lossy
+  -- both sides are empty, so the equivalence is `False ↔ False`
+  | .never => fun _ => Iff.rfl
   -- the row the *constructor* made exact, rather than a sharper analysis of the old one
   | .set b => ExactV_set b
   -- the row that asks `ownsNull`

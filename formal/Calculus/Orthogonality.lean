@@ -173,6 +173,7 @@ twenty-one constructors; this is `n`, and the pair only ever compares two answer
 
 def occOnly {α : Type} [DecidableEq α] (x : α) : α → Bool := fun y => decide (y = x)
 def occTop {α : Type} : α → Bool := fun _ => true
+def occNone {α : Type} : α → Bool := fun _ => false
 def occWith {α : Type} [DecidableEq α] (x : α) (o : α → Bool) : α → Bool :=
   fun y => decide (y = x) || o y
 def occBut {α : Type} [DecidableEq α] (x : α) : α → Bool := fun y => !decide (y = x)
@@ -212,6 +213,8 @@ def occV : Term → Slot → Bool
   | .binary  => occOnly .bin
   | .null    => occOnly .null
   | .literal k _ => occOnly k.slot
+  -- the bottom writes nothing, so it occupies no slot
+  | .never       => occNone
   | .set b       => occOnly b.slot
   | .array _     => occOnly .arr
   | .tuple _ _   => occOnly .arr
@@ -252,6 +255,8 @@ def occA : Term → Member → Bool
   | .binary  => occOnly .B
   | .null    => occOnly .NULL
   | .literal k _ => occOnly k.member
+  -- and stores nothing, so it occupies no member
+  | .never       => occNone
   | .set b       => occOnly b.member
   | .array _     => occOnly .L
   | .tuple _ _   => occOnly .L
@@ -494,6 +499,8 @@ theorem occV_sound : ∀ (t : Term), OccSoundV t
   | .string | .boolean | .binary | .null =>
       fun v h => by cases v <;> simp_all [Adm, occV, occOnly, Value.slot]
   | .number => fun v h => by cases v <;> simp_all [Adm, inD, occV, occOnly, Value.slot]
+  -- the row is `false`, so the premise is the one that cannot arrive
+  | .never => fun _ h => by simp [Adm] at h
   | .decimal => fun v h => by cases v <;> simp_all [Adm, isStored, occV, occOnly, Value.slot]
   | .literal k _ => fun v h => by
       rw [Adm_literal] at h
@@ -593,6 +600,7 @@ theorem occA_sound : ∀ (t : Term), OccSoundA t
   -- stored member being what `Attr.member` already computes.
   | .string | .number | .decimal | .boolean | .binary | .null =>
       fun a h => by cases a <;> simp_all [AdmA, occA, occOnly, Attr.member]
+  | .never => fun _ h => by simp [AdmA] at h
   | .literal k _ => fun a h => by
       rw [AdmA_literal] at h
       cases k with

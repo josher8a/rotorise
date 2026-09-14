@@ -1798,6 +1798,7 @@ export {
     held,
     lazy,
     legacy,
+    never,
     nullable,
     nullValue,
     number,

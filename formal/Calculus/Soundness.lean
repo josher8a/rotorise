@@ -65,7 +65,7 @@ mutual
 def Obligations : Term → Prop
   -- `set` joins the leaves: its base is an index, so there is no subterm to carry premises.
   | .string | .number | .decimal | .boolean | .binary | .null
-  | .literal _ _ | .opaq _ | .set _ => True
+  | .literal _ _ | .opaq _ | .set _ | .never => True
   | .array t' | .record t' | .refine t' _ => Obligations t'
   | .tuple ts tail => ObligationsList ts ∧ ObligationsOpt tail
   | .held t' f g => Obligations t' ∧ IsoCancels (denote t') f g
@@ -111,7 +111,7 @@ def MPOk : Term → Prop
   | .legacy _ _ => False
   | .literal _ _
   | .string | .number | .decimal | .boolean | .binary | .null
-  | .opaq _ | .custom _ _ | .set _ => True
+  | .opaq _ | .custom _ _ | .set _ | .never => True
   | .array t' | .record t' | .refine t' _ | .nullable t'
   | .held t' _ _ => MPOk t'
   | .tuple ts tail => MPOkList ts ∧ MPOkOpt tail
@@ -308,6 +308,7 @@ theorem typed_μSyn : ∀ {t T μ}, Typed t T μ → μSyn t = μ
   | _, _, _, .null => rfl
   | _, _, _, .binary => rfl
   | _, _, _, .set _ => rfl
+  | _, _, _, .never => rfl
   | _, _, _, .array _ => rfl
   | _, _, _, .tuple _ _ => rfl
   | _, _, _, .record _ => rfl
@@ -533,6 +534,8 @@ theorem soundness_both : ∀ {t T μ}, Typed t T μ → Obligations t → Sound 
   | t, T, μ, h, hob => by
     cases h with
     | literal k ls => exact sound_ground (lawful_literalCodec k ls)
+    -- the bottom's domains are empty, so every law holds vacuously
+    | never => exact sound_ground Lawful.empty
     | string => exact sound_ground lawful_stringCodec
     | number => exact sound_ground lawful_numberCodec
     | decimal => exact sound_ground lawful_decimalCodec
@@ -867,6 +870,7 @@ theorem typed_TSub : ∀ {t T μ}, Typed t T μ → ∀ v, (denote t).T v → T 
     -- `numberCodec` into `Numeral.WF`'s decision procedure. The denotation's held set and the
     -- rule's are the same expression now — `HLit k ls` — so there is nothing to prove.
     | literal _ _ => exact hv
+    | never => exact hv
     | custom _ _ => exact hv
     | opaq lossy => exact opaq_TSubω lossy v hv
     -- the base's codec holds exactly the base's held set (`SetBase.elem_T`), so the three
@@ -971,6 +975,7 @@ theorem carrier_denote : ∀ {t T μ}, Typed t T μ → Obligations t → Carrie
   | t, T, μ, h, hob => by
     cases h with
     | literal k ls => exact carrier_literalCodec k ls
+    | never => exact Carrier.empty
     | string => exact carrier_stringCodec
     | number => exact carrier_numberCodec
     | decimal => exact carrier_decimalCodec

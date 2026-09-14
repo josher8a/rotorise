@@ -133,6 +133,11 @@ inductive Term where
       codec writes the tag out of that field, so the field is not the table's to remove.
       `Typed.dunion`'s `hone` is that one fact now, where it used to be five. -/
   | dunion   (d : Name) (variants : MapOf Body)
+  /-- §5's bottom: the term that admits no value. Its held set is `False`, which is a subset of
+      every held set, so (D) fails against every other option and this is an option of no
+      `union`. A constructor and not an empty `dunion`: the empty table is a term a caller can
+      build by accident, and a rule that reads it as the bottom reads that accident as intent. -/
+  | never
 
 /-- §4's object payload: the declared names, the field at each, and the policy for
     everything else. A `mutual` block admits no `structure`, so this is `inductive … | mk`
@@ -236,7 +241,7 @@ def Term.depth : Term → Nat
   | .string | .number | .decimal | .boolean | .binary | .null
   -- `set` is a **leaf** since its base became an index: there is no element term to
   -- measure, so it sits with the other ground shapes rather than costing a layer.
-  | .literal _ _ | .custom _ _ | .opaq _ | .set _ => 1
+  | .literal _ _ | .custom _ _ | .opaq _ | .set _ | .never => 1
   | .array t | .record t | .nullable t | .lazy t => Term.depth t + 1
   | .held t _ _ | .refine t _ | .legacy t _ => Term.depth t + 1
   | .tuple ts tail => max (Term.depthL ts) (Term.depthO tail) + 1

@@ -186,6 +186,7 @@ theorem typed_T_eq : ∀ {t T μ}, Typed t T μ → ∀ v, T v → (denote t).T 
     -- the carrier is gated, so the rule's `HLit k ls` and the denotation's are one
     -- expression — the same fact that removed `typed_TSub`'s five-way split here
     | literal _ _ => exact hv
+    | never => exact hv
     | custom _ _ => exact hv
     | opaq lossy => exact (opaq_T_identity lossy v).mpr hv
     | set b =>
