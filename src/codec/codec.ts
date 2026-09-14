@@ -36,6 +36,7 @@ import {
 } from './result'
 import type { Body, Field, Term } from './term'
 import {
+    alwaysWritten,
     elementPredicates,
     meet,
     member as memberOf,
@@ -930,6 +931,47 @@ export const array = <const C extends AnyCodec>(
 }
 
 /**
+ * A declaration that fills a **slot** with a term holding no value.
+ *
+ * A slot is a position a value must fill: a fixed element of a tuple, and a `req` or `fallback`
+ * field. `optional` and `undefinable` are not slots, because the key may be absent.
+ */
+type IsNeverSlot<D> = [D] extends [{ readonly [optionalMarker]: true }]
+    ? false
+    : [D] extends [
+            { readonly codec: { readonly def: { readonly kind: 'never' } } },
+        ]
+      ? true
+      : [D] extends [{ readonly def: { readonly kind: 'never' } }]
+        ? true
+        : false
+
+/** Whether any fixed position of a tuple, or its tail, is `never`. */
+type TupleNeverSlot<Cs extends readonly unknown[]> = Cs extends readonly [
+    infer H,
+    ...infer T extends readonly unknown[],
+]
+    ? H extends { readonly rest: { readonly def: { readonly kind: 'never' } } }
+        ? true
+        : IsNeverSlot<H> extends true
+          ? true
+          : TupleNeverSlot<T>
+    : false
+
+/**
+ * Nothing, or why this tuple can hold no value.
+ *
+ * **The model types `tuple [never]` and gives it an empty held set, which is correct there.** The
+ * host refuses it instead, because a position nothing fills makes the whole tuple unconstructible
+ * and `never` already names that term: a declaration with two spellings, one of them a trap, is
+ * the shape a constructor should not have.
+ */
+type NoNeverSlot<Cs extends readonly unknown[]> =
+    TupleNeverSlot<Cs> extends true
+        ? ErrorMessage<'[tuple] a fixed position is `never`, so nothing fills it and the tuple holds no value at all. Use `never` itself if that is what you meant'>
+        : unknown
+
+/**
  * A fixed-length, heterogeneous list, as `L`.
  *
  * `list` gives `readonly T[]`, which cannot say that a route is one step or exactly two. Decode
@@ -939,7 +981,7 @@ export const tuple = <const Cs extends readonly (AnyCodec | AnyRest)[]>(
     // asked of the union of the elements rather than mapped over them: one instantiation instead of
     // one per position, and the diagnostic lands on the call either way. Mapping cost +10% across
     // this repo, measured. `rest` is exempt, and checked for position separately
-    ...elements: Cs & RestGoesLast<Cs>
+    ...elements: Cs & RestGoesLast<Cs> & NoNeverSlot<Cs>
 ): AttributeCodec<TupleOf<Cs>, L<TupleWrites<Cs>>> => {
     const all = elements as readonly unknown[]
 
@@ -970,6 +1012,21 @@ export const tuple = <const Cs extends readonly (AnyCodec | AnyRest)[]>(
     const last = all[all.length - 1]
     const tail = isTail(last) ? termOf(last.rest) : undefined
     const items = (tail ? all.slice(0, -1) : all) as readonly AnyCodec[]
+
+    /**
+     * **A position nothing fills makes the whole tuple unconstructible.**
+     *
+     * The model types `tuple [never]` and gives it an empty held set, which is correct as a model.
+     * Here it is a declaration with a second spelling for `never`, and one of the two is a trap:
+     * every fixed position aligns whatever the tail, so a `never` anywhere in the fixed part, or a
+     * `never` tail, refuses every value. The type says so too; this is the cast's path.
+     */
+    const deadAt = items.findIndex((item) => termOf(item).kind === 'never')
+    if (deadAt !== -1 || tail?.kind === 'never') {
+        throw new CodecError(
+            `${deadAt !== -1 ? `position ${deadAt}` : 'the tail'} is \`never\`, so nothing fills it and the tuple holds no value at all — use \`never\` itself if that is what you meant`,
+        )
+    }
 
     // as with `record` and `map`, the cast keeps the shape each position writes, which
     // `Attribute<'L'>` would flatten to "some list"
@@ -1028,6 +1085,18 @@ type NoTail<Spec> = [
 ] extends [never]
     ? unknown
     : ErrorMessage<"`rest(...)` is a tuple's tail, not an attribute: an item has names and not positions">
+
+/** A field whose mark makes it a slot, declared at a term that holds no value. */
+type NoNeverField<Spec> = [
+    {
+        [K in keyof Spec]: IsNeverSlot<Spec[K]> extends true ? K : never
+    }[keyof Spec],
+] extends [never]
+    ? unknown
+    : ErrorMessage<`[object] '${{
+          [K in keyof Spec]: IsNeverSlot<Spec[K]> extends true ? K : never
+      }[keyof Spec] &
+          string}' is declared at \`never\` and the row always writes it, so the object holds no value at all. Mark it \`optional\`, or use \`never\` itself`>
 
 /**
  * Nothing, or why a rest element is not where it has to be.
@@ -2281,7 +2350,7 @@ export const object = <
     const Spec extends Record<string, AnyDeclaration>,
     const Rest extends RestDeclaration = 'drop',
 >(
-    spec: Spec & NoTail<Spec>,
+    spec: Spec & NoTail<Spec> & NoNeverField<Spec>,
     rest: Rest = 'drop' as Rest,
 ): ObjectCodec<Spec, Rest> => {
     // the marker off each declared attribute, once — the term. What the two directions walk is
@@ -2292,6 +2361,22 @@ export const object = <
     const declaredSpec = spec as unknown as Record<string, AnyDeclaration>
     for (const name in declaredSpec) {
         fields[name] = fieldOf(declaredSpec[name] as AnyDeclaration)
+    }
+    /**
+     * **A name the row always writes, declared at a term that holds no value.**
+     *
+     * The model types such an object and gives it an empty held set, which is correct as a model.
+     * Here it is a second spelling for `never`, and the trap is that it looks like a schema: the
+     * row would refuse every entity and say so one field at a time. `optional` is the mark that
+     * makes the name a non-slot, and `never` itself is the term for "holds nothing".
+     */
+    for (const name in fields) {
+        const field = fields[name] as Field
+        if (alwaysWritten(field) && field.t.kind === 'never') {
+            throw new CodecError(
+                `'${name}' is declared at \`never\` and the row always writes it, so the object holds no value at all — mark it \`optional\`, or use \`never\` itself`,
+            )
+        }
     }
     const declaredRest = rest as RestDeclaration
     const declaredBody: Body = {
@@ -2415,22 +2500,26 @@ export const object = <
     }
 }
 
-/** A name both factors declare, which is the one thing a product cannot have. */
-type SharedName<A, B> = Extract<keyof A, keyof B> & string
+/** The options a factor offers, at the type level: a union's, or the factor itself. */
+type FactorOptions<F> = F extends UnionCodec<infer _T, infer Os>
+    ? Os
+    : readonly [F]
 
-/**
- * Nothing, or why these two factors have no product.
- *
- * Two rules, and the shared name comes first because its message names the name. The open
- * factor is the second: a `rest` codec holds an undeclared name through a codec of its own, and
- * the product would have to hold it through both. The model says the same thing by making
- * `Rest.merge` answer `none` there, and a product declares no meet of two codecs.
- */
-export type ValidateProduct<A, B, RA, RB> = [SharedName<A, B>] extends [never]
-    ? [RA | RB] extends ['drop' | 'refuse']
-        ? unknown
-        : ErrorMessage<'[product] a factor holds undeclared names through a `rest` codec, and a product declares no meet of two of them. Close both factors with `drop` or `refuse`'>
-    : ErrorMessage<`[product] both factors declare '${SharedName<A, B>}', and a product needs disjoint names. Rename it, or drop it from one factor`>
+/** Every name a factor can declare, across all of its options. */
+type DeclaredNames<F> = FactorOptions<F>[number] extends infer O
+    ? O extends ObjectCodec<infer S, infer _R>
+        ? keyof S & string
+        : never
+    : never
+
+/** Whether any option of a factor is left open by a rest codec. */
+type AnyOpen<F> = FactorOptions<F>[number] extends infer O
+    ? O extends ObjectCodec<infer _S, infer R>
+        ? [R] extends ['drop' | 'refuse']
+            ? never
+            : true
+        : true
+    : never
 
 /** `Rest.merge`: `refuse` wins, because a name neither factor declares is one the product refuses. */
 type MergedRest<RA, RB> = [RA] extends ['refuse']
@@ -2439,68 +2528,224 @@ type MergedRest<RA, RB> = [RA] extends ['refuse']
       ? 'refuse'
       : 'drop'
 
+/** One merge: `Body.merge` at the type level. */
+type MergeTwo<X, Y> = X extends ObjectCodec<infer A, infer RA>
+    ? Y extends ObjectCodec<infer B, infer RB>
+        ? ObjectCodec<show<A & B>, MergedRest<RA, RB>>
+        : never
+    : never
+
+type DistributeOne<X, Ys extends readonly unknown[]> = {
+    [I in keyof Ys]: MergeTwo<X, Ys[I]>
+}
+
+/** The `flatMap` order the model's distribution law states: outer first, inner second. */
+type Distribute<
+    Xs extends readonly unknown[],
+    Ys extends readonly unknown[],
+> = Xs extends readonly [infer H, ...infer T extends readonly unknown[]]
+    ? [...DistributeOne<H, Ys>, ...Distribute<T, Ys>]
+    : []
+
+/** One merge needs no union around it; several are one flat union. */
+type ProductOfTwo<X, Y> = Distribute<
+    FactorOptions<X>,
+    FactorOptions<Y>
+> extends infer Ms extends readonly unknown[]
+    ? Ms extends readonly [infer One]
+        ? One
+        : UnionCodec<DerivedUnion<Ms>, Ms>
+    : never
+
+/** More than two factors fold left, which `merge_assoc` is why the other nesting agrees. */
+type FoldProduct<Fs extends readonly unknown[]> = Fs extends readonly [
+    infer A,
+    infer B,
+    ...infer R extends readonly unknown[],
+]
+    ? FoldProduct<[ProductOfTwo<A, B>, ...R]>
+    : Fs extends readonly [infer A]
+      ? A
+      : never
+
+/** A name two factors both declare, which is the one thing a product cannot have. */
+type SharedAcross<Fs extends readonly unknown[]> = Fs extends readonly [
+    infer H,
+    ...infer T extends readonly unknown[],
+]
+    ? (DeclaredNames<H> & DeclaredNames<T[number]>) | SharedAcross<T>
+    : never
+
+/** Whether any factor is `never`, matched on the term's kind as {@link HasOpaque} is. */
+type HasNeverFactor<Fs extends readonly unknown[]> = Fs extends readonly [
+    infer H,
+    ...infer T extends readonly unknown[],
+]
+    ? // `[H] extends [never]` is true only where `H` *is* `never`, which is how a spec casts a
+      // factor past the type. Without this guard that cast matches every shape below it
+      [H] extends [never]
+        ? HasNeverFactor<T>
+        : [H] extends [{ readonly def: { readonly kind: 'never' } }]
+          ? true
+          : HasNeverFactor<T>
+    : false
+
 /**
- * **The product of two closed objects: the object of their merged spec.**
+ * Nothing, or why these factors have no product.
  *
- * The founding operation of the Cartesian product over codecs. `Body.merge` is the model's, and
- * `typed_merge` is the corollary that makes the result derivable from the two factors' own
- * judgements: the field tables are a disjoint union, and the rest policies merge.
+ * **Three rules, in the order that gives the advice a caller can act on.** A `never` factor comes
+ * first: §5's (D) fails at a product against a factor that holds nothing, because every merge
+ * holds nothing and two empty held sets are comparable in both directions. Without this clause the
+ * open-factor one fired on it and told the caller to close a rest policy `never` does not have,
+ * which is the same misdirection {@link ValidateOptions} orders its `opaque` clause to avoid.
  *
- * **Built by calling {@link object} on the merged spec, rather than by assembling a body.**
- * `object` computes a field table by running `fieldOf` over each declaration, so the table it
- * builds from `{...a, ...b}` is the union of the two tables it built from `a` and `b` alone. That
- * is the merged term, arrived at without a second copy of the constructor, and the law test pins
- * the `def` against a body assembled by hand rather than taking it on this paragraph's word.
+ * The shared name is next, because its message names the name. The open factor is last: a `rest`
+ * codec holds an undeclared name through a codec of its own, and the product would have to hold it
+ * through both. The model says the same by making `Rest.merge` answer `none` there.
  *
- * @example
- * ```ts
- * product(object({ petId: string }), object({ price: decimal }))
- * ```
+ * `never` is the only term a factor can be that holds no value: `tuple` and `object` refuse a slot
+ * declared at it, so no other declaration reaches here empty.
  */
-export const product = <
-    const A extends Record<string, AnyDeclaration>,
-    const RA extends RestDeclaration,
-    const B extends Record<string, AnyDeclaration>,
-    const RB extends RestDeclaration,
->(
-    first: ObjectCodec<A, RA>,
-    second: ObjectCodec<B, RB> & ValidateProduct<A, B, RA, RB>,
-): ObjectCodec<A & B, MergedRest<RA, RB>> => {
-    const factors = [first, second] as readonly ObjectCodec<
-        Record<string, AnyDeclaration>,
-        RestDeclaration
-    >[]
-    for (const factor of factors) {
-        // a factor past the type is a cast or a JavaScript caller, and `.item.spec` is what says
-        // this is an object codec at all
-        if (!factor?.item?.spec) {
+export type ValidateProduct<Fs extends readonly unknown[]> =
+    HasNeverFactor<Fs> extends true
+        ? ErrorMessage<'[product] one factor is `never`, which holds no value — so every product with it holds none either and no value could select between the results. Remove the factor'>
+        : [SharedAcross<Fs>] extends [never]
+          ? [AnyOpen<Fs[number]>] extends [never]
+              ? unknown
+              : ErrorMessage<'[product] a factor holds undeclared names through a `rest` codec, and a product declares no meet of two of them. Close every factor with `drop` or `refuse`'>
+          : ErrorMessage<`[product] two factors both declare '${SharedAcross<Fs>}', and a product needs disjoint names. Rename it, or drop it from one factor`>
+
+/** One option of a factor: what the merge reads off it. */
+type Factor = {
+    readonly spec: Record<string, AnyDeclaration>
+    readonly rest: RestPolicy<unknown>
+    readonly def: Term
+}
+
+/**
+ * The options a factor offers: a union's, or the factor itself.
+ *
+ * A `dunion` is refused here rather than distributed. Its variants are chosen by a tag and a
+ * union's by names, so one product would need two selection rules; JH has not ruled on the
+ * constructor that would carry both, and a refusal that names a pending ruling is honest where a
+ * guess is not.
+ */
+const optionsOfFactor = (factor: unknown): readonly Factor[] => {
+    const codec = factor as
+        | {
+              readonly def?: Term
+              readonly item?: {
+                  readonly spec?: Record<string, AnyDeclaration>
+                  readonly rest?: RestPolicy<unknown>
+                  readonly variant?: (index: number) => Factor
+              }
+          }
+        | undefined
+    const def = codec?.def
+    if (def?.kind === 'dunion') {
+        throw new CodecError(
+            'a `discriminatedUnion` is not a factor of a product yet — its variants are chosen by a tag and a product of tagged factors needs a term keyed by more than one, which is a ruling the owner has not made. Use an untagged `union` of objects, or take the product inside each variant',
+        )
+    }
+    // §5's (D) fails at a product against a factor that holds nothing: every merge would hold
+    // nothing too, and two empty held sets are comparable both ways, so no value tells the options
+    // apart. `not_subset_prodOn` is the theorem, and this is the hypothesis it carries. `never` is
+    // the only way in, because every other term that holds nothing is refused at its constructor
+    if (def?.kind === 'never') {
+        throw new CodecError(
+            '`never` holds no value, so every product with it holds none either and no value could select between the results — remove the factor',
+        )
+    }
+    if (def?.kind === 'union') {
+        const variant = codec?.item?.variant
+        if (!variant) {
             throw new CodecError(
-                'a product is taken of two object codecs, and one of these is not — a product merges declared names, and only an object declares any',
+                'a union factor must read as a whole item, and this one cannot — every option of it has to be an object for the product to merge names',
             )
         }
-        if (factor.item.rest !== 'drop' && factor.item.rest !== 'refuse') {
+        return def.options.map((_, index) => variant(index))
+    }
+    if (codec?.item?.spec && codec.item.rest !== undefined) {
+        return [codec.item as Factor]
+    }
+    throw new CodecError(
+        'a factor of a product is an object codec or a `union` of object codecs, and this is neither — a product merges declared names, and only an object declares any',
+    )
+}
+
+/** The binary product, over the options each factor offers. */
+const productOfTwo = (first: unknown, second: unknown): unknown => {
+    const lefts = optionsOfFactor(first)
+    const rights = optionsOfFactor(second)
+    for (const option of [...lefts, ...rights]) {
+        if (!option?.spec) {
+            throw new CodecError(
+                'an option of a union factor is not an object codec — a product merges declared names, and only an object declares any',
+            )
+        }
+        if (option.rest !== 'drop' && option.rest !== 'refuse') {
             throw new CodecError(
                 'a factor holds undeclared names through a `rest` codec, and a product declares no meet of two of them — close both factors with `drop` or `refuse`',
             )
         }
     }
-    const left = first.item.spec as Record<string, AnyDeclaration>
-    const right = second.item.spec as Record<string, AnyDeclaration>
-    for (const name in right) {
-        if (Object.hasOwn(left, name)) {
-            throw new CodecError(
-                `both factors declare '${name}', and a product needs disjoint names — rename it, or drop it from one factor`,
-            )
-        }
+    const merges = lefts.flatMap((left) =>
+        rights.map((right) => {
+            for (const name in right.spec) {
+                if (Object.hasOwn(left.spec, name)) {
+                    throw new CodecError(
+                        `both factors declare '${name}', and a product needs disjoint names — rename it, or drop it from one factor`,
+                    )
+                }
+            }
+            const rest: RestDeclaration =
+                left.rest === 'refuse' || right.rest === 'refuse'
+                    ? 'refuse'
+                    : 'drop'
+            return object({ ...left.spec, ...right.spec }, rest)
+        }),
+    )
+    // one merge is an object and needs no union around it; several are one flat union, built
+    // through `union` itself so `Collides` and `separable` run over the products
+    return merges.length === 1
+        ? merges[0]
+        : union(merges as unknown as readonly AnyCodec[])
+}
+
+/**
+ * **The product of two objects, or of unions of objects: the object of their merged spec.**
+ *
+ * The founding operation of the Cartesian product over codecs. `Body.merge` is the model's, and
+ * `typed_merge` is the corollary that makes the result derivable from the two factors' own
+ * judgements.
+ *
+ * **A union factor distributes.** The result is one flat `union` of the `n·m` merges, outer over
+ * the first factor's options and inner over the second — the `flatMap` order the model's
+ * distribution law states. It is built through {@link union}, so `Collides` and `separable` run
+ * over the products and a pair of merges no value can tell apart is refused there rather than here.
+ *
+ * **More than two factors fold left.** `product(a, b, c)` is `product(product(a, b), c)`, and the
+ * model's `merge_assoc` on `fields` and `rest` is why the other nesting gives the same term.
+ *
+ * @example
+ * ```ts
+ * product(object({ petId: string }), object({ price: decimal }))
+ * product(union([object({ a: string }), object({ b: string })]), object({ n: boolean }))
+ * ```
+ */
+export const product = <const Fs extends readonly unknown[]>(
+    ...factors: Fs & ValidateProduct<Fs>
+): FoldProduct<Fs> => {
+    const [head, ...rest] = factors as readonly unknown[]
+    if (head === undefined || rest.length === 0) {
+        throw new CodecError(
+            'a product is taken of two or more factors, and fewer were given',
+        )
     }
-    const rest: RestDeclaration =
-        first.item.rest === 'refuse' || second.item.rest === 'refuse'
-            ? 'refuse'
-            : 'drop'
-    return object({ ...left, ...right }, rest) as unknown as ObjectCodec<
-        A & B,
-        MergedRest<RA, RB>
-    >
+    return rest.reduce(
+        (carried, next) => productOfTwo(carried, next),
+        head,
+    ) as FoldProduct<Fs>
 }
 
 /**
@@ -3595,9 +3840,11 @@ export const discriminatedUnion = <
  * It is an option of no `union`: `False` is a subset of every held set, so §5's (D) fails against
  * every other option. `not_dincomp_never_left` and `not_dincomp_never_right` are that refutation.
  */
-export const never: AttributeCodec<never, never> = codecOfTerm({
-    kind: 'never',
-})
+export const never: AttributeCodec<never, never> & {
+    readonly def: { readonly kind: 'never' }
+} = codecOfTerm({ kind: 'never' }) as AttributeCodec<never, never> & {
+    readonly def: { readonly kind: 'never' }
+}
 
 /**
  * A union told apart by what each option holds, with no tag to switch on — `zod`'s `union`.
