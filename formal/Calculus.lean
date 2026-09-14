@@ -11,6 +11,7 @@ import Calculus.Frontier
 import Calculus.Term
 import Calculus.Denote
 import Calculus.Typing
+import Calculus.Merge
 import Calculus.Soundness
 import Calculus.Discharge
 import Calculus.Equations

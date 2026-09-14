@@ -47,6 +47,7 @@ import {
     object,
     opaque,
     optional,
+    product,
     record,
     refine,
     string,
@@ -118,6 +119,34 @@ describe('terms', () => {
         )
         expect(leanTermOf(erase(string('only')))).toBe(
             'Term.literal GroundKind.string (NEFinset.of "only" ∅)',
+        )
+    })
+
+    /**
+     * **A name, a literal or a tag outside ASCII reaches the model as a string Lean accepts.**
+     *
+     * Lean takes exactly four hex digits after `\u` and has no `\u{...}` form, so this emitted
+     * `invalid hexadecimal numeral` for every non-ASCII character until the first one arrived.
+     * Above `U+FFFF` no escape is correct at all — `\u1d538` lexes as `\u1d53` then `8` — so a
+     * printable character goes raw and the control range keeps a four-digit escape.
+     *
+     * `literal_non_ascii` in the corpus is the vector, which is what makes this a gated rule
+     * rather than an assertion about a string.
+     */
+    it('emits a character outside ASCII as one Lean accepts, at every code point', () => {
+        // the BMP, where a four-digit escape would also have worked
+        expect(leanTermOf(erase(string('⊥')))).toBe(
+            'Term.literal GroundKind.string (NEFinset.of "⊥" ∅)',
+        )
+        // above `U+FFFF`, where no escape is correct and the raw character is the only spelling
+        expect(leanTermOf(erase(string('𝔸')))).toBe(
+            'Term.literal GroundKind.string (NEFinset.of "𝔸" ∅)',
+        )
+        // an object's names and a tag go through the same writer
+        expect(leanTermOf(erase(object({ π: string }).item))).toContain('"π"')
+        // and the control range keeps an escape, zero-padded to the four digits Lean wants
+        expect(leanTermOf(erase(string('\u0001')))).toBe(
+            'Term.literal GroundKind.string (NEFinset.of "\\u0001" ∅)',
         )
     })
 
@@ -532,16 +561,16 @@ describe('values and attributes', () => {
     })
 
     /**
-     * Lean's escape language and JSON's overlap and disagree, silently. JSON writes `\uXXXX` for
-     * the control range and Lean 4 reads `\u` as wanting braces — so a tab in an attribute name
-     * would have produced a file that does not parse, with no hint of where. Everything outside
-     * printable ASCII goes out as `\u{...}`.
+     * Lean's escape language and JSON's overlap and disagree, silently, and this test asserted the
+     * disagreement backwards. Lean has no `\u{...}` form: it takes exactly four hex digits, so
+     * everything this wrote outside printable ASCII was a file that does not parse. A printable
+     * character goes out raw, at every code point, and the control range keeps a padded escape.
      */
     it('escapes strings the way Lean reads them, not the way JSON writes them', () => {
         expect(leanValueOf('a\tb')).toBe('Value.str "a\\tb"')
         expect(leanValueOf('q"\\')).toBe('Value.str "q\\"\\\\"')
-        expect(leanValueOf('\u0001')).toBe('Value.str "\\u{1}"')
-        expect(leanValueOf('é')).toBe('Value.str "\\u{e9}"')
+        expect(leanValueOf('\u0001')).toBe('Value.str "\\u0001"')
+        expect(leanValueOf('é')).toBe('Value.str "é"')
     })
 })
 
@@ -633,6 +662,12 @@ export const sampleVectors: readonly Vector[] = [
         codec: erase(decimal('1', '2.5')),
         value: '2.5',
     },
+    // one alternative in the BMP and one above `U+FFFF`, which is where no escape is correct
+    {
+        name: 'literal_non_ascii',
+        codec: erase(string('⊥', '𝔸')),
+        value: '𝔸',
+    },
     {
         name: 'literal_binary',
         codec: erase(binary(new Uint8Array([0, 127, 255]))),
@@ -720,6 +755,13 @@ export const sampleVectors: readonly Vector[] = [
         ),
         value: { kind: 'a', x: 'v' },
     },
+    // a product, so the bridge sees one: the merged body is an ordinary `object` term, which is
+    // the whole content of `Body.merge` on the host side
+    {
+        name: 'product_two_objects',
+        codec: erase(product(object({ a: string }), object({ n: boolean }))),
+        value: { a: 'x', n: true },
+    },
     { name: 'opaque_map', codec: erase(opaque), value: { a: 'x' } },
     { name: 'lazy_string', codec: erase(lazy(() => string)), value: 'x' },
 ]
@@ -738,7 +780,7 @@ export const sampleVectors: readonly Vector[] = [
  *
  * `opaque` is the one codec with **no** refusal, and that is a result rather than a gap: it is the
  * fixpoint of everything self-identifying, so it admits every value in this corpus. A codec that
- * refuses nothing contributes no refusal vector, and the subset says twenty-six of twenty-seven
+ * refuses nothing contributes no refusal vector, and the subset says one less than the whole
  * for that reason.
  */
 const refusalCodecs: readonly (readonly [string, AnyCodec])[] = [
@@ -1011,13 +1053,13 @@ describe('union resolution, model against library', () => {
      * a positive vector *is* an agreement about which option answered, since the attribute it
      * names is the one that option produced — and the refusal set carries 88 more union lines.
      * This widens two to 208, and the value is the corpus rather than the question. 216 with
-     * `set_of_literal`, the twenty-eighth codec: the eight it adds are the resolutions of the
-     * unions the new entry takes part in.
+     * `set_of_literal`, 224 with `literal_non_ascii` and 232 with `product_two_objects`: each new
+     * entry adds the resolutions of the unions it takes part in.
      */
-    it('offers 216 write pairs and 239 statable of 240 read pairs', () => {
-        expect(writeResolutions().length).toBe(216)
+    it('offers 232 write pairs and 255 statable of 256 read pairs', () => {
+        expect(writeResolutions().length).toBe(232)
         const reads = readResolutions()
-        expect(reads.length).toBe(240)
+        expect(reads.length).toBe(256)
         // one pair only, and it is the `Double` axiom reaching the decoded value; the five
         // map-valued reads beside it are stated through `vcheck` now
         expect(
@@ -1077,9 +1119,9 @@ describe("the read side, against the model's read row", () => {
      * description of one thing, and this differential is the guard that a second description
      * would have needed anyway.
      */
-    it('offers 924 pairs, three of them stuck on the `Double` axiom', () => {
+    it('offers 1050 pairs, three of them stuck on the `Double` axiom', () => {
         const verdicts = readVerdicts()
-        expect(verdicts.length).toBe(924)
+        expect(verdicts.length).toBe(1050)
         const stuck = verdicts.filter(readRowIsStuck)
         expect(stuck.map((one) => one.name)).toEqual([
             'scalar_number__reads__scalar_decimal',
@@ -1105,7 +1147,7 @@ describe("the read side, against the model's read row", () => {
 
 describe("the declaration guard, against the model's classifier", () => {
     /**
-     * **`src/` refuses sixty-four pairs, and each one carries a warrant.** That is the whole
+     * **`src/` refuses sixty-seven pairs, and each one carries a warrant.** That is the whole
      * law, and it is one-directional on purpose: `Orth` is sufficient and not necessary, so a
      * pair it declines may still be separable. What would be a defect is `src/` refusing a
      * declaration the model *proves* works — which is what it did to
@@ -1138,14 +1180,14 @@ describe("the declaration guard, against the model's classifier", () => {
      * law was untouched either way, and what moved is that a union no value can resolve is now
      * refused where it used to be declared. JH's ruling, landed in `ff75c6b`.
      *
-     * **The count pins a fact no law has, deliberately.** That it is sixty-four is a property of
+     * **The count pins a fact no law has, deliberately.** That it is sixty-seven is a property of
      * this corpus, so widening the corpus is meant to fail here and be looked at; the *law* is
      * the loop below, that every refusal the model also declines. Both are kept, and the number
      * stays.
      */
     it('refuses only pairs the classifier also declines', () => {
         const separations = separationPairs()
-        expect(separations.length).toBe(64)
+        expect(separations.length).toBe(67)
         // each one emits, which is where `leanSeparation` re-checks that `src/` really refuses,
         // and it carries one of the two warrants: `Orth` declines, or (D) fails against `never`
         for (const one of separations) {
@@ -1236,7 +1278,7 @@ describe("the read side of every corpus codec, against the model's `p`", () => {
             (one) => readVectorIsUnstatable(one) === undefined,
         )
         expect(statable.length).toBe(sampleVectors.length)
-        expect(statable.length).toBe(27)
+        expect(statable.length).toBe(29)
         // each asserts the model's `p`, through the comparator that crosses `Value.map`'s binder
         for (const one of statable) {
             const vector = leanReadVector(one)
