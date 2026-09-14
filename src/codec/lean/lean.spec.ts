@@ -762,6 +762,29 @@ export const sampleVectors: readonly Vector[] = [
         codec: erase(product(object({ a: string }), object({ n: boolean }))),
         value: { a: 'x', n: true },
     },
+    // the distribution: a product over a union of objects is a flat union of the merges
+    {
+        name: 'product_union_object',
+        codec: erase(
+            product(
+                union([object({ a: string }), object({ b: boolean })]),
+                object({ n: decimal }),
+            ),
+        ),
+        value: { a: 'x', n: '1' },
+    },
+    // and the fold, which `merge_assoc` on `fields` and `rest` is why either nesting gives
+    {
+        name: 'product_three',
+        codec: erase(
+            product(
+                object({ p: string }),
+                object({ q: boolean }),
+                object({ r: decimal }),
+            ),
+        ),
+        value: { p: 'x', q: true, r: '1' },
+    },
     { name: 'opaque_map', codec: erase(opaque), value: { a: 'x' } },
     { name: 'lazy_string', codec: erase(lazy(() => string)), value: 'x' },
 ]
@@ -1053,13 +1076,13 @@ describe('union resolution, model against library', () => {
      * a positive vector *is* an agreement about which option answered, since the attribute it
      * names is the one that option produced — and the refusal set carries 88 more union lines.
      * This widens two to 208, and the value is the corpus rather than the question. 216 with
-     * `set_of_literal`, 224 with `literal_non_ascii` and 232 with `product_two_objects`: each new
-     * entry adds the resolutions of the unions it takes part in.
+     * `set_of_literal`, and 248 by `literal_non_ascii` and the three products: each new entry
+     * adds the resolutions of the unions it takes part in.
      */
-    it('offers 232 write pairs and 255 statable of 256 read pairs', () => {
-        expect(writeResolutions().length).toBe(232)
+    it('offers 248 write pairs and 271 statable of 272 read pairs', () => {
+        expect(writeResolutions().length).toBe(248)
         const reads = readResolutions()
-        expect(reads.length).toBe(256)
+        expect(reads.length).toBe(272)
         // one pair only, and it is the `Double` axiom reaching the decoded value; the five
         // map-valued reads beside it are stated through `vcheck` now
         expect(
@@ -1119,9 +1142,9 @@ describe("the read side, against the model's read row", () => {
      * description of one thing, and this differential is the guard that a second description
      * would have needed anyway.
      */
-    it('offers 1050 pairs, three of them stuck on the `Double` axiom', () => {
+    it('offers 1184 pairs, three of them stuck on the `Double` axiom', () => {
         const verdicts = readVerdicts()
-        expect(verdicts.length).toBe(1050)
+        expect(verdicts.length).toBe(1184)
         const stuck = verdicts.filter(readRowIsStuck)
         expect(stuck.map((one) => one.name)).toEqual([
             'scalar_number__reads__scalar_decimal',
@@ -1147,7 +1170,7 @@ describe("the read side, against the model's read row", () => {
 
 describe("the declaration guard, against the model's classifier", () => {
     /**
-     * **`src/` refuses sixty-seven pairs, and each one carries a warrant.** That is the whole
+     * **`src/` refuses seventy-two pairs, and each one carries a warrant.** That is the whole
      * law, and it is one-directional on purpose: `Orth` is sufficient and not necessary, so a
      * pair it declines may still be separable. What would be a defect is `src/` refusing a
      * declaration the model *proves* works — which is what it did to
@@ -1180,14 +1203,14 @@ describe("the declaration guard, against the model's classifier", () => {
      * law was untouched either way, and what moved is that a union no value can resolve is now
      * refused where it used to be declared. JH's ruling, landed in `ff75c6b`.
      *
-     * **The count pins a fact no law has, deliberately.** That it is sixty-seven is a property of
+     * **The count pins a fact no law has, deliberately.** That it is seventy-two is a property of
      * this corpus, so widening the corpus is meant to fail here and be looked at; the *law* is
      * the loop below, that every refusal the model also declines. Both are kept, and the number
      * stays.
      */
     it('refuses only pairs the classifier also declines', () => {
         const separations = separationPairs()
-        expect(separations.length).toBe(67)
+        expect(separations.length).toBe(72)
         // each one emits, which is where `leanSeparation` re-checks that `src/` really refuses,
         // and it carries one of the two warrants: `Orth` declines, or (D) fails against `never`
         for (const one of separations) {
@@ -1278,7 +1301,7 @@ describe("the read side of every corpus codec, against the model's `p`", () => {
             (one) => readVectorIsUnstatable(one) === undefined,
         )
         expect(statable.length).toBe(sampleVectors.length)
-        expect(statable.length).toBe(29)
+        expect(statable.length).toBe(31)
         // each asserts the model's `p`, through the comparator that crosses `Value.map`'s binder
         for (const one of statable) {
             const vector = leanReadVector(one)

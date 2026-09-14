@@ -239,6 +239,20 @@ theorem product_two_objects :
     = some (Attr.m {"a", "n"} (fun k => if k.1 = "a" then Attr.s "x" else Attr.bool true)) := by
   vector
 
+/-- `product_union_object` -/
+theorem product_union_object :
+    (denote (Term.union [Term.object (Body.mk {"a", "n"} (fun k => if k.1 = "a" then Field.req (Term.string) else Field.req (Term.decimal)) Rest.drop), Term.object (Body.mk {"b", "n"} (fun k => if k.1 = "b" then Field.req (Term.boolean) else Field.req (Term.decimal)) Rest.drop)])).e
+      (Value.map {"a", "n"} (fun k => if k.1 = "a" then Value.str "x" else Value.str "1"))
+    = some (Attr.m {"a", "n"} (fun k => if k.1 = "a" then Attr.s "x" else Attr.n (WFNumeral.of "1"))) := by
+  vector
+
+/-- `product_three` -/
+theorem product_three :
+    (denote (Term.object (Body.mk {"p", "q", "r"} (fun k => if k.1 = "p" then Field.req (Term.string) else if k.1 = "q" then Field.req (Term.boolean) else Field.req (Term.decimal)) Rest.drop))).e
+      (Value.map {"p", "q", "r"} (fun k => if k.1 = "p" then Value.str "x" else if k.1 = "q" then Value.bool true else Value.str "1"))
+    = some (Attr.m {"p", "q", "r"} (fun k => if k.1 = "p" then Attr.s "x" else if k.1 = "q" then Attr.bool true else Attr.n (WFNumeral.of "1"))) := by
+  vector
+
 /-- `opaque_map` -/
 theorem opaque_map :
     (denote (Term.opaq false)).e
@@ -255,8 +269,8 @@ theorem lazy_string :
 
 /-! ## Refusals — neither side writes anything for these
 
-30 of 781 shown; `scripts/gate.sh` elaborates all
-781. One `rfl` each, no comparator and no fuel: the answer is `none`,
+32 of 897 shown; `scripts/gate.sh` elaborates all
+897. One `rfl` each, no comparator and no fuel: the answer is `none`,
 which carries no function for the funext gap to open under.
 -/
 
@@ -393,6 +407,16 @@ theorem discriminated_union__refuses__scalar_string :
 /-- `product_two_objects__refuses__scalar_string` — refused on both sides -/
 theorem product_two_objects__refuses__scalar_string :
     (denote (Term.object (Body.mk {"a", "n"} (fun k => if k.1 = "a" then Field.req (Term.string) else Field.req (Term.boolean)) Rest.drop))).e
+      (Value.str "hello") = none := rfl
+
+/-- `product_union_object__refuses__scalar_string` — refused on both sides -/
+theorem product_union_object__refuses__scalar_string :
+    (denote (Term.union [Term.object (Body.mk {"a", "n"} (fun k => if k.1 = "a" then Field.req (Term.string) else Field.req (Term.decimal)) Rest.drop), Term.object (Body.mk {"b", "n"} (fun k => if k.1 = "b" then Field.req (Term.boolean) else Field.req (Term.decimal)) Rest.drop)])).e
+      (Value.str "hello") = none := rfl
+
+/-- `product_three__refuses__scalar_string` — refused on both sides -/
+theorem product_three__refuses__scalar_string :
+    (denote (Term.object (Body.mk {"p", "q", "r"} (fun k => if k.1 = "p" then Field.req (Term.string) else if k.1 = "q" then Field.req (Term.boolean) else Field.req (Term.decimal)) Rest.drop))).e
       (Value.str "hello") = none := rfl
 
 /-- `lazy_string__refuses__scalar_boolean` — refused on both sides -/

@@ -8,13 +8,22 @@
 import { describe, expect, it } from 'vitest'
 import type { AnyCodec } from '../../codec'
 import {
+    array,
     boolean,
     CodecError,
     decimal,
+    discriminatedUnion,
+    fallback,
+    never,
+    nullable,
     object,
     optional,
     product,
+    rest,
     string,
+    tuple,
+    undefinable,
+    union,
 } from '../../codec'
 import { checkRoundTrip } from '../../testing'
 
@@ -135,7 +144,215 @@ describe('the declarations a product refuses', () => {
         expect(() => take(object({ a: string }), string)).toThrow(CodecError)
         // and the message says what a factor has to be
         expect(() => take(string, object({ b: string }))).toThrow(
-            /two object codecs/,
+            /an object codec or a `union` of object codecs/,
+        )
+    })
+})
+
+describe('the product distributes over a union', () => {
+    const Kind = union([object({ a: string }), object({ b: boolean })])
+    const Tail = object({ n: decimal })
+
+    /**
+     * **The distribution law.** A product over a union of objects is the union of the merges,
+     * and nothing is nested: the result is one flat `union`, built through `union` itself so
+     * `Collides` and `separable` run over the products rather than over the factors.
+     */
+    it('is the union of the merges, flat', () => {
+        expect(product(Kind, Tail).def).toEqual(
+            union([
+                object({ a: string, n: decimal }),
+                object({ b: boolean, n: decimal }),
+            ]).def,
+        )
+    })
+
+    /**
+     * **The order is the model's `flatMap` order**: outer over the first factor's options, inner
+     * over the second. Asserted as a term against a union written out in that order, which is
+     * what pins it — a different order is a different term.
+     */
+    it('takes n·m merges in flatMap order, outer first', () => {
+        const Other = union([object({ n: decimal }), object({ m: boolean })])
+        expect(product(Kind, Other).def).toEqual(
+            union([
+                object({ a: string, n: decimal }),
+                object({ a: string, m: boolean }),
+                object({ b: boolean, n: decimal }),
+                object({ b: boolean, m: boolean }),
+            ]).def,
+        )
+    })
+
+    it('round-trips through whichever merge the names choose', () => {
+        const P = product(Kind, Tail)
+        expect(P.unsafeDecode(P.unsafeEncode({ a: 'x', n: '1' }))).toEqual({
+            a: 'x',
+            n: '1',
+        })
+        expect(P.unsafeDecode(P.unsafeEncode({ b: true, n: '2' }))).toEqual({
+            b: true,
+            n: '2',
+        })
+    })
+
+    /**
+     * **(D) is inherited, and it is a theorem rather than a check.**
+     *
+     * A collision between two merges reduces to a collision inside one factor. Names are disjoint
+     * across factors, so `req(Aᵢ ∪ Cⱼ) ⊆ decl(Aₖ ∪ C_l)` splits into `req(Aᵢ) ⊆ decl(Aₖ)` and
+     * `req(Cⱼ) ⊆ decl(C_l)` — and both directions of that are exactly `Collides` at one factor,
+     * which that factor's own `union` already refused.
+     *
+     * So the collision check `product` hands to {@link union} never fires on valid factors. It is
+     * kept because the products go through `union` rather than around it, which is what makes the
+     * claim checkable at all; this test is the claim.
+     */
+    it('never produces two merges that collide, whatever the factors are', () => {
+        const lefts = [
+            union([object({ a: string }), object({ b: boolean })]),
+            union([
+                object({ a: string, p: optional(string) }),
+                object({ b: boolean }),
+            ]),
+            union([object({ a: string }), object({ b: boolean, q: decimal })]),
+        ]
+        const rights = [
+            union([object({ n: decimal }), object({ m: boolean })]),
+            union([
+                object({ n: decimal, r: optional(string) }),
+                object({ m: boolean }),
+            ]),
+        ]
+        for (const left of lefts) {
+            for (const right of rights) {
+                expect(() => product(left, right)).not.toThrow()
+            }
+        }
+    })
+})
+
+describe('the variadic product', () => {
+    /** The fold is left, and `merge_assoc` on `fields` and `rest` is why the other nesting agrees. */
+    it('folds left, and both nestings give the same term', () => {
+        const a = object({ a: string })
+        const b = object({ b: boolean })
+        const c = object({ c: decimal })
+        expect(product(a, b, c).def).toEqual(product(product(a, b), c).def)
+        expect(product(a, b, c).def).toEqual(product(a, product(b, c)).def)
+        expect(product(a, b, c).def).toEqual(
+            object({ a: string, b: boolean, c: decimal }).def,
+        )
+    })
+
+    it('refuses fewer than two factors', () => {
+        const take = product as unknown as (...f: readonly unknown[]) => unknown
+        expect(() => take(object({ a: string }))).toThrow(CodecError)
+    })
+})
+
+describe('the factors a product refuses until the owner rules', () => {
+    /**
+     * **A slot nothing fills makes the term hold no value**, and the constructor refuses it.
+     *
+     * A slot is a position a value must fill: a fixed element of a tuple, and a `req` or
+     * `fallback` field. `never` already names the term that holds nothing, so a second spelling
+     * for it is a declaration that looks like a schema and refuses every entity.
+     */
+    it('refuses a slot declared at never, at the constructor that holds it', () => {
+        // @ts-expect-error the type refuses it too; this asserts the runtime half
+        expect(() => object({ a: string, dead: never })).toThrow(
+            /holds no value/,
+        )
+        // @ts-expect-error a fixed position of a tuple is a slot
+        expect(() => tuple(never, string)).toThrow(/nothing fills it/)
+        // …and a `never` tail is a tail that admits nothing past the fixed part. The runtime
+        // alone refuses this one: `RestCodec.rest` is typed `AttributeCodec<T, A>`, which erases
+        // the narrowed `def` that the fixed positions are matched on
+        expect(() => tuple(string, rest(never))).toThrow(/nothing fills it/)
+    })
+
+    /**
+     * **A mark that lets the value be absent makes the name a non-slot**, so the object still
+     * holds something and the declaration stands.
+     *
+     * `optional` and `undefinable` declare a key that can never be present, which is a redundant
+     * declaration rather than an impossible one. `nullable(never)` is different and is `null`
+     * alone: the field stays `req`, and the one value it holds is the null.
+     */
+    it('declares a name at never under a mark that admits absence', () => {
+        const Opt = object({ a: string, gone: optional(never) }).item
+        expect(Opt.unsafeEncode({ a: 'q' })).toEqual({ a: { S: 'q' } })
+
+        // `undefinable` keeps the key in the entity and lets the value be `undefined`, so over
+        // `never` the key is required and `undefined` is the only value it can take
+        const Und = object({ a: string, gone: undefinable(never) }).item
+        expect(Und.unsafeEncode({ a: 'q', gone: undefined })).toEqual({
+            a: { S: 'q' },
+        })
+
+        // `nullable` holds the null and nothing else, and the name stays required
+        const Nul = object({ a: string, gone: nullable(never) }).item
+        expect(Nul.unsafeEncode({ a: 'q', gone: null })).toEqual({
+            a: { S: 'q' },
+            gone: { NULL: true },
+        })
+        expect(() => Nul.unsafeEncode({ a: 'q' } as never)).toThrow(CodecError)
+    })
+
+    /**
+     * **`fallback` at `never` is refused twice, by two different rules.**
+     *
+     * The type reaches it through the slot gate: a `fallback` name is always written. The runtime
+     * never gets that far, because `fallback`'s own older rule refuses a stand-in that the codec
+     * it stands in for cannot write, and `never` writes nothing.
+     */
+    it('refuses a fallback at never, at the type by the slot and at the runtime by the stand-in', () => {
+        expect(() =>
+            // @ts-expect-error the slot gate refuses it at the type
+            object({ a: string, gone: fallback(never as never, 'v') }),
+        ).toThrow(/stand-in must be a value/)
+    })
+
+    /** `array` and `record` are not slots: both admit their empty case, and that is a value. */
+    it('declares an array of never, which holds the empty list', () => {
+        const Empty = array(never)
+        expect(Empty.unsafeDecode(Empty.unsafeEncode([]))).toEqual([])
+    })
+
+    /**
+     * **(D) fails at a product against a factor that holds nothing.** Every merge would hold
+     * nothing too, and two empty held sets are comparable in both directions, so no value could
+     * select between the results. `not_subset_prodOn` carries that hypothesis.
+     */
+    it('refuses never as a factor', () => {
+        // the type refuses it by a clause of its own: without one the open-factor clause fired
+        // and told the caller to close a rest policy `never` does not have
+        // @ts-expect-error the clause under test
+        expect(() => product(never, object({ n: decimal }))).toThrow(
+            /holds no value/,
+        )
+        // @ts-expect-error and either position
+        expect(() => product(object({ n: decimal }), never)).toThrow(
+            /holds no value/,
+        )
+    })
+
+    /**
+     * A `dunion` chooses a variant by a tag and a `union` by names, so one product of the two
+     * would need a term carrying both selection rules. The owner has not ruled on that
+     * constructor, and the message says so rather than guessing.
+     */
+    it('refuses a discriminatedUnion factor, naming the pending ruling', () => {
+        const Tagged = discriminatedUnion('kind', [
+            object({ kind: string('a'), x: string }),
+            object({ kind: string('b'), y: boolean }),
+        ]) as never
+        expect(() => product(Tagged, object({ n: decimal }))).toThrow(
+            CodecError,
+        )
+        expect(() => product(Tagged, object({ n: decimal }))).toThrow(
+            /the owner has not made/,
         )
     })
 })
