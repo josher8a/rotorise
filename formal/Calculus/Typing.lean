@@ -119,6 +119,10 @@ def HUnion (Ts : List Held) : Held :=
 def HVariants (variants : MapOf Body) (Ts : {k // k ∈ variants.1} → Held) : Held :=
   fun v => ∃ k, Ts k v
 
+/-- The bottom's held set: nothing. It is a subset of every held set, so (D) fails against
+    every other option and `never` is an option of no `union`. -/
+def HNever : Held := fun _ => False
+
 /-- §5's **(D)**, `(union)`'s well-formedness side condition, pairwise over the held sets.
 
     *Incomparability*, not disjointness: disjointness would reject working unions
@@ -229,6 +233,8 @@ inductive Typed : Term → Held → Option Member → Prop where
   | lazy {t T μ} (h : Typed t T μ) : Typed (.lazy t) T none
   | custom (ce cp) : Typed (.custom ce cp) (fun v => (ce v).isSome = true) none
   | opaq (lossy) : Typed (.opaq lossy) (HOpaque lossy) none
+  /-- §5's bottom. It writes no value, so it stores no member, and its held set is `False`. -/
+  | never : Typed .never HNever none
   /-- §4 `(object)`. The field table is a key set with a function on it, so the
       judgement is **pointwise**: every declared name's field is typed at its binding,
       and the bindings are indexed by the same set — so "the same names, in the same

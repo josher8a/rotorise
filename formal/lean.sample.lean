@@ -241,8 +241,8 @@ theorem lazy_string :
 
 /-! ## Refusals — neither side writes anything for these
 
-27 of 649 shown; `scripts/gate.sh` elaborates all
-649. One `rfl` each, no comparator and no fuel: the answer is `none`,
+28 of 676 shown; `scripts/gate.sh` elaborates all
+676. One `rfl` each, no comparator and no fuel: the answer is `none`,
 which carries no function for the funext gap to open under.
 -/
 
@@ -379,6 +379,11 @@ theorem lazy_string__refuses__scalar_boolean :
 /-- `scalar_number__refuses__scalar_string` — refused on both sides -/
 theorem scalar_number__refuses__scalar_string :
     (denote (Term.number)).e
+      (Value.str "hello") = none := rfl
+
+/-- `never__refuses__scalar_string` — refused on both sides -/
+theorem never__refuses__scalar_string :
+    (denote (Term.never)).e
       (Value.str "hello") = none := rfl
 
 end Calculus

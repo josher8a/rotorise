@@ -178,6 +178,13 @@ export type Term =
           readonly d: string
           readonly options: readonly Term[]
       }
+    /**
+     * §5's bottom: the term that admits no value.
+     *
+     * A constructor rather than a `dunion` over no variants. The empty table is a term a caller
+     * can build by accident, and a rule that reads it as the bottom reads that accident as intent.
+     */
+    | { readonly kind: 'never' }
 
 /**
  * §4's object payload: the declared names with the field at each, and the policy for the rest.
@@ -290,6 +297,8 @@ export const member = (t: Term): AttributeName | undefined => {
         case 'lazy':
         case 'custom':
         case 'opaq':
+        // nothing is written, so there is no member stored
+        case 'never':
             return undefined
         case 'union':
             return unanimous(t.options.map(member))
@@ -422,6 +431,10 @@ export const occV = (t: Term): readonly Slot[] | undefined => {
             return t.lossy
                 ? everySlot
                 : everySlot.filter((slot) => slot !== 'number')
+        // **Empty, not `undefined`.** `undefined` is the `⊤` that says "cannot be read", and this
+        // term's occupancy is fully known: it is nothing. The model spells it `occNone`.
+        case 'never':
+            return []
     }
 }
 
@@ -479,6 +492,9 @@ export const occA = (t: Term): readonly AttributeName[] | undefined => {
             return t.lossy
                 ? everyMember
                 : everyMember.filter((one) => one !== 'N')
+        // empty and not `undefined`, for the reason {@link occV}'s `never` row gives
+        case 'never':
+            return []
     }
 }
 
@@ -564,6 +580,8 @@ export const identifies = (t: Term): boolean => {
         case 'literal':
         // a tag lookup fails for a value carrying no tag it knows, which is the same evidence
         case 'dunion':
+        // …and a term that admits nothing turns every value down, which is evidence too
+        case 'never':
             return true
         case 'array':
             return identifies(t.elem)
@@ -607,6 +625,8 @@ export const identifies = (t: Term): boolean => {
  * erased path. This is the runtime agreeing with the type rather than a new refusal.
  */
 export const restricts = (x: Term, y: Term): boolean => {
+    // the empty set is contained in every set, which is `opaque`'s rule at the opposite width
+    if (x.kind === 'never') return true
     // a literal is a refinement of its base: every value it admits, the base admits
     if (x.kind === 'literal' && y.kind === x.base) return true
     // …and a set of a literal is a restriction of the plain set at that base
@@ -678,8 +698,11 @@ export const restricts = (x: Term, y: Term): boolean => {
  * back what it wrote, because `decimal` takes a string and `number` a number while both store `N`.
  */
 export const separable = (x: Term, y: Term): boolean => {
-    if (x.kind === 'object' || y.kind === 'object') return true
+    // **Containment before the object exemption.** The three {@link restricts} rows name a literal,
+    // a set of a literal and `never`, and an object option is none of them — so the only pair
+    // whose answer this order changes is an object option beside `never`.
     if (restricts(x, y) || restricts(y, x)) return false
+    if (x.kind === 'object' || y.kind === 'object') return true
     if (identifies(x) || identifies(y)) return true
     const writable = meet(occV(x), occV(y))
     const readable = meet(occA(x), occA(y))

@@ -9,6 +9,8 @@ import {
     boolean,
     CodecError,
     decimal,
+    discriminatedUnion,
+    never,
     nullValue,
     number,
     object,
@@ -18,6 +20,7 @@ import {
     union,
 } from '../../codec'
 import { accepts } from '../../denote'
+import { failed } from '../../result'
 import { checkRoundTrip, roundTrip } from '../../testing'
 
 type LineItem =
@@ -433,5 +436,79 @@ describe('an object option is admitted by its names alone', () => {
         expect(() =>
             Sum.unsafeEncode({ kind: 'b', x: '1' } as never),
         ).not.toThrow(/no option admits/)
+    })
+})
+
+/**
+ * **`never`: the term that admits no value.**
+ *
+ * `Term.never` on both sides. The model types it — `Typed.never` gives it `HNever`, which is
+ * `False` — and denotes it as `Codec.empty`. A constructor rather than a `discriminatedUnion` over
+ * no options: an empty option list is a term a caller can build by accident, and a rule reading it
+ * as the bottom reads that accident as intent.
+ */
+describe('never', () => {
+    it('admits no value, in either direction', () => {
+        expect(failed(never.encode({} as never))).toBe(true)
+        expect(failed(never.encode('x' as never))).toBe(true)
+        expect(failed(never.encode(undefined as never))).toBe(true)
+        expect(failed(never.decode({ S: 'x' }))).toBe(true)
+        expect(failed(never.decode({ M: { a: { S: 'x' } } }))).toBe(true)
+        expect(failed(never.decode({ NULL: true }))).toBe(true)
+    })
+
+    /** The refusal is a value in both directions, which is the rule every other codec follows. */
+    it('reports a refusal as a value and never as a throw', () => {
+        expect(() => never.encode({} as never)).not.toThrow()
+        expect(() => never.encode(undefined as never)).not.toThrow()
+        expect(() => never.decode({ S: 'x' })).not.toThrow()
+    })
+
+    /**
+     * **`opaque`'s rule at the opposite width.** `opaque` admits every value, so every other
+     * option is inside it. `never` admits none, so it is inside every other option, and §5's
+     * `select` acts nowhere on it. The message is the same one, and it names the option to remove.
+     */
+    it('can never be an option of a union', () => {
+        // @ts-expect-error the type refuses the pair; this asserts the runtime half
+        expect(() => union([string, never])).toThrow(CodecError)
+        // @ts-expect-error the order of the options does not matter
+        expect(() => union([never, string])).toThrow(CodecError)
+        // @ts-expect-error the same type-level refusal
+        expect(() => union([string, never])).toThrow(/admits only values that/)
+        // @ts-expect-error the same type-level refusal
+        expect(() => union([string, never])).toThrow(
+            /a discriminator does not fix this/,
+        )
+    })
+
+    /**
+     * **An object option is no exception**, and it is the one pair that made the order matter.
+     *
+     * `separable` exempts an object option, because a union admits an object by its names. That
+     * exemption used to be asked before containment, so an object beside `never` was certified
+     * separable and the refusal was never reached — the type refused the pair and the runtime
+     * declared it. Containment is asked first now, and no other object pair changes answer: the
+     * three {@link restricts} rows name a literal, a set of a literal and `never`.
+     */
+    it('can never be an option beside an object either', () => {
+        // @ts-expect-error the type refuses the pair; this asserts the runtime half
+        expect(() => union([object({ a: string }), never])).toThrow(CodecError)
+        // @ts-expect-error the same type-level refusal
+        expect(() => union([object({ a: string }), never])).toThrow(
+            /admits only values that/,
+        )
+        // and the exemption itself still stands for a pair of objects, which names decide
+        expect(() =>
+            union([object({ a: string }), object({ b: string })]),
+        ).not.toThrow()
+    })
+
+    /** `discriminatedUnion` over no options stays refused: an empty list is a mistake, not a term. */
+    it('is the only name that reaches the term', () => {
+        expect(() =>
+            // @ts-expect-error the empty option list is refused by the type as well
+            discriminatedUnion('kind', []),
+        ).toThrow(CodecError)
     })
 })

@@ -652,6 +652,8 @@ const leanTermOfTerm = (t: Term, at: string, forced: number): string => {
             // {@link leanBodyOf} and both rows print the same thing.
             return `Term.object ${leanBodyOf(t.body, at, forced)}`
         }
+        case 'never':
+            return 'Term.never'
         case 'dunion': {
             /**
              * **The two sides agree about what a tag is now, at two of the three bases.**
@@ -928,6 +930,13 @@ export const leanRefusal = ({ name, codec, value }: Refusal): string => {
  * starts certifying a pair `src/` turns down. Zero counterexamples today, and the pair that
  * motivated `ff75c6b` is the reason the law is worth gating rather than asserting once:
  * `Orth (Term.set .string) (Term.set .number) = true`, which `src/` refused until that commit.
+ *
+ * **That law holds of a pair the model TYPES, and a refusal has one of two warrants.** `never` is
+ * the pair it does not reach: `HNever` is `False`, a subset of every held set, so §5's (D) fails
+ * on the first conjunct and `union([X, never])` is not `Typed`. `Orth` never sees it, and
+ * certifies it on slots alone — `Orth Term.string Term.never` is `true`, `never` occupying no
+ * slot. So a pair with `never` on a side carries the (D) refutation instead, and the other side
+ * appears in the name and the docstring only: the warrant does not depend on it.
  */
 export type Separation = {
     /** A Lean identifier; anything else is sanitized, because a bad name loses the whole file. */
@@ -956,6 +965,21 @@ export const leanSeparation = ({ name, left, right }: Separation): string => {
             '`src/` accepts this pair at the declaration, so there is no refusal for the model to contradict — the law is one-directional and this is the direction it does not run',
         )
     }
+    // the same test `restricts` makes, which is what put the pair in this list
+    const isNever = (declared: AnyCodec): boolean => {
+        const def = declared.def
+        return !('mark' in def) && def.kind === 'never'
+    }
+    if (isNever(left) || isNever(right)) {
+        const [held, warrant] = isNever(left)
+            ? (['[HNever, T]', 'not_dincomp_never_left'] as const)
+            : (['[T, HNever]', 'not_dincomp_never_right'] as const)
+        return [
+            `/-- \`${name}\` — \`src/\` refuses this pair; (D) fails, so it is not \`Typed\` -/`,
+            `theorem ${leanIdent(name)} : ∀ T : Held, ¬ DIncomp ${held} :=`,
+            `    ${warrant}`,
+        ].join('\n')
+    }
     return [
         `/-- \`${name}\` — \`src/\` refuses this pair; the model must not certify it -/`,
         `theorem ${leanIdent(name)} :`,
@@ -982,7 +1006,9 @@ export const leanSeparationModule = (
 
 **Generated — do not edit.** One theorem per option pair \`src/\`'s \`union\` refuses at the
 declaration. \`Orth\` is *sufficient* and not necessary, so this runs one way: a pair the model
-certifies must not be refused by \`src/\`. See \`src/codec/lean.ts\`'s \`Separation\`.
+certifies must not be refused by \`src/\`. A refusal carries one of two warrants: \`Orth\` declines
+the pair, or (D) fails against \`never\` and the pair is not \`Typed\`. See
+\`src/codec/lean.ts\`'s \`Separation\`.
 -/
 
 /-! The emitted key function is total on a membership subtype, so a single-name object binds a

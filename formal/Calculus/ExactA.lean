@@ -168,6 +168,8 @@ noncomputable def AdmA : Term → Attr → Bool
       | _ => false
   | .decimal  => fun a => match a with | .n x => Numeral.Stored x.1 | _ => false
   | .literal k ls => AdmALit k ls
+  -- the bottom reads nothing back, and the row is that sentence
+  | .never => fun _ => false
   | .custom _ cp => fun a => (cp a).isSome
   | .array c  => fun a => match a with | .l as => allPA (AdmA c) as | _ => false
   | .record c => fun a =>
@@ -685,6 +687,8 @@ theorem AdmA_exact : ∀ (t : Term), ExactA t
   | .dunion _ variants => ExactA_dunion fun k => AdmA_exactB (variants.2 k)
   | .object b => AdmA_exactB b
   | .opaq lossy => ExactA_opaq lossy
+  -- both sides are empty, so the equivalence is `False ↔ False`
+  | .never => fun _ => Iff.rfl
   -- exact because the constructor narrowed, not because the row sharpened
   | .set b => ExactA_set b
   -- the row that asks `ownsNull`; see `ExactA_nullable`

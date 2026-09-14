@@ -105,6 +105,8 @@ def μSyn : Term → Option Member
   | .object _ => some .M
   | .union opts => unanimous (μSynList opts)
   | .dunion _ _ => some .M
+  -- the bottom writes no value, so there is no member it stores
+  | .never => none
 
 def μSynList : List Term → List (Option Member)
   | [] => []
@@ -172,6 +174,8 @@ def denote : Term → Codec
   -- **the lookup, not a filtered sum.** The variants are a table keyed by tag, so the codec
   -- reads the tag and indexes; ~~denoteTagged~~ and its list are gone with the sum.
   | .dunion d variants => dunionTable d ⟨variants.1, fun k => bodySem (variants.2 k)⟩
+  -- §2's degenerate codec is the bottom exactly: empty domains, and the laws hold vacuously
+  | .never => Codec.empty
 
 /-- The payload's semantics: the field table and the rest policy, each through its own
     companion. This is the third companion of `denote`, alongside `fieldSem` and `restSem`, and
@@ -234,7 +238,7 @@ theorem denote_μ : ∀ t : Term, (denote t).μ = μSyn t
   | .held t' _ _ => denote_μ t'
   | .refine t' _ => denote_μ t'
   | .legacy t' _ => denote_μ t'
-  | .nullable _ | .lazy _ | .custom _ _ | .opaq _ => rfl
+  | .nullable _ | .lazy _ | .custom _ _ | .opaq _ | .never => rfl
   | .object b => bodySem_μ b
   | .union opts => by
       show unanimous (denoteμs opts) = unanimous (μSynList opts)

@@ -40,6 +40,7 @@ import {
     held,
     lazy,
     legacy,
+    never,
     nullable,
     nullValue,
     number,
@@ -743,6 +744,7 @@ export const sampleVectors: readonly Vector[] = [
 const refusalCodecs: readonly (readonly [string, AnyCodec])[] = [
     ...sampleVectors.map((v) => [v.name, v.codec] as const),
     ['scalar_number', erase(number)] as const,
+    ['never', erase(never)] as const,
 ]
 
 export const allRefusals = (): readonly Refusal[] => {
@@ -848,6 +850,7 @@ const separationPairs = (): readonly Separation[] => {
     const codecs: readonly (readonly [string, AnyCodec])[] = [
         ...sampleVectors.map((v) => [v.name, v.codec] as const),
         ['scalar_number', erase(number)] as const,
+        ['never', erase(never)] as const,
     ]
     const out: Separation[] = []
     for (let x = 0; x < codecs.length; x++) {
@@ -1102,13 +1105,25 @@ describe("the read side, against the model's read row", () => {
 
 describe("the declaration guard, against the model's classifier", () => {
     /**
-     * **`src/` refuses thirty-six pairs and the model certifies none of them.** That is the whole
+     * **`src/` refuses sixty-four pairs, and each one carries a warrant.** That is the whole
      * law, and it is one-directional on purpose: `Orth` is sufficient and not necessary, so a
      * pair it declines may still be separable. What would be a defect is `src/` refusing a
      * declaration the model *proves* works — which is what it did to
      * `union([string.set(), number.set()])` until `ff75c6b`, and what `Orth` certifies.
      *
-     * **The four most recent all have a *restriction* on a side**, which is `opaque`'s rule at a
+     * **It was thirty-six, and the ones that arrived all have `never` on a side.** `never` admits
+     * no value, so every value it admits every other option admits, and {@link restricts} answers
+     * the containment at its narrowest width.
+     *
+     * **Those carry the other warrant, and needed it.** `Orth` *certifies* a pair with `never` on
+     * a side — `never` occupies no slot and meets nothing — so asserting `Orth x y = false` about
+     * one is false, and `decide` refuted nineteen of them the first time this corpus carried the
+     * bottom. The model's reason is upstream of `Orth`: `HNever` is `False`, a subset of every
+     * held set, so §5's (D) fails on its first conjunct and `union([X, never])` is never `Typed`.
+     * `not_dincomp_never_left` and `not_dincomp_never_right` are that refutation, and the emitter
+     * states which warrant a pair carries.
+     *
+     * **The four before those all have a *restriction* on a side**, which is `opaque`'s rule at a
      * narrower width: a literal against its own base's ground term, three of them, and a set of a
      * literal against the plain set at that base. Every value the narrower option admits, the
      * wider one admits too, so `select` acts nowhere on the narrower and it can never be chosen.
@@ -1123,17 +1138,22 @@ describe("the declaration guard, against the model's classifier", () => {
      * law was untouched either way, and what moved is that a union no value can resolve is now
      * refused where it used to be declared. JH's ruling, landed in `ff75c6b`.
      *
-     * **The count pins a fact no law has, deliberately.** That it is thirty-six is a property of
+     * **The count pins a fact no law has, deliberately.** That it is sixty-four is a property of
      * this corpus, so widening the corpus is meant to fail here and be looked at; the *law* is
      * the loop below, that every refusal the model also declines. Both are kept, and the number
      * stays.
      */
     it('refuses only pairs the classifier also declines', () => {
         const separations = separationPairs()
-        expect(separations.length).toBe(36)
-        // each one emits, which is where `leanSeparation` re-checks that `src/` really refuses
+        expect(separations.length).toBe(64)
+        // each one emits, which is where `leanSeparation` re-checks that `src/` really refuses,
+        // and it carries one of the two warrants: `Orth` declines, or (D) fails against `never`
         for (const one of separations) {
-            expect(leanSeparation(one)).toContain('= false := by decide')
+            const emitted = leanSeparation(one)
+            expect(
+                emitted.includes('= false := by decide') ||
+                    emitted.includes('¬ DIncomp'),
+            ).toBe(true)
         }
     })
 

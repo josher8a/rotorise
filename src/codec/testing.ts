@@ -1122,6 +1122,13 @@ export const arbitraryOf = (
             throw new CodecError(
                 'a codec written by hand generates nothing unless it says how; give it `arbitrary`',
             )
+        // the one term with no inhabitant, so a property quantified over it has no input. A throw
+        // and not a value: the switch's return type admits `undefined`, and falling through would
+        // hand `undefined` to a round trip as though it were a value of this codec
+        case 'never':
+            throw new CodecError(
+                '`never` admits no value, so there is nothing to generate',
+            )
     }
 }
 

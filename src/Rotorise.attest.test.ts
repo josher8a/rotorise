@@ -1,6 +1,7 @@
 import { attest } from '@ark/attest'
 import { describe, it } from 'vitest'
-import { object, opaque, string, union } from './codec/codec'
+import type { Decoded } from './codec/codec'
+import { never, object, opaque, string, union } from './codec/codec'
 import { tableEntry } from './Rotorise'
 
 describe('Rotorise Performance Baseline', () => {
@@ -122,6 +123,28 @@ describe('the union refusals a caller reads at compile time', () => {
             union([string.set(), string.set('a', 'b')]),
         ).type.errors.snap(
             'Argument of type \'[AttributeCodec<ReadonlySet<string>, SS>, AttributeCodec<ReadonlySet<"a" | "b">, SS>]\' is not assignable to parameter of type \'readonly [AttributeCodec<ReadonlySet<string>, SS>, AttributeCodec<ReadonlySet<"a" | "b">, SS>] & ErrorMessage<"[union] option 1 inside option 0: every value the narrower option admits, the wider one admits too, so no value can ever select it. Remove the narrower option; a discriminator does not fix this">\'.Property \'[errorMessage]\' is missing in type \'[AttributeCodec<ReadonlySet<string>, SS>, AttributeCodec<ReadonlySet<"a" | "b">, SS>]\' but required in type \'ErrorMessage<"[union] option 1 inside option 0: every value the narrower option admits, the wider one admits too, so no value can ever select it. Remove the narrower option; a discriminator does not fix this">\'.',
+        )
+    })
+
+    /**
+     * **`never` reads back as `never`**, which is what makes the containment clause fire on it
+     * without a row of its own: `[never] extends [X]` for every `X`, and no `X` extends `never`.
+     */
+    it('reads never back as never', () => {
+        attest<never>({} as Decoded<typeof never>)
+    })
+
+    /**
+     * **The same rule at its widest on the other side.** `opaque` admits every value, so every
+     * other option is inside it; `never` admits none, so it is inside every other option. Both
+     * are the containment clause and both name the option to remove.
+     */
+    it('names never as the option to remove', () => {
+        attest(() =>
+            // @ts-expect-error the clause under test
+            union([string, never]),
+        ).type.errors.snap(
+            "Argument of type '[StringCodec, AttributeCodec<never, never>]' is not assignable to parameter of type 'readonly [StringCodec, AttributeCodec<never, never>] & ErrorMessage<\"[union] option 1 inside option 0: every value the narrower option admits, the wider one admits too, so no value can ever select it. Remove the narrower option; a discriminator does not fix this\">'.Property '[errorMessage]' is missing in type '[StringCodec, AttributeCodec<never, never>]' but required in type 'ErrorMessage<\"[union] option 1 inside option 0: every value the narrower option admits, the wider one admits too, so no value can ever select it. Remove the narrower option; a discriminator does not fix this\">'.",
         )
     })
 

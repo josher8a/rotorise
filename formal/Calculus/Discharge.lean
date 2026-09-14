@@ -244,6 +244,9 @@ theorem pairwise_imp_mem {α : Type} {R S : α → α → Prop} :
     and `(dunion)`'s premises are quantified over the option list, so it is derivable. -/
 
 
+/-- `HNever` holds nothing: it is `False` at every value. -/
+theorem hnever_false (v : Value) : ¬ HNever v := id
+
 /-- And it is derivable — `(dunion)`'s premises are quantified over the key set, so the empty
     table satisfies both vacuously and the held set is `False`, which is what a variant table
     with no variants holds. -/
@@ -251,6 +254,25 @@ theorem typed_dunion_nil (d : Name) :
     Typed (.dunion d ⟨∅, fun k => nomatch k.2⟩)
       (HVariants ⟨∅, fun k => nomatch k.2⟩ (fun k => nomatch k.2)) (some .M) :=
   .dunion (fun k => nomatch k.2) (fun k => nomatch k.2)
+
+/-- The empty table's held set is the bottom's: a witness names a variant, and there is no
+    variant to name. `Term.never` is the constructor, and this is why the derived form was
+    never a second bottom. -/
+theorem hvariants_empty_eq_never (v : Value) :
+    HVariants ⟨∅, fun k => nomatch k.2⟩ (fun k => nomatch k.2) v ↔ HNever v :=
+  Iff.intro (fun h => h.elim fun k _ => nomatch k.2) (fun h => h.elim)
+
+/-- §5's (D) fails against the bottom: `False` is a subset of every held set, so the
+    first conjunct of `DIncomp` is false. `union([X, never])` is not `Typed`. -/
+theorem not_dincomp_never_left (T : Held) : ¬ DIncomp [HNever, T] := fun h =>
+  ((List.pairwise_cons.mp h).1 T (List.mem_singleton_self T)).1
+    (fun v hv => absurd hv (hnever_false v))
+
+/-- The same on the other side. (D) is pairwise, so the order of the two held sets decides
+    which conjunct carries the refutation, and nothing else changes. -/
+theorem not_dincomp_never_right (T : Held) : ¬ DIncomp [T, HNever] := fun h =>
+  ((List.pairwise_cons.mp h).1 HNever (List.mem_singleton_self HNever)).2
+    (fun v hv => absurd hv (hnever_false v))
 
 
 /-- **The pair reading of the same fact**, and it is not superseded: it discharges the whole

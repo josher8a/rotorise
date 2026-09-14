@@ -3425,6 +3425,15 @@ export const discriminatedUnion = <
     D,
     ByTag<SpecsOf<Options>, D>
 > => {
+    // **An empty option list is a mistake, not the bottom.** `never` is the bottom and says so as
+    // a term; a `dunion` over no variants is what a typo or a `map` over an empty array produces,
+    // and it admits nothing while no rule reads it as admitting nothing. The type refuses this
+    // too — what reaches here is a cast, plain JavaScript, or an erased path
+    if ((options as readonly AnyObjectCodec[]).length === 0) {
+        throw new CodecError(
+            `a discriminated union needs at least one option, and this one has none — no tag reaches a variant, so nothing can be written or read. If a codec that admits no value is what you meant, that is \`never\``,
+        )
+    }
     const byTag: Record<
         string,
         ItemCodec<Record<string, unknown>, unknown>
@@ -3481,6 +3490,26 @@ export const discriminatedUnion = <
     }
     return tagged(discriminator, byTag) as never
 }
+
+/**
+ * **The term that admits no value**, and the unit the product and the slice need.
+ *
+ * `Term.never` on both sides. The model types it — `Typed.never` gives it the held set `HNever`,
+ * which is `False` — and denotes it as `Codec.empty`, whose laws hold vacuously because both
+ * domains are empty.
+ *
+ * **A constructor rather than a `discriminatedUnion` over no options.** The derived form works and
+ * costs a structural test: an empty option list is a term a caller can build by accident, so every
+ * rule reading it as the bottom reads that accident as intent, and the term carries a discriminator
+ * no value will ever name. `discriminatedUnion` stays refused on an empty list — that list is a
+ * typo or a `map` over an empty array — and this is the one name that reaches the bottom.
+ *
+ * It is an option of no `union`: `False` is a subset of every held set, so §5's (D) fails against
+ * every other option. `not_dincomp_never_left` and `not_dincomp_never_right` are that refutation.
+ */
+export const never: AttributeCodec<never, never> = codecOfTerm({
+    kind: 'never',
+})
 
 /**
  * A union told apart by what each option holds, with no tag to switch on — `zod`'s `union`.
