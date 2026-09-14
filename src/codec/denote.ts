@@ -663,6 +663,15 @@ export const altSem = (
     }
 
     /**
+     * The model's `admitOptV`: an object option is admitted by the names it declares, which
+     * `survives` has already fit, and every other option by {@link accepts}. Asking the option's
+     * own admission terminates: it is one level down, and the direction that would not is an
+     * `encode` consulting admission.
+     */
+    const admitOption = (option: Option, value: unknown) =>
+        option.declares ? true : accepts(option.codec, value)
+
+    /**
      * The same, **decided rather than attempted** — the write side only.
      *
      * `only` finds its answer by encoding through every survivor and keeping the one that did not
@@ -672,10 +681,12 @@ export const altSem = (
      * the declaration. `union([held(decimal, dateAdapter), string])` could not encode a `Date` for
      * exactly that reason, and the fix was `string` refusing one.
      *
-     * {@link accepts} is the decision. §3's `Adm`, proved exact at all 21 constructors, and
-     * `codec.laws.spec.ts` holds `accepts(c, v) ⟺ !failed(c.encode(v))` over its whole table —
-     * so on the values in play this selects the same option `only` would have found by attempting,
-     * and says *why* rather than discovering it. Two differences that are improvements rather than
+     * {@link accepts} is the decision for every option that is not an object option, and an object
+     * option is decided by its names alone: {@link admitOption} carries both rows. §3's `Adm`,
+     * proved exact at all 21 constructors, and `codec.laws.spec.ts` holds
+     * `accepts(c, v) ⟺ !failed(c.encode(v))` over its whole table — so on the values in play this
+     * selects the same option `only` would have found by attempting, and says *why* rather than
+     * discovering it. Two differences that are improvements rather than
      * equivalences: a `held` option whose adapter **throws** on a value it does not own is filtered
      * out here instead of propagating, and an ambiguity is reported without first writing one of
      * the two answers.
@@ -691,10 +702,7 @@ export const altSem = (
         through: (option: Option) => Result<A>,
     ): Result<A> => {
         const candidates = all.filter(
-            // admission **is** "encode succeeds", which is the law `codec.laws.spec.ts` states
-            // over the whole table. Asking the option's own encode terminates: it is one level
-            // down, and the direction that would not is an `encode` consulting admission
-            (option) => survives(option) && accepts(option.codec, value),
+            (option) => survives(option) && admitOption(option, value),
         )
         if (candidates.length === 0) return unmatched(named)
         if (candidates.length > 1) {

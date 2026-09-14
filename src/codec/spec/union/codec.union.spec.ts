@@ -369,3 +369,69 @@ describe('the declaration guard, where a term is what the guard reads', () => {
         ).not.toThrow()
     })
 })
+
+/**
+ * **A union admits an object option by the names the item carries, never by the values it holds.**
+ *
+ * The model's `admitOptV`: an object option is admitted by `keysOk` over the names of the map, and
+ * every other option by its own row. The option that admits alone then decides the contents, so a
+ * wrong field value is that option's error rather than a failure to select.
+ */
+describe('an object option is admitted by its names alone', () => {
+    type Kinded =
+        | { readonly kind: 'a'; readonly x: string }
+        | { readonly kind: 'b'; readonly x: number }
+
+    /** Declared through a cast: the type refuses two options that declare the same names. */
+    const declare = union as unknown as (
+        options: readonly AnyCodec[],
+    ) => UnionCodec<Kinded, readonly AnyCodec[]>
+
+    it('reports ambiguity for two options declaring one name set, whatever the values hold', () => {
+        const Ambiguous = declare([
+            object({ kind: string('a'), x: string }),
+            object({ kind: string('b'), x: number }),
+        ]).item
+
+        // the contents pick out one option and the names pick out both, and it is the names that
+        // select: two candidates, so the union does not resolve
+        expect(
+            accepts(object({ kind: string('a'), x: string }), {
+                kind: 'a',
+                x: '1',
+            }),
+        ).toBe(true)
+        expect(
+            accepts(object({ kind: string('b'), x: number }), {
+                kind: 'a',
+                x: '1',
+            }),
+        ).toBe(false)
+        expect(() => Ambiguous.unsafeEncode({ kind: 'a', x: '1' })).toThrow(
+            CodecError,
+        )
+        expect(() => Ambiguous.unsafeEncode({ kind: 'a', x: '1' })).toThrow(
+            /both admit/,
+        )
+    })
+
+    it('reports the admitted option error when the names fit one option and a value is wrong', () => {
+        const Sum = union([
+            object({ kind: string('a'), x: string }),
+            object({ petIds: array(string) }),
+        ]).item
+
+        // the names fit the first option and nothing else, so that option is the one chosen, and
+        // what it says about its own field is what the caller is told
+        expect(Sum.unsafeEncode({ kind: 'a', x: '1' })).toEqual({
+            kind: { S: 'a' },
+            x: { S: '1' },
+        })
+        expect(() => Sum.unsafeEncode({ kind: 'b', x: '1' } as never)).toThrow(
+            /'a'/,
+        )
+        expect(() =>
+            Sum.unsafeEncode({ kind: 'b', x: '1' } as never),
+        ).not.toThrow(/no option admits/)
+    })
+})
