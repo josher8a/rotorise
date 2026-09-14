@@ -150,54 +150,51 @@ describe('both entry points build the same paths', () => {
 /**
  * Maps whose keys are only known at runtime.
  *
- * That file writes
- * `UserPaymentMethodEntry.path().requirements?.[requirement.requirementId]?.toString() as string`.
- * Both halves of that are the path type getting in the way: the `?.` because `requirements` is an
- * optional attribute, and the `as string` because indexing a record with a runtime key yields
- * `| undefined`. Neither says anything about the path, which is a string either way.
+ * A caller writes
+ * `AdopterEntry.path().checks?.[check.checkId]?.toString() as string`. Both halves of that are the
+ * path type getting in the way: the `?.` because `checks` is an optional attribute, and the
+ * `as string` because indexing a record with a runtime key yields `| undefined`. Neither says
+ * anything about the path, which is a string either way.
  */
 describe('a map whose keys are not known ahead of time', () => {
-    type UserPaymentMethod = {
+    type Adopter = {
         userId: string
-        provider: string
-        requirements?: Record<string, { requirementId: string; status: string }>
+        shelter: string
+        checks?: Record<string, { checkId: string; status: string }>
     }
-    type Requirement = {
+    type Check = {
         userId: string
-        requirementId: string
-        paymentMethodDetailsIds?: string[]
+        checkId: string
+        vaccinationIds?: string[]
     }
 
-    const PaymentMethod = tableEntry<UserPaymentMethod>()({ PK: ['userId'] })
-    const RequirementEntry = tableEntry<Requirement>()({ PK: ['userId'] })
+    const AdopterEntry = tableEntry<Adopter>()({ PK: ['userId'] })
+    const CheckEntry = tableEntry<Check>()({ PK: ['userId'] })
 
     // the id is only known at runtime, which is the whole point
-    const requirementId: string = 'r1'
+    const checkId: string = 'c1'
 
     it('indexes by a runtime key without an assertion', () => {
-        expect(
-            PaymentMethod.path().requirements.at(requirementId).toString(),
-        ).toBe('requirements.r1')
+        expect(AdopterEntry.path().checks.at(checkId).toString()).toBe(
+            'checks.c1',
+        )
     })
 
     it('keeps walking past the runtime key', () => {
-        expect(
-            PaymentMethod.path()
-                .requirements.at(requirementId)
-                .status.toString(),
-        ).toBe('requirements.r1.status')
+        expect(AdopterEntry.path().checks.at(checkId).status.toString()).toBe(
+            'checks.c1.status',
+        )
     })
 
     it('reaches an optional attribute with no `?.` and no `as string`', () => {
-        const path: string =
-            RequirementEntry.path().paymentMethodDetailsIds.toString()
-        expect(path).toBe('paymentMethodDetailsIds')
+        const path: string = CheckEntry.path().vaccinationIds.toString()
+        expect(path).toBe('vaccinationIds')
     })
 
     it('listings `at` only where the keys are actually unknown', () => {
         // a plain object has named keys, and `.userId` is how you reach one
         // @ts-expect-error there is no `at` on an object with known keys
-        const _noAt = () => PaymentMethod.path().at('userId')
+        const _noAt = () => AdopterEntry.path().at('userId')
         expect(typeof _noAt).toBe('function')
     })
 })
