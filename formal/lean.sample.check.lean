@@ -195,7 +195,7 @@ theorem union_of_two :
 /-- `nullable_null` -/
 theorem nullable_null :
     check 1
-      ((denote (Term.nullable (Term.string))).e
+      ((denote (Term.union [Term.string, Term.null])).e
         (Value.null))
       (some (Attr.null)) = .same := rfl
 
@@ -432,7 +432,7 @@ theorem union_of_two__refuses__scalar_binary :
 
 /-- `nullable_null__refuses__scalar_boolean` — refused on both sides -/
 theorem nullable_null__refuses__scalar_boolean :
-    (denote (Term.nullable (Term.string))).e
+    (denote (Term.union [Term.string, Term.null])).e
       (Value.bool true) = none := rfl
 
 /-- `union_by_literal__refuses__scalar_string` — refused on both sides -/

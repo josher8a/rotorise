@@ -384,18 +384,19 @@ describe('optional', () => {
 })
 
 /**
- * `nullable` is the one wrapper that changes the *pair* and not only the declaration, so it is the
- * one with a law about what it wraps.
+ * `nullable` is a builder, not a wrapper: it joins the null term to its subterm with a union, and
+ * asks at construction whether the subterm already reaches the point. So its laws are laws about
+ * what that question answers.
  */
 describe('nullable', () => {
     /**
      * **§6's idempotence row.** `nullable(nullable(c)) ≡ nullable(c)`.
      *
-     * The specification proves this by *construction* rather than as an equation the proof has to
-     * earn: `owns(nullable(c))` holds for every `c`, so the outer wrapper finds the point already
-     * owned and is the inner codec's pair. The test is here because that reasoning is about the
-     * guard, and the guard is one `||` — an implementation could satisfy every other law in this
-     * file and still shadow the inner wrapper's `NULL` branch with its own.
+     * True by construction rather than as an equation the proof has to earn: the inner call builds
+     * `union([c, null])`, which reaches the point, so the outer call returns it unchanged. The test
+     * is here because that reasoning is about the reading, and a reading that answered `false` for
+     * a union carrying the null term would build `union([union([c, null]), null])` and claim the
+     * point twice.
      */
     it('is idempotent', () => {
         checkEquivalent(nullable(nullable(string)), nullable(string), { seed })
@@ -405,32 +406,44 @@ describe('nullable', () => {
     })
 
     /**
-     * **(R) over an inner term that already owns the null point.**
+     * **A term whose null point is decided by a function is refused, not guessed.**
      *
-     * `nullable(c)` adds the null point *unless `c` already reaches it* — the specification's
-     * `owns(c)`, asked of both halves at once. Without that guard the wrapper's `NULL` branch
-     * shadows the inner codec: the adapter here maps `'SENTINEL'` to `null`, so the inner term
-     * writes and reads `{ NULL: true }` itself, and an unguarded wrapper reads that attribute as
-     * `null` before the inner term is consulted. The value written is not the value read.
-     *
-     * This is a public-API term. No declaration in this repository builds it and `held` is
-     * unemittable, so no generated vector could reach it — which is why it is written by hand and
-     * lives beside the rows it belongs to rather than under the laws that do not hold. It is a law
-     * that must hold.
+     * `held` carries the caller's adapter, so whether it reaches the point is not readable off the
+     * term. Guessing `false` builds `union([held, null])` and claims a point the adapter may
+     * already write, which is (R) failing: the adapter here maps `'SENTINEL'` to `null`, so the
+     * inner term writes and reads `{ NULL: true }` itself and the added option would shadow it.
+     * Guessing `true` drops a point the adapter may not reach. So the builder refuses, and names
+     * the spelling that does work.
      */
-    it('and nullable defers to an inner term that owns NULL', () => {
+    it('refuses a term whose null point it cannot read, and names the spelling', () => {
+        const adapter = {
+            encode: (v: string) => (v === 'SENTINEL' ? null : v),
+            decode: (v: string | null) => (v === null ? 'SENTINEL' : v),
+        }
+        expect(() => nullable(held(nullable(string), adapter))).toThrow(
+            /held\(nullable\(inner\), adapter\)/,
+        )
+    })
+
+    /**
+     * **…and the spelling it names round-trips.**
+     *
+     * `held(nullable(inner), adapter)` puts the point inside the adapter rather than outside it, so
+     * the adapter's `null` is the inner term's own `NULL` and there is one writer of the point.
+     * This is the term the refusal above points at, and it is a law that must hold.
+     */
+    it('and the null point inside the adapter round-trips through it', () => {
         const sentinel = held(nullable(string), {
             encode: (v: string) => (v === 'SENTINEL' ? null : v),
             decode: (v: string | null) => (v === null ? 'SENTINEL' : v),
         })
-        const outer = nullable(sentinel)
 
-        const written = outer.unsafeEncode('SENTINEL')
+        const written = sentinel.unsafeEncode('SENTINEL')
         expect(written).toEqual({ NULL: true })
-        expect(outer.unsafeDecode(written)).toBe('SENTINEL')
+        expect(sentinel.unsafeDecode(written)).toBe('SENTINEL')
 
-        // and the point still round-trips at the values the inner term does not claim
-        expect(outer.unsafeDecode(outer.unsafeEncode('a'))).toBe('a')
+        // and the values the adapter does not claim still round-trip
+        expect(sentinel.unsafeDecode(sentinel.unsafeEncode('a'))).toBe('a')
     })
 })
 

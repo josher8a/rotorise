@@ -123,9 +123,11 @@ describe('a definition generates what the codec generated', () => {
     // PINS A FACT NO LAW HAS, deliberately: the *number* of kinds is a property of this
     // library's inventory, not of the calculus, so adding a constructor is meant to fail here
     // and be looked at. It stays as it is.
+    // 16: `nullable` went the same way. It is a builder that joins the null term to its subterm
+    // with a union, so the null point is one term and not a wrapper kind of its own
     it('covers every kind a codec can be', () => {
         const kinds = new Set(codecs.map(([, c]) => c.def?.kind))
-        expect(kinds.size).toBe(17)
+        expect(kinds.size).toBe(16)
         expect([...kinds].every(Boolean)).toBe(true)
     })
 })

@@ -40,13 +40,13 @@ describe('the member a term stores', () => {
     })
 
     /**
-     * §3 gives four terms a `⊤` index and gives each a different reason: `nullable` writes its
-     * subterm's member or `NULL` and names neither, `lazy` could be asked but answering forces the
-     * thunk, `custom` is a pair of opaque functions with nothing to ask, and `opaque` writes
-     * whatever the value turns out to be. A term with no member is one only (MP) constrains.
+     * §3 gives three terms a `⊤` index and gives each a different reason: `lazy` could be asked but
+     * answering forces the thunk, `custom` is a pair of opaque functions with nothing to ask, and
+     * `opaque` writes whatever the value turns out to be. A term with no member is one only (MP)
+     * constrains. A union of several members answers nothing for a fourth reason, which is
+     * `unanimous` and is asked in its own test.
      */
-    it('the four terms whose member the term does not determine answer nothing', () => {
-        expect(member({ kind: 'nullable', inner: str })).toBe(undefined)
+    it('the three terms whose member the term does not determine answer nothing', () => {
         expect(member({ kind: 'lazy', get: () => str })).toBe(undefined)
         expect(
             member({
@@ -169,13 +169,14 @@ describe('the occupancies a declaration is separated by', () => {
         expect(occV({ kind: 'opaq', lossy: false })).not.toBe(undefined)
     })
 
-    /** §3 `(nullable)`: the wrapper inserts the null point, so both sides gain it. */
-    it('a nullable holds the null point on both sides of the pair', () => {
-        expect(occV({ kind: 'nullable', inner: str })).toEqual([
-            'null',
-            'string',
-        ])
-        expect(occA({ kind: 'nullable', inner: str })).toEqual(['NULL', 'S'])
+    /**
+     * A null point is the null term joined by a union, which is what {@link nullable} builds, so
+     * both sides gain it through the union's own row rather than through a wrapper of their own.
+     */
+    it('a union carrying the null term holds the null point on both sides of the pair', () => {
+        const maybe: Term = { kind: 'union', options: [str, { kind: 'null' }] }
+        expect(occV(maybe)).toEqual(['string', 'null'])
+        expect(occA(maybe)).toEqual(['S', 'NULL'])
     })
 
     /**

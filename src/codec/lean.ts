@@ -670,8 +670,6 @@ const leanTermOfTerm = (t: Term, at: string, forced: number): string => {
                     leanTermOfTerm(variant, `${at}[${index}]`, forced),
                 )
                 .join(', ')}]`
-        case 'nullable':
-            return `Term.nullable (${leanTermOfTerm(t.inner, `${at}.inner`, forced)})`
         case 'opaq':
             return `Term.opaq ${t.lossy}`
         case 'lazy': {

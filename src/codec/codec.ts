@@ -47,6 +47,7 @@ import {
     member as memberOf,
     occA,
     occV,
+    ownsNullOf,
     restricts,
     separable,
     setBaseOf,
@@ -393,7 +394,6 @@ const childrenOf = (
                 segment,
             )
         case 'refine':
-        case 'nullable':
         case 'legacy':
             return childrenOf(codecOfTerm(def.inner), segment)
         case 'lazy':
@@ -1705,9 +1705,22 @@ export const undefinable = <const C extends AnyCodec>(
 export const nullable = <T, A extends AttributeValue>(
     inner: AttributeCodec<T, A>,
 ): AttributeCodec<T | null, A | Attribute<'NULL'>> => {
+    const t = termOf(inner as unknown as AnyCodec)
+    const owns = ownsNullOf(t)
+    if (owns === undefined) {
+        throw new CodecError(
+            `nullable: ${t.kind} decides the null point by running a function this cannot read, ` +
+                'so whether the union would be certified is unknown. ' +
+                'Write the wrapper inside instead, as in held(nullable(inner), adapter).',
+        )
+    }
+    if (owns) return inner as AttributeCodec<T | null, A | Attribute<'NULL'>>
+    if (t.kind === 'never') {
+        return nullValue as AttributeCodec<T | null, A | Attribute<'NULL'>>
+    }
     return codecOfTerm<T | null, A | Attribute<'NULL'>>({
-        kind: 'nullable',
-        inner: termOf(inner as unknown as AnyCodec),
+        kind: 'union',
+        options: [t, { kind: 'null' }],
     })
 }
 

@@ -58,7 +58,7 @@ import type {
     SetBase,
 } from './codec'
 import { CodecError, codecOfTerm, failed, opaque } from './codec'
-import { holds, readsBack, valueKinds } from './denote'
+import { accepts, holds, readsBack, valueKinds } from './denote'
 import type { Field, Predicate, Term } from './term'
 import { alwaysWritten, member as termMember } from './term'
 import { shapeOf } from './value'
@@ -1104,10 +1104,6 @@ export const arbitraryOf = (
             }
             return sample(rng, size)
         }
-        case 'nullable':
-            return rng() < 0.25
-                ? null
-                : arbitraryOf(codecOfTerm(def.inner), rng, size)
         case 'legacy':
             return arbitraryOf(codecOfTerm(def.inner), rng, size)
         case 'lazy':
@@ -1323,6 +1319,15 @@ export const shrinkOf = (
             return out
         }
         case 'union': {
+            // A union option is told apart by name only where the value carries names. Since
+            // `nullable` builds a union, a union value is now routinely a scalar or `null`, and
+            // there the admitting option is the one to shrink through.
+            if (typeof value !== 'object' || value === null) {
+                const only = def.options.find((option) =>
+                    accepts(codecOfTerm(option), value),
+                )
+                return only ? shrinkOf(codecOfTerm(only), value) : []
+            }
             const names = new Set(
                 Object.keys(value as Record<string, unknown>).filter(
                     (k) => (value as Record<string, unknown>)[k] !== undefined,
@@ -1337,10 +1342,6 @@ export const shrinkOf = (
         }
         case 'refine':
             return shrinkOf(codecOfTerm(def.inner), value).filter(holds(def.q))
-        case 'nullable':
-            return value === null
-                ? []
-                : [null, ...shrinkOf(codecOfTerm(def.inner), value)]
         case 'legacy':
             return shrinkOf(codecOfTerm(def.inner), value)
         case 'lazy':
@@ -1979,7 +1980,6 @@ const unionsIn = (subject: AnyCodec): readonly UnionSite[] => {
                 )
             }
             case 'refine':
-            case 'nullable':
             case 'held':
             case 'legacy':
                 return inner(codecOfTerm(def.inner))

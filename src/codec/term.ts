@@ -177,7 +177,6 @@ export type Term =
           readonly inner: Term
           readonly r: (attribute: AttributeValue) => unknown
       }
-    | { readonly kind: 'nullable'; readonly inner: Term }
     /**
      * §3 `(lazy)`, and **the one row where this language is wider than the model's.**
      *
@@ -319,7 +318,6 @@ export const member = (t: Term): AttributeName | undefined => {
         case 'refine':
         case 'legacy':
             return member(t.inner)
-        case 'nullable':
         case 'lazy':
         case 'custom':
         case 'opaq':
@@ -392,11 +390,6 @@ const joined = <A>(
     return out
 }
 
-const withOne = <A>(
-    one: A,
-    rest: readonly A[] | undefined,
-): readonly A[] | undefined => joined([[one], rest])
-
 /**
  * `occV`: which value constructors a term may write, or `undefined` for every one of them.
  *
@@ -443,8 +436,6 @@ export const occV = (t: Term): readonly Slot[] | undefined => {
         case 'refine':
         case 'legacy':
             return occV(t.inner)
-        case 'nullable':
-            return withOne<Slot>('null', occV(t.inner))
         case 'union':
             return joined(t.options.map(occV))
         // **A closed form, not `⊤`.** §5 separates the two things a `⊤` covers: *unknown*, which is
@@ -460,6 +451,56 @@ export const occV = (t: Term): readonly Slot[] | undefined => {
         // term's occupancy is fully known: it is nothing. The model spells it `occNone`.
         case 'never':
             return []
+    }
+}
+
+/**
+ * Whether a term reaches the null point, read off the term.
+ *
+ * `undefined` is *not determined by the term*, and it is what makes {@link nullable} refuse at
+ * construction rather than guess. The rows that answer it are the four whose admission is a
+ * function: `held`, `custom` and `legacy` carry the caller's, and `lazy` could be asked but
+ * answering forces the thunk — which at module-evaluation time is a reference to a binding that
+ * does not exist yet, so a recursive declaration would throw on the guard that exists to allow it.
+ *
+ * `refine` answers `false` through its subterm and `undefined` otherwise: a predicate narrows, so
+ * a subterm that does not reach the point keeps not reaching it, while one that does may or may not
+ * survive the predicate, and this reads no predicate.
+ *
+ * A union's options are separated by construction, so at most one admits null and the union reaches
+ * the point exactly when one of its options does.
+ */
+export const ownsNullOf = (t: Term): boolean | undefined => {
+    switch (t.kind) {
+        case 'null':
+        case 'opaq':
+            return true
+        case 'string':
+        case 'number':
+        case 'decimal':
+        case 'boolean':
+        case 'binary':
+        case 'literal':
+        case 'set':
+        case 'array':
+        case 'tuple':
+        case 'record':
+        case 'object':
+        case 'never':
+            return false
+        case 'refine':
+            return ownsNullOf(t.inner) === false ? false : undefined
+        case 'union': {
+            const answers = t.options.map(ownsNullOf)
+            return answers.some((one) => one === undefined)
+                ? undefined
+                : answers.some((one) => one === true)
+        }
+        case 'held':
+        case 'custom':
+        case 'legacy':
+        case 'lazy':
+            return undefined
     }
 }
 
@@ -507,8 +548,6 @@ export const occA = (t: Term): readonly AttributeName[] | undefined => {
         case 'refine':
         case 'held':
             return occA(t.inner)
-        case 'nullable':
-            return withOne<AttributeName>('NULL', occA(t.inner))
         case 'union':
             return joined(t.options.map(occA))
         // the closed form again, for the reason {@link occV}'s `opaq` row gives

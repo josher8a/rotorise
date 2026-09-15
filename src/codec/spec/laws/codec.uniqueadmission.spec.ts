@@ -172,17 +172,19 @@ describe('the harness, against planted violations', () => {
     })
 })
 
-describe('what (U) says about nullable, which the model reads as a union', () => {
+describe('what (U) says about nullable, which is a union', () => {
     /**
-     * `nullable(c)` is `union(c, ⟨NULL⟩)` in the model and a wrapper here, so it is not a union
-     * *site* — nothing walks into it looking for options. Recorded rather than asserted: the model
-     * has `nullOption` and this harness has no counterpart, so (U) for `nullable` is checked in
-     * Lean and nowhere here.
+     * `nullable(c)` builds `union([c, null])`, so it is a union *site* and (U) is asked of it here
+     * like any other. It was checked in Lean and nowhere here while the wrapper was its own kind,
+     * because nothing walked into a wrapper looking for options.
+     *
+     * (U) is what makes the null point safe to add: `c` and the null term must be separated, or a
+     * stored `NULL` would be claimed by two options and the union would write nothing.
      */
-    it('is not a union site, and this says so', () => {
-        expect(() => checkUniqueAdmission(nullable(string), { seed })).toThrow(
-            CodecError,
-        )
+    it('a nullable is a union site, and its two options are separated', () => {
+        expect(() =>
+            checkUniqueAdmission(nullable(string), { seed }),
+        ).not.toThrow()
     })
 })
 
