@@ -37,7 +37,7 @@ import {
     orThrow,
     type Result,
 } from './result'
-import type { Body, Field, NameLiteral, Term } from './term'
+import type { Body, Field, Literal, NameLiteral, Term } from './term'
 import {
     alwaysWritten,
     elementPredicates,
@@ -2217,11 +2217,11 @@ export type DiscriminatedCodec<T, D extends string, Spec> = {
      * than positionally.
      */
     readonly extract: <const C extends ClauseOf<T>>(
-        clause: C,
+        clause: C & ValidateClause<T, C>,
     ) => DiscriminatedCodec<Extracted<T, C>, D, Spec>
     /** …and the members it rejects, the complement of the same clause. */
     readonly exclude: <const C extends ClauseOf<T>>(
-        clause: C,
+        clause: C & ValidateClause<T, C>,
     ) => DiscriminatedCodec<Excluded<T, C>, D, Spec>
     /** The row this codec writes, pinnable with {@link Writes}. Type-level only. */
     readonly [writesMarker]?: WritesVariantsPin<Spec>
@@ -2281,11 +2281,11 @@ export type DissectedCodec<
     readonly item: Dissected<T, Ks, Specs>
     /** **The members a clause keeps**, over the same keys — or `never` where it keeps none. */
     readonly extract: <const C extends ClauseOf<T>>(
-        clause: C,
+        clause: C & ValidateClause<T, C>,
     ) => DissectedCodec<Extracted<T, C>, Ks, Specs>
     /** …and the members it rejects, the complement of the same clause. */
     readonly exclude: <const C extends ClauseOf<T>>(
-        clause: C,
+        clause: C & ValidateClause<T, C>,
     ) => DissectedCodec<Excluded<T, C>, Ks, Specs>
 }
 
@@ -2334,13 +2334,13 @@ export type UnionCodec<T, Options extends readonly unknown[]> = {
      */
     readonly extract: AllObjects<Options> extends true
         ? <const C extends ClauseOf<T>>(
-              clause: C,
+              clause: C & ValidateClause<T, C>,
           ) => UnionCodec<Extracted<T, C>, Options>
         : ErrorMessage<'[union] this union can hold an attribute that is not a map, so a clause has nothing to name — only a union of objects has a slice'>
     /** …and the options it rejects, the complement of the same clause. */
     readonly exclude: AllObjects<Options> extends true
         ? <const C extends ClauseOf<T>>(
-              clause: C,
+              clause: C & ValidateClause<T, C>,
           ) => UnionCodec<Excluded<T, C>, Options>
         : ErrorMessage<'[union] this union can hold an attribute that is not a map, so a clause has nothing to name — only a union of objects has a slice'>
     /** The row this codec writes, pinnable with {@link Writes}. Type-level only. */
@@ -4136,35 +4136,76 @@ type EveryOptionTagged<
 /* ── the slice of a union ─────────────────────────────────────────────────────────────── */
 
 /**
- * The tags a clause admits at one key: one tag, or a tuple of them.
+ * **A clause**: a partial assignment pinning each key it names to a **literal codec**.
  *
- * Both spellings, because a clause naming one tag per key is what almost every call writes and a
- * set is what makes the slice more than a lookup.
- */
-type TagsIn<V> = V extends readonly (infer One)[] ? One : V
-
-/**
- * **A clause**: a partial assignment admitting a set of tags at each key it names.
+ * `Calculus.AltClause` at the host, whose value at each key is `Alts` — a base with a non-empty set
+ * of that base's carriers. A codec and not a tag, because a tag is text and text does not say which
+ * base it was written at: `string('1')` and `decimal('1')` carry the same character and are read
+ * from different members, and `number(1)` is a third thing again. A clause spelled as text cannot
+ * tell the three apart, and one spelled as a codec cannot fail to.
  *
- * `Calculus.AltClause` at the host. An object literal and not a list of pairs, so the keys carry no
- * order and no repeat — the same reason the model's clause is a `Finset` and a function on it.
+ * A set of tags is a literal with several alternatives — `string('dog', 'cat')` — so there is one
+ * spelling and not two. An object literal and not a list of pairs, so the keys carry no order and
+ * no repeat, which is the reason the model's clause is a `Finset` and a function on it.
+ *
+ * `Ks` is a parameter and the mapped type is written over it rather than over `keyof T` directly,
+ * which is not a spelling preference: a mapped type whose constraint *is* `keyof T` is homomorphic
+ * and distributes over a union, so `ClauseOf` of a three-member union would be three clause types
+ * and a clause naming two members' tags would match none of them.
  */
 export type ClauseOf<T, Ks extends PropertyKey = keyof T> = {
-    readonly [K in Ks]?: TagsAt<T, K> | readonly TagsAt<T, K>[]
+    readonly [K in Ks]?: AnyLiteralCodec
 }
+
+/**
+ * The shape of a clause value: something with a term and a read.
+ *
+ * Read-only and structural, not `AttributeCodec<TagsAt<T, K>, …>`. A codec is invariant in the
+ * value it carries — `encode` takes it — so a slot typed at the members' whole tag set would refuse
+ * `string('CHECKUP')` against members carrying `'CHECKUP' | 'SHOT'`, which is every clause that
+ * selects anything. The slot admits any codec and {@link ValidateClause} is what asks whether it
+ * fits, which also lets the refusal name the key.
+ */
+type AnyLiteralCodec = {
+    readonly def: Term
+    readonly decode: (attribute: AttributeValue) => Result<unknown>
+}
+
+/** A clause key whose value is not a literal, or is a literal the members do not carry. */
+type BadClauseKey<T, C> = {
+    [K in keyof C]: PinsALiteral<ClauseValue<C[K]>> extends true
+        ? [ClauseValue<C[K]>] extends [TagsAt<T, K>]
+            ? never
+            : K
+        : K
+}[keyof C]
+
+/**
+ * Rejects a clause a member could never answer, at the call rather than on the result.
+ *
+ * Two failures with one message, because they are one mistake in two spellings: a value that is no
+ * literal at all, and a literal whose alternatives no member carries at that key.
+ */
+export type ValidateClause<T, C> = [BadClauseKey<T, C>] extends [never]
+    ? unknown
+    : ErrorMessage<`[extract] the clause at '${BadClauseKey<T, C> & string}' is not a literal whose alternatives the members carry at that key — a clause pins each key it names to a literal codec, written as \`string('a')\`, \`decimal('1')\` or \`number(1)\`, because a bare tag does not say which base it was written at`>
 
 /**
  * The tags the members carry at one key, taken together.
  *
- * `Ks` is a parameter and the mapped type above is written over it rather than over `keyof T`
- * directly, which is not a spelling preference: a mapped type whose constraint *is* `keyof T` is
- * homomorphic and distributes over a union, so `ClauseOf` of a three-member union would be three
- * clause types and a clause naming two members' tags would match none of them.
+ * This is also what refuses a clause value that is not a literal: a plain `string` codec decodes to
+ * `string`, and `string` is not the `'dog' | 'cat'` the members carry, so it does not fit the slot.
+ * A bare tag does not fit either, being no codec at all.
  */
 type TagsAt<T, K extends PropertyKey> = T extends unknown
     ? K extends keyof T
         ? T[K]
         : never
+    : never
+
+/** The values a clause codec admits, which is what the filter below compares. */
+type ClauseValue<C> = C extends AttributeCodec<infer V, AttributeValue>
+    ? V
     : never
 
 /**
@@ -4175,13 +4216,20 @@ type TagsAt<T, K extends PropertyKey> = T extends unknown
  * {@link VariantOf}, which is a *lookup* asking which member one tag selects, and it is the wrong
  * direction here: a member spanning `'ACME' | 'GLOBEX'` against a clause naming `'ACME'` would be
  * kept, and the extraction would then admit a value the clause does not describe. The model's
- * `altsSub` reads containment for that reason, and so does this. The two coincide wherever a
- * member carries one tag per key, which is every discriminated union.
+ * `altsSub` reads containment for that reason, and so does this. The two coincide wherever a member
+ * carries one tag per key, which is every discriminated union.
+ *
+ * **The base is not read here, and it cannot be.** An entity type carries the values a member
+ * holds, not the base they were written at, which is the whole reason `Literal` records a base at
+ * all: `string('1')` and `decimal('1')` both decode to `'1'`. So this separates `number(1)` from
+ * both of those and does not separate those two from each other, and the runtime — which reads the
+ * term — is what does. The narrowing is therefore one member wide on exactly that pair, and the
+ * codec the slice returns admits the right member either way.
  */
 export type Extracted<T, C> = T extends unknown
     ? {
           [K in keyof C]-?: K extends keyof T
-              ? [T[K]] extends [TagsIn<C[K]>]
+              ? [T[K]] extends [ClauseValue<C[K]>]
                   ? never
                   : K
               : K
@@ -4193,29 +4241,47 @@ export type Extracted<T, C> = T extends unknown
 /** …and the members it rejects, which is the complement of the same predicate. */
 export type Excluded<T, C> = Exclude<T, Extracted<T, C>>
 
-/** The tags a clause names at one key, as a list, whichever spelling the caller used. */
-const clauseTags = (named: unknown): readonly unknown[] =>
-    Array.isArray(named) ? named : [named]
+/**
+ * The literal a clause pins one key to, or a refusal naming the key.
+ *
+ * A clause value is a codec and the question is asked of its term, which is where a base lives. The
+ * type refuses a non-literal codec by its decoded type; this is the same refusal for a caller who
+ * reached here through a cast or through plain JavaScript.
+ */
+const clauseLiteral = (name: string, value: unknown): Literal => {
+    const def = (value as { readonly def?: Term } | undefined)?.def
+    if (def?.kind !== 'literal') {
+        throw new CodecError(
+            `the clause at '${name}' is not a literal codec — a clause pins each key it names to a literal, written as \`string('a')\`, \`decimal('1')\`, \`number(1)\`, \`boolean(true)\` or \`binary(...)\`, because a bare tag does not say which base it was written at`,
+        )
+    }
+    return def
+}
 
 /**
  * **Whether a clause describes one member**: the member declares every clause key as a *required*
- * literal, and that literal's alternatives all lie inside the clause's tags.
+ * literal **at the clause's base**, and that literal's alternatives all lie inside the clause's.
  *
  * `required` is read for `Calculus.litSubAt`'s reason: an optional literal name admits the map that
  * omits the name, so the member holds values outside every fibre the clause describes.
+ *
+ * The base is compared before the alternatives, and a mismatch keeps the member out. That is
+ * `Calculus.altsSub`, whose four rows are four bases and whose fall-through row is every pair that
+ * does not share one.
  */
 const clauseKeeps = (
-    clause: Readonly<Record<string, unknown>>,
+    clause: ReadonlyMap<string, Literal>,
     term: Term,
 ): boolean => {
     const literals = literalsOf(term)
     if (!literals) return false
-    for (const name in clause) {
-        const pinned = literals[name]
-        if (!pinned?.required) return false
-        const admitted = clauseTags(clause[name])
-        const inside = (pinned.alts.ls as readonly LiteralValue[]).every(
-            (one) => admitted.some((tag) => sameLiteral(one, tag)),
+    for (const [name, pinned] of clause) {
+        const mine = literals[name]
+        if (!mine?.required || mine.alts.base !== pinned.base) return false
+        const inside = (mine.alts.ls as readonly LiteralValue[]).every((one) =>
+            (pinned.ls as readonly LiteralValue[]).some((tag) =>
+                sameLiteral(one, tag),
+            ),
         )
         if (!inside) return false
     }
@@ -4223,12 +4289,17 @@ const clauseKeeps = (
 }
 
 /**
- * The members kept, with a foreign key refused before anything is filtered.
+ * The members kept, with two refusals taken before anything is filtered.
  *
- * A clause key no member pins to a literal keeps nothing, and silently: an empty result is a
- * legitimate answer, so a typo in a key would read as "no member matched" rather than as the typo
- * it is. The model cannot have this failure — its clause keys are a subset of the dissection's by
- * the type — so the refusal is the host's own and says which keys exist.
+ * **A clause key no member pins to a literal**, and **a clause at a base no member carries at that
+ * key**. Both keep nothing, and both keep nothing *whatever the values are*: they are facts about
+ * the declaration, decidable before any item exists, and a clause that cannot describe a member is
+ * a typo rather than an answer. An empty result stays a legitimate answer where the bases agree and
+ * the alternatives simply do not meet, because that is a fact about values. That line is where the
+ * foreign-key refusal already sits, and the base refusal sits beside it for the same reason.
+ *
+ * The model cannot have either failure — its clause keys are a subset of the dissection's by the
+ * type, and `Alts` carries the base at the key — so both refusals are the host's own.
  */
 const sliced = <O>(
     options: readonly O[],
@@ -4236,19 +4307,32 @@ const sliced = <O>(
     keep: boolean,
 ): readonly O[] => {
     const terms = options.map((option) => termOf(option as unknown as AnyCodec))
-    const pinned = new Set<string>()
+    const pinned = new Map<string, Set<LiteralBase>>()
     for (const term of terms) {
-        for (const name in literalsOf(term) ?? {}) pinned.add(name)
-    }
-    for (const name of Object.keys(clause)) {
-        if (!pinned.has(name)) {
-            throw new CodecError(
-                `'${name}' is not a key any member pins to a literal, so a clause naming it selects nothing; the keys available are ${[...pinned].map((one) => `'${one}'`).join(', ') || '(none)'}`,
-            )
+        for (const [name, one] of Object.entries(literalsOf(term) ?? {})) {
+            const bases = pinned.get(name) ?? new Set<LiteralBase>()
+            bases.add(one.alts.base)
+            pinned.set(name, bases)
         }
     }
+    const read = new Map<string, Literal>()
+    for (const [name, value] of Object.entries(clause)) {
+        const bases = pinned.get(name)
+        if (!bases) {
+            throw new CodecError(
+                `'${name}' is not a key any member pins to a literal, so a clause naming it selects nothing; the keys available are ${[...pinned.keys()].map((one) => `'${one}'`).join(', ') || '(none)'}`,
+            )
+        }
+        const literal = clauseLiteral(name, value)
+        if (!bases.has(literal.base)) {
+            throw new CodecError(
+                `the clause at '${name}' is a \`${literal.base}\` literal and no member pins '${name}' at that base, so it describes no member whatever its alternatives; the bases declared at '${name}' are ${[...bases].map((one) => `\`${one}\``).join(', ')}`,
+            )
+        }
+        read.set(name, literal)
+    }
     return options.filter(
-        (_option, at) => clauseKeeps(clause, terms[at] as Term) === keep,
+        (_option, at) => clauseKeeps(read, terms[at] as Term) === keep,
     )
 }
 

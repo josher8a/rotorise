@@ -1057,7 +1057,7 @@ const resolutionUnions = (): readonly (readonly [string, AnyCodec])[] => [
                 object({ kind: string('a'), x: string }),
                 object({ kind: string('b'), x: boolean }),
                 object({ kind: string('c'), x: decimal }),
-            ]).extract({ kind: ['a', 'b'] }),
+            ]).extract({ kind: string('a', 'b') }),
         ),
     ],
     [
