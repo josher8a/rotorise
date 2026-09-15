@@ -60,7 +60,6 @@ import {
     namedLiteral,
     namesFit,
     namesOf,
-    ownsNull,
     rendered,
     sameLiteral,
     shapeOf,
@@ -1232,39 +1231,6 @@ export const denote = (def: Term): Pair => {
                         `no encoding could read this attribute; tried the current one and one older: ${read} | ${older_}`,
                     )
                 },
-            }
-        }
-        /**
-         * §3 `(nullable)`: the null point adjoined, **unless the subterm already owns it** —
-         * `Codec.withNull` with the guard, and `lawful_withNull` is the lemma.
-         *
-         * Without the guard the wrapper's `NULL` branch shadows the subterm and **(R)** fails on a
-         * term the specification proves lawful: `nullable(held(nullable(string), adapter))`, where
-         * the adapter maps `'SENTINEL'` to `null`, writes `{ NULL: true }` for `'SENTINEL'` and
-         * reads back `null`. The value written is not the value read.
-         *
-         * Where the guard does *not* fire, null-honesty is a theorem rather than an assumption: an
-         * inner that wrote `⟨NULL, ∗⟩` would read it straight back by **(R)** and so would own the
-         * point, and one that read some attribute to `null` would write the point by **(C)** and
-         * own it again. §3's guard is what turned two premises into consequences.
-         *
-         * **The question is asked once, at first use rather than at construction**, because
-         * `lazy` exists: a recursive declaration forces its thunk when probed, and at
-         * module-evaluation time that is a reference to a binding that does not exist yet.
-         */
-        case 'nullable': {
-            const inner = codecOfTerm(def.inner)
-            let owns: boolean | undefined
-            const ownsInner = () => (owns ??= ownsNull(inner))
-            return {
-                encode: (value) =>
-                    value === null && !ownsInner()
-                        ? carrying('NULL', true)
-                        : inner.encode(value),
-                decode: (attribute) =>
-                    memberOf(attribute) === 'NULL' && !ownsInner()
-                        ? null
-                        : inner.decode(attribute),
             }
         }
         /**

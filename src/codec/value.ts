@@ -26,8 +26,8 @@ import type {
     AttributeValue,
     StoredItem,
 } from './attribute'
-import { carrying, memberOf } from './attribute'
-import type { AnyCodec, LiteralValue, Option, Shape } from './codec'
+import { memberOf } from './attribute'
+import type { LiteralValue, Option, Shape } from './codec'
 import type { Result } from './result'
 import { CodecError, failed } from './result'
 
@@ -177,31 +177,6 @@ export const namedLiteral = (one: unknown): string =>
         : one instanceof Uint8Array
           ? `0x${[...one].map((byte) => byte.toString(16).padStart(2, '0')).join('')}`
           : rendered(one)
-
-export const reaches = (probe: () => unknown): boolean => {
-    try {
-        return !failed(probe())
-    } catch {
-        return false
-    }
-}
-
-/**
- * Does `inner` already reach the null point, at *either* end?
- *
- * `null ∈ dom(e)` or `⟨NULL, ∗⟩ ∈ dom(p)`, which is the specification's `owns(c)`. The
- * disjunction is not a convenience: asked per side, a codec could decline to write `null` while
- * still reading `⟨NULL, ∗⟩`, the point's two ends would belong to different codecs, and a round
- * trip would go out through one and back through the other with nothing looking ambiguous on
- * either side taken alone.
- *
- * Two probes at two points. A throw is a refusal like any other — {@link held}'s adapter is
- * arbitrary user code and may throw rather than return a `CodecError`, which is the same reason
- * {@link accepts} catches.
- */
-export const ownsNull = (inner: AnyCodec): boolean =>
-    reaches(() => inner.encode(null as never)) ||
-    reaches(() => inner.decode(carrying('NULL', true)))
 
 /**
  * Whether this stand-in has to be *copied* on each read that uses it, decided once.

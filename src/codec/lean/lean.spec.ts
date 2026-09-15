@@ -323,8 +323,9 @@ describe('terms', () => {
         expect(leanTermOf(erase(union([string, boolean])))).toBe(
             'Term.union [Term.string, Term.boolean]',
         )
+        // `nullable` is a builder, so the null point emits as the union it is
         expect(leanTermOf(erase(nullable(string)))).toBe(
-            'Term.nullable (Term.string)',
+            'Term.union [Term.string, Term.null]',
         )
     })
 
