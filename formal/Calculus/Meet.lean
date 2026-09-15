@@ -1,5 +1,5 @@
 import Calculus.Merge
-import Calculus.ExactV
+import Calculus.Orthogonality
 
 /-!
 # The meet
@@ -203,6 +203,12 @@ def Term.meet : Term → Term → Option Term
   -- the containers
   | .array x, .array y => (Term.meet x y).map .array
   | .record x, .record y => (Term.meet x y).map .record
+  -- **`set string` and `set decimal` are `string ∧ decimal` one container out.** Both write a
+  -- `strSet` and they store it at `SS` and at `NS`, so they share every set of stored numerals
+  -- and have no meet. `never` would claim they share none. Every other pair of bases writes a
+  -- different `Value` constructor and so shares nothing.
+  | .set .string, .set .decimal => none
+  | .set .decimal, .set .string => none
   | .set b, .set b' => if b = b' then some (.set b) else some .never
   | .opaq l, .opaq l' => some (.opaq (l && l'))
   -- **an array against a tuple is the tuple**, each declared position and the tail met with the
@@ -404,6 +410,17 @@ example : Term.meet .string .decimal = none := by simp [Term.meet]
 
 /-- `nullable` keeps its null point only against something that holds null. -/
 example : Term.meet (.nullable .string) .null = some .null := by simp [Term.meet]
+
+/-- …and the same refusal one container out. A set of stored numerals satisfies both bases, so
+    the pair shares values and has no meet. -/
+example : Term.meet (.set .string) (.set .decimal) = none := by simp [Term.meet]
+
+example : Adm (.set .string) (.strSet ⟨{"1"}, Finset.singleton_nonempty _⟩) = true := by
+  simp [Adm, SetBase.adm]
+
+example : Adm (.set .decimal) (.strSet ⟨{"1"}, Finset.singleton_nonempty _⟩) = true := by
+  simp [Adm, SetBase.adm, isStored, Numeral.Stored]
+  decide
 
 /-! ### Why the write-agreement condition is conditional
 
