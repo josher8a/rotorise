@@ -33,9 +33,11 @@ admissions. `array(string) ∧ tuple(string 'a')` is `tuple(string 'a')` and is 
 **An object's declared names meet by intersection.** `objAdmV` quantifies over the names the
 *value* carries and `AdmRest` is `none` at `drop` and at `refuse` alike, so a closed object refuses
 an undeclared name on the value side under either policy: the declared set is an upper bound. Two
-upper bounds meet at their intersection. The required names unite, and a required name outside the
-intersection makes the object `never`, because that name must be present and the other factor
-refuses it.
+upper bounds meet at their intersection. The required names unite, and **with both rests closed** a
+required name outside the intersection makes the object `never`, because that name must be present
+and the other factor refuses it. An *open* factor refuses no name: its rest holds one the factor
+does not declare. So the rests are read first, and a `codec` on either side answers the refusal
+before the required-name test is consulted.
 
 The witness that the union of the declared names is wrong: `object {x : req string}` and
 `object {y : req string}`, both `drop`, against the value `{x := "1", y := "2"}`. Each factor
@@ -91,8 +93,10 @@ theorem Body.mem_shared_left {a b : Body} {k : Name} (h : k ∈ Body.shared a b)
 theorem Body.mem_shared_right {a b : Body} {k : Name} (h : k ∈ Body.shared a b) : k ∈ b.fields :=
   (Finset.mem_filter.mp h).2
 
-/-- Whether every name one body requires is a name the other declares. A required name the other
-    factor refuses is a name that must be present and cannot be, which is the bottom. -/
+/-- Whether every name one body requires is a name the other declares. **A bottom test only
+    against a closed factor**: a name the other body does not declare is a name it refuses when its
+    rest is `drop` or `refuse`, and a name it holds when its rest is a codec. `Body.meetTerm` reads
+    the rests first for that reason. -/
 def Body.reqShared (a b : Body) : Bool :=
   decide (∀ k : {k // k ∈ a.fields}, Field.isReq (a.at k) = true → k.1 ∈ b.fields)
 
@@ -324,25 +328,30 @@ decreasing_by meet_wf
 
 /-- Two bodies, over the names both declare.
 
+    The rests decide first. `Rest.merge` answers `none` at a codec on either side, and an open
+    factor is one that holds a name it does not declare, so the required-name test below is a
+    bottom test only once both rests are closed.
+
     The declared set is the intersection and the required set is the union, which is what two upper
-    bounds meet to. A required name the other factor does not declare makes the object the bottom:
-    the name must be present, and the other factor refuses a value carrying it.
+    bounds meet to. With both rests closed, a required name the other factor does not declare makes
+    the object the bottom: the name must be present, and the other factor refuses a value carrying
+    it.
 
     A field whose terms meet to the bottom is kept rather than dropped. At `optional` the two read
     the same — a name the body does not declare and a name at `optional never` are both refused
     when present — and keeping it leaves the key set fixed for every row below. At `req` it is the
     body that becomes the bottom, which is the `isBottom` test. -/
 def Body.meetTerm (a b : Body) : Option Term :=
-  if Body.reqShared a b && Body.reqShared b a then
-    if Body.meetOk a b then
-      match Rest.merge a.rest b.rest with
-      | some r =>
+  match Rest.merge a.rest b.rest with
+  | some r =>
+      if Body.reqShared a b && Body.reqShared b a then
+        if Body.meetOk a b then
           if decide (∀ k, Field.isBottom (Body.meetField a b k) = false) then
             some (.object (.mk (Body.shared a b) (fun k => Body.meetField a b k) r))
           else some .never
-      | none => none
-    else none
-  else some .never
+        else none
+      else some .never
+  | none => none
 termination_by (Body.depth a + Body.depth b, 1)
 decreasing_by meet_wf
 
@@ -479,6 +488,31 @@ example : Adm (.set .string) (.strSet ⟨{"1"}, Finset.singleton_nonempty _⟩) 
 example : Adm (.set .decimal) (.strSet ⟨{"1"}, Finset.singleton_nonempty _⟩) = true := by
   simp [Adm, SetBase.adm, isStored, Numeral.Stored]
   decide
+
+/-- **An open factor refuses no name, so the required-name test is not a bottom test against
+    one.** The left body requires `x` and the right does not declare it, which the required-name
+    test reads as a refusal; the right body's rest holds `x` instead. The two examples below are
+    the value both admit, so the pair shares a value and the answer is the refusal. -/
+example :
+    Term.meet
+        (.object (.mk {"x"} (fun _ => .req .string) (.codec .string)))
+        (.object (.mk {"y"} (fun _ => .optional .string) (.codec .string)))
+      = none := by
+  rw [Term.meet.eq_def]
+  simp [Body.meetTerm, Rest.merge]
+
+/-- The left body admits `{x := "1"}` through its declared field… -/
+example : Adm (.object (.mk {"x"} (fun _ => .req .string) (.codec .string)))
+    (.map {"x"} (fun _ => .str "1")) = true := by
+  simp [Adm, AdmBody, valPresentT, objAdmV, entryP, MapOf.at, AdmField]
+
+/-- …and the right body admits it through its rest, at a name it does not declare. -/
+example : Adm (.object (.mk {"y"} (fun _ => .optional .string) (.codec .string)))
+    (.map {"x"} (fun _ => .str "1")) = true := by
+  simp [Adm, AdmBody, valPresentT, objAdmV, entryP, MapOf.at, AdmField, AdmRest]
+  apply decide_eq_true
+  intro k
+  rw [if_neg (by have hk := k.2; simp only [Finset.mem_singleton] at hk; simp [hk])]
 
 /-! ### Why the write-agreement condition is conditional
 
