@@ -4,10 +4,8 @@ import Calculus.Objects
 # Sums (§5), and unknown values
 
 `altCodec` over `OptionSem`s that carry their *admission as data*, with `UniqueAdmission`
-as (U) in premise form. `dunionTable` is not one of them: a discriminated union is a
-**lookup**, and its key set makes the fact. `opaqCodec` is `altCodec`'s fueled fixpoint
-over everything self-identifying, and the `refuse` policy is the absence of the number
-option.
+as (U) in premise form. `opaqCodec` is `altCodec`'s fueled fixpoint over everything
+self-identifying, and the `refuse` policy is the absence of the number option.
 -/
 
 namespace Calculus
@@ -101,56 +99,6 @@ def OptionSem.byAttempt (c : Codec) : OptionSem :=
     `union(c, ⟨NULL⟩-point)`. It decides by attempting, like any ground option. -/
 abbrev nullOption : OptionSem := .byAttempt nullCodec
 
-/-- §5's discriminator projection: the tag an item carries at `d`, where it carries one.
-    A membership decision and a function application, where the list representation needed
-    a `lookup`. -/
-def Value.tagText : Value → Option String
-  | .str s => some s
-  | _ => none
-
-/-- …and its stored twin, which reads **two** members. A decimal tag writes a `.str` and stores
-    an `.n`, so the value side has one row and the stored side has two. The host's tag reader
-    accepts `S` or `N` and returns the text carried by either; this is that rule.
-
-    Named beside `Value.tagText` rather than written inline in `tagOfV`/`tagOfA`, because a
-    lemma about a tag is then a lemma about these and not about a match under a `dif`. -/
-def Attr.tagText : Attr → Option String
-  -- the binders are not `s` and `n`: this definition opens the `Attr` namespace, where those
-  -- two names are the constructors themselves
-  | .s text => some text
-  | .n num => some num.1
-  | _ => none
-
-/-- One discriminator's tag, read off a value. -/
-def tagAtV (d : Name) : Value → Option String
-  | .map keys f => if h : d ∈ keys then (f ⟨d, h⟩).tagText else none
-  | _ => none
-
-/-- **A member's assignment, read off a value**: one tag per key, `none` if any key is absent.
-
-    A finite function on the key set, so the keys have no order and neither does the reading.
-    `Finset.attach` gives the decidable `∀ k ∈ ks` the totality check needs without enumerating,
-    which `Finset.toList` would and which reaches `Classical.choice`. -/
-def tagOfV (ks : Finset Name) (v : Value) : Option (Assignment ks) :=
-  if h : ∀ k ∈ ks, (tagAtV k v).isSome then
-    some (fun k => (tagAtV k.1 v).get (h k.1 k.2))
-  else none
-
-/-- One key's tag on the stored side, where the field may be `S` **or** `N`.
-
-    A decimal tag writes a `.str` and stores an `N`, so the value side is covered by the `.str`
-    row above and the stored side needs this one. The host reads a tag from the stored item and
-    accepts `S` or `N`, returning the text carried by either. This is that rule. -/
-def tagAtA (d : Name) : Attr → Option String
-  | .m keys g => if h : d ∈ keys then (g ⟨d, h⟩).tagText else none
-  | _ => none
-
-/-- The same on the stored side. -/
-def tagOfA (ks : Finset Name) (a : Attr) : Option (Assignment ks) :=
-  if h : ∀ k ∈ ks, (tagAtA k a).isSome then
-    some (fun k => (tagAtA k.1 a).get (h k.1 k.2))
-  else none
-
 /-- The builder `denote` uses for a union option. -/
 def optionSemOf (c : Codec) : Option (MapOf NameSpec) → OptionSem
   | some spec => .byStructure spec c
@@ -239,7 +187,7 @@ def AdmitsAtMostOne (os : List OptionSem) : Prop :=
 
     Under `AdmitsAtMostOne` the question does not arise. No filter is ever longer than one, so a
     singleton in the sub-selection is a singleton in the whole, the original's obligation applies,
-    and the answer restricts. The certificate is why a slice of a `dunion` is safe, and it is a
+    and the answer restricts. The certificate is why a slice of a union is safe, and it is a
     premise rather than decoration. -/
 theorem uAtAct_sublist {os us : List OptionSem} (hsub : us.Sublist os)
     (hcert : AdmitsAtMostOne os) (h : UniqueBothWays os) : UniqueBothWays us := by

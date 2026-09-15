@@ -8,12 +8,12 @@
  * properties of the table rather than of the options, which is why neither showed up in a
  * round-trip test: each option round-trips perfectly on its own.
  *
- * The model makes the first unstatable rather than refusing it. `Calculus.Typed.dunion` keys its
- * variants by tag, so a table cannot hold two entries for one key and there is no tag set left to
- * compare; the one premise that remains, `hone`, says a variant's own discriminator field agrees
- * with its key. So a union with two options answering to one tag is not a `dunion` the calculus
- * types. The library built it anyway and let the earlier option be overwritten: a model fact the
- * host did not carry.
+ * The model states neither defect, and it no longer keys anything by a tag: there is one sum. Two
+ * options answering to one tag are not separated, so `Calculus.OrthS` certifies nothing about them
+ * and the union gets no (U) certificate — `Calculus.admitsAtMostOne_of_separated` is what the
+ * lookup would need and is exactly what such a pair withholds. The library built it anyway and let
+ * the earlier option be overwritten. The refusal below is where the host states what the
+ * certificate declines to give.
  */
 import { describe, expect, it } from 'vitest'
 import { CodecError } from '../../../Rotorise'
@@ -63,8 +63,8 @@ describe('two options answering to the same tag', () => {
      * other — and the second was labelled "the feature the refusal must not take with it",
      * asserting that a multi-tag variant colliding with nothing still encodes.
      *
-     * Arity one at the discriminator (`36df8e7`, `Typed.dunion`'s `hone`) makes neither
-     * expressible: an option's literal admits one value, so an overlap cannot be partial and
+     * Arity one at the discriminator (`36df8e7`) makes neither expressible: a member's tag is read
+     * off a required literal with exactly one alternative, so an overlap cannot be partial and
      * there is no multi-tag variant to accept. The same closure `HOpaque`'s `set []` got — a
      * witness that a case is handled is worth having exactly while the case can be written down,
      * and when the type stops admitting it the witness stops being a theorem and becomes the

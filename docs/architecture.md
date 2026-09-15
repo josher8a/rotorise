@@ -96,14 +96,13 @@ error but a silent "everything": the analysis stays sound and stops saying anyth
 | a depth clause | `Body.depth` | the termination measure must see through it |
 | a denotation clause | `bodySem` | `denote` must dispatch with no case split at the use site |
 | a spec projection | `Body.spec` | `select` counts an object option by its names, not its contents |
-| a member and tag projection | `Body.tags` | the union residues read this, not the payload |
 | an admission row, per side | `AdmBody` and `AdmABody` | exactness is per row; a stratum with no row cannot be exact |
 | a premise carrier | `ObligationsBody` | semantic side conditions are structural, not global |
 | a law exemption | `MPOkBody` | the exemption of `legacy` propagates through the stratum |
 | an emitter clause | the object row of `src/codec/lean.ts` | the bridge writes terms in this language, and a constructor it cannot spell breaks it |
 
-The two name-reading projections are owed only by a stratum that holds names. A policy answers to
-no name and carries no tag. Every other row is owed unconditionally.
+The spec projection is owed only by a stratum that holds names. A policy answers to no name.
+Every other row is owed unconditionally.
 
 The emitter clause is owed for the same reason as the rest: the bridge is part of the
 correspondence, and a stratum whose shape the emitter cannot spell produces committed vector
@@ -167,21 +166,16 @@ That last clause is the boundary, and **unique admission is the case on the wron
 it is not a property of an option but a property of a set of options at an input the set as a
 whole resolves. Indices make per-thing properties structural, and this is not one.
 
-**The discriminated union is the case that crossed from premise to index, and it crossed by
-changing what the payload is.** Its variants are a tag-keyed table over `Body` rather than a list
-under side conditions. Object-ness is the codomain. Arity one is a function on a key set, since
-one key reaches one variant. Distinctness is `Finset`, which is why the keys are a set and not a
-list. And because the key *is* the tag, there is no tag set left to compare, so the disjointness
-that once related one option to the others has no statement to make.
-
-**One premise stays, and it is the one a table cannot state**: that a variant's own discriminator
-field agrees with its key. `Typed.dunion`'s `hone` is that fact, and `tagsOf_ne_nil` is the
-inversion that unpacks it. The field cannot be removed to make the agreement vacuous, because the
-codec writes the tag out of that field and the host's variant declares it. So the residue is not a
-relation between options — which is what the boundary forbids — but an agreement between one
-variant and its own key, which a key set cannot express because the key set does not see inside a
-variant. The conclusion moved with it: a disjunction over a list becomes `HVariants`, the same
-disjunction over the key set.
+**The discriminated union is the case that left the term language rather than crossing into it.**
+A dissection is a `union` of object members whose pairwise structural meet is empty: two members
+differ at a required literal name with disjoint alternatives, or the name intervals they declare
+cannot be satisfied at once. Structural admission is what reads that, on both halves of the pair.
+An object option is admitted when the names the item carries lie in the interval its spec declares,
+and every present name whose field is a literal carries one of that literal's alternatives. `OrthS`
+is the phase of `Orth` that certifies the first case, and a sub-selection of a certified union
+stays certified, because the certificate is `Pairwise` and `uAtAct_sublist` carries (U) under it. A
+tag table keyed by the discriminating literals is an index the host builds over such a union, and
+no term carries it.
 
 **The criterion is necessary and not sufficient.** A move can pass it and still not pay, when the
 bundling it invites re-threads the parts a stratum exists to bundle, or when it crosses a stated
@@ -521,10 +515,9 @@ how the host spells "the value the model means" where the model needs no spellin
 value semantics for byte arrays owes nothing here, and one without owes the identity.
 
 **Where the two sides disagree, the emitter is where it gets written down.** A tag is stored as a
-string or as a numeral, and the model's tag reader answers at the string base and at the decimal
-base, keying on the text either way — a decimal literal holds its numeral as text, so the two
-bases are two spellings of one tag rather than two tag types. There the two sides agree, and a
-discriminator at either base emits.
+string or as a numeral, and the model reads a discriminator as the literal it is at either base —
+a decimal literal holds its numeral as text, so the two bases are two spellings of one tag rather
+than two tag types. There the two sides agree, and a discriminator at either base emits.
 
 **The one refusal left is the numeric base**, and it is not a disagreement about what a tag is.
 The model can state no tag there at all, for the reason `docs/defects.md` records as an issue: the
@@ -533,9 +526,11 @@ emitting a vector about a selection the model cannot express, and its message sa
 caller's vocabulary. That refusal is the record, and it is the shape every gap of this kind takes
 — the reader is total, and what bounds it is which terms have closed forms.
 
-The reader also answers on a required discriminator only. A fallback discriminator would fill an
-absent tag with a default and break the stamp on the value side, and the `discriminatedUnion`
-combinator in `src/` refuses one for the same reason, so this is agreement rather than a gap.
+**A `fallback` discriminator is refused at the host and not at the model.** The
+`discriminatedUnion` combinator in `src/` writes the tag out of the discriminator's field, so a
+default would fill an absent tag with a value no member vouched for, and it refuses a `fallback`
+field for that reason. The model writes no tag and states no rule about one. `Body.spec` marks a
+`fallback` field required, so `litSubAt` selects on such a name as it does on a `req` one.
 
 **A host obligation that no host code reads is found by whatever has to serialise the host's own
 definition, or it is not found.** A term the host builds must determine the codec the host runs.

@@ -2,8 +2,9 @@
  * The multi-key `dunion`: a dissection is a key set and a set of members, and a member carries one
  * tag per key.
  *
- * `mdunion` builds one at any arity, and `discriminatedUnion` is `mdunion` at one key. Each test
- * below names one rule of `Calculus.TagMap`, or the premise `Typed.dunion` keeps.
+ * `mdunion` builds one at any arity, and `discriminatedUnion` is `mdunion` at one key. The term
+ * it builds is a `Term.union` of objects; the tag table is the builder's own index, and each test
+ * below names one rule that index needs.
  */
 import { describe, expect, it } from 'vitest'
 import { boolean, mdunion, object, string } from '../../codec'
@@ -33,9 +34,9 @@ const pair = twoKey.item as unknown as ItemPair
 
 describe("a member's assignment is read off the member's own body", () => {
     /**
-     * `Calculus.Body.namesTags`: the tag at each key is the singleton the body's own `req` literal
-     * names. The field cannot go — the codec writes the tag out of it — so the agreement between
-     * the key and the field is the one premise the table cannot carry.
+     * The tag at each key is the one alternative the body's own `req` literal names. The field
+     * cannot go — the codec writes the tag out of it — so the index reads its keys off the members
+     * rather than carrying them beside the members.
      */
     it('reads one tag per key off the body, and names the key it cannot read', () => {
         const body = unionTerm(twoKey).options[0] as Extract<
@@ -52,8 +53,8 @@ describe("a member's assignment is read off the member's own body", () => {
     })
 
     /**
-     * `req` only, which is `Calculus.tagsOfField`'s own rule: a `fallback` discriminator would fill
-     * an absent tag with a default and break the value-side stamp.
+     * `req` only: a `fallback` discriminator would fill an absent tag with a default, and the
+     * index would key a member on a value no item carries.
      */
     it('refuses a member whose discriminator is not required', () => {
         const optionalTag = {
@@ -75,7 +76,7 @@ describe("a member's assignment is read off the member's own body", () => {
 })
 
 describe('the members of a dissection form a set', () => {
-    /** `Calculus.TagMap.keys` is a `Finset`, so one assignment reaches at most one member. */
+    /** The index must be a lookup, so one assignment reaches at most one member. */
     it('refuses two members carrying the same assignment', () => {
         const twin = object({
             kind: string('pet'),

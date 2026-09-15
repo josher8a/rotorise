@@ -40,30 +40,6 @@ they are the machine-checked half of a correction the document has already made.
 
 namespace Calculus
 
-/-! ## Two utilities the discharges below need
-
-    `allTags` pools a `discriminatedUnion`'s tags, and `refineReads` is `refine`'s
-    read-side test: decode with the base, then ask `q` of the result. Both were rows of the
-    retired tables before they were anything else, and both survive because the discharges
-    at the foot of this file use them. -/
-
-/-- The tags a `(dunion)`'s options answer to, pooled. Spelled out rather than a
-    `flatMap` so the membership lemma is one induction. -/
-def allTags (d : Name) : List Term → Finset String
-  | [] => ∅
-  | t :: ts => tagsOf d t ∪ allTags d ts
-
-theorem mem_allTags {d : Name} {ts : List Term} {t tag} (ht : t ∈ ts)
-    (htag : tag ∈ tagsOf d t) : tag ∈ allTags d ts := by
-  induction ts with
-  | nil => exact absurd ht (by simp)
-  | cons t₀ ts ih =>
-    rcases List.mem_cons.mp ht with rfl | ht'
-    · exact Finset.mem_union.mpr (Or.inl htag)
-    · exact Finset.mem_union.mpr (Or.inr (ih ht'))
-
-
-
 /-- **`refine`'s read-side gate**: decode with the base, then apply `q` to what comes out.
 
     The row this replaces was `admA (.refine t q) = admA t` — the predicate dropped — and
@@ -329,32 +305,15 @@ theorem pairwise_imp_mem {α : Type} {R S : α → α → Prop} :
         (fun x hx y hy => h x (List.mem_cons_of_mem a hx) y (List.mem_cons_of_mem a hy))
         htail
 
-/-! ### A term that admits nothing, and is derivable
+/-! ### A term that admits nothing
 
     Disjointness of admissible sets is not on its own a discharge, and the reason is a term
     whose set is *empty*: it is disjoint from everything, including from itself, so it would
-    separate from options the discharger refuses. `discriminatedUnion(d)` with no options is
-    that term,
-    and `(dunion)`'s premises are quantified over the member set, so it is derivable. -/
+    separate from options the discharger refuses. `never` is that term. -/
 
 
 /-- `HNever` holds nothing: it is `False` at every value. -/
 theorem hnever_false (v : Value) : ¬ HNever v := id
-
-/-- And it is derivable — `(dunion)`'s premises are quantified over the member set, so the empty
-    table satisfies both vacuously and the held set is `False`, which is what a variant table
-    with no variants holds. The key set stays non-empty: what is empty here is the members. -/
-theorem typed_dunion_nil (ks : NEFinset Name) :
-    Typed (.dunion ⟨ks, ∅, fun k => nomatch k.2⟩)
-      (HVariants ⟨ks, ∅, fun k => nomatch k.2⟩ (fun k => nomatch k.2)) (some .M) :=
-  .dunion (fun k => nomatch k.2) (fun k => nomatch k.2)
-
-/-- The empty table's held set is the bottom's: a witness names a variant, and there is no
-    variant to name. `Term.never` is the constructor, and this is why the derived form was
-    never a second bottom. -/
-theorem hvariants_empty_eq_never (ks : NEFinset Name) (v : Value) :
-    HVariants ⟨ks, ∅, fun k => nomatch k.2⟩ (fun k => nomatch k.2) v ↔ HNever v :=
-  Iff.intro (fun h => h.elim fun k _ => nomatch k.2) (fun h => h.elim)
 
 /-- §5's (D) fails against the bottom: `False` is a subset of every held set, so the
     first conjunct of `DIncomp` is false. `union([X, never])` is not `Typed`. -/
@@ -531,24 +490,22 @@ theorem uAtCan_of_literalN_disjoint {lss : List (NEFinset WFDouble)}
 
     §5's discharger table has four rows, and until now a reviewer checking it changed
     vocabulary halfway across: two rows are about `UAtCan opts` — a list of
-    **terms** — and two are about `UniqueAdmission os`, a list of `OptionSem`. Worse,
-    `(dunion)`'s row was never stated at all: it appeared only inside
-    ~~lawful_dunionCodec~~, where it is an argument rather than a claim.
+    **terms** — and two are about `UniqueAdmission os`, a list of `OptionSem`.
 
-    `(dunion)`'s row moves to term level here, so three of the four are one vocabulary.
-    The fourth cannot follow, and the reason is worth stating rather than working
-    around: `denote` gives `(opaque)` the **fuel-free** `opaqCodecω`, which budgets each
-    input by its own depth and is not `altCodec` over any one list of options. Its (U)
-    is therefore a statement about `opaqCodec` at a fuel, one level below the term
-    language. That is a fact about `opaque`, not a gap in the table. -/
+    The discriminated union's row is gone with its constructor. `(opaque)`'s cannot follow the
+    other two, and the reason is worth stating rather than working around: `denote` gives
+    `(opaque)` the **fuel-free** `opaqCodecω`, which budgets each input by its own depth and is
+    not `altCodec` over any one list of options. Its (U) is therefore a statement about
+    `opaqCodec` at a fuel, one level below the term language. That is a fact about `opaque`, not
+    a gap in the table. -/
 
-/-! **Row three is gone, and that is the row's answer.** §5 called `(dunion)` "the one union
-whose (U) is discharged by the rule itself", and the discharge was ~~uAtCan_dunion~~ over
-~~semsOfD~~, the option list `denote`'s dunion case used to build. There is no option list now:
-the variants are a table keyed by tag and the denotation is a lookup, so at most one variant is
-reached by construction and there is no unique-admission statement left to make. ~~uAtCan_dunion~~,
-~~UAtCanD~~ and ~~semsOfD~~ are deleted rather than restated, which is the strongest form the row's
-claim can take. -/
+/-! **Row three is gone, and that is the row's answer.** §5 called the discriminated union "the
+one union whose (U) is discharged by the rule itself", and the discharge was ~~uAtCan_dunion~~ over
+~~semsOfD~~, the option list that rule's denotation used to build. There is no such rule now: a
+dissection is a certified `union`, its members are separated by phase *literals* of `Orth`, and
+(U) at a sub-selection is `uAtAct_extract`'s premise rather than a row of this table.
+~~uAtCan_dunion~~, ~~UAtCanD~~ and ~~semsOfD~~ are deleted rather than restated, which is the
+strongest form the row's claim can take. -/
 
 /-- **Row four: `(opaque)`'s (U), unconditionally.** `uniqueAdmission_opaque` asks for the
     recursive option's lawfulness; `lawful_opaqCodec` supplies it, so the row has no

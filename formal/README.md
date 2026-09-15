@@ -14,7 +14,7 @@ definition it touches.
 | `Calculus/Prisms.lean`      | §3          | The entry point of the certified combinator algebra, opening with `Ctor` — a constructor as a partial iso onto its image, the prism §7 names. The point ground codecs (`string`, `boolean`, `binary`, `null`) are `pointCodec` at four pairs of prisms and share one lawfulness proof; the wire-set payload projections are the same shape again. Then `through`/`restrict` (iso/prism), `extendRead` (legacy) and `orNull` (nullable) |
 | `Calculus/Products.lean`    | §3          | `carriedCodec` — a payload pair carried between two prisms, the shape underneath every product: `entrywise` is it at a traversal (`array`, `record`), `tupleCodec` it at `align` + a traversal over `slots`, the codec row a shape assigns to a row of *n* positions, which is what makes alignment depend on length alone. `setCodec` is argued on its own |
 | `Calculus/Objects.lean`     | §4          | The field table as a map rather than a row, and the object taken apart through it. `objectCodec` is cashed as an equation by `objectCodecCore_eq` rather than argued on its own |
-| `Calculus/Sums.lean`        | §5, §3      | `altCodec` + `UniqueAdmission` (the sum), `dunionTable` (the lookup a `dunion` is) and `opaqCodec`, the fueled fixpoint over everything self-identifying |
+| `Calculus/Sums.lean`        | §5, §3      | `altCodec` + `UniqueAdmission` (the sum), `uAtAct_sublist` (which carries (U) to a sub-selection under the classifier's certificate) and `opaqCodec`, the fueled fixpoint over everything self-identifying |
 | `Calculus/Carriers.lean`    | §3          | One `Carrier` lemma per combinator, so the judgement's held-set index is the domain of the pair |
 | `Calculus/Lawful.lean`      | §3–§5       | The lawfulness lemmas this development discharges, one per construction |
 | `Calculus/Frontier.lean`    | §3–§5       | The lawfulness lemmas that are stated and not yet discharged, and the ones whose discharge is partial |
@@ -29,7 +29,7 @@ definition it touches.
 | `Calculus/Nesting.lean`     | §1          | **The one place `𝔸` is bigger in the model than in the store.** `Attr.Storable` (`Domain.lean`) is §1's 32-level bound, counting `L` and `M` only — a different function from `Attr.depth`, which is a termination measure and charges a wire set a layer. The ground fragment writes nesting `0`, containers add exactly one, and `not_storable_of_typed` exhibits a **derivable** term whose encoding the store refuses: the bound is absent from §3's rules rather than a premise someone failed to discharge |
 | `Calculus/Refutations.lean` | §6          | §6's seven "Do not hold" nodes, all settled, over eight declarations: `not_equiv_union_array`, `not_equiv_tupleTail_tuple` and `not_equiv_tupleTail_array`, `not_equiv_refine_held`, `not_equiv_union_extend`, `not_equiv_lazy` (where `≡`'s member index is what fails), `legacy_breaks_MP`, `e_comp_p_ne_id` — plus `optional` nesting and `set(union(…))`, both of which the syntax rules out |
 | `Calculus/Axioms.lean`      | §3          | `#assert_axioms`, and the headline theorems run through it — the advertised axiom base (`propext`, `Classical.choice`, `Quot.sound`, the `Double` axioms; **no `sorryAx`**) as a build error rather than a claim in prose |
-| `Calculus/Discharge.lean`   | §5          | The discharges of (U) that no phase of `Orth` reaches — an arbitrary `q` inside a `refine`, a union of numeric literals, `(dunion)` and `opaque`, and `uAtAct_array_literals` where `UAtCan` is outright false — with the two counterexamples that repaired §5's admission row and the refutation of (D) as a discharger. The four per-aspect tables this file used to carry are retired: §5 states that row on option admission and occupancy, `Calculus/ExactV.lean` and `Calculus/ExactA.lean` prove those rows exact, and `Calculus/Orthogonality.lean` decides the pairs a declaration can decide |
+| `Calculus/Discharge.lean`   | §5          | The discharges of (U) that no phase of `Orth` reaches — an arbitrary `q` inside a `refine`, a union of numeric literals, `opaque`, and `uAtAct_array_literals` where `UAtCan` is outright false — with the two counterexamples that repaired §5's admission row and the refutation of (D) as a discharger. The four per-aspect tables this file used to carry are retired: §5 states that row on option admission and occupancy, `Calculus/ExactV.lean` and `Calculus/ExactA.lean` prove those rows exact, and `Calculus/Orthogonality.lean` decides the pairs a declaration can decide |
 
 This table has a row of its own for twenty-two of the modules under `Calculus/`.
 `ExactV.lean`, `ExactA.lean`, `Separation.lean`, `Orthogonality.lean`,
@@ -40,8 +40,7 @@ Read those.
 of §5's soundness theorem are machine-checked — `soundness` (all four laws, (MP) with
 the legacy exemption as the `MPOk` hypothesis) and `soundness_core` ((R), (C), (W)
 through `legacy`-containing derivations) — by induction on the judgement, dispatching
-each case to its certified combinator lemma, with the `(dunion)` stamps derived from
-typing and (U) a fact of the variant table's key set rather than a discharge, and `opaque`'s by
+each case to its certified combinator lemma, with `opaque`'s (U) discharged by
 `uniqueAdmission_of_kinds`.
 The judgement carries both of §3's indices, and both are checked against the
 denotation. `typed_e_mem` and `typed_p_mem` are §3's `e : T ⇀ 𝔸` and `p : 𝔸 ⇀ T` at the

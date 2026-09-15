@@ -195,10 +195,6 @@ noncomputable def AdmA : Term → Attr → Bool
   | .tuple ts tail => fun a =>
       match a with | .l as => alignPA (AdmAList ts) (AdmAOptT tail) as | _ => false
   | .object b => AdmABody b
-  | .dunion variants => fun a =>
-      match tagOfA variants.ks.1 a with
-      | some tag => if h : tag ∈ variants.keys then AdmABody (variants.get ⟨tag, h⟩) a else false
-      | none => false
   -- the read side of the same deferral; see the `Adm` row and `ExactA_opaq`
   | .opaq lossy => fun a => ((opaqCodecω lossy).p a).isSome
 
@@ -521,37 +517,6 @@ theorem ExactA_tuple {ts : List Term} {tail : Option Term}
       simp
   all_goals simp [AdmA, denote, tupleCodec]
 
-theorem ExactA_dunion {variants : TagMap Body}
-    (h : ∀ k, ExactA (.object (variants.get k))) : ExactA (.dunion variants) := by
-  intro a
-  show (match tagOfA variants.ks.1 a with
-        | some tag => if hk : tag ∈ variants.keys then AdmABody (variants.get ⟨tag, hk⟩) a
-                      else false
-        | none => false) = true ↔ _
-  rw [denote_dunion_tags]
-  cases hta : tagOfA variants.ks.1 a with
-  | none => simp [dunionTable, hta]
-  | some tag =>
-    show (if hk : tag ∈ variants.keys then AdmABody (variants.get ⟨tag, hk⟩) a else false)
-        = true ↔ _
-    by_cases hk : tag ∈ variants.keys
-    · rw [dif_pos hk]
-      refine Iff.trans (h ⟨tag, hk⟩ a) (Iff.intro (fun hs => ?_) (fun hs => ?_))
-      · obtain ⟨v, hv⟩ := Option.isSome_iff_exists.mp hs
-        exact Option.isSome_iff_exists.mpr ⟨v, dunionTable_p.mpr ⟨tag, hk, hta, hv⟩⟩
-      · obtain ⟨v, hv⟩ := Option.isSome_iff_exists.mp hs
-        obtain ⟨tag', hk', ht, hvp⟩ := dunionTable_p.mp hv
-        rw [hta] at ht
-        obtain rfl : tag' = tag := (Option.some.inj ht).symm
-        exact Option.isSome_iff_exists.mpr ⟨v, hvp⟩
-    · rw [dif_neg hk]
-      refine Iff.intro (fun hs => nomatch hs) (fun hs => ?_)
-      obtain ⟨v, hv⟩ := Option.isSome_iff_exists.mp hs
-      obtain ⟨tag', hk', ht, -⟩ := dunionTable_p.mp hv
-      rw [hta] at ht
-      obtain rfl : tag' = tag := (Option.some.inj ht).symm
-      exact absurd hk' hk
-
 def ExactAField (fd : Field) : Prop :=
   ∀ a, AdmAField fd a = true ↔ (((fieldSem fd).codec).p a).isSome
 
@@ -689,7 +654,6 @@ theorem AdmA_exact : ∀ (t : Term), ExactA t
   -- the rows §5 excused on this side too
   | .tuple ts tail =>
       ExactA_tuple (exactAL_mem ts (AdmA_exactL ts)) (exactAO_mem tail (AdmA_exactO tail))
-  | .dunion variants => ExactA_dunion fun k => AdmA_exactB (variants.get k)
   | .object b => AdmA_exactB b
   | .opaq lossy => ExactA_opaq lossy
   -- both sides are empty, so the equivalence is `False ↔ False`

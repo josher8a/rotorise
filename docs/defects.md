@@ -199,35 +199,6 @@ than advertised, and it means that only because the two sides are written indepe
 
 ---
 
-## Known: the model carries two sums where one was ruled
-
-**Observation.** `Term` has `Term.union` and `Term.dunion`. A dissection is a `union` of object
-members whose pairwise structural meet is empty: the members differ at a required literal key with
-disjoint alternatives, or their key intervals do not meet. `Orth` certifies that, `uAtAct_sublist`
-carries (U) to any sub-selection of a certified union, and `AltClause.extract` and
-`AltClause.exclude` are the operations over the members. So the second constructor states what the
-first already states, with a `TagMap` and a key set carrying facts the members' own literals carry.
-
-**Effect.** Every rule over a term has a `dunion` row that repeats a `union` row: `Typed.dunion`
-beside `Typed.union`, `HVariants` beside `HUnion`, `dunionTable` and its rewrites, `StampedAt`,
-`namesTags` and the `hone` premise, `Assignment`, `asgEq`, `tagOfV`, `tagOfA`, `tagsOf` and
-`Body.tags`. Two sums also keep two declaration gates at the host: the union's gate asks whether
-the structural meet is empty, and the dissection's asks whether two members carry one assignment at
-the key set. Those are two questions while a dissection is a lookup, and they become one question
-when it is a union.
-
-**Pin.** None on the duplication itself. `Slice.lean` holds both slices side by side, which is where
-the repetition is visible in one file, and the union half is the one that survives.
-
-**Owed, and blocked on prose rather than on code.** The deletion is `Term.dunion` and every
-declaration above, with the host's discriminated union and multi-key dissection becoming builders
-that construct a `union` term and keep the tag table as a runtime index. What blocks it is that
-`formal/README.md` and `docs/architecture.md` cite the deleted names, so the deletion cannot be
-green until the architecture passage is rewritten to say that a dissection is a certified union.
-That rewrite is the owner's.
-
----
-
 ## Known: the type level reads a literal off a type, and the term is what the runtime reads
 
 **Observation.** The union's declaration gate decides whether an object option pins a name to a

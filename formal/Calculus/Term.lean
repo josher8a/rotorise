@@ -120,33 +120,10 @@ inductive Term where
       `Attr.m` and `Value.map` use one level down. -/
   | object   (b : Body)
   | union    (options : List Term)
-  /-- §5 `(dunion)`, **keyed by the tag**. The variants were a `List Term` under three side
-      conditions: each an object, each answering to exactly one tag, no two answering to the
-      same one. A tag-keyed table over `Body` says all three.
-
-      *Object* is the codomain. *Arity one* is a function on a key set: one key reaches one
-      variant. *Distinctness* is `Finset`, which is why the keys are a set and not a list — the
-      same reason the field table one stratum up is one.
-
-      What the table cannot say is that a variant's own `d` field agrees with its key, and that
-      stays a premise. It cannot go: the host's variant *declares* the discriminator and the
-      codec writes the tag out of that field, so the field is not the table's to remove.
-      `Typed.dunion`'s `hone` is that one fact now, where it used to be five.
-
-      **The key is a member's assignment, and the key set has no order.** A `dunion` is a
-      non-empty set of discriminators and a set of members; each member carries one tag per
-      discriminator, and that finite function is its key. `NEFinset` says a `dunion` with no
-      discriminator is not a `dunion`, as a literal with no alternative is not a literal.
-
-      An order here would be an order the concept does not have: two products differing only in
-      the order of their factors would build two terms for one dissection. The key set is a field
-      of the table rather than an argument here, because a nested inductive's parameters may not
-      contain local variables. -/
-  | dunion   (variants : TagMap Body)
   /-- §5's bottom: the term that admits no value. Its held set is `False`, which is a subset of
       every held set, so (D) fails against every other option and this is an option of no
-      `union`. A constructor and not an empty `dunion`: the empty table is a term a caller can
-      build by accident, and a rule that reads it as the bottom reads that accident as intent. -/
+      `union`. A constructor and not an empty `union`: the empty option list is a term a caller
+      can build by accident, and a rule that reads it as the bottom reads that accident as intent. -/
   | never
 
 /-- §4's object payload: the declared names, the field at each, and the policy for
@@ -258,12 +235,6 @@ def Term.depth : Term → Nat
   -- one companion, like every other non-leaf row
   | .object b => Body.depth b + 1
   | .union opts => Term.depthL opts + 1
-  -- one more than the deepest variant **term**, which is the `union` row's shape: a variant is
-  -- an object, so its term costs `Body.depth + 1`, and writing that here is what makes the
-  -- recursion to `.object (variants.2 k)` strictly decrease rather than merely not increase
-  | .dunion variants =>
-      (variants.keys.attach.sup fun k => Body.depth (variants.get k) + 1) + 1
-
 /-- The payload's own budget: the field table is a key *set* with a function on it, so its
     layer is the largest field budget over the key set — a `Finset.sup`, where a list would be
     a fold — against the rest policy's. This is the companion `Field.depth` and `Rest.depth`
@@ -358,15 +329,6 @@ theorem Term.depth_lt_object_rest {b : Body} {t : Term} (h : b.rest = .codec t) 
     Term.depth t < Term.depth (.object b) :=
   lt_trans (Body.depth_lt_rest b h) (Term.depth_lt_object_body b)
 
-/-- A variant's term is strictly below the `dunion`'s, which is the inequality a `Finset.sup`
-    needs and a fold does not: `le_sup` gives `≤`, so the row counts the variant's **term** and
-    not its payload, and the successor does the rest. -/
-theorem Term.depth_lt_dunion {variants : TagMap Body}
-    (k : {k // k ∈ variants.keys}) :
-    Term.depth (.object (variants.get k)) < Term.depth (.dunion variants) :=
-  Nat.lt_succ_of_le (Finset.le_sup (f := fun k => Body.depth (variants.get k) + 1)
-    (Finset.mem_attach _ k))
-
 /-- The termination argument every `Term.depth` recursion in this development uses, written
     once. **Three** theorems share it, all in `Soundness.lean` — `soundness_both`,
     `typed_TSub`, `carrier_denote` — and their goal sets differ, so some alternatives are dead
@@ -386,7 +348,7 @@ macro (name := termDepthWf) "term_depth_wf" : tactic => `(tactic|
      first
        -- one subterm: the measure is `depth t' + 1`
        | (simp only [Term.depth]; omega)
-       -- an element of a list, where the layer is a bare fold (union, dunion)…
+       -- an element of a list, where the layer is a bare fold (union)…
        | (have hle := Term.depth_le_depthL ‹_ ∈ _›
           simp only [Term.depth]
           exact Nat.lt_succ_of_le hle)
@@ -401,8 +363,6 @@ macro (name := termDepthWf) "term_depth_wf" : tactic => `(tactic|
        | exact Term.depth_lt_object_req _ (by assumption)
        | exact Term.depth_lt_object_opt _ (by assumption)
        | exact Term.depth_lt_object_fb _ (by assumption)
-       -- a variant's term, where the layer is a `Finset.sup` rather than a fold
-       | exact Term.depth_lt_dunion _
        -- the rest policy's codec
        | exact Term.depth_lt_object_rest (by assumption)
        | exact Term.depth_lt_object_rest rfl

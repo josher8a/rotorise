@@ -327,16 +327,11 @@ describe('terms', () => {
     })
 
     /**
-     * **A tag-keyed table of `Body`, which is the pair the object row prints one stratum up.**
+     * **A dissection emits as the `Term.union` of objects it is.**
      *
-     * `Term.dunion` carried a `List Term` under three side conditions — each variant an object,
-     * each answering to one tag, no two answering to the same. A `MapOf Body` says all three: the
-     * codomain is the object-ness, a function on a key set is the arity, and `Finset` is the
-     * distinctness. So there is no `Term.object` in the emission at all, and no list.
-     *
-     * The tag is the *key*, and the variant still declares it as a field — the codec writes the
-     * tag out of that field, so it cannot go, and the agreement between the two is the one
-     * premise `Typed.dunion` keeps.
+     * There is one sum, so there is one row. The members are `Term.object` terms, each declaring
+     * its discriminator as a required literal in its own body, and the tag table is the builder's
+     * own index that no term carries.
      */
     it('emits a discriminated union as the union of objects it is', () => {
         const emitted = leanTermOf(
@@ -488,11 +483,10 @@ describe('what cannot be emitted', () => {
      * **The two sides agree about what a tag is now, at two of the three bases.**
      *
      * The host carries a tag as `S` or `N`, so `discriminatedUnion` admits a discriminator at
-     * `string`, `number` or `decimal` and refuses `boolean` and `binary`. `Denote.lean`'s
-     * `tagsOfField` used to match `some (.req (.literal .string ls))` alone, so the model read
-     * every other base's tag set as empty and this row refused all of them. It reads the decimal
-     * base too now — a decimal literal holds its numeral as text — and the model's stored-side
-     * tag reader takes an `.n` as well as an `.s`, so a decimal tag emits on both halves.
+     * `string`, `number` or `decimal` and refuses `boolean` and `binary`. The model reads a
+     * discriminator as the literal it is, through `Calculus.altsOfField`, at `string` and at
+     * `decimal` alike — a decimal literal holds its numeral as text — so a decimal discriminator
+     * emits on both halves.
      *
      * **`number` stays refused and the reason changed.** It was a disagreement between two rules;
      * it is a limit on what the model can say. `Calculus.Double` is an axiom with no closed terms,
@@ -759,7 +753,7 @@ export const sampleVectors: readonly Vector[] = [
     },
     { name: 'nullable_null', codec: erase(nullable(string)), value: null },
     // **The vector pass 7 owed.** Two object options with the *same* names, told apart by a
-    // required literal and by nothing else — so `byNames` alone resolves neither and `byStructure`
+    // required literal and by nothing else — so the names alone resolve neither and `byStructure`
     // resolves both. Nothing in this corpus exercised the literal half of admission before, which
     // is why the bridge passed unchanged while the model gained it.
     {

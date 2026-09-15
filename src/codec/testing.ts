@@ -1691,11 +1691,13 @@ export const checkIso = <C extends AnyCodec, T>(
  * `union` which option it picked would be checking the implementation against itself. What is asked
  * here is what the model asks:
  *
- * - an **object** option admits by *names* — every name present declared, every required name
- *   present (`keysOk`, `OptionSem.byNames`). It is never tried, because `object({ a })` will happily
+ * - an **object** option admits by its *structure* — every name present declared, every required
+ *   name present, and every present literal name carrying one of its alternatives (`keysOk`,
+ *   `literalsOk`, `OptionSem.byStructure`). It is never tried, because `object({ a })` will happily
  *   encode `{ a, b }` and lose `b`, so "it encoded" is not evidence.
- * - a **tagged** option admits by its discriminator's stored value. The model spells that as a
- *   lookup now: `Term.dunion` carries a table keyed by the tag, and `dunionTable` indexes it.
+ * - a **tagged** option is an object option, and admits by the same rule: its discriminator is a
+ *   required literal, so `literalsOk` is what reads the tag. The tag table is a host index over the
+ *   same `Term.union`, and no term carries it.
  * - anything else admits by *being defined* on the input (`OptionSem.byAttempt`) — not by the kind
  *   filter the implementation uses first. Where the two differ, this reports it, and that difference
  *   is the whole reason to run it.
@@ -1847,7 +1849,7 @@ const declaration = (of: Readonly<Record<string, Field>>) => {
     return { declares, requires }
 }
 
-/** `OptionSem.byNames` — an object option decides by names, never by being attempted. */
+/** An object option decides by its declared names, never by being attempted. */
 const byNames = (
     codec: AnyCodec,
     of: Readonly<Record<string, Field>>,

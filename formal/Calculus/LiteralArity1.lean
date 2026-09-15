@@ -234,51 +234,6 @@ theorem typed_literalsN {l : List WFDouble} (hnd : l.Nodup) (hne : l ≠ []) :
   rw [hunion_map_literal_num, unanimous_map_const _ hne] at h
   exact h
 
-/-! ## `tagsOf`, which I claimed would need a homogeneity proof
-
-It does not. `tagsOfField` matches `.req (.literalS ls)` and hands back `ls.1`; the replacement
-walks a union's options and unions what each contributes, and a non-conforming option contributes
-`∅` — which is exactly what the existing `| _ => ∅` already does for every term that is not a
-string literal. There is nothing to prove about the options being homogeneous, because
-heterogeneity is not an error here, it is an empty contribution. A discriminator whose tags come
-back `∅` fails `(dunion)`'s arity premise, which is where that error already belongs and where
-it already lived.
-
-Stated as a candidate and proved against the union form, so the claim is checked before the
-definition it would replace is touched. -/
-
-/-- The tag an option names, if it names one. Shallow, exactly as `tagsOfField` is: a term that
-    is not a string literal contributes nothing, and that is not an error. -/
-def tagOf1 : Term → Finset String
-  | .literal .string ls => ls.1
-  | _ => ∅
-
-/-- The tags a discriminator field names — one level, no recursion, so no termination argument
-    and no premise. -/
-noncomputable def tagStringsOf : Term → Finset String
-  | .union opts => (opts.map tagOf1).foldr (· ∪ ·) ∅
-  | t => tagOf1 t
-
-theorem mem_tagStringsOf_fold (l : List String) (x : String) :
-    x ∈ (((l.map fun s => Term.literal .string (.of s ∅)).map tagOf1).foldr (· ∪ ·) ∅) ↔ x ∈ l := by
-  induction l with
-  | nil => simp
-  | cons s rest ih =>
-    show x ∈ tagOf1 (Term.literal .string (.of s ∅)) ∪
-        ((rest.map fun s => Term.literal .string (.of s ∅)).map tagOf1).foldr (· ∪ ·) ∅ ↔ _
-    rw [Finset.mem_union, ih]
-    show x ∈ ({s} : Finset String) ∨ x ∈ rest ↔ _
-    rw [Finset.mem_singleton]
-    exact List.mem_cons.symm
-
-/-- **`tagsOf` recovers the tag set from the union form, with no premise** — an objection
-    raised against it and never checked. A non-conforming option contributes `∅`,
-    which is what `tagsOfField`'s existing `| _ => ∅` already does; heterogeneity is an empty
-    contribution, not an error, and the error it *should* be is `(dunion)`'s arity premise. -/
-theorem mem_tagStringsOf_union (l : List String) (x : String) :
-    x ∈ tagStringsOf (.union (l.map fun s => .literal .string (.of s ∅))) ↔ x ∈ l :=
-  mem_tagStringsOf_fold l x
-
 /-! ## The other route not taken: `literal` as a refinement
 
 `refine(base, · ∈ ℓ)` is the second derivation of `literal`, and until now it cost precision:
