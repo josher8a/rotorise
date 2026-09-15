@@ -175,12 +175,29 @@ def Term.meet : Term → Term → Option Term
   | .number, .number => some .number
   | .decimal, .decimal => some .decimal
   -- **`string` and `decimal` part on the stored side.** Both admit text; `string` writes `S` and
-  -- `decimal` writes `N`, so a value they share is stored two ways and there is no meet.
+  -- `decimal` writes `N`, so a value they share is stored two ways and there is no meet. The
+  -- literal rows below repeat this, because a literal at either base inherits the pair.
   | .string, .decimal => none
   | .decimal, .string => none
-  -- **a literal against a base is the literal at that base, and nothing at any other.**
-  | .literal k v, .string => if k = .string then some (.literal k v) else some .never
-  | .string, .literal k v => if k = .string then some (.literal k v) else some .never
+  -- **The `string` family and the `decimal` family never meet.** A family is the base, a literal
+  -- at it, and a `refine` over either: every member writes `.str`, and the two store it at `S`
+  -- and at `N`. So every cell putting one family against the other answers `none`, and a
+  -- container inherits that answer through its element, because `none` survives `.map` and
+  -- `allSome`. `never` is the empty intersection alone, and this pair shares every stored
+  -- numeral.
+  --
+  -- **a literal against a base is the literal at that base, and nothing at any other** — except
+  -- that pair, which refuses rather than answering the bottom.
+  | .literal k v, .string =>
+      match k, v with
+      | .string, v => some (.literal .string v)
+      | .decimal, _ => none
+      | _, _ => some .never
+  | .string, .literal k v =>
+      match k, v with
+      | .string, v => some (.literal .string v)
+      | .decimal, _ => none
+      | _, _ => some .never
   | .literal k v, .boolean => if k = .boolean then some (.literal k v) else some .never
   | .boolean, .literal k v => if k = .boolean then some (.literal k v) else some .never
   | .literal k v, .binary => if k = .binary then some (.literal k v) else some .never
@@ -189,8 +206,16 @@ def Term.meet : Term → Term → Option Term
   | .null, .literal k v => if k = .null then some (.literal k v) else some .never
   | .literal k v, .number => if k = .number then some (.literal k v) else some .never
   | .number, .literal k v => if k = .number then some (.literal k v) else some .never
-  | .literal k v, .decimal => if k = .decimal then some (.literal k v) else some .never
-  | .decimal, .literal k v => if k = .decimal then some (.literal k v) else some .never
+  | .literal k v, .decimal =>
+      match k, v with
+      | .decimal, v => some (.literal .decimal v)
+      | .string, _ => none
+      | _, _ => some .never
+  | .decimal, .literal k v =>
+      match k, v with
+      | .decimal, v => some (.literal .decimal v)
+      | .string, _ => none
+      | _, _ => some .never
   -- **two literals: the same value, or nothing.**
   | .literal k v, .literal k' v' => Term.meetLit k v k' v'
   -- the containers
@@ -275,6 +300,9 @@ def Term.meetLit : (k : GroundKind) → k.Carrier → (k' : GroundKind) → k'.C
   -- `Unit` has one inhabitant, so two null literals name the same value
   | .null, v, .null, _ => some (.literal .null v)
   | .number, _, .number, _ => none
+  -- the same shared pair as the rows above, with both sides pinned
+  | .string, _, .decimal, _ => none
+  | .decimal, _, .string, _ => none
   | _, _, _, _ => some .never
 
 
@@ -400,6 +428,35 @@ example : Term.meet (.literal .string "a") (.literal .string "b") = some .never 
 /-- `string` and `decimal` admit the same text and store it at different members, so the pair has
     no meet rather than an empty one. -/
 example : Term.meet .string .decimal = none := by simp [Term.meet]
+
+/-- **The same refusal reaches a literal at either base**, because a `decimal` literal's values
+    are `.str`. These four rows answered the bottom, which claims the pair shares no value while
+    it shares one, and the two literals below are the same mistake one level further in. -/
+example : Term.meet (.literal .decimal ⟨"1", by decide⟩) .string = none := by simp [Term.meet]
+
+example : Term.meet (.literal .string "1") .decimal = none := by simp [Term.meet]
+
+example : Term.meet (.literal .string "1") (.literal .decimal ⟨"1", by decide⟩) = none := by
+  simp [Term.meet, Term.meetLit]
+
+/-- The value the refusal is about: both terms admit it, and they store it at `S` and at `N`. -/
+example : Adm (.literal .decimal ⟨"1", by decide⟩) (.str "1") = true := by
+  simp [Adm, AdmLit, inL]
+  decide
+
+example : Adm Term.string (.str "1") = true := by simp [Adm]
+
+/-- A literal at a base that shares nothing with the partner is still the bottom. -/
+example : Term.meet (.literal .string "1") .boolean = some .never := by simp [Term.meet]
+
+/-- A refinement carries the cell, and so does a container: `none` survives `.map`. -/
+example : Term.meet (.refine .string (.members .string ⟨{"1"}, Finset.singleton_nonempty _⟩))
+    .decimal = none := by simp [Term.meet]
+
+example : Term.meet (.array .string) (.array .decimal) = none := by simp [Term.meet]
+
+/-- …while two terms that write different constructors are still the bottom, container or not. -/
+example : Term.meet .number .decimal = some .never := by simp [Term.meet]
 
 /-- **The null point needs no row of its own.** A null point is the null term joined by a union,
     so the union rows distribute over it and the ground rows answer each cell. This is the pair
