@@ -1,17 +1,27 @@
 import Calculus.Merge
+import Calculus.ExactV
 
 /-!
 # The meet
 
 `Term.meet` is the intersection of two admissions, as a term. It is a derived function and not a
-constructor: `some z` says a value satisfies `z` exactly when it satisfies both factors and that
-the three write it the same way, `some never` says nothing satisfies both, and `none` is a
+constructor: `some z` says a value satisfies `z` exactly when it satisfies both factors, `some
+never` says nothing satisfies both, and `none` is a
 refusal — the pair is one whose admission is a function rather than data, so no term states the
 intersection. `held`, `legacy`, `custom` and `lazy` refuse on that ground at every partner, `opaq`
 refuses where its closed form cannot be compared with an exact held set, and `refine` refuses at a
 `closure`. A pair that admits a common value and stores it at two members has no meet either, and
 that is a refusal and not an empty one: `string` and `decimal` both admit text, one writes `S` and
 the other `N`, so `never` would claim they share no value when they share every value.
+
+**The write side agrees only where both factors name a member**, and that is weaker than "all three
+write the same way". `μSyn` answers `none` for two different reasons — a term that writes no value
+at all (`never`) and a term that names no *single* stored member (`nullable`, `opaq`, `lazy`,
+`custom`) — so a factor answering `none` constrains nothing. The two examples at the foot of this
+file are the witnesses: `nullable string ∧ null` is `null` and `opaq ∧ string` is `string`, and in
+each the meet names a member neither shared with its `none`-answering factor. The condition the
+rows keep is that where both factors name a member they name the same one, and the meet names it
+too; `string ∧ decimal` is refused by exactly that condition.
 
 **The meet and the merge are two operations.** `Body.merge` (`Merge.lean`) joins two bodies over
 *disjoint* names and is the record product: its held set is the product of the factors' held sets
@@ -394,5 +404,19 @@ example : Term.meet .string .decimal = none := by simp [Term.meet]
 
 /-- `nullable` keeps its null point only against something that holds null. -/
 example : Term.meet (.nullable .string) .null = some .null := by simp [Term.meet]
+
+/-! ### Why the write-agreement condition is conditional
+
+Two meets that are not the bottom and whose factor names no member. They are why the condition the
+rows keep is "where both factors name a member" rather than "all three name the same member": a
+`μSyn` of `none` is a term that names no single stored member, not a term that writes nothing. -/
+
+example : μSyn (Term.nullable .string) = none := by simp [μSyn]
+
+example : ¬ (μSyn Term.null = μSyn (Term.nullable .string)) := by simp [μSyn]
+
+example : Term.meet (.opaq true) .string = some .string := by simp [Term.meet]
+
+example : ¬ (μSyn Term.string = μSyn (Term.opaq true)) := by simp [μSyn]
 
 end Calculus
