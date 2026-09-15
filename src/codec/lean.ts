@@ -54,7 +54,7 @@ import type { AttributeValue } from './attribute'
 import { isNumeral, isStoredNumeral, memberOf } from './attribute'
 import type { AnyCodec, AnyDeclaration, LiteralValue } from './codec'
 import { union } from './codec'
-import { accepts, assignmentOf, readsBack } from './denote'
+import { accepts, readsBack } from './denote'
 import { failed } from './result'
 import type { Body, Literal, Predicate, Term, Field as TermField } from './term'
 import { shapeOf } from './value'
@@ -118,10 +118,6 @@ export const leanString = (value: string): string => {
     }
     return `${out}"`
 }
-
-/** A `Finset (List String)` literal, whose elements are already-rendered Lean lists. */
-const leanTuples = (rendered: readonly string[]): string =>
-    rendered.length === 0 ? '∅' : `{${rendered.join(', ')}}`
 
 /** A `Finset Name` literal — `∅` when empty, because `{}` is notation Lean does not have here. */
 const leanFinset = (names: readonly string[]): string =>
@@ -549,9 +545,9 @@ const leanPredicate = (q: Predicate, at: string, forced: number): string => {
 /**
  * §4's object payload, as the model's `Body.mk`.
  *
- * Two rows print one: an object's payload, and each of a `dunion`'s variants. `Term.dunion`
- * carries a `MapOf Body` now, so a variant is a `Body` and not a `Term` that wraps one, and this
- * is what both of them name.
+ * One row prints it: an object's payload. It used to be two, the second being each variant of a
+ * tagged union — and there is one sum now, so a member of a dissection is an `object` term like
+ * any other union option and prints through the row above.
  */
 const leanBodyOf = (body: Body, at: string, forced: number): string => {
     const declared = Object.entries(body.fields)
@@ -573,49 +569,6 @@ const leanBodyOf = (body: Body, at: string, forced: number): string => {
             ? `Rest.${rest}`
             : `(Rest.codec (${leanTermOfTerm(rest.t, `${at}.rest`, forced)}))`
     return `(Body.mk ${leanFinset(names)} (${fields}) ${restTerm})`
-}
-
-/**
- * One variant of a `dunion`, as the key and the `Body` it maps to.
- *
- * **One narrowing serves both halves**, which is why this returns the pair rather than the tag:
- * the kind check that produces the refusal is the same check that gives `variant.body` its type,
- * so reading the payload after it needs no cast.
- *
- * `discriminatedUnion` refuses both failures at the declaration — a non-object variant, and one
- * that does not name `d` with a one-valued literal — so neither is a case a declaration reaches.
- * The emitter takes a `Term` past the type through `erase`, so it says so rather than assuming.
- */
-const leanVariantOf = (
-    ks: readonly string[],
-    variant: Term,
-    at: string,
-    forced: number,
-): readonly [string, string] => {
-    if (variant.kind !== 'object') {
-        return refuse(
-            at,
-            `a discriminated union's variants are object codecs and this one is a \`${variant.kind}\`; \`Term.dunion\` carries a table of \`Body\`, so there is nothing to emit for it`,
-        )
-    }
-    // the key is the variant's assignment, `{k // k ∈ ks} → String`: a function on the key set,
-    // so the emission tests the key's *name* and carries no order
-    const assignment = assignmentOf(ks, variant.body)
-    if (failed(assignment)) {
-        return refuse(at, String(assignment))
-    }
-    return [
-        `(${leanKeyFunction(
-            ks.map(
-                (name) =>
-                    [
-                        leanString(name),
-                        leanString(assignment[name] as string),
-                    ] as const,
-            ),
-        )})`,
-        leanBodyOf(variant.body, at, forced),
-    ] as const
 }
 
 const leanTermOfTerm = (t: Term, at: string, forced: number): string => {
@@ -684,66 +637,6 @@ const leanTermOfTerm = (t: Term, at: string, forced: number): string => {
         }
         case 'never':
             return 'Term.never'
-        case 'dunion': {
-            /**
-             * **The two sides agree about what a tag is now, at two of the three bases.**
-             *
-             * `readTag` accepts `S` or `N`, so `discriminatedUnion` admits a discriminator at
-             * `string`, `number` or `decimal` and refuses one at `boolean` or `binary` — a `BOOL`
-             * or a `B` names no tag a lookup could reach.
-             *
-             * `Denote.lean`'s `tagsOfField` used to match `some (.req (.literal .string ls))`
-             * alone, so the model read every other base's tag set as **empty** and this row
-             * refused all of them. It matches the decimal base too now, reading the literal's
-             * carrier as the text it is, and `Prisms.lean`'s stored-side tag reader takes an
-             * `.n` as well as an `.s`. So a decimal tag emits.
-             *
-             * **`number` stays refused, and the reason changed from a disagreement to a limit.**
-             * `Calculus.Double` is an axiom with no closed terms, so no numeric tag can appear in
-             * a term the model can state at all — the same reason the corpus carries no numeric
-             * value. The host builds one and reads it back as its text; that is a gap in what the
-             * bridge can propose, not a gap between the two rules.
-             */
-            const numeric = t.ks.find((name) =>
-                t.options.some((variant) => {
-                    const field =
-                        variant.kind === 'object'
-                            ? variant.body.fields[name]
-                            : undefined
-                    const tag = field?.mark === 'req' ? field.t : undefined
-                    return tag?.kind === 'literal' && tag.base === 'number'
-                }),
-            )
-            if (numeric !== undefined) {
-                return refuse(
-                    at,
-                    `this union's discriminator '${numeric}' is a literal at the \`number\` base, and \`Calculus.Double\` is an axiom with no closed terms — so the model has no expression for this tag and never will. A tag at \`string\` or \`decimal\` emits: both carry their tag as text, which is what the model's tag readers answer. The same limit is why the corpus carries no numeric value`,
-                )
-            }
-            // One option, one tag: `discriminatedUnion` refuses a literal admitting several
-            // values at the declaration, so the table cannot hold one codec twice and the option
-            // list cannot repeat one. `Typed.dunion`'s `hdisj` is answered upstream of here — this
-            // used to dedup by identity, which was the same invariant enforced in two places
-            const options = t.options.map((variant, index) =>
-                leanVariantOf(
-                    t.ks,
-                    variant,
-                    `${at}.variants[${index}]`,
-                    forced,
-                ),
-            )
-            // **A `TagMap Body`: the key set, the member set, and a function on membership.**
-            // `Term.dunion` carries that instead of a list because arity one and tag distinctness
-            // are then the type rather than two premises of the rule. The key set is a field of
-            // the table because the kernel refuses a nested inductive whose parameter mentions a
-            // constructor-bound variable.
-            return `Term.dunion ⟨${leanNonEmptySet(
-                t.ks.map(leanString),
-                at,
-            )}, ${leanTuples(options.map(([tag]) => tag))}, ${leanKeyFunction(
-                options,
-            )}⟩`
-        }
         case 'union':
             return `Term.union [${t.options
                 .map((variant, index) =>

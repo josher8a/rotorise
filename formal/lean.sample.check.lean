@@ -209,7 +209,7 @@ theorem union_by_literal :
 /-- `discriminated_union` -/
 theorem discriminated_union :
     check 2
-      ((denote (Term.dunion ⟨NEFinset.of "kind" ∅, {(fun k => "a"), (fun k => "b")}, fun k => if k.1 = (fun k => "a") then (Body.mk {"kind", "x"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string (NEFinset.of "a" ∅)) else Field.req (Term.string)) Rest.drop) else (Body.mk {"kind", "y"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string (NEFinset.of "b" ∅)) else Field.req (Term.boolean)) Rest.drop)⟩)).e
+      ((denote (Term.union [Term.object (Body.mk {"kind", "x"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string (NEFinset.of "a" ∅)) else Field.req (Term.string)) Rest.drop), Term.object (Body.mk {"kind", "y"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string (NEFinset.of "b" ∅)) else Field.req (Term.boolean)) Rest.drop)])).e
         (Value.map {"kind", "x"} (fun k => if k.1 = "kind" then Value.str "a" else Value.str "v")))
       (some (Attr.m {"kind", "x"} (fun k => if k.1 = "kind" then Attr.s "a" else Attr.s "v"))) = .same := rfl
 
@@ -237,7 +237,7 @@ theorem product_three :
 /-- `dunion_two_keys` -/
 theorem dunion_two_keys :
     check 2
-      ((denote (Term.dunion ⟨NEFinset.of "kind" {"size"}, {(fun k => if k.1 = "kind" then "pet" else "small"), (fun k => if k.1 = "kind" then "pet" else "large")}, fun k => if k.1 = (fun k => if k.1 = "kind" then "pet" else "small") then (Body.mk {"kind", "size", "toy"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string (NEFinset.of "pet" ∅)) else if k.1 = "size" then Field.req (Term.literal GroundKind.string (NEFinset.of "small" ∅)) else Field.req (Term.string)) Rest.drop) else (Body.mk {"kind", "size", "pen"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string (NEFinset.of "pet" ∅)) else if k.1 = "size" then Field.req (Term.literal GroundKind.string (NEFinset.of "large" ∅)) else Field.req (Term.string)) Rest.drop)⟩)).e
+      ((denote (Term.union [Term.object (Body.mk {"kind", "size", "toy"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string (NEFinset.of "pet" ∅)) else if k.1 = "size" then Field.req (Term.literal GroundKind.string (NEFinset.of "small" ∅)) else Field.req (Term.string)) Rest.drop), Term.object (Body.mk {"kind", "size", "pen"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string (NEFinset.of "pet" ∅)) else if k.1 = "size" then Field.req (Term.literal GroundKind.string (NEFinset.of "large" ∅)) else Field.req (Term.string)) Rest.drop)])).e
         (Value.map {"kind", "size", "toy"} (fun k => if k.1 = "kind" then Value.str "pet" else if k.1 = "size" then Value.str "small" else Value.str "ball")))
       (some (Attr.m {"kind", "size", "toy"} (fun k => if k.1 = "kind" then Attr.s "pet" else if k.1 = "size" then Attr.s "small" else Attr.s "ball"))) = .same := rfl
 
@@ -442,7 +442,7 @@ theorem union_by_literal__refuses__scalar_string :
 
 /-- `discriminated_union__refuses__scalar_string` — refused on both sides -/
 theorem discriminated_union__refuses__scalar_string :
-    (denote (Term.dunion ⟨NEFinset.of "kind" ∅, {(fun k => "a"), (fun k => "b")}, fun k => if k.1 = (fun k => "a") then (Body.mk {"kind", "x"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string (NEFinset.of "a" ∅)) else Field.req (Term.string)) Rest.drop) else (Body.mk {"kind", "y"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string (NEFinset.of "b" ∅)) else Field.req (Term.boolean)) Rest.drop)⟩)).e
+    (denote (Term.union [Term.object (Body.mk {"kind", "x"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string (NEFinset.of "a" ∅)) else Field.req (Term.string)) Rest.drop), Term.object (Body.mk {"kind", "y"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string (NEFinset.of "b" ∅)) else Field.req (Term.boolean)) Rest.drop)])).e
       (Value.str "hello") = none := rfl
 
 /-- `product_two_objects__refuses__scalar_string` — refused on both sides -/
@@ -462,7 +462,7 @@ theorem product_three__refuses__scalar_string :
 
 /-- `dunion_two_keys__refuses__scalar_string` — refused on both sides -/
 theorem dunion_two_keys__refuses__scalar_string :
-    (denote (Term.dunion ⟨NEFinset.of "kind" {"size"}, {(fun k => if k.1 = "kind" then "pet" else "small"), (fun k => if k.1 = "kind" then "pet" else "large")}, fun k => if k.1 = (fun k => if k.1 = "kind" then "pet" else "small") then (Body.mk {"kind", "size", "toy"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string (NEFinset.of "pet" ∅)) else if k.1 = "size" then Field.req (Term.literal GroundKind.string (NEFinset.of "small" ∅)) else Field.req (Term.string)) Rest.drop) else (Body.mk {"kind", "size", "pen"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string (NEFinset.of "pet" ∅)) else if k.1 = "size" then Field.req (Term.literal GroundKind.string (NEFinset.of "large" ∅)) else Field.req (Term.string)) Rest.drop)⟩)).e
+    (denote (Term.union [Term.object (Body.mk {"kind", "size", "toy"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string (NEFinset.of "pet" ∅)) else if k.1 = "size" then Field.req (Term.literal GroundKind.string (NEFinset.of "small" ∅)) else Field.req (Term.string)) Rest.drop), Term.object (Body.mk {"kind", "size", "pen"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string (NEFinset.of "pet" ∅)) else if k.1 = "size" then Field.req (Term.literal GroundKind.string (NEFinset.of "large" ∅)) else Field.req (Term.string)) Rest.drop)])).e
       (Value.str "hello") = none := rfl
 
 /-- `lazy_string__refuses__scalar_boolean` — refused on both sides -/

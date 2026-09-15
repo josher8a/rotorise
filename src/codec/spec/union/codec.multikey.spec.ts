@@ -7,7 +7,8 @@
  */
 import { describe, expect, it } from 'vitest'
 import { boolean, mdunion, object, string } from '../../codec'
-import { assignmentOf, taggedItemSem } from '../../denote'
+import type { ItemPair } from '../../denote'
+import { assignmentOf } from '../../denote'
 import { failed } from '../../result'
 import type { Term } from '../../term'
 
@@ -19,12 +20,16 @@ const food = object({
     gram: boolean,
 })
 
-const dunionTerm = (codec: { readonly def: Term }) =>
-    codec.def as Extract<Term, { readonly kind: 'dunion' }>
+/** A dissection's term is an ordinary union of its members now; the tag table is the builder's. */
+const unionTerm = (codec: { readonly def: Term }) =>
+    codec.def as Extract<Term, { readonly kind: 'union' }>
 
 /** Two discriminators, `kind` and `size`, and three members over their assignments. */
 const twoKey = mdunion(['kind', 'size'], [pet, dog, food])
-const pair = taggedItemSem(dunionTerm(twoKey))
+// the untyped item pair, which is what these tests are about: several of them feed a partial or a
+// mistyped entity on purpose, to assert the runtime refusal the tag index gives. The typed
+// `Dissected` reading refuses those at the call, where the rule under test is the run-time one
+const pair = twoKey.item as unknown as ItemPair
 
 describe("a member's assignment is read off the member's own body", () => {
     /**
@@ -33,7 +38,7 @@ describe("a member's assignment is read off the member's own body", () => {
      * the key and the field is the one premise the table cannot carry.
      */
     it('reads one tag per key off the body, and names the key it cannot read', () => {
-        const body = dunionTerm(twoKey).options[0] as Extract<
+        const body = unionTerm(twoKey).options[0] as Extract<
             Term,
             { readonly kind: 'object' }
         >
@@ -160,9 +165,8 @@ describe('neither the keys nor the members carry an order', () => {
      * made two terms for one dissection, and this is the test it could not pass.
      */
     it('reads the same dissection declared with the keys the other way round', () => {
-        const swapped = taggedItemSem(
-            dunionTerm(mdunion(['size', 'kind'], [pet, dog, food])),
-        )
+        const swapped = mdunion(['size', 'kind'], [pet, dog, food])
+            .item as unknown as ItemPair
         for (const entity of [
             { kind: 'pet', size: 'small', toy: 'ball' },
             { kind: 'pet', size: 'large', pen: 'p1' },
@@ -176,9 +180,8 @@ describe('neither the keys nor the members carry an order', () => {
 
     /** …and a *set* of members, so the order the caller listed them in reaches nothing. */
     it('reads the same dissection with the members declared in another order', () => {
-        const reordered = taggedItemSem(
-            dunionTerm(mdunion(['kind', 'size'], [food, dog, pet])),
-        )
+        const reordered = mdunion(['kind', 'size'], [food, dog, pet])
+            .item as unknown as ItemPair
         for (const entity of [
             { kind: 'pet', size: 'small', toy: 'ball' },
             { kind: 'pet', size: 'large', pen: 'p1' },

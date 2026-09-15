@@ -173,25 +173,10 @@ export type Term =
     | { readonly kind: 'opaq'; readonly lossy: boolean }
     | { readonly kind: 'object'; readonly body: Body }
     | { readonly kind: 'union'; readonly options: readonly Term[] }
-    | {
-          readonly kind: 'dunion'
-          /**
-           * The discriminators. **The order carries no meaning**: a variant is chosen by the tag
-           * it carries at each of these, and the same dissection declared with the keys written
-           * the other way round is the same term. The model's key set is a `Finset` and says this
-           * by construction; an array is the host's spelling of it, and no reader may depend on
-           * the positions.
-           *
-           * Non-empty, because a `dunion` over no discriminator admits every value at the empty
-           * assignment. `discriminatedUnion` builds the one-key form.
-           */
-          readonly ks: readonly string[]
-          readonly options: readonly Term[]
-      }
     /**
      * §5's bottom: the term that admits no value.
      *
-     * A constructor rather than a `dunion` over no variants. The empty table is a term a caller
+     * A constructor rather than a union over no options. The empty option list is a term a caller
      * can build by accident, and a rule that reads it as the bottom reads that accident as intent.
      */
     | { readonly kind: 'never' }
@@ -296,7 +281,6 @@ export const member = (t: Term): AttributeName | undefined => {
             return 'L'
         case 'record':
         case 'object':
-        case 'dunion':
             return 'M'
         // a wrapper preserves the member (§6), which is what keeps a key's attribute type stable
         case 'held':
@@ -419,7 +403,6 @@ export const occV = (t: Term): readonly Slot[] | undefined => {
             return ['array']
         case 'record':
         case 'object':
-        case 'dunion':
             return ['map']
         case 'held':
         case 'custom':
@@ -484,7 +467,6 @@ export const occA = (t: Term): readonly AttributeName[] | undefined => {
             return ['L']
         case 'record':
         case 'object':
-        case 'dunion':
             return ['M']
         case 'legacy':
         case 'custom':
@@ -637,8 +619,6 @@ const decidesOwn = (q: Predicate): boolean =>
 export const identifies = (t: Term): boolean => {
     switch (t.kind) {
         case 'literal':
-        // a tag lookup fails for a value carrying no tag it knows, which is the same evidence
-        case 'dunion':
         // …and a term that admits nothing turns every value down, which is evidence too
         case 'never':
             return true
@@ -758,6 +738,26 @@ export const structuralMeet = (
 }
 
 /**
+ * The object members a term offers: itself, or a union's options where every one is an object.
+ *
+ * **A dissection is a union of objects**, so a union option that is one has members to compare
+ * rather than an occupancy to meet. Without this, `union([discriminatedUnion(…),
+ * discriminatedUnion(…)])` is two terms that both write `M`, and the occupancy meet refuses it —
+ * which it did not do while a dissection was a term of its own, because `identifies` answered for
+ * it. Deleting the second sum moved that fact here, where it is a statement about structures
+ * rather than a claim that a whole union decides its own values.
+ */
+const objectMembers = (
+    t: Term,
+): readonly Extract<Term, { kind: 'object' }>[] | undefined => {
+    if (t.kind === 'object') return [t]
+    if (t.kind !== 'union' || t.options.length === 0) return undefined
+    return t.options.every((o) => o.kind === 'object')
+        ? (t.options as readonly Extract<Term, { kind: 'object' }>[])
+        : undefined
+}
+
+/**
  * **Whether a union may hold these two options**, asked at the declaration.
  *
  * **This is not a port of `Orth`, and the difference is the direction.** `Orth` is a *certificate*:
@@ -822,7 +822,11 @@ export const separable = (x: Term, y: Term): boolean => {
     // a set of a literal and `never`, and an object option is none of them — so the only pair
     // whose answer this order changes is an object option beside `never`.
     if (restricts(x, y) || restricts(y, x)) return false
-    if (x.kind === 'object' && y.kind === 'object') return !structuralMeet(x, y)
+    const xs = objectMembers(x)
+    const ys = objectMembers(y)
+    if (xs && ys) {
+        return xs.every((a) => ys.every((b) => !structuralMeet(a, b)))
+    }
     if (x.kind === 'object' || y.kind === 'object') return true
     if (identifies(x) || identifies(y)) return true
     const writable = meet(occV(x), occV(y))

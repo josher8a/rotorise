@@ -386,7 +386,6 @@ const childrenOf = (
             const at = def.elems[Number(segment)] ?? def.tail
             return one(at ? codecOfTerm(at) : undefined)
         }
-        case 'dunion':
         case 'union':
             return acrossVariants(
                 def.options.map((option) => codecOfTerm(option)),
@@ -2773,10 +2772,11 @@ type Factor = {
 /**
  * The options a factor offers: a union's, or the factor itself.
  *
- * A `dunion` is refused here rather than distributed. Its variants are chosen by a tag and a
- * union's by names, so one product would need two selection rules; JH has not ruled on the
- * constructor that would carry both, and a refusal that names a pending ruling is honest where a
- * guess is not.
+ * **A tagged builder is a union here, and that is why it is no longer refused.** It used to be a
+ * term of its own, chosen by a tag where a union is chosen by names, so one product would have
+ * needed two selection rules and the refusal named the ruling that was missing. The ruling was to
+ * delete the second sum: a dissection is a certified union, so a product of two of them is the
+ * distribution over one selection rule, and the merges are what comes out.
  */
 const optionsOfFactor = (factor: unknown): readonly Factor[] => {
     const codec = factor as
@@ -2790,11 +2790,6 @@ const optionsOfFactor = (factor: unknown): readonly Factor[] => {
           }
         | undefined
     const def = codec?.def
-    if (def?.kind === 'dunion') {
-        throw new CodecError(
-            'a `discriminatedUnion` is not a factor of a product yet — its variants are chosen by a tag and a product of tagged factors needs a term keyed by more than one, which is a ruling the owner has not made. Use an untagged `union` of objects, or take the product inside each variant',
-        )
-    }
     // §5's (D) fails at a product against a factor that holds nothing: every merge would hold
     // nothing too, and two empty held sets are comparable both ways, so no value tells the options
     // apart. `not_subset_prodOn` is the theorem, and this is the hypothesis it carries. `never` is
@@ -2809,6 +2804,16 @@ const optionsOfFactor = (factor: unknown): readonly Factor[] => {
         if (!variant) {
             throw new CodecError(
                 'a union factor must read as a whole item, and this one cannot — every option of it has to be an object for the product to merge names',
+            )
+        }
+        // **A dissection is a union now and its members are not reached positionally.** Its
+        // `variant` is keyed by the assignment its members carry, where a plain union's is keyed by
+        // position, so the loop below would ask for member `0` and be handed nothing. The term-level
+        // refusal this replaces named a ruling the owner had not made; that ruling has been made
+        // and what is left is the wiring, which is its own pass.
+        if ((codec?.item as { readonly keys?: unknown })?.keys !== undefined) {
+            throw new CodecError(
+                'a `discriminatedUnion` is a union of objects and a product distributes over it, but its members are reached by the assignment they carry rather than by position, and this loop reads a union positionally — take the product inside each member, or use an untagged `union` of objects',
             )
         }
         return def.options.map((_, index) => variant(index))
@@ -3295,22 +3300,28 @@ const dissect = <T extends Record<string, unknown>>(
             )
         }
     }
-    // the variants' own terms, which is what the definition carries: the assignments are read back
-    // off them rather than stored beside them, so there is one statement of one fact
-    const dunionDef = {
-        kind: 'dunion',
-        ks,
-        options: options.map((option) =>
-            termOf(option.item as unknown as AnyCodec),
-        ),
-    } as const
+    /**
+     * **The term is a `union`, and the tag table is this builder's index over it.**
+     *
+     * A dissection is a certified union: its members are objects that differ at a required literal
+     * key with disjoint alternatives, which is exactly what structural admission resolves and what
+     * `Calculus.OrthS` certifies. So there is one sum in the term language, and the key set below
+     * is a lookup this builder keeps for `variant`, `encodePartial` and the item path — a host
+     * index, carried by no term.
+     */
+    const memberTerms = options.map((option) =>
+        termOf(option.item as unknown as AnyCodec),
+    )
+    const unionDef = { kind: 'union', options: memberTerms } as const
 
     // **every member's assignment, read off the member's own body, and no two alike.** This is
-    // `Calculus.Body.namesTags` at each member and `Calculus.TagMap.keys` being a `Finset`; the
-    // one-key refusals `discriminatedUnion` used to spell inline are these two rules at one key
+    // `Calculus.Body.namesTags` at each member and a `Finset` of assignments; the one-key refusals
+    // `discriminatedUnion` used to spell inline are these two rules at one key. The union's own
+    // gate does not replace them: a duplicated index key is a different fact from a non-empty
+    // structural meet, and the index is what needs it.
     const members = membersOf(
         ks,
-        dunionDef.options.map((term, at) => {
+        memberTerms.map((term, at) => {
             if (term.kind !== 'object') {
                 throw new CodecError(
                     `every option must be an object codec, and option ${at} is a \`${term.kind}\` — a bare spec has no variant to select, so pass \`object(...)\` around it`,
@@ -3393,10 +3404,10 @@ const dissect = <T extends Record<string, unknown>>(
                           variant.spec,
                       ]),
                   ),
-        def: dunionDef,
+        def: unionDef,
     }
 
-    const nested = codecOfTerm<T, Attribute<'M'>>(dunionDef)
+    const nested = codecOfTerm<T, Attribute<'M'>>(unionDef)
     return {
         encode: nested.encode,
         decode: nested.decode,
@@ -3936,10 +3947,12 @@ const optionOf = (codec: AnyCodec): Option => {
      * object codec and of nothing else.
      */
     const base = optionOfTerm(termOf(codec))
-    // a `dunion` carries a whole-item reading of its own — its `Tagged` — and the union's item
-    // path delegates to it exactly as it does to an object's `ItemCodec`
+    // a tagged builder carries a whole-item reading of its own — its `Tagged` — over a term that
+    // is now an ordinary union, so the test is the presence of that reading and not the kind
     const asObject =
-        codec.def?.kind === 'object' || codec.def?.kind === 'dunion'
+        codec.def?.kind === 'object' ||
+        (codec.def?.kind === 'union' &&
+            !!(codec as unknown as Partial<AnyObjectCodec>).item)
             ? (codec as unknown as Partial<AnyObjectCodec>).item
             : undefined
     return asObject

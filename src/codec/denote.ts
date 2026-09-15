@@ -54,7 +54,6 @@ import {
     namesFit,
     namesOf,
     ownsNull,
-    readTags,
     rendered,
     sameLiteral,
     shapeOf,
@@ -943,13 +942,15 @@ export type ItemPair = {
 }
 
 /**
- * The terms that have a whole-item reading: an object, and a union of objects by tag.
+ * The term that has a whole-item reading: an object.
  *
- * Not `untagged`. An undiscriminated union's item reading is built by {@link union} from its
- * resolved options, and `denote`'s `untagged` row asks {@link altSem} for the *attribute* pair, so
- * nothing here needs one.
+ * **It used to be two**, an object and a union of objects by tag. There is one sum now, so a union
+ * of objects reads a whole item the way every union does: {@link union} builds that reading from
+ * its resolved options, and `denote`'s union row asks {@link altSem} for the *attribute* pair. A
+ * tagged builder keeps a tag table, and that table is its own index over the union rather than a
+ * second way for a term to mean something.
  */
-export type ItemTerm = Extract<Term, { readonly kind: 'object' | 'dunion' }>
+export type ItemTerm = Extract<Term, { readonly kind: 'object' }>
 
 /**
  * **One item pair per term, for the life of the term** — {@link codecOfTerm}'s counterpart.
@@ -969,51 +970,9 @@ const itemPairs = new WeakMap<ItemTerm, ItemPair>()
 export const itemSem = (def: ItemTerm): ItemPair => {
     const built = itemPairs.get(def)
     if (built) return built
-    const made = def.kind === 'object' ? bodySem(def.body) : taggedItemSem(def)
+    const made = bodySem(def.body)
     itemPairs.set(Object.freeze(def), made)
     return made
-}
-
-/**
- * §3 `(dunion)`'s item reading: the tag chooses the variant, and the variant reads the whole item.
- *
- * **Every variant is an object**, which is why this recurses into {@link itemSem} rather than
- * asking a codec for its `.item`. {@link discriminatedUnion} refuses an option whose `spec` does
- * not name the discriminator with a literal, and only an object codec has a `spec` shaped that way
- * — so a variant's term is an `attributes` term at every tag. The throw below is that invariant,
- * not a case a declaration can reach.
- */
-export const taggedItemSem = (
-    def: Extract<Term, { readonly kind: 'dunion' }>,
-): ItemPair => {
-    if (def.ks.length === 0) {
-        throw new CodecError(
-            `a discriminated union needs at least one discriminator, and this term has none — every value carries the empty assignment, so the first variant would answer for all of them`,
-        )
-    }
-    const bodies = def.options.map((option) => {
-        if (option.kind !== 'object') {
-            throw new CodecError(
-                `a discriminated union's variants are object codecs, and one option is a \`${option.kind}\`. \`discriminatedUnion\` refuses that at the declaration, so this term was not built by it`,
-            )
-        }
-        return [option.body, itemSem(option)] as const
-    })
-    const members = membersOf<ItemPair>(def.ks, bodies)
-    // a term can be written by hand, so the rules `mdunion` checks at the declaration are checked
-    // again here, where a term first has to mean something
-    if (failed(members)) throw members
-    const { pick, tagOf } = byTagSem<ItemPair>(def.ks, members)
-    return {
-        encode: (held) =>
-            andThen(andThen(tagOf(held), pick), (variant) =>
-                variant.encode(held),
-            ),
-        decode: (item) =>
-            andThen(andThen(readTags(item, def.ks), pick), (variant) =>
-                variant.decode(item),
-            ),
-    }
 }
 
 /**
@@ -1343,26 +1302,6 @@ export const denote = (def: Term): Pair => {
          */
         case 'union':
             return altSem(def.options.map(optionOfTerm)).pair
-        /**
-         * §3 `(dunion)`: the variants' lookup, carried into an `M`. The tag is read off the item on
-         * both sides — `tagOfV` and `tagOfA` in the model — so neither half attempts a variant it
-         * was not sent to.
-         */
-        case 'dunion': {
-            const body = itemSem(def)
-            return carriedCodec(
-                (value): value is Record<string, unknown> =>
-                    asRecord(value) !== undefined,
-                'M',
-                (value) =>
-                    new CodecError(
-                        `${describeShape(value)} is not a plain object, and a discriminated union writes an 'M' — a codec's input is typed, so this is a value that reached \`encode\` past its type`,
-                    ),
-                body.encode,
-                (carried: Readonly<Record<string, AttributeValue>>) =>
-                    body.decode(carried),
-            )
-        }
         /**
          * §5's bottom: the codec that admits no value.
          *
@@ -1919,7 +1858,7 @@ export const readsBack = (
  * read "opaq and string both take the same kind of value", naming something no caller had typed.
  */
 const namedKind = (kind: Term['kind']): string =>
-    kind === 'opaq' ? 'opaque' : kind === 'dunion' ? 'discriminatedUnion' : kind
+    kind === 'opaq' ? 'opaque' : kind
 
 /**
  * **Content admission on the write side**: every name present whose field is a literal carries one
@@ -1998,20 +1937,23 @@ export const literalsRead = (
 export const optionOfTerm = (def: Term): Option => {
     const codec = codecOfTerm(def)
     /**
-     * A tagged option carries names too, and they are its variants' taken together.
+     * **A union of objects carries names too**, and they are its members' taken together.
      *
-     * Its own body is the tag map, so there is no one `Body` to read. A variant admits every name
-     * set between its required keys and its declared keys (see `Collides`), so the option admits
-     * every set between the **intersection** of its variants' required names — the ones present
-     * whichever variant it turns out to be — and the **union** of their declared names.
+     * There is no one `Body` to read, so the interval is read off the members: a member admits
+     * every name set between its required keys and its declared keys, so the option admits every
+     * set between the **intersection** of the members' required names — the ones present whichever
+     * member it turns out to be — and the **union** of their declared names.
      *
      * Without this an option like `discriminatedUnion('side', …)` reached {@link namesFit} with no
      * `declares`, which answers `false`, so a `union` holding one had no whole-item reading: every
      * option was filtered out and the row matched nothing. The attribute-level path never showed it,
-     * because that one falls back to matching on the value's kind and then attempts.
+     * because that one falls back to matching on the value's kind and then attempts. It used to be
+     * the tagged row alone; a nested plain union of objects had the same hole and now has the same
+     * answer, which is what deleting the second sum buys here.
      */
     if (
-        def.kind === 'dunion' &&
+        def.kind === 'union' &&
+        def.options.length > 0 &&
         def.options.every((o) => o.kind === 'object')
     ) {
         const bodies = def.options.map(
