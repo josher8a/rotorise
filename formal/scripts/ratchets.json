@@ -26,7 +26,7 @@
     "Calculus/Products.lean": 301,
     "Calculus/Refutations.lean": 109,
     "Calculus/Separation.lean": 74,
-    "Calculus/Slice.lean": 1,
+    "Calculus/Slice.lean": 26,
     "Calculus/Soundness.lean": 345,
     "Calculus/Sums.lean": 52,
     "Calculus/Term.lean": 56,
