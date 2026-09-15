@@ -6,6 +6,7 @@ import Calculus.Continuity
 import Calculus.Refutations
 import Calculus.HeldSet
 import Calculus.Separation
+import Calculus.Meet
 import Batteries.Tactic.Lint
 import Calculus.LiteralArity1
 import Calculus.Nesting
