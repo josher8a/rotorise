@@ -116,12 +116,16 @@ describe('a definition generates what the codec generated', () => {
     // here are now `number` and `number(0, 1, 2)`, whose kinds were already covered), and
     // `nullValue` was added, giving the `NULL` point a codec for the first time
     //
+    // 17: `dunion` went. `mdunion` and `discriminatedUnion` still build a codec, and the term they
+    // build is a `union` — there is one sum, and the tag table is the builder's own index rather
+    // than a second kind a term can be
+    //
     // PINS A FACT NO LAW HAS, deliberately: the *number* of kinds is a property of this
     // library's inventory, not of the calculus, so adding a constructor is meant to fail here
     // and be looked at. It stays as it is.
     it('covers every kind a codec can be', () => {
         const kinds = new Set(codecs.map(([, c]) => c.def?.kind))
-        expect(kinds.size).toBe(18)
+        expect(kinds.size).toBe(17)
         expect([...kinds].every(Boolean)).toBe(true)
     })
 })

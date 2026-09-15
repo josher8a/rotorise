@@ -40,6 +40,7 @@ import {
     held,
     lazy,
     legacy,
+    mdunion,
     never,
     nullable,
     nullValue,
@@ -54,7 +55,7 @@ import {
     tuple,
     union,
 } from '../codec'
-import { accepts, codecOfTerm } from '../denote'
+import { accepts } from '../denote'
 import type {
     ReadResolution,
     ReadVerdict,
@@ -337,7 +338,7 @@ describe('terms', () => {
      * tag out of that field, so it cannot go, and the agreement between the two is the one
      * premise `Typed.dunion` keeps.
      */
-    it('emits a discriminated union as a table keyed by its tags', () => {
+    it('emits a discriminated union as the union of objects it is', () => {
         const emitted = leanTermOf(
             erase(
                 discriminatedUnion('kind', [
@@ -346,14 +347,18 @@ describe('terms', () => {
                 ]),
             ),
         )
-        // the key is the variant's assignment, a function on the key set, and the key set is a
-        // `NEFinset` because `discriminatedUnion` is the one-key form
+        // **there is one sum, so there is one row.** The members are `object` terms and the tag
+        // table is the builder's own index, carried by no term — so what reaches the model is the
+        // union the declaration always was, and the discriminators are the required literals in
+        // each member's body
+        expect(emitted).toContain('Term.union [Term.object')
         expect(emitted).toContain(
-            'Term.dunion ⟨NEFinset.of "kind" ∅, {(fun k => "a"), (fun k => "b")}',
+            'Field.req (Term.literal GroundKind.string (NEFinset.of "a" ∅))',
         )
-        expect(emitted).toContain('if k.1 = (fun k => "a") then (Body.mk')
-        // the variants are `Body`s, so no `Term.object` wraps them
-        expect(emitted).not.toContain('Term.object')
+        expect(emitted).toContain(
+            'Field.req (Term.literal GroundKind.string (NEFinset.of "b" ∅))',
+        )
+        expect(emitted).not.toContain('Term.dunion')
         expect(emitted.split('Body.mk')).toHaveLength(3)
     })
 
@@ -501,9 +506,13 @@ describe('what cannot be emitted', () => {
                 object({ kind: number(1), b: string }),
             ]),
         )
+        // the refusal is the literal's own now, not a row about tags: a numeric discriminator is a
+        // numeric literal field, and `Calculus.Double` is an axiom with no closed terms wherever
+        // such a literal appears. Deleting the tagged row lost no refusal, only a second statement
+        // of this one
         const why = refusal(() => leanTermOf(numeric)).reason
-        expect(why).toContain('no closed terms')
-        expect(why).toContain('number')
+        expect(why).toContain('Double')
+        expect(why).toContain('GroundKind.number')
 
         // **a decimal tag emits now**, which is the half of the disagreement that closed: it is
         // stored in an `N` and carried as text, and both of the model's tag readers answer that
@@ -513,7 +522,7 @@ describe('what cannot be emitted', () => {
                 object({ v: decimal('2'), b: string }),
             ]),
         )
-        expect(leanTermOf(decimals)).toContain('Term.dunion')
+        expect(leanTermOf(decimals)).toContain('Term.union')
         expect(leanTermOf(decimals)).toContain('GroundKind.decimal')
 
         // and a string tag emits, which it always did
@@ -526,7 +535,7 @@ describe('what cannot be emitted', () => {
                     ]),
                 ),
             ),
-        ).toContain('Term.dunion')
+        ).toContain('Term.union')
     })
 })
 
@@ -803,27 +812,28 @@ export const sampleVectors: readonly Vector[] = [
         ),
         value: { p: 'x', q: true, r: '1' },
     },
-    // **a two-key `dunion`**, so the bridge elaborates a two-key `NEFinset` and the emitter's
-    // assignments reach Lean as functions. Built as a term: nothing in the public surface makes
-    // one yet
+    // **a two-key dissection**, which is a union of three objects each pinning two required
+    // literals. Built through `mdunion`, where it used to be a hand-written term: there is one sum
+    // now, so the builder's result is an ordinary union and the public surface makes it
     {
         name: 'dunion_two_keys',
-        codec: codecOfTerm({
-            kind: 'dunion',
-            ks: ['kind', 'size'],
-            options: [
-                object({
-                    kind: string('pet'),
-                    size: string('small'),
-                    toy: string,
-                }).def,
-                object({
-                    kind: string('pet'),
-                    size: string('large'),
-                    pen: string,
-                }).def,
-            ],
-        }) as AnyCodec,
+        codec: erase(
+            mdunion(
+                ['kind', 'size'],
+                [
+                    object({
+                        kind: string('pet'),
+                        size: string('small'),
+                        toy: string,
+                    }),
+                    object({
+                        kind: string('pet'),
+                        size: string('large'),
+                        pen: string,
+                    }),
+                ],
+            ),
+        ),
         value: { kind: 'pet', size: 'small', toy: 'ball' },
     },
     { name: 'opaque_map', codec: erase(opaque), value: { a: 'x' } },
@@ -1284,7 +1294,7 @@ describe("the declaration guard, against the model's classifier", () => {
      */
     it('refuses only pairs the classifier also declines', () => {
         const separations = separationPairs()
-        expect(separations.length).toBe(85)
+        expect(separations.length).toBe(92)
         // each one emits, which is where `leanSeparation` re-checks that `src/` really refuses,
         // and it carries one of the two warrants: `Orth` declines, or (D) fails against `never`
         for (const one of separations) {

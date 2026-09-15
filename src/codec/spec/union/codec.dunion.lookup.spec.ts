@@ -114,15 +114,21 @@ describe('a stored tag that names a member of Object.prototype', () => {
      * Reachable from data this library does not control: the tag is read off the stored item. And
      * a raw `TypeError` is the one thing every other failure here is careful not to be — the
      * library's contract is that what a caller has to handle is a `CodecError`.
+     *
+     * **The class of defect is gone rather than guarded now, and the message says so.** A
+     * dissection's term is a union, so decoding resolves by structural admission — the names the
+     * item carries, then the literal at each — and reaches no lookup keyed by attacker-controlled
+     * text. The rule this pins is the one it always pinned: a stored tag naming a member of
+     * `Object.prototype` is a `CodecError` and never a `TypeError`. What moved is which sentence
+     * the caller reads, because there is no table to miss.
      */
     it.each(['toString', 'constructor', '__proto__', 'valueOf'])(
         'decodes to a CodecError, not a TypeError, at %s',
         (tag) => {
             const result = visit.decode(stored(tag))
             expect(result).toBeInstanceOf(CodecError)
-            expect((result as CodecError).reason).toMatch(
-                new RegExp(`'${tag}' is not a variant of 'type'`),
-            )
+            expect(result).not.toBeInstanceOf(TypeError)
+            expect((result as CodecError).reason).toMatch(/no option admits/)
         },
     )
 
@@ -137,9 +143,7 @@ describe('a stored tag that names a member of Object.prototype', () => {
     it('leaves an ordinary unknown tag alone', () => {
         const result = visit.decode(stored('NOPE'))
         expect(result).toBeInstanceOf(CodecError)
-        expect((result as CodecError).reason).toMatch(
-            /'NOPE' is not a variant of 'type'; expected 'CHECKUP', 'SHOT'/,
-        )
+        expect((result as CodecError).reason).toMatch(/no option admits/)
     })
 
     /** And the variants that exist still resolve. */
