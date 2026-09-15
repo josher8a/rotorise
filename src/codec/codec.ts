@@ -23,7 +23,9 @@ import {
     codecOfTerm,
     itemSem,
     literalCodec,
+    membersOf,
     optionOfTerm,
+    sameAssignment,
     termOf,
 } from './denote'
 import {
@@ -57,7 +59,13 @@ import {
 export { codecOfTerm, termOf, valueKinds } from './denote'
 
 import type { ErrorMessage, show } from '../utils'
-import { describeShape, namesFit, namesOf, readTag, sameLiteral } from './value'
+import {
+    describeShape,
+    namesFit,
+    namesOf,
+    readTags,
+    sameLiteral,
+} from './value'
 
 // the failure algebra lives in `./result`, and is re-exported because it is part of the surface a
 // caller works in: a `Result` is what every direction returns
@@ -2201,6 +2209,79 @@ export type DiscriminatedCodec<T, D extends string, Spec> = {
     readonly [writesMarker]?: WritesVariantsPin<Spec>
 }
 
+/**
+ * A dissection read as a whole item: the members, chosen by an assignment.
+ *
+ * {@link Tagged} at several discriminators. Two fields move, and both because there is no single
+ * discriminator to name: `keys` holds the key set where `discriminator` held the one name, and
+ * `variant` takes the assignment as an **object literal** rather than a bare tag. An object type is
+ * unordered, so the selector carries no order and no rendered key — which is the whole of what the
+ * multi-key term buys, said at the type level.
+ *
+ * `spec` is the members' specs as the caller declared them. There is no string to key them by: a
+ * key would be a rendering of an assignment, and a rendering is an order.
+ */
+export type Dissected<
+    T,
+    Ks extends readonly string[],
+    Specs extends readonly unknown[],
+> = {
+    /** Every attribute, or why one could not be written. */
+    readonly encode: (item: T) => Result<AttributeMap>
+    readonly unsafeEncode: (item: T) => AttributeMap
+    /** The attributes a patch names. Every discriminator is required: they choose the codec. */
+    readonly encodePartial: (
+        patch: Partial<T> & Pick<T, Ks[number] & keyof T>,
+    ) => Result<AttributeMap>
+    readonly unsafeEncodePartial: (
+        patch: Partial<T> & Pick<T, Ks[number] & keyof T>,
+    ) => AttributeMap
+    /** The entity, or why the item could not be read. */
+    readonly decode: (item: StoredItem) => Result<T>
+    readonly unsafeDecode: (item: StoredItem) => T
+    /** One member, by the assignment it carries. */
+    readonly variant: <A extends AssignmentOf<Specs[number], Ks>>(
+        assignment: A,
+    ) => ItemCodec<Extract<T, A>, unknown>
+    readonly keys: Ks
+    readonly spec: Specs
+    /** What this codec is — see {@link Term}. */
+    readonly def: Term
+}
+
+/** {@link Dissected} with the top-level `M` back on, which is what a `dunion` codec is. */
+export type DissectedCodec<
+    T,
+    Ks extends readonly string[],
+    Specs extends readonly unknown[],
+> = {
+    readonly encode: (value: T) => Result<Attribute<'M'>>
+    readonly decode: (attribute: AttributeValue) => Result<T>
+    readonly unsafeEncode: (value: T) => Attribute<'M'>
+    readonly unsafeDecode: (attribute: AttributeValue) => T
+    readonly def: Term
+    readonly item: Dissected<T, Ks, Specs>
+}
+
+/**
+ * What {@link mdunion} returns, read at the arity the caller wrote.
+ *
+ * **At one key it is today's type, exactly.** `discriminatedUnion` is `mdunion` at one
+ * discriminator, so the two have to be the same type and not merely compatible ones — a caller
+ * who swaps the call changes no annotation, and `variant`, `discriminator`, `spec` and the
+ * `Writes` pin all read as they did.
+ */
+export type Dissection<
+    Ks extends readonly string[],
+    Options extends readonly unknown[],
+> = Ks extends readonly [infer D extends string]
+    ? DiscriminatedCodec<
+          DerivedVariants<SpecsOf<Options>>,
+          D,
+          ByTag<SpecsOf<Options>, D>
+      >
+    : DissectedCodec<DerivedVariants<SpecsOf<Options>>, Ks, SpecsOf<Options>>
+
 export type UnionCodec<T, Options extends readonly unknown[]> = {
     readonly encode: (value: T) => Result<WrittenBy<Options>>
     readonly decode: (attribute: AttributeValue) => Result<T>
@@ -3118,63 +3199,145 @@ export type Tagged<T, D extends string = keyof T & string, Spec = unknown> = {
  * })
  * ```
  */
-const tagged = <T extends Record<string, unknown>>(
-    discriminator: string,
-    byVariant: Record<string, ItemCodec<Record<string, unknown>, unknown>>,
+const dissect = <T extends Record<string, unknown>>(
+    ks: readonly string[],
+    options: readonly AnyObjectCodec[],
 ): DiscriminatedCodec<T, string, Record<string, unknown>> => {
-    // the model reads a variant's tag off the variant's own `d` field, so the table's key is
-    // dropped rather than carried: two statements of one fact are two things that can disagree
-    const taggedDef = {
+    // **the empty key set, refused where the type cannot refuse it.** Over no discriminator every
+    // value carries the empty assignment, so the first member answers for all of them and the
+    // union is a union of one. `Calculus.TagMap.ks` is a `NEFinset` and says this in the type; a
+    // `readonly string[]` cannot, so this is the gate the model does not need
+    if (ks.length === 0) {
+        throw new CodecError(
+            `a discriminated union needs at least one discriminator, and this one has none — every value carries the empty assignment, so the first variant would answer for all of them`,
+        )
+    }
+    // **An empty option list is a mistake, not the bottom.** `never` is the bottom and says so as
+    // a term; a `dunion` over no variants is what a typo or a `map` over an empty array produces,
+    // and it admits nothing while no rule reads it as admitting nothing. The type refuses this
+    // too — what reaches here is a cast, plain JavaScript, or an erased path
+    if (options.length === 0) {
+        throw new CodecError(
+            `a discriminated union needs at least one option, and this one has none — no tag reaches a variant, so nothing can be written or read. If a codec that admits no value is what you meant, that is \`never\``,
+        )
+    }
+    for (const option of options) {
+        if (!option?.item?.spec) {
+            throw new CodecError(
+                `every option must be an object codec, and one of them is not — a bare spec has no variant to select, so pass \`object(...)\` around it`,
+            )
+        }
+    }
+    // the variants' own terms, which is what the definition carries: the assignments are read back
+    // off them rather than stored beside them, so there is one statement of one fact
+    const dunionDef = {
         kind: 'dunion',
-        d: discriminator,
-        options: Object.values(byVariant).map((variant) =>
-            termOf(variant as unknown as AnyCodec),
+        ks,
+        options: options.map((option) =>
+            termOf(option.item as unknown as AnyCodec),
         ),
     } as const
-    const { pick, tagOf } = byTagSem(discriminator, byVariant) as {
-        pick: (tag: string) => Result<ItemCodec<T, unknown>>
-        tagOf: (item: Partial<T>) => Result<string>
+
+    // **every member's assignment, read off the member's own body, and no two alike.** This is
+    // `Calculus.Body.namesTags` at each member and `Calculus.TagMap.keys` being a `Finset`; the
+    // one-key refusals `discriminatedUnion` used to spell inline are these two rules at one key
+    const members = membersOf(
+        ks,
+        dunionDef.options.map((term, at) => {
+            if (term.kind !== 'object') {
+                throw new CodecError(
+                    `every option must be an object codec, and option ${at} is a \`${term.kind}\` — a bare spec has no variant to select, so pass \`object(...)\` around it`,
+                )
+            }
+            return [
+                term.body,
+                options[at]?.item as unknown as ItemCodec<T, unknown>,
+            ] as const
+        }),
+    )
+    if (failed(members)) throw members
+
+    const { pick, tagOf } = byTagSem(ks, members) as unknown as {
+        pick: (
+            assignment: Readonly<Record<string, string>>,
+        ) => Result<ItemCodec<T, unknown>>
+        tagOf: (item: Partial<T>) => Result<Readonly<Record<string, string>>>
     }
 
-    const self: Tagged<T, string, Record<string, unknown>> = {
-        encode: (item) =>
+    // **the published one-key surface carries `discriminator`, and this is that name.** Where the
+    // key set has one element, that element *is* the discriminator: it is the whole set, not the
+    // head of a list. Where it has several there is no such name, and the codec carries `keys`
+    // instead — so the field is absent rather than holding one of several
+    const [only, ...rest] = ks
+    const oneKey = rest.length === 0 ? (only as string) : undefined
+
+    const self = {
+        encode: (item: T) =>
             andThen(andThen(tagOf(item), pick), (variant) =>
                 variant.encode(item as never),
             ),
-        encodePartial: (patch) =>
+        encodePartial: (patch: Partial<T>) =>
             andThen(andThen(tagOf(patch), pick), (variant) =>
                 variant.encodePartial(patch as never),
             ),
-        decode: (item) =>
-            andThen(
-                andThen(readTag(item, discriminator), pick),
-                (variant) => variant.decode(item) as Result<T>,
-            ),
-        unsafeEncode: (item) => orThrow(self.encode(item)),
-        unsafeEncodePartial: (patch) => orThrow(self.encodePartial(patch)),
-        unsafeDecode: (item) => orThrow(self.decode(item)),
-        variant: (name) => byVariant[name as string] as never,
-        discriminator,
-        // keyed by tag, holding what each variant declares — the keys are the variant names,
-        // which is what a caller walking the variants reads
-        spec: Object.fromEntries(
-            Object.entries(byVariant).map(([tag, variant]) => [
-                tag,
-                variant.spec,
-            ]),
-        ),
-        def: taggedDef,
+        decode: (item: StoredItem) =>
+            andThen(andThen(readTags(item, ks), pick), (variant) =>
+                variant.decode(item),
+            ) as Result<T>,
+        unsafeEncode: (item: T) => orThrow(self.encode(item)),
+        unsafeEncodePartial: (patch: Partial<T>) =>
+            orThrow(self.encodePartial(patch)),
+        unsafeDecode: (item: StoredItem) => orThrow(self.decode(item)),
+        /**
+         * One variant, selected by its assignment.
+         *
+         * An **object literal**, matched key by key with {@link sameAssignment}, so the selector is
+         * the same unordered thing the term's key is. A bare tag is the one-key spelling and means
+         * that tag at the one key there is; at several keys it names no member, which is what a
+         * caller who wrote one meant to be told.
+         */
+        variant: (selector: unknown) => {
+            const assignment =
+                typeof selector === 'object' && selector !== null
+                    ? Object.fromEntries(
+                          Object.entries(selector).map(([name, tag]) => [
+                              name,
+                              String(tag),
+                          ]),
+                      )
+                    : Object.fromEntries(
+                          ks.map((name) => [name, String(selector)]),
+                      )
+            return members.find(([one]) =>
+                sameAssignment(ks, one, assignment),
+            )?.[1] as never
+        },
+        keys: ks,
+        ...(oneKey === undefined ? {} : { discriminator: oneKey }),
+        // at one key the spec is keyed by the tag, which is what a caller walking the variants
+        // reads today; at several there is no one string to key it by, so it is the members' specs
+        // in the order the caller declared them
+        spec:
+            oneKey === undefined
+                ? members.map(([, variant]) => variant.spec)
+                : Object.fromEntries(
+                      members.map(([assignment, variant]) => [
+                          assignment[oneKey],
+                          variant.spec,
+                      ]),
+                  ),
+        def: dunionDef,
     }
 
-    const nested = codecOfTerm<T, Attribute<'M'>>(taggedDef)
+    const nested = codecOfTerm<T, Attribute<'M'>>(dunionDef)
     return {
         encode: nested.encode,
         decode: nested.decode,
         unsafeEncode: nested.unsafeEncode,
         unsafeDecode: nested.unsafeDecode,
         def: nested.def,
-        item: self as Tagged<T, string, Record<string, unknown>>,
-    }
+        item: self as unknown as Tagged<T, string, Record<string, unknown>>,
+    } as DiscriminatedCodec<T, string, Record<string, unknown>>
 }
 
 // ── unions with no discriminator ────────────────────────────────────
@@ -3626,28 +3789,6 @@ type ByTag<Specs extends readonly unknown[], D extends PropertyKey> = {
 }
 
 /**
- * Which pairs of options answer to a tag in common, as `options i and j`.
- *
- * A discriminated union is a *lookup*, so two options claiming one tag is not an ambiguity to be
- * resolved when a value turns up — it is a table with one key written twice, and the second write
- * wins in silence. Decidable from the declaration, so it is refused there, the way
- * {@link Overlapping} refuses an untagged union's.
- */
-type SharedTagsFrom<
-    Head,
-    Rest extends readonly unknown[],
-    D extends PropertyKey,
-    At extends number,
-    Cursor extends readonly unknown[],
-> = Rest extends readonly [infer Next, ...infer Tail extends readonly unknown[]]
-    ?
-          | ([TagsOf<Head, D> & TagsOf<Next, D>] extends [never]
-                ? never
-                : `options ${At} and ${Cursor['length']}`)
-          | SharedTagsFrom<Head, Tail, D, At, [...Cursor, unknown]>
-    : never
-
-/**
  * Whether a tag set has more than one member.
  *
  * The intersection of a union of distinct literals is `never`, and of a single literal is itself —
@@ -3665,7 +3806,8 @@ type TagIntersection<Tags> = (
 /**
  * The options whose discriminator literal admits more than one value.
  *
- * Indexed by position like {@link SharedTags}, and one option at a time rather than a pair: this is
+ * Indexed by position like {@link SharedAssignments}, and one option at a time rather than a
+ * pair: this is
  * a defect in a single option, so naming its neighbour would say nothing.
  */
 type MultiTagged<
@@ -3683,48 +3825,138 @@ type MultiTagged<
           | MultiTagged<Rest, D, [...Cursor, unknown]>
     : never
 
-type SharedTags<
+/**
+ * The assignment a variant's spec names: its tag at each key.
+ *
+ * An **object type**, so the type level carries what the term carries and no more. An object type
+ * has no order on its keys, which is the property `Calculus.Assignment` has by being a function on
+ * a `Finset`; a tuple would put the order back and make two types for one dissection.
+ */
+export type AssignmentOf<Spec, Ks extends readonly PropertyKey[]> = {
+    readonly [K in Ks[number]]: TagsOf<Spec, K>
+}
+
+/**
+ * A key that **some** option names with no tag: that option cannot be found at it.
+ *
+ * Asked of each option in turn, and not of `Specs[number]`. Asking the union of the specs answers a
+ * question about the collection — "does anybody name this key" — and an option that names none of
+ * them passes, because its neighbours answered for it. Every other rule here is already distributed
+ * over the options one at a time ({@link MultiTagged}) or over their pairs
+ * ({@link SharedAssignments}, {@link Overlapping}); this is the same shape, and it was the one
+ * clause that was not.
+ */
+type UntaggedKey<
     Specs extends readonly unknown[],
-    D extends PropertyKey,
+    Ks extends readonly PropertyKey[],
+> = Specs extends readonly [
+    infer Head,
+    ...infer Rest extends readonly unknown[],
+]
+    ?
+          | {
+                [K in Ks[number]]: [TagsOf<Head, K>] extends [never] ? K : never
+            }[Ks[number]]
+          | UntaggedKey<Rest, Ks>
+    : never
+
+/** An option whose literal at some key admits more than one value, at any key. */
+type MultiTaggedAnywhere<
+    Specs extends readonly unknown[],
+    Ks extends readonly PropertyKey[],
+> = { [K in Ks[number]]: MultiTagged<Specs, K> }[Ks[number]]
+
+/**
+ * Whether two options differ at some key.
+ *
+ * **At some key, not at the first.** Two members of a dissection are distinct when their
+ * assignments differ anywhere, which is `Calculus.asgEq` read the other way round, and asking it
+ * of every key at once is what makes the answer independent of how the keys were written.
+ */
+type DiffersSomewhere<A, B, Ks extends readonly PropertyKey[]> = true extends {
+    [K in Ks[number]]: [TagsOf<A, K> & TagsOf<B, K>] extends [never]
+        ? true
+        : false
+}[Ks[number]]
+    ? true
+    : false
+
+type SharedAssignmentsFrom<
+    Head,
+    Rest extends readonly unknown[],
+    Ks extends readonly PropertyKey[],
+    At extends number,
+    Cursor extends readonly unknown[],
+> = Rest extends readonly [infer Next, ...infer Tail extends readonly unknown[]]
+    ?
+          | (DiffersSomewhere<Head, Next, Ks> extends true
+                ? never
+                : `options ${At} and ${Cursor['length']}`)
+          | SharedAssignmentsFrom<Head, Tail, Ks, At, [...Cursor, unknown]>
+    : never
+
+/**
+ * Which pairs of options carry one assignment, as `options i and j`.
+ *
+ * A discriminated union is a *lookup*, so two options claiming one assignment is not an ambiguity
+ * to be resolved when a value turns up — it is a table with one key written twice, and the second
+ * write wins in silence. Decidable from the declaration, so it is refused there, the way
+ * {@link Overlapping} refuses an untagged union's.
+ */
+type SharedAssignments<
+    Specs extends readonly unknown[],
+    Ks extends readonly PropertyKey[],
     Cursor extends readonly unknown[] = [],
 > = Specs extends readonly [
     infer Head,
     ...infer Rest extends readonly unknown[],
 ]
     ?
-          | SharedTagsFrom<
+          | SharedAssignmentsFrom<
                 Head,
                 Rest,
-                D,
+                Ks,
                 Cursor['length'],
                 [...Cursor, unknown]
             >
-          | SharedTags<Rest, D, [...Cursor, unknown]>
+          | SharedAssignments<Rest, Ks, [...Cursor, unknown]>
     : never
 
 /**
- * Nothing, or the fact that the options cannot be looked up.
+ * Nothing, or the fact that the options cannot be looked up — at a key set.
  *
- * Three ways that happens, in the order that gives the more specific message. An option that does
- * not name the discriminator with a `literal` cannot be found at all, and would decode as whichever
- * option happened to match instead. An option whose literal admits *several* values is arity one's
- * refusal — one variant, one tag. Two options that name the *same* value can each be found, and
- * only one of them ever is.
+ * The same three failures in the same order, asked of every key instead of one. An option that
+ * does not name a key with a `literal` cannot be found at all; an option whose literal admits
+ * several values is arity one's refusal; two options carrying one assignment can each be found and
+ * only one ever is.
  *
  * The arity check comes before the sharing check because it is a defect in one option rather than
  * in a pair, and because an option with two tags has to lose one before the sharing question is
  * even well posed.
  */
+type MembersTagged<
+    Specs extends readonly unknown[],
+    Ks extends readonly PropertyKey[],
+> = Specs extends readonly []
+    ? ErrorMessage<'[discriminatedUnion] a discriminated union needs at least one option, and this one has none — no tag reaches a variant, so nothing can be written or read. If a codec that admits no value is what you meant, that is `never`'>
+    : [UntaggedKey<Specs, Ks>] extends [never]
+      ? [MultiTaggedAnywhere<Specs, Ks>] extends [never]
+          ? [SharedAssignments<Specs, Ks>] extends [never]
+              ? unknown
+              : ErrorMessage<`[discriminatedUnion] ${SharedAssignments<Specs, Ks>} answer to the same discriminator value, and a lookup reaches only one of them — give them distinct values`>
+          : ErrorMessage<`[discriminatedUnion] ${MultiTaggedAnywhere<Specs, Ks>} names the discriminator with a literal admitting several values, and a variant answers to exactly one tag — split it into one option per value`>
+      : ErrorMessage<'[discriminatedUnion] every option must name the discriminator with a literal at `string`, `number` or `decimal`, or a lookup cannot find it'>
+
+/**
+ * The one-key gate, as the instance of {@link MembersTagged} at a one-element key set.
+ *
+ * One rule and not two: the messages are the same strings at one key, so the surface a caller
+ * reads did not move, and a change to the rule cannot reach one arity and miss the other.
+ */
 type EveryOptionTagged<
     Specs extends readonly unknown[],
     D extends PropertyKey,
-> = [TagsOf<Specs[number], D>] extends [never]
-    ? ErrorMessage<'[discriminatedUnion] every option must name the discriminator with a literal at `string`, `number` or `decimal`, or a lookup cannot find it'>
-    : [MultiTagged<Specs, D>] extends [never]
-      ? [SharedTags<Specs, D>] extends [never]
-          ? unknown
-          : ErrorMessage<`[discriminatedUnion] ${SharedTags<Specs, D>} answer to the same discriminator value, and a lookup reaches only one of them — give them distinct values`>
-      : ErrorMessage<`[discriminatedUnion] ${MultiTagged<Specs, D>} names the discriminator with a literal admitting several values, and a variant answers to exactly one tag — split it into one option per value`>
+> = MembersTagged<Specs, readonly [D]>
 
 /**
  * A union of objects told apart by one attribute — `zod`'s `discriminatedUnion`, over an item.
@@ -3747,6 +3979,43 @@ type EveryOptionTagged<
  * ])
  * ```
  */
+export const mdunion = <
+    const Ks extends readonly [string, ...string[]],
+    const Options extends readonly AnyObjectCodec[],
+>(
+    ks: Ks,
+    options: Options & MembersTagged<SpecsOf<Options>, Ks>,
+): Dissection<Ks, Options> =>
+    // one cast, at the one place where a runtime table meets a type computed from the specs: the
+    // builder is written once over `readonly string[]`, and {@link Dissection} is what that builder
+    // produces read at the arity the caller wrote
+    dissect(ks, options as readonly AnyObjectCodec[]) as never
+
+/**
+ * A union of objects told apart by one attribute — `zod`'s `discriminatedUnion`, over an item.
+ *
+ * The stored value of the discriminator chooses the option, and each option says which value it is by
+ * naming that attribute with a literal — `string('CHECKUP')`, `number(1)`, `decimal('1')`. A
+ * lookup rather than a search: it cannot be ambiguous,
+ * and it is the only union that can encode a *patch*, because a subset of the attributes does not say
+ * which option it belongs to.
+ *
+ * The options are *codecs*, not bare specs, so an option that already has a name can be handed over
+ * by it and a nested union reads the same as a nested anything else. What the union needs of an
+ * option — its attributes, and what its discriminator admits — an object codec already carries.
+ *
+ * **{@link mdunion} at one discriminator**, and nothing else: the two spellings build the same term,
+ * the same table and the same codec, so a caller can replace one with the other and change no other
+ * line. This name is the one-key case because one discriminator is what almost every entity needs.
+ *
+ * @example
+ * ```ts
+ * discriminatedUnion('type', [
+ *     object({ type: string('CHECKUP'), petId: string, vetId: string }),
+ *     object({ type: string('SHOT'), petId: string, vaccine: string }),
+ * ])
+ * ```
+ */
 export const discriminatedUnion = <
     const D extends string,
     const Options extends readonly AnyObjectCodec[],
@@ -3757,72 +4026,14 @@ export const discriminatedUnion = <
     DerivedVariants<SpecsOf<Options>>,
     D,
     ByTag<SpecsOf<Options>, D>
-> => {
-    // **An empty option list is a mistake, not the bottom.** `never` is the bottom and says so as
-    // a term; a `dunion` over no variants is what a typo or a `map` over an empty array produces,
-    // and it admits nothing while no rule reads it as admitting nothing. The type refuses this
-    // too — what reaches here is a cast, plain JavaScript, or an erased path
-    if ((options as readonly AnyObjectCodec[]).length === 0) {
-        throw new CodecError(
-            `a discriminated union needs at least one option, and this one has none — no tag reaches a variant, so nothing can be written or read. If a codec that admits no value is what you meant, that is \`never\``,
-        )
-    }
-    const byTag: Record<
-        string,
-        ItemCodec<Record<string, unknown>, unknown>
-    > = {}
-    for (const option of options as readonly AnyObjectCodec[]) {
-        if (!option?.item?.spec) {
-            throw new CodecError(
-                `every option must be an object codec, and one of them is not — a bare spec has no variant to select, so pass \`object(...)\` around it`,
-            )
-        }
-        // one value, not the whole admissible set: a variant answers to exactly one tag, so the
-        // `ls` set below is read for its single member and refused if it has more
-        const declared = option.item.spec[discriminator]?.def
-        // a term and not a field: a mark on the discriminator would let the tag be absent
-        const def = declared && !('mark' in declared) ? declared : undefined
-        /**
-         * A tag is read back by {@link readTag}, which accepts `S` or `N` and nothing else — so the
-         * bases that can carry one are exactly the three that write those two members. A literal at
-         * `boolean` or `binary` is a perfectly good literal and cannot be a discriminator: `BOOL`
-         * and `B` name no variant a lookup could find, and the value is not a key.
-         */
-        const tags =
-            def?.kind === 'literal' &&
-            def.base !== 'boolean' &&
-            def.base !== 'binary'
-                ? def.ls
-                : undefined
-        if (!tags?.length) {
-            throw new CodecError(
-                `every option must name '${discriminator}' with a literal at \`string\`, \`number\` or \`decimal\`, and one of them does not — a tag is carried as 'S' or 'N', and without one a lookup cannot find the variant`,
-            )
-        }
-        if (tags.length > 1) {
-            throw new CodecError(
-                `'${discriminator}' names ${tags.length} values at one option (${tags.join(', ')}), and a variant answers to exactly one tag — split it into one option per value`,
-            )
-        }
-        const [tag] = tags as readonly [string | number]
-        // Two options answering to one tag is a table with a key written twice: the second
-        // write wins and the first option becomes unreachable, which shows up later as a
-        // required attribute of the *other* variant going missing. `union` refuses its own
-        // ambiguity at the declaration; so does this.
-        if (Object.hasOwn(byTag, tag)) {
-            throw new CodecError(
-                `two options answer to '${discriminator}' = '${tag}', and a lookup reaches only one of them — give them distinct values`,
-            )
-        }
-        // the option is already built, so the variant is the codec it came with rather than a
-        // second one built from the same spec
-        byTag[tag] = option.item as unknown as ItemCodec<
-            Record<string, unknown>,
-            unknown
-        >
-    }
-    return tagged(discriminator, byTag) as never
-}
+> =>
+    // **the type arguments are given, not inferred, and that is what makes the alias cast-free.**
+    // Inferring them from `options` would take `Options` to be the *intersection* the parameter
+    // declares — `Options & MembersTagged<…>` — and the return type computed from that intersection
+    // is not the one this signature promises. Pinned, `Dissection<readonly [D], Options>` reduces to
+    // exactly the `DiscriminatedCodec` below, and `EveryOptionTagged<SpecsOf<Options>, D>` is
+    // `MembersTagged<SpecsOf<Options>, readonly [D]>` by definition, so the argument needs nothing.
+    mdunion<readonly [D], Options>([discriminator], options)
 
 /**
  * **The term that admits no value**, and the unit the product and the slice need.

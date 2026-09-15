@@ -116,7 +116,7 @@ def HUnion (Ts : List Held) : Held :=
     reading is true and belongs where it is used: `T` is an upper bound `Carrier` keeps `e` and
     `p` inside, and asking it of `T` would cost `Carrier` two premises it does not otherwise
     need. -/
-def HVariants (variants : MapOf Body) (Ts : {k // k ∈ variants.1} → Held) : Held :=
+def HVariants (variants : TagMap Body) (Ts : {k // k ∈ variants.keys} → Held) : Held :=
   fun v => ∃ k, Ts k v
 
 /-- The bottom's held set: nothing. It is a subset of every held set, so (D) fails against
@@ -260,14 +260,15 @@ inductive Typed : Term → Held → Option Member → Prop where
       **What is left is one fact, and it is the one a table cannot state**: that a variant's own
       `d` field agrees with its key. The field cannot go — the codec writes the tag out of it, and
       the host's variant declares it — so the agreement is a premise. `hone` is that, and
-      `tagsOf_ne_nil` is still the inversion that unpacks it.
+      `tagsOf_ne_nil` is still the inversion that unpacks it, once per discriminator: the key is
+      an assignment now, so `hone` is one such equation at each key of the set.
 
       The conclusion moved too. `HUnion` is a disjunction over a list and there is no list;
       `HVariants` is the same disjunction over the key set. -/
-  | dunion {d} {variants : MapOf Body} {Ts : {k // k ∈ variants.1} → Held}
-      (h : ∀ k, Typed (.object (variants.2 k)) (Ts k) (some .M))
-      (hone : ∀ k, (variants.2 k).tags d = {k.1}) :
-      Typed (.dunion d variants) (HVariants variants Ts) (some .M)
+  | dunion {variants : TagMap Body} {Ts : {k // k ∈ variants.keys} → Held}
+      (h : ∀ k, Typed (.object (variants.get k)) (Ts k) (some .M))
+      (hone : ∀ k, (variants.get k).namesTags variants.ks.1 k.1) :
+      Typed (.dunion variants) (HVariants variants Ts) (some .M)
 
 inductive TypedList : List Term → List Held → Prop where
   | nil : TypedList [] []

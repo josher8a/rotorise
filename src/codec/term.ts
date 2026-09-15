@@ -175,7 +175,17 @@ export type Term =
     | { readonly kind: 'union'; readonly options: readonly Term[] }
     | {
           readonly kind: 'dunion'
-          readonly d: string
+          /**
+           * The discriminators. **The order carries no meaning**: a variant is chosen by the tag
+           * it carries at each of these, and the same dissection declared with the keys written
+           * the other way round is the same term. The model's key set is a `Finset` and says this
+           * by construction; an array is the host's spelling of it, and no reader may depend on
+           * the positions.
+           *
+           * Non-empty, because a `dunion` over no discriminator admits every value at the empty
+           * assignment. `discriminatedUnion` builds the one-key form.
+           */
+          readonly ks: readonly string[]
           readonly options: readonly Term[]
       }
     /**

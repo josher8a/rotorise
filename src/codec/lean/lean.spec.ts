@@ -54,7 +54,7 @@ import {
     tuple,
     union,
 } from '../codec'
-import { accepts } from '../denote'
+import { accepts, codecOfTerm } from '../denote'
 import type {
     ReadResolution,
     ReadVerdict,
@@ -346,8 +346,12 @@ describe('terms', () => {
                 ]),
             ),
         )
-        expect(emitted).toContain('Term.dunion "kind" ⟨{"a", "b"}, fun k =>')
-        expect(emitted).toContain('if k.1 = "a" then (Body.mk')
+        // the key is the variant's assignment, a function on the key set, and the key set is a
+        // `NEFinset` because `discriminatedUnion` is the one-key form
+        expect(emitted).toContain(
+            'Term.dunion ⟨NEFinset.of "kind" ∅, {(fun k => "a"), (fun k => "b")}',
+        )
+        expect(emitted).toContain('if k.1 = (fun k => "a") then (Body.mk')
         // the variants are `Body`s, so no `Term.object` wraps them
         expect(emitted).not.toContain('Term.object')
         expect(emitted.split('Body.mk')).toHaveLength(3)
@@ -785,6 +789,29 @@ export const sampleVectors: readonly Vector[] = [
         ),
         value: { p: 'x', q: true, r: '1' },
     },
+    // **a two-key `dunion`**, so the bridge elaborates a two-key `NEFinset` and the emitter's
+    // assignments reach Lean as functions. Built as a term: nothing in the public surface makes
+    // one yet
+    {
+        name: 'dunion_two_keys',
+        codec: codecOfTerm({
+            kind: 'dunion',
+            ks: ['kind', 'size'],
+            options: [
+                object({
+                    kind: string('pet'),
+                    size: string('small'),
+                    toy: string,
+                }).def,
+                object({
+                    kind: string('pet'),
+                    size: string('large'),
+                    pen: string,
+                }).def,
+            ],
+        }) as AnyCodec,
+        value: { kind: 'pet', size: 'small', toy: 'ball' },
+    },
     { name: 'opaque_map', codec: erase(opaque), value: { a: 'x' } },
     { name: 'lazy_string', codec: erase(lazy(() => string)), value: 'x' },
 ]
@@ -1079,10 +1106,10 @@ describe('union resolution, model against library', () => {
      * `set_of_literal`, and 248 by `literal_non_ascii` and the three products: each new entry
      * adds the resolutions of the unions it takes part in.
      */
-    it('offers 248 write pairs and 271 statable of 272 read pairs', () => {
-        expect(writeResolutions().length).toBe(248)
+    it('offers 256 write pairs and 279 statable of 280 read pairs', () => {
+        expect(writeResolutions().length).toBe(256)
         const reads = readResolutions()
-        expect(reads.length).toBe(272)
+        expect(reads.length).toBe(280)
         // one pair only, and it is the `Double` axiom reaching the decoded value; the five
         // map-valued reads beside it are stated through `vcheck` now
         expect(
@@ -1142,9 +1169,9 @@ describe("the read side, against the model's read row", () => {
      * description of one thing, and this differential is the guard that a second description
      * would have needed anyway.
      */
-    it('offers 1184 pairs, three of them stuck on the `Double` axiom', () => {
+    it('offers 1254 pairs, three of them stuck on the `Double` axiom', () => {
         const verdicts = readVerdicts()
-        expect(verdicts.length).toBe(1184)
+        expect(verdicts.length).toBe(1254)
         const stuck = verdicts.filter(readRowIsStuck)
         expect(stuck.map((one) => one.name)).toEqual([
             'scalar_number__reads__scalar_decimal',
@@ -1170,7 +1197,7 @@ describe("the read side, against the model's read row", () => {
 
 describe("the declaration guard, against the model's classifier", () => {
     /**
-     * **`src/` refuses seventy-two pairs, and each one carries a warrant.** That is the whole
+     * **`src/` refuses seventy-three pairs, and each one carries a warrant.** That is the whole
      * law, and it is one-directional on purpose: `Orth` is sufficient and not necessary, so a
      * pair it declines may still be separable. What would be a defect is `src/` refusing a
      * declaration the model *proves* works — which is what it did to
@@ -1203,14 +1230,14 @@ describe("the declaration guard, against the model's classifier", () => {
      * law was untouched either way, and what moved is that a union no value can resolve is now
      * refused where it used to be declared. JH's ruling, landed in `ff75c6b`.
      *
-     * **The count pins a fact no law has, deliberately.** That it is seventy-two is a property of
+     * **The count pins a fact no law has, deliberately.** That it is seventy-three is a property of
      * this corpus, so widening the corpus is meant to fail here and be looked at; the *law* is
      * the loop below, that every refusal the model also declines. Both are kept, and the number
      * stays.
      */
     it('refuses only pairs the classifier also declines', () => {
         const separations = separationPairs()
-        expect(separations.length).toBe(72)
+        expect(separations.length).toBe(73)
         // each one emits, which is where `leanSeparation` re-checks that `src/` really refuses,
         // and it carries one of the two warrants: `Orth` declines, or (D) fails against `never`
         for (const one of separations) {
@@ -1301,7 +1328,7 @@ describe("the read side of every corpus codec, against the model's `p`", () => {
             (one) => readVectorIsUnstatable(one) === undefined,
         )
         expect(statable.length).toBe(sampleVectors.length)
-        expect(statable.length).toBe(31)
+        expect(statable.length).toBe(32)
         // each asserts the model's `p`, through the comparator that crosses `Value.map`'s binder
         for (const one of statable) {
             const vector = leanReadVector(one)

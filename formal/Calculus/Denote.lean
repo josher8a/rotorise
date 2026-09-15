@@ -69,6 +69,21 @@ def tagsOf (d : Name) : Term → Finset String
   | .object b => b.tags d
   | _ => ∅
 
+/-- **Whether a body names exactly this tag tuple**, one tag per discriminator, in order.
+
+    The per-key clause is `b.tags k = {asg k}`, which is the equation `hone` carried before the
+    assignment: arity one and agreement in one statement. An assignment is the same fact once per
+    key, quantified over the key set, so there is no order to match and nothing to keep in step.
+
+    A predicate and not an extraction. Reading the element out of a singleton `Finset` needs
+    `Finset.min'`, which is not in scope here, or a choice principle, and neither buys anything:
+    every proof over this inverts the singleton equation, which is what it already did.
+
+    Built on {@link Body.tags} rather than replacing it. The per-discriminator set is the fact
+    this reads, and `tagsOf` keeps its own callers in `Discharge` and `LiteralArity1`. -/
+def Body.namesTags (b : Body) (ks : Finset Name) (asg : Assignment ks) : Prop :=
+  ∀ k : {k // k ∈ ks}, b.tags k.1 = {asg k}
+
 /-! ### Where ~~literalMember~~ went
 
 `(literal)`'s member is its base's — `literalCodec` and `GroundKind.member` agree case for case,
@@ -104,7 +119,7 @@ def μSyn : Term → Option Member
   | .opaq _ => none
   | .object _ => some .M
   | .union opts => unanimous (μSynList opts)
-  | .dunion _ _ => some .M
+  | .dunion _ => some .M
   -- the bottom writes no value, so there is no member it stores
   | .never => none
 
@@ -173,7 +188,7 @@ def denote : Term → Codec
   | .union opts => altCodec (optionSems opts) (unanimous (denoteμs opts))
   -- **the lookup, not a filtered sum.** The variants are a table keyed by tag, so the codec
   -- reads the tag and indexes; ~~denoteTagged~~ and its list are gone with the sum.
-  | .dunion d variants => dunionTable d ⟨variants.1, fun k => bodySem (variants.2 k)⟩
+  | .dunion variants => dunionTable ⟨variants.ks, variants.keys, fun k => bodySem (variants.get k)⟩
   -- §2's degenerate codec is the bottom exactly: empty domains, and the laws hold vacuously
   | .never => Codec.empty
 
@@ -243,7 +258,7 @@ theorem denote_μ : ∀ t : Term, (denote t).μ = μSyn t
   | .union opts => by
       show unanimous (denoteμs opts) = unanimous (μSynList opts)
       rw [denoteμs_eq opts]
-  | .dunion _ _ => rfl
+  | .dunion _ => rfl
 
 /-- The union options' members, per option. ~~μSynList_eq~~ under its old name was the same fact
     with a fuel index and a `termination_by`; both are gone. -/
@@ -305,9 +320,9 @@ theorem denote_union_sems (opts : List Term) :
       altCodec (optionSems opts) (unanimous (denoteμs opts)) := rfl
 
 /-- `discriminatedUnion` denotes the lookup, over the variants' own codecs. -/
-theorem denote_dunion_tags (d : Name) (variants : MapOf Body) :
-    denote (.dunion d variants)
-      = dunionTable d ⟨variants.1, fun k => bodySem (variants.2 k)⟩ := rfl
+theorem denote_dunion_tags (variants : TagMap Body) :
+    denote (.dunion variants)
+      = dunionTable ⟨variants.ks, variants.keys, fun k => bodySem (variants.get k)⟩ := rfl
 
 /-- `opaque` denotes `opaqCodecω` — the fuel-free one, which is why §5's discharger table has
     a row about `opaqCodec` at a fuel and a reason rather than a term-level twin. -/

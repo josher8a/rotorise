@@ -71,11 +71,11 @@ theorem MapOf.ext {α : Type} {p q : MapOf α} (hk : p.1 = q.1)
 /-- The value a `MapOf` gives a name, where it gives one — the lookup a key set with a
     function on it has. Generic because the *term*'s field table needs it too. -/
 def MapOf.at {α : Type} (m : MapOf α) (k : Name) : Option α :=
-  if h : k ∈ m.1 then some (m.2 ⟨k, h⟩) else none
+  if h : k ∈ m.keys then some (m.get ⟨k, h⟩) else none
 
 /-- A declared name is one the table's key set carries, and conversely. -/
 theorem MapOf.at_eq_some {α : Type} {m : MapOf α} {k : Name} {x : α} :
-    m.at k = some x ↔ ∃ h : k ∈ m.1, m.2 ⟨k, h⟩ = x := by
+    m.at k = some x ↔ ∃ h : k ∈ m.keys, m.get ⟨k, h⟩ = x := by
   simp only [MapOf.at]
   by_cases h : k ∈ m.1
   · rw [dif_pos h]
@@ -355,6 +355,58 @@ deriving DecidableEq, Repr
     `{S : Finset α // S.Nonempty}` is admissible in a constructor, so the claim that only
     a gate could enforce this was a claim worth testing. -/
 abbrev NEFinset (α : Type) := {S : Finset α // S.Nonempty}
+
+/-- **A member's assignment**: one tag per key, as a finite function on the key set.
+
+    The concept has no order on the keys, so neither does this. A list of pairs would be order
+    free only by a convention to keep it sorted, and that convention is an encoding living in the
+    term: two products differing only in factor order would build two lists for one dissection. -/
+abbrev Assignment (ks : Finset Name) := {k // k ∈ ks} → String
+
+/-- Equality of assignments, decided by `∀ k ∈ ks` rather than by mathlib's pi instance.
+
+    The type is the same either way and the decision procedure is not: mathlib's instance reaches
+    the decidable-pi instance over a fintype, which `scripts/classical_gateways.txt` does not
+    carry; this reaches `Finset.decidableDforallFinset`, which it does. That is a fact about
+    instance selection rather than about the model, and no reading of the type finds it. -/
+instance asgEq (ks : Finset Name) : DecidableEq (Assignment ks) := fun f g =>
+  decidable_of_iff (∀ k (h : k ∈ ks), f ⟨k, h⟩ = g ⟨k, h⟩)
+    ⟨fun h => funext fun ⟨k, hk⟩ => h k hk, fun h k hk => congrFun h ⟨k, hk⟩⟩
+
+/-- A table of members keyed by their assignments, over one key set.
+
+    A member table is not a name table and nothing reads one as the other, so the two structures
+    share no fact that a drift could break. Generalising `MapOf` over its key costs 88 sites across
+    17 files, `Frontier.lean` among them, which is where a new classical gateway would appear. A
+    third key type is the point at which the parameter pays for itself.
+
+    **The key set is a field and not a parameter**, which is what lets this nest inside `Term`.
+    A nested inductive's parameters may not contain local variables, so `TagMap ks.1 Body` with
+    `ks` bound by the constructor is refused by the kernel. Holding the key set makes the
+    structure what the concept already says it is: a set of keys and a set of members over it.
+
+    A structure and never a dependent pair, for the reason `MapOf` is one: positivity inside
+    `Term`. -/
+structure TagMap (α : Type) where
+  ks   : NEFinset Name
+  keys : Finset (Assignment ks.1)
+  get  : {k // k ∈ keys} → α
+
+/-- The member an assignment reaches, where it reaches one. -/
+def TagMap.at {α : Type} (m : TagMap α) (k : Assignment m.ks.1) : Option α :=
+  if h : k ∈ m.keys then some (m.get ⟨k, h⟩) else none
+
+/-- An assignment reaches a member exactly when the key set carries it. -/
+theorem TagMap.at_eq_some {α : Type} {m : TagMap α} {k : Assignment m.ks.1} {x : α} :
+    m.at k = some x ↔ ∃ h : k ∈ m.keys, m.get ⟨k, h⟩ = x := by
+  simp only [TagMap.at]
+  split <;> simp_all
+
+/-- …and a key of the set reaches the member the table gives it. -/
+theorem TagMap.at_of_mem {α : Type} {m : TagMap α} (k : {k // k ∈ m.keys}) :
+    m.at k.1 = some (m.get k) := by
+  simp only [TagMap.at, dif_pos k.2]
+
 
 /-! **Do not reach for an order on these.** A wire set read back as a *list* would need a
 canonical representative, hence a sort, hence an order — and `LinearOrder String` and

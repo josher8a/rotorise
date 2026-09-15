@@ -252,3 +252,21 @@ export const readTag = (
     }
     return attribute[member] as string
 }
+
+/**
+ * The assignment a stored item carries: one tag per discriminator.
+ *
+ * A record and not a tuple, because the keys have no order — see `Term`'s `dunion` row.
+ */
+export const readTags = (
+    item: StoredItem,
+    ks: readonly string[],
+): Result<Readonly<Record<string, string>>> => {
+    const out: Record<string, string> = {}
+    for (const name of ks) {
+        const one = readTag(item, name)
+        if (failed(one)) return one
+        out[name] = one
+    }
+    return out
+}
