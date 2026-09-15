@@ -184,11 +184,11 @@ theorem carrier_setBase : ∀ b : SetBase, Carrier b.elem
     *agreed* with a restriction. It now **is** the restriction, so `carrier_restrict` supplies
     everything and all that remains is the held set being no smaller than the restriction's,
     which is `hLit_of_inL`. -/
-theorem carrier_literalCodec (k : GroundKind) (ls : NEFinset k.Carrier) :
-    Carrier (literalCodec k ls) :=
-  Carrier.congr (d := (baseCodec k).restrict (inL k ls)) rfl rfl
-    (fun _ hv => hLit_of_inL k ls _ hv.2)
-    (carrier_restrict (carrier_baseCodec k) (inL k ls))
+theorem carrier_literalCodec (k : GroundKind) (x : k.Carrier) :
+    Carrier (literalCodec k x) :=
+  Carrier.congr (d := (baseCodec k).restrict (inL k x)) rfl rfl
+    (fun _ hv => hLit_of_inL k x _ hv.2)
+    (carrier_restrict (carrier_baseCodec k) (inL k x))
 
 /-- `legacy`: the migration lands in `T` because §3's `ran(r) ⊆ dom(e)` puts it in
     `dom(e)`, and `e`'s domain is `T`. The doc writes `r : 𝔸 ⇀ T` directly; this is the

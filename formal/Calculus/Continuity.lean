@@ -50,7 +50,7 @@ theorem Codec.Approx.empty_le (c : Codec) : Codec.Approx Codec.empty c := by
 of definedness. -/
 
 /-- The stable option: `literal("A")`, which admits `"A"` at every stage. -/
-noncomputable def optLit : OptionSem := .byAttempt (literalCodec .string (.of "A" ∅))
+noncomputable def optLit : OptionSem := .byAttempt (literalCodec .string "A")
 
 /-- The growing option, before unfolding: undefined everywhere. -/
 def optBot : OptionSem := .byAttempt Codec.empty
@@ -71,7 +71,7 @@ theorem altCodec_not_monotone :
     ∧ (altCodec [optLit, optStr] (some .S)).e (.str "A") = none := by
   refine ⟨optBot_approx_optStr, ?_, ?_⟩ <;>
     simp [altCodec, select, optLit, optBot, optStr, OptionSem.byAttempt,
-          literalCodec, baseCodec, Codec.restrict, inL, stringCodec, Codec.empty, NEFinset.of]
+          literalCodec, baseCodec, Codec.restrict, inL, stringCodec, Codec.empty]
 
 /-! ## The same defect through a staged denotation
 
@@ -101,7 +101,7 @@ noncomputable def stage : Nat → Term → Codec
 /-- §4's `union(literal("A"), string)`, with the `string` option behind a `lazy` so it
     arrives one stage later than the literal. -/
 def tWitness : Term :=
-  .union [.literal .string (.of "A" ∅), .lazy .string]
+  .union [.literal .string "A", .lazy .string]
 
 /-- **The stages are not a chain.** Stage `2` encodes `"A"`; stage `3` encodes nothing. So
     `⨆ n, stage n t` is not a definition either, and the low-stage answer is *over*-defined —
@@ -111,7 +111,7 @@ theorem stage_not_monotone :
     ∧ (stage 3 tWitness).e (.str "A") = none := by
   constructor <;>
     simp [stage, tWitness, specOf, optionSemOf, altCodec, select, OptionSem.byAttempt,
-          literalCodec, baseCodec, Codec.restrict, inL, stringCodec, Codec.empty, NEFinset.of]
+          literalCodec, baseCodec, Codec.restrict, inL, stringCodec, Codec.empty]
 
 /-- At stage `3` the union is simply the ill-formed one §4 refuted, and `none` is correct;
     stage `2` hid that by not looking. The defect is not a wrong answer at stage `3` — it is
@@ -187,7 +187,7 @@ theorem selectF_skip {o : OptionSem} {os : List OptionSem} {v : Value}
 theorem confluent_survives_the_refutation :
     optLit.c.e (.str "A") = optStr.c.e (.str "A") := by
   simp [optLit, optStr, OptionSem.byAttempt, literalCodec, baseCodec, Codec.restrict, inL,
-        stringCodec, NEFinset.of]
+        stringCodec]
 
 /-! ### The obligation is not free, and a new witness is needed -/
 
@@ -211,7 +211,7 @@ theorem selectF_not_monotone :
     ∧ selectF [optBad, optLit] (.str "A") = some (.s "B") := by
   constructor <;>
     simp [selectF, optBot, optBad, optLit, OptionSem.byAttempt, cBad, ceBad, Codec.empty,
-          literalCodec, baseCodec, Codec.restrict, inL, stringCodec, NEFinset.of]
+          literalCodec, baseCodec, Codec.restrict, inL, stringCodec]
 
 /-- …and the obligation is exactly what that violates. -/
 theorem optBad_not_confluent : ¬ ConfluentAt [optBad, optLit] (.str "A") := by
@@ -219,9 +219,9 @@ theorem optBad_not_confluent : ¬ ConfluentAt [optBad, optLit] (.str "A") := by
   have := h optBad (by simp) optLit (by simp)
     (by simp [optBad, OptionSem.byAttempt, cBad, ceBad])
     (by simp [optLit, OptionSem.byAttempt, literalCodec, baseCodec, Codec.restrict, inL,
-              stringCodec, NEFinset.of])
+              stringCodec])
   simp [optBad, optLit, OptionSem.byAttempt, cBad, ceBad, literalCodec, baseCodec,
-        Codec.restrict, inL, stringCodec, NEFinset.of] at this
+        Codec.restrict, inL, stringCodec] at this
 
 /-- **Nor is the obligation automatic at ground terms.** `string` and `decimal` both take the
     value `.str "1.5"` and store it *differently*. Neither is an escape hatch. So confluence has

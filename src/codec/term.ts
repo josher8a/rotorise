@@ -18,6 +18,7 @@
 import type { AttributeName, AttributeValue } from './attribute'
 import type {
     LiteralBase,
+    LiteralValue,
     Refinement,
     Result,
     Rng,
@@ -38,41 +39,71 @@ import type {
 export type NonEmpty<T> = readonly [T, ...T[]]
 
 /**
- * §3 `(literal)`: a ground base, and a nonempty set of that base's alternatives.
+ * §3 `(literal)`: a ground base, and **one** inhabitant of that base's carrier.
  *
  * **Five variants rather than one with a `base` field**, and that is the whole content. One
- * variant with `base: LiteralBase` beside `ls: readonly LiteralValue[]` admits
- * `{ base: 'decimal', ls: [1, 2] }` — a decimal literal whose alternatives are numbers, which
- * nothing can encode. The model has no such term: `ls` is a `NEFinset k.Carrier`, so the base
- * *indexes* the alternatives. This is that indexing, in the one form TypeScript has for it.
+ * variant with `base: LiteralBase` beside `v: LiteralValue` admits
+ * `{ base: 'decimal', v: 1 }` — a decimal literal whose value is a number, which nothing can
+ * encode. The model has no such term: `v` is a `k.Carrier`, so the base *indexes* the value. This
+ * is that indexing, in the one form TypeScript has for it.
  *
  * `decimal` carries text, which is the reason the base is recorded at all: a decimal literal's
- * alternatives are strings and it stores `N`, so neither the member nor the JS type of the values
- * recovers the base.
+ * value is a string and it stores `N`, so neither the member nor the JS type of the value recovers
+ * the base.
+ *
+ * **One value, and several values are a `union`.** `string('a', 'b')` builds
+ * `union([string('a'), string('b')])`, whose members are separated because the values differ. The
+ * builder stays because the union form costs the type checker linearly in the number of
+ * alternatives where this form is flat; {@link Alternatives} is what a reader gets back from
+ * either shape.
  */
 export type Literal =
+    | { readonly kind: 'literal'; readonly base: 'string'; readonly v: string }
+    | { readonly kind: 'literal'; readonly base: 'decimal'; readonly v: string }
+    | { readonly kind: 'literal'; readonly base: 'number'; readonly v: number }
     | {
           readonly kind: 'literal'
+          readonly base: 'boolean'
+          readonly v: boolean
+      }
+    | {
+          readonly kind: 'literal'
+          readonly base: 'binary'
+          readonly v: Uint8Array
+      }
+
+/**
+ * A base and a nonempty set of that base's values — what a reader gets back from a literal or from
+ * a union of literals at one base.
+ *
+ * This is what {@link Literal} was before a literal carried one value, and it survives for the two
+ * places the model keeps a set of alternatives too: `Pred.members`, which is a refinement
+ * predicate over a `NEFinset`, and the answer {@link literalsOf} gives for a declared name. The
+ * model's split is the same one, `inL` against `inLs`.
+ */
+export type Alternatives =
+    | {
+          readonly kind: 'alternatives'
           readonly base: 'string'
           readonly ls: NonEmpty<string>
       }
     | {
-          readonly kind: 'literal'
+          readonly kind: 'alternatives'
           readonly base: 'decimal'
           readonly ls: NonEmpty<string>
       }
     | {
-          readonly kind: 'literal'
+          readonly kind: 'alternatives'
           readonly base: 'number'
           readonly ls: NonEmpty<number>
       }
     | {
-          readonly kind: 'literal'
+          readonly kind: 'alternatives'
           readonly base: 'boolean'
           readonly ls: NonEmpty<boolean>
       }
     | {
-          readonly kind: 'literal'
+          readonly kind: 'alternatives'
           readonly base: 'binary'
           readonly ls: NonEmpty<Uint8Array>
       }
@@ -95,7 +126,7 @@ export type Literal =
  * no declaration reads and no `Term` prints.
  */
 export type Predicate =
-    | { readonly kind: 'members'; readonly literal: Literal }
+    | { readonly kind: 'members'; readonly literal: Alternatives }
     | { readonly kind: 'each'; readonly of: Predicate }
     | { readonly kind: 'closure'; readonly q: Refinement }
 
@@ -521,7 +552,7 @@ export const specOf = (
  */
 export type NameLiteral = {
     readonly required: boolean
-    readonly alts: Literal
+    readonly alts: Alternatives
 }
 
 /**
@@ -554,12 +585,74 @@ export const literalsOf = (
  * value inside it that the refinement rejects is the option's own error to report. `setBaseOf`
  * reads through `refine` for the same reason.
  */
-const pinnedLiteral = (t: Term): Literal | undefined =>
+const pinnedLiteral = (t: Term): Alternatives | undefined =>
+    t.kind === 'refine' ? pinnedLiteral(t.inner) : literalAlternatives(t)
+
+/**
+ * **The alternatives a term pins, without reading through a refinement.**
+ *
+ * One literal pins its own value; a union of literals at one base pins theirs, which is what
+ * `string('a', 'b')` builds. Everything else pins nothing.
+ *
+ * Separate from {@link pinnedLiteral} because a tag is written and a refinement is not: a reader
+ * that must produce the value the codec writes cannot look through a predicate that narrows it.
+ */
+export const literalAlternatives = (t: Term): Alternatives | undefined =>
     t.kind === 'literal'
-        ? t
-        : t.kind === 'refine'
-          ? pinnedLiteral(t.inner)
+        ? oneAlternative(t)
+        : t.kind === 'union'
+          ? unionAlternatives(t.options)
           : undefined
+
+/** One literal, as the one-alternative set it pins. */
+const oneAlternative = (t: Literal): Alternatives =>
+    ({ kind: 'alternatives', base: t.base, ls: [t.v] }) as Alternatives
+
+/**
+ * …and back: the term a set of alternatives denotes, which is one literal or a union of them.
+ *
+ * The inverse of {@link pinnedLiteral} at a literal or a union of literals, and it is what a
+ * reader holding alternatives uses to build the codec that decides them. `refine` has no inverse
+ * here and needs none: a refinement narrows what the alternatives already bound.
+ */
+export const alternativesTerm = (a: Alternatives): Term => {
+    const [first, ...rest] = a.ls
+    const one = (value: LiteralValue): Term =>
+        ({ kind: 'literal', base: a.base, v: value }) as Term
+    return rest.length === 0
+        ? one(first)
+        : { kind: 'union', options: [one(first), ...rest.map(one)] }
+}
+
+/**
+ * A union of literals at one base, as the alternatives it pins.
+ *
+ * `string('a', 'b')` builds this union, so a reader that stopped at `kind === 'literal'` would see
+ * a field pinned to nothing and every gate over it would answer as if the name were free. That is
+ * not a fast path over a correct answer: without this the declaration gate refuses every
+ * dissection the builder makes, measured.
+ *
+ * One option that is not a literal, or two at different bases, pins nothing — a union of
+ * `string('a')` and `decimal('a')` is told apart by the member and not by the value, and no single
+ * base describes it.
+ */
+const unionAlternatives = (
+    options: readonly Term[],
+): Alternatives | undefined => {
+    const first = options[0]
+    if (first === undefined || first.kind !== 'literal') return undefined
+    const ls: LiteralValue[] = [first.v]
+    for (const option of options.slice(1)) {
+        if (option.kind !== 'literal' || option.base !== first.base)
+            return undefined
+        ls.push(option.v)
+    }
+    return {
+        kind: 'alternatives',
+        base: first.base,
+        ls,
+    } as unknown as Alternatives
+}
 
 /**
  * The tags an object option answers to on discriminator `d` — empty for everything else.
@@ -574,8 +667,9 @@ export const tagsOf = (d: string, t: Term): readonly string[] => {
     if (t.kind !== 'object') return []
     const field = t.body.fields[d]
     if (field === undefined || field.mark !== 'req') return []
-    const inner = field.t
-    return inner.kind === 'literal' && inner.base === 'string' ? inner.ls : []
+    // a union of string literals is what `string('a', 'b')` builds, and it names those tags
+    const alts = literalAlternatives(field.t)
+    return alts?.base === 'string' ? alts.ls : []
 }
 
 /* ── the declaration guard ────────────────────────────────────────────────────────────── */
@@ -660,6 +754,11 @@ export const identifies = (t: Term): boolean => {
  * `union([string('A'), string('B')])` is two options neither of which contains the other, and
  * `Orth` certifies it since `OrthL`. So this row asks containment, never disjointness.
  *
+ * **A union of literals at one base is a restriction of that base**, and reading only the
+ * `literal` constructor here would miss it: `string('A', 'B')` builds that union, so the pair
+ * `union([string, string('A', 'B')])` would declare and then fail at the first value both admit.
+ * Measured — it cost three corpus pairs before this row read the union.
+ *
  * The type level says the same thing already — `Overlaps` fires on a subtype either way round —
  * so a typed caller never reaches this. What reaches it is a cast, a JavaScript caller, or an
  * erased path. This is the runtime agreeing with the type rather than a new refusal.
@@ -667,8 +766,10 @@ export const identifies = (t: Term): boolean => {
 export const restricts = (x: Term, y: Term): boolean => {
     // the empty set is contained in every set, which is `opaque`'s rule at the opposite width
     if (x.kind === 'never') return true
-    // a literal is a refinement of its base: every value it admits, the base admits
-    if (x.kind === 'literal' && y.kind === x.base) return true
+    // a literal, or a union of literals at one base, is a refinement of that base: every value
+    // it admits, the base admits
+    const alts = literalAlternatives(x)
+    if (alts && y.kind === alts.base) return true
     // …and a set of a literal is a restriction of the plain set at that base
     return (
         x.kind === 'refine' &&
@@ -704,7 +805,7 @@ const namesMeet = (x: Body, y: Body): boolean => {
  * different attribute members, so they never meet on the stored side — but they meet on the value
  * side, where both are the text `'a'`, and a pair separated on one side only is not separated.
  */
-const altsApart = (x: Literal, y: Literal): boolean =>
+const altsApart = (x: Alternatives, y: Alternatives): boolean =>
     x.base === y.base &&
     !(x.ls as readonly unknown[]).some((one) =>
         (y.ls as readonly unknown[]).some((other) =>
@@ -867,6 +968,14 @@ export const setBaseOf = (t: Term): SetBase | undefined => {
             return t.base === 'boolean' ? undefined : t.base
         case 'refine':
             return setBaseOf(t.inner)
+        // `string.set('a', 'b')` puts a union of literals at the element, and a union of literals
+        // at one base is that base narrowed — the same reading a single literal gets
+        case 'union': {
+            const alts = literalAlternatives(t)
+            return alts === undefined || alts.base === 'boolean'
+                ? undefined
+                : alts.base
+        }
         default:
             return undefined
     }
@@ -885,7 +994,14 @@ export const setBaseOf = (t: Term): SetBase | undefined => {
 export const elementPredicates = (elem: Term): readonly Predicate[] => {
     switch (elem.kind) {
         case 'literal':
-            return [{ kind: 'members', literal: elem }]
+            return [{ kind: 'members', literal: oneAlternative(elem) }]
+        // `string.set('a', 'b')` puts a union of literals at the element, and the model's
+        // `Pred.members` carries a `NEFinset` — so the set is where the alternatives come back
+        // together. A union of anything else restricts by nothing this can name.
+        case 'union': {
+            const alts = unionAlternatives(elem.options)
+            return alts ? [{ kind: 'members', literal: alts }] : []
+        }
         case 'refine':
             return [elem.q, ...elementPredicates(elem.inner)]
         default:

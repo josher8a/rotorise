@@ -322,7 +322,11 @@ def OrthM (x y : Term) : Bool :=
     `∀ x ∈ ls.1, x ∉ ls'.1` and not `ls.1 ∩ ls'.1 = ∅`, because the intersection needs
     `DecidableEq` on the `Finset` and membership needs it only on the element. That matters
     here: mathlib's `DecidableEq (Finset α)` reaches `Classical.choice`, and `Orth` is a
-    `by decide`. -/
+    `by decide`.
+
+    **A literal has no set and this is not its test.** `Pred.members` is the remaining set of
+    alternatives: a refinement predicate is data over a `Finset`, so the `set` rows below still
+    compare two sets. A literal carries one value, and its rows compare two values. -/
 def disjAlts {α : Type} [DecidableEq α] (ls ls' : NEFinset α) : Bool :=
   decide (∀ x ∈ ls.1, x ∉ ls'.1)
 
@@ -339,9 +343,9 @@ theorem disjAlts_sound {α : Type} [DecidableEq α] {ls ls' : NEFinset α}
     field of the axiomatized `numericHost`. One uniform row would make this `noncomputable`
     and would stop `Orth` reducing at every pair, numeric or not.
 
-    So `number` declines, and `null` declines. Both answers are `false`, and only the first is
-    a concession: `NEFinset Unit` has one inhabitant, so two null literals never have disjoint
-    held sets and `false` is what a complete test would answer.
+    So `number` declines, and its answer is `false`. `null` no longer needs a row of its own:
+    `Unit` has one inhabitant, so `decide (x ≠ y)` computes `false` there, which is what a
+    complete test answers. The concession the old row carried is gone rather than restated.
 
     The match is on the two terms and not on a subterm, which is why
     `not_orth_array_literals` still answers `false`. A container admits its empty case
@@ -353,14 +357,13 @@ theorem disjAlts_sound {α : Type} [DecidableEq α] {ls ls' : NEFinset α}
     attribute, so two bases decode one attribute to two values and the disjointness argument
     has nothing to compare. The write side would hold without it. -/
 def OrthL : Term → Term → Bool
-  | .literal .string ls,  .literal .string ls'  => disjAlts ls ls'
-  | .literal .decimal ls, .literal .decimal ls' => disjAlts ls ls'
-  | .literal .boolean ls, .literal .boolean ls' => disjAlts ls ls'
-  | .literal .binary ls,  .literal .binary ls'  => disjAlts ls ls'
+  | .literal .string x,  .literal .string y  => decide (x ≠ y)
+  | .literal .decimal x, .literal .decimal y => decide (x ≠ y)
+  | .literal .boolean x, .literal .boolean y => decide (x ≠ y)
+  | .literal .binary x,  .literal .binary y  => decide (x ≠ y)
+  | .literal .null x,    .literal .null y    => decide (x ≠ y)
   -- `WFDouble`'s equality is a field of `numericHost`; see the docstring above
   | .literal .number _,   .literal .number _    => false
-  -- two null literals hold the same one alternative
-  | .literal .null _,     .literal .null _      => false
   -- `set(literal k ls)`, in the spelling `set` taking a base forces on it
   | .refine (.set b) (.each (.members .string ls)),
     .refine (.set b') (.each (.members .string ls'))  => decide (b = b') && disjAlts ls ls'
@@ -373,30 +376,31 @@ def OrthL : Term → Term → Bool
   -- such a term admits nothing and there is no pair to certify.
   | _, _ => false
 
-/-- Two literal payloads at one base with nothing in common. `OrthL` asks this of two terms;
+/-- Two literal payloads at one base that are different values. `OrthL` asks this of two terms;
     this asks it of the two payloads a pair of specs pins one name to.
 
     Four bases and not six, and the rows are the bases for the reason `OrthL` gives: a uniform
-    row would be `noncomputable` at `number` and would stop `Orth` reducing at every pair. -/
+    row would be `noncomputable` at `number` and would stop `Orth` reducing at every pair.
+    `null` has no row because two null literals carry the one inhabitant of `Unit`. -/
 def altsDisj : Option Alts → Option Alts → Bool
-  | some ⟨.string, ls⟩,  some ⟨.string, ls'⟩  => disjAlts ls ls'
-  | some ⟨.decimal, ls⟩, some ⟨.decimal, ls'⟩ => disjAlts ls ls'
-  | some ⟨.boolean, ls⟩, some ⟨.boolean, ls'⟩ => disjAlts ls ls'
-  | some ⟨.binary, ls⟩,  some ⟨.binary, ls'⟩  => disjAlts ls ls'
+  | some ⟨.string, x⟩,  some ⟨.string, y⟩  => decide (x ≠ y)
+  | some ⟨.decimal, x⟩, some ⟨.decimal, y⟩ => decide (x ≠ y)
+  | some ⟨.boolean, x⟩, some ⟨.boolean, y⟩ => decide (x ≠ y)
+  | some ⟨.binary, x⟩,  some ⟨.binary, y⟩  => decide (x ≠ y)
   | _, _ => false
 
 /-- One name that both specs declare, both **require**, and pin to disjoint alternatives.
 
     `required` on both sides is a rule and not a precaution. Two objects sharing an *optional*
-    literal name with disjoint alternatives both admit the map that omits the name, so a
+    literal name pinned to different values both admit the map that omits the name, so a
     req-blind test would certify a pair `select` cannot resolve. -/
 def litDisjAt (sx sy : MapOf NameSpec) (k : Name) : Bool :=
   match sx.at k, sy.at k with
   | some nx, some ny => nx.required && ny.required && altsDisj nx.alts ny.alts
   | _, _ => false
 
-/-- **Phase *literals*.** Two object options that pin one shared required name to alternatives
-    with nothing in common.
+/-- **Phase *literals*.** Two object options that pin one shared required name to different
+    values.
 
     *The tag rule is about what a key can carry; the meet is about what a value can satisfy.*
 
@@ -629,10 +633,10 @@ theorem occA_admitOpt {t : Term} (h : OccSoundA t) (a : Attr)
     it *asks its codec* — `AdmALit .decimal ls a = ((literalCodec .decimal ls).p a).isSome`.
     So the member comes from (W) on the read side instead: `Lawful.reads` says a
     member-naming codec accepts no other member, and `literalCodec_μ` names it. -/
-theorem admALit_decimal_member {ls : NEFinset GroundKind.decimal.Carrier} {a : Attr}
-    (h : AdmALit .decimal ls a = true) : a.member = .N := by
+theorem admALit_decimal_member {y : GroundKind.decimal.Carrier} {a : Attr}
+    (h : AdmALit .decimal y a = true) : a.member = .N := by
   obtain ⟨v, hp⟩ := Option.isSome_iff_exists.mp (by simpa [AdmALit] using h)
-  exact (lawful_literalCodec .decimal ls).reads (literalCodec_μ .decimal ls) hp
+  exact (lawful_literalCodec .decimal y).reads (literalCodec_μ .decimal y) hp
 
 mutual
 
@@ -777,31 +781,30 @@ def Separates (x y : Term) : Prop :=
 
 /-! ## Phase *alternatives*
 
-Two literals at one base with disjoint held sets. The `Prop` below is uniform in the base and
+Two literals at one base pinned to different values. The `Prop` below is uniform in the base and
 `OrthL` decides it at four of the six, for the reason the file header gives. It is the
 generalization of the hand instances at one base: `uAtCan_of_literalN_disjoint` in
 `Discharge.lean` is one of them, and is now the caller that supplies the premise where `OrthL`
 declines. Its siblings at the string base went with the per-aspect layer, this phase being
 what reaches them. -/
 
-/-- Disjoint held sets make `inL` disjoint, at every base. Two bases are not the pattern
-    match:
+/-- Different values make `inL` disjoint, at every base. Two bases are not the pattern match:
 
     * `null` — `inL .null _ .null` is `true` unconditionally, so two null literals are never
-      disjoint. The premise is what rules it out, *vacuously*: `NEFinset Unit` has exactly one
-      inhabitant, so `ls` and `ls'` both contain `()` and `hd` is uninhabited. The rule needs
-      no `k ≠ .null` side condition.
-    * `decimal` — membership goes *through* the `Numeral.Stored` gate rather than round it, so
-      the proof is a `split` on the `dite` rather than a rewrite. `by_cases` would reach
+      disjoint. The premise is what rules it out, *vacuously*: `Unit` has exactly one
+      inhabitant, so `x ≠ y` is uninhabited there. The rule needs no `k ≠ .null` side
+      condition.
+    * `decimal` — the comparison goes *through* the `Numeral.Stored` gate rather than round it,
+      so the proof is a `split` on the `dite` rather than a rewrite. `by_cases` would reach
       `Classical.em`; `split` does not. -/
-theorem inL_disjoint {k : GroundKind} {ls ls' : NEFinset k.Carrier}
-    (hd : ∀ x ∈ ls.1, x ∉ ls'.1) (v : Value) (h : inL k ls v = true) : inL k ls' v = false := by
+theorem inL_disjoint {k : GroundKind} {x y : k.Carrier}
+    (hd : x ≠ y) (v : Value) (h : inL k x v = true) : inL k y v = false := by
   cases k with
   | string =>
     cases v with
     | str s =>
-      replace h : decide (s ∈ ls.1) = true := h
-      exact decide_eq_false (hd s (of_decide_eq_true h))
+      replace h : decide (s = x) = true := h
+      exact decide_eq_false (of_decide_eq_true h ▸ hd)
     | _ => rfl
   | number =>
     cases v with
@@ -812,52 +815,49 @@ theorem inL_disjoint {k : GroundKind} {ls ls' : NEFinset k.Carrier}
       | true =>
         simp only [inL, hw, dite_true, decide_eq_true_eq] at h
         simp only [inL, hw, dite_true]
-        exact decide_eq_false (hd ⟨d, hw⟩ h)
+        exact decide_eq_false (h ▸ hd)
     | _ => rfl
   | boolean =>
     cases v with
     | bool b =>
-      replace h : decide (b ∈ ls.1) = true := h
-      exact decide_eq_false (hd b (of_decide_eq_true h))
+      replace h : decide (b = x) = true := h
+      exact decide_eq_false (of_decide_eq_true h ▸ hd)
     | _ => rfl
   | binary =>
     cases v with
     | bin b =>
-      replace h : decide (b ∈ ls.1) = true := h
-      exact decide_eq_false (hd b (of_decide_eq_true h))
+      replace h : decide (b = x) = true := h
+      exact decide_eq_false (of_decide_eq_true h ▸ hd)
     | _ => rfl
   | null =>
     cases v with
-    | null =>
-      obtain ⟨u, hu⟩ := ls.2
-      obtain ⟨u', hu'⟩ := ls'.2
-      exact absurd (by cases u; cases u'; exact hu') (hd u hu)
+    | null => exact absurd (by cases x; cases y; rfl) hd
     | _ => rfl
   | decimal =>
     cases v with
     | str s =>
       show (if hst : Numeral.Stored s = true then
-              decide ((⟨s, hst⟩ : StoredNumeral) ∈ ls'.1) else false) = false
+              decide ((⟨s, hst⟩ : StoredNumeral) = y) else false) = false
       replace h : (if hs : Numeral.Stored s = true then
-              decide ((⟨s, hs⟩ : StoredNumeral) ∈ ls.1) else false) = true := h
+              decide ((⟨s, hs⟩ : StoredNumeral) = x) else false) = true := h
       split
       · rename_i hst
         rw [dif_pos hst] at h
-        exact decide_eq_false (hd _ (of_decide_eq_true h))
+        exact decide_eq_false (of_decide_eq_true h ▸ hd)
       · rfl
     | _ => rfl
 
-theorem denote_lit (k : GroundKind) (ls : NEFinset k.Carrier) :
-    denote (.literal k ls) = literalCodec k ls := rfl
+theorem denote_lit (k : GroundKind) (x : k.Carrier) :
+    denote (.literal k x) = literalCodec k x := rfl
 
 /-- The literal's read row *is* the codec's read domain — `AdmA_exact` with no hypothesis, so
     this is a rewrite rather than a discharge. It is what makes the read side of the rule
     uniform in the base: `AdmALit` is spelled per base (and at `decimal` it asks the codec),
     but the domain is `(baseCodec k).restrict (inL k ls)` at every base. -/
-theorem admALit_iff {k : GroundKind} {ls : NEFinset k.Carrier} {a : Attr} :
-    AdmALit k ls a = true ↔ ((literalCodec k ls).p a).isSome = true := by
-  rw [← denote_lit k ls, ← AdmA_literal k ls a]
-  exact AdmA_exact (.literal k ls) a
+theorem admALit_iff {k : GroundKind} {x : k.Carrier} {a : Attr} :
+    AdmALit k x a = true ↔ ((literalCodec k x).p a).isSome = true := by
+  rw [← denote_lit k x, ← AdmA_literal k x a]
+  exact AdmA_exact (.literal k x) a
 
 /-- …and so the read side is the same `inL` disjointness, one level up: the base reads the
     attribute to *one* value, and one value cannot be in two disjoint held sets.
@@ -866,13 +866,13 @@ theorem admALit_iff {k : GroundKind} {ls : NEFinset k.Carrier} {a : Attr} :
     reason §5 recorded the readable side as "undischargeable from the tables alone" was that
     the old `admALit .number` row was `⊤`. The row asks now, and this is where the argument
     lives. -/
-theorem admALit_disjoint {k : GroundKind} {ls ls' : NEFinset k.Carrier}
-    (hd : ∀ x ∈ ls.1, x ∉ ls'.1) (a : Attr)
-    (h : AdmALit k ls a = true) : AdmALit k ls' a = false := by
+theorem admALit_disjoint {k : GroundKind} {x y : k.Carrier}
+    (hd : x ≠ y) (a : Attr)
+    (h : AdmALit k x a = true) : AdmALit k y a = false := by
   obtain ⟨v, hp⟩ := Option.isSome_iff_exists.mp (admALit_iff.mp h)
   rw [literalCodec_p_restrict] at hp
   obtain ⟨hbase, hin⟩ := restrict_p.mp hp
-  cases hq : AdmALit k ls' a with
+  cases hq : AdmALit k y a with
   | false => rfl
   | true =>
     obtain ⟨v', hp'⟩ := Option.isSome_iff_exists.mp (admALit_iff.mp hq)
@@ -886,15 +886,15 @@ theorem admALit_disjoint {k : GroundKind} {ls ls' : NEFinset k.Carrier}
 /-- **Phase *alternatives*.** Uniform in the base, both sides, no lawfulness premise and no
     `ident` conjunct — where §5 stated its second disjunct as
     `ident(cᵢ) ∧ ident(cⱼ) ∧ adm(cᵢ) ∩ adm(cⱼ) = ∅`. -/
-theorem separates_literal_disjoint {k : GroundKind} {ls ls' : NEFinset k.Carrier}
-    (hd : ∀ x ∈ ls.1, x ∉ ls'.1) :
-    Separates (.literal k ls) (.literal k ls') := by
+theorem separates_literal_disjoint {k : GroundKind} {x y : k.Carrier}
+    (hd : x ≠ y) :
+    Separates (.literal k x) (.literal k y) := by
   refine ⟨?_, ?_⟩
   · rintro v ⟨-, hx⟩ ⟨-, hy⟩
     rw [specOf_none_admitOptV rfl, Adm_literal] at hx hy
     -- `AdmLit` is `inL`, full stop, since `number`'s `WF` conjunct became its carrier's
-    have hix : inL k ls v = true := hx
-    have hiy : inL k ls' v = true := hy
+    have hix : inL k x v = true := hx
+    have hiy : inL k y v = true := hy
     rw [inL_disjoint hd v hix] at hiy
     exact absurd hiy (by simp)
   · rintro a ⟨-, hx⟩ ⟨-, hy⟩
@@ -905,7 +905,7 @@ theorem separates_literal_disjoint {k : GroundKind} {ls ls' : NEFinset k.Carrier
 /-! ### …and the same rule one spelling further out
 
 `set` takes a base, so a set over a literal is a **restriction of the set**:
-`refine(set b, each(members k ls))`, and `setCodec_restrict` proves the two are one pair.
+`refine(set b, each(members k x))`, and `setCodec_restrict` proves the two are one pair.
 `sepJV_set_literals` is that separation at one pair of alternatives, on the write side.
 These two are the rule, uniform in the base and on both halves. -/
 
@@ -916,33 +916,43 @@ These two are the rule, uniform in the base and on both halves. -/
     admits `[]`, which passes every element predicate vacuously, and that is exactly why
     `not_uAtCan_array_literals` holds and `uAtAct_array_literals` is the most that pair
     meets. -/
-theorem liftQ_inL_disjoint {k : GroundKind} {ls ls' : NEFinset k.Carrier}
+theorem inLs_disjoint {k : GroundKind} {ls ls' : NEFinset k.Carrier}
     (hd : ∀ x ∈ ls.1, x ∉ ls'.1) (v : Value)
-    (h : liftQ (inL k ls) v = true) : liftQ (inL k ls') v = false := by
+    (h : inLs k ls v = true) : inLs k ls' v = false := by
+  obtain ⟨x, hx, hix⟩ := of_decide_eq_true h
+  simp only [inLs, decide_eq_false_iff_not]
+  rintro ⟨y, hy, hiy⟩
+  rw [inL_disjoint (fun hxy => hd x hx (by rw [hxy]; exact hy)) v hix] at hiy
+  exact absurd hiy (by simp)
+
+/-- …and the set form one level out, where the wire set's elements are each asked. -/
+theorem liftQ_inLs_disjoint {k : GroundKind} {ls ls' : NEFinset k.Carrier}
+    (hd : ∀ x ∈ ls.1, x ∉ ls'.1) (v : Value)
+    (h : liftQ (inLs k ls) v = true) : liftQ (inLs k ls') v = false := by
   cases v with
   | strSet S =>
-      obtain ⟨x, hx⟩ := S.2
+      obtain ⟨z, hz⟩ := S.2
       simp only [liftQ, decide_eq_true_eq] at h
       simp only [liftQ, decide_eq_false_iff_not]
       exact fun hall => by
-        have hne := inL_disjoint hd (.str x) (h x hx)
-        rw [hall x hx] at hne
+        have hne := inLs_disjoint hd (.str z) (h z hz)
+        rw [hall z hz] at hne
         exact absurd hne (by simp)
   | numSet S =>
-      obtain ⟨x, hx⟩ := S.2
+      obtain ⟨z, hz⟩ := S.2
       simp only [liftQ, decide_eq_true_eq] at h
       simp only [liftQ, decide_eq_false_iff_not]
       exact fun hall => by
-        have hne := inL_disjoint hd (.num x) (h x hx)
-        rw [hall x hx] at hne
+        have hne := inLs_disjoint hd (.num z) (h z hz)
+        rw [hall z hz] at hne
         exact absurd hne (by simp)
   | binSet S =>
-      obtain ⟨x, hx⟩ := S.2
+      obtain ⟨z, hz⟩ := S.2
       simp only [liftQ, decide_eq_true_eq] at h
       simp only [liftQ, decide_eq_false_iff_not]
       exact fun hall => by
-        have hne := inL_disjoint hd (.bin x) (h x hx)
-        rw [hall x hx] at hne
+        have hne := inLs_disjoint hd (.bin z) (h z hz)
+        rw [hall z hz] at hne
         exact absurd hne (by simp)
   | _ => exact absurd h (by simp [liftQ])
 
@@ -970,9 +980,9 @@ theorem separates_setLiteral_disjoint {b : SetBase} {k : GroundKind}
   refine ⟨?_, ?_⟩
   · rintro v ⟨-, hx⟩ ⟨-, hy⟩
     rw [specOf_none_admitOptV rfl, Adm_refine_row] at hx hy
-    have hlx : liftQ (inL k ls) v = true := (Bool.and_eq_true_iff.mp hx).2
-    have hly : liftQ (inL k ls') v = true := (Bool.and_eq_true_iff.mp hy).2
-    rw [liftQ_inL_disjoint hd v hlx] at hly
+    have hlx : liftQ (inLs k ls) v = true := (Bool.and_eq_true_iff.mp hx).2
+    have hly : liftQ (inLs k ls') v = true := (Bool.and_eq_true_iff.mp hy).2
+    rw [liftQ_inLs_disjoint hd v hlx] at hly
     exact absurd hly (by simp)
   · rintro a ⟨-, hx⟩ ⟨-, hy⟩
     rw [specOf_none_admitOptA rfl, AdmA_refine_row] at hx hy
@@ -984,20 +994,20 @@ theorem separates_setLiteral_disjoint {b : SetBase} {k : GroundKind}
     | some v =>
         rw [refineReads_some hp] at hrx hry
         simp only [Pred.eval] at hrx hry
-        rw [liftQ_inL_disjoint hd v hrx] at hry
+        rw [liftQ_inLs_disjoint hd v hrx] at hry
         exact absurd hry (by simp)
 
-/-- Phase *alternatives*, from its decidable half. One `split` over `OrthL`'s ten rows: four
+/-- Phase *alternatives*, from its decidable half. One `split` over `OrthL`'s ten rows: five
     hand `separates_literal_disjoint` its premise, three hand `separates_setLiteral_disjoint`
-    its premise and the base equality the read side needs, and three answer `false`. -/
+    its premise and the base equality the read side needs, and two answer `false`. -/
 theorem separates_of_orthL {x y : Term} (h : OrthL x y = true) : Separates x y := by
   unfold OrthL at h
   split at h
-  · exact separates_literal_disjoint (disjAlts_sound h)
-  · exact separates_literal_disjoint (disjAlts_sound h)
-  · exact separates_literal_disjoint (disjAlts_sound h)
-  · exact separates_literal_disjoint (disjAlts_sound h)
-  · exact absurd h (by simp)
+  · exact separates_literal_disjoint (of_decide_eq_true h)
+  · exact separates_literal_disjoint (of_decide_eq_true h)
+  · exact separates_literal_disjoint (of_decide_eq_true h)
+  · exact separates_literal_disjoint (of_decide_eq_true h)
+  · exact separates_literal_disjoint (of_decide_eq_true h)
   · exact absurd h (by simp)
   · obtain ⟨hb, hdis⟩ := Bool.and_eq_true_iff.mp h
     obtain rfl := of_decide_eq_true hb
@@ -1036,7 +1046,7 @@ theorem altsDisj_disjointV {ax ay : Option Alts} (h : altsDisj ax ay = true) (v 
         first
           | (have hx' : inL _ lx v = true := hx
              have hy' : inL _ ly v = true := hy
-             rw [inL_disjoint (disjAlts_sound h) v hx'] at hy'
+             rw [inL_disjoint (of_decide_eq_true h) v hx'] at hy'
              exact absurd hy' (by simp))
           | exact absurd h (by simp [altsDisj])
 
@@ -1056,7 +1066,7 @@ theorem altsDisj_disjointA {ax ay : Option Alts} (h : altsDisj ax ay = true) (a 
         first
           | (have hx' : AdmALit _ lx a = true := admALit_iff.mpr hx
              have hy' : AdmALit _ ly a = true := admALit_iff.mpr hy
-             rw [admALit_disjoint (disjAlts_sound h) a hx'] at hy'
+             rw [admALit_disjoint (of_decide_eq_true h) a hx'] at hy'
              exact absurd hy' (by simp))
           | exact absurd h (by simp [altsDisj])
 
@@ -1256,8 +1266,12 @@ point of having it. The negatives matter more than the positives: **the ten `not
 witnesses are a ready-made unsoundness test suite**, and if `Orth` certified one of them
 `Orth` would be wrong. It certifies none. -/
 
-private def lsA : NEFinset String := ⟨{"A"}, Finset.singleton_nonempty _⟩
-private def lsB : NEFinset String := ⟨{"B"}, Finset.singleton_nonempty _⟩
+private def lsA : String := "A"
+private def lsB : String := "B"
+
+/-- …and the set forms, for `Pred.members`, which keeps its `Finset` where a literal lost one. -/
+private def setA : NEFinset String := ⟨{"A"}, Finset.singleton_nonempty _⟩
+private def setB : NEFinset String := ⟨{"B"}, Finset.singleton_nonempty _⟩
 
 theorem orth_string_number : Orth .string .number = true := by decide
 theorem orth_string_null : Orth .string .null = true := by decide
@@ -1339,15 +1353,15 @@ theorem not_orth_literal_literal_same :
     is a field of `numericHost`, so `OrthL` has no computable row there and answers `false`.
     `separates_literal_disjoint` takes the premise by hand instead, which is
     `uAtCan_of_literalN_disjoint`'s content. -/
-theorem not_orth_literal_number (ls ls' : NEFinset GroundKind.number.Carrier) :
-    Orth (.literal .number ls) (.literal .number ls') = false := by
+theorem not_orth_literal_number (x y : GroundKind.number.Carrier) :
+    Orth (.literal .number x) (.literal .number y) = false := by
   simp [Orth, Orth1, OrthM, OrthS, OrthL, occV, occA, occOnly, Slot.all, Member.all, specOf,
     GroundKind.slot, GroundKind.member]
 
 /-- **Two null literals are never disjoint**, and `false` here is exact rather than a
     concession: `NEFinset Unit` has one inhabitant, so both hold `()`. -/
-theorem not_orth_literal_null (ls ls' : NEFinset GroundKind.null.Carrier) :
-    Orth (.literal .null ls) (.literal .null ls') = false := by
+theorem not_orth_literal_null (x y : GroundKind.null.Carrier) :
+    Orth (.literal .null x) (.literal .null y) = false := by
   simp [Orth, Orth1, OrthM, OrthS, OrthL, occV, occA, occOnly, Slot.all, Member.all, specOf,
     GroundKind.slot, GroundKind.member]
 
@@ -1356,26 +1370,26 @@ theorem not_orth_literal_null (ls ls' : NEFinset GroundKind.null.Carrier) :
     certificate answers both halves. `℘⁺fin` is what makes it a `set` fact: the payload has an
     element, and one element is not in two disjoint held sets. -/
 theorem orth_set_literals :
-    Orth (.refine (.set .string) (.each (.members .string lsA)))
-         (.refine (.set .string) (.each (.members .string lsB))) = true := by decide
+    Orth (.refine (.set .string) (.each (.members .string setA)))
+         (.refine (.set .string) (.each (.members .string setB))) = true := by decide
 
 /-- …and not where the alternatives meet. -/
 theorem not_orth_set_literals_same :
-    Orth (.refine (.set .string) (.each (.members .string lsA)))
-         (.refine (.set .string) (.each (.members .string lsA))) = false := by decide
+    Orth (.refine (.set .string) (.each (.members .string setA)))
+         (.refine (.set .string) (.each (.members .string setA))) = false := by decide
 
 /-- **Two set bases decline**, and the read side is the reason: `refineReads` has the base
     decode the attribute, so two bases decode one attribute to two values and there is
     nothing to compare. `set(string)` and `set(decimal)` are the pair that shows it, both
     writing a `strSet` while storing `SS` and `NS`. -/
 theorem not_orth_set_literals_two_bases :
-    Orth (.refine (.set .string) (.each (.members .string lsA)))
-         (.refine (.set .decimal) (.each (.members .string lsB))) = false := by decide
+    Orth (.refine (.set .string) (.each (.members .string setA)))
+         (.refine (.set .decimal) (.each (.members .string setB))) = false := by decide
 
 /-- **A `closure` beside a `members` is not certified**, which is the case `Pred` keeps rather
     than removes. Holds for every `q`, so this is phase *opaque predicate* and not a gap. -/
 theorem not_orth_set_literal_closure (q : Value → Bool) :
-    Orth (.refine (.set .string) (.each (.members .string lsA)))
+    Orth (.refine (.set .string) (.each (.members .string setA)))
          (.refine (.set .string) (.each (.closure q))) = false := by
   simp [Orth, Orth1, OrthM, OrthS, OrthL, occV, occA, occOnly, Slot.all, Member.all, specOf,
     SetBase.slot, SetBase.member]

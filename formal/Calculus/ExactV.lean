@@ -118,8 +118,8 @@ def selOptV (os : List (Option (MapOf NameSpec) × VP)) (v : Value) : Bool :=
     and was therefore inexact at `number` by exactly this conjunct, while the joint row carried
     it and so `Adm_exact` covered the literal. The defect is closed rather than patched:
     nothing was added to make the two agree. -/
-noncomputable def AdmLit (k : GroundKind) (ls : NEFinset k.Carrier) (v : Value) : Bool :=
-  inL k ls v
+noncomputable def AdmLit (k : GroundKind) (x : k.Carrier) (v : Value) : Bool :=
+  inL k x v
 
 /-! ## The two rows that ask their own codec
 
@@ -374,8 +374,8 @@ theorem selOptV_le_AdmAny {opts : List Term} {v : Value}
     mentions `k` — so generating the table's equation lemmas across it is expensive enough to
     exhaust the heartbeat budget in proofs that used to close in one step. Stating the row once
     contains that cost, and every literal proof below rewrites with this instead. -/
-@[simp] theorem Adm_literal (k : GroundKind) (ls : NEFinset k.Carrier) (v : Value) :
-    Adm (.literal k ls) v = AdmLit k ls v := by unfold Adm; rfl
+@[simp] theorem Adm_literal (k : GroundKind) (x : k.Carrier) (v : Value) :
+    Adm (.literal k x) v = AdmLit k x v := by unfold Adm; rfl
 
 /-- §5's converse direction: the row is `dom(e)`, not merely a bound on it. -/
 def ExactV (t : Term) : Prop := ∀ v, Adm t v = true ↔ ((denote t).e v).isSome
@@ -869,13 +869,13 @@ theorem Adm_array_nil (c : Term) : Adm (.array c) (.arr []) = true := by
   simp [Adm, allP]
 
 /-- …and it is strictly sharper than the `⊤` that was standing in for it. -/
-theorem Adm_array_sharp : Adm (.array (.literal .string (.of "A" ∅))) (.arr [.str "B"]) = false := by
-  simp [Adm, allP, AdmLit, inL, NEFinset.of]
+theorem Adm_array_sharp : Adm (.array (.literal .string "A")) (.arr [.str "B"]) = false := by
+  simp [Adm, allP, AdmLit, inL]
 
 /-- Nested, which the old row could not see at any depth. -/
 theorem Adm_array_nested :
-    Adm (.array (.array (.literal .string (.of "A" ∅)))) (.arr [.arr [.str "B"]]) = false := by
-  simp [Adm, allP, AdmLit, inL, NEFinset.of]
+    Adm (.array (.array (.literal .string "A"))) (.arr [.arr [.str "B"]]) = false := by
+  simp [Adm, allP, AdmLit, inL]
 
 
 

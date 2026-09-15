@@ -460,19 +460,19 @@ theorem uAtCan_boolLiterals :
     Which is the honest reading of what a numeric literal set *is*: options told apart by
     the value a read produces, never by the text the store holds. That reading is now
     available to the table as well, because the table's row asks the same codec. -/
-theorem uAtCan_of_literalN_disjoint {lss : List (NEFinset WFDouble)}
-    (hdisj : List.Pairwise (fun ls ls' => ∀ d ∈ ls.1, d ∉ ls'.1) lss) :
-    UAtCan (lss.map (Term.literal .number)) := by
-  show UniqueAdmission (semsOf (lss.map (Term.literal .number)))
-  have hs : semsOf (lss.map (Term.literal .number))
-      = (lss.map (literalCodec .number)).map OptionSem.byAttempt := by
+theorem uAtCan_of_literalN_disjoint {xs : List WFDouble}
+    (hdisj : List.Pairwise (fun x y => x ≠ y) xs) :
+    UAtCan (xs.map (Term.literal .number)) := by
+  show UniqueAdmission (semsOf (xs.map (Term.literal .number)))
+  have hs : semsOf (xs.map (Term.literal .number))
+      = (xs.map (literalCodec .number)).map OptionSem.byAttempt := by
     simp [semsOf, List.map_map, specOf, optionSemOf, denote]
   rw [hs]
-  refine uniqueAdmission_of_sharedBase (base := numberCodec) (qs := lss.map (inL .number))
+  refine uniqueAdmission_of_sharedBase (base := numberCodec) (qs := xs.map (inL .number))
     lawful_numberCodec.core ?_ ?_
   · rw [List.forall₂_map_left_iff, List.forall₂_map_right_iff]
-    exact List.forall₂_same.mpr fun ls _ =>
-      ⟨literalCodec_e_restrict .number ls, literalCodec_p_restrict .number ls⟩
+    exact List.forall₂_same.mpr fun x _ =>
+      ⟨literalCodec_e_restrict .number x, literalCodec_p_restrict .number x⟩
   · rw [List.pairwise_map]
     refine hdisj.imp fun h v hv => ?_
     cases v
@@ -483,7 +483,7 @@ theorem uAtCan_of_literalN_disjoint {lss : List (NEFinset WFDouble)}
       | true =>
         simp only [inL, hw, dite_true, decide_eq_true_eq] at hv
         simp only [inL, hw, dite_true, decide_eq_false_iff_not]
-        exact h ⟨d, hw⟩ hv
+        exact fun hy => h (hv ▸ hy ▸ rfl)
     all_goals exact Bool.noConfusion hv
 
 /-! ## The other two rows of §5's table
@@ -575,15 +575,15 @@ theorem not_uAtCan_pair {t₁ t₂ : Term} {v w : Value} {a : Attr}
     and violates (U) at the value `"A"`, which both options admit. `literal`'s attempt *is*
     evidence; `string`'s is not, and one honest answer does not resolve a pair. -/
 theorem not_uAtCan_literal_string :
-    ¬ UAtCan [Term.literal .string (.of "A" ∅), Term.string] := by
-  have hA : (denote (Term.literal .string (.of "A" ∅))).e (Value.str "A") = some (Attr.s "A") := by
+    ¬ UAtCan [Term.literal .string "A", Term.string] := by
+  have hA : (denote (Term.literal .string "A")).e (Value.str "A") = some (Attr.s "A") := by
     show (if "A" ∈ ["A"] then some (Attr.s "A") else none) = some (Attr.s "A")
     rw [if_pos (List.mem_cons_self)]
-  have hB : (denote (Term.literal .string (.of "A" ∅))).e (Value.str "B") = none := by
+  have hB : (denote (Term.literal .string "A")).e (Value.str "B") = none := by
     show (if "B" ∈ ["A"] then some (Attr.s "B") else none) = none
     rw [if_neg (by simp)]
   refine not_uAtCan_pair (v := .str "A") (a := Attr.s "A") (w := .str "B") hA rfl ?_
-  · show ((denote (Term.literal .string (.of "A" ∅))).e (Value.str "B")).isSome ≠
+  · show ((denote (Term.literal .string "A")).e (Value.str "B")).isSome ≠
       ((denote Term.string).e (Value.str "B")).isSome
     rw [hB]
     exact fun h => nomatch h
@@ -594,7 +594,7 @@ theorem not_uAtCan_literal_string :
     property through a container does not propagate disjointness of the admissible sets:
     every container admits its empty case. -/
 theorem not_uAtCan_array_literals :
-    ¬ UAtCan [Term.array (.literal .string (.of "A" ∅)), Term.array (.literal .string (.of "B" ∅))] := by
+    ¬ UAtCan [Term.array (.literal .string "A"), Term.array (.literal .string "B")] := by
   refine not_uAtCan_pair (v := .arr []) (a := Attr.l []) (w := .arr [.str "A"])
     rfl rfl ?_
   -- separated one fuel down, where the element codecs are live: `["A"]` is written by
@@ -631,24 +631,24 @@ unfolding that inside a `simp_all` with two hypotheses in play runs out of heart
 `whnf` reaches for `numberCodec`'s `dite` on `Numeral.WF`, which is a string parser. The fix is
 the one the other three numeric sites use: state the consequence once, and rewrite with it. -/
 
-theorem literalCodec_string_e (ls : NEFinset String) : ∀ v : Value,
-    (literalCodec .string ls).e v
-      = (match v with | .str s => if s ∈ ls.1 then some (Attr.s s) else none | _ => none)
+theorem literalCodec_string_e (x : String) : ∀ v : Value,
+    (literalCodec .string x).e v
+      = (match v with | .str s => if s = x then some (Attr.s s) else none | _ => none)
   | .str _ => by simp [literalCodec, baseCodec, Codec.restrict, inL, stringCodec]
   | .num _ | .bool _ | .bin _ | .null | .strSet _ | .numSet _ | .binSet _
   | .arr _ | .map _ _ => rfl
 
-theorem literalCodec_string_p (ls : NEFinset String) : ∀ a : Attr,
-    (literalCodec .string ls).p a
-      = (match a with | .s s => if s ∈ ls.1 then some (Value.str s) else none | _ => none)
+theorem literalCodec_string_p (x : String) : ∀ a : Attr,
+    (literalCodec .string x).p a
+      = (match a with | .s s => if s = x then some (Value.str s) else none | _ => none)
   | .s _ => by simp [literalCodec, baseCodec, Codec.restrict, inL, stringCodec]
   | .n _ | .bool _ | .b _ | .null | .ss _ | .ns _ | .bs _ | .l _ | .m _ _ => rfl
 
 /-- §3 `(literal-S)`'s two halves test one set, so a `literal` declines to read the
     attribute it declines to write. -/
-theorem literalS_p_none {ls ls' : NEFinset String} {t : Value} {a : Attr}
-    (he : (literalCodec .string ls).e t = some a) (hne : (literalCodec .string ls').e t = none) :
-    (literalCodec .string ls').p a = none := by
+theorem literalS_p_none {x y : String} {t : Value} {a : Attr}
+    (he : (literalCodec .string x).e t = some a) (hne : (literalCodec .string y).e t = none) :
+    (literalCodec .string y).p a = none := by
   rw [literalCodec_string_e] at he hne
   cases t <;> simp_all
   obtain ⟨-, rfl⟩ := he
@@ -656,9 +656,9 @@ theorem literalS_p_none {ls ls' : NEFinset String} {t : Value} {a : Attr}
   simp [hne]
 
 /-- …the reading half of the same §3 `(literal-S)` fact. -/
-theorem literalS_e_none {ls ls' : NEFinset String} {t : Value} {a : Attr}
-    (hp : (literalCodec .string ls).p a = some t) (hne : (literalCodec .string ls').p a = none) :
-    (literalCodec .string ls').e t = none := by
+theorem literalS_e_none {x y : String} {t : Value} {a : Attr}
+    (hp : (literalCodec .string x).p a = some t) (hne : (literalCodec .string y).p a = none) :
+    (literalCodec .string y).e t = none := by
   rw [literalCodec_string_p] at hp hne
   cases a <;> simp_all
   obtain ⟨-, rfl⟩ := hp
@@ -667,19 +667,19 @@ theorem literalS_e_none {ls ls' : NEFinset String} {t : Value} {a : Attr}
 
 /-- §3 `(array)`'s traversal inherits it: an element the neighbour refuses makes the
     whole list unreadable, at the position the writing traversal already fixed. -/
-theorem traverse_literalS_p_none {ls ls' : NEFinset String} {vs : List Value} {as : List Attr}
-    (he : traverse (literalCodec .string ls).e vs = some as)
-    (hne : traverse (literalCodec .string ls').e vs = none) :
-    traverse (literalCodec .string ls').p as = none := by
-  cases hres : traverse (literalCodec .string ls').p as with
+theorem traverse_literalS_p_none {x y : String} {vs : List Value} {as : List Attr}
+    (he : traverse (literalCodec .string x).e vs = some as)
+    (hne : traverse (literalCodec .string y).e vs = none) :
+    traverse (literalCodec .string y).p as = none := by
+  cases hres : traverse (literalCodec .string y).p as with
   | none => rfl
   | some ws =>
     exfalso
-    have hall : ∀ v ∈ vs, ((literalCodec .string ls').e v).isSome := by
+    have hall : ∀ v ∈ vs, ((literalCodec .string y).e v).isSome := by
       intro v hv
       obtain ⟨a, ha, hea⟩ := (traverse_eq_some.mp he).mem_left hv
       obtain ⟨w, -, hpw⟩ := (traverse_eq_some.mp hres).mem_left ha
-      cases hev : (literalCodec .string ls').e v with
+      cases hev : (literalCodec .string y).e v with
       | none => rw [literalS_p_none hea hev] at hpw; exact nomatch hpw
       | some _ => rfl
     have hs := traverse_isSome_of_all hall
@@ -687,19 +687,19 @@ theorem traverse_literalS_p_none {ls ls' : NEFinset String} {vs : List Value} {a
     exact nomatch hs
 
 /-- …and dually, at §3 `(array)`. -/
-theorem traverse_literalS_e_none {ls ls' : NEFinset String} {as : List Attr} {vs : List Value}
-    (hp : traverse (literalCodec .string ls).p as = some vs)
-    (hne : traverse (literalCodec .string ls').p as = none) :
-    traverse (literalCodec .string ls').e vs = none := by
-  cases hres : traverse (literalCodec .string ls').e vs with
+theorem traverse_literalS_e_none {x y : String} {as : List Attr} {vs : List Value}
+    (hp : traverse (literalCodec .string x).p as = some vs)
+    (hne : traverse (literalCodec .string y).p as = none) :
+    traverse (literalCodec .string y).e vs = none := by
+  cases hres : traverse (literalCodec .string y).e vs with
   | none => rfl
   | some ws =>
     exfalso
-    have hall : ∀ a ∈ as, ((literalCodec .string ls').p a).isSome := by
+    have hall : ∀ a ∈ as, ((literalCodec .string y).p a).isSome := by
       intro a ha
       obtain ⟨v, hv, hpv⟩ := (traverse_eq_some.mp hp).mem_left ha
       obtain ⟨w, -, hew⟩ := (traverse_eq_some.mp hres).mem_left hv
-      cases hpa : (literalCodec .string ls').p a with
+      cases hpa : (literalCodec .string y).p a with
       | none => rw [literalS_e_none hpv hpa] at hew; exact nomatch hew
       | some _ => rfl
     have hs := traverse_isSome_of_all hall
@@ -708,39 +708,39 @@ theorem traverse_literalS_e_none {ls ls' : NEFinset String} {as : List Attr} {vs
 
 /-- §3 `(array)` over §3 `(literal-S)`: it refuses on the attribute side whatever it
     refuses on the value side, at the attribute its neighbour wrote. -/
-theorem arrayLiteral_p_none {ls ls' : NEFinset String} {t : Value} {a : Attr}
-    (he : (arrayCodec (literalCodec .string ls)).e t = some a)
-    (hne : (arrayCodec (literalCodec .string ls')).e t = none) :
-    (arrayCodec (literalCodec .string ls')).p a = none := by
+theorem arrayLiteral_p_none {x y : String} {t : Value} {a : Attr}
+    (he : (arrayCodec (literalCodec .string x)).e t = some a)
+    (hne : (arrayCodec (literalCodec .string y)).e t = none) :
+    (arrayCodec (literalCodec .string y)).p a = none := by
   cases t with
   | arr vs =>
     simp only [arrayCodec, Option.map_eq_some_iff] at he
     obtain ⟨as, has, rfl⟩ := he
     simp only [arrayCodec] at hne ⊢
-    cases h2 : traverse (literalCodec .string ls').e vs with
+    cases h2 : traverse (literalCodec .string y).e vs with
     | some _ => rw [h2] at hne; exact nomatch hne
     | none => rw [traverse_literalS_p_none has h2]; rfl
   | _ => exact nomatch he
 
 /-- …and dually, the same §3 pair. -/
-theorem arrayLiteral_e_none {ls ls' : NEFinset String} {t : Value} {a : Attr}
-    (hp : (arrayCodec (literalCodec .string ls)).p a = some t)
-    (hne : (arrayCodec (literalCodec .string ls')).p a = none) :
-    (arrayCodec (literalCodec .string ls')).e t = none := by
+theorem arrayLiteral_e_none {x y : String} {t : Value} {a : Attr}
+    (hp : (arrayCodec (literalCodec .string x)).p a = some t)
+    (hne : (arrayCodec (literalCodec .string y)).p a = none) :
+    (arrayCodec (literalCodec .string y)).e t = none := by
   cases a with
   | l as =>
     simp only [arrayCodec, Option.map_eq_some_iff] at hp
     obtain ⟨vs, hvs, rfl⟩ := hp
     simp only [arrayCodec] at hne ⊢
-    cases h2 : traverse (literalCodec .string ls').p as with
+    cases h2 : traverse (literalCodec .string y).p as with
     | some _ => rw [h2] at hne; exact nomatch hne
     | none => rw [traverse_literalS_e_none hvs h2]; rfl
   | _ => exact nomatch hp
 
 /-- The two §5 options are distinct — needed only to read a singleton filter back. -/
 theorem optionSem_arrayLiterals_ne :
-    OptionSem.byAttempt (arrayCodec (literalCodec .string (.of "A" ∅))) ≠
-      OptionSem.byAttempt (arrayCodec (literalCodec .string (.of "B" ∅))) := by
+    OptionSem.byAttempt (arrayCodec (literalCodec .string "A")) ≠
+      OptionSem.byAttempt (arrayCodec (literalCodec .string "B")) := by
   intro h
   have := congrArg (fun o => o.admitV (.arr [.str "A"])) h
   simp [OptionSem.byAttempt, arrayCodec, traverse, literalCodec, baseCodec, Codec.restrict, inL, stringCodec] at this
@@ -752,20 +752,20 @@ theorem optionSem_arrayLiterals_ne :
     union declines the empty array, and every value it does write round-trips through the
     option that wrote it. -/
 theorem uAtAct_array_literals :
-    UAtAct [Term.array (.literal .string (.of "A" ∅)), Term.array (.literal .string (.of "B" ∅))] := by
-  show UniqueBothWays [OptionSem.byAttempt (arrayCodec (literalCodec .string (.of "A" ∅))),
-    OptionSem.byAttempt (arrayCodec (literalCodec .string (.of "B" ∅)))]
-  have lawA : LawfulCore (arrayCodec (literalCodec .string (.of "A" ∅))) :=
+    UAtAct [Term.array (.literal .string "A"), Term.array (.literal .string "B")] := by
+  show UniqueBothWays [OptionSem.byAttempt (arrayCodec (literalCodec .string "A")),
+    OptionSem.byAttempt (arrayCodec (literalCodec .string "B"))]
+  have lawA : LawfulCore (arrayCodec (literalCodec .string "A")) :=
     lawfulCore_arrayCodec (lawful_literalCodec _ _).core
-  have lawB : LawfulCore (arrayCodec (literalCodec .string (.of "B" ∅))) :=
+  have lawB : LawfulCore (arrayCodec (literalCodec .string "B")) :=
     lawfulCore_arrayCodec (lawful_literalCodec _ _).core
   refine ⟨?_, ?_⟩
   · intro o ho t a hf he
     rcases List.mem_cons.mp ho with rfl | ho'
     · obtain ⟨-, hB⟩ := filter_pair_left_inv optionSem_arrayLiterals_ne hf
       rw [OptionSem.byAttempt_admitV] at hB
-      have hBe : (arrayCodec (literalCodec .string (.of "B" ∅))).e t = none := by
-        cases h : (arrayCodec (literalCodec .string (.of "B" ∅))).e t with
+      have hBe : (arrayCodec (literalCodec .string "B")).e t = none := by
+        cases h : (arrayCodec (literalCodec .string "B")).e t with
         | none => rfl
         | some _ => rw [h] at hB; exact nomatch hB
       refine filter_pair_left ?_ ?_
@@ -774,8 +774,8 @@ theorem uAtAct_array_literals :
     · rcases List.mem_singleton.mp ho' with rfl
       obtain ⟨hA, -⟩ := filter_pair_right_inv optionSem_arrayLiterals_ne hf
       rw [OptionSem.byAttempt_admitV] at hA
-      have hAe : (arrayCodec (literalCodec .string (.of "A" ∅))).e t = none := by
-        cases h : (arrayCodec (literalCodec .string (.of "A" ∅))).e t with
+      have hAe : (arrayCodec (literalCodec .string "A")).e t = none := by
+        cases h : (arrayCodec (literalCodec .string "A")).e t with
         | none => rfl
         | some _ => rw [h] at hA; exact nomatch hA
       refine filter_pair_right ?_ ?_
@@ -785,22 +785,22 @@ theorem uAtAct_array_literals :
     rcases List.mem_cons.mp ho with rfl | ho'
     · obtain ⟨-, hB⟩ := filter_pair_left_inv optionSem_arrayLiterals_ne hf
       rw [OptionSem.byAttempt_admitA] at hB
-      have hBp : (arrayCodec (literalCodec .string (.of "B" ∅))).p a = none := by
-        cases h : (arrayCodec (literalCodec .string (.of "B" ∅))).p a with
+      have hBp : (arrayCodec (literalCodec .string "B")).p a = none := by
+        cases h : (arrayCodec (literalCodec .string "B")).p a with
         | none => rfl
         | some _ => rw [h] at hB; exact nomatch hB
-      have h' : (arrayCodec (literalCodec .string (.of "A" ∅))).e t = some a' := he
+      have h' : (arrayCodec (literalCodec .string "A")).e t = some a' := he
       refine filter_pair_left ?_ ?_
       · rw [OptionSem.byAttempt_admitV, h']; rfl
       · rw [OptionSem.byAttempt_admitV, arrayLiteral_e_none hp hBp]; rfl
     · rcases List.mem_singleton.mp ho' with rfl
       obtain ⟨hA, -⟩ := filter_pair_right_inv optionSem_arrayLiterals_ne hf
       rw [OptionSem.byAttempt_admitA] at hA
-      have hAp : (arrayCodec (literalCodec .string (.of "A" ∅))).p a = none := by
-        cases h : (arrayCodec (literalCodec .string (.of "A" ∅))).p a with
+      have hAp : (arrayCodec (literalCodec .string "A")).p a = none := by
+        cases h : (arrayCodec (literalCodec .string "A")).p a with
         | none => rfl
         | some _ => rw [h] at hA; exact nomatch hA
-      have h' : (arrayCodec (literalCodec .string (.of "B" ∅))).e t = some a' := he
+      have h' : (arrayCodec (literalCodec .string "B")).e t = some a' := he
       refine filter_pair_right ?_ ?_
       · rw [OptionSem.byAttempt_admitV, arrayLiteral_e_none hp hAp]; rfl
       · rw [OptionSem.byAttempt_admitV, h']; rfl
@@ -839,7 +839,7 @@ def fRel : Value → Value := fun v => match v with | .str "B" => .str "A" | _ =
 def gRel : Value → Value := fun v => match v with | .str "A" => .str "B" | _ => .null
 
 /-- `held(literal("A"), fRel, gRel)` — holds `{"B"}`, stores it as `S "A"`. -/
-def tRel : Term := .held (.literal .string (.of "A" ∅)) fRel gRel
+def tRel : Term := .held (.literal .string "A") fRel gRel
 
 /-- The attribute-side twin of `not_uAtCan_pair`. -/
 theorem not_uAtCan_pair_A {t₁ t₂ : Term} {v w : Value} {a : Attr}
@@ -866,9 +866,9 @@ theorem not_uAtCan_pair_A {t₁ t₂ : Term} {v w : Value} {a : Attr}
 theorem typed_tRel :
     Typed tRel (fun v => ∃ s, s ∈ ["A"] ∧ fRel v = .str s) (some .S) := by
   refine Typed.held (I := fun w => ∃ s, s ∈ ["A"] ∧ w = .str s) ?_
-  have h := Typed.literal .string (.of "A" ∅)
-  have hT : HLit .string (.of "A" ∅) = fun w => ∃ s, s ∈ ["A"] ∧ w = Value.str s := by
-    funext w; simp [HLit, NEFinset.of]
+  have h := Typed.literal .string "A"
+  have hT : HLit .string "A" = fun w => ∃ s, s ∈ ["A"] ∧ w = Value.str s := by
+    funext w; simp [HLit]
   rw [hT] at h
   exact h
 
@@ -884,18 +884,18 @@ theorem dDisj_tRel :
 /-- **(D) does not discharge the readable side.** Disjoint held sets, and both options
     admit the attribute `S "A"` — the first reading it to `"A"`, the second to `"B"`. -/
 theorem not_uAtCan_literal_held :
-    ¬ UAtCan [Term.literal .string (.of "A" ∅), tRel] := by
-  have hA : (denote (Term.literal .string (.of "A" ∅))).e (Value.str "A") = some (Attr.s "A") := by
+    ¬ UAtCan [Term.literal .string "A", tRel] := by
+  have hA : (denote (Term.literal .string "A")).e (Value.str "A") = some (Attr.s "A") := by
     show (if "A" ∈ ["A"] then some (Attr.s "A") else none) = some (Attr.s "A")
     rw [if_pos (List.mem_cons_self)]
   refine not_uAtCan_pair_A (v := .str "A") (a := Attr.s "A") (w := .str "A") hA ?_ ?_
   · show (((if "A" ∈ ["A"] then some (Value.str "A") else none).map gRel)).isSome = true
     rw [if_pos (List.mem_cons_self)]
     rfl
-  · show ((denote (Term.literal .string (.of "A" ∅))).e (Value.str "A")).isSome ≠
-      ((denote (Term.literal .string (.of "A" ∅))).e (fRel (Value.str "A"))).isSome
+  · show ((denote (Term.literal .string "A")).e (Value.str "A")).isSome ≠
+      ((denote (Term.literal .string "A")).e (fRel (Value.str "A"))).isSome
     rw [hA]
-    show true ≠ ((denote (Term.literal .string (.of "A" ∅))).e Value.null).isSome
+    show true ≠ ((denote (Term.literal .string "A")).e Value.null).isSome
     exact fun h => nomatch h
 
 

@@ -110,16 +110,18 @@ describe('terms', () => {
 
     /**
      * `literal` is base-indexed in the model and value-indexed here, and the two agree only at the
-     * string base. `GroundKind` is the index and `NEFinset k.Carrier` the alternatives — so the
-     * whole of §3's premise line (`g ground`, `n ≥ 1`, pairwise distinct, homogeneous) is
-     * discharged by the type, and the emitter's only job is to write the first element and the rest.
+     * string base. `GroundKind` is the index and `k.Carrier` the value — so §3's premise line
+     * (`g ground`, `ℓ ⊆ T`) is discharged by the type and the emitter writes one value.
+     *
+     * **Several alternatives are a union of singletons**, which is what the model says a set of
+     * alternatives is. `string('A', 'B', 'C')` builds that union, so the emitter writes it.
      */
-    it('emits a string literal as its base and its alternatives', () => {
-        expect(leanTermOf(erase(string('A', 'B', 'C')))).toBe(
-            'Term.literal GroundKind.string (NEFinset.of "A" {"B", "C"})',
-        )
+    it('emits a string literal as its base and its one value', () => {
         expect(leanTermOf(erase(string('only')))).toBe(
-            'Term.literal GroundKind.string (NEFinset.of "only" ∅)',
+            'Term.literal GroundKind.string "only"',
+        )
+        expect(leanTermOf(erase(string('A', 'B', 'C')))).toBe(
+            'Term.union [Term.literal GroundKind.string "A", Term.literal GroundKind.string "B", Term.literal GroundKind.string "C"]',
         )
     })
 
@@ -137,17 +139,17 @@ describe('terms', () => {
     it('emits a character outside ASCII as one Lean accepts, at every code point', () => {
         // the BMP, where a four-digit escape would also have worked
         expect(leanTermOf(erase(string('⊥')))).toBe(
-            'Term.literal GroundKind.string (NEFinset.of "⊥" ∅)',
+            'Term.literal GroundKind.string "⊥"',
         )
         // above `U+FFFF`, where no escape is correct and the raw character is the only spelling
         expect(leanTermOf(erase(string('𝔸')))).toBe(
-            'Term.literal GroundKind.string (NEFinset.of "𝔸" ∅)',
+            'Term.literal GroundKind.string "𝔸"',
         )
         // an object's names and a tag go through the same writer
         expect(leanTermOf(erase(object({ π: string }).item))).toContain('"π"')
         // and the control range keeps an escape, zero-padded to the four digits Lean wants
         expect(leanTermOf(erase(string('\u0001')))).toBe(
-            'Term.literal GroundKind.string (NEFinset.of "\\u0001" ∅)',
+            'Term.literal GroundKind.string "\\u0001"',
         )
     })
 
@@ -161,11 +163,11 @@ describe('terms', () => {
      * and both directions of its admission; `literal_decimal` in the sample is the vector.
      */
     it('emits a decimal literal at its own base, with the stored gate discharged', () => {
-        expect(leanTermOf(erase(decimal('1', '2.5')))).toBe(
-            'Term.literal GroundKind.decimal (NEFinset.of ⟨"1", by decide⟩ {⟨"2.5", by decide⟩})',
-        )
         expect(leanTermOf(erase(decimal('-1.5')))).toBe(
-            'Term.literal GroundKind.decimal (NEFinset.of ⟨"-1.5", by decide⟩ ∅)',
+            'Term.literal GroundKind.decimal ⟨"-1.5", by decide⟩',
+        )
+        expect(leanTermOf(erase(decimal('1', '2.5')))).toBe(
+            'Term.union [Term.literal GroundKind.decimal ⟨"1", by decide⟩, Term.literal GroundKind.decimal ⟨"2.5", by decide⟩]',
         )
     })
 
@@ -176,7 +178,7 @@ describe('terms', () => {
      */
     it('emits a binary literal as its octets', () => {
         expect(leanTermOf(erase(binary(new Uint8Array([0, 127, 255]))))).toBe(
-            'Term.literal GroundKind.binary (NEFinset.of [0, 127, 255] ∅)',
+            'Term.literal GroundKind.binary [0, 127, 255]',
         )
     })
 
@@ -348,10 +350,10 @@ describe('terms', () => {
         // each member's body
         expect(emitted).toContain('Term.union [Term.object')
         expect(emitted).toContain(
-            'Field.req (Term.literal GroundKind.string (NEFinset.of "a" ∅))',
+            'Field.req (Term.literal GroundKind.string "a")',
         )
         expect(emitted).toContain(
-            'Field.req (Term.literal GroundKind.string (NEFinset.of "b" ∅))',
+            'Field.req (Term.literal GroundKind.string "b")',
         )
         expect(emitted).not.toContain('Term.dunion')
         expect(emitted.split('Body.mk')).toHaveLength(3)

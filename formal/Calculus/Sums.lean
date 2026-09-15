@@ -29,10 +29,10 @@ def keysOk (spec : MapOf NameSpec) (keys : Finset Name) : Bool :=
   decide (∀ k : {k // k ∈ spec.1}, (spec.2 k).required = true → k.1 ∈ keys)
 
 /-- One present name's content, on the write side: where the name's field is a literal, the
-    value is one of the alternatives. A name the spec does not declare asks nothing, because
+    value is the one the literal names. A name the spec does not declare asks nothing, because
     `keysOk` has already refused it. -/
 def altsOkV : Option Alts → Value → Bool
-  | some ⟨g, ls⟩, v => inL g ls v
+  | some ⟨g, x⟩, v => inL g x v
   | none, _ => true
 
 def litOkV (spec : MapOf NameSpec) (k : Name) (v : Value) : Bool :=
@@ -44,7 +44,7 @@ def litOkV (spec : MapOf NameSpec) (k : Name) (v : Value) : Bool :=
     a `Value` and the stored side holds an `Attr`, so the read test asks the codec that decodes
     it rather than a second membership. -/
 def altsOkA : Option Alts → Attr → Bool
-  | some ⟨g, ls⟩, a => ((literalCodec g ls).p a).isSome
+  | some ⟨g, x⟩, a => ((literalCodec g x).p a).isSome
   | none, _ => true
 
 def litOkA (spec : MapOf NameSpec) (k : Name) (a : Attr) : Bool :=

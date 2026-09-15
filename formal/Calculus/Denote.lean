@@ -37,9 +37,9 @@ def Body.map (b : Body) : MapOf Field := ⟨b.fields, b.at⟩
     an object does not carry is settled by `keysOk` and never reaches `literalsOk`, so an
     `optional` literal constrains exactly the values that do carry the name. -/
 def altsOfField : Field → Option Alts
-  | .req (.literal k ls) => some ⟨k, ls⟩
-  | .optional (.literal k ls) => some ⟨k, ls⟩
-  | .fallback (.literal k ls) _ => some ⟨k, ls⟩
+  | .req (.literal k x) => some ⟨k, x⟩
+  | .optional (.literal k x) => some ⟨k, x⟩
+  | .fallback (.literal k x) _ => some ⟨k, x⟩
   | _ => none
 
 /-- A body's name spec: what admission reads off each declared name. The payload's own
@@ -118,14 +118,27 @@ and nothing here does.
 
 Fuel was a termination device and never a cost measure; it is not even that any more. -/
 
+/-- **A set of alternatives, as the predicate `Pred.members` carries.** Some alternative is the
+    value, which is `inL` at each.
+
+    This is what `inL` was before a literal carried one value. It survives because a refinement
+    predicate is data over a `Finset` and a literal is not: `Pred.members` is the only remaining
+    set of alternatives in the language. -/
+noncomputable def inLs (k : GroundKind) (ls : NEFinset k.Carrier) (v : Value) : Bool :=
+  decide (∃ x ∈ ls.1, inL k x v = true)
+
 /-- **What a `Pred` means.** The type is in `Term.lean`, and the meaning is here, because `inL`
     is in `Prisms.lean` and `liftQ` in `Products.lean`, and `Term.lean` imports neither.
 
     `noncomputable`, because `inL` is: the numeric base's carrier gate reaches `numericHost`.
     That costs nothing new. `denote` is noncomputable for the same reason, and `Orth` never
-    calls this — a classifier reads a `Pred`'s constructors, which are data. -/
+    calls this — a classifier reads a `Pred`'s constructors, which are data.
+
+    **`members` keeps its `Finset`, and a literal no longer has one.** A refinement predicate is
+    data over a set of alternatives; a literal is one value. `inLs` is the set form, built from
+    `inL` at each alternative rather than as a membership row of its own. -/
 noncomputable def Pred.eval : Pred → Value → Bool
-  | .members k ls => inL k ls
+  | .members k ls => inLs k ls
   | .each p       => liftQ p.eval
   | .closure q    => q
 

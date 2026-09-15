@@ -19,9 +19,10 @@ Mechanization choices, and where they diverge from the doc (each is routine to s
   mention the denotation.
 * **`literal` is one rule in §3 and one constructor here.** §3's `(literal)` reads its member
   off a base, which in a naive transcription needs `ℓ : List Value` plus a premise that the
-  values share a kind. `literal (k : GroundKind) (ls : NEFinset k.Carrier)` gets that from the
-  *type*: with the base as an index, homogeneity, nonemptiness and pairwise distinctness are
-  Lean's. `GroundKind` covers all six bases, so nothing §3 admits is spelled `refine`.
+  values share a kind. `literal (k : GroundKind) (x : k.Carrier)` gets that from the *type*:
+  with the base as an index, `ℓᵢ ∈ T` is the carrier and the member is a function of the index.
+  A set of alternatives is a certified `union` of singletons. `GroundKind` covers all six
+  bases, so nothing §3 admits is spelled `refine`.
 * **§5's dischargers are in neither list, and that is the rule.** `(union)`'s premises are
   the option judgements and (D); a discharger settles the (U) obligation, and lives with
   `κ`/`ident`/`adm` in `Discharge.lean` — downstream of this file, which is why it could
@@ -186,12 +187,12 @@ inductive Typed : Term → Held → Option Member → Prop where
       that gating it deletes the witness. It does not: the witness is about §3's rule, which
       admits an ungated `ℓ` only if you drop `ℓᵢ ∈ T`, so it is stated on an ungated prism that
       is deliberately not a `Term`. What the gate does buy is that `inL` is the whole of
-      admission, which makes `adm (.literal .number ls)` exact.
+      admission, which makes `adm (.literal .number x)` exact.
 
-      Not a union of arity-one literals: derivable (`Calculus/LiteralArity1.lean`) but not free,
-      since `Term.union` is list-shaped and the bridge from a `Finset` is `Classical.choice`. -/
-  | literal (k : GroundKind) (ls : NEFinset k.Carrier) :
-      Typed (.literal k ls) (HLit k ls) (some k.member)
+      **One value.** Several alternatives are a certified `union` of singletons, and
+      `Calculus/LiteralArity1.lean` derives that rule from this one and `Typed.union`. -/
+  | literal (k : GroundKind) (x : k.Carrier) :
+      Typed (.literal k x) (HLit k x) (some k.member)
   /-- §3 `(set)`, and there is nothing left of the premise line.
 
       The rule was `⊢ c : T ⇝ μ` plus `setMember μ = some μS`, and the second premise was

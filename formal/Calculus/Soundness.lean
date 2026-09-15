@@ -235,9 +235,9 @@ theorem lawful_number : Lawful (denote .number) := by
   simp only [denote]; exact lawful_numberCodec
 
 /-- One where there were two, at every base rather than the two commonest. -/
-theorem lawful_literal (k : GroundKind) (ls : NEFinset k.Carrier) :
-    Lawful (denote (.literal k ls)) := by
-  simp only [denote]; exact lawful_literalCodec k ls
+theorem lawful_literal (k : GroundKind) (x : k.Carrier) :
+    Lawful (denote (.literal k x)) := by
+  simp only [denote]; exact lawful_literalCodec k x
 
 /-! ## Inversion and dispatch helpers -/
 
