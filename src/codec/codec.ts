@@ -41,6 +41,7 @@ import type { Body, Field, NameLiteral, Term } from './term'
 import {
     alwaysWritten,
     elementPredicates,
+    literalsOf,
     meet,
     member as memberOf,
     occA,
@@ -2206,6 +2207,22 @@ export type DiscriminatedCodec<T, D extends string, Spec> = {
     readonly unsafeDecode: (attribute: AttributeValue) => T
     readonly def: Term
     readonly item: Tagged<T, D, Spec>
+    /**
+     * **The members a clause keeps**, over the same keys — or `never` where it keeps none.
+     *
+     * `Spec` does not shrink with `T`. A member the clause dropped is still keyed in the table, and
+     * asking for it gives an `ItemCodec<never>`: the entity type is what the slice narrows, and the
+     * runtime is what refuses the assignment. Narrowing the table too would need the spec list
+     * filtered in step with the entity union, and the two are matched by their decoded types rather
+     * than positionally.
+     */
+    readonly extract: <const C extends ClauseOf<T>>(
+        clause: C,
+    ) => DiscriminatedCodec<Extracted<T, C>, D, Spec>
+    /** …and the members it rejects, the complement of the same clause. */
+    readonly exclude: <const C extends ClauseOf<T>>(
+        clause: C,
+    ) => DiscriminatedCodec<Excluded<T, C>, D, Spec>
     /** The row this codec writes, pinnable with {@link Writes}. Type-level only. */
     readonly [writesMarker]?: WritesVariantsPin<Spec>
 }
@@ -2262,6 +2279,14 @@ export type DissectedCodec<
     readonly unsafeDecode: (attribute: AttributeValue) => T
     readonly def: Term
     readonly item: Dissected<T, Ks, Specs>
+    /** **The members a clause keeps**, over the same keys — or `never` where it keeps none. */
+    readonly extract: <const C extends ClauseOf<T>>(
+        clause: C,
+    ) => DissectedCodec<Extracted<T, C>, Ks, Specs>
+    /** …and the members it rejects, the complement of the same clause. */
+    readonly exclude: <const C extends ClauseOf<T>>(
+        clause: C,
+    ) => DissectedCodec<Excluded<T, C>, Ks, Specs>
 }
 
 /**
@@ -2299,6 +2324,25 @@ export type UnionCodec<T, Options extends readonly unknown[]> = {
     readonly item: AllObjects<Options> extends true
         ? Untagged<T, SpecsOf<Options>>
         : ErrorMessage<'[union] this union can hold an attribute that is not a map, so it has no whole-item reading — an item is always a map'>
+    /**
+     * **The options a clause keeps** — only where every option is an object, for the reason `item`
+     * gives: a clause names attributes, and an option that writes no map declares none.
+     *
+     * The same operation the dissection has, and the same implementation, because a dissection is a
+     * union of objects with a tag table over it. Every option survives or is dropped whole; no key
+     * moves.
+     */
+    readonly extract: AllObjects<Options> extends true
+        ? <const C extends ClauseOf<T>>(
+              clause: C,
+          ) => UnionCodec<Extracted<T, C>, Options>
+        : ErrorMessage<'[union] this union can hold an attribute that is not a map, so a clause has nothing to name — only a union of objects has a slice'>
+    /** …and the options it rejects, the complement of the same clause. */
+    readonly exclude: AllObjects<Options> extends true
+        ? <const C extends ClauseOf<T>>(
+              clause: C,
+          ) => UnionCodec<Excluded<T, C>, Options>
+        : ErrorMessage<'[union] this union can hold an attribute that is not a map, so a clause has nothing to name — only a union of objects has a slice'>
     /** The row this codec writes, pinnable with {@link Writes}. Type-level only. */
     readonly [writesMarker]?: WritesVariantsPin<SpecsOf<Options>>
 }
@@ -3338,7 +3382,34 @@ const dissect = <T extends Record<string, unknown>>(
         unsafeDecode: nested.unsafeDecode,
         def: nested.def,
         item: self as unknown as Tagged<T, string, Record<string, unknown>>,
+        // **The slice keeps every key**, at one member as at several. A key the clause pins to one
+        // tag is a constant key on the result, and no normalisation drops a constant key: the
+        // codec writes the tag out of the member's own field, so every item carries it whatever
+        // the key set says. So a one-member result is a one-member dissection that still reads its
+        // key, and `dissect` is handed the same `ks` it was built with.
+        extract: (clause: Readonly<Record<string, unknown>>) =>
+            slicedDissection(ks, options, clause, true),
+        exclude: (clause: Readonly<Record<string, unknown>>) =>
+            slicedDissection(ks, options, clause, false),
     } as DiscriminatedCodec<T, string, Record<string, unknown>>
+}
+
+/**
+ * A dissection's slice: the same keys, the members the clause keeps, and `never` where it keeps
+ * none.
+ *
+ * `never` and not an empty dissection, which `dissect` refuses: an empty option list is what a typo
+ * produces, so a rule reading it as the bottom reads that accident as intent. An extraction that
+ * keeps nothing is the bottom on purpose, and there is one name for the bottom.
+ */
+const slicedDissection = (
+    ks: readonly string[],
+    options: readonly AnyObjectCodec[],
+    clause: Readonly<Record<string, unknown>>,
+    keep: boolean,
+): unknown => {
+    const kept = sliced(options, clause, keep)
+    return kept.length === 0 ? never : dissect(ks, kept)
 }
 
 // ── unions with no discriminator ────────────────────────────────────
@@ -4062,6 +4133,125 @@ type EveryOptionTagged<
     D extends PropertyKey,
 > = MembersTagged<Specs, readonly [D]>
 
+/* ── the slice of a union ─────────────────────────────────────────────────────────────── */
+
+/**
+ * The tags a clause admits at one key: one tag, or a tuple of them.
+ *
+ * Both spellings, because a clause naming one tag per key is what almost every call writes and a
+ * set is what makes the slice more than a lookup.
+ */
+type TagsIn<V> = V extends readonly (infer One)[] ? One : V
+
+/**
+ * **A clause**: a partial assignment admitting a set of tags at each key it names.
+ *
+ * `Calculus.AltClause` at the host. An object literal and not a list of pairs, so the keys carry no
+ * order and no repeat — the same reason the model's clause is a `Finset` and a function on it.
+ */
+export type ClauseOf<T, Ks extends PropertyKey = keyof T> = {
+    readonly [K in Ks]?: TagsAt<T, K> | readonly TagsAt<T, K>[]
+}
+
+/**
+ * The tags the members carry at one key, taken together.
+ *
+ * `Ks` is a parameter and the mapped type above is written over it rather than over `keyof T`
+ * directly, which is not a spelling preference: a mapped type whose constraint *is* `keyof T` is
+ * homomorphic and distributes over a union, so `ClauseOf` of a three-member union would be three
+ * clause types and a clause naming two members' tags would match none of them.
+ */
+type TagsAt<T, K extends PropertyKey> = T extends unknown
+    ? K extends keyof T
+        ? T[K]
+        : never
+    : never
+
+/**
+ * **The members a clause keeps**: at every key the clause names, the member's whole tag set lies
+ * inside the clause's.
+ *
+ * **Inside, and not "the clause's tag is among the member's".** That second reading is
+ * {@link VariantOf}, which is a *lookup* asking which member one tag selects, and it is the wrong
+ * direction here: a member spanning `'ACME' | 'GLOBEX'` against a clause naming `'ACME'` would be
+ * kept, and the extraction would then admit a value the clause does not describe. The model's
+ * `altsSub` reads containment for that reason, and so does this. The two coincide wherever a
+ * member carries one tag per key, which is every discriminated union.
+ */
+export type Extracted<T, C> = T extends unknown
+    ? {
+          [K in keyof C]-?: K extends keyof T
+              ? [T[K]] extends [TagsIn<C[K]>]
+                  ? never
+                  : K
+              : K
+      }[keyof C] extends never
+        ? T
+        : never
+    : never
+
+/** …and the members it rejects, which is the complement of the same predicate. */
+export type Excluded<T, C> = Exclude<T, Extracted<T, C>>
+
+/** The tags a clause names at one key, as a list, whichever spelling the caller used. */
+const clauseTags = (named: unknown): readonly unknown[] =>
+    Array.isArray(named) ? named : [named]
+
+/**
+ * **Whether a clause describes one member**: the member declares every clause key as a *required*
+ * literal, and that literal's alternatives all lie inside the clause's tags.
+ *
+ * `required` is read for `Calculus.litSubAt`'s reason: an optional literal name admits the map that
+ * omits the name, so the member holds values outside every fibre the clause describes.
+ */
+const clauseKeeps = (
+    clause: Readonly<Record<string, unknown>>,
+    term: Term,
+): boolean => {
+    const literals = literalsOf(term)
+    if (!literals) return false
+    for (const name in clause) {
+        const pinned = literals[name]
+        if (!pinned?.required) return false
+        const admitted = clauseTags(clause[name])
+        const inside = (pinned.alts.ls as readonly LiteralValue[]).every(
+            (one) => admitted.some((tag) => sameLiteral(one, tag)),
+        )
+        if (!inside) return false
+    }
+    return true
+}
+
+/**
+ * The members kept, with a foreign key refused before anything is filtered.
+ *
+ * A clause key no member pins to a literal keeps nothing, and silently: an empty result is a
+ * legitimate answer, so a typo in a key would read as "no member matched" rather than as the typo
+ * it is. The model cannot have this failure — its clause keys are a subset of the dissection's by
+ * the type — so the refusal is the host's own and says which keys exist.
+ */
+const sliced = <O>(
+    options: readonly O[],
+    clause: Readonly<Record<string, unknown>>,
+    keep: boolean,
+): readonly O[] => {
+    const terms = options.map((option) => termOf(option as unknown as AnyCodec))
+    const pinned = new Set<string>()
+    for (const term of terms) {
+        for (const name in literalsOf(term) ?? {}) pinned.add(name)
+    }
+    for (const name of Object.keys(clause)) {
+        if (!pinned.has(name)) {
+            throw new CodecError(
+                `'${name}' is not a key any member pins to a literal, so a clause naming it selects nothing; the keys available are ${[...pinned].map((one) => `'${one}'`).join(', ') || '(none)'}`,
+            )
+        }
+    }
+    return options.filter(
+        (_option, at) => clauseKeeps(clause, terms[at] as Term) === keep,
+    )
+}
+
 /**
  * A union of objects told apart by one attribute — `zod`'s `discriminatedUnion`, over an item.
  *
@@ -4346,7 +4536,35 @@ export const union = <const Options extends readonly AnyCodec[]>(
             options: all.map((option) => termOf(option.codec)),
         },
         item: self as never,
+        // built either way rather than branched, exactly as `item` is: an option that writes no map
+        // declares no name, so it survives no clause, and the type is what says the capability does
+        // not apply to such a union
+        extract: ((clause: Readonly<Record<string, unknown>>) =>
+            slicedUnion(options as readonly AnyCodec[], clause, true)) as never,
+        exclude: ((clause: Readonly<Record<string, unknown>>) =>
+            slicedUnion(
+                options as readonly AnyCodec[],
+                clause,
+                false,
+            )) as never,
     }
+}
+
+/**
+ * A union's slice: the options the clause keeps, and `never` where it keeps none.
+ *
+ * Rebuilt through {@link union} and not assembled here, so the declaration guard runs over the
+ * result. It has to: a sub-selection of a certified union is certified, and a sub-selection of one
+ * that was never certified is not — which is the premise `Calculus.uAtAct_extract` takes and the
+ * reason it takes one.
+ */
+const slicedUnion = (
+    options: readonly AnyCodec[],
+    clause: Readonly<Record<string, unknown>>,
+    keep: boolean,
+): unknown => {
+    const kept = sliced(options, clause, keep)
+    return kept.length === 0 ? never : union(kept as never)
 }
 
 /**

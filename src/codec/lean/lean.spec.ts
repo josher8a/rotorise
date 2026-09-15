@@ -1047,6 +1047,19 @@ const resolutionUnions = (): readonly (readonly [string, AnyCodec])[] => [
         erase(union([object({ a: string }), object({ b: boolean })])),
     ],
     ['u_literal_pair', erase(union([string('A'), string('B')]))],
+    // **the slice, as a term the model can read.** An extraction is a `union` over the members it
+    // kept, so what the bridge elaborates here is `Calculus.AltClause.extract`'s result spelled as
+    // an ordinary union — which is the whole claim: the slice builds no new kind of term
+    [
+        'u_extracted',
+        erase(
+            union([
+                object({ kind: string('a'), x: string }),
+                object({ kind: string('b'), x: boolean }),
+                object({ kind: string('c'), x: decimal }),
+            ]).extract({ kind: ['a', 'b'] }),
+        ),
+    ],
     [
         'u_objects_by_literal',
         erase(
@@ -1129,10 +1142,10 @@ describe('union resolution, model against library', () => {
      * `set_of_literal`, and 248 by `literal_non_ascii` and the three products: each new entry
      * adds the resolutions of the unions it takes part in.
      */
-    it('offers 297 write pairs and 323 statable of 324 read pairs', () => {
-        expect(writeResolutions().length).toBe(297)
+    it('offers 330 write pairs and 359 statable of 360 read pairs', () => {
+        expect(writeResolutions().length).toBe(330)
         const reads = readResolutions()
-        expect(reads.length).toBe(324)
+        expect(reads.length).toBe(360)
         // one pair only, and it is the `Double` axiom reaching the decoded value; the five
         // map-valued reads beside it are stated through `vcheck` now
         expect(
