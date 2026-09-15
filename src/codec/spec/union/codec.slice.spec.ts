@@ -198,6 +198,27 @@ describe('a clause is a literal at a base', () => {
         )
     })
 
+    /**
+     * **The slice acts on the structure, so the type it carries follows the members kept.** A union
+     * is a pair — the entity type and the member specs — and the filter runs over the specs, which
+     * is the only place the base lives. So `string('1')` and `decimal('1')` part company at the
+     * type as they do at run time, and the entity type of the result is the kept member's alone.
+     */
+    it('narrows the entity type to the member kept, and no further', () => {
+        const kept = byBase.extract({ k: string('1') })
+        // the kept member is exactly what the result carries, asserted both ways with no call
+        type Kept = ReturnType<typeof kept.unsafeDecode>
+        const read: { readonly k: '1'; readonly a: string } = {} as Kept
+        const write: Kept = { k: '1', a: 'x' }
+        expect(read).toEqual({})
+        expect(kept.unsafeEncode(write)).toEqual({
+            M: { k: { S: '1' }, a: { S: 'x' } },
+        })
+        // and the dropped member is gone from the type, not merely refused at run time
+        // @ts-expect-error the decimal member is no longer part of this union
+        kept.encode({ k: '1', b: true })
+    })
+
     it('refuses a clause value that is no literal at all', () => {
         expect(() =>
             // @ts-expect-error a bare tag says nothing about the base
@@ -257,6 +278,18 @@ describe('the clause carries no order', () => {
             kind: string('pet'),
         })
         expect(one.def).toEqual(other.def)
+    })
+
+    /**
+     * **The spec table shrinks with the entity type**, which is what makes a dissected codec
+     * deterministic at both levels: asking for a member the clause dropped is a type error, where a
+     * table that kept every key would answer with a codec over `never`.
+     */
+    it('drops the member from the table, so asking for it is a type error', () => {
+        const pets = twoKey.extract({ kind: string('pet') })
+        expect(pets.item.variant({ kind: 'pet', size: 'large' })).toBeDefined()
+        // @ts-expect-error `food` is not a member of the extraction
+        pets.item.variant({ kind: 'food', size: 'small' })
     })
 
     it('gives the same members whichever order they were declared in', () => {
