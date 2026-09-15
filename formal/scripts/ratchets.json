@@ -28,7 +28,7 @@
     "Calculus/Separation.lean": 74,
     "Calculus/Slice.lean": 1,
     "Calculus/Soundness.lean": 345,
-    "Calculus/Sums.lean": 26,
+    "Calculus/Sums.lean": 32,
     "Calculus/Term.lean": 56,
     "Calculus/Typing.lean": 68,
     "Calculus/Vectors.lean": 201
