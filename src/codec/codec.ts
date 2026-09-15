@@ -3277,8 +3277,8 @@ const dissect = <T extends Record<string, unknown>>(
 ): DiscriminatedCodec<T, string, Record<string, unknown>> => {
     // **the empty key set, refused where the type cannot refuse it.** Over no discriminator every
     // value carries the empty assignment, so the first member answers for all of them and the
-    // union is a union of one. `Calculus.TagMap.ks` is a `NEFinset` and says this in the type; a
-    // `readonly string[]` cannot, so this is the gate the model does not need
+    // union is a union of one. The model carries no key set at all, so it never asks this; here
+    // the key set is a `readonly string[]`, which cannot say it, and this is the gate
     if (ks.length === 0) {
         throw new CodecError(
             `a discriminated union needs at least one discriminator, and this one has none — every value carries the empty assignment, so the first variant would answer for all of them`,
@@ -3314,11 +3314,11 @@ const dissect = <T extends Record<string, unknown>>(
     )
     const unionDef = { kind: 'union', options: memberTerms } as const
 
-    // **every member's assignment, read off the member's own body, and no two alike.** This is
-    // `Calculus.Body.namesTags` at each member and a `Finset` of assignments; the one-key refusals
-    // `discriminatedUnion` used to spell inline are these two rules at one key. The union's own
-    // gate does not replace them: a duplicated index key is a different fact from a non-empty
-    // structural meet, and the index is what needs it.
+    // **every member's assignment, read off the member's own body, and no two alike.** Both rules
+    // are the index's, not the union's: the one-key refusals `discriminatedUnion` used to spell
+    // inline are these two at one key. The union's own gate does not replace them, because a
+    // duplicated index key is a different fact from a non-empty structural meet, and the index is
+    // what needs it.
     const members = membersOf(
         ks,
         memberTerms.map((term, at) => {
@@ -4080,8 +4080,8 @@ type MultiTaggedAnywhere<
  * Whether two options differ at some key.
  *
  * **At some key, not at the first.** Two members of a dissection are distinct when their
- * assignments differ anywhere, which is `Calculus.asgEq` read the other way round, and asking it
- * of every key at once is what makes the answer independent of how the keys were written.
+ * assignments differ anywhere, and asking that of every key at once is what makes the answer
+ * independent of how the keys were written.
  */
 type DiffersSomewhere<A, B, Ks extends readonly PropertyKey[]> = true extends {
     [K in Ks[number]]: [TagsOf<A, K> & TagsOf<B, K>] extends [never]

@@ -67,10 +67,6 @@ def valPresentT (fields : Finset Name) (fld : {k // k ∈ fields} → Field)
   decide (∀ k : {k // k ∈ fields},
     (match fld k with | .optional _ => true | _ => decide (k.1 ∈ keys)) = true)
 
-/-! `select` at a `dunion` is gone with the filtered sum. The variants are keyed by tag, so the
-lookup reaches one variant or none: there is nothing to filter and no second match to rule out.
-~~selTagV~~, ~~selTagA~~, ~~AdmTagged~~ and ~~AdmATagged~~ went with it. -/
-
 /-- A `union` option's own admission, as `optionSemOf` builds it — and the two builders are
     **not** the same test. An *object* option decides by *structure*: the names the map carries
     lie in the spec's interval, and every present name whose field is a literal carries one of
@@ -264,12 +260,6 @@ noncomputable def Adm : Term → Value → Bool
   | .tuple ts tail => fun v =>
       match v with | .arr vs => alignP (AdmList ts) (AdmOptT tail) vs | _ => false
   | .object b => AdmBody b
-  -- the lookup: read the tag, index the table, ask that one variant. No filter, and no second
-  -- match to rule out — the key set already did that
-  | .dunion variants => fun v =>
-      match tagOfV variants.ks.1 v with
-      | some tag => if h : tag ∈ variants.keys then AdmBody (variants.get ⟨tag, h⟩) v else false
-      | none => false
   -- **The second row that asks its own codec**, as the section above sets out:
   -- `denote (.opaq lossy)` *is* `opaqCodecω lossy`, so this is `dom(e)` rather than a
   -- description of it, and `ExactV_opaq` is `Iff.rfl`.
@@ -516,38 +506,6 @@ theorem ExactV_tuple {ts : List Term} {tail : Option Term}
       simp
   all_goals simp [Adm, denote, tupleCodec]
 
-/-- **`dunion` is exact** once its options are: the tag filter is syntactic, and the one
-    option it lands on answers for itself. -/
-theorem ExactV_dunion {variants : TagMap Body}
-    (h : ∀ k, ExactV (.object (variants.get k))) : ExactV (.dunion variants) := by
-  intro v
-  show (match tagOfV variants.ks.1 v with
-        | some tag => if hk : tag ∈ variants.keys then AdmBody (variants.get ⟨tag, hk⟩) v else false
-        | none => false) = true ↔ _
-  rw [denote_dunion_tags]
-  cases htv : tagOfV variants.ks.1 v with
-  | none => simp [dunionTable, htv]
-  | some tag =>
-    show (if hk : tag ∈ variants.keys then AdmBody (variants.get ⟨tag, hk⟩) v else false)
-        = true ↔ _
-    by_cases hk : tag ∈ variants.keys
-    · rw [dif_pos hk]
-      refine Iff.trans (h ⟨tag, hk⟩ v) (Iff.intro (fun hs => ?_) (fun hs => ?_))
-      · obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp hs
-        exact Option.isSome_iff_exists.mpr ⟨a, dunionTable_e.mpr ⟨tag, hk, htv, ha⟩⟩
-      · obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp hs
-        obtain ⟨tag', hk', ht, hve⟩ := dunionTable_e.mp ha
-        rw [htv] at ht
-        obtain rfl : tag' = tag := (Option.some.inj ht).symm
-        exact Option.isSome_iff_exists.mpr ⟨a, hve⟩
-    · rw [dif_neg hk]
-      refine Iff.intro (fun hs => nomatch hs) (fun hs => ?_)
-      obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp hs
-      obtain ⟨tag', hk', ht, -⟩ := dunionTable_e.mp ha
-      rw [htv] at ht
-      obtain rfl : tag' = tag := (Option.some.inj ht).symm
-      exact absurd hk' hk
-
 /-- A field's row is exact when the term it carries is. -/
 def ExactField (fd : Field) : Prop :=
   ∀ v, AdmField fd v = true ↔ (((fieldSem fd).codec).e v).isSome
@@ -736,8 +694,8 @@ theorem filter_AdmSpecs {opts : List Term} (h : ∀ t ∈ opts, ExactV t) (v : V
 
     The excuse's argument was correct and its scope was the table, not the row: a count is
     anti-monotone, so while any option's row could be loose the count could refuse where the
-    codec writes. The hypothesis here is the same one `ExactV_tuple`, `ExactV_object` and
-    `ExactV_dunion` all take — the options are exact — and once `set` and `nullable` stopped
+    codec writes. The hypothesis here is the same one `ExactV_tuple` and `ExactV_object` both
+    take — the options are exact — and once `set` and `nullable` stopped
     declining there is no term at which it is unavailable. `Adm_exact` supplies it by
     structural recursion, exactly as it does at every other container.
 
@@ -803,14 +761,13 @@ mutual
     added without a case here.
 
     Mutual with the list, option, field and rest companions, for the same reason `denote` is:
-    a tuple's components and a `dunion`'s options are reached through a `List Term` and an
+    a tuple's components and a union's options are reached through a `List Term` and an
     object's fields through a *function*, and a single recursion on the term cannot follow
     either. -/
 theorem Adm_exact : ∀ (t : Term), ExactV t
   -- the rows §5 excused, and not one of them needed excusing
   | .tuple ts tail =>
       ExactV_tuple (exactVL_mem ts (Adm_exactL ts)) (exactVO_mem tail (Adm_exactO tail))
-  | .dunion variants => ExactV_dunion fun k => Adm_exactB (variants.get k)
   | .object b => Adm_exactB b
   | .opaq lossy => ExactV_opaq lossy
   -- both sides are empty, so the equivalence is `False ↔ False`
@@ -876,9 +833,9 @@ theorem Adm_exact : ∀ (t : Term), ExactV t
       have hc := Adm_exact c
       intro v; simpa [Adm, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, Codec.through] using hc (f v)
 
-/-- The payload's own exactness, as a companion. A `dunion`'s variants are `Body`s reached
-    through a function, so the recursion needs to land on a `Body` rather than on the `Term` that
-    wraps one — the same reason the field and rest companions exist. -/
+/-- The payload's own exactness, as a companion. An object's fields are reached through a
+    function, so the recursion needs to land on a `Body` rather than on the `Term` that wraps
+    one — the same reason the field and rest companions exist. -/
 theorem Adm_exactB : ∀ (b : Body), ExactV (.object b)
   | .mk _ fld rest =>
       ExactV_object (fun k => Adm_exactF (fld k)) (exactVR_codec rest (Adm_exactR rest))

@@ -181,9 +181,9 @@ names, not contents. So `Adm` is not an over-approximation of admission there, i
 discharge on what `select` consults, which is the repair the `object` row invites. -/
 
 
-/-! ~~selTagV_mem~~ and ~~selTagA_mem~~ went with `select` at a `dunion`. They said that the
-option the filter lands on is one of the options; a key set says it, and the lookup's two rewrite
-lemmas are where it is read off now. -/
+/-! ~~selTagV_mem~~ and ~~selTagA_mem~~ went with the tag-filtered sum. They said that the option
+the filter lands on is one of the options; a dissection is a certified `union` now, and
+`selOptV_mem_admitOpt` is where that fact is read off. -/
 
 /-- **Separation on the joint predicate, value side — one clause.** §5's ~~SepV~~ offers a
     choice between disjoint kinds and disjoint admissible sets; `Adm` carries the kind gate

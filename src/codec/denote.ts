@@ -286,14 +286,15 @@ const setWire: {
 /**
  * **A member's assignment: one tag per key, read off the member's own body.**
  *
- * `Calculus.Body.namesTags` as a function. The model states it as a predicate — `b.tags k = {asg
- * k}` at every key — because reading the element out of a singleton `Finset` costs a choice
- * principle there. Here the body's field is data, so the same fact extracts, and the extraction is
- * exact: a body satisfies `namesTags` at exactly the assignment this returns, and at no other.
+ * The model states no rule here: the tag table is a host index over a `Term.union`, and no term
+ * carries it. What the model does carry is the member's own body, as `Calculus.Body.spec`, and
+ * this reads the same field data one question further — the field is `req`, its term is a
+ * `literal`, and it pins exactly one alternative.
  *
- * `Calculus.tagsOfField` decides each key, and this mirrors it: **`req` only** — a `fallback`
- * discriminator would fill an absent tag with a default and break the value-side stamp — a
- * `literal`, and exactly one alternative, which is `namesTags`' singleton.
+ * **`req` only.** A `fallback` discriminator would fill an absent tag with a default, and the
+ * index would then key a member on a value no item carries. `Calculus.Body.spec` marks a
+ * `fallback` field required, so the model's own clause keeps one where this refuses it: the two
+ * rules differ because this one writes a tag and the model's writes none.
  *
  * One divergence, and it is the one the model writes down rather than fixes: the model reads a
  * `number` literal's tag set as empty, because `Calculus.Double` is an axiom with no closed terms.
@@ -339,8 +340,8 @@ export const assignmentOf = (
 }
 
 /**
- * **Two assignments are equal when they agree at every key.** `Calculus.asgEq`, which decides
- * `Assignment ks` by `∀ k ∈ ks` and not by a rendering.
+ * **Two assignments are equal when they agree at every key**, decided by walking the keys and
+ * not by a rendering.
  *
  * No sort, no join, no `JSON.stringify`. A rendering would be an encoding, and an encoding of a
  * key set is an order: the thing the term is built not to carry. This reads the keys the caller
@@ -825,19 +826,17 @@ export const altSem = (
     }
 }
 /**
- * §3 `(dunion)`: the assignment chooses the member, and the choice is a **lookup** rather than an
- * attempt.
+ * The assignment chooses the member, and the choice is a **lookup** rather than an attempt.
  *
- * The model's `dunionTable`, and `lawful_dunionTable` is the lemma. Its (U) is a fact of the key
- * set rather than an obligation, which §5 states as the reason `(dunion)` is not a second kind of
- * sum: reading a label off an input is something a member cannot be wrong about.
+ * **The index is the host's, and the model has no such term.** A dissection is a `Term.union` of
+ * members whose structures do not meet, certified by `Calculus.OrthS`; this table is an index
+ * built over that union, so nothing in the model states it and nothing in the model needs it. What
+ * makes the lookup answer the same question the union answers is the refusal at construction: two
+ * members carrying one assignment are refused, so at most one member is reached either way.
  *
- * **A list and a scan, which is `Calculus.TagMap` and its `at` verbatim.** The model's table is a
- * `Finset` of assignments with a function on membership, and membership is decided by
- * {@link sameAssignment}. An index keyed by a rendered string would be a second statement of what
- * an assignment is, in a vocabulary the model does not have, and it would put an order on the keys
- * to build the rendering. The members of one dissection are few; the scan is the model's own
- * decision procedure and costs what the model says it costs.
+ * **A list and a scan.** Membership is decided by {@link sameAssignment}. An index keyed by a
+ * rendered string would put an order on the keys to build the rendering, and a key set has none.
+ * The members of one dissection are few, so the scan costs what the walk over the keys costs.
  */
 export const byTagSem = <V>(
     ks: readonly string[],
@@ -894,9 +893,10 @@ export const byTagSem = <V>(
  * **The members of a dissection, as a set.** Every member's assignment, read off its own body, and
  * a refusal where two members carry one assignment.
  *
- * `Calculus.TagMap.keys` is a `Finset`, so the model cannot hold one assignment twice and needs no
- * premise saying so. A JavaScript array can, and this is where that difference is paid: the
- * refusal is the `Finset`, stated at construction because the type cannot state it.
+ * **The index must be a lookup, and that is what this refuses.** Two members carrying one
+ * assignment leave the table unable to say which member an item reaches. The model states nothing
+ * here, because no term carries the table; the refusal is the host's alone, and it is stated at
+ * construction because the type cannot state it.
  *
  * Reached by both spellings — `mdunion` at the declaration, and {@link taggedItemSem} at a bare
  * term — so a term that was not built through the constructor meets the same rule.
@@ -1850,8 +1850,8 @@ export const readsBack = (
  * A term's kind, as the **constructor the caller wrote**.
  *
  * A refusal names the option to remove, so it has to use the caller's vocabulary rather than the
- * model's. Two kinds differ: `Term.opaq` is written `opaque(...)` and `Term.dunion` is written
- * `discriminatedUnion(...)`. Everything else is spelled the same on both sides.
+ * model's. One kind differs: `Term.opaq` is written `opaque(...)`. Everything else is spelled the
+ * same on both sides.
  *
  * Reached by `union`'s refusal, which is the one message that names an option by its kind. The
  * `opaq` row became reachable when the guard stopped exempting an `opaque` option: the message

@@ -11,9 +11,8 @@ Mechanization choices, and where they diverge from the doc (each is routine to s
   set formers below. The index is determined by the term in every rule, exactly as a
   syntax-directed judgement should be; it is an index rather than a function so the rules
   read as §3 writes them.
-* `Typed` keeps only the *syntactic* premises, and there are two: `(union)`'s **(D)** and
-  `(dunion)`'s tag arity and disjointness. Every other side condition became a type — see each
-  constructor's own docstring.
+* `Typed` keeps only one *syntactic* premise, `(union)`'s **(D)**. Every other side condition
+  became a type — see each constructor's own docstring.
   The doc's *semantic* premises — `(held)`'s carrier-restricted iso, `(legacy)`'s
   `ran(r) ⊆ dom(e)` and coherence, `(fallback)`'s `v(∗) ∈ dom(e)`, `(custom)`'s laws, and
   `(union)`'s residual (U) — live in `Obligations` (Soundness.lean), which is where they can
@@ -102,22 +101,9 @@ def HMap (T : Held) : Held :=
 def HNull (T : Held) : Held :=
   fun v => T v ∨ v = .null
 
-/-- `⋃ Tᵢ` (§5 `(union)`, `(dunion)`). -/
+/-- `⋃ Tᵢ` (§5 `(union)`). -/
 def HUnion (Ts : List Held) : Held :=
   fun v => ∃ T ∈ Ts, T v
-
-/-- `(dunion)`'s held set: some variant holds the value.
-
-    **`HUnion` over a key set, and not `HUnion` itself.** `HUnion` is a disjunction over a *list*
-    and a tag-keyed table has no list — building one needs `Finset.toList`, which reaches
-    `Classical.choice`. This is the same disjunction, indexed.
-
-    It does *not* say that the value's own tag picks the variant, though a lookup does. That
-    reading is true and belongs where it is used: `T` is an upper bound `Carrier` keeps `e` and
-    `p` inside, and asking it of `T` would cost `Carrier` two premises it does not otherwise
-    need. -/
-def HVariants (variants : TagMap Body) (Ts : {k // k ∈ variants.keys} → Held) : Held :=
-  fun v => ∃ k, Ts k v
 
 /-- The bottom's held set: nothing. It is a subset of every held set, so (D) fails against
     every other option and `never` is an option of no `union`. -/
@@ -246,29 +232,6 @@ inductive Typed : Term → Held → Option Member → Prop where
   /-- `(union)`: the option judgements, and §5's **(D)** on their held sets. -/
   | union {opts Ts μs} (h : TypedListμ opts Ts μs) (hD : DIncomp Ts) :
       Typed (.union opts) (HUnion Ts) (unanimous μs)
-  /-- §5 `(dunion)`, **keyed by the tag**, where the premises used to carry what the key set
-      now carries.
-
-      `hone` did five jobs. `tagsOf` is empty for everything but an object whose `d` field is a
-      `req` literal at a tag base, so asking anything of it forced *object*, *`d` declared*,
-      *`req` rather than `optional`/`fallback`*, and *a literal at a tag base*; `card = 1` added
-      that the literal is a singleton. `hdisj` did a sixth, that no two options answer to one tag.
-
-      The table does four of the six. *Object* is the codomain. *Arity one* is a function on a key
-      set. *Distinctness* is `Finset`. And the key is the tag, so there is no tag set to compare.
-
-      **What is left is one fact, and it is the one a table cannot state**: that a variant's own
-      `d` field agrees with its key. The field cannot go — the codec writes the tag out of it, and
-      the host's variant declares it — so the agreement is a premise. `hone` is that, and
-      `tagsOf_ne_nil` is still the inversion that unpacks it, once per discriminator: the key is
-      an assignment now, so `hone` is one such equation at each key of the set.
-
-      The conclusion moved too. `HUnion` is a disjunction over a list and there is no list;
-      `HVariants` is the same disjunction over the key set. -/
-  | dunion {variants : TagMap Body} {Ts : {k // k ∈ variants.keys} → Held}
-      (h : ∀ k, Typed (.object (variants.get k)) (Ts k) (some .M))
-      (hone : ∀ k, (variants.get k).namesTags variants.ks.1 k.1) :
-      Typed (.dunion variants) (HVariants variants Ts) (some .M)
 
 inductive TypedList : List Term → List Held → Prop where
   | nil : TypedList [] []

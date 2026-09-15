@@ -888,8 +888,7 @@ theorem uniqueAdmission_of_sharedBase {base : Codec} {cs : List Codec}
       rw [hq.2, restrict_p.mpr ⟨hlaw.retract hb, hqt⟩]; rfl
 
 /-- An option pinned to a **set of labels**, under a partial projection of each side of
-    the pair. `OnKind` is the singleton case at `Value.kind`/`Attr.kind`; `(dunion)`'s
-    tag sets are the general one at `tagOfV`/`tagOfA`. -/
+    the pair. `OnKind` is the singleton case at `Value.kind`/`Attr.kind`. -/
 def OptionSem.Labelled {L : Type} (πV : Value → Option L) (πA : Attr → Option L)
     (o : OptionSem) (S : L → Prop) : Prop :=
   (∀ v, o.admitV v = true → ∃ l, πV v = some l ∧ S l) ∧
@@ -903,8 +902,8 @@ def OptionSem.Labelled {L : Type} (πV : Value → Option L) (πA : Attr → Opt
     in at most one option's set. `hw` is the only codec-facing premise, and it is what
     ties a canonical pair to its own option's admission.
 
-    Kind-separation (`opaque`'s fixpoint) and tag-separation (`(dunion)`) are this theorem
-    at two projections; §5's table reads as four conditions and is one. -/
+    Kind-separation (`opaque`'s fixpoint) is this theorem at one projection; §5's table reads
+    as four conditions and is one. -/
 theorem uniqueAdmission_of_labels {L : Type} {πV : Value → Option L} {πA : Attr → Option L}
     {os : List OptionSem} {Ss : List (L → Prop)}
     (hz : List.Forall₂ (OptionSem.Labelled πV πA) os Ss)
@@ -938,184 +937,6 @@ theorem uniqueAdmission_of_kinds {os : List OptionSem} {ks : List Kind}
 theorem byAttempt_write {c : Codec} (h : Lawful c) {t a} (he : c.e t = some a) :
     (OptionSem.byAttempt c).admitV t = true ∧ (OptionSem.byAttempt c).admitA a = true :=
   ⟨by simp [OptionSem.byAttempt, he], by simp [OptionSem.byAttempt, h.retract he]⟩
-
-/-! ### `(dunion)` as a lookup
-
-A discriminated union is a **lookup**, and the list of tag-labelled options is that lookup with
-its key set spread over a list and its uniqueness left as an obligation. A `MapOf Codec` is the
-same thing with the key set as a key set, and it changes what has to be proved rather than how.
-
-**`hdisj` goes and the whole uniqueness chain goes with it.** ~~uniqueAdmission_byTag~~,
-`uniqueBothWays_of_uniqueAdmission` at this site, ~~labelled_byTag~~ and ~~OptionSem.byTag~~ existed to
-establish that at most one option answers to a tag. A key set says it, so there is nothing left
-to discharge: `lawful_dunionTable` below takes two premises where ~~lawful_dunionCodec~~ took three.
-
-**`hstamp` stays, per key, and it is what makes the lookup lawful at all.** `e` routes through
-`tagOfV` and `p` routes through `tagOfA`, so the two halves reach the same variant only if that
-variant writes its own tag onto the attribute it produces. Without it the codec would encode
-through one key and decode through another. It is the semantic twin of the coherence premise the
-term carries, and `dunion_stamp` is what supplies it. -/
-
-/-- The stamp a lookup needs, keyed rather than listed: every variant writes its own key, on both
-    halves of every pair it produces. -/
-def StampedAt (m : TagMap Codec) : Prop :=
-  ∀ (k : {k // k ∈ m.keys}) v a, (m.get k).e v = some a →
-    tagOfA m.ks.1 a = some k.1 ∧ tagOfV m.ks.1 v = some k.1
-
-/-- §5 `(dunion)`, as the lookup it is: read the tag, index the table, run that one variant.
-
-    No `altCodec`, no filtered list, and no enumeration of the key set — which is the point, since
-    enumerating a `Finset` is `Finset.toList` and that reaches `Classical.choice`. The two readers
-    are the ones a decimal tag widened, so this works at `string` and `decimal` alike. -/
-def dunionTable (m : TagMap Codec) : Codec :=
-  -- **`T` is the disjunction over the key set and says nothing about the tag.** The sharper
-  -- reading — "the value's own tag picks the variant" — is true and costs two premises on
-  -- `Carrier`: `ranP` gives a value from the *attribute*'s key, and recovering the *value*'s key
-  -- needs (C) and the stamp. `T` is an upper bound that `Carrier` keeps `e` and `p` inside, so
-  -- the looser one is the right one, and the fact stays where it is used rather than declared.
-  { T := fun v => ∃ k : {k // k ∈ m.keys}, (m.get k).T v
-    μ := some .M
-    e := fun v => match tagOfV m.ks.1 v with
-      | some tag => if h : tag ∈ m.keys then (m.get ⟨tag, h⟩).e v else none
-      | none => none
-    p := fun a => match tagOfA m.ks.1 a with
-      | some tag => if h : tag ∈ m.keys then (m.get ⟨tag, h⟩).p a else none
-      | none => none }
-
-/-- The write half, as the rewrite every proof over it names rather than unfolding. -/
-theorem dunionTable_e {m : TagMap Codec} {v : Value} {a : Attr} :
-    (dunionTable m).e v = some a ↔
-      ∃ (tag : Assignment m.ks.1) (h : tag ∈ m.keys),
-        tagOfV m.ks.1 v = some tag ∧ (m.get ⟨tag, h⟩).e v = some a := by
-  show (match tagOfV m.ks.1 v with
-        | some tag => if h : tag ∈ m.keys then (m.get ⟨tag, h⟩).e v else none
-        | none => none) = some a ↔ _
-  cases htv : tagOfV m.ks.1 v with
-  | none => exact Iff.intro (fun he => nomatch he) (fun ⟨_, _, ht, _⟩ => nomatch ht)
-  | some tag =>
-    show (if h : tag ∈ m.keys then (m.get ⟨tag, h⟩).e v else none) = some a ↔ _
-    by_cases hk : tag ∈ m.keys
-    · rw [dif_pos hk]
-      refine Iff.intro (fun he => ⟨tag, hk, rfl, he⟩) ?_
-      rintro ⟨tag', hk', ht, he⟩
-      obtain rfl : tag' = tag := (Option.some.inj ht).symm
-      exact he
-    · rw [dif_neg hk]
-      refine Iff.intro (fun he => nomatch he) ?_
-      rintro ⟨tag', hk', ht, -⟩
-      obtain rfl : tag' = tag := (Option.some.inj ht).symm
-      exact absurd hk' hk
-
-/-- …and the read half. -/
-theorem dunionTable_p {m : TagMap Codec} {a : Attr} {v : Value} :
-    (dunionTable m).p a = some v ↔
-      ∃ (tag : Assignment m.ks.1) (h : tag ∈ m.keys),
-        tagOfA m.ks.1 a = some tag ∧ (m.get ⟨tag, h⟩).p a = some v := by
-  show (match tagOfA m.ks.1 a with
-        | some tag => if h : tag ∈ m.keys then (m.get ⟨tag, h⟩).p a else none
-        | none => none) = some v ↔ _
-  cases hta : tagOfA m.ks.1 a with
-  | none => exact Iff.intro (fun hp => nomatch hp) (fun ⟨_, _, ht, _⟩ => nomatch ht)
-  | some tag =>
-    show (if h : tag ∈ m.keys then (m.get ⟨tag, h⟩).p a else none) = some v ↔ _
-    by_cases hk : tag ∈ m.keys
-    · rw [dif_pos hk]
-      refine Iff.intro (fun hp => ⟨tag, hk, rfl, hp⟩) ?_
-      rintro ⟨tag', hk', ht, hp⟩
-      obtain rfl : tag' = tag := (Option.some.inj ht).symm
-      exact hp
-    · rw [dif_neg hk]
-      refine Iff.intro (fun hp => nomatch hp) ?_
-      rintro ⟨tag', hk', ht, -⟩
-      obtain rfl : tag' = tag := (Option.some.inj ht).symm
-      exact absurd hk' hk
-
-/-- **Two premises, where the list form takes three.** The variants' own laws and the stamp; the
-    disjointness premise has nowhere to go, because the key set is where it went.
-
-    **`NEFinset` is not decoration, and the member clause is where it earns its place.** Over an
-    empty key set the assignment is the empty function, which every attribute carries, so a
-    `dunion` would claim the member `M` while writing none; the witness `m.ks.2` is what rules
-    that out. -/
-theorem lawful_dunionTable {m : TagMap Codec}
-    (h : ∀ k, Lawful (m.get k)) (hstamp : StampedAt m) :
-    Lawful (dunionTable m) := by
-  refine ⟨?_, ?_, ?_, ?_⟩
-  · intro v a he
-    obtain ⟨tag, hk, htv, hve⟩ := dunionTable_e.mp he
-    obtain ⟨hA, -⟩ := hstamp ⟨tag, hk⟩ v a hve
-    exact dunionTable_p.mpr ⟨tag, hk, hA, (h ⟨tag, hk⟩).retract hve⟩
-  · intro a v hp
-    obtain ⟨tag, hk, hta, hvp⟩ := dunionTable_p.mp hp
-    obtain ⟨a', hae⟩ := Option.isSome_iff_exists.mp ((h ⟨tag, hk⟩).canon hvp)
-    obtain ⟨-, hV⟩ := hstamp ⟨tag, hk⟩ v a' hae
-    exact Option.isSome_iff_exists.mpr ⟨a', dunionTable_e.mpr ⟨tag, hk, hV, hae⟩⟩
-  · rintro μ hμ v a he
-    cases hμ
-    obtain ⟨tag, hk, -, hve⟩ := dunionTable_e.mp he
-    obtain ⟨hA, -⟩ := hstamp ⟨tag, hk⟩ v a hve
-    -- **Only an `.m` carries a tag, and the key set is non-empty**, so some key is read and the
-    -- stamp fixes the member. The non-emptiness is load bearing: over an empty key set the
-    -- assignment is the empty function, which every attribute carries, and a `dunion` would
-    -- claim a member it does not write. `NEFinset` is why that case does not exist
-    obtain ⟨k, hkm⟩ := m.ks.2
-    rw [tagOfA] at hA
-    split at hA
-    · rename_i hall
-      have hk1 := hall k hkm
-      cases a <;> first | rfl | simp_all [tagAtA]
-    · exact nomatch hA
-  · intro a v a' hp he
-    obtain ⟨tag, hk, hta, hvp⟩ := dunionTable_p.mp hp
-    obtain ⟨tag', hk', htv, hve⟩ := dunionTable_e.mp he
-    -- **the value carries one tag**, so the write half lands on the key the read half came from:
-    -- the variant the read half chose writes *something* by (C), and the stamp says that
-    -- something carries the read half's key
-    obtain ⟨a'', hae⟩ := Option.isSome_iff_exists.mp ((h ⟨tag, hk⟩).canon hvp)
-    obtain ⟨-, hV⟩ := hstamp ⟨tag, hk⟩ v a'' hae
-    obtain rfl : tag' = tag := by rw [hV] at htv; exact (Option.some.inj htv).symm
-    exact (h ⟨_, hk⟩).agree hvp hve
-
-/-- **On its carrier from the variants' alone**, one premise, as `altCodec` takes one. `T` is the
-    disjunction over the key set, so a value either half produces sits under the key it came
-    from — and neither half has to know it is the *same* key, which is what dropping the tag
-    conjunct from `T` bought. -/
-theorem carrier_dunionTable {m : TagMap Codec}
-    (h : ∀ k, Carrier (m.get k)) : Carrier (dunionTable m) := by
-  refine ⟨?_, ?_⟩
-  · intro v a he
-    obtain ⟨tag, hk, -, hve⟩ := dunionTable_e.mp he
-    exact ⟨⟨tag, hk⟩, (h ⟨tag, hk⟩).domE hve⟩
-  · intro a v hp
-    obtain ⟨tag, hk, -, hvp⟩ := dunionTable_p.mp hp
-    exact ⟨⟨tag, hk⟩, (h ⟨tag, hk⟩).ranP hvp⟩
-
-/-- Core `(dunion)`: the same two premises, with core variants. -/
-theorem lawfulCore_dunionTable {m : TagMap Codec}
-    (h : ∀ k, LawfulCore (m.get k)) (hstamp : StampedAt m) :
-    LawfulCore (dunionTable m) := by
-  refine ⟨?_, ?_, ?_⟩
-  · intro v a he
-    obtain ⟨tag, hk, htv, hve⟩ := dunionTable_e.mp he
-    obtain ⟨hA, -⟩ := hstamp ⟨tag, hk⟩ v a hve
-    exact dunionTable_p.mpr ⟨tag, hk, hA, (h ⟨tag, hk⟩).retract hve⟩
-  · intro a v hp
-    obtain ⟨tag, hk, hta, hvp⟩ := dunionTable_p.mp hp
-    obtain ⟨a', hae⟩ := Option.isSome_iff_exists.mp ((h ⟨tag, hk⟩).canon hvp)
-    obtain ⟨-, hV⟩ := hstamp ⟨tag, hk⟩ v a' hae
-    exact Option.isSome_iff_exists.mpr ⟨a', dunionTable_e.mpr ⟨tag, hk, hV, hae⟩⟩
-  · rintro μ hμ v a he
-    cases hμ
-    obtain ⟨tag, hk, -, hve⟩ := dunionTable_e.mp he
-    obtain ⟨hA, -⟩ := hstamp ⟨tag, hk⟩ v a hve
-    -- the same argument as `lawful_dunionTable`'s member clause, and for the same reason
-    obtain ⟨k, hkm⟩ := m.ks.2
-    rw [tagOfA] at hA
-    split at hA
-    · rename_i hall
-      have hk1 := hall k hkm
-      cases a <;> first | rfl | simp_all [tagAtA]
-    · exact nomatch hA
 
 /-! ### `opaque`'s options, each pinned to its kind -/
 

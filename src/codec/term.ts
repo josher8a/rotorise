@@ -2,7 +2,8 @@
  * §3's term language, and the five functions of a term that the model computes.
  *
  * Derived from `formal/Calculus/Term.lean`, with `member` from `Denote.lean`'s `μSyn`, `specOf`
- * and `tagsOf` from `Denote.lean`, and {@link occV}/{@link occA} from `Orthogonality.lean`. One
+ * from `Denote.lean`, and {@link occV}/{@link occA} from `Orthogonality.lean`. {@link tagsOf} has
+ * no counterpart there: the tag table is a host index, and no term carries it. One
  * variant per model constructor, under the model's own names, so a reader holding the two files
  * side by side is reading one language twice rather than two languages that agree.
  *
@@ -566,8 +567,8 @@ const pinnedLiteral = (t: Term): Literal | undefined =>
  * **`req` only, and a string literal only.** A `fallback` discriminator would fill an absent tag
  * with an arbitrary value the tag sets never vouched for, and (C) would then re-encode a variant no
  * tag selects; an `optional` one would let the tag be absent altogether. So four facts are read off
- * one question, exactly as the model's `tagsOf` reads them: the term is an object, `d` is declared,
- * the field is `req`, and its term is a literal at the string base.
+ * one question: the term is an object, `d` is declared, the field is `req`, and its term is a
+ * literal at the string base. The model reads none of this, because no term carries the table.
  */
 export const tagsOf = (d: string, t: Term): readonly string[] => {
     if (t.kind !== 'object') return []
