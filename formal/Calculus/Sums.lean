@@ -148,6 +148,68 @@ theorem uniqueBothWays_of_uniqueAdmission {os : List OptionSem}
   ⟨fun o ho t a _ he => (hU o ho t a he).1,
    fun o ho _ t a' _ _ he => (hU o ho t a' he).2⟩
 
+/-! ### Sub-selection
+
+A slice keeps some of the options and drops the rest. `(D)` survives that by itself, because it is
+a `Pairwise` property and `List.Pairwise.sublist` carries it to any sublist with no axioms at all.
+`UniqueBothWays` does **not**, and the reason is the singleton filter test below. -/
+
+/-- A list that holds at most one entry, and holds this one, is exactly it. -/
+theorem eq_singleton_of_mem_of_length_le_one {α : Type} {l : List α} {x : α}
+    (hx : x ∈ l) (hl : l.length ≤ 1) : l = [x] := by
+  cases l with
+  | nil => exact absurd hx (by simp)
+  | cons y ys =>
+    cases ys with
+    | nil =>
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hx
+      rw [hx]
+    | cons z zs => simp at hl
+
+/-- **No value and no attribute is admitted by two options.**
+
+    The certificate a discriminated selection carries and an undiscriminated one does not. Pass 7's
+    structural meet is a syntactic test that implies this; stated here as the property the lemma
+    below actually needs, so the lemma does not wait on the test. -/
+def AdmitsAtMostOne (os : List OptionSem) : Prop :=
+  (∀ t, (os.filter (·.admitV t)).length ≤ 1) ∧
+  (∀ a, (os.filter (·.admitA a)).length ≤ 1)
+
+/-- **(U) at the acting options survives a sub-selection, under the certificate and not without it.**
+
+    `UniqueBothWays` reads `os.filter (·.admitV t) = [o]`, which is a *singleton* test, so it is not
+    monotone on its own: dropping an option can turn a filter of two into a filter of one, making a
+    premise that was vacuous live and demanding a conclusion nothing previously required. **Slicing
+    an uncertified union can break it.**
+
+    Under `AdmitsAtMostOne` the question does not arise. No filter is ever longer than one, so a
+    singleton in the sub-selection is a singleton in the whole, the original's obligation applies,
+    and the answer restricts. The certificate is why a slice of a `dunion` is safe, and it is a
+    premise rather than decoration. -/
+theorem uAtAct_sublist {os us : List OptionSem} (hsub : us.Sublist os)
+    (hcert : AdmitsAtMostOne os) (h : UniqueBothWays os) : UniqueBothWays us := by
+  -- one argument, used on both halves: a singleton of the sub-selection is the whole's singleton
+  have lift : ∀ (p : OptionSem → Bool) (o : OptionSem),
+      (os.filter p).length ≤ 1 → us.filter p = [o] → os.filter p = [o] := by
+    intro p o hlen hus
+    have ho : o ∈ us.filter p := by rw [hus]; exact List.mem_singleton_self o
+    have hmem := List.mem_filter.mp ho
+    exact eq_singleton_of_mem_of_length_le_one
+      (List.mem_filter.mpr ⟨hsub.subset hmem.1, hmem.2⟩) hlen
+  -- and one for the conclusion: the whole's singleton restricts, because the member is kept
+  have drop : ∀ (p : OptionSem → Bool) (o : OptionSem),
+      o ∈ us → os.filter p = [o] → us.filter p = [o] := by
+    intro p o hou hos
+    have hp : p o = true := (List.mem_filter.mp (by rw [hos]; exact List.mem_singleton_self o)).2
+    have hsl : (us.filter p).Sublist [o] := hos ▸ hsub.filter p
+    have ho : o ∈ us.filter p := List.mem_filter.mpr ⟨hou, hp⟩
+    exact eq_singleton_of_mem_of_length_le_one ho (hsl.length_le)
+  exact
+    ⟨fun o ho t a hus he =>
+       drop _ o ho (h.1 o (hsub.subset ho) t a (lift _ o (hcert.1 t) hus) he),
+     fun o ho a t a' hus hp he =>
+       drop _ o ho (h.2 o (hsub.subset ho) a t a' (lift _ o (hcert.2 a) hus) hp he)⟩
+
 /-- A union's member: `μ` when unanimous, else `⊤` (§5 `(union)`). -/
 def unanimous : List (Option Member) → Option Member
   | [] => none
