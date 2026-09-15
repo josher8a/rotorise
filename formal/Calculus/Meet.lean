@@ -16,10 +16,10 @@ the other `N`, so `never` would claim they share no value when they share every 
 
 **The write side agrees only where both factors name a member**, and that is weaker than "all three
 write the same way". `μSyn` answers `none` for two different reasons — a term that writes no value
-at all (`never`) and a term that names no *single* stored member (`nullable`, `opaq`, `lazy`,
+at all (`never`) and a term that names no *single* stored member (`union`, `opaq`, `lazy`,
 `custom`) — so a factor answering `none` constrains nothing. The two examples at the foot of this
-file are the witnesses: `nullable string ∧ null` is `null` and `opaq ∧ string` is `string`, and in
-each the meet names a member neither shared with its `none`-answering factor. The condition the
+file are the witnesses: `union [string, null] ∧ null` is `null` and `opaq ∧ string` is `string`,
+and in each the meet names a member neither shared with its `none`-answering factor. The condition the
 rows keep is that where both factors name a member they name the same one, and the meet names it
 too; `string ∧ decimal` is refused by exactly that condition.
 
@@ -167,13 +167,6 @@ def Term.meet : Term → Term → Option Term
   -- **a refinement conjoins**: the predicate is data, so it rides on the meet of the inner terms.
   | .refine x p, y => if p.isData then (Term.meet x y).map (fun z => .refine z p) else none
   | x, .refine y p => if p.isData then (Term.meet x y).map (fun z => .refine z p) else none
-  -- **`nullable` keeps its null point only against another nullable.** Against anything else the
-  -- point is dropped, which is the meet of the two held sets.
-  | .nullable x, .nullable y => (Term.meet x y).map .nullable
-  | .nullable _, .null => some .null
-  | .null, .nullable _ => some .null
-  | .nullable x, y => Term.meet x y
-  | x, .nullable y => Term.meet x y
   -- the ground bases: the same base is itself, and two different value kinds meet nowhere
   | .string, .string => some .string
   | .boolean, .boolean => some .boolean
@@ -408,8 +401,16 @@ example : Term.meet (.literal .string "a") (.literal .string "b") = some .never 
     no meet rather than an empty one. -/
 example : Term.meet .string .decimal = none := by simp [Term.meet]
 
-/-- `nullable` keeps its null point only against something that holds null. -/
-example : Term.meet (.nullable .string) .null = some .null := by simp [Term.meet]
+/-- **The null point needs no row of its own.** A null point is the null term joined by a union,
+    so the union rows distribute over it and the ground rows answer each cell. This is the pair
+    that had a row and got it wrong: the wrapper this replaced dropped the point at every
+    partner but another wrapper and a `null`, and `opaq` holds the point. -/
+example : Term.meet (.union [.string, .null]) (.opaq true) = some (.union [.string, .null]) := by
+  simp [Term.meet, allSome, Term.ofOptions, Term.isNever]
+
+/-- …and against the null term alone the string cell is the bottom, so one option survives. -/
+example : Term.meet (.union [.string, .null]) .null = some .null := by
+  simp [Term.meet, allSome, Term.ofOptions, Term.isNever]
 
 /-- …and the same refusal one container out. A set of stored numerals satisfies both bases, so
     the pair shares values and has no meet. -/
@@ -428,9 +429,10 @@ Two meets that are not the bottom and whose factor names no member. They are why
 rows keep is "where both factors name a member" rather than "all three name the same member": a
 `μSyn` of `none` is a term that names no single stored member, not a term that writes nothing. -/
 
-example : μSyn (Term.nullable .string) = none := by simp [μSyn]
+example : μSyn (Term.union [.string, .null]) = none := by simp [μSyn, μSynList, unanimous]
 
-example : ¬ (μSyn Term.null = μSyn (Term.nullable .string)) := by simp [μSyn]
+example : ¬ (μSyn Term.null = μSyn (Term.union [.string, .null])) := by
+  simp [μSyn, μSynList, unanimous]
 
 example : Term.meet (.opaq true) .string = some .string := by simp [Term.meet]
 

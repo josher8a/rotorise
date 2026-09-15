@@ -95,10 +95,6 @@ def OptionSem.byAttempt (c : Codec) : OptionSem :=
 @[simp] theorem OptionSem.byAttempt_admitV {c : Codec} {v : Value} :
     (OptionSem.byAttempt c).admitV v = (c.e v).isSome := rfl
 
-/-- The `⟨NULL⟩` point as a union option — §3's second half of `nullable(c)` read as
-    `union(c, ⟨NULL⟩-point)`. It decides by attempting, like any ground option. -/
-abbrev nullOption : OptionSem := .byAttempt nullCodec
-
 /-- The builder `denote` uses for a union option. -/
 def optionSemOf (c : Codec) : Option (MapOf NameSpec) → OptionSem
   | some spec => .byStructure spec c

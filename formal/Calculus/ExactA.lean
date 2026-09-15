@@ -182,10 +182,6 @@ noncomputable def AdmA : Term → Attr → Bool
   | .refine t p => fun a => AdmA t a && refineReads t p.eval a
   -- hatch
   | .legacy t r => fun a => AdmA t a || (r a).isSome
-  -- the read side of the same question; see the `Adm` row. `withNull` guards *both* halves
-  -- on the same `ownsNull`, so the conjunct is identical rather than a mirror of it.
-  | .nullable t => fun a =>
-      AdmA t a || ((match a with | .null => true | _ => false) && !(denote t).ownsNull)
   -- the read side of the same count; `byStructure` reads the structural test off an `.m`
   | .union opts => fun a => selOptA (AdmASpecs opts) a
   -- **the row that used to admit all three wire families whatever the element term was.**
@@ -383,19 +379,6 @@ theorem ExactA_union {opts : List Term} (h : ∀ t ∈ opts, ExactA t) : ExactA 
       have ht : ExactA t := h t (mem_of_filter_eq_singleton hf).1
       simpa [optionSemOf_c] using ht a
     | cons t2 r2 => simp
-
-/-- **`nullable` reads exactly what its row says.** The same two cases as `ExactV_nullable`,
-    against the same guard: `withNull` gates *both* halves of the pair on one `ownsNull`, so
-    the read side needs no separate argument and gets none. -/
-theorem ExactA_nullable {t : Term} (h : ExactA t) : ExactA (.nullable t) := by
-  intro a
-  rw [denote_nullable]
-  simp only [AdmA, Codec.withNull]
-  cases hw : (denote t).ownsNull with
-  | true => simp [h a]
-  | false =>
-    simp only [Bool.not_false, Bool.and_true, if_false, Bool.false_eq_true, addPoint]
-    cases a <;> simp [h _]
 
 /-- **`set` reads exactly what its row says.**
 
@@ -660,8 +643,6 @@ theorem AdmA_exact : ∀ (t : Term), ExactA t
   | .never => fun _ => Iff.rfl
   -- exact because the constructor narrowed, not because the row sharpened
   | .set b => ExactA_set b
-  -- the row that asks `ownsNull`; see `ExactA_nullable`
-  | .nullable c => ExactA_nullable (AdmA_exact c)
   -- see `ExactA_union`
   | .union opts => ExactA_union (exactAL_mem opts (AdmA_exactL opts))
 

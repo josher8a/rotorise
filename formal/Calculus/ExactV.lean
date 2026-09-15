@@ -97,8 +97,8 @@ def admitOptV (o : Option (MapOf NameSpec) × VP) (v : Value) : Bool :=
     where the codec writes — so while any row was loose, sharpening `union` traded imprecision
     for unsoundness. What the argument did not reach is that the count is *exact given the
     options' exactness*, which is the hypothesis every other container row already carries; and
-    once `set` (a narrower constructor) and `nullable` (a row that asks `ownsNull`) stopped
-    being loose, there was nothing left to loosen. The excuse was a fact about the state of the
+    once `set` (a narrower constructor) stopped being loose, there was nothing left to
+    loosen. The excuse was a fact about the state of the
     table, recorded as a fact about the row. -/
 def selOptV (os : List (Option (MapOf NameSpec) × VP)) (v : Value) : Bool :=
   match os.filter (fun o => admitOptV o v) with
@@ -222,19 +222,6 @@ noncomputable def Adm : Term → Value → Bool
   | .legacy t _ => Adm t
   | .lazy t     => Adm t
   | .held t f _ => fun v => Adm t (f v)
-  -- **`ownsNull` is asked, not assumed.** The row was `Adm t v || v = null`, which claims
-  -- the wrapper always adds the point. §3's `withNull` adds it *unless the subterm already
-  -- owns it*, and `ownsNull` is a disjunction over **both** halves — so a subterm whose
-  -- *read* reaches null (a `legacy` widening) suppresses the wrapper while its write still
-  -- refuses null, and the old row admitted a value the codec does not write
-  -- (~~not_ExactV_nullable~~, deleted with the excuse it witnessed).
-  --
-  -- The conjunct is the sixth row to **ask its codec** rather than describe it, and the
-  -- cheapest of them: `Codec.ownsNull` is a computable `Bool` off the subterm's pair, so
-  -- this needs no mutual recursion and no new vocabulary — only the question the old row
-  -- answered from a reading.
-  | .nullable t => fun v =>
-      Adm t v || ((match v with | .null => true | _ => false) && !(denote t).ownsNull)
   -- **`select`'s count, mirrored** — where this was `⋁` over the options. The `⋁` was
   -- inexact with perfectly exact options (`union [string, string]`: two admit, so the union
   -- writes nothing while `⋁` says yes), and the count that fixes it was refused on
@@ -695,8 +682,8 @@ theorem filter_AdmSpecs {opts : List Term} (h : ∀ t ∈ opts, ExactV t) (v : V
     The excuse's argument was correct and its scope was the table, not the row: a count is
     anti-monotone, so while any option's row could be loose the count could refuse where the
     codec writes. The hypothesis here is the same one `ExactV_tuple` and `ExactV_object` both
-    take — the options are exact — and once `set` and `nullable` stopped
-    declining there is no term at which it is unavailable. `Adm_exact` supplies it by
+    take — the options are exact — and once `set` stopped declining there is no term at
+    which it is unavailable. `Adm_exact` supplies it by
     structural recursion, exactly as it does at every other container.
 
     What the proof spends it on is narrower than the excuse suggested: the *filter*, not the
@@ -720,29 +707,6 @@ theorem ExactV_union {opts : List Term} (h : ∀ t ∈ opts, ExactV t) : ExactV 
       have ht : ExactV t := h t (mem_of_filter_eq_singleton hf).1
       simpa [optionSemOf_c] using ht v
     | cons t2 r2 => simp
-
-/-- **`nullable` writes exactly what its row says**, once the row asks `ownsNull`.
-
-    The proof is the definition of `withNull` in two cases, and each case is where the old
-    row went wrong or did not:
-
-    * `ownsNull = true` — the wrapper is *suppressed*, `e` is the subterm's, and the row
-      collapses to the subterm's row. The old row still offered `null`, and at
-      `nullable(legacy(string, ⟨NULL⟩))` that was a value the pair refuses to write: the
-      read side owns the point, so the guard fires, and the write side is `string`'s.
-    * `ownsNull = false` — the wrapper is `orNull`, and the point really is added.
-
-    So the conjunct is not a repair of an approximation. It is the guard §3 already has,
-    stated on the side of the analysis that had been reading it as unconditional. -/
-theorem ExactV_nullable {t : Term} (h : ExactV t) : ExactV (.nullable t) := by
-  intro v
-  rw [denote_nullable]
-  simp only [Adm, Codec.withNull]
-  cases hw : (denote t).ownsNull with
-  | true => simp [h v]
-  | false =>
-    simp only [Bool.not_false, Bool.and_true, if_false, Bool.false_eq_true, addPoint]
-    cases v <;> simp [h _]
 
 -- `unnecessarySeqFocus` fires on `Adm_exact`'s `literal` case and is wrong there: `try split`
 -- leaves two goals at `decimal`, and the `;` it suggests would reach only the first.
@@ -774,8 +738,6 @@ theorem Adm_exact : ∀ (t : Term), ExactV t
   | .never => fun _ => Iff.rfl
   -- the row the *constructor* made exact, rather than a sharper analysis of the old one
   | .set b => ExactV_set b
-  -- the row that asks `ownsNull`
-  | .nullable c => ExactV_nullable (Adm_exact c)
   -- the count is exact given the options' exactness, which is the hypothesis this
   -- recursion hands it. See `ExactV_union`.
   | .union opts => ExactV_union (exactVL_mem opts (Adm_exactL opts))
@@ -883,8 +845,8 @@ theorem Adm_array_nested :
 
     This was a hundred-and-twenty-line recursion on `Term.depth`, separate from `Adm_exact`
     because exactness was proved *given* the subterms' exactness and soundness could assume no
-    such thing: `set`, `nullable` and `union` were loose, so a row over them had to be argued
-    monotone instead. All three rows are exact now, `Adm_exact` carries no hypothesis, and the
+    such thing: `set` and `union` were loose, so a row over them had to be argued monotone
+    instead. Both rows are exact now, `Adm_exact` carries no hypothesis, and the
     separate proof was proving the weaker half of something already available.
 
     The scaffolding it needed — ~~SoundV~~, ~~alignP_sound~~ and the per-constructor soundness

@@ -232,6 +232,9 @@ HOST = {
                    "the `AdmA` port was rejected and this is what landed instead",
     "discriminatedUnion": "`src/`'s combinator; the calculus has no such codec — it is the sum "
                           "over tag-admission, which is why `(dunion)` is a rule and not a row",
+    "nullable": "`src/codec/codec.ts`'s builder, and the model has no such term. It reads whether "
+                "its subterm already holds the null point and joins the null term with a union, "
+                "which is what §3's sugar paragraph says it always was",
     "EveryOptionTagged": "`src/codec/codec.ts`'s type-level check, cited by the arity-one row",
 }
 

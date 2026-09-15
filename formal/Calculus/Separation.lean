@@ -576,10 +576,9 @@ adapter at all, and asking whether it was is what found the row above.
 
 An adapter *composes*: `adapt`'s read is `(c.p a).bind g`, so it can only lose attributes —
 `adapt_p_le`. `legacy`'s read *gains* them: `extendRead`'s `p` is the subterm's channel
-falling back to `r`'s, which is a **choice**, not a composition. That is the family
-`nullable` belongs to as well (`orNull` adjoins the null point on both sides) and `union`
-(`altCodec`, n-ary, both sides). `legacy` is the one-sided member: it reads on two channels
-and writes on one.
+falling back to `r`'s, which is a **choice**, not a composition. That is the family `union`
+belongs to as well (`altCodec`, n-ary, both sides). `legacy` is the one-sided member: it reads
+on two channels and writes on one.
 
 Placing it correctly is what makes the row exact. §5 called `admA(legacy)` `⊤` because
 `extendRead` widens past the subterm's set — true, and the wrong conclusion, because the

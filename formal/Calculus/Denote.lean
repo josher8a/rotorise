@@ -83,7 +83,6 @@ def μSyn : Term → Option Member
   | .held t _ _ => μSyn t
   | .refine t _ => μSyn t
   | .legacy t _ => μSyn t
-  | .nullable _ => none
   | .lazy _ => none
   | .custom _ _ => none
   | .opaq _ => none
@@ -159,7 +158,6 @@ def denote : Term → Codec
   | .held inner f g => (denote inner).through f g
   | .refine inner p => (denote inner).restrict p.eval
   | .legacy inner r => (denote inner).extendRead r
-  | .nullable inner => (denote inner).withNull
   -- `(lazy)` concludes `⊤`: the pair is the thunk's, the member is not.
   | .lazy inner => { denote inner with μ := none }
   | .custom ce cp => { T := fun v => (ce v).isSome, μ := none, e := ce, p := cp }
@@ -232,7 +230,7 @@ theorem denote_μ : ∀ t : Term, (denote t).μ = μSyn t
   | .held t' _ _ => denote_μ t'
   | .refine t' _ => denote_μ t'
   | .legacy t' _ => denote_μ t'
-  | .nullable _ | .lazy _ | .custom _ _ | .opaq _ | .never => rfl
+  | .lazy _ | .custom _ _ | .opaq _ | .never => rfl
   | .object b => bodySem_μ b
   | .union opts => by
       show unanimous (denoteμs opts) = unanimous (μSynList opts)
@@ -288,9 +286,6 @@ theorem denote_refine (t : Term) (p : Pred) :
 /-- `legacy` denotes `extendRead`. -/
 theorem denote_legacy (t : Term) (r : Attr → Option Value) :
     denote (.legacy t r) = (denote t).extendRead r := rfl
-
-/-- `nullable` denotes `withNull` — `orNull` behind §3's guard. -/
-theorem denote_nullable (t : Term) : denote (.nullable t) = (denote t).withNull := rfl
 
 /-- `union` denotes `altCodec`, over the options' semantics and their unanimous member. -/
 theorem denote_union_sems (opts : List Term) :

@@ -203,19 +203,6 @@ theorem carrier_extendRead {c : Codec} {r : Attr → Option Value} (hc : Carrier
     · obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp (hran _ _ hrv)
       exact hc.domE ha'
 
-theorem carrier_orNull {c : Codec} (hc : Carrier c) : Carrier c.orNull where
-  domE he := by
-    rcases orNull_e.mp he with ⟨hv, -⟩ | ⟨-, hcv⟩
-    · exact .inr hv
-    · exact .inl (hc.domE hcv)
-  ranP hp := by
-    rcases orNull_p.mp hp with ⟨-, hv⟩ | ⟨-, hcv⟩
-    · exact .inr hv
-    · exact .inl (hc.ranP hcv)
-
-/-! ### Containers -/
-
-
 /-- `set`: non-emptiness comes from the codec refusing an empty set on both sides, and
     membership in the held set from the element codec's own carrier. Uniqueness and order
     are no longer conditions at all — the `Finset` carries them. -/

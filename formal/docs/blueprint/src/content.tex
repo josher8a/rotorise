@@ -598,17 +598,6 @@ subterm's member this way.
 \end{verbatim}
 \end{definition}
 
-\begin{definition}[(nullable)]
-\label{rule:nullable}
-\lean{Calculus.Typed.nullable}
-\leanok
-\begin{verbatim}
-⊢ c : T ⇝ μ
-──────────────────────── (nullable)
-⊢ nullable(c) : T + 𝟙 ⇝ ⊤
-\end{verbatim}
-\end{definition}
-
 \begin{definition}[(lazy)]
 \label{rule:lazy}
 \lean{Calculus.Typed.lazy}
@@ -643,10 +632,7 @@ e : T ⇀ 𝔸    p : 𝔸 ⇀ T    (R), (C), (MP) hold of (e, p)
 \end{verbatim}
 \end{definition}
 
-These \texttt{⊤}s are forced for different reasons, and the distinction matters. \texttt{nullable} writes \texttt{μ} or
-\texttt{NULL} and so names neither, and it is idempotent: the value language has one null, so the second
-\texttt{𝟙} in \texttt{T\ +\ 𝟙\ +\ 𝟙} is one nothing can inhabit distinctly, and \texttt{nullable(nullable(c))\ ≡\ nullable(c)}
-(§6). \texttt{lazy} could be asked but answering would force the thunk, which is the recursion it exists to
+These \texttt{⊤}s are forced for different reasons, and the distinction matters. \texttt{lazy} could be asked but answering would force the thunk, which is the recursion it exists to
 break. \texttt{custom} is a pair of opaque functions and there is nothing to ask, which is also why its
 premise is the laws themselves: nothing structural guarantees them, so the rule demands them.
 Demanding \rulelink{cond:R}{\textbf{(R)}} alone would under-demand, deriving a \texttt{⊤} term free to change stored members — the
@@ -916,8 +902,6 @@ the reason the machinery of admission gives.
 \begin{definition}[(dunion)]
 \label{rule:dunion}
 \uses{rule:object,rule:literal}
-\lean{Calculus.Typed.dunion}
-\leanok
 \begin{verbatim}
 ⊢ oᵢ = object(sᵢ, ρᵢ) : Tᵢ ⇝ M    sᵢ(d) = literal(tᵢ)    tᵢ pairwise distinct
 ─────────────────────────────────────────────────────────────────────────────── (dunion)
@@ -1330,10 +1314,9 @@ What it lacks is the theorem, not a rule.
 
 Three premises in §3–§4 — \texttt{ran(r)\ ⊆\ dom(e)} and coherence on \rulelink{rule:legacy}{\texttt{(legacy)}}, \texttt{v(∗)\ ∈\ dom(e)} on
 \rulelink{rule:fallback}{\texttt{(fallback)}} — exist because this proof failed without them. That is the theorem earning its keep:
-each names a term the calculus would otherwise derive and the laws refuse. Null-honesty on
-\rulelink{rule:nullable}{\texttt{(nullable)}} is not among them: the wrapper's guard (§3) makes it a consequence
-of lawfulness, which is available there and not for the other three, since those constrain
-functions the caller supplies.
+each names a term the calculus would otherwise derive and the laws refuse. Null-honesty is not
+among them: the null point is an option of \rulelink{rule:union}{\texttt{(union)}}, so what would have been a
+premise is that sum's \rulelink{cond:U}{\textbf{(U)}}, and the sugar paragraph of §3 settles it.
 
 \begin{lemma}[injectivity]
 \label{lem:injectivity}
@@ -1371,7 +1354,7 @@ below is an instantiation.
 \end{proof}
 
 \begin{proof}
-\uses{rule:string,rule:boolean,rule:binary,rule:null,rule:decimal,rule:number,rule:literal,rule:held,rule:refine,rule:legacy,rule:nullable,rule:custom,rule:lazy,rule:field,rule:optional,rule:fallback,rule:array,rule:tuple,rule:tuple-tail,rule:record,rule:object,rule:set,rule:union,rule:dunion,rule:opaque}
+\uses{rule:string,rule:boolean,rule:binary,rule:null,rule:decimal,rule:number,rule:literal,rule:held,rule:refine,rule:legacy,rule:custom,rule:lazy,rule:field,rule:optional,rule:fallback,rule:array,rule:tuple,rule:tuple-tail,rule:record,rule:object,rule:set,rule:union,rule:dunion,rule:opaque}
 \leanok
 By induction on the derivation, with one refinement at \rulelink{rule:lazy}{\texttt{(lazy)}}. Each case
 first says what the pair \emph{is} — the denotation is part of the rule — then discharges the laws. The
@@ -1610,16 +1593,6 @@ there.
 \leanok
 \texttt{union(c₁\ …\ cₙ)\ ≡\ union(c\_σ(1)\ …\ c\_σ(n))} for any permutation \texttt{σ}. Commutative:
 resolution is unique admission (§5), never declaration order.
-\end{theorem}
-
-\begin{theorem}[nullable is idempotent]
-\label{eq:nullable-idem}
-\uses{rule:nullable}
-\lean{Calculus.equiv_orNull_idem, Calculus.equiv_withNull_idem, Calculus.equiv_denote_nullable_idem}
-\leanok
-\texttt{nullable(nullable(c))\ ≡\ nullable(c)}. Idempotent, by construction: \texttt{nullable} inserts the
-null option unless the pair has it, and after one insertion it has it. The value language has one
-null, so there is nothing for a second \texttt{𝟙} to be.
 \end{theorem}
 
 \begin{theorem}[wrappers preserve the member]
