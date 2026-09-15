@@ -33,14 +33,17 @@ predicates (`keepB` on the denoted table, `keepT` on the term's) are equal and n
 /-- An attribute-side row, once the subterms' rows are known. -/
 abbrev AP := Attr → Bool
 
-/-- …and on the attribute side, where `byNames` reads the same name test off an `.m`. -/
-def admitOptA (o : Option (MapOf Bool) × AP) (a : Attr) : Bool :=
+/-- …and on the attribute side, where `byStructure` reads the same two tests off an `.m`. -/
+def admitOptA (o : Option (MapOf NameSpec) × AP) (a : Attr) : Bool :=
   match o.1 with
-  | some spec => match a with | .m keys _ => keysOk spec keys | _ => false
+  | some spec =>
+      match a with
+      | .m keys g => keysOk spec keys && literalsOkA spec keys g
+      | _ => false
   | none => o.2 a
 
 /-- …and the same count. -/
-def selOptA (os : List (Option (MapOf Bool) × AP)) (a : Attr) : Bool :=
+def selOptA (os : List (Option (MapOf NameSpec) × AP)) (a : Attr) : Bool :=
   match os.filter (fun o => admitOptA o a) with
   | [o] => o.2 a
   | _ => false
@@ -183,7 +186,7 @@ noncomputable def AdmA : Term → Attr → Bool
   -- on the same `ownsNull`, so the conjunct is identical rather than a mirror of it.
   | .nullable t => fun a =>
       AdmA t a || ((match a with | .null => true | _ => false) && !(denote t).ownsNull)
-  -- the read side of the same count; `byNames` reads the name test off an `.m`
+  -- the read side of the same count; `byStructure` reads the structural test off an `.m`
   | .union opts => fun a => selOptA (AdmASpecs opts) a
   -- **the row that used to admit all three wire families whatever the element term was.**
   -- With the base an index the family is a function of it, so this names one — and at
@@ -229,7 +232,7 @@ noncomputable def AdmAOptT : Option Term → Option AP
 
 
 /-- `optionSems`' mirror on the attribute side. -/
-noncomputable def AdmASpecs : List Term → List (Option (MapOf Bool) × AP)
+noncomputable def AdmASpecs : List Term → List (Option (MapOf NameSpec) × AP)
   | [] => []
   | t :: ts => (specOf t, AdmA t) :: AdmASpecs ts
 

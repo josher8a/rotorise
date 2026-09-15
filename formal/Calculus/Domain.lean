@@ -718,6 +718,25 @@ deriving DecidableEq, Repr
   | .binary  => .binary
   | .null    => .null
 
+/-! ## What a `union` option's admission reads
+
+`Sums.lean` states a union option's admission and cannot see `Field`: `Term.lean` is on no
+import path below `Calculus.Objects`. So an object option's field table crosses to `Sums` as
+the two things admission reads off each declared name, built in `Denote.lean` where `Field` is
+in scope. -/
+
+/-- A literal's payload with its base packed in. The alternatives' type depends on the base,
+    so one literal as data is this pair and not two fields. -/
+abbrev Alts := (k : GroundKind) × NEFinset k.Carrier
+
+/-- One declared name, as admission reads it: whether the name is required, and the
+    alternatives the name is pinned to where its field is a literal.
+
+    `required` is what `keysOk` reads, `alts` what `literalsOk` reads. -/
+structure NameSpec where
+  required : Bool
+  alts : Option Alts
+
 /-! ## The set bases (§3 `(set)`'s payload)
 
 §3's `(set)` rule reads a member off its element term and refuses when there is none. Four

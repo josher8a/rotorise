@@ -72,20 +72,24 @@ lookup reaches one variant or none: there is nothing to filter and no second mat
 ~~selTagV~~, ~~selTagA~~, ~~AdmTagged~~ and ~~AdmATagged~~ went with it. -/
 
 /-- A `union` option's own admission, as `optionSemOf` builds it — and the two builders are
-    **not** the same test. An *object* option decides by `keysOk`: which names the map carries,
-    not what they hold. Every other option decides by *attempt*, which is its row exactly when
-    its row is exact.
+    **not** the same test. An *object* option decides by *structure*: the names the map carries
+    lie in the spec's interval, and every present name whose field is a literal carries one of
+    that literal's alternatives. Every other option decides by *attempt*, which is its row
+    exactly when its row is exact.
 
-    That asymmetry is the whole of why this is not `Adm`. A row that counted `Adm` would count
-    an object option by its fields' contents, where `select` counts it by its names — so the
-    two would disagree on any union of objects, in both directions.
+    That asymmetry is the whole of why this is not `Adm`. Structure is weaker than `Adm`, which
+    reads every field's contents through that field's codec; a row that counted `Adm` would
+    disagree with `select` on any union of objects, in both directions.
 
     Taking `(spec, row)` rather than the term is what keeps the recursion structural, the same
     shape ~~selTagV~~ took; `specOf` is a function of the term, so the distinction is available
     here without consulting a codec. -/
-def admitOptV (o : Option (MapOf Bool) × VP) (v : Value) : Bool :=
+def admitOptV (o : Option (MapOf NameSpec) × VP) (v : Value) : Bool :=
   match o.1 with
-  | some spec => match v with | .map keys _ => keysOk spec keys | _ => false
+  | some spec =>
+      match v with
+      | .map keys f => keysOk spec keys && literalsOk spec keys f
+      | _ => false
   | none => o.2 v
 
 /-- `select` at a `union`, as a row: filter the options by the admission each one reads, and
@@ -100,7 +104,7 @@ def admitOptV (o : Option (MapOf Bool) × VP) (v : Value) : Bool :=
     once `set` (a narrower constructor) and `nullable` (a row that asks `ownsNull`) stopped
     being loose, there was nothing left to loosen. The excuse was a fact about the state of the
     table, recorded as a fact about the row. -/
-def selOptV (os : List (Option (MapOf Bool) × VP)) (v : Value) : Bool :=
+def selOptV (os : List (Option (MapOf NameSpec) × VP)) (v : Value) : Bool :=
   match os.filter (fun o => admitOptV o v) with
   | [o] => o.2 v
   | _ => false
@@ -317,7 +321,7 @@ noncomputable def AdmOptT : Option Term → Option VP
 /-- Each `union` option paired with its name spec — `optionSems`' mirror, the way
     ~~AdmTagged~~ mirrored ~~denoteTagged~~. `specOf` is what tells an object option from the
     rest, and it is a function of the term. -/
-noncomputable def AdmSpecs : List Term → List (Option (MapOf Bool) × VP)
+noncomputable def AdmSpecs : List Term → List (Option (MapOf NameSpec) × VP)
   | [] => []
   | t :: ts => (specOf t, Adm t) :: AdmSpecs ts
 
@@ -688,9 +692,9 @@ theorem ExactV_set (b : SetBase) : ExactV (.set b) := by
 /-- Each option's row *is* the admission `optionSemOf` builds for it — given that option's
     exactness, which is where the exactness hypothesis is spent.
 
-    Two cases and they are not symmetric. At an **object** option both sides are `keysOk`,
-    definitionally, and the hypothesis is not used at all: `select` never attempts an object
-    option, and neither does the row. Everywhere else the admission *is* `(c.e ·).isSome`, and
+    Two cases and they are not symmetric. At an **object** option both sides are the same
+    `keysOk && literalsOk`, definitionally, and the hypothesis is not used at all: `select`
+    never attempts an object option, and neither does the row. Everywhere else the admission *is* `(c.e ·).isSome`, and
     the hypothesis is exactly what identifies it with the row. -/
 theorem admitOptV_eq {t : Term} (h : ExactV t) (v : Value) :
     (optionSemOf (denote t) (specOf t)).admitV v = admitOptV (specOf t, Adm t) v := by

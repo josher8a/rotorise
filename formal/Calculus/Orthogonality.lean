@@ -69,13 +69,13 @@ The read-side slot is `Member`, which `Attr.member` already computes.
 |---|---|---|
 | slot | the `Value` constructor on the write side, the `Member` on the read side | `Orth1` |
 | names | two-sided `keysOk` containment over the declared/required name sets | `OrthM` |
-| tag | `tagOfV d`/`tagOfA d` | **not a phase of `Orth`** — see below |
+| literals | one shared required name pinned to disjoint alternatives, at four bases | `OrthS` |
 | alternatives | two literals, or two sets over literals, at one base with disjoint `ℓ` | `OrthL` |
 | opaque predicate | `refine`'s `q`, `held`'s `f`, `custom` | undecidable by construction |
 
 The interface the discharger consumes is `Separates`, a `Prop`; `Orth` is the *decidable*
-sufficient condition for it, covering the first three phases. Phase *alternatives* is folded in
-per base, and not uniform in the base. The type is the reason.
+sufficient condition for it, covering the first four phases. Phases *literals* and
+*alternatives* are folded in per base, and not uniform in the base. The type is the reason.
 `GroundKind.number.Carrier` is `WFDouble`, a subtype of `Double`, whose `DecidableEq` is a
 field of the axiomatized `numericHost`. The gate moved into the carrier and the
 noncomputability did not move with it, because a `Subtype`'s instance is the base type's. So a
@@ -92,13 +92,21 @@ is `uAtCan_of_literalN_disjoint`. `null` answers `false` too, and there the answ
 rather than a concession: `NEFinset Unit` has one inhabitant, so two null literals hold the
 same alternative and are never disjoint.
 
-**The tag is not a phase of `Orth`, and this is a finding rather than an omission.** A
-`union` option that is an object is admitted by `OptionSem.byNames` — `keysOk`, a test on the
-*names* the map carries — so `select` never looks at any field's contents, discriminator
-included. Two object options with disjoint `req`-literal discriminators on the same name are
-therefore **not** separated at a `union`; they are separated at a `dunion`, whose options are
-~~OptionSem.byTag~~ and whose (U) is a fact of its key set rather than a theorem. So the tag row of
-§5's table belongs to a different constructor, not to a phase here.
+**The tag is a phase, and phase *literals* is it.** A `union` option that is an object is
+admitted by `OptionSem.byStructure`: the names lie in the spec's interval, *and* every present
+name whose field is a literal carries one of that literal's alternatives. So `select` does read
+the discriminating fields, and two object options with disjoint `req`-literal alternatives on
+one shared name are separated at a `union`.
+
+A `dunion` is then a **certified `union`** of its members. Its lookup table implements `select`
+over members no two of whose structures meet, and the fibre algebra is an optimisation rather
+than the operation.
+
+Phase *literals* takes four bases where a `dunion`'s key takes two, and the reason is the
+difference between the two questions. The tag rule is about what a key can carry, and a tag is
+read back as text, so `string` and `decimal` are the bases that can carry one. The meet is about
+what a value can satisfy, and a `boolean` or `binary` literal separates two objects as well as
+any. `number` and `null` decline here for the reasons `OrthL` gives at the same two bases.
 -/
 
 namespace Calculus
@@ -293,8 +301,8 @@ def Orth1 (x y : Term) : Bool :=
     spec admits are exactly the interval `[req spec, decl spec]`, and two intervals meet iff
     `req x ∪ req y ⊆ decl x ∩ decl y`. Since `req ⊆ decl` always, that fails exactly when one
     side requires a name the other does not declare. -/
-def reqNotDeclared (sx sy : MapOf Bool) : Bool :=
-  decide (∃ k : {k // k ∈ sx.1}, sx.2 k = true ∧ k.1 ∉ sy.1)
+def reqNotDeclared (sx sy : MapOf NameSpec) : Bool :=
+  decide (∃ k : {k // k ∈ sx.1}, (sx.2 k).required = true ∧ k.1 ∉ sy.1)
 
 /-- **Phase *names*.** Two object options whose admissible key-set intervals are disjoint.
 
@@ -367,16 +375,56 @@ def OrthL : Term → Term → Bool
   -- such a term admits nothing and there is no pair to certify.
   | _, _ => false
 
+/-- Two literal payloads at one base with nothing in common. `OrthL` asks this of two terms;
+    this asks it of the two payloads a pair of specs pins one name to.
+
+    Four bases and not six, and the rows are the bases for the reason `OrthL` gives: a uniform
+    row would be `noncomputable` at `number` and would stop `Orth` reducing at every pair. -/
+def altsDisj : Option Alts → Option Alts → Bool
+  | some ⟨.string, ls⟩,  some ⟨.string, ls'⟩  => disjAlts ls ls'
+  | some ⟨.decimal, ls⟩, some ⟨.decimal, ls'⟩ => disjAlts ls ls'
+  | some ⟨.boolean, ls⟩, some ⟨.boolean, ls'⟩ => disjAlts ls ls'
+  | some ⟨.binary, ls⟩,  some ⟨.binary, ls'⟩  => disjAlts ls ls'
+  | _, _ => false
+
+/-- One name that both specs declare, both **require**, and pin to disjoint alternatives.
+
+    `required` on both sides is a rule and not a precaution. Two objects sharing an *optional*
+    literal name with disjoint alternatives both admit the map that omits the name, so a
+    req-blind test would certify a pair `select` cannot resolve. -/
+def litDisjAt (sx sy : MapOf NameSpec) (k : Name) : Bool :=
+  match sx.at k, sy.at k with
+  | some nx, some ny => nx.required && ny.required && altsDisj nx.alts ny.alts
+  | _, _ => false
+
+/-- **Phase *literals*.** Two object options that pin one shared required name to alternatives
+    with nothing in common.
+
+    *The tag rule is about what a key can carry; the meet is about what a value can satisfy.*
+
+    That sentence is the whole of why this is a phase of `Orth` and why it takes four bases
+    where a `dunion`'s key takes two. A `dunion` restricts its discriminator to `string` and
+    `decimal` because a tag is read back as text. This asks only whether some value satisfies
+    both structures, and a `boolean` or `binary` literal separates two objects as well as any.
+
+    The existential is over the *first* spec's declared names, which is enough: a name the
+    first spec does not declare pins nothing on the first side. -/
+def OrthS (x y : Term) : Bool :=
+  match specOf x, specOf y with
+  | some sx, some sy => decide (∃ k : {k // k ∈ sx.1}, litDisjAt sx sy k.1 = true)
+  | _, _ => false
+
 /-- **The classifier.** A syntactic, decidable certificate that two terms cannot both admit
     one input — on both halves of the pair. `false` means "no certificate found". -/
-def Orth (x y : Term) : Bool := Orth1 x y || OrthM x y || OrthL x y
+def Orth (x y : Term) : Bool := Orth1 x y || OrthM x y || OrthS x y || OrthL x y
 
 /-! ## Soundness
 
 Two structural recursions, one per side, each mutual with a list companion for `union`. The
 statement is about the **rows** (`Adm`/`AdmA`) and about `admitOptV`/`admitOptA`, never about
 the term's own rows: `select` filters by the *option* semantics, and for an object option that is
-`keysOk` — names, not contents — so a certificate stated on `Adm` alone would not transfer.
+structure — the names and the literal fields, not every field's contents — so a certificate
+stated on `Adm` alone would not transfer.
 See `admitOptV`. -/
 
 theorem specOf_none_admitOptV {t : Term} (h : specOf t = none) (v : Value) :
@@ -423,7 +471,7 @@ theorem selOptA_mem_admitOpt {opts : List Term} {a : Attr}
 
 /-- Only an object has a name spec — the fact that lets the `admitOptV` wrapper below split
     into two cases instead of twenty-one. -/
-theorem specOf_some_object {t : Term} {spec : MapOf Bool} (h : specOf t = some spec) :
+theorem specOf_some_object {t : Term} {spec : MapOf NameSpec} (h : specOf t = some spec) :
     ∃ b, t = .object b := by
   cases t <;> simp_all [specOf]
 
@@ -683,7 +731,7 @@ theorem occA_disjoint_of_Orth1 {x y : Term} (h : Orth1 x y = true) {m : Member}
 /-- The name test really is disjointness of the admitted key sets: the name one option
     requires is present in any map it admits, and absent from the other's declarations, so
     the other refuses that map on its first `keysOk` conjunct. -/
-theorem keysOk_of_reqNotDeclared {sx sy : MapOf Bool} (h : reqNotDeclared sx sy = true)
+theorem keysOk_of_reqNotDeclared {sx sy : MapOf NameSpec} (h : reqNotDeclared sx sy = true)
     {keys : Finset Name} (hx : keysOk sx keys = true) (hy : keysOk sy keys = true) : False := by
   obtain ⟨k, hreq, hnd⟩ := of_decide_eq_true h
   have hpres : k.1 ∈ keys := (of_decide_eq_true (Bool.and_eq_true_iff.mp hx).2) k hreq
@@ -711,8 +759,8 @@ theorem orthSV_disjoint {x y : Term} (h : (Orth1 x y || OrthM x y) = true) :
     rw [hsx] at hax; rw [hsy] at hay
     cases v with
     | map keys g =>
-      have hkx : keysOk sx keys = true := by simpa [admitOptV] using hax
-      have hky : keysOk sy keys = true := by simpa [admitOptV] using hay
+      have hkx : keysOk sx keys = true := (Bool.and_eq_true_iff.mp hax).1
+      have hky : keysOk sy keys = true := (Bool.and_eq_true_iff.mp hay).1
       rcases hr with hr | hr
       · exact keysOk_of_reqNotDeclared hr hkx hky
       · exact keysOk_of_reqNotDeclared hr hky hkx
@@ -727,8 +775,8 @@ theorem orthSA_disjoint {x y : Term} (h : (Orth1 x y || OrthM x y) = true) :
     rw [hsx] at hax; rw [hsy] at hay
     cases a with
     | m keys g =>
-      have hkx : keysOk sx keys = true := by simpa [admitOptA] using hax
-      have hky : keysOk sy keys = true := by simpa [admitOptA] using hay
+      have hkx : keysOk sx keys = true := (Bool.and_eq_true_iff.mp hax).1
+      have hky : keysOk sy keys = true := (Bool.and_eq_true_iff.mp hay).1
       rcases hr with hr | hr
       · exact keysOk_of_reqNotDeclared hr hkx hky
       · exact keysOk_of_reqNotDeclared hr hky hkx
@@ -978,6 +1026,118 @@ theorem separates_of_orthL {x y : Term} (h : OrthL x y = true) : Separates x y :
     exact separates_setLiteral_disjoint (disjAlts_sound hdis)
   · exact absurd h (by simp)
 
+/-! ## Phase *literals*
+
+The name test reads the interval and this reads the contents, so the two are one `keysOk` and
+one `literalsOk` apart. Both halves of the pair are the literal's own disjointness, reached
+through the same two lemmas phase *alternatives* uses: `inL_disjoint` on the write side and
+`admALit_disjoint` on the read side. -/
+
+/-- Disjoint alternatives refute content admission on the write side: no value lies in both.
+
+    Thirty-six rows and four of them do work — the diagonal at the four bases whose equality
+    computes. `number` and `null` are off the diagonal here because `altsDisj` has no row for
+    them, which is `OrthL`'s own concession arriving at the same two bases. -/
+theorem altsDisj_disjointV {ax ay : Option Alts} (h : altsDisj ax ay = true) (v : Value)
+    (hx : altsOkV ax v = true) (hy : altsOkV ay v = true) : False := by
+  cases ax with
+  | none => exact absurd h (by cases ay <;> simp [altsDisj])
+  | some px =>
+    cases ay with
+    | none => obtain ⟨g, _⟩ := px; exact absurd h (by cases g <;> simp [altsDisj])
+    | some py =>
+      obtain ⟨gx, lx⟩ := px
+      obtain ⟨gy, ly⟩ := py
+      cases gx <;> cases gy <;>
+        first
+          | (have hx' : inL _ lx v = true := hx
+             have hy' : inL _ ly v = true := hy
+             rw [inL_disjoint (disjAlts_sound h) v hx'] at hy'
+             exact absurd hy' (by simp))
+          | exact absurd h (by simp [altsDisj])
+
+/-- …and on the read side, where the base reads the attribute to one value and one value
+    cannot lie in two disjoint held sets. -/
+theorem altsDisj_disjointA {ax ay : Option Alts} (h : altsDisj ax ay = true) (a : Attr)
+    (hx : altsOkA ax a = true) (hy : altsOkA ay a = true) : False := by
+  cases ax with
+  | none => exact absurd h (by cases ay <;> simp [altsDisj])
+  | some px =>
+    cases ay with
+    | none => obtain ⟨g, _⟩ := px; exact absurd h (by cases g <;> simp [altsDisj])
+    | some py =>
+      obtain ⟨gx, lx⟩ := px
+      obtain ⟨gy, ly⟩ := py
+      cases gx <;> cases gy <;>
+        first
+          | (have hx' : AdmALit _ lx a = true := admALit_iff.mpr hx
+             have hy' : AdmALit _ ly a = true := admALit_iff.mpr hy
+             rw [admALit_disjoint (disjAlts_sound h) a hx'] at hy'
+             exact absurd hy' (by simp))
+          | exact absurd h (by simp [altsDisj])
+
+/-- Structural admission at a required name: the name is present, and what it carries lies in
+    the alternatives the spec pins it to. -/
+theorem litOkV_of_admitOptV {sx : MapOf NameSpec} {keys : Finset Name}
+    {f : {k // k ∈ keys} → Value} (h : (keysOk sx keys && literalsOk sx keys f) = true)
+    {k : Name} (hk : k ∈ sx.1) (hreq : (sx.2 ⟨k, hk⟩).required = true) :
+    ∃ hm : k ∈ keys, litOkV sx k (f ⟨k, hm⟩) = true := by
+  obtain ⟨hkeys, hlit⟩ := Bool.and_eq_true_iff.mp h
+  have hm : k ∈ keys := (of_decide_eq_true (Bool.and_eq_true_iff.mp hkeys).2) ⟨k, hk⟩ hreq
+  exact ⟨hm, (of_decide_eq_true hlit) ⟨k, hm⟩⟩
+
+/-- …and its read-side twin, at the stored item. -/
+theorem litOkA_of_admitOptA {sx : MapOf NameSpec} {keys : Finset Name}
+    {g : {k // k ∈ keys} → Attr} (h : (keysOk sx keys && literalsOkA sx keys g) = true)
+    {k : Name} (hk : k ∈ sx.1) (hreq : (sx.2 ⟨k, hk⟩).required = true) :
+    ∃ hm : k ∈ keys, litOkA sx k (g ⟨k, hm⟩) = true := by
+  obtain ⟨hkeys, hlit⟩ := Bool.and_eq_true_iff.mp h
+  have hm : k ∈ keys := (of_decide_eq_true (Bool.and_eq_true_iff.mp hkeys).2) ⟨k, hk⟩ hreq
+  exact ⟨hm, (of_decide_eq_true hlit) ⟨k, hm⟩⟩
+
+/-- **Phase *literals*, from its decidable half.** A phase producing `Separates`, so
+    `uAtCan_of_separated` gains no case. -/
+theorem separates_of_orthS {x y : Term} (h : OrthS x y = true) : Separates x y := by
+  unfold OrthS at h
+  cases hsx : specOf x with
+  | none => rw [hsx] at h; exact absurd h (by simp)
+  | some sx =>
+    cases hsy : specOf y with
+    | none => rw [hsx, hsy] at h; exact absurd h (by simp)
+    | some sy =>
+      rw [hsx, hsy] at h
+      obtain ⟨k, hkd⟩ := of_decide_eq_true h
+      cases hay : sy.at k.1 with
+      | none =>
+        rw [litDisjAt, hay] at hkd
+        cases sx.at k.1 <;> exact absurd hkd (by simp)
+      | some ny =>
+        obtain ⟨hky, rfl⟩ := MapOf.at_eq_some.mp hay
+        rw [litDisjAt, MapOf.at_of_mem k, MapOf.at_of_mem ⟨k.1, hky⟩] at hkd
+        obtain ⟨hreq, hda⟩ := Bool.and_eq_true_iff.mp hkd
+        obtain ⟨hrx, hry⟩ := Bool.and_eq_true_iff.mp hreq
+        refine ⟨?_, ?_⟩
+        · rintro v ⟨-, hax⟩ ⟨-, hay'⟩
+          rw [hsx] at hax; rw [hsy] at hay'
+          cases v with
+          | map keys f =>
+            obtain ⟨hmx, hlx⟩ := litOkV_of_admitOptV hax k.2 hrx
+            obtain ⟨hmy, hly⟩ := litOkV_of_admitOptV hay' hky hry
+            rw [litOkV, MapOf.at_of_mem k] at hlx
+            rw [litOkV, MapOf.at_of_mem ⟨k.1, hky⟩] at hly
+            exact altsDisj_disjointV hda (f ⟨k.1, hmx⟩) hlx hly
+          | _ => exact absurd hax (by simp [admitOptV])
+        · rintro a ⟨-, hax⟩ ⟨-, hay'⟩
+          rw [hsx] at hax; rw [hsy] at hay'
+          cases a with
+          | m keys g =>
+            obtain ⟨hmx, hlx⟩ := litOkA_of_admitOptA hax k.2 hrx
+            obtain ⟨hmy, hly⟩ := litOkA_of_admitOptA hay' hky hry
+            rw [litOkA, MapOf.at_of_mem k] at hlx
+            rw [litOkA, MapOf.at_of_mem ⟨k.1, hky⟩] at hly
+            exact altsDisj_disjointA hda (g ⟨k.1, hmx⟩) hlx hly
+          | _ => exact absurd hax (by simp [admitOptA])
+
 /-- **The whole premise the discharger takes**, as one name: every pair of options separated.
 
     `Separates` is the rule for a pair and this is the rule for a list, so a phase produces the
@@ -1001,8 +1161,10 @@ theorem separates_of_orthL {x y : Term} (h : OrthL x y = true) : Separates x y :
 def Separated (opts : List Term) : Prop := List.Pairwise Separates opts
 
 theorem separates_of_orth {x y : Term} (h : Orth x y = true) : Separates x y := by
-  rcases Bool.or_eq_true_iff.mp h with h' | hl
-  · exact ⟨orthSV_disjoint h', orthSA_disjoint h'⟩
+  rcases Bool.or_eq_true_iff.mp h with h'' | hl
+  · rcases Bool.or_eq_true_iff.mp h'' with h' | hs
+    · exact ⟨orthSV_disjoint h', orthSA_disjoint h'⟩
+    · exact separates_of_orthS hs
   · exact separates_of_orthL hl
 
 /-- **§5's (U), from pairwise separation.** The two other premises are the ones every
@@ -1038,11 +1200,51 @@ theorem uAtCan_of_separated {opts : List Term}
     rw [optionSemOf_c] at he
     exact optionSem_self_admit t (hcl t ht) (hlaw t ht) he
 
+/-- **Pairwise separation is the structural certificate**, which is (U)'s premise read as a
+    counting fact rather than as a singleton one.
+
+    `UniqueBothWays` asks that a filter *is* `[o]`; `AdmitsAtMostOne` asks only that no filter is
+    longer than one. The second is what `uAtAct_sublist` needs, because it is monotone under a
+    sub-selection where the first is not. Every phase supplies it at once: separation says no two
+    options admit one input, and admission implies occupancy through `occV_sound`, so the two
+    conjuncts of `OrthSV` are both in hand.
+
+    Stated on `Separated` and not on `OrthS`, because the argument reads none of the phases. -/
+theorem admitsAtMostOne_of_separated {opts : List Term} (h : Separated opts) :
+    AdmitsAtMostOne (semsOf opts) := by
+  constructor
+  · intro v
+    rw [show semsOf opts = optionSems opts from (optionSems_eq opts).symm,
+      filter_AdmSpecs (fun t _ => Adm_exact t) v, List.length_map]
+    refine length_le_one_of_pairwise_false (List.Pairwise.imp_of_mem ?_
+      (List.Pairwise.filter _ (h.imp fun hs => hs.1 v)))
+    intro x y hx hy hxy
+    have hax : admitOptV (specOf x, Adm x) v = true := (List.mem_filter.mp hx).2
+    have hay : admitOptV (specOf y, Adm y) v = true := (List.mem_filter.mp hy).2
+    exact hxy ⟨occV_admitOpt (occV_sound x) v hax, hax⟩
+      ⟨occV_admitOpt (occV_sound y) v hay, hay⟩
+  · intro a
+    rw [show semsOf opts = optionSems opts from (optionSems_eq opts).symm,
+      filter_AdmASpecs (fun t _ => AdmA_exact t) a, List.length_map]
+    refine length_le_one_of_pairwise_false (List.Pairwise.imp_of_mem ?_
+      (List.Pairwise.filter _ (h.imp fun hs => hs.2 a)))
+    intro x y hx hy hxy
+    have hax : admitOptA (specOf x, AdmA x) a = true := (List.mem_filter.mp hx).2
+    have hay : admitOptA (specOf y, AdmA y) a = true := (List.mem_filter.mp hy).2
+    exact hxy ⟨occA_admitOpt (occA_sound x) a hax, hax⟩
+      ⟨occA_admitOpt (occA_sound y) a hay, hay⟩
+
 /-- The classifier's answer for a whole option list, which is the one bridge from the decidable
     phase to the `Prop` the discharger takes. -/
 theorem separated_of_orth {opts : List Term}
     (h : List.Pairwise (fun x y => Orth x y = true) opts) : Separated opts :=
   h.imp separates_of_orth
+
+/-- …and from the decidable classifier, which is the form `uAtAct_sublist` takes at a call site. -/
+theorem admitsAtMostOne_of_orth {opts : List Term}
+    (h : List.Pairwise (fun x y => Orth x y = true) opts) :
+    AdmitsAtMostOne (semsOf opts) :=
+  admitsAtMostOne_of_separated (separated_of_orth h)
 
 /-- …and from the decidable premise alone, which reaches six of the twenty-five hand
     discharges; seven more need `Separates` and `uAtCan_of_separated` above, for thirteen of
@@ -1138,7 +1340,7 @@ theorem not_orth_opaq_string_strict : Orth (.opaq false) .string = false := by d
     than a gap in the tables. -/
 theorem not_orth_literal_held (f g : Value → Value) :
     Orth (.literal .string lsA) (.held (.literal .string lsB) f g) = false := by
-  simp [Orth, Orth1, OrthM, OrthL, occV, occA, occTop, occOnly, Slot.all, Member.all, specOf]
+  simp [Orth, Orth1, OrthM, OrthS, OrthL, occV, occA, occTop, occOnly, Slot.all, Member.all, specOf]
 
 /-- **Phase *alternatives*, and §5's own worked `ident` example.** The occupancies forget
     `ℓ`, so `Orth1` answers `false` here; `OrthL` reads `ℓ` and the classifier certifies the
@@ -1158,14 +1360,14 @@ theorem not_orth_literal_literal_same :
     `uAtCan_of_literalN_disjoint`'s content. -/
 theorem not_orth_literal_number (ls ls' : NEFinset GroundKind.number.Carrier) :
     Orth (.literal .number ls) (.literal .number ls') = false := by
-  simp [Orth, Orth1, OrthM, OrthL, occV, occA, occOnly, Slot.all, Member.all, specOf,
+  simp [Orth, Orth1, OrthM, OrthS, OrthL, occV, occA, occOnly, Slot.all, Member.all, specOf,
     GroundKind.slot, GroundKind.member]
 
 /-- **Two null literals are never disjoint**, and `false` here is exact rather than a
     concession: `NEFinset Unit` has one inhabitant, so both hold `()`. -/
 theorem not_orth_literal_null (ls ls' : NEFinset GroundKind.null.Carrier) :
     Orth (.literal .null ls) (.literal .null ls') = false := by
-  simp [Orth, Orth1, OrthM, OrthL, occV, occA, occOnly, Slot.all, Member.all, specOf,
+  simp [Orth, Orth1, OrthM, OrthS, OrthL, occV, occA, occOnly, Slot.all, Member.all, specOf,
     GroundKind.slot, GroundKind.member]
 
 /-- **The same rule at a set**, which is the pair `Separation.lean` discharges by hand as
@@ -1194,7 +1396,7 @@ theorem not_orth_set_literals_two_bases :
 theorem not_orth_set_literal_closure (q : Value → Bool) :
     Orth (.refine (.set .string) (.each (.members .string lsA)))
          (.refine (.set .string) (.each (.closure q))) = false := by
-  simp [Orth, Orth1, OrthM, OrthL, occV, occA, occOnly, Slot.all, Member.all, specOf,
+  simp [Orth, Orth1, OrthM, OrthS, OrthL, occV, occA, occOnly, Slot.all, Member.all, specOf,
     SetBase.slot, SetBase.member]
 
 /-- …and the pair, discharged from one `decide` where it used to name its premise. At

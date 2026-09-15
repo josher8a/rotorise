@@ -31,13 +31,27 @@ noncomputable section
     -/
 def Body.map (b : Body) : MapOf Field := ⟨b.fields, b.at⟩
 
-/-- A body's name spec: `(name, required?)`. The payload's own function, so `specOf` is a
-    dispatch and nothing more. -/
-def Body.spec : Body → MapOf Bool
-  | .mk fields f _ => ⟨fields, fun k => match f k with | .optional _ => false | _ => true⟩
+/-- The alternatives a field pins its name to, where the field's term is a literal.
 
-/-- The name spec of an object option: `(name, required?)` — `none` for non-objects. -/
-def specOf : Term → Option (MapOf Bool)
+    Every field form and not `req` only, because the test this feeds is present-only: a name
+    an object does not carry is settled by `keysOk` and never reaches `literalsOk`, so an
+    `optional` literal constrains exactly the values that do carry the name. `tagsOfField`
+    reads `req` alone for the other reason: a tag has to be written. -/
+def altsOfField : Field → Option Alts
+  | .req (.literal k ls) => some ⟨k, ls⟩
+  | .optional (.literal k ls) => some ⟨k, ls⟩
+  | .fallback (.literal k ls) _ => some ⟨k, ls⟩
+  | _ => none
+
+/-- A body's name spec: what admission reads off each declared name. The payload's own
+    function, so `specOf` is a dispatch and nothing more. -/
+def Body.spec : Body → MapOf NameSpec
+  | .mk fields f _ =>
+      ⟨fields, fun k =>
+        ⟨(match f k with | .optional _ => false | _ => true), altsOfField (f k)⟩⟩
+
+/-- The name spec of an object option — `none` for non-objects. -/
+def specOf : Term → Option (MapOf NameSpec)
   | .object b => some b.spec
   | _ => none
 
