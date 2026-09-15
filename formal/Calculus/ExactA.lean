@@ -97,25 +97,25 @@ def keepT (rest : Rest) (fields : Finset Name) : Name → Bool :=
     The retired per-aspect row was `⊤` here, on the ground that a *syntactic* set of
     attributes does not bound a read through `Double.ofDec`. True, and it never made the row
     unwritable: `ofDec` is a function the row may call, exactly as this one does. -/
-noncomputable def AdmALit : (k : GroundKind) → NEFinset k.Carrier → Attr → Bool
-  | .string,  ls, .s s    => decide (s ∈ ls.1)
-  | .boolean, ls, .bool b => decide (b ∈ ls.1)
-  | .binary,  ls, .b b    => decide (b ∈ ls.1)
-  | .null,    _,  .null   => true
+noncomputable def AdmALit : (k : GroundKind) → k.Carrier → Attr → Bool
+  | .string,  y, .s s    => decide (s = y)
+  | .boolean, y, .bool b => decide (b = y)
+  | .binary,  y, .b b    => decide (b = y)
+  | .null,    _, .null   => true
   -- **The `&& Numeral.WF d.toDec` conjunct used to be written out here**, and it was the
   -- reason this row was exact while the table's `adm` row was not. It is now the
-  -- carrier's: `ls : NEFinset WFDouble`, so the gate is what names the alternative.
-  | .number,  ls, .n x    => (match Double.ofDec x.1 with
+  -- carrier's: `y : WFDouble`, so the gate is what names the alternative.
+  | .number,  y, .n x    => (match Double.ofDec x.1 with
                               | some d =>
                                   if h : Numeral.WF d.toDec = true then
-                                    decide ((⟨d, h⟩ : WFDouble) ∈ ls.1)
+                                    decide ((⟨d, h⟩ : WFDouble) = y)
                                   else false
                               | none => false)
   -- `decimal` asks its codec, which is what the retired per-aspect row did at this base too — so the joint row
   -- and the table row are the *same function* here rather than two spellings that have to be
   -- proved equal. `number` cannot do this and spells the `ofDec` lookup out, because its answer
   -- depends on the host's numeric type; `decimal`'s does not.
-  | .decimal, ls, a       => ((literalCodec .decimal ls).p a).isSome
+  | .decimal, y, a       => ((literalCodec .decimal y).p a).isSome
   | _, _, _ => false
 
 /-- **What a set base reads.**
@@ -283,14 +283,14 @@ theorem selOptA_le_AdmAAny {opts : List Term} {a : Attr}
       exact AdmAAny_of_mem ht h
 
 /-- `AdmA`'s literal row, named — for the reason `Adm_literal` gives. -/
-@[simp] theorem AdmA_literal (k : GroundKind) (ls : NEFinset k.Carrier) (a : Attr) :
-    AdmA (.literal k ls) a = AdmALit k ls a := by unfold AdmA; rfl
+@[simp] theorem AdmA_literal (k : GroundKind) (x : k.Carrier) (a : Attr) :
+    AdmA (.literal k x) a = AdmALit k x a := by unfold AdmA; rfl
 
 /-! The four bases whose stored attribute *is* the value, stated as standalone lemmas with
 their carriers written out.
 
-`GroundKind.Carrier` is reducible, so `NEFinset k.Carrier` at a *constructor* `k` is the same
-type as `NEFinset Bytes` — but it is not the same *expression*, and `simp` inside the goal
+`GroundKind.Carrier` is reducible, so `k.Carrier` at a *constructor* `k` is the same type as
+`Bytes` — but it is not the same *expression*, and `simp` inside the goal
 re-derives that on every rewrite. At `binary` (`List UInt8`) and `null` (`Unit`) that was
 enough to exhaust the heartbeat budget. Taking the carrier as a plain type in the statement
 does the reduction once, at elaboration.
@@ -299,30 +299,30 @@ does the reduction once, at elaboration.
 `AdmA_exact` they were re-derived inside a twenty-case fan, and the row each one needs is a
 statement about *one* base. `AdmA_exact` cites all four and unfolds none. -/
 
-theorem AdmALit_binary_exact (ls : NEFinset Bytes) (a : Attr) :
-    AdmA (.literal .binary ls) a = true ↔ ((denote (Term.literal .binary ls)).p a).isSome = true := by
+theorem AdmALit_binary_exact (y : Bytes) (a : Attr) :
+    AdmA (.literal .binary y) a = true ↔ ((denote (Term.literal .binary y)).p a).isSome = true := by
   cases a <;>
     simp [AdmA_literal, AdmALit, denote, denote, literalCodec, baseCodec,
           binaryCodec]
 
-theorem AdmALit_null_exact (ls : NEFinset Unit) (a : Attr) :
-    AdmA (.literal .null ls) a = true ↔ ((denote (Term.literal .null ls)).p a).isSome = true := by
+theorem AdmALit_null_exact (y : Unit) (a : Attr) :
+    AdmA (.literal .null y) a = true ↔ ((denote (Term.literal .null y)).p a).isSome = true := by
   cases a <;>
     simp [AdmA_literal, AdmALit, denote, denote, literalCodec, baseCodec,
           nullCodec]
 
-/-- `(literal)` at `string`, read side. `NEFinset String` and not `NEFinset k.Carrier`: the
-    carrier reduces once here instead of on every rewrite. -/
-theorem AdmALit_string_exact (ls : NEFinset String) (a : Attr) :
-    AdmA (.literal .string ls) a = true ↔ ((denote (Term.literal .string ls)).p a).isSome = true := by
+/-- `(literal)` at `string`, read side. `String` and not `k.Carrier`: the carrier reduces once
+    here instead of on every rewrite. -/
+theorem AdmALit_string_exact (y : String) (a : Attr) :
+    AdmA (.literal .string y) a = true ↔ ((denote (Term.literal .string y)).p a).isSome = true := by
   cases a <;>
     simp [AdmA_literal, AdmALit, denote, denote, literalCodec, baseCodec,
           stringCodec]
 
 /-- `(literal)` at `boolean`, read side. Same shape as `AdmALit_string_exact`, and the two
     cannot share a `simp` set — one of them would have to name the other's codec. -/
-theorem AdmALit_boolean_exact (ls : NEFinset Bool) (a : Attr) :
-    AdmA (.literal .boolean ls) a = true ↔ ((denote (Term.literal .boolean ls)).p a).isSome = true := by
+theorem AdmALit_boolean_exact (y : Bool) (a : Attr) :
+    AdmA (.literal .boolean y) a = true ↔ ((denote (Term.literal .boolean y)).p a).isSome = true := by
   cases a <;>
     simp [AdmA_literal, AdmALit, denote, denote, literalCodec, baseCodec,
           booleanCodec]

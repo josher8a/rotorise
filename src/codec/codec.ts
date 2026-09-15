@@ -37,10 +37,11 @@ import {
     orThrow,
     type Result,
 } from './result'
-import type { Body, Field, Literal, NameLiteral, Term } from './term'
+import type { Alternatives, Body, Field, NameLiteral, Term } from './term'
 import {
     alwaysWritten,
     elementPredicates,
+    literalAlternatives,
     literalsOf,
     meet,
     member as memberOf,
@@ -350,7 +351,7 @@ export const constantOf = (declared: AnyDeclaration): unknown => {
     // the value, and `refine` can reject it, `legacy` can decode an older encoding into something
     // else, and `optional` admits absence, which is not the value. `fallback` is the one that keeps
     // it, always writing the attribute at a value typed to the same alternative.
-    return t.kind === 'literal' && t.ls.length === 1 ? t.ls[0] : undefined
+    return t.kind === 'literal' ? t.v : undefined
 }
 
 /* ── the seam: a definition, as the term it denotes ───────────────────────────────────── */
@@ -4335,20 +4336,24 @@ export type ValidateClause<S, C> = [BadClauseKey<S, C>] extends [never]
     : ErrorMessage<`[extract] the clause at '${BadClauseKey<S, C> & string}' is not a literal the members pin that key to — a clause pins each key it names to a literal codec at the base the members declare, written as \`string('a')\`, \`decimal('1')\` or \`number(1)\`, because a bare tag does not say which base it was written at`>
 
 /**
- * The literal a clause pins one key to, or a refusal naming the key.
+ * The alternatives a clause pins one key to, or a refusal naming the key.
  *
  * A clause value is a codec and the question is asked of its term, which is where a base lives. The
  * type refuses a non-literal codec by its decoded type; this is the same refusal for a caller who
  * reached here through a cast or through plain JavaScript.
+ *
+ * A set of tags is `string('a', 'b')`, which is a union of literals, so the reader is
+ * {@link literalAlternatives} and not a test for one constructor.
  */
-const clauseLiteral = (name: string, value: unknown): Literal => {
+const clauseLiteral = (name: string, value: unknown): Alternatives => {
     const def = (value as { readonly def?: Term } | undefined)?.def
-    if (def?.kind !== 'literal') {
+    const alts = def && literalAlternatives(def)
+    if (!alts) {
         throw new CodecError(
             `the clause at '${name}' is not a literal codec — a clause pins each key it names to a literal, written as \`string('a')\`, \`decimal('1')\`, \`number(1)\`, \`boolean(true)\` or \`binary(...)\`, because a bare tag does not say which base it was written at`,
         )
     }
-    return def
+    return alts
 }
 
 /**
@@ -4363,7 +4368,7 @@ const clauseLiteral = (name: string, value: unknown): Literal => {
  * does not share one.
  */
 const clauseKeeps = (
-    clause: ReadonlyMap<string, Literal>,
+    clause: ReadonlyMap<string, Alternatives>,
     term: Term,
 ): boolean => {
     const literals = literalsOf(term)
@@ -4408,7 +4413,7 @@ const sliced = <O>(
             pinned.set(name, bases)
         }
     }
-    const read = new Map<string, Literal>()
+    const read = new Map<string, Alternatives>()
     for (const [name, value] of Object.entries(clause)) {
         const bases = pinned.get(name)
         if (!bases) {

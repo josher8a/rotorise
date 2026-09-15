@@ -44,7 +44,14 @@ import type {
 import type { Result } from './result'
 import { andThen, CodecError, every, everyEntry, failed } from './result'
 import type { Body, Field, Literal, NameLiteral, Predicate, Term } from './term'
-import { alwaysWritten, literalsOf, occV, member as termMember } from './term'
+import {
+    alternativesTerm,
+    alwaysWritten,
+    literalAlternatives,
+    literalsOf,
+    occV,
+    member as termMember,
+} from './term'
 import {
     asRecord,
     copiedPerRead,
@@ -103,7 +110,7 @@ export const literalCodec = <T extends LiteralValue>(
     base: LiteralBase,
     allowed: readonly T[],
 ): AttributeCodec<T, AttributeValue> => {
-    const term = literalTerm(base, allowed)
+    const term = literalTermOf(base, allowed)
 
     /**
      * **`ℓ ⊆ D`** — the premise on the numeric bases, and the defect that made it more than
@@ -150,66 +157,57 @@ export const literalCodec = <T extends LiteralValue>(
 }
 
 /**
- * A literal's alternatives, indexed by the base that carries them — {@link Literal}'s five variants.
+ * **One literal, or a union of them.** A literal carries one value, so several alternatives are a
+ * union of singletons — the certified union the model's `OrthL` separates, the values differing.
  *
- * **`ℓ` is homogeneous at the base**, and the check is what narrows: a loop that tests each element
- * and then spreads the array teaches the checker nothing, so it ends in a cast. A type predicate is
- * the same test with the narrowing kept, and the count is how the refusal survives — `filter` drops
- * what fails, so a shorter answer is an alternative that was not this base's.
- *
- * Non-emptiness is a throw and not a refusal: every caller checks it first, so that the message can
- * name the constructor the caller wrote.
+ * The builder stays a builder rather than asking the caller to write the union: measured on a
+ * twenty-six alternative discriminator, the hand-written union costs the type checker 26.8 times
+ * what this form costs, and this form is flat in the number of alternatives. So the union is what
+ * the term is and the call is what the caller writes.
  */
-const literalTerm = (
+const literalTermOf = (
     base: LiteralBase,
     allowed: readonly LiteralValue[],
-): Literal => {
-    const [first, ...rest] = allowed
-    if (first === undefined) {
-        throw new Error(
-            `\`${base}()\` names no alternative, and every caller refuses that first`,
-        )
+): Term => {
+    const one = allowed[0]
+    if (one !== undefined && allowed.length === 1) return literalTerm(base, one)
+    return {
+        kind: 'union',
+        options: allowed.map((value) => literalTerm(base, value)),
     }
+}
+
+/**
+ * One literal's value, indexed by the base that carries it — {@link Literal}'s five variants.
+ *
+ * **`ℓ` is homogeneous at the base**, and the check is what narrows: a `typeof` test the checker
+ * reads is the same test as a cast, with the narrowing kept. One value rather than a list, so
+ * there is no tail to filter and the refusal names the value it read.
+ */
+const literalTerm = (base: LiteralBase, value: LiteralValue): Literal => {
     const wrong = (): never => {
-        const outside = allowed.filter(
-            (one) => shapeOf(one) !== literalShape[base],
-        )
         throw new CodecError(
-            `\`${base}(...)\` admits ${literalShape[base]} values, and ${outside
-                .map(namedLiteral)
-                .join(', ')} ${outside.length === 1 ? 'is' : 'are'} not one`,
+            `\`${base}(...)\` admits ${literalShape[base]} values, and ${namedLiteral(value)} is not one`,
         )
-    }
-    const tail = <T extends LiteralValue>(
-        is: (one: LiteralValue) => one is T,
-    ): readonly T[] => {
-        const kept = rest.filter(is)
-        return kept.length === rest.length ? kept : wrong()
     }
     switch (base) {
         case 'string':
-        case 'decimal': {
-            if (typeof first !== 'string') return wrong()
-            const ls = tail((one): one is string => typeof one === 'string')
-            return { kind: 'literal', base, ls: [first, ...ls] }
-        }
-        case 'number': {
-            if (typeof first !== 'number') return wrong()
-            const ls = tail((one): one is number => typeof one === 'number')
-            return { kind: 'literal', base, ls: [first, ...ls] }
-        }
-        case 'boolean': {
-            if (typeof first !== 'boolean') return wrong()
-            const ls = tail((one): one is boolean => typeof one === 'boolean')
-            return { kind: 'literal', base, ls: [first, ...ls] }
-        }
-        case 'binary': {
-            if (!(first instanceof Uint8Array)) return wrong()
-            const ls = tail(
-                (one): one is Uint8Array => one instanceof Uint8Array,
-            )
-            return { kind: 'literal', base, ls: [first, ...ls] }
-        }
+        case 'decimal':
+            return typeof value === 'string'
+                ? { kind: 'literal', base, v: value }
+                : wrong()
+        case 'number':
+            return typeof value === 'number'
+                ? { kind: 'literal', base, v: value }
+                : wrong()
+        case 'boolean':
+            return typeof value === 'boolean'
+                ? { kind: 'literal', base, v: value }
+                : wrong()
+        case 'binary':
+            return value instanceof Uint8Array
+                ? { kind: 'literal', base, v: value }
+                : wrong()
     }
 }
 
@@ -319,22 +317,24 @@ export const assignmentOf = (
                 `every option must name '${name}' with a literal at \`string\`, \`number\` or \`decimal\`, and one of them declares it \`${field.mark}\` — a tag that can be absent or defaulted names no variant, which is why the model reads a tag off a \`req\` field alone`,
             )
         }
-        const t = field.t
+        // a union of same-base literals is what `string('a', 'b')` builds, and it names as many
+        // tags as it has options — which the arity refusal below is what answers
+        const alts = literalAlternatives(field.t)
         if (
-            t.kind !== 'literal' ||
-            t.base === 'boolean' ||
-            t.base === 'binary'
+            alts === undefined ||
+            alts.base === 'boolean' ||
+            alts.base === 'binary'
         ) {
             return new CodecError(
                 `every option must name '${name}' with a literal at \`string\`, \`number\` or \`decimal\`, and one of them does not — a tag is carried as 'S' or 'N', and without one a lookup cannot find the variant`,
             )
         }
-        if (t.ls.length !== 1) {
+        if (alts.ls.length !== 1) {
             return new CodecError(
-                `'${name}' names ${t.ls.length} values at one option (${t.ls.join(', ')}), and a variant answers to exactly one tag — split it into one option per value`,
+                `'${name}' names ${alts.ls.length} values at one option (${alts.ls.join(', ')}), and a variant answers to exactly one tag — split it into one option per value`,
             )
         }
-        out[name] = String(t.ls[0])
+        out[name] = String(alts.ls[0])
     }
     return out
 }
@@ -1356,7 +1356,7 @@ export const denote = (def: Term): Pair => {
          * literal's stored text *is* its value, a numeric literal's is not.
          */
         case 'literal': {
-            const allowed: readonly LiteralValue[] = def.ls
+            const allowed: readonly LiteralValue[] = [def.v]
             /**
              * `inL`, answering with the **member of `ℓ`** rather than with `true`.
              *
@@ -1909,7 +1909,8 @@ export const literalsRead = (
         const attribute = carried[name]
         if (attribute === undefined) continue
         const alts = (literals[name] as NameLiteral).alts
-        if (failed(codecOfTerm(alts).decode(attribute))) return false
+        if (failed(codecOfTerm(alternativesTerm(alts)).decode(attribute)))
+            return false
     }
     return true
 }

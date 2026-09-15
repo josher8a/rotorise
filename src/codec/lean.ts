@@ -56,7 +56,14 @@ import type { AnyCodec, AnyDeclaration, LiteralValue } from './codec'
 import { union } from './codec'
 import { accepts, readsBack } from './denote'
 import { failed } from './result'
-import type { Body, Literal, Predicate, Term, Field as TermField } from './term'
+import type {
+    Alternatives,
+    Body,
+    Literal,
+    Predicate,
+    Term,
+    Field as TermField,
+} from './term'
 import { shapeOf } from './value'
 
 /**
@@ -406,6 +413,10 @@ const writesOnlyStrings = (t: Term | undefined): boolean => {
         return t.base === 'string' || t.base === 'decimal'
     }
     if (t.kind === 'refine') return writesOnlyStrings(t.inner)
+    // `string('1', '2')` is a union of literals, and a union writes only strings exactly where
+    // every option does
+    if (t.kind === 'union')
+        return t.options.length > 0 && t.options.every(writesOnlyStrings)
     return false
 }
 
@@ -478,27 +489,43 @@ export const leanTermOf = (
  * membership predicate over exactly the pair the term carries, which is what makes a `members`
  * predicate printable where a closure never will be.
  */
-const leanGround = (literal: Literal, at: string): string => {
-    const base = literal.base
+const leanAlternative = (
+    base: Literal['base'],
+    one: unknown,
+    at: string,
+): string => {
     if (base === 'number') {
         return refuse(
             at,
             'a numeric literal sits at `GroundKind.number`, whose carrier is `Double`',
         )
     }
+    return base === 'boolean'
+        ? String(one)
+        : base === 'binary'
+          ? leanBytes(one as Uint8Array)
+          : base === 'decimal'
+            ? `⟨${leanString(one as string)}, by decide⟩`
+            : leanString(one as string)
+}
+
+/** One literal, as the base and the one inhabitant of its carrier. */
+const leanLiteral = (literal: Literal, at: string): string =>
+    `GroundKind.${literal.base} ${leanAlternative(literal.base, literal.v, at)}`
+
+/**
+ * …and a set of alternatives, which `Pred.members` still carries.
+ *
+ * `Pred.members` is a refinement predicate over a `NEFinset`, so this keeps the wire-set spelling
+ * a literal gave up. `string.set('a', 'b')` is where it is reached.
+ */
+const leanGround = (alts: Alternatives, at: string): string => {
+    const base = alts.base
     // an annotation rather than a cast: widening to the union's supertype is something
     // the checker can do on its own, and `as` here would only hide it doing so
-    const alternatives: readonly LiteralValue[] = literal.ls
-    const alternative = (one: unknown): string =>
-        base === 'boolean'
-            ? String(one)
-            : base === 'binary'
-              ? leanBytes(one as Uint8Array)
-              : base === 'decimal'
-                ? `⟨${leanString(one as string)}, by decide⟩`
-                : leanString(one as string)
+    const alternatives: readonly LiteralValue[] = alts.ls
     return `GroundKind.${base} (${leanNonEmptySet(
-        [...new Set(alternatives)].map(alternative),
+        [...new Set(alternatives)].map((one) => leanAlternative(base, one, at)),
         at,
     )})`
 }
@@ -593,7 +620,7 @@ const leanTermOfTerm = (t: Term, at: string, forced: number): string => {
         case 'number':
             return 'Term.number'
         case 'literal':
-            return `Term.literal ${leanGround(t, at)}`
+            return `Term.literal ${leanLiteral(t, at)}`
         /**
          * `Term.set` is indexed by a **`SetBase`**, and by the time the printer sees one it holds a
          * base rather than an element term.

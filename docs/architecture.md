@@ -154,8 +154,9 @@ Repeatedly a typing-rule side condition turns out to be expressible in the type 
 constructor, at which point violating it stops being possible rather than being refused.
 `SetBase` is the set of bases that survive the element premise, so the member is a total function
 of the index and the refusal is a type error. `GroundKind` makes a literal's carrier concrete and
-its membership decidable, and `NEFinset` makes nonemptiness, pairwise distinctness and homogeneity
-properties of the type.
+its equality decidable, so `ℓ ⊆ T` is the carrier rather than a premise beside it. `NEFinset`
+makes nonemptiness, pairwise distinctness and homogeneity properties of the type wherever a wire
+set is written.
 
 **The criterion.** A premise becomes structural when its satisfying set is finitely enumerable at
 declaration time, or when it is a property of one argument expressible in that argument's own
@@ -442,9 +443,14 @@ with `liftQ` carrying the predicate through. What is lost has no set-level spell
 set-level adapter would need an injective image rather than the classical one, and a set-level
 read widening widens the whole attribute rather than each member.
 
-**The n-ary literal as a union of singletons.** Derivable — `LiteralArity1.lean` is the proof,
-including the uniqueness property on both sides through `uniqueAdmission_of_sharedBase` — and not
-taken, because the union route cannot carry the alternatives as a `Finset`.
+**The n-ary literal is a union of singletons.** A literal carries one value, and several
+alternatives are a `union` of singleton literals whose members are separated because the values
+differ. `LiteralArity1.lean` is the derivation, including the uniqueness property on both sides
+through `uniqueAdmission_of_sharedBase`. The route was refused while a literal held a set: the
+bridge from a `Finset` of alternatives to the list `Term.union` takes is `Finset.toList`, which
+reaches `Classical.choice`. One value leaves no such set, so there is no bridge to cross. The host
+keeps the n-ary call as a builder that writes the union, because the hand-written union costs the
+type checker in proportion to the number of alternatives where the call is flat.
 
 **A number with no closed terms.** The host's number is axiomatized rather than modelled, because
 rounding is not a theorem of this calculus. The price is paid in distinct places that close

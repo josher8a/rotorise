@@ -28,23 +28,21 @@ they sit here by the same rule.
 
 namespace Calculus
 
-/-- The alternatives lie inside the clause's, at one base.
+/-- A declared name's literal is the clause's value, at the same base.
 
-    `disjAlts` with the membership turned round, and it is deliberately the same shape. -/
-def subAlts {α : Type} [DecidableEq α] (ls c : NEFinset α) : Bool :=
-  decide (∀ x ∈ ls.1, x ∈ c.1)
-
-/-- A declared name's alternatives lie inside the clause's, at the same base.
+    **A clause pins one value per name, because a literal carries one.** The subset test this
+    replaces existed only while a literal held a set. Selecting several alternatives is
+    selecting with one clause per alternative, which `mem_extract_or` below states.
 
     Four rows, and they are `altsDisj`'s four for `altsDisj`'s reasons: `number` declines because
-    `WFDouble`'s equality is a field of `numericHost`, and `null` because its one alternative is
-    every null literal's, so a clause there would keep each member rather than select among them.
-    A name pinned at one base against a clause at another is no match, which is the `_` row. -/
+    `WFDouble`'s equality is a field of `numericHost`, and `null` because its carrier has one
+    inhabitant, so a clause there would keep every member rather than select among them. A name
+    pinned at one base against a clause at another is no match, which is the `_` row. -/
 def altsSub : Option Alts → Alts → Bool
-  | some ⟨.string, ls⟩,  ⟨.string, c⟩  => subAlts ls c
-  | some ⟨.decimal, ls⟩, ⟨.decimal, c⟩ => subAlts ls c
-  | some ⟨.boolean, ls⟩, ⟨.boolean, c⟩ => subAlts ls c
-  | some ⟨.binary, ls⟩,  ⟨.binary, c⟩  => subAlts ls c
+  | some ⟨.string, x⟩,  ⟨.string, c⟩  => decide (x = c)
+  | some ⟨.decimal, x⟩, ⟨.decimal, c⟩ => decide (x = c)
+  | some ⟨.boolean, x⟩, ⟨.boolean, c⟩ => decide (x = c)
+  | some ⟨.binary, x⟩,  ⟨.binary, c⟩  => decide (x = c)
   | _, _ => false
 
 /-- **A clause at union level**: the names it speaks about, and the alternatives it admits at each.
@@ -84,6 +82,16 @@ def AltClause.extract (c : AltClause) (opts : List Term) : List Term :=
     no option is both kept and dropped. -/
 def AltClause.exclude (c : AltClause) (opts : List Term) : List Term :=
   opts.filter (fun t => ! c.admits t)
+
+/-- **Several alternatives are several clauses, and the extracts join.**
+
+    A clause pins one value per name, so selecting a set of alternatives is selecting with each
+    clause in turn. Stated on membership and not as an append: `List.filter` fixes an order, and
+    an append would carry an option both clauses admit twice. -/
+theorem mem_extract_or (c c' : AltClause) (opts : List Term) (t : Term) :
+    t ∈ opts.filter (fun u => c.admits u || c'.admits u) ↔
+      t ∈ c.extract opts ∨ t ∈ c'.extract opts := by
+  simp [AltClause.extract, List.mem_filter, and_or_left]
 
 /-- The extraction keeps options and reorders none, which is what every corollary below reads. -/
 theorem AltClause.extract_sublist (c : AltClause) (opts : List Term) :

@@ -952,12 +952,10 @@ export const arbitraryOf = (
     switch (def.kind) {
         case 'string':
             return someString(rng)
-        // `ℓ` is non-empty by construction now — every constructor that builds one refuses
-        // an empty admissible set — so there is no fallback branch to take
-        case 'literal': {
-            const ls: readonly LiteralValue[] = def.ls
-            return pickFrom(rng, ls)
-        }
+        // one value, so there is nothing to pick between; several alternatives are a union of
+        // literals and the union row picks the option
+        case 'literal':
+            return def.v
         case 'decimal':
             return someDecimal(rng)
         case 'number':
@@ -1227,10 +1225,10 @@ export const shrinkOf = (
          * array it read. A value that is not in `ℓ` shrinks to nothing, which is right: nothing
          * smaller is admissible.
          */
-        case 'literal': {
-            const ls: readonly unknown[] = def.ls
-            return ls.slice(0, Math.max(0, ls.indexOf(value)))
-        }
+        // one value, so nothing smaller is admissible; a set of alternatives is a union, and
+        // the union row shrinks towards its first option
+        case 'literal':
+            return []
         case 'decimal':
             return shrinkDecimal(value as string)
         case 'number':

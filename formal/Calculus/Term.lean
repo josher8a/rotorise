@@ -60,21 +60,19 @@ inductive Term where
       `nullCodec` is one of `opaque`'s options, but until now no *term* denoted it —
       so a schema could not say "this attribute is exactly NULL". -/
   | null
-  /-- §3 `(literal)`, in the shape §3 states it: a ground **base**, and a nonempty finite set
-      of that base's alternatives.
+  /-- §3 `(literal)`: a ground **base**, and one inhabitant of that base's carrier.
 
       This was three constructors — arity-one over a value, and ~~literalS~~/~~literalN~~ at the
-      two commonest bases — because no single payload type could say "these alternatives, all
-      at one base". `(k : GroundKind)` with `ls : NEFinset k.Carrier` says it: the base is an
-      index, so `g ground` is unsayable-otherwise and the member is a function rather than an
-      index with a premise; the alternatives are a `NEFinset` of that base's carrier, so
-      `n ≥ 1`, pairwise distinctness *and* homogeneity are the type's. Arity one is the
-      singleton case, and `.null`'s carrier is `Unit`, so `literal .null` can say nothing but
-      what it means.
+      two commonest bases — because no single payload type could say "this alternative, at this
+      base". `(k : GroundKind)` with `v : k.Carrier` says it: the base is an index, so
+      `g ground` is unsayable-otherwise and the member is a function rather than an index with a
+      premise, and `ℓ ⊆ T` is the carrier. `.null`'s carrier is `Unit`, so `literal .null` can
+      say nothing but what it means.
 
-      Not a union of arity-one literals, which is derivable but not free: see
-      `Calculus/LiteralArity1.lean`. -/
-  | literal (k : GroundKind) (ls : NEFinset k.Carrier)
+      **One value, and several values are a `union`.** A set of alternatives is a certified
+      union of singletons: the members are pairwise separated because the values differ, which
+      is `OrthL` at one base. `Calculus/LiteralArity1.lean` derives that rule. -/
+  | literal (k : GroundKind) (v : k.Carrier)
   /-- §3 `(set)`, indexed by its element **base** rather than by an arbitrary element term.
 
       The rule's premise was `⊢ c : T ⇝ μ` together with `setMember μ = some μS`, and

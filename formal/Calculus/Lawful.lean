@@ -294,10 +294,10 @@ statement, because there is one codec. -/
     each other and never mentions `T`, so a restriction of a lawful pair is lawful whether or
     not the restriction is inhabited. That is why §3's `ℓ ⊆ D` belongs to the carrier and not
     here. -/
-theorem lawful_literalCodec (k : GroundKind) (ls : NEFinset k.Carrier) :
-    Lawful (literalCodec k ls) :=
-  Lawful.congr (d := (baseCodec k).restrict (inL k ls)) rfl rfl rfl
-    (Lawful.restrict (lawful_baseCodec k) (inL k ls))
+theorem lawful_literalCodec (k : GroundKind) (x : k.Carrier) :
+    Lawful (literalCodec k x) :=
+  Lawful.congr (d := (baseCodec k).restrict (inL k x)) rfl rfl rfl
+    (Lawful.restrict (lawful_baseCodec k) (inL k x))
 
 theorem LawfulCore.extendRead {c : Codec} (h : LawfulCore c) {r : Attr → Option Value}
     (hran : ∀ a v, r a = some v → (c.e v).isSome) :

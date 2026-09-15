@@ -291,23 +291,23 @@ noncomputable def SetBase.elem : SetBase → Codec
   | .decimal => decimalCodec
   | .binary  => binaryCodec
 
-/-- `literal(ℓ)`'s predicate: the value is one of the alternatives.
+/-- `literal(ℓ)`'s predicate: the value is the alternative.
 
     One definition where there were two (~~inLS~~, ~~inLN~~) and three bases with none. Dispatching
-    on the index first is what makes the carrier concrete, and so the membership decidable. -/
-noncomputable def inL : (k : GroundKind) → NEFinset k.Carrier → Value → Bool
-  | .string,  ls, .str s  => decide (s ∈ ls.1)
-  -- `number`'s carrier is gated too now (`WFDouble`), so this row is `decimal`'s: membership
-  -- goes *through* the gate, and a double whose text §1 refuses is in no alternative set.
-  | .number,  ls, .num d  =>
-      if h : Numeral.WF d.toDec = true then decide ((⟨d, h⟩ : WFDouble) ∈ ls.1) else false
-  -- `decimal`'s value is a `.str` and its carrier is the `Stored` subtype, so membership goes
-  -- through the gate rather than round it: a text that is not stored is in no alternative set.
-  | .decimal, ls, .str s  =>
-      if h : Numeral.Stored s = true then decide ((⟨s, h⟩ : StoredNumeral) ∈ ls.1) else false
-  | .boolean, ls, .bool b => decide (b ∈ ls.1)
-  | .binary,  ls, .bin b  => decide (b ∈ ls.1)
-  | .null,    _,  .null   => true
+    on the index first is what makes the carrier concrete, and so the equality decidable. -/
+noncomputable def inL : (k : GroundKind) → k.Carrier → Value → Bool
+  | .string,  x, .str s  => decide (s = x)
+  -- `number`'s carrier is gated (`WFDouble`), so this row is `decimal`'s: the comparison goes
+  -- *through* the gate, and a double whose text §1 refuses is no alternative.
+  | .number,  x, .num d  =>
+      if h : Numeral.WF d.toDec = true then decide ((⟨d, h⟩ : WFDouble) = x) else false
+  -- `decimal`'s value is a `.str` and its carrier is the `Stored` subtype, so the comparison
+  -- goes through the gate rather than round it: a text that is not stored is no alternative.
+  | .decimal, x, .str s  =>
+      if h : Numeral.Stored s = true then decide ((⟨s, h⟩ : StoredNumeral) = x) else false
+  | .boolean, x, .bool b => decide (b = x)
+  | .binary,  x, .bin b  => decide (b = x)
+  | .null,    _, .null   => true
   | _, _, _ => false
 
 /-! `inL`'s rows at the four ungated bases, as `@[simp]` equations.
@@ -319,26 +319,25 @@ their rows are a `dite` on a gate, so the useful statement is about the gate rat
 the row, and `hLit_of_inL`'s two `cases hs :` branches are where that is done. -/
 
 /-- `.str` at `string`: the payload *is* the carrier, so this is `rfl`. -/
-@[simp] theorem inL_str (ls : NEFinset String) (s : String) :
-    inL .string ls (.str s) = decide (s ∈ ls.1) := rfl
+@[simp] theorem inL_str (x s : String) :
+    inL .string x (.str s) = decide (s = x) := rfl
 
 /-- `.bool` at `boolean`, on the same terms. -/
-@[simp] theorem inL_bool (ls : NEFinset Bool) (b : Bool) :
-    inL .boolean ls (.bool b) = decide (b ∈ ls.1) := rfl
+@[simp] theorem inL_bool (x b : Bool) :
+    inL .boolean x (.bool b) = decide (b = x) := rfl
 
 /-- `.bin` at `binary`, on the same terms. -/
-@[simp] theorem inL_bin (ls : NEFinset Bytes) (b : Bytes) :
-    inL .binary ls (.bin b) = decide (b ∈ ls.1) := rfl
+@[simp] theorem inL_bin (x b : Bytes) :
+    inL .binary x (.bin b) = decide (b = x) := rfl
 
-/-- `.null` at `null`: the alternative set cannot distinguish anything, `Unit` having one
-    inhabitant and `℘⁺fin` no empty one, so the row is `true` and not a membership test. -/
-@[simp] theorem inL_null (ls : NEFinset Unit) :
-    inL .null ls .null = true := rfl
+/-- `.null` at `null`: `Unit` has one inhabitant, so the row is `true` and not a comparison. -/
+@[simp] theorem inL_null (x : Unit) :
+    inL .null x .null = true := rfl
 
-/-- §3's `{ℓ₁ … ℓₙ}` — the held set, uniform in the base because `toValue` is. Spelled
+/-- §3's `{ℓ}` — the held set, uniform in the base because `toValue` is. Spelled
     `Value → Prop` rather than `Held`, which is `Typing`'s abbreviation and one module down. -/
-def HLit (k : GroundKind) (ls : NEFinset k.Carrier) : Value → Prop :=
-  fun v => ∃ x, x ∈ ls.1 ∧ v = k.toValue x
+def HLit (k : GroundKind) (x : k.Carrier) : Value → Prop :=
+  fun v => v = k.toValue x
 
 
 /-! ## Wrappers -/
@@ -499,12 +498,12 @@ theorem decimalCodec_p_restrict : decimalCodec.p = (wfDecimalCodec.restrict isSt
     be, because `GroundKind.number`'s carrier is `WFDouble`, so `HLit` holds only values
     `numberCodec` writes. What (B) failing looks like is stated on `literalNRule`
     (`Refutations.lean`), a prism over an ungated `ℓ` that is not a `Term`. -/
-noncomputable def literalCodec (k : GroundKind) (ls : NEFinset k.Carrier) : Codec :=
-  { (baseCodec k).restrict (inL k ls) with T := HLit k ls }
+noncomputable def literalCodec (k : GroundKind) (x : k.Carrier) : Codec :=
+  { (baseCodec k).restrict (inL k x) with T := HLit k x }
 
-theorem literalNCodec_p_n (ls : NEFinset WFDouble) (x : WFNumeral) :
-    (literalCodec .number ls).p (.n x) =
-      (numberCodec.p (.n x)).bind (fun v => if inL .number ls v then some v else none) := rfl
+theorem literalNCodec_p_n (y : WFDouble) (x : WFNumeral) :
+    (literalCodec .number y).p (.n x) =
+      (numberCodec.p (.n x)).bind (fun v => if inL .number y v then some v else none) := rfl
 
 /-! ### The gated ground codecs are refinements
 
@@ -523,17 +522,17 @@ attribute), so it is not a refinement of `string` and keeps its own proofs. -/
 
     Both halves are `rfl` now, where the string pair needed a `funext` and a case split: the
     codec *is* the restriction, rather than a hand-written pair that agreed with one. -/
-theorem literalCodec_e_restrict (k : GroundKind) (ls : NEFinset k.Carrier) :
-    (literalCodec k ls).e = ((baseCodec k).restrict (inL k ls)).e := rfl
+theorem literalCodec_e_restrict (k : GroundKind) (x : k.Carrier) :
+    (literalCodec k x).e = ((baseCodec k).restrict (inL k x)).e := rfl
 
-theorem literalCodec_p_restrict (k : GroundKind) (ls : NEFinset k.Carrier) :
-    (literalCodec k ls).p = ((baseCodec k).restrict (inL k ls)).p := rfl
+theorem literalCodec_p_restrict (k : GroundKind) (x : k.Carrier) :
+    (literalCodec k x).p = ((baseCodec k).restrict (inL k x)).p := rfl
 
-/-- **A literal codec writes only its own alternatives.** `restrict`'s `e` is a guard in front
-    of the base's, so a defined write is a value in `ℓ` — which is what an object option's
+/-- **A literal codec writes only its own alternative.** `restrict`'s `e` is a guard in front
+    of the base's, so a defined write is the value `ℓ` names — which is what an object option's
     content admission reads off a field whose term is a literal. -/
-theorem inL_of_literalCodec_e {k : GroundKind} {ls : NEFinset k.Carrier} {v a}
-    (he : (literalCodec k ls).e v = some a) : inL k ls v = true := by
+theorem inL_of_literalCodec_e {k : GroundKind} {x : k.Carrier} {v a}
+    (he : (literalCodec k x).e v = some a) : inL k x v = true := by
   rw [literalCodec_e_restrict] at he
   simp only [Codec.restrict] at he
   split at he
@@ -541,37 +540,37 @@ theorem inL_of_literalCodec_e {k : GroundKind} {ls : NEFinset k.Carrier} {v a}
   · exact absurd he (by simp)
 
 /-- The member is the base's, and the base's is the index's. -/
-theorem literalCodec_μ (k : GroundKind) (ls : NEFinset k.Carrier) :
-    (literalCodec k ls).μ = some k.member := by cases k <;> rfl
+theorem literalCodec_μ (k : GroundKind) (x : k.Carrier) :
+    (literalCodec k x).μ = some k.member := by cases k <;> rfl
 
-/-- Membership in `ℓ` places the value in the held set — the direction `Carrier` needs, and
-    the one place `.null`'s nonemptiness is used for anything. -/
-theorem hLit_of_inL (k : GroundKind) (ls : NEFinset k.Carrier) (v : Value) :
-    inL k ls v = true → HLit k ls v := by
+/-- The value `ℓ` names places the value in the held set — the direction `Carrier` needs.
+
+    The four ungated bases are the payload equality outright. `number` and `decimal` reach here
+    with a `dite` on their gate, so the branch splits on the gate and names the alternative as a
+    subtype, and `toValue` projects it straight back. `cases hs :` rather than `by_cases`, which
+    is classical. `.null` is `rfl`: it used to need the alternative set's nonemptiness proof, and
+    a carrier with one inhabitant needs nothing. -/
+theorem hLit_of_inL (k : GroundKind) (x : k.Carrier) (v : Value) :
+    inL k x v = true → HLit k x v := by
   cases k <;> cases v <;> intro h <;>
     first
       | exact Bool.noConfusion h
-      | exact ⟨_, by simpa [inL] using h, rfl⟩
-      -- **The two gated bases reach here and the four ungated ones do not.** Their rows are a
-      -- `dite` on the gate, so the alternative above — which expects the value's payload to
-      -- *be* the carrier — cannot see through it. Splitting on the gate names the alternative
-      -- as a subtype, and `toValue` projects it straight back. `cases hs :` rather than
-      -- `by_cases`, which is classical. `number` joined `decimal` here when `ℓ ⊆ D` moved from
-      -- ~~LiteralD~~ into `WFDouble`; the two branches differ only in which gate they split.
-      | exact (by
-          rename_i s
-          cases hs : Numeral.Stored s with
-          | false => simp [inL, hs] at h
-          | true => exact ⟨⟨s, hs⟩, by simpa [inL, hs] using h, rfl⟩)
-      | exact (by
-          rename_i d
-          cases hs : Numeral.WF d.toDec with
-          | false => simp [inL, hs] at h
-          | true => exact ⟨⟨d, hs⟩, by simpa [inL, hs] using h, rfl⟩)
-      -- `.null`'s carrier is `Unit`, so the alternative is whichever one the nonemptiness
-      -- proof names. Destructed rather than `choose`n: `Exists.choose` is `Classical.choice`,
-      -- and `formal/` advertises its absence.
-      | exact (by obtain ⟨x, hx⟩ := ls.2; exact ⟨x, hx, rfl⟩)
+      | rfl
+      | (simp only [inL, decide_eq_true_eq] at h
+         subst h
+         rfl)
+      | (rename_i s
+         cases hs : Numeral.Stored s with
+         | true =>
+           simp only [inL, hs, dif_pos, decide_eq_true_eq] at h
+           exact congrArg Value.str (congrArg Subtype.val h)
+         | false => simp [inL, hs] at h)
+      | (rename_i d
+         cases hs : Numeral.WF d.toDec with
+         | true =>
+           simp only [inL, hs, dif_pos, decide_eq_true_eq] at h
+           exact congrArg Value.num (congrArg Subtype.val h)
+         | false => simp [inL, hs] at h)
 
 /-- `legacy`: extend the reading. With §3's coherence premise this presentation equals
     the order-free `p ∪ r`. -/

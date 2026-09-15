@@ -492,13 +492,11 @@ def Decides (t : Term) : Prop :=
   ∃ v w, ((denote t).e v).isSome = true ∧ v.kind = w.kind ∧ ((denote t).e w).isSome = false
 
 /-- A string `literal` decides, as §5 says. -/
-theorem decides_literalS : Decides (.literal .string (.of "A" ∅)) :=
+theorem decides_literalS : Decides (.literal .string "A") :=
   ⟨.str "A", .str "B",
-   by simp [denote, denote, literalCodec, baseCodec, Codec.restrict, inL, stringCodec,
-         NEFinset.of],
+   by simp [denote, denote, literalCodec, baseCodec, Codec.restrict, inL, stringCodec],
    rfl,
-   by simp [denote, denote, literalCodec, baseCodec, Codec.restrict, inL, stringCodec,
-         NEFinset.of]⟩
+   by simp [denote, denote, literalCodec, baseCodec, Codec.restrict, inL, stringCodec]⟩
 
 /-- `string` does not, as §5 also says. -/
 theorem not_decides_string : ¬ Decides .string := by
@@ -637,12 +635,12 @@ theorem sepJV_set_literals :
     simp only [Adm, Bool.and_eq_true, Pred.eval, liftQ, decide_eq_true_eq] at hv
     have hxA : x = "A" := by
       have h1 := (of_decide_eq_true hv.2) x hx
-      simpa [inL, NEFinset.of] using h1
+      simpa [inLs, inL] using h1
     simp only [Adm, Pred.eval, liftQ, Bool.and_eq_false_iff, decide_eq_false_iff_not]
     refine Or.inr (decide_eq_false (fun hall => ?_))
     have h2 := hall x hx
     rw [hxA] at h2
-    simp [inL, NEFinset.of] at h2
+    simp [inLs, inL] at h2
   -- the other two wire families are refused by the *set* row, element by element: a
   -- `string` base admits no number and no byte string, and `℘⁺fin` supplies the element
   case numSet S =>
@@ -659,7 +657,7 @@ theorem sepJV_set_literals :
     separate, because both options admit `[]`. This is §5's empty-container argument in its
     correct scope — it is a fact about `array`, `record` and `object`, not about `set`. -/
 theorem not_sepJV_array_literals :
-    ¬ SepJV (.array (.literal .string (.of "A" ∅))) (.array (.literal .string (.of "B" ∅))) := by
+    ¬ SepJV (.array (.literal .string "A")) (.array (.literal .string "B")) := by
   intro h
   exact absurd (h (.arr []) (by simp [Adm, allP])) (by simp [Adm, allP])
 

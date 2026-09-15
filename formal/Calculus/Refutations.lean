@@ -212,13 +212,13 @@ elementwise." The witness is the shortest heterogeneous sequence. -/
 /-- `["A", "B"]` is an array of either literal, but homogeneous in neither. -/
 theorem not_equiv_union_array :
     ¬ Codec.Equiv
-        (denote (.union [.array (.literal .string (.of "A" ∅)), .array (.literal .string (.of "B" ∅))]))
-        (denote (.array (.union [.literal .string (.of "A" ∅), .literal .string (.of "B" ∅)]))) := by
+        (denote (.union [.array (.literal .string "A"), .array (.literal .string "B")]))
+        (denote (.array (.union [.literal .string "A", .literal .string "B"]))) := by
   intro h
   have hv := (h.heldSet (.arr [.str "A", .str "B"])).mpr
   simp [denote, denote, optionSems, denoteμs, optionSemOf, specOf, OptionSem.byAttempt,
         altCodec, arrayCodec, literalCodec, baseCodec, Codec.restrict, inL,
-        stringCodec, NEFinset.of, HLit] at hv
+        stringCodec, HLit] at hv
 
 /-! ## `tuple(c₁ … cₙ, rest(c))` is neither a tuple nor an array of unions
 
@@ -372,14 +372,14 @@ the model shows the condition is needed for *interchangeability*, not for `≡`.
 
 /-- Left: the outer union resolves, because the inner one has already failed. -/
 theorem assoc_left_e :
-    (denote (.union [.string, .union [.literal .string (.of "A" ∅), .literal .string (.of "A" ∅)]])).e (.str "A")
+    (denote (.union [.string, .union [.literal .string "A", .literal .string "A"]])).e (.str "A")
       = some (.s "A") := by
   simp [denote, denote, optionSems, denoteμs, optionSemOf, specOf, OptionSem.byAttempt,
         altCodec, select, stringCodec, literalCodec, baseCodec, Codec.restrict, inL]
 
 /-- Right: three options admit, so the union refuses globally. -/
 theorem assoc_right_e :
-    (denote (.union [.string, .literal .string (.of "A" ∅), .literal .string (.of "A" ∅)])).e (.str "A") = none := by
+    (denote (.union [.string, .literal .string "A", .literal .string "A"])).e (.str "A") = none := by
   simp [denote, denote, optionSems, denoteμs, optionSemOf, specOf, OptionSem.byAttempt,
         altCodec, select, stringCodec, literalCodec, baseCodec, Codec.restrict, inL]
 
@@ -388,8 +388,8 @@ theorem assoc_right_e :
 theorem not_eq_altCodec_assoc :
     ∃ (l r : Term) (v : Value) (a : Attr),
       (denote l).e v = some a ∧ (denote r).e v = none :=
-  ⟨.union [.string, .union [.literal .string (.of "A" ∅), .literal .string (.of "A" ∅)]],
-   .union [.string, .literal .string (.of "A" ∅), .literal .string (.of "A" ∅)],
+  ⟨.union [.string, .union [.literal .string "A", .literal .string "A"]],
+   .union [.string, .literal .string "A", .literal .string "A"],
    .str "A", .s "A", assoc_left_e, assoc_right_e⟩
 
 /-! ## `≡` is not transitive
@@ -515,11 +515,11 @@ which is what settled the question the conditional leaves open. -/
 /-- **`literal-N` is a refinement of `number`, with nothing asked for.** This took
     `hD : ∀ d ∈ ls.1, Numeral.WF d.toDec = true` and its docstring said the premise "is the
     whole of what the prism needed". It still is; it is now `WFDouble`'s, so the containment
-    holds of every `ls` there is. -/
-theorem literalN_sub_number (ls : NEFinset WFDouble) :
-    ∀ v, (literalCodec .number ls).T v → numberCodec.T v := by
-  rintro v ⟨d, hd, rfl⟩
-  exact ⟨d.1, rfl, d.2⟩
+    holds of every literal there is. -/
+theorem literalN_sub_number (y : WFDouble) :
+    ∀ v, (literalCodec .number y).T v → numberCodec.T v := by
+  rintro v rfl
+  exact ⟨y.1, rfl, y.2⟩
 
 /-! ### §3's `(literal)` at `number`, with `ℓᵢ ∈ T` dropped
 

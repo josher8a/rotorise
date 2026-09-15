@@ -241,7 +241,7 @@ describe('the tags a variant answers to', () => {
                     fields: {
                         kind: {
                             mark: 'req',
-                            t: { kind: 'literal', base: 'string', ls: ['A'] },
+                            t: { kind: 'literal', base: 'string', v: 'A' },
                         },
                     },
                     rest: 'drop',
@@ -267,7 +267,7 @@ describe('the tags a variant answers to', () => {
                                   t: {
                                       kind: 'literal',
                                       base: 'string',
-                                      ls: ['A'],
+                                      v: 'A',
                                   },
                               }
                             : {
@@ -275,7 +275,7 @@ describe('the tags a variant answers to', () => {
                                   t: {
                                       kind: 'literal',
                                       base: 'string',
-                                      ls: ['A'],
+                                      v: 'A',
                                   },
                                   v: 'A',
                               },
@@ -305,7 +305,7 @@ describe('the tags a variant answers to', () => {
                     fields: {
                         kind: {
                             mark: 'req',
-                            t: { kind: 'literal', base: 'boolean', ls: [true] },
+                            t: { kind: 'literal', base: 'boolean', v: true },
                         },
                     },
                     rest: 'drop',
@@ -359,7 +359,7 @@ describe('the term `.set()` writes', () => {
                 of: {
                     kind: 'members',
                     literal: {
-                        kind: 'literal',
+                        kind: 'alternatives',
                         base: 'string',
                         ls: ['a', 'b'],
                     },
@@ -379,20 +379,36 @@ describe('the term `.set()` writes', () => {
     })
 
     /**
-     * The term indexes the alternatives by the base. A decimal literal is the pair that shows why:
-     * its alternatives are text and it stores `N`, so neither the member nor the JS type of the
-     * values recovers the base.
+     * The term indexes the value by the base. A decimal literal is the pair that shows why: its
+     * value is text and it stores `N`, so neither the member nor the JS type of the value recovers
+     * the base.
      */
-    it("a literal's alternatives are indexed by the base that stores them", () => {
-        expect(erase(decimal('1', '2.5')).def).toEqual({
-            kind: 'literal',
-            base: 'decimal',
-            ls: ['1', '2.5'],
-        })
+    it("a literal's value is indexed by the base that stores it", () => {
         expect(erase(string('A')).def).toEqual({
             kind: 'literal',
             base: 'string',
-            ls: ['A'],
+            v: 'A',
+        })
+        expect(erase(decimal('1')).def).toEqual({
+            kind: 'literal',
+            base: 'decimal',
+            v: '1',
+        })
+    })
+
+    /**
+     * **Several alternatives are a union of singletons**, which is the rule the model states: a
+     * literal carries one value, and a set of them is a certified union whose members are told
+     * apart because the values differ. The builder stays a builder because the hand-written union
+     * costs the type checker linearly in the alternatives where the call is flat.
+     */
+    it('builds a union of singleton literals where several values are named', () => {
+        expect(erase(decimal('1', '2.5')).def).toEqual({
+            kind: 'union',
+            options: [
+                { kind: 'literal', base: 'decimal', v: '1' },
+                { kind: 'literal', base: 'decimal', v: '2.5' },
+            ],
         })
     })
 })

@@ -598,25 +598,20 @@ three times over (~~literalOK~~'s `| _ => false`, ~~literalMember~~'s `none`, `l
 `ℓᵢ ∈ T` at a base the other constructors could not name was why there were two of them.
 
 `GroundKind` is the premise line as a type. The base is an index, so `member` is a function of
-it and `g ground` is unsayable-otherwise; the alternatives are a `NEFinset` of *that base's*
-carrier, so non-emptiness, distinctness and homogeneity are all the type's. One constructor, and
-arity one is the singleton case.
-
-`Calculus/LiteralArity1.lean` is why it is this shape rather than a union of arity-one literals:
-the union is derivable, but `Term.union` is list-shaped and the bridge from a `Finset` is
-`Classical.choice`. -/
+it and `g ground` is unsayable-otherwise; the alternative is one inhabitant of *that base's*
+carrier, so `ℓ ⊆ T` is the type. A literal carries one value; several values are a certified
+`union` of singletons, and `Calculus/LiteralArity1.lean` derives that rule. -/
 
 /-- The five bases a literal can sit at — `Kind` minus the three container kinds. -/
 inductive GroundKind where
   | string | number | decimal | boolean | binary | null
 deriving DecidableEq, Repr
 
-/-- What each base's held set is drawn from. `Unit` at `.null` is not a degenerate case: the
-    only nonempty subset of `Unit` is `{()}`, so `NEFinset .null.Carrier` says "exactly null"
-    and cannot say anything else.
+/-- What each base's held set is drawn from. `Unit` at `.null` is not a degenerate case: `Unit`
+    has one inhabitant, so `literal .null` says "exactly null" and cannot say anything else.
 
     **Reducible**, and that is load-bearing: it lets `Carrier .string` elaborate as `String`, so
-    membership in `ℓ` resolves through `String.decEq` and the ordinary instances. An indexed
+    equality at `ℓ` resolves through `String.decEq` and the ordinary instances. An indexed
     `DecidableEq k.Carrier` instance would work too, and would be *noncomputable* — `Double`'s
     equality is a field of §1's axiomatized `NumericHost` — which then spreads to every `def`
     that names a literal. -/
@@ -673,12 +668,12 @@ import path below `Calculus.Objects`. So an object option's field table crosses 
 the two things admission reads off each declared name, built in `Denote.lean` where `Field` is
 in scope. -/
 
-/-- A literal's payload with its base packed in. The alternatives' type depends on the base,
-    so one literal as data is this pair and not two fields. -/
-abbrev Alts := (k : GroundKind) × NEFinset k.Carrier
+/-- A literal's payload with its base packed in. The value's type depends on the base, so one
+    literal as data is this pair and not two fields. -/
+abbrev Alts := (k : GroundKind) × k.Carrier
 
-/-- One declared name, as admission reads it: whether the name is required, and the
-    alternatives the name is pinned to where its field is a literal.
+/-- One declared name, as admission reads it: whether the name is required, and the value the
+    name is pinned to where its field is a literal.
 
     `required` is what `keysOk` reads, `alts` what `literalsOk` reads. -/
 structure NameSpec where
