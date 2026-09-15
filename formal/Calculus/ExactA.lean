@@ -192,9 +192,9 @@ noncomputable def AdmA : Term → Attr → Bool
   | .tuple ts tail => fun a =>
       match a with | .l as => alignPA (AdmAList ts) (AdmAOptT tail) as | _ => false
   | .object b => AdmABody b
-  | .dunion d variants => fun a =>
-      match tagOfA d a with
-      | some tag => if h : tag ∈ variants.1 then AdmABody (variants.2 ⟨tag, h⟩) a else false
+  | .dunion variants => fun a =>
+      match tagOfA variants.ks.1 a with
+      | some tag => if h : tag ∈ variants.keys then AdmABody (variants.get ⟨tag, h⟩) a else false
       | none => false
   -- the read side of the same deferral; see the `Adm` row and `ExactA_opaq`
   | .opaq lossy => fun a => ((opaqCodecω lossy).p a).isSome
@@ -518,18 +518,20 @@ theorem ExactA_tuple {ts : List Term} {tail : Option Term}
       simp
   all_goals simp [AdmA, denote, tupleCodec]
 
-theorem ExactA_dunion {d : Name} {variants : MapOf Body}
-    (h : ∀ k, ExactA (.object (variants.2 k))) : ExactA (.dunion d variants) := by
+theorem ExactA_dunion {variants : TagMap Body}
+    (h : ∀ k, ExactA (.object (variants.get k))) : ExactA (.dunion variants) := by
   intro a
-  show (match tagOfA d a with
-        | some tag => if hk : tag ∈ variants.1 then AdmABody (variants.2 ⟨tag, hk⟩) a else false
+  show (match tagOfA variants.ks.1 a with
+        | some tag => if hk : tag ∈ variants.keys then AdmABody (variants.get ⟨tag, hk⟩) a
+                      else false
         | none => false) = true ↔ _
   rw [denote_dunion_tags]
-  cases hta : tagOfA d a with
+  cases hta : tagOfA variants.ks.1 a with
   | none => simp [dunionTable, hta]
   | some tag =>
-    show (if hk : tag ∈ variants.1 then AdmABody (variants.2 ⟨tag, hk⟩) a else false) = true ↔ _
-    by_cases hk : tag ∈ variants.1
+    show (if hk : tag ∈ variants.keys then AdmABody (variants.get ⟨tag, hk⟩) a else false)
+        = true ↔ _
+    by_cases hk : tag ∈ variants.keys
     · rw [dif_pos hk]
       refine Iff.trans (h ⟨tag, hk⟩ a) (Iff.intro (fun hs => ?_) (fun hs => ?_))
       · obtain ⟨v, hv⟩ := Option.isSome_iff_exists.mp hs
@@ -684,7 +686,7 @@ theorem AdmA_exact : ∀ (t : Term), ExactA t
   -- the rows §5 excused on this side too
   | .tuple ts tail =>
       ExactA_tuple (exactAL_mem ts (AdmA_exactL ts)) (exactAO_mem tail (AdmA_exactO tail))
-  | .dunion _ variants => ExactA_dunion fun k => AdmA_exactB (variants.2 k)
+  | .dunion variants => ExactA_dunion fun k => AdmA_exactB (variants.get k)
   | .object b => AdmA_exactB b
   | .opaq lossy => ExactA_opaq lossy
   -- both sides are empty, so the equivalence is `False ↔ False`

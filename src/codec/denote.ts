@@ -54,7 +54,7 @@ import {
     namesFit,
     namesOf,
     ownsNull,
-    readTag,
+    readTags,
     rendered,
     sameLiteral,
     shapeOf,
@@ -285,27 +285,73 @@ const setWire: {
 }
 
 /**
- * The one tag a `dunion` option answers to, read off the option's own `d` field.
+ * **A member's assignment: one tag per key, read off the member's own body.**
  *
- * `discriminatedUnion` refuses an option that does not name `d` with a one-valued literal at
- * `string`, `number` or `decimal`, so the throw below is that invariant and not a case a
- * declaration can reach. `readTag` reads a stored tag back as text, so a numeric tag is its text.
+ * `Calculus.Body.namesTags` as a function. The model states it as a predicate — `b.tags k = {asg
+ * k}` at every key — because reading the element out of a singleton `Finset` costs a choice
+ * principle there. Here the body's field is data, so the same fact extracts, and the extraction is
+ * exact: a body satisfies `namesTags` at exactly the assignment this returns, and at no other.
+ *
+ * `Calculus.tagsOfField` decides each key, and this mirrors it: **`req` only** — a `fallback`
+ * discriminator would fill an absent tag with a default and break the value-side stamp — a
+ * `literal`, and exactly one alternative, which is `namesTags`' singleton.
+ *
+ * One divergence, and it is the one the model writes down rather than fixes: the model reads a
+ * `number` literal's tag set as empty, because `Calculus.Double` is an axiom with no closed terms.
+ * The host builds a numeric tag and reads it back as its text, and `src/codec/lean.ts` refuses to
+ * emit one and says why. Narrowing this to the model's two bases would take a tag the published
+ * surface admits today.
  */
-export const variantTag = (d: string, option: Term): string => {
-    const field = option.kind === 'object' ? option.body.fields[d] : undefined
-    const t = field?.mark === 'req' ? field.t : undefined
-    if (
-        t?.kind !== 'literal' ||
-        t.base === 'boolean' ||
-        t.base === 'binary' ||
-        t.ls.length !== 1
-    ) {
-        throw new CodecError(
-            `a discriminated union's options each name '${d}' with a one-valued literal, and this option does not. \`discriminatedUnion\` refuses that at the declaration, so this term was not built by it`,
-        )
+export const assignmentOf = (
+    ks: readonly string[],
+    body: Body,
+): Result<Readonly<Record<string, string>>> => {
+    const out: Record<string, string> = {}
+    for (const name of ks) {
+        const field = body.fields[name]
+        if (field === undefined) {
+            return new CodecError(
+                `every option must name '${name}' with a literal at \`string\`, \`number\` or \`decimal\`, and one of them declares no '${name}' — a tag is carried as 'S' or 'N', and without one a lookup cannot find the variant`,
+            )
+        }
+        if (field.mark !== 'req') {
+            return new CodecError(
+                `every option must name '${name}' with a literal at \`string\`, \`number\` or \`decimal\`, and one of them declares it \`${field.mark}\` — a tag that can be absent or defaulted names no variant, which is why the model reads a tag off a \`req\` field alone`,
+            )
+        }
+        const t = field.t
+        if (
+            t.kind !== 'literal' ||
+            t.base === 'boolean' ||
+            t.base === 'binary'
+        ) {
+            return new CodecError(
+                `every option must name '${name}' with a literal at \`string\`, \`number\` or \`decimal\`, and one of them does not — a tag is carried as 'S' or 'N', and without one a lookup cannot find the variant`,
+            )
+        }
+        if (t.ls.length !== 1) {
+            return new CodecError(
+                `'${name}' names ${t.ls.length} values at one option (${t.ls.join(', ')}), and a variant answers to exactly one tag — split it into one option per value`,
+            )
+        }
+        out[name] = String(t.ls[0])
     }
-    return String(t.ls[0])
+    return out
 }
+
+/**
+ * **Two assignments are equal when they agree at every key.** `Calculus.asgEq`, which decides
+ * `Assignment ks` by `∀ k ∈ ks` and not by a rendering.
+ *
+ * No sort, no join, no `JSON.stringify`. A rendering would be an encoding, and an encoding of a
+ * key set is an order: the thing the term is built not to carry. This reads the keys the caller
+ * gave in whatever order the array happens to hold them, and the answer does not depend on it.
+ */
+export const sameAssignment = (
+    ks: readonly string[],
+    a: Readonly<Record<string, string>>,
+    b: Readonly<Record<string, string>>,
+): boolean => ks.every((name) => a[name] === b[name])
 
 /**
  * The two halves a term denotes, with neither half's type known.
@@ -762,49 +808,105 @@ export const altSem = (
     }
 }
 /**
- * §3 `(dunion)`: the tag chooses the variant, and the choice is a **lookup** rather than an attempt.
+ * §3 `(dunion)`: the assignment chooses the member, and the choice is a **lookup** rather than an
+ * attempt.
  *
- * The model's `dunionTable`, and `lawful_dunionTable` is the lemma. Its (U) is a fact of the key set rather
- * than an obligation, which §5 states as the reason `(dunion)` is not a second kind of sum: reading
- * a label off an input is something an option cannot be wrong about.
+ * The model's `dunionTable`, and `lawful_dunionTable` is the lemma. Its (U) is a fact of the key
+ * set rather than an obligation, which §5 states as the reason `(dunion)` is not a second kind of
+ * sum: reading a label off an input is something a member cannot be wrong about.
  *
- * `Object.hasOwn` and not a truthiness test: `byVariant` is a plain object, so a tag of `toString`
- * or `constructor` reaches `Object.prototype` and comes back as a variant that has no `decode`. The
- * tag is read off the *stored* item, so that is reachable from data this library does not control,
- * and it surfaced as a raw `TypeError` — the one thing every other failure here is careful not to
- * be.
+ * **A list and a scan, which is `Calculus.TagMap` and its `at` verbatim.** The model's table is a
+ * `Finset` of assignments with a function on membership, and membership is decided by
+ * {@link sameAssignment}. An index keyed by a rendered string would be a second statement of what
+ * an assignment is, in a vocabulary the model does not have, and it would put an order on the keys
+ * to build the rendering. The members of one dissection are few; the scan is the model's own
+ * decision procedure and costs what the model says it costs.
  */
 export const byTagSem = <V>(
-    discriminator: string,
-    byVariant: Readonly<Record<string, V>>,
+    ks: readonly string[],
+    members: readonly (readonly [Readonly<Record<string, string>>, V])[],
 ): {
-    readonly pick: (tag: string) => Result<V>
-    readonly tagOf: (item: Readonly<Record<string, unknown>>) => Result<string>
+    readonly pick: (assignment: Readonly<Record<string, string>>) => Result<V>
+    readonly tagOf: (
+        item: Readonly<Record<string, unknown>>,
+    ) => Result<Readonly<Record<string, string>>>
 } => ({
-    pick: (tag) => {
-        const variant = Object.hasOwn(byVariant, tag)
-            ? (byVariant[tag] as V | undefined)
-            : undefined
-        return (
-            variant ??
-            new CodecError(
-                `'${tag}' is not a variant of '${discriminator}'; expected ${Object.keys(
-                    byVariant,
+    pick: (assignment) => {
+        const found = members.find(([one]) =>
+            sameAssignment(ks, one, assignment),
+        )
+        if (found !== undefined) return found[1]
+        // **which discriminator was wrong, decided without an order.** A key whose tag no member
+        // carries is wrong on its own, so it is named with the tags that would have matched.
+        // Where every key matches some member and no member carries them all, the combination is
+        // what failed, and that is what the message says
+        for (const name of ks) {
+            const carried = members.map(([one]) => one[name] as string)
+            if (!carried.includes(assignment[name] as string)) {
+                const expected = [...new Set(carried)]
+                    .map((tag) => `'${tag}'`)
+                    .join(', ')
+                return new CodecError(
+                    `'${assignment[name]}' is not a variant of '${name}'; expected ${expected}`,
                 )
-                    .map((x) => `'${x}'`)
-                    .join(', ')}`,
-            )
+            }
+        }
+        const wrote = ks
+            .map((name) => `${name}='${assignment[name]}'`)
+            .join(', ')
+        return new CodecError(
+            `no variant carries ${wrote}; each tag names a variant and no variant names them together`,
         )
     },
     tagOf: (item) => {
-        const tag = item[discriminator]
-        return tag === undefined
-            ? new CodecError(
-                  `'${String(discriminator)}' chooses the variant and was not given`,
-              )
-            : String(tag)
+        const out: Record<string, string> = {}
+        for (const name of ks) {
+            const tag = item[name]
+            if (tag === undefined) {
+                return new CodecError(
+                    `'${name}' chooses the variant and was not given`,
+                )
+            }
+            out[name] = String(tag)
+        }
+        return out
     },
 })
+
+/**
+ * **The members of a dissection, as a set.** Every member's assignment, read off its own body, and
+ * a refusal where two members carry one assignment.
+ *
+ * `Calculus.TagMap.keys` is a `Finset`, so the model cannot hold one assignment twice and needs no
+ * premise saying so. A JavaScript array can, and this is where that difference is paid: the
+ * refusal is the `Finset`, stated at construction because the type cannot state it.
+ *
+ * Reached by both spellings — `mdunion` at the declaration, and {@link taggedItemSem} at a bare
+ * term — so a term that was not built through the constructor meets the same rule.
+ */
+export const membersOf = <V>(
+    ks: readonly string[],
+    bodies: readonly (readonly [Body, V])[],
+): Result<readonly (readonly [Readonly<Record<string, string>>, V])[]> => {
+    const out: (readonly [Readonly<Record<string, string>>, V])[] = []
+    for (const [body, value] of bodies) {
+        const assignment = assignmentOf(ks, body)
+        if (failed(assignment)) return assignment
+        const clash = out.find(([one]) => sameAssignment(ks, one, assignment))
+        if (clash !== undefined) {
+            // one template at every arity: at one key this reads `'type' = 'A'`, which is what the
+            // one-key refusal always said, and at several it reads the whole assignment
+            const wrote = ks
+                .map((name) => `'${name}' = '${assignment[name]}'`)
+                .join(' and ')
+            return new CodecError(
+                `two options answer to ${wrote}, and a lookup reaches only one of them — give them distinct values`,
+            )
+        }
+        out.push([assignment, value] as const)
+    }
+    return out
+}
 
 /**
  * The two directions over a bare attribute map — a term's reading with the top-level `M` taken off.
@@ -866,23 +968,31 @@ export const itemSem = (def: ItemTerm): ItemPair => {
 export const taggedItemSem = (
     def: Extract<Term, { readonly kind: 'dunion' }>,
 ): ItemPair => {
-    const byTag: Record<string, ItemPair> = {}
-    for (const option of def.options) {
+    if (def.ks.length === 0) {
+        throw new CodecError(
+            `a discriminated union needs at least one discriminator, and this term has none — every value carries the empty assignment, so the first variant would answer for all of them`,
+        )
+    }
+    const bodies = def.options.map((option) => {
         if (option.kind !== 'object') {
             throw new CodecError(
                 `a discriminated union's variants are object codecs, and one option is a \`${option.kind}\`. \`discriminatedUnion\` refuses that at the declaration, so this term was not built by it`,
             )
         }
-        byTag[variantTag(def.d, option)] = itemSem(option)
-    }
-    const { pick, tagOf } = byTagSem(def.d, byTag)
+        return [option.body, itemSem(option)] as const
+    })
+    const members = membersOf<ItemPair>(def.ks, bodies)
+    // a term can be written by hand, so the rules `mdunion` checks at the declaration are checked
+    // again here, where a term first has to mean something
+    if (failed(members)) throw members
+    const { pick, tagOf } = byTagSem<ItemPair>(def.ks, members)
     return {
         encode: (held) =>
             andThen(andThen(tagOf(held), pick), (variant) =>
                 variant.encode(held),
             ),
         decode: (item) =>
-            andThen(andThen(readTag(item, def.d), pick), (variant) =>
+            andThen(andThen(readTags(item, def.ks), pick), (variant) =>
                 variant.decode(item),
             ),
     }

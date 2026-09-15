@@ -220,7 +220,7 @@ def occV : Term → Slot → Bool
   | .tuple _ _   => occOnly .arr
   | .record _    => occOnly .map
   | .object _   => occOnly .map
-  | .dunion _ _  => occOnly .map
+  | .dunion _  => occOnly .map
   | .held _ _ _  => occTop
   | .custom _ _  => occTop
   | .refine t _  => occV t
@@ -262,7 +262,7 @@ def occA : Term → Member → Bool
   | .tuple _ _   => occOnly .L
   | .record _    => occOnly .M
   | .object _   => occOnly .M
-  | .dunion _ _  => occOnly .M
+  | .dunion _  => occOnly .M
   | .legacy _ _  => occTop
   | .custom _ _  => occTop
   | .refine t _  => occA t
@@ -518,8 +518,14 @@ theorem occV_sound : ∀ (t : Term), OccSoundV t
   -- the containers, whose slot is fixed by the constructor and not by the payload
   | .array _ | .tuple _ _ | .record _ =>
       fun v h => by cases v <;> simp_all [Adm, occV, occOnly, Value.slot]
-  | .dunion _ _ => fun v h => by
-      cases v <;> simp_all [Adm, tagOfV, occV, occOnly, Value.slot]
+  -- the key set is non-empty, so a value with no tag at one key has no assignment at all;
+  -- over an empty key set every value would carry the empty assignment and pass the guard
+  | .dunion m => fun v h => by
+      obtain ⟨k, hk⟩ := m.ks.2
+      have hnone : ∀ w : Value, tagAtV k w = none → tagOfV m.ks.1 w = none :=
+        fun w hw => dif_neg fun hall => by
+          have hk' := hall k hk; rw [hw] at hk'; simp at hk'
+      cases v <;> simp_all [Adm, tagAtV, occV, occOnly, Value.slot]
   | .object (.mk _ _ _) => fun v h => by
       cases v <;> simp_all [Adm, AdmBody, occV, occOnly, Value.slot]
   | .held _ _ _ => fun _ _ => rfl
@@ -613,8 +619,12 @@ theorem occA_sound : ∀ (t : Term), OccSoundA t
       fun a h => by cases a <;> simp_all [AdmA, occA, occOnly, Attr.member]
   | .object (.mk _ _ _) => fun a h => by
       cases a <;> simp_all [AdmA, AdmABody, occA, occOnly, Attr.member]
-  | .dunion _ _ => fun a h => by
-      cases a <;> simp_all [AdmA, tagOfA, occA, occOnly, Attr.member]
+  | .dunion m => fun a h => by
+      obtain ⟨k, hk⟩ := m.ks.2
+      have hnone : ∀ b : Attr, tagAtA k b = none → tagOfA m.ks.1 b = none :=
+        fun b hb => dif_neg fun hall => by
+          have hk' := hall k hk; rw [hb] at hk'; simp at hk'
+      cases a <;> simp_all [AdmA, tagAtA, occA, occOnly, Attr.member]
   | .legacy _ _ => fun _ _ => rfl
   | .custom _ _ => fun _ _ => rfl
   | .refine t _ => fun a h => by
@@ -1067,7 +1077,8 @@ theorem orth_string_number : Orth .string .number = true := by decide
 theorem orth_string_null : Orth .string .null = true := by decide
 theorem orth_string_boolean : Orth .string .boolean = true := by decide
 theorem orth_string_dunion :
-    Orth .string (.dunion "k" ⟨∅, fun k => nomatch k.2⟩) = true := by decide
+    Orth .string (.dunion ⟨⟨{"k"}, Finset.singleton_nonempty "k"⟩, ∅, fun k => nomatch k.2⟩)
+      = true := by decide
 theorem orth_array_record : Orth (.array .string) (.record .string) = true := by decide
 
 /-- §5's worked `(set)` example, and out of reach of ~~SepV~~'s kind disjunct: `κ` collapses

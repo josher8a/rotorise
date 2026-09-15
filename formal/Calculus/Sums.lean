@@ -76,22 +76,35 @@ def Attr.tagText : Attr → Option String
   | .n num => some num.1
   | _ => none
 
-def tagOfV (d : Name) : Value → Option String
+/-- One discriminator's tag, read off a value. -/
+def tagAtV (d : Name) : Value → Option String
   | .map keys f => if h : d ∈ keys then (f ⟨d, h⟩).tagText else none
   | _ => none
 
-/-- …and on the stored side, where the field may be `S` **or** `N`.
+/-- **A member's assignment, read off a value**: one tag per key, `none` if any key is absent.
+
+    A finite function on the key set, so the keys have no order and neither does the reading.
+    `Finset.attach` gives the decidable `∀ k ∈ ks` the totality check needs without enumerating,
+    which `Finset.toList` would and which reaches `Classical.choice`. -/
+def tagOfV (ks : Finset Name) (v : Value) : Option (Assignment ks) :=
+  if h : ∀ k ∈ ks, (tagAtV k v).isSome then
+    some (fun k => (tagAtV k.1 v).get (h k.1 k.2))
+  else none
+
+/-- One key's tag on the stored side, where the field may be `S` **or** `N`.
 
     A decimal tag writes a `.str` and stores an `N`, so the value side is covered by the `.str`
-    row above and the stored side needs this one. Without it a decimal-tagged variant would be
-    selectable on write and unreachable on read, which is the asymmetry `GroundKind.decimal`
-    creates everywhere: its value is text and its member is numeric.
-
-    The host reads a tag from the stored item and accepts `S` or `N`, returning the text carried
-    by either. This is that rule. -/
-def tagOfA (d : Name) : Attr → Option String
+    row above and the stored side needs this one. The host reads a tag from the stored item and
+    accepts `S` or `N`, returning the text carried by either. This is that rule. -/
+def tagAtA (d : Name) : Attr → Option String
   | .m keys g => if h : d ∈ keys then (g ⟨d, h⟩).tagText else none
   | _ => none
+
+/-- The same on the stored side. -/
+def tagOfA (ks : Finset Name) (a : Attr) : Option (Assignment ks) :=
+  if h : ∀ k ∈ ks, (tagAtA k a).isSome then
+    some (fun k => (tagAtA k.1 a).get (h k.1 k.2))
+  else none
 
 /-- The builder `denote` uses for a union option. -/
 def optionSemOf (c : Codec) : Option (MapOf Bool) → OptionSem

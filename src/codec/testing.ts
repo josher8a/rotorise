@@ -58,7 +58,7 @@ import type {
     SetBase,
 } from './codec'
 import { CodecError, codecOfTerm, failed, opaque } from './codec'
-import { holds, readsBack, valueKinds, variantTag } from './denote'
+import { assignmentOf, holds, readsBack, valueKinds } from './denote'
 import type { Field, Predicate, Term } from './term'
 import { alwaysWritten, member as termMember } from './term'
 import { shapeOf } from './value'
@@ -1327,10 +1327,17 @@ export const shrinkOf = (
         }
         case 'dunion': {
             const held = value as Record<string, unknown>
-            const tag = String(held[def.d])
-            const chosen = def.options.find(
-                (option) => variantTag(def.d, option) === tag,
-            )
+            // the whole assignment chooses the variant, so every key has to agree
+            const chosen = def.options.find((option) => {
+                if (option.kind !== 'object') return false
+                const assignment = assignmentOf(def.ks, option.body)
+                return (
+                    !failed(assignment) &&
+                    def.ks.every(
+                        (name) => assignment[name] === String(held[name]),
+                    )
+                )
+            })
             return chosen ? shrinkOf(codecOfTerm(chosen), value) : []
         }
         case 'union': {
@@ -1885,21 +1892,29 @@ const byNames = (
     }
 }
 
-/** A `(dunion)` variant is admitted by its discriminator, which the model's table uses as a key. */
+/**
+ * A `(dunion)` variant is admitted by its assignment, which the model's table uses as a key.
+ *
+ * Every discriminator, and not one: a variant answers to one tag at each key, so an option that
+ * agreed at one key and disagreed at another would be admitted by a value no variant carries.
+ */
 const byTag = (
     codec: AnyCodec,
-    discriminator: string,
-    tags: readonly string[],
+    assignment: Readonly<Record<string, string>>,
 ): UnionOption => ({
     codec,
-    describe: `'${discriminator}' of ${tags.map((t) => `'${t}'`).join(' | ')}`,
+    describe: Object.entries(assignment)
+        .map(([name, tag]) => `'${name}' of '${tag}'`)
+        .join(' and '),
     admitsValue: (value) => {
         const held = recordOf(value)
-        const tag = held?.[discriminator]
-        return (
-            (typeof tag === 'string' || typeof tag === 'number') &&
-            tags.includes(String(tag))
-        )
+        return Object.entries(assignment).every(([name, tag]) => {
+            const seen = held?.[name]
+            return (
+                (typeof seen === 'string' || typeof seen === 'number') &&
+                String(seen) === tag
+            )
+        })
     },
     admitsAttribute: (attribute) => {
         /**
@@ -1912,13 +1927,13 @@ const byTag = (
          * other codec — so a union's options are all read at one level and the exception is gone.
          */
         const map = mapOf(attribute)
-        const carried = map?.[discriminator]
-        if (!carried) return false
-        const member = memberOf(carried)
-        if (member !== 'S' && member !== 'N') return false
-        return tags.includes(
-            String((carried as Record<string, unknown>)[member]),
-        )
+        return Object.entries(assignment).every(([name, tag]) => {
+            const carried = map?.[name]
+            if (!carried) return false
+            const member = memberOf(carried)
+            if (member !== 'S' && member !== 'N') return false
+            return String((carried as Record<string, unknown>)[member]) === tag
+        })
     },
 })
 
@@ -2007,18 +2022,26 @@ const unionsIn = (subject: AnyCodec): readonly UnionSite[] => {
                 def.options.forEach((option) => inner(codecOfTerm(option)))
                 return
             case 'dunion': {
-                // one option per variant, and the tag is read off the variant's own `d` field —
-                // the model's variants are a table keyed by the tag, and a variant answers to one
-                const tagged = def.options.map((option) => ({
-                    tag: variantTag(def.d, option),
-                    option,
-                }))
+                // one option per variant, and the tags are read off the variant's own fields —
+                // the model's variants are a table keyed by the assignment, and a variant answers
+                // to one assignment
+                const tagged = def.options.flatMap((option) => {
+                    if (option.kind !== 'object') return []
+                    const assignment = assignmentOf(def.ks, option.body)
+                    return failed(assignment) ? [] : [{ assignment, option }]
+                })
                 out.push({
-                    describe: `discriminatedUnion('${def.d}', ${tagged
-                        .map(({ tag }) => `'${tag}'`)
+                    describe: `discriminatedUnion(${def.ks
+                        .map((name) => `'${name}'`)
+                        .join(', ')}, ${tagged
+                        .map(({ assignment }) =>
+                            def.ks
+                                .map((name) => `'${assignment[name]}'`)
+                                .join('/'),
+                        )
                         .join(', ')})`,
-                    options: tagged.map(({ tag, option }) =>
-                        byTag(codecOfTerm(option), def.d, [tag]),
+                    options: tagged.map(({ assignment, option }) =>
+                        byTag(codecOfTerm(option), assignment),
                     ),
                 })
                 def.options.forEach((option) => inner(codecOfTerm(option)))

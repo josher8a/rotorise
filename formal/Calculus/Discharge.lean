@@ -241,25 +241,25 @@ theorem pairwise_imp_mem {α : Type} {R S : α → α → Prop} :
     whose set is *empty*: it is disjoint from everything, including from itself, so it would
     separate from options the discharger refuses. `discriminatedUnion(d)` with no options is
     that term,
-    and `(dunion)`'s premises are quantified over the option list, so it is derivable. -/
+    and `(dunion)`'s premises are quantified over the member set, so it is derivable. -/
 
 
 /-- `HNever` holds nothing: it is `False` at every value. -/
 theorem hnever_false (v : Value) : ¬ HNever v := id
 
-/-- And it is derivable — `(dunion)`'s premises are quantified over the key set, so the empty
+/-- And it is derivable — `(dunion)`'s premises are quantified over the member set, so the empty
     table satisfies both vacuously and the held set is `False`, which is what a variant table
-    with no variants holds. -/
-theorem typed_dunion_nil (d : Name) :
-    Typed (.dunion d ⟨∅, fun k => nomatch k.2⟩)
-      (HVariants ⟨∅, fun k => nomatch k.2⟩ (fun k => nomatch k.2)) (some .M) :=
+    with no variants holds. The key set stays non-empty: what is empty here is the members. -/
+theorem typed_dunion_nil (ks : NEFinset Name) :
+    Typed (.dunion ⟨ks, ∅, fun k => nomatch k.2⟩)
+      (HVariants ⟨ks, ∅, fun k => nomatch k.2⟩ (fun k => nomatch k.2)) (some .M) :=
   .dunion (fun k => nomatch k.2) (fun k => nomatch k.2)
 
 /-- The empty table's held set is the bottom's: a witness names a variant, and there is no
     variant to name. `Term.never` is the constructor, and this is why the derived form was
     never a second bottom. -/
-theorem hvariants_empty_eq_never (v : Value) :
-    HVariants ⟨∅, fun k => nomatch k.2⟩ (fun k => nomatch k.2) v ↔ HNever v :=
+theorem hvariants_empty_eq_never (ks : NEFinset Name) (v : Value) :
+    HVariants ⟨ks, ∅, fun k => nomatch k.2⟩ (fun k => nomatch k.2) v ↔ HNever v :=
   Iff.intro (fun h => h.elim fun k _ => nomatch k.2) (fun h => h.elim)
 
 /-- §5's (D) fails against the bottom: `False` is a subset of every held set, so the

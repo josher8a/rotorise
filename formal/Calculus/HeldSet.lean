@@ -251,7 +251,7 @@ theorem typed_T_eq : ∀ {t T μ}, Typed t T μ → ∀ v, T v → (denote t).T 
       refine ⟨optionSemOf (denote tx) (specOf tx), ?_, ?_⟩
       · simp only [List.mem_map]; exact ⟨tx, htx, rfl⟩
       · rw [optionSemOf_c]; exact hd
-    | @dunion d variants Ts hty hone =>
+    | @dunion variants Ts hty hone =>
       -- the held set is the disjunction over the key set, so the witness is a key
       obtain ⟨k, hTv⟩ := hv
       exact ⟨k, typed_T_eq (hty k) v hTv⟩

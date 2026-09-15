@@ -262,9 +262,9 @@ noncomputable def Adm : Term → Value → Bool
   | .object b => AdmBody b
   -- the lookup: read the tag, index the table, ask that one variant. No filter, and no second
   -- match to rule out — the key set already did that
-  | .dunion d variants => fun v =>
-      match tagOfV d v with
-      | some tag => if h : tag ∈ variants.1 then AdmBody (variants.2 ⟨tag, h⟩) v else false
+  | .dunion variants => fun v =>
+      match tagOfV variants.ks.1 v with
+      | some tag => if h : tag ∈ variants.keys then AdmBody (variants.get ⟨tag, h⟩) v else false
       | none => false
   -- **The second row that asks its own codec**, as the section above sets out:
   -- `denote (.opaq lossy)` *is* `opaqCodecω lossy`, so this is `dom(e)` rather than a
@@ -514,18 +514,19 @@ theorem ExactV_tuple {ts : List Term} {tail : Option Term}
 
 /-- **`dunion` is exact** once its options are: the tag filter is syntactic, and the one
     option it lands on answers for itself. -/
-theorem ExactV_dunion {d : Name} {variants : MapOf Body}
-    (h : ∀ k, ExactV (.object (variants.2 k))) : ExactV (.dunion d variants) := by
+theorem ExactV_dunion {variants : TagMap Body}
+    (h : ∀ k, ExactV (.object (variants.get k))) : ExactV (.dunion variants) := by
   intro v
-  show (match tagOfV d v with
-        | some tag => if hk : tag ∈ variants.1 then AdmBody (variants.2 ⟨tag, hk⟩) v else false
+  show (match tagOfV variants.ks.1 v with
+        | some tag => if hk : tag ∈ variants.keys then AdmBody (variants.get ⟨tag, hk⟩) v else false
         | none => false) = true ↔ _
   rw [denote_dunion_tags]
-  cases htv : tagOfV d v with
+  cases htv : tagOfV variants.ks.1 v with
   | none => simp [dunionTable, htv]
   | some tag =>
-    show (if hk : tag ∈ variants.1 then AdmBody (variants.2 ⟨tag, hk⟩) v else false) = true ↔ _
-    by_cases hk : tag ∈ variants.1
+    show (if hk : tag ∈ variants.keys then AdmBody (variants.get ⟨tag, hk⟩) v else false)
+        = true ↔ _
+    by_cases hk : tag ∈ variants.keys
     · rw [dif_pos hk]
       refine Iff.trans (h ⟨tag, hk⟩ v) (Iff.intro (fun hs => ?_) (fun hs => ?_))
       · obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp hs
@@ -805,7 +806,7 @@ theorem Adm_exact : ∀ (t : Term), ExactV t
   -- the rows §5 excused, and not one of them needed excusing
   | .tuple ts tail =>
       ExactV_tuple (exactVL_mem ts (Adm_exactL ts)) (exactVO_mem tail (Adm_exactO tail))
-  | .dunion _ variants => ExactV_dunion fun k => Adm_exactB (variants.2 k)
+  | .dunion variants => ExactV_dunion fun k => Adm_exactB (variants.get k)
   | .object b => Adm_exactB b
   | .opaq lossy => ExactV_opaq lossy
   -- both sides are empty, so the equivalence is `False ↔ False`

@@ -54,7 +54,7 @@ import type { AttributeValue } from './attribute'
 import { isNumeral, isStoredNumeral, memberOf } from './attribute'
 import type { AnyCodec, AnyDeclaration, LiteralValue } from './codec'
 import { union } from './codec'
-import { accepts, readsBack, variantTag } from './denote'
+import { accepts, assignmentOf, readsBack } from './denote'
 import { failed } from './result'
 import type { Body, Literal, Predicate, Term, Field as TermField } from './term'
 import { shapeOf } from './value'
@@ -119,6 +119,10 @@ export const leanString = (value: string): string => {
     return `${out}"`
 }
 
+/** A `Finset (List String)` literal, whose elements are already-rendered Lean lists. */
+const leanTuples = (rendered: readonly string[]): string =>
+    rendered.length === 0 ? '∅' : `{${rendered.join(', ')}}`
+
 /** A `Finset Name` literal — `∅` when empty, because `{}` is notation Lean does not have here. */
 const leanFinset = (names: readonly string[]): string =>
     names.length === 0 ? '∅' : `{${names.map(leanString).join(', ')}}`
@@ -143,6 +147,10 @@ const leanNonEmptySet = (elements: readonly string[], at: string): string => {
 /**
  * The `{k // k ∈ keys} → α` half of a map, as a chain of key tests.
  *
+ * **The key arrives rendered**, not as a bare name: an object's keys are `Name`, a `dunion`'s
+ * members are assignments, and a `dunion`'s own keys are `Name` again. One caller renders one way
+ * and one the other, so this does not have to know which it is serving.
+ *
  * The last entry is the `else`, which is total by accident of the type rather than by luck: the
  * subtype's inhabitants are exactly the declared keys, so `fin_cases` in the `vector` tactic
  * reaches the final branch only for the final key.
@@ -156,9 +164,7 @@ const leanKeyFunction = (
     const last = entries[entries.length - 1] as readonly [string, string]
     const tests = entries
         .slice(0, -1)
-        .map(
-            ([name, body]) => `if k.1 = ${leanString(name)} then ${body} else `,
-        )
+        .map(([name, body]) => `if k.1 = ${name} then ${body} else `)
         .join('')
     return `fun k => ${tests}${last[1]}`
 }
@@ -237,7 +243,10 @@ export const leanValueOf = (value: unknown, at = 'value'): string => {
         return `Value.map ${leanFinset(names)} (${leanKeyFunction(
             names.map(
                 (name) =>
-                    [name, leanValueOf(value[name], `${at}.${name}`)] as const,
+                    [
+                        leanString(name),
+                        leanValueOf(value[name], `${at}.${name}`),
+                    ] as const,
             ),
         )})`
     }
@@ -302,7 +311,7 @@ export const leanAttrOf = (
                 names.map(
                     (name) =>
                         [
-                            name,
+                            leanString(name),
                             leanAttrOf(
                                 map[name] as AttributeValue,
                                 `${at}.${name}`,
@@ -550,7 +559,10 @@ const leanBodyOf = (body: Body, at: string, forced: number): string => {
     const fields = leanKeyFunction(
         declared.map(
             ([name, field]) =>
-                [name, leanFieldOf(field, `${at}.${name}`, forced)] as const,
+                [
+                    leanString(name),
+                    leanFieldOf(field, `${at}.${name}`, forced),
+                ] as const,
         ),
     )
     // three policies, three terms — the definition records the policy itself, so nothing
@@ -575,7 +587,7 @@ const leanBodyOf = (body: Body, at: string, forced: number): string => {
  * The emitter takes a `Term` past the type through `erase`, so it says so rather than assuming.
  */
 const leanVariantOf = (
-    d: string,
+    ks: readonly string[],
     variant: Term,
     at: string,
     forced: number,
@@ -586,8 +598,22 @@ const leanVariantOf = (
             `a discriminated union's variants are object codecs and this one is a \`${variant.kind}\`; \`Term.dunion\` carries a table of \`Body\`, so there is nothing to emit for it`,
         )
     }
+    // the key is the variant's assignment, `{k // k ∈ ks} → String`: a function on the key set,
+    // so the emission tests the key's *name* and carries no order
+    const assignment = assignmentOf(ks, variant.body)
+    if (failed(assignment)) {
+        return refuse(at, String(assignment))
+    }
     return [
-        variantTag(d, variant),
+        `(${leanKeyFunction(
+            ks.map(
+                (name) =>
+                    [
+                        leanString(name),
+                        leanString(assignment[name] as string),
+                    ] as const,
+            ),
+        )})`,
         leanBodyOf(variant.body, at, forced),
     ] as const
 }
@@ -678,18 +704,20 @@ const leanTermOfTerm = (t: Term, at: string, forced: number): string => {
              * value. The host builds one and reads it back as its text; that is a gap in what the
              * bridge can propose, not a gap between the two rules.
              */
-            const numeric = t.options.find((variant) => {
-                const field =
-                    variant.kind === 'object'
-                        ? variant.body.fields[t.d]
-                        : undefined
-                const tag = field?.mark === 'req' ? field.t : undefined
-                return tag?.kind === 'literal' && tag.base === 'number'
-            })
+            const numeric = t.ks.find((name) =>
+                t.options.some((variant) => {
+                    const field =
+                        variant.kind === 'object'
+                            ? variant.body.fields[name]
+                            : undefined
+                    const tag = field?.mark === 'req' ? field.t : undefined
+                    return tag?.kind === 'literal' && tag.base === 'number'
+                }),
+            )
             if (numeric !== undefined) {
                 return refuse(
                     at,
-                    `this union's discriminator '${t.d}' is a literal at the \`number\` base, and \`Calculus.Double\` is an axiom with no closed terms — so the model has no expression for this tag and never will. A tag at \`string\` or \`decimal\` emits: both carry their tag as text, which is what the model's tag readers answer. The same limit is why the corpus carries no numeric value`,
+                    `this union's discriminator '${numeric}' is a literal at the \`number\` base, and \`Calculus.Double\` is an axiom with no closed terms — so the model has no expression for this tag and never will. A tag at \`string\` or \`decimal\` emits: both carry their tag as text, which is what the model's tag readers answer. The same limit is why the corpus carries no numeric value`,
                 )
             }
             // One option, one tag: `discriminatedUnion` refuses a literal admitting several
@@ -697,15 +725,24 @@ const leanTermOfTerm = (t: Term, at: string, forced: number): string => {
             // list cannot repeat one. `Typed.dunion`'s `hdisj` is answered upstream of here — this
             // used to dedup by identity, which was the same invariant enforced in two places
             const options = t.options.map((variant, index) =>
-                leanVariantOf(t.d, variant, `${at}.variants[${index}]`, forced),
+                leanVariantOf(
+                    t.ks,
+                    variant,
+                    `${at}.variants[${index}]`,
+                    forced,
+                ),
             )
-            // **A `MapOf Body`, keyed by the tag.** The same pair the object row prints one
-            // stratum up: a key set, and a function on membership in it. `Term.dunion` carries
-            // that instead of a list because arity one and tag distinctness are then the type
-            // rather than two premises of the rule.
-            return `Term.dunion ${leanString(t.d)} ⟨${leanFinset(
-                options.map(([tag]) => tag),
-            )}, ${leanKeyFunction(options)}⟩`
+            // **A `TagMap Body`: the key set, the member set, and a function on membership.**
+            // `Term.dunion` carries that instead of a list because arity one and tag distinctness
+            // are then the type rather than two premises of the rule. The key set is a field of
+            // the table because the kernel refuses a nested inductive whose parameter mentions a
+            // constructor-bound variable.
+            return `Term.dunion ⟨${leanNonEmptySet(
+                t.ks.map(leanString),
+                at,
+            )}, ${leanTuples(options.map(([tag]) => tag))}, ${leanKeyFunction(
+                options,
+            )}⟩`
         }
         case 'union':
             return `Term.union [${t.options
