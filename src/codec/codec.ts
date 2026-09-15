@@ -23,6 +23,7 @@ import {
     codecOfTerm,
     itemSem,
     literalCodec,
+    literalsRead,
     membersOf,
     optionOfTerm,
     sameAssignment,
@@ -36,7 +37,7 @@ import {
     orThrow,
     type Result,
 } from './result'
-import type { Body, Field, Term } from './term'
+import type { Body, Field, NameLiteral, Term } from './term'
 import {
     alwaysWritten,
     elementPredicates,
@@ -3367,29 +3368,122 @@ type RequiredKeysOf<Spec> = {
         : K
 }[keyof Spec]
 
-type CollisionsFrom<
+/**
+ * **A type that is a literal rather than a base.**
+ *
+ * The type level's reading of "this name is pinned to a literal", and it has to be a reading:
+ * nothing in a codec's *type* says which constructor built it, so the question is put to the type
+ * the codec decodes to. `'a'` and `'a' | 'b'` answer `true`; `string`, `number` and `boolean`
+ * answer `false`, each excluded by its own row, because a base is assignable *from* its literals
+ * and `extends` alone cannot tell the two apart.
+ *
+ * **Where this and the runtime disagree, and it is one case.** `literalsOf` reads the *term* and
+ * accepts a `literal`, a `refine` over one included. A `held` or `custom` whose adapter happens to
+ * decode to a literal type is read as pinned here and is not read as pinned there, so such a pair
+ * would declare and then be ambiguous on the first item. An adapter that narrows to a literal type
+ * is the only way to write it.
+ */
+type PinsALiteral<V> = [V] extends [never]
+    ? false
+    : string extends V
+      ? false
+      : number extends V
+        ? false
+        : boolean extends V
+          ? false
+          : [V] extends [string | number | boolean]
+            ? true
+            : false
+
+/** What a spec declares at one name, as the type that name decodes to. */
+type PinnedAt<Spec, K extends PropertyKey> = K extends keyof Spec
+    ? Spec[K] extends AttributeCodec<infer V, AttributeValue>
+        ? V
+        : never
+    : never
+
+/**
+ * **Two specs pin one shared required name to alternatives with nothing in common.**
+ *
+ * `Calculus.OrthS` written in the type, and `required` on both sides is a rule rather than a
+ * precaution: two objects sharing an *optional* literal name with disjoint alternatives both admit
+ * the map that omits the name, so a mark-blind test would certify a pair no value can resolve.
+ *
+ * At some shared name, not at the first, and the mapped type over the intersection of the two
+ * required key sets is what makes the answer independent of the order they were written in.
+ */
+type SharedRequired<A, B> = Extract<
+    RequiredKeysOf<A> & RequiredKeysOf<B>,
+    PropertyKey
+>
+
+type LiteralsApart<A, B> = true extends {
+    [K in SharedRequired<A, B>]: PinsALiteral<PinnedAt<A, K>> extends true
+        ? PinsALiteral<PinnedAt<B, K>> extends true
+            ? [PinnedAt<A, K> & PinnedAt<B, K>] extends [never]
+                ? true
+                : false
+            : false
+        : false
+}[SharedRequired<A, B>]
+    ? true
+    : false
+
+/**
+ * **The structural meet of two object options**: some value satisfies both structures.
+ *
+ * The whole of what structural admission decides, in the type. `denote.ts` reads a value's names
+ * and then every literal field it carries; this asks the same two questions of the declarations.
+ * The name intervals must meet — {@link Collides} — *and* no shared required literal name may tell
+ * the two apart. Either alone is not the rule: names alone refuse
+ * `union([object({ kind: string('a'), x: string }), object({ kind: string('b'), x: number })])`,
+ * which resolves; literals alone accept two options with no name in common at all, which do not
+ * collide in the first place.
+ */
+type StructuralMeet<A, B> = Collides<A, B> extends true
+    ? LiteralsApart<A, B> extends true
+        ? false
+        : true
+    : false
+
+type PairwiseConflictsFrom<
     Head,
     Rest extends readonly unknown[],
+    Label extends string,
     At extends number,
     Cursor extends readonly unknown[],
 > = Rest extends readonly [infer Next, ...infer Tail extends readonly unknown[]]
     ?
-          | (Collides<Head, Next> extends true
-                ? `variants ${At} and ${Cursor['length']}`
+          | (StructuralMeet<Head, Next> extends true
+                ? `${Label} ${At} and ${Cursor['length']}`
                 : never)
-          | CollisionsFrom<Head, Tail, At, [...Cursor, unknown]>
+          | PairwiseConflictsFrom<Head, Tail, Label, At, [...Cursor, unknown]>
     : never
 
-type Collisions<
+/**
+ * **Which pairs of options meet**, as `${Label} i and j`, over every pair once.
+ *
+ * `Label` is a string and not a second predicate, because TypeScript has no way to pass one: a
+ * higher-kinded parameter would be what the walk actually wants, and the walk is the part worth
+ * having once.
+ */
+type PairwiseConflicts<
     Specs extends readonly unknown[],
+    Label extends string,
     Cursor extends readonly unknown[] = [],
 > = Specs extends readonly [
     infer Head,
     ...infer Rest extends readonly unknown[],
 ]
     ?
-          | CollisionsFrom<Head, Rest, Cursor['length'], [...Cursor, unknown]>
-          | Collisions<Rest, [...Cursor, unknown]>
+          | PairwiseConflictsFrom<
+                Head,
+                Rest,
+                Label,
+                Cursor['length'],
+                [...Cursor, unknown]
+            >
+          | PairwiseConflicts<Rest, Label, [...Cursor, unknown]>
     : never
 
 /**
@@ -3397,10 +3491,10 @@ type Collisions<
  * first item that collides in production.
  */
 export type ValidateVariants<Specs extends readonly unknown[]> = [
-    Collisions<Specs>,
+    PairwiseConflicts<Specs, 'variants'>,
 ] extends [never]
     ? unknown
-    : ErrorMessage<`[untagged] ${Collisions<Specs>} can hold the same attributes and cannot be told apart; give them a discriminator and use tagged`>
+    : ErrorMessage<`[untagged] ${PairwiseConflicts<Specs, 'variants'>} can hold the same attributes and cannot be told apart; give them a discriminator, or a literal field that tells them apart`>
 
 /**
  * Whether two options read back as types a value could not choose between.
@@ -3725,6 +3819,14 @@ export type Option = {
     /** The names it declares, for object options only. */
     readonly declares: ReadonlySet<string> | undefined
     readonly requires: readonly string[]
+    /**
+     * The literal each declared name is pinned to, for object options only.
+     *
+     * The other half of structural admission. `declares` and `requires` are the model's `keysOk`;
+     * this is its `literalsOk`, and without it two object options with the same names are
+     * indistinguishable however differently their literals are declared.
+     */
+    readonly literals: Readonly<Record<string, NameLiteral>> | undefined
     /** How it is named in a message — written the way it was declared. */
     readonly describe: string
 }
@@ -4171,11 +4273,15 @@ export const union = <const Options extends readonly AnyCodec[]>(
         naming,
     } = altSem(all)
 
-    /** The item reading's own matcher: the value is always a record, so only names filter. */
+    /**
+     * The item reading's own matcher: the value is always a record, so the shape filter has nothing
+     * to do and structure is the whole of it — the names, and then every literal field the item
+     * carries, which is what tells two options with one name set apart.
+     */
     const readItem = (item: StoredItem): Result<T> => {
         const names = namesOf(item)
         return only(
-            (option) => namesFit(option, names),
+            (option) => namesFit(option, names) && literalsRead(option, item),
             naming('this item', names),
             (option) =>
                 (

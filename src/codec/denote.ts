@@ -43,8 +43,8 @@ import type {
 } from './codec'
 import type { Result } from './result'
 import { andThen, CodecError, every, everyEntry, failed } from './result'
-import type { Body, Field, Literal, Predicate, Term } from './term'
-import { alwaysWritten, occV, member as termMember } from './term'
+import type { Body, Field, Literal, NameLiteral, Predicate, Term } from './term'
+import { alwaysWritten, literalsOf, occV, member as termMember } from './term'
 import {
     asRecord,
     copiedPerRead,
@@ -695,6 +695,17 @@ export const altSem = (
         const candidates = all.filter(survives)
         if (candidates.length === 0) return unmatched(named)
         if (candidates.length === 1) return through(candidates[0] as Option)
+        // **The attempt loop runs only where a non-object option survives.** An object option is
+        // decided by its structure and never tried, so two of them surviving is an ambiguity in the
+        // declaration, and attempting would resolve it by whichever happens to decode — reporting a
+        // property of the data where the defect is in the union.
+        if (candidates.every((option) => option.declares)) {
+            return ambiguous(
+                candidates[0] as Option,
+                candidates[1] as Option,
+                named,
+            )
+        }
 
         let first: Option | undefined
         let carried: Result<A> | undefined
@@ -714,8 +725,11 @@ export const altSem = (
      * own admission terminates: it is one level down, and the direction that would not is an
      * `encode` consulting admission.
      */
-    const admitOption = (option: Option, value: unknown) =>
-        option.declares ? true : accepts(option.codec, value)
+    const admitOption = (option: Option, value: unknown) => {
+        if (!option.declares) return accepts(option.codec, value)
+        const held = asRecord(value)
+        return !!held && literalsFit(option, held)
+    }
 
     /**
      * The same, **decided rather than attempted** — the write side only.
@@ -782,7 +796,11 @@ export const altSem = (
         return only(
             (option) =>
                 option.declares
-                    ? member === 'M' && !!names && namesFit(option, names)
+                    ? member === 'M' &&
+                      !!names &&
+                      namesFit(option, names) &&
+                      !!carriedMap &&
+                      literalsRead(option, carriedMap)
                     : option.member === undefined ||
                       member === undefined ||
                       option.member === member,
@@ -1904,6 +1922,60 @@ const namedKind = (kind: Term['kind']): string =>
     kind === 'opaq' ? 'opaque' : kind === 'dunion' ? 'discriminatedUnion' : kind
 
 /**
+ * **Content admission on the write side**: every name present whose field is a literal carries one
+ * of that literal's alternatives.
+ *
+ * The model's `literalsOk`, and the half `namesFit` cannot state. **Present-only**: a name the
+ * value omits asks nothing here, because whether it may be omitted is `namesFit`'s question. So an
+ * `optional` literal constrains exactly the values that do carry the name, and constrains nothing
+ * else.
+ *
+ * A membership and not the literal's codec, which is the model's asymmetry with
+ * {@link literalsRead}: `inL` is a predicate on a value, and the alternatives are the values.
+ */
+export const literalsFit = (
+    option: Option,
+    held: Record<string, unknown>,
+): boolean => {
+    const literals = option.literals
+    if (!literals) return true
+    for (const name in literals) {
+        const carried = held[name]
+        if (carried === undefined) continue
+        const alts = (literals[name] as NameLiteral).alts
+        if (!alts.ls.some((one) => sameLiteral(one, carried))) return false
+    }
+    return true
+}
+
+/**
+ * **…and on the read side, where the test is the literal codec's own.**
+ *
+ * The stored side holds an attribute and the alternatives are values, so the question is put to the
+ * codec that decodes one into the other rather than to a second membership. That is the model's
+ * `litOkA`, `((literalCodec g ls).p a).isSome` — and it is why a `decimal` literal, whose
+ * alternatives are text and whose attribute is an `N`, needs no row of its own here.
+ *
+ * {@link codecOfTerm} and not {@link literalCodec}: the base and the alternatives are correlated by
+ * the term and separate as two arguments, so passing the literal whole is what keeps a `decimal`
+ * literal from being offered a numeric alternative list. The term cache makes the call a lookup.
+ */
+export const literalsRead = (
+    option: Option,
+    carried: Readonly<Record<string, AttributeValue | undefined>>,
+): boolean => {
+    const literals = option.literals
+    if (!literals) return true
+    for (const name in literals) {
+        const attribute = carried[name]
+        if (attribute === undefined) continue
+        const alts = (literals[name] as NameLiteral).alts
+        if (failed(codecOfTerm(alts).decode(attribute))) return false
+    }
+    return true
+}
+
+/**
  * Everything about an option that the **term** decides, which is everything but `item`.
  *
  * `denote`'s `untagged` row builds its options from the definition and asks {@link altSem} for the
@@ -1962,6 +2034,11 @@ export const optionOfTerm = (def: Term): Option => {
             item: undefined,
             declares,
             requires,
+            // **No literals, and that is not an omission.** A tagged option is several members and
+            // each pins its discriminator to its own tag, so there is no one literal the option as
+            // a whole carries. An absent table asks nothing, which is the right answer: the tag
+            // table decides among the members one level down.
+            literals: undefined,
             describe: `${namedKind(def.kind)} { ${[...declares]
                 .map((name) => (requires.includes(name) ? name : `${name}?`))
                 .join(', ')} }`,
@@ -1975,6 +2052,7 @@ export const optionOfTerm = (def: Term): Option => {
             item: undefined,
             declares: undefined,
             requires: [],
+            literals: undefined,
             describe: namedKind(def.kind),
         }
     }
@@ -1993,6 +2071,7 @@ export const optionOfTerm = (def: Term): Option => {
         item: undefined,
         declares,
         requires,
+        literals: literalsOf(def),
         describe: `{ ${[...declares]
             .map((name) =>
                 alwaysWritten(fields[name] as Field) ? name : `${name}?`,

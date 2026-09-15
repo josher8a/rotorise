@@ -225,6 +225,13 @@ theorem nullable_null :
     = some (Attr.null) := by
   vector
 
+/-- `union_by_literal` -/
+theorem union_by_literal :
+    (denote (Term.union [Term.object (Body.mk {"kind", "x"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string (NEFinset.of "a" ∅)) else Field.req (Term.string)) Rest.drop), Term.object (Body.mk {"kind", "x"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string (NEFinset.of "b" ∅)) else Field.req (Term.boolean)) Rest.drop)])).e
+      (Value.map {"kind", "x"} (fun k => if k.1 = "kind" then Value.str "a" else Value.str "v"))
+    = some (Attr.m {"kind", "x"} (fun k => if k.1 = "kind" then Attr.s "a" else Attr.s "v")) := by
+  vector
+
 /-- `discriminated_union` -/
 theorem discriminated_union :
     (denote (Term.dunion ⟨NEFinset.of "kind" ∅, {(fun k => "a"), (fun k => "b")}, fun k => if k.1 = (fun k => "a") then (Body.mk {"kind", "x"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string (NEFinset.of "a" ∅)) else Field.req (Term.string)) Rest.drop) else (Body.mk {"kind", "y"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string (NEFinset.of "b" ∅)) else Field.req (Term.boolean)) Rest.drop)⟩)).e
@@ -276,8 +283,8 @@ theorem lazy_string :
 
 /-! ## Refusals — neither side writes anything for these
 
-33 of 958 shown; `scripts/gate.sh` elaborates all
-958. One `rfl` each, no comparator and no fuel: the answer is `none`,
+34 of 1019 shown; `scripts/gate.sh` elaborates all
+1019. One `rfl` each, no comparator and no fuel: the answer is `none`,
 which carries no function for the funext gap to open under.
 -/
 
@@ -405,6 +412,11 @@ theorem union_of_two__refuses__scalar_binary :
 theorem nullable_null__refuses__scalar_boolean :
     (denote (Term.nullable (Term.string))).e
       (Value.bool true) = none := rfl
+
+/-- `union_by_literal__refuses__scalar_string` — refused on both sides -/
+theorem union_by_literal__refuses__scalar_string :
+    (denote (Term.union [Term.object (Body.mk {"kind", "x"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string (NEFinset.of "a" ∅)) else Field.req (Term.string)) Rest.drop), Term.object (Body.mk {"kind", "x"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string (NEFinset.of "b" ∅)) else Field.req (Term.boolean)) Rest.drop)])).e
+      (Value.str "hello") = none := rfl
 
 /-- `discriminated_union__refuses__scalar_string` — refused on both sides -/
 theorem discriminated_union__refuses__scalar_string :
