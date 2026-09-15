@@ -12,8 +12,7 @@ plumbing rather than twenty-one bespoke cases.
 * ground codecs, one per §3 ground term;
 * `through` / `restrict` — the iso/prism pair behind `held` and `refine`;
 * `extendRead` — the agreeing extension of the reading, for `legacy`; (MP) is the
-  sanctioned breach and has no lemma, by design;
-* `orNull` — `nullable`, whose honesty premises are (U) for a two-option sum.
+  sanctioned breach and has no lemma, by design.
 -/
 
 namespace Calculus
@@ -368,8 +367,8 @@ def Codec.restrict (c : Codec) (q : Value → Bool) : Codec :=
 
     The `Codec` is not redefined in its terms. `T` agrees only propositionally — `adapt`'s
     is `∃ w, f v = some w ∧ c.T w` where `through`'s is `c.T (f v)` — so a merge at the
-    definition would cost every `rfl` over the two wrappers, which is the trade `withNull`
-    already showed is not worth taking blind. The pair is what the claim is about, and the
+    definition would cost every `rfl` over the two wrappers, and that trade is not worth
+    taking blind. The pair is what the claim is about, and the
     pair agrees on the nose. -/
 def Codec.adapt (c : Codec) (f g : Value → Option Value) : Codec :=
   { T := fun v => ∃ w, f v = some w ∧ c.T w
@@ -580,20 +579,6 @@ def Codec.extendRead (c : Codec) (r : Attr → Option Value) : Codec :=
     e := c.e
     p := fun a => match c.p a with | some v => some v | none => r a }
 
-/-- **Adjoining a point**, on either side. `nullable` does this twice — the null value to
-    the writing half, the `⟨NULL, ∗⟩` attribute to the reading half — and the two are the
-    same construction at two carriers. Stating it once is what makes `orNull_e` and
-    `orNull_p` one theorem rather than a theorem and its mirror. -/
-def addPoint {A B : Type} (isPt : A → Bool) (pt : B) (f : A → Option B) : A → Option B :=
-  fun x => if isPt x then some pt else f x
-
-/-- `nullable`. -/
-def Codec.orNull (c : Codec) : Codec :=
-  { T := fun v => c.T v ∨ v = .null
-    μ := none
-    e := addPoint (· matches .null) .null c.e
-    p := addPoint (· matches .null) .null c.p }
-
 /-! ### What the wrappers write and read
 
 Each wrapper is one line of definition and touches exactly one half of the pair; stating
@@ -647,19 +632,7 @@ theorem extendRead_p {r : Attr → Option Value} {a v} :
   show (match c.p a with | some w => some w | none => r a) = some v ↔ _
   cases hp : c.p a <;> simp
 
-/-- `nullable` adds the `null` point and passes everything else through — `addPoint` at
-    the value carrier. -/
-theorem orNull_e {v a} :
-    c.orNull.e v = some a ↔ (v = .null ∧ a = .null) ∨ (v ≠ .null ∧ c.e v = some a) := by
-  cases v <;> simp [Codec.orNull, addPoint, eq_comm (a := a)]
-
-/-- …and the same construction at the attribute carrier. -/
-theorem orNull_p {a v} :
-    c.orNull.p a = some v ↔ (a = .null ∧ v = .null) ∨ (a ≠ .null ∧ c.p a = some v) := by
-  cases a <;> simp [Codec.orNull, addPoint, eq_comm (a := v)]
-
 end WrapperInversion
-
 
 /-- Lawfulness sees only the pair and the member, so it transfers to any codec agreeing on
     those three. This is how a ground codec inherits from the wrapper it turns out to be,

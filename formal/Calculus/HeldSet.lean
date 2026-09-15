@@ -206,10 +206,6 @@ theorem typed_T_eq : ∀ {t T μ}, Typed t T μ → ∀ v, T v → (denote t).T 
     | @held t' I' μ' f g h' => exact typed_T_eq h' (f v) hv
     | @refine t' T' μ' q h' => exact ⟨typed_T_eq h' v hv.1, hv.2⟩
     | @legacy t' T' μ' r h' => exact typed_T_eq h' v hv
-    | @nullable t' T' μ' h' =>
-      rcases hv with hv' | rfl
-      · exact Or.inl (typed_T_eq h' v hv')
-      · exact Or.inr rfl
     | @lazy t' T' μ' h' => exact typed_T_eq h' v hv
     | @object body bind R μs hfields hrest =>
       cases body with | mk fields ff rest =>

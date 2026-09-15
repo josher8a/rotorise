@@ -233,7 +233,6 @@ def occV : Term → Slot → Bool
   | .refine t _  => occV t
   | .legacy t _  => occV t
   | .lazy t      => occV t
-  | .nullable t  => occWith .null (occV t)
   | .union opts  => occVL opts
   | .opaq lossy  => if lossy then occTop else occBut .num
 
@@ -274,7 +273,6 @@ def occA : Term → Member → Bool
   | .refine t _  => occA t
   | .held t _ _  => occA t
   | .lazy t      => occA t
-  | .nullable t  => occWith .NULL (occA t)
   | .union opts  => occAL opts
   | .opaq lossy  => if lossy then occTop else occBut .N
 
@@ -576,11 +574,6 @@ theorem occV_sound : ∀ (t : Term), OccSoundV t
       simpa [occV] using occV_sound t v (Bool.and_eq_true_iff.mp h).1
   | .legacy t _ => fun v h => by simpa [occV] using occV_sound t v h
   | .lazy t => fun v h => by simpa [occV] using occV_sound t v h
-  | .nullable t => fun v h => by
-      simp only [Adm, Bool.or_eq_true] at h
-      rcases h with h | h
-      · simp only [occV, occWith, Bool.or_eq_true]; exact Or.inr (occV_sound t v h)
-      · cases v <;> simp_all [occV, occWith, Value.slot]
   | .union opts => fun v h => by
       obtain ⟨t, ht, hadm⟩ := selOptV_mem_admitOpt (by rw [Adm_union] at h; exact h)
       exact occVL_of_mem ht
@@ -667,11 +660,6 @@ theorem occA_sound : ∀ (t : Term), OccSoundA t
       simpa [occA] using occA_sound t a (Bool.and_eq_true_iff.mp h).1
   | .held t _ _ => fun a h => by simpa [occA] using occA_sound t a h
   | .lazy t => fun a h => by simpa [occA] using occA_sound t a h
-  | .nullable t => fun a h => by
-      simp only [AdmA, Bool.or_eq_true] at h
-      rcases h with h | h
-      · simp only [occA, occWith, Bool.or_eq_true]; exact Or.inr (occA_sound t a h)
-      · cases a <;> simp_all [occA, occWith, Attr.member]
   | .union opts => fun a h => by
       obtain ⟨t, ht, hadm⟩ := selOptA_mem_admitOpt (by rw [AdmA_union] at h; exact h)
       exact occAL_of_mem ht
@@ -1423,10 +1411,9 @@ phase *slot*, and the string-base half of phase *alternatives*, was a hand proof
 per-aspect ~~SepV~~/~~SepA~~ and reached here by `decide` — so when that layer was retired the
 hand proofs went with it and this file is what certifies those pairs now. Three more went with
 the four tables: ~~sep_lazy_literal~~, ~~sepA_lazy_literal~~ and ~~sep_nullable_plain~~ were
-stated on the retired rows, and each said that a transparent wrapper — `lazy`, `nullable` over a
-literal — separates from a plain literal exactly as the subterm does. Nothing consumed them,
-and `Adm` and `AdmA` pass through both wrappers by definition, so the fact is the rows' rather
-than a theorem's. What is left is the two phases `Orth` does *not* reach, the numeric base of
+stated on the retired rows, and each said that a transparent wrapper over a literal separates
+from a plain literal exactly as the subterm does. Nothing consumed them, and `Adm` and `AdmA`
+pass through `lazy` by definition, so the fact is the rows' rather than a theorem's. What is left is the two phases `Orth` does *not* reach, the numeric base of
 phase *alternatives*, and the two constructors below the term language: the table has stopped
 being a map of duplicated work and is now a list of what only exists by hand.
 

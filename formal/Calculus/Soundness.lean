@@ -5,13 +5,9 @@ import Calculus.Typing
 
 The theorem. `Obligations t` collects the doc's *semantic* rule premises — `(legacy)`'s two
 side conditions, `(held)`'s cancellation laws, `(fallback)`'s writable stand-in, `(custom)`'s
-laws, `(union)`'s residual (U) at canonical inputs. **Neither fueled nor carrying
-`(nullable)`'s null-honesty**, both of which this paragraph said: `Obligations : Term → Prop`
-is structural, as its own docstring says in as many words, and the `nullable` row is
-`Obligations t'` with no conjunct — `NullHonest` left `Obligations` when §3's guard made it
-derivable (`Lawful.lean`'s `nullHonest_of_not_ownsNull`). `MPOk` marks a derivation
-legacy-free — the doc's
-(MP) exemption, as a predicate.
+laws, `(union)`'s residual (U) at canonical inputs. **Not fueled**, which this paragraph
+once said: `Obligations : Term → Prop` is structural, as its own docstring says in as many
+words. `MPOk` marks a derivation legacy-free — the doc's (MP) exemption, as a predicate.
 
 Statements:
 
@@ -70,7 +66,6 @@ def Obligations : Term → Prop
   | .tuple ts tail => ObligationsList ts ∧ ObligationsOpt tail
   | .held t' f g => Obligations t' ∧ IsoCancels (denote t') f g
   | .legacy t' r => Obligations t' ∧ ReadsCoherently (denote t') r
-  | .nullable t' => Obligations t'
   | .lazy t' => Obligations t'
   | .custom ce cp =>
     Lawful { T := fun v => (ce v).isSome, μ := none, e := ce, p := cp }
@@ -110,7 +105,7 @@ def MPOk : Term → Prop
   | .literal _ _
   | .string | .number | .decimal | .boolean | .binary | .null
   | .opaq _ | .custom _ _ | .set _ | .never => True
-  | .array t' | .record t' | .refine t' _ | .nullable t'
+  | .array t' | .record t' | .refine t' _
   | .held t' _ _ => MPOk t'
   | .tuple ts tail => MPOkList ts ∧ MPOkOpt tail
   | .lazy t' => MPOk t'
@@ -191,13 +186,6 @@ theorem held {t f g} (h : Obligations (.held t f g)) :
     and agreeing with the current reading. -/
 theorem legacy {t r} (h : Obligations (.legacy t r)) :
     Obligations t ∧ ReadsCoherently (denote t) r := h
-
-/-- §3 `(nullable)`: the subterm's premises, and **nothing else**. Null-honesty was the
-    other half of this until the wrapper's guard made it derivable
-    (`nullHonest_of_not_ownsNull`) — one of the four premises §5's theorem levied, now
-    paid by lawfulness instead. -/
-theorem nullable {t} (h : Obligations (.nullable t)) :
-    Obligations t := h
 
 /-- §3 `(custom)`: the escape hatch proves §2's laws for itself. -/
 theorem custom {ce cp} (h : Obligations (.custom ce cp)) :
@@ -307,7 +295,6 @@ theorem typed_μSyn : ∀ {t T μ}, Typed t T μ → μSyn t = μ
   | _, _, _, .held h' => by have ih := typed_μSyn h'; exact ih
   | _, _, _, .refine h' => by have ih := typed_μSyn h'; exact ih
   | _, _, _, .legacy h' => by have ih := typed_μSyn h'; exact ih
-  | _, _, _, .nullable _ => rfl
   | _, _, _, .lazy _ => rfl
   | _, _, _, .custom _ _ => rfl
   | _, _, _, .opaq _ => rfl
@@ -406,8 +393,6 @@ theorem soundness_both : ∀ {t T μ}, Typed t T μ → Obligations t → Sound 
     | @held t' I' μ' f g h' =>
       exact sound_wrap (t := t') (soundness_both h' hob.1) (LawfulCore.through · hob.2)
         (Lawful.through · hob.2)
-    | @nullable t' T' μ' h' =>
-      exact sound_wrap (t := t') (soundness_both h' hob) lawfulCore_withNull lawful_withNull
     | @legacy t' T' μ' r h' =>
       -- (MP) is off here by design: `MPOk` is `False` at a `legacy`, so the second
       -- half is vacuous and only the core laws survive. §5's first residue.
@@ -739,10 +724,6 @@ theorem typed_TSub : ∀ {t T μ}, Typed t T μ → ∀ v, (denote t).T v → T 
       exact typed_TSub h' (f v) hv
     | @refine t' T' μ' q h' => exact ⟨typed_TSub h' v hv.1, hv.2⟩
     | @legacy t' T' μ' r h' => exact typed_TSub h' v hv
-    | @nullable t' T' μ' h' =>
-      rcases hv with hv' | rfl
-      · exact Or.inl (typed_TSub h' v hv')
-      · exact Or.inr rfl
     | @lazy γ T' μ' h' => exact typed_TSub h' v hv
     | @object body bind R μs hfields hrest =>
       cases body with | mk fields ff rest =>
@@ -840,8 +821,6 @@ theorem carrier_denote : ∀ {t T μ}, Typed t T μ → Obligations t → Carrie
       exact carrier_restrict (carrier_denote h' hob.refine) p.eval
     | @legacy t' T' μ' r h' =>
       exact carrier_extendRead (carrier_denote h' hob.1) hob.2.1
-    | @nullable t' T' μ' h' =>
-      exact carrier_withNull (carrier_denote h' hob)
     | @lazy γ T' μ' h' =>
       have ih := carrier_denote h' hob.lazy
       exact ⟨fun he => ih.domE he, fun hp => ih.ranP hp⟩

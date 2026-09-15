@@ -100,7 +100,6 @@ inductive Term where
   | held     (inner : Term) (f : Value → Value) (g : Value → Value)
   | refine   (inner : Term) (p : Pred)
   | legacy   (inner : Term) (r : Attr → Option Value)
-  | nullable (inner : Term)
   /-- §3 `(lazy)`. The thunk is *not* `Unit → Term`: a closure adds no constructible
       term (every `Term` is finite either way) and only defeats the termination
       checker. Recursive codecs are not modelled, and cannot be — see
@@ -227,7 +226,7 @@ def Term.depth : Term → Nat
   -- `set` is a **leaf** since its base became an index: there is no element term to
   -- measure, so it sits with the other ground shapes rather than costing a layer.
   | .literal _ _ | .custom _ _ | .opaq _ | .set _ | .never => 1
-  | .array t | .record t | .nullable t | .lazy t => Term.depth t + 1
+  | .array t | .record t | .lazy t => Term.depth t + 1
   | .held t _ _ | .refine t _ | .legacy t _ => Term.depth t + 1
   | .tuple ts tail => max (Term.depthL ts) (Term.depthO tail) + 1
   -- one companion, like every other non-leaf row

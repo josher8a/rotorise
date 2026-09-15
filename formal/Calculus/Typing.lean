@@ -97,11 +97,6 @@ def HProd (Ts : List Held) (tail : Option Held) : Held :=
 def HMap (T : Held) : Held :=
   fun v => ∃ keys f, v = .map keys f ∧ ∀ k, T (f k)
 
-/-- `T + 𝟙` (§3 `(nullable)`). Idempotent, as §6 requires: the value language has one
-    null, so a second `𝟙` adds nothing. -/
-def HNull (T : Held) : Held :=
-  fun v => T v ∨ v = .null
-
 /-- `⋃ Tᵢ` (§5 `(union)`). -/
 def HUnion (Ts : List Held) : Held :=
   fun v => ∃ T ∈ Ts, T v
@@ -216,7 +211,6 @@ inductive Typed : Term → Held → Option Member → Prop where
   | refine {t T μ p} (h : Typed t T μ) :
       Typed (.refine t p) (fun v => T v ∧ p.eval v) μ
   | legacy {t T μ r} (h : Typed t T μ) : Typed (.legacy t r) T μ
-  | nullable {t T μ} (h : Typed t T μ) : Typed (.nullable t) (HNull T) none
   | lazy {t T μ} (h : Typed t T μ) : Typed (.lazy t) T none
   | custom (ce cp) : Typed (.custom ce cp) (fun v => (ce v).isSome = true) none
   | opaq (lossy) : Typed (.opaq lossy) (HOpaque lossy) none
