@@ -530,6 +530,55 @@ export const specOf = (
 }
 
 /**
+ * One declared name, as **structural admission** reads it.
+ *
+ * The model's `NameSpec`: `required` is what `keysOk` reads, `alts` what `literalsOk` reads. Split
+ * across two host readers rather than one record, because {@link specOf} already answers the first
+ * for every declared name and this answers the second for the few names a literal pins.
+ */
+export type NameLiteral = {
+    readonly required: boolean
+    readonly alts: Literal
+}
+
+/**
+ * The literal each declared name is pinned to — the names with no literal field are absent, and a
+ * non-object term answers `undefined`.
+ *
+ * **Every mark, not `req` alone**, which is where this parts company with {@link tagsOf}. A tag has
+ * to be written, so `tagsOf` reads `req` and refuses the other three. A literal *field* constrains
+ * exactly the values that carry the name whatever its mark, and admission is present-only, so an
+ * `optional` literal is read here and its `required` says `false`. That is the model's
+ * `altsOfField`, which has a row for `req`, `optional` and `fallback` alike.
+ */
+export const literalsOf = (
+    t: Term,
+): Readonly<Record<string, NameLiteral>> | undefined => {
+    if (t.kind !== 'object') return undefined
+    const literals: Record<string, NameLiteral> = {}
+    for (const [name, field] of Object.entries(t.body.fields)) {
+        const alts = pinnedLiteral(field.t)
+        if (alts) literals[name] = { required: alwaysWritten(field), alts }
+    }
+    return literals
+}
+
+/**
+ * The literal a term is pinned to, reading through a refinement.
+ *
+ * A refinement of a literal admits a subset of that literal's alternatives, so the literal is a
+ * sound upper bound on what the field can carry: a value outside it is outside the field, and a
+ * value inside it that the refinement rejects is the option's own error to report. `setBaseOf`
+ * reads through `refine` for the same reason.
+ */
+const pinnedLiteral = (t: Term): Literal | undefined =>
+    t.kind === 'literal'
+        ? t
+        : t.kind === 'refine'
+          ? pinnedLiteral(t.inner)
+          : undefined
+
+/**
  * The tags an object option answers to on discriminator `d` — empty for everything else.
  *
  * **`req` only, and a string literal only.** A `fallback` discriminator would fill an absent tag
@@ -651,6 +700,64 @@ export const restricts = (x: Term, y: Term): boolean => {
 }
 
 /**
+ * Whether two bodies' name intervals meet: neither requires a name the other does not declare.
+ *
+ * A body admits every name set between its required names and its declared names, so the two
+ * intervals intersect exactly on that condition. `Calculus.OrthM` read positively, and the same
+ * rule `Collides` states in the type.
+ */
+const namesMeet = (x: Body, y: Body): boolean => {
+    for (const [name, field] of Object.entries(x.fields)) {
+        if (alwaysWritten(field) && !(name in y.fields)) return false
+    }
+    for (const [name, field] of Object.entries(y.fields)) {
+        if (alwaysWritten(field) && !(name in x.fields)) return false
+    }
+    return true
+}
+
+/**
+ * Whether two literals at one base admit nothing in common.
+ *
+ * Different bases answer `false` and not `true`. `string('a')` and `decimal('a')` are read from two
+ * different attribute members, so they never meet on the stored side — but they meet on the value
+ * side, where both are the text `'a'`, and a pair separated on one side only is not separated.
+ */
+const altsApart = (x: Literal, y: Literal): boolean =>
+    x.base === y.base &&
+    !(x.ls as readonly unknown[]).some((one) =>
+        (y.ls as readonly unknown[]).some((other) =>
+            one instanceof Uint8Array
+                ? other instanceof Uint8Array &&
+                  one.length === other.length &&
+                  one.every((byte, at) => byte === other[at])
+                : one === other,
+        ),
+    )
+
+/**
+ * **Whether some value satisfies both object structures** — the runtime half of `StructuralMeet`.
+ *
+ * Two clauses, and the second is what pass 7 added: the name intervals meet, and no shared
+ * **required** name is pinned to literals with nothing in common. `required` on both sides is the
+ * rule `Calculus.OrthS` states, because two objects sharing an *optional* literal name with
+ * disjoint alternatives both admit the map that omits the name.
+ */
+export const structuralMeet = (
+    x: Extract<Term, { kind: 'object' }>,
+    y: Extract<Term, { kind: 'object' }>,
+): boolean => {
+    if (!namesMeet(x.body, y.body)) return false
+    const theirs = literalsOf(y) ?? {}
+    for (const [name, mine] of Object.entries(literalsOf(x) ?? {})) {
+        const other = theirs[name]
+        if (!mine.required || !other?.required) continue
+        if (altsApart(mine.alts, other.alts)) return false
+    }
+    return true
+}
+
+/**
  * **Whether a union may hold these two options**, asked at the declaration.
  *
  * **This is not a port of `Orth`, and the difference is the direction.** `Orth` is a *certificate*:
@@ -664,12 +771,15 @@ export const restricts = (x: Term, y: Term): boolean => {
  * Four rows, and each carries its own warrant. A fifth exempted an `opaque` option and is gone;
  * the paragraph below the fourth says why.
  *
- * **An object option, either side.** A union admits an object by the names present, never by being
- * attempted, and the collision check is `Collides` — which is `OrthM` written in the type:
- * `[Exclude<RequiredKeysOf<A>, keyof B>] extends [never]` on both sides is exactly "neither side
- * requires a name the other does not declare". So the model's certificate for objects already runs,
- * one level up, and the type-level snapshot pins it. Answering `true` here is deferring to it, not
- * skipping it.
+ * **Two object options: the structural meet, which is the same question the type asks.** A union
+ * admits an object by its structure, never by being attempted — the names present, and then every
+ * literal field the value carries. Two such options are separable exactly where no value satisfies
+ * both structures: either their name intervals do not meet (`OrthM`, and `Collides` is that written
+ * in the type) or some shared required name is pinned to literals with nothing in common (`OrthS`).
+ * This answers that, so the runtime and the declaration decide by one rule rather than two.
+ *
+ * **One object option beside a non-object is separable outright**, and that is not this rule
+ * declining. An object writes a map and nothing else does, so the two never meet on either side.
  *
  * **An option that is a restriction of another.** {@link restricts}, and it *refuses* where every
  * other row accepts, so it sits ahead of them. `opaque` was the first instance of the rule and had
@@ -712,6 +822,7 @@ export const separable = (x: Term, y: Term): boolean => {
     // a set of a literal and `never`, and an object option is none of them — so the only pair
     // whose answer this order changes is an object option beside `never`.
     if (restricts(x, y) || restricts(y, x)) return false
+    if (x.kind === 'object' && y.kind === 'object') return !structuralMeet(x, y)
     if (x.kind === 'object' || y.kind === 'object') return true
     if (identifies(x) || identifies(y)) return true
     const writable = meet(occV(x), occV(y))

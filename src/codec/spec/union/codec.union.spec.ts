@@ -101,11 +101,17 @@ describe('untagged', () => {
     })
 
     it('rejects variants that cannot be told apart, at the declaration', () => {
-        // `{ a }` is admitted by both, so nothing can tell them apart
-        union(
-            // @ts-expect-error the declaration itself is rejected
-            [object({ a: string, b: optional(string) }), object({ a: string })],
-        )
+        // `{ a }` is admitted by both, so nothing can tell them apart — and the two levels now
+        // answer one rule, so the declaration is refused by the type and by the constructor
+        expect(() =>
+            union(
+                // @ts-expect-error the declaration itself is rejected
+                [
+                    object({ a: string, b: optional(string) }),
+                    object({ a: string }),
+                ],
+            ),
+        ).toThrow(CodecError)
     })
 
     /**
@@ -162,30 +168,28 @@ describe('untagged', () => {
         ).not.toThrow()
     })
 
-    it('still refuses ambiguity at runtime, as a backstop', () => {
+    it('refuses a caller who bypasses the compile-time check, at construction', () => {
         type Overlapping = { a: string; b?: string } | { a: string }
         // declared through a cast, as a caller bypassing the compile-time check would. The options
         // are still codecs — what is bypassed is `ValidateVariants`, which is the check being tested
         const declare = union as unknown as (
             options: readonly AnyCodec[],
         ) => UnionCodec<Overlapping, readonly AnyCodec[]>
-        const Ambiguous = declare([
-            object({ a: string, b: optional(string) }),
-            object({ a: string }),
-        ]).item
 
-        // what makes it ambiguous is that *both* options admit the entity, and that is the
-        // assertion the message was standing in for — (U) fails at this input
+        // what makes it ambiguous is that *both* options admit the entity — (U) fails at this input
         expect(
             accepts(object({ a: string, b: optional(string) }), { a: '1' }),
         ).toBe(true)
         expect(accepts(object({ a: string }), { a: '1' })).toBe(true)
-        expect(() => Ambiguous.unsafeEncode({ a: '1' })).toThrow(CodecError)
-        // and the unambiguous case still works
-        expect(Ambiguous.unsafeEncode({ a: '1', b: '2' })).toEqual({
-            a: { S: '1' },
-            b: { S: '2' },
-        })
+
+        // the constructor answers the same structural question the type does, so the refusal
+        // arrives at the declaration rather than on the first item that collides
+        expect(() =>
+            declare([
+                object({ a: string, b: optional(string) }),
+                object({ a: string }),
+            ]),
+        ).toThrow(CodecError)
     })
 
     it('nests, like the discriminated form', () => {
@@ -374,68 +378,90 @@ describe('the declaration guard, where a term is what the guard reads', () => {
 })
 
 /**
- * **A union admits an object option by the names the item carries, never by the values it holds.**
+ * **An object option is admitted by its structure, not by its names alone.**
  *
- * The model's `admitOptV`: an object option is admitted by `keysOk` over the names of the map, and
- * every other option by its own row. The option that admits alone then decides the contents, so a
- * wrong field value is that option's error rather than a failure to select.
+ * Pass 7. Admission used to read the name set and stop, so two options declaring one name set were
+ * ambiguous whatever their fields said, and a discriminator was the only way to tell them apart.
+ * It now reads the name set *and* every literal field the value carries — the model's `keysOk` and
+ * `literalsOk` — so a required literal with disjoint alternatives resolves the pair, at the
+ * declaration and at the item.
  */
-describe('an object option is admitted by its names alone', () => {
-    type Kinded =
-        | { readonly kind: 'a'; readonly x: string }
-        | { readonly kind: 'b'; readonly x: number }
-
-    /** Declared through a cast: the type refuses two options that declare the same names. */
-    const declare = union as unknown as (
-        options: readonly AnyCodec[],
-    ) => UnionCodec<Kinded, readonly AnyCodec[]>
-
-    it('reports ambiguity for two options declaring one name set, whatever the values hold', () => {
-        const Ambiguous = declare([
+describe('an object option is admitted by its structure', () => {
+    it('resolves two options with one name set whose required literals differ', () => {
+        // no cast: the declaration itself now stands, which is half the rule
+        const Kinded = union([
             object({ kind: string('a'), x: string }),
             object({ kind: string('b'), x: number }),
         ]).item
 
-        // the contents pick out one option and the names pick out both, and it is the names that
-        // select: two candidates, so the union does not resolve
+        expect(Kinded.unsafeEncode({ kind: 'a', x: '1' })).toEqual({
+            kind: { S: 'a' },
+            x: { S: '1' },
+        })
+        expect(Kinded.unsafeEncode({ kind: 'b', x: 1 })).toEqual({
+            kind: { S: 'b' },
+            x: { N: '1' },
+        })
+        // and both branches read back, which is the half `namesFit` alone could not reach: the
+        // stored side asks each literal's own codec to decode the attribute it carries
         expect(
-            accepts(object({ kind: string('a'), x: string }), {
-                kind: 'a',
-                x: '1',
-            }),
-        ).toBe(true)
+            Kinded.unsafeDecode({ kind: { S: 'a' }, x: { S: '1' } }),
+        ).toEqual({ kind: 'a', x: '1' })
         expect(
-            accepts(object({ kind: string('b'), x: number }), {
-                kind: 'a',
-                x: '1',
-            }),
-        ).toBe(false)
-        expect(() => Ambiguous.unsafeEncode({ kind: 'a', x: '1' })).toThrow(
-            CodecError,
-        )
-        expect(() => Ambiguous.unsafeEncode({ kind: 'a', x: '1' })).toThrow(
-            /both admit/,
-        )
+            Kinded.unsafeDecode({ kind: { S: 'b' }, x: { N: '1' } }),
+        ).toEqual({ kind: 'b', x: 1 })
     })
 
-    it('reports the admitted option error when the names fit one option and a value is wrong', () => {
+    it('still reports ambiguity where one name set carries no literal difference', () => {
+        type Kinded =
+            | { readonly kind: 'a'; readonly x: string }
+            | { readonly kind: string; readonly x: string }
+        /** Declared through a cast: the type refuses the pair for the same reason. */
+        const declare = union as unknown as (
+            options: readonly AnyCodec[],
+        ) => UnionCodec<Kinded, readonly AnyCodec[]>
+
+        // `string` admits `'a'`, so the two literals are not disjoint and no value chooses between
+        // them — a literal field is not a discriminator merely by being a literal on one side
+        expect(() =>
+            declare([
+                object({ kind: string('a'), x: string }),
+                object({ kind: string, x: string }),
+            ]),
+        ).toThrow(CodecError)
+    })
+
+    it('reports the admitted option error when the structure fits one option and a value is wrong', () => {
         const Sum = union([
             object({ kind: string('a'), x: string }),
             object({ petIds: array(string) }),
         ]).item
 
-        // the names fit the first option and nothing else, so that option is the one chosen, and
-        // what it says about its own field is what the caller is told
+        // the structure fits the first option and nothing else, so that option is the one chosen,
+        // and what it says about its own field is what the caller is told
         expect(Sum.unsafeEncode({ kind: 'a', x: '1' })).toEqual({
             kind: { S: 'a' },
             x: { S: '1' },
         })
-        expect(() => Sum.unsafeEncode({ kind: 'b', x: '1' } as never)).toThrow(
-            /'a'/,
+        expect(() => Sum.unsafeEncode({ kind: 'a', x: 1 } as never)).toThrow(
+            CodecError,
         )
         expect(() =>
-            Sum.unsafeEncode({ kind: 'b', x: '1' } as never),
+            Sum.unsafeEncode({ kind: 'a', x: 1 } as never),
         ).not.toThrow(/no option admits/)
+    })
+
+    it('admits no option where the literal itself is wrong, which is not that option error', () => {
+        const Sum = union([
+            object({ kind: string('a'), x: string }),
+            object({ petIds: array(string) }),
+        ]).item
+
+        // `kind: 'b'` is outside the first option's literal, so the first option is not admitted
+        // rather than admitted-and-failing — the difference structural admission makes
+        expect(() => Sum.unsafeEncode({ kind: 'b', x: '1' } as never)).toThrow(
+            /no option admits/,
+        )
     })
 })
 

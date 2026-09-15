@@ -749,6 +749,20 @@ export const sampleVectors: readonly Vector[] = [
         value: true,
     },
     { name: 'nullable_null', codec: erase(nullable(string)), value: null },
+    // **The vector pass 7 owed.** Two object options with the *same* names, told apart by a
+    // required literal and by nothing else — so `byNames` alone resolves neither and `byStructure`
+    // resolves both. Nothing in this corpus exercised the literal half of admission before, which
+    // is why the bridge passed unchanged while the model gained it.
+    {
+        name: 'union_by_literal',
+        codec: erase(
+            union([
+                object({ kind: string('a'), x: string }),
+                object({ kind: string('b'), x: boolean }),
+            ]),
+        ),
+        value: { kind: 'a', x: 'v' },
+    },
     {
         name: 'discriminated_union',
         codec: erase(
@@ -1034,6 +1048,15 @@ const resolutionUnions = (): readonly (readonly [string, AnyCodec])[] => [
     ],
     ['u_literal_pair', erase(union([string('A'), string('B')]))],
     [
+        'u_objects_by_literal',
+        erase(
+            union([
+                object({ kind: string('a'), x: string }),
+                object({ kind: string('b'), x: boolean }),
+            ]),
+        ),
+    ],
+    [
         'u_optional_inner',
         erase(union([string, object({ z: optional(boolean) })])),
     ],
@@ -1106,10 +1129,10 @@ describe('union resolution, model against library', () => {
      * `set_of_literal`, and 248 by `literal_non_ascii` and the three products: each new entry
      * adds the resolutions of the unions it takes part in.
      */
-    it('offers 256 write pairs and 279 statable of 280 read pairs', () => {
-        expect(writeResolutions().length).toBe(256)
+    it('offers 297 write pairs and 323 statable of 324 read pairs', () => {
+        expect(writeResolutions().length).toBe(297)
         const reads = readResolutions()
-        expect(reads.length).toBe(280)
+        expect(reads.length).toBe(324)
         // one pair only, and it is the `Double` axiom reaching the decoded value; the five
         // map-valued reads beside it are stated through `vcheck` now
         expect(
@@ -1169,9 +1192,9 @@ describe("the read side, against the model's read row", () => {
      * description of one thing, and this differential is the guard that a second description
      * would have needed anyway.
      */
-    it('offers 1254 pairs, three of them stuck on the `Double` axiom', () => {
+    it('offers 1326 pairs, three of them stuck on the `Double` axiom', () => {
         const verdicts = readVerdicts()
-        expect(verdicts.length).toBe(1254)
+        expect(verdicts.length).toBe(1326)
         const stuck = verdicts.filter(readRowIsStuck)
         expect(stuck.map((one) => one.name)).toEqual([
             'scalar_number__reads__scalar_decimal',
@@ -1230,14 +1253,25 @@ describe("the declaration guard, against the model's classifier", () => {
      * law was untouched either way, and what moved is that a union no value can resolve is now
      * refused where it used to be declared. JH's ruling, landed in `ff75c6b`.
      *
-     * **The count pins a fact no law has, deliberately.** That it is seventy-three is a property of
+     * **It was seventy-three, and the seven that arrived are all object against object.** Pass 7
+     * gave the runtime guard the structural meet, where its object row used to answer `true`
+     * unconditionally and defer to the type's `Collides`. So a pair of object options whose name
+     * intervals meet and which no required literal tells apart is now refused at construction as
+     * well as at the declaration:
+     * `object_two_fields__vs__object_optional_absent`, `object_optional_absent__vs__` each of
+     * `object_fallback_present`, `object_open` and `object_nested`,
+     * `object_fallback_present__vs__` each of `object_open` and `object_nested`, and
+     * `object_open__vs__object_nested`. `Orth` declines every one, so the law is untouched and
+     * what moved is that the two levels now answer one rule instead of two.
+     *
+     * **The count pins a fact no law has, deliberately.** That it is eighty is a property of
      * this corpus, so widening the corpus is meant to fail here and be looked at; the *law* is
      * the loop below, that every refusal the model also declines. Both are kept, and the number
      * stays.
      */
     it('refuses only pairs the classifier also declines', () => {
         const separations = separationPairs()
-        expect(separations.length).toBe(73)
+        expect(separations.length).toBe(85)
         // each one emits, which is where `leanSeparation` re-checks that `src/` really refuses,
         // and it carries one of the two warrants: `Orth` declines, or (D) fails against `never`
         for (const one of separations) {
@@ -1328,7 +1362,7 @@ describe("the read side of every corpus codec, against the model's `p`", () => {
             (one) => readVectorIsUnstatable(one) === undefined,
         )
         expect(statable.length).toBe(sampleVectors.length)
-        expect(statable.length).toBe(32)
+        expect(statable.length).toBe(33)
         // each asserts the model's `p`, through the comparator that crosses `Value.map`'s binder
         for (const one of statable) {
             const vector = leanReadVector(one)
