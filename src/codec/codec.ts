@@ -3515,10 +3515,12 @@ type Overlaps<A, B> = [Decoded<A>] extends [Decoded<B>]
 /**
  * Object options are exempt, because a different rule already covers them.
  *
- * Two object options are told apart by their exact set of attribute names, which is *stricter* than
- * their types: `{ a, b }` is assignable to `{ a }`, and yet an item carrying both attributes is
- * admitted by only one of them. Judging those by type would refuse declarations that work, so they
- * are judged by {@link Collisions} instead.
+ * Two object options are told apart by their structure, which is neither stricter nor looser than
+ * their types but a different question: `{ a, b }` is assignable to `{ a }`, and yet an item
+ * carrying both attributes is admitted by only one of them, while two options whose types differ at
+ * a field no literal pins are not told apart at all. Judging those by type would refuse
+ * declarations that work and accept declarations that do not, so they are judged by
+ * {@link StructuralMeet} instead.
  */
 type BothObjects<A, B> = A extends AnyObjectCodec
     ? B extends AnyObjectCodec

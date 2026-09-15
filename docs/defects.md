@@ -196,3 +196,58 @@ separates the two claims so that neither can be read as the other.
 the blueprint's `content.tex`, and a rule whose held set is spelled as the denotation's cannot be read
 against the document it transcribes. The identity is what makes the transcription checked rather
 than advertised, and it means that only because the two sides are written independently.
+
+---
+
+## Known: the model carries two sums where one was ruled
+
+**Observation.** `Term` has `Term.union` and `Term.dunion`. A dissection is a `union` of object
+members whose pairwise structural meet is empty: the members differ at a required literal key with
+disjoint alternatives, or their key intervals do not meet. `Orth` certifies that, `uAtAct_sublist`
+carries (U) to any sub-selection of a certified union, and `AltClause.extract` and
+`AltClause.exclude` are the operations over the members. So the second constructor states what the
+first already states, with a `TagMap` and a key set carrying facts the members' own literals carry.
+
+**Effect.** Every rule over a term has a `dunion` row that repeats a `union` row: `Typed.dunion`
+beside `Typed.union`, `HVariants` beside `HUnion`, `dunionTable` and its rewrites, `StampedAt`,
+`namesTags` and the `hone` premise, `Assignment`, `asgEq`, `tagOfV`, `tagOfA`, `tagsOf` and
+`Body.tags`. Two sums also keep two declaration gates at the host: the union's gate asks whether
+the structural meet is empty, and the dissection's asks whether two members carry one assignment at
+the key set. Those are two questions while a dissection is a lookup, and they become one question
+when it is a union.
+
+**Pin.** None on the duplication itself. `Slice.lean` holds both slices side by side, which is where
+the repetition is visible in one file, and the union half is the one that survives.
+
+**Owed, and blocked on prose rather than on code.** The deletion is `Term.dunion` and every
+declaration above, with the host's discriminated union and multi-key dissection becoming builders
+that construct a `union` term and keep the tag table as a runtime index. What blocks it is that
+`formal/README.md` and `docs/architecture.md` cite the deleted names, so the deletion cannot be
+green until the architecture passage is rewritten to say that a dissection is a certified union.
+That rewrite is the owner's.
+
+---
+
+## Known: the type level reads a literal off a type, and the term is what the runtime reads
+
+**Observation.** The union's declaration gate decides whether an object option pins a name to a
+literal by looking at the type that name's codec decodes to: a literal type answers yes, and a base
+type answers no. Nothing in a codec's type says which constructor built it, so there is no other
+question to ask there. Admission at run time reads the term instead, and a term is a literal only
+where a literal constructor made it.
+
+**Effect.** The two disagree on one shape. An adapter — a held codec, or a custom one — whose
+decode narrows to a literal type reads as pinning a literal at the type level and pins none at the
+term. Two object options with the same names, told apart only by such an adapter, pass the
+declaration gate and are then ambiguous on the first item, which is the failure the gate exists to
+move to the declaration. The refinement case is closed: the term reader walks through a refinement
+to the literal underneath, because a refinement of a literal admits a subset of that literal's
+alternatives.
+
+**Pin.** None. No test declares such a pair, and the disagreement is written at the type-level
+predicate rather than asserted anywhere.
+
+**Fix direction.** The type-level test has to read the constructor rather than the decoded type,
+which needs a codec's type to carry which constructor built it. It does not today. Widening the
+term reader instead would not close it: an adapter's decode is arbitrary code, and no term says
+what it returns.
