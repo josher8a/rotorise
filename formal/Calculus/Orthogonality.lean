@@ -202,10 +202,6 @@ mutual
     * `refine t q` — the subterm's, over-approximating away `q`. Sound: a refinement writes
       a subset of what the base writes.
     * `legacy t _` — the subterm's on the write side; `r` only widens the *read*.
-    * `nullable t` — the subterm's plus `null`. Always adding `null` is the sound
-      over-approximation; asking `(denote t).ownsNull` would be sharper and is a computable
-      `Bool`, but the sharpening buys nothing a pair can use, since a term that owns null
-      already occupies the slot.
     * `opaq lossy` — a closed form, because `opaque` is a fixed list of options: every slot,
       minus `num` when the numeric option is `Codec.empty`. This is itself an
       over-approximation in one place: a non-lossy `opaque` refuses a `numSet` too, since
