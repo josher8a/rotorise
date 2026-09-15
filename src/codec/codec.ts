@@ -2216,13 +2216,21 @@ export type DiscriminatedCodec<T, D extends string, Spec> = {
      * filtered in step with the entity union, and the two are matched by their decoded types rather
      * than positionally.
      */
-    readonly extract: <const C extends ClauseOf<T>>(
-        clause: C & ValidateClause<T, C>,
-    ) => DiscriminatedCodec<Extracted<T, C>, D, Spec>
+    readonly extract: <const C extends ClauseOf<Spec[keyof Spec]>>(
+        clause: C & ValidateClause<Spec[keyof Spec], C>,
+    ) => DiscriminatedCodec<
+        VariantsOf<KeptByTag<Spec, C>>,
+        D,
+        KeptByTag<Spec, C>
+    >
     /** …and the members it rejects, the complement of the same clause. */
-    readonly exclude: <const C extends ClauseOf<T>>(
-        clause: C & ValidateClause<T, C>,
-    ) => DiscriminatedCodec<Excluded<T, C>, D, Spec>
+    readonly exclude: <const C extends ClauseOf<Spec[keyof Spec]>>(
+        clause: C & ValidateClause<Spec[keyof Spec], C>,
+    ) => DiscriminatedCodec<
+        VariantsOf<KeptByTag<Spec, C, false>>,
+        D,
+        KeptByTag<Spec, C, false>
+    >
     /** The row this codec writes, pinnable with {@link Writes}. Type-level only. */
     readonly [writesMarker]?: WritesVariantsPin<Spec>
 }
@@ -2280,13 +2288,21 @@ export type DissectedCodec<
     readonly def: Term
     readonly item: Dissected<T, Ks, Specs>
     /** **The members a clause keeps**, over the same keys — or `never` where it keeps none. */
-    readonly extract: <const C extends ClauseOf<T>>(
-        clause: C & ValidateClause<T, C>,
-    ) => DissectedCodec<Extracted<T, C>, Ks, Specs>
+    readonly extract: <const C extends ClauseOf<Specs[number]>>(
+        clause: C & ValidateClause<Specs[number], C>,
+    ) => DissectedCodec<
+        DerivedVariants<Extracted<Specs, C>>,
+        Ks,
+        Extracted<Specs, C>
+    >
     /** …and the members it rejects, the complement of the same clause. */
-    readonly exclude: <const C extends ClauseOf<T>>(
-        clause: C & ValidateClause<T, C>,
-    ) => DissectedCodec<Excluded<T, C>, Ks, Specs>
+    readonly exclude: <const C extends ClauseOf<Specs[number]>>(
+        clause: C & ValidateClause<Specs[number], C>,
+    ) => DissectedCodec<
+        DerivedVariants<Excluded<Specs, C>>,
+        Ks,
+        Excluded<Specs, C>
+    >
 }
 
 /**
@@ -2333,15 +2349,21 @@ export type UnionCodec<T, Options extends readonly unknown[]> = {
      * moves.
      */
     readonly extract: AllObjects<Options> extends true
-        ? <const C extends ClauseOf<T>>(
-              clause: C & ValidateClause<T, C>,
-          ) => UnionCodec<Extracted<T, C>, Options>
+        ? <const C extends ClauseOf<SpecsOf<Options>[number]>>(
+              clause: C & ValidateClause<SpecsOf<Options>[number], C>,
+          ) => UnionCodec<
+              DerivedUnion<KeptOptions<Options, C>>,
+              KeptOptions<Options, C>
+          >
         : ErrorMessage<'[union] this union can hold an attribute that is not a map, so a clause has nothing to name — only a union of objects has a slice'>
     /** …and the options it rejects, the complement of the same clause. */
     readonly exclude: AllObjects<Options> extends true
-        ? <const C extends ClauseOf<T>>(
-              clause: C & ValidateClause<T, C>,
-          ) => UnionCodec<Excluded<T, C>, Options>
+        ? <const C extends ClauseOf<SpecsOf<Options>[number]>>(
+              clause: C & ValidateClause<SpecsOf<Options>[number], C>,
+          ) => UnionCodec<
+              DerivedUnion<KeptOptions<Options, C, false>>,
+              KeptOptions<Options, C, false>
+          >
         : ErrorMessage<'[union] this union can hold an attribute that is not a map, so a clause has nothing to name — only a union of objects has a slice'>
     /** The row this codec writes, pinnable with {@link Writes}. Type-level only. */
     readonly [writesMarker]?: WritesVariantsPin<SpecsOf<Options>>
@@ -4148,98 +4170,156 @@ type EveryOptionTagged<
  * spelling and not two. An object literal and not a list of pairs, so the keys carry no order and
  * no repeat, which is the reason the model's clause is a `Finset` and a function on it.
  *
- * `Ks` is a parameter and the mapped type is written over it rather than over `keyof T` directly,
- * which is not a spelling preference: a mapped type whose constraint *is* `keyof T` is homomorphic
- * and distributes over a union, so `ClauseOf` of a three-member union would be three clause types
- * and a clause naming two members' tags would match none of them.
+ * **Over the member specs, not over the entity type.** A union is a pair — the type it carries and
+ * the structure it is — and the slice acts on the structure. `S` is the union of the members'
+ * specs, and {@link ClauseKeys} distributes over it explicitly: a mapped type whose constraint is
+ * `keyof S` would be homomorphic and distribute on its own, giving one clause type per member.
  */
-export type ClauseOf<T, Ks extends PropertyKey = keyof T> = {
-    readonly [K in Ks]?: AnyLiteralCodec
+export type ClauseOf<S> = {
+    readonly [K in ClauseKeys<S>]?: AnyLiteralCodec
 }
+
+/** Every name some member requires, which is every name a clause may speak about. */
+type ClauseKeys<S> = S extends unknown
+    ? Extract<RequiredKeysOf<S>, PropertyKey>
+    : never
 
 /**
  * The shape of a clause value: something with a term and a read.
  *
- * Read-only and structural, not `AttributeCodec<TagsAt<T, K>, …>`. A codec is invariant in the
- * value it carries — `encode` takes it — so a slot typed at the members' whole tag set would refuse
- * `string('CHECKUP')` against members carrying `'CHECKUP' | 'SHOT'`, which is every clause that
- * selects anything. The slot admits any codec and {@link ValidateClause} is what asks whether it
- * fits, which also lets the refusal name the key.
+ * Read-only and structural, not `AttributeCodec<…>` at the members' tags. A codec is invariant in
+ * the value it carries — `encode` takes it — so a slot typed at the members' whole tag set would
+ * refuse `string('CHECKUP')` against members carrying `'CHECKUP' | 'SHOT'`, which is every clause
+ * that selects anything. The slot admits any codec and {@link ValidateClause} is what asks whether
+ * it fits, which also lets the refusal name the key.
  */
 type AnyLiteralCodec = {
     readonly def: Term
     readonly decode: (attribute: AttributeValue) => Result<unknown>
 }
 
-/** A clause key whose value is not a literal, or is a literal the members do not carry. */
-type BadClauseKey<T, C> = {
-    [K in keyof C]: PinsALiteral<ClauseValue<C[K]>> extends true
-        ? [ClauseValue<C[K]>] extends [TagsAt<T, K>]
-            ? never
+/** The codec a spec declares at one name, or nothing where it declares none. */
+type FieldAt<Spec, K> = K extends keyof Spec ? Spec[K] : never
+
+/**
+ * **Whether one member's spec answers a clause** — `clauseKeeps` at the type, reading the same two
+ * facts off the same declaration.
+ *
+ * At every clause key the member must **require** the name, write it at the clause's **attribute**,
+ * and admit **only** values the clause admits. The attribute is what carries the base: `string`
+ * writes `S`, `decimal` and `number` write `N`, and those two are told apart by the values, `'1'`
+ * against `1`. So the pair (attribute, values) is a base and its alternatives, and the two levels
+ * cannot disagree about which member a clause keeps.
+ */
+type SpecKeeps<Spec, C> = {
+    [K in keyof C]-?: K extends RequiredKeysOf<Spec>
+        ? [AttributeOf<FieldAt<Spec, K>>] extends [AttributeOf<C[K]>]
+            ? [Decoded<FieldAt<Spec, K>>] extends [Decoded<C[K]>]
+                ? never
+                : K
             : K
+        : K
+}[keyof C] extends never
+    ? true
+    : false
+
+/**
+ * **The member specs a clause keeps**, in the order they were declared.
+ *
+ * `Keep` is `true` for the extraction and `false` for the exclusion, so the two are one walk and
+ * the complement cannot drift from the selection.
+ */
+export type Extracted<
+    Specs extends readonly unknown[],
+    C,
+    Keep extends boolean = true,
+> = Specs extends readonly [
+    infer Head,
+    ...infer Tail extends readonly unknown[],
+]
+    ? [
+          ...(SpecKeeps<Head, C> extends Keep ? [Head] : []),
+          ...Extracted<Tail, C, Keep>,
+      ]
+    : []
+
+/** …and the ones it rejects, the same walk at the complement. */
+export type Excluded<Specs extends readonly unknown[], C> = Extracted<
+    Specs,
+    C,
+    false
+>
+
+/** The option codecs a clause keeps, read through each option's own spec. */
+export type KeptOptions<
+    Options extends readonly unknown[],
+    C,
+    Keep extends boolean = true,
+> = Options extends readonly [
+    infer Head,
+    ...infer Tail extends readonly unknown[],
+]
+    ? [
+          ...(SpecKeeps<SpecOf<Head>, C> extends Keep ? [Head] : []),
+          ...KeptOptions<Tail, C, Keep>,
+      ]
+    : []
+
+type SpecOf<Option> = Option extends {
+    readonly item: { readonly spec: infer S }
+}
+    ? S
+    : never
+
+/** The members of a tag table a clause keeps, keyed as they were. */
+export type KeptByTag<Spec, C, Keep extends boolean = true> = {
+    [K in keyof Spec as SpecKeeps<Spec[K], C> extends Keep ? K : never]: Spec[K]
+}
+
+/** The entity a tag table describes, which is what its members describe. */
+export type VariantsOf<Spec> = {
+    [K in keyof Spec]: show<ObjectOf<Spec[K]>>
+}[keyof Spec]
+
+/**
+ * The tags the members carry at one key, at one attribute — and only where the member pins a
+ * literal there.
+ *
+ * The last clause is what stops a clause selecting on a plain field: `toy: string` writes an `S`
+ * and admits every string, so a clause naming `'t'` would fit it and select nothing meaningful.
+ */
+type TagsAtSpecs<S, K, A> = S extends unknown
+    ? K extends RequiredKeysOf<S>
+        ? [AttributeOf<FieldAt<S, K>>] extends [A]
+            ? PinsALiteral<Decoded<FieldAt<S, K>>> extends true
+                ? Decoded<FieldAt<S, K>>
+                : never
+            : never
+        : never
+    : never
+
+/** A clause key no member could ever answer, whatever the values turn out to be. */
+type BadClauseKey<S, C> = {
+    [K in keyof C]: PinsALiteral<Decoded<C[K]>> extends true
+        ? [TagsAtSpecs<S, K, AttributeOf<C[K]>>] extends [never]
+            ? K
+            : [Decoded<C[K]>] extends [TagsAtSpecs<S, K, AttributeOf<C[K]>>]
+              ? never
+              : K
         : K
 }[keyof C]
 
 /**
  * Rejects a clause a member could never answer, at the call rather than on the result.
  *
- * Two failures with one message, because they are one mistake in two spellings: a value that is no
- * literal at all, and a literal whose alternatives no member carries at that key.
+ * Three failures with one message, because they are one mistake in three spellings: a value that is
+ * no literal at all, a literal at a base no member pins that key at, and a literal whose
+ * alternatives no member carries. Each is decidable from the declaration, which is the line the
+ * runtime's refusals draw too.
  */
-export type ValidateClause<T, C> = [BadClauseKey<T, C>] extends [never]
+export type ValidateClause<S, C> = [BadClauseKey<S, C>] extends [never]
     ? unknown
-    : ErrorMessage<`[extract] the clause at '${BadClauseKey<T, C> & string}' is not a literal whose alternatives the members carry at that key — a clause pins each key it names to a literal codec, written as \`string('a')\`, \`decimal('1')\` or \`number(1)\`, because a bare tag does not say which base it was written at`>
-
-/**
- * The tags the members carry at one key, taken together.
- *
- * This is also what refuses a clause value that is not a literal: a plain `string` codec decodes to
- * `string`, and `string` is not the `'dog' | 'cat'` the members carry, so it does not fit the slot.
- * A bare tag does not fit either, being no codec at all.
- */
-type TagsAt<T, K extends PropertyKey> = T extends unknown
-    ? K extends keyof T
-        ? T[K]
-        : never
-    : never
-
-/** The values a clause codec admits, which is what the filter below compares. */
-type ClauseValue<C> = C extends AttributeCodec<infer V, AttributeValue>
-    ? V
-    : never
-
-/**
- * **The members a clause keeps**: at every key the clause names, the member's whole tag set lies
- * inside the clause's.
- *
- * **Inside, and not "the clause's tag is among the member's".** That second reading is
- * {@link VariantOf}, which is a *lookup* asking which member one tag selects, and it is the wrong
- * direction here: a member spanning `'ACME' | 'GLOBEX'` against a clause naming `'ACME'` would be
- * kept, and the extraction would then admit a value the clause does not describe. The model's
- * `altsSub` reads containment for that reason, and so does this. The two coincide wherever a member
- * carries one tag per key, which is every discriminated union.
- *
- * **The base is not read here, and it cannot be.** An entity type carries the values a member
- * holds, not the base they were written at, which is the whole reason `Literal` records a base at
- * all: `string('1')` and `decimal('1')` both decode to `'1'`. So this separates `number(1)` from
- * both of those and does not separate those two from each other, and the runtime — which reads the
- * term — is what does. The narrowing is therefore one member wide on exactly that pair, and the
- * codec the slice returns admits the right member either way.
- */
-export type Extracted<T, C> = T extends unknown
-    ? {
-          [K in keyof C]-?: K extends keyof T
-              ? [T[K]] extends [ClauseValue<C[K]>]
-                  ? never
-                  : K
-              : K
-      }[keyof C] extends never
-        ? T
-        : never
-    : never
-
-/** …and the members it rejects, which is the complement of the same predicate. */
-export type Excluded<T, C> = Exclude<T, Extracted<T, C>>
+    : ErrorMessage<`[extract] the clause at '${BadClauseKey<S, C> & string}' is not a literal the members pin that key to — a clause pins each key it names to a literal codec at the base the members declare, written as \`string('a')\`, \`decimal('1')\` or \`number(1)\`, because a bare tag does not say which base it was written at`>
 
 /**
  * The literal a clause pins one key to, or a refusal naming the key.
