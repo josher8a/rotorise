@@ -529,6 +529,17 @@ theorem literalCodec_e_restrict (k : GroundKind) (ls : NEFinset k.Carrier) :
 theorem literalCodec_p_restrict (k : GroundKind) (ls : NEFinset k.Carrier) :
     (literalCodec k ls).p = ((baseCodec k).restrict (inL k ls)).p := rfl
 
+/-- **A literal codec writes only its own alternatives.** `restrict`'s `e` is a guard in front
+    of the base's, so a defined write is a value in `ℓ` — which is what an object option's
+    content admission reads off a field whose term is a literal. -/
+theorem inL_of_literalCodec_e {k : GroundKind} {ls : NEFinset k.Carrier} {v a}
+    (he : (literalCodec k ls).e v = some a) : inL k ls v = true := by
+  rw [literalCodec_e_restrict] at he
+  simp only [Codec.restrict] at he
+  split at he
+  · assumption
+  · exact absurd he (by simp)
+
 /-- The member is the base's, and the base's is the index's. -/
 theorem literalCodec_μ (k : GroundKind) (ls : NEFinset k.Carrier) :
     (literalCodec k ls).μ = some k.member := by cases k <;> rfl

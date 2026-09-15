@@ -412,7 +412,7 @@ theorem extendRead_eq_on_can (c : Codec) (r : Attr → Option Value) (hc : Lawfu
 
 /-- §6: `union(c) ≡ c`. Choice of one: the filter is `[o]` exactly when `o` admits, and
     `altCodec` then reads `o`'s own pair. Where `o` does not admit, the union is undefined
-    and `≡` asks nothing — which is the clause that makes this row true for a `byNames`
+    and `≡` asks nothing — which is the clause that makes this row true for a `byStructure`
     option as well as a `byAttempt` one. -/
 theorem equiv_altCodec_single (o : OptionSem) :
     Codec.Equiv (altCodec [o] o.c.μ) o.c := by

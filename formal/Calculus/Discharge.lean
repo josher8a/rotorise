@@ -142,7 +142,8 @@ theorem keysOk_of_names {fields : Finset Name} {ff : {k // k ∈ fields} → Fie
     (hsub : ∀ k ∈ keys, k ∈ fields)
     (hreq : ∀ k : {k // k ∈ fields},
       (match ff k with | Field.optional _ => false | _ => true) = true → k.1 ∈ keys) :
-    keysOk ⟨fields, fun k => match ff k with | Field.optional _ => false | _ => true⟩
+    keysOk ⟨fields, fun k =>
+      ⟨(match ff k with | Field.optional _ => false | _ => true), altsOfField (ff k)⟩⟩
       keys = true := by
   simp only [keysOk, Bool.and_eq_true, decide_eq_true_eq]
   exact ⟨hsub, hreq⟩
@@ -162,7 +163,8 @@ theorem keysOk_of_encode {fields : Finset Name} {ff : {k // k ∈ fields} → Fi
     (hfi : funImage (fun k : {k // k ∈ keys} =>
         (entryCodec ⟨fields, fun k => fieldSem (ff k)⟩ none k.1).bind
           (fun c => c.e (f k))) = some g) :
-    keysOk ⟨fields, fun k => match ff k with | Field.optional _ => false | _ => true⟩
+    keysOk ⟨fields, fun k =>
+      ⟨(match ff k with | Field.optional _ => false | _ => true), altsOfField (ff k)⟩⟩
       keys = true := by
   refine keysOk_of_names (fun k hk => ?_) (fun k hb => ?_)
   · -- a name the entry function is defined at is declared: `rc?` is `none`, so
@@ -174,6 +176,95 @@ theorem keysOk_of_encode {fields : Finset Name} {ff : {k // k ∈ fields} → Fi
     exact nomatch hw
   · exact valPresentB_spec hval (MapOf.at_of_mem (m := ⟨fields, _⟩) k)
       (fieldSem_ne_opt hb)
+
+/-- A field whose term is a literal writes only that literal's alternatives, whatever the
+    field's presence marker: `fieldSem` carries the same codec through `req`, `optional` and
+    `fallback`, and `altsOfField` reads the same three. -/
+theorem litOkV_of_field_e : ∀ {fd : Field} {v a}, (fieldSem fd).codec.e v = some a →
+    altsOkV (altsOfField fd) v = true
+  | .req t, _, _, he => by
+      cases t <;> first
+        | rfl
+        | exact inL_of_literalCodec_e (by simpa [fieldSem, FieldSem.codec, denote] using he)
+  | .optional t, _, _, he => by
+      cases t <;> first
+        | rfl
+        | exact inL_of_literalCodec_e (by simpa [fieldSem, FieldSem.codec, denote] using he)
+  | .fallback t _, _, _, he => by
+      cases t <;> first
+        | rfl
+        | exact inL_of_literalCodec_e (by simpa [fieldSem, FieldSem.codec, denote] using he)
+
+/-- …and the attribute it wrote is one the same codec reads back, which is `retract` at the
+    field's own codec rather than at the object's. -/
+theorem litOkA_of_field_e : ∀ {fd : Field} {v a}, (fieldSem fd).codec.e v = some a →
+    altsOkA (altsOfField fd) a = true
+  | .req t, _, _, he => by
+      cases t <;> first
+        | rfl
+        | exact Option.isSome_iff_exists.mpr ⟨_, (lawful_literalCodec _ _).retract
+            (by simpa [fieldSem, FieldSem.codec, denote] using he)⟩
+  | .optional t, _, _, he => by
+      cases t <;> first
+        | rfl
+        | exact Option.isSome_iff_exists.mpr ⟨_, (lawful_literalCodec _ _).retract
+            (by simpa [fieldSem, FieldSem.codec, denote] using he)⟩
+  | .fallback t _, _, _, he => by
+      cases t <;> first
+        | rfl
+        | exact Option.isSome_iff_exists.mpr ⟨_, (lawful_literalCodec _ _).retract
+            (by simpa [fieldSem, FieldSem.codec, denote] using he)⟩
+
+/-- Object-encode stamps content admission too: every written name whose field is a literal
+    carries one of that literal's alternatives.
+
+    `keysOk_of_encode`'s twin, on the other half of the structural test. The quantifier runs
+    over the *written* key set, which is what makes an `optional` literal field harmless: a
+    name the encode did not write is `keysOk`'s business and never reaches here. -/
+theorem literalsOk_of_encode {fields : Finset Name} {ff : {k // k ∈ fields} → Field}
+    {keys : Finset Name} {f : {k // k ∈ keys} → Value} {g : {k // k ∈ keys} → Attr}
+    (hfi : funImage (fun k : {k // k ∈ keys} =>
+        (entryCodec ⟨fields, fun k => fieldSem (ff k)⟩ none k.1).bind
+          (fun c => c.e (f k))) = some g) :
+    literalsOk ⟨fields, fun k =>
+      ⟨(match ff k with | Field.optional _ => false | _ => true), altsOfField (ff k)⟩⟩
+      keys f = true := by
+  simp only [literalsOk, decide_eq_true_eq]
+  intro k
+  have hw := funImage_some hfi k
+  cases hm : decide ((k : Name) ∈ fields) with
+  | false =>
+      simp only [litOkV, MapOf.at, dif_neg (of_decide_eq_false hm)]
+  | true =>
+      have hk : (k : Name) ∈ fields := of_decide_eq_true hm
+      simp only [litOkV, MapOf.at, dif_pos hk]
+      rw [show entryCodec (⟨fields, fun k => fieldSem (ff k)⟩ : MapOf FieldSem) none k.1
+          = some (fieldSem (ff ⟨k.1, hk⟩)).codec from by
+            simp only [entryCodec, MapOf.at, dif_pos hk]] at hw
+      exact litOkV_of_field_e (by simpa using hw)
+
+/-- …and the read side, at the attribute the same encode produced. -/
+theorem literalsOkA_of_encode {fields : Finset Name} {ff : {k // k ∈ fields} → Field}
+    {keys : Finset Name} {f : {k // k ∈ keys} → Value} {g : {k // k ∈ keys} → Attr}
+    (hfi : funImage (fun k : {k // k ∈ keys} =>
+        (entryCodec ⟨fields, fun k => fieldSem (ff k)⟩ none k.1).bind
+          (fun c => c.e (f k))) = some g) :
+    literalsOkA ⟨fields, fun k =>
+      ⟨(match ff k with | Field.optional _ => false | _ => true), altsOfField (ff k)⟩⟩
+      keys g = true := by
+  simp only [literalsOkA, decide_eq_true_eq]
+  intro k
+  have hw := funImage_some hfi k
+  cases hm : decide ((k : Name) ∈ fields) with
+  | false =>
+      simp only [litOkA, MapOf.at, dif_neg (of_decide_eq_false hm)]
+  | true =>
+      have hk : (k : Name) ∈ fields := of_decide_eq_true hm
+      simp only [litOkA, MapOf.at, dif_pos hk]
+      rw [show entryCodec (⟨fields, fun k => fieldSem (ff k)⟩ : MapOf FieldSem) none k.1
+          = some (fieldSem (ff ⟨k.1, hk⟩)).codec from by
+            simp only [entryCodec, MapOf.at, dif_pos hk]] at hw
+      exact litOkA_of_field_e (by simpa using hw)
 
 /-- A closed option admits its own canonical pairs, on both sides. An *open* object —
     a rest codec — is excluded, as §5 demands: an undeclared name disqualifies the
@@ -196,7 +287,8 @@ theorem optionSem_self_admit (t : Term)
     case object body =>
       cases body with | mk fields ff rest =>
       replace hs : some (⟨fields, fun k =>
-        match ff k with | Field.optional _ => false | _ => true⟩ : MapOf Bool) =
+        ⟨(match ff k with | Field.optional _ => false | _ => true),
+          altsOfField (ff k)⟩⟩ : MapOf NameSpec) =
         some spec := hs
       cases hs
       have hrc : rcOf (restSem rest) = none := by
@@ -214,8 +306,10 @@ theorem optionSem_self_admit (t : Term)
         some a := he
       obtain ⟨keys, fv, g, rfl, rfl, hval, hfi⟩ := objectCodecCore_e_inv he
       rw [hrc] at hfi
-      -- both halves are the same `keysOk`, at the key set the two payloads share
-      exact ⟨keysOk_of_encode hval hfi, keysOk_of_encode hval hfi⟩
+      -- both halves read the same two tests at the key set the two payloads share: the
+      -- names, and the literal fields' contents
+      exact ⟨(Bool.and_eq_true _ _).mpr ⟨keysOk_of_encode hval hfi, literalsOk_of_encode hfi⟩,
+             (Bool.and_eq_true _ _).mpr ⟨keysOk_of_encode hval hfi, literalsOkA_of_encode hfi⟩⟩
     all_goals exact nomatch hs
 
 

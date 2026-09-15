@@ -385,9 +385,11 @@ theorem lawful_objReqStr : Lawful (denote objReqStr) :=
 theorem lawful_objReqNum : Lawful (denote objReqNum) :=
   soundness typed_objReqNum ⟨fun _ => trivial, trivial⟩ ⟨fun _ => trivial, trivial⟩
 
-/-- **The pair is not uniquely admitting.** `select` counts an object option by its names,
-    the two specs are the same spec, so a map the first option writes is admitted by both
-    and the filter is not a singleton. -/
+/-- **The pair is not uniquely admitting.** `select` counts an object option by its
+    structure, the two specs are the same spec, and neither field is a literal — so content
+    admission asks nothing of either, a map the first option writes is admitted by both, and
+    the filter is not a singleton. This is the pair structural admission does **not** resolve,
+    and the reason the phase is literals rather than field terms. -/
 theorem not_uAtCan_objReq : ¬ UAtCan [objReqStr, objReqNum] := by
   intro h
   obtain ⟨a, ha⟩ :=
@@ -395,7 +397,8 @@ theorem not_uAtCan_objReq : ¬ UAtCan [objReqStr, objReqNum] := by
   have hfil := (h (optionSemOf (denote objReqStr) (specOf objReqStr)) (by simp [semsOf])
     mapReqStr a (by rw [optionSemOf_c]; exact ha)).2
   simp [semsOf, objReqStr, objReqNum, bodyReqStr, bodyReqNum, specOf, Body.spec, optionSemOf,
-    OptionSem.byNames, keysOk, mapReqStr] at hfil
+    OptionSem.byStructure, keysOk, literalsOk, litOkV, altsOkV, altsOfField, MapOf.at,
+    mapReqStr] at hfil
 
 /-- **Admission does not imply the row**, which is the route the discharger would have to
     take. An object option admits by names; `Adm` asks the field terms. -/

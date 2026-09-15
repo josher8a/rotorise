@@ -23,17 +23,62 @@ structure OptionSem where
   c : Codec
 
 /-- Name admission (objects): every present name declared, every required name present.
-    The spec is a `MapOf Bool` — the declared names with each one's required flag —
+    The spec is a `MapOf NameSpec` — the declared names with what admission reads at each —
     for the same reason the field table is: a list of pairs admits orderings and
     repeats that a declaration does not have. -/
-def keysOk (spec : MapOf Bool) (keys : Finset Name) : Bool :=
+def keysOk (spec : MapOf NameSpec) (keys : Finset Name) : Bool :=
   decide (∀ k ∈ keys, k ∈ spec.1) &&
-  decide (∀ k : {k // k ∈ spec.1}, spec.2 k = true → k.1 ∈ keys)
+  decide (∀ k : {k // k ∈ spec.1}, (spec.2 k).required = true → k.1 ∈ keys)
 
-/-- An object option decides by names, never by being attempted. -/
-def OptionSem.byNames (spec : MapOf Bool) (c : Codec) : OptionSem :=
-  { admitA := fun a => match a with | .m keys _ => keysOk spec keys | _ => false
-    admitV := fun v => match v with | .map keys _ => keysOk spec keys | _ => false
+/-- One present name's content, on the write side: where the name's field is a literal, the
+    value is one of the alternatives. A name the spec does not declare asks nothing, because
+    `keysOk` has already refused it. -/
+def altsOkV : Option Alts → Value → Bool
+  | some ⟨g, ls⟩, v => inL g ls v
+  | none, _ => true
+
+def litOkV (spec : MapOf NameSpec) (k : Name) (v : Value) : Bool :=
+  match spec.at k with
+  | some ns => altsOkV ns.alts v
+  | none => true
+
+/-- …and on the read side, where the test is the literal codec's own. `inL` is a predicate on
+    a `Value` and the stored side holds an `Attr`, so the read test asks the codec that decodes
+    it rather than a second membership. -/
+def altsOkA : Option Alts → Attr → Bool
+  | some ⟨g, ls⟩, a => ((literalCodec g ls).p a).isSome
+  | none, _ => true
+
+def litOkA (spec : MapOf NameSpec) (k : Name) (a : Attr) : Bool :=
+  match spec.at k with
+  | some ns => altsOkA ns.alts a
+  | none => true
+
+/-- **Content admission (objects): every present name whose field is a literal carries one of
+    that literal's alternatives.**
+
+    The other half of an object option's admission, and the half `keysOk` alone cannot state.
+    Present-only: the quantifier runs over the *map's* key set, so an absent name is `keysOk`'s
+    business. `Finset.attach`'s decidable `∀ k ∈ keys` is what `decide` resolves through, the
+    same route `valPresentT` takes and the one `Finset.toList` would spoil. -/
+def literalsOk (spec : MapOf NameSpec) (keys : Finset Name)
+    (f : {k // k ∈ keys} → Value) : Bool :=
+  decide (∀ k : {k // k ∈ keys}, litOkV spec k.1 (f k) = true)
+
+/-- …and its read-side twin. -/
+def literalsOkA (spec : MapOf NameSpec) (keys : Finset Name)
+    (g : {k // k ∈ keys} → Attr) : Bool :=
+  decide (∀ k : {k // k ∈ keys}, litOkA spec k.1 (g k) = true)
+
+/-- An object option decides by structure, never by being attempted: the names lie in the
+    spec's interval, and every present literal field carries one of its alternatives. -/
+def OptionSem.byStructure (spec : MapOf NameSpec) (c : Codec) : OptionSem :=
+  { admitA := fun a => match a with
+      | .m keys g => keysOk spec keys && literalsOkA spec keys g
+      | _ => false
+    admitV := fun v => match v with
+      | .map keys f => keysOk spec keys && literalsOk spec keys f
+      | _ => false
     c := c }
 
 /-- Any other option is admitted by attempt — the doc's `ident` caveat lives in the
@@ -107,8 +152,8 @@ def tagOfA (ks : Finset Name) (a : Attr) : Option (Assignment ks) :=
   else none
 
 /-- The builder `denote` uses for a union option. -/
-def optionSemOf (c : Codec) : Option (MapOf Bool) → OptionSem
-  | some spec => .byNames spec c
+def optionSemOf (c : Codec) : Option (MapOf NameSpec) → OptionSem
+  | some spec => .byStructure spec c
   | none => .byAttempt c
 
 /-- §5 (U) at every option's canonical pairs: each is admitted by that option alone, on
@@ -165,6 +210,16 @@ theorem eq_singleton_of_mem_of_length_le_one {α : Type} {l : List α} {x : α}
       simp only [List.mem_cons, List.not_mem_nil, or_false] at hx
       rw [hx]
     | cons z zs => simp at hl
+
+/-- A list no two of whose entries stand in any relation holds at most one entry. -/
+theorem length_le_one_of_pairwise_false {α : Type} {l : List α}
+    (h : List.Pairwise (fun _ _ : α => False) l) : l.length ≤ 1 := by
+  cases l with
+  | nil => simp
+  | cons x xs =>
+    cases xs with
+    | nil => simp
+    | cons y ys => exact absurd ((List.pairwise_cons.mp h).1 y (by simp)) id
 
 /-- **No value and no attribute is admitted by two options.**
 
