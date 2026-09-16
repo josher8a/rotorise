@@ -14,6 +14,14 @@ refuses where its closed form cannot be compared with an exact held set, and `re
 that is a refusal and not an empty one: `string` and `decimal` both admit text, one writes `S` and
 the other `N`, so `never` would claim they share no value when they share every value.
 
+**The same on the read side, and `never` is the empty intersection of BOTH halves.** `number` and
+`decimal` write different value kinds, so they share no value and the bottom is right about the
+write side. They read the same member `N`, so they share every stored numeral the host re-reads
+and the bottom is wrong about the read side. A pair disjoint on one half only is not disjoint,
+which is why `Orth1` conjoins the two occupancies; `never` is for a pair disjoint on both, and
+everything else refuses. `decimal` is the base that meets `string` on values and `number` on
+members, and both crosses refuse.
+
 **The write side agrees only where both factors name a member**, and that is weaker than "all three
 write the same way". `μSyn` answers `none` for two different reasons — a term that writes no value
 at all (`never`) and a term that names no *single* stored member (`union`, `opaq`, `lazy`,
@@ -223,6 +231,11 @@ def Term.meet : Term → Term → Option Term
   -- literal rows below repeat this, because a literal at either base inherits the pair.
   | .string, .decimal => none
   | .decimal, .string => none
+  -- **The `number` family and the `decimal` family never meet either**, and for the other half
+  -- of the rule: one member `N`, different slots, so the pair stores nothing together and reads
+  -- a stored numeral together. Every cell pairing the two families answers `none`, and the
+  -- containers inherit it the same way.
+  --
   -- **The `string` family and the `decimal` family never meet.** A family is the base, a literal
   -- at it, and a `refine` over either: every member writes `.str`, and the two store it at `S`
   -- and at `N`. So every cell putting one family against the other answers `none`, and a
@@ -248,17 +261,27 @@ def Term.meet : Term → Term → Option Term
   | .binary, .literal k v => if k = .binary then some (.literal k v) else some .never
   | .literal k v, .null => if k = .null then some (.literal k v) else some .never
   | .null, .literal k v => if k = .null then some (.literal k v) else some .never
-  | .literal k v, .number => if k = .number then some (.literal k v) else some .never
-  | .number, .literal k v => if k = .number then some (.literal k v) else some .never
+  | .literal k v, .number =>
+      match k, v with
+      | .number, v => some (.literal .number v)
+      | .decimal, _ => none
+      | _, _ => some .never
+  | .number, .literal k v =>
+      match k, v with
+      | .number, v => some (.literal .number v)
+      | .decimal, _ => none
+      | _, _ => some .never
   | .literal k v, .decimal =>
       match k, v with
       | .decimal, v => some (.literal .decimal v)
       | .string, _ => none
+      | .number, _ => none
       | _, _ => some .never
   | .decimal, .literal k v =>
       match k, v with
       | .decimal, v => some (.literal .decimal v)
       | .string, _ => none
+      | .number, _ => none
       | _, _ => some .never
   -- **two literals: the same value, or nothing.**
   | .literal k v, .literal k' v' => Term.meetLit k v k' v'
@@ -271,6 +294,8 @@ def Term.meet : Term → Term → Option Term
   -- different `Value` constructor and so shares nothing.
   | .set .string, .set .decimal => none
   | .set .decimal, .set .string => none
+  | .set .number, .set .decimal => none
+  | .set .decimal, .set .number => none
   | .set b, .set b' => if b = b' then some (.set b) else some .never
   | .opaq l, .opaq l' => some (.opaq (l && l'))
   -- **an array against a tuple is the tuple**, each declared position and the tail met with the
@@ -325,6 +350,13 @@ def Term.meet : Term → Term → Option Term
   | .number, .opaq l => if l then some .number else some .never
   | .opaq _, _ => none
   | _, .opaq _ => none
+  -- **The `number` family and the `decimal` family never meet.** They write different value
+  -- kinds, so the bottom is right about the write side, and they read the same member `N`, so
+  -- the bottom is wrong about the read side: every stored numeral the host re-reads is an
+  -- attribute both admit. A pair that shares an attribute has no meet, for the reason a pair
+  -- that shares a value has none.
+  | .number, .decimal => none
+  | .decimal, .number => none
   -- everything left is two constructors that write different value kinds
   | _, _ => some .never
 termination_by x y => (Term.depth x + Term.depth y, 1)
@@ -344,9 +376,12 @@ def Term.meetLit : (k : GroundKind) → k.Carrier → (k' : GroundKind) → k'.C
   -- `Unit` has one inhabitant, so two null literals name the same value
   | .null, v, .null, _ => some (.literal .null v)
   | .number, _, .number, _ => none
-  -- the same shared pair as the rows above, with both sides pinned
+  -- the same shared pairs as the rows above, with both sides pinned: `string` shares values
+  -- with `decimal`, and `number` shares the member `N` with it
   | .string, _, .decimal, _ => none
   | .decimal, _, .string, _ => none
+  | .number, _, .decimal, _ => none
+  | .decimal, _, .number, _ => none
   | _, _, _, _ => some .never
 
 
@@ -504,8 +539,17 @@ example : Term.meet (.refine .string (.members .string ⟨{"1"}, Finset.singleto
 
 example : Term.meet (.array .string) (.array .decimal) = none := by simp [Term.meet]
 
-/-- …while two terms that write different constructors are still the bottom, container or not. -/
-example : Term.meet .number .decimal = some .never := by simp [Term.meet]
+/-- **`number` and `decimal` refuse too, and for the other half of the rule.** They write
+    different value kinds, so the bottom is right about what they store together — nothing. They
+    read the same member `N`, so the bottom is wrong about what they read together: a stored
+    numeral the host re-reads is an attribute both admit. A pair that shares an attribute has no
+    meet, for the reason a pair that shares a value has none. -/
+example : Term.meet .number .decimal = none := by simp [Term.meet]
+
+example : Term.meet (.set .number) (.set .decimal) = none := by simp [Term.meet]
+
+/-- The attribute the refusal is about: both terms read it, and the bottom reads nothing. -/
+example (x : WFNumeral) (h : Numeral.Stored x.1 = true) : AdmA Term.decimal (.n x) = true := h
 
 /-- **The null point needs no row of its own.** A null point is the null term joined by a union,
     so the union rows distribute over it and the ground rows answer each cell. This is the pair
@@ -1793,10 +1837,10 @@ theorem Adm_meet_le : ∀ (n : Nat) (x y : Term), Term.depth x + Term.depth y �
       case case10 => rename_i t hne _ _ _ _; rw [meet_lazyR_none hne t] at h; exact absurd h (by simp)
       -- a refinement whose predicate is a closure, and `opaque` against what it cannot compare:
       -- both refuse, and the partner is a variable, so the row reduces one constructor at a time
-      case case14 | case84 => cases y <;> simp_all [Term.meet]
-      case case16 | case85 => cases x <;> simp_all [Term.meet]
+      case case14 | case90 => cases y <;> simp_all [Term.meet]
+      case case16 | case91 => cases x <;> simp_all [Term.meet]
       -- two literals: the same value at the same base, or nothing
-      case case53 =>
+      case case57 =>
         rename_i k a k' a'
         simp only [Term.meet] at h
         cases k <;> cases k' <;> simp only [Term.meetLit, reduceCtorEq] at h <;>
@@ -1806,17 +1850,17 @@ theorem Adm_meet_le : ∀ (n : Nat) (x y : Term), Term.depth x + Term.depth y �
                 cases v <;> simp_all [Adm, AdmLit, inL, isStored, inD]))
       -- two set bases that write different wire families: a set is non-empty, so a base that
       -- refuses every element refuses the set
-      case case59 =>
-        rename_i b b' _ _ hb
+      case case65 =>
+        rename_i b b' _ _ _ _ hb
         simp only [Term.meet, if_neg hb, Option.some.injEq] at h
         subst h
         cases b <;> cases b' <;> cases v <;>
           simp_all [Adm, SetBase.adm, isStored, inD, -Classical.not_forall] <;>
           (intros; exact NEFinset.not_forall_notMem _)
       -- the two set bases that share the `strSet` slot
-      case case56 | case57 => simp [Term.meet] at h
+      case case60 | case61 => simp [Term.meet] at h
       -- the same set base is itself
-      case case58 =>
+      case case64 =>
         simp only [Term.meet, if_true, ite_true, Option.some.injEq] at h
         subst h
         simp
@@ -1829,55 +1873,64 @@ theorem Adm_meet_le : ∀ (n : Nat) (x y : Term), Term.depth x + Term.depth y �
       case case17 | case18 | case19 | case20 | case21 | case22 =>
         simp only [Term.meet, Option.some.injEq] at h; subst h; simp
       -- the `string`/`decimal` family, which shares values and so refuses
-      case case23 | case24 | case26 | case29 | case48 | case51 => simp [Term.meet] at h
+      case case23 | case24 | case26 | case29 | case50 | case54 => simp [Term.meet] at h
       -- a literal against its own base: the literal is the finer term, so the base adds nothing
       -- a literal against its own base: the literal is the finer term, so the base adds nothing.
       -- The `string` and `decimal` rows are explicit matches and reduce on their own; the other
       -- four bases still decide by `if`, and the condition is closed.
-      case case25 | case28 | case47 | case50 =>
+      case case25 | case28 | case43 | case46 | case49 | case53 =>
         simp only [Term.meet, Option.some.injEq] at h
         subst h
-        cases v <;> simp [Adm, AdmLit, inL, isStored] <;> (intro hs _; exact hs)
-      case case31 | case33 | case35 | case37 | case39 | case41 | case43 | case45 =>
+        cases v <;> simp [Adm, AdmLit, inL, isStored, inD] <;> (intro hs _; exact hs)
+      case case31 | case33 | case35 | case37 | case39 | case41 =>
         simp only [Term.meet, if_true, ite_true, Option.some.injEq] at h
         subst h
         cases v <;> simp [Adm, AdmLit, inL, inD] <;> (intro hs _; exact hs)
       -- …and against any other base, nothing: the two write different value constructors
       -- …and against any other base, nothing: the two write different value constructors
-      case case27 | case30 | case49 | case52 =>
+      case case52 | case56 =>
+        rename_i k _ _ _ _
+        simp only [Term.meet, Option.some.injEq] at h
+        subst h
+        cases k <;> cases v <;> simp_all [Adm, AdmLit, inL, inD, isStored]
+      case case27 | case30 | case45 | case48 =>
         rename_i k _ _ _
         simp only [Term.meet, Option.some.injEq] at h
         subst h
         cases k <;> cases v <;> simp_all [Adm, AdmLit, inL, inD, isStored]
-      case case32 | case34 | case36 | case38 | case40 | case42 | case44 | case46 =>
+      case case32 | case34 | case36 | case38 | case40 | case42 =>
         rename_i k _ hk
         simp only [Term.meet, if_neg hk, Option.some.injEq] at h
         subst h
         cases k <;> cases v <;> simp_all [Adm, AdmLit, inL, inD, isStored]
       -- `opaque` against a self-identifying base: the base is the finer term
-      case case72 | case73 | case74 | case75 | case76 | case77 | case78 | case79 =>
+      case case78 | case79 | case80 | case81 | case82 | case83 | case84 | case85 =>
         simp only [Term.meet, Option.some.injEq] at h
         subst h
         cases v <;>
           (try simp only [Adm_opaq_str, Adm_opaq_bool, Adm_opaq_bin, Adm_opaq_null]) <;>
           simp [Adm]
       -- …and against `number`, by the policy: the lossy one holds every stored double
-      case case80 | case82 =>
+      case case86 | case88 =>
         simp only [Term.meet, if_true, Option.some.injEq] at h
         subst h
         cases v <;> (try simp only [Adm_opaq_num]) <;> simp [Adm, inD]
       -- …and the refusing one none, so the pair is the bottom
-      case case81 | case83 =>
+      case case87 | case89 =>
         rename_i l hl
         simp only [Bool.not_eq_true] at hl
         subst hl
         simp only [Term.meet, Bool.false_eq_true, if_false, Option.some.injEq] at h
         subst h
         cases v <;> (try simp only [Adm_opaq_num]) <;> simp [Adm, inD]
+      -- **the `number` family against the `decimal` family.** One member, different slots: the
+      -- pair stores nothing together and reads a stored numeral together, so it has no meet.
+      case case44 | case47 | case51 | case55 | case62 | case63 | case92 | case93 =>
+        simp [Term.meet, Term.meetLit] at h
       -- **the catch-all: two constructors with no row of their own.** They occupy different
       -- value slots, so `Adm_and_false` answers the pair; `number` against `decimal` is the one
       -- pair that shares a member and needs the value split instead.
-      case case86 =>
+      case case94 =>
         clear ih hle
         cases x <;> (try (exfalso; solve_by_elim (maxDepth := 2) [rfl])) <;>
           cases y <;> (try (exfalso; solve_by_elim (maxDepth := 8) [rfl])) <;>
@@ -1900,21 +1953,21 @@ theorem Adm_meet_le : ∀ (n : Nat) (x y : Term), Term.depth x + Term.depth y �
         simp only [Adm, ihw]
         simp [Bool.and_assoc, Bool.and_comm, Bool.and_left_comm]
       -- the containers: the element rows meet, and the payload carries the conjunction
-      case case54 =>
+      case case58 =>
         obtain ⟨w, hw, rfl⟩ := Option.map_eq_some_iff.mp (by simpa only [Term.meet] using h)
         have ihw := ih _ _ (by simp only [Term.depth] at hle; omega) w hw
         cases v <;> simp only [Adm, Bool.and_self, allP_and ihw]
-      case case55 =>
+      case case59 =>
         obtain ⟨w, hw, rfl⟩ := Option.map_eq_some_iff.mp (by simpa only [Term.meet] using h)
         have ihw := ih _ _ (by simp only [Term.depth] at hle; omega) w hw
         cases v <;> simp only [Adm, Bool.and_self, decide_forall_and (fun k => ihw _)]
-      case case61 | case62 =>
+      case case67 | case68 =>
         obtain ⟨vs, tl, rfl, hts, htl⟩ := meet_array_tuple h
         obtain ⟨hb1, hb2⟩ := tuple_bounds_l hle
         cases v <;>
           simp only [Adm, Bool.and_self,
             alignP_meet_all (AdmList_forall₂ ih hb1 hts) (tailMeet_lift ih hb2 htl)]
-      case case63 | case64 =>
+      case case69 | case70 =>
         obtain ⟨vs, tl, rfl, hts, htl⟩ := meet_tuple_array h
         obtain ⟨hb1, hb2⟩ := tuple_bounds_r hle
         cases v <;> simp only [Adm, Bool.and_self] <;>
@@ -1922,7 +1975,7 @@ theorem Adm_meet_le : ∀ (n : Nat) (x y : Term), Term.depth x + Term.depth y �
             alignP_meet_all (AdmList_forall₂ ih hb1 hts) (tailMeet_lift ih hb2 htl)]
       -- two tuples: one arity meets positionwise, and two arities with no tail admit no
       -- common array
-      case case65 | case66 | case67 | case68 =>
+      case case71 | case72 | case73 | case74 =>
         obtain ⟨hb1, hb2⟩ := tuple_bounds_tt hle
         rcases meet_tuple_tuple h with ⟨vs, tl, rfl, hlen, hF, htl⟩ | ⟨rfl, hne, rfl, rfl⟩
         · cases v <;> simp only [Adm, Bool.and_self,
@@ -1943,13 +1996,13 @@ theorem Adm_meet_le : ∀ (n : Nat) (x y : Term), Term.depth x + Term.depth y �
                     ((alignP_none_length hB).trans (AdmList_length _))) hne
           | _ => simp [Adm]
       -- two `opaque`s: the policies conjoin, the refusing one being below the lossy one
-      case case60 =>
+      case case66 =>
         simp only [Term.meet, Option.some.injEq] at h
         subst h
         exact Adm_opaq_and _ _ v
       -- two objects: the declared names intersect, the required names unite, and the rests
       -- decide first
-      case case71 =>
+      case case77 =>
         rename_i a b
         obtain ⟨r, hr, hcase⟩ := meet_object_object h
         obtain ⟨hra, hrb, hrr⟩ := Rest.merge_admRest hr
@@ -2005,7 +2058,7 @@ theorem Adm_meet_le : ∀ (n : Nat) (x y : Term), Term.depth x + Term.depth y �
         all_goals exact hnm _ (fun _ _ hc => Value.noConfusion hc)
       -- an object against a record: only a `codec` rest reads an undeclared name the way a
       -- record does, and the record's term meets every field and the rest's codec
-      case case69 =>
+      case case75 =>
         rename_i b x
         have hmr : Body.meetRec b x = some z := by rw [Term.meet.eq_def] at h; simpa using h
         obtain ⟨t, r, hrest, hmt, hok, hcase⟩ := meet_object_record hmr
@@ -2055,7 +2108,7 @@ theorem Adm_meet_le : ∀ (n : Nat) (x y : Term), Term.depth x + Term.depth y �
                 show AdmRest (.codec t) = some (Adm t) from rfl, objAdmV_meetRec ihf iht]
             simp [Bool.and_assoc, Bool.and_comm, Bool.and_left_comm]
         all_goals exact hnm _ (fun _ _ hc => Value.noConfusion hc)
-      case case70 =>
+      case case76 =>
         rename_i x b
         have hmr : Body.meetRec b x = some z := by rw [Term.meet.eq_def] at h; simpa using h
         obtain ⟨t, r, hrest, hmt, hok, hcase⟩ := meet_object_record hmr
