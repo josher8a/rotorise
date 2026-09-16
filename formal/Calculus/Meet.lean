@@ -5515,4 +5515,51 @@ theorem Adm_meet_union_distrib {x z o : Term} {os : List Term} (hok : unionOk (o
   rw [Adm_meet_union hok h, AdmAny_cons]
   cases Adm x v <;> cases Adm o v <;> cases AdmAny os v <;> rfl
 
+/-! ## The laws, on reading
+
+`AdmA_meet` is the homomorphism from the meet to conjunction on the read side, so each law
+below is the corresponding law of `Bool` read through it, exactly as the admission laws are.
+Each is stated on both sides ANSWERING, for the same reason: whether the meet answers in one
+order when it answers in the other is a question about the rows, and the lattice does not need
+it.
+-/
+
+/-- **The meet is commutative on reading.** -/
+theorem AdmA_meet_comm {x y z z' : Term} (h : Term.meet x y = some z)
+    (h' : Term.meet y x = some z') (a : Attr) : AdmA z a = AdmA z' a := by
+  rw [AdmA_meet h, AdmA_meet h', Bool.and_comm]
+
+/-- **…and associative on reading**, both bracketings answering. -/
+theorem AdmA_meet_assoc {x y z xy yz l r : Term}
+    (hxy : Term.meet x y = some xy) (hl : Term.meet xy z = some l)
+    (hyz : Term.meet y z = some yz) (hr : Term.meet x yz = some r) (a : Attr) :
+    AdmA l a = AdmA r a := by
+  rw [AdmA_meet hl, AdmA_meet hxy, AdmA_meet hr, AdmA_meet hyz, Bool.and_assoc]
+
+/-- **…and idempotent.** -/
+theorem AdmA_meet_self {x z : Term} (h : Term.meet x x = some z) (a : Attr) :
+    AdmA z a = AdmA x a := by
+  rw [AdmA_meet h, Bool.and_self]
+
+/-- **The bottom absorbs**, and it reads nothing. -/
+theorem AdmA_meet_never {x z : Term} (h : Term.meet x .never = some z) (a : Attr) :
+    AdmA z a = false := by
+  rw [AdmA_meet h, AdmA_never, Bool.and_false]
+
+/-- **The meet distributes over a certified union.** `AdmAAny` is the join of the options'
+    readings, and `&&` distributes over `||`, so this is the distributive law with the join
+    written the way the certificate makes it available. -/
+theorem AdmA_meet_union {x z : Term} {os : List Term} (hok : unionOk os = true)
+    (h : Term.meet x (.union os) = some z) (a : Attr) :
+    AdmA z a = (AdmA x a && AdmAAny os a) := by
+  rw [AdmA_meet h, AdmA_union os a, selOptA_eq_AdmAAny hok]
+
+/-- …and the distribution, written so a reader sees it: the meet of a term with a join is the
+    join of the meets, one option at a time. -/
+theorem AdmA_meet_union_distrib {x z o : Term} {os : List Term} (hok : unionOk (o :: os) = true)
+    (h : Term.meet x (.union (o :: os)) = some z) (a : Attr) :
+    AdmA z a = ((AdmA x a && AdmA o a) || (AdmA x a && AdmAAny os a)) := by
+  rw [AdmA_meet_union hok h, AdmAAny_cons]
+  cases AdmA x a <;> cases AdmA o a <;> cases AdmAAny os a <;> rfl
+
 end Calculus
