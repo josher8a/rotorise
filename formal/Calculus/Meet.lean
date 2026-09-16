@@ -2885,6 +2885,2540 @@ example : Term.meet (.refine .string (.members .string ⟨{"1"}, Finset.singleto
   simp [Term.meet, Pred.isData, Term.refineOf, Term.isNever]
 
 
+/-! ## The homomorphism on the read side
+
+`AdmA_meet` and `denote_meet_p` are proved together, and the pairing is forced.
+`AdmA (.refine t p) a` is `AdmA t a && refineReads t p.eval a`, and `refineReads` asks the
+predicate of what `t` decodes `a` to, so the refinement rows reduce to the reading agreement.
+The agreement is unprovable alone: at a row that answers the bottom the meet reads nothing
+where a factor reads something, and what rules that row out is the homomorphism's own content
+there. The value side needs no such pairing, because `Adm (.refine t p) v` shows the predicate
+the value itself.
+-/
+
+
+/-- A `Bool`-valued filter, compared on the set's own names. Mathlib's `Finset.filter_congr`
+    reaches `Classical.choice`; a filter whose predicate is already a `Bool` needs no choice. -/
+theorem filter_congr_on {S : Finset Name} {p q : Name → Bool} (h : ∀ k ∈ S, p k = q k) :
+    S.filter (p ·) = S.filter (q ·) := by
+  ext k
+  simp only [Finset.mem_filter]
+  exact ⟨fun hk => ⟨hk.1, (h k hk.1) ▸ hk.2⟩, fun hk => ⟨hk.1, (h k hk.1).symm ▸ hk.2⟩⟩
+
+/-- …a filter that keeps nothing is empty… -/
+theorem filter_eq_empty_on {S : Finset Name} {p : Name → Bool} (h : ∀ k ∈ S, p k = false) :
+    S.filter (p ·) = ∅ := by
+  ext k
+  refine ⟨fun hk => ?_, fun hk => absurd hk (Finset.notMem_empty k)⟩
+  obtain ⟨hs, hp⟩ := Finset.mem_filter.mp hk
+  rw [h k hs] at hp
+  exact Bool.noConfusion hp
+
+/-- …and one that keeps everything is the set. -/
+theorem filter_eq_self_on {S : Finset Name} {p : Name → Bool} (h : ∀ k ∈ S, p k = true) :
+    S.filter (p ·) = S := by
+  ext k
+  simp only [Finset.mem_filter]
+  exact ⟨fun hk => hk.1, fun hk => ⟨hk, h k hk⟩⟩
+
+/-- `AdmA` at an object is its body's row. -/
+theorem AdmA_object (b : Body) (a : Attr) : AdmA (.object b) a = AdmABody b a := rfl
+
+/-- …and at a record, the row of every entry the map carries. -/
+theorem AdmA_record (x : Term) (keys : Finset Name) (g : {k // k ∈ keys} → Attr) :
+    AdmA (.record x) (.m keys g) = decide (∀ k : {k // k ∈ keys}, AdmA x (g k) = true) := rfl
+
+/-- A literal table's lookup at a declared name. `MapOf.at_of_mem` says the same for an
+    abstract table, and its `m.2 k` does not reduce when the table is written out, which is what
+    the rows below need. -/
+theorem MapOf.at_mk_pos {α : Type} {S : Finset Name} {f : {k // k ∈ S} → α} {k : Name}
+    (h : k ∈ S) : MapOf.at ⟨S, f⟩ k = some (f ⟨k, h⟩) := dif_pos h
+
+/-- …and at an undeclared name it answers nothing. -/
+theorem MapOf.at_of_not_mem {α : Type} {m : MapOf α} {k : Name} (h : k ∉ m.1) :
+    m.at k = none := dif_neg h
+
+/-- An entry at a declared name goes through that name's field… -/
+theorem entryCodec_mk_pos {S : Finset Name} {f : {k // k ∈ S} → FieldSem} {rc? : Option Codec}
+    {k : Name} (h : k ∈ S) : entryCodec ⟨S, f⟩ rc? k = some (f ⟨k, h⟩).codec := by
+  rw [entryCodec, MapOf.at_mk_pos h]
+
+/-- …and at an undeclared one through the rest policy's. -/
+theorem entryCodec_mk_neg {S : Finset Name} {f : {k // k ∈ S} → FieldSem} {rc? : Option Codec}
+    {k : Name} (h : k ∉ S) : entryCodec ⟨S, f⟩ rc? k = rc? := by
+  rw [entryCodec, MapOf.at_of_not_mem (m := ⟨S, f⟩) h]
+
+/-- The refusing `opaque` reads no stored numeral, which is the row the `number` pair turns
+    on. -/
+theorem opaq_p_num_false (n : Nat) (x : WFNumeral) : (opaqCodec n false).p (.n x) = none := by
+  cases n with
+  | zero => rfl
+  | succ m => rw [opaqCodec_p_n]; rfl
+
+/-- A set over a base that reads nothing reads nothing. -/
+theorem decSet_none_of_refuse {α : Type} (c : Codec) (inj : α → Attr) (S : NEFinset α)
+    (h : ∀ x, c.p (inj x) = none) : decSet c inj S = none := by
+  obtain ⟨x0, hx0⟩ := S.2
+  have key : ∀ {β : Type} [DecidableEq β] (out : Value → Option β),
+      neSetImage (fun x => (c.p (inj x)).bind out) S = none := by
+    intro β _ out
+    cases hs : setImage (fun x => (c.p (inj x)).bind out) S.1 with
+    | none => exact neSetImage_none hs
+    | some T => exact absurd (setImage_some hs x0 hx0) (by rw [h x0]; exact fun hc => Bool.noConfusion hc)
+  unfold decSet
+  rw [key, key, key]
+  rfl
+
+/-- Two codecs that read a set's members alike give the set one reading. -/
+theorem decSet_congr_p {α : Type} (c d : Codec) (inj : α → Attr) (S : NEFinset α)
+    (h : ∀ x, c.p (inj x) = d.p (inj x)) : decSet c inj S = decSet d inj S := by
+  unfold decSet
+  rw [neSetImage_congr (f := fun x => (c.p (inj x)).bind vStr)
+        (g := fun x => (d.p (inj x)).bind vStr) (fun x _ => by rw [h x]),
+      neSetImage_congr (f := fun x => (c.p (inj x)).bind vNum)
+        (g := fun x => (d.p (inj x)).bind vNum) (fun x _ => by rw [h x]),
+      neSetImage_congr (f := fun x => (c.p (inj x)).bind vBin)
+        (g := fun x => (d.p (inj x)).bind vBin) (fun x _ => by rw [h x])]
+
+/-- The two policies read a stored string alike: only the numeral row separates them. -/
+theorem opaq_p_s_lossy (m : Nat) (s : String) :
+    (opaqCodec m false).p (.s s) = (opaqCodec m true).p (.s s) := by
+  cases m with
+  | zero => rfl
+  | succ k => rw [opaqCodec_p_s, opaqCodec_p_s]
+
+/-- …and stored bytes alike, for the same reason. -/
+theorem opaq_p_b_lossy (m : Nat) (b : Bytes) :
+    (opaqCodec m false).p (.b b) = (opaqCodec m true).p (.b b) := by
+  cases m with
+  | zero => rfl
+  | succ k => rw [opaqCodec_p_b, opaqCodec_p_b]
+
+/-- **The refusing policy is below the lossy one on the read side too.** -/
+theorem opaq_p_mono : ∀ (n : Nat) (a : Attr) (v : Value),
+    (opaqCodec n false).p a = some v → (opaqCodec n true).p a = some v := by
+  intro n
+  induction n with
+  | zero => intro a v hh; exact nomatch hh
+  | succ m ihm =>
+    intro a v hh
+    cases a with
+    | s s => rw [opaqCodec_p_s] at hh ⊢; exact hh
+    | bool b => rw [opaqCodec_p_bool] at hh ⊢; exact hh
+    | b b => rw [opaqCodec_p_b] at hh ⊢; exact hh
+    | null => rw [opaqCodec_p_null] at hh ⊢; exact hh
+    | n x => rw [opaq_p_num_false] at hh; exact nomatch hh
+    | ss S =>
+      rw [opaqCodec_p_ss] at hh ⊢
+      show (setCodec (opaqCodec m true)).p (.ss S) = some v
+      show decSet (opaqCodec m true) Attr.s S = some v
+      rw [← decSet_congr_p (opaqCodec m false) (opaqCodec m true) Attr.s S
+            (fun x => opaq_p_s_lossy m x)]
+      exact hh
+    | bs S =>
+      rw [opaqCodec_p_bs] at hh ⊢
+      show decSet (opaqCodec m true) Attr.b S = some v
+      rw [← decSet_congr_p (opaqCodec m false) (opaqCodec m true) Attr.b S
+            (fun x => opaq_p_b_lossy m x)]
+      exact hh
+    | ns S =>
+      rw [opaqCodec_p_ns] at hh
+      rw [show (setCodec (opaqCodec m false)).p (.ns S)
+            = decSet (opaqCodec m false) Attr.n S from rfl,
+          decSet_none_of_refuse _ _ _ (opaq_p_num_false m)] at hh
+      exact nomatch hh
+    | l as =>
+      rw [opaqCodec_p_l] at hh ⊢
+      show ((traverse (opaqCodec m true).p as).map Value.arr) = some v
+      replace hh : ((traverse (opaqCodec m false).p as).map Value.arr) = some v := hh
+      obtain ⟨vs, hvs, rfl⟩ := Option.map_eq_some_iff.mp hh
+      rw [traverse_mono (fun x b hb => ihm x b hb) hvs]
+      rfl
+    | m keys f =>
+      rw [opaqCodec_p_m] at hh ⊢
+      show ((funImage (fun k => (opaqCodec m true).p (f k))).map (Value.map keys)) = some v
+      replace hh : ((funImage (fun k => (opaqCodec m false).p (f k))).map (Value.map keys))
+          = some v := hh
+      obtain ⟨g, hg, rfl⟩ := Option.map_eq_some_iff.mp hh
+      rw [funImage_mono (fun k b hb => ihm _ b hb) hg]
+      rfl
+
+/-- A body reads nothing that is not a map. -/
+theorem AdmABody_of_not_m {c : Body} {a : Attr} (h : ∀ keys g, a ≠ .m keys g) :
+    AdmABody c a = false := by
+  cases c with
+  | mk fields fld rest =>
+    cases a with
+    | m keys g => exact absurd rfl (h keys g)
+    | _ => rfl
+
+/-- The rows of a term list are as many as the terms. -/
+theorem AdmAList_length (ts : List Term) : (AdmAList ts).length = ts.length := by
+  induction ts with
+  | nil => rfl
+  | cons t ts ihx => simp only [AdmAList, List.length_cons, ihx]
+
+/-- A list reads under the meet exactly where it reads under both factors. -/
+theorem allPA_and {p q r : AP} (h : ∀ a, r a = (p a && q a)) (xs : List Attr) :
+    allPA r xs = (allPA p xs && allPA q xs) := by
+  induction xs with
+  | nil => simp [allPA]
+  | cons a as ihx => simp only [allPA, h, ihx]; cases p a <;> cases q a <;> simp
+
+/-- Two terms whose occupancies are disjoint share no attribute, so their conjunction is
+    the bottom. This closes every row that answers `never` because the two read different `Attr`
+    constructors. -/
+theorem AdmA_and_false {x y : Term} (h : Orth1 x y = true) (a : Attr) :
+    (AdmA x a && AdmA y a) = false := by
+  cases hx : AdmA x a with
+  | false => simp
+  | true =>
+    cases hy : AdmA y a with
+    | false => simp
+    | true =>
+      have h2 := occA_disjoint_of_Orth1 h (occA_sound x a hx)
+      rw [occA_sound y a hy] at h2
+      exact absurd h2 (by simp)
+
+/-- `opaque` reads an attribute exactly where its codec at that depth answers. -/
+theorem AdmA_opaq_eq (l : Bool) (a : Attr) :
+    AdmA (.opaq l) a = ((opaqCodec (Attr.depth a) l).p a).isSome := rfl
+
+/-- It reads every stored string, -/
+theorem AdmA_opaq_str (l : Bool) (s : String) : AdmA (.opaq l) (.s s) = true := by
+  rw [AdmA_opaq_eq, show Attr.depth (.s s) = 0 + 1 from rfl, opaqCodec_p_s]
+  simp [stringCodec]
+
+/-- …every stored boolean, -/
+theorem AdmA_opaq_bool (l : Bool) (b : Bool) : AdmA (.opaq l) (.bool b) = true := by
+  rw [AdmA_opaq_eq, show Attr.depth (.bool b) = 0 + 1 from rfl, opaqCodec_p_bool]
+  simp [booleanCodec]
+
+/-- …every stored byte string, -/
+theorem AdmA_opaq_bin (l : Bool) (b : Bytes) : AdmA (.opaq l) (.b b) = true := by
+  rw [AdmA_opaq_eq, show Attr.depth (.b b) = 0 + 1 from rfl, opaqCodec_p_b]
+  simp [binaryCodec]
+
+/-- …and the stored null, under either policy. -/
+theorem AdmA_opaq_null (l : Bool) : AdmA (.opaq l) .null = true := by
+  rw [AdmA_opaq_eq, show Attr.depth Attr.null = 0 + 1 from rfl, opaqCodec_p_null]
+  simp [nullCodec]
+
+-- the numeric read row, mirror of `Adm_opaq_num`
+/-- The numeral is the one row the policy decides: the refusing `opaque` reads none. -/
+theorem AdmA_opaq_num (l : Bool) (x : WFNumeral) :
+    AdmA (.opaq l) (.n x) = (l && ((numberCodec.p (.n x)).isSome)) := by
+  show ((opaqCodec (Attr.depth (.n x)) l).p (.n x)).isSome = _
+  rw [show Attr.depth (.n x) = 0 + 1 from rfl, opaqCodec_p_n]
+  cases l <;> simp [Codec.empty]
+
+/-- A tuple with no tail pins the length of the wire list it reads. -/
+theorem alignPA_none_length : ∀ {Ps : List AP} {as : List Attr},
+    alignPA Ps none as = true → as.length = Ps.length := by
+  intro Ps
+  induction Ps with
+  | nil => intro as h; cases as with
+    | nil => rfl
+    | cons _ _ => simp [alignPA] at h
+  | cons p Ps' ihp =>
+    intro as h
+    cases as with
+    | nil => simp [alignPA] at h
+    | cons w as' =>
+      simp only [alignPA, Bool.and_eq_true] at h
+      simp [ihp h.2]
+
+/-- A meet field's row and its codec, against one pair of terms. The two halves share the
+    witnesses, because `bodySem_p_congr` reads the codec at the field whose row the induction
+    hypothesis speaks about. -/
+theorem AdmAField_meet {f g fm : Field} (h : Field.meet f g = some fm) :
+    ∃ x y z, Term.meet x y = some z ∧
+      AdmAField f = AdmA x ∧ AdmAField g = AdmA y ∧ AdmAField fm = AdmA z ∧
+      (fieldSem f).codec = denote x ∧ (fieldSem g).codec = denote y ∧
+      (fieldSem fm).codec = denote z ∧
+      Field.depth f = Term.depth x + 1 ∧ Field.depth g = Term.depth y + 1 := by
+  cases f <;> cases g <;>
+    simp only [Field.meet, Option.map_eq_some_iff, Option.bind_eq_some_iff, reduceCtorEq,
+      false_and, exists_false] at h <;>
+    first
+      | (obtain ⟨tz, hz, rfl⟩ := h
+         exact ⟨_, _, tz, hz, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩)
+      | (obtain ⟨tz, hz, hfm⟩ := h
+         split at hfm
+         · exact absurd hfm (by simp)
+         · obtain rfl := Option.some.inj hfm
+           exact ⟨_, _, tz, hz, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩)
+
+/-- …and the same against a record's term, codec included. -/
+theorem AdmAField_meetT {f fm : Field} {y : Term} (h : Field.meetT f y = some fm) :
+    ∃ tx tz, Term.meet tx y = some tz ∧
+      AdmAField f = AdmA tx ∧ AdmAField fm = AdmA tz ∧
+      (fieldSem f).codec = denote tx ∧ (fieldSem fm).codec = denote tz ∧
+      Field.depth f = Term.depth tx + 1 := by
+  cases f <;>
+    simp only [Field.meetT, Option.map_eq_some_iff, reduceCtorEq] at h <;>
+    obtain ⟨tz, hz, rfl⟩ := h <;>
+    exact ⟨_, tz, hz, rfl, rfl, rfl, rfl, rfl⟩
+
+/-- An array against a tuple: every declared position and the tail meet the array's element
+    row, so the aligned answer is the conjunction. -/
+theorem alignPA_meet_all {P : AP} :
+    ∀ {Ps Qs : List AP}, List.Forall₂ (fun p q => ∀ a, q a = (p a && P a)) Ps Qs →
+    ∀ {pt qt : Option AP},
+      (pt = none ∧ qt = none) ∨
+        (∃ p q, pt = some p ∧ qt = some q ∧ ∀ a, q a = (p a && P a)) →
+    ∀ as, alignPA Qs qt as = (allPA P as && alignPA Ps pt as) := by
+  intro Ps Qs hPQ pt qt htl as
+  induction as generalizing Ps Qs with
+  | nil =>
+    cases hPQ with
+    | nil => rcases htl with ⟨rfl, rfl⟩ | ⟨p, q, rfl, rfl, _⟩ <;> simp [alignPA, allPA]
+    | cons _ _ => simp [alignPA, allPA]
+  | cons w as ihw =>
+    cases hPQ with
+    | nil =>
+      rcases htl with ⟨rfl, rfl⟩ | ⟨p, q, rfl, rfl, hpq⟩
+      · simp [alignPA, allPA]
+      · simp only [alignPA, allPA, hpq, ihw .nil]
+        simp [Bool.and_assoc, Bool.and_left_comm]
+    | cons hpq hrest =>
+      simp only [alignPA, allPA, hpq, ihw hrest]
+      simp [Bool.and_assoc, Bool.and_left_comm]
+
+/-- A tuple's positions, all met with one element term, lifted from the meet of the terms to
+    the meet of the rows. -/
+theorem AdmAList_forall₂ {a : Term} {n : Nat}
+    (ih : ∀ x y, Term.depth x + Term.depth y ≤ n → ∀ z, Term.meet x y = some z →
+          ∀ b, AdmA z b = (AdmA x b && AdmA y b)) :
+    ∀ {ts vs : List Term}, Term.depthL ts + Term.depth a ≤ n →
+      List.Forall₂ (fun t v => Term.meet t a = some v) ts vs →
+      List.Forall₂ (fun p q => ∀ b, q b = (p b && AdmA a b)) (AdmAList ts) (AdmAList vs) := by
+  intro ts
+  induction ts with
+  | nil => intro vs _ hts; cases hts; exact .nil
+  | cons t ts' ihx =>
+    intro vs hd hts
+    cases hts with
+    | cons hh hrest =>
+      have h1 : Term.depth t ≤ Term.depthL (t :: ts') := by simp [Term.depthL]
+      have h2 : Term.depthL ts' ≤ Term.depthL (t :: ts') := by simp [Term.depthL]
+      simp only [AdmAList]
+      exact .cons (ih t a (by omega) _ hh) (ihx (by omega) hrest)
+
+/-- A tail lifted from the meet of the terms to the meet of the rows. -/
+theorem tailMeetA_lift {a : Term} {n : Nat}
+    (ih : ∀ x y, Term.depth x + Term.depth y ≤ n → ∀ z, Term.meet x y = some z →
+          ∀ b, AdmA z b = (AdmA x b && AdmA y b))
+    {tail tl : Option Term}
+    (hb : ∀ t, tail = some t → Term.depth t + Term.depth a ≤ n)
+    (htl : (tail = none ∧ tl = none) ∨
+      ∃ t u, tail = some t ∧ tl = some u ∧ Term.meet t a = some u) :
+    (AdmAOptT tail = none ∧ AdmAOptT tl = none) ∨
+      ∃ p q, AdmAOptT tail = some p ∧ AdmAOptT tl = some q ∧
+        ∀ b, q b = (p b && AdmA a b) := by
+  rcases htl with ⟨rfl, rfl⟩ | ⟨t, u, rfl, rfl, hu⟩
+  · exact Or.inl ⟨rfl, rfl⟩
+  · exact Or.inr ⟨AdmA t, AdmA u, rfl, rfl, ih t a (hb t rfl) u hu⟩
+
+/-- Two tuples of one arity: the positions meet positionwise and the tails meet. -/
+theorem alignPA_meet_zip :
+    ∀ {Ps Qs Rs : List AP},
+      List.Forall₂ (fun (pq : AP × AP) r => ∀ a, r a = (pq.1 a && pq.2 a)) (Ps.zip Qs) Rs →
+      Ps.length = Qs.length →
+    ∀ {pt qt rt : Option AP},
+      ((pt = none ∧ qt = none ∧ rt = none) ∨
+        ∃ p q r, pt = some p ∧ qt = some q ∧ rt = some r ∧ ∀ a, r a = (p a && q a)) →
+    ∀ as, alignPA Rs rt as = (alignPA Ps pt as && alignPA Qs qt as) := by
+  intro Ps Qs Rs hF hlen pt qt rt htl as
+  induction as generalizing Ps Qs Rs with
+  | nil =>
+    cases Ps with
+    | nil =>
+      cases Qs with
+      | nil =>
+        cases hF
+        rcases htl with ⟨rfl, rfl, rfl⟩ | ⟨p, q, r, rfl, rfl, rfl, _⟩ <;> simp [alignPA]
+      | cons => simp only [List.length_nil, List.length_cons] at hlen; omega
+    | cons p Ps' =>
+      cases Qs with
+      | nil => simp only [List.length_nil, List.length_cons] at hlen; omega
+      | cons q Qs' =>
+        rw [List.zip_cons_cons] at hF
+        cases hF with
+        | cons _ _ => simp [alignPA]
+  | cons a as ihw =>
+    cases Ps with
+    | nil =>
+      cases Qs with
+      | nil =>
+        cases hF
+        rcases htl with ⟨rfl, rfl, rfl⟩ | ⟨p, q, r, rfl, rfl, rfl, hr⟩
+        · simp [alignPA]
+        · simp only [alignPA, hr, ihw (Ps := []) (Qs := []) .nil rfl]
+          simp [Bool.and_assoc, Bool.and_left_comm]
+      | cons => simp only [List.length_nil, List.length_cons] at hlen; omega
+    | cons p Ps' =>
+      cases Qs with
+      | nil => simp only [List.length_nil, List.length_cons] at hlen; omega
+      | cons q Qs' =>
+        rw [List.zip_cons_cons] at hF
+        cases hF with
+        | cons hr hrest =>
+          simp only [alignPA, hr, ihw hrest (by simpa using hlen)]
+          simp [Bool.and_assoc, Bool.and_left_comm]
+
+/-- Whether a field's name must be present for a READ. `fallback` reads to its stand-in, so it
+    need not be; `Field.isReq` is the write side's answer and counts it. -/
+def Field.isReqA : Field → Bool
+  | .req _ => true
+  | _ => false
+
+/-- `reqPresentT` in the form the object row uses: a declared name that must be read is
+    present. -/
+theorem reqPresentT_req (fields : Finset Name) (fld : {k // k ∈ fields} → Field)
+    (keys : Finset Name) :
+    reqPresentT fields fld keys
+      = decide (∀ k : {k // k ∈ fields}, Field.isReqA (fld k) = true → k.1 ∈ keys) := by
+  unfold reqPresentT
+  refine decide_eq_decide.mpr ⟨fun hh k hreq => ?_, fun hh k => ?_⟩
+  · have hk := hh k
+    cases hf : fld k with
+    | req t => rw [hf] at hk; exact of_decide_eq_true hk
+    | optional t => rw [hf] at hreq; exact absurd hreq (by simp [Field.isReqA])
+    | fallback t d => rw [hf] at hreq; exact absurd hreq (by simp [Field.isReqA])
+  · cases hf : fld k with
+    | req t => exact decide_eq_true (hh k (by rw [hf]; rfl))
+    | optional t => rfl
+    | fallback t d => rfl
+
+/-- The meet of two fields must be present for a read when either factor's must. The mark of
+    the meet is the stronger of the two, and `req` is the stronger. -/
+theorem isReqA_of_meet {f g fm : Field} (h : Field.meet f g = some fm) :
+    Field.isReqA fm = (Field.isReqA f || Field.isReqA g) := by
+  cases f <;> cases g <;>
+    simp only [Field.meet, Option.map_eq_some_iff, Option.bind_eq_some_iff, reduceCtorEq] at h <;>
+    first
+      | (obtain ⟨z, _, rfl⟩ := h; rfl)
+      | (obtain ⟨z, _, hfm⟩ := h
+         split at hfm
+         · exact absurd hfm (by simp)
+         · obtain rfl := Option.some.inj hfm; rfl)
+
+/-- …and the same at a shared name of two bodies. -/
+theorem isReqA_meetField {a b : Body} (hok : Body.meetOk a b = true)
+    (k : {k // k ∈ Body.shared a b}) :
+    Field.isReqA (Body.meetField a b k)
+      = (Field.isReqA (a.at ⟨k.1, Body.mem_shared_left k.2⟩)
+         || Field.isReqA (b.at ⟨k.1, Body.mem_shared_right k.2⟩)) := by
+  unfold Body.meetOk at hok
+  obtain ⟨fm, hfm⟩ := Option.isSome_iff_exists.mp (of_decide_eq_true hok k)
+  unfold Body.meetField
+  rw [hfm, Option.getD_some]
+  exact isReqA_of_meet hfm
+
+/-- The read side of the object row's presence test, and it is about the intersection only
+    because `Body.reqShared` holds both ways. -/
+theorem reqPresentT_meet {a b : Body} (hab : Body.reqShared a b = true)
+    (hba : Body.reqShared b a = true) (hok : Body.meetOk a b = true) (keys : Finset Name) :
+    reqPresentT (Body.shared a b) (fun k => Body.meetField a b k) keys
+      = (reqPresentT a.fields a.at keys && reqPresentT b.fields b.at keys) := by
+  rw [reqPresentT_req, reqPresentT_req, reqPresentT_req, Bool.eq_iff_iff]
+  simp only [Bool.and_eq_true, decide_eq_true_eq]
+  unfold Body.reqShared at hab hba
+  have hA := of_decide_eq_true hab
+  have hB := of_decide_eq_true hba
+  constructor
+  · intro hs
+    refine ⟨fun k hreq => ?_, fun k hreq => ?_⟩
+    · have hr : Field.isReq (a.at k) = true := by
+        cases hf : a.at k with
+        | req t => rfl
+        | optional t => rw [hf] at hreq; exact absurd hreq (by simp [Field.isReqA])
+        | fallback t d => rw [hf] at hreq; exact absurd hreq (by simp [Field.isReqA])
+      have hk : k.1 ∈ Body.shared a b := mem_shared_iff.mpr ⟨k.2, hA k hr⟩
+      refine hs ⟨k.1, hk⟩ ?_
+      rw [isReqA_meetField hok ⟨k.1, hk⟩, hreq, Bool.true_or]
+    · have hr : Field.isReq (b.at k) = true := by
+        cases hf : b.at k with
+        | req t => rfl
+        | optional t => rw [hf] at hreq; exact absurd hreq (by simp [Field.isReqA])
+        | fallback t d => rw [hf] at hreq; exact absurd hreq (by simp [Field.isReqA])
+      have hk : k.1 ∈ Body.shared a b := mem_shared_iff.mpr ⟨hB k hr, k.2⟩
+      refine hs ⟨k.1, hk⟩ ?_
+      rw [isReqA_meetField hok ⟨k.1, hk⟩, hreq, Bool.or_true]
+  · rintro ⟨hA', hB'⟩ k hreq
+    rw [isReqA_meetField hok k, Bool.or_eq_true] at hreq
+    rcases hreq with hr | hr
+    · exact hA' ⟨k.1, Body.mem_shared_left k.2⟩ hr
+    · exact hB' ⟨k.1, Body.mem_shared_right k.2⟩ hr
+
+/-- A quantified conjunction splits. The value side's twin takes `Bool` predicates; the read
+    side's rows are a `keepT` guard implying an entry, so the congruence has to be at `Prop`. -/
+theorem decide_forall_and_prop {α : Sort*} {P Q R : α → Prop}
+    [Decidable (∀ k, R k)] [Decidable (∀ k, P k)] [Decidable (∀ k, Q k)]
+    (h : ∀ k, (R k ↔ (P k ∧ Q k))) :
+    decide (∀ k, R k) = (decide (∀ k, P k) && decide (∀ k, Q k)) := by
+  simp only [h, forall_and]
+  simp
+
+/-- A name one body declares and the other does not forces the other to `refuse`: under
+    `drop` the certificate would have made the declared sets equal. -/
+theorem rest_refuse_of_dropFits {a b : Body} {r : Rest}
+    (hr : Rest.merge a.rest b.rest = some r) (hb : Body.dropFits b a = true)
+    {k : Name} (hka : k ∈ a.fields) (hkb : k ∉ b.fields) : b.rest = .refuse := by
+  unfold Body.dropFits at hb
+  cases hbr : b.rest with
+  | drop => rw [hbr] at hb; exact absurd (of_decide_eq_true hb k hka) hkb
+  | refuse => rfl
+  | codec t => rw [hbr] at hr; cases har : a.rest <;> rw [har] at hr <;> simp [Rest.merge] at hr
+
+/-- The merged rest is `drop` exactly where both are. -/
+theorem merge_eq_drop_iff {ra rb r : Rest} (hr : Rest.merge ra rb = some r) :
+    r = .drop ↔ (ra = .drop ∧ rb = .drop) := by
+  cases ra <;> cases rb <;> simp_all [Rest.merge]
+
+/-- `Rest.merge` reads its two policies alike. -/
+theorem merge_comm (ra rb : Rest) : Rest.merge ra rb = Rest.merge rb ra := by
+  cases ra <;> cases rb <;> rfl
+
+/-- A `refuse` on either side merges to `refuse`. -/
+theorem merge_refuse_of_left {ra rb r : Rest} (hr : Rest.merge ra rb = some r)
+    (h : rb = .refuse) : r = .refuse := by
+  cases ra <;> rw [h] at hr <;> simp_all [Rest.merge]
+
+/-- **The read side of the object row.** Where the value side needs only `AdmRest`, this needs
+    `keepT`, and `Body.dropFits` is what makes the three keep filters agree: a name outside the
+    intersection is one the other factor refuses, or one all three skip. -/
+theorem objAdmA_meet {a b : Body} {r : Rest}
+    (hr : Rest.merge a.rest b.rest = some r)
+    (hda : Body.dropFits a b = true) (hdb : Body.dropFits b a = true)
+    (ihf : ∀ (k : {k // k ∈ Body.shared a b}) (c : Attr),
+      AdmAField (Body.meetField a b k) c
+        = (AdmAField (a.at ⟨k.1, Body.mem_shared_left k.2⟩) c
+            && AdmAField (b.at ⟨k.1, Body.mem_shared_right k.2⟩) c))
+    (keys : Finset Name) (g : {k // k ∈ keys} → Attr) :
+    objAdmA ⟨Body.shared a b, fun k => AdmAField (Body.meetField a b k)⟩ (AdmARest r)
+        (keepT r (Body.shared a b)) keys g
+      = (objAdmA ⟨a.fields, fun k => AdmAField (a.at k)⟩ (AdmARest a.rest)
+           (keepT a.rest a.fields) keys g
+         && objAdmA ⟨b.fields, fun k => AdmAField (b.at k)⟩ (AdmARest b.rest)
+           (keepT b.rest b.fields) keys g) := by
+  have hnc : ∀ t, a.rest ≠ .codec t := by
+    intro t ht; rw [ht] at hr; simp [Rest.merge] at hr
+  have hnc' : ∀ t, b.rest ≠ .codec t := by
+    intro t ht; rw [ht] at hr; cases har : a.rest <;> rw [har] at hr <;> simp [Rest.merge] at hr
+  have hrestA : AdmARest a.rest = none := by
+    cases har : a.rest with
+    | drop => rfl | refuse => rfl | codec t => exact absurd har (hnc t)
+  have hrestB : AdmARest b.rest = none := by
+    cases hbr : b.rest with
+    | drop => rfl | refuse => rfl | codec t => exact absurd hbr (hnc' t)
+  have hrestR : AdmARest r = none := by
+    cases hrr : r with
+    | drop => rfl | refuse => rfl
+    | codec t =>
+      exfalso; cases har : a.rest <;> cases hbr : b.rest <;>
+        rw [har, hbr] at hr <;> simp [Rest.merge, hrr] at hr
+  simp only [objAdmA, entryPA, MapOf.at, hrestA, hrestB, hrestR]
+  refine decide_forall_and_prop (fun k => ?_)
+  by_cases hk : k.1 ∈ Body.shared a b
+  · have ha := Body.mem_shared_left hk
+    have hb := Body.mem_shared_right hk
+    have hkr : keepT r (Body.shared a b) k.1 = true := by
+      cases hrr : r with
+      | drop => simp [keepT, hk]
+      | refuse => rfl
+      | codec t => simp [keepT]
+    have hkA : keepT a.rest a.fields k.1 = true := by
+      cases har : a.rest with
+      | drop => simp [keepT, ha] | refuse => rfl | codec t => simp [keepT]
+    have hkB : keepT b.rest b.fields k.1 = true := by
+      cases hbr : b.rest with
+      | drop => simp [keepT, hb] | refuse => rfl | codec t => simp [keepT]
+    simp only [hkr, hkA, hkB, dif_pos hk, dif_pos ha, dif_pos hb, true_implies,
+      ihf ⟨k.1, hk⟩ (g k), Bool.and_eq_true]
+  · have hnab : ¬ (k.1 ∈ a.fields ∧ k.1 ∈ b.fields) := fun hh => hk (mem_shared_iff.mpr hh)
+    by_cases ha : k.1 ∈ a.fields
+    · have hb : k.1 ∉ b.fields := fun hh => hnab ⟨ha, hh⟩
+      have hbref : b.rest = .refuse := rest_refuse_of_dropFits hr hdb ha hb
+      have hrref : r = .refuse := merge_refuse_of_left hr hbref
+      simp only [hrref, hbref, keepT, dif_neg hk, dif_neg hb, true_implies]
+      simp
+    · by_cases hb : k.1 ∈ b.fields
+      · have hrc : Rest.merge b.rest a.rest = some r := by rw [merge_comm]; exact hr
+        have haref : a.rest = .refuse := rest_refuse_of_dropFits hrc hda hb ha
+        have hrref : r = .refuse := merge_refuse_of_left hrc haref
+        simp only [hrref, haref, keepT, dif_neg hk, dif_neg ha, true_implies]
+        simp
+      · cases har : a.rest with
+        | drop =>
+          cases hbr : b.rest with
+          | drop =>
+            have hrd : r = .drop := (merge_eq_drop_iff hr).mpr ⟨har, hbr⟩
+            simp only [hrd, keepT, decide_eq_true_eq]
+            simp [hk, ha, hb]
+          | refuse =>
+            have hrref : r = .refuse := merge_refuse_of_left hr hbr
+            simp only [hrref, keepT, dif_neg hk, dif_neg hb, true_implies]
+            simp
+          | codec t => exact absurd hbr (hnc' t)
+        | refuse =>
+          have hrref : r = .refuse :=
+            merge_refuse_of_left (by rw [merge_comm]; exact hr) har
+          simp only [hrref, keepT, dif_neg hk, dif_neg ha, true_implies]
+          simp
+        | codec t => exact absurd har (hnc t)
+
+/-- The two policies meet at their conjunction, which is what makes the `opaque` pair a row
+    rather than a refusal. -/
+theorem AdmA_opaq_and (l l2 : Bool) (a : Attr) :
+    AdmA (.opaq (l && l2)) a = (AdmA (.opaq l) a && AdmA (.opaq l2) a) := by
+  rw [AdmA_opaq_eq, AdmA_opaq_eq, AdmA_opaq_eq]
+  cases hf : (opaqCodec (Attr.depth a) false).p a with
+  | none => cases l <;> cases l2 <;> simp [hf]
+  | some v =>
+    have ht := opaq_p_mono _ a v hf
+    cases l <;> cases l2 <;> simp [hf, ht]
+
+/-- A surviving `fallback` cell holds something, so a meet field at the bottom is a `req` one. -/
+theorem isReq_req_of_isBottom {a b : Body} (hok : Body.meetOk a b = true)
+    (k : {k // k ∈ Body.shared a b}) (hbot : Field.isBottom (Body.meetField a b k) = true) :
+    ∃ t, Body.meetField a b k = .req t := by
+  unfold Body.meetOk at hok
+  obtain ⟨fm, hfm⟩ := Option.isSome_iff_exists.mp (of_decide_eq_true hok k)
+  unfold Body.meetField at hbot ⊢
+  rw [hfm, Option.getD_some] at hbot ⊢
+  cases hf : fm with
+  | req t => exact ⟨t, rfl⟩
+  | optional t => rw [hf] at hbot; exact absurd hbot (by simp [Field.isBottom])
+  | fallback t d =>
+      exfalso
+      rw [hf] at hbot
+      have ht : t = .never := eq_never_of_isNever (by simpa [Field.isBottom] using hbot)
+      subst ht
+      revert hfm
+      rw [hf]
+      cases a.at ⟨k.1, Body.mem_shared_left k.2⟩ <;>
+        cases b.at ⟨k.1, Body.mem_shared_right k.2⟩ <;>
+        simp only [Field.meet, Option.map_eq_some_iff, Option.bind_eq_some_iff, reduceCtorEq] <;>
+        (try simp)
+
+/-- A declared name that must be read is a name the map carries. -/
+theorem mem_keys_of_req {fields : Finset Name} {fld : {k // k ∈ fields} → Field}
+    {keys : Finset Name} (hv : reqPresentT fields fld keys = true) {k : {k // k ∈ fields}}
+    (hf : Field.isReqA (fld k) = true) : k.1 ∈ keys := by
+  have hh := of_decide_eq_true hv k
+  cases hfd : fld k with
+  | req t => rw [hfd] at hh; exact of_decide_eq_true hh
+  | optional t => rw [hfd] at hf; exact absurd hf (by simp [Field.isReqA])
+  | fallback t d => rw [hfd] at hf; exact absurd hf (by simp [Field.isReqA])
+
+/-- A declared name passes the keep filter under every rest, because `drop` keeps exactly the
+    declared names. A shared name is declared by both bodies, so the object rows need no
+    hypothesis about the filter. -/
+theorem keepT_of_mem {rest : Rest} {fields : Finset Name} {k : Name} (h : k ∈ fields) :
+    keepT rest fields k = true := by
+  cases rest <;> simp [keepT, h]
+
+/-- The read-side twin: no shared field meets to the bottom at an attribute both bodies read. -/
+theorem isBottom_false_of_admA {a b : Body}
+    (ihf : ∀ (k : {k // k ∈ Body.shared a b}) (c : Attr),
+      AdmAField (Body.meetField a b k) c
+        = (AdmAField (a.at ⟨k.1, Body.mem_shared_left k.2⟩) c
+            && AdmAField (b.at ⟨k.1, Body.mem_shared_right k.2⟩) c))
+    (hok : Body.meetOk a b = true) {keys : Finset Name} {g : {k // k ∈ keys} → Attr}
+    (hA : AdmABody a (.m keys g) = true) (hB : AdmABody b (.m keys g) = true) :
+    ∀ k, Field.isBottom (Body.meetField a b k) = false := by
+  rw [AdmABody_map, Bool.and_eq_true] at hA hB
+  intro k
+  refine Bool.eq_false_iff.mpr (fun hbot => ?_)
+  have ha := Body.mem_shared_left k.2
+  have hb := Body.mem_shared_right k.2
+  obtain ⟨t, hreqf⟩ := isReq_req_of_isBottom hok k hbot
+  have hreq : Field.isReqA (Body.meetField a b k) = true := by rw [hreqf]; rfl
+  rw [isReqA_meetField hok k, Bool.or_eq_true] at hreq
+  have hk : k.1 ∈ keys := by
+    rcases hreq with hr | hr
+    · exact mem_keys_of_req hA.1 (k := ⟨k.1, ha⟩) hr
+    · exact mem_keys_of_req hB.1 (k := ⟨k.1, hb⟩) hr
+  have hrowA := objAdmA_row hA.2 hk ha (keepT_of_mem ha)
+  have hrowB := objAdmA_row hB.2 hk hb (keepT_of_mem hb)
+  have := ihf k (g ⟨k.1, hk⟩)
+  rw [hreqf] at this
+  simp only [AdmAField, hrowA, hrowB] at this
+  rw [show t = Term.never from eq_never_of_isNever (by simpa [hreqf, Field.isBottom] using hbot)] at this
+  simp [AdmA] at this
+
+/-- The read side's required-name test, against the guards the meet reads first. A `fallback`
+    name is shared, because `Body.fbShared` holds; a `req` name is present, because the read side
+    forces it, and the partner declares every name it reads. -/
+theorem reqShared_of_admA {a b : Body} {r : Rest}
+    (hr : Rest.merge a.rest b.rest = some r)
+    (hfb : Body.fbShared a b = true) (hdb : Body.dropFits b a = true)
+    {keys : Finset Name} {g : {k // k ∈ keys} → Attr}
+    (hA : AdmABody a (.m keys g) = true) (hB : AdmABody b (.m keys g) = true) :
+    Body.reqShared a b = true := by
+  refine decide_eq_true (fun k hreq => ?_)
+  cases hf : a.at k with
+  | fallback t d => exact of_decide_eq_true hfb k (by rw [hf]; rfl)
+  | optional t => rw [hf] at hreq; exact absurd hreq (by simp [Field.isReq])
+  | req t =>
+      have hpres : k.1 ∈ keys := by
+        rw [AdmABody_map, Bool.and_eq_true] at hA
+        exact mem_keys_of_req hA.1 (by rw [hf]; rfl)
+      cases hbr : b.rest with
+      | refuse => exact mem_fields_of_admA hbr hB k.1 hpres
+      | drop =>
+          unfold Body.dropFits at hdb
+          rw [hbr] at hdb
+          exact of_decide_eq_true hdb k.1 k.2
+      | codec t => rw [hbr] at hr; cases har : a.rest <;> rw [har] at hr <;> simp [Rest.merge] at hr
+
+/-- `Field.meetT` keeps the read side's mark, because it refuses a `fallback` outright. -/
+theorem isReqA_of_meetT {f fm : Field} {y : Term} (h : Field.meetT f y = some fm) :
+    Field.isReqA fm = Field.isReqA f := by
+  cases f <;>
+    simp only [Field.meetT, Option.map_eq_some_iff, reduceCtorEq] at h <;>
+    obtain ⟨tz, _, rfl⟩ := h <;> rfl
+
+/-- The read side's presence test survives the meet with a record's term. -/
+theorem reqPresentT_meetRec {b : Body} {x : Term} (hok : Body.meetRecOk b x = true)
+    (keys : Finset Name) :
+    reqPresentT b.fields (fun k => Body.meetRecField b x k) keys
+      = reqPresentT b.fields b.at keys := by
+  rw [reqPresentT_req, reqPresentT_req]
+  unfold Body.meetRecOk at hok
+  refine decide_eq_decide.mpr (forall_congr' fun k => ?_)
+  obtain ⟨fm, hfm⟩ := Option.isSome_iff_exists.mp (of_decide_eq_true hok k)
+  unfold Body.meetRecField
+  rw [hfm, Option.getD_some, isReqA_of_meetT hfm]
+
+/-- …and every kept entry goes through its field and the record's term alike. The rest is a
+    codec here, so `keepT` is constantly true and the two sides filter the same names. -/
+theorem objAdmA_meetRec {b : Body} {x t r : Term} (hrest : b.rest = .codec t)
+    (ihf : ∀ (k : {k // k ∈ b.fields}) (c : Attr),
+      AdmAField (Body.meetRecField b x k) c = (AdmAField (b.at k) c && AdmA x c))
+    (iht : ∀ c, AdmA r c = (AdmA t c && AdmA x c))
+    (keys : Finset Name) (g : {k // k ∈ keys} → Attr) :
+    objAdmA ⟨b.fields, fun k => AdmAField (Body.meetRecField b x k)⟩ (some (AdmA r))
+        (keepT (.codec r) b.fields) keys g
+      = (objAdmA ⟨b.fields, fun k => AdmAField (b.at k)⟩ (some (AdmA t))
+           (keepT b.rest b.fields) keys g
+         && decide (∀ k : {k // k ∈ keys}, AdmA x (g k) = true)) := by
+  simp only [objAdmA, entryPA, MapOf.at, hrest, keepT, true_implies]
+  refine decide_forall_and (fun k => ?_)
+  by_cases hk : k.1 ∈ b.fields
+  · simp only [dif_pos hk]
+    exact ihf ⟨k.1, hk⟩ (g k)
+  · simp only [dif_neg hk]
+    exact iht (g k)
+
+/-- A field at the bottom reads nothing either. -/
+theorem AdmAField_of_isBottom {f : Field} (h : Field.isBottom f = true) (c : Attr) :
+    AdmAField f c = false := by
+  cases f with
+  | req t => rw [show t = .never from eq_never_of_isNever h]; rfl
+  | fallback t d => rw [show t = .never from eq_never_of_isNever h]; rfl
+  | optional t => exact absurd h (by simp [Field.isBottom])
+
+/-- `Field.meetT` never answers a `fallback`: it refuses one outright. -/
+theorem meetT_not_fallback {f fm : Field} {y : Term} (h : Field.meetT f y = some fm)
+    {t : Term} {d : Value} : fm ≠ .fallback t d := by
+  cases f <;>
+    simp only [Field.meetT, Option.map_eq_some_iff, reduceCtorEq] at h <;>
+    obtain ⟨z, _, rfl⟩ := h <;> simp
+
+/-- No declared field meets the record's term to the bottom at an attribute both read. -/
+theorem isBottom_false_of_admARec {b : Body} {x : Term} (hok : Body.meetRecOk b x = true)
+    (ihf : ∀ (k : {k // k ∈ b.fields}) (c : Attr),
+      AdmAField (Body.meetRecField b x k) c = (AdmAField (b.at k) c && AdmA x c))
+    {keys : Finset Name} {g : {k // k ∈ keys} → Attr}
+    (hA : AdmABody b (.m keys g) = true)
+    (hR : decide (∀ k : {k // k ∈ keys}, AdmA x (g k) = true) = true) :
+    ∀ k, Field.isBottom (Body.meetRecField b x k) = false := by
+  rw [AdmABody_map, Bool.and_eq_true] at hA
+  intro k
+  refine Bool.eq_false_iff.mpr (fun hbot => ?_)
+  have hisreq : Field.isReqA (Body.meetRecField b x k) = Field.isReqA (b.at k) := by
+    unfold Body.meetRecOk at hok
+    obtain ⟨fm, hfm⟩ := Option.isSome_iff_exists.mp (of_decide_eq_true hok k)
+    unfold Body.meetRecField
+    rw [hfm, Option.getD_some]
+    exact isReqA_of_meetT hfm
+  have hbotA : Field.isReqA (Body.meetRecField b x k) = true := by
+    unfold Body.meetRecOk at hok
+    obtain ⟨fm, hfm⟩ := Option.isSome_iff_exists.mp (of_decide_eq_true hok k)
+    have heq : Body.meetRecField b x k = fm := by
+      unfold Body.meetRecField; rw [hfm, Option.getD_some]
+    rw [heq] at hbot ⊢
+    cases hfd : fm with
+    | req t => rfl
+    | optional t => rw [hfd] at hbot; exact absurd hbot (by simp [Field.isBottom])
+    | fallback t d => exact absurd hfd (meetT_not_fallback hfm)
+  have hk : k.1 ∈ keys := mem_keys_of_req hA.1 (hisreq ▸ hbotA)
+  have hrow := objAdmA_row hA.2 hk k.2 (keepT_of_mem k.2)
+  have hrec := of_decide_eq_true hR ⟨k.1, hk⟩
+  have := ihf k (g ⟨k.1, hk⟩)
+  rw [AdmAField_of_isBottom hbot, hrow, hrec] at this
+  exact absurd this (by simp)
+
+
+/-- Where a literal reads, its base reads the same value: `literalCodec` is `baseCodec`
+    restricted, and `Codec.restrict`'s `p` returns the base's own value where the guard passes. -/
+theorem literal_p_base {k : GroundKind} {x : k.Carrier} {a : Attr} {v : Value}
+    (h : (literalCodec k x).p a = some v) : (baseCodec k).p a = some v := by
+  rw [literalCodec_p_restrict] at h
+  simp only [Codec.restrict] at h
+  cases hb : (baseCodec k).p a with
+  | none => rw [hb] at h; simp at h
+  | some w => rw [hb] at h; simp only [Option.bind] at h; split at h <;> simp_all
+
+/-- Where a literal reads, its base reads it to the same value. -/
+theorem literal_denote_agree {k : GroundKind} {x : k.Carrier} {a : Attr}
+    (h : AdmA (Term.literal k x) a = true) :
+    (denote (Term.literal k x)).p a = (baseCodec k).p a := by
+  obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp ((AdmA_exact _ a).mp h)
+  rw [hw, literal_p_base (show (literalCodec k x).p a = some w from hw)]
+
+/-- Where a literal reads, its base reads: the literal's codec is the base's restricted. -/
+theorem AdmA_base_of_literal {k : GroundKind} {x : k.Carrier} {bt : Term} {a : Attr}
+    (hb : denote bt = baseCodec k) (h : AdmA (Term.literal k x) a = true) :
+    AdmA bt a = true := by
+  refine (AdmA_exact bt a).mpr ?_
+  rw [hb]
+  obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp ((AdmA_exact _ a).mp h)
+  rw [literal_p_base (show (literalCodec k x).p a = some w from hw)]
+  rfl
+
+/-- A literal's guard, read off a successful read: mirror of `literal_p_base`. -/
+theorem literal_inL {k : GroundKind} {x : k.Carrier} {a : Attr} {v : Value}
+    (h : (literalCodec k x).p a = some v) : inL k x v = true := by
+  rw [literalCodec_p_restrict] at h
+  simp only [Codec.restrict] at h
+  cases hb : (baseCodec k).p a with
+  | none => rw [hb] at h; simp at h
+  | some w => rw [hb] at h; simp only [Option.bind] at h; split at h <;> simp_all
+
+/-- One base's guard names one inhabitant. -/
+theorem inL_inj {k : GroundKind} {x y : k.Carrier} {v : Value}
+    (hx : inL k x v = true) (hy : inL k y v = true) : x = y := by
+  cases k <;> cases v <;> simp_all [inL] <;>
+    first
+      | rfl
+      | (obtain ⟨_, rfl⟩ := hx; obtain ⟨_, rfl⟩ := hy; rfl)
+
+/-- **Two literals at one base and two values read nothing together.** Simp on `AdmALit` and
+    `inL` does not reach the `decimal` and `number` rows; exactness does. -/
+theorem AdmALit_never_of_ne {k : GroundKind} {x y : k.Carrier} (hne : ¬ (x = y)) (a : Attr) :
+    AdmA (.never : Term) a = (AdmA (Term.literal k x) a && AdmA (Term.literal k y) a) := by
+  cases hx : AdmA (Term.literal k x) a with
+  | false => simp [AdmA]
+  | true =>
+      cases hy : AdmA (Term.literal k y) a with
+      | false => simp [AdmA]
+      | true =>
+          exfalso
+          obtain ⟨v, hv⟩ := Option.isSome_iff_exists.mp ((AdmA_exact _ a).mp hx)
+          obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp ((AdmA_exact _ a).mp hy)
+          have hbx := literal_p_base (show (literalCodec k x).p a = some v from hv)
+          have hby := literal_p_base (show (literalCodec k y).p a = some w from hw)
+          have hvw : v = w := Option.some.inj (hbx.symm.trans hby)
+          subst hvw
+          exact hne (inL_inj (literal_inL (show (literalCodec k x).p a = some v from hv))
+            (literal_inL (show (literalCodec k y).p a = some v from hw)))
+
+/-- Every row that answers the bottom owes only its first half: the second is vacuous, because
+    the first says no attribute is read by both factors. -/
+theorem bottom_row {x y : Term}
+    (h1 : ∀ a : Attr, AdmA (.never : Term) a = (AdmA x a && AdmA y a)) :
+    (∀ a : Attr, AdmA (.never : Term) a = (AdmA x a && AdmA y a)) ∧
+    (∀ a : Attr, AdmA x a = true → AdmA y a = true →
+      (denote (.never : Term)).p a = (denote x).p a ∧
+      (denote (.never : Term)).p a = (denote y).p a) :=
+  ⟨h1, fun a ha hb => absurd (h1 a) (by rw [ha, hb]; simp [AdmA])⟩
+
+
+/-- A traversal is a congruence in its element function, at the entries it visits. -/
+theorem traverse_congr {α β : Type} {f g : α → Option β} :
+    ∀ {xs : List α}, (∀ x ∈ xs, f x = g x) → traverse f xs = traverse g xs := by
+  intro xs
+  induction xs with
+  | nil => intro _; rfl
+  | cons x xs ihx =>
+      intro hh
+      rw [traverse_cons, traverse_cons, hh x (by simp),
+        ihx (fun y hy => hh y (by simp [hy]))]
+
+/-- `allPA` holds at each attribute it quantifies over. -/
+theorem allPA_mem {P : AP} : ∀ {as : List Attr}, allPA P as = true → ∀ a ∈ as, P a = true := by
+  intro as
+  induction as with
+  | nil => intro _ a ha; exact absurd ha (by simp)
+  | cons b bs ihx =>
+      intro hh a ha
+      rw [allPA, Bool.and_eq_true] at hh
+      rcases List.mem_cons.mp ha with rfl | ha'
+      · exact hh.1
+      · exact ihx hh.2 a ha'
+
+/-- **The `array` congruence.** Element codecs that agree at every attribute the wire list
+    carries read that list to the same value. -/
+theorem arrayCodec_p_congr {c d : Codec} {as : List Attr} (hh : ∀ a ∈ as, c.p a = d.p a) :
+    (arrayCodec c).p (.l as) = (arrayCodec d).p (.l as) := by
+  show (traverse c.p as).map Value.arr = (traverse d.p as).map Value.arr
+  rw [traverse_congr hh]
+
+/-- **The `record` congruence.** The name set is the index, so the entry function is the only
+    thing to compare. -/
+theorem recordCodec_p_congr {c d : Codec} {keys : Finset Name} {g : {k // k ∈ keys} → Attr}
+    (hh : ∀ k, c.p (g k) = d.p (g k)) :
+    (recordCodec c).p (.m keys g) = (recordCodec d).p (.m keys g) := by
+  show (funImage (fun k => c.p (g k))).map (Value.map keys)
+      = (funImage (fun k => d.p (g k))).map (Value.map keys)
+  rw [funext hh]
+
+
+/-- `opaque` reads a self-identifying attribute exactly as the base for that attribute does. -/
+theorem opaq_p_string (l : Bool) (s : String) :
+    (denote (.opaq l)).p (.s s) = (denote (.string : Term)).p (.s s) := opaqCodec_p_s l 0 s
+
+/-- …a stored boolean as `boolean` does, -/
+theorem opaq_p_boolean (l : Bool) (b : Bool) :
+    (denote (.opaq l)).p (.bool b) = (denote (.boolean : Term)).p (.bool b) :=
+  opaqCodec_p_bool l 0 b
+
+/-- …stored bytes as `binary` does, -/
+theorem opaq_p_binary (l : Bool) (b : Bytes) :
+    (denote (.opaq l)).p (.b b) = (denote (.binary : Term)).p (.b b) := opaqCodec_p_b l 0 b
+
+/-- …and the stored null as `null` does. -/
+theorem opaq_p_null (l : Bool) :
+    (denote (.opaq l)).p .null = (denote (.null : Term)).p .null := opaqCodec_p_null l 0
+
+/-- …and the lossy one reads a stored numeral as `number` does. The refusing one reads none,
+    which is why the `number` row answers the bottom there. -/
+theorem opaq_p_number (x : WFNumeral) :
+    (denote (.opaq true)).p (.n x) = (denote (.number : Term)).p (.n x) := by
+  rw [show (denote (.opaq true)).p (.n x) = (opaqCodec (0 + 1) true).p (.n x) from rfl,
+    opaqCodec_p_n]
+  rfl
+
+/-- `number`'s read row is its codec's domain, said as an equation so the `opaque` rows can
+    conjoin the two. -/
+theorem AdmA_number_eq (x : WFNumeral) :
+    AdmA (.number : Term) (.n x) = (numberCodec.p (.n x)).isSome := by
+  show (match Double.ofDec x.1 with | some d => Numeral.WF d.toDec | none => false) = _
+  cases hd : Double.ofDec x.1 with
+  | none => simp [numberCodec, hd]
+  | some d => cases hw : Numeral.WF d.toDec <;> simp [numberCodec, hd, hw]
+
+/-- The refusing `opaque` is below the lossy one, so where the refusing one admits, the two
+    read the same value. -/
+theorem opaq_p_lossy {l : Bool} {a : Attr} (hh : AdmA (.opaq false) a = true) :
+    (denote (.opaq l)).p a = (denote (.opaq false)).p a := by
+  cases l with
+  | false => rfl
+  | true =>
+      rw [AdmA_opaq_eq] at hh
+      obtain ⟨v, hv⟩ := Option.isSome_iff_exists.mp hh
+      show (opaqCodec (Attr.depth a) true).p a = _
+      rw [opaq_p_mono _ a v hv]
+      exact hv.symm
+
+/-- A declared position that holds nothing empties the tuple: every wire list the tuple
+    reads fills each declared position. -/
+theorem alignPA_never_false : ∀ {ts : List Term} {tail : Option Term} {ws : List Attr},
+    ts.any Term.isNever = true → alignPA (AdmAList ts) (AdmAOptT tail) ws = false := by
+  intro ts
+  induction ts with
+  | nil => intro _ _ h; simp at h
+  | cons t ts' ih =>
+    intro tail ws h
+    cases ws with
+    | nil => rfl
+    | cons w ws' =>
+      simp only [List.any_cons, Bool.or_eq_true] at h
+      simp only [AdmAList, alignPA]
+      rcases h with ht | hrest
+      · rw [show t = Term.never from eq_never_of_isNever ht, show AdmA .never _ = false from rfl, Bool.false_and]
+      · rw [ih (tail := tail) (ws := ws') hrest, Bool.and_false]
+
+
+/-- Normalising a tuple keeps what it reads. -/
+theorem AdmA_tupleOf (ts : List Term) (tail : Option Term) (v : Attr) :
+    AdmA (Term.tupleOf ts tail) v = AdmA (.tuple ts tail) v := by
+  unfold Term.tupleOf
+  split
+  next hany =>
+    cases v <;> simp only [AdmA] <;> try rfl
+    exact (alignPA_never_false hany).symm
+  next => rfl
+
+
+/-- Two tuples of one arity, lifted position by position from the meet of the terms to the
+    meet of the rows. -/
+theorem AdmAList_forall₂_zip {n : Nat}
+    (ih : ∀ x y, Term.depth x + Term.depth y ≤ n → ∀ z, Term.meet x y = some z →
+          ∀ w, AdmA z w = (AdmA x w && AdmA y w)) :
+    ∀ {ts us vs : List Term}, Term.depthL ts + Term.depthL us ≤ n →
+      List.Forall₂ (fun (p : Term × Term) v => Term.meet p.1 p.2 = some v) (ts.zip us) vs →
+      List.Forall₂ (fun (pq : AP × AP) r => ∀ w, r w = (pq.1 w && pq.2 w))
+        ((AdmAList ts).zip (AdmAList us)) (AdmAList vs) := by
+  intro ts
+  induction ts with
+  | nil =>
+    intro us vs _ hF
+    rw [List.zip_nil_left] at hF
+    cases hF
+    simp only [AdmAList, List.zip_nil_left]
+    exact .nil
+  | cons t ts' ihx =>
+    intro us vs hd hF
+    cases us with
+    | nil =>
+      rw [List.zip_nil_right] at hF
+      cases hF
+      simp only [AdmAList, List.zip_nil_right]
+      exact .nil
+    | cons u us' =>
+      rw [List.zip_cons_cons] at hF
+      cases hF with
+      | cons hh hrest =>
+        have h1 : Term.depth t ≤ Term.depthL (t :: ts') := by simp [Term.depthL]
+        have h2 : Term.depthL ts' ≤ Term.depthL (t :: ts') := by simp [Term.depthL]
+        have h3 : Term.depth u ≤ Term.depthL (u :: us') := by simp [Term.depthL]
+        have h4 : Term.depthL us' ≤ Term.depthL (u :: us') := by simp [Term.depthL]
+        simp only [AdmAList, List.zip_cons_cons]
+        exact .cons (ih t u (by omega) _ hh) (ihx (by omega) hrest)
+
+
+/-- …and their two tails, lifted the same way. -/
+theorem tailMeetA_lift2 {n : Nat}
+    (ih : ∀ x y, Term.depth x + Term.depth y ≤ n → ∀ z, Term.meet x y = some z →
+          ∀ w, AdmA z w = (AdmA x w && AdmA y w))
+    {tail tail' tl : Option Term}
+    (hb : ∀ t u, tail = some t → tail' = some u → Term.depth t + Term.depth u ≤ n)
+    (htl : (tail = none ∧ tail' = none ∧ tl = none) ∨
+      ∃ t u w, tail = some t ∧ tail' = some u ∧ tl = some w ∧ Term.meet t u = some w) :
+    (AdmAOptT tail = none ∧ AdmAOptT tail' = none ∧ AdmAOptT tl = none) ∨
+      ∃ p q r, AdmAOptT tail = some p ∧ AdmAOptT tail' = some q ∧ AdmAOptT tl = some r ∧
+        ∀ w, r w = (p w && q w) := by
+  rcases htl with ⟨rfl, rfl, rfl⟩ | ⟨t, u, w, rfl, rfl, rfl, hw⟩
+  · exact Or.inl ⟨rfl, rfl, rfl⟩
+  · exact Or.inr ⟨AdmA t, AdmA u, AdmA w, rfl, rfl, rfl, ih t u (hb t u rfl rfl) w hw⟩
+
+
+/-- A term that admits an attribute is not the bottom. -/
+theorem not_isNever_of_admA {t : Term} {b : Attr} (hh : AdmA t b = true) : t.isNever = false := by
+  cases t <;> first | rfl | exact absurd hh (by simp [AdmA])
+
+/-- A wire list a tuple aligns leaves no declared position at the bottom, so the normalised
+    tuple is the tuple. -/
+theorem alignPA_not_never : ∀ {vs : List Term} {tl : Option Term} {as : List Attr},
+    alignPA (AdmAList vs) (AdmAOptT tl) as = true → vs.any Term.isNever = false := by
+  intro vs
+  induction vs with
+  | nil => intro _ _ _; rfl
+  | cons v vs' ihv =>
+      intro tl as hh
+      cases as with
+      | nil => exact absurd hh (by simp [AdmAList, alignPA])
+      | cons b as' =>
+          simp only [AdmAList, alignPA, Bool.and_eq_true] at hh
+          simp only [List.any_cons, Bool.or_eq_false_iff]
+          exact ⟨not_isNever_of_admA hh.1, ihv hh.2⟩
+
+/-- A tuple that reads a wire list is already normal. -/
+theorem tupleOf_eq_tuple {vs : List Term} {tl : Option Term} {as : List Attr}
+    (hh : alignPA (AdmAList vs) (AdmAOptT tl) as = true) :
+    Term.tupleOf vs tl = .tuple vs tl := if_neg (by rw [alignPA_not_never hh]; simp)
+
+/-- The aligned traversal, one declared position at a time. -/
+theorem align_traverse_cons {c : Codec} {cs : List Codec} {tc : Option Codec} {b : Attr}
+    {as : List Attr} :
+    (align (c :: cs) tc (b :: as)).bind (traverse fun ca => ca.1.p ca.2)
+      = (c.p b).bind fun y =>
+          ((align cs tc as).bind (traverse fun ca => ca.1.p ca.2)).map (y :: ·) := by
+  simp only [align]
+  cases align cs tc as <;> simp [traverse_cons]
+
+/-- …and one tail position at a time. -/
+theorem align_traverse_tail_cons {c : Codec} {b : Attr} {as : List Attr} :
+    (align [] (some c) (b :: as)).bind (traverse fun ca => ca.1.p ca.2)
+      = (c.p b).bind fun y =>
+          ((align [] (some c) as).bind (traverse fun ca => ca.1.p ca.2)).map (y :: ·) := by
+  simp only [align]
+  cases align ([] : List Codec) (some c) as <;> simp [traverse_cons]
+
+/-- **The `tuple` congruence.** At a wire list the met row aligns, two tuples whose positions
+    read alike wherever the met row admits read the whole list alike. -/
+theorem align_p_congr : ∀ {as : List Attr} {vs ts : List Term} {tl tail : Option Term},
+    alignPA (AdmAList vs) (AdmAOptT tl) as = true →
+    List.Forall₂ (fun v t => ∀ b, AdmA v b = true → (denote v).p b = (denote t).p b) vs ts →
+    ((tl = none ∧ tail = none) ∨
+      ∃ u t, tl = some u ∧ tail = some t ∧
+        ∀ b, AdmA u b = true → (denote u).p b = (denote t).p b) →
+    (align (denoteList vs) (denoteOpt tl) as).bind (traverse fun ca => ca.1.p ca.2)
+      = (align (denoteList ts) (denoteOpt tail) as).bind (traverse fun ca => ca.1.p ca.2) := by
+  intro as
+  induction as with
+  | nil =>
+      intro vs ts tl tail hal hF _
+      cases hF with
+      | nil => rcases tl with _ | u <;> rcases tail with _ | t <;> rfl
+      | cons _ _ => exact absurd hal (by simp [AdmAList, alignPA])
+  | cons b as' ihx =>
+      intro vs ts tl tail hal hF htl
+      cases hF with
+      | nil =>
+          rcases htl with ⟨rfl, rfl⟩ | ⟨u, t, rfl, rfl, hu⟩
+          · exact absurd hal (by simp [AdmAList, AdmAOptT, alignPA])
+          · simp only [AdmAList, AdmAOptT, alignPA, Bool.and_eq_true] at hal
+            have hrec := ihx (vs := []) (ts := []) (tl := some u) (tail := some t) hal.2 .nil
+              (Or.inr ⟨u, t, rfl, rfl, hu⟩)
+            simp only [denoteList, denoteOpt] at hrec
+            simp only [denoteList, denoteOpt, align_traverse_tail_cons, hrec, hu b hal.1]
+      | cons hvt hrest =>
+          rename_i v vs' t ts'
+          simp only [AdmAList, alignPA, Bool.and_eq_true] at hal
+          simp only [denoteList, align_traverse_cons,
+            ihx hal.2 hrest htl, hvt b hal.1]
+
+/-- **The `array` half of the same congruence**: a met tuple against the array it was met with. -/
+theorem align_p_congr_array : ∀ {as : List Attr} {vs : List Term} {tl : Option Term} {e : Term},
+    alignPA (AdmAList vs) (AdmAOptT tl) as = true →
+    (∀ v ∈ vs, ∀ b, AdmA v b = true → (denote v).p b = (denote e).p b) →
+    (∀ u ∈ tl, ∀ b, AdmA u b = true → (denote u).p b = (denote e).p b) →
+    (align (denoteList vs) (denoteOpt tl) as).bind (traverse fun ca => ca.1.p ca.2)
+      = traverse (denote e).p as := by
+  intro as
+  induction as with
+  | nil =>
+      intro vs tl e hal _ _
+      cases vs with
+      | nil => rcases tl with _ | u <;> rfl
+      | cons _ _ => exact absurd hal (by simp [AdmAList, alignPA])
+  | cons b as' ihx =>
+      intro vs tl e hal hvs htl
+      cases vs with
+      | nil =>
+          cases tl with
+          | none => exact absurd hal (by simp [AdmAList, AdmAOptT, alignPA])
+          | some u =>
+              simp only [AdmAList, AdmAOptT, alignPA, Bool.and_eq_true] at hal
+              have hu := htl u (by simp)
+              have hrec := ihx (vs := []) (tl := some u) (e := e) hal.2 (by simp) htl
+              simp only [denoteList, denoteOpt] at hrec
+              simp only [denoteList, denoteOpt, align_traverse_tail_cons, traverse_cons,
+                hrec, hu b hal.1]
+      | cons v vs' =>
+          simp only [AdmAList, alignPA, Bool.and_eq_true] at hal
+          simp only [denoteList, align_traverse_cons, traverse_cons,
+            ihx hal.2 (fun w hw => hvs w (by simp [hw])) htl,
+            hvs v (by simp) b hal.1]
+
+/-- Where the meet admits, the meet reads what both factors read. -/
+theorem denote_agree_of_meet {n : Nat}
+    (ihA : ∀ x y, Term.depth x + Term.depth y ≤ n → ∀ z, Term.meet x y = some z →
+        ∀ b, AdmA z b = (AdmA x b && AdmA y b))
+    (ihP : ∀ x y, Term.depth x + Term.depth y ≤ n → ∀ z, Term.meet x y = some z →
+        ∀ b, AdmA x b = true → AdmA y b = true →
+          (denote z).p b = (denote x).p b ∧ (denote z).p b = (denote y).p b)
+    {x y z : Term} (hd : Term.depth x + Term.depth y ≤ n) (hz : Term.meet x y = some z)
+    (b : Attr) (hb : AdmA z b = true) :
+    (denote z).p b = (denote x).p b ∧ (denote z).p b = (denote y).p b := by
+  rw [ihA x y hd z hz b, Bool.and_eq_true] at hb
+  exact ihP x y hd z hz b hb.1 hb.2
+
+
+section Lifts
+variable {n : Nat}
+  (ihA : ∀ x y, Term.depth x + Term.depth y ≤ n → ∀ z, Term.meet x y = some z →
+      ∀ b, AdmA z b = (AdmA x b && AdmA y b))
+  (ihP : ∀ x y, Term.depth x + Term.depth y ≤ n → ∀ z, Term.meet x y = some z →
+      ∀ b, AdmA x b = true → AdmA y b = true →
+        (denote z).p b = (denote x).p b ∧ (denote z).p b = (denote y).p b)
+
+include ihA ihP
+
+/-- A tuple's positions, all met with one element term: the reading agreement against the
+    tuple and against the element. -/
+theorem denoteList_agree_all {e : Term} :
+    ∀ {ts vs : List Term}, Term.depthL ts + Term.depth e ≤ n →
+      List.Forall₂ (fun t v => Term.meet t e = some v) ts vs →
+      List.Forall₂ (fun v t => ∀ b, AdmA v b = true → (denote v).p b = (denote t).p b) vs ts
+        ∧ (∀ v ∈ vs, ∀ b, AdmA v b = true → (denote v).p b = (denote e).p b) := by
+  intro ts
+  induction ts with
+  | nil => intro vs _ hts; cases hts; exact ⟨.nil, by simp⟩
+  | cons t ts' ihx =>
+      intro vs hd hts
+      cases hts with
+      | cons hh hrest =>
+          rename_i v vs'
+          have h1 : Term.depth t ≤ Term.depthL (t :: ts') := by simp [Term.depthL]
+          have h2 : Term.depthL ts' ≤ Term.depthL (t :: ts') := by simp [Term.depthL]
+          obtain ⟨hr1, hr2⟩ := ihx (vs := vs') (by omega) hrest
+          refine ⟨.cons (fun b hb =>
+            (denote_agree_of_meet ihA ihP (by omega) hh b hb).1) hr1, ?_⟩
+          intro w hw b hb
+          rcases List.mem_cons.mp hw with rfl | hw'
+          · exact (denote_agree_of_meet ihA ihP (by omega) hh b hb).2
+          · exact hr2 w hw' b hb
+
+/-- Two tuples of one arity, met position by position. -/
+theorem denoteList_agree_zip :
+    ∀ {ts us vs : List Term}, Term.depthL ts + Term.depthL us ≤ n → ts.length = us.length →
+      List.Forall₂ (fun (p : Term × Term) v => Term.meet p.1 p.2 = some v) (ts.zip us) vs →
+      List.Forall₂ (fun v t => ∀ b, AdmA v b = true → (denote v).p b = (denote t).p b) vs ts
+        ∧ List.Forall₂ (fun v u => ∀ b, AdmA v b = true →
+            (denote v).p b = (denote u).p b) vs us := by
+  intro ts
+  induction ts with
+  | nil =>
+      intro us vs _ hlen hF
+      cases us with
+      | nil => rw [List.zip_nil_left] at hF; cases hF; exact ⟨.nil, .nil⟩
+      | cons => exact absurd hlen (by simp only [List.length_nil, List.length_cons]; omega)
+  | cons t ts' ihx =>
+      intro us vs hd hlen hF
+      cases us with
+      | nil => exact absurd hlen (by simp only [List.length_nil, List.length_cons]; omega)
+      | cons u us' =>
+          rw [List.zip_cons_cons] at hF
+          cases hF with
+          | cons hh hrest =>
+              have h1 : Term.depth t ≤ Term.depthL (t :: ts') := by simp [Term.depthL]
+              have h2 : Term.depthL ts' ≤ Term.depthL (t :: ts') := by simp [Term.depthL]
+              have h3 : Term.depth u ≤ Term.depthL (u :: us') := by simp [Term.depthL]
+              have h4 : Term.depthL us' ≤ Term.depthL (u :: us') := by simp [Term.depthL]
+              obtain ⟨hr1, hr2⟩ :=
+                ihx (us := us') (by omega) (by simp only [List.length_cons] at hlen; omega) hrest
+              exact ⟨.cons (fun b hb =>
+                       (denote_agree_of_meet ihA ihP (x := t) (y := u) (by omega) hh b hb).1) hr1,
+                     .cons (fun b hb =>
+                       (denote_agree_of_meet ihA ihP (x := t) (y := u) (by omega) hh b hb).2) hr2⟩
+
+/-- The tail of a tuple met with an element term. -/
+theorem tailMeetA_agree {e : Term} {tail tl : Option Term}
+    (hb : ∀ t, tail = some t → Term.depth t + Term.depth e ≤ n)
+    (htl : (tail = none ∧ tl = none) ∨
+      ∃ t u, tail = some t ∧ tl = some u ∧ Term.meet t e = some u) :
+    ((tl = none ∧ tail = none) ∨
+      ∃ u t, tl = some u ∧ tail = some t ∧
+        ∀ b, AdmA u b = true → (denote u).p b = (denote t).p b)
+    ∧ (∀ u ∈ tl, ∀ b, AdmA u b = true → (denote u).p b = (denote e).p b) := by
+  rcases htl with ⟨rfl, rfl⟩ | ⟨t, u, rfl, rfl, hu⟩
+  · exact ⟨Or.inl ⟨rfl, rfl⟩, by simp⟩
+  · refine ⟨Or.inr ⟨u, t, rfl, rfl, fun b hbb =>
+      (denote_agree_of_meet ihA ihP (hb t rfl) hu b hbb).1⟩, ?_⟩
+    intro w hw b hbb
+    rw [Option.mem_def, Option.some.injEq] at hw
+    subst hw
+    exact (denote_agree_of_meet ihA ihP (hb t rfl) hu b hbb).2
+
+/-- Two tuples' tails, met with each other. -/
+theorem tailMeetA_agree2 {tail tail' tl : Option Term}
+    (hb : ∀ t u, tail = some t → tail' = some u → Term.depth t + Term.depth u ≤ n)
+    (htl : (tail = none ∧ tail' = none ∧ tl = none) ∨
+      ∃ t u w, tail = some t ∧ tail' = some u ∧ tl = some w ∧ Term.meet t u = some w) :
+    ((tl = none ∧ tail = none) ∨ ∃ u t, tl = some u ∧ tail = some t ∧
+        ∀ b, AdmA u b = true → (denote u).p b = (denote t).p b)
+    ∧ ((tl = none ∧ tail' = none) ∨ ∃ u t, tl = some u ∧ tail' = some t ∧
+        ∀ b, AdmA u b = true → (denote u).p b = (denote t).p b) := by
+  rcases htl with ⟨rfl, rfl, rfl⟩ | ⟨t, u, w, rfl, rfl, rfl, hw⟩
+  · exact ⟨Or.inl ⟨rfl, rfl⟩, Or.inl ⟨rfl, rfl⟩⟩
+  · exact ⟨Or.inr ⟨w, t, rfl, rfl, fun b hbb =>
+             (denote_agree_of_meet ihA ihP (hb t u rfl rfl) hw b hbb).1⟩,
+           Or.inr ⟨w, u, rfl, rfl, fun b hbb =>
+             (denote_agree_of_meet ihA ihP (hb t u rfl rfl) hw b hbb).2⟩⟩
+
+end Lifts
+
+
+/-- Normalising a refinement keeps what it reads. -/
+theorem AdmA_refineOf (z : Term) (p : Pred) (a : Attr) :
+    AdmA (Term.refineOf z p) a = AdmA (.refine z p) a := by
+  unfold Term.refineOf
+  split
+  next hz => rw [show z = Term.never from eq_never_of_isNever hz]; simp [AdmA, refineReads]
+  next => rfl
+
+/-- Normalising a refinement changes no reading at an attribute the inner term admits. -/
+theorem refineOf_p {w : Term} {p : Pred} {a : Attr} (hw : AdmA w a = true) :
+    (denote (Term.refineOf w p)).p a
+      = ((denote w).p a).bind (fun v => if p.eval v then some v else none) := by
+  rw [show Term.refineOf w p = .refine w p from
+    if_neg (by rw [not_isNever_of_admA hw]; simp)]
+  rfl
+
+/-- A refinement's gate reads the inner term, so terms that read alike gate alike. -/
+theorem refineReads_congr {t u : Term} {q : Value → Bool} {a : Attr}
+    (hh : (denote t).p a = (denote u).p a) : refineReads t q a = refineReads u q a := by
+  simp only [refineReads, hh]
+
+/-- **The refinement row, with the refinement on the left.** The predicate is data, so it rides
+    on the meet of the inner terms; the reading agreement is what makes the gate agree. -/
+theorem refine_row_l {x y w : Term} {p : Pred}
+    (ih1 : ∀ b, AdmA w b = (AdmA x b && AdmA y b))
+    (ih2 : ∀ b, AdmA x b = true → AdmA y b = true →
+      (denote w).p b = (denote x).p b ∧ (denote w).p b = (denote y).p b) :
+    (∀ a, AdmA (Term.refineOf w p) a = (AdmA (.refine x p) a && AdmA y a)) ∧
+    (∀ a, AdmA (.refine x p) a = true → AdmA y a = true →
+      (denote (Term.refineOf w p)).p a = (denote (.refine x p)).p a ∧
+      (denote (Term.refineOf w p)).p a = (denote y).p a) := by
+  constructor
+  · intro a
+    rw [AdmA_refineOf]
+    show (AdmA w a && refineReads w p.eval a) = ((AdmA x a && refineReads x p.eval a) && AdmA y a)
+    cases hw : AdmA w a with
+    | false =>
+        rw [ih1 a, Bool.and_eq_false_iff] at hw
+        rcases hw with hx | hy
+        · rw [hx]; simp
+        · rw [hy]; simp
+    | true =>
+        have hxy := ih1 a
+        rw [hw] at hxy
+        have hx : AdmA x a = true := (Bool.and_eq_true .. ▸ hxy.symm : _).1
+        have hy : AdmA y a = true := (Bool.and_eq_true .. ▸ hxy.symm : _).2
+        rw [refineReads_congr (ih2 a hx hy).1, hx, hy]
+        simp
+  · intro a ha hb
+    rw [show AdmA (.refine x p) a = (AdmA x a && refineReads x p.eval a) from rfl,
+      Bool.and_eq_true] at ha
+    obtain ⟨hx, hr⟩ := ha
+    have hw : AdmA w a = true := by rw [ih1 a, hx, hb]; rfl
+    obtain ⟨hd1, hd2⟩ := ih2 a hx hb
+    cases hp : (denote x).p a with
+    | none => rw [refineReads_none hp] at hr; exact absurd hr (by simp)
+    | some v =>
+        rw [refineReads_some hp] at hr
+        have hwv : (denote w).p a = some v := hd1.trans hp
+        have hyv : (denote y).p a = some v := hd2.symm.trans hwv
+        refine ⟨?_, ?_⟩
+        · rw [refineOf_p hw, hwv,
+            show (denote (.refine x p)).p a
+              = ((denote x).p a).bind (fun u => if p.eval u then some u else none) from rfl, hp]
+        · simp [refineOf_p hw, hwv, hyv, hr]
+
+/-- …and with the refinement on the right. -/
+theorem refine_row_r {x y w : Term} {p : Pred}
+    (ih1 : ∀ b, AdmA w b = (AdmA x b && AdmA y b))
+    (ih2 : ∀ b, AdmA x b = true → AdmA y b = true →
+      (denote w).p b = (denote x).p b ∧ (denote w).p b = (denote y).p b) :
+    (∀ a, AdmA (Term.refineOf w p) a = (AdmA x a && AdmA (.refine y p) a)) ∧
+    (∀ a, AdmA x a = true → AdmA (.refine y p) a = true →
+      (denote (Term.refineOf w p)).p a = (denote x).p a ∧
+      (denote (Term.refineOf w p)).p a = (denote (.refine y p)).p a) := by
+  constructor
+  · intro a
+    rw [AdmA_refineOf]
+    show (AdmA w a && refineReads w p.eval a) = (AdmA x a && (AdmA y a && refineReads y p.eval a))
+    cases hw : AdmA w a with
+    | false =>
+        rw [ih1 a, Bool.and_eq_false_iff] at hw
+        rcases hw with hx | hy
+        · rw [hx]; simp
+        · rw [hy]; simp
+    | true =>
+        have hxy := ih1 a
+        rw [hw] at hxy
+        have hx : AdmA x a = true := (Bool.and_eq_true .. ▸ hxy.symm : _).1
+        have hy : AdmA y a = true := (Bool.and_eq_true .. ▸ hxy.symm : _).2
+        rw [refineReads_congr (ih2 a hx hy).2, hx, hy]
+        simp
+  · intro a ha hb
+    rw [show AdmA (.refine y p) a = (AdmA y a && refineReads y p.eval a) from rfl,
+      Bool.and_eq_true] at hb
+    obtain ⟨hy, hr⟩ := hb
+    have hw : AdmA w a = true := by rw [ih1 a, ha, hy]; rfl
+    obtain ⟨hd1, hd2⟩ := ih2 a ha hy
+    cases hp : (denote y).p a with
+    | none => rw [refineReads_none hp] at hr; exact absurd hr (by simp)
+    | some v =>
+        rw [refineReads_some hp] at hr
+        have hwv : (denote w).p a = some v := hd2.trans hp
+        have hxv : (denote x).p a = some v := hd1.symm.trans hwv
+        refine ⟨?_, ?_⟩
+        · simp [refineOf_p hw, hwv, hxv, hr]
+        · rw [refineOf_p hw, hwv,
+            show (denote (.refine y p)).p a
+              = ((denote y).p a).bind (fun u => if p.eval u then some u else none) from rfl, hp]
+
+
+/-- The options that survive are the ones that read; the bottoms read nothing. -/
+theorem AdmAAny_filter_never : ∀ (ts : List Term) (v : Attr),
+    AdmAAny (ts.filter (fun z => !z.isNever)) v = AdmAAny ts v
+  | [], _ => rfl
+  | t :: ts, v => by
+      cases ht : t.isNever with
+      | true =>
+        have htn : t = Term.never := eq_never_of_isNever ht
+        subst htn
+        rw [List.filter_cons, if_neg (by simp [Term.isNever]), AdmAAny_cons,
+          AdmAAny_filter_never ts v]
+        rfl
+      | false =>
+        rw [List.filter_cons, if_pos (by simp [ht]), AdmAAny_cons, AdmAAny_cons,
+          AdmAAny_filter_never ts v]
+
+
+/-- A certified list of survivors reads what its options read. -/
+theorem AdmA_ofOptions {ts : List Term} (hc : unionOk ts = true) (v : Attr) :
+    AdmA (Term.ofOptions ts) v = AdmAAny ts v := by
+  match ts with
+  | [] => rfl
+  | [t] => simp only [Term.ofOptions, AdmAAny_cons, AdmAAny_nil, Bool.or_false]
+  | _ :: _ :: _ => exact selOptA_eq_AdmAAny hc v
+
+
+/-- The join over the met options is the join over the options, met with the partner. -/
+theorem AdmAAny_meet {y : Term} (v : Attr) : ∀ {os zs : List Term},
+    List.Forall₂ (fun t w => ∀ u, AdmA w u = (AdmA t u && AdmA y u)) os zs →
+    AdmAAny zs v = (AdmAAny os v && AdmA y v) := by
+  intro os zs h
+  induction h with
+  | nil => simp
+  | cons hh _ ihx =>
+    rw [AdmAAny_cons, AdmAAny_cons, hh v, ihx]
+    cases AdmA _ v <;> cases AdmA y v <;> simp
+
+
+/-- A union's options, lifted from the meet of the terms to the meet of the rows. -/
+theorem forall₂_liftA {y : Term} {n : Nat}
+    (ih : ∀ x y, Term.depth x + Term.depth y ≤ n → ∀ z, Term.meet x y = some z →
+          ∀ w, AdmA z w = (AdmA x w && AdmA y w)) :
+    ∀ {os zs : List Term}, Term.depthL os + Term.depth y ≤ n →
+      List.Forall₂ (fun t w => Term.meet t y = some w) os zs →
+      List.Forall₂ (fun t w => ∀ u, AdmA w u = (AdmA t u && AdmA y u)) os zs := by
+  intro os
+  induction os with
+  | nil => intro zs _ h; cases h; exact .nil
+  | cons t os' ihx =>
+    intro zs hd h
+    cases h with
+    | cons hh hrest =>
+      have h1 : Term.depth t ≤ Term.depthL (t :: os') := by simp [Term.depthL]
+      have h2 : Term.depthL os' ≤ Term.depthL (t :: os') := by simp [Term.depthL]
+      exact .cons (ih t y (by omega) _ hh) (ihx (by omega) hrest)
+
+
+/-- A `Forall₂` relates every left element to some right one. -/
+theorem forall₂_mem_left {α β : Type} {R : α → β → Prop} :
+    ∀ {as : List α} {bs : List β}, List.Forall₂ R as bs → ∀ {x}, x ∈ as → ∃ y ∈ bs, R x y
+  | _, _, .nil, _, hx => by simp at hx
+  | _, _, .cons hr hrest, x, hx => by
+      rcases List.mem_cons.mp hx with rfl | hx'
+      · exact ⟨_, List.mem_cons_self, hr⟩
+      · obtain ⟨y, hy, hry⟩ := forall₂_mem_left hrest hx'
+        exact ⟨y, List.mem_cons_of_mem _ hy, hry⟩
+
+/-- **Under the certificate a term's read row is its structural test.** Lifted out of
+    `selOptA_eq_AdmAAny`, which needs it in this form and states it inline. -/
+theorem admitOptA_of_AdmA {os : List Term} (hc : unionOk os = true) {t : Term} (ht : t ∈ os)
+    {a : Attr} (hh : AdmA t a = true) : admitOptA (specOf t, AdmA t) a = true := by
+  simp only [unionOk, Bool.and_eq_true, List.all_eq_true] at hc
+  cases t with
+  | object b =>
+      obtain ⟨hr, hnf⟩ := namesAgree_parts (hc.2 _ ht)
+      cases a with
+      | m keys g => simpa only [admitOptA, specOf] using structural_of_AdmABody hr hnf hh
+      | _ => exact absurd hh (by cases b; simp [AdmA, AdmABody])
+  | _ => exact hh
+
+/-- Where the row answers, exactly one option passes the structural test, and its row is true
+    there. This is `selOptA`'s own `match`, read backwards. -/
+theorem filter_eq_singleton_of_selOptA {ts : List Term} {a : Attr}
+    (hh : selOptA (AdmASpecs ts) a = true) :
+    ∃ t, ts.filter (fun u => admitOptA (specOf u, AdmA u) a) = [t] ∧ AdmA t a = true := by
+  rw [selOptA, AdmASpecs_eq, filter_map_AdmASpecs] at hh
+  cases hL : ts.filter (fun u => admitOptA (specOf u, AdmA u) a) with
+  | nil => rw [hL] at hh; simp at hh
+  | cons t rest =>
+      cases rest with
+      | nil => exact ⟨t, rfl, by rw [hL] at hh; simpa using hh⟩
+      | cons _ _ => rw [hL] at hh; simp at hh
+
+/-- **A union reads through the one option that admits.** `select` answers only at a singleton
+    filter, and `filter_AdmASpecs` is that filter in the term list's own terms. -/
+theorem union_p_of_filter {ts : List Term} {t : Term} {a : Attr}
+    (hf : ts.filter (fun u => admitOptA (specOf u, AdmA u) a) = [t]) :
+    (denote (.union ts)).p a = (denote t).p a := by
+  rw [denote_union_sems]
+  show select (optionSems ts) (·.admitA) (·.c.p) a = _
+  unfold select
+  rw [filter_AdmASpecs (fun u _ => AdmA_exact u) a, hf]
+  simp [optionSemOf_c]
+
+/-- …and so does a list of survivors, whatever its length. -/
+theorem ofOptions_p_of_filter {ts : List Term} {t : Term} {a : Attr}
+    (hf : ts.filter (fun u => admitOptA (specOf u, AdmA u) a) = [t]) :
+    (denote (Term.ofOptions ts)).p a = (denote t).p a := by
+  match ts with
+  | [] => simp at hf
+  | [s] =>
+      rw [List.filter_cons] at hf
+      split at hf
+      · rw [show Term.ofOptions [s] = s from rfl]
+        simp only [List.filter_nil, List.cons.injEq] at hf
+        rw [hf.1]
+      · simp at hf
+  | _ :: _ :: _ => exact union_p_of_filter hf
+
+/-- Both halves of the induction hypothesis, lifted option by option. -/
+theorem forall₂_liftB {y : Term} {n : Nat}
+    (ih : ∀ x y, Term.depth x + Term.depth y ≤ n → ∀ z, Term.meet x y = some z →
+      (∀ b, AdmA z b = (AdmA x b && AdmA y b)) ∧
+      (∀ b, AdmA x b = true → AdmA y b = true →
+        (denote z).p b = (denote x).p b ∧ (denote z).p b = (denote y).p b)) :
+    ∀ {os zs : List Term}, Term.depthL os + Term.depth y ≤ n →
+      List.Forall₂ (fun t w => Term.meet t y = some w) os zs →
+      List.Forall₂ (fun t w =>
+        (∀ b, AdmA w b = (AdmA t b && AdmA y b)) ∧
+        (∀ b, AdmA t b = true → AdmA y b = true →
+          (denote w).p b = (denote t).p b ∧ (denote w).p b = (denote y).p b)) os zs := by
+  intro os
+  induction os with
+  | nil => intro zs _ hh; cases hh; exact .nil
+  | cons t os' ihx =>
+      intro zs hd hh
+      cases hh with
+      | cons h1 hrest =>
+          have b1 : Term.depth t ≤ Term.depthL (t :: os') := by simp [Term.depthL]
+          have b2 : Term.depthL os' ≤ Term.depthL (t :: os') := by simp [Term.depthL]
+          exact .cons (ih t y (by omega) _ h1) (ihx (by omega) hrest)
+
+/-- **The guard, read backwards.** Both lists carry the certificate where the meet answers at a
+    union. The output test is not redundant: `unionOk` constrains the options and says nothing
+    about the partner, and the row `.record x, .object b` answers an OPEN object, so a certified
+    list of options can meet to an uncertified list of survivors. `Term.ofOptionsGuarded` states
+    the same fact on its own definition. -/
+theorem unionOk_of_ofOptionsGuarded {os ts : List Term} {z : Term}
+    (hh : Term.ofOptionsGuarded os ts = some z) : unionOk os = true ∧ unionOk ts = true := by
+  unfold Term.ofOptionsGuarded at hh
+  split at hh
+  · next hg => simpa using hg
+  · exact absurd hh (by simp)
+
+
+
+/-- The two guards `Body.meetTerm` passes before it answers an object, read back off the answer.
+    `meet_object_object` does not expose them and the congruences need both. -/
+theorem meet_object_guards {a b : Body} {z : Term}
+    (h : Term.meet (.object a) (.object b) = some z) :
+    Body.fbShared a b = true ∧ Body.fbShared b a = true ∧
+      Body.dropFits a b = true ∧ Body.dropFits b a = true := by
+  rw [Term.meet.eq_def] at h
+  simp only [] at h
+  unfold Body.meetTerm at h
+  split at h
+  · split at h
+    · next hfb =>
+        split at h
+        · next hdf =>
+            rw [Bool.and_eq_true] at hfb hdf
+            exact ⟨hfb.1, hfb.2, hdf.1, hdf.2⟩
+        · exact absurd h (by simp)
+    · exact absurd h (by simp)
+  · exact absurd h (by simp)
+
+/-- No meet field is a `fallback` since the `optional` cell refuses, so a meet body declares no
+    stand-in and reads exactly the names its map carries. -/
+theorem meet_not_fallback {f g fm : Field} (h : Field.meet f g = some fm) :
+    ∀ t d, fm ≠ .fallback t d := by
+  cases f <;> cases g <;>
+    simp_all [Field.meet, Option.map_eq_some_iff] <;>
+    (obtain ⟨w, _, rfl⟩ := h; simp)
+
+/-- `Field.meetT` refuses a `fallback` outright, so no field of a record meet is one. -/
+theorem meetT_not_fallback' {f fm : Field} {y : Term} (h : Field.meetT f y = some fm) :
+    ∀ t d, fm ≠ .fallback t d := by
+  cases f <;> simp_all [Field.meetT, Option.map_eq_some_iff] <;>
+    (obtain ⟨w, _, rfl⟩ := h; simp)
+
+/-- A meet body declares no stand-in: since `optional` against `fallback` refuses, no
+    `Field.meet` row answers a `fallback` at all. -/
+theorem fbNames_meet_empty {a b : Body} (hok : Body.meetOk a b = true) (names : Finset Name) :
+    fbNames names ⟨Body.shared a b, fun k => fieldSem (Body.meetField a b k)⟩ = ∅ := by
+  rw [fbNames]
+  refine filter_eq_empty_on (fun k hk => ?_)
+  rw [Body.meetOk] at hok
+  obtain ⟨fm, hfm⟩ := Option.isSome_iff_exists.mp (of_decide_eq_true hok ⟨k, hk⟩)
+  have hnf := meet_not_fallback hfm
+  rw [Bool.and_eq_false_iff]
+  refine Or.inl ?_
+  rw [MapOf.at_mk_pos hk]
+  rw [Body.meetField, hfm, Option.getD_some]
+  cases fm with
+  | req _ => rfl
+  | optional _ => rfl
+  | fallback t d => exact absurd rfl (hnf t d)
+
+
+
+/-- **A record's partner declares no stand-in at all.** `Field.meetT` refuses a `fallback`
+    outright, so `Body.meetRecOk` holds only where the object declares none, and the meet body
+    declares none either. -/
+theorem fbNames_meetRec_empty {b : Body} {x : Term} (hok : Body.meetRecOk b x = true)
+    (names : Finset Name) :
+    fbNames names ⟨b.fields, fun k => fieldSem (b.at k)⟩ = ∅ ∧
+      fbNames names ⟨b.fields, fun k => fieldSem (Body.meetRecField b x k)⟩ = ∅ := by
+  rw [Body.meetRecOk] at hok
+  constructor <;>
+    (rw [fbNames]; refine filter_eq_empty_on (fun k hk => ?_)
+     obtain ⟨fm, hfm⟩ := Option.isSome_iff_exists.mp (of_decide_eq_true hok ⟨k, hk⟩)
+     rw [Bool.and_eq_false_iff]
+     refine Or.inl ?_)
+  · rw [MapOf.at_mk_pos hk]
+    cases hf : b.at ⟨k, hk⟩ with
+    | req _ => rfl
+    | optional _ => rfl
+    | fallback t d => rw [hf] at hfm; simp [Field.meetT] at hfm
+  · rw [MapOf.at_mk_pos hk, Body.meetRecField, hfm, Option.getD_some]
+    cases hf : fm with
+    | req _ => rfl
+    | optional _ => rfl
+    | fallback t d => exact absurd hf (meetT_not_fallback hfm)
+
+/-- **A factor declares no stand-in the map omits.** A `fallback` field survives `Field.meet`
+    only against a `req` one, and the partner's `reqPresentT` then forces the name present. So the
+    stand-in never enters the factor's reading at a map both factors admit. -/
+theorem fbNames_factor_empty {a b : Body} (hok : Body.meetOk a b = true)
+    (hfb : Body.fbShared a b = true)
+    {keys : Finset Name} {g : {k // k ∈ keys} → Attr}
+    (hB : AdmA (.object b) (.m keys g) = true) :
+    fbNames keys ⟨a.fields, fun k => fieldSem (a.at k)⟩ = ∅ := by
+  have hreqB : reqPresentT b.fields b.at keys = true := by
+    rw [AdmA_object b (.m keys g), AdmABody_map,
+      Bool.and_eq_true] at hB
+    exact hB.1
+  rw [Body.meetOk] at hok
+  rw [fbNames]
+  refine filter_eq_empty_on (fun k hk => ?_)
+  rw [Bool.and_eq_false_iff,
+    MapOf.at_mk_pos (f := fun k => fieldSem (a.at k)) hk]
+  cases hf : a.at ⟨k, hk⟩ with
+  | req _ => exact Or.inl rfl
+  | optional _ => exact Or.inl rfl
+  | fallback t d =>
+      refine Or.inr ?_
+      have hkb : k ∈ b.fields := of_decide_eq_true hfb ⟨k, hk⟩ (by rw [hf]; rfl)
+      have hks : k ∈ Body.shared a b := Finset.mem_filter.mpr ⟨hk, hkb⟩
+      obtain ⟨fm, hfm⟩ := Option.isSome_iff_exists.mp (of_decide_eq_true hok ⟨k, hks⟩)
+      have hba : b.at ⟨k, Body.mem_shared_right hks⟩ = b.at ⟨k, hkb⟩ := rfl
+      have hab : a.at ⟨k, Body.mem_shared_left hks⟩ = a.at ⟨k, hk⟩ := rfl
+      rw [hab, hf, hba] at hfm
+      have hisreq : ∃ u, b.at ⟨k, hkb⟩ = .req u := by
+        cases hb : b.at ⟨k, hkb⟩ with
+        | req u => exact ⟨u, rfl⟩
+        | optional _ => rw [hb] at hfm; simp [Field.meet] at hfm
+        | fallback _ _ => rw [hb] at hfm; simp [Field.meet] at hfm
+      obtain ⟨u, hu⟩ := hisreq
+      have := of_decide_eq_true hreqB ⟨k, hkb⟩
+      rw [hu] at this
+      simp [this]
+
+/-- …and the same for the right factor. `Body.meetOk` reads the pair in one order, so the
+    mirror inspects the left field rather than the right one, and the duplication stays. -/
+theorem fbNames_factor_empty' {a b : Body} (hok : Body.meetOk a b = true)
+    (hfb : Body.fbShared b a = true)
+    {keys : Finset Name} {g : {k // k ∈ keys} → Attr}
+    (hA : AdmA (.object a) (.m keys g) = true) :
+    fbNames keys ⟨b.fields, fun k => fieldSem (b.at k)⟩ = ∅ := by
+  have hreqA : reqPresentT a.fields a.at keys = true := by
+    rw [AdmA_object a (.m keys g), AdmABody_map,
+      Bool.and_eq_true] at hA
+    exact hA.1
+  rw [Body.meetOk] at hok
+  rw [fbNames]
+  refine filter_eq_empty_on (fun k hk => ?_)
+  rw [Bool.and_eq_false_iff,
+    MapOf.at_mk_pos (f := fun k => fieldSem (b.at k)) hk]
+  cases hf : b.at ⟨k, hk⟩ with
+  | req _ => exact Or.inl rfl
+  | optional _ => exact Or.inl rfl
+  | fallback t d =>
+      refine Or.inr ?_
+      have hka : k ∈ a.fields := of_decide_eq_true hfb ⟨k, hk⟩ (by rw [hf]; rfl)
+      have hks : k ∈ Body.shared a b := Finset.mem_filter.mpr ⟨hka, by simpa using hk⟩
+      obtain ⟨fm, hfm⟩ := Option.isSome_iff_exists.mp (of_decide_eq_true hok ⟨k, hks⟩)
+      have hba : b.at ⟨k, Body.mem_shared_right hks⟩ = b.at ⟨k, hk⟩ := rfl
+      have hab : a.at ⟨k, Body.mem_shared_left hks⟩ = a.at ⟨k, hka⟩ := rfl
+      rw [hab, hba, hf] at hfm
+      have hisreq : ∃ u, a.at ⟨k, hka⟩ = .req u := by
+        cases ha : a.at ⟨k, hka⟩ with
+        | req u => exact ⟨u, rfl⟩
+        | optional _ => rw [ha] at hfm; simp [Field.meet] at hfm
+        | fallback _ _ => rw [ha] at hfm; simp [Field.meet] at hfm
+      obtain ⟨u, hu⟩ := hisreq
+      have := of_decide_eq_true hreqA ⟨k, hka⟩
+      rw [hu] at this
+      simp [this]
+
+/-- **The keep filter agrees on the map's own names.** `Rest.merge` answers `refuse` unless both
+    rests are `drop`, so the merged filter keeps everything except at `drop` against `drop`, where
+    `dropFits` makes the two declared sets equal. The one case that is not structural is `drop`
+    against `refuse`: there the `refuse` factor's admission puts the map's names inside its
+    declared set, and `dropFits` puts that inside the `drop` factor's. -/
+theorem keepT_agree {a b : Body} {r : Rest}
+    (hr : Rest.merge a.rest b.rest = some r)
+    (hda : Body.dropFits a b = true) (hdb : Body.dropFits b a = true)
+    {keys : Finset Name} {g : {k // k ∈ keys} → Attr}
+    (hB : AdmA (.object b) (.m keys g) = true) :
+    ∀ k ∈ keys, keepT r (Body.shared a b) k = keepT a.rest a.fields k := by
+  intro k hk
+  cases hra : a.rest with
+  | codec t => rw [hra] at hr; cases hrb : b.rest <;> rw [hrb] at hr <;> simp [Rest.merge] at hr
+  | refuse =>
+      cases hrb : b.rest with
+      | codec t => rw [hra, hrb] at hr; simp [Rest.merge] at hr
+      | refuse => rw [hra, hrb] at hr; simp only [Rest.merge, Option.some.injEq] at hr; subst hr; rfl
+      | drop => rw [hra, hrb] at hr; simp only [Rest.merge, Option.some.injEq] at hr; subst hr; rfl
+  | drop =>
+      cases hrb : b.rest with
+      | codec t => rw [hra, hrb] at hr; simp [Rest.merge] at hr
+      | refuse =>
+          rw [hra, hrb] at hr; simp only [Rest.merge, Option.some.injEq] at hr; subst hr
+          have hkb : k ∈ b.fields :=
+            mem_fields_of_admA hrb (by rw [← show AdmA (.object b) (.m keys g)
+              = AdmABody b (.m keys g) from rfl]; exact hB) k hk
+          rw [Body.dropFits, hra] at hda
+          simp only [keepT, decide_eq_true_eq, of_decide_eq_true hda k hkb]
+          rfl
+      | drop =>
+          rw [hra, hrb] at hr; simp only [Rest.merge, Option.some.injEq] at hr; subst hr
+          rw [Body.dropFits, hra] at hda
+          rw [Body.dropFits, hrb] at hdb
+          simp only [keepT, Body.shared, Finset.mem_filter, decide_eq_decide]
+          exact ⟨fun h => h.1, fun h => ⟨h, of_decide_eq_true hdb k h⟩⟩
+
+
+
+
+/-- The shared name set reads the same from either side. -/
+theorem Body.shared_comm (a b : Body) : Body.shared a b = Body.shared b a := by
+  ext k; simp [Body.shared, Finset.mem_filter, and_comm]
+
+/-- **A kept name is shared.** At `drop` against `drop` the merged filter says so outright. At a
+    merged `refuse` the filter is vacuous, and the name comes from the map instead: the `refuse`
+    factor's admission puts it inside that factor's declared set, and `dropFits` carries it into
+    the other's. -/
+theorem mem_shared_of_keep {a b : Body} {r : Rest}
+    (hr : Rest.merge a.rest b.rest = some r)
+    (hda : Body.dropFits a b = true) (hdb : Body.dropFits b a = true)
+    {keys : Finset Name} {g : {k // k ∈ keys} → Attr}
+    (hA : AdmABody a (.m keys g) = true) (hB : AdmABody b (.m keys g) = true)
+    {k : Name} (hk : k ∈ keys) (hkeep : keepT r (Body.shared a b) k = true) :
+    k ∈ Body.shared a b := by
+  have mk : k ∈ a.fields → k ∈ b.fields → k ∈ Body.shared a b := fun p q =>
+    Finset.mem_filter.mpr ⟨p, by simpa using q⟩
+  cases hra : a.rest with
+  | codec t => rw [hra] at hr; cases hrb : b.rest <;> rw [hrb] at hr <;> simp [Rest.merge] at hr
+  | drop =>
+      cases hrb : b.rest with
+      | codec t => rw [hra, hrb] at hr; simp [Rest.merge] at hr
+      | drop =>
+          rw [hra, hrb] at hr; simp only [Rest.merge, Option.some.injEq] at hr; subst hr
+          simpa only [keepT, decide_eq_true_eq] using hkeep
+      | refuse =>
+          have hkb : k ∈ b.fields := mem_fields_of_admA hrb hB k hk
+          rw [Body.dropFits, hra] at hda
+          exact mk (of_decide_eq_true hda k hkb) hkb
+  | refuse =>
+      have hka : k ∈ a.fields := mem_fields_of_admA hra hA k hk
+      cases hrb : b.rest with
+      | codec t => rw [hra, hrb] at hr; simp [Rest.merge] at hr
+      | refuse => exact mk hka (mem_fields_of_admA hrb hB k hk)
+      | drop =>
+          rw [Body.dropFits, hrb] at hdb
+          exact mk hka (of_decide_eq_true hdb k hka)
+
+/-- **The transport, with the kept name set a variable.** Two images over equal name sets agree
+    where their entries agree. `subst` does the work, so the membership proof inside the entry
+    never has to be rewritten, which is what defeats `rw` on the filter itself. -/
+theorem funImage_map_congr {S S' : Finset Name} (hS : S = S')
+    {g : {k // k ∈ S} → Option Value} {g' : {k // k ∈ S'} → Option Value}
+    (hg : ∀ (k : Name) (h : k ∈ S) (h' : k ∈ S'), g ⟨k, h⟩ = g' ⟨k, h'⟩)
+    {fb fb' : Name → Option Value} :
+    (funImage g).map (fun d => (⟨S ∪ ∅, fun k => if h : k.1 ∈ S then d ⟨k.1, h⟩
+        else (fb k.1).getD .null⟩ : MapOf Value))
+      = (funImage g').map (fun d => (⟨S' ∪ ∅, fun k => if h : k.1 ∈ S' then d ⟨k.1, h⟩
+        else (fb' k.1).getD .null⟩ : MapOf Value)) := by
+  subst hS
+  have himg : g = g' := funext fun k => hg k.1 k.2 k.2
+  subst himg
+  refine congrArg (fun F => Option.map F (funImage g)) (funext fun d => ?_)
+  refine congrArg (MapOf.mk (S ∪ ∅)) (funext fun k => ?_)
+  have hk : k.1 ∈ S := by simpa using k.2
+  rw [dif_pos hk, dif_pos hk]
+
+/-- **The `object` congruence.** Two payload tables that require the same names, keep the same
+    names of the map, declare no stand-in the map omits, and read each kept name alike, read the
+    whole map alike. `fbNames = ∅` is what rules out the one place the two could differ at a name
+    the map does not carry. -/
+theorem objRead_congr {sems sems' : MapOf FieldSem} {rc rc' : Option Codec}
+    {kn kn' : Name → Bool} {q : MapOf Attr}
+    (hreq : reqPresentB sems q.1 = reqPresentB sems' q.1)
+    (hfb : fbNames q.1 sems = ∅) (hfb' : fbNames q.1 sems' = ∅)
+    (hfil : q.1.filter (kn ·) = q.1.filter (kn' ·))
+    (hent : ∀ (k : Name) (h : k ∈ q.1), kn k = true →
+        (entryCodec sems rc k).bind (fun c => c.p (q.2 ⟨k, h⟩))
+          = (entryCodec sems' rc' k).bind (fun c => c.p (q.2 ⟨k, h⟩))) :
+    objRead sems rc kn q = objRead sems' rc' kn' q := by
+  unfold objRead
+  rw [hreq, hfb, hfb']
+  split
+  · exact funImage_map_congr hfil
+      (fun k h _ => hent k (Finset.mem_filter.mp h).1 (Finset.mem_filter.mp h).2)
+  · rfl
+
+/-- …and the same at the term level, which is where the meet's object rows use it. -/
+theorem bodySem_p_congr {b b' : Body} {keys : Finset Name} {g : {k // k ∈ keys} → Attr}
+    (hreq : reqPresentT b.fields b.at keys = reqPresentT b'.fields b'.at keys)
+    (hfb : fbNames keys ⟨b.fields, fun k => fieldSem (b.at k)⟩ = ∅)
+    (hfb' : fbNames keys ⟨b'.fields, fun k => fieldSem (b'.at k)⟩ = ∅)
+    (hfil : keys.filter (keepT b.rest b.fields ·) = keys.filter (keepT b'.rest b'.fields ·))
+    (hent : ∀ (k : Name) (h : k ∈ keys), keepT b.rest b.fields k = true →
+        (entryCodec ⟨b.fields, fun k => fieldSem (b.at k)⟩ (rcOf (restSem b.rest)) k).bind
+            (fun c => c.p (g ⟨k, h⟩))
+          = (entryCodec ⟨b'.fields, fun k => fieldSem (b'.at k)⟩ (rcOf (restSem b'.rest)) k).bind
+            (fun c => c.p (g ⟨k, h⟩))) :
+    (denote (.object b)).p (.m keys g) = (denote (.object b')).p (.m keys g) := by
+  have hb : ∀ c : Body, (denote (.object c)).p (.m keys g)
+      = (objRead ⟨c.fields, fun k => fieldSem (c.at k)⟩ (rcOf (restSem c.rest))
+          (keepB (restSem c.rest) ⟨c.fields, fun k => fieldSem (c.at k)⟩)
+          ⟨keys, g⟩).map mapV.into := by
+    intro c; cases c; rfl
+  rw [hb b, hb b']
+  refine congrArg _ (objRead_congr ?_ hfb hfb' ?_
+    (fun k h hk => hent k h (by rw [← keepB_eq b.fields b.at b.rest k]; exact hk)))
+  · rw [← reqPresentT_eq, ← reqPresentT_eq]; exact hreq
+  · refine Eq.trans (filter_congr_on (fun k _ => keepB_eq b.fields b.at b.rest k))
+      (Eq.trans hfil (filter_congr_on (fun k _ => keepB_eq b'.fields b'.at b'.rest k)).symm)
+
+
+
+
+/-- **The object row.** The first half mirrors the value side through the read-side twins. The
+    second half applies `bodySem_p_congr` against each factor: the meet body requires the same
+    names, keeps the same names of the map, declares no stand-in the map omits, and reads each
+    kept name through the field the induction hypothesis speaks about. -/
+theorem object_row {a b : Body} {z : Term} {n : Nat}
+    (ih : ∀ p q, Term.depth p + Term.depth q ≤ n → ∀ w, Term.meet p q = some w →
+      (∀ c, AdmA w c = (AdmA p c && AdmA q c)) ∧
+      (∀ c, AdmA p c = true → AdmA q c = true →
+        (denote w).p c = (denote p).p c ∧ (denote w).p c = (denote q).p c))
+    (hle : Term.depth (.object a) + Term.depth (.object b) ≤ n + 1)
+    (h : Term.meet (.object a) (.object b) = some z) :
+    (∀ c, AdmA z c = (AdmA (.object a) c && AdmA (.object b) c)) ∧
+    (∀ c, AdmA (.object a) c = true → AdmA (.object b) c = true →
+      (denote z).p c = (denote (.object a)).p c ∧ (denote z).p c = (denote (.object b)).p c) := by
+  obtain ⟨r, hr, hcase⟩ := meet_object_object h
+  obtain ⟨hfba, hfbb, hda, hdb⟩ := meet_object_guards h
+  simp only [Term.depth] at hle
+  -- the field row and the field codec, at one pair of terms, from the induction hypothesis
+  have ihf : Body.meetOk a b = true →
+      ∀ (k : {k // k ∈ Body.shared a b}),
+        (∀ c, AdmAField (Body.meetField a b k) c
+          = (AdmAField (a.at ⟨k.1, Body.mem_shared_left k.2⟩) c
+              && AdmAField (b.at ⟨k.1, Body.mem_shared_right k.2⟩) c))
+        ∧ (∀ c, AdmAField (a.at ⟨k.1, Body.mem_shared_left k.2⟩) c = true →
+            AdmAField (b.at ⟨k.1, Body.mem_shared_right k.2⟩) c = true →
+            (fieldSem (Body.meetField a b k)).codec.p c
+                = (fieldSem (a.at ⟨k.1, Body.mem_shared_left k.2⟩)).codec.p c
+              ∧ (fieldSem (Body.meetField a b k)).codec.p c
+                = (fieldSem (b.at ⟨k.1, Body.mem_shared_right k.2⟩)).codec.p c) := by
+    intro hok k
+    unfold Body.meetOk at hok
+    obtain ⟨fm, hfm⟩ := Option.isSome_iff_exists.mp (of_decide_eq_true hok k)
+    obtain ⟨tx, ty, tz, hz, hx, hy, hfz, hcx, hcy, hcz, hdx, hdy⟩ := AdmAField_meet hfm
+    have hlt := Body.depth_lt_shared a b k
+    have hmf : Body.meetField a b k = fm := by unfold Body.meetField; rw [hfm, Option.getD_some]
+    obtain ⟨ihA, ihP⟩ := ih tx ty (by omega) tz hz
+    refine ⟨fun c => by rw [hmf, hfz, hx, hy]; exact ihA c, fun c hxa hyb => ?_⟩
+    rw [hmf, hcz, hcx, hcy]
+    rw [hx] at hxa
+    rw [hy] at hyb
+    exact ihP c hxa hyb
+  -- an attribute that is not a map is read by no object
+  have hnm : ∀ c : Attr, (∀ keys g, c ≠ .m keys g) →
+      AdmA z c = (AdmA (.object a) c && AdmA (.object b) c) := by
+    intro c hc
+    rw [AdmA_object a c,
+        AdmA_object b c,
+        AdmABody_of_not_m hc, AdmABody_of_not_m hc, Bool.and_self]
+    rcases hcase with ⟨rfl, _⟩ | ⟨_, _, _, ⟨rfl, _⟩ | rfl⟩
+    · rfl
+    · rfl
+    · exact AdmABody_of_not_m hc
+  -- the first half
+  have half1 : ∀ c, AdmA z c = (AdmA (.object a) c && AdmA (.object b) c) := by
+    intro c
+    cases c
+    case m keys g =>
+      rw [AdmA_object a (.m keys g),
+          AdmA_object b (.m keys g)]
+      rcases hcase with ⟨rfl, hne⟩ | ⟨hab, hba, hok, ⟨rfl, hnb⟩ | rfl⟩
+      · show (false : Bool) = _
+        cases hA : AdmABody a (.m keys g) with
+        | false => rfl
+        | true =>
+          cases hB : AdmABody b (.m keys g) with
+          | false => rfl
+          | true =>
+            exact absurd ⟨reqShared_of_admA hr hfba hdb hA hB,
+              reqShared_of_admA ((merge_comm a.rest b.rest) ▸ hr) hfbb hda hB hA⟩ hne
+      · show (false : Bool) = _
+        cases hA : AdmABody a (.m keys g) with
+        | false => rfl
+        | true =>
+          cases hB : AdmABody b (.m keys g) with
+          | false => rfl
+          | true =>
+            exact absurd (isBottom_false_of_admA (fun k c => (ihf hok k).1 c) hok hA hB) hnb
+      · show AdmABody (.mk (Body.shared a b) (fun k => Body.meetField a b k) r)
+            (.m keys g) = _
+        rw [AdmABody_map, AdmABody_map, AdmABody_map]
+        simp only [Body.fields_mk, Body.at_mk, Body.rest_mk]
+        rw [reqPresentT_meet hab hba hok, objAdmA_meet hr hda hdb (fun k c => (ihf hok k).1 c)]
+        simp [Bool.and_assoc, Bool.and_left_comm]
+    all_goals exact hnm _ (fun _ _ hc => Attr.noConfusion hc)
+  refine ⟨half1, fun c hA hB => ?_⟩
+  cases c
+  case m keys g =>
+    rw [AdmA_object a (.m keys g)] at hA
+    rw [AdmA_object b (.m keys g)] at hB
+    rcases hcase with ⟨rfl, hne⟩ | ⟨hab, hba, hok, ⟨rfl, hnb⟩ | rfl⟩
+    · exact absurd ⟨reqShared_of_admA hr hfba hdb hA hB,
+        reqShared_of_admA ((merge_comm a.rest b.rest) ▸ hr) hfbb hda hB hA⟩ hne
+    · exact absurd (isBottom_false_of_admA (fun k c => (ihf hok k).1 c) hok hA hB) hnb
+    · rw [AdmABody_map, Bool.and_eq_true] at hA hB
+      have hreqA := hA.1
+      have hreqB := hB.1
+      have hAo : AdmA (.object a) (.m keys g) = true := by
+        rw [AdmA_object a (.m keys g), AdmABody_map,
+          Bool.and_eq_true]
+        exact ⟨hA.1, hA.2⟩
+      have hBo : AdmA (.object b) (.m keys g) = true := by
+        rw [AdmA_object b (.m keys g), AdmABody_map,
+          Bool.and_eq_true]
+        exact ⟨hB.1, hB.2⟩
+      -- the entry agreement, against whichever factor the congruence is applied to
+      have hentry : ∀ (k : Name) (hk : k ∈ keys), keepT r (Body.shared a b) k = true →
+          ∀ (hks : k ∈ Body.shared a b),
+            (fieldSem (Body.meetField a b ⟨k, hks⟩)).codec.p (g ⟨k, hk⟩)
+                = (fieldSem (a.at ⟨k, Body.mem_shared_left hks⟩)).codec.p (g ⟨k, hk⟩)
+              ∧ (fieldSem (Body.meetField a b ⟨k, hks⟩)).codec.p (g ⟨k, hk⟩)
+                = (fieldSem (b.at ⟨k, Body.mem_shared_right hks⟩)).codec.p (g ⟨k, hk⟩) := by
+        intro k hk _ hks
+        exact (ihf hok ⟨k, hks⟩).2 (g ⟨k, hk⟩)
+          (objAdmA_row hA.2 hk (Body.mem_shared_left hks) (keepT_of_mem (Body.mem_shared_left hks)))
+          (objAdmA_row hB.2 hk (Body.mem_shared_right hks)
+            (keepT_of_mem (Body.mem_shared_right hks)))
+      have hfilA : ∀ k ∈ keys, keepT r (Body.shared a b) k = keepT a.rest a.fields k :=
+        keepT_agree hr hda hdb hBo
+      have hfilB : ∀ k ∈ keys, keepT r (Body.shared a b) k = keepT b.rest b.fields k := by
+        intro k hk
+        rw [Body.shared_comm]
+        exact keepT_agree ((merge_comm a.rest b.rest) ▸ hr) hdb hda hAo k hk
+      constructor
+      · refine bodySem_p_congr (b := .mk (Body.shared a b) (fun k => Body.meetField a b k) r)
+          ?_ (fbNames_meet_empty hok keys) (fbNames_factor_empty hok hfba hBo)
+          (filter_congr_on (fun k hk => by
+            simp only [Body.fields_mk, Body.rest_mk]; exact hfilA k hk))
+          (fun k hk hkeep => ?_)
+        · simp only [Body.fields_mk, Body.at_mk]
+          rw [reqPresentT_meet hab hba hok, hreqA, hreqB]
+          rfl
+        · simp only [Body.fields_mk, Body.at_mk, Body.rest_mk] at hkeep ⊢
+          have hks := mem_shared_of_keep hr hda hdb hAo hBo hk hkeep
+          rw [entryCodec_mk_pos hks, entryCodec_mk_pos (Body.mem_shared_left hks)]
+          exact (hentry k hk hkeep hks).1
+      · refine bodySem_p_congr (b := .mk (Body.shared a b) (fun k => Body.meetField a b k) r)
+          ?_ (fbNames_meet_empty hok keys) (fbNames_factor_empty' hok hfbb hAo)
+          (filter_congr_on (fun k hk => by
+            simp only [Body.fields_mk, Body.rest_mk]; exact hfilB k hk))
+          (fun k hk hkeep => ?_)
+        · simp only [Body.fields_mk, Body.at_mk]
+          rw [reqPresentT_meet hab hba hok, hreqA, hreqB]
+          rfl
+        · simp only [Body.fields_mk, Body.at_mk, Body.rest_mk] at hkeep ⊢
+          have hks := mem_shared_of_keep hr hda hdb hAo hBo hk hkeep
+          rw [entryCodec_mk_pos hks, entryCodec_mk_pos (Body.mem_shared_right hks)]
+          exact (hentry k hk hkeep hks).2
+  all_goals exact absurd hA (by rw [AdmA_object a _,
+    AdmABody_of_not_m (fun _ _ hc => Attr.noConfusion hc)]; exact Bool.noConfusion)
+
+/-- **The transport into a record's reading.** An object whose keep filter drops nothing writes
+    the map's own key set, and the stand-in branch is unreachable, so its output is the record's.
+    The filter is a variable again, so `subst` carries the membership proof inside the entry. -/
+theorem funImage_record_congr {S T : Finset Name} (hS : S = T)
+    {g : {k // k ∈ S} → Option Value} {g' : {k // k ∈ T} → Option Value}
+    (hg : ∀ (k : Name) (h : k ∈ S) (h' : k ∈ T), g ⟨k, h⟩ = g' ⟨k, h'⟩)
+    {fb : Name → Option Value} :
+    (funImage g).map (mapV.into ∘ fun d => (⟨S ∪ ∅, fun k => if h : k.1 ∈ S then d ⟨k.1, h⟩
+        else (fb k.1).getD .null⟩ : MapOf Value))
+      = (funImage g').map (Value.map T) := by
+  subst hS
+  have himg : g = g' := funext fun k => hg k.1 k.2 k.2
+  subst himg
+  refine congrArg (fun F => Option.map F (funImage g)) (funext fun d => ?_)
+  show mapV.into _ = mapV.into ⟨S, d⟩
+  exact congrArg mapV.into (MapOf.ext (Finset.union_empty S) (fun k _ h2 => dif_pos h2))
+
+/-- **The object-against-record congruence.** `Body.meetRec` answers an object whose rest is a
+    codec, so the keep filter is constantly true and no name of the map is dropped. With no
+    stand-in declared, the output key set is the map's own, which is what the record writes, and
+    the two agree entry by entry. -/
+theorem bodySem_p_record_congr {b : Body} {t x : Term}
+    {keys : Finset Name} {g : {k // k ∈ keys} → Attr}
+    (hrest : b.rest = .codec t)
+    (hreq : reqPresentT b.fields b.at keys = true)
+    (hfb : fbNames keys ⟨b.fields, fun k => fieldSem (b.at k)⟩ = ∅)
+    (hent : ∀ (k : Name) (h : k ∈ keys),
+      (entryCodec ⟨b.fields, fun k => fieldSem (b.at k)⟩ (rcOf (restSem b.rest)) k).bind
+          (fun c => c.p (g ⟨k, h⟩))
+        = (denote x).p (g ⟨k, h⟩)) :
+    (denote (.object b)).p (.m keys g) = (denote (.record x)).p (.m keys g) := by
+  have hb : (denote (.object b)).p (.m keys g)
+      = (objRead ⟨b.fields, fun k => fieldSem (b.at k)⟩ (rcOf (restSem b.rest))
+          (keepB (restSem b.rest) ⟨b.fields, fun k => fieldSem (b.at k)⟩)
+          ⟨keys, g⟩).map mapV.into := by
+    cases b; rfl
+  have hkn : ∀ k, keepB (restSem b.rest) ⟨b.fields, fun k => fieldSem (b.at k)⟩ k = true := by
+    intro k; rw [keepB_eq b.fields b.at b.rest k, hrest]; rfl
+  have hfil : keys.filter
+      (keepB (restSem b.rest) ⟨b.fields, fun k => fieldSem (b.at k)⟩ ·) = keys :=
+    filter_eq_self_on (fun k _ => hkn k)
+  rw [hb, show (denote (.record x)).p (.m keys g)
+      = (funImage (fun k => (denote x).p (g k))).map (Value.map keys) from rfl]
+  unfold objRead
+  rw [show reqPresentB ⟨b.fields, fun k => fieldSem (b.at k)⟩ (⟨keys, g⟩ : MapOf Attr).1 = true from
+    by rw [← reqPresentT_eq]; exact hreq, if_pos rfl, hfb]
+  simp only [Option.map_map]
+  exact funImage_record_congr hfil
+    (fun k h _ => hent k (Finset.mem_filter.mp h).1)
+
+/-- **The object-against-record row.** `Body.meetRec` answers an object over the same names with
+    a `codec` rest, so the first half is the read-side twins and the second applies the object
+    congruence against the object factor and the record congruence against the record. -/
+theorem record_row {b : Body} {x z : Term} {n : Nat}
+    (ih : ∀ p q, Term.depth p + Term.depth q ≤ n → ∀ w, Term.meet p q = some w →
+      (∀ c, AdmA w c = (AdmA p c && AdmA q c)) ∧
+      (∀ c, AdmA p c = true → AdmA q c = true →
+        (denote w).p c = (denote p).p c ∧ (denote w).p c = (denote q).p c))
+    (hle : Term.depth (.object b) + Term.depth (.record x) ≤ n + 1)
+    (hmr : Body.meetRec b x = some z) :
+    (∀ c, AdmA z c = (AdmA (.object b) c && AdmA (.record x) c)) ∧
+    (∀ c, AdmA (.object b) c = true → AdmA (.record x) c = true →
+      (denote z).p c = (denote (.object b)).p c ∧ (denote z).p c = (denote (.record x)).p c) := by
+  obtain ⟨t, r, hrest, hmt, hok, hcase⟩ := meet_object_record hmr
+  simp only [Term.depth] at hle
+  have hdt := Body.depth_lt_rest b hrest
+  obtain ⟨ihtA, ihtP⟩ := ih t x (by omega) r hmt
+  have ihf : ∀ (k : {k // k ∈ b.fields}),
+      (∀ c, AdmAField (Body.meetRecField b x k) c = (AdmAField (b.at k) c && AdmA x c))
+      ∧ (∀ c, AdmAField (b.at k) c = true → AdmA x c = true →
+          (fieldSem (Body.meetRecField b x k)).codec.p c = (fieldSem (b.at k)).codec.p c
+            ∧ (fieldSem (Body.meetRecField b x k)).codec.p c = (denote x).p c) := by
+    intro k
+    unfold Body.meetRecOk at hok
+    obtain ⟨fm, hfm⟩ := Option.isSome_iff_exists.mp (of_decide_eq_true hok k)
+    obtain ⟨tx, tz, hz, hx, hfz, hcx, hcz, hdx⟩ := AdmAField_meetT hfm
+    have hlt := Body.depth_lt_field b k
+    have hmf : Body.meetRecField b x k = fm := by
+      unfold Body.meetRecField; rw [hfm, Option.getD_some]
+    obtain ⟨ihA, ihP⟩ := ih tx x (by omega) tz hz
+    refine ⟨fun c => by rw [hmf, hfz, hx]; exact ihA c, fun c hxa hxx => ?_⟩
+    rw [hmf, hcz, hcx]
+    rw [hx] at hxa
+    exact ihP c hxa hxx
+  have hnm : ∀ c : Attr, (∀ keys g, c ≠ .m keys g) →
+      AdmA z c = (AdmA (.object b) c && AdmA (.record x) c) := by
+    intro c hc
+    have hrx : AdmA (.record x) c = false := by cases c with
+      | m keys g => exact absurd rfl (hc keys g)
+      | _ => rfl
+    rw [AdmA_object b c, AdmABody_of_not_m hc, hrx, Bool.and_self]
+    rcases hcase with ⟨rfl, _⟩ | rfl
+    · rfl
+    · exact AdmABody_of_not_m hc
+  have half1 : ∀ c, AdmA z c = (AdmA (.object b) c && AdmA (.record x) c) := by
+    intro c
+    cases c
+    case m keys g =>
+      rw [AdmA_object b (.m keys g),
+          AdmA_record x keys g]
+      rcases hcase with ⟨rfl, hnb⟩ | rfl
+      · show (false : Bool) = _
+        cases hA : AdmABody b (.m keys g) with
+        | false => rfl
+        | true =>
+          cases hR : decide (∀ k : {k // k ∈ keys}, AdmA x (g k) = true) with
+          | false => rfl
+          | true =>
+            exact absurd (isBottom_false_of_admARec hok (fun k c => (ihf k).1 c) hA hR) hnb
+      · show AdmABody (.mk b.fields (fun k => Body.meetRecField b x k) (.codec r))
+            (.m keys g) = _
+        rw [AdmABody_map, AdmABody_map]
+        simp only [Body.fields_mk, Body.at_mk, Body.rest_mk, hrest]
+        rw [reqPresentT_meetRec hok, show AdmARest (.codec r) = some (AdmA r) from rfl,
+            show AdmARest (.codec t) = some (AdmA t) from rfl,
+            objAdmA_meetRec hrest (fun k c => (ihf k).1 c) ihtA]
+        simp only [hrest]
+        simp [Bool.and_assoc, Bool.and_left_comm]
+    all_goals exact hnm _ (fun _ _ hc => Attr.noConfusion hc)
+  refine ⟨half1, fun c hA hR => ?_⟩
+  cases c
+  case m keys g =>
+    rw [AdmA_object b (.m keys g)] at hA
+    rw [AdmA_record x keys g] at hR
+    rcases hcase with ⟨rfl, hnb⟩ | rfl
+    · exact absurd (isBottom_false_of_admARec hok (fun k c => (ihf k).1 c) hA hR) hnb
+    · rw [AdmABody_map, Bool.and_eq_true] at hA
+      have hrec : ∀ (k : Name) (hk : k ∈ keys), AdmA x (g ⟨k, hk⟩) = true :=
+        fun k hk => of_decide_eq_true hR ⟨k, hk⟩
+      -- the rest codec's row, at a name the object does not declare
+      have hrestrow : ∀ (k : Name) (hk : k ∈ keys), k ∉ b.fields → AdmA t (g ⟨k, hk⟩) = true := by
+        intro k hk hnf
+        have hh := of_decide_eq_true hA.2 ⟨k, hk⟩ (by rw [hrest]; rfl)
+        simpa only [entryPA,
+          MapOf.at_of_not_mem (m := ⟨b.fields, fun k => AdmAField (b.at k)⟩) hnf, hrest,
+          AdmARest] using hh
+      -- the entry agreement, shared by the two congruences
+      have hentry : ∀ (k : Name) (hk : k ∈ keys),
+          ((entryCodec ⟨b.fields, fun k => fieldSem (Body.meetRecField b x k)⟩
+              (rcOf (restSem (Rest.codec r))) k).bind (fun c => c.p (g ⟨k, hk⟩))
+            = (entryCodec ⟨b.fields, fun k => fieldSem (b.at k)⟩ (rcOf (restSem b.rest)) k).bind
+              (fun c => c.p (g ⟨k, hk⟩)))
+          ∧ ((entryCodec ⟨b.fields, fun k => fieldSem (Body.meetRecField b x k)⟩
+              (rcOf (restSem (Rest.codec r))) k).bind (fun c => c.p (g ⟨k, hk⟩))
+            = (denote x).p (g ⟨k, hk⟩)) := by
+        intro k hk
+        by_cases hf : k ∈ b.fields
+        · rw [entryCodec_mk_pos hf, entryCodec_mk_pos hf]
+          exact (ihf ⟨k, hf⟩).2 (g ⟨k, hk⟩)
+            (objAdmA_row hA.2 hk hf (keepT_of_mem hf)) (hrec k hk)
+        · rw [entryCodec_mk_neg (f := fun k => fieldSem (Body.meetRecField b x k)) hf,
+            entryCodec_mk_neg (f := fun k => fieldSem (b.at k)) hf, hrest]
+          exact ihtP (g ⟨k, hk⟩) (hrestrow k hk hf) (hrec k hk)
+      constructor
+      · refine bodySem_p_congr (b := .mk b.fields (fun k => Body.meetRecField b x k) (.codec r))
+          ?_ (fbNames_meetRec_empty hok keys).2 (fbNames_meetRec_empty hok keys).1
+          (filter_congr_on (fun k _ => by simp [hrest, keepT, Body.rest_mk]))
+          (fun k hk _ => ?_)
+        · simp only [Body.fields_mk, Body.at_mk]; exact reqPresentT_meetRec hok keys
+        · simpa only [Body.fields_mk, Body.at_mk, Body.rest_mk] using (hentry k hk).1
+      · refine bodySem_p_record_congr (b := .mk b.fields (fun k => Body.meetRecField b x k)
+          (.codec r)) rfl ?_ (fbNames_meetRec_empty hok keys).2 (fun k hk => ?_)
+        · simp only [Body.fields_mk, Body.at_mk]
+          rw [reqPresentT_meetRec hok keys]; exact hA.1
+        · simpa only [Body.fields_mk, Body.at_mk, Body.rest_mk] using (hentry k hk).2
+  all_goals exact absurd hA (by rw [AdmA_object b _,
+    AdmABody_of_not_m (fun _ _ hc => Attr.noConfusion hc)]; exact Bool.noConfusion)
+set_option maxHeartbeats 20000000 in
+/-- **The read side's homomorphism and its reading agreement, together.** Strong induction on
+    the summed depth, because a two-argument recursion is structural on neither argument. Both
+    directions of the second half are carried: a refinement row needs the agreement against
+    whichever factor the wrapper sits on. -/
+theorem AdmA_meet_le : ∀ (n : Nat) (x y : Term), Term.depth x + Term.depth y ≤ n →
+    ∀ z, Term.meet x y = some z →
+      (∀ a : Attr, AdmA z a = (AdmA x a && AdmA y a)) ∧
+      (∀ a : Attr, AdmA x a = true → AdmA y a = true →
+        (denote z).p a = (denote x).p a ∧ (denote z).p a = (denote y).p a) := by
+  intro n
+  induction n with
+  | zero =>
+      intro x y hle
+      exact absurd hle (by have h1 := Term.depth_pos x; have h2 := Term.depth_pos y; omega)
+  | succ n ih =>
+      intro x y hle z h
+      have ihA : ∀ x y, Term.depth x + Term.depth y ≤ n → ∀ z, Term.meet x y = some z →
+          ∀ b, AdmA z b = (AdmA x b && AdmA y b) := fun p q hd w hw => (ih p q hd w hw).1
+      have ihP : ∀ x y, Term.depth x + Term.depth y ≤ n → ∀ z, Term.meet x y = some z →
+          ∀ b, AdmA x b = true → AdmA y b = true →
+            (denote z).p b = (denote x).p b ∧ (denote z).p b = (denote y).p b :=
+        fun p q hd w hw => (ih p q hd w hw).2
+      cases x, y using Term.meet.fun_cases
+      -- the four function-carrying terms, on the left and on the right: every row refuses
+      case case3 => rename_i t f g hne; rw [meet_held_none t f g hne] at h; exact absurd h (by simp)
+      case case4 => rename_i t r hne; rw [meet_legacy_none t r hne] at h; exact absurd h (by simp)
+      case case5 => rename_i ce cp hne; rw [meet_custom_none ce cp hne] at h; exact absurd h (by simp)
+      case case6 => rename_i t hne; rw [meet_lazy_none t hne] at h; exact absurd h (by simp)
+      case case7 => rename_i t f g hne _ _ _ _; rw [meet_heldR_none hne t f g] at h; exact absurd h (by simp)
+      case case8 => rename_i t r hne _ _ _ _; rw [meet_legacyR_none hne t r] at h; exact absurd h (by simp)
+      case case9 => rename_i ce cp hne _ _ _ _; rw [meet_customR_none hne ce cp] at h; exact absurd h (by simp)
+      case case10 => rename_i t hne _ _ _ _; rw [meet_lazyR_none hne t] at h; exact absurd h (by simp)
+      -- a closure refinement and `opaque` against what it cannot compare: both refuse
+      case case14 | case90 => cases y <;> simp_all [Term.meet]
+      case case16 | case91 => cases x <;> simp_all [Term.meet]
+      -- the bottom absorbs on either side, and it reads nothing, so the second half is vacuous
+      case case1 =>
+        simp only [Term.meet, Option.some.injEq] at h; subst h
+        exact ⟨fun a => rfl, fun a ha _ => absurd ha (by simp [AdmA])⟩
+      case case2 =>
+        rw [meet_never_right] at h
+        simp only [Option.some.injEq] at h; subst h
+        exact ⟨fun a => by simp [AdmA], fun a _ hb => absurd hb (by simp [AdmA])⟩
+      -- the ground bases: the same base is itself, so both halves are reflexive
+      case case17 | case18 | case19 | case20 | case21 | case22 =>
+        simp only [Term.meet, Option.some.injEq] at h; subst h
+        exact ⟨fun a => (Bool.and_self _).symm, fun a _ _ => ⟨rfl, rfl⟩⟩
+      -- the pairs that share a value or a member and so refuse: `string`/`decimal` and
+      -- `number`/`decimal`, at the bases, the set bases and the literal crosses
+      case case23 | case24 | case26 | case29 | case50 | case54 => simp [Term.meet] at h
+      case case60 | case61 => simp [Term.meet] at h
+      case case44 | case47 | case51 | case55 | case62 | case63 | case92 | case93 =>
+        simp [Term.meet, Term.meetLit] at h
+      -- a literal against its own base is the literal, which reads what the base reads
+      case case25 | case43 | case49 =>
+        simp only [Term.meet, Option.some.injEq] at h
+        subst h
+        refine ⟨fun a => ?_, fun a ha hb => ⟨rfl, literal_denote_agree ha⟩⟩
+        cases hx : AdmA (Term.literal _ _) a with
+        | false => simp
+        | true => rw [AdmA_base_of_literal rfl hx]; simp
+      case case28 | case46 | case53 =>
+        simp only [Term.meet, Option.some.injEq] at h
+        subst h
+        refine ⟨fun a => ?_, fun a ha hb => ⟨literal_denote_agree hb, rfl⟩⟩
+        cases hx : AdmA (Term.literal _ _) a with
+        | false => simp
+        | true => rw [AdmA_base_of_literal rfl hx]; simp
+      -- the same, where the row decides by an `if` rather than by a match
+      case case31 | case33 | case35 | case37 | case39 | case41 =>
+        simp only [Term.meet, if_true, ite_true, Option.some.injEq] at h
+        subst h
+        refine ⟨fun a => ?_, fun a ha hb => ?_⟩
+        · cases hx : AdmA (Term.literal _ _) a with
+          | false => simp
+          | true => rw [AdmA_base_of_literal rfl hx]; simp
+        · first
+          | exact ⟨rfl, literal_denote_agree ha⟩
+          | exact ⟨literal_denote_agree hb, rfl⟩
+      -- …and a literal at a base that shares nothing with the partner is the bottom
+      case case32 | case34 | case36 | case38 | case40 | case42 =>
+        rename_i k _ hk
+        simp only [Term.meet, if_neg hk, Option.some.injEq] at h
+        subst h
+        refine bottom_row (fun a => ?_)
+        cases k <;> cases a <;>
+          simp_all [AdmA, AdmALit, inL, inD, isStored, literalCodec, Codec.restrict, baseCodec,
+            decimalCodec]
+      case case27 | case30 | case45 | case48 =>
+        rename_i k _ _ _
+        simp only [Term.meet, Option.some.injEq] at h
+        subst h
+        refine bottom_row (fun a => ?_)
+        cases k <;> cases a <;>
+          simp_all [AdmA, AdmALit, inL, inD, isStored, literalCodec, Codec.restrict, baseCodec,
+            decimalCodec]
+      case case52 | case56 =>
+        rename_i k _ _ _ _
+        simp only [Term.meet, Option.some.injEq] at h
+        subst h
+        refine bottom_row (fun a => ?_)
+        cases k <;> cases a <;>
+          simp_all [AdmA, AdmALit, inL, inD, isStored, literalCodec, Codec.restrict, baseCodec,
+            decimalCodec]
+      -- the same set base is itself; two different ones write different wire families
+      case case64 =>
+        simp only [Term.meet, if_true, ite_true, Option.some.injEq] at h
+        subst h
+        exact ⟨fun a => (Bool.and_self _).symm, fun a _ _ => ⟨rfl, rfl⟩⟩
+      case case65 =>
+        rename_i b b' _ _ _ _ hb
+        simp only [Term.meet, if_neg hb, Option.some.injEq] at h
+        subst h
+        refine bottom_row (fun a => ?_)
+        cases b <;> cases b' <;> cases a <;> simp_all [AdmA, AdmASet, isStored]
+      -- the containers: the element rows meet, and the payload carries the conjunction
+      case case58 =>
+        obtain ⟨w, hw, rfl⟩ := Option.map_eq_some_iff.mp (by simpa only [Term.meet] using h)
+        obtain ⟨ih1, ih2⟩ := ih _ _ (by simp only [Term.depth] at hle; omega) w hw
+        refine ⟨fun a => ?_, fun a ha hb => ?_⟩
+        · cases a <;> simp only [AdmA, Bool.and_self, allPA_and ih1]
+        · cases a
+          case l as =>
+            simp only [AdmA] at ha hb
+            simp only [denote_array]
+            exact ⟨arrayCodec_p_congr
+                     (fun b hm => (ih2 b (allPA_mem ha b hm) (allPA_mem hb b hm)).1),
+                   arrayCodec_p_congr
+                     (fun b hm => (ih2 b (allPA_mem ha b hm) (allPA_mem hb b hm)).2)⟩
+          all_goals (exfalso; revert ha; simp [AdmA])
+      case case59 =>
+        obtain ⟨w, hw, rfl⟩ := Option.map_eq_some_iff.mp (by simpa only [Term.meet] using h)
+        obtain ⟨ih1, ih2⟩ := ih _ _ (by simp only [Term.depth] at hle; omega) w hw
+        refine ⟨fun a => ?_, fun a ha hb => ?_⟩
+        · cases a <;> simp only [AdmA, Bool.and_self, decide_forall_and (fun k => ih1 _)]
+        · cases a
+          case m keys g =>
+            simp only [AdmA, decide_eq_true_eq] at ha hb
+            simp only [denote_record]
+            exact ⟨recordCodec_p_congr (fun k => (ih2 (g k) (ha k) (hb k)).1),
+                   recordCodec_p_congr (fun k => (ih2 (g k) (ha k) (hb k)).2)⟩
+          all_goals (exfalso; revert ha; simp [AdmA])
+      -- two `opaque`s: the policies conjoin, the refusing one being below the lossy one
+      case case66 =>
+        rename_i l l2
+        simp only [Term.meet, Option.some.injEq] at h
+        subst h
+        refine ⟨AdmA_opaq_and l l2, fun a ha hb => ⟨?_, ?_⟩⟩ <;>
+          cases l <;> cases l2 <;>
+          first
+            | rfl
+            | exact (opaq_p_lossy ha).symm
+            | exact (opaq_p_lossy hb).symm
+      -- `opaque` against a self-identifying base: the base is the finer term, and it reads
+      -- what `opaque` reads there
+      case case78 | case79 | case80 | case81 | case82 | case83 | case84 | case85 =>
+        simp only [Term.meet, Option.some.injEq] at h
+        subst h
+        refine ⟨fun a => ?_, fun a ha hb => ?_⟩
+        · cases a <;>
+            (try simp only [AdmA_opaq_str, AdmA_opaq_bool, AdmA_opaq_bin, AdmA_opaq_null]) <;>
+            simp [AdmA]
+        · cases a <;> refine ⟨?_, ?_⟩ <;>
+            simp_all [AdmA, opaq_p_string, opaq_p_boolean, opaq_p_binary, opaq_p_null]
+      -- …and against `number`, by the policy: the lossy one reads every stored numeral
+      case case86 | case88 =>
+        simp only [Term.meet, if_true, Option.some.injEq] at h
+        subst h
+        refine ⟨fun a => ?_, fun a ha hb => ?_⟩
+        · cases a <;>
+            (try simp only [AdmA_opaq_num, AdmA_number_eq, Bool.true_and, Bool.and_self]) <;>
+            simp [AdmA]
+        · cases a <;> refine ⟨?_, ?_⟩ <;> simp_all [AdmA, opaq_p_number]
+      -- …and the refusing one reads none, so the pair is the bottom
+      case case87 | case89 =>
+        rename_i l hl
+        simp only [Bool.not_eq_true] at hl
+        subst hl
+        simp only [Term.meet, Bool.false_eq_true, if_false, Option.some.injEq] at h
+        subst h
+        refine bottom_row (fun a => ?_)
+        cases a <;> (try simp only [AdmA_opaq_num]) <;> simp [AdmA, inD]
+      -- an array against a tuple: each declared position and the tail meet with the element,
+      -- and the met tuple reads the wire list as both factors read it
+      case case67 | case68 =>
+        obtain ⟨vs, tl, rfl, hts, htl⟩ := meet_array_tuple h
+        obtain ⟨hb1, hb2⟩ := tuple_bounds_l hle
+        have hFA := AdmAList_forall₂ ihA hb1 hts
+        have hTA := tailMeetA_lift ihA hb2 htl
+        obtain ⟨hP1, hP2⟩ := denoteList_agree_all ihA ihP hb1 hts
+        obtain ⟨hT1, hT2⟩ := tailMeetA_agree ihA ihP hb2 htl
+        refine ⟨fun a => ?_, fun a ha hb => ?_⟩
+        · rw [AdmA_tupleOf]
+          cases a <;> simp only [AdmA, Bool.and_self, alignPA_meet_all hFA hTA]
+        · cases a
+          case l as =>
+            simp only [AdmA] at ha hb
+            have hz : alignPA (AdmAList vs) (AdmAOptT tl) as = true := by
+              simp only [alignPA_meet_all hFA hTA, ha, hb, Bool.and_self]
+            rw [tupleOf_eq_tuple hz]
+            exact ⟨congrArg (Option.map Value.arr) (align_p_congr_array hz hP2 hT2),
+                   congrArg (Option.map Value.arr) (align_p_congr hz hP1 hT1)⟩
+          all_goals (exfalso; revert ha; simp [AdmA])
+      case case69 | case70 =>
+        obtain ⟨vs, tl, rfl, hts, htl⟩ := meet_tuple_array h
+        obtain ⟨hb1, hb2⟩ := tuple_bounds_r hle
+        have hFA := AdmAList_forall₂ ihA hb1 hts
+        have hTA := tailMeetA_lift ihA hb2 htl
+        obtain ⟨hP1, hP2⟩ := denoteList_agree_all ihA ihP hb1 hts
+        obtain ⟨hT1, hT2⟩ := tailMeetA_agree ihA ihP hb2 htl
+        refine ⟨fun a => ?_, fun a ha hb => ?_⟩
+        · rw [AdmA_tupleOf]
+          cases a <;> simp only [AdmA, Bool.and_self] <;>
+            rw [Bool.and_comm, alignPA_meet_all hFA hTA]
+        · cases a
+          case l as =>
+            simp only [AdmA] at ha hb
+            have hz : alignPA (AdmAList vs) (AdmAOptT tl) as = true := by
+              simp only [alignPA_meet_all hFA hTA, ha, hb, Bool.and_self]
+            rw [tupleOf_eq_tuple hz]
+            exact ⟨congrArg (Option.map Value.arr) (align_p_congr hz hP1 hT1),
+                   congrArg (Option.map Value.arr) (align_p_congr_array hz hP2 hT2)⟩
+          all_goals (exfalso; revert hb; simp [AdmA])
+      -- two tuples: one arity meets positionwise, and two arities with no tail read no
+      -- common wire list
+      case case71 | case72 | case73 | case74 =>
+        obtain ⟨hb1, hb2⟩ := tuple_bounds_tt hle
+        rcases meet_tuple_tuple h with ⟨vs, tl, rfl, hlen, hF, htl⟩ | ⟨rfl, hne, rfl, rfl⟩
+        · have hFA := AdmAList_forall₂_zip ihA hb1 hF
+          have hTA := tailMeetA_lift2 ihA hb2 htl
+          obtain ⟨hP1, hP2⟩ := denoteList_agree_zip ihA ihP hb1 hlen hF
+          obtain ⟨hT1, hT2⟩ := tailMeetA_agree2 ihA ihP hb2 htl
+          refine ⟨fun a => ?_, fun a ha hb => ?_⟩
+          · rw [AdmA_tupleOf]
+            cases a <;> simp only [AdmA, Bool.and_self, alignPA_meet_zip hFA (by rw [AdmAList_length, AdmAList_length]; exact hlen) hTA]
+          · cases a
+            case l as =>
+              simp only [AdmA] at ha hb
+              have hz : alignPA (AdmAList vs) (AdmAOptT tl) as = true := by
+                simp only [alignPA_meet_zip hFA
+                  (by rw [AdmAList_length, AdmAList_length]; exact hlen) hTA, ha, hb,
+                  Bool.and_self]
+              rw [tupleOf_eq_tuple hz]
+              exact ⟨congrArg (Option.map Value.arr) (align_p_congr hz hP1 hT1),
+                     congrArg (Option.map Value.arr) (align_p_congr hz hP2 hT2)⟩
+            all_goals (exfalso; revert ha; simp [AdmA])
+        · refine bottom_row (fun a => ?_)
+          cases a
+          case l ws =>
+            simp only [AdmA, AdmAOptT]
+            cases hA : alignPA (AdmAList _) none ws with
+            | false => simp
+            | true =>
+              cases hB : alignPA (AdmAList _) none ws with
+              | false => simp
+              | true =>
+                exact absurd
+                  (((alignPA_none_length hA).trans (AdmAList_length _)).symm.trans
+                    ((alignPA_none_length hB).trans (AdmAList_length _))) hne
+          all_goals simp [AdmA]
+      -- a refinement conjoins: the predicate is data, so it rides on the meet of the inner
+      -- terms, and the reading agreement is what makes the two gates agree
+      case case13 =>
+        simp only [Term.meet] at h
+        rw [if_pos (by assumption)] at h
+        obtain ⟨w, hw, rfl⟩ := Option.map_eq_some_iff.mp h
+        obtain ⟨ih1, ih2⟩ := ih _ _ (by simp only [Term.depth] at hle; omega) w hw
+        exact refine_row_l ih1 ih2
+      case case15 =>
+        simp only [Term.meet] at h
+        rw [if_pos (by assumption)] at h
+        obtain ⟨w, hw, rfl⟩ := Option.map_eq_some_iff.mp h
+        obtain ⟨ih1, ih2⟩ := ih _ _ (by simp only [Term.depth] at hle; omega) w hw
+        exact refine_row_r ih1 ih2
+      -- two literals: the same value, or nothing
+      case case57 =>
+        rename_i k lv k' lv'
+        simp only [Term.meet] at h
+        cases k <;> cases k' <;> simp only [Term.meetLit, reduceCtorEq] at h <;>
+          (try split at h) <;>
+          (try (simp only [Option.some.injEq] at h
+                subst h
+                subst_vars
+                first
+                  | exact ⟨fun a => (Bool.and_self _).symm, fun a _ _ => ⟨rfl, rfl⟩⟩
+                  | (refine bottom_row (fun a => ?_)
+                     first
+                       | exact AdmALit_never_of_ne (by assumption) a
+                       | (cases a <;> simp_all [AdmA, AdmALit, inL, inD, isStored,
+                            literalCodec_p_restrict, Codec.restrict, baseCodec, decimalCodec,
+                            numberCodec, stringCodec, booleanCodec, binaryCodec, nullCodec]))))
+      -- **the catch-all: two constructors with no row of their own.** They read different
+      -- attribute slots, so `AdmA_and_false` answers the pair; `number` against `decimal` is
+      -- the one pair that shares a member and has its own row above
+      case case94 =>
+        clear ih ihA ihP hle
+        cases x <;> (try (exfalso; solve_by_elim (maxDepth := 2) [rfl])) <;>
+          cases y <;> (try (exfalso; solve_by_elim (maxDepth := 8) [rfl])) <;>
+          (simp only [Term.meet, Option.some.injEq] at h; subst h)
+        all_goals refine bottom_row (fun a => ?_)
+        all_goals (first
+          | (refine Eq.trans ?g1 (AdmA_and_false ?g2 a).symm
+             case g2 =>
+               first
+                 | rfl
+                 | (cases ‹GroundKind› <;> rfl)
+                 | (cases ‹SetBase› <;> rfl)
+                 | (cases ‹GroundKind› <;> cases ‹SetBase› <;> rfl)
+             case g1 => rfl)
+          | (cases a <;> simp [AdmA, inD, isStored]))
+      -- **a certified union distributes.** Its admission is the join of its options', the meet
+      -- is optionwise, and the bottoms that drop out read nothing. `select` answers only where
+      -- exactly one option admits, which the certificate makes true.
+      case case11 =>
+        obtain ⟨zs, hF, hco, hcz, rfl⟩ :=
+          meet_union_left (by assumption) (by assumption) (by assumption) (by assumption)
+            (by assumption) h
+        simp only [Term.depth] at hle
+        have hB := forall₂_liftB ih (by omega) hF
+        refine ⟨fun a => ?_, fun a ha hb => ?_⟩
+        · rw [AdmA_ofOptions hcz, AdmAAny_filter_never,
+            AdmA_union _ a, selOptA_eq_AdmAAny hco]
+          exact AdmAAny_meet a (List.Forall₂.imp (fun _ _ hh => hh.1) hB)
+        · obtain ⟨t, hft, hta⟩ :=
+            filter_eq_singleton_of_selOptA (show selOptA (AdmASpecs _) a = true from ha)
+          obtain ⟨w, hwmem, hwA, hwP⟩ := forall₂_mem_left hB (mem_of_filter_eq_singleton hft).1
+          have hwa : AdmA w a = true := by rw [hwA a, hta, hb]; rfl
+          have hsurv : w ∈ zs.filter (fun z => !z.isNever) :=
+            List.mem_filter.mpr ⟨hwmem, by rw [not_isNever_of_admA hwa]; rfl⟩
+          obtain ⟨u, hfu, _⟩ := filter_eq_singleton_of_selOptA
+            (show selOptA (AdmASpecs (zs.filter (fun z => !z.isNever))) a = true by
+              rw [selOptA_eq_AdmAAny hcz]; exact AdmAAny_of_mem hsurv hwa)
+          have hwu : w = u := by
+            have hm : w ∈ (zs.filter (fun z => !z.isNever)).filter
+                (fun v => admitOptA (specOf v, AdmA v) a) :=
+              List.mem_filter.mpr ⟨hsurv, admitOptA_of_AdmA hcz hsurv hwa⟩
+            rw [hfu, List.mem_singleton] at hm
+            exact hm
+          subst hwu
+          rw [ofOptions_p_of_filter hfu, union_p_of_filter hft]
+          exact hwP a hta hb
+      case case12 =>
+        obtain ⟨zs, hF, hco, hcz, rfl⟩ :=
+          meet_union_right (by assumption) (by assumption) (by assumption) (by assumption)
+            (by assumption) (by assumption) h
+        simp only [Term.depth] at hle
+        have hB := forall₂_liftB ih (by omega) hF
+        refine ⟨fun a => ?_, fun a ha hb => ?_⟩
+        · rw [AdmA_ofOptions hcz, AdmAAny_filter_never,
+            AdmA_union _ a, selOptA_eq_AdmAAny hco,
+            Bool.and_comm]
+          exact AdmAAny_meet a (List.Forall₂.imp (fun _ _ hh => hh.1) hB)
+        · obtain ⟨t, hft, hta⟩ :=
+            filter_eq_singleton_of_selOptA (show selOptA (AdmASpecs _) a = true from hb)
+          obtain ⟨w, hwmem, hwA, hwP⟩ := forall₂_mem_left hB (mem_of_filter_eq_singleton hft).1
+          have hwa : AdmA w a = true := by rw [hwA a, hta, ha]; rfl
+          have hsurv : w ∈ zs.filter (fun z => !z.isNever) :=
+            List.mem_filter.mpr ⟨hwmem, by rw [not_isNever_of_admA hwa]; rfl⟩
+          obtain ⟨u, hfu, _⟩ := filter_eq_singleton_of_selOptA
+            (show selOptA (AdmASpecs (zs.filter (fun z => !z.isNever))) a = true by
+              rw [selOptA_eq_AdmAAny hcz]; exact AdmAAny_of_mem hsurv hwa)
+          have hwu : w = u := by
+            have hm : w ∈ (zs.filter (fun z => !z.isNever)).filter
+                (fun v => admitOptA (specOf v, AdmA v) a) :=
+              List.mem_filter.mpr ⟨hsurv, admitOptA_of_AdmA hcz hsurv hwa⟩
+            rw [hfu, List.mem_singleton] at hm
+            exact hm
+          subst hwu
+          rw [ofOptions_p_of_filter hfu, union_p_of_filter hft]
+          exact ⟨(hwP a hta ha).2, (hwP a hta ha).1⟩
+      -- **an object against an object**: the intersection of the tables, at the merged rest
+      case case77 =>
+        rename_i a b
+        exact object_row ih hle h
+      -- **an object against a record**: only a `codec` rest reads an undeclared name the way a
+      -- record does, and the record's term meets every field and the rest's codec
+      case case75 =>
+        rename_i b x
+        exact record_row ih hle (by rw [Term.meet.eq_def] at h; simpa using h)
+      case case76 =>
+        rename_i x b
+        obtain ⟨h1, h2⟩ := record_row ih (by simp only [Term.depth] at hle ⊢; omega)
+          (show Body.meetRec b x = some z by rw [Term.meet.eq_def] at h; simpa using h)
+        exact ⟨fun c => by rw [h1 c, Bool.and_comm], fun c hx hb => (h2 c hb hx).symm⟩
+
+/-- **`AdmA` is a homomorphism from the meet to conjunction.** Where two terms have a meet, the
+    attributes it reads are exactly the attributes both read. -/
+theorem AdmA_meet {x y z : Term} (h : Term.meet x y = some z) (a : Attr) :
+    AdmA z a = (AdmA x a && AdmA y a) :=
+  (AdmA_meet_le (Term.depth x + Term.depth y) x y (Nat.le_refl _) z h).1 a
+
+/-- **…and it reads them to the same value.** The read agreement is proved with the homomorphism
+    and not after it: `AdmA (.refine t p) a` asks the predicate of what `t` decodes `a` to, so the
+    refinement rows reduce to this statement, and this statement is false on its own at a row that
+    answers the bottom, where the first half is what makes it vacuous. -/
+theorem denote_meet_p {x y z : Term} (h : Term.meet x y = some z) {a : Attr}
+    (hx : AdmA x a = true) (hy : AdmA y a = true) :
+    (denote z).p a = (denote x).p a ∧ (denote z).p a = (denote y).p a :=
+  (AdmA_meet_le (Term.depth x + Term.depth y) x y (Nat.le_refl _) z h).2 a hx hy
+
+
 /-! ## The bottom, and what a sub-selection keeps -/
 
 /-- The bottom admits no value. -/
