@@ -222,3 +222,32 @@ predicate rather than asserted anywhere.
 which needs a codec's type to carry which constructor built it. It does not today. Widening the
 term reader instead would not close it: an adapter's decode is arbitrary code, and no term says
 what it returns.
+
+---
+
+## Known: two meet cells refuse a pair they could answer, for want of a decidable equality
+
+**Observation.** `Field.meet` answers `none` at two `fallback` fields, and `Term.meetLit` answers
+`none` at two `number` literals. In both the pair meets whenever the two carried values are equal,
+and in both the row cannot ask whether they are. `Value` has no `DecidableEq` in this tree, and
+neither does `Attr`; only the small index types carry one. At `number` the obstruction is
+`Double.decEq`, which is `numericHost`'s field and so noncomputable — the same reason `OrthL`
+declines at that base.
+
+    -- both answer `none`, and both pairs are equal
+    Field.meet (.fallback .string (.str "d")) (.fallback .string (.str "d"))
+    Term.meetLit .number x .number x
+
+**Effect.** The meet is less complete than the lattice it models. Two objects that declare one name
+with the same stand-in have no meet, and two numeric literals at the same value have none either.
+Nothing is answered wrongly: each cell refuses rather than guessing, so every theorem about the
+meet holds on a smaller set of pairs.
+
+**Pin.** Both cells are pinned as examples beside their definitions in `Calculus/Meet.lean`, each
+asserting `none` on a pair that is equal, and each docstring says why. A later pass that adds the
+equality must move those two examples, which is what keeps the defect from closing unnoticed.
+
+**Open.** The improvement is a decidable equality on `Value` that stays within the advertised
+axiom base. `Value` carries a function at its map constructor and three `Finset`s over `Double`,
+so the instance would reach the pi and `Finset` routes; whether that is acceptable is a decision
+about the axiom base and belongs to the owner.
