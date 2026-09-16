@@ -174,6 +174,42 @@ theorem pairwise_of_orthAll : ∀ {ts : List Term}, orthAll ts = true →
       simp only [orthAll, Bool.and_eq_true, List.all_eq_true] at h
       exact .cons (fun u hu => h.1 u hu) (pairwise_of_orthAll h.2)
 
+/-- A held set of the option judgements is some option's own. -/
+theorem mem_typed_of_mem : ∀ {os : List Term} {Ts μs}, TypedListμ os Ts μs →
+    ∀ T ∈ Ts, ∃ t ∈ os, ∃ μ, Typed t T μ
+  | _, _, _, .nil, _, hT => nomatch hT
+  | _, _, _, .cons hty hs, T, hT => by
+    rcases List.mem_cons.mp hT with rfl | hT'
+    · exact ⟨_, List.mem_cons_self, _, hty⟩
+    · obtain ⟨t', ht', μ', hty'⟩ := mem_typed_of_mem hs T hT'
+      exact ⟨t', List.mem_cons_of_mem _ ht', μ', hty'⟩
+
+/-- The certificate's pairwise `Orth`, carried to the held sets option by option. -/
+theorem unionOk_pairwise_held : ∀ {os : List Term} {Ts μs}, TypedListμ os Ts μs →
+    List.Pairwise (fun x y => Orth x y = true) os →
+    (∀ t ∈ os, t.isOpenObject = false) → Ts.Pairwise HDisj
+  | _, _, _, .nil, _, _ => .nil
+  | _, _, _, .cons hty hs, ho, hc => by
+    obtain ⟨hohead, hotail⟩ := List.pairwise_cons.mp ho
+    refine .cons ?_
+      (unionOk_pairwise_held hs hotail (fun t ht => hc t (List.mem_cons_of_mem _ ht)))
+    intro T hT
+    obtain ⟨t', ht', μ', hty'⟩ := mem_typed_of_mem hs T hT
+    exact separates_held_of_orth (hc _ List.mem_cons_self)
+      (hc _ (List.mem_cons_of_mem _ ht')) (hohead t' ht') hty hty'
+
+/-- **A certified union satisfies (D).** The certificate is what the judgement's side
+    condition needs, and it needs no `denote`: the held sets are the judgement's own, and
+    disjointness is the second disjunct. This is the form the meet's union row takes. -/
+theorem dincomp_of_unionOk {os : List Term} {Ts μs} (hc : unionOk os = true)
+    (h : TypedListμ os Ts μs) : DIncomp Ts := by
+  obtain ⟨hc1, _⟩ := Bool.and_eq_true_iff.mp hc
+  obtain ⟨horth, hopen⟩ := Bool.and_eq_true_iff.mp hc1
+  refine dincomp_of_disjoint (unionOk_pairwise_held h (pairwise_of_orthAll horth) ?_)
+  intro t ht
+  have := List.all_eq_true.mp hopen t ht
+  simpa using this
+
 /-- A union of what survived a distribution: nothing is the bottom, one survivor is itself, and
     the rest are a union again. -/
 def Term.ofOptions : List Term → Term
