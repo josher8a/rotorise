@@ -64,6 +64,15 @@ The witness that the union of the declared names is wrong: `object {x : req stri
 refuses it, for the name the other declares. An object over the union of the two names admits it,
 so the union rule answers `true` where both factors answer `false`.
 
+**A shared name's two fields meet at the stronger mark, and an unshared one parts the halves.**
+A mark says whether the name must be present when the object is written and when it is read, and
+those two bits are not the same bit: `fallback` forces the write and not the read, because its
+stand-in answers a read that finds no name. Intersecting conjoins each bit, so a shared name meets
+at the stronger of the two marks — `optional < fallback < req` — which is `Field.meet`. A name one
+body declares and the other does not has no second mark to join: under a closed rest a `req` name
+makes the object the bottom, because it must be written and the partner refuses it, and a
+`fallback` name refuses outright, because the write side is empty there and the read side is not.
+
 **The intersection is wrong on the read side under `drop`, so that pair refuses too.** `objAdmA`
 filters by `keepT`, and `keepT` at `drop` keeps the declared names alone, so a `drop` object
 *skips* an undeclared name rather than refusing it. That is what `drop` means for a read. The
@@ -194,6 +203,18 @@ theorem Body.mem_shared_right {a b : Body} {k : Name} (h : k ∈ Body.shared a b
 def Body.reqShared (a b : Body) : Bool :=
   decide (∀ k : {k // k ∈ a.fields}, Field.isReq (a.at k) = true → k.1 ∈ b.fields)
 
+/-- Whether a field carries a stand-in. -/
+def Field.isFallback : Field → Bool
+  | .fallback _ _ => true
+  | _ => false
+
+/-- Whether every `fallback` name one body declares is a name the other declares too. The cell
+    where it fails is the one that refuses: a stand-in name the partner does not declare is a name
+    the write side must write and the partner refuses, so the pair is empty on the write side,
+    while the read side reads the stand-in and needs no name at all. -/
+def Body.fbShared (a b : Body) : Bool :=
+  decide (∀ k : {k // k ∈ a.fields}, Field.isFallback (a.at k) = true → k.1 ∈ b.fields)
+
 /-- Whether a `drop` factor declares every name the other factor declares. The declared set is an
     upper bound on the write side, where an undeclared name is refused, and a lower bound on the
     read side under `drop`, where an undeclared name is skipped. The intersection is the meet of
@@ -253,6 +274,10 @@ macro (name := meetWf) "meet_wf" : tactic => `(tactic|
 
 /-! ## The meet -/
 
+-- The presence table added five rows to `Field.meet`, and each one puts another goal to
+-- `meet_wf`. The default budget is reached inside the termination proof of the block, not inside
+-- any proof about it.
+set_option maxHeartbeats 1000000 in
 mutual
 
 /-- **The intersection of two admissions, as a term.** One row per pair of constructors. -/
@@ -449,15 +474,34 @@ def Term.meetLit : (k : GroundKind) → k.Carrier → (k' : GroundKind) → k'.C
 
 
 
-/-- Two fields at one name. `req` against `optional` is `req`: the name must be present for one
-    factor, so it must be present for the meet. `fallback` refuses against any mark, its default
-    being a value the other factor has not been asked about. -/
+/-- **Two fields at one name: the meet of the terms, at the stronger mark.**
+
+    A mark carries two presence bits, whether the name must be present when the object is
+    *written* and whether it must be present when the object is *read*. `optional` forces neither,
+    `fallback` forces the write alone, because its stand-in answers a read that finds no name, and
+    `req` forces both. Intersecting admissions conjoins constraints, so each bit is a join, and
+    the three marks are a chain under it: `optional < fallback < req`. The mark of the meet is the
+    stronger of the two, and the pair "read forces, write does not" names no mark because no mark
+    has it.
+
+    So `req` against a `fallback` is `req` and the stand-in goes: `req` forces the name present, so
+    a read never finds it missing and never reaches the stand-in. `optional` against a `fallback`
+    is that `fallback`, which is the only mark forcing the write and not the read.
+
+    **Two `fallback` fields refuse, and that is a defect and not a rule.** They meet at the same
+    mark whenever their stand-ins agree, and `Value` has no `DecidableEq` in this tree, so the row
+    cannot ask. `Term.meetLit` declines at `number` for the same shape one type down, and
+    `docs/defects.md` carries the pair as one entry. -/
 def Field.meet : Field → Field → Option Field
   | .req x, .req y => (Term.meet x y).map .req
   | .req x, .optional y => (Term.meet x y).map .req
   | .optional x, .req y => (Term.meet x y).map .req
+  | .req x, .fallback y _ => (Term.meet x y).map .req
+  | .fallback x _, .req y => (Term.meet x y).map .req
   | .optional x, .optional y => (Term.meet x y).map .optional
-  | _, _ => none
+  | .optional x, .fallback y d => (Term.meet x y).map (.fallback · d)
+  | .fallback x d, .optional y => (Term.meet x y).map (.fallback · d)
+  | .fallback _ _, .fallback _ _ => none
 termination_by f g => (Field.depth f + Field.depth g, 1)
 decreasing_by meet_wf
 
@@ -485,14 +529,16 @@ decreasing_by meet_wf
 def Body.meetTerm (a b : Body) : Option Term :=
   match Rest.merge a.rest b.rest with
   | some r =>
-      if Body.dropFits a b && Body.dropFits b a then
-        if Body.reqShared a b && Body.reqShared b a then
-          if Body.meetOk a b then
-            if decide (∀ k, Field.isBottom (Body.meetField a b k) = false) then
-              some (.object (.mk (Body.shared a b) (fun k => Body.meetField a b k) r))
-            else some .never
-          else none
-        else some .never
+      if Body.fbShared a b && Body.fbShared b a then
+        if Body.dropFits a b && Body.dropFits b a then
+          if Body.reqShared a b && Body.reqShared b a then
+            if Body.meetOk a b then
+              if decide (∀ k, Field.isBottom (Body.meetField a b k) = false) then
+                some (.object (.mk (Body.shared a b) (fun k => Body.meetField a b k) r))
+              else some .never
+            else none
+          else some .never
+        else none
       else none
   | none => none
 termination_by (Body.depth a + Body.depth b, 1)
@@ -669,6 +715,63 @@ example : Adm (.object (.mk {"y"} (fun _ => .optional .string) (.codec .string))
   apply decide_eq_true
   intro k
   rw [if_neg (by have hk := k.2; simp only [Finset.mem_singleton] at hk; simp [hk])]
+
+/-! ### The presence table
+
+Nine cells, one per pair of marks, and the two an unshared name answers. Each is the join of the
+two presence bits, and the term is the meet of the terms. -/
+
+/-- `req` against `req`, `optional` and `fallback`: the name must be present for one factor, so it
+    must be present for the meet, and a `fallback`'s stand-in never answers under it. -/
+example : Field.meet (.req .string) (.req .string) = some (.req .string) := by
+  simp [Field.meet, Term.meet]
+
+example : Field.meet (.req .string) (.optional .string) = some (.req .string) := by
+  simp [Field.meet, Term.meet]
+
+example : Field.meet (.optional .string) (.req .string) = some (.req .string) := by
+  simp [Field.meet, Term.meet]
+
+example : Field.meet (.req .string) (.fallback .string (.str "d")) = some (.req .string) := by
+  simp [Field.meet, Term.meet]
+
+example : Field.meet (.fallback .string (.str "d")) (.req .string) = some (.req .string) := by
+  simp [Field.meet, Term.meet]
+
+/-- `optional` against `optional` forces neither half… -/
+example : Field.meet (.optional .string) (.optional .string) = some (.optional .string) := by
+  simp [Field.meet, Term.meet]
+
+/-- …and against a `fallback` the stand-in survives, because that is the one mark forcing the
+    write and not the read. -/
+example : Field.meet (.optional .string) (.fallback .string (.str "d"))
+    = some (.fallback .string (.str "d")) := by simp [Field.meet, Term.meet]
+
+example : Field.meet (.fallback .string (.str "d")) (.optional .string)
+    = some (.fallback .string (.str "d")) := by simp [Field.meet, Term.meet]
+
+/-- Two stand-ins refuse, even these two, which are equal. `Value` has no `DecidableEq` here, so
+    the row cannot ask; `docs/defects.md` carries it. -/
+example : Field.meet (.fallback .string (.str "d")) (.fallback .string (.str "d")) = none := by
+  simp [Field.meet]
+
+/-- An unshared `req` name under a closed rest is the bottom: it must be written and the partner
+    refuses it, and on the read side the partner refuses it too. -/
+example : Term.meet
+    (.object (.mk {"x"} (fun _ => .req .string) .refuse))
+    (.object (.mk ∅ (fun _ => .optional .never) .refuse)) = some .never := by
+  rw [Term.meet.eq_def]
+  simp [Body.meetTerm, Rest.merge, Body.fbShared, Field.isFallback, Body.dropFits,
+    Body.reqShared, Field.isReq]
+
+/-- **…and an unshared `fallback` name refuses**, because the two halves part there. The write
+    side must write the name and the partner refuses it, so nothing is written; the read side
+    needs no name at all and both factors read the map that omits it. -/
+example : Term.meet
+    (.object (.mk {"x"} (fun _ => .fallback .string (.str "d")) .refuse))
+    (.object (.mk ∅ (fun _ => .optional .never) .refuse)) = none := by
+  rw [Term.meet.eq_def]
+  simp [Body.meetTerm, Rest.merge, Body.fbShared, Field.isFallback]
 
 /-- **`drop` skips an undeclared name on the read side, so the declared set bounds the read from
     below.** These two bodies declare one name each, and the intersection declares neither. On the
@@ -1612,18 +1715,21 @@ theorem meet_object_object {a b : Body} {z : Term}
     split at h
     next =>
       split at h
-      next hreq =>
-        rw [Bool.and_eq_true] at hreq
+      next =>
         split at h
-        next hok =>
+        next hreq =>
+          rw [Bool.and_eq_true] at hreq
           split at h
-          next _ => exact Or.inr ⟨hreq.1, hreq.2, hok, Or.inr (Option.some.inj h).symm⟩
-          next hnb =>
-            exact Or.inr ⟨hreq.1, hreq.2, hok,
-              Or.inl ⟨(Option.some.inj h).symm, fun hall => hnb (decide_eq_true hall)⟩⟩
-        next => exact absurd h (by simp)
-      next hreq =>
-        exact Or.inl ⟨(Option.some.inj h).symm, fun hc => hreq (Bool.and_eq_true _ _ ▸ hc)⟩
+          next hok =>
+            split at h
+            next _ => exact Or.inr ⟨hreq.1, hreq.2, hok, Or.inr (Option.some.inj h).symm⟩
+            next hnb =>
+              exact Or.inr ⟨hreq.1, hreq.2, hok,
+                Or.inl ⟨(Option.some.inj h).symm, fun hall => hnb (decide_eq_true hall)⟩⟩
+          next => exact absurd h (by simp)
+        next hreq =>
+          exact Or.inl ⟨(Option.some.inj h).symm, fun hc => hreq (Bool.and_eq_true _ _ ▸ hc)⟩
+      next => exact absurd h (by simp)
     next => exact absurd h (by simp)
   next => exact absurd h (by simp)
 
