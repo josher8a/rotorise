@@ -203,6 +203,39 @@ theorem Body.mem_shared_right {a b : Body} {k : Name} (h : k ∈ Body.shared a b
 def Body.reqShared (a b : Body) : Bool :=
   decide (∀ k : {k // k ∈ a.fields}, Field.isReq (a.at k) = true → k.1 ∈ b.fields)
 
+mutual
+
+/-- **Whether a term holds nothing.** `Term.isNever` is the syntactic test; this one sees through
+    the wrappers that hold nothing without being the bottom.
+
+    `array` and `record` are deliberately FALSE at an empty element: an array over the bottom holds
+    the empty list and a record over it holds the empty map. A tuple's TAIL is not read either,
+    because a list of exactly the declared length omits the tail's positions. An `optional` field
+    at an empty term is a name that must be absent, which is a map the object holds. -/
+def Term.isEmpty : Term → Bool
+  | .never => true
+  | .refine t _ => Term.isEmpty t
+  | .tuple ts _ => Term.isEmptyL ts
+  | .object b => Body.isEmptyB b
+  | _ => false
+
+/-- A declared position of a tuple. -/
+def Term.isEmptyL : List Term → Bool
+  | [] => false
+  | t :: ts => Term.isEmpty t || Term.isEmptyL ts
+
+/-- A body with a name that must be present and holds nothing. -/
+def Body.isEmptyB : Body → Bool
+  | .mk fields fld _ => decide (∃ k : {k // k ∈ fields}, Field.isEmptyF (fld k) = true)
+
+/-- A field holds nothing where its name must be written and its term holds nothing. -/
+def Field.isEmptyF : Field → Bool
+  | .req t => Term.isEmpty t
+  | .fallback t _ => Term.isEmpty t
+  | .optional _ => false
+
+end
+
 /-- Whether a field carries a stand-in. -/
 def Field.isFallback : Field → Bool
   | .fallback _ _ => true
@@ -488,6 +521,12 @@ def Term.meetLit : (k : GroundKind) → k.Carrier → (k' : GroundKind) → k'.C
     a read never finds it missing and never reaches the stand-in. `optional` against a `fallback`
     is that `fallback`, which is the only mark forcing the write and not the read.
 
+    **A `fallback` cell whose terms meet at an empty term refuses.** The mark would force the
+    write and not the read, so the two halves part: the write side must write the name with content
+    nothing holds, which makes the object the bottom, and the read side may omit the name and read
+    the stand-in, which is a map the object holds. `Field.isBottom` answers the write side, so it
+    fires at `req` alone once this cell refuses.
+
     **Two `fallback` fields refuse, and that is a defect and not a rule.** They meet at the same
     mark whenever their stand-ins agree, and `Value` has no `DecidableEq` in this tree, so the row
     cannot ask. `Term.meetLit` declines at `number` for the same shape one type down, and
@@ -499,8 +538,10 @@ def Field.meet : Field → Field → Option Field
   | .req x, .fallback y _ => (Term.meet x y).map .req
   | .fallback x _, .req y => (Term.meet x y).map .req
   | .optional x, .optional y => (Term.meet x y).map .optional
-  | .optional x, .fallback y d => (Term.meet x y).map (.fallback · d)
-  | .fallback x d, .optional y => (Term.meet x y).map (.fallback · d)
+  | .optional x, .fallback y d =>
+      (Term.meet x y).bind (fun z => if z.isEmpty then none else some (.fallback z d))
+  | .fallback x d, .optional y =>
+      (Term.meet x y).bind (fun z => if z.isEmpty then none else some (.fallback z d))
   | .fallback _ _, .fallback _ _ => none
 termination_by f g => (Field.depth f + Field.depth g, 1)
 decreasing_by meet_wf
@@ -745,10 +786,29 @@ example : Field.meet (.optional .string) (.optional .string) = some (.optional .
 /-- …and against a `fallback` the stand-in survives, because that is the one mark forcing the
     write and not the read. -/
 example : Field.meet (.optional .string) (.fallback .string (.str "d"))
-    = some (.fallback .string (.str "d")) := by simp [Field.meet, Term.meet]
+    = some (.fallback .string (.str "d")) := by simp [Field.meet, Term.meet, Term.isEmpty]
 
 example : Field.meet (.fallback .string (.str "d")) (.optional .string)
-    = some (.fallback .string (.str "d")) := by simp [Field.meet, Term.meet]
+    = some (.fallback .string (.str "d")) := by simp [Field.meet, Term.meet, Term.isEmpty]
+
+/-- **…and a `fallback` cell whose terms meet at an empty term refuses.** The mark forces the
+    write and not the read, so the write side must write a name nothing can fill, which makes the
+    object the bottom, while the read side omits the name and reads the stand-in, which is a map
+    the object holds. `Field.isBottom` answers the write side, so it fires at `req` alone. -/
+example : Field.meet (.optional .never) (.fallback .never (.str "d")) = none := by
+  simp [Field.meet, Term.meet, Term.isEmpty]
+
+/-- …and the test is `Term.isEmpty`, not `Term.isNever`: a refinement over the bottom holds
+    nothing and is not syntactically the bottom. -/
+example : Field.meet
+    (.optional (.refine .string (.members .string ⟨{"1"}, Finset.singleton_nonempty _⟩)))
+    (.fallback .boolean (.str "d")) = none := by
+  simp [Field.meet, Term.meet, Term.isEmpty, Pred.isData]
+
+/-- A `req` field over the bottom is still the bottom and not a refusal: both halves force the
+    name present, so both agree that nothing satisfies the object. -/
+example : Field.meet (.req .string) (.req .boolean) = some (.req .never) := by
+  simp [Field.meet, Term.meet]
 
 /-- Two stand-ins refuse, even these two, which are equal. `Value` has no `DecidableEq` here, so
     the row cannot ask; `docs/defects.md` carries it. -/
@@ -1492,9 +1552,16 @@ theorem AdmField_meet {f g fm : Field} (h : Field.meet f g = some fm) :
       AdmField f = Adm x ∧ AdmField g = Adm y ∧ AdmField fm = Adm z ∧
       Field.depth f = Term.depth x + 1 ∧ Field.depth g = Term.depth y + 1 := by
   cases f <;> cases g <;>
-    simp only [Field.meet, Option.map_eq_some_iff, reduceCtorEq, false_and, exists_false] at h <;>
-    obtain ⟨z, hz, rfl⟩ := h <;>
-    exact ⟨_, _, z, hz, rfl, rfl, rfl, rfl, rfl⟩
+    simp only [Field.meet, Option.map_eq_some_iff, Option.bind_eq_some_iff, reduceCtorEq,
+      false_and, exists_false] at h <;>
+    first
+      | (obtain ⟨z, hz, rfl⟩ := h
+         exact ⟨_, _, z, hz, rfl, rfl, rfl, rfl, rfl⟩)
+      | (obtain ⟨z, hz, hfm⟩ := h
+         split at hfm
+         · exact absurd hfm (by simp)
+         · obtain rfl := Option.some.inj hfm
+           exact ⟨_, _, z, hz, rfl, rfl, rfl, rfl, rfl⟩)
 
 
 /-- A name is shared exactly when both bodies declare it. -/
@@ -1552,8 +1619,13 @@ theorem valPresentT_req (fields : Finset Name) (fld : {k // k ∈ fields} → Fi
 theorem isReq_of_meet {f g fm : Field} (h : Field.meet f g = some fm) :
     Field.isReq fm = (Field.isReq f || Field.isReq g) := by
   cases f <;> cases g <;>
-    simp only [Field.meet, Option.map_eq_some_iff, reduceCtorEq] at h <;>
-    obtain ⟨z, _, rfl⟩ := h <;> rfl
+    simp only [Field.meet, Option.map_eq_some_iff, Option.bind_eq_some_iff, reduceCtorEq] at h <;>
+    first
+      | (obtain ⟨z, _, rfl⟩ := h; rfl)
+      | (obtain ⟨z, _, hfm⟩ := h
+         split at hfm
+         · exact absurd hfm (by simp)
+         · obtain rfl := Option.some.inj hfm; rfl)
 
 /-- The meet of two fields at a shared name must be present when either factor's must. -/
 theorem isReq_meetField {a b : Body} (hok : Body.meetOk a b = true)
