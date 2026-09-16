@@ -44,19 +44,31 @@ admissions. `array(string) ∧ tuple(string 'a')` is `tuple(string 'a')` and is 
 `object {a} ⊗ object {b}` is `object {a, b}` and is a merge. The meet's object row does not call
 `Body.merge`; only `Rest.merge` is shared, and the rests are the one place the two agree.
 
-**An object's declared names meet by intersection.** `objAdmV` quantifies over the names the
-*value* carries and `AdmRest` is `none` at `drop` and at `refuse` alike, so a closed object refuses
-an undeclared name on the value side under either policy: the declared set is an upper bound. Two
-upper bounds meet at their intersection. The required names unite, and **with both rests closed** a
-required name outside the intersection makes the object `never`, because that name must be present
-and the other factor refuses it. An *open* factor refuses no name: its rest holds one the factor
-does not declare. So the rests are read first, and a `codec` on either side answers the refusal
-before the required-name test is consulted.
+**An object's declared names meet by intersection, and only where both halves read the set the
+same way.** `objAdmV` quantifies over the names the *value* carries and `AdmRest` is `none` at
+`drop` and at `refuse` alike, so a closed object refuses an undeclared name on the value side under
+either policy: the declared set is an upper bound. Two upper bounds meet at their intersection. The
+required names unite, and **with both rests closed** a required name outside the intersection makes
+the object `never`, because that name must be present and the other factor refuses it. An *open*
+factor refuses no name: its rest holds one the factor does not declare. So the rests are read
+first, and a `codec` on either side answers the refusal before the required-name test is consulted.
 
 The witness that the union of the declared names is wrong: `object {x : req string}` and
 `object {y : req string}`, both `drop`, against the value `{x := "1", y := "2"}`. Each factor
 refuses it, for the name the other declares. An object over the union of the two names admits it,
 so the union rule answers `true` where both factors answer `false`.
+
+**The intersection is wrong on the read side under `drop`, so that pair refuses too.** `objAdmA`
+filters by `keepT`, and `keepT` at `drop` keeps the declared names alone, so a `drop` object
+*skips* an undeclared name rather than refusing it. That is what `drop` means for a read. The
+declared set therefore bounds the read from below where it bounds the write from above, and an
+intersection is the meet of two upper bounds and the join of two lower ones. The same two bodies
+each read `{x := true}`, because each skips the name the other declares, while the intersection
+declares neither name and reads every map. `Body.dropFits` states the condition under which the two
+halves agree: a `drop` factor must declare every name the other factor declares. Two `drop` factors
+must then declare the same names, a `drop` factor against a `refuse` one must declare every name
+the `refuse` one declares, and two `refuse` factors are free. Every other pair refuses, the
+required-name test included, because a `drop` factor skips the required name it does not declare.
 -/
 
 namespace Calculus
@@ -138,11 +150,21 @@ theorem Body.mem_shared_right {a b : Body} {k : Name} (h : k ∈ Body.shared a b
   (Finset.mem_filter.mp h).2
 
 /-- Whether every name one body requires is a name the other declares. **A bottom test only
-    against a closed factor**: a name the other body does not declare is a name it refuses when its
-    rest is `drop` or `refuse`, and a name it holds when its rest is a codec. `Body.meetTerm` reads
-    the rests first for that reason. -/
+    against a factor that refuses the name on both halves**: a `codec` rest holds the name, and a
+    `drop` rest refuses it on the write side and skips it on the read side. So `Body.meetTerm`
+    reads the rests first, and puts the pair to `Body.dropFits` before it consults this test. -/
 def Body.reqShared (a b : Body) : Bool :=
   decide (∀ k : {k // k ∈ a.fields}, Field.isReq (a.at k) = true → k.1 ∈ b.fields)
+
+/-- Whether a `drop` factor declares every name the other factor declares. The declared set is an
+    upper bound on the write side, where an undeclared name is refused, and a lower bound on the
+    read side under `drop`, where an undeclared name is skipped. The intersection is the meet of
+    two upper bounds and the join of two lower ones, so the two halves agree only where a `drop`
+    factor's declared set contains the other's. -/
+def Body.dropFits (a b : Body) : Bool :=
+  match a.rest with
+  | .drop => decide (∀ k ∈ b.fields, k ∈ a.fields)
+  | _ => true
 
 /-- Both fields at a shared name are strictly shallower than their bodies — the inequality the
     object row's recursion needs, named once so the termination proof cites it rather than
@@ -412,6 +434,12 @@ decreasing_by meet_wf
     the object the bottom: the name must be present, and the other factor refuses a value carrying
     it.
 
+    **The declared set is an upper bound on the write side only.** Under `drop` the read side skips
+    an undeclared name rather than refusing it, so the declared set bounds the read from below and
+    the intersection is the join there. `Body.dropFits` refuses the pair where the two halves
+    disagree, and the required-name test below is a bottom test only once it holds: a `drop` factor
+    that does not declare a required name skips it rather than refusing it.
+
     A field whose terms meet to the bottom is kept rather than dropped. At `optional` the two read
     the same — a name the body does not declare and a name at `optional never` are both refused
     when present — and keeping it leaves the key set fixed for every row below. At `req` it is the
@@ -419,13 +447,15 @@ decreasing_by meet_wf
 def Body.meetTerm (a b : Body) : Option Term :=
   match Rest.merge a.rest b.rest with
   | some r =>
-      if Body.reqShared a b && Body.reqShared b a then
-        if Body.meetOk a b then
-          if decide (∀ k, Field.isBottom (Body.meetField a b k) = false) then
-            some (.object (.mk (Body.shared a b) (fun k => Body.meetField a b k) r))
-          else some .never
-        else none
-      else some .never
+      if Body.dropFits a b && Body.dropFits b a then
+        if Body.reqShared a b && Body.reqShared b a then
+          if Body.meetOk a b then
+            if decide (∀ k, Field.isBottom (Body.meetField a b k) = false) then
+              some (.object (.mk (Body.shared a b) (fun k => Body.meetField a b k) r))
+            else some .never
+          else none
+        else some .never
+      else none
   | none => none
 termination_by (Body.depth a + Body.depth b, 1)
 decreasing_by meet_wf
@@ -599,6 +629,50 @@ example : Adm (.object (.mk {"y"} (fun _ => .optional .string) (.codec .string))
   apply decide_eq_true
   intro k
   rw [if_neg (by have hk := k.2; simp only [Finset.mem_singleton] at hk; simp [hk])]
+
+/-- **`drop` skips an undeclared name on the read side, so the declared set bounds the read from
+    below.** These two bodies declare one name each, and the intersection declares neither. On the
+    write side each factor refuses a map carrying the other's name and the intersection refuses it
+    too, so the write side is right. On the read side each factor skips the name it does not
+    declare, so each reads `{x := true}` — and the intersection, declaring nothing, reads every
+    map, where the left factor refuses that one. No object states both halves and the pair
+    refuses. -/
+example : Term.meet
+    (.object (.mk {"x"} (fun _ => .optional .string) .drop))
+    (.object (.mk {"y"} (fun _ => .optional .string) .drop)) = none := by
+  rw [Term.meet.eq_def]
+  simp [Body.meetTerm, Rest.merge, Body.dropFits]
+
+/-- The same pair at `req`, where the answer was the bottom: the required-name test reads a name
+    the other body does not declare as a refusal, and under `drop` the other body skips it. -/
+example : Term.meet
+    (.object (.mk {"x"} (fun _ => .req .string) .drop))
+    (.object (.mk {"y"} (fun _ => .req .string) .drop)) = none := by
+  rw [Term.meet.eq_def]
+  simp [Body.meetTerm, Rest.merge, Body.dropFits]
+
+/-- …and the mirror, where the meet refuses what both factors read. The `drop` factor skips `y`
+    and the `refuse` factor reads it through its own field, so both admit `{y := "1"}`; the
+    intersection declares nothing and the merged `refuse` refuses it. -/
+example : Term.meet
+    (.object (.mk ∅ (fun _ => .optional .never) .drop))
+    (.object (.mk {"y"} (fun _ => .optional .string) .refuse)) = none := by
+  rw [Term.meet.eq_def]
+  simp [Body.meetTerm, Rest.merge, Body.dropFits]
+
+/-- Two `refuse` factors keep the intersection. `refuse` reads an undeclared name the way it
+    writes one, so the declared set is an upper bound on both halves and the two agree. -/
+example : Term.meet
+    (.object (.mk {"x"} (fun _ => .optional .string) .refuse))
+    (.object (.mk {"y"} (fun _ => .optional .string) .refuse))
+    = some (.object (.mk (Body.shared (.mk {"x"} (fun _ => .optional .string) .refuse)
+                                      (.mk {"y"} (fun _ => .optional .string) .refuse))
+        (fun k => Body.meetField (.mk {"x"} (fun _ => .optional .string) .refuse)
+                                 (.mk {"y"} (fun _ => .optional .string) .refuse) k) .refuse)) := by
+  rw [Term.meet.eq_def]
+  simp only [Body.meetTerm, Rest.merge, Body.dropFits, Body.reqShared, Body.meetOk,
+    Field.isBottom, Field.isReq, Body.shared]
+  rfl
 
 /-- **An uncertified union has no meet, and there are two ways to be uncertified.** These two
     options declare the same name with the same mark and no literal, so nothing tells them
@@ -1456,9 +1530,10 @@ theorem isBottom_false_of_adm {a b : Body}
 
 
 
-/-- What two objects answer: the refusal where the rests do not merge, the bottom where the
-    required names do not fit the intersection or a shared field meets to the bottom, and
-    otherwise the object over the shared names. -/
+/-- What two objects answer: the refusal where the rests do not merge or a `drop` factor does not
+    declare every name the other declares, the bottom where the required names do not fit the
+    intersection or a shared field meets to the bottom, and otherwise the object over the shared
+    names. -/
 theorem meet_object_object {a b : Body} {z : Term}
     (h : Term.meet (.object a) (.object b) = some z) :
     ∃ r, Rest.merge a.rest b.rest = some r ∧
@@ -1473,18 +1548,21 @@ theorem meet_object_object {a b : Body} {z : Term}
   next r hr =>
     refine ⟨r, hr, ?_⟩
     split at h
-    next hreq =>
-      rw [Bool.and_eq_true] at hreq
+    next =>
       split at h
-      next hok =>
+      next hreq =>
+        rw [Bool.and_eq_true] at hreq
         split at h
-        next _ => exact Or.inr ⟨hreq.1, hreq.2, hok, Or.inr (Option.some.inj h).symm⟩
-        next hnb =>
-          exact Or.inr ⟨hreq.1, hreq.2, hok,
-            Or.inl ⟨(Option.some.inj h).symm, fun hall => hnb (decide_eq_true hall)⟩⟩
-      next => exact absurd h (by simp)
-    next hreq =>
-      exact Or.inl ⟨(Option.some.inj h).symm, fun hc => hreq (Bool.and_eq_true _ _ ▸ hc)⟩
+        next hok =>
+          split at h
+          next _ => exact Or.inr ⟨hreq.1, hreq.2, hok, Or.inr (Option.some.inj h).symm⟩
+          next hnb =>
+            exact Or.inr ⟨hreq.1, hreq.2, hok,
+              Or.inl ⟨(Option.some.inj h).symm, fun hall => hnb (decide_eq_true hall)⟩⟩
+        next => exact absurd h (by simp)
+      next hreq =>
+        exact Or.inl ⟨(Option.some.inj h).symm, fun hc => hreq (Bool.and_eq_true _ _ ▸ hc)⟩
+    next => exact absurd h (by simp)
   next => exact absurd h (by simp)
 
 
