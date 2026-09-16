@@ -1242,6 +1242,325 @@ theorem uAtAct_of_orth {opts : List Term}
     UAtAct opts :=
   uAtAct_of_uAtCan (uAtCan_of_orth hlaw hcl h)
 
+/-! ## The same certificate, on the held sets
+
+`separates_of_orth` above is stated on `Adm`, which is what an option **writes**. §5's (D) is
+stated on held sets, and the two are not the same set: `T = dom(e)` fails at a `union` whose
+options both admit one value, where `select` writes nothing and the held set keeps it
+(`TIsDomE`, `not_TIsDomE_unionLiteralString`). So disjoint admission does not give disjoint
+held sets, and `Typed.union`'s (D) cannot be discharged through `separates_of_orth`.
+
+The mirror below re-runs each phase against the judgement instead. It needs the value half
+only, because a held set is a set of values. `uAtCan_of_orth` takes the same closedness
+premise for the same reason, and `orth_alone_is_not_enough` is the witness that the premise
+is not decoration. -/
+
+/-- The option list's held occupancy, for the `union` row below. -/
+theorem typed_occVL : ∀ {opts : List Term} {Ts μs}, TypedListμ opts Ts μs →
+    (∀ t ∈ opts, ∀ (T : Held) (μ), Typed t T μ → ∀ v, T v → occV t v.slot = true) →
+    ∀ (v : Value) (T : Held), T ∈ Ts → T v → occVL opts v.slot = true
+  | _, _, _, .nil, _, _, _, hT, _ => nomatch hT
+  | _, _, _, .cons hty hs, ih, v, T, hT, hv => by
+    rcases List.mem_cons.mp hT with rfl | hT'
+    · simp only [occVL, Bool.or_eq_true]
+      exact Or.inl (ih _ List.mem_cons_self _ _ hty v hv)
+    · simp only [occVL, Bool.or_eq_true]
+      exact Or.inr (typed_occVL hs (fun x hx => ih x (List.mem_cons_of_mem _ hx)) v T hT' hv)
+
+set_option linter.unreachableTactic false in
+/-- **Every held value's slot is one the term occupies**, which is `occV_sound` against the
+    judgement rather than against `Adm`. The `⊤` rows cost nothing, and a set whose kind does
+    not match its base is empty, which its carrier forbids. -/
+theorem typed_occV : ∀ {t T μ}, Typed t T μ → ∀ v, T v → occV t v.slot = true
+  | t, T, μ, h, v, hv => by
+    cases h with
+    | string => obtain ⟨s, rfl⟩ := hv; rfl
+    | number => obtain ⟨d, rfl, _⟩ := hv; rfl
+    | decimal => obtain ⟨s, rfl, _⟩ := hv; rfl
+    | boolean => obtain ⟨b, rfl⟩ := hv; rfl
+    | null => subst hv; rfl
+    | binary => obtain ⟨b, rfl⟩ := hv; rfl
+    | literal k x => subst hv; cases k <;> rfl
+    | never => exact absurd hv (hnever_false v)
+    | custom _ _ => rfl
+    | set b =>
+        rcases hv with ⟨S, rfl, hall⟩ | ⟨S, rfl, hall⟩ | ⟨S, rfl, hall⟩ <;>
+          cases b <;>
+          simp_all [occV, occOnly, Value.slot, SetBase.slot, SetBase.held] <;>
+          exact S.2.elim (fun a ha => hall a ha)
+    | array _ => obtain ⟨vs, rfl, _⟩ := hv; rfl
+    | tuple _ _ => obtain ⟨vs, rfl, _⟩ := hv; rfl
+    | record _ => obtain ⟨keys, f, rfl, _⟩ := hv; rfl
+    | object _ _ => obtain ⟨keys, f, rfl, _⟩ := hv; rfl
+    | held _ => rfl
+    | @refine t' T' μ' q h' => exact typed_occV h' v hv.1
+    | @legacy t' T' μ' r h' => exact typed_occV h' v hv
+    | @lazy t' T' μ' h' => exact typed_occV h' v hv
+    | opaq lossy =>
+        cases lossy with
+        | true => rfl
+        | false => cases hv <;> simp_all [occV, occBut, Value.slot]
+    | @union opts Ts μs h' _ =>
+        obtain ⟨T', hT', hv'⟩ := hv
+        exact typed_occVL h' (fun t' _ _ _ hty w hw => typed_occV hty w hw) v T' hT' hv'
+termination_by t _ _ _ _ => Term.depth t
+decreasing_by term_depth_wf
+
+/-- **Phase *slot*, on the held sets.** -/
+theorem held_disj_of_Orth1 {x y : Term} {Tx Ty : Held} {μx μy : Option Member}
+    (h : Orth1 x y = true) (hx : Typed x Tx μx) (hy : Typed y Ty μy) : HDisj Tx Ty :=
+  fun v hvx hvy => occV_disjoint_of_Orth1 h (typed_occV hx v hvx) (typed_occV hy v hvy)
+
+set_option linter.unnecessarySimpa false in
+/-- **Phase *alternatives*, on the held sets.** Two literals pinned to different values hold
+    different values, and two restricted sets with no common alternative hold no common set:
+    a set value held by both would have every element in both alternative sets, and its
+    carrier gives it an element. -/
+theorem held_disj_of_OrthL {x y : Term} {Tx Ty : Held} {μx μy : Option Member}
+    (h : OrthL x y = true) (hx : Typed x Tx μx) (hy : Typed y Ty μy) : HDisj Tx Ty := by
+  unfold OrthL at h
+  split at h
+  case _ a b | _ a b | _ a b | _ a b | _ a b =>
+    cases hx; cases hy
+    intro v hvx hvy
+    simp only [HLit] at hvx hvy
+    subst hvx
+    simp only [GroundKind.toValue] at hvy
+    have hne := of_decide_eq_true h
+    first
+      | exact hne (by simpa using hvy)
+      | exact hne (Subtype.ext (by simpa using hvy))
+  case _ => exact absurd h (by simp)
+  case _ b ls b' ls' | _ b ls b' ls' | _ b ls b' ls' =>
+    obtain ⟨hb, hd⟩ := Bool.and_eq_true_iff.mp h
+    cases hx
+    rename_i hx'
+    cases hx'
+    cases hy
+    rename_i hy'
+    cases hy'
+    intro v hvx hvy
+    have hq1 := hvx.2
+    have hq2 := hvy.2
+    simp only [Pred.eval] at hq1 hq2
+    cases v
+    case strSet S =>
+      exact S.2.elim (fun s hs => by
+        simp_all [liftQ, inLs, inL, disjAlts]
+        all_goals
+          obtain ⟨p1, hm1⟩ := hq1 s hs
+          obtain ⟨p2, hm2⟩ := hq2 s hs
+          exact h _ p1 hm1 hm2)
+    case numSet S => exact S.2.elim (fun d hd => by simp_all [liftQ, inLs, inL, disjAlts])
+    case binSet S => exact S.2.elim (fun w hw => by simp_all [liftQ, inLs, inL, disjAlts])
+    all_goals simp_all [liftQ]
+  case _ => exact absurd h (by simp)
+
+/-- A term with a name spec is an object, and the spec is that object's body's. -/
+theorem specOf_object {t : Term} {s : MapOf NameSpec} (h : specOf t = some s) :
+    ∃ b : Body, t = .object b ∧ s = b.spec := by
+  cases t <;> simp only [specOf, reduceCtorEq] at h
+  exact ⟨_, rfl, (Option.some.inj h).symm⟩
+
+/-- A closed rest holds nothing: the open part of the held set is absent. -/
+theorem typedRest_none {r : Rest} {R : Option Held} (h : TypedRest r R)
+    (ho : r.isOpen = false) : R = none := by
+  cases h <;> simp_all [Rest.isOpen]
+
+/-- A body's spec is indexed by that body's own names. -/
+@[simp] theorem Body.spec_keys (b : Body) : b.spec.keys = b.fields := by cases b; rfl
+
+/-- What the spec calls required, it reads off that name's field. -/
+theorem body_spec_get {b : Body} (k : {k // k ∈ b.spec.keys}) (hk : k.1 ∈ b.fields) :
+    (b.spec.get k).required =
+      (match b.at ⟨k.1, hk⟩ with | .optional _ => false | _ => true) := by
+  cases b; rfl
+
+/-- A name the spec calls required is a name whose field is not `optional`, which is the
+    premise `TypedField.true_of_not_optional` takes. -/
+theorem body_spec_required {b : Body} (k : {k // k ∈ b.spec.keys})
+    (h : (b.spec.get k).required = true) (hk : k.1 ∈ b.fields) :
+    ∀ t', b.at ⟨k.1, hk⟩ ≠ .optional t' := by
+  intro t' hc
+  rw [body_spec_get k hk, hc] at h
+  exact absurd h (by simp)
+
+/-- **Phase *names*, one direction.** One body requires a name the other does not declare,
+    and the other is closed, so the name it would have to carry falls to a rest that holds
+    nothing. -/
+theorem held_disj_of_reqNotDeclared {a b : Body} {Ta Tb : Held} {μa μb : Option Member}
+    (hclosed : b.rest.isOpen = false) (h : reqNotDeclared a.spec b.spec = true)
+    (hta : Typed (.object a) Ta μa) (htb : Typed (.object b) Tb μb) : HDisj Ta Tb := by
+  obtain ⟨k, hreq, hnd⟩ := of_decide_eq_true h
+  cases hta with
+  | @object _ binda Ra μsa hfa hra =>
+    cases htb with
+    | @object _ bindb Rb μsb hfb hrb =>
+      intro v hva hvb
+      obtain ⟨keys, f, rfl, hpresa, _⟩ := hva
+      obtain ⟨keys', f', heq, _, hkeysb⟩ := hvb
+      cases heq
+      have hkma : k.1 ∈ a.fields := by rw [← Body.spec_keys]; exact k.2
+      have hnd' : k.1 ∉ b.fields := by rw [← Body.spec_keys]; exact hnd
+      have hka : k.1 ∈ keys :=
+        hpresa ⟨k.1, hkma⟩
+          (TypedField.true_of_not_optional (hfa ⟨k.1, hkma⟩) (body_spec_required k hreq hkma))
+      have hb := hkeysb ⟨k.1, hka⟩
+      rw [dif_neg hnd'] at hb
+      obtain ⟨T, hT, _⟩ := hb
+      rw [typedRest_none hrb hclosed] at hT
+      exact absurd hT (by simp)
+
+/-- The mirror of `HDisj`'s own symmetry, used to read the second direction off the first. -/
+theorem HDisj.symm {Tx Ty : Held} (h : HDisj Tx Ty) : HDisj Ty Tx :=
+  fun v hy hx => h v hx hy
+
+/-- **Phase *names*, on the held sets.** -/
+theorem held_disj_of_OrthM {x y : Term} {Tx Ty : Held} {μx μy : Option Member}
+    (hx0 : x.isOpenObject = false) (hy0 : y.isOpenObject = false) (h : OrthM x y = true)
+    (hx : Typed x Tx μx) (hy : Typed y Ty μy) : HDisj Tx Ty := by
+  unfold OrthM at h
+  cases hsx : specOf x with
+  | none => rw [hsx] at h; exact absurd h (by simp)
+  | some sx =>
+    cases hsy : specOf y with
+    | none => rw [hsx, hsy] at h; exact absurd h (by simp)
+    | some sy =>
+      rw [hsx, hsy] at h
+      obtain ⟨bx, rfl, rfl⟩ := specOf_object hsx
+      obtain ⟨by_, rfl, rfl⟩ := specOf_object hsy
+      simp only [Term.isOpenObject] at hx0 hy0
+      rcases Bool.or_eq_true_iff.mp h with h' | h'
+      · exact held_disj_of_reqNotDeclared hy0 h' hx hy
+      · exact (held_disj_of_reqNotDeclared hx0 h' hy hx).symm
+
+/-- What the spec pins at a declared name, it reads off that name's field. -/
+theorem body_spec_alts {b : Body} (k : {k // k ∈ b.spec.keys}) (hk : k.1 ∈ b.fields) :
+    (b.spec.get k).alts = altsOfField (b.at ⟨k.1, hk⟩) := by
+  cases b; rfl
+
+/-- A field the spec pins to a literal holds that literal's value and no other. Every field
+    form, because `altsOfField` reads all three: a present name is pinned whether or not the
+    field is required. -/
+theorem held_lit_of_alts {fd : Field} {T : Held} {π μ} {kd : GroundKind} {a : kd.Carrier}
+    (halts : altsOfField fd = some ⟨kd, a⟩) (h : TypedField fd T π μ) :
+    ∀ v, T v → v = kd.toValue a := by
+  obtain ⟨t', hty, hshape⟩ := TypedField.term h
+  rcases hshape with rfl | rfl | ⟨w, rfl⟩ <;>
+    cases t' <;> simp only [altsOfField, reduceCtorEq] at halts <;>
+    cases halts <;> cases hty <;> exact fun v hv => hv
+
+set_option linter.unnecessarySimpa false in
+/-- **Phase *literals*, on the held sets.** Both specs require the shared name, so every map
+    either holds carries it, and each side pins its value to a different literal. -/
+theorem held_disj_of_OrthS {x y : Term} {Tx Ty : Held} {μx μy : Option Member}
+    (h : OrthS x y = true) (hx : Typed x Tx μx) (hy : Typed y Ty μy) : HDisj Tx Ty := by
+  unfold OrthS at h
+  cases hsx : specOf x with
+  | none => rw [hsx] at h; exact absurd h (by simp)
+  | some sx =>
+    cases hsy : specOf y with
+    | none => rw [hsx, hsy] at h; exact absurd h (by simp)
+    | some sy =>
+      rw [hsx, hsy] at h
+      obtain ⟨bx, rfl, rfl⟩ := specOf_object hsx
+      obtain ⟨b2, rfl, rfl⟩ := specOf_object hsy
+      obtain ⟨k, hlit⟩ := of_decide_eq_true h
+      have hkx : k.1 ∈ bx.fields := by rw [← Body.spec_keys]; exact k.2
+      unfold litDisjAt at hlit
+      rw [show bx.spec.at k.1 = some (bx.spec.get k) by
+            simp only [MapOf.at, dif_pos k.2]] at hlit
+      cases hay : b2.spec.at k.1 with
+      | none => rw [hay] at hlit; exact absurd hlit (by simp)
+      | some ny =>
+        rw [hay] at hlit
+        obtain ⟨hky, rfl⟩ := MapOf.at_eq_some.mp hay
+        obtain ⟨hreqs, hd⟩ := Bool.and_eq_true_iff.mp hlit
+        obtain ⟨hreqx, hreqy⟩ := Bool.and_eq_true_iff.mp hreqs
+        have hky' : k.1 ∈ b2.fields := by rw [← Body.spec_keys]; exact hky
+        rw [body_spec_alts k hkx, body_spec_alts ⟨k.1, hky⟩ hky'] at hd
+        cases hx with
+        | @object _ bindx Rx μsx hfx hrx =>
+          cases hy with
+          | @object _ bindy Ry μsy hfy hry =>
+            intro v hvx hvy
+            obtain ⟨keys, f, rfl, hpresx, hentx⟩ := hvx
+            obtain ⟨keys', f', heq, hpresy, henty⟩ := hvy
+            cases heq
+            have hin : k.1 ∈ keys :=
+              hpresx ⟨k.1, hkx⟩
+                (TypedField.true_of_not_optional (hfx ⟨k.1, hkx⟩)
+                  (body_spec_required k hreqx hkx))
+            have hex := hentx ⟨k.1, hin⟩
+            have hey := henty ⟨k.1, hin⟩
+            rw [dif_pos hkx] at hex
+            rw [dif_pos hky'] at hey
+            unfold altsDisj at hd
+            split at hd
+            case _ ax ay | _ ax ay | _ ax ay | _ ax ay =>
+              have h1 := held_lit_of_alts (by assumption) (hfx ⟨k.1, hkx⟩) _ hex
+              have h2 := held_lit_of_alts (by assumption) (hfy ⟨k.1, hky'⟩) _ hey
+              rw [h1] at h2
+              have hne := of_decide_eq_true hd
+              simp only [GroundKind.toValue] at h2
+              first
+                | exact hne (by simpa using h2.symm)
+                | exact hne (by simpa using h2)
+                | exact hne (Subtype.ext (by simpa using h2.symm))
+                | exact hne (Subtype.ext (by simpa using h2))
+            case _ => exact absurd hd (by simp)
+
+/-- **The certificate separates held sets.** Whichever phase found the certificate, two
+    derivable closed options hold no value in common. This is what `Typed.union`'s (D) takes,
+    in the disjointness form `dincomp_of_disjoint` reads. -/
+theorem separates_held_of_orth {x y : Term} {Tx Ty : Held} {μx μy : Option Member}
+    (hx0 : x.isOpenObject = false) (hy0 : y.isOpenObject = false) (h : Orth x y = true)
+    (hx : Typed x Tx μx) (hy : Typed y Ty μy) : HDisj Tx Ty := by
+  rcases Bool.or_eq_true_iff.mp h with h'' | hl
+  · rcases Bool.or_eq_true_iff.mp h'' with h' | hs
+    · rcases Bool.or_eq_true_iff.mp h' with h1 | hm
+      · exact held_disj_of_Orth1 h1 hx hy
+      · exact held_disj_of_OrthM hx0 hy0 hm hx hy
+    · exact held_disj_of_OrthS hs hx hy
+  · exact held_disj_of_OrthL hl hx hy
+
+/-! ### The closedness premise, and why it is not decoration -/
+
+private def bReq : Body := .mk {"k"} (fun _ => .req .string) .refuse
+private def bOpen : Body := .mk ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) (.codec .string)
+private def vShared : Value := .map {"k"} (fun _ => .str "a")
+private def TStr : Held := fun v => ∃ s, v = .str s
+
+private theorem typed_bReq :
+    Typed (.object bReq) (HObject bReq.fields (fun _ => (true, TStr)) none) (some .M) :=
+  Typed.object (μs := fun _ => some .S) (fun _ => TypedField.req Typed.string) TypedRest.refuse
+
+private theorem typed_bOpen :
+    Typed (.object bOpen) (HObject bOpen.fields
+      (fun k => absurd k.2 (Finset.notMem_empty k.1)) (some TStr)) (some .M) :=
+  Typed.object (μs := fun k => absurd k.2 (Finset.notMem_empty k.1))
+    (fun k => absurd k.2 (Finset.notMem_empty k.1)) (TypedRest.codec Typed.string)
+
+private theorem held_bReq : HObject bReq.fields (fun _ => (true, TStr)) none vShared :=
+  ⟨{"k"}, fun _ => .str "a", rfl, fun k _ => by simpa [bReq] using k.2,
+    fun k => by rw [dif_pos (show k.1 ∈ bReq.fields by simp [bReq, k.2])]; exact ⟨"a", rfl⟩⟩
+
+private theorem held_bOpen : HObject bOpen.fields
+    (fun k => absurd k.2 (Finset.notMem_empty k.1)) (some TStr) vShared :=
+  ⟨{"k"}, fun _ => .str "a", rfl, fun k => absurd k.2 (Finset.notMem_empty k.1),
+    fun k => by rw [dif_neg (by simp [bOpen])]; exact ⟨TStr, rfl, "a", rfl⟩⟩
+
+/-- **`Orth` alone does not separate held sets.** The certificate answers on the names phase
+    for a closed object against an OPEN one, and the open one holds the very map the closed
+    one requires: a name it does not declare falls to its rest rather than being refused. The
+    write side does not have this case, because `admitOptV` reads `keysOk` off the spec, and
+    that is why `separates_of_orth` needs no such premise and this mirror does. -/
+theorem orth_alone_is_not_enough
+    (hyp : ∀ (x y : Term) (Tx Ty : Held) (μx μy : Option Member), Orth x y = true →
+      Typed x Tx μx → Typed y Ty μy → HDisj Tx Ty) : False :=
+  hyp _ _ _ _ _ _ (by decide +kernel) typed_bReq typed_bOpen vShared held_bReq held_bOpen
+
+
 
 /-! ## The classifier, checked against the table
 
