@@ -2648,4 +2648,51 @@ example : Term.meet (.refine .string (.members .string ⟨{"1"}, Finset.singleto
 example : μSyn (.refine .never (.members .string ⟨{"1"}, Finset.singleton_nonempty _⟩)) = none :=
   rfl
 
+
+/-! ## The bottom, and what a sub-selection keeps -/
+
+/-- The bottom admits no value. -/
+theorem Adm_never (v : Value) : Adm .never v = false := rfl
+
+/-- …and reads no attribute. -/
+theorem AdmA_never (a : Attr) : AdmA .never a = false := rfl
+
+/-- `orthAll` from the pairwise form, which is what a sublist preserves. -/
+theorem orthAll_of_pairwise : ∀ {ts : List Term},
+    List.Pairwise (fun x y => Orth x y = true) ts → orthAll ts = true
+  | [], _ => rfl
+  | t :: ts, h => by
+      cases h with
+      | cons hh hrest =>
+        simp only [orthAll, Bool.and_eq_true, List.all_eq_true]
+        exact ⟨fun u hu => hh u hu, orthAll_of_pairwise hrest⟩
+
+/-- **The certificate survives a sub-selection.** All three conjuncts are pairwise or pointwise,
+    so keeping fewer options proves nothing new. (U) is the property that does not survive, and
+    it is not one of the three. -/
+theorem unionOk_sublist {opts sub : List Term} (hs : sub.Sublist opts)
+    (h : unionOk opts = true) : unionOk sub = true := by
+  simp only [unionOk, Bool.and_eq_true, List.all_eq_true] at h ⊢
+  exact ⟨⟨orthAll_of_pairwise ((pairwise_of_orthAll h.1.1).sublist hs),
+          fun t ht => h.1.2 t (hs.mem ht)⟩, fun t ht => h.2 t (hs.mem ht)⟩
+
+/-- **A value an option admits, the option admits structurally**, where the option is closed.
+    The bridge `selOptV_eq_AdmAny` builds inline; an open object is the case it fails at. -/
+theorem admitOptV_of_Adm {t : Term} (hcl : t.isOpenObject = false) {v : Value}
+    (h : Adm t v = true) : admitOptV (specOf t, Adm t) v = true := by
+  cases t with
+  | object b =>
+    have hr : AdmRest b.rest = none := by
+      cases hrest : b.rest with
+      | drop => rfl
+      | refuse => rfl
+      | codec _ => exact absurd hcl (by simp [Term.isOpenObject, hrest, Rest.isOpen])
+    cases b with
+    | mk fields fld rest =>
+      cases v with
+      | map keys g => simpa only [admitOptV, specOf] using structural_of_AdmBody hr h
+      | _ => exact absurd h (by simp [Adm, AdmBody])
+  | _ => exact h
+
+
 end Calculus

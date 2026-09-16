@@ -1,3 +1,4 @@
+import Calculus.Meet
 import Calculus.Orthogonality
 
 /-!
@@ -186,5 +187,79 @@ theorem uAtAct_exclude {opts : List Term} (c : AltClause)
     (hsep : Separated opts) (h : UAtAct opts) : UAtAct (c.exclude opts) :=
   uAtAct_sublist (semsOf_sublist (c.exclude_sublist opts))
     (admitsAtMostOne_of_separated hsep) h
+
+
+/-! ## The slice partitions the union
+
+`unionOk` is `Meet.lean`'s, so the two corollaries that read it live behind that import. The
+join half needs no certificate: `extract` and `exclude` filter by a predicate and its negation.
+The disjointness half does, because two options sharing a value is exactly what (U) forbids. -/
+
+/-- **A clause partitions a union's options, and the join is the union's admission.** Pure list
+    algebra: `extract` and `exclude` filter by a predicate and its negation. -/
+theorem AdmAny_extract_or_exclude (c : AltClause) (opts : List Term) (v : Value) :
+    (AdmAny (c.extract opts) v || AdmAny (c.exclude opts) v) = AdmAny opts v := by
+  induction opts with
+  | nil => rfl
+  | cons t ts ih =>
+    simp only [AltClause.extract, AltClause.exclude, List.filter_cons] at *
+    cases hc : c.admits t <;> simp_all [AdmAny_cons] <;> cases Adm t v <;> simp_all
+
+/-- …and the two halves of a slice share no value, because the certificate bounds the options
+    that admit one at a single option and the clause keeps them apart. -/
+theorem AdmAny_extract_and_exclude {c : AltClause} {opts : List Term}
+    (hok : unionOk opts = true) (v : Value) :
+    (AdmAny (c.extract opts) v && AdmAny (c.exclude opts) v) = false := by
+  simp only [unionOk, Bool.and_eq_true, List.all_eq_true] at hok
+  rcases hb : AdmAny (c.extract opts) v with _ | _
+  · simp
+  rcases hb2 : AdmAny (c.exclude opts) v with _ | _
+  · simp
+  exfalso
+  obtain ⟨t1, ht1, ha1⟩ := AdmAny_iff.mp hb
+  obtain ⟨t2, ht2, ha2⟩ := AdmAny_iff.mp hb2
+  have hm1 : t1 ∈ opts := List.mem_of_mem_filter ht1
+  have hm2 : t2 ∈ opts := List.mem_of_mem_filter ht2
+  have hc1 : c.admits t1 = true := (List.mem_filter.mp ht1).2
+  have hc2 : c.admits t2 = false := by
+    have := (List.mem_filter.mp ht2).2; simpa using this
+  have hne : t1 ≠ t2 := fun hh => by rw [hh, hc2] at hc1; exact Bool.noConfusion hc1
+  have hlen : (opts.filter (fun t => admitOptV (specOf t, Adm t) v)).length ≤ 1 := by
+    have hone := (admitsAtMostOne_of_orth (pairwise_of_orthAll hok.1.1)).1 v
+    rwa [semsOf, ← optionSems_eq, filter_AdmSpecs (fun t _ => Adm_exact t) v,
+      List.length_map] at hone
+  have hf1 : t1 ∈ opts.filter (fun t => admitOptV (specOf t, Adm t) v) :=
+    List.mem_filter.mpr ⟨hm1, admitOptV_of_Adm (by simpa using hok.1.2 t1 hm1) ha1⟩
+  have hf2 : t2 ∈ opts.filter (fun t => admitOptV (specOf t, Adm t) v) :=
+    List.mem_filter.mpr ⟨hm2, admitOptV_of_Adm (by simpa using hok.1.2 t2 hm2) ha2⟩
+  match hL : opts.filter (fun t => admitOptV (specOf t, Adm t) v), hlen with
+  | [], _ => rw [hL] at hf1; exact absurd hf1 (by simp)
+  | [x], _ =>
+      rw [hL, List.mem_singleton] at hf1 hf2
+      exact hne (hf1.trans hf2.symm)
+  | _ :: _ :: _, hl => rw [hL] at hlen; simp at hlen
+
+/-- **A clause partitions a certified union.** The two slices join to the union and share no
+    value, so a union is the sum of any slice and its complement. Stated on `Term.ofOptions`,
+    because a slice of one option is that option and a slice of none is the bottom. -/
+theorem Adm_extract_or_exclude {c : AltClause} {opts : List Term} (hok : unionOk opts = true)
+    (v : Value) :
+    (Adm (Term.ofOptions (c.extract opts)) v || Adm (Term.ofOptions (c.exclude opts)) v)
+      = Adm (Term.ofOptions opts) v := by
+  rw [Adm_ofOptions (unionOk_sublist (AltClause.extract_sublist c opts) hok),
+      Adm_ofOptions (unionOk_sublist (AltClause.exclude_sublist c opts) hok),
+      Adm_ofOptions hok]
+  exact AdmAny_extract_or_exclude c opts v
+
+/-- …and no value falls in both slices. -/
+theorem Adm_extract_and_exclude {c : AltClause} {opts : List Term} (hok : unionOk opts = true)
+    (v : Value) :
+    (Adm (Term.ofOptions (c.extract opts)) v && Adm (Term.ofOptions (c.exclude opts)) v)
+      = false := by
+  rw [Adm_ofOptions (unionOk_sublist (AltClause.extract_sublist c opts) hok),
+      Adm_ofOptions (unionOk_sublist (AltClause.exclude_sublist c opts) hok)]
+  exact AdmAny_extract_and_exclude hok v
+
+
 
 end Calculus
