@@ -23,6 +23,12 @@ and in each the meet names a member neither shared with its `none`-answering fac
 rows keep is that where both factors name a member they name the same one, and the meet names it
 too; `string ∧ decimal` is refused by exactly that condition.
 
+**A union carries a certificate, and the meet reads it.** `Adm (.union os)` is `selOptV`, which
+admits where *exactly one* option admits structurally. That is the join of the options' admissions
+only when the options carry `unionOk`: pairwise `Orth`, so no value is refused for being admitted
+twice, and no open object, so each option's structural test is its row. Without it the meet has
+nothing to state, and the two examples at the foot of this file are the two ways it fails.
+
 **The meet and the merge are two operations.** `Body.merge` (`Merge.lean`) joins two bodies over
 *disjoint* names and is the record product: its held set is the product of the factors' held sets
 through the split, and the map it admits is one neither factor admits. The meet intersects
@@ -74,12 +80,42 @@ def Pred.isData : Pred → Bool
   | .closure _ => false
   | _ => true
 
+/-- **The certificate a union must carry for its admission to be the join of its options'.**
+    Two conditions, and each answers a way the admission can fall short of the join. Pairwise
+    `Orth` bounds the structural admitters at one, so no value is refused for being admitted
+    twice. Closed options make each option's structural test its row: an *open* object is
+    admitted by `keysOk`, which refuses a name the object holds through its rest, so a union
+    carrying one refuses a value that option admits.
+
+    Lives here rather than beside `Orth` because the meet is its one caller. -/
+def orthAll : List Term → Bool
+  | [] => true
+  | t :: ts => ts.all (fun u => Orth t u) && orthAll ts
+
+def unionOk (os : List Term) : Bool := orthAll os && os.all (fun t => !t.isOpenObject)
+
+/-- The certificate, in the form the separation lemmas take. -/
+theorem pairwise_of_orthAll : ∀ {ts : List Term}, orthAll ts = true →
+    List.Pairwise (fun x y => Orth x y = true) ts
+  | [], _ => .nil
+  | _ :: _, h => by
+      simp only [orthAll, Bool.and_eq_true, List.all_eq_true] at h
+      exact .cons (fun u hu => h.1 u hu) (pairwise_of_orthAll h.2)
+
 /-- A union of what survived a distribution: nothing is the bottom, one survivor is itself, and
     the rest are a union again. -/
 def Term.ofOptions : List Term → Term
   | [] => .never
   | [t] => t
   | ts => .union ts
+
+/-- …and the answer the meet gives at a union: the survivors, where both the options met and
+    the survivors carry the certificate. The meet is the lattice's meet, and an uncertified
+    union is not in the lattice, so the pair has no meet to state. Both sides are tested and
+    not one: `Body.meetRec` answers an OPEN object, so a certified list of options can meet to
+    an uncertified one. -/
+def Term.ofOptionsGuarded (os ts : List Term) : Option Term :=
+  if unionOk os && unionOk ts then some (Term.ofOptions ts) else none
 
 /-- The names both bodies declare. `Finset.filter` and not `∩`: the intersection's membership API
     is not a sanctioned route to `Classical.choice`, and `Finset.mem_filter` is. -/
@@ -160,14 +196,18 @@ def Term.meet : Term → Term → Option Term
   -- without running them, so no term states the intersection.
   | .held _ _ _, _ | .legacy _ _, _ | .custom _ _, _ | .lazy _, _ => none
   | _, .held _ _ _ | _, .legacy _ _ | _, .custom _ _ | _, .lazy _ => none
-  -- **a union distributes**, on either side: meet each option, drop the bottoms, refuse where a
-  -- cell refuses. What survives is a union again, one survivor, or the bottom.
+  -- **a certified union distributes**, on either side: meet each option, drop the bottoms,
+  -- refuse where a cell refuses. What survives is a union again, one survivor, or the bottom.
+  -- Both lists are put to `unionOk` and the pair refuses where either fails, because a union
+  -- whose admission is not the join of its options' is not in the lattice and has no meet to
+  -- state. Both sides are tested: `Body.meetRec` answers an open object, so certified options
+  -- can meet to an uncertified list.
   | .union os, y =>
-      (allSome (os.attach.map fun ⟨t, _⟩ => Term.meet t y)).map
-        (fun zs => Term.ofOptions (zs.filter (fun z => !z.isNever)))
+      (allSome (os.attach.map fun ⟨t, _⟩ => Term.meet t y)).bind
+        (fun zs => Term.ofOptionsGuarded os (zs.filter (fun z => !z.isNever)))
   | x, .union os =>
-      (allSome (os.attach.map fun ⟨t, _⟩ => Term.meet t x)).map
-        (fun zs => Term.ofOptions (zs.filter (fun z => !z.isNever)))
+      (allSome (os.attach.map fun ⟨t, _⟩ => Term.meet t x)).bind
+        (fun zs => Term.ofOptionsGuarded os (zs.filter (fun z => !z.isNever)))
   -- **a refinement conjoins**: the predicate is data, so it rides on the meet of the inner terms.
   | .refine x p, y => if p.isData then (Term.meet x y).map (fun z => .refine z p) else none
   | x, .refine y p => if p.isData then (Term.meet x y).map (fun z => .refine z p) else none
@@ -472,11 +512,13 @@ example : Term.meet .number .decimal = some .never := by simp [Term.meet]
     that had a row and got it wrong: the wrapper this replaced dropped the point at every
     partner but another wrapper and a `null`, and `opaq` holds the point. -/
 example : Term.meet (.union [.string, .null]) (.opaq true) = some (.union [.string, .null]) := by
-  simp [Term.meet, allSome, Term.ofOptions, Term.isNever]
+  simp [Term.meet, allSome, Term.ofOptions, Term.ofOptionsGuarded, unionOk, orthAll,
+    Orth, Orth1, occV, occA, occOnly, Slot.all, Member.all, Term.isNever, Term.isOpenObject]
 
 /-- …and against the null term alone the string cell is the bottom, so one option survives. -/
 example : Term.meet (.union [.string, .null]) .null = some .null := by
-  simp [Term.meet, allSome, Term.ofOptions, Term.isNever]
+  simp [Term.meet, allSome, Term.ofOptions, Term.ofOptionsGuarded, unionOk, orthAll,
+    Orth, Orth1, occV, occA, occOnly, Slot.all, Member.all, Term.isNever, Term.isOpenObject]
 
 /-- …and the same refusal one container out. A set of stored numerals satisfies both bases, so
     the pair shares values and has no meet. -/
@@ -513,6 +555,23 @@ example : Adm (.object (.mk {"y"} (fun _ => .optional .string) (.codec .string))
   apply decide_eq_true
   intro k
   rw [if_neg (by have hk := k.2; simp only [Finset.mem_singleton] at hk; simp [hk])]
+
+/-- **An uncertified union has no meet, and there are two ways to be uncertified.** These two
+    options declare the same name with the same mark and no literal, so nothing tells them
+    apart: both admit a map carrying `a` *structurally*, `selOptV` finds two admitters and
+    refuses, and the union admits less than the join of its options. -/
+example : unionOk [.object (.mk {"a"} (fun _ => .req .string) .refuse),
+    .object (.mk {"a"} (fun _ => .req .boolean) .refuse)] = false := by
+  simp [unionOk, orthAll, Orth, Orth1, OrthM, OrthS, OrthL, occV, occA, occOnly, Slot.all,
+    Member.all, reqNotDeclared, Body.spec, altsOfField, specOf, litDisjAt, altsDisj, MapOf.at,
+    Finset.mem_singleton]
+
+/-- …and an **open** object is the second way, on its own. Its rest holds a name it does not
+    declare, while an object option is admitted by `keysOk`, which refuses that name. So one
+    such option makes the union refuse a value the option admits, and a singleton union is
+    enough. -/
+example : unionOk [.object (.mk {"a"} (fun _ => .req .string) (.codec .string))] = false := by
+  simp [unionOk, orthAll, Term.isOpenObject, Rest.isOpen]
 
 /-! ### Why the write-agreement condition is conditional
 
