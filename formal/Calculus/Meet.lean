@@ -27,9 +27,15 @@ write the same way". `μSyn` answers `none` for two different reasons — a term
 at all (`never`) and a term that names no *single* stored member (`union`, `opaq`, `lazy`,
 `custom`) — so a factor answering `none` constrains nothing. The two examples at the foot of this
 file are the witnesses: `union [string, null] ∧ null` is `null` and `opaq ∧ string` is `string`,
-and in each the meet names a member neither shared with its `none`-answering factor. The condition the
-rows keep is that where both factors name a member they name the same one, and the meet names it
-too; `string ∧ decimal` is refused by exactly that condition.
+and in each the meet names a member neither shared with its `none`-answering factor.
+
+The condition the rows keep reads off the MEET and not off the factors: where the meet names a
+member, any member a factor names is that one, which is `meet_writes`. The other direction is
+false and the two examples beside that theorem are why. A bottom names no member, so two factors
+naming different members meet at a term that names none — `literal boolean ∧ string` is the
+bottom, and `BOOL` and `S` never have to agree. Excluding the bottom does not repair it either,
+because a refinement over the bottom is not the bottom: `refine string p ∧ boolean` is
+`refine never p`, which names no member and is not `never`.
 
 **A union carries a certificate, and the meet reads it.** `Adm (.union os)` is `selOptV`, which
 admits where *exactly one* option admits structurally. That is the join of the options' admissions
@@ -2482,5 +2488,164 @@ theorem Adm_meet_le : ∀ (n : Nat) (x y : Term), Term.depth x + Term.depth y �
 theorem Adm_meet {x y z : Term} (h : Term.meet x y = some z) (v : Value) :
     Adm z v = (Adm x v && Adm y v) :=
   Adm_meet_le (Term.depth x + Term.depth y) x y (Nat.le_refl _) z h v
+
+/-- A unanimous list names one member, so every entry is that member. -/
+theorem unanimous_all : ∀ {μs : List (Option Member)} {m : Member},
+    unanimous μs = some m → ∀ u ∈ μs, u = some m
+  | [], _, h => by simp [unanimous] at h
+  | μ :: μs, m, h => by
+      simp only [unanimous] at h
+      split at h
+      next hall =>
+        subst h
+        intro u hu
+        rcases List.mem_cons.mp hu with rfl | hu'
+        · rfl
+        · exact of_decide_eq_true (by simpa using (List.all_eq_true.mp hall) u hu')
+      next => exact absurd h (by simp)
+
+/-- An option's member is one of the list's. -/
+theorem mem_μSynList : ∀ {os : List Term} {o : Term}, o ∈ os → μSyn o ∈ μSynList os
+  | [], _, h => by simp at h
+  | t :: ts, o, h => by
+      rcases List.mem_cons.mp h with rfl | h'
+      · exact List.mem_cons_self
+      · exact List.mem_cons_of_mem _ (mem_μSynList h')
+
+/-- Every option of a union that names a member names that one. -/
+theorem μSyn_union_mem {os : List Term} {m : Member} (h : μSyn (.union os) = some m) :
+    ∀ o ∈ os, μSyn o = some m := by
+  intro o ho
+  exact unanimous_all (by simpa only [μSyn] using h) _ (mem_μSynList ho)
+
+/-- …and a list of survivors that names a member has one that does. -/
+theorem μSyn_ofOptions_mem {ts : List Term} {m : Member}
+    (h : μSyn (Term.ofOptions ts) = some m) : ∃ t ∈ ts, μSyn t = some m := by
+  match ts with
+  | [] => exact absurd h (by simp [Term.ofOptions, μSyn])
+  | [t] => exact ⟨t, by simp, h⟩
+  | a :: b :: rest =>
+      exact ⟨a, by simp, μSyn_union_mem (os := a :: b :: rest) h a (by simp)⟩
+
+
+
+/-- A `Forall₂` relates every right element to some left one. -/
+theorem forall₂_mem_right {α β : Type} {R : α → β → Prop} :
+    ∀ {as : List α} {bs : List β}, List.Forall₂ R as bs → ∀ {b}, b ∈ bs → ∃ a ∈ as, R a b
+  | _, _, .nil, _, hb => by simp at hb
+  | _, _, .cons hr hrest, b, hb => by
+      rcases List.mem_cons.mp hb with rfl | hb'
+      · exact ⟨_, List.mem_cons_self, hr⟩
+      · obtain ⟨a, ha, hra⟩ := forall₂_mem_right hrest hb'
+        exact ⟨a, List.mem_cons_of_mem _ ha, hra⟩
+
+set_option maxHeartbeats 2000000 in
+/-- `meet_writes`, in the form the strong induction on summed depth takes. -/
+theorem meet_writes_le : ∀ (n : Nat) (x y : Term), Term.depth x + Term.depth y ≤ n →
+    ∀ z, Term.meet x y = some z → ∀ m : Member, μSyn z = some m →
+      (∀ mx, μSyn x = some mx → mx = m) ∧ (∀ my, μSyn y = some my → my = m) := by
+  intro n
+  induction n with
+  | zero =>
+      intro x y hle
+      have h1 := Term.depth_pos x; have h2 := Term.depth_pos y; omega
+  | succ n ih =>
+      intro x y hle z h m hz
+      cases x, y using Term.meet.fun_cases
+      -- a refinement carries the cell, and `μSyn` reads through it on both sides
+      case case13 | case15 =>
+        simp only [Term.meet] at h
+        rw [if_pos (by assumption)] at h
+        obtain ⟨w, hw, rfl⟩ := Option.map_eq_some_iff.mp h
+        exact ih _ _ (by simp only [Term.depth] at hle; omega) w hw m hz
+      -- a certified union distributes, and a survivor that names the member is the witness
+      case case11 =>
+        obtain ⟨zs, hF, _, _, rfl⟩ :=
+          meet_union_left (by assumption) (by assumption) (by assumption) (by assumption)
+            (by assumption) h
+        obtain ⟨w, hw, hwm⟩ := μSyn_ofOptions_mem hz
+        obtain ⟨o, ho, hom⟩ := forall₂_mem_right hF (List.mem_of_mem_filter hw)
+        simp only [Term.depth] at hle
+        have ihw := ih o _ (by have := Term.depth_le_depthL ho; omega) w hom m hwm
+        exact ⟨fun mx hmx => ihw.1 mx (μSyn_union_mem hmx o ho), ihw.2⟩
+      case case12 =>
+        obtain ⟨zs, hF, _, _, rfl⟩ :=
+          meet_union_right (by assumption) (by assumption) (by assumption) (by assumption)
+            (by assumption) (by assumption) h
+        obtain ⟨w, hw, hwm⟩ := μSyn_ofOptions_mem hz
+        obtain ⟨o, ho, hom⟩ := forall₂_mem_right hF (List.mem_of_mem_filter hw)
+        simp only [Term.depth] at hle
+        have ihw := ih o _ (by have := Term.depth_le_depthL ho; omega) w hom m hwm
+        exact ⟨ihw.2, fun my hmy => ihw.1 my (μSyn_union_mem hmy o ho)⟩
+      -- the ground rows, the literal rows, the set rows and the bottom rows. `μSyn` is a
+      -- function of the constructor at each, so no row here can disagree with its factors about
+      -- the member; the bottom names none, which is what makes `hz` a hypothesis rather than a
+      -- conclusion
+      all_goals (try (simp only [Term.meet, Option.some.injEq] at h))
+      all_goals (try subst h)
+      all_goals (try (simp_all [μSyn, Term.meetLit, Term.meet]))
+      all_goals (try (split at h))
+      all_goals (try (simp only [Option.some.injEq] at h))
+      all_goals (try subst h)
+      all_goals (try (simp_all [μSyn]))
+      all_goals (try (split at h))
+      all_goals (try (simp only [Option.some.injEq] at h))
+      all_goals (try subst h)
+      all_goals (try (simp_all [μSyn]))
+      -- the containers and the objects answer a constructor whose member is fixed, so these
+      -- rows never read the recursion: `μSyn` of an `array`, a `tuple`, a `record` and an
+      -- `object` is `L`, `L`, `M` and `M` whatever the payload meets to
+      case case58 | case59 =>
+        obtain ⟨w, _, rfl⟩ := h
+        simpa [μSyn] using hz
+      case case67 | case68 =>
+        obtain ⟨vs, tl, rfl, _, _⟩ := meet_array_tuple h
+        simpa [μSyn] using hz
+      case case69 | case70 =>
+        obtain ⟨vs, tl, rfl, _, _⟩ := meet_tuple_array h
+        simpa [μSyn] using hz
+      case case71 | case72 | case74 =>
+        rcases meet_tuple_tuple h with ⟨vs, tl, rfl, _, _, _⟩ | ⟨rfl, _, _, _⟩
+        · simpa [μSyn] using hz
+        · exact absurd hz (by simp [μSyn])
+      case case75 | case76 =>
+        obtain ⟨t, r, _, _, _, hc⟩ := meet_object_record h
+        rcases hc with ⟨rfl, _⟩ | rfl
+        · exact absurd hz (by simp [μSyn])
+        · simpa [μSyn] using hz
+      case case77 =>
+        obtain ⟨r, _, hc⟩ :=
+          meet_object_object (show Term.meet (.object _) (.object _) = some z by
+            rw [Term.meet.eq_def]; simpa using h)
+        rcases hc with ⟨rfl, _⟩ | ⟨_, _, _, ⟨rfl, _⟩ | rfl⟩
+        · exact absurd hz (by simp [μSyn])
+        · exact absurd hz (by simp [μSyn])
+        · simpa [μSyn] using hz
+
+
+/-- **Where the meet names a member, any member a factor names is that one.** `μSyn z` is a
+    hypothesis and not a conclusion, because the converse fails twice: a bottom names no member,
+    so two factors naming different members meet at a term that names none, and a refinement over
+    the bottom is not the bottom, so excluding `never` does not repair it. -/
+theorem meet_writes {x y z : Term} (h : Term.meet x y = some z) {m : Member}
+    (hz : μSyn z = some m) :
+    (∀ mx, μSyn x = some mx → mx = m) ∧ (∀ my, μSyn y = some my → my = m) :=
+  meet_writes_le (Term.depth x + Term.depth y) x y (Nat.le_refl _) z h m hz
+
+/-- **The converse is false, and a bottom is why.** Two factors naming different members meet at
+    the bottom, which names none, so a theorem concluding `mx = my` from the factors alone fails
+    here. -/
+example : Term.meet (.literal .boolean true) Term.string = some .never := by simp [Term.meet]
+
+example : μSyn Term.never = none := rfl
+
+/-- …and excluding the bottom does not repair it: a refinement over the bottom is not the bottom,
+    and it names no member either. -/
+example : Term.meet (.refine .string (.members .string ⟨{"1"}, Finset.singleton_nonempty _⟩))
+    .boolean = some (.refine .never (.members .string ⟨{"1"}, Finset.singleton_nonempty _⟩)) := by
+  simp [Term.meet, Pred.isData]
+
+example : μSyn (.refine .never (.members .string ⟨{"1"}, Finset.singleton_nonempty _⟩)) = none :=
+  rfl
 
 end Calculus
