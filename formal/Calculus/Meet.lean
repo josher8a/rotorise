@@ -2695,4 +2695,54 @@ theorem admitOptV_of_Adm {t : Term} (hcl : t.isOpenObject = false) {v : Value}
   | _ => exact h
 
 
+
+/-! ## The laws, on admission
+
+`Adm_meet` is the homomorphism from the meet to conjunction, so each law below is the
+corresponding law of `Bool` read through it. Each is stated on both sides ANSWERING: whether the
+meet answers in one order when it answers in the other is a question about the rows, and the
+lattice does not need it.
+-/
+
+/-- **The meet is commutative on admission.** Stated on both orders answering, because whether
+    the meet answers in one order when it answers in the other is a question about the rows and
+    not about the lattice. -/
+theorem Adm_meet_comm {x y z z' : Term} (h : Term.meet x y = some z)
+    (h' : Term.meet y x = some z') (v : Value) : Adm z v = Adm z' v := by
+  rw [Adm_meet h, Adm_meet h', Bool.and_comm]
+
+/-- **…and associative on admission**, both bracketings answering. -/
+theorem Adm_meet_assoc {x y z xy yz l r : Term}
+    (hxy : Term.meet x y = some xy) (hl : Term.meet xy z = some l)
+    (hyz : Term.meet y z = some yz) (hr : Term.meet x yz = some r) (v : Value) :
+    Adm l v = Adm r v := by
+  rw [Adm_meet hl, Adm_meet hxy, Adm_meet hr, Adm_meet hyz, Bool.and_assoc]
+
+/-- **…and idempotent.** -/
+theorem Adm_meet_self {x z : Term} (h : Term.meet x x = some z) (v : Value) :
+    Adm z v = Adm x v := by
+  rw [Adm_meet h, Bool.and_self]
+
+/-- **The bottom absorbs.** -/
+theorem Adm_meet_never {x z : Term} (h : Term.meet x .never = some z) (v : Value) :
+    Adm z v = false := by
+  rw [Adm_meet h, Adm_never, Bool.and_false]
+
+/-- **The meet distributes over a certified union.** `AdmAny` is the join of the options'
+    admissions, and `&&` distributes over `||`, so this is the distributive law with the join
+    written the way the certificate makes it available. -/
+theorem Adm_meet_union {x z : Term} {os : List Term} (hok : unionOk os = true)
+    (h : Term.meet x (.union os) = some z) (v : Value) :
+    Adm z v = (Adm x v && AdmAny os v) := by
+  rw [Adm_meet h, show Adm (.union os) v = selOptV (AdmSpecs os) v from rfl,
+    selOptV_eq_AdmAny hok]
+
+/-- …and the distribution, written so a reader sees it: the meet of a term with a join is the
+    join of the meets, one option at a time. -/
+theorem Adm_meet_union_distrib {x z o : Term} {os : List Term} (hok : unionOk (o :: os) = true)
+    (h : Term.meet x (.union (o :: os)) = some z) (v : Value) :
+    Adm z v = ((Adm x v && Adm o v) || (Adm x v && AdmAny os v)) := by
+  rw [Adm_meet_union hok h, AdmAny_cons]
+  cases Adm x v <;> cases Adm o v <;> cases AdmAny os v <;> rfl
+
 end Calculus
