@@ -1,3 +1,4 @@
+import Calculus.HeldSet
 import Calculus.Merge
 import Calculus.Orthogonality
 
@@ -5597,5 +5598,454 @@ theorem AdmA_meet_union_distrib {x z o : Term} {os : List Term} (hok : unionOk (
     AdmA z a = ((AdmA x a && AdmA o a) || (AdmA x a && AdmAAny os a)) := by
   rw [AdmA_meet_union hok h, AdmAAny_cons]
   cases AdmA x a <;> cases AdmA o a <;> cases AdmAAny os a <;> rfl
+
+/-! ## The typed fragment is closed under the meet
+
+`Typed.union` carries §5's (D), and the meet builds unions, so the rows that distribute a union
+owe it. `dincomp_of_unionOk` reads (D) off the certificate the same rows already test, which is
+why this theorem needs nothing from the denotation at a union.
+
+The object rows are the ones that would need a choice of index. They do not make one:
+`typed_canon` restates a derivation at indices that are functions of the term, so the merged
+field table is written down. -/
+
+/-- Option judgements for a list, where each option has one. -/
+theorem typedListμ_of_all : ∀ {ss : List Term}, (∀ t ∈ ss, ∃ T μ, Typed t T μ) →
+    ∃ Ts μs, TypedListμ ss Ts μs
+  | [], _ => ⟨[], [], .nil⟩
+  | t :: ts, h => by
+    obtain ⟨T, μ, hty⟩ := h t List.mem_cons_self
+    obtain ⟨Ts, μs, hs⟩ := typedListμ_of_all (fun u hu => h u (List.mem_cons_of_mem _ hu))
+    exact ⟨T :: Ts, μ :: μs, .cons hty hs⟩
+
+/-- **A certified list of derivable survivors gives a derivable union.** -/
+theorem typed_ofOptions {ss : List Term} (hok : unionOk ss = true)
+    (h : ∀ t ∈ ss, ∃ T μ, Typed t T μ) : ∃ T μ, Typed (Term.ofOptions ss) T μ := by
+  rcases ss with _ | ⟨a, _ | ⟨b, rest⟩⟩
+  · exact ⟨_, _, Typed.never⟩
+  · exact h a List.mem_cons_self
+  · obtain ⟨Ts, μs, hL⟩ := typedListμ_of_all h
+    exact ⟨_, _, Typed.union hL (dincomp_of_unionOk hok hL)⟩
+
+
+/-- Each option of a derivable union is derivable. -/
+theorem typedListμ_mem : ∀ {os : List Term} {Ts μs}, TypedListμ os Ts μs →
+    ∀ t ∈ os, ∃ T μ, Typed t T μ
+  | _, _, _, .nil, _, ht => nomatch ht
+  | _, _, _, .cons hty hs, t, ht => by
+    rcases List.mem_cons.mp ht with rfl | ht'
+    · exact ⟨_, _, hty⟩
+    · exact typedListμ_mem hs t ht'
+
+/-- …read off the judgement of the union itself. -/
+theorem typed_union_inv {os : List Term} :
+    (∃ T μ, Typed (.union os) T μ) → ∀ t ∈ os, ∃ T μ, Typed t T μ
+  | ⟨_, _, h⟩ => by cases h with | union hL _ => exact typedListμ_mem hL
+
+/-- Inversions: a derivable container gives derivable components. -/
+theorem typed_array_inv {a : Term} : (∃ T μ, Typed (.array a) T μ) → ∃ T μ, Typed a T μ
+  | ⟨_, _, h⟩ => by cases h with | array h' => exact ⟨_, _, h'⟩
+
+/-- …and a record's value term. -/
+theorem typed_record_inv {a : Term} : (∃ T μ, Typed (.record a) T μ) → ∃ T μ, Typed a T μ
+  | ⟨_, _, h⟩ => by cases h with | record h' => exact ⟨_, _, h'⟩
+
+/-- …and the term under a refinement. -/
+theorem typed_refine_inv {a : Term} {p : Pred} :
+    (∃ T μ, Typed (.refine a p) T μ) → ∃ T μ, Typed a T μ
+  | ⟨_, _, h⟩ => by cases h with | refine h' => exact ⟨_, _, h'⟩
+
+/-- Normalising a refinement keeps it derivable: the bottom is derivable too. -/
+theorem typed_refineOf {t : Term} {p : Pred} (h : ∃ T μ, Typed t T μ) :
+    ∃ T μ, Typed (Term.refineOf t p) T μ := by
+  obtain ⟨T, μ, hT⟩ := h
+  unfold Term.refineOf
+  split
+  · exact ⟨_, _, Typed.never⟩
+  · exact ⟨_, _, Typed.refine hT⟩
+
+/-- Judgements for a list, from one per element. -/
+theorem typedList_of_all : ∀ {ts : List Term}, (∀ t ∈ ts, ∃ T μ, Typed t T μ) →
+    ∃ Ts, TypedList ts Ts
+  | [], _ => ⟨[], .nil⟩
+  | t :: ts, h => by
+    obtain ⟨T, μ, hty⟩ := h t List.mem_cons_self
+    obtain ⟨Ts, hs⟩ := typedList_of_all (fun u hu => h u (List.mem_cons_of_mem _ hu))
+    exact ⟨T :: Ts, .cons hty hs⟩
+
+/-- …and for a tail. -/
+theorem typedOpt_of_all : ∀ {tail : Option Term}, (∀ t ∈ tail, ∃ T μ, Typed t T μ) →
+    ∃ Tt, TypedOpt tail Tt
+  | none, _ => ⟨none, .none⟩
+  | some t, h => by
+    obtain ⟨T, μ, hty⟩ := h t rfl
+    exact ⟨some T, .some hty⟩
+
+/-- Normalising a tuple keeps it derivable: a declared position at the bottom gives the
+    bottom, which is derivable. -/
+theorem typed_tupleOf {ts : List Term} {tail : Option Term}
+    (h : ∀ t ∈ ts, ∃ T μ, Typed t T μ) (ht : ∀ t ∈ tail, ∃ T μ, Typed t T μ) :
+    ∃ T μ, Typed (Term.tupleOf ts tail) T μ := by
+  unfold Term.tupleOf
+  split
+  · exact ⟨_, _, Typed.never⟩
+  · obtain ⟨Ts, hTs⟩ := typedList_of_all h
+    obtain ⟨Tt, hTt⟩ := typedOpt_of_all ht
+    exact ⟨_, _, Typed.tuple hTs hTt⟩
+
+/-- Inversions for a tuple: each declared position, and the tail. -/
+theorem typedList_mem : ∀ {ts : List Term} {Ts}, TypedList ts Ts → ∀ t ∈ ts, ∃ T μ, Typed t T μ
+  | _, _, .nil, _, ht => nomatch ht
+  | _, _, .cons hty hs, t, ht => by
+    rcases List.mem_cons.mp ht with rfl | ht'
+    · exact ⟨_, _, hty⟩
+    · exact typedList_mem hs t ht'
+
+/-- …and both halves of a tuple at once, which is the form the four tuple rows take. -/
+theorem typed_tuple_inv {ts : List Term} {tail : Option Term} :
+    (∃ T μ, Typed (.tuple ts tail) T μ) →
+    (∀ t ∈ ts, ∃ T μ, Typed t T μ) ∧ (∀ t ∈ tail, ∃ T μ, Typed t T μ)
+  | ⟨_, _, h⟩ => by
+    cases h with
+    | tuple hL hT =>
+        refine ⟨typedList_mem hL, ?_⟩
+        cases hT with
+        | none => exact fun t ht => nomatch ht
+        | some hty => exact fun t ht => by cases ht; exact ⟨_, _, hty⟩
+
+/-- The term a field carries. -/
+def Field.termOf : Field → Term
+  | .req t | .optional t => t
+  | .fallback t _ => t
+
+/-- A field is one layer deeper than the term it carries, at every mark. -/
+theorem Field.depth_termOf (fd : Field) : Field.depth fd = Term.depth (Field.termOf fd) + 1 := by
+  cases fd <;> rfl
+
+/-- **A derivation restated at indices that are functions of the term.** The held set of a
+    derivable term is its denotation's and its member is `μSyn`'s, so an object row can write
+    its field table down instead of choosing one. -/
+theorem typed_canon {t : Term} (h : ∃ T μ, Typed t T μ) : Typed t (denote t).T (μSyn t) := by
+  obtain ⟨T, μ, hT⟩ := h
+  have h1 : (denote t).T = T := funext fun v => propext (typed_T_identity hT v)
+  have h2 : μSyn t = μ := typed_μSyn hT
+  rw [h1, h2]
+  exact hT
+
+/-- …and the same at a field, where the mark is `Field.isReq`. -/
+theorem typedField_canon {fd : Field} (h : ∃ T μ, Typed (Field.termOf fd) T μ) :
+    TypedField fd (denote (Field.termOf fd)).T (Field.isReq fd) (μSyn (Field.termOf fd)) := by
+  cases fd with
+  | req t => exact TypedField.req (typed_canon h)
+  | optional t => exact TypedField.optional (typed_canon h)
+  | fallback t v => exact TypedField.fallback (typed_canon h)
+
+/-- A typed field carries a derivable term, whichever mark it has. -/
+theorem typedField_termOf {fd : Field} {T π μ} (h : TypedField fd T π μ) :
+    ∃ T' μ', Typed (Field.termOf fd) T' μ' := by
+  cases h with
+  | req h' => exact ⟨_, _, h'⟩
+  | optional h' => exact ⟨_, _, h'⟩
+  | fallback h' => exact ⟨_, _, h'⟩
+
+/-- Inversion for an object: every declared field's term is derivable, and the rest is typed. -/
+theorem typed_object_inv {b : Body} (h : ∃ T μ, Typed (.object b) T μ) :
+    (∀ k, ∃ T μ, Typed (Field.termOf (b.at k)) T μ) ∧ ∃ R, TypedRest b.rest R := by
+  obtain ⟨T, μ, hT⟩ := h
+  cases hT with
+  | object hf hr => exact ⟨fun k => typedField_termOf (hf k), _, hr⟩
+
+/-- A rest that merges is closed, so its held set has no open part. -/
+theorem typedRest_none_of_merge {x y r : Rest} {R : Option Held} (hm : Rest.merge x y = some r)
+    (h : TypedRest x R) : R = none := by
+  cases h <;> cases y <;> simp_all [Rest.merge]
+
+/-- …and the same for the right factor. -/
+theorem typedRest_none_of_merge_right {x y r : Rest} {R : Option Held}
+    (hm : Rest.merge x y = some r) (h : TypedRest y R) : R = none := by
+  cases h <;> cases x <;> simp_all [Rest.merge]
+
+/-- The field meet meets the fields' terms. -/
+theorem meet_field_termOf {f g fm : Field} (h : Field.meet f g = some fm) :
+    Term.meet (Field.termOf f) (Field.termOf g) = some (Field.termOf fm) := by
+  cases f <;> cases g <;>
+    simp only [Field.meet, Option.map_eq_some_iff, reduceCtorEq] at h <;>
+    obtain ⟨z, hz, rfl⟩ := h <;> exact hz
+
+/-- …and the same against a record's value term. -/
+theorem meetT_field_termOf {f fm : Field} {y : Term} (h : Field.meetT f y = some fm) :
+    Term.meet (Field.termOf f) y = some (Field.termOf fm) := by
+  cases f <;>
+    simp only [Field.meetT, Option.map_eq_some_iff, reduceCtorEq] at h <;>
+    obtain ⟨z, hz, rfl⟩ := h <;> exact hz
+
+/-- **The object row, as a standalone lemma.** The merged field table is written down rather
+    than chosen: every field's indices are functions of that field's term. -/
+theorem typed_object_row {n : Nat} {a b : Body} {z : Term}
+    (ih : ∀ (x y : Term), Term.depth x + Term.depth y ≤ n → ∀ w, Term.meet x y = some w →
+      (∃ T μ, Typed x T μ) → (∃ T μ, Typed y T μ) → ∃ T μ, Typed w T μ)
+    (hle : Term.depth (.object a) + Term.depth (.object b) ≤ n + 1)
+    (h : Term.meet (.object a) (.object b) = some z)
+    (hx : ∃ T μ, Typed (.object a) T μ) (hy : ∃ T μ, Typed (.object b) T μ) :
+    ∃ T μ, Typed z T μ := by
+  obtain ⟨r, hr, hcase⟩ := meet_object_object h
+  obtain ⟨hfa, Ra, hra⟩ := typed_object_inv hx
+  obtain ⟨hfb, Rb, hrb⟩ := typed_object_inv hy
+  rcases hcase with ⟨rfl, -⟩ | ⟨-, -, hok, hz⟩
+  · exact ⟨_, _, Typed.never⟩
+  · rcases hz with ⟨rfl, -⟩ | rfl
+    · exact ⟨_, _, Typed.never⟩
+    · simp only [Term.depth] at hle
+      refine ⟨_, _, Typed.object
+        (body := .mk (Body.shared a b) (fun k => Body.meetField a b k) r) (R := none)
+        (bind := fun k => (Field.isReq (Body.meetField a b k),
+          (denote (Field.termOf (Body.meetField a b k))).T))
+        (μs := fun k => μSyn (Field.termOf (Body.meetField a b k))) ?_ ?_⟩
+      · intro k
+        refine typedField_canon ?_
+        have hall := hok
+        simp only [Body.meetOk, decide_eq_true_eq] at hall
+        obtain ⟨fm, hfm⟩ := Option.isSome_iff_exists.mp (hall ⟨k.1, k.2⟩)
+        have hfield :
+            Field.termOf ((Body.mk (Body.shared a b) (fun k => Body.meetField a b k) r).at k)
+              = Field.termOf fm := by
+          show Field.termOf (Body.meetField a b ⟨k.1, k.2⟩) = Field.termOf fm
+          simp only [Body.meetField, hfm, Option.getD_some]
+        rw [hfield]
+        refine ih (Field.termOf (a.at ⟨k.1, Body.mem_shared_left k.2⟩))
+          (Field.termOf (b.at ⟨k.1, Body.mem_shared_right k.2⟩)) ?_ _
+          (meet_field_termOf hfm) (hfa _) (hfb _)
+        have d1 := Body.depth_lt_field a ⟨k.1, Body.mem_shared_left k.2⟩
+        have d2 := Body.depth_lt_field b ⟨k.1, Body.mem_shared_right k.2⟩
+        rw [Field.depth_termOf] at d1 d2
+        omega
+      · rw [typedRest_none_of_merge hr hra] at hra
+        rw [typedRest_none_of_merge_right hr hrb] at hrb
+        exact TypedRest.merge_closed hr hra hrb
+
+/-- **The object-against-record row.** Only a `codec` rest reads an undeclared name the way a
+    record does, so the answer carries the rest's own meet as its open part. -/
+theorem typed_record_row {n : Nat} {b : Body} {x z : Term}
+    (ih : ∀ (x y : Term), Term.depth x + Term.depth y ≤ n → ∀ w, Term.meet x y = some w →
+      (∃ T μ, Typed x T μ) → (∃ T μ, Typed y T μ) → ∃ T μ, Typed w T μ)
+    (hle : Term.depth (.object b) + Term.depth (.record x) ≤ n + 1)
+    (h : Body.meetRec b x = some z)
+    (hx : ∃ T μ, Typed (.object b) T μ) (hy : ∃ T μ, Typed (.record x) T μ) :
+    ∃ T μ, Typed z T μ := by
+  obtain ⟨t, r, hrest, hmt, hok, hz⟩ := meet_object_record h
+  obtain ⟨hfb, Rb, hrb⟩ := typed_object_inv hx
+  rcases hz with ⟨rfl, -⟩ | rfl
+  · exact ⟨_, _, Typed.never⟩
+  · simp only [Term.depth] at hle
+    have hxin := typed_record_inv hy
+    have hrt : ∃ T μ, Typed t T μ := by
+      rw [hrest] at hrb
+      cases hrb with
+      | codec hT => exact ⟨_, _, hT⟩
+    have hdt : Term.depth t < Body.depth b := Body.depth_lt_rest b hrest
+    obtain ⟨Tr, μr, hTr⟩ := ih t x (by omega) r hmt hrt hxin
+    refine ⟨_, _, Typed.object
+      (body := .mk b.fields (fun k => Body.meetRecField b x k) (.codec r)) (R := some Tr)
+      (bind := fun k => (Field.isReq (Body.meetRecField b x k),
+        (denote (Field.termOf (Body.meetRecField b x k))).T))
+      (μs := fun k => μSyn (Field.termOf (Body.meetRecField b x k))) ?_ (TypedRest.codec hTr)⟩
+    intro k
+    refine typedField_canon ?_
+    have hall := hok
+    simp only [Body.meetRecOk, decide_eq_true_eq] at hall
+    obtain ⟨fm, hfm⟩ := Option.isSome_iff_exists.mp (hall ⟨k.1, k.2⟩)
+    have hfield :
+        Field.termOf ((Body.mk b.fields (fun k => Body.meetRecField b x k) (.codec r)).at k)
+          = Field.termOf fm := by
+      show Field.termOf (Body.meetRecField b x ⟨k.1, k.2⟩) = Field.termOf fm
+      simp only [Body.meetRecField, hfm, Option.getD_some]
+    rw [hfield]
+    refine ih (Field.termOf (b.at ⟨k.1, k.2⟩)) x ?_ _ (meetT_field_termOf hfm) (hfb _) hxin
+    have d1 := Body.depth_lt_field b ⟨k.1, k.2⟩
+    rw [Field.depth_termOf] at d1
+    omega
+
+-- One `simp only` serves several rows of a group, and the simprocs a row needs differ by row,
+-- so an argument unused at one row is needed at the next.
+set_option linter.unusedSimpArgs false in
+set_option maxHeartbeats 4000000 in
+/-- The strong-induction form, on the summed depth: a two-argument recursion is structural
+    on neither argument. `typed_meet` below is the statement a caller wants. -/
+theorem typed_meet_le : ∀ (n : Nat) (x y : Term), Term.depth x + Term.depth y ≤ n →
+    ∀ z, Term.meet x y = some z → (∃ T μ, Typed x T μ) → (∃ T μ, Typed y T μ) →
+    ∃ T μ, Typed z T μ := by
+  intro n
+  induction n with
+  | zero =>
+      intro x y hle
+      exact absurd hle (by have h1 := Term.depth_pos x; have h2 := Term.depth_pos y; omega)
+  | succ n ih =>
+      intro x y hle z h hx hy
+      cases x, y using Term.meet.fun_cases
+      -- the objects, each as a standalone lemma: a row developed inside the induction pays the
+      -- whole file's elaboration on every iteration
+      case case75 => exact typed_record_row ih hle (by simpa only [Term.meet] using h) hx hy
+      case case76 =>
+        exact typed_record_row ih (by simp only [Term.depth] at hle ⊢; omega)
+          (by simpa only [Term.meet] using h) hy hx
+      case case77 => exact typed_object_row ih hle h hx hy
+      -- **a certified union distributes**, and the survivors carry the certificate, which is
+      -- what (D) needs: `dincomp_of_unionOk` reads the disjointness off it
+      case case11 =>
+        obtain ⟨zs, hF, hco, hcz, rfl⟩ :=
+          meet_union_left (by assumption) (by assumption) (by assumption) (by assumption)
+            (by assumption) h
+        simp only [Term.depth] at hle
+        refine typed_ofOptions hcz ?_
+        intro t ht
+        obtain ⟨o, ho, hom⟩ := forall₂_mem_right hF (List.mem_of_mem_filter ht)
+        exact ih o _ (by have := Term.depth_le_depthL ho; omega) t hom
+          (typed_union_inv hx o ho) hy
+      case case12 =>
+        obtain ⟨zs, hF, hco, hcz, rfl⟩ :=
+          meet_union_right (by assumption) (by assumption) (by assumption) (by assumption)
+            (by assumption) (by assumption) h
+        simp only [Term.depth] at hle
+        refine typed_ofOptions hcz ?_
+        intro t ht
+        obtain ⟨o, ho, hom⟩ := forall₂_mem_right hF (List.mem_of_mem_filter ht)
+        exact ih o _ (by have := Term.depth_le_depthL ho; omega) t hom
+          (typed_union_inv hy o ho) hx
+      -- **an array against a tuple**: every declared position meets the element term, and so
+      -- does the tail; the answer normalises
+      case case67 | case68 =>
+        obtain ⟨vs, tl, rfl, hF, hT⟩ := meet_array_tuple h
+        simp only [Term.depth] at hle
+        obtain ⟨hts, htail⟩ := typed_tuple_inv hy
+        refine typed_tupleOf ?_ ?_
+        · intro w hw
+          obtain ⟨t, ht, hm⟩ := forall₂_mem_right hF hw
+          exact ih t _ (by have := Term.depth_le_depthL ht; omega) w hm (hts t ht)
+            (typed_array_inv hx)
+        · intro w hw
+          rcases hT with ⟨-, h2⟩ | ⟨t, u, h1, h2, hm⟩
+          · subst h2; exact nomatch hw
+          · subst h2
+            cases hw
+            have hd : Term.depthO (some t) = Term.depth t := rfl
+            subst h1
+            exact ih t _ (by omega) _ hm (htail t rfl) (typed_array_inv hx)
+      case case69 | case70 =>
+        obtain ⟨vs, tl, rfl, hF, hT⟩ := meet_tuple_array h
+        simp only [Term.depth] at hle
+        obtain ⟨hts, htail⟩ := typed_tuple_inv hx
+        refine typed_tupleOf ?_ ?_
+        · intro w hw
+          obtain ⟨t, ht, hm⟩ := forall₂_mem_right hF hw
+          exact ih t _ (by have := Term.depth_le_depthL ht; omega) w hm (hts t ht)
+            (typed_array_inv hy)
+        · intro w hw
+          rcases hT with ⟨-, h2⟩ | ⟨t, u, h1, h2, hm⟩
+          · subst h2; exact nomatch hw
+          · subst h2
+            cases hw
+            have hd : Term.depthO (some t) = Term.depth t := rfl
+            subst h1
+            exact ih t _ (by omega) _ hm (htail t rfl) (typed_array_inv hy)
+      -- **two tuples** meet positionwise at one arity, and two arities with no tail meet at
+      -- the bottom
+      case case71 | case72 | case73 | case74 =>
+        rcases meet_tuple_tuple h with ⟨vs, tl, rfl, hlen, hF, hT⟩ | ⟨rfl, -, -, -⟩
+        · simp only [Term.depth] at hle
+          obtain ⟨hts, htail⟩ := typed_tuple_inv hx
+          obtain ⟨hus, htail'⟩ := typed_tuple_inv hy
+          refine typed_tupleOf ?_ ?_
+          · intro w hw
+            obtain ⟨⟨a, b⟩, hab, hm⟩ := forall₂_mem_right hF hw
+            have ha := List.of_mem_zip hab
+            exact ih a b
+              (by have := Term.depth_le_depthL ha.1; have := Term.depth_le_depthL ha.2; omega)
+              w hm (hts a ha.1) (hus b ha.2)
+          · intro w hw
+            rcases hT with ⟨-, -, h3⟩ | ⟨t, u, v, h1, h2, h3, hm⟩
+            · subst h3; exact nomatch hw
+            · subst h3
+              cases hw
+              have hd : Term.depthO (some t) = Term.depth t := rfl
+              have hd' : Term.depthO (some u) = Term.depth u := rfl
+              subst h1; subst h2
+              exact ih t u (by omega) _ hm (htail t rfl) (htail' u rfl)
+        · exact ⟨_, _, Typed.never⟩
+      -- a refinement rides on the meet of the inner terms, and normalises
+      case case13 =>
+        simp only [Term.meet] at h
+        split at h
+        · obtain ⟨w, hw, rfl⟩ := Option.map_eq_some_iff.mp h
+          simp only [Term.depth] at hle
+          exact typed_refineOf (ih _ _ (by omega) w hw (typed_refine_inv hx) hy)
+        · contradiction
+      case case15 =>
+        simp only [Term.meet] at h
+        split at h
+        · obtain ⟨w, hw, rfl⟩ := Option.map_eq_some_iff.mp h
+          simp only [Term.depth] at hle
+          exact typed_refineOf (ih _ _ (by omega) w hw hx (typed_refine_inv hy))
+        · contradiction
+      -- a refinement whose predicate is a closure refuses, and the partner is a variable
+      case case14 => cases y <;> simp_all [Term.meet]
+      case case16 => cases x <;> simp_all [Term.meet]
+      -- two literals: the same value at the same base, or the bottom
+      case case57 =>
+        simp only [Term.meet, Term.meetLit] at h
+        repeat' split at h
+        all_goals
+          first
+            | (simp only [Option.some.injEq, reduceCtorEq] at h; done)
+            | (simp only [Option.some.injEq] at h
+               subst h
+               first | exact hx | exact hy | exact ⟨_, _, Typed.never⟩)
+      -- the literal rows whose partner's base is a variable: the row matches on the base
+      case case31 | case32 | case33 | case34 | case35 | case36 | case37 | case38 | case39
+         | case40 | case41 | case42 =>
+        simp only [Term.meet] at h
+        (try split at h) <;>
+          simp only [Option.some.injEq, reduceCtorEq, reduceIte] at h <;> subst h <;>
+          first | exact hx | exact hy | exact ⟨_, _, Typed.never⟩
+      -- the two containers whose answer is the components' meet
+      case case58 =>
+        simp only [Term.meet] at h
+        obtain ⟨w, hw, rfl⟩ := Option.map_eq_some_iff.mp h
+        simp only [Term.depth] at hle
+        obtain ⟨T, μ, hT⟩ :=
+          ih _ _ (by omega) w hw (typed_array_inv hx) (typed_array_inv hy)
+        exact ⟨_, _, Typed.array hT⟩
+      case case59 =>
+        simp only [Term.meet] at h
+        obtain ⟨w, hw, rfl⟩ := Option.map_eq_some_iff.mp h
+        simp only [Term.depth] at hle
+        obtain ⟨T, μ, hT⟩ :=
+          ih _ _ (by omega) w hw (typed_record_inv hx) (typed_record_inv hy)
+        exact ⟨_, _, Typed.record hT⟩
+      -- the set bases, the `opaque` pair and `opaque` against `number`
+      case case64 | case65 | case66 | case86 | case87 | case88 | case89 =>
+        simp only [Term.meet] at h
+        (try split at h) <;>
+          simp only [Option.some.injEq, reduceCtorEq, reduceIte] at h <;> subst h <;>
+          first
+            | exact hx | exact hy | exact ⟨_, _, Typed.never⟩ | exact ⟨_, _, Typed.opaq _⟩
+
+      all_goals
+        first
+          -- a refusing row has no answer to type
+          | (simp only [Term.meet, reduceCtorEq] at h; done)
+          -- a row that answers one of its factors, or the bottom
+          | (simp only [Term.meet, Option.some.injEq] at h
+             subst h
+             first
+               | exact hx
+               | exact hy
+               | exact ⟨_, _, Typed.never⟩)
+
+/-- **The typed fragment is closed under the meet.** Where two derivable terms have a meet,
+    the meet is derivable. The union row is the one that needs the certificate: `unionOk` gives
+    pairwise `Orth`, and `dincomp_of_unionOk` reads §5's (D) off it. -/
+theorem typed_meet {x y z : Term} (h : Term.meet x y = some z)
+    (hx : ∃ T μ, Typed x T μ) (hy : ∃ T μ, Typed y T μ) : ∃ T μ, Typed z T μ :=
+  typed_meet_le (Term.depth x + Term.depth y) x y (Nat.le_refl _) z h hx hy
 
 end Calculus

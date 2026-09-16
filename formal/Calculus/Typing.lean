@@ -117,7 +117,12 @@ def HDisj (Tx Ty : Held) : Prop := ∀ v, Tx v → ¬ Ty v
     disjointness instead rejects working unions, which is why §5 withdrew it; offering it as an
     alternative rejects nothing, because two disjoint options are distinguishable in the
     strongest way there is. Not a discharger of (U) either — no condition on held sets is one —
-    so nothing consumes it; it constrains the judgement's `T`.
+    so no rule eliminates it; it constrains the judgement's `T`.
+
+    **It is not free, either.** Every union the meet builds owes it, and `typed_meet` pays it
+    through `dincomp_of_unionOk`, which reads the disjointness off the union's own certificate.
+    `src/codec/lean.ts` cites it too, for the pairs where the host refuses a `never` option and
+    the model permits it.
 
     **An empty option is the unit of the sum**, and it reaches (D) through the second disjunct:
     it is disjoint from everything, vacuously. Such an option contributes nothing to `HUnion`,
