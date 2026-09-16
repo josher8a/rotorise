@@ -33,9 +33,10 @@ The condition the rows keep reads off the MEET and not off the factors: where th
 member, any member a factor names is that one, which is `meet_writes`. The other direction is
 false and the two examples beside that theorem are why. A bottom names no member, so two factors
 naming different members meet at a term that names none — `literal boolean ∧ string` is the
-bottom, and `BOOL` and `S` never have to agree. Excluding the bottom does not repair it either,
-because a refinement over the bottom is not the bottom: `refine string p ∧ boolean` is
-`refine never p`, which names no member and is not `never`.
+bottom, and `BOOL` and `S` never have to agree. The bottom is the whole of the reason, and it is
+enough: a bottom names no member, so no pair whose meet is one can conclude anything about the
+factors. The meet normalises a refinement over the bottom to the bottom, so that shape no longer
+gives a second witness.
 
 **A union carries a certificate, and the meet reads it.** `Adm (.union os)` is `selOptV`, which
 admits where *exactly one* option admits structurally. That is the join of the options' admissions
@@ -305,6 +306,20 @@ macro (name := meetWf) "meet_wf" : tactic => `(tactic|
       | (apply Prod.Lex.right
          omega)))
 
+/-- **A refinement over the bottom is the bottom.** The bottom bubbles up through a slot that
+    must hold a value, and a refinement's inner term is one: `refine` narrows what the inner term
+    holds, so it holds nothing where the inner term does. Called from the right-hand side of the
+    meet's refinement rows, so every refinement the meet builds is normal. -/
+def Term.refineOf (z : Term) (p : Pred) : Term :=
+  if z.isNever then .never else .refine z p
+
+/-- **A tuple with a declared position at the bottom is the bottom.** Every list the tuple admits
+    fills each declared position, so one position holding nothing empties the tuple. The TAIL is
+    not such a slot: a list of exactly the declared length omits every tail position, so a tail at
+    the bottom reads "exactly the declared positions" rather than "nothing". -/
+def Term.tupleOf (ts : List Term) (tail : Option Term) : Term :=
+  if ts.any Term.isNever then .never else .tuple ts tail
+
 /-! ## The meet -/
 
 -- The presence table added five rows to `Field.meet`, and each one puts another goal to
@@ -335,8 +350,8 @@ def Term.meet : Term → Term → Option Term
       (allSome (os.attach.map fun ⟨t, _⟩ => Term.meet t x)).bind
         (fun zs => Term.ofOptionsGuarded os (zs.filter (fun z => !z.isNever)))
   -- **a refinement conjoins**: the predicate is data, so it rides on the meet of the inner terms.
-  | .refine x p, y => if p.isData then (Term.meet x y).map (fun z => .refine z p) else none
-  | x, .refine y p => if p.isData then (Term.meet x y).map (fun z => .refine z p) else none
+  | .refine x p, y => if p.isData then (Term.meet x y).map (fun z => Term.refineOf z p) else none
+  | x, .refine y p => if p.isData then (Term.meet x y).map (fun z => Term.refineOf z p) else none
   -- the ground bases: the same base is itself, and two different value kinds meet nowhere
   | .string, .string => some .string
   | .boolean, .boolean => some .boolean
@@ -423,14 +438,14 @@ def Term.meet : Term → Term → Option Term
             (match tail with
              | none => some none
              | some t => (Term.meet t x).map some) with
-      | some vs, some tl => some (.tuple vs tl)
+      | some vs, some tl => some (Term.tupleOf vs tl)
       | _, _ => none
   | .tuple ts tail, .array x =>
       match allSome (ts.attach.map fun ⟨t, _⟩ => Term.meet t x),
             (match tail with
              | none => some none
              | some t => (Term.meet t x).map some) with
-      | some vs, some tl => some (.tuple vs tl)
+      | some vs, some tl => some (Term.tupleOf vs tl)
       | _, _ => none
   -- **two tuples meet by arity.** Equal arity meets positionwise and meets the tails. Unequal
   -- arity with no tail on either side admits no common array, which is the bottom. Unequal arity
@@ -443,7 +458,7 @@ def Term.meet : Term → Term → Option Term
                | none, none => some none
                | some t, some u => (Term.meet t u).map some
                | _, _ => none) with
-        | some vs, some tl => some (.tuple vs tl)
+        | some vs, some tl => some (Term.tupleOf vs tl)
         | _, _ => none
       else if tail.isNone && tail'.isNone then some .never
       else none
@@ -651,7 +666,8 @@ the example the meet exists for: an array admits every length and a tuple pins o
 the tuple. -/
 
 example : Term.meet (.array .string) (.tuple [.literal .string "a"] none)
-    = some (.tuple [.literal .string "a"] none) := by simp [Term.meet, allSome]
+    = some (.tuple [.literal .string "a"] none) := by
+  simp [Term.meet, allSome, Term.tupleOf, Term.isNever]
 
 /-- Two value kinds that never meet. -/
 example : Term.meet .string .number = some .never := by simp [Term.meet]
@@ -803,7 +819,7 @@ example : Field.meet (.optional .never) (.fallback .never (.str "d")) = none := 
 example : Field.meet
     (.optional (.refine .string (.members .string ⟨{"1"}, Finset.singleton_nonempty _⟩)))
     (.fallback .boolean (.str "d")) = none := by
-  simp [Field.meet, Term.meet, Term.isEmpty, Pred.isData]
+  simp [Field.meet, Term.meet, Term.isEmpty, Term.refineOf, Term.isNever, Pred.isData]
 
 /-- A `req` field over the bottom is still the bottom and not a refusal: both halves force the
     name present, so both agree that nothing satisfies the object. -/
@@ -886,6 +902,28 @@ example : unionOk [.object (.mk {"a"} (fun _ => .req .string) .refuse),
   simp [unionOk, orthAll, Orth, Orth1, OrthM, OrthS, OrthL, occV, occA, occOnly, Slot.all,
     Member.all, reqNotDeclared, Body.spec, altsOfField, specOf, litDisjAt, altsDisj, MapOf.at,
     Finset.mem_singleton]
+
+/-! ### The bottom bubbles up through a required slot
+
+A slot that must hold a value passes the bottom up; a slot that may be empty stops it. So the
+meet's output is normal, and `Term.isNever` is the whole of the union guard's filter again. -/
+
+/-- A tuple's declared position is such a slot… -/
+example : Term.meet (.tuple [.string] none) (.tuple [.boolean] none) = some .never := by
+  rw [Term.meet.eq_def]
+  simp [Term.meet, allSome, Term.tupleOf, Term.isNever]
+
+/-- …an `array`'s element is not, because an array over the bottom holds the empty list. -/
+example : Term.meet (.array .string) (.array .boolean) = some (.array .never) := by
+  simp [Term.meet]
+
+/-- A refinement's inner term is such a slot, and this is the pair that made a union of empty
+    options: each option met the partner at a refinement over the bottom, which the filter could
+    not see. Both options now answer the bottom and the filter drops them. -/
+example : Term.meet
+    (.refine .string (.members .string ⟨{"1"}, Finset.singleton_nonempty _⟩)) .null
+      = some .never := by
+  simp [Term.meet, Pred.isData, Term.refineOf, Term.isNever]
 
 /-- **A `drop` object is the third way, and it is the open object's defect one half over.** The
     rest is closed, so the value side refuses an undeclared name and `keysOk` is that option's
@@ -1079,7 +1117,7 @@ theorem allSome_map_forall₂ {α β : Type} (f : α → Option β) :
     the tail met against the array's element term. -/
 theorem meet_array_tuple {a : Term} {ts : List Term} {tail : Option Term} {z : Term}
     (h : Term.meet (.array a) (.tuple ts tail) = some z) :
-    ∃ vs tl, z = .tuple vs tl ∧
+    ∃ vs tl, z = Term.tupleOf vs tl ∧
       List.Forall₂ (fun t v => Term.meet t a = some v) ts vs ∧
       ((tail = none ∧ tl = none) ∨
         ∃ t u, tail = some t ∧ tl = some u ∧ Term.meet t a = some u) := by
@@ -1153,7 +1191,7 @@ theorem AdmList_forall₂ {a : Term} {n : Nat}
 /-- …and the same answer with the tuple on the left. -/
 theorem meet_tuple_array {a : Term} {ts : List Term} {tail : Option Term} {z : Term}
     (h : Term.meet (.tuple ts tail) (.array a) = some z) :
-    ∃ vs tl, z = .tuple vs tl ∧
+    ∃ vs tl, z = Term.tupleOf vs tl ∧
       List.Forall₂ (fun t v => Term.meet t a = some v) ts vs ∧
       ((tail = none ∧ tl = none) ∨
         ∃ t u, tail = some t ∧ tl = some u ∧ Term.meet t a = some u) := by
@@ -1278,7 +1316,7 @@ theorem attach_map_fun {α β : Type} (l : List α) (f : α → β) :
     with no tail admit no common array. -/
 theorem meet_tuple_tuple {ts us : List Term} {tail tail' : Option Term} {z : Term}
     (h : Term.meet (.tuple ts tail) (.tuple us tail') = some z) :
-    (∃ vs tl, z = .tuple vs tl ∧ ts.length = us.length ∧
+    (∃ vs tl, z = Term.tupleOf vs tl ∧ ts.length = us.length ∧
         List.Forall₂ (fun (p : Term × Term) v => Term.meet p.1 p.2 = some v) (ts.zip us) vs ∧
         ((tail = none ∧ tail' = none ∧ tl = none) ∨
           ∃ t u w, tail = some t ∧ tail' = some u ∧ tl = some w ∧ Term.meet t u = some w))
@@ -1694,6 +1732,57 @@ theorem AdmBody_of_not_map {c : Body} {v : Value} (h : ∀ keys g, v ≠ .map ke
 /-- The bottom is the only term that reads as the bottom. -/
 theorem eq_never_of_isNever {t : Term} (h : t.isNever = true) : t = .never := by
   cases t <;> simp only [Term.isNever, Bool.false_eq_true] at h <;> rfl
+
+/-- Normalising a refinement keeps the member it stores, because the bottom stores none and so
+    does the refinement over it. -/
+theorem μSyn_refineOf (z : Term) (p : Pred) : μSyn (Term.refineOf z p) = μSyn z := by
+  unfold Term.refineOf
+  split
+  next hz => rw [show z = Term.never from eq_never_of_isNever hz]
+  next => rfl
+
+/-- …and a normalised tuple is a tuple or the bottom. -/
+theorem tupleOf_cases (ts : List Term) (tail : Option Term) :
+    Term.tupleOf ts tail = .never ∨ Term.tupleOf ts tail = .tuple ts tail := by
+  unfold Term.tupleOf; split
+  · exact Or.inl rfl
+  · exact Or.inr rfl
+
+/-- A declared position that holds nothing empties the tuple: every list the tuple admits fills
+    each declared position. -/
+theorem alignP_never_false : ∀ {ts : List Term} {tail : Option Term} {ws : List Value},
+    ts.any Term.isNever = true → alignP (AdmList ts) (AdmOptT tail) ws = false := by
+  intro ts
+  induction ts with
+  | nil => intro _ _ h; simp at h
+  | cons t ts' ih =>
+    intro tail ws h
+    cases ws with
+    | nil => rfl
+    | cons w ws' =>
+      simp only [List.any_cons, Bool.or_eq_true] at h
+      simp only [AdmList, alignP]
+      rcases h with ht | hrest
+      · rw [show t = Term.never from eq_never_of_isNever ht, show Adm .never _ = false from rfl, Bool.false_and]
+      · rw [ih (tail := tail) (ws := ws') hrest, Bool.and_false]
+
+/-- Normalising a tuple keeps what it admits. -/
+theorem Adm_tupleOf (ts : List Term) (tail : Option Term) (v : Value) :
+    Adm (Term.tupleOf ts tail) v = Adm (.tuple ts tail) v := by
+  unfold Term.tupleOf
+  split
+  next hany =>
+    cases v <;> simp only [Adm] <;> try rfl
+    exact (alignP_never_false hany).symm
+  next => rfl
+
+/-- …and normalising a refinement keeps what it admits. -/
+theorem Adm_refineOf (z : Term) (p : Pred) (v : Value) :
+    Adm (Term.refineOf z p) v = Adm (.refine z p) v := by
+  unfold Term.refineOf
+  split
+  next hz => rw [show z = Term.never from eq_never_of_isNever hz]; simp [Adm]
+  next => rfl
 
 /-- **The required-name test is sound once the partner is closed.** If both bodies admit one
     map, every name the left requires is a name the right declares: the value carries it, and a
@@ -2430,6 +2519,7 @@ theorem Adm_meet_le : ∀ (n : Nat) (x y : Term), Term.depth x + Term.depth y �
         rw [if_pos (by assumption)] at h
         obtain ⟨w, hw, rfl⟩ := Option.map_eq_some_iff.mp h
         have ihw := ih _ _ (by simp only [Term.depth] at hle; omega) w hw v
+        rw [Adm_refineOf]
         simp only [Adm, ihw]
         simp [Bool.and_assoc, Bool.and_comm, Bool.and_left_comm]
       -- the containers: the element rows meet, and the payload carries the conjunction
@@ -2444,12 +2534,14 @@ theorem Adm_meet_le : ∀ (n : Nat) (x y : Term), Term.depth x + Term.depth y �
       case case67 | case68 =>
         obtain ⟨vs, tl, rfl, hts, htl⟩ := meet_array_tuple h
         obtain ⟨hb1, hb2⟩ := tuple_bounds_l hle
+        rw [Adm_tupleOf]
         cases v <;>
           simp only [Adm, Bool.and_self,
             alignP_meet_all (AdmList_forall₂ ih hb1 hts) (tailMeet_lift ih hb2 htl)]
       case case69 | case70 =>
         obtain ⟨vs, tl, rfl, hts, htl⟩ := meet_tuple_array h
         obtain ⟨hb1, hb2⟩ := tuple_bounds_r hle
+        rw [Adm_tupleOf]
         cases v <;> simp only [Adm, Bool.and_self] <;>
           rw [Bool.and_comm,
             alignP_meet_all (AdmList_forall₂ ih hb1 hts) (tailMeet_lift ih hb2 htl)]
@@ -2458,7 +2550,8 @@ theorem Adm_meet_le : ∀ (n : Nat) (x y : Term), Term.depth x + Term.depth y �
       case case71 | case72 | case73 | case74 =>
         obtain ⟨hb1, hb2⟩ := tuple_bounds_tt hle
         rcases meet_tuple_tuple h with ⟨vs, tl, rfl, hlen, hF, htl⟩ | ⟨rfl, hne, rfl, rfl⟩
-        · cases v <;> simp only [Adm, Bool.and_self,
+        · rw [Adm_tupleOf]
+          cases v <;> simp only [Adm, Bool.and_self,
             alignP_meet_zip (AdmList_forall₂_zip ih hb1 hF)
               (by rw [AdmList_length, AdmList_length]; exact hlen)
               (tailMeet_lift2 ih hb2 htl)]
@@ -2735,6 +2828,7 @@ theorem meet_writes_le : ∀ (n : Nat) (x y : Term), Term.depth x + Term.depth y
         simp only [Term.meet] at h
         rw [if_pos (by assumption)] at h
         obtain ⟨w, hw, rfl⟩ := Option.map_eq_some_iff.mp h
+        rw [μSyn_refineOf] at hz
         exact ih _ _ (by simp only [Term.depth] at hle; omega) w hw m hz
       -- a certified union distributes, and a survivor that names the member is the witness
       case case11 =>
@@ -2778,13 +2872,19 @@ theorem meet_writes_le : ∀ (n : Nat) (x y : Term), Term.depth x + Term.depth y
         simpa [μSyn] using hz
       case case67 | case68 =>
         obtain ⟨vs, tl, rfl, _, _⟩ := meet_array_tuple h
-        simpa [μSyn] using hz
+        rcases tupleOf_cases vs tl with hc | hc <;> rw [hc] at hz
+        · exact absurd hz (by simp [μSyn])
+        · simpa [μSyn] using hz
       case case69 | case70 =>
         obtain ⟨vs, tl, rfl, _, _⟩ := meet_tuple_array h
-        simpa [μSyn] using hz
+        rcases tupleOf_cases vs tl with hc | hc <;> rw [hc] at hz
+        · exact absurd hz (by simp [μSyn])
+        · simpa [μSyn] using hz
       case case71 | case72 | case74 =>
         rcases meet_tuple_tuple h with ⟨vs, tl, rfl, _, _, _⟩ | ⟨rfl, _, _, _⟩
-        · simpa [μSyn] using hz
+        · rcases tupleOf_cases vs tl with hc | hc <;> rw [hc] at hz
+          · exact absurd hz (by simp [μSyn])
+          · simpa [μSyn] using hz
         · exact absurd hz (by simp [μSyn])
       case case75 | case76 =>
         obtain ⟨t, r, _, _, _, hc⟩ := meet_object_record h
@@ -2817,14 +2917,13 @@ example : Term.meet (.literal .boolean true) Term.string = some .never := by sim
 
 example : μSyn Term.never = none := rfl
 
-/-- …and excluding the bottom does not repair it: a refinement over the bottom is not the bottom,
-    and it names no member either. -/
+/-- The refinement that used to be the second witness is now the bottom, because the meet
+    normalises: a refinement over the bottom holds nothing, so `Term.refineOf` answers the bottom.
+    The hypothesis form is still the right one — the first witness needs no wrapper — and this
+    example is kept because it pins the normalisation at the row that motivated it. -/
 example : Term.meet (.refine .string (.members .string ⟨{"1"}, Finset.singleton_nonempty _⟩))
-    .boolean = some (.refine .never (.members .string ⟨{"1"}, Finset.singleton_nonempty _⟩)) := by
-  simp [Term.meet, Pred.isData]
-
-example : μSyn (.refine .never (.members .string ⟨{"1"}, Finset.singleton_nonempty _⟩)) = none :=
-  rfl
+    .boolean = some .never := by
+  simp [Term.meet, Pred.isData, Term.refineOf, Term.isNever]
 
 
 /-! ## The bottom, and what a sub-selection keeps -/
