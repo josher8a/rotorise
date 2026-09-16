@@ -251,3 +251,41 @@ equality must move those two examples, which is what keeps the defect from closi
 axiom base. `Value` carries a function at its map constructor and three `Finset`s over `Double`,
 so the instance would reach the pi and `Finset` routes; whether that is acceptable is a decision
 about the axiom base and belongs to the owner.
+
+---
+
+## Known: `optional` against `fallback` has no meet, and their intersection is not empty
+
+**Observation.** `Field.meet` answers `none` at an `optional` field and a `fallback` field, in both
+orientations. The two marks agree about presence: each admits a map that omits the name. They read
+that map apart. `objRead` builds its output key set as `keys.filter kn ∪ fbNames keys sems`, and
+`fbNames` is every declared `fallback` name the map omits, so the stand-in enters the read there
+and only there. Measured 2026-09-16:
+
+    -- both bodies admit the attribute `.m ∅ _`, and they read it to different maps
+    object {x : optional string}      reads it to  .map ∅ _
+    object {x : fallback string "d"}  reads it to  .map {"x"} _
+
+**Effect.** The meet is less complete than the lattice it models. Two objects that declare one name,
+one marking it `optional` and the other `fallback`, have no meet, and the pair they share is not
+empty: every map carrying the name is admitted and read alike by both. Nothing is answered wrongly.
+The cell refuses rather than guessing, so every theorem about the meet holds on a smaller set of
+pairs.
+
+A mark cannot answer this cell. The write intersection is the maps carrying the name, because
+`fallback` forces the write; the read intersection is the same, because an absent name reads two
+ways and so carries no agreed value. Both are `req`. But `req` admits less than either factor at a
+map omitting the name, so answering `req` would break `Adm_meet`, which states that the meet admits
+*exactly* what both factors admit, and the read side's counterpart of it. The intersection is `optional`-shaped as an
+admission set and `req`-shaped as a reader, and no mark carries both.
+
+**Pin.** Two examples beside `Field.meet` in `Calculus/Meet.lean` assert `none` in both
+orientations, and the docstring above it gives the reason. `Adm_meet` is the theorem that fails if
+a later pass makes the cell answer a mark.
+
+**Open.** The improvement is not a new mark. It is a decision about the advertised laws: if
+`Adm_meet` and its read-side counterpart were stated as "the meet admits at most what both factors
+admit" rather than exactly, the cell could answer `req` and this pair would gain a meet. Weakening an advertised
+law is a decision about what the development claims, and belongs to the owner. The earlier state of
+this cell answered `fallback`, which kept the equality and broke the reading instead; see the
+commit that introduced this entry.

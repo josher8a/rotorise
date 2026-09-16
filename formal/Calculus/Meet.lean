@@ -65,14 +65,18 @@ The witness that the union of the declared names is wrong: `object {x : req stri
 refuses it, for the name the other declares. An object over the union of the two names admits it,
 so the union rule answers `true` where both factors answer `false`.
 
-**A shared name's two fields meet at the stronger mark, and an unshared one parts the halves.**
-A mark says whether the name must be present when the object is written and when it is read, and
-those two bits are not the same bit: `fallback` forces the write and not the read, because its
-stand-in answers a read that finds no name. Intersecting conjoins each bit, so a shared name meets
-at the stronger of the two marks — `optional < fallback < req` — which is `Field.meet`. A name one
-body declares and the other does not has no second mark to join: under a closed rest a `req` name
-makes the object the bottom, because it must be written and the partner refuses it, and a
-`fallback` name refuses outright, because the write side is empty there and the read side is not.
+**A shared name's two fields meet at the stronger mark where the two marks read alike, and an
+unshared one parts the halves.** A mark says whether the name must be present when the object is
+written and when it is read, and those two bits are not the same bit: `fallback` forces the write
+and not the read, because its stand-in answers a read that finds no name. Intersecting conjoins
+each bit, so where the marks read alike a shared name meets at the stronger of the two,
+`optional < fallback < req`, which is `Field.meet`. **`optional` against a `fallback` reads an
+absent name two ways and so refuses**: both admit a map that omits the name, and there one reads a
+map without the name and the other a map carrying the stand-in, so the pair shares attributes no
+term states. A name one body declares and the other does not has no second mark to join: under a
+closed rest a `req` name makes the object the bottom, because it must be written and the partner
+refuses it, and a `fallback` name refuses outright, because the write side is empty there and the
+read side is not.
 
 **The intersection is wrong on the read side under `drop`, so that pair refuses too.** `objAdmA`
 filters by `keepT`, and `keepT` at `drop` keeps the declared names alone, so a `drop` object
@@ -203,39 +207,6 @@ theorem Body.mem_shared_right {a b : Body} {k : Name} (h : k ∈ Body.shared a b
     reads the rests first, and puts the pair to `Body.dropFits` before it consults this test. -/
 def Body.reqShared (a b : Body) : Bool :=
   decide (∀ k : {k // k ∈ a.fields}, Field.isReq (a.at k) = true → k.1 ∈ b.fields)
-
-mutual
-
-/-- **Whether a term holds nothing.** `Term.isNever` is the syntactic test; this one sees through
-    the wrappers that hold nothing without being the bottom.
-
-    `array` and `record` are deliberately FALSE at an empty element: an array over the bottom holds
-    the empty list and a record over it holds the empty map. A tuple's TAIL is not read either,
-    because a list of exactly the declared length omits the tail's positions. An `optional` field
-    at an empty term is a name that must be absent, which is a map the object holds. -/
-def Term.isEmpty : Term → Bool
-  | .never => true
-  | .refine t _ => Term.isEmpty t
-  | .tuple ts _ => Term.isEmptyL ts
-  | .object b => Body.isEmptyB b
-  | _ => false
-
-/-- A declared position of a tuple. -/
-def Term.isEmptyL : List Term → Bool
-  | [] => false
-  | t :: ts => Term.isEmpty t || Term.isEmptyL ts
-
-/-- A body with a name that must be present and holds nothing. -/
-def Body.isEmptyB : Body → Bool
-  | .mk fields fld _ => decide (∃ k : {k // k ∈ fields}, Field.isEmptyF (fld k) = true)
-
-/-- A field holds nothing where its name must be written and its term holds nothing. -/
-def Field.isEmptyF : Field → Bool
-  | .req t => Term.isEmpty t
-  | .fallback t _ => Term.isEmpty t
-  | .optional _ => false
-
-end
 
 /-- Whether a field carries a stand-in. -/
 def Field.isFallback : Field → Bool
@@ -533,14 +504,18 @@ def Term.meetLit : (k : GroundKind) → k.Carrier → (k' : GroundKind) → k'.C
     has it.
 
     So `req` against a `fallback` is `req` and the stand-in goes: `req` forces the name present, so
-    a read never finds it missing and never reaches the stand-in. `optional` against a `fallback`
-    is that `fallback`, which is the only mark forcing the write and not the read.
+    a read never finds it missing and never reaches the stand-in.
 
-    **A `fallback` cell whose terms meet at an empty term refuses.** The mark would force the
-    write and not the read, so the two halves part: the write side must write the name with content
-    nothing holds, which makes the object the bottom, and the read side may omit the name and read
-    the stand-in, which is a map the object holds. `Field.isBottom` answers the write side, so it
-    fires at `req` alone once this cell refuses.
+    **`optional` against a `fallback` refuses, and the two bits are not why.** The bits describe
+    presence, and these two agree on presence: both admit a map that omits the name. They part on
+    what they READ there, because a stand-in is a VALUE and no other mark carries one. At a map
+    omitting the name, `optional` reads a map without it and `fallback` reads a map carrying the
+    stand-in, so the pair shares attributes it reads two ways, and no term states that. The write
+    intersection and the read intersection are both `req`, and `req` admits less than either
+    factor, so no mark answers either. `docs/defects.md` carries the pair.
+
+    So no row of this function answers a `fallback`. That is what lets `Field.isBottom` ask the
+    write bit: the only meet field that can be the bottom is a `req` one.
 
     **Two `fallback` fields refuse, and that is a defect and not a rule.** They meet at the same
     mark whenever their stand-ins agree, and `Value` has no `DecidableEq` in this tree, so the row
@@ -553,10 +528,8 @@ def Field.meet : Field → Field → Option Field
   | .req x, .fallback y _ => (Term.meet x y).map .req
   | .fallback x _, .req y => (Term.meet x y).map .req
   | .optional x, .optional y => (Term.meet x y).map .optional
-  | .optional x, .fallback y d =>
-      (Term.meet x y).bind (fun z => if z.isEmpty then none else some (.fallback z d))
-  | .fallback x d, .optional y =>
-      (Term.meet x y).bind (fun z => if z.isEmpty then none else some (.fallback z d))
+  | .optional _, .fallback _ _ => none
+  | .fallback _ _, .optional _ => none
   | .fallback _ _, .fallback _ _ => none
 termination_by f g => (Field.depth f + Field.depth g, 1)
 decreasing_by meet_wf
@@ -799,27 +772,13 @@ example : Field.meet (.fallback .string (.str "d")) (.req .string) = some (.req 
 example : Field.meet (.optional .string) (.optional .string) = some (.optional .string) := by
   simp [Field.meet, Term.meet]
 
-/-- …and against a `fallback` the stand-in survives, because that is the one mark forcing the
-    write and not the read. -/
-example : Field.meet (.optional .string) (.fallback .string (.str "d"))
-    = some (.fallback .string (.str "d")) := by simp [Field.meet, Term.meet, Term.isEmpty]
+/-- …and against a `fallback` it refuses, at every pair of terms, because the two read an absent
+    name apart. -/
+example : Field.meet (.optional .string) (.fallback .string (.str "d")) = none := by
+  simp [Field.meet]
 
-example : Field.meet (.fallback .string (.str "d")) (.optional .string)
-    = some (.fallback .string (.str "d")) := by simp [Field.meet, Term.meet, Term.isEmpty]
-
-/-- **…and a `fallback` cell whose terms meet at an empty term refuses.** The mark forces the
-    write and not the read, so the write side must write a name nothing can fill, which makes the
-    object the bottom, while the read side omits the name and reads the stand-in, which is a map
-    the object holds. `Field.isBottom` answers the write side, so it fires at `req` alone. -/
-example : Field.meet (.optional .never) (.fallback .never (.str "d")) = none := by
-  simp [Field.meet, Term.meet, Term.isEmpty]
-
-/-- …and the test is `Term.isEmpty`, not `Term.isNever`: a refinement over the bottom holds
-    nothing and is not syntactically the bottom. -/
-example : Field.meet
-    (.optional (.refine .string (.members .string ⟨{"1"}, Finset.singleton_nonempty _⟩)))
-    (.fallback .boolean (.str "d")) = none := by
-  simp [Field.meet, Term.meet, Term.isEmpty, Term.refineOf, Term.isNever, Pred.isData]
+example : Field.meet (.fallback .string (.str "d")) (.optional .string) = none := by
+  simp [Field.meet]
 
 /-- A `req` field over the bottom is still the bottom and not a refusal: both halves force the
     name present, so both agree that nothing satisfies the object. -/
