@@ -102,36 +102,47 @@ def HUnion (Ts : List Held) : Held :=
   fun v => ∃ T ∈ Ts, T v
 
 /-- The bottom's held set: nothing. It is a subset of every held set, so it is comparable
-    with every option, and (D) admits it as an empty option rather than by incomparability. -/
+    with every option, and (D) admits it on disjointness rather than by incomparability. -/
 def HNever : Held := fun _ => False
 
-/-- An option that holds nothing. `HNever` is one. So is a refinement whose predicate holds of
-    nothing the inner term holds, and that one is not syntactically the bottom. -/
-def HEmpty (T : Held) : Prop := ∀ v, ¬ T v
+/-- Two options share no value. §5 considered this as the whole of (D) and withdrew it, because
+    required of every pair it rejects working unions (`not_uAtCan_literal_held`). As an
+    *alternative* to incomparability it rejects nothing, and it is what a union's certificate
+    actually provides. -/
+def HDisj (Tx Ty : Held) : Prop := ∀ v, Tx v → ¬ Ty v
 
 /-- §5's **(D)**, `(union)`'s well-formedness side condition, pairwise over the held sets.
 
-    *Incomparability*, not disjointness: disjointness would reject working unions
-    (`not_uAtCan_literal_held`). Not a discharger of (U) either — no condition on held sets
-    is one — so nothing consumes it; it constrains the judgement's `T`. Contrast `DDisj`,
-    the strengthening §5 withdrew.
+    Incomparability is the first disjunct and was once the whole condition. Requiring
+    disjointness instead rejects working unions, which is why §5 withdrew it; offering it as an
+    alternative rejects nothing, because two disjoint options are distinguishable in the
+    strongest way there is. Not a discharger of (U) either — no condition on held sets is one —
+    so nothing consumes it; it constrains the judgement's `T`.
 
-    **An empty option is the unit of the sum**, which is the second disjunct. Such an option
-    contributes nothing to `HUnion`, so it cannot make a union ambiguous, and it is a subset
-    of every held set, so incomparability alone excludes it against every partner. The meet
-    builds exactly that union: a `refine` whose predicate holds of nothing the inner term
-    holds is empty, is not syntactically the bottom, and no syntactic test reads a predicate.
-    Requiring incomparability there would put the meet's output outside the typed fragment
-    for a pair that is well behaved. -/
+    **An empty option is the unit of the sum**, and it reaches (D) through the second disjunct:
+    it is disjoint from everything, vacuously. Such an option contributes nothing to `HUnion`,
+    so it cannot make a union ambiguous, while being a subset of every held set, which
+    incomparability alone would reject. The meet builds exactly that union: a `refine` whose
+    predicate holds of nothing the inner term holds is empty, is not syntactically the bottom,
+    and no syntactic test reads a predicate.
+
+    **Disjointness rather than emptiness, and the reason is constructive.** The two read the
+    same classically — an empty set is disjoint from everything, and disjoint sets with an
+    inhabitant apiece are incomparable. But a union's certificate yields disjointness directly,
+    where emptiness would have to be decided of a `Held`, which is a `Prop` at every value. -/
 def DIncomp (Ts : List Held) : Prop :=
   Ts.Pairwise fun Tx Ty =>
-    (¬ (∀ v, Tx v → Ty v) ∧ ¬ (∀ v, Ty v → Tx v)) ∨ HEmpty Tx ∨ HEmpty Ty
+    (¬ (∀ v, Tx v → Ty v) ∧ ¬ (∀ v, Ty v → Tx v)) ∨ HDisj Tx Ty
 
 /-- The strong reading implies this one, so every derivation written against incomparability
     alone survives the weakening. -/
 theorem dincomp_of_incomp {Ts : List Held}
     (h : Ts.Pairwise fun Tx Ty => ¬ (∀ v, Tx v → Ty v) ∧ ¬ (∀ v, Ty v → Tx v)) :
     DIncomp Ts := h.imp Or.inl
+
+/-- …and so does pairwise disjointness, which is the form a union's certificate gives. -/
+theorem dincomp_of_disjoint {Ts : List Held} (h : Ts.Pairwise HDisj) : DIncomp Ts :=
+  h.imp Or.inr
 
 /-- `⟨n₁ :^π₁ T₁ … nₙ :^πₙ Tₙ⟩ ⊕ R(ρ)` (§4 `(object)`). A binding is `(name, required?,
     held set)`; `R` is the open part — `none` for `drop`/`refuse`, the rest codec's held

@@ -1253,8 +1253,8 @@ describe("the declaration guard, against the model's classifier", () => {
      * **Those carry the other warrant, and needed it.** `Orth` *certifies* a pair with `never` on
      * a side — `never` occupies no slot and meets nothing — so asserting `Orth x y = false` about
      * one is false, and `decide` refuted nineteen of them the first time this corpus carried the
-     * bottom. The model types the union too: `HNever` is empty, and §5's (D) admits an empty
-     * option as the unit of the sum. So these carry the *permits*-form, `dincomp_never_left` and
+     * bottom. The model types the union too: `HNever` is disjoint from every held
+     * set, and §5's (D) admits a disjoint pair. So these carry the *permits*-form, `dincomp_never_left` and
      * `dincomp_never_right`, and the emitter states which warrant a pair carries. `src/` refuses
      * them on usefulness — an option admitting nothing can never be chosen — and that is a
      * divergence the artifact records rather than a disagreement about soundness.

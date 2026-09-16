@@ -4538,7 +4538,8 @@ export const discriminatedUnion = <
  * typo or a `map` over an empty array — and this is the one name that reaches the bottom.
  *
  * The model makes it an option of any `union`: `False` is a subset of every held set, and §5's
- * (D) admits an empty option as the unit of the sum, so `union([X, never])` is `Typed`
+ * (D) admits an option disjoint from its partner, which the bottom is from every held set, so
+ * `union([X, never])` is `Typed`
  * (`dincomp_never_left`, `dincomp_never_right`). `union` here refuses it all the same, and on a
  * different ground: an option admitting nothing can never be chosen, which `restricts` answers
  * and which is a lint rather than a soundness rule. Well formed and useful are different claims,

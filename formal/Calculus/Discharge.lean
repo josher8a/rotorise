@@ -30,8 +30,8 @@ So the discharges that remain are the ones no phase reaches: an arbitrary `q` in
 values, (U)'s readable side quantifies over attributes, and `held`'s adapter relabels
 between them. Two options can hold disjoint sets and read one attribute. (D) is a
 well-formedness condition on the `T` index and lives there — `DIncomp`, a premise of
-`Typed.union` (`Typing.lean`), which asks incomparability or an empty option. `DDisj` below is
-the *stronger* reading §5 considered and withdrew, kept only to be refuted.
+`Typed.union` (`Typing.lean`), which asks incomparability or `HDisj`. Asked of *every* pair,
+`HDisj` is the stronger reading §5 considered and withdrew, and it is refuted below.
 
 The two counterexamples that repaired §5's discharger are at the foot of the file. §5 keeps
 both, and
@@ -315,9 +315,12 @@ theorem pairwise_imp_mem {α : Type} {R S : α → α → Prop} :
 /-- `HNever` holds nothing: it is `False` at every value. -/
 theorem hnever_false (v : Value) : ¬ HNever v := id
 
-/-- …so the bottom's held set is empty, and that is how (D) admits it. Incomparability cannot:
-    the bottom is a subset of every held set, so it is comparable with every option. -/
-theorem hempty_never : HEmpty HNever := hnever_false
+/-- …so the bottom is disjoint from every held set, and that is how (D) admits it.
+    Incomparability cannot: the bottom is a subset of every held set. -/
+theorem hdisj_never_left (T : Held) : HDisj HNever T := fun v hv => absurd hv (hnever_false v)
+
+/-- …and on the other side, where the bottom is what the pair is disjoint from. -/
+theorem hdisj_never_right (T : Held) : HDisj T HNever := fun v _ hn => hnever_false v hn
 
 /-- **(D) holds against the bottom, on emptiness.** `union([X, never])` is `Typed`: the bottom
     contributes nothing to `HUnion`, so it cannot make the union ambiguous.
@@ -328,13 +331,14 @@ theorem hempty_never : HEmpty HNever := hnever_false
     divergence as a theorem rather than as prose. -/
 theorem dincomp_never_right (T : Held) : DIncomp [T, HNever] :=
   List.pairwise_cons.mpr
-    ⟨fun _ hb => by rw [List.mem_singleton] at hb; subst hb; exact Or.inr (Or.inr hempty_never),
+    ⟨fun _ hb => by rw [List.mem_singleton] at hb; subst hb; exact Or.inr (hdisj_never_right T),
      List.pairwise_singleton _ _⟩
 
 /-- The same on the other side, where the bottom is the one the disjunct names. -/
 theorem dincomp_never_left (T : Held) : DIncomp [HNever, T] :=
   List.pairwise_cons.mpr
-    ⟨fun _ _ => Or.inr (Or.inl hempty_never), List.pairwise_singleton _ _⟩
+    ⟨fun _ hb => by rw [List.mem_singleton] at hb; subst hb; exact Or.inr (hdisj_never_left _),
+     List.pairwise_singleton _ _⟩
 
 
 /-- **The pair reading of the same fact**, and it is not superseded: it discharges the whole
@@ -832,14 +836,13 @@ theorem uAtAct_array_literals :
     readable side is a condition on stored attributes: distinct members, or disjoint
     readable-side admission. -/
 
-/-- (D) in its held-set form, as the disjointness §5 proposes: no value is held by two
-    options. Stated so the counterexample below can be about it.
+/-! ### (D) in its held-set form, as the disjointness §5 proposed
 
-    This is *not* the rule's premise: `(union)` carries `DIncomp` (`Typing.lean`), which asks
-    incomparability or an empty option. `DDisj` is the strictly stronger reading §5 considered
-    and withdrew, and it is here only to be refuted — the witness below satisfies it and still
-    fails (U). -/
-def DDisj (Tx Ty : Held) : Prop := ∀ v, Tx v → ¬ Ty v
+`HDisj` (`Typing.lean`) is that predicate: no value is held by two options. It is *not* the
+rule's premise asked of every pair — `(union)` carries `DIncomp`, which asks incomparability
+**or** `HDisj` of each pair. §5's withdrawn reading asked `HDisj` of every pair, and that is the
+strictly stronger thing refuted below: the witness satisfies it and still fails (U). One
+predicate in two roles, so it is named once. -/
 
 /-- The relabelling adapter: `"B"` on the outside is `"A"` on the inside. -/
 def fRel : Value → Value := fun v => match v with | .str "B" => .str "A" | _ => .null
@@ -882,7 +885,7 @@ theorem typed_tRel :
   exact h
 
 theorem dDisj_tRel :
-    DDisj (fun v => ∃ s, s ∈ ["A"] ∧ v = .str s)
+    HDisj (fun v => ∃ s, s ∈ ["A"] ∧ v = .str s)
       (fun v => ∃ s, s ∈ ["A"] ∧ fRel v = .str s) := by
   rintro v ⟨s, hs, rfl⟩ ⟨s', hs', hf⟩
   -- `v = "A"`, so `fRel v = null`, which is no string
