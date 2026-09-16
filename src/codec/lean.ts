@@ -893,8 +893,8 @@ export const leanRefusal = ({ name, codec, value }: Refusal): string => {
  * **That law holds of a pair the model TYPES, and a refusal has one of two warrants.** `never` is
  * the pair it does not reach. `Orth` certifies it on slots alone — `Orth Term.string Term.never`
  * is `true`, `never` occupying no slot — so `Orth x y = false` is false about it. The model types
- * the union as well: `HNever` is empty, an empty option is the unit of the sum, and §5's (D)
- * holds on that disjunct.
+ * the union as well: `HNever` is disjoint from every held set, being empty, and §5's (D) holds on
+ * that disjunct.
  *
  * **So a `never` pair is the one place the two sides diverge, and the artifact states the
  * divergence rather than hiding it.** `src/` refuses the pair as a *lint*: `restricts` answers

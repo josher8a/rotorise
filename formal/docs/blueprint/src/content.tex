@@ -882,12 +882,15 @@ strong form implies it.
 \label{cond:D}
 \lean{Calculus.DIncomp}
 \leanok
-\texttt{∀\ i\ ≠\ j.\ (¬(Tᵢ\ ⊆\ Tⱼ)\ ∧\ ¬(Tⱼ\ ⊆\ Tᵢ))\ ∨\ Tᵢ\ =\ ∅\ ∨\ Tⱼ\ =\ ∅}.
-Well-formedness: of any two options, neither held set subsumes the other, or one of them is empty.
-An empty option is the unit of the sum --- it contributes nothing to the union and so cannot make
-it ambiguous, while being a subset of every held set, which incomparability alone would reject.
-Decidable from the held sets alone. It does \textbf{not} discharge the readable side, for the
-reason the machinery of admission gives.
+\texttt{∀\ i\ ≠\ j.\ (¬(Tᵢ\ ⊆\ Tⱼ)\ ∧\ ¬(Tⱼ\ ⊆\ Tᵢ))\ ∨\ Tᵢ\ ∩\ Tⱼ\ =\ ∅}.
+Well-formedness: of any two options, neither held set subsumes the other, or the two share no
+value. Required of every pair, disjointness rejects working unions, which is why it is offered as
+an alternative and not imposed; two disjoint options are distinguishable in the strongest way
+there is. An empty option is the unit of the sum and reaches the condition this way, being
+disjoint from everything: it contributes nothing to the union and so cannot make it ambiguous,
+while being a subset of every held set, which incomparability alone would reject. Decidable from
+the held sets alone. It does \textbf{not} discharge the readable side, for the reason the
+machinery of admission gives.
 \end{definition}
 
 \begin{definition}[(union)]

@@ -354,14 +354,15 @@ theorem typed_union_string_boolean :
 
 /-- **An empty option is the unit of the sum**, and this is the pair the strong reading of (D)
     refused. The bottom is comparable with every held set, so incomparability excluded it; it
-    holds nothing, so it changes no union's `HUnion` and passes on emptiness instead. The meet
-    builds such a union whenever a surviving option's predicate holds of nothing. -/
+    holds nothing, so it changes no union's `HUnion` and reaches (D) on disjointness instead,
+    which it has against everything. The meet builds such a union whenever a surviving option's
+    predicate holds of nothing. -/
 example : ∃ T μ, Typed (.union [.string, .never]) T μ :=
   ⟨_, _, .union (.cons .string (.cons .never .nil)) <| by
     rw [DIncomp, List.pairwise_cons]
     refine ⟨fun T hT => ?_, List.pairwise_singleton _ _⟩
     rw [List.mem_singleton] at hT; subst hT
-    exact Or.inr (Or.inr hempty_never)⟩
+    exact Or.inr (hdisj_never_right _)⟩
 
 /-! ## What `≡` cannot see about associativity
 
