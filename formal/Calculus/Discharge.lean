@@ -30,8 +30,8 @@ So the discharges that remain are the ones no phase reaches: an arbitrary `q` in
 values, (U)'s readable side quantifies over attributes, and `held`'s adapter relabels
 between them. Two options can hold disjoint sets and read one attribute. (D) is a
 well-formedness condition on the `T` index and lives there — `DIncomp`, a premise of
-`Typed.union` (`Typing.lean`). `DDisj` below is the *stronger* reading §5 considered and
-withdrew, kept only to be refuted.
+`Typed.union` (`Typing.lean`), which asks incomparability or an empty option. `DDisj` below is
+the *stronger* reading §5 considered and withdrew, kept only to be refuted.
 
 The two counterexamples that repaired §5's discharger are at the foot of the file. §5 keeps
 both, and
@@ -315,17 +315,26 @@ theorem pairwise_imp_mem {α : Type} {R S : α → α → Prop} :
 /-- `HNever` holds nothing: it is `False` at every value. -/
 theorem hnever_false (v : Value) : ¬ HNever v := id
 
-/-- §5's (D) fails against the bottom: `False` is a subset of every held set, so the
-    first conjunct of `DIncomp` is false. `union([X, never])` is not `Typed`. -/
-theorem not_dincomp_never_left (T : Held) : ¬ DIncomp [HNever, T] := fun h =>
-  ((List.pairwise_cons.mp h).1 T (List.mem_singleton_self T)).1
-    (fun v hv => absurd hv (hnever_false v))
+/-- …so the bottom's held set is empty, and that is how (D) admits it. Incomparability cannot:
+    the bottom is a subset of every held set, so it is comparable with every option. -/
+theorem hempty_never : HEmpty HNever := hnever_false
 
-/-- The same on the other side. (D) is pairwise, so the order of the two held sets decides
-    which conjunct carries the refutation, and nothing else changes. -/
-theorem not_dincomp_never_right (T : Held) : ¬ DIncomp [T, HNever] := fun h =>
-  ((List.pairwise_cons.mp h).1 HNever (List.mem_singleton_self HNever)).2
-    (fun v hv => absurd hv (hnever_false v))
+/-- **(D) holds against the bottom, on emptiness.** `union([X, never])` is `Typed`: the bottom
+    contributes nothing to `HUnion`, so it cannot make the union ambiguous.
+
+    `src/` refuses the pair all the same, and the two sides are not in conflict. The model says
+    the union is *well formed*; `src/` says it is *useless*, because an option that admits
+    nothing can never be selected, and refuses it as a lint. `.separations.lean` carries that
+    divergence as a theorem rather than as prose. -/
+theorem dincomp_never_right (T : Held) : DIncomp [T, HNever] :=
+  List.pairwise_cons.mpr
+    ⟨fun _ hb => by rw [List.mem_singleton] at hb; subst hb; exact Or.inr (Or.inr hempty_never),
+     List.pairwise_singleton _ _⟩
+
+/-- The same on the other side, where the bottom is the one the disjunct names. -/
+theorem dincomp_never_left (T : Held) : DIncomp [HNever, T] :=
+  List.pairwise_cons.mpr
+    ⟨fun _ _ => Or.inr (Or.inl hempty_never), List.pairwise_singleton _ _⟩
 
 
 /-- **The pair reading of the same fact**, and it is not superseded: it discharges the whole
@@ -826,10 +835,10 @@ theorem uAtAct_array_literals :
 /-- (D) in its held-set form, as the disjointness §5 proposes: no value is held by two
     options. Stated so the counterexample below can be about it.
 
-    This is *not* the rule's premise: `(union)` carries `DIncomp` (`Typing.lean`), §5's
-    incomparability. `DDisj` is the strictly stronger reading §5 considered and withdrew,
-    and it is here only to be refuted — the witness below satisfies it and still fails
-    (U). -/
+    This is *not* the rule's premise: `(union)` carries `DIncomp` (`Typing.lean`), which asks
+    incomparability or an empty option. `DDisj` is the strictly stronger reading §5 considered
+    and withdrew, and it is here only to be refuted — the witness below satisfies it and still
+    fails (U). -/
 def DDisj (Tx Ty : Held) : Prop := ∀ v, Tx v → ¬ Ty v
 
 /-- The relabelling adapter: `"B"` on the outside is `"A"` on the inside. -/

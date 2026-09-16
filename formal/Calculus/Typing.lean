@@ -101,18 +101,37 @@ def HMap (T : Held) : Held :=
 def HUnion (Ts : List Held) : Held :=
   fun v => ∃ T ∈ Ts, T v
 
-/-- The bottom's held set: nothing. It is a subset of every held set, so (D) fails against
-    every other option and `never` is an option of no `union`. -/
+/-- The bottom's held set: nothing. It is a subset of every held set, so it is comparable
+    with every option, and (D) admits it as an empty option rather than by incomparability. -/
 def HNever : Held := fun _ => False
+
+/-- An option that holds nothing. `HNever` is one. So is a refinement whose predicate holds of
+    nothing the inner term holds, and that one is not syntactically the bottom. -/
+def HEmpty (T : Held) : Prop := ∀ v, ¬ T v
 
 /-- §5's **(D)**, `(union)`'s well-formedness side condition, pairwise over the held sets.
 
     *Incomparability*, not disjointness: disjointness would reject working unions
     (`not_uAtCan_literal_held`). Not a discharger of (U) either — no condition on held sets
     is one — so nothing consumes it; it constrains the judgement's `T`. Contrast `DDisj`,
-    the strengthening §5 withdrew. -/
+    the strengthening §5 withdrew.
+
+    **An empty option is the unit of the sum**, which is the second disjunct. Such an option
+    contributes nothing to `HUnion`, so it cannot make a union ambiguous, and it is a subset
+    of every held set, so incomparability alone excludes it against every partner. The meet
+    builds exactly that union: a `refine` whose predicate holds of nothing the inner term
+    holds is empty, is not syntactically the bottom, and no syntactic test reads a predicate.
+    Requiring incomparability there would put the meet's output outside the typed fragment
+    for a pair that is well behaved. -/
 def DIncomp (Ts : List Held) : Prop :=
-  Ts.Pairwise fun Tx Ty => ¬ (∀ v, Tx v → Ty v) ∧ ¬ (∀ v, Ty v → Tx v)
+  Ts.Pairwise fun Tx Ty =>
+    (¬ (∀ v, Tx v → Ty v) ∧ ¬ (∀ v, Ty v → Tx v)) ∨ HEmpty Tx ∨ HEmpty Ty
+
+/-- The strong reading implies this one, so every derivation written against incomparability
+    alone survives the weakening. -/
+theorem dincomp_of_incomp {Ts : List Held}
+    (h : Ts.Pairwise fun Tx Ty => ¬ (∀ v, Tx v → Ty v) ∧ ¬ (∀ v, Ty v → Tx v)) :
+    DIncomp Ts := h.imp Or.inl
 
 /-- `⟨n₁ :^π₁ T₁ … nₙ :^πₙ Tₙ⟩ ⊕ R(ρ)` (§4 `(object)`). A binding is `(name, required?,
     held set)`; `R` is the open part — `none` for `drop`/`refuse`, the rest codec's held
