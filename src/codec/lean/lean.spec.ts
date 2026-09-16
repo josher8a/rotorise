@@ -1253,10 +1253,11 @@ describe("the declaration guard, against the model's classifier", () => {
      * **Those carry the other warrant, and needed it.** `Orth` *certifies* a pair with `never` on
      * a side — `never` occupies no slot and meets nothing — so asserting `Orth x y = false` about
      * one is false, and `decide` refuted nineteen of them the first time this corpus carried the
-     * bottom. The model's reason is upstream of `Orth`: `HNever` is `False`, a subset of every
-     * held set, so §5's (D) fails on its first conjunct and `union([X, never])` is never `Typed`.
-     * `not_dincomp_never_left` and `not_dincomp_never_right` are that refutation, and the emitter
-     * states which warrant a pair carries.
+     * bottom. The model types the union too: `HNever` is empty, and §5's (D) admits an empty
+     * option as the unit of the sum. So these carry the *permits*-form, `dincomp_never_left` and
+     * `dincomp_never_right`, and the emitter states which warrant a pair carries. `src/` refuses
+     * them on usefulness — an option admitting nothing can never be chosen — and that is a
+     * divergence the artifact records rather than a disagreement about soundness.
      *
      * **The four before those all have a *restriction* on a side**, which is `opaque`'s rule at a
      * narrower width: a literal against its own base's ground term, three of them, and a set of a
@@ -1284,7 +1285,7 @@ describe("the declaration guard, against the model's classifier", () => {
      * `object_open__vs__object_nested`. `Orth` declines every one, so the law is untouched and
      * what moved is that the two levels now answer one rule instead of two.
      *
-     * **The count pins a fact no law has, deliberately.** That it is eighty is a property of
+     * **The count pins a fact no law has, deliberately.** That it is ninety-two is a property of
      * this corpus, so widening the corpus is meant to fail here and be looked at; the *law* is
      * the loop below, that every refusal the model also declines. Both are kept, and the number
      * stays.
@@ -1293,12 +1294,13 @@ describe("the declaration guard, against the model's classifier", () => {
         const separations = separationPairs()
         expect(separations.length).toBe(92)
         // each one emits, which is where `leanSeparation` re-checks that `src/` really refuses,
-        // and it carries one of the two warrants: `Orth` declines, or (D) fails against `never`
+        // and it carries one of the two warrants: `Orth` declines, or — for a `never` pair, where
+        // the model permits what `src/` lints away — the permits-form states what the model says
         for (const one of separations) {
             const emitted = leanSeparation(one)
             expect(
                 emitted.includes('= false := by decide') ||
-                    emitted.includes('¬ DIncomp'),
+                    emitted.includes(': ∀ T : Held, DIncomp '),
             ).toBe(true)
         }
     })

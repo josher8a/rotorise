@@ -4537,8 +4537,12 @@ export const discriminatedUnion = <
  * no value will ever name. `discriminatedUnion` stays refused on an empty list — that list is a
  * typo or a `map` over an empty array — and this is the one name that reaches the bottom.
  *
- * It is an option of no `union`: `False` is a subset of every held set, so §5's (D) fails against
- * every other option. `not_dincomp_never_left` and `not_dincomp_never_right` are that refutation.
+ * The model makes it an option of any `union`: `False` is a subset of every held set, and §5's
+ * (D) admits an empty option as the unit of the sum, so `union([X, never])` is `Typed`
+ * (`dincomp_never_left`, `dincomp_never_right`). `union` here refuses it all the same, and on a
+ * different ground: an option admitting nothing can never be chosen, which `restricts` answers
+ * and which is a lint rather than a soundness rule. Well formed and useful are different claims,
+ * and `.separations.lean` carries the divergence as a theorem.
  */
 export const never: AttributeCodec<never, never> & {
     readonly def: { readonly kind: 'never' }

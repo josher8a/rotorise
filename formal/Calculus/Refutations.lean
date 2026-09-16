@@ -348,9 +348,20 @@ theorem typed_union_string_boolean :
     rw [DIncomp, List.pairwise_cons]
     refine ⟨fun T hT => ?_, List.pairwise_singleton _ _⟩
     rw [List.mem_singleton] at hT; subst hT
-    refine ⟨fun h => ?_, fun h => ?_⟩
+    refine Or.inl ⟨fun h => ?_, fun h => ?_⟩
     · obtain ⟨b, hb⟩ := h (.str "") ⟨"", rfl⟩; exact nomatch hb
     · obtain ⟨s, hs⟩ := h (.bool true) ⟨true, rfl⟩; exact nomatch hs
+
+/-- **An empty option is the unit of the sum**, and this is the pair the strong reading of (D)
+    refused. The bottom is comparable with every held set, so incomparability excluded it; it
+    holds nothing, so it changes no union's `HUnion` and passes on emptiness instead. The meet
+    builds such a union whenever a surviving option's predicate holds of nothing. -/
+example : ∃ T μ, Typed (.union [.string, .never]) T μ :=
+  ⟨_, _, .union (.cons .string (.cons .never .nil)) <| by
+    rw [DIncomp, List.pairwise_cons]
+    refine ⟨fun T hT => ?_, List.pairwise_singleton _ _⟩
+    rw [List.mem_singleton] at hT; subst hT
+    exact Or.inr (Or.inr hempty_never)⟩
 
 /-! ## What `≡` cannot see about associativity
 

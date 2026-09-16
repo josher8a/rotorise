@@ -891,11 +891,18 @@ export const leanRefusal = ({ name, codec, value }: Refusal): string => {
  * `Orth (Term.set .string) (Term.set .number) = true`, which `src/` refused until that commit.
  *
  * **That law holds of a pair the model TYPES, and a refusal has one of two warrants.** `never` is
- * the pair it does not reach: `HNever` is `False`, a subset of every held set, so §5's (D) fails
- * on the first conjunct and `union([X, never])` is not `Typed`. `Orth` never sees it, and
- * certifies it on slots alone — `Orth Term.string Term.never` is `true`, `never` occupying no
- * slot. So a pair with `never` on a side carries the (D) refutation instead, and the other side
- * appears in the name and the docstring only: the warrant does not depend on it.
+ * the pair it does not reach. `Orth` certifies it on slots alone — `Orth Term.string Term.never`
+ * is `true`, `never` occupying no slot — so `Orth x y = false` is false about it. The model types
+ * the union as well: `HNever` is empty, an empty option is the unit of the sum, and §5's (D)
+ * holds on that disjunct.
+ *
+ * **So a `never` pair is the one place the two sides diverge, and the artifact states the
+ * divergence rather than hiding it.** `src/` refuses the pair as a *lint*: `restricts` answers
+ * that an option admitting nothing can never be chosen, which is true and is worth saying. The
+ * model answers that the union is *well formed*, which is also true. Well formed and useful are
+ * different claims, so a pair with `never` on a side carries the permits-form — what the model
+ * does say about it — and the other side appears in the name and the docstring only: the warrant
+ * does not depend on it.
  */
 export type Separation = {
     /** A Lean identifier; anything else is sanitized, because a bad name loses the whole file. */
@@ -930,12 +937,15 @@ export const leanSeparation = ({ name, left, right }: Separation): string => {
         return !('mark' in def) && def.kind === 'never'
     }
     if (isNever(left) || isNever(right)) {
+        // the permits-form: `src/` refuses on usefulness, the model answers well-formedness, and
+        // the theorem records what the model says rather than asserting a refusal it does not make
         const [held, warrant] = isNever(left)
-            ? (['[HNever, T]', 'not_dincomp_never_left'] as const)
-            : (['[T, HNever]', 'not_dincomp_never_right'] as const)
+            ? (['[HNever, T]', 'dincomp_never_left'] as const)
+            : (['[T, HNever]', 'dincomp_never_right'] as const)
         return [
-            `/-- \`${name}\` — \`src/\` refuses this pair; (D) fails, so it is not \`Typed\` -/`,
-            `theorem ${leanIdent(name)} : ∀ T : Held, ¬ DIncomp ${held} :=`,
+            `/-- \`${name}\` — \`src/\` refuses this pair as a lint: an option admitting nothing can`,
+            `    never be chosen. The model permits it, an empty option being the unit of the sum. -/`,
+            `theorem ${leanIdent(name)} : ∀ T : Held, DIncomp ${held} :=`,
             `    ${warrant}`,
         ].join('\n')
     }
@@ -966,8 +976,10 @@ export const leanSeparationModule = (
 **Generated — do not edit.** One theorem per option pair \`src/\`'s \`union\` refuses at the
 declaration. \`Orth\` is *sufficient* and not necessary, so this runs one way: a pair the model
 certifies must not be refused by \`src/\`. A refusal carries one of two warrants: \`Orth\` declines
-the pair, or (D) fails against \`never\` and the pair is not \`Typed\`. See
-\`src/codec/lean.ts\`'s \`Separation\`.
+the pair, or — where the pair has \`never\` on a side — the model permits it and the theorem says
+so. That second one is a divergence, and a deliberate one: the model answers whether the union is
+well formed, \`src/\` answers whether it is useful, and an option admitting nothing is well formed
+and useless at once. See \`src/codec/lean.ts\`'s \`Separation\`.
 -/
 
 /-! The emitted key function is total on a membership subtype, so a single-name object binds a

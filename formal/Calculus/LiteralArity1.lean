@@ -106,7 +106,7 @@ theorem dincomp_map_literal_str {l : List String} (hnd : l.Nodup) :
   rw [DIncomp, List.pairwise_map]
   refine hnd.imp ?_
   intro a b hab
-  refine ⟨fun h => hab ?_, fun h => hab ?_⟩
+  refine Or.inl ⟨fun h => hab ?_, fun h => hab ?_⟩
   · have h' : Value.str a = Value.str b := h (.str a) rfl
     simpa using h'
   · have h' : Value.str b = Value.str a := h (.str b) rfl
@@ -118,7 +118,7 @@ theorem dincomp_map_literal_num {l : List WFDouble} (hnd : l.Nodup) :
   rw [DIncomp, List.pairwise_map]
   refine hnd.imp ?_
   intro a b hab
-  refine ⟨fun h => hab ?_, fun h => hab ?_⟩
+  refine Or.inl ⟨fun h => hab ?_, fun h => hab ?_⟩
   · have h' : Value.num a.1 = Value.num b.1 := h (.num a.1) rfl
     exact Subtype.ext (by simpa using h')
   · have h' : Value.num b.1 = Value.num a.1 := h (.num b.1) rfl
