@@ -204,6 +204,20 @@ theorem object_nested :
     = some (Attr.m {"a"} (fun k => Attr.m {"b"} (fun k => Attr.s "x"))) := by
   vector
 
+/-- `record_of_restricted_set` -/
+theorem record_of_restricted_set :
+    (denote (Term.record (Term.refine (Term.set SetBase.string) (Pred.each (Pred.members GroundKind.string (NEFinset.of "a" {"b"})))))).e
+      (Value.map {"a"} (fun k => Value.strSet (NEFinset.of "a" ∅)))
+    = some (Attr.m {"a"} (fun k => Attr.ss (NEFinset.of "a" ∅))) := by
+  vector
+
+/-- `object_restricted_rest` -/
+theorem object_restricted_rest :
+    (denote (Term.object (Body.mk {"a"} (fun k => Field.req (Term.refine (Term.set SetBase.string) (Pred.each (Pred.members GroundKind.string (NEFinset.of "b" {"c"}))))) (Rest.codec (Term.refine (Term.set SetBase.string) (Pred.each (Pred.members GroundKind.string (NEFinset.of "b" {"c"})))))))).e
+      (Value.map {"a", "z"} (fun k => if k.1 = "a" then Value.strSet (NEFinset.of "b" ∅) else Value.strSet (NEFinset.of "c" ∅)))
+    = some (Attr.m {"a", "z"} (fun k => if k.1 = "a" then Attr.ss (NEFinset.of "b" ∅) else Attr.ss (NEFinset.of "c" ∅))) := by
+  vector
+
 /-- `map_inside_a_list` -/
 theorem map_inside_a_list :
     (denote (Term.array (Term.record (Term.string)))).e
@@ -283,8 +297,8 @@ theorem lazy_string :
 
 /-! ## Refusals — neither side writes anything for these
 
-34 of 1019 shown; `scripts/gate.sh` elaborates all
-1019. One `rfl` each, no comparator and no fuel: the answer is `none`,
+36 of 1154 shown; `scripts/gate.sh` elaborates all
+1154. One `rfl` each, no comparator and no fuel: the answer is `none`,
 which carries no function for the funext gap to open under.
 -/
 
@@ -396,6 +410,16 @@ theorem object_open__refuses__scalar_string :
 /-- `object_nested__refuses__scalar_string` — refused on both sides -/
 theorem object_nested__refuses__scalar_string :
     (denote (Term.object (Body.mk {"a"} (fun k => Field.req (Term.object (Body.mk {"b"} (fun k => Field.req (Term.string)) Rest.drop))) Rest.drop))).e
+      (Value.str "hello") = none := rfl
+
+/-- `record_of_restricted_set__refuses__scalar_string` — refused on both sides -/
+theorem record_of_restricted_set__refuses__scalar_string :
+    (denote (Term.record (Term.refine (Term.set SetBase.string) (Pred.each (Pred.members GroundKind.string (NEFinset.of "a" {"b"})))))).e
+      (Value.str "hello") = none := rfl
+
+/-- `object_restricted_rest__refuses__scalar_string` — refused on both sides -/
+theorem object_restricted_rest__refuses__scalar_string :
+    (denote (Term.object (Body.mk {"a"} (fun k => Field.req (Term.refine (Term.set SetBase.string) (Pred.each (Pred.members GroundKind.string (NEFinset.of "b" {"c"}))))) (Rest.codec (Term.refine (Term.set SetBase.string) (Pred.each (Pred.members GroundKind.string (NEFinset.of "b" {"c"})))))))).e
       (Value.str "hello") = none := rfl
 
 /-- `map_inside_a_list__refuses__scalar_string` — refused on both sides -/

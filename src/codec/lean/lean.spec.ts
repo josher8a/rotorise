@@ -747,6 +747,25 @@ export const sampleVectors: readonly Vector[] = [
         codec: erase(object({ a: object({ b: string }) })),
         value: { a: { b: 'x' } },
     },
+    /**
+     * **The record∧object cell, with a refinement on either side.** Every row of the meet keeps
+     * the left operand on the left, and `Term.refineOf z p` is `z.refine p`, so two refinements
+     * nest in argument order: the pair answers `refine (refine z q') q` one way and the two
+     * predicates the other way round the other. These two vectors are the only pair in the corpus
+     * that reaches that cell with a refinement on both sides. The two predicates differ on
+     * purpose: with one predicate on both sides the two nestings are the same term and the bridge
+     * sees nothing, which is how the first version of this pair was found to assert nothing.
+     */
+    {
+        name: 'record_of_restricted_set',
+        codec: erase(record(string.set('a', 'b'))),
+        value: { a: new Set(['a']) },
+    },
+    {
+        name: 'object_restricted_rest',
+        codec: erase(object({ a: string.set('b', 'c') }, string.set('b', 'c'))),
+        value: { a: new Set(['b']), z: new Set(['c']) },
+    },
     {
         name: 'map_inside_a_list',
         codec: erase(array(record(string))),
@@ -1001,12 +1020,8 @@ const separationPairs = (): readonly Separation[] => {
  * exists to keep, so a pair this library refuses is as much of a claim as one it answers.
  */
 const MEET_DEFERRED: readonly string[] = [
-    'record_of_string__meet__object_open',
-    'record_empty__meet__object_open',
     'object_two_fields__meet__object_optional_absent',
-    'object_fallback_present__meet__object_nested',
     'union_by_literal__meet__discriminated_union',
-    'product_two_objects__meet__product_union_object',
 ]
 
 const meetPairs = (): readonly MeetPair[] => {
@@ -1196,9 +1211,9 @@ describe('union resolution, model against library', () => {
      * adds the resolutions of the unions it takes part in.
      */
     it('offers 330 write pairs and 359 statable of 360 read pairs', () => {
-        expect(writeResolutions().length).toBe(330)
+        expect(writeResolutions().length).toBe(350)
         const reads = readResolutions()
-        expect(reads.length).toBe(360)
+        expect(reads.length).toBe(380)
         // one pair only, and it is the `Double` axiom reaching the decoded value; the five
         // map-valued reads beside it are stated through `vcheck` now
         expect(
@@ -1260,7 +1275,7 @@ describe("the read side, against the model's read row", () => {
      */
     it('offers 1326 pairs, three of them stuck on the `Double` axiom', () => {
         const verdicts = readVerdicts()
-        expect(verdicts.length).toBe(1326)
+        expect(verdicts.length).toBe(1476)
         const stuck = verdicts.filter(readRowIsStuck)
         expect(stuck.map((one) => one.name)).toEqual([
             'scalar_number__reads__scalar_decimal',
@@ -1338,7 +1353,7 @@ describe("the declaration guard, against the model's classifier", () => {
      */
     it('refuses only pairs the classifier also declines', () => {
         const separations = separationPairs()
-        expect(separations.length).toBe(92)
+        expect(separations.length).toBe(98)
         // each one emits, which is where `leanSeparation` re-checks that `src/` really refuses,
         // and it carries one of the two warrants: `Orth` declines, or — for a `never` pair, where
         // the model permits what `src/` lints away — the permits-form states what the model says
@@ -1371,8 +1386,8 @@ describe("the declaration guard, against the model's classifier", () => {
      */
     it('puts every corpus meet to the model', () => {
         const meets = meetPairs()
-        expect(meets.length).toBe(589)
-        expect(MEET_DEFERRED.length).toBe(6)
+        expect(meets.length).toBe(664)
+        expect(MEET_DEFERRED.length).toBe(2)
         if (process.env.EMIT_LEAN_REFUSALS) {
             writeFileSync(
                 join(process.cwd(), 'formal', '.meets.lean'),
@@ -1449,7 +1464,7 @@ describe("the read side of every corpus codec, against the model's `p`", () => {
             (one) => readVectorIsUnstatable(one) === undefined,
         )
         expect(statable.length).toBe(sampleVectors.length)
-        expect(statable.length).toBe(33)
+        expect(statable.length).toBe(35)
         // each asserts the model's `p`, through the comparator that crosses `Value.map`'s binder
         for (const one of statable) {
             const vector = leanReadVector(one)

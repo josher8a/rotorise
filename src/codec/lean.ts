@@ -1095,12 +1095,13 @@ verdicts this runs in both directions, the two being one function written twice.
 \`none\` is not the bottom. It says no term states the intersection, where \`.never\` says the
 intersection is empty, and both are asserted here.
 
-**The pairs this module defers, and why.** \`Field.meet\` and \`Body.meetField\` are compiled by
-well-founded recursion, so \`decide\` cannot evaluate them under the \`∀ k\` that \`Body.meetOk\`
-quantifies with, and a pair whose answer is a non-trivial object body needs the equation lemmas
-driven under that binder rather than a decision procedure. Those pairs are named here and asserted
-nowhere, which is the honest form: a gap that is counted and read, not one that is skipped in
-silence. The count is pinned in \`lean.spec.ts\`, so a *new* deferral fails the suite.
+**The pairs this module defers, and why.** \`Term.meet\` is structural and reduces, so what is
+left is the binder and not the recursion: an object body's field function quantifies over
+\`Body.shared\`, a \`Finset.filter\` subtype that \`decide\` does not enumerate, and neither
+reduction nor the unfolding set settles the \`∀ k\` under it. Both pairs left are object-against-object
+ones whose answer carries such a body. They are named here and asserted nowhere, which is the honest
+form: a gap that is counted and read, not one that is skipped in silence. The count is pinned in
+\`lean.spec.ts\`, so a *new* deferral fails the suite.
 ${deferred.length === 0 ? '\nNone today.\n' : deferred.map((name) => `\n* \`${name}\``).join('')}
 -/
 
@@ -1112,14 +1113,14 @@ set_option maxHeartbeats 1000000
 set_option linter.unusedVariables false
 set_option linter.style.nameCheck false
 
-/-- The equation compiler, then the same with the definition rewritten first, then that with the
-    field function settled by \`rfl\`. -/
+/-- Reduction first: \`Term.meet\` is structural, so the kernel evaluates a closed pair. The
+    unfolding alternatives stay for a pair whose answer carries a field function. -/
 local macro "meet_pair" : tactic => \`(tactic|
   first
+    | rfl
+    | decide
     | (simp [${MEET_LEMMAS}] <;> decide)
-    | (rw [Term.meet.eq_def]; simp [${MEET_LEMMAS}] <;> decide)
-    | (rw [Term.meet.eq_def]; simp only [${MEET_LEMMAS}] <;> rfl)
-    | (rw [Term.meet.eq_def]; simp [${MEET_LEMMAS}] <;> rfl))
+    | (simp [${MEET_LEMMAS}] <;> rfl))
 
 ${meets.map(leanMeet).join('\n\n')}
 
@@ -1143,11 +1144,6 @@ const MEET_LEMMAS = [
     'MapOf.at',
     'Term.tupleOf',
     'Term.refineOf',
-    'Body.meetTerm',
-    'Body.meetField',
-    'Body.meetRec',
-    'Body.meetRecOk',
-    'Body.meetRecField',
     'Field.meet',
     'Field.meetT',
     'Rest.merge',
@@ -1156,9 +1152,32 @@ const MEET_LEMMAS = [
     'Body.dropFits',
     'Body.reqShared',
     'Field.isReq',
-    'Body.meetOk',
     'Field.isBottom',
     'Body.shared',
+    'meetSRight',
+    'meetSRightL',
+    'famString',
+    'famNumber',
+    'famDecimal',
+    'famBoolean',
+    'famBinary',
+    'famNull',
+    'famLit',
+    'famSet',
+    'famOpaq',
+    'famArr',
+    'famTup',
+    'famRec',
+    'famObj',
+    'fieldMeetT',
+    'recObj',
+    'objRec',
+    'objObj',
+    'mapF',
+    'zipF',
+    'applyAt',
+    'Term.meetSL',
+    'Term.meetSTs',
 ].join(', ')
 
 /**
