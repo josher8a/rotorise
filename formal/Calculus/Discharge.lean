@@ -436,7 +436,7 @@ theorem uAtCan_refine_container {p p' : Pred}
     (hd : List.Pairwise (fun a b => ∀ v, a.eval v = true → b.eval v = false) [p, p']) :
     UAtCan [Term.refine (.array .string) p, Term.refine (.array .string) p'] :=
   uAtCan_of_refine_disjoint_of_typed (Typed.array Typed.string)
-    trivial hd
+    ⟨trivial, trivial, trivial⟩ hd
 
 /-- And a union of two discharges on **both** sides, by the same shared-base argument that
     settles numeric literals — a primitive §3 never wrote a `literal` rule for. -/
@@ -766,8 +766,13 @@ theorem optionSem_arrayLiterals_ne :
     option that wrote it. -/
 theorem uAtAct_array_literals :
     UAtAct [Term.array (.literal .string "A"), Term.array (.literal .string "B")] := by
-  show UniqueBothWays [OptionSem.byAttempt (arrayCodec (literalCodec .string "A")),
-    OptionSem.byAttempt (arrayCodec (literalCodec .string "B"))]
+  -- `array` denotes the spread-only `list` now, so the option semantics reduce to
+  -- `listCodec`; the equation puts `arrayCodec` back, and the rest of the argument is
+  -- about `arrayCodec` as it always was.
+  show UniqueBothWays
+    [OptionSem.byAttempt (listCodec [] (some (literalCodec .string "A")) []),
+     OptionSem.byAttempt (listCodec [] (some (literalCodec .string "B")) [])]
+  rw [← arrayCodec_eq_listCodec, ← arrayCodec_eq_listCodec]
   have lawA : LawfulCore (arrayCodec (literalCodec .string "A")) :=
     lawfulCore_arrayCodec (lawful_literalCodec _ _).core
   have lawB : LawfulCore (arrayCodec (literalCodec .string "B")) :=

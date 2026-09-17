@@ -216,9 +216,9 @@ theorem not_equiv_union_array :
         (denote (.array (.union [.literal .string "A", .literal .string "B"]))) := by
   intro h
   have hv := (h.heldSet (.arr [.str "A", .str "B"])).mpr
-  simp [denote, denote, optionSems, denoteμs, optionSemOf, specOf, OptionSem.byAttempt,
-        altCodec, arrayCodec, literalCodec, baseCodec, Codec.restrict, inL,
-        stringCodec, HLit] at hv
+  simp [Term.array, ← arrayCodec_eq_listCodec, denote, denote, optionSems, denoteμs,
+        optionSemOf, specOf, OptionSem.byAttempt, altCodec, arrayCodec, literalCodec,
+        baseCodec, Codec.restrict, inL, stringCodec, HLit] at hv
 
 /-! ## `tuple(c₁ … cₙ, rest(c))` is neither a tuple nor an array of unions
 
@@ -235,8 +235,8 @@ theorem not_equiv_tupleTail_tuple :
   have hv := (h.heldSet (.arr [.str "a", .str "b"])).mp
   -- `simp`'s classical push-neg turned this into an existential and pulled
   -- `Classical.choice` in with it; the implication is the constructive shape.
-  simp only [denote, denote, denoteList, denoteOpt, tupleCodec, align, stringCodec,
-    Option.map_some, 
+  simp only [Term.tuple, ← tupleCodec_eq_listCodec, denote, denote, denoteList, denoteOpt,
+    tupleCodec, align, stringCodec, Option.map_some,
     Option.some.injEq, exists_eq_left', List.mem_cons, List.not_mem_nil, or_false] at hv
   exact absurd (hv (by rintro p (rfl | rfl) <;> exact ⟨_, rfl⟩))
     (by rintro ⟨ps, hps, -⟩; simp at hps)
@@ -247,8 +247,10 @@ theorem not_equiv_tupleTail_array :
                   (denote (.array (.union [.string]))) := by
   intro h
   have hv := (h.heldSet (.arr [])).mpr
-  simp [denote, denote, denoteList, denoteOpt, optionSems, denoteμs, optionSemOf, specOf,
-        OptionSem.byAttempt, altCodec, tupleCodec, align, arrayCodec, stringCodec] at hv
+  simp [Term.tuple, Term.array, ← tupleCodec_eq_listCodec, ← arrayCodec_eq_listCodec,
+        denote, denote, denoteList, denoteOpt, optionSems, denoteμs,
+        optionSemOf, specOf, OptionSem.byAttempt, altCodec, tupleCodec, align, arrayCodec,
+        stringCodec] at hv
 
 /-! ## `refine(held(c, f, g), q) ≢ held(refine(c, q), f, g)`
 

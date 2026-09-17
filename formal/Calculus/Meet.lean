@@ -282,12 +282,17 @@ def allSome {α : Type} : List (Option α) → Option (List α)
 def Term.refineOf (z : Term) (p : Pred) : Term :=
   if z.isNever then .never else .refine z p
 
-/-- **A tuple with a declared position at the bottom is the bottom.** Every list the tuple admits
-    fills each declared position, so one position holding nothing empties the tuple. The TAIL is
-    not such a slot: a list of exactly the declared length omits every tail position, so a tail at
-    the bottom reads "exactly the declared positions" rather than "nothing". -/
+/-- **A list with a declared position at the bottom is the bottom.** Every value the list
+    admits fills each declared position, so one position holding nothing empties the list.
+    The SPREAD is not such a slot: a value of exactly the declared length omits every spread
+    position, so a spread at the bottom reads "exactly the declared positions" rather than
+    "nothing". The prefix and the suffix are both declared; the spread is not. -/
+def Term.listOf (pre : List Term) (sp : Option Term) (suf : List Term) : Term :=
+  if pre.any Term.isNever || suf.any Term.isNever then .never else .list pre sp suf
+
+/-- The suffix-free case, under the name the tuple rows use. -/
 def Term.tupleOf (ts : List Term) (tail : Option Term) : Term :=
-  if ts.any Term.isNever then .never else .tuple ts tail
+  Term.listOf ts tail []
 
 /-! ## The meet -/
 
@@ -419,17 +424,139 @@ def famOpaq (l : Bool) : Term → Option Term
   | .opaq l' => some (.opaq (l && l'))
   | _ => none
 
-def famArr (f : Term → Option Term) : Term → Option Term
-  | .array y => (f y).map .array
-  | .tuple ts tail =>
-      match allSome (mapF f ts), (match tail with | none => some none | some t => (f t).map some) with
-      | some vs, some tl => some (Term.tupleOf vs tl)
-      | _, _ => none
-  | .opaq _ => none
-  | _ => some .never
-
 def applyAt : List (Term → Option Term) → Term → List (Option Term)
   | [], _ => [] | f :: fs, y => f y :: applyAt fs y
+
+/-- **The row a `list` shape assigns to `n` positions**: the prefix, the spread as often as
+    the middle needs, then the suffix. `none` is the length the shape refuses. One
+    definition serves both operands, because the left operand's positions are partially
+    applied meets and the right operand's are terms, and the shape does not care which.
+    Mirrors `slotsL` one level up. -/
+def rowOfG {α : Type} (pre : List α) (sp : Option α) (suf : List α) (n : Nat) :
+    Option (List α) :=
+  match sp with
+  | some c =>
+      if n < pre.length + suf.length then none
+      else some (pre ++ List.replicate (n - pre.length - suf.length) c ++ suf)
+  | none => if n = pre.length + suf.length then some (pre ++ suf) else none
+
+/-- The spread row, split at the suffix. Stated over an explicit split so no rewrite has to
+    reach inside a length. -/
+theorem zipP_row_split (pre suf : List VP) (c : VP) (A B : List Value)
+    (hB : B.length = suf.length) (hA : pre.length ≤ A.length) :
+    (zipP (pre ++ List.replicate (A.length - pre.length) c) A && zipP suf B)
+      = zipP (pre ++ List.replicate ((A ++ B).length - pre.length - suf.length) c ++ suf)
+          (A ++ B) := by
+  have hcount : (A ++ B).length - pre.length - suf.length = A.length - pre.length := by
+    simp only [List.length_append, hB]; omega
+  rw [hcount, zipP_append _ _ _ _
+      (by simp only [List.length_append, List.length_replicate]; omega)]
+
+/-- **`alignPL` is its row, applied position for position.** This is `align_eq_zip` one level
+    down, and it is what lets the meet reason about two shapes by reasoning about their rows
+    at one length: the admission of a `list` at a value of length `n` is the admission of the
+    row `rowOfG` assigns to `n`, position by position. -/
+theorem alignPL_eq_rowOfG (pre : List VP) (sp : Option VP) (suf : List VP) (ws : List Value) :
+    alignPL pre sp suf ws
+      = match rowOfG pre sp suf ws.length with
+        | none => false
+        | some row => zipP row ws := by
+  have htl : (ws.take (ws.length - suf.length)).length = ws.length - suf.length := by
+    simp only [List.length_take]; omega
+  unfold alignPL
+  rcases Nat.lt_or_ge ws.length (pre.length + suf.length) with hlt | hge
+  · have hrow : rowOfG pre sp suf ws.length = none := by
+      cases sp with
+      | none => simp only [rowOfG]; rw [if_neg (by omega)]
+      | some c => simp only [rowOfG]; rw [if_pos (by omega)]
+    rw [hrow]
+    rcases Nat.lt_or_ge ws.length suf.length with hs | hs
+    · rw [zipP_false_of_length_ne _ _ (by simp only [List.length_drop]; omega), Bool.and_false]
+    · rw [alignP_short _ _ _ (by omega), Bool.false_and]
+  · have hdl : (ws.drop (ws.length - suf.length)).length = suf.length := by
+      simp only [List.length_drop]; omega
+    have hAB : ws.take (ws.length - suf.length) ++ ws.drop (ws.length - suf.length) = ws :=
+      List.take_append_drop _ _
+    cases sp with
+    | none =>
+        rw [alignP_none_eq_zipP]
+        simp only [rowOfG]
+        rcases Nat.eq_or_lt_of_le hge with heq | hlt2
+        · rw [if_pos heq.symm]
+          show _ = zipP (pre ++ suf) ws
+          have hz := (zipP_append pre suf (ws.take (ws.length - suf.length))
+            (ws.drop (ws.length - suf.length)) (by omega)).symm
+          rw [hAB] at hz
+          exact hz
+        · rw [if_neg (by omega)]
+          show _ = false
+          rw [zipP_false_of_length_ne _ _ (by omega), Bool.false_and]
+    | some c =>
+        rw [alignP_some_eq_zipP _ _ _ (by omega)]
+        simp only [rowOfG]
+        rw [if_neg (by omega)]
+        show _ = zipP (pre ++ List.replicate (ws.length - pre.length - suf.length) c ++ suf) ws
+        have hz := zipP_row_split pre suf c (ws.take (ws.length - suf.length))
+          (ws.drop (ws.length - suf.length)) hdl (by omega)
+        rw [hAB] at hz
+        exact hz
+
+/-- **One side dominates the other**, in the prefix and in the suffix at once.
+
+    This is the whole of the `list` meet's refusal, and it is a fact about lengths alone.
+    With both shapes spreading, the meet admits a value of length `n` exactly when
+    `n ≥ max (p₁+s₁) (p₂+s₂)`, while the widest `list` the answer can spell admits
+    `n ≥ max p₁ p₂ + max s₁ s₂`. The second is never smaller, and the two are EQUAL exactly
+    when one side's prefix and suffix are both at least the other's. Elsewhere a window of
+    lengths sits in the intersection that no single `list` states, because a `list` carries
+    one prefix and one suffix and the window needs two shapes. There the meet refuses. -/
+def dominates (p₁ s₁ p₂ s₂ : Nat) : Bool :=
+  (decide (p₂ ≤ p₁) && decide (s₂ ≤ s₁)) || (decide (p₁ ≤ p₂) && decide (s₁ ≤ s₂))
+
+/-- Two `list` shapes met, the left as partially applied meets and the right as terms.
+
+    Three branches, and only the first can refuse. **Both spreading**: the answer is the
+    row at `max p₁ p₂ + max s₁ s₂`, split back into that prefix and that suffix, with the
+    spreads met; `dominates` says when that is the exact intersection, and the meet refuses
+    otherwise. **Either side without a spread**: that side's arity is fixed, so the answer
+    FLATTENS to one prefix of exactly that length with no spread and no suffix; a length the
+    other side cannot reach is the empty intersection, which is `.never`. Flattening rather
+    than keeping the longer prefix and the longer suffix is what the fixed-arity case needs:
+    the two overhangs can collide, and at a fixed arity there is no spread to meet them
+    against. -/
+def listMeetRow (fpre : List (Term → Option Term)) (fsp : Option (Term → Option Term))
+    (fsuf : List (Term → Option Term)) (pre₂ : List Term) (sp₂ : Option Term)
+    (suf₂ : List Term) : Option Term :=
+  match fsp, sp₂ with
+  | some f, some c =>
+      if dominates fpre.length fsuf.length pre₂.length suf₂.length then
+        match f c with
+        | none => none
+        | some sp =>
+          let P := max fpre.length pre₂.length
+          let S := max fsuf.length suf₂.length
+          match rowOfG fpre (some f) fsuf (P + S), rowOfG pre₂ (some c) suf₂ (P + S) with
+          | some fs, some us =>
+              (allSome (zipF fs us)).map fun row =>
+                Term.listOf (row.take P) (some sp) (row.drop P)
+          | _, _ => some .never
+      else none
+  | _, _ =>
+      let n := match fsp with
+        | none => fpre.length + fsuf.length
+        | some _ => pre₂.length + suf₂.length
+      match rowOfG fpre fsp fsuf n, rowOfG pre₂ sp₂ suf₂ n with
+      | some fs, some us =>
+          (allSome (zipF fs us)).map fun row => Term.listOf row none []
+      | _, _ => some .never
+
+/-- The family of the one positional container. Replaces `famArr` and `famTup`, which
+    answered on shapes that are now one term. -/
+def famList (fpre : List (Term → Option Term)) (fsp : Option (Term → Option Term))
+    (fsuf : List (Term → Option Term)) : Term → Option Term
+  | .list pre₂ sp₂ suf₂ => listMeetRow fpre fsp fsuf pre₂ sp₂ suf₂
+  | .opaq _ => none
+  | _ => some .never
 
 def famTup (fs : List (Term → Option Term)) (ftail : Option (Term → Option Term)) :
     Term → Option Term
@@ -553,11 +680,11 @@ def Term.meet : Term → Term → Option Term
   | .literal k v, y => meetSRight (famLit k v) y
   | .set b, y => meetSRight (famSet b) y
   | .opaq l, y => meetSRight (famOpaq l) y
-  | .array x, y => meetSRight (famArr (Term.meet x)) y
   | .record x, y => meetSRight (famRec (Term.meet x)) y
-  | .tuple ts tail, y =>
-      meetSRight (famTup (Term.meetSTs ts)
-        (match tail with | none => none | some t => some (Term.meet t))) y
+  | .list pre sp suf, y =>
+      meetSRight (famList (Term.meetSTs pre)
+        (match sp with | none => none | some t => some (Term.meet t))
+        (Term.meetSTs suf)) y
   | .object (.mk fs f r), y =>
       meetSRight (famObj (.mk fs f r) (fun k => Field.meet (f k)) (fun k => Field.meetT (f k))
         (match r with | .codec t => some (Term.meet t) | _ => none)) y
@@ -1270,12 +1397,17 @@ theorem μSyn_refineOf (z : Term) (p : Pred) : μSyn (Term.refineOf z p) = μSyn
   next hz => rw [show z = Term.never from eq_never_of_isNever hz]
   next => rfl
 
-/-- …and a normalised tuple is a tuple or the bottom. -/
-theorem tupleOf_cases (ts : List Term) (tail : Option Term) :
-    Term.tupleOf ts tail = .never ∨ Term.tupleOf ts tail = .tuple ts tail := by
-  unfold Term.tupleOf; split
+/-- …and a normalised list is a list or the bottom. -/
+theorem listOf_cases (pre : List Term) (sp : Option Term) (suf : List Term) :
+    Term.listOf pre sp suf = .never ∨ Term.listOf pre sp suf = .list pre sp suf := by
+  unfold Term.listOf; split
   · exact Or.inl rfl
   · exact Or.inr rfl
+
+/-- The suffix-free case, under the name the tuple rows use. -/
+theorem tupleOf_cases (ts : List Term) (tail : Option Term) :
+    Term.tupleOf ts tail = .never ∨ Term.tupleOf ts tail = .tuple ts tail :=
+  listOf_cases ts tail []
 
 /-- A declared position that holds nothing empties the tuple: every list the tuple admits fills
     each declared position. -/
@@ -1295,15 +1427,44 @@ theorem alignP_never_false : ∀ {ts : List Term} {tail : Option Term} {ws : Lis
       · rw [show t = Term.never from eq_never_of_isNever ht, show Adm .never _ = false from rfl, Bool.false_and]
       · rw [ih (tail := tail) (ws := ws') hrest, Bool.and_false]
 
-/-- Normalising a tuple keeps what it admits. -/
-theorem Adm_tupleOf (ts : List Term) (tail : Option Term) (v : Value) :
-    Adm (Term.tupleOf ts tail) v = Adm (.tuple ts tail) v := by
-  unfold Term.tupleOf
+/-- A declared SUFFIX position that holds nothing empties the list, for the same reason:
+    every value the list admits fills each suffix position too. -/
+theorem zipP_never_false : ∀ {suf : List Term} {ws : List Value},
+    suf.any Term.isNever = true → zipP (AdmList suf) ws = false := by
+  intro suf
+  induction suf with
+  | nil => intro _ h; simp at h
+  | cons t ts' ih =>
+    intro ws h
+    cases ws with
+    | nil => rfl
+    | cons w ws' =>
+      simp only [List.any_cons, Bool.or_eq_true] at h
+      simp only [AdmList, zipP]
+      rcases h with ht | hrest
+      · rw [show t = Term.never from eq_never_of_isNever ht,
+          show Adm .never w = false from rfl, Bool.false_and]
+      · rw [ih (ws := ws') hrest, Bool.and_false]
+
+/-- Normalising a list keeps what it admits. -/
+theorem Adm_listOf (pre : List Term) (sp : Option Term) (suf : List Term) (v : Value) :
+    Adm (Term.listOf pre sp suf) v = Adm (.list pre sp suf) v := by
+  unfold Term.listOf
   split
   next hany =>
     cases v <;> simp only [Adm] <;> try rfl
-    exact (alignP_never_false hany).symm
+    rename_i ws
+    refine Eq.symm ?_
+    simp only [alignPL]
+    rcases Bool.or_eq_true .. |>.mp hany with hp | hs
+    · rw [alignP_never_false hp, Bool.false_and]
+    · rw [zipP_never_false hs, Bool.and_false]
   next => rfl
+
+/-- Normalising a tuple keeps what it admits. -/
+theorem Adm_tupleOf (ts : List Term) (tail : Option Term) (v : Value) :
+    Adm (Term.tupleOf ts tail) v = Adm (.tuple ts tail) v :=
+  Adm_listOf ts tail [] v
 
 /-- …and normalising a refinement keeps what it admits. -/
 theorem Adm_refineOf (z : Term) (p : Pred) (v : Value) :

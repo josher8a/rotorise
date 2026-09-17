@@ -192,17 +192,16 @@ theorem typed_T_eq : ∀ {t T μ}, Typed t T μ → ∀ v, T v → (denote t).T 
     | set b =>
       rcases hv with ⟨S, rfl, hall⟩ | ⟨S, rfl, hall⟩ | ⟨S, rfl, hall⟩ <;>
         simp only [denote, setCodec, SetBase.elem_T] <;> exact hall
-    | @array t' T' μ' h' =>
-      obtain ⟨vs, rfl, hall⟩ := hv
-      exact fun x hx => typed_T_eq h' x (hall x hx)
     | @record t' T' μ' h' =>
       obtain ⟨keys, f, rfl, hall⟩ := hv
       exact fun k => typed_T_eq h' _ (hall k)
-    | @tuple ts Ts tail Tt hlist hopt =>
+    | @list pre Tpre sp Tsp suf Tsuf hp hs hf =>
       obtain ⟨vs, rfl, hall⟩ := hv
-      rw [denote, denoteList_eq, denoteOpt_eq]
-      exact align_T_of_HTuple hopt (fun t' _ _ _ hty w hw => typed_T_eq hty w hw) hlist
-        (fun t' _ _ _ hty w hw => typed_T_eq hty w hw) vs hall
+      rw [denote, denoteList_eq, denoteOpt_eq, denoteList_eq]
+      exact alignL_T_of_HTupleL hp hs hf
+        (fun t' _ _ _ hty w hw => typed_T_eq hty w hw)
+        (fun t' _ _ _ hty w hw => typed_T_eq hty w hw)
+        (fun t' _ _ _ hty w hw => typed_T_eq hty w hw) hall
     | @held t' I' μ' f g h' => exact typed_T_eq h' (f v) hv
     | @refine t' T' μ' q h' => exact ⟨typed_T_eq h' v hv.1, hv.2⟩
     | @legacy t' T' μ' r h' => exact typed_T_eq h' v hv

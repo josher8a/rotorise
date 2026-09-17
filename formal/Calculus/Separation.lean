@@ -56,27 +56,13 @@ domain. -/
 def noFields : {k // k ∈ (∅ : Finset Name)} → Field :=
   fun k => absurd k.2 (Finset.notMem_empty k.1)
 
-/-- `array`'s fold is its `tuple`'s alignment. The induction is on the value's list, not the
-    term: `alignP [] (some P)` recurses with the same `(([], some P))`, so there is nothing
-    structural to follow on the term side. -/
-theorem arrayRow (c : Term) (v : Value) : Adm (.array c) v = Adm (.tuple [] (some c)) v := by
-  cases v with
-  | arr xs =>
-    simp only [Adm, AdmList, AdmOptT]
-    induction xs with
-    | nil => rfl
-    | cons x xs ih => simp [allP, alignP, ih]
-  | _ => rfl
+/-- `array` **is** the degenerate `tuple`, and now on the nose: both builders write the
+    same `list`, so the two rows are one term and the equation is `rfl`. It was an
+    induction over the value's list while `allP` and `alignP` were two different rows. -/
+theorem arrayRow (c : Term) (v : Value) : Adm (.array c) v = Adm (.tuple [] (some c)) v := rfl
 
-/-- The same on the read side; `allPA`/`alignPA` are the same two shapes over `Attr`. -/
-theorem arrayRowA (c : Term) (a : Attr) : AdmA (.array c) a = AdmA (.tuple [] (some c)) a := by
-  cases a with
-  | l as =>
-    simp only [AdmA, AdmAList, AdmAOptT]
-    induction as with
-    | nil => rfl
-    | cons x as ih => simp [allPA, alignPA, ih]
-  | _ => rfl
+/-- The same on the read side, and for the same reason. -/
+theorem arrayRowA (c : Term) (a : Attr) : AdmA (.array c) a = AdmA (.tuple [] (some c)) a := rfl
 
 /-- `record`'s one `decide` is its `object`'s guard-and-traverse, with both extra pieces
     dead: the presence guard quantifies over an empty field table, and `entryP` finds no
@@ -658,7 +644,7 @@ theorem sepJV_set_literals :
 theorem not_sepJV_array_literals :
     ¬ SepJV (.array (.literal .string "A")) (.array (.literal .string "B")) := by
   intro h
-  exact absurd (h (.arr []) (by simp [Adm, allP])) (by simp [Adm, allP])
+  exact absurd (h (.arr []) (Adm_array_nil _)) (by rw [Adm_array_nil]; exact fun hc => nomatch hc)
 
 /-! ### What `set` is, structurally — and the defect that closed
 

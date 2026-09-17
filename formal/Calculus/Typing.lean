@@ -91,6 +91,33 @@ def HTuple : List Held → Option Held → List Value → Prop
 def HProd (Ts : List Held) (tail : Option Held) : Held :=
   fun v => ∃ vs, v = .arr vs ∧ HTuple Ts tail vs
 
+/-- The positional part of a `list`'s held set: the suffix splits off the right end, and
+    what is left is `HTuple`'s prefix-and-spread. `Forall₂` carries both the length of the
+    suffix and the holding at each of its positions, so no length premise is owed. -/
+def HTupleL (pre : List Held) (sp : Option Held) (suf : List Held) (vs : List Value) : Prop :=
+  ∃ front back : List Value,
+    vs = front ++ back ∧ List.Forall₂ (fun T v => T v) suf back ∧ HTuple pre sp front
+
+/-- `T₁ × … × Tₚ × T* × U₁ × … × U_s` (§3 `(list)`): the one positional held set. -/
+def HList (pre : List Held) (sp : Option Held) (suf : List Held) : Held :=
+  fun v => ∃ vs, v = .arr vs ∧ HTupleL pre sp suf vs
+
+/-- **`HProd` is the `HList` with no suffix.** `Forall₂` against `[]` forces the right
+    part empty, so the split is trivial and the two say the same thing. -/
+theorem HProd_eq_HList (Ts : List Held) (tail : Option Held) :
+    HProd Ts tail = HList Ts tail [] := by
+  funext v
+  refine propext ⟨?_, ?_⟩
+  · rintro ⟨vs, rfl, h⟩
+    exact ⟨vs, rfl, vs, [], (List.append_nil vs).symm, List.Forall₂.nil, h⟩
+  · rintro ⟨vs, rfl, front, back, rfl, hb, h⟩
+    cases hb
+    exact ⟨front ++ [], rfl, by rwa [List.append_nil]⟩
+
+/-- **`HStar` is the `HList` with one spread and nothing else.** -/
+theorem HStar_eq_HList (T : Held) : HStar T = HList [] (some T) [] := by
+  rw [show HStar T = HProd [] (some T) from rfl, HProd_eq_HList]
+
 /-- `Name ⇀fin T` (§3 `(record)`). The finite partial map is now literally that: a name
     set and a function on it, so "every value holds `T`" is a statement about the
     function's codomain and needs no membership hypothesis. -/
@@ -231,9 +258,12 @@ inductive Typed : Term → Held → Option Member → Prop where
       `b.member`, and both are functions rather than premises — the same move `(literal)`
       made when `GroundKind` replaced its three constructors. -/
   | set (b : SetBase) : Typed (.set b) (HSet b.held) (some b.member)
-  | array {t T μ} (h : Typed t T μ) : Typed (.array t) (HStar T) (some .L)
-  | tuple {ts Ts tail Tt} (h : TypedList ts Ts) (ht : TypedOpt tail Tt) :
-      Typed (.tuple ts tail) (HProd Ts Tt) (some .L)
+  /-- `(list)`: one rule for the one positional container. `(array)`, `(tuple)` and
+      `(tuple-tail)` were three rules of this one, and the theorems below recover each
+      spelling. -/
+  | list {pre Tpre sp Tsp suf Tsuf} (hp : TypedList pre Tpre) (hs : TypedOpt sp Tsp)
+      (hf : TypedList suf Tsuf) :
+      Typed (.list pre sp suf) (HList Tpre Tsp Tsuf) (some .L)
   | record {t T μ} (h : Typed t T μ) : Typed (.record t) (HMap T) (some .M)
   /-- `(held)`: the held set **is** the premise's, pulled back along `f`; the cancellation
       laws are `Obligations`'.
@@ -298,6 +328,22 @@ inductive TypedRest : Rest → Option Held → Prop where
   | codec {t T μ} (h : Typed t T μ) : TypedRest (.codec t) (some T)
 
 end
+
+/-! ## `(array)` and `(tuple)`, recovered from `(list)`
+
+The rules the doc states for the three positional shapes. Each is `(list)` at the shape's
+own prefix, spread and suffix, with the held set rewritten by the equation that says the
+two held sets are one. They exist so a statement about `.array` or `.tuple` reads as the
+rule it belongs to, the way the `Obligations` unfoldings do. -/
+
+/-- `T*` (§3 `(array)`): the spread-only `list`. -/
+theorem Typed.array {t T μ} (h : Typed t T μ) : Typed (.array t) (HStar T) (some .L) :=
+  (HStar_eq_HList T) ▸ Typed.list TypedList.nil (TypedOpt.some h) TypedList.nil
+
+/-- `T₁ × … × Tₙ` (§3 `(tuple)`), and `… × T*` (`(tuple-tail)`): the suffix-free `list`. -/
+theorem Typed.tuple {ts Ts tail Tt} (h : TypedList ts Ts) (ht : TypedOpt tail Tt) :
+    Typed (.tuple ts tail) (HProd Ts Tt) (some .L) :=
+  (HProd_eq_HList Ts Tt) ▸ Typed.list h ht TypedList.nil
 
 /-! ## Reading a field's judgement
 

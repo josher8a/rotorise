@@ -64,6 +64,17 @@ def alignPA : List AP → Option AP → List Attr → Bool
   | _ :: _, _, [] => false
   | P :: Ps, tail, a :: as => P a && alignPA Ps tail as
 
+/-- The suffix's row on the read side: position for position, a length mismatch refused. -/
+def zipPA : List AP → List Attr → Bool
+  | [], [] => true
+  | P :: Ps, a :: as => P a && zipPA Ps as
+  | _, _ => false
+
+/-- `alignL`'s row on the read side. Mirrors `alignPL`. -/
+def alignPAL (pre : List AP) (sp : Option AP) (suf : List AP) (as : List Attr) : Bool :=
+  alignPA pre sp (as.take (as.length - suf.length))
+    && zipPA suf (as.drop (as.length - suf.length))
+
 def entryPA (fs : MapOf AP) (rp : Option AP) (k : Name) : Option AP :=
   match fs.at k with | some P => some P | none => rp
 
@@ -174,7 +185,6 @@ noncomputable def AdmA : Term → Attr → Bool
   -- the bottom reads nothing back, and the row is that sentence
   | .never => fun _ => false
   | .custom _ cp => fun a => (cp a).isSome
-  | .array c  => fun a => match a with | .l as => allPA (AdmA c) as | _ => false
   | .record c => fun a =>
       match a with | .m _ g => decide (∀ k, AdmA c (g k) = true) | _ => false
   | .held t _ _ => AdmA t
@@ -188,8 +198,12 @@ noncomputable def AdmA : Term → Attr → Bool
   -- With the base an index the family is a function of it, so this names one — and at
   -- `number` defers to the codec, for the rounding residue `AdmASet` documents.
   | .set b    => AdmASet b
-  | .tuple ts tail => fun a =>
-      match a with | .l as => alignPA (AdmAList ts) (AdmAOptT tail) as | _ => false
+  -- **One row**, for the reason the value side gives: `array` and `tuple` were two rows
+  -- computing different things on what is now one shape.
+  | .list pre sp suf => fun a =>
+      match a with
+      | .l as => alignPAL (AdmAList pre) (AdmAOptT sp) (AdmAList suf) as
+      | _ => false
   | .object b => AdmABody b
   -- the read side of the same deferral; see the `Adm` row and `ExactA_opaq`
   | .opaq lossy => fun a => ((opaqCodecω lossy).p a).isSome
@@ -487,18 +501,81 @@ theorem alignPA_iff (tail : Option Term) (htl : ∀ t ∈ tail, ExactA t) :
         simp only [hal, Option.map_some, Option.bind_some] at ih ⊢
         rw [traverse_cons_isSome, Bool.and_eq_true, ← ht a, ← ih]
 
-theorem ExactA_tuple {ts : List Term} {tail : Option Term}
-    (h : ∀ t ∈ ts, ExactA t) (htl : ∀ t ∈ tail, ExactA t) : ExactA (.tuple ts tail) := by
+/-- A suffix row that holds pins the length. -/
+theorem zipPA_length : ∀ (Ps : List AP) (as : List Attr),
+    zipPA Ps as = true → Ps.length = as.length
+  | [], [], _ => rfl
+  | [], _ :: _, h => by simp [zipPA] at h
+  | _ :: _, [], h => by simp [zipPA] at h
+  | _ :: Ps, _ :: as, h => by
+      simp only [zipPA, Bool.and_eq_true] at h
+      simp [zipPA_length Ps as h.2]
+
+/-- The suffix's row, transported across its positions' exactness. The length premise is
+    load bearing for the reason `zipP_iff`'s is: `List.zip` truncates. -/
+theorem zipPA_iff : ∀ (suf : List Term), (∀ t ∈ suf, ExactA t) → ∀ (back : List Attr),
+    back.length = suf.length →
+    (zipPA (AdmAList suf) back = true ↔
+      (traverse (fun ca : Codec × Attr => ca.1.p ca.2)
+        ((denoteList suf).zip back)).isSome = true)
+  | [], _, [], _ => by simp [zipPA, AdmAList, denoteList]
+  | [], _, _ :: _, h => by simp at h
+  | _ :: _, _, [], h => by simp at h
+  | t :: ts, h, a :: as, hlen => by
+      simp only [AdmAList, denoteList, zipPA, List.zip_cons_cons, Bool.and_eq_true,
+        traverse_cons_isSome]
+      rw [zipPA_iff ts (fun t' ht' => h t' (List.mem_cons_of_mem _ ht')) as
+          (by simpa using hlen),
+        h t List.mem_cons_self a]
+
+/-- **`alignPAL` is `alignL`'s row on the read side.** -/
+theorem alignPAL_iff (pre : List Term) (sp : Option Term) (suf : List Term)
+    (hpre : ∀ t ∈ pre, ExactA t) (hsp : ∀ t ∈ sp, ExactA t) (hsuf : ∀ t ∈ suf, ExactA t)
+    (as : List Attr) :
+    alignPAL (AdmAList pre) (AdmAOptT sp) (AdmAList suf) as = true ↔
+      ((alignL (denoteList pre) (denoteOpt sp) (denoteList suf) as).bind
+        (traverse fun ca => ca.1.p ca.2)).isSome = true := by
+  have hlenA : (AdmAList suf).length = suf.length := by simp
+  have hlenD : (denoteList suf).length = suf.length := by simp
+  unfold alignPAL
+  rw [hlenA]
+  rcases Nat.lt_or_ge as.length suf.length with hlt | hge
+  · rw [alignL_short _ _ _ _ (by omega)]
+    have h0 : as.length - suf.length = 0 := by omega
+    rw [h0, List.drop_zero]
+    refine ⟨fun hc => ?_, fun hc => nomatch hc⟩
+    have := zipPA_length _ _ (Bool.and_eq_true .. ▸ hc |>.2)
+    rw [hlenA] at this
+    omega
+  · rw [alignL_eq_split _ _ _ _ (by omega), hlenD]
+    rw [Bool.and_eq_true, alignPA_iff sp hsp pre (as.take (as.length - suf.length)) hpre,
+      zipPA_iff suf hsuf _ (by simp; omega)]
+    cases hal : align (denoteList pre) (denoteOpt sp) (as.take (as.length - suf.length)) with
+    | none => simp
+    | some ps => simp [traverse_append_isSome]
+
+/-- **`list` reads exactly** once its three parts do. -/
+theorem ExactA_list {pre : List Term} {sp : Option Term} {suf : List Term}
+    (hpre : ∀ t ∈ pre, ExactA t) (hsp : ∀ t ∈ sp, ExactA t) (hsuf : ∀ t ∈ suf, ExactA t) :
+    ExactA (.list pre sp suf) := by
   intro a
   cases a
   case l as =>
-    show alignPA (AdmAList ts) (AdmAOptT tail) as = true ↔
-      (((align (denoteList ts) (denoteOpt tail) as).bind
+    show alignPAL (AdmAList pre) (AdmAOptT sp) (AdmAList suf) as = true ↔
+      (((alignL (denoteList pre) (denoteOpt sp) (denoteList suf) as).bind
         (traverse fun ca => ca.1.p ca.2)).map Value.arr).isSome = true
-    rw [alignPA_iff tail htl ts as h]
-    cases (align (denoteList ts) (denoteOpt tail) as).bind (traverse fun ca => ca.1.p ca.2) <;>
-      simp
-  all_goals simp [AdmA, denote, tupleCodec]
+    rw [alignPAL_iff pre sp suf hpre hsp hsuf as]
+    cases (alignL (denoteList pre) (denoteOpt sp) (denoteList suf) as).bind
+      (traverse fun ca => ca.1.p ca.2) <;> simp
+  all_goals simp [AdmA, denote, listCodec]
+
+theorem ExactA_tuple {ts : List Term} {tail : Option Term}
+    (h : ∀ t ∈ ts, ExactA t) (htl : ∀ t ∈ tail, ExactA t) : ExactA (.tuple ts tail) :=
+  ExactA_list h htl (by simp)
+
+/-- **`array` reads exactly** once its element does. -/
+theorem ExactA_array {c : Term} (hc : ExactA c) : ExactA (.array c) :=
+  ExactA_list (by simp) (by simpa using hc) (by simp)
 
 def ExactAField (fd : Field) : Prop :=
   ∀ a, AdmAField fd a = true ↔ (((fieldSem fd).codec).p a).isSome
@@ -635,8 +712,9 @@ mutual
     even though no finite set of numerals describes its domain. §5 wrote `⊤` there. -/
 theorem AdmA_exact : ∀ (t : Term), ExactA t
   -- the rows §5 excused on this side too
-  | .tuple ts tail =>
-      ExactA_tuple (exactAL_mem ts (AdmA_exactL ts)) (exactAO_mem tail (AdmA_exactO tail))
+  | .list pre sp suf =>
+      ExactA_list (exactAL_mem pre (AdmA_exactL pre)) (exactAO_mem sp (AdmA_exactO sp))
+        (exactAL_mem suf (AdmA_exactL suf))
   | .object b => AdmA_exactB b
   | .opaq lossy => ExactA_opaq lossy
   -- both sides are empty, so the equivalence is `False ↔ False`
@@ -690,15 +768,6 @@ theorem AdmA_exact : ∀ (t : Term), ExactA t
       case binary => exact AdmALit_binary_exact ls a
       case null => exact AdmALit_null_exact ls a
   | .custom ce cp => by intro a; simp [AdmA, denote, denote]
-  | .array c => by
-      have hc := AdmA_exact c
-      intro a
-      cases a
-      case l as =>
-        simp only [AdmA, denote, denote, denote, arrayCodec]
-        rw [AdmAAll_iff hc, ← traverse_isSome_iff]
-        cases traverse (denote c).p as <;> simp
-      all_goals simp [AdmA, denote, denote, arrayCodec]
   | .record c => by
       have hc := AdmA_exact c
       intro a

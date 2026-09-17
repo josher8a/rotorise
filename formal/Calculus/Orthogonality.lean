@@ -220,8 +220,8 @@ def occV : Term → Slot → Bool
   -- the bottom writes nothing, so it occupies no slot
   | .never       => occNone
   | .set b       => occOnly b.slot
-  | .array _     => occOnly .arr
-  | .tuple _ _   => occOnly .arr
+  -- `array` and `tuple` are one shape now, and both rows said the same thing
+  | .list _ _ _  => occOnly .arr
   | .record _    => occOnly .map
   | .object _   => occOnly .map
   | .held _ _ _  => occTop
@@ -260,8 +260,7 @@ def occA : Term → Member → Bool
   -- and stores nothing, so it occupies no member
   | .never       => occNone
   | .set b       => occOnly b.member
-  | .array _     => occOnly .L
-  | .tuple _ _   => occOnly .L
+  | .list _ _ _  => occOnly .L
   | .record _    => occOnly .M
   | .object _   => occOnly .M
   | .legacy _ _  => occTop
@@ -560,7 +559,7 @@ theorem occV_sound : ∀ (t : Term), OccSoundV t
           simp_all [Adm, SetBase.adm, inD, isStored, occV, occOnly, Value.slot, SetBase.slot]
       | _ => exact absurd h (by simp [Adm])
   -- the containers, whose slot is fixed by the constructor and not by the payload
-  | .array _ | .tuple _ _ | .record _ =>
+  | .list _ _ _ | .record _ =>
       fun v h => by cases v <;> simp_all [Adm, occV, occOnly, Value.slot]
   | .object (.mk _ _ _) => fun v h => by
       cases v <;> simp_all [Adm, AdmBody, occV, occOnly, Value.slot]
@@ -646,7 +645,7 @@ theorem occA_sound : ∀ (t : Term), OccSoundA t
   | .set b => fun a h => by
       cases b <;> cases a <;>
         simp_all [AdmA, AdmASet, occA, occOnly, Attr.member, SetBase.member]
-  | .array _ | .tuple _ _ | .record _ =>
+  | .list _ _ _ | .record _ =>
       fun a h => by cases a <;> simp_all [AdmA, occA, occOnly, Attr.member]
   | .object (.mk _ _ _) => fun a h => by
       cases a <;> simp_all [AdmA, AdmABody, occA, occOnly, Attr.member]
@@ -1288,8 +1287,7 @@ theorem typed_occV : ∀ {t T μ}, Typed t T μ → ∀ v, T v → occV t v.slot
           cases b <;>
           simp_all [occV, occOnly, Value.slot, SetBase.slot, SetBase.held] <;>
           exact S.2.elim (fun a ha => hall a ha)
-    | array _ => obtain ⟨vs, rfl, _⟩ := hv; rfl
-    | tuple _ _ => obtain ⟨vs, rfl, _⟩ := hv; rfl
+    | list _ _ _ => obtain ⟨vs, rfl, _⟩ := hv; rfl
     | record _ => obtain ⟨keys, f, rfl, _⟩ := hv; rfl
     | object _ _ => obtain ⟨keys, f, rfl, _⟩ := hv; rfl
     | held _ => rfl
