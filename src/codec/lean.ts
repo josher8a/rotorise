@@ -64,6 +64,7 @@ import type {
     Term,
     Field as TermField,
 } from './term'
+import { meetTerms } from './term'
 import { shapeOf } from './value'
 
 /**
@@ -1019,6 +1020,146 @@ export type ReadVerdict = {
     readonly codec: AnyCodec
     readonly attribute: AttributeValue
 }
+
+/**
+ * A pair of corpus terms, put to the model's meet with the answer `src/` computes.
+ *
+ * The separations bridge runs one way, because `Orth` is sufficient and not necessary. This one
+ * runs both: `Term.meet` and {@link meetTerms} are the *same function* stated twice, so a
+ * disagreement in either direction is a defect on one side. It is the only check that measures the
+ * meet at all — the host's `unionOk` reads `separable`, which exempts what the model's `Orth` does
+ * not, and nothing else holds that divergence.
+ */
+export type MeetPair = {
+    /** A Lean identifier; anything else is sanitized, because a bad name loses the whole file. */
+    readonly name: string
+    readonly left: AnyCodec
+    readonly right: AnyCodec
+}
+
+/**
+ * One meet, as a Lean `theorem`: the two terms, and the answer this library gives.
+ *
+ * A refusal emits `= none` and is as much of an assertion as an answer is. The two are the
+ * distinction the meet exists to keep — `none` says no term states the intersection and `.never`
+ * says the intersection is empty — so a port that confused them would fail here on the pair it
+ * confused, which is the whole reason to emit the refusals rather than skip them.
+ */
+export const leanMeet = ({ name, left, right }: MeetPair): string => {
+    const one = left.def
+    const other = right.def
+    if ('mark' in one || 'mark' in other) {
+        throw new LeanUnemittable(
+            name,
+            'a §4 *field*, not a term — no `Term` position accepts one, so the meet has no pair to state',
+        )
+    }
+    const answer = meetTerms(one, other)
+    const rhs =
+        answer === undefined
+            ? 'none'
+            : `some (${leanTermOfTerm(answer, `${name}.meet`, 0)})`
+    return [
+        `/-- \`${name}\` — the meet \`src/\` computes, put to the model -/`,
+        `theorem ${leanIdent(name)} :`,
+        `    Term.meet (${leanTermOf(left, name)})`,
+        `      (${leanTermOf(right, name)}) = ${rhs} := by meet_pair`,
+    ].join('\n')
+}
+
+/**
+ * The meets as a module of their own, carrying the tactic that discharges them.
+ *
+ * **The tactic is generated and not a declaration of `Calculus/`.** `Term.meet` is compiled by
+ * well-founded recursion, so it does not reduce: `decide` and `rfl` both fail, and `Term` carries
+ * functions at `held`, `custom` and a `Body`'s field map, so it has no `DecidableEq` for `decide`
+ * to use even where it did reduce. What is left is the equation compiler, which is what `simp` on
+ * the definition reaches. The lemma set below is the union of the sets `Meet.lean`'s own worked
+ * examples use, and the three alternatives are ordered by cost. A wrong answer does not close:
+ * measured on two planted controls, one claiming a refusal where the model answers and one
+ * claiming an answer where the model refuses.
+ */
+export const leanMeetModule = (
+    meets: readonly MeetPair[],
+    deferred: readonly string[] = [],
+): string =>
+    `import Calculus.Meet
+
+/-!
+# The meet, proposed to the model
+
+**Generated — do not edit.** One theorem per pair of corpus terms, asserting that
+\`Calculus.Term.meet\` answers what \`src/\`'s \`meetTerms\` answered. Unlike the separation
+verdicts this runs in both directions, the two being one function written twice.
+
+\`none\` is not the bottom. It says no term states the intersection, where \`.never\` says the
+intersection is empty, and both are asserted here.
+
+**The pairs this module defers, and why.** \`Field.meet\` and \`Body.meetField\` are compiled by
+well-founded recursion, so \`decide\` cannot evaluate them under the \`∀ k\` that \`Body.meetOk\`
+quantifies with, and a pair whose answer is a non-trivial object body needs the equation lemmas
+driven under that binder rather than a decision procedure. Those pairs are named here and asserted
+nowhere, which is the honest form: a gap that is counted and read, not one that is skipped in
+silence. The count is pinned in \`lean.spec.ts\`, so a *new* deferral fails the suite.
+${deferred.length === 0 ? '\nNone today.\n' : deferred.map((name) => `\n* \`${name}\``).join('')}
+-/
+
+namespace Calculus
+
+set_option maxHeartbeats 1000000
+-- the emitted key function is total on a membership subtype, so a single-name object binds a
+-- variable it never reads, and the generated names carry the corpus vector names
+set_option linter.unusedVariables false
+set_option linter.style.nameCheck false
+
+/-- The equation compiler, then the same with the definition rewritten first, then that with the
+    field function settled by \`rfl\`. -/
+local macro "meet_pair" : tactic => \`(tactic|
+  first
+    | (simp [${MEET_LEMMAS}] <;> decide)
+    | (rw [Term.meet.eq_def]; simp [${MEET_LEMMAS}] <;> decide)
+    | (rw [Term.meet.eq_def]; simp only [${MEET_LEMMAS}] <;> rfl)
+    | (rw [Term.meet.eq_def]; simp [${MEET_LEMMAS}] <;> rfl))
+
+${meets.map(leanMeet).join('\n\n')}
+
+end Calculus
+`
+
+/** The union of the lemma sets `Meet.lean`'s worked examples use to reduce a meet. */
+const MEET_LEMMAS = [
+    'Term.meet',
+    'Term.meetLit',
+    'Pred.isData',
+    'allSome',
+    'Term.ofOptions',
+    'Term.ofOptionsGuarded',
+    'unionOk',
+    'orthAll',
+    'Term.isNever',
+    'Term.isOpenObject',
+    'objectNamesAgree',
+    'Field.presenceAgrees',
+    'MapOf.at',
+    'Term.tupleOf',
+    'Term.refineOf',
+    'Body.meetTerm',
+    'Body.meetField',
+    'Body.meetRec',
+    'Body.meetRecOk',
+    'Body.meetRecField',
+    'Field.meet',
+    'Field.meetT',
+    'Rest.merge',
+    'Body.fbShared',
+    'Field.isFallback',
+    'Body.dropFits',
+    'Body.reqShared',
+    'Field.isReq',
+    'Body.meetOk',
+    'Field.isBottom',
+    'Body.shared',
+].join(', ')
 
 /**
  * Whether the model's read row is **stuck** on this pair rather than answering.
