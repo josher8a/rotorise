@@ -93,9 +93,20 @@ inductive Term where
       `Finset.image` to stay injective, and a set-level `legacy` widens the whole attribute
       rather than each member. -/
   | set      (base : SetBase)
-  | array    (elem : Term)
-  /-- `(tuple)` and `(tuple-tail)` in one constructor; `tail = none` is the plain tuple. -/
-  | tuple    (elems : List Term) (tail : Option Term)
+  /-- §3 `(list)`: the one positional container, as a prefix, at most one spread, and a
+      suffix. `array`, `(tuple)` and `(tuple-tail)` were three shapes of one thing, and
+      none of the three could say `[A, B, ...C[], D]` — a fixed position AFTER a spread.
+
+      A value of length `n` is admitted when `n ≥ pre.length + suf.length`: `pre` aligns
+      from the left, `suf` from the right, and every position between them goes through
+      the spread. With `spread = none` the arity is exactly `pre.length + suf.length`.
+
+      **Two spreads have no term**, because the spread is an `Option` and not a `List`. The
+      host carries a type-level refusal for a rest element that is not last, and that
+      refusal has nothing left to refuse: the ambiguity it excluded is now unrepresentable.
+      `array` and `tuple` survive below as *builders*, so a statement that spells either
+      keeps its spelling. -/
+  | list     (pre : List Term) (spread : Option Term) (suf : List Term)
   | record   (val : Term)
   | held     (inner : Term) (f : Value → Value) (g : Value → Value)
   | refine   (inner : Term) (p : Pred)
@@ -140,6 +151,21 @@ inductive Rest where
   | codec (t : Term)
 
 end
+
+/-! ## `array` and `tuple`, as builders over `list`
+
+`Term.list` replaced three constructors, and these two keep the words that name the shapes
+a caller writes. They are definitions, so a *statement* about `.array c` reads as it always
+did, while a *match* goes through `.list`. -/
+
+/-- §3 `(array)`: every position under one codec, and no fixed position. -/
+def Term.array (elem : Term) : Term := .list [] (some elem) []
+
+/-- §3 `(tuple)` and `(tuple-tail)` in one builder: the declared positions, then the tail
+    codec where there is one. `tail = none` is the plain tuple, whose arity is exactly the
+    number of declared positions. -/
+def Term.tuple (elems : List Term) (tail : Option Term) : Term := .list elems tail []
+
 
 /-! ## `Body`'s projections
 
@@ -226,9 +252,10 @@ def Term.depth : Term → Nat
   -- `set` is a **leaf** since its base became an index: there is no element term to
   -- measure, so it sits with the other ground shapes rather than costing a layer.
   | .literal _ _ | .custom _ _ | .opaq _ | .set _ | .never => 1
-  | .array t | .record t | .lazy t => Term.depth t + 1
+  | .record t | .lazy t => Term.depth t + 1
   | .held t _ _ | .refine t _ | .legacy t _ => Term.depth t + 1
-  | .tuple ts tail => max (Term.depthL ts) (Term.depthO tail) + 1
+  | .list pre sp suf =>
+      max (Term.depthL pre) (max (Term.depthO sp) (Term.depthL suf)) + 1
   -- one companion, like every other non-leaf row
   | .object b => Body.depth b + 1
   | .union opts => Term.depthL opts + 1
@@ -349,13 +376,18 @@ macro (name := termDepthWf) "term_depth_wf" : tactic => `(tactic|
        | (have hle := Term.depth_le_depthL ‹_ ∈ _›
           simp only [Term.depth]
           exact Nat.lt_succ_of_le hle)
-       -- …or a `max` (tuple)
+       -- …or a `max` (list): the prefix, the spread and the suffix each sit under one
+       -- branch of the nested `max`, and `omega` reads `Nat.max` directly, so one
+       -- alternative per companion covers all three rather than one per branch.
        | (have hle := Term.depth_le_depthL ‹_ ∈ _›
           simp only [Term.depth]
-          exact Nat.lt_succ_of_le (le_trans hle (le_max_left _ _)))
+          omega)
        | (have hle := Term.depthO_le ‹_ ∈ _›
           simp only [Term.depth]
-          exact Nat.lt_succ_of_le (le_trans hle (le_max_right _ _)))
+          omega)
+       -- the spread, where the recursion substituted `sp := some t'` and left no
+       -- membership to read: `depthO (some t')` IS `t'.depth`, so the row needs no premise
+       | (simp only [Term.depth, Term.depthO]; omega)
        -- a declared field's term: the inequality `sizeOf` cannot give
        | exact Term.depth_lt_object_req _ (by assumption)
        | exact Term.depth_lt_object_opt _ (by assumption)

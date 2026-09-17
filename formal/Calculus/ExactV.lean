@@ -48,6 +48,19 @@ def alignP : List VP → Option VP → List Value → Bool
   | _ :: _, _, [] => false
   | P :: Ps, tail, v :: vs => P v && alignP Ps tail vs
 
+/-- The suffix's row: position for position, and a length mismatch refused. -/
+def zipP : List VP → List Value → Bool
+  | [], [] => true
+  | P :: Ps, v :: vs => P v && zipP Ps vs
+  | _, _ => false
+
+/-- `alignL`'s row: the suffix splits off the right end, and what is left is `alignP`'s
+    prefix-and-spread. A row shorter than the suffix takes `0` off the end, and `zipP`
+    refuses it on the length, so no guard is owed. -/
+def alignPL (pre : List VP) (sp : Option VP) (suf : List VP) (vs : List Value) : Bool :=
+  alignP pre sp (vs.take (vs.length - suf.length))
+    && zipP suf (vs.drop (vs.length - suf.length))
+
 /-- `entryCodec`'s row: the field a name declares, or else the rest policy's. `none` is an
     undeclared name under `drop` or `refuse` — which the *write* side refuses, `drop` being a
     read-side filter. -/
@@ -212,7 +225,6 @@ noncomputable def Adm : Term → Value → Bool
   | .custom ce _ => fun v => (ce v).isSome
   -- the bottom admits nothing, and the row is that sentence
   | .never => fun _ => false
-  | .array c  => fun v => match v with | .arr xs => allP (Adm c) xs | _ => false
   -- `record` needs no list companion either: `M`'s entries are a function on the key
   -- set, so "every entry admits" is one `decide` over that set, the way the three `set`
   -- rows are one `decide` over theirs.
@@ -244,8 +256,14 @@ noncomputable def Adm : Term → Value → Bool
       | .numSet S => decide (∀ d ∈ S.1, b.adm (.num d) = true)
       | .binSet S => decide (∀ y ∈ S.1, b.adm (.bin y) = true)
       | _ => false
-  | .tuple ts tail => fun v =>
-      match v with | .arr vs => alignP (AdmList ts) (AdmOptT tail) vs | _ => false
+  -- **One row for the one positional container.** `array` and `tuple` were two rows that
+  -- computed different things (`allP` and `alignP`) on shapes that are now the same term,
+  -- so the first would have shadowed the second in silence. `alignPL` is the row both
+  -- shapes reduce to.
+  | .list pre sp suf => fun v =>
+      match v with
+      | .arr vs => alignPL (AdmList pre) (AdmOptT sp) (AdmList suf) vs
+      | _ => false
   | .object b => AdmBody b
   -- **The second row that asks its own codec**, as the section above sets out:
   -- `denote (.opaq lossy)` *is* `opaqCodecω lossy`, so this is `dom(e)` rather than a
@@ -479,19 +497,131 @@ theorem alignP_iff (tail : Option Term) (htl : ∀ t ∈ tail, ExactV t) :
         rw [traverse_cons_isSome, Bool.and_eq_true, ← ht v, ← ih]
 
 
-/-- **`tuple` is exact** once its components are. -/
-theorem ExactV_tuple {ts : List Term} {tail : Option Term}
-    (h : ∀ t ∈ ts, ExactV t) (htl : ∀ t ∈ tail, ExactV t) : ExactV (.tuple ts tail) := by
+/-- A suffix row that holds pins the length. -/
+theorem zipP_length : ∀ (Ps : List VP) (vs : List Value), zipP Ps vs = true → Ps.length = vs.length
+  | [], [], _ => rfl
+  | [], _ :: _, h => by simp [zipP] at h
+  | _ :: _, [], h => by simp [zipP] at h
+  | _ :: Ps, _ :: vs, h => by
+      simp only [zipP, Bool.and_eq_true] at h
+      simp [zipP_length Ps vs h.2]
+
+/-- A row of the wrong length holds nothing. -/
+theorem zipP_false_of_length_ne (Ps : List VP) (ws : List Value) (h : Ps.length ≠ ws.length) :
+    zipP Ps ws = false := by
+  cases hz : zipP Ps ws with
+  | false => rfl
+  | true => exact absurd (zipP_length Ps ws hz) h
+
+/-- Two rows of matching heads split. -/
+theorem zipP_append : ∀ (a₁ b₁ : List VP) (a₂ b₂ : List Value), a₁.length = a₂.length →
+    zipP (a₁ ++ b₁) (a₂ ++ b₂) = (zipP a₁ a₂ && zipP b₁ b₂)
+  | [], _, [], _, _ => by simp [zipP]
+  | P :: Ps, b₁, v :: vs, b₂, h => by
+      simp only [List.cons_append, zipP, zipP_append Ps b₁ vs b₂ (by simpa using h)]
+      exact (Bool.and_assoc _ _ _).symm
+
+/-- With no spread, `alignP` IS the positionwise row: both refuse a length mismatch. -/
+theorem alignP_none_eq_zipP : ∀ (pre : List VP) (ws : List Value),
+    alignP pre none ws = zipP pre ws
+  | [], [] => rfl
+  | [], _ :: _ => rfl
+  | _ :: _, [] => rfl
+  | _ :: Ps, _ :: vs => by simp only [alignP, zipP, alignP_none_eq_zipP Ps vs]
+
+/-- A spread pads the row out to the value's length. -/
+theorem alignP_some_eq_zipP : ∀ (pre : List VP) (c : VP) (ws : List Value),
+    pre.length ≤ ws.length →
+    alignP pre (some c) ws = zipP (pre ++ List.replicate (ws.length - pre.length) c) ws
+  | [], _, [], _ => rfl
+  | [], c, _ :: vs, _ => by
+      have ih := alignP_some_eq_zipP [] c vs (Nat.zero_le _)
+      simp only [List.length_nil, Nat.sub_zero, List.nil_append] at ih ⊢
+      simp only [alignP, List.length_cons, List.replicate_succ, zipP, ih]
+  | _ :: _, _, [], h => by simp at h
+  | _ :: Ps, c, _ :: vs, h => by
+      have ih := alignP_some_eq_zipP Ps c vs (by simpa using h)
+      simp only [alignP, List.cons_append, zipP, List.length_cons,
+        Nat.succ_sub_succ_eq_sub, ih]
+
+/-- …and refuses a row shorter than its declared positions. -/
+theorem alignP_short : ∀ (pre : List VP) (sp : Option VP) (ws : List Value),
+    ws.length < pre.length → alignP pre sp ws = false
+  | [], _, _, h => by simp at h
+  | _ :: _, sp, [], _ => by cases sp <;> rfl
+  | _ :: Ps, sp, _ :: vs, h => by
+      simp only [alignP, alignP_short Ps sp vs (by simpa using h), Bool.and_false]
+
+/-- The suffix's row, transported across its positions' exactness.
+
+    The length premise is load bearing: `List.zip` TRUNCATES, so a row longer than the
+    suffix would traverse the short zip and answer `true` where `zipP` answers `false`.
+    `alignL` only ever hands this a row of exactly the suffix's length. -/
+theorem zipP_iff : ∀ (suf : List Term), (∀ t ∈ suf, ExactV t) → ∀ (back : List Value),
+    back.length = suf.length →
+    (zipP (AdmList suf) back = true ↔
+      (traverse (fun cv : Codec × Value => cv.1.e cv.2)
+        ((denoteList suf).zip back)).isSome = true)
+  | [], _, [], _ => by simp [zipP, AdmList, denoteList]
+  | [], _, _ :: _, h => by simp at h
+  | _ :: _, _, [], h => by simp at h
+  | t :: ts, h, v :: vs, hlen => by
+      simp only [AdmList, denoteList, zipP, List.zip_cons_cons, Bool.and_eq_true,
+        traverse_cons_isSome]
+      rw [zipP_iff ts (fun t' ht' => h t' (List.mem_cons_of_mem _ ht')) vs
+          (by simpa using hlen),
+        h t List.mem_cons_self v]
+
+/-- **`alignPL` is `alignL`'s row.** The suffix splits off the right end on both sides, so
+    this is `alignP_iff` beside `zipP_iff` and nothing new. -/
+theorem alignPL_iff (pre : List Term) (sp : Option Term) (suf : List Term)
+    (hpre : ∀ t ∈ pre, ExactV t) (hsp : ∀ t ∈ sp, ExactV t) (hsuf : ∀ t ∈ suf, ExactV t)
+    (vs : List Value) :
+    alignPL (AdmList pre) (AdmOptT sp) (AdmList suf) vs = true ↔
+      ((alignL (denoteList pre) (denoteOpt sp) (denoteList suf) vs).bind
+        (traverse fun cv => cv.1.e cv.2)).isSome = true := by
+  have hlenA : (AdmList suf).length = suf.length := by simp
+  have hlenD : (denoteList suf).length = suf.length := by simp
+  unfold alignPL
+  rw [hlenA]
+  rcases Nat.lt_or_ge vs.length suf.length with hlt | hge
+  · rw [alignL_short _ _ _ _ (by omega)]
+    have h0 : vs.length - suf.length = 0 := by omega
+    rw [h0, List.drop_zero]
+    refine ⟨fun hc => ?_, fun hc => nomatch hc⟩
+    have := zipP_length _ _ (Bool.and_eq_true .. ▸ hc |>.2)
+    rw [hlenA] at this
+    omega
+  · rw [alignL_eq_split _ _ _ _ (by omega), hlenD]
+    rw [Bool.and_eq_true, alignP_iff sp hsp pre (vs.take (vs.length - suf.length)) hpre,
+      zipP_iff suf hsuf _ (by simp; omega)]
+    cases hal : align (denoteList pre) (denoteOpt sp) (vs.take (vs.length - suf.length)) with
+    | none => simp
+    | some ps => simp [traverse_append_isSome]
+
+/-- **`list` is exact** once its three parts are. -/
+theorem ExactV_list {pre : List Term} {sp : Option Term} {suf : List Term}
+    (hpre : ∀ t ∈ pre, ExactV t) (hsp : ∀ t ∈ sp, ExactV t) (hsuf : ∀ t ∈ suf, ExactV t) :
+    ExactV (.list pre sp suf) := by
   intro v
   cases v
   case arr vs =>
-    show alignP (AdmList ts) (AdmOptT tail) vs = true ↔
-      (((align (denoteList ts) (denoteOpt tail) vs).bind
+    show alignPL (AdmList pre) (AdmOptT sp) (AdmList suf) vs = true ↔
+      (((alignL (denoteList pre) (denoteOpt sp) (denoteList suf) vs).bind
         (traverse fun cv => cv.1.e cv.2)).map Attr.l).isSome = true
-    rw [alignP_iff tail htl ts vs h]
-    cases (align (denoteList ts) (denoteOpt tail) vs).bind (traverse fun cv => cv.1.e cv.2) <;>
-      simp
-  all_goals simp [Adm, denote, tupleCodec]
+    rw [alignPL_iff pre sp suf hpre hsp hsuf vs]
+    cases (alignL (denoteList pre) (denoteOpt sp) (denoteList suf) vs).bind
+      (traverse fun cv => cv.1.e cv.2) <;> simp
+  all_goals simp [Adm, denote, listCodec]
+
+/-- **`tuple` is exact** once its components are: the `list` with no suffix. -/
+theorem ExactV_tuple {ts : List Term} {tail : Option Term}
+    (h : ∀ t ∈ ts, ExactV t) (htl : ∀ t ∈ tail, ExactV t) : ExactV (.tuple ts tail) :=
+  ExactV_list h htl (by simp)
+
+/-- **`array` is exact** once its element is: the `list` with one spread. -/
+theorem ExactV_array {c : Term} (hc : ExactV c) : ExactV (.array c) :=
+  ExactV_list (by simp) (by simpa using hc) (by simp)
 
 /-- A field's row is exact when the term it carries is. -/
 def ExactField (fd : Field) : Prop :=
@@ -730,8 +860,9 @@ mutual
     either. -/
 theorem Adm_exact : ∀ (t : Term), ExactV t
   -- the rows §5 excused, and not one of them needed excusing
-  | .tuple ts tail =>
-      ExactV_tuple (exactVL_mem ts (Adm_exactL ts)) (exactVO_mem tail (Adm_exactO tail))
+  | .list pre sp suf =>
+      ExactV_list (exactVL_mem pre (Adm_exactL pre)) (exactVO_mem sp (Adm_exactO sp))
+        (exactVL_mem suf (Adm_exactL suf))
   | .object b => Adm_exactB b
   | .opaq lossy => ExactV_opaq lossy
   -- both sides are empty, so the equivalence is `False ↔ False`
@@ -760,14 +891,6 @@ theorem Adm_exact : ∀ (t : Term), ExactV t
         simp [AdmLit, denote, denote, literalCodec, baseCodec, inL,
               stringCodec, booleanCodec, binaryCodec, nullCodec, inD, decimalCodec]
   | .custom ce cp => by intro v; simp [Adm, denote, denote]
-  | .array c => by
-      have hc := Adm_exact c
-      intro v
-      cases v
-      case arr xs =>
-        simp only [Adm, denote, denote, denote, arrayCodec, Option.isSome_map]
-        rw [AdmAll_iff hc, ← traverse_isSome_iff]
-      all_goals simp [Adm, denote, denote, arrayCodec]
   | .record c => by
       have hc := Adm_exact c
       intro v
@@ -828,16 +951,16 @@ end
 
 /-- §5's empty-container argument, **derived**: the exact row still admits `[]`. -/
 theorem Adm_array_nil (c : Term) : Adm (.array c) (.arr []) = true := by
-  simp [Adm, allP]
+  simp [Term.array, Adm, alignPL, alignP, zipP, AdmList, AdmOptT]
 
 /-- …and it is strictly sharper than the `⊤` that was standing in for it. -/
 theorem Adm_array_sharp : Adm (.array (.literal .string "A")) (.arr [.str "B"]) = false := by
-  simp [Adm, allP, AdmLit, inL]
+  simp [Term.array, Adm, alignPL, alignP, zipP, AdmList, AdmOptT, AdmLit, inL]
 
 /-- Nested, which the old row could not see at any depth. -/
 theorem Adm_array_nested :
     Adm (.array (.array (.literal .string "A"))) (.arr [.arr [.str "B"]]) = false := by
-  simp [Adm, allP, AdmLit, inL]
+  simp [Term.array, Adm, alignPL, alignP, zipP, AdmList, AdmOptT, AdmLit, inL]
 
 
 

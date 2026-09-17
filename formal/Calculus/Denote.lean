@@ -77,8 +77,7 @@ def μSyn : Term → Option Member
   | .binary => some .B
   -- the member is the base's, where it was `setMember` of the element's and could be `none`
   | .set b => some b.member
-  | .array _ => some .L
-  | .tuple _ _ => some .L
+  | .list _ _ _ => some .L
   | .record _ => some .M
   | .held t _ _ => μSyn t
   | .refine t _ => μSyn t
@@ -152,8 +151,7 @@ def denote : Term → Codec
   | .binary => binaryCodec
   | .literal k ls => literalCodec k ls
   | .set b => setCodec b.elem
-  | .array elem => arrayCodec (denote elem)
-  | .tuple elems tail => tupleCodec (denoteList elems) (denoteOpt tail)
+  | .list pre spread suf => listCodec (denoteList pre) (denoteOpt spread) (denoteList suf)
   | .record val => recordCodec (denote val)
   | .held inner f g => (denote inner).through f g
   | .refine inner p => (denote inner).restrict p.eval
@@ -226,7 +224,7 @@ theorem denote_μ : ∀ t : Term, (denote t).μ = μSyn t
   | .literal k ls => literalCodec_μ k ls
   | .string | .number | .decimal | .boolean | .binary | .null => rfl
   | .set b => SetBase.setCodec_μ b
-  | .array _ | .tuple _ _ | .record _ => rfl
+  | .list _ _ _ | .record _ => rfl
   | .held t' _ _ => denote_μ t'
   | .refine t' _ => denote_μ t'
   | .legacy t' _ => denote_μ t'
@@ -266,11 +264,20 @@ def fieldTable (fields : Finset Name) (f : {k // k ∈ fields} → Field) : MapO
 section Bridge
 
 theorem denote_set (b : SetBase) : denote (.set b) = setCodec b.elem := rfl
-theorem denote_array (t : Term) : denote (.array t) = arrayCodec (denote t) := rfl
+/-- `array` denotes the spread-only `list`, which is what `arrayCodec` is. -/
+theorem denote_array (t : Term) : denote (.array t) = arrayCodec (denote t) :=
+  (arrayCodec_eq_listCodec (denote t)).symm
 theorem denote_record (t : Term) : denote (.record t) = recordCodec (denote t) := rfl
 
+/-- `tuple` denotes the suffix-free `list`, which is what `tupleCodec` is. -/
 theorem denote_tuple (ts : List Term) (tail : Option Term) :
-    denote (.tuple ts tail) = tupleCodec (denoteList ts) (denoteOpt tail) := rfl
+    denote (.tuple ts tail) = tupleCodec (denoteList ts) (denoteOpt tail) :=
+  (tupleCodec_eq_listCodec (denoteList ts) (denoteOpt tail)).symm
+
+/-- …and the container itself denotes the `list` codec over its three parts. -/
+theorem denote_list (pre : List Term) (spread : Option Term) (suf : List Term) :
+    denote (.list pre spread suf)
+      = listCodec (denoteList pre) (denoteOpt spread) (denoteList suf) := rfl
 
 /-- `held` denotes `through` — the entry that reads least like its term. -/
 theorem denote_held (t : Term) (f g : Value → Value) :

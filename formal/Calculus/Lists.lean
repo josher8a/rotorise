@@ -120,6 +120,17 @@ theorem traverse_length :
     ∀ (xs : List α) (ys : List β), traverse f xs = some ys → xs.length = ys.length :=
   fun _ _ ht => (traverse_eq_some.mp ht).length_eq
 
+/-- A traversal of two parts is defined exactly where both parts are. `list`'s alignment
+    splits at the suffix, so the two halves are traversed independently. -/
+theorem traverse_append_isSome :
+    ∀ (xs ys : List α),
+      (traverse f (xs ++ ys)).isSome = ((traverse f xs).isSome && (traverse f ys).isSome)
+  | [], ys => by simp
+  | x :: xs, ys => by
+      simp only [List.cons_append, traverse_cons]
+      rw [show (traverse f (xs ++ ys)) = (traverse f (xs ++ ys)) from rfl]
+      cases hx : f x <;> simp [traverse_cons, traverse_append_isSome xs ys, hx]
+
 /-- §5, Lemma (traversal), **(R)** — "positions re-read in place". Pointwise (R) lifts to
     the traversal: reverse the relation. -/
 theorem traverse_roundTrip (h : ∀ x y, f x = some y → g y = some x) :

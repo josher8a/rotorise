@@ -62,8 +62,8 @@ def Obligations : Term → Prop
   -- `set` joins the leaves: its base is an index, so there is no subterm to carry premises.
   | .string | .number | .decimal | .boolean | .binary | .null
   | .literal _ _ | .opaq _ | .set _ | .never => True
-  | .array t' | .record t' | .refine t' _ => Obligations t'
-  | .tuple ts tail => ObligationsList ts ∧ ObligationsOpt tail
+  | .record t' | .refine t' _ => Obligations t'
+  | .list pre sp suf => ObligationsList pre ∧ ObligationsOpt sp ∧ ObligationsList suf
   | .held t' f g => Obligations t' ∧ IsoCancels (denote t') f g
   | .legacy t' r => Obligations t' ∧ ReadsCoherently (denote t') r
   | .lazy t' => Obligations t'
@@ -105,9 +105,9 @@ def MPOk : Term → Prop
   | .literal _ _
   | .string | .number | .decimal | .boolean | .binary | .null
   | .opaq _ | .custom _ _ | .set _ | .never => True
-  | .array t' | .record t' | .refine t' _
+  | .record t' | .refine t' _
   | .held t' _ _ => MPOk t'
-  | .tuple ts tail => MPOkList ts ∧ MPOkOpt tail
+  | .list pre sp suf => MPOkList pre ∧ MPOkOpt sp ∧ MPOkList suf
   | .lazy t' => MPOk t'
   | .object b => MPOkBody b
   | .union opts => MPOkList opts
@@ -169,14 +169,19 @@ rule, and they read as the rule they belong to. Each is `:= h`. -/
 
 namespace Obligations
 
-theorem array {t} (h : Obligations (.array t)) : Obligations t := h
+theorem array {t} (h : Obligations (.array t)) : Obligations t := h.2.1
 theorem record {t} (h : Obligations (.record t)) : Obligations t := h
 theorem refine {t q} (h : Obligations (.refine t q)) : Obligations t := h
 theorem lazy {t} (h : Obligations (.lazy t)) : Obligations t := h
 
 theorem tuple {ts tail} (h : Obligations (.tuple ts tail)) :
     (∀ t ∈ ts, Obligations t) ∧ (∀ t ∈ tail, Obligations t) :=
-  ⟨obligationsList_iff.mp h.1, obligationsOpt_iff.mp h.2⟩
+  ⟨obligationsList_iff.mp h.1, obligationsOpt_iff.mp h.2.1⟩
+
+/-- §3 `(list)`: one premise per declared position, the spread's, and the suffix's. -/
+theorem list {pre sp suf} (h : Obligations (.list pre sp suf)) :
+    (∀ t ∈ pre, Obligations t) ∧ (∀ t ∈ sp, Obligations t) ∧ (∀ t ∈ suf, Obligations t) :=
+  ⟨obligationsList_iff.mp h.1, obligationsOpt_iff.mp h.2.1, obligationsList_iff.mp h.2.2⟩
 
 /-- §3 `(held)`: the subterm's premises, and the iso cancelling on the carriers. -/
 theorem held {t f g} (h : Obligations (.held t f g)) :
@@ -289,8 +294,7 @@ theorem typed_μSyn : ∀ {t T μ}, Typed t T μ → μSyn t = μ
   | _, _, _, .binary => rfl
   | _, _, _, .set _ => rfl
   | _, _, _, .never => rfl
-  | _, _, _, .array _ => rfl
-  | _, _, _, .tuple _ _ => rfl
+  | _, _, _, .list _ _ _ => rfl
   | _, _, _, .record _ => rfl
   | _, _, _, .held h' => by have ih := typed_μSyn h'; exact ih
   | _, _, _, .refine h' => by have ih := typed_μSyn h'; exact ih
@@ -381,8 +385,6 @@ theorem soundness_both : ∀ {t T μ}, Typed t T μ → Obligations t → Sound 
     -- a leaf now: `setCodec` is lawful at each of the four bases, so `(set)` discharges the
     -- way the ground rules do rather than by wrapping a subterm's soundness
     | set b => exact sound_ground (lawful_setCodec (lawful_setBase b))
-    | @array t' T' μ' h' =>
-      exact sound_wrap (t := t') (soundness_both h' hob) lawfulCore_arrayCodec lawful_arrayCodec
     | @record t' T' μ' h' =>
       exact sound_wrap (t := t') (soundness_both h' hob) lawfulCore_recordCodec lawful_recordCodec
     | @refine t' T' μ' p h' =>
@@ -397,24 +399,30 @@ theorem soundness_both : ∀ {t T μ}, Typed t T μ → Obligations t → Sound 
       -- (MP) is off here by design: `MPOk` is `False` at a `legacy`, so the second
       -- half is vacuous and only the core laws survive. §5's first residue.
       exact ⟨LawfulCore.extendRead (soundness_both h' hob.1).1 hob.2.1, fun hmp => hmp.elim⟩
-    | @tuple ts Ts tail Tt hlist hopt =>
-      have ihs : ∀ t' ∈ ts, Sound t' := fun t' ht' => by
-        obtain ⟨T', μ', hμ'⟩ := TypedList.forall hlist t' ht'
-        exact soundness_both hμ' ((Obligations.tuple hob).1 t' ht')
-      have iht : ∀ t' ∈ tail, Sound t' := fun t' ht' => by
-        cases tail with
+    | @list pre Tpre sp Tsp suf Tsuf hp hs hf =>
+      have ihp : ∀ t' ∈ pre, Sound t' := fun t' ht' => by
+        obtain ⟨T', μ', hμ'⟩ := TypedList.forall hp t' ht'
+        exact soundness_both hμ' ((Obligations.list hob).1 t' ht')
+      have ihsp : ∀ t' ∈ sp, Sound t' := fun t' ht' => by
+        cases sp with
         | none => exact nomatch ht'
         | some tx =>
           replace ht' : some tx = some t' := ht'
           cases ht'
-          cases hopt with
-          | some hμ' => exact soundness_both hμ' ((Obligations.tuple hob).2 t' rfl)
-      rw [Sound, denote_tuple, denoteList_eq, denoteOpt_eq]
-      exact ⟨lawfulCore_tupleCodec (List.forall_mem_map.mpr fun t' ht' => (ihs t' ht').1)
-          (forall_mem_map_option fun t' ht' => (iht t' ht').1),
-        fun hmp => lawful_tupleCodec
-          (List.forall_mem_map.mpr fun t' ht' => (ihs t' ht').2 (mpOkList_iff.mp hmp.1 t' ht'))
-          (forall_mem_map_option fun t' ht' => (iht t' ht').2 (mpOkOpt_iff.mp hmp.2 t' ht'))⟩
+          cases hs with
+          | some hμ' => exact soundness_both hμ' ((Obligations.list hob).2.1 t' rfl)
+      have ihf : ∀ t' ∈ suf, Sound t' := fun t' ht' => by
+        obtain ⟨T', μ', hμ'⟩ := TypedList.forall hf t' ht'
+        exact soundness_both hμ' ((Obligations.list hob).2.2 t' ht')
+      rw [Sound, denote_list, denoteList_eq, denoteOpt_eq, denoteList_eq]
+      exact ⟨lawfulCore_listCodec (List.forall_mem_map.mpr fun t' ht' => (ihp t' ht').1)
+          (forall_mem_map_option fun t' ht' => (ihsp t' ht').1)
+          (List.forall_mem_map.mpr fun t' ht' => (ihf t' ht').1),
+        fun hmp => lawful_listCodec
+          (List.forall_mem_map.mpr fun t' ht' => (ihp t' ht').2 (mpOkList_iff.mp hmp.1 t' ht'))
+          (forall_mem_map_option fun t' ht' => (ihsp t' ht').2 (mpOkOpt_iff.mp hmp.2.1 t' ht'))
+          (List.forall_mem_map.mpr fun t' ht' => (ihf t' ht').2
+            (mpOkList_iff.mp hmp.2.2 t' ht'))⟩
     -- The field table is indexed by the declared names, so the induction hypothesis is
     -- read off at a key rather than at a membership, and ~~TypedFields.forall~~ — which
     -- existed to walk the row — is not needed. Nor is a `Nodup` to transport.
@@ -590,6 +598,104 @@ theorem align_T_of_HTuple {tail Tt} (hopt : TypedOpt tail Tt)
           · exact ih tx (List.mem_cons_self) _ _ hty v hall.1
           · exact hps p hp'
 
+/-! #### The suffix, and the `list` shape that carries it
+
+`align_TSub` and `align_T_of_HTuple` state the prefix-and-spread half. The suffix half is a
+`Forall₂` against the zipped row, and `alignL_split` joins the two: an alignment of a
+`list` IS an alignment of its prefix and spread beside a zip of its suffix, so neither
+half is restated. -/
+
+/-- The declared length of a judgement's row is the row's. -/
+theorem TypedList.length_eq : ∀ {ts Ts}, TypedList ts Ts → ts.length = Ts.length
+  | _, _, .nil => rfl
+  | _, _, .cons _ hs => by simp [TypedList.length_eq hs]
+
+/-- The suffix's positions, read off the zipped row. -/
+theorem zipSuf_TSub :
+    ∀ {suf Tsuf}, TypedList suf Tsuf →
+      (∀ t' ∈ suf, ∀ (T' : Held) (μ' : Option Member),
+        Typed t' T' μ' → ∀ v, (denote t').T v → T' v) →
+      ∀ {back : List Value}, back.length = suf.length →
+      (∀ p ∈ (suf.map denote).zip back, p.1.T p.2) →
+      List.Forall₂ (fun T v => T v) Tsuf back
+  | _, _, .nil, _, back, hlen, _ => by
+      cases back with
+      | nil => exact .nil
+      | cons _ _ => simp at hlen
+  | _, _, @TypedList.cons t ts T Ts μ hty hs, ih, back, hlen, hall => by
+      cases back with
+      | nil => simp at hlen
+      | cons b bs =>
+        refine .cons (ih t (List.mem_cons_self) _ _ hty b (hall (denote t, b) ?_)) ?_
+        · simp only [List.map_cons, List.zip_cons_cons]
+          exact List.mem_cons_self
+        · exact zipSuf_TSub hs (fun t' ht' => ih t' (List.mem_cons_of_mem _ ht'))
+            (by simpa using hlen)
+            (fun p hp => hall p (by
+              simp only [List.map_cons, List.zip_cons_cons]
+              exact List.mem_cons_of_mem _ hp))
+
+/-- …and the same suffix, built rather than read. -/
+theorem zipSuf_T :
+    ∀ {suf Tsuf}, TypedList suf Tsuf →
+      (∀ t' ∈ suf, ∀ (T' : Held) (μ' : Option Member),
+        Typed t' T' μ' → ∀ v, T' v → (denote t').T v) →
+      ∀ {back : List Value}, List.Forall₂ (fun T v => T v) Tsuf back →
+      back.length = suf.length ∧ ∀ p ∈ (suf.map denote).zip back, p.1.T p.2
+  | _, _, .nil, _, back, hb => by
+      cases hb; exact ⟨rfl, by simp⟩
+  | _, _, @TypedList.cons t ts T Ts μ hty hs, ih, back, hb => by
+      cases hb with
+      | cons hhead htail =>
+        obtain ⟨hlen, hall⟩ :=
+          zipSuf_T hs (fun t' ht' => ih t' (List.mem_cons_of_mem _ ht')) htail
+        refine ⟨by simpa using hlen, ?_⟩
+        intro p hp
+        simp only [List.map_cons, List.zip_cons_cons] at hp
+        rcases List.mem_cons.mp hp with rfl | hp'
+        · exact ih t (List.mem_cons_self) _ _ hty _ hhead
+        · exact hall p hp'
+
+/-- `alignL`'s pairing is §3's `(list)` held set, read off the alignment. -/
+theorem alignL_TSub {pre Tpre sp Tsp suf Tsuf} (hp : TypedList pre Tpre)
+    (hs : TypedOpt sp Tsp) (hf : TypedList suf Tsuf)
+    (ihp : ∀ t' ∈ pre, ∀ (T' : Held) (μ' : Option Member),
+      Typed t' T' μ' → ∀ v, (denote t').T v → T' v)
+    (ihs : ∀ t' ∈ sp, ∀ (T' : Held) (μ' : Option Member),
+      Typed t' T' μ' → ∀ v, (denote t').T v → T' v)
+    (ihf : ∀ t' ∈ suf, ∀ (T' : Held) (μ' : Option Member),
+      Typed t' T' μ' → ∀ v, (denote t').T v → T' v)
+    {vs ps}
+    (hal : alignL (pre.map denote) (sp.map denote) (suf.map denote) vs = some ps)
+    (hall : ∀ p ∈ ps, p.1.T p.2) : HTupleL Tpre Tsp Tsuf vs := by
+  obtain ⟨front, back, psF, rfl, hblen, halF, rfl⟩ :=
+    alignL_split _ _ _ _ _ hal
+  refine ⟨front, back, rfl, ?_, ?_⟩
+  · exact zipSuf_TSub hf ihf (by simpa using hblen)
+      (fun p hp => hall p (List.mem_append_right _ hp))
+  · exact align_TSub hs ihs hp ihp halF (fun p hp => hall p (List.mem_append_left _ hp))
+
+/-- …and the same held set built rather than read: the `list` aligns whenever it holds. -/
+theorem alignL_T_of_HTupleL {pre Tpre sp Tsp suf Tsuf} (hp : TypedList pre Tpre)
+    (hs : TypedOpt sp Tsp) (hf : TypedList suf Tsuf)
+    (ihp : ∀ t' ∈ pre, ∀ (T' : Held) (μ' : Option Member),
+      Typed t' T' μ' → ∀ v, T' v → (denote t').T v)
+    (ihs : ∀ t' ∈ sp, ∀ (T' : Held) (μ' : Option Member),
+      Typed t' T' μ' → ∀ v, T' v → (denote t').T v)
+    (ihf : ∀ t' ∈ suf, ∀ (T' : Held) (μ' : Option Member),
+      Typed t' T' μ' → ∀ v, T' v → (denote t').T v)
+    {vs} (hh : HTupleL Tpre Tsp Tsuf vs) :
+    ∃ ps, alignL (pre.map denote) (sp.map denote) (suf.map denote) vs = some ps
+      ∧ ∀ p ∈ ps, p.1.T p.2 := by
+  obtain ⟨front, back, rfl, hback, hfront⟩ := hh
+  obtain ⟨hblen, hzip⟩ := zipSuf_T hf ihf hback
+  obtain ⟨psF, halF, hpsF⟩ := align_T_of_HTuple hs ihs hp ihp front hfront
+  refine ⟨psF ++ (suf.map denote).zip back, alignL_of_split (by simpa using hblen) halF, ?_⟩
+  intro p hp
+  rcases List.mem_append.mp hp with hp' | hp'
+  · exact hpsF p hp'
+  · exact hzip p hp'
+
 /-- `opaque`'s fixpoint carries §3's `Uν` at every fuel.
 
     **This fuel stays.** It is `Opaque.lean`'s budget on the *input's* depth, not `denote`'s on
@@ -703,23 +809,20 @@ theorem typed_TSub : ∀ {t T μ}, Typed t T μ → ∀ v, (denote t).T v → T 
         | exact Or.inr (Or.inl ⟨_, rfl, fun x hx => hv x hx⟩)
         | exact Or.inr (Or.inr ⟨_, rfl, fun x hx => hv x hx⟩)
         | exact nomatch hv
-    | @array t' T' μ' h' =>
-      cases v <;> first
-        | exact ⟨_, rfl, fun x hx => typed_TSub h' x (hv x hx)⟩
-        | exact nomatch hv
     | @record t' T' μ' h' =>
       cases v <;> first
         | exact ⟨_, _, rfl, fun k => typed_TSub h' _ (hv k)⟩
         | exact nomatch hv
-    | @tuple ts Ts tail Tt hlist hopt =>
-      rw [denote_tuple, denoteList_eq, denoteOpt_eq] at hv
+    | @list pre Tpre sp Tsp suf Tsuf hp hs hf =>
+      rw [denote_list, denoteList_eq, denoteOpt_eq, denoteList_eq] at hv
       cases v
       case arr vs =>
         obtain ⟨ps, hal, hall⟩ := hv
-        exact ⟨_, rfl, align_TSub hopt
-          (fun t' _ _ _ hty v hv => typed_TSub hty v hv) hlist
+        exact ⟨_, rfl, alignL_TSub hp hs hf
+          (fun t' _ _ _ hty v hv => typed_TSub hty v hv)
+          (fun t' _ _ _ hty v hv => typed_TSub hty v hv)
           (fun t' _ _ _ hty v hv => typed_TSub hty v hv) hal hall⟩
-      all_goals exact absurd hv (by simp only [tupleCodec]; exact id)
+      all_goals exact absurd hv (by simp only [listCodec]; exact id)
     | @held t' I' μ' f g h' =>
       exact typed_TSub h' (f v) hv
     | @refine t' T' μ' q h' => exact ⟨typed_TSub h' v hv.1, hv.2⟩
@@ -796,24 +899,26 @@ theorem carrier_denote : ∀ {t T μ}, Typed t T μ → Obligations t → Carrie
     | null => exact carrier_nullCodec
     | binary => exact carrier_binaryCodec
     | set b => exact carrier_setCodec (carrier_setBase b)
-    | @array t' T' μ' h' =>
-      exact carrier_arrayCodec (carrier_denote h' hob.array)
     | @record t' T' μ' h' =>
       exact carrier_recordCodec (carrier_denote h' hob.record)
-    | @tuple ts Ts tail Tt hlist hopt =>
-      rw [denote_tuple, denoteList_eq, denoteOpt_eq]
-      refine carrier_tupleCodec (List.forall_mem_map.mpr ?_) (forall_mem_map_option ?_)
+    | @list pre Tpre sp Tsp suf Tsuf hp hs hf =>
+      rw [denote_list, denoteList_eq, denoteOpt_eq, denoteList_eq]
+      refine carrier_listCodec (List.forall_mem_map.mpr ?_) (forall_mem_map_option ?_)
+        (List.forall_mem_map.mpr ?_)
       · intro t' ht'
-        obtain ⟨T', μ', hty⟩ := TypedList.forall hlist t' ht'
-        exact carrier_denote hty ((Obligations.tuple hob).1 t' ht')
+        obtain ⟨T', μ', hty⟩ := TypedList.forall hp t' ht'
+        exact carrier_denote hty ((Obligations.list hob).1 t' ht')
       · intro t' ht'
-        cases tail with
+        cases sp with
         | none => exact nomatch ht'
         | some tx =>
           replace ht' : some tx = some t' := ht'
           cases ht'
-          cases hopt with
-          | some hty => exact carrier_denote hty ((Obligations.tuple hob).2 t' rfl)
+          cases hs with
+          | some hty => exact carrier_denote hty ((Obligations.list hob).2.1 t' rfl)
+      · intro t' ht'
+        obtain ⟨T', μ', hty⟩ := TypedList.forall hf t' ht'
+        exact carrier_denote hty ((Obligations.list hob).2.2 t' ht')
     | @held t' I' μ' f g h' =>
       exact carrier_through (carrier_denote h' hob.1)
         (soundness_both h' hob.1).1 hob.2.2

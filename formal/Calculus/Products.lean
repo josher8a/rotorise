@@ -1241,6 +1241,349 @@ theorem carrier_tupleCodec (hcs : ∀ c ∈ cs, Carrier c) (htl : ∀ c ∈ tail
 
 end Tuple
 
+/-! #### `list` (§3) — one prefix, at most one spread, one suffix
+
+`list` is the positional product that `tuple` cannot state: a fixed **suffix** after a
+spread, so `[A, B, ...C[], D]` has a term. The shape assigns a row of `n` codecs the same
+way `tuple` does, and the extra content is one sentence: the last `|suf|` positions are
+the suffix, and the first `n - |suf|` are exactly `tuple`'s row. So `slotsL` is `slots`
+with the suffix appended, and every fact proved about `slots` carries over through that
+one append. The four clauses of §2 then run position by position over the row, as they do
+for `tuple` and for `array`.
+
+`tuple` is the case with no suffix and `array` the case with no prefix and no suffix. Both
+are proved equal to a `list` below rather than restated, so the positional theory is
+proved one time. -/
+
+/-- The codec row a `list` shape assigns to `n` positions: the prefix positionally, the
+    spread as often as the middle needs, then the suffix. `none` is the length the shape
+    refuses, which is every `n` below `|suf|`, and every `n` that `slots` then refuses. -/
+def slotsL (pre : List Codec) (spread : Option Codec) (suf : List Codec) (n : Nat) :
+    Option (List Codec) :=
+  if n < suf.length then none
+  else (slots pre spread (n - suf.length)).map (· ++ suf)
+
+/-- `align` for a `list`: the row zipped with the positions, exactly as `align_eq_zip`
+    shows `align` itself to be. -/
+def alignL {α : Type} (pre : List Codec) (spread : Option Codec) (suf : List Codec)
+    (xs : List α) : Option (List (Codec × α)) :=
+  (slotsL pre spread suf xs.length).map (·.zip xs)
+
+/-- A row the shape accepts has exactly the length asked of it. -/
+theorem slotsL_length (pre : List Codec) (sp : Option Codec) (suf : List Codec) (n : Nat)
+    (ds) (h : slotsL pre sp suf n = some ds) : ds.length = n := by
+  unfold slotsL at h
+  split at h
+  · exact absurd h (by simp)
+  · next hlt =>
+    obtain ⟨ds', h', rfl⟩ := Option.map_eq_some_iff.mp h
+    rw [List.length_append, slots_length pre sp (n - suf.length) ds' h']
+    omega
+
+/-- Every codec in the row is one the shape declared: a prefix position, the spread, or a
+    suffix position. -/
+theorem slotsL_mem (pre : List Codec) (sp : Option Codec) (suf : List Codec) (n : Nat)
+    (ds) (h : slotsL pre sp suf n = some ds) :
+    ∀ c ∈ ds, c ∈ pre ∨ sp = some c ∨ c ∈ suf := by
+  unfold slotsL at h
+  split at h
+  · exact absurd h (by simp)
+  · next hlt =>
+    obtain ⟨ds', h', rfl⟩ := Option.map_eq_some_iff.mp h
+    intro c hc
+    rcases List.mem_append.mp hc with hc' | hc'
+    · exact (slots_mem pre sp (n - suf.length) ds' h' c hc').imp id Or.inl
+    · exact Or.inr (Or.inr hc')
+
+/-- A property of the shape's three parts is a property of every codec in every row. -/
+theorem slotsL_all {Q : Codec → Prop} {pre : List Codec} {sp : Option Codec}
+    {suf : List Codec} (hpre : ∀ c ∈ pre, Q c) (hsp : ∀ c ∈ sp, Q c)
+    (hsuf : ∀ c ∈ suf, Q c) {n ds} (hs : slotsL pre sp suf n = some ds) :
+    ∀ c ∈ ds, Q c := fun c hc =>
+  (slotsL_mem pre sp suf n ds hs c hc).elim (hpre c)
+    (fun h => h.elim (fun he => hsp c he) (hsuf c))
+
+/-- **The pivot for `alignL`**, and it says what `align_eq_some` says: which codec a
+    position gets depends on the position alone, never on what stands there. -/
+theorem alignL_eq_some {α : Type} {pre : List Codec} {sp : Option Codec} {suf : List Codec}
+    {xs : List α} {ps} :
+    alignL pre sp suf xs = some ps ↔
+      ∃ ds, slotsL pre sp suf xs.length = some ds ∧ ds.length = xs.length ∧ ps = ds.zip xs := by
+  unfold alignL
+  constructor
+  · intro h
+    obtain ⟨ds, h', rfl⟩ := Option.map_eq_some_iff.mp h
+    exact ⟨ds, h', slotsL_length _ _ _ _ _ h', rfl⟩
+  · rintro ⟨ds, h', _, rfl⟩
+    rw [h']; rfl
+
+/-- …so any row of the same length aligns against the same codecs. -/
+theorem alignL_of_slotsL {α : Type} {pre : List Codec} {sp : Option Codec}
+    {suf : List Codec} {n ds} (h : slotsL pre sp suf n = some ds) {xs : List α}
+    (hn : xs.length = n) : alignL pre sp suf xs = some (ds.zip xs) := by
+  unfold alignL; rw [hn, h]; rfl
+
+/-- No suffix is `tuple`'s row, on the nose. -/
+theorem slotsL_nil_suf (pre : List Codec) (sp : Option Codec) (n : Nat) :
+    slotsL pre sp [] n = slots pre sp n := by
+  unfold slotsL
+  simp
+
+/-- …and therefore `tuple`'s alignment. -/
+theorem alignL_nil_suf {α : Type} (pre : List Codec) (sp : Option Codec) (xs : List α) :
+    alignL pre sp [] xs = align pre sp xs := by
+  unfold alignL
+  rw [slotsL_nil_suf, align_eq_zip]
+
+/-- A row the shape accepts splits at the suffix: `tuple`'s row for the positions before
+    it, then the suffix itself. -/
+theorem slotsL_split (pre : List Codec) (sp : Option Codec) (suf : List Codec) (n : Nat)
+    (ds) (h : slotsL pre sp suf n = some ds) :
+    ∃ dsF, slots pre sp (n - suf.length) = some dsF ∧ ds = dsF ++ suf
+        ∧ dsF.length = n - suf.length ∧ suf.length ≤ n := by
+  unfold slotsL at h
+  split at h
+  · exact absurd h (by simp)
+  · next hlt =>
+    obtain ⟨dsF, h', rfl⟩ := Option.map_eq_some_iff.mp h
+    exact ⟨dsF, h', rfl, slots_length _ _ _ _ h', by omega⟩
+
+/-- **The split for `alignL`.** An alignment of a `list` is an alignment of its prefix and
+    spread against the left part, and the suffix zipped with the right part. This is what
+    lets every `align` fact serve the `list` unchanged. -/
+theorem alignL_split {α : Type} (pre : List Codec) (sp : Option Codec) (suf : List Codec)
+    (xs : List α) (ps) (h : alignL pre sp suf xs = some ps) :
+    ∃ front back psF, xs = front ++ back ∧ back.length = suf.length
+      ∧ align pre sp front = some psF ∧ ps = psF ++ suf.zip back := by
+  obtain ⟨ds, hs, hlen, rfl⟩ := alignL_eq_some.mp h
+  obtain ⟨dsF, hsF, rfl, hlenF, hle⟩ := slotsL_split pre sp suf xs.length ds hs
+  refine ⟨xs.take (xs.length - suf.length), xs.drop (xs.length - suf.length),
+    dsF.zip (xs.take (xs.length - suf.length)),
+    (List.take_append_drop _ _).symm, by simp; omega,
+    align_of_slots hsF (by simp), ?_⟩
+  conv_lhs => rw [← List.take_append_drop (xs.length - suf.length) xs]
+  rw [List.zip_append (by simp; omega)]
+
+
+
+/-- …and the split built rather than read: a row long enough for the suffix aligns. -/
+theorem alignL_of_split {α : Type} {pre : List Codec} {sp : Option Codec} {suf : List Codec}
+    {front back : List α} {psF} (hb : back.length = suf.length)
+    (h : align pre sp front = some psF) :
+    alignL pre sp suf (front ++ back) = some (psF ++ suf.zip back) := by
+  obtain ⟨ds, hs, hlen, rfl⟩ := align_eq_some.mp h
+  unfold alignL slotsL
+  rw [if_neg (by simp [hb]), show (front ++ back).length - suf.length = front.length by
+    simp [hb], hs]
+  simp only [Option.map_some]
+  rw [List.zip_append (by omega)]
+
+/-- A row shorter than the suffix aligns against nothing. -/
+theorem alignL_short {α : Type} (pre : List Codec) (sp : Option Codec) (suf : List Codec)
+    (xs : List α) (h : xs.length < suf.length) : alignL pre sp suf xs = none := by
+  unfold alignL slotsL; rw [if_pos h]; rfl
+
+/-- **`alignL` as one equation.** A row long enough for the suffix aligns exactly when its
+    left part aligns against the prefix and spread, and the answer is that alignment with
+    the suffix zipped onto the right part. Every fact about `alignL` follows from this and
+    the corresponding fact about `align`. -/
+theorem alignL_eq_split {α : Type} (pre : List Codec) (sp : Option Codec) (suf : List Codec)
+    (xs : List α) (h : suf.length ≤ xs.length) :
+    alignL pre sp suf xs
+      = (align pre sp (xs.take (xs.length - suf.length))).map
+          (· ++ suf.zip (xs.drop (xs.length - suf.length))) := by
+  cases hal : align pre sp (xs.take (xs.length - suf.length)) with
+  | none =>
+    simp only [Option.map_none]
+    cases hL : alignL pre sp suf xs with
+    | none => rfl
+    | some ps =>
+      obtain ⟨front, back, psF, rfl, hblen, halF, rfl⟩ := alignL_split _ _ _ _ _ hL
+      have hlen : (front ++ back).length - suf.length = front.length := by simp [hblen]
+      rw [hlen, List.take_left] at hal
+      rw [hal] at halF
+      exact nomatch halF
+  | some psF =>
+    have hb : (xs.drop (xs.length - suf.length)).length = suf.length := by simp; omega
+    have := alignL_of_split (pre := pre) (sp := sp) (suf := suf) hb hal
+    rw [List.take_append_drop] at this
+    rw [this]
+    rfl
+
+/-- §3 `(list)`: the positional product over a prefix, a spread and a suffix. -/
+def listCodec (pre : List Codec) (spread : Option Codec) (suf : List Codec) : Codec :=
+  { T := fun v => match v with
+      | .arr vs => ∃ ps, alignL pre spread suf vs = some ps ∧ ∀ p ∈ ps, p.1.T p.2
+      | _ => False
+    μ := some .L
+    e := fun v => match v with
+      | .arr vs => ((alignL pre spread suf vs).bind
+          (traverse fun cv => cv.1.e cv.2)).map Attr.l
+      | _ => none
+    p := fun a => match a with
+      | .l as => ((alignL pre spread suf as).bind
+          (traverse fun ca => ca.1.p ca.2)).map Value.arr
+      | _ => none }
+
+section ListShape
+variable {pre : List Codec} {sp : Option Codec} {suf : List Codec}
+
+/-- `list` is `carriedCodec` between the same two prisms as `tuple` and `array`. -/
+theorem listCodec_eq :
+    listCodec pre sp suf = carriedCodec arrV lA .L
+      (fun vs => ∃ ps, alignL pre sp suf vs = some ps ∧ ∀ p ∈ ps, p.1.T p.2)
+      (fun vs => (alignL pre sp suf vs).bind (traverse fun cv => cv.1.e cv.2))
+      (fun as => (alignL pre sp suf as).bind (traverse fun ca => ca.1.p ca.2)) := by
+  refine Codec.ext ?_ rfl ?_ ?_ <;> funext v <;> cases v <;>
+    simp [listCodec, carriedCodec, arrV, lA]
+
+/-- (R) for the payload pair: realign the written row against the same codecs, then read
+    back position by position. -/
+theorem list_retract (hpre : ∀ c ∈ pre, LawfulCore c) (hsp : ∀ c ∈ sp, LawfulCore c)
+    (hsuf : ∀ c ∈ suf, LawfulCore c) :
+    ∀ vs as, (alignL pre sp suf vs).bind (traverse fun cv => cv.1.e cv.2) = some as →
+      (alignL pre sp suf as).bind (traverse fun ca => ca.1.p ca.2) = some vs := by
+  intro vs as hE
+  obtain ⟨ps, hal, htr⟩ := Option.bind_eq_some_iff.mp hE
+  obtain ⟨ds, hs, hlen, rfl⟩ := alignL_eq_some.mp hal
+  have hn : as.length = vs.length := by
+    rw [← traverse_length _ _ htr, List.length_zip, hlen, Nat.min_self]
+  exact Option.bind_eq_some_iff.mpr ⟨_, alignL_of_slotsL hs hn,
+    zip_roundTrip ds vs as (slotsL_all hpre hsp hsuf hs) hlen htr⟩
+
+/-- (C) for the payload pair, the same way round. -/
+theorem list_canon (hpre : ∀ c ∈ pre, LawfulCore c) (hsp : ∀ c ∈ sp, LawfulCore c)
+    (hsuf : ∀ c ∈ suf, LawfulCore c) :
+    ∀ as vs, (alignL pre sp suf as).bind (traverse fun ca => ca.1.p ca.2) = some vs →
+      ((alignL pre sp suf vs).bind (traverse fun cv => cv.1.e cv.2)).isSome := by
+  intro as vs hD
+  obtain ⟨ps, hal, htr⟩ := Option.bind_eq_some_iff.mp hD
+  obtain ⟨ds, hs, hlen, rfl⟩ := alignL_eq_some.mp hal
+  have hn : vs.length = as.length := by
+    rw [← traverse_length _ _ htr, List.length_zip, hlen, Nat.min_self]
+  rw [alignL_of_slotsL hs hn]
+  exact zip_canon ds as vs (slotsL_all hpre hsp hsuf hs) htr
+
+/-- (R) and (C) for the shape. -/
+theorem lawfulCore_listCodec (hpre : ∀ c ∈ pre, LawfulCore c) (hsp : ∀ c ∈ sp, LawfulCore c)
+    (hsuf : ∀ c ∈ suf, LawfulCore c) : LawfulCore (listCodec pre sp suf) :=
+  listCodec_eq ▸ lawfulCore_carried (fun _ => rfl) (list_retract hpre hsp hsuf)
+    (list_canon hpre hsp hsuf)
+
+/-- `≼` at `L` is positional, and so is the alignment, which is why the re-encoded row
+    lands on the same codecs and agrees with the stored one entry for entry. -/
+theorem lawful_listCodec (hpre : ∀ c ∈ pre, Lawful c) (hsp : ∀ c ∈ sp, Lawful c)
+    (hsuf : ∀ c ∈ suf, Lawful c) : Lawful (listCodec pre sp suf) := by
+  refine listCodec_eq ▸ lawful_carried (fun _ => rfl)
+    (list_retract (fun c h => (hpre c h).core) (fun c h => (hsp c h).core)
+      (fun c h => (hsuf c h).core))
+    (list_canon (fun c h => (hpre c h).core) (fun c h => (hsp c h).core)
+      (fun c h => (hsuf c h).core)) ?_
+  intro as vs as' hD hE
+  obtain ⟨ps, hal, htr⟩ := Option.bind_eq_some_iff.mp hD
+  obtain ⟨ds, hs, hlen, rfl⟩ := alignL_eq_some.mp hal
+  have hn : vs.length = as.length := by
+    rw [← traverse_length _ _ htr, List.length_zip, hlen, Nat.min_self]
+  obtain ⟨ps', hal', htr'⟩ := Option.bind_eq_some_iff.mp hE
+  rw [alignL_of_slotsL hs hn] at hal'
+  cases hal'
+  exact .l as' as (zip_agree ds as vs as' (slotsL_all hpre hsp hsuf hs) htr htr')
+
+/-- Writing and reading a `list` puts every position on its own carrier. -/
+theorem carrier_listCodec (hpre : ∀ c ∈ pre, Carrier c) (hsp : ∀ c ∈ sp, Carrier c)
+    (hsuf : ∀ c ∈ suf, Carrier c) : Carrier (listCodec pre sp suf) := by
+  refine listCodec_eq ▸ carrier_carried ?_ ?_
+  · intro vs as hE
+    obtain ⟨ps, hal, htr⟩ := Option.bind_eq_some_iff.mp hE
+    obtain ⟨ds, hs, hlen, rfl⟩ := alignL_eq_some.mp hal
+    exact ⟨_, hal, zip_domE ds vs as (slotsL_all hpre hsp hsuf hs) htr⟩
+  · intro as vs hD
+    obtain ⟨ps, hal, htr⟩ := Option.bind_eq_some_iff.mp hD
+    obtain ⟨ds, hs, hlen, rfl⟩ := alignL_eq_some.mp hal
+    have hn : vs.length = as.length := by
+      rw [← traverse_length _ _ htr, List.length_zip, hlen, Nat.min_self]
+    exact ⟨_, alignL_of_slotsL hs hn, zip_ranP ds as vs (slotsL_all hpre hsp hsuf hs) htr⟩
+
+end ListShape
+
+/-- **`tuple` is the `list` with no suffix.** -/
+theorem tupleCodec_eq_listCodec (cs : List Codec) (tail : Option Codec) :
+    tupleCodec cs tail = listCodec cs tail [] := by
+  refine Codec.ext ?_ rfl ?_ ?_ <;> funext v <;> cases v <;>
+    simp [tupleCodec, listCodec, alignL_nil_suf]
+
+/-- A spread alone assigns the same codec to every position. -/
+theorem slots_spread (c : Codec) : ∀ n : Nat, slots [] (some c) n = some (List.replicate n c)
+  | 0 => rfl
+  | n + 1 => by rw [slots, slots_spread c n]; rfl
+
+/-- Traversing a row of one repeated codec is traversing that codec. -/
+theorem traverse_replicate_zip {α β : Type} (c : Codec) (g : Codec → α → Option β) :
+    ∀ xs : List α,
+      traverse (fun q : Codec × α => g q.1 q.2) ((List.replicate xs.length c).zip xs)
+        = traverse (g c) xs
+  | [] => rfl
+  | x :: xs => by
+      simp only [List.length_cons, List.replicate_succ, List.zip_cons_cons, traverse_cons]
+      rw [traverse_replicate_zip c g xs]
+
+/-- A spread alone aligns every position against the one codec. -/
+theorem alignL_spread {α : Type} (c : Codec) (xs : List α) :
+    alignL [] (some c) [] xs = some ((List.replicate xs.length c).zip xs) := by
+  unfold alignL
+  rw [slotsL_nil_suf, slots_spread]
+  rfl
+
+/-- A position of such an alignment is the codec paired with a member of the row. -/
+theorem mem_replicate_zip {α : Type} (c : Codec) (xs : List α) (d : Codec) (x : α) :
+    (d, x) ∈ (List.replicate xs.length c).zip xs ↔ d = c ∧ x ∈ xs := by
+  constructor
+  · intro h
+    obtain ⟨h1, h2⟩ := List.of_mem_zip h
+    exact ⟨List.eq_of_mem_replicate h1, h2⟩
+  · rintro ⟨rfl, h2⟩
+    obtain ⟨i, hi, rfl⟩ := List.mem_iff_getElem.mp h2
+    rw [List.mem_iff_getElem]
+    exact ⟨i, by simp [hi], by simp [List.getElem_zip]⟩
+
+/-- `array` writes what the `list` with one spread writes. -/
+theorem arrayCodec_e (c : Codec) (v : Value) :
+    (arrayCodec c).e v = (listCodec [] (some c) []).e v := by
+  cases v <;> (simp only [arrayCodec, listCodec]; try rfl)
+  rw [alignL_spread]
+  show _ = ((traverse (fun q : Codec × Value => q.1.e q.2) _).map Attr.l)
+  rw [traverse_replicate_zip c (fun d x => d.e x)]
+
+/-- …and reads what it reads. -/
+theorem arrayCodec_p (c : Codec) (a : Attr) :
+    (arrayCodec c).p a = (listCodec [] (some c) []).p a := by
+  cases a <;> (simp only [arrayCodec, listCodec]; try rfl)
+  rw [alignL_spread]
+  show _ = ((traverse (fun q : Codec × Attr => q.1.p q.2) _).map Value.arr)
+  rw [traverse_replicate_zip c (fun d x => d.p x)]
+
+/-- …and carries what it carries. -/
+theorem arrayCodec_T (c : Codec) (v : Value) :
+    (arrayCodec c).T v ↔ (listCodec [] (some c) []).T v := by
+  cases v <;> (simp only [arrayCodec, listCodec]; try exact Iff.rfl)
+  rw [alignL_spread]
+  constructor
+  · intro h
+    refine ⟨_, rfl, fun p hp => ?_⟩
+    obtain ⟨d, x⟩ := p
+    obtain ⟨rfl, h2⟩ := (mem_replicate_zip c _ d x).mp hp
+    exact h _ h2
+  · rintro ⟨ps, hps, hall⟩
+    cases hps
+    intro x hx
+    exact hall (c, x) ((mem_replicate_zip c _ c x).mpr ⟨rfl, hx⟩)
+
+/-- **`array` is the `list` with one spread and nothing else.** `arrayCodec` keeps its own
+    unfolded definition, because the `opaque` fixpoint reduces through it. -/
+theorem arrayCodec_eq_listCodec (c : Codec) : arrayCodec c = listCodec [] (some c) [] :=
+  Codec.ext (funext fun v => propext (arrayCodec_T c v)) rfl
+    (funext (arrayCodec_e c)) (funext (arrayCodec_p c))
+
 end
 
 end Calculus
