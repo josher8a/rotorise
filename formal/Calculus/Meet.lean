@@ -3033,9 +3033,1201 @@ theorem Adm_meet_le : ∀ (n : Nat) (x y : Term), Term.depth x + Term.depth y �
 
 /-- **`Adm` is a homomorphism from the meet to conjunction.** Where two terms have a meet, the
     values it admits are exactly the values both admit. -/
-theorem Adm_meet {x y z : Term} (h : Term.meetWF x y = some z) (v : Value) :
+theorem Adm_meetWF {x y z : Term} (h : Term.meetWF x y = some z) (v : Value) :
     Adm z v = (Adm x v && Adm y v) :=
   Adm_meet_le (Term.depth x + Term.depth y) x y (Nat.le_refl _) z h v
+
+section StructuralAdm
+-- the object rows put the whole field table to `decide` under a binder, which is where the
+-- default budget goes
+set_option maxHeartbeats 1000000
+
+/-! ## `Adm` is a homomorphism from the meet to conjunction, structurally
+
+The definition recurses on the left operand, so the theorem does too: one shared lemma for every
+row that reads the right operand alone, one flat lemma per left constructor, and an outer
+recursion that feeds the induction hypothesis at the subterm into the two. No measure appears,
+and the depth bounds the well-founded proof carries are gone with it. -/
+
+/-- The right operands `meetSRight` hands to the family: everything its own rows do not answer.
+    A family's catch-all row answers the bottom, which is right for these and wrong for the
+    seven above, so the predicate below carries the same split the definition makes. -/
+def Delegated : Term → Prop
+  | .never | .held _ _ _ | .legacy _ _ | .custom _ _ | .lazy _ | .refine _ _ | .union _ => False
+  | _ => True
+
+/-- `f` answers the meet with one term fixed on the left, at EVERY right operand. The container
+    families need this of the call they carry, because they apply it to a subterm of any shape. -/
+def AdmSound (x : Term) (f : Term → Option Term) : Prop :=
+  ∀ y z, f y = some z → ∀ v, Adm z v = (Adm x v && Adm y v)
+
+/-- `fam` answers the meet with one term fixed on the left, over the operands it is handed. -/
+def AdmFam (x : Term) (fam : Term → Option Term) : Prop :=
+  ∀ y z, Delegated y → fam y = some z → ∀ v, Adm z v = (Adm x v && Adm y v)
+
+/-- The list companion is the plain map, so the union row reuses the `Forall₂` machinery. -/
+theorem meetSRightL_eq (fam : Term → Option Term) :
+    ∀ os, meetSRightL fam os = os.map (meetSRight fam)
+  | [] => rfl
+  | _ :: os => congrArg _ (meetSRightL_eq fam os)
+
+/-- …and the union row's extraction, with no exclusions: the row is reached by the pattern. -/
+theorem meetSRight_union {fam : Term → Option Term} {os : List Term} {z : Term}
+    (h : meetSRight fam (.union os) = some z) :
+    ∃ zs, List.Forall₂ (fun t w => meetSRight fam t = some w) os zs ∧
+      unionOk os = true ∧ unionOk (zs.filter (fun w => !w.isNever)) = true ∧
+      z = Term.ofOptions (zs.filter (fun w => !w.isNever)) := by
+  rw [meetSRight] at h
+  obtain ⟨zs, hzs, hg⟩ := Option.bind_eq_some_iff.mp h
+  unfold Term.ofOptionsGuarded at hg
+  split at hg
+  next hok =>
+    rw [Bool.and_eq_true] at hok
+    refine ⟨zs, allSome_map_forall₂ _ ?_, hok.1, hok.2, (Option.some.inj hg).symm⟩
+    rw [← meetSRightL_eq]
+    exact hzs
+  next => exact absurd hg (by simp)
+
+mutual
+/-- Every row that reads the right operand alone is sound wherever the family is. -/
+theorem Adm_meetSRight {x : Term} {fam : Term → Option Term} (hf : AdmFam x fam) :
+    ∀ y z, meetSRight fam y = some z → ∀ v, Adm z v = (Adm x v && Adm y v)
+  | .never, _, h, _ => by
+      simp only [meetSRight, Option.some.injEq] at h; subst h; simp [Adm]
+  | .held _ _ _, _, h, _ => by simp [meetSRight] at h
+  | .legacy _ _, _, h, _ => by simp [meetSRight] at h
+  | .custom _ _, _, h, _ => by simp [meetSRight] at h
+  | .lazy _, _, h, _ => by simp [meetSRight] at h
+  | .refine y p, _, h, v => by
+      simp only [meetSRight] at h
+      split at h
+      · obtain ⟨w, hw, rfl⟩ := Option.map_eq_some_iff.mp h
+        have ihw := Adm_meetSRight hf y w hw v
+        rw [Adm_refineOf]
+        simp only [Adm, ihw]
+        simp [Bool.and_assoc, Bool.and_comm, Bool.and_left_comm]
+      · exact absurd h (by simp)
+  | .union os, _, h, v => by
+      obtain ⟨zs, hF, hco, hcz, rfl⟩ := meetSRight_union h
+      rw [Adm_ofOptions hcz, AdmAny_filter_never,
+        show Adm (.union _) v = selOptV (AdmSpecs _) v from rfl, selOptV_eq_AdmAny hco,
+        Bool.and_comm]
+      exact AdmAny_meet v (Adm_meetSRightL hf os _ hF)
+  | .string, _, h, v => hf .string _ trivial h v
+  | .number, _, h, v => hf .number _ trivial h v
+  | .decimal, _, h, v => hf .decimal _ trivial h v
+  | .boolean, _, h, v => hf .boolean _ trivial h v
+  | .binary, _, h, v => hf .binary _ trivial h v
+  | .null, _, h, v => hf .null _ trivial h v
+  | .literal k lv, _, h, v => hf (.literal k lv) _ trivial h v
+  | .set b, _, h, v => hf (.set b) _ trivial h v
+  | .opaq l, _, h, v => hf (.opaq l) _ trivial h v
+  | .array e, _, h, v => hf (.array e) _ trivial h v
+  | .record c, _, h, v => hf (.record c) _ trivial h v
+  | .tuple ts tl, _, h, v => hf (.tuple ts tl) _ trivial h v
+  | .object b, _, h, v => hf (.object b) _ trivial h v
+termination_by structural y => y
+
+/-- The list companion: the union row's options, lifted pointwise. It recurses on the list and
+    `Adm_meetSRight` on the term, as the definition's own pair does. -/
+theorem Adm_meetSRightL {x : Term} {fam : Term → Option Term} (hf : AdmFam x fam) :
+    ∀ os zs, List.Forall₂ (fun t w => meetSRight fam t = some w) os zs →
+      List.Forall₂ (fun t w => ∀ u, Adm w u = (Adm t u && Adm x u)) os zs
+  | [], _, h => by cases h; exact .nil
+  | t :: ts, _, h => by
+      cases h with
+      | cons hh ht =>
+          exact .cons (fun u => by rw [Adm_meetSRight hf t _ hh u, Bool.and_comm])
+            (Adm_meetSRightL hf ts _ ht)
+termination_by structural os => os
+end
+
+/-- The catch-all of every family: two constructors in different value slots meet at the bottom. -/
+theorem Adm_never_orth {x y : Term} (ho : Orth1 x y = true) (v : Value) :
+    Adm Term.never v = (Adm x v && Adm y v) := by
+  rw [Adm_and_false ho v]; simp [Adm]
+
+/-- The tactic every family's catch-all row uses. -/
+local macro "fam_never" fam:ident : tactic => `(tactic|
+  (simp only [$fam:ident, Option.some.injEq] at *
+   subst_vars
+   refine Adm_never_orth ?_ _
+   first
+     | rfl
+     | decide
+     | (cases ‹GroundKind› <;> first | rfl | decide)
+     | (cases ‹SetBase› <;> first | rfl | decide)
+     | (cases ‹GroundKind› <;> cases ‹SetBase› <;> first | rfl | decide)))
+
+/-- `boolean` meets the boolean literal, `opaque`, and nothing else. -/
+theorem Adm_famBoolean : AdmFam Term.boolean famBoolean := by
+  intro y z hd h v
+  cases y <;> first | exact hd.elim | skip
+  case boolean => simp only [famBoolean, Option.some.injEq] at h; subst h; simp
+  case literal k v' =>
+      simp only [famBoolean] at h
+      split at h
+      next hk =>
+        subst hk
+        simp only [Option.some.injEq] at h; subst h
+        cases v <;> simp [Adm, AdmLit, inL, inD, isStored]
+      next hk =>
+        simp only [Option.some.injEq] at h; subst h
+        cases k <;> cases v <;> simp_all [Adm, AdmLit, inL, inD, isStored]
+  case opaq l =>
+      simp only [famBoolean, Option.some.injEq] at h; subst h
+      cases v <;> (try simp only [Adm_opaq_bool]) <;> simp [Adm]
+  all_goals fam_never famBoolean
+
+/-- `binary` meets the binary literal, `opaque`, and nothing else. -/
+theorem Adm_famBinary : AdmFam Term.binary famBinary := by
+  intro y z hd h v
+  cases y <;> first | exact hd.elim | skip
+  case binary => simp only [famBinary, Option.some.injEq] at h; subst h; simp
+  case literal k v' =>
+      simp only [famBinary] at h
+      split at h
+      next hk =>
+        subst hk
+        simp only [Option.some.injEq] at h; subst h
+        cases v <;> simp [Adm, AdmLit, inL, inD, isStored]
+      next hk =>
+        simp only [Option.some.injEq] at h; subst h
+        cases k <;> cases v <;> simp_all [Adm, AdmLit, inL, inD, isStored]
+  case opaq l =>
+      simp only [famBinary, Option.some.injEq] at h; subst h
+      cases v <;> (try simp only [Adm_opaq_bin]) <;> simp [Adm]
+  all_goals fam_never famBinary
+
+/-- `null` meets the null literal, `opaque`, and nothing else. -/
+theorem Adm_famNull : AdmFam Term.null famNull := by
+  intro y z hd h v
+  cases y <;> first | exact hd.elim | skip
+  case null => simp only [famNull, Option.some.injEq] at h; subst h; simp
+  case literal k v' =>
+      simp only [famNull] at h
+      split at h
+      next hk =>
+        subst hk
+        simp only [Option.some.injEq] at h; subst h
+        cases v <;> simp [Adm, AdmLit, inL, inD, isStored]
+      next hk =>
+        simp only [Option.some.injEq] at h; subst h
+        cases k <;> cases v <;> simp_all [Adm, AdmLit, inL, inD, isStored]
+  case opaq l =>
+      simp only [famNull, Option.some.injEq] at h; subst h
+      cases v <;> (try simp only [Adm_opaq_null]) <;> simp [Adm]
+  all_goals fam_never famNull
+
+/-- `string` meets its own literals and `opaque`, and refuses the `decimal` family. -/
+theorem Adm_famString : AdmFam Term.string famString := by
+  intro y z hd h v
+  cases y <;> first | exact hd.elim | skip
+  case string => simp only [famString, Option.some.injEq] at h; subst h; simp
+  case decimal => simp [famString] at h
+  case literal k v' =>
+      cases k <;> simp only [famString, Option.some.injEq, reduceCtorEq] at h <;>
+        (try subst h) <;>
+        first
+          | (cases v <;> simp [Adm, AdmLit, inL, inD, isStored] <;>
+              (try (intro hs _; exact hs)))
+          | exact Adm_never_orth (by rfl) v
+  case opaq l =>
+      simp only [famString, Option.some.injEq] at h; subst h
+      cases v <;> (try simp only [Adm_opaq_str]) <;> simp [Adm]
+  all_goals fam_never famString
+
+/-- `number` meets its own literals and a lossy `opaque`, and refuses `decimal`. -/
+theorem Adm_famNumber : AdmFam Term.number famNumber := by
+  intro y z hd h v
+  cases y <;> first | exact hd.elim | skip
+  case number => simp only [famNumber, Option.some.injEq] at h; subst h; simp
+  case decimal => simp [famNumber] at h
+  case literal k v' =>
+      cases k <;> simp only [famNumber, Option.some.injEq, reduceCtorEq] at h <;>
+        (try subst h) <;>
+        first
+          | (cases v <;> simp [Adm, AdmLit, inL, inD, isStored] <;>
+              (try (intro hs _; exact hs)))
+          | exact Adm_never_orth (by rfl) v
+  case opaq l =>
+      simp only [famNumber] at h
+      split at h
+      next hl =>
+        subst hl
+        simp only [Option.some.injEq] at h; subst h
+        cases v <;> (try simp only [Adm_opaq_num]) <;> simp [Adm, inD]
+      next hl =>
+        simp only [Bool.not_eq_true] at hl; subst hl
+        simp only [Option.some.injEq] at h; subst h
+        cases v <;> (try simp only [Adm_opaq_num]) <;> simp [Adm, inD]
+  all_goals fam_never famNumber
+
+/-- `decimal` meets its own literals alone: it shares values with `string` and the
+    member `N` with `number`, so both refuse. -/
+theorem Adm_famDecimal : AdmFam Term.decimal famDecimal := by
+  intro y z hd h v
+  cases y <;> first | exact hd.elim | skip
+  case decimal => simp only [famDecimal, Option.some.injEq] at h; subst h; simp
+  case string => simp [famDecimal] at h
+  case number => simp [famDecimal] at h
+  case opaq l => simp [famDecimal] at h
+  case literal k v' =>
+      cases k <;> simp only [famDecimal, Option.some.injEq, reduceCtorEq] at h <;>
+        (try subst h) <;>
+        first
+          | (cases v <;> simp [Adm, AdmLit, inL, inD, isStored] <;>
+              (try (intro hs _; exact hs)))
+          | exact Adm_never_orth (by rfl) v
+  all_goals fam_never famDecimal
+
+/-- A literal meets its own base and an equal literal, and is the bottom elsewhere. -/
+theorem Adm_famLit (k : GroundKind) (lv : k.Carrier) : AdmFam (.literal k lv) (famLit k lv) := by
+  intro y z hd h v
+  cases y <;> first | exact hd.elim | skip
+  case string | number | decimal =>
+      cases k <;> simp only [famLit, Option.some.injEq, reduceCtorEq] at h <;>
+        (try subst h) <;>
+        first
+          | (cases v <;> simp [Adm, AdmLit, inL, inD, isStored] <;>
+              (try (intro hs _; exact hs)))
+          | exact Adm_never_orth (by rfl) v
+  case boolean | binary | null =>
+      simp only [famLit] at h
+      split at h
+      next hk =>
+        subst hk
+        simp only [Option.some.injEq] at h; subst h
+        cases v <;> simp [Adm, AdmLit, inL, inD, isStored]
+      next hk =>
+        simp only [Option.some.injEq] at h; subst h
+        cases k <;> cases v <;> simp_all [Adm, AdmLit, inL, inD, isStored]
+  case literal k' v' =>
+      simp only [famLit] at h
+      cases k <;> cases k' <;> simp only [Term.meetLit, reduceCtorEq] at h <;>
+        (try split at h) <;>
+        (try (simp only [Option.some.injEq] at h
+              subst h
+              cases v <;> simp_all [Adm, AdmLit, inL, isStored, inD]))
+  case opaq l => simp [famLit] at h
+  all_goals fam_never famLit
+
+/-- Two set bases meet where they are equal, refusing the three that share a wire slot. -/
+theorem Adm_famSet (b : SetBase) : AdmFam (.set b) (famSet b) := by
+  intro y z hd h v
+  cases y <;> first | exact hd.elim | skip
+  case set b' =>
+      cases b <;> cases b' <;>
+        simp only [famSet, reduceCtorEq, reduceIte, Option.some.injEq] at h <;>
+        (try subst h) <;>
+        first
+          | simp
+          | (cases v <;>
+              simp_all [Adm, SetBase.adm, isStored, inD, -Classical.not_forall] <;>
+              (intros; exact NEFinset.not_forall_notMem _))
+  case opaq l => simp [famSet] at h
+  all_goals fam_never famSet
+
+/-- `opaque` meets each self-identifying base, and another `opaque` at the conjoined policy. -/
+theorem Adm_famOpaq (l : Bool) : AdmFam (.opaq l) (famOpaq l) := by
+  intro y z hd h v
+  cases y <;> first | exact hd.elim | skip
+  case string | boolean | binary | null =>
+      simp only [famOpaq, Option.some.injEq] at h; subst h
+      cases v <;>
+        (try simp only [Adm_opaq_str, Adm_opaq_bool, Adm_opaq_bin, Adm_opaq_null]) <;>
+        simp [Adm]
+  case number =>
+      simp only [famOpaq] at h
+      split at h
+      next hl =>
+        subst hl
+        simp only [Option.some.injEq] at h; subst h
+        cases v <;> (try simp only [Adm_opaq_num]) <;> simp [Adm, inD]
+      next hl =>
+        simp only [Bool.not_eq_true] at hl; subst hl
+        simp only [Option.some.injEq] at h; subst h
+        cases v <;> (try simp only [Adm_opaq_num]) <;> simp [Adm, inD]
+  case opaq l' =>
+      simp only [famOpaq, Option.some.injEq] at h; subst h
+      exact Adm_opaq_and l l' v
+  all_goals simp [famOpaq] at h
+
+/-! ### The container families. The depth bounds go: the lifts are measure-free. -/
+
+/-- The element companion is the plain map. -/
+theorem mapF_eq (f : Term → Option Term) : ∀ ts, mapF f ts = ts.map f
+  | [] => rfl
+  | _ :: ts => congrArg _ (mapF_eq f ts)
+
+/-- The element list of an array against a tuple, lifted pointwise. -/
+theorem AdmList_lift {x' : Term} {f : Term → Option Term} (hf : AdmSound x' f) :
+    ∀ {ts vs : List Term}, List.Forall₂ (fun t v => f t = some v) ts vs →
+      List.Forall₂ (fun p q => ∀ w, q w = (p w && Adm x' w)) (AdmList ts) (AdmList vs) := by
+  intro ts
+  induction ts with
+  | nil => intro vs h; cases h; exact .nil
+  | cons t ts ihs =>
+      intro vs h
+      cases h with
+      | cons hh ht =>
+          exact .cons (fun w => by rw [hf t _ hh w, Bool.and_comm]) (ihs ht)
+
+/-- …and the tail. -/
+theorem AdmOptT_lift {x' : Term} {f : Term → Option Term} (hf : AdmSound x' f)
+    {tail tl : Option Term}
+    (htl : (tail = none ∧ tl = none) ∨
+      ∃ t u, tail = some t ∧ tl = some u ∧ f t = some u) :
+    (AdmOptT tail = none ∧ AdmOptT tl = none) ∨
+      (∃ p q, AdmOptT tail = some p ∧ AdmOptT tl = some q ∧
+        ∀ w, q w = (p w && Adm x' w)) := by
+  rcases htl with ⟨rfl, rfl⟩ | ⟨t, u, rfl, rfl, hm⟩
+  · exact .inl ⟨rfl, rfl⟩
+  · exact .inr ⟨Adm t, Adm u, rfl, rfl, fun w => by rw [hf t _ hm w, Bool.and_comm]⟩
+
+/-- The array-against-tuple row's extraction, with no measure. -/
+theorem famArr_tuple {f : Term → Option Term} {ts : List Term} {tail : Option Term} {z : Term}
+    (h : famArr f (.tuple ts tail) = some z) :
+    ∃ vs tl, z = Term.tupleOf vs tl ∧
+      List.Forall₂ (fun t v => f t = some v) ts vs ∧
+      ((tail = none ∧ tl = none) ∨
+        ∃ t u, tail = some t ∧ tl = some u ∧ f t = some u) := by
+  simp only [famArr] at h
+  split at h
+  next vs tl hvs htl =>
+    simp only [Option.some.injEq] at h
+    refine ⟨vs, tl, h.symm, ?_, ?_⟩
+    · exact allSome_map_forall₂ _ (by rw [← mapF_eq]; exact hvs)
+    · cases tail with
+      | none =>
+          replace htl : some (none : Option Term) = some tl := htl
+          exact .inl ⟨rfl, by simpa using htl.symm⟩
+      | some t =>
+          replace htl : Option.map some (f t) = some tl := htl
+          obtain ⟨u, hu, rfl⟩ := Option.map_eq_some_iff.mp htl
+          exact .inr ⟨t, u, rfl, rfl, hu⟩
+  next => exact absurd h (by simp)
+
+/-- An array meets an array at the element, and a tuple at every declared position. -/
+theorem Adm_famArr {x' : Term} {f : Term → Option Term} (hf : AdmSound x' f) :
+    AdmFam (.array x') (famArr f) := by
+  intro y z hd h v
+  cases y <;> first | exact hd.elim | skip
+  case array e =>
+      simp only [famArr] at h
+      obtain ⟨w, hw, rfl⟩ := Option.map_eq_some_iff.mp h
+      have ihw := hf e w hw
+      cases v <;> simp only [Adm, Bool.and_self, allP_and ihw]
+  case tuple ts tail =>
+      obtain ⟨vs, tl, rfl, hts, htl⟩ := famArr_tuple h
+      rw [Adm_tupleOf]
+      cases v <;>
+        simp only [Adm, Bool.and_self,
+          alignP_meet_all (AdmList_lift hf hts) (AdmOptT_lift hf htl)]
+  case opaq l => simp [famArr] at h
+  all_goals fam_never famArr
+
+/-- A tuple's position functions, applied at one term and lifted pointwise. -/
+theorem applyAt_lift {y : Term} :
+    ∀ {ts : List Term} {fs : List (Term → Option Term)} {vs : List Term},
+      List.Forall₂ AdmSound ts fs →
+      List.Forall₂ (fun f v => f y = some v) fs vs →
+      List.Forall₂ (fun p q => ∀ w, q w = (p w && Adm y w)) (AdmList ts) (AdmList vs) := by
+  intro ts
+  induction ts with
+  | nil => intro fs vs hfs hv; cases hfs; cases hv; exact .nil
+  | cons t ts ihs =>
+      intro fs vs hfs hv
+      cases hfs with
+      | cons hf hfs' =>
+          cases hv with
+          | cons hh ht => exact .cons (fun w => by rw [hf y _ hh w, Bool.and_comm]) (ihs hfs' ht)
+
+/-- …and the same two tuples' positions zipped. -/
+theorem zipF_lift :
+    ∀ {ts us : List Term} {fs : List (Term → Option Term)} {vs : List Term},
+      List.Forall₂ AdmSound ts fs →
+      List.Forall₂ (fun (p : (Term → Option Term) × Term) v => p.1 p.2 = some v) (fs.zip us) vs →
+      List.Forall₂ (fun (pq : VP × VP) r => ∀ w, r w = (pq.1 w && pq.2 w))
+        ((AdmList ts).zip (AdmList us)) (AdmList vs) := by
+  intro ts
+  induction ts with
+  | nil => intro us fs vs hfs hv; cases hfs; cases hv; exact .nil
+  | cons t ts ihs =>
+      intro us fs vs hfs hv
+      cases hfs with
+      | cons hf hfs' =>
+          cases us with
+          | nil => cases hv; exact .nil
+          | cons u us =>
+              cases hv with
+              | cons hh ht => exact .cons (fun w => hf u _ hh w) (ihs hfs' ht)
+
+/-- A record meets a record at the value term. -/
+theorem Adm_famRecTerm {x' : Term} {f : Term → Option Term} (hf : AdmSound x' f)
+    {y w : Term} (hw : f y = some w) (v : Value) :
+    Adm (.record w) v = (Adm (.record x') v && Adm (.record y) v) := by
+  have ihw := hf y w hw
+  cases v <;> simp only [Adm, Bool.and_self, decide_forall_and (fun k => ihw _)]
+
+/-- The position companion is the plain map at one term. -/
+theorem applyAt_eq (y : Term) : ∀ fs, applyAt fs y = fs.map (fun f => f y)
+  | [] => rfl
+  | _ :: fs => congrArg _ (applyAt_eq y fs)
+
+/-- …and the zip companion is the plain map over the zip. -/
+theorem zipF_eq : ∀ (fs : List (Term → Option Term)) (us : List Term),
+    zipF fs us = (fs.zip us).map (fun p => p.1 p.2)
+  | [], _ => rfl
+  | _ :: _, [] => rfl
+  | _ :: fs, _ :: us => congrArg _ (zipF_eq fs us)
+
+/-- A tuple meets an array at every position, and another tuple by arity. -/
+theorem Adm_famTup {ts : List Term} {tail : Option Term}
+    {fs : List (Term → Option Term)} {ftail : Option (Term → Option Term)}
+    (hfs : List.Forall₂ AdmSound ts fs)
+    (hft : (tail = none ∧ ftail = none) ∨
+      ∃ t ft, tail = some t ∧ ftail = some ft ∧ AdmSound t ft) :
+    AdmFam (.tuple ts tail) (famTup fs ftail) := by
+  intro y z hd h v
+  cases y <;> first | exact hd.elim | skip
+  case array e =>
+      simp only [famTup] at h
+      split at h
+      next vs tl hvs htl =>
+        simp only [Option.some.injEq] at h; subst h
+        have hF : List.Forall₂ (fun f w => f e = some w) fs vs :=
+          allSome_map_forall₂ _ (by rw [← applyAt_eq]; exact hvs)
+        have hT : (AdmOptT tail = none ∧ AdmOptT tl = none) ∨
+            (∃ p q, AdmOptT tail = some p ∧ AdmOptT tl = some q ∧
+              ∀ w, q w = (p w && Adm e w)) := by
+          rcases hft with ⟨rfl, rfl⟩ | ⟨t, ft, rfl, rfl, hsound⟩
+          · replace htl : some (none : Option Term) = some tl := htl
+            simp only [Option.some.injEq] at htl; subst htl; exact .inl ⟨rfl, rfl⟩
+          · replace htl : Option.map some (ft e) = some tl := htl
+            obtain ⟨u, hu, rfl⟩ := Option.map_eq_some_iff.mp htl
+            exact .inr ⟨Adm t, Adm u, rfl, rfl, fun w => by rw [hsound e _ hu w, Bool.and_comm]⟩
+        rw [Adm_tupleOf]
+        cases v <;> simp only [Adm, Bool.and_self] <;>
+          rw [Bool.and_comm, alignP_meet_all (applyAt_lift hfs hF) hT]
+      next => exact absurd h (by simp)
+  case tuple us tail' =>
+      simp only [famTup] at h
+      split at h
+      next hlen =>
+        split at h
+        next vs tl hvs htl =>
+          simp only [Option.some.injEq] at h; subst h
+          have hF : List.Forall₂
+              (fun (p : (Term → Option Term) × Term) w => p.1 p.2 = some w) (fs.zip us) vs :=
+            allSome_map_forall₂ _ (by rw [← zipF_eq]; exact hvs)
+          have hT : (AdmOptT tail = none ∧ AdmOptT tail' = none ∧ AdmOptT tl = none) ∨
+              ∃ p q r, AdmOptT tail = some p ∧ AdmOptT tail' = some q ∧ AdmOptT tl = some r ∧
+                ∀ w, r w = (p w && q w) := by
+            rcases hft with ⟨rfl, rfl⟩ | ⟨t, ft, rfl, rfl, hsound⟩
+            · cases tail' with
+              | none =>
+                  replace htl : some (none : Option Term) = some tl := htl
+                  simp only [Option.some.injEq] at htl; subst htl
+                  exact .inl ⟨rfl, rfl, rfl⟩
+              | some u => exact absurd htl (by simp)
+            · cases tail' with
+              | none => exact absurd htl (by simp)
+              | some u =>
+                  replace htl : Option.map some (ft u) = some tl := htl
+                  obtain ⟨w, hw, rfl⟩ := Option.map_eq_some_iff.mp htl
+                  exact .inr ⟨Adm t, Adm u, Adm w, rfl, rfl, rfl, fun q => hsound u _ hw q⟩
+          rw [Adm_tupleOf]
+          cases v <;> simp only [Adm, Bool.and_self,
+            alignP_meet_zip (zipF_lift hfs hF)
+              (by rw [AdmList_length, AdmList_length]
+                  exact hfs.length_eq.trans hlen) hT]
+        next => exact absurd h (by simp)
+      next hlen =>
+        split at h
+        next hb =>
+          simp only [Option.some.injEq] at h; subst h
+          simp only [Bool.and_eq_true, Option.isNone_iff_eq_none] at hb
+          obtain ⟨hb1, hb2⟩ := hb
+          have htn : tail = none := by
+            rcases hft with ⟨rfl, _⟩ | ⟨t, ft, rfl, rfl, _⟩
+            · rfl
+            · exact absurd hb1 (by simp)
+          subst htn; subst hb2
+          have hne : ts.length ≠ us.length := fun hc =>
+            hlen (((hfs.length_eq).symm.trans hc))
+          cases v with
+          | arr ws =>
+            simp only [Adm, AdmOptT]
+            cases hA : alignP (AdmList ts) none ws with
+            | false => simp
+            | true =>
+              cases hB : alignP (AdmList us) none ws with
+              | false => simp
+              | true =>
+                exact absurd
+                  (((alignP_none_length hA).trans (AdmList_length _)).symm.trans
+                    ((alignP_none_length hB).trans (AdmList_length _))) hne
+          | _ => simp [Adm]
+        next => exact absurd h (by simp)
+  case opaq l => simp [famTup] at h
+  all_goals fam_never famTup
+
+/-! ### The object families. The three body helpers are stated over an abstract field function,
+     so the flipped cell and the object cell share them. -/
+
+/-- The presence test reads the marks alone, so a field table with the body's marks has the
+    body's test. -/
+theorem valPresentT_of_isReq {b : Body} {F : {k // k ∈ b.fields} → Field}
+    (hreq : ∀ k, Field.isReq (F k) = Field.isReq (b.at k)) (keys : Finset Name) :
+    valPresentT b.fields F keys = valPresentT b.fields b.at keys := by
+  rw [valPresentT_req, valPresentT_req]
+  exact decide_eq_decide.mpr (forall_congr' fun k => by rw [hreq k])
+
+/-- Every present name goes through its field and the left operand's term alike. -/
+theorem objAdmV_of_left {b : Body} {x t r : Term} {F : {k // k ∈ b.fields} → Field}
+    (ihf : ∀ (k : {k // k ∈ b.fields}) (w : Value),
+      AdmField (F k) w = (Adm x w && AdmField (b.at k) w))
+    (iht : ∀ w, Adm r w = (Adm x w && Adm t w))
+    (keys : Finset Name) (g : {k // k ∈ keys} → Value) :
+    objAdmV ⟨b.fields, fun k => AdmField (F k)⟩ (some (Adm r)) keys g
+      = (decide (∀ k : {k // k ∈ keys}, Adm x (g k) = true)
+         && objAdmV ⟨b.fields, fun k => AdmField (b.at k)⟩ (some (Adm t)) keys g) := by
+  simp only [objAdmV, entryP, MapOf.at]
+  refine decide_forall_and (fun k => ?_)
+  by_cases hk : k.1 ∈ b.fields
+  · simp only [dif_pos hk]; exact ihf ⟨k.1, hk⟩ (g k)
+  · simp only [dif_neg hk]; exact iht (g k)
+
+/-- No declared field meets the left operand's term to the bottom at a value both admit. -/
+theorem isBottom_false_of_left {b : Body} {x : Term} {F : {k // k ∈ b.fields} → Field}
+    (hreq : ∀ k, Field.isReq (F k) = Field.isReq (b.at k))
+    (ihf : ∀ (k : {k // k ∈ b.fields}) (w : Value),
+      AdmField (F k) w = (Adm x w && AdmField (b.at k) w))
+    {keys : Finset Name} {g : {k // k ∈ keys} → Value}
+    (hA : AdmBody b (.map keys g) = true)
+    (hR : decide (∀ k : {k // k ∈ keys}, Adm x (g k) = true) = true) :
+    ∀ k, Field.isBottom (F k) = false := by
+  rw [AdmBody_map, Bool.and_eq_true] at hA
+  intro k
+  refine Bool.eq_false_iff.mpr (fun hbot => ?_)
+  have hreqk : Field.isReq (b.at k) = true := (hreq k) ▸ isReq_of_isBottom hbot
+  have hk : k.1 ∈ keys := mem_keys_of_isReq hA.1 k.2 hreqk
+  have hrow := objAdmV_row hA.2 hk k.2
+  have hrec := of_decide_eq_true hR ⟨k.1, hk⟩
+  have hi := ihf k (g ⟨k.1, hk⟩)
+  rw [AdmField_of_isBottom hbot, hrow, hrec] at hi
+  exact absurd hi (by simp)
+
+/-- A field met with one term carries two terms that meet. -/
+theorem AdmField_fieldMeetT {f : Term → Option Term} {fl fm : Field}
+    (h : fieldMeetT f fl = some fm) :
+    ∃ tx tz, f tx = some tz ∧ AdmField fl = Adm tx ∧ AdmField fm = Adm tz := by
+  cases fl <;> simp only [fieldMeetT, Option.map_eq_some_iff, reduceCtorEq] at h <;>
+    obtain ⟨tz, hz, rfl⟩ := h <;> exact ⟨_, tz, hz, rfl, rfl⟩
+
+/-- …and keeps the field's mark, because a term says nothing about presence. -/
+theorem isReq_fieldMeetT {f : Term → Option Term} {fl fm : Field}
+    (h : fieldMeetT f fl = some fm) : Field.isReq fm = Field.isReq fl := by
+  cases fl <;> simp only [fieldMeetT, Option.map_eq_some_iff, reduceCtorEq] at h <;>
+    obtain ⟨tz, hz, rfl⟩ := h <;> rfl
+
+/-- What a record against an object answers: the refusal at a rest that is not a codec, the
+    bottom where a declared field empties, and otherwise the object. -/
+theorem recObj_extract {f : Term → Option Term} {b : Body} {z : Term}
+    (h : recObj f b = some z) :
+    ∃ t r, b.rest = .codec t ∧ f t = some r ∧
+      (∀ k : {k // k ∈ b.fields}, (fieldMeetT f (b.at k)).isSome = true) ∧
+      ((z = .never ∧ ¬ (∀ k, Field.isBottom
+            ((fieldMeetT f (b.at k)).getD (.optional .never)) = false))
+       ∨ z = .object (.mk b.fields
+            (fun k => (fieldMeetT f (b.at k)).getD (.optional .never)) (.codec r))) := by
+  unfold recObj at h
+  split at h
+  next t ht =>
+    split at h
+    next hok =>
+      split at h
+      next r hmr =>
+        refine ⟨t, r, ht, hmr, of_decide_eq_true hok, ?_⟩
+        split at h
+        next _ => exact Or.inr (Option.some.inj h).symm
+        next hnb =>
+          exact Or.inl ⟨(Option.some.inj h).symm, fun hall => hnb (decide_eq_true hall)⟩
+      next => exact absurd h (by simp)
+    next => exact absurd h (by simp)
+  next => exact absurd h (by simp)
+
+/-- A record meets a record at the value term, and an object through every declared field. -/
+theorem Adm_famRec {x' : Term} {f : Term → Option Term} (hf : AdmSound x' f) :
+    AdmFam (.record x') (famRec f) := by
+  intro y z hd h v
+  cases y <;> first | exact hd.elim | skip
+  case record c =>
+      simp only [famRec] at h
+      obtain ⟨w, hw, rfl⟩ := Option.map_eq_some_iff.mp h
+      exact Adm_famRecTerm hf hw v
+  case object b =>
+      simp only [famRec] at h
+      obtain ⟨t, r, hrest, hmt, hok, hcase⟩ := recObj_extract h
+      have hreq : ∀ k : {k // k ∈ b.fields},
+          Field.isReq ((fieldMeetT f (b.at k)).getD (.optional .never))
+            = Field.isReq (b.at k) := by
+        intro k
+        obtain ⟨fm, hfm⟩ := Option.isSome_iff_exists.mp (hok k)
+        rw [hfm, Option.getD_some]
+        exact isReq_fieldMeetT hfm
+      have ihf : ∀ (k : {k // k ∈ b.fields}) (w : Value),
+          AdmField ((fieldMeetT f (b.at k)).getD (.optional .never)) w
+            = (Adm x' w && AdmField (b.at k) w) := by
+        intro k w
+        obtain ⟨fm, hfm⟩ := Option.isSome_iff_exists.mp (hok k)
+        obtain ⟨tx, tz, hz, hx, hfz⟩ := AdmField_fieldMeetT hfm
+        rw [hfm, Option.getD_some, hfz, hx]
+        exact hf tx tz hz w
+      have iht : ∀ w, Adm r w = (Adm x' w && Adm t w) := hf t r hmt
+      have hnm : ∀ w : Value, (∀ keys g, w ≠ .map keys g) →
+          Adm z w = (Adm (.record x') w && Adm (.object b) w) := by
+        intro w hw
+        have hrx : Adm (.record x') w = false := by
+          cases w with
+          | map keys g => exact absurd rfl (hw keys g)
+          | _ => rfl
+        rw [show Adm (.object b) w = AdmBody b w from rfl, AdmBody_of_not_map hw, hrx,
+          Bool.and_self]
+        rcases hcase with ⟨rfl, _⟩ | rfl
+        · rfl
+        · exact AdmBody_of_not_map hw
+      cases v
+      case map keys g =>
+        rw [show Adm (.object b) (.map keys g) = AdmBody b (.map keys g) from rfl,
+            show Adm (.record x') (.map keys g)
+              = decide (∀ k : {k // k ∈ keys}, Adm x' (g k) = true) from rfl]
+        rcases hcase with ⟨rfl, hnb⟩ | rfl
+        · show (false : Bool) = _
+          cases hR : decide (∀ k : {k // k ∈ keys}, Adm x' (g k) = true) with
+          | false => rfl
+          | true =>
+            cases hA : AdmBody b (.map keys g) with
+            | false => simp
+            | true => exact absurd (isBottom_false_of_left hreq ihf hA hR) hnb
+        · show AdmBody (.mk b.fields
+              (fun k => (fieldMeetT f (b.at k)).getD (.optional .never)) (.codec r))
+                (.map keys g) = _
+          rw [AdmBody_map, AdmBody_map]
+          simp only [Body.fields_mk, Body.at_mk, Body.rest_mk, hrest]
+          rw [valPresentT_of_isReq hreq, show AdmRest (.codec r) = some (Adm r) from rfl,
+              show AdmRest (.codec t) = some (Adm t) from rfl, objAdmV_of_left ihf iht]
+          simp [Bool.and_assoc, Bool.and_comm, Bool.and_left_comm]
+      all_goals exact hnm _ (fun _ _ hc => Value.noConfusion hc)
+  case opaq l => simp [famRec] at h
+  all_goals fam_never famRec
+
+/-! ### …and the same three over the right operand, and over two bodies. -/
+
+/-- Every present name goes through its field and the right operand's term alike. -/
+theorem objAdmV_of_right {b : Body} {x t r : Term} {F : {k // k ∈ b.fields} → Field}
+    (ihf : ∀ (k : {k // k ∈ b.fields}) (w : Value),
+      AdmField (F k) w = (AdmField (b.at k) w && Adm x w))
+    (iht : ∀ w, Adm r w = (Adm t w && Adm x w))
+    (keys : Finset Name) (g : {k // k ∈ keys} → Value) :
+    objAdmV ⟨b.fields, fun k => AdmField (F k)⟩ (some (Adm r)) keys g
+      = (objAdmV ⟨b.fields, fun k => AdmField (b.at k)⟩ (some (Adm t)) keys g
+         && decide (∀ k : {k // k ∈ keys}, Adm x (g k) = true)) := by
+  simp only [objAdmV, entryP, MapOf.at]
+  refine decide_forall_and (fun k => ?_)
+  by_cases hk : k.1 ∈ b.fields
+  · simp only [dif_pos hk]; exact ihf ⟨k.1, hk⟩ (g k)
+  · simp only [dif_neg hk]; exact iht (g k)
+
+/-- No declared field meets the right operand's term to the bottom at a value both admit. -/
+theorem isBottom_false_of_right {b : Body} {x : Term} {F : {k // k ∈ b.fields} → Field}
+    (hreq : ∀ k, Field.isReq (F k) = Field.isReq (b.at k))
+    (ihf : ∀ (k : {k // k ∈ b.fields}) (w : Value),
+      AdmField (F k) w = (AdmField (b.at k) w && Adm x w))
+    {keys : Finset Name} {g : {k // k ∈ keys} → Value}
+    (hA : AdmBody b (.map keys g) = true)
+    (hR : decide (∀ k : {k // k ∈ keys}, Adm x (g k) = true) = true) :
+    ∀ k, Field.isBottom (F k) = false := by
+  rw [AdmBody_map, Bool.and_eq_true] at hA
+  intro k
+  refine Bool.eq_false_iff.mpr (fun hbot => ?_)
+  have hreqk : Field.isReq (b.at k) = true := (hreq k) ▸ isReq_of_isBottom hbot
+  have hk : k.1 ∈ keys := mem_keys_of_isReq hA.1 k.2 hreqk
+  have hrow := objAdmV_row hA.2 hk k.2
+  have hrec := of_decide_eq_true hR ⟨k.1, hk⟩
+  have hi := ihf k (g ⟨k.1, hk⟩)
+  rw [AdmField_of_isBottom hbot, hrow, hrec] at hi
+  exact absurd hi (by simp)
+
+/-- Every present name goes through both bodies' fields, a shared name through the meet. -/
+theorem objAdmV_of_bodies {a b : Body} {F : {k // k ∈ Body.shared a b} → Field}
+    (ihf : ∀ (k : {k // k ∈ Body.shared a b}) (w : Value),
+      AdmField (F k) w = (AdmField (a.at ⟨k.1, Body.mem_shared_left k.2⟩) w
+        && AdmField (b.at ⟨k.1, Body.mem_shared_right k.2⟩) w))
+    (keys : Finset Name) (g : {k // k ∈ keys} → Value) :
+    objAdmV ⟨Body.shared a b, fun k => AdmField (F k)⟩ none keys g
+      = (objAdmV ⟨a.fields, fun k => AdmField (a.at k)⟩ none keys g
+         && objAdmV ⟨b.fields, fun k => AdmField (b.at k)⟩ none keys g) := by
+  simp only [objAdmV, entryP, MapOf.at]
+  refine decide_forall_and (fun k => ?_)
+  by_cases hk : k.1 ∈ Body.shared a b
+  · have ha := Body.mem_shared_left hk
+    have hb := Body.mem_shared_right hk
+    simp only [dif_pos hk, dif_pos ha, dif_pos hb]
+    exact ihf ⟨k.1, hk⟩ (g k)
+  · have hnab : ¬ (k.1 ∈ a.fields ∧ k.1 ∈ b.fields) := fun hh => hk (mem_shared_iff.mpr hh)
+    simp only [dif_neg hk]
+    by_cases ha : k.1 ∈ a.fields
+    · simp only [dif_pos ha, dif_neg (fun hh => hnab ⟨ha, hh⟩), Bool.and_false]
+    · simp only [dif_neg ha, Bool.false_and]
+
+/-- The declared set is the intersection and the required set the union, which is what the
+    two presence tests conjoin to. -/
+theorem valPresentT_of_bodies {a b : Body} {F : {k // k ∈ Body.shared a b} → Field}
+    (hab : Body.reqShared a b = true) (hba : Body.reqShared b a = true)
+    (hisreq : ∀ k, Field.isReq (F k)
+      = (Field.isReq (a.at ⟨k.1, Body.mem_shared_left k.2⟩)
+         || Field.isReq (b.at ⟨k.1, Body.mem_shared_right k.2⟩)))
+    (keys : Finset Name) :
+    valPresentT (Body.shared a b) F keys
+      = (valPresentT a.fields a.at keys && valPresentT b.fields b.at keys) := by
+  rw [valPresentT_req, valPresentT_req, valPresentT_req, Bool.eq_iff_iff]
+  simp only [Bool.and_eq_true, decide_eq_true_eq]
+  unfold Body.reqShared at hab hba
+  have hA := of_decide_eq_true hab
+  have hB := of_decide_eq_true hba
+  constructor
+  · intro hs
+    refine ⟨fun k hreq => ?_, fun k hreq => ?_⟩
+    · have hk : k.1 ∈ Body.shared a b := mem_shared_iff.mpr ⟨k.2, hA k hreq⟩
+      exact hs ⟨k.1, hk⟩ (by rw [hisreq ⟨k.1, hk⟩, hreq, Bool.true_or])
+    · have hk : k.1 ∈ Body.shared a b := mem_shared_iff.mpr ⟨hB k hreq, k.2⟩
+      exact hs ⟨k.1, hk⟩ (by rw [hisreq ⟨k.1, hk⟩, hreq, Bool.or_true])
+  · rintro ⟨hA', hB'⟩ k hreq
+    rw [hisreq k, Bool.or_eq_true] at hreq
+    rcases hreq with hr | hr
+    · exact hA' ⟨k.1, Body.mem_shared_left k.2⟩ hr
+    · exact hB' ⟨k.1, Body.mem_shared_right k.2⟩ hr
+
+/-- No shared field meets to the bottom at a value both bodies admit. -/
+theorem isBottom_false_of_bodies {a b : Body} {F : {k // k ∈ Body.shared a b} → Field}
+    (hisreq : ∀ k, Field.isReq (F k)
+      = (Field.isReq (a.at ⟨k.1, Body.mem_shared_left k.2⟩)
+         || Field.isReq (b.at ⟨k.1, Body.mem_shared_right k.2⟩)))
+    (ihf : ∀ (k : {k // k ∈ Body.shared a b}) (w : Value),
+      AdmField (F k) w = (AdmField (a.at ⟨k.1, Body.mem_shared_left k.2⟩) w
+        && AdmField (b.at ⟨k.1, Body.mem_shared_right k.2⟩) w))
+    {keys : Finset Name} {g : {k // k ∈ keys} → Value}
+    (hA : AdmBody a (.map keys g) = true) (hB : AdmBody b (.map keys g) = true) :
+    ∀ k, Field.isBottom (F k) = false := by
+  rw [AdmBody_map, Bool.and_eq_true] at hA hB
+  intro k
+  refine Bool.eq_false_iff.mpr (fun hbot => ?_)
+  have ha := Body.mem_shared_left k.2
+  have hb := Body.mem_shared_right k.2
+  have hreq : Field.isReq (F k) = true := isReq_of_isBottom hbot
+  rw [hisreq k, Bool.or_eq_true] at hreq
+  have hk : k.1 ∈ keys := by
+    rcases hreq with hr | hr
+    · exact mem_keys_of_isReq hA.1 ha hr
+    · exact mem_keys_of_isReq hB.1 hb hr
+  have hrowA := objAdmV_row hA.2 hk ha
+  have hrowB := objAdmV_row hB.2 hk hb
+  have hi := ihf k (g ⟨k.1, hk⟩)
+  rw [AdmField_of_isBottom hbot, hrowA, hrowB] at hi
+  exact absurd hi (by simp)
+
+/-- What an object against a record answers, with the object on the left. -/
+theorem objRec_extract {fs : Finset Name} {gt : {k // k ∈ fs} → Term → Option Field}
+    {frest : Option (Term → Option Term)} {x z : Term}
+    (h : objRec fs gt frest x = some z) :
+    ∃ fr r, frest = some fr ∧ fr x = some r ∧
+      (∀ k, (gt k x).isSome = true) ∧
+      ((z = .never ∧ ¬ (∀ k, Field.isBottom ((gt k x).getD (.optional .never)) = false))
+       ∨ z = .object (.mk fs (fun k => (gt k x).getD (.optional .never)) (.codec r))) := by
+  unfold objRec at h
+  cases hfr : frest with
+  | none => rw [hfr] at h; exact absurd h (by simp)
+  | some fr =>
+    rw [hfr] at h
+    simp only at h
+    split at h
+    next hok =>
+      split at h
+      next r hr =>
+        refine ⟨fr, r, rfl, hr, of_decide_eq_true hok, ?_⟩
+        split at h
+        next _ => exact Or.inr (Option.some.inj h).symm
+        next hnb =>
+          exact Or.inl ⟨(Option.some.inj h).symm, fun hall => hnb (decide_eq_true hall)⟩
+      next => exact absurd h (by simp)
+    next => exact absurd h (by simp)
+
+/-- What two objects answer: the bottom where the required names do not fit the
+    intersection or a shared field empties, and otherwise the object over the shared names. -/
+theorem objObj_extract {a b : Body} {g : {k // k ∈ a.fields} → Field → Option Field} {z : Term}
+    (h : objObj a g b = some z) :
+    ∃ r, Rest.merge a.rest b.rest = some r ∧
+      ((z = .never ∧ ¬ (Body.reqShared a b = true ∧ Body.reqShared b a = true))
+       ∨ (Body.reqShared a b = true ∧ Body.reqShared b a = true ∧
+          (∀ k : {k // k ∈ Body.shared a b},
+            (g ⟨k.1, Body.mem_shared_left k.2⟩
+              (b.at ⟨k.1, Body.mem_shared_right k.2⟩)).isSome = true) ∧
+          ((z = .never ∧ ¬ (∀ k : {k // k ∈ Body.shared a b}, Field.isBottom
+              ((g ⟨k.1, Body.mem_shared_left k.2⟩
+                (b.at ⟨k.1, Body.mem_shared_right k.2⟩)).getD (.optional .never)) = false))
+           ∨ z = .object (.mk (Body.shared a b)
+              (fun k => (g ⟨k.1, Body.mem_shared_left k.2⟩
+                (b.at ⟨k.1, Body.mem_shared_right k.2⟩)).getD (.optional .never)) r)))) := by
+  unfold objObj at h
+  split at h
+  next r hr =>
+    refine ⟨r, hr, ?_⟩
+    split at h
+    next =>
+      split at h
+      next =>
+        split at h
+        next hreq =>
+          rw [Bool.and_eq_true] at hreq
+          refine Or.inr ⟨hreq.1, hreq.2, ?_⟩
+          split at h
+          next hok =>
+            refine ⟨of_decide_eq_true hok, ?_⟩
+            split at h
+            next _ => exact Or.inr (Option.some.inj h).symm
+            next hnb =>
+              exact Or.inl ⟨(Option.some.inj h).symm, fun hall => hnb (decide_eq_true hall)⟩
+          next => exact absurd h (by simp)
+        next hreq =>
+          refine Or.inl ⟨(Option.some.inj h).symm, ?_⟩
+          rw [Bool.and_eq_true] at hreq
+          exact hreq
+      next => exact absurd h (by simp)
+    next => exact absurd h (by simp)
+  next => exact absurd h (by simp)
+
+/-- An object meets an object over the shared names, and a record through every field. -/
+theorem Adm_famObj {a : Body} {g : {k // k ∈ a.fields} → Field → Option Field}
+    {gt : {k // k ∈ a.fields} → Term → Option Field}
+    {frest : Option (Term → Option Term)}
+    (hg : ∀ (k : {k // k ∈ a.fields}) (fl fm : Field), g k fl = some fm →
+      ∀ w, AdmField fm w = (AdmField (a.at k) w && AdmField fl w))
+    (hgreq : ∀ (k : {k // k ∈ a.fields}) (fl fm : Field), g k fl = some fm →
+      Field.isReq fm = (Field.isReq (a.at k) || Field.isReq fl))
+    (hgt : ∀ (k : {k // k ∈ a.fields}) (y : Term) (fm : Field), gt k y = some fm →
+      ∀ w, AdmField fm w = (AdmField (a.at k) w && Adm y w))
+    (hgtreq : ∀ (k : {k // k ∈ a.fields}) (y : Term) (fm : Field), gt k y = some fm →
+      Field.isReq fm = Field.isReq (a.at k))
+    (hfr : ∀ fr, frest = some fr → ∃ t, a.rest = .codec t ∧ AdmSound t fr) :
+    AdmFam (.object a) (famObj a g gt frest) := by
+  intro y z hd h v
+  cases y <;> first | exact hd.elim | skip
+  case object b =>
+      simp only [famObj] at h
+      obtain ⟨r, hr, hcase⟩ := objObj_extract h
+      obtain ⟨hra, hrb, hrr⟩ := Rest.merge_admRest hr
+      have hnm : ∀ w : Value, (∀ keys gv, w ≠ .map keys gv) →
+          Adm z w = (Adm (.object a) w && Adm (.object b) w) := by
+        intro w hw
+        rw [show Adm (.object a) w = AdmBody a w from rfl,
+            show Adm (.object b) w = AdmBody b w from rfl,
+            AdmBody_of_not_map hw, AdmBody_of_not_map hw, Bool.and_self]
+        rcases hcase with ⟨rfl, _⟩ | ⟨_, _, _, ⟨rfl, _⟩ | rfl⟩
+        · rfl
+        · rfl
+        · exact AdmBody_of_not_map hw
+      cases v
+      case map keys gv =>
+        rw [show Adm (.object a) (.map keys gv) = AdmBody a (.map keys gv) from rfl,
+            show Adm (.object b) (.map keys gv) = AdmBody b (.map keys gv) from rfl]
+        rcases hcase with ⟨rfl, hne⟩ | ⟨hab, hba, hok, hrest⟩
+        · show (false : Bool) = _
+          cases hA : AdmBody a (.map keys gv) with
+          | false => rfl
+          | true =>
+            cases hB : AdmBody b (.map keys gv) with
+            | false => rfl
+            | true => exact absurd ⟨reqShared_of_adm hrb hA hB, reqShared_of_adm hra hB hA⟩ hne
+        · have hisreq : ∀ k : {k // k ∈ Body.shared a b},
+              Field.isReq ((g ⟨k.1, Body.mem_shared_left k.2⟩
+                (b.at ⟨k.1, Body.mem_shared_right k.2⟩)).getD (.optional .never))
+                = (Field.isReq (a.at ⟨k.1, Body.mem_shared_left k.2⟩)
+                   || Field.isReq (b.at ⟨k.1, Body.mem_shared_right k.2⟩)) := by
+            intro k
+            obtain ⟨fm, hfm⟩ := Option.isSome_iff_exists.mp (hok k)
+            rw [hfm, Option.getD_some]
+            exact hgreq _ _ _ hfm
+          have ihf : ∀ (k : {k // k ∈ Body.shared a b}) (w : Value),
+              AdmField ((g ⟨k.1, Body.mem_shared_left k.2⟩
+                (b.at ⟨k.1, Body.mem_shared_right k.2⟩)).getD (.optional .never)) w
+                = (AdmField (a.at ⟨k.1, Body.mem_shared_left k.2⟩) w
+                   && AdmField (b.at ⟨k.1, Body.mem_shared_right k.2⟩) w) := by
+            intro k w
+            obtain ⟨fm, hfm⟩ := Option.isSome_iff_exists.mp (hok k)
+            rw [hfm, Option.getD_some]
+            exact hg _ _ _ hfm w
+          rcases hrest with ⟨rfl, hnb⟩ | rfl
+          · show (false : Bool) = _
+            cases hA : AdmBody a (.map keys gv) with
+            | false => rfl
+            | true =>
+              cases hB : AdmBody b (.map keys gv) with
+              | false => rfl
+              | true => exact absurd (isBottom_false_of_bodies hisreq ihf hA hB) hnb
+          · show AdmBody (.mk (Body.shared a b) _ r) (.map keys gv) = _
+            rw [AdmBody_map, AdmBody_map, AdmBody_map]
+            simp only [Body.fields_mk, Body.at_mk, Body.rest_mk, hra, hrb, hrr]
+            rw [valPresentT_of_bodies hab hba hisreq, objAdmV_of_bodies ihf]
+            simp [Bool.and_assoc, Bool.and_comm, Bool.and_left_comm]
+      all_goals exact hnm _ (fun _ _ hc => Value.noConfusion hc)
+  case record x =>
+      simp only [famObj] at h
+      obtain ⟨fr, r, hfrest, hrx, hok, hcase⟩ := objRec_extract h
+      obtain ⟨t, hrest, hsound⟩ := hfr fr hfrest
+      have hreq : ∀ k : {k // k ∈ a.fields},
+          Field.isReq ((gt k x).getD (.optional .never)) = Field.isReq (a.at k) := by
+        intro k
+        obtain ⟨fm, hfm⟩ := Option.isSome_iff_exists.mp (hok k)
+        rw [hfm, Option.getD_some]
+        exact hgtreq _ _ _ hfm
+      have ihf : ∀ (k : {k // k ∈ a.fields}) (w : Value),
+          AdmField ((gt k x).getD (.optional .never)) w
+            = (AdmField (a.at k) w && Adm x w) := by
+        intro k w
+        obtain ⟨fm, hfm⟩ := Option.isSome_iff_exists.mp (hok k)
+        rw [hfm, Option.getD_some]
+        exact hgt _ _ _ hfm w
+      have iht : ∀ w, Adm r w = (Adm t w && Adm x w) := hsound x r hrx
+      have hnm : ∀ w : Value, (∀ keys gv, w ≠ .map keys gv) →
+          Adm z w = (Adm (.object a) w && Adm (.record x) w) := by
+        intro w hw
+        have hrxv : Adm (.record x) w = false := by
+          cases w with
+          | map keys gv => exact absurd rfl (hw keys gv)
+          | _ => rfl
+        rw [show Adm (.object a) w = AdmBody a w from rfl, AdmBody_of_not_map hw, hrxv,
+          Bool.and_self]
+        rcases hcase with ⟨rfl, _⟩ | rfl
+        · rfl
+        · exact AdmBody_of_not_map hw
+      cases v
+      case map keys gv =>
+        rw [show Adm (.object a) (.map keys gv) = AdmBody a (.map keys gv) from rfl,
+            show Adm (.record x) (.map keys gv)
+              = decide (∀ k : {k // k ∈ keys}, Adm x (gv k) = true) from rfl]
+        rcases hcase with ⟨rfl, hnb⟩ | rfl
+        · show (false : Bool) = _
+          cases hA : AdmBody a (.map keys gv) with
+          | false => rfl
+          | true =>
+            cases hR : decide (∀ k : {k // k ∈ keys}, Adm x (gv k) = true) with
+            | false => rfl
+            | true => exact absurd (isBottom_false_of_right hreq ihf hA hR) hnb
+        · show AdmBody (.mk a.fields _ (.codec r)) (.map keys gv) = _
+          rw [AdmBody_map, AdmBody_map]
+          simp only [Body.fields_mk, Body.at_mk, Body.rest_mk, hrest]
+          rw [valPresentT_of_isReq hreq, show AdmRest (.codec r) = some (Adm r) from rfl,
+              show AdmRest (.codec t) = some (Adm t) from rfl, objAdmV_of_right ihf iht]
+          simp [Bool.and_assoc, Bool.and_comm, Bool.and_left_comm]
+      all_goals exact hnm _ (fun _ _ hc => Value.noConfusion hc)
+  case opaq l => simp [famObj] at h
+  all_goals fam_never famObj
+
+/-! ### The outer theorem. -/
+
+/-- Two fields meet at the stronger mark, so the write bit is the join. -/
+theorem isReq_Field_meet : ∀ {f fl fm : Field}, Field.meet f fl = some fm →
+    Field.isReq fm = (Field.isReq f || Field.isReq fl) := by
+  intro f fl fm h
+  cases f <;> cases fl <;>
+    simp only [Field.meet, Option.map_eq_some_iff, reduceCtorEq] at h <;>
+    obtain ⟨tz, _, rfl⟩ := h <;> rfl
+
+/-- …and a field met with a term keeps its own mark. -/
+theorem isReq_Field_meetT : ∀ {f : Field} {y : Term} {fm : Field}, Field.meetT f y = some fm →
+    Field.isReq fm = Field.isReq f := by
+  intro f y fm h
+  cases f <;> simp only [Field.meetT, Option.map_eq_some_iff, reduceCtorEq] at h <;>
+    obtain ⟨tz, _, rfl⟩ := h <;> rfl
+
+/-- The option companion is the plain map at the fixed partner. -/
+theorem meetSL_eq (y : Term) : ∀ os, Term.meetSL os y = os.map (fun t => Term.meet t y)
+  | [] => rfl
+  | _ :: os => congrArg _ (meetSL_eq y os)
+
+/-- A certified union distributes: every option meets, the bottoms drop, and the survivors
+    carry the certificate. -/
+theorem meet_union_of {os : List Term} {y z : Term}
+    (h : Term.meet (.union os) y = some z) (hy : y ≠ .never) :
+    ∃ zs, List.Forall₂ (fun t w => Term.meet t y = some w) os zs ∧
+      unionOk os = true ∧ unionOk (zs.filter (fun w => !w.isNever)) = true ∧
+      z = Term.ofOptions (zs.filter (fun w => !w.isNever)) := by
+  rw [Term.meet] at h
+  · obtain ⟨zs, hzs, hg⟩ := Option.bind_eq_some_iff.mp h
+    unfold Term.ofOptionsGuarded at hg
+    split at hg
+    next hok =>
+      rw [Bool.and_eq_true] at hok
+      refine ⟨zs, allSome_map_forall₂ _ ?_, hok.1, hok.2, (Option.some.inj hg).symm⟩
+      rw [← meetSL_eq]
+      exact hzs
+    next => exact absurd hg (by simp)
+  all_goals (intros; simp_all)
+
+mutual
+/-- **`Adm` is a homomorphism from the meet to conjunction.** Where two terms have a meet,
+    the values it admits are exactly the values both admit. -/
+theorem Adm_meet : ∀ x y z, Term.meet x y = some z → ∀ v, Adm z v = (Adm x v && Adm y v)
+  | .never, _, _, h, _ => by
+      simp only [Term.meet, Option.some.injEq] at h; subst h; simp [Adm]
+  | .held _ _ _, y, _, h, v => by
+      cases y <;>
+        first
+          | (simp only [Term.meet, Option.some.injEq] at h; subst h; simp [Adm])
+          | exact absurd h (by simp [Term.meet])
+  | .legacy _ _, y, _, h, v => by
+      cases y <;>
+        first
+          | (simp only [Term.meet, Option.some.injEq] at h; subst h; simp [Adm])
+          | exact absurd h (by simp [Term.meet])
+  | .custom _ _, y, _, h, v => by
+      cases y <;>
+        first
+          | (simp only [Term.meet, Option.some.injEq] at h; subst h; simp [Adm])
+          | exact absurd h (by simp [Term.meet])
+  | .lazy _, y, _, h, v => by
+      cases y <;>
+        first
+          | (simp only [Term.meet, Option.some.injEq] at h; subst h; simp [Adm])
+          | exact absurd h (by simp [Term.meet])
+  | .refine x p, y, _, h, v => by
+      cases y with
+      | never =>
+          simp only [Term.meet, Option.some.injEq] at h; subst h; simp [Adm]
+      | _ =>
+        simp only [Term.meet] at h
+        split at h
+        · obtain ⟨w, hw, rfl⟩ := Option.map_eq_some_iff.mp h
+          have ihw := Adm_meet x _ w hw v
+          rw [Adm_refineOf]
+          simp only [Adm, ihw]
+          simp [Bool.and_assoc, Bool.and_comm, Bool.and_left_comm]
+        · exact absurd h (by simp)
+  | .union os, y, _, h, v => by
+      cases y with
+      | never =>
+          simp only [Term.meet, Option.some.injEq] at h; subst h; simp [Adm]
+      | _ =>
+        obtain ⟨zs, hF, hco, hcz, rfl⟩ := meet_union_of h (by simp)
+        rw [Adm_ofOptions hcz, AdmAny_filter_never,
+          show Adm (.union _) v = selOptV (AdmSpecs _) v from rfl, selOptV_eq_AdmAny hco]
+        exact AdmAny_meet v (Adm_meetL os _ _ hF)
+  | .string, y, z, h, v => Adm_meetSRight Adm_famString y z h v
+  | .number, y, z, h, v => Adm_meetSRight Adm_famNumber y z h v
+  | .decimal, y, z, h, v => Adm_meetSRight Adm_famDecimal y z h v
+  | .boolean, y, z, h, v => Adm_meetSRight Adm_famBoolean y z h v
+  | .binary, y, z, h, v => Adm_meetSRight Adm_famBinary y z h v
+  | .null, y, z, h, v => Adm_meetSRight Adm_famNull y z h v
+  | .literal k lv, y, z, h, v => Adm_meetSRight (Adm_famLit k lv) y z h v
+  | .set b, y, z, h, v => Adm_meetSRight (Adm_famSet b) y z h v
+  | .opaq l, y, z, h, v => Adm_meetSRight (Adm_famOpaq l) y z h v
+  | .array e, y, z, h, v =>
+      Adm_meetSRight (Adm_famArr (fun t w hw => Adm_meet e t w hw)) y z h v
+  | .record c, y, z, h, v =>
+      Adm_meetSRight (Adm_famRec (fun t w hw => Adm_meet c t w hw)) y z h v
+  | .tuple ts tl, y, z, h, v => by
+      cases tl with
+      | none =>
+          exact Adm_meetSRight (Adm_famTup (Adm_meetSTs ts) (Or.inl ⟨rfl, rfl⟩)) y z h v
+      | some t =>
+          exact Adm_meetSRight (Adm_famTup (Adm_meetSTs ts)
+            (Or.inr ⟨t, Term.meet t, rfl, rfl, fun u w hw => Adm_meet t u w hw⟩)) y z h v
+  | .object (.mk fs f r), y, z, h, v => by
+      cases r with
+      | codec t =>
+          exact Adm_meetSRight (Adm_famObj (a := .mk fs f (.codec t))
+            (fun k fl fm hm w => Adm_Field_meet (f k) fl fm hm w)
+            (fun _ _ _ hm => isReq_Field_meet hm)
+            (fun k u fm hm w => Adm_Field_meetT (f k) u fm hm w)
+            (fun _ _ _ hm => isReq_Field_meetT hm)
+            (fun fr hfr => ⟨t, rfl, by
+              simp only [Option.some.injEq] at hfr
+              subst hfr
+              exact fun u w hw => Adm_meet t u w hw⟩)) y z h v
+      | drop =>
+          exact Adm_meetSRight (Adm_famObj (a := .mk fs f .drop)
+            (fun k fl fm hm w => Adm_Field_meet (f k) fl fm hm w)
+            (fun _ _ _ hm => isReq_Field_meet hm)
+            (fun k u fm hm w => Adm_Field_meetT (f k) u fm hm w)
+            (fun _ _ _ hm => isReq_Field_meetT hm)
+            (fun _ hfr => absurd hfr (by simp))) y z h v
+      | refuse =>
+          exact Adm_meetSRight (Adm_famObj (a := .mk fs f .refuse)
+            (fun k fl fm hm w => Adm_Field_meet (f k) fl fm hm w)
+            (fun _ _ _ hm => isReq_Field_meet hm)
+            (fun k u fm hm w => Adm_Field_meetT (f k) u fm hm w)
+            (fun _ _ _ hm => isReq_Field_meetT hm)
+            (fun _ hfr => absurd hfr (by simp))) y z h v
+termination_by structural x => x
+
+/-- The union row's options, lifted pointwise at the fixed partner. -/
+theorem Adm_meetL : ∀ (os : List Term) (y : Term) (zs : List Term),
+    List.Forall₂ (fun t w => Term.meet t y = some w) os zs →
+    List.Forall₂ (fun t w => ∀ u, Adm w u = (Adm t u && Adm y u)) os zs
+  | [], _, _, h => by cases h; exact .nil
+  | t :: ts, y, _, h => by
+      cases h with
+      | cons hh ht => exact .cons (fun u => Adm_meet t y _ hh u) (Adm_meetL ts y _ ht)
+termination_by structural os => os
+
+/-- Every position of a tuple carries the meet at that position. -/
+theorem Adm_meetSTs : ∀ ts : List Term, List.Forall₂ AdmSound ts (Term.meetSTs ts)
+  | [] => .nil
+  | t :: ts => .cons (fun u w hw => Adm_meet t u w hw) (Adm_meetSTs ts)
+termination_by structural ts => ts
+
+/-- Two fields at one name admit what both admit, at the stronger mark. -/
+theorem Adm_Field_meet : ∀ (f fl : Field) (fm : Field), Field.meet f fl = some fm →
+    ∀ w, AdmField fm w = (AdmField f w && AdmField fl w)
+  | .req x, .req y, _, h, w => by
+      obtain ⟨tz, hz, rfl⟩ := Option.map_eq_some_iff.mp h
+      exact Adm_meet x y tz hz w
+  | .req x, .optional y, _, h, w => by
+      obtain ⟨tz, hz, rfl⟩ := Option.map_eq_some_iff.mp h
+      exact Adm_meet x y tz hz w
+  | .optional x, .req y, _, h, w => by
+      obtain ⟨tz, hz, rfl⟩ := Option.map_eq_some_iff.mp h
+      exact Adm_meet x y tz hz w
+  | .req x, .fallback y _, _, h, w => by
+      obtain ⟨tz, hz, rfl⟩ := Option.map_eq_some_iff.mp h
+      exact Adm_meet x y tz hz w
+  | .fallback x _, .req y, _, h, w => by
+      obtain ⟨tz, hz, rfl⟩ := Option.map_eq_some_iff.mp h
+      exact Adm_meet x y tz hz w
+  | .optional x, .optional y, _, h, w => by
+      obtain ⟨tz, hz, rfl⟩ := Option.map_eq_some_iff.mp h
+      exact Adm_meet x y tz hz w
+  | .optional _, .fallback _ _, _, h, _ => by simp [Field.meet] at h
+  | .fallback _ _, .optional _, _, h, _ => by simp [Field.meet] at h
+  | .fallback _ _, .fallback _ _, _, h, _ => by simp [Field.meet] at h
+termination_by structural f => f
+
+/-- …and a field met with a record's term admits what both admit. -/
+theorem Adm_Field_meetT : ∀ (f : Field) (y : Term) (fm : Field), Field.meetT f y = some fm →
+    ∀ w, AdmField fm w = (AdmField f w && Adm y w)
+  | .req x, y, _, h, w => by
+      obtain ⟨tz, hz, rfl⟩ := Option.map_eq_some_iff.mp h
+      exact Adm_meet x y tz hz w
+  | .optional x, y, _, h, w => by
+      obtain ⟨tz, hz, rfl⟩ := Option.map_eq_some_iff.mp h
+      exact Adm_meet x y tz hz w
+  | .fallback _ _, _, _, h, _ => by simp [Field.meetT] at h
+termination_by structural f => f
+end
+
+end StructuralAdm
 
 /-- A unanimous list names one member, so every entry is that member. -/
 theorem unanimous_all : ∀ {μs : List (Option Member)} {m : Member},
@@ -5786,7 +6978,7 @@ theorem admitOptV_of_Adm {t : Term} (hcl : t.isOpenObject = false) {v : Value}
 
 /-! ## The laws, on admission
 
-`Adm_meet` is the homomorphism from the meet to conjunction, so each law below is the
+`Adm_meetWF` is the homomorphism from the meet to conjunction, so each law below is the
 corresponding law of `Bool` read through it. Each is stated on both sides ANSWERING: whether the
 meet answers in one order when it answers in the other is a question about the rows, and the
 lattice does not need it.
@@ -5797,24 +6989,24 @@ lattice does not need it.
     not about the lattice. -/
 theorem Adm_meet_comm {x y z z' : Term} (h : Term.meetWF x y = some z)
     (h' : Term.meetWF y x = some z') (v : Value) : Adm z v = Adm z' v := by
-  rw [Adm_meet h, Adm_meet h', Bool.and_comm]
+  rw [Adm_meetWF h, Adm_meetWF h', Bool.and_comm]
 
 /-- **…and associative on admission**, both bracketings answering. -/
 theorem Adm_meet_assoc {x y z xy yz l r : Term}
     (hxy : Term.meetWF x y = some xy) (hl : Term.meetWF xy z = some l)
     (hyz : Term.meetWF y z = some yz) (hr : Term.meetWF x yz = some r) (v : Value) :
     Adm l v = Adm r v := by
-  rw [Adm_meet hl, Adm_meet hxy, Adm_meet hr, Adm_meet hyz, Bool.and_assoc]
+  rw [Adm_meetWF hl, Adm_meetWF hxy, Adm_meetWF hr, Adm_meetWF hyz, Bool.and_assoc]
 
 /-- **…and idempotent.** -/
 theorem Adm_meet_self {x z : Term} (h : Term.meetWF x x = some z) (v : Value) :
     Adm z v = Adm x v := by
-  rw [Adm_meet h, Bool.and_self]
+  rw [Adm_meetWF h, Bool.and_self]
 
 /-- **The bottom absorbs.** -/
 theorem Adm_meet_never {x z : Term} (h : Term.meetWF x .never = some z) (v : Value) :
     Adm z v = false := by
-  rw [Adm_meet h, Adm_never, Bool.and_false]
+  rw [Adm_meetWF h, Adm_never, Bool.and_false]
 
 /-- **The meet distributes over a certified union.** `AdmAny` is the join of the options'
     admissions, and `&&` distributes over `||`, so this is the distributive law with the join
@@ -5822,7 +7014,7 @@ theorem Adm_meet_never {x z : Term} (h : Term.meetWF x .never = some z) (v : Val
 theorem Adm_meet_union {x z : Term} {os : List Term} (hok : unionOk os = true)
     (h : Term.meetWF x (.union os) = some z) (v : Value) :
     Adm z v = (Adm x v && AdmAny os v) := by
-  rw [Adm_meet h, show Adm (.union os) v = selOptV (AdmSpecs os) v from rfl,
+  rw [Adm_meetWF h, show Adm (.union os) v = selOptV (AdmSpecs os) v from rfl,
     selOptV_eq_AdmAny hok]
 
 /-- …and the distribution, written so a reader sees it: the meet of a term with a join is the
