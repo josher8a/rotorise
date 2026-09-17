@@ -987,6 +987,434 @@ export const meet = <A>(
     other: readonly A[] | undefined,
 ): A | undefined =>
     one && other ? one.find((label) => other.includes(label)) : undefined
+
+/* ── the meet ─────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * **The intersection of two admissions, as a term** — `Calculus.Term.meet`, one row per pair of
+ * constructors.
+ *
+ * `undefined` is the model's `none` and is **not** the bottom. It says no term states this
+ * intersection, which happens for two reasons: a factor whose admission is a function nobody can
+ * read, and a pair that shares a value or a stored attribute it writes or reads two ways. `never`
+ * is the empty intersection alone. Conflating the two is the defect this development found four
+ * separate times, each time by writing the homomorphism equation rather than by reading the table.
+ *
+ * **Where the host could answer and the model has no row, this refuses.** Two `number` literals,
+ * two `fallback` fields and an `undefinable` field are each comparable in TypeScript and each
+ * answer `undefined` here, because a row the model does not state is a rule this port would be
+ * inventing. The first two are `docs/defects.md` entries; the third is a mark the model's `Field`
+ * does not have.
+ */
+export const meetTerms = (x: Term, y: Term): Term | undefined => {
+    // the bottom absorbs, on either side
+    if (x.kind === 'never' || y.kind === 'never') return never
+    // the four whose admission is a function and not data: a reader cannot say what they admit
+    // without running them, so no term states the intersection
+    if (opaqueToReader(x) || opaqueToReader(y)) return undefined
+    // a certified union distributes, on either side
+    if (x.kind === 'union') return distribute(x.options, y)
+    if (y.kind === 'union') return distribute(y.options, x)
+    // a refinement conjoins: the predicate is data, so it rides on the meet of the inner terms
+    if (x.kind === 'refine') return overRefinement(x.inner, x.q, y)
+    if (y.kind === 'refine') return overRefinement(y.inner, y.q, x)
+    // the ground bases: the same base is itself
+    if (x.kind === y.kind && groundBase(x)) return x
+    // **`string` and `decimal` part on the stored side.** Both admit text; `string` writes `S` and
+    // `decimal` writes `N`, so a value they share is stored two ways and there is no meet. The
+    // literal rows repeat it, because a literal at either base inherits the pair
+    if (crossesStringDecimal(x.kind, y.kind)) return undefined
+    if (x.kind === 'literal' && y.kind === 'literal') return meetLiterals(x, y)
+    if (x.kind === 'literal') return literalAgainstBase(x, y)
+    if (y.kind === 'literal') return literalAgainstBase(y, x)
+    if (x.kind === 'array' && y.kind === 'array')
+        return mapped(x.elem, y.elem, elementOf)
+    if (x.kind === 'record' && y.kind === 'record')
+        return mapped(x.val, y.val, valueOf)
+    if (x.kind === 'set' && y.kind === 'set') {
+        // `set string` and `set decimal` are `string ∧ decimal` one container out: both write a
+        // `strSet`, stored at `SS` and at `NS`, so they share every set of stored numerals. The
+        // number family against the decimal family shares `NS` the same way
+        if (
+            crossesStringDecimal(x.base, y.base) ||
+            crossesNumberDecimal(x.base, y.base)
+        )
+            return undefined
+        return x.base === y.base ? x : never
+    }
+    if (x.kind === 'opaq' && y.kind === 'opaq')
+        return { kind: 'opaq', lossy: x.lossy && y.lossy }
+    // an array against a tuple is the tuple, each declared position and the tail met with the
+    // array's one element term
+    if (x.kind === 'array' && y.kind === 'tuple')
+        return arrayAgainstTuple(x.elem, y)
+    if (y.kind === 'array' && x.kind === 'tuple')
+        return arrayAgainstTuple(y.elem, x)
+    if (x.kind === 'tuple' && y.kind === 'tuple') return meetTuples(x, y)
+    // an object against a record holds every name through one codec on one side and through a
+    // declared field on the other, so only a `codec` rest meets a record
+    if (x.kind === 'object' && y.kind === 'record')
+        return meetBodyRecord(x.body, y.val)
+    if (y.kind === 'object' && x.kind === 'record')
+        return meetBodyRecord(y.body, x.val)
+    if (x.kind === 'object' && y.kind === 'object')
+        return meetBodies(x.body, y.body)
+    // **`opaque` against a ground base.** It admits every value of every self-identifying kind, so
+    // at `string`, `boolean`, `binary` and `null` the base is the finer term. `decimal` refuses for
+    // the reason `string ∧ decimal` refuses. `number` follows the policy
+    if (x.kind === 'opaq') return opaqueAgainst(x, y)
+    if (y.kind === 'opaq') return opaqueAgainst(y, x)
+    // **The `number` family and the `decimal` family never meet.** They write different value kinds,
+    // so the bottom is right about the write side, and they read the same member `N`, so the bottom
+    // is wrong about the read side: every stored numeral is an attribute both admit
+    if (crossesNumberDecimal(x.kind, y.kind)) return undefined
+    // everything left is two constructors that write different value kinds
+    return never
+}
+
+const never: Term = { kind: 'never' }
+
+const opaqueToReader = (t: Term): boolean =>
+    t.kind === 'held' ||
+    t.kind === 'legacy' ||
+    t.kind === 'custom' ||
+    t.kind === 'lazy'
+
+const groundBase = (t: Term): boolean =>
+    t.kind === 'string' ||
+    t.kind === 'number' ||
+    t.kind === 'decimal' ||
+    t.kind === 'boolean' ||
+    t.kind === 'binary' ||
+    t.kind === 'null'
+
+const crossesStringDecimal = (a: string, b: string): boolean =>
+    (a === 'string' && b === 'decimal') || (a === 'decimal' && b === 'string')
+
+const crossesNumberDecimal = (a: string, b: string): boolean =>
+    (a === 'number' && b === 'decimal') || (a === 'decimal' && b === 'number')
+
+/** A refinement over the bottom is the bottom: `refine` narrows what the inner term holds. */
+const refineOf = (z: Term, q: Predicate): Term =>
+    z.kind === 'never' ? never : { kind: 'refine', inner: z, q }
+
+/** A tuple with a declared position at the bottom is the bottom. The tail is not such a slot. */
+const tupleOf = (elems: readonly Term[], tail: Term | undefined): Term =>
+    elems.some((t) => t.kind === 'never')
+        ? never
+        : tail === undefined
+          ? { kind: 'tuple', elems }
+          : { kind: 'tuple', elems, tail }
+
+/** A union of what survived a distribution: nothing is the bottom, and one survivor is itself. */
+const ofOptions = (ts: readonly Term[]): Term =>
+    ts.length === 0
+        ? never
+        : ts.length === 1
+          ? (ts[0] as Term)
+          : { kind: 'union', options: ts }
+
+const elementOf = (elem: Term): Term => ({ kind: 'array', elem })
+const valueOf = (val: Term): Term => ({ kind: 'record', val })
+
+const mapped = (
+    a: Term,
+    b: Term,
+    of: (inner: Term) => Term,
+): Term | undefined => {
+    const z = meetTerms(a, b)
+    return z === undefined ? undefined : of(z)
+}
+
+const overRefinement = (
+    inner: Term,
+    q: Predicate,
+    other: Term,
+): Term | undefined => {
+    if (q.kind === 'closure') return undefined
+    const z = meetTerms(inner, other)
+    return z === undefined ? undefined : refineOf(z, q)
+}
+
+/**
+ * **The meet at a union: the survivors, where both lists carry the certificate.**
+ *
+ * The meet is the lattice's meet and an uncertified union is not in the lattice, so the pair has
+ * no meet to state. Both lists are tested and not one, because an object met with a record answers
+ * an open object: a certified list of options can meet to an uncertified one.
+ */
+const distribute = (
+    options: readonly Term[],
+    other: Term,
+): Term | undefined => {
+    const met: Term[] = []
+    for (const option of options) {
+        const z = meetTerms(option, other)
+        if (z === undefined) return undefined
+        met.push(z)
+    }
+    const survivors = met.filter((z) => z.kind !== 'never')
+    return unionOk(options) && unionOk(survivors)
+        ? ofOptions(survivors)
+        : undefined
+}
+
+/**
+ * **The certificate a union must carry for its admission to be the join of its options'** —
+ * `Calculus.unionOk`.
+ *
+ * `orthAll` is {@link separable} here, which is this library's `Orth` and carries exemptions the
+ * model's does not. Every union the builders can construct has already passed it pairwise, so the
+ * conjunct bites on the survivor list rather than on the input.
+ */
+const unionOk = (os: readonly Term[]): boolean =>
+    os.every((t, at) =>
+        os.every((u, other) => other <= at || separable(t, u)),
+    ) && os.every((t) => !isOpenObject(t) && objectNamesAgree(t))
+
+const isOpenObject = (t: Term): boolean =>
+    t.kind === 'object' && typeof t.body.rest === 'object'
+
+/**
+ * Whether an object option's two halves answer the same question about names. A `drop` rest skips
+ * an undeclared name on the read side and refuses it on the write side, and a `fallback` field is
+ * required by the write side and supplied by the read side.
+ */
+const objectNamesAgree = (t: Term): boolean =>
+    t.kind !== 'object' ||
+    (t.body.rest === 'refuse' &&
+        Object.values(t.body.fields).every(
+            (field) => field.mark !== 'fallback',
+        ))
+
+/**
+ * **A literal against a base is the literal at that base, and the bottom at any other** — except
+ * the pairs that share values, which refuse rather than answering the bottom.
+ */
+const literalAgainstBase = (lit: Literal, base: Term): Term | undefined => {
+    switch (base.kind) {
+        case 'string':
+            return lit.base === 'decimal'
+                ? undefined
+                : lit.base === 'string'
+                  ? lit
+                  : never
+        case 'number':
+            return lit.base === 'decimal'
+                ? undefined
+                : lit.base === 'number'
+                  ? lit
+                  : never
+        case 'decimal':
+            return lit.base === 'string' || lit.base === 'number'
+                ? undefined
+                : lit.base === 'decimal'
+                  ? lit
+                  : never
+        case 'boolean':
+            return lit.base === 'boolean' ? lit : never
+        case 'binary':
+            return lit.base === 'binary' ? lit : never
+        default:
+            return never
+    }
+}
+
+/**
+ * **Two literals: the same value, or nothing.**
+ *
+ * `number` refuses, mirroring the model, where `DecidableEq WFDouble` is a field of `numericHost`
+ * and the row would be noncomputable. TypeScript can compare two numbers, and answering here would
+ * make this library's meet finer than the one the model's theorems are about.
+ */
+const meetLiterals = (x: Literal, y: Literal): Term | undefined => {
+    if (crossesStringDecimal(x.base, y.base)) return undefined
+    if (crossesNumberDecimal(x.base, y.base)) return undefined
+    if (x.base !== y.base) return never
+    if (x.base === 'number') return undefined
+    const other = (y as { readonly v: unknown }).v
+    return sameValue(x.v, other) ? x : never
+}
+
+/** Two literal values, compared the way the base compares them: bytes for `binary`, `===` else. */
+const sameValue = (one: unknown, other: unknown): boolean =>
+    one instanceof Uint8Array
+        ? other instanceof Uint8Array &&
+          one.length === other.length &&
+          one.every((byte, at) => byte === other[at])
+        : one === other
+
+const opaqueAgainst = (
+    op: Extract<Term, { kind: 'opaq' }>,
+    other: Term,
+): Term | undefined => {
+    switch (other.kind) {
+        case 'string':
+        case 'boolean':
+        case 'binary':
+        case 'null':
+            return other
+        case 'number':
+            return op.lossy ? other : never
+        default:
+            return undefined
+    }
+}
+
+const arrayAgainstTuple = (
+    elem: Term,
+    tuple: Extract<Term, { kind: 'tuple' }>,
+): Term | undefined => {
+    const elems: Term[] = []
+    for (const at of tuple.elems) {
+        const z = meetTerms(at, elem)
+        if (z === undefined) return undefined
+        elems.push(z)
+    }
+    if (tuple.tail === undefined) return tupleOf(elems, undefined)
+    const tail = meetTerms(tuple.tail, elem)
+    return tail === undefined ? undefined : tupleOf(elems, tail)
+}
+
+/**
+ * **Two tuples meet by arity.** Equal arity meets positionwise and meets the tails. Unequal arity
+ * with no tail on either side admits no common array, which is the bottom. Unequal arity *with* a
+ * tail refuses: aligning a declared position against a tail position is a rule this development has
+ * not stated, and answering it here would state it by accident.
+ */
+const meetTuples = (
+    x: Extract<Term, { kind: 'tuple' }>,
+    y: Extract<Term, { kind: 'tuple' }>,
+): Term | undefined => {
+    if (x.elems.length !== y.elems.length)
+        return x.tail === undefined && y.tail === undefined ? never : undefined
+    const elems: Term[] = []
+    for (const [at, one] of x.elems.entries()) {
+        const z = meetTerms(one, y.elems[at] as Term)
+        if (z === undefined) return undefined
+        elems.push(z)
+    }
+    if (x.tail === undefined && y.tail === undefined)
+        return tupleOf(elems, undefined)
+    if (x.tail === undefined || y.tail === undefined) return undefined
+    const tail = meetTerms(x.tail, y.tail)
+    return tail === undefined ? undefined : tupleOf(elems, tail)
+}
+
+/**
+ * **Two fields at one name: the meet of the terms, at the stronger mark.**
+ *
+ * A mark carries two presence bits, whether the name must be present when the object is written and
+ * whether it must be present when it is read. `optional` forces neither, `fallback` forces the write
+ * alone, and `req` forces both, so the three are a chain and the meet takes the stronger.
+ *
+ * **`optional` against `fallback` refuses, and the presence bits are not why.** Both admit a map
+ * omitting the name. They part on what they *read* there: `optional` reads a map without it and
+ * `fallback` reads a map carrying the stand-in, so the pair shares attributes it reads two ways.
+ *
+ * Two `fallback` fields refuse because the model has no equality on its stand-ins, and
+ * `undefinable` refuses because the model's `Field` has no such mark. Both are refusals this
+ * library inherits rather than rules it states.
+ */
+const meetFields = (a: Field, b: Field): Field | undefined => {
+    if (a.mark === 'undefinable' || b.mark === 'undefinable') return undefined
+    if (a.mark === 'optional' && b.mark === 'optional')
+        return mark(meetTerms(a.t, b.t), 'optional')
+    if (a.mark === 'fallback' || b.mark === 'fallback')
+        return a.mark === 'req' || b.mark === 'req'
+            ? mark(meetTerms(a.t, b.t), 'req')
+            : undefined
+    return mark(meetTerms(a.t, b.t), 'req')
+}
+
+const mark = (
+    t: Term | undefined,
+    of: 'req' | 'optional',
+): Field | undefined => (t === undefined ? undefined : { mark: of, t })
+
+/** Whether a field admits nothing at a name that must be present. */
+const isBottomField = (field: Field): boolean =>
+    field.mark !== 'optional' && field.t.kind === 'never'
+
+const mergeRests = (a: Rest, b: Rest): Rest | undefined =>
+    typeof a === 'object' || typeof b === 'object'
+        ? undefined
+        : a === 'refuse' || b === 'refuse'
+          ? 'refuse'
+          : 'drop'
+
+/** Whether a `drop` factor declares every name the other factor declares. */
+const dropFits = (a: Body, b: Body): boolean =>
+    a.rest !== 'drop' || Object.keys(b.fields).every((k) => k in a.fields)
+
+/** Whether every name one body requires is a name the other declares. */
+const reqShared = (a: Body, b: Body): boolean =>
+    Object.entries(a.fields).every(
+        ([name, field]) => field.mark !== 'req' || name in b.fields,
+    )
+
+/** Whether every `fallback` name one body declares is a name the other declares too. */
+const fbShared = (a: Body, b: Body): boolean =>
+    Object.entries(a.fields).every(
+        ([name, field]) => field.mark !== 'fallback' || name in b.fields,
+    )
+
+/**
+ * **Two bodies, over the names both declare.**
+ *
+ * The rests decide first, and an open factor holds a name it does not declare, so the required-name
+ * test is a bottom test only once both rests are closed. The declared set is the intersection and
+ * the required set is the union, which is what two upper bounds meet to.
+ *
+ * **The declared set is an upper bound on the write side only.** Under `drop` the read side skips an
+ * undeclared name rather than refusing it, so the declared set bounds the read from below and the
+ * intersection is the join there. {@link dropFits} refuses the pair where the two halves disagree.
+ *
+ * A field whose terms meet to the bottom is kept rather than dropped: at `optional` the two read the
+ * same, and at `req` it is the body that becomes the bottom.
+ */
+const meetBodies = (a: Body, b: Body): Term | undefined => {
+    const rest = mergeRests(a.rest, b.rest)
+    if (rest === undefined) return undefined
+    if (!fbShared(a, b) || !fbShared(b, a)) return undefined
+    if (!dropFits(a, b) || !dropFits(b, a)) return undefined
+    if (!reqShared(a, b) || !reqShared(b, a)) return never
+    const fields: Record<string, Field> = {}
+    for (const [name, field] of Object.entries(a.fields)) {
+        const other = b.fields[name]
+        if (!other) continue
+        const met = meetFields(field, other)
+        if (met === undefined) return undefined
+        fields[name] = met
+    }
+    return Object.values(fields).some(isBottomField)
+        ? never
+        : { kind: 'object', body: { fields, rest } }
+}
+
+/**
+ * **An object against a record.** Only a `codec` rest reads an undeclared name the way a record
+ * does, so the other two refuse; the record's value term meets every declared field and the rest's
+ * own codec. The mark survives, because the value term says what every name holds and says nothing
+ * about whether a name is present.
+ */
+const meetBodyRecord = (body: Body, val: Term): Term | undefined => {
+    const rest = body.rest
+    if (typeof rest !== 'object') return undefined
+    const held = meetTerms(rest.t, val)
+    if (held === undefined) return undefined
+    const fields: Record<string, Field> = {}
+    for (const [name, field] of Object.entries(body.fields)) {
+        if (field.mark === 'fallback' || field.mark === 'undefinable')
+            return undefined
+        const met = meetTerms(field.t, val)
+        if (met === undefined) return undefined
+        fields[name] = { mark: field.mark, t: met }
+    }
+    return Object.values(fields).some(isBottomField)
+        ? never
+        : { kind: 'object', body: { fields, rest: { kind: 'codec', t: held } } }
+}
 /**
  * Which of the four set bases a term's values sit at, or `undefined` where the term is not one.
  *
