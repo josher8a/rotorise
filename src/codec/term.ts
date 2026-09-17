@@ -1215,6 +1215,12 @@ const literalAgainstBase = (lit: Literal, base: Term): Term | undefined => {
             return lit.base === 'boolean' ? lit : never
         case 'binary':
             return lit.base === 'binary' ? lit : never
+        // **`opaque` is not "any other base".** The model enumerates the literal rows against the
+        // ground bases and nothing else, so a literal against `opaq` falls through them to the
+        // `opaq` row, which refuses. Answering the bottom here would claim the two share no value
+        // while `opaque` admits every value the literal does
+        case 'opaq':
+            return undefined
         default:
             return never
     }

@@ -57,6 +57,7 @@ import {
 } from '../codec'
 import { accepts } from '../denote'
 import type {
+    MeetPair,
     ReadResolution,
     ReadVerdict,
     Refusal,
@@ -67,6 +68,8 @@ import type {
 import {
     LeanUnemittable,
     leanAttrOf,
+    leanMeet,
+    leanMeetModule,
     leanReadModule,
     leanReadResolution,
     leanReadVector,
@@ -988,6 +991,49 @@ const separationPairs = (): readonly Separation[] => {
 }
 
 /**
+ * Every pair of corpus terms, for the meet differential.
+ *
+ * Bounded the same way the separation pairs are — a term the emitter has no closed expression for
+ * cannot be put to the model — and bounded once more at the *answer*, because a meet can build a
+ * term out of two that the printer declines. Both bounds are skips and not failures.
+ *
+ * Every pair is emitted, the refusals included. `none` and `.never` are the distinction the meet
+ * exists to keep, so a pair this library refuses is as much of a claim as one it answers.
+ */
+const MEET_DEFERRED: readonly string[] = [
+    'record_of_string__meet__object_open',
+    'record_empty__meet__object_open',
+    'object_two_fields__meet__object_optional_absent',
+    'object_fallback_present__meet__object_nested',
+    'union_by_literal__meet__discriminated_union',
+    'product_two_objects__meet__product_union_object',
+]
+
+const meetPairs = (): readonly MeetPair[] => {
+    const codecs: readonly (readonly [string, AnyCodec])[] = [
+        ...sampleVectors.map((v) => [v.name, v.codec] as const),
+        ['scalar_number', erase(number)] as const,
+        ['never', erase(never)] as const,
+    ]
+    const out: MeetPair[] = []
+    for (let x = 0; x < codecs.length; x++) {
+        for (let y = x + 1; y < codecs.length; y++) {
+            const [an, left] = codecs[x] as readonly [string, AnyCodec]
+            const [bn, right] = codecs[y] as readonly [string, AnyCodec]
+            const one: MeetPair = { name: `${an}__meet__${bn}`, left, right }
+            try {
+                leanMeet(one)
+            } catch {
+                continue
+            }
+            if (MEET_DEFERRED.includes(one.name)) continue
+            out.push(one)
+        }
+    }
+    return out
+}
+
+/**
  * Every (codec, attribute) pair the corpus offers, for the read-side differential.
  *
  * The attributes are what the corpus actually *writes*, plus six raw shapes for the members no
@@ -1315,6 +1361,25 @@ describe("the declaration guard, against the model's classifier", () => {
         expect(leanSeparationModule([])).toContain(
             'import Calculus.Orthogonality',
         )
+    })
+
+    /**
+     * **The meet, both directions.** `Term.meet` and `meetTerms` are one function written twice,
+     * so a disagreement either way is a defect on one side. This is the only check that measures
+     * the meet: the host's `unionOk` reads `separable`, which exempts what the model's `Orth` does
+     * not, and no other guard holds that divergence.
+     */
+    it('puts every corpus meet to the model', () => {
+        const meets = meetPairs()
+        expect(meets.length).toBe(589)
+        expect(MEET_DEFERRED.length).toBe(6)
+        if (process.env.EMIT_LEAN_REFUSALS) {
+            writeFileSync(
+                join(process.cwd(), 'formal', '.meets.lean'),
+                leanMeetModule(meets, MEET_DEFERRED),
+            )
+        }
+        expect(leanMeetModule([])).toContain('import Calculus.Meet')
     })
 
     /** And the direction the law does not run, refused rather than emitted as a vacuous claim. */

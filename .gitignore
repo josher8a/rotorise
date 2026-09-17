@@ -10,6 +10,7 @@ tsconfig.tsbuildinfo
 /formal/.readverdicts.lean
 /formal/.resolutions.lean
 /formal/.readvectors.lean
+/formal/.meets.lean
 
 # local tarballs for installing into consuming repos before a release
 .pack/
