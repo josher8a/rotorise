@@ -195,6 +195,77 @@ describe('two object bodies meet over the names both declare', () => {
             ),
         ).toBeUndefined()
     })
+
+    /**
+     * The record's value term meets every declared field and the rest's own codec, and which
+     * operand the caller had on the left does not change *what* the pair admits. So the two
+     * orders answer the same object wherever no refinement is in play.
+     */
+    it('answers the same object whichever operand a plain pair has on the left', () => {
+        const open = termOf(object({ a: string }, string))
+        const map = termOf(record(string))
+        const expected = {
+            kind: 'object',
+            body: {
+                fields: { a: { mark: 'req', t: termOf(string) } },
+                rest: { kind: 'codec', t: termOf(string) },
+            },
+        }
+        expect(meetTerms(open, map)).toEqual(expected)
+        expect(meetTerms(map, open)).toEqual(expected)
+    })
+
+    /**
+     * **Every row keeps the left operand on the left, and a refinement is where that shows.**
+     * `refineOf z p` is `z.refine p`, so two refinements nest in the order the cell met them: the
+     * outermost predicate is the left operand's. The pair admits the same values either way — the
+     * two predicates are conjoined either way — and the *term* differs, which is why the cell
+     * cannot answer by meeting the object's field on the left when the record is on the left.
+     */
+    it('nests the left operand refinement outermost in a record against an object', () => {
+        const qMap: Term = {
+            kind: 'refine',
+            inner: termOf(string),
+            q: {
+                kind: 'members',
+                literal: { kind: 'alternatives', base: 'string', ls: ['a'] },
+            },
+        }
+        const qObj: Term = {
+            kind: 'refine',
+            inner: termOf(string),
+            q: {
+                kind: 'members',
+                literal: {
+                    kind: 'alternatives',
+                    base: 'string',
+                    ls: ['a', 'b'],
+                },
+            },
+        }
+        const map: Term = { kind: 'record', val: qMap }
+        const open: Term = {
+            kind: 'object',
+            body: {
+                fields: { a: { mark: 'req', t: qObj } },
+                rest: { kind: 'codec', t: qObj },
+            },
+        }
+        const outermost = (t: Term | undefined): unknown => {
+            if (t === undefined || t.kind !== 'object') return undefined
+            const rest = t.body.rest
+            if (typeof rest !== 'object') return undefined
+            return rest.t.kind === 'refine' ? rest.t.q : undefined
+        }
+        // the record on the left: its own predicate is the one the outer refinement carries
+        expect(outermost(meetTerms(map, open))).toEqual(
+            qMap.kind === 'refine' ? qMap.q : undefined,
+        )
+        // and the object on the left: the object's
+        expect(outermost(meetTerms(open, map))).toEqual(
+            qObj.kind === 'refine' ? qObj.q : undefined,
+        )
+    })
 })
 
 describe('a union distributes and the survivors carry the certificate', () => {

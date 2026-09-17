@@ -1054,9 +1054,9 @@ export const meetTerms = (x: Term, y: Term): Term | undefined => {
     // an object against a record holds every name through one codec on one side and through a
     // declared field on the other, so only a `codec` rest meets a record
     if (x.kind === 'object' && y.kind === 'record')
-        return meetBodyRecord(x.body, y.val)
+        return meetBodyRecord(x.body, y.val, false)
     if (y.kind === 'object' && x.kind === 'record')
-        return meetBodyRecord(y.body, x.val)
+        return meetBodyRecord(y.body, x.val, true)
     if (x.kind === 'object' && y.kind === 'object')
         return meetBodies(x.body, y.body)
     // **`opaque` against a ground base.** It admits every value of every self-identifying kind, so
@@ -1403,17 +1403,25 @@ const meetBodies = (a: Body, b: Body): Term | undefined => {
  * does, so the other two refuse; the record's value term meets every declared field and the rest's
  * own codec. The mark survives, because the value term says what every name holds and says nothing
  * about whether a name is present.
+ *
+ * `valLeft` says which of the two terms the caller had on the left, and every cell puts that one
+ * on the left of `meetTerms`. A refinement nests in argument order, so the two orders build
+ * different terms out of the same pair.
  */
-const meetBodyRecord = (body: Body, val: Term): Term | undefined => {
+const meetBodyRecord = (
+    body: Body,
+    val: Term,
+    valLeft: boolean,
+): Term | undefined => {
     const rest = body.rest
     if (typeof rest !== 'object') return undefined
-    const held = meetTerms(rest.t, val)
+    const held = valLeft ? meetTerms(val, rest.t) : meetTerms(rest.t, val)
     if (held === undefined) return undefined
     const fields: Record<string, Field> = {}
     for (const [name, field] of Object.entries(body.fields)) {
         if (field.mark === 'fallback' || field.mark === 'undefinable')
             return undefined
-        const met = meetTerms(field.t, val)
+        const met = valLeft ? meetTerms(val, field.t) : meetTerms(field.t, val)
         if (met === undefined) return undefined
         fields[name] = { mark: field.mark, t: met }
     }
