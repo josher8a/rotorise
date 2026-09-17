@@ -3268,6 +3268,30 @@ export type Tagged<T, D extends string = keyof T & string, Spec = unknown> = {
 }
 
 /**
+ * The options of a union, as the terms of a union have to state them.
+ *
+ * `Calculus.unionOk` is the certificate that makes a union's admission the join of its options', and
+ * it asks `objectNamesAgree` of every option: `rest` is `refuse`, and no field is `fallback`. The
+ * host already *reads* an object option that way — {@link namesFit} bounds an item's names above by
+ * the option's declared names, so an undeclared name reaches no option's own `decode` — and what is
+ * missing is the term saying so. The copy belongs to this union alone: the codec the caller passed
+ * keeps the `rest` it was built with, and nothing but `def.options` moves.
+ *
+ * **`drop` is the only policy rewritten.** An option that holds undeclared names through a `rest`
+ * codec is left as it is, and its union does not certify: writing `refuse` over it would state a
+ * closure the codec does not have. `objectNamesAgree`'s other half, that no field is `fallback`,
+ * is not enforced here either — a union whose option carries one does not certify, and refusing it
+ * at construction is a refusal `Orth` does not warrant.
+ */
+const unionMembers = (terms: readonly Term[]): readonly Term[] =>
+    terms.map(
+        (term): Term =>
+            term.kind === 'object' && term.body.rest === 'drop'
+                ? { ...term, body: { ...term.body, rest: 'refuse' } }
+                : term,
+    )
+
+/**
  * How an entity that is a union of objects is stored.
  *
  * **Discriminated, not a bare `oneOf`.** Trying each member until one parses is ambiguous, order-
@@ -3323,8 +3347,8 @@ const dissect = <T extends Record<string, unknown>>(
      * is a lookup this builder keeps for `variant`, `encodePartial` and the item path — a host
      * index, carried by no term.
      */
-    const memberTerms = options.map((option) =>
-        termOf(option.item as unknown as AnyCodec),
+    const memberTerms = unionMembers(
+        options.map((option) => termOf(option.item as unknown as AnyCodec)),
     )
     const unionDef = { kind: 'union', options: memberTerms } as const
 
@@ -4665,6 +4689,8 @@ export const union = <const Options extends readonly AnyCodec[]>(
         naming,
     } = altSem(all)
 
+    const optionTerms = unionMembers(all.map((option) => termOf(option.codec)))
+
     /**
      * The item reading's own matcher: the value is always a record, so the shape filter has nothing
      * to do and structure is the whole of it — the names, and then every literal field the item
@@ -4716,7 +4742,7 @@ export const union = <const Options extends readonly AnyCodec[]>(
         ) as never,
         def: {
             kind: 'union',
-            options: all.map((option) => termOf(option.codec)),
+            options: optionTerms,
         },
     }
 
@@ -4733,7 +4759,7 @@ export const union = <const Options extends readonly AnyCodec[]>(
         unsafeDecode: (attribute) => orThrow(decode(attribute)),
         def: {
             kind: 'union',
-            options: all.map((option) => termOf(option.codec)),
+            options: optionTerms,
         },
         item: self as never,
         // built either way rather than branched, exactly as `item` is: an option that writes no map

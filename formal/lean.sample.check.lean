@@ -202,14 +202,14 @@ theorem nullable_null :
 /-- `union_by_literal` -/
 theorem union_by_literal :
     check 2
-      ((denote (Term.union [Term.object (Body.mk {"kind", "x"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string "a") else Field.req (Term.string)) Rest.drop), Term.object (Body.mk {"kind", "x"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string "b") else Field.req (Term.boolean)) Rest.drop)])).e
+      ((denote (Term.union [Term.object (Body.mk {"kind", "x"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string "a") else Field.req (Term.string)) Rest.refuse), Term.object (Body.mk {"kind", "x"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string "b") else Field.req (Term.boolean)) Rest.refuse)])).e
         (Value.map {"kind", "x"} (fun k => if k.1 = "kind" then Value.str "a" else Value.str "v")))
       (some (Attr.m {"kind", "x"} (fun k => if k.1 = "kind" then Attr.s "a" else Attr.s "v"))) = .same := rfl
 
 /-- `discriminated_union` -/
 theorem discriminated_union :
     check 2
-      ((denote (Term.union [Term.object (Body.mk {"kind", "x"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string "a") else Field.req (Term.string)) Rest.drop), Term.object (Body.mk {"kind", "y"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string "b") else Field.req (Term.boolean)) Rest.drop)])).e
+      ((denote (Term.union [Term.object (Body.mk {"kind", "x"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string "a") else Field.req (Term.string)) Rest.refuse), Term.object (Body.mk {"kind", "y"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string "b") else Field.req (Term.boolean)) Rest.refuse)])).e
         (Value.map {"kind", "x"} (fun k => if k.1 = "kind" then Value.str "a" else Value.str "v")))
       (some (Attr.m {"kind", "x"} (fun k => if k.1 = "kind" then Attr.s "a" else Attr.s "v"))) = .same := rfl
 
@@ -223,7 +223,7 @@ theorem product_two_objects :
 /-- `product_union_object` -/
 theorem product_union_object :
     check 2
-      ((denote (Term.union [Term.object (Body.mk {"a", "n"} (fun k => if k.1 = "a" then Field.req (Term.string) else Field.req (Term.decimal)) Rest.drop), Term.object (Body.mk {"b", "n"} (fun k => if k.1 = "b" then Field.req (Term.boolean) else Field.req (Term.decimal)) Rest.drop)])).e
+      ((denote (Term.union [Term.object (Body.mk {"a", "n"} (fun k => if k.1 = "a" then Field.req (Term.string) else Field.req (Term.decimal)) Rest.refuse), Term.object (Body.mk {"b", "n"} (fun k => if k.1 = "b" then Field.req (Term.boolean) else Field.req (Term.decimal)) Rest.refuse)])).e
         (Value.map {"a", "n"} (fun k => if k.1 = "a" then Value.str "x" else Value.str "1")))
       (some (Attr.m {"a", "n"} (fun k => if k.1 = "a" then Attr.s "x" else Attr.n (WFNumeral.of "1")))) = .same := rfl
 
@@ -237,7 +237,7 @@ theorem product_three :
 /-- `dunion_two_keys` -/
 theorem dunion_two_keys :
     check 2
-      ((denote (Term.union [Term.object (Body.mk {"kind", "size", "toy"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string "pet") else if k.1 = "size" then Field.req (Term.literal GroundKind.string "small") else Field.req (Term.string)) Rest.drop), Term.object (Body.mk {"kind", "size", "pen"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string "pet") else if k.1 = "size" then Field.req (Term.literal GroundKind.string "large") else Field.req (Term.string)) Rest.drop)])).e
+      ((denote (Term.union [Term.object (Body.mk {"kind", "size", "toy"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string "pet") else if k.1 = "size" then Field.req (Term.literal GroundKind.string "small") else Field.req (Term.string)) Rest.refuse), Term.object (Body.mk {"kind", "size", "pen"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string "pet") else if k.1 = "size" then Field.req (Term.literal GroundKind.string "large") else Field.req (Term.string)) Rest.refuse)])).e
         (Value.map {"kind", "size", "toy"} (fun k => if k.1 = "kind" then Value.str "pet" else if k.1 = "size" then Value.str "small" else Value.str "ball")))
       (some (Attr.m {"kind", "size", "toy"} (fun k => if k.1 = "kind" then Attr.s "pet" else if k.1 = "size" then Attr.s "small" else Attr.s "ball"))) = .same := rfl
 
@@ -437,12 +437,12 @@ theorem nullable_null__refuses__scalar_boolean :
 
 /-- `union_by_literal__refuses__scalar_string` — refused on both sides -/
 theorem union_by_literal__refuses__scalar_string :
-    (denote (Term.union [Term.object (Body.mk {"kind", "x"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string "a") else Field.req (Term.string)) Rest.drop), Term.object (Body.mk {"kind", "x"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string "b") else Field.req (Term.boolean)) Rest.drop)])).e
+    (denote (Term.union [Term.object (Body.mk {"kind", "x"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string "a") else Field.req (Term.string)) Rest.refuse), Term.object (Body.mk {"kind", "x"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string "b") else Field.req (Term.boolean)) Rest.refuse)])).e
       (Value.str "hello") = none := rfl
 
 /-- `discriminated_union__refuses__scalar_string` — refused on both sides -/
 theorem discriminated_union__refuses__scalar_string :
-    (denote (Term.union [Term.object (Body.mk {"kind", "x"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string "a") else Field.req (Term.string)) Rest.drop), Term.object (Body.mk {"kind", "y"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string "b") else Field.req (Term.boolean)) Rest.drop)])).e
+    (denote (Term.union [Term.object (Body.mk {"kind", "x"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string "a") else Field.req (Term.string)) Rest.refuse), Term.object (Body.mk {"kind", "y"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string "b") else Field.req (Term.boolean)) Rest.refuse)])).e
       (Value.str "hello") = none := rfl
 
 /-- `product_two_objects__refuses__scalar_string` — refused on both sides -/
@@ -452,7 +452,7 @@ theorem product_two_objects__refuses__scalar_string :
 
 /-- `product_union_object__refuses__scalar_string` — refused on both sides -/
 theorem product_union_object__refuses__scalar_string :
-    (denote (Term.union [Term.object (Body.mk {"a", "n"} (fun k => if k.1 = "a" then Field.req (Term.string) else Field.req (Term.decimal)) Rest.drop), Term.object (Body.mk {"b", "n"} (fun k => if k.1 = "b" then Field.req (Term.boolean) else Field.req (Term.decimal)) Rest.drop)])).e
+    (denote (Term.union [Term.object (Body.mk {"a", "n"} (fun k => if k.1 = "a" then Field.req (Term.string) else Field.req (Term.decimal)) Rest.refuse), Term.object (Body.mk {"b", "n"} (fun k => if k.1 = "b" then Field.req (Term.boolean) else Field.req (Term.decimal)) Rest.refuse)])).e
       (Value.str "hello") = none := rfl
 
 /-- `product_three__refuses__scalar_string` — refused on both sides -/
@@ -462,7 +462,7 @@ theorem product_three__refuses__scalar_string :
 
 /-- `dunion_two_keys__refuses__scalar_string` — refused on both sides -/
 theorem dunion_two_keys__refuses__scalar_string :
-    (denote (Term.union [Term.object (Body.mk {"kind", "size", "toy"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string "pet") else if k.1 = "size" then Field.req (Term.literal GroundKind.string "small") else Field.req (Term.string)) Rest.drop), Term.object (Body.mk {"kind", "size", "pen"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string "pet") else if k.1 = "size" then Field.req (Term.literal GroundKind.string "large") else Field.req (Term.string)) Rest.drop)])).e
+    (denote (Term.union [Term.object (Body.mk {"kind", "size", "toy"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string "pet") else if k.1 = "size" then Field.req (Term.literal GroundKind.string "small") else Field.req (Term.string)) Rest.refuse), Term.object (Body.mk {"kind", "size", "pen"} (fun k => if k.1 = "kind" then Field.req (Term.literal GroundKind.string "pet") else if k.1 = "size" then Field.req (Term.literal GroundKind.string "large") else Field.req (Term.string)) Rest.refuse)])).e
       (Value.str "hello") = none := rfl
 
 /-- `lazy_string__refuses__scalar_boolean` — refused on both sides -/

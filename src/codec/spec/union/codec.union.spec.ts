@@ -463,6 +463,44 @@ describe('an object option is admitted by its structure', () => {
             /no option admits/,
         )
     })
+
+    /**
+     * **A union reads an object option as closed, and the option's term is what has to say so.**
+     *
+     * An undeclared name fails `namesFit` and so reaches no option's own `decode`: inside a union
+     * a `drop` option already refuses what `drop` would skip. `Calculus.unionOk` asks every object
+     * option for `refuse`, and until the builder wrote it the four object unions in the corpus
+     * carried a `rest` that named the wrong policy and certified nothing.
+     */
+    it('states the closure a union reads its object options with', () => {
+        const codec = union([object({ a: string }), object({ b: number })])
+        const def = codec.def
+        expect(
+            def.kind === 'union' &&
+                def.options.map(
+                    (option) => option.kind === 'object' && option.body.rest,
+                ),
+        ).toEqual(['refuse', 'refuse'])
+        // and what the union writes and reads is what it wrote and read before
+        expect(codec.unsafeDecode(codec.unsafeEncode({ a: 'x' }))).toEqual({
+            a: 'x',
+        })
+        expect(codec.unsafeDecode(codec.unsafeEncode({ b: 1 }))).toEqual({
+            b: 1,
+        })
+    })
+
+    /**
+     * **The copy belongs to the union.** A codec is a value a caller keeps and passes to more than
+     * one union, so the closure a union needs is written on that union's own option and nowhere
+     * else. The same codec used alone still drops what it does not declare.
+     */
+    it('leaves the option codec the caller declared alone', () => {
+        const option = object({ a: string })
+        union([option, object({ b: number })])
+        const def = option.def
+        expect(def.kind === 'object' && def.body.rest).toBe('drop')
+    })
 })
 
 /**
