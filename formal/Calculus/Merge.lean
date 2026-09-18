@@ -24,46 +24,29 @@ def MapOf.disjUnion {α : Type} (a b : MapOf α) (h : Disjoint a.keys b.keys) : 
       if hk : k.1 ∈ a.keys then a.get ⟨k.1, hk⟩
       else b.get ⟨k.1, (Finset.mem_disjUnion.mp k.2).resolve_left hk⟩ }
 
-/-- The rest policies of a product, where there is one. Two closed policies merge, and
-    `refuse` wins because a name neither factor declares is a name the product refuses.
+/-- The body of a product: the disjoint union of the field tables, and no open block.
 
-    `none` is the refusal, and it is the product declaring no meet of two codecs: an open
-    factor holds an undeclared name through a codec of its own, and the product would have
-    to hold it through both. -/
-def Rest.merge : Rest → Rest → Option Rest
-  | .refuse, .refuse => some .refuse
-  | .refuse, .drop => some .refuse
-  | .drop, .refuse => some .refuse
-  | .drop, .drop => some .drop
-  | .codec _, _ => none
-  | _, .codec _ => none
-
-/-- The body of a product: the disjoint union of the field tables, at the merged policy. -/
-def Body.merge (a b : Body) (h : Disjoint a.fields b.fields) {r : Rest}
-    (_hr : Rest.merge a.rest b.rest = some r) : Body :=
+    **The merge of two open blocks is gone rather than refused.** It used to be `Rest.merge`,
+    a nine-cell table over three policies that answered on the four closed cells and refused
+    the rest. One closed state replaced the three, so the four cells are one cell, and the
+    refusal has nothing left to decide: an open factor holds an undeclared name through a
+    codec of its own, and a product would have to hold it through both. The premise says so
+    directly, and `Rest.merge`, `Rest.merge_assoc`, `Rest.merge_admRest` and
+    `TypedRest.merge_closed` are deleted with it. -/
+def Body.merge (a b : Body) (h : Disjoint a.fields b.fields)
+    (_ha : a.wild = none) (_hb : b.wild = none) : Body :=
   .mk (a.fields.disjUnion b.fields h)
     (fun k =>
       if hk : k.1 ∈ a.fields then a.at ⟨k.1, hk⟩
       else b.at ⟨k.1, (Finset.mem_disjUnion.mp k.2).resolve_left hk⟩)
-    r
+    none
 
-@[simp] theorem Body.merge_fields (a b : Body) (h : Disjoint a.fields b.fields) {r : Rest}
-    (hr : Rest.merge a.rest b.rest = some r) :
-    (Body.merge a b h hr).fields = a.fields.disjUnion b.fields h := rfl
+@[simp] theorem Body.merge_fields (a b : Body) (h : Disjoint a.fields b.fields)
+    (ha : a.wild = none) (hb : b.wild = none) :
+    (Body.merge a b h ha hb).fields = a.fields.disjUnion b.fields h := rfl
 
-@[simp] theorem Body.merge_rest (a b : Body) (h : Disjoint a.fields b.fields) {r : Rest}
-    (hr : Rest.merge a.rest b.rest = some r) : (Body.merge a b h hr).rest = r := rfl
-
-/-- Two closed policies merge to a closed one. `codec` is the only open policy and
-    `Rest.merge` refuses it, so the product of two closed factors is closed. -/
-theorem TypedRest.merge_closed {x y r : Rest} (hm : Rest.merge x y = some r)
-    (hx : TypedRest x none) (hy : TypedRest y none) : TypedRest r none := by
-  cases hx <;> cases hy <;>
-    simp only [Rest.merge, Option.some.injEq] at hm <;> subst hm
-  · exact .drop
-  · exact .refuse
-  · exact .refuse
-  · exact .refuse
+@[simp] theorem Body.merge_wild (a b : Body) (h : Disjoint a.fields b.fields)
+    (ha : a.wild = none) (hb : b.wild = none) : (Body.merge a b h ha hb).wild = none := rfl
 
 /-- A binding on the merged key set: the factor that declares the name gives it. -/
 def bindMerge {α : Type} (a b : Finset Name) (h : Disjoint a b)
@@ -78,15 +61,14 @@ def bindMerge {α : Type} (a b : Finset Name) (h : Disjoint a b)
     that is the form the rule takes and inverting it back would add nothing. The held set is
     `HObject` at the merged table, which is what makes the distribution laws above this one
     statements about `HObject` and not about a second construction. -/
-theorem typed_merge {a b : Body} (h : Disjoint a.fields b.fields) {r : Rest}
-    (hr : Rest.merge a.rest b.rest = some r)
+theorem typed_merge {a b : Body} (h : Disjoint a.fields b.fields)
+    (ha : a.wild = none) (hb : b.wild = none)
     {binda : {k // k ∈ a.fields} → Bool × Held} {μa : {k // k ∈ a.fields} → Option Member}
     {bindb : {k // k ∈ b.fields} → Bool × Held} {μb : {k // k ∈ b.fields} → Option Member}
     (hfa : ∀ k, TypedField (a.at k) (binda k).2 (binda k).1 (μa k))
-    (hfb : ∀ k, TypedField (b.at k) (bindb k).2 (bindb k).1 (μb k))
-    (hra : TypedRest a.rest none) (hrb : TypedRest b.rest none) :
-    Typed (.object (Body.merge a b h hr))
-      (HObject (Body.merge a b h hr).fields
+    (hfb : ∀ k, TypedField (b.at k) (bindb k).2 (bindb k).1 (μb k)) :
+    Typed (.object (Body.merge a b h ha hb))
+      (HObject (Body.merge a b h ha hb).fields
         (bindMerge a.fields b.fields h binda bindb) none) (some .M) := by
   refine Typed.object (μs := bindMerge a.fields b.fields h μa μb) ?_ ?_
   · intro k
@@ -94,7 +76,7 @@ theorem typed_merge {a b : Body} (h : Disjoint a.fields b.fields) {r : Rest}
     split
     · exact hfa _
     · exact hfb _
-  · exact TypedRest.merge_closed hr hra hrb
+  · exact TypedWild.none
 
 /-! ## The product law
 
@@ -311,14 +293,6 @@ theorem not_subset_prodOn {na nb : Finset Name} (h : Disjoint na nb) {Ta Ta' Tb 
 
 /-! ## Associativity -/
 
-/-- `Rest.merge` is associative where both groupings are defined. -/
-theorem Rest.merge_assoc {x y z u v w : Rest}
-    (h₁ : Rest.merge x y = some u) (h₂ : Rest.merge u z = some w)
-    (h₃ : Rest.merge y z = some v) : Rest.merge x v = some w := by
-  cases x <;> cases y <;> cases z <;>
-    simp only [Rest.merge, Option.some.injEq, reduceCtorEq] at h₁ h₃ <;>
-    subst_vars <;>
-    simpa only [Rest.merge, Option.some.injEq] using h₂
 
 /-- The merged name set does not depend on the grouping. Through `Finset.ext` and
     `Finset.mem_disjUnion`, both of which the gateway record already admits. -/

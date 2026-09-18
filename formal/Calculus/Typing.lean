@@ -287,7 +287,7 @@ inductive Typed : Term → Held → Option Member → Prop where
       order, without repeats" is not a premise, it is the type. `hnd` is gone with it. -/
   | object {body : Body} {bind R} {μs : {k // k ∈ body.fields} → Option Member}
       (hf : ∀ k, TypedField (body.at k) (bind k).2 (bind k).1 (μs k))
-      (hr : TypedRest body.rest R) :
+      (hr : TypedWild body.wild R) :
       Typed (.object body) (HObject body.fields bind R) (some .M)
   /-- `(union)`: the option judgements, and §5's **(D)** on their held sets. -/
   | union {opts Ts μs} (h : TypedListμ opts Ts μs) (hD : DIncomp Ts) :
@@ -314,18 +314,20 @@ inductive TypedOpt : Option Term → Option Held → Prop where
   | none : TypedOpt none none
   | some {t T μ} (h : Typed t T μ) : TypedOpt (some t) (some T)
 
-/-- §4's `⊢ f : T ⊗ π ⇝ μ`; the `Bool` is `π`, `true` for `req`. -/
-inductive TypedField : Field → Held → Bool → Option Member → Prop where
-  | req {t T μ} (h : Typed t T μ) : TypedField (.req t) T true μ
-  | optional {t T μ} (h : Typed t T μ) : TypedField (.optional t) T false μ
-  | fallback {t T μ v} (h : Typed t T μ) : TypedField (.fallback t v) T true μ
+/-- §4's `⊢ f : T ⊗ π ⇝ μ`; the `Bool` is `π`, `true` for `req`.
 
-/-- §4's `⊢ ρ : rest`, carrying `R(ρ)` — `∅` (here `none`) for the two string policies,
-    the rest codec's held set otherwise. -/
-inductive TypedRest : Rest → Option Held → Prop where
-  | drop : TypedRest .drop none
-  | refuse : TypedRest .refuse none
-  | codec {t T μ} (h : Typed t T μ) : TypedRest (.codec t) (some T)
+    **Two rows, where there were three.** §4 said "`fallback` concludes `req`", and that
+    sentence was a rule relating two constructors. The stand-in rides on `req` now, so the
+    two rows are one row and the sentence is the type. -/
+inductive TypedField : ObjectSlot → Held → Bool → Option Member → Prop where
+  | req {t T μ m} (h : Typed t T μ) : TypedField (.req t m) T true μ
+  | optional {t T μ} (h : Typed t T μ) : TypedField (.optional t) T false μ
+
+/-- §4's `⊢ ρ : wild`, carrying `R(ρ)` — `∅` (here `none`) where the body carries no open
+    block, the open block's held set otherwise. -/
+inductive TypedWild : Option (KeyPat × Term) → Option Held → Prop where
+  | none : TypedWild none none
+  | some {pat t T μ} (h : Typed t T μ) : TypedWild (some (pat, t)) (some T)
 
 end
 
@@ -353,21 +355,19 @@ want without eliminating at the use site. -/
 
 /-- A typed field gives its term, that term's judgement, and which of the three shapes
     the field has. -/
-theorem TypedField.term {fd : Field} {T π μ} (h : TypedField fd T π μ) :
+theorem TypedField.term {fd : ObjectSlot} {T π μ} (h : TypedField fd T π μ) :
     ∃ t', Typed t' T μ ∧
-      (fd = .req t' ∨ fd = .optional t' ∨ ∃ v, fd = .fallback t' v) := by
+      ((∃ m, fd = .req t' m) ∨ fd = .optional t') := by
   cases h with
-  | req h' => exact ⟨_, h', Or.inl rfl⟩
-  | optional h' => exact ⟨_, h', Or.inr (Or.inl rfl)⟩
-  | fallback h' => exact ⟨_, h', Or.inr (Or.inr ⟨_, rfl⟩)⟩
+  | req h' => exact ⟨_, h', Or.inl ⟨_, rfl⟩⟩
+  | optional h' => exact ⟨_, h', Or.inr rfl⟩
 
 /-- …and a *required* one is not `optional`, which is §4's `fallback` concluding `req`
     read backwards. -/
-theorem TypedField.not_optional {fd : Field} {T π μ} (h : TypedField fd T π μ)
+theorem TypedField.not_optional {fd : ObjectSlot} {T π μ} (h : TypedField fd T π μ)
     (hπ : π = true) : ∀ t', fd ≠ .optional t' := by
   cases h with
   | req _ => intro t' hc; exact nomatch hc
-  | fallback _ => intro t' hc; exact nomatch hc
   | optional _ => exact absurd hπ (by simp)
 
 /-- …and the same fact read the other way: a field that is not `optional` is required.
@@ -378,11 +378,10 @@ theorem TypedField.not_optional {fd : Field} {T π μ} (h : TypedField fd T π �
     required name and the guard `valPresentB` is stated by shape, so the two have to be
     exchanged in this direction. Both rows are `rfl`; §4's "`fallback` concludes `req`" is
     the second one. -/
-theorem TypedField.true_of_not_optional {fd : Field} {T π μ} (h : TypedField fd T π μ)
+theorem TypedField.true_of_not_optional {fd : ObjectSlot} {T π μ} (h : TypedField fd T π μ)
     (hno : ∀ t', fd ≠ .optional t') : π = true := by
   cases h with
   | req _ => rfl
-  | fallback _ => rfl
   | optional _ => exact absurd rfl (hno _)
 
 end Calculus

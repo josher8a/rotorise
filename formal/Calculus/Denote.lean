@@ -267,9 +267,10 @@ theorem denote_set (b : SetBase) : denote (.set b) = setCodec b.elem := rfl
 /-- `array` denotes the spread-only `list`, which is what `arrayCodec` is. -/
 theorem denote_array (t : Term) : denote (.array t) = arrayCodec (denote t) :=
   (arrayCodec_eq_listCodec (denote t)).symm
-/-- `record` denotes `recordCodec`. It is a builder over the body whose only block is the open
-    one, so this is the equation that keeps the word rather than a row of `denote`. -/
-theorem denote_record (t : Term) : denote (.record t) = recordCodec (denote t) := rfl
+/-- `record` denotes `recordCodec`: the empty body with an open block, which is what
+    `objectCodec_empty_codec` proves the record codec to be. -/
+theorem denote_record (t : Term) : denote (.record t) = recordCodec (denote t) :=
+  objectCodec_empty_codec (denote t)
 
 /-- `tuple` denotes the suffix-free `list`, which is what `tupleCodec` is. -/
 theorem denote_tuple (ts : List Term) (tail : Option Term) :

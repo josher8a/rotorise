@@ -202,11 +202,12 @@ def Term.array (elem : Term) : Term := .list [] (some elem) []
     number of declared positions. -/
 def Term.tuple (elems : List Term) (tail : Option Term) : Term := .list elems tail []
 
-/-- §4 `(record)`: the object that declares no name and takes every key at one codec. It is the
-    body whose only block is the open one, so it stopped being a constructor when the open block
-    became a block like any other. -/
+/-- §4 `(record)`: the object that declares no name and takes every key at one codec. It stopped
+    being a constructor when the open block became a block like any other, and
+    `objectCodec_empty_codec` is the equation that keeps the two readings one. -/
 def Term.record (val : Term) : Term :=
   .object (.mk ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) (some (.any, val)))
+
 
 
 /-! ## `Body`'s projections
