@@ -294,6 +294,13 @@ def Term.listOf (pre : List Term) (sp : Option Term) (suf : List Term) : Term :=
 def Term.tupleOf (ts : List Term) (tail : Option Term) : Term :=
   Term.listOf ts tail []
 
+/-- A normalised list is a list or the bottom. -/
+theorem listOf_cases (pre : List Term) (sp : Option Term) (suf : List Term) :
+    Term.listOf pre sp suf = .never ∨ Term.listOf pre sp suf = .list pre sp suf := by
+  unfold Term.listOf; split
+  · exact Or.inl rfl
+  · exact Or.inr rfl
+
 /-! ## The meet -/
 
 mutual
@@ -501,6 +508,110 @@ theorem alignPL_eq_rowOfG (pre : List VP) (sp : Option VP) (suf : List VP) (ws :
         rw [hAB] at hz
         exact hz
 
+/-- A row the shape accepts has exactly the length asked of it. -/
+theorem rowOfG_length {α : Type} {pre : List α} {sp : Option α} {suf : List α} {n row}
+    (h : rowOfG pre sp suf n = some row) : row.length = n := by
+  cases sp with
+  | none =>
+      simp only [rowOfG] at h
+      split at h
+      · next he =>
+          simp only [Option.some.injEq] at h
+          subst h
+          simp only [List.length_append]
+          omega
+      · exact absurd h (by simp)
+  | some c =>
+      simp only [rowOfG] at h
+      split at h
+      · exact absurd h (by simp)
+      · next he =>
+          simp only [Option.some.injEq] at h
+          subst h
+          simp only [List.length_append, List.length_replicate]
+          omega
+
+/-- Two rows over the same three parts, related position for position. -/
+theorem forall₂_replicate {α β : Type} {R : α → β → Prop} {a : α} {b : β} (hab : R a b) :
+    ∀ n, List.Forall₂ R (List.replicate n a) (List.replicate n b)
+  | 0 => .nil
+  | n + 1 => by
+      simp only [List.replicate_succ]
+      exact .cons hab (forall₂_replicate hab n)
+
+theorem forall₂_append {α β : Type} {R : α → β → Prop} {a₁ a₂ : List α} {b₁ b₂ : List β} :
+    List.Forall₂ R a₁ b₁ → List.Forall₂ R a₂ b₂ →
+      List.Forall₂ R (a₁ ++ a₂) (b₁ ++ b₂) := by
+  intro h₁ h₂
+  induction h₁ with
+  | nil => exact h₂
+  | cons hh _ ih => exact .cons hh ih
+
+/-- **The row transfers a relation.** Two shapes whose prefixes, spreads and suffixes are
+    related position for position assign related rows at every length. This is the one
+    lemma the meet's three semantic families share: each reads its own relation off the
+    two rows rather than off the shapes. -/
+theorem rowOfG_forall₂ {α β : Type} {R : α → β → Prop}
+    {pre₁ : List α} {pre₂ : List β} {sp₁ : Option α} {sp₂ : Option β}
+    {suf₁ : List α} {suf₂ : List β}
+    (hp : List.Forall₂ R pre₁ pre₂)
+    (hs : (sp₁ = none ∧ sp₂ = none) ∨ ∃ a b, sp₁ = some a ∧ sp₂ = some b ∧ R a b)
+    (hf : List.Forall₂ R suf₁ suf₂) {n : Nat} {r₁ : List α} {r₂ : List β}
+    (h₁ : rowOfG pre₁ sp₁ suf₁ n = some r₁) (h₂ : rowOfG pre₂ sp₂ suf₂ n = some r₂) :
+    List.Forall₂ R r₁ r₂ := by
+  have hlp := hp.length_eq
+  have hlf := hf.length_eq
+  rcases hs with ⟨rfl, rfl⟩ | ⟨a, b, rfl, rfl, hab⟩
+  · simp only [rowOfG] at h₁ h₂
+    split at h₁
+    · next he₁ =>
+        split at h₂
+        · next he₂ =>
+            simp only [Option.some.injEq] at h₁ h₂
+            subst h₁; subst h₂
+            exact forall₂_append hp hf
+        · exact absurd h₂ (by simp)
+    · exact absurd h₁ (by simp)
+  · simp only [rowOfG] at h₁ h₂
+    split at h₁
+    · exact absurd h₁ (by simp)
+    · next he₁ =>
+        split at h₂
+        · exact absurd h₂ (by simp)
+        · next he₂ =>
+            simp only [Option.some.injEq] at h₁ h₂
+            subst h₁; subst h₂
+            refine forall₂_append (forall₂_append hp ?_) hf
+            have hc : n - pre₁.length - suf₁.length = n - pre₂.length - suf₂.length := by omega
+            rw [hc]
+            exact forall₂_replicate hab _
+
+/-- …and the row of a shape whose parts match another's lengths exists wherever that one's
+    does, related to it. This is the form the meet uses: it holds the FUNCTION row and needs
+    the TERM row that stands behind it. -/
+theorem rowOfG_forall₂_left {α β : Type} {R : α → β → Prop}
+    {pre₁ : List α} {pre₂ : List β} {sp₁ : Option α} {sp₂ : Option β}
+    {suf₁ : List α} {suf₂ : List β}
+    (hp : List.Forall₂ R pre₁ pre₂)
+    (hs : (sp₁ = none ∧ sp₂ = none) ∨ ∃ a b, sp₁ = some a ∧ sp₂ = some b ∧ R a b)
+    (hf : List.Forall₂ R suf₁ suf₂) {n : Nat} {r₂ : List β}
+    (h₂ : rowOfG pre₂ sp₂ suf₂ n = some r₂) :
+    ∃ r₁, rowOfG pre₁ sp₁ suf₁ n = some r₁ ∧ List.Forall₂ R r₁ r₂ := by
+  have hlp := hp.length_eq
+  have hlf := hf.length_eq
+  have hex : ∃ r₁, rowOfG pre₁ sp₁ suf₁ n = some r₁ := by
+    rcases hs with ⟨rfl, rfl⟩ | ⟨a, b, rfl, rfl, _⟩
+    · simp only [rowOfG] at h₂ ⊢
+      split at h₂
+      · next he => exact ⟨_, if_pos (by omega)⟩
+      · exact absurd h₂ (by simp)
+    · simp only [rowOfG] at h₂ ⊢
+      split at h₂
+      · exact absurd h₂ (by simp)
+      · next he => exact ⟨_, if_neg (by omega)⟩
+  obtain ⟨r₁, h₁⟩ := hex
+  exact ⟨r₁, h₁, rowOfG_forall₂ hp hs hf h₁ h₂⟩
+
 /-- **One side dominates the other**, in the prefix and in the suffix at once.
 
     This is the whole of the `list` meet's refusal, and it is a fact about lengths alone.
@@ -530,24 +641,27 @@ def listMeetRow (fpre : List (Term → Option Term)) (fsp : Option (Term → Opt
   match fsp, sp₂ with
   | some f, some c =>
       if dominates fpre.length fsuf.length pre₂.length suf₂.length then
-        match f c with
-        | none => none
-        | some sp =>
-          let P := max fpre.length pre₂.length
-          let S := max fsuf.length suf₂.length
-          match rowOfG fpre (some f) fsuf (P + S), rowOfG pre₂ (some c) suf₂ (P + S) with
-          | some fs, some us =>
-              (allSome (zipF fs us)).map fun row =>
-                Term.listOf (row.take P) (some sp) (row.drop P)
-          | _, _ => some .never
+        match f c,
+            rowOfG fpre (some f) fsuf
+              (max fpre.length pre₂.length + max fsuf.length suf₂.length),
+            rowOfG pre₂ (some c) suf₂
+              (max fpre.length pre₂.length + max fsuf.length suf₂.length) with
+        | some sp, some fs, some us =>
+            (allSome (zipF fs us)).map fun row =>
+              Term.listOf (row.take (max fpre.length pre₂.length)) (some sp)
+                (row.drop (max fpre.length pre₂.length))
+        | none, _, _ => none
+        | _, _, _ => some .never
       else none
-  | _, _ =>
-      let n := match fsp with
-        | none => fpre.length + fsuf.length
-        | some _ => pre₂.length + suf₂.length
-      match rowOfG fpre fsp fsuf n, rowOfG pre₂ sp₂ suf₂ n with
-      | some fs, some us =>
-          (allSome (zipF fs us)).map fun row => Term.listOf row none []
+  | none, _ =>
+      match rowOfG fpre none fsuf (fpre.length + fsuf.length),
+          rowOfG pre₂ sp₂ suf₂ (fpre.length + fsuf.length) with
+      | some fs, some us => (allSome (zipF fs us)).map fun row => Term.listOf row none []
+      | _, _ => some .never
+  | some f, none =>
+      match rowOfG fpre (some f) fsuf (pre₂.length + suf₂.length),
+          rowOfG pre₂ none suf₂ (pre₂.length + suf₂.length) with
+      | some fs, some us => (allSome (zipF fs us)).map fun row => Term.listOf row none []
       | _, _ => some .never
 
 /-- The family of the one positional container. Replaces `famArr` and `famTup`, which
@@ -557,6 +671,53 @@ def famList (fpre : List (Term → Option Term)) (fsp : Option (Term → Option 
   | .list pre₂ sp₂ suf₂ => listMeetRow fpre fsp fsuf pre₂ sp₂ suf₂
   | .opaq _ => none
   | _ => some .never
+
+
+/-- Every answer of `listMeetRow` is the bottom or a list: each branch ends in `Term.listOf`,
+    and a normalised list is one or the other. -/
+theorem listMeetRow_isList {fpre : List (Term → Option Term)}
+    {fsp : Option (Term → Option Term)} {fsuf : List (Term → Option Term)}
+    {pre₂ : List Term} {sp₂ : Option Term} {suf₂ : List Term} {z : Term}
+    (h : listMeetRow fpre fsp fsuf pre₂ sp₂ suf₂ = some z) :
+    z = .never ∨ ∃ p q s, z = .list p q s := by
+  have hA : ∀ (o : Option (List Term)) (g : List Term → Term),
+      (∀ row, g row = .never ∨ ∃ p q s, g row = .list p q s) →
+      o.map g = some z → z = .never ∨ ∃ p q s, z = .list p q s := by
+    intro o g hg ho
+    obtain ⟨row, _, rfl⟩ := Option.map_eq_some_iff.mp ho
+    exact hg row
+  have hTake : ∀ (P : Nat) (q : Option Term) (row : List Term),
+      Term.listOf (row.take P) q (row.drop P) = .never ∨
+        ∃ p q' s, Term.listOf (row.take P) q (row.drop P) = .list p q' s :=
+    fun P q row => (listOf_cases _ _ _).imp id fun hc => ⟨_, _, _, hc⟩
+  have hFlat : ∀ row : List Term, Term.listOf row none [] = .never ∨
+      ∃ p q' s, Term.listOf row none [] = .list p q' s :=
+    fun row => (listOf_cases _ _ _).imp id fun hc => ⟨_, _, _, hc⟩
+  unfold listMeetRow at h
+  split at h
+  · split at h
+    · split at h
+      · exact hA _ _ (hTake _ _) h
+      · exact absurd h (by simp)
+      · simp only [Option.some.injEq] at h; exact Or.inl h.symm
+    · exact absurd h (by simp)
+  · split at h
+    · exact hA _ _ hFlat h
+    · simp only [Option.some.injEq] at h; exact Or.inl h.symm
+  · split at h
+    · exact hA _ _ hFlat h
+    · simp only [Option.some.injEq] at h; exact Or.inl h.symm
+
+/-- …so every answer of the family is the bottom or a list. -/
+theorem famList_isList {fpre : List (Term → Option Term)}
+    {fsp : Option (Term → Option Term)} {fsuf : List (Term → Option Term)} {y z : Term}
+    (h : famList fpre fsp fsuf y = some z) :
+    z = .never ∨ ∃ p q s, z = .list p q s := by
+  cases y <;>
+    first
+      | exact listMeetRow_isList h
+      | (simp only [famList, Option.some.injEq] at h; exact Or.inl h.symm)
+      | exact absurd h (by simp [famList])
 
 def famTup (fs : List (Term → Option Term)) (ftail : Option (Term → Option Term)) :
     Term → Option Term
@@ -1396,13 +1557,6 @@ theorem μSyn_refineOf (z : Term) (p : Pred) : μSyn (Term.refineOf z p) = μSyn
   split
   next hz => rw [show z = Term.never from eq_never_of_isNever hz]
   next => rfl
-
-/-- …and a normalised list is a list or the bottom. -/
-theorem listOf_cases (pre : List Term) (sp : Option Term) (suf : List Term) :
-    Term.listOf pre sp suf = .never ∨ Term.listOf pre sp suf = .list pre sp suf := by
-  unfold Term.listOf; split
-  · exact Or.inl rfl
-  · exact Or.inr rfl
 
 /-- The suffix-free case, under the name the tuple rows use. -/
 theorem tupleOf_cases (ts : List Term) (tail : Option Term) :
@@ -3116,9 +3270,8 @@ theorem writes_meetSRight {x : Term} {fam : Term → Option Term} (hf : WritesFa
   | .literal k lv, _, h, m, hz => hf (.literal k lv) _ trivial h m hz
   | .set b, _, h, m, hz => hf (.set b) _ trivial h m hz
   | .opaq l, _, h, m, hz => hf (.opaq l) _ trivial h m hz
-  | .array e, _, h, m, hz => hf (.array e) _ trivial h m hz
   | .record c, _, h, m, hz => hf (.record c) _ trivial h m hz
-  | .tuple ts tl, _, h, m, hz => hf (.tuple ts tl) _ trivial h m hz
+  | .list p q s, _, h, m, hz => hf (.list p q s) _ trivial h m hz
   | .object b, _, h, m, hz => hf (.object b) _ trivial h m hz
 termination_by structural y => y
 
@@ -3329,30 +3482,24 @@ theorem writes_famOpaq (l : Bool) : WritesFam (.opaq l) (famOpaq l) := by
   all_goals (try (subst h; simp_all [μSyn, GroundKind.member, SetBase.member]))
   all_goals (try (subst_vars; simp only [μSyn, GroundKind.member, SetBase.member, Option.some.injEq] at hz; exact hz.symm))
 
-/-- An array names `L` whatever the element meets to. -/
-theorem writes_famArr {f : Term → Option Term} {x' : Term} :
-    WritesFam (.array x') (famArr f) := by
+/-- **A list names `L`, and a list it meets names `L` too.** The family answers a list or the
+    bottom; the bottom writes nothing, so wherever the answer has a member that member is `L`,
+    and so is each operand's. -/
+theorem writes_famList {fpre : List (Term → Option Term)}
+    {fsp : Option (Term → Option Term)} {fsuf : List (Term → Option Term)}
+    {pre : List Term} {sp : Option Term} {suf : List Term} :
+    WritesFam (.list pre sp suf) (famList fpre fsp fsuf) := by
   intro y z hd h m hz
-  cases y <;> first | exact hd.elim | skip
-  case array e =>
-      obtain ⟨w, _, rfl⟩ := Option.map_eq_some_iff.mp h
-      simpa [μSyn] using hz
-  case tuple ts tl =>
-      obtain ⟨vs, tll, rfl, _, _⟩ := famArr_tuple h
-      rcases tupleOf_cases vs tll with hc | hc <;> rw [hc] at hz
-      · exact absurd hz (by simp [μSyn])
-      · simpa [μSyn] using hz
-  all_goals (try simp_all [famArr, μSyn])
-  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member, SetBase.member]))
-  all_goals (try (split at h))
-  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member, SetBase.member]))
-  all_goals (try (split at h))
-  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member, SetBase.member]))
-  all_goals (try (subst_vars
-                  simp only [μSyn, GroundKind.member, SetBase.member, Option.some.injEq] at hz
-                  exact ⟨fun _ hh => by simp_all [μSyn, GroundKind.member, SetBase.member], fun _ hh => by simp_all [μSyn, GroundKind.member, SetBase.member]⟩))
-  all_goals (try (subst h; simp_all [μSyn, GroundKind.member, SetBase.member]))
-  all_goals (try (subst_vars; simp only [μSyn, GroundKind.member, SetBase.member, Option.some.injEq] at hz; exact hz.symm))
+  rcases famList_isList h with rfl | ⟨p, q, s, rfl⟩
+  · exact absurd hz (by simp [μSyn])
+  · simp only [μSyn, Option.some.injEq] at hz
+    subst hz
+    refine ⟨fun mx hmx => ?_, fun my hmy => ?_⟩
+    · simp only [μSyn, Option.some.injEq] at hmx; exact hmx.symm
+    · cases y <;> simp only [famList] at h <;>
+        first
+          | (simp only [μSyn, Option.some.injEq] at hmy; exact hmy.symm)
+          | exact absurd h (by simp)
 
 /-- A record names `M`, and an object it meets names `M` too. -/
 theorem writes_famRec {f : Term → Option Term} {x' : Term} :
@@ -3378,42 +3525,6 @@ theorem writes_famRec {f : Term → Option Term} {x' : Term} :
                   exact ⟨fun _ hh => by simp_all [μSyn, GroundKind.member, SetBase.member], fun _ hh => by simp_all [μSyn, GroundKind.member, SetBase.member]⟩))
   all_goals (try (subst h; simp_all [μSyn, GroundKind.member, SetBase.member]))
   all_goals (try (subst_vars; simp only [μSyn, GroundKind.member, SetBase.member, Option.some.injEq] at hz; exact hz.symm))
-
-/-- A tuple names `L`, and the bottom it can answer names none. -/
-theorem writes_famTup {ts : List Term} {tl : Option Term}
-    {fs : List (Term → Option Term)} {ftail : Option (Term → Option Term)} :
-    WritesFam (.tuple ts tl) (famTup fs ftail) := by
-  intro y z hd h m hz
-  cases y <;> first | exact hd.elim | skip
-  case array e =>
-      simp only [famTup] at h
-      split at h
-      next vs tll _ _ =>
-        simp only [Option.some.injEq] at h; subst h
-        rcases tupleOf_cases vs tll with hc | hc <;> rw [hc] at hz
-        · exact absurd hz (by simp [μSyn])
-        · simpa [μSyn] using hz
-      next => exact absurd h (by simp)
-  case tuple us tail' =>
-      simp only [famTup] at h
-      split at h
-      next =>
-        split at h
-        next vs tll _ _ =>
-          simp only [Option.some.injEq] at h; subst h
-          rcases tupleOf_cases vs tll with hc | hc <;> rw [hc] at hz
-          · exact absurd hz (by simp [μSyn])
-          · simpa [μSyn] using hz
-        next => exact absurd h (by simp)
-      next =>
-        split at h
-        next =>
-          simp only [Option.some.injEq] at h; subst h
-          exact absurd hz (by simp [μSyn])
-        next => exact absurd h (by simp)
-  case opaq l => simp [famTup] at h
-  all_goals (try simp_all [famTup, μSyn])
-  all_goals (try (subst h; simp_all [μSyn, GroundKind.member, SetBase.member]))
 
 /-- An object names `M`, and the bottom it can answer names none. -/
 theorem writes_famObj {a : Body} {g : {k // k ∈ a.fields} → Field → Option Field}
@@ -3514,16 +3625,17 @@ theorem meet_writes : ∀ x y z, Term.meet x y = some z → ∀ m : Member, μSy
   | .literal k lv, y, z, h, m, hz => writes_meetSRight (writes_famLit k lv) y z h m hz
   | .set b, y, z, h, m, hz => writes_meetSRight (writes_famSet b) y z h m hz
   | .opaq l, y, z, h, m, hz => writes_meetSRight (writes_famOpaq l) y z h m hz
-  | .array _, y, z, h, m, hz => writes_meetSRight writes_famArr y z h m hz
   | .record _, y, z, h, m, hz => writes_meetSRight writes_famRec y z h m hz
-  | .tuple ts tl, y, z, h, m, hz => by
-      cases tl with
+  | .list pre sp suf, y, z, h, m, hz => by
+      cases sp with
       | none =>
-          exact writes_meetSRight (writes_famTup (ts := ts) (tl := none)
-            (fs := Term.meetSTs ts) (ftail := none)) y z h m hz
+          exact writes_meetSRight (writes_famList (pre := pre) (sp := none) (suf := suf)
+            (fpre := Term.meetSTs pre) (fsp := none)
+            (fsuf := Term.meetSTs suf)) y z h m hz
       | some t =>
-          exact writes_meetSRight (writes_famTup (ts := ts) (tl := some t)
-            (fs := Term.meetSTs ts) (ftail := some (Term.meet t))) y z h m hz
+          exact writes_meetSRight (writes_famList (pre := pre) (sp := some t) (suf := suf)
+            (fpre := Term.meetSTs pre) (fsp := some (Term.meet t))
+            (fsuf := Term.meetSTs suf)) y z h m hz
   | .object (.mk fs f r), y, z, h, m, hz => by
       cases r with
       | codec t =>
