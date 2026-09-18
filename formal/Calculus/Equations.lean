@@ -262,10 +262,10 @@ theorem extendRead_μ (c : Codec) (r : Attr → Option Value) :
     subterm's member. -/
 theorem optional_μ (t : Term) : (fieldSem (.optional t)).codec.μ = (denote t).μ := rfl
 
-/-- §4 `(fallback)`: the stand-in is written through the same codec, so the member is
-    the subterm's too. -/
+/-- §4, a `req` slot carrying a stand-in: the stand-in is written through the same codec, so
+    the member is the subterm's too. -/
 theorem fallback_μ (t : Term) (v : Value) :
-    (fieldSem (.fallback t v)).codec.μ = (denote t).μ := rfl
+    (fieldSem (.req t (some v))).codec.μ = (denote t).μ := rfl
 
 /-! ## `union` is associative
 

@@ -264,7 +264,6 @@ inductive Typed : Term → Held → Option Member → Prop where
   | list {pre Tpre sp Tsp suf Tsuf} (hp : TypedList pre Tpre) (hs : TypedOpt sp Tsp)
       (hf : TypedList suf Tsuf) :
       Typed (.list pre sp suf) (HList Tpre Tsp Tsuf) (some .L)
-  | record {t T μ} (h : Typed t T μ) : Typed (.record t) (HMap T) (some .M)
   /-- `(held)`: the held set **is** the premise's, pulled back along `f`; the cancellation
       laws are `Obligations`'.
 
@@ -330,6 +329,26 @@ inductive TypedWild : Option (KeyPat × Term) → Option Held → Prop where
   | some {pat t T μ} (h : Typed t T μ) : TypedWild (some (pat, t)) (some T)
 
 end
+
+/-- **§3 `(record)`, derived.** `record` is the object that declares no name and takes every
+    key at one codec, so its rule is `object`'s at the empty key set. It was a constructor,
+    and a constructor would now conclude about a term `object` already concludes about: one
+    term with two derivations, and two held sets where `typed_T_eq` needs one. -/
+theorem HObject_empty (b : {k // k ∈ (∅ : Finset Name)} → Bool × Held) (T : Held) :
+    HObject ∅ b (some T) = HMap T := by
+  funext v
+  simp only [HObject, HMap, Finset.notMem_empty, IsEmpty.forall_iff, true_and,
+             dite_false, Option.some.injEq, eq_iff_iff]
+  constructor
+  · rintro ⟨keys, f, rfl, h⟩
+    exact ⟨keys, f, rfl, fun k => by obtain ⟨T', rfl, hT⟩ := h k; exact hT⟩
+  · rintro ⟨keys, f, rfl, h⟩
+    exact ⟨keys, f, rfl, fun k => ⟨T, rfl, h k⟩⟩
+
+theorem Typed.record {t T μ} (h : Typed t T μ) : Typed (.record t) (HMap T) (some .M) := by
+  rw [← HObject_empty (fun k => absurd k.2 (Finset.notMem_empty k.1)) T]
+  exact Typed.object (μs := fun k => absurd k.2 (Finset.notMem_empty k.1))
+    (fun k => absurd k.2 (Finset.notMem_empty k.1)) (TypedWild.some h)
 
 /-! ## `(array)` and `(tuple)`, recovered from `(list)`
 
