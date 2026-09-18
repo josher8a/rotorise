@@ -141,6 +141,20 @@ theorem array_of_string :
     = some (Attr.l [Attr.s "a", Attr.s "b"]) := by
   vector
 
+/-- `list_prefix_spread` -/
+theorem list_prefix_spread :
+    (denote (Term.tuple [Term.string] (some (Term.string)))).e
+      (Value.arr [Value.str "a", Value.str "b", Value.str "c"])
+    = some (Attr.l [Attr.s "a", Attr.s "b", Attr.s "c"]) := by
+  vector
+
+/-- `list_spread_suffix` -/
+theorem list_spread_suffix :
+    (denote (Term.list [] (some (Term.string)) [Term.boolean])).e
+      (Value.arr [Value.str "a", Value.str "b", Value.bool true])
+    = some (Attr.l [Attr.s "a", Attr.s "b", Attr.bool true]) := by
+  vector
+
 /-- `array_empty` -/
 theorem array_empty :
     (denote (Term.array (Term.string))).e
@@ -297,8 +311,8 @@ theorem lazy_string :
 
 /-! ## Refusals — neither side writes anything for these
 
-36 of 1154 shown; `scripts/gate.sh` elaborates all
-1154. One `rfl` each, no comparator and no fuel: the answer is `none`,
+38 of 1294 shown; `scripts/gate.sh` elaborates all
+1294. One `rfl` each, no comparator and no fuel: the answer is `none`,
 which carries no function for the funext gap to open under.
 -/
 
@@ -365,6 +379,16 @@ theorem set_of_decimal__refuses__scalar_string :
 /-- `array_of_string__refuses__scalar_string` — refused on both sides -/
 theorem array_of_string__refuses__scalar_string :
     (denote (Term.array (Term.string))).e
+      (Value.str "hello") = none := rfl
+
+/-- `list_prefix_spread__refuses__scalar_string` — refused on both sides -/
+theorem list_prefix_spread__refuses__scalar_string :
+    (denote (Term.tuple [Term.string] (some (Term.string)))).e
+      (Value.str "hello") = none := rfl
+
+/-- `list_spread_suffix__refuses__scalar_string` — refused on both sides -/
+theorem list_spread_suffix__refuses__scalar_string :
+    (denote (Term.list [] (some (Term.string)) [Term.boolean])).e
       (Value.str "hello") = none := rfl
 
 /-- `array_empty__refuses__scalar_string` — refused on both sides -/
