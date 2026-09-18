@@ -1410,9 +1410,8 @@ describe('the published surface', () => {
             'optional',
             'record',
             'refine',
-            'rest',
+            'spread',
             'string',
-            'tuple',
             'union',
             'CodecError',
         ]) {

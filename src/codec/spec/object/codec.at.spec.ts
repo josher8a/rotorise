@@ -10,11 +10,11 @@ import { describe, expect, it } from 'vitest'
 import {
     array,
     discriminatedUnion,
+    list,
     number,
     object,
     optional,
     string,
-    tuple,
 } from '../../codec'
 
 const Delivery = object({
@@ -42,11 +42,11 @@ type Leg = typeof Leg extends { unsafeDecode: (...a: never[]) => infer T }
 const Fulfilment = discriminatedUnion('type', [
     object({
         type: string('SINGLE_LEG'),
-        legs: tuple(Leg),
+        legs: list(Leg),
     }),
     object({
         type: string('MULTI_LEG'),
-        legs: tuple(Leg, Leg),
+        legs: list(Leg, Leg),
     }),
 ])
 

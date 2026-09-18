@@ -18,12 +18,12 @@ import {
     list,
     never as nothing,
     object,
+    spread,
     string,
-    tuple,
 } from '../../codec'
 import { checkEncodePaths, checkRoundTrip } from '../../testing'
 
-const framed = list([string], decimal, [boolean])
+const framed = list(string, spread(decimal), boolean)
 
 describe('a list with a fixed position after the spread', () => {
     it('holds the shape no array and no tuple can state', () => {
@@ -90,13 +90,12 @@ describe('the shapes a builder already names', () => {
      * same declaration written as a `list` are one codec. The model states the same two equations
      * as definitions.
      */
-    it('is what array and tuple build', () => {
-        expect(list([], string).def).toEqual(array(string).def)
-        expect(list([string, boolean]).def).toEqual(tuple(string, boolean).def)
+    it('is what array builds', () => {
+        expect(list(spread(string)).def).toEqual(array(string).def)
     })
 
     it('counts exactly the declared positions where there is no spread', () => {
-        const pair = list([string, boolean])
+        const pair = list(string, boolean)
         expect(pair.unsafeDecode({ L: [{ S: 'a' }, { BOOL: true }] })).toEqual([
             'a',
             true,
@@ -117,36 +116,38 @@ describe('what a list refuses at the declaration', () => {
         // the type refuses it first, and a cast is the only way to reach the constructor
         expect(() =>
             // @ts-expect-error a declared position holds no value
-            list([string, nothing], decimal),
+            list(string, nothing, spread(decimal)),
         ).toThrow(CodecError)
         expect(() =>
-            // @ts-expect-error and the suffix is declared too
-            list([string], decimal, [nothing]),
+            // @ts-expect-error and a position after the spread is declared too
+            list(string, spread(decimal), nothing),
         ).toThrow(CodecError)
     })
 
     /**
-     * **A spread at the bottom is not the bottom**, and that is why it is refused for the other
-     * reason: a value of exactly the declared length omits every spread position, so the list is
-     * its declared positions and the spread is a second spelling of writing them alone.
+     * **A spread at the bottom is not the bottom, so it is admitted.**
+     *
+     * A value of exactly the declared length omits every spread position, so a list whose spread
+     * holds nothing is the list of its declared positions, and that is a value. The declared
+     * positions are slots and refuse `never`; the spread is not a slot and does not. `Term.listOf`
+     * draws the same line, and `array(never)` is the same fact under the one-word name.
      */
-    it('refuses a spread at never, which is the same list without it', () => {
-        expect(() => list([string], nothing)).toThrow(
-            /holds exactly its declared positions/,
-        )
+    it('admits a spread at never, which holds the declared positions alone', () => {
+        const bare = list(string, spread(nothing))
+        expect(bare.unsafeDecode({ L: [{ S: 'a' }] })).toEqual(['a'])
     })
 
     /**
-     * **Two spreads have no spelling here, and that is the difference from `tuple`.** `tuple` takes
-     * its tail as a marker inside a variadic parameter list, so `RestGoesLast` has a parameter list
-     * to refuse; `list` takes the spread as one parameter, so the ambiguity is unrepresentable and
-     * nothing is owed a refusal.
+     * **A second spread has no reading, because the positions between the two belong to both.**
+     *
+     * `SpreadOnce` refuses it at the type and the constructor refuses it again, because a cast
+     * defeats the type. That is the shape a structural guarantee the host cannot express owes: a
+     * refusal at construction, a test that pins it, and the reason written down.
      */
-    it('takes the spread as one parameter, so two are unrepresentable', () => {
-        const _wrong = () => [
-            // @ts-expect-error the suffix holds terms, and a spread is not one of them
-            list([string], decimal, [decimal, string], decimal),
-        ]
-        expect(typeof _wrong).toBe('function')
+    it('refuses a second spread, whose positions would belong to both', () => {
+        expect(() =>
+            // @ts-expect-error a list has at most one spread
+            list(string, spread(decimal), decimal, spread(string)),
+        ).toThrow(/at most one spread/)
     })
 })
