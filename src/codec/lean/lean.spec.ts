@@ -40,6 +40,7 @@ import {
     held,
     lazy,
     legacy,
+    list,
     mdunion,
     never,
     nullable,
@@ -710,6 +711,32 @@ export const sampleVectors: readonly Vector[] = [
         value: new Set(['1.5', '2']),
     },
     { name: 'array_of_string', codec: erase(array(string)), value: ['a', 'b'] },
+    /**
+     * **The two shapes that put `meetLists` and `dominates` to the model.**
+     *
+     * Before these, every list in the corpus was `array` or `tuple`: three shapes with a spread
+     * and an empty prefix and suffix, and one with a prefix of two and no spread. So `dominates`
+     * was only ever asked about a shape against itself, where it answers true for both reasons,
+     * and the fixed-arity branch only ever answered `never`. The bridge never asked the model
+     * about a suffix, about a flattening that survives, or about the refusal at all.
+     *
+     * These two are the smallest pair that asks all four, and it takes two because the refusal
+     * needs *two* shapes neither of which dominates. Against the corpus they state:
+     * the meet of a prefix against a plain spread, where the prefix side dominates
+     * (`array_of_string`); the meet against a fixed arity that **flattens and survives**
+     * (`list_spread_suffix` against `tuple_pair`, which answers the tuple itself); and the
+     * window where neither dominates, `p1 s0` against `p0 s1`, which answers `none`.
+     */
+    {
+        name: 'list_prefix_spread',
+        codec: erase(list([string], string)),
+        value: ['a', 'b', 'c'],
+    },
+    {
+        name: 'list_spread_suffix',
+        codec: erase(list([], string, [boolean])),
+        value: ['a', 'b', true],
+    },
     { name: 'array_empty', codec: erase(array(string)), value: [] },
     {
         name: 'tuple_pair',
@@ -1211,9 +1238,9 @@ describe('union resolution, model against library', () => {
      * adds the resolutions of the unions it takes part in.
      */
     it('offers 330 write pairs and 359 statable of 360 read pairs', () => {
-        expect(writeResolutions().length).toBe(350)
+        expect(writeResolutions().length).toBe(370)
         const reads = readResolutions()
-        expect(reads.length).toBe(380)
+        expect(reads.length).toBe(400)
         // one pair only, and it is the `Double` axiom reaching the decoded value; the five
         // map-valued reads beside it are stated through `vcheck` now
         expect(
@@ -1275,7 +1302,7 @@ describe("the read side, against the model's read row", () => {
      */
     it('offers 1326 pairs, three of them stuck on the `Double` axiom', () => {
         const verdicts = readVerdicts()
-        expect(verdicts.length).toBe(1476)
+        expect(verdicts.length).toBe(1634)
         const stuck = verdicts.filter(readRowIsStuck)
         expect(stuck.map((one) => one.name)).toEqual([
             'scalar_number__reads__scalar_decimal',
@@ -1353,7 +1380,7 @@ describe("the declaration guard, against the model's classifier", () => {
      */
     it('refuses only pairs the classifier also declines', () => {
         const separations = separationPairs()
-        expect(separations.length).toBe(98)
+        expect(separations.length).toBe(111)
         // each one emits, which is where `leanSeparation` re-checks that `src/` really refuses,
         // and it carries one of the two warrants: `Orth` declines, or — for a `never` pair, where
         // the model permits what `src/` lints away — the permits-form states what the model says
@@ -1386,7 +1413,7 @@ describe("the declaration guard, against the model's classifier", () => {
      */
     it('puts every corpus meet to the model', () => {
         const meets = meetPairs()
-        expect(meets.length).toBe(664)
+        expect(meets.length).toBe(739)
         expect(MEET_DEFERRED.length).toBe(2)
         if (process.env.EMIT_LEAN_REFUSALS) {
             writeFileSync(
@@ -1464,7 +1491,7 @@ describe("the read side of every corpus codec, against the model's `p`", () => {
             (one) => readVectorIsUnstatable(one) === undefined,
         )
         expect(statable.length).toBe(sampleVectors.length)
-        expect(statable.length).toBe(35)
+        expect(statable.length).toBe(37)
         // each asserts the model's `p`, through the comparator that crosses `Value.map`'s binder
         for (const one of statable) {
             const vector = leanReadVector(one)
