@@ -519,13 +519,15 @@ theorem zipPA_iff : ∀ (suf : List Term), (∀ t ∈ suf, ExactA t) → ∀ (ba
       (traverse (fun ca : Codec × Attr => ca.1.p ca.2)
         ((denoteList suf).zip back)).isSome = true)
   | [], _, [], _ => by simp [zipPA, AdmAList, denoteList]
-  | [], _, _ :: _, h => by simp at h
-  | _ :: _, _, [], h => by simp at h
+  | [], _, _ :: _, h => by
+      exact absurd h (by simp only [List.length_cons, List.length_nil]; omega)
+  | _ :: _, _, [], h => by
+      exact absurd h (by simp only [List.length_cons, List.length_nil]; omega)
   | t :: ts, h, a :: as, hlen => by
       simp only [AdmAList, denoteList, zipPA, List.zip_cons_cons, Bool.and_eq_true,
         traverse_cons_isSome]
       rw [zipPA_iff ts (fun t' ht' => h t' (List.mem_cons_of_mem _ ht')) as
-          (by simpa using hlen),
+          (by simp only [List.length_cons] at hlen; omega),
         h t List.mem_cons_self a]
 
 /-- **`alignPAL` is `alignL`'s row on the read side.** -/

@@ -621,16 +621,17 @@ theorem zipSuf_TSub :
   | _, _, .nil, _, back, hlen, _ => by
       cases back with
       | nil => exact .nil
-      | cons _ _ => simp at hlen
+      | cons _ _ =>
+          exact absurd hlen (by simp only [List.length_cons, List.length_nil]; omega)
   | _, _, @TypedList.cons t ts T Ts μ hty hs, ih, back, hlen, hall => by
       cases back with
-      | nil => simp at hlen
+      | nil => exact absurd hlen (by simp only [List.length_cons, List.length_nil]; omega)
       | cons b bs =>
         refine .cons (ih t (List.mem_cons_self) _ _ hty b (hall (denote t, b) ?_)) ?_
         · simp only [List.map_cons, List.zip_cons_cons]
           exact List.mem_cons_self
         · exact zipSuf_TSub hs (fun t' ht' => ih t' (List.mem_cons_of_mem _ ht'))
-            (by simpa using hlen)
+            (by simp only [List.length_cons] at hlen; omega)
             (fun p hp => hall p (by
               simp only [List.map_cons, List.zip_cons_cons]
               exact List.mem_cons_of_mem _ hp))
