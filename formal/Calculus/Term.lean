@@ -52,6 +52,24 @@ inductive Pred where
   | each    (p : Pred)
   | closure (q : Value → Bool)
 
+/-- **A key block's pattern.** §4's object is a *partition* of the key space: every name falls in
+    exactly one block, and a name in no block is refused. `any` is the one open block: every
+    name the body does not declare. The declared names are therefore subtracted *structurally*,
+    and no well-formedness premise travels with a body.
+
+    **An open block needs no ban list.** A name an open body must refuse is a *declared* name at
+    `optional never`: the key may be absent, and nothing admits it when it is present. So
+    `object({c}, exclude d)` is `{c, d : optional never}` with `any`, and the exclusion needs no
+    second place to live.
+
+    One constructor, no fields, and it is a wrapper rather than nothing on purpose. A key pattern
+    that is not "every undeclared name" — a template or a regular expression — is a second
+    constructor here and no table over bodies moves. `Name` is `String` and so infinite, which is
+    why two open blocks always intersect, and why one block is all a body can ever carry. -/
+inductive KeyPat where
+  | any
+  deriving DecidableEq
+
 mutual
 
 inductive Term where
@@ -109,7 +127,6 @@ inductive Term where
       `array` and `tuple` survive below as *builders*, so a statement that spells either
       keeps its spelling. -/
   | list     (pre : List Term) (spread : Option Term) (suf : List Term)
-  | record   (val : Term)
   | held     (inner : Term) (f : Value → Value) (g : Value → Value)
   | refine   (inner : Term) (p : Pred)
   | legacy   (inner : Term) (r : Attr → Option Value)
@@ -136,21 +153,38 @@ inductive Term where
       can build by accident, and a rule that reads it as the bottom reads that accident as intent. -/
   | never
 
-/-- §4's object payload: the declared names, the field at each, and the policy for
-    everything else. A `mutual` block admits no `structure`, so this is `inductive … | mk`
-    and the projections below are written by hand — three lines, against a `Body`-shaped
-    row in every table over terms. -/
+/-- §4's object payload: the declared names, the slot at each, and the one open block.
+    A `mutual` block admits no `structure`, so this is `inductive … | mk` and the projections
+    below are written by hand — three lines, against a `Body`-shaped row in every table over
+    terms.
+
+    **A body is a partition of the key space.** The declared names are one block each, `wild`
+    is the single open block, and every remaining name is refused. There is no policy that
+    silently drops a name: an undeclared name a body does not claim is a name the body refuses,
+    on the way in and on the way out. -/
 inductive Body where
-  | mk (fields : Finset Name) (f : {k // k ∈ fields} → Field) (rest : Rest)
+  | mk (fields : Finset Name) (f : {k // k ∈ fields} → ObjectSlot) (wild : Option (KeyPat × Term))
 
-inductive Field where
-  | req      (t : Term)
+/-- §4's slot: the two marks, and the stand-in that only a `req` slot can carry.
+
+    **The two marks are two independent bits, and the constructor owns one of them.** A slot
+    answers two questions: is the key present in the *value*, and may the attribute be absent on
+    the *wire*. `req` and `optional` answer the first. `ifMissing` answers the second, and it
+    rides on `req` because that is the only combination the other constructor cannot already
+    state: `optional` admits absence on both sides at once.
+
+    So `req t none` is a name that must be there, and `req t (some v)` is a name that may be
+    absent on the wire and is always present in the value, reading to `v` when the map omits it.
+    That second shape is what a separate `fallback` mark used to say.
+
+    **The stand-in cannot live in the value codec.** `Codec.p` takes an `Attr`, so a codec never
+    sees an absent attribute — absence is not an attribute. `Objects.lean`'s `FieldSem.fb` has
+    always carried the stand-in *beside* the codec for that reason, and this constructor is the
+    syntax that matches it. A reader that widens an attribute's *shape* is `legacy`, and it is a
+    different question with a different home. -/
+inductive ObjectSlot where
+  | req      (t : Term) (ifMissing : Option Value)
   | optional (t : Term)
-  | fallback (t : Term) (v : Value)
-
-inductive Rest where
-  | drop | refuse
-  | codec (t : Term)
 
 end
 
@@ -168,6 +202,12 @@ def Term.array (elem : Term) : Term := .list [] (some elem) []
     number of declared positions. -/
 def Term.tuple (elems : List Term) (tail : Option Term) : Term := .list elems tail []
 
+/-- §4 `(record)`: the object that declares no name and takes every key at one codec. It is the
+    body whose only block is the open one, so it stopped being a constructor when the open block
+    became a block like any other. -/
+def Term.record (val : Term) : Term :=
+  .object (.mk ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) (some (.any, val)))
+
 
 /-! ## `Body`'s projections
 
@@ -184,28 +224,22 @@ projections and keeps the equation compiler's iota reductions available. -/
 def Body.fields : Body → Finset Name
   | .mk fields _ _ => fields
 
-def Body.at : (b : Body) → {k // k ∈ b.fields} → Field
+def Body.at : (b : Body) → {k // k ∈ b.fields} → ObjectSlot
   | .mk _ f _ => f
 
-def Body.rest : Body → Rest
-  | .mk _ _ rest => rest
+def Body.wild : Body → Option (KeyPat × Term)
+  | .mk _ _ wild => wild
 
-@[simp] theorem Body.fields_mk (fields : Finset Name) (f : {k // k ∈ fields} → Field)
-    (rest : Rest) : (Body.mk fields f rest).fields = fields := rfl
+@[simp] theorem Body.fields_mk (fields : Finset Name) (f : {k // k ∈ fields} → ObjectSlot)
+    (wild : Option (KeyPat × Term)) : (Body.mk fields f wild).fields = fields := rfl
 
-@[simp] theorem Body.rest_mk (fields : Finset Name) (f : {k // k ∈ fields} → Field)
-    (rest : Rest) : (Body.mk fields f rest).rest = rest := rfl
+@[simp] theorem Body.wild_mk (fields : Finset Name) (f : {k // k ∈ fields} → ObjectSlot)
+    (wild : Option (KeyPat × Term)) : (Body.mk fields f wild).wild = wild := rfl
 
-@[simp] theorem Body.at_mk (fields : Finset Name) (f : {k // k ∈ fields} → Field)
-    (rest : Rest) : (Body.mk fields f rest).at = f := rfl
+@[simp] theorem Body.at_mk (fields : Finset Name) (f : {k // k ∈ fields} → ObjectSlot)
+    (wild : Option (KeyPat × Term)) : (Body.mk fields f wild).at = f := rfl
 
-/-- `codec` is the policy that *holds* an undeclared name; `drop` and `refuse` both refuse
-    it on the way out. -/
-def Rest.isOpen : Rest → Bool
-  | .codec _ => true
-  | .drop | .refuse => false
-
-/-- An **open object**: one whose rest policy is a codec, so an undeclared name is held
+/-- An **open object**: one that carries the open block, so a name it does not declare is held
     rather than refused.
 
     §5's closed-option dischargers exclude exactly these, and they used to say so with three
@@ -213,24 +247,21 @@ def Rest.isOpen : Rest → Bool
     seven statements. The payload is one thing now, so the exclusion is one decidable
     question about it. `isOpenObject_eq_false` below is the form the disequality had. -/
 def Term.isOpenObject : Term → Bool
-  | .object b => b.rest.isOpen
+  | .object b => b.wild.isSome
   | _ => false
 
 /-- The old spelling of the premise, so a reader can see the two say the same thing. -/
 theorem Term.isOpenObject_eq_false {t : Term} :
-    t.isOpenObject = false ↔ ∀ b tr, t = .object b → b.rest ≠ .codec tr := by
+    t.isOpenObject = false ↔ ∀ b, t = .object b → b.wild = none := by
   constructor
-  · intro h b tr hb hr
+  · intro h b hb
     subst hb
-    simp only [Term.isOpenObject, hr, Rest.isOpen] at h
-    exact absurd h (by simp)
+    cases hw : b.wild with
+    | none => rfl
+    | some w => simp only [Term.isOpenObject, hw, Option.isSome] at h; exact absurd h (by simp)
   · intro h
     cases t with
-    | object b =>
-      cases hr : b.rest with
-      | drop => simp [Term.isOpenObject, hr, Rest.isOpen]
-      | refuse => simp [Term.isOpenObject, hr, Rest.isOpen]
-      | codec tr => exact absurd hr (h b tr rfl)
+    | object b => simp only [Term.isOpenObject, h b rfl, Option.isSome]
     | _ => rfl
 
 
@@ -254,29 +285,28 @@ def Term.depth : Term → Nat
   -- `set` is a **leaf** since its base became an index: there is no element term to
   -- measure, so it sits with the other ground shapes rather than costing a layer.
   | .literal _ _ | .custom _ _ | .opaq _ | .set _ | .never => 1
-  | .record t | .lazy t => Term.depth t + 1
+  | .lazy t => Term.depth t + 1
   | .held t _ _ | .refine t _ | .legacy t _ => Term.depth t + 1
   | .list pre sp suf =>
       max (Term.depthL pre) (max (Term.depthO sp) (Term.depthL suf)) + 1
   -- one companion, like every other non-leaf row
   | .object b => Body.depth b + 1
   | .union opts => Term.depthL opts + 1
-/-- The payload's own budget: the field table is a key *set* with a function on it, so its
-    layer is the largest field budget over the key set — a `Finset.sup`, where a list would be
-    a fold — against the rest policy's. This is the companion `Field.depth` and `Rest.depth`
-    were always missing: the object row used to inline it, which is why the three inequality
-    lemmas below had to quantify over three components. -/
+/-- The payload's own budget: the slot table is a key *set* with a function on it, so its
+    layer is the largest slot budget over the key set — a `Finset.sup`, where a list would be
+    a fold — against the open block's. This is the companion `ObjectSlot.depth` and
+    `Body.wildDepth` were always missing: the object row used to inline it, which is why the
+    three inequality lemmas below had to quantify over three components. -/
 def Body.depth : Body → Nat
-  | .mk fields f rest =>
-      max (fields.attach.sup fun k => Field.depth (f k)) (Rest.depth rest) + 1
+  | .mk fields f wild =>
+      max (fields.attach.sup fun k => ObjectSlot.depth (f k)) (Body.wildDepth wild) + 1
 
-def Field.depth : Field → Nat
-  | .req t | .optional t => Term.depth t + 1
-  | .fallback t _ => Term.depth t + 1
+def ObjectSlot.depth : ObjectSlot → Nat
+  | .req t _ | .optional t => Term.depth t + 1
 
-def Rest.depth : Rest → Nat
-  | .drop | .refuse => 1
-  | .codec t => Term.depth t + 1
+def Body.wildDepth : Option (KeyPat × Term) → Nat
+  | none => 1
+  | some (_, t) => Term.depth t + 1
 
 def Term.depthL : List Term → Nat
   | [] => 1
@@ -305,21 +335,22 @@ theorem Term.depthO_le : ∀ {tail : Option Term} {t}, t ∈ tail → Term.depth
     and the reason this measure exists. Stated at `Body`, where it belongs: it is a fact about a
     key set and a function on it, and mentions no `Term` at all. -/
 theorem Body.depth_lt_field : ∀ (b : Body) (k : {k // k ∈ b.fields}),
-    Field.depth (b.at k) < Body.depth b
+    ObjectSlot.depth (b.at k) < Body.depth b
   | .mk fields f _, k => by
-      have : (fun k => Field.depth (f k)) k ≤ fields.attach.sup fun k => Field.depth (f k) :=
-        Finset.le_sup (f := fun k => Field.depth (f k)) (Finset.mem_attach _ k)
+      have : (fun k => ObjectSlot.depth (f k)) k ≤
+          fields.attach.sup fun k => ObjectSlot.depth (f k) :=
+        Finset.le_sup (f := fun k => ObjectSlot.depth (f k)) (Finset.mem_attach _ k)
       simp only at this
       simp only [Body.depth, Body.at]
       omega
 
-/-- …and the rest policy's codec, the other half of the payload. -/
-theorem Body.depth_lt_rest : ∀ (b : Body) {t : Term}, b.rest = .codec t →
+/-- …and the open block's codec, the other half of the payload. -/
+theorem Body.depth_lt_rest : ∀ (b : Body) {p : KeyPat} {t : Term}, b.wild = some (p, t) →
     Term.depth t < Body.depth b
-  | .mk _ _ _, _, h => by
-      simp only [Body.rest] at h
+  | .mk _ _ _, _, _, h => by
+      simp only [Body.wild] at h
       subst h
-      simp only [Body.depth, Rest.depth]
+      simp only [Body.depth, Body.wildDepth]
       omega
 
 /-- The body is strictly shallower than the object term — one layer, by `rfl` on the measure. -/
@@ -329,29 +360,27 @@ theorem Term.depth_lt_object_body (b : Body) : Body.depth b < Term.depth (.objec
 /-- A declared field's *layer* against the object's, kept under its old name: every downstream
     citation is of this, and the payload's own version is `Body.depth_lt_field`. -/
 theorem Term.depth_lt_object (b : Body) (k : {k // k ∈ b.fields}) :
-    Field.depth (b.at k) < Term.depth (.object b) :=
+    ObjectSlot.depth (b.at k) < Term.depth (.object b) :=
   lt_trans (Body.depth_lt_field b k) (Term.depth_lt_object_body b)
 
-/-- …and the three field shapes, which is what a proof recursing into a declared field needs.
-    A row that matched `.object (.mk fields f rest)` discharges these with `f k = .req t` in
-    hand: `(Body.mk fields f rest).at k` is `f k` by `rfl`, so `assumption` closes it. -/
+/-- …and the two slot shapes, which is what a proof recursing into a declared slot needs.
+    A row that matched `.object (.mk fields f wild)` discharges these with `f k = .req t m` in
+    hand: `(Body.mk fields f wild).at k` is `f k` by `rfl`, so `assumption` closes it.
+
+    There were three of these while `fallback` was a third mark. It is `req`'s `ifMissing` now,
+    so the `req` lemma covers both and the third one is gone rather than renamed. -/
 theorem Term.depth_lt_object_req {b : Body} (k : {k // k ∈ b.fields}) {t : Term}
-    (h : b.at k = .req t) : Term.depth t < Term.depth (.object b) := by
+    {m : Option Value} (h : b.at k = .req t m) : Term.depth t < Term.depth (.object b) := by
   have h1 := Term.depth_lt_object b k
-  rw [h] at h1; simp only [Field.depth] at h1; omega
+  rw [h] at h1; simp only [ObjectSlot.depth] at h1; omega
 
 theorem Term.depth_lt_object_opt {b : Body} (k : {k // k ∈ b.fields}) {t : Term}
     (h : b.at k = .optional t) : Term.depth t < Term.depth (.object b) := by
   have h1 := Term.depth_lt_object b k
-  rw [h] at h1; simp only [Field.depth] at h1; omega
+  rw [h] at h1; simp only [ObjectSlot.depth] at h1; omega
 
-theorem Term.depth_lt_object_fb {b : Body} (k : {k // k ∈ b.fields}) {t : Term} {v : Value}
-    (h : b.at k = .fallback t v) : Term.depth t < Term.depth (.object b) := by
-  have h1 := Term.depth_lt_object b k
-  rw [h] at h1; simp only [Field.depth] at h1; omega
-
-/-- The rest policy's codec against the object's layer, for the same reason. -/
-theorem Term.depth_lt_object_rest {b : Body} {t : Term} (h : b.rest = .codec t) :
+/-- The open block's codec against the object's layer, for the same reason. -/
+theorem Term.depth_lt_object_rest {b : Body} {p : KeyPat} {t : Term} (h : b.wild = some (p, t)) :
     Term.depth t < Term.depth (.object b) :=
   lt_trans (Body.depth_lt_rest b h) (Term.depth_lt_object_body b)
 
