@@ -1000,23 +1000,18 @@ export const arbitraryOf = (
             const element = codecOfTerm({ kind: def.base })
             return someSet(rng, element, () => arbitraryOf(element, rng, size))
         }
-        case 'array':
-            return Array.from({ length: Math.floor(rng() * 3) }, () =>
-                arbitraryOf(codecOfTerm(def.elem), rng, Math.max(0, size - 1)),
-            )
-        case 'tuple': {
-            const fixed = def.elems.map((element) =>
-                arbitraryOf(codecOfTerm(element), rng, Math.max(0, size - 1)),
-            )
-            if (!def.tail) return fixed
-            // a tail has no arity to hit, so its length is generated like a list's
-            const tail = def.tail
-            return [
-                ...fixed,
-                ...Array.from({ length: Math.floor(rng() * 3) }, () =>
-                    arbitraryOf(codecOfTerm(tail), rng, Math.max(0, size - 1)),
-                ),
-            ]
+        case 'list': {
+            const one = (element: Term) =>
+                arbitraryOf(codecOfTerm(element), rng, Math.max(0, size - 1))
+            const spread = def.spread
+            // the declared positions have an arity to hit; the spread has none, so its length is
+            // generated the way a list's always was
+            const middle = spread
+                ? Array.from({ length: Math.floor(rng() * 3) }, () =>
+                      one(spread),
+                  )
+                : []
+            return [...def.pre.map(one), ...middle, ...def.suf.map(one)]
         }
         case 'record':
             return Object.fromEntries(
@@ -1254,17 +1249,30 @@ export const shrinkOf = (
                 shrinkAt(codecOfTerm({ kind: def.base })),
                 1,
             ).map((shrunk) => new Set(shrunk as readonly unknown[]))
-        case 'array':
-            return shrinkSequence(
-                value as readonly unknown[],
-                shrinkAt(codecOfTerm(def.elem)),
-                0,
-            )
-        case 'tuple':
-            // the fixed arity cannot reduce, so only those elements do. A tail could also shorten,
-            // and does not: dropping one changes the length, which the fixed part forbids reasoning
-            // about here — the elements are where a counterexample actually lives
-            return def.elems.flatMap((element, i) =>
+        case 'list':
+            // with no declared position the length is free, so the sequence shrinks
+            if (def.pre.length === 0 && def.suf.length === 0 && def.spread)
+                return shrinkSequence(
+                    value as readonly unknown[],
+                    shrinkAt(codecOfTerm(def.spread)),
+                    0,
+                )
+            // a declared arity cannot reduce, so only the declared positions do. A spread could
+            // also shorten, and does not: dropping one changes the length, which the declared part
+            // forbids reasoning about here — the elements are where a counterexample actually lives
+            return [
+                ...def.pre.map((element, i) => [element, i] as const),
+                // the suffix aligns from the right, so its positions are counted back from the end
+                ...def.suf.map(
+                    (element, i) =>
+                        [
+                            element,
+                            (value as readonly unknown[]).length -
+                                def.suf.length +
+                                i,
+                        ] as const,
+                ),
+            ].flatMap(([element, i]) =>
                 shrinkOf(
                     codecOfTerm(element),
                     (value as readonly unknown[])[i],
@@ -1963,13 +1971,12 @@ const unionsIn = (subject: AnyCodec): readonly UnionSite[] => {
                 return
             case 'set':
                 return inner(codecOfTerm({ kind: def.base }))
-            case 'array':
-                return inner(codecOfTerm(def.elem))
             case 'record':
                 return inner(codecOfTerm(def.val))
-            case 'tuple':
-                def.elems.forEach((element) => inner(codecOfTerm(element)))
-                return inner(def.tail && codecOfTerm(def.tail))
+            case 'list':
+                def.pre.forEach((element) => inner(codecOfTerm(element)))
+                def.suf.forEach((element) => inner(codecOfTerm(element)))
+                return inner(def.spread && codecOfTerm(def.spread))
             case 'object': {
                 const { fields, rest } = def.body
                 Object.values(fields).forEach((field) =>

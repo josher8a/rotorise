@@ -1003,30 +1003,6 @@ export const denote = (def: Term): Pair => {
         case 'binary':
             return groundCodec('binary', 'B', 'a `Uint8Array`', "a 'B'")
         /**
-         * §3 `(array)`: a list carried into an `L`, with the element's pair run entrywise.
-         * `arrayCodec_eq` is the lemma, and the traversal is `every` here where the model writes
-         * `entrywise` — one word for one concept, and this file already had it.
-         *
-         * The element's own methods are handed over rather than a closure around them: a closure
-         * per call to encode a list is a closure per list in every item written. And `every`
-         * iterates whatever is iterable, so a string arrived as its characters until the shape was
-         * asked first — which is what the term's `array` row asks, and now what this asks too.
-         */
-        case 'array': {
-            const items = codecOfTerm(def.elem)
-            return carriedCodec(
-                (value): value is readonly never[] => Array.isArray(value),
-                'L',
-                (value) =>
-                    new CodecError(
-                        `${describeShape(value)} is not an array, and \`array\` writes an 'L' — a codec's input is typed, so this is a value that reached \`encode\` past its type`,
-                    ),
-                (list) => every(list, items.encode),
-                (carried: readonly AttributeValue[]) =>
-                    every(carried, items.decode),
-            )
-        }
-        /**
          * §3 `(record)`: the same construction as `array` at the other product.
          * `recordCodec_e_eq` is the lemma, and the two rows differ in exactly three things — the
          * shape they test, the member they carry, and whether the traversal walks positions or
@@ -1053,50 +1029,83 @@ export const denote = (def: Term): Pair => {
             )
         }
         /**
-         * §3 `(tuple)` and `(tuple-tail)` in one row, which is what the constructor carries.
-         * `tupleCodec_eq` is the lemma and `align_eq_some` is what settles the tail: the arity
-         * test comes **before** the positions, because a list of the wrong length has no
-         * entrywise reading at all. `align` is the model's name for that step; here it is the two
-         * length tests, and they are the same fact — a tuple with a tail aligns at *at least* its
-         * fixed arity, one without at exactly it.
+         * §3 `(list)`: the one positional container, with the arity test before any position.
          *
-         * A `Uint8Array` of the right length has the right `length` and is not a tuple, which is
-         * what the length tests alone could not say. The term's `tuple` row asks `Array.isArray`
+         * `arrayCodec_eq` and `tupleCodec_eq` are the lemmas for the two builder shapes, and
+         * `align_eq_some` is what settles the spread: the arity test comes **before** the
+         * positions, because a list of the wrong length has no entrywise reading at all. `align`
+         * is the model's name for that step; here it is the two length tests, and they are the
+         * same fact — a list with a spread aligns at *at least* its declared positions, one
+         * without at exactly them.
+         *
+         * A `Uint8Array` of the right length has the right `length` and is not a list, which is
+         * what the length tests alone could not say. The term's `list` row asks `Array.isArray`
          * before it counts, and so does this, which is what makes the arity messages mean what
          * they say.
+         *
+         * The element codecs are handed over rather than closed over per call: a closure per call
+         * to encode a list is a closure per list in every item written. `every` iterates whatever
+         * is iterable, so a string arrived as its characters until the shape was asked first.
+         *
+         * The shape word comes from the term, because the term is what says which shape it is:
+         * no declared position and one spread is what `array` builds, an empty suffix is what
+         * `tuple` builds, and everything else only `list` can spell.
          */
-        case 'tuple': {
-            const items = def.elems.map((element) => codecOfTerm(element))
-            const tail = def.tail
+        case 'list': {
+            const pre = def.pre.map((element) => codecOfTerm(element))
+            const suf = def.suf.map((element) => codecOfTerm(element))
+            const spread = def.spread ? codecOfTerm(def.spread) : undefined
+            const declared = pre.length + suf.length
+            const shape =
+                declared === 0 && spread
+                    ? 'array'
+                    : suf.length === 0
+                      ? 'tuple'
+                      : 'list'
             /** `align`: the arity test, which comes before any position is read. */
             const aligned = (
                 length: number,
                 say: (arity: number) => string,
             ): CodecError | undefined =>
-                (tail ? length < items.length : length !== items.length)
-                    ? new CodecError(`${say(items.length)}, found ${length}`)
+                (spread ? length < declared : length !== declared)
+                    ? new CodecError(`${say(declared)}, found ${length}`)
                     : undefined
-            const atLeast = tail ? 'at least ' : ''
-            const tailItems = tail ? codecOfTerm(tail) : undefined
-            const at = (index: number) =>
-                items[index] ?? (tailItems as AnyCodec)
+            const atLeast = spread ? 'at least ' : ''
+            /**
+             * The codec at one position, which needs the **length** as well as the index: the
+             * suffix aligns from the right, so which positions it holds depends on how long the
+             * value is. The prefix and the suffix cannot overlap here, because `aligned` has
+             * already turned down every length below `declared`.
+             */
+            const at = (index: number, length: number): AnyCodec =>
+                index < pre.length
+                    ? (pre[index] as AnyCodec)
+                    : index >= length - suf.length
+                      ? (suf[index - (length - suf.length)] as AnyCodec)
+                      : (spread as AnyCodec)
             return carriedCodec(
                 (value): value is readonly never[] => Array.isArray(value),
                 'L',
                 (value) =>
                     new CodecError(
-                        `${describeShape(value)} is not an array, and \`tuple\` writes an 'L' — a codec's input is typed, so this is a value that reached \`encode\` past its type`,
+                        `${describeShape(value)} is not an array, and \`${shape}\` writes an 'L' — a codec's input is typed, so this is a value that reached \`encode\` past its type`,
                     ),
                 (held) =>
                     aligned(
                         held.length,
                         (arity) => `expected ${atLeast}${arity} elements`,
-                    ) ?? every(held, (one, index) => at(index).encode(one)),
+                    ) ??
+                    every(held, (one, index) =>
+                        at(index, held.length).encode(one),
+                    ),
                 (carried: readonly AttributeValue[]) =>
                     aligned(
                         carried.length,
                         (arity) => `expected a list of ${atLeast}${arity}`,
-                    ) ?? every(carried, (one, index) => at(index).decode(one)),
+                    ) ??
+                    every(carried, (one, index) =>
+                        at(index, carried.length).decode(one),
+                    ),
             )
         }
         /**

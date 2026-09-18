@@ -1401,6 +1401,7 @@ describe('the published surface', () => {
             'held',
             'lazy',
             'legacy',
+            'list',
             'nullValue',
             'nullable',
             'number',

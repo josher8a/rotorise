@@ -379,13 +379,17 @@ const childrenOf = (
         }
         case 'record':
             return one(codecOfTerm(def.val))
-        case 'array':
-            return one(codecOfTerm(def.elem))
         // a set is unordered, so no document path addresses a member of one — `set` never offered
         // a child either, and refusing here is what keeps a meaningless path from compiling
-        case 'tuple': {
-            // a position past the fixed part is a tail element, where there is a tail
-            const at = def.elems[Number(segment)] ?? def.tail
+        case 'list': {
+            // **A suffix refuses every position past the prefix.** Which codec holds position `n`
+            // depends on how long the value is, because the suffix aligns from the right, and a
+            // path is written without a length. The prefix is the part a path can address whatever
+            // the value, so that is the part addressed here
+            const index = Number(segment)
+            const at =
+                def.pre[index] ??
+                (def.suf.length === 0 ? def.spread : undefined)
             return one(at ? codecOfTerm(at) : undefined)
         }
         case 'union':
@@ -935,8 +939,10 @@ export const array = <const C extends AnyCodec>(
 ): AttributeCodec<readonly Decoded<C>[], L<AttributeOf<C>>> => {
     type T = Decoded<C>
     return codecOfTerm<readonly T[], L<AttributeOf<C>>>({
-        kind: 'array',
-        elem: termOf(element as unknown as AnyCodec),
+        kind: 'list',
+        pre: [],
+        spread: termOf(element as unknown as AnyCodec),
+        suf: [],
     })
 }
 
@@ -976,16 +982,21 @@ type TupleNeverSlot<Cs extends readonly unknown[]> = Cs extends readonly [
  * and `never` already names that term: a declaration with two spellings, one of them a trap, is
  * the shape a constructor should not have.
  */
-type NoNeverSlot<Cs extends readonly unknown[]> =
-    TupleNeverSlot<Cs> extends true
-        ? ErrorMessage<'[tuple] a fixed position is `never`, so nothing fills it and the tuple holds no value at all. Use `never` itself if that is what you meant'>
-        : unknown
+type NoNeverSlot<
+    Cs extends readonly unknown[],
+    Where extends string = 'tuple',
+> = TupleNeverSlot<Cs> extends true
+    ? ErrorMessage<`[${Where}] a fixed position is \`never\`, so nothing fills it and the ${Where} holds no value at all. Use \`never\` itself if that is what you meant`>
+    : unknown
 
 /**
  * A fixed-length, heterogeneous list, as `L`.
  *
- * `list` gives `readonly T[]`, which cannot say that a route is one step or exactly two. Decode
+ * `array` gives `readonly T[]`, which cannot say that a route is one step or exactly two. Decode
  * checks the length, because a tuple whose arity is wrong is not the type it claims to be.
+ *
+ * A builder over {@link list}: the declared elements are the prefix and a `rest` element is the
+ * spread. {@link list} is what says a fixed position after the spread.
  */
 export const tuple = <const Cs extends readonly (AnyCodec | AnyRest)[]>(
     // asked of the union of the elements rather than mapped over them: one instantiation instead of
@@ -1027,9 +1038,15 @@ export const tuple = <const Cs extends readonly (AnyCodec | AnyRest)[]>(
      * **A position nothing fills makes the whole tuple unconstructible.**
      *
      * The model types `tuple [never]` and gives it an empty held set, which is correct as a model.
-     * Here it is a declaration with a second spelling for `never`, and one of the two is a trap:
-     * every fixed position aligns whatever the tail, so a `never` anywhere in the fixed part, or a
-     * `never` tail, refuses every value. The type says so too; this is the cast's path.
+     * Here it is a declaration with a second spelling for `never`, and one of the two is a trap.
+     *
+     * The two spellings differ: a declared position at the bottom does refuse every value, which is
+     * `Term.listOf`'s normalisation, while a **tail** at the bottom is the tuple of the declared
+     * positions alone, because a value of exactly the declared length omits every tail position.
+     * So the fixed part is `never` itself written twice, and the tail is `tuple(...)` without the
+     * tail written twice. Both are refused, and for the second reason rather than the first: the
+     * earlier wording here said a `never` tail refuses every value, and porting `listOf` disproved
+     * it. The type says so too; this is the cast's path.
      */
     const deadAt = items.findIndex((item) => termOf(item).kind === 'never')
     if (deadAt !== -1 || tail?.kind === 'never') {
@@ -1041,11 +1058,116 @@ export const tuple = <const Cs extends readonly (AnyCodec | AnyRest)[]>(
     // as with `record` and `map`, the cast keeps the shape each position writes, which
     // `Attribute<'L'>` would flatten to "some list"
     return codecOfTerm({
-        kind: 'tuple',
-        elems: items.map(termOf),
-        tail,
+        kind: 'list',
+        pre: items.map(termOf),
+        ...(tail ? { spread: tail } : {}),
+        suf: [],
     }) as unknown as AttributeCodec<TupleOf<Cs>, L<TupleWrites<Cs>>>
 }
+
+/**
+ * A positional container, as a prefix, at most one spread, and a suffix.
+ *
+ * `array` and `tuple` are the two shapes a single word already names, and neither can say
+ * `[A, B, ...C[], D]` — a fixed position *after* a spread. This is the constructor of the term both
+ * build, so it says every shape they say and that one too.
+ *
+ * **The spread is one parameter, so two spreads have no spelling.** `tuple` takes its tail as a
+ * marker inside a variadic parameter list, which is why it owes {@link RestGoesLast} a refusal;
+ * here the position of the argument says which part it is, and a parameter list that carries two
+ * spreads does not typecheck. A value of length `n` is held when `n` is at least the declared
+ * positions: the prefix aligns from the left, the suffix from the right, and the middle goes
+ * through the spread.
+ *
+ * @example
+ * ```ts
+ * list([string, number], decimal, [boolean])  // readonly [string, number, ...string[], boolean]
+ * list([string, number])                      // readonly [string, number], as `tuple` gives
+ * list([], string)                            // readonly string[], as `array` gives
+ * ```
+ */
+export const list = <
+    const Pre extends readonly AnyCodec[],
+    const Sp extends AnyCodec | undefined = undefined,
+    const Suf extends readonly AnyCodec[] = readonly [],
+>(
+    pre: Pre & NoNeverSlot<Pre, 'list'>,
+    spread?: Sp,
+    suf?: Suf & NoNeverSlot<Suf, 'list'>,
+): AttributeCodec<ListOf<Pre, Sp, Suf>, L<ListWrites<Pre, Sp, Suf>>> => {
+    const declared = [
+        ...(pre as readonly AnyCodec[]),
+        ...((suf ?? []) as readonly AnyCodec[]),
+    ]
+    /**
+     * **A declared position nothing fills makes the whole list unconstructible**, and a spread at
+     * the bottom is the same list without the spread.
+     *
+     * The two are different facts and both are a second spelling for something already spelled:
+     * the first is `never`, and the second is this call without its spread. `NoNeverSlot` refuses
+     * the declared positions in the *type*, and a cast defeats the type, so both are refused here.
+     */
+    const deadAt = declared.findIndex((item) => termOf(item).kind === 'never')
+    if (deadAt !== -1) {
+        throw new CodecError(
+            `position ${deadAt} of the declared positions is \`never\`, so nothing fills it and the list holds no value at all — use \`never\` itself if that is what you meant`,
+        )
+    }
+    if (spread && termOf(spread).kind === 'never') {
+        throw new CodecError(
+            'the spread is `never`, so the list holds exactly its declared positions — drop the spread if that is what you meant',
+        )
+    }
+    // as with `record` and `tuple`, the cast keeps the shape each position writes, which
+    // `Attribute<'L'>` would flatten to "some list"
+    return codecOfTerm({
+        kind: 'list',
+        pre: (pre as readonly AnyCodec[]).map(termOf),
+        ...(spread ? { spread: termOf(spread) } : {}),
+        suf: ((suf ?? []) as readonly AnyCodec[]).map(termOf),
+    }) as unknown as AttributeCodec<
+        ListOf<Pre, Sp, Suf>,
+        L<ListWrites<Pre, Sp, Suf>>
+    >
+}
+
+/**
+ * What a list holds: the prefix by position, the spread by repetition, then the suffix by position.
+ *
+ * Written as two branches on the spread rather than as one type with an empty rest, because
+ * `...never[]` in the middle of a tuple type is not the empty middle — it is a tuple no value
+ * inhabits.
+ */
+export type ListOf<
+    Pre extends readonly unknown[],
+    Sp,
+    Suf extends readonly unknown[],
+> = Sp extends AnyCodec
+    ? readonly [
+          ...{ [I in keyof Pre]: Decoded<Pre[I]> },
+          ...Decoded<Sp>[],
+          ...{ [I in keyof Suf]: Decoded<Suf[I]> },
+      ]
+    : readonly [
+          ...{ [I in keyof Pre]: Decoded<Pre[I]> },
+          ...{ [I in keyof Suf]: Decoded<Suf[I]> },
+      ]
+
+/** The same split, on the stored side. */
+export type ListWrites<
+    Pre extends readonly unknown[],
+    Sp,
+    Suf extends readonly unknown[],
+> = Sp extends AnyCodec
+    ? readonly [
+          ...{ [I in keyof Pre]: AttributeOf<Pre[I]> },
+          ...(AttributeOf<Sp> & AttributeValue)[],
+          ...{ [I in keyof Suf]: AttributeOf<Suf[I]> },
+      ]
+    : readonly [
+          ...{ [I in keyof Pre]: AttributeOf<Pre[I]> },
+          ...{ [I in keyof Suf]: AttributeOf<Suf[I]> },
+      ]
 
 /**
  * What a tuple holds: the fixed positions, and then the tail if it has one.

@@ -297,20 +297,148 @@ describe('a union distributes and the survivors carry the certificate', () => {
  * differential this side of the bridge can run without emitting a term: the model states the
  * answer, and this asserts the port gives the same one.
  */
+describe('two list shapes meet by their lengths', () => {
+    const listOf = (
+        pre: readonly Term[],
+        spread: Term | undefined,
+        suf: readonly Term[],
+    ): Term =>
+        spread === undefined
+            ? { kind: 'list', pre, suf }
+            : { kind: 'list', pre, spread, suf }
+
+    /**
+     * **A fixed arity flattens to one prefix of that length.** The side without a spread fixes the
+     * arity, so the answer states that arity and nothing else: keeping the longer prefix and the
+     * longer suffix is wrong there, because the two overhangs collide and there is no spread left
+     * to meet them against.
+     */
+    it('flattens to the fixed arity where one side has no spread', () => {
+        expect(
+            meetTerms(
+                listOf([termOf(string)], termOf(string), []),
+                listOf(
+                    [termOf(string('a')), termOf(string('b'))],
+                    undefined,
+                    [],
+                ),
+            ),
+        ).toEqual(
+            listOf([termOf(string('a')), termOf(string('b'))], undefined, []),
+        )
+    })
+
+    /**
+     * **A length one side refuses is the empty intersection, not a refusal to answer.** The shorter
+     * fixed arity is below the other side's declared positions, so the two share no value and the
+     * meet is the bottom.
+     */
+    it('answers the bottom where the fixed arity is out of the other side reach', () => {
+        expect(
+            meetTerms(
+                listOf([termOf(string), termOf(string)], termOf(string), []),
+                listOf([termOf(string)], undefined, []),
+            ),
+        ).toEqual(bottom)
+    })
+
+    /**
+     * **Two spreading shapes answer where one dominates the other in both coordinates.** This is
+     * the cell the tuple rows used to decline: unequal declared arity with a tail on each side. The
+     * answer is the row at `max p1 p2 + max s1 s2`, which is the exact intersection exactly there.
+     */
+    it('answers unequal arities where each side spreads and one dominates', () => {
+        expect(
+            meetTerms(
+                listOf([termOf(string)], termOf(string), []),
+                listOf(
+                    [termOf(string('a')), termOf(string('b'))],
+                    termOf(string('c')),
+                    [],
+                ),
+            ),
+        ).toEqual(
+            listOf(
+                [termOf(string('a')), termOf(string('b'))],
+                termOf(string('c')),
+                [],
+            ),
+        )
+    })
+
+    /**
+     * **Where neither side dominates, no single list states the intersection, so the meet refuses.**
+     * One side declares more positions at the front and the other more at the back, so the
+     * intersection begins at `max (p1+s1) (p2+s2)` while any list the answer could spell begins at
+     * `max p1 p2 + max s1 s2`. The window between the two is a set of lengths that needs two shapes,
+     * and a refusal is the honest answer rather than the wider list.
+     */
+    it('refuses where neither side dominates the other', () => {
+        expect(
+            meetTerms(
+                listOf([termOf(string), termOf(string)], termOf(string), [
+                    termOf(string),
+                ]),
+                listOf([termOf(string)], termOf(string), [
+                    termOf(string),
+                    termOf(string),
+                ]),
+            ),
+        ).toBeUndefined()
+    })
+
+    /** Equal arity with no spread on either side meets position for position. */
+    it('meets equal arities position for position', () => {
+        expect(
+            meetTerms(
+                listOf([termOf(string), termOf(boolean)], undefined, []),
+                listOf([termOf(string('a')), termOf(boolean)], undefined, []),
+            ),
+        ).toEqual(listOf([termOf(string('a')), termOf(boolean)], undefined, []))
+    })
+
+    /** Unequal arity with no spread on either side shares no value at all. */
+    it('answers the bottom for unequal arities with no spread', () => {
+        expect(
+            meetTerms(
+                listOf([termOf(string)], undefined, []),
+                listOf([termOf(string), termOf(string)], undefined, []),
+            ),
+        ).toEqual(bottom)
+    })
+
+    /**
+     * **A declared position at the bottom empties the list, and a spread at the bottom does not.**
+     * `Term.listOf` is the normalisation, and the difference is what a value of exactly the declared
+     * length does: it fills every declared position and omits every spread position.
+     */
+    it('empties the list where a declared position meets the bottom', () => {
+        expect(
+            meetTerms(
+                listOf([termOf(string)], undefined, []),
+                listOf([termOf(boolean)], undefined, []),
+            ),
+        ).toEqual(bottom)
+    })
+})
+
 describe('the worked pairs the model pins', () => {
     const body = (fields: Record<string, Field>, rest: Body['rest']): Term => ({
         kind: 'object',
         body: { fields, rest },
     })
 
-    /** `array(string) ∧ tuple(string('a'))` — an array against a tuple is the tuple. */
-    it('meets an array against a tuple positionwise', () => {
+    /**
+     * `array(string) ∧ tuple(string('a'))` — a spread against a fixed arity flattens to that
+     * arity, which is `listMeetRow`'s second branch.
+     */
+    it('meets a spread against a fixed arity by flattening to that arity', () => {
         expect(
             meetTerms(
-                { kind: 'array', elem: termOf(string) },
-                { kind: 'tuple', elems: [termOf(string('a'))] },
+                { kind: 'list', pre: [], spread: termOf(string), suf: [] },
+                { kind: 'list', pre: [termOf(string('a'))], suf: [] },
             ),
-        ).toEqual({ kind: 'tuple', elems: [termOf(string('a'))] })
+        ).toEqual({ kind: 'list', pre: [termOf(string('a'))], suf: [] })
     })
 
     /** A refinement carries the cell, and so does a container: a refusal survives the map. */
@@ -334,8 +462,8 @@ describe('the worked pairs the model pins', () => {
         ).toBeUndefined()
         expect(
             meetTerms(
-                { kind: 'array', elem: termOf(string) },
-                { kind: 'array', elem: termOf(decimal) },
+                { kind: 'list', pre: [], spread: termOf(string), suf: [] },
+                { kind: 'list', pre: [], spread: termOf(decimal), suf: [] },
             ),
         ).toBeUndefined()
     })
