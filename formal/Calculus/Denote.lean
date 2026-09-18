@@ -164,8 +164,8 @@ def denote : Term → Codec
   -- §2's degenerate codec is the bottom exactly: empty domains, and the laws hold vacuously
   | .never => Codec.empty
 
-/-- The payload's semantics: the field table and the rest policy, each through its own
-    companion. This is the third companion of `denote`, alongside `fieldSem` and `restSem`, and
+/-- The payload's semantics: the slot table and the open block, each through its own
+    companion. This is the third companion of `denote`, alongside `fieldSem` and `wildSem`, and
     it exists for the same reason they do — the recursion has to be passed *applied*. Before
     `Body`, `denote`'s row inlined it, which is why nothing else could name "the codec an
     object payload denotes" without repeating the pair. -/

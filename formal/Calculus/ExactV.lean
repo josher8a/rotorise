@@ -21,7 +21,7 @@ subterms compute — which is what `denote` does with codecs one level down. The
 matter of taste: `Term.object`'s field table is a **function**, `sizeOf` is blind to functions,
 and a well-founded recursion therefore cannot reach a field's term. A structural recursion can,
 and a structural recursion is what this shape buys — the same reason `denote` is structural and
-`fieldSem`/`restSem` are its companions rather than its arguments.
+`fieldSem`/`wildSem` are its companions rather than its arguments.
 -/
 
 /-- A value-side row, once the subterms' rows are known. -/
@@ -61,9 +61,8 @@ def alignPL (pre : List VP) (sp : Option VP) (suf : List VP) (vs : List Value) :
   alignP pre sp (vs.take (vs.length - suf.length))
     && zipP suf (vs.drop (vs.length - suf.length))
 
-/-- `entryCodec`'s row: the field a name declares, or else the rest policy's. `none` is an
-    undeclared name under `drop` or `refuse` — which the *write* side refuses, `drop` being a
-    read-side filter. -/
+/-- `entryCodec`'s row: the slot a name declares, or else the open block's. `none` is an
+    undeclared name in a body that declares no open block, and both sides refuse it. -/
 def entryP (fs : MapOf VP) (rp : Option VP) (k : Name) : Option VP :=
   match fs.at k with | some P => some P | none => rp
 
@@ -75,7 +74,7 @@ def objAdmV (fs : MapOf VP) (rp : Option VP) (keys : Finset Name)
 
 /-- `valPresentB`'s guard, read off the *term*'s field table: only `optional` may be absent.
     Decidable over a `Finset Name`, which is why the excuse that named it never held. -/
-def valPresentT (fields : Finset Name) (fld : {k // k ∈ fields} → Field)
+def valPresentT (fields : Finset Name) (fld : {k // k ∈ fields} → ObjectSlot)
     (keys : Finset Name) : Bool :=
   decide (∀ k : {k // k ∈ fields},
     (match fld k with | .optional _ => true | _ => decide (k.1 ∈ keys)) = true)
@@ -225,11 +224,6 @@ noncomputable def Adm : Term → Value → Bool
   | .custom ce _ => fun v => (ce v).isSome
   -- the bottom admits nothing, and the row is that sentence
   | .never => fun _ => false
-  -- `record` needs no list companion either: `M`'s entries are a function on the key
-  -- set, so "every entry admits" is one `decide` over that set, the way the three `set`
-  -- rows are one `decide` over theirs.
-  | .record c => fun v =>
-      match v with | .map _ f => decide (∀ k, Adm c (f k) = true) | _ => false
   | .refine t p => fun v => Adm t v && p.eval v
   | .legacy t _ => Adm t
   | .lazy t     => Adm t
@@ -277,31 +271,29 @@ noncomputable def Adm : Term → Value → Bool
   | .opaq lossy => fun v => ((opaqCodecω lossy).e v).isSome
 
 /-- The payload's row: the declared names are present, and every present name's value is
-    admitted by its field or by the rest policy. The companion `AdmField` and `AdmRest`
+    admitted by its slot or by the open block. The companion `AdmField` and `AdmWild`
     were missing — `Adm`'s object row inlined it, so the one place that says what an object
     payload admits was a row of a table rather than a definition. -/
 noncomputable def AdmBody : Body → VP
-  | .mk fields fld rest => fun v =>
+  | .mk fields fld wild => fun v =>
       match v with
       | .map keys g =>
           valPresentT fields fld keys &&
-          objAdmV ⟨fields, fun k => AdmField (fld k)⟩ (AdmRest rest) keys g
+          objAdmV ⟨fields, fun k => AdmField (fld k)⟩ (AdmWild wild) keys g
       | _ => false
 
-/-- A field's row is its term's; the presence marker is `valPresentT`'s business, not this
-    one's. Mirrors `fieldSem`, and for the same reason: the recursion has to be passed
-    *applied*. -/
-noncomputable def AdmField : Field → VP
-  | .req t => Adm t
+/-- A slot's row is its term's; the presence marker is `valPresentT`'s business and the
+    stand-in is `AdmA`'s, so neither reaches this one. Mirrors `fieldSem`, and for the same
+    reason: the recursion has to be passed *applied*. -/
+noncomputable def AdmField : ObjectSlot → VP
+  | .req t _ => Adm t
   | .optional t => Adm t
-  | .fallback t _ => Adm t
 
-/-- The rest policy's row, where it has one — `rcOf`'s mirror. `drop` and `refuse` have
-    none, and an undeclared name is therefore refused on the way *out* under both. -/
-noncomputable def AdmRest : Rest → Option VP
-  | .drop => none
-  | .refuse => none
-  | .codec t => some (Adm t)
+/-- The open block's row, where the body has one — `rcOf`'s mirror. A body with no open
+    block refuses, so an undeclared name is refused on the way *out* as well. -/
+noncomputable def AdmWild : Option (KeyPat × Term) → Option VP
+  | none => none
+  | some (_, t) => some (Adm t)
 
 /-- The options' rows, in order — `denoteList`'s mirror. -/
 noncomputable def AdmList : List Term → List VP
@@ -393,9 +385,9 @@ def ExactVO : Option Term → Prop
   | none => True
   | some t => ExactV t
 
-def ExactVR : Rest → Prop
-  | .drop | .refuse => True
-  | .codec t => ExactV t
+def ExactVW : Option (KeyPat × Term) → Prop
+  | none => True
+  | some (_, t) => ExactV t
 
 theorem exactVL_mem : ∀ (ts : List Term), ExactVL ts → ∀ t ∈ ts, ExactV t
   | [], _, t, ht => absurd ht (by simp)
@@ -410,12 +402,12 @@ theorem exactVO_mem : ∀ (tail : Option Term), ExactVO tail → ∀ t ∈ tail,
       have heq : t0 = t := by simpa using ht
       subst heq; exact h
 
-theorem exactVR_codec : ∀ (rest : Rest), ExactVR rest → ∀ t, rest = .codec t → ExactV t
-  | .drop, _, t, h => nomatch h
-  | .refuse, _, t, h => nomatch h
-  | .codec t0, h, t, hc => by
-      have : t = t0 := by injection hc.symm
-      subst this; exact h
+theorem exactVW_codec : ∀ (wild : Option (KeyPat × Term)), ExactVW wild →
+    ∀ p t, wild = some (p, t) → ExactV t
+  | none, _, _, t, h => nomatch h
+  | some (_, t0), h, _, t, hc => by
+      simp only [Option.some.injEq, Prod.mk.injEq] at hc
+      exact hc.2 ▸ h
 
 /-- A traversal succeeds exactly when every entry does. -/
 theorem traverse_isSome_iff {α β : Type} (f : α → Option β) : ∀ xs : List α,
@@ -625,47 +617,52 @@ theorem ExactV_tuple {ts : List Term} {tail : Option Term}
 theorem ExactV_array {c : Term} (hc : ExactV c) : ExactV (.array c) :=
   ExactV_list (by simp) (by simpa using hc) (by simp)
 
-/-- A field's row is exact when the term it carries is. -/
-def ExactField (fd : Field) : Prop :=
+/-- A slot's row is exact when the term it carries is. -/
+def ExactField (fd : ObjectSlot) : Prop :=
   ∀ v, AdmField fd v = true ↔ (((fieldSem fd).codec).e v).isSome
 
-theorem valPresentT_eq (fields : Finset Name) (fld : {k // k ∈ fields} → Field)
+theorem valPresentT_eq (fields : Finset Name) (fld : {k // k ∈ fields} → ObjectSlot)
     (keys : Finset Name) :
     valPresentT fields fld keys = valPresentB ⟨fields, fun k => fieldSem (fld k)⟩ keys := by
   simp only [valPresentT, valPresentB]
   congr 1
   apply propext
-  constructor <;> intro h k <;> have := h k <;> cases hfd : fld k <;>
-    simp_all [valPresentAt, fieldSem]
+  -- `fieldSem (.req t m)` does not reduce while `m` is a variable, so the `req` row splits
+  -- on the stand-in before either side computes.
+  constructor <;> intro h k <;> have := h k <;>
+    (cases hfd : fld k with
+      | req t m => cases m <;> simp_all [valPresentAt, fieldSem]
+      | optional t => simp_all [valPresentAt, fieldSem])
 
-theorem entry_iff {fields : Finset Name} {fld : {k // k ∈ fields} → Field} {rest : Rest}
+theorem entry_iff {fields : Finset Name} {fld : {k // k ∈ fields} → ObjectSlot}
+    {wild : Option (KeyPat × Term)}
     (hf : ∀ k : {k // k ∈ fields}, ExactField (fld k))
-    (hr : ∀ t, rest = .codec t → ExactV t) (k : Name) (v : Value) :
-    (match entryP ⟨fields, fun k => AdmField (fld k)⟩ (AdmRest rest) k with
+    (hr : ∀ p t, wild = some (p, t) → ExactV t) (k : Name) (v : Value) :
+    (match entryP ⟨fields, fun k => AdmField (fld k)⟩ (AdmWild wild) k with
       | some P => P v | none => false) = true ↔
-    ((entryCodec ⟨fields, fun k => fieldSem (fld k)⟩ (rcOf (restSem rest)) k).bind
+    ((entryCodec ⟨fields, fun k => fieldSem (fld k)⟩ (rcOf (wildSem wild)) k).bind
       (fun c => c.e v)).isSome = true := by
   simp only [entryP, entryCodec, MapOf.at]
   by_cases hk : k ∈ fields
   · rw [dif_pos hk, dif_pos hk]
     simpa using hf ⟨k, hk⟩ v
   · rw [dif_neg hk, dif_neg hk]
-    cases rest with
-    | drop => simp [AdmRest, restSem, rcOf]
-    | refuse => simp [AdmRest, restSem, rcOf]
-    | codec t => simpa [AdmRest, restSem, rcOf] using hr t rfl v
+    cases wild with
+    | none => simp [AdmWild, wildSem, rcOf]
+    | some pt => simpa [AdmWild, wildSem, rcOf] using hr pt.1 pt.2 rfl v
 
-/-- **`object` is exact** once its fields and its rest policy are. -/
-theorem ExactV_object {fields : Finset Name} {fld : {k // k ∈ fields} → Field} {rest : Rest}
+/-- **`object` is exact** once its slots and its open block are. -/
+theorem ExactV_object {fields : Finset Name} {fld : {k // k ∈ fields} → ObjectSlot}
+    {wild : Option (KeyPat × Term)}
     (hf : ∀ k : {k // k ∈ fields}, ExactField (fld k))
-    (hr : ∀ t, rest = .codec t → ExactV t) :
-    ExactV (.object (.mk fields fld rest)) := by
+    (hr : ∀ p t, wild = some (p, t) → ExactV t) :
+    ExactV (.object (.mk fields fld wild)) := by
   intro v
   cases v
   case map keys g =>
     show (valPresentT fields fld keys &&
-        objAdmV ⟨fields, fun k => AdmField (fld k)⟩ (AdmRest rest) keys g) = true ↔
-      ((objectCodec ⟨fields, fun k => fieldSem (fld k)⟩ (restSem rest)).e (.map keys g)).isSome
+        objAdmV ⟨fields, fun k => AdmField (fld k)⟩ (AdmWild wild) keys g) = true ↔
+      ((objectCodec ⟨fields, fun k => fieldSem (fld k)⟩ (wildSem wild)).e (.map keys g)).isSome
         = true
     rw [valPresentT_eq]
     simp only [objectCodec, objectCodecCore, carriedCodec, mapV, objWrite,
@@ -845,21 +842,21 @@ theorem ExactV_union {opts : List Term} (h : ∀ t ∈ opts, ExactV t) : ExactV 
 -- Suppressed at the block, as the three `term_depth_wf` recursions already do.
 set_option linter.unnecessarySeqFocus false in
 mutual
-/-- **Every row is exact.** Not a bound on `dom(e)` — `dom(e)`, at all twenty-one
-    constructors and with no hypothesis.
+/-- **Every row is exact.** Not a bound on `dom(e)` — `dom(e)`, at every constructor and
+    with no hypothesis.
 
     The `held` case is the one worth reading: it appeals to the subterm at `f v`, which is
     the pullback, and it is one line because `(c.through f g).e v = c.e (f v)` holds by
-    `Iff.rfl`. The `array` and `record` cases are the repair of §5's container rows.
+    `Iff.rfl`. The `list` case is the repair of §5's container rows.
 
     **There is no hypothesis to discharge**, which is the whole of what the last two rows
     bought: `Adm_sound` is now `(Adm_exact t v).mpr`, and a new `Term` constructor cannot be
     added without a case here.
 
-    Mutual with the list, option, field and rest companions, for the same reason `denote` is:
-    a tuple's components and a union's options are reached through a `List Term` and an
-    object's fields through a *function*, and a single recursion on the term cannot follow
-    either. -/
+    Mutual with the list, option, slot and open-block companions, for the same reason
+    `denote` is: a list's positions and a union's options are reached through a `List Term`
+    and an object's slots through a *function*, and a single recursion on the term cannot
+    follow either. -/
 theorem Adm_exact : ∀ (t : Term), ExactV t
   -- the rows §5 excused, and not one of them needed excusing
   | .list pre sp suf =>
@@ -893,20 +890,6 @@ theorem Adm_exact : ∀ (t : Term), ExactV t
         simp [AdmLit, denote, denote, literalCodec, baseCodec, inL,
               stringCodec, booleanCodec, binaryCodec, nullCodec, inD, decimalCodec]
   | .custom ce cp => by intro v; simp [Adm, denote, denote]
-  | .record c => by
-      have hc := Adm_exact c
-      intro v
-      cases v
-      -- The entry-key transport is gone with the traversal: `funImage` is defined
-      -- exactly where every entry's `e` is, which is the row verbatim.
-      case map keys f =>
-        simp only [Adm, denote, denote, denote, recordCodec, Option.isSome_map, decide_eq_true_eq,
-          funImage_isSome_iff]
-        exact forall_congr' fun k => hc (f k)
-      -- the other nine rows are refused on both sides, and unfolding `recordCodec`'s
-      -- `funImage` to see it is more work than reading it off the two `false`s
-      all_goals simp only [Adm, denote, denote, denote, recordCodec, 
-        Option.isSome_none, Bool.false_eq_true]
   | .refine c p => by
       have hc := Adm_exact c
       intro v; cases hq : p.eval v <;> simp [Adm, denote, denote, Codec.restrict, hq, hc v]
@@ -920,12 +903,12 @@ theorem Adm_exact : ∀ (t : Term), ExactV t
       have hc := Adm_exact c
       intro v; simpa [Adm, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, Codec.through] using hc (f v)
 
-/-- The payload's own exactness, as a companion. An object's fields are reached through a
+/-- The payload's own exactness, as a companion. An object's slots are reached through a
     function, so the recursion needs to land on a `Body` rather than on the `Term` that wraps
-    one — the same reason the field and rest companions exist. -/
+    one — the same reason the slot and open-block companions exist. -/
 theorem Adm_exactB : ∀ (b : Body), ExactV (.object b)
-  | .mk _ fld rest =>
-      ExactV_object (fun k => Adm_exactF (fld k)) (exactVR_codec rest (Adm_exactR rest))
+  | .mk _ fld wild =>
+      ExactV_object (fun k => Adm_exactF (fld k)) (exactVW_codec wild (Adm_exactW wild))
 
 /-- The options' exactness, in the shape the recursion can produce it: a `∀ t ∈ ts` needs a
     membership hypothesis the structural checker cannot follow back to the constructor's
@@ -938,17 +921,19 @@ theorem Adm_exactO : ∀ (tail : Option Term), ExactVO tail
   | none => trivial
   | some t0 => Adm_exact t0
 
-/-- A field's row is exact when its term's is — the marker plays no part, which is what
-    `valPresentT` being a separate conjunct records. -/
-theorem Adm_exactF : ∀ (fd : Field), ExactField fd
-  | .req t0 => fun v => Adm_exact t0 v
-  | .optional t0 => fun v => Adm_exact t0 v
-  | .fallback t0 _ => fun v => Adm_exact t0 v
+/-- A slot's row is exact when its term's is — the mark plays no part, which is what
+    `valPresentT` being a separate conjunct records.
 
-theorem Adm_exactR : ∀ (rest : Rest), ExactVR rest
-  | .drop => trivial
-  | .refuse => trivial
-  | .codec t0 => Adm_exact t0
+    The stand-in splits because `fieldSem (.req t m)` does not reduce while `m` is a
+    variable, so `ExactField (.req t0 m)` states nothing the recursion can close. -/
+theorem Adm_exactF : ∀ (fd : ObjectSlot), ExactField fd
+  | .req t0 none => fun v => Adm_exact t0 v
+  | .req t0 (some _) => fun v => Adm_exact t0 v
+  | .optional t0 => fun v => Adm_exact t0 v
+
+theorem Adm_exactW : ∀ (wild : Option (KeyPat × Term)), ExactVW wild
+  | none => trivial
+  | some (_, t0) => Adm_exact t0
 end
 
 /-- §5's empty-container argument, **derived**: the exact row still admits `[]`. -/

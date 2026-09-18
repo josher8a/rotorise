@@ -222,7 +222,6 @@ def occV : Term → Slot → Bool
   | .set b       => occOnly b.slot
   -- `array` and `tuple` are one shape now, and both rows said the same thing
   | .list _ _ _  => occOnly .arr
-  | .record _    => occOnly .map
   | .object _   => occOnly .map
   | .held _ _ _  => occTop
   | .custom _ _  => occTop
@@ -261,7 +260,6 @@ def occA : Term → Member → Bool
   | .never       => occNone
   | .set b       => occOnly b.member
   | .list _ _ _  => occOnly .L
-  | .record _    => occOnly .M
   | .object _   => occOnly .M
   | .legacy _ _  => occTop
   | .custom _ _  => occTop
@@ -559,7 +557,7 @@ theorem occV_sound : ∀ (t : Term), OccSoundV t
           simp_all [Adm, SetBase.adm, inD, isStored, occV, occOnly, Value.slot, SetBase.slot]
       | _ => exact absurd h (by simp [Adm])
   -- the containers, whose slot is fixed by the constructor and not by the payload
-  | .list _ _ _ | .record _ =>
+  | .list _ _ _ =>
       fun v h => by cases v <;> simp_all [Adm, occV, occOnly, Value.slot]
   | .object (.mk _ _ _) => fun v h => by
       cases v <;> simp_all [Adm, AdmBody, occV, occOnly, Value.slot]
@@ -645,7 +643,7 @@ theorem occA_sound : ∀ (t : Term), OccSoundA t
   | .set b => fun a h => by
       cases b <;> cases a <;>
         simp_all [AdmA, AdmASet, occA, occOnly, Attr.member, SetBase.member]
-  | .list _ _ _ | .record _ =>
+  | .list _ _ _ =>
       fun a h => by cases a <;> simp_all [AdmA, occA, occOnly, Attr.member]
   | .object (.mk _ _ _) => fun a h => by
       cases a <;> simp_all [AdmA, AdmABody, occA, occOnly, Attr.member]
@@ -1288,7 +1286,6 @@ theorem typed_occV : ∀ {t T μ}, Typed t T μ → ∀ v, T v → occV t v.slot
           simp_all [occV, occOnly, Value.slot, SetBase.slot, SetBase.held] <;>
           exact S.2.elim (fun a ha => hall a ha)
     | list _ _ _ => obtain ⟨vs, rfl, _⟩ := hv; rfl
-    | record _ => obtain ⟨keys, f, rfl, _⟩ := hv; rfl
     | object _ _ => obtain ⟨keys, f, rfl, _⟩ := hv; rfl
     | held _ => rfl
     | @refine t' T' μ' q h' => exact typed_occV h' v hv.1
@@ -1360,10 +1357,10 @@ theorem specOf_object {t : Term} {s : MapOf NameSpec} (h : specOf t = some s) :
   cases t <;> simp only [specOf, reduceCtorEq] at h
   exact ⟨_, rfl, (Option.some.inj h).symm⟩
 
-/-- A closed rest holds nothing: the open part of the held set is absent. -/
-theorem typedRest_none {r : Rest} {R : Option Held} (h : TypedRest r R)
-    (ho : r.isOpen = false) : R = none := by
-  cases h <;> simp_all [Rest.isOpen]
+/-- A body with no open block holds nothing there: the open part of the held set is absent. -/
+theorem typedWild_none {w : Option (KeyPat × Term)} {R : Option Held} (h : TypedWild w R)
+    (ho : w.isSome = false) : R = none := by
+  cases h <;> simp_all
 
 /-- A body's spec is indexed by that body's own names. -/
 @[simp] theorem Body.spec_keys (b : Body) : b.spec.keys = b.fields := by cases b; rfl
@@ -1384,10 +1381,10 @@ theorem body_spec_required {b : Body} (k : {k // k ∈ b.spec.keys})
   exact absurd h (by simp)
 
 /-- **Phase *names*, one direction.** One body requires a name the other does not declare,
-    and the other is closed, so the name it would have to carry falls to a rest that holds
-    nothing. -/
+    and the other declares no open block, so the name it would have to carry has no block to
+    fall to. -/
 theorem held_disj_of_reqNotDeclared {a b : Body} {Ta Tb : Held} {μa μb : Option Member}
-    (hclosed : b.rest.isOpen = false) (h : reqNotDeclared a.spec b.spec = true)
+    (hclosed : b.wild.isSome = false) (h : reqNotDeclared a.spec b.spec = true)
     (hta : Typed (.object a) Ta μa) (htb : Typed (.object b) Tb μb) : HDisj Ta Tb := by
   obtain ⟨k, hreq, hnd⟩ := of_decide_eq_true h
   cases hta with
@@ -1406,7 +1403,7 @@ theorem held_disj_of_reqNotDeclared {a b : Body} {Ta Tb : Held} {μa μb : Optio
       have hb := hkeysb ⟨k.1, hka⟩
       rw [dif_neg hnd'] at hb
       obtain ⟨T, hT, _⟩ := hb
-      rw [typedRest_none hrb hclosed] at hT
+      rw [typedWild_none hrb hclosed] at hT
       exact absurd hT (by simp)
 
 /-- The mirror of `HDisj`'s own symmetry, used to read the second direction off the first. -/
@@ -1440,11 +1437,11 @@ theorem body_spec_alts {b : Body} (k : {k // k ∈ b.spec.keys}) (hk : k.1 ∈ b
 /-- A field the spec pins to a literal holds that literal's value and no other. Every field
     form, because `altsOfField` reads all three: a present name is pinned whether or not the
     field is required. -/
-theorem held_lit_of_alts {fd : Field} {T : Held} {π μ} {kd : GroundKind} {a : kd.Carrier}
+theorem held_lit_of_alts {fd : ObjectSlot} {T : Held} {π μ} {kd : GroundKind} {a : kd.Carrier}
     (halts : altsOfField fd = some ⟨kd, a⟩) (h : TypedField fd T π μ) :
     ∀ v, T v → v = kd.toValue a := by
   obtain ⟨t', hty, hshape⟩ := TypedField.term h
-  rcases hshape with rfl | rfl | ⟨w, rfl⟩ <;>
+  rcases hshape with ⟨m, rfl⟩ | rfl <;>
     cases t' <;> simp only [altsOfField, reduceCtorEq] at halts <;>
     cases halts <;> cases hty <;> exact fun v hv => hv
 
@@ -1524,20 +1521,21 @@ theorem separates_held_of_orth {x y : Term} {Tx Ty : Held} {μx μy : Option Mem
 
 /-! ### The closedness premise, and why it is not decoration -/
 
-private def bReq : Body := .mk {"k"} (fun _ => .req .string) .refuse
-private def bOpen : Body := .mk ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) (.codec .string)
+private def bReq : Body := .mk {"k"} (fun _ => .req .string none) none
+private def bOpen : Body :=
+  .mk ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) (some (.any, .string))
 private def vShared : Value := .map {"k"} (fun _ => .str "a")
 private def TStr : Held := fun v => ∃ s, v = .str s
 
 private theorem typed_bReq :
     Typed (.object bReq) (HObject bReq.fields (fun _ => (true, TStr)) none) (some .M) :=
-  Typed.object (μs := fun _ => some .S) (fun _ => TypedField.req Typed.string) TypedRest.refuse
+  Typed.object (μs := fun _ => some .S) (fun _ => TypedField.req Typed.string) TypedWild.none
 
 private theorem typed_bOpen :
     Typed (.object bOpen) (HObject bOpen.fields
       (fun k => absurd k.2 (Finset.notMem_empty k.1)) (some TStr)) (some .M) :=
   Typed.object (μs := fun k => absurd k.2 (Finset.notMem_empty k.1))
-    (fun k => absurd k.2 (Finset.notMem_empty k.1)) (TypedRest.codec Typed.string)
+    (fun k => absurd k.2 (Finset.notMem_empty k.1)) (TypedWild.some Typed.string)
 
 private theorem held_bReq : HObject bReq.fields (fun _ => (true, TStr)) none vShared :=
   ⟨{"k"}, fun _ => .str "a", rfl, fun k _ => by simpa [bReq] using k.2,
@@ -1550,7 +1548,7 @@ private theorem held_bOpen : HObject bOpen.fields
 
 /-- **`Orth` alone does not separate held sets.** The certificate answers on the names phase
     for a closed object against an OPEN one, and the open one holds the very map the closed
-    one requires: a name it does not declare falls to its rest rather than being refused. The
+    one requires: a name it does not declare falls to its open block rather than being refused. The
     write side does not have this case, because `admitOptV` reads `keysOk` off the spec, and
     that is why `separates_of_orth` needs no such premise and this mirror does. -/
 theorem orth_alone_is_not_enough
@@ -1599,15 +1597,15 @@ theorem orth_set_string_decimal : Orth (.set .string) (.set .decimal) = false :=
     separator in practice, and invisible to every slot-based phase, since both options occupy
     `map` and `M`. -/
 theorem orth_objects_no_shared_name :
-    Orth (.object (.mk {"petId", "price"} (fun _ => .req .string) .refuse))
-         (.object (.mk {"petIds"} (fun _ => .req .string) .refuse)) = true := by decide
+    Orth (.object (.mk {"petId", "price"} (fun _ => .req .string none) none))
+         (.object (.mk {"petIds"} (fun _ => .req .string none) none)) = true := by decide
 
 /-- …and the ambiguity §5 names: **an optional binding widens admission**, so two objects
     declaring only optional names both admit the empty map and are not separated however
     disjoint their names are. -/
 theorem orth_objects_optional_only :
-    Orth (.object (.mk {"a"} (fun _ => .optional .string) .refuse))
-         (.object (.mk {"b"} (fun _ => .optional .string) .refuse)) = false := by decide
+    Orth (.object (.mk {"a"} (fun _ => .optional .string) none))
+         (.object (.mk {"b"} (fun _ => .optional .string) none)) = false := by decide
 
 /-! ### The negatives
 

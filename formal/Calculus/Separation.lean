@@ -11,50 +11,48 @@ does not record, with what to use instead.
 namespace Calculus
 
 noncomputable section
-/-! ## Two of the twenty-one constructors are derivable
+/-! ## `array` is derivable, and it is kept
 
-`array` is the degenerate `tuple` — empty fixed part, uniform tail — and `record` the
-degenerate `object`: no declared names, `codec` rest. Both rows agree with their general
-form *pointwise*, on both sides, so nothing in the analysis depends on them existing.
+`array` is the degenerate `tuple` — empty fixed part, uniform tail — and its row agrees with
+the general form *pointwise*, on both sides, so nothing in the analysis depends on it
+existing.
 
-They are kept anyway, and the reason is the shape of the row rather than the size of the
+It is kept anyway, and the reason is the shape of the row rather than the size of the
 language. `array`'s row is `allP`, one fold; the `tuple` it expands to is `alignP`, which
-carries a length discipline that at `([], some c)` can never fire. `record`'s row is one
-`decide` over the key set; the `object` it expands to is `valPresentT && objAdmV`, a
-presence guard over an empty field table — vacuous — conjoined with a traversal that
-consults `entryP` at every name only to be handed the rest policy back. So the narrow
-constructor buys a row a reader can check by eye, and that is the **opposite** trade from
-`set`, where a narrower constructor bought *exactness*: `set b` cannot be spelled as a
-`refine` of anything, and indexing by the base is what made `encSet`'s collision guard
-provably dead. Convenience here, necessity there.
+carries a length discipline that at `([], some c)` can never fire. So the narrow builder buys
+a row a reader can check by eye, and that is the **opposite** trade from `set`, where a
+narrower *constructor* bought *exactness*: `set b` cannot be spelled as a `refine` of
+anything, and indexing by the base is what made `encSet`'s collision guard provably dead.
+Convenience here, necessity there.
+
+`record` used to stand beside `array` here, as the degenerate `object`. It does not any more:
+it is a builder over the body whose only block is the open one, so `record c` and the object
+it expanded to are **one term**, and the pair that compared them has nothing to compare.
 
 ### …and `union` is not a congruence for codec equivalence
 
-`record c` and `object ∅ noFields (.codec c)` have identical rows on both sides, hence —
-by `Adm_exact`/`AdmA_exact`, which take no hypothesis — identical domains on both sides.
-They are the same codec as far as anything observable through `e` and `p` can tell.
+The fact the deleted pair recorded survives, and `union_not_congruent` carries it on a live
+pair: `refine t ⊤` and `t` have identical rows on both sides, hence — by
+`Adm_exact`/`AdmA_exact`, which take no hypothesis — identical domains on both sides. They
+are the same codec as far as anything observable through `e` and `p` can tell.
 
-`union` still distinguishes them, and `union_not_congruent` is the pair. An option's
-admission is `admitOptV`, which matches the **constructor**: `specOf (.record c) = none`,
-so the option is admitted *by attempt*, while `specOf (.object (.mk ∅ noFields (.codec c)))` is
-`some ⟨∅, _⟩`, so the option is admitted *by names* — and an empty name spec admits no map
-that carries a name. On `{"a" ↦ "x"}` the first option answers `true` and the second
-`false`, with equal domains behind both.
+`union` still distinguishes them. An option's admission is `admitOptV`, which matches the
+**constructor**: `specOf (.refine t ⊤) = none`, so the option is admitted *by attempt*, while
+`specOf (.record c)` is `some ⟨∅, _⟩` — a record is an object — so the option is admitted *by
+names*, and an empty name spec admits no map that carries a name. On `{"a" ↦ "x"}` the first
+option answers `true` and the second `false`, with equal domains behind both.
 
 This is not a defect in the rows and not one in `select`; it is the price of deciding an
 object option syntactically, which §5 argues for on other grounds ("an open object that must
 be an option should declare what it means to keep").
 What that passage does not observe is this consequence: **term equivalence is not a
 congruence for `union`**, so no rewrite that replaces a subterm by a domain-equal one is
-sound inside a `union`. Anything that wants to normalize `record` to `object` — or `array`
-to `tuple`, which is safe, both being `specOf = none` — has to check the spec, not the
-domain. -/
+sound inside a `union`. Anything that wants to drop a `refine` by the trivially-true
+predicate — or normalize `array` to `tuple`, which is safe, both being `specOf = none` — has
+to check the spec, not the domain. -/
 
-/-- The empty field table. Not `by simp`: `simp`'s route to a vacuous `Finset ∅` goal reaches
-    `Classical.choice`, and this is a *definition*, so it would put the axiom under every
-    theorem below rather than under a proof. `Finset.notMem_empty` is the direct term. -/
-def noFields : {k // k ∈ (∅ : Finset Name)} → Field :=
-  fun k => absurd k.2 (Finset.notMem_empty k.1)
+/-- A refinement by the trivially-true predicate: the same pair as the bare base. -/
+def qTop : Value → Bool := fun _ => true
 
 /-- `array` **is** the degenerate `tuple`, and now on the nose: both builders write the
     same `list`, so the two rows are one term and the equation is `rfl`. It was an
@@ -64,92 +62,33 @@ theorem arrayRow (c : Term) (v : Value) : Adm (.array c) v = Adm (.tuple [] (som
 /-- The same on the read side, and for the same reason. -/
 theorem arrayRowA (c : Term) (a : Attr) : AdmA (.array c) a = AdmA (.tuple [] (some c)) a := rfl
 
-/-- `record`'s one `decide` is its `object`'s guard-and-traverse, with both extra pieces
-    dead: the presence guard quantifies over an empty field table, and `entryP` finds no
-    declaration at any name and hands back the rest policy.
+/-- **`union` is not a congruence for domain equality.** `refine t ⊤` and `t` write and read
+    the same values at every point: the row is `Adm t v && true`, so `Adm_exact` gives equal
+    domains with no hypothesis. As *options* they disagree at `{"a" ↦ "x"}`: the refinement is
+    attempted and admits, the record is asked for its names and refuses, because its spec is
+    empty and the map is not.
 
-    Spelled out rather than left to `simp`. The one-line `simp [Adm, valPresentT, objAdmV,
-    entryP, AdmRest, noFields, MapOf.at]` proves it and reaches `Classical.choice` — the
-    `decide` over a `Finset` subtype is where simp picks up a classical instance — which
-    `#assert_axioms_all` rejects. `decide_eq_true` and `dif_neg` are the two facts actually
-    needed. -/
-theorem recordRow (c : Term) (v : Value) :
-    Adm (.record c) v = Adm (.object (.mk ∅ noFields (.codec c))) v := by
-  cases v with
-  | map keys f =>
-    have hv : valPresentT ∅ noFields keys = true :=
-      decide_eq_true (fun k => absurd k.2 (Finset.notMem_empty k.1))
-    have he : ∀ k : Name, entryP ⟨∅, fun k => AdmField (noFields k)⟩ (some (Adm c)) k
-        = some (Adm c) := fun k => by
-      simp only [entryP, MapOf.at, dif_neg (Finset.notMem_empty k)]
-    simp only [Adm, AdmBody, hv, Bool.true_and, objAdmV, AdmRest, he]
-  | _ => rfl
-
-/-- The read side, with one extra dead piece: `keepT (.codec c) ∅` is the constant `true`,
-    an open rest keeping every name, so `objAdmA`'s guard discharges by `true_implies`. -/
-theorem recordRowA (c : Term) (a : Attr) :
-    AdmA (.record c) a = AdmA (.object (.mk ∅ noFields (.codec c))) a := by
-  cases a with
-  | m keys g =>
-    have hv : reqPresentT ∅ noFields keys = true :=
-      decide_eq_true (fun k => absurd k.2 (Finset.notMem_empty k.1))
-    have he : ∀ k : Name, entryPA ⟨∅, fun k => AdmAField (noFields k)⟩ (some (AdmA c)) k
-        = some (AdmA c) := fun k => by
-      simp only [entryPA, MapOf.at, dif_neg (Finset.notMem_empty k)]
-    simp only [AdmA, AdmABody, hv, Bool.true_and, objAdmA, AdmARest, keepT, he, true_implies]
-  | _ => rfl
-
-/-! ### Row equality is domain equality, for free
-
-Each of the four above becomes a statement about `e` and `p` with no further work, which is
-what an unconditional `Adm_exact`/`AdmA_exact` buys: the row *is* the domain, so a proof
-that two rows agree is a proof that two codecs' domains agree. Under the old exactness —
-a hypothesis to discharge per term — each of these would have needed its own discharge. -/
-
-theorem arrayDom (c : Term) (v : Value) :
-    ((denote (.array c)).e v).isSome = ((denote (.tuple [] (some c))).e v).isSome :=
-  Bool.coe_iff_coe.mp
-    ((Adm_exact (.array c) v).symm.trans (arrayRow c v ▸ Adm_exact (.tuple [] (some c)) v))
-
-theorem arrayDomA (c : Term) (a : Attr) :
-    ((denote (.array c)).p a).isSome = ((denote (.tuple [] (some c))).p a).isSome :=
-  Bool.coe_iff_coe.mp
-    ((AdmA_exact (.array c) a).symm.trans (arrayRowA c a ▸ AdmA_exact (.tuple [] (some c)) a))
-
-theorem recordDom (c : Term) (v : Value) :
-    ((denote (.record c)).e v).isSome = ((denote (.object (.mk ∅ noFields (.codec c)))).e v).isSome :=
-  Bool.coe_iff_coe.mp
-    ((Adm_exact (.record c) v).symm.trans
-      (recordRow c v ▸ Adm_exact (.object (.mk ∅ noFields (.codec c))) v))
-
-theorem recordDomA (c : Term) (a : Attr) :
-    ((denote (.record c)).p a).isSome = ((denote (.object (.mk ∅ noFields (.codec c)))).p a).isSome :=
-  Bool.coe_iff_coe.mp
-    ((AdmA_exact (.record c) a).symm.trans
-      (recordRowA c a ▸ AdmA_exact (.object (.mk ∅ noFields (.codec c))) a))
-
-/-- `record` is admitted by attempt… -/
-theorem specOf_record (c : Term) : specOf (.record c) = none := rfl
-
-/-- …and the `object` with its domain is admitted by names. -/
-theorem specOf_object_isSome (c : Term) :
-    (specOf (.object (.mk ∅ noFields (.codec c)))).isSome = true := rfl
-
-/-- **`union` is not a congruence for domain equality.** `recordDom` and `recordDomA` say
-    these two terms have the same `e` and the same `p` at every point. As *options* they
-    disagree at `{"a" ↦ "x"}`: the first is attempted and admits, the second is asked for
-    its names and refuses, because its spec is empty and the map is not.
-
-    So a normalization pass over `Term` may not replace `record c` by its `object` inside a
-    `union` — nor, in general, replace any subterm by a domain-equal one there. See the
-    section note above; §5 gives the reason `ρ` goes unread and does not draw this
-    corollary. -/
+    So a normalization pass over `Term` may not drop a trivial `refine` inside a `union` — nor,
+    in general, replace any subterm by a domain-equal one there. See the section note above;
+    §5 gives the reason `ρ` goes unread and does not draw this corollary. -/
 theorem union_not_congruent :
-    admitOptV (specOf (.record .string), Adm (.record .string))
-        (.map {"a"} (fun _ => .str "x")) = true
-      ∧ admitOptV (specOf (.object (.mk ∅ noFields (.codec .string))),
-          Adm (.object (.mk ∅ noFields (.codec .string)))) (.map {"a"} (fun _ => .str "x")) = false :=
-  ⟨rfl, rfl⟩
+    admitOptV (specOf (.refine (.record .string) (.closure qTop)),
+        Adm (.refine (.record .string) (.closure qTop))) (.map {"a"} (fun _ => .str "x")) = true
+      ∧ admitOptV (specOf (.record .string), Adm (.record .string))
+          (.map {"a"} (fun _ => .str "x")) = false := by
+  refine ⟨?_, rfl⟩
+  show Adm (.refine (.record .string) (.closure qTop)) (.map {"a"} (fun _ => .str "x")) = true
+  have hv : valPresentT ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) {"a"} = true :=
+    decide_eq_true (fun k => absurd k.2 (Finset.notMem_empty k.1))
+  simp only [Term.record, Adm, Pred.eval, qTop, AdmBody, Bool.and_true, AdmWild, hv,
+    Bool.true_and, objAdmV]
+  refine decide_eq_true (fun k => ?_)
+  simp only [entryP, MapOf.at, dif_neg (Finset.notMem_empty k.1)]
+
+/-- The two rows do agree, which is what makes the pair above a non-congruence rather than a
+    difference. -/
+theorem refine_top_row (t : Term) : Adm (.refine t (.closure qTop)) = Adm t := by
+  funext v; simp [Adm, Pred.eval, qTop]
 
 /-! ## Separation on the pair, and the one direction that fails
 
@@ -226,13 +165,10 @@ pinned from the pair rather than read off the syntax. The witness that the two
 questions are different is the one theorem kept from that table's section, immediately
 below. -/
 
-/-- A refinement by the trivially-true predicate: the same pair as the bare base. -/
-def qTop : Value → Bool := fun _ => true
-
 /-- **How a term is written is not a function of what it admits.** Two terms, one a
     refinement of the other, agreeing on the joint predicate at every value. -/
-theorem Adm_string_eq_refine : Adm .string = Adm (.refine .string (.closure qTop)) := by
-  funext v; simp [Adm, Pred.eval, qTop]
+theorem Adm_string_eq_refine : Adm .string = Adm (.refine .string (.closure qTop)) :=
+  (refine_top_row .string).symm
 
 
 
@@ -287,7 +223,7 @@ pair separates — while `select` attempts both options, so (U) genuinely fails.
 gets *stronger* and the theorem becomes *false*.
 
 The witness is two objects with the same names and different field terms. Both are derivable
-(`Typed.object`), both closed (`rest = drop`), and both lawful, so no other premise of the
+(`Typed.object`), both closed (no open block), and both lawful, so no other premise of the
 discharger is what declines them — which is what makes `not_uAtCan_of_sepJ` a
 refutation of the migration rather than a failure to find its proof.
 
@@ -296,11 +232,11 @@ And the `object` row is the *only* obstruction: `admitV_Adm_nonObject` and
 exactness alone, for every term whose `specOf` is `none` — which is every term but an
 `object`. -/
 
-/-- One required field, holding a string. -/
-def bodyReqStr : Body := .mk {"a"} (fun _ => .req .string) .drop
+/-- One required slot, holding a string. -/
+def bodyReqStr : Body := .mk {"a"} (fun _ => .req .string none) none
 
-/-- The same name, the same policy, a different field term. -/
-def bodyReqNum : Body := .mk {"a"} (fun _ => .req .number) .drop
+/-- The same name, the same open block, a different slot term. -/
+def bodyReqNum : Body := .mk {"a"} (fun _ => .req .number none) none
 
 def objReqStr : Term := .object bodyReqStr
 def objReqNum : Term := .object bodyReqNum
@@ -343,9 +279,9 @@ theorem sepJA_objReq : SepJA objReqStr objReqNum := by
   cases a with
   | m keys g =>
     simp only [objReqStr, bodyReqStr, AdmA, AdmABody, reqPresentT, objAdmA, entryPA,
-      MapOf.at, keepT, Bool.and_eq_true, decide_eq_true_eq] at ha
+      MapOf.at, Bool.and_eq_true, decide_eq_true_eq] at ha
     simp only [objReqNum, bodyReqNum, AdmA, AdmABody, reqPresentT, objAdmA, entryPA,
-      MapOf.at, keepT, decide_eq_true_eq, Bool.and_eq_false_iff,
+      MapOf.at, decide_eq_true_eq, Bool.and_eq_false_iff,
       decide_eq_false_iff_not]
     refine Or.inr fun h => ?_
     have ha' : "a" ∈ keys := ha.1 ⟨"a", Finset.mem_singleton_self _⟩
@@ -357,13 +293,13 @@ theorem sepJA_objReq : SepJA objReqStr objReqNum := by
 
 theorem typed_objReqStr :
     Typed objReqStr (HObject {"a"} (fun _ => (true, fun v => ∃ s, v = .str s)) none)
-      (some .M) := .object (fun _ => .req .string) .drop
+      (some .M) := .object (fun _ => .req .string) .none
 
 theorem typed_objReqNum :
     Typed objReqNum
       (HObject {"a"}
         (fun _ => (true, fun v => ∃ d, v = .num d ∧ Numeral.WF d.toDec = true)) none)
-      (some .M) := .object (fun _ => .req .number) .drop
+      (some .M) := .object (fun _ => .req .number) .none
 
 theorem lawful_objReqStr : Lawful (denote objReqStr) :=
   soundness typed_objReqStr ⟨fun _ => trivial, trivial⟩ ⟨fun _ => trivial, trivial⟩
@@ -500,15 +436,15 @@ theorem not_decides_refine_top : ¬ Decides (.refine .string (.closure qTop)) :=
 /-- **And too stingy.** An object with a required field refuses the empty map and writes a
     populated one — two `map`s differing in admission — while `ident` calls it `false`. -/
 theorem decides_object :
-    Decides (.object (.mk {"k"} (fun _ => .req .string) .refuse)) := by
+    Decides (.object (.mk {"k"} (fun _ => .req .string none) none)) := by
   refine ⟨.map {"k"} (fun _ => .str "a"),
           .map ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)), ?_, rfl, ?_⟩
-  · simp +contextual [denote, denote, bodySem, restSem, fieldSem, restSem,
+  · simp +contextual [denote, denote, bodySem, wildSem, fieldSem,
           objectCodec, objectCodecCore, stringCodec,
           valPresentB, valPresentAt, fieldSem, rcOf, FieldSem.codec, carriedCodec,
           mapV, mA, objWrite, entryCodec, MapOf.at, funImage,
           Subtype.forall]
-  · simp [denote, denote, bodySem, restSem, fieldSem, restSem,
+  · simp [denote, denote, bodySem, wildSem, fieldSem,
           objectCodec, objectCodecCore, stringCodec,
           valPresentB, valPresentAt, fieldSem, rcOf, carriedCodec,
           mapV, mA, objWrite, Subtype.forall]

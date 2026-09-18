@@ -311,9 +311,9 @@ theorem e_comp_p_ne_id :
 
 /-! ## `optional(optional(c))` — not derivable, by construction
 
-This row needs no theorem, and could not have one: it is enforced by the syntax. `Field`
-(Term.lean) has three constructors — `req`, `optional`, `fallback` — and every one takes a
-`Term`. None takes a `Field`, so `optional(optional(c))` cannot be written down, and
+This row needs no theorem, and could not have one: it is enforced by the syntax. `ObjectSlot`
+(Term.lean) has two constructors — `req` and `optional` — and every one takes a
+`Term`. None takes an `ObjectSlot`, so `optional(optional(c))` cannot be written down, and
 neither can `optional(fallback(c, v))` or `fallback(optional(c), v)`.
 
 That is the stratification §4 of the specification asks for, and the model gets it from

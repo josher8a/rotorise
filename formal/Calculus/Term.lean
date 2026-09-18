@@ -12,12 +12,12 @@ Deep embedding. Notes:
 * `custom` carries its pair as data; its *laws* are premises of the typing rule (§3),
   exactly as in the doc.
 * `opaque` is a Lean keyword, hence `opaq`.
-* Fields (§4) are a separate inductive — the stratification is the point: no `Term`
-  position accepts a `Field`.
+* Slots (§4) are a separate inductive — the stratification is the point: no `Term`
+  position accepts an `ObjectSlot`.
 * An object's **payload** (§4) is a separate inductive for the same reason, one level up.
-  `Body` is the key set, the field function on it, and the rest policy, as one thing — so
+  `Body` is the key set, the slot function on it, and the open block, as one thing — so
   every table over terms has a *one-argument* `.object` row that delegates to a `Body`
-  companion, the way `denote`'s row delegates to `fieldSem` and `restSem`. Threading three
+  companion, the way `denote`'s row delegates to `fieldSem` and `wildSem`. Threading three
   arguments by hand through twenty tables was the only reason those three had to agree by
   convention rather than by type.
 -/
@@ -140,9 +140,9 @@ inductive Term where
   /-- §3 `(opaque)`: `lossy = false` is the `refuse` policy. -/
   | opaq     (lossy : Bool)
   /-- §4's field table is a *set* of names each declaring one field, so that is what the
-      term carries. A `List (Name × Field)` admitted two orderings of one object and a
+      term carries. A `List (Name × ObjectSlot)` admitted two orderings of one object and a
       repeated name, and the typing rule carried a `Nodup` premise to make the first
-      harmless and rule out the second; both are now properties of the type. `Field`
+      harmless and rule out the second; both are now properties of the type. `ObjectSlot`
       sits in the function's codomain, which is strictly positive — the same factoring
       `Attr.m` and `Value.map` use one level down. -/
   | object   (b : Body)
