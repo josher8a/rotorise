@@ -20,6 +20,7 @@ import {
     discriminatedUnion,
     lazy,
     legacy,
+    list,
     nullable,
     object,
     opaque,
@@ -27,7 +28,6 @@ import {
     record,
     refine,
     string,
-    tuple,
     union,
 } from '../../codec'
 
@@ -179,7 +179,7 @@ describe('the safe pair never throws, whatever is thrown at it', () => {
         ['opaque nested', () => opaque.encode({ a: [{ b: 1n }] })],
         ['set', () => string.set().encode(new Set())],
         ['array', () => array(string).decode({ L: [{ N: '1' }] })],
-        ['tuple', () => tuple(string).decode({ L: [] })],
+        ['tuple', () => list(string).decode({ L: [] })],
         ['record', () => record(string).decode({ M: { k: { N: '1' } } })],
         ['map', () => object({ a: string }).decode({ M: {} })],
         ['item missing', () => object({ a: string }).encode({} as never)],

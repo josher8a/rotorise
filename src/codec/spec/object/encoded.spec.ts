@@ -34,6 +34,7 @@ import {
     boolean,
     decimal,
     discriminatedUnion,
+    list,
     nullable,
     number,
     object,
@@ -41,7 +42,6 @@ import {
     optional,
     record,
     string,
-    tuple,
     union,
 } from '../../codec'
 
@@ -358,7 +358,7 @@ describe('a record and a tuple keep their shape', () => {
 
     const crateSpec = {
         prices: record(decimal),
-        span: tuple(string, number),
+        span: list(string, number),
         nested: record(object({ at: string })),
     }
 
@@ -391,7 +391,7 @@ describe('a record and a tuple keep their shape', () => {
     it('is refused when a tuple position changes', () => {
         const drifted = {
             ...crateSpec,
-            span: tuple(decimal, number) as never,
+            span: list(decimal, number) as never,
         }
         const _wrong = () =>
             // @ts-expect-error `span` is readonly [S, N], and this writes [N, N]

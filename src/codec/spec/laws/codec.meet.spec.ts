@@ -429,7 +429,7 @@ describe('the worked pairs the model pins', () => {
     })
 
     /**
-     * `array(string) ∧ tuple(string('a'))` — a spread against a fixed arity flattens to that
+     * `array(string) ∧ list(string('a'))` — a spread against a fixed arity flattens to that
      * arity, which is `listMeetRow`'s second branch.
      */
     it('meets a spread against a fixed arity by flattening to that arity', () => {

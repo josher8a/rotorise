@@ -13,11 +13,11 @@ import {
     CodecError,
     decimal,
     discriminatedUnion,
+    list,
     number,
     object,
     optional,
     string,
-    tuple,
 } from '../../codec'
 import { checkEncodePaths, checkRoundTrip } from '../../testing'
 
@@ -152,11 +152,11 @@ const StepCodec = object({
 const FulfilmentCodec = discriminatedUnion('type', [
     object({
         type: string('SINGLE_LEG'),
-        legs: tuple(StepCodec),
+        legs: list(StepCodec),
     }),
     object({
         type: string('MULTI_LEG'),
-        legs: tuple(StepCodec, StepCodec),
+        legs: list(StepCodec, StepCodec),
     }),
 ])
 

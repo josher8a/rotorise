@@ -153,15 +153,15 @@ export type Term =
     /**
      * §3 `(list)`: the one positional container, as a prefix, at most one spread, and a suffix.
      *
-     * `array`, `tuple` and a tuple with a tail were three shapes of one thing, and none of the
-     * three could say `[A, B, ...C[], D]` — a fixed position *after* a spread. A value of length
+     * A fixed arity, a homogeneous run, and the two together are shapes of one thing, and a fixed
+     * position *after* a spread — `[A, B, ...C[], D]` — is one more. A value of length
      * `n` is admitted when `n >= pre.length + suf.length`: `pre` aligns from the left, `suf` from
      * the right, and every position between them goes through the spread. With no spread the arity
      * is exactly `pre.length + suf.length`.
      *
      * **Two spreads have no term**, because `spread` is one optional member and not a list. The
-     * constructors keep their own refusal, because {@link tuple} takes its tail as a marker in a
-     * variadic parameter list and a parameter list can still carry two.
+     * constructor keeps its own refusal, because `list` takes its elements as a variadic parameter
+     * list and a parameter list can still carry two markers.
      */
     | {
           readonly kind: 'list'

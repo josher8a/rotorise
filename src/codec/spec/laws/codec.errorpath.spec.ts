@@ -12,11 +12,11 @@ import {
     array,
     CodecError,
     decimal,
+    list,
     number,
     object,
     record,
     string,
-    tuple,
 } from '../../codec'
 
 const pathOf = (run: () => unknown): readonly (string | number)[] => {
@@ -64,7 +64,7 @@ describe('a failure carries the path it took', () => {
 
     it('names the position, inside a tuple', () => {
         const Pair = object({
-            pair: tuple(string, number),
+            pair: list(string, number),
         }).item
         expect(
             pathOf(() =>

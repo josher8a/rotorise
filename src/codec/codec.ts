@@ -100,14 +100,14 @@ declare const fallbackMarker: unique symbol
 declare const undefinableMarker: unique symbol
 
 /**
- * Marks the codec for a tuple's trailing elements.
+ * Marks the codec for a list's repeating positions.
  *
  * Type-level only, and read at runtime from the definition, for the same reason as
  * {@link optionalMarker}. Like `optional`, it is a marker for a *position* rather than a codec in its
- * own right — it says "and then any number of these" — so it is meaningful in exactly one place: last
- * in a {@link tuple}.
+ * own right — it says "and then any number of these" — so it is meaningful in exactly one place:
+ * among the elements of a {@link list}.
  */
-declare const restMarker: unique symbol
+declare const spreadMarker: unique symbol
 
 /**
  * A deterministic source of randomness.
@@ -229,15 +229,18 @@ export type UndefinableCodec<
 export type AnyCodec = CodecShape<never, unknown, AttributeValue>
 
 /**
- * Anything a {@link rest} produced, whatever it marks — {@link AnyCodec}'s counterpart for the one
- * thing that is a position rather than a codec, and the only element type {@link tuple} accepts that
+ * Anything a {@link spread} produced, whatever it marks — {@link AnyCodec}'s counterpart for the one
+ * thing that is a position rather than a codec, and the only element type {@link list} accepts that
  * is not a codec.
  *
- * Written as the marked shape rather than as `RestCodec<unknown, AttributeValue>`, for the reason
- * {@link TupleWrites} records: `AttributeCodec` names its value on both sides, so it is invariant
+ * Written as the marked shape rather than as `SpreadCodec<unknown, AttributeValue>`, for the reason
+ * {@link ListWrites} records: `AttributeCodec` names its value on both sides, so it is invariant
  * and the `unknown` instantiation matches no real one.
  */
-export type AnyRest = { readonly [restMarker]: true; readonly rest: AnyCodec }
+export type AnySpread = {
+    readonly [spreadMarker]: true
+    readonly spread: AnyCodec
+}
 
 /**
  * Anything an object member can be declared as: a codec, or a §4 field that marks one.
@@ -934,6 +937,13 @@ const set = <const C extends AnyCodec>(
     return codecOfTerm<ReadonlySet<T>, SetOf<C>>(term)
 }
 
+/**
+ * A homogeneous positional container, as `L`.
+ *
+ * `list(spread(c))` says the same thing, and this says it in one word for the common case. A
+ * `never` element is admitted rather than refused: the spread is not a slot, so an array of
+ * nothing is the empty list, which is a value.
+ */
 export const array = <const C extends AnyCodec>(
     element: C,
 ): AttributeCodec<readonly Decoded<C>[], L<AttributeOf<C>>> => {
@@ -949,8 +959,9 @@ export const array = <const C extends AnyCodec>(
 /**
  * A declaration that fills a **slot** with a term holding no value.
  *
- * A slot is a position a value must fill: a fixed element of a tuple, and a `req` or `fallback`
- * field. `optional` and `undefinable` are not slots, because the key may be absent.
+ * A slot is a position a value must fill: a declared element of a list, and a `req` or `fallback`
+ * field. `optional` and `undefinable` are not slots, because the key may be absent. A list's
+ * spread is not one either, because a value of the declared length omits it.
  */
 type IsNeverSlot<D> = [D] extends [{ readonly [optionalMarker]: true }]
     ? false
@@ -962,150 +973,101 @@ type IsNeverSlot<D> = [D] extends [{ readonly [optionalMarker]: true }]
         ? true
         : false
 
-/** Whether any fixed position of a tuple, or its tail, is `never`. */
-type TupleNeverSlot<Cs extends readonly unknown[]> = Cs extends readonly [
+/**
+ * Whether any **declared** position of a list is `never`.
+ *
+ * The spread is not asked, because the spread is not a slot: a value of exactly the declared
+ * length omits every spread position, so a spread at the bottom is the list of its declared
+ * positions and that is a value. `Term.listOf` normalises the declared positions for the same
+ * reason and leaves the spread alone.
+ */
+type ListNeverSlot<Cs extends readonly unknown[]> = Cs extends readonly [
     infer H,
     ...infer T extends readonly unknown[],
 ]
-    ? H extends { readonly rest: { readonly def: { readonly kind: 'never' } } }
-        ? true
+    ? H extends AnySpread
+        ? ListNeverSlot<T>
         : IsNeverSlot<H> extends true
           ? true
-          : TupleNeverSlot<T>
+          : ListNeverSlot<T>
     : false
 
 /**
- * Nothing, or why this tuple can hold no value.
+ * Nothing, or why this list can hold no value.
  *
- * **The model types `tuple [never]` and gives it an empty held set, which is correct there.** The
- * host refuses it instead, because a position nothing fills makes the whole tuple unconstructible
- * and `never` already names that term: a declaration with two spellings, one of them a trap, is
- * the shape a constructor should not have.
+ * **The model types a list with a `never` position and gives it an empty held set, which is
+ * correct there.** The host refuses it instead, because a position nothing fills makes the whole
+ * list unconstructible and `never` already names that term: a declaration with two spellings, one
+ * of them a trap, is the shape a constructor should not have.
+ *
+ * The spread is exempt, and that is the same rule read the other way: it is not a slot, so a list
+ * whose spread is `never` is the list of its declared positions, and that is a value.
  */
-type NoNeverSlot<
-    Cs extends readonly unknown[],
-    Where extends string = 'tuple',
-> = TupleNeverSlot<Cs> extends true
-    ? ErrorMessage<`[${Where}] a fixed position is \`never\`, so nothing fills it and the ${Where} holds no value at all. Use \`never\` itself if that is what you meant`>
+type NoNeverSlot<Cs extends readonly unknown[]> = ListNeverSlot<Cs> extends true
+    ? ErrorMessage<'[list] a declared position is `never`, so nothing fills it and the list holds no value at all. Use `never` itself if that is what you meant'>
     : unknown
 
 /**
- * A fixed-length, heterogeneous list, as `L`.
+ * A positional container: the elements in order, with at most one {@link spread} among them.
  *
- * `array` gives `readonly T[]`, which cannot say that a route is one step or exactly two. Decode
- * checks the length, because a tuple whose arity is wrong is not the type it claims to be.
+ * The call reads as the type it builds. `list(string, spread(decimal), boolean)` is
+ * `readonly [string, ...string[], boolean]`, position for position, so a reader checks the
+ * declaration against the type without splitting it into parts first.
  *
- * A builder over {@link list}: the declared elements are the prefix and a `rest` element is the
- * spread. {@link list} is what says a fixed position after the spread.
- */
-export const tuple = <const Cs extends readonly (AnyCodec | AnyRest)[]>(
-    // asked of the union of the elements rather than mapped over them: one instantiation instead of
-    // one per position, and the diagnostic lands on the call either way. Mapping cost +10% across
-    // this repo, measured. `rest` is exempt, and checked for position separately
-    ...elements: Cs & RestGoesLast<Cs> & NoNeverSlot<Cs>
-): AttributeCodec<TupleOf<Cs>, L<TupleWrites<Cs>>> => {
-    const all = elements as readonly unknown[]
-
-    /**
-     * `RestGoesLast` refuses a misplaced `rest` in the *type*, and a cast defeats the type.
-     *
-     * Past one, nothing looked: the split below reads only the last element, so a `rest` anywhere
-     * else was read as a fixed element and written as one — `tuple(rest(string) as any, number)`
-     * encoded `['a', 1]` as a two-element tuple and reported nothing. This is §8 case (b): the
-     * condition is decidable from the declaration, so it is refused where the declaration is,
-     * beside `set`'s two refusals for the same reason.
-     */
-    const misplaced = all.findIndex(
-        (element, at) => at < all.length - 1 && isTail(element),
-    )
-    if (misplaced !== -1) {
-        throw new CodecError(
-            `\`rest\` is at position ${misplaced} of ${all.length} elements and a tuple's rest must be last — everything after it would have no fixed position. The type says so too; this call reached here past a cast`,
-        )
-    }
-
-    /**
-     * The tail is split off once, here, rather than asked for per row.
-     *
-     * `RestGoesLast` has already refused it anywhere but the end, so the last element is the only one
-     * that can be marked and looking at it is enough.
-     */
-    const last = all[all.length - 1]
-    const tail = isTail(last) ? termOf(last.rest) : undefined
-    const items = (tail ? all.slice(0, -1) : all) as readonly AnyCodec[]
-
-    /**
-     * **A position nothing fills makes the whole tuple unconstructible.**
-     *
-     * The model types `tuple [never]` and gives it an empty held set, which is correct as a model.
-     * Here it is a declaration with a second spelling for `never`, and one of the two is a trap.
-     *
-     * The two spellings differ: a declared position at the bottom does refuse every value, which is
-     * `Term.listOf`'s normalisation, while a **tail** at the bottom is the tuple of the declared
-     * positions alone, because a value of exactly the declared length omits every tail position.
-     * So the fixed part is `never` itself written twice, and the tail is `tuple(...)` without the
-     * tail written twice. Both are refused, and for the second reason rather than the first: the
-     * earlier wording here said a `never` tail refuses every value, and porting `listOf` disproved
-     * it. The type says so too; this is the cast's path.
-     */
-    const deadAt = items.findIndex((item) => termOf(item).kind === 'never')
-    if (deadAt !== -1 || tail?.kind === 'never') {
-        throw new CodecError(
-            `${deadAt !== -1 ? `position ${deadAt}` : 'the tail'} is \`never\`, so nothing fills it and the tuple holds no value at all — use \`never\` itself if that is what you meant`,
-        )
-    }
-
-    // as with `record` and `map`, the cast keeps the shape each position writes, which
-    // `Attribute<'L'>` would flatten to "some list"
-    return codecOfTerm({
-        kind: 'list',
-        pre: items.map(termOf),
-        ...(tail ? { spread: tail } : {}),
-        suf: [],
-    }) as unknown as AttributeCodec<TupleOf<Cs>, L<TupleWrites<Cs>>>
-}
-
-/**
- * A positional container, as a prefix, at most one spread, and a suffix.
+ * **A spread may sit anywhere, and only once.** It used to have to go last, because the only
+ * container that took one was a tuple and a tuple had no suffix. A list has one, so "last" was
+ * never the rule: the rule is *once*, and {@link SpreadOnce} states it. Every position after the
+ * spread is a fixed element aligned from the right.
  *
- * `array` and `tuple` are the two shapes a single word already names, and neither can say
- * `[A, B, ...C[], D]` — a fixed position *after* a spread. This is the constructor of the term both
- * build, so it says every shape they say and that one too.
- *
- * **The spread is one parameter, so two spreads have no spelling.** `tuple` takes its tail as a
- * marker inside a variadic parameter list, which is why it owes {@link RestGoesLast} a refusal;
- * here the position of the argument says which part it is, and a parameter list that carries two
- * spreads does not typecheck. A value of length `n` is held when `n` is at least the declared
- * positions: the prefix aligns from the left, the suffix from the right, and the middle goes
- * through the spread.
+ * A value of length `n` is held when `n` is at least the declared positions: the prefix aligns
+ * from the left, the suffix from the right, and the middle goes through the spread.
  *
  * @example
  * ```ts
- * list([string, number], decimal, [boolean])  // readonly [string, number, ...string[], boolean]
- * list([string, number])                      // readonly [string, number], as `tuple` gives
- * list([], string)                            // readonly string[], as `array` gives
+ * list(string, decimal, spread(boolean))  // readonly [string, string, ...boolean[]]
+ * list(string, spread(decimal), boolean)  // readonly [string, ...string[], boolean]
+ * list(string, decimal)                   // readonly [string, string]
+ * list(spread(string))                    // readonly string[], as `array` gives
  * ```
  */
-export const list = <
-    const Pre extends readonly AnyCodec[],
-    const Sp extends AnyCodec | undefined = undefined,
-    const Suf extends readonly AnyCodec[] = readonly [],
->(
-    pre: Pre & NoNeverSlot<Pre, 'list'>,
-    spread?: Sp,
-    suf?: Suf & NoNeverSlot<Suf, 'list'>,
-): AttributeCodec<ListOf<Pre, Sp, Suf>, L<ListWrites<Pre, Sp, Suf>>> => {
-    const declared = [
-        ...(pre as readonly AnyCodec[]),
-        ...((suf ?? []) as readonly AnyCodec[]),
-    ]
+export const list = <const Cs extends readonly (AnyCodec | AnySpread)[]>(
+    // asked of the union of the elements rather than mapped over them: one instantiation instead
+    // of one per position, and the diagnostic lands on the call either way. Mapping cost +10%
+    // across this repo, measured
+    ...elements: Cs & SpreadOnce<Cs> & NoNeverSlot<Cs>
+): AttributeCodec<ListOf<Cs>, L<ListWrites<Cs>>> => {
+    const all = elements as readonly unknown[]
+
     /**
-     * **A declared position nothing fills makes the whole list unconstructible**, and a spread at
-     * the bottom is the same list without the spread.
+     * `SpreadOnce` refuses a second spread in the *type*, and a cast defeats the type.
      *
-     * The two are different facts and both are a second spelling for something already spelled:
-     * the first is `never`, and the second is this call without its spread. `NoNeverSlot` refuses
-     * the declared positions in the *type*, and a cast defeats the type, so both are refused here.
+     * The cast is the path that matters: with two spreads the first was read as the spread and
+     * the second as a fixed element, so the declaration held a shape nobody wrote.
+     */
+    const spreads = all.filter(isSpread)
+    if (spreads.length > 1) {
+        throw new CodecError(
+            'a list has at most one spread, and this one has ' +
+                `${spreads.length} — the positions after the spread are fixed elements`,
+        )
+    }
+
+    const at = all.findIndex(isSpread)
+    const marked = at === -1 ? undefined : (all[at] as AnySpread)
+    const declared = (
+        at === -1 ? all : [...all.slice(0, at), ...all.slice(at + 1)]
+    ) as readonly AnyCodec[]
+
+    /**
+     * **A declared position nothing fills makes the whole list unconstructible.**
+     *
+     * The model types a list with a `never` position and gives it an empty held set, which is
+     * correct as a model. Here it is a declaration with a second spelling for `never`, and one of
+     * the two is a trap. `NoNeverSlot` refuses it in the *type*, and a cast defeats the type.
+     *
+     * The **spread** is not asked, and that is the rule rather than an omission: a value of
+     * exactly the declared length omits every spread position, so `list(spread(never))` is the
+     * empty list and the empty list is a value. `Term.listOf` draws the same line.
      */
     const deadAt = declared.findIndex((item) => termOf(item).kind === 'never')
     if (deadAt !== -1) {
@@ -1113,23 +1075,38 @@ export const list = <
             `position ${deadAt} of the declared positions is \`never\`, so nothing fills it and the list holds no value at all — use \`never\` itself if that is what you meant`,
         )
     }
-    if (spread && termOf(spread).kind === 'never') {
-        throw new CodecError(
-            'the spread is `never`, so the list holds exactly its declared positions — drop the spread if that is what you meant',
-        )
-    }
-    // as with `record` and `tuple`, the cast keeps the shape each position writes, which
+
+    // as with `record` and `map`, the cast keeps the shape each position writes, which
     // `Attribute<'L'>` would flatten to "some list"
     return codecOfTerm({
         kind: 'list',
-        pre: (pre as readonly AnyCodec[]).map(termOf),
-        ...(spread ? { spread: termOf(spread) } : {}),
-        suf: ((suf ?? []) as readonly AnyCodec[]).map(termOf),
-    }) as unknown as AttributeCodec<
-        ListOf<Pre, Sp, Suf>,
-        L<ListWrites<Pre, Sp, Suf>>
-    >
+        pre: (at === -1 ? all : all.slice(0, at)).map((c) =>
+            termOf(c as AnyCodec),
+        ),
+        ...(marked ? { spread: termOf(marked.spread) } : {}),
+        suf: (at === -1 ? [] : all.slice(at + 1)).map((c) =>
+            termOf(c as AnyCodec),
+        ),
+    }) as unknown as AttributeCodec<ListOf<Cs>, L<ListWrites<Cs>>>
 }
+
+/**
+ * The elements split at the one spread: what comes before it, what it marks, and what comes after.
+ *
+ * Accumulated into `Pre` rather than inferred at a fixed position, because the spread may sit
+ * anywhere. The accumulator makes the recursion tail-recursive, which is the form TypeScript
+ * unrolls to a thousand elements instead of fifty.
+ */
+type Split<
+    Cs extends readonly unknown[],
+    Pre extends readonly unknown[] = [],
+> = Cs extends readonly [infer H, ...infer T]
+    ? H extends AnySpread
+        ? H extends { readonly spread: infer S }
+            ? { pre: Pre; spread: S; suf: T }
+            : never
+        : Split<T, [...Pre, H]>
+    : { pre: Pre; spread: undefined; suf: [] }
 
 /**
  * What a list holds: the prefix by position, the spread by repetition, then the suffix by position.
@@ -1138,85 +1115,62 @@ export const list = <
  * `...never[]` in the middle of a tuple type is not the empty middle — it is a tuple no value
  * inhabits.
  */
-export type ListOf<
-    Pre extends readonly unknown[],
-    Sp,
-    Suf extends readonly unknown[],
-> = Sp extends AnyCodec
-    ? readonly [
-          ...{ [I in keyof Pre]: Decoded<Pre[I]> },
-          ...Decoded<Sp>[],
-          ...{ [I in keyof Suf]: Decoded<Suf[I]> },
-      ]
-    : readonly [
-          ...{ [I in keyof Pre]: Decoded<Pre[I]> },
-          ...{ [I in keyof Suf]: Decoded<Suf[I]> },
-      ]
-
-/** The same split, on the stored side. */
-export type ListWrites<
-    Pre extends readonly unknown[],
-    Sp,
-    Suf extends readonly unknown[],
-> = Sp extends AnyCodec
-    ? readonly [
-          ...{ [I in keyof Pre]: AttributeOf<Pre[I]> },
-          ...(AttributeOf<Sp> & AttributeValue)[],
-          ...{ [I in keyof Suf]: AttributeOf<Suf[I]> },
-      ]
-    : readonly [
-          ...{ [I in keyof Pre]: AttributeOf<Pre[I]> },
-          ...{ [I in keyof Suf]: AttributeOf<Suf[I]> },
-      ]
-
-/**
- * What a tuple holds: the fixed positions, and then the tail if it has one.
- *
- * Split by peeling the last element, which is the only one a rest may be — so a tuple without one
- * maps position for position exactly as it always did.
- */
-export type TupleOf<Cs extends readonly unknown[]> = Cs extends readonly [
-    ...infer Head,
-    infer Last,
-]
-    ? Last extends { readonly [restMarker]: true; readonly rest: infer R }
-        ? readonly [...{ [I in keyof Head]: Decoded<Head[I]> }, ...Decoded<R>[]]
-        : { readonly [I in keyof Cs]: Decoded<Cs[I]> }
-    : { readonly [I in keyof Cs]: Decoded<Cs[I]> }
+export type ListOf<Cs extends readonly unknown[]> = Split<Cs> extends {
+    pre: infer P extends readonly unknown[]
+    spread: infer S
+    suf: infer F extends readonly unknown[]
+}
+    ? S extends AnyCodec
+        ? readonly [
+              ...{ [I in keyof P]: Decoded<P[I]> },
+              ...Decoded<S>[],
+              ...{ [I in keyof F]: Decoded<F[I]> },
+          ]
+        : readonly [
+              ...{ [I in keyof P]: Decoded<P[I]> },
+              ...{ [I in keyof F]: Decoded<F[I]> },
+          ]
+    : never
 
 /**
  * The same split, on the stored side.
  *
- * Both sides match the *marker* and then extract with {@link Decoded} and {@link AttributeOf}, rather
- * than inferring through `RestCodec<…>`. Inferring is the trap: `AttributeCodec` names its value on
- * both sides, so `RestCodec<unknown, infer A>` matches nothing and this fell to the fixed-arity branch
- * — a tuple with a tail typed as though its tail were one element. Silently, because a fixed `[S, N,
- * N]` *is* assignable to `readonly [S, N, ...N[]]`, so an assignment could not tell.
+ * Both sides match the *marker* and then extract with {@link Decoded} and {@link AttributeOf},
+ * rather than inferring through `SpreadCodec<…>`. Inferring is the trap: `AttributeCodec` names
+ * its value on both sides, so `SpreadCodec<unknown, infer A>` matches nothing and this fell to the
+ * fixed-arity branch — a list with a spread typed as though the spread were one element. Silently,
+ * because a fixed `[S, N, N]` *is* assignable to `readonly [S, N, ...N[]]`, so an assignment could
+ * not tell.
  */
-export type TupleWrites<Cs extends readonly unknown[]> = Cs extends readonly [
-    ...infer Head,
-    infer Last,
-]
-    ? Last extends { readonly [restMarker]: true; readonly rest: infer R }
+export type ListWrites<Cs extends readonly unknown[]> = Split<Cs> extends {
+    pre: infer P extends readonly unknown[]
+    spread: infer S
+    suf: infer F extends readonly unknown[]
+}
+    ? S extends AnyCodec
         ? readonly [
-              ...{ [I in keyof Head]: AttributeOf<Head[I]> },
-              ...(AttributeOf<R> & AttributeValue)[],
+              ...{ [I in keyof P]: AttributeOf<P[I]> },
+              ...(AttributeOf<S> & AttributeValue)[],
+              ...{ [I in keyof F]: AttributeOf<F[I]> },
           ]
-        : { readonly [I in keyof Cs]: AttributeOf<Cs[I]> }
-    : { readonly [I in keyof Cs]: AttributeOf<Cs[I]> }
+        : readonly [
+              ...{ [I in keyof P]: AttributeOf<P[I]> },
+              ...{ [I in keyof F]: AttributeOf<F[I]> },
+          ]
+    : never
 
 /**
- * Nothing, or why a tuple's tail is not an attribute.
+ * Nothing, or why a spread is not an attribute.
  *
  * An item's members are reached by *name*, so `optional` and `fallback` belong here — both are
- * statements about a name. `rest` is a statement about a *position*, and there are no positions in a
- * map, so it is the one marker an object member cannot be.
+ * statements about a name. `spread` is a statement about a *position*, and there are no positions
+ * in a map, so it is the one marker an object member cannot be.
  */
-type NoTail<Spec> = [
-    Extract<Spec[keyof Spec], { readonly [restMarker]: true }>,
+type NoSpreadMember<Spec> = [
+    Extract<Spec[keyof Spec], { readonly [spreadMarker]: true }>,
 ] extends [never]
     ? unknown
-    : ErrorMessage<"`rest(...)` is a tuple's tail, not an attribute: an item has names and not positions">
+    : ErrorMessage<'`spread(...)` is a position in a list, not an attribute: an item has names and not positions'>
 
 /** A field whose mark makes it a slot, declared at a term that holds no value. */
 type NoNeverField<Spec> = [
@@ -1231,69 +1185,70 @@ type NoNeverField<Spec> = [
           string}' is declared at \`never\` and the row always writes it, so the object holds no value at all. Mark it \`optional\`, or use \`never\` itself`>
 
 /**
- * Nothing, or why a rest element is not where it has to be.
+ * Nothing, or why a list carries more than one spread.
  *
- * "The rest" is only a thing to be once, and only at the end. Checked by asking whether any element
- * *but* the last is marked, which is one instantiation over the head rather than one per position.
+ * A spread says "and then any number of these", and a second one has no reading: the positions
+ * between the two belong to both. Checked by splitting at the first spread and asking whether
+ * anything *after* it is marked, which is one instantiation over the tail rather than one per
+ * position.
  */
-export type RestGoesLast<Cs extends readonly unknown[]> = Cs extends readonly [
-    ...infer Head,
-    unknown,
-]
-    ? [Extract<Head[number], { readonly [restMarker]: true }>] extends [never]
+export type SpreadOnce<Cs extends readonly unknown[]> = Split<Cs> extends {
+    suf: infer F extends readonly unknown[]
+}
+    ? [Extract<F[number], { readonly [spreadMarker]: true }>] extends [never]
         ? unknown
-        : ErrorMessage<'`rest(...)` is the tail of a tuple, so it goes last and only once — every earlier position is a fixed element'>
+        : ErrorMessage<'a list has at most one `spread(...)` — the positions after it are fixed elements'>
     : unknown
 
 /**
- * A tuple's trailing elements: *and then any number of these*.
+ * A list's repeating positions: *and then any number of these*.
  *
- * The counterpart of `...T[]` in a tuple type, and restricted the same way — it is meaningful only as
- * the last element of a {@link tuple}, because "the rest" is only a thing to be once. Every other
- * position refuses it, and the type says so rather than a runtime check discovering it.
+ * The counterpart of `...T[]` in a tuple type, and restricted the same way — it is meaningful only
+ * among the elements of a {@link list}, and only once, because the positions between two spreads
+ * belong to both. Every other place refuses it, and the type says so rather than a runtime check
+ * discovering it.
  *
  * @example
  * ```ts
- * tuple(string, number, rest(decimal))   // readonly [string, number, ...string[]]
- * tuple(rest(string))                    // readonly string[], but stored as L with no minimum
+ * list(string, decimal, spread(boolean))  // readonly [string, string, ...boolean[]]
+ * list(string, spread(decimal), boolean)  // readonly [string, ...string[], boolean]
+ * list(spread(string))                    // readonly string[], stored as L with no minimum
  * ```
  */
-export const rest = <const C extends AnyCodec>(
+export const spread = <const C extends AnyCodec>(
     element: C,
-): RestCodec<Decoded<C>, AttributeOf<C> & AttributeValue> =>
-    ({ rest: element as unknown as AnyCodec }) as unknown as RestCodec<
+): SpreadCodec<Decoded<C>, AttributeOf<C> & AttributeValue> =>
+    ({ spread: element as unknown as AnyCodec }) as unknown as SpreadCodec<
         Decoded<C>,
         AttributeOf<C> & AttributeValue
     >
 
 /**
- * Whether this is a tail marker rather than an element — the runtime half of `restMarker`.
+ * Whether this is a spread marker rather than an element — the runtime half of `spreadMarker`.
  *
- * `restMarker` is a `declare const` symbol, so it exists in the type and nowhere else, and
- * {@link tuple} needs an answer at run time. One own property, checked by name.
+ * `spreadMarker` is a `declare const` symbol, so it exists in the type and nowhere else, and
+ * {@link list} needs an answer at run time. One own property, checked by name.
  */
-const isTail = (element: unknown): element is { readonly rest: AnyCodec } =>
+const isSpread = (element: unknown): element is AnySpread =>
     typeof element === 'object' &&
     element !== null &&
-    'rest' in element &&
-    // and it is not a codec, which is decidable now that every codec carries a definition. An
-    // `ItemCodec` has a `rest` of its own — its open-part policy — so the first test alone would
-    // take one for a tail
+    'spread' in element &&
+    // and it is not a codec, which is decidable now that every codec carries a definition: a
+    // marker is a position and has no `encode` to call
     !('def' in element)
 
 /**
- * A tuple's tail: the element codec, marked for a position.
+ * A list's repeating position: the element codec, marked for a position.
  *
  * **Not a codec, and it used to say it was.** This was `AttributeCodec<T, A> & { …marker }`, which
- * claimed a rest has an `encode` and a `decode` — true only because `rest(c)` was built by spreading
- * `c`, so a bare rest encoded as its element by accident. A rest is a *position*, `Rest` in §4's
- * third stratum, and the only two things that have one are a tuple's tail and an object's open part.
- * Both unwrap it at construction. Nothing else may be given one, and the type no longer offers a
- * caller the two halves to call.
+ * claimed a marker has an `encode` and a `decode` — true only because the marker was built by
+ * spreading its element, so a bare one encoded as its element by accident. A spread is a
+ * *position*, and a list is the only thing that has one. It unwraps the marker at construction.
+ * Nothing else may be given one, and the type no longer offers a caller the two halves to call.
  */
-export type RestCodec<T, A extends AttributeValue = AttributeValue> = {
-    readonly [restMarker]: true
-    readonly rest: AttributeCodec<T, A>
+export type SpreadCodec<T, A extends AttributeValue = AttributeValue> = {
+    readonly [spreadMarker]: true
+    readonly spread: AttributeCodec<T, A>
 }
 
 /** A homogeneous string-keyed record, as `M`. */
@@ -2633,7 +2588,7 @@ export const object = <
     const Spec extends Record<string, AnyDeclaration>,
     const Rest extends RestDeclaration = 'drop',
 >(
-    spec: Spec & NoTail<Spec> & NoNeverField<Spec>,
+    spec: Spec & NoSpreadMember<Spec> & NoNeverField<Spec>,
     rest: Rest = 'drop' as Rest,
 ): ObjectCodec<Spec, Rest> => {
     // the marker off each declared attribute, once — the term. What the two directions walk is

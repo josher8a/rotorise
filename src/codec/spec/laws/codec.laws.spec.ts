@@ -29,6 +29,7 @@ import {
     held,
     lazy,
     legacy,
+    list,
     nullable,
     nullValue,
     number,
@@ -37,9 +38,8 @@ import {
     optional,
     record,
     refine,
-    rest,
+    spread,
     string,
-    tuple,
     union,
 } from '../../codec'
 import { accepts } from '../../denote'
@@ -239,15 +239,19 @@ describe('the obligations a caller owes', () => {
         expect(() => fallback(string('A'), 'A' as const)).not.toThrow()
     })
 
-    /** `RestGoesLast`, past the cast that defeats the type. */
-    it('tuple: a rest out of position is refused at construction', () => {
-        // the whole call is cast, because `RestGoesLast` constrains the parameter list rather
+    /** `SpreadOnce`, past the cast that defeats the type. */
+    it('list: a second spread is refused at construction', () => {
+        // the whole call is cast, because `SpreadOnce` constrains the parameter list rather
         // than any one element — which is the type doing its job, and the cast is the witness
-        const unchecked = tuple as unknown as (
+        const unchecked = list as unknown as (
             ...elements: readonly unknown[]
         ) => unknown
-        expect(() => unchecked(rest(string), number)).toThrow(CodecError)
-        expect(() => tuple(string, rest(number))).not.toThrow()
+        expect(() => unchecked(spread(string), number, spread(number))).toThrow(
+            CodecError,
+        )
+        // a spread before a fixed position is an ordinary shape: that is what a suffix is for
+        expect(() => list(spread(string), number)).not.toThrow()
+        expect(() => list(string, spread(number))).not.toThrow()
     })
 })
 
@@ -623,7 +627,7 @@ describe('the laws that do NOT hold', () => {
             // @ts-expect-error nor in a record
             record(optional(string)),
             // @ts-expect-error nor in a tuple
-            tuple(string, optional(number)),
+            list(string, optional(number)),
             // @ts-expect-error nor is a union option a name
             union([optional(string), number]),
             // @ts-expect-error and a fallback says the same thing about absence
@@ -841,8 +845,8 @@ describe('`accepts`, and the direction of the law that is true', () => {
         ['set', string.set()],
         ['set(decimal)', decimal.set()],
         ['array', array(string)],
-        ['tuple', tuple(string, number)],
-        ['tuple(rest)', tuple(string, rest(number))],
+        ['list', list(string, number)],
+        ['list(rest)', list(string, spread(number))],
         ['record', record(decimal)],
         ['attributes', object({ a: string, b: number }).item],
         ['attributes(open)', object({ a: string }, decimal).item],

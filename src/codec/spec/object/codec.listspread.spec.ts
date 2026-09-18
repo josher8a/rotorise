@@ -1,11 +1,11 @@
 /**
- * A tuple with a tail: some fixed positions, and then any number of one more thing.
+ * A list with a spread: some declared positions, and any number of one more thing among them.
  *
- * `rest(c)` is the counterpart of `...T[]` in a tuple type, and it is a marker for a *position* in
+ * `spread(c)` is the counterpart of `...T[]` in a tuple type, and it is a marker for a *position* in
  * the same way `optional` is a marker for a *name* — so it means something in exactly one place, and
- * every other place refuses it. What it buys over `array` is the fixed head: a list whose first two
- * elements are a `string` and a number and whose remainder is digits is not expressible as either a
- * tuple or an array on its own.
+ * every other place refuses it. What it buys over `array` is the declared positions: a list whose
+ * first two elements are a `string` and a number and whose remainder is digits is not expressible
+ * as a fixed arity or as an array on its own.
  */
 
 import { attest } from '@ark/attest'
@@ -15,16 +15,16 @@ import {
     array,
     CodecError,
     decimal,
+    list,
     number,
     object,
-    rest,
+    spread,
     string,
-    tuple,
     union,
 } from '../../codec'
 import { checkEncodePaths, checkRoundTrip } from '../../testing'
 
-const path = tuple(string, number, rest(decimal))
+const path = list(string, number, spread(decimal))
 
 describe('a tuple with a tail', () => {
     it('is still an L', () => {
@@ -49,7 +49,7 @@ describe('a tuple with a tail', () => {
     })
 
     it('and a tuple without a tail is typed as tightly as it always was', () => {
-        const fixed = tuple(string, number)
+        const fixed = list(string, number)
         attest<readonly [string, number]>(
             fixed.unsafeDecode({ L: [{ S: 'a' }, { N: '1' }] }),
         )
@@ -81,14 +81,14 @@ describe('a tuple with a tail', () => {
     })
 
     it('leaves a tuple without one exactly as strict as it was', () => {
-        const fixed = tuple(string, number)
+        const fixed = list(string, number)
         expect(() =>
             fixed.unsafeDecode({ L: [{ S: 'a' }, { N: '1' }, { N: '2' }] }),
         ).toThrow(CodecError)
     })
 
     it('admits a tail and nothing else', () => {
-        const every = tuple(rest(string))
+        const every = list(spread(string))
         expect(every.unsafeEncode(['a', 'b'])).toEqual({
             L: [{ S: 'a' }, { S: 'b' }],
         })
@@ -103,28 +103,27 @@ describe('a tuple with a tail', () => {
 
 describe('where a tail cannot go', () => {
     /**
-     * "The rest" is only a thing to be once, and only at the end. Everywhere else it is a marker with
-     * nothing to mark — a list has no head to be the tail of, and a map has names rather than
-     * positions.
+     * A spread is only a thing to be **once**. It used to have to be last as well, which was never
+     * the rule: it held only because the one container taking a spread had no positions after it.
+     * A list has a suffix, so a spread before a fixed position is an ordinary shape.
      */
-    it('is refused anywhere but last', () => {
+    it('is refused a second time, and admitted before a fixed position', () => {
+        expect(() => list(spread(string), number)).not.toThrow()
         const _wrong = () => [
-            // @ts-expect-error a tail goes last
-            tuple(rest(string), number),
-            // @ts-expect-error and only once
-            tuple(rest(string), rest(number)),
+            // @ts-expect-error a list has at most one spread
+            list(spread(string), spread(number)),
         ]
         expect(typeof _wrong).toBe('function')
     })
 
-    it('is refused where there is no head at all', () => {
+    it('is refused where there are no positions at all', () => {
         const _wrong = () => [
             // @ts-expect-error an array is already every element
-            array(rest(string)),
+            array(spread(string)),
             // @ts-expect-error an item has names, not positions
-            object({ a: rest(string) }),
+            object({ a: spread(string) }),
             // @ts-expect-error nor is a union option a position
-            union([rest(string), number]),
+            union([spread(string), number]),
         ]
         expect(typeof _wrong).toBe('function')
     })
@@ -133,14 +132,14 @@ describe('where a tail cannot go', () => {
      * The rule is that marking an element changes nothing about the element, and the tuple is
      * where it can be seen — a rest is a *position*, so it means nothing anywhere else.
      *
-     * This used to read `writes(rest(decimal))`, asking a marker what it writes. That worked
-     * because `rest(c)` was `c` with a definition stamped on it, so a bare rest had an `encode`
+     * This used to read `writes(spread(decimal))`, asking a marker what it writes. That worked
+     * because `spread(c)` was `c` with a definition stamped on it, so a bare rest had an `encode`
      * and answered as its element. It is a marker now and answers nothing, which is the point:
      * asking a position what it writes is a question with no subject.
      */
     it('but the element underneath is untouched by the mark', () => {
         expect(
-            tuple(string, rest(decimal)).unsafeEncode(['a', '1.5', '2']),
+            list(string, spread(decimal)).unsafeEncode(['a', '1.5', '2']),
         ).toEqual({ L: [{ S: 'a' }, { N: '1.5' }, { N: '2' }] })
     })
 })

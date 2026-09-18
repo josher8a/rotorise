@@ -14,14 +14,14 @@ import {
     decimal,
     discriminatedUnion,
     fallback,
+    list,
     never,
     nullable,
     object,
     optional,
     product,
-    rest,
+    spread,
     string,
-    tuple,
     undefinable,
     union,
 } from '../../codec'
@@ -264,12 +264,11 @@ describe('the factors a product refuses until the owner rules', () => {
         expect(() => object({ a: string, dead: never })).toThrow(
             /holds no value/,
         )
-        // @ts-expect-error a fixed position of a tuple is a slot
-        expect(() => tuple(never, string)).toThrow(/nothing fills it/)
-        // …and a `never` tail is a tail that admits nothing past the fixed part. The runtime
-        // alone refuses this one: `RestCodec.rest` is typed `AttributeCodec<T, A>`, which erases
-        // the narrowed `def` that the fixed positions are matched on
-        expect(() => tuple(string, rest(never))).toThrow(/nothing fills it/)
+        // @ts-expect-error a declared position of a list is a slot
+        expect(() => list(never, string)).toThrow(/nothing fills it/)
+        // …and the spread is NOT one, so it is admitted: a value of exactly the declared length
+        // omits every spread position, so this is `list(string)` and that holds a value
+        expect(() => list(string, spread(never))).not.toThrow()
     })
 
     /**

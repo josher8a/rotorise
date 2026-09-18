@@ -175,7 +175,7 @@ export type L<
     /**
      * A tuple where `Of` is one, and a homogeneous list otherwise.
      *
-     * `array(string)` writes `L<S>` — any number of strings — and `tuple(string, decimal)` writes
+     * `array(string)` writes `L<S>` — any number of strings — and `list(string, decimal)` writes
      * `L<[S, N]>`, which says one string then one number. The bracketed check is what keeps a union
      * `Of` a list of that union rather than a union of lists.
      */

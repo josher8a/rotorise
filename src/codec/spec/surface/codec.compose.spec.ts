@@ -10,12 +10,12 @@ import { describe, expect, it } from 'vitest'
 import {
     array,
     discriminatedUnion,
+    list,
     number,
     object,
     optional,
     record,
     string,
-    tuple,
     union,
 } from '../../codec'
 
@@ -39,7 +39,7 @@ const Adoption = object({
         object({ kind: string('PET'), coat: string }),
     ]),
     items: array(object({ n: number })),
-    legs: tuple(object({ n: number }), object({ n: number })),
+    legs: list(object({ n: number }), object({ n: number })),
     tags: record(object({ n: number })),
     maybe: optional(object({ m: string })),
     untagged: union([object({ a: string }), object({ b: number })]),

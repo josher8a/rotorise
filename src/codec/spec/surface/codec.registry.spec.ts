@@ -19,6 +19,7 @@ import {
     decimal,
     discriminatedUnion,
     legacy,
+    list,
     nullable,
     nullValue,
     number,
@@ -28,7 +29,6 @@ import {
     record,
     refine,
     string,
-    tuple,
     union,
 } from '../../codec'
 import { arbitraryOf, rngFrom, shrinkOf } from '../../testing'
@@ -48,7 +48,7 @@ const codecs: readonly (readonly [string, AnyCodec])[] = [
     ['opaque', opaque],
     ['set', string.set()],
     ['array', array(string)],
-    ['tuple', tuple(string, number)],
+    ['list', list(string, number)],
     ['record', record(decimal)],
     ['map', object({ a: string, b: number })],
     ['nullable', nullable(string)],

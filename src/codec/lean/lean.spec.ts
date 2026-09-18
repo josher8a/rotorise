@@ -52,8 +52,8 @@ import {
     product,
     record,
     refine,
+    spread,
     string,
-    tuple,
     union,
 } from '../codec'
 import { accepts } from '../denote'
@@ -200,7 +200,7 @@ describe('terms', () => {
         expect(leanTermOf(erase(record(boolean)))).toBe(
             'Term.record (Term.boolean)',
         )
-        expect(leanTermOf(erase(tuple(string, boolean)))).toBe(
+        expect(leanTermOf(erase(list(string, boolean)))).toBe(
             'Term.tuple [Term.string, Term.boolean] none',
         )
     })
@@ -729,18 +729,18 @@ export const sampleVectors: readonly Vector[] = [
      */
     {
         name: 'list_prefix_spread',
-        codec: erase(list([string], string)),
+        codec: erase(list(string, spread(string))),
         value: ['a', 'b', 'c'],
     },
     {
         name: 'list_spread_suffix',
-        codec: erase(list([], string, [boolean])),
+        codec: erase(list(spread(string), boolean)),
         value: ['a', 'b', true],
     },
     { name: 'array_empty', codec: erase(array(string)), value: [] },
     {
         name: 'tuple_pair',
-        codec: erase(tuple(string, boolean)),
+        codec: erase(list(string, boolean)),
         value: ['a', true],
     },
     {
