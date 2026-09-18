@@ -125,9 +125,12 @@ describe('a definition generates what the codec generated', () => {
     // and be looked at. It stays as it is.
     // 16: `nullable` went the same way. It is a builder that joins the null term to its subterm
     // with a union, so the null point is one term and not a wrapper kind of its own
+    //
+    // 15: `array` and `tuple` became one `list`, which carries a prefix, at most one spread and a
+    // suffix. Both are builders over it, and `list` says the shape neither could say
     it('covers every kind a codec can be', () => {
         const kinds = new Set(codecs.map(([, c]) => c.def?.kind))
-        expect(kinds.size).toBe(16)
+        expect(kinds.size).toBe(15)
         expect([...kinds].every(Boolean)).toBe(true)
     })
 })

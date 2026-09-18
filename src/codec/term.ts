@@ -150,12 +150,24 @@ export type Term =
      * `refine(set(b), each(…))`, with {@link elementPredicates} naming the restriction.
      */
     | { readonly kind: 'set'; readonly base: SetBase }
-    | { readonly kind: 'array'; readonly elem: Term }
-    /** `(tuple)` and `(tuple-tail)` in one variant; no tail is the plain tuple. */
+    /**
+     * §3 `(list)`: the one positional container, as a prefix, at most one spread, and a suffix.
+     *
+     * `array`, `tuple` and a tuple with a tail were three shapes of one thing, and none of the
+     * three could say `[A, B, ...C[], D]` — a fixed position *after* a spread. A value of length
+     * `n` is admitted when `n >= pre.length + suf.length`: `pre` aligns from the left, `suf` from
+     * the right, and every position between them goes through the spread. With no spread the arity
+     * is exactly `pre.length + suf.length`.
+     *
+     * **Two spreads have no term**, because `spread` is one optional member and not a list. The
+     * constructors keep their own refusal, because {@link tuple} takes its tail as a marker in a
+     * variadic parameter list and a parameter list can still carry two.
+     */
     | {
-          readonly kind: 'tuple'
-          readonly elems: readonly Term[]
-          readonly tail?: Term
+          readonly kind: 'list'
+          readonly pre: readonly Term[]
+          readonly spread?: Term
+          readonly suf: readonly Term[]
       }
     | { readonly kind: 'record'; readonly val: Term }
     /** §3 `(held)`: the iso, both halves, as the caller supplied them. */
@@ -307,8 +319,7 @@ export const member = (t: Term): AttributeName | undefined => {
             return baseMember[t.base]
         case 'set':
             return setMember[t.base]
-        case 'array':
-        case 'tuple':
+        case 'list':
             return 'L'
         case 'record':
         case 'object':
@@ -423,8 +434,7 @@ export const occV = (t: Term): readonly Slot[] | undefined => {
             return [baseSlot[t.base]]
         case 'set':
             return [setSlot[t.base]]
-        case 'array':
-        case 'tuple':
+        case 'list':
             return ['array']
         case 'record':
         case 'object':
@@ -482,8 +492,7 @@ export const ownsNullOf = (t: Term): boolean | undefined => {
         case 'binary':
         case 'literal':
         case 'set':
-        case 'array':
-        case 'tuple':
+        case 'list':
         case 'record':
         case 'object':
         case 'never':
@@ -535,8 +544,7 @@ export const occA = (t: Term): readonly AttributeName[] | undefined => {
             return [baseMember[t.base]]
         case 'set':
             return [setMember[t.base]]
-        case 'array':
-        case 'tuple':
+        case 'list':
             return ['L']
         case 'record':
         case 'object':
@@ -756,10 +764,20 @@ export const identifies = (t: Term): boolean => {
         // …and a term that admits nothing turns every value down, which is evidence too
         case 'never':
             return true
-        case 'array':
-            return identifies(t.elem)
-        case 'tuple':
-            return t.elems.every(identifies)
+        /**
+         * **Every part, the spread included**, which is what the two rows this replaced disagreed
+         * about: `array` read its element and `tuple` read its declared positions and left the
+         * tail alone. A value longer than the declared positions is decided *by the spread*, so a
+         * tail whose admission is a caller's function decides nothing a declaration can see — the
+         * reason stated above for leaving `held` out. One row cannot hold both readings, and this
+         * is the reading the reason gives.
+         */
+        case 'list':
+            return (
+                t.pre.every(identifies) &&
+                (t.spread === undefined || identifies(t.spread)) &&
+                t.suf.every(identifies)
+            )
         case 'record':
             return identifies(t.val)
         case 'union':
@@ -1027,8 +1045,7 @@ export const meetTerms = (x: Term, y: Term): Term | undefined => {
     if (x.kind === 'literal' && y.kind === 'literal') return meetLiterals(x, y)
     if (x.kind === 'literal') return literalAgainstBase(x, y)
     if (y.kind === 'literal') return literalAgainstBase(y, x)
-    if (x.kind === 'array' && y.kind === 'array')
-        return mapped(x.elem, y.elem, elementOf)
+    if (x.kind === 'list' && y.kind === 'list') return meetLists(x, y)
     if (x.kind === 'record' && y.kind === 'record')
         return mapped(x.val, y.val, valueOf)
     if (x.kind === 'set' && y.kind === 'set') {
@@ -1044,13 +1061,6 @@ export const meetTerms = (x: Term, y: Term): Term | undefined => {
     }
     if (x.kind === 'opaq' && y.kind === 'opaq')
         return { kind: 'opaq', lossy: x.lossy && y.lossy }
-    // an array against a tuple is the tuple, each declared position and the tail met with the
-    // array's one element term
-    if (x.kind === 'array' && y.kind === 'tuple')
-        return arrayAgainstTuple(x.elem, y)
-    if (y.kind === 'array' && x.kind === 'tuple')
-        return arrayAgainstTuple(y.elem, x)
-    if (x.kind === 'tuple' && y.kind === 'tuple') return meetTuples(x, y)
     // an object against a record holds every name through one codec on one side and through a
     // declared field on the other, so only a `codec` rest meets a record
     if (x.kind === 'object' && y.kind === 'record')
@@ -1098,13 +1108,25 @@ const crossesNumberDecimal = (a: string, b: string): boolean =>
 const refineOf = (z: Term, q: Predicate): Term =>
     z.kind === 'never' ? never : { kind: 'refine', inner: z, q }
 
-/** A tuple with a declared position at the bottom is the bottom. The tail is not such a slot. */
-const tupleOf = (elems: readonly Term[], tail: Term | undefined): Term =>
-    elems.some((t) => t.kind === 'never')
+/**
+ * **A list with a declared position at the bottom is the bottom.**
+ *
+ * Every value the list admits fills each declared position, so one position holding nothing empties
+ * the list. The *spread* is not such a position: a value of exactly the declared length omits every
+ * spread position, so a spread at the bottom reads "exactly the declared positions" rather than
+ * "nothing". The prefix and the suffix are declared; the spread is not. `Term.listOf` is the
+ * model's name for this normalisation, and every list the meet builds goes through it.
+ */
+const listOf = (
+    pre: readonly Term[],
+    spread: Term | undefined,
+    suf: readonly Term[],
+): Term =>
+    pre.some((t) => t.kind === 'never') || suf.some((t) => t.kind === 'never')
         ? never
-        : tail === undefined
-          ? { kind: 'tuple', elems }
-          : { kind: 'tuple', elems, tail }
+        : spread === undefined
+          ? { kind: 'list', pre, suf }
+          : { kind: 'list', pre, spread, suf }
 
 /** A union of what survived a distribution: nothing is the bottom, and one survivor is itself. */
 const ofOptions = (ts: readonly Term[]): Term =>
@@ -1114,7 +1136,6 @@ const ofOptions = (ts: readonly Term[]): Term =>
           ? (ts[0] as Term)
           : { kind: 'union', options: ts }
 
-const elementOf = (elem: Term): Term => ({ kind: 'array', elem })
 const valueOf = (val: Term): Term => ({ kind: 'record', val })
 
 const mapped = (
@@ -1267,44 +1288,97 @@ const opaqueAgainst = (
     }
 }
 
-const arrayAgainstTuple = (
-    elem: Term,
-    tuple: Extract<Term, { kind: 'tuple' }>,
-): Term | undefined => {
-    const elems: Term[] = []
-    for (const at of tuple.elems) {
-        const z = meetTerms(at, elem)
+/**
+ * **The row a list shape assigns to `n` positions**: the prefix, the spread as often as the middle
+ * needs, then the suffix. `undefined` is a length the shape refuses.
+ */
+const rowOf = (
+    t: Extract<Term, { kind: 'list' }>,
+    n: number,
+): readonly Term[] | undefined => {
+    const declared = t.pre.length + t.suf.length
+    if (t.spread === undefined)
+        return n === declared ? [...t.pre, ...t.suf] : undefined
+    if (n < declared) return undefined
+    const spread = t.spread
+    return [
+        ...t.pre,
+        ...Array.from({ length: n - declared }, () => spread),
+        ...t.suf,
+    ]
+}
+
+/** Two rows met position for position, or nothing where a position refuses. */
+const rowMeet = (
+    a: readonly Term[],
+    b: readonly Term[],
+): readonly Term[] | undefined => {
+    const row: Term[] = []
+    for (const [at, one] of a.entries()) {
+        const z = meetTerms(one, b[at] as Term)
         if (z === undefined) return undefined
-        elems.push(z)
+        row.push(z)
     }
-    if (tuple.tail === undefined) return tupleOf(elems, undefined)
-    const tail = meetTerms(tuple.tail, elem)
-    return tail === undefined ? undefined : tupleOf(elems, tail)
+    return row
 }
 
 /**
- * **Two tuples meet by arity.** Equal arity meets positionwise and meets the tails. Unequal arity
- * with no tail on either side admits no common array, which is the bottom. Unequal arity *with* a
- * tail refuses: aligning a declared position against a tail position is a rule this development has
- * not stated, and answering it here would state it by accident.
+ * **One side dominates the other**, in the prefix and in the suffix at once.
+ *
+ * This is the whole of the list meet's refusal, and it is a fact about lengths alone. With both
+ * shapes spreading, the meet admits a value of length `n` exactly when `n >= max (p1+s1) (p2+s2)`,
+ * while the widest list the answer can spell admits `n >= max p1 p2 + max s1 s2`. The second is
+ * never smaller, and the two are equal exactly when one side's prefix and suffix are both at least
+ * the other's. Elsewhere a window of lengths sits in the intersection that no single list states,
+ * because a list carries one prefix and one suffix and the window needs two shapes. There the meet
+ * refuses. `dominates` and `dominates_max` are the model's pair.
  */
-const meetTuples = (
-    x: Extract<Term, { kind: 'tuple' }>,
-    y: Extract<Term, { kind: 'tuple' }>,
+const dominates = (p1: number, s1: number, p2: number, s2: number): boolean =>
+    (p2 <= p1 && s2 <= s1) || (p1 <= p2 && s1 <= s2)
+
+/**
+ * **Two list shapes met**, which is `listMeetRow` in the model.
+ *
+ * Three branches, and only the first can refuse. **Both spreading**: the answer is the row at
+ * `max p1 p2 + max s1 s2`, split back into that prefix and that suffix, with the spreads met.
+ * **Either side without a spread**: that side's arity is fixed, so the answer *flattens* to one
+ * prefix of exactly that length with no spread and no suffix; a length the other side cannot reach
+ * is the empty intersection, which is the bottom. Flattening rather than keeping the longer prefix
+ * and the longer suffix is what the fixed arity needs: the two overhangs can collide, and at a
+ * fixed arity there is no spread to meet them against.
+ *
+ * The rows are zipped left operand first, because every cell of the meet keeps the left operand on
+ * the left and two refinements nest in argument order.
+ */
+const meetLists = (
+    x: Extract<Term, { kind: 'list' }>,
+    y: Extract<Term, { kind: 'list' }>,
 ): Term | undefined => {
-    if (x.elems.length !== y.elems.length)
-        return x.tail === undefined && y.tail === undefined ? never : undefined
-    const elems: Term[] = []
-    for (const [at, one] of x.elems.entries()) {
-        const z = meetTerms(one, y.elems[at] as Term)
-        if (z === undefined) return undefined
-        elems.push(z)
+    if (x.spread !== undefined && y.spread !== undefined) {
+        const p = Math.max(x.pre.length, y.pre.length)
+        const s = Math.max(x.suf.length, y.suf.length)
+        if (!dominates(x.pre.length, x.suf.length, y.pre.length, y.suf.length))
+            return undefined
+        const spread = meetTerms(x.spread, y.spread)
+        if (spread === undefined) return undefined
+        const rows = rowOf(x, p + s)
+        const other = rowOf(y, p + s)
+        // unreachable under dominance, where `p + s` is at least each side's declared length
+        if (rows === undefined || other === undefined) return never
+        const row = rowMeet(rows, other)
+        return row === undefined
+            ? undefined
+            : listOf(row.slice(0, p), spread, row.slice(p))
     }
-    if (x.tail === undefined && y.tail === undefined)
-        return tupleOf(elems, undefined)
-    if (x.tail === undefined || y.tail === undefined) return undefined
-    const tail = meetTerms(x.tail, y.tail)
-    return tail === undefined ? undefined : tupleOf(elems, tail)
+    // the side without a spread fixes the arity, and a shape that refuses that length shares no
+    // value with it
+    const fixed = x.spread === undefined ? x : y
+    const n = fixed.pre.length + fixed.suf.length
+    const rows = rowOf(x, n)
+    const other = rowOf(y, n)
+    if (rows === undefined || other === undefined) return never
+    const row = rowMeet(rows, other)
+    return row === undefined ? undefined : listOf(row, undefined, [])
 }
 
 /**

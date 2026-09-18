@@ -101,9 +101,11 @@ inductive Term where
       from the left, `suf` from the right, and every position between them goes through
       the spread. With `spread = none` the arity is exactly `pre.length + suf.length`.
 
-      **Two spreads have no term**, because the spread is an `Option` and not a `List`. The
-      host carries a type-level refusal for a rest element that is not last, and that
-      refusal has nothing left to refuse: the ambiguity it excluded is now unrepresentable.
+      **Two spreads have no term**, because the spread is an `Option` and not a `List`.
+      The host's list constructor takes the spread as one parameter and inherits that,
+      while its tuple takes a tail as a marker inside a variadic parameter list. So the
+      host's type-level refusal for a misplaced tail still has a job, on the tuple alone:
+      the refusal is narrower than it was and it is not gone. Measured, not read.
       `array` and `tuple` survive below as *builders*, so a statement that spells either
       keeps its spelling. -/
   | list     (pre : List Term) (spread : Option Term) (suf : List Term)

@@ -635,18 +635,38 @@ const leanTermOfTerm = (t: Term, at: string, forced: number): string => {
          */
         case 'set':
             return `Term.set SetBase.${t.base}`
-        case 'array':
-            return `Term.array (${leanTermOfTerm(t.elem, `${at}.element`, forced)})`
-        case 'tuple': {
-            const elements = t.elems
-                .map((element, index) =>
-                    leanTermOfTerm(element, `${at}[${index}]`, forced),
-                )
-                .join(', ')
-            const tail = t.tail
-                ? `(some (${leanTermOfTerm(t.tail, `${at}.tail`, forced)}))`
+        /**
+         * **The builder where the shape is one, the constructor where it is not.**
+         *
+         * `Term.array` and `Term.tuple` are definitions over `Term.list` in `Term.lean`, kept so
+         * that a statement about either shape reads as it always did. A shape either builder can
+         * spell is printed through that builder, so the vectors keep their spelling and the
+         * committed samples stay the file they were. Only a suffix, which neither builder can
+         * spell, prints the constructor.
+         */
+        case 'list': {
+            const positions = (
+                ts: readonly Term[],
+                part: (index: number) => string,
+            ) =>
+                ts
+                    .map((element, index) =>
+                        leanTermOfTerm(element, part(index), forced),
+                    )
+                    .join(', ')
+            const spread = t.spread
+            if (t.suf.length === 0) {
+                if (t.pre.length === 0 && spread)
+                    return `Term.array (${leanTermOfTerm(spread, `${at}.element`, forced)})`
+                const tail = spread
+                    ? `(some (${leanTermOfTerm(spread, `${at}.tail`, forced)}))`
+                    : 'none'
+                return `Term.tuple [${positions(t.pre, (index) => `${at}[${index}]`)}] ${tail}`
+            }
+            const middle = spread
+                ? `(some (${leanTermOfTerm(spread, `${at}.spread`, forced)}))`
                 : 'none'
-            return `Term.tuple [${elements}] ${tail}`
+            return `Term.list [${positions(t.pre, (index) => `${at}[${index}]`)}] ${middle} [${positions(t.suf, (index) => `${at}.suffix[${index}]`)}]`
         }
         case 'record':
             return `Term.record (${leanTermOfTerm(t.val, `${at}.value`, forced)})`
