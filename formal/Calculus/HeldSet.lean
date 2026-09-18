@@ -192,9 +192,6 @@ theorem typed_T_eq : ∀ {t T μ}, Typed t T μ → ∀ v, T v → (denote t).T 
     | set b =>
       rcases hv with ⟨S, rfl, hall⟩ | ⟨S, rfl, hall⟩ | ⟨S, rfl, hall⟩ <;>
         simp only [denote, setCodec, SetBase.elem_T] <;> exact hall
-    | @record t' T' μ' h' =>
-      obtain ⟨keys, f, rfl, hall⟩ := hv
-      exact fun k => typed_T_eq h' _ (hall k)
     | @list pre Tpre sp Tsp suf Tsuf hp hs hf =>
       obtain ⟨vs, rfl, hall⟩ := hv
       rw [denote, denoteList_eq, denoteOpt_eq, denoteList_eq]
@@ -207,8 +204,8 @@ theorem typed_T_eq : ∀ {t T μ}, Typed t T μ → ∀ v, T v → (denote t).T 
     | @legacy t' T' μ' r h' => exact typed_T_eq h' v hv
     | @lazy t' T' μ' h' => exact typed_T_eq h' v hv
     | @object body bind R μs hfields hrest =>
-      cases body with | mk fields ff rest =>
-      simp only [Body.fields_mk, Body.at_mk, Body.rest_mk] at hfields hrest hv ⊢
+      cases body with | mk fields ff wild =>
+      simp only [Body.fields_mk, Body.at_mk, Body.wild_mk] at hfields hrest hv ⊢
       obtain ⟨keys, f, rfl, hreq, hall⟩ := hv
       refine ⟨⟨keys, f⟩, rfl, ?_, ?_⟩
       · refine valPresentB_of fun k fs hm hno => ?_
@@ -224,18 +221,18 @@ theorem typed_T_eq : ∀ {t T μ}, Typed t T μ → ∀ v, T v → (denote t).T 
             MapOf.at_of_mem (m := (⟨fields, fun k => fieldSem (ff k)⟩ :
               MapOf FieldSem)) ⟨k.1, hk⟩]
           obtain ⟨t', hty', hshape⟩ := TypedField.term (hfields ⟨k.1, hk⟩)
-          rcases hshape with heq | heq | ⟨v₀, heq⟩ <;> rw [heq] <;>
-            exact typed_T_eq hty' _ hentry
-        -- an undeclared name under `drop` or `refuse` is refused by *both* sides: `R` is
-        -- `none` by `TypedRest` and `rcOf` is `none` by definition, so the two branches are
+          rcases hshape with ⟨m, heq⟩ | heq
+          · rw [heq]; cases m <;> exact typed_T_eq hty' _ hentry
+          · rw [heq]; exact typed_T_eq hty' _ hentry
+        -- an undeclared name in a body with no open block is refused by *both* sides: `R` is
+        -- `none` by `TypedWild` and `rcOf` is `none` by definition, so the two branches are
         -- the same `False` and the case closes on their agreement rather than despite it
         · rw [dif_neg hk] at hentry
           obtain ⟨T'', hR, hT''⟩ := hentry
           simp only [objEntryT, MapOf.at, dif_neg hk]
           cases hrest with
-          | drop => exact nomatch hR
-          | refuse => exact nomatch hR
-          | @codec t' T''' μ'' hty' =>
+          | none => exact nomatch hR
+          | @some pat t' T''' μ'' hty' =>
             obtain rfl : T''' = T'' := Option.some.inj hR
             exact ⟨denote t', rfl, typed_T_eq hty' _ hT''⟩
     | @union opts Ts μs h' hD =>
