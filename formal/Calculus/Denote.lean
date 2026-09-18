@@ -29,17 +29,16 @@ noncomputable section
     what `Body` would *be* if a `mutual` block could nest an inductive through a structure
     whose field is a function into the type being defined; it cannot, so this is the coercion.
     -/
-def Body.map (b : Body) : MapOf Field := ⟨b.fields, b.at⟩
+def Body.map (b : Body) : MapOf ObjectSlot := ⟨b.fields, b.at⟩
 
 /-- The alternatives a field pins its name to, where the field's term is a literal.
 
     Every field form and not `req` only, because the test this feeds is present-only: a name
     an object does not carry is settled by `keysOk` and never reaches `literalsOk`, so an
     `optional` literal constrains exactly the values that do carry the name. -/
-def altsOfField : Field → Option Alts
-  | .req (.literal k x) => some ⟨k, x⟩
+def altsOfField : ObjectSlot → Option Alts
+  | .req (.literal k x) _ => some ⟨k, x⟩
   | .optional (.literal k x) => some ⟨k, x⟩
-  | .fallback (.literal k x) _ => some ⟨k, x⟩
   | _ => none
 
 /-- A body's name spec: what admission reads off each declared name. The payload's own
@@ -78,7 +77,6 @@ def μSyn : Term → Option Member
   -- the member is the base's, where it was `setMember` of the element's and could be `none`
   | .set b => some b.member
   | .list _ _ _ => some .L
-  | .record _ => some .M
   | .held t _ _ => μSyn t
   | .refine t _ => μSyn t
   | .legacy t _ => μSyn t
@@ -152,7 +150,6 @@ def denote : Term → Codec
   | .literal k ls => literalCodec k ls
   | .set b => setCodec b.elem
   | .list pre spread suf => listCodec (denoteList pre) (denoteOpt spread) (denoteList suf)
-  | .record val => recordCodec (denote val)
   | .held inner f g => (denote inner).through f g
   | .refine inner p => (denote inner).restrict p.eval
   | .legacy inner r => (denote inner).extendRead r
@@ -173,20 +170,23 @@ def denote : Term → Codec
     `Body`, `denote`'s row inlined it, which is why nothing else could name "the codec an
     object payload denotes" without repeating the pair. -/
 def bodySem : Body → Codec
-  | .mk fields f rest => objectCodec ⟨fields, fun k => fieldSem (f k)⟩ (restSem rest)
+  | .mk fields f wild => objectCodec ⟨fields, fun k => fieldSem (f k)⟩ (wildSem wild)
 
 /-- A field's semantics. A companion of `denote` rather than a function of one — which is what
     removed the fuel. -/
-def fieldSem : Field → FieldSem
-  | .req t => .req (denote t)
+def fieldSem : ObjectSlot → FieldSem
+  | .req t none => .req (denote t)
+  | .req t (some v) => .fb (denote t) v
   | .optional t => .opt (denote t)
-  | .fallback t v => .fb (denote t) v
 
-/-- A rest policy's semantics, for the same reason. -/
-def restSem : Rest → RestSem
-  | .drop => .drop
-  | .refuse => .refuse
-  | .codec t => .codec (denote t)
+/-- The open block's semantics, for the same reason.
+
+    **A body with no open block refuses.** There is no third answer: the policy that read an
+    undeclared name and wrote nothing back is gone, so a name the body does not claim is a name
+    the body refuses, in both directions. -/
+def wildSem : Option (KeyPat × Term) → RestSem
+  | none => .refuse
+  | some (_, t) => .codec (denote t)
 
 def denoteList : List Term → List Codec
   | [] => []
@@ -224,7 +224,7 @@ theorem denote_μ : ∀ t : Term, (denote t).μ = μSyn t
   | .literal k ls => literalCodec_μ k ls
   | .string | .number | .decimal | .boolean | .binary | .null => rfl
   | .set b => SetBase.setCodec_μ b
-  | .list _ _ _ | .record _ => rfl
+  | .list _ _ _ => rfl
   | .held t' _ _ => denote_μ t'
   | .refine t' _ => denote_μ t'
   | .legacy t' _ => denote_μ t'
@@ -258,7 +258,7 @@ Here it is, as `rfl` theorems — `denote` dispatches straight onto the combinat
 prove nothing but the correspondence. Term-level twins of each row follow at the end. -/
 
 /-- The object field table, denoted. Was ~~denoteωF~~. -/
-def fieldTable (fields : Finset Name) (f : {k // k ∈ fields} → Field) : MapOf FieldSem :=
+def fieldTable (fields : Finset Name) (f : {k // k ∈ fields} → ObjectSlot) : MapOf FieldSem :=
   ⟨fields, fun k => fieldSem (f k)⟩
 
 section Bridge
@@ -267,6 +267,8 @@ theorem denote_set (b : SetBase) : denote (.set b) = setCodec b.elem := rfl
 /-- `array` denotes the spread-only `list`, which is what `arrayCodec` is. -/
 theorem denote_array (t : Term) : denote (.array t) = arrayCodec (denote t) :=
   (arrayCodec_eq_listCodec (denote t)).symm
+/-- `record` denotes `recordCodec`. It is a builder over the body whose only block is the open
+    one, so this is the equation that keeps the word rather than a row of `denote`. -/
 theorem denote_record (t : Term) : denote (.record t) = recordCodec (denote t) := rfl
 
 /-- `tuple` denotes the suffix-free `list`, which is what `tupleCodec` is. -/
@@ -304,9 +306,9 @@ theorem denote_union_sems (opts : List Term) :
 theorem denote_opaq (lossy : Bool) : denote (.opaq lossy) = opaqCodecω lossy := rfl
 
 /-- `object` denotes `objectCodec`. -/
-theorem denote_object_table (fields : Finset Name) (f : {k // k ∈ fields} → Field)
-    (rest : Rest) :
-    denote (.object (.mk fields f rest)) = objectCodec (fieldTable fields f) (restSem rest) :=
+theorem denote_object_table (fields : Finset Name) (f : {k // k ∈ fields} → ObjectSlot)
+    (wild : Option (KeyPat × Term)) :
+    denote (.object (.mk fields f wild)) = objectCodec (fieldTable fields f) (wildSem wild) :=
   rfl
 
 /-- …and the `Body`-level form, which is the one a statement about an arbitrary object needs. -/
