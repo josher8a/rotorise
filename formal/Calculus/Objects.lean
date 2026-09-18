@@ -182,6 +182,23 @@ theorem objRead_eq {q : MapOf Attr} {p : MapOf Value} :
   · next hg => simp [hg, Option.map_eq_some_iff, eq_comm (a := p)]
   · next hg => simp [hg]
 
+/-- **The transport into a record's reading.** An object whose keep filter drops nothing writes
+    the map's own key set, and the stand-in branch is unreachable, so its output is the record's.
+    The filter is a variable again, so `subst` carries the membership proof inside the entry. -/
+theorem funImage_record_congr {S T : Finset Name} (hS : S = T)
+    {g : {k // k ∈ S} → Option Value} {g' : {k // k ∈ T} → Option Value}
+    (hg : ∀ (k : Name) (h : k ∈ S) (h' : k ∈ T), g ⟨k, h⟩ = g' ⟨k, h'⟩)
+    {fb : Name → Option Value} :
+    (funImage g).map (mapV.into ∘ fun d => (⟨S ∪ ∅, fun k => if h : k.1 ∈ S then d ⟨k.1, h⟩
+        else (fb k.1).getD .null⟩ : MapOf Value))
+      = (funImage g').map (Value.map T) := by
+  subst hS
+  have himg : g = g' := funext fun k => hg k.1 k.2 k.2
+  subst himg
+  refine congrArg (fun F => Option.map F (funImage g)) (funext fun d => ?_)
+  show mapV.into _ = mapV.into ⟨S, d⟩
+  exact congrArg mapV.into (MapOf.ext (Finset.union_empty S) (fun k _ h2 => dif_pos h2))
+
 /-- The object is `carriedCodec` between `map` and `M`, at that pair. -/
 noncomputable def objectCodecCore (sems : MapOf FieldSem) (rc? : Option Codec)
     (kn : Name → Bool) : Codec :=
@@ -207,6 +224,43 @@ theorem objectCodecCore_e_inv {t a} (he : (objectCodecCore sems rc? kn).e t = so
   obtain ⟨p, q, hv, hw, rfl⟩ := carried_e.mp (objectCodecCore_eq ▸ he)
   obtain ⟨hval, g, hg, rfl⟩ := objWrite_eq.mp hw
   exact ⟨p.1, p.2, g, mapV.into_out hv, rfl, hval, hg⟩
+
+/-- **The empty body with an open block is the record.** `record` is not a term of its own: it
+    is the object that declares no name and takes every key at one codec, and this is the
+    equation that says so. Four components, and only the reading needs work: the keep filter is
+    constantly true at an open block, so it drops no name, and with no declared name there is no
+    stand-in, so the output key set is the map's own. `funImage_record_congr` carries the
+    filter as a variable, which is what keeps the transport out of a dependent rewrite. -/
+theorem objectCodec_empty_codec (c : Codec) :
+    objectCodec ⟨∅, fun k => absurd k.2 (Finset.notMem_empty k.1)⟩ (.codec c) = recordCodec c := by
+  apply Codec.ext
+  · funext v
+    cases v <;>
+      simp [objectCodec, objectCodecCore, carriedCodec, recordCodec,
+            valPresentB, objEntryT, rcOf, MapOf.at, mapV]
+    constructor
+    · rintro ⟨x, ⟨rfl, hf⟩, h⟩
+      cases eq_of_heq hf
+      exact h
+    · rename_i keys f
+      exact fun h => ⟨⟨keys, f⟩, ⟨rfl, HEq.rfl⟩, h⟩
+  · rfl
+  · funext v
+    cases v <;> try rfl
+    simp [objectCodec, objectCodecCore, carriedCodec, recordCodec,
+          valPresentB, objWrite, rcOf, entryCodec, MapOf.at, mapV, mA, Function.comp]
+    rfl
+  · funext a
+    cases a <;> try rfl
+    rename_i keys f
+    simp only [objectCodec, objectCodecCore, carriedCodec, mapV, mA, Option.bind,
+               objRead, rcOf, recordCodec, reqPresentB, reqPresentAt]
+    rw [if_pos (by simp)]
+    have hfb : fbNames keys ⟨(∅ : Finset Name), fun k => absurd k.2 (Finset.notMem_empty k.1)⟩
+        = ∅ := by simp [fbNames]
+    rw [hfb, Option.map_map]
+    exact funImage_record_congr (Finset.filter_true_of_mem (fun _ _ => rfl))
+      (fun k h h' => rfl)
 
 end Object
 

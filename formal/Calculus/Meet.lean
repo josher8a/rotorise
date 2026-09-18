@@ -5716,23 +5716,6 @@ theorem object_row_gen {a b : Body} {z : Term} {r : Rest} {Ok : Prop}
   all_goals exact absurd hA (by rw [AdmA_object a _,
     AdmABody_of_not_m (fun _ _ hc => Attr.noConfusion hc)]; exact Bool.noConfusion)
 
-/-- **The transport into a record's reading.** An object whose keep filter drops nothing writes
-    the map's own key set, and the stand-in branch is unreachable, so its output is the record's.
-    The filter is a variable again, so `subst` carries the membership proof inside the entry. -/
-theorem funImage_record_congr {S T : Finset Name} (hS : S = T)
-    {g : {k // k ∈ S} → Option Value} {g' : {k // k ∈ T} → Option Value}
-    (hg : ∀ (k : Name) (h : k ∈ S) (h' : k ∈ T), g ⟨k, h⟩ = g' ⟨k, h'⟩)
-    {fb : Name → Option Value} :
-    (funImage g).map (mapV.into ∘ fun d => (⟨S ∪ ∅, fun k => if h : k.1 ∈ S then d ⟨k.1, h⟩
-        else (fb k.1).getD .null⟩ : MapOf Value))
-      = (funImage g').map (Value.map T) := by
-  subst hS
-  have himg : g = g' := funext fun k => hg k.1 k.2 k.2
-  subst himg
-  refine congrArg (fun F => Option.map F (funImage g)) (funext fun d => ?_)
-  show mapV.into _ = mapV.into ⟨S, d⟩
-  exact congrArg mapV.into (MapOf.ext (Finset.union_empty S) (fun k _ h2 => dif_pos h2))
-
 /-- **The object-against-record congruence.** `objRec` answers an object whose rest is a
     codec, so the keep filter is constantly true and no name of the map is dropped. With no
     stand-in declared, the output key set is the map's own, which is what the record writes, and
