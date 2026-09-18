@@ -563,13 +563,15 @@ theorem zipP_iff : ∀ (suf : List Term), (∀ t ∈ suf, ExactV t) → ∀ (bac
       (traverse (fun cv : Codec × Value => cv.1.e cv.2)
         ((denoteList suf).zip back)).isSome = true)
   | [], _, [], _ => by simp [zipP, AdmList, denoteList]
-  | [], _, _ :: _, h => by simp at h
-  | _ :: _, _, [], h => by simp at h
+  | [], _, _ :: _, h => by
+      exact absurd h (by simp only [List.length_cons, List.length_nil]; omega)
+  | _ :: _, _, [], h => by
+      exact absurd h (by simp only [List.length_cons, List.length_nil]; omega)
   | t :: ts, h, v :: vs, hlen => by
       simp only [AdmList, denoteList, zipP, List.zip_cons_cons, Bool.and_eq_true,
         traverse_cons_isSome]
       rw [zipP_iff ts (fun t' ht' => h t' (List.mem_cons_of_mem _ ht')) vs
-          (by simpa using hlen),
+          (by simp only [List.length_cons] at hlen; omega),
         h t List.mem_cons_self v]
 
 /-- **`alignPL` is `alignL`'s row.** The suffix splits off the right end on both sides, so

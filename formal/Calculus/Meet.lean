@@ -332,9 +332,6 @@ end
 
 Every row keeps the left operand on the left. -/
 
-def mapF (f : Term → Option Term) : List Term → List (Option Term)
-  | [] => [] | t :: ts => f t :: mapF f ts
-
 def zipF : List (Term → Option Term) → List Term → List (Option Term)
   | [], _ => [] | _, [] => []
   | f :: fs, u :: us => f u :: zipF fs us
@@ -431,9 +428,6 @@ def famOpaq (l : Bool) : Term → Option Term
   | .opaq l' => some (.opaq (l && l'))
   | _ => none
 
-def applyAt : List (Term → Option Term) → Term → List (Option Term)
-  | [], _ => [] | f :: fs, y => f y :: applyAt fs y
-
 /-- **The row a `list` shape assigns to `n` positions**: the prefix, the spread as often as
     the middle needs, then the suffix. `none` is the length the shape refuses. One
     definition serves both operands, because the left operand's positions are partially
@@ -508,6 +502,117 @@ theorem alignPL_eq_rowOfG (pre : List VP) (sp : Option VP) (suf : List VP) (ws :
         rw [hAB] at hz
         exact hz
 
+/-! ### The read side's mirror of the same five, and the row equation they give.
+
+    The value side states these in `ExactV`; `alignPL_eq_rowOfG` above is stated here because
+    `rowOfG` is. The read-side twins follow it rather than their value-side siblings, so the
+    two row equations sit together. -/
+
+/-- A suffix row of the wrong length refuses. -/
+theorem zipPA_false_of_length_ne (Ps : List AP) (as : List Attr) (h : Ps.length ≠ as.length) :
+    zipPA Ps as = false := by
+  cases hz : zipPA Ps as with
+  | false => rfl
+  | true => exact absurd (zipPA_length Ps as hz) h
+
+/-- A row shorter than the declared prefix refuses. -/
+theorem alignPA_short : ∀ (pre : List AP) (sp : Option AP) (as : List Attr),
+    as.length < pre.length → alignPA pre sp as = false
+  | [], _, _, h => by simp at h
+  | _ :: _, sp, [], _ => by cases sp <;> rfl
+  | _ :: Ps, sp, _ :: as, h => by
+      simp only [alignPA, alignPA_short Ps sp as (by simpa using h), Bool.and_false]
+
+/-- With no spread, the prefix row is the suffix row. -/
+theorem alignPA_none_eq_zipPA : ∀ (pre : List AP) (as : List Attr),
+    alignPA pre none as = zipPA pre as
+  | [], [] => rfl
+  | [], _ :: _ => rfl
+  | _ :: _, [] => rfl
+  | _ :: Ps, _ :: as => by simp only [alignPA, zipPA, alignPA_none_eq_zipPA Ps as]
+
+/-- …and with a spread it is the prefix padded out to the length. -/
+theorem alignPA_some_eq_zipPA : ∀ (pre : List AP) (c : AP) (as : List Attr),
+    pre.length ≤ as.length →
+    alignPA pre (some c) as = zipPA (pre ++ List.replicate (as.length - pre.length) c) as
+  | [], _, [], _ => rfl
+  | [], c, _ :: as, _ => by
+      have ih := alignPA_some_eq_zipPA [] c as (Nat.zero_le _)
+      simp only [List.length_nil, Nat.sub_zero, List.nil_append] at ih ⊢
+      simp only [alignPA, List.length_cons, List.replicate_succ, zipPA, ih]
+  | _ :: _, _, [], h => by simp at h
+  | _ :: Ps, c, _ :: as, h => by
+      have ih := alignPA_some_eq_zipPA Ps c as (by simpa using h)
+      simp only [alignPA, List.cons_append, zipPA, List.length_cons,
+        Nat.succ_sub_succ_eq_sub, ih]
+
+/-- The suffix row splits where the rows do. -/
+theorem zipPA_append : ∀ (a₁ b₁ : List AP) (a₂ b₂ : List Attr), a₁.length = a₂.length →
+    zipPA (a₁ ++ b₁) (a₂ ++ b₂) = (zipPA a₁ a₂ && zipPA b₁ b₂)
+  | [], _, [], _, _ => by simp [zipPA]
+  | P :: Ps, b₁, a :: as, b₂, h => by
+      simp only [List.cons_append, zipPA, zipPA_append Ps b₁ as b₂ (by simpa using h)]
+      exact (Bool.and_assoc _ _ _).symm
+
+/-- The spread row, split at the suffix, on the read side. -/
+theorem zipPA_row_split (pre suf : List AP) (c : AP) (A B : List Attr)
+    (hB : B.length = suf.length) (hA : pre.length ≤ A.length) :
+    (zipPA (pre ++ List.replicate (A.length - pre.length) c) A && zipPA suf B)
+      = zipPA (pre ++ List.replicate ((A ++ B).length - pre.length - suf.length) c ++ suf)
+          (A ++ B) := by
+  have hcount : (A ++ B).length - pre.length - suf.length = A.length - pre.length := by
+    simp only [List.length_append, hB]; omega
+  rw [hcount, zipPA_append _ _ _ _
+      (by simp only [List.length_append, List.length_replicate]; omega)]
+
+/-- **`alignPAL` is its row, applied position for position.** The read-side twin of
+    `alignPL_eq_rowOfG`, and the same statement: what a `list` reads at an attribute list of
+    length `n` is the row `rowOfG` assigns to `n`, read position by position. -/
+theorem alignPAL_eq_rowOfG (pre : List AP) (sp : Option AP) (suf : List AP) (as : List Attr) :
+    alignPAL pre sp suf as
+      = match rowOfG pre sp suf as.length with
+        | none => false
+        | some row => zipPA row as := by
+  have htl : (as.take (as.length - suf.length)).length = as.length - suf.length := by
+    simp only [List.length_take]; omega
+  unfold alignPAL
+  rcases Nat.lt_or_ge as.length (pre.length + suf.length) with hlt | hge
+  · have hrow : rowOfG pre sp suf as.length = none := by
+      cases sp with
+      | none => simp only [rowOfG]; rw [if_neg (by omega)]
+      | some c => simp only [rowOfG]; rw [if_pos (by omega)]
+    rw [hrow]
+    rcases Nat.lt_or_ge as.length suf.length with hs | hs
+    · rw [zipPA_false_of_length_ne _ _ (by simp only [List.length_drop]; omega), Bool.and_false]
+    · rw [alignPA_short _ _ _ (by omega), Bool.false_and]
+  · have hdl : (as.drop (as.length - suf.length)).length = suf.length := by
+      simp only [List.length_drop]; omega
+    have hAB : as.take (as.length - suf.length) ++ as.drop (as.length - suf.length) = as :=
+      List.take_append_drop _ _
+    cases sp with
+    | none =>
+        rw [alignPA_none_eq_zipPA]
+        simp only [rowOfG]
+        rcases Nat.eq_or_lt_of_le hge with heq | hlt2
+        · rw [if_pos heq.symm]
+          show _ = zipPA (pre ++ suf) as
+          have hz := (zipPA_append pre suf (as.take (as.length - suf.length))
+            (as.drop (as.length - suf.length)) (by omega)).symm
+          rw [hAB] at hz
+          exact hz
+        · rw [if_neg (by omega)]
+          show _ = false
+          rw [zipPA_false_of_length_ne _ _ (by omega), Bool.false_and]
+    | some c =>
+        rw [alignPA_some_eq_zipPA _ _ _ (by omega)]
+        simp only [rowOfG]
+        rw [if_neg (by omega)]
+        show _ = zipPA (pre ++ List.replicate (as.length - pre.length - suf.length) c ++ suf) as
+        have hz := zipPA_row_split pre suf c (as.take (as.length - suf.length))
+          (as.drop (as.length - suf.length)) hdl (by omega)
+        rw [hAB] at hz
+        exact hz
+
 /-- A row the shape accepts has exactly the length asked of it. -/
 theorem rowOfG_length {α : Type} {pre : List α} {sp : Option α} {suf : List α} {n row}
     (h : rowOfG pre sp suf n = some row) : row.length = n := by
@@ -531,6 +636,44 @@ theorem rowOfG_length {α : Type} {pre : List α} {sp : Option α} {suf : List �
           simp only [List.length_append, List.length_replicate]
           omega
 
+/-- The row of a shape with no spread, as an `if`: the shape has a row at its own arity and
+    at no other length. -/
+theorem rowOfG_none_eq {α : Type} (pre suf : List α) (n : Nat) :
+    rowOfG pre none suf n
+      = if n = pre.length + suf.length then some (pre ++ suf) else none := rfl
+
+/-- …and of a spreading shape, which has a row at every length from its arity up. -/
+theorem rowOfG_some_eq {α : Type} (pre : List α) (c : α) (suf : List α) (n : Nat) :
+    rowOfG pre (some c) suf n
+      = if n < pre.length + suf.length then none
+        else some (pre ++ List.replicate (n - pre.length - suf.length) c ++ suf) := rfl
+
+/-- Every term a row holds comes from the shape: a declared position, or the spread. -/
+theorem rowOfG_mem {α : Type} {pre : List α} {sp : Option α} {suf : List α} {n row}
+    (h : rowOfG pre sp suf n = some row) {a : α} (ha : a ∈ row) :
+    a ∈ pre ∨ a ∈ sp ∨ a ∈ suf := by
+  cases sp with
+  | none =>
+      rw [rowOfG_none_eq] at h
+      split at h
+      · simp only [Option.some.injEq] at h
+        subst h
+        rcases List.mem_append.mp ha with h' | h'
+        · exact Or.inl h'
+        · exact Or.inr (Or.inr h')
+      · exact absurd h (by simp)
+  | some c =>
+      rw [rowOfG_some_eq] at h
+      split at h
+      · exact absurd h (by simp)
+      · simp only [Option.some.injEq] at h
+        subst h
+        rcases List.mem_append.mp ha with h' | h'
+        · rcases List.mem_append.mp h' with h'' | h''
+          · exact Or.inl h''
+          · exact Or.inr (Or.inl (by rw [List.eq_of_mem_replicate h'']; rfl))
+        · exact Or.inr (Or.inr h')
+
 /-- Two rows over the same three parts, related position for position. -/
 theorem forall₂_replicate {α β : Type} {R : α → β → Prop} {a : α} {b : β} (hab : R a b) :
     ∀ n, List.Forall₂ R (List.replicate n a) (List.replicate n b)
@@ -539,6 +682,7 @@ theorem forall₂_replicate {α β : Type} {R : α → β → Prop} {a : α} {b 
       simp only [List.replicate_succ]
       exact .cons hab (forall₂_replicate hab n)
 
+/-- …and two such pairs, appended: a row built in parts carries the relation in parts. -/
 theorem forall₂_append {α β : Type} {R : α → β → Prop} {a₁ a₂ : List α} {b₁ b₂ : List β} :
     List.Forall₂ R a₁ b₁ → List.Forall₂ R a₂ b₂ →
       List.Forall₂ R (a₁ ++ a₂) (b₁ ++ b₂) := by
@@ -546,6 +690,79 @@ theorem forall₂_append {α β : Type} {R : α → β → Prop} {a₁ a₂ : Li
   induction h₁ with
   | nil => exact h₂
   | cons hh _ ih => exact .cons hh ih
+
+/-- **The three-place row relation**, carried as a `Forall₂` over the pair list, as
+    `zipF_lift` and `alignP_meet_zip` already carry it. The four lemmas below close it under
+    the four ways the meet cuts and rebuilds a row. -/
+theorem forall₂_zip_append {α β γ : Type} {R : α × β → γ → Prop}
+    {a₁ a₂ : List α} {b₁ b₂ : List β} {c₁ c₂ : List γ}
+    (hl : a₁.length = b₁.length)
+    (h₁ : List.Forall₂ R (a₁.zip b₁) c₁) (h₂ : List.Forall₂ R (a₂.zip b₂) c₂) :
+    List.Forall₂ R ((a₁ ++ a₂).zip (b₁ ++ b₂)) (c₁ ++ c₂) := by
+  rw [List.zip_append hl]
+  exact forall₂_append h₁ h₂
+
+/-- …the spread, held at as many positions as the length needs. -/
+theorem forall₂_zip_replicate {α β γ : Type} {R : α × β → γ → Prop} {a : α} {b : β} {c : γ}
+    (h : R (a, b) c) (n : Nat) :
+    List.Forall₂ R ((List.replicate n a).zip (List.replicate n b)) (List.replicate n c) := by
+  rw [List.zip_replicate, Nat.min_self]
+  exact forall₂_replicate h n
+
+/-- …the prefix the answer keeps. -/
+theorem forall₂_zip_take {α β γ : Type} {R : α × β → γ → Prop} :
+    ∀ {as : List α} {bs : List β} {cs : List γ} (n : Nat),
+      List.Forall₂ R (as.zip bs) cs →
+      List.Forall₂ R ((as.take n).zip (bs.take n)) (cs.take n) := by
+  intro as bs cs n
+  induction n generalizing as bs cs with
+  | zero => intro _; simp
+  | succ n ih =>
+      intro h
+      cases as with
+      | nil => cases h; simp
+      | cons a as' =>
+          cases bs with
+          | nil => cases h; simp
+          | cons b bs' =>
+              rw [List.zip_cons_cons] at h
+              cases h with
+              | cons hh ht => simpa using List.Forall₂.cons hh (ih ht)
+
+/-- …and the suffix the answer keeps. -/
+theorem forall₂_zip_drop {α β γ : Type} {R : α × β → γ → Prop} :
+    ∀ {as : List α} {bs : List β} {cs : List γ} (n : Nat),
+      List.Forall₂ R (as.zip bs) cs →
+      List.Forall₂ R ((as.drop n).zip (bs.drop n)) (cs.drop n) := by
+  intro as bs cs n
+  induction n generalizing as bs cs with
+  | zero => intro h; simpa using h
+  | succ n ih =>
+      intro h
+      cases as with
+      | nil => cases h; simp
+      | cons a as' =>
+          cases bs with
+          | nil => cases h; simp
+          | cons b bs' =>
+              rw [List.zip_cons_cons] at h
+              cases h with
+              | cons _ ht => simpa using ih ht
+
+/-- **A row of rows is the mapped row.** The value side, the read side and the derivation
+    each hold their shape as terms and read it through one map, so every row equation is
+    stated over terms once. -/
+theorem rowOfG_map {α β : Type} (g : α → β) (pre : List α) (sp : Option α) (suf : List α)
+    (n : Nat) :
+    rowOfG (pre.map g) (sp.map g) (suf.map g) n
+      = (rowOfG pre sp suf n).map (List.map g) := by
+  cases sp with
+  | none =>
+      simp only [rowOfG, Option.map_none, List.length_map]
+      split <;> simp [List.map_append]
+  | some c =>
+      simp only [rowOfG, Option.map_some, List.length_map]
+      split <;> simp [List.map_append, List.map_replicate]
 
 /-- **The row transfers a relation.** Two shapes whose prefixes, spreads and suffixes are
     related position for position assign related rows at every length. This is the one
@@ -612,6 +829,55 @@ theorem rowOfG_forall₂_left {α β : Type} {R : α → β → Prop}
   obtain ⟨r₁, h₁⟩ := hex
   exact ⟨r₁, h₁, rowOfG_forall₂ hp hs hf h₁ h₂⟩
 
+/-- …and a spreading shape has a row exactly from its arity up. -/
+theorem rowOfG_some_isSome {α : Type} (pre : List α) (c : α) (suf : List α) (n : Nat) :
+    (rowOfG pre (some c) suf n).isSome = decide (pre.length + suf.length ≤ n) := by
+  rw [rowOfG_some_eq]
+  split <;> simp_all
+
+/-- A spreading shape has a row at every length its prefix and suffix fit inside. -/
+theorem rowOfG_total {α : Type} {pre suf : List α} {c : α} {n : Nat}
+    (hn : pre.length + suf.length ≤ n) :
+    ∃ row, rowOfG pre (some c) suf n = some row := by
+  simp only [rowOfG]
+  exact ⟨_, if_neg (by omega)⟩
+
+/-- **A spreading shape's row at any length is its row at one length, re-spread.** Cut the
+    shorter row at `P`, insert the spread as often as the longer length needs, and the
+    longer row comes back. This is what the `list` meet owes and what the row relations
+    alone cannot give: the meet builds its answer from the two rows at ONE length, and the
+    admission obligation is at EVERY length. `P` and `S` are the answer's prefix and suffix
+    lengths, which each operand's own prefix and suffix fit inside. -/
+theorem rowOfG_respread {α : Type} {pre suf : List α} {c : α} {P S n : Nat}
+    (hP : pre.length ≤ P) (hS : suf.length ≤ S) (hn : P + S ≤ n)
+    {rN rn : List α}
+    (hN : rowOfG pre (some c) suf (P + S) = some rN)
+    (hm : rowOfG pre (some c) suf n = some rn) :
+    rn = rN.take P ++ List.replicate (n - P - S) c ++ rN.drop P := by
+  simp only [rowOfG] at hN hm
+  rw [if_neg (by omega)] at hN
+  rw [if_neg (by omega)] at hm
+  simp only [Option.some.injEq] at hN hm
+  subst hN; subst hm
+  have h1 : ((pre ++ List.replicate (P + S - pre.length - suf.length) c) ++ suf).take P
+      = pre ++ List.replicate (P - pre.length) c := by
+    simp only [List.take_append, List.length_append, List.length_replicate,
+      List.take_replicate, List.take_of_length_le hP]
+    rw [show min (P - pre.length) (P + S - pre.length - suf.length) = P - pre.length by omega,
+      show P - (pre.length + (P + S - pre.length - suf.length)) = 0 by omega]
+    simp
+  have h2 : ((pre ++ List.replicate (P + S - pre.length - suf.length) c) ++ suf).drop P
+      = List.replicate (S - suf.length) c ++ suf := by
+    simp only [List.drop_append, List.length_append, List.length_replicate,
+      List.drop_replicate, List.drop_eq_nil_of_le hP]
+    rw [show P - (pre.length + (P + S - pre.length - suf.length)) = 0 by omega,
+      show P + S - pre.length - suf.length - (P - pre.length) = S - suf.length by omega]
+    simp
+  rw [h1, h2, show n - pre.length - suf.length
+      = (P - pre.length) + ((n - P - S) + (S - suf.length)) by omega,
+    List.replicate_add, List.replicate_add]
+  simp only [List.append_assoc]
+
 /-- **One side dominates the other**, in the prefix and in the suffix at once.
 
     This is the whole of the `list` meet's refusal, and it is a fact about lengths alone.
@@ -623,6 +889,15 @@ theorem rowOfG_forall₂_left {α β : Type} {R : α → β → Prop}
     one prefix and one suffix and the window needs two shapes. There the meet refuses. -/
 def dominates (p₁ s₁ p₂ s₂ : Nat) : Bool :=
   (decide (p₂ ≤ p₁) && decide (s₂ ≤ s₁)) || (decide (p₁ ≤ p₂) && decide (s₁ ≤ s₂))
+
+/-- **Dominance is exactly the equation the answer needs.** The widest `list` the answer can
+    spell starts at `max p₁ p₂ + max s₁ s₂`, and the intersection starts at
+    `max (p₁+s₁) (p₂+s₂)`. Where one side dominates, the two agree, so the answer refuses a
+    length exactly where a factor does. -/
+theorem dominates_max {p₁ s₁ p₂ s₂ : Nat} (h : dominates p₁ s₁ p₂ s₂ = true) :
+    max p₁ p₂ + max s₁ s₂ = max (p₁ + s₁) (p₂ + s₂) := by
+  simp only [dominates, Bool.or_eq_true, Bool.and_eq_true, decide_eq_true_eq] at h
+  omega
 
 /-- Two `list` shapes met, the left as partially applied meets and the right as terms.
 
@@ -664,8 +939,9 @@ def listMeetRow (fpre : List (Term → Option Term)) (fsp : Option (Term → Opt
       | some fs, some us => (allSome (zipF fs us)).map fun row => Term.listOf row none []
       | _, _ => some .never
 
-/-- The family of the one positional container. Replaces `famArr` and `famTup`, which
-    answered on shapes that are now one term. -/
+/-- The family of the one positional container: the one shape a positional value can meet,
+    and the bottom at every constructor in another value slot. `opaq` refuses, because its
+    closed form states no positional shape to intersect. -/
 def famList (fpre : List (Term → Option Term)) (fsp : Option (Term → Option Term))
     (fsuf : List (Term → Option Term)) : Term → Option Term
   | .list pre₂ sp₂ suf₂ => listMeetRow fpre fsp fsuf pre₂ sp₂ suf₂
@@ -718,27 +994,6 @@ theorem famList_isList {fpre : List (Term → Option Term)}
       | exact listMeetRow_isList h
       | (simp only [famList, Option.some.injEq] at h; exact Or.inl h.symm)
       | exact absurd h (by simp [famList])
-
-def famTup (fs : List (Term → Option Term)) (ftail : Option (Term → Option Term)) :
-    Term → Option Term
-  | .array y =>
-      match allSome (applyAt fs y),
-            (match ftail with | none => some none | some ft => (ft y).map some) with
-      | some vs, some tl => some (Term.tupleOf vs tl)
-      | _, _ => none
-  | .tuple us tail' =>
-      if fs.length = us.length then
-        match allSome (zipF fs us),
-              (match ftail, tail' with
-               | none, none => some none
-               | some ft, some u => (ft u).map some
-               | _, _ => none) with
-        | some vs, some tl => some (Term.tupleOf vs tl)
-        | _, _ => none
-      else if ftail.isNone && tail'.isNone then some .never
-      else none
-  | .opaq _ => none
-  | _ => some .never
 
 /-- A field met with one term, the field's mark kept, with the TERM on the left. `Field.meetT`
     is the same cell with the field on the left; the record∧object row needs this one. -/
@@ -1219,15 +1474,6 @@ theorem Adm_and_false {x y : Term} (h : Orth1 x y = true) (v : Value) :
 theorem NEFinset.not_forall_notMem {α : Type} (S : NEFinset α) : ¬ ∀ a, a ∉ S.1 :=
   fun hall => S.2.elim (fun a ha => hall a ha)
 
-/-- A list admits under the meet exactly where it admits under both factors. -/
-theorem allP_and {p q r : VP} (h : ∀ v, r v = (p v && q v)) (xs : List Value) :
-    allP r xs = (allP p xs && allP q xs) := by
-  induction xs with
-  | nil => simp [allP]
-  | cons a as ihx =>
-    simp only [allP, h, ihx]
-    simp [Bool.and_assoc, Bool.and_comm, Bool.and_left_comm]
-
 /-- …and a key set the same way. -/
 theorem decide_forall_and {α : Sort*} {p q r : α → Bool}
     [Decidable (∀ k, r k = true)] [Decidable (∀ k, p k = true)] [Decidable (∀ k, q k = true)]
@@ -1253,30 +1499,6 @@ theorem allSome_map_forall₂ {α β : Type} (f : α → Option β) :
       simp only [allSome, Option.map_eq_some_iff] at h
       obtain ⟨zs, hzs, rfl⟩ := h
       exact .cons hf (ihx hzs)
-
-/-- An array against a tuple: every declared position and the tail meet the array's element row, so the aligned answer is the conjunction. -/
-theorem alignP_meet_all {P : VP} :
-    ∀ {Ps Qs : List VP}, List.Forall₂ (fun p q => ∀ w, q w = (p w && P w)) Ps Qs →
-    ∀ {pt qt : Option VP},
-      (pt = none ∧ qt = none) ∨
-        (∃ p q, pt = some p ∧ qt = some q ∧ ∀ w, q w = (p w && P w)) →
-    ∀ ws, alignP Qs qt ws = (allP P ws && alignP Ps pt ws) := by
-  intro Ps Qs hPQ pt qt htl ws
-  induction ws generalizing Ps Qs with
-  | nil =>
-    cases hPQ with
-    | nil => rcases htl with ⟨rfl, rfl⟩ | ⟨p, q, rfl, rfl, _⟩ <;> simp [alignP, allP]
-    | cons _ _ => simp [alignP, allP]
-  | cons w ws ihw =>
-    cases hPQ with
-    | nil =>
-      rcases htl with ⟨rfl, rfl⟩ | ⟨p, q, rfl, rfl, hpq⟩
-      · simp [alignP, allP]
-      · simp only [alignP, allP, hpq, ihw .nil]
-        simp [Bool.and_assoc, Bool.and_comm, Bool.and_left_comm]
-    | cons hpq hrest =>
-      simp only [alignP, allP, hpq, ihw hrest]
-      simp [Bool.and_assoc, Bool.and_comm, Bool.and_left_comm]
 
 /-- Two tuples of one arity: the positions meet positionwise and the tails meet. -/
 theorem alignP_meet_zip :
@@ -1341,6 +1563,56 @@ theorem alignP_none_length : ∀ {Ps : List VP} {ws : List Value},
       simp only [alignP, Bool.and_eq_true] at h
       simp [ihp h.2]
 
+
+/-- The rows of a term list are that list mapped, so `rowOfG_map` carries a row of terms
+    onto the row of rows the admission reads. -/
+theorem AdmList_eq_map (ts : List Term) : AdmList ts = ts.map Adm := by
+  induction ts with
+  | nil => rfl
+  | cons t ts ih => simp only [AdmList, List.map_cons, ih]
+
+/-- …and the same for the spread. -/
+theorem AdmOptT_eq_map (sp : Option Term) : AdmOptT sp = sp.map Adm := by
+  cases sp <;> rfl
+
+/-- **The suffix row meets position by position**, which is `alignP_meet_zip` for the half
+    that carries no spread. Stated over terms, because the three rows the `list` meet
+    compares are rows of terms. -/
+theorem zipP_meet {r₁ r₂ rz : List Term} (hlen : r₁.length = r₂.length)
+    (hF : List.Forall₂ (fun (pq : Term × Term) w => ∀ u, Adm w u = (Adm pq.1 u && Adm pq.2 u))
+      (r₁.zip r₂) rz) :
+    ∀ ws, zipP (AdmList rz) ws = (zipP (AdmList r₁) ws && zipP (AdmList r₂) ws) := by
+  intro ws
+  induction ws generalizing r₁ r₂ rz with
+  | nil =>
+      cases r₁ with
+      | nil =>
+          cases r₂ with
+          | nil => cases hF; simp [zipP, AdmList]
+          | cons => simp only [List.length_nil, List.length_cons] at hlen; omega
+      | cons t r₁' =>
+          cases r₂ with
+          | nil => simp only [List.length_nil, List.length_cons] at hlen; omega
+          | cons u r₂' =>
+              rw [List.zip_cons_cons] at hF
+              cases hF with
+              | cons _ _ => simp [zipP, AdmList]
+  | cons w ws ihw =>
+      cases r₁ with
+      | nil =>
+          cases r₂ with
+          | nil => cases hF; simp [zipP, AdmList]
+          | cons => simp only [List.length_nil, List.length_cons] at hlen; omega
+      | cons t r₁' =>
+          cases r₂ with
+          | nil => simp only [List.length_nil, List.length_cons] at hlen; omega
+          | cons u r₂' =>
+              rw [List.zip_cons_cons] at hF
+              cases hF with
+              | cons hr hrest =>
+                  simp only [AdmList, zipP, hr,
+                    ihw (by simpa using hlen) hrest]
+                  simp [Bool.and_assoc, Bool.and_comm, Bool.and_left_comm]
 
 /-- The rows of a term list are as many as the terms. -/
 theorem AdmList_length (ts : List Term) : (AdmList ts).length = ts.length := by
@@ -1558,11 +1830,6 @@ theorem μSyn_refineOf (z : Term) (p : Pred) : μSyn (Term.refineOf z p) = μSyn
   next hz => rw [show z = Term.never from eq_never_of_isNever hz]
   next => rfl
 
-/-- The suffix-free case, under the name the tuple rows use. -/
-theorem tupleOf_cases (ts : List Term) (tail : Option Term) :
-    Term.tupleOf ts tail = .never ∨ Term.tupleOf ts tail = .tuple ts tail :=
-  listOf_cases ts tail []
-
 /-- A declared position that holds nothing empties the tuple: every list the tuple admits fills
     each declared position. -/
 theorem alignP_never_false : ∀ {ts : List Term} {tail : Option Term} {ws : List Value},
@@ -1614,6 +1881,60 @@ theorem Adm_listOf (pre : List Term) (sp : Option Term) (suf : List Term) (v : V
     · rw [alignP_never_false hp, Bool.false_and]
     · rw [zipP_never_false hs, Bool.and_false]
   next => rfl
+
+/-- **The `list` meet's whole admission obligation, read off the three rows.** A `list`
+    admits an array exactly where its row at that length does, so an answer whose row exists
+    exactly where both factors' rows exist, and is their pointwise meet there, admits exactly
+    what both factors admit. Each of `listMeetRow`'s three branches supplies these two facts
+    and nothing else. -/
+theorem Adm_list_rows {p₁ s₁ p₂ s₂ pz sz : List Term} {q₁ q₂ qz : Option Term}
+    (hsome : ∀ n, (rowOfG pz qz sz n).isSome
+      = ((rowOfG p₁ q₁ s₁ n).isSome && (rowOfG p₂ q₂ s₂ n).isSome))
+    (hrel : ∀ n r₁ r₂ rz, rowOfG p₁ q₁ s₁ n = some r₁ → rowOfG p₂ q₂ s₂ n = some r₂ →
+      rowOfG pz qz sz n = some rz →
+      r₁.length = r₂.length ∧
+        List.Forall₂ (fun (pq : Term × Term) w => ∀ u, Adm w u = (Adm pq.1 u && Adm pq.2 u))
+          (r₁.zip r₂) rz)
+    (v : Value) :
+    Adm (.list pz qz sz) v = (Adm (.list p₁ q₁ s₁) v && Adm (.list p₂ q₂ s₂) v) := by
+  cases v with
+  | arr ws =>
+      have hb := hsome ws.length
+      simp only [Adm, AdmList_eq_map, AdmOptT_eq_map, alignPL_eq_rowOfG, rowOfG_map]
+      cases h₁ : rowOfG p₁ q₁ s₁ ws.length with
+      | none =>
+          rw [h₁] at hb
+          simp only [Option.isSome_none, Bool.false_and] at hb
+          cases hz : rowOfG pz qz sz ws.length with
+          | none => simp
+          | some rz => rw [hz] at hb; simp at hb
+      | some r₁ =>
+          cases h₂ : rowOfG p₂ q₂ s₂ ws.length with
+          | none =>
+              rw [h₁, h₂] at hb
+              simp only [Option.isSome_some, Option.isSome_none, Bool.and_false] at hb
+              cases hz : rowOfG pz qz sz ws.length with
+              | none => simp
+              | some rz => rw [hz] at hb; simp at hb
+          | some r₂ =>
+              cases hz : rowOfG pz qz sz ws.length with
+              | none => rw [h₁, h₂, hz] at hb; simp at hb
+              | some rz =>
+                  obtain ⟨hlen, hF⟩ := hrel _ _ _ _ h₁ h₂ hz
+                  simp only [Option.map_some]
+                  simpa only [← AdmList_eq_map] using zipP_meet hlen hF ws
+  | _ => simp [Adm]
+
+/-- **Two `list` shapes with no common length share no value.** The bottom is the right
+    answer exactly there, and `listMeetRow` reaches it from both flattening branches. -/
+theorem Adm_list_disjoint {p₁ s₁ p₂ s₂ : List Term} {q₁ q₂ : Option Term}
+    (h : ∀ n, rowOfG p₁ q₁ s₁ n = none ∨ rowOfG p₂ q₂ s₂ n = none) (v : Value) :
+    (Adm (.list p₁ q₁ s₁) v && Adm (.list p₂ q₂ s₂) v) = false := by
+  cases v with
+  | arr ws =>
+      simp only [Adm, AdmList_eq_map, AdmOptT_eq_map, alignPL_eq_rowOfG, rowOfG_map]
+      rcases h ws.length with hn | hn <;> simp [hn]
+  | _ => simp [Adm]
 
 /-- Normalising a tuple keeps what it admits. -/
 theorem Adm_tupleOf (ts : List Term) (tail : Option Term) (v : Value) :
@@ -2064,9 +2385,8 @@ theorem Adm_meetSRight {x : Term} {fam : Term → Option Term} (hf : AdmFam x fa
   | .literal k lv, _, h, v => hf (.literal k lv) _ trivial h v
   | .set b, _, h, v => hf (.set b) _ trivial h v
   | .opaq l, _, h, v => hf (.opaq l) _ trivial h v
-  | .array e, _, h, v => hf (.array e) _ trivial h v
   | .record c, _, h, v => hf (.record c) _ trivial h v
-  | .tuple ts tl, _, h, v => hf (.tuple ts tl) _ trivial h v
+  | .list p q s, _, h, v => hf (.list p q s) _ trivial h v
   | .object b, _, h, v => hf (.object b) _ trivial h v
 termination_by structural y => y
 
@@ -2297,94 +2617,6 @@ theorem Adm_famOpaq (l : Bool) : AdmFam (.opaq l) (famOpaq l) := by
 
 /-! ### The container families. The depth bounds go: the lifts are measure-free. -/
 
-/-- The element companion is the plain map. -/
-theorem mapF_eq (f : Term → Option Term) : ∀ ts, mapF f ts = ts.map f
-  | [] => rfl
-  | _ :: ts => congrArg _ (mapF_eq f ts)
-
-/-- The element list of an array against a tuple, lifted pointwise. -/
-theorem AdmList_lift {x' : Term} {f : Term → Option Term} (hf : AdmSound x' f) :
-    ∀ {ts vs : List Term}, List.Forall₂ (fun t v => f t = some v) ts vs →
-      List.Forall₂ (fun p q => ∀ w, q w = (p w && Adm x' w)) (AdmList ts) (AdmList vs) := by
-  intro ts
-  induction ts with
-  | nil => intro vs h; cases h; exact .nil
-  | cons t ts ihs =>
-      intro vs h
-      cases h with
-      | cons hh ht =>
-          exact .cons (fun w => by rw [hf t _ hh w, Bool.and_comm]) (ihs ht)
-
-/-- …and the tail. -/
-theorem AdmOptT_lift {x' : Term} {f : Term → Option Term} (hf : AdmSound x' f)
-    {tail tl : Option Term}
-    (htl : (tail = none ∧ tl = none) ∨
-      ∃ t u, tail = some t ∧ tl = some u ∧ f t = some u) :
-    (AdmOptT tail = none ∧ AdmOptT tl = none) ∨
-      (∃ p q, AdmOptT tail = some p ∧ AdmOptT tl = some q ∧
-        ∀ w, q w = (p w && Adm x' w)) := by
-  rcases htl with ⟨rfl, rfl⟩ | ⟨t, u, rfl, rfl, hm⟩
-  · exact .inl ⟨rfl, rfl⟩
-  · exact .inr ⟨Adm t, Adm u, rfl, rfl, fun w => by rw [hf t _ hm w, Bool.and_comm]⟩
-
-/-- The array-against-tuple row's extraction, with no measure. -/
-theorem famArr_tuple {f : Term → Option Term} {ts : List Term} {tail : Option Term} {z : Term}
-    (h : famArr f (.tuple ts tail) = some z) :
-    ∃ vs tl, z = Term.tupleOf vs tl ∧
-      List.Forall₂ (fun t v => f t = some v) ts vs ∧
-      ((tail = none ∧ tl = none) ∨
-        ∃ t u, tail = some t ∧ tl = some u ∧ f t = some u) := by
-  simp only [famArr] at h
-  split at h
-  next vs tl hvs htl =>
-    simp only [Option.some.injEq] at h
-    refine ⟨vs, tl, h.symm, ?_, ?_⟩
-    · exact allSome_map_forall₂ _ (by rw [← mapF_eq]; exact hvs)
-    · cases tail with
-      | none =>
-          replace htl : some (none : Option Term) = some tl := htl
-          exact .inl ⟨rfl, by simpa using htl.symm⟩
-      | some t =>
-          replace htl : Option.map some (f t) = some tl := htl
-          obtain ⟨u, hu, rfl⟩ := Option.map_eq_some_iff.mp htl
-          exact .inr ⟨t, u, rfl, rfl, hu⟩
-  next => exact absurd h (by simp)
-
-/-- An array meets an array at the element, and a tuple at every declared position. -/
-theorem Adm_famArr {x' : Term} {f : Term → Option Term} (hf : AdmSound x' f) :
-    AdmFam (.array x') (famArr f) := by
-  intro y z hd h v
-  cases y <;> first | exact hd.elim | skip
-  case array e =>
-      simp only [famArr] at h
-      obtain ⟨w, hw, rfl⟩ := Option.map_eq_some_iff.mp h
-      have ihw := hf e w hw
-      cases v <;> simp only [Adm, Bool.and_self, allP_and ihw]
-  case tuple ts tail =>
-      obtain ⟨vs, tl, rfl, hts, htl⟩ := famArr_tuple h
-      rw [Adm_tupleOf]
-      cases v <;>
-        simp only [Adm, Bool.and_self,
-          alignP_meet_all (AdmList_lift hf hts) (AdmOptT_lift hf htl)]
-  case opaq l => simp [famArr] at h
-  all_goals fam_never famArr
-
-/-- A tuple's position functions, applied at one term and lifted pointwise. -/
-theorem applyAt_lift {y : Term} :
-    ∀ {ts : List Term} {fs : List (Term → Option Term)} {vs : List Term},
-      List.Forall₂ AdmSound ts fs →
-      List.Forall₂ (fun f v => f y = some v) fs vs →
-      List.Forall₂ (fun p q => ∀ w, q w = (p w && Adm y w)) (AdmList ts) (AdmList vs) := by
-  intro ts
-  induction ts with
-  | nil => intro fs vs hfs hv; cases hfs; cases hv; exact .nil
-  | cons t ts ihs =>
-      intro fs vs hfs hv
-      cases hfs with
-      | cons hf hfs' =>
-          cases hv with
-          | cons hh ht => exact .cons (fun w => by rw [hf y _ hh w, Bool.and_comm]) (ihs hfs' ht)
-
 /-- …and the same two tuples' positions zipped. -/
 theorem zipF_lift :
     ∀ {ts us : List Term} {fs : List (Term → Option Term)} {vs : List Term},
@@ -2412,11 +2644,6 @@ theorem Adm_famRecTerm {x' : Term} {f : Term → Option Term} (hf : AdmSound x' 
   have ihw := hf y w hw
   cases v <;> simp only [Adm, Bool.and_self, decide_forall_and (fun k => ihw _)]
 
-/-- The position companion is the plain map at one term. -/
-theorem applyAt_eq (y : Term) : ∀ fs, applyAt fs y = fs.map (fun f => f y)
-  | [] => rfl
-  | _ :: fs => congrArg _ (applyAt_eq y fs)
-
 /-- …and the zip companion is the plain map over the zip. -/
 theorem zipF_eq : ∀ (fs : List (Term → Option Term)) (us : List Term),
     zipF fs us = (fs.zip us).map (fun p => p.1 p.2)
@@ -2424,96 +2651,283 @@ theorem zipF_eq : ∀ (fs : List (Term → Option Term)) (us : List Term),
   | _ :: _, [] => rfl
   | _ :: fs, _ :: us => congrArg _ (zipF_eq fs us)
 
-/-- A tuple meets an array at every position, and another tuple by arity. -/
-theorem Adm_famTup {ts : List Term} {tail : Option Term}
-    {fs : List (Term → Option Term)} {ftail : Option (Term → Option Term)}
-    (hfs : List.Forall₂ AdmSound ts fs)
-    (hft : (tail = none ∧ ftail = none) ∨
-      ∃ t ft, tail = some t ∧ ftail = some ft ∧ AdmSound t ft) :
-    AdmFam (.tuple ts tail) (famTup fs ftail) := by
+/-- Two rows of terms, the left as partially applied meets, met position by position. The
+    term-level twin of `zipF_lift`, because the rows the `list` meet compares are rows of
+    terms rather than rows of predicates. -/
+theorem zipF_lift_terms :
+    ∀ {ts us : List Term} {fs : List (Term → Option Term)} {vs : List Term},
+      List.Forall₂ AdmSound ts fs →
+      List.Forall₂ (fun (p : (Term → Option Term) × Term) v => p.1 p.2 = some v) (fs.zip us) vs →
+      List.Forall₂ (fun (pq : Term × Term) w => ∀ u, Adm w u = (Adm pq.1 u && Adm pq.2 u))
+        (ts.zip us) vs := by
+  intro ts
+  induction ts with
+  | nil => intro us fs vs hfs hv; cases hfs; cases hv; exact .nil
+  | cons t ts ihs =>
+      intro us fs vs hfs hv
+      cases hfs with
+      | cons hsound hfs' =>
+          cases us with
+          | nil => cases hv; exact .nil
+          | cons u us =>
+              cases hv with
+              | cons hh ht =>
+                  exact .cons (fun w => hsound u _ hh w) (ihs hfs' ht)
+
+/-- **The one positional container's family.** Two `list` shapes meet through their rows, and
+    `Adm_list_rows` states the whole obligation over those rows. -/
+theorem Adm_famList {pre suf : List Term} {sp : Option Term}
+    {fpre fsuf : List (Term → Option Term)} {fsp : Option (Term → Option Term)}
+    (hp : List.Forall₂ AdmSound pre fpre)
+    (hs : (sp = none ∧ fsp = none) ∨ ∃ t f, sp = some t ∧ fsp = some f ∧ AdmSound t f)
+    (hf : List.Forall₂ AdmSound suf fsuf) :
+    AdmFam (.list pre sp suf) (famList fpre fsp fsuf) := by
+  have hlp := hp.length_eq
+  have hlf := hf.length_eq
   intro y z hd h v
   cases y <;> first | exact hd.elim | skip
-  case array e =>
-      simp only [famTup] at h
-      split at h
-      next vs tl hvs htl =>
-        simp only [Option.some.injEq] at h; subst h
-        have hF : List.Forall₂ (fun f w => f e = some w) fs vs :=
-          allSome_map_forall₂ _ (by rw [← applyAt_eq]; exact hvs)
-        have hT : (AdmOptT tail = none ∧ AdmOptT tl = none) ∨
-            (∃ p q, AdmOptT tail = some p ∧ AdmOptT tl = some q ∧
-              ∀ w, q w = (p w && Adm e w)) := by
-          rcases hft with ⟨rfl, rfl⟩ | ⟨t, ft, rfl, rfl, hsound⟩
-          · replace htl : some (none : Option Term) = some tl := htl
-            simp only [Option.some.injEq] at htl; subst htl; exact .inl ⟨rfl, rfl⟩
-          · replace htl : Option.map some (ft e) = some tl := htl
-            obtain ⟨u, hu, rfl⟩ := Option.map_eq_some_iff.mp htl
-            exact .inr ⟨Adm t, Adm u, rfl, rfl, fun w => by rw [hsound e _ hu w, Bool.and_comm]⟩
-        rw [Adm_tupleOf]
-        cases v <;> simp only [Adm, Bool.and_self] <;>
-          rw [Bool.and_comm, alignP_meet_all (applyAt_lift hfs hF) hT]
-      next => exact absurd h (by simp)
-  case tuple us tail' =>
-      simp only [famTup] at h
-      split at h
-      next hlen =>
-        split at h
-        next vs tl hvs htl =>
-          simp only [Option.some.injEq] at h; subst h
-          have hF : List.Forall₂
-              (fun (p : (Term → Option Term) × Term) w => p.1 p.2 = some w) (fs.zip us) vs :=
-            allSome_map_forall₂ _ (by rw [← zipF_eq]; exact hvs)
-          have hT : (AdmOptT tail = none ∧ AdmOptT tail' = none ∧ AdmOptT tl = none) ∨
-              ∃ p q r, AdmOptT tail = some p ∧ AdmOptT tail' = some q ∧ AdmOptT tl = some r ∧
-                ∀ w, r w = (p w && q w) := by
-            rcases hft with ⟨rfl, rfl⟩ | ⟨t, ft, rfl, rfl, hsound⟩
-            · cases tail' with
-              | none =>
-                  replace htl : some (none : Option Term) = some tl := htl
-                  simp only [Option.some.injEq] at htl; subst htl
-                  exact .inl ⟨rfl, rfl, rfl⟩
-              | some u => exact absurd htl (by simp)
-            · cases tail' with
-              | none => exact absurd htl (by simp)
-              | some u =>
-                  replace htl : Option.map some (ft u) = some tl := htl
-                  obtain ⟨w, hw, rfl⟩ := Option.map_eq_some_iff.mp htl
-                  exact .inr ⟨Adm t, Adm u, Adm w, rfl, rfl, rfl, fun q => hsound u _ hw q⟩
-          rw [Adm_tupleOf]
-          cases v <;> simp only [Adm, Bool.and_self,
-            alignP_meet_zip (zipF_lift hfs hF)
-              (by rw [AdmList_length, AdmList_length]
-                  exact hfs.length_eq.trans hlen) hT]
-        next => exact absurd h (by simp)
-      next hlen =>
-        split at h
-        next hb =>
-          simp only [Option.some.injEq] at h; subst h
-          simp only [Bool.and_eq_true, Option.isNone_iff_eq_none] at hb
-          obtain ⟨hb1, hb2⟩ := hb
-          have htn : tail = none := by
-            rcases hft with ⟨rfl, _⟩ | ⟨t, ft, rfl, rfl, _⟩
-            · rfl
-            · exact absurd hb1 (by simp)
-          subst htn; subst hb2
-          have hne : ts.length ≠ us.length := fun hc =>
-            hlen (((hfs.length_eq).symm.trans hc))
-          cases v with
-          | arr ws =>
-            simp only [Adm, AdmOptT]
-            cases hA : alignP (AdmList ts) none ws with
-            | false => simp
-            | true =>
-              cases hB : alignP (AdmList us) none ws with
-              | false => simp
+  case list pre₂ sp₂ suf₂ =>
+      simp only [famList] at h
+      rcases hs with ⟨rfl, rfl⟩ | ⟨t, f, rfl, rfl, hsound⟩
+      · -- The left states a fixed arity, so the answer is that one row, flattened.
+        simp only [listMeetRow] at h
+        rw [show rowOfG fpre none fsuf (fpre.length + fsuf.length) = some (fpre ++ fsuf) from
+          by rw [rowOfG_none_eq, if_pos rfl]] at h
+        have hlen0 : fpre.length + fsuf.length = pre.length + suf.length := by omega
+        rw [hlen0] at h
+        cases hR : rowOfG pre₂ sp₂ suf₂ (pre.length + suf.length) with
+        | none =>
+            rw [hR] at h
+            simp only [Option.some.injEq] at h
+            subst h
+            have hdis : ∀ n, rowOfG pre none suf n = none ∨ rowOfG pre₂ sp₂ suf₂ n = none := by
+              intro n
+              cases hd : decide (n = pre.length + suf.length) with
+              | true => simp only [decide_eq_true_eq] at hd; subst hd; exact Or.inr hR
+              | false =>
+                  simp only [decide_eq_false_iff_not] at hd
+                  exact Or.inl (by rw [rowOfG_none_eq, if_neg hd])
+            exact (Adm_list_disjoint hdis v).symm
+        | some us =>
+            rw [hR] at h
+            obtain ⟨row, hrow, rfl⟩ := Option.map_eq_some_iff.mp h
+            have hus : us.length = pre.length + suf.length := rowOfG_length hR
+            have hFz : List.Forall₂
+                (fun (p : (Term → Option Term) × Term) w => p.1 p.2 = some w)
+                ((fpre ++ fsuf).zip us) row :=
+              allSome_map_forall₂ _ (by rw [← zipF_eq]; exact hrow)
+            have hrowlen : row.length = pre.length + suf.length := by
+              have hz := hFz.length_eq
+              simp only [List.length_zip, List.length_append, hus] at hz
+              omega
+            have hrel₀ := zipF_lift_terms (forall₂_append hp hf) hFz
+            rw [Adm_listOf]
+            refine Adm_list_rows (p₁ := pre) (q₁ := none) (s₁ := suf) ?_ ?_ v
+            · intro n
+              simp only [rowOfG_none_eq, List.length_nil, Nat.add_zero, hrowlen]
+              cases hd : decide (n = pre.length + suf.length) with
               | true =>
-                exact absurd
-                  (((alignP_none_length hA).trans (AdmList_length _)).symm.trans
-                    ((alignP_none_length hB).trans (AdmList_length _))) hne
-          | _ => simp [Adm]
-        next => exact absurd h (by simp)
-  case opaq l => simp [famTup] at h
-  all_goals fam_never famTup
+                  simp only [decide_eq_true_eq] at hd
+                  subst hd
+                  rw [if_pos rfl, if_pos rfl, hR]
+                  simp
+              | false =>
+                  simp only [decide_eq_false_iff_not] at hd
+                  rw [if_neg hd, if_neg hd]
+                  simp
+            · intro n r₁ r₂ rz h1 h2 h3
+              rw [rowOfG_none_eq] at h1 h3
+              simp only [List.length_nil, Nat.add_zero, hrowlen] at h3
+              split at h1
+              · next he =>
+                  simp only [Option.some.injEq] at h1
+                  subst h1
+                  subst he
+                  rw [if_pos rfl] at h3
+                  simp only [Option.some.injEq] at h3
+                  subst h3
+                  rw [hR] at h2
+                  simp only [Option.some.injEq] at h2
+                  subst h2
+                  exact ⟨by simp only [List.length_append]; omega, by simpa using hrel₀⟩
+              · exact absurd h1 (by simp)
+      · cases sp₂ with
+        | none =>
+            -- The right states a fixed arity: the answer flattens to that length.
+            simp only [listMeetRow] at h
+            rw [show rowOfG pre₂ none suf₂ (pre₂.length + suf₂.length)
+                = some (pre₂ ++ suf₂) from by rw [rowOfG_none_eq, if_pos rfl]] at h
+            cases hL : rowOfG fpre (some f) fsuf (pre₂.length + suf₂.length) with
+            | none =>
+                rw [hL] at h
+                simp only [Option.some.injEq] at h
+                subst h
+                have hshort : pre₂.length + suf₂.length < fpre.length + fsuf.length := by
+                  rw [rowOfG_some_eq] at hL
+                  split at hL
+                  · omega
+                  · exact absurd hL (by simp)
+                have hdis : ∀ n,
+                    rowOfG pre (some t) suf n = none ∨ rowOfG pre₂ none suf₂ n = none := by
+                  intro n
+                  cases hd : decide (n = pre₂.length + suf₂.length) with
+                  | true =>
+                      simp only [decide_eq_true_eq] at hd
+                      subst hd
+                      exact Or.inl (by rw [rowOfG_some_eq, if_pos (by omega)])
+                  | false =>
+                      simp only [decide_eq_false_iff_not] at hd
+                      exact Or.inr (by rw [rowOfG_none_eq, if_neg hd])
+                exact (Adm_list_disjoint hdis v).symm
+            | some fs =>
+                rw [hL] at h
+                obtain ⟨row, hrow, rfl⟩ := Option.map_eq_some_iff.mp h
+                obtain ⟨ts, hts, htsF⟩ :=
+                  rowOfG_forall₂_left hp (Or.inr ⟨t, f, rfl, rfl, hsound⟩) hf hL
+                have hmin : pre.length + suf.length ≤ pre₂.length + suf₂.length := by
+                  rw [rowOfG_some_eq] at hL
+                  split at hL
+                  · exact absurd hL (by simp)
+                  · omega
+                have hfs : fs.length = pre₂.length + suf₂.length := rowOfG_length hL
+                have hFz : List.Forall₂
+                    (fun (p : (Term → Option Term) × Term) w => p.1 p.2 = some w)
+                    (fs.zip (pre₂ ++ suf₂)) row :=
+                  allSome_map_forall₂ _ (by rw [← zipF_eq]; exact hrow)
+                have hrowlen : row.length = pre₂.length + suf₂.length := by
+                  have hz := hFz.length_eq
+                  simp only [List.length_zip, List.length_append, hfs] at hz
+                  omega
+                have hrel₀ := zipF_lift_terms htsF hFz
+                rw [Adm_listOf]
+                refine Adm_list_rows (p₁ := pre) (q₁ := some t) (s₁ := suf) ?_ ?_ v
+                · intro n
+                  simp only [rowOfG_none_eq, rowOfG_some_eq, List.length_nil, Nat.add_zero,
+                    hrowlen]
+                  cases hd : decide (n = pre₂.length + suf₂.length) with
+                  | true =>
+                      simp only [decide_eq_true_eq] at hd
+                      subst hd
+                      rw [if_pos rfl, if_neg (by omega), if_pos rfl]
+                      simp
+                  | false =>
+                      simp only [decide_eq_false_iff_not] at hd
+                      rw [if_neg hd, if_neg hd]
+                      simp
+                · intro n r₁ r₂ rz h1 h2 h3
+                  rw [rowOfG_none_eq] at h2 h3
+                  simp only [List.length_nil, Nat.add_zero, hrowlen] at h3
+                  split at h2
+                  · next he =>
+                      simp only [Option.some.injEq] at h2
+                      subst h2
+                      subst he
+                      rw [if_pos rfl] at h3
+                      simp only [Option.some.injEq] at h3
+                      subst h3
+                      rw [hts] at h1
+                      simp only [Option.some.injEq] at h1
+                      subst h1
+                      refine ⟨?_, by simpa using hrel₀⟩
+                      have hl := rowOfG_length hts
+                      simp only [List.length_append]
+                      omega
+                  · exact absurd h2 (by simp)
+        | some c =>
+            -- Both sides spread. The answer is the row at one length, re-spread at every
+            -- other, and `dominates` is what makes the answer refuse exactly where a
+            -- factor does.
+            simp only [listMeetRow] at h
+            split at h
+            · next hdom =>
+                obtain ⟨fs, hfs⟩ :=
+                  rowOfG_total (pre := fpre) (suf := fsuf) (c := f)
+                    (n := max fpre.length pre₂.length + max fsuf.length suf₂.length) (by omega)
+                obtain ⟨us, hus⟩ :=
+                  rowOfG_total (pre := pre₂) (suf := suf₂) (c := c)
+                    (n := max fpre.length pre₂.length + max fsuf.length suf₂.length) (by omega)
+                rw [hfs, hus] at h
+                cases hfc : f c with
+                | none => rw [hfc] at h; exact absurd h (by simp)
+                | some spz =>
+                    rw [hfc] at h
+                    obtain ⟨row, hrow, rfl⟩ := Option.map_eq_some_iff.mp h
+                    have hfsl : fs.length
+                        = max fpre.length pre₂.length + max fsuf.length suf₂.length :=
+                      rowOfG_length hfs
+                    have husl : us.length
+                        = max fpre.length pre₂.length + max fsuf.length suf₂.length :=
+                      rowOfG_length hus
+                    have hFz : List.Forall₂
+                        (fun (p : (Term → Option Term) × Term) w => p.1 p.2 = some w)
+                        (fs.zip us) row :=
+                      allSome_map_forall₂ _ (by rw [← zipF_eq]; exact hrow)
+                    have hrowlen : row.length
+                        = max fpre.length pre₂.length + max fsuf.length suf₂.length := by
+                      have hz := hFz.length_eq
+                      simp only [List.length_zip, hfsl, husl] at hz
+                      omega
+                    have htk : (row.take (max fpre.length pre₂.length)).length
+                        = max fpre.length pre₂.length := by
+                      rw [List.length_take, hrowlen]; omega
+                    have hdp : (row.drop (max fpre.length pre₂.length)).length
+                        = max fsuf.length suf₂.length := by
+                      rw [List.length_drop, hrowlen]; omega
+                    obtain ⟨ts, hts, htsF⟩ :=
+                      rowOfG_forall₂_left hp (Or.inr ⟨t, f, rfl, rfl, hsound⟩) hf hfs
+                    have htsl : ts.length
+                        = max fpre.length pre₂.length + max fsuf.length suf₂.length :=
+                      rowOfG_length hts
+                    have hrel₀ := zipF_lift_terms htsF hFz
+                    have hspz : ∀ u, Adm spz u = (Adm t u && Adm c u) := hsound c spz hfc
+                    have hdm := dominates_max hdom
+                    rw [Adm_listOf]
+                    refine Adm_list_rows (p₁ := pre) (q₁ := some t) (s₁ := suf) ?_ ?_ v
+                    · intro n
+                      simp only [rowOfG_some_isSome, htk, hdp]
+                      rcases Nat.lt_or_ge n (pre.length + suf.length) with h1 | h1
+                      · rw [decide_eq_false (by omega : ¬ (max fpre.length pre₂.length
+                          + max fsuf.length suf₂.length ≤ n)),
+                          decide_eq_false (by omega : ¬ (pre.length + suf.length ≤ n)),
+                          Bool.false_and]
+                      · rcases Nat.lt_or_ge n (pre₂.length + suf₂.length) with h2 | h2
+                        · rw [decide_eq_false (by omega : ¬ (max fpre.length pre₂.length
+                            + max fsuf.length suf₂.length ≤ n)),
+                            decide_eq_true (by omega : pre.length + suf.length ≤ n),
+                            decide_eq_false (by omega : ¬ (pre₂.length + suf₂.length ≤ n)),
+                            Bool.and_false]
+                        · rw [decide_eq_true (by omega : max fpre.length pre₂.length
+                            + max fsuf.length suf₂.length ≤ n),
+                            decide_eq_true (by omega : pre.length + suf.length ≤ n),
+                            decide_eq_true (by omega : pre₂.length + suf₂.length ≤ n),
+                            Bool.and_self]
+                    · intro n r₁ r₂ rz h1 h2 h3
+                      rw [rowOfG_some_eq, htk, hdp] at h3
+                      split at h3
+                      · exact absurd h3 (by simp)
+                      · next hge =>
+                          simp only [Option.some.injEq] at h3
+                          subst h3
+                          have hr₁ := rowOfG_respread (P := max fpre.length pre₂.length)
+                            (S := max fsuf.length suf₂.length)
+                            (by omega) (by omega) (by omega) hts h1
+                          have hr₂ := rowOfG_respread (P := max fpre.length pre₂.length)
+                            (S := max fsuf.length suf₂.length)
+                            (by omega) (by omega) (by omega) hus h2
+                          subst hr₁; subst hr₂
+                          refine ⟨?_, ?_⟩
+                          · simp only [List.length_append, List.length_take, List.length_drop,
+                              List.length_replicate, htsl, husl]
+                          · refine forall₂_zip_append ?_
+                              (forall₂_zip_append ?_ (forall₂_zip_take _ hrel₀)
+                                (forall₂_zip_replicate hspz _))
+                              (forall₂_zip_drop _ hrel₀)
+                            · simp only [List.length_append, List.length_take,
+                                List.length_replicate, htsl, husl]
+                            · simp only [List.length_take, htsl, husl]
+            · exact absurd h (by simp)
+  case opaq l => simp [famList] at h
+  all_goals fam_never famList
 
 /-! ### The object families. The three body helpers are stated over an abstract field function,
      so the flipped cell and the object cell share them. -/
@@ -3075,17 +3489,18 @@ theorem Adm_meet : ∀ x y z, Term.meet x y = some z → ∀ v, Adm z v = (Adm x
   | .literal k lv, y, z, h, v => Adm_meetSRight (Adm_famLit k lv) y z h v
   | .set b, y, z, h, v => Adm_meetSRight (Adm_famSet b) y z h v
   | .opaq l, y, z, h, v => Adm_meetSRight (Adm_famOpaq l) y z h v
-  | .array e, y, z, h, v =>
-      Adm_meetSRight (Adm_famArr (fun t w hw => Adm_meet e t w hw)) y z h v
   | .record c, y, z, h, v =>
       Adm_meetSRight (Adm_famRec (fun t w hw => Adm_meet c t w hw)) y z h v
-  | .tuple ts tl, y, z, h, v => by
-      cases tl with
+  | .list pre sp suf, y, z, h, v => by
+      cases sp with
       | none =>
-          exact Adm_meetSRight (Adm_famTup (Adm_meetSTs ts) (Or.inl ⟨rfl, rfl⟩)) y z h v
+          exact Adm_meetSRight (Adm_famList (pre := pre) (sp := none) (suf := suf)
+            (Adm_meetSTs pre) (Or.inl ⟨rfl, rfl⟩) (Adm_meetSTs suf)) y z h v
       | some t =>
-          exact Adm_meetSRight (Adm_famTup (Adm_meetSTs ts)
-            (Or.inr ⟨t, Term.meet t, rfl, rfl, fun u w hw => Adm_meet t u w hw⟩)) y z h v
+          exact Adm_meetSRight (Adm_famList (pre := pre) (sp := some t) (suf := suf)
+            (Adm_meetSTs pre)
+            (Or.inr ⟨t, Term.meet t, rfl, rfl, fun u w hw => Adm_meet t u w hw⟩)
+            (Adm_meetSTs suf)) y z h v
   | .object (.mk fs f r), y, z, h, v => by
       cases r with
       | codec t =>
@@ -3855,13 +4270,6 @@ theorem AdmAList_length (ts : List Term) : (AdmAList ts).length = ts.length := b
   | nil => rfl
   | cons t ts ihx => simp only [AdmAList, List.length_cons, ihx]
 
-/-- A list reads under the meet exactly where it reads under both factors. -/
-theorem allPA_and {p q r : AP} (h : ∀ a, r a = (p a && q a)) (xs : List Attr) :
-    allPA r xs = (allPA p xs && allPA q xs) := by
-  induction xs with
-  | nil => simp [allPA]
-  | cons a as ihx => simp only [allPA, h, ihx]; cases p a <;> cases q a <;> simp
-
 /-- Two terms whose occupancies are disjoint share no attribute, so their conjunction is
     the bottom. This closes every row that answers `never` because the two read different `Attr`
     constructors. -/
@@ -3924,31 +4332,6 @@ theorem alignPA_none_length : ∀ {Ps : List AP} {as : List Attr},
     | cons w as' =>
       simp only [alignPA, Bool.and_eq_true] at h
       simp [ihp h.2]
-
-/-- An array against a tuple: every declared position and the tail meet the array's element
-    row, so the aligned answer is the conjunction. -/
-theorem alignPA_meet_all {P : AP} :
-    ∀ {Ps Qs : List AP}, List.Forall₂ (fun p q => ∀ a, q a = (p a && P a)) Ps Qs →
-    ∀ {pt qt : Option AP},
-      (pt = none ∧ qt = none) ∨
-        (∃ p q, pt = some p ∧ qt = some q ∧ ∀ a, q a = (p a && P a)) →
-    ∀ as, alignPA Qs qt as = (allPA P as && alignPA Ps pt as) := by
-  intro Ps Qs hPQ pt qt htl as
-  induction as generalizing Ps Qs with
-  | nil =>
-    cases hPQ with
-    | nil => rcases htl with ⟨rfl, rfl⟩ | ⟨p, q, rfl, rfl, _⟩ <;> simp [alignPA, allPA]
-    | cons _ _ => simp [alignPA, allPA]
-  | cons w as ihw =>
-    cases hPQ with
-    | nil =>
-      rcases htl with ⟨rfl, rfl⟩ | ⟨p, q, rfl, rfl, hpq⟩
-      · simp [alignPA, allPA]
-      · simp only [alignPA, allPA, hpq, ihw .nil]
-        simp [Bool.and_assoc, Bool.and_left_comm]
-    | cons hpq hrest =>
-      simp only [alignPA, allPA, hpq, ihw hrest]
-      simp [Bool.and_assoc, Bool.and_left_comm]
 
 /-- Two tuples of one arity: the positions meet positionwise and the tails meet. -/
 theorem alignPA_meet_zip :
@@ -4413,25 +4796,6 @@ theorem traverse_congr {α β : Type} {f g : α → Option β} :
       rw [traverse_cons, traverse_cons, hh x (by simp),
         ihx (fun y hy => hh y (by simp [hy]))]
 
-/-- `allPA` holds at each attribute it quantifies over. -/
-theorem allPA_mem {P : AP} : ∀ {as : List Attr}, allPA P as = true → ∀ a ∈ as, P a = true := by
-  intro as
-  induction as with
-  | nil => intro _ a ha; exact absurd ha (by simp)
-  | cons b bs ihx =>
-      intro hh a ha
-      rw [allPA, Bool.and_eq_true] at hh
-      rcases List.mem_cons.mp ha with rfl | ha'
-      · exact hh.1
-      · exact ihx hh.2 a ha'
-
-/-- **The `array` congruence.** Element codecs that agree at every attribute the wire list
-    carries read that list to the same value. -/
-theorem arrayCodec_p_congr {c d : Codec} {as : List Attr} (hh : ∀ a ∈ as, c.p a = d.p a) :
-    (arrayCodec c).p (.l as) = (arrayCodec d).p (.l as) := by
-  show (traverse c.p as).map Value.arr = (traverse d.p as).map Value.arr
-  rw [traverse_congr hh]
-
 /-- **The `record` congruence.** The name set is the index, so the entry function is the only
     thing to compare. -/
 theorem recordCodec_p_congr {c d : Codec} {keys : Finset Name} {g : {k // k ∈ keys} → Attr}
@@ -4508,15 +4872,244 @@ theorem alignPA_never_false : ∀ {ts : List Term} {tail : Option Term} {ws : Li
       · rw [ih (tail := tail) (ws := ws') hrest, Bool.and_false]
 
 
-/-- Normalising a tuple keeps what it reads. -/
-theorem AdmA_tupleOf (ts : List Term) (tail : Option Term) (v : Attr) :
-    AdmA (Term.tupleOf ts tail) v = AdmA (.tuple ts tail) v := by
-  unfold Term.tupleOf
+/-- A suffix holding the bottom reads nothing, on the read side. -/
+theorem zipPA_never_false : ∀ {suf : List Term} {as : List Attr},
+    suf.any Term.isNever = true → zipPA (AdmAList suf) as = false := by
+  intro suf
+  induction suf with
+  | nil => intro _ h; simp at h
+  | cons t ts' ih =>
+    intro as h
+    cases as with
+    | nil => rfl
+    | cons w as' =>
+      simp only [List.any_cons, Bool.or_eq_true] at h
+      simp only [AdmAList, zipPA]
+      rcases h with ht | hrest
+      · rw [show t = Term.never from eq_never_of_isNever ht,
+          show AdmA .never w = false from rfl, Bool.false_and]
+      · rw [ih (as := as') hrest, Bool.and_false]
+
+/-- Normalising a list keeps what it reads. -/
+theorem AdmA_listOf (pre : List Term) (sp : Option Term) (suf : List Term) (a : Attr) :
+    AdmA (Term.listOf pre sp suf) a = AdmA (.list pre sp suf) a := by
+  unfold Term.listOf
   split
   next hany =>
-    cases v <;> simp only [AdmA] <;> try rfl
-    exact (alignPA_never_false hany).symm
+    cases a <;> simp only [AdmA] <;> try rfl
+    refine Eq.symm ?_
+    simp only [alignPAL]
+    rcases Bool.or_eq_true .. |>.mp hany with hp | hs
+    · rw [alignPA_never_false hp, Bool.false_and]
+    · rw [zipPA_never_false hs, Bool.and_false]
   next => rfl
+
+/-- Normalising a tuple keeps what it reads. -/
+theorem AdmA_tupleOf (ts : List Term) (tail : Option Term) (v : Attr) :
+    AdmA (Term.tupleOf ts tail) v = AdmA (.tuple ts tail) v :=
+  AdmA_listOf ts tail [] v
+
+/-- The read-side rows of a term list are that list mapped. -/
+theorem AdmAList_eq_map (ts : List Term) : AdmAList ts = ts.map AdmA := by
+  induction ts with
+  | nil => rfl
+  | cons t ts ih => simp only [AdmAList, List.map_cons, ih]
+
+/-- …and the same for the spread. -/
+theorem AdmAOptT_eq_map (sp : Option Term) : AdmAOptT sp = sp.map AdmA := by
+  cases sp <;> rfl
+
+/-- **The suffix row meets position by position**, on the read side. -/
+theorem zipPA_meet {r₁ r₂ rz : List Term} (hlen : r₁.length = r₂.length)
+    (hF : List.Forall₂ (fun (pq : Term × Term) w => ∀ b, AdmA w b = (AdmA pq.1 b && AdmA pq.2 b))
+      (r₁.zip r₂) rz) :
+    ∀ as, zipPA (AdmAList rz) as = (zipPA (AdmAList r₁) as && zipPA (AdmAList r₂) as) := by
+  intro as
+  induction as generalizing r₁ r₂ rz with
+  | nil =>
+      cases r₁ with
+      | nil =>
+          cases r₂ with
+          | nil => cases hF; simp [zipPA, AdmAList]
+          | cons => simp only [List.length_nil, List.length_cons] at hlen; omega
+      | cons t r₁' =>
+          cases r₂ with
+          | nil => simp only [List.length_nil, List.length_cons] at hlen; omega
+          | cons u r₂' =>
+              rw [List.zip_cons_cons] at hF
+              cases hF with
+              | cons _ _ => simp [zipPA, AdmAList]
+  | cons b as ihb =>
+      cases r₁ with
+      | nil =>
+          cases r₂ with
+          | nil => cases hF; simp [zipPA, AdmAList]
+          | cons => simp only [List.length_nil, List.length_cons] at hlen; omega
+      | cons t r₁' =>
+          cases r₂ with
+          | nil => simp only [List.length_nil, List.length_cons] at hlen; omega
+          | cons u r₂' =>
+              rw [List.zip_cons_cons] at hF
+              cases hF with
+              | cons hr hrest =>
+                  simp only [AdmAList, zipPA, hr, ihb (by simpa using hlen) hrest]
+                  simp [Bool.and_assoc, Bool.and_comm, Bool.and_left_comm]
+
+/-- **The `list` meet's read-side admission obligation, read off the three rows.** The twin
+    of `Adm_list_rows`. -/
+theorem AdmA_list_rows {p₁ s₁ p₂ s₂ pz sz : List Term} {q₁ q₂ qz : Option Term}
+    (hsome : ∀ n, (rowOfG pz qz sz n).isSome
+      = ((rowOfG p₁ q₁ s₁ n).isSome && (rowOfG p₂ q₂ s₂ n).isSome))
+    (hrel : ∀ n r₁ r₂ rz, rowOfG p₁ q₁ s₁ n = some r₁ → rowOfG p₂ q₂ s₂ n = some r₂ →
+      rowOfG pz qz sz n = some rz →
+      r₁.length = r₂.length ∧
+        List.Forall₂ (fun (pq : Term × Term) w => ∀ b, AdmA w b = (AdmA pq.1 b && AdmA pq.2 b))
+          (r₁.zip r₂) rz)
+    (a : Attr) :
+    AdmA (.list pz qz sz) a = (AdmA (.list p₁ q₁ s₁) a && AdmA (.list p₂ q₂ s₂) a) := by
+  cases a with
+  | l as =>
+      have hb := hsome as.length
+      simp only [AdmA, AdmAList_eq_map, AdmAOptT_eq_map, alignPAL_eq_rowOfG, rowOfG_map]
+      cases h₁ : rowOfG p₁ q₁ s₁ as.length with
+      | none =>
+          rw [h₁] at hb
+          simp only [Option.isSome_none, Bool.false_and] at hb
+          cases hz : rowOfG pz qz sz as.length with
+          | none => simp
+          | some rz => rw [hz] at hb; simp at hb
+      | some r₁ =>
+          cases h₂ : rowOfG p₂ q₂ s₂ as.length with
+          | none =>
+              rw [h₁, h₂] at hb
+              simp only [Option.isSome_some, Option.isSome_none, Bool.and_false] at hb
+              cases hz : rowOfG pz qz sz as.length with
+              | none => simp
+              | some rz => rw [hz] at hb; simp at hb
+          | some r₂ =>
+              cases hz : rowOfG pz qz sz as.length with
+              | none => rw [h₁, h₂, hz] at hb; simp at hb
+              | some rz =>
+                  obtain ⟨hlen, hF⟩ := hrel _ _ _ _ h₁ h₂ hz
+                  simp only [Option.map_some]
+                  simpa only [← AdmAList_eq_map] using zipPA_meet hlen hF as
+  | _ => simp [AdmA]
+
+/-- **`slots` is `rowOfG` with no suffix.** The codec-side row and the term-side row are one
+    definition seen twice, which is what lets the reading agreement be stated over `rowOfG`
+    like the admission. -/
+theorem slots_eq_rowOfG : ∀ (cs : List Codec) (sp : Option Codec) (m : Nat),
+    slots cs sp m = rowOfG cs sp [] m := by
+  intro cs
+  induction cs with
+  | nil =>
+      intro sp m
+      cases sp with
+      | none =>
+          cases m with
+          | zero =>
+              rw [rowOfG_none_eq, if_pos (by simp only [List.length_nil]),
+                List.append_nil]
+              rfl
+          | succ n =>
+              rw [rowOfG_none_eq,
+                if_neg (by simp only [List.length_nil, Nat.add_zero]; omega)]
+              rfl
+      | some c =>
+          rw [slots_spread, rowOfG_some_eq,
+            if_neg (by simp only [List.length_nil, Nat.add_zero]; omega)]
+          simp only [List.length_nil, Nat.sub_zero, List.nil_append, List.append_nil]
+  | cons c cs ih =>
+      intro sp m
+      cases m with
+      | zero =>
+          cases sp with
+          | none =>
+              rw [rowOfG_none_eq,
+                if_neg (by simp only [List.length_cons, List.length_nil]; omega)]
+              rfl
+          | some d =>
+              rw [rowOfG_some_eq,
+                if_pos (by simp only [List.length_cons, List.length_nil]; omega)]
+              rfl
+      | succ n =>
+          simp only [slots, ih]
+          cases sp with
+          | none =>
+              simp only [rowOfG_none_eq, List.length_nil, Nat.add_zero, List.length_cons,
+                List.append_nil]
+              split
+              · next he =>
+                  rw [if_pos (by omega)]
+                  simp only [Option.map_some, List.cons_append]
+              · next he => rw [if_neg (by omega)]; rfl
+          | some d =>
+              simp only [rowOfG_some_eq, List.length_nil, Nat.add_zero, List.length_cons,
+                List.append_nil]
+              split
+              · next he => rw [if_pos (by omega)]; rfl
+              · next he =>
+                  rw [if_neg (by omega),
+                    show n + 1 - (cs.length + 1) = n - cs.length by omega]
+                  simp only [Option.map_some, List.cons_append]
+
+/-- …and `slotsL` is `rowOfG`. -/
+theorem slotsL_eq_rowOfG (pre : List Codec) (sp : Option Codec) (suf : List Codec) (n : Nat) :
+    slotsL pre sp suf n = rowOfG pre sp suf n := by
+  unfold slotsL
+  rw [slots_eq_rowOfG]
+  cases sp with
+  | none =>
+      simp only [rowOfG_none_eq, List.length_nil, Nat.add_zero, List.append_nil]
+      split
+      · next hlt => rw [if_neg (by omega)]
+      · next hge =>
+          split
+          · next he => rw [if_pos (by omega)]; simp
+          · next he => rw [if_neg (by omega)]; simp
+  | some c =>
+      simp only [rowOfG_some_eq, List.length_nil, Nat.add_zero, List.append_nil]
+      split
+      · next hlt => rw [if_pos (by omega)]
+      · next hge =>
+          split
+          · next hlt2 => rw [if_pos (by omega)]; simp
+          · next hge2 =>
+              rw [if_neg (by omega),
+                show n - suf.length - pre.length = n - pre.length - suf.length by omega]
+              simp
+
+/-- Every position of an admitted row is admitted. -/
+theorem zipPA_forall₂ : ∀ {r : List Term} {as : List Attr}, zipPA (AdmAList r) as = true →
+    List.Forall₂ (fun t b => AdmA t b = true) r as := by
+  intro r
+  induction r with
+  | nil =>
+      intro as h
+      cases as with
+      | nil => exact .nil
+      | cons => simp [zipPA, AdmAList] at h
+  | cons t r' ih =>
+      intro as h
+      cases as with
+      | nil => simp [zipPA, AdmAList] at h
+      | cons b as' =>
+          simp only [AdmAList, zipPA, Bool.and_eq_true] at h
+          exact .cons h.1 (ih h.2)
+
+/-- The spread a container denotes is the spread's own codec. -/
+theorem denoteOpt_eq_map (sp : Option Term) : denoteOpt sp = sp.map denote := by
+  cases sp <;> rfl
+
+/-- **Two `list` shapes with no common length read nothing together.** -/
+theorem AdmA_list_disjoint {p₁ s₁ p₂ s₂ : List Term} {q₁ q₂ : Option Term}
+    (h : ∀ n, rowOfG p₁ q₁ s₁ n = none ∨ rowOfG p₂ q₂ s₂ n = none) (a : Attr) :
+    (AdmA (.list p₁ q₁ s₁) a && AdmA (.list p₂ q₂ s₂) a) = false := by
+  cases a with
+  | l as =>
+      simp only [AdmA, AdmAList_eq_map, AdmAOptT_eq_map, alignPAL_eq_rowOfG, rowOfG_map]
+      rcases h as.length with hn | hn <;> simp [hn]
+  | _ => simp [AdmA]
 
 
 /-- A term that admits an attribute is not the bottom. -/
@@ -4539,11 +5132,6 @@ theorem alignPA_not_never : ∀ {vs : List Term} {tl : Option Term} {as : List A
           simp only [List.any_cons, Bool.or_eq_false_iff]
           exact ⟨not_isNever_of_admA hh.1, ihv hh.2⟩
 
-/-- A tuple that reads a wire list is already normal. -/
-theorem tupleOf_eq_tuple {vs : List Term} {tl : Option Term} {as : List Attr}
-    (hh : alignPA (AdmAList vs) (AdmAOptT tl) as = true) :
-    Term.tupleOf vs tl = .tuple vs tl := if_neg (by rw [alignPA_not_never hh]; simp)
-
 /-- The aligned traversal, one declared position at a time. -/
 theorem align_traverse_cons {c : Codec} {cs : List Codec} {tc : Option Codec} {b : Attr}
     {as : List Attr} :
@@ -4560,73 +5148,6 @@ theorem align_traverse_tail_cons {c : Codec} {b : Attr} {as : List Attr} :
           ((align [] (some c) as).bind (traverse fun ca => ca.1.p ca.2)).map (y :: ·) := by
   simp only [align]
   cases align ([] : List Codec) (some c) as <;> simp [traverse_cons]
-
-/-- **The `tuple` congruence.** At a wire list the met row aligns, two tuples whose positions
-    read alike wherever the met row admits read the whole list alike. -/
-theorem align_p_congr : ∀ {as : List Attr} {vs ts : List Term} {tl tail : Option Term},
-    alignPA (AdmAList vs) (AdmAOptT tl) as = true →
-    List.Forall₂ (fun v t => ∀ b, AdmA v b = true → (denote v).p b = (denote t).p b) vs ts →
-    ((tl = none ∧ tail = none) ∨
-      ∃ u t, tl = some u ∧ tail = some t ∧
-        ∀ b, AdmA u b = true → (denote u).p b = (denote t).p b) →
-    (align (denoteList vs) (denoteOpt tl) as).bind (traverse fun ca => ca.1.p ca.2)
-      = (align (denoteList ts) (denoteOpt tail) as).bind (traverse fun ca => ca.1.p ca.2) := by
-  intro as
-  induction as with
-  | nil =>
-      intro vs ts tl tail hal hF _
-      cases hF with
-      | nil => rcases tl with _ | u <;> rcases tail with _ | t <;> rfl
-      | cons _ _ => exact absurd hal (by simp [AdmAList, alignPA])
-  | cons b as' ihx =>
-      intro vs ts tl tail hal hF htl
-      cases hF with
-      | nil =>
-          rcases htl with ⟨rfl, rfl⟩ | ⟨u, t, rfl, rfl, hu⟩
-          · exact absurd hal (by simp [AdmAList, AdmAOptT, alignPA])
-          · simp only [AdmAList, AdmAOptT, alignPA, Bool.and_eq_true] at hal
-            have hrec := ihx (vs := []) (ts := []) (tl := some u) (tail := some t) hal.2 .nil
-              (Or.inr ⟨u, t, rfl, rfl, hu⟩)
-            simp only [denoteList, denoteOpt] at hrec
-            simp only [denoteList, denoteOpt, align_traverse_tail_cons, hrec, hu b hal.1]
-      | cons hvt hrest =>
-          rename_i v vs' t ts'
-          simp only [AdmAList, alignPA, Bool.and_eq_true] at hal
-          simp only [denoteList, align_traverse_cons,
-            ihx hal.2 hrest htl, hvt b hal.1]
-
-/-- **The `array` half of the same congruence**: a met tuple against the array it was met with. -/
-theorem align_p_congr_array : ∀ {as : List Attr} {vs : List Term} {tl : Option Term} {e : Term},
-    alignPA (AdmAList vs) (AdmAOptT tl) as = true →
-    (∀ v ∈ vs, ∀ b, AdmA v b = true → (denote v).p b = (denote e).p b) →
-    (∀ u ∈ tl, ∀ b, AdmA u b = true → (denote u).p b = (denote e).p b) →
-    (align (denoteList vs) (denoteOpt tl) as).bind (traverse fun ca => ca.1.p ca.2)
-      = traverse (denote e).p as := by
-  intro as
-  induction as with
-  | nil =>
-      intro vs tl e hal _ _
-      cases vs with
-      | nil => rcases tl with _ | u <;> rfl
-      | cons _ _ => exact absurd hal (by simp [AdmAList, alignPA])
-  | cons b as' ihx =>
-      intro vs tl e hal hvs htl
-      cases vs with
-      | nil =>
-          cases tl with
-          | none => exact absurd hal (by simp [AdmAList, AdmAOptT, alignPA])
-          | some u =>
-              simp only [AdmAList, AdmAOptT, alignPA, Bool.and_eq_true] at hal
-              have hu := htl u (by simp)
-              have hrec := ihx (vs := []) (tl := some u) (e := e) hal.2 (by simp) htl
-              simp only [denoteList, denoteOpt] at hrec
-              simp only [denoteList, denoteOpt, align_traverse_tail_cons, traverse_cons,
-                hrec, hu b hal.1]
-      | cons v vs' =>
-          simp only [AdmAList, alignPA, Bool.and_eq_true] at hal
-          simp only [denoteList, align_traverse_cons, traverse_cons,
-            ihx hal.2 (fun w hw => hvs w (by simp [hw])) htl,
-            hvs v (by simp) b hal.1]
 
 /-- Normalising a refinement keeps what it reads. -/
 theorem AdmA_refineOf (z : Term) (p : Pred) (a : Attr) :
@@ -5374,6 +5895,88 @@ def AdmASound (x : Term) (f : Term → Option Term) : Prop :=
 def AdmAFam (x : Term) (fam : Term → Option Term) : Prop :=
   ∀ y z, Delegated y → fam y = some z → AdmAAt x y z
 
+/-- **Three rows that read every position alike read the whole list alike.** The answer's row
+    and the two factors' rows agree at every position that both factors admit, so the three
+    traversals agree. -/
+theorem traverse_p_agree : ∀ {r₁ r₂ rz : List Term} {as : List Attr},
+    List.Forall₂ (fun (pq : Term × Term) w => AdmAAt pq.1 pq.2 w) (r₁.zip r₂) rz →
+    r₁.length = r₂.length →
+    List.Forall₂ (fun t b => AdmA t b = true) r₁ as →
+    List.Forall₂ (fun t b => AdmA t b = true) r₂ as →
+    traverse (fun ca : Codec × Attr => ca.1.p ca.2) ((rz.map denote).zip as)
+        = traverse (fun ca : Codec × Attr => ca.1.p ca.2) ((r₁.map denote).zip as) ∧
+      traverse (fun ca : Codec × Attr => ca.1.p ca.2) ((rz.map denote).zip as)
+        = traverse (fun ca : Codec × Attr => ca.1.p ca.2) ((r₂.map denote).zip as) := by
+  intro r₁
+  induction r₁ with
+  | nil =>
+      intro r₂ rz as hF hl ha hb
+      cases r₂ with
+      | nil => cases hF; cases ha; exact ⟨rfl, rfl⟩
+      | cons => exact absurd hl (by simp only [List.length_nil, List.length_cons]; omega)
+  | cons t r₁' ih =>
+      intro r₂ rz as hF hl ha hb
+      cases r₂ with
+      | nil => exact absurd hl (by simp only [List.length_nil, List.length_cons]; omega)
+      | cons u r₂' =>
+          rw [List.zip_cons_cons] at hF
+          cases hF with
+          | cons hh ht =>
+              cases ha with
+              | cons hat hat' =>
+                  cases hb with
+                  | cons hbt hbt' =>
+                      obtain ⟨hz1, hz2⟩ :=
+                        ih ht (by simp only [List.length_cons] at hl; omega) hat' hbt'
+                      obtain ⟨hp1, hp2⟩ := hh.2 _ hat hbt
+                      refine ⟨?_, ?_⟩
+                      · simp only [List.map_cons, List.zip_cons_cons, traverse_cons, hp1, hz1]
+                      · simp only [List.map_cons, List.zip_cons_cons, traverse_cons, hp2, hz2]
+
+/-- **The whole read-side obligation of the `list` meet, read off the three rows.** The
+    admission half is `AdmA_list_rows`; the reading half is `traverse_p_agree` through
+    `slotsL_eq_rowOfG`, which says the codec-side row and the term-side row are one row. -/
+theorem AdmA_list_at {p₁ s₁ p₂ s₂ pz sz : List Term} {q₁ q₂ qz : Option Term}
+    (hsome : ∀ n, (rowOfG pz qz sz n).isSome
+      = ((rowOfG p₁ q₁ s₁ n).isSome && (rowOfG p₂ q₂ s₂ n).isSome))
+    (hrel : ∀ n r₁ r₂ rz, rowOfG p₁ q₁ s₁ n = some r₁ → rowOfG p₂ q₂ s₂ n = some r₂ →
+      rowOfG pz qz sz n = some rz →
+      r₁.length = r₂.length ∧
+        List.Forall₂ (fun (pq : Term × Term) w => AdmAAt pq.1 pq.2 w) (r₁.zip r₂) rz) :
+    AdmAAt (.list p₁ q₁ s₁) (.list p₂ q₂ s₂) (.list pz qz sz) := by
+  refine ⟨AdmA_list_rows hsome (fun n r₁ r₂ rz h1 h2 h3 => ?_), ?_⟩
+  · obtain ⟨hlen, hF⟩ := hrel n r₁ r₂ rz h1 h2 h3
+    exact ⟨hlen, hF.imp (fun _ _ h => h.1)⟩
+  · intro a ha hb
+    cases a with
+    | l as =>
+        simp only [AdmA, AdmAList_eq_map, AdmAOptT_eq_map, alignPAL_eq_rowOfG, rowOfG_map]
+          at ha hb
+        cases h₁ : rowOfG p₁ q₁ s₁ as.length with
+        | none => rw [h₁] at ha; simp at ha
+        | some r₁ =>
+            cases h₂ : rowOfG p₂ q₂ s₂ as.length with
+            | none => rw [h₂] at hb; simp at hb
+            | some r₂ =>
+                have hzs := hsome as.length
+                rw [h₁, h₂] at hzs
+                cases hz : rowOfG pz qz sz as.length with
+                | none => rw [hz] at hzs; simp at hzs
+                | some rz =>
+                    obtain ⟨hlen, hF⟩ := hrel _ _ _ _ h₁ h₂ hz
+                    rw [h₁] at ha
+                    rw [h₂] at hb
+                    simp only [Option.map_some, ← AdmAList_eq_map] at ha hb
+                    obtain ⟨hq1, hq2⟩ :=
+                      traverse_p_agree hF hlen (zipPA_forall₂ ha) (zipPA_forall₂ hb)
+                    simp only [denote_list, listCodec, alignL, denoteList_eq, denoteOpt_eq_map,
+                      slotsL_eq_rowOfG, rowOfG_map, h₁, h₂, hz, Option.map_some,
+                      Option.bind_some]
+                    exact ⟨congrArg (Option.map Value.arr) hq1,
+                      congrArg (Option.map Value.arr) hq2⟩
+    | _ => simp [AdmA] at ha
+
+
 mutual
 /-- Every row that reads the right operand alone reads what the family reads. -/
 theorem admA_meetSRight {x : Term} {fam : Term → Option Term} (hf : AdmAFam x fam) :
@@ -5426,9 +6029,8 @@ theorem admA_meetSRight {x : Term} {fam : Term → Option Term} (hf : AdmAFam x 
   | .literal k lv, _, h => hf (.literal k lv) _ trivial h
   | .set b, _, h => hf (.set b) _ trivial h
   | .opaq l, _, h => hf (.opaq l) _ trivial h
-  | .array e, _, h => hf (.array e) _ trivial h
   | .record c, _, h => hf (.record c) _ trivial h
-  | .tuple ts tl, _, h => hf (.tuple ts tl) _ trivial h
+  | .list p q s, _, h => hf (.list p q s) _ trivial h
   | .object b, _, h => hf (.object b) _ trivial h
 termination_by structural y => y
 
@@ -5743,109 +6345,6 @@ theorem admA_split {e : Term} {f : Term → Option Term} (hf : AdmASound e f)
   rw [h1 b, Bool.and_eq_true] at hb
   exact ⟨hb.1, hb.2, h2 b hb.1 hb.2⟩
 
-/-- A tuple's positions against one element, lifted pointwise on the read side. -/
-theorem admAList_lift {e : Term} {f : Term → Option Term} (hf : AdmASound e f) :
-    ∀ {ts vs : List Term}, List.Forall₂ (fun t v => f t = some v) ts vs →
-      List.Forall₂ (fun p q => ∀ b, q b = (p b && AdmA e b)) (AdmAList ts) (AdmAList vs) := by
-  intro ts
-  induction ts with
-  | nil => intro vs hts; cases hts; exact .nil
-  | cons t ts' ihx =>
-      intro vs hts
-      cases hts with
-      | cons hh hrest =>
-          exact .cons (fun b => by rw [(hf t _ hh).1 b, Bool.and_comm]) (ihx hrest)
-
-/-- …and the tail. -/
-theorem admAOptT_lift {e : Term} {f : Term → Option Term} (hf : AdmASound e f)
-    {tail tl : Option Term}
-    (htl : (tail = none ∧ tl = none) ∨
-      ∃ t u, tail = some t ∧ tl = some u ∧ f t = some u) :
-    (AdmAOptT tail = none ∧ AdmAOptT tl = none) ∨
-      ∃ p q, AdmAOptT tail = some p ∧ AdmAOptT tl = some q ∧
-        ∀ b, q b = (p b && AdmA e b) := by
-  rcases htl with ⟨rfl, rfl⟩ | ⟨t, u, rfl, rfl, hu⟩
-  · exact Or.inl ⟨rfl, rfl⟩
-  · exact Or.inr ⟨AdmA t, AdmA u, rfl, rfl, fun b => by rw [(hf t u hu).1 b, Bool.and_comm]⟩
-
-/-- …and what the met positions read, against both factors. -/
-theorem denoteList_lift {e : Term} {f : Term → Option Term} (hf : AdmASound e f) :
-    ∀ {ts vs : List Term}, List.Forall₂ (fun t v => f t = some v) ts vs →
-      List.Forall₂ (fun v t => ∀ b, AdmA v b = true → (denote v).p b = (denote t).p b) vs ts
-        ∧ (∀ v ∈ vs, ∀ b, AdmA v b = true → (denote v).p b = (denote e).p b) := by
-  intro ts
-  induction ts with
-  | nil => intro vs hts; cases hts; exact ⟨.nil, by simp⟩
-  | cons t ts' ihx =>
-      intro vs hts
-      cases hts with
-      | cons hh hrest =>
-          obtain ⟨hF, hE⟩ := ihx hrest
-          refine ⟨.cons (fun b hb => (admA_split hf hh b hb).2.2.2) hF, ?_⟩
-          intro v hv b hb
-          rcases List.mem_cons.mp hv with rfl | hv'
-          · exact (admA_split hf hh b hb).2.2.1
-          · exact hE v hv' b hb
-
-/-- …and what the met tail reads. -/
-theorem tailDenote_lift {e : Term} {f : Term → Option Term} (hf : AdmASound e f)
-    {tail tl : Option Term}
-    (htl : (tail = none ∧ tl = none) ∨
-      ∃ t u, tail = some t ∧ tl = some u ∧ f t = some u) :
-    ((tl = none ∧ tail = none) ∨
-      ∃ u t, tl = some u ∧ tail = some t ∧
-        ∀ b, AdmA u b = true → (denote u).p b = (denote t).p b)
-    ∧ (∀ u ∈ tl, ∀ b, AdmA u b = true → (denote u).p b = (denote e).p b) := by
-  rcases htl with ⟨rfl, rfl⟩ | ⟨t, u, rfl, rfl, hu⟩
-  · exact ⟨Or.inl ⟨rfl, rfl⟩, by simp⟩
-  · refine ⟨Or.inr ⟨u, t, rfl, rfl, fun b hb => (admA_split hf hu b hb).2.2.2⟩, ?_⟩
-    intro w hw b hb
-    rw [Option.mem_def, Option.some.injEq] at hw
-    subst hw
-    exact (admA_split hf hu b hb).2.2.1
-
-
-/-- An array reads an array at the element, and a tuple at every declared position. -/
-theorem admA_famArr {x' : Term} {f : Term → Option Term} (hf : AdmASound x' f) :
-    AdmAFam (.array x') (famArr f) := by
-  intro y z hd h
-  cases y <;> first | exact hd.elim | skip
-  case array e =>
-      simp only [famArr] at h
-      obtain ⟨w, hw, rfl⟩ := Option.map_eq_some_iff.mp h
-      obtain ⟨ih1, ih2⟩ := hf e w hw
-      refine ⟨fun a => ?_, fun a ha hb => ?_⟩
-      · cases a <;> simp only [AdmA, Bool.and_self, allPA_and ih1]
-      · cases a
-        case l as =>
-          simp only [AdmA] at ha hb
-          simp only [denote_array]
-          exact ⟨arrayCodec_p_congr
-                   (fun b hm => (ih2 b (allPA_mem ha b hm) (allPA_mem hb b hm)).1),
-                 arrayCodec_p_congr
-                   (fun b hm => (ih2 b (allPA_mem ha b hm) (allPA_mem hb b hm)).2)⟩
-        all_goals (exfalso; revert ha; simp [AdmA])
-  case tuple ts tail =>
-      obtain ⟨vs, tl, rfl, hts, htl⟩ := famArr_tuple h
-      have hFA := admAList_lift hf hts
-      have hTA := admAOptT_lift hf htl
-      obtain ⟨hP1, hP2⟩ := denoteList_lift hf hts
-      obtain ⟨hT1, hT2⟩ := tailDenote_lift hf htl
-      refine ⟨fun a => ?_, fun a ha hb => ?_⟩
-      · rw [AdmA_tupleOf]
-        cases a <;> simp only [AdmA, Bool.and_self, alignPA_meet_all hFA hTA]
-      · cases a
-        case l as =>
-          simp only [AdmA] at ha hb
-          have hz : alignPA (AdmAList vs) (AdmAOptT tl) as = true := by
-            simp only [alignPA_meet_all hFA hTA, ha, hb, Bool.and_self]
-          rw [tupleOf_eq_tuple hz]
-          exact ⟨congrArg (Option.map Value.arr) (align_p_congr_array hz hP2 hT2),
-                 congrArg (Option.map Value.arr) (align_p_congr hz hP1 hT1)⟩
-        all_goals (exfalso; revert ha; simp [AdmA])
-  case opaq l => simp [famArr] at h
-  all_goals admA_never famArr
-
 /-- A record reads a record at the value term. -/
 theorem admA_famRecTerm {x' : Term} {f : Term → Option Term} (hf : AdmASound x' f)
     {c w : Term} (hw : f c = some w) : AdmAAt (.record x') (.record c) (.record w) := by
@@ -5955,247 +6454,6 @@ theorem admAList_zip_lift :
               cases hF with
               | cons hh ht => exact .cons (fun w => (hf u _ hh).1 w) (ihx hfs' ht)
 
-/-- …and their tails. -/
-theorem admAOptT_zip_lift {tail tail' tl : Option Term}
-    {ftail : Option (Term → Option Term)}
-    (hft : (tail = none ∧ ftail = none) ∨
-      ∃ t ft, tail = some t ∧ ftail = some ft ∧ AdmASound t ft)
-    (htl : (ftail = none ∧ tail' = none ∧ tl = none) ∨
-      ∃ ft u w, ftail = some ft ∧ tail' = some u ∧ tl = some w ∧ ft u = some w) :
-    (AdmAOptT tail = none ∧ AdmAOptT tail' = none ∧ AdmAOptT tl = none) ∨
-      ∃ p q r, AdmAOptT tail = some p ∧ AdmAOptT tail' = some q ∧ AdmAOptT tl = some r ∧
-        ∀ w, r w = (p w && q w) := by
-  rcases hft with ⟨rfl, rfl⟩ | ⟨t, ft, rfl, rfl, hs⟩
-  · rcases htl with ⟨_, rfl, rfl⟩ | ⟨ft, u, w, hfe, _, _, _⟩
-    · exact Or.inl ⟨rfl, rfl, rfl⟩
-    · exact absurd hfe (by simp)
-  · rcases htl with ⟨hfe, _, _⟩ | ⟨ft', u, w, hfe, rfl, rfl, hw⟩
-    · exact absurd hfe (by simp)
-    · simp only [Option.some.injEq] at hfe; subst hfe
-      exact Or.inr ⟨AdmA t, AdmA u, AdmA w, rfl, rfl, rfl, (hs u w hw).1⟩
-
-/-- …and what the met positions read, against both tuples. -/
-theorem denoteList_zip_lift :
-    ∀ {ts us : List Term} {fs : List (Term → Option Term)} {vs : List Term},
-      ts.length = us.length →
-      List.Forall₂ AdmASound ts fs →
-      List.Forall₂ (fun (p : (Term → Option Term) × Term) v => p.1 p.2 = some v) (fs.zip us) vs →
-      List.Forall₂ (fun v t => ∀ b, AdmA v b = true → (denote v).p b = (denote t).p b) vs ts
-        ∧ List.Forall₂ (fun v u => ∀ b, AdmA v b = true →
-            (denote v).p b = (denote u).p b) vs us := by
-  intro ts
-  induction ts with
-  | nil =>
-      intro us fs vs hlen hfs hF
-      cases us with
-      | nil => cases hfs; rw [List.zip_nil_left] at hF; cases hF; exact ⟨.nil, .nil⟩
-      | cons => exact absurd hlen (by simp only [List.length_nil, List.length_cons]; omega)
-  | cons t ts' ihx =>
-      intro us fs vs hlen hfs hF
-      cases hfs with
-      | cons hf hfs' =>
-          cases us with
-          | nil => exact absurd hlen (by simp only [List.length_nil, List.length_cons]; omega)
-          | cons u us' =>
-              cases hF with
-              | cons hh ht =>
-                  obtain ⟨hA, hB⟩ := ihx (by simp only [List.length_cons] at hlen; omega) hfs' ht
-                  exact ⟨.cons (fun b hb => (admA_split hf hh b hb).2.2.1) hA,
-                         .cons (fun b hb => (admA_split hf hh b hb).2.2.2) hB⟩
-
-/-- …and what the met tails read. -/
-theorem tailDenote_zip_lift {tail tail' tl : Option Term}
-    {ftail : Option (Term → Option Term)}
-    (hft : (tail = none ∧ ftail = none) ∨
-      ∃ t ft, tail = some t ∧ ftail = some ft ∧ AdmASound t ft)
-    (htl : (ftail = none ∧ tail' = none ∧ tl = none) ∨
-      ∃ ft u w, ftail = some ft ∧ tail' = some u ∧ tl = some w ∧ ft u = some w) :
-    ((tl = none ∧ tail = none) ∨ ∃ u t, tl = some u ∧ tail = some t ∧
-        ∀ b, AdmA u b = true → (denote u).p b = (denote t).p b)
-    ∧ ((tl = none ∧ tail' = none) ∨ ∃ u t, tl = some u ∧ tail' = some t ∧
-        ∀ b, AdmA u b = true → (denote u).p b = (denote t).p b) := by
-  rcases hft with ⟨rfl, rfl⟩ | ⟨t, ft, rfl, rfl, hs⟩
-  · rcases htl with ⟨_, rfl, rfl⟩ | ⟨ft, u, w, hfe, _, _, _⟩
-    · exact ⟨Or.inl ⟨rfl, rfl⟩, Or.inl ⟨rfl, rfl⟩⟩
-    · exact absurd hfe (by simp)
-  · rcases htl with ⟨hfe, _, _⟩ | ⟨ft', u, w, hfe, rfl, rfl, hw⟩
-    · exact absurd hfe (by simp)
-    · simp only [Option.some.injEq] at hfe; subst hfe
-      exact ⟨Or.inr ⟨w, t, rfl, rfl, fun b hb => (admA_split hs hw b hb).2.2.1⟩,
-             Or.inr ⟨w, u, rfl, rfl, fun b hb => (admA_split hs hw b hb).2.2.2⟩⟩
-
-
-/-- A tuple's positions applied at one term, lifted pointwise. -/
-theorem admAApplyAt_lift {e : Term} :
-    ∀ {ts : List Term} {fs : List (Term → Option Term)} {vs : List Term},
-      List.Forall₂ AdmASound ts fs →
-      List.Forall₂ (fun f v => f e = some v) fs vs →
-      List.Forall₂ (fun p q => ∀ w, q w = (p w && AdmA e w)) (AdmAList ts) (AdmAList vs) := by
-  intro ts
-  induction ts with
-  | nil => intro fs vs hfs hv; cases hfs; cases hv; exact .nil
-  | cons t ts' ihx =>
-      intro fs vs hfs hv
-      cases hfs with
-      | cons hf hfs' =>
-          cases hv with
-          | cons hh ht => exact .cons (fun w => by rw [(hf e _ hh).1 w, Bool.and_comm]) (ihx hfs' ht)
-
-/-- …and what they read. -/
-theorem denoteApplyAt_lift {e : Term} :
-    ∀ {ts : List Term} {fs : List (Term → Option Term)} {vs : List Term},
-      List.Forall₂ AdmASound ts fs →
-      List.Forall₂ (fun f v => f e = some v) fs vs →
-      List.Forall₂ (fun v t => ∀ b, AdmA v b = true → (denote v).p b = (denote t).p b) vs ts
-        ∧ (∀ v ∈ vs, ∀ b, AdmA v b = true → (denote v).p b = (denote e).p b) := by
-  intro ts
-  induction ts with
-  | nil => intro fs vs hfs hv; cases hfs; cases hv; exact ⟨.nil, by simp⟩
-  | cons t ts' ihx =>
-      intro fs vs hfs hv
-      cases hfs with
-      | cons hf hfs' =>
-          cases hv with
-          | cons hh ht =>
-              obtain ⟨hF, hE⟩ := ihx hfs' ht
-              refine ⟨.cons (fun b hb => (admA_split hf hh b hb).2.2.1) hF, ?_⟩
-              intro v hv' b hb
-              rcases List.mem_cons.mp hv' with rfl | hv''
-              · exact (admA_split hf hh b hb).2.2.2
-              · exact hE v hv'' b hb
-
-/-- A tuple reads an array at every position, and another tuple by arity. -/
-theorem admA_famTup {ts : List Term} {tail : Option Term}
-    {fs : List (Term → Option Term)} {ftail : Option (Term → Option Term)}
-    (hfs : List.Forall₂ AdmASound ts fs)
-    (hft : (tail = none ∧ ftail = none) ∨
-      ∃ t ft, tail = some t ∧ ftail = some ft ∧ AdmASound t ft) :
-    AdmAFam (.tuple ts tail) (famTup fs ftail) := by
-  intro y z hd h
-  cases y <;> first | exact hd.elim | skip
-  case array e =>
-      simp only [famTup] at h
-      split at h
-      next vs tl hvs htl =>
-        simp only [Option.some.injEq] at h; subst h
-        have hF : List.Forall₂ (fun f w => f e = some w) fs vs :=
-          allSome_map_forall₂ _ (by rw [← applyAt_eq]; exact hvs)
-        have hT : ((AdmAOptT tail = none ∧ AdmAOptT tl = none) ∨
-              ∃ p q, AdmAOptT tail = some p ∧ AdmAOptT tl = some q ∧
-                ∀ b, q b = (p b && AdmA e b))
-            ∧ (((tl = none ∧ tail = none) ∨ ∃ u t, tl = some u ∧ tail = some t ∧
-                  ∀ b, AdmA u b = true → (denote u).p b = (denote t).p b)
-               ∧ (∀ u ∈ tl, ∀ b, AdmA u b = true → (denote u).p b = (denote e).p b)) := by
-          rcases hft with ⟨rfl, rfl⟩ | ⟨t, ft, rfl, rfl, hs⟩
-          · replace htl : some (none : Option Term) = some tl := htl
-            simp only [Option.some.injEq] at htl; subst htl
-            exact ⟨.inl ⟨rfl, rfl⟩, .inl ⟨rfl, rfl⟩, by simp⟩
-          · replace htl : Option.map some (ft e) = some tl := htl
-            obtain ⟨u, hu, rfl⟩ := Option.map_eq_some_iff.mp htl
-            refine ⟨.inr ⟨AdmA t, AdmA u, rfl, rfl, fun b => by
-                      rw [(hs e u hu).1 b, Bool.and_comm]⟩,
-                    .inr ⟨u, t, rfl, rfl, fun b hb => (admA_split hs hu b hb).2.2.1⟩, ?_⟩
-            intro w hw b hb
-            rw [Option.mem_def, Option.some.injEq] at hw; subst hw
-            exact (admA_split hs hu b hb).2.2.2
-        obtain ⟨hTA, hTD⟩ := hT
-        obtain ⟨hP1, hP2⟩ := denoteApplyAt_lift hfs hF
-        refine ⟨fun a => ?_, fun a ha hb => ?_⟩
-        · rw [AdmA_tupleOf]
-          cases a <;> simp only [AdmA, Bool.and_self] <;>
-            rw [Bool.and_comm, alignPA_meet_all (admAApplyAt_lift hfs hF) hTA]
-        · cases a
-          case l as =>
-            simp only [AdmA] at ha hb
-            have hz : alignPA (AdmAList vs) (AdmAOptT tl) as = true := by
-              simp only [alignPA_meet_all (admAApplyAt_lift hfs hF) hTA, ha, hb, Bool.and_self]
-            rw [tupleOf_eq_tuple hz]
-            exact ⟨congrArg (Option.map Value.arr) (align_p_congr hz hP1 hTD.1),
-                   congrArg (Option.map Value.arr) (align_p_congr_array hz hP2 hTD.2)⟩
-          all_goals (exfalso; revert hb; simp [AdmA])
-      next => exact absurd h (by simp)
-  case tuple us tail' =>
-      simp only [famTup] at h
-      split at h
-      next hlen =>
-        split at h
-        next vs tl hvs htl =>
-          simp only [Option.some.injEq] at h; subst h
-          have hF : List.Forall₂
-              (fun (p : (Term → Option Term) × Term) w => p.1 p.2 = some w) (fs.zip us) vs :=
-            allSome_map_forall₂ _ (by rw [← zipF_eq]; exact hvs)
-          have hTraw : (ftail = none ∧ tail' = none ∧ tl = none) ∨
-              ∃ ft u w, ftail = some ft ∧ tail' = some u ∧ tl = some w ∧ ft u = some w := by
-            cases hfe : ftail with
-            | none =>
-                cases tail' with
-                | none =>
-                    rw [hfe] at htl
-                    replace htl : some (none : Option Term) = some tl := htl
-                    simp only [Option.some.injEq] at htl; subst htl
-                    exact .inl ⟨rfl, rfl, rfl⟩
-                | some u => rw [hfe] at htl; exact absurd htl (by simp)
-            | some ft =>
-                cases tail' with
-                | none => rw [hfe] at htl; exact absurd htl (by simp)
-                | some u =>
-                    rw [hfe] at htl
-                    replace htl : Option.map some (ft u) = some tl := htl
-                    obtain ⟨w, hw, rfl⟩ := Option.map_eq_some_iff.mp htl
-                    exact .inr ⟨ft, u, w, rfl, rfl, rfl, hw⟩
-          have hlenT : ts.length = us.length := hfs.length_eq.trans hlen
-          have hFA := admAList_zip_lift hfs hF
-          have hTA := admAOptT_zip_lift hft hTraw
-          obtain ⟨hP1, hP2⟩ := denoteList_zip_lift hlenT hfs hF
-          obtain ⟨hT1, hT2⟩ := tailDenote_zip_lift hft hTraw
-          refine ⟨fun a => ?_, fun a ha hb => ?_⟩
-          · rw [AdmA_tupleOf]
-            cases a <;> simp only [AdmA, Bool.and_self,
-              alignPA_meet_zip hFA
-                (by rw [AdmAList_length, AdmAList_length]; exact hlenT) hTA]
-          · cases a
-            case l as =>
-              simp only [AdmA] at ha hb
-              have hz : alignPA (AdmAList vs) (AdmAOptT tl) as = true := by
-                simp only [alignPA_meet_zip hFA
-                  (by rw [AdmAList_length, AdmAList_length]; exact hlenT) hTA, ha, hb,
-                  Bool.and_self]
-              rw [tupleOf_eq_tuple hz]
-              exact ⟨congrArg (Option.map Value.arr) (align_p_congr hz hP1 hT1),
-                     congrArg (Option.map Value.arr) (align_p_congr hz hP2 hT2)⟩
-            all_goals (exfalso; revert ha; simp [AdmA])
-        next => exact absurd h (by simp)
-      next hlen =>
-        split at h
-        next hb2 =>
-          simp only [Option.some.injEq] at h; subst h
-          simp only [Bool.and_eq_true, Option.isNone_iff_eq_none] at hb2
-          obtain ⟨hb1, hb2'⟩ := hb2
-          have htn : tail = none := by
-            rcases hft with ⟨rfl, _⟩ | ⟨t, ft, rfl, rfl, _⟩
-            · rfl
-            · exact absurd hb1 (by simp)
-          subst htn; subst hb2'
-          have hne : ts.length ≠ us.length := fun hc => hlen (hfs.length_eq.symm.trans hc)
-          refine bottom_row (fun a => ?_)
-          cases a
-          case l ws =>
-            simp only [AdmA, AdmAOptT]
-            cases hA : alignPA (AdmAList ts) none ws with
-            | false => simp
-            | true =>
-              cases hB : alignPA (AdmAList us) none ws with
-              | false => simp
-              | true =>
-                exact absurd
-                  (((alignPA_none_length hA).trans (AdmAList_length _)).symm.trans
-                    ((alignPA_none_length hB).trans (AdmAList_length _))) hne
-          all_goals simp [AdmA]
-        next => exact absurd h (by simp)
-  case opaq l => simp [famTup] at h
-  all_goals admA_never famTup
-
-
 /-- The four structural guards `objObj` passes before it answers. -/
 theorem objObj_guards {a b : Body} {g : {k // k ∈ a.fields} → Field → Option Field} {z : Term}
     (h : objObj a g b = some z) :
@@ -6213,6 +6471,286 @@ theorem objObj_guards {a b : Body} {g : {k // k ∈ a.fields} → Field → Opti
       next => exact absurd h (by simp)
     next => exact absurd h (by simp)
   next => exact absurd h (by simp)
+
+/-- **Normalisation keeps the read-side obligation.** Where a declared position is the bottom
+    the answer admits no attribute, so the reading half is vacuous and the bottom stands. -/
+theorem AdmAAt_listOf {x y : Term} {pre suf : List Term} {sp : Option Term}
+    (h : AdmAAt x y (.list pre sp suf)) : AdmAAt x y (Term.listOf pre sp suf) := by
+  rcases listOf_cases pre sp suf with hc | hc
+  · rw [hc]
+    refine bottom_row (fun a => ?_)
+    rw [← h.1 a, ← AdmA_listOf, hc]
+  · rw [hc]; exact h
+
+/-- Two rows of terms, the left as partially applied meets, met position by position on the
+    read side. The term-level twin of `admAList_zip_lift`. -/
+theorem zipF_lift_termsA :
+    ∀ {ts us : List Term} {fs : List (Term → Option Term)} {vs : List Term},
+      List.Forall₂ AdmASound ts fs →
+      List.Forall₂ (fun (p : (Term → Option Term) × Term) v => p.1 p.2 = some v) (fs.zip us) vs →
+      List.Forall₂ (fun (pq : Term × Term) w => AdmAAt pq.1 pq.2 w) (ts.zip us) vs := by
+  intro ts
+  induction ts with
+  | nil => intro us fs vs hfs hv; cases hfs; cases hv; exact .nil
+  | cons t ts ihs =>
+      intro us fs vs hfs hv
+      cases hfs with
+      | cons hsound hfs' =>
+          cases us with
+          | nil => cases hv; exact .nil
+          | cons u us =>
+              cases hv with
+              | cons hh ht => exact .cons (hsound u _ hh) (ihs hfs' ht)
+
+/-- **The one positional container's family, on the read side.** The same three branches the
+    value side takes, with `AdmA_list_at` in place of `Adm_list_rows`. -/
+theorem admA_famList {pre suf : List Term} {sp : Option Term}
+    {fpre fsuf : List (Term → Option Term)} {fsp : Option (Term → Option Term)}
+    (hp : List.Forall₂ AdmASound pre fpre)
+    (hs : (sp = none ∧ fsp = none) ∨ ∃ t f, sp = some t ∧ fsp = some f ∧ AdmASound t f)
+    (hf : List.Forall₂ AdmASound suf fsuf) :
+    AdmAFam (.list pre sp suf) (famList fpre fsp fsuf) := by
+  have hlp := hp.length_eq
+  have hlf := hf.length_eq
+  intro y z hd h
+  cases y <;> first | exact hd.elim | skip
+  case list pre₂ sp₂ suf₂ =>
+      simp only [famList] at h
+      rcases hs with ⟨rfl, rfl⟩ | ⟨t, f, rfl, rfl, hsound⟩
+      · simp only [listMeetRow] at h
+        rw [show rowOfG fpre none fsuf (fpre.length + fsuf.length) = some (fpre ++ fsuf) from
+          by rw [rowOfG_none_eq, if_pos rfl]] at h
+        have hlen0 : fpre.length + fsuf.length = pre.length + suf.length := by omega
+        rw [hlen0] at h
+        cases hR : rowOfG pre₂ sp₂ suf₂ (pre.length + suf.length) with
+        | none =>
+            rw [hR] at h
+            simp only [Option.some.injEq] at h
+            subst h
+            have hdis : ∀ n, rowOfG pre none suf n = none ∨ rowOfG pre₂ sp₂ suf₂ n = none := by
+              intro n
+              cases hd2 : decide (n = pre.length + suf.length) with
+              | true => simp only [decide_eq_true_eq] at hd2; subst hd2; exact Or.inr hR
+              | false =>
+                  simp only [decide_eq_false_iff_not] at hd2
+                  exact Or.inl (by rw [rowOfG_none_eq, if_neg hd2])
+            exact bottom_row (fun a => (AdmA_list_disjoint hdis a).symm)
+        | some us =>
+            rw [hR] at h
+            obtain ⟨row, hrow, rfl⟩ := Option.map_eq_some_iff.mp h
+            have hus : us.length = pre.length + suf.length := rowOfG_length hR
+            have hFz : List.Forall₂
+                (fun (p : (Term → Option Term) × Term) w => p.1 p.2 = some w)
+                ((fpre ++ fsuf).zip us) row :=
+              allSome_map_forall₂ _ (by rw [← zipF_eq]; exact hrow)
+            have hrowlen : row.length = pre.length + suf.length := by
+              have hz := hFz.length_eq
+              simp only [List.length_zip, List.length_append, hus] at hz
+              omega
+            have hrel₀ := zipF_lift_termsA (forall₂_append hp hf) hFz
+            refine AdmAAt_listOf ?_
+            refine AdmA_list_at (p₁ := pre) (q₁ := none) (s₁ := suf) ?_ ?_
+            · intro n
+              simp only [rowOfG_none_eq, List.length_nil, Nat.add_zero, hrowlen]
+              cases hd2 : decide (n = pre.length + suf.length) with
+              | true =>
+                  simp only [decide_eq_true_eq] at hd2
+                  subst hd2
+                  rw [if_pos rfl, if_pos rfl, hR]
+                  simp
+              | false =>
+                  simp only [decide_eq_false_iff_not] at hd2
+                  rw [if_neg hd2, if_neg hd2]
+                  simp
+            · intro n r₁ r₂ rz h1 h2 h3
+              rw [rowOfG_none_eq] at h1 h3
+              simp only [List.length_nil, Nat.add_zero, hrowlen] at h3
+              split at h1
+              · next he =>
+                  simp only [Option.some.injEq] at h1
+                  subst h1
+                  subst he
+                  rw [if_pos rfl] at h3
+                  simp only [Option.some.injEq] at h3
+                  subst h3
+                  rw [hR] at h2
+                  simp only [Option.some.injEq] at h2
+                  subst h2
+                  exact ⟨by simp only [List.length_append]; omega, by simpa using hrel₀⟩
+              · exact absurd h1 (by simp)
+      · cases sp₂ with
+        | none =>
+            simp only [listMeetRow] at h
+            rw [show rowOfG pre₂ none suf₂ (pre₂.length + suf₂.length)
+                = some (pre₂ ++ suf₂) from by rw [rowOfG_none_eq, if_pos rfl]] at h
+            cases hL : rowOfG fpre (some f) fsuf (pre₂.length + suf₂.length) with
+            | none =>
+                rw [hL] at h
+                simp only [Option.some.injEq] at h
+                subst h
+                have hshort : pre₂.length + suf₂.length < fpre.length + fsuf.length := by
+                  rw [rowOfG_some_eq] at hL
+                  split at hL
+                  · omega
+                  · exact absurd hL (by simp)
+                have hdis : ∀ n,
+                    rowOfG pre (some t) suf n = none ∨ rowOfG pre₂ none suf₂ n = none := by
+                  intro n
+                  cases hd2 : decide (n = pre₂.length + suf₂.length) with
+                  | true =>
+                      simp only [decide_eq_true_eq] at hd2
+                      subst hd2
+                      exact Or.inl (by rw [rowOfG_some_eq, if_pos (by omega)])
+                  | false =>
+                      simp only [decide_eq_false_iff_not] at hd2
+                      exact Or.inr (by rw [rowOfG_none_eq, if_neg hd2])
+                exact bottom_row (fun a => (AdmA_list_disjoint hdis a).symm)
+            | some fs =>
+                rw [hL] at h
+                obtain ⟨row, hrow, rfl⟩ := Option.map_eq_some_iff.mp h
+                obtain ⟨ts, hts, htsF⟩ :=
+                  rowOfG_forall₂_left hp (Or.inr ⟨t, f, rfl, rfl, hsound⟩) hf hL
+                have hmin : pre.length + suf.length ≤ pre₂.length + suf₂.length := by
+                  rw [rowOfG_some_eq] at hL
+                  split at hL
+                  · exact absurd hL (by simp)
+                  · omega
+                have hfs : fs.length = pre₂.length + suf₂.length := rowOfG_length hL
+                have hFz : List.Forall₂
+                    (fun (p : (Term → Option Term) × Term) w => p.1 p.2 = some w)
+                    (fs.zip (pre₂ ++ suf₂)) row :=
+                  allSome_map_forall₂ _ (by rw [← zipF_eq]; exact hrow)
+                have hrowlen : row.length = pre₂.length + suf₂.length := by
+                  have hz := hFz.length_eq
+                  simp only [List.length_zip, List.length_append, hfs] at hz
+                  omega
+                have hrel₀ := zipF_lift_termsA htsF hFz
+                refine AdmAAt_listOf ?_
+                refine AdmA_list_at (p₁ := pre) (q₁ := some t) (s₁ := suf) ?_ ?_
+                · intro n
+                  simp only [rowOfG_none_eq, rowOfG_some_eq, List.length_nil, Nat.add_zero,
+                    hrowlen]
+                  cases hd2 : decide (n = pre₂.length + suf₂.length) with
+                  | true =>
+                      simp only [decide_eq_true_eq] at hd2
+                      subst hd2
+                      rw [if_pos rfl, if_neg (by omega), if_pos rfl]
+                      simp
+                  | false =>
+                      simp only [decide_eq_false_iff_not] at hd2
+                      rw [if_neg hd2, if_neg hd2]
+                      simp
+                · intro n r₁ r₂ rz h1 h2 h3
+                  rw [rowOfG_none_eq] at h2 h3
+                  simp only [List.length_nil, Nat.add_zero, hrowlen] at h3
+                  split at h2
+                  · next he =>
+                      simp only [Option.some.injEq] at h2
+                      subst h2
+                      subst he
+                      rw [if_pos rfl] at h3
+                      simp only [Option.some.injEq] at h3
+                      subst h3
+                      rw [hts] at h1
+                      simp only [Option.some.injEq] at h1
+                      subst h1
+                      refine ⟨?_, by simpa using hrel₀⟩
+                      have hl := rowOfG_length hts
+                      simp only [List.length_append]
+                      omega
+                  · exact absurd h2 (by simp)
+        | some c =>
+            simp only [listMeetRow] at h
+            split at h
+            · next hdom =>
+                obtain ⟨fs, hfs⟩ :=
+                  rowOfG_total (pre := fpre) (suf := fsuf) (c := f)
+                    (n := max fpre.length pre₂.length + max fsuf.length suf₂.length) (by omega)
+                obtain ⟨us, hus⟩ :=
+                  rowOfG_total (pre := pre₂) (suf := suf₂) (c := c)
+                    (n := max fpre.length pre₂.length + max fsuf.length suf₂.length) (by omega)
+                rw [hfs, hus] at h
+                cases hfc : f c with
+                | none => rw [hfc] at h; exact absurd h (by simp)
+                | some spz =>
+                    rw [hfc] at h
+                    obtain ⟨row, hrow, rfl⟩ := Option.map_eq_some_iff.mp h
+                    have hfsl : fs.length
+                        = max fpre.length pre₂.length + max fsuf.length suf₂.length :=
+                      rowOfG_length hfs
+                    have husl : us.length
+                        = max fpre.length pre₂.length + max fsuf.length suf₂.length :=
+                      rowOfG_length hus
+                    have hFz : List.Forall₂
+                        (fun (p : (Term → Option Term) × Term) w => p.1 p.2 = some w)
+                        (fs.zip us) row :=
+                      allSome_map_forall₂ _ (by rw [← zipF_eq]; exact hrow)
+                    have hrowlen : row.length
+                        = max fpre.length pre₂.length + max fsuf.length suf₂.length := by
+                      have hz := hFz.length_eq
+                      simp only [List.length_zip, hfsl, husl] at hz
+                      omega
+                    have htk : (row.take (max fpre.length pre₂.length)).length
+                        = max fpre.length pre₂.length := by
+                      rw [List.length_take, hrowlen]; omega
+                    have hdp : (row.drop (max fpre.length pre₂.length)).length
+                        = max fsuf.length suf₂.length := by
+                      rw [List.length_drop, hrowlen]; omega
+                    obtain ⟨ts, hts, htsF⟩ :=
+                      rowOfG_forall₂_left hp (Or.inr ⟨t, f, rfl, rfl, hsound⟩) hf hfs
+                    have htsl : ts.length
+                        = max fpre.length pre₂.length + max fsuf.length suf₂.length :=
+                      rowOfG_length hts
+                    have hrel₀ := zipF_lift_termsA htsF hFz
+                    have hspz : AdmAAt t c spz := hsound c spz hfc
+                    have hdm := dominates_max hdom
+                    refine AdmAAt_listOf ?_
+                    refine AdmA_list_at (p₁ := pre) (q₁ := some t) (s₁ := suf) ?_ ?_
+                    · intro n
+                      simp only [rowOfG_some_isSome, htk, hdp]
+                      rcases Nat.lt_or_ge n (pre.length + suf.length) with h1 | h1
+                      · rw [decide_eq_false (by omega : ¬ (max fpre.length pre₂.length
+                          + max fsuf.length suf₂.length ≤ n)),
+                          decide_eq_false (by omega : ¬ (pre.length + suf.length ≤ n)),
+                          Bool.false_and]
+                      · rcases Nat.lt_or_ge n (pre₂.length + suf₂.length) with h2 | h2
+                        · rw [decide_eq_false (by omega : ¬ (max fpre.length pre₂.length
+                            + max fsuf.length suf₂.length ≤ n)),
+                            decide_eq_true (by omega : pre.length + suf.length ≤ n),
+                            decide_eq_false (by omega : ¬ (pre₂.length + suf₂.length ≤ n)),
+                            Bool.and_false]
+                        · rw [decide_eq_true (by omega : max fpre.length pre₂.length
+                            + max fsuf.length suf₂.length ≤ n),
+                            decide_eq_true (by omega : pre.length + suf.length ≤ n),
+                            decide_eq_true (by omega : pre₂.length + suf₂.length ≤ n),
+                            Bool.and_self]
+                    · intro n r₁ r₂ rz h1 h2 h3
+                      rw [rowOfG_some_eq, htk, hdp] at h3
+                      split at h3
+                      · exact absurd h3 (by simp)
+                      · next hge =>
+                          simp only [Option.some.injEq] at h3
+                          subst h3
+                          have hr₁ := rowOfG_respread (P := max fpre.length pre₂.length)
+                            (S := max fsuf.length suf₂.length)
+                            (by omega) (by omega) (by omega) hts h1
+                          have hr₂ := rowOfG_respread (P := max fpre.length pre₂.length)
+                            (S := max fsuf.length suf₂.length)
+                            (by omega) (by omega) (by omega) hus h2
+                          subst hr₁; subst hr₂
+                          refine ⟨?_, ?_⟩
+                          · simp only [List.length_append, List.length_take, List.length_drop,
+                              List.length_replicate, htsl, husl]
+                          · refine forall₂_zip_append ?_
+                              (forall₂_zip_append ?_ (forall₂_zip_take _ hrel₀)
+                                (forall₂_zip_replicate hspz _))
+                              (forall₂_zip_drop _ hrel₀)
+                            · simp only [List.length_append, List.length_take,
+                                List.length_replicate, htsl, husl]
+                            · simp only [List.length_take, htsl, husl]
+            · exact absurd h (by simp)
+  case opaq l => simp [famList] at h
+  all_goals admA_never famList
 
 /-- An object reads an object over the shared names, and a record through every field. -/
 theorem admA_famObj {a : Body} {g : {k // k ∈ a.fields} → Field → Option Field}
@@ -6443,17 +6981,17 @@ theorem AdmA_meet_both : ∀ x y z, Term.meet x y = some z → AdmAAt x y z
   | .literal k lv, y, z, h => admA_meetSRight (admA_famLit k lv) y z h
   | .set b, y, z, h => admA_meetSRight (admA_famSet b) y z h
   | .opaq l, y, z, h => admA_meetSRight (admA_famOpaq l) y z h
-  | .array e, y, z, h => admA_meetSRight (admA_famArr (fun u w hw => AdmA_meet_both e u w hw)) y z h
   | .record c, y, z, h => admA_meetSRight (admA_famRec (fun u w hw => AdmA_meet_both c u w hw)) y z h
-  | .tuple ts tl, y, z, h => by
-      cases tl with
+  | .list pre sp suf, y, z, h => by
+      cases sp with
       | none =>
-          exact admA_meetSRight (admA_famTup (ts := ts) (tail := none)
-            (fs := Term.meetSTs ts) (ftail := none) (admA_meetSTs ts) (Or.inl ⟨rfl, rfl⟩)) y z h
+          exact admA_meetSRight (admA_famList (pre := pre) (sp := none) (suf := suf)
+            (admA_meetSTs pre) (Or.inl ⟨rfl, rfl⟩) (admA_meetSTs suf)) y z h
       | some t =>
-          exact admA_meetSRight (admA_famTup (ts := ts) (tail := some t)
-            (fs := Term.meetSTs ts) (ftail := some (Term.meet t)) (admA_meetSTs ts)
-            (Or.inr ⟨t, Term.meet t, rfl, rfl, fun u w hw => AdmA_meet_both t u w hw⟩)) y z h
+          exact admA_meetSRight (admA_famList (pre := pre) (sp := some t) (suf := suf)
+            (admA_meetSTs pre)
+            (Or.inr ⟨t, Term.meet t, rfl, rfl, fun u w hw => AdmA_meet_both t u w hw⟩)
+            (admA_meetSTs suf)) y z h
   | .object (.mk fs f r), y, z, h => by
       cases r with
       | codec t =>
@@ -6748,10 +7286,6 @@ theorem typed_union_inv {os : List Term} :
     (∃ T μ, Typed (.union os) T μ) → ∀ t ∈ os, ∃ T μ, Typed t T μ
   | ⟨_, _, h⟩ => by cases h with | union hL _ => exact typedListμ_mem hL
 
-/-- Inversions: a derivable container gives derivable components. -/
-theorem typed_array_inv {a : Term} : (∃ T μ, Typed (.array a) T μ) → ∃ T μ, Typed a T μ
-  | ⟨_, _, h⟩ => by cases h with | array h' => exact ⟨_, _, h'⟩
-
 /-- …and a record's value term. -/
 theorem typed_record_inv {a : Term} : (∃ T μ, Typed (.record a) T μ) → ∃ T μ, Typed a T μ
   | ⟨_, _, h⟩ => by cases h with | record h' => exact ⟨_, _, h'⟩
@@ -6789,15 +7323,23 @@ theorem typedOpt_of_all : ∀ {tail : Option Term}, (∀ t ∈ tail, ∃ T μ, T
 
 /-- Normalising a tuple keeps it derivable: a declared position at the bottom gives the
     bottom, which is derivable. -/
-theorem typed_tupleOf {ts : List Term} {tail : Option Term}
-    (h : ∀ t ∈ ts, ∃ T μ, Typed t T μ) (ht : ∀ t ∈ tail, ∃ T μ, Typed t T μ) :
-    ∃ T μ, Typed (Term.tupleOf ts tail) T μ := by
-  unfold Term.tupleOf
+theorem typed_listOf {pre : List Term} {sp : Option Term} {suf : List Term}
+    (hp : ∀ t ∈ pre, ∃ T μ, Typed t T μ) (hs : ∀ t ∈ sp, ∃ T μ, Typed t T μ)
+    (hf : ∀ t ∈ suf, ∃ T μ, Typed t T μ) :
+    ∃ T μ, Typed (Term.listOf pre sp suf) T μ := by
+  unfold Term.listOf
   split
   · exact ⟨_, _, Typed.never⟩
-  · obtain ⟨Ts, hTs⟩ := typedList_of_all h
-    obtain ⟨Tt, hTt⟩ := typedOpt_of_all ht
-    exact ⟨_, _, Typed.tuple hTs hTt⟩
+  · obtain ⟨Tp, hTp⟩ := typedList_of_all hp
+    obtain ⟨Ts, hTs⟩ := typedOpt_of_all hs
+    obtain ⟨Tf, hTf⟩ := typedList_of_all hf
+    exact ⟨_, _, Typed.list hTp hTs hTf⟩
+
+/-- …and the suffix-free case, under the name the tuple rows use. -/
+theorem typed_tupleOf {ts : List Term} {tail : Option Term}
+    (h : ∀ t ∈ ts, ∃ T μ, Typed t T μ) (ht : ∀ t ∈ tail, ∃ T μ, Typed t T μ) :
+    ∃ T μ, Typed (Term.tupleOf ts tail) T μ :=
+  typed_listOf h ht (by simp)
 
 /-- Inversions for a tuple: each declared position, and the tail. -/
 theorem typedList_mem : ∀ {ts : List Term} {Ts}, TypedList ts Ts → ∀ t ∈ ts, ∃ T μ, Typed t T μ
@@ -6807,17 +7349,28 @@ theorem typedList_mem : ∀ {ts : List Term} {Ts}, TypedList ts Ts → ∀ t ∈
     · exact ⟨_, _, hty⟩
     · exact typedList_mem hs t ht'
 
+/-- Inversions: a derivable container gives derivable components. -/
+theorem typed_list_inv {pre : List Term} {sp : Option Term} {suf : List Term} :
+    (∃ T μ, Typed (.list pre sp suf) T μ) →
+    (∀ t ∈ pre, ∃ T μ, Typed t T μ) ∧ (∀ t ∈ sp, ∃ T μ, Typed t T μ) ∧
+      (∀ t ∈ suf, ∃ T μ, Typed t T μ)
+  | ⟨_, _, h⟩ => by
+    cases h with
+    | list hp hs hf =>
+        refine ⟨typedList_mem hp, ?_, typedList_mem hf⟩
+        cases hs with
+        | none => exact fun t ht => nomatch ht
+        | some hty => exact fun t ht => by cases ht; exact ⟨_, _, hty⟩
+
+/-- …the element of a derivable array, which is the spread of the `list` it builds. -/
+theorem typed_array_inv {a : Term} : (∃ T μ, Typed (.array a) T μ) → ∃ T μ, Typed a T μ :=
+  fun h => (typed_list_inv h).2.1 a rfl
+
 /-- …and both halves of a tuple at once, which is the form the four tuple rows take. -/
 theorem typed_tuple_inv {ts : List Term} {tail : Option Term} :
     (∃ T μ, Typed (.tuple ts tail) T μ) →
-    (∀ t ∈ ts, ∃ T μ, Typed t T μ) ∧ (∀ t ∈ tail, ∃ T μ, Typed t T μ)
-  | ⟨_, _, h⟩ => by
-    cases h with
-    | tuple hL hT =>
-        refine ⟨typedList_mem hL, ?_⟩
-        cases hT with
-        | none => exact fun t ht => nomatch ht
-        | some hty => exact fun t ht => by cases ht; exact ⟨_, _, hty⟩
+    (∀ t ∈ ts, ∃ T μ, Typed t T μ) ∧ (∀ t ∈ tail, ∃ T μ, Typed t T μ) :=
+  fun h => ⟨(typed_list_inv h).1, (typed_list_inv h).2.1⟩
 
 /-- The term a field carries. -/
 def Field.termOf : Field → Term
@@ -6934,9 +7487,8 @@ theorem typed_meetSRight {x : Term} {fam : Term → Option Term} (hf : TypedFam 
   | .literal k lv, _, h, hx, hy => hf (.literal k lv) _ trivial h hx hy
   | .set b, _, h, hx, hy => hf (.set b) _ trivial h hx hy
   | .opaq l, _, h, hx, hy => hf (.opaq l) _ trivial h hx hy
-  | .array e, _, h, hx, hy => hf (.array e) _ trivial h hx hy
   | .record c, _, h, hx, hy => hf (.record c) _ trivial h hx hy
-  | .tuple ts tl, _, h, hx, hy => hf (.tuple ts tl) _ trivial h hx hy
+  | .list p q s, _, h, hx, hy => hf (.list p q s) _ trivial h hx hy
   | .object b, _, h, hx, hy => hf (.object b) _ trivial h hx hy
 termination_by structural y => y
 
@@ -7002,52 +7554,6 @@ theorem typed_famOpaq (l : Bool) : TypedFam (.opaq l) (famOpaq l) := by typed_fa
 
 /-! ### The container families: the four that read the recursion. -/
 
-/-- An array meets an array at the element, and a tuple at every declared position. -/
-theorem typed_famArr {x' : Term} {f : Term → Option Term} (hf : TypedSound x' f) :
-    TypedFam (.array x') (famArr f) := by
-  intro y z hd h hx hy
-  cases y <;> first | exact hd.elim | skip
-  case array e =>
-      simp only [famArr] at h
-      obtain ⟨w, hw, rfl⟩ := Option.map_eq_some_iff.mp h
-      obtain ⟨T, μ, hT⟩ := hf e w hw (typed_array_inv hx) (typed_array_inv hy)
-      exact ⟨_, _, Typed.array hT⟩
-  case tuple ts tail =>
-      obtain ⟨vs, tl, rfl, hts, htl⟩ := famArr_tuple h
-      obtain ⟨hts', htail'⟩ := typed_tuple_inv hy
-      refine typed_tupleOf ?_ ?_
-      · intro w hw
-        obtain ⟨t, ht, hm⟩ := forall₂_mem_right hts hw
-        exact hf t w hm (typed_array_inv hx) (hts' t ht)
-      · intro w hw
-        rcases htl with ⟨-, rfl⟩ | ⟨t, u, rfl, rfl, hm⟩
-        · exact nomatch hw
-        · cases hw
-          exact hf t _ hm (typed_array_inv hx) (htail' t rfl)
-  case opaq l => simp [famArr] at h
-  all_goals
-    (simp only [famArr, Option.some.injEq] at h; subst h; exact ⟨_, _, Typed.never⟩)
-
-/-- A tuple's position functions, applied at one term: every answer is derivable. -/
-theorem typed_applyAt_lift {y : Term} (hy : ∃ T μ, Typed y T μ) :
-    ∀ {ts : List Term} {fs : List (Term → Option Term)} {vs : List Term},
-      List.Forall₂ TypedSound ts fs → (∀ t ∈ ts, ∃ T μ, Typed t T μ) →
-      List.Forall₂ (fun f v => f y = some v) fs vs →
-      ∀ v ∈ vs, ∃ T μ, Typed v T μ := by
-  intro ts
-  induction ts with
-  | nil => intro fs vs hfs _ hv; cases hfs; cases hv; intro v hvm; exact nomatch hvm
-  | cons t ts ihs =>
-      intro fs vs hfs hts hv
-      cases hfs with
-      | cons hf hfs' =>
-          cases hv with
-          | cons hh ht =>
-              intro v hvm
-              rcases List.mem_cons.mp hvm with rfl | hvm'
-              · exact hf y v hh (hts t List.mem_cons_self) hy
-              · exact ihs hfs' (fun u hu => hts u (List.mem_cons_of_mem _ hu)) ht v hvm'
-
 /-- …and the same two tuples' positions zipped. -/
 theorem typed_zipF_lift :
     ∀ {ts us : List Term} {fs : List (Term → Option Term)} {vs : List Term},
@@ -7073,71 +7579,105 @@ theorem typed_zipF_lift :
                   · exact ihs hfs' (fun w hw => hts w (List.mem_cons_of_mem _ hw))
                       (fun w hw => hus w (List.mem_cons_of_mem _ hw)) ht v hvm'
 
-/-- A tuple meets an array at every declared position, and a tuple of one arity positionwise. -/
-theorem typed_famTup {ts : List Term} {tail : Option Term}
-    {fs : List (Term → Option Term)} {ftail : Option (Term → Option Term)}
-    (hfs : List.Forall₂ TypedSound ts fs)
-    (hft : (tail = none ∧ ftail = none) ∨
-      ∃ t ft, tail = some t ∧ ftail = some ft ∧ TypedSound t ft) :
-    TypedFam (.tuple ts tail) (famTup fs ftail) := by
+/-- **The one positional container's family, on the derivation.** Every term the answer holds
+    is a meet of a term one shape declares with a term the other declares, and `rowOfG_mem`
+    says a row holds nothing else. -/
+theorem typed_famList {pre suf : List Term} {sp : Option Term}
+    {fpre fsuf : List (Term → Option Term)} {fsp : Option (Term → Option Term)}
+    (hp : List.Forall₂ TypedSound pre fpre)
+    (hs : (sp = none ∧ fsp = none) ∨ ∃ t f, sp = some t ∧ fsp = some f ∧ TypedSound t f)
+    (hf : List.Forall₂ TypedSound suf fsuf) :
+    TypedFam (.list pre sp suf) (famList fpre fsp fsuf) := by
   intro y z hd h hx hy
-  obtain ⟨hts, htail⟩ := typed_tuple_inv hx
+  obtain ⟨hpre, hsp, hsuf⟩ := typed_list_inv hx
   cases y <;> first | exact hd.elim | skip
-  case array e =>
-      simp only [famTup] at h
-      split at h
-      next vs tl hvs htl =>
-        simp only [Option.some.injEq] at h; subst h
-        have hF : List.Forall₂ (fun f w => f e = some w) fs vs :=
-          allSome_map_forall₂ _ (by rw [← applyAt_eq]; exact hvs)
-        have he := typed_array_inv hy
-        refine typed_tupleOf (typed_applyAt_lift he hfs hts hF) ?_
+  case list pre₂ sp₂ suf₂ =>
+      obtain ⟨hpre₂, hsp₂, hsuf₂⟩ := typed_list_inv hy
+      have hall : ∀ t ∈ pre ++ suf, ∃ T μ, Typed t T μ := by
         intro w hw
-        rcases hft with ⟨rfl, rfl⟩ | ⟨t, ft, rfl, rfl, hsound⟩
-        · replace htl : some (none : Option Term) = some tl := htl
-          simp only [Option.some.injEq] at htl; subst htl
-          exact nomatch hw
-        · replace htl : Option.map some (ft e) = some tl := htl
-          obtain ⟨u, hu, rfl⟩ := Option.map_eq_some_iff.mp htl
-          cases hw
-          exact hsound e _ hu (htail t rfl) he
-      next => exact absurd h (by simp)
-  case tuple us tail' =>
-      obtain ⟨hus, htail'⟩ := typed_tuple_inv hy
-      simp only [famTup] at h
-      split at h
-      next hlen =>
-        split at h
-        next vs tl hvs htl =>
-          simp only [Option.some.injEq] at h; subst h
-          have hF : List.Forall₂
-              (fun (p : (Term → Option Term) × Term) w => p.1 p.2 = some w) (fs.zip us) vs :=
-            allSome_map_forall₂ _ (by rw [← zipF_eq]; exact hvs)
-          refine typed_tupleOf (typed_zipF_lift hfs hts hus hF) ?_
-          intro w hw
-          rcases hft with ⟨rfl, rfl⟩ | ⟨t, ft, rfl, rfl, hsound⟩
-          · cases tail' with
+        rcases List.mem_append.mp hw with h' | h'
+        exacts [hpre w h', hsuf w h']
+      simp only [famList] at h
+      rcases hs with ⟨rfl, rfl⟩ | ⟨t, f, rfl, rfl, hsound⟩
+      · simp only [listMeetRow] at h
+        rw [show rowOfG fpre none fsuf (fpre.length + fsuf.length) = some (fpre ++ fsuf) from
+          by rw [rowOfG_none_eq, if_pos rfl]] at h
+        cases hR : rowOfG pre₂ sp₂ suf₂ (fpre.length + fsuf.length) with
+        | none =>
+            rw [hR] at h
+            simp only [Option.some.injEq] at h
+            subst h
+            exact ⟨_, _, Typed.never⟩
+        | some us =>
+            rw [hR] at h
+            obtain ⟨row, hrow, rfl⟩ := Option.map_eq_some_iff.mp h
+            refine typed_listOf ?_ (by simp) (by simp)
+            refine typed_zipF_lift (forall₂_append hp hf) hall ?_
+              (allSome_map_forall₂ _ (by rw [← zipF_eq]; exact hrow))
+            intro u hu
+            rcases rowOfG_mem hR hu with h' | h' | h'
+            exacts [hpre₂ u h', hsp₂ u h', hsuf₂ u h']
+      · cases sp₂ with
+        | none =>
+            simp only [listMeetRow] at h
+            rw [show rowOfG pre₂ none suf₂ (pre₂.length + suf₂.length)
+                = some (pre₂ ++ suf₂) from by rw [rowOfG_none_eq, if_pos rfl]] at h
+            cases hL : rowOfG fpre (some f) fsuf (pre₂.length + suf₂.length) with
             | none =>
-                replace htl : some (none : Option Term) = some tl := htl
-                simp only [Option.some.injEq] at htl; subst htl
-                exact nomatch hw
-            | some u => exact absurd htl (by simp)
-          · cases tail' with
-            | none => exact absurd htl (by simp)
-            | some u =>
-                replace htl : Option.map some (ft u) = some tl := htl
-                obtain ⟨w', hw', rfl⟩ := Option.map_eq_some_iff.mp htl
-                cases hw
-                exact hsound u _ hw' (htail t rfl) (htail' u rfl)
-        next => exact absurd h (by simp)
-      next =>
-        split at h
-        next =>
-          simp only [Option.some.injEq] at h; subst h; exact ⟨_, _, Typed.never⟩
-        next => exact absurd h (by simp)
-  case opaq l => simp [famTup] at h
+                rw [hL] at h
+                simp only [Option.some.injEq] at h
+                subst h
+                exact ⟨_, _, Typed.never⟩
+            | some fs =>
+                rw [hL] at h
+                obtain ⟨row, hrow, rfl⟩ := Option.map_eq_some_iff.mp h
+                obtain ⟨ts, hts, htsF⟩ :=
+                  rowOfG_forall₂_left hp (Or.inr ⟨t, f, rfl, rfl, hsound⟩) hf hL
+                refine typed_listOf ?_ (by simp) (by simp)
+                refine typed_zipF_lift htsF ?_ ?_
+                  (allSome_map_forall₂ _ (by rw [← zipF_eq]; exact hrow))
+                · intro w hw
+                  rcases rowOfG_mem hts hw with h' | h' | h'
+                  exacts [hpre w h', hsp w h', hsuf w h']
+                · intro u hu
+                  rcases List.mem_append.mp hu with h' | h'
+                  exacts [hpre₂ u h', hsuf₂ u h']
+        | some c =>
+            simp only [listMeetRow] at h
+            split at h
+            · next hdom =>
+                obtain ⟨fs, hfs⟩ :=
+                  rowOfG_total (pre := fpre) (suf := fsuf) (c := f)
+                    (n := max fpre.length pre₂.length + max fsuf.length suf₂.length) (by omega)
+                obtain ⟨us, hus⟩ :=
+                  rowOfG_total (pre := pre₂) (suf := suf₂) (c := c)
+                    (n := max fpre.length pre₂.length + max fsuf.length suf₂.length) (by omega)
+                rw [hfs, hus] at h
+                cases hfc : f c with
+                | none => rw [hfc] at h; exact absurd h (by simp)
+                | some spz =>
+                    rw [hfc] at h
+                    obtain ⟨row, hrow, rfl⟩ := Option.map_eq_some_iff.mp h
+                    obtain ⟨ts, hts, htsF⟩ :=
+                      rowOfG_forall₂_left hp (Or.inr ⟨t, f, rfl, rfl, hsound⟩) hf hfs
+                    have hrowT : ∀ w ∈ row, ∃ T μ, Typed w T μ := by
+                      refine typed_zipF_lift htsF ?_ ?_
+                        (allSome_map_forall₂ _ (by rw [← zipF_eq]; exact hrow))
+                      · intro w hw
+                        rcases rowOfG_mem hts hw with h' | h' | h'
+                        exacts [hpre w h', hsp w h', hsuf w h']
+                      · intro u hu
+                        rcases rowOfG_mem hus hu with h' | h' | h'
+                        exacts [hpre₂ u h', hsp₂ u h', hsuf₂ u h']
+                    refine typed_listOf (fun w hw => hrowT w (List.mem_of_mem_take hw)) ?_
+                      (fun w hw => hrowT w (List.mem_of_mem_drop hw))
+                    intro w hw
+                    cases hw
+                    exact hsound c spz hfc (hsp t rfl) (hsp₂ c rfl)
+            · exact absurd h (by simp)
+  case opaq l => simp [famList] at h
   all_goals
-    (simp only [famTup, Option.some.injEq] at h; subst h; exact ⟨_, _, Typed.never⟩)
+    (simp only [famList, Option.some.injEq] at h; subst h; exact ⟨_, _, Typed.never⟩)
 
 /-- A record meets a record at the value term, and an object through every declared field. -/
 theorem typed_famRec {x' : Term} {f : Term → Option Term} (hf : TypedSound x' f) :
@@ -7281,17 +7821,18 @@ theorem typed_meet : ∀ x y z, Term.meet x y = some z →
   | .literal k lv, y, z, h, hx, hy => typed_meetSRight (typed_famLit k lv) y z h hx hy
   | .set b, y, z, h, hx, hy => typed_meetSRight (typed_famSet b) y z h hx hy
   | .opaq l, y, z, h, hx, hy => typed_meetSRight (typed_famOpaq l) y z h hx hy
-  | .array e, y, z, h, hx, hy =>
-      typed_meetSRight (typed_famArr (fun t w hw => typed_meet e t w hw)) y z h hx hy
   | .record c, y, z, h, hx, hy =>
       typed_meetSRight (typed_famRec (fun t w hw => typed_meet c t w hw)) y z h hx hy
-  | .tuple ts tl, y, z, h, hx, hy => by
-      cases tl with
+  | .list pre sp suf, y, z, h, hx, hy => by
+      cases sp with
       | none =>
-          exact typed_meetSRight (typed_famTup (typed_meetSTs ts) (Or.inl ⟨rfl, rfl⟩)) y z h hx hy
+          exact typed_meetSRight (typed_famList (pre := pre) (sp := none) (suf := suf)
+            (typed_meetSTs pre) (Or.inl ⟨rfl, rfl⟩) (typed_meetSTs suf)) y z h hx hy
       | some t =>
-          exact typed_meetSRight (typed_famTup (typed_meetSTs ts)
-            (Or.inr ⟨t, Term.meet t, rfl, rfl, fun u w hw => typed_meet t u w hw⟩)) y z h hx hy
+          exact typed_meetSRight (typed_famList (pre := pre) (sp := some t) (suf := suf)
+            (typed_meetSTs pre)
+            (Or.inr ⟨t, Term.meet t, rfl, rfl, fun u w hw => typed_meet t u w hw⟩)
+            (typed_meetSTs suf)) y z h hx hy
   | .object (.mk fs f r), y, z, h, hx, hy => by
       cases r with
       | codec t =>
@@ -7374,5 +7915,7 @@ termination_by structural f => f
 end
 
 end StructuralTyped
+
+
 
 end Calculus
