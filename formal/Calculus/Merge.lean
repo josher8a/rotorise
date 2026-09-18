@@ -26,13 +26,12 @@ def MapOf.disjUnion {α : Type} (a b : MapOf α) (h : Disjoint a.keys b.keys) : 
 
 /-- The body of a product: the disjoint union of the field tables, and no open block.
 
-    **The merge of two open blocks is gone rather than refused.** It used to be `Rest.merge`,
-    a nine-cell table over three policies that answered on the four closed cells and refused
-    the rest. One closed state replaced the three, so the four cells are one cell, and the
-    refusal has nothing left to decide: an open factor holds an undeclared name through a
-    codec of its own, and a product would have to hold it through both. The premise says so
-    directly, and `Rest.merge`, `Rest.merge_assoc`, `Rest.merge_admRest` and
-    `TypedRest.merge_closed` are deleted with it. -/
+    **The merge of two open blocks is gone rather than refused.** It used to be a nine-cell
+    table over three policies that answered on the four closed cells and refused the rest.
+    One closed state replaced the three, so the four cells are one cell, and the refusal has
+    nothing left to decide: an open factor holds an undeclared name through a codec of its
+    own, and a product would have to hold it through both. The premise says so directly, and
+    the table and its three corollaries are deleted with it. -/
 def Body.merge (a b : Body) (h : Disjoint a.fields b.fields)
     (_ha : a.wild = none) (_hb : b.wild = none) : Body :=
   .mk (a.fields.disjUnion b.fields h)

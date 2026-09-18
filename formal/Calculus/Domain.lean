@@ -663,9 +663,9 @@ deriving DecidableEq, Repr
 
 /-! ## What a `union` option's admission reads
 
-`Sums.lean` states a union option's admission and cannot see `Field`: `Term.lean` is on no
-import path below `Calculus.Objects`. So an object option's field table crosses to `Sums` as
-the two things admission reads off each declared name, built in `Denote.lean` where `Field` is
+`Sums.lean` states a union option's admission and cannot see `ObjectSlot`: `Term.lean` is on no
+import path below `Calculus.Objects`. So an object option's slot table crosses to `Sums` as
+the two things admission reads off each declared name, built in `Denote.lean` where `ObjectSlot` is
 in scope. -/
 
 /-- A literal's payload with its base packed in. The value's type depends on the base, so one

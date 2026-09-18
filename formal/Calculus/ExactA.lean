@@ -23,12 +23,11 @@ then applies `q`. Each is a row here rather than a remark. -/
 
 /-! ### The attribute side's rows, and the three that are not the value side's
 
-The combinators below mirror the value side's one for one, with one genuine difference:
-`objRead` filters the *stored* names through `keepB` before traversing — `drop` is a read-side
-policy — so `objAdmA` carries the filter and `objAdmV` does not. The filter is written as an
-implication over the key set rather than as a `Finset.filter` on the subtype, because the two
-predicates (`keepB` on the denoted table, `keepT` on the term's) are equal and not
-*definitionally* equal, and a filtered subtype would make that difference a transport. -/
+The combinators below mirror the value side's one for one. `objRead` still filters the
+*stored* names through `keepB`, and the row carries no filter to match it: `keepB` is the
+constant `true` at every body, because `drop` was the one policy that dropped a name and an
+open block is a codec or nothing. `keepB_wild` states that, and it is what the object proof
+spends on the filter. -/
 
 /-- An attribute-side row, once the subterms' rows are known. -/
 abbrev AP := Attr → Bool
@@ -78,24 +77,19 @@ def alignPAL (pre : List AP) (sp : Option AP) (suf : List AP) (as : List Attr) :
 def entryPA (fs : MapOf AP) (rp : Option AP) (k : Name) : Option AP :=
   match fs.at k with | some P => some P | none => rp
 
-/-- `objRead`'s traversal, as a row: every *kept* entry goes through its name's codec. -/
-def objAdmA (fs : MapOf AP) (rp : Option AP) (kn : Name → Bool) (keys : Finset Name)
+/-- `objRead`'s traversal, as a row: every stored entry goes through its name's codec. -/
+def objAdmA (fs : MapOf AP) (rp : Option AP) (keys : Finset Name)
     (g : {k // k ∈ keys} → Attr) : Bool :=
-  decide (∀ k : {k // k ∈ keys}, kn k.1 = true →
+  decide (∀ k : {k // k ∈ keys},
     (match entryPA fs rp k.1 with | some P => P (g k) | none => false) = true)
 
-/-- `reqPresentB`'s guard off the term's table: `fb` reads to its stand-in, so only `req`
-    must be present. -/
-def reqPresentT (fields : Finset Name) (fld : {k // k ∈ fields} → Field)
+/-- `reqPresentB`'s guard off the term's table: a slot with a stand-in reads to that
+    stand-in, so only a `req` without one must be present. The mark alone does not decide
+    it, which is why the row splits on `ifMissing`. -/
+def reqPresentT (fields : Finset Name) (fld : {k // k ∈ fields} → ObjectSlot)
     (keys : Finset Name) : Bool :=
   decide (∀ k : {k // k ∈ fields},
-    (match fld k with | .req _ => decide (k.1 ∈ keys) | _ => true) = true)
-
-/-- `keepB`'s row: `drop` keeps declared names, the other two keep everything. -/
-def keepT (rest : Rest) (fields : Finset Name) : Name → Bool :=
-  match rest with
-  | .drop => fun k => decide (k ∈ fields)
-  | _ => fun _ => true
+    (match fld k with | .req _ none => decide (k.1 ∈ keys) | _ => true) = true)
 
 
 /-- What the literal codec **reads**, exactly.
@@ -185,8 +179,6 @@ noncomputable def AdmA : Term → Attr → Bool
   -- the bottom reads nothing back, and the row is that sentence
   | .never => fun _ => false
   | .custom _ cp => fun a => (cp a).isSome
-  | .record c => fun a =>
-      match a with | .m _ g => decide (∀ k, AdmA c (g k) = true) | _ => false
   | .held t _ _ => AdmA t
   | .lazy t   => AdmA t
   | .refine t p => fun a => AdmA t a && refineReads t p.eval a
@@ -210,23 +202,20 @@ noncomputable def AdmA : Term → Attr → Bool
 
 /-- The read side's payload row; `AdmBody`'s mirror. -/
 noncomputable def AdmABody : Body → AP
-  | .mk fields fld rest => fun a =>
+  | .mk fields fld wild => fun a =>
       match a with
       | .m keys g =>
           reqPresentT fields fld keys &&
-          objAdmA ⟨fields, fun k => AdmAField (fld k)⟩ (AdmARest rest)
-            (keepT rest fields) keys g
+          objAdmA ⟨fields, fun k => AdmAField (fld k)⟩ (AdmAWild wild) keys g
       | _ => false
 
-noncomputable def AdmAField : Field → AP
-  | .req t => AdmA t
+noncomputable def AdmAField : ObjectSlot → AP
+  | .req t _ => AdmA t
   | .optional t => AdmA t
-  | .fallback t _ => AdmA t
 
-noncomputable def AdmARest : Rest → Option AP
-  | .drop => none
-  | .refuse => none
-  | .codec t => some (AdmA t)
+noncomputable def AdmAWild : Option (KeyPat × Term) → Option AP
+  | none => none
+  | some (_, t) => some (AdmA t)
 
 noncomputable def AdmAList : List Term → List AP
   | [] => []
@@ -579,56 +568,59 @@ theorem ExactA_tuple {ts : List Term} {tail : Option Term}
 theorem ExactA_array {c : Term} (hc : ExactA c) : ExactA (.array c) :=
   ExactA_list (by simp) (by simpa using hc) (by simp)
 
-def ExactAField (fd : Field) : Prop :=
+def ExactAField (fd : ObjectSlot) : Prop :=
   ∀ a, AdmAField fd a = true ↔ (((fieldSem fd).codec).p a).isSome
 
-theorem reqPresentT_eq (fields : Finset Name) (fld : {k // k ∈ fields} → Field)
+theorem reqPresentT_eq (fields : Finset Name) (fld : {k // k ∈ fields} → ObjectSlot)
     (keys : Finset Name) :
     reqPresentT fields fld keys = reqPresentB ⟨fields, fun k => fieldSem (fld k)⟩ keys := by
   simp only [reqPresentT, reqPresentB]
   congr 1
   apply propext
-  constructor <;> intro h k <;> have := h k <;> cases hfd : fld k <;>
-    simp_all [reqPresentAt, fieldSem]
+  -- `fieldSem (.req t m)` does not reduce while `m` is a variable, and the two rows it
+  -- splits into are the two answers this guard gives.
+  constructor <;> intro h k <;> have := h k <;>
+    (cases hfd : fld k with
+      | req t m => cases m <;> simp_all [reqPresentAt, fieldSem]
+      | optional t => simp_all [reqPresentAt, fieldSem])
 
-theorem keepB_eq (fields : Finset Name) (fld : {k // k ∈ fields} → Field) (rest : Rest)
-    (k : Name) :
-    keepB (restSem rest) ⟨fields, fun k => fieldSem (fld k)⟩ k = keepT rest fields k := by
-  cases rest with
-  | drop =>
-    simp only [keepB, keepT, restSem, MapOf.at]
-    by_cases hk : k ∈ fields <;> simp [hk]
-  | refuse => rfl
-  | codec t => rfl
+/-- **The read side keeps every stored name.** `drop` was the one policy that dropped one,
+    and it is gone, so `objRead`'s filter is the identity on the key set and the row owes it
+    nothing. -/
+theorem keepB_wild (wild : Option (KeyPat × Term)) (sems : MapOf FieldSem) (k : Name) :
+    keepB (wildSem wild) sems k = true := by
+  cases wild with
+  | none => rfl
+  | some pt => rfl
 
-theorem entryA_iff {fields : Finset Name} {fld : {k // k ∈ fields} → Field} {rest : Rest}
+theorem entryA_iff {fields : Finset Name} {fld : {k // k ∈ fields} → ObjectSlot}
+    {wild : Option (KeyPat × Term)}
     (hf : ∀ k : {k // k ∈ fields}, ExactAField (fld k))
-    (hr : ∀ t, rest = .codec t → ExactA t) (k : Name) (a : Attr) :
-    (match entryPA ⟨fields, fun k => AdmAField (fld k)⟩ (AdmARest rest) k with
+    (hr : ∀ p t, wild = some (p, t) → ExactA t) (k : Name) (a : Attr) :
+    (match entryPA ⟨fields, fun k => AdmAField (fld k)⟩ (AdmAWild wild) k with
       | some P => P a | none => false) = true ↔
-    ((entryCodec ⟨fields, fun k => fieldSem (fld k)⟩ (rcOf (restSem rest)) k).bind
+    ((entryCodec ⟨fields, fun k => fieldSem (fld k)⟩ (rcOf (wildSem wild)) k).bind
       (fun c => c.p a)).isSome = true := by
   simp only [entryPA, entryCodec, MapOf.at]
   by_cases hk : k ∈ fields
   · rw [dif_pos hk, dif_pos hk]
     simpa using hf ⟨k, hk⟩ a
   · rw [dif_neg hk, dif_neg hk]
-    cases rest with
-    | drop => simp [AdmARest, restSem, rcOf]
-    | refuse => simp [AdmARest, restSem, rcOf]
-    | codec t => simpa [AdmARest, restSem, rcOf] using hr t rfl a
+    cases wild with
+    | none => simp [AdmAWild, wildSem, rcOf]
+    | some pt => simpa [AdmAWild, wildSem, rcOf] using hr pt.1 pt.2 rfl a
 
-theorem ExactA_object {fields : Finset Name} {fld : {k // k ∈ fields} → Field} {rest : Rest}
+theorem ExactA_object {fields : Finset Name} {fld : {k // k ∈ fields} → ObjectSlot}
+    {wild : Option (KeyPat × Term)}
     (hf : ∀ k : {k // k ∈ fields}, ExactAField (fld k))
-    (hr : ∀ t, rest = .codec t → ExactA t) :
-    ExactA (.object (.mk fields fld rest)) := by
+    (hr : ∀ p t, wild = some (p, t) → ExactA t) :
+    ExactA (.object (.mk fields fld wild)) := by
   intro a
   cases a
   case m keys g =>
     show (reqPresentT fields fld keys &&
-        objAdmA ⟨fields, fun k => AdmAField (fld k)⟩ (AdmARest rest)
-          (keepT rest fields) keys g) = true ↔
-      ((objectCodec ⟨fields, fun k => fieldSem (fld k)⟩ (restSem rest)).p (.m keys g)).isSome
+        objAdmA ⟨fields, fun k => AdmAField (fld k)⟩ (AdmAWild wild) keys g) = true ↔
+      ((objectCodec ⟨fields, fun k => fieldSem (fld k)⟩ (wildSem wild)).p (.m keys g)).isSome
         = true
     rw [reqPresentT_eq]
     simp only [objectCodec, objectCodecCore, carriedCodec, mA, objRead,
@@ -639,14 +631,11 @@ theorem ExactA_object {fields : Finset Name} {fld : {k // k ∈ fields} → Fiel
       simp only [hv, true_and, Option.isSome_map, funImage_isSome_iff]
       constructor
       · intro h k
-        refine (entryA_iff hf hr k.1 _).mp ?_
-        refine h ⟨k.1, (Finset.mem_filter.mp k.2).1⟩ ?_
-        rw [← keepB_eq fields fld rest]
-        exact (Finset.mem_filter.mp k.2).2
-      · intro h k hk
+        exact (entryA_iff hf hr k.1 _).mp (h ⟨k.1, (Finset.mem_filter.mp k.2).1⟩)
+      · intro h k
         refine (entryA_iff hf hr k.1 (g k)).mpr ?_
-        have hmem : k.1 ∈ keys.filter (keepB (restSem rest) ⟨fields, fun k => fieldSem (fld k)⟩ ·) :=
-          Finset.mem_filter.mpr ⟨k.2, by rw [keepB_eq fields fld rest]; exact hk⟩
+        have hmem : k.1 ∈ keys.filter (keepB (wildSem wild) ⟨fields, fun k => fieldSem (fld k)⟩ ·) :=
+          Finset.mem_filter.mpr ⟨k.2, keepB_wild wild _ k.1⟩
         exact h ⟨k.1, hmem⟩
     · rw [if_neg hv]
       simp [hv]
@@ -671,9 +660,9 @@ def ExactAO : Option Term → Prop
   | none => True
   | some t => ExactA t
 
-def ExactAR : Rest → Prop
-  | .drop | .refuse => True
-  | .codec t => ExactA t
+def ExactAW : Option (KeyPat × Term) → Prop
+  | none => True
+  | some (_, t) => ExactA t
 
 theorem exactAL_mem : ∀ (ts : List Term), ExactAL ts → ∀ t ∈ ts, ExactA t
   | [], _, t, ht => absurd ht (by simp)
@@ -688,12 +677,12 @@ theorem exactAO_mem : ∀ (tail : Option Term), ExactAO tail → ∀ t ∈ tail,
       have heq : t0 = t := by simpa using ht
       subst heq; exact h
 
-theorem exactAR_codec : ∀ (rest : Rest), ExactAR rest → ∀ t, rest = .codec t → ExactA t
-  | .drop, _, t, h => nomatch h
-  | .refuse, _, t, h => nomatch h
-  | .codec t0, h, t, hc => by
-      have heq : t = t0 := by injection hc.symm
-      subst heq; exact h
+theorem exactAW_codec : ∀ (wild : Option (KeyPat × Term)), ExactAW wild →
+    ∀ p t, wild = some (p, t) → ExactA t
+  | none, _, _, t, h => nomatch h
+  | some (_, t0), h, _, t, hc => by
+      simp only [Option.some.injEq, Prod.mk.injEq] at hc
+      exact hc.2 ▸ h
 
 /-- `allPA` transported across the entry's exactness. -/
 theorem AdmAAll_iff {c : Term} (h : ExactA c) : ∀ as : List Attr,
@@ -770,16 +759,6 @@ theorem AdmA_exact : ∀ (t : Term), ExactA t
       case binary => exact AdmALit_binary_exact ls a
       case null => exact AdmALit_null_exact ls a
   | .custom ce cp => by intro a; simp [AdmA, denote, denote]
-  | .record c => by
-      have hc := AdmA_exact c
-      intro a
-      cases a
-      case m keys g =>
-        simp only [AdmA, denote, denote, denote, recordCodec, Option.isSome_map, decide_eq_true_eq,
-          funImage_isSome_iff]
-        exact forall_congr' fun k => hc (g k)
-      all_goals simp only [AdmA, denote, denote, denote, recordCodec, 
-        Option.isSome_none, Bool.false_eq_true]
   | .held c f g => by
       have hc := AdmA_exact c
       intro a
@@ -805,8 +784,8 @@ theorem AdmA_exact : ∀ (t : Term), ExactA t
 
 /-- …and its read-side twin, for the reason the write side gives. -/
 theorem AdmA_exactB : ∀ (b : Body), ExactA (.object b)
-  | .mk _ fld rest =>
-      ExactA_object (fun k => AdmA_exactF (fld k)) (exactAR_codec rest (AdmA_exactR rest))
+  | .mk _ fld wild =>
+      ExactA_object (fun k => AdmA_exactF (fld k)) (exactAW_codec wild (AdmA_exactW wild))
 
 theorem AdmA_exactL : ∀ (ts : List Term), ExactAL ts
   | [] => trivial
@@ -816,15 +795,16 @@ theorem AdmA_exactO : ∀ (tail : Option Term), ExactAO tail
   | none => trivial
   | some t0 => AdmA_exact t0
 
-theorem AdmA_exactF : ∀ (fd : Field), ExactAField fd
-  | .req t0 => fun a => AdmA_exact t0 a
+/-- The stand-in splits because `fieldSem (.req t m)` does not reduce while `m` is a
+    variable, the same split `Adm_exactF` makes. -/
+theorem AdmA_exactF : ∀ (fd : ObjectSlot), ExactAField fd
+  | .req t0 none => fun a => AdmA_exact t0 a
+  | .req t0 (some _) => fun a => AdmA_exact t0 a
   | .optional t0 => fun a => AdmA_exact t0 a
-  | .fallback t0 _ => fun a => AdmA_exact t0 a
 
-theorem AdmA_exactR : ∀ (rest : Rest), ExactAR rest
-  | .drop => trivial
-  | .refuse => trivial
-  | .codec t0 => AdmA_exact t0
+theorem AdmA_exactW : ∀ (wild : Option (KeyPat × Term)), ExactAW wild
+  | none => trivial
+  | some (_, t0) => AdmA_exact t0
 end
 
 /-- Soundness of every attribute row — a corollary, as on the value side. The

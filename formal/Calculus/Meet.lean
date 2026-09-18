@@ -50,19 +50,19 @@ nothing to state, and the two examples at the foot of this file are the two ways
 through the split, and the map it admits is one neither factor admits. The meet intersects
 admissions. `array(string) ∧ tuple(string 'a')` is `tuple(string 'a')` and is a meet;
 `object {a} ⊗ object {b}` is `object {a, b}` and is a merge. The meet's object row does not call
-`Body.merge`; only `Rest.merge` is shared, and the rests are the one place the two agree.
+`Body.merge`; each reads the two open blocks first, and that is the one place the two agree.
 
 **An object's declared names meet by intersection, and only where both halves read the set the
-same way.** `objAdmV` quantifies over the names the *value* carries and `AdmRest` is `none` at
-`drop` and at `refuse` alike, so a closed object refuses an undeclared name on the value side under
-either policy: the declared set is an upper bound. Two upper bounds meet at their intersection. The
-required names unite, and **with both rests closed** a required name outside the intersection makes
-the object `never`, because that name must be present and the other factor refuses it. An *open*
-factor refuses no name: its rest holds one the factor does not declare. So the rests are read
-first, and a `codec` on either side answers the refusal before the required-name test is consulted.
+same way.** `objAdmV` quantifies over the names the *value* carries and `AdmWild` is `none` where
+the body declares no open block, so a closed object refuses an undeclared name on the value side:
+the declared set is an upper bound. Two upper bounds meet at their intersection. The required names
+unite, and **with both bodies closed** a required name outside the intersection makes the object
+`never`, because that name must be present and the other factor refuses it. An *open* factor
+refuses no name: its open block holds one the factor does not declare. So the open blocks are read
+first, and one on either side answers the refusal before the required-name test is consulted.
 
 The witness that the union of the declared names is wrong: `object {x : req string}` and
-`object {y : req string}`, both `drop`, against the value `{x := "1", y := "2"}`. Each factor
+`object {y : req string}`, both closed, against the value `{x := "1", y := "2"}`. Each factor
 refuses it, for the name the other declares. An object over the union of the two names admits it,
 so the union rule answers `true` where both factors answer `false`.
 
@@ -70,26 +70,21 @@ so the union rule answers `true` where both factors answer `false`.
 unshared one parts the halves.** A mark says whether the name must be present when the object is
 written and when it is read, and those two bits are not the same bit: `fallback` forces the write
 and not the read, because its stand-in answers a read that finds no name. Intersecting conjoins
-each bit, so where the marks read alike a shared name meets at the stronger of the two,
-`optional < fallback < req`, which is `Field.meet`. **`optional` against a `fallback` reads an
-absent name two ways and so refuses**: both admit a map that omits the name, and there one reads a
-map without the name and the other a map carrying the stand-in, so the pair shares attributes no
-term states. A name one body declares and the other does not has no second mark to join: under a
-closed rest a `req` name makes the object the bottom, because it must be written and the partner
-refuses it, and a `fallback` name refuses outright, because the write side is empty there and the
-read side is not.
+each bit, so where the marks read alike a shared name meets at the stronger of the two, which is
+`ObjectSlot.meet`. **`optional` against a slot carrying a stand-in reads an absent name two ways
+and so refuses**: both admit a map that omits the name, and there one reads a map without the name
+and the other a map carrying the stand-in, so the pair shares attributes no term states. A name one
+body declares and the other does not has no second mark to join: in a closed body a `req` name
+makes the object the bottom, because it must be written and the partner refuses it, and a stand-in
+name refuses outright, because the write side is empty there and the read side is not.
 
-**The intersection is wrong on the read side under `drop`, so that pair refuses too.** `objAdmA`
-filters by `keepT`, and `keepT` at `drop` keeps the declared names alone, so a `drop` object
-*skips* an undeclared name rather than refusing it. That is what `drop` means for a read. The
-declared set therefore bounds the read from below where it bounds the write from above, and an
-intersection is the meet of two upper bounds and the join of two lower ones. The same two bodies
-each read `{x := true}`, because each skips the name the other declares, while the intersection
-declares neither name and reads every map. `Body.dropFits` states the condition under which the two
-halves agree: a `drop` factor must declare every name the other factor declares. Two `drop` factors
-must then declare the same names, a `drop` factor against a `refuse` one must declare every name
-the `refuse` one declares, and two `refuse` factors are free. Every other pair refuses, the
-required-name test included, because a `drop` factor skips the required name it does not declare.
+**The read side no longer parts from the write side at an undeclared name.** The read row used to
+filter the stored names, and the filter at the old `drop` policy kept the declared names alone, so
+such an object *skipped* an undeclared name rather than refusing it. The declared set then bounded
+the read from below where it bounded the write from above, and a further guard carried the
+condition under which the two halves agreed. That policy is gone. A body has one closed state, that
+state refuses an undeclared name on both halves, and the filter, the guard and the pairs they
+turned away go with the policy.
 -/
 
 namespace Calculus
@@ -102,17 +97,16 @@ def Term.isNever : Term → Bool
   | .never => true
   | _ => false
 
-/-- Whether a field's name must be present. `optional` is the only mark that admits absence, which
+/-- Whether a slot's name must be present. `optional` is the only mark that admits absence, which
     is the reading `Body.spec` and `valPresentT` already take. -/
-def Field.isReq : Field → Bool
+def ObjectSlot.isReq : ObjectSlot → Bool
   | .optional _ => false
   | _ => true
 
-/-- Whether a field admits nothing at a name that must be present. An `optional` field at the
+/-- Whether a slot admits nothing at a name that must be present. An `optional` slot at the
     bottom is not this: it is a name that must be absent, which is a body a value can satisfy. -/
-def Field.isBottom : Field → Bool
-  | .req t => t.isNever
-  | .fallback t _ => t.isNever
+def ObjectSlot.isBottom : ObjectSlot → Bool
+  | .req t _ => t.isNever
   | .optional _ => false
 
 /-- Whether a predicate is data a term can carry through a meet. `closure` is the caller's own
@@ -127,26 +121,26 @@ def orthAll : List Term → Bool
   | [] => true
   | t :: ts => ts.all (fun u => Orth t u) && orthAll ts
 
-/-- Whether a field's presence rule is the same on both halves. `req` must be present for both
-    and `optional` may be absent for both. `fallback` parts them: the write side writes the name
-    and the read side reads the stand-in when the name is absent. -/
-def Field.presenceAgrees : Field → Bool
-  | .fallback _ _ => false
+/-- Whether a slot's presence rule is the same on both halves. `req` with no stand-in must be
+    present for both and `optional` may be absent for both. A stand-in parts them: the write side
+    writes the name and the read side reads the stand-in when the name is absent. -/
+def ObjectSlot.presenceAgrees : ObjectSlot → Bool
+  | .req _ (some _) => false
   | _ => true
 
 /-- Whether an object option's two halves answer the same question about names, which is what
     `keysOk` needs in order to be that option's row. `keysOk` is the write side's name test, and
     a union dispatches on it, so a read that disagrees with it is a read the union refuses.
 
-    Two names part the halves. An **undeclared** name: `refuse` refuses it on both halves, and
-    `drop` refuses it when it writes and skips it when it reads. A **declared and absent** name:
-    `req` must be present for both and `optional` may be absent for both, while `fallback` must
-    be written and reads to its stand-in, so `keysOk` requires the name and `reqPresentT` does
-    not. A term that is not an object declares no names and the question does not arise. -/
+    One name parts the halves, and it is a **declared and absent** one: `req` with no stand-in
+    must be present for both and `optional` may be absent for both, while a slot carrying a
+    stand-in must be written and reads to that stand-in, so `keysOk` requires the name and
+    `reqPresentT` does not. An **undeclared** name no longer parts them: a body with no open
+    block refuses it on both halves, and `unionOk` already asks for that through `isOpenObject`,
+    where the `drop` policy used to slip past. A term that is not an object declares no names and
+    the question does not arise. -/
 def objectNamesAgree : Term → Bool
-  | .object b =>
-      (match b.rest with | .refuse => true | _ => false) &&
-      decide (∀ k : {k // k ∈ b.fields}, Field.presenceAgrees (b.at k) = true)
+  | .object b => decide (∀ k : {k // k ∈ b.fields}, ObjectSlot.presenceAgrees (b.at k) = true)
   | _ => true
 
 /-- **The certificate a union must carry for its admission to be the join of its options'.**
@@ -158,12 +152,10 @@ def objectNamesAgree : Term → Bool
     No *open* object. `keysOk` refuses a name the object does not declare, and an open object
     holds that name through its rest, so a union carrying one refuses an input that option admits.
 
-    Every object option's two halves agree about names. This is the same sentence one half over,
-    twice. A `drop` object skips an undeclared name on the read side, and `keysOk` refuses that
-    name just as it does the one an open object holds; `Rest.isOpen` is `false` at `drop`, so the
-    second condition does not catch it. A `fallback` field reads to its stand-in when its name is
-    absent, and `keysOk` requires that name because the write side writes it. The write side needs
-    neither: `objAdmV` has no keep filter and `valPresentT` counts a `fallback` as present. -/
+    Every object option's two halves agree about names. A slot carrying a stand-in reads to that
+    stand-in when its name is absent, and `keysOk` requires that name because the write side
+    writes it. The write side needs neither: `objAdmV` has no keep filter and `valPresentT` counts
+    such a slot as present. -/
 def unionOk (os : List Term) : Bool :=
   orthAll os && os.all (fun t => !t.isOpenObject) && os.all objectNamesAgree
 
@@ -221,7 +213,7 @@ def Term.ofOptions : List Term → Term
 /-- …and the answer the meet gives at a union: the survivors, where both the options met and
     the survivors carry the certificate. The meet is the lattice's meet, and an uncertified
     union is not in the lattice, so the pair has no meet to state. Both sides are tested and
-    not one: `objRec` answers an OPEN object, so a certified list of options can meet to an
+    not one: a meet can answer an OPEN object, so a certified list of options can meet to an
     uncertified one. -/
 def Term.ofOptionsGuarded (os ts : List Term) : Option Term :=
   if unionOk os && unionOk ts then some (Term.ofOptions ts) else none
@@ -239,33 +231,22 @@ theorem Body.mem_shared_right {a b : Body} {k : Name} (h : k ∈ Body.shared a b
   (Finset.mem_filter.mp h).2
 
 /-- Whether every name one body requires is a name the other declares. **A bottom test only
-    against a factor that refuses the name on both halves**: a `codec` rest holds the name, and a
-    `drop` rest refuses it on the write side and skips it on the read side. So `objObj` reads the
-    rests first, and puts the pair to `Body.dropFits` before it consults this test. -/
+    against a factor that refuses the name on both halves**: an open block holds the name, so
+    `objObj` reads the two open blocks first and refuses the pair unless both are absent. -/
 def Body.reqShared (a b : Body) : Bool :=
-  decide (∀ k : {k // k ∈ a.fields}, Field.isReq (a.at k) = true → k.1 ∈ b.fields)
+  decide (∀ k : {k // k ∈ a.fields}, ObjectSlot.isReq (a.at k) = true → k.1 ∈ b.fields)
 
-/-- Whether a field carries a stand-in. -/
-def Field.isFallback : Field → Bool
-  | .fallback _ _ => true
+/-- Whether a slot carries a stand-in. -/
+def ObjectSlot.isFallback : ObjectSlot → Bool
+  | .req _ (some _) => true
   | _ => false
 
-/-- Whether every `fallback` name one body declares is a name the other declares too. The cell
+/-- Whether every stand-in name one body declares is a name the other declares too. The cell
     where it fails is the one that refuses: a stand-in name the partner does not declare is a name
     the write side must write and the partner refuses, so the pair is empty on the write side,
     while the read side reads the stand-in and needs no name at all. -/
 def Body.fbShared (a b : Body) : Bool :=
-  decide (∀ k : {k // k ∈ a.fields}, Field.isFallback (a.at k) = true → k.1 ∈ b.fields)
-
-/-- Whether a `drop` factor declares every name the other factor declares. The declared set is an
-    upper bound on the write side, where an undeclared name is refused, and a lower bound on the
-    read side under `drop`, where an undeclared name is skipped. The intersection is the meet of
-    two upper bounds and the join of two lower ones, so the two halves agree only where a `drop`
-    factor's declared set contains the other's. -/
-def Body.dropFits (a b : Body) : Bool :=
-  match a.rest with
-  | .drop => decide (∀ k ∈ b.fields, k ∈ a.fields)
-  | _ => true
+  decide (∀ k : {k // k ∈ a.fields}, ObjectSlot.isFallback (a.at k) = true → k.1 ∈ b.fields)
 
 /-- A list of answers, as one answer: `none` where any cell refused. Outside the recursion, so
     the rows below reach a list through `List.attach` and a `map` rather than through a mutual
@@ -995,82 +976,41 @@ theorem famList_isList {fpre : List (Term → Option Term)}
       | (simp only [famList, Option.some.injEq] at h; exact Or.inl h.symm)
       | exact absurd h (by simp [famList])
 
-/-- A field met with one term, the field's mark kept, with the TERM on the left. `Field.meetT`
-    is the same cell with the field on the left; the record∧object row needs this one. -/
-def fieldMeetT (f : Term → Option Term) : Field → Option Field
-  | .req t => (f t).map .req
-  | .optional t => (f t).map .optional
-  | .fallback _ _ => none
-
-/-- **A record against an object, with the RECORD as the left operand.** `f` is the meet at the
-    record's value term, so each declared field answers `meet x t` and not `meet t x`. -/
-def recObj (f : Term → Option Term) (b : Body) : Option Term :=
-  match b.rest with
-  | .codec t =>
-      if decide (∀ k : {k // k ∈ b.fields}, (fieldMeetT f (b.at k)).isSome = true) then
-        match f t with
-        | some r =>
-            if decide (∀ k : {k // k ∈ b.fields},
-                Field.isBottom ((fieldMeetT f (b.at k)).getD (.optional .never)) = false) then
-              some (.object (.mk b.fields
-                (fun k => (fieldMeetT f (b.at k)).getD (.optional .never)) (.codec r)))
-            else some .never
-        | none => none
-      else none
-  | _ => none
-
-def famRec (f : Term → Option Term) : Term → Option Term
-  | .record y => (f y).map .record
-  | .object b => recObj f b
-  | .opaq _ => none
-  | _ => some .never
-
-/-- **An object against a record, with the OBJECT as the left operand.** `gt k` is the meet at
-    the left body's field `k`, and `frest` the meet at its rest codec. -/
-def objRec (fs : Finset Name) (gt : {k // k ∈ fs} → Term → Option Field)
-    (frest : Option (Term → Option Term)) (x : Term) : Option Term :=
-  match frest with
-  | some fr =>
-      if decide (∀ k : {k // k ∈ fs}, (gt k x).isSome = true) then
-        match fr x with
-        | some r =>
-            if decide (∀ k : {k // k ∈ fs},
-                Field.isBottom ((gt k x).getD (.optional .never)) = false) then
-              some (.object (.mk fs (fun k => (gt k x).getD (.optional .never)) (.codec r)))
-            else some .never
-        | none => none
-      else none
-  | none => none
-
 /-- **Two objects.** The guards read the two bodies whole; only the shared names recurse, through
-    `g` at the left body's field. -/
-def objObj (a : Body) (g : {k // k ∈ a.fields} → Field → Option Field) (b : Body) : Option Term :=
-  match Rest.merge a.rest b.rest with
-  | some r =>
-      if Body.fbShared a b && Body.fbShared b a then
-        if Body.dropFits a b && Body.dropFits b a then
-          if Body.reqShared a b && Body.reqShared b a then
-            if decide (∀ k : {k // k ∈ Body.shared a b},
-                (g ⟨k.1, Body.mem_shared_left k.2⟩
-                   (b.at ⟨k.1, Body.mem_shared_right k.2⟩)).isSome = true) then
-              if decide (∀ k : {k // k ∈ Body.shared a b},
-                  Field.isBottom ((g ⟨k.1, Body.mem_shared_left k.2⟩
-                    (b.at ⟨k.1, Body.mem_shared_right k.2⟩)).getD (.optional .never)) = false) then
-                some (.object (.mk (Body.shared a b)
-                  (fun k => (g ⟨k.1, Body.mem_shared_left k.2⟩
-                    (b.at ⟨k.1, Body.mem_shared_right k.2⟩)).getD (.optional .never)) r))
-              else some .never
-            else none
-          else some .never
-        else none
-      else none
-  | none => none
+    `g` at the left body's slot.
 
-def famObj (a : Body) (g : {k // k ∈ a.fields} → Field → Option Field)
-    (gt : {k // k ∈ a.fields} → Term → Option Field)
-    (frest : Option (Term → Option Term)) : Term → Option Term
+    **Two open blocks refuse.** Where this read `Rest.merge`, a nine-cell table over three
+    policies, it now reads the two open blocks: an open factor holds an undeclared name through a
+    codec of its own, and the meet would have to hold it through both. One closed state replaced
+    the three, so the four closed cells are one cell and the five refusing cells are one refusal.
+
+    The record∧object rows went with the record constructor. A record is the object whose only
+    block is the open one, so this row answers that pair, and it answers it by refusing: a record
+    is open, and an open factor is what the first guard turns away. -/
+def objObj (a : Body) (g : {k // k ∈ a.fields} → ObjectSlot → Option ObjectSlot) (b : Body) :
+    Option Term :=
+  match a.wild, b.wild with
+  | none, none =>
+      if Body.fbShared a b && Body.fbShared b a then
+        if Body.reqShared a b && Body.reqShared b a then
+          if decide (∀ k : {k // k ∈ Body.shared a b},
+              (g ⟨k.1, Body.mem_shared_left k.2⟩
+                 (b.at ⟨k.1, Body.mem_shared_right k.2⟩)).isSome = true) then
+            if decide (∀ k : {k // k ∈ Body.shared a b},
+                ObjectSlot.isBottom ((g ⟨k.1, Body.mem_shared_left k.2⟩
+                  (b.at ⟨k.1, Body.mem_shared_right k.2⟩)).getD (.optional .never)) = false) then
+              some (.object (.mk (Body.shared a b)
+                (fun k => (g ⟨k.1, Body.mem_shared_left k.2⟩
+                  (b.at ⟨k.1, Body.mem_shared_right k.2⟩)).getD (.optional .never)) none))
+            else some .never
+          else none
+        else some .never
+      else none
+  | _, _ => none
+
+def famObj (a : Body) (g : {k // k ∈ a.fields} → ObjectSlot → Option ObjectSlot) :
+    Term → Option Term
   | .object b => objObj a g b
-  | .record x => objRec a.fields gt frest x
   | .opaq _ => none
   | _ => some .never
 
@@ -1096,14 +1036,12 @@ def Term.meet : Term → Term → Option Term
   | .literal k v, y => meetSRight (famLit k v) y
   | .set b, y => meetSRight (famSet b) y
   | .opaq l, y => meetSRight (famOpaq l) y
-  | .record x, y => meetSRight (famRec (Term.meet x)) y
   | .list pre sp suf, y =>
       meetSRight (famList (Term.meetSTs pre)
         (match sp with | none => none | some t => some (Term.meet t))
         (Term.meetSTs suf)) y
-  | .object (.mk fs f r), y =>
-      meetSRight (famObj (.mk fs f r) (fun k => Field.meet (f k)) (fun k => Field.meetT (f k))
-        (match r with | .codec t => some (Term.meet t) | _ => none)) y
+  | .object (.mk fs f w), y =>
+      meetSRight (famObj (.mk fs f w) (fun k => ObjectSlot.meet (f k))) y
 termination_by structural x _ => x
 def Term.meetSL : List Term → Term → List (Option Term)
   | [], _ => [] | x :: xs, y => Term.meet x y :: Term.meetSL xs y
@@ -1111,34 +1049,40 @@ termination_by structural xs _ => xs
 def Term.meetSTs : List Term → List (Term → Option Term)
   | [] => [] | t :: ts => Term.meet t :: Term.meetSTs ts
 termination_by structural ts => ts
-def Field.meet : Field → Field → Option Field
-  | .req x, .req y => (Term.meet x y).map .req
-  | .req x, .optional y => (Term.meet x y).map .req
-  | .optional x, .req y => (Term.meet x y).map .req
-  | .req x, .fallback y _ => (Term.meet x y).map .req
-  | .fallback x _, .req y => (Term.meet x y).map .req
+/-- **The slot table, and the two cells that refuse.** Nine rows over three marks became seven
+    over two: the stand-in rides on `req` now, so the cells that used to sit at a `fallback`
+    constructor sit at `req`'s `some`. What each cell answers did not change.
+
+    A meet that answers answers at `req` with no stand-in. The stand-in is dropped rather than
+    carried, because carrying it would need the two to agree and the two cells below are exactly
+    where they cannot be asked to. -/
+def ObjectSlot.meet : ObjectSlot → ObjectSlot → Option ObjectSlot
+  -- a stand-in on both sides meets whenever the two values are equal, and `Value` has no
+  -- `DecidableEq` in this tree, so the cell refuses rather than guessing
+  | .req _ (some _), .req _ (some _) => none
+  -- a stand-in against `optional` agrees about presence and parts on what the two read at a map
+  -- omitting the name, and no mark states that
+  | .req _ (some _), .optional _ => none
+  | .optional _, .req _ (some _) => none
+  | .req x _, .req y _ => (Term.meet x y).map (.req · none)
+  | .req x _, .optional y => (Term.meet x y).map (.req · none)
+  | .optional x, .req y _ => (Term.meet x y).map (.req · none)
   | .optional x, .optional y => (Term.meet x y).map .optional
-  | .optional _, .fallback _ _ => none
-  | .fallback _ _, .optional _ => none
-  | .fallback _ _, .fallback _ _ => none
-termination_by structural f _ => f
-def Field.meetT : Field → Term → Option Field
-  | .req x, y => (Term.meet x y).map .req
-  | .optional x, y => (Term.meet x y).map .optional
-  | .fallback _ _, _ => none
 termination_by structural f _ => f
 end
 
-/-- **`optional` against a `fallback` refuses, in both orientations.** They agree on presence and
-    part on what they read at a map omitting the name, so the pair shares attributes it reads two
-    ways and no mark states that. `docs/defects.md` carries the pair. -/
-example : Field.meet (.optional .string) (.fallback .string (.str "d")) = none := by rfl
+/-- **`optional` against a slot with a stand-in refuses, in both orientations.** They agree on
+    presence and part on what they read at a map omitting the name, so the pair shares attributes
+    it reads two ways and no mark states that. `docs/defects.md` carries the pair. -/
+example : ObjectSlot.meet (.optional .string) (.req .string (some (.str "d"))) = none := by rfl
 
-example : Field.meet (.fallback .string (.str "d")) (.optional .string) = none := by rfl
+example : ObjectSlot.meet (.req .string (some (.str "d"))) (.optional .string) = none := by rfl
 
-/-- **Two `fallback` fields refuse, and that is a defect and not a rule.** They meet at the same
-    mark whenever their stand-ins agree, and `Value` has no `DecidableEq` in this tree. -/
-example : Field.meet (.fallback .string (.str "d")) (.fallback .string (.str "d")) = none := by rfl
+/-- **Two slots carrying a stand-in refuse, and that is a defect and not a rule.** They meet at
+    the same mark whenever their stand-ins agree, and `Value` has no `DecidableEq` in this
+    tree. -/
+example : ObjectSlot.meet (.req .string (some (.str "d"))) (.req .string (some (.str "d"))) = none := by
+  rfl
 
 /-! ## What the rows answer
 
@@ -1221,121 +1165,100 @@ example : Adm (.set .decimal) (.strSet ⟨{"1"}, Finset.singleton_nonempty _⟩)
 
 /-- **An open factor refuses no name, so the required-name test is not a bottom test against
     one.** The left body requires `x` and the right does not declare it, which the required-name
-    test reads as a refusal; the right body's rest holds `x` instead. The two examples below are
-    the value both admit, so the pair shares a value and the answer is the refusal. -/
+    test reads as a refusal; the right body's open block holds `x` instead. The two examples below
+    are the value both admit, so the pair shares a value and the answer is the refusal. -/
 example :
     Term.meet
-        (.object (.mk {"x"} (fun _ => .req .string) (.codec .string)))
-        (.object (.mk {"y"} (fun _ => .optional .string) (.codec .string)))
+        (.object (.mk {"x"} (fun _ => .req .string none) (some (.any, .string))))
+        (.object (.mk {"y"} (fun _ => .optional .string) (some (.any, .string))))
       = none := by rfl
 
-/-- The left body admits `{x := "1"}` through its declared field… -/
-example : Adm (.object (.mk {"x"} (fun _ => .req .string) (.codec .string)))
+/-- The left body admits `{x := "1"}` through its declared slot… -/
+example : Adm (.object (.mk {"x"} (fun _ => .req .string none) (some (.any, .string))))
     (.map {"x"} (fun _ => .str "1")) = true := by
   simp [Adm, AdmBody, valPresentT, objAdmV, entryP, MapOf.at, AdmField]
 
-/-- …and the right body admits it through its rest, at a name it does not declare. -/
-example : Adm (.object (.mk {"y"} (fun _ => .optional .string) (.codec .string)))
+/-- …and the right body admits it through its open block, at a name it does not declare. -/
+example : Adm (.object (.mk {"y"} (fun _ => .optional .string) (some (.any, .string))))
     (.map {"x"} (fun _ => .str "1")) = true := by
-  simp [Adm, AdmBody, valPresentT, objAdmV, entryP, MapOf.at, AdmField, AdmRest]
+  simp [Adm, AdmBody, valPresentT, objAdmV, entryP, MapOf.at, AdmField, AdmWild]
   apply decide_eq_true
   intro k
   rw [if_neg (by have hk := k.2; simp only [Finset.mem_singleton] at hk; simp [hk])]
 
 /-! ### The presence table
 
-Nine cells, one per pair of marks, and the two an unshared name answers. Each is the join of the
-two presence bits, and the term is the meet of the terms. -/
+Seven cells, and the two an unshared name answers. Each is the join of the two presence bits, and
+the term is the meet of the terms. -/
 
-/-- `req` against `req`, `optional` and `fallback`: the name must be present for one factor, so it
-    must be present for the meet, and a `fallback`'s stand-in never answers under it. -/
-example : Field.meet (.req .string) (.req .string) = some (.req .string) := by rfl
+/-- `req` against `req` and `optional`, with a stand-in and without: the name must be present for
+    one factor, so it must be present for the meet, and a stand-in never answers under it. -/
+example : ObjectSlot.meet (.req .string none) (.req .string none) = some (.req .string none) := by rfl
 
-example : Field.meet (.req .string) (.optional .string) = some (.req .string) := by rfl
+example : ObjectSlot.meet (.req .string none) (.optional .string) = some (.req .string none) := by rfl
 
-example : Field.meet (.optional .string) (.req .string) = some (.req .string) := by rfl
+example : ObjectSlot.meet (.optional .string) (.req .string none) = some (.req .string none) := by rfl
 
-example : Field.meet (.req .string) (.fallback .string (.str "d")) = some (.req .string) := by rfl
+example : ObjectSlot.meet (.req .string none) (.req .string (some (.str "d")))
+    = some (.req .string none) := by rfl
 
-example : Field.meet (.fallback .string (.str "d")) (.req .string) = some (.req .string) := by rfl
+example : ObjectSlot.meet (.req .string (some (.str "d"))) (.req .string none)
+    = some (.req .string none) := by rfl
 
 /-- `optional` against `optional` forces neither half… -/
-example : Field.meet (.optional .string) (.optional .string) = some (.optional .string) := by rfl
+example : ObjectSlot.meet (.optional .string) (.optional .string) = some (.optional .string) := by rfl
 
-/-- …and against a `fallback` it refuses, at every pair of terms, because the two read an absent
-    name apart. -/
-example : Field.meet (.optional .string) (.fallback .string (.str "d")) = none := by
-  simp [Field.meet]
+/-- …and against a slot carrying a stand-in it refuses, at every pair of terms, because the two
+    read an absent name apart. -/
+example : ObjectSlot.meet (.optional .string) (.req .string (some (.str "d"))) = none := by
+  simp [ObjectSlot.meet]
 
-example : Field.meet (.fallback .string (.str "d")) (.optional .string) = none := by
-  simp [Field.meet]
+example : ObjectSlot.meet (.req .string (some (.str "d"))) (.optional .string) = none := by
+  simp [ObjectSlot.meet]
 
-/-- A `req` field over the bottom is still the bottom and not a refusal: both halves force the
+/-- A `req` slot over the bottom is still the bottom and not a refusal: both halves force the
     name present, so both agree that nothing satisfies the object. -/
-example : Field.meet (.req .string) (.req .boolean) = some (.req .never) := by rfl
+example : ObjectSlot.meet (.req .string none) (.req .boolean none) = some (.req .never none) := by rfl
 
 /-- Two stand-ins refuse, even these two, which are equal. `Value` has no `DecidableEq` here, so
     the row cannot ask; `docs/defects.md` carries it. -/
-example : Field.meet (.fallback .string (.str "d")) (.fallback .string (.str "d")) = none := by
-  simp [Field.meet]
+example : ObjectSlot.meet (.req .string (some (.str "d"))) (.req .string (some (.str "d"))) = none := by
+  simp [ObjectSlot.meet]
 
-/-- An unshared `req` name under a closed rest is the bottom: it must be written and the partner
+/-- An unshared `req` name in a closed body is the bottom: it must be written and the partner
     refuses it, and on the read side the partner refuses it too. -/
 example : Term.meet
-    (.object (.mk {"x"} (fun _ => .req .string) .refuse))
-    (.object (.mk ∅ (fun _ => .optional .never) .refuse)) = some .never := by rfl
+    (.object (.mk {"x"} (fun _ => .req .string none) none))
+    (.object (.mk ∅ (fun _ => .optional .never) none)) = some .never := by rfl
 
-/-- **…and an unshared `fallback` name refuses**, because the two halves part there. The write
+/-- **…and an unshared stand-in name refuses**, because the two halves part there. The write
     side must write the name and the partner refuses it, so nothing is written; the read side
     needs no name at all and both factors read the map that omits it. -/
 example : Term.meet
-    (.object (.mk {"x"} (fun _ => .fallback .string (.str "d")) .refuse))
-    (.object (.mk ∅ (fun _ => .optional .never) .refuse)) = none := by rfl
+    (.object (.mk {"x"} (fun _ => .req .string (some (.str "d"))) none))
+    (.object (.mk ∅ (fun _ => .optional .never) none)) = none := by rfl
 
-/-- **`drop` skips an undeclared name on the read side, so the declared set bounds the read from
-    below.** These two bodies declare one name each, and the intersection declares neither. On the
-    write side each factor refuses a map carrying the other's name and the intersection refuses it
-    too, so the write side is right. On the read side each factor skips the name it does not
-    declare, so each reads `{x := true}` — and the intersection, declaring nothing, reads every
-    map, where the left factor refuses that one. No object states both halves and the pair
-    refuses. -/
+/-- Two closed factors keep the intersection. A body with no open block reads an undeclared name
+    the way it writes one, so the declared set is an upper bound on both halves and the two
+    agree. -/
 example : Term.meet
-    (.object (.mk {"x"} (fun _ => .optional .string) .drop))
-    (.object (.mk {"y"} (fun _ => .optional .string) .drop)) = none := by rfl
-
-/-- The same pair at `req`, where the answer was the bottom: the required-name test reads a name
-    the other body does not declare as a refusal, and under `drop` the other body skips it. -/
-example : Term.meet
-    (.object (.mk {"x"} (fun _ => .req .string) .drop))
-    (.object (.mk {"y"} (fun _ => .req .string) .drop)) = none := by rfl
-
-/-- …and the mirror, where the meet refuses what both factors read. The `drop` factor skips `y`
-    and the `refuse` factor reads it through its own field, so both admit `{y := "1"}`; the
-    intersection declares nothing and the merged `refuse` refuses it. -/
-example : Term.meet
-    (.object (.mk ∅ (fun _ => .optional .never) .drop))
-    (.object (.mk {"y"} (fun _ => .optional .string) .refuse)) = none := by rfl
-
-/-- Two `refuse` factors keep the intersection. `refuse` reads an undeclared name the way it
-    writes one, so the declared set is an upper bound on both halves and the two agree. -/
-example : Term.meet
-    (.object (.mk {"x"} (fun _ => .optional .string) .refuse))
-    (.object (.mk {"y"} (fun _ => .optional .string) .refuse))
-    = some (.object (.mk (Body.shared (.mk {"x"} (fun _ => .optional .string) .refuse)
-                                      (.mk {"y"} (fun _ => .optional .string) .refuse))
-        (fun k => (Field.meet
-            ((Body.mk {"x"} (fun _ => .optional .string) .refuse).at
+    (.object (.mk {"x"} (fun _ => .optional .string) none))
+    (.object (.mk {"y"} (fun _ => .optional .string) none))
+    = some (.object (.mk (Body.shared (.mk {"x"} (fun _ => .optional .string) none)
+                                      (.mk {"y"} (fun _ => .optional .string) none))
+        (fun k => (ObjectSlot.meet
+            ((Body.mk {"x"} (fun _ => .optional .string) none).at
               ⟨k.1, Body.mem_shared_left k.2⟩)
-            ((Body.mk {"y"} (fun _ => .optional .string) .refuse).at
+            ((Body.mk {"y"} (fun _ => .optional .string) none).at
               ⟨k.1, Body.mem_shared_right k.2⟩)).getD (.optional .never))
-        .refuse)) := by rfl
+        none)) := by rfl
 
 /-- **An uncertified union has no meet, and there are two ways to be uncertified.** These two
     options declare the same name with the same mark and no literal, so nothing tells them
     apart: both admit a map carrying `a` *structurally*, `selOptV` finds two admitters and
     refuses, and the union admits less than the join of its options. -/
-example : unionOk [.object (.mk {"a"} (fun _ => .req .string) .refuse),
-    .object (.mk {"a"} (fun _ => .req .boolean) .refuse)] = false := by
+example : unionOk [.object (.mk {"a"} (fun _ => .req .string none) none),
+    .object (.mk {"a"} (fun _ => .req .boolean none) none)] = false := by
   simp [unionOk, orthAll, Orth, Orth1, OrthM, OrthS, OrthL, occV, occA, occOnly, Slot.all,
     Member.all, reqNotDeclared, Body.spec, altsOfField, specOf, litDisjAt, altsDisj, MapOf.at,
     Finset.mem_singleton]
@@ -1358,34 +1281,31 @@ example : Term.meet
     (.refine .string (.members .string ⟨{"1"}, Finset.singleton_nonempty _⟩)) .null
       = some .never := by rfl
 
-/-- **A `drop` object is the third way, and it is the open object's defect one half over.** The
-    rest is closed, so the value side refuses an undeclared name and `keysOk` is that option's
-    write row. The read side skips the name instead, so the option reads a map `keysOk` refuses,
-    and a singleton union is enough to show it. -/
-example : unionOk [.object (.mk {"x"} (fun _ => .optional .string) .drop)] = false := by
-  simp [unionOk, orthAll, Term.isOpenObject, Rest.isOpen, objectNamesAgree]
+/-- A closed body with no stand-in carries the certificate. -/
+example : unionOk [.object (.mk {"x"} (fun _ => .optional .string) none)] = true := by
+  simp [unionOk, orthAll, Term.isOpenObject, objectNamesAgree,
+    ObjectSlot.presenceAgrees, MapOf.at]
 
-/-- …and the same body at `refuse` carries the certificate. -/
-example : unionOk [.object (.mk {"x"} (fun _ => .optional .string) .refuse)] = true := by
-  simp [unionOk, orthAll, Term.isOpenObject, Rest.isOpen, objectNamesAgree,
-    Field.presenceAgrees, MapOf.at]
+/-- **A stand-in is the third way, and it is about a declared name rather than an undeclared
+    one.** The slot reads to its stand-in when the name is absent, so the option reads a map that
+    omits the name, while `keysOk` requires every non-`optional` name to be present because the
+    write side writes it. The body is closed here, so this is not the row below.
 
-/-- **A `fallback` field is the fourth way, and it is about a declared name rather than an
-    undeclared one.** The field reads to its stand-in when the name is absent, so the option
-    reads a map that omits the name, while `keysOk` requires every non-`optional` name to be
-    present because the write side writes it. The rest is `refuse` here, so this is not the row
-    above. -/
-example : unionOk [.object (.mk {"x"} (fun _ => .fallback .string (.str "d")) .refuse)]
+    The `drop` object used to stand here as a fourth way, the open object's defect one half over.
+    It is gone with the policy: a body has one closed state now, and that state refuses an
+    undeclared name on both halves. -/
+example : unionOk [.object (.mk {"x"} (fun _ => .req .string (some (.str "d"))) none)]
     = false := by
-  simp [unionOk, orthAll, Term.isOpenObject, Rest.isOpen, objectNamesAgree,
-    Field.presenceAgrees, MapOf.at]
+  simp [unionOk, orthAll, Term.isOpenObject, objectNamesAgree,
+    ObjectSlot.presenceAgrees, MapOf.at]
 
-/-- …and an **open** object is the second way, on its own. Its rest holds a name it does not
+/-- …and an **open** object is the second way, on its own. Its open block holds a name it does not
     declare, while an object option is admitted by `keysOk`, which refuses that name. So one
     such option makes the union refuse a value the option admits, and a singleton union is
     enough. -/
-example : unionOk [.object (.mk {"a"} (fun _ => .req .string) (.codec .string))] = false := by
-  simp [unionOk, orthAll, Term.isOpenObject, Rest.isOpen]
+example : unionOk [.object (.mk {"a"} (fun _ => .req .string none) (some (.any, .string)))]
+    = false := by
+  simp [unionOk, orthAll, Term.isOpenObject]
 
 /-! ### Why the write-agreement condition is conditional
 
@@ -1765,40 +1685,31 @@ theorem Adm_opaq_and (l l' : Bool) (v : Value) :
     have ht := opaq_e_mono _ v a hf
     cases l <;> cases l' <;> simp [hf, ht]
 
-/-- A rest policy that merges is closed on both sides and closed in the answer, so an
-    undeclared name is refused by all three. -/
-theorem Rest.merge_admRest {p q r : Rest} (h : Rest.merge p q = some r) :
-    AdmRest p = none ∧ AdmRest q = none ∧ AdmRest r = none := by
-  cases p <;> cases q <;> simp only [Rest.merge, Option.some.injEq, reduceCtorEq] at h <;>
-    subst h <;> exact ⟨rfl, rfl, rfl⟩
-
 /-- A name is shared exactly when both bodies declare it. -/
 theorem mem_shared_iff {a b : Body} {k : Name} :
     k ∈ Body.shared a b ↔ k ∈ a.fields ∧ k ∈ b.fields := Finset.mem_filter
 
 /-- `valPresentT` in the form the object row uses: a declared name that must be present is
     present. -/
-theorem valPresentT_req (fields : Finset Name) (fld : {k // k ∈ fields} → Field)
+theorem valPresentT_req (fields : Finset Name) (fld : {k // k ∈ fields} → ObjectSlot)
     (keys : Finset Name) :
     valPresentT fields fld keys
-      = decide (∀ k : {k // k ∈ fields}, Field.isReq (fld k) = true → k.1 ∈ keys) := by
+      = decide (∀ k : {k // k ∈ fields}, ObjectSlot.isReq (fld k) = true → k.1 ∈ keys) := by
   unfold valPresentT
   refine decide_eq_decide.mpr ⟨fun hh k hreq => ?_, fun hh k => ?_⟩
   · have hk := hh k
     cases hf : fld k with
-    | req t => rw [hf] at hk; exact of_decide_eq_true hk
-    | fallback t d => rw [hf] at hk; exact of_decide_eq_true hk
-    | optional t => rw [hf] at hreq; exact absurd hreq (by simp [Field.isReq])
+    | req t m => rw [hf] at hk; exact of_decide_eq_true hk
+    | optional t => rw [hf] at hreq; exact absurd hreq (by simp [ObjectSlot.isReq])
   · cases hf : fld k with
     | optional t => rfl
-    | req t => exact decide_eq_true (hh k (by rw [hf]; rfl))
-    | fallback t d => exact decide_eq_true (hh k (by rw [hf]; rfl))
+    | req t m => exact decide_eq_true (hh k (by rw [hf]; rfl))
 
 
 /-- A declared name that must be present is present, read off the admission. -/
 theorem mem_keys_of_isReq {c : Body} {keys : Finset Name}
     (hv : valPresentT c.fields c.at keys = true) {k : Name} (hc : k ∈ c.fields)
-    (hreq : Field.isReq (c.at ⟨k, hc⟩) = true) : k ∈ keys := by
+    (hreq : ObjectSlot.isReq (c.at ⟨k, hc⟩) = true) : k ∈ keys := by
   rw [valPresentT_req] at hv
   exact of_decide_eq_true hv ⟨k, hc⟩ hreq
 
@@ -1806,14 +1717,14 @@ theorem mem_keys_of_isReq {c : Body} {keys : Finset Name}
 theorem AdmBody_map (c : Body) (keys : Finset Name) (g : {k // k ∈ keys} → Value) :
     AdmBody c (.map keys g)
       = (valPresentT c.fields c.at keys
-         && objAdmV ⟨c.fields, fun k => AdmField (c.at k)⟩ (AdmRest c.rest) keys g) := by
+         && objAdmV ⟨c.fields, fun k => AdmField (c.at k)⟩ (AdmWild c.wild) keys g) := by
   cases c; rfl
 
 /-- A body admits nothing that is not a map. -/
 theorem AdmBody_of_not_map {c : Body} {v : Value} (h : ∀ keys g, v ≠ .map keys g) :
     AdmBody c v = false := by
   cases c with
-  | mk fields fld rest =>
+  | mk fields fld wild =>
     cases v with
     | map keys g => exact absurd rfl (h keys g)
     | _ => rfl
@@ -1952,7 +1863,7 @@ theorem Adm_refineOf (z : Term) (p : Pred) (v : Value) :
 /-- **The required-name test is sound once the partner is closed.** If both bodies admit one
     map, every name the left requires is a name the right declares: the value carries it, and a
     closed body refuses a name it does not declare. -/
-theorem reqShared_of_adm {a b : Body} (hrb : AdmRest b.rest = none)
+theorem reqShared_of_adm {a b : Body} (hrb : AdmWild b.wild = none)
     {keys : Finset Name} {g : {k // k ∈ keys} → Value}
     (hA : AdmBody a (.map keys g) = true) (hB : AdmBody b (.map keys g) = true) :
     Body.reqShared a b = true := by
@@ -1969,20 +1880,19 @@ theorem reqShared_of_adm {a b : Body} (hrb : AdmRest b.rest = none)
 
 
 /-- A field that admits nothing at a name that must be present is a field that must be present. -/
-theorem isReq_of_isBottom {f : Field} (h : Field.isBottom f = true) : Field.isReq f = true := by
-  cases f <;> simp only [Field.isBottom, Field.isReq, Bool.false_eq_true] at h ⊢
+theorem isReq_of_isBottom {f : ObjectSlot} (h : ObjectSlot.isBottom f = true) : ObjectSlot.isReq f = true := by
+  cases f <;> simp only [ObjectSlot.isBottom, ObjectSlot.isReq, Bool.false_eq_true] at h ⊢
 
 /-- …and it admits no value at all. -/
-theorem AdmField_of_isBottom {f : Field} (h : Field.isBottom f = true) (w : Value) :
+theorem AdmField_of_isBottom {f : ObjectSlot} (h : ObjectSlot.isBottom f = true) (w : Value) :
     AdmField f w = false := by
   cases f with
-  | req t => rw [show t = .never from eq_never_of_isNever h]; rfl
-  | fallback t d => rw [show t = .never from eq_never_of_isNever h]; rfl
-  | optional t => exact absurd h (by simp [Field.isBottom])
+  | req t m => rw [show t = .never from eq_never_of_isNever h]; cases m <;> rfl
+  | optional t => exact absurd h (by simp [ObjectSlot.isBottom])
 
 /-- A present name that the body declares goes through that name's field. -/
 theorem objAdmV_row {c : Body} {keys : Finset Name} {g : {k // k ∈ keys} → Value}
-    (hB : objAdmV ⟨c.fields, fun k => AdmField (c.at k)⟩ (AdmRest c.rest) keys g = true)
+    (hB : objAdmV ⟨c.fields, fun k => AdmField (c.at k)⟩ (AdmWild c.wild) keys g = true)
     {k : Name} (hk : k ∈ keys) (hc : k ∈ c.fields) :
     AdmField (c.at ⟨k, hc⟩) (g ⟨k, hk⟩) = true := by
   unfold objAdmV at hB
@@ -1990,7 +1900,7 @@ theorem objAdmV_row {c : Body} {keys : Finset Name} {g : {k // k ∈ keys} → V
   rwa [entryP, MapOf.at, dif_pos hc] at hh
 
 /-- Every present name is declared, where the rest refuses an undeclared one. -/
-theorem mem_fields_of_adm {b : Body} (hr : AdmRest b.rest = none)
+theorem mem_fields_of_adm {b : Body} (hr : AdmWild b.wild = none)
     {keys : Finset Name} {g : {k // k ∈ keys} → Value}
     (h : AdmBody b (.map keys g) = true) : ∀ k ∈ keys, k ∈ b.fields := by
   rw [AdmBody_map, Bool.and_eq_true] at h
@@ -2003,17 +1913,16 @@ theorem mem_fields_of_adm {b : Body} (hr : AdmRest b.rest = none)
   exact absurd hh (by simp)
 
 /-- A field's row carries its literal alternatives, where it has any. -/
-theorem altsOkV_of_AdmField {f : Field} {v : Value} (h : AdmField f v = true) :
+theorem altsOkV_of_AdmField {f : ObjectSlot} {v : Value} (h : AdmField f v = true) :
     altsOkV (altsOfField f) v = true := by
   cases f with
-  | req t => cases t <;> first | rfl | exact h
+  | req t m => cases t <;> cases m <;> first | rfl | exact h
   | optional t => cases t <;> first | rfl | exact h
-  | fallback t d => cases t <;> first | rfl | exact h
 
-/-- **A closed object's structural test is its row.** Where the rest refuses an undeclared
-    name, a value the body admits passes `keysOk` and `literalsOk`. An OPEN object is the case
-    this fails at, which is why `unionOk` excludes one. -/
-theorem structural_of_AdmBody {b : Body} (hr : AdmRest b.rest = none)
+/-- **A closed object's structural test is its row.** Where the body declares no open block and
+    so refuses an undeclared name, a value the body admits passes `keysOk` and `literalsOk`. An
+    OPEN object is the case this fails at, which is why `unionOk` excludes one. -/
+theorem structural_of_AdmBody {b : Body} (hr : AdmWild b.wild = none)
     {keys : Finset Name} {g : {k // k ∈ keys} → Value}
     (h : AdmBody b (.map keys g) = true) :
     (keysOk b.spec keys && literalsOk b.spec keys g) = true := by
@@ -2060,14 +1969,13 @@ theorem selOptV_eq_AdmAny {os : List Term} (hc : unionOk os = true) (v : Value) 
     intro t ht h
     cases t with
     | object b =>
-      have hr : AdmRest b.rest = none := by
-        cases hrest : b.rest with
-        | drop => rfl
-        | refuse => rfl
-        | codec _ =>
-          exact absurd (hclosed _ ht) (by simp [Term.isOpenObject, hrest, Rest.isOpen])
+      have hr : AdmWild b.wild = none := by
+        cases hwild : b.wild with
+        | none => rfl
+        | some _ =>
+          exact absurd (hclosed _ ht) (by simp [Term.isOpenObject, hwild])
       cases b with
-      | mk fields fld rest =>
+      | mk fields fld wild =>
         cases v with
         | map keys g => simpa only [admitOptV, specOf] using structural_of_AdmBody hr h
         | _ => exact absurd h (by simp [Adm, AdmBody])
@@ -2105,31 +2013,31 @@ theorem selOptV_eq_AdmAny {os : List Term} (hc : unionOk os = true) (v : Value) 
         exact absurd hat (by rw [hao]; simp)
 /-! ### The same equation on the read side
 
-The value side needs only `AdmRest`, which is `none` at `drop` and at `refuse` alike. The read
-side needs the certificate's third conjunct twice over, and the two lemmas below are where it is
-spent: `mem_fields_of_admA` at the undeclared name, `mem_keys_of_isReqA` at the declared and
-absent one. -/
+The value side needs only `AdmWild`, which is `none` exactly where the body declares no open
+block. The read side needs that same fact and the certificate's third conjunct as well, and the
+two lemmas below are where each is spent: `mem_fields_of_admA` at the undeclared name,
+`mem_keys_of_isReqA` at the declared and absent one. -/
 
 /-- `AdmABody` at a map, unfolded. -/
 theorem AdmABody_map {b : Body} {keys : Finset Name} {g : {k // k ∈ keys} → Attr} :
     AdmABody b (.m keys g)
       = (reqPresentT b.fields b.at keys &&
-         objAdmA ⟨b.fields, fun k => AdmAField (b.at k)⟩ (AdmARest b.rest)
-           (keepT b.rest b.fields) keys g) := by
+         objAdmA ⟨b.fields, fun k => AdmAField (b.at k)⟩ (AdmAWild b.wild) keys g) := by
   cases b; rfl
 
 /-- A field's row carries its literal alternatives on the read side, where it has any —
     `altsOkV_of_AdmField`'s twin, through `ExactA` because `altsOkA` asks the codec. -/
-theorem altsOkA_of_AdmAField {f : Field} {a : Attr} (h : AdmAField f a = true) :
+theorem altsOkA_of_AdmAField {f : ObjectSlot} {a : Attr} (h : AdmAField f a = true) :
     altsOkA (altsOfField f) a = true := by
   cases f with
-  | req t => cases t <;> first | rfl | exact (AdmA_exact _ a).mp h
+  | req t m => cases t <;> cases m <;> first | rfl | exact (AdmA_exact _ a).mp h
   | optional t => cases t <;> first | rfl | exact (AdmA_exact _ a).mp h
-  | fallback t d => cases t <;> first | rfl | exact (AdmA_exact _ a).mp h
 
-/-- Every present name is declared, where the rest REFUSES an undeclared one. `drop` skips it,
-    and a name that is skipped is read, which is why the certificate excludes a `drop` option. -/
-theorem mem_fields_of_admA {b : Body} (hr : b.rest = .refuse)
+/-- Every present name is declared, where the body declares no open block and so refuses an
+    undeclared one. The read side used to need this against `drop` as well, which skips such a
+    name rather than refusing it, and a name that is skipped is read. `drop` is gone, so the one
+    closed state answers both halves the same way. -/
+theorem mem_fields_of_admA {b : Body} (hr : b.wild = none)
     {keys : Finset Name} {g : {k // k ∈ keys} → Attr}
     (h : AdmABody b (.m keys g) = true) : ∀ k ∈ keys, k ∈ b.fields := by
   rw [AdmABody_map, Bool.and_eq_true] at h
@@ -2137,61 +2045,60 @@ theorem mem_fields_of_admA {b : Body} (hr : b.rest = .refuse)
   unfold objAdmA at h2
   intro k hk
   refine Decidable.byContradiction (fun hnb => ?_)
-  have hh := of_decide_eq_true h2 ⟨k, hk⟩ (by rw [hr]; rfl)
+  have hh := of_decide_eq_true h2 ⟨k, hk⟩
   rw [entryPA, MapOf.at, dif_neg hnb, hr] at hh
-  exact absurd hh (by simp [AdmARest])
+  exact absurd hh (by simp [AdmAWild])
 
-/-- A declared name that must be present on both halves is present. `fallback` is where the two
+/-- A declared name that must be present on both halves is present. A stand-in is where the two
     halves part, and the certificate excludes it for that. -/
 theorem mem_keys_of_isReqA {b : Body} {keys : Finset Name}
-    (hnf : ∀ k : {k // k ∈ b.fields}, Field.presenceAgrees (b.at k) = true)
+    (hnf : ∀ k : {k // k ∈ b.fields}, ObjectSlot.presenceAgrees (b.at k) = true)
     (hv : reqPresentT b.fields b.at keys = true) {k : Name} (hc : k ∈ b.fields)
-    (hreq : Field.isReq (b.at ⟨k, hc⟩) = true) : k ∈ keys := by
+    (hreq : ObjectSlot.isReq (b.at ⟨k, hc⟩) = true) : k ∈ keys := by
   have hh := of_decide_eq_true hv ⟨k, hc⟩
   cases hf : b.at ⟨k, hc⟩ with
-  | req t => rw [hf] at hh; exact of_decide_eq_true hh
-  | optional t => rw [hf] at hreq; exact absurd hreq (by simp [Field.isReq])
-  | fallback t d =>
-      have := hnf ⟨k, hc⟩
-      rw [hf] at this
-      exact absurd this (by simp [Field.presenceAgrees])
+  | req t m =>
+      cases m with
+      | none => rw [hf] at hh; exact of_decide_eq_true hh
+      | some d =>
+          have := hnf ⟨k, hc⟩
+          rw [hf] at this
+          exact absurd this (by simp [ObjectSlot.presenceAgrees])
+  | optional t => rw [hf] at hreq; exact absurd hreq (by simp [ObjectSlot.isReq])
 
-/-- One kept entry of the read-side object row — `objAdmV_row`'s twin, with the keep filter as a
-    hypothesis because `keepT` is the half the two sides do not share. -/
+/-- One entry of the read-side object row — `objAdmV_row`'s twin. It took a keep filter as a
+    hypothesis while `drop` made the two sides' filters differ; they do not differ now. -/
 theorem objAdmA_row {c : Body} {keys : Finset Name} {g : {k // k ∈ keys} → Attr}
-    (hB : objAdmA ⟨c.fields, fun k => AdmAField (c.at k)⟩ (AdmARest c.rest)
-            (keepT c.rest c.fields) keys g = true)
-    {k : Name} (hk : k ∈ keys) (hc : k ∈ c.fields)
-    (hkeep : keepT c.rest c.fields k = true) :
+    (hB : objAdmA ⟨c.fields, fun k => AdmAField (c.at k)⟩ (AdmAWild c.wild) keys g = true)
+    {k : Name} (hk : k ∈ keys) (hc : k ∈ c.fields) :
     AdmAField (c.at ⟨k, hc⟩) (g ⟨k, hk⟩) = true := by
   unfold objAdmA at hB
-  have hh := of_decide_eq_true hB ⟨k, hk⟩ hkeep
+  have hh := of_decide_eq_true hB ⟨k, hk⟩
   rwa [entryPA, MapOf.at, dif_pos hc] at hh
 
 /-- **An object option whose halves agree about names has its structural test for a read row.**
     `structural_of_AdmBody`'s twin, and it needs both halves of `objectNamesAgree` where the
     value side needs neither. -/
-theorem structural_of_AdmABody {b : Body} (hr : b.rest = .refuse)
-    (hnf : ∀ k : {k // k ∈ b.fields}, Field.presenceAgrees (b.at k) = true)
+theorem structural_of_AdmABody {b : Body} (hr : b.wild = none)
+    (hnf : ∀ k : {k // k ∈ b.fields}, ObjectSlot.presenceAgrees (b.at k) = true)
     {keys : Finset Name} {g : {k // k ∈ keys} → Attr}
     (h : AdmABody b (.m keys g) = true) :
     (keysOk b.spec keys && literalsOkA b.spec keys g) = true := by
   have hsub := mem_fields_of_admA hr h
   have h' := h
   rw [AdmABody_map, Bool.and_eq_true] at h'
-  have hkeepall : ∀ k, keepT b.rest b.fields k = true := fun _ => by rw [hr]; rfl
   cases hb : b with
-  | mk fields fld rest =>
+  | mk fields fld wild =>
     subst hb
     refine Bool.and_eq_true _ _ |>.mpr ⟨?_, ?_⟩
     · exact keysOk_of_names hsub (fun k hreq => mem_keys_of_isReqA hnf h'.1 k.2 hreq)
     · refine decide_eq_true (fun k => ?_)
       have hkf : k.1 ∈ fields := hsub k.1 k.2
       show litOkA _ k.1 (g k) = true
-      rw [litOkA, show (Body.spec (.mk fields fld rest)).at k.1
+      rw [litOkA, show (Body.spec (.mk fields fld wild)).at k.1
             = some ⟨_, altsOfField (fld ⟨k.1, hkf⟩)⟩ from by
           rw [Body.spec, MapOf.at, dif_pos hkf]]
-      exact altsOkA_of_AdmAField (objAdmA_row h'.2 k.2 hkf (hkeepall k.1))
+      exact altsOkA_of_AdmAField (objAdmA_row h'.2 k.2 hkf)
 
 /-- A list reads an attribute exactly when one of its terms does. -/
 theorem AdmAAny_iff : ∀ {os : List Term} {a : Attr},
@@ -2208,15 +2115,12 @@ theorem AdmAAny_iff : ∀ {os : List Term} {a : Attr},
         · exact Or.inl h
         · exact Or.inr ⟨u, hu', h⟩
 
-/-- The certificate's third conjunct, in the two forms the bridge takes. -/
+/-- The certificate's third conjunct, in the form the bridge takes. It carried the closedness of
+    the body as a second component while `drop` could pass `isOpenObject` and still part the two
+    halves; the bridge reads closedness off `isOpenObject` now. -/
 theorem namesAgree_parts {b : Body} (h : objectNamesAgree (.object b) = true) :
-    b.rest = .refuse ∧ ∀ k : {k // k ∈ b.fields}, Field.presenceAgrees (b.at k) = true := by
-  rw [objectNamesAgree, Bool.and_eq_true] at h
-  refine ⟨?_, of_decide_eq_true h.2⟩
-  cases hr : b.rest with
-  | refuse => rfl
-  | drop => rw [hr] at h; exact absurd h.1 (by simp)
-  | codec t => rw [hr] at h; exact absurd h.1 (by simp)
+    ∀ k : {k // k ∈ b.fields}, ObjectSlot.presenceAgrees (b.at k) = true :=
+  of_decide_eq_true h
 
 /-- **A certified union reads the join of its options'.** `selOptV_eq_AdmAny`'s twin. `selOptA`
     answers where exactly one option admits structurally; the certificate makes that at most one,
@@ -2228,7 +2132,11 @@ theorem selOptA_eq_AdmAAny {os : List Term} (hc : unionOk os = true) (a : Attr) 
     intro t ht h
     cases t with
     | object b =>
-      obtain ⟨hr, hnf⟩ := namesAgree_parts (hc.2 _ ht)
+      have hnf := namesAgree_parts (hc.2 _ ht)
+      have hr : b.wild = none := by
+        cases hwild : b.wild with
+        | none => rfl
+        | some _ => exact absurd (hc.1.2 _ ht) (by simp [Term.isOpenObject, hwild])
       cases a with
       | m keys g => simpa only [admitOptA, specOf] using structural_of_AdmABody hr hnf h
       | _ => exact absurd h (by cases b; simp [AdmA, AdmABody])
@@ -2385,7 +2293,6 @@ theorem Adm_meetSRight {x : Term} {fam : Term → Option Term} (hf : AdmFam x fa
   | .literal k lv, _, h, v => hf (.literal k lv) _ trivial h v
   | .set b, _, h, v => hf (.set b) _ trivial h v
   | .opaq l, _, h, v => hf (.opaq l) _ trivial h v
-  | .record c, _, h, v => hf (.record c) _ trivial h v
   | .list p q s, _, h, v => hf (.list p q s) _ trivial h v
   | .object b, _, h, v => hf (.object b) _ trivial h v
 termination_by structural y => y
@@ -2636,13 +2543,6 @@ theorem zipF_lift :
           | cons u us =>
               cases hv with
               | cons hh ht => exact .cons (fun w => hf u _ hh w) (ihs hfs' ht)
-
-/-- A record meets a record at the value term. -/
-theorem Adm_famRecTerm {x' : Term} {f : Term → Option Term} (hf : AdmSound x' f)
-    {y w : Term} (hw : f y = some w) (v : Value) :
-    Adm (.record w) v = (Adm (.record x') v && Adm (.record y) v) := by
-  have ihw := hf y w hw
-  cases v <;> simp only [Adm, Bool.and_self, decide_forall_and (fun k => ihw _)]
 
 /-- …and the zip companion is the plain map over the zip. -/
 theorem zipF_eq : ∀ (fs : List (Term → Option Term)) (us : List Term),
@@ -2934,14 +2834,14 @@ theorem Adm_famList {pre suf : List Term} {sp : Option Term}
 
 /-- The presence test reads the marks alone, so a field table with the body's marks has the
     body's test. -/
-theorem valPresentT_of_isReq {b : Body} {F : {k // k ∈ b.fields} → Field}
-    (hreq : ∀ k, Field.isReq (F k) = Field.isReq (b.at k)) (keys : Finset Name) :
+theorem valPresentT_of_isReq {b : Body} {F : {k // k ∈ b.fields} → ObjectSlot}
+    (hreq : ∀ k, ObjectSlot.isReq (F k) = ObjectSlot.isReq (b.at k)) (keys : Finset Name) :
     valPresentT b.fields F keys = valPresentT b.fields b.at keys := by
   rw [valPresentT_req, valPresentT_req]
   exact decide_eq_decide.mpr (forall_congr' fun k => by rw [hreq k])
 
 /-- Every present name goes through its field and the left operand's term alike. -/
-theorem objAdmV_of_left {b : Body} {x t r : Term} {F : {k // k ∈ b.fields} → Field}
+theorem objAdmV_of_left {b : Body} {x t r : Term} {F : {k // k ∈ b.fields} → ObjectSlot}
     (ihf : ∀ (k : {k // k ∈ b.fields}) (w : Value),
       AdmField (F k) w = (Adm x w && AdmField (b.at k) w))
     (iht : ∀ w, Adm r w = (Adm x w && Adm t w))
@@ -2956,168 +2856,29 @@ theorem objAdmV_of_left {b : Body} {x t r : Term} {F : {k // k ∈ b.fields} →
   · simp only [dif_neg hk]; exact iht (g k)
 
 /-- No declared field meets the left operand's term to the bottom at a value both admit. -/
-theorem isBottom_false_of_left {b : Body} {x : Term} {F : {k // k ∈ b.fields} → Field}
-    (hreq : ∀ k, Field.isReq (F k) = Field.isReq (b.at k))
+theorem isBottom_false_of_left {b : Body} {x : Term} {F : {k // k ∈ b.fields} → ObjectSlot}
+    (hreq : ∀ k, ObjectSlot.isReq (F k) = ObjectSlot.isReq (b.at k))
     (ihf : ∀ (k : {k // k ∈ b.fields}) (w : Value),
       AdmField (F k) w = (Adm x w && AdmField (b.at k) w))
     {keys : Finset Name} {g : {k // k ∈ keys} → Value}
     (hA : AdmBody b (.map keys g) = true)
     (hR : decide (∀ k : {k // k ∈ keys}, Adm x (g k) = true) = true) :
-    ∀ k, Field.isBottom (F k) = false := by
+    ∀ k, ObjectSlot.isBottom (F k) = false := by
   rw [AdmBody_map, Bool.and_eq_true] at hA
   intro k
   refine Bool.eq_false_iff.mpr (fun hbot => ?_)
-  have hreqk : Field.isReq (b.at k) = true := (hreq k) ▸ isReq_of_isBottom hbot
+  have hreqk : ObjectSlot.isReq (b.at k) = true := (hreq k) ▸ isReq_of_isBottom hbot
   have hk : k.1 ∈ keys := mem_keys_of_isReq hA.1 k.2 hreqk
   have hrow := objAdmV_row hA.2 hk k.2
   have hrec := of_decide_eq_true hR ⟨k.1, hk⟩
   have hi := ihf k (g ⟨k.1, hk⟩)
   rw [AdmField_of_isBottom hbot, hrow, hrec] at hi
   exact absurd hi (by simp)
-
-/-- A field met with one term carries two terms that meet. -/
-theorem AdmField_fieldMeetT {f : Term → Option Term} {fl fm : Field}
-    (h : fieldMeetT f fl = some fm) :
-    ∃ tx tz, f tx = some tz ∧ AdmField fl = Adm tx ∧ AdmField fm = Adm tz := by
-  cases fl <;> simp only [fieldMeetT, Option.map_eq_some_iff, reduceCtorEq] at h <;>
-    obtain ⟨tz, hz, rfl⟩ := h <;> exact ⟨_, tz, hz, rfl, rfl⟩
-
-/-- …and keeps the field's mark, because a term says nothing about presence. -/
-theorem isReq_fieldMeetT {f : Term → Option Term} {fl fm : Field}
-    (h : fieldMeetT f fl = some fm) : Field.isReq fm = Field.isReq fl := by
-  cases fl <;> simp only [fieldMeetT, Option.map_eq_some_iff, reduceCtorEq] at h <;>
-    obtain ⟨tz, hz, rfl⟩ := h <;> rfl
-
-/-- What a record against an object answers: the refusal at a rest that is not a codec, the
-    bottom where a declared field empties, and otherwise the object. -/
-theorem recObj_extract {f : Term → Option Term} {b : Body} {z : Term}
-    (h : recObj f b = some z) :
-    ∃ t r, b.rest = .codec t ∧ f t = some r ∧
-      (∀ k : {k // k ∈ b.fields}, (fieldMeetT f (b.at k)).isSome = true) ∧
-      ((z = .never ∧ ¬ (∀ k, Field.isBottom
-            ((fieldMeetT f (b.at k)).getD (.optional .never)) = false))
-       ∨ z = .object (.mk b.fields
-            (fun k => (fieldMeetT f (b.at k)).getD (.optional .never)) (.codec r))) := by
-  unfold recObj at h
-  split at h
-  next t ht =>
-    split at h
-    next hok =>
-      split at h
-      next r hmr =>
-        refine ⟨t, r, ht, hmr, of_decide_eq_true hok, ?_⟩
-        split at h
-        next _ => exact Or.inr (Option.some.inj h).symm
-        next hnb =>
-          exact Or.inl ⟨(Option.some.inj h).symm, fun hall => hnb (decide_eq_true hall)⟩
-      next => exact absurd h (by simp)
-    next => exact absurd h (by simp)
-  next => exact absurd h (by simp)
-
-/-- A record meets a record at the value term, and an object through every declared field. -/
-theorem Adm_famRec {x' : Term} {f : Term → Option Term} (hf : AdmSound x' f) :
-    AdmFam (.record x') (famRec f) := by
-  intro y z hd h v
-  cases y <;> first | exact hd.elim | skip
-  case record c =>
-      simp only [famRec] at h
-      obtain ⟨w, hw, rfl⟩ := Option.map_eq_some_iff.mp h
-      exact Adm_famRecTerm hf hw v
-  case object b =>
-      simp only [famRec] at h
-      obtain ⟨t, r, hrest, hmt, hok, hcase⟩ := recObj_extract h
-      have hreq : ∀ k : {k // k ∈ b.fields},
-          Field.isReq ((fieldMeetT f (b.at k)).getD (.optional .never))
-            = Field.isReq (b.at k) := by
-        intro k
-        obtain ⟨fm, hfm⟩ := Option.isSome_iff_exists.mp (hok k)
-        rw [hfm, Option.getD_some]
-        exact isReq_fieldMeetT hfm
-      have ihf : ∀ (k : {k // k ∈ b.fields}) (w : Value),
-          AdmField ((fieldMeetT f (b.at k)).getD (.optional .never)) w
-            = (Adm x' w && AdmField (b.at k) w) := by
-        intro k w
-        obtain ⟨fm, hfm⟩ := Option.isSome_iff_exists.mp (hok k)
-        obtain ⟨tx, tz, hz, hx, hfz⟩ := AdmField_fieldMeetT hfm
-        rw [hfm, Option.getD_some, hfz, hx]
-        exact hf tx tz hz w
-      have iht : ∀ w, Adm r w = (Adm x' w && Adm t w) := hf t r hmt
-      have hnm : ∀ w : Value, (∀ keys g, w ≠ .map keys g) →
-          Adm z w = (Adm (.record x') w && Adm (.object b) w) := by
-        intro w hw
-        have hrx : Adm (.record x') w = false := by
-          cases w with
-          | map keys g => exact absurd rfl (hw keys g)
-          | _ => rfl
-        rw [show Adm (.object b) w = AdmBody b w from rfl, AdmBody_of_not_map hw, hrx,
-          Bool.and_self]
-        rcases hcase with ⟨rfl, _⟩ | rfl
-        · rfl
-        · exact AdmBody_of_not_map hw
-      cases v
-      case map keys g =>
-        rw [show Adm (.object b) (.map keys g) = AdmBody b (.map keys g) from rfl,
-            show Adm (.record x') (.map keys g)
-              = decide (∀ k : {k // k ∈ keys}, Adm x' (g k) = true) from rfl]
-        rcases hcase with ⟨rfl, hnb⟩ | rfl
-        · show (false : Bool) = _
-          cases hR : decide (∀ k : {k // k ∈ keys}, Adm x' (g k) = true) with
-          | false => rfl
-          | true =>
-            cases hA : AdmBody b (.map keys g) with
-            | false => simp
-            | true => exact absurd (isBottom_false_of_left hreq ihf hA hR) hnb
-        · show AdmBody (.mk b.fields
-              (fun k => (fieldMeetT f (b.at k)).getD (.optional .never)) (.codec r))
-                (.map keys g) = _
-          rw [AdmBody_map, AdmBody_map]
-          simp only [Body.fields_mk, Body.at_mk, Body.rest_mk, hrest]
-          rw [valPresentT_of_isReq hreq, show AdmRest (.codec r) = some (Adm r) from rfl,
-              show AdmRest (.codec t) = some (Adm t) from rfl, objAdmV_of_left ihf iht]
-          simp [Bool.and_assoc, Bool.and_comm, Bool.and_left_comm]
-      all_goals exact hnm _ (fun _ _ hc => Value.noConfusion hc)
-  case opaq l => simp [famRec] at h
-  all_goals fam_never famRec
 
 /-! ### …and the same three over the right operand, and over two bodies. -/
 
-/-- Every present name goes through its field and the right operand's term alike. -/
-theorem objAdmV_of_right {b : Body} {x t r : Term} {F : {k // k ∈ b.fields} → Field}
-    (ihf : ∀ (k : {k // k ∈ b.fields}) (w : Value),
-      AdmField (F k) w = (AdmField (b.at k) w && Adm x w))
-    (iht : ∀ w, Adm r w = (Adm t w && Adm x w))
-    (keys : Finset Name) (g : {k // k ∈ keys} → Value) :
-    objAdmV ⟨b.fields, fun k => AdmField (F k)⟩ (some (Adm r)) keys g
-      = (objAdmV ⟨b.fields, fun k => AdmField (b.at k)⟩ (some (Adm t)) keys g
-         && decide (∀ k : {k // k ∈ keys}, Adm x (g k) = true)) := by
-  simp only [objAdmV, entryP, MapOf.at]
-  refine decide_forall_and (fun k => ?_)
-  by_cases hk : k.1 ∈ b.fields
-  · simp only [dif_pos hk]; exact ihf ⟨k.1, hk⟩ (g k)
-  · simp only [dif_neg hk]; exact iht (g k)
-
-/-- No declared field meets the right operand's term to the bottom at a value both admit. -/
-theorem isBottom_false_of_right {b : Body} {x : Term} {F : {k // k ∈ b.fields} → Field}
-    (hreq : ∀ k, Field.isReq (F k) = Field.isReq (b.at k))
-    (ihf : ∀ (k : {k // k ∈ b.fields}) (w : Value),
-      AdmField (F k) w = (AdmField (b.at k) w && Adm x w))
-    {keys : Finset Name} {g : {k // k ∈ keys} → Value}
-    (hA : AdmBody b (.map keys g) = true)
-    (hR : decide (∀ k : {k // k ∈ keys}, Adm x (g k) = true) = true) :
-    ∀ k, Field.isBottom (F k) = false := by
-  rw [AdmBody_map, Bool.and_eq_true] at hA
-  intro k
-  refine Bool.eq_false_iff.mpr (fun hbot => ?_)
-  have hreqk : Field.isReq (b.at k) = true := (hreq k) ▸ isReq_of_isBottom hbot
-  have hk : k.1 ∈ keys := mem_keys_of_isReq hA.1 k.2 hreqk
-  have hrow := objAdmV_row hA.2 hk k.2
-  have hrec := of_decide_eq_true hR ⟨k.1, hk⟩
-  have hi := ihf k (g ⟨k.1, hk⟩)
-  rw [AdmField_of_isBottom hbot, hrow, hrec] at hi
-  exact absurd hi (by simp)
-
 /-- Every present name goes through both bodies' fields, a shared name through the meet. -/
-theorem objAdmV_of_bodies {a b : Body} {F : {k // k ∈ Body.shared a b} → Field}
+theorem objAdmV_of_bodies {a b : Body} {F : {k // k ∈ Body.shared a b} → ObjectSlot}
     (ihf : ∀ (k : {k // k ∈ Body.shared a b}) (w : Value),
       AdmField (F k) w = (AdmField (a.at ⟨k.1, Body.mem_shared_left k.2⟩) w
         && AdmField (b.at ⟨k.1, Body.mem_shared_right k.2⟩) w))
@@ -3140,11 +2901,11 @@ theorem objAdmV_of_bodies {a b : Body} {F : {k // k ∈ Body.shared a b} → Fie
 
 /-- The declared set is the intersection and the required set the union, which is what the
     two presence tests conjoin to. -/
-theorem valPresentT_of_bodies {a b : Body} {F : {k // k ∈ Body.shared a b} → Field}
+theorem valPresentT_of_bodies {a b : Body} {F : {k // k ∈ Body.shared a b} → ObjectSlot}
     (hab : Body.reqShared a b = true) (hba : Body.reqShared b a = true)
-    (hisreq : ∀ k, Field.isReq (F k)
-      = (Field.isReq (a.at ⟨k.1, Body.mem_shared_left k.2⟩)
-         || Field.isReq (b.at ⟨k.1, Body.mem_shared_right k.2⟩)))
+    (hisreq : ∀ k, ObjectSlot.isReq (F k)
+      = (ObjectSlot.isReq (a.at ⟨k.1, Body.mem_shared_left k.2⟩)
+         || ObjectSlot.isReq (b.at ⟨k.1, Body.mem_shared_right k.2⟩)))
     (keys : Finset Name) :
     valPresentT (Body.shared a b) F keys
       = (valPresentT a.fields a.at keys && valPresentT b.fields b.at keys) := by
@@ -3167,22 +2928,22 @@ theorem valPresentT_of_bodies {a b : Body} {F : {k // k ∈ Body.shared a b} →
     · exact hB' ⟨k.1, Body.mem_shared_right k.2⟩ hr
 
 /-- No shared field meets to the bottom at a value both bodies admit. -/
-theorem isBottom_false_of_bodies {a b : Body} {F : {k // k ∈ Body.shared a b} → Field}
-    (hisreq : ∀ k, Field.isReq (F k)
-      = (Field.isReq (a.at ⟨k.1, Body.mem_shared_left k.2⟩)
-         || Field.isReq (b.at ⟨k.1, Body.mem_shared_right k.2⟩)))
+theorem isBottom_false_of_bodies {a b : Body} {F : {k // k ∈ Body.shared a b} → ObjectSlot}
+    (hisreq : ∀ k, ObjectSlot.isReq (F k)
+      = (ObjectSlot.isReq (a.at ⟨k.1, Body.mem_shared_left k.2⟩)
+         || ObjectSlot.isReq (b.at ⟨k.1, Body.mem_shared_right k.2⟩)))
     (ihf : ∀ (k : {k // k ∈ Body.shared a b}) (w : Value),
       AdmField (F k) w = (AdmField (a.at ⟨k.1, Body.mem_shared_left k.2⟩) w
         && AdmField (b.at ⟨k.1, Body.mem_shared_right k.2⟩) w))
     {keys : Finset Name} {g : {k // k ∈ keys} → Value}
     (hA : AdmBody a (.map keys g) = true) (hB : AdmBody b (.map keys g) = true) :
-    ∀ k, Field.isBottom (F k) = false := by
+    ∀ k, ObjectSlot.isBottom (F k) = false := by
   rw [AdmBody_map, Bool.and_eq_true] at hA hB
   intro k
   refine Bool.eq_false_iff.mpr (fun hbot => ?_)
   have ha := Body.mem_shared_left k.2
   have hb := Body.mem_shared_right k.2
-  have hreq : Field.isReq (F k) = true := isReq_of_isBottom hbot
+  have hreq : ObjectSlot.isReq (F k) = true := isReq_of_isBottom hbot
   rw [hisreq k, Bool.or_eq_true] at hreq
   have hk : k.1 ∈ keys := by
     rcases hreq with hr | hr
@@ -3194,96 +2955,63 @@ theorem isBottom_false_of_bodies {a b : Body} {F : {k // k ∈ Body.shared a b} 
   rw [AdmField_of_isBottom hbot, hrowA, hrowB] at hi
   exact absurd hi (by simp)
 
-/-- What an object against a record answers, with the object on the left. -/
-theorem objRec_extract {fs : Finset Name} {gt : {k // k ∈ fs} → Term → Option Field}
-    {frest : Option (Term → Option Term)} {x z : Term}
-    (h : objRec fs gt frest x = some z) :
-    ∃ fr r, frest = some fr ∧ fr x = some r ∧
-      (∀ k, (gt k x).isSome = true) ∧
-      ((z = .never ∧ ¬ (∀ k, Field.isBottom ((gt k x).getD (.optional .never)) = false))
-       ∨ z = .object (.mk fs (fun k => (gt k x).getD (.optional .never)) (.codec r))) := by
-  unfold objRec at h
-  cases hfr : frest with
-  | none => rw [hfr] at h; exact absurd h (by simp)
-  | some fr =>
-    rw [hfr] at h
-    simp only at h
-    split at h
-    next hok =>
-      split at h
-      next r hr =>
-        refine ⟨fr, r, rfl, hr, of_decide_eq_true hok, ?_⟩
-        split at h
-        next _ => exact Or.inr (Option.some.inj h).symm
-        next hnb =>
-          exact Or.inl ⟨(Option.some.inj h).symm, fun hall => hnb (decide_eq_true hall)⟩
-      next => exact absurd h (by simp)
-    next => exact absurd h (by simp)
-
 /-- What two objects answer: the bottom where the required names do not fit the
     intersection or a shared field empties, and otherwise the object over the shared names. -/
-theorem objObj_extract {a b : Body} {g : {k // k ∈ a.fields} → Field → Option Field} {z : Term}
+theorem objObj_extract {a b : Body} {g : {k // k ∈ a.fields} → ObjectSlot → Option ObjectSlot} {z : Term}
     (h : objObj a g b = some z) :
-    ∃ r, Rest.merge a.rest b.rest = some r ∧
+    a.wild = none ∧ b.wild = none ∧
       ((z = .never ∧ ¬ (Body.reqShared a b = true ∧ Body.reqShared b a = true))
        ∨ (Body.reqShared a b = true ∧ Body.reqShared b a = true ∧
           (∀ k : {k // k ∈ Body.shared a b},
             (g ⟨k.1, Body.mem_shared_left k.2⟩
               (b.at ⟨k.1, Body.mem_shared_right k.2⟩)).isSome = true) ∧
-          ((z = .never ∧ ¬ (∀ k : {k // k ∈ Body.shared a b}, Field.isBottom
+          ((z = .never ∧ ¬ (∀ k : {k // k ∈ Body.shared a b}, ObjectSlot.isBottom
               ((g ⟨k.1, Body.mem_shared_left k.2⟩
                 (b.at ⟨k.1, Body.mem_shared_right k.2⟩)).getD (.optional .never)) = false))
            ∨ z = .object (.mk (Body.shared a b)
               (fun k => (g ⟨k.1, Body.mem_shared_left k.2⟩
-                (b.at ⟨k.1, Body.mem_shared_right k.2⟩)).getD (.optional .never)) r)))) := by
+                (b.at ⟨k.1, Body.mem_shared_right k.2⟩)).getD (.optional .never)) none)))) := by
   unfold objObj at h
   split at h
-  next r hr =>
-    refine ⟨r, hr, ?_⟩
+  next ha hb =>
+    refine ⟨ha, hb, ?_⟩
     split at h
     next =>
       split at h
-      next =>
+      next hreq =>
+        rw [Bool.and_eq_true] at hreq
+        refine Or.inr ⟨hreq.1, hreq.2, ?_⟩
         split at h
-        next hreq =>
-          rw [Bool.and_eq_true] at hreq
-          refine Or.inr ⟨hreq.1, hreq.2, ?_⟩
+        next hok =>
+          refine ⟨of_decide_eq_true hok, ?_⟩
           split at h
-          next hok =>
-            refine ⟨of_decide_eq_true hok, ?_⟩
-            split at h
-            next _ => exact Or.inr (Option.some.inj h).symm
-            next hnb =>
-              exact Or.inl ⟨(Option.some.inj h).symm, fun hall => hnb (decide_eq_true hall)⟩
-          next => exact absurd h (by simp)
-        next hreq =>
-          refine Or.inl ⟨(Option.some.inj h).symm, ?_⟩
-          rw [Bool.and_eq_true] at hreq
-          exact hreq
-      next => exact absurd h (by simp)
+          next _ => exact Or.inr (Option.some.inj h).symm
+          next hnb =>
+            exact Or.inl ⟨(Option.some.inj h).symm, fun hall => hnb (decide_eq_true hall)⟩
+        next => exact absurd h (by simp)
+      next hreq =>
+        refine Or.inl ⟨(Option.some.inj h).symm, ?_⟩
+        rw [Bool.and_eq_true] at hreq
+        exact hreq
     next => exact absurd h (by simp)
   next => exact absurd h (by simp)
 
-/-- An object meets an object over the shared names, and a record through every field. -/
-theorem Adm_famObj {a : Body} {g : {k // k ∈ a.fields} → Field → Option Field}
-    {gt : {k // k ∈ a.fields} → Term → Option Field}
-    {frest : Option (Term → Option Term)}
-    (hg : ∀ (k : {k // k ∈ a.fields}) (fl fm : Field), g k fl = some fm →
+/-- An object meets an object over the shared names. The record rows went with the record
+    constructor: a record is an object, and an open one, which the first guard turns away. -/
+theorem Adm_famObj {a : Body} {g : {k // k ∈ a.fields} → ObjectSlot → Option ObjectSlot}
+    (hg : ∀ (k : {k // k ∈ a.fields}) (fl fm : ObjectSlot), g k fl = some fm →
       ∀ w, AdmField fm w = (AdmField (a.at k) w && AdmField fl w))
-    (hgreq : ∀ (k : {k // k ∈ a.fields}) (fl fm : Field), g k fl = some fm →
-      Field.isReq fm = (Field.isReq (a.at k) || Field.isReq fl))
-    (hgt : ∀ (k : {k // k ∈ a.fields}) (y : Term) (fm : Field), gt k y = some fm →
-      ∀ w, AdmField fm w = (AdmField (a.at k) w && Adm y w))
-    (hgtreq : ∀ (k : {k // k ∈ a.fields}) (y : Term) (fm : Field), gt k y = some fm →
-      Field.isReq fm = Field.isReq (a.at k))
-    (hfr : ∀ fr, frest = some fr → ∃ t, a.rest = .codec t ∧ AdmSound t fr) :
-    AdmFam (.object a) (famObj a g gt frest) := by
+    (hgreq : ∀ (k : {k // k ∈ a.fields}) (fl fm : ObjectSlot), g k fl = some fm →
+      ObjectSlot.isReq fm = (ObjectSlot.isReq (a.at k) || ObjectSlot.isReq fl)) :
+    AdmFam (.object a) (famObj a g) := by
   intro y z hd h v
   cases y <;> first | exact hd.elim | skip
   case object b =>
       simp only [famObj] at h
-      obtain ⟨r, hr, hcase⟩ := objObj_extract h
-      obtain ⟨hra, hrb, hrr⟩ := Rest.merge_admRest hr
+      obtain ⟨ha, hb, hcase⟩ := objObj_extract h
+      have hra : AdmWild a.wild = none := by rw [ha]; rfl
+      have hrb : AdmWild b.wild = none := by rw [hb]; rfl
+      have hrr : AdmWild (none : Option (KeyPat × Term)) = none := rfl
       have hnm : ∀ w : Value, (∀ keys gv, w ≠ .map keys gv) →
           Adm z w = (Adm (.object a) w && Adm (.object b) w) := by
         intro w hw
@@ -3307,10 +3035,10 @@ theorem Adm_famObj {a : Body} {g : {k // k ∈ a.fields} → Field → Option Fi
             | false => rfl
             | true => exact absurd ⟨reqShared_of_adm hrb hA hB, reqShared_of_adm hra hB hA⟩ hne
         · have hisreq : ∀ k : {k // k ∈ Body.shared a b},
-              Field.isReq ((g ⟨k.1, Body.mem_shared_left k.2⟩
+              ObjectSlot.isReq ((g ⟨k.1, Body.mem_shared_left k.2⟩
                 (b.at ⟨k.1, Body.mem_shared_right k.2⟩)).getD (.optional .never))
-                = (Field.isReq (a.at ⟨k.1, Body.mem_shared_left k.2⟩)
-                   || Field.isReq (b.at ⟨k.1, Body.mem_shared_right k.2⟩)) := by
+                = (ObjectSlot.isReq (a.at ⟨k.1, Body.mem_shared_left k.2⟩)
+                   || ObjectSlot.isReq (b.at ⟨k.1, Body.mem_shared_right k.2⟩)) := by
             intro k
             obtain ⟨fm, hfm⟩ := Option.isSome_iff_exists.mp (hok k)
             rw [hfm, Option.getD_some]
@@ -3332,61 +3060,11 @@ theorem Adm_famObj {a : Body} {g : {k // k ∈ a.fields} → Field → Option Fi
               cases hB : AdmBody b (.map keys gv) with
               | false => rfl
               | true => exact absurd (isBottom_false_of_bodies hisreq ihf hA hB) hnb
-          · show AdmBody (.mk (Body.shared a b) _ r) (.map keys gv) = _
+          · show AdmBody (.mk (Body.shared a b) _ none) (.map keys gv) = _
             rw [AdmBody_map, AdmBody_map, AdmBody_map]
-            simp only [Body.fields_mk, Body.at_mk, Body.rest_mk, hra, hrb, hrr]
+            simp only [Body.fields_mk, Body.at_mk, Body.wild_mk, hra, hrb, hrr]
             rw [valPresentT_of_bodies hab hba hisreq, objAdmV_of_bodies ihf]
             simp [Bool.and_assoc, Bool.and_comm, Bool.and_left_comm]
-      all_goals exact hnm _ (fun _ _ hc => Value.noConfusion hc)
-  case record x =>
-      simp only [famObj] at h
-      obtain ⟨fr, r, hfrest, hrx, hok, hcase⟩ := objRec_extract h
-      obtain ⟨t, hrest, hsound⟩ := hfr fr hfrest
-      have hreq : ∀ k : {k // k ∈ a.fields},
-          Field.isReq ((gt k x).getD (.optional .never)) = Field.isReq (a.at k) := by
-        intro k
-        obtain ⟨fm, hfm⟩ := Option.isSome_iff_exists.mp (hok k)
-        rw [hfm, Option.getD_some]
-        exact hgtreq _ _ _ hfm
-      have ihf : ∀ (k : {k // k ∈ a.fields}) (w : Value),
-          AdmField ((gt k x).getD (.optional .never)) w
-            = (AdmField (a.at k) w && Adm x w) := by
-        intro k w
-        obtain ⟨fm, hfm⟩ := Option.isSome_iff_exists.mp (hok k)
-        rw [hfm, Option.getD_some]
-        exact hgt _ _ _ hfm w
-      have iht : ∀ w, Adm r w = (Adm t w && Adm x w) := hsound x r hrx
-      have hnm : ∀ w : Value, (∀ keys gv, w ≠ .map keys gv) →
-          Adm z w = (Adm (.object a) w && Adm (.record x) w) := by
-        intro w hw
-        have hrxv : Adm (.record x) w = false := by
-          cases w with
-          | map keys gv => exact absurd rfl (hw keys gv)
-          | _ => rfl
-        rw [show Adm (.object a) w = AdmBody a w from rfl, AdmBody_of_not_map hw, hrxv,
-          Bool.and_self]
-        rcases hcase with ⟨rfl, _⟩ | rfl
-        · rfl
-        · exact AdmBody_of_not_map hw
-      cases v
-      case map keys gv =>
-        rw [show Adm (.object a) (.map keys gv) = AdmBody a (.map keys gv) from rfl,
-            show Adm (.record x) (.map keys gv)
-              = decide (∀ k : {k // k ∈ keys}, Adm x (gv k) = true) from rfl]
-        rcases hcase with ⟨rfl, hnb⟩ | rfl
-        · show (false : Bool) = _
-          cases hA : AdmBody a (.map keys gv) with
-          | false => rfl
-          | true =>
-            cases hR : decide (∀ k : {k // k ∈ keys}, Adm x (gv k) = true) with
-            | false => rfl
-            | true => exact absurd (isBottom_false_of_right hreq ihf hA hR) hnb
-        · show AdmBody (.mk a.fields _ (.codec r)) (.map keys gv) = _
-          rw [AdmBody_map, AdmBody_map]
-          simp only [Body.fields_mk, Body.at_mk, Body.rest_mk, hrest]
-          rw [valPresentT_of_isReq hreq, show AdmRest (.codec r) = some (Adm r) from rfl,
-              show AdmRest (.codec t) = some (Adm t) from rfl, objAdmV_of_right ihf iht]
-          simp [Bool.and_assoc, Bool.and_comm, Bool.and_left_comm]
       all_goals exact hnm _ (fun _ _ hc => Value.noConfusion hc)
   case opaq l => simp [famObj] at h
   all_goals fam_never famObj
@@ -3394,19 +3072,21 @@ theorem Adm_famObj {a : Body} {g : {k // k ∈ a.fields} → Field → Option Fi
 /-! ### The outer theorem. -/
 
 /-- Two fields meet at the stronger mark, so the write bit is the join. -/
-theorem isReq_Field_meet : ∀ {f fl fm : Field}, Field.meet f fl = some fm →
-    Field.isReq fm = (Field.isReq f || Field.isReq fl) := by
+theorem isReq_Field_meet : ∀ {f fl fm : ObjectSlot}, ObjectSlot.meet f fl = some fm →
+    ObjectSlot.isReq fm = (ObjectSlot.isReq f || ObjectSlot.isReq fl) := by
   intro f fl fm h
-  cases f <;> cases fl <;>
-    simp only [Field.meet, Option.map_eq_some_iff, reduceCtorEq] at h <;>
-    obtain ⟨tz, _, rfl⟩ := h <;> rfl
-
-/-- …and a field met with a term keeps its own mark. -/
-theorem isReq_Field_meetT : ∀ {f : Field} {y : Term} {fm : Field}, Field.meetT f y = some fm →
-    Field.isReq fm = Field.isReq f := by
-  intro f y fm h
-  cases f <;> simp only [Field.meetT, Option.map_eq_some_iff, reduceCtorEq] at h <;>
-    obtain ⟨tz, _, rfl⟩ := h <;> rfl
+  match f, fl, h with
+  | .req _ (some _), .req _ (some _), h
+  | .req _ (some _), .optional _, h
+  | .optional _, .req _ (some _), h => exact absurd h (by simp [ObjectSlot.meet])
+  | .req _ none, .req _ _, h
+  | .req _ (some _), .req _ none, h
+  | .req _ none, .optional _, h
+  | .optional _, .req _ none, h
+  | .optional _, .optional _, h =>
+      simp only [ObjectSlot.meet, Option.map_eq_some_iff] at h
+      obtain ⟨tz, _, rfl⟩ := h
+      rfl
 
 /-- The option companion is the plain map at the fixed partner. -/
 theorem meetSL_eq (y : Term) : ∀ os, Term.meetSL os y = os.map (fun t => Term.meet t y)
@@ -3489,8 +3169,6 @@ theorem Adm_meet : ∀ x y z, Term.meet x y = some z → ∀ v, Adm z v = (Adm x
   | .literal k lv, y, z, h, v => Adm_meetSRight (Adm_famLit k lv) y z h v
   | .set b, y, z, h, v => Adm_meetSRight (Adm_famSet b) y z h v
   | .opaq l, y, z, h, v => Adm_meetSRight (Adm_famOpaq l) y z h v
-  | .record c, y, z, h, v =>
-      Adm_meetSRight (Adm_famRec (fun t w hw => Adm_meet c t w hw)) y z h v
   | .list pre sp suf, y, z, h, v => by
       cases sp with
       | none =>
@@ -3501,32 +3179,10 @@ theorem Adm_meet : ∀ x y z, Term.meet x y = some z → ∀ v, Adm z v = (Adm x
             (Adm_meetSTs pre)
             (Or.inr ⟨t, Term.meet t, rfl, rfl, fun u w hw => Adm_meet t u w hw⟩)
             (Adm_meetSTs suf)) y z h v
-  | .object (.mk fs f r), y, z, h, v => by
-      cases r with
-      | codec t =>
-          exact Adm_meetSRight (Adm_famObj (a := .mk fs f (.codec t))
-            (fun k fl fm hm w => Adm_Field_meet (f k) fl fm hm w)
-            (fun _ _ _ hm => isReq_Field_meet hm)
-            (fun k u fm hm w => Adm_Field_meetT (f k) u fm hm w)
-            (fun _ _ _ hm => isReq_Field_meetT hm)
-            (fun fr hfr => ⟨t, rfl, by
-              simp only [Option.some.injEq] at hfr
-              subst hfr
-              exact fun u w hw => Adm_meet t u w hw⟩)) y z h v
-      | drop =>
-          exact Adm_meetSRight (Adm_famObj (a := .mk fs f .drop)
-            (fun k fl fm hm w => Adm_Field_meet (f k) fl fm hm w)
-            (fun _ _ _ hm => isReq_Field_meet hm)
-            (fun k u fm hm w => Adm_Field_meetT (f k) u fm hm w)
-            (fun _ _ _ hm => isReq_Field_meetT hm)
-            (fun _ hfr => absurd hfr (by simp))) y z h v
-      | refuse =>
-          exact Adm_meetSRight (Adm_famObj (a := .mk fs f .refuse)
-            (fun k fl fm hm w => Adm_Field_meet (f k) fl fm hm w)
-            (fun _ _ _ hm => isReq_Field_meet hm)
-            (fun k u fm hm w => Adm_Field_meetT (f k) u fm hm w)
-            (fun _ _ _ hm => isReq_Field_meetT hm)
-            (fun _ hfr => absurd hfr (by simp))) y z h v
+  | .object (.mk fs f w'), y, z, h, v =>
+      Adm_meetSRight (Adm_famObj (a := .mk fs f w')
+        (fun k fl fm hm w => Adm_Field_meet (f k) fl fm hm w)
+        (fun _ _ _ hm => isReq_Field_meet hm)) y z h v
 termination_by structural x => x
 
 /-- The union row's options, lifted pointwise at the fixed partner. -/
@@ -3546,41 +3202,26 @@ theorem Adm_meetSTs : ∀ ts : List Term, List.Forall₂ AdmSound ts (Term.meetS
 termination_by structural ts => ts
 
 /-- Two fields at one name admit what both admit, at the stronger mark. -/
-theorem Adm_Field_meet : ∀ (f fl : Field) (fm : Field), Field.meet f fl = some fm →
+theorem Adm_Field_meet : ∀ (f fl : ObjectSlot) (fm : ObjectSlot), ObjectSlot.meet f fl = some fm →
     ∀ w, AdmField fm w = (AdmField f w && AdmField fl w)
-  | .req x, .req y, _, h, w => by
+  | .req x none, .req y _, _, h, w => by
       obtain ⟨tz, hz, rfl⟩ := Option.map_eq_some_iff.mp h
       exact Adm_meet x y tz hz w
-  | .req x, .optional y, _, h, w => by
+  | .req x (some _), .req y none, _, h, w => by
       obtain ⟨tz, hz, rfl⟩ := Option.map_eq_some_iff.mp h
       exact Adm_meet x y tz hz w
-  | .optional x, .req y, _, h, w => by
+  | .req x none, .optional y, _, h, w => by
       obtain ⟨tz, hz, rfl⟩ := Option.map_eq_some_iff.mp h
       exact Adm_meet x y tz hz w
-  | .req x, .fallback y _, _, h, w => by
-      obtain ⟨tz, hz, rfl⟩ := Option.map_eq_some_iff.mp h
-      exact Adm_meet x y tz hz w
-  | .fallback x _, .req y, _, h, w => by
+  | .optional x, .req y none, _, h, w => by
       obtain ⟨tz, hz, rfl⟩ := Option.map_eq_some_iff.mp h
       exact Adm_meet x y tz hz w
   | .optional x, .optional y, _, h, w => by
       obtain ⟨tz, hz, rfl⟩ := Option.map_eq_some_iff.mp h
       exact Adm_meet x y tz hz w
-  | .optional _, .fallback _ _, _, h, _ => by simp [Field.meet] at h
-  | .fallback _ _, .optional _, _, h, _ => by simp [Field.meet] at h
-  | .fallback _ _, .fallback _ _, _, h, _ => by simp [Field.meet] at h
-termination_by structural f => f
-
-/-- …and a field met with a record's term admits what both admit. -/
-theorem Adm_Field_meetT : ∀ (f : Field) (y : Term) (fm : Field), Field.meetT f y = some fm →
-    ∀ w, AdmField fm w = (AdmField f w && Adm y w)
-  | .req x, y, _, h, w => by
-      obtain ⟨tz, hz, rfl⟩ := Option.map_eq_some_iff.mp h
-      exact Adm_meet x y tz hz w
-  | .optional x, y, _, h, w => by
-      obtain ⟨tz, hz, rfl⟩ := Option.map_eq_some_iff.mp h
-      exact Adm_meet x y tz hz w
-  | .fallback _ _, _, _, h, _ => by simp [Field.meetT] at h
+  | .req _ (some _), .req _ (some _), _, h, _ => by simp [ObjectSlot.meet] at h
+  | .req _ (some _), .optional _, _, h, _ => by simp [ObjectSlot.meet] at h
+  | .optional _, .req _ (some _), _, h, _ => by simp [ObjectSlot.meet] at h
 termination_by structural f => f
 end
 
@@ -3685,7 +3326,6 @@ theorem writes_meetSRight {x : Term} {fam : Term → Option Term} (hf : WritesFa
   | .literal k lv, _, h, m, hz => hf (.literal k lv) _ trivial h m hz
   | .set b, _, h, m, hz => hf (.set b) _ trivial h m hz
   | .opaq l, _, h, m, hz => hf (.opaq l) _ trivial h m hz
-  | .record c, _, h, m, hz => hf (.record c) _ trivial h m hz
   | .list p q s, _, h, m, hz => hf (.list p q s) _ trivial h m hz
   | .object b, _, h, m, hz => hf (.object b) _ trivial h m hz
 termination_by structural y => y
@@ -3916,47 +3556,15 @@ theorem writes_famList {fpre : List (Term → Option Term)}
           | (simp only [μSyn, Option.some.injEq] at hmy; exact hmy.symm)
           | exact absurd h (by simp)
 
-/-- A record names `M`, and an object it meets names `M` too. -/
-theorem writes_famRec {f : Term → Option Term} {x' : Term} :
-    WritesFam (.record x') (famRec f) := by
-  intro y z hd h m hz
-  cases y <;> first | exact hd.elim | skip
-  case record c =>
-      obtain ⟨w, _, rfl⟩ := Option.map_eq_some_iff.mp h
-      simpa [μSyn] using hz
-  case object b =>
-      obtain ⟨t, r, _, _, _, hc⟩ := recObj_extract (by simpa [famRec] using h)
-      rcases hc with ⟨rfl, _⟩ | rfl
-      · exact absurd hz (by simp [μSyn])
-      · simpa [μSyn] using hz
-  all_goals (try simp_all [famRec, μSyn])
-  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member, SetBase.member]))
-  all_goals (try (split at h))
-  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member, SetBase.member]))
-  all_goals (try (split at h))
-  all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member, SetBase.member]))
-  all_goals (try (subst_vars
-                  simp only [μSyn, GroundKind.member, SetBase.member, Option.some.injEq] at hz
-                  exact ⟨fun _ hh => by simp_all [μSyn, GroundKind.member, SetBase.member], fun _ hh => by simp_all [μSyn, GroundKind.member, SetBase.member]⟩))
-  all_goals (try (subst h; simp_all [μSyn, GroundKind.member, SetBase.member]))
-  all_goals (try (subst_vars; simp only [μSyn, GroundKind.member, SetBase.member, Option.some.injEq] at hz; exact hz.symm))
-
 /-- An object names `M`, and the bottom it can answer names none. -/
-theorem writes_famObj {a : Body} {g : {k // k ∈ a.fields} → Field → Option Field}
-    {gt : {k // k ∈ a.fields} → Term → Option Field}
-    {frest : Option (Term → Option Term)} :
-    WritesFam (.object a) (famObj a g gt frest) := by
+theorem writes_famObj {a : Body} {g : {k // k ∈ a.fields} → ObjectSlot → Option ObjectSlot} :
+    WritesFam (.object a) (famObj a g) := by
   intro y z hd h m hz
   cases y <;> first | exact hd.elim | skip
   case object b =>
-      obtain ⟨r, _, hc⟩ := objObj_extract (by simpa [famObj] using h)
+      obtain ⟨_, _, hc⟩ := objObj_extract (by simpa [famObj] using h)
       rcases hc with ⟨rfl, _⟩ | ⟨_, _, _, ⟨rfl, _⟩ | rfl⟩
       · exact absurd hz (by simp [μSyn])
-      · exact absurd hz (by simp [μSyn])
-      · simpa [μSyn] using hz
-  case record x =>
-      obtain ⟨fr, r, _, _, _, hc⟩ := objRec_extract (by simpa [famObj] using h)
-      rcases hc with ⟨rfl, _⟩ | rfl
       · exact absurd hz (by simp [μSyn])
       · simpa [μSyn] using hz
   all_goals (try simp_all [famObj, μSyn])
@@ -4040,7 +3648,6 @@ theorem meet_writes : ∀ x y z, Term.meet x y = some z → ∀ m : Member, μSy
   | .literal k lv, y, z, h, m, hz => writes_meetSRight (writes_famLit k lv) y z h m hz
   | .set b, y, z, h, m, hz => writes_meetSRight (writes_famSet b) y z h m hz
   | .opaq l, y, z, h, m, hz => writes_meetSRight (writes_famOpaq l) y z h m hz
-  | .record _, y, z, h, m, hz => writes_meetSRight writes_famRec y z h m hz
   | .list pre sp suf, y, z, h, m, hz => by
       cases sp with
       | none =>
@@ -4051,20 +3658,9 @@ theorem meet_writes : ∀ x y z, Term.meet x y = some z → ∀ m : Member, μSy
           exact writes_meetSRight (writes_famList (pre := pre) (sp := some t) (suf := suf)
             (fpre := Term.meetSTs pre) (fsp := some (Term.meet t))
             (fsuf := Term.meetSTs suf)) y z h m hz
-  | .object (.mk fs f r), y, z, h, m, hz => by
-      cases r with
-      | codec t =>
-          exact writes_meetSRight (writes_famObj (a := .mk fs f (.codec t))
-            (g := fun k => Field.meet (f k)) (gt := fun k => Field.meetT (f k))
-            (frest := some (Term.meet t))) y z h m hz
-      | drop =>
-          exact writes_meetSRight (writes_famObj (a := .mk fs f .drop)
-            (g := fun k => Field.meet (f k)) (gt := fun k => Field.meetT (f k))
-            (frest := none)) y z h m hz
-      | refuse =>
-          exact writes_meetSRight (writes_famObj (a := .mk fs f .refuse)
-            (g := fun k => Field.meet (f k)) (gt := fun k => Field.meetT (f k))
-            (frest := none)) y z h m hz
+  | .object (.mk fs f w), y, z, h, m, hz =>
+      writes_meetSRight (writes_famObj (a := .mk fs f w)
+        (g := fun k => ObjectSlot.meet (f k))) y z h m hz
 termination_by structural x => x
 
 /-- The union row's options, lifted pointwise at the fixed partner. -/
@@ -4380,37 +3976,41 @@ theorem alignPA_meet_zip :
           simp only [alignPA, hr, ihw hrest (by simpa using hlen)]
           simp [Bool.and_assoc, Bool.and_left_comm]
 
-/-- Whether a field's name must be present for a READ. `fallback` reads to its stand-in, so it
-    need not be; `Field.isReq` is the write side's answer and counts it. -/
-def Field.isReqA : Field → Bool
-  | .req _ => true
+/-- Whether a slot's name must be present for a READ. A stand-in reads in the name's place, so a
+    slot carrying one need not be; `ObjectSlot.isReq` is the write side's answer and counts it. -/
+def ObjectSlot.isReqA : ObjectSlot → Bool
+  | .req _ none => true
   | _ => false
 
 /-- `reqPresentT` in the form the object row uses: a declared name that must be read is
     present. -/
-theorem reqPresentT_req (fields : Finset Name) (fld : {k // k ∈ fields} → Field)
+theorem reqPresentT_req (fields : Finset Name) (fld : {k // k ∈ fields} → ObjectSlot)
     (keys : Finset Name) :
     reqPresentT fields fld keys
-      = decide (∀ k : {k // k ∈ fields}, Field.isReqA (fld k) = true → k.1 ∈ keys) := by
+      = decide (∀ k : {k // k ∈ fields}, ObjectSlot.isReqA (fld k) = true → k.1 ∈ keys) := by
   unfold reqPresentT
   refine decide_eq_decide.mpr ⟨fun hh k hreq => ?_, fun hh k => ?_⟩
   · have hk := hh k
     cases hf : fld k with
-    | req t => rw [hf] at hk; exact of_decide_eq_true hk
-    | optional t => rw [hf] at hreq; exact absurd hreq (by simp [Field.isReqA])
-    | fallback t d => rw [hf] at hreq; exact absurd hreq (by simp [Field.isReqA])
+    | req t m =>
+        cases m with
+        | none => rw [hf] at hk; exact of_decide_eq_true hk
+        | some d => rw [hf] at hreq; exact absurd hreq (by simp [ObjectSlot.isReqA])
+    | optional t => rw [hf] at hreq; exact absurd hreq (by simp [ObjectSlot.isReqA])
   · cases hf : fld k with
-    | req t => exact decide_eq_true (hh k (by rw [hf]; rfl))
+    | req t m =>
+        cases m with
+        | none => exact decide_eq_true (hh k (by rw [hf]; rfl))
+        | some d => rfl
     | optional t => rfl
-    | fallback t d => rfl
 
 /-- The declared set is the intersection and the required set the union, which is what the two
     presence tests conjoin to. -/
-theorem reqPresentT_of_bodies {a b : Body} {F : {k // k ∈ Body.shared a b} → Field}
+theorem reqPresentT_of_bodies {a b : Body} {F : {k // k ∈ Body.shared a b} → ObjectSlot}
     (hab : Body.reqShared a b = true) (hba : Body.reqShared b a = true)
-    (hisreqA : ∀ k, Field.isReqA (F k)
-      = (Field.isReqA (a.at ⟨k.1, Body.mem_shared_left k.2⟩)
-         || Field.isReqA (b.at ⟨k.1, Body.mem_shared_right k.2⟩)))
+    (hisreqA : ∀ k, ObjectSlot.isReqA (F k)
+      = (ObjectSlot.isReqA (a.at ⟨k.1, Body.mem_shared_left k.2⟩)
+         || ObjectSlot.isReqA (b.at ⟨k.1, Body.mem_shared_right k.2⟩)))
     (keys : Finset Name) :
     reqPresentT (Body.shared a b) F keys
       = (reqPresentT a.fields a.at keys && reqPresentT b.fields b.at keys) := by
@@ -4422,19 +4022,17 @@ theorem reqPresentT_of_bodies {a b : Body} {F : {k // k ∈ Body.shared a b} →
   constructor
   · intro hs
     refine ⟨fun k hreq => ?_, fun k hreq => ?_⟩
-    · have hr : Field.isReq (a.at k) = true := by
+    · have hr : ObjectSlot.isReq (a.at k) = true := by
         cases hf : a.at k with
-        | req t => rfl
-        | optional t => rw [hf] at hreq; exact absurd hreq (by simp [Field.isReqA])
-        | fallback t d => rw [hf] at hreq; exact absurd hreq (by simp [Field.isReqA])
+        | req t m => rfl
+        | optional t => rw [hf] at hreq; exact absurd hreq (by simp [ObjectSlot.isReqA])
       have hk : k.1 ∈ Body.shared a b := mem_shared_iff.mpr ⟨k.2, hA k hr⟩
       refine hs ⟨k.1, hk⟩ ?_
       rw [hisreqA ⟨k.1, hk⟩, hreq, Bool.true_or]
-    · have hr : Field.isReq (b.at k) = true := by
+    · have hr : ObjectSlot.isReq (b.at k) = true := by
         cases hf : b.at k with
-        | req t => rfl
-        | optional t => rw [hf] at hreq; exact absurd hreq (by simp [Field.isReqA])
-        | fallback t d => rw [hf] at hreq; exact absurd hreq (by simp [Field.isReqA])
+        | req t m => rfl
+        | optional t => rw [hf] at hreq; exact absurd hreq (by simp [ObjectSlot.isReqA])
       have hk : k.1 ∈ Body.shared a b := mem_shared_iff.mpr ⟨hB k hr, k.2⟩
       refine hs ⟨k.1, hk⟩ ?_
       rw [hisreqA ⟨k.1, hk⟩, hreq, Bool.or_true]
@@ -4444,122 +4042,30 @@ theorem reqPresentT_of_bodies {a b : Body} {F : {k // k ∈ Body.shared a b} →
     · exact hA' ⟨k.1, Body.mem_shared_left k.2⟩ hr
     · exact hB' ⟨k.1, Body.mem_shared_right k.2⟩ hr
 
-
-/-- A quantified conjunction splits. The value side's twin takes `Bool` predicates; the read
-    side's rows are a `keepT` guard implying an entry, so the congruence has to be at `Prop`. -/
-theorem decide_forall_and_prop {α : Sort*} {P Q R : α → Prop}
-    [Decidable (∀ k, R k)] [Decidable (∀ k, P k)] [Decidable (∀ k, Q k)]
-    (h : ∀ k, (R k ↔ (P k ∧ Q k))) :
-    decide (∀ k, R k) = (decide (∀ k, P k) && decide (∀ k, Q k)) := by
-  simp only [h, forall_and]
-  simp
-
-/-- A name one body declares and the other does not forces the other to `refuse`: under
-    `drop` the certificate would have made the declared sets equal. -/
-theorem rest_refuse_of_dropFits {a b : Body} {r : Rest}
-    (hr : Rest.merge a.rest b.rest = some r) (hb : Body.dropFits b a = true)
-    {k : Name} (hka : k ∈ a.fields) (hkb : k ∉ b.fields) : b.rest = .refuse := by
-  unfold Body.dropFits at hb
-  cases hbr : b.rest with
-  | drop => rw [hbr] at hb; exact absurd (of_decide_eq_true hb k hka) hkb
-  | refuse => rfl
-  | codec t => rw [hbr] at hr; cases har : a.rest <;> rw [har] at hr <;> simp [Rest.merge] at hr
-
-/-- The merged rest is `drop` exactly where both are. -/
-theorem merge_eq_drop_iff {ra rb r : Rest} (hr : Rest.merge ra rb = some r) :
-    r = .drop ↔ (ra = .drop ∧ rb = .drop) := by
-  cases ra <;> cases rb <;> simp_all [Rest.merge]
-
-/-- `Rest.merge` reads its two policies alike. -/
-theorem merge_comm (ra rb : Rest) : Rest.merge ra rb = Rest.merge rb ra := by
-  cases ra <;> cases rb <;> rfl
-
-/-- A `refuse` on either side merges to `refuse`. -/
-theorem merge_refuse_of_left {ra rb r : Rest} (hr : Rest.merge ra rb = some r)
-    (h : rb = .refuse) : r = .refuse := by
-  cases ra <;> rw [h] at hr <;> simp_all [Rest.merge]
-
-/-- Every kept entry goes through both bodies' fields, a shared name through the meet. -/
-theorem objAdmA_of_bodies {a b : Body} {r : Rest} {F : {k // k ∈ Body.shared a b} → Field}
-    (hr : Rest.merge a.rest b.rest = some r)
-    (hda : Body.dropFits a b = true) (hdb : Body.dropFits b a = true)
+/-- Every entry goes through both bodies' fields, a shared name through the meet. This carried two
+    keep-filter guards while the old read-side policy existed; both are gone, so it is the value
+    side's twin line for line. -/
+theorem objAdmA_of_bodies {a b : Body} {F : {k // k ∈ Body.shared a b} → ObjectSlot}
     (ihf : ∀ (k : {k // k ∈ Body.shared a b}) (c : Attr),
       AdmAField (F k) c
         = (AdmAField (a.at ⟨k.1, Body.mem_shared_left k.2⟩) c
             && AdmAField (b.at ⟨k.1, Body.mem_shared_right k.2⟩) c))
     (keys : Finset Name) (g : {k // k ∈ keys} → Attr) :
-    objAdmA ⟨Body.shared a b, fun k => AdmAField (F k)⟩ (AdmARest r)
-        (keepT r (Body.shared a b)) keys g
-      = (objAdmA ⟨a.fields, fun k => AdmAField (a.at k)⟩ (AdmARest a.rest)
-           (keepT a.rest a.fields) keys g
-         && objAdmA ⟨b.fields, fun k => AdmAField (b.at k)⟩ (AdmARest b.rest)
-           (keepT b.rest b.fields) keys g) := by
-  have hnc : ∀ t, a.rest ≠ .codec t := by
-    intro t ht; rw [ht] at hr; simp [Rest.merge] at hr
-  have hnc' : ∀ t, b.rest ≠ .codec t := by
-    intro t ht; rw [ht] at hr; cases har : a.rest <;> rw [har] at hr <;> simp [Rest.merge] at hr
-  have hrestA : AdmARest a.rest = none := by
-    cases har : a.rest with
-    | drop => rfl | refuse => rfl | codec t => exact absurd har (hnc t)
-  have hrestB : AdmARest b.rest = none := by
-    cases hbr : b.rest with
-    | drop => rfl | refuse => rfl | codec t => exact absurd hbr (hnc' t)
-  have hrestR : AdmARest r = none := by
-    cases hrr : r with
-    | drop => rfl | refuse => rfl
-    | codec t =>
-      exfalso; cases har : a.rest <;> cases hbr : b.rest <;>
-        rw [har, hbr] at hr <;> simp [Rest.merge, hrr] at hr
-  simp only [objAdmA, entryPA, MapOf.at, hrestA, hrestB, hrestR]
-  refine decide_forall_and_prop (fun k => ?_)
+    objAdmA ⟨Body.shared a b, fun k => AdmAField (F k)⟩ none keys g
+      = (objAdmA ⟨a.fields, fun k => AdmAField (a.at k)⟩ none keys g
+         && objAdmA ⟨b.fields, fun k => AdmAField (b.at k)⟩ none keys g) := by
+  simp only [objAdmA, entryPA, MapOf.at]
+  refine decide_forall_and (fun k => ?_)
   by_cases hk : k.1 ∈ Body.shared a b
   · have ha := Body.mem_shared_left hk
     have hb := Body.mem_shared_right hk
-    have hkr : keepT r (Body.shared a b) k.1 = true := by
-      cases hrr : r with
-      | drop => simp [keepT, hk]
-      | refuse => rfl
-      | codec t => simp [keepT]
-    have hkA : keepT a.rest a.fields k.1 = true := by
-      cases har : a.rest with
-      | drop => simp [keepT, ha] | refuse => rfl | codec t => simp [keepT]
-    have hkB : keepT b.rest b.fields k.1 = true := by
-      cases hbr : b.rest with
-      | drop => simp [keepT, hb] | refuse => rfl | codec t => simp [keepT]
-    simp only [hkr, hkA, hkB, dif_pos hk, dif_pos ha, dif_pos hb, true_implies,
-      ihf ⟨k.1, hk⟩ (g k), Bool.and_eq_true]
+    simp only [dif_pos hk, dif_pos ha, dif_pos hb]
+    exact ihf ⟨k.1, hk⟩ (g k)
   · have hnab : ¬ (k.1 ∈ a.fields ∧ k.1 ∈ b.fields) := fun hh => hk (mem_shared_iff.mpr hh)
+    simp only [dif_neg hk]
     by_cases ha : k.1 ∈ a.fields
-    · have hb : k.1 ∉ b.fields := fun hh => hnab ⟨ha, hh⟩
-      have hbref : b.rest = .refuse := rest_refuse_of_dropFits hr hdb ha hb
-      have hrref : r = .refuse := merge_refuse_of_left hr hbref
-      simp only [hrref, hbref, keepT, dif_neg hk, dif_neg hb, true_implies]
-      simp
-    · by_cases hb : k.1 ∈ b.fields
-      · have hrc : Rest.merge b.rest a.rest = some r := by rw [merge_comm]; exact hr
-        have haref : a.rest = .refuse := rest_refuse_of_dropFits hrc hda hb ha
-        have hrref : r = .refuse := merge_refuse_of_left hrc haref
-        simp only [hrref, haref, keepT, dif_neg hk, dif_neg ha, true_implies]
-        simp
-      · cases har : a.rest with
-        | drop =>
-          cases hbr : b.rest with
-          | drop =>
-            have hrd : r = .drop := (merge_eq_drop_iff hr).mpr ⟨har, hbr⟩
-            simp only [hrd, keepT, decide_eq_true_eq]
-            simp [hk, ha, hb]
-          | refuse =>
-            have hrref : r = .refuse := merge_refuse_of_left hr hbr
-            simp only [hrref, keepT, dif_neg hk, dif_neg hb, true_implies]
-            simp
-          | codec t => exact absurd hbr (hnc' t)
-        | refuse =>
-          have hrref : r = .refuse :=
-            merge_refuse_of_left (by rw [merge_comm]; exact hr) har
-          simp only [hrref, keepT, dif_neg hk, dif_neg ha, true_implies]
-          simp
-        | codec t => exact absurd har (hnc t)
-
+    · simp only [dif_pos ha, dif_neg (fun hh => hnab ⟨ha, hh⟩), Bool.and_false]
+    · simp only [dif_neg ha, Bool.false_and]
 
 /-- The two policies meet at their conjunction, which is what makes the `opaque` pair a row
     rather than a refusal. -/
@@ -4573,142 +4079,85 @@ theorem AdmA_opaq_and (l l2 : Bool) (a : Attr) :
     cases l <;> cases l2 <;> simp [hf, ht]
 
 /-- A declared name that must be read is a name the map carries. -/
-theorem mem_keys_of_req {fields : Finset Name} {fld : {k // k ∈ fields} → Field}
+theorem mem_keys_of_req {fields : Finset Name} {fld : {k // k ∈ fields} → ObjectSlot}
     {keys : Finset Name} (hv : reqPresentT fields fld keys = true) {k : {k // k ∈ fields}}
-    (hf : Field.isReqA (fld k) = true) : k.1 ∈ keys := by
+    (hf : ObjectSlot.isReqA (fld k) = true) : k.1 ∈ keys := by
   have hh := of_decide_eq_true hv k
   cases hfd : fld k with
-  | req t => rw [hfd] at hh; exact of_decide_eq_true hh
-  | optional t => rw [hfd] at hf; exact absurd hf (by simp [Field.isReqA])
-  | fallback t d => rw [hfd] at hf; exact absurd hf (by simp [Field.isReqA])
+  | req t m =>
+      cases m with
+      | none => rw [hfd] at hh; exact of_decide_eq_true hh
+      | some d => rw [hfd] at hf; exact absurd hf (by simp [ObjectSlot.isReqA])
+  | optional t => rw [hfd] at hf; exact absurd hf (by simp [ObjectSlot.isReqA])
 
-/-- A declared name passes the keep filter under every rest, because `drop` keeps exactly the
-    declared names. A shared name is declared by both bodies, so the object rows need no
-    hypothesis about the filter. -/
-theorem keepT_of_mem {rest : Rest} {fields : Finset Name} {k : Name} (h : k ∈ fields) :
-    keepT rest fields k = true := by
-  cases rest <;> simp [keepT, h]
-
-/-- No shared field meets to the bottom at an attribute both bodies read. -/
-theorem isBottom_false_of_admA_bodies {a b : Body} {F : {k // k ∈ Body.shared a b} → Field}
-    (hisreqA : ∀ k, Field.isReqA (F k)
-      = (Field.isReqA (a.at ⟨k.1, Body.mem_shared_left k.2⟩)
-         || Field.isReqA (b.at ⟨k.1, Body.mem_shared_right k.2⟩)))
-    (hreqOf : ∀ k, Field.isBottom (F k) = true → ∃ t, F k = .req t)
+/-- No shared slot meets to the bottom at an attribute both bodies read. -/
+theorem isBottom_false_of_admA_bodies {a b : Body} {F : {k // k ∈ Body.shared a b} → ObjectSlot}
+    (hisreqA : ∀ k, ObjectSlot.isReqA (F k)
+      = (ObjectSlot.isReqA (a.at ⟨k.1, Body.mem_shared_left k.2⟩)
+         || ObjectSlot.isReqA (b.at ⟨k.1, Body.mem_shared_right k.2⟩)))
+    (hreqOf : ∀ k, ObjectSlot.isBottom (F k) = true → ∃ t, F k = .req t none)
     (ihf : ∀ (k : {k // k ∈ Body.shared a b}) (c : Attr),
       AdmAField (F k) c
         = (AdmAField (a.at ⟨k.1, Body.mem_shared_left k.2⟩) c
             && AdmAField (b.at ⟨k.1, Body.mem_shared_right k.2⟩) c))
     {keys : Finset Name} {g : {k // k ∈ keys} → Attr}
     (hA : AdmABody a (.m keys g) = true) (hB : AdmABody b (.m keys g) = true) :
-    ∀ k, Field.isBottom (F k) = false := by
+    ∀ k, ObjectSlot.isBottom (F k) = false := by
   rw [AdmABody_map, Bool.and_eq_true] at hA hB
   intro k
   refine Bool.eq_false_iff.mpr (fun hbot => ?_)
   have ha := Body.mem_shared_left k.2
   have hb := Body.mem_shared_right k.2
   obtain ⟨t, hreqf⟩ := hreqOf k hbot
-  have hreq : Field.isReqA (F k) = true := by rw [hreqf]; rfl
+  have hreq : ObjectSlot.isReqA (F k) = true := by rw [hreqf]; rfl
   rw [hisreqA k, Bool.or_eq_true] at hreq
   have hk : k.1 ∈ keys := by
     rcases hreq with hr | hr
     · exact mem_keys_of_req hA.1 (k := ⟨k.1, ha⟩) hr
     · exact mem_keys_of_req hB.1 (k := ⟨k.1, hb⟩) hr
-  have hrowA := objAdmA_row hA.2 hk ha (keepT_of_mem ha)
-  have hrowB := objAdmA_row hB.2 hk hb (keepT_of_mem hb)
+  have hrowA := objAdmA_row hA.2 hk ha
+  have hrowB := objAdmA_row hB.2 hk hb
   have := ihf k (g ⟨k.1, hk⟩)
   rw [hreqf] at this
   simp only [AdmAField, hrowA, hrowB] at this
-  rw [show t = Term.never from eq_never_of_isNever (by simpa [hreqf, Field.isBottom] using hbot)] at this
+  rw [show t = Term.never from
+    eq_never_of_isNever (by simpa [hreqf, ObjectSlot.isBottom] using hbot)] at this
   simp [AdmA] at this
 
-
-/-- The read side's required-name test, against the guards the meet reads first. A `fallback`
-    name is shared, because `Body.fbShared` holds; a `req` name is present, because the read side
-    forces it, and the partner declares every name it reads. -/
-theorem reqShared_of_admA {a b : Body} {r : Rest}
-    (hr : Rest.merge a.rest b.rest = some r)
-    (hfb : Body.fbShared a b = true) (hdb : Body.dropFits b a = true)
+/-- The read side's required-name test, against the guards the meet reads first. A stand-in name
+    is shared, because `Body.fbShared` holds; a `req` name is present, because the read side
+    forces it, and a closed partner declares every name it reads. -/
+theorem reqShared_of_admA {a b : Body} (hb0 : b.wild = none)
+    (hfb : Body.fbShared a b = true)
     {keys : Finset Name} {g : {k // k ∈ keys} → Attr}
     (hA : AdmABody a (.m keys g) = true) (hB : AdmABody b (.m keys g) = true) :
     Body.reqShared a b = true := by
   refine decide_eq_true (fun k hreq => ?_)
   cases hf : a.at k with
-  | fallback t d => exact of_decide_eq_true hfb k (by rw [hf]; rfl)
-  | optional t => rw [hf] at hreq; exact absurd hreq (by simp [Field.isReq])
-  | req t =>
-      have hpres : k.1 ∈ keys := by
-        rw [AdmABody_map, Bool.and_eq_true] at hA
-        exact mem_keys_of_req hA.1 (by rw [hf]; rfl)
-      cases hbr : b.rest with
-      | refuse => exact mem_fields_of_admA hbr hB k.1 hpres
-      | drop =>
-          unfold Body.dropFits at hdb
-          rw [hbr] at hdb
-          exact of_decide_eq_true hdb k.1 k.2
-      | codec t => rw [hbr] at hr; cases har : a.rest <;> rw [har] at hr <;> simp [Rest.merge] at hr
+  | optional t => rw [hf] at hreq; exact absurd hreq (by simp [ObjectSlot.isReq])
+  | req t m =>
+      cases m with
+      | some d => exact of_decide_eq_true hfb k (by rw [hf]; rfl)
+      | none =>
+          have hpres : k.1 ∈ keys := by
+            rw [AdmABody_map, Bool.and_eq_true] at hA
+            exact mem_keys_of_req hA.1 (by rw [hf]; rfl)
+          exact mem_fields_of_admA hb0 hB k.1 hpres
 
 /-- The read side's presence test reads the marks alone, so a field table carrying the body's
     marks has the body's test. -/
-theorem reqPresentT_of_isReqA {b : Body} {F : {k // k ∈ b.fields} → Field}
-    (hreq : ∀ k, Field.isReqA (F k) = Field.isReqA (b.at k)) (keys : Finset Name) :
+theorem reqPresentT_of_isReqA {b : Body} {F : {k // k ∈ b.fields} → ObjectSlot}
+    (hreq : ∀ k, ObjectSlot.isReqA (F k) = ObjectSlot.isReqA (b.at k)) (keys : Finset Name) :
     reqPresentT b.fields F keys = reqPresentT b.fields b.at keys := by
   rw [reqPresentT_req, reqPresentT_req]
   exact decide_eq_decide.mpr (forall_congr' fun k => by rw [hreq k])
 
-/-- Every kept entry goes through its field and the right operand's term alike. The rest is a
-    codec here, so `keepT` is constantly true and the two sides filter the same names. -/
-theorem objAdmA_of_right {b : Body} {x t r : Term} {F : {k // k ∈ b.fields} → Field}
-    (hrest : b.rest = .codec t)
-    (ihf : ∀ (k : {k // k ∈ b.fields}) (c : Attr),
-      AdmAField (F k) c = (AdmAField (b.at k) c && AdmA x c))
-    (iht : ∀ c, AdmA r c = (AdmA t c && AdmA x c))
-    (keys : Finset Name) (g : {k // k ∈ keys} → Attr) :
-    objAdmA ⟨b.fields, fun k => AdmAField (F k)⟩ (some (AdmA r))
-        (keepT (.codec r) b.fields) keys g
-      = (objAdmA ⟨b.fields, fun k => AdmAField (b.at k)⟩ (some (AdmA t))
-           (keepT b.rest b.fields) keys g
-         && decide (∀ k : {k // k ∈ keys}, AdmA x (g k) = true)) := by
-  simp only [objAdmA, entryPA, MapOf.at, hrest, keepT, true_implies]
-  refine decide_forall_and (fun k => ?_)
-  by_cases hk : k.1 ∈ b.fields
-  · simp only [dif_pos hk]
-    exact ihf ⟨k.1, hk⟩ (g k)
-  · simp only [dif_neg hk]
-    exact iht (g k)
-
 /-- A field at the bottom reads nothing either. -/
-theorem AdmAField_of_isBottom {f : Field} (h : Field.isBottom f = true) (c : Attr) :
+theorem AdmAField_of_isBottom {f : ObjectSlot} (h : ObjectSlot.isBottom f = true) (c : Attr) :
     AdmAField f c = false := by
   cases f with
-  | req t => rw [show t = .never from eq_never_of_isNever h]; rfl
-  | fallback t d => rw [show t = .never from eq_never_of_isNever h]; rfl
-  | optional t => exact absurd h (by simp [Field.isBottom])
-
-/-- No declared field meets the right operand's term to the bottom at an attribute both read. -/
-theorem isBottom_false_of_admA_right {b : Body} {x : Term} {F : {k // k ∈ b.fields} → Field}
-    (hreq : ∀ k, Field.isReqA (F k) = Field.isReqA (b.at k))
-    (hnfb : ∀ (k : {k // k ∈ b.fields}) (t : Term) (d : Value), F k ≠ .fallback t d)
-    (ihf : ∀ (k : {k // k ∈ b.fields}) (c : Attr),
-      AdmAField (F k) c = (AdmAField (b.at k) c && AdmA x c))
-    {keys : Finset Name} {g : {k // k ∈ keys} → Attr}
-    (hA : AdmABody b (.m keys g) = true)
-    (hR : decide (∀ k : {k // k ∈ keys}, AdmA x (g k) = true) = true) :
-    ∀ k, Field.isBottom (F k) = false := by
-  rw [AdmABody_map, Bool.and_eq_true] at hA
-  intro k
-  refine Bool.eq_false_iff.mpr (fun hbot => ?_)
-  have hbotA : Field.isReqA (F k) = true := by
-    cases hfd : F k with
-    | req t => rfl
-    | optional t => rw [hfd] at hbot; exact absurd hbot (by simp [Field.isBottom])
-    | fallback t d => exact absurd hfd (hnfb k t d)
-  have hk : k.1 ∈ keys := mem_keys_of_req hA.1 ((hreq k) ▸ hbotA)
-  have hrow := objAdmA_row hA.2 hk k.2 (keepT_of_mem k.2)
-  have hrec := of_decide_eq_true hR ⟨k.1, hk⟩
-  have := ihf k (g ⟨k.1, hk⟩)
-  rw [AdmAField_of_isBottom hbot, hrow, hrec] at this
-  exact absurd this (by simp)
+  | req t m => rw [show t = .never from eq_never_of_isNever h]; cases m <;> rfl
+  | optional t => exact absurd h (by simp [ObjectSlot.isBottom])
 
 /-- Where a literal reads, its base reads the same value: `literalCodec` is `baseCodec`
     restricted, and `Codec.restrict`'s `p` returns the base's own value where the guard passes. -/
@@ -5315,7 +4764,11 @@ theorem admitOptA_of_AdmA {os : List Term} (hc : unionOk os = true) {t : Term} (
   simp only [unionOk, Bool.and_eq_true, List.all_eq_true] at hc
   cases t with
   | object b =>
-      obtain ⟨hr, hnf⟩ := namesAgree_parts (hc.2 _ ht)
+      have hnf := namesAgree_parts (hc.2 _ ht)
+      have hr : b.wild = none := by
+        cases hwild : b.wild with
+        | none => rfl
+        | some _ => exact absurd (hc.1.2 _ ht) (by simp [Term.isOpenObject, hwild])
       cases a with
       | m keys g => simpa only [admitOptA, specOf] using structural_of_AdmABody hr hnf hh
       | _ => exact absurd hh (by cases b; simp [AdmA, AdmABody])
@@ -5361,8 +4814,8 @@ theorem ofOptions_p_of_filter {ts : List Term} {t : Term} {a : Attr}
   | _ :: _ :: _ => exact union_p_of_filter hf
 
 /-- A table that declares no stand-in contributes no name to `fbNames`. -/
-theorem fbNames_empty_of_not_fallback {fields : Finset Name} {F : {k // k ∈ fields} → Field}
-    (hnfb : ∀ (k : {k // k ∈ fields}) (t : Term) (d : Value), F k ≠ .fallback t d)
+theorem fbNames_empty_of_not_fallback {fields : Finset Name} {F : {k // k ∈ fields} → ObjectSlot}
+    (hnfb : ∀ (k : {k // k ∈ fields}) (t : Term) (d : Value), F k ≠ .req t (some d))
     (names : Finset Name) :
     fbNames names ⟨fields, fun k => fieldSem (F k)⟩ = ∅ := by
   rw [fbNames]
@@ -5371,15 +4824,17 @@ theorem fbNames_empty_of_not_fallback {fields : Finset Name} {F : {k // k ∈ fi
   refine Or.inl ?_
   rw [MapOf.at_mk_pos hk]
   cases hf : F ⟨k, hk⟩ with
-  | req _ => rfl
+  | req t m =>
+      cases m with
+      | none => rfl
+      | some d => exact absurd hf (hnfb ⟨k, hk⟩ t d)
   | optional _ => rfl
-  | fallback t d => exact absurd hf (hnfb ⟨k, hk⟩ t d)
 
 /-- **A factor declares no stand-in the map omits**, given that a shared stand-in forces the
     partner's field to be required. -/
 theorem fbNames_factor_of_req {a b : Body}
     (hfbReq : ∀ (k : Name) (hk : k ∈ a.fields) (hkb : k ∈ b.fields),
-      (∃ t d, a.at ⟨k, hk⟩ = .fallback t d) → ∃ u, b.at ⟨k, hkb⟩ = .req u)
+      (∃ t d, a.at ⟨k, hk⟩ = .req t (some d)) → ∃ u, b.at ⟨k, hkb⟩ = .req u none)
     (hfb : Body.fbShared a b = true)
     {keys : Finset Name} {g : {k // k ∈ keys} → Attr}
     (hB : AdmA (.object b) (.m keys g) = true) :
@@ -5393,21 +4848,23 @@ theorem fbNames_factor_of_req {a b : Body}
   rw [Bool.and_eq_false_iff,
     MapOf.at_mk_pos (f := fun k => fieldSem (a.at k)) hk]
   cases hf : a.at ⟨k, hk⟩ with
-  | req _ => exact Or.inl rfl
   | optional _ => exact Or.inl rfl
-  | fallback t d =>
-      refine Or.inr ?_
-      have hkb : k ∈ b.fields := of_decide_eq_true hfb ⟨k, hk⟩ (by rw [hf]; rfl)
-      obtain ⟨u, hu⟩ := hfbReq k hk hkb ⟨t, d, hf⟩
-      have := of_decide_eq_true hreqB ⟨k, hkb⟩
-      rw [hu] at this
-      simp [this]
+  | req t m =>
+      cases m with
+      | none => exact Or.inl rfl
+      | some d =>
+          refine Or.inr ?_
+          have hkb : k ∈ b.fields := of_decide_eq_true hfb ⟨k, hk⟩ (by rw [hf]; rfl)
+          obtain ⟨u, hu⟩ := hfbReq k hk hkb ⟨t, d, hf⟩
+          have := of_decide_eq_true hreqB ⟨k, hkb⟩
+          rw [hu] at this
+          simp [this]
 
 
 /-- …and the mirror. -/
 theorem fbNames_factor_of_req' {a b : Body}
     (hfbReq : ∀ (k : Name) (hk : k ∈ b.fields) (hkb : k ∈ a.fields),
-      (∃ t d, b.at ⟨k, hk⟩ = .fallback t d) → ∃ u, a.at ⟨k, hkb⟩ = .req u)
+      (∃ t d, b.at ⟨k, hk⟩ = .req t (some d)) → ∃ u, a.at ⟨k, hkb⟩ = .req u none)
     (hfb : Body.fbShared b a = true)
     {keys : Finset Name} {g : {k // k ∈ keys} → Attr}
     (hA : AdmA (.object a) (.m keys g) = true) :
@@ -5421,91 +4878,33 @@ theorem fbNames_factor_of_req' {a b : Body}
   rw [Bool.and_eq_false_iff,
     MapOf.at_mk_pos (f := fun k => fieldSem (b.at k)) hk]
   cases hf : b.at ⟨k, hk⟩ with
-  | req _ => exact Or.inl rfl
   | optional _ => exact Or.inl rfl
-  | fallback t d =>
-      refine Or.inr ?_
-      have hka : k ∈ a.fields := of_decide_eq_true hfb ⟨k, hk⟩ (by rw [hf]; rfl)
-      obtain ⟨u, hu⟩ := hfbReq k hk hka ⟨t, d, hf⟩
-      have := of_decide_eq_true hreqA ⟨k, hka⟩
-      rw [hu] at this
-      simp [this]
-
-/-- **The keep filter agrees on the map's own names.** `Rest.merge` answers `refuse` unless both
-    rests are `drop`, so the merged filter keeps everything except at `drop` against `drop`, where
-    `dropFits` makes the two declared sets equal. The one case that is not structural is `drop`
-    against `refuse`: there the `refuse` factor's admission puts the map's names inside its
-    declared set, and `dropFits` puts that inside the `drop` factor's. -/
-theorem keepT_agree {a b : Body} {r : Rest}
-    (hr : Rest.merge a.rest b.rest = some r)
-    (hda : Body.dropFits a b = true) (hdb : Body.dropFits b a = true)
-    {keys : Finset Name} {g : {k // k ∈ keys} → Attr}
-    (hB : AdmA (.object b) (.m keys g) = true) :
-    ∀ k ∈ keys, keepT r (Body.shared a b) k = keepT a.rest a.fields k := by
-  intro k hk
-  cases hra : a.rest with
-  | codec t => rw [hra] at hr; cases hrb : b.rest <;> rw [hrb] at hr <;> simp [Rest.merge] at hr
-  | refuse =>
-      cases hrb : b.rest with
-      | codec t => rw [hra, hrb] at hr; simp [Rest.merge] at hr
-      | refuse => rw [hra, hrb] at hr; simp only [Rest.merge, Option.some.injEq] at hr; subst hr; rfl
-      | drop => rw [hra, hrb] at hr; simp only [Rest.merge, Option.some.injEq] at hr; subst hr; rfl
-  | drop =>
-      cases hrb : b.rest with
-      | codec t => rw [hra, hrb] at hr; simp [Rest.merge] at hr
-      | refuse =>
-          rw [hra, hrb] at hr; simp only [Rest.merge, Option.some.injEq] at hr; subst hr
-          have hkb : k ∈ b.fields :=
-            mem_fields_of_admA hrb (by rw [← show AdmA (.object b) (.m keys g)
-              = AdmABody b (.m keys g) from rfl]; exact hB) k hk
-          rw [Body.dropFits, hra] at hda
-          simp only [keepT, decide_eq_true_eq, of_decide_eq_true hda k hkb]
-          rfl
-      | drop =>
-          rw [hra, hrb] at hr; simp only [Rest.merge, Option.some.injEq] at hr; subst hr
-          rw [Body.dropFits, hra] at hda
-          rw [Body.dropFits, hrb] at hdb
-          simp only [keepT, Body.shared, Finset.mem_filter, decide_eq_decide]
-          exact ⟨fun h => h.1, fun h => ⟨h, of_decide_eq_true hdb k h⟩⟩
-
+  | req t m =>
+      cases m with
+      | none => exact Or.inl rfl
+      | some d =>
+          refine Or.inr ?_
+          have hka : k ∈ a.fields := of_decide_eq_true hfb ⟨k, hk⟩ (by rw [hf]; rfl)
+          obtain ⟨u, hu⟩ := hfbReq k hk hka ⟨t, d, hf⟩
+          have := of_decide_eq_true hreqA ⟨k, hka⟩
+          rw [hu] at this
+          simp [this]
 
 /-- The shared name set reads the same from either side. -/
 theorem Body.shared_comm (a b : Body) : Body.shared a b = Body.shared b a := by
   ext k; simp [Body.shared, Finset.mem_filter, and_comm]
 
-/-- **A kept name is shared.** At `drop` against `drop` the merged filter says so outright. At a
-    merged `refuse` the filter is vacuous, and the name comes from the map instead: the `refuse`
-    factor's admission puts it inside that factor's declared set, and `dropFits` carries it into
-    the other's. -/
-theorem mem_shared_of_keep {a b : Body} {r : Rest}
-    (hr : Rest.merge a.rest b.rest = some r)
-    (hda : Body.dropFits a b = true) (hdb : Body.dropFits b a = true)
+/-- **A stored name is shared.** Both factors are closed, so each factor's admission puts the
+    name inside that factor's declared set, and the shared set is the intersection of the two.
+    This read the merged keep filter while the old read-side policy could drop a name; there is
+    no filter left to read. -/
+theorem mem_shared_of_keep {a b : Body} (ha0 : a.wild = none) (hb0 : b.wild = none)
     {keys : Finset Name} {g : {k // k ∈ keys} → Attr}
     (hA : AdmABody a (.m keys g) = true) (hB : AdmABody b (.m keys g) = true)
-    {k : Name} (hk : k ∈ keys) (hkeep : keepT r (Body.shared a b) k = true) :
-    k ∈ Body.shared a b := by
-  have mk : k ∈ a.fields → k ∈ b.fields → k ∈ Body.shared a b := fun p q =>
-    Finset.mem_filter.mpr ⟨p, by simpa using q⟩
-  cases hra : a.rest with
-  | codec t => rw [hra] at hr; cases hrb : b.rest <;> rw [hrb] at hr <;> simp [Rest.merge] at hr
-  | drop =>
-      cases hrb : b.rest with
-      | codec t => rw [hra, hrb] at hr; simp [Rest.merge] at hr
-      | drop =>
-          rw [hra, hrb] at hr; simp only [Rest.merge, Option.some.injEq] at hr; subst hr
-          simpa only [keepT, decide_eq_true_eq] using hkeep
-      | refuse =>
-          have hkb : k ∈ b.fields := mem_fields_of_admA hrb hB k hk
-          rw [Body.dropFits, hra] at hda
-          exact mk (of_decide_eq_true hda k hkb) hkb
-  | refuse =>
-      have hka : k ∈ a.fields := mem_fields_of_admA hra hA k hk
-      cases hrb : b.rest with
-      | codec t => rw [hra, hrb] at hr; simp [Rest.merge] at hr
-      | refuse => exact mk hka (mem_fields_of_admA hrb hB k hk)
-      | drop =>
-          rw [Body.dropFits, hrb] at hdb
-          exact mk hka (of_decide_eq_true hdb k hka)
+    {k : Name} (hk : k ∈ keys) :
+    k ∈ Body.shared a b :=
+  Finset.mem_filter.mpr
+    ⟨mem_fields_of_admA ha0 hA k hk, by simpa using mem_fields_of_admA hb0 hB k hk⟩
 
 /-- **The transport, with the kept name set a variable.** Two images over equal name sets agree
     where their entries agree. `subst` does the work, so the membership proof inside the entry
@@ -5551,37 +4950,34 @@ theorem bodySem_p_congr {b b' : Body} {keys : Finset Name} {g : {k // k ∈ keys
     (hreq : reqPresentT b.fields b.at keys = reqPresentT b'.fields b'.at keys)
     (hfb : fbNames keys ⟨b.fields, fun k => fieldSem (b.at k)⟩ = ∅)
     (hfb' : fbNames keys ⟨b'.fields, fun k => fieldSem (b'.at k)⟩ = ∅)
-    (hfil : keys.filter (keepT b.rest b.fields ·) = keys.filter (keepT b'.rest b'.fields ·))
-    (hent : ∀ (k : Name) (h : k ∈ keys), keepT b.rest b.fields k = true →
-        (entryCodec ⟨b.fields, fun k => fieldSem (b.at k)⟩ (rcOf (restSem b.rest)) k).bind
+    (hent : ∀ (k : Name) (h : k ∈ keys),
+        (entryCodec ⟨b.fields, fun k => fieldSem (b.at k)⟩ (rcOf (wildSem b.wild)) k).bind
             (fun c => c.p (g ⟨k, h⟩))
-          = (entryCodec ⟨b'.fields, fun k => fieldSem (b'.at k)⟩ (rcOf (restSem b'.rest)) k).bind
+          = (entryCodec ⟨b'.fields, fun k => fieldSem (b'.at k)⟩ (rcOf (wildSem b'.wild)) k).bind
             (fun c => c.p (g ⟨k, h⟩))) :
     (denote (.object b)).p (.m keys g) = (denote (.object b')).p (.m keys g) := by
   have hb : ∀ c : Body, (denote (.object c)).p (.m keys g)
-      = (objRead ⟨c.fields, fun k => fieldSem (c.at k)⟩ (rcOf (restSem c.rest))
-          (keepB (restSem c.rest) ⟨c.fields, fun k => fieldSem (c.at k)⟩)
+      = (objRead ⟨c.fields, fun k => fieldSem (c.at k)⟩ (rcOf (wildSem c.wild))
+          (keepB (wildSem c.wild) ⟨c.fields, fun k => fieldSem (c.at k)⟩)
           ⟨keys, g⟩).map mapV.into := by
     intro c; cases c; rfl
   rw [hb b, hb b']
-  refine congrArg _ (objRead_congr ?_ hfb hfb' ?_
-    (fun k h hk => hent k h (by rw [← keepB_eq b.fields b.at b.rest k]; exact hk)))
+  refine congrArg _ (objRead_congr ?_ hfb hfb' ?_ (fun k h _ => hent k h))
   · rw [← reqPresentT_eq, ← reqPresentT_eq]; exact hreq
-  · refine Eq.trans (filter_congr_on (fun k _ => keepB_eq b.fields b.at b.rest k))
-      (Eq.trans hfil (filter_congr_on (fun k _ => keepB_eq b'.fields b'.at b'.rest k)).symm)
+  · exact Eq.trans (filter_congr_on (fun k _ => keepB_wild b.wild _ k))
+      (filter_congr_on (fun k _ => keepB_wild b'.wild _ k)).symm
 
 
 /-- **Two objects, over an abstract field table.** Everything after the field agreement reads
     that agreement alone, so the well-founded caller and the structural one share this. -/
-theorem object_row_gen {a b : Body} {z : Term} {r : Rest} {Ok : Prop}
-    {F : {k // k ∈ Body.shared a b} → Field}
-    (hr : Rest.merge a.rest b.rest = some r)
+theorem object_row_gen {a b : Body} {z : Term} {Ok : Prop}
+    {F : {k // k ∈ Body.shared a b} → ObjectSlot}
+    (ha0 : a.wild = none) (hb0 : b.wild = none)
     (hfba : Body.fbShared a b = true) (hfbb : Body.fbShared b a = true)
-    (hda : Body.dropFits a b = true) (hdb : Body.dropFits b a = true)
-    (hisreqA : Ok → ∀ k, Field.isReqA (F k)
-      = (Field.isReqA (a.at ⟨k.1, Body.mem_shared_left k.2⟩)
-         || Field.isReqA (b.at ⟨k.1, Body.mem_shared_right k.2⟩)))
-    (hreqOf : Ok → ∀ k, Field.isBottom (F k) = true → ∃ t, F k = .req t)
+    (hisreqA : Ok → ∀ k, ObjectSlot.isReqA (F k)
+      = (ObjectSlot.isReqA (a.at ⟨k.1, Body.mem_shared_left k.2⟩)
+         || ObjectSlot.isReqA (b.at ⟨k.1, Body.mem_shared_right k.2⟩)))
+    (hreqOf : Ok → ∀ k, ObjectSlot.isBottom (F k) = true → ∃ t, F k = .req t none)
     (hfbM : Ok → ∀ keys : Finset Name,
       fbNames keys ⟨Body.shared a b, fun k => fieldSem (F k)⟩ = ∅)
     (hfbA : Ok → ∀ {keys : Finset Name} {g : {k // k ∈ keys} → Attr},
@@ -5602,8 +4998,8 @@ theorem object_row_gen {a b : Body} {z : Term} {r : Rest} {Ok : Prop}
               = (fieldSem (b.at ⟨k.1, Body.mem_shared_right k.2⟩)).codec.p c))
     (hcase : (z = .never ∧ ¬ (Body.reqShared a b = true ∧ Body.reqShared b a = true))
              ∨ (Body.reqShared a b = true ∧ Body.reqShared b a = true ∧ Ok ∧
-                ((z = .never ∧ ¬ (∀ k, Field.isBottom (F k) = false))
-                 ∨ z = .object (.mk (Body.shared a b) F r)))) :
+                ((z = .never ∧ ¬ (∀ k, ObjectSlot.isBottom (F k) = false))
+                 ∨ z = .object (.mk (Body.shared a b) F none)))) :
     (∀ c, AdmA z c = (AdmA (.object a) c && AdmA (.object b) c)) ∧
     (∀ c, AdmA (.object a) c = true → AdmA (.object b) c = true →
       (denote z).p c = (denote (.object a)).p c ∧ (denote z).p c = (denote (.object b)).p c) := by
@@ -5633,8 +5029,8 @@ theorem object_row_gen {a b : Body} {z : Term} {r : Rest} {Ok : Prop}
           cases hB : AdmABody b (.m keys g) with
           | false => rfl
           | true =>
-            exact absurd ⟨reqShared_of_admA hr hfba hdb hA hB,
-              reqShared_of_admA ((merge_comm a.rest b.rest) ▸ hr) hfbb hda hB hA⟩ hne
+            exact absurd ⟨reqShared_of_admA hb0 hfba hA hB,
+              reqShared_of_admA ha0 hfbb hB hA⟩ hne
       · show (false : Bool) = _
         cases hA : AdmABody a (.m keys g) with
         | false => rfl
@@ -5643,11 +5039,12 @@ theorem object_row_gen {a b : Body} {z : Term} {r : Rest} {Ok : Prop}
           | false => rfl
           | true =>
             exact absurd (isBottom_false_of_admA_bodies (hisreqA hok) (hreqOf hok) (fun k c => (ihf hok k).1 c) hA hB) hnb
-      · show AdmABody (.mk (Body.shared a b) F r)
+      · show AdmABody (.mk (Body.shared a b) F none)
             (.m keys g) = _
         rw [AdmABody_map, AdmABody_map, AdmABody_map]
-        simp only [Body.fields_mk, Body.at_mk, Body.rest_mk]
-        rw [reqPresentT_of_bodies hab hba (hisreqA hok), objAdmA_of_bodies hr hda hdb (fun k c => (ihf hok k).1 c)]
+        simp only [Body.fields_mk, Body.at_mk, Body.wild_mk, ha0, hb0, AdmAWild]
+        rw [reqPresentT_of_bodies hab hba (hisreqA hok),
+          objAdmA_of_bodies (fun k c => (ihf hok k).1 c)]
         simp [Bool.and_assoc, Bool.and_left_comm]
     all_goals exact hnm _ (fun _ _ hc => Attr.noConfusion hc)
   refine ⟨half1, fun c hA hB => ?_⟩
@@ -5656,8 +5053,8 @@ theorem object_row_gen {a b : Body} {z : Term} {r : Rest} {Ok : Prop}
     rw [AdmA_object a (.m keys g)] at hA
     rw [AdmA_object b (.m keys g)] at hB
     rcases hcase with ⟨rfl, hne⟩ | ⟨hab, hba, hok, ⟨rfl, hnb⟩ | rfl⟩
-    · exact absurd ⟨reqShared_of_admA hr hfba hdb hA hB,
-        reqShared_of_admA ((merge_comm a.rest b.rest) ▸ hr) hfbb hda hB hA⟩ hne
+    · exact absurd ⟨reqShared_of_admA hb0 hfba hA hB,
+        reqShared_of_admA ha0 hfbb hB hA⟩ hne
     · exact absurd (isBottom_false_of_admA_bodies (hisreqA hok) (hreqOf hok) (fun k c => (ihf hok k).1 c) hA hB) hnb
     · rw [AdmABody_map, Bool.and_eq_true] at hA hB
       have hreqA := hA.1
@@ -5671,187 +5068,35 @@ theorem object_row_gen {a b : Body} {z : Term} {r : Rest} {Ok : Prop}
           Bool.and_eq_true]
         exact ⟨hB.1, hB.2⟩
       -- the entry agreement, against whichever factor the congruence is applied to
-      have hentry : ∀ (k : Name) (hk : k ∈ keys), keepT r (Body.shared a b) k = true →
-          ∀ (hks : k ∈ Body.shared a b),
+      have hentry : ∀ (k : Name) (hk : k ∈ keys) (hks : k ∈ Body.shared a b),
             (fieldSem (F ⟨k, hks⟩)).codec.p (g ⟨k, hk⟩)
                 = (fieldSem (a.at ⟨k, Body.mem_shared_left hks⟩)).codec.p (g ⟨k, hk⟩)
               ∧ (fieldSem (F ⟨k, hks⟩)).codec.p (g ⟨k, hk⟩)
                 = (fieldSem (b.at ⟨k, Body.mem_shared_right hks⟩)).codec.p (g ⟨k, hk⟩) := by
-        intro k hk _ hks
+        intro k hk hks
         exact (ihf hok ⟨k, hks⟩).2 (g ⟨k, hk⟩)
-          (objAdmA_row hA.2 hk (Body.mem_shared_left hks) (keepT_of_mem (Body.mem_shared_left hks)))
-          (objAdmA_row hB.2 hk (Body.mem_shared_right hks)
-            (keepT_of_mem (Body.mem_shared_right hks)))
-      have hfilA : ∀ k ∈ keys, keepT r (Body.shared a b) k = keepT a.rest a.fields k :=
-        keepT_agree hr hda hdb hBo
-      have hfilB : ∀ k ∈ keys, keepT r (Body.shared a b) k = keepT b.rest b.fields k := by
-        intro k hk
-        rw [Body.shared_comm]
-        exact keepT_agree ((merge_comm a.rest b.rest) ▸ hr) hdb hda hAo k hk
+          (objAdmA_row hA.2 hk (Body.mem_shared_left hks))
+          (objAdmA_row hB.2 hk (Body.mem_shared_right hks))
       constructor
-      · refine bodySem_p_congr (b := .mk (Body.shared a b) F r)
-          ?_ (hfbM hok keys) (hfbA hok hBo)
-          (filter_congr_on (fun k hk => by
-            simp only [Body.fields_mk, Body.rest_mk]; exact hfilA k hk))
-          (fun k hk hkeep => ?_)
+      · refine bodySem_p_congr (b := .mk (Body.shared a b) F none)
+          ?_ (hfbM hok keys) (hfbA hok hBo) (fun k hk => ?_)
         · simp only [Body.fields_mk, Body.at_mk]
           rw [reqPresentT_of_bodies hab hba (hisreqA hok), hreqA, hreqB]
           rfl
-        · simp only [Body.fields_mk, Body.at_mk, Body.rest_mk] at hkeep ⊢
-          have hks := mem_shared_of_keep hr hda hdb hAo hBo hk hkeep
+        · simp only [Body.fields_mk, Body.at_mk, Body.wild_mk] at hk ⊢
+          have hks := mem_shared_of_keep ha0 hb0 hAo hBo hk
           rw [entryCodec_mk_pos hks, entryCodec_mk_pos (Body.mem_shared_left hks)]
-          exact (hentry k hk hkeep hks).1
-      · refine bodySem_p_congr (b := .mk (Body.shared a b) F r)
-          ?_ (hfbM hok keys) (hfbB hok hAo)
-          (filter_congr_on (fun k hk => by
-            simp only [Body.fields_mk, Body.rest_mk]; exact hfilB k hk))
-          (fun k hk hkeep => ?_)
+          exact (hentry k hk hks).1
+      · refine bodySem_p_congr (b := .mk (Body.shared a b) F none)
+          ?_ (hfbM hok keys) (hfbB hok hAo) (fun k hk => ?_)
         · simp only [Body.fields_mk, Body.at_mk]
           rw [reqPresentT_of_bodies hab hba (hisreqA hok), hreqA, hreqB]
           rfl
-        · simp only [Body.fields_mk, Body.at_mk, Body.rest_mk] at hkeep ⊢
-          have hks := mem_shared_of_keep hr hda hdb hAo hBo hk hkeep
+        · simp only [Body.fields_mk, Body.at_mk, Body.wild_mk] at hk ⊢
+          have hks := mem_shared_of_keep ha0 hb0 hAo hBo hk
           rw [entryCodec_mk_pos hks, entryCodec_mk_pos (Body.mem_shared_right hks)]
-          exact (hentry k hk hkeep hks).2
+          exact (hentry k hk hks).2
   all_goals exact absurd hA (by rw [AdmA_object a _,
-    AdmABody_of_not_m (fun _ _ hc => Attr.noConfusion hc)]; exact Bool.noConfusion)
-
-/-- **The object-against-record congruence.** `objRec` answers an object whose rest is a
-    codec, so the keep filter is constantly true and no name of the map is dropped. With no
-    stand-in declared, the output key set is the map's own, which is what the record writes, and
-    the two agree entry by entry. -/
-theorem bodySem_p_record_congr {b : Body} {t x : Term}
-    {keys : Finset Name} {g : {k // k ∈ keys} → Attr}
-    (hrest : b.rest = .codec t)
-    (hreq : reqPresentT b.fields b.at keys = true)
-    (hfb : fbNames keys ⟨b.fields, fun k => fieldSem (b.at k)⟩ = ∅)
-    (hent : ∀ (k : Name) (h : k ∈ keys),
-      (entryCodec ⟨b.fields, fun k => fieldSem (b.at k)⟩ (rcOf (restSem b.rest)) k).bind
-          (fun c => c.p (g ⟨k, h⟩))
-        = (denote x).p (g ⟨k, h⟩)) :
-    (denote (.object b)).p (.m keys g) = (denote (.record x)).p (.m keys g) := by
-  have hb : (denote (.object b)).p (.m keys g)
-      = (objRead ⟨b.fields, fun k => fieldSem (b.at k)⟩ (rcOf (restSem b.rest))
-          (keepB (restSem b.rest) ⟨b.fields, fun k => fieldSem (b.at k)⟩)
-          ⟨keys, g⟩).map mapV.into := by
-    cases b; rfl
-  have hkn : ∀ k, keepB (restSem b.rest) ⟨b.fields, fun k => fieldSem (b.at k)⟩ k = true := by
-    intro k; rw [keepB_eq b.fields b.at b.rest k, hrest]; rfl
-  have hfil : keys.filter
-      (keepB (restSem b.rest) ⟨b.fields, fun k => fieldSem (b.at k)⟩ ·) = keys :=
-    filter_eq_self_on (fun k _ => hkn k)
-  rw [hb, show (denote (.record x)).p (.m keys g)
-      = (funImage (fun k => (denote x).p (g k))).map (Value.map keys) from rfl]
-  unfold objRead
-  rw [show reqPresentB ⟨b.fields, fun k => fieldSem (b.at k)⟩ (⟨keys, g⟩ : MapOf Attr).1 = true from
-    by rw [← reqPresentT_eq]; exact hreq, if_pos rfl, hfb]
-  simp only [Option.map_map]
-  exact funImage_record_congr hfil
-    (fun k h _ => hent k (Finset.mem_filter.mp h).1)
-
-/-- **An object against a record, over an abstract field table.** Everything after the field
-    agreement reads that agreement alone, so the well-founded caller and the structural one share
-    this. -/
-theorem record_row_gen {b : Body} {x z t r : Term} {F : {k // k ∈ b.fields} → Field}
-    (hrest : b.rest = .codec t)
-    (hreqA : ∀ k, Field.isReqA (F k) = Field.isReqA (b.at k))
-    (hnfb : ∀ (k : {k // k ∈ b.fields}) (u : Term) (d : Value), F k ≠ .fallback u d)
-    (hnfbSrc : ∀ (k : {k // k ∈ b.fields}) (u : Term) (d : Value), b.at k ≠ .fallback u d)
-    (ihtA : ∀ c, AdmA r c = (AdmA t c && AdmA x c))
-    (ihtP : ∀ c, AdmA t c = true → AdmA x c = true →
-      (denote r).p c = (denote t).p c ∧ (denote r).p c = (denote x).p c)
-    (ihf : ∀ (k : {k // k ∈ b.fields}),
-      (∀ c, AdmAField (F k) c = (AdmAField (b.at k) c && AdmA x c))
-      ∧ (∀ c, AdmAField (b.at k) c = true → AdmA x c = true →
-          (fieldSem (F k)).codec.p c = (fieldSem (b.at k)).codec.p c
-            ∧ (fieldSem (F k)).codec.p c = (denote x).p c))
-    (hcase : (z = .never ∧ ¬ (∀ k, Field.isBottom (F k) = false))
-             ∨ z = .object (.mk b.fields F (.codec r))) :
-    (∀ c, AdmA z c = (AdmA (.object b) c && AdmA (.record x) c)) ∧
-    (∀ c, AdmA (.object b) c = true → AdmA (.record x) c = true →
-      (denote z).p c = (denote (.object b)).p c ∧ (denote z).p c = (denote (.record x)).p c) := by
-  have hnm : ∀ c : Attr, (∀ keys g, c ≠ .m keys g) →
-      AdmA z c = (AdmA (.object b) c && AdmA (.record x) c) := by
-    intro c hc
-    have hrx : AdmA (.record x) c = false := by cases c with
-      | m keys g => exact absurd rfl (hc keys g)
-      | _ => rfl
-    rw [AdmA_object b c, AdmABody_of_not_m hc, hrx, Bool.and_self]
-    rcases hcase with ⟨rfl, _⟩ | rfl
-    · rfl
-    · exact AdmABody_of_not_m hc
-  have half1 : ∀ c, AdmA z c = (AdmA (.object b) c && AdmA (.record x) c) := by
-    intro c
-    cases c
-    case m keys g =>
-      rw [AdmA_object b (.m keys g),
-          AdmA_record x keys g]
-      rcases hcase with ⟨rfl, hnb⟩ | rfl
-      · show (false : Bool) = _
-        cases hA : AdmABody b (.m keys g) with
-        | false => rfl
-        | true =>
-          cases hR : decide (∀ k : {k // k ∈ keys}, AdmA x (g k) = true) with
-          | false => rfl
-          | true =>
-            exact absurd (isBottom_false_of_admA_right hreqA hnfb (fun k c => (ihf k).1 c) hA hR) hnb
-      · show AdmABody (.mk b.fields F (.codec r))
-            (.m keys g) = _
-        rw [AdmABody_map, AdmABody_map]
-        simp only [Body.fields_mk, Body.at_mk, Body.rest_mk, hrest]
-        rw [reqPresentT_of_isReqA hreqA, show AdmARest (.codec r) = some (AdmA r) from rfl,
-            show AdmARest (.codec t) = some (AdmA t) from rfl,
-            objAdmA_of_right hrest (fun k c => (ihf k).1 c) ihtA]
-        simp only [hrest]
-        simp [Bool.and_assoc, Bool.and_left_comm]
-    all_goals exact hnm _ (fun _ _ hc => Attr.noConfusion hc)
-  refine ⟨half1, fun c hA hR => ?_⟩
-  cases c
-  case m keys g =>
-    rw [AdmA_object b (.m keys g)] at hA
-    rw [AdmA_record x keys g] at hR
-    rcases hcase with ⟨rfl, hnb⟩ | rfl
-    · exact absurd (isBottom_false_of_admA_right hreqA hnfb (fun k c => (ihf k).1 c) hA hR) hnb
-    · rw [AdmABody_map, Bool.and_eq_true] at hA
-      have hrec : ∀ (k : Name) (hk : k ∈ keys), AdmA x (g ⟨k, hk⟩) = true :=
-        fun k hk => of_decide_eq_true hR ⟨k, hk⟩
-      -- the rest codec's row, at a name the object does not declare
-      have hrestrow : ∀ (k : Name) (hk : k ∈ keys), k ∉ b.fields → AdmA t (g ⟨k, hk⟩) = true := by
-        intro k hk hnf
-        have hh := of_decide_eq_true hA.2 ⟨k, hk⟩ (by rw [hrest]; rfl)
-        simpa only [entryPA,
-          MapOf.at_of_not_mem (m := ⟨b.fields, fun k => AdmAField (b.at k)⟩) hnf, hrest,
-          AdmARest] using hh
-      -- the entry agreement, shared by the two congruences
-      have hentry : ∀ (k : Name) (hk : k ∈ keys),
-          ((entryCodec ⟨b.fields, fun k => fieldSem (F k)⟩
-              (rcOf (restSem (Rest.codec r))) k).bind (fun c => c.p (g ⟨k, hk⟩))
-            = (entryCodec ⟨b.fields, fun k => fieldSem (b.at k)⟩ (rcOf (restSem b.rest)) k).bind
-              (fun c => c.p (g ⟨k, hk⟩)))
-          ∧ ((entryCodec ⟨b.fields, fun k => fieldSem (F k)⟩
-              (rcOf (restSem (Rest.codec r))) k).bind (fun c => c.p (g ⟨k, hk⟩))
-            = (denote x).p (g ⟨k, hk⟩)) := by
-        intro k hk
-        by_cases hf : k ∈ b.fields
-        · rw [entryCodec_mk_pos hf, entryCodec_mk_pos hf]
-          exact (ihf ⟨k, hf⟩).2 (g ⟨k, hk⟩)
-            (objAdmA_row hA.2 hk hf (keepT_of_mem hf)) (hrec k hk)
-        · rw [entryCodec_mk_neg (f := fun k => fieldSem (F k)) hf,
-            entryCodec_mk_neg (f := fun k => fieldSem (b.at k)) hf, hrest]
-          exact ihtP (g ⟨k, hk⟩) (hrestrow k hk hf) (hrec k hk)
-      constructor
-      · refine bodySem_p_congr (b := .mk b.fields F (.codec r))
-          ?_ (fbNames_empty_of_not_fallback hnfb keys) (fbNames_empty_of_not_fallback hnfbSrc keys)
-          (filter_congr_on (fun k _ => by simp [hrest, keepT, Body.rest_mk]))
-          (fun k hk _ => ?_)
-        · simp only [Body.fields_mk, Body.at_mk]; exact reqPresentT_of_isReqA hreqA keys
-        · simpa only [Body.fields_mk, Body.at_mk, Body.rest_mk] using (hentry k hk).1
-      · refine bodySem_p_record_congr (b := .mk b.fields F
-          (.codec r)) rfl ?_ (fbNames_empty_of_not_fallback hnfb keys) (fun k hk => ?_)
-        · simp only [Body.fields_mk, Body.at_mk]
-          rw [reqPresentT_of_isReqA hreqA keys]; exact hA.1
-        · simpa only [Body.fields_mk, Body.at_mk, Body.rest_mk] using (hentry k hk).2
-  all_goals exact absurd hA (by rw [AdmA_object b _,
     AdmABody_of_not_m (fun _ _ hc => Attr.noConfusion hc)]; exact Bool.noConfusion)
 
 section StructuralAdmA
@@ -5861,8 +5106,8 @@ set_option maxHeartbeats 1000000
 /-! ## The read side's homomorphism and its reading agreement, structurally
 
 The same three layers the value side uses. The depth bounds are gone with the measure: the list
-and tail lifts have measure-free twins here, and the object rows go through `record_row_gen` and
-`object_row_gen`, the general field-table forms that the well-founded proof now shares. -/
+and tail lifts have measure-free twins here, and the object rows go through `object_row_gen`,
+the general field-table form that the well-founded proof now shares. -/
 
 /-- The conclusion of the read-side homomorphism, at one pair. -/
 abbrev AdmAAt (x y z : Term) : Prop :=
@@ -6012,7 +5257,6 @@ theorem admA_meetSRight {x : Term} {fam : Term → Option Term} (hf : AdmAFam x 
   | .literal k lv, _, h => hf (.literal k lv) _ trivial h
   | .set b, _, h => hf (.set b) _ trivial h
   | .opaq l, _, h => hf (.opaq l) _ trivial h
-  | .record c, _, h => hf (.record c) _ trivial h
   | .list p q s, _, h => hf (.list p q s) _ trivial h
   | .object b, _, h => hf (.object b) _ trivial h
 termination_by structural y => y
@@ -6328,93 +5572,6 @@ theorem admA_split {e : Term} {f : Term → Option Term} (hf : AdmASound e f)
   rw [h1 b, Bool.and_eq_true] at hb
   exact ⟨hb.1, hb.2, h2 b hb.1 hb.2⟩
 
-/-- A record reads a record at the value term. -/
-theorem admA_famRecTerm {x' : Term} {f : Term → Option Term} (hf : AdmASound x' f)
-    {c w : Term} (hw : f c = some w) : AdmAAt (.record x') (.record c) (.record w) := by
-  obtain ⟨ih1, ih2⟩ := hf c w hw
-  refine ⟨fun a => ?_, fun a ha hb => ?_⟩
-  · cases a <;> simp only [AdmA, Bool.and_self, decide_forall_and (fun k => ih1 _)]
-  · cases a
-    case m keys g =>
-      simp only [AdmA, decide_eq_true_eq] at ha hb
-      simp only [denote_record]
-      exact ⟨recordCodec_p_congr (fun k => (ih2 (g k) (ha k) (hb k)).1),
-             recordCodec_p_congr (fun k => (ih2 (g k) (ha k) (hb k)).2)⟩
-    all_goals (exfalso; revert ha; simp [AdmA])
-
-
-/-- A field met with one term on the left, as the read side needs it. -/
-theorem AdmAField_fieldMeetT {f : Term → Option Term} {fl fm : Field}
-    (h : fieldMeetT f fl = some fm) :
-    ∃ tx tz, f tx = some tz ∧ AdmAField fl = AdmA tx ∧ AdmAField fm = AdmA tz ∧
-      (fieldSem fl).codec = denote tx ∧ (fieldSem fm).codec = denote tz := by
-  cases fl <;> simp only [fieldMeetT, Option.map_eq_some_iff, reduceCtorEq] at h <;>
-    obtain ⟨tz, hz, rfl⟩ := h <;> exact ⟨_, tz, hz, rfl, rfl, rfl, rfl⟩
-
-/-- A field met with a term on the left keeps its own read-side mark. -/
-theorem isReqA_fieldMeetT {f : Term → Option Term} {fl fm : Field}
-    (h : fieldMeetT f fl = some fm) : Field.isReqA fm = Field.isReqA fl := by
-  cases fl <;> simp only [fieldMeetT, Option.map_eq_some_iff, reduceCtorEq] at h <;>
-    obtain ⟨tz, _, rfl⟩ := h <;> rfl
-
-/-- …and never answers a `fallback`. -/
-theorem fieldMeetT_not_fallback {f : Term → Option Term} {fl fm : Field}
-    (h : fieldMeetT f fl = some fm) {t : Term} {d : Value} : fm ≠ .fallback t d := by
-  cases fl <;> simp only [fieldMeetT, Option.map_eq_some_iff, reduceCtorEq] at h <;>
-    obtain ⟨z, _, rfl⟩ := h <;> simp
-
-/-- A record reads a record at the value term, and an object through every field. -/
-theorem admA_famRec {x' : Term} {f : Term → Option Term} (hf : AdmASound x' f) :
-    AdmAFam (.record x') (famRec f) := by
-  intro y z hd h
-  cases y <;> first | exact hd.elim | skip
-  case record c =>
-      simp only [famRec] at h
-      obtain ⟨w, hw, rfl⟩ := Option.map_eq_some_iff.mp h
-      exact admA_famRecTerm hf hw
-  case object b =>
-      simp only [famRec] at h
-      obtain ⟨t, r, hrest, hmt, hok, hcase⟩ := recObj_extract h
-      have hnfbSrc : ∀ (k : {k // k ∈ b.fields}) (u : Term) (d : Value),
-          b.at k ≠ .fallback u d := by
-        intro k u d hfd
-        obtain ⟨fm, hfm⟩ := Option.isSome_iff_exists.mp (hok k)
-        rw [hfd] at hfm; simp [fieldMeetT] at hfm
-      have hreqA : ∀ k : {k // k ∈ b.fields},
-          Field.isReqA ((fieldMeetT f (b.at k)).getD (.optional .never))
-            = Field.isReqA (b.at k) := by
-        intro k
-        obtain ⟨fm, hfm⟩ := Option.isSome_iff_exists.mp (hok k)
-        rw [hfm, Option.getD_some]; exact isReqA_fieldMeetT hfm
-      have hnfb : ∀ (k : {k // k ∈ b.fields}) (u : Term) (d : Value),
-          (fieldMeetT f (b.at k)).getD (.optional .never) ≠ .fallback u d := by
-        intro k u d
-        obtain ⟨fm, hfm⟩ := Option.isSome_iff_exists.mp (hok k)
-        rw [hfm, Option.getD_some]; exact fieldMeetT_not_fallback hfm
-      obtain ⟨ihtA, ihtP⟩ := hf t r hmt
-      have ihf : ∀ (k : {k // k ∈ b.fields}),
-          (∀ c, AdmAField ((fieldMeetT f (b.at k)).getD (.optional .never)) c
-            = (AdmAField (b.at k) c && AdmA x' c))
-          ∧ (∀ c, AdmAField (b.at k) c = true → AdmA x' c = true →
-              (fieldSem ((fieldMeetT f (b.at k)).getD (.optional .never))).codec.p c
-                  = (fieldSem (b.at k)).codec.p c
-                ∧ (fieldSem ((fieldMeetT f (b.at k)).getD (.optional .never))).codec.p c
-                  = (denote x').p c) := by
-        intro k
-        obtain ⟨fm, hfm⟩ := Option.isSome_iff_exists.mp (hok k)
-        obtain ⟨tx, tz, hz, hx, hfz, hcx, hcz⟩ := AdmAField_fieldMeetT hfm
-        obtain ⟨hA1, hA2⟩ := hf tx tz hz
-        rw [hfm, Option.getD_some, hfz, hx, hcz, hcx]
-        exact ⟨fun c => by rw [hA1 c, Bool.and_comm], fun c hxa hxx => ⟨(hA2 c hxx hxa).2,
-          (hA2 c hxx hxa).1⟩⟩
-      have hgen := record_row_gen (x := x') (z := z) hrest hreqA hnfb hnfbSrc
-        (fun c => by rw [ihtA c, Bool.and_comm])
-        (fun c ht hx => ⟨(ihtP c hx ht).2, (ihtP c hx ht).1⟩) ihf hcase
-      exact ⟨fun c => by rw [hgen.1 c, Bool.and_comm], fun c hx hb => (hgen.2 c hb hx).symm⟩
-  case opaq l => simp [famRec] at h
-  all_goals admA_never famRec
-
-
 /-! ### The tuple lifts, zipped and measure-free. -/
 
 /-- Two tuples' positions, zipped and lifted pointwise. -/
@@ -6437,21 +5594,17 @@ theorem admAList_zip_lift :
               cases hF with
               | cons hh ht => exact .cons (fun w => (hf u _ hh).1 w) (ihx hfs' ht)
 
-/-- The four structural guards `objObj` passes before it answers. -/
-theorem objObj_guards {a b : Body} {g : {k // k ∈ a.fields} → Field → Option Field} {z : Term}
-    (h : objObj a g b = some z) :
-    Body.fbShared a b = true ∧ Body.fbShared b a = true ∧
-      Body.dropFits a b = true ∧ Body.dropFits b a = true := by
+/-- The structural guards `objObj` passes before it answers. It read four while the read side
+    could drop a name; the two open blocks are the first guard now, and `objObj_extract` carries
+    them. -/
+theorem objObj_guards {a b : Body} {g : {k // k ∈ a.fields} → ObjectSlot → Option ObjectSlot}
+    {z : Term} (h : objObj a g b = some z) :
+    Body.fbShared a b = true ∧ Body.fbShared b a = true := by
   unfold objObj at h
   split at h
   next =>
     split at h
-    next hfb =>
-      split at h
-      next hd =>
-        rw [Bool.and_eq_true] at hfb hd
-        exact ⟨hfb.1, hfb.2, hd.1, hd.2⟩
-      next => exact absurd h (by simp)
+    next hfb => rw [Bool.and_eq_true] at hfb; exact ⟨hfb.1, hfb.2⟩
     next => exact absurd h (by simp)
   next => exact absurd h (by simp)
 
@@ -6736,47 +5889,33 @@ theorem admA_famList {pre suf : List Term} {sp : Option Term}
   all_goals admA_never famList
 
 /-- An object reads an object over the shared names, and a record through every field. -/
-theorem admA_famObj {a : Body} {g : {k // k ∈ a.fields} → Field → Option Field}
-    {gt : {k // k ∈ a.fields} → Term → Option Field}
-    {frest : Option (Term → Option Term)}
-    (hg : ∀ (k : {k // k ∈ a.fields}) (fl fm : Field), g k fl = some fm →
+theorem admA_famObj {a : Body} {g : {k // k ∈ a.fields} → ObjectSlot → Option ObjectSlot}
+    (hg : ∀ (k : {k // k ∈ a.fields}) (fl fm : ObjectSlot), g k fl = some fm →
       (∀ c, AdmAField fm c = (AdmAField (a.at k) c && AdmAField fl c))
       ∧ (∀ c, AdmAField (a.at k) c = true → AdmAField fl c = true →
           (fieldSem fm).codec.p c = (fieldSem (a.at k)).codec.p c
             ∧ (fieldSem fm).codec.p c = (fieldSem fl).codec.p c))
-    (hgreq : ∀ (k : {k // k ∈ a.fields}) (fl fm : Field), g k fl = some fm →
-      Field.isReqA fm = (Field.isReqA (a.at k) || Field.isReqA fl))
-    (hgbot : ∀ (k : {k // k ∈ a.fields}) (fl fm : Field), g k fl = some fm →
-      Field.isBottom fm = true → ∃ t, fm = .req t)
-    (hgfb : ∀ (k : {k // k ∈ a.fields}) (fl fm : Field), g k fl = some fm →
-      ∀ (u : Term) (d : Value), fm ≠ .fallback u d)
-    (hgpair : ∀ (k : {k // k ∈ a.fields}) (fl fm : Field), g k fl = some fm →
-      (∃ u d, a.at k = .fallback u d) → ∃ v, fl = .req v)
-    (hgpair' : ∀ (k : {k // k ∈ a.fields}) (fl fm : Field), g k fl = some fm →
-      (∃ u d, fl = .fallback u d) → ∃ v, a.at k = .req v)
-    (hgt : ∀ (k : {k // k ∈ a.fields}) (y : Term) (fm : Field), gt k y = some fm →
-      (∀ c, AdmAField fm c = (AdmAField (a.at k) c && AdmA y c))
-      ∧ (∀ c, AdmAField (a.at k) c = true → AdmA y c = true →
-          (fieldSem fm).codec.p c = (fieldSem (a.at k)).codec.p c
-            ∧ (fieldSem fm).codec.p c = (denote y).p c))
-    (hgtreq : ∀ (k : {k // k ∈ a.fields}) (y : Term) (fm : Field), gt k y = some fm →
-      Field.isReqA fm = Field.isReqA (a.at k))
-    (hgtfb : ∀ (k : {k // k ∈ a.fields}) (y : Term) (fm : Field), gt k y = some fm →
-      ∀ (u : Term) (d : Value), fm ≠ .fallback u d)
-    (hgtsrc : ∀ (k : {k // k ∈ a.fields}) (y : Term) (fm : Field), gt k y = some fm →
-      ∀ (u : Term) (d : Value), a.at k ≠ .fallback u d)
-    (hfr : ∀ fr, frest = some fr → ∃ t, a.rest = .codec t ∧ AdmASound t fr) :
-    AdmAFam (.object a) (famObj a g gt frest) := by
+    (hgreq : ∀ (k : {k // k ∈ a.fields}) (fl fm : ObjectSlot), g k fl = some fm →
+      ObjectSlot.isReqA fm = (ObjectSlot.isReqA (a.at k) || ObjectSlot.isReqA fl))
+    (hgbot : ∀ (k : {k // k ∈ a.fields}) (fl fm : ObjectSlot), g k fl = some fm →
+      ObjectSlot.isBottom fm = true → ∃ t, fm = .req t none)
+    (hgfb : ∀ (k : {k // k ∈ a.fields}) (fl fm : ObjectSlot), g k fl = some fm →
+      ∀ (u : Term) (d : Value), fm ≠ .req u (some d))
+    (hgpair : ∀ (k : {k // k ∈ a.fields}) (fl fm : ObjectSlot), g k fl = some fm →
+      (∃ u d, a.at k = .req u (some d)) → ∃ v, fl = .req v none)
+    (hgpair' : ∀ (k : {k // k ∈ a.fields}) (fl fm : ObjectSlot), g k fl = some fm →
+      (∃ u d, fl = .req u (some d)) → ∃ v, a.at k = .req v none) :
+    AdmAFam (.object a) (famObj a g) := by
   intro y z hd h
   cases y <;> first | exact hd.elim | skip
   case object b =>
       simp only [famObj] at h
-      obtain ⟨hfba, hfbb, hda, hdb⟩ := objObj_guards h
-      obtain ⟨r, hr, hcase⟩ := objObj_extract h
+      obtain ⟨hfba, hfbb⟩ := objObj_guards h
+      obtain ⟨ha0, hb0, hcase⟩ := objObj_extract h
       refine object_row_gen (Ok := ∀ k : {k // k ∈ Body.shared a b},
           (g ⟨k.1, Body.mem_shared_left k.2⟩
             (b.at ⟨k.1, Body.mem_shared_right k.2⟩)).isSome = true)
-        hr hfba hfbb hda hdb (fun hok k => ?_) (fun hok k hbot => ?_) (fun hok keys => ?_)
+        ha0 hb0 hfba hfbb (fun hok k => ?_) (fun hok k hbot => ?_) (fun hok keys => ?_)
         (fun hok => fbNames_factor_of_req (fun k hk hkb hfd => by
             have hks : k ∈ Body.shared a b := Finset.mem_filter.mpr ⟨hk, hkb⟩
             obtain ⟨fm, hfm⟩ := Option.isSome_iff_exists.mp (hok ⟨k, hks⟩)
@@ -6795,91 +5934,81 @@ theorem admA_famObj {a : Body} {g : {k // k ∈ a.fields} → Field → Option F
         rw [hfm, Option.getD_some]; exact hgfb _ _ _ hfm u d
       · obtain ⟨fm, hfm⟩ := Option.isSome_iff_exists.mp (hok k)
         rw [hfm, Option.getD_some]; exact hg _ _ _ hfm
-  case record x =>
-      simp only [famObj] at h
-      obtain ⟨fr, r, hfrest, hrx, hok, hcase⟩ := objRec_extract h
-      obtain ⟨t, hrest, hsound⟩ := hfr fr hfrest
-      obtain ⟨ihtA, ihtP⟩ := hsound x r hrx
-      have hsrc : ∀ (k : {k // k ∈ a.fields}) (u : Term) (d : Value), a.at k ≠ .fallback u d := by
-        intro k u d
-        obtain ⟨fm, hfm⟩ := Option.isSome_iff_exists.mp (hok k)
-        exact hgtsrc k x fm hfm u d
-      refine record_row_gen (x := x) (z := z) hrest (fun k => ?_) (fun k u d => ?_) hsrc
-        ihtA ihtP (fun k => ?_) hcase
-      · obtain ⟨fm, hfm⟩ := Option.isSome_iff_exists.mp (hok k)
-        rw [hfm, Option.getD_some]; exact hgtreq _ _ _ hfm
-      · obtain ⟨fm, hfm⟩ := Option.isSome_iff_exists.mp (hok k)
-        rw [hfm, Option.getD_some]; exact hgtfb _ _ _ hfm u d
-      · obtain ⟨fm, hfm⟩ := Option.isSome_iff_exists.mp (hok k)
-        rw [hfm, Option.getD_some]; exact hgt _ _ _ hfm
   case opaq l => simp [famObj] at h
   all_goals admA_never famObj
-
 
 /-! ### The outer theorem. -/
 
 /-- Two fields meet at the stronger mark, so the read bit is the join. -/
-theorem isReqA_Field_meet : ∀ {f fl fm : Field}, Field.meet f fl = some fm →
-    Field.isReqA fm = (Field.isReqA f || Field.isReqA fl) := by
+theorem isReqA_Field_meet : ∀ {f fl fm : ObjectSlot}, ObjectSlot.meet f fl = some fm →
+    ObjectSlot.isReqA fm = (ObjectSlot.isReqA f || ObjectSlot.isReqA fl) := by
   intro f fl fm h
-  cases f <;> cases fl <;>
-    simp only [Field.meet, Option.map_eq_some_iff, reduceCtorEq] at h <;>
-    obtain ⟨tz, _, rfl⟩ := h <;> rfl
+  match f, fl, h with
+  | .req _ (some _), .req _ (some _), h
+  | .req _ (some _), .optional _, h
+  | .optional _, .req _ (some _), h => exact absurd h (by simp [ObjectSlot.meet])
+  | .req _ none, .req _ _, h
+  | .req _ (some _), .req _ none, h
+  | .req _ none, .optional _, h
+  | .optional _, .req _ none, h
+  | .optional _, .optional _, h =>
+      simp only [ObjectSlot.meet, Option.map_eq_some_iff] at h
+      obtain ⟨tz, _, rfl⟩ := h
+      rfl
 
-/-- Only a `req` field can meet to the bottom, which is what `isBottom` asks. -/
-theorem reqOf_Field_meet : ∀ {f fl fm : Field}, Field.meet f fl = some fm →
-    Field.isBottom fm = true → ∃ t, fm = .req t := by
+/-- Only a `req` slot with no stand-in can meet to the bottom, which is what `isBottom` asks. -/
+theorem reqOf_Field_meet : ∀ {f fl fm : ObjectSlot}, ObjectSlot.meet f fl = some fm →
+    ObjectSlot.isBottom fm = true → ∃ t, fm = .req t none := by
   intro f fl fm h hbot
-  cases f <;> cases fl <;>
-    simp only [Field.meet, Option.map_eq_some_iff, reduceCtorEq] at h <;>
-    obtain ⟨tz, _, rfl⟩ := h <;>
-    first
-      | exact ⟨tz, rfl⟩
-      | exact absurd hbot (by simp [Field.isBottom])
+  match f, fl, h with
+  | .req _ (some _), .req _ (some _), h
+  | .req _ (some _), .optional _, h
+  | .optional _, .req _ (some _), h => exact absurd h (by simp [ObjectSlot.meet])
+  | .req _ none, .req _ _, h
+  | .req _ (some _), .req _ none, h
+  | .req _ none, .optional _, h
+  | .optional _, .req _ none, h
+  | .optional _, .optional _, h =>
+      simp only [ObjectSlot.meet, Option.map_eq_some_iff] at h
+      obtain ⟨tz, _, rfl⟩ := h
+      first
+        | exact ⟨tz, rfl⟩
+        | exact absurd hbot (by simp [ObjectSlot.isBottom])
 
-/-- No row of `Field.meet` answers a `fallback`. -/
-theorem notFallback_Field_meet : ∀ {f fl fm : Field}, Field.meet f fl = some fm →
-    ∀ (u : Term) (d : Value), fm ≠ .fallback u d := by
+/-- No row of `ObjectSlot.meet` answers a slot carrying a stand-in. -/
+theorem notFallback_Field_meet : ∀ {f fl fm : ObjectSlot}, ObjectSlot.meet f fl = some fm →
+    ∀ (u : Term) (d : Value), fm ≠ .req u (some d) := by
   intro f fl fm h u d
-  cases f <;> cases fl <;>
-    simp only [Field.meet, Option.map_eq_some_iff, reduceCtorEq] at h <;>
-    obtain ⟨tz, _, rfl⟩ := h <;> simp
+  match f, fl, h with
+  | .req _ (some _), .req _ (some _), h
+  | .req _ (some _), .optional _, h
+  | .optional _, .req _ (some _), h => exact absurd h (by simp [ObjectSlot.meet])
+  | .req _ none, .req _ _, h
+  | .req _ (some _), .req _ none, h
+  | .req _ none, .optional _, h
+  | .optional _, .req _ none, h
+  | .optional _, .optional _, h =>
+      simp only [ObjectSlot.meet, Option.map_eq_some_iff] at h
+      obtain ⟨tz, _, rfl⟩ := h
+      simp
 
-/-- A `fallback` on the left meets only a `req` on the right. -/
-theorem pair_Field_meet : ∀ {f fl fm : Field}, Field.meet f fl = some fm →
-    (∃ u d, f = .fallback u d) → ∃ v, fl = .req v := by
+/-- A stand-in on the left meets only a `req` with none on the right. -/
+theorem pair_Field_meet : ∀ {f fl fm : ObjectSlot}, ObjectSlot.meet f fl = some fm →
+    (∃ u d, f = .req u (some d)) → ∃ v, fl = .req v none := by
   intro f fl fm h hfd
   obtain ⟨u, d, rfl⟩ := hfd
-  cases fl <;> simp only [Field.meet, Option.map_eq_some_iff, reduceCtorEq] at h
-  exact ⟨_, rfl⟩
+  match fl, h with
+  | .req _ (some _), h | .optional _, h => exact absurd h (by simp [ObjectSlot.meet])
+  | .req _ none, _ => exact ⟨_, rfl⟩
 
 /-- …and the mirror. -/
-theorem pair_Field_meet' : ∀ {f fl fm : Field}, Field.meet f fl = some fm →
-    (∃ u d, fl = .fallback u d) → ∃ v, f = .req v := by
+theorem pair_Field_meet' : ∀ {f fl fm : ObjectSlot}, ObjectSlot.meet f fl = some fm →
+    (∃ u d, fl = .req u (some d)) → ∃ v, f = .req v none := by
   intro f fl fm h hfd
   obtain ⟨u, d, rfl⟩ := hfd
-  cases f <;> simp only [Field.meet, Option.map_eq_some_iff, reduceCtorEq] at h
-  exact ⟨_, rfl⟩
-
-/-- A field met with a record's term keeps its own read-side mark. -/
-theorem isReqA_Field_meetT : ∀ {f : Field} {y : Term} {fm : Field}, Field.meetT f y = some fm →
-    Field.isReqA fm = Field.isReqA f := by
-  intro f y fm h
-  cases f <;> simp only [Field.meetT, Option.map_eq_some_iff, reduceCtorEq] at h <;>
-    obtain ⟨tz, _, rfl⟩ := h <;> rfl
-
-/-- …and never answers a `fallback`. -/
-theorem notFallback_Field_meetT : ∀ {f : Field} {y : Term} {fm : Field},
-    Field.meetT f y = some fm → ∀ (u : Term) (d : Value), fm ≠ .fallback u d := by
-  intro f y fm h u d
-  cases f <;> simp only [Field.meetT, Option.map_eq_some_iff, reduceCtorEq] at h <;>
-    obtain ⟨tz, _, rfl⟩ := h <;> simp
-
-/-- …and refuses a `fallback` source outright. -/
-theorem src_Field_meetT : ∀ {f : Field} {y : Term} {fm : Field}, Field.meetT f y = some fm →
-    ∀ (u : Term) (d : Value), f ≠ .fallback u d := by
-  intro f y fm h u d
-  cases f <;> simp only [Field.meetT, Option.map_eq_some_iff, reduceCtorEq] at h <;> simp
+  match f, h with
+  | .req _ (some _), h | .optional _, h => exact absurd h (by simp [ObjectSlot.meet])
+  | .req _ none, _ => exact ⟨_, rfl⟩
 
 mutual
 /-- **The read side's homomorphism and its reading agreement, together.** Both halves are
@@ -6964,7 +6093,6 @@ theorem AdmA_meet_both : ∀ x y z, Term.meet x y = some z → AdmAAt x y z
   | .literal k lv, y, z, h => admA_meetSRight (admA_famLit k lv) y z h
   | .set b, y, z, h => admA_meetSRight (admA_famSet b) y z h
   | .opaq l, y, z, h => admA_meetSRight (admA_famOpaq l) y z h
-  | .record c, y, z, h => admA_meetSRight (admA_famRec (fun u w hw => AdmA_meet_both c u w hw)) y z h
   | .list pre sp suf, y, z, h => by
       cases sp with
       | none =>
@@ -6975,40 +6103,12 @@ theorem AdmA_meet_both : ∀ x y z, Term.meet x y = some z → AdmAAt x y z
             (admA_meetSTs pre)
             (Or.inr ⟨t, Term.meet t, rfl, rfl, fun u w hw => AdmA_meet_both t u w hw⟩)
             (admA_meetSTs suf)) y z h
-  | .object (.mk fs f r), y, z, h => by
-      cases r with
-      | codec t =>
-          exact admA_meetSRight (admA_famObj (a := .mk fs f (.codec t))
-            (fun k fl fm hm => admA_Field_meet (f k) fl fm hm)
-            (fun _ _ _ hm => isReqA_Field_meet hm) (fun _ _ _ hm => reqOf_Field_meet hm)
-            (fun _ _ _ hm => notFallback_Field_meet hm) (fun _ _ _ hm => pair_Field_meet hm)
-            (fun _ _ _ hm => pair_Field_meet' hm)
-            (fun k u fm hm => admA_Field_meetT (f k) u fm hm)
-            (fun _ _ _ hm => isReqA_Field_meetT hm) (fun _ _ _ hm => notFallback_Field_meetT hm)
-            (fun _ _ _ hm => src_Field_meetT hm)
-            (fun fr hfr => ⟨t, rfl, by
-              simp only [Option.some.injEq] at hfr; subst hfr
-              exact fun u w hw => AdmA_meet_both t u w hw⟩)) y z h
-      | drop =>
-          exact admA_meetSRight (admA_famObj (a := .mk fs f .drop)
-            (fun k fl fm hm => admA_Field_meet (f k) fl fm hm)
-            (fun _ _ _ hm => isReqA_Field_meet hm) (fun _ _ _ hm => reqOf_Field_meet hm)
-            (fun _ _ _ hm => notFallback_Field_meet hm) (fun _ _ _ hm => pair_Field_meet hm)
-            (fun _ _ _ hm => pair_Field_meet' hm)
-            (fun k u fm hm => admA_Field_meetT (f k) u fm hm)
-            (fun _ _ _ hm => isReqA_Field_meetT hm) (fun _ _ _ hm => notFallback_Field_meetT hm)
-            (fun _ _ _ hm => src_Field_meetT hm)
-            (fun _ hfr => absurd hfr (by simp))) y z h
-      | refuse =>
-          exact admA_meetSRight (admA_famObj (a := .mk fs f .refuse)
-            (fun k fl fm hm => admA_Field_meet (f k) fl fm hm)
-            (fun _ _ _ hm => isReqA_Field_meet hm) (fun _ _ _ hm => reqOf_Field_meet hm)
-            (fun _ _ _ hm => notFallback_Field_meet hm) (fun _ _ _ hm => pair_Field_meet hm)
-            (fun _ _ _ hm => pair_Field_meet' hm)
-            (fun k u fm hm => admA_Field_meetT (f k) u fm hm)
-            (fun _ _ _ hm => isReqA_Field_meetT hm) (fun _ _ _ hm => notFallback_Field_meetT hm)
-            (fun _ _ _ hm => src_Field_meetT hm)
-            (fun _ hfr => absurd hfr (by simp))) y z h
+  | .object (.mk fs f w), y, z, h =>
+      admA_meetSRight (admA_famObj (a := .mk fs f w)
+        (fun k fl fm hm => admA_Field_meet (f k) fl fm hm)
+        (fun _ _ _ hm => isReqA_Field_meet hm) (fun _ _ _ hm => reqOf_Field_meet hm)
+        (fun _ _ _ hm => notFallback_Field_meet hm) (fun _ _ _ hm => pair_Field_meet hm)
+        (fun _ _ _ hm => pair_Field_meet' hm)) y z h
 termination_by structural x => x
 
 /-- The union row's options, lifted pointwise at the fixed partner. -/
@@ -7031,39 +6131,26 @@ theorem admA_meetSTs : ∀ ts : List Term, List.Forall₂ AdmASound ts (Term.mee
 termination_by structural ts => ts
 
 /-- Two fields at one name read what both read, and read it to the same value. -/
-theorem admA_Field_meet : ∀ (f fl : Field) (fm : Field), Field.meet f fl = some fm →
+theorem admA_Field_meet : ∀ (f fl : ObjectSlot) (fm : ObjectSlot), ObjectSlot.meet f fl = some fm →
     (∀ c, AdmAField fm c = (AdmAField f c && AdmAField fl c))
     ∧ (∀ c, AdmAField f c = true → AdmAField fl c = true →
         (fieldSem fm).codec.p c = (fieldSem f).codec.p c
           ∧ (fieldSem fm).codec.p c = (fieldSem fl).codec.p c)
-  | .req x, .req y, _, h => by
+  | .req x none, .req y none, _, h => by
       obtain ⟨tz, hz, rfl⟩ := Option.map_eq_some_iff.mp h; exact AdmA_meet_both x y tz hz
-  | .req x, .optional y, _, h => by
+  | .req x none, .req y (some _), _, h => by
       obtain ⟨tz, hz, rfl⟩ := Option.map_eq_some_iff.mp h; exact AdmA_meet_both x y tz hz
-  | .optional x, .req y, _, h => by
+  | .req x (some _), .req y none, _, h => by
       obtain ⟨tz, hz, rfl⟩ := Option.map_eq_some_iff.mp h; exact AdmA_meet_both x y tz hz
-  | .req x, .fallback y _, _, h => by
+  | .req x none, .optional y, _, h => by
       obtain ⟨tz, hz, rfl⟩ := Option.map_eq_some_iff.mp h; exact AdmA_meet_both x y tz hz
-  | .fallback x _, .req y, _, h => by
+  | .optional x, .req y none, _, h => by
       obtain ⟨tz, hz, rfl⟩ := Option.map_eq_some_iff.mp h; exact AdmA_meet_both x y tz hz
   | .optional x, .optional y, _, h => by
       obtain ⟨tz, hz, rfl⟩ := Option.map_eq_some_iff.mp h; exact AdmA_meet_both x y tz hz
-  | .optional _, .fallback _ _, _, h => by simp [Field.meet] at h
-  | .fallback _ _, .optional _, _, h => by simp [Field.meet] at h
-  | .fallback _ _, .fallback _ _, _, h => by simp [Field.meet] at h
-termination_by structural f => f
-
-/-- …and a field met with a record's term does the same. -/
-theorem admA_Field_meetT : ∀ (f : Field) (y : Term) (fm : Field), Field.meetT f y = some fm →
-    (∀ c, AdmAField fm c = (AdmAField f c && AdmA y c))
-    ∧ (∀ c, AdmAField f c = true → AdmA y c = true →
-        (fieldSem fm).codec.p c = (fieldSem f).codec.p c
-          ∧ (fieldSem fm).codec.p c = (denote y).p c)
-  | .req x, y, _, h => by
-      obtain ⟨tz, hz, rfl⟩ := Option.map_eq_some_iff.mp h; exact AdmA_meet_both x y tz hz
-  | .optional x, y, _, h => by
-      obtain ⟨tz, hz, rfl⟩ := Option.map_eq_some_iff.mp h; exact AdmA_meet_both x y tz hz
-  | .fallback _ _, _, _, h => by simp [Field.meetT] at h
+  | .req _ (some _), .req _ (some _), _, h => by simp [ObjectSlot.meet] at h
+  | .req _ (some _), .optional _, _, h => by simp [ObjectSlot.meet] at h
+  | .optional _, .req _ (some _), _, h => by simp [ObjectSlot.meet] at h
 termination_by structural f => f
 end
 
@@ -7117,13 +6204,12 @@ theorem admitOptV_of_Adm {t : Term} (hcl : t.isOpenObject = false) {v : Value}
     (h : Adm t v = true) : admitOptV (specOf t, Adm t) v = true := by
   cases t with
   | object b =>
-    have hr : AdmRest b.rest = none := by
-      cases hrest : b.rest with
-      | drop => rfl
-      | refuse => rfl
-      | codec _ => exact absurd hcl (by simp [Term.isOpenObject, hrest, Rest.isOpen])
+    have hr : AdmWild b.wild = none := by
+      cases hwild : b.wild with
+      | none => rfl
+      | some _ => exact absurd hcl (by simp [Term.isOpenObject, hwild])
     cases b with
-    | mk fields fld rest =>
+    | mk fields fld wild =>
       cases v with
       | map keys g => simpa only [admitOptV, specOf] using structural_of_AdmBody hr h
       | _ => exact absurd h (by simp [Adm, AdmBody])
@@ -7269,10 +6355,6 @@ theorem typed_union_inv {os : List Term} :
     (∃ T μ, Typed (.union os) T μ) → ∀ t ∈ os, ∃ T μ, Typed t T μ
   | ⟨_, _, h⟩ => by cases h with | union hL _ => exact typedListμ_mem hL
 
-/-- …and a record's value term. -/
-theorem typed_record_inv {a : Term} : (∃ T μ, Typed (.record a) T μ) → ∃ T μ, Typed a T μ
-  | ⟨_, _, h⟩ => by cases h with | record h' => exact ⟨_, _, h'⟩
-
 /-- …and the term under a refinement. -/
 theorem typed_refine_inv {a : Term} {p : Pred} :
     (∃ T μ, Typed (.refine a p) T μ) → ∃ T μ, Typed a T μ
@@ -7355,10 +6437,9 @@ theorem typed_tuple_inv {ts : List Term} {tail : Option Term} :
     (∀ t ∈ ts, ∃ T μ, Typed t T μ) ∧ (∀ t ∈ tail, ∃ T μ, Typed t T μ) :=
   fun h => ⟨(typed_list_inv h).1, (typed_list_inv h).2.1⟩
 
-/-- The term a field carries. -/
-def Field.termOf : Field → Term
-  | .req t | .optional t => t
-  | .fallback t _ => t
+/-- The term a slot carries. -/
+def ObjectSlot.termOf : ObjectSlot → Term
+  | .req t _ | .optional t => t
 
 /-- **A derivation restated at indices that are functions of the term.** The held set of a
     derivable term is its denotation's and its member is `μSyn`'s, so an object row can write
@@ -7370,38 +6451,32 @@ theorem typed_canon {t : Term} (h : ∃ T μ, Typed t T μ) : Typed t (denote t)
   rw [h1, h2]
   exact hT
 
-/-- …and the same at a field, where the mark is `Field.isReq`. -/
-theorem typedField_canon {fd : Field} (h : ∃ T μ, Typed (Field.termOf fd) T μ) :
-    TypedField fd (denote (Field.termOf fd)).T (Field.isReq fd) (μSyn (Field.termOf fd)) := by
+/-- …and the same at a field, where the mark is `ObjectSlot.isReq`. -/
+theorem typedField_canon {fd : ObjectSlot} (h : ∃ T μ, Typed (ObjectSlot.termOf fd) T μ) :
+    TypedField fd (denote (ObjectSlot.termOf fd)).T (ObjectSlot.isReq fd) (μSyn (ObjectSlot.termOf fd)) := by
   cases fd with
-  | req t => exact TypedField.req (typed_canon h)
+  | req t m => exact TypedField.req (typed_canon h)
   | optional t => exact TypedField.optional (typed_canon h)
-  | fallback t v => exact TypedField.fallback (typed_canon h)
 
 /-- A typed field carries a derivable term, whichever mark it has. -/
-theorem typedField_termOf {fd : Field} {T π μ} (h : TypedField fd T π μ) :
-    ∃ T' μ', Typed (Field.termOf fd) T' μ' := by
+theorem typedField_termOf {fd : ObjectSlot} {T π μ} (h : TypedField fd T π μ) :
+    ∃ T' μ', Typed (ObjectSlot.termOf fd) T' μ' := by
   cases h with
   | req h' => exact ⟨_, _, h'⟩
   | optional h' => exact ⟨_, _, h'⟩
-  | fallback h' => exact ⟨_, _, h'⟩
 
-/-- Inversion for an object: every declared field's term is derivable, and the rest is typed. -/
+/-- Inversion for an object: every declared slot's term is derivable, and the open block is
+    typed. -/
 theorem typed_object_inv {b : Body} (h : ∃ T μ, Typed (.object b) T μ) :
-    (∀ k, ∃ T μ, Typed (Field.termOf (b.at k)) T μ) ∧ ∃ R, TypedRest b.rest R := by
+    (∀ k, ∃ T μ, Typed (ObjectSlot.termOf (b.at k)) T μ) ∧ ∃ R, TypedWild b.wild R := by
   obtain ⟨T, μ, hT⟩ := h
   cases hT with
   | object hf hr => exact ⟨fun k => typedField_termOf (hf k), _, hr⟩
 
-/-- A rest that merges is closed, so its held set has no open part. -/
-theorem typedRest_none_of_merge {x y r : Rest} {R : Option Held} (hm : Rest.merge x y = some r)
-    (h : TypedRest x R) : R = none := by
-  cases h <;> cases y <;> simp_all [Rest.merge]
-
-/-- …and the same for the right factor. -/
-theorem typedRest_none_of_merge_right {x y r : Rest} {R : Option Held}
-    (hm : Rest.merge x y = some r) (h : TypedRest y R) : R = none := by
-  cases h <;> cases x <;> simp_all [Rest.merge]
+/-- A body with no open block has no open part in its held set. -/
+theorem typedWild_none_of_closed {w : Option (KeyPat × Term)} {R : Option Held}
+    (hw : w = none) (h : TypedWild w R) : R = none := by
+  cases h <;> simp_all
 
 section StructuralTyped
 set_option maxHeartbeats 1000000
@@ -7421,21 +6496,17 @@ def TypedFam (x : Term) (fam : Term → Option Term) : Prop :=
   ∀ y z, Delegated y → fam y = some z → (∃ T μ, Typed x T μ) → (∃ T μ, Typed y T μ) →
     ∃ T μ, Typed z T μ
 
-/-- An object is derivable where every declared field's term is and the rest is typed: the
-    indices are written down as functions of each field's own term rather than chosen. -/
-theorem typed_object_of {fs : Finset Name} {F : {k // k ∈ fs} → Field} {r : Rest}
-    {R : Option Held} (hf : ∀ k, ∃ T μ, Typed (Field.termOf (F k)) T μ) (hr : TypedRest r R) :
-    ∃ T μ, Typed (.object (.mk fs F r)) T μ :=
-  ⟨_, _, Typed.object (body := .mk fs F r) (R := R)
-    (bind := fun k => (Field.isReq (F k), (denote (Field.termOf (F k))).T))
-    (μs := fun k => μSyn (Field.termOf (F k)))
+/-- An object is derivable where every declared slot's term is and the open block is typed: the
+    indices are written down as functions of each slot's own term rather than chosen. -/
+theorem typed_object_of {fs : Finset Name} {F : {k // k ∈ fs} → ObjectSlot}
+    {w : Option (KeyPat × Term)}
+    {R : Option Held} (hf : ∀ k, ∃ T μ, Typed (ObjectSlot.termOf (F k)) T μ)
+    (hr : TypedWild w R) :
+    ∃ T μ, Typed (.object (.mk fs F w)) T μ :=
+  ⟨_, _, Typed.object (body := .mk fs F w) (R := R)
+    (bind := fun k => (ObjectSlot.isReq (F k), (denote (ObjectSlot.termOf (F k))).T))
+    (μs := fun k => μSyn (ObjectSlot.termOf (F k)))
     (fun k => typedField_canon (hf k)) hr⟩
-
-/-- The record-side field meet meets the field's term, with the record's term on the left. -/
-theorem termOf_fieldMeetT {f : Term → Option Term} {fl fm : Field}
-    (h : fieldMeetT f fl = some fm) : f (Field.termOf fl) = some (Field.termOf fm) := by
-  cases fl <;> simp only [fieldMeetT, Option.map_eq_some_iff, reduceCtorEq] at h <;>
-    obtain ⟨tz, hz, rfl⟩ := h <;> exact hz
 
 mutual
 /-- Every row that reads the right operand alone is derivable wherever the family is. -/
@@ -7470,7 +6541,6 @@ theorem typed_meetSRight {x : Term} {fam : Term → Option Term} (hf : TypedFam 
   | .literal k lv, _, h, hx, hy => hf (.literal k lv) _ trivial h hx hy
   | .set b, _, h, hx, hy => hf (.set b) _ trivial h hx hy
   | .opaq l, _, h, hx, hy => hf (.opaq l) _ trivial h hx hy
-  | .record c, _, h, hx, hy => hf (.record c) _ trivial h hx hy
   | .list p q s, _, h, hx, hy => hf (.list p q s) _ trivial h hx hy
   | .object b, _, h, hx, hy => hf (.object b) _ trivial h hx hy
 termination_by structural y => y
@@ -7662,84 +6732,28 @@ theorem typed_famList {pre suf : List Term} {sp : Option Term}
   all_goals
     (simp only [famList, Option.some.injEq] at h; subst h; exact ⟨_, _, Typed.never⟩)
 
-/-- A record meets a record at the value term, and an object through every declared field. -/
-theorem typed_famRec {x' : Term} {f : Term → Option Term} (hf : TypedSound x' f) :
-    TypedFam (.record x') (famRec f) := by
-  intro y z hd h hx hy
-  cases y <;> first | exact hd.elim | skip
-  case record c =>
-      simp only [famRec] at h
-      obtain ⟨w, hw, rfl⟩ := Option.map_eq_some_iff.mp h
-      obtain ⟨T, μ, hT⟩ := hf c w hw (typed_record_inv hx) (typed_record_inv hy)
-      exact ⟨_, _, Typed.record hT⟩
-  case object b =>
-      simp only [famRec] at h
-      obtain ⟨t, r, hrest, hmt, hok, hcase⟩ := recObj_extract h
-      obtain ⟨hfb, Rb, hrb⟩ := typed_object_inv hy
-      rcases hcase with ⟨rfl, -⟩ | rfl
-      · exact ⟨_, _, Typed.never⟩
-      · have hrt : ∃ T μ, Typed t T μ := by
-          rw [hrest] at hrb
-          cases hrb with
-          | codec hT => exact ⟨_, _, hT⟩
-        obtain ⟨Tr, μr, hTr⟩ := hf t r hmt (typed_record_inv hx) hrt
-        refine typed_object_of ?_ (TypedRest.codec hTr)
-        intro k
-        obtain ⟨fm, hfm⟩ := Option.isSome_iff_exists.mp (hok k)
-        rw [hfm, Option.getD_some]
-        exact hf _ _ (termOf_fieldMeetT hfm) (typed_record_inv hx) (hfb k)
-  case opaq l => simp [famRec] at h
-  all_goals
-    (simp only [famRec, Option.some.injEq] at h; subst h; exact ⟨_, _, Typed.never⟩)
-
-/-- An object meets an object over the shared names, and a record through every field. -/
-theorem typed_famObj {a : Body} {g : {k // k ∈ a.fields} → Field → Option Field}
-    {gt : {k // k ∈ a.fields} → Term → Option Field}
-    {frest : Option (Term → Option Term)}
-    (hg : ∀ (k : {k // k ∈ a.fields}) (fl fm : Field), g k fl = some fm →
-      (∃ T μ, Typed (Field.termOf (a.at k)) T μ) → (∃ T μ, Typed (Field.termOf fl) T μ) →
-      ∃ T μ, Typed (Field.termOf fm) T μ)
-    (hgt : ∀ (k : {k // k ∈ a.fields}) (u : Term) (fm : Field), gt k u = some fm →
-      (∃ T μ, Typed (Field.termOf (a.at k)) T μ) → (∃ T μ, Typed u T μ) →
-      ∃ T μ, Typed (Field.termOf fm) T μ)
-    (hfr : ∀ fr, frest = some fr → ∃ t, a.rest = .codec t ∧ TypedSound t fr) :
-    TypedFam (.object a) (famObj a g gt frest) := by
+/-- An object meets an object over the shared names. -/
+theorem typed_famObj {a : Body} {g : {k // k ∈ a.fields} → ObjectSlot → Option ObjectSlot}
+    (hg : ∀ (k : {k // k ∈ a.fields}) (fl fm : ObjectSlot), g k fl = some fm →
+      (∃ T μ, Typed (ObjectSlot.termOf (a.at k)) T μ) → (∃ T μ, Typed (ObjectSlot.termOf fl) T μ) →
+      ∃ T μ, Typed (ObjectSlot.termOf fm) T μ) :
+    TypedFam (.object a) (famObj a g) := by
   intro y z hd h hx hy
   obtain ⟨hfa, Ra, hra⟩ := typed_object_inv hx
   cases y <;> first | exact hd.elim | skip
   case object b =>
       simp only [famObj] at h
-      obtain ⟨r, hr, hcase⟩ := objObj_extract h
+      obtain ⟨ha0, hb0, hcase⟩ := objObj_extract h
       obtain ⟨hfb, Rb, hrb⟩ := typed_object_inv hy
       rcases hcase with ⟨rfl, -⟩ | ⟨-, -, hok, hz⟩
       · exact ⟨_, _, Typed.never⟩
       · rcases hz with ⟨rfl, -⟩ | rfl
         · exact ⟨_, _, Typed.never⟩
-        · refine typed_object_of (R := none) ?_ ?_
-          · intro k
-            obtain ⟨fm, hfm⟩ := Option.isSome_iff_exists.mp (hok k)
-            rw [hfm, Option.getD_some]
-            exact hg _ _ _ hfm (hfa _) (hfb _)
-          · rw [typedRest_none_of_merge hr hra] at hra
-            rw [typedRest_none_of_merge_right hr hrb] at hrb
-            exact TypedRest.merge_closed hr hra hrb
-  case record x =>
-      simp only [famObj] at h
-      obtain ⟨fr, r, hfrest, hrx, hok, hcase⟩ := objRec_extract h
-      obtain ⟨t, hrest, hsound⟩ := hfr fr hfrest
-      rcases hcase with ⟨rfl, -⟩ | rfl
-      · exact ⟨_, _, Typed.never⟩
-      · have hxin := typed_record_inv hy
-        have hrt : ∃ T μ, Typed t T μ := by
-          rw [hrest] at hra
-          cases hra with
-          | codec hT => exact ⟨_, _, hT⟩
-        obtain ⟨Tr, μr, hTr⟩ := hsound x r hrx hrt hxin
-        refine typed_object_of ?_ (TypedRest.codec hTr)
-        intro k
-        obtain ⟨fm, hfm⟩ := Option.isSome_iff_exists.mp (hok k)
-        rw [hfm, Option.getD_some]
-        exact hgt _ _ _ hfm (hfa _) hxin
+        · refine typed_object_of (R := none) ?_ TypedWild.none
+          intro k
+          obtain ⟨fm, hfm⟩ := Option.isSome_iff_exists.mp (hok k)
+          rw [hfm, Option.getD_some]
+          exact hg _ _ _ hfm (hfa _) (hfb _)
   case opaq l => simp [famObj] at h
   all_goals
     (simp only [famObj, Option.some.injEq] at h; subst h; exact ⟨_, _, Typed.never⟩)
@@ -7804,8 +6818,6 @@ theorem typed_meet : ∀ x y z, Term.meet x y = some z →
   | .literal k lv, y, z, h, hx, hy => typed_meetSRight (typed_famLit k lv) y z h hx hy
   | .set b, y, z, h, hx, hy => typed_meetSRight (typed_famSet b) y z h hx hy
   | .opaq l, y, z, h, hx, hy => typed_meetSRight (typed_famOpaq l) y z h hx hy
-  | .record c, y, z, h, hx, hy =>
-      typed_meetSRight (typed_famRec (fun t w hw => typed_meet c t w hw)) y z h hx hy
   | .list pre sp suf, y, z, h, hx, hy => by
       cases sp with
       | none =>
@@ -7816,26 +6828,9 @@ theorem typed_meet : ∀ x y z, Term.meet x y = some z →
             (typed_meetSTs pre)
             (Or.inr ⟨t, Term.meet t, rfl, rfl, fun u w hw => typed_meet t u w hw⟩)
             (typed_meetSTs suf)) y z h hx hy
-  | .object (.mk fs f r), y, z, h, hx, hy => by
-      cases r with
-      | codec t =>
-          exact typed_meetSRight (typed_famObj (a := .mk fs f (.codec t))
-            (fun k fl fm hm => typed_Field_meet (f k) fl fm hm)
-            (fun k u fm hm => typed_Field_meetT (f k) u fm hm)
-            (fun fr hfr => ⟨t, rfl, by
-              simp only [Option.some.injEq] at hfr
-              subst hfr
-              exact fun u w hw => typed_meet t u w hw⟩)) y z h hx hy
-      | drop =>
-          exact typed_meetSRight (typed_famObj (a := .mk fs f .drop)
-            (fun k fl fm hm => typed_Field_meet (f k) fl fm hm)
-            (fun k u fm hm => typed_Field_meetT (f k) u fm hm)
-            (fun _ hfr => absurd hfr (by simp))) y z h hx hy
-      | refuse =>
-          exact typed_meetSRight (typed_famObj (a := .mk fs f .refuse)
-            (fun k fl fm hm => typed_Field_meet (f k) fl fm hm)
-            (fun k u fm hm => typed_Field_meetT (f k) u fm hm)
-            (fun _ hfr => absurd hfr (by simp))) y z h hx hy
+  | .object (.mk fs f w), y, z, h, hx, hy =>
+      typed_meetSRight (typed_famObj (a := .mk fs f w)
+        (fun k fl fm hm => typed_Field_meet (f k) fl fm hm)) y z h hx hy
 termination_by structural x => x
 
 /-- The union row's options, lifted pointwise at the fixed partner. -/
@@ -7857,43 +6852,30 @@ theorem typed_meetSTs : ∀ ts : List Term, List.Forall₂ TypedSound ts (Term.m
 termination_by structural ts => ts
 
 /-- Two fields at one name carry two terms that meet. -/
-theorem typed_Field_meet : ∀ (f fl : Field) (fm : Field), Field.meet f fl = some fm →
-    (∃ T μ, Typed (Field.termOf f) T μ) → (∃ T μ, Typed (Field.termOf fl) T μ) →
-    ∃ T μ, Typed (Field.termOf fm) T μ
-  | .req x, .req y, _, h, hx, hy => by
+theorem typed_Field_meet : ∀ (f fl : ObjectSlot) (fm : ObjectSlot), ObjectSlot.meet f fl = some fm →
+    (∃ T μ, Typed (ObjectSlot.termOf f) T μ) → (∃ T μ, Typed (ObjectSlot.termOf fl) T μ) →
+    ∃ T μ, Typed (ObjectSlot.termOf fm) T μ
+  | .req x none, .req y none, _, h, hx, hy => by
       obtain ⟨tz, hz, rfl⟩ := Option.map_eq_some_iff.mp h
       exact typed_meet x y tz hz hx hy
-  | .req x, .optional y, _, h, hx, hy => by
+  | .req x none, .req y (some _), _, h, hx, hy => by
       obtain ⟨tz, hz, rfl⟩ := Option.map_eq_some_iff.mp h
       exact typed_meet x y tz hz hx hy
-  | .optional x, .req y, _, h, hx, hy => by
+  | .req x (some _), .req y none, _, h, hx, hy => by
       obtain ⟨tz, hz, rfl⟩ := Option.map_eq_some_iff.mp h
       exact typed_meet x y tz hz hx hy
-  | .req x, .fallback y _, _, h, hx, hy => by
+  | .req x none, .optional y, _, h, hx, hy => by
       obtain ⟨tz, hz, rfl⟩ := Option.map_eq_some_iff.mp h
       exact typed_meet x y tz hz hx hy
-  | .fallback x _, .req y, _, h, hx, hy => by
+  | .optional x, .req y none, _, h, hx, hy => by
       obtain ⟨tz, hz, rfl⟩ := Option.map_eq_some_iff.mp h
       exact typed_meet x y tz hz hx hy
   | .optional x, .optional y, _, h, hx, hy => by
       obtain ⟨tz, hz, rfl⟩ := Option.map_eq_some_iff.mp h
       exact typed_meet x y tz hz hx hy
-  | .optional _, .fallback _ _, _, h, _, _ => by simp [Field.meet] at h
-  | .fallback _ _, .optional _, _, h, _, _ => by simp [Field.meet] at h
-  | .fallback _ _, .fallback _ _, _, h, _, _ => by simp [Field.meet] at h
-termination_by structural f => f
-
-/-- …and a field met with a record's term carries the field's term and that term. -/
-theorem typed_Field_meetT : ∀ (f : Field) (y : Term) (fm : Field), Field.meetT f y = some fm →
-    (∃ T μ, Typed (Field.termOf f) T μ) → (∃ T μ, Typed y T μ) →
-    ∃ T μ, Typed (Field.termOf fm) T μ
-  | .req x, y, _, h, hx, hy => by
-      obtain ⟨tz, hz, rfl⟩ := Option.map_eq_some_iff.mp h
-      exact typed_meet x y tz hz hx hy
-  | .optional x, y, _, h, hx, hy => by
-      obtain ⟨tz, hz, rfl⟩ := Option.map_eq_some_iff.mp h
-      exact typed_meet x y tz hz hx hy
-  | .fallback _ _, _, _, h, _, _ => by simp [Field.meetT] at h
+  | .req _ (some _), .req _ (some _), _, h, _, _ => by simp [ObjectSlot.meet] at h
+  | .req _ (some _), .optional _, _, h, _, _ => by simp [ObjectSlot.meet] at h
+  | .optional _, .req _ (some _), _, h, _, _ => by simp [ObjectSlot.meet] at h
 termination_by structural f => f
 end
 

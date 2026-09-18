@@ -337,14 +337,22 @@ end
 theorem HObject_empty (b : {k // k ∈ (∅ : Finset Name)} → Bool × Held) (T : Held) :
     HObject ∅ b (some T) = HMap T := by
   funext v
-  simp only [HObject, HMap, Finset.notMem_empty, IsEmpty.forall_iff, true_and,
-             dite_false, Option.some.injEq, eq_iff_iff]
-  constructor
+  -- simp discharges the quantifier over the empty key set through an emptiness lemma that
+  -- reaches `Classical.choice`; `Finset.notMem_empty` discharges it directly instead.
+  refine propext ⟨?_, ?_⟩
+  · rintro ⟨keys, f, rfl, -, h⟩
+    refine ⟨keys, f, rfl, fun k => ?_⟩
+    have hk := h k
+    rw [dif_neg (Finset.notMem_empty k.1)] at hk
+    obtain ⟨T', hT', hv⟩ := hk
+    exact (Option.some.inj hT') ▸ hv
   · rintro ⟨keys, f, rfl, h⟩
-    exact ⟨keys, f, rfl, fun k => by obtain ⟨T', rfl, hT⟩ := h k; exact hT⟩
-  · rintro ⟨keys, f, rfl, h⟩
-    exact ⟨keys, f, rfl, fun k => ⟨T, rfl, h k⟩⟩
+    refine ⟨keys, f, rfl, fun k => absurd k.2 (Finset.notMem_empty k.1), fun k => ?_⟩
+    rw [dif_neg (Finset.notMem_empty k.1)]
+    exact ⟨T, rfl, h k⟩
 
+/-- §3 `(record)` itself, at the held set the rule states: the object at the empty key set
+    holds exactly the maps whose every entry the value term holds. -/
 theorem Typed.record {t T μ} (h : Typed t T μ) : Typed (.record t) (HMap T) (some .M) := by
   rw [← HObject_empty (fun k => absurd k.2 (Finset.notMem_empty k.1)) T]
   exact Typed.object (μs := fun k => absurd k.2 (Finset.notMem_empty k.1))

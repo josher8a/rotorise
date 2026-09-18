@@ -233,34 +233,54 @@ theorem objectCodecCore_e_inv {t a} (he : (objectCodecCore sems rc? kn).e t = so
     filter as a variable, which is what keeps the transport out of a dependent rewrite. -/
 theorem objectCodec_empty_codec (c : Codec) :
     objectCodec ⟨∅, fun k => absurd k.2 (Finset.notMem_empty k.1)⟩ (.codec c) = recordCodec c := by
+  -- A quantifier over the empty key set is vacuous, and simp discharges one through an
+  -- emptiness instance that reaches `Classical.choice`. `hval` is the same fact as a direct
+  -- term, so the guard rewrites without the instance and the route stays closed.
+  have hval : ∀ keys : Finset Name,
+      valPresentB ⟨∅, fun k => absurd k.2 (Finset.notMem_empty k.1)⟩ keys = true :=
+    fun _ => decide_eq_true (fun k => absurd k.2 (Finset.notMem_empty k.1))
   apply Codec.ext
   · funext v
     cases v <;>
       simp [objectCodec, objectCodecCore, carriedCodec, recordCodec,
-            valPresentB, objEntryT, rcOf, MapOf.at, mapV]
+            objEntryT, rcOf, MapOf.at, mapV]
     constructor
     · rintro ⟨x, ⟨rfl, hf⟩, h⟩
       cases eq_of_heq hf
-      exact h
+      exact h.2
     · rename_i keys f
-      exact fun h => ⟨⟨keys, f⟩, ⟨rfl, HEq.rfl⟩, h⟩
+      exact fun h => ⟨⟨keys, f⟩, ⟨rfl, HEq.rfl⟩, hval keys, h⟩
   · rfl
   · funext v
     cases v <;> try rfl
-    simp [objectCodec, objectCodecCore, carriedCodec, recordCodec,
-          valPresentB, objWrite, rcOf, entryCodec, MapOf.at, mapV, mA, Function.comp]
-    rfl
+    rename_i keys f
+    simp only [objectCodec, objectCodecCore, carriedCodec, recordCodec, Option.bind,
+          objWrite, rcOf, entryCodec, MapOf.at, mapV, mA]
+    rw [if_pos (hval keys), Option.map_map]
+    refine congrArg (fun F => Option.map F _) (funext fun _ => rfl) |>.trans ?_
+    exact congrArg (Option.map _) (congrArg funImage
+      (funext fun k => by rw [dif_neg (Finset.notMem_empty k.1)]))
   · funext a
     cases a <;> try rfl
     rename_i keys f
     simp only [objectCodec, objectCodecCore, carriedCodec, mapV, mA, Option.bind,
-               objRead, rcOf, recordCodec, reqPresentB, reqPresentAt]
-    rw [if_pos (by simp)]
+               objRead, rcOf, recordCodec]
+    -- simp over a vacuous `Finset ∅` goal reaches `Classical.choice` through three filter
+    -- lemmas this development does not advertise. Each fact below is the direct term instead.
+    rw [if_pos (show reqPresentB ⟨(∅ : Finset Name),
+        fun k => absurd k.2 (Finset.notMem_empty k.1)⟩ keys = true from
+      decide_eq_true (fun k => absurd k.2 (Finset.notMem_empty k.1)))]
     have hfb : fbNames keys ⟨(∅ : Finset Name), fun k => absurd k.2 (Finset.notMem_empty k.1)⟩
-        = ∅ := by simp [fbNames]
+        = ∅ :=
+      Finset.ext fun k =>
+        ⟨fun hk => (Finset.mem_filter.mp hk).1, fun hk => absurd hk (Finset.notMem_empty k)⟩
+    have hkeep : keys.filter
+        (keepB (.codec c) ⟨(∅ : Finset Name), fun k => absurd k.2 (Finset.notMem_empty k.1)⟩ ·)
+          = keys :=
+      Finset.ext fun k =>
+        ⟨fun hk => (Finset.mem_filter.mp hk).1, fun hk => Finset.mem_filter.mpr ⟨hk, rfl⟩⟩
     rw [hfb, Option.map_map]
-    exact funImage_record_congr (Finset.filter_true_of_mem (fun _ _ => rfl))
-      (fun k h h' => rfl)
+    exact funImage_record_congr hkeep (fun k h h' => rfl)
 
 end Object
 
