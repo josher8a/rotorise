@@ -227,15 +227,15 @@ what it returns.
 
 ## Known: two meet cells refuse a pair they could answer, for want of a decidable equality
 
-**Observation.** `Field.meet` answers `none` at two `fallback` fields, and `Term.meetLit` answers
-`none` at two `number` literals. In both the pair meets whenever the two carried values are equal,
-and in both the row cannot ask whether they are. `Value` has no `DecidableEq` in this tree, and
-neither does `Attr`; only the small index types carry one. At `number` the obstruction is
-`Double.decEq`, which is `numericHost`'s field and so noncomputable — the same reason `OrthL`
-declines at that base.
+**Observation.** `ObjectSlot.meet` answers `none` at two `req` slots that each carry a stand-in,
+and `Term.meetLit` answers `none` at two `number` literals. In both the pair meets whenever the two
+carried values are equal, and in both the row cannot ask whether they are. `Value` has no
+`DecidableEq` in this tree, and neither does `Attr`; only the small index types carry one. At
+`number` the obstruction is `Double.decEq`, which is `numericHost`'s field and so noncomputable —
+the same reason `OrthL` declines at that base.
 
     -- both answer `none`, and both pairs are equal
-    Field.meet (.fallback .string (.str "d")) (.fallback .string (.str "d"))
+    ObjectSlot.meet (.req .string (some (.str "d"))) (.req .string (some (.str "d")))
     Term.meetLit .number x .number x
 
 **Effect.** The meet is less complete than the lattice it models. Two objects that declare one name
@@ -254,38 +254,39 @@ about the axiom base and belongs to the owner.
 
 ---
 
-## Known: `optional` against `fallback` has no meet, and their intersection is not empty
+## Known: `optional` against a stand-in has no meet, and their intersection is not empty
 
-**Observation.** `Field.meet` answers `none` at an `optional` field and a `fallback` field, in both
-orientations. The two marks agree about presence: each admits a map that omits the name. They read
-that map apart. `objRead` builds its output key set as `keys.filter kn ∪ fbNames keys sems`, and
-`fbNames` is every declared `fallback` name the map omits, so the stand-in enters the read there
-and only there. Measured 2026-09-16:
+**Observation.** `ObjectSlot.meet` answers `none` at an `optional` slot and a `req` slot carrying a
+stand-in, in both orientations. The two slots agree about presence: each admits a map that omits
+the name. They read that map apart. `objRead` builds its output key set as
+`keys.filter kn ∪ fbNames keys sems`, and `fbNames` is every declared name with a stand-in that the
+map omits, so the stand-in enters the read there and only there. Measured 2026-09-16:
 
     -- both bodies admit the attribute `.m ∅ _`, and they read it to different maps
-    object {x : optional string}      reads it to  .map ∅ _
-    object {x : fallback string "d"}  reads it to  .map {"x"} _
+    object {x : optional string}        reads it to  .map ∅ _
+    object {x : req string (some "d")}  reads it to  .map {"x"} _
 
 **Effect.** The meet is less complete than the lattice it models. Two objects that declare one name,
-one marking it `optional` and the other `fallback`, have no meet, and the pair they share is not
+one marking it `optional` and the other giving it a stand-in, have no meet, and the pair they share is not
 empty: every map carrying the name is admitted and read alike by both. Nothing is answered wrongly.
 The cell refuses rather than guessing, so every theorem about the meet holds on a smaller set of
 pairs.
 
-A mark cannot answer this cell. The write intersection is the maps carrying the name, because
-`fallback` forces the write; the read intersection is the same, because an absent name reads two
-ways and so carries no agreed value. Both are `req`. But `req` admits less than either factor at a
-map omitting the name, so answering `req` would break `Adm_meet`, which states that the meet admits
-*exactly* what both factors admit, and the read side's counterpart of it. The intersection is `optional`-shaped as an
-admission set and `req`-shaped as a reader, and no mark carries both.
+No slot answers this cell. The write intersection is the maps carrying the name, because the
+stand-in forces the write; the read intersection is the same, because an absent name reads two ways
+and so carries no agreed value. Both are `req` with no stand-in. But that slot admits less than
+either factor at a map omitting the name, so answering it would break `Adm_meet`, which states that
+the meet admits *exactly* what both factors admit, and the read side's counterpart of it. The
+intersection is `optional`-shaped as an admission set and `req`-shaped as a reader, and no slot
+carries both.
 
-**Pin.** Two examples beside `Field.meet` in `Calculus/Meet.lean` assert `none` in both
+**Pin.** Two examples beside `ObjectSlot.meet` in `Calculus/Meet.lean` assert `none` in both
 orientations, and the docstring above it gives the reason. `Adm_meet` is the theorem that fails if
-a later pass makes the cell answer a mark.
+a later pass makes the cell answer a slot.
 
 **Open.** The improvement is not a new mark. It is a decision about the advertised laws: if
 `Adm_meet` and its read-side counterpart were stated as "the meet admits at most what both factors
 admit" rather than exactly, the cell could answer `req` and this pair would gain a meet. Weakening an advertised
 law is a decision about what the development claims, and belongs to the owner. The earlier state of
-this cell answered `fallback`, which kept the equality and broke the reading instead; see the
+this cell answered with the stand-in, which kept the equality and broke the reading instead; see the
 commit that introduced this entry.

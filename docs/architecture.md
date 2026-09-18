@@ -71,20 +71,20 @@ taste is caught by nobody.
 
 ## The term family, and what a stratum owes
 
-`Term`, `Body`, `Field` and `Rest` are inductives in one `mutual` block. **The point of the split
-is negative: no `Term` position accepts a `Field`.** A field policy is not a term, so a nonsensical
+`Term`, `Body` and `ObjectSlot` are inductives in one `mutual` block. **The point of the split
+is negative: no `Term` position accepts an `ObjectSlot`.** A slot is not a term, so a nonsensical
 term is a type error rather than a rule somebody must remember to refuse.
 
-`Body` bundles the object payload — the declared key set, the field at each key, and the rest
-policy — into one thing. Two consequences are the reason to do it again:
+`Body` bundles the object payload — the declared key set, the slot at each key, and the one open
+block — into one thing. Two consequences are the reason to do it again:
 
 - Every table over terms gets a one-argument object row that delegates to a `Body` companion.
   Threading the payload's parts by hand is what made them agree by convention rather than by type.
 - A `Finset Name` together with a function off the membership subtype makes the no-duplicate-keys
   premise disappear. Both a repeated name and two orderings of one object stop being
-  representable. `Field` sits in the function's codomain, which is strictly positive.
+  representable. `ObjectSlot` sits in the function's codomain, which is strictly positive.
 
-`Body`'s projections `Body.fields`, `Body.at` and `Body.rest` are written by hand, because a
+`Body`'s projections `Body.fields`, `Body.at` and `Body.wild` are written by hand, because a
 `mutual` block admits no `structure`. Rows needing all three match on the constructor, which keeps
 the equation compiler's reductions available.
 
