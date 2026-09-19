@@ -1,0 +1,40 @@
+{
+  "workflows": {
+    "enabled": true,
+    "footerMode": "status",
+    "defaultModel": "github-copilot/claude-opus-5",
+    "fastModel": "github-copilot/gpt-5.6-luna"
+  },
+  "defaultProvider": "github-copilot",
+  "defaultModel": "claude-opus-5",
+  "defaultThinkingLevel": "medium",
+  "modelThinkingLevels": {
+    "github-copilot/claude-opus-5": "high",
+    "github-copilot/claude-opus-4.8": "high"
+  },
+  "sessionDir": ".pi/sessions",
+  "defaultTools": [
+    "read",
+    "bash",
+    "edit",
+    "write",
+    "grep"
+  ],
+  "compaction": {
+    "enabled": true,
+    "keepRecentTokens": 20000
+  },
+  "enabledModels": [
+    "github-copilot/claude-opus-5",
+    "github-copilot/claude-opus-4.8",
+    "github-copilot/claude-sonnet-5",
+    "github-copilot/claude-haiku-4.5",
+    "github-copilot/gpt-6-astra",
+    "github-copilot/gpt-5.3-codex",
+    "github-copilot/gpt-5.6-terra",
+    "github-copilot/gpt-5.6-luna",
+    "github-copilot/gemini-3.8-flash",
+    "github-copilot/grok-4.6",
+    "github-copilot/mai-code-1.1-flash"
+  ]
+}
