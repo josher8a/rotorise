@@ -225,6 +225,13 @@ A change to a normative document, to the advertised axiom base, or to the public
 Deliver the measurement, state the trade, and stop.
 Do not move a finding from an audit into a normative document. The owner triages each finding first.
 
+### Rule 30: Read the memory index before you plan
+`memory/` holds the record of past arcs, where the directory exists. Read `memory/MEMORY.md` first.
+Open only the entries whose hook matches your task. Do not read the whole directory.
+Treat each entry as dated. Verify a name, a path, or a count in the tree before you act on it.
+The memory is not normative. `CLAUDE.md` and `docs/` outrank it, and the owner triages each finding.
+The directory has no remote. Do not push it, and do not copy its content into a tracked file.
+
 ## Roles
 
 Two sessions and one owner work on this repository. Each session holds one role.
