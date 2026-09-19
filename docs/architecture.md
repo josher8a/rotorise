@@ -84,6 +84,12 @@ block — into one thing. Two consequences are the reason to do it again:
   premise disappear. Both a repeated name and two orderings of one object stop being
   representable. `ObjectSlot` sits in the function's codomain, which is strictly positive.
 
+`ObjectSlot` carries the current-schema rule only. A required slot remains required on both
+current-schema sides. Missing-value migration is an outer `Term.legacy` reader. Structural
+operations, including `meet` and union certification, operate on the core carrier and never
+propagate a legacy reader. A caller reapplies a legacy reader after an operation when migration
+is required.
+
 `Body`'s projections `Body.fields`, `Body.at` and `Body.wild` are written by hand, because a
 `mutual` block admits no `structure`. Rows needing all three match on the constructor, which keeps
 the equation compiler's reductions available.
@@ -107,8 +113,8 @@ Every other row is owed unconditionally.
 The spec projection separates a name's presence from what the name holds. The split is
 Rémy's, from the 1989 record and variant extension of ML. A field type carries presence
 beside the value type, so an analysis keeps exact negative information about a name.
-`keysOkV` and `keysOkA` read their respective presence facts. `literalsOk` and `literalsOkA`
-read the value constraints. No reader reads a codec.
+`keysOk` reads the one current-schema presence fact. `literalsOk` and `literalsOkA` read the
+value constraints. No reader reads a codec.
 
 The emitter clause is owed for the same reason as the rest: the bridge is part of the
 correspondence, and a stratum whose shape the emitter cannot spell produces committed vector
@@ -545,11 +551,10 @@ emitting a vector about a selection the model cannot express, and its message sa
 caller's vocabulary. That refusal is the record, and it is the shape every gap of this kind takes
 — the reader is total, and what bounds it is which terms have closed forms.
 
-**A `fallback` discriminator is refused at the host and not at the model.** The
-`discriminatedUnion` combinator in `src/` writes the tag out of the discriminator's field, so a
-default would fill an absent tag with a value no member vouched for, and it refuses a `fallback`
-field for that reason. The model writes no tag and states no rule about one. `Body.spec` marks a
-`fallback` field required, so `litSubAt` selects on such a name as it does on a `req` one.
+**A core union requires its discriminator.** The model selects only an input that carries the
+required discriminator. A caller that accepts an old input wraps the whole union in one outer
+`Term.legacy` reader. The alternate reader owns that migration after core selection refuses.
+`Body.spec` contains no migration field.
 
 **A host obligation that no host code reads is found by whatever has to serialise the host's own
 definition, or it is not found.** A term the host builds must determine the codec the host runs.

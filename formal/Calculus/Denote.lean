@@ -37,7 +37,7 @@ def Body.map (b : Body) : MapOf ObjectSlot := ⟨b.fields, b.at⟩
     an object does not carry is settled by the sided name readers and never reaches `literalsOk`, so an
     `optional` literal constrains exactly the values that do carry the name. -/
 def altsOfField : ObjectSlot → Option Alts
-  | .req (.literal k x) _ => some ⟨k, x⟩
+  | .req (.literal k x) => some ⟨k, x⟩
   | .optional (.literal k x) => some ⟨k, x⟩
   | _ => none
 
@@ -58,14 +58,14 @@ def altsOfTerm : Term → Option Alts
 def Body.spec : Body → BodySpec
   | .mk fields f wild =>
       { names := ⟨fields, fun k =>
-          ⟨(f k).presenceV, (f k).presenceA, altsOfField (f k)⟩⟩
+          ⟨(f k).presence, altsOfField (f k)⟩⟩
         wild := wild.map (fun w => altsOfTerm w.2) }
 
 /-- The spec's name table, read off the constructor. -/
 @[simp] theorem Body.spec_names_mk (fields : Finset Name)
     (f : {k // k ∈ fields} → ObjectSlot) (wild : Option (KeyPat × Term)) :
     (Body.mk fields f wild).spec.names =
-      ⟨fields, fun k => ⟨(f k).presenceV, (f k).presenceA, altsOfField (f k)⟩⟩ := rfl
+      ⟨fields, fun k => ⟨(f k).presence, altsOfField (f k)⟩⟩ := rfl
 
 /-- …and the open block, which a closed body does not have. -/
 @[simp] theorem Body.spec_wild_none (fields : Finset Name)
@@ -203,8 +203,7 @@ def bodySem : Body → Codec
 /-- A field's semantics. A companion of `denote` rather than a function of one — which is what
     removed the fuel. -/
 def fieldSem : ObjectSlot → FieldSem
-  | .req t none => .req (denote t)
-  | .req t (some v) => .fb (denote t) v
+  | .req t => .req (denote t)
   | .optional t => .opt (denote t)
 
 /-- The open block's semantics, for the same reason.

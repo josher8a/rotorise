@@ -313,8 +313,8 @@ theorem e_comp_p_ne_id :
 
 This row needs no theorem, and could not have one: it is enforced by the syntax. `ObjectSlot`
 (Term.lean) has two constructors — `req` and `optional` — and every one takes a
-`Term`. None takes an `ObjectSlot`, so `optional(optional(c))` cannot be written down, and
-neither can `optional(fallback(c, v))` or `fallback(optional(c), v)`.
+`Term`. None takes an `ObjectSlot`, so `optional(optional(c))` cannot be written down.
+An outer `legacy` term can occur inside a slot because `legacy` is a `Term`, not a presence mark.
 
 That is the stratification §4 of the specification asks for, and the model gets it from
 the type rather than from a side condition — which is the stronger place to get it. It is

@@ -778,20 +778,8 @@ something whose judgement has a \texttt{⊗}.
 \end{verbatim}
 \end{definition}
 
-\begin{definition}[(fallback)]
-\label{rule:fallback}
-\lean{Calculus.TypedField.fallback, Calculus.ObligationsField}
-\leanok
-\begin{verbatim}
-⊢ c : T ⇝ μ    v : 𝟙 → T    v(∗) ∈ dom(e)
-────────────────────────────────────────────── (fallback)
-⊢ fallback(c, v) : T ⊗ req ⇝ μ
-\end{verbatim}
-\end{definition}
-
 \begin{definition}[(object)]
 \label{rule:object}
-\uses{rule:field,rule:optional,rule:fallback,rule:rest}
 \lean{Calculus.Typed.object}
 \leanok
 \begin{verbatim}
@@ -825,21 +813,9 @@ no ordering to lose, one of only three places \texttt{ker\ p} is not equality. T
 
 \subsection{The stratification does work}\label{the-stratification-does-work}
 
-No rule derives \texttt{⊢\ optional(c)\ :\ T\ ⇝\ μ}. Presence lives in \texttt{⊗\ π} and nowhere else, so \texttt{optional} and
-\texttt{fallback} are fields and never attributes, which makes \texttt{array(optional(c))} \textbf{not derivable}, since
+No rule derives \texttt{⊢\ optional(c)\ :\ T\ ⇝\ μ}. Presence lives in \texttt{⊗\ π} and nowhere else, so \texttt{optional} is a field.
 \texttt{array}'s premise is an attribute judgement. Nor \texttt{set}, \texttt{tuple}, \texttt{record}, nor a union option, for the
 same reason: none of those positions has a name for anything to be absent from.
-
-Note also that \texttt{fallback} concludes \texttt{req}. It is not a weaker \texttt{optional}: it is a \emph{total} field whose
-\texttt{p} is defined on rows that omit the name. The absence is in the row, never in the value.
-\texttt{v(∗)\ ∈\ dom(e)} is the soundness proof's levy (§5): a row omitting the name reads to the stand-in,
-so the stand-in must be writable, or \rulelink{cond:C}{\textbf{(C)}} fails at the one input the term exists to serve.
-
-And a marker marks \textbf{once}. Both \rulelink{rule:optional}{\texttt{(optional)}} and \rulelink{rule:fallback}{\texttt{(fallback)}} take an \emph{attribute} premise, so
-\texttt{optional(optional(c))}, \texttt{optional(fallback(c,\ v))} and \texttt{fallback(optional(c),\ v)} have no derivation.
-That is not tidiness: only the outermost mark was ever read, so \texttt{optional(fallback(c,\ v))} dropped the
-stand-in and left the attribute simply absent, while \texttt{fallback(optional(c),\ v)} stood in on the way out
-and then \emph{required} the value on the way back. Both spellings mean \texttt{fallback(c,\ v)}.
 
 \begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
 
@@ -916,9 +892,8 @@ machinery of admission gives.
 \end{definition}
 
 Note that \rulelink{rule:dunion}{\texttt{(dunion)}}'s premise asks \texttt{sᵢ(d)} to \emph{be} the literal — an attribute term, hence a \texttt{req}
-field. A \texttt{fallback} around it has no derivation, and the proof says why rather than leaving it to
-taste: a row omitting the discriminator would read to the fallback's stand-in, an arbitrary value
-the tag sets never vouched for, and \rulelink{cond:C}{\textbf{(C)}} would then re-encode a variant no tag selects.
+field. A row without the discriminator does not select a core option. A caller that accepts such
+an old row supplies one outer \texttt{legacy} reader for the whole union.
 
 \textbf{Arity one at the discriminator}, and n-ary literals everywhere else. The rule asks for a single
 tag \texttt{tᵢ} per variant, and disjointness of singletons is distinctness. Soundness does not need the
@@ -1255,8 +1230,8 @@ obligation, \texttt{f} being free to move a value into any constructor. And
 \texttt{union(literal("A"),\ held(literal("A"),\ f,\ g))}, the counterexample below, separates on neither
 side. Note that the member disjunct is no help in either case: both options are \texttt{⇝\ S}.
 
-Two notes on what has no set of its own. \texttt{optional} and \texttt{fallback} are \textbf{fields} (§4), not terms,
-so nothing passes through them: admission is a function on terms and has no case to give them. And a
+One note on what has no set of its own. \texttt{optional} is a \textbf{field} (§4), not a term,
+so nothing passes through it: admission is a function on terms and has no case to give it. And a
 union's own admission is not the join of its options' — it is the set where \textbf{exactly one} option
 admits, which is the union's own resolution, written as a set. Where two options both admit, the union writes nothing,
 which is the empty array above stated the other way round.
@@ -1318,9 +1293,9 @@ below repeats: there is no fixpoint there to prove anything about. Such a union 
 What it lacks is the theorem, not a rule.
 \end{theorem}
 
-Three premises in §3–§4 — \texttt{ran(r)\ ⊆\ dom(e)} and coherence on \rulelink{rule:legacy}{\texttt{(legacy)}}, \texttt{v(∗)\ ∈\ dom(e)} on
-\rulelink{rule:fallback}{\texttt{(fallback)}} — exist because this proof failed without them. That is the theorem earning its keep:
-each names a term the calculus would otherwise derive and the laws refuse. Null-honesty is not
+The two premises on \rulelink{rule:legacy}{\texttt{(legacy)}}, \texttt{ran(r)\ ⊆\ dom(e)} and
+coherence, exist because this proof failed without them. Each excludes a term that the calculus
+would otherwise derive and the laws refuse. Null-honesty is not
 among them: the null point is an option of \rulelink{rule:union}{\texttt{(union)}}, so what would have been a
 premise is that sum's \rulelink{cond:U}{\textbf{(U)}}, and the sugar paragraph of §3 settles it.
 
@@ -1360,7 +1335,6 @@ below is an instantiation.
 \end{proof}
 
 \begin{proof}
-\uses{rule:string,rule:boolean,rule:binary,rule:null,rule:decimal,rule:number,rule:literal,rule:held,rule:refine,rule:legacy,rule:custom,rule:lazy,rule:field,rule:optional,rule:fallback,rule:array,rule:tuple,rule:tuple-tail,rule:record,rule:object,rule:set,rule:union,rule:dunion,rule:opaque}
 \leanok
 By induction on the derivation, with one refinement at \rulelink{rule:lazy}{\texttt{(lazy)}}. Each case
 first says what the pair \emph{is} — the denotation is part of the rule — then discharges the laws. The
@@ -1440,11 +1414,9 @@ its own step.
 \textbf{Fields.} A field denotes a pair over presence-extended domains — \texttt{e♭\ :\ T\ ⇀\ 𝔸\ ∪\ \{ε\}},
 \texttt{p♭\ :\ (𝔸\ ∪\ \{ε\})\ ⇀\ T}, \texttt{ε} the absent binding — with \texttt{member(ε)} undefined and the laws read over
 \texttt{𝔸} as before. \rulelink{rule:field}{\texttt{(field)}} and \rulelink{rule:optional}{\texttt{(optional)}} set \texttt{e♭\ =\ e}, \texttt{p♭\ =\ p}; absence is handled at \rulelink{rule:object}{\texttt{(object)}},
-where an \texttt{opt} name absent in the item is a binding absent in the record, which round-trips by
-construction. \rulelink{rule:fallback}{\texttt{(fallback)}} adds \texttt{p♭(ε)\ =\ v(∗)}, and \rulelink{cond:C}{\textbf{(C)}} at \texttt{ε} \emph{is} the premise
-\texttt{v(∗)\ ∈\ dom(e)}: a row missing the name reads to the stand-in, and the stand-in must be writable.
-\texttt{≼} quantifies over \texttt{𝔸}, so \texttt{ε} asks nothing — that the canonizer materialises the attribute is
-quotient, not member change.
+where an \texttt{opt} name absent in the item is a binding absent in the record. A required name
+must be present on both current-schema sides.
+\texttt{≼} quantifies over \texttt{𝔸}, so \texttt{ε} asks nothing.
 
 \textbf{Products} — each an instantiation of the \rulelink{lem:traversal}{traversal Lemma}.
 
@@ -1458,9 +1430,7 @@ element is where the \rulelink{cond:MP}{\textbf{(MP)}} exemption propagates — 
 \texttt{ε}-handling of the Fields case; an undeclared name by \texttt{ρ}. \texttt{drop} is a filter \emph{before} the step
 (§4), so it needs no traversal mode of its own; the presence guards — every \texttt{req} name demanded in
 both directions, every non-\texttt{opt} binding demanded of a value — are what keep the step total where
-the Lemma needs it, and \rulelink{rule:fallback}{\texttt{(fallback)}}'s stand-ins appear only for names a row omits, so a canonical
 item adds none. \rulelink{cond:W}{\textbf{(W)}}: \texttt{M}. \texttt{≼}: the Lemma's keyed clause; the names \texttt{drop} discards and the
-stand-ins \texttt{fallback} materialises are each on one side only, and \texttt{≼} compares shared names — the
 quotient again.
 
 \emph{set.} The premise gives \texttt{e\_c(x)\ =\ ⟨μ,\ w(x)⟩}; the step is \texttt{w} outward and \texttt{p\_c(⟨μ,\ ·⟩)} back, and
@@ -1603,10 +1573,7 @@ resolution is unique admission (§5), never declaration order.
 
 \begin{theorem}[wrappers preserve the member]
 \label{eq:wrapper-mu}
-\uses{rule:held,rule:refine,rule:legacy,rule:optional,rule:fallback}
-\lean{Calculus.through_μ, Calculus.restrict_μ, Calculus.extendRead_μ, Calculus.optional_μ, Calculus.fallback_μ, Calculus.denote_held_μ, Calculus.denote_refine_μ, Calculus.denote_legacy_μ}
 \leanok
-\texttt{μ(w(c))\ =\ μ(c)} for \texttt{w\ ∈\ \{held,\ refine,\ legacy,\ optional,\ fallback\}}. Wrappers
 preserve the member: a field's member is its attribute's (§4).
 \end{theorem}
 
@@ -1687,7 +1654,6 @@ This is §2's quotient.
 Equation & Why it is not derivable \\
 \midrule
 \texttt{set(union(c₁,\ c₂))} — not derivable & The premise on \texttt{set} demands a member, and a union of options writing different members has none. \\
-\texttt{optional(optional(c))} — not derivable & A marker marks once, and nesting read only the outermost. \texttt{optional(fallback(c,\ v))} and \texttt{fallback(optional(c),\ v)} likewise. \\
 \bottomrule
 \end{tabular}
 

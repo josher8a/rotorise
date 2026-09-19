@@ -16,12 +16,10 @@ noncomputable section
 inductive FieldSem where
   | req (c : Codec)
   | opt (c : Codec)
-  | fb  (c : Codec) (v : Value)
 
 def FieldSem.codec : FieldSem → Codec
   | .req c => c
   | .opt c => c
-  | .fb c _ => c
 
 /-- A rest policy, denoted. -/
 inductive RestSem where
@@ -38,26 +36,8 @@ Both are now properties of the type, and that premise is gone from all five of t
 
 The type and its lookup are in `Domain.lean`, because three strata need them and the lowest is
 the term language. The lookup is deliberately shaped like `List.lookup`, so everything downstream
-— `entryCodec`, `objEntryT`, `fbValue`, `keepB` and every proof that splits on them — reads
+— `entryCodec`, `objEntryT`, `field value`, `keepB` and every proof that splits on them — reads
 unchanged. -/
-
-/-- `fb`'s absent case, `p♭(ε) = v(∗)`: the stand-ins for the fallback names a row
-    omits. Empty on canonical items, where every `fb` name is present.
-
-    A `Finset.filter` over the declared names, where the list form was a fold with an
-    `insert` — and its characterization is `Finset.mem_filter` rather than an induction. -/
-def isFbB : Option FieldSem → Bool
-  | some (.fb _ _) => true
-  | _ => false
-
-def fbNames (names : Finset Name) (sems : MapOf FieldSem) : Finset Name :=
-  sems.1.filter fun k => isFbB (sems.at k) && !decide (k ∈ names)
-
-/-- …and the stand-in each of them reads to. -/
-def fbValue (sems : MapOf FieldSem) (k : Name) : Option Value :=
-  match sems.at k with
-  | some (.fb _ v) => some v
-  | _ => none
 
 /-- What each guard asks of one binding, named so the guards themselves are a single
     quantifier over the key set rather than a `List.all` over a row. -/
@@ -69,12 +49,10 @@ def reqPresentAt (names : Finset Name) : Name → FieldSem → Bool
   | k, .req _ => decide (k ∈ names)
   | _, _ => true
 
-/-- Every non-`opt` binding present — the value-side guard (§4: `fallback` concludes
-    `req`). -/
 def valPresentB (sems : MapOf FieldSem) (names : Finset Name) : Bool :=
   decide (∀ k : {k // k ∈ sems.1}, valPresentAt names k.1 (sems.2 k) = true)
 
-/-- Every `req` name present — the stored-side guard; `fb` reads to its stand-in. -/
+/-- Every `req` name present on the stored side. -/
 def reqPresentB (sems : MapOf FieldSem) (names : Finset Name) : Bool :=
   decide (∀ k : {k // k ∈ sems.1}, reqPresentAt names k.1 (sems.2 k) = true)
 
@@ -96,7 +74,6 @@ Three namings, and everything §4 asks becomes short. **`entryCodec`** is the co
 entry goes through — the field its name declares, or else the rest policy's — which is
 the only thing ~~encEntry~~/~~decEntry~~ do with a name, so every per-entry law is one appeal
 to `entryCodec_of`. **`objWrite`/`objRead`** are the payload pair: the guard and the
-steps going out, the guard, the `drop` filter, the steps and the fallback stand-ins
 coming back. **`objectCodecCore_eq`** then makes the object `carriedCodec` between `map`
 and `M`, so §2's prism halves are the ones already discharged. -/
 
@@ -145,17 +122,14 @@ noncomputable def objWrite (sems : MapOf FieldSem) (rc? : Option Codec) :
       (fun g => ⟨p.1, g⟩)
   else none
 
-/-- …and coming back: the stored-side guard, the `drop` filter, the steps, and the
-    stand-ins for the fallback names the row omits. -/
+/-- …and coming back: the stored-side guard, the filter, and the entrywise steps. -/
 noncomputable def objRead (sems : MapOf FieldSem) (rc? : Option Codec)
     (kn : Name → Bool) : MapOf Attr → Option (MapOf Value) := fun p =>
   if reqPresentB sems p.1 = true then
     (funImage (fun k : {k // k ∈ p.1.filter (kn ·)} =>
         (entryCodec sems rc? k.1).bind
           (fun c => c.p (p.2 ⟨k.1, (Finset.mem_filter.mp k.2).1⟩)))).map
-      (fun d => ⟨p.1.filter (kn ·) ∪ fbNames p.1 sems, fun k =>
-        if h : k.1 ∈ p.1.filter (kn ·) then d ⟨k.1, h⟩
-        else (fbValue sems k.1).getD .null⟩)
+      (fun d => ⟨p.1.filter (kn ·), d⟩)
   else none
 
 theorem objWrite_eq {p : MapOf Value} {q : MapOf Attr} :
@@ -174,30 +148,21 @@ theorem objRead_eq {q : MapOf Attr} {p : MapOf Value} :
         funImage (fun k : {k // k ∈ q.1.filter (kn ·)} =>
             (entryCodec sems rc? k.1).bind
               (fun c => c.p (q.2 ⟨k.1, (Finset.mem_filter.mp k.2).1⟩))) = some d ∧
-        p = ⟨q.1.filter (kn ·) ∪ fbNames q.1 sems, fun k =>
-              if h : k.1 ∈ q.1.filter (kn ·) then d ⟨k.1, h⟩
-              else (fbValue sems k.1).getD .null⟩ := by
+        p = ⟨q.1.filter (kn ·), d⟩ := by
   simp only [objRead]
   split
   · next hg => simp [hg, Option.map_eq_some_iff, eq_comm (a := p)]
   · next hg => simp [hg]
 
-/-- **The transport into a record's reading.** An object whose keep filter drops nothing writes
-    the map's own key set, and the stand-in branch is unreachable, so its output is the record's.
-    The filter is a variable again, so `subst` carries the membership proof inside the entry. -/
+/-- A filter that keeps every name transports an entrywise read to a record read. -/
 theorem funImage_record_congr {S T : Finset Name} (hS : S = T)
     {g : {k // k ∈ S} → Option Value} {g' : {k // k ∈ T} → Option Value}
-    (hg : ∀ (k : Name) (h : k ∈ S) (h' : k ∈ T), g ⟨k, h⟩ = g' ⟨k, h'⟩)
-    {fb : Name → Option Value} :
-    (funImage g).map (mapV.into ∘ fun d => (⟨S ∪ ∅, fun k => if h : k.1 ∈ S then d ⟨k.1, h⟩
-        else (fb k.1).getD .null⟩ : MapOf Value))
-      = (funImage g').map (Value.map T) := by
+    (hg : ∀ (k : Name) (h : k ∈ S) (h' : k ∈ T), g ⟨k, h⟩ = g' ⟨k, h'⟩) :
+    (funImage g).map (Value.map S) = (funImage g').map (Value.map T) := by
   subst hS
   have himg : g = g' := funext fun k => hg k.1 k.2 k.2
   subst himg
-  refine congrArg (fun F => Option.map F (funImage g)) (funext fun d => ?_)
-  show mapV.into _ = mapV.into ⟨S, d⟩
-  exact congrArg mapV.into (MapOf.ext (Finset.union_empty S) (fun k _ h2 => dif_pos h2))
+  rfl
 
 /-- The object is `carriedCodec` between `map` and `M`, at that pair. -/
 noncomputable def objectCodecCore (sems : MapOf FieldSem) (rc? : Option Codec)
@@ -228,9 +193,9 @@ theorem objectCodecCore_e_inv {t a} (he : (objectCodecCore sems rc? kn).e t = so
 /-- **The empty body with an open block is the record.** `record` is not a term of its own: it
     is the object that declares no name and takes every key at one codec, and this is the
     equation that says so. Four components, and only the reading needs work: the keep filter is
-    constantly true at an open block, so it drops no name, and with no declared name there is no
-    stand-in, so the output key set is the map's own. `funImage_record_congr` carries the
-    filter as a variable, which is what keeps the transport out of a dependent rewrite. -/
+    constantly true at an open block, so it drops no name. The output key set is therefore the
+    map's own. `funImage_record_congr` carries the filter as a variable, which keeps the
+    transport out of a dependent rewrite. -/
 theorem objectCodec_empty_codec (c : Codec) :
     objectCodec ⟨∅, fun k => absurd k.2 (Finset.notMem_empty k.1)⟩ (.codec c) = recordCodec c := by
   -- A quantifier over the empty key set is vacuous, and simp discharges one through an
@@ -270,16 +235,12 @@ theorem objectCodec_empty_codec (c : Codec) :
     rw [if_pos (show reqPresentB ⟨(∅ : Finset Name),
         fun k => absurd k.2 (Finset.notMem_empty k.1)⟩ keys = true from
       decide_eq_true (fun k => absurd k.2 (Finset.notMem_empty k.1)))]
-    have hfb : fbNames keys ⟨(∅ : Finset Name), fun k => absurd k.2 (Finset.notMem_empty k.1)⟩
-        = ∅ :=
-      Finset.ext fun k =>
-        ⟨fun hk => (Finset.mem_filter.mp hk).1, fun hk => absurd hk (Finset.notMem_empty k)⟩
     have hkeep : keys.filter
         (keepB (.codec c) ⟨(∅ : Finset Name), fun k => absurd k.2 (Finset.notMem_empty k.1)⟩ ·)
           = keys :=
       Finset.ext fun k =>
         ⟨fun hk => (Finset.mem_filter.mp hk).1, fun hk => Finset.mem_filter.mpr ⟨hk, rfl⟩⟩
-    rw [hfb, Option.map_map]
+    rw [Option.map_map]
     exact funImage_record_congr hkeep (fun k h h' => rfl)
 
 end Object
