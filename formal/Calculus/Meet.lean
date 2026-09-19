@@ -110,33 +110,16 @@ def orthAll : List Term → Bool
   | [] => true
   | t :: ts => ts.all (fun u => Orth t u) && orthAll ts
 
-/-- Whether a slot's presence rule is the same on both halves. `req` with no stand-in must be
-    present for both and `optional` may be absent for both. A stand-in parts them: the write side
-    writes the name and the read side reads the stand-in when the name is absent. -/
-def ObjectSlot.presenceAgrees : ObjectSlot → Bool
-  | .req _ (some _) => false
-  | _ => true
-
-/-- The former read-side structural proof still consumes this temporary agreement premise.
-    `keysOkV` and `keysOkA` now read their own presence elements. Step 2 removes this guard by
-    proving `structural_of_AdmABody` without `hnf`. -/
-def objectNamesAgree : Term → Bool
-  | .object b => decide (∀ k : {k // k ∈ b.fields}, ObjectSlot.presenceAgrees (b.at k) = true)
-  | _ => true
-
 /-- **The certificate a union must carry for its admission to be the join of its options'.**
-    Three conditions, and each answers a way the admission can fall short of the join.
+    Two conditions, and each answers a way the admission can fall short of the join.
 
     Pairwise `Orth` bounds the structural admitters at one, so nothing is refused for being
     admitted twice.
 
     No *open* object. The sided name readers admit an open block's undeclared names, while the
-    present structural proof still excludes an open object.
-
-    The read-side structural proof still needs `hnf`, which `objectNamesAgree` supplies. The
-    guard remains until Step 2 proves `structural_of_AdmABody` without that premise. -/
+    structural proof excludes an open object. -/
 def unionOk (os : List Term) : Bool :=
-  orthAll os && os.all (fun t => !t.isOpenObject) && os.all objectNamesAgree
+  orthAll os && os.all (fun t => !t.isOpenObject)
 
 /-- The certificate, in the form the separation lemmas take. -/
 theorem pairwise_of_orthAll : ∀ {ts : List Term}, orthAll ts = true →
@@ -174,8 +157,7 @@ theorem unionOk_pairwise_held : ∀ {os : List Term} {Ts μs}, TypedListμ os Ts
     disjointness is the second disjunct. This is the form the meet's union row takes. -/
 theorem dincomp_of_unionOk {os : List Term} {Ts μs} (hc : unionOk os = true)
     (h : TypedListμ os Ts μs) : DIncomp Ts := by
-  obtain ⟨hc1, _⟩ := Bool.and_eq_true_iff.mp hc
-  obtain ⟨horth, hopen⟩ := Bool.and_eq_true_iff.mp hc1
+  obtain ⟨horth, hopen⟩ := Bool.and_eq_true_iff.mp hc
   refine dincomp_of_disjoint (unionOk_pairwise_held h (pairwise_of_orthAll horth) ?_)
   intro t ht
   have := List.all_eq_true.mp hopen t ht
@@ -1261,22 +1243,19 @@ example : Term.meet
 
 /-- A closed body with no stand-in carries the certificate. -/
 example : unionOk [.object (.mk {"x"} (fun _ => .optional .string) none)] = true := by
-  simp [unionOk, orthAll, Term.isOpenObject, objectNamesAgree,
-    ObjectSlot.presenceAgrees, MapOf.at]
+  simp [unionOk, orthAll, Term.isOpenObject]
 
-/-- **A stand-in is the third way, and it is about a declared name rather than an undeclared
-    one.** The slot reads to its stand-in when the name is absent, so the option reads a map that
-    omits the name. The sided name readers now answer that absence separately. The agreement
-    guard remains as the current read-side structural proof premise. The body is closed here, so
-    this is not the row below.
+/-- **A stand-in is about a declared name rather than an undeclared one.** The slot reads to its
+    stand-in when the name is absent, so the option reads a map that omits the name. The sided
+    name readers answer that absence separately. The body is closed here, so this is not the row
+    below.
 
     The `drop` object used to stand here as a fourth way, the open object's defect one half over.
     It is gone with the policy: a body has one closed state now, and that state refuses an
     undeclared name on both halves. -/
 example : unionOk [.object (.mk {"x"} (fun _ => .req .string (some (.str "d"))) none)]
-    = false := by
-  simp [unionOk, orthAll, Term.isOpenObject, objectNamesAgree,
-    ObjectSlot.presenceAgrees, MapOf.at]
+    = true := by
+  simp [unionOk, orthAll, Term.isOpenObject]
 
 /-- …and an **open** object is the second way, on its own. Its open block makes an undeclared name
     top for both sided name readers. The temporary certificate still refuses an open object, so a
@@ -1967,7 +1946,7 @@ theorem selOptV_eq_AdmAny {os : List Term} (hc : unionOk os = true) (v : Value) 
     selOptV (AdmSpecs os) v = AdmAny os v := by
   simp only [unionOk, Bool.and_eq_true, List.all_eq_true] at hc
   have hclosed : ∀ t ∈ os, t.isOpenObject = false := fun t ht => by
-    have := hc.1.2 t ht; simpa using this
+    have := hc.2 t ht; simpa using this
   have hbridge : ∀ t ∈ os, Adm t v = true → admitOptV (specOf t, Adm t) v = true := by
     intro t ht h
     cases t with
@@ -1984,7 +1963,7 @@ theorem selOptV_eq_AdmAny {os : List Term} (hc : unionOk os = true) (v : Value) 
         | _ => exact absurd h (by simp [Adm, AdmBody])
     | _ => exact h
   have hlen : (os.filter (fun t => admitOptV (specOf t, Adm t) v)).length ≤ 1 := by
-    have hone := (admitsAtMostOne_of_orth (pairwise_of_orthAll hc.1.1)).1 v
+    have hone := (admitsAtMostOne_of_orth (pairwise_of_orthAll hc.1)).1 v
     rwa [semsOf, ← optionSems_eq, filter_AdmSpecs (fun t _ => Adm_exact t) v,
       List.length_map] at hone
   rw [selOptV, AdmSpecs_eq, filter_map_AdmSpecs]
@@ -2017,9 +1996,8 @@ theorem selOptV_eq_AdmAny {os : List Term} (hc : unionOk os = true) (v : Value) 
 /-! ### The same equation on the read side
 
 The value side needs only `AdmWild`, which is `none` exactly where the body declares no open
-block. The read side needs that same fact and the certificate's third conjunct as well, and the
-two lemmas below are where each is spent: `mem_fields_of_admA` at the undeclared name,
-`mem_keys_of_isReqA` at the declared and absent one. -/
+block. The read side uses the same closedness fact. `mem_fields_of_admA` handles an undeclared
+name, and the sided presence lattice handles a declared absent name. -/
 
 /-- `AdmABody` at a map, unfolded. -/
 theorem AdmABody_map {b : Body} {keys : Finset Name} {g : {k // k ∈ keys} → Attr} :
@@ -2052,23 +2030,6 @@ theorem mem_fields_of_admA {b : Body} (hr : b.wild = none)
   rw [entryPA, MapOf.at, dif_neg hnb, hr] at hh
   exact absurd hh (by simp [AdmAWild])
 
-/-- A declared name that must be present on both halves is present. A stand-in is where the two
-    halves part, and the certificate excludes it for that. -/
-theorem mem_keys_of_isReqA {b : Body} {keys : Finset Name}
-    (hnf : ∀ k : {k // k ∈ b.fields}, ObjectSlot.presenceAgrees (b.at k) = true)
-    (hv : reqPresentT b.fields b.at keys = true) {k : Name} (hc : k ∈ b.fields)
-    (hreq : ObjectSlot.isReq (b.at ⟨k, hc⟩) = true) : k ∈ keys := by
-  have hh := of_decide_eq_true hv ⟨k, hc⟩
-  cases hf : b.at ⟨k, hc⟩ with
-  | req t m =>
-      cases m with
-      | none => rw [hf] at hh; exact of_decide_eq_true hh
-      | some d =>
-          have := hnf ⟨k, hc⟩
-          rw [hf] at this
-          exact absurd this (by simp [ObjectSlot.presenceAgrees])
-  | optional t => rw [hf] at hreq; exact absurd hreq (by simp [ObjectSlot.isReq])
-
 /-- One entry of the read-side object row — `objAdmV_row`'s twin. It took a keep filter as a
     hypothesis while `drop` made the two sides' filters differ; they do not differ now. -/
 theorem objAdmA_row {c : Body} {keys : Finset Name} {g : {k // k ∈ keys} → Attr}
@@ -2079,11 +2040,9 @@ theorem objAdmA_row {c : Body} {keys : Finset Name} {g : {k // k ∈ keys} → A
   have hh := of_decide_eq_true hB ⟨k, hk⟩
   rwa [entryPA, MapOf.at, dif_pos hc] at hh
 
-/-- **An object option whose halves agree about names has its structural test for a read row.**
-    `structural_of_AdmBody`'s twin, and it needs both halves of `objectNamesAgree` where the
-    value side needs neither. -/
+/-- **An object option has its structural test for a read row.** `structural_of_AdmBody`'s twin
+    reads the read-side presence element directly. -/
 theorem structural_of_AdmABody {b : Body} (hr : b.wild = none)
-    (hnf : ∀ k : {k // k ∈ b.fields}, ObjectSlot.presenceAgrees (b.at k) = true)
     {keys : Finset Name} {g : {k // k ∈ keys} → Attr}
     (h : AdmABody b (.m keys g) = true) :
     (keysOkA b.spec keys && literalsOkA b.spec keys g) = true := by
@@ -2100,13 +2059,11 @@ theorem structural_of_AdmABody {b : Body} (hr : b.wild = none)
         | req t m =>
           cases m with
           | none =>
-            apply mem_keys_of_isReqA hnf h'.1 k.2
-            simp [Body.at, ObjectSlot.isReq, hf]
+            have hh := of_decide_eq_true h'.1 k
+            exact of_decide_eq_true (by simpa [Body.at, hf] using hh)
           | some v =>
-            have hfalse : ObjectSlot.presenceAgrees (fld k) = true := by
-              simpa [Body.at] using hnf k
-            rw [hf] at hfalse
-            simp [ObjectSlot.presenceAgrees] at hfalse
+            rw [hf] at hreq
+            simp [ObjectSlot.presenceA, ObjectSlot.isReqA] at hreq
         | optional t =>
           rw [hf] at hreq
           cases t <;> simp [ObjectSlot.presenceA, Term.isNever] at hreq
@@ -2149,13 +2106,6 @@ theorem AdmAAny_iff : ∀ {os : List Term} {a : Attr},
         · exact Or.inl h
         · exact Or.inr ⟨u, hu', h⟩
 
-/-- The certificate's third conjunct, in the form the bridge takes. It carried the closedness of
-    the body as a second component while `drop` could pass `isOpenObject` and still part the two
-    halves; the bridge reads closedness off `isOpenObject` now. -/
-theorem namesAgree_parts {b : Body} (h : objectNamesAgree (.object b) = true) :
-    ∀ k : {k // k ∈ b.fields}, ObjectSlot.presenceAgrees (b.at k) = true :=
-  of_decide_eq_true h
-
 /-- **A certified union reads the join of its options'.** `selOptV_eq_AdmAny`'s twin. `selOptA`
     answers where exactly one option admits structurally; the certificate makes that at most one,
     and makes each option's structural test its read row. -/
@@ -2166,17 +2116,16 @@ theorem selOptA_eq_AdmAAny {os : List Term} (hc : unionOk os = true) (a : Attr) 
     intro t ht h
     cases t with
     | object b =>
-      have hnf := namesAgree_parts (hc.2 _ ht)
       have hr : b.wild = none := by
         cases hwild : b.wild with
         | none => rfl
-        | some _ => exact absurd (hc.1.2 _ ht) (by simp [Term.isOpenObject, hwild])
+        | some _ => exact absurd (hc.2 _ ht) (by simp [Term.isOpenObject, hwild])
       cases a with
-      | m keys g => simpa only [admitOptA, specOf] using structural_of_AdmABody hr hnf h
+      | m keys g => simpa only [admitOptA, specOf] using structural_of_AdmABody hr h
       | _ => exact absurd h (by cases b; simp [AdmA, AdmABody])
     | _ => exact h
   have hlen : (os.filter (fun t => admitOptA (specOf t, AdmA t) a)).length ≤ 1 := by
-    have hone := (admitsAtMostOne_of_orth (pairwise_of_orthAll hc.1.1)).2 a
+    have hone := (admitsAtMostOne_of_orth (pairwise_of_orthAll hc.1)).2 a
     rwa [semsOf, ← optionSems_eq, filter_AdmASpecs (fun t _ => AdmA_exact t) a,
       List.length_map] at hone
   rw [selOptA, AdmASpecs_eq, filter_map_AdmASpecs]
@@ -3383,8 +3332,8 @@ theorem writes_famString : WritesFam Term.string famString := by
   intro y z hd h m hz
   cases y <;> first | exact hd.elim | skip
   case literal k lv =>
-      cases k <;> (try simp_all [famString, μSyn, Term.meetLit]) <;>
-        (try (subst_vars; simp_all [μSyn, GroundKind.member, SetBase.member]))
+      cases k <;> (try simp_all [famString, μSyn]) <;>
+        (try (subst_vars; simp_all [μSyn, GroundKind.member]))
       all_goals (try (split at h))
       all_goals (try (subst_vars; simp_all [μSyn, GroundKind.member, SetBase.member]))
       all_goals (try (subst h; simp_all [μSyn, GroundKind.member, SetBase.member]))
@@ -4792,13 +4741,12 @@ theorem admitOptA_of_AdmA {os : List Term} (hc : unionOk os = true) {t : Term} (
   simp only [unionOk, Bool.and_eq_true, List.all_eq_true] at hc
   cases t with
   | object b =>
-      have hnf := namesAgree_parts (hc.2 _ ht)
       have hr : b.wild = none := by
         cases hwild : b.wild with
         | none => rfl
-        | some _ => exact absurd (hc.1.2 _ ht) (by simp [Term.isOpenObject, hwild])
+        | some _ => exact absurd (hc.2 _ ht) (by simp [Term.isOpenObject, hwild])
       cases a with
-      | m keys g => simpa only [admitOptA, specOf] using structural_of_AdmABody hr hnf hh
+      | m keys g => simpa only [admitOptA, specOf] using structural_of_AdmABody hr hh
       | _ => exact absurd hh (by cases b; simp [AdmA, AdmABody])
   | _ => exact hh
 
@@ -6217,14 +6165,14 @@ theorem orthAll_of_pairwise : ∀ {ts : List Term},
         simp only [orthAll, Bool.and_eq_true, List.all_eq_true]
         exact ⟨fun u hu => hh u hu, orthAll_of_pairwise hrest⟩
 
-/-- **The certificate survives a sub-selection.** All three conjuncts are pairwise or pointwise,
-    so keeping fewer options proves nothing new. (U) is the property that does not survive, and
-    it is not one of the three. -/
+/-- **The certificate survives a sub-selection.** Both conjuncts are pairwise or pointwise, so
+    keeping fewer options proves nothing new. (U) is the property that does not survive, and it
+    is not one of the two. -/
 theorem unionOk_sublist {opts sub : List Term} (hs : sub.Sublist opts)
     (h : unionOk opts = true) : unionOk sub = true := by
   simp only [unionOk, Bool.and_eq_true, List.all_eq_true] at h ⊢
-  exact ⟨⟨orthAll_of_pairwise ((pairwise_of_orthAll h.1.1).sublist hs),
-          fun t ht => h.1.2 t (hs.mem ht)⟩, fun t ht => h.2 t (hs.mem ht)⟩
+  exact ⟨orthAll_of_pairwise ((pairwise_of_orthAll h.1).sublist hs),
+    fun t ht => h.2 t (hs.mem ht)⟩
 
 /-- **A value an option admits, the option admits structurally**, where the option is closed.
     The bridge `selOptV_eq_AdmAny` builds inline; an open object is the case it fails at. -/

@@ -225,13 +225,13 @@ theorem AdmAny_extract_and_exclude {c : AltClause} {opts : List Term}
     have := (List.mem_filter.mp ht2).2; simpa using this
   have hne : t1 ≠ t2 := fun hh => by rw [hh, hc2] at hc1; exact Bool.noConfusion hc1
   have hlen : (opts.filter (fun t => admitOptV (specOf t, Adm t) v)).length ≤ 1 := by
-    have hone := (admitsAtMostOne_of_orth (pairwise_of_orthAll hok.1.1)).1 v
+    have hone := (admitsAtMostOne_of_orth (pairwise_of_orthAll hok.1)).1 v
     rwa [semsOf, ← optionSems_eq, filter_AdmSpecs (fun t _ => Adm_exact t) v,
       List.length_map] at hone
   have hf1 : t1 ∈ opts.filter (fun t => admitOptV (specOf t, Adm t) v) :=
-    List.mem_filter.mpr ⟨hm1, admitOptV_of_Adm (by simpa using hok.1.2 t1 hm1) ha1⟩
+    List.mem_filter.mpr ⟨hm1, admitOptV_of_Adm (by simpa using hok.2 t1 hm1) ha1⟩
   have hf2 : t2 ∈ opts.filter (fun t => admitOptV (specOf t, Adm t) v) :=
-    List.mem_filter.mpr ⟨hm2, admitOptV_of_Adm (by simpa using hok.1.2 t2 hm2) ha2⟩
+    List.mem_filter.mpr ⟨hm2, admitOptV_of_Adm (by simpa using hok.2 t2 hm2) ha2⟩
   match hL : opts.filter (fun t => admitOptV (specOf t, Adm t) v), hlen with
   | [], _ => rw [hL] at hf1; exact absurd hf1 (by simp)
   | [x], _ =>
