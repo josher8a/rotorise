@@ -104,6 +104,11 @@ error but a silent "everything": the analysis stays sound and stops saying anyth
 The spec projection is owed only by a stratum that holds names. A policy answers to no name.
 Every other row is owed unconditionally.
 
+The spec projection separates a name's presence from what the name holds. The split is
+Rémy's, from the 1989 record and variant extension of ML. A field type carries presence
+beside the value type, so an analysis keeps exact negative information about a name.
+`keysOk` reads the presence half, `literalsOk` reads the other, and neither reads a codec.
+
 The emitter clause is owed for the same reason as the rest: the bridge is part of the
 correspondence, and a stratum whose shape the emitter cannot spell produces committed vector
 output that typechecks against nothing.
@@ -254,6 +259,13 @@ the discharger on the sharper predicate and the pair does separate while `select
 both options, so the uniqueness property genuinely fails. The premise gets stronger and the
 theorem becomes false. `not_uAtCan_of_sepJ` is that statement, and the witness is two objects with
 the same names and different field terms, both derivable and both lawful.
+
+**The direction has a standard name.** Both facts are one principle, the abstract
+interpretation of Cousot and Cousot, 1977. A coarse test that over-approximates a precise
+one transfers disjointness downward. A tighter test does not. The object row answering
+everything over-approximates option admission, which is why the row is load-bearing.
+Structural admission over-approximates `Adm`, which is `admitOptV_of_Adm`, and that is what
+lets a certificate proved over specs bind a union whose options carry codecs.
 
 On the value side the object row is the whole of the obstruction: `admitV_Adm_nonObject` and
 `admitA_AdmA_nonObject` hold from exactness alone for every term whose spec projection is absent,
