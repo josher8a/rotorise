@@ -63,8 +63,8 @@ structure AltClause where
     describe the option. A `fallback` literal **is** required — `Body.spec` marks it so, and §4's
     `(fallback)` concludes `req` — so a clause selects on a fallback name as it does on a `req`
     one. -/
-def litSubAt (s : MapOf NameSpec) (c : AltClause) (k : {k // k ∈ c.keys}) : Bool :=
-  match s.at k.1 with
+def litSubAt (s : BodySpec) (c : AltClause) (k : {k // k ∈ c.keys}) : Bool :=
+  match s.names.at k.1 with
   | some ns => ns.required && altsSub ns.alts (c.alts k)
   | none => false
 

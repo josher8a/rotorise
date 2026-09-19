@@ -33,7 +33,7 @@ spends on the filter. -/
 abbrev AP := Attr → Bool
 
 /-- …and on the attribute side, where `byStructure` reads the same two tests off an `.m`. -/
-def admitOptA (o : Option (MapOf NameSpec) × AP) (a : Attr) : Bool :=
+def admitOptA (o : Option (BodySpec) × AP) (a : Attr) : Bool :=
   match o.1 with
   | some spec =>
       match a with
@@ -42,7 +42,7 @@ def admitOptA (o : Option (MapOf NameSpec) × AP) (a : Attr) : Bool :=
   | none => o.2 a
 
 /-- …and the same count. -/
-def selOptA (os : List (Option (MapOf NameSpec) × AP)) (a : Attr) : Bool :=
+def selOptA (os : List (Option (BodySpec) × AP)) (a : Attr) : Bool :=
   match os.filter (fun o => admitOptA o a) with
   | [o] => o.2 a
   | _ => false
@@ -227,7 +227,7 @@ noncomputable def AdmAOptT : Option Term → Option AP
 
 
 /-- `optionSems`' mirror on the attribute side. -/
-noncomputable def AdmASpecs : List Term → List (Option (MapOf NameSpec) × AP)
+noncomputable def AdmASpecs : List Term → List (Option (BodySpec) × AP)
   | [] => []
   | t :: ts => (specOf t, AdmA t) :: AdmASpecs ts
 

@@ -680,6 +680,23 @@ structure NameSpec where
   required : Bool
   alts : Option Alts
 
+/-- A whole body, as admission reads it: the declared names, and the open block.
+
+    **The open block is one fact about the body, not one fact per name**, so it sits beside
+    the name table rather than inside `NameSpec`. A flag repeated at every declared name is a
+    record instantiated once per name, and a body with no declared names could not carry it
+    at all.
+
+    The two layers of `Option` answer two questions. The outer one is whether the body has an
+    open block: `none` is a closed body, which refuses every undeclared name. The inner one is
+    what that block pins, and it is `altsOfTerm` of the wild's term: `some alts` where the
+    wild is a literal, `none` where it is anything else. So an undeclared name under an open
+    block is read exactly as a declared name whose field is not `req` is read — by its
+    alternatives where it has them, and admitted where it has none. -/
+structure BodySpec where
+  names : MapOf NameSpec
+  wild : Option (Option Alts)
+
 /-! ## The set bases (§3 `(set)`'s payload)
 
 §3's `(set)` rule reads a member off its element term and refuses when there is none. Four

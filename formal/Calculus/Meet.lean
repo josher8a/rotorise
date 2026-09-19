@@ -188,8 +188,7 @@ theorem unionOk_pairwise_held : ∀ {os : List Term} {Ts μs}, TypedListμ os Ts
       (unionOk_pairwise_held hs hotail (fun t ht => hc t (List.mem_cons_of_mem _ ht)))
     intro T hT
     obtain ⟨t', ht', μ', hty'⟩ := mem_typed_of_mem hs T hT
-    exact separates_held_of_orth (hc _ List.mem_cons_self)
-      (hc _ (List.mem_cons_of_mem _ ht')) (hohead t' ht') hty hty'
+    exact separates_held_of_orth (hohead t' ht') hty hty'
 
 /-- **A certified union satisfies (D).** The certificate is what the judgement's side
     condition needs, and it needs no `denote`: the held sets are the judgement's own, and
@@ -1931,14 +1930,15 @@ theorem structural_of_AdmBody {b : Body} (hr : AdmWild b.wild = none)
   rw [AdmBody_map, Bool.and_eq_true] at h'
   cases b with
   | mk fields fld rest =>
+    -- `hr` is `AdmWild rest = none`, and `AdmWild` answers `some _` on every open block
+    obtain rfl : rest = none := by cases rest with | none => rfl | some _ => exact nomatch hr
     refine Bool.and_eq_true _ _ |>.mpr ⟨?_, ?_⟩
     · exact keysOk_of_names hsub (fun k hreq => mem_keys_of_isReq h'.1 k.2 hreq)
     · refine decide_eq_true (fun k => ?_)
       have hkf : k.1 ∈ fields := hsub k.1 k.2
       show litOkV _ k.1 (g k) = true
-      rw [litOkV, show (Body.spec (.mk fields fld rest)).at k.1
-            = some ⟨_, altsOfField (fld ⟨k.1, hkf⟩)⟩ from by
-          rw [Body.spec, MapOf.at, dif_pos hkf]]
+      rw [litOkV, show (Body.spec (.mk fields fld none)).names.at k.1
+            = some ⟨_, altsOfField (fld ⟨k.1, hkf⟩)⟩ from dif_pos hkf]
       exact altsOkV_of_AdmField (objAdmV_row h'.2 k.2 hkf)
 
 
@@ -2090,14 +2090,14 @@ theorem structural_of_AdmABody {b : Body} (hr : b.wild = none)
   cases hb : b with
   | mk fields fld wild =>
     subst hb
+    obtain rfl : wild = none := by simpa using hr
     refine Bool.and_eq_true _ _ |>.mpr ⟨?_, ?_⟩
     · exact keysOk_of_names hsub (fun k hreq => mem_keys_of_isReqA hnf h'.1 k.2 hreq)
     · refine decide_eq_true (fun k => ?_)
       have hkf : k.1 ∈ fields := hsub k.1 k.2
       show litOkA _ k.1 (g k) = true
-      rw [litOkA, show (Body.spec (.mk fields fld wild)).at k.1
-            = some ⟨_, altsOfField (fld ⟨k.1, hkf⟩)⟩ from by
-          rw [Body.spec, MapOf.at, dif_pos hkf]]
+      rw [litOkA, show (Body.spec (.mk fields fld none)).names.at k.1
+            = some ⟨_, altsOfField (fld ⟨k.1, hkf⟩)⟩ from dif_pos hkf]
       exact altsOkA_of_AdmAField (objAdmA_row h'.2 k.2 hkf)
 
 /-- A list reads an attribute exactly when one of its terms does. -/
