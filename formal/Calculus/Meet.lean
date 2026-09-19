@@ -9,7 +9,7 @@ import Calculus.Orthogonality
 constructor: `some z` says a value satisfies `z` exactly when it satisfies both factors, `some
 never` says nothing satisfies both, and `none` is a
 refusal — the pair is one whose admission is a function rather than data, so no term states the
-intersection. `held`, `legacy`, `custom` and `lazy` refuse on that ground at every partner, `opaq`
+intersection. `held`, `custom` and `lazy` refuse on that ground at every partner, `opaq`
 refuses where its closed form cannot be compared with an exact held set, and `refine` refuses at a
 `closure`. A pair that admits a common value and stores it at two members has no meet either, and
 that is a refusal and not an empty one: `string` and `decimal` both admit text, one writes `S` and
@@ -265,7 +265,7 @@ mutual
     carries the left operand, already applied. -/
 def meetSRight (fam : Term → Option Term) : Term → Option Term
   | .never => some .never
-  | .held _ _ _ | .legacy _ _ | .custom _ _ | .lazy _ => none
+  | .held _ _ _ | .custom _ _ | .lazy _ => none
   | .refine y p => if p.isData then (meetSRight fam y).map (fun z => Term.refineOf z p) else none
   | .union os => (allSome (meetSRightL fam os)).bind
       (fun zs => Term.ofOptionsGuarded os (zs.filter (fun z => !z.isNever)))
@@ -958,9 +958,9 @@ mutual
     operand. Every row keeps the left operand on the left. -/
 def Term.meet : Term → Term → Option Term
   | .never, _ => some .never
-  | .held _ _ _, .never | .legacy _ _, .never | .custom _ _, .never | .lazy _, .never =>
+  | .held _ _ _, .never | .custom _ _, .never | .lazy _, .never =>
       some .never
-  | .held _ _ _, _ | .legacy _ _, _ | .custom _ _, _ | .lazy _, _ => none
+  | .held _ _ _, _ | .custom _ _, _ | .lazy _, _ => none
   | .refine _ _, .never => some .never
   | .refine x p, y => if p.isData then (Term.meet x y).map (fun z => Term.refineOf z p) else none
   | .union _, .never => some .never
@@ -1119,8 +1119,6 @@ example : ObjectSlot.meet (.optional .string) (.optional .string) = some (.optio
     name present, so both agree that nothing satisfies the object. -/
 example : ObjectSlot.meet (.req .string) (.req .boolean) = some (.req .never) := by rfl
 
-/-- A legacy reader remains outside structural meet. -/
-example : Term.meet (.legacy .string (fun _ => none)) .string = none := by rfl
 
 
 /-- Two closed factors keep the intersection. A body with no open block reads an undeclared name
@@ -2118,7 +2116,7 @@ and the depth bounds the well-founded proof carries are gone with it. -/
     A family's catch-all row answers the bottom, which is right for these and wrong for the
     seven above, so the predicate below carries the same split the definition makes. -/
 def Delegated : Term → Prop
-  | .never | .held _ _ _ | .legacy _ _ | .custom _ _ | .lazy _ | .refine _ _ | .union _ => False
+  | .never | .held _ _ _ | .custom _ _ | .lazy _ | .refine _ _ | .union _ => False
   | _ => True
 
 /-- `f` answers the meet with one term fixed on the left, at EVERY right operand. The container
@@ -2160,7 +2158,6 @@ theorem Adm_meetSRight {x : Term} {fam : Term → Option Term} (hf : AdmFam x fa
   | .never, _, h, _ => by
       simp only [meetSRight, Option.some.injEq] at h; subst h; simp [Adm]
   | .held _ _ _, _, h, _ => by simp [meetSRight] at h
-  | .legacy _ _, _, h, _ => by simp [meetSRight] at h
   | .custom _ _, _, h, _ => by simp [meetSRight] at h
   | .lazy _, _, h, _ => by simp [meetSRight] at h
   | .refine y p, _, h, v => by
@@ -3010,11 +3007,6 @@ theorem Adm_meet : ∀ x y z, Term.meet x y = some z → ∀ v, Adm z v = (Adm x
         first
           | (simp only [Term.meet, Option.some.injEq] at h; subst h; simp [Adm])
           | exact absurd h (by simp [Term.meet])
-  | .legacy _ _, y, _, h, v => by
-      cases y <;>
-        first
-          | (simp only [Term.meet, Option.some.injEq] at h; subst h; simp [Adm])
-          | exact absurd h (by simp [Term.meet])
   | .custom _ _, y, _, h, v => by
       cases y <;>
         first
@@ -3180,7 +3172,6 @@ theorem writes_meetSRight {x : Term} {fam : Term → Option Term} (hf : WritesFa
       simp only [meetSRight, Option.some.injEq] at h; subst h
       exact absurd hz (by simp [μSyn])
   | .held _ _ _, _, h, _, _ => by simp [meetSRight] at h
-  | .legacy _ _, _, h, _, _ => by simp [meetSRight] at h
   | .custom _ _, _, h, _, _ => by simp [meetSRight] at h
   | .lazy _, _, h, _, _ => by simp [meetSRight] at h
   | .refine y p, _, h, m, hz => by
@@ -3472,12 +3463,6 @@ theorem meet_writes : ∀ x y z, Term.meet x y = some z → ∀ m : Member, μSy
       simp only [Term.meet, Option.some.injEq] at h; subst h
       exact absurd hz (by simp [μSyn])
   | .held _ _ _, y, _, h, _, hz => by
-      cases y <;>
-        first
-          | (simp only [Term.meet, Option.some.injEq] at h; subst h
-             exact absurd hz (by simp [μSyn]))
-          | exact absurd h (by simp [Term.meet])
-  | .legacy _ _, y, _, h, _, hz => by
       cases y <;>
         first
           | (simp only [Term.meet, Option.some.injEq] at h; subst h
@@ -4929,7 +4914,6 @@ theorem admA_meetSRight {x : Term} {fam : Term → Option Term} (hf : AdmAFam x 
       simp only [meetSRight, Option.some.injEq] at h; subst h
       exact ⟨fun a => by simp [AdmA], fun a _ hb => absurd hb (by simp [AdmA])⟩
   | .held _ _ _, _, h => by simp [meetSRight] at h
-  | .legacy _ _, _, h => by simp [meetSRight] at h
   | .custom _ _, _, h => by simp [meetSRight] at h
   | .lazy _, _, h => by simp [meetSRight] at h
   | .refine y p, _, h => by
@@ -5649,12 +5633,6 @@ theorem AdmA_meet_both : ∀ x y z, Term.meet x y = some z → AdmAAt x y z
           | (simp only [Term.meet, Option.some.injEq] at h; subst h
              exact ⟨fun a => by simp [AdmA], fun a _ hb => absurd hb (by simp [AdmA])⟩)
           | exact absurd h (by simp [Term.meet])
-  | .legacy _ _, y, _, h => by
-      cases y <;>
-        first
-          | (simp only [Term.meet, Option.some.injEq] at h; subst h
-             exact ⟨fun a => by simp [AdmA], fun a _ hb => absurd hb (by simp [AdmA])⟩)
-          | exact absurd h (by simp [Term.meet])
   | .custom _ _, y, _, h => by
       cases y <;>
         first
@@ -6132,7 +6110,6 @@ theorem typed_meetSRight {x : Term} {fam : Term → Option Term} (hf : TypedFam 
   | .never, _, h, _, _ => by
       simp only [meetSRight, Option.some.injEq] at h; subst h; exact ⟨_, _, Typed.never⟩
   | .held _ _ _, _, h, _, _ => by simp [meetSRight] at h
-  | .legacy _ _, _, h, _, _ => by simp [meetSRight] at h
   | .custom _ _, _, h, _, _ => by simp [meetSRight] at h
   | .lazy _, _, h, _, _ => by simp [meetSRight] at h
   | .refine y p, _, h, hx, hy => by
@@ -6385,11 +6362,6 @@ theorem typed_meet : ∀ x y z, Term.meet x y = some z →
   | .never, _, _, h, _, _ => by
       simp only [Term.meet, Option.some.injEq] at h; subst h; exact ⟨_, _, Typed.never⟩
   | .held _ _ _, y, _, h, _, _ => by
-      cases y <;>
-        first
-          | (simp only [Term.meet, Option.some.injEq] at h; subst h; exact ⟨_, _, Typed.never⟩)
-          | exact absurd h (by simp [Term.meet])
-  | .legacy _ _, y, _, h, _, _ => by
       cases y <;>
         first
           | (simp only [Term.meet, Option.some.injEq] at h; subst h; exact ⟨_, _, Typed.never⟩)

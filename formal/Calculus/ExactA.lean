@@ -17,7 +17,7 @@ noncomputable section
 renamed onto `Adm`. `AdmA` below is that counterpart's definition and its soundness proof.
 
 The mirror is not symmetric, and the asymmetry that remains is §1's rather than this
-file's: the numeric rows go through `Double.ofDec`, and `legacy` widens a read. `refine`
+file's: the numeric rows go through `Double.ofDec`, and `refine` narrows a read.
 was listed here as a third — "cannot narrow a read" — and is not one: the row decodes and
 then applies `q`. Each is a row here rather than a remark. -/
 
@@ -158,9 +158,7 @@ mutual
       syntactic set of attributes bounds that" is true of syntax and says nothing about a
       row, which may decode and then ask `q` (`refineReads`). Sound, and exact whenever the
       subterm's row is: `dom((c.restrict q).p)` is precisely `{a | ∃ v, c.p a = some v ∧ q v}`.
-    * `legacy` is the read-side alternative: `p` is the subterm's channel falling back to
-      `r`'s, and `r` is data the term carries — the asymmetry that makes the two sides' rows
-      part at all. -/
+    `LegacyRead` is outside `Term`, so this table has no alternate-reader row. -/
 noncomputable def AdmA : Term → Attr → Bool
   | .string   => fun a => match a with | .s _ => true | _ => false
   | .boolean  => fun a => match a with | .bool _ => true | _ => false
@@ -181,7 +179,6 @@ noncomputable def AdmA : Term → Attr → Bool
   | .lazy t   => AdmA t
   | .refine t p => fun a => AdmA t a && refineReads t p.eval a
   -- hatch
-  | .legacy t r => fun a => AdmA t a || (r a).isSome
   -- the read side of the same count; `byStructure` reads the structural test off an `.m`
   | .union opts => fun a => selOptA (AdmASpecs opts) a
   -- **the row that used to admit all three wire families whatever the element term was.**
@@ -690,7 +687,7 @@ theorem AdmAAll_iff {c : Term} (h : ExactA c) : ∀ as : List Attr,
 mutual
 /-- **Every attribute row is exact** — all twenty-one, as on the value side, and nothing
     declines on either. `refine` was the last difference between
-    the two sides and is exact now: its row decodes and then applies `q`. `legacy`,
+    the two sides and is exact now: its row decodes and then applies `q`.
     which used to be the other half of that asymmetry, is exact here because its row is the
     union of the two channels it reads on.
 
@@ -772,11 +769,7 @@ theorem AdmA_exact : ∀ (t : Term), ExactA t
   | .lazy c => by
       have hc := AdmA_exact c
       intro a; simpa [AdmA, denote] using hc a
-  | .legacy c r => by
-      have hc := AdmA_exact c
-      intro a
-      simp only [AdmA, denote, denote, denote, Codec.extendRead]
-      cases hx : (denote c).p a <;> simp [hc a, hx]
+
 
 /-- …and its read-side twin, for the reason the write side gives. -/
 theorem AdmA_exactB : ∀ (b : Body), ExactA (.object b)

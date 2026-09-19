@@ -40,7 +40,7 @@ The `cM` case is the one worth reading twice. (W) and (MP) both constrain member
 tempting to take one for a special case of the other. `cM` declares no member at all, so (W)
 holds for the only reason it can hold without saying anything, and (MP) fails regardless. Its
 three positive halves are exactly `LawfulCore` — which is not a coincidence but the same
-residue `legacy` leaves (§5), arriving from the other direction. -/
+residue `alternate reader` leaves (§5), arriving from the other direction. -/
 
 /-- **(R) fails alone.** Every string is written to one attribute, so the write forgets which
     string it was; nothing else notices. -/
@@ -165,7 +165,7 @@ theorem cM_C : ∀ {a t}, cM.p a = some t → (cM.e t).isSome := by
 /-- (W) holds vacuously, which is the only way a `⊤`-membered codec can satisfy it. -/
 theorem cM_W : ∀ {μ}, cM.μ = some μ → ∀ {t a}, cM.e t = some a → a.member = μ := by
   intro μ hμ; exact absurd hμ (by simp [cM])
-/-- So the three that hold are exactly `LawfulCore` — the same residue `legacy` leaves. -/
+/-- So the three that hold are exactly `LawfulCore` — the same residue `alternate reader` leaves. -/
 theorem cM_core : LawfulCore cM := ⟨cM_R, cM_C, cM_W⟩
 /-- …and (MP) is what is left to break: `⟨BOOL, true⟩` reads as `"z"` and re-writes to
     `⟨S, "z"⟩`, which `Agree` does not relate. -/
@@ -279,7 +279,7 @@ theorem not_equiv_refine_held :
 
 Two rows, one witness. (MP) is *member* agreement (`≼`), so a migration only breaks it by
 reading an attribute of one member into a value that writes another — which is precisely
-what a member-changing migration is, and precisely why §6 says a `legacy` attribute cannot
+what a member-changing migration is, and precisely why §6 says a `alternate reader` attribute cannot
 be an index key.
 
 Note that a value-changing `r` would *not* refute (MP): `Agree.s x y` holds for any two
@@ -291,14 +291,14 @@ def migrateNtoS : Attr → Option Value
   | .n _ => some (.str "x")
   | _ => none
 
-theorem legacy_p_n : (denote (.legacy .string migrateNtoS)).p (.n (.of "1")) = some (.str "x") :=
-  rfl
+def migration : LegacyRead := ⟨.string, some migrateNtoS⟩
 
-theorem legacy_e_x : (denote (.legacy .string migrateNtoS)).e (.str "x") = some (.s "x") :=
-  rfl
+theorem legacy_p_n : migration.denote.p (.n (.of "1")) = some (.str "x") := rfl
 
-/-- §6: `legacy(c, r)` breaks (MP). The migration reads `N` and writes `S`. -/
-theorem legacy_breaks_MP : ¬ Lawful (denote (.legacy .string migrateNtoS)) := by
+theorem legacy_e_x : migration.denote.e (.str "x") = some (.s "x") := rfl
+
+/-- §6: an alternate reader can break (MP). The migration reads `N` and writes `S`. -/
+theorem legacy_breaks_MP : ¬ Lawful migration.denote := by
   intro h
   have hag := h.agree legacy_p_n legacy_e_x
   cases hag
@@ -306,7 +306,7 @@ theorem legacy_breaks_MP : ¬ Lawful (denote (.legacy .string migrateNtoS)) := b
 /-- §6: `e ∘ p ≢ id` — equality holds only on `Can(c)`, and this attribute is off it. -/
 theorem e_comp_p_ne_id :
     ∃ (c : Codec) (a : Attr) (v : Value), c.p a = some v ∧ c.e v ≠ some a :=
-  ⟨denote (.legacy .string migrateNtoS), .n (.of "1"), .str "x", legacy_p_n, by
+  ⟨migration.denote, .n (.of "1"), .str "x", legacy_p_n, by
     rw [legacy_e_x]; intro hc; exact nomatch hc⟩
 
 /-! ## `optional(optional(c))` — not derivable, by construction
@@ -314,7 +314,7 @@ theorem e_comp_p_ne_id :
 This row needs no theorem, and could not have one: it is enforced by the syntax. `ObjectSlot`
 (Term.lean) has two constructors — `req` and `optional` — and every one takes a
 `Term`. None takes an `ObjectSlot`, so `optional(optional(c))` cannot be written down.
-An outer `legacy` term can occur inside a slot because `legacy` is a `Term`, not a presence mark.
+A `LegacyRead` carrier is outside a slot. An `ObjectSlot` always carries a current `Term`.
 
 That is the stratification §4 of the specification asks for, and the model gets it from
 the type rather than from a side condition — which is the stronger place to get it. It is

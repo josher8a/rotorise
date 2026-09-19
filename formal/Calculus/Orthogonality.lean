@@ -201,7 +201,7 @@ mutual
     * `custom _ _` — arbitrary partial functions both ways. `⊤` on both sides.
     * `refine t q` — the subterm's, over-approximating away `q`. Sound: a refinement writes
       a subset of what the base writes.
-    * `legacy t _` — the subterm's on the write side; `r` only widens the *read*.
+    * `LegacyRead` is outside the structural classifier.
     * `opaq lossy` — a closed form, because `opaque` is a fixed list of options: every slot,
       minus `num` when the numeric option is `Codec.empty`. This is itself an
       over-approximation in one place: a non-lossy `opaque` refuses a `numSet` too, since
@@ -226,7 +226,6 @@ def occV : Term → Slot → Bool
   | .held _ _ _  => occTop
   | .custom _ _  => occTop
   | .refine t _  => occV t
-  | .legacy t _  => occV t
   | .lazy t      => occV t
   | .union opts  => occVL opts
   | .opaq lossy  => if lossy then occTop else occBut .num
@@ -239,15 +238,9 @@ end
 mutual
 
 /-- **Which members this term can read.** The mirror, and it is not a symmetric mirror:
-    `held` and `legacy` swap sides.
+    `held` has distinct write and read rows.
 
-    `legacy t r` is `⊤` here where it was the subterm's on the write side, and the reason is
-    the *row*, not the codec: `AdmA (.legacy t r) a = AdmA t a || (r a).isSome`, and `r` is
-    arbitrary data the term carries. A lawful `r` does respect the member —
-    `μSyn (.legacy t _) = μSyn t`, and `ReadsCoherently` is what makes that good — but
-    `Orth` is stated on the row, which is looser, so the certificate declines. That is the
-    one place where `μSyn` is sharper than `occA`, and it is sharper only under an
-    obligation `Orth` does not take as a premise. -/
+    `LegacyRead` is not a `Term`. The classifier has no alternate-reader row. -/
 def occA : Term → Member → Bool
   | .string  => occOnly .S
   | .number  => occOnly .N
@@ -261,7 +254,6 @@ def occA : Term → Member → Bool
   | .set b       => occOnly b.member
   | .list _ _ _  => occOnly .L
   | .object _   => occOnly .M
-  | .legacy _ _  => occTop
   | .custom _ _  => occTop
   | .refine t _  => occA t
   | .held t _ _  => occA t
@@ -570,7 +562,6 @@ theorem occV_sound : ∀ (t : Term), OccSoundV t
   | .custom _ _ => fun _ _ => rfl
   | .refine t _ => fun v h => by
       simpa [occV] using occV_sound t v (Bool.and_eq_true_iff.mp h).1
-  | .legacy t _ => fun v h => by simpa [occV] using occV_sound t v h
   | .lazy t => fun v h => by simpa [occV] using occV_sound t v h
   | .union opts => fun v h => by
       obtain ⟨t, ht, hadm⟩ := selOptV_mem_admitOpt (by rw [Adm_union] at h; exact h)
@@ -632,8 +623,7 @@ theorem admALit_decimal_member {y : GroundKind.decimal.Carrier} {a : Attr}
 mutual
 
 /-- **The read occupancy contains the row.** The mirror of `occV_sound`, with `held` and
-    `legacy` on the other sides and `literal .decimal` going through (W) rather than through
-    a pattern. -/
+    `literal .decimal` goes through (W) rather than through a pattern. -/
 theorem occA_sound : ∀ (t : Term), OccSoundA t
   -- One group where the write side needs three: on the read side the gates are gone, the
   -- stored member being what `Attr.member` already computes.
@@ -652,7 +642,6 @@ theorem occA_sound : ∀ (t : Term), OccSoundA t
       fun a h => by cases a <;> simp_all [AdmA, occA, occOnly, Attr.member]
   | .object (.mk _ _ _) => fun a h => by
       cases a <;> simp_all [AdmA, AdmABody, occA, occOnly, Attr.member]
-  | .legacy _ _ => fun _ _ => rfl
   | .custom _ _ => fun _ _ => rfl
   | .refine t _ => fun a h => by
       simpa [occA] using occA_sound t a (Bool.and_eq_true_iff.mp h).1
@@ -1327,7 +1316,6 @@ theorem typed_occV : ∀ {t T μ}, Typed t T μ → ∀ v, T v → occV t v.slot
     | object _ _ => obtain ⟨keys, f, rfl, _⟩ := hv; rfl
     | held _ => rfl
     | @refine t' T' μ' q h' => exact typed_occV h' v hv.1
-    | @legacy t' T' μ' r h' => exact typed_occV h' v hv
     | @lazy t' T' μ' h' => exact typed_occV h' v hv
     | opaq lossy =>
         cases lossy with
@@ -1750,12 +1738,7 @@ being a map of duplicated work and is now a list of what only exists by hand.
 from the row above them, where the phase is `none` because `UAtCan` is false and there is no
 orthogonality to certify at all.
 
-`sepJA_legacy_decimal` separates `legacy(string, r)` from `decimal` by the **member**, and
-`Orth` cannot: `occA (.legacy _ _)` is `⊤` because the *row* is
-`AdmA t a || (r a).isSome` with `r` arbitrary data, while `μSyn (.legacy t _) = μSyn t` is
-sharper — true of the lawful codec, false of the row. `sepJA_needs_member` is the pair
-showing `AdmA` alone does not separate them either. So the member disjunct of `SepJA` is not
-subsumed here, and a phase that reached it would have to take `ReadsCoherently` as a premise.
+`LegacyRead` stays outside `Term`. `legacyRead_reads_n` shows an alternate reader can read a numeric attribute through a string core. `Orth` classifies current terms only.
 
 `uAtAct_array_literals` is out of reach **by strength, not by phase**: `Orth` produces
 `UAtCan`, and that pair genuinely fails `UAtCan` (`not_uAtCan_array_literals` — both options

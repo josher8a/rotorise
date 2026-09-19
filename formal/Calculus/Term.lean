@@ -105,11 +105,9 @@ inductive Term where
       one pair on the nose, the first on `e` and the second on `p`, with `liftQ` carrying
       the predicate through. This cited the write-side theorem for both halves, and the
       read side was a sentence in its docstring until it was proved. What is lost is
-      `set(held b f g)` and `set(legacy b r)` — an element-level adapter and an
-      element-level read widening. Neither appears in `src/`, and neither has a set-level
-      spelling: a set-level `held` would need `setImage` rather than the classical
-      `Finset.image` to stay injective, and a set-level `legacy` widens the whole attribute
-      rather than each member. -/
+      `set(held b f g)` is not a term. An element-level adapter has no set-level spelling:
+      a set-level `held` would need `setImage` rather than the classical `Finset.image` to
+      stay injective. -/
   | set      (base : SetBase)
   /-- §3 `(list)`: the one positional container, as a prefix, at most one spread, and a
       suffix. `array`, `(tuple)` and `(tuple-tail)` were three shapes of one thing, and
@@ -129,7 +127,6 @@ inductive Term where
   | list     (pre : List Term) (spread : Option Term) (suf : List Term)
   | held     (inner : Term) (f : Value → Value) (g : Value → Value)
   | refine   (inner : Term) (p : Pred)
-  | legacy   (inner : Term) (r : Attr → Option Value)
   /-- §3 `(lazy)`. The thunk is *not* `Unit → Term`: a closure adds no constructible
       term (every `Term` is finite either way) and only defeats the termination
       checker. Recursive codecs are not modelled, and cannot be — see
@@ -165,8 +162,7 @@ inductive Term where
 inductive Body where
   | mk (fields : Finset Name) (f : {k // k ∈ fields} → ObjectSlot) (wild : Option (KeyPat × Term))
 
-/-- §4's current-schema slot. A required name is required on both sides. A migration reader
-    belongs outside the object term at `legacy`, where structural algebra cannot propagate it. -/
+/-- §4's current-schema slot. A required name is required on both current-schema sides. -/
 inductive ObjectSlot where
   | req      (t : Term)
   | optional (t : Term)
@@ -296,7 +292,7 @@ def Term.depth : Term → Nat
   -- measure, so it sits with the other ground shapes rather than costing a layer.
   | .literal _ _ | .custom _ _ | .opaq _ | .set _ | .never => 1
   | .lazy t => Term.depth t + 1
-  | .held t _ _ | .refine t _ | .legacy t _ => Term.depth t + 1
+  | .held t _ _ | .refine t _ => Term.depth t + 1
   | .list pre sp suf =>
       max (Term.depthL pre) (max (Term.depthO sp) (Term.depthL suf)) + 1
   -- one companion, like every other non-leaf row

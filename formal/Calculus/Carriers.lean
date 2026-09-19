@@ -190,7 +190,7 @@ theorem carrier_literalCodec (k : GroundKind) (x : k.Carrier) :
     (fun _ hv => hLit_of_inL k x _ hv.2)
     (carrier_restrict (carrier_baseCodec k) (inL k x))
 
-/-- `legacy`: the migration lands in `T` because §3's `ran(r) ⊆ dom(e)` puts it in
+/-- `alternate reader`: the migration lands in `T` because §3's `ran(r) ⊆ dom(e)` puts it in
     `dom(e)`, and `e`'s domain is `T`. The doc writes `r : 𝔸 ⇀ T` directly; this is the
     same premise arrived at through the one the proof already needs. -/
 theorem carrier_extendRead {c : Codec} {r : Attr → Option Value} (hc : Carrier c)

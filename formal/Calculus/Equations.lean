@@ -17,7 +17,7 @@ load-bearing and came first:
   need `≡` to compose, and `Refutations.not_equiv_trans` says it does not.
 
 The remaining rows: `held`'s identity and composition, `refine`'s meet and its full case,
-`legacy` with its own reading (and `≈` on `Can(c)`), `union` of one, and the member
+`alternate reader` with its own reading (and `≈` on `Can(c)`), `union` of one, and the member
 preservation of the three codec wrappers.
 
 The last row, `union` associativity, is the table's only *conditional* one — and it turns
@@ -185,7 +185,7 @@ theorem equiv_restrict_full (c : Codec) (q : Value → Bool)
   · exact fun h h' => Option.some.inj ((restrict_e.mp h).2.symm.trans h')
   · exact fun h h' => Option.some.inj ((restrict_p.mp h).1.symm.trans h')
 
-/-! ## `legacy` with its own reading -/
+/-! ## `alternate reader` with its own reading -/
 
 /-- The pair is not merely `≡` but equal: both branches of `extendRead`'s match give
     `c.p a`, so re-reading through `c`'s own `p` adds nothing at all. -/
@@ -495,15 +495,15 @@ theorem equiv_denote_refine_full (t : Term) (p : Pred)
     (hq : ∀ v, (denote t).T v ↔ p.eval v = true) :
     Codec.Equiv (denote (.refine t p)) (denote t) := equiv_restrict_full _ _ hq
 
-/-- §6: `legacy(c, p_c) ≡ c`. -/
-theorem equiv_denote_legacy_self (t : Term) :
-    Codec.Equiv (denote (.legacy t (denote t).p)) (denote t) :=
+/-- §6: an adapter using the current reader as its alternate reader is equivalent to its core. -/
+theorem equiv_legacyRead_self (t : Term) :
+    Codec.Equiv (LegacyRead.denote ⟨t, some (denote t).p⟩) (denote t) :=
   equiv_extendRead_self _
 
-/-- §6: `legacy(c, r) ≈ c` on `Can(c)`. -/
-theorem denote_legacy_eq_on_can (t : Term) (r : Attr → Option Value)
+/-- §6: an alternate reader cannot change a canonical current read. -/
+theorem legacyRead_eq_on_can (t : Term) (r : Attr → Option Value)
     (hc : Lawful (denote t)) {a : Attr} (ha : Can (denote t) a) :
-    (denote (.legacy t r)).p a = (denote t).p a :=
+    (LegacyRead.denote ⟨t, some r⟩).p a = (denote t).p a :=
   extendRead_eq_on_can _ r hc ha
 
 /-- §6: `μ(w(c)) = μ(c)` for the three codec wrappers. The two field wrappers are
@@ -514,8 +514,8 @@ theorem denote_held_μ (t : Term) (f g : Value → Value) :
 theorem denote_refine_μ (t : Term) (p : Pred) :
     (denote (.refine t p)).μ = (denote t).μ := rfl
 
-theorem denote_legacy_μ (t : Term) (r : Attr → Option Value) :
-    (denote (.legacy t r)).μ = (denote t).μ := rfl
+theorem legacyRead_μ (t : Term) (r : Attr → Option Value) :
+    (LegacyRead.denote ⟨t, some r⟩).μ = (denote t).μ := rfl
 
 end Terms
 

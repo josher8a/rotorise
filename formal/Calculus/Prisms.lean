@@ -11,7 +11,7 @@ plumbing rather than twenty-one bespoke cases.
 * `Ctor` — a constructor as a prism, on the value side and the attribute side;
 * ground codecs, one per §3 ground term;
 * `through` / `restrict` — the iso/prism pair behind `held` and `refine`;
-* `extendRead` — the agreeing extension of the reading, for `legacy`; (MP) is the
+* `extendRead` — the agreeing extension of the reading, for `alternate reader`; (MP) is the
   sanctioned breach and has no lemma, by design.
 -/
 
@@ -571,7 +571,7 @@ theorem hLit_of_inL (k : GroundKind) (x : k.Carrier) (v : Value) :
            exact congrArg Value.num (congrArg Subtype.val h)
          | false => simp [inL, hs] at h)
 
-/-- `legacy`: extend the reading. With §3's coherence premise this presentation equals
+/-- `alternate reader`: extend the reading. With §3's coherence premise this presentation equals
     the order-free `p ∪ r`. -/
 def Codec.extendRead (c : Codec) (r : Attr → Option Value) : Codec :=
   { T := c.T
@@ -583,7 +583,7 @@ def Codec.extendRead (c : Codec) (r : Attr → Option Value) : Codec :=
 
 Each wrapper is one line of definition and touches exactly one half of the pair; stating
 that as an `iff` is what keeps the proofs below — and §6's wrapper rows — from unfolding
-the definitions again. `held` and `legacy` are transparent on the side they do not
+the definitions again. `held` and `alternate reader` are transparent on the side they do not
 touch, which is why two of the eight are `Iff.rfl`. -/
 
 section WrapperInversion
@@ -621,7 +621,7 @@ theorem restrict_p {q : Value → Bool} {a v} :
   · rintro ⟨w, hw, h⟩; split at h <;> simp_all
   · rintro ⟨h, hq⟩; exact ⟨v, h, by simp [hq]⟩
 
-/-- `legacy` does not touch the writing at all — §5's whole point. -/
+/-- `alternate reader` does not touch the writing at all — §5's whole point. -/
 theorem extendRead_e {r : Attr → Option Value} {v a} :
     (c.extendRead r).e v = some a ↔ c.e v = some a := Iff.rfl
 

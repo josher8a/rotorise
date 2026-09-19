@@ -80,7 +80,7 @@ theorem Agree.member_eq {a a' : Attr} (h : Agree a a') : a.member = a'.member :=
   cases h <;> rfl
 
 /-- §2 Laws. `(R)` retraction, `(C)` canonizability, `(W)` member-naming, and `(MP)` in
-    §5's strong form. The `legacy` exemption is handled at the theorem (§5), not here:
+    §5's strong form. The `alternate reader` exemption is handled at the theorem (§5), not here:
     `Lawful` is the exemption-free bundle. -/
 structure Lawful (c : Codec) : Prop where
   retract : ∀ {t a}, c.e t = some a → c.p a = some t
@@ -89,7 +89,7 @@ structure Lawful (c : Codec) : Prop where
   agree   : ∀ {a t a'}, c.p a = some t → c.e t = some a' → Agree a' a
 
 /-- `(R)`, `(C)`, `(W)` without `(MP)` — what survives in a derivation containing
-    `legacy` (§5 theorem, first residue). -/
+    `alternate reader` (§5 theorem, first residue). -/
 structure LawfulCore (c : Codec) : Prop where
   retract : ∀ {t a}, c.e t = some a → c.p a = some t
   canon   : ∀ {a t}, c.p a = some t → (c.e t).isSome
@@ -158,7 +158,7 @@ def IsoCancels (c : Codec) (f g : Value → Value) : Prop :=
   (∀ v, (c.e (f v)).isSome → g (f v) = v) ∧
   (∀ v, (c.e v).isSome → f (g v) = v)
 
-/-- §3 `(legacy)`: `ran(r) ⊆ dom(e)` — a migration lands on writable values — and
+/-- §3 `(alternate reader)`: `ran(r) ⊆ dom(e)` — a migration lands on writable values — and
     coherence, the legacy reading agreeing with the current one on their overlap. -/
 def ReadsCoherently (c : Codec) (r : Attr → Option Value) : Prop :=
   (∀ a v, r a = some v → (c.e v).isSome) ∧

@@ -121,11 +121,9 @@ theorem refine_top_row (t : Term) : Adm (.refine t (.closure qTop)) = Adm t := b
 
 /-! ## Separation on the pair, and the one direction that fails
 
-`SepJV` and `SepJA` state separation on the rows this file proves exact. The value side is a
-single clause — `Adm` folds the kind gate into its own rows, so there is no second disjunct
-for a coarse label to supply. The attribute side keeps a member disjunct, and
-`sepJA_needs_member` is the pair that shows it doing work: `legacy` widens a read past the
-member its own term claims, so `AdmA` does not bound `μSyn`.
+`SepJV` and `SepJA` state separation on the rows this file proves exact. Each side is one
+clause. `Adm` and `AdmA` fold the kind or member gate into their rows. `LegacyRead` is outside
+`Term`, so an alternate reader cannot add a second structural clause.
 
 **What this section exists to record is the direction that fails.** A discharger consumes
 disjointness of the options `select` builds, and at an `object` option that is `keysOk` —
@@ -145,44 +143,16 @@ the filter lands on is one of the options; a dissection is a certified `union` n
     collapses. -/
 def SepJV (x y : Term) : Prop := ∀ v, Adm x v = true → Adm y v = false
 
-/-- **…and attribute side, which does *not* collapse.** The member disjunct stays, because
-    `AdmA` does not bound `μSyn`.
+/-- **…and attribute side, also one clause.** The former member disjunct described an
+    alternate reader inside `Term`. The carrier split made that state unrepresentable. -/
+def SepJA (x y : Term) : Prop := ∀ a, AdmA x a = true → AdmA y a = false
 
-    The reason used to be `setMember`'s — one value kind, three attribute members, so a
-    `set` row admitted `SS`, `NS` and `BS` whatever its element term was. That reason is
-    **gone**: `set` is indexed by its base, so its wire family is a function of the index
-    and its row names one member. The clause survives anyway, because the phenomenon was
-    never `set`'s alone. `legacy` widens a read past the member its own term claims — `p`
-    falls back to a channel the term carries as data — so `AdmA` still fails to bound
-    `μSyn`, and `sepJA_needs_member` is now witnessed there. -/
-def SepJA (x y : Term) : Prop :=
-  (∃ μx μy, μSyn x = some μx ∧ μSyn y = some μy ∧ μx ≠ μy) ∨
-  (∀ a, AdmA x a = true → AdmA y a = false)
-
-/-- A read channel that fires at `N` and nowhere else — `legacy`'s widening, minimal. -/
+/-- A read channel that fires at `N` and nowhere else. -/
 def rNum : Attr → Option Value := fun a => match a with | .n _ => some (.str "x") | _ => none
 
-/-- **The member disjunct is load-bearing, and the witness moved.**
-
-    It used to be `set(string)` against `set(number)`: they differ in `μSyn` and were
-    indistinguishable to `AdmA`, which admitted `NS` at both. Indexing `set` killed that
-    pair — the wire family is now a function of the base, so `AdmA` separates those two on
-    its own — and it did **not** kill the disjunct, because `set` was never the only way to
-    have a read that outruns `μSyn`.
-
-    `legacy` is. `legacy(string, r)` stores `S`, and `r` reading an `.n` widens `p` past the
-    member the term claims; `decimal` stores `N` and admits the same attribute. So the two
-    are separated by `μSyn` and not by `AdmA`, which is exactly what the first clause of
-    `SepJA` is for. -/
-theorem sepJA_needs_member :
-    ¬ (∀ a, AdmA (.legacy .string rNum) a = true → AdmA .decimal a = false) := by
-  intro h
-  exact absurd (h (.n (.of "1")) (by simp [AdmA, rNum])) (by simp [AdmA]; decide)
-
-/-- …and the pair really is separated — by the member disjunct alone, which is what makes
-    `SepJA`'s two clauses independent rather than redundant. -/
-theorem sepJA_legacy_decimal : SepJA (.legacy .string rNum) .decimal :=
-  Or.inl ⟨.S, .N, rfl, rfl, by decide⟩
+/-- An alternate reader may read outside the member of its current term. -/
+theorem legacyRead_reads_n :
+    (LegacyRead.denote ⟨.string, some rNum⟩).p (.n (.of "1")) = some (.str "x") := rfl
 
 /-! ## What the pair does not record, and what to use instead
 
@@ -219,8 +189,8 @@ theorem admitV_of_sepJV {x y : Term} (h : SepJV x y) (v : Value) (a : Attr)
   | none => rfl
   | some b => exact absurd (Adm_sound y hy) (by simp [hAy])
 
-/-- …and on the attribute side, from `SepJA`'s second disjunct. -/
-theorem admitA_of_sepJA {x y : Term} (h : ∀ a, AdmA x a = true → AdmA y a = false)
+/-- …and on the attribute side. -/
+theorem admitA_of_sepJA {x y : Term} (h : SepJA x y)
     (a : Attr) (v : Value) (hx : (denote x).p a = some v) :
     ((denote y).p a).isSome = false := by
   have hAx : AdmA x a = true := AdmA_sound x hx
@@ -301,10 +271,9 @@ theorem sepJV_objReq : SepJV objReqStr objReqNum := by
     cases hg : g ⟨"a", ha⟩ <;> simp_all [Adm, inD]
   | _ => rfl
 
-/-- …and on the readable side, on the `AdmA` disjunct: the member disjunct is no help,
-    both objects being `⇝ M`. -/
+/-- …and on the readable side. -/
 theorem sepJA_objReq : SepJA objReqStr objReqNum := by
-  refine Or.inr fun a ha => ?_
+  intro a ha
   cases a with
   | m keys g =>
     simp only [objReqStr, bodyReqStr, AdmA, AdmABody, reqPresentT, objAdmA, entryPA,
@@ -331,10 +300,10 @@ theorem typed_objReqNum :
       (some .M) := .object (fun _ => .req .number) .none
 
 theorem lawful_objReqStr : Lawful (denote objReqStr) :=
-  soundness typed_objReqStr ⟨fun _ => trivial, trivial⟩ ⟨fun _ => trivial, trivial⟩
+  soundness typed_objReqStr ⟨fun _ => trivial, trivial⟩
 
 theorem lawful_objReqNum : Lawful (denote objReqNum) :=
-  soundness typed_objReqNum ⟨fun _ => trivial, trivial⟩ ⟨fun _ => trivial, trivial⟩
+  soundness typed_objReqNum ⟨fun _ => trivial, trivial⟩
 
 /-- **The pair is not uniquely admitting.** `select` counts an object option by its
     structure, the two specs are the same spec, and neither field is a literal — so content
@@ -363,10 +332,8 @@ theorem not_admitV_le_Adm :
     had to survive for the per-aspect tables and their separation to be retired *in favour of*
     `Adm`, `AdmA`, `SepJV` and `SepJA`; it does not, which is why the separation layer was
     retired in favour of `Orthogonality.lean` instead and the tables stayed. The reason is a
-    row rather than a
-    proof — see the section note above, which is wider than this theorem: the `object` row is
-    the whole obstruction on the *value* side only, and `sepJA_needs_member` is a second one on
-    the read side, at a different constructor and reached by no premise here. -/
+    row rather than a proof. The `object` row is the obstruction on the value side.
+    `legacyRead_reads_n` records a separate outer-carrier fact that no premise here can reach. -/
 theorem not_uAtCan_of_sepJ :
     ¬ ∀ (opts : List Term),
       (∀ t ∈ opts, Lawful (denote t)) →
@@ -520,24 +487,24 @@ theorem Adm_held_adapt (t : Term) (f g : Value → Value) (v : Value) :
     Adm (.held t f g) v = ((some (f v)).elim false (Adm t)) := by
   simp [Adm]
 
-/-! ### Adapters and alternatives, and why `legacy` was in the wrong family
+/-! ### Adapters and alternatives, and why `alternate reader` was in the wrong family
 
-`held` and `refine` are `Codec.adapt` with different adapters. `legacy` is **not** an
+`held` and `refine` are `Codec.adapt` with different adapters. `alternate reader` is **not** an
 adapter at all, and asking whether it was is what found the row above.
 
 An adapter *composes*: `adapt`'s read is `(c.p a).bind g`, so it can only lose attributes —
-`adapt_p_le`. `legacy`'s read *gains* them: `extendRead`'s `p` is the subterm's channel
+`adapt_p_le`. `alternate reader`'s read *gains* them: `extendRead`'s `p` is the subterm's channel
 falling back to `r`'s, which is a **choice**, not a composition. That is the family `union`
-belongs to as well (`altCodec`, n-ary, both sides). `legacy` is the one-sided member: it reads
+belongs to as well (`altCodec`, n-ary, both sides). `alternate reader` is the one-sided member: it reads
 on two channels and writes on one.
 
-Placing it correctly is what makes the row exact. §5 called `admA(legacy)` `⊤` because
+Placing it correctly is what makes the row exact. §5 called `admA(alternate reader)` `⊤` because
 `extendRead` widens past the subterm's set — true, and the wrong conclusion, because the
 thing it widens *by* is `r`, which the term carries. The domain is
 `dom(p) ∪ dom(r)`, both halves named, and `AdmA` can apply `r` for the same reason it can
 apply `held`'s `f` and `custom`'s `cp`.
 
-So `legacy` leaves the attribute hatch, and the ~~widenedRead~~ excuse is deleted rather than
+So `alternate reader` leaves the attribute hatch, and the ~~widenedRead~~ excuse is deleted rather than
 witnessed: it was covering a row that did not need excusing. What survives is the fact the
 excuse misread — §5's *passthrough* really is unsound, and the union is not the
 passthrough. -/
@@ -551,21 +518,10 @@ theorem adapt_p_le {c : Codec} {f g : Value → Option Value} {a : Attr} :
   | none => rw [hc] at h; simp at h
   | some _ => rfl
 
-/-- `legacy` is the read-side alternative: the subterm's channel, falling back to `r`'s. -/
-theorem legacy_p_alt (t : Term) (r : Attr → Option Value) (a : Attr) :
-    (denote (.legacy t r)).p a
-      = (match (denote t).p a with | some v => some v | none => r a) := rfl
-
-/-- …so its read domain is the union of the two channels, and both are named. -/
-theorem legacy_p_isSome (t : Term) (r : Attr → Option Value) (a : Attr) :
-    ((denote (.legacy t r)).p a).isSome = (((denote t).p a).isSome || (r a).isSome) := by
-  simp only [legacy_p_alt]
-  cases (denote t).p a <;> simp
-
-/-- Which is exactly `AdmA`'s row, so `legacy` widens the read side and is exact anyway. -/
-theorem AdmA_legacy_union (t : Term) (r : Attr → Option Value) (a : Attr) :
-    AdmA (.legacy t r) a = (AdmA t a || (r a).isSome) := by
-  simp [AdmA]
+/-- The adapter always keeps the current reader first. -/
+theorem legacyRead_p_alt (t : Term) (r : Attr → Option Value) (a : Attr) :
+    (LegacyRead.denote ⟨t, some r⟩).p a =
+      match (denote t).p a with | some v => some v | none => r a := rfl
 
 /-- **A discharge §5 could not state.** Two sets over disjoint literals separate, because
     `℘⁺fin` has no empty inhabitant and so the two options share none. The non-emptiness
