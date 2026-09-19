@@ -109,22 +109,34 @@ theorem fieldSem_ne_opt {fd : ObjectSlot}
   | req t m => cases m <;> simp_all [fieldSem]
   | optional t => simp_all
 
-/-- Name admission from names alone: everything present is declared, everything
-    required is present.
-
-    Two hypotheses in, `keysOk` out — literally. `keysOk` is now a pair of quantifiers
-    over the declared names, so this is `⟨hsub, hreq⟩` where the row form needed a
-    `List.any` witness built by hand and a `List.all` over the mapped row. -/
-theorem keysOk_of_names {fields : Finset Name} {ff : {k // k ∈ fields} → ObjectSlot}
+/-- Write-side name admission from names alone: every present name is declared, every required
+    name is present, and every forbidden name is absent. -/
+theorem keysOkV_of_names {fields : Finset Name} {ff : {k // k ∈ fields} → ObjectSlot}
     {keys : Finset Name}
     (hsub : ∀ k ∈ keys, k ∈ fields)
     (hreq : ∀ k : {k // k ∈ fields},
-      (match ff k with | ObjectSlot.optional _ => false | _ => true) = true → k.1 ∈ keys) :
-    keysOk (Body.spec (.mk fields ff none))
+      (ff k).presenceV.2 = false → k.1 ∈ keys)
+    (hforbid : ∀ k : {k // k ∈ fields},
+      (ff k).presenceV.1 = false → k.1 ∉ keys) :
+    keysOkV (Body.spec (.mk fields ff none))
       keys = true := by
-  simp only [keysOk, Body.spec, Bool.and_eq_true, Option.map_none, Option.isSome_none,
+  simp only [keysOkV, Body.spec, Bool.and_eq_true, Option.map_none, Option.isSome_none,
     Bool.false_or]
-  exact ⟨decide_eq_true hsub, decide_eq_true hreq⟩
+  exact ⟨decide_eq_true hsub, decide_eq_true hreq, decide_eq_true hforbid⟩
+
+/-- The read-side name reader follows the same three facts with its own presence projection. -/
+theorem keysOkA_of_names {fields : Finset Name} {ff : {k // k ∈ fields} → ObjectSlot}
+    {keys : Finset Name}
+    (hsub : ∀ k ∈ keys, k ∈ fields)
+    (hreq : ∀ k : {k // k ∈ fields},
+      (ff k).presenceA.2 = false → k.1 ∈ keys)
+    (hforbid : ∀ k : {k // k ∈ fields},
+      (ff k).presenceA.1 = false → k.1 ∉ keys) :
+    keysOkA (Body.spec (.mk fields ff none))
+      keys = true := by
+  simp only [keysOkA, Body.spec, Bool.and_eq_true, Option.map_none, Option.isSome_none,
+    Bool.false_or]
+  exact ⟨decide_eq_true hsub, decide_eq_true hreq, decide_eq_true hforbid⟩
 
 /-- Object-encode under a closed rest policy stamps name admission: every written name
     is declared and every non-`opt` name is written.
@@ -134,16 +146,16 @@ theorem keysOk_of_names {fields : Finset Name} {ff : {k // k ∈ fields} → Obj
     `traverse_fst`. `M`'s payload is a key set with a function on it, and encoding does
     not touch the key set — so the value side's admission *is* the attribute side's, and
     there is nothing to transport. -/
-theorem keysOk_of_encode {fields : Finset Name} {ff : {k // k ∈ fields} → ObjectSlot}
+theorem keysOkV_of_encode {fields : Finset Name} {ff : {k // k ∈ fields} → ObjectSlot}
     {keys : Finset Name}
     {f : {k // k ∈ keys} → Value} {g : {k // k ∈ keys} → Attr}
     (hval : valPresentB ⟨fields, fun k => fieldSem (ff k)⟩ keys = true)
     (hfi : funImage (fun k : {k // k ∈ keys} =>
         (entryCodec ⟨fields, fun k => fieldSem (ff k)⟩ none k.1).bind
           (fun c => c.e (f k))) = some g) :
-    keysOk (Body.spec (.mk fields ff none))
+    keysOkV (Body.spec (.mk fields ff none))
       keys = true := by
-  refine keysOk_of_names (fun k hk => ?_) (fun k hb => ?_)
+  refine keysOkV_of_names (fun k hk => ?_) (fun k hb => ?_) (fun k hb hk => ?_)
   · -- a name the entry function is defined at is declared: `rc?` is `none`, so
     -- `entryCodec` succeeds only through the field table
     by_contra hnk
@@ -151,8 +163,76 @@ theorem keysOk_of_encode {fields : Finset Name} {ff : {k // k ∈ fields} → Ob
     rw [show entryCodec (⟨fields, fun k => fieldSem (ff k)⟩ : MapOf FieldSem) none k
         = none from by simp only [entryCodec, MapOf.at, dif_neg hnk]] at hw
     exact nomatch hw
-  · exact valPresentB_spec hval (MapOf.at_of_mem (m := ⟨fields, _⟩) k)
-      (fieldSem_ne_opt hb)
+  · apply valPresentB_spec hval (MapOf.at_of_mem (m := ⟨fields, _⟩) k)
+    apply fieldSem_ne_opt
+    cases hfd : ff k with
+    | req t m => simp
+    | optional t => cases t <;> simp [ObjectSlot.presenceV, Term.isNever, hfd] at hb
+  · have hw := funImage_some hfi ⟨k.1, hk⟩
+    have he : (fieldSem (ff k)).codec.e (f ⟨k.1, hk⟩) = some (g ⟨k.1, hk⟩) := by
+      rw [show entryCodec (⟨fields, fun k => fieldSem (ff k)⟩ : MapOf FieldSem) none k.1
+          = some (fieldSem (ff k)).codec by
+            simp only [entryCodec, MapOf.at, dif_pos k.2]] at hw
+      simpa using hw
+    cases hfd : ff k with
+    | req t m =>
+      cases t <;> simp [ObjectSlot.presenceV, ObjectSlot.isReq, Term.isNever, hfd] at hb
+      case never =>
+        rw [hfd] at he
+        cases m <;> change none = some _ at he <;> cases he
+    | optional t =>
+      cases t <;> simp [ObjectSlot.presenceV, Term.isNever, hfd] at hb
+      case never =>
+        rw [hfd] at he
+        change none = some _ at he
+        cases he
+
+/-- A closed object encoder also satisfies the read-side presence lattice. A stand-in weakens the
+    read requirement, while an empty slot cannot produce an entry. -/
+theorem keysOkA_of_encode {fields : Finset Name} {ff : {k // k ∈ fields} → ObjectSlot}
+    {keys : Finset Name}
+    {f : {k // k ∈ keys} → Value} {g : {k // k ∈ keys} → Attr}
+    (hval : valPresentB ⟨fields, fun k => fieldSem (ff k)⟩ keys = true)
+    (hfi : funImage (fun k : {k // k ∈ keys} =>
+        (entryCodec ⟨fields, fun k => fieldSem (ff k)⟩ none k.1).bind
+          (fun c => c.e (f k))) = some g) :
+    keysOkA (Body.spec (.mk fields ff none))
+      keys = true := by
+  simp only [keysOkA, Body.spec, Bool.and_eq_true, Option.map_none, Option.isSome_none,
+    Bool.false_or]
+  refine ⟨decide_eq_true (fun k hk => ?_), decide_eq_true (fun k hb => ?_),
+    decide_eq_true (fun k hb hk => ?_)⟩
+  · by_contra hnk
+    have hw := funImage_some hfi ⟨k, hk⟩
+    rw [show entryCodec (⟨fields, fun k => fieldSem (ff k)⟩ : MapOf FieldSem) none k
+        = none from by simp only [entryCodec, MapOf.at, dif_neg hnk]] at hw
+    exact nomatch hw
+  · apply valPresentB_spec hval (MapOf.at_of_mem (m := ⟨fields, _⟩) k)
+    apply fieldSem_ne_opt
+    cases hfd : ff k with
+    | req t m =>
+      cases m <;> simp [ObjectSlot.presenceA, ObjectSlot.isReqA, Term.isNever, hfd] at hb ⊢
+    | optional t => cases t <;> simp [ObjectSlot.presenceA, Term.isNever, hfd] at hb
+  · have hw := funImage_some hfi ⟨k.1, hk⟩
+    have he : (fieldSem (ff k)).codec.e (f ⟨k.1, hk⟩) = some (g ⟨k.1, hk⟩) := by
+      rw [show entryCodec (⟨fields, fun k => fieldSem (ff k)⟩ : MapOf FieldSem) none k.1
+          = some (fieldSem (ff k)).codec by
+            simp only [entryCodec, MapOf.at, dif_pos k.2]] at hw
+      simpa using hw
+    cases hfd : ff k with
+    | req t m =>
+      cases t <;> cases m <;>
+        simp [ObjectSlot.presenceA, ObjectSlot.isReqA, Term.isNever, hfd] at hb
+      case never.none | never.some =>
+        rw [hfd] at he
+        change none = some _ at he
+        cases he
+    | optional t =>
+      cases t <;> simp [ObjectSlot.presenceA, Term.isNever, hfd] at hb
+      case never =>
+        rw [hfd] at he
+        change none = some _ at he
+        cases he
 
 /-- A field whose term is a literal writes only that literal's alternatives, whatever the
     slot's presence marker: `fieldSem` carries the same codec through both marks and through
@@ -177,9 +257,9 @@ theorem litOkA_of_field_e : ∀ {fd : ObjectSlot} {v a}, (fieldSem fd).codec.e v
 /-- Object-encode stamps content admission too: every written name whose field is a literal
     carries one of that literal's alternatives.
 
-    `keysOk_of_encode`'s twin, on the other half of the structural test. The quantifier runs
+    `keysOkV_of_encode`'s twin, on the other half of the structural test. The quantifier runs
     over the *written* key set, which is what makes an `optional` literal field harmless: a
-    name the encode did not write is `keysOk`'s business and never reaches here. -/
+    name the encode did not write is `keysOkV`'s business and never reaches here. -/
 theorem literalsOk_of_encode {fields : Finset Name} {ff : {k // k ∈ fields} → ObjectSlot}
     {keys : Finset Name} {f : {k // k ∈ keys} → Value} {g : {k // k ∈ keys} → Attr}
     (hfi : funImage (fun k : {k // k ∈ keys} =>
@@ -199,7 +279,7 @@ theorem literalsOk_of_encode {fields : Finset Name} {ff : {k // k ∈ fields} �
   | true =>
       have hk : (k : Name) ∈ fields := of_decide_eq_true hm
       rw [litOkV, show (Body.spec (.mk fields ff none)).names.at k.1
-          = some ⟨_, altsOfField (ff ⟨k.1, hk⟩)⟩ from dif_pos hk]
+          = some ⟨_, _, altsOfField (ff ⟨k.1, hk⟩)⟩ from dif_pos hk]
       rw [show entryCodec (⟨fields, fun k => fieldSem (ff k)⟩ : MapOf FieldSem) none k.1
           = some (fieldSem (ff ⟨k.1, hk⟩)).codec from by
             simp only [entryCodec, MapOf.at, dif_pos hk]] at hw
@@ -225,7 +305,7 @@ theorem literalsOkA_of_encode {fields : Finset Name} {ff : {k // k ∈ fields} �
   | true =>
       have hk : (k : Name) ∈ fields := of_decide_eq_true hm
       rw [litOkA, show (Body.spec (.mk fields ff none)).names.at k.1
-          = some ⟨_, altsOfField (ff ⟨k.1, hk⟩)⟩ from dif_pos hk]
+          = some ⟨_, _, altsOfField (ff ⟨k.1, hk⟩)⟩ from dif_pos hk]
       rw [show entryCodec (⟨fields, fun k => fieldSem (ff k)⟩ : MapOf FieldSem) none k.1
           = some (fieldSem (ff ⟨k.1, hk⟩)).codec from by
             simp only [entryCodec, MapOf.at, dif_pos hk]] at hw
@@ -268,8 +348,8 @@ theorem optionSem_self_admit (t : Term)
       rw [hrc] at hfi
       -- both halves read the same two tests at the key set the two payloads share: the
       -- names, and the literal fields' contents
-      exact ⟨(Bool.and_eq_true _ _).mpr ⟨keysOk_of_encode hval hfi, literalsOk_of_encode hfi⟩,
-             (Bool.and_eq_true _ _).mpr ⟨keysOk_of_encode hval hfi, literalsOkA_of_encode hfi⟩⟩
+      exact ⟨(Bool.and_eq_true _ _).mpr ⟨keysOkV_of_encode hval hfi, literalsOk_of_encode hfi⟩,
+             (Bool.and_eq_true _ _).mpr ⟨keysOkA_of_encode hval hfi, literalsOkA_of_encode hfi⟩⟩
     all_goals exact nomatch hs
 
 
@@ -901,4 +981,3 @@ theorem not_uAtCan_literal_held :
 
 
 end Calculus
-
