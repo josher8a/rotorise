@@ -145,6 +145,15 @@ theorem optional_never_forbidsV :
 theorem optional_never_forbidsA :
     keysOkA forbiddenSpec {"A"} = false := by decide
 
+/-- A bottom slot with a stand-in admits an absent name on the read side. -/
+private def bottomFallbackNames : MapOf NameSpec :=
+  ⟨{"A"}, fun _ => ⟨(true, false), (false, true), none⟩⟩
+
+private def bottomFallbackSpec : BodySpec := ⟨bottomFallbackNames, none⟩
+
+example :
+    keysOkA bottomFallbackSpec ∅ = true := by decide
+
 /-- An object option decides by structure, never by being attempted: the names lie in the
     spec's interval, and every present literal field carries one of its alternatives. -/
 def OptionSem.byStructure (spec : BodySpec) (c : Codec) : OptionSem :=

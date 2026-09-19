@@ -213,8 +213,24 @@ def ObjectSlot.presenceV (f : ObjectSlot) : Bool × Bool :=
 /-- A slot's read-side presence lattice element. The stand-in changes this side alone. -/
 def ObjectSlot.presenceA (f : ObjectSlot) : Bool × Bool :=
   match f with
-  | .req t _ => if t.isNever then (false, false) else (true, !f.isReqA)
+  | .req t _ => (!t.isNever, !f.isReqA)
   | .optional t => if t.isNever then (false, true) else (true, true)
+
+/-- A normal required slot must be present on the read side. -/
+theorem req_presenceA :
+    (.req .string none : ObjectSlot).presenceA = (true, false) := by decide
+
+/-- A normal required slot with a stand-in may be absent on the read side. -/
+theorem req_fallback_presenceA :
+    (.req .string (some (.str "d")) : ObjectSlot).presenceA = (true, true) := by decide
+
+/-- A bottom required slot has no read-side presence or absence. -/
+theorem req_never_presenceA :
+    (.req .never none : ObjectSlot).presenceA = (false, false) := by decide
+
+/-- A bottom required slot with a stand-in admits absence but refuses presence. -/
+theorem req_never_fallback_presenceA :
+    (.req .never (some (.str "d")) : ObjectSlot).presenceA = (false, true) := by decide
 
 /-! ## `array` and `tuple`, as builders over `list`
 
