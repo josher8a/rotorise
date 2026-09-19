@@ -221,8 +221,8 @@ theorem typed_T_eq : ∀ {t T μ}, Typed t T μ → ∀ v, T v → (denote t).T 
             MapOf.at_of_mem (m := (⟨fields, fun k => fieldSem (ff k)⟩ :
               MapOf FieldSem)) ⟨k.1, hk⟩]
           obtain ⟨t', hty', hshape⟩ := TypedField.term (hfields ⟨k.1, hk⟩)
-          rcases hshape with ⟨m, heq⟩ | heq
-          · rw [heq]; cases m <;> exact typed_T_eq hty' _ hentry
+          rcases hshape with heq | heq
+          · rw [heq]; exact typed_T_eq hty' _ hentry
           · rw [heq]; exact typed_T_eq hty' _ hentry
         -- an undeclared name in a body with no open block is refused by *both* sides: `R` is
         -- `none` by `TypedWild` and `rcOf` is `none` by definition, so the two branches are

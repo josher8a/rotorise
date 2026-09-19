@@ -38,7 +38,7 @@ anything observable through `e` and `p` can tell.
 
 `union` still distinguishes them. An option's admission is `admitOptV`, which matches the
 **constructor**: `specOf (.refine t ⊤) = none`, so the option is admitted *by attempt* and runs
-`Adm`, while an object option is admitted *by structure*, which is `keysOkV` and the literal
+`Adm`, while an object option is admitted *by structure*, which is `keysOk` and the literal
 alternatives and nothing else. Structure is the coarser of the two, and at a declared name
 pinned to no literal it asks only that the name is present. So on `{"A" ↦ true}` against
 `{A : req string}` the object option answers `true` and the refinement `false`, with equal
@@ -58,7 +58,7 @@ def qTop : Value → Bool := fun _ => true
 
 /-- One name, declared `req string` and pinned to no literal — so the structural test asks
     only that the name is present. -/
-def tReqStr : Term := .object (.mk {"A"} (fun _ => .req .string none) none)
+def tReqStr : Term := .object (.mk {"A"} (fun _ => .req .string) none)
 
 /-- …and a map carrying that name at a boolean, which the structure admits and the row
     refuses. -/
@@ -93,7 +93,7 @@ above is that merge on the nose. -/
     `refine t ⊤` and `t` admit the same values at every point, so their domains are equal with
     no hypothesis. As *options* they still disagree, because `admitOptV` matches the
     constructor: `specOf` is `none` at a `refine`, so that option is admitted by ATTEMPT and
-    runs `Adm`, while an object option is admitted by STRUCTURE, which is `keysOkV` and the
+    runs `Adm`, while an object option is admitted by STRUCTURE, which is `keysOk` and the
     literal alternatives and nothing else.
 
     So the pair parts wherever structure is coarser than `Adm`, and at a declared name whose
@@ -128,7 +128,7 @@ for a coarse label to supply. The attribute side keeps a member disjunct, and
 member its own term claims, so `AdmA` does not bound `μSyn`.
 
 **What this section exists to record is the direction that fails.** A discharger consumes
-disjointness of the options `select` builds, and at an `object` option that is `keysOkV` —
+disjointness of the options `select` builds, and at an `object` option that is `keysOk` —
 names, not contents. So `Adm` is not an over-approximation of admission there, it is strictly
 *tighter*, and `not_uAtCan_of_sepJ` at the end of the section is the discharger restated on
 `SepJV`/`SepJA` and refuted, with every other premise met. `Orthogonality.lean` states the
@@ -209,7 +209,7 @@ theorem Adm_string_eq_refine : Adm .string = Adm (.refine .string (.closure qTop
 
     This said "and that is all the discharge needs", which is where it over-claimed. What a
     discharger consumes is disjointness of the *options* `select` builds, and an object option
-    is admitted by `keysOkV` rather than by attempting its codec. The section
+    is admitted by `keysOk` rather than by attempting its codec. The section
     below is that gap, with the pair that refutes the stronger reading. -/
 theorem admitV_of_sepJV {x y : Term} (h : SepJV x y) (v : Value) (a : Attr)
     (hx : (denote x).e v = some a) : ((denote y).e v).isSome = false := by
@@ -239,7 +239,7 @@ on it.
 `admitV_of_sepJV` is a claim about the **codec**: where `x`'s `e` writes, `y`'s `e` refuses.
 A discharger is a claim about the **options `select` builds**, and at an `object` those are not
 the same test. `admitOptV` records the asymmetry already — an object option is
-admitted by `keysOkV`, which reads which names a map carries and never what they hold — but
+admitted by `keysOk`, which reads which names a map carries and never what they hold — but
 the corollary was not drawn: `Adm` is not an over-approximation of `OptionSem.admitV` at an
 object, it is strictly *tighter*, and disjointness of a tighter predicate does not imply
 disjointness of admission.
@@ -262,10 +262,10 @@ exactness alone, for every term whose `specOf` is `none` — which is every term
 `object`. -/
 
 /-- One required slot, holding a string. -/
-def bodyReqStr : Body := .mk {"a"} (fun _ => .req .string none) none
+def bodyReqStr : Body := .mk {"a"} (fun _ => .req .string) none
 
 /-- The same name, the same open block, a different slot term. -/
-def bodyReqNum : Body := .mk {"a"} (fun _ => .req .number none) none
+def bodyReqNum : Body := .mk {"a"} (fun _ => .req .number) none
 
 def objReqStr : Term := .object bodyReqStr
 def objReqNum : Term := .object bodyReqNum
@@ -348,8 +348,8 @@ theorem not_uAtCan_objReq : ¬ UAtCan [objReqStr, objReqNum] := by
   have hfil := (h (optionSemOf (denote objReqStr) (specOf objReqStr)) (by simp [semsOf])
     mapReqStr a (by rw [optionSemOf_c]; exact ha)).2
   simp [semsOf, objReqStr, objReqNum, bodyReqStr, bodyReqNum, specOf, Body.spec, optionSemOf,
-    OptionSem.byStructure, keysOkV, literalsOk, litOkV, altsOkV, altsOfField, MapOf.at,
-    ObjectSlot.presenceV, ObjectSlot.isReq, Term.isNever, mapReqStr] at hfil
+    OptionSem.byStructure, keysOk, literalsOk, litOkV, altsOkV, altsOfField, MapOf.at,
+    ObjectSlot.presence, ObjectSlot.isReq, Term.isNever, mapReqStr] at hfil
 
 /-- **Admission does not imply the row**, which is the route the discharger would have to
     take. An object option admits by names; `Adm` asks the field terms. -/
@@ -465,7 +465,7 @@ theorem not_decides_refine_top : ¬ Decides (.refine .string (.closure qTop)) :=
 /-- **And too stingy.** An object with a required field refuses the empty map and writes a
     populated one — two `map`s differing in admission — while `ident` calls it `false`. -/
 theorem decides_object :
-    Decides (.object (.mk {"k"} (fun _ => .req .string none) none)) := by
+    Decides (.object (.mk {"k"} (fun _ => .req .string) none)) := by
   refine ⟨.map {"k"} (fun _ => .str "a"),
           .map ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)), ?_, rfl, ?_⟩
   · simp +contextual [denote, denote, bodySem, wildSem, fieldSem,

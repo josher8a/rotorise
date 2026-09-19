@@ -96,7 +96,7 @@ def admitOptV (o : Option (BodySpec) × VP) (v : Value) : Bool :=
   match o.1 with
   | some spec =>
       match v with
-      | .map keys f => keysOkV spec keys && literalsOk spec keys f
+      | .map keys f => keysOk spec keys && literalsOk spec keys f
       | _ => false
   | none => o.2 v
 
@@ -282,11 +282,11 @@ noncomputable def AdmBody : Body → VP
           objAdmV ⟨fields, fun k => AdmField (fld k)⟩ (AdmWild wild) keys g
       | _ => false
 
-/-- A slot's row is its term's; the presence marker is `valPresentT`'s business and the
-    stand-in is `AdmA`'s, so neither reaches this one. Mirrors `fieldSem`, and for the same
-    reason: the recursion has to be passed *applied*. -/
+/-- A slot's row is its term's. The presence marker is `valPresentT`'s business, so it does
+    not reach this row. Mirrors `fieldSem`, and for the same reason: the recursion has to be
+    passed *applied*. -/
 noncomputable def AdmField : ObjectSlot → VP
-  | .req t _ => Adm t
+  | .req t => Adm t
   | .optional t => Adm t
 
 /-- The open block's row, where the body has one — `rcOf`'s mirror. A body with no open
@@ -627,11 +627,9 @@ theorem valPresentT_eq (fields : Finset Name) (fld : {k // k ∈ fields} → Obj
   simp only [valPresentT, valPresentB]
   congr 1
   apply propext
-  -- `fieldSem (.req t m)` does not reduce while `m` is a variable, so the `req` row splits
-  -- on the stand-in before either side computes.
   constructor <;> intro h k <;> have := h k <;>
     (cases hfd : fld k with
-      | req t m => cases m <;> simp_all [valPresentAt, fieldSem]
+      | req t => simp_all [valPresentAt, fieldSem]
       | optional t => simp_all [valPresentAt, fieldSem])
 
 theorem entry_iff {fields : Finset Name} {fld : {k // k ∈ fields} → ObjectSlot}
@@ -921,14 +919,9 @@ theorem Adm_exactO : ∀ (tail : Option Term), ExactVO tail
   | none => trivial
   | some t0 => Adm_exact t0
 
-/-- A slot's row is exact when its term's is — the mark plays no part, which is what
-    `valPresentT` being a separate conjunct records.
-
-    The stand-in splits because `fieldSem (.req t m)` does not reduce while `m` is a
-    variable, so `ExactField (.req t0 m)` states nothing the recursion can close. -/
+/-- A slot's row is exact when its term's is. -/
 theorem Adm_exactF : ∀ (fd : ObjectSlot), ExactField fd
-  | .req t0 none => fun v => Adm_exact t0 v
-  | .req t0 (some _) => fun v => Adm_exact t0 v
+  | .req t0 => fun v => Adm_exact t0 v
   | .optional t0 => fun v => Adm_exact t0 v
 
 theorem Adm_exactW : ∀ (wild : Option (KeyPat × Term)), ExactVW wild

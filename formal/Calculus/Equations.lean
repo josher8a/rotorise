@@ -242,7 +242,6 @@ theorem equiv_altCodec_single (o : OptionSem) :
 /-! ## Wrappers preserve the member
 
 §6's last "Hold" row, `μ(w(c)) = μ(c)` for `w ∈ {held, refine, legacy, optional,
-fallback}`, and §4's reason index keys stay stable under refactoring.
 
 Three of the five are codec wrappers. The other two are **fields**, and this file used to
 say their half of the row was "the stratification of §4 and not a statement about
@@ -261,11 +260,6 @@ theorem extendRead_μ (c : Codec) (r : Attr → Option Value) :
 /-- §4 `(opt)`: an optional attribute is still stored somewhere, and where is the
     subterm's member. -/
 theorem optional_μ (t : Term) : (fieldSem (.optional t)).codec.μ = (denote t).μ := rfl
-
-/-- §4, a `req` slot carrying a stand-in: the stand-in is written through the same codec, so
-    the member is the subterm's too. -/
-theorem fallback_μ (t : Term) (v : Value) :
-    (fieldSem (.req t (some v))).codec.μ = (denote t).μ := rfl
 
 /-! ## `union` is associative
 
@@ -513,7 +507,7 @@ theorem denote_legacy_eq_on_can (t : Term) (r : Attr → Option Value)
   extendRead_eq_on_can _ r hc ha
 
 /-- §6: `μ(w(c)) = μ(c)` for the three codec wrappers. The two field wrappers are
-    `optional_μ` and `fallback_μ`, which are already stated over a denotation. -/
+    `optional_μ` and `optional_μ`, which are already stated over a denotation. -/
 theorem denote_held_μ (t : Term) (f g : Value → Value) :
     (denote (.held t f g)).μ = (denote t).μ := rfl
 

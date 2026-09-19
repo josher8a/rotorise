@@ -14,9 +14,8 @@ Mechanization choices, and where they diverge from the doc (each is routine to s
 * `Typed` keeps only one *syntactic* premise, `(union)`'s **(D)**. Every other side condition
   became a type — see each constructor's own docstring.
   The doc's *semantic* premises — `(held)`'s carrier-restricted iso, `(legacy)`'s
-  `ran(r) ⊆ dom(e)` and coherence, `(fallback)`'s `v(∗) ∈ dom(e)`, `(custom)`'s laws, and
-  `(union)`'s residual (U) — live in `Obligations` (Soundness.lean), which is where they can
-  mention the denotation.
+  `ran(r) ⊆ dom(e)` and coherence, `(custom)`'s laws, and `(union)`'s residual (U) — live in
+  `Obligations` (Soundness.lean), which is where they can mention the denotation.
 * **`literal` is one rule in §3 and one constructor here.** §3's `(literal)` reads its member
   off a base, which in a naive transcription needs `ℓ : List Value` plus a premise that the
   values share a kind. `literal (k : GroundKind) (x : k.Carrier)` gets that from the *type*:
@@ -313,13 +312,9 @@ inductive TypedOpt : Option Term → Option Held → Prop where
   | none : TypedOpt none none
   | some {t T μ} (h : Typed t T μ) : TypedOpt (some t) (some T)
 
-/-- §4's `⊢ f : T ⊗ π ⇝ μ`; the `Bool` is `π`, `true` for `req`.
-
-    **Two rows, where there were three.** §4 said "`fallback` concludes `req`", and that
-    sentence was a rule relating two constructors. The stand-in rides on `req` now, so the
-    two rows are one row and the sentence is the type. -/
+/-- §4's `⊢ f : T ⊗ π ⇝ μ`; the `Bool` is `π`, `true` for `req`. -/
 inductive TypedField : ObjectSlot → Held → Bool → Option Member → Prop where
-  | req {t T μ m} (h : Typed t T μ) : TypedField (.req t m) T true μ
+  | req {t T μ} (h : Typed t T μ) : TypedField (.req t) T true μ
   | optional {t T μ} (h : Typed t T μ) : TypedField (.optional t) T false μ
 
 /-- §4's `⊢ ρ : wild`, carrying `R(ρ)` — `∅` (here `none`) where the body carries no open
@@ -380,17 +375,15 @@ theorem Typed.tuple {ts Ts tail Tt} (h : TypedList ts Ts) (ht : TypedOpt tail Tt
 them a variable — so `cases` on it cannot eliminate. These two extract what the callers
 want without eliminating at the use site. -/
 
-/-- A typed field gives its term, that term's judgement, and which of the three shapes
-    the field has. -/
+/-- A typed field gives its term, that term's judgement, and its shape. -/
 theorem TypedField.term {fd : ObjectSlot} {T π μ} (h : TypedField fd T π μ) :
     ∃ t', Typed t' T μ ∧
-      ((∃ m, fd = .req t' m) ∨ fd = .optional t') := by
+      (fd = .req t' ∨ fd = .optional t') := by
   cases h with
-  | req h' => exact ⟨_, h', Or.inl ⟨_, rfl⟩⟩
+  | req h' => exact ⟨_, h', Or.inl rfl⟩
   | optional h' => exact ⟨_, h', Or.inr rfl⟩
 
-/-- …and a *required* one is not `optional`, which is §4's `fallback` concluding `req`
-    read backwards. -/
+/-- …and a required one is not optional. -/
 theorem TypedField.not_optional {fd : ObjectSlot} {T π μ} (h : TypedField fd T π μ)
     (hπ : π = true) : ∀ t', fd ≠ .optional t' := by
   cases h with
@@ -403,8 +396,7 @@ theorem TypedField.not_optional {fd : ObjectSlot} {T π μ} (h : TypedField fd T
     the shape. Producing `π = true` from the shape is the converse, and `typed_T_eq`'s
     `object` case is where it is needed: there the map's key set is known to contain every
     required name and the guard `valPresentB` is stated by shape, so the two have to be
-    exchanged in this direction. Both rows are `rfl`; §4's "`fallback` concludes `req`" is
-    the second one. -/
+    exchanged in this direction. Both rows are `rfl`. -/
 theorem TypedField.true_of_not_optional {fd : ObjectSlot} {T π μ} (h : TypedField fd T π μ)
     (hno : ∀ t', fd ≠ .optional t') : π = true := by
   cases h with

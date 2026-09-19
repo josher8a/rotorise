@@ -37,7 +37,7 @@ def admitOptA (o : Option (BodySpec) × AP) (a : Attr) : Bool :=
   match o.1 with
   | some spec =>
       match a with
-      | .m keys g => keysOkA spec keys && literalsOkA spec keys g
+      | .m keys g => keysOk spec keys && literalsOkA spec keys g
       | _ => false
   | none => o.2 a
 
@@ -83,13 +83,11 @@ def objAdmA (fs : MapOf AP) (rp : Option AP) (keys : Finset Name)
   decide (∀ k : {k // k ∈ keys},
     (match entryPA fs rp k.1 with | some P => P (g k) | none => false) = true)
 
-/-- `reqPresentB`'s guard off the term's table: a slot with a stand-in reads to that
-    stand-in, so only a `req` without one must be present. The mark alone does not decide
-    it, which is why the row splits on `ifMissing`. -/
+/-- The current-schema reader has the same required-name guard as the writer. -/
 def reqPresentT (fields : Finset Name) (fld : {k // k ∈ fields} → ObjectSlot)
     (keys : Finset Name) : Bool :=
   decide (∀ k : {k // k ∈ fields},
-    (match fld k with | .req _ none => decide (k.1 ∈ keys) | _ => true) = true)
+    (match fld k with | .req _ => decide (k.1 ∈ keys) | _ => true) = true)
 
 
 /-- What the literal codec **reads**, exactly.
@@ -210,7 +208,7 @@ noncomputable def AdmABody : Body → AP
       | _ => false
 
 noncomputable def AdmAField : ObjectSlot → AP
-  | .req t _ => AdmA t
+  | .req t => AdmA t
   | .optional t => AdmA t
 
 noncomputable def AdmAWild : Option (KeyPat × Term) → Option AP
@@ -577,11 +575,9 @@ theorem reqPresentT_eq (fields : Finset Name) (fld : {k // k ∈ fields} → Obj
   simp only [reqPresentT, reqPresentB]
   congr 1
   apply propext
-  -- `fieldSem (.req t m)` does not reduce while `m` is a variable, and the two rows it
-  -- splits into are the two answers this guard gives.
   constructor <;> intro h k <;> have := h k <;>
     (cases hfd : fld k with
-      | req t m => cases m <;> simp_all [reqPresentAt, fieldSem]
+      | req t => simp_all [reqPresentAt, fieldSem]
       | optional t => simp_all [reqPresentAt, fieldSem])
 
 /-- **The read side keeps every stored name.** `drop` was the one policy that dropped one,
@@ -795,11 +791,9 @@ theorem AdmA_exactO : ∀ (tail : Option Term), ExactAO tail
   | none => trivial
   | some t0 => AdmA_exact t0
 
-/-- The stand-in splits because `fieldSem (.req t m)` does not reduce while `m` is a
-    variable, the same split `Adm_exactF` makes. -/
+/-- Each current-schema slot reads exactly through its carried term. -/
 theorem AdmA_exactF : ∀ (fd : ObjectSlot), ExactAField fd
-  | .req t0 none => fun a => AdmA_exact t0 a
-  | .req t0 (some _) => fun a => AdmA_exact t0 a
+  | .req t0 => fun a => AdmA_exact t0 a
   | .optional t0 => fun a => AdmA_exact t0 a
 
 theorem AdmA_exactW : ∀ (wild : Option (KeyPat × Term)), ExactAW wild

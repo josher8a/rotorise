@@ -4,8 +4,8 @@ import Calculus.Typing
 # §5 — Soundness
 
 The theorem. `Obligations t` collects the doc's *semantic* rule premises — `(legacy)`'s two
-side conditions, `(held)`'s cancellation laws, `(fallback)`'s writable stand-in, `(custom)`'s
-laws, `(union)`'s residual (U) at canonical inputs. **Not fueled**, which this paragraph
+side conditions, `(held)`'s cancellation laws, `(custom)`'s laws, and `(union)`'s residual
+(U) at canonical inputs. **Not fueled**, which this paragraph
 once said: `Obligations : Term → Prop` is structural, as its own docstring says in as many
 words. `MPOk` marks a derivation legacy-free — the doc's (MP) exemption, as a predicate.
 
@@ -77,14 +77,9 @@ def Obligations : Term → Prop
 def ObligationsBody : Body → Prop
   | .mk _ f wild => (∀ k, ObligationsField (f k)) ∧ ObligationsWild wild
 
-/-- A slot's premises: the subterm's, plus a stand-in's own `v(∗) ∈ dom(e)`.
-
-    The premise belongs to the stand-in and not to a mark. It used to sit on a `fallback`
-    constructor; it sits on the `some` of `req`'s `ifMissing`, which is the same fact in the
-    place the fact lives. -/
+/-- A slot's premises are the current-schema term's premises. -/
 def ObligationsField : ObjectSlot → Prop
-  | .req t' none => Obligations t'
-  | .req t' (some v) => Obligations t' ∧ ((denote t').e v).isSome
+  | .req t' => Obligations t'
   | .optional t' => Obligations t'
 
 def ObligationsWild : Option (KeyPat × Term) → Prop
@@ -120,7 +115,7 @@ def MPOkBody : Body → Prop
   | .mk _ f wild => (∀ k, MPOkField (f k)) ∧ MPOkWild wild
 
 def MPOkField : ObjectSlot → Prop
-  | .req t' _ | .optional t' => MPOk t'
+  | .req t' | .optional t' => MPOk t'
 
 def MPOkWild : Option (KeyPat × Term) → Prop
   | some (_, t') => MPOk t'
@@ -203,10 +198,6 @@ theorem custom {ce cp} (h : Obligations (.custom ce cp)) :
 theorem union {opts} (h : Obligations (.union opts)) :
     (∀ t ∈ opts, Obligations t) ∧ UAtAct opts :=
   ⟨obligationsList_iff.mp h.1, h.2⟩
-
-/-- A stand-in's own premise, `v(∗) ∈ dom(e)`. -/
-theorem fallback {t v} (h : ObligationsField (ObjectSlot.req t (some v))) :
-    Obligations t ∧ ((denote t).e v).isSome := h
 
 end Obligations
 
@@ -344,27 +335,6 @@ theorem sound_wrap {t : Term} {c : Codec} (ih : Sound t)
     LawfulCore c ∧ (MPOk t → Lawful c) :=
   ⟨core ih.1, fun hmp => full (ih.2 hmp)⟩
 
-/-- `(fallback)`'s premise `v(∗) ∈ dom(e)`, transported to the denoted field list —
-    which is the shape `object`'s two lemmas ask for. Both walks of the derivation
-    need it, so it is stated here rather than twice inside them. -/
-theorem fieldSems_fb {fields : Finset Name}
-    {f : {k // k ∈ fields} → ObjectSlot}
-    (hob : ∀ k, ObligationsField (f k)) :
-    ∀ (k : {k // k ∈ fields}) c v, fieldSem (f k) = .fb c v → (c.e v).isSome := by
-  intro k c v hcv
-  have hobf := hob k
-  cases hfk : f k with
-  | optional t' => rw [hfk] at hcv; exact nomatch hcv
-  | req t' m =>
-    cases m with
-    | none => rw [hfk] at hcv; exact nomatch hcv
-    | some v₀ =>
-      rw [hfk] at hcv hobf
-      replace hobf := Obligations.fallback hobf
-      replace hcv : FieldSem.fb (denote t') v₀ = FieldSem.fb c v := hcv
-      cases hcv
-      exact hobf.2
-
 -- the shared `term_depth_wf` block has alternatives this theorem's goals do not use
 set_option linter.unreachableTactic false in
 /-- Both halves of §5's theorem in one induction: the core laws unconditionally, and
@@ -439,13 +409,10 @@ theorem soundness_both : ∀ {t T μ}, Typed t T μ → Obligations t → Sound 
         intro k
         have hobf := hob.1 k
         obtain ⟨t', hty', hshape⟩ := TypedField.term (hfields k)
-        rcases hshape with ⟨m, heq⟩ | heq
+        rcases hshape with heq | heq
         · rw [heq] at hobf ⊢
-          cases m with
-          | none => exact soundness_both hty' hobf
-          | some v => exact soundness_both hty' (Obligations.fallback hobf).1
+          exact soundness_both hty' hobf
         · rw [heq] at hobf ⊢; exact soundness_both hty' hobf
-      have hfb := fieldSems_fb hob.1
       have ihr : ∀ c, wildSem wild = .codec c →
           LawfulCore c ∧ (MPOk (.object (.mk fields ff wild)) → Lawful c) := by
         intro c hcr
@@ -456,9 +423,9 @@ theorem soundness_both : ∀ {t T μ}, Typed t T μ → Obligations t → Sound 
           cases hcr
           exact ⟨(soundness_both hty hob.2).1, fun hmp => (soundness_both hty hob.2).2 hmp.2⟩
       rw [Sound, denote_object_table, fieldTable]
-      exact ⟨lawfulCore_objectCodec (fun k => (ihf k).1) hfb
+      exact ⟨lawfulCore_objectCodec (fun k => (ihf k).1)
           (fun c hcr => (ihr c hcr).1),
-        fun hmp => lawful_objectCodec (fun k => (ihf k).2 (hmp.1 k)) hfb
+        fun hmp => lawful_objectCodec (fun k => (ihf k).2 (hmp.1 k))
           (fun c hcr => (ihr c hcr).2 hmp)⟩
     | @union opts Ts μs hlist _ =>
       have ihs : ∀ t' ∈ opts, Sound t' := fun t' ht' => by
@@ -841,8 +808,8 @@ theorem typed_TSub : ∀ {t T μ}, Typed t T μ → ∀ v, (denote t).T v → T 
         have hno : ∀ c, fieldSem (ff k) ≠ FieldSem.opt c := by
           intro c hc
           obtain ⟨t', -, hshape⟩ := TypedField.term hty
-          rcases hshape with ⟨m, heq⟩ | heq
-          · rw [heq] at hc; cases m <;> exact nomatch hc
+          rcases hshape with heq | heq
+          · rw [heq] at hc; exact nomatch hc
           · exact TypedField.not_optional hty hreq t' heq
         exact valPresentB_spec hval (MapOf.at_of_mem (m := ⟨fields, _⟩) k) hno
       · -- and every present name holds what its binding, or the open part, says
@@ -855,8 +822,8 @@ theorem typed_TSub : ∀ {t T μ}, Typed t T μ → ∀ v, (denote t).T v → T 
             MapOf.at_of_mem (m := (⟨fields, fun k => fieldSem (ff k)⟩ :
               MapOf FieldSem)) ⟨k.1, hk⟩] at hentry
           obtain ⟨t', hty', hshape⟩ := TypedField.term (hfields ⟨k.1, hk⟩)
-          rcases hshape with ⟨m, heq⟩ | heq
-          · rw [heq] at hentry; cases m <;> exact typed_TSub hty' _ hentry
+          rcases hshape with heq | heq
+          · rw [heq] at hentry; exact typed_TSub hty' _ hentry
           · rw [heq] at hentry; exact typed_TSub hty' _ hentry
         · -- undeclared: it falls to the open part
           rw [dif_neg hk]
@@ -944,13 +911,10 @@ theorem carrier_denote : ∀ {t T μ}, Typed t T μ → Obligations t → Carrie
         intro k
         have hobf := hob.1 k
         obtain ⟨t', hty', hshape⟩ := TypedField.term (hfields k)
-        rcases hshape with ⟨m, heq⟩ | heq
+        rcases hshape with heq | heq
         · rw [heq] at hobf ⊢
-          cases m with
-          | none => exact carrier_denote hty' hobf
-          | some v => exact carrier_denote hty' (Obligations.fallback hobf).1
+          exact carrier_denote hty' hobf
         · rw [heq] at hobf ⊢; exact carrier_denote hty' hobf
-      have hfb := fieldSems_fb hob.1
       have hrc : ∀ rc, rcOf (wildSem wild) = some rc → Carrier rc := by
         intro rc hcr
         cases hrest with
@@ -959,7 +923,7 @@ theorem carrier_denote : ∀ {t T μ}, Typed t T μ → Obligations t → Carrie
           replace hcr : some (denote t') = some rc := hcr
           cases hcr
           exact carrier_denote hty hob.2
-      exact carrier_objectCodec hsems hrc hfb
+      exact carrier_objectCodec hsems hrc
     | @union opts Ts μs hlist _ =>
       rw [denote_union_sems, optionSems_eq]
       refine carrier_altCodec (List.forall_mem_map.mpr fun t' ht' => ?_)

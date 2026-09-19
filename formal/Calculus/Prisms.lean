@@ -515,7 +515,7 @@ that visible, and lets all four of its laws come from `Lawful.restrict` and
 attribute), so it is not a refinement of `string` and keeps its own proofs. -/
 
 /-- **§3's gate is `refine` over the base, at every base** — and the numeric one is `number`
-    itself rather than an ungated stand-in, because §1's `Numerals` is the whole of
+    itself rather than a separate ungated numeric term, because §1's `Numerals` is the whole of
     `Carries(N)` and there is no wider numeric pair. That is what makes numeric literals
     separable: see `uniqueAdmission_of_sharedBase`.
 

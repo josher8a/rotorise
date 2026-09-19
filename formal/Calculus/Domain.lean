@@ -672,14 +672,13 @@ in scope. -/
     literal as data is this pair and not two fields. -/
 abbrev Alts := (k : GroundKind) × k.Carrier
 
-/-- One declared name, as admission reads it: one presence lattice element per side, and the
-    value the name is pinned to where its field is a literal.
+/-- One declared name, as admission reads it: one presence lattice element, and the value the
+    name is pinned to where its field is a literal.
 
     Each presence pair admits presence and absence, respectively. `alts` is what the literal
     readers read. -/
 structure NameSpec where
-  presenceV : Bool × Bool
-  presenceA : Bool × Bool
+  presence : Bool × Bool
   alts : Option Alts
 
 /-- A whole body, as admission reads it: the declared names, and the open block.

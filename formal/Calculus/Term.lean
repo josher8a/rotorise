@@ -165,25 +165,10 @@ inductive Term where
 inductive Body where
   | mk (fields : Finset Name) (f : {k // k ∈ fields} → ObjectSlot) (wild : Option (KeyPat × Term))
 
-/-- §4's slot: the two marks, and the stand-in that only a `req` slot can carry.
-
-    **The two marks are two independent bits, and the constructor owns one of them.** A slot
-    answers two questions: is the key present in the *value*, and may the attribute be absent on
-    the *wire*. `req` and `optional` answer the first. `ifMissing` answers the second, and it
-    rides on `req` because that is the only combination the other constructor cannot already
-    state: `optional` admits absence on both sides at once.
-
-    So `req t none` is a name that must be there, and `req t (some v)` is a name that may be
-    absent on the wire and is always present in the value, reading to `v` when the map omits it.
-    That second shape is what a separate `fallback` mark used to say.
-
-    **The stand-in cannot live in the value codec.** `Codec.p` takes an `Attr`, so a codec never
-    sees an absent attribute — absence is not an attribute. `Objects.lean`'s `FieldSem.fb` has
-    always carried the stand-in *beside* the codec for that reason, and this constructor is the
-    syntax that matches it. A reader that widens an attribute's *shape* is `legacy`, and it is a
-    different question with a different home. -/
+/-- §4's current-schema slot. A required name is required on both sides. A migration reader
+    belongs outside the object term at `legacy`, where structural algebra cannot propagate it. -/
 inductive ObjectSlot where
-  | req      (t : Term) (ifMissing : Option Value)
+  | req      (t : Term)
   | optional (t : Term)
 
 end
@@ -198,39 +183,19 @@ def ObjectSlot.isReq : ObjectSlot → Bool
   | .optional _ => false
   | _ => true
 
-/-- Whether a slot's name must be present on the read side. A stand-in reads when absent. -/
-def ObjectSlot.isReqA : ObjectSlot → Bool
-  | .req _ none => true
-  | _ => false
-
-/-- A slot's write-side presence lattice element. The bits admit presence and absence,
-    respectively. -/
-def ObjectSlot.presenceV (f : ObjectSlot) : Bool × Bool :=
+/-- A slot's presence lattice element. The bits admit presence and absence, respectively. -/
+def ObjectSlot.presence (f : ObjectSlot) : Bool × Bool :=
   match f with
-  | .req t _ => if t.isNever then (false, false) else (f.isReq, !f.isReq)
+  | .req t => if t.isNever then (false, false) else (f.isReq, !f.isReq)
   | .optional t => if t.isNever then (false, true) else (true, true)
 
-/-- A slot's read-side presence lattice element. The stand-in changes this side alone. -/
-def ObjectSlot.presenceA (f : ObjectSlot) : Bool × Bool :=
-  match f with
-  | .req t _ => (!t.isNever, !f.isReqA)
-  | .optional t => if t.isNever then (false, true) else (true, true)
+/-- A required slot is required on both sides of the current schema. -/
+theorem req_presence :
+    (.req .string : ObjectSlot).presence = (true, false) := by decide
 
-/-- A normal required slot must be present on the read side. -/
-theorem req_presenceA :
-    (.req .string none : ObjectSlot).presenceA = (true, false) := by decide
-
-/-- A normal required slot with a stand-in may be absent on the read side. -/
-theorem req_fallback_presenceA :
-    (.req .string (some (.str "d")) : ObjectSlot).presenceA = (true, true) := by decide
-
-/-- A bottom required slot has no read-side presence or absence. -/
-theorem req_never_presenceA :
-    (.req .never none : ObjectSlot).presenceA = (false, false) := by decide
-
-/-- A bottom required slot with a stand-in admits absence but refuses presence. -/
-theorem req_never_fallback_presenceA :
-    (.req .never (some (.str "d")) : ObjectSlot).presenceA = (false, true) := by decide
+/-- A bottom required slot admits neither presence nor absence. -/
+theorem req_never_presence :
+    (.req .never : ObjectSlot).presence = (false, false) := by decide
 
 /-! ## `array` and `tuple`, as builders over `list`
 
@@ -347,7 +312,7 @@ def Body.depth : Body → Nat
       max (fields.attach.sup fun k => ObjectSlot.depth (f k)) (Body.wildDepth wild) + 1
 
 def ObjectSlot.depth : ObjectSlot → Nat
-  | .req t _ | .optional t => Term.depth t + 1
+  | .req t | .optional t => Term.depth t + 1
 
 def Body.wildDepth : Option (KeyPat × Term) → Nat
   | none => 1
@@ -412,10 +377,9 @@ theorem Term.depth_lt_object (b : Body) (k : {k // k ∈ b.fields}) :
     A row that matched `.object (.mk fields f wild)` discharges these with `f k = .req t m` in
     hand: `(Body.mk fields f wild).at k` is `f k` by `rfl`, so `assumption` closes it.
 
-    There were three of these while `fallback` was a third mark. It is `req`'s `ifMissing` now,
     so the `req` lemma covers both and the third one is gone rather than renamed. -/
 theorem Term.depth_lt_object_req {b : Body} (k : {k // k ∈ b.fields}) {t : Term}
-    {m : Option Value} (h : b.at k = .req t m) : Term.depth t < Term.depth (.object b) := by
+    (h : b.at k = .req t) : Term.depth t < Term.depth (.object b) := by
   have h1 := Term.depth_lt_object b k
   rw [h] at h1; simp only [ObjectSlot.depth] at h1; omega
 
@@ -467,7 +431,6 @@ macro (name := termDepthWf) "term_depth_wf" : tactic => `(tactic|
        -- a declared field's term: the inequality `sizeOf` cannot give
        | exact Term.depth_lt_object_req _ (by assumption)
        | exact Term.depth_lt_object_opt _ (by assumption)
-       | exact Term.depth_lt_object_fb _ (by assumption)
        -- the rest policy's codec
        | exact Term.depth_lt_object_rest (by assumption)
        | exact Term.depth_lt_object_rest rfl

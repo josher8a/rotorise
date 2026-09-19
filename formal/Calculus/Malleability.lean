@@ -200,7 +200,7 @@ noncomputable def dropAll : Codec := objectCodec noEntries .drop
     are vacuous — no proof obligation is being dodged. -/
 theorem lawful_dropAll : Lawful dropAll :=
   lawful_objectCodec (fun k => (Finset.notMem_empty _ k.2).elim)
-    (fun k => (Finset.notMem_empty _ k.2).elim) (fun _ h => nomatch h)
+    (fun _ h => nomatch h)
 
 /-- No name survives the `drop` filter when nothing is declared. -/
 theorem keepB_noEntries (k : Name) : keepB .drop (noEntries (α := FieldSem)) k = false := by
@@ -222,12 +222,6 @@ theorem filter_keepB_noEntries (keys : Finset Name) :
     keys.filter (fun k => keepB .drop (noEntries (α := FieldSem)) k = true) = ∅ :=
   Finset.filter_false_of_mem fun k _ => by simp [keepB_noEntries k]
 
-/-- …and there are no fallback names to reinstate either, so the read side reconstructs
-    nothing at all. Proved by `rfl` rather than by `Finset.filter_empty`, which is classical
-    in this toolchain — the axiom guard sees this file. -/
-theorem fbNames_noEntries (keys : Finset Name) :
-    fbNames keys (noEntries (α := FieldSem)) = ∅ := rfl
-
 /-- The stored-side guard is vacuous: it quantifies over the declared names, and there are
     none. This is the same vacuity that makes `lawful_dropAll` free. -/
 theorem reqPresentB_noEntries (keys : Finset Name) :
@@ -235,9 +229,8 @@ theorem reqPresentB_noEntries (keys : Finset Name) :
   unfold reqPresentB
   exact decide_eq_true fun k => (Finset.notMem_empty _ k.2).elim
 
-/-- **Every `M` attribute reads to the empty map.** The guard is vacuous, the filter is empty,
-    and there are no fallback names to reinstate, so nothing whatever of the stored item
-    reaches the value. This one equation is the fibre. -/
+/-- **Every `M` attribute reads to the empty map.** The guard is vacuous and the filter is empty,
+    so nothing from the stored item reaches the value. This one equation is the fibre. -/
 theorem dropAll_p (keys : Finset Name) (f : {k // k ∈ keys} → Attr) :
     dropAll.p (.m keys f) = some (mapV.into noEntries) := by
   show (objRead noEntries (rcOf .drop) (keepB .drop noEntries) ⟨keys, f⟩).map mapV.into
@@ -252,8 +245,7 @@ theorem dropAll_p (keys : Finset Name) (f : {k // k ∈ keys} → Attr) :
   obtain ⟨d, hd⟩ := Option.isSome_iff_exists.mp (funImage_isSome fun k => (hemp k).elim)
   rw [hd]
   refine congrArg (fun m => some (mapV.into m)) (mapOf_of_keys_empty ?_ _)
-  rw [filter_keepB_noEntries, fbNames_noEntries]
-  exact Finset.empty_union ∅
+  rw [filter_keepB_noEntries]
 
 /-- **The headline: a `Lawful` shipped codec with no relational format at all.** Both
     attributes carry the key `"z"`, so `Agree.m`'s premise bites there, and they disagree.
