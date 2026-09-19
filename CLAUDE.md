@@ -11,6 +11,19 @@ The repository is two things at one time. `src/` is a published TypeScript libra
 vectors that tie the two sides together. A pass usually touches one side. A pass that
 touches the bridge touches both sides.
 
+## Method: epistemological structural realism
+
+Use epistemological structural realism as the default design method.
+Treat each representation as a hypothesis about the underlying structure.
+Discover the semantic invariants before you select a data structure, a constructor, or a proof method.
+Encode the structure in the domain model so an invalid state has no representation.
+Prefer an abstraction that deletes guards, premises, special cases, or repeated proofs.
+Require the abstraction to simplify a derivation or produce a valid generalization.
+Reject an abstraction that adds only reuse, indirection, or elegance.
+Measure the current behavior and probe the proposed structure before you replace a representation.
+Preserve the structural content when you replace its carrier.
+Read `memory/method-structural-realism.md` for the evidence and the established applications.
+
 ## Writing style: ASD-STE100
 
 Write all code, comments, docs, commit messages, and guides for an agent in Simplified Technical English.
