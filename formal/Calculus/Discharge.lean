@@ -120,11 +120,11 @@ theorem keysOk_of_names {fields : Finset Name} {ff : {k // k ∈ fields} → Obj
     (hsub : ∀ k ∈ keys, k ∈ fields)
     (hreq : ∀ k : {k // k ∈ fields},
       (match ff k with | ObjectSlot.optional _ => false | _ => true) = true → k.1 ∈ keys) :
-    keysOk ⟨fields, fun k =>
-      ⟨(match ff k with | ObjectSlot.optional _ => false | _ => true), altsOfField (ff k)⟩⟩
+    keysOk (Body.spec (.mk fields ff none))
       keys = true := by
-  simp only [keysOk, Bool.and_eq_true, decide_eq_true_eq]
-  exact ⟨hsub, hreq⟩
+  simp only [keysOk, Body.spec, Bool.and_eq_true, Option.map_none, Option.isSome_none,
+    Bool.false_or]
+  exact ⟨decide_eq_true hsub, decide_eq_true hreq⟩
 
 /-- Object-encode under a closed rest policy stamps name admission: every written name
     is declared and every non-`opt` name is written.
@@ -141,8 +141,7 @@ theorem keysOk_of_encode {fields : Finset Name} {ff : {k // k ∈ fields} → Ob
     (hfi : funImage (fun k : {k // k ∈ keys} =>
         (entryCodec ⟨fields, fun k => fieldSem (ff k)⟩ none k.1).bind
           (fun c => c.e (f k))) = some g) :
-    keysOk ⟨fields, fun k =>
-      ⟨(match ff k with | ObjectSlot.optional _ => false | _ => true), altsOfField (ff k)⟩⟩
+    keysOk (Body.spec (.mk fields ff none))
       keys = true := by
   refine keysOk_of_names (fun k hk => ?_) (fun k hb => ?_)
   · -- a name the entry function is defined at is declared: `rc?` is `none`, so
@@ -186,18 +185,21 @@ theorem literalsOk_of_encode {fields : Finset Name} {ff : {k // k ∈ fields} �
     (hfi : funImage (fun k : {k // k ∈ keys} =>
         (entryCodec ⟨fields, fun k => fieldSem (ff k)⟩ none k.1).bind
           (fun c => c.e (f k))) = some g) :
-    literalsOk ⟨fields, fun k =>
-      ⟨(match ff k with | ObjectSlot.optional _ => false | _ => true), altsOfField (ff k)⟩⟩
+    literalsOk (Body.spec (.mk fields ff none))
       keys f = true := by
   simp only [literalsOk, decide_eq_true_eq]
   intro k
   have hw := funImage_some hfi k
   cases hm : decide ((k : Name) ∈ fields) with
   | false =>
-      simp only [litOkV, MapOf.at, dif_neg (of_decide_eq_false hm)]
+      have hk : (k : Name) ∉ fields := of_decide_eq_false hm
+      show litOkV (Body.spec (.mk fields ff none)) k.1 (f k) = true
+      rw [litOkV, show (Body.spec (.mk fields ff none)).names.at k.1 = none from dif_neg hk]
+      rfl
   | true =>
       have hk : (k : Name) ∈ fields := of_decide_eq_true hm
-      simp only [litOkV, MapOf.at, dif_pos hk]
+      rw [litOkV, show (Body.spec (.mk fields ff none)).names.at k.1
+          = some ⟨_, altsOfField (ff ⟨k.1, hk⟩)⟩ from dif_pos hk]
       rw [show entryCodec (⟨fields, fun k => fieldSem (ff k)⟩ : MapOf FieldSem) none k.1
           = some (fieldSem (ff ⟨k.1, hk⟩)).codec from by
             simp only [entryCodec, MapOf.at, dif_pos hk]] at hw
@@ -209,18 +211,21 @@ theorem literalsOkA_of_encode {fields : Finset Name} {ff : {k // k ∈ fields} �
     (hfi : funImage (fun k : {k // k ∈ keys} =>
         (entryCodec ⟨fields, fun k => fieldSem (ff k)⟩ none k.1).bind
           (fun c => c.e (f k))) = some g) :
-    literalsOkA ⟨fields, fun k =>
-      ⟨(match ff k with | ObjectSlot.optional _ => false | _ => true), altsOfField (ff k)⟩⟩
+    literalsOkA (Body.spec (.mk fields ff none))
       keys g = true := by
   simp only [literalsOkA, decide_eq_true_eq]
   intro k
   have hw := funImage_some hfi k
   cases hm : decide ((k : Name) ∈ fields) with
   | false =>
-      simp only [litOkA, MapOf.at, dif_neg (of_decide_eq_false hm)]
+      have hk : (k : Name) ∉ fields := of_decide_eq_false hm
+      show litOkA (Body.spec (.mk fields ff none)) k.1 (g k) = true
+      rw [litOkA, show (Body.spec (.mk fields ff none)).names.at k.1 = none from dif_neg hk]
+      rfl
   | true =>
       have hk : (k : Name) ∈ fields := of_decide_eq_true hm
-      simp only [litOkA, MapOf.at, dif_pos hk]
+      rw [litOkA, show (Body.spec (.mk fields ff none)).names.at k.1
+          = some ⟨_, altsOfField (ff ⟨k.1, hk⟩)⟩ from dif_pos hk]
       rw [show entryCodec (⟨fields, fun k => fieldSem (ff k)⟩ : MapOf FieldSem) none k.1
           = some (fieldSem (ff ⟨k.1, hk⟩)).codec from by
             simp only [entryCodec, MapOf.at, dif_pos hk]] at hw
@@ -246,21 +251,17 @@ theorem optionSem_self_admit (t : Term)
     cases t
     case object body =>
       cases body with | mk fields ff wild =>
-      replace hs : some (⟨fields, fun k =>
-        ⟨(match ff k with | ObjectSlot.optional _ => false | _ => true),
-          altsOfField (ff k)⟩⟩ : MapOf NameSpec) =
-        some spec := hs
+      -- `hcl` says the body has no open block, so the payload is the closed one and every
+      -- lemma below reads the spec at `wild = none`
+      obtain rfl : wild = none := by
+        simpa using Term.isOpenObject_eq_false.mp hcl (.mk fields ff wild) rfl
+      replace hs : some (Body.spec (.mk fields ff none)) = some spec := hs
       cases hs
-      have hrc : rcOf (wildSem wild) = none := by
-        cases hw : wild with
-        | none => rfl
-        | some w =>
-          exact absurd (Term.isOpenObject_eq_false.mp hcl (.mk fields ff wild) rfl)
-            (by rw [Body.wild_mk, hw]; exact Option.some_ne_none w)
+      have hrc : rcOf (wildSem none) = none := rfl
       replace he : (objectCodecCore
           ⟨fields, fun k => fieldSem (ff k)⟩
-          (rcOf (wildSem wild))
-          (keepB (wildSem wild)
+          (rcOf (wildSem none))
+          (keepB (wildSem none)
             ⟨fields, fun k => fieldSem (ff k)⟩)).e v =
         some a := he
       obtain ⟨keys, fv, g, rfl, rfl, hval, hfi⟩ := objectCodecCore_e_inv he
@@ -900,3 +901,4 @@ theorem not_uAtCan_literal_held :
 
 
 end Calculus
+

@@ -31,16 +31,18 @@ it expanded to are **one term**, and the pair that compared them has nothing to 
 
 ### …and `union` is not a congruence for codec equivalence
 
-The fact the deleted pair recorded survives, and `union_not_congruent` carries it on a live
-pair: `refine t ⊤` and `t` have identical rows on both sides, hence — by
-`Adm_exact`/`AdmA_exact`, which take no hypothesis — identical domains on both sides. They
-are the same codec as far as anything observable through `e` and `p` can tell.
+The fact survives the deletion, and `union_not_congruent` carries it on a live pair:
+`refine t ⊤` and `t` have identical rows on both sides, hence — by `Adm_exact`/`AdmA_exact`,
+which take no hypothesis — identical domains on both sides. They are the same codec as far as
+anything observable through `e` and `p` can tell.
 
 `union` still distinguishes them. An option's admission is `admitOptV`, which matches the
-**constructor**: `specOf (.refine t ⊤) = none`, so the option is admitted *by attempt*, while
-`specOf (.record c)` is `some ⟨∅, _⟩` — a record is an object — so the option is admitted *by
-names*, and an empty name spec admits no map that carries a name. On `{"a" ↦ "x"}` the first
-option answers `true` and the second `false`, with equal domains behind both.
+**constructor**: `specOf (.refine t ⊤) = none`, so the option is admitted *by attempt* and runs
+`Adm`, while an object option is admitted *by structure*, which is `keysOk` and the literal
+alternatives and nothing else. Structure is the coarser of the two, and at a declared name
+pinned to no literal it asks only that the name is present. So on `{"A" ↦ true}` against
+`{A : req string}` the object option answers `true` and the refinement `false`, with equal
+domains behind both.
 
 This is not a defect in the rows and not one in `select`; it is the price of deciding an
 object option syntactically, which §5 argues for on other grounds ("an open object that must
@@ -54,6 +56,14 @@ to check the spec, not the domain. -/
 /-- A refinement by the trivially-true predicate: the same pair as the bare base. -/
 def qTop : Value → Bool := fun _ => true
 
+/-- One name, declared `req string` and pinned to no literal — so the structural test asks
+    only that the name is present. -/
+def tReqStr : Term := .object (.mk {"A"} (fun _ => .req .string none) none)
+
+/-- …and a map carrying that name at a boolean, which the structure admits and the row
+    refuses. -/
+def vBoolAtA : Value := .map {"A"} (fun _ => .bool true)
+
 /-- `array` **is** the degenerate `tuple`, and now on the nose: both builders write the
     same `list`, so the two rows are one term and the equation is `rfl`. It was an
     induction over the value's list while `allP` and `alignP` were two different rows. -/
@@ -62,31 +72,50 @@ theorem arrayRow (c : Term) (v : Value) : Adm (.array c) v = Adm (.tuple [] (som
 /-- The same on the read side, and for the same reason. -/
 theorem arrayRowA (c : Term) (a : Attr) : AdmA (.array c) a = AdmA (.tuple [] (some c)) a := rfl
 
-/-- **`union` is not a congruence for domain equality.** `refine t ⊤` and `t` write and read
-    the same values at every point: the row is `Adm t v && true`, so `Adm_exact` gives equal
-    domains with no hypothesis. As *options* they disagree at `{"a" ↦ "x"}`: the refinement is
-    attempted and admits, the record is asked for its names and refuses, because its spec is
-    empty and the map is not.
+/-! ### `union` and domain equality
 
-    So a normalization pass over `Term` may not drop a trivial `refine` inside a `union` — nor,
-    in general, replace any subterm by a domain-equal one there. See the section note above;
-    §5 gives the reason `ρ` goes unread and does not draw this corollary. -/
+**An object option is admitted by its structure, and the structure now includes the open
+block.** `keysOk` reads the block as well as the field table, so a body that claims a name
+through its block admits the maps carrying that name, and a body that declares no such name
+and has no block refuses them. The two answers come from one reading of one payload.
+
+This is where a non-congruence used to sit. `record c` and the object with no declared name
+and a rest codec were two spellings of one codec with two structural admissions, so a
+normalization pass that replaced either by the other changed what a `union` selected. They are
+one term now: `record` is a builder over `object` with a block, and the pair that recorded the
+difference has nothing left to compare. No other domain-equal pair with different structural
+admission is owed here: `array` and `tuple` merged into `list` the same way, and `arrayRow`
+above is that merge on the nose. -/
+
+/-- **`union` is not a congruence for domain equality**, and the witness is the
+    over-approximation rather than a missing name.
+
+    `refine t ⊤` and `t` admit the same values at every point, so their domains are equal with
+    no hypothesis. As *options* they still disagree, because `admitOptV` matches the
+    constructor: `specOf` is `none` at a `refine`, so that option is admitted by ATTEMPT and
+    runs `Adm`, while an object option is admitted by STRUCTURE, which is `keysOk` and the
+    literal alternatives and nothing else.
+
+    So the pair parts wherever structure is coarser than `Adm`, and at a declared name whose
+    term is not a literal it always is: `altsOfField` pins nothing there, so the structural
+    test asks only that the name is present. A boolean at a name declared `string` passes the
+    structure and fails the row.
+
+    **This is the same pair the deleted spelling recorded, with the polarity reversed.** It
+    used to part because an empty name spec refused a map carrying a name; the block is in the
+    spec now, so that half is gone, and what survives is the half that was always there. A
+    normalization pass over `Term` may still not drop a trivial `refine` inside a `union`, nor
+    replace any subterm there by a domain-equal one. -/
 theorem union_not_congruent :
-    admitOptV (specOf (.refine (.record .string) (.closure qTop)),
-        Adm (.refine (.record .string) (.closure qTop))) (.map {"a"} (fun _ => .str "x")) = true
-      ∧ admitOptV (specOf (.record .string), Adm (.record .string))
-          (.map {"a"} (fun _ => .str "x")) = false := by
-  refine ⟨?_, rfl⟩
-  show Adm (.refine (.record .string) (.closure qTop)) (.map {"a"} (fun _ => .str "x")) = true
-  have hv : valPresentT ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) {"a"} = true :=
-    decide_eq_true (fun k => absurd k.2 (Finset.notMem_empty k.1))
-  simp only [Term.record, Adm, Pred.eval, qTop, AdmBody, Bool.and_true, AdmWild, hv,
-    Bool.true_and, objAdmV]
-  refine decide_eq_true (fun k => ?_)
-  simp only [entryP, MapOf.at, dif_neg (Finset.notMem_empty k.1)]
+    admitOptV (specOf tReqStr, Adm tReqStr) vBoolAtA = true
+      ∧ admitOptV (specOf (.refine tReqStr (.closure qTop)),
+          Adm (.refine tReqStr (.closure qTop))) vBoolAtA = false := by
+  refine ⟨by decide, ?_⟩
+  show (Adm tReqStr vBoolAtA && true) = false
+  rfl
 
-/-- The two rows do agree, which is what makes the pair above a non-congruence rather than a
-    difference. -/
+/-- `refine t ⊤` and `t` admit the same values at every point: the row is `Adm t v && true`,
+    so the domains are equal with no hypothesis. -/
 theorem refine_top_row (t : Term) : Adm (.refine t (.closure qTop)) = Adm t := by
   funext v; simp [Adm, Pred.eval, qTop]
 

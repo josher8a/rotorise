@@ -21,24 +21,30 @@ structure OptionSem where
   c : Codec
 
 /-- Name admission (objects): every present name declared, every required name present.
-    The spec is a `MapOf NameSpec` — the declared names with what admission reads at each —
-    for the same reason the field table is: a list of pairs admits orderings and
-    repeats that a declaration does not have. -/
-def keysOk (spec : MapOf NameSpec) (keys : Finset Name) : Bool :=
-  decide (∀ k ∈ keys, k ∈ spec.1) &&
-  decide (∀ k : {k // k ∈ spec.1}, (spec.2 k).required = true → k.1 ∈ keys)
+    The spec is a `BodySpec` — the declared names with what admission reads at each, and the
+    open block — for the same reason the field table is a `MapOf`: a list of pairs admits
+    orderings and repeats that a declaration does not have.
+
+    **An open body declares every name.** Its block claims each name the field table does not,
+    so the present-name half asks nothing of an open body and the required-name half is
+    unchanged: a name the body requires must still be there. A closed body is the same test it
+    always was, `wild = none` making the first conjunct the plain containment. -/
+def keysOk (spec : BodySpec) (keys : Finset Name) : Bool :=
+  (spec.wild.isSome || decide (∀ k ∈ keys, k ∈ spec.names.1)) &&
+  decide (∀ k : {k // k ∈ spec.names.1}, (spec.names.2 k).required = true → k.1 ∈ keys)
 
 /-- One present name's content, on the write side: where the name's field is a literal, the
-    value is the one the literal names. A name the spec does not declare asks nothing, because
-    `keysOk` has already refused it. -/
+    value is the one the literal names. A name the spec does not declare is the open block's,
+    and reads that block's alternatives; under a closed body `keysOk` has already refused it,
+    so the answer there is never consulted. -/
 def altsOkV : Option Alts → Value → Bool
   | some ⟨g, x⟩, v => inL g x v
   | none, _ => true
 
-def litOkV (spec : MapOf NameSpec) (k : Name) (v : Value) : Bool :=
-  match spec.at k with
+def litOkV (spec : BodySpec) (k : Name) (v : Value) : Bool :=
+  match spec.names.at k with
   | some ns => altsOkV ns.alts v
-  | none => true
+  | none => altsOkV (spec.wild.getD none) v
 
 /-- …and on the read side, where the test is the literal codec's own. `inL` is a predicate on
     a `Value` and the stored side holds an `Attr`, so the read test asks the codec that decodes
@@ -47,10 +53,10 @@ def altsOkA : Option Alts → Attr → Bool
   | some ⟨g, x⟩, a => ((literalCodec g x).p a).isSome
   | none, _ => true
 
-def litOkA (spec : MapOf NameSpec) (k : Name) (a : Attr) : Bool :=
-  match spec.at k with
+def litOkA (spec : BodySpec) (k : Name) (a : Attr) : Bool :=
+  match spec.names.at k with
   | some ns => altsOkA ns.alts a
-  | none => true
+  | none => altsOkA (spec.wild.getD none) a
 
 /-- **Content admission (objects): every present name whose field is a literal carries one of
     that literal's alternatives.**
@@ -59,18 +65,57 @@ def litOkA (spec : MapOf NameSpec) (k : Name) (a : Attr) : Bool :=
     Present-only: the quantifier runs over the *map's* key set, so an absent name is `keysOk`'s
     business. `Finset.attach`'s decidable `∀ k ∈ keys` is what `decide` resolves through, the
     same route `valPresentT` takes and the one `Finset.toList` would spoil. -/
-def literalsOk (spec : MapOf NameSpec) (keys : Finset Name)
+def literalsOk (spec : BodySpec) (keys : Finset Name)
     (f : {k // k ∈ keys} → Value) : Bool :=
   decide (∀ k : {k // k ∈ keys}, litOkV spec k.1 (f k) = true)
 
 /-- …and its read-side twin. -/
-def literalsOkA (spec : MapOf NameSpec) (keys : Finset Name)
+def literalsOkA (spec : BodySpec) (keys : Finset Name)
     (g : {k // k ∈ keys} → Attr) : Bool :=
   decide (∀ k : {k // k ∈ keys}, litOkA spec k.1 (g k) = true)
 
+/-! ### What the open block does, pinned
+
+Four cases, stated on `keysOk` and `literalsOk` together because that pair **is** an object
+option's admission. They are `by decide`, so each is the kernel running the definitions rather
+than a claim about them. -/
+
+/-- No declared name: everything the body claims, it claims through its block. -/
+private def noNames : MapOf NameSpec := ⟨∅, fun k => absurd k.2 (Finset.notMem_empty k.1)⟩
+
+/-- An open block at a term that pins no literal, which is every non-literal term. -/
+private def openAny : BodySpec := ⟨noNames, some none⟩
+
+/-- An open block at the literal `"x"`. -/
+private def openLit : BodySpec := ⟨noNames, some (some ⟨.string, "x"⟩)⟩
+
+/-- No block at all. -/
+private def closedNone : BodySpec := ⟨noNames, none⟩
+
+/-- **An open block admits an undeclared name**, which is the whole of the change: the body
+    claims the name, so `keysOk` passes, and the block pins nothing, so the content is free. -/
+theorem open_block_admits_undeclared :
+    (keysOk openAny {"A"} && literalsOk openAny {"A"} (fun _ => .str "y")) = true := by decide
+
+/-- **A literal block refuses the wrong value at an undeclared name.** The block does real
+    work rather than only widening: an undeclared name is read by the block's alternatives the
+    way a declared name is read by its field's. -/
+theorem open_literal_block_refuses :
+    (keysOk openLit {"A"} && literalsOk openLit {"A"} (fun _ => .str "y")) = false := by decide
+
+/-- …and admits the right one. -/
+theorem open_literal_block_admits :
+    (keysOk openLit {"A"} && literalsOk openLit {"A"} (fun _ => .str "x")) = true := by decide
+
+/-- **A closed body is unchanged.** No block, so an undeclared name is refused on the first
+    conjunct exactly as it always was. -/
+theorem closed_refuses_undeclared :
+    (keysOk closedNone {"A"} && literalsOk closedNone {"A"} (fun _ => .str "y")) = false := by
+  decide
+
 /-- An object option decides by structure, never by being attempted: the names lie in the
     spec's interval, and every present literal field carries one of its alternatives. -/
-def OptionSem.byStructure (spec : MapOf NameSpec) (c : Codec) : OptionSem :=
+def OptionSem.byStructure (spec : BodySpec) (c : Codec) : OptionSem :=
   { admitA := fun a => match a with
       | .m keys g => keysOk spec keys && literalsOkA spec keys g
       | _ => false
@@ -96,7 +141,7 @@ def OptionSem.byAttempt (c : Codec) : OptionSem :=
     (OptionSem.byAttempt c).admitV v = (c.e v).isSome := rfl
 
 /-- The builder `denote` uses for a union option. -/
-def optionSemOf (c : Codec) : Option (MapOf NameSpec) → OptionSem
+def optionSemOf (c : Codec) : Option BodySpec → OptionSem
   | some spec => .byStructure spec c
   | none => .byAttempt c
 

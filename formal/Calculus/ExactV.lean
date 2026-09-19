@@ -92,7 +92,7 @@ def valPresentT (fields : Finset Name) (fld : {k // k ∈ fields} → ObjectSlot
     Taking `(spec, row)` rather than the term is what keeps the recursion structural, the same
     shape ~~selTagV~~ took; `specOf` is a function of the term, so the distinction is available
     here without consulting a codec. -/
-def admitOptV (o : Option (MapOf NameSpec) × VP) (v : Value) : Bool :=
+def admitOptV (o : Option (BodySpec) × VP) (v : Value) : Bool :=
   match o.1 with
   | some spec =>
       match v with
@@ -112,7 +112,7 @@ def admitOptV (o : Option (MapOf NameSpec) × VP) (v : Value) : Bool :=
     once `set` (a narrower constructor) stopped being loose, there was nothing left to
     loosen. The excuse was a fact about the state of the
     table, recorded as a fact about the row. -/
-def selOptV (os : List (Option (MapOf NameSpec) × VP)) (v : Value) : Bool :=
+def selOptV (os : List (Option (BodySpec) × VP)) (v : Value) : Bool :=
   match os.filter (fun o => admitOptV o v) with
   | [o] => o.2 v
   | _ => false
@@ -308,7 +308,7 @@ noncomputable def AdmOptT : Option Term → Option VP
 /-- Each `union` option paired with its name spec — `optionSems`' mirror, the way
     ~~AdmTagged~~ mirrored ~~denoteTagged~~. `specOf` is what tells an object option from the
     rest, and it is a function of the term. -/
-noncomputable def AdmSpecs : List Term → List (Option (MapOf NameSpec) × VP)
+noncomputable def AdmSpecs : List Term → List (Option (BodySpec) × VP)
   | [] => []
   | t :: ts => (specOf t, Adm t) :: AdmSpecs ts
 
