@@ -1305,12 +1305,16 @@ describe('DynamoDB Utils', () => {
         const table = tableEntry<Entity>()({
             PK: [
                 'id',
-                ['data', (d: { name: string }) => d.name, { name: 'fallback' }],
+                [
+                    'data',
+                    (d: { name: string }) => d.name,
+                    { name: 'withLegacyRead' },
+                ],
             ],
         })
 
         expect(table.key('PK', { id: 'x', data: undefined })).toBe(
-            'ID#x#DATA#fallback',
+            'ID#x#DATA#withLegacyRead',
         )
     })
 })
@@ -1342,6 +1346,13 @@ describe('the published surface', () => {
         // `readsBack` replaced `admitsAttribute`, both asking the codec rather than reading a term
         'accepts',
         'readsBack',
+        // deleted public names remain absent from the value and type surfaces
+        'Slot',
+        'fallback',
+        'legacy',
+        'drop',
+        'RestPolicy',
+        'RestDeclaration',
         // the five functions of a term the model computes, which `writes` and `decides` became
         'member',
         'occV',
@@ -1397,10 +1408,9 @@ describe('the published surface', () => {
             'custom',
             'decimal',
             'discriminatedUnion',
-            'fallback',
+            'withLegacyRead',
             'held',
             'lazy',
-            'legacy',
             'list',
             'nullValue',
             'nullable',

@@ -272,7 +272,12 @@ describe('an item codec types what it writes', () => {
      * which is what made the first attempt at this wrong.
      */
     it('admits the attributes a rest policy adds', () => {
-        const Open = object({ id: string }, opaque('lossy')).item
+        const Open = object(
+            {
+                id: string,
+            },
+            [string, optional(opaque('lossy'))],
+        ).item
         const written = Open.unsafeEncode({ id: 'p', extra: 'x' })
         expect(written.id.S).toBe('p')
         expect(written.extra).toEqual({ S: 'x' })

@@ -14,10 +14,9 @@ import {
     CodecError,
     custom,
     decimal,
-    fallback,
-    legacy,
     object,
     string,
+    withLegacyRead,
 } from '../../codec'
 import { checkMembersStable, checkRoundTrip } from '../../testing'
 
@@ -33,9 +32,15 @@ type Listing = {
 
 const Listing = object({
     id: string,
-    holding: fallback(string('STORE_V1', 'STORE_V2'), 'STORE_V1' as const),
-    vendorId: fallback(string('PICKUP', 'ACME'), 'PICKUP' as const),
-    rate: legacy({ current: decimal, older: string }),
+    holding: withLegacyRead({
+        current: string('STORE_V1', 'STORE_V2'),
+        whenMissing: 'STORE_V1' as const,
+    }),
+    vendorId: withLegacyRead({
+        current: string('PICKUP', 'ACME'),
+        whenMissing: 'PICKUP' as const,
+    }),
+    rate: withLegacyRead({ current: decimal, older: string }),
 }).item
 
 /**
@@ -43,10 +48,10 @@ const Listing = object({
  *
  * Two things at once. `older` asks for a reader and not a codec, because digits stored as `B` by a
  * migration nobody finished read back as a `Uint8Array` rather than the `string` `decimal` holds — and
- * converting that with `held` would mean writing an encode path `legacy` never calls, since it writes
+ * converting that with `held` would mean writing an encode path `withLegacyRead` never calls, since it writes
  * `current` and only `current`.
  *
- * And it takes *one* older encoding, so three encodings are two of these nested — `legacy` is itself
+ * And it takes *one* older encoding, so three encodings are two of these nested — `withLegacyRead` is itself
  * a reader. Not a union: a union needs its options to read back as different types so a value says
  * which it is, and every encoding of one attribute reads back as the same type by definition.
  */
@@ -54,9 +59,9 @@ describe('an older encoding held as something else', () => {
     const decoder = new TextDecoder()
     const Priced = object({
         id: string,
-        price: legacy({
+        price: withLegacyRead({
             current: decimal,
-            older: legacy({
+            older: withLegacyRead({
                 current: string,
                 older: {
                     decode: (at: AttributeValue) =>
@@ -147,7 +152,7 @@ describe('an attribute the row does not have', () => {
     /**
      * **A copy per read, so a mutable stand-in cannot be shared between entities.**
      *
-     * The declaration holds one value — that is what makes §3 `(fallback)`'s premise checkable
+     * The declaration holds one value — that is what makes §3 `(withLegacyRead)`'s premise checkable
      * where the declaration is, rather than on whichever read reaches it first — and each read
      * that needs one gets a `structuredClone`. Both halves matter and this asserts both: the
      * value is right, and it is not the *same* value twice.
@@ -158,7 +163,10 @@ describe('an attribute the row does not have', () => {
     it('is a copy per read, not one shared value', () => {
         const C = object({
             id: string,
-            tags: fallback({ ...listOfStrings }, []),
+            tags: withLegacyRead({
+                current: { ...listOfStrings },
+                whenMissing: [],
+            }),
         }).item
         const a = C.unsafeDecode({ id: { S: 'a' } })
         const b = C.unsafeDecode({ id: { S: 'b' } })
@@ -169,7 +177,10 @@ describe('an attribute the row does not have', () => {
 
     /** A primitive is handed over as it is: there is nothing to copy and nothing to leak. */
     it('does not copy a primitive stand-in', () => {
-        const C = object({ id: string, tier: fallback(string, 'FREE') }).item
+        const C = object({
+            id: string,
+            tier: withLegacyRead({ current: string, whenMissing: 'FREE' }),
+        }).item
         expect(C.unsafeDecode({ id: { S: 'a' } }).tier).toBe('FREE')
     })
 
@@ -191,7 +202,10 @@ describe('an attribute the row does not have', () => {
         const stand: Holder = { tag: 'x', run: () => 1 }
         expect(() => structuredClone(stand)).toThrow()
 
-        const C = object({ id: string, h: fallback(holding, stand) }).item
+        const C = object({
+            id: string,
+            h: withLegacyRead({ current: holding, whenMissing: stand }),
+        }).item
         const a = C.unsafeDecode({ id: { S: 'a' } })
         const b = C.unsafeDecode({ id: { S: 'b' } })
         expect(a.h).toBe(b.h)
@@ -241,8 +255,8 @@ describe('an attribute written in an older encoding', () => {
 
     it('cannot be got backwards, because the roles are named', () => {
         // the whole point of the shape: `current` is the encoding the entity is in now
-        const toNumber = legacy({ current: decimal, older: string })
-        const toString = legacy({ current: string, older: decimal })
+        const toNumber = withLegacyRead({ current: decimal, older: string })
+        const toString = withLegacyRead({ current: string, older: decimal })
 
         expect(toNumber.unsafeDecode({ S: '1.5' })).toBe('1.5')
         expect(toNumber.unsafeEncode('1.5')).toEqual({ N: '1.5' })

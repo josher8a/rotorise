@@ -101,7 +101,7 @@ export const rendered = (value: unknown): string => {
  *
  * The five ground `encode`s all refuse the same way and want to say the same thing about what they
  * were handed. `shapeOf` answers `undefined` for what it cannot place — a `bigint`, a `Map`, a
- * function — and `typeof` is the honest fallback there rather than a guess.
+ * function — and `typeof` is the honest withLegacyRead there rather than a guess.
  */
 export const describeShape = (value: unknown): string =>
     `${shapeOf(value) ?? typeof value} \`${rendered(value)}\``
@@ -181,7 +181,7 @@ export const namedLiteral = (one: unknown): string =>
 /**
  * Whether this stand-in has to be *copied* on each read that uses it, decided once.
  *
- * The declaration holds **one** value — that is what makes §3 `(fallback)`'s premise checkable
+ * The declaration holds **one** value — that is what makes §3 `(withLegacyRead)`'s premise checkable
  * where the declaration is — so handing that object out is handing every row the same object, and
  * one caller's `.push` becomes every other caller's default. `structuredClone` is the platform's,
  * so a copy costs no dependency.

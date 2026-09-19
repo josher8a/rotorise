@@ -16,14 +16,14 @@
 import { attest } from '@ark/attest'
 import { describe, expect, it } from 'vitest'
 import type { ConstantAttributes } from '../../../Rotorise'
-import type { AnyDeclaration, ConstantCodec } from '../../codec'
+import type { ConstantCodec, ObjectSlot } from '../../codec'
 import {
     constantOf,
     decimal,
-    fallback,
     optional,
     refine,
     string,
+    withLegacyRead,
 } from '../../codec'
 
 /**
@@ -36,7 +36,7 @@ import {
  * Wrapped in tuples so that `never` is expressible: `attest`'s second parameter defaults to `never`
  * and it refuses that as an explicit argument, since it cannot tell it from the default.
  */
-const decided = (spec: Record<string, AnyDeclaration>): readonly string[] =>
+const decided = (spec: Record<string, ObjectSlot>): readonly string[] =>
     Object.entries(spec)
         .filter(([, declared]) => constantOf(declared) !== undefined)
         .map(([name]) => name)
@@ -113,9 +113,12 @@ describe('the type and the function agree on what is decided', () => {
      * the caller was asked for a component the runtime could have supplied — and it predated the
      * field types becoming declarations rather than being caused by it.
      */
-    it('on a fallback over a literal, which both call decided', () => {
+    it('on a withLegacyRead over a literal, which both call decided', () => {
         const stood = {
-            TAG: fallback(string('PET'), 'PET' as const),
+            TAG: withLegacyRead({
+                current: string('PET'),
+                whenMissing: 'PET' as const,
+            }),
             id: string,
         }
         attest<[ConstantAttributes<typeof stood>], ['TAG']>()

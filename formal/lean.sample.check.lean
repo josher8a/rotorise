@@ -160,21 +160,21 @@ theorem record_empty :
 /-- `object_two_fields` -/
 theorem object_two_fields :
     check 2
-      ((denote (Term.object (Body.mk {"a", "b"} (fun k => if k.1 = "a" then Field.req (Term.string) else Field.req (Term.boolean)) Rest.drop))).e
+      ((denote (Term.object (Body.mk {"a", "b"} (fun k => if k.1 = "a" then Field.req (Term.string) else Field.req (Term.boolean)) Rest.refuse))).e
         (Value.map {"a", "b"} (fun k => if k.1 = "a" then Value.str "x" else Value.bool true)))
       (some (Attr.m {"a", "b"} (fun k => if k.1 = "a" then Attr.s "x" else Attr.bool true))) = .same := rfl
 
 /-- `object_optional_absent` -/
 theorem object_optional_absent :
     check 2
-      ((denote (Term.object (Body.mk {"a", "b"} (fun k => if k.1 = "a" then Field.req (Term.string) else Field.optional (Term.boolean)) Rest.drop))).e
+      ((denote (Term.object (Body.mk {"a", "b"} (fun k => if k.1 = "a" then Field.req (Term.string) else Field.optional (Term.boolean)) Rest.refuse))).e
         (Value.map {"a"} (fun k => Value.str "x")))
       (some (Attr.m {"a"} (fun k => Attr.s "x"))) = .same := rfl
 
 /-- `object_fallback_present` -/
 theorem object_fallback_present :
     check 2
-      ((denote (Term.object (Body.mk {"a"} (fun k => Field.fallback (Term.string) (Value.str "stand-in")) Rest.drop))).e
+      ((denote (Term.object (Body.mk {"a"} (fun k => Field.fallback (Term.string) (Value.str "stand-in")) Rest.refuse))).e
         (Value.map {"a"} (fun k => Value.str "x")))
       (some (Attr.m {"a"} (fun k => Attr.s "x"))) = .same := rfl
 
@@ -188,7 +188,7 @@ theorem object_open :
 /-- `object_nested` -/
 theorem object_nested :
     check 3
-      ((denote (Term.object (Body.mk {"a"} (fun k => Field.req (Term.object (Body.mk {"b"} (fun k => Field.req (Term.string)) Rest.drop))) Rest.drop))).e
+      ((denote (Term.object (Body.mk {"a"} (fun k => Field.req (Term.object (Body.mk {"b"} (fun k => Field.req (Term.string)) Rest.refuse))) Rest.refuse))).e
         (Value.map {"a"} (fun k => Value.map {"b"} (fun k => Value.str "x"))))
       (some (Attr.m {"a"} (fun k => Attr.m {"b"} (fun k => Attr.s "x")))) = .same := rfl
 
@@ -244,7 +244,7 @@ theorem discriminated_union :
 /-- `product_two_objects` -/
 theorem product_two_objects :
     check 2
-      ((denote (Term.object (Body.mk {"a", "n"} (fun k => if k.1 = "a" then Field.req (Term.string) else Field.req (Term.boolean)) Rest.drop))).e
+      ((denote (Term.object (Body.mk {"a", "n"} (fun k => if k.1 = "a" then Field.req (Term.string) else Field.req (Term.boolean)) Rest.refuse))).e
         (Value.map {"a", "n"} (fun k => if k.1 = "a" then Value.str "x" else Value.bool true)))
       (some (Attr.m {"a", "n"} (fun k => if k.1 = "a" then Attr.s "x" else Attr.bool true))) = .same := rfl
 
@@ -258,7 +258,7 @@ theorem product_union_object :
 /-- `product_three` -/
 theorem product_three :
     check 2
-      ((denote (Term.object (Body.mk {"p", "q", "r"} (fun k => if k.1 = "p" then Field.req (Term.string) else if k.1 = "q" then Field.req (Term.boolean) else Field.req (Term.decimal)) Rest.drop))).e
+      ((denote (Term.object (Body.mk {"p", "q", "r"} (fun k => if k.1 = "p" then Field.req (Term.string) else if k.1 = "q" then Field.req (Term.boolean) else Field.req (Term.decimal)) Rest.refuse))).e
         (Value.map {"p", "q", "r"} (fun k => if k.1 = "p" then Value.str "x" else if k.1 = "q" then Value.bool true else Value.str "1")))
       (some (Attr.m {"p", "q", "r"} (fun k => if k.1 = "p" then Attr.s "x" else if k.1 = "q" then Attr.bool true else Attr.n (WFNumeral.of "1")))) = .same := rfl
 
@@ -320,7 +320,7 @@ theorem array_of_string__reads :
 /-- `object_two_fields` — read back through the term that wrote it -/
 theorem object_two_fields__reads :
     vcheck 2
-      ((denote (Term.object (Body.mk {"a", "b"} (fun k => if k.1 = "a" then Field.req (Term.string) else Field.req (Term.boolean)) Rest.drop))).p
+      ((denote (Term.object (Body.mk {"a", "b"} (fun k => if k.1 = "a" then Field.req (Term.string) else Field.req (Term.boolean)) Rest.refuse))).p
         (Attr.m {"a", "b"} (fun k => if k.1 = "a" then Attr.s "x" else Attr.bool true)))
       (some (Value.map {"a", "b"} (fun k => if k.1 = "a" then Value.str "x" else Value.bool true))) = .same := rfl
 
@@ -435,17 +435,17 @@ theorem record_empty__refuses__scalar_string :
 
 /-- `object_two_fields__refuses__scalar_string` — refused on both sides -/
 theorem object_two_fields__refuses__scalar_string :
-    (denote (Term.object (Body.mk {"a", "b"} (fun k => if k.1 = "a" then Field.req (Term.string) else Field.req (Term.boolean)) Rest.drop))).e
+    (denote (Term.object (Body.mk {"a", "b"} (fun k => if k.1 = "a" then Field.req (Term.string) else Field.req (Term.boolean)) Rest.refuse))).e
       (Value.str "hello") = none := rfl
 
 /-- `object_optional_absent__refuses__scalar_string` — refused on both sides -/
 theorem object_optional_absent__refuses__scalar_string :
-    (denote (Term.object (Body.mk {"a", "b"} (fun k => if k.1 = "a" then Field.req (Term.string) else Field.optional (Term.boolean)) Rest.drop))).e
+    (denote (Term.object (Body.mk {"a", "b"} (fun k => if k.1 = "a" then Field.req (Term.string) else Field.optional (Term.boolean)) Rest.refuse))).e
       (Value.str "hello") = none := rfl
 
 /-- `object_fallback_present__refuses__scalar_string` — refused on both sides -/
 theorem object_fallback_present__refuses__scalar_string :
-    (denote (Term.object (Body.mk {"a"} (fun k => Field.fallback (Term.string) (Value.str "stand-in")) Rest.drop))).e
+    (denote (Term.object (Body.mk {"a"} (fun k => Field.fallback (Term.string) (Value.str "stand-in")) Rest.refuse))).e
       (Value.str "hello") = none := rfl
 
 /-- `object_open__refuses__scalar_string` — refused on both sides -/
@@ -455,7 +455,7 @@ theorem object_open__refuses__scalar_string :
 
 /-- `object_nested__refuses__scalar_string` — refused on both sides -/
 theorem object_nested__refuses__scalar_string :
-    (denote (Term.object (Body.mk {"a"} (fun k => Field.req (Term.object (Body.mk {"b"} (fun k => Field.req (Term.string)) Rest.drop))) Rest.drop))).e
+    (denote (Term.object (Body.mk {"a"} (fun k => Field.req (Term.object (Body.mk {"b"} (fun k => Field.req (Term.string)) Rest.refuse))) Rest.refuse))).e
       (Value.str "hello") = none := rfl
 
 /-- `record_of_restricted_set__refuses__scalar_string` — refused on both sides -/
@@ -495,7 +495,7 @@ theorem discriminated_union__refuses__scalar_string :
 
 /-- `product_two_objects__refuses__scalar_string` — refused on both sides -/
 theorem product_two_objects__refuses__scalar_string :
-    (denote (Term.object (Body.mk {"a", "n"} (fun k => if k.1 = "a" then Field.req (Term.string) else Field.req (Term.boolean)) Rest.drop))).e
+    (denote (Term.object (Body.mk {"a", "n"} (fun k => if k.1 = "a" then Field.req (Term.string) else Field.req (Term.boolean)) Rest.refuse))).e
       (Value.str "hello") = none := rfl
 
 /-- `product_union_object__refuses__scalar_string` — refused on both sides -/
@@ -505,7 +505,7 @@ theorem product_union_object__refuses__scalar_string :
 
 /-- `product_three__refuses__scalar_string` — refused on both sides -/
 theorem product_three__refuses__scalar_string :
-    (denote (Term.object (Body.mk {"p", "q", "r"} (fun k => if k.1 = "p" then Field.req (Term.string) else if k.1 = "q" then Field.req (Term.boolean) else Field.req (Term.decimal)) Rest.drop))).e
+    (denote (Term.object (Body.mk {"p", "q", "r"} (fun k => if k.1 = "p" then Field.req (Term.string) else if k.1 = "q" then Field.req (Term.boolean) else Field.req (Term.decimal)) Rest.refuse))).e
       (Value.str "hello") = none := rfl
 
 /-- `dunion_two_keys__refuses__scalar_string` — refused on both sides -/

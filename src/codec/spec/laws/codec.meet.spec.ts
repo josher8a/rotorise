@@ -11,7 +11,6 @@ import {
     binary,
     boolean,
     decimal,
-    fallback,
     never,
     nullValue,
     number,
@@ -21,6 +20,7 @@ import {
     record,
     string,
     union,
+    withLegacyRead,
 } from '../../codec'
 import type { Body, Field, Term } from '../../term'
 import { meetTerms } from '../../term'
@@ -108,8 +108,8 @@ describe('a factor whose admission is a function states no meet', () => {
 describe('two object bodies meet over the names both declare', () => {
     it('intersects the declared names and unions the required ones', () => {
         const met = meetTerms(
-            termOf(object({ a: string, b: optional(boolean) }, 'refuse')),
-            termOf(object({ a: string('A'), c: optional(number) }, 'refuse')),
+            termOf(object({ a: string, b: optional(boolean) })),
+            termOf(object({ a: string('A'), c: optional(number) })),
         )
         expect(met).toEqual({
             kind: 'object',
@@ -127,8 +127,8 @@ describe('two object bodies meet over the names both declare', () => {
     it('is the bottom where one factor requires a name the other refuses', () => {
         expect(
             meetTerms(
-                termOf(object({ a: string }, 'refuse')),
-                termOf(object({ b: string }, 'refuse')),
+                termOf(object({ a: string })),
+                termOf(object({ b: string })),
             ),
         ).toEqual(bottom)
     })
@@ -138,44 +138,72 @@ describe('two object bodies meet over the names both declare', () => {
      * set bounds the read from below and the write from above. The two halves agree only where the
      * `drop` factor's declared set contains the other's.
      */
-    it('refuses a drop factor that does not contain the other declared set', () => {
+    it('meets strict objects with incompatible required keys at the bottom', () => {
         expect(
             meetTerms(
-                termOf(object({ a: string }, 'drop')),
-                termOf(object({ a: string, b: boolean }, 'refuse')),
+                termOf(object({ a: string })),
+                termOf(object({ a: string, b: boolean })),
             ),
-        ).toBeUndefined()
+        ).toEqual(bottom)
     })
 
     /**
-     * `optional` and `fallback` agree on presence and part on what they read at an absent name:
+     * `optional` and `withLegacyRead` agree on presence and part on what they read at an absent name:
      * one reads a map without it, the other a map carrying the stand-in.
      */
-    it('refuses an optional field against a fallback field', () => {
+    it('refuses an optional field against a required slot with a stand-in', () => {
         expect(
             meetTerms(
-                termOf(object({ a: optional(string) }, 'refuse')),
-                termOf(object({ a: fallback(string, 'x') }, 'refuse')),
+                termOf(object({ a: optional(string) })),
+                termOf(
+                    object({
+                        a: withLegacyRead({
+                            current: string,
+                            whenMissing: 'x',
+                        }),
+                    }),
+                ),
             ),
         ).toBeUndefined()
     })
 
     /** Two stand-ins the model has no equality for. `docs/defects.md` carries the pair. */
-    it('refuses two fallback fields at one name', () => {
+    it('refuses two required slots with stand-ins at one name', () => {
         expect(
             meetTerms(
-                termOf(object({ a: fallback(string, 'x') }, 'refuse')),
-                termOf(object({ a: fallback(string, 'x') }, 'refuse')),
+                termOf(
+                    object({
+                        a: withLegacyRead({
+                            current: string,
+                            whenMissing: 'x',
+                        }),
+                    }),
+                ),
+                termOf(
+                    object({
+                        a: withLegacyRead({
+                            current: string,
+                            whenMissing: 'x',
+                        }),
+                    }),
+                ),
             ),
         ).toBeUndefined()
     })
 
-    /** `req` against `fallback` is `req`, and the stand-in goes: a read never finds the name absent. */
+    /** `req` against `withLegacyRead` is `req`, and the stand-in goes: a read never finds the name absent. */
     it('takes the stronger mark and drops a stand-in req makes unreachable', () => {
         expect(
             meetTerms(
-                termOf(object({ a: string }, 'refuse')),
-                termOf(object({ a: fallback(string, 'x') }, 'refuse')),
+                termOf(object({ a: string })),
+                termOf(
+                    object({
+                        a: withLegacyRead({
+                            current: string,
+                            whenMissing: 'x',
+                        }),
+                    }),
+                ),
             ),
         ).toEqual({
             kind: 'object',
@@ -189,10 +217,7 @@ describe('two object bodies meet over the names both declare', () => {
     /** Only a `codec` rest reads an undeclared name the way a record does. */
     it('refuses an object against a record unless the rest is a codec', () => {
         expect(
-            meetTerms(
-                termOf(object({ a: string }, 'refuse')),
-                termOf(record(string)),
-            ),
+            meetTerms(termOf(object({ a: string })), termOf(record(string))),
         ).toBeUndefined()
     })
 
@@ -202,7 +227,7 @@ describe('two object bodies meet over the names both declare', () => {
      * orders answer the same object wherever no refinement is in play.
      */
     it('answers the same object whichever operand a plain pair has on the left', () => {
-        const open = termOf(object({ a: string }, string))
+        const open = termOf(object({ a: string }, [string, optional(string)]))
         const map = termOf(record(string))
         const expected = {
             kind: 'object',
@@ -423,7 +448,10 @@ describe('two list shapes meet by their lengths', () => {
 })
 
 describe('the worked pairs the model pins', () => {
-    const body = (fields: Record<string, Field>, rest: Body['rest']): Term => ({
+    const body = (
+        fields: Record<string, Field>,
+        rest: Body['rest'] = 'refuse',
+    ): Term => ({
         kind: 'object',
         body: { fields, rest },
     })
@@ -493,24 +521,24 @@ describe('the worked pairs the model pins', () => {
     })
 
     /**
-     * An unshared `fallback` name refuses, where an unshared `req` name is the bottom. The write
+     * An unshared `withLegacyRead` name refuses, where an unshared `req` name is the bottom. The write
      * side must write the name and the partner refuses it, so nothing is written; the read side
      * needs no name at all and both factors read the map that omits it.
      */
-    it('parts an unshared fallback name from an unshared required one', () => {
+    it('parts an unshared withLegacyRead name from an unshared required one', () => {
         expect(
             meetTerms(
                 body(
                     { x: { mark: 'fallback', t: termOf(string), v: 'd' } },
                     'refuse',
                 ),
-                body({}, 'refuse'),
+                body({}),
             ),
         ).toBeUndefined()
         expect(
             meetTerms(
-                body({ x: { mark: 'req', t: termOf(string) } }, 'refuse'),
-                body({}, 'refuse'),
+                body({ x: { mark: 'req', t: termOf(string) } }),
+                body({}),
             ),
         ).toEqual(bottom)
     })
@@ -520,20 +548,20 @@ describe('the worked pairs the model pins', () => {
      * declare, and the intersection, declaring nothing, reads every map. No object states both
      * halves.
      */
-    it('refuses two drop bodies whose declared sets do not contain each other', () => {
+    it('keeps the empty strict object where optional keys do not overlap', () => {
         expect(
             meetTerms(
-                body({ x: { mark: 'optional', t: termOf(string) } }, 'drop'),
-                body({ y: { mark: 'optional', t: termOf(string) } }, 'drop'),
+                body({ x: { mark: 'optional', t: termOf(string) } }),
+                body({ y: { mark: 'optional', t: termOf(string) } }),
             ),
-        ).toBeUndefined()
-        // …and the mirror, where the `drop` factor skips `y` and the `refuse` factor reads it
+        ).toEqual(body({}))
+        // The empty strict body admits the same map as the optional-key body.
         expect(
             meetTerms(
-                body({}, 'drop'),
-                body({ y: { mark: 'optional', t: termOf(string) } }, 'refuse'),
+                body({}),
+                body({ y: { mark: 'optional', t: termOf(string) } }),
             ),
-        ).toBeUndefined()
+        ).toEqual(body({}))
     })
 
     /**
@@ -543,9 +571,9 @@ describe('the worked pairs the model pins', () => {
     it('keeps the empty intersection as an object and not as the bottom', () => {
         expect(
             meetTerms(
-                body({ x: { mark: 'optional', t: termOf(string) } }, 'refuse'),
-                body({ y: { mark: 'optional', t: termOf(string) } }, 'refuse'),
+                body({ x: { mark: 'optional', t: termOf(string) } }),
+                body({ y: { mark: 'optional', t: termOf(string) } }),
             ),
-        ).toEqual(body({}, 'refuse'))
+        ).toEqual(body({}))
     })
 })

@@ -7,12 +7,11 @@ import type {
 import { carrying } from './codec/attribute'
 import type {
     AnyCodec,
-    AnyDeclaration,
     Encoded,
-    EncodedBy,
     IsUnion,
     ItemCodec,
     ItemSpec,
+    ObjectSlot,
     PathOf,
     Result,
     TaggedCodec,
@@ -672,7 +671,7 @@ type TableEntryDefinition<
     Schema,
     Separator extends string,
     CodecSpec = undefined,
-    CodecRest = 'drop',
+    CodecRest = 'refuse',
 > = {
     /**
      * Converts a raw entity into a complete table entry with all keys computed.
@@ -924,7 +923,9 @@ type NamedKey<
 type EncodedAttributes<CodecSpec, CodecRest> =
     IsVariantSpec<CodecSpec> extends true
         ? { [V in keyof CodecSpec]: Encoded<CodecSpec[V]> }[keyof CodecSpec]
-        : EncodedBy<CodecSpec, CodecRest>
+        : CodecRest extends AnyCodec
+          ? Encoded<CodecSpec> & { readonly [name: string]: AttributeValue }
+          : Encoded<CodecSpec>
 
 /**
  * Marks a table key.
@@ -1207,7 +1208,7 @@ const callable = <T>(
 /** An erased item codec — what {@link isItemCodec} narrows to, and all this layer uses. */
 type ItemCodecRuntime = ItemCodec<
     Record<string, unknown>,
-    Record<string, AnyDeclaration>
+    Record<string, ObjectSlot>
 >
 
 /**
@@ -1387,7 +1388,7 @@ export const tableEntry =
             | ItemSpec<Entity>
             | Record<string, unknown>
             | undefined = undefined,
-        const CodecRest = 'drop',
+        const CodecRest = 'refuse',
         Separator extends string = '#',
     >(
         schema: Schema & ValidateSchema<Schema>,
@@ -1715,7 +1716,6 @@ export * from './codec/attribute'
 export type {
     AllObjects,
     AnyCodec,
-    AnyDeclaration,
     AnyObjectCodec,
     AnySpread,
     AttributeCodec,
@@ -1726,7 +1726,6 @@ export type {
     ConstantCodec,
     DecimalCodec,
     Decoded,
-    DerivedItem,
     DerivedUnion,
     DerivedVariants,
     DiscriminatedCodec,
@@ -1734,10 +1733,8 @@ export type {
     DissectedCodec,
     Dissection,
     Encoded,
-    EncodedBy,
     EncodedPatch,
     EncodedVariants,
-    FallbackCodec,
     IsUnion,
     ItemCodec,
     ItemSpec,
@@ -1751,7 +1748,9 @@ export type {
     Nestable,
     NumberCodec,
     ObjectCodec,
+    ObjectEntry,
     ObjectOf,
+    ObjectSlot,
     ObjectSpecsOf,
     OptionalCodec,
     PathOf,
@@ -1759,15 +1758,13 @@ export type {
     Reader,
     Refined,
     Refinement,
-    RestDeclaration,
-    RestPolicy,
     Result,
     Rng,
     SetBase,
     SetCapable,
     SetOf,
+    SetSlot,
     Shape,
-    Slot,
     SpecsOf,
     SpreadCodec,
     SpreadOnce,
@@ -1782,6 +1779,7 @@ export type {
     ValidateOptions,
     ValidateVariants,
     VariantOf,
+    WithLegacyReadOptions,
     Writes,
     WrittenBy,
 } from './codec/codec'
@@ -1797,10 +1795,8 @@ export {
     every,
     everyEntry,
     failed,
-    fallback,
     held,
     lazy,
-    legacy,
     list,
     mdunion,
     never,
@@ -1819,6 +1815,7 @@ export {
     string,
     undefinable,
     union,
+    withLegacyRead,
 } from './codec/codec'
 export type { Field, Term } from './codec/term'
 // `shapeOf` classifies a *value* and reaches no term, so it moved to `value.ts` with the twelve

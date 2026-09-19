@@ -53,7 +53,6 @@ import type {
     AttributeCodec,
     ItemCodec,
     LiteralValue,
-    RestPolicy,
     Rng,
     SetBase,
 } from './codec'
@@ -491,7 +490,7 @@ const mutations = (item: AttributeMap): readonly Mutation[] => {
                 })
             }
         }
-        // and the attribute missing altogether, which `optional` and `fallback` must survive
+        // and the attribute missing altogether, which `optional` and `withLegacyRead` must survive
         const { [key]: _dropped, ...without } = item
         out.push({ what: `'${key}' absent`, item: without })
     }
@@ -621,23 +620,18 @@ export const checkEncodePaths = <T, Spec>(
  */
 export const checkMembersStable = <T>(
     subject: Pick<Checkable<T>, 'unsafeEncode' | 'unsafeDecode'> & {
-        rest?: RestPolicy<unknown>
+        rest?: 'refuse' | AnyCodec
     },
     items: readonly AttributeMap[],
     equals: (a: unknown, b: unknown) => boolean = structuralEquals,
 ): void => {
-    // under `'drop'` an undeclared attribute is *meant* to be absent from a re-encode, and saying so
-    // here is the difference between a policy and an unexplained gap in the law
-    const drops = (subject.rest ?? 'drop') === 'drop'
-
     for (const [i, item] of items.entries()) {
         const rewritten = subject.unsafeEncode(subject.unsafeDecode(item))
         for (const [name, attribute] of Object.entries(item)) {
             const after = rewritten[name]
             if (after === undefined) {
-                if (drops) continue
                 throw new CodecError(
-                    `'${name}' was dropped on a read-modify-write at item ${i}, and this codec does not drop`,
+                    `'${name}' is absent after a read-modify-write at item ${i}`,
                 )
             }
             const before = membersOf(attribute)

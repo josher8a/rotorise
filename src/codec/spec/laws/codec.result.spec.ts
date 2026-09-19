@@ -19,7 +19,6 @@ import {
     custom,
     discriminatedUnion,
     lazy,
-    legacy,
     list,
     nullable,
     object,
@@ -29,6 +28,7 @@ import {
     refine,
     string,
     union,
+    withLegacyRead,
 } from '../../codec'
 
 type Pet = { TAG: 'PET'; id: string; name: string }
@@ -193,9 +193,9 @@ describe('the safe pair never throws, whatever is thrown at it', () => {
             () => refine(string, (v): v is 't' => v === 't').decode({ N: '1' }),
         ],
         [
-            'legacy',
+            'withLegacyRead',
             () =>
-                legacy({ current: string, older: string }).decode({
+                withLegacyRead({ current: string, older: string }).decode({
                     BOOL: true,
                 }),
         ],

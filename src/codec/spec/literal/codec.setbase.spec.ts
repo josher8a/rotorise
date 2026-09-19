@@ -8,7 +8,7 @@
  * platform's numbers means; `decimal.set()` is the host-independent one. They write the same member
  * — `NS` — and hold different things, which is exactly why `formal/Calculus/Domain.lean` indexes a
  * set by a *base* rather than by a `Member`: `Member` cannot tell them apart and the index can.
- * Neither is a legacy path.
+ * Neither is a legacy encoding path.
  *
  * ── the free `set(...)` is gone, and the branding objection was answered rather than overruled ──
  *
@@ -31,12 +31,12 @@ import {
     CodecError,
     decimal,
     held,
-    legacy,
     number,
     object,
     refine,
     string,
     union,
+    withLegacyRead,
 } from '../../codec'
 import { checkRoundTrip } from '../../testing'
 
@@ -238,7 +238,7 @@ describe('branding survives, and it survives through the capability', () => {
  * §3 `(set)`'s premise used to be `setMember μ = some μS`, read off an arbitrary element term, and
  * `setMember` is partial — so the constructor accepted elements the rule then refused.
  * `Term.set`'s `SetBase` index replaced the element term, making the
- * refusal a type error, and states what that gives up: a set of a `held` and of a `legacy`.
+ * refusal a type error, and states what that gives up: a set of a `held` and of a `withLegacyRead`.
  *
  * This library had the same hole and it was reachable. The member reader read *through* an adapter
  * — `held` writes where its inner term does — so a set of `held(string, …)` was accepted, and its two
@@ -257,7 +257,7 @@ describe('what a set cannot be built from', () => {
     })
 
     /**
-     * **The two the type cannot catch.** `held` and `legacy` both write `S`, so `SetCapable`'s gate
+     * **The two the type cannot catch.** `held` and `withLegacyRead` both write `S`, so `SetCapable`'s gate
      * — which sees the attribute and never the base — hands them a `.set()`. That is the gap the
      * runtime refusal exists to close, and the reason it must stay: closing it in the type needs a
      * codec type generic in its definition, measured at 481 of 968 signatures and rejected.
@@ -274,7 +274,7 @@ describe('what a set cannot be built from', () => {
     })
 
     it('refuses a read widening, for the same reason', () => {
-        const widened = legacy({ current: string, older: decimal })
+        const widened = withLegacyRead({ current: string, older: decimal })
         expect(() => refine(widened, isText).set()).toThrow(CodecError)
     })
 })

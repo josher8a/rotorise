@@ -499,7 +499,7 @@ describe('an object option is admitted by its structure', () => {
         const option = object({ a: string })
         union([option, object({ b: number })])
         const def = option.def
-        expect(def.kind === 'object' && def.body.rest).toBe('drop')
+        expect(def.kind === 'object' && def.body.rest).toBe('refuse')
     })
 })
 

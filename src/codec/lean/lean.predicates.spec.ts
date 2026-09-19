@@ -30,7 +30,7 @@
 import { describe, expect, it } from 'vitest'
 import { isNumeral, isStoredNumeral } from '../attribute'
 import type { AnyCodec, AttributeCodec } from '../codec'
-import { array, decimal, held, legacy, refine, string } from '../codec'
+import { array, decimal, held, refine, string, withLegacyRead } from '../codec'
 import { LeanUnemittable, leanTermOf, leanVector } from '../lean'
 
 /** The emitter takes the erased codec; the library's types are richer than it needs. */
@@ -149,7 +149,7 @@ describe('what is still refused', () => {
         )
     })
 
-    /** `held` and `legacy` did not move, and the messages now say why each is stuck. */
+    /** `held` and `withLegacyRead` did not move, and the messages now say why each is stuck. */
     it('refuses `held`, which this library never builds itself', () => {
         const adapted = held(string, {
             encode: (value: string) => value,
@@ -161,16 +161,16 @@ describe('what is still refused', () => {
     })
 
     /**
-     * `legacy` is stuck on the closure, and on that alone now.
+     * `withLegacyRead` is stuck on the closure, and on that alone now.
      *
-     * It used to be stuck twice over, and this asserted the second reason: `Def['legacy']`
+     * It used to be stuck twice over, and this asserted the second reason: `Def['withLegacyRead']`
      * recorded only `current` and dropped the older readers at construction, so there was no `r`
      * in this library to recognise even if the model named one. The definition carries the reader
      * now, so that half is gone and the assertion moved to the half that remains — `r` is a JS
-     * closure, and no `Term` prints one. The rule is unchanged: the emitter refuses a `legacy`.
+     * closure, and no `Term` prints one. The rule is unchanged: the emitter refuses a `withLegacyRead`.
      */
-    it('refuses `legacy`, whose reader is a closure', () => {
-        const older = legacy({
+    it('refuses `withLegacyRead`, whose reader is a closure', () => {
+        const older = withLegacyRead({
             current: string,
             older: { decode: () => 'older' as string },
         })

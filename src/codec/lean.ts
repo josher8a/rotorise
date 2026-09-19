@@ -52,7 +52,7 @@
  */
 import type { AttributeValue } from './attribute'
 import { isNumeral, isStoredNumeral, memberOf } from './attribute'
-import type { AnyCodec, AnyDeclaration, LiteralValue } from './codec'
+import type { AnyCodec, LiteralValue, ObjectSlot } from './codec'
 import { union } from './codec'
 import { accepts, readsBack } from './denote'
 import { failed } from './result'
@@ -466,7 +466,7 @@ const lazyLimit = 16
  * carries the policy now rather than only its codec, and this emits all three.
  */
 export const leanTermOf = (
-    declared: AnyDeclaration,
+    declared: ObjectSlot,
     at = 'codec',
     forced = 0,
 ): string => {

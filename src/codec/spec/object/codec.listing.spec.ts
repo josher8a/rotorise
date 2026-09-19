@@ -498,11 +498,11 @@ describe('what it refuses', () => {
         ).toThrow(CodecError)
     })
 
-    it('drops attributes no schema mentions, which is why the inverse law fails', () => {
+    it('refuses attributes no schema mentions', () => {
         const withLegacy = {
             ...Listing.unsafeEncode(listing),
             legacyFlag: { S: 'x' },
         }
-        expect(Listing.unsafeDecode(withLegacy)).toEqual(listing)
+        expect(() => Listing.unsafeDecode(withLegacy)).toThrow(CodecError)
     })
 })
