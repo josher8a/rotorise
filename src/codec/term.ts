@@ -23,7 +23,7 @@ import type {
     Result,
     Rng,
     SetBase,
-    Slot,
+    SetSlot,
 } from './codec'
 
 /* ── the term ─────────────────────────────────────────────────────────────────────────── */
@@ -183,7 +183,7 @@ export type Term =
      * `what` as the refusal text and `arbitrary` as what a generator derived from the term reads.
      */
     | { readonly kind: 'refine'; readonly inner: Term; readonly q: Predicate }
-    /** §3 `(legacy)`: `r : Attr ⇀ Value`, the older reading, which widens `p` and never `e`. */
+    /** §3 `(withLegacyRead)`: `r : Attr ⇀ Value`, the older reading, which widens `p` and never `e`. */
     | {
           readonly kind: 'legacy'
           readonly inner: Term
@@ -233,7 +233,7 @@ export type Term =
  */
 export type Body = {
     readonly fields: Readonly<Record<string, Field>>
-    readonly rest: Rest
+    readonly rest: OldRest
 }
 
 /**
@@ -245,7 +245,7 @@ export type Body = {
 export type Field =
     | { readonly mark: 'req'; readonly t: Term }
     | { readonly mark: 'optional'; readonly t: Term }
-    /** `fallback` concludes `req` (§4): the absence is in the row, never in the value. */
+    /** `withLegacyRead` concludes `req` (§4): the absence is in the row, never in the value. */
     | { readonly mark: 'fallback'; readonly t: Term; readonly v: unknown }
     /** The absence is in the row *and* in the value, and the key is still there. */
     | { readonly mark: 'undefinable'; readonly t: Term }
@@ -254,11 +254,13 @@ export type Field =
 export const alwaysWritten = (field: Field): boolean =>
     field.mark === 'req' || field.mark === 'fallback'
 
-/** §4's rest policy. `codec` is the one that holds an undeclared name; the two others refuse it. */
-export type Rest =
-    | 'drop'
-    | 'refuse'
-    | { readonly kind: 'codec'; readonly t: Term }
+/**
+ * The old §4 rest policy.
+ *
+ * `drop` remains for terms that the pass-two bridge still reads. Public codecs declare `refuse`
+ * or an open entry instead.
+ */
+type OldRest = 'drop' | 'refuse' | { readonly kind: 'codec'; readonly t: Term }
 
 /* ── the member index ─────────────────────────────────────────────────────────────────── */
 
@@ -343,7 +345,7 @@ export const member = (t: Term): AttributeName | undefined => {
 /* ── occupancy ────────────────────────────────────────────────────────────────────────── */
 
 /** A ground base's value slot. `decimal` is held as text, which is why it lands on `string`. */
-const baseSlot: { readonly [B in LiteralBase]: Slot } = {
+const baseSlot: { readonly [B in LiteralBase]: SetSlot } = {
     string: 'string',
     number: 'number',
     decimal: 'string',
@@ -356,14 +358,14 @@ const baseSlot: { readonly [B in LiteralBase]: Slot } = {
  * {@link setMember} collides at `number`/`decimal` instead. The two collisions are disjoint, which
  * is why the pair of families separates all four bases and neither family does alone.
  */
-const setSlot: { readonly [B in SetBase]: Slot } = {
+const setSlot: { readonly [B in SetBase]: SetSlot } = {
     string: 'strSet',
     number: 'numSet',
     decimal: 'strSet',
     binary: 'binSet',
 }
 
-const everySlot: readonly Slot[] = [
+const everySlot: readonly SetSlot[] = [
     'string',
     'number',
     'boolean',
@@ -417,7 +419,7 @@ const joined = <A>(
  * direction: an over-approximation costs a certificate and never buys a wrong one, and the
  * alternative throws on the recursive entity the thunk exists to allow.
  */
-export const occV = (t: Term): readonly Slot[] | undefined => {
+export const occV = (t: Term): readonly SetSlot[] | undefined => {
     switch (t.kind) {
         case 'string':
         case 'decimal':
@@ -469,7 +471,7 @@ export const occV = (t: Term): readonly Slot[] | undefined => {
  *
  * `undefined` is *not determined by the term*, and it is what makes {@link nullable} refuse at
  * construction rather than guess. The rows that answer it are the four whose admission is a
- * function: `held`, `custom` and `legacy` carry the caller's, and `lazy` could be asked but
+ * function: `held`, `custom` and `withLegacyRead` carry the caller's, and `lazy` could be asked but
  * answering forces the thunk — which at module-evaluation time is a reference to a binding that
  * does not exist yet, so a recursive declaration would throw on the guard that exists to allow it.
  *
@@ -516,9 +518,9 @@ export const ownsNullOf = (t: Term): boolean | undefined => {
 /**
  * `occA`: which members a term may read, or `undefined` for every one of them.
  *
- * The mirror of {@link occV}, and **not a symmetric mirror**: `held` and `legacy` swap sides.
+ * The mirror of {@link occV}, and **not a symmetric mirror**: `held` and `withLegacyRead` swap sides.
  * `held`'s `g` sits *behind* `p`, so it changes which value comes out and never which attributes go
- * in, and the read occupancy is the subterm's. `legacy`'s `r` is arbitrary data the term carries and
+ * in, and the read occupancy is the subterm's. `withLegacyRead`'s `r` is arbitrary data the term carries and
  * widens exactly the reading, so it is `⊤` here where it was the subterm's on the write side.
  *
  * A lawful `r` does respect the member, and the model records that this is the one place `μSyn` is
@@ -610,7 +612,7 @@ export type NameLiteral = {
  * to be written, so `tagsOf` reads `req` and refuses the other three. A literal *field* constrains
  * exactly the values that carry the name whatever its mark, and admission is present-only, so an
  * `optional` literal is read here and its `required` says `false`. That is the model's
- * `altsOfField`, which has a row for `req`, `optional` and `fallback` alike.
+ * `altsOfField`, which has a row for `req`, `optional` and `withLegacyRead` alike.
  */
 export const literalsOf = (
     t: Term,
@@ -704,7 +706,7 @@ const unionAlternatives = (
 /**
  * The tags an object option answers to on discriminator `d` — empty for everything else.
  *
- * **`req` only, and a string literal only.** A `fallback` discriminator would fill an absent tag
+ * **`req` only, and a string literal only.** A `withLegacyRead` discriminator would fill an absent tag
  * with an arbitrary value the tag sets never vouched for, and (C) would then re-encode a variant no
  * tag selects; an `optional` one would let the tag be absent altogether. So four facts are read off
  * one question: the term is an object, `d` is declared, the field is `req`, and its term is a
@@ -1019,7 +1021,7 @@ export const meet = <A>(
  * separate times, each time by writing the homomorphism equation rather than by reading the table.
  *
  * **Where the host could answer and the model has no row, this refuses.** Two `number` literals,
- * two `fallback` fields and an `undefinable` field are each comparable in TypeScript and each
+ * two `withLegacyRead` fields and an `undefinable` field are each comparable in TypeScript and each
  * answer `undefined` here, because a row the model does not state is a rule this port would be
  * inventing. The first two are `docs/defects.md` entries; the third is a mark the model's `Field`
  * does not have.
@@ -1198,7 +1200,7 @@ const isOpenObject = (t: Term): boolean =>
 
 /**
  * Whether an object option's two halves answer the same question about names. A `drop` rest skips
- * an undeclared name on the read side and refuses it on the write side, and a `fallback` field is
+ * an undeclared name on the read side and refuses it on the write side, and a `withLegacyRead` field is
  * required by the write side and supplied by the read side.
  */
 const objectNamesAgree = (t: Term): boolean =>
@@ -1385,14 +1387,14 @@ const meetLists = (
  * **Two fields at one name: the meet of the terms, at the stronger mark.**
  *
  * A mark carries two presence bits, whether the name must be present when the object is written and
- * whether it must be present when it is read. `optional` forces neither, `fallback` forces the write
+ * whether it must be present when it is read. `optional` forces neither, `withLegacyRead` forces the write
  * alone, and `req` forces both, so the three are a chain and the meet takes the stronger.
  *
- * **`optional` against `fallback` refuses, and the presence bits are not why.** Both admit a map
+ * **`optional` against `withLegacyRead` refuses, and the presence bits are not why.** Both admit a map
  * omitting the name. They part on what they *read* there: `optional` reads a map without it and
- * `fallback` reads a map carrying the stand-in, so the pair shares attributes it reads two ways.
+ * `withLegacyRead` reads a map carrying the stand-in, so the pair shares attributes it reads two ways.
  *
- * Two `fallback` fields refuse because the model has no equality on its stand-ins, and
+ * Two `withLegacyRead` fields refuse because the model has no equality on its stand-ins, and
  * `undefinable` refuses because the model's `Field` has no such mark. Both are refusals this
  * library inherits rather than rules it states.
  */
@@ -1416,7 +1418,7 @@ const mark = (
 const isBottomField = (field: Field): boolean =>
     field.mark !== 'optional' && field.t.kind === 'never'
 
-const mergeRests = (a: Rest, b: Rest): Rest | undefined =>
+const mergeRests = (a: OldRest, b: OldRest): OldRest | undefined =>
     typeof a === 'object' || typeof b === 'object'
         ? undefined
         : a === 'refuse' || b === 'refuse'
@@ -1433,7 +1435,7 @@ const reqShared = (a: Body, b: Body): boolean =>
         ([name, field]) => field.mark !== 'req' || name in b.fields,
     )
 
-/** Whether every `fallback` name one body declares is a name the other declares too. */
+/** Whether every `withLegacyRead` name one body declares is a name the other declares too. */
 const fbShared = (a: Body, b: Body): boolean =>
     Object.entries(a.fields).every(
         ([name, field]) => field.mark !== 'fallback' || name in b.fields,
@@ -1510,7 +1512,7 @@ const meetBodyRecord = (
  * cannot tell them apart and the term can — which is why `SetBase` indexes
  * a set by a base rather than by a `Member`. Reads through `refine` and a literal only — both are *restrictions* of a base, so the set
  * they build is a restriction of the base's set (`setCodec_restrict`). An adapter (`held`), a read
- * widening (`legacy`) or a union is not a restriction of anything, and gets `undefined`.
+ * widening (`withLegacyRead`) or a union is not a restriction of anything, and gets `undefined`.
  */
 export const setBaseOf = (t: Term): SetBase | undefined => {
     switch (t.kind) {

@@ -53,7 +53,7 @@ describe("a member's assignment is read off the member's own body", () => {
     })
 
     /**
-     * `req` only: a `fallback` discriminator would fill an absent tag with a default, and the
+     * `req` only: a `withLegacyRead` discriminator would fill an absent tag with a default, and the
      * index would key a member on a value no item carries.
      */
     it('refuses a member whose discriminator is not required', () => {

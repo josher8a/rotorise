@@ -25,10 +25,8 @@ import {
     decimal,
     discriminatedUnion,
     failed,
-    fallback,
     held,
     lazy,
-    legacy,
     list,
     nullable,
     nullValue,
@@ -41,6 +39,7 @@ import {
     spread,
     string,
     union,
+    withLegacyRead,
 } from '../../codec'
 import { accepts } from '../../denote'
 import {
@@ -174,7 +173,7 @@ describe('held', () => {
  *
  * Each is a side condition §3 or §2 asks of a constructor that takes a caller's function or value.
  * Three are decidable from what the caller hands over and are now refused where the declaration is
- * — `fallback`'s stand-in, `legacy`'s `ran(r) ⊆ dom(e)`, and a `rest` out of position. Two are not
+ * — `withLegacyRead`'s stand-in, `withLegacyRead`'s `ran(r) ⊆ dom(e)`, and a `rest` out of position. Two are not
  * decidable at all, so what is pinned here is the failure mode, which is the only thing a test can
  * say about an obligation nothing enforces.
  */
@@ -208,13 +207,13 @@ describe('the obligations a caller owes', () => {
     })
 
     /**
-     * `legacy`'s coherence half, which has **no observable witness** — and that is the finding
+     * `withLegacyRead`'s coherence half, which has **no observable witness** — and that is the finding
      * rather than a gap in the test. The current encoding is tried first and the older one only on
      * its failure, so where both could read an attribute the older one is never consulted. A
      * reader that disagrees outright is invisible.
      */
-    it('legacy: a disagreeing older reader is never consulted, so nothing can see it', () => {
-        const disagreeing = legacy({
+    it('withLegacyRead: a disagreeing older reader is never consulted, so nothing can see it', () => {
+        const disagreeing = withLegacyRead({
             current: string,
             older: { decode: () => 'DISAGREE' as string },
         })
@@ -223,9 +222,9 @@ describe('the obligations a caller owes', () => {
         expect(disagreeing.unsafeDecode({ N: '1' })).toBe('DISAGREE')
     })
 
-    /** `legacy`'s first half, now refused at the read that produces the unwritable value. */
-    it('legacy: an older reading the current encoding cannot write is refused', () => {
-        const migrating = legacy({
+    /** `withLegacyRead`'s first half, now refused at the read that produces the unwritable value. */
+    it('withLegacyRead: an older reading the current encoding cannot write is refused', () => {
+        const migrating = withLegacyRead({
             current: string('A'),
             older: { decode: () => 'B' as 'A' },
         })
@@ -233,10 +232,14 @@ describe('the obligations a caller owes', () => {
         expect(() => migrating.unsafeDecode({ N: '1' })).toThrow(CodecError)
     })
 
-    /** `fallback`'s stand-in, now refused at the declaration. */
-    it('fallback: a stand-in the codec cannot write is refused at construction', () => {
-        expect(() => fallback(string('A'), 'B' as 'A')).toThrow(CodecError)
-        expect(() => fallback(string('A'), 'A' as const)).not.toThrow()
+    /** `withLegacyRead`'s stand-in, now refused at the declaration. */
+    it('withLegacyRead: a stand-in the codec cannot write is refused at construction', () => {
+        expect(() =>
+            withLegacyRead({ current: string('A'), whenMissing: 'B' as 'A' }),
+        ).toThrow(CodecError)
+        expect(() =>
+            withLegacyRead({ current: string('A'), whenMissing: 'A' as const }),
+        ).not.toThrow()
     })
 
     /** `SpreadOnce`, past the cast that defeats the type. */
@@ -283,17 +286,25 @@ describe('refine', () => {
     })
 })
 
-describe('legacy', () => {
+describe('withLegacyRead', () => {
     it('whose older encoding is the current one is the current one', () => {
-        checkEquivalent(legacy({ current: decimal, older: decimal }), decimal, {
-            seed,
-        })
+        checkEquivalent(
+            withLegacyRead({ current: decimal, older: decimal }),
+            decimal,
+            {
+                seed,
+            },
+        )
     })
 
     it('writes only the current encoding, so what it stores is the current one', () => {
-        checkEquivalent(legacy({ current: decimal, older: string }), decimal, {
-            seed,
-        })
+        checkEquivalent(
+            withLegacyRead({ current: decimal, older: string }),
+            decimal,
+            {
+                seed,
+            },
+        )
     })
 
     /**
@@ -303,9 +314,9 @@ describe('legacy', () => {
      * are tried in is the order they are nested, and the outermost `current` is the only one written.
      */
     it('nests, and the outermost current is what is written', () => {
-        const three = legacy({
+        const three = withLegacyRead({
             current: decimal,
-            older: legacy({ current: string, older: decimal }),
+            older: withLegacyRead({ current: string, older: decimal }),
         })
         expect(three.unsafeEncode('1.5')).toEqual({ N: '1.5' })
         expect(three.unsafeDecode({ N: '1.5' })).toBe('1.5')
@@ -359,17 +370,17 @@ describe('optional', () => {
      * Not idempotent, because it is not derivable: a marker marks a declaration once.
      *
      * This read as an equation that held until the two markers were checked against each other. Only
-     * the outermost mark was ever read, so `optional(fallback(c, v))` silently dropped the stand-in —
+     * the outermost mark was ever read, so `optional(withLegacyRead({ current: c, whenMissing: v }))` silently dropped the stand-in —
      * which makes nesting a thing to refuse rather than a law to state.
      */
     it('cannot wrap another marker', () => {
         const _wrong = () => [
             // @ts-expect-error a name is marked once
             optional(optional(string)),
-            // @ts-expect-error and `fallback` is what "absent, with a stand-in" is called
-            optional(fallback(string, 'x')),
+            // @ts-expect-error and `withLegacyRead` is what "absent, with a stand-in" is called
+            optional(withLegacyRead({ current: string, whenMissing: 'x' })),
             // @ts-expect-error in either order
-            fallback(optional(string), 'x'),
+            withLegacyRead({ current: optional(string), whenMissing: 'x' }),
         ]
         expect(typeof _wrong).toBe('function')
     })
@@ -460,8 +471,8 @@ describe('what the wrappers preserve', () => {
         ['held', held(decimal, { encode: String, decode: Number }), 1.5],
         ['refine', refine(decimal, (_v): _v is string => true), '1.5'],
         [
-            'fallbackless legacy',
-            legacy({ current: decimal, older: decimal }),
+            'required slot without a stand-in',
+            withLegacyRead({ current: decimal, older: decimal }),
             '1.5',
         ],
         [
@@ -612,7 +623,7 @@ describe('the laws that do NOT hold', () => {
     /**
      * The combinators live at two levels, and mixing them is refused.
      *
-     * `optional` and `fallback` are statements about a *name* — the attribute called this may be
+     * `optional` and `withLegacyRead` are statements about a *name* — the attribute called this may be
      * missing from the item. Everything else here is a statement about an attribute. A list, a set, a
      * tuple, a record and a union option have no name at that position, so one of those there is a
      * category error rather than a weaker element.
@@ -630,8 +641,8 @@ describe('the laws that do NOT hold', () => {
             list(string, optional(number)),
             // @ts-expect-error nor is a union option a name
             union([optional(string), number]),
-            // @ts-expect-error and a fallback says the same thing about absence
-            array(fallback(string, 'x')),
+            // @ts-expect-error and a withLegacyRead says the same thing about absence
+            array(withLegacyRead({ current: string, whenMissing: 'x' })),
         ]
         expect(typeof _wrong).toBe('function')
     })
@@ -672,7 +683,7 @@ describe('(C): what a codec reads, it can write', () => {
         tags: string.set(),
         steps: array(string),
         note: optional(string),
-        nick: fallback(string, 'anon'),
+        nick: withLegacyRead({ current: string, whenMissing: 'anon' }),
     }).item
 
     it('holds for a wide entity, over every mutation of every attribute', () => {
@@ -849,9 +860,12 @@ describe('`accepts`, and the direction of the law that is true', () => {
         ['list(rest)', list(string, spread(number))],
         ['record', record(decimal)],
         ['attributes', object({ a: string, b: number }).item],
-        ['attributes(open)', object({ a: string }, decimal).item],
+        [
+            'attributes(open)',
+            object({ a: string }, [string, optional(decimal)]).item,
+        ],
         ['nullable', nullable(string)],
-        ['legacy', legacy({ current: decimal, older: string })],
+        ['withLegacyRead', withLegacyRead({ current: decimal, older: string })],
         ['refine', refine(string, isTag, { arbitrary: () => 't-x' as const })],
         [
             'held',
@@ -972,7 +986,7 @@ describe('`accepts`, and the direction of the law that is true', () => {
      * How it went: gating the five **ground** rows on the predicates `admits` already used closed
      * seventeen, because twelve of the twenty-three were loose only through their elements — a
      * `tuple` took a `Uint8Array` of the right length because its positions did, and `attributes`,
-     * the wrappers, `legacy`, `held`, `lazy` and both unions inherited the same way. The remaining
+     * the wrappers, `withLegacyRead`, `held`, `lazy` and both unions inherited the same way. The remaining
      * six were loose in their own row and got their own gate: `set` asked `instanceof Set` before
      * spreading, `array` and `tuple` asked `Array.isArray`, `record` asked `asRecord`, and `refine`
      * started running its predicate on the way in.

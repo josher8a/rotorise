@@ -245,14 +245,14 @@ export type AnySpread = {
 /**
  * Anything an object member can be declared as: a codec, or a §4 field that marks one.
  *
- * `optional` and `fallback` state that the attribute at a *name* may be absent, and the name belongs
+ * `optional` and `withLegacyRead` state that the attribute at a *name* may be absent, and the name belongs
  * to the object rather than to the thing declared at it. So a field is not a codec, and the pair a
  * member is read and written through is the one the field marks.
  *
  * Written as the definition alone, because the definition is the whole of what both cases carry that
  * an object reads: `fieldOf` takes the mark off `def.mark` and the child term out of the same record.
  */
-export type AnyDeclaration = AnyCodec | { readonly def: Field }
+export type ObjectSlot = AnyCodec | { readonly def: Field }
 
 /**
  * The codec a declaration marks, and the declaration itself where it is already one.
@@ -301,8 +301,8 @@ export type Decoded<C> = C extends {
  * from `numSet` means inspecting the elements, and **an empty `Set` belongs to no family at all**.
  * The same asymmetry decides which containers separate at `union`.
  *
- * {@link Slot} is the finer alphabet and is not a replacement. A term knows its base, so `occV` can
- * answer `strSet`; a value does not carry one, so **no total function takes a value to a `Slot`**.
+ * {@link SetSlot} is the finer alphabet and is not a replacement. A term knows its base, so `occV`
+ * can answer `strSet`; a value does not carry one, so no total function takes a value to a `SetSlot`.
  * The two are the codomains of two different functions rather than two spellings of one, which is
  * the answer to the question `1060c01` left open.
  */
@@ -319,7 +319,7 @@ export type Shape =
 /**
  * The `Value` **constructor** a term can write — {@link Shape} with the three set families split.
  *
- * The model's `Slot`, and the split is the whole of its content: `Kind` collapses `strSet`, `numSet`
+ * The model's `SetSlot`, and the split is the whole of its content: `Kind` collapses `strSet`, `numSet`
  * and `binSet` to one label, so `set(string)` and `set(number)` are indistinguishable to it, while
  * the ten constructors tell them apart. `union(set(string), set(number))` is certified by this and
  * was not by the coarser label — which is the correction §5 recorded when the kind tables went, and
@@ -329,7 +329,7 @@ export type Shape =
  * term carries its base. {@link Shape} is the value side's alphabet and stays coarse for the reason
  * written there, so this does not replace it: the two answer different questions.
  */
-export type Slot = Exclude<Shape, 'set'> | 'strSet' | 'numSet' | 'binSet'
+export type SetSlot = Exclude<Shape, 'set'> | 'strSet' | 'numSet' | 'binSet'
 
 /**
  * What one declared attribute decides, read where the field is held.
@@ -341,7 +341,7 @@ export type Slot = Exclude<Shape, 'set'> | 'strSet' | 'numSet' | 'binSet'
  * A reader of the term alone does not answer this. A term is what a codec has, a field is not a
  * codec, and the body is what holds a field — so this reads the mark first and the term second.
  */
-export const constantOf = (declared: AnyDeclaration): unknown => {
+export const constantOf = (declared: ObjectSlot): unknown => {
     const def = declared.def
     if (
         'mark' in def &&
@@ -352,8 +352,8 @@ export const constantOf = (declared: AnyDeclaration): unknown => {
     // **A single-valued literal decides; two admissible values narrow without deciding.** This was
     // `decides`, a reader that walked the definition to answer it, and the term answers the same
     // row — deliberately *not* through the wrappers `member` descends: a constant is a claim about
-    // the value, and `refine` can reject it, `legacy` can decode an older encoding into something
-    // else, and `optional` admits absence, which is not the value. `fallback` is the one that keeps
+    // the value, and `refine` can reject it, `withLegacyRead` can decode an older encoding into something
+    // else, and `optional` admits absence, which is not the value. `withLegacyRead` is the one that keeps
     // it, always writing the attribute at a value typed to the same alternative.
     return t.kind === 'literal' ? t.v : undefined
 }
@@ -466,7 +466,7 @@ export type Refinement = {
  * that compose:
  *
  * - the same stored attribute held as something else — {@link held}
- * - several encodings read, one written — {@link legacy}
+ * - several encodings read, one written — {@link withLegacyRead}
  * - the member following from the value, where the options can be told apart — {@link union}
  *
  * So there is no illustrative example here on purpose. What is left when those are exhausted is not a
@@ -749,7 +749,7 @@ export const decimal: DecimalCodec = Object.assign(
  * A JS number, stored as `N`. Lossy by construction — `N` carries 38 digits, `number` about 15.
  * Right for enums, counts and flags; wrong for money, which is {@link decimal}.
  *
- * `number.set()` and `decimal.set()` are **both first-class**, and neither is the other's legacy
+ * `number.set()` and `decimal.set()` are **both first-class**, and neither is the other's withLegacyRead
  * spelling: `number.set()` is what a caller who means their platform's numbers means, and
  * `decimal.set()` is the host-independent one. They write the same member, `NS`, and hold different
  * things — which is why `SetBase` indexes a set by a base rather than by
@@ -900,7 +900,7 @@ const set = <const C extends AnyCodec>(
      * was `'S'`, and the adapter's two functions then ran per member of an attribute that stores no
      * such thing. The model closed this by indexing `Term.set` with a `SetBase`
      * and says outright what that gives up — a set of a `held` and
-     * of a `legacy`, neither of which has a set-level spelling and neither of which appears in
+     * of a `withLegacyRead`, neither of which has a set-level spelling and neither of which appears in
      * `src/`. This is the same refusal, at the same place the other one lives.
      *
      * `refine` and a literal are **not** given up: a restriction of the elements is a restriction of
@@ -959,7 +959,7 @@ export const array = <const C extends AnyCodec>(
 /**
  * A declaration that fills a **slot** with a term holding no value.
  *
- * A slot is a position a value must fill: a declared element of a list, and a `req` or `fallback`
+ * A slot is a position a value must fill: a declared element of a list, and a `req` or `withLegacyRead`
  * field. `optional` and `undefinable` are not slots, because the key may be absent. A list's
  * spread is not one either, because a value of the declared length omits it.
  */
@@ -1162,7 +1162,7 @@ export type ListWrites<Cs extends readonly unknown[]> = Split<Cs> extends {
 /**
  * Nothing, or why a spread is not an attribute.
  *
- * An item's members are reached by *name*, so `optional` and `fallback` belong here — both are
+ * An item's members are reached by *name*, so `optional` and `withLegacyRead` belong here — both are
  * statements about a name. `spread` is a statement about a *position*, and there are no positions
  * in a map, so it is the one marker an object member cannot be.
  */
@@ -1430,10 +1430,10 @@ export const refine = <Wide, Narrow extends Wide, A extends AttributeValue>(
  * A field that stands in a value where the attribute is absent.
  *
  * Not a codec, for the reason {@link OptionalCodec} records. The stand-in is the marker's payload at
- * the type level and `def.value` at run time, and the run-time side is the one {@link fallback}
- * checks against §3 `(fallback)`.
+ * the type level and `def.value` at run time, and the run-time side is the one {@link withLegacyRead}
+ * checks against §3 `(withLegacyRead)`.
  */
-export type FallbackCodec<
+type MissingCodec<
     T,
     A extends AttributeValue = AttributeValue,
     // the codec the mark is about, carried rather than erased to `AttributeCodec<T, A>`. A brand
@@ -1453,11 +1453,11 @@ export type FallbackCodec<
  * attribute existed. Replaces `item.channel ?? 'IN_STORE'` at every read site.
  *
  * **The stand-in must be writable by the codec it stands in for**, and that is checked here, at the
- * declaration. §3 `(fallback)` carries it as a premise, `ObligationsField`'s `.req` row, and it
+ * declaration. §3 `(withLegacyRead)` carries it as a premise, `ObligationsField`'s `.req` row, and it
  * exists because the proof failed without it: a row missing the attribute reads back as the
  * stand-in, and if the inner codec cannot write that value the item cannot be written back —
  * **(C)** broken at the read, with the refusal surfacing on some later write rather than at the
- * declaration responsible for it. `fallback(string('A'), 'B')` is the whole of it.
+ * declaration responsible for it. `withLegacyRead({ current: string('A'), whenMissing: 'B' })` is the whole of it.
  *
  * The stand-in is a **value and not a thunk**, which is what makes the check possible here rather
  * than on whichever read happens to need it first. It does not become shared state for that: the
@@ -1465,7 +1465,7 @@ export type FallbackCodec<
  * mutable stand-in still cannot leak between entities. Primitives are handed over as they are,
  * being unable to leak anything.
  */
-export const fallback = <const C extends AnyCodec>(
+const withMissing = <const C extends AnyCodec>(
     // the *argument's own* type, not a re-declared `AttributeCodec<T, A>`: the guard has to see the
     // marker the caller passed, and a parameter written in terms of inferred `T` and `A` reconstructs
     // a plain codec that never carries one
@@ -1474,25 +1474,21 @@ export const fallback = <const C extends AnyCodec>(
     // unified them, and a stand-in written `'A'` widens to `string`, which then refused the very
     // codec it stands in for — invisible while the entity was declared first and pinned it itself
     value: NoInfer<Decoded<C>>,
-): FallbackCodec<Decoded<C>, AttributeOf<C> & AttributeValue, C> => {
-    // §3 `(fallback)`: the stand-in must be *writable*, or a row missing the name decodes to a
+): MissingCodec<Decoded<C>, AttributeOf<C> & AttributeValue, C> => {
+    // §3 `(withLegacyRead)`: the stand-in must be *writable*, or a row missing the name decodes to a
     // value the item cannot be written back as — (C) broken at the read, with the refusal arriving
     // on the next write instead of at the declaration that caused it. Decidable here, from the
     // declaration alone, which is why the stand-in is a value and not a thunk.
     if (!accepts(inner as unknown as AnyCodec, value)) {
         throw new CodecError(
-            `\`fallback\`'s stand-in must be a value the codec it stands in for can write, and ${describeShape(value)} is not one this \`${(inner as unknown as AnyCodec).def?.kind ?? 'codec'}\` writes. A row missing the attribute would read back as it and then refuse on the way out`,
+            `\`withLegacyRead\`'s stand-in must be a value the codec it stands in for can write, and ${describeShape(value)} is not one this \`${(inner as unknown as AnyCodec).def?.kind ?? 'codec'}\` writes. A row missing the attribute would read back as it and then refuse on the way out`,
         )
     }
     const attribute = inner as unknown as AttributeCodec<Decoded<C>>
     return {
         codec: attribute,
         def: { mark: 'fallback', t: termOf(inner), v: value },
-    } as unknown as FallbackCodec<
-        Decoded<C>,
-        AttributeOf<C> & AttributeValue,
-        C
-    >
+    } as unknown as MissingCodec<Decoded<C>, AttributeOf<C> & AttributeValue, C>
 }
 
 /**
@@ -1586,7 +1582,7 @@ export const held = <T, const C extends AnyCodec>(
 /**
  * One direction, which is all an older encoding is ever asked for.
  *
- * `legacy` never writes through `older` — that is the whole of what makes it a migration rather than
+ * `withLegacyRead` never writes through `older` — that is the whole of what makes it a migration rather than
  * a union — so asking for a whole codec there asked for a half nobody calls. It also *forced* one:
  * an older encoding whose held type differs from the current one has to be adapted, and {@link held}
  * requires both halves, so adapting a reader meant writing an encode path that is dead by
@@ -1595,7 +1591,7 @@ export const held = <T, const C extends AnyCodec>(
  * @example
  * ```ts
  * // stored as N now; some rows still hold the digits as B, from a migration nobody finished
- * legacy({
+ * withLegacyRead({
  *     current: decimal,
  *     older: { decode: (at) => andThen(binary.decode(at), (b) => decoder.decode(b)) },
  * })
@@ -1616,11 +1612,11 @@ export type Reader<T> = {
  * an index key cannot use it: DynamoDB rejects a write whose index key has the wrong type.
  *
  * @example
- * **One older encoding.** A table that has held three needs two of these, nested — and `legacy` is
+ * **One older encoding.** A table that has held three needs two of these, nested — and `withLegacyRead` is
  * itself a {@link Reader}, so it nests directly:
  *
  * ```ts
- * legacy({ current: decimal, older: legacy({ current: string, older: fromBytes }) })
+ * withLegacyRead({ current: decimal, older: withLegacyRead({ current: string, older: fromBytes }) })
  * ```
  *
  * Not a union: {@link union} requires its options to read back as *different* types so that a value
@@ -1630,7 +1626,7 @@ export type Reader<T> = {
  *
  * ```ts
  * // stored as N today, and as S in rows written before that; always written as N
- * rate: legacy({ current: decimal, older: string })
+ * rate: withLegacyRead({ current: decimal, older: string })
  * ```
  *
  * **Two things §3 asks of the older reader** (`ReadsCoherently`), and only one of them is
@@ -1650,20 +1646,60 @@ export type Reader<T> = {
  * resolution never does. So it is a written obligation, and the thing to check is that two
  * readers of one attribute agree — nothing in this library will tell you they do not.
  */
-export const legacy = <T, A extends AttributeValue>({
-    current,
-    older,
-}: {
-    readonly current: AttributeCodec<T, A>
-    readonly older: Reader<T>
-}): AttributeCodec<T, A> =>
-    // `member` reads through to `current`, the encoding every write produces; `constantOf` does not,
-    // because an older reader can decode this attribute into something else entirely
-    codecOfTerm<T, A>({
-        kind: 'legacy',
-        inner: termOf(current as unknown as AnyCodec),
-        r: older.decode,
-    })
+export type WithLegacyReadOptions<C extends AnyCodec> = {
+    readonly current: C
+} & (
+    | {
+          readonly older: Reader<Decoded<C>>
+          readonly whenMissing?: NoInfer<Decoded<C>>
+      }
+    | {
+          readonly older?: Reader<Decoded<C>>
+          readonly whenMissing: NoInfer<Decoded<C>>
+      }
+)
+
+/**
+ * Reads an older attribute encoding or a missing object attribute.
+ *
+ * `older` extends an attribute codec's read side. `whenMissing` declares an object slot, because
+ * absence belongs to an object map and no attribute codec can read an absent attribute.
+ */
+export function withLegacyRead<const C extends AnyCodec>(options: {
+    readonly current: C
+    readonly older: Reader<Decoded<C>>
+    readonly whenMissing?: never
+}): AttributeCodec<Decoded<C>, AttributeOf<C> & AttributeValue>
+export function withLegacyRead<const C extends AnyCodec>(options: {
+    readonly current: C
+    readonly older?: Reader<Decoded<C>>
+    readonly whenMissing: NoInfer<Decoded<C>>
+}): MissingCodec<Decoded<C>, AttributeOf<C> & AttributeValue, C>
+export function withLegacyRead<const C extends AnyCodec>(
+    options: WithLegacyReadOptions<C>,
+):
+    | AttributeCodec<Decoded<C>, AttributeOf<C> & AttributeValue>
+    | MissingCodec<Decoded<C>, AttributeOf<C> & AttributeValue, C> {
+    const { current, older } = options
+    const currentCodec = current as unknown as AttributeCodec<
+        Decoded<C>,
+        AttributeOf<C> & AttributeValue
+    >
+    const extended = older
+        ? codecOfTerm<Decoded<C>, AttributeOf<C> & AttributeValue>({
+              kind: 'legacy',
+              inner: termOf(current),
+              r: older.decode,
+          })
+        : currentCodec
+    return (
+        'whenMissing' in options
+            ? withMissing(extended, options.whenMissing as Decoded<C>)
+            : extended
+    ) as
+        | AttributeCodec<Decoded<C>, AttributeOf<C> & AttributeValue>
+        | MissingCodec<Decoded<C>, AttributeOf<C> & AttributeValue, C>
+}
 
 /**
  * A codec resolved on first use, so an entity can contain itself.
@@ -1711,7 +1747,7 @@ export const lazy = <T, A extends AttributeValue = AttributeValue>(
  * nowhere else. A list, a set, a tuple, a record and a union option have no name at that position for
  * anything to be missing from, and each of those refuses this because a field is not a codec — the
  * member for a value that may be stored as `NULL` in one of them is {@link nullable}. Marking a
- * marked declaration is refused the same way: `fallback(c, v)` is the attribute that may be absent
+ * marked declaration is refused the same way: `withLegacyRead({ current: c, whenMissing: v })` is the attribute that may be absent
  * and has a stand-in, and it is what both nestings meant.
  */
 export const optional = <const C extends AnyCodec>(
@@ -1746,7 +1782,7 @@ export const optional = <const C extends AnyCodec>(
  *
  * It is the stricter of the pair: `optional` reads both `{}` and `{ k: undefined }` back as `{}`,
  * so **(R)** holds for it modulo that identification, while here the round trip is an equality. It
- * takes on no premise of its own — unlike {@link fallback}, which must check its stand-in is
+ * takes on no premise of its own — unlike {@link withLegacyRead}, which must check its stand-in is
  * writable because it writes one.
  */
 export const undefinable = <const C extends AnyCodec>(
@@ -2183,26 +2219,12 @@ declare const pathValue: unique symbol
 // ── items ───────────────────────────────────────────────────────────
 
 /**
- * What an item codec does with an attribute its spec does not declare.
- *
- * - `'drop'` (default) — ignored in, absent out. What `PutItem` and `UpdateItem` already mean: a
- *   spec describes the item, and what it does not say is not there.
- * - `'refuse'` — decoding one throws. For a service that owns its table, where an unexpected
- *   attribute means schema and data have drifted.
- * - a codec — extra keys are part of the type, decoding through it and encoding back out. What an
- *   open entity needs.
- */
-export type RestPolicy<V = never> = 'drop' | 'refuse' | AttributeCodec<V>
-
-/**
  * The same three answers, stated so a spec can be read *first*.
  *
- * {@link RestPolicy} names the value the codec must handle, which only an entity with an index
- * signature can say. Declaring the spec first means there is no entity yet to ask, so the codec is
- * taken as given and the entity's index signature is derived from it instead — the same fact,
- * flowing the other way.
+ * `drop` remains for terms that the pass-two bridge still reads. Public codecs declare `refuse`
+ * or an open entry instead.
  */
-export type RestDeclaration = 'drop' | 'refuse' | AnyCodec
+type OldRestDeclaration = 'drop' | 'refuse' | AnyCodec
 
 /**
  * The entity a spec describes.
@@ -2211,7 +2233,7 @@ export type RestDeclaration = 'drop' | 'refuse' | AnyCodec
  * says it holds anything that codec can read, which is exactly an index signature — the mirror of
  * what {@link EncodedBy} does to the stored shape.
  */
-export type DerivedItem<Spec, Rest> = [Rest] extends ['drop' | 'refuse']
+type DerivedItem<Spec, Rest> = [Rest] extends ['drop' | 'refuse']
     ? show<ObjectOf<Spec>>
     : show<ObjectOf<Spec>> & { readonly [name: string]: Decoded<Rest> }
 
@@ -2251,8 +2273,8 @@ export type ItemSpec<T> = T extends unknown
  * writes to bypass a declaration-time check no longer compiles.
  */
 export type ObjectCodec<
-    Spec extends Record<string, AnyDeclaration>,
-    Rest = 'drop',
+    Spec extends Record<string, ObjectSlot>,
+    Rest extends 'refuse' | AnyCodec = 'refuse',
 > = {
     // spelled out rather than intersected with `AttributeCodec`, for the reason recorded on
     // {@link ItemCodec}: as an intersection the same type costs more to instantiate and stops being
@@ -2459,7 +2481,7 @@ export type UnionCodec<T, Options extends readonly unknown[]> = {
     readonly [writesMarker]?: WritesVariantsPin<SpecsOf<Options>>
 }
 
-export type ItemCodec<T, Spec = unknown, Rest = 'drop'> = {
+export type ItemCodec<T, Spec = unknown, Rest = 'refuse'> = {
     /** Every attribute, or why one could not be written. For `PutItem`. */
     readonly encode: (item: T) => Result<EncodedBy<Spec, Rest>>
     readonly unsafeEncode: (item: T) => EncodedBy<Spec, Rest>
@@ -2506,7 +2528,7 @@ export type ItemCodec<T, Spec = unknown, Rest = 'drop'> = {
     readonly path: () => PathOf<T>
     readonly spec: Spec
     /** What this codec does with an attribute the spec does not declare. */
-    readonly rest: RestPolicy<unknown>
+    readonly rest: Rest
     /** What this codec is — see {@link Term}. */
     readonly def: Term
     /** The row this codec writes, pinnable with {@link Writes}. Type-level only. */
@@ -2546,7 +2568,7 @@ export type Declared = {
  * *named* rather than left to be recovered from a definition kind, which is what {@link Field} is
  * for.
  */
-const fieldOf = (declared: AnyDeclaration): Field => {
+const fieldOf = (declared: ObjectSlot): Field => {
     const def = declared.def
     return 'mark' in def ? def : { mark: 'req', t: def }
 }
@@ -2584,22 +2606,23 @@ const fieldOf = (declared: AnyDeclaration): Field => {
  * const Checked = item(spec) satisfies ItemCodec<PetEntry> satisfies Writes<PetItem>
  * ```
  */
-export const object = <
-    const Spec extends Record<string, AnyDeclaration>,
-    const Rest extends RestDeclaration = 'drop',
+const objectFromMap = <
+    const Spec extends Record<string, ObjectSlot>,
+    const Rest extends 'refuse' | AnyCodec = 'refuse',
 >(
     spec: Spec & NoSpreadMember<Spec> & NoNeverField<Spec>,
-    rest: Rest = 'drop' as Rest,
+    rest: Rest = 'refuse' as Rest,
 ): ObjectCodec<Spec, Rest> => {
     // the marker off each declared attribute, once — the term. What the two directions walk is
     // the *compiled* form of it, which `bodySem` builds and which carries one thing the term does
     // not: whether a stand-in has to be copied per read, a fact about this runtime and not about
     // the declaration.
     const fields: Record<string, Field> = {}
-    const declaredSpec = spec as unknown as Record<string, AnyDeclaration>
+    const declaredSpec = spec as unknown as Record<string, ObjectSlot>
     for (const name in declaredSpec) {
-        fields[name] = fieldOf(declaredSpec[name] as AnyDeclaration)
+        fields[name] = fieldOf(declaredSpec[name] as ObjectSlot)
     }
+
     /**
      * **A name the row always writes, declared at a term that holds no value.**
      *
@@ -2616,7 +2639,7 @@ export const object = <
             )
         }
     }
-    const declaredRest = rest as RestDeclaration
+    const declaredRest = rest as OldRestDeclaration
     const declaredBody: Body = {
         fields,
         rest:
@@ -2716,7 +2739,7 @@ export const object = <
             return (declared && codecOfTerm(declared.t)) as Marks<Spec[K]>
         },
         spec: spec as Spec,
-        rest: rest as RestPolicy<unknown>,
+        rest,
         def: itemDef,
     }
 
@@ -2738,6 +2761,154 @@ export const object = <
     }
 }
 
+export type ObjectEntry<
+    Key extends string = string,
+    Value extends ObjectSlot = ObjectSlot,
+> = readonly [AttributeCodec<Key, Attribute<'S'>>, Value]
+
+type AnyObjectEntry = readonly [AnyCodec, ObjectSlot]
+
+type OptionalObjectSlot = {
+    readonly def: Extract<Field, { readonly mark: 'optional' | 'undefinable' }>
+}
+
+type EntryAdmission<Entry> = Entry extends readonly [
+    AttributeCodec<infer Key, Attribute<'S'>>,
+    infer Value extends ObjectSlot,
+]
+    ? Key extends string
+        ? string extends Key
+            ? Value extends OptionalObjectSlot
+                ? unknown
+                : ErrorMessage<'[object] an open key entry must be optional, because a required wildcard means at least one matching key'>
+            : unknown
+        : ErrorMessage<'[object] an entry key must be a string codec'>
+    : ErrorMessage<'[object] an entry must contain a string codec and an object slot'>
+
+type EntriesAdmission<Entries extends readonly AnyObjectEntry[]> =
+    UnionToIntersection<EntryAdmission<Entries[number]>>
+
+type UnionToIntersection<Value> = (
+    Value extends unknown
+        ? (value: Value) => void
+        : never
+) extends (value: infer Intersection) => void
+    ? Intersection
+    : never
+
+type EntrySpec<Entry> = Entry extends readonly [
+    AttributeCodec<infer Key extends string, Attribute<'S'>>,
+    infer Value extends ObjectSlot,
+]
+    ? string extends Key
+        ? Record<never, never>
+        : { readonly [K in Key]: Value }
+    : never
+
+type EntrySpecs<Entries extends readonly AnyObjectEntry[]> = show<
+    UnionToIntersection<EntrySpec<Entries[number]>>
+>
+
+type SlotCodec<Slot> = Slot extends { readonly codec: infer Codec }
+    ? Codec
+    : Slot
+
+type WildcardEntry<Entries extends readonly AnyObjectEntry[]> =
+    Entries[number] extends infer Entry
+        ? Entry extends readonly [
+              AttributeCodec<infer Key, Attribute<'S'>>,
+              infer Value extends ObjectSlot,
+          ]
+            ? string extends Key
+                ? SlotCodec<Value>
+                : never
+            : never
+        : never
+
+type EntryRest<Entries extends readonly AnyObjectEntry[]> = [
+    WildcardEntry<Entries>,
+] extends [never]
+    ? 'refuse'
+    : Extract<WildcardEntry<Entries>, AnyCodec>
+
+const entryNames = (key: AnyCodec): string[] => {
+    const term = termOf(key)
+    if (term.kind === 'literal' && term.base === 'string') return [term.v]
+    if (
+        term.kind === 'union' &&
+        term.options.every(
+            (option) => option.kind === 'literal' && option.base === 'string',
+        )
+    ) {
+        return term.options.map((option) => (option as { v: string }).v)
+    }
+    if (term.kind === 'string') return []
+    throw new CodecError(
+        'an object entry key must be `string` or a string literal key set',
+    )
+}
+
+const entryCodec = (slot: ObjectSlot): AnyCodec =>
+    ('codec' in slot ? slot.codec : slot) as AnyCodec
+
+export function object<const Spec extends Record<string, ObjectSlot>>(
+    spec: Spec & NoSpreadMember<Spec> & NoNeverField<Spec>,
+): ObjectCodec<show<Spec>, 'refuse'>
+export function object<const Entries extends readonly AnyObjectEntry[]>(
+    ...entries: Entries & EntriesAdmission<Entries>
+): ObjectCodec<EntrySpecs<Entries>, EntryRest<Entries>>
+export function object<
+    const Spec extends Record<string, ObjectSlot>,
+    const FirstEntry extends AnyObjectEntry,
+    const Entries extends readonly AnyObjectEntry[],
+>(
+    spec: Spec & NoSpreadMember<Spec> & NoNeverField<Spec>,
+    firstEntry: FirstEntry & EntriesAdmission<[FirstEntry, ...Entries]>,
+    ...entries: Entries
+): ObjectCodec<
+    show<Spec & EntrySpecs<[FirstEntry, ...Entries]>>,
+    EntryRest<[FirstEntry, ...Entries]>
+>
+export function object(
+    first?: Record<string, ObjectSlot> | AnyObjectEntry,
+    ...tail: AnyObjectEntry[]
+): ObjectCodec<Record<string, ObjectSlot>, 'refuse' | AnyCodec> {
+    const isEntry = Array.isArray(first)
+    const spec: Record<string, ObjectSlot> =
+        !isEntry && first !== undefined
+            ? (first as Record<string, ObjectSlot>)
+            : {}
+    const entries = (isEntry ? [first, ...tail] : tail) as AnyObjectEntry[]
+    const fields: Record<string, ObjectSlot> = { ...spec }
+    let rest: AnyCodec | 'refuse' = 'refuse'
+    for (const [key, slot] of entries) {
+        const names = entryNames(key)
+        if (names.length === 0) {
+            const field = fieldOf(slot)
+            if (field.mark !== 'optional' && field.mark !== 'undefinable') {
+                throw new CodecError(
+                    'an open key entry must be optional, because a required wildcard means at least one matching key',
+                )
+            }
+            if (rest !== 'refuse') {
+                throw new CodecError('an object has at most one open key entry')
+            }
+            rest = entryCodec(slot)
+            continue
+        }
+        for (const name of names) {
+            if (name in fields) {
+                throw new CodecError(`'${name}' is declared more than once`)
+            }
+            fields[name] = slot
+        }
+    }
+    return objectFromMap(fields, rest) as ObjectCodec<
+        Record<string, ObjectSlot>,
+        'refuse' | AnyCodec
+    >
+}
+
 /** The options a factor offers, at the type level: a union's, or the factor itself. */
 type FactorOptions<F> = F extends UnionCodec<infer _T, infer Os>
     ? Os
@@ -2753,18 +2924,18 @@ type DeclaredNames<F> = FactorOptions<F>[number] extends infer O
 /** Whether any option of a factor is left open by a rest codec. */
 type AnyOpen<F> = FactorOptions<F>[number] extends infer O
     ? O extends ObjectCodec<infer _S, infer R>
-        ? [R] extends ['drop' | 'refuse']
+        ? [R] extends ['refuse']
             ? never
             : true
         : true
     : never
 
-/** `Rest.merge`: `refuse` wins, because a name neither factor declares is one the product refuses. */
+/** `refuse` wins, because a name neither factor declares is one the product refuses. */
 type MergedRest<RA, RB> = [RA] extends ['refuse']
     ? 'refuse'
     : [RB] extends ['refuse']
       ? 'refuse'
-      : 'drop'
+      : 'refuse'
 
 /** One merge: `Body.merge` at the type level. */
 type MergeTwo<X, Y> = X extends ObjectCodec<infer A, infer RA>
@@ -2855,8 +3026,8 @@ export type ValidateProduct<Fs extends readonly unknown[]> =
 
 /** One option of a factor: what the merge reads off it. */
 type Factor = {
-    readonly spec: Record<string, AnyDeclaration>
-    readonly rest: RestPolicy<unknown>
+    readonly spec: Record<string, ObjectSlot>
+    readonly rest: 'refuse' | AnyCodec
     readonly def: Term
 }
 
@@ -2874,8 +3045,8 @@ const optionsOfFactor = (factor: unknown): readonly Factor[] => {
         | {
               readonly def?: Term
               readonly item?: {
-                  readonly spec?: Record<string, AnyDeclaration>
-                  readonly rest?: RestPolicy<unknown>
+                  readonly spec?: Record<string, ObjectSlot>
+                  readonly rest?: 'refuse' | AnyCodec
                   readonly variant?: (index: number) => Factor
               }
           }
@@ -2927,9 +3098,9 @@ const productOfTwo = (first: unknown, second: unknown): unknown => {
                 'an option of a union factor is not an object codec — a product merges declared names, and only an object declares any',
             )
         }
-        if (option.rest !== 'drop' && option.rest !== 'refuse') {
+        if (option.rest !== 'refuse') {
             throw new CodecError(
-                'a factor holds undeclared names through a `rest` codec, and a product declares no meet of two of them — close both factors with `drop` or `refuse`',
+                'a factor holds undeclared names through a `rest` codec, and a product declares no meet of two of them. Close every factor with `refuse`',
             )
         }
     }
@@ -2942,11 +3113,8 @@ const productOfTwo = (first: unknown, second: unknown): unknown => {
                     )
                 }
             }
-            const rest: RestDeclaration =
-                left.rest === 'refuse' || right.rest === 'refuse'
-                    ? 'refuse'
-                    : 'drop'
-            return object({ ...left.spec, ...right.spec }, rest)
+            const rest = 'refuse'
+            return objectFromMap({ ...left.spec, ...right.spec }, rest)
         }),
     )
     // one merge is an object and needs no union around it; several are one flat union, built
@@ -3219,7 +3387,7 @@ type Written<Full, K> = Exclude<Full[K & keyof Full], undefined>
  * invariant in its value, so `Rest extends AttributeCodec<unknown, infer A>` fails for every codec
  * of a narrower value and quietly takes the wrong branch.
  */
-export type EncodedBy<Spec, Rest> = [Rest] extends ['drop' | 'refuse']
+type EncodedBy<Spec, Rest> = [Rest] extends ['drop' | 'refuse']
     ? Encoded<Spec>
     : Encoded<Spec> & { readonly [name: string]: AttributeValue }
 
@@ -3348,7 +3516,7 @@ export type Tagged<T, D extends string = keyof T & string, Spec = unknown> = {
  * The options of a union, as the terms of a union have to state them.
  *
  * `Calculus.unionOk` is the certificate that makes a union's admission the join of its options', and
- * it asks `objectNamesAgree` of every option: `rest` is `refuse`, and no field is `fallback`. The
+ * it asks `objectNamesAgree` of every option: `rest` is `refuse`, and no field is `withLegacyRead`. The
  * host already *reads* an object option that way — {@link namesFit} bounds an item's names above by
  * the option's declared names, so an undeclared name reaches no option's own `decode` — and what is
  * missing is the term saying so. The copy belongs to this union alone: the codec the caller passed
@@ -3356,7 +3524,7 @@ export type Tagged<T, D extends string = keyof T & string, Spec = unknown> = {
  *
  * **`drop` is the only policy rewritten.** An option that holds undeclared names through a `rest`
  * codec is left as it is, and its union does not certify: writing `refuse` over it would state a
- * closure the codec does not have. `objectNamesAgree`'s other half, that no field is `fallback`,
+ * closure the codec does not have. `objectNamesAgree`'s other half, that no field is `withLegacyRead`,
  * is not enforced here either — a union whose option carries one does not certify, and refusing it
  * at construction is a refusal `Orth` does not warrant.
  */
@@ -3884,7 +4052,7 @@ export type AnyObjectCodec = {
         // fits and none of them has to be named
         readonly encode: (item: never) => unknown
         readonly decode: (item: StoredItem) => unknown
-        readonly spec: Record<string, AnyDeclaration>
+        readonly spec: Record<string, ObjectSlot>
     }
 }
 

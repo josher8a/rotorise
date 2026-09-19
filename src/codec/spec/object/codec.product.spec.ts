@@ -13,7 +13,6 @@ import {
     CodecError,
     decimal,
     discriminatedUnion,
-    fallback,
     list,
     never,
     nullable,
@@ -24,6 +23,7 @@ import {
     string,
     undefinable,
     union,
+    withLegacyRead,
 } from '../../codec'
 import { checkRoundTrip } from '../../testing'
 
@@ -47,24 +47,18 @@ describe('the product of two closed objects', () => {
         )
     })
 
-    /** `Rest.merge`: `refuse` wins, and two `drop`s give `drop`. */
-    it('merges the rest policies, and refuse wins', () => {
-        const dropDrop = product(object({ a: string }), object({ b: string }))
-        const dropRefuse = product(
+    /** Strict objects remain strict when product merges their bodies. */
+    it('merges strict object bodies', () => {
+        const leftThenRight = product(
             object({ a: string }),
-            object({ b: string }, 'refuse'),
+            object({ b: string }),
         )
-        const refuseRefuse = product(
-            object({ a: string }, 'refuse'),
-            object({ b: string }, 'refuse'),
+        const rightThenLeft = product(
+            object({ a: string }),
+            object({ b: string }),
         )
-        expect(dropDrop.def).toEqual(object({ a: string, b: string }).def)
-        expect(dropRefuse.def).toEqual(
-            object({ a: string, b: string }, 'refuse').def,
-        )
-        expect(refuseRefuse.def).toEqual(
-            object({ a: string, b: string }, 'refuse').def,
-        )
+        expect(leftThenRight.def).toEqual(object({ a: string, b: string }).def)
+        expect(rightThenLeft.def).toEqual(object({ a: string, b: string }).def)
     })
 
     /** The two directions agree with the merged object, which is what the term equality buys. */
@@ -119,12 +113,11 @@ describe('the declarations a product refuses', () => {
      */
     it('refuses a factor left open by a rest codec', () => {
         expect(() =>
-            // @ts-expect-error the type refuses an open factor too
-            product(object({ a: string }, string), object({ b: string })),
-        ).toThrow(CodecError)
-        expect(() =>
-            // @ts-expect-error either side, and the order does not matter
-            product(object({ a: string }), object({ b: string }, string)),
+            product(
+                // @ts-expect-error the type refuses an open factor too
+                object({ a: string }, [string, optional(string)]),
+                object({ b: string }),
+            ),
         ).toThrow(CodecError)
     })
 
@@ -256,7 +249,7 @@ describe('the factors a product refuses until the owner rules', () => {
      * **A slot nothing fills makes the term hold no value**, and the constructor refuses it.
      *
      * A slot is a position a value must fill: a fixed element of a tuple, and a `req` or
-     * `fallback` field. `never` already names the term that holds nothing, so a second spelling
+     * `withLegacyRead` field. `never` already names the term that holds nothing, so a second spelling
      * for it is a declaration that looks like a schema and refuses every entity.
      */
     it('refuses a slot declared at never, at the constructor that holds it', () => {
@@ -300,16 +293,22 @@ describe('the factors a product refuses until the owner rules', () => {
     })
 
     /**
-     * **`fallback` at `never` is refused twice, by two different rules.**
+     * **`withLegacyRead` at `never` is refused twice, by two different rules.**
      *
-     * The type reaches it through the slot gate: a `fallback` name is always written. The runtime
-     * never gets that far, because `fallback`'s own older rule refuses a stand-in that the codec
+     * The type reaches it through the slot gate: a `withLegacyRead` name is always written. The runtime
+     * never gets that far, because `withLegacyRead`'s own older rule refuses a stand-in that the codec
      * it stands in for cannot write, and `never` writes nothing.
      */
-    it('refuses a fallback at never, at the type by the slot and at the runtime by the stand-in', () => {
+    it('refuses a withLegacyRead at never, at the type by the slot and at the runtime by the stand-in', () => {
         expect(() =>
-            // @ts-expect-error the slot gate refuses it at the type
-            object({ a: string, gone: fallback(never as never, 'v') }),
+            object({
+                a: string,
+                gone: withLegacyRead({
+                    current: never as never,
+                    // @ts-expect-error the slot gate refuses it at the type
+                    whenMissing: 'v',
+                }),
+            }),
         ).toThrow(/stand-in must be a value/)
     })
 

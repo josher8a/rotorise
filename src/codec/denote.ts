@@ -30,11 +30,11 @@ import type { Codec } from './build'
 import { codec } from './build'
 import type {
     AnyCodec,
-    AnyDeclaration,
     AttributeCodec,
     Declared,
     LiteralBase,
     LiteralValue,
+    ObjectSlot,
     Option,
     opaque,
     Refinement,
@@ -288,9 +288,9 @@ const setWire: {
  * this reads the same field data one question further — the field is `req`, its term is a
  * `literal`, and it pins exactly one alternative.
  *
- * **`req` only.** A `fallback` discriminator would fill an absent tag with a default, and the
+ * **`req` only.** A `withLegacyRead` discriminator would fill an absent tag with a default, and the
  * index would then key a member on a value no item carries. `Calculus.Body.spec` marks a
- * `fallback` field required, so the model's own clause keeps one where this refuses it: the two
+ * `withLegacyRead` field required, so the model's own clause keeps one where this refuses it: the two
  * rules differ because this one writes a tag and the model's writes none.
  *
  * One divergence, and it is the one the model writes down rather than fixes: the model reads a
@@ -1205,16 +1205,16 @@ export const denote = (def: Term): Pair => {
                 refusedBy(def.q, value),
             )
         /**
-         * §3 `(legacy)`: the current reading, extended by an older one — the model's
+         * §3 `(withLegacyRead)`: the current reading, extended by an older one — the model's
          * `Codec.extendRead`, and `lawful_extendRead` is the lemma. The write side is untouched,
-         * which is the whole of what makes it a migration rather than a union: `legacy` adds no
+         * which is the whole of what makes it a migration rather than a union: `withLegacyRead` adds no
          * way to *write*, only a second way to read.
          *
          * The current encoding is tried first and on its own, so the path every row written since
          * the migration takes allocates nothing — no `[current, ...older]` to walk and no list of
          * reasons collected for a failure that did not happen.
          *
-         * §3 `(legacy)`'s first premise, `ran(r) ⊆ dom(e)`, is checked here and nowhere earlier:
+         * §3 `(withLegacyRead)`'s first premise, `ran(r) ⊆ dom(e)`, is checked here and nowhere earlier:
          * `older` is a function, so what it returns is known only once it has answered. Without
          * the check the row decodes and the write-back refuses, which is **(C)** broken at the
          * migrated row and reported at the next write instead of at this read.
@@ -1489,11 +1489,11 @@ const codecs = new WeakMap<Term, AttributeCodec<never, AttributeValue>>()
 /**
  * A declaration's term, refusing a §4 field where a term is wanted.
  *
- * `optional(c)` and `fallback(c, v)` denote a `Field`, and no `Term` position accepts one — which
+ * `optional(c)` and `withLegacyRead({ current: c, whenMissing: v })` denote a `Field`, and no `Term` position accepts one — which
  * the positional guards refuse in the *type* at every site that could go wrong. This is the runtime
  * half, at the one place a child is taken from a codec a caller handed over.
  */
-export const termOf = (declared: AnyDeclaration): Term => {
+export const termOf = (declared: ObjectSlot): Term => {
     // a declaration and not a codec, which is what keeps the refusal below reachable: a codec's
     // definition is a term, so a parameter of `AnyCodec` would make this a branch the checker
     // says cannot be taken, and the caller it is for is the one that arrived past a cast
@@ -1748,7 +1748,7 @@ export const decodeUnknown = (
 /**
  * `occV`'s answer, coarsened to the alphabet a **value** can be classified into.
  *
- * `occV` reads a term and answers a {@link Slot}, which splits the three wire set families because
+ * `occV` reads a term and answers a {@link SetSlot}, which splits the three wire set families because
  * a term carries its base. A value does not: `shapeOf` sees a `Set` and answers `'set'`, since
  * telling `strSet` from `numSet` means inspecting the elements and **an empty `Set` belongs to no
  * family at all**. So the two alphabets stay two, and this is the one-way map between them — from

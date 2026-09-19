@@ -11,13 +11,13 @@ import type { AnyCodec } from '../../codec'
 import {
     CodecError,
     codecOfTerm,
-    fallback,
     object,
     opaque,
     optional,
     refine,
     string,
     termOf,
+    withLegacyRead,
 } from '../../codec'
 import { checkMembersStable, checkRoundTrip } from '../../testing'
 
@@ -53,7 +53,10 @@ const scalar = refine(
     },
 )
 
-const Meta = object({ vendorId: string('ACME', 'GLOBEX') }, scalar).item
+const Meta = object({ vendorId: string('ACME', 'GLOBEX') }, [
+    string,
+    optional(scalar),
+]).item
 
 describe('an open type', () => {
     const meta: VendorMeta = {
@@ -92,28 +95,56 @@ describe('an open type', () => {
     })
 })
 
-describe("what 'drop' means, said out loud", () => {
+describe('an open object entry', () => {
+    it('refuses a required wildcard because it means at least one matching key', () => {
+        expect(() =>
+            // @ts-expect-error a wildcard cannot require an unnamed attribute
+            object([string, scalar]),
+        ).toThrow(
+            /an open key entry must be optional, because a required wildcard means at least one matching key/,
+        )
+        expect(() =>
+            // @ts-expect-error a stand-in marks a required object slot
+            object([
+                string,
+                withLegacyRead({
+                    current: string,
+                    whenMissing: 'current',
+                }),
+            ]),
+        ).toThrow(
+            /an open key entry must be optional, because a required wildcard means at least one matching key/,
+        )
+    })
+
+    it('allows a required literal key set', () => {
+        const Declared = object([string('current'), string]).item
+        expect(Declared.unsafeDecode({ current: { S: 'v1' } })).toEqual({
+            current: 'v1',
+        })
+    })
+})
+
+describe('a strict object', () => {
     const Closed = object({ id: string }).item
 
-    it('ignores an undeclared attribute on the way in', () => {
-        expect(
+    it('refuses an undeclared attribute on the way in', () => {
+        expect(() =>
             Closed.unsafeDecode({ id: { S: 'w1' }, retired: { S: 'x' } }),
-        ).toEqual({
-            id: 'w1',
-        })
+        ).toThrow(CodecError)
     })
 
-    it('leaves it out of a PutItem, which replaces the item anyway', () => {
+    it('refuses a read-modify-write that contains an undeclared attribute', () => {
         const stored = { id: { S: 'w1' }, retired: { S: 'x' } }
-        expect(Closed.unsafeEncode(Closed.unsafeDecode(stored))).toEqual({
-            id: { S: 'w1' },
-        })
+        expect(() => Closed.unsafeEncode(Closed.unsafeDecode(stored))).toThrow(
+            CodecError,
+        )
     })
 
-    it('never mentions it in a patch, so an UpdateItem cannot touch it', () => {
-        expect(Closed.unsafeEncodePartial({ id: 'w2' })).toEqual({
-            id: { S: 'w2' },
-        })
+    it('refuses an undeclared attribute in a patch', () => {
+        expect(() =>
+            Closed.unsafeEncodePartial({ retired: 'x' } as never),
+        ).toThrow(CodecError)
     })
 
     it('is what the member law is told, rather than left to infer', () => {
@@ -122,18 +153,12 @@ describe("what 'drop' means, said out loud", () => {
             checkMembersStable(Closed, [
                 { id: { S: 'w1' }, retired: { S: 'x' } },
             ]),
-        ).not.toThrow()
-        // but a codec that does *not* drop is held to keeping it
-        expect(() =>
-            checkMembersStable({ ...Closed, rest: 'refuse' }, [
-                { id: { S: 'w1' }, retired: { S: 'x' } },
-            ]),
-        ).toThrow()
+        ).toThrow(CodecError)
     })
 })
 
 describe("'refuse', for a service that owns its table", () => {
-    const Strict = object({ id: string }, 'refuse').item
+    const Strict = object({ id: string }).item
 
     /**
      * **Pins wording no law has, deliberately.** The refusal is asserted as a `CodecError` beside
@@ -175,12 +200,8 @@ describe("'refuse', for a service that owns its table", () => {
  * has no `item`. The last test here is that walk.
  */
 describe('the rest policy a definition records', () => {
-    it('tells the two string policies apart', () => {
-        expect(object({ id: string }, 'drop').def).toMatchObject({
-            kind: 'object',
-            body: { rest: 'drop' },
-        })
-        expect(object({ id: string }, 'refuse').def).toMatchObject({
+    it('records the strict policy', () => {
+        expect(object({ id: string }).def).toMatchObject({
             kind: 'object',
             body: { rest: 'refuse' },
         })
@@ -199,7 +220,10 @@ describe('the rest policy a definition records', () => {
      * the term's codec. What the walk owes is the behaviour, which is what the second line asks.
      */
     it('records a rest codec as its term, not as a flag', () => {
-        const def = object({ vendorId: string('ACME', 'GLOBEX') }, scalar).def
+        const def = object({ vendorId: string('ACME', 'GLOBEX') }, [
+            string,
+            optional(scalar),
+        ]).def
         expect(def).toMatchObject({ kind: 'object' })
         expect(def.kind === 'object' && def.body.rest).toMatchObject({
             kind: 'codec',
@@ -228,17 +252,20 @@ describe('the rest policy a definition records', () => {
             /marks a \*field\*/,
         )
         expect(() =>
-            termOf(fallback(string, 'x') as unknown as AnyCodec),
+            termOf(
+                withLegacyRead({
+                    current: string,
+                    whenMissing: 'x',
+                }) as unknown as AnyCodec,
+            ),
         ).toThrow(/this position takes a term/)
     })
 
     it('agrees with the policy the item codec reports', () => {
-        for (const policy of ['drop', 'refuse'] as const) {
-            const built = object({ id: string }, policy)
-            expect(built.def.kind === 'object' && built.def.body.rest).toBe(
-                built.item.rest,
-            )
-        }
+        const built = object({ id: string })
+        expect(built.def.kind === 'object' && built.def.body.rest).toBe(
+            built.item.rest,
+        )
     })
 
     /**
@@ -260,12 +287,9 @@ describe('the rest policy a definition records', () => {
             return innerDef.body.rest
         }
 
-        expect(
-            restOfNested(object({ inner: object({ id: string }, 'drop') })),
-        ).toBe('drop')
-        expect(
-            restOfNested(object({ inner: object({ id: string }, 'refuse') })),
-        ).toBe('refuse')
+        expect(restOfNested(object({ inner: object({ id: string }) }))).toBe(
+            'refuse',
+        )
     })
 })
 
@@ -288,10 +312,10 @@ describe('a built codec passed to tableEntry', () => {
     type MetaKeys = { TAG: 'META'; id: string }
     type Meta = MetaKeys & { [key: string]: unknown }
 
-    const Attributes = object(
-        { TAG: string('META'), id: string },
-        opaque('lossy'),
-    ).item
+    const Attributes = object({ TAG: string('META'), id: string }, [
+        string,
+        optional(opaque('lossy')),
+    ]).item
     it('round-trips the attributes the spec does not name', () => {
         // generation reaches the rest policy now, so this exercises the open part and not only the
         // closed one — which is what the definition recording `rest` bought

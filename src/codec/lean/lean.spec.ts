@@ -11,9 +11,9 @@
  * long. Each one names a fact about the model rather than about this library:
  *
  * - `Double` is an axiom, so `Value.num` has no closed term. `number` is out permanently.
- * - `refine`, `held`, `legacy` and `custom` carry *functions* in the model and *closures* here.
+ * - `refine`, `held`, `withLegacyRead` and `custom` carry *functions* in the model and *closures* here.
  *   There is no expression in Lean for a closure. Out until somebody writes the Lean side by hand.
- * - `optional` and `fallback` are §4 `Field`s and `restOf` is a §4 `Rest`. Asking for a `Term` at
+ * - `optional` and `withLegacyRead` are §4 `Field`s and `restOf` is a §4 `Rest`. Asking for a `Term` at
  *   one of them is a stratification error, and the emitter reports it as one rather than flattening
  *   it — which is the same discipline `NotAboutAbsence` enforces in the types.
  *
@@ -36,10 +36,8 @@ import {
     custom,
     decimal,
     discriminatedUnion,
-    fallback,
     held,
     lazy,
-    legacy,
     list,
     mdunion,
     never,
@@ -55,6 +53,7 @@ import {
     spread,
     string,
     union,
+    withLegacyRead,
 } from '../codec'
 import { accepts } from '../denote'
 import type {
@@ -263,9 +262,11 @@ describe('terms', () => {
         expect(() => leanTermOf(erase(optional(string)))).toThrow(
             /a §4 \*field\*, not a term/,
         )
-        expect(() => leanTermOf(erase(fallback(string, 'x')))).toThrow(
-            /`optional`\/`fallback` denote `Field`/,
-        )
+        expect(() =>
+            leanTermOf(
+                erase(withLegacyRead({ current: string, whenMissing: 'x' })),
+            ),
+        ).toThrow(/`optional`\/`fallback` denote `Field`/)
         expect(leanTermOf(erase(object({ a: optional(string) })))).toContain(
             'Field.optional',
         )
@@ -280,25 +281,40 @@ describe('terms', () => {
         expect(
             leanTermOf(erase(object({ a: string, b: optional(boolean) }))),
         ).toBe(
-            'Term.object (Body.mk {"a", "b"} (fun k => if k.1 = "a" then Field.req (Term.string) else Field.optional (Term.boolean)) Rest.drop)',
+            'Term.object (Body.mk {"a", "b"} (fun k => if k.1 = "a" then Field.req (Term.string) else Field.optional (Term.boolean)) Rest.refuse)',
         )
     })
 
     /** The empty key set has no `else` to fall through to, so the function is the absurd one. */
     it('emits an object with no fields as the absurd function', () => {
         expect(leanTermOf(erase(object({})))).toBe(
-            'Term.object (Body.mk ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) Rest.drop)',
+            'Term.object (Body.mk ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) Rest.refuse)',
         )
     })
 
-    it('emits a fallback field with its stand-in value', () => {
-        expect(leanTermOf(erase(object({ a: fallback(string, 'd') })))).toBe(
-            'Term.object (Body.mk {"a"} (fun k => Field.fallback (Term.string) (Value.str "d")) Rest.drop)',
+    it('emits a missing-value field with its stand-in value', () => {
+        expect(
+            leanTermOf(
+                erase(
+                    object({
+                        a: withLegacyRead({
+                            current: string,
+                            whenMissing: 'd',
+                        }),
+                    }),
+                ),
+            ),
+        ).toBe(
+            'Term.object (Body.mk {"a"} (fun k => Field.fallback (Term.string) (Value.str "d")) Rest.refuse)',
         )
     })
 
     it('emits an open object as `Rest.codec`', () => {
-        expect(leanTermOf(erase(object({ a: string }, boolean)))).toBe(
+        expect(
+            leanTermOf(
+                erase(object({ a: string }, [string, optional(boolean)])),
+            ),
+        ).toBe(
             'Term.object (Body.mk {"a"} (fun k => Field.req (Term.string)) (Rest.codec (Term.boolean)))',
         )
     })
@@ -314,12 +330,9 @@ describe('terms', () => {
      * is exactly where they differ — would have been silently false. `Body['rest']` now carries
      * the policy, and the emitter reads it rather than guessing.
      */
-    it('tells `refuse` from `drop`, which a decode vector would need', () => {
-        expect(leanTermOf(erase(object({ a: string }, 'refuse')))).toBe(
+    it('emits the strict object policy', () => {
+        expect(leanTermOf(erase(object({ a: string })))).toBe(
             'Term.object (Body.mk {"a"} (fun k => Field.req (Term.string)) Rest.refuse)',
-        )
-        expect(leanTermOf(erase(object({ a: string }, 'drop')))).toBe(
-            'Term.object (Body.mk {"a"} (fun k => Field.req (Term.string)) Rest.drop)',
         )
     })
 
@@ -430,7 +443,7 @@ describe('what cannot be emitted', () => {
         expect(refusal(() => leanTermOf(erase(adapted))).reason).toContain(
             'Value → Value',
         )
-        const older = legacy({
+        const older = withLegacyRead({
             current: string,
             older: { decode: () => 'older' as string },
         })
@@ -458,7 +471,13 @@ describe('what cannot be emitted', () => {
             refusal(() => leanTermOf(erase(optional(string)))).reason,
         ).toContain('§4 *field*')
         expect(
-            refusal(() => leanTermOf(erase(fallback(string, 'd')))).reason,
+            refusal(() =>
+                leanTermOf(
+                    erase(
+                        withLegacyRead({ current: string, whenMissing: 'd' }),
+                    ),
+                ),
+            ).reason,
         ).toContain('§4 *field*')
     })
 
@@ -761,12 +780,16 @@ export const sampleVectors: readonly Vector[] = [
     },
     {
         name: 'object_fallback_present',
-        codec: erase(object({ a: fallback(string, 'stand-in') })),
+        codec: erase(
+            object({
+                a: withLegacyRead({ current: string, whenMissing: 'stand-in' }),
+            }),
+        ),
         value: { a: 'x' },
     },
     {
         name: 'object_open',
-        codec: erase(object({ a: string }, boolean)),
+        codec: erase(object({ a: string }, [string, optional(boolean)])),
         value: { a: 'x', z: true },
     },
     {
@@ -790,7 +813,12 @@ export const sampleVectors: readonly Vector[] = [
     },
     {
         name: 'object_restricted_rest',
-        codec: erase(object({ a: string.set('b', 'c') }, string.set('b', 'c'))),
+        codec: erase(
+            object({ a: string.set('b', 'c') }, [
+                string,
+                optional(string.set('b', 'c')),
+            ]),
+        ),
         value: { a: new Set(['b']), z: new Set(['c']) },
     },
     {
