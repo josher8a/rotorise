@@ -132,9 +132,9 @@ theorem tWitness_violates_uniqueAdmission :
     list can remove definedness everywhere. Nothing about partiality or the quotient is
     responsible; a calculus with both and no sum would be continuous. -/
 
-/-- **`legacy` is a step up.** `extendRead` only ever adds readings — everything `c`
+/-- **`alternate reader` is a step up.** `extendRead` only ever adds readings — everything `c`
     decodes, the migration decodes the same way, and the writing half is untouched. §3's
-    `(legacy)` coherence premise is what makes this an *extension* rather than a
+    `(alternate reader)` coherence premise is what makes this an *extension* rather than a
     replacement, and this is that fact in the information order. -/
 theorem approx_extendRead (c : Codec) (r : Attr → Option Value) :
     Codec.Approx c (c.extendRead r) :=

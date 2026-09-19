@@ -85,10 +85,9 @@ block — into one thing. Two consequences are the reason to do it again:
   representable. `ObjectSlot` sits in the function's codomain, which is strictly positive.
 
 `ObjectSlot` carries the current-schema rule only. A required slot remains required on both
-current-schema sides. Missing-value migration is an outer `Term.legacy` reader. Structural
-operations, including `meet` and union certification, operate on the core carrier and never
-propagate a legacy reader. A caller reapplies a legacy reader after an operation when migration
-is required.
+current-schema sides. `LegacyRead` carries one current `Term` and one optional alternate reader.
+Structural operations, including `meet` and union certification, operate on `Term`. The operations
+cannot observe or propagate an alternate reader.
 
 `Body`'s projections `Body.fields`, `Body.at` and `Body.wild` are written by hand, because a
 `mutual` block admits no `structure`. Rows needing all three match on the constructor, which keeps
@@ -104,7 +103,6 @@ error but a silent "everything": the analysis stays sound and stops saying anyth
 | a spec projection | `Body.spec` | `select` counts an object option by its names, not its contents |
 | an admission row, per side | `AdmBody` and `AdmABody` | exactness is per row; a stratum with no row cannot be exact |
 | a premise carrier | `ObligationsBody` | semantic side conditions are structural, not global |
-| a law exemption | `MPOkBody` | the exemption of `legacy` propagates through the stratum |
 | an emitter clause | the object row of `src/codec/lean.ts` | the bridge writes terms in this language, and a constructor it cannot spell breaks it |
 
 The spec projection is owed only by a stratum that holds names. A policy answers to no name.
@@ -130,11 +128,10 @@ only.
 | A premise that is | goes in | consumed by |
 | --- | --- | --- |
 | decidable from the term | `Typed`, as `DIncomp` is for a union | the judgement itself |
-| about what a codec does — its write half, its read half, an iso, a resolution | `Obligations`, as `UAtAct`, `IsoCancels` and `ReadsCoherently` are | both soundness theorems |
-| the propagation law that `legacy` is exempt from | `MPOk` | `soundness` alone |
+| about what a codec does — its write half, its read half, an iso, a resolution | `Obligations`, as `UAtAct` and `IsoCancels` are | both soundness theorems |
 
-`MPOk` is not a rule premise. It is a predicate on the term saying the derivation is legacy-free,
-and it is the single hypothesis separating `soundness_core` from `soundness`.
+`Term` has no alternate reader. Therefore `soundness` proves all four laws for every typed term.
+`LegacyRead` packages a separate alternate reader and its conditions at the codec layer.
 
 Choosing wrong is not a build error. A semantic premise in `Typed` makes the judgement
 undecidable; a syntactic premise in `Obligations` becomes a burden every caller carries.
@@ -207,10 +204,8 @@ that asks is the domain of the read half exactly.
 The price is that a row becomes `noncomputable` when its codec is, which costs nothing here
 because the numeric equality is already a field of an axiomatized interface.
 
-One row is deliberately not of this shape. The read-side row for `legacy` names both the
-subterm's channel and the term's own read channel and takes the union, keeping the subterm's
-over-approximation rather than reaching past it. Asking there is exact and is refused, because it
-would see through the object row's slack, which the analyses need.
+An alternate reader is deliberately outside the term rows. `LegacyRead.denote` tries the current
+reader first and then the alternate reader. No structural analysis reads the alternate reader.
 
 ### One codec, stated once for both sides of the pair
 
@@ -253,8 +248,9 @@ and admissible sets are ways of building those families rather than four separat
 
 `ExactV.lean` holds `Adm` and `ExactA.lean` holds `AdmA`, exact at every constructor, with no
 hypothesis and no escape hatch. Its value-side separation predicate is one clause, because the
-joint predicate absorbs what a kind table used to carry. The attribute-side predicate keeps a
-member disjunct, because `AdmA` does not bound the member index.
+joint predicate absorbs what a kind table used to carry. The attribute-side predicate is also one
+clause. An alternate reader cannot add a structural exception because `LegacyRead` is outside
+`Term`.
 
 **Retiring the older generation is refused by theorem, and the reason is counter-intuitive.**
 `select` counts an object option by the names a map carries, never by what they hold. So at an
@@ -278,12 +274,10 @@ On the value side the object row is the whole of the obstruction: `admitV_Adm_no
 `admitA_AdmA_nonObject` hold from exactness alone for every term whose spec projection is absent,
 which is every term but an object.
 
-**The read side carries a second, independent obstruction.** `sepJA_needs_member` is the witness:
-a `legacy` over a string base with a read channel firing at a numeric attribute stores one member
-while the channel reads another, widening the read half past the member the term claims, and
-another base admits that same attribute. The pair is separated by the member index and not by
-`AdmA`. The two obstructions sit at different constructors and neither subsumes the other, so a
-migration has to answer both.
+**The outer carrier has a separate read-side fact.** An alternate reader can read an attribute
+outside the current term's member. `legacyRead_reads_n` records a string core that reads a numeric
+attribute through its alternate reader. The structural classifier has no row for the outer
+carrier.
 
 The repair the object row invites — ask what the resolver consults rather than what the row says
 — is made in `Orthogonality.lean`. `OrthSV` and `OrthSA` are occupancy conjoined with option
@@ -553,7 +547,7 @@ caller's vocabulary. That refusal is the record, and it is the shape every gap o
 
 **A core union requires its discriminator.** The model selects only an input that carries the
 required discriminator. A caller that accepts an old input wraps the whole union in one outer
-`Term.legacy` reader. The alternate reader owns that migration after core selection refuses.
+`LegacyRead` carrier. The alternate reader owns that migration after core selection refuses.
 `Body.spec` contains no migration field.
 
 **A host obligation that no host code reads is found by whatever has to serialise the host's own
@@ -641,7 +635,7 @@ convention: they are proof waypoints, which is the one thing a name cannot suppl
 - New module under `Calculus/` → make it reachable from `Axioms.lean`, and baseline its counts,
   because a new module has no prior state to be judged against.
 - New stratum in the term family → every companion in the table above, counted per side.
-- New rule → put each premise in exactly one of `Typed`, `Obligations` and `MPOk`.
+- New rule → put each term premise in exactly one of `Typed` and `Obligations`.
 - New term recursion → `term_depth_wf`, and any new inequality beside `Term.depth`.
 - New analysis row → prefer asking the codec over describing the set, then prove its exactness
   clause, because a missing row is silent and silence is sound.

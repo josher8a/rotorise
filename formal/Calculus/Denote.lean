@@ -107,7 +107,6 @@ def μSyn : Term → Option Member
   | .list _ _ _ => some .L
   | .held t _ _ => μSyn t
   | .refine t _ => μSyn t
-  | .legacy t _ => μSyn t
   | .lazy _ => none
   | .custom _ _ => none
   | .opaq _ => none
@@ -180,7 +179,6 @@ def denote : Term → Codec
   | .list pre spread suf => listCodec (denoteList pre) (denoteOpt spread) (denoteList suf)
   | .held inner f g => (denote inner).through f g
   | .refine inner p => (denote inner).restrict p.eval
-  | .legacy inner r => (denote inner).extendRead r
   -- `(lazy)` concludes `⊤`: the pair is the thunk's, the member is not.
   | .lazy inner => { denote inner with μ := none }
   | .custom ce cp => { T := fun v => (ce v).isSome, μ := none, e := ce, p := cp }
@@ -233,6 +231,79 @@ def denoteμs : List Term → List (Option Member)
 
 end
 
+/-! ## The normalized legacy reader
+
+`Term` carries current syntax only. `LegacyRead` carries the current term and at most one
+alternate reader. Adding a reader combines the alternate readers into one function. The current
+reader remains first, because `Codec.extendRead` examines it before the alternate reader. -/
+
+structure LegacyRead where
+  current : Term
+  alternate : Option (Attr → Option Value)
+
+/-- Add an alternate reader without nesting the carrier. The earlier alternate reader has priority. -/
+def LegacyRead.extendRead (w : LegacyRead) (r : Attr → Option Value) : LegacyRead :=
+  { current := w.current
+    alternate := some fun a =>
+      match w.alternate with
+      | none => r a
+      | some prior => match prior a with | some v => some v | none => r a }
+
+/-- The current term denotes directly when no alternate reader exists. -/
+def LegacyRead.denote (w : LegacyRead) : Codec :=
+  match w.alternate with
+  | none => Calculus.denote w.current
+  | some r => (Calculus.denote w.current).extendRead r
+
+/-- A carrier without an alternate reader changes no codec. -/
+theorem LegacyRead.denote_none (t : Term) : (⟨t, none⟩ : LegacyRead).denote = Calculus.denote t := rfl
+
+/-- The carrier extends only the current term's reader. -/
+theorem LegacyRead.denote_some (t : Term) (r : Attr → Option Value) :
+    (⟨t, some r⟩ : LegacyRead).denote = (Calculus.denote t).extendRead r := rfl
+
+/-- Legacy composition retains one current term and one normalized alternate reader. -/
+theorem LegacyRead.extendRead_current (w : LegacyRead) (r : Attr → Option Value) :
+    (w.extendRead r).current = w.current := rfl
+
+/-- The adapter preserves the current encoder. -/
+theorem LegacyRead.encode (w : LegacyRead) (v : Value) :
+    w.denote.e v = (Calculus.denote w.current).e v := by
+  rcases w with ⟨current, alternate⟩
+  cases alternate <;> rfl
+
+/-- The adapter preserves the current member. -/
+theorem LegacyRead.member (w : LegacyRead) : w.denote.μ = (Calculus.denote w.current).μ := by
+  rcases w with ⟨current, alternate⟩
+  cases alternate <;> rfl
+
+/-- The current reader runs before the alternate reader. -/
+theorem LegacyRead.read (w : LegacyRead) (a : Attr) :
+    w.denote.p a =
+      match (Calculus.denote w.current).p a with
+      | some v => some v
+      | none => match w.alternate with | none => none | some r => r a := by
+  rcases w with ⟨current, alternate⟩
+  cases alternate <;> cases h : (Calculus.denote current).p a <;> simp [LegacyRead.denote, Codec.extendRead, h]
+
+/-- A composed reader still falls back in declaration order. -/
+theorem LegacyRead.extendRead_read (w : LegacyRead) (r : Attr → Option Value) (a : Attr) :
+    (w.extendRead r).denote.p a =
+      match (Calculus.denote w.current).p a with
+      | some v => some v
+      | none => match w.alternate with
+        | none => r a
+        | some prior => match prior a with | some v => some v | none => r a := by
+  rcases w with ⟨current, alternate⟩
+  cases alternate <;> cases h : (Calculus.denote current).p a <;> simp [LegacyRead.extendRead, LegacyRead.denote, Codec.extendRead, h]
+
+/-- One reader is represented by one alternate function. -/
+example : (LegacyRead.extendRead ⟨.string, none⟩ (fun _ => none)).alternate.isSome = true := rfl
+
+/-- Composed readers remain one alternate function. -/
+example : (LegacyRead.extendRead (LegacyRead.extendRead ⟨.string, none⟩ (fun _ => none))
+    (fun _ => none)).alternate.isSome = true := rfl
+
 /-! ## The member index
 
 Was "fuel-free" as a *claim about a fueled denotation*; now it is a fact about a structural one,
@@ -254,7 +325,6 @@ theorem denote_μ : ∀ t : Term, (denote t).μ = μSyn t
   | .list _ _ _ => rfl
   | .held t' _ _ => denote_μ t'
   | .refine t' _ => denote_μ t'
-  | .legacy t' _ => denote_μ t'
   | .lazy _ | .custom _ _ | .opaq _ | .never => rfl
   | .object b => bodySem_μ b
   | .union opts => by
@@ -320,9 +390,6 @@ theorem denote_held (t : Term) (f g : Value → Value) :
 theorem denote_refine (t : Term) (p : Pred) :
     denote (.refine t p) = (denote t).restrict p.eval := rfl
 
-/-- `legacy` denotes `extendRead`. -/
-theorem denote_legacy (t : Term) (r : Attr → Option Value) :
-    denote (.legacy t r) = (denote t).extendRead r := rfl
 
 /-- `union` denotes `altCodec`, over the options' semantics and their unanimous member. -/
 theorem denote_union_sems (opts : List Term) :

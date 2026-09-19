@@ -106,7 +106,7 @@ build stops here rather than in a reader's `#print axioms`. -/
 (§4) — a counterexample proved classically would still be a counterexample, but these are
 constructive and the guard records that. -/
 
-/-! §5's `adm` cannot pass through `legacy` on the read side — the specification defect
+/-! §5's `adm` cannot pass through `alternate reader` on the read side — the specification defect
 that had no witness until it had this one. -/
 
 /-! §6's `≡` is not transitive — the one refutation that is about the equational theory

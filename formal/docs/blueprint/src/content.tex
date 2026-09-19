@@ -122,10 +122,11 @@ there is a pair satisfying the other three and failing that one.
 \end{theorem}
 
 And \rulelink{cond:MP}{\textbf{(MP)}} is well defined only because \rulelink{cond:C}{\textbf{(C)}} holds — \texttt{e(p(a))} is an
-attribute at all because everything readable re-encodes. One term is exempt from \rulelink{cond:MP}{\textbf{(MP)}} and only
-one: \texttt{legacy}, whose entire purpose is to change what is stored (§3, §6), and since \rulelink{cond:MP}{\textbf{(MP)}} is
-recursive, a term \emph{containing} a \texttt{legacy} inherits the exemption on exactly the attributes the
-migration rereads, and on no others. Nothing is exempt from the other three.
+attribute at all because everything readable re-encodes. Every term satisfies
+\rulelink{cond:MP}{\textbf{(MP)}}. A \texttt{LegacyRead} is not a term. It is an outer carrier that
+preserves \rulelink{cond:R}{\textbf{(R)}}, \rulelink{cond:C}{\textbf{(C)}} and
+\rulelink{cond:W}{\textbf{(W)}} under its two premises, while its alternate reader can break
+\rulelink{cond:MP}{\textbf{(MP)}}.
 
 Only \rulelink{cond:R}{\textbf{(R)}} is an equality on the nose. Taken as one, \texttt{e\ ∘\ p\ =\ id} is \emph{false} and must be: digits have
 a normal form, so writing back what was read is free to normalise it, and a schema may discard names
@@ -171,7 +172,7 @@ produced, \rulelink{cor:Q}{\textbf{(Q)}} at values a table returned. What \rulel
 
 \rulelink{cond:W}{\textbf{(W)}} constrains only the writing half; this corollary is what makes the reading half follow. A
 \texttt{⇝\ S} term does not merely write \texttt{S}: it \emph{accepts} nothing else, or a read-modify-write could
-smuggle a member change through. \texttt{legacy} is precisely the sanctioned violation: it reads members the
+smuggle a member change through. The outer \texttt{LegacyRead} carrier is the sanctioned violation: it reads members the
 current encoding no longer writes, and re-encoding them is the migration.
 
 \rulelink{cond:MP}{\textbf{(MP)}} binds hardest where \texttt{μ\ =\ ⊤}. A term with a \texttt{μ} is pinned by \rulelink{cond:W}{\textbf{(W)}} and the corollary above;
@@ -219,10 +220,10 @@ the first, partial isomorphisms \cite{invertible-syntax} for the second — and 
 neither reference alone is the right one. The quotient reading refines the asymmetric lens of
 \cite{tree-transformations}, and \cite{lens-laws} is where the variants are told apart.
 
-The same two relaxations reappear one level up, in the terms rather than in the pair: §3's \texttt{held} is
-an iso and \texttt{refine} its prism, and §6's \texttt{legacy(c,\ r)\ ≈\ c} on \texttt{Can(c)} is the quotient again at the
-term level. That is not a coincidence but it is not a theorem either: the algebra that builds
-codecs relaxes an iso in the two ways a codec itself does.
+The same two relaxations reappear one level up. §3's \texttt{held} is an iso and
+\texttt{refine} its prism. The outer \texttt{LegacyRead(c,\ r)} carrier satisfies
+\texttt{LegacyRead(c,\ r)\ ≈\ c} on \texttt{Can(c)}. That is the quotient again, outside the term
+algebra.
 
 \subsection{When the deviations vanish}\label{when-the-deviations-vanish}
 
@@ -587,14 +588,14 @@ subterm's member this way.
 \end{verbatim}
 \end{definition}
 
-\begin{definition}[(legacy)]
+\begin{definition}[(alternate reader)]
 \label{rule:legacy}
-\lean{Calculus.Typed.legacy, Calculus.ReadsCoherently}
+\lean{Calculus.LegacyRead, Calculus.ReadsCoherently}
 \leanok
 \begin{verbatim}
 ⊢ c : T ⇝ μ    r : 𝔸 ⇀ T    ran(r) ⊆ dom(e)    a ∈ dom(r) ∩ dom(p) ⟹ r(a) = p(a)
-──────────────────────────────────────────────────────────────────────────────────── (legacy)
-⊢ legacy(c, r) : T ⇝ μ
+──────────────────────────────────────────────────────────────────────────────────── (alternate reader)
+LegacyRead(c, r) : adapted(T, μ)
 \end{verbatim}
 \end{definition}
 
@@ -673,15 +674,14 @@ sampling. Same term, different search. The split is a note about testing, writte
 so it cannot be lost, which is the same bargain \texttt{nullable} strikes with \texttt{union(c,\ null)}, and
 should be read the same way.
 
-\texttt{legacy}'s \texttt{r} is a bare partial map and not a codec, because only one direction is ever used: the
+\texttt{LegacyRead}'s \texttt{r} is a bare partial map and not a codec, because only one direction is ever used: the
 rule writes through \texttt{c} whatever it read through. Asking for a codec would ask for a half that cannot
 be called, and would \emph{force} one wherever the older encoding's held set differs. The two side
 premises are the soundness proof's levies (§5). \texttt{ran(r)\ ⊆\ dom(e)} is \rulelink{cond:C}{\textbf{(C)}}'s: a migration must
 land on values the current encoding can write, or the read succeeds and the write-back is the
 failure. The \textbf{coherence} premise — \texttt{r} agrees with \texttt{p} wherever both are defined — is what makes
-\texttt{legacy} a migration and not a disguise: without it the term is a union with a privileged write
-path, resolved by a precedence between its two readings, which is precisely the resolution order
-\rulelink{cond:U}{\textbf{(U)}} exists to refuse. With it, \texttt{p\ ∪\ r} is a plain union of partial maps, nothing is privileged,
+\texttt{LegacyRead} a migration and not a disguise. Without it the adapter gives two conflicting
+answers to one attribute. With it, \texttt{p\ ∪\ r} is a left-biased union of compatible partial maps,
 and a migrated row behaves \emph{by law} like a current one at the surface. How the migration achieves
 that is the migration's duty, but that it must is the calculus's.
 
@@ -893,7 +893,7 @@ machinery of admission gives.
 
 Note that \rulelink{rule:dunion}{\texttt{(dunion)}}'s premise asks \texttt{sᵢ(d)} to \emph{be} the literal — an attribute term, hence a \texttt{req}
 field. A row without the discriminator does not select a core option. A caller that accepts such
-an old row supplies one outer \texttt{legacy} reader for the whole union.
+an old row supplies one outer \texttt{LegacyRead} reader for the whole union.
 
 \textbf{Arity one at the discriminator}, and n-ary literals everywhere else. The rule asks for a single
 tag \texttt{tᵢ} per variant, and disjointness of singletons is distinctness. Soundness does not need the
@@ -916,8 +916,8 @@ The difference decides real schemas, and the next example is one.
 write the empty array, but every value it does write is read back by the one option that wrote it.
 Under the stronger reading the union is refused; under this one it is lawful, minus the empty case.
 
-Declaration order is never consulted, which is what puts commutativity in §6, and why \texttt{legacy}'s
-coherence premise (§3) matters beyond \texttt{legacy}: a precedence between readings anywhere in the
+Declaration order is never consulted, which is what puts commutativity in §6, and why \texttt{LegacyRead}'s
+coherence premise (§3) matters beyond \texttt{LegacyRead}: a precedence between readings anywhere in the
 calculus would be a union resolved by rank, which is what \rulelink{cond:U}{\textbf{(U)}} refuses.
 
 \rulelink{cond:U}{\textbf{(U)}} quantifies over inputs, so it is not decidable at the declaration, where a
@@ -1072,11 +1072,11 @@ terms force the point:
   readable side cannot follow syntactically, \texttt{q} testing the value a read \emph{produces}, so it decodes
   with the base and applies \texttt{q} to the result.
 \item
-  \textbf{\texttt{legacy(c,\ r)}.} \texttt{p} reads attributes \texttt{c} does not, so a passthrough would claim a bound on
-  exactly the direction \texttt{r} widens: \texttt{legacy(literal("A"),\ r)} with \texttt{r} reading \texttt{⟨N,\ "1"⟩} to \texttt{"A"}
+  \textbf{\texttt{LegacyRead(c,\ r)}.} \texttt{p} reads attributes \texttt{c} does not, so a passthrough would claim a bound on
+  exactly the direction \texttt{r} widens: \texttt{LegacyRead(literal("A"),\ r)} with \texttt{r} reading \texttt{⟨N,\ "1"⟩} to \texttt{"A"}
   reads an attribute \texttt{A(literal("A"))} refuses, which is unsound rather than coarse. The attributes
-  \texttt{r} widens by are \texttt{dom(r)}, and \texttt{r} is data the term carries, so the set is \texttt{A(c)\ ∪\ dom(r)}. The
-  writable side passes through: \texttt{legacy} adds no way to write.
+  \texttt{r} widens by are \texttt{dom(r)}, and \texttt{r} is data the outer carrier holds, so the set is \texttt{A(c)\ ∪\ dom(r)}. The
+  writable side passes through: \texttt{LegacyRead} adds no way to write.
 \item
   \textbf{\texttt{held(c,\ f,\ g)}}, the one term whose readable side sees further than its writable one. \texttt{f} sits
   in front of \texttt{e}, so \texttt{V} pulls back along it; \texttt{g} sits behind \texttt{p} and is total, so it changes which
@@ -1125,7 +1125,7 @@ Both over-approximate, and over-approximating is the safe direction — if \text
 \texttt{X′\ ∩\ Y′\ =\ ∅} then \texttt{X\ ∩\ Y\ =\ ∅} — so a coarse answer costs a discharge and never buys a wrong one.
 Where a term carries an arbitrary function the answer is \texttt{⊤}, every label: \texttt{held}'s \texttt{f} runs before
 the subterm and can move a value into any constructor, \texttt{custom} is arbitrary in both directions, and
-\texttt{legacy}'s \texttt{r} is arbitrary on the reading side.
+\texttt{LegacyRead}'s \texttt{r} is arbitrary on the reading side.
 
 \textbf{The writable side's label is the constructor of the value, not the runtime kind}, and the
 difference does work. A kind collapses the three set families into one; the constructors do not, and
@@ -1228,7 +1228,7 @@ two.
 and reading through the wrapper is what lets the question be asked of it. The writable side stays an
 obligation, \texttt{f} being free to move a value into any constructor. And
 \texttt{union(literal("A"),\ held(literal("A"),\ f,\ g))}, the counterexample below, separates on neither
-side. Note that the member disjunct is no help in either case: both options are \texttt{⇝\ S}.
+side. The member projection cannot distinguish either pair: both options are \texttt{⇝\ S}.
 
 One note on what has no set of its own. \texttt{optional} is a \textbf{field} (§4), not a term,
 so nothing passes through it: admission is a function on terms and has no case to give it. And a
@@ -1279,12 +1279,12 @@ and it implies \rulelink{cond:MP}{\textbf{(MP)}} as stated.
 
 \begin{theorem}[soundness]
 \label{thm:soundness}
-\uses{cond:R,cond:C,cond:W,cond:MP,cond:U,rule:legacy,rule:lazy,rule:union,rule:dunion,rule:opaque}
+\uses{cond:R,cond:C,cond:W,cond:MP,cond:U,rule:lazy,rule:union,rule:dunion,rule:opaque}
 \lean{Calculus.soundness, Calculus.soundness_core, Calculus.carrier_denote}
 \leanok
 Every derivable \texttt{⊢\ c\ :\ T\ ⇝\ μ}, and every \texttt{⊢\ f\ :\ T\ ⊗\ π\ ⇝\ μ}, denotes a pair satisfying \rulelink{cond:R}{\textbf{(R)}},
-\rulelink{cond:C}{\textbf{(C)}}, \rulelink{cond:W}{\textbf{(W)}}, and \rulelink{cond:MP}{\textbf{(MP)}} in the strong form \texttt{e(p(a))\ ≼\ a}, with three residues,
-all named: \rulelink{cond:MP}{\textbf{(MP)}} is off on the attributes a \texttt{legacy} in the derivation rereads; every
+\rulelink{cond:C}{\textbf{(C)}}, \rulelink{cond:W}{\textbf{(W)}}, and \rulelink{cond:MP}{\textbf{(MP)}} in the strong form \texttt{e(p(a))\ ≼\ a}, with two residues,
+both named: every
 \rulelink{rule:union}{\texttt{(union)}} in the derivation carries \rulelink{cond:U}{\textbf{(U)}} \emph{where the union acts} as an obligation, which the
 dischargers of this section settle at the declaration wherever they decide a pair, \rulelink{rule:dunion}{\texttt{(dunion)}} and
 \texttt{opaque} outright; and a \rulelink{rule:lazy}{\texttt{(lazy)}} whose unfolding re-enters itself \textbf{through a union} is outside
@@ -1293,7 +1293,7 @@ below repeats: there is no fixpoint there to prove anything about. Such a union 
 What it lacks is the theorem, not a rule.
 \end{theorem}
 
-The two premises on \rulelink{rule:legacy}{\texttt{(legacy)}}, \texttt{ran(r)\ ⊆\ dom(e)} and
+The two premises on \rulelink{rule:legacy}{\texttt{(alternate reader)}}, \texttt{ran(r)\ ⊆\ dom(e)} and
 coherence, exist because this proof failed without them. Each excludes a term that the calculus
 would otherwise derive and the laws refuse. Null-honesty is not
 among them: the null point is an option of \rulelink{rule:union}{\texttt{(union)}}, so what would have been a
@@ -1422,7 +1422,7 @@ must be present on both current-schema sides.
 
 \emph{array, tuple, tuple-tail, record.} The step is the subterm's pair at each position or name — a
 tuple first aligns positions with their codecs, head positionally and tail uniformly, length
-mismatches refusing. The Lemma gives all four laws from the induction hypotheses; a \texttt{legacy}
+mismatches refusing. The Lemma gives all four laws from the induction hypotheses; a \texttt{LegacyRead}
 element is where the \rulelink{cond:MP}{\textbf{(MP)}} exemption propagates — pointwise, on the positions it rereads, per
 §2.
 
@@ -1529,17 +1529,17 @@ refinement.
 \begin{theorem}[a legacy reading that is the current one]
 \label{eq:legacy-self}
 \uses{rule:legacy}
-\lean{Calculus.equiv_extendRead_self, Calculus.equiv_denote_legacy_self}
+\lean{Calculus.equiv_extendRead_self, Calculus.equiv_legacyRead_self}
 \leanok
-\texttt{legacy(c,\ p\_c)\ ≡\ c}. An older reading that is the current one adds nothing.
+\texttt{LegacyRead(c,\ p\_c)\ ≡\ c}. An older reading that is the current one adds nothing.
 \end{theorem}
 
 \begin{theorem}[a migration agrees on the canonical set]
 \label{eq:legacy-can}
 \uses{rule:legacy,cond:R}
-\lean{Calculus.extendRead_eq_on_can, Calculus.denote_legacy_eq_on_can}
+\lean{Calculus.extendRead_eq_on_can, Calculus.legacyRead_eq_on_can}
 \leanok
-\texttt{legacy(c,\ r)\ ≈\ c} on \texttt{Can(c)}, for lawful \texttt{c}. A migration differs from a
+\texttt{LegacyRead(c,\ r)\ ≈\ c} on \texttt{Can(c)}, for lawful \texttt{c}. A migration differs from a
 lawful current encoding only off the canonical set, and the premise it needs is \rulelink{cond:R}{\textbf{(R)}}.
 \end{theorem}
 
@@ -1634,11 +1634,11 @@ too.
 \uses{rule:legacy,cond:MP,cor:readW}
 \lean{Calculus.legacy_breaks_MP}
 \leanok
-\texttt{legacy(c,\ r)} breaks \rulelink{cond:MP}{\textbf{(MP)}}. On purpose, and it is the only term licensed to: changing
-what is stored \emph{is} the migration, and §2's read-side corollary falls with it.
+\texttt{LegacyRead(c,\ r)} can break \rulelink{cond:MP}{\textbf{(MP)}}. It is outside the term
+judgement. Changing what is stored is the migration, and §2's read-side corollary falls with it.
 \end{theorem}
 
-So a \texttt{legacy} attribute cannot be an index key, which is the price.
+So an adapted codec cannot be an index key, which is the price.
 
 \begin{theorem}[the canonizer is not the identity]
 \label{eq:canonizer}
@@ -1673,13 +1673,14 @@ Which places the calculus: \textbf{§1} a universal domain, \textbf{§2} types a
 \textbf{§3–§5} a two-index typing relation with side conditions, tied back to §2 by soundness, \textbf{§6} the
 equational theory. And the terms are generated by a small algebra, which the soundness proof's
 grouping makes official: \textbf{points} (the ground terms); one \textbf{partial iso} (\texttt{held}, with \texttt{refine}
-its prism); one \textbf{agreeing read-extension} (\texttt{legacy}); three \textbf{products} — positional (\texttt{array},
+its prism); three \textbf{products} — positional (\texttt{array},
 \texttt{tuple}) and keyed (\texttt{record}, \texttt{object}), instances of one traversal argument, and unordered (\texttt{set}),
 which is the image argument, with injectivity from \rulelink{cond:R}{\textbf{(R)}};
 one \textbf{sum} (\texttt{union}), resolved by unique admission, with \rulelink{rule:dunion}{\texttt{(dunion)}} the one whose (U) holds
 by construction and \texttt{opaque} the one whose (U) is a theorem; and a \textbf{fixpoint} (\texttt{lazy},
 and \texttt{opaque} again). Fields are the keyed product's
 presence decoration, and \texttt{nullable} is that sum's guarded insertion (§3) rather than a term of its own.
+The outer \texttt{LegacyRead} carrier adds one agreeing read-extension to a complete current term.
 
 The algebra makes one more thing visible, which the rules do not show. \textbf{The two halves of the pair are the same construction at two carriers, everywhere the
 calculus builds something itself.} A sum filters by the admission \emph{that side} reads and acts
@@ -1688,24 +1689,27 @@ swapped for attribute-admission. Adjoining the null point is the same constructi
 attributes. A product traverses. Reading a discriminator's tag is one lookup, spelled once per
 carrier.
 
-Exactly three terms break it, and they are the same three every time: \texttt{held}, \texttt{refine} and
-\texttt{legacy} — the wrappers carrying a \textbf{caller's function that is not itself a codec}. \texttt{held}'s \texttt{f}
+Exactly three term constructors break it: \texttt{held}, \texttt{refine} and \texttt{custom}. Each
+constructor carries a \textbf{caller's function that is not itself a codec}. \texttt{held}'s \texttt{f}
 gates the writing while \texttt{g} only post-processes the reading, which is why the readable side sees
-through it and the writable one cannot (§5). \texttt{legacy}'s \texttt{r} widens the reading and touches the writing not at all. \texttt{refine}'s
+through it and the writable one cannot (§5). \texttt{refine}'s
 \texttt{q} is a predicate on \emph{values}, so it gates one carrier directly and the other only after a read.
 \texttt{custom} is the degenerate case: both halves are the caller's, so there is no shared construction to
-be symmetric about.
+be symmetric about. Outside the term algebra, \texttt{LegacyRead}'s \texttt{r} widens the reading and
+touches the writing not at all.
 
 So the asymmetry in this calculus is not a property of encoding-versus-decoding. It is the mark of
-where a caller's function enters, and it stays local to the four terms that admit one.
+where a caller's function enters. It stays local to three term constructors and one outer carrier.
 That is the divisible /
 decidable \cite{divisible-decidable} skeleton, read invariantly — as Invariant rather than as a
 contravariant functor — because both directions are present at once.
 
 The judgement settles the laws for every term the calculus builds itself. What it leaves to the
 caller is the premise on a function that is not a codec: \rulelink{rule:held}{\texttt{(held)}}'s inverse pair,
-\rulelink{rule:refine}{\texttt{(refine)}}'s predicate, \rulelink{rule:legacy}{\texttt{(legacy)}}'s agreement with the reading it
-extends, and \rulelink{rule:custom}{\texttt{(custom)}}'s two halves outright. What no derivation settles is each
+\rulelink{rule:refine}{\texttt{(refine)}}'s predicate, and
+\rulelink{rule:custom}{\texttt{(custom)}}'s two halves outright. The outer
+\rulelink{rule:legacy}{\texttt{(alternate reader)}} rule separately requires agreement with the current
+reading. What no derivation settles is each
 \texttt{union}'s residual \rulelink{cond:U}{\textbf{(U)}} where no discharger decides it, and how much of any of this an
 implementation carries in its own types, which is a question about that implementation and not
 about the calculus.

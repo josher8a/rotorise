@@ -273,7 +273,6 @@ inductive Typed : Term → Held → Option Member → Prop where
       Typed (.held t f g) (fun v => I (f v)) μ
   | refine {t T μ p} (h : Typed t T μ) :
       Typed (.refine t p) (fun v => T v ∧ p.eval v) μ
-  | legacy {t T μ r} (h : Typed t T μ) : Typed (.legacy t r) T μ
   | lazy {t T μ} (h : Typed t T μ) : Typed (.lazy t) T none
   | custom (ce cp) : Typed (.custom ce cp) (fun v => (ce v).isSome = true) none
   | opaq (lossy) : Typed (.opaq lossy) (HOpaque lossy) none

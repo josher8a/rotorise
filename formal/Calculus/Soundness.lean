@@ -3,16 +3,9 @@ import Calculus.Typing
 /-!
 # §5 — Soundness
 
-The theorem. `Obligations t` collects the doc's *semantic* rule premises — `(legacy)`'s two
-side conditions, `(held)`'s cancellation laws, `(custom)`'s laws, and `(union)`'s residual
-(U) at canonical inputs. **Not fueled**, which this paragraph
-once said: `Obligations : Term → Prop` is structural, as its own docstring says in as many
-words. `MPOk` marks a derivation legacy-free — the doc's (MP) exemption, as a predicate.
-
-Statements:
-
-* `soundness_core` — (R), (C), (W) for every derivable term.
-* `soundness` — all four laws, legacy-free.
+The theorem. `Obligations t` collects the semantic rule premises: `(held)` cancellation laws,
+`(custom)` laws, and `(union)` residual (U). The current term language has no read adapter,
+so every typed term satisfies all four laws.
 
 The ground-term cases are wrappers over the certified combinators,
 where the per-construction lemmas — proved and open — now live.
@@ -65,7 +58,6 @@ def Obligations : Term → Prop
   | .refine t' _ => Obligations t'
   | .list pre sp suf => ObligationsList pre ∧ ObligationsOpt sp ∧ ObligationsList suf
   | .held t' f g => Obligations t' ∧ IsoCancels (denote t') f g
-  | .legacy t' r => Obligations t' ∧ ReadsCoherently (denote t') r
   | .lazy t' => Obligations t'
   | .custom ce cp =>
     Lawful { T := fun v => (ce v).isSome, μ := none, e := ce, p := cp }
@@ -96,40 +88,14 @@ def ObligationsOpt : Option Term → Prop
 
 end
 
-mutual
+/-! ## The normalized alternate reader -/
 
-/-- Legacy-free: where (MP) holds without exemption. Structural, for the same reason. -/
-def MPOk : Term → Prop
-  | .legacy _ _ => False
-  | .literal _ _
-  | .string | .number | .decimal | .boolean | .binary | .null
-  | .opaq _ | .custom _ _ | .set _ | .never => True
-  | .refine t' _
-  | .held t' _ _ => MPOk t'
-  | .list pre sp suf => MPOkList pre ∧ MPOkOpt sp ∧ MPOkList suf
-  | .lazy t' => MPOk t'
-  | .object b => MPOkBody b
-  | .union opts => MPOkList opts
-
-def MPOkBody : Body → Prop
-  | .mk _ f wild => (∀ k, MPOkField (f k)) ∧ MPOkWild wild
-
-def MPOkField : ObjectSlot → Prop
-  | .req t' | .optional t' => MPOk t'
-
-def MPOkWild : Option (KeyPat × Term) → Prop
-  | some (_, t') => MPOk t'
-  | none => True
-
-def MPOkList : List Term → Prop
-  | [] => True
-  | t' :: ts => MPOk t' ∧ MPOkList ts
-
-def MPOkOpt : Option Term → Prop
-  | none => True
-  | some t' => MPOk t'
-
-end
+/-- The current term's obligations and the alternate reader's existing coherence condition. -/
+def LegacyReadObligations (w : LegacyRead) : Prop :=
+  Obligations w.current ∧
+    match w.alternate with
+    | none => True
+    | some r => ReadsCoherently (denote w.current) r
 
 /-! ### The companions, as the quantifiers the rest of the file speaks in
 
@@ -147,16 +113,6 @@ theorem obligationsOpt_iff : ∀ {tail : Option Term},
     ObligationsOpt tail ↔ ∀ t ∈ tail, Obligations t
   | none => by simp [ObligationsOpt]
   | some _ => by simp [ObligationsOpt]
-
-theorem mpOkList_iff : ∀ {ts : List Term}, MPOkList ts ↔ ∀ t ∈ ts, MPOk t
-  | [] => by simp [MPOkList]
-  | t :: ts => by
-      simp only [MPOkList, List.mem_cons, forall_eq_or_imp]
-      exact and_congr_right (fun _ => mpOkList_iff)
-
-theorem mpOkOpt_iff : ∀ {tail : Option Term}, MPOkOpt tail ↔ ∀ t ∈ tail, MPOk t
-  | none => by simp [MPOkOpt]
-  | some _ => by simp [MPOkOpt]
 
 /-! ### The premises, per rule
 
@@ -184,11 +140,6 @@ theorem list {pre sp suf} (h : Obligations (.list pre sp suf)) :
 /-- §3 `(held)`: the subterm's premises, and the iso cancelling on the carriers. -/
 theorem held {t f g} (h : Obligations (.held t f g)) :
     Obligations t ∧ IsoCancels (denote t) f g := h
-
-/-- §3 `(legacy)`: the subterm's premises, and the migration landing on writable values
-    and agreeing with the current reading. -/
-theorem legacy {t r} (h : Obligations (.legacy t r)) :
-    Obligations t ∧ ReadsCoherently (denote t) r := h
 
 /-- §3 `(custom)`: the escape hatch proves §2's laws for itself. -/
 theorem custom {ce cp} (h : Obligations (.custom ce cp)) :
@@ -291,7 +242,6 @@ theorem typed_μSyn : ∀ {t T μ}, Typed t T μ → μSyn t = μ
   | _, _, _, .list _ _ _ => rfl
   | _, _, _, .held h' => by have ih := typed_μSyn h'; exact ih
   | _, _, _, .refine h' => by have ih := typed_μSyn h'; exact ih
-  | _, _, _, .legacy h' => by have ih := typed_μSyn h'; exact ih
   | _, _, _, .lazy _ => rfl
   | _, _, _, .custom _ _ => rfl
   | _, _, _, .opaq _ => rfl
@@ -316,29 +266,22 @@ subterm, whose two combinator lemmas are applied to the two halves of the induct
 hypothesis; and a list of subterms, where the hypothesis is read off the mapped list.
 What is left in each case is the combinator lemmas it cites — which is the content. -/
 
-/-- What one derivation has to deliver: the core laws unconditionally, and all four
-    where it is legacy-free. -/
-abbrev Sound (t : Term) : Prop :=
-  LawfulCore (denote t) ∧ (MPOk t → Lawful (denote t))
+/-- What one derivation has to deliver: the core laws and all four laws. -/
+abbrev Sound (t : Term) : Prop := LawfulCore (denote t) ∧ Lawful (denote t)
 
-/-- A ground case: the pair is lawful outright, so both halves are the same lemma. -/
-theorem sound_ground {P : Prop} {c : Codec} (h : Lawful c) :
-    LawfulCore c ∧ (P → Lawful c) :=
-  ⟨h.core, fun _ => h⟩
+/-- A ground case supplies both results. -/
+theorem sound_ground {c : Codec} (h : Lawful c) : LawfulCore c ∧ Lawful c := ⟨h.core, h⟩
 
-/-- A one-subterm case: the subterm's core lemma and its full one, applied to the two
-    halves of the induction hypothesis. (MP) passes through unchanged — every wrapper
-    but `legacy` is transparent to it. -/
+/-- A one-subterm construction preserves both results. -/
 theorem sound_wrap {t : Term} {c : Codec} (ih : Sound t)
     (core : LawfulCore (denote t) → LawfulCore c)
-    (full : Lawful (denote t) → Lawful c) :
-    LawfulCore c ∧ (MPOk t → Lawful c) :=
-  ⟨core ih.1, fun hmp => full (ih.2 hmp)⟩
+    (full : Lawful (denote t) → Lawful c) : LawfulCore c ∧ Lawful c :=
+  ⟨core ih.1, full ih.2⟩
 
 -- the shared `term_depth_wf` block has alternatives this theorem's goals do not use
 set_option linter.unreachableTactic false in
 /-- Both halves of §5's theorem in one induction: the core laws unconditionally, and
-    all four where the derivation is legacy-free. One walk of the derivation, one
+    all four laws. One walk of the derivation, one
     unpacking of the obligations; each case dispatches to its two combinator lemmas.
     The public statements are the projections below. -/
 theorem soundness_both : ∀ {t T μ}, Typed t T μ → Obligations t → Sound t
@@ -367,10 +310,6 @@ theorem soundness_both : ∀ {t T μ}, Typed t T μ → Obligations t → Sound 
     | @held t' I' μ' f g h' =>
       exact sound_wrap (t := t') (soundness_both h' hob.1) (LawfulCore.through · hob.2)
         (Lawful.through · hob.2)
-    | @legacy t' T' μ' r h' =>
-      -- (MP) is off here by design: `MPOk` is `False` at a `legacy`, so the second
-      -- half is vacuous and only the core laws survive. §5's first residue.
-      exact ⟨LawfulCore.extendRead (soundness_both h' hob.1).1 hob.2.1, fun hmp => hmp.elim⟩
     | @list pre Tpre sp Tsp suf Tsuf hp hs hf =>
       have ihp : ∀ t' ∈ pre, Sound t' := fun t' ht' => by
         obtain ⟨T', μ', hμ'⟩ := TypedList.forall hp t' ht'
@@ -390,11 +329,10 @@ theorem soundness_both : ∀ {t T μ}, Typed t T μ → Obligations t → Sound 
       exact ⟨lawfulCore_listCodec (List.forall_mem_map.mpr fun t' ht' => (ihp t' ht').1)
           (forall_mem_map_option fun t' ht' => (ihsp t' ht').1)
           (List.forall_mem_map.mpr fun t' ht' => (ihf t' ht').1),
-        fun hmp => lawful_listCodec
-          (List.forall_mem_map.mpr fun t' ht' => (ihp t' ht').2 (mpOkList_iff.mp hmp.1 t' ht'))
-          (forall_mem_map_option fun t' ht' => (ihsp t' ht').2 (mpOkOpt_iff.mp hmp.2.1 t' ht'))
-          (List.forall_mem_map.mpr fun t' ht' => (ihf t' ht').2
-            (mpOkList_iff.mp hmp.2.2 t' ht'))⟩
+        lawful_listCodec
+          (List.forall_mem_map.mpr fun t' ht' => (ihp t' ht').2)
+          (forall_mem_map_option fun t' ht' => (ihsp t' ht').2)
+          (List.forall_mem_map.mpr fun t' ht' => (ihf t' ht').2)⟩
     -- The field table is indexed by the declared names, so the induction hypothesis is
     -- read off at a key rather than at a membership, and ~~TypedFields.forall~~ — which
     -- existed to walk the row — is not needed. Nor is a `Nodup` to transport.
@@ -405,7 +343,7 @@ theorem soundness_both : ∀ {t T μ}, Typed t T μ → Obligations t → Sound 
       simp only [Body.fields_mk, Body.at_mk, Body.wild_mk] at hfields hrest
       -- a field's codec is its term's denotation, and (MP) reaches it unchanged
       have ihf : ∀ k, LawfulCore (fieldSem (ff k)).codec ∧
-          (MPOkField (ff k) → Lawful (fieldSem (ff k)).codec) := by
+          Lawful (fieldSem (ff k)).codec := by
         intro k
         have hobf := hob.1 k
         obtain ⟨t', hty', hshape⟩ := TypedField.term (hfields k)
@@ -414,19 +352,19 @@ theorem soundness_both : ∀ {t T μ}, Typed t T μ → Obligations t → Sound 
           exact soundness_both hty' hobf
         · rw [heq] at hobf ⊢; exact soundness_both hty' hobf
       have ihr : ∀ c, wildSem wild = .codec c →
-          LawfulCore c ∧ (MPOk (.object (.mk fields ff wild)) → Lawful c) := by
+          LawfulCore c ∧ Lawful c := by
         intro c hcr
         cases hrest with
         | none => exact nomatch hcr
         | @some pat t' T' μ' hty =>
           replace hcr : RestSem.codec (denote t') = RestSem.codec c := hcr
           cases hcr
-          exact ⟨(soundness_both hty hob.2).1, fun hmp => (soundness_both hty hob.2).2 hmp.2⟩
+          exact soundness_both hty hob.2
       rw [Sound, denote_object_table, fieldTable]
       exact ⟨lawfulCore_objectCodec (fun k => (ihf k).1)
           (fun c hcr => (ihr c hcr).1),
-        fun hmp => lawful_objectCodec (fun k => (ihf k).2 (hmp.1 k))
-          (fun c hcr => (ihr c hcr).2 hmp)⟩
+        lawful_objectCodec (fun k => (ihf k).2)
+          (fun c hcr => (ihr c hcr).2)⟩
     | @union opts Ts μs hlist _ =>
       have ihs : ∀ t' ∈ opts, Sound t' := fun t' ht' => by
         obtain ⟨T', μ', hμ'⟩ := TypedListμ.forall hlist t' ht'
@@ -444,8 +382,8 @@ theorem soundness_both : ∀ {t T μ}, Typed t T μ → Obligations t → Sound 
       rw [Sound, denote_union_sems, optionSems_eq, denoteμs_eq_map]
       exact ⟨lawfulCore_altCodec
           (List.forall_mem_map.mpr fun t' ht' => (optionSemOf_c _ _) ▸ (ihs t' ht').1) hU hW,
-        fun hmp => lawful_altCodec
-          (List.forall_mem_map.mpr fun t' ht' => (optionSemOf_c _ _) ▸ (ihs t' ht').2 (mpOkList_iff.mp hmp t' ht'))
+        lawful_altCodec
+          (List.forall_mem_map.mpr fun t' ht' => (optionSemOf_c _ _) ▸ (ihs t' ht').2)
           hU hW⟩
 
 termination_by t _ _ _ _ => Term.depth t
@@ -792,7 +730,6 @@ theorem typed_TSub : ∀ {t T μ}, Typed t T μ → ∀ v, (denote t).T v → T 
     | @held t' I' μ' f g h' =>
       exact typed_TSub h' (f v) hv
     | @refine t' T' μ' q h' => exact ⟨typed_TSub h' v hv.1, hv.2⟩
-    | @legacy t' T' μ' r h' => exact typed_TSub h' v hv
     | @lazy γ T' μ' h' => exact typed_TSub h' v hv
     | @object body bind R μs hfields hrest =>
       cases body with | mk fields ff wild =>
@@ -887,8 +824,6 @@ theorem carrier_denote : ∀ {t T μ}, Typed t T μ → Obligations t → Carrie
         (soundness_both h' hob.1).1 hob.2.2
     | @refine t' T' μ' p h' =>
       exact carrier_restrict (carrier_denote h' hob.refine) p.eval
-    | @legacy t' T' μ' r h' =>
-      exact carrier_extendRead (carrier_denote h' hob.1) hob.2.1
     | @lazy γ T' μ' h' =>
       have ih := carrier_denote h' hob.lazy
       exact ⟨fun he => ih.domE he, fun hp => ih.ranP hp⟩
@@ -944,17 +879,23 @@ theorem typed_p_mem {t T μ} (h : Typed t T μ) (hob : Obligations t)
     {a v} (hp : (denote t).p a = some v) : T v :=
   typed_TSub h v ((carrier_denote h hob).ranP hp)
 
-/-- §5 Theorem (soundness), core half: (R), (C), (W) for every derivable term — the
-    `legacy` case included, which is exactly where this differs from `soundness`. -/
+/-- §5 Theorem (soundness), core half: (R), (C), (W) for every derivable current term. -/
 theorem soundness_core {t T μ} (h : Typed t T μ)
     (hob : Obligations t) : LawfulCore (denote t) :=
   (soundness_both h hob).1
 
-/-- §5 Theorem (soundness), full: all four laws where the derivation is legacy-free —
-    the doc's (MP) exemption, made a hypothesis. Each case dispatches to its
-    combinator lemma; the grouping is the doc's proof, machine-checked. -/
+/-- §5 Theorem (soundness): every current term satisfies all four laws. -/
 theorem soundness {t T μ} (h : Typed t T μ)
-    (hob : Obligations t) (hmp : MPOk t) : Lawful (denote t) :=
-  (soundness_both h hob).2 hmp
+    (hob : Obligations t) : Lawful (denote t) :=
+  (soundness_both h hob).2
+
+/-- The alternate reader preserves the three core laws under its existing condition. -/
+theorem legacyRead_lawfulCore {T μ} (w : LegacyRead) (ht : Typed w.current T μ)
+    (h : LegacyReadObligations w) :
+    LawfulCore w.denote := by
+  rcases w with ⟨current, alternate⟩
+  cases alternate with
+  | none => exact soundness_core ht h.1
+  | some r => exact LawfulCore.extendRead (soundness_core ht h.1) h.2.1
 
 end Calculus

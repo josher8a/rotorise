@@ -225,7 +225,6 @@ noncomputable def Adm : Term → Value → Bool
   -- the bottom admits nothing, and the row is that sentence
   | .never => fun _ => false
   | .refine t p => fun v => Adm t v && p.eval v
-  | .legacy t _ => Adm t
   | .lazy t     => Adm t
   | .held t f _ => fun v => Adm t (f v)
   -- **`select`'s count, mirrored** — where this was `⋁` over the options. The `⋁` was
@@ -891,9 +890,6 @@ theorem Adm_exact : ∀ (t : Term), ExactV t
   | .refine c p => by
       have hc := Adm_exact c
       intro v; cases hq : p.eval v <;> simp [Adm, denote, denote, Codec.restrict, hq, hc v]
-  | .legacy c r => by
-      have hc := Adm_exact c
-      intro v; simpa [Adm, denote, denote, denoteList_eq, denoteOpt_eq, optionSems_eq, denoteμs_eq_map, Codec.extendRead] using hc v
   | .lazy c => by
       have hc := Adm_exact c
       intro v; simpa [Adm, denote] using hc v
