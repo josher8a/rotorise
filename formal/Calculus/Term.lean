@@ -188,6 +188,34 @@ inductive ObjectSlot where
 
 end
 
+/-- Whether a term is the bottom, as a `Bool` the object presence rows branch on. -/
+def Term.isNever : Term → Bool
+  | .never => true
+  | _ => false
+
+/-- Whether a slot's name must be present on the write side. -/
+def ObjectSlot.isReq : ObjectSlot → Bool
+  | .optional _ => false
+  | _ => true
+
+/-- Whether a slot's name must be present on the read side. A stand-in reads when absent. -/
+def ObjectSlot.isReqA : ObjectSlot → Bool
+  | .req _ none => true
+  | _ => false
+
+/-- A slot's write-side presence lattice element. The bits admit presence and absence,
+    respectively. -/
+def ObjectSlot.presenceV (f : ObjectSlot) : Bool × Bool :=
+  match f with
+  | .req t _ => if t.isNever then (false, false) else (f.isReq, !f.isReq)
+  | .optional t => if t.isNever then (false, true) else (true, true)
+
+/-- A slot's read-side presence lattice element. The stand-in changes this side alone. -/
+def ObjectSlot.presenceA (f : ObjectSlot) : Bool × Bool :=
+  match f with
+  | .req t _ => if t.isNever then (false, false) else (true, !f.isReqA)
+  | .optional t => if t.isNever then (false, true) else (true, true)
+
 /-! ## `array` and `tuple`, as builders over `list`
 
 `Term.list` replaced three constructors, and these two keep the words that name the shapes

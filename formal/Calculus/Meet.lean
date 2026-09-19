@@ -92,17 +92,6 @@ namespace Calculus
 
 /-! ## Reading a field and a term -/
 
-/-- Whether a term is the bottom, as a `Bool` the rows below branch on. -/
-def Term.isNever : Term → Bool
-  | .never => true
-  | _ => false
-
-/-- Whether a slot's name must be present. `optional` is the only mark that admits absence, which
-    is the reading `Body.spec` and `valPresentT` already take. -/
-def ObjectSlot.isReq : ObjectSlot → Bool
-  | .optional _ => false
-  | _ => true
-
 /-- Whether a slot admits nothing at a name that must be present. An `optional` slot at the
     bottom is not this: it is a name that must be absent, which is a body a value can satisfy. -/
 def ObjectSlot.isBottom : ObjectSlot → Bool
@@ -128,17 +117,9 @@ def ObjectSlot.presenceAgrees : ObjectSlot → Bool
   | .req _ (some _) => false
   | _ => true
 
-/-- Whether an object option's two halves answer the same question about names, which is what
-    `keysOk` needs in order to be that option's row. `keysOk` is the write side's name test, and
-    a union dispatches on it, so a read that disagrees with it is a read the union refuses.
-
-    One name parts the halves, and it is a **declared and absent** one: `req` with no stand-in
-    must be present for both and `optional` may be absent for both, while a slot carrying a
-    stand-in must be written and reads to that stand-in, so `keysOk` requires the name and
-    `reqPresentT` does not. An **undeclared** name no longer parts them: a body with no open
-    block refuses it on both halves, and `unionOk` already asks for that through `isOpenObject`,
-    where the `drop` policy used to slip past. A term that is not an object declares no names and
-    the question does not arise. -/
+/-- The former read-side structural proof still consumes this temporary agreement premise.
+    `keysOkV` and `keysOkA` now read their own presence elements. Step 2 removes this guard by
+    proving `structural_of_AdmABody` without `hnf`. -/
 def objectNamesAgree : Term → Bool
   | .object b => decide (∀ k : {k // k ∈ b.fields}, ObjectSlot.presenceAgrees (b.at k) = true)
   | _ => true
@@ -149,13 +130,11 @@ def objectNamesAgree : Term → Bool
     Pairwise `Orth` bounds the structural admitters at one, so nothing is refused for being
     admitted twice.
 
-    No *open* object. `keysOk` refuses a name the object does not declare, and an open object
-    holds that name through its rest, so a union carrying one refuses an input that option admits.
+    No *open* object. The sided name readers admit an open block's undeclared names, while the
+    present structural proof still excludes an open object.
 
-    Every object option's two halves agree about names. A slot carrying a stand-in reads to that
-    stand-in when its name is absent, and `keysOk` requires that name because the write side
-    writes it. The write side needs neither: `objAdmV` has no keep filter and `valPresentT` counts
-    such a slot as present. -/
+    The read-side structural proof still needs `hnf`, which `objectNamesAgree` supplies. The
+    guard remains until Step 2 proves `structural_of_AdmABody` without that premise. -/
 def unionOk (os : List Term) : Bool :=
   orthAll os && os.all (fun t => !t.isOpenObject) && os.all objectNamesAgree
 
@@ -1287,8 +1266,9 @@ example : unionOk [.object (.mk {"x"} (fun _ => .optional .string) none)] = true
 
 /-- **A stand-in is the third way, and it is about a declared name rather than an undeclared
     one.** The slot reads to its stand-in when the name is absent, so the option reads a map that
-    omits the name, while `keysOk` requires every non-`optional` name to be present because the
-    write side writes it. The body is closed here, so this is not the row below.
+    omits the name. The sided name readers now answer that absence separately. The agreement
+    guard remains as the current read-side structural proof premise. The body is closed here, so
+    this is not the row below.
 
     The `drop` object used to stand here as a fourth way, the open object's defect one half over.
     It is gone with the policy: a body has one closed state now, and that state refuses an
@@ -1298,10 +1278,9 @@ example : unionOk [.object (.mk {"x"} (fun _ => .req .string (some (.str "d"))) 
   simp [unionOk, orthAll, Term.isOpenObject, objectNamesAgree,
     ObjectSlot.presenceAgrees, MapOf.at]
 
-/-- …and an **open** object is the second way, on its own. Its open block holds a name it does not
-    declare, while an object option is admitted by `keysOk`, which refuses that name. So one
-    such option makes the union refuse a value the option admits, and a singleton union is
-    enough. -/
+/-- …and an **open** object is the second way, on its own. Its open block makes an undeclared name
+    top for both sided name readers. The temporary certificate still refuses an open object, so a
+    singleton union refuses a value the option admits. -/
 example : unionOk [.object (.mk {"a"} (fun _ => .req .string none) (some (.any, .string)))]
     = false := by
   simp [unionOk, orthAll, Term.isOpenObject]
@@ -1919,12 +1898,12 @@ theorem altsOkV_of_AdmField {f : ObjectSlot} {v : Value} (h : AdmField f v = tru
   | optional t => cases t <;> first | rfl | exact h
 
 /-- **A closed object's structural test is its row.** Where the body declares no open block and
-    so refuses an undeclared name, a value the body admits passes `keysOk` and `literalsOk`. An
+    so refuses an undeclared name, a value the body admits passes `keysOkV` and `literalsOk`. An
     OPEN object is the case this fails at, which is why `unionOk` excludes one. -/
 theorem structural_of_AdmBody {b : Body} (hr : AdmWild b.wild = none)
     {keys : Finset Name} {g : {k // k ∈ keys} → Value}
     (h : AdmBody b (.map keys g) = true) :
-    (keysOk b.spec keys && literalsOk b.spec keys g) = true := by
+    (keysOkV b.spec keys && literalsOk b.spec keys g) = true := by
   have hsub := mem_fields_of_adm hr h
   have h' := h
   rw [AdmBody_map, Bool.and_eq_true] at h'
@@ -1933,12 +1912,36 @@ theorem structural_of_AdmBody {b : Body} (hr : AdmWild b.wild = none)
     -- `hr` is `AdmWild rest = none`, and `AdmWild` answers `some _` on every open block
     obtain rfl : rest = none := by cases rest with | none => rfl | some _ => exact nomatch hr
     refine Bool.and_eq_true _ _ |>.mpr ⟨?_, ?_⟩
-    · exact keysOk_of_names hsub (fun k hreq => mem_keys_of_isReq h'.1 k.2 hreq)
+    · refine keysOkV_of_names hsub (fun k hreq => ?_) (fun k hforbid hk => ?_)
+      · cases hf : fld k with
+        | req t m =>
+          apply mem_keys_of_isReq h'.1 k.2
+          simp [Body.at, ObjectSlot.isReq, hf]
+        | optional t =>
+          rw [hf] at hreq
+          cases t <;> simp [ObjectSlot.presenceV, Term.isNever] at hreq
+      · have hrow := objAdmV_row h'.2 hk k.2
+        change AdmField (fld k) (g ⟨k.1, hk⟩) = true at hrow
+        cases hf : fld k with
+        | req t m =>
+          rw [hf] at hforbid
+          have ht : t = .never := by
+            cases t <;> simp [ObjectSlot.presenceV, ObjectSlot.isReq, Term.isNever] at hforbid ⊢
+          subst t
+          rw [hf] at hrow
+          simp [AdmField, Adm] at hrow
+        | optional t =>
+          rw [hf] at hforbid
+          have ht : t = .never := by
+            cases t <;> simp [ObjectSlot.presenceV, ObjectSlot.isReq, Term.isNever] at hforbid ⊢
+          subst t
+          rw [hf] at hrow
+          simp [AdmField, Adm] at hrow
     · refine decide_eq_true (fun k => ?_)
       have hkf : k.1 ∈ fields := hsub k.1 k.2
       show litOkV _ k.1 (g k) = true
       rw [litOkV, show (Body.spec (.mk fields fld none)).names.at k.1
-            = some ⟨_, altsOfField (fld ⟨k.1, hkf⟩)⟩ from dif_pos hkf]
+            = some ⟨_, _, altsOfField (fld ⟨k.1, hkf⟩)⟩ from dif_pos hkf]
       exact altsOkV_of_AdmField (objAdmV_row h'.2 k.2 hkf)
 
 
@@ -2083,7 +2086,7 @@ theorem structural_of_AdmABody {b : Body} (hr : b.wild = none)
     (hnf : ∀ k : {k // k ∈ b.fields}, ObjectSlot.presenceAgrees (b.at k) = true)
     {keys : Finset Name} {g : {k // k ∈ keys} → Attr}
     (h : AdmABody b (.m keys g) = true) :
-    (keysOk b.spec keys && literalsOkA b.spec keys g) = true := by
+    (keysOkA b.spec keys && literalsOkA b.spec keys g) = true := by
   have hsub := mem_fields_of_admA hr h
   have h' := h
   rw [AdmABody_map, Bool.and_eq_true] at h'
@@ -2092,12 +2095,43 @@ theorem structural_of_AdmABody {b : Body} (hr : b.wild = none)
     subst hb
     obtain rfl : wild = none := by simpa using hr
     refine Bool.and_eq_true _ _ |>.mpr ⟨?_, ?_⟩
-    · exact keysOk_of_names hsub (fun k hreq => mem_keys_of_isReqA hnf h'.1 k.2 hreq)
+    · refine keysOkA_of_names hsub (fun k hreq => ?_) (fun k hforbid hk => ?_)
+      · cases hf : fld k with
+        | req t m =>
+          cases m with
+          | none =>
+            apply mem_keys_of_isReqA hnf h'.1 k.2
+            simp [Body.at, ObjectSlot.isReq, hf]
+          | some v =>
+            have hfalse : ObjectSlot.presenceAgrees (fld k) = true := by
+              simpa [Body.at] using hnf k
+            rw [hf] at hfalse
+            simp [ObjectSlot.presenceAgrees] at hfalse
+        | optional t =>
+          rw [hf] at hreq
+          cases t <;> simp [ObjectSlot.presenceA, Term.isNever] at hreq
+      · have hrow := objAdmA_row h'.2 hk k.2
+        change AdmAField (fld k) (g ⟨k.1, hk⟩) = true at hrow
+        cases hf : fld k with
+        | req t m =>
+          rw [hf] at hforbid
+          have ht : t = .never := by
+            cases t <;> simp [ObjectSlot.presenceA, ObjectSlot.isReqA, Term.isNever] at hforbid ⊢
+          subst t
+          rw [hf] at hrow
+          simp [AdmAField, AdmA] at hrow
+        | optional t =>
+          rw [hf] at hforbid
+          have ht : t = .never := by
+            cases t <;> simp [ObjectSlot.presenceA, Term.isNever] at hforbid ⊢
+          subst t
+          rw [hf] at hrow
+          simp [AdmAField, AdmA] at hrow
     · refine decide_eq_true (fun k => ?_)
       have hkf : k.1 ∈ fields := hsub k.1 k.2
       show litOkA _ k.1 (g k) = true
       rw [litOkA, show (Body.spec (.mk fields fld none)).names.at k.1
-            = some ⟨_, altsOfField (fld ⟨k.1, hkf⟩)⟩ from dif_pos hkf]
+            = some ⟨_, _, altsOfField (fld ⟨k.1, hkf⟩)⟩ from dif_pos hkf]
       exact altsOkA_of_AdmAField (objAdmA_row h'.2 k.2 hkf)
 
 /-- A list reads an attribute exactly when one of its terms does. -/
@@ -3975,12 +4009,6 @@ theorem alignPA_meet_zip :
         | cons hr hrest =>
           simp only [alignPA, hr, ihw hrest (by simpa using hlen)]
           simp [Bool.and_assoc, Bool.and_left_comm]
-
-/-- Whether a slot's name must be present for a READ. A stand-in reads in the name's place, so a
-    slot carrying one need not be; `ObjectSlot.isReq` is the write side's answer and counts it. -/
-def ObjectSlot.isReqA : ObjectSlot → Bool
-  | .req _ none => true
-  | _ => false
 
 /-- `reqPresentT` in the form the object row uses: a declared name that must be read is
     present. -/

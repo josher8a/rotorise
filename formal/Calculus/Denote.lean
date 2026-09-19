@@ -34,7 +34,7 @@ def Body.map (b : Body) : MapOf ObjectSlot := ⟨b.fields, b.at⟩
 /-- The alternatives a field pins its name to, where the field's term is a literal.
 
     Every field form and not `req` only, because the test this feeds is present-only: a name
-    an object does not carry is settled by `keysOk` and never reaches `literalsOk`, so an
+    an object does not carry is settled by the sided name readers and never reaches `literalsOk`, so an
     `optional` literal constrains exactly the values that do carry the name. -/
 def altsOfField : ObjectSlot → Option Alts
   | .req (.literal k x) _ => some ⟨k, x⟩
@@ -52,21 +52,20 @@ def altsOfTerm : Term → Option Alts
 
     The open block contributes `altsOfTerm` of its term, one layer in: `some (some alts)` where
     the block is a literal, `some none` where it is any other term, and `none` where the body
-    has no block at all. Reading the block here is what lets `keysOk` and `litOkV` answer for
+    has no block at all. Reading the block here is what lets the sided name readers and `litOkV` answer for
     an undeclared name without consulting `Adm`, which is `noncomputable` and is the whole
     reason admission decides by structure. -/
 def Body.spec : Body → BodySpec
   | .mk fields f wild =>
       { names := ⟨fields, fun k =>
-          ⟨(match f k with | .optional _ => false | _ => true), altsOfField (f k)⟩⟩
+          ⟨(f k).presenceV, (f k).presenceA, altsOfField (f k)⟩⟩
         wild := wild.map (fun w => altsOfTerm w.2) }
 
 /-- The spec's name table, read off the constructor. -/
 @[simp] theorem Body.spec_names_mk (fields : Finset Name)
     (f : {k // k ∈ fields} → ObjectSlot) (wild : Option (KeyPat × Term)) :
     (Body.mk fields f wild).spec.names =
-      ⟨fields, fun k => ⟨(match f k with | .optional _ => false | _ => true),
-        altsOfField (f k)⟩⟩ := rfl
+      ⟨fields, fun k => ⟨(f k).presenceV, (f k).presenceA, altsOfField (f k)⟩⟩ := rfl
 
 /-- …and the open block, which a closed body does not have. -/
 @[simp] theorem Body.spec_wild_none (fields : Finset Name)

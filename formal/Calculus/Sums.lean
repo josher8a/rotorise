@@ -20,7 +20,7 @@ structure OptionSem where
   admitV : Value → Bool
   c : Codec
 
-/-- Name admission (objects): every present name declared, every required name present.
+/-- Name admission (objects): every present name allowed, and every absent name allowed.
     The spec is a `BodySpec` — the declared names with what admission reads at each, and the
     open block — for the same reason the field table is a `MapOf`: a list of pairs admits
     orderings and repeats that a declaration does not have.
@@ -29,13 +29,24 @@ structure OptionSem where
     so the present-name half asks nothing of an open body and the required-name half is
     unchanged: a name the body requires must still be there. A closed body is the same test it
     always was, `wild = none` making the first conjunct the plain containment. -/
-def keysOk (spec : BodySpec) (keys : Finset Name) : Bool :=
+def keysOkV (spec : BodySpec) (keys : Finset Name) : Bool :=
   (spec.wild.isSome || decide (∀ k ∈ keys, k ∈ spec.names.1)) &&
-  decide (∀ k : {k // k ∈ spec.names.1}, (spec.names.2 k).required = true → k.1 ∈ keys)
+  (decide (∀ k : {k // k ∈ spec.names.1},
+    (spec.names.2 k).presenceV.2 = false → k.1 ∈ keys) &&
+  decide (∀ k : {k // k ∈ spec.names.1},
+    (spec.names.2 k).presenceV.1 = false → k.1 ∉ keys))
+
+/-- The read-side name admission. A stand-in changes only the read presence element. -/
+def keysOkA (spec : BodySpec) (keys : Finset Name) : Bool :=
+  (spec.wild.isSome || decide (∀ k ∈ keys, k ∈ spec.names.1)) &&
+  (decide (∀ k : {k // k ∈ spec.names.1},
+    (spec.names.2 k).presenceA.2 = false → k.1 ∈ keys) &&
+  decide (∀ k : {k // k ∈ spec.names.1},
+    (spec.names.2 k).presenceA.1 = false → k.1 ∉ keys))
 
 /-- One present name's content, on the write side: where the name's field is a literal, the
     value is the one the literal names. A name the spec does not declare is the open block's,
-    and reads that block's alternatives; under a closed body `keysOk` has already refused it,
+    and reads that block's alternatives; under a closed body `keysOkV` has already refused it,
     so the answer there is never consulted. -/
 def altsOkV : Option Alts → Value → Bool
   | some ⟨g, x⟩, v => inL g x v
@@ -61,8 +72,8 @@ def litOkA (spec : BodySpec) (k : Name) (a : Attr) : Bool :=
 /-- **Content admission (objects): every present name whose field is a literal carries one of
     that literal's alternatives.**
 
-    The other half of an object option's admission, and the half `keysOk` alone cannot state.
-    Present-only: the quantifier runs over the *map's* key set, so an absent name is `keysOk`'s
+    The other half of an object option's admission, and the half `keysOkV` alone cannot state.
+    Present-only: the quantifier runs over the *map's* key set, so an absent name is `keysOkV`'s
     business. `Finset.attach`'s decidable `∀ k ∈ keys` is what `decide` resolves through, the
     same route `valPresentT` takes and the one `Finset.toList` would spoil. -/
 def literalsOk (spec : BodySpec) (keys : Finset Name)
@@ -76,7 +87,7 @@ def literalsOkA (spec : BodySpec) (keys : Finset Name)
 
 /-! ### What the open block does, pinned
 
-Four cases, stated on `keysOk` and `literalsOk` together because that pair **is** an object
+Four cases, stated on `keysOkV` and `literalsOk` together because that pair **is** an object
 option's admission. They are `by decide`, so each is the kernel running the definitions rather
 than a claim about them. -/
 
@@ -93,34 +104,55 @@ private def openLit : BodySpec := ⟨noNames, some (some ⟨.string, "x"⟩)⟩
 private def closedNone : BodySpec := ⟨noNames, none⟩
 
 /-- **An open block admits an undeclared name**, which is the whole of the change: the body
-    claims the name, so `keysOk` passes, and the block pins nothing, so the content is free. -/
+    claims the name, so `keysOkV` passes, and the block pins nothing, so the content is free. -/
 theorem open_block_admits_undeclared :
-    (keysOk openAny {"A"} && literalsOk openAny {"A"} (fun _ => .str "y")) = true := by decide
+    (keysOkV openAny {"A"} && literalsOk openAny {"A"} (fun _ => .str "y")) = true := by decide
 
 /-- **A literal block refuses the wrong value at an undeclared name.** The block does real
     work rather than only widening: an undeclared name is read by the block's alternatives the
     way a declared name is read by its field's. -/
 theorem open_literal_block_refuses :
-    (keysOk openLit {"A"} && literalsOk openLit {"A"} (fun _ => .str "y")) = false := by decide
+    (keysOkV openLit {"A"} && literalsOk openLit {"A"} (fun _ => .str "y")) = false := by decide
 
 /-- …and admits the right one. -/
 theorem open_literal_block_admits :
-    (keysOk openLit {"A"} && literalsOk openLit {"A"} (fun _ => .str "x")) = true := by decide
+    (keysOkV openLit {"A"} && literalsOk openLit {"A"} (fun _ => .str "x")) = true := by decide
 
 /-- **A closed body is unchanged.** No block, so an undeclared name is refused on the first
     conjunct exactly as it always was. -/
 theorem closed_refuses_undeclared :
-    (keysOk closedNone {"A"} && literalsOk closedNone {"A"} (fun _ => .str "y")) = false := by
+    (keysOkV closedNone {"A"} && literalsOk closedNone {"A"} (fun _ => .str "y")) = false := by
   decide
+
+/-- The open block makes an undeclared name top on the write side. -/
+theorem open_block_presence_topV :
+    keysOkV openAny {"A"} = true := by decide
+
+/-- The same undeclared name is top on the read side. -/
+theorem open_block_presence_topA :
+    keysOkA openAny {"A"} = true := by decide
+
+/-- The forbidden lattice element refuses a present name on both sides. The checks reduce in the
+    kernel. `Body.spec` maps an optional bottom slot to this element. -/
+private def forbiddenNames : MapOf NameSpec :=
+  ⟨{"A"}, fun _ => ⟨(false, true), (false, true), none⟩⟩
+
+private def forbiddenSpec : BodySpec := ⟨forbiddenNames, none⟩
+
+theorem optional_never_forbidsV :
+    keysOkV forbiddenSpec {"A"} = false := by decide
+
+theorem optional_never_forbidsA :
+    keysOkA forbiddenSpec {"A"} = false := by decide
 
 /-- An object option decides by structure, never by being attempted: the names lie in the
     spec's interval, and every present literal field carries one of its alternatives. -/
 def OptionSem.byStructure (spec : BodySpec) (c : Codec) : OptionSem :=
   { admitA := fun a => match a with
-      | .m keys g => keysOk spec keys && literalsOkA spec keys g
+      | .m keys g => keysOkA spec keys && literalsOkA spec keys g
       | _ => false
     admitV := fun v => match v with
-      | .map keys f => keysOk spec keys && literalsOk spec keys f
+      | .map keys f => keysOkV spec keys && literalsOk spec keys f
       | _ => false
     c := c }
 

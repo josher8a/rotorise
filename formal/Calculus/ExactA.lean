@@ -37,7 +37,7 @@ def admitOptA (o : Option (BodySpec) × AP) (a : Attr) : Bool :=
   match o.1 with
   | some spec =>
       match a with
-      | .m keys g => keysOk spec keys && literalsOkA spec keys g
+      | .m keys g => keysOkA spec keys && literalsOkA spec keys g
       | _ => false
   | none => o.2 a
 

@@ -96,7 +96,7 @@ def admitOptV (o : Option (BodySpec) × VP) (v : Value) : Bool :=
   match o.1 with
   | some spec =>
       match v with
-      | .map keys f => keysOk spec keys && literalsOk spec keys f
+      | .map keys f => keysOkV spec keys && literalsOk spec keys f
       | _ => false
   | none => o.2 v
 
