@@ -9,8 +9,6 @@ Deep embedding. Notes:
 * Predicates carried by terms (`refine`) are `Bool`-valued so the denotation
   needs no classical choice; the doc's subsets are their coercions. `Pred` below is that
   predicate **as data** where the data exists, and a function only where it does not.
-* `custom` carries its pair as data; its *laws* are premises of the typing rule (§3),
-  exactly as in the doc.
 * `opaque` is a Lean keyword, hence `opaq`.
 * Slots (§4) are a separate inductive — the stratification is the point: no `Term`
   position accepts an `ObjectSlot`.
@@ -133,7 +131,6 @@ inductive Term where
       `Continuity.lean`: `union`'s admission is anti-monotone, so a genuinely
       recursive union has no fixpoint semantics in any system. -/
   | lazy     (inner : Term)
-  | custom   (ce : Value → Option Attr) (cp : Attr → Option Value)
   /-- §3 `(opaque)`: `lossy = false` is the `refuse` policy. -/
   | opaq     (lossy : Bool)
   /-- §4's field table is a *set* of names each declaring one field, so that is what the
@@ -290,7 +287,7 @@ def Term.depth : Term → Nat
   | .string | .number | .decimal | .boolean | .binary | .null
   -- `set` is a **leaf** since its base became an index: there is no element term to
   -- measure, so it sits with the other ground shapes rather than costing a layer.
-  | .literal _ _ | .custom _ _ | .opaq _ | .set _ | .never => 1
+  | .literal _ _ | .opaq _ | .set _ | .never => 1
   | .lazy t => Term.depth t + 1
   | .held t _ _ | .refine t _ => Term.depth t + 1
   | .list pre sp suf =>

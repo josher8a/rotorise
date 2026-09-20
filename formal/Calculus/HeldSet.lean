@@ -171,7 +171,7 @@ set_option linter.unreachableTactic false in
 
     `HeldSet.lean` names this claim (A) and had it only at `opaque` (`opaq_T_identity`); the
     general statement is here because it is `typed_TSub`'s mirror and recurses the same way.
-    Every rule closes: the ground rules, `literal` and `custom` are `exact hv`, the two
+    Every rule closes: the ground rules and `literal` are `exact hv`, the two
     containers and the four wrappers reduce past their constructor, `opaque` is the existing
     iff, and `set` is `SetBase.elem_T`. Only four rules need anything new, and each needs the
     converse of a helper that was already here for the other direction.
@@ -187,7 +187,6 @@ theorem typed_T_eq : ∀ {t T μ}, Typed t T μ → ∀ v, T v → (denote t).T 
     -- expression — the same fact that removed `typed_TSub`'s five-way split here
     | literal _ _ => exact hv
     | never => exact hv
-    | custom _ _ => exact hv
     | opaq lossy => exact (opaq_T_identity lossy v).mpr hv
     | set b =>
       rcases hv with ⟨S, rfl, hall⟩ | ⟨S, rfl, hall⟩ | ⟨S, rfl, hall⟩ <;>

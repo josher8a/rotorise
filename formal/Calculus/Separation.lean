@@ -495,7 +495,7 @@ Placing it correctly is what makes the row exact. §5 called `admA(alternate rea
 `extendRead` widens past the subterm's set — true, and the wrong conclusion, because the
 thing it widens *by* is `r`, which the term carries. The domain is
 `dom(p) ∪ dom(r)`, both halves named, and `AdmA` can apply `r` for the same reason it can
-apply `held`'s `f` and `custom`'s `cp`.
+apply `held`'s `f`.
 
 So `alternate reader` leaves the attribute hatch, and the ~~widenedRead~~ excuse is deleted rather than
 witnessed: it was covering a row that did not need excusing. What survives is the fact the
