@@ -1187,17 +1187,15 @@ theorem separates_of_orth {x y : Term} (h : Orth x y = true) : Separates x y := 
     discharger in `Discharge.lean` already takes: lawfulness, which soundness supplies, and
     the closed-object restriction.
 
-    `hcl` is `Term.isOpenObject`, one decidable question about the payload, where the
-    premise used to be three quantifiers and a disequality against a three-argument
-    constructor. It is not a defect being worked around: an object option with an open rest
-    (`.codec t`) has `Adm t v = true` where `admitOptV … v = false` — the option refuses maps
-    its own `e` accepts — and §5 argues that this is the intended reading ("an object's open
-    part is unreachable through a union — the price of deciding by names").
-    `optionSem_self_admit` takes the same premise for the same reason. `Orth`
-    declines to certify such an option rather than proposing a repair. -/
+    `hblk` asks that an open block's term denotes a lawful codec. The premise was
+    `Term.isOpenObject = false`, which refused the open object outright. The structural
+    lemmas now read the block, so an open option admits through a union like any other, and
+    the residue is lawfulness alone: `optionSem_self_admit` reads the block's codec back and
+    needs that codec to retract. A closed body discharges `hblk` with no content. -/
 theorem uAtCan_of_separated {opts : List Term}
     (hlaw : ∀ t ∈ opts, Lawful (denote t))
-    (hcl : ∀ t ∈ opts, t.isOpenObject = false)
+    (hblk : ∀ t ∈ opts, ∀ fields ff wild, t = .object (.mk fields ff wild) →
+      ∀ w : KeyPat × Term, wild = some w → Lawful (denote w.2))
     (h : Separated opts) :
     UAtCan opts := by
   refine uniqueAdmission_of_disjoint
@@ -1214,7 +1212,7 @@ theorem uAtCan_of_separated {opts : List Term}
   · rw [List.pairwise_map]; exact h.imp (fun hs => hs.2)
   · refine List.forall_mem_map.mpr fun t ht v a he => ?_
     rw [optionSemOf_c] at he
-    exact optionSem_self_admit t (hcl t ht) (hlaw t ht) he
+    exact optionSem_self_admit t (hblk t ht) (hlaw t ht) he
 
 /-- **Pairwise separation is the structural certificate**, which is (U)'s premise read as a
     counting fact rather than as a singleton one.
@@ -1267,18 +1265,20 @@ theorem admitsAtMostOne_of_orth {opts : List Term}
     twenty-five between them. The by-phase table at the end of the file is the measurement. -/
 theorem uAtCan_of_orth {opts : List Term}
     (hlaw : ∀ t ∈ opts, Lawful (denote t))
-    (hcl : ∀ t ∈ opts, t.isOpenObject = false)
+    (hblk : ∀ t ∈ opts, ∀ fields ff wild, t = .object (.mk fields ff wild) →
+      ∀ w : KeyPat × Term, wild = some w → Lawful (denote w.2))
     (h : List.Pairwise (fun x y => Orth x y = true) opts) :
     UAtCan opts :=
-  uAtCan_of_separated hlaw hcl (separated_of_orth h)
+  uAtCan_of_separated hlaw hblk (separated_of_orth h)
 
 /-- …and the residue the laws actually need. -/
 theorem uAtAct_of_orth {opts : List Term}
     (hlaw : ∀ t ∈ opts, Lawful (denote t))
-    (hcl : ∀ t ∈ opts, t.isOpenObject = false)
+    (hblk : ∀ t ∈ opts, ∀ fields ff wild, t = .object (.mk fields ff wild) →
+      ∀ w : KeyPat × Term, wild = some w → Lawful (denote w.2))
     (h : List.Pairwise (fun x y => Orth x y = true) opts) :
     UAtAct opts :=
-  uAtAct_of_uAtCan (uAtCan_of_orth hlaw hcl h)
+  uAtAct_of_uAtCan (uAtCan_of_orth hlaw hblk h)
 
 /-! ## The same certificate, on the held sets
 
@@ -1776,7 +1776,7 @@ theorem not_orth_set_literal_closure (q : Value → Bool) :
 theorem uAtCan_literal_literal_by_orth :
     UAtCan [Term.literal .string lsA, Term.literal .string lsB] :=
   uAtCan_of_orth (forall_mem_pair (lawful_literal _ _) (lawful_literal _ _))
-    (forall_mem_pair rfl rfl)
+    (forall_mem_pair (fun _ _ _ h => nomatch h) (fun _ _ _ h => nomatch h))
     (List.pairwise_pair.mpr (by decide))
 
 /-! ### The existing discharges, by phase
@@ -1821,7 +1821,7 @@ certificate on a pair of terms is. That gap is where the working container schem
     established rather than a second route to it. -/
 theorem uAtCan_string_null_by_orth : UAtCan [Term.string, Term.null] :=
   uAtCan_of_orth (forall_mem_pair lawful_string lawful_null)
-    (forall_mem_pair rfl rfl)
+    (forall_mem_pair (fun _ _ _ h => nomatch h) (fun _ _ _ h => nomatch h))
     (List.pairwise_pair.mpr (by decide))
 
 end Calculus

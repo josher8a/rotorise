@@ -42,8 +42,8 @@ gives a second witness.
 **A union carries a certificate, and the meet reads it.** `Adm (.union os)` is `selOptV`, which
 admits where *exactly one* option admits structurally. That is the join of the options' admissions
 only when the options carry `unionOk`: pairwise `Orth`, so no value is refused for being admitted
-twice, and no open object, so each option's structural test is its row. Without it the meet has
-nothing to state, and the two examples at the foot of this file are the two ways it fails.
+twice. Each option's structural test is its row whether or not the option is open, because the
+structural lemmas read the open block. Without the certificate the meet has nothing to state.
 
 **The meet and the merge are two operations.** `Body.merge` (`Merge.lean`) joins two bodies over
 *disjoint* names and is the record product: its held set is the product of the factors' held sets
@@ -104,15 +104,13 @@ def orthAll : List Term → Bool
   | t :: ts => ts.all (fun u => Orth t u) && orthAll ts
 
 /-- **The certificate a union must carry for its admission to be the join of its options'.**
-    Two conditions, and each answers a way the admission can fall short of the join.
+    One condition. Pairwise `Orth` bounds the structural admitters at one, so nothing is
+    refused for being admitted twice.
 
-    Pairwise `Orth` bounds the structural admitters at one, so nothing is refused for being
-    admitted twice.
-
-    No *open* object. `keysOk` admits an open block's undeclared names, while the
-    structural proof excludes an open object. -/
+    An open object needs no second condition. The structural lemmas carry the open block
+    themselves, so a union holding an open block certifies on separation alone. -/
 def unionOk (os : List Term) : Bool :=
-  orthAll os && os.all (fun t => !t.isOpenObject)
+  orthAll os
 
 /-- The certificate, in the form the separation lemmas take. -/
 theorem pairwise_of_orthAll : ∀ {ts : List Term}, orthAll ts = true →
@@ -134,13 +132,11 @@ theorem mem_typed_of_mem : ∀ {os : List Term} {Ts μs}, TypedListμ os Ts μs 
 
 /-- The certificate's pairwise `Orth`, carried to the held sets option by option. -/
 theorem unionOk_pairwise_held : ∀ {os : List Term} {Ts μs}, TypedListμ os Ts μs →
-    List.Pairwise (fun x y => Orth x y = true) os →
-    (∀ t ∈ os, t.isOpenObject = false) → Ts.Pairwise HDisj
-  | _, _, _, .nil, _, _ => .nil
-  | _, _, _, .cons hty hs, ho, hc => by
+    List.Pairwise (fun x y => Orth x y = true) os → Ts.Pairwise HDisj
+  | _, _, _, .nil, _ => .nil
+  | _, _, _, .cons hty hs, ho => by
     obtain ⟨hohead, hotail⟩ := List.pairwise_cons.mp ho
-    refine .cons ?_
-      (unionOk_pairwise_held hs hotail (fun t ht => hc t (List.mem_cons_of_mem _ ht)))
+    refine .cons ?_ (unionOk_pairwise_held hs hotail)
     intro T hT
     obtain ⟨t', ht', μ', hty'⟩ := mem_typed_of_mem hs T hT
     exact separates_held_of_orth (hohead t' ht') hty hty'
@@ -150,11 +146,7 @@ theorem unionOk_pairwise_held : ∀ {os : List Term} {Ts μs}, TypedListμ os Ts
     disjointness is the second disjunct. This is the form the meet's union row takes. -/
 theorem dincomp_of_unionOk {os : List Term} {Ts μs} (hc : unionOk os = true)
     (h : TypedListμ os Ts μs) : DIncomp Ts := by
-  obtain ⟨horth, hopen⟩ := Bool.and_eq_true_iff.mp hc
-  refine dincomp_of_disjoint (unionOk_pairwise_held h (pairwise_of_orthAll horth) ?_)
-  intro t ht
-  have := List.all_eq_true.mp hopen t ht
-  simpa using this
+  exact dincomp_of_disjoint (unionOk_pairwise_held h (pairwise_of_orthAll hc))
 
 /-- A union of what survived a distribution: nothing is the bottom, one survivor is itself, and
     the rest are a union again. -/
@@ -1172,13 +1164,13 @@ example : unionOk [.object (.mk {"x"} (fun _ => .req .string) none)]
     = true := by
   simp [unionOk, orthAll, Term.isOpenObject]
 
-/-- …and an **open** object is the second way, on its own. Its open block makes an undeclared name
-    the top, so no name meets at the bottom and the names phase separates it from nothing.
-    `unionOk` still refuses an open object for the admission family's reason, so a
-    singleton union refuses a value the option admits. -/
+/-- …and an **open** object separates from nothing on the names phase. Its open block makes
+    an undeclared name the top, so no name meets at the bottom. `unionOk` admits the open
+    object, because the structural lemmas read the block, so a singleton union admits every
+    value the option admits. -/
 example : unionOk [.object (.mk {"a"} (fun _ => .req .string) (some (.any, .string)))]
-    = false := by
-  simp [unionOk, orthAll, Term.isOpenObject]
+    = true := by
+  simp [unionOk, orthAll]
 
 /-! ### Why the write-agreement condition is conditional
 
@@ -1772,6 +1764,16 @@ theorem objAdmV_row {c : Body} {keys : Finset Name} {g : {k // k ∈ keys} → V
   have hh := of_decide_eq_true hB ⟨k, hk⟩
   rwa [entryP, MapOf.at, dif_pos hc] at hh
 
+/-- A present name the body does not declare goes through the open block. `mem_fields_of_adm`'s
+    twin: where that lemma reads a closed body's refusal, this reads an open body's claim. -/
+theorem objAdmV_wild {c : Body} {keys : Finset Name} {g : {k // k ∈ keys} → Value}
+    (hB : objAdmV ⟨c.fields, fun k => AdmField (c.at k)⟩ (AdmWild c.wild) keys g = true)
+    {k : Name} (hk : k ∈ keys) (hnc : k ∉ c.fields) {w : KeyPat × Term}
+    (hw : c.wild = some w) : Adm w.2 (g ⟨k, hk⟩) = true := by
+  unfold objAdmV at hB
+  have hh := of_decide_eq_true hB ⟨k, hk⟩
+  rwa [entryP, MapOf.at, dif_neg hnc, hw, AdmWild] at hh
+
 /-- Every present name is declared, where the rest refuses an undeclared one. -/
 theorem mem_fields_of_adm {b : Body} (hr : AdmWild b.wild = none)
     {keys : Finset Name} {g : {k // k ∈ keys} → Value}
@@ -1792,22 +1794,34 @@ theorem altsOkV_of_AdmField {f : ObjectSlot} {v : Value} (h : AdmField f v = tru
   | req t => cases t <;> first | rfl | exact h
   | optional t => cases t <;> first | rfl | exact h
 
-/-- **A closed object's structural test is its row.** Where the body declares no open block and
-    so refuses an undeclared name, a value the body admits passes `keysOk` and `literalsOk`. An
-    OPEN object is the case this fails at, which is why `unionOk` excludes one. -/
-theorem structural_of_AdmBody {b : Body} (hr : AdmWild b.wild = none)
+/-- A term's row carries its literal alternatives, where it has any. `altsOkV_of_AdmField`'s
+    twin at the term level, which is what an open block needs: the block carries a term and
+    no mark. -/
+theorem altsOkV_of_Adm {t : Term} {v : Value} (h : Adm t v = true) :
+    altsOkV (altsOfTerm t) v = true := by
+  cases t <;> first | rfl | exact h
+
+/-- **An object's structural test is its row, open block and all.** A value the body admits
+    passes `keysOk` and `literalsOk`.
+
+    **No closedness premise, and none is needed.** `keysOk`'s first conjunct is free under an
+    open block, so the claim that every present name is declared is owed by a closed body alone.
+    `literalsOk` reads the block's alternatives at an undeclared name, and the block's own row
+    is `Adm` of the block's term, which carries those alternatives. -/
+theorem structural_of_AdmBody {b : Body}
     {keys : Finset Name} {g : {k // k ∈ keys} → Value}
     (h : AdmBody b (.map keys g) = true) :
     (keysOk b.spec keys && literalsOk b.spec keys g) = true := by
-  have hsub := mem_fields_of_adm hr h
   have h' := h
   rw [AdmBody_map, Bool.and_eq_true] at h'
-  cases b with
-  | mk fields fld rest =>
-    -- `hr` is `AdmWild rest = none`, and `AdmWild` answers `some _` on every open block
-    obtain rfl : rest = none := by cases rest with | none => rfl | some _ => exact nomatch hr
+  cases hb : b with
+  | mk fields fld wild =>
+    subst hb
     refine Bool.and_eq_true _ _ |>.mpr ⟨?_, ?_⟩
-    · refine keysOk_of_names hsub (fun k hreq => ?_) (fun k hforbid hk => ?_)
+    · refine keysOk_of_names ?_ (fun k hreq => ?_) (fun k hforbid hk => ?_)
+      · cases hw : wild with
+        | none => exact Or.inr (mem_fields_of_adm (by simp [Body.wild, hw, AdmWild]) h)
+        | some _ => exact Or.inl rfl
       · cases hf : fld k with
         | req t =>
           apply mem_keys_of_isReq h'.1 k.2
@@ -1833,11 +1847,24 @@ theorem structural_of_AdmBody {b : Body} (hr : AdmWild b.wild = none)
           rw [hf] at hrow
           simp [AdmField, Adm] at hrow
     · refine decide_eq_true (fun k => ?_)
-      have hkf : k.1 ∈ fields := hsub k.1 k.2
       show litOkV _ k.1 (g k) = true
-      rw [litOkV, show (Body.spec (.mk fields fld none)).names.at k.1
-            = some ⟨_, altsOfField (fld ⟨k.1, hkf⟩)⟩ from dif_pos hkf]
-      exact altsOkV_of_AdmField (objAdmV_row h'.2 k.2 hkf)
+      cases hkf : decide (k.1 ∈ fields) with
+      | true =>
+        have hd := of_decide_eq_true hkf
+        rw [litOkV, show (Body.spec (.mk fields fld wild)).names.at k.1
+              = some ⟨_, altsOfField (fld ⟨k.1, hd⟩)⟩ from dif_pos hd]
+        exact altsOkV_of_AdmField (objAdmV_row h'.2 k.2 hd)
+      | false =>
+        have hnd := of_decide_eq_false hkf
+        cases hw : wild with
+        | none =>
+          exact absurd (mem_fields_of_adm (by simp [Body.wild, hw, AdmWild]) h k.1 k.2) hnd
+        | some w =>
+          have hat : (Body.spec (.mk fields fld (some w))).names.at k.1 = none := dif_neg hnd
+          have hws : (Body.spec (.mk fields fld (some w))).wild = some (altsOfTerm w.2) := by
+            simp [Body.spec]
+          simp only [litOkV, hat, hws]
+          exact altsOkV_of_Adm (objAdmV_wild h'.2 k.2 hnd hw)
 
 
 /-- A list admits a value exactly when one of its terms does. -/
@@ -1860,26 +1887,19 @@ theorem AdmAny_iff : ∀ {os : List Term} {v : Value},
     each option's structural test its row. -/
 theorem selOptV_eq_AdmAny {os : List Term} (hc : unionOk os = true) (v : Value) :
     selOptV (AdmSpecs os) v = AdmAny os v := by
-  simp only [unionOk, Bool.and_eq_true, List.all_eq_true] at hc
-  have hclosed : ∀ t ∈ os, t.isOpenObject = false := fun t ht => by
-    have := hc.2 t ht; simpa using this
+  simp only [unionOk] at hc
   have hbridge : ∀ t ∈ os, Adm t v = true → admitOptV (specOf t, Adm t) v = true := by
-    intro t ht h
+    intro t _ h
     cases t with
     | object b =>
-      have hr : AdmWild b.wild = none := by
-        cases hwild : b.wild with
-        | none => rfl
-        | some _ =>
-          exact absurd (hclosed _ ht) (by simp [Term.isOpenObject, hwild])
       cases b with
       | mk fields fld wild =>
         cases v with
-        | map keys g => simpa only [admitOptV, specOf] using structural_of_AdmBody hr h
+        | map keys g => simpa only [admitOptV, specOf] using structural_of_AdmBody h
         | _ => exact absurd h (by simp [Adm, AdmBody])
     | _ => exact h
   have hlen : (os.filter (fun t => admitOptV (specOf t, Adm t) v)).length ≤ 1 := by
-    have hone := (admitsAtMostOne_of_orth (pairwise_of_orthAll hc.1)).1 v
+    have hone := (admitsAtMostOne_of_orth (pairwise_of_orthAll hc)).1 v
     rwa [semsOf, ← optionSems_eq, filter_AdmSpecs (fun t _ => Adm_exact t) v,
       List.length_map] at hone
   rw [selOptV, AdmSpecs_eq, filter_map_AdmSpecs]
@@ -1912,8 +1932,8 @@ theorem selOptV_eq_AdmAny {os : List Term} (hc : unionOk os = true) (v : Value) 
 /-! ### The same equation on the read side
 
 The value side needs only `AdmWild`, which is `none` exactly where the body declares no open
-block. The read side uses the same closedness fact. `mem_fields_of_admA` handles an undeclared
-name, and the sided presence lattice handles a declared absent name. -/
+block. The read side reads the block the same way. `mem_fields_of_admA` handles an undeclared
+name under a closed body, and each name's own presence pair handles a declared absent name. -/
 
 /-- `AdmABody` at a map, unfolded. -/
 theorem AdmABody_map {b : Body} {keys : Finset Name} {g : {k // k ∈ keys} → Attr} :
@@ -1956,21 +1976,38 @@ theorem objAdmA_row {c : Body} {keys : Finset Name} {g : {k // k ∈ keys} → A
   have hh := of_decide_eq_true hB ⟨k, hk⟩
   rwa [entryPA, MapOf.at, dif_pos hc] at hh
 
-/-- **An object option has its structural test for a read row.** `structural_of_AdmBody`'s twin
-    reads the read-side presence element directly. -/
-theorem structural_of_AdmABody {b : Body} (hr : b.wild = none)
+/-- A present name the body does not declare goes through the open block, on the read side.
+    `objAdmV_wild`'s twin. -/
+theorem objAdmA_wild {c : Body} {keys : Finset Name} {g : {k // k ∈ keys} → Attr}
+    (hB : objAdmA ⟨c.fields, fun k => AdmAField (c.at k)⟩ (AdmAWild c.wild) keys g = true)
+    {k : Name} (hk : k ∈ keys) (hnc : k ∉ c.fields) {w : KeyPat × Term}
+    (hw : c.wild = some w) : AdmA w.2 (g ⟨k, hk⟩) = true := by
+  unfold objAdmA at hB
+  have hh := of_decide_eq_true hB ⟨k, hk⟩
+  rwa [entryPA, MapOf.at, dif_neg hnc, hw, AdmAWild] at hh
+
+/-- A term's row carries its literal alternatives on the read side, where it has any.
+    `altsOkA_of_AdmAField`'s twin at the term level, which is what an open block needs. -/
+theorem altsOkA_of_AdmA {t : Term} {a : Attr} (h : AdmA t a = true) :
+    altsOkA (altsOfTerm t) a = true := by
+  cases t <;> first | rfl | exact (AdmA_exact _ a).mp h
+
+/-- **An object option has its structural test for a read row, open block and all.**
+    `structural_of_AdmBody`'s twin, and it carries no closedness premise for the same reason. -/
+theorem structural_of_AdmABody {b : Body}
     {keys : Finset Name} {g : {k // k ∈ keys} → Attr}
     (h : AdmABody b (.m keys g) = true) :
     (keysOk b.spec keys && literalsOkA b.spec keys g) = true := by
-  have hsub := mem_fields_of_admA hr h
   have h' := h
   rw [AdmABody_map, Bool.and_eq_true] at h'
   cases hb : b with
   | mk fields fld wild =>
     subst hb
-    obtain rfl : wild = none := by simpa using hr
     refine Bool.and_eq_true _ _ |>.mpr ⟨?_, ?_⟩
-    · refine keysOk_of_names hsub (fun k hreq => ?_) (fun k hforbid hk => ?_)
+    · refine keysOk_of_names ?_ (fun k hreq => ?_) (fun k hforbid hk => ?_)
+      · cases hw : wild with
+        | none => exact Or.inr (mem_fields_of_admA (b := .mk fields fld wild) hw h)
+        | some _ => exact Or.inl rfl
       · cases hf : fld k with
         | req t =>
           have hh := of_decide_eq_true h'.1 k
@@ -1996,11 +2033,23 @@ theorem structural_of_AdmABody {b : Body} (hr : b.wild = none)
           rw [hf] at hrow
           simp [AdmAField, AdmA] at hrow
     · refine decide_eq_true (fun k => ?_)
-      have hkf : k.1 ∈ fields := hsub k.1 k.2
       show litOkA _ k.1 (g k) = true
-      rw [litOkA, show (Body.spec (.mk fields fld none)).names.at k.1
-            = some ⟨_, altsOfField (fld ⟨k.1, hkf⟩)⟩ from dif_pos hkf]
-      exact altsOkA_of_AdmAField (objAdmA_row h'.2 k.2 hkf)
+      cases hkf : decide (k.1 ∈ fields) with
+      | true =>
+        have hd := of_decide_eq_true hkf
+        rw [litOkA, show (Body.spec (.mk fields fld wild)).names.at k.1
+              = some ⟨_, altsOfField (fld ⟨k.1, hd⟩)⟩ from dif_pos hd]
+        exact altsOkA_of_AdmAField (objAdmA_row h'.2 k.2 hd)
+      | false =>
+        have hnd := of_decide_eq_false hkf
+        cases hw : wild with
+        | none => exact absurd (mem_fields_of_admA (b := .mk fields fld wild) hw h k.1 k.2) hnd
+        | some w =>
+          have hat : (Body.spec (.mk fields fld (some w))).names.at k.1 = none := dif_neg hnd
+          have hws : (Body.spec (.mk fields fld (some w))).wild = some (altsOfTerm w.2) := by
+            simp [Body.spec]
+          simp only [litOkA, hat, hws]
+          exact altsOkA_of_AdmA (objAdmA_wild h'.2 k.2 hnd hw)
 
 /-- A list reads an attribute exactly when one of its terms does. -/
 theorem AdmAAny_iff : ∀ {os : List Term} {a : Attr},
@@ -2022,21 +2071,17 @@ theorem AdmAAny_iff : ∀ {os : List Term} {a : Attr},
     and makes each option's structural test its read row. -/
 theorem selOptA_eq_AdmAAny {os : List Term} (hc : unionOk os = true) (a : Attr) :
     selOptA (AdmASpecs os) a = AdmAAny os a := by
-  simp only [unionOk, Bool.and_eq_true, List.all_eq_true] at hc
+  simp only [unionOk] at hc
   have hbridge : ∀ t ∈ os, AdmA t a = true → admitOptA (specOf t, AdmA t) a = true := by
     intro t ht h
     cases t with
     | object b =>
-      have hr : b.wild = none := by
-        cases hwild : b.wild with
-        | none => rfl
-        | some _ => exact absurd (hc.2 _ ht) (by simp [Term.isOpenObject, hwild])
       cases a with
-      | m keys g => simpa only [admitOptA, specOf] using structural_of_AdmABody hr h
+      | m keys g => simpa only [admitOptA, specOf] using structural_of_AdmABody h
       | _ => exact absurd h (by cases b; simp [AdmA, AdmABody])
     | _ => exact h
   have hlen : (os.filter (fun t => admitOptA (specOf t, AdmA t) a)).length ≤ 1 := by
-    have hone := (admitsAtMostOne_of_orth (pairwise_of_orthAll hc.1)).2 a
+    have hone := (admitsAtMostOne_of_orth (pairwise_of_orthAll hc)).2 a
     rwa [semsOf, ← optionSems_eq, filter_AdmASpecs (fun t _ => AdmA_exact t) a,
       List.length_map] at hone
   rw [selOptA, AdmASpecs_eq, filter_map_AdmASpecs]
@@ -4596,19 +4641,15 @@ theorem forall₂_mem_left {α β : Type} {R : α → β → Prop} :
       · obtain ⟨y, hy, hry⟩ := forall₂_mem_left hrest hx'
         exact ⟨y, List.mem_cons_of_mem _ hy, hry⟩
 
-/-- **Under the certificate a term's read row is its structural test.** Lifted out of
-    `selOptA_eq_AdmAAny`, which needs it in this form and states it inline. -/
-theorem admitOptA_of_AdmA {os : List Term} (hc : unionOk os = true) {t : Term} (ht : t ∈ os)
+/-- **A term's read row is its structural test.** Lifted out of `selOptA_eq_AdmAAny`, which
+    needs it in this form and states it inline. The open block needs no certificate here,
+    because `structural_of_AdmABody` carries the open case itself. -/
+theorem admitOptA_of_AdmA {t : Term}
     {a : Attr} (hh : AdmA t a = true) : admitOptA (specOf t, AdmA t) a = true := by
-  simp only [unionOk, Bool.and_eq_true, List.all_eq_true] at hc
   cases t with
   | object b =>
-      have hr : b.wild = none := by
-        cases hwild : b.wild with
-        | none => rfl
-        | some _ => exact absurd (hc.2 _ ht) (by simp [Term.isOpenObject, hwild])
       cases a with
-      | m keys g => simpa only [admitOptA, specOf] using structural_of_AdmABody hr hh
+      | m keys g => simpa only [admitOptA, specOf] using structural_of_AdmABody hh
       | _ => exact absurd hh (by cases b; simp [AdmA, AdmABody])
   | _ => exact hh
 
@@ -4944,7 +4985,7 @@ theorem admA_meetSRight {x : Term} {fam : Term → Option Term} (hf : AdmAFam x 
         have hwu : w = u := by
           have hm : w ∈ (zs.filter (fun z => !z.isNever)).filter
               (fun v => admitOptA (specOf v, AdmA v) a) :=
-            List.mem_filter.mpr ⟨hsurv, admitOptA_of_AdmA hcz hsurv hwa⟩
+            List.mem_filter.mpr ⟨hsurv, admitOptA_of_AdmA hwa⟩
           rw [hfu, List.mem_singleton] at hm
           exact hm
         subst hwu
@@ -5683,7 +5724,7 @@ theorem AdmA_meet_both : ∀ x y z, Term.meet x y = some z → AdmAAt x y z
           have hwu : w = u := by
             have hm : w ∈ (zs.filter (fun z => !z.isNever)).filter
                 (fun v => admitOptA (specOf v, AdmA v) a) :=
-              List.mem_filter.mpr ⟨hsurv, admitOptA_of_AdmA hcz hsurv hwa⟩
+              List.mem_filter.mpr ⟨hsurv, admitOptA_of_AdmA hwa⟩
             rw [hfu, List.mem_singleton] at hm
             exact hm
           subst hwu
@@ -5790,24 +5831,20 @@ theorem orthAll_of_pairwise : ∀ {ts : List Term},
     is not one of the two. -/
 theorem unionOk_sublist {opts sub : List Term} (hs : sub.Sublist opts)
     (h : unionOk opts = true) : unionOk sub = true := by
-  simp only [unionOk, Bool.and_eq_true, List.all_eq_true] at h ⊢
-  exact ⟨orthAll_of_pairwise ((pairwise_of_orthAll h.1).sublist hs),
-    fun t ht => h.2 t (hs.mem ht)⟩
+  simp only [unionOk] at h ⊢
+  exact orthAll_of_pairwise ((pairwise_of_orthAll h).sublist hs)
 
-/-- **A value an option admits, the option admits structurally**, where the option is closed.
-    The bridge `selOptV_eq_AdmAny` builds inline; an open object is the case it fails at. -/
-theorem admitOptV_of_Adm {t : Term} (hcl : t.isOpenObject = false) {v : Value}
+/-- **A value an option admits, the option admits structurally.** The bridge
+    `selOptV_eq_AdmAny` builds inline. An open object was the case this failed at, until
+    `structural_of_AdmBody` read the block. -/
+theorem admitOptV_of_Adm {t : Term} {v : Value}
     (h : Adm t v = true) : admitOptV (specOf t, Adm t) v = true := by
   cases t with
   | object b =>
-    have hr : AdmWild b.wild = none := by
-      cases hwild : b.wild with
-      | none => rfl
-      | some _ => exact absurd hcl (by simp [Term.isOpenObject, hwild])
     cases b with
     | mk fields fld wild =>
       cases v with
-      | map keys g => simpa only [admitOptV, specOf] using structural_of_AdmBody hr h
+      | map keys g => simpa only [admitOptV, specOf] using structural_of_AdmBody h
       | _ => exact absurd h (by simp [Adm, AdmBody])
   | _ => exact h
 

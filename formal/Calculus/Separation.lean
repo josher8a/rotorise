@@ -337,23 +337,16 @@ theorem not_admitV_le_Adm :
 theorem not_uAtCan_of_sepJ :
     ¬ ∀ (opts : List Term),
       (∀ t ∈ opts, Lawful (denote t)) →
-      (∀ t ∈ opts, t.isOpenObject = false) →
       List.Pairwise SepJV opts →
       List.Pairwise SepJA opts →
       UAtCan opts := by
   intro h
-  refine not_uAtCan_objReq (h [objReqStr, objReqNum] ?_ ?_ ?_ ?_)
+  refine not_uAtCan_objReq (h [objReqStr, objReqNum] ?_ ?_ ?_)
   · intro t ht
     rcases List.mem_cons.mp ht with rfl | ht
     · exact lawful_objReqStr
     · rcases List.mem_cons.mp ht with rfl | ht
       · exact lawful_objReqNum
-      · exact nomatch ht
-  · intro t ht
-    rcases List.mem_cons.mp ht with rfl | ht
-    · rfl
-    · rcases List.mem_cons.mp ht with rfl | ht
-      · rfl
       · exact nomatch ht
   · refine .cons (fun y hy => ?_) (.cons (by simp) .nil)
     rcases List.mem_singleton.mp hy with rfl
