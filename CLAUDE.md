@@ -274,8 +274,9 @@ Name the command, and quote the output. A report without both is a claim.
 | type-level surface | the attest snapshots in `src/Rotorise.attest.test.ts`, against `.attest/assertions/typescript.json` |
 | the Lean side | `formal/scripts/gate.sh`, which gates on the exit code, and reports every check rather than the first failure |
 
-`biome ci` fails on this tree today. Measure the count at HEAD first, and compare against
-that count.
+`biome ci` exits 0 on this tree. Measured at HEAD on 2026-09-19: `npm run format:ci` reports
+70 files and no fixes. A non-zero count is a regression that your pass caused. Measure at HEAD
+first anyway, because this line is dated and the tree moves.
 
 `biome --write` reformats a file that you did not edit. Name the files that you changed
 when you format.

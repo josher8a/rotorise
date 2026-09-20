@@ -54,13 +54,13 @@ structure AltClause where
   keys : Finset Name
   alts : {k // k ∈ keys} → Alts
 
-/-- One clause key, answered against one option's spec: the name is declared, it is write-required,
+/-- One clause key, answered against one option's spec: the name is declared, it is required,
     and its alternatives lie inside the clause's.
 
-    `litDisjAt`'s shape with the subset test in place of the disjointness one, and write-required presence is
-    read for `litDisjAt`'s reason. An optional literal name admits the map that omits the name, so
-    the option holds values outside every fibre the clause describes and the clause does not
-    one. -/
+    `litDisjAt`'s shape with the subset test in place of the disjointness one, and required
+    presence is read for `litDisjAt`'s reason. An optional literal name admits the map that
+    omits the name, so the option holds values outside every fibre the clause describes, and
+    the clause does not describe the option. -/
 def litSubAt (s : BodySpec) (c : AltClause) (k : {k // k ∈ c.keys}) : Bool :=
   match s.names.at k.1 with
   | some ns => decide (ns.presence = (true, false)) && altsSub ns.alts (c.alts k)

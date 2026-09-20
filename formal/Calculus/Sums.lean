@@ -36,9 +36,61 @@ def keysOk (spec : BodySpec) (keys : Finset Name) : Bool :=
   decide (∀ k : {k // k ∈ spec.names.1},
     (spec.names.2 k).presence.1 = false → k.1 ∉ keys))
 
+/-- **The presence a body admits at any name.** One function where the separator read two
+    cases by hand.
+
+    A declared name answers that name's own element. An undeclared name under an open block
+    answers the top, because the block claims the name and carries no mark, so the body admits
+    the name present and admits the name absent. An undeclared name under a closed body answers
+    `(false, true)`, because a closed body refuses the name and so admits absence alone. -/
+def BodySpec.presenceAt (s : BodySpec) (k : Name) : Bool × Bool :=
+  match s.names.at k with
+  | some ns => ns.presence
+  | none => if s.wild.isSome then (true, true) else (false, true)
+
+/-- **A name a body admits present lies in the presence `presenceAt` reads.** By contraposition
+    on the third conjunct of `keysOk` at a declared name, and on the first conjunct at an
+    undeclared one: a closed body refuses the name outright, and an open body answers the top. -/
+theorem presenceAt_fst_of_keysOk {s : BodySpec} {keys : Finset Name} {k : Name}
+    (h : keysOk s keys = true) (hk : k ∈ keys) : (s.presenceAt k).1 = true := by
+  unfold BodySpec.presenceAt
+  cases hat : s.names.at k with
+  | some ns =>
+    obtain ⟨hd, rfl⟩ := MapOf.at_eq_some.mp hat
+    have hforbid := of_decide_eq_true (Bool.and_eq_true_iff.mp (Bool.and_eq_true_iff.mp h).2).2
+    cases hp : (s.names.get ⟨k, hd⟩).presence.1 with
+    | true => rfl
+    | false => exact absurd hk (hforbid ⟨k, hd⟩ hp)
+  | none =>
+    have hnd : k ∉ s.names.1 := by
+      intro hm
+      rw [MapOf.at_of_mem ⟨k, hm⟩] at hat
+      exact nomatch hat
+    cases hw : s.wild.isSome with
+    | true => rfl
+    | false =>
+      have hsub := (Bool.and_eq_true_iff.mp h).1
+      rw [hw, Bool.false_or] at hsub
+      exact absurd ((of_decide_eq_true hsub) k hk) hnd
+
+/-- **A name a body admits absent lies in the presence `presenceAt` reads.** By contraposition
+    on the second conjunct of `keysOk` at a declared name. An undeclared name answers `true` in
+    the absent bit whether the body is open or closed, so no conjunct is needed there. -/
+theorem presenceAt_snd_of_keysOk {s : BodySpec} {keys : Finset Name} {k : Name}
+    (h : keysOk s keys = true) (hk : k ∉ keys) : (s.presenceAt k).2 = true := by
+  unfold BodySpec.presenceAt
+  cases hat : s.names.at k with
+  | some ns =>
+    obtain ⟨hd, rfl⟩ := MapOf.at_eq_some.mp hat
+    have hreq := of_decide_eq_true (Bool.and_eq_true_iff.mp (Bool.and_eq_true_iff.mp h).2).1
+    cases hp : (s.names.get ⟨k, hd⟩).presence.2 with
+    | true => rfl
+    | false => exact absurd (hreq ⟨k, hd⟩ hp) hk
+  | none => cases s.wild.isSome <;> rfl
+
 /-- One present name's content, on the write side: where the name's field is a literal, the
     value is the one the literal names. A name the spec does not declare is the open block's,
-    and reads that block's alternatives; under a closed body     `keysOk` has already refused it,
+    and reads that block's alternatives; under a closed body `keysOk` has already refused it,
     so the answer there is never consulted. -/
 def altsOkV : Option Alts → Value → Bool
   | some ⟨g, x⟩, v => inL g x v
@@ -64,7 +116,7 @@ def litOkA (spec : BodySpec) (k : Name) (a : Attr) : Bool :=
 /-- **Content admission (objects): every present name whose field is a literal carries one of
     that literal's alternatives.**
 
-    The other half of an object option's admission, and the half     `keysOk` alone cannot state.
+    The other half of an object option's admission, and the half `keysOk` alone cannot state.
     Present-only: the quantifier runs over the *map's* key set, so an absent name is `keysOk`'s
     business. `Finset.attach`'s decidable `∀ k ∈ keys` is what `decide` resolves through, the
     same route `valPresentT` takes and the one `Finset.toList` would spoil. -/
@@ -116,9 +168,14 @@ theorem closed_refuses_undeclared :
     (keysOk closedNone {"A"} && literalsOk closedNone {"A"} (fun _ => .str "y")) = false := by
   decide
 
-/-- The open block makes an undeclared name top on the write side. -/
+/-- **An undeclared name under an open block is the top.** One theorem where the pin was the
+    present half alone: `presenceAt` states both bits, so the whole claim reduces in the kernel. -/
 theorem open_block_presence_top :
-    keysOk openAny {"A"} = true := by decide
+    openAny.presenceAt "A" = (true, true) := by decide
+
+/-- …and an undeclared name under a closed body admits absence alone. -/
+theorem closed_presence_absent :
+    closedNone.presenceAt "A" = (false, true) := by decide
 
 /-- The forbidden lattice element refuses a present name on both sides. The checks reduce in the
     kernel. `Body.spec` maps an optional bottom slot to this element. -/
