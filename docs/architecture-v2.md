@@ -15,14 +15,23 @@ Three things happen together, and none of them is a judgment call.
 2. This file replaces `docs/architecture.md`, under that name.
 3. `formal/scripts/name_drift.py` swaps the two in its `CURRENT` list.
 
+```mermaid
+flowchart LR
+  S1["the structure exists under Calculus/"] --> S2["this file replaces architecture.md under that name"]
+  S2 --> S3["name_drift.py swaps the two in CURRENT"]
+  S3 --> DONE["the new document is guarded, the old one is gone"]
+  RISK["until the third step, a name here can go stale and nothing reports it"] -.-> S3
+```
+
+
 Point 3 is the one that matters and the reason the other two are written down. **This file is
 not name-checked today**, because every guarded document is in that list and this one is not.
 A guarded document cannot cite a declaration that does not exist, and this file cites several on
 purpose. So it carries the risk that every unguarded document carries: a name here can go stale
 and nothing reports it. Treat a name in this file as a proposal, and the tree as the authority.
 
-This file carries no count, no line number and no measurement, for the reason
-`architecture.md` gives. The measurements that produced this design, the probes that tested it,
+This file carries no count, no line number, no measurement and no section number, for the
+reason `architecture.md` gives. A renumbering must not be able to make a sentence here wrong. The measurements that produced this design, the probes that tested it,
 and the decisions still open are in the repository memory, not here. A reader who needs the
 evidence reads that. A reader who needs the intent reads this.
 
@@ -33,6 +42,36 @@ evidence reads that. A reader who needs the intent reads this.
 | Future states, and what decides each | `docs/roadmap.md` |
 | Known, suspected and partially mitigated issues | `docs/defects.md` |
 | The evidence, the probes and the open decisions | the repository memory |
+
+---
+
+## The map
+
+**The prose governs and a diagram illustrates it.** Where a diagram and a sentence disagree, the
+sentence is right and the diagram is the defect. Nothing checks these pictures, so read one as a
+summary of the section it sits in and never as the source of a claim.
+
+```mermaid
+flowchart TB
+  subgraph LANG["the term language, what a caller writes"]
+    direction LR
+    CAR["a carrier<br/>with an admissible set"]
+    RES["a restriction<br/>commutative, idempotent"]
+    ADA["an adapter<br/>associative, not commutative"]
+    RES --- CAR
+    ADA --- CAR
+  end
+  LANG --> MEET["the structural intersection<br/>one recursion, exact at every constructor"]
+  MEET --> LEAF["a leaf it cannot decide<br/>a host function, a closure, an opaque"]
+  LEAF -- "no information" --> MEET
+  MEET --> Q{"is the intersection inhabited"}
+  Q -- "no" --> YES["the options separate, the union is admitted"]
+  Q -- "yes, or unknown" --> NO["refused where it is written"]
+```
+
+The loop through the undecidable leaf is the only place information is lost, and an unknown
+answer refuses rather than admits. Everything else in this document is a consequence of the
+recursion being exact everywhere else.
 
 ---
 
@@ -53,76 +92,216 @@ store at the same member, and then encoding is unambiguous while decoding is not
 So every operation here answers one shape of question: **is the intersection of two described
 sets empty?**
 
-## 2. Where the certificate lives, and why it has no choice
+## 2. Where the certificate lives
 
-The calculus cannot read the concrete sets. A value set is infinite, a predicate is a host
-function, an adapter is a caller's function. So it decides over **descriptions**: finite data
-standing for those sets, with a meet and a decidable test for the bottom.
+### One relation, three uses
 
-Write `V t` for the values a term writes, and `[t]` for its description. A concretization `g`
-turns a description back into a set. Three laws carry the whole design.
+The meet is structural intersection. It takes two terms and returns the term that admits exactly
+what both admit, or reports that it cannot tell. Everything the calculus needs is a use of it.
 
-    V t  ⊆  g [t]                    a description OVER-approximates
+    the meet         the intersection itself, as a term
+    the certificate  is that intersection inhabited
+    the selector     does this value inhabit it
+
+```mermaid
+flowchart LR
+  M["the structural intersection of two terms"]
+  M --> U1["as a term<br/>what both admit"]
+  M --> U2["as a certificate<br/>is it inhabited"]
+  M --> U3["as a selector<br/>does this value inhabit it"]
+```
+
+There is no second apparatus. A certificate that is not the inhabitance of the meet is a second
+function that must be held in agreement with the meet by hand, and nothing holds it there.
+
+### The selector decides by attempt, at every constructor
+
+An option admits a value when the option's codec accepts it. That is one rule, and it recurses
+because a codec recurses.
+
+A selector that decides an object by its key set and its literal marks is a narrower thing: a
+dispatch on discriminants. It is cheap, it is shallow, it is what a host does when it dispatches
+a tagged union, and **it is not admission.** A calculus built on it inherits the depth limit.
+The same fact then separates one level in and vanishes two levels in, and a position the
+dispatch never reads, such as a list index, never separates at all.
+
+**This document rules for attempt, at every constructor including the object.** The cost is real
+and named below. What it buys is that the certificate has nothing left to approximate except
+where approximation is forced.
+
+### The abstraction is confined to the leaves
+
+Write `S t` for a set a term claims and `[t]` for its description, with `g` turning a description
+back into a set. Three laws carry the design.
+
+    S t  ⊆  g [t]                    a description OVER-approximates
     g (a ⊓ b)  ⊇  g a ∩ g b          the meet over-approximates the intersection
     g ⊥  =  ∅                        the bottom stands for the empty set
 
-**Disjointness transfers downward, and the derivation is three steps.** Suppose
-`[x] ⊓ [y] = ⊥`. Then
+**The laws are generic in the side, and both instances are required.** Separation is two
+questions, so `S` has two readings: the values a term writes, and the attributes a term reads.
+Each carries its own description, its own meet and its own bottom, and the three laws hold of
+each.
 
-    ∅  =  g ⊥  =  g ([x] ⊓ [y])  ⊇  g [x] ∩ g [y]  ⊇  V x ∩ V y
+With admission by attempt, `g` is the identity at every constructor: a carrier, an admissible
+set, a name, a position. It over-approximates only where a leaf cannot be decided.
 
-so `V x ∩ V y = ∅`. Nothing in that chain runs backwards. From `V x ∩ V y = ∅` the second law
-gives no information about `g [x] ∩ g [y]`, which may be inhabited because `g` over-approximates
-by construction. **That is what an abstraction is, and not a defect of one.**
+```mermaid
+flowchart LR
+  POS["a position in the term"] --> Q{"can this position be decided"}
+  Q -- "a carrier, an admissible set,<br/>a name, an index" --> EX["recurse, exactly"]
+  Q -- "a host function, a closure,<br/>an opaque projection" --> TOP["no information, so refuse"]
+  EX --> POS
+```
 
-**Therefore the exact term meet is not the certificate.** The term meet is exact concretely: it
-admits what both factors admit, and that law is worth keeping. A certificate built on it reports
-two options disjoint while the descriptions the runtime reads still overlap, and the runtime
-then finds two claimants for one thing. The abstract domain needs its own meet, and that single
-fact is what the rest of this file follows from.
+**That is the whole of the incompleteness and it is local.** It sits at named leaves, it does not
+accumulate with depth, and it is the honest answer at each of those leaves rather than a gap
+somebody has not closed yet. Disjointness proved over descriptions transfers to the concrete
+sets and never upward, which is what an abstraction is:
 
-**The boundary is a constructor, not a judgment.** At an option that is not an object, the
-structural test *is* the concrete row, so the term meet decides correctly there. At an object the
-two differ, and the abstract meet has real work only there.
+    ∅  =  g ⊥  =  g ([x] ⊓ [y])  ⊇  g [x] ∩ g [y]  ⊇  S x ∩ S y
 
-### The certificate is a disjunction of phases, not one meet
+Nothing in that chain runs backwards.
 
-`Orth` is not one test. It is `Orth1 || OrthM || OrthS || OrthL`: four descriptions, four meets,
-four bottom tests, combined by `or`. Each phase is sound alone, so the disjunction is sound
-because a disjunction of sound tests is sound. **No phase is complete, and none claims to be.**
+### Inhabitance propagates by position
 
-| phase | the description it meets | it fires when |
-| --- | --- | --- |
-| `Orth1` | occupancy: a subset of `Slot`, a subset of `Member` | no value slot and no attribute member is shared |
-| `OrthM` | presence: two bits at every name | some name meets at the bottom |
-| `OrthS` | the alternatives pinned at a name | some name carries disjoint alternatives |
-| `OrthL` | the carrier with its admissible set | two literals of one kind differ, or two sets have disjoint alternatives |
+    the intersection of two one-position tuples over disjoint types   is the bottom
+    the intersection of two arrays over disjoint types                is an array of the bottom
 
-`Slot` and `Member` are the **coarse** descriptions of the two sides, and they are kind tags
-rather than contents. Two distinct text literals share the member `S` and are still separable,
-which is why a finer phase exists at all: `Orth1` reads the tag, `OrthL` reads the literal.
+A required position passes the bottom upward. A variadic one does not, because the empty list
+inhabits an array over the bottom. Nothing states that rule twice: it follows from the position
+being required or variadic, and it is the same rule a structural type system applies when it
+intersects a tuple and when it intersects an array.
 
-**This is the shape a new capability takes.** Widening a phase to read more of what a term
-already carries strengthens the certificate and touches no constructor. Adding a fifth phase
-does the same. Neither disturbs a proof of another phase, because soundness is proved one phase
-at a time and the disjunction inherits it.
+### What the ruling deletes
 
-**The top is how a description goes blind.** A description that answers "every slot" for a term
-meets non-trivially with everything, so its phase never fires. A construct whose occupancy is
-the top on both sides is invisible to `Orth1` by construction, and no proof about that construct
-recovers the loss. `D4` exists for this reason.
+An occupancy projection over a finite index of value slots and attribute members. A presence
+test at a name. A literal test at a name. A row for each written shape. A body specification
+carried beside the term so that a test can read it without consulting a codec.
+
+Every one of them is the recursion truncated at some depth. Each owes its own soundness proof,
+its own argument that the indices it skips could not have separated, and its own extension on
+the day the language gains a constructor. **The recursion owes one proof and gains nothing on
+that day.**
+
+### The cost, stated plainly
+
+Deciding an object by attempt reads every field through that field's codec. A dispatch on keys
+and discriminants is a lookup. That is a genuine trade at run time, it is measurable rather than
+arguable, and this ruling accepts it. A host that needs the cheap dispatch can keep one, as an
+optimisation that must agree with admission, never as the definition of it.
 
 ### The lattice is complete and the term language is not
 
 The term language has a bottom and no top. No term admits every value, because a term denotes a
 codec and no codec encodes every value.
 
-The description has a top and needs one: occupancy has it, and the value side of an uncertified
-adapter is it. So **the top belongs to the description and not to the term language**, and the
+The description has a top and needs one: an undecidable leaf answers with it, and the value side
+of an uncertified adapter is it. So **the top belongs to the description and not to the term language**, and the
 asymmetry is forced rather than missing. A host constructs the top's **projection**, never the
 top: the opaque term is that projection, and its flag says whether the projection loses.
 
 ## 3. What the structure demands of any description
+
+Each demand below is a constraint on any description, and each already has something in the
+development that meets it. The diagram is that pairing; the text is the reason.
+
+```mermaid
+requirementDiagram
+  requirement D1 {
+    id: D1
+    text: a description answers at every index including the undeclared one
+    risk: high
+    verifymethod: test
+  }
+  requirement D2 {
+    id: D2
+    text: the description of a sum meets summand by summand
+    risk: high
+    verifymethod: test
+  }
+  requirement D3 {
+    id: D3
+    text: a restriction names the carrier it restricts
+    risk: medium
+    verifymethod: inspection
+  }
+  requirement D4 {
+    id: D4
+    text: a projection keeps every fact the certificate reads
+    risk: high
+    verifymethod: test
+  }
+  requirement D5 {
+    id: D5
+    text: analysability is whether the premises are discharged
+    risk: medium
+    verifymethod: demonstration
+  }
+  requirement D6 {
+    id: D6
+    text: every test computes and no route reaches a classical axiom
+    risk: high
+    verifymethod: test
+  }
+  requirement D7 {
+    id: D7
+    text: a concept leaves the language exactly when it is terminal in it
+    risk: low
+    verifymethod: inspection
+  }
+
+  element nameSum {
+    type: description
+  }
+  element members {
+    type: constructor
+  }
+  element structuralAdmission {
+    type: relation
+  }
+  element certifiedAdapter {
+    type: constructor
+  }
+  element mutualInclusion {
+    type: instance
+  }
+  element alternateReader {
+    type: field
+  }
+
+  structuralAdmission - satisfies -> D1
+  nameSum - satisfies -> D2
+  members - satisfies -> D3
+  structuralAdmission - satisfies -> D4
+  certifiedAdapter - satisfies -> D5
+  mutualInclusion - satisfies -> D6
+  alternateReader - satisfies -> D7
+
+  requirement D8 {
+    id: D8
+    text: the selector and the certificate are one relation
+    risk: high
+    verifymethod: test
+  }
+  requirement D9 {
+    id: D9
+    text: a certificate separates on the value side and on the attribute side
+    risk: high
+    verifymethod: test
+  }
+  structuralAdmission - satisfies -> D8
+  structuralAdmission - satisfies -> D9
+```
+
+The members constructor is a declaration in `Calculus/` today. The other elements are concepts
+this design names and the development does not: read them as the shape a satisfying declaration
+must take, not as something to grep for.
+
+**`D4` is the demand the ruling repays.** A projection can drop a fact the certificate needs, and
+under a dispatch on discriminants every field's type was such a fact. Admission by attempt
+projects nothing away except at a leaf it cannot decide, so `D4` stops being a standing debt and
+becomes a property of the one relation.
 
 **D1. A description is total over its index.** A description answering only at declared names is
 a partial function pretending to be total, and every reader then carries the undeclared case by
@@ -141,9 +320,10 @@ tests are different, and the difference is not a matter of strength in one direc
 product form asks a question about one coordinate at a time, so a pair that overlaps in every
 coordinate while every summand pair is empty is invisible to it.
 
-The presence lattice is the worked instance. A name's description is two bits, one per summand,
-and it meets by `and` on each bit and reaches the bottom when neither survives. `presenceAt`
-answers at every name and `presenceMeetsBot` is that meet.
+A name is the worked instance: absent, or present carrying a value. The intersection of two
+names is the intersection of the absent cases beside the intersection of the present ones, so a
+name separates only when both summands do. A width-open body admits every unnamed key, so its
+absent case is empty and two open bodies overlap where two closed ones separate.
 
 **D3. A restriction has a carrier.** A restriction with no carrier describes a set no term
 describes, so the abstraction has nothing to abstract, and only the top can approximate it.
@@ -176,16 +356,31 @@ and both are in the development already. Membership needs equality on the elemen
 computes, so a test can quantify over a set without ever comparing two sets. Where two sets must
 be compared, mutual inclusion decides equality and is choice-free.
 
-So `D6` constrains how a set is *used* and not whether a description may carry one. A phase that
+So `D6` constrains how a set is *used* and not whether a description may carry one. A test that
 quantifies over the declared names owes one more thing: a theorem that the names it skips could
-not have separated anyway. `presenceMeetsBot_undeclared_false` is that theorem for the presence
-phase, and it is what makes quantifying over the declared names complete rather than convenient.
+not have separated anyway. A width-open body is why the obligation is real, because such a body
+answers at a name it never declared.
 
 **D7. A concept lives outside the language exactly when it is terminal in it.** If no constructor
 position accepts a concept, moving it outside removes a row from every table and closes off
 nothing reachable. If any position accepts it, moving it outside makes a reachable state
 unwritable, and encoding exists to do the opposite. The alternate reader is terminal and sits
 outside. An adapter is a union option and composes with itself, so it is a constructor.
+
+**D8 and D9 constrain the certificate rather than a description**, and the rest of this document
+leans on both without having stated either.
+
+**D8. The selector and the certificate are one relation.** The certificate asks whether any
+value can inhabit two options. The selector asks whether this value inhabits one. A certificate
+that separates what the selector cannot tell apart is **unsound**, because the run time then
+finds two claimants. A selector that tells apart what the certificate cannot is **wasted**,
+because the union is refused where the codec would have worked. Two functions kept in agreement
+by hand will drift, and nothing reports the drift. So they are one function at two arguments.
+
+**D9. A certificate separates on the value side and on the attribute side.** Separation is two
+questions, and a pair separated on one alone is not separated. A recursion may discharge both at
+once where the codec makes them one fact, as a literal does, but it may never discharge one and
+stay silent about the other.
 
 ---
 
@@ -194,10 +389,10 @@ outside. An adapter is a union option and composes with itself, so it is a const
 ### A carrier and a restriction, and an adapter beside them
 
 A literal and a refinement both restrict what a carrier accepts, differing only in the size of
-the set. **A set of admissible values is one concept and a literal is its singleton.** So the
-alternatives a name is pinned to and the members a refinement admits are one type, and the
-disjointness test over them is one function rather than a general one beside a hand-written
-special case.
+the set. **A set of admissible values is one concept, a literal is its singleton, and a bare
+carrier is the whole set.** A type and a discriminant stop being different kinds of thing, which
+is the symmetry the old arrangement broke: it gave a literal the power to separate and gave a
+type none. One relation over admissible sets decides both, at every depth, in every position.
 
 An adapter does not restrict. It **re-indexes**, which is why it commutes with nothing: a
 refinement outside an adapter tests the caller's value and the same refinement inside tests the
@@ -224,6 +419,27 @@ one term.
 That is what makes the stack a mechanism rather than a list. A reader knows where a run ends
 without looking at its contents, and the description below reads the word positionally.
 
+```mermaid
+stateDiagram-v2
+  direction LR
+  [*] --> Carrier
+  Carrier --> Restriction
+  Carrier --> Adapter
+  Restriction --> Adapter: alternation, no law relates the two
+  Adapter --> Restriction: alternation, both orders are wanted
+  Restriction --> Restriction: a second one meets in, so a run has one normal form
+  Adapter --> Adapter: a second one composes, so the order inside a run is kept
+  Restriction --> [*]: the outermost layer is the caller's view
+  Adapter --> [*]: the outermost layer is the caller's view
+```
+
+**The stack bottoms out at a wire carrier, and a base is not one.** A base of the language is an
+adapter, so the platform-number base is an adapter over the decimal carrier rather
+than a carrier itself. A carrier is therefore a kind the wire format has, with nothing beneath
+it, and the set of carriers is smaller than the set of things a caller may write at the bottom
+of a stack. Read the start of the diagram as the wire, not as the vocabulary.
+
+
 The description does not collapse it either. **The value side of a description lives at the
 caller's level**, so the rule is positional: read every restriction outside the outermost
 adapter directly, and take the top from the outermost adapter inward. Nothing crosses an
@@ -247,13 +463,13 @@ working** rather than a gap in it.
 ### A name description is an admissible set
 
 A name admits absence, or presence carrying a value. That is one set and one emptiness test, not
-two coordinates tested in two phases with a presence equality guarding the second. The guard is
-the absent summand, and writing it by hand in the other phase is what makes a pair separated by
-the two summands together go unseen.
+two coordinates tested apart with a presence equality guarding the second. The guard is the
+absent summand, and writing it by hand is what makes a pair separated by the two summands
+together go unseen.
 
-The description also carries the stored signature of a field. Without it, two objects declaring
-one name at two different types describe identically, and the object phase is blind by
-construction.
+A name's description reaches the field's term, not a summary of it. Two objects declaring one
+name at two different types are separated by that name, at any depth, because the relation at
+the name is the relation itself.
 
 A set of admissible values is not a new representation. The members of a refinement are already
 a non-empty finite set over the carrier's type, so unifying a literal with a refinement merges
@@ -288,10 +504,12 @@ hatch added to it.
 
 ## 6. What this architecture does not reach
 
-- **Relational separation.** Every phase reads one name at a time. A pair separated only by a
+- **Relational separation.** The recursion reads one name at a time. A pair separated only by a
   correlation between two names is unreachable.
 - **An adapter's value side where the caller states no domain.** The top is forced there, and it
   is the honest answer: nobody can decide it.
-- **The concrete meet's exactness.** It keeps its law. The abstract meet sits beside it and does
-  not weaken it.
-- **A top in the term language.** Forced, for the reason in section 2.
+- **A cheap dispatch.** Admission by attempt reads every field through that field's codec. A host
+  may keep a discriminant dispatch as an optimisation that agrees with admission, and nothing
+  here derives one for it.
+- **A top in the term language.** Forced: a term denotes a codec, and no codec encodes every
+  value.
