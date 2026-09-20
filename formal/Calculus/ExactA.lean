@@ -174,7 +174,6 @@ noncomputable def AdmA : Term → Attr → Bool
   | .literal k ls => AdmALit k ls
   -- the bottom reads nothing back, and the row is that sentence
   | .never => fun _ => false
-  | .custom _ cp => fun a => (cp a).isSome
   | .held t _ _ => AdmA t
   | .lazy t   => AdmA t
   | .refine t p => fun a => AdmA t a && refineReads t p.eval a
@@ -751,7 +750,6 @@ theorem AdmA_exact : ∀ (t : Term), ExactA t
       case boolean => exact AdmALit_boolean_exact ls a
       case binary => exact AdmALit_binary_exact ls a
       case null => exact AdmALit_null_exact ls a
-  | .custom ce cp => by intro a; simp [AdmA, denote, denote]
   | .held c f g => by
       have hc := AdmA_exact c
       intro a

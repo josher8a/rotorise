@@ -108,7 +108,6 @@ def μSyn : Term → Option Member
   | .held t _ _ => μSyn t
   | .refine t _ => μSyn t
   | .lazy _ => none
-  | .custom _ _ => none
   | .opaq _ => none
   | .object _ => some .M
   | .union opts => unanimous (μSynList opts)
@@ -181,7 +180,6 @@ def denote : Term → Codec
   | .refine inner p => (denote inner).restrict p.eval
   -- `(lazy)` concludes `⊤`: the pair is the thunk's, the member is not.
   | .lazy inner => { denote inner with μ := none }
-  | .custom ce cp => { T := fun v => (ce v).isSome, μ := none, e := ce, p := cp }
   -- `opaqCodecω` budgets each input by its own depth (`Opaque.lean`); that is a recursion on the
   -- *input*, not on the term, and is untouched by this.
   | .opaq lossy => opaqCodecω lossy
@@ -325,7 +323,7 @@ theorem denote_μ : ∀ t : Term, (denote t).μ = μSyn t
   | .list _ _ _ => rfl
   | .held t' _ _ => denote_μ t'
   | .refine t' _ => denote_μ t'
-  | .lazy _ | .custom _ _ | .opaq _ | .never => rfl
+  | .lazy _ | .opaq _ | .never => rfl
   | .object b => bodySem_μ b
   | .union opts => by
       show unanimous (denoteμs opts) = unanimous (μSynList opts)

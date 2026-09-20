@@ -14,7 +14,7 @@ Mechanization choices, and where they diverge from the doc (each is routine to s
 * `Typed` keeps only one *syntactic* premise, `(union)`'s **(D)**. Every other side condition
   became a type — see each constructor's own docstring.
   The doc's *semantic* premises — `(held)`'s carrier-restricted iso, `(legacy)`'s
-  `ran(r) ⊆ dom(e)` and coherence, `(custom)`'s laws, and `(union)`'s residual (U) — live in
+  `ran(r) ⊆ dom(e)` and coherence, and `(union)`'s residual (U) — live in
   `Obligations` (Soundness.lean), which is where they can mention the denotation.
 * **`literal` is one rule in §3 and one constructor here.** §3's `(literal)` reads its member
   off a base, which in a naive transcription needs `ℓ : List Value` plus a premise that the
@@ -274,7 +274,6 @@ inductive Typed : Term → Held → Option Member → Prop where
   | refine {t T μ p} (h : Typed t T μ) :
       Typed (.refine t p) (fun v => T v ∧ p.eval v) μ
   | lazy {t T μ} (h : Typed t T μ) : Typed (.lazy t) T none
-  | custom (ce cp) : Typed (.custom ce cp) (fun v => (ce v).isSome = true) none
   | opaq (lossy) : Typed (.opaq lossy) (HOpaque lossy) none
   /-- §5's bottom. It writes no value, so it stores no member, and its held set is `False`. -/
   | never : Typed .never HNever none

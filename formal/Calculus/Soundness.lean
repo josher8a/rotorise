@@ -4,7 +4,7 @@ import Calculus.Typing
 # §5 — Soundness
 
 The theorem. `Obligations t` collects the semantic rule premises: `(held)` cancellation laws,
-`(custom)` laws, and `(union)` residual (U). The current term language has no read adapter,
+and `(union)` residual (U). The current term language has no read adapter,
 so every typed term satisfies all four laws.
 
 The ground-term cases are wrappers over the certified combinators,
@@ -59,8 +59,6 @@ def Obligations : Term → Prop
   | .list pre sp suf => ObligationsList pre ∧ ObligationsOpt sp ∧ ObligationsList suf
   | .held t' f g => Obligations t' ∧ IsoCancels (denote t') f g
   | .lazy t' => Obligations t'
-  | .custom ce cp =>
-    Lawful { T := fun v => (ce v).isSome, μ := none, e := ce, p := cp }
   | .object b => ObligationsBody b
   | .union opts => ObligationsList opts ∧ UAtAct opts
 
@@ -140,10 +138,6 @@ theorem list {pre sp suf} (h : Obligations (.list pre sp suf)) :
 /-- §3 `(held)`: the subterm's premises, and the iso cancelling on the carriers. -/
 theorem held {t f g} (h : Obligations (.held t f g)) :
     Obligations t ∧ IsoCancels (denote t) f g := h
-
-/-- §3 `(custom)`: the escape hatch proves §2's laws for itself. -/
-theorem custom {ce cp} (h : Obligations (.custom ce cp)) :
-    Lawful { T := fun v => (ce v).isSome, μ := none, e := ce, p := cp } := h
 
 /-- §5 `(union)`: one premise per option, and (U) where the union acts. -/
 theorem union {opts} (h : Obligations (.union opts)) :
@@ -243,7 +237,6 @@ theorem typed_μSyn : ∀ {t T μ}, Typed t T μ → μSyn t = μ
   | _, _, _, .held h' => by have ih := typed_μSyn h'; exact ih
   | _, _, _, .refine h' => by have ih := typed_μSyn h'; exact ih
   | _, _, _, .lazy _ => rfl
-  | _, _, _, .custom _ _ => rfl
   | _, _, _, .opaq _ => rfl
   | _, _, _, .object _ _ => rfl
   | _, _, _, .union h _ => by
@@ -297,8 +290,6 @@ theorem soundness_both : ∀ {t T μ}, Typed t T μ → Obligations t → Sound 
     | null => exact sound_ground lawful_nullCodec
     | binary => exact sound_ground lawful_binaryCodec
     | opaq lossy => exact sound_ground (lawful_opaqCodecω lossy)
-    | custom ce cp =>
-      exact sound_ground hob.custom
     -- a leaf now: `setCodec` is lawful at each of the four bases, so `(set)` discharges the
     -- way the ground rules do rather than by wrapping a subterm's soundness
     | set b => exact sound_ground (lawful_setCodec (lawful_setBase b))
@@ -707,7 +698,6 @@ theorem typed_TSub : ∀ {t T μ}, Typed t T μ → ∀ v, (denote t).T v → T 
     -- rule's are the same expression now — `HLit k ls` — so there is nothing to prove.
     | literal _ _ => exact hv
     | never => exact hv
-    | custom _ _ => exact hv
     | opaq lossy => exact opaq_TSubω lossy v hv
     -- the base's codec holds exactly the base's held set (`SetBase.elem_T`), so the three
     -- wire families transport with no recursion left to do
@@ -788,7 +778,7 @@ decreasing_by term_depth_wf
 set_option linter.unreachableTactic false in
 /-- Every derivable term denotes a pair **on its carrier** — §3's `e : T ⇀ 𝔸`,
     `p : 𝔸 ⇀ T`. One walk of the derivation, dispatching to the `Carrier` lemmas, with
-    `soundness_both` supplying the lawfulness the `held` and `custom` cases need. -/
+    `soundness_both` supplying the lawfulness the `held` case needs. -/
 theorem carrier_denote : ∀ {t T μ}, Typed t T μ → Obligations t → Carrier (denote t)
   | t, T, μ, h, hob => by
     cases h with
@@ -827,16 +817,6 @@ theorem carrier_denote : ∀ {t T μ}, Typed t T μ → Obligations t → Carrie
     | @lazy γ T' μ' h' =>
       have ih := carrier_denote h' hob.lazy
       exact ⟨fun he => ih.domE he, fun hp => ih.ranP hp⟩
-    | custom ce cp =>
-      refine ⟨?_, ?_⟩
-      · intro v a he
-        replace he : ce v = some a := he
-        show (ce v).isSome = true
-        rw [he]
-        rfl
-      · intro a v hp
-        replace hp : cp a = some v := hp
-        exact hob.canon hp
     | opaq lossy => exact carrier_opaqCodecω lossy
     | @object body bind R μs hfields hrest =>
       cases body with | mk fields ff wild =>

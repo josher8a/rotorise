@@ -213,8 +213,13 @@ EXPECTED = {
 # `testing.ts`'s `firstDifference`. Asking "does this name appear in `src/`" passes it and
 # reproduces the hole; asking for a declaration at the start of a line does not.
 HOST = {
-    "opaque": "`src/`'s codec, analysed here as a well-behaved `custom` — same analysis, "
-              "opposite warranty (§7). `opaqCodec` is the model's, and is not the same name",
+    "custom": "`src/`'s escape-hatch codec. The model deleted `Term.custom`: its two call sites "
+              "were both tests, it never crossed the bridge, and `occV = occA = occTop` made it "
+              "invisible to every analysis. The host still publishes it, so the two sides "
+              "disagree until the host carrier port closes the vector bridge",
+    "opaque": "`src/`'s codec, analysed here as the language's one escape hatch, and warranted "
+              "by the calculus rather than by its user (§7). `opaqCodec` is the model's, and is "
+              "not the same name",
     "separable": "`src/codec/term.ts`'s declaration-time guard: whether a union may hold two options. "
                  "§5 cites it because `Orth` is its specification, and the two run opposite "
                  "directions — `Orth` certifies, this refutes, so where `Orth` declines this "

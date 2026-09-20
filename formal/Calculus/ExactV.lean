@@ -133,70 +133,57 @@ def selOptV (os : List (Option (BodySpec) × VP)) (v : Value) : Bool :=
 noncomputable def AdmLit (k : GroundKind) (x : k.Carrier) (v : Value) : Bool :=
   inL k x v
 
-/-! ## The two rows that ask their own codec
+/-! ## The one row that asks its own codec
 
-    `custom` and `opaque` are the language's two escape hatches, and they are the two rows
-    below that **do not describe a set at all**. Each asks the codec it denotes:
+    `opaque` is the language's escape hatch, and it is the row below that **does not
+    describe a set at all**. It asks the codec it denotes:
 
-        Adm  (.custom ce _)   v = (ce v).isSome
         Adm  (.opaq lossy)    v = ((opaqCodecω lossy).e v).isSome
-        AdmA (.custom _ cp)   a = (cp a).isSome
         AdmA (.opaq lossy)    a = ((opaqCodecω lossy).p a).isSome
 
-    Three things follow, and they are the same three for both.
+    Three things follow.
 
-    *They are exact by construction.* `denote`'s rows set `e := ce` and
-    `e := (opaqCodecω lossy).e` — the `custom` row definitionally, `opaque` by `denote_opaq`
-    — so the row and `dom(e)` are the same function, and `ExactV`/`ExactA` at either term is
-    `Iff.rfl`. That is not a sharp analysis of an escape hatch; it is the analysis
-    *declining* to be one, and the exactness is the codec's, borrowed.
+    *It is exact by construction.* `denote`'s row sets `e := (opaqCodecω lossy).e`, by
+    `denote_opaq`, so the row and `dom(e)` are the same function, and `ExactV`/`ExactA` at
+    the term is `Iff.rfl`. That is not a sharp analysis of an escape hatch; it is the
+    analysis *declining* to be one, and the exactness is the codec's, borrowed.
 
-    *They are as precise as the semantics is.* No syntactic set could name `opaqCodecω`'s
+    *It is as precise as the semantics is.* No syntactic set could name `opaqCodecω`'s
     domain: it recurses on the *input's own depth*, refusing a `numSet` of numerals the
     store will not take, or an array with one such numeral at any depth. A row over the term
     cannot see past the top constructor. Deferring sees all of it, because it does not look.
 
-    *Nothing here knows anything about either implementation.* Swap `opaqCodecω` for a
+    *Nothing here knows anything about the implementation.* Swap `opaqCodecω` for a
     different `opaque` — a different numeric policy, a different set of options, a different
     fuel discipline — and every theorem downstream is still true and still proved, because
     none of them mentions what the codec answers.
 
-    ### …and the one respect in which they are opposite
+    ### The warranty behind the row
 
-    The likeness is **the analysis, and only the analysis**. `opaque` is not a `custom`, and
-    the difference is the warranty behind the codec each row asks:
-
-    * `custom` carries a real premise. `Obligations (.custom ce cp)` (`Soundness.lean`) is
-      `Lawful ⟨dom(ce), none, ce, cp⟩` — a proof obligation on whoever writes the term, and
-      nothing in the calculus discharges it. The row asks a codec **the user warrants**.
-    * `opaque` carries none. `Obligations (.opaq _) = True`, and it is `True` because the
-      laws are *theorems* here: `lawful_opaqCodecω` and `carrier_opaqCodecω`
-      (`Opaque.lean`), off the stabilization and depth-preservation lemmas. The row asks a
-      codec **the calculus warrants**.
-
-    So `opaque` is strictly the stronger of the two — same decoupling, no premise — and that
-    is what "a *well-behaved* `custom`" means. A reading of these rows as "`opaque` is a
-    `custom`" gets the obligation exactly backwards.
+    `opaque` carries no premise. `Obligations (.opaq _) = True`, and it is `True` because the
+    laws are *theorems* here: `lawful_opaqCodecω` and `carrier_opaqCodecω`
+    (`Opaque.lean`), off the stabilization and depth-preservation lemmas. The row asks a
+    codec **the calculus warrants**, and owes nothing to whoever writes the term.
 
     ### What "unanalysable" turned out to mean
 
-    `held` and `custom` were on the unanalysable list because they carry Lean functions, and
+    `held` was on the unanalysable list because it carries Lean functions, and
     a function is not something a reader can look inside. But a row is not a reader: it is a
-    function with the term in hand, and the term *carries* `f`, `ce` and `cp` as data. It can
+    function with the term in hand, and the term *carries* `f` and `g` as data. It can
     apply them. `(c.through f g).e v = c.e (f v)` holds by `Iff.rfl`, so `held`'s writable
     set is the subterm's pulled back along `f`, with no appeal to `held`'s iso obligation.
 
     Three senses had been running together: (i) the term does not carry the information —
     true of nothing here; (ii) the domain cannot be computed without running the codec — true
-    of `opaq` and of `custom`, and the reason both rows *do* run it, at the price of being
-    `noncomputable`; (iii) a reader cannot see through it — true of `held`, `custom` and
+    of `opaq`, and the reason the row *does* run it, at the price of being
+    `noncomputable`; (iii) a reader cannot see through it — true of `held` and
     `opaq`, and not a property of the calculus.
 
     ### And `lazy` is transparent, on both sides
 
     `denote (.lazy t) = { denote t with μ := none }`: the pair is the subterm's and only the
     member is erased, so both rows below pass straight through. The specification's §5
-    lists `lazy` with `custom` as unanalysable, and that is inherited from the document's
+    lists `lazy` as unanalysable, and that is inherited from the document's
     thunk, which is `∗ → term`. `Term.lazy` carries a plain `Term` — a deliberate change,
     made because a closure adds no constructible term and defeats the termination checker
     (`Term.lean`) — so the model answers a question the document's `lazy` cannot be asked.
@@ -221,7 +208,6 @@ noncomputable def Adm : Term → Value → Bool
   | .number   => inD
   | .decimal  => isStored
   | .literal k ls => AdmLit k ls
-  | .custom ce _ => fun v => (ce v).isSome
   -- the bottom admits nothing, and the row is that sentence
   | .never => fun _ => false
   | .refine t p => fun v => Adm t v && p.eval v
@@ -714,21 +700,18 @@ theorem neSetImage_isSome_of_inj {α β : Type} [DecidableEq β] {f : α → Opt
     Boolean and there is nothing to prove.
 
     This is exactness **earned by deferring**, not by a clever row: as a claim about the
-    analysis it is exactly the `custom` row's claim, which is to say it says the analysis
-    of an escape hatch is that hatch's own answer, and nothing about what the answer is.
+    analysis it says the analysis of an escape hatch is that hatch's own answer, and
+    nothing about what the answer is.
     What it replaced was a 120-line induction (~~AdmOpaqV_iff~~) proving a hand-written
     recursion over the value agreed with the codec at every budget that sees the value.
     That was a real theorem about `opaqCodec`; this is not one, and does not pretend to be.
 
     What is bought instead is decoupling: change `opaqCodecω` and this still holds, still
-    by `rfl`. `custom` and `opaq` are exactly the terms for which that is true.
+    by `rfl`. `opaq` is the one term for which that is true.
 
-    They are **not** interchangeable, and the difference is on the other side of the row.
-    `custom`'s codec is warranted by its user — `Obligations (.custom ce cp)` is a `Lawful`
-    premise nothing here discharges. `opaque`'s is warranted by the calculus:
+    The codec the row asks is warranted by the calculus:
     `Obligations (.opaq _) = True`, because `lawful_opaqCodecω` and `carrier_opaqCodecω`
-    (`Opaque.lean`) are proved. Same deferral, opposite warranty; `opaque` is the member of
-    the pair that owes nothing. -/
+    (`Opaque.lean`) are proved. The deferral costs the writer of the term nothing. -/
 theorem ExactV_opaq (lossy : Bool) : ExactV (.opaq lossy) := fun _ => Iff.rfl
 
 
@@ -886,7 +869,6 @@ theorem Adm_exact : ∀ (t : Term), ExactV t
       cases k <;> cases v <;>
         simp [AdmLit, denote, denote, literalCodec, baseCodec, inL,
               stringCodec, booleanCodec, binaryCodec, nullCodec, inD, decimalCodec]
-  | .custom ce cp => by intro v; simp [Adm, denote, denote]
   | .refine c p => by
       have hc := Adm_exact c
       intro v; cases hq : p.eval v <;> simp [Adm, denote, denote, Codec.restrict, hq, hc v]

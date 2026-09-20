@@ -634,8 +634,8 @@ e : T ⇀ 𝔸    p : 𝔸 ⇀ T    (R), (C), (MP) hold of (e, p)
 \end{definition}
 
 These \texttt{⊤}s are forced for different reasons, and the distinction matters. \texttt{lazy} could be asked but answering would force the thunk, which is the recursion it exists to
-break. \texttt{custom} is a pair of opaque functions and there is nothing to ask, which is also why its
-premise is the laws themselves: nothing structural guarantees them, so the rule demands them.
+break. \texttt{held} carries a pair of opaque maps and there is nothing to ask, which is also why its
+premise is the cancellation law itself: nothing structural guarantees it, so the rule demands it.
 Demanding \rulelink{cond:R}{\textbf{(R)}} alone would under-demand, deriving a \texttt{⊤} term free to change stored members — the
 exact term §2's argument for \texttt{opaque} says cannot exist. (\rulelink{cond:W}{\textbf{(W)}} is vacuous at \texttt{⊤}, so the three
 named are the whole obligation.)

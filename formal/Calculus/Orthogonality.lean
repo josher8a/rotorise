@@ -21,8 +21,7 @@ answers whether there is a *syntactic certificate* that they cannot both admit o
 ## Sound, never complete, and why there is no `unknown`
 
 Semantic orthogonality is undecidable in this language — `refine t q` carries an arbitrary
-`Value → Bool`, `held t f g` an arbitrary pair of maps, `custom` an arbitrary pair of partial
-functions. So `Orth` answers a *narrower* question, and the answer `false` means "no
+`Value → Bool` and `held t f g` an arbitrary pair of maps. So `Orth` answers a *narrower* question, and the answer `false` means "no
 certificate", never "not orthogonal".
 
 The direction that keeps this sound is that **over-approximating an occupancy is always
@@ -71,7 +70,7 @@ The read-side slot is `Member`, which `Attr.member` already computes.
 | names | the presence each body admits at one name, where the two meet at the bottom | `OrthM` |
 | literals | one shared required name pinned to disjoint alternatives, at four bases | `OrthS` |
 | alternatives | two literals, or two sets over literals, at one base with disjoint `ℓ` | `OrthL` |
-| opaque predicate | `refine`'s `q`, `held`'s `f`, `custom` | undecidable by construction |
+| opaque predicate | `refine`'s `q`, `held`'s `f` | undecidable by construction |
 
 The interface the discharger consumes is `Separates`, a `Prop`; `Orth` is the *decidable*
 sufficient condition for it, covering the first four phases. Phases *literals* and
@@ -198,7 +197,6 @@ mutual
       so it can move the value into any constructor. `⊤`. (The read side is not: `g`
       post-processes, so `AdmA (.held t f g) = AdmA t` and the read occupancy is the
       subterm's.)
-    * `custom _ _` — arbitrary partial functions both ways. `⊤` on both sides.
     * `refine t q` — the subterm's, over-approximating away `q`. Sound: a refinement writes
       a subset of what the base writes.
     * `LegacyRead` is outside the structural classifier.
@@ -224,7 +222,6 @@ def occV : Term → Slot → Bool
   | .list _ _ _  => occOnly .arr
   | .object _   => occOnly .map
   | .held _ _ _  => occTop
-  | .custom _ _  => occTop
   | .refine t _  => occV t
   | .lazy t      => occV t
   | .union opts  => occVL opts
@@ -254,7 +251,6 @@ def occA : Term → Member → Bool
   | .set b       => occOnly b.member
   | .list _ _ _  => occOnly .L
   | .object _   => occOnly .M
-  | .custom _ _  => occTop
   | .refine t _  => occA t
   | .held t _ _  => occA t
   | .lazy t      => occA t
@@ -584,7 +580,6 @@ theorem occV_sound : ∀ (t : Term), OccSoundV t
   | .object (.mk _ _ _) => fun v h => by
       cases v <;> simp_all [Adm, AdmBody, occV, occOnly, Value.slot]
   | .held _ _ _ => fun _ _ => rfl
-  | .custom _ _ => fun _ _ => rfl
   | .refine t _ => fun v h => by
       simpa [occV] using occV_sound t v (Bool.and_eq_true_iff.mp h).1
   | .lazy t => fun v h => by simpa [occV] using occV_sound t v h
@@ -667,7 +662,6 @@ theorem occA_sound : ∀ (t : Term), OccSoundA t
       fun a h => by cases a <;> simp_all [AdmA, occA, occOnly, Attr.member]
   | .object (.mk _ _ _) => fun a h => by
       cases a <;> simp_all [AdmA, AdmABody, occA, occOnly, Attr.member]
-  | .custom _ _ => fun _ _ => rfl
   | .refine t _ => fun a h => by
       simpa [occA] using occA_sound t a (Bool.and_eq_true_iff.mp h).1
   | .held t _ _ => fun a h => by simpa [occA] using occA_sound t a h
@@ -1320,7 +1314,6 @@ theorem typed_occV : ∀ {t T μ}, Typed t T μ → ∀ v, T v → occV t v.slot
     | binary => obtain ⟨b, rfl⟩ := hv; rfl
     | literal k x => subst hv; cases k <;> rfl
     | never => exact absurd hv (hnever_false v)
-    | custom _ _ => rfl
     | set b =>
         rcases hv with ⟨S, rfl, hall⟩ | ⟨S, rfl, hall⟩ | ⟨S, rfl, hall⟩ <;>
           cases b <;>
