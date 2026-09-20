@@ -71,6 +71,31 @@ the gate's output, not this file's.
 
 ---
 
+## The term language separates a carrier from a restriction, and the certificate meets descriptions
+
+**The future state.** `docs/architecture-v2.md` describes it in full and this entry does not
+repeat it. In one sentence: a literal is a refinement at a singleton, an adapter re-indexes
+rather than restricts, a name description is an admissible set rather than two coordinates, and
+the certificate meets descriptions rather than terms.
+
+**Why it is a roadmap entry and not the architecture.** `architecture-v2.md` states the intent
+and does not govern. `architecture.md` governs. A reader who wants to know what the system is
+reads the second; a reader who wants to know where it is going reads the first. Neither repeats
+the other, and this entry is the only place that says how they relate.
+
+**The ruling today is not yet.** The generated artifacts are stated over the term language and
+are checked by elaborating them. While they do not elaborate, a change to the constructor set
+lands unchecked. That argues for restoring the bridge first, and it is the strongest argument
+against starting with this.
+
+**What decides it.** Three things together, and none is a judgment call. The structure exists
+under `Calculus/`. `architecture-v2.md` replaces `architecture.md` under that name.
+`formal/scripts/name_drift.py` swaps the two in its `CURRENT` list, which is what makes the new
+document guarded and the old one gone. Until the third happens the new document cites names that
+do not exist and nothing reports it, which is stated at its head.
+
+---
+
 ## The value side and the attribute side are one parametrised development
 
 **The future state.** The analysis is written once and instantiated at the value side and at the
