@@ -15,6 +15,7 @@ path, as a call, or in prose.
 
 | For | Read |
 | --- | --- |
+| The system this arc is building toward | `docs/architecture-v2.md`, which does NOT govern yet |
 | The rules, normatively | `formal/docs/blueprint/src/content.tex` |
 | Future states, and what decides each | `docs/roadmap.md` |
 | Known, suspected and partially mitigated issues | `docs/defects.md` |
