@@ -75,7 +75,7 @@ theorem arrayRowA (c : Term) (a : Attr) : AdmA (.array c) a = AdmA (.tuple [] (s
 /-! ### `union` and domain equality
 
 **An object option is admitted by its structure, and the structure now includes the open
-block.** The sided name readers read the block as well as the field table, so a body that claims a name
+block.** `keysOk` reads the block as well as the field table, so a body that claims a name
 through its block admits the maps carrying that name, and a body that declares no such name
 and has no block refuses them. The two answers come from one reading of one payload.
 

@@ -109,7 +109,7 @@ def orthAll : List Term → Bool
     Pairwise `Orth` bounds the structural admitters at one, so nothing is refused for being
     admitted twice.
 
-    No *open* object. The sided name readers admit an open block's undeclared names, while the
+    No *open* object. `keysOk` admits an open block's undeclared names, while the
     structural proof excludes an open object. -/
 def unionOk (os : List Term) : Bool :=
   orthAll os && os.all (fun t => !t.isOpenObject)
@@ -1143,8 +1143,9 @@ example : Term.meet
 example : unionOk [.object (.mk {"a"} (fun _ => .req .string) none),
     .object (.mk {"a"} (fun _ => .req .boolean) none)] = false := by
   simp [unionOk, orthAll, Orth, Orth1, OrthM, OrthS, OrthL, occV, occA, occOnly, Slot.all,
-    Member.all, reqNotDeclared, Body.spec, altsOfField, specOf, litDisjAt, altsDisj, MapOf.at,
-    Finset.mem_singleton]
+    Member.all, namesSeparate, presenceMeetsBot, BodySpec.presenceAt, ObjectSlot.presence,
+    ObjectSlot.isReq, Term.isNever, Body.spec, altsOfField,
+    specOf, litDisjAt, altsDisj, MapOf.at, Finset.mem_singleton]
 
 /-! ### The bottom bubbles up through a required slot
 
@@ -1172,7 +1173,8 @@ example : unionOk [.object (.mk {"x"} (fun _ => .req .string) none)]
   simp [unionOk, orthAll, Term.isOpenObject]
 
 /-- …and an **open** object is the second way, on its own. Its open block makes an undeclared name
-    top for both sided name readers. The temporary certificate still refuses an open object, so a
+    the top, so no name meets at the bottom and the names phase separates it from nothing.
+    `unionOk` still refuses an open object for the admission family's reason, so a
     singleton union refuses a value the option admits. -/
 example : unionOk [.object (.mk {"a"} (fun _ => .req .string) (some (.any, .string)))]
     = false := by

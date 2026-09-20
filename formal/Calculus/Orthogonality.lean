@@ -68,7 +68,7 @@ The read-side slot is `Member`, which `Attr.member` already computes.
 | phase | separator | this module |
 |---|---|---|
 | slot | the `Value` constructor on the write side, the `Member` on the read side | `Orth1` |
-| names | both-sided required presence against the declared name sets | `OrthM` |
+| names | the presence each body admits at one name, where the two meet at the bottom | `OrthM` |
 | literals | one shared required name pinned to disjoint alternatives, at four bases | `OrthS` |
 | alternatives | two literals, or two sets over literals, at one base with disjoint `ℓ` | `OrthL` |
 | opaque predicate | `refine`'s `q`, `held`'s `f`, `custom` | undecidable by construction |
@@ -274,16 +274,43 @@ def Orth1 (x y : Term) : Bool :=
   Slot.all.all (fun s => !(occV x s && occV y s)) &&
   Member.all.all (fun m => !(occA x m && occA y m))
 
-/-- One option requires a name on both sides that the other does not declare.
+/-- **The two bodies admit presences at one name that meet at the bottom.**
 
-    Each sided name reader admits a presence interval. `OrthM` is conservative: it separates
-    only when one name has the required element `(true, false)` in both intervals and the other
-    spec does not declare the name. -/
-def reqNotDeclared (sx sy : BodySpec) : Bool :=
-  decide (∃ k : {k // k ∈ sx.names.1},
-    (sx.names.2 k).presence = (true, false) ∧
-    (sx.names.2 k).presence = (true, false) ∧
-    k.1 ∉ sy.names.1)
+    `keysOk` says the key set lies inside the presence the spec admits at each name. Two
+    options are separated at a name when the presence each admits there meets at the bottom:
+    no key set can lie inside both, because a key set either carries the name or omits it and
+    the meet refuses each answer.
+
+    Presence is the lattice `Bool × Bool` and the meet is componentwise, so the test is the
+    two conjunctions being `false`.
+
+    **The quantifier runs over the names one side declares, and that is complete.** At a name
+    neither side declares, each side answers the top or `(false, true)`, and neither meet of
+    those is the bottom. `presenceMeetsBot_undeclared_false` below is that claim, proved.
+
+    Two existentials over the two declared sets and not one over their union: the union needs
+    `DecidableEq (Finset Name)`, whose mathlib instance reaches `Classical.choice`, and `Orth`
+    is a `by decide`. Membership needs equality on the element alone. -/
+def presenceMeetsBot (sx sy : BodySpec) (k : Name) : Bool :=
+  !((sx.presenceAt k).1 && (sy.presenceAt k).1) &&
+  !((sx.presenceAt k).2 && (sy.presenceAt k).2)
+
+/-- The separator: some name one side declares meets at the bottom. -/
+def namesSeparate (sx sy : BodySpec) : Bool :=
+  decide (∃ k : {k // k ∈ sx.names.1}, presenceMeetsBot sx sy k.1 = true) ||
+  decide (∃ k : {k // k ∈ sy.names.1}, presenceMeetsBot sx sy k.1 = true)
+
+/-- **Quantifying over the declared names is complete.** A name neither side declares can never
+    meet at the bottom: each side answers `(true, true)` under a block and `(false, true)`
+    without one, and every one of the four meets keeps the absent bit. -/
+theorem presenceMeetsBot_undeclared_false {sx sy : BodySpec} {k : Name}
+    (hx : k ∉ sx.names.1) (hy : k ∉ sy.names.1) : presenceMeetsBot sx sy k = false := by
+  have ex : sx.presenceAt k = if sx.wild.isSome then (true, true) else (false, true) := by
+    simp only [BodySpec.presenceAt, MapOf.at, dif_neg hx]
+  have ey : sy.presenceAt k = if sy.wild.isSome then (true, true) else (false, true) := by
+    simp only [BodySpec.presenceAt, MapOf.at, dif_neg hy]
+  simp only [presenceMeetsBot, ex, ey]
+  cases sx.wild.isSome <;> cases sy.wild.isSome <;> rfl
 
 /-- **Phase *names*.** Two object options whose admissible key-set intervals are disjoint.
 
@@ -298,7 +325,7 @@ def reqNotDeclared (sx sy : BodySpec) : Bool :=
 def OrthM (x y : Term) : Bool :=
   match specOf x, specOf y with
   | some sx, some sy =>
-      sx.wild.isNone && sy.wild.isNone && (reqNotDeclared sx sy || reqNotDeclared sy sx)
+      namesSeparate sx sy
   | _, _ => false
 
 /-- Two alternative sets with no element in common, at a base whose equality computes.
@@ -373,18 +400,16 @@ def altsDisj : Option Alts → Option Alts → Bool
   | some ⟨.binary, x⟩,  some ⟨.binary, y⟩  => decide (x ≠ y)
   | _, _ => false
 
-/-- One name that both specs declare, are required on both sides, and pin to disjoint alternatives.
+/-- One name that both specs declare, require, and pin to disjoint alternatives.
 
-    Both-sided required presence is a rule and not a precaution. Two objects sharing an *optional*
-    literal name pinned to different values both admit the map that omits the name, so a
-    req-blind test would certify a pair `select` cannot resolve. -/
+    Required presence on each side is a rule and not a precaution. Two objects sharing an
+    *optional* literal name pinned to different values both admit the map that omits the name,
+    so a req-blind test would certify a pair `select` cannot resolve. -/
 def litDisjAt (sx sy : BodySpec) (k : Name) : Bool :=
   match sx.names.at k, sy.names.at k with
   | some nx, some ny =>
       decide (nx.presence = (true, false)) &&
-      (decide (nx.presence = (true, false)) &&
-      (decide (ny.presence = (true, false)) &&
-      (decide (ny.presence = (true, false)) && altsDisj nx.alts ny.alts)))
+      (decide (ny.presence = (true, false)) && altsDisj nx.alts ny.alts)
   | _, _ => false
 
 /-- **Phase *literals*.** Two object options that pin one shared required name to different
@@ -691,30 +716,38 @@ theorem occA_disjoint_of_Orth1 {x y : Term} (h : Orth1 x y = true) {m : Member}
   have := List.all_eq_true.mp h1 m (Member.mem_all m)
   simp_all
 
-/-- The name test really is disjointness of the admitted key sets: the name one option
-    requires is present in any map it admits, and absent from the other's declarations, so
-    the other refuses that map on its first sided name-reader conjunct.
+/-- **The name test really is disjointness of the admitted key sets.** `keysOk` puts the key
+    set inside the presence each spec admits at the name. The two presences meet at the bottom,
+    so the key set would have to lie inside the bottom, and no key set does: it either carries
+    the name or omits it, and the meet refuses each answer.
 
-    **`sy` must be closed, and the premise is new.** An open body's first sided name-reader conjunct is
-    free, because its block declares every name the field table does not — so "absent from the
-    other's declarations" no longer refuses the map. `reqNotDeclared` reads the field table
-    alone and cannot see that, which is why an open option is excluded from a certified union
-    for now rather than handled here. -/
-theorem keysOk_of_reqNotDeclared {sx sy : BodySpec} (h : reqNotDeclared sx sy = true)
-    (hcy : sy.wild = none)
+    **No closedness premise, and none is needed.** An open body answers the top at an undeclared
+    name, so no meet there is the bottom and an open body simply fails to separate on that name.
+    An open body that *declares* a name at a refusing element still separates on the declared
+    name, and this lemma covers that case with the rest. -/
+theorem keysOk_of_presenceMeetsBot {sx sy : BodySpec} {k : Name}
+    (h : presenceMeetsBot sx sy k = true)
     {keys : Finset Name} (hx : keysOk sx keys = true) (hy : keysOk sy keys = true) : False := by
-  obtain ⟨k, hreqV, hreqA, hnd⟩ := of_decide_eq_true h
-  have hpres : k.1 ∈ keys :=
-    (of_decide_eq_true (Bool.and_eq_true_iff.mp (Bool.and_eq_true_iff.mp hx).2).1) k
-      (by simp [hreqV])
-  have hsub : decide (∀ k ∈ keys, k ∈ sy.names.1) = true := by
-    have := (Bool.and_eq_true_iff.mp hy).1
-    rwa [hcy, Option.isSome, Bool.false_or] at this
-  exact hnd ((of_decide_eq_true hsub) k.1 hpres)
+  obtain ⟨h1, h2⟩ := Bool.and_eq_true_iff.mp h
+  cases hk : decide (k ∈ keys) with
+  | true =>
+    have hm := of_decide_eq_true hk
+    rw [presenceAt_fst_of_keysOk hx hm, presenceAt_fst_of_keysOk hy hm] at h1
+    exact absurd h1 (by simp)
+  | false =>
+    have hm := of_decide_eq_false hk
+    rw [presenceAt_snd_of_keysOk hx hm, presenceAt_snd_of_keysOk hy hm] at h2
+    exact absurd h2 (by simp)
+
+/-- …and from the separator, which is the same fact at whichever declared name meets. -/
+theorem keysOk_of_namesSeparate {sx sy : BodySpec} (h : namesSeparate sx sy = true)
+    {keys : Finset Name} (hx : keysOk sx keys = true) (hy : keysOk sy keys = true) : False := by
+  rcases Bool.or_eq_true_iff.mp h with h' | h' <;>
+    obtain ⟨k, hk⟩ := of_decide_eq_true h' <;>
+    exact keysOk_of_presenceMeetsBot hk hx hy
 
 theorem orthM_spec {x y : Term} (h : OrthM x y = true) :
-    ∃ sx sy, specOf x = some sx ∧ specOf y = some sy ∧ sx.wild = none ∧ sy.wild = none ∧
-      (reqNotDeclared sx sy = true ∨ reqNotDeclared sy sx = true) := by
+    ∃ sx sy, specOf x = some sx ∧ specOf y = some sy ∧ namesSeparate sx sy = true := by
   unfold OrthM at h
   cases hsx : specOf x with
   | none => rw [hsx] at h; exact absurd h (by simp)
@@ -723,35 +756,20 @@ theorem orthM_spec {x y : Term} (h : OrthM x y = true) :
     | none => rw [hsx, hsy] at h; exact absurd h (by simp)
     | some sy =>
       rw [hsx, hsy] at h
-      obtain ⟨hc, hr⟩ := Bool.and_eq_true_iff.mp h
-      obtain ⟨hcx, hcy⟩ := Bool.and_eq_true_iff.mp hc
-      -- `cases` on the option rather than the mathlib lemma that turns an option's
-      -- emptiness into a universal disequality: that route reaches `Classical.choice` and
-      -- would put a gateway under a `by decide`
-      have hwx : sx.wild = none := by
-        cases hw : sx.wild with
-        | none => rfl
-        | some _ => rw [hw] at hcx; exact absurd hcx (by simp)
-      have hwy : sy.wild = none := by
-        cases hw : sy.wild with
-        | none => rfl
-        | some _ => rw [hw] at hcy; exact absurd hcy (by simp)
-      exact ⟨sx, sy, rfl, rfl, hwx, hwy, Bool.or_eq_true_iff.mp hr⟩
+      exact ⟨sx, sy, rfl, rfl, h⟩
 
 theorem orthSV_disjoint {x y : Term} (h : (Orth1 x y || OrthM x y) = true) :
     ∀ v, OrthSV x v → ¬ OrthSV y v := by
   rintro v ⟨hox, hax⟩ ⟨hoy, hay⟩
   rcases Bool.or_eq_true_iff.mp h with h1 | hm
   · exact occV_disjoint_of_Orth1 h1 hox hoy
-  · obtain ⟨sx, sy, hsx, hsy, hcx, hcy, hr⟩ := orthM_spec hm
+  · obtain ⟨sx, sy, hsx, hsy, hr⟩ := orthM_spec hm
     rw [hsx] at hax; rw [hsy] at hay
     cases v with
     | map keys g =>
       have hkx : keysOk sx keys = true := (Bool.and_eq_true_iff.mp hax).1
       have hky : keysOk sy keys = true := (Bool.and_eq_true_iff.mp hay).1
-      rcases hr with hr | hr
-      · exact keysOk_of_reqNotDeclared hr hcy hkx hky
-      · exact keysOk_of_reqNotDeclared hr hcx hky hkx
+      exact keysOk_of_namesSeparate hr hkx hky
     | _ => exact absurd hax (by simp [admitOptV])
 
 theorem orthSA_disjoint {x y : Term} (h : (Orth1 x y || OrthM x y) = true) :
@@ -759,15 +777,13 @@ theorem orthSA_disjoint {x y : Term} (h : (Orth1 x y || OrthM x y) = true) :
   rintro a ⟨hox, hax⟩ ⟨hoy, hay⟩
   rcases Bool.or_eq_true_iff.mp h with h1 | hm
   · exact occA_disjoint_of_Orth1 h1 hox hoy
-  · obtain ⟨sx, sy, hsx, hsy, hcx, hcy, hr⟩ := orthM_spec hm
+  · obtain ⟨sx, sy, hsx, hsy, hr⟩ := orthM_spec hm
     rw [hsx] at hax; rw [hsy] at hay
     cases a with
     | m keys g =>
       have hkx : keysOk sx keys = true := (Bool.and_eq_true_iff.mp hax).1
       have hky : keysOk sy keys = true := (Bool.and_eq_true_iff.mp hay).1
-      rcases hr with hr | hr
-      · exact keysOk_of_reqNotDeclared hr hcy hkx hky
-      · exact keysOk_of_reqNotDeclared hr hcx hky hkx
+      exact keysOk_of_namesSeparate hr hkx hky
     | _ => exact absurd hax (by simp [admitOptA])
 
 /-- **What the discharger consumes.** Both families disjoint, as a `Prop` — the interface, of
@@ -1115,9 +1131,7 @@ theorem separates_of_orthS {x y : Term} (h : OrthS x y = true) : Separates x y :
         obtain ⟨hky, rfl⟩ := MapOf.at_eq_some.mp hay
         rw [litDisjAt, MapOf.at_of_mem k, MapOf.at_of_mem ⟨k.1, hky⟩] at hkd
         obtain ⟨hrxV, hrest⟩ := Bool.and_eq_true_iff.mp hkd
-        obtain ⟨hrxA, hrest⟩ := Bool.and_eq_true_iff.mp hrest
-        obtain ⟨hryV, hrest⟩ := Bool.and_eq_true_iff.mp hrest
-        obtain ⟨hryA, hda⟩ := Bool.and_eq_true_iff.mp hrest
+        obtain ⟨hryV, hda⟩ := Bool.and_eq_true_iff.mp hrest
         refine ⟨?_, ?_⟩
         · rintro v ⟨-, hax⟩ ⟨-, hay'⟩
           rw [hsx] at hax; rw [hsy] at hay'
@@ -1133,8 +1147,8 @@ theorem separates_of_orthS {x y : Term} (h : OrthS x y = true) : Separates x y :
           rw [hsx] at hax; rw [hsy] at hay'
           cases a with
           | m keys g =>
-            obtain ⟨hmx, hlx⟩ := litOkA_of_admitOptA hax k.2 (of_decide_eq_true hrxA)
-            obtain ⟨hmy, hly⟩ := litOkA_of_admitOptA hay' hky (of_decide_eq_true hryA)
+            obtain ⟨hmx, hlx⟩ := litOkA_of_admitOptA hax k.2 (of_decide_eq_true hrxV)
+            obtain ⟨hmy, hly⟩ := litOkA_of_admitOptA hay' hky (of_decide_eq_true hryV)
             rw [litOkA, MapOf.at_of_mem k] at hlx
             rw [litOkA, MapOf.at_of_mem ⟨k.1, hky⟩] at hly
             exact altsDisj_disjointA hda (g ⟨k.1, hmx⟩) hlx hly
@@ -1405,32 +1419,109 @@ theorem body_spec_requiredV {b : Body} (k : {k // k ∈ b.spec.names.keys})
   rw [body_spec_presence k hk, hc] at h
   cases t' <;> simp [ObjectSlot.presence, Term.isNever] at h
 
-/-- **Phase *names*, one direction.** One body requires a name the other does not declare,
-    and the other declares no open block, so the name it would have to carry has no block to
-    fall to. -/
-theorem held_disj_of_reqNotDeclared {a b : Body} {Ta Tb : Held} {μa μb : Option Member}
-    (hclosed : b.wild.isSome = false) (h : reqNotDeclared a.spec b.spec = true)
+/-- **A body's held set puts its key set inside the presence its spec admits.** The present
+    half: a name whose element refuses absence is in the key set of every map the body holds.
+    `HObject`'s required-name conjunct, read through the slot. -/
+theorem held_presence_fst {b : Body} {T : Held} {μ : Option Member}
+    (ht : Typed (.object b) T μ) {v : Value} (hv : T v)
+    {keys : Finset Name} {f} (hveq : v = .map keys f) {k : Name}
+    (hk : k ∉ keys) : (b.spec.presenceAt k).2 = true := by
+  cases ht with
+  | @object _ bind R μs hf hr =>
+    obtain ⟨keys', f', heq, hpres, _⟩ := hv
+    rw [hveq] at heq
+    cases heq
+    unfold BodySpec.presenceAt
+    cases hat : b.spec.names.at k with
+    | some ns =>
+      obtain ⟨hd, rfl⟩ := MapOf.at_eq_some.mp hat
+      have hkm : k ∈ b.fields := by rw [← Body.spec_keys]; exact hd
+      cases hp : (b.spec.names.get ⟨k, hd⟩).presence.2 with
+      | true => rfl
+      | false =>
+        refine absurd (hpres ⟨k, hkm⟩
+          (TypedField.true_of_not_optional (hf ⟨k, hkm⟩) (fun t' hc => ?_))) hk
+        -- the slot admits no absence, so the slot is not `optional`
+        rw [body_spec_presence ⟨k, hd⟩ hkm, hc] at hp
+        cases t' <;> simp [ObjectSlot.presence, Term.isNever] at hp
+    | none => cases b.spec.wild.isSome <;> rfl
+
+/-- …and the absent half: a name whose element refuses presence is out of the key set of every
+    map the body holds. An undeclared name falls to the open block, and a body with no block
+    holds nothing there. -/
+theorem held_presence_snd {b : Body} {T : Held} {μ : Option Member}
+    (ht : Typed (.object b) T μ) {v : Value} (hv : T v)
+    {keys : Finset Name} {f} (hveq : v = .map keys f) {k : Name}
+    (hk : k ∈ keys) : (b.spec.presenceAt k).1 = true := by
+  cases ht with
+  | @object _ bind R μs hf hr =>
+    obtain ⟨keys', f', heq, _, hent⟩ := hv
+    rw [hveq] at heq
+    cases heq
+    unfold BodySpec.presenceAt
+    cases hat : b.spec.names.at k with
+    | some ns =>
+      obtain ⟨hd, rfl⟩ := MapOf.at_eq_some.mp hat
+      have hkm : k ∈ b.fields := by rw [← Body.spec_keys]; exact hd
+      have he := hent ⟨k, hk⟩
+      rw [dif_pos hkm] at he
+      cases hp : (b.spec.names.get ⟨k, hd⟩).presence.1 with
+      | true => rfl
+      | false =>
+        -- the element refuses presence, so the slot's term is `never` and its held set is empty
+        exfalso
+        rw [body_spec_presence ⟨k, hd⟩ hkm] at hp
+        -- the slot's term is `never` on either mark, so the field's held set is `HNever`
+        obtain ⟨t', hty, hshape⟩ := TypedField.term (hf ⟨k, hkm⟩)
+        have hnv : t' = .never := by
+          rcases hshape with hs | hs <;> rw [hs] at hp <;>
+            cases t' <;> simp [ObjectSlot.presence, ObjectSlot.isReq, Term.isNever] at hp ⊢
+        cases hnv
+        -- `Typed .never` has one constructor and it pins the held set to `HNever`, which is
+        -- empty. The projection is generalized first, so the elimination has a variable motive.
+        generalize hgT : (bind ⟨k, hkm⟩).2 = T' at he hty
+        generalize (μs ⟨k, hkm⟩) = m at hty
+        cases hty
+        exact (hnever_false _) he
+    | none =>
+      have hnd : k ∉ b.fields := by
+        intro hm
+        rw [MapOf.at_of_mem (m := b.spec.names) ⟨k, by rw [Body.spec_keys]; exact hm⟩] at hat
+        exact nomatch hat
+      have he := hent ⟨k, hk⟩
+      rw [dif_neg hnd] at he
+      obtain ⟨T', hT', _⟩ := he
+      cases hw : b.wild.isSome with
+      | true =>
+        have : b.spec.wild.isSome = true := by
+          have hb := Body.spec_wild_isNone b
+          cases hwb : b.spec.wild <;> cases hwb2 : b.wild <;>
+            simp_all [Option.isNone, Option.isSome]
+        rw [this]; rfl
+      | false => rw [typedWild_none hr hw] at hT'; exact nomatch hT'
+
+/-- **Phase *names*, one direction, on the held sets.** The two bodies admit presences at one
+    name that meet at the bottom, and each body's held set puts its key set inside the presence
+    it admits. So no map lies in both held sets. -/
+theorem held_disj_of_presenceMeetsBot {a b : Body} {Ta Tb : Held} {μa μb : Option Member}
+    {k : Name} (h : presenceMeetsBot a.spec b.spec k = true)
     (hta : Typed (.object a) Ta μa) (htb : Typed (.object b) Tb μb) : HDisj Ta Tb := by
-  obtain ⟨k, hreqV, _, hnd⟩ := of_decide_eq_true h
-  cases hta with
-  | @object _ binda Ra μsa hfa hra =>
-    cases htb with
-    | @object _ bindb Rb μsb hfb hrb =>
-      intro v hva hvb
-      obtain ⟨keys, f, rfl, hpresa, _⟩ := hva
-      obtain ⟨keys', f', heq, _, hkeysb⟩ := hvb
-      cases heq
-      have hkma : k.1 ∈ a.fields := by rw [← Body.spec_keys]; exact k.2
-      have hnd' : k.1 ∉ b.fields := by rw [← Body.spec_keys]; exact hnd
-      have hka : k.1 ∈ keys :=
-        hpresa ⟨k.1, hkma⟩
-          (TypedField.true_of_not_optional (hfa ⟨k.1, hkma⟩)
-            (body_spec_requiredV k hreqV hkma))
-      have hb := hkeysb ⟨k.1, hka⟩
-      rw [dif_neg hnd'] at hb
-      obtain ⟨T, hT, _⟩ := hb
-      rw [typedWild_none hrb hclosed] at hT
-      exact absurd hT (by simp)
+  obtain ⟨h1, h2⟩ := Bool.and_eq_true_iff.mp h
+  intro v hva hvb
+  -- both held sets are objects, so the value is a map
+  have hm : ∃ keys f, v = .map keys f := by
+    cases hta with
+    | @object _ bind R μs hf hr => obtain ⟨keys, f, rfl, _, _⟩ := hva; exact ⟨keys, f, rfl⟩
+  obtain ⟨keys, f, rfl⟩ := hm
+  cases hk : decide (k ∈ keys) with
+  | true =>
+    have hmem := of_decide_eq_true hk
+    rw [held_presence_snd hta hva rfl hmem, held_presence_snd htb hvb rfl hmem] at h1
+    exact absurd h1 (by simp)
+  | false =>
+    have hmem := of_decide_eq_false hk
+    rw [held_presence_fst hta hva rfl hmem, held_presence_fst htb hvb rfl hmem] at h2
+    exact absurd h2 (by simp)
 
 /-- The mirror of `HDisj`'s own symmetry, used to read the second direction off the first. -/
 theorem HDisj.symm {Tx Ty : Held} (h : HDisj Tx Ty) : HDisj Ty Tx :=
@@ -1446,31 +1537,12 @@ theorem HDisj.symm {Tx Ty : Held} (h : HDisj Tx Ty) : HDisj Ty Tx :=
 theorem held_disj_of_OrthM {x y : Term} {Tx Ty : Held} {μx μy : Option Member}
     (h : OrthM x y = true)
     (hx : Typed x Tx μx) (hy : Typed y Ty μy) : HDisj Tx Ty := by
-  unfold OrthM at h
-  cases hsx : specOf x with
-  | none => rw [hsx] at h; exact absurd h (by simp)
-  | some sx =>
-    cases hsy : specOf y with
-    | none => rw [hsx, hsy] at h; exact absurd h (by simp)
-    | some sy =>
-      rw [hsx, hsy] at h
-      obtain ⟨bx, rfl, rfl⟩ := specOf_object hsx
-      obtain ⟨by_, rfl, rfl⟩ := specOf_object hsy
-      obtain ⟨hc, hr⟩ := Bool.and_eq_true_iff.mp h
-      obtain ⟨hcx, hcy⟩ := Bool.and_eq_true_iff.mp hc
-      -- `OrthM` refused an open block on either side, so both bodies are closed
-      simp only [Body.spec_wild_isNone] at hcx hcy
-      have hx0 : bx.wild.isSome = false := by
-        cases hw : bx.wild with
-        | none => rfl
-        | some _ => rw [hw] at hcx; exact absurd hcx (by simp)
-      have hy0 : by_.wild.isSome = false := by
-        cases hw : by_.wild with
-        | none => rfl
-        | some _ => rw [hw] at hcy; exact absurd hcy (by simp)
-      rcases Bool.or_eq_true_iff.mp hr with h' | h'
-      · exact held_disj_of_reqNotDeclared hy0 h' hx hy
-      · exact (held_disj_of_reqNotDeclared hx0 h' hy hx).symm
+  obtain ⟨sx, sy, hsx, hsy, hr⟩ := orthM_spec h
+  obtain ⟨bx, rfl, rfl⟩ := specOf_object hsx
+  obtain ⟨by_, rfl, rfl⟩ := specOf_object hsy
+  rcases Bool.or_eq_true_iff.mp hr with h' | h' <;>
+    obtain ⟨k, hk⟩ := of_decide_eq_true h' <;>
+    exact held_disj_of_presenceMeetsBot hk hx hy
 
 /-- What the spec pins at a declared name, it reads off that name's field. -/
 theorem body_spec_alts {b : Body} (k : {k // k ∈ b.spec.names.keys}) (hk : k.1 ∈ b.fields) :
@@ -1514,8 +1586,6 @@ theorem held_disj_of_OrthS {x y : Term} {Tx Ty : Held} {μx μy : Option Member}
         rw [hay] at hlit
         obtain ⟨hky, rfl⟩ := MapOf.at_eq_some.mp hay
         obtain ⟨hreqxV, hrest⟩ := Bool.and_eq_true_iff.mp hlit
-        obtain ⟨_, hrest⟩ := Bool.and_eq_true_iff.mp hrest
-        obtain ⟨_, hrest⟩ := Bool.and_eq_true_iff.mp hrest
         obtain ⟨_, hd⟩ := Bool.and_eq_true_iff.mp hrest
         have hky' : k.1 ∈ b2.fields := by rw [← Body.spec_keys]; exact hky
         rw [body_spec_alts k hkx, body_spec_alts ⟨k.1, hky⟩ hky'] at hd
