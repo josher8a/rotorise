@@ -66,7 +66,7 @@ flowchart TB
   P1 --> MEET["the meet intersects BOTH projections"]
   P2 --> MEET
   MEET --> Q{"does the meet admit anything"}
-  LEAF["a leaf nothing can decide<br/>a host function, a closure, an opaque"] -. "no information" .-> Q
+  LEAF["the one leaf nothing can decide<br/>a closure over an unbounded carrier"] -. "no information" .-> Q
   Q -- "yes" --> YES["the options separate, the union is admitted"]
   Q -- "no, or unknown" --> NO["refused where it is written"]
 ```
@@ -175,21 +175,40 @@ questions, so `S` has two readings: the values a term writes, and the attributes
 Each carries its own description, its own meet and its own bottom, and the three laws hold of
 each.
 
-With admission by attempt, `g` is the identity at every constructor: a carrier, an admissible
-set, a name, a position. It over-approximates only where a leaf cannot be decided.
+With admission by attempt, `g` is the identity wherever a term names its own set: a carrier, an
+admissible set, a name, a position.
+
+The three leaves below are not one kind of thing, so read each against the question the
+certificate puts. The certificate asks whether a term admits any value, and nothing more. Two of
+the three name no set and still answer that question. One answers nothing.
+
+**An adapter decides that question.** An adapter carries the obligation that its two functions
+cancel on the carriers. So an adapter admits a value exactly when its inner term admits one, and
+the inner term answers. The adapter's set stays unnamed, because the host function is arbitrary.
+The certificate never asks for the set.
+
+**An opaque projection decides that question.** An opaque term denotes a codec the calculus
+warrants, and not a codec a caller supplies. Its inhabitance is a theorem about that codec, and
+its set stays a question for that codec to answer.
+
+**A closure decides against a finite partner.** A closure is a caller's function on a value. Apply
+the function to each alternative of a finite admissible set, and the answer is exact. A ground
+carrier with one inhabitant, or with two, is such a set. A closure answers with the top only over
+an unbounded carrier.
 
 ```mermaid
 flowchart LR
-  POS["a position in the term"] --> Q{"can this position be decided"}
+  POS["a position in the term"] --> Q{"can this position answer the certificate"}
   Q -- "a carrier, an admissible set,<br/>a name, an index" --> EX["recurse, exactly"]
-  Q -- "a host function, a closure,<br/>an opaque projection" --> TOP["no information, so refuse"]
+  Q -- "an adapter, an opaque projection,<br/>a closure over a finite set" --> EX
+  Q -- "a closure over an unbounded carrier" --> TOP["no information, so refuse"]
   EX --> POS
 ```
 
-**That is the whole of the incompleteness and it is local.** It sits at named leaves, it does not
-accumulate with depth, and it is the honest answer at each of those leaves rather than a gap
-somebody has not closed yet. Disjointness proved over descriptions transfers to the concrete
-sets and never upward, which is what an abstraction is:
+**That is the whole of the incompleteness and it is local.** It sits at one named leaf, it does
+not accumulate with depth, and it is the honest answer at that leaf rather than a gap somebody
+has not closed yet. Disjointness proved over descriptions transfers to the concrete sets and
+never upward, which is what an abstraction is:
 
     ∅  =  g ⊥  =  g ([x] ⊓ [y])  ⊇  g [x] ∩ g [y]  ⊇  S x ∩ S y
 
@@ -223,6 +242,12 @@ and discriminants is a lookup. That is a genuine trade at run time, it is measur
 arguable, and this ruling accepts it. A host that needs the cheap dispatch can keep one, as an
 optimisation that must agree with admission, never as the definition of it.
 
+**One side of the trade is a cost and the other side is a defect.** Two object options that
+declare the same names with the same marks and no literal carry one description. The dispatch
+admits both, the selector finds two admitters, and the union admits no value at all. So the
+dispatch does not only stop separating below some depth. It empties a union that the options'
+own codecs separate.
+
 ### The constructors are universal constructions, and the laws arrive with them
 
 A constructor of the term language is one of five things, and which one it is fixes the laws the
@@ -243,24 +268,48 @@ that uses it reports a normalization as a broken law.
 
 **The meet obeys these laws at every construction above.** The gap is not in the meet.
 
-### Inhabitance is a decision, and testing for the bottom is its shadow
+### Testing for the bottom is exact over a normal form
 
-The certificate asks whether the intersection is inhabited. A term that denotes the empty set is
-not always **spelled** as the bottom: intersecting two restrictions over one carrier pinned to
-disjoint sets yields the carrier under both restrictions, which is empty and is spelled as a
-restriction. A certificate that compares the meet against the bottom therefore misses it.
+The certificate asks whether the intersection is inhabited. The bottom is the term that admits no
+value, so a test for the bottom is a test on the spelling. That test is exact where the meet
+spells an empty result as the bottom.
 
-**So the missing object is a decision procedure for inhabitance, not a repair at one
-constructor**, and it settles the value projection alone. The attribute projection is a different
-kind of set and takes the recursion below. The bottom is one syntactic witness of an empty term. The bottom rising through a
-required position of a product and stopping at a variadic one is a second, already written into
-the meet by hand. Disjoint restrictions over one carrier are a third, and nothing decides it.
-Each further witness written by hand is another truncation, for the same reason a test per shape
-was one.
+**The bottom propagates through every position a construction depends on, and it stops at a
+position the construction does not depend on.** A required name and a fixed index are positions a
+product depends on. A variadic position and an optional name are not, because the empty instance
+and the absent name inhabit them. A coproduct with no surviving option is the bottom. A
+transparent wrapper passes the bottom through. That one rule is the normal form, and the meet
+writes it.
 
-Decided structurally, inhabitance costs one function and every construction contributes one case,
-which is where the work belongs. A constructor added later arrives with its case known in
-advance. A construction nobody has tested still owes its laws: the meet's associativity, its
+**So the missing object is not a decision procedure beside the meet. It is the rows of that rule
+the meet does not carry yet.** Two constructions fail to propagate, and each fails for a reason
+that names its own repair.
+
+A **restriction** fails because the predicate language has no meet. A predicate over a finite set
+of alternatives cannot name the empty set, so two restrictions over one carrier pinned to disjoint
+sets stack rather than reduce. The result denotes the empty set and is spelled as a restriction.
+The residual at a ground position is the object the predicate language lacks: a finite set of
+alternatives, the whole carrier, or the top. That object carries a meet, a bottom and a top, and
+the predicate language carries none of the three.
+
+An **adapter** fails because the meet refuses to compare two adapters. The refusal is right, since
+no rule reads a caller's function. The refusal is written at the adapter rather than at the bottom
+under it, and an adapter over the bottom admits nothing whatever its functions are.
+
+**The certificate is sound before either row lands, and it rests on nothing.** The meet intersects
+admission on both projections, so a meet that reaches the bottom separates its operands. Neither
+row is a premise of that. The rows buy completeness, and completeness reaches as far as the leaves
+allow. Sound everywhere, and complete where no position answers the top: that is the obligation a
+pass can discharge. The stronger one stays out of reach while a closure over an unbounded carrier
+is a term.
+
+**The order is forced rather than chosen.** The meet consults the certificate at its own coproduct
+row, so the certificate cannot be defined through the meet until that consultation goes. Under
+admission by attempt the consultation protects nothing, because the meet preserves the count at
+each option. A coproduct the selector refuses meets to a coproduct the selector refuses.
+
+A constructor added later arrives with its row known in advance, because the propagation rule
+decides it. A construction nobody has tested still owes its laws: the meet's associativity, its
 distribution over the coproduct, and the adapter's unit are not established here.
 
 ### The two projections are inhabited together, so one decision settles both
@@ -297,8 +346,8 @@ them wherever it reasons about a term. **No preservation theorem about the meet 
 the design rests on no standing assumption.
 
 What remains is one computable question: whether a term admits any value. The structural admission
-that answers it at a given value is in the development already and is proved exact at every term,
-so the work is a decision over that function rather than a new description beside it.
+that answers it at a given value is in the development already and is proved exact at every term.
+So the work is the meet's own missing rows rather than a new description beside it.
 
 ### The attribute side is a fibred set, and the certificate does not read it
 
