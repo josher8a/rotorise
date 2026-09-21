@@ -15,15 +15,6 @@ Three things happen together, and none of them is a judgment call.
 2. This file replaces `docs/architecture.md`, under that name.
 3. `formal/scripts/name_drift.py` swaps the two in its `CURRENT` list.
 
-```mermaid
-flowchart LR
-  S1["the structure exists under Calculus/"] --> S2["this file replaces architecture.md under that name"]
-  S2 --> S3["name_drift.py swaps the two in CURRENT"]
-  S3 --> DONE["the new document is guarded, the old one is gone"]
-  RISK["until the third step, a name here can go stale and nothing reports it"] -.-> S3
-```
-
-
 Point 3 is the one that matters and the reason the other two are written down. **This file is
 not name-checked today**, because every guarded document is in that list and this one is not.
 A guarded document cannot cite a declaration that does not exist, and this file cites several on
@@ -135,14 +126,6 @@ what both admit, or reports that it cannot tell. Everything the calculus needs i
     the certificate  is that intersection inhabited
     the selector     does this value inhabit it
 
-```mermaid
-flowchart LR
-  M["the structural intersection of two terms"]
-  M --> U1["as a term<br/>what both admit"]
-  M --> U2["as a certificate<br/>is it inhabited"]
-  M --> U3["as a selector<br/>does this value inhabit it"]
-```
-
 There is no second apparatus. A certificate that is not the inhabitance of the meet is a second
 function that must be held in agreement with the meet by hand, and nothing holds it there.
 
@@ -214,16 +197,6 @@ never upward, which is what an abstraction is:
 
 Nothing in that chain runs backwards.
 
-### Inhabitance propagates by position
-
-    the intersection of two one-position tuples over disjoint types   is the bottom
-    the intersection of two arrays over disjoint types                is an array of the bottom
-
-A required position passes the bottom upward. A variadic one does not, because the empty list
-inhabits an array over the bottom. Nothing states that rule twice: it follows from the position
-being required or variadic, and it is the same rule a structural type system applies when it
-intersects a tuple and when it intersects an array.
-
 ### What the ruling deletes
 
 An occupancy projection over a finite index of value slots and attribute members. A presence
@@ -277,9 +250,10 @@ spells an empty result as the bottom.
 **The bottom propagates through every position a construction depends on, and it stops at a
 position the construction does not depend on.** A required name and a fixed index are positions a
 product depends on. A variadic position and an optional name are not, because the empty instance
-and the absent name inhabit them. A coproduct with no surviving option is the bottom. A
-transparent wrapper passes the bottom through. That one rule is the normal form, and the meet
-writes it.
+and the absent name inhabit them. So two one-position tuples over disjoint types meet at the
+bottom, and two arrays over the same types meet at an array of the bottom. A coproduct with no
+surviving option is the bottom, and a transparent wrapper passes the bottom through. That one
+rule is the normal form, and the meet writes it.
 
 **So the missing object is not a decision procedure beside the meet. It is the rows of that rule
 the meet does not carry yet.** Two constructions fail to propagate, and each fails for a reason
@@ -374,99 +348,22 @@ top: the opaque term is that projection, and its flag says whether the projectio
 ## 3. What the structure demands of any description
 
 Each demand below is a constraint on any description, and each already has something in the
-development that meets it. The diagram is that pairing; the text is the reason.
+development that meets it. The table is that pairing; the text below is the reason.
 
-```mermaid
-requirementDiagram
-  requirement D1 {
-    id: D1
-    text: a description answers at every index including the undeclared one
-    risk: high
-    verifymethod: test
-  }
-  requirement D2 {
-    id: D2
-    text: the description of a sum meets summand by summand
-    risk: high
-    verifymethod: test
-  }
-  requirement D3 {
-    id: D3
-    text: a restriction names the carrier it restricts
-    risk: medium
-    verifymethod: inspection
-  }
-  requirement D4 {
-    id: D4
-    text: a projection keeps every fact the certificate reads
-    risk: high
-    verifymethod: test
-  }
-  requirement D5 {
-    id: D5
-    text: analysability is whether the premises are discharged
-    risk: medium
-    verifymethod: demonstration
-  }
-  requirement D6 {
-    id: D6
-    text: every test computes and no route reaches a classical axiom
-    risk: high
-    verifymethod: test
-  }
-  requirement D7 {
-    id: D7
-    text: a concept leaves the language exactly when it is terminal in it
-    risk: low
-    verifymethod: inspection
-  }
+| demand | what meets it |
+| --- | --- |
+| D1. a description is total over its index | the structural admission |
+| D2. a description of a sum is a sum | a name's absent-or-present |
+| D3. a restriction has a carrier | the members constructor |
+| D4. a projection keeps what the decision reads | the structural admission |
+| D5. analysability is a field | a certified adapter |
+| D6. the description decides in the kernel | mutual inclusion |
+| D7. a concept lives outside the language when it is terminal | the alternate reader |
+| D8. the selector and the certificate are one relation | the structural admission |
 
-  element nameSum {
-    type: description
-  }
-  element members {
-    type: constructor
-  }
-  element structuralAdmission {
-    type: relation
-  }
-  element certifiedAdapter {
-    type: constructor
-  }
-  element mutualInclusion {
-    type: instance
-  }
-  element alternateReader {
-    type: field
-  }
-
-  structuralAdmission - satisfies -> D1
-  nameSum - satisfies -> D2
-  members - satisfies -> D3
-  structuralAdmission - satisfies -> D4
-  certifiedAdapter - satisfies -> D5
-  mutualInclusion - satisfies -> D6
-  alternateReader - satisfies -> D7
-
-  requirement D8 {
-    id: D8
-    text: the selector and the certificate are one relation
-    risk: high
-    verifymethod: test
-  }
-  requirement D9 {
-    id: D9
-    text: whether a term admits any value is decidable
-    risk: high
-    verifymethod: test
-  }
-  structuralAdmission - satisfies -> D8
-  structuralAdmission - satisfies -> D9
-```
-
-The members constructor is a declaration in `Calculus/` today. The other elements are concepts
-this design names and the development does not: read them as the shape a satisfying declaration
-must take, not as something to grep for.
+The members constructor is a declaration in `Calculus/` today. The other entries in the right
+column are concepts this design names and the development does not: read each as the shape a
+satisfying declaration must take, and not as something to grep for.
 
 **`D4` is the demand the ruling repays.** A projection can drop a fact the certificate needs, and
 under a dispatch on discriminants every field's type was such a fact. Admission by attempt
@@ -537,9 +434,8 @@ nothing reachable. If any position accepts it, moving it outside makes a reachab
 unwritable, and encoding exists to do the opposite. The alternate reader is terminal and sits
 outside. An adapter is a union option and composes with itself, so it is a constructor.
 
-**D8 and D9 constrain the certificate rather than a description**, and D9 is what remains after
-the demand it began as turned into a consequence: a decision to compute, not a premise to assume, and the rest of this document
-leans on both without having stated either.
+**D8 constrains the certificate rather than a description**, and the rest of this document leans
+on it without having stated it.
 
 **D8. The selector and the certificate are one relation.** The certificate asks whether any
 value can inhabit two options. The selector asks whether this value inhabits one. A certificate
@@ -548,14 +444,9 @@ finds two claimants. A selector that tells apart what the certificate cannot is 
 because the union is refused where the codec would have worked. Two functions kept in agreement
 by hand will drift, and nothing reports the drift. So they are one function at two arguments.
 
-**D9 is withdrawn as a demand.** It said a certificate must separate on the value side and on the
-attribute side. That is a consequence: canonicity on the operands, with the read-side law of the
-meet, makes an attribute shared by the meet force a value shared by the meet. So a meet admitting
-no value accepts no attribute, and one decision settles both projections. Nothing replaces the
-demand, because the consequence rests on premises the development already carries and on no claim
-about the meet. A recursion may discharge both at
-once where the codec makes them one fact, as a literal does, but it may never discharge one and
-stay silent about the other.
+Separation on the two sides is one question and not two, because the two projections of a term
+are inhabited together. A recursion may discharge both at once where the codec makes them one
+fact, as a literal does. A recursion may never discharge one and stay silent about the other.
 
 ---
 
