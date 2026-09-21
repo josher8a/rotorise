@@ -1906,18 +1906,16 @@ theorem AdmAny_iff : ∀ {os : List Term} {v : Value},
         · exact Or.inl h
         · exact Or.inr ⟨u, hu', h⟩
 
-/-- **A certified union's admission is the join of its options'.** `selOptV` answers where
-    exactly one option admits structurally; the certificate makes that at most one, and makes
-    each option's structural test its row. -/
-theorem selOptV_eq_AdmAny {os : List Term} (hc : unionOk os = true) (v : Value) :
+/-- **The count is the join wherever at most one option admits.** The premise is the fact the
+    proof spends and not the certificate that supplies it. A caller holding a certificate goes
+    through `selOptV_eq_AdmAny`; a caller holding the bound itself comes here. Keeping the
+    certificate out of the statement is what lets a proof about the meet use this equation at a
+    union, where the bound arrives from the recursion rather than from a separate function. -/
+theorem selOptV_eq_AdmAny_of_le {os : List Term} {v : Value}
+    (hlen : (os.filter (fun t => admitOptV (specOf t, Adm t) v)).length ≤ 1) :
     selOptV (AdmSpecs os) v = AdmAny os v := by
-  simp only [unionOk] at hc
   have hbridge : ∀ t ∈ os, Adm t v = true → admitOptV (specOf t, Adm t) v = true :=
     fun _ _ h => h
-  have hlen : (os.filter (fun t => admitOptV (specOf t, Adm t) v)).length ≤ 1 := by
-    have hone := (admitsAtMostOne_of_orth (pairwise_of_orthAll hc)).1 v
-    rwa [semsOf, ← optionSems_eq, filter_AdmSpecs (fun t _ => Adm_exact t) v,
-      List.length_map] at hone
   rw [selOptV, AdmSpecs_eq, filter_map_AdmSpecs]
   cases hL : os.filter (fun t => admitOptV (specOf t, Adm t) v) with
   | nil =>
@@ -1945,6 +1943,17 @@ theorem selOptV_eq_AdmAny {os : List Term} (hc : unionOk os = true) (v : Value) 
         rw [hL, List.mem_singleton] at htl
         rw [htl] at hat
         exact absurd hat (by rw [hao]; simp)
+
+/-- **A certified union's admission is the join of its options'.** The certificate bounds the
+    admitters at one, and that bound is the whole of what the equation needs. -/
+theorem selOptV_eq_AdmAny {os : List Term} (hc : unionOk os = true) (v : Value) :
+    selOptV (AdmSpecs os) v = AdmAny os v := by
+  refine selOptV_eq_AdmAny_of_le ?_
+  simp only [unionOk] at hc
+  have hone := (admitsAtMostOne_of_orth (pairwise_of_orthAll hc)).1 v
+  rwa [semsOf, ← optionSems_eq, filter_AdmSpecs (fun t _ => Adm_exact t) v,
+    List.length_map] at hone
+
 /-! ### The same equation on the read side
 
 The value side needs only `AdmWild`, which is `none` exactly where the body declares no open
@@ -2082,18 +2091,14 @@ theorem AdmAAny_iff : ∀ {os : List Term} {a : Attr},
         · exact Or.inl h
         · exact Or.inr ⟨u, hu', h⟩
 
-/-- **A certified union reads the join of its options'.** `selOptV_eq_AdmAny`'s twin. `selOptA`
-    answers where exactly one option admits structurally; the certificate makes that at most one,
-    and makes each option's structural test its read row. -/
-theorem selOptA_eq_AdmAAny {os : List Term} (hc : unionOk os = true) (a : Attr) :
+/-- **The read count is the read join wherever at most one option accepts.**
+    `selOptV_eq_AdmAny_of_le`'s twin, and it takes the same shape of premise for the same
+    reason. -/
+theorem selOptA_eq_AdmAAny_of_le {os : List Term} {a : Attr}
+    (hlen : (os.filter (fun t => admitOptA (specOf t, AdmA t) a)).length ≤ 1) :
     selOptA (AdmASpecs os) a = AdmAAny os a := by
-  simp only [unionOk] at hc
   have hbridge : ∀ t ∈ os, AdmA t a = true → admitOptA (specOf t, AdmA t) a = true :=
     fun _ _ h => h
-  have hlen : (os.filter (fun t => admitOptA (specOf t, AdmA t) a)).length ≤ 1 := by
-    have hone := (admitsAtMostOne_of_orth (pairwise_of_orthAll hc)).2 a
-    rwa [semsOf, ← optionSems_eq, filter_AdmASpecs (fun t _ => AdmA_exact t) a,
-      List.length_map] at hone
   rw [selOptA, AdmASpecs_eq, filter_map_AdmASpecs]
   cases hL : os.filter (fun t => admitOptA (specOf t, AdmA t) a) with
   | nil =>
@@ -2121,6 +2126,17 @@ theorem selOptA_eq_AdmAAny {os : List Term} (hc : unionOk os = true) (a : Attr) 
         rw [hL, List.mem_singleton] at htl
         rw [htl] at hat
         exact absurd hat (by rw [hao]; simp)
+
+
+/-- **A certified union reads the join of its options'.** `selOptV_eq_AdmAny`'s twin, and it
+    spends its certificate the same way. -/
+theorem selOptA_eq_AdmAAny {os : List Term} (hc : unionOk os = true) (a : Attr) :
+    selOptA (AdmASpecs os) a = AdmAAny os a := by
+  refine selOptA_eq_AdmAAny_of_le ?_
+  simp only [unionOk] at hc
+  have hone := (admitsAtMostOne_of_orth (pairwise_of_orthAll hc)).2 a
+  rwa [semsOf, ← optionSems_eq, filter_AdmASpecs (fun t _ => AdmA_exact t) a,
+    List.length_map] at hone
 
 /-- The options that survive are the ones that admit; the bottoms admit nothing. -/
 theorem AdmAny_filter_never : ∀ (ts : List Term) (v : Value),
