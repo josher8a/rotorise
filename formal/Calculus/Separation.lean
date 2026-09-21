@@ -29,29 +29,22 @@ Convenience here, necessity there.
 it is a builder over the body whose only block is the open one, so `record c` and the object
 it expanded to are **one term**, and the pair that compared them has nothing to compare.
 
-### …and `union` is not a congruence for codec equivalence
+### …and `union` is a congruence for codec equivalence
 
-The fact survives the deletion, and `union_not_congruent` carries it on a live pair:
-`refine t ⊤` and `t` have identical rows on both sides, hence — by `Adm_exact`/`AdmA_exact`,
-which take no hypothesis — identical domains on both sides. They are the same codec as far as
-anything observable through `e` and `p` can tell.
+`union_congruent` carries the fact on a live pair: `refine t ⊤` and `t` have identical rows on
+both sides, hence — by `Adm_exact`/`AdmA_exact`, which take no hypothesis — identical domains
+on both sides. They are the same codec as far as anything observable through `e` and `p` can
+tell, and `union` no longer disagrees: every option, `object` included, is admitted by
+*attempt*, which runs `Adm` directly. `admitOptV`/`admitOptA` are `Adm`/`AdmA` at every
+constructor now, so a domain-equal substitution changes no option's admission, and a rewrite
+that replaces a subterm by a domain-equal one is sound inside a `union`.
 
-`union` still distinguishes them. An option's admission is `admitOptV`, which matches the
-**constructor**: `specOf (.refine t ⊤) = none`, so the option is admitted *by attempt* and runs
-`Adm`, while an object option is admitted *by structure*, which is `keysOk` and the literal
-alternatives and nothing else. Structure is the coarser of the two, and at a declared name
-pinned to no literal it asks only that the name is present. So on `{"A" ↦ true}` against
-`{A : req string}` the object option answers `true` and the refinement `false`, with equal
-domains behind both.
-
-This is not a defect in the rows and not one in `select`; it is the price of deciding an
-object option syntactically, which §5 argues for on other grounds ("an open object that must
-be an option should declare what it means to keep").
-What that passage does not observe is this consequence: **term equivalence is not a
-congruence for `union`**, so no rewrite that replaces a subterm by a domain-equal one is
-sound inside a `union`. Anything that wants to drop a `refine` by the trivially-true
-predicate — or normalize `array` to `tuple`, which is safe, both being `specOf = none` — has
-to check the spec, not the domain. -/
+This used to fail at one constructor: an object option was admitted *by structure* —
+`keysOk` and the literal alternatives, and nothing else — which is coarser than `Adm` at a
+declared name pinned to no literal. `{"A" ↦ true}` against `{A : req string}` is the pair
+that recorded the gap: the structural test answered `true` and the row answered `false`, with
+equal domains behind both. That gap closed when the option stopped being decided
+syntactically. -/
 
 /-- A refinement by the trivially-true predicate: the same pair as the bare base. -/
 def qTop : Value → Bool := fun _ => true
@@ -74,63 +67,45 @@ theorem arrayRowA (c : Term) (a : Attr) : AdmA (.array c) a = AdmA (.tuple [] (s
 
 /-! ### `union` and domain equality
 
-**An object option is admitted by its structure, and the structure now includes the open
-block.** `keysOk` reads the block as well as the field table, so a body that claims a name
-through its block admits the maps carrying that name, and a body that declares no such name
-and has no block refuses them. The two answers come from one reading of one payload.
-
-This is where a non-congruence used to sit. `record c` and the object with no declared name
-and a rest codec were two spellings of one codec with two structural admissions, so a
-normalization pass that replaced either by the other changed what a `union` selected. They are
-one term now: `record` is a builder over `object` with a block, and the pair that recorded the
-difference has nothing left to compare. No other domain-equal pair with different structural
-admission is owed here: `array` and `tuple` merged into `list` the same way, and `arrayRow`
-above is that merge on the nose. -/
-
-/-- **`union` is not a congruence for domain equality**, and the witness is the
-    over-approximation rather than a missing name.
-
-    `refine t ⊤` and `t` admit the same values at every point, so their domains are equal with
-    no hypothesis. As *options* they still disagree, because `admitOptV` matches the
-    constructor: `specOf` is `none` at a `refine`, so that option is admitted by ATTEMPT and
-    runs `Adm`, while an object option is admitted by STRUCTURE, which is `keysOk` and the
-    literal alternatives and nothing else.
-
-    So the pair parts wherever structure is coarser than `Adm`, and at a declared name whose
-    term is not a literal it always is: `altsOfField` pins nothing there, so the structural
-    test asks only that the name is present. A boolean at a name declared `string` passes the
-    structure and fails the row.
-
-    **This is the same pair the deleted spelling recorded, with the polarity reversed.** It
-    used to part because an empty name spec refused a map carrying a name; the block is in the
-    spec now, so that half is gone, and what survives is the half that was always there. A
-    normalization pass over `Term` may still not drop a trivial `refine` inside a `union`, nor
-    replace any subterm there by a domain-equal one. -/
-theorem union_not_congruent :
-    admitOptV (specOf tReqStr, Adm tReqStr) vBoolAtA = true
-      ∧ admitOptV (specOf (.refine tReqStr (.closure qTop)),
-          Adm (.refine tReqStr (.closure qTop))) vBoolAtA = false := by
-  refine ⟨by decide, ?_⟩
-  show (Adm tReqStr vBoolAtA && true) = false
-  rfl
+`record c` and the object with no declared name and a rest codec used to be two spellings of
+one codec with two structural admissions, so a normalization pass that replaced either by the
+other used to change what a `union` selected. They are one term now: `record` is a builder
+over `object` with a block, and the pair that recorded the difference has nothing left to
+compare. `array` and `tuple` merged into `list` the same way, and `arrayRow` above is that
+merge on the nose. -/
 
 /-- `refine t ⊤` and `t` admit the same values at every point: the row is `Adm t v && true`,
     so the domains are equal with no hypothesis. -/
 theorem refine_top_row (t : Term) : Adm (.refine t (.closure qTop)) = Adm t := by
   funext v; simp [Adm, Pred.eval, qTop]
 
-/-! ## Separation on the pair, and the one direction that fails
+/-- **`union` is a congruence for domain equality.** `refine t ⊤` and `t` admit the same
+    values at every point (`refine_top_row`), and every option — `object` included — is now
+    admitted by *attempt*, which runs `Adm` directly: `admitOptV` is `Adm` at every
+    constructor, not only at a `refine`. So the two options agree at every value, and a
+    rewrite that replaces a subterm by a domain-equal one is sound inside a `union`.
+
+    **This used to fail, and the witness recorded why.** An object option was admitted by
+    *structure* — `keysOk` and the literal alternatives, nothing else — which is coarser than
+    `Adm` at a declared name pinned to no literal. `{"A" ↦ true}` against `{A : req string}`
+    is the pair: the structural test answered `true`, the row answered `false`, and the
+    domains were equal behind both. That gap closed when the option stopped being decided
+    syntactically. -/
+theorem union_congruent (t : Term) (v : Value) :
+    admitOptV (specOf t, Adm t) v
+      = admitOptV (specOf (.refine t (.closure qTop)), Adm (.refine t (.closure qTop))) v := by
+  show Adm t v = Adm (.refine t (.closure qTop)) v
+  rw [refine_top_row]
+
+/-! ## Separation on the pair
 
 `SepJV` and `SepJA` state separation on the rows this file proves exact. Each side is one
 clause. `Adm` and `AdmA` fold the kind or member gate into their rows. `LegacyRead` is outside
 `Term`, so an alternate reader cannot add a second structural clause.
 
-**What this section exists to record is the direction that fails.** A discharger consumes
-disjointness of the options `select` builds, and at an `object` option that is `keysOk` —
-names, not contents. So `Adm` is not an over-approximation of admission there, it is strictly
-*tighter*, and `not_uAtCan_of_sepJ` at the end of the section is the discharger restated on
-`SepJV`/`SepJA` and refuted, with every other premise met. `Orthogonality.lean` states the
-discharge on what `select` consults, which is the repair the `object` row invites. -/
+A discharger consumes disjointness of the options `select` builds, and every option — `object`
+included — is now admitted by attempt, which is `Adm`/`AdmA` exactly. `admitV_le_Adm` and
+`admitA_le_AdmA`, below the next section, are that containment stated for every constructor. -/
 
 
 /-! ~~selTagV_mem~~ and ~~selTagA_mem~~ went with the tag-filtered sum. They said that the option
@@ -175,12 +150,9 @@ theorem Adm_string_eq_refine : Adm .string = Adm (.refine .string (.closure qTop
 
 /-- **`SepJV` suffices for the codec-level discharge.** The joint predicate is tighter than
     the rows it replaces, so `SepJV` is a *weaker* statement — but `Adm_sound` connects it
-    straight to the denotation: where `x` writes, `y` refuses.
-
-    This said "and that is all the discharge needs", which is where it over-claimed. What a
-    discharger consumes is disjointness of the *options* `select` builds, and an object option
-    is admitted by `keysOk` rather than by attempting its codec. The section
-    below is that gap, with the pair that refutes the stronger reading. -/
+    straight to the denotation: where `x` writes, `y` refuses. What a discharger consumes is
+    disjointness of the *options* `select` builds, and every option — `object` included — is
+    now admitted by attempting its codec, so this is the same fact the discharger needs. -/
 theorem admitV_of_sepJV {x y : Term} (h : SepJV x y) (v : Value) (a : Attr)
     (hx : (denote x).e v = some a) : ((denote y).e v).isSome = false := by
   have hAx : Adm x v = true := Adm_sound x hx
@@ -199,175 +171,36 @@ theorem admitA_of_sepJA {x y : Term} (h : SepJA x y)
   | none => rfl
   | some w => exact absurd (AdmA_sound y hy) (by simp [hAy])
 
-/-! ### …and it does **not** suffice for the discharger, because of `adm`'s `object` row
+/-! ### …and it now suffices for the discharger, at every constructor
 
-The paragraph above says the discharge never needed `adm`'s extra strength. That is true of
-the two theorems it is stated about and false of the theorem the migration exists to move,
-and the difference is worth being precise about because the whole retirement of `adm` turns
-on it.
+This section used to record a gap: `admitV_of_sepJV` is a claim about the **codec** — where
+`x`'s `e` writes, `y`'s `e` refuses — and a discharger is a claim about the **options `select`
+builds**, and at an `object` those used not to be the same test. `admitOptV` matched the
+asymmetry: an object option was admitted by `keysOk`, which reads which names a map carries
+and never what they hold, so `Adm` was strictly *tighter* than `OptionSem.admitV` there, and
+disjointness of a tighter predicate did not imply disjointness of admission. The witness was
+two objects with the same declared name and different field terms — `SepJV`/`SepJA` separated
+the pair, and `select` still confused their options, so the discharger restated on the joint
+predicate was false.
 
-`admitV_of_sepJV` is a claim about the **codec**: where `x`'s `e` writes, `y`'s `e` refuses.
-A discharger is a claim about the **options `select` builds**, and at an `object` those are not
-the same test. `admitOptV` records the asymmetry already — an object option is
-admitted by `keysOk`, which reads which names a map carries and never what they hold — but
-the corollary was not drawn: `Adm` is not an over-approximation of `OptionSem.admitV` at an
-object, it is strictly *tighter*, and disjointness of a tighter predicate does not imply
-disjointness of admission.
+Every option is admitted by attempt now, `object` included, so `admitOptV`/`admitOptA` **are**
+`Adm`/`AdmA` at every constructor and the gap above is gone: `admitV_le_Adm`/`admitA_le_AdmA`
+below hold unconditionally, not only off an `object`. Whether the discharger itself —
+`(∀ t ∈ opts, Lawful (denote t)) → List.Pairwise SepJV opts → List.Pairwise SepJA opts →
+UAtCan opts` — is now sound in general is a question this file does not answer: closing the
+one gap a single witness pair exposed is not the same as showing no witness remains, and nothing
+below attempts that. -/
 
-`adm (.object _) = ⊤` is what makes §5's generation sound here, and it is not slack. It is
-exactly the over-approximation that turns `adm`-disjointness into admission-disjointness,
-and it is why ~~SepV~~ cannot separate two objects at all: both `κ`s are `[map]` and both
-`adm`s are `⊤`, so neither disjunct is available. Restate the discharger on `SepJV` and the
-pair separates — while `select` attempts both options, so (U) genuinely fails. The premise
-gets *stronger* and the theorem becomes *false*.
-
-The witness is two objects with the same names and different field terms. Both are derivable
-(`Typed.object`), both closed (no open block), and both lawful, so no other premise of the
-discharger is what declines them — which is what makes `not_uAtCan_of_sepJ` a
-refutation of the migration rather than a failure to find its proof.
-
-And the `object` row is the *only* obstruction: `admitV_Adm_nonObject` and
-`admitA_AdmA_nonObject` are the containments the discharger needs, and they hold, from
-exactness alone, for every term whose `specOf` is `none` — which is every term but an
-`object`. -/
-
-/-- One required slot, holding a string. -/
-def bodyReqStr : Body := .mk {"a"} (fun _ => .req .string) none
-
-/-- The same name, the same open block, a different slot term. -/
-def bodyReqNum : Body := .mk {"a"} (fun _ => .req .number) none
-
-def objReqStr : Term := .object bodyReqStr
-def objReqNum : Term := .object bodyReqNum
-
-/-- A map the first object writes and the second refuses. -/
-def mapReqStr : Value := .map {"a"} (fun _ => .str "x")
-
-
-theorem Adm_objReqStr : Adm objReqStr mapReqStr = true := by
-  simp [objReqStr, bodyReqStr, mapReqStr, Adm, AdmBody, AdmField, objAdmV,
-    valPresentT, entryP, MapOf.at]
-
-theorem Adm_objReqNum : Adm objReqNum mapReqStr = false := by
-  simp [objReqNum, bodyReqNum, mapReqStr, Adm, AdmBody, AdmField, objAdmV,
-    valPresentT, entryP, MapOf.at, inD]
-
-/-- **The joint predicate separates the pair on the writable side.** A map the first admits
-    carries a string at `"a"`, which the second's field term refuses; and neither admits a
-    value that is not a map. -/
-theorem sepJV_objReq : SepJV objReqStr objReqNum := by
-  intro v hv
-  cases v with
-  | map keys g =>
-    simp only [objReqStr, bodyReqStr, Adm, AdmBody, valPresentT, objAdmV, entryP, MapOf.at,
-      Bool.and_eq_true, decide_eq_true_eq] at hv
-    simp only [objReqNum, bodyReqNum, Adm, AdmBody, valPresentT, objAdmV, entryP, MapOf.at,
-      decide_eq_true_eq, Bool.and_eq_false_iff, decide_eq_false_iff_not]
-    refine Or.inr fun h => ?_
-    have ha : "a" ∈ keys := hv.1 ⟨"a", Finset.mem_singleton_self _⟩
-    have h1 := hv.2 ⟨"a", ha⟩
-    have h2 := h ⟨"a", ha⟩
-    simp only [Finset.mem_singleton, dif_pos, AdmField] at h1 h2
-    cases hg : g ⟨"a", ha⟩ <;> simp_all [Adm, inD]
-  | _ => rfl
-
-/-- …and on the readable side. -/
-theorem sepJA_objReq : SepJA objReqStr objReqNum := by
-  intro a ha
-  cases a with
-  | m keys g =>
-    simp only [objReqStr, bodyReqStr, AdmA, AdmABody, reqPresentT, objAdmA, entryPA,
-      MapOf.at, Bool.and_eq_true, decide_eq_true_eq] at ha
-    simp only [objReqNum, bodyReqNum, AdmA, AdmABody, reqPresentT, objAdmA, entryPA,
-      MapOf.at, decide_eq_true_eq, Bool.and_eq_false_iff,
-      decide_eq_false_iff_not]
-    refine Or.inr fun h => ?_
-    have ha' : "a" ∈ keys := ha.1 ⟨"a", Finset.mem_singleton_self _⟩
-    have h1 := ha.2 ⟨"a", ha'⟩
-    have h2 := h ⟨"a", ha'⟩
-    simp only [Finset.mem_singleton, dif_pos, AdmAField] at h1 h2
-    cases hg : g ⟨"a", ha'⟩ <;> simp_all [AdmA]
-  | _ => rfl
-
-theorem typed_objReqStr :
-    Typed objReqStr (HObject {"a"} (fun _ => (true, fun v => ∃ s, v = .str s)) none)
-      (some .M) := .object (fun _ => .req .string) .none
-
-theorem typed_objReqNum :
-    Typed objReqNum
-      (HObject {"a"}
-        (fun _ => (true, fun v => ∃ d, v = .num d ∧ Numeral.WF d.toDec = true)) none)
-      (some .M) := .object (fun _ => .req .number) .none
-
-theorem lawful_objReqStr : Lawful (denote objReqStr) :=
-  soundness typed_objReqStr ⟨fun _ => trivial, trivial⟩
-
-theorem lawful_objReqNum : Lawful (denote objReqNum) :=
-  soundness typed_objReqNum ⟨fun _ => trivial, trivial⟩
-
-/-- **The pair is not uniquely admitting.** `select` counts an object option by its
-    structure, the two specs are the same spec, and neither field is a literal — so content
-    admission asks nothing of either, a map the first option writes is admitted by both, and
-    the filter is not a singleton. This is the pair structural admission does **not** resolve,
-    and the reason the phase is literals rather than field terms. -/
-theorem not_uAtCan_objReq : ¬ UAtCan [objReqStr, objReqNum] := by
-  intro h
-  obtain ⟨a, ha⟩ :=
-    Option.isSome_iff_exists.mp ((Adm_exact objReqStr mapReqStr).mp Adm_objReqStr)
-  have hfil := (h (optionSemOf (denote objReqStr) (specOf objReqStr)) (by simp [semsOf])
-    mapReqStr a (by rw [optionSemOf_c]; exact ha)).2
-  simp [semsOf, objReqStr, objReqNum, bodyReqStr, bodyReqNum, specOf, Body.spec, optionSemOf,
-    OptionSem.byStructure, keysOk, literalsOk, litOkV, altsOkV, altsOfField, MapOf.at,
-    ObjectSlot.presence, ObjectSlot.isReq, Term.isNever, mapReqStr] at hfil
-
-/-- **Admission does not imply the row**, which is the route the discharger would have to
-    take. An object option admits by names; `Adm` asks the field terms. -/
-theorem not_admitV_le_Adm :
-    ¬ ∀ (t : Term) (v : Value),
-      (optionSemOf (denote t) (specOf t)).admitV v = true → Adm t v = true := fun h =>
-  absurd (h objReqNum mapReqStr rfl) (by simp [Adm_objReqNum])
-
-/-- **The discharger, restated on the joint predicate, is false.** Every premise holds of
-    `[objReqStr, objReqNum]` and the conclusion does not. This is the theorem that would have
-    had to survive for the per-aspect tables and their separation to be retired *in favour of*
-    `Adm`, `AdmA`, `SepJV` and `SepJA`; it does not, which is why the separation layer was
-    retired in favour of `Orthogonality.lean` instead and the tables stayed. The reason is a
-    row rather than a proof. The `object` row is the obstruction on the value side.
-    `legacyRead_reads_n` records a separate outer-carrier fact that no premise here can reach. -/
-theorem not_uAtCan_of_sepJ :
-    ¬ ∀ (opts : List Term),
-      (∀ t ∈ opts, Lawful (denote t)) →
-      List.Pairwise SepJV opts →
-      List.Pairwise SepJA opts →
-      UAtCan opts := by
-  intro h
-  refine not_uAtCan_objReq (h [objReqStr, objReqNum] ?_ ?_ ?_)
-  · intro t ht
-    rcases List.mem_cons.mp ht with rfl | ht
-    · exact lawful_objReqStr
-    · rcases List.mem_cons.mp ht with rfl | ht
-      · exact lawful_objReqNum
-      · exact nomatch ht
-  · refine .cons (fun y hy => ?_) (.cons (by simp) .nil)
-    rcases List.mem_singleton.mp hy with rfl
-    exact sepJV_objReq
-  · refine .cons (fun y hy => ?_) (.cons (by simp) .nil)
-    rcases List.mem_singleton.mp hy with rfl
-    exact sepJA_objReq
-
-/-- **The containment the discharger needs, everywhere it holds.** Off an `object`, `specOf`
-    is `none`, admission *is* attempted encoding, and exactness identifies it with the row.
-    So the `object` row is the whole of the obstruction above. -/
-theorem admitV_Adm_nonObject (t : Term) (hs : specOf t = none) {v : Value}
-    (h : (optionSemOf (denote t) (specOf t)).admitV v = true) : Adm t v = true := by
-  rw [hs] at h
-  exact (Adm_exact t v).mpr h
+/-- **The containment the discharger needs, at every constructor.** Admission is attempted
+    encoding now, whatever the term, and exactness identifies it with the row. -/
+theorem admitV_le_Adm (t : Term) {v : Value}
+    (h : (optionSemOf (denote t) (specOf t)).admitV v = true) : Adm t v = true :=
+  (Adm_exact t v).mpr h
 
 /-- …and its twin on the readable side. -/
-theorem admitA_AdmA_nonObject (t : Term) (hs : specOf t = none) {a : Attr}
-    (h : (optionSemOf (denote t) (specOf t)).admitA a = true) : AdmA t a = true := by
-  rw [hs] at h
-  exact (AdmA_exact t a).mpr h
+theorem admitA_le_AdmA (t : Term) {a : Attr}
+    (h : (optionSemOf (denote t) (specOf t)).admitA a = true) : AdmA t a = true :=
+  (AdmA_exact t a).mpr h
 
 /-! ### `ident`, pinned from below
 

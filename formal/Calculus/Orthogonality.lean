@@ -10,8 +10,8 @@ residual (U)). Thirty-two `sep*`/`uAtCan_*`/`uAtAct_*` theorems live in `Dischar
 `not_sep*` and
 are refutations rather than discharges. Twenty-five of the thirty-two are the per-shape hand
 discharges; the other seven are the two generic dischargers, the ~~SepV~~→`SepJV` bridges, the
-`refine`-family discharger, and the two `object` witnesses that exist in order to *fail*
-(`not_uAtCan_of_sepJ`). **Thirteen of the twenty-five are the *same rule* at different
+`refine`-family discharger, and the two `object` witnesses that existed in order to *fail*.
+**Thirteen of the twenty-five are the *same rule* at different
 constructors**, and the by-phase table at the end of this file is that count, measured rather
 than estimated.
 
@@ -511,12 +511,8 @@ theorem occVL_of_mem {t : Term} {ts : List Term} {s : Slot} (ht : t ∈ ts)
 /-- Row soundness lifts to option soundness. At an object the row is not consulted at all:
     `keysOk` already says the value is a map, which is the only slot the term occupies. -/
 theorem occV_admitOpt {t : Term} (h : OccSoundV t) (v : Value)
-    (hv : admitOptV (specOf t, Adm t) v = true) : occV t v.slot = true := by
-  cases hs : specOf t with
-  | none => exact h v (by rw [admitOptV, hs] at hv; exact hv)
-  | some spec =>
-      obtain ⟨b, rfl⟩ := specOf_some_object hs
-      cases v <;> simp_all [admitOptV, specOf, occV, occOnly, Value.slot]
+    (hv : admitOptV (specOf t, Adm t) v = true) : occV t v.slot = true :=
+  h v hv
 
 /-- **A refusing `opaque` writes no numeral**, off the joint row.
 
@@ -624,12 +620,8 @@ theorem occAL_of_mem {t : Term} {ts : List Term} {m : Member} (ht : t ∈ ts)
     · simp [occAL, ih h']
 
 theorem occA_admitOpt {t : Term} (h : OccSoundA t) (a : Attr)
-    (ha : admitOptA (specOf t, AdmA t) a = true) : occA t a.member = true := by
-  cases hs : specOf t with
-  | none => exact h a (by rw [admitOptA, hs] at ha; exact ha)
-  | some spec =>
-      obtain ⟨f, ff, r, rfl⟩ := specOf_some_object hs
-      cases a <;> simp_all [admitOptA, specOf, occA, occOnly, Attr.member]
+    (ha : admitOptA (specOf t, AdmA t) a = true) : occA t a.member = true :=
+  h a ha
 
 /-- A decimal literal reads only an `N`, and the row cannot be read off syntactically because
     it *asks its codec* — `AdmALit .decimal ls a = ((literalCodec .decimal ls).p a).isSome`.
@@ -758,13 +750,15 @@ theorem orthSV_disjoint {x y : Term} (h : (Orth1 x y || OrthM x y) = true) :
   rcases Bool.or_eq_true_iff.mp h with h1 | hm
   · exact occV_disjoint_of_Orth1 h1 hox hoy
   · obtain ⟨sx, sy, hsx, hsy, hr⟩ := orthM_spec hm
-    rw [hsx] at hax; rw [hsy] at hay
+    obtain ⟨bx, rfl⟩ := specOf_some_object hsx
     cases v with
     | map keys g =>
-      have hkx : keysOk sx keys = true := (Bool.and_eq_true_iff.mp hax).1
-      have hky : keysOk sy keys = true := (Bool.and_eq_true_iff.mp hay).1
-      exact keysOk_of_namesSeparate hr hkx hky
-    | _ => exact absurd hax (by simp [admitOptV])
+      -- STOP, reported to the architect: `hax`/`hay` are now `Adm (.object bx) (.map keys g)
+      -- = true`, i.e. `AdmBody bx (.map keys g) = true`. Extracting `keysOk sx keys = true`
+      -- from that needs `structural_of_AdmBody` (Meet.lean:1960), which is not available
+      -- here: Meet.lean imports Orthogonality.lean, not the reverse.
+      sorry
+    | _ => exact absurd hax (by cases bx; simp [admitOptV, Adm, AdmBody])
 
 theorem orthSA_disjoint {x y : Term} (h : (Orth1 x y || OrthM x y) = true) :
     ∀ a, OrthSA x a → ¬ OrthSA y a := by
@@ -772,13 +766,14 @@ theorem orthSA_disjoint {x y : Term} (h : (Orth1 x y || OrthM x y) = true) :
   rcases Bool.or_eq_true_iff.mp h with h1 | hm
   · exact occA_disjoint_of_Orth1 h1 hox hoy
   · obtain ⟨sx, sy, hsx, hsy, hr⟩ := orthM_spec hm
-    rw [hsx] at hax; rw [hsy] at hay
+    obtain ⟨bx, rfl⟩ := specOf_some_object hsx
     cases a with
     | m keys g =>
-      have hkx : keysOk sx keys = true := (Bool.and_eq_true_iff.mp hax).1
-      have hky : keysOk sy keys = true := (Bool.and_eq_true_iff.mp hay).1
-      exact keysOk_of_namesSeparate hr hkx hky
-    | _ => exact absurd hax (by simp [admitOptA])
+      -- STOP, reported to the architect: same gap as `orthSV_disjoint`'s map row above.
+      -- `hax` is `AdmABody bx (.m keys g) = true`, and extracting `keysOk sx keys = true`
+      -- from it needs `structural_of_AdmABody` (Meet.lean:2227), not available here.
+      sorry
+    | _ => exact absurd hax (by cases bx; simp [admitOptA, AdmA, AdmABody])
 
 /-- **What the discharger consumes.** Both families disjoint, as a `Prop` — the interface, of
     which `Orth` is the decidable part and the numeric base of phase *alternatives* the part
@@ -1126,27 +1121,23 @@ theorem separates_of_orthS {x y : Term} (h : OrthS x y = true) : Separates x y :
         rw [litDisjAt, MapOf.at_of_mem k, MapOf.at_of_mem ⟨k.1, hky⟩] at hkd
         obtain ⟨hrxV, hrest⟩ := Bool.and_eq_true_iff.mp hkd
         obtain ⟨hryV, hda⟩ := Bool.and_eq_true_iff.mp hrest
+        obtain ⟨bx, rfl⟩ := specOf_some_object hsx
         refine ⟨?_, ?_⟩
         · rintro v ⟨-, hax⟩ ⟨-, hay'⟩
-          rw [hsx] at hax; rw [hsy] at hay'
           cases v with
           | map keys f =>
-            obtain ⟨hmx, hlx⟩ := litOkV_of_admitOptV hax k.2 (of_decide_eq_true hrxV)
-            obtain ⟨hmy, hly⟩ := litOkV_of_admitOptV hay' hky (of_decide_eq_true hryV)
-            rw [litOkV, MapOf.at_of_mem k] at hlx
-            rw [litOkV, MapOf.at_of_mem ⟨k.1, hky⟩] at hly
-            exact altsDisj_disjointV hda (f ⟨k.1, hmx⟩) hlx hly
-          | _ => exact absurd hax (by simp [admitOptV])
+            -- STOP, reported to the architect: same gap as `orthSV_disjoint`/`orthSA_disjoint`
+            -- above. `litOkV_of_admitOptV` wants `keysOk sx keys && literalsOk sx keys f`, and
+            -- `hax` is now `AdmBody bx (.map keys f) = true`; bridging the two needs
+            -- `structural_of_AdmBody` (Meet.lean:1960), not available here.
+            sorry
+          | _ => exact absurd hax (by cases bx; simp [admitOptV, Adm, AdmBody])
         · rintro a ⟨-, hax⟩ ⟨-, hay'⟩
-          rw [hsx] at hax; rw [hsy] at hay'
           cases a with
           | m keys g =>
-            obtain ⟨hmx, hlx⟩ := litOkA_of_admitOptA hax k.2 (of_decide_eq_true hrxV)
-            obtain ⟨hmy, hly⟩ := litOkA_of_admitOptA hay' hky (of_decide_eq_true hryV)
-            rw [litOkA, MapOf.at_of_mem k] at hlx
-            rw [litOkA, MapOf.at_of_mem ⟨k.1, hky⟩] at hly
-            exact altsDisj_disjointA hda (g ⟨k.1, hmx⟩) hlx hly
-          | _ => exact absurd hax (by simp [admitOptA])
+            -- STOP, same gap, read side: needs `structural_of_AdmABody` (Meet.lean:2227).
+            sorry
+          | _ => exact absurd hax (by cases bx; simp [admitOptA, AdmA, AdmABody])
 
 /-- **The whole premise the discharger takes**, as one name: every pair of options separated.
 
