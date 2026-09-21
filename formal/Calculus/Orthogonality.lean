@@ -751,13 +751,16 @@ theorem orthSV_disjoint {x y : Term} (h : (Orth1 x y || OrthM x y) = true) :
   · exact occV_disjoint_of_Orth1 h1 hox hoy
   · obtain ⟨sx, sy, hsx, hsy, hr⟩ := orthM_spec hm
     obtain ⟨bx, rfl⟩ := specOf_some_object hsx
+    obtain ⟨by', rfl⟩ := specOf_some_object hsy
+    have hsxeq : bx.spec = sx := Option.some.inj hsx
+    have hsyeq : by'.spec = sy := Option.some.inj hsy
     cases v with
     | map keys g =>
-      -- STOP, reported to the architect: `hax`/`hay` are now `Adm (.object bx) (.map keys g)
-      -- = true`, i.e. `AdmBody bx (.map keys g) = true`. Extracting `keysOk sx keys = true`
-      -- from that needs `structural_of_AdmBody` (Meet.lean:1960), which is not available
-      -- here: Meet.lean imports Orthogonality.lean, not the reverse.
-      sorry
+      have hkx : keysOk sx keys = true :=
+        hsxeq ▸ (Bool.and_eq_true_iff.mp (structural_of_AdmBody hax)).1
+      have hky : keysOk sy keys = true :=
+        hsyeq ▸ (Bool.and_eq_true_iff.mp (structural_of_AdmBody hay)).1
+      exact keysOk_of_namesSeparate hr hkx hky
     | _ => exact absurd hax (by cases bx; simp [admitOptV, Adm, AdmBody])
 
 theorem orthSA_disjoint {x y : Term} (h : (Orth1 x y || OrthM x y) = true) :
@@ -767,12 +770,16 @@ theorem orthSA_disjoint {x y : Term} (h : (Orth1 x y || OrthM x y) = true) :
   · exact occA_disjoint_of_Orth1 h1 hox hoy
   · obtain ⟨sx, sy, hsx, hsy, hr⟩ := orthM_spec hm
     obtain ⟨bx, rfl⟩ := specOf_some_object hsx
+    obtain ⟨by', rfl⟩ := specOf_some_object hsy
+    have hsxeq : bx.spec = sx := Option.some.inj hsx
+    have hsyeq : by'.spec = sy := Option.some.inj hsy
     cases a with
     | m keys g =>
-      -- STOP, reported to the architect: same gap as `orthSV_disjoint`'s map row above.
-      -- `hax` is `AdmABody bx (.m keys g) = true`, and extracting `keysOk sx keys = true`
-      -- from it needs `structural_of_AdmABody` (Meet.lean:2227), not available here.
-      sorry
+      have hkx : keysOk sx keys = true :=
+        hsxeq ▸ (Bool.and_eq_true_iff.mp (structural_of_AdmABody hax)).1
+      have hky : keysOk sy keys = true :=
+        hsyeq ▸ (Bool.and_eq_true_iff.mp (structural_of_AdmABody hay)).1
+      exact keysOk_of_namesSeparate hr hkx hky
     | _ => exact absurd hax (by cases bx; simp [admitOptA, AdmA, AdmABody])
 
 /-- **What the discharger consumes.** Both families disjoint, as a `Prop` — the interface, of
@@ -1122,21 +1129,31 @@ theorem separates_of_orthS {x y : Term} (h : OrthS x y = true) : Separates x y :
         obtain ⟨hrxV, hrest⟩ := Bool.and_eq_true_iff.mp hkd
         obtain ⟨hryV, hda⟩ := Bool.and_eq_true_iff.mp hrest
         obtain ⟨bx, rfl⟩ := specOf_some_object hsx
+        obtain ⟨by', rfl⟩ := specOf_some_object hsy
+        have hsxeq : bx.spec = sx := Option.some.inj hsx
+        have hsyeq : by'.spec = sy := Option.some.inj hsy
         refine ⟨?_, ?_⟩
         · rintro v ⟨-, hax⟩ ⟨-, hay'⟩
           cases v with
           | map keys f =>
-            -- STOP, reported to the architect: same gap as `orthSV_disjoint`/`orthSA_disjoint`
-            -- above. `litOkV_of_admitOptV` wants `keysOk sx keys && literalsOk sx keys f`, and
-            -- `hax` is now `AdmBody bx (.map keys f) = true`; bridging the two needs
-            -- `structural_of_AdmBody` (Meet.lean:1960), not available here.
-            sorry
+            obtain ⟨hmx, hlx⟩ := litOkV_of_admitOptV (hsxeq ▸ structural_of_AdmBody hax) k.2
+              (of_decide_eq_true hrxV)
+            obtain ⟨hmy, hly⟩ := litOkV_of_admitOptV (hsyeq ▸ structural_of_AdmBody hay') hky
+              (of_decide_eq_true hryV)
+            rw [litOkV, MapOf.at_of_mem k] at hlx
+            rw [litOkV, MapOf.at_of_mem ⟨k.1, hky⟩] at hly
+            exact altsDisj_disjointV hda (f ⟨k.1, hmx⟩) hlx hly
           | _ => exact absurd hax (by cases bx; simp [admitOptV, Adm, AdmBody])
         · rintro a ⟨-, hax⟩ ⟨-, hay'⟩
           cases a with
           | m keys g =>
-            -- STOP, same gap, read side: needs `structural_of_AdmABody` (Meet.lean:2227).
-            sorry
+            obtain ⟨hmx, hlx⟩ := litOkA_of_admitOptA (hsxeq ▸ structural_of_AdmABody hax) k.2
+              (of_decide_eq_true hrxV)
+            obtain ⟨hmy, hly⟩ := litOkA_of_admitOptA (hsyeq ▸ structural_of_AdmABody hay') hky
+              (of_decide_eq_true hryV)
+            rw [litOkA, MapOf.at_of_mem k] at hlx
+            rw [litOkA, MapOf.at_of_mem ⟨k.1, hky⟩] at hly
+            exact altsDisj_disjointA hda (g ⟨k.1, hmx⟩) hlx hly
           | _ => exact absurd hax (by cases bx; simp [admitOptA, AdmA, AdmABody])
 
 /-- **The whole premise the discharger takes**, as one name: every pair of options separated.
