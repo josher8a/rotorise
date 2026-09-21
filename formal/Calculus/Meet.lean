@@ -189,12 +189,123 @@ def allSome {α : Type} : List (Option α) → Option (List α)
   | none :: _ => none
   | some x :: rest => (allSome rest).map (x :: ·)
 
-/-- **A refinement over the bottom is the bottom.** The bottom bubbles up through a slot that
-    must hold a value, and a refinement's inner term is one: `refine` narrows what the inner term
-    holds, so it holds nothing where the inner term does. Called from the right-hand side of the
-    meet's refinement rows, so every refinement the meet builds is normal. -/
+/-- One base's guard names one inhabitant. -/
+theorem inL_inj {k : GroundKind} {x y : k.Carrier} {v : Value}
+    (hx : inL k x v = true) (hy : inL k y v = true) : x = y := by
+  cases k <;> cases v <;> simp_all [inL] <;>
+    first
+      | rfl
+      | (obtain ⟨_, rfl⟩ := hx; obtain ⟨_, rfl⟩ := hy; rfl)
+
+/-- Two alternative sets over one base, met. `D6`: membership through `Finset.filter`, never
+    `∩`, whose membership API is not a sanctioned route to `Classical.choice`. -/
+def Pred.meetAlt (k : GroundKind) [DecidableEq k.Carrier]
+    (A B : NEFinset k.Carrier) : Option (Option Pred) :=
+  if h : (A.1.filter (fun x => x ∈ B.1)).Nonempty then
+    some (some (.members k ⟨A.1.filter (fun x => x ∈ B.1), h⟩))
+  else some none
+
+/-- **Two `members` predicates over one base, met.** `none` is a refusal to combine, `some none`
+    says the two share no alternative, and `some (some r)` is the combined predicate. The kinds
+    are matched in pairs so that every row has a concrete carrier, which is what `Term.meetLit`
+    does and for the same reason: `number` refuses because `DecidableEq WFDouble` is a field of
+    `numericHost`, so a row there would not reduce. A `closure` refuses because nothing reads a
+    caller's function. -/
+def Pred.meetM : Pred → Pred → Option (Option Pred)
+  | .members .string A,  .members .string B  => Pred.meetAlt .string A B
+  | .members .decimal A, .members .decimal B => Pred.meetAlt .decimal A B
+  | .members .boolean A, .members .boolean B => Pred.meetAlt .boolean A B
+  | .members .binary A,  .members .binary B  => Pred.meetAlt .binary A B
+  | _, _ => none
+
+/-- **A refinement over the bottom is the bottom, and two refinements over one carrier meet.**
+    The bottom bubbles up through a slot that must hold a value, and a refinement's inner term
+    is one. A second refinement over an already-refined term does not stack: the predicates meet,
+    and where they share no alternative the result is the bottom. That second case is the one
+    `Typing.lean` names as the reason (D) carries a disjointness disjunct — a refinement whose
+    predicate holds of nothing the inner term holds is empty and is not spelled `never`. Called
+    from both refinement rows of the meet, so every refinement the meet builds is normal. -/
 def Term.refineOf (z : Term) (p : Pred) : Term :=
-  if z.isNever then .never else .refine z p
+  match z with
+  | .never => .never
+  | .refine z' q =>
+      match Pred.meetM q p with
+      | some (some r) => .refine z' r
+      | some none     => .never
+      | none          => .refine (.refine z' q) p
+  | _ => .refine z p
+
+/-- **An alternative shared by two sets is the only way both hold.** `inL` names one inhabitant
+    per base, so a value that satisfies an alternative of each set satisfies one alternative
+    lying in both. This is what makes the predicate meet exact rather than merely sound. -/
+theorem exists_filter_iff {k : GroundKind} [DecidableEq k.Carrier]
+    (A B : Finset k.Carrier) (v : Value) :
+    (∃ x ∈ A.filter (fun x => x ∈ B), inL k x v = true)
+      ↔ ((∃ x ∈ A, inL k x v = true) ∧ (∃ y ∈ B, inL k y v = true)) := by
+  constructor
+  · rintro ⟨x, hx, hv⟩
+    obtain ⟨hxA, hxB⟩ := Finset.mem_filter.mp hx
+    exact ⟨⟨x, hxA, hv⟩, ⟨x, hxB, hv⟩⟩
+  · rintro ⟨⟨x, hxA, hxv⟩, ⟨y, hyB, hyv⟩⟩
+    cases inL_inj hxv hyv
+    exact ⟨x, Finset.mem_filter.mpr ⟨hxA, hyB⟩, hxv⟩
+
+/-- The combined alternative set holds exactly where both sets hold. -/
+theorem meetAlt_eval {k : GroundKind} [DecidableEq k.Carrier] {A B : NEFinset k.Carrier}
+    {r : Pred} (h : Pred.meetAlt k A B = some (some r)) (v : Value) :
+    Pred.eval r v = (inLs k A v && inLs k B v) := by
+  unfold Pred.meetAlt at h
+  split at h
+  · injection h with h; injection h with h; subst h
+    show inLs k _ v = _
+    refine Bool.eq_iff_iff.mpr ?_
+    simp only [inLs, Bool.and_eq_true, decide_eq_true_eq]
+    exact exists_filter_iff A.1 B.1 v
+  · exact absurd h (by simp)
+
+/-- Where the two sets share no alternative, nothing satisfies both. -/
+theorem meetAlt_empty {k : GroundKind} [DecidableEq k.Carrier] {A B : NEFinset k.Carrier}
+    (h : Pred.meetAlt k A B = some none) (v : Value) :
+    (inLs k A v && inLs k B v) = false := by
+  unfold Pred.meetAlt at h
+  split at h
+  · exact absurd h (by simp)
+  · rename_i hne
+    rw [Finset.not_nonempty_iff_eq_empty] at hne
+    have hiff := exists_filter_iff A.1 B.1 v
+    rw [hne] at hiff
+    simp only [Finset.notMem_empty, false_and, exists_false, false_iff, not_and] at hiff
+    cases hA : inLs k A v with
+    | false => simp
+    | true =>
+        cases hB : inLs k B v with
+        | false => simp
+        | true =>
+            simp only [inLs, decide_eq_true_eq] at hA hB
+            exact absurd hB (hiff hA)
+
+/-- The combined predicate holds exactly where both hold. -/
+theorem meetM_eval {q p r : Pred} (h : Pred.meetM q p = some (some r)) (v : Value) :
+    Pred.eval r v = (Pred.eval q v && Pred.eval p v) := by
+  unfold Pred.meetM at h
+  split at h
+  case _ => exact meetAlt_eval h v
+  case _ => exact meetAlt_eval h v
+  case _ => exact meetAlt_eval h v
+  case _ => exact meetAlt_eval h v
+  case _ => exact absurd h (by simp)
+
+/-- Where the two share no alternative, nothing satisfies both. -/
+theorem meetM_empty {q p : Pred} (h : Pred.meetM q p = some none) (v : Value) :
+    (Pred.eval q v && Pred.eval p v) = false := by
+  unfold Pred.meetM at h
+  split at h
+  case _ => exact meetAlt_empty h v
+  case _ => exact meetAlt_empty h v
+  case _ => exact meetAlt_empty h v
+  case _ => exact meetAlt_empty h v
+  case _ => exact absurd h (by simp)
+
 
 /-- **A list with a declared position at the bottom is the bottom.** Every value the list
     admits fills each declared position, so one position holding nothing empties the list.
@@ -1624,11 +1735,16 @@ theorem eq_never_of_isNever {t : Term} (h : t.isNever = true) : t = .never := by
 
 /-- Normalising a refinement keeps the member it stores, because the bottom stores none and so
     does the refinement over it. -/
-theorem μSyn_refineOf (z : Term) (p : Pred) : μSyn (Term.refineOf z p) = μSyn z := by
-  unfold Term.refineOf
-  split
-  next hz => rw [show z = Term.never from eq_never_of_isNever hz]
-  next => rfl
+theorem μSyn_refineOf {z : Term} {p : Pred} {m : Member}
+    (h : μSyn (Term.refineOf z p) = some m) : μSyn z = some m := by
+  cases z <;>
+    first
+      | exact h
+      | (simp only [Term.refineOf] at h
+         split at h
+         · simpa [μSyn] using h
+         · exact absurd h (by simp [μSyn])
+         · exact h)
 
 /-- A declared position that holds nothing empties the tuple: every list the tuple admits fills
     each declared position. -/
@@ -1744,10 +1860,19 @@ theorem Adm_tupleOf (ts : List Term) (tail : Option Term) (v : Value) :
 /-- …and normalising a refinement keeps what it admits. -/
 theorem Adm_refineOf (z : Term) (p : Pred) (v : Value) :
     Adm (Term.refineOf z p) v = Adm (.refine z p) v := by
-  unfold Term.refineOf
-  split
-  next hz => rw [show z = Term.never from eq_never_of_isNever hz]; simp [Adm]
-  next => rfl
+  cases z <;>
+    first
+      | rfl
+      | (simp only [Term.refineOf]
+         rename_i z' q
+         split
+         · rename_i r hr
+           show (Adm z' v && Pred.eval r v) = ((Adm z' v && Pred.eval q v) && Pred.eval p v)
+           rw [meetM_eval hr v, Bool.and_assoc]
+         · rename_i hr
+           show false = ((Adm z' v && Pred.eval q v) && Pred.eval p v)
+           rw [Bool.and_assoc, meetM_empty hr v, Bool.and_false]
+         · rfl)
 
 /-- **The required-name test is sound once the partner is closed.** If both bodies admit one
     map, every name the left requires is a name the right declares: the value carries it, and a
@@ -3314,7 +3439,7 @@ theorem writes_meetSRight {x : Term} {fam : Term → Option Term} (hf : WritesFa
       simp only [meetSRight] at h
       split at h
       · obtain ⟨w, hw, rfl⟩ := Option.map_eq_some_iff.mp h
-        rw [μSyn_refineOf] at hz
+        replace hz := μSyn_refineOf hz
         have ih := writes_meetSRight hf y w hw m hz
         exact ⟨ih.1, fun my hmy => ih.2 my (by simpa [μSyn] using hmy)⟩
       · exact absurd h (by simp)
@@ -3617,7 +3742,7 @@ theorem meet_writes : ∀ x y z, Term.meet x y = some z → ∀ m : Member, μSy
         simp only [Term.meet] at h
         split at h
         · obtain ⟨w, hw, rfl⟩ := Option.map_eq_some_iff.mp h
-          rw [μSyn_refineOf] at hz
+          replace hz := μSyn_refineOf hz
           have ih := meet_writes x _ w hw m hz
           exact ⟨fun mx hmx => ih.1 mx (by simpa [μSyn] using hmx), ih.2⟩
         · exact absurd h (by simp)
@@ -4160,13 +4285,6 @@ theorem literal_inL {k : GroundKind} {x : k.Carrier} {a : Attr} {v : Value}
   | none => rw [hb] at h; simp at h
   | some w => rw [hb] at h; simp only [Option.bind] at h; split at h <;> simp_all
 
-/-- One base's guard names one inhabitant. -/
-theorem inL_inj {k : GroundKind} {x y : k.Carrier} {v : Value}
-    (hx : inL k x v = true) (hy : inL k y v = true) : x = y := by
-  cases k <;> cases v <;> simp_all [inL] <;>
-    first
-      | rfl
-      | (obtain ⟨_, rfl⟩ := hx; obtain ⟨_, rfl⟩ := hy; rfl)
 
 /-- **Two literals at one base and two values read nothing together.** Simp on `AdmALit` and
     `inL` does not reach the `decimal` and `number` rows; exactness does. -/
@@ -4629,18 +4747,71 @@ theorem align_traverse_tail_cons {c : Codec} {b : Attr} {as : List Attr} :
 /-- Normalising a refinement keeps what it reads. -/
 theorem AdmA_refineOf (z : Term) (p : Pred) (a : Attr) :
     AdmA (Term.refineOf z p) a = AdmA (.refine z p) a := by
-  unfold Term.refineOf
-  split
-  next hz => rw [show z = Term.never from eq_never_of_isNever hz]; simp [AdmA, refineReads]
-  next => rfl
+  cases z <;>
+    first
+      | rfl
+      | (simp only [Term.refineOf]
+         rename_i z' q
+         split
+         · rename_i r hr
+           show (AdmA z' a && refineReads z' r.eval a)
+               = ((AdmA z' a && refineReads z' q.eval a) && refineReads (.refine z' q) p.eval a)
+           simp only [refineReads, denote_refine, Codec.restrict]
+           cases hv : (denote z').p a with
+           | none => simp
+           | some v0 =>
+               simp only [Option.bind_some]
+               rw [meetM_eval hr v0]
+               cases hq : q.eval v0 <;> simp [hq]
+         · rename_i hr
+           show false = ((AdmA z' a && refineReads z' q.eval a) && refineReads (.refine z' q) p.eval a)
+           simp only [refineReads, denote_refine, Codec.restrict]
+           cases hv : (denote z').p a with
+           | none => simp
+           | some v0 =>
+               simp only [Option.bind_some]
+               have he := meetM_empty hr v0
+               cases hq : q.eval v0 <;> simp [hq] at he ⊢
+               simp [he]
+         · rfl)
 
 /-- Normalising a refinement changes no reading at an attribute the inner term admits. -/
 theorem refineOf_p {w : Term} {p : Pred} {a : Attr} (hw : AdmA w a = true) :
     (denote (Term.refineOf w p)).p a
       = ((denote w).p a).bind (fun v => if p.eval v then some v else none) := by
-  rw [show Term.refineOf w p = .refine w p from
-    if_neg (by rw [not_isNever_of_admA hw]; simp)]
-  rfl
+  cases w with
+  | never => simp [AdmA] at hw
+  | refine z' q =>
+      obtain ⟨_, hq⟩ := Bool.and_eq_true_iff.mp
+        (show (AdmA z' a && refineReads z' q.eval a) = true from hw)
+      cases hv : (denote z').p a with
+      | none => exact absurd ((refineReads_none hv).symm.trans hq) (by simp)
+      | some v0 =>
+        have hqv : q.eval v0 = true := (refineReads_some hv).symm.trans hq
+        have hwv : (denote (.refine z' q)).p a = some v0 := by
+          rw [denote_refine, Codec.restrict]
+          show ((denote z').p a).bind (fun v => if q.eval v then some v else none) = some v0
+          rw [hv]; simp [hqv]
+        rw [hwv]
+        simp only [Option.bind_some]
+        simp only [Term.refineOf]
+        split
+        · rename_i r hr
+          rw [denote_refine, Codec.restrict]
+          show ((denote z').p a).bind (fun v => if r.eval v then some v else none) = _
+          rw [hv]
+          simp only [Option.bind_some]
+          rw [meetM_eval hr v0, hqv, Bool.true_and]
+        · rename_i hr
+          have hp0 : p.eval v0 = false := by
+            have he := meetM_empty hr v0
+            rwa [hqv, Bool.true_and] at he
+          rw [hp0]; rfl
+        · rw [denote_refine, Codec.restrict]
+          show (((denote z').p a).bind (fun v => if q.eval v then some v else none)).bind
+              (fun v => if p.eval v then some v else none) = _
+          rw [hv]; simp [hqv]
+  | _ => rfl
 
 /-- A refinement's gate reads the inner term, so terms that read alike gate alike. -/
 theorem refineReads_congr {t u : Term} {q : Value → Bool} {a : Attr}
@@ -6125,10 +6296,16 @@ theorem typed_refine_inv {a : Term} {p : Pred} :
 theorem typed_refineOf {t : Term} {p : Pred} (h : ∃ T μ, Typed t T μ) :
     ∃ T μ, Typed (Term.refineOf t p) T μ := by
   obtain ⟨T, μ, hT⟩ := h
-  unfold Term.refineOf
-  split
-  · exact ⟨_, _, Typed.never⟩
-  · exact ⟨_, _, Typed.refine hT⟩
+  cases t <;>
+    first
+      | exact ⟨_, _, Typed.refine hT⟩
+      | exact ⟨_, _, Typed.never⟩
+      | (simp only [Term.refineOf]
+         split
+         · obtain ⟨T', μ', hT'⟩ := typed_refine_inv ⟨_, _, hT⟩
+           exact ⟨_, _, Typed.refine hT'⟩
+         · exact ⟨_, _, Typed.never⟩
+         · exact ⟨_, _, Typed.refine hT⟩)
 
 /-- Judgements for a list, from one per element. -/
 theorem typedList_of_all : ∀ {ts : List Term}, (∀ t ∈ ts, ∃ T μ, Typed t T μ) →
