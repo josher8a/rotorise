@@ -79,26 +79,11 @@ def valPresentT (fields : Finset Name) (fld : {k // k ∈ fields} → ObjectSlot
   decide (∀ k : {k // k ∈ fields},
     (match fld k with | .optional _ => true | _ => decide (k.1 ∈ keys)) = true)
 
-/-- A `union` option's own admission, as `optionSemOf` builds it — and the two builders are
-    **not** the same test. An *object* option decides by *structure*: the names the map carries
-    lie in the spec's interval, and every present name whose field is a literal carries one of
-    that literal's alternatives. Every other option decides by *attempt*, which is its row
-    exactly when its row is exact.
-
-    That asymmetry is the whole of why this is not `Adm`. Structure is weaker than `Adm`, which
-    reads every field's contents through that field's codec; a row that counted `Adm` would
-    disagree with `select` on any union of objects, in both directions.
-
-    Taking `(spec, row)` rather than the term is what keeps the recursion structural, the same
-    shape ~~selTagV~~ took; `specOf` is a function of the term, so the distinction is available
-    here without consulting a codec. -/
-def admitOptV (o : Option (BodySpec) × VP) (v : Value) : Bool :=
-  match o.1 with
-  | some spec =>
-      match v with
-      | .map keys f => keysOk spec keys && literalsOk spec keys f
-      | _ => false
-  | none => o.2 v
+/-- A `union` option's own admission, as `optionSemOf` builds it. Every option decides by
+    *attempt* now, which is its row exactly when its row is exact — `admitOptV (specOf t,
+    Adm t) v` reduces to `Adm t v`. `o.1` (`specOf`) goes unread here; `Orth` still reads
+    it. -/
+def admitOptV (o : Option (BodySpec) × VP) (v : Value) : Bool := o.2 v
 
 /-- `select` at a `union`, as a row: filter the options by the admission each one reads, and
     the option that answers **alone** answers for the union.
@@ -218,9 +203,9 @@ noncomputable def Adm : Term → Value → Bool
   -- writes nothing while `⋁` says yes), and the count that fixes it was refused on
   -- anti-monotonicity grounds that held only while some other row was loose. None is.
   --
-  -- The count is over `AdmSpecs`, not over `Adm`: an object option is admitted by its
-  -- **names** and not by its fields' contents, so the row must mirror `optionSems` rather
-  -- than count rows. See `admitOptV`.
+  -- The count is over `AdmSpecs`, not over `Adm` directly, so the row mirrors
+  -- `optionSems`'s pairing with `specOf`. Every option, object included, is now admitted
+  -- by attempt: `admitOptV (specOf t, Adm t) v` reduces to `Adm t v`. See `admitOptV`.
   | .union opts => fun v => selOptV (AdmSpecs opts) v
   -- **`set` is a leaf, and exact.** Its base's row is `SetBase.adm` — the four ground rows
   -- of this table, indexed — and the set's row is that row over whichever payload the value
@@ -744,20 +729,13 @@ theorem ExactV_set (b : SetBase) : ExactV (.set b) := by
   all_goals exact Iff.intro (fun h => nomatch h) (fun h => nomatch h)
 
 /-- Each option's row *is* the admission `optionSemOf` builds for it — given that option's
-    exactness, which is where the exactness hypothesis is spent.
-
-    Two cases and they are not symmetric. At an **object** option both sides are the same
-    `keysOk && literalsOk`, definitionally, and the hypothesis is not used at all: `select`
-    never attempts an object option, and neither does the row. Everywhere else the admission *is* `(c.e ·).isSome`, and
-    the hypothesis is exactly what identifies it with the row. -/
+    exactness, which is where the exactness hypothesis is spent. The admission is always
+    `(c.e ·).isSome`, and the hypothesis is exactly what identifies it with the row. -/
 theorem admitOptV_eq {t : Term} (h : ExactV t) (v : Value) :
     (optionSemOf (denote t) (specOf t)).admitV v = admitOptV (specOf t, Adm t) v := by
   unfold admitOptV
-  cases hs : specOf t with
-  | some spec => rfl
-  | none =>
-    simp only [optionSemOf, OptionSem.byAttempt]
-    exact Bool.coe_iff_coe.mp (by simpa using (h v).symm)
+  simp only [optionSemOf, OptionSem.byAttempt]
+  exact Bool.coe_iff_coe.mp (by simpa using (h v).symm)
 
 /-- The row's own filter, pushed through the map — the plain commutation, no hypothesis. -/
 theorem filter_map_AdmSpecs (opts : List Term) (v : Value) :

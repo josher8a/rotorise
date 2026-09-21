@@ -187,8 +187,8 @@ private def forbiddenSpec : BodySpec := ⟨forbiddenNames, none⟩
 theorem optional_never_forbids :
     keysOk forbiddenSpec {"A"} = false := by decide
 
-/-- An object option decides by structure, never by being attempted: the names lie in the
-    spec's interval, and every present literal field carries one of its alternatives. -/
+/-- Decides by structure: the names lie in the spec's interval, and every present literal
+    field carries one of its alternatives. `optionSemOf` no longer builds this. -/
 def OptionSem.byStructure (spec : BodySpec) (c : Codec) : OptionSem :=
   { admitA := fun a => match a with
       | .m keys g => keysOk spec keys && literalsOkA spec keys g
@@ -216,8 +216,7 @@ def OptionSem.byAttempt (c : Codec) : OptionSem :=
 
 /-- The builder `denote` uses for a union option. -/
 def optionSemOf (c : Codec) : Option BodySpec → OptionSem
-  | some spec => .byStructure spec c
-  | none => .byAttempt c
+  | _ => .byAttempt c
 
 /-- §5 (U) at every option's canonical pairs: each is admitted by that option alone, on
     both sides. The strong form, and what every discharger in `Discharge` produces. -/

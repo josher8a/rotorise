@@ -32,14 +32,9 @@ spends on the filter. -/
 /-- An attribute-side row, once the subterms' rows are known. -/
 abbrev AP := Attr → Bool
 
-/-- …and on the attribute side, where `byStructure` reads the same two tests off an `.m`. -/
-def admitOptA (o : Option (BodySpec) × AP) (a : Attr) : Bool :=
-  match o.1 with
-  | some spec =>
-      match a with
-      | .m keys g => keysOk spec keys && literalsOkA spec keys g
-      | _ => false
-  | none => o.2 a
+/-- …and on the attribute side, admitted by attempt like `admitOptV`. `o.1` (`specOf`)
+    goes unread here; `Orth` still reads it. -/
+def admitOptA (o : Option (BodySpec) × AP) (a : Attr) : Bool := o.2 a
 
 /-- …and the same count. -/
 def selOptA (os : List (Option (BodySpec) × AP)) (a : Attr) : Bool :=
@@ -178,7 +173,7 @@ noncomputable def AdmA : Term → Attr → Bool
   | .lazy t   => AdmA t
   | .refine t p => fun a => AdmA t a && refineReads t p.eval a
   -- hatch
-  -- the read side of the same count; `byStructure` reads the structural test off an `.m`
+  -- the read side of the same count; every option, object included, is admitted by attempt
   | .union opts => fun a => selOptA (AdmASpecs opts) a
   -- **the row that used to admit all three wire families whatever the element term was.**
   -- With the base an index the family is a function of it, so this names one — and at
@@ -328,11 +323,8 @@ def ExactA (t : Term) : Prop := ∀ a, AdmA t a = true ↔ ((denote t).p a).isSo
 theorem admitOptA_eq {t : Term} (h : ExactA t) (a : Attr) :
     (optionSemOf (denote t) (specOf t)).admitA a = admitOptA (specOf t, AdmA t) a := by
   unfold admitOptA
-  cases hs : specOf t with
-  | some spec => rfl
-  | none =>
-    simp only [optionSemOf, OptionSem.byAttempt]
-    exact Bool.coe_iff_coe.mp (by simpa using (h a).symm)
+  simp only [optionSemOf, OptionSem.byAttempt]
+  exact Bool.coe_iff_coe.mp (by simpa using (h a).symm)
 
 /-- The row's own filter, pushed through the map. -/
 theorem filter_map_AdmASpecs (opts : List Term) (a : Attr) :

@@ -77,24 +77,11 @@ theorem admitA_member (t : Term) {μ a}
     (hμ : μSyn t = some μ) (hlaw : Lawful (denote t))
     (h : (optionSemOf (denote t) (specOf t)).admitA a = true) :
     a.member = μ := by
-  cases hs : specOf t with
-  | none =>
-    rw [hs] at h
-    replace h : ((denote t).p a).isSome = true := h
-    obtain ⟨v, hv⟩ := Option.isSome_iff_exists.mp h
-    refine hlaw.reads ?_ hv
-    rw [denote_μ]
-    exact hμ
-  | some spec =>
-    rw [hs] at h
-    cases t
-    case object body =>
-      replace hμ : some Member.M = some μ := hμ
-      cases hμ
-      cases a <;> first
-        | rfl
-        | exact nomatch h
-    all_goals exact nomatch hs
+  replace h : ((denote t).p a).isSome = true := h
+  obtain ⟨v, hv⟩ := Option.isSome_iff_exists.mp h
+  refine hlaw.reads ?_ hv
+  rw [denote_μ]
+  exact hμ
 
 /-! ## Options admit their own canonical pairs -/
 
@@ -314,39 +301,11 @@ theorem optionSem_self_admit (t : Term)
     (he : (denote t).e v = some a) :
     (optionSemOf (denote t) (specOf t)).admitV v = true ∧
     (optionSemOf (denote t) (specOf t)).admitA a = true := by
-  cases hs : specOf t with
-  | none =>
-    constructor
-    · show ((denote t).e v).isSome = true
-      rw [he]; rfl
-    · show ((denote t).p a).isSome = true
-      rw [hlaw.retract he]; rfl
-  | some spec =>
-    cases t
-    case object body =>
-      cases body with | mk fields ff wild =>
-      replace hs : some (Body.spec (.mk fields ff wild)) = some spec := hs
-      cases hs
-      replace he : (objectCodecCore
-          ⟨fields, fun k => fieldSem (ff k)⟩
-          (rcOf (wildSem wild))
-          (keepB (wildSem wild)
-            ⟨fields, fun k => fieldSem (ff k)⟩)).e v =
-        some a := he
-      obtain ⟨keys, fv, g, rfl, rfl, hval, hfi⟩ := objectCodecCore_e_inv he
-      -- the block's codec is lawful BY PREMISE, and not because the object's codec is. A body
-      -- whose required name is the bottom writes nothing, so that object's codec is lawful
-      -- with nothing to retract, while the block it carries may be any codec at all. So
-      -- `lawful_objectCodec` runs parts to whole and has no converse, and `hlawBlock` is the
-      -- same fact `hrest` states one layer down.
-      have hlawW : ∀ w : KeyPat × Term, wild = some w → Lawful (denote w.2) :=
-        hlawBlock fields ff wild rfl
-      -- both halves read the same two tests at the key set the two payloads share: the
-      -- names, and the literal fields' contents
-      exact ⟨(Bool.and_eq_true _ _).mpr ⟨keysOk_of_encode hval hfi, literalsOk_of_encode hfi⟩,
-             (Bool.and_eq_true _ _).mpr ⟨keysOk_of_encode hval hfi,
-               literalsOkA_of_encode hlawW hfi⟩⟩
-    all_goals exact nomatch hs
+  constructor
+  · show ((denote t).e v).isSome = true
+    rw [he]; rfl
+  · show ((denote t).p a).isSome = true
+    rw [hlaw.retract he]; rfl
 
 
 
