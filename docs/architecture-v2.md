@@ -165,10 +165,11 @@ The three leaves below are not one kind of thing, so read each against the quest
 certificate puts. The certificate asks whether a term admits any value, and nothing more. Two of
 the three name no set and still answer that question. One answers nothing.
 
-**An adapter decides that question.** An adapter carries the obligation that its two functions
-cancel on the carriers. So an adapter admits a value exactly when its inner term admits one, and
-the inner term answers. The adapter's set stays unnamed, because the host function is arbitrary.
-The certificate never asks for the set.
+**An adapter decides that question**, which is `D5` read at a leaf: analysability is whether the
+premises are discharged. An adapter carries the obligation that its two functions cancel on the
+carriers, so an adapter admits a value exactly when its inner term admits one, and the inner term
+answers. The adapter's set stays unnamed, because the host function is arbitrary. The certificate
+never asks for the set.
 
 **An opaque projection decides that question.** An opaque term denotes a codec the calculus
 warrants, and not a codec a caller supplies. Its inhabitance is a theorem about that codec, and
@@ -247,13 +248,13 @@ The certificate asks whether the intersection is inhabited. The bottom is the te
 value, so a test for the bottom is a test on the spelling. That test is exact where the meet
 spells an empty result as the bottom.
 
-**The bottom propagates through every position a construction depends on, and it stops at a
-position the construction does not depend on.** A required name and a fixed index are positions a
-product depends on. A variadic position and an optional name are not, because the empty instance
-and the absent name inhabit them. So two one-position tuples over disjoint types meet at the
-bottom, and two arrays over the same types meet at an array of the bottom. A coproduct with no
-surviving option is the bottom, and a transparent wrapper passes the bottom through. That one
-rule is the normal form, and the meet writes it.
+**The normal form is `D2`'s law, applied to the spelling.** A product is the bottom when either
+factor is, and a sum is the bottom only when both summands are. A required name and a fixed index
+are factors of a product. A variadic position and an optional name are summands, because the empty
+instance and the absent name inhabit them. So two one-position tuples over disjoint types meet at
+the bottom, two arrays over those types meet at an array of the bottom, a coproduct with no
+surviving option is the bottom, and a transparent wrapper passes the bottom through. The meet
+writes that form, and nothing states the law a second time.
 
 **So the missing object is not a decision procedure beside the meet. It is the rows of that rule
 the meet does not carry yet.** Two constructions fail to propagate, and each fails for a reason
@@ -262,9 +263,10 @@ that names its own repair.
 A **restriction** fails because the predicate language has no meet. A predicate over a finite set
 of alternatives cannot name the empty set, so two restrictions over one carrier pinned to disjoint
 sets stack rather than reduce. The result denotes the empty set and is spelled as a restriction.
-The residual at a ground position is the object the predicate language lacks: a finite set of
-alternatives, the whole carrier, or the top. That object carries a meet, a bottom and a top, and
-the predicate language carries none of the three.
+The residual at a ground position is the admissible set this document already rules for, with
+one element added: a finite set of alternatives, the whole carrier, or the top. The addition is
+the **empty** set, which is the bottom at that position and is the one thing neither a literal nor
+a refinement can spell today.
 
 An **adapter** fails because the meet refuses to compare two adapters. The refusal is right, since
 no rule reads a caller's function. The refusal is written at the adapter rather than at the bottom
@@ -469,10 +471,10 @@ carrier's. Those are different facts and both are wanted, so the two orders are 
 
 Those are different algebras, and the difference is the whole reason the two stay apart. The
 restrictions around one carrier form a meet-semilattice, so a run of them has one normal form
-and the order inside the run carries no information. An implementation may carry a run as written
-rather than reduce it, which costs nothing while the reader of the term decides inhabitance
-rather than reading the spelling. The adapters form a monoid, so a run of
-them composes, and the order inside the run carries everything.
+and the order inside the run carries no information. **A run carried as written rather than
+reduced costs the certificate.** The reader tests the spelling, so a run over disjoint sets
+denotes the empty set while it is spelled as a restriction, and the test misses it. The adapters
+form a monoid, so a run of them composes, and the order inside the run carries everything.
 
 Restrictions compose, because an adapter needs a second restriction naming the values it owns.
 
@@ -540,8 +542,10 @@ name at two different types are separated by that name, at any depth, because th
 the name is the relation itself.
 
 A set of admissible values is not a new representation. The members of a refinement are already
-a non-empty finite set over the carrier's type, so unifying a literal with a refinement merges
-two representations rather than introducing one. What the unification inherits is `D6`'s
+a finite set over the carrier's type, so unifying a literal with a refinement merges two
+representations rather than introducing one. **The merge adds one element that neither side
+carries: the empty set.** Both spell non-empty sets today, which is why a meet of two disjoint
+ones has nowhere to land and stacks instead. What the unification inherits is `D6`'s
 discipline: quantify by membership, decide equality by mutual inclusion, and never reach for the
 classical instance.
 
