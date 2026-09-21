@@ -56,22 +56,24 @@ flowchart TB
   subgraph LANG["the term language, what a caller writes"]
     direction LR
     CAR["a carrier<br/>with an admissible set"]
-    RES["a restriction<br/>commutative, idempotent"]
-    ADA["an adapter<br/>associative, not commutative"]
+    RES["a restriction"]
+    ADA["an adapter"]
     RES --- CAR
     ADA --- CAR
   end
-  LANG --> MEET["the structural intersection<br/>one recursion, exact at every constructor"]
-  MEET --> LEAF["a leaf it cannot decide<br/>a host function, a closure, an opaque"]
-  LEAF -- "no information" --> MEET
-  MEET --> Q{"is the intersection inhabited"}
-  Q -- "no" --> YES["the options separate, the union is admitted"]
-  Q -- "yes, or unknown" --> NO["refused where it is written"]
+  LANG --> P1["the value projection<br/>a subset"]
+  LANG --> P2["the attribute projection<br/>a set fibred over it"]
+  P1 --> MEET["the meet intersects BOTH projections"]
+  P2 --> MEET
+  MEET --> Q{"does the meet admit anything"}
+  LEAF["a leaf nothing can decide<br/>a host function, a closure, an opaque"] -. "no information" .-> Q
+  Q -- "yes" --> YES["the options separate, the union is admitted"]
+  Q -- "no, or unknown" --> NO["refused where it is written"]
 ```
 
-The loop through the undecidable leaf is the only place information is lost, and an unknown
-answer refuses rather than admits. Everything else in this document is a consequence of the
-recursion being exact everywhere else.
+The two projections are different kinds of set, and the meet intersects each of them. They are
+inhabited together, so one decision settles both. The undecidable leaf is the only place
+information is lost, and an unknown answer refuses rather than admits.
 
 ---
 
@@ -91,6 +93,25 @@ larger than the set it produces.
 and the attributes it accepts. A term is not a partial bijection between them, and any reasoning
 that treats it as one collapses two independent facts into a single one. The calculus carries
 both projections for this reason and not for symmetry.
+
+### The object is a retract
+
+The write is a section and the read is its retraction. That single fact fixes the shape of both
+projections and they come out as different kinds of object.
+
+    the value projection       a SUBSET of the value universe
+    the attribute projection   a set FIBRED over that subset
+    the write                  a choice of one representative in each fibre
+
+Every attribute the read accepts lands on some value, and the attributes landing on one value are
+that value's fibre. The write picks one of them, so the attributes a term produces are a section
+of the attributes it accepts, never all of them.
+
+**A subset and a fibred set are compared by different means, so no reasoning unifies the two
+projections.** An argument that treats the attribute side as a subset of the values, or derives
+one projection from the other by injectivity, has discarded the fibres. Each such argument looks
+like a symmetry and is a category error, and the calculus carries two projections because there
+are two kinds of thing here, not two spellings of one.
 
 "Told apart" is two questions.
 
@@ -230,7 +251,8 @@ disjoint sets yields the carrier under both restrictions, which is empty and is 
 restriction. A certificate that compares the meet against the bottom therefore misses it.
 
 **So the missing object is a decision procedure for inhabitance, not a repair at one
-constructor.** The bottom is one syntactic witness of an empty term. The bottom rising through a
+constructor**, and it settles the value projection alone. The attribute projection is a different
+kind of set and takes the recursion below. The bottom is one syntactic witness of an empty term. The bottom rising through a
 required position of a product and stopping at a variadic one is a second, already written into
 the meet by hand. Disjoint restrictions over one carrier are a third, and nothing decides it.
 Each further witness written by hand is another truncation, for the same reason a test per shape
@@ -240,6 +262,45 @@ Decided structurally, inhabitance costs one function and every construction cont
 which is where the work belongs. A constructor added later arrives with its case known in
 advance. A construction nobody has tested still owes its laws: the meet's associativity, its
 distribution over the coproduct, and the adapter's unit are not established here.
+
+### The two projections are inhabited together, so one decision settles both
+
+The meet intersects **both** projections, and each has its own homomorphism law: the values the
+meet admits are the values both factors admit, and the attributes the meet accepts are the
+attributes both factors accept.
+
+Now take any one term and use the retraction law and the canonicity law alone.
+
+    it admits a value      →  the value writes an attribute  →  retraction  →  that attribute is accepted
+    it accepts an attribute →  the attribute reads a value   →  canonicity  →  that value is written
+
+**So a term's two projections are inhabited together.** Apply that to the meet of two options and
+the consequence is immediate: the value projections are disjoint exactly when the meet admits no
+value, the attribute projections are disjoint exactly when the meet accepts no attribute, and
+those two conditions are the same condition.
+
+**Separating on both sides is therefore one question about the meet rather than two.** It needs no
+second apparatus on the attribute side, no comparison of shapes, and no assumption that acceptance
+is closed under anything. A design that builds a separate attribute-side recursion has duplicated
+a decision that the meet already carries.
+
+The derivation uses the retraction and the canonicity laws and nothing else. Both belong to the
+weaker bundle that a term containing an alternate reader still satisfies, so the collapse holds
+there too. What it does rest on is that the meet of lawful terms is itself lawful, and **that is
+the load-bearing obligation of this design.** It is one preservation theorem rather than a family
+of them.
+
+### The attribute side is a fibred set, and the certificate does not read it
+
+For completeness rather than for use: the attribute side admits a ladder of descriptions, from
+the outermost member, through the member at every position recursively, to the fibres the codec
+actually distinguishes, to the raw wire. The recursive one is in the development and is proved to
+refine the member.
+
+**None of that is the certificate's business.** The meet intersects acceptance directly, and the
+collapse above makes one inhabitance decision settle both projections. The ladder describes the
+structure of the attribute side; it does not supply a test, and a design that reaches for it has
+mistaken a description for a mechanism.
 
 ### The lattice is complete and the term language is not
 
@@ -336,7 +397,7 @@ requirementDiagram
   }
   requirement D9 {
     id: D9
-    text: a certificate separates on the value side and on the attribute side
+    text: the meet of lawful terms is lawful
     risk: high
     verifymethod: test
   }
@@ -417,7 +478,8 @@ nothing reachable. If any position accepts it, moving it outside makes a reachab
 unwritable, and encoding exists to do the opposite. The alternate reader is terminal and sits
 outside. An adapter is a union option and composes with itself, so it is a constructor.
 
-**D8 and D9 constrain the certificate rather than a description**, and the rest of this document
+**D8 and D9 constrain the certificate rather than a description**, and D9 is what remains after
+the demand it began as turned into a consequence, and the rest of this document
 leans on both without having stated either.
 
 **D8. The selector and the certificate are one relation.** The certificate asks whether any
@@ -427,10 +489,11 @@ finds two claimants. A selector that tells apart what the certificate cannot is 
 because the union is refused where the codec would have worked. Two functions kept in agreement
 by hand will drift, and nothing reports the drift. So they are one function at two arguments.
 
-**D9. A certificate separates on the value side and on the attribute side.** The two projections
-of a term are independent, because the read accepts a class of attributes where the write
-produces one. A pair separated on one projection alone is not separated, and no property of the
-codec recovers the other projection from it. A recursion may discharge both at
+**D9 is withdrawn as a demand.** It said a certificate must separate on the value side and on the
+attribute side. That is true and it is a consequence rather than an obligation: the retraction and
+canonicity laws make a term's two projections inhabited together, so one inhabitance decision on
+the meet settles both. What replaces it is the preservation obligation above, that the meet of
+lawful terms is lawful, which is what the consequence rests on. A recursion may discharge both at
 once where the codec makes them one fact, as a literal does, but it may never discharge one and
 stay silent about the other.
 
