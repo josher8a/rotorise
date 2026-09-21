@@ -284,11 +284,21 @@ second apparatus on the attribute side, no comparison of shapes, and no assumpti
 is closed under anything. A design that builds a separate attribute-side recursion has duplicated
 a decision that the meet already carries.
 
-The derivation uses the retraction and the canonicity laws and nothing else. Both belong to the
-weaker bundle that a term containing an alternate reader still satisfies, so the collapse holds
-there too. What it does rest on is that the meet of lawful terms is itself lawful, and **that is
-the load-bearing obligation of this design.** It is one preservation theorem rather than a family
-of them.
+**Nothing about the meet itself has to be assumed.** The read-side law says more than that the
+meet accepts what both accept: where both operands accept one attribute, the meet reads it to the
+same value each of them does. So an attribute the meet accepts is read to a value that both
+operands write, by canonicity, and that value is one the meet admits. An attribute shared by the
+meet therefore forces a value shared by the meet, and the contrapositive is the whole certificate:
+**a meet that admits no value accepts no attribute.**
+
+The premises are canonicity on the two operands and nothing else. They belong to the weaker bundle
+that a term containing an alternate reader still satisfies, and the development already carries
+them wherever it reasons about a term. **No preservation theorem about the meet is required**, and
+the design rests on no standing assumption.
+
+What remains is one computable question: whether a term admits any value. The structural admission
+that answers it at a given value is in the development already and is proved exact at every term,
+so the work is a decision over that function rather than a new description beside it.
 
 ### The attribute side is a fibred set, and the certificate does not read it
 
@@ -397,7 +407,7 @@ requirementDiagram
   }
   requirement D9 {
     id: D9
-    text: the meet of lawful terms is lawful
+    text: whether a term admits any value is decidable
     risk: high
     verifymethod: test
   }
@@ -479,7 +489,7 @@ unwritable, and encoding exists to do the opposite. The alternate reader is term
 outside. An adapter is a union option and composes with itself, so it is a constructor.
 
 **D8 and D9 constrain the certificate rather than a description**, and D9 is what remains after
-the demand it began as turned into a consequence, and the rest of this document
+the demand it began as turned into a consequence: a decision to compute, not a premise to assume, and the rest of this document
 leans on both without having stated either.
 
 **D8. The selector and the certificate are one relation.** The certificate asks whether any
@@ -490,10 +500,11 @@ because the union is refused where the codec would have worked. Two functions ke
 by hand will drift, and nothing reports the drift. So they are one function at two arguments.
 
 **D9 is withdrawn as a demand.** It said a certificate must separate on the value side and on the
-attribute side. That is true and it is a consequence rather than an obligation: the retraction and
-canonicity laws make a term's two projections inhabited together, so one inhabitance decision on
-the meet settles both. What replaces it is the preservation obligation above, that the meet of
-lawful terms is lawful, which is what the consequence rests on. A recursion may discharge both at
+attribute side. That is a consequence: canonicity on the operands, with the read-side law of the
+meet, makes an attribute shared by the meet force a value shared by the meet. So a meet admitting
+no value accepts no attribute, and one decision settles both projections. Nothing replaces the
+demand, because the consequence rests on premises the development already carries and on no claim
+about the meet. A recursion may discharge both at
 once where the codec makes them one fact, as a literal does, but it may never discharge one and
 stay silent about the other.
 
