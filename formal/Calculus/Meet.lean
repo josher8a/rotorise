@@ -1912,16 +1912,8 @@ theorem AdmAny_iff : ∀ {os : List Term} {v : Value},
 theorem selOptV_eq_AdmAny {os : List Term} (hc : unionOk os = true) (v : Value) :
     selOptV (AdmSpecs os) v = AdmAny os v := by
   simp only [unionOk] at hc
-  have hbridge : ∀ t ∈ os, Adm t v = true → admitOptV (specOf t, Adm t) v = true := by
-    intro t _ h
-    cases t with
-    | object b =>
-      cases b with
-      | mk fields fld wild =>
-        cases v with
-        | map keys g => simpa only [admitOptV, specOf] using structural_of_AdmBody h
-        | _ => exact absurd h (by simp [Adm, AdmBody])
-    | _ => exact h
+  have hbridge : ∀ t ∈ os, Adm t v = true → admitOptV (specOf t, Adm t) v = true :=
+    fun _ _ h => h
   have hlen : (os.filter (fun t => admitOptV (specOf t, Adm t) v)).length ≤ 1 := by
     have hone := (admitsAtMostOne_of_orth (pairwise_of_orthAll hc)).1 v
     rwa [semsOf, ← optionSems_eq, filter_AdmSpecs (fun t _ => Adm_exact t) v,
@@ -2096,14 +2088,8 @@ theorem AdmAAny_iff : ∀ {os : List Term} {a : Attr},
 theorem selOptA_eq_AdmAAny {os : List Term} (hc : unionOk os = true) (a : Attr) :
     selOptA (AdmASpecs os) a = AdmAAny os a := by
   simp only [unionOk] at hc
-  have hbridge : ∀ t ∈ os, AdmA t a = true → admitOptA (specOf t, AdmA t) a = true := by
-    intro t ht h
-    cases t with
-    | object b =>
-      cases a with
-      | m keys g => simpa only [admitOptA, specOf] using structural_of_AdmABody h
-      | _ => exact absurd h (by cases b; simp [AdmA, AdmABody])
-    | _ => exact h
+  have hbridge : ∀ t ∈ os, AdmA t a = true → admitOptA (specOf t, AdmA t) a = true :=
+    fun _ _ h => h
   have hlen : (os.filter (fun t => admitOptA (specOf t, AdmA t) a)).length ≤ 1 := by
     have hone := (admitsAtMostOne_of_orth (pairwise_of_orthAll hc)).2 a
     rwa [semsOf, ← optionSems_eq, filter_AdmASpecs (fun t _ => AdmA_exact t) a,
@@ -4654,17 +4640,11 @@ theorem forall₂_mem_left {α β : Type} {R : α → β → Prop} :
       · obtain ⟨y, hy, hry⟩ := forall₂_mem_left hrest hx'
         exact ⟨y, List.mem_cons_of_mem _ hy, hry⟩
 
-/-- **A term's read row is its structural test.** Lifted out of `selOptA_eq_AdmAAny`, which
-    needs it in this form and states it inline. The open block needs no certificate here,
-    because `structural_of_AdmABody` carries the open case itself. -/
+/-- **A term's read row is its option admission.** Every option is attempted, so `admitOptA` is
+    the row itself and this is the identity. It keeps its name because the filter lemmas call
+    it, and because the statement is what a reader wants where `rfl` would say nothing. -/
 theorem admitOptA_of_AdmA {t : Term}
-    {a : Attr} (hh : AdmA t a = true) : admitOptA (specOf t, AdmA t) a = true := by
-  cases t with
-  | object b =>
-      cases a with
-      | m keys g => simpa only [admitOptA, specOf] using structural_of_AdmABody hh
-      | _ => exact absurd hh (by cases b; simp [AdmA, AdmABody])
-  | _ => exact hh
+    {a : Attr} (hh : AdmA t a = true) : admitOptA (specOf t, AdmA t) a = true := hh
 
 /-- Where the row answers, exactly one option passes the structural test, and its row is true
     there. This is `selOptA`'s own `match`, read backwards. -/
@@ -5843,19 +5823,10 @@ theorem unionOk_sublist {opts sub : List Term} (hs : sub.Sublist opts)
   simp only [unionOk] at h ⊢
   exact orthAll_of_pairwise ((pairwise_of_orthAll h).sublist hs)
 
-/-- **A value an option admits, the option admits structurally.** The bridge
-    `selOptV_eq_AdmAny` builds inline. An open object was the case this failed at, until
-    `structural_of_AdmBody` read the block. -/
+/-- **A value an option admits, the option admits as an option.** Every option is attempted, so
+    `admitOptV` is the row itself and this is the identity. `Slice.lean` calls it by name. -/
 theorem admitOptV_of_Adm {t : Term} {v : Value}
-    (h : Adm t v = true) : admitOptV (specOf t, Adm t) v = true := by
-  cases t with
-  | object b =>
-    cases b with
-    | mk fields fld wild =>
-      cases v with
-      | map keys g => simpa only [admitOptV, specOf] using structural_of_AdmBody h
-      | _ => exact absurd h (by simp [Adm, AdmBody])
-  | _ => exact h
+    (h : Adm t v = true) : admitOptV (specOf t, Adm t) v = true := h
 
 
 /-! ## The laws, on admission
