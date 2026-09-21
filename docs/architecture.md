@@ -253,37 +253,34 @@ joint predicate absorbs what a kind table used to carry. The attribute-side pred
 clause. An alternate reader cannot add a structural exception because `LegacyRead` is outside
 `Term`.
 
-**Retiring the older generation is refused by theorem, and the reason is counter-intuitive.**
-`select` counts an object option by the names a map carries, never by what they hold. So at an
-object the joint predicate is not an over-approximation of option admission; it is strictly
-tighter, and disjointness of a tighter predicate does not imply disjointness of admission.
-Therefore **the object row answering "everything" is load-bearing rather than slack**: it is
-exactly the over-approximation that turns row disjointness into admission disjointness. Restate
-the discharger on the sharper predicate and the pair does separate while `select` still attempts
-both options, so the uniqueness property genuinely fails. The premise gets stronger and the
-theorem becomes false. `not_uAtCan_of_sepJ` is that statement, and the witness is two objects with
-the same names and different field terms, both derivable and both lawful.
+**Both generations stand, and the reason is that nothing has retired the older one.**
+`select` attempts every option, so option admission *is* the row at every constructor:
+`admitV_le_Adm` and `admitA_le_AdmA` hold from exactness alone, with no premise on the term and
+no exception for an object. `admitOptV_of_Adm` is the identity for the same reason. So the joint
+predicate and the admission a discharger consumes are one test, and a discharger stated on the
+joint predicate asks the question `select` decides by.
 
-**The direction has a standard name.** Both facts are one principle, the abstract
-interpretation of Cousot and Cousot, 1977. A coarse test that over-approximates a precise
-one transfers disjointness downward. A tighter test does not. The object row answering
-everything over-approximates option admission, which is why the row is load-bearing.
-Structural admission over-approximates `Adm`, which is `admitOptV_of_Adm`, and that is what
-lets a certificate proved over specs bind a union whose options carry codecs.
+**Whether that discharger is sound in general is open, and the development does not claim it.**
+The two tests coinciding at every constructor removes the shape that is known to part them. It is
+not a proof that no pair parts them, and no theorem here attempts that proof. Until one arrives
+the per-aspect tables and their separation stay, and `Orthogonality.lean` remains the certificate
+the library is checked against.
 
-On the value side the object row is the whole of the obstruction: `admitV_Adm_nonObject` and
-`admitA_AdmA_nonObject` hold from exactness alone for every term whose spec projection is absent,
-which is every term but an object.
+**The direction has a standard name.** It is the abstract interpretation of Cousot and Cousot,
+1977: a coarse test that over-approximates a precise one transfers disjointness downward, and a
+tighter test does not. The principle is why a certificate may be proved over an approximation at
+all. This development spends it on occupancy: `occV` and `occA` over-approximate what a term
+occupies, and disjoint occupancy is what the certificate decides.
 
 **The outer carrier has a separate read-side fact.** An alternate reader can read an attribute
 outside the current term's member. `legacyRead_reads_n` records a string core that reads a numeric
 attribute through its alternate reader. The structural classifier has no row for the outer
 carrier.
 
-The repair the object row invites — ask what the resolver consults rather than what the row says
-— is made in `Orthogonality.lean`. `OrthSV` and `OrthSA` are occupancy conjoined with option
-admission, `admitOptV_eq` identifies that second conjunct with option admission itself, and
-`uAtCan_of_separated` is the discharger stated on what `select` actually decides by.
+`Orthogonality.lean` states the discharge on what the resolver consults rather than on what the
+row says. `OrthSV` and `OrthSA` are occupancy conjoined with option admission, `admitOptV_eq`
+identifies that second conjunct with option admission itself, and `uAtCan_of_separated` is the
+discharger stated on what `select` actually decides by.
 
 ### The classifier, and what it is the specification of
 
