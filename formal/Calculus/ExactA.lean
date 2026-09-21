@@ -760,7 +760,6 @@ theorem AdmA_exact : ∀ (t : Term), ExactA t
       have hc := AdmA_exact c
       intro a; simpa [AdmA, denote] using hc a
 
-
 /-- …and its read-side twin, for the reason the write side gives. -/
 theorem AdmA_exactB : ∀ (b : Body), ExactA (.object b)
   | .mk _ fld wild =>
@@ -783,6 +782,128 @@ theorem AdmA_exactW : ∀ (wild : Option (KeyPat × Term)), ExactAW wild
   | none => trivial
   | some (_, t0) => AdmA_exact t0
 end
+
+/-! ### The same equation on the read side
+
+The value side needs only `AdmWild`, which is `none` exactly where the body declares no open
+block. The read side reads the block the same way. `mem_fields_of_admA` handles an undeclared
+name under a closed body, and each name's own presence pair handles a declared absent name. -/
+
+/-- `AdmABody` at a map, unfolded. -/
+theorem AdmABody_map {b : Body} {keys : Finset Name} {g : {k // k ∈ keys} → Attr} :
+    AdmABody b (.m keys g)
+      = (reqPresentT b.fields b.at keys &&
+         objAdmA ⟨b.fields, fun k => AdmAField (b.at k)⟩ (AdmAWild b.wild) keys g) := by
+  cases b; rfl
+
+/-- A field's row carries its literal alternatives on the read side, where it has any —
+    `altsOkV_of_AdmField`'s twin, through `ExactA` because `altsOkA` asks the codec. -/
+theorem altsOkA_of_AdmAField {f : ObjectSlot} {a : Attr} (h : AdmAField f a = true) :
+    altsOkA (altsOfField f) a = true := by
+  cases f with
+  | req t => cases t <;> first | rfl | exact (AdmA_exact _ a).mp h
+  | optional t => cases t <;> first | rfl | exact (AdmA_exact _ a).mp h
+
+/-- Every present name is declared, where the body declares no open block and so refuses an
+    undeclared one. The read side used to need this against `drop` as well, which skips such a
+    name rather than refusing it, and a name that is skipped is read. `drop` is gone, so the one
+    closed state answers both halves the same way. -/
+theorem mem_fields_of_admA {b : Body} (hr : b.wild = none)
+    {keys : Finset Name} {g : {k // k ∈ keys} → Attr}
+    (h : AdmABody b (.m keys g) = true) : ∀ k ∈ keys, k ∈ b.fields := by
+  rw [AdmABody_map, Bool.and_eq_true] at h
+  have h2 := h.2
+  unfold objAdmA at h2
+  intro k hk
+  refine Decidable.byContradiction (fun hnb => ?_)
+  have hh := of_decide_eq_true h2 ⟨k, hk⟩
+  rw [entryPA, MapOf.at, dif_neg hnb, hr] at hh
+  exact absurd hh (by simp [AdmAWild])
+
+/-- One entry of the read-side object row — `objAdmV_row`'s twin. It took a keep filter as a
+    hypothesis while `drop` made the two sides' filters differ; they do not differ now. -/
+theorem objAdmA_row {c : Body} {keys : Finset Name} {g : {k // k ∈ keys} → Attr}
+    (hB : objAdmA ⟨c.fields, fun k => AdmAField (c.at k)⟩ (AdmAWild c.wild) keys g = true)
+    {k : Name} (hk : k ∈ keys) (hc : k ∈ c.fields) :
+    AdmAField (c.at ⟨k, hc⟩) (g ⟨k, hk⟩) = true := by
+  unfold objAdmA at hB
+  have hh := of_decide_eq_true hB ⟨k, hk⟩
+  rwa [entryPA, MapOf.at, dif_pos hc] at hh
+
+/-- A present name the body does not declare goes through the open block, on the read side.
+    `objAdmV_wild`'s twin. -/
+theorem objAdmA_wild {c : Body} {keys : Finset Name} {g : {k // k ∈ keys} → Attr}
+    (hB : objAdmA ⟨c.fields, fun k => AdmAField (c.at k)⟩ (AdmAWild c.wild) keys g = true)
+    {k : Name} (hk : k ∈ keys) (hnc : k ∉ c.fields) {w : KeyPat × Term}
+    (hw : c.wild = some w) : AdmA w.2 (g ⟨k, hk⟩) = true := by
+  unfold objAdmA at hB
+  have hh := of_decide_eq_true hB ⟨k, hk⟩
+  rwa [entryPA, MapOf.at, dif_neg hnc, hw, AdmAWild] at hh
+
+/-- A term's row carries its literal alternatives on the read side, where it has any.
+    `altsOkA_of_AdmAField`'s twin at the term level, which is what an open block needs. -/
+theorem altsOkA_of_AdmA {t : Term} {a : Attr} (h : AdmA t a = true) :
+    altsOkA (altsOfTerm t) a = true := by
+  cases t <;> first | rfl | exact (AdmA_exact _ a).mp h
+
+/-- **An object option has its structural test for a read row, open block and all.**
+    `structural_of_AdmBody`'s twin, and it carries no closedness premise for the same reason. -/
+theorem structural_of_AdmABody {b : Body}
+    {keys : Finset Name} {g : {k // k ∈ keys} → Attr}
+    (h : AdmABody b (.m keys g) = true) :
+    (keysOk b.spec keys && literalsOkA b.spec keys g) = true := by
+  have h' := h
+  rw [AdmABody_map, Bool.and_eq_true] at h'
+  cases hb : b with
+  | mk fields fld wild =>
+    subst hb
+    refine Bool.and_eq_true _ _ |>.mpr ⟨?_, ?_⟩
+    · refine keysOk_of_names ?_ (fun k hreq => ?_) (fun k hforbid hk => ?_)
+      · cases hw : wild with
+        | none => exact Or.inr (mem_fields_of_admA (b := .mk fields fld wild) hw h)
+        | some _ => exact Or.inl rfl
+      · cases hf : fld k with
+        | req t =>
+          have hh := of_decide_eq_true h'.1 k
+          exact of_decide_eq_true (by simpa [Body.at, hf] using hh)
+        | optional t =>
+          rw [hf] at hreq
+          cases t <;> simp [ObjectSlot.presence, Term.isNever] at hreq
+      · have hrow := objAdmA_row h'.2 hk k.2
+        change AdmAField (fld k) (g ⟨k.1, hk⟩) = true at hrow
+        cases hf : fld k with
+        | req t =>
+          rw [hf] at hforbid
+          have ht : t = .never := by
+            cases t <;> simp [ObjectSlot.presence, ObjectSlot.isReq, Term.isNever] at hforbid ⊢
+          subst t
+          rw [hf] at hrow
+          simp [AdmAField, AdmA] at hrow
+        | optional t =>
+          rw [hf] at hforbid
+          have ht : t = .never := by
+            cases t <;> simp [ObjectSlot.presence, Term.isNever] at hforbid ⊢
+          subst t
+          rw [hf] at hrow
+          simp [AdmAField, AdmA] at hrow
+    · refine decide_eq_true (fun k => ?_)
+      show litOkA _ k.1 (g k) = true
+      cases hkf : decide (k.1 ∈ fields) with
+      | true =>
+        have hd := of_decide_eq_true hkf
+        rw [litOkA, show (Body.spec (.mk fields fld wild)).names.at k.1
+              = some ⟨_, altsOfField (fld ⟨k.1, hd⟩)⟩ from dif_pos hd]
+        exact altsOkA_of_AdmAField (objAdmA_row h'.2 k.2 hd)
+      | false =>
+        have hnd := of_decide_eq_false hkf
+        cases hw : wild with
+        | none => exact absurd (mem_fields_of_admA (b := .mk fields fld wild) hw h k.1 k.2) hnd
+        | some w =>
+          have hat : (Body.spec (.mk fields fld (some w))).names.at k.1 = none := dif_neg hnd
+          have hws : (Body.spec (.mk fields fld (some w))).wild = some (altsOfTerm w.2) := by
+            simp [Body.spec]
+          simp only [litOkA, hat, hws]
+          exact altsOkA_of_AdmA (objAdmA_wild h'.2 k.2 hnd hw)
 
 /-- Soundness of every attribute row — a corollary, as on the value side. The
     hundred-and-thirty-line depth recursion this was, and the ~~SoundA~~ scaffolding it needed,

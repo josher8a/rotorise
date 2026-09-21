@@ -284,6 +284,148 @@ noncomputable def AdmSpecs : List Term → List (Option (BodySpec) × VP)
 
 end
 
+/-- `valPresentT` in the form the object row uses: a declared name that must be present is
+    present. -/
+theorem valPresentT_req (fields : Finset Name) (fld : {k // k ∈ fields} → ObjectSlot)
+    (keys : Finset Name) :
+    valPresentT fields fld keys
+      = decide (∀ k : {k // k ∈ fields}, ObjectSlot.isReq (fld k) = true → k.1 ∈ keys) := by
+  unfold valPresentT
+  refine decide_eq_decide.mpr ⟨fun hh k hreq => ?_, fun hh k => ?_⟩
+  · have hk := hh k
+    cases hf : fld k with
+    | req t => rw [hf] at hk; exact of_decide_eq_true hk
+    | optional t => rw [hf] at hreq; exact absurd hreq (by simp [ObjectSlot.isReq])
+  · cases hf : fld k with
+    | optional t => rfl
+    | req t => exact decide_eq_true (hh k (by rw [hf]; rfl))
+
+
+/-- A declared name that must be present is present, read off the admission. -/
+theorem mem_keys_of_isReq {c : Body} {keys : Finset Name}
+    (hv : valPresentT c.fields c.at keys = true) {k : Name} (hc : k ∈ c.fields)
+    (hreq : ObjectSlot.isReq (c.at ⟨k, hc⟩) = true) : k ∈ keys := by
+  rw [valPresentT_req] at hv
+  exact of_decide_eq_true hv ⟨k, hc⟩ hreq
+
+/-- A body admits a map by two tests: the declared names that must be present are, and every present name passes its row. -/
+theorem AdmBody_map (c : Body) (keys : Finset Name) (g : {k // k ∈ keys} → Value) :
+    AdmBody c (.map keys g)
+      = (valPresentT c.fields c.at keys
+         && objAdmV ⟨c.fields, fun k => AdmField (c.at k)⟩ (AdmWild c.wild) keys g) := by
+  cases c; rfl
+
+/-- A present name that the body declares goes through that name's field. -/
+theorem objAdmV_row {c : Body} {keys : Finset Name} {g : {k // k ∈ keys} → Value}
+    (hB : objAdmV ⟨c.fields, fun k => AdmField (c.at k)⟩ (AdmWild c.wild) keys g = true)
+    {k : Name} (hk : k ∈ keys) (hc : k ∈ c.fields) :
+    AdmField (c.at ⟨k, hc⟩) (g ⟨k, hk⟩) = true := by
+  unfold objAdmV at hB
+  have hh := of_decide_eq_true hB ⟨k, hk⟩
+  rwa [entryP, MapOf.at, dif_pos hc] at hh
+
+/-- A present name the body does not declare goes through the open block. `mem_fields_of_adm`'s
+    twin: where that lemma reads a closed body's refusal, this reads an open body's claim. -/
+theorem objAdmV_wild {c : Body} {keys : Finset Name} {g : {k // k ∈ keys} → Value}
+    (hB : objAdmV ⟨c.fields, fun k => AdmField (c.at k)⟩ (AdmWild c.wild) keys g = true)
+    {k : Name} (hk : k ∈ keys) (hnc : k ∉ c.fields) {w : KeyPat × Term}
+    (hw : c.wild = some w) : Adm w.2 (g ⟨k, hk⟩) = true := by
+  unfold objAdmV at hB
+  have hh := of_decide_eq_true hB ⟨k, hk⟩
+  rwa [entryP, MapOf.at, dif_neg hnc, hw, AdmWild] at hh
+
+/-- Every present name is declared, where the rest refuses an undeclared one. -/
+theorem mem_fields_of_adm {b : Body} (hr : AdmWild b.wild = none)
+    {keys : Finset Name} {g : {k // k ∈ keys} → Value}
+    (h : AdmBody b (.map keys g) = true) : ∀ k ∈ keys, k ∈ b.fields := by
+  rw [AdmBody_map, Bool.and_eq_true] at h
+  have h2 := h.2
+  unfold objAdmV at h2
+  intro k hk
+  refine Decidable.byContradiction (fun hnb => ?_)
+  have hh := of_decide_eq_true h2 ⟨k, hk⟩
+  rw [entryP, MapOf.at, dif_neg hnb, hr] at hh
+  exact absurd hh (by simp)
+
+/-- A field's row carries its literal alternatives, where it has any. -/
+theorem altsOkV_of_AdmField {f : ObjectSlot} {v : Value} (h : AdmField f v = true) :
+    altsOkV (altsOfField f) v = true := by
+  cases f with
+  | req t => cases t <;> first | rfl | exact h
+  | optional t => cases t <;> first | rfl | exact h
+
+/-- A term's row carries its literal alternatives, where it has any. `altsOkV_of_AdmField`'s
+    twin at the term level, which is what an open block needs: the block carries a term and
+    no mark. -/
+theorem altsOkV_of_Adm {t : Term} {v : Value} (h : Adm t v = true) :
+    altsOkV (altsOfTerm t) v = true := by
+  cases t <;> first | rfl | exact h
+
+/-- **An object's structural test is its row, open block and all.** A value the body admits
+    passes `keysOk` and `literalsOk`.
+
+    **No closedness premise, and none is needed.** `keysOk`'s first conjunct is free under an
+    open block, so the claim that every present name is declared is owed by a closed body alone.
+    `literalsOk` reads the block's alternatives at an undeclared name, and the block's own row
+    is `Adm` of the block's term, which carries those alternatives. -/
+theorem structural_of_AdmBody {b : Body}
+    {keys : Finset Name} {g : {k // k ∈ keys} → Value}
+    (h : AdmBody b (.map keys g) = true) :
+    (keysOk b.spec keys && literalsOk b.spec keys g) = true := by
+  have h' := h
+  rw [AdmBody_map, Bool.and_eq_true] at h'
+  cases hb : b with
+  | mk fields fld wild =>
+    subst hb
+    refine Bool.and_eq_true _ _ |>.mpr ⟨?_, ?_⟩
+    · refine keysOk_of_names ?_ (fun k hreq => ?_) (fun k hforbid hk => ?_)
+      · cases hw : wild with
+        | none => exact Or.inr (mem_fields_of_adm (by simp [Body.wild, hw, AdmWild]) h)
+        | some _ => exact Or.inl rfl
+      · cases hf : fld k with
+        | req t =>
+          apply mem_keys_of_isReq h'.1 k.2
+          simp [Body.at, ObjectSlot.isReq, hf]
+        | optional t =>
+          rw [hf] at hreq
+          cases t <;> simp [ObjectSlot.presence, Term.isNever] at hreq
+      · have hrow := objAdmV_row h'.2 hk k.2
+        change AdmField (fld k) (g ⟨k.1, hk⟩) = true at hrow
+        cases hf : fld k with
+        | req t =>
+          rw [hf] at hforbid
+          have ht : t = .never := by
+            cases t <;> simp [ObjectSlot.presence, ObjectSlot.isReq, Term.isNever] at hforbid ⊢
+          subst t
+          rw [hf] at hrow
+          simp [AdmField, Adm] at hrow
+        | optional t =>
+          rw [hf] at hforbid
+          have ht : t = .never := by
+            cases t <;> simp [ObjectSlot.presence, ObjectSlot.isReq, Term.isNever] at hforbid ⊢
+          subst t
+          rw [hf] at hrow
+          simp [AdmField, Adm] at hrow
+    · refine decide_eq_true (fun k => ?_)
+      show litOkV _ k.1 (g k) = true
+      cases hkf : decide (k.1 ∈ fields) with
+      | true =>
+        have hd := of_decide_eq_true hkf
+        rw [litOkV, show (Body.spec (.mk fields fld wild)).names.at k.1
+              = some ⟨_, altsOfField (fld ⟨k.1, hd⟩)⟩ from dif_pos hd]
+        exact altsOkV_of_AdmField (objAdmV_row h'.2 k.2 hd)
+      | false =>
+        have hnd := of_decide_eq_false hkf
+        cases hw : wild with
+        | none =>
+          exact absurd (mem_fields_of_adm (by simp [Body.wild, hw, AdmWild]) h k.1 k.2) hnd
+        | some w =>
+          have hat : (Body.spec (.mk fields fld (some w))).names.at k.1 = none := dif_neg hnd
+          have hws : (Body.spec (.mk fields fld (some w))).wild = some (altsOfTerm w.2) := by
+            simp [Body.spec]
+          simp only [litOkV, hat, hws]
+          exact altsOkV_of_Adm (objAdmV_wild h'.2 k.2 hnd hw)
+
 @[simp] theorem AdmList_eq : ∀ ts : List Term, AdmList ts = ts.map Adm
   | [] => rfl
   | t :: ts => by simp only [AdmList, List.map]; rw [AdmList_eq ts]
