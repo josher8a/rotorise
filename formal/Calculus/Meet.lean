@@ -161,7 +161,7 @@ def Term.ofOptions : List Term → Term
     not one: a meet can answer an OPEN object, so a certified list of options can meet to an
     uncertified one. -/
 def Term.ofOptionsGuarded (os ts : List Term) : Option Term :=
-  if unionOk os && unionOk ts then some (Term.ofOptions ts) else none
+  some (Term.ofOptions ts)
 
 /-- The names both bodies declare. `Finset.filter` and not `∩`: the intersection's membership API
     is not a sanctioned route to `Classical.choice`, and `Finset.mem_filter` is. -/
@@ -1906,6 +1906,86 @@ theorem AdmAny_iff : ∀ {os : List Term} {v : Value},
         · exact Or.inl h
         · exact Or.inr ⟨u, hu', h⟩
 
+
+/-! ### The count, and what the meet does to it
+
+These are what let the coproduct row of the meet stand without a certificate. The guard on that
+row used to supply one, and the guard could not survive: the certificate is stated on the meet,
+so a guard that consults it closes a cycle. What the row actually needs is that the meet scales
+the number of admitting options by whether the partner admits, and that is a fact about counting
+rather than about separation. -/
+
+/-- A term that admits a value is not the bottom. -/
+theorem not_isNever_of_adm {t : Term} {v : Value} (h : Adm t v = true) : t.isNever = false := by
+  cases ht : t.isNever with
+  | true =>
+      rw [eq_never_of_isNever ht, show Adm .never v = false from rfl] at h
+      exact absurd h (by simp)
+  | false => rfl
+
+/-- Dropping the bottoms from a list of options does not change who admits. -/
+theorem filter_never_count (ts : List Term) (v : Value) :
+    ((ts.filter (fun z => !z.isNever)).filter (fun t => Adm t v)).length
+      = (ts.filter (fun t => Adm t v)).length := by
+  rw [List.filter_filter]
+  congr 1
+  refine List.filter_congr (fun a _ => ?_)
+  cases hA : Adm a v with
+  | false => simp
+  | true => simp [not_isNever_of_adm hA]
+
+/-- **`selOptV` is a count.** Every option is attempted, so the filter keeps the admitters and
+    the row answers exactly where there is one of them. -/
+theorem selOptV_count (os : List Term) (v : Value) :
+    selOptV (AdmSpecs os) v = decide ((os.filter (fun t => Adm t v)).length = 1) := by
+  rw [selOptV, AdmSpecs_eq, filter_map_AdmSpecs,
+      show (fun t => admitOptV (specOf t, Adm t) v) = (fun t => Adm t v) from rfl]
+  cases hL : os.filter (fun t => Adm t v) with
+  | nil => simp
+  | cons o rest =>
+    cases rest with
+    | nil =>
+      have ho : Adm o v = true := by
+        have : o ∈ os.filter (fun t => Adm t v) := by rw [hL]; simp
+        exact (List.mem_filter.mp this).2
+      simp [ho]
+    | cons _ _ => simp
+
+/-- **The meet scales the admitter count by the partner.** Where the partner admits, the options
+    that admit are exactly the ones whose meet with it admits. Where it does not, none do. -/
+theorem filter_len_meet {y : Term} (v : Value) : ∀ {os zs : List Term},
+    List.Forall₂ (fun t w => ∀ u, Adm w u = (Adm t u && Adm y u)) os zs →
+    (zs.filter (fun w => Adm w v)).length
+      = if Adm y v = true then (os.filter (fun t => Adm t v)).length else 0 := by
+  intro os zs h
+  induction h with
+  | nil => simp
+  | @cons t w ts ws hr _ ih =>
+      have hw : Adm w v = (Adm t v && Adm y v) := hr v
+      cases hy : Adm y v with
+      | false => simp [List.filter_cons, hw, hy] at ih ⊢; simpa [hy] using ih
+      | true => simp [List.filter_cons, hw, hy] at ih ⊢; cases Adm t v <;> simp [ih]
+
+/-- **`ofOptions` admits what the count says, and no certificate is spent.** -/
+theorem Adm_ofOptions_free (ts : List Term) (v : Value) :
+    Adm (Term.ofOptions ts) v = decide ((ts.filter (fun t => Adm t v)).length = 1) := by
+  match ts with
+  | [] => simp [Term.ofOptions, show Adm .never v = false from rfl]
+  | [t] => cases h : Adm t v <;> simp [Term.ofOptions, List.filter_cons, h]
+  | a :: b :: r =>
+      show Adm (.union (a :: b :: r)) v = _
+      exact selOptV_count _ v
+
+/-- **The coproduct row of the meet needs no certificate.** An uncertified union admits nothing,
+    and so does its meet with anything, because the count that refuses one refuses the other. -/
+theorem union_meet_free {os zs : List Term} {y : Term} (v : Value)
+    (hR : List.Forall₂ (fun t w => ∀ u, Adm w u = (Adm t u && Adm y u)) os zs) :
+    Adm (Term.ofOptions (zs.filter (fun z => !z.isNever))) v
+      = (Adm (.union os) v && Adm y v) := by
+  rw [Adm_ofOptions_free, filter_never_count, filter_len_meet v hR,
+      show Adm (.union os) v = selOptV (AdmSpecs os) v from rfl, selOptV_count]
+  cases hy : Adm y v <;> simp
+
 /-- **The count is the join wherever at most one option admits.** The premise is the fact the
     proof spends and not the certificate that supplies it. A caller holding a certificate goes
     through `selOptV_eq_AdmAny`; a caller holding the bound itself comes here. Keeping the
@@ -2212,18 +2292,13 @@ theorem meetSRightL_eq (fam : Term → Option Term) :
 theorem meetSRight_union {fam : Term → Option Term} {os : List Term} {z : Term}
     (h : meetSRight fam (.union os) = some z) :
     ∃ zs, List.Forall₂ (fun t w => meetSRight fam t = some w) os zs ∧
-      unionOk os = true ∧ unionOk (zs.filter (fun w => !w.isNever)) = true ∧
       z = Term.ofOptions (zs.filter (fun w => !w.isNever)) := by
   rw [meetSRight] at h
   obtain ⟨zs, hzs, hg⟩ := Option.bind_eq_some_iff.mp h
   unfold Term.ofOptionsGuarded at hg
-  split at hg
-  next hok =>
-    rw [Bool.and_eq_true] at hok
-    refine ⟨zs, allSome_map_forall₂ _ ?_, hok.1, hok.2, (Option.some.inj hg).symm⟩
-    rw [← meetSRightL_eq]
-    exact hzs
-  next => exact absurd hg (by simp)
+  refine ⟨zs, allSome_map_forall₂ _ ?_, (Option.some.inj hg).symm⟩
+  rw [← meetSRightL_eq]
+  exact hzs
 
 mutual
 /-- Every row that reads the right operand alone is sound wherever the family is. -/
@@ -2245,11 +2320,9 @@ theorem Adm_meetSRight {x : Term} {fam : Term → Option Term} (hf : AdmFam x fa
         simp [Bool.and_assoc, Bool.and_comm, Bool.and_left_comm]
       · exact absurd h (by simp)
   | .union os, _, h, v => by
-      obtain ⟨zs, hF, hco, hcz, rfl⟩ := meetSRight_union h
-      rw [Adm_ofOptions hcz, AdmAny_filter_never,
-        show Adm (.union _) v = selOptV (AdmSpecs _) v from rfl, selOptV_eq_AdmAny hco,
-        Bool.and_comm]
-      exact AdmAny_meet v (Adm_meetSRightL hf os _ hF)
+      obtain ⟨zs, hF, rfl⟩ := meetSRight_union h
+      rw [Bool.and_comm]
+      exact union_meet_free v (Adm_meetSRightL hf os _ hF)
   | .string, _, h, v => hf .string _ trivial h v
   | .number, _, h, v => hf .number _ trivial h v
   | .decimal, _, h, v => hf .decimal _ trivial h v
@@ -3057,18 +3130,13 @@ theorem meetSL_eq (y : Term) : ∀ os, Term.meetSL os y = os.map (fun t => Term.
 theorem meet_union_of {os : List Term} {y z : Term}
     (h : Term.meet (.union os) y = some z) (hy : y ≠ .never) :
     ∃ zs, List.Forall₂ (fun t w => Term.meet t y = some w) os zs ∧
-      unionOk os = true ∧ unionOk (zs.filter (fun w => !w.isNever)) = true ∧
       z = Term.ofOptions (zs.filter (fun w => !w.isNever)) := by
   rw [Term.meet] at h
   · obtain ⟨zs, hzs, hg⟩ := Option.bind_eq_some_iff.mp h
     unfold Term.ofOptionsGuarded at hg
-    split at hg
-    next hok =>
-      rw [Bool.and_eq_true] at hok
-      refine ⟨zs, allSome_map_forall₂ _ ?_, hok.1, hok.2, (Option.some.inj hg).symm⟩
-      rw [← meetSL_eq]
-      exact hzs
-    next => exact absurd hg (by simp)
+    refine ⟨zs, allSome_map_forall₂ _ ?_, (Option.some.inj hg).symm⟩
+    rw [← meetSL_eq]
+    exact hzs
   all_goals (intros; simp_all)
 
 mutual
@@ -3103,10 +3171,8 @@ theorem Adm_meet : ∀ x y z, Term.meet x y = some z → ∀ v, Adm z v = (Adm x
       | never =>
           simp only [Term.meet, Option.some.injEq] at h; subst h; simp [Adm]
       | _ =>
-        obtain ⟨zs, hF, hco, hcz, rfl⟩ := meet_union_of h (by simp)
-        rw [Adm_ofOptions hcz, AdmAny_filter_never,
-          show Adm (.union _) v = selOptV (AdmSpecs _) v from rfl, selOptV_eq_AdmAny hco]
-        exact AdmAny_meet v (Adm_meetL os _ _ hF)
+        obtain ⟨zs, hF, rfl⟩ := meet_union_of h (by simp)
+        exact union_meet_free v (Adm_meetL os _ _ hF)
   | .string, y, z, h, v => Adm_meetSRight Adm_famString y z h v
   | .number, y, z, h, v => Adm_meetSRight Adm_famNumber y z h v
   | .decimal, y, z, h, v => Adm_meetSRight Adm_famDecimal y z h v
@@ -4464,6 +4530,69 @@ theorem AdmA_list_disjoint {p₁ s₁ p₂ s₂ : List Term} {q₁ q₂ : Option
 theorem not_isNever_of_admA {t : Term} {b : Attr} (hh : AdmA t b = true) : t.isNever = false := by
   cases t <;> first | rfl | exact absurd hh (by simp [AdmA])
 
+/-! ### The count, on the read side
+
+The mirror of §"The count, and what the meet does to it" above, one section at a time. -/
+
+/-- Dropping the bottoms from a list of options does not change who reads. -/
+theorem filter_never_countA (ts : List Term) (a : Attr) :
+    ((ts.filter (fun z => !z.isNever)).filter (fun t => AdmA t a)).length
+      = (ts.filter (fun t => AdmA t a)).length := by
+  rw [List.filter_filter]
+  congr 1
+  refine List.filter_congr (fun t _ => ?_)
+  cases hA : AdmA t a with
+  | false => simp
+  | true => simp [not_isNever_of_admA hA]
+
+/-- **`selOptA` is a count.** -/
+theorem selOptA_count (os : List Term) (a : Attr) :
+    selOptA (AdmASpecs os) a = decide ((os.filter (fun t => AdmA t a)).length = 1) := by
+  rw [selOptA, AdmASpecs_eq, filter_map_AdmASpecs,
+      show (fun t => admitOptA (specOf t, AdmA t) a) = (fun t => AdmA t a) from rfl]
+  cases hL : os.filter (fun t => AdmA t a) with
+  | nil => simp
+  | cons o rest =>
+    cases rest with
+    | nil =>
+      have ho : AdmA o a = true := by
+        have : o ∈ os.filter (fun t => AdmA t a) := by rw [hL]; simp
+        exact (List.mem_filter.mp this).2
+      simp [ho]
+    | cons _ _ => simp
+
+/-- **The meet scales the reader count by the partner.** -/
+theorem filter_len_meetA {y : Term} (a : Attr) : ∀ {os zs : List Term},
+    List.Forall₂ (fun t w => ∀ b, AdmA w b = (AdmA t b && AdmA y b)) os zs →
+    (zs.filter (fun w => AdmA w a)).length
+      = if AdmA y a = true then (os.filter (fun t => AdmA t a)).length else 0 := by
+  intro os zs h
+  induction h with
+  | nil => simp
+  | @cons t w ts ws hr _ ih =>
+      have hw : AdmA w a = (AdmA t a && AdmA y a) := hr a
+      cases hy : AdmA y a with
+      | false => simp [List.filter_cons, hw, hy] at ih ⊢; simpa [hy] using ih
+      | true => simp [List.filter_cons, hw, hy] at ih ⊢; cases AdmA t a <;> simp [ih]
+
+/-- **`ofOptions` reads what the count says, and no certificate is spent.** -/
+theorem AdmA_ofOptions_free (ts : List Term) (a : Attr) :
+    AdmA (Term.ofOptions ts) a = decide ((ts.filter (fun t => AdmA t a)).length = 1) := by
+  match ts with
+  | [] => simp [Term.ofOptions, show AdmA .never a = false from rfl]
+  | [t] => cases h : AdmA t a <;> simp [Term.ofOptions, List.filter_cons, h]
+  | a' :: b :: r =>
+      show AdmA (.union (a' :: b :: r)) a = _
+      exact selOptA_count _ a
+
+/-- **The coproduct row of the meet needs no certificate, on the read side either.** -/
+theorem union_meet_freeA {os zs : List Term} {y : Term} (a : Attr)
+    (hR : List.Forall₂ (fun t w => ∀ b, AdmA w b = (AdmA t b && AdmA y b)) os zs) :
+    AdmA (Term.ofOptions (zs.filter (fun z => !z.isNever))) a
+      = (AdmA (.union os) a && AdmA y a) := by
+  rw [AdmA_ofOptions_free, filter_never_countA, filter_len_meetA a hR, AdmA_union, selOptA_count]
+  cases hy : AdmA y a <;> simp
+
 /-- A wire list a tuple aligns leaves no declared position at the bottom, so the normalised
     tuple is the tuple. -/
 theorem alignPA_not_never : ∀ {vs : List Term} {tl : Option Term} {as : List Attr},
@@ -4979,12 +5108,11 @@ theorem admA_meetSRight {x : Term} {fam : Term → Option Term} (hf : AdmAFam x 
         exact refine_row_r ih1 ih2
       · exact absurd h (by simp)
   | .union os, _, h => by
-      obtain ⟨zs, hF, hco, hcz, rfl⟩ := meetSRight_union h
+      obtain ⟨zs, hF, rfl⟩ := meetSRight_union h
       have hB := admA_meetSRightL hf os zs hF
       refine ⟨fun a => ?_, fun a ha hb => ?_⟩
-      · rw [AdmA_ofOptions hcz, AdmAAny_filter_never,
-          AdmA_union _ a, selOptA_eq_AdmAAny hco, Bool.and_comm]
-        exact AdmAAny_meet a (List.Forall₂.imp (fun _ _ hh => hh.1) hB)
+      · rw [Bool.and_comm]
+        exact union_meet_freeA a (List.Forall₂.imp (fun _ _ hh => hh.1) hB)
       · obtain ⟨t, hft, hta⟩ :=
           filter_eq_singleton_of_selOptA (show selOptA (AdmASpecs _) a = true from hb)
         obtain ⟨w, hwmem, hwA, hwP⟩ := forall₂_mem_left hB (mem_of_filter_eq_singleton hft).1
@@ -4993,7 +5121,10 @@ theorem admA_meetSRight {x : Term} {fam : Term → Option Term} (hf : AdmAFam x 
           List.mem_filter.mpr ⟨hwmem, by rw [not_isNever_of_admA hwa]; rfl⟩
         obtain ⟨u, hfu, _⟩ := filter_eq_singleton_of_selOptA
           (show selOptA (AdmASpecs (zs.filter (fun z => !z.isNever))) a = true by
-            rw [selOptA_eq_AdmAAny hcz]; exact AdmAAny_of_mem hsurv hwa)
+            rw [selOptA_count, filter_never_countA,
+              filter_len_meetA a (List.Forall₂.imp (fun _ _ hh => hh.1) hB), if_pos ha]
+            rw [AdmA_union, selOptA_count] at hb
+            exact hb)
         have hwu : w = u := by
           have hm : w ∈ (zs.filter (fun z => !z.isNever)).filter
               (fun v => admitOptA (specOf v, AdmA v) a) :=
@@ -5711,12 +5842,10 @@ theorem AdmA_meet_both : ∀ x y z, Term.meet x y = some z → AdmAAt x y z
           simp only [Term.meet, Option.some.injEq] at h; subst h
           exact ⟨fun a => by simp [AdmA], fun a _ hb => absurd hb (by simp [AdmA])⟩
       | _ =>
-        obtain ⟨zs, hF, hco, hcz, rfl⟩ := meet_union_of h (by simp)
+        obtain ⟨zs, hF, rfl⟩ := meet_union_of h (by simp)
         have hB := admA_meetL os _ zs hF
         refine ⟨fun a => ?_, fun a ha hb => ?_⟩
-        · rw [AdmA_ofOptions hcz, AdmAAny_filter_never,
-            AdmA_union _ a, selOptA_eq_AdmAAny hco]
-          exact AdmAAny_meet a (List.Forall₂.imp (fun _ _ hh => hh.1) hB)
+        · exact union_meet_freeA a (List.Forall₂.imp (fun _ _ hh => hh.1) hB)
         · obtain ⟨t, hft, hta⟩ :=
             filter_eq_singleton_of_selOptA (show selOptA (AdmASpecs _) a = true from ha)
           obtain ⟨w, hwmem, hwA, hwP⟩ := forall₂_mem_left hB (mem_of_filter_eq_singleton hft).1
@@ -5725,7 +5854,10 @@ theorem AdmA_meet_both : ∀ x y z, Term.meet x y = some z → AdmAAt x y z
             List.mem_filter.mpr ⟨hwmem, by rw [not_isNever_of_admA hwa]; rfl⟩
           obtain ⟨u, hfu, _⟩ := filter_eq_singleton_of_selOptA
             (show selOptA (AdmASpecs (zs.filter (fun z => !z.isNever))) a = true by
-              rw [selOptA_eq_AdmAAny hcz]; exact AdmAAny_of_mem hsurv hwa)
+              rw [selOptA_count, filter_never_countA,
+                filter_len_meetA a (List.Forall₂.imp (fun _ _ hh => hh.1) hB), if_pos hb]
+              rw [AdmA_union, selOptA_count] at ha
+              exact ha)
           have hwu : w = u := by
             have hm : w ∈ (zs.filter (fun z => !z.isNever)).filter
                 (fun v => admitOptA (specOf v, AdmA v) a) :=
@@ -6157,12 +6289,17 @@ theorem typed_meetSRight {x : Term} {fam : Term → Option Term} (hf : TypedFam 
         exact typed_refineOf (typed_meetSRight hf y w hw hx (typed_refine_inv hy))
       · exact absurd h (by simp)
   | .union os, _, h, hx, hy => by
-      obtain ⟨zs, hF, _, hcz, rfl⟩ := meetSRight_union h
-      refine typed_ofOptions hcz ?_
-      intro t ht
-      obtain ⟨o, ho, hom⟩ :=
-        forall₂_mem_right (typed_meetSRightL hf os zs hF) (List.mem_of_mem_filter ht)
-      exact hom hx (typed_union_inv hy o ho)
+      obtain ⟨zs, hF, rfl⟩ := meetSRight_union h
+      -- OPEN. `typed_ofOptions` takes `unionOk _ = true` to reach (D), and the restated
+      -- `meetSRight_union` no longer produces it. This is NOT the same gap as the rows above,
+      -- and no counting lemma closes it: (D) is stated on HELD SETS, the meet is stated on
+      -- admission, and `T = dom(e)` is false — see `TIsDomE` and
+      -- `not_TIsDomE_unionLiteralString` in `HeldSet.lean`, and the note above
+      -- `typed_occVL` in `Orthogonality.lean`, which says outright that disjoint admission
+      -- does not give disjoint held sets. Closing this needs a held-set certificate, not a
+      -- sharper count. `sorryAx` is unsanctioned, so `#assert_axioms_all` refuses any green
+      -- tree that still contains this.
+      sorry
   | .string, _, h, hx, hy => hf .string _ trivial h hx hy
   | .number, _, h, hx, hy => hf .number _ trivial h hx hy
   | .decimal, _, h, hx, hy => hf .decimal _ trivial h hx hy
@@ -6424,12 +6561,10 @@ theorem typed_meet : ∀ x y z, Term.meet x y = some z →
       | never =>
           simp only [Term.meet, Option.some.injEq] at h; subst h; exact ⟨_, _, Typed.never⟩
       | _ =>
-        obtain ⟨zs, hF, _, hcz, rfl⟩ := meet_union_of h (by simp)
-        refine typed_ofOptions hcz ?_
-        intro t ht
-        obtain ⟨o, ho, hom⟩ :=
-          forall₂_mem_right (typed_meetL os _ zs hF) (List.mem_of_mem_filter ht)
-        exact hom (typed_union_inv hx o ho) hy
+        obtain ⟨zs, hF, rfl⟩ := meet_union_of h (by simp)
+        -- OPEN, and it is the same gap as `typed_meetSRight`'s union row above: (D) is a
+        -- fact about held sets and the meet is a fact about admission. Read the note there.
+        sorry
   | .string, y, z, h, hx, hy => typed_meetSRight typed_famString y z h hx hy
   | .number, y, z, h, hx, hy => typed_meetSRight typed_famNumber y z h hx hy
   | .decimal, y, z, h, hx, hy => typed_meetSRight typed_famDecimal y z h hx hy
