@@ -5859,6 +5859,24 @@ theorem Adm_never (v : Value) : Adm .never v = false := rfl
 /-- …and reads no attribute. -/
 theorem AdmA_never (a : Attr) : AdmA .never a = false := rfl
 
+/-- **The meet is the separation certificate, and this is its soundness half.** Where two terms
+    meet at the bottom, no value is admitted by both. `Adm_meet` makes the meet's row the
+    conjunction of the two rows, and the bottom admits nothing, so the conjunction is false at
+    every value. `Adm_meet` and `Adm_never` each take no hypothesis, so this takes none beyond
+    the meet and the test on it.
+
+    The premise is `isNever` rather than a literal `.never` because `isNever` is what a
+    certificate computes: it is the exact test over the normal form, and the literal case is
+    this theorem with `rfl`. -/
+theorem meet_separates {x y z : Term} (h : Term.meet x y = some z) (hz : z.isNever = true)
+    (v : Value) : (Adm x v && Adm y v) = false := by
+  rw [← Adm_meet x y z h v, eq_never_of_isNever hz]; exact Adm_never v
+
+/-- …and the attribute twin, over `AdmA_meet` and `AdmA_never`, equally unpremised. -/
+theorem meet_separates_A {x y z : Term} (h : Term.meet x y = some z) (hz : z.isNever = true)
+    (a : Attr) : (AdmA x a && AdmA y a) = false := by
+  rw [← AdmA_meet h a, eq_never_of_isNever hz]; exact AdmA_never a
+
 /-- `orthAll` from the pairwise form, which is what a sublist preserves. -/
 theorem orthAll_of_pairwise : ∀ {ts : List Term},
     List.Pairwise (fun x y => Orth x y = true) ts → orthAll ts = true
