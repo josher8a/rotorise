@@ -81,6 +81,17 @@ A term denotes a codec: a partial write from a value to an attribute, and a part
 A union holds options, and the calculus decides at declaration time whether the options can be
 told apart, because selection must find at most one option claiming a given thing.
 
+**The write and the read are not inverse, and that is the reason this question is two questions.**
+A read after a write returns the value that was written. A write after a read returns an
+attribute that only *agrees* with the one that was read. So the read accepts a whole class of
+attributes where the write produces one, and the set of attributes a term accepts is strictly
+larger than the set it produces.
+
+**A term therefore has two projections, and neither determines the other**: the values it writes,
+and the attributes it accepts. A term is not a partial bijection between them, and any reasoning
+that treats it as one collapses two independent facts into a single one. The calculus carries
+both projections for this reason and not for symmetry.
+
 "Told apart" is two questions.
 
     no value is written by two options
@@ -190,6 +201,45 @@ Deciding an object by attempt reads every field through that field's codec. A di
 and discriminants is a lookup. That is a genuine trade at run time, it is measurable rather than
 arguable, and this ruling accepts it. A host that needs the cheap dispatch can keep one, as an
 optimisation that must agree with admission, never as the definition of it.
+
+### The constructors are universal constructions, and the laws arrive with them
+
+A constructor of the term language is one of five things, and which one it is fixes the laws the
+meet owes at that position before anybody writes the row.
+
+| construction | in the language | what the meet owes |
+| --- | --- | --- |
+| a base | a ground carrier, an opaque projection | nothing beyond its own set |
+| a **product** | an object, a tuple, an array | meet componentwise; the bottom propagates at a required position and not at a variadic one |
+| a **coproduct** | a union, a name's absent-or-present | a unit law; disjoint injections; the meet distributes over it |
+| a **subobject** | a restriction | the predicates **meet**: idempotent and commutative |
+| a **composition** | an adapter | associative, unital, not commutative |
+
+Compare a term with itself and the meet returns a **normal form** rather than the term as
+written: a union of one option reduces to that option, a transparent wrapper disappears, and a
+restriction is carried as written. So the meet is not tested by syntactic equality, and a test
+that uses it reports a normalization as a broken law.
+
+**The meet obeys these laws at every construction above.** The gap is not in the meet.
+
+### Inhabitance is a decision, and testing for the bottom is its shadow
+
+The certificate asks whether the intersection is inhabited. A term that denotes the empty set is
+not always **spelled** as the bottom: intersecting two restrictions over one carrier pinned to
+disjoint sets yields the carrier under both restrictions, which is empty and is spelled as a
+restriction. A certificate that compares the meet against the bottom therefore misses it.
+
+**So the missing object is a decision procedure for inhabitance, not a repair at one
+constructor.** The bottom is one syntactic witness of an empty term. The bottom rising through a
+required position of a product and stopping at a variadic one is a second, already written into
+the meet by hand. Disjoint restrictions over one carrier are a third, and nothing decides it.
+Each further witness written by hand is another truncation, for the same reason a test per shape
+was one.
+
+Decided structurally, inhabitance costs one function and every construction contributes one case,
+which is where the work belongs. A constructor added later arrives with its case known in
+advance. A construction nobody has tested still owes its laws: the meet's associativity, its
+distribution over the coproduct, and the adapter's unit are not established here.
 
 ### The lattice is complete and the term language is not
 
@@ -377,8 +427,10 @@ finds two claimants. A selector that tells apart what the certificate cannot is 
 because the union is refused where the codec would have worked. Two functions kept in agreement
 by hand will drift, and nothing reports the drift. So they are one function at two arguments.
 
-**D9. A certificate separates on the value side and on the attribute side.** Separation is two
-questions, and a pair separated on one alone is not separated. A recursion may discharge both at
+**D9. A certificate separates on the value side and on the attribute side.** The two projections
+of a term are independent, because the read accepts a class of attributes where the write
+produces one. A pair separated on one projection alone is not separated, and no property of the
+codec recovers the other projection from it. A recursion may discharge both at
 once where the codec makes them one fact, as a literal does, but it may never discharge one and
 stay silent about the other.
 
@@ -403,7 +455,9 @@ carrier's. Those are different facts and both are wanted, so the two orders are 
 
 Those are different algebras, and the difference is the whole reason the two stay apart. The
 restrictions around one carrier form a meet-semilattice, so a run of them has one normal form
-and the order inside the run carries no information. The adapters form a monoid, so a run of
+and the order inside the run carries no information. An implementation may carry a run as written
+rather than reduce it, which costs nothing while the reader of the term decides inhabitance
+rather than reading the spelling. The adapters form a monoid, so a run of
 them composes, and the order inside the run carries everything.
 
 Restrictions compose, because an adapter needs a second restriction naming the values it owns.
