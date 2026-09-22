@@ -25,6 +25,7 @@ import type {
     SetBase,
     SetSlot,
 } from './codec'
+import { sameLiteral } from './value'
 
 /* ── the term ─────────────────────────────────────────────────────────────────────────── */
 
@@ -930,21 +931,6 @@ export const identifies = (t: Term): boolean => {
             return decidesOwn(t.q) || identifies(t.inner)
         case 'legacy':
             return identifies(t.inner)
-        /**
-         * **A declared adapter over something that identifies.** The reason `held` sits outside
-         * this rule is stated above: `f` runs before the subterm, so the occupancy is unknown and
-         * the value could land in any constructor. {@link Held.writes} is that occupancy, declared.
-         * Where it is present the conversion is one this library wrote and the slots it lands in
-         * are named, so the pair below the adapter is the pair that decides, and the stored side
-         * matches through {@link storedAlternatives} exactly as a tag table does.
-         *
-         * A caller's adapter declares no `writes`, which is the honest answer there and leaves it
-         * on the `default` row. So this certifies `union([number(0, 1), decimal('2', '3')])`, whose
-         * two literal sets are disjoint under one carrier, and certifies nothing about an `f` the
-         * library cannot read.
-         */
-        case 'held':
-            return t.writes !== undefined && identifies(t.inner)
         default:
             return false
     }
@@ -1132,6 +1118,41 @@ const objectMembers = (
  * the loosened form ships `union([decimal, number])`, which writes `'1.5'` to an `N` and cannot read
  * back what it wrote, because `decimal` takes a string and `number` a number while both store `N`.
  */
+/**
+ * **Whether two pinned options hold disjoint carrier values** — the equivalence class the two sides
+ * collapse onto, as a check.
+ *
+ * `identifies` is unary, and a unary predicate cannot state this: "each option knows its own
+ * values" does not say the two sets of values are *different*. For a pair under one carrier that is
+ * the whole question. `number(0, 1)` and `decimal('2', '3')` become `dynamoNumber(0, 1)` and
+ * `dynamoNumber(2, 3)`, which are disjoint and so resolvable; `number(0.1)` and `decimal('0.1')`
+ * become the same `dynamoNumber(0.1)`, and no stored attribute can ever choose between them.
+ *
+ * {@link clauseForm} is the descent, so an adapter that declares no `writes` pins nothing here and
+ * is never certified.
+ */
+const carrierDisjoint = (x: Term, y: Term): boolean => {
+    const xs = clauseForm(x)
+    const ys = clauseForm(y)
+    if (!xs || !ys) return false
+    const theirs = ys.alts.ls as readonly LiteralValue[]
+    return (xs.alts.ls as readonly LiteralValue[]).every(
+        (one) => !theirs.some((other) => sameLiteral(one, other)),
+    )
+}
+
+/**
+ * **Whether one conversion runs on both sides**, by reference.
+ *
+ * The write side needs it and the read side does not. A stored attribute lands in at most one of
+ * two disjoint alternative sets whatever `g` does, so the read side is decided by the sets alone.
+ * A caller's value reaches those sets through `f`, so two *different* `f`s could carry one value
+ * into both sets and disjointness would certify nothing. Every `number(…)` shares one `asFloat` and
+ * every `decimal(…)` one `storedOnly`, so the identity is the reference.
+ */
+const sameConversion = (x: Term, y: Term): boolean =>
+    x.kind === 'held' && y.kind === 'held' && x.f === y.f
+
 export const separable = (x: Term, y: Term): boolean => {
     // **Containment before the object exemption.** The three {@link restricts} rows name a literal,
     // a set of a literal and `never`, and an object option is none of them — so the only pair
@@ -1146,7 +1167,23 @@ export const separable = (x: Term, y: Term): boolean => {
     if (identifies(x) || identifies(y)) return true
     const writable = meet(occV(x), occV(y))
     const readable = meet(occA(x), occA(y))
-    return writable === undefined && readable === undefined
+    if (writable === undefined && readable === undefined) return true
+    /**
+     * **Two options pinned to disjoint values under one carrier.** `decimal` is an adapter over
+     * `number` since `8a2eed9`, so a numeric literal and a decimal literal share a stored
+     * attribute and `occA` meets for every such pair. The occupancies are the right answer about
+     * *where* the two write and read, and the wrong answer about *what*: the values decide, and
+     * {@link carrierDisjoint} is what the model's `Orth` asks of them.
+     *
+     * The two sides part company. A stored attribute lies in at most one of two disjoint sets, so
+     * disjointness alone settles the read side. The write side reaches those sets through `f`, so
+     * it settles only where one `f` runs for both.
+     */
+    const disjoint = carrierDisjoint(x, y)
+    return (
+        (writable === undefined || (sameConversion(x, y) && disjoint)) &&
+        (readable === undefined || disjoint)
+    )
 }
 
 /**
