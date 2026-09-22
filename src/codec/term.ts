@@ -1077,6 +1077,60 @@ const objectMembers = (
 }
 
 /**
+ * **Whether two pinned options hold disjoint carrier values** — the equivalence class the two sides
+ * collapse onto, as a check.
+ *
+ * `identifies` is unary, and a unary predicate cannot state this: "each option knows its own
+ * values" does not say the two sets of values are *different*. For a pair under one carrier that is
+ * the whole question. `number(0, 1)` and `decimal('2', '3')` become `dynamoNumber(0, 1)` and
+ * `dynamoNumber(2, 3)`, which are disjoint and so resolvable; `number(0.1)` and `decimal('0.1')`
+ * become the same `dynamoNumber(0.1)`, and no stored attribute can ever choose between them.
+ *
+ * {@link clauseForm} is the descent, so an adapter that declares no `writes` pins nothing here and
+ * is never certified.
+ */
+const carrierDisjoint = (x: Term, y: Term): boolean =>
+    sharedLiterals(x, y)?.length === 0
+
+/**
+ * **The values two pinned options both carry**, or `undefined` where one of them pins none.
+ *
+ * `union` asks again on the path it is about to throw on, so a refusal can name the values that
+ * caused it rather than the slot they happen to share. That is the same walk {@link meet} is asked
+ * to repeat for the same reason.
+ */
+export const sharedLiterals = (
+    x: Term,
+    y: Term,
+): readonly LiteralValue[] | undefined => {
+    const xs = clauseForm(x)
+    const ys = clauseForm(y)
+    if (!xs || !ys) return undefined
+    const theirs = ys.alts.ls as readonly LiteralValue[]
+    return (xs.alts.ls as readonly LiteralValue[]).filter((one) =>
+        theirs.some((other) => sameLiteral(one, other)),
+    )
+}
+
+/**
+ * **Whether one conversion runs on both sides**, by reference.
+ *
+ * The write side needs it and the read side does not. A stored attribute lands in at most one of
+ * two disjoint alternative sets whatever `g` does, so the read side is decided by the sets alone.
+ * A caller's value reaches those sets through `f`, so two *different* `f`s could carry one value
+ * into both sets and disjointness would certify nothing. Every `number(…)` shares one `asFloat` and
+ * every `decimal(…)` one `storedOnly`, so the identity is the reference.
+ *
+ * **Two bare terms share the identity**, which is one conversion by the same argument: `string('a')`
+ * and `string('b')` carry the caller's value to itself, so disjoint alternatives are disjoint
+ * admissions. A bare term beside an adapter does not, because the identity and `f` are two.
+ */
+const sameConversion = (x: Term, y: Term): boolean =>
+    x.kind === 'held' || y.kind === 'held'
+        ? x.kind === 'held' && y.kind === 'held' && x.f === y.f
+        : true
+
+/**
  * **Whether a union may hold these two options**, asked at the declaration.
  *
  * **This is not a port of `Orth`, and the difference is the direction.** `Orth` is a *certificate*:
@@ -1136,60 +1190,6 @@ const objectMembers = (
  * the loosened form ships `union([decimal, number])`, which writes `'1.5'` to an `N` and cannot read
  * back what it wrote, because `decimal` takes a string and `number` a number while both store `N`.
  */
-/**
- * **Whether two pinned options hold disjoint carrier values** — the equivalence class the two sides
- * collapse onto, as a check.
- *
- * `identifies` is unary, and a unary predicate cannot state this: "each option knows its own
- * values" does not say the two sets of values are *different*. For a pair under one carrier that is
- * the whole question. `number(0, 1)` and `decimal('2', '3')` become `dynamoNumber(0, 1)` and
- * `dynamoNumber(2, 3)`, which are disjoint and so resolvable; `number(0.1)` and `decimal('0.1')`
- * become the same `dynamoNumber(0.1)`, and no stored attribute can ever choose between them.
- *
- * {@link clauseForm} is the descent, so an adapter that declares no `writes` pins nothing here and
- * is never certified.
- */
-const carrierDisjoint = (x: Term, y: Term): boolean =>
-    sharedLiterals(x, y)?.length === 0
-
-/**
- * **The values two pinned options both carry**, or `undefined` where one of them pins none.
- *
- * `union` asks again on the path it is about to throw on, so a refusal can name the values that
- * caused it rather than the slot they happen to share. That is the same walk {@link meet} is asked
- * to repeat for the same reason.
- */
-export const sharedLiterals = (
-    x: Term,
-    y: Term,
-): readonly LiteralValue[] | undefined => {
-    const xs = clauseForm(x)
-    const ys = clauseForm(y)
-    if (!xs || !ys) return undefined
-    const theirs = ys.alts.ls as readonly LiteralValue[]
-    return (xs.alts.ls as readonly LiteralValue[]).filter((one) =>
-        theirs.some((other) => sameLiteral(one, other)),
-    )
-}
-
-/**
- * **Whether one conversion runs on both sides**, by reference.
- *
- * The write side needs it and the read side does not. A stored attribute lands in at most one of
- * two disjoint alternative sets whatever `g` does, so the read side is decided by the sets alone.
- * A caller's value reaches those sets through `f`, so two *different* `f`s could carry one value
- * into both sets and disjointness would certify nothing. Every `number(…)` shares one `asFloat` and
- * every `decimal(…)` one `storedOnly`, so the identity is the reference.
- *
- * **Two bare terms share the identity**, which is one conversion by the same argument: `string('a')`
- * and `string('b')` carry the caller's value to itself, so disjoint alternatives are disjoint
- * admissions. A bare term beside an adapter does not, because the identity and `f` are two.
- */
-const sameConversion = (x: Term, y: Term): boolean =>
-    x.kind === 'held' || y.kind === 'held'
-        ? x.kind === 'held' && y.kind === 'held' && x.f === y.f
-        : true
-
 export const separable = (x: Term, y: Term): boolean => {
     // **Containment before the object exemption.** The three {@link restricts} rows name a literal,
     // a set of a literal and `never`, and an object option is none of them — so the only pair

@@ -64,7 +64,7 @@ describe('the predicates this library ships', () => {
     it('emits `isStored` for `isStoredNumeral`', () => {
         const stored = refine(decimal, narrowing(isStoredNumeral))
         expect(leanTermOf(erase(stored))).toBe(
-            'Term.refine ((Term.held Term.number numeralOfStoredText textOfNumeral)) (Pred.closure isStored)',
+            'Term.refine ((Term.held (Term.number) numeralOfStoredText textOfNumeral)) (Pred.closure isStored)',
         )
     })
 
@@ -108,7 +108,7 @@ describe('the predicates this library ships', () => {
             value: '1.5',
         })
         expect(emitted).toContain(
-            'Term.refine ((Term.held Term.number numeralOfStoredText textOfNumeral)) (Pred.closure isStored)',
+            'Term.refine ((Term.held (Term.number) numeralOfStoredText textOfNumeral)) (Pred.closure isStored)',
         )
         expect(emitted).toContain('Attr.n (WFNumeral.of "1.5")')
     })
