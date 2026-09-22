@@ -213,6 +213,19 @@ EXPECTED = {
 # `testing.ts`'s `firstDifference`. Asking "does this name appear in `src/`" passes it and
 # reproduces the hole; asking for a declaration at the start of a line does not.
 HOST = {
+    "leanValueOf": "`src/codec/lean.ts`'s value emitter, which writes a `Value` for a host value. "
+                   "The model has no emitter, so the name is the host's alone",
+    "DynamoNumber": "`src/`'s carrier for `N`, which is what the model calls `WFNumeral`. Two "
+                    "names for one carrier, on the two sides of the bridge",
+    "dynamoNumber": "`src/`'s codec at the native numeric base, whose term is `Term.number`. The "
+                    "codec and the term are named on their own sides",
+    "sampleVectors": "`src/codec/lean/lean.spec.ts`'s differential corpus. The vectors it "
+                     "generates are elaborated here; the list itself is the host's",
+    "structuralMeet": "`src/codec/term.ts`'s object-body meet, which decides whether two object "
+                      "options can be told apart. `Term.meet` is the model's and is not the same "
+                      "function",
+    "literalsOf": "`src/codec/term.ts`'s reader for the literals an object pins, at the caller's "
+                  "level. The model reads `altsOfField`, which is not the same question",
     "custom": "`src/`'s escape-hatch codec. The model deleted `Term.custom`: its two call sites "
               "were both tests, it never crossed the bridge, and `occV = occA = occTop` made it "
               "invisible to every analysis. The host still publishes it, so the two sides "
