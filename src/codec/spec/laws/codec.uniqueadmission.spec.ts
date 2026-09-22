@@ -24,7 +24,6 @@ import {
     decimal,
     discriminatedUnion,
     held,
-    lazy,
     nullable,
     number,
     object,
@@ -132,16 +131,16 @@ describe('the harness, against planted violations', () => {
      * point. Kept for the opposite reason to the diagnostics elsewhere in this batch.
      */
     it('reports a value two options admit', () => {
-        // behind a `lazy`, whose read occupancy is `undefined` because answering forces the
-        // thunk. That is what stops the declaration guard refusing the pair before the harness
-        // sees it, and the harness is what this test is about
-        const loose = lazy(() =>
-            held(string, {
-                encode: (v: number) => String(v),
-                decode: (a) => Number(a),
-                arbitrary: () => 1,
-            }),
-        )
+        // an adapter over `number`, reading back as one. The guard's read side sees `N` against
+        // `S`, and its write side sees the top an adapter declares, so neither half refuses the
+        // pair. Admission is by attempt, and this conversion accepts the string `'1'` as well as
+        // the number, so both options admit one value — which is what the harness finds and what
+        // the guard is not complete enough to see. `Orth` is sufficient, not necessary
+        const loose = held(number, {
+            encode: (v: number) => Number(v),
+            decode: (a) => a,
+            arbitrary: () => 1,
+        })
         expect(() =>
             checkUniqueAdmission(union([string, loose]), { seed }),
         ).toThrow(/\(U\) fails on the write side/)

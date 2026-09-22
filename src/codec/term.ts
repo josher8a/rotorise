@@ -260,10 +260,21 @@ export type Term =
      * has no fixpoint semantics in any system.
      *
      * This library supports a recursive entity through a thunk, and `codec.recursive.spec.ts`
-     * declares one. So the thunk stays, the emitter refuses a `lazy`, and {@link occV} and
-     * {@link occA} answer `undefined` here rather than the subterm's — because reading through
-     * forces a binding that may not exist at declaration time, and a declaration-time guard that
-     * forces is a guard that throws on the entity it exists to allow.
+     * declares one, so the thunk stays. **Everything else here reads through it.**
+     * {@link occV}, {@link occA} and {@link ownsNullOf} answer what the term underneath answers,
+     * `meetTerms` reads through on either side, and the emitter forces the chain to a depth and
+     * gives up only on a genuinely recursive one. `Meet.lean` heads the matching section
+     * "`lazy` is transparent, and it constrains nothing". Only {@link member} is lost, because
+     * the model's `μSyn (.lazy t)` is `none`.
+     *
+     * **The two projections answered `undefined` until it was measured, on the ground that
+     * forcing would throw on the entity the thunk exists to allow. Both halves were wrong.**
+     * Forcing does not throw: `object()` already forces at the declaration and the recursive
+     * entity still round-trips. And `undefined` was the unsound direction rather than the safe
+     * one, because the declaration guard refuses a union when two occupancies *meet*, so an
+     * unknown occupancy makes it decline to refuse. `union([lazy(string), string])` was accepted
+     * and `checkUniqueAdmission` then found two options admitting one value. `lazy` was the only
+     * term answering unknown on both projections, which is why it was the only hole.
      */
     | { readonly kind: 'lazy'; readonly get: () => Term }
     /** §3 `(opaque)`: `lossy = false` is the `refuse` policy — the absence of the `number` option. */
@@ -495,8 +506,11 @@ export const occV = (t: Term): readonly SetSlot[] | undefined => {
         // an adapter answers with what it declared, and the top where it declared nothing
         case 'held':
             return t.writes
+        // a thunk carries a term, so it answers what that term answers. `Meet.lean` heads the
+        // section `lazy` is transparent, and it constrains nothing: the model reads through on
+        // both projections and only the member is lost
         case 'lazy':
-            return undefined
+            return occV(t.get())
         case 'refine':
         case 'legacy':
             return occV(t.inner)
@@ -570,8 +584,9 @@ export const ownsNullOf = (t: Term): boolean | undefined => {
         }
         case 'held':
         case 'legacy':
-        case 'lazy':
             return undefined
+        case 'lazy':
+            return ownsNullOf(t.get())
     }
 }
 
@@ -611,8 +626,10 @@ export const occA = (t: Term): readonly AttributeName[] | undefined => {
         case 'object':
             return ['M']
         case 'legacy':
-        case 'lazy':
             return undefined
+        // transparent, as on the write side
+        case 'lazy':
+            return occA(t.get())
         case 'refine':
         case 'held':
             return occA(t.inner)

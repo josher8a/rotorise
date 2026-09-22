@@ -86,25 +86,29 @@ describe('the member a term stores', () => {
 
 describe('the occupancies a declaration is separated by', () => {
     /**
-     * The one row where this language is wider than the model's, and the reason is a
-     * declaration-time one: a host `lazy` holds a closure over a binding that may not exist yet,
-     * so reading through it would force a reference to a constant still being defined. `⊤` is the
-     * sound direction — an over-approximation costs a certificate and never buys a wrong one — and
-     * the alternative throws on the recursive entity the thunk exists to allow.
+     * **A thunk carries a term, so both projections read through it.** `Meet.lean` heads the
+     * section "`lazy` is transparent, and it constrains nothing", and the model reads through on
+     * both: `occV (.lazy t) = occV t` and `occA (.lazy t) = occA t`. Only the member is lost,
+     * because `μSyn (.lazy t)` is `none`.
+     *
+     * **This answered `⊤` on both sides until it was measured, and `⊤` was the unsound
+     * direction rather than the safe one.** The claim was that an over-approximation costs a
+     * certificate and never buys a wrong one. It is backwards here: the guard refuses a union
+     * when two occupancies *meet*, so an unknown occupancy makes it decline to refuse.
+     * `union([lazy(string), string])` was accepted at the declaration, and `checkUniqueAdmission`
+     * then reported two options admitting one value — the migration from declaration time to
+     * write time that the calculus exists to stop. `lazy` was the only term answering unknown on
+     * both projections, which is why it was the only hole.
+     *
+     * The other half of the old reason was that reading through throws on the recursive entity
+     * the thunk exists to allow. It does not: forcing at the declaration is what `object()`
+     * already does, and `codec.recursive.spec.ts` declares such an entity and still passes.
      */
-    it('a lazy is not forced to answer, so a recursive entity can still be declared', () => {
-        let forced = 0
-        const recursive: Term = {
-            kind: 'lazy',
-            get: () => {
-                forced++
-                return str
-            },
-        }
-        expect(occV(recursive)).toBe(undefined)
-        expect(occA(recursive)).toBe(undefined)
+    it('a lazy answers what its term answers, and the member is what it loses', () => {
+        const recursive: Term = { kind: 'lazy', get: () => str }
+        expect(occV(recursive)).toEqual(occV(str))
+        expect(occA(recursive)).toEqual(occA(str))
         expect(member(recursive)).toBe(undefined)
-        expect(forced).toBe(0)
     })
 
     /**

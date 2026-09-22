@@ -1499,7 +1499,7 @@ describe("the declaration guard, against the model's classifier", () => {
      */
     it('refuses only pairs the classifier also declines', () => {
         const separations = separationPairs()
-        expect(separations.length).toBe(112)
+        expect(separations.length).toBe(118)
         // each one emits, which is where `leanSeparation` re-checks that `src/` really refuses,
         // and it carries one of the two warrants: `Orth` declines, or — for a `never` pair, where
         // the model permits what `src/` lints away — the permits-form states what the model says
