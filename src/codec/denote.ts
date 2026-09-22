@@ -47,6 +47,7 @@ import type { Body, Field, Literal, NameLiteral, Predicate, Term } from './term'
 import {
     alternativesTerm,
     alwaysWritten,
+    literalForm,
     literalsOf,
     occV,
     storedAlternatives,
@@ -1768,9 +1769,24 @@ export const readsBack = (
 const namedKind = (t: Term): string =>
     t.kind === 'opaq'
         ? 'opaque'
-        : t.kind === 'held' && t.writes !== undefined
-          ? t.writes.join(' | ')
-          : t.kind
+        : t.kind !== 'held' || t.writes === undefined
+          ? t.kind
+          : (heldBase(t.inner) ?? undefined) !== undefined
+            ? literalForm(heldBase(t.inner) as LiteralBase, t.writes)
+            : t.writes.join(' | ')
+
+/** The ground base a declared adapter carries, where it carries one. @see {@link namedKind} */
+const heldBase = (t: Term): LiteralBase | undefined =>
+    t.kind === 'literal'
+        ? t.base
+        : t.kind === 'string' ||
+            t.kind === 'number' ||
+            t.kind === 'boolean' ||
+            t.kind === 'binary'
+          ? t.kind
+          : t.kind === 'refine' || t.kind === 'legacy'
+            ? heldBase(t.inner)
+            : undefined
 
 /**
  * **Content admission on the write side**: every name present whose field is a literal carries one
