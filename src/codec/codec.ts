@@ -479,8 +479,8 @@ export type Refinement = {
  * Three smaller capabilities are also only here:
  *
  * 1. **Its own failure.** Both directions return a {@link Result}, so the error says what was wrong
- *    with the value. An adapter's halves are total, so a failure there arrives wrapped — `refine` the
- *    inner codec instead when the message matters.
+ *    with the value. {@link held}'s halves return one too, so this is no longer a reason to reach
+ *    for `custom`.
  * 2. **Its own generation.** `arbitrary` *and* `shrink`. `held` derives both from the codec
  *    underneath, and `refine` offers only `arbitrary`.
  * 3. **Throws escape.** Unlike `held`, an exception is not caught here: writing a codec is owning it,
@@ -506,6 +506,14 @@ export type Refinement = {
  * a round trip cannot reach, and where three of this library's shipped defects lived — and
  * `checkMembersStable` is (W) and (MP). All three are in `./testing`, and a `custom` without them
  * is a codec whose laws nobody has asserted.
+ *
+ * @deprecated Use {@link held} over the codec the values really sit on.
+ *
+ * **The model has no constructor for this any more.** `Term.custom` carries two closures, so it
+ * prints as no term, elaborates to no vector, and everything built through it is outside what the
+ * kernel checks — `src/codec/lean.ts` refuses it by name. `held`'s halves return a {@link Result}
+ * now, which was the one thing `custom` offered that it did not, so a `custom` is a `held` over a
+ * ground codec in every case this library has met.
  */
 export const custom = <T, A extends AttributeValue = AttributeValue>(raw: {
     readonly encode: (value: T) => Result<A>
@@ -1554,22 +1562,30 @@ const withMissing = <const C extends AnyCodec>(
 export const held = <T, const C extends AnyCodec>(
     inner: C,
     adapt: {
-        /** The value, as the inner codec holds it. Runs on the way to the table. */
-        readonly encode: (value: T) => NoInfer<Decoded<C>>
-        /** What the inner codec read, as you hold it. Runs on the way back. */
-        readonly decode: (held: Decoded<C>) => NoInfer<T>
+        /**
+         * The value, as the inner codec holds it. Runs on the way to the table.
+         *
+         * Return a {@link CodecError} where the conversion has nothing to hand over — a value
+         * outside the range the inner codec describes, or text that does not parse. That is a
+         * refusal like any other and reaches the caller as one.
+         */
+        readonly encode: (value: T) => Result<NoInfer<Decoded<C>>>
+        /** What the inner codec read, as you hold it. Runs on the way back. Refuses the same way. */
+        readonly decode: (held: Decoded<C>) => Result<NoInfer<T>>
     },
 ): AttributeCodec<T, AttributeOf<C>> => {
     /**
-     * The two halves are the one place in a codec where code this library did not write runs.
+     * **A half that cannot convert returns a `CodecError`**, and the signature says so. A refusal
+     * is a value here, as it is everywhere else on this surface, so nothing about declining a
+     * conversion is special and no caller has to catch.
      *
-     * So the throw is contained here. A conversion is ordinary code and ordinary code throws — `new
-     * Set(4)` for an adapter typed to take an array, a `.toISOString()` on something that is not a
-     * `Date` — and a codec that let that escape would make every caller defensive about it. One of
-     * them already was: a union tries an option to find out whether it is the right one, and had to
-     * catch, which meant it also swallowed failures that were nothing to do with an adapter.
-     *
-     * A `CodecError` is what every caller already handles, so that is what a throw becomes.
+     * The two halves are still the one place in a codec where code this library did not write
+     * runs, so the throw stays contained as a backstop rather than as the contract. A conversion
+     * is ordinary code and ordinary code throws — `new Set(4)` for an adapter typed to take an
+     * array, a `.toISOString()` on something that is not a `Date`. A codec that let that escape
+     * would make every caller defensive about it, and one already was: a union tries an option to
+     * find out whether it is the right one, and had to catch, which meant it also swallowed
+     * failures that were nothing to do with an adapter.
      */
     return codecOfTerm<T, AttributeOf<C>>({
         kind: 'held',
