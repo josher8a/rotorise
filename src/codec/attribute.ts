@@ -9,6 +9,8 @@
  * deliberately *stricter* than the SDK's: see `ExactlyOne`.
  */
 
+import { CodecError, type Result } from './result'
+
 /**
  * Exactly one of the members, and the others shut out.
  *
@@ -160,7 +162,10 @@ export const isStoredNumeral = (s: string): boolean =>
  * all three are on the surface rather than one being the others' spelling.
  */
 export class DynamoNumber {
-    /** The numeral text. Always {@link isNumeral}. */
+    /**
+     * The numeral text, in the form the store returns. Always {@link isStoredNumeral}, because
+     * the constructor is the only way in and it normalises.
+     */
     readonly digits: string
 
     private constructor(digits: string) {
@@ -168,28 +173,81 @@ export class DynamoNumber {
     }
 
     /**
-     * From numeral text. `undefined` when the text is not one DynamoDB accepts — wrong shape,
-     * more than 38 significant digits, or a magnitude outside `1e-130 … 9.9…e125`.
+     * **The spelling the store would return, expanded from the digits.** Not through a JS number:
+     * `String(Number(...))` writes exponent form at or above `1e21` and below `1e-6` — `'1e+21'`,
+     * `'1e-7'` — and the store returns neither, while DynamoDB carries magnitudes to `1e125`.
+     *
+     * Total on anything {@link isNumeral} accepts. The value does not change, so the significant
+     * digits and the magnitude are the ones that already passed.
      */
-    static from(digits: string): DynamoNumber | undefined {
-        return isNumeral(digits) ? new DynamoNumber(digits) : undefined
+    private static normalise(numeral: string): string {
+        const parts = /^([+-]?)(\d+)(?:\.(\d+))?(?:[eE]([+-]?\d+))?$/.exec(
+            numeral,
+        )
+        // unreachable: every caller has already passed `isNumeral`, which is this shape
+        if (!parts) return numeral
+        const sign = parts[1] === '-' ? '-' : ''
+        const whole = parts[2] as string
+        // where the point sits in `digits`, counted from the left, after the exponent moves it
+        let point = whole.length + Number(parts[4] ?? '0')
+        let digits = whole + (parts[3] ?? '')
+
+        const lead = digits.length - digits.replace(/^0+/, '').length
+        digits = digits.slice(lead).replace(/0+$/, '')
+        point -= lead
+
+        // every digit was a zero, and the store keeps one spelling of it
+        if (!digits) return '0'
+
+        return (
+            sign +
+            (point <= 0
+                ? `0.${'0'.repeat(-point)}${digits}`
+                : point >= digits.length
+                  ? digits + '0'.repeat(point - digits.length)
+                  : `${digits.slice(0, point)}.${digits.slice(point)}`)
+        )
     }
 
     /**
-     * From a JS number. `undefined` for `NaN`, `±Infinity`, and any value whose decimal form
-     * DynamoDB will not accept.
+     * From numeral text. Refuses text DynamoDB will not accept — the wrong shape, more than 38
+     * significant digits, or a magnitude outside `1e-130 … 9.9…e125`.
+     *
+     * **The digits are normalised here**, so `from('1.50')` and `from('1.5')` are one value and
+     * `from('1e5').toString()` is `'100000'`. The store normalises every `N` it accepts, so a
+     * carrier holding any other spelling holds one the table will not give back, and every
+     * comparison and round trip downstream would have to know that. This is the one place that
+     * can know it.
+     *
+     * A codec that must refuse a denormal spelling rather than re-spell it — {@link decimal} does,
+     * because it hands the caller back text — checks {@link isStoredNumeral} on the text before
+     * building one of these.
+     */
+    static from(digits: string): Result<DynamoNumber> {
+        return isNumeral(digits)
+            ? new DynamoNumber(DynamoNumber.normalise(digits))
+            : new CodecError(
+                  `'${digits}' is not a number DynamoDB stores: it takes at most 38 significant digits and magnitude 1e-130 to 9.9e125`,
+              )
+    }
+
+    /**
+     * From a JS number. Refuses `NaN`, `±Infinity`, and any value whose decimal form DynamoDB
+     * will not accept.
      *
      * **This is the lossy boundary and it is the only one.** The float has already rounded before
      * this is called, so the `DynamoNumber` is exact about a value that may not be the one meant.
      * Where that matters, carry the digits and use {@link DynamoNumber.from}.
      */
-    static fromNumber(value: number): DynamoNumber | undefined {
+    static fromNumber(value: number): Result<DynamoNumber> {
         return Number.isFinite(value)
             ? DynamoNumber.from(String(value))
-            : undefined
+            : new CodecError(
+                  `${String(value)} is not a number DynamoDB stores: it has no NaN and no Infinity`,
+              )
     }
 
-    /** The numeral text, unchanged. Exact. */
+    /** The numeral text, as the store holds it. Exact. */
     toString(): string {
         return this.digits
     }
@@ -202,34 +260,16 @@ export class DynamoNumber {
         return Number(this.digits)
     }
 
-    /** Whether the store hands this spelling back unchanged. See {@link isStoredNumeral}. */
-    get isStored(): boolean {
-        return isStoredNumeral(this.digits)
-    }
-
     /**
-     * The spelling the store would return, or `undefined` where the digits are not a numeral it
-     * normalises to a representable one. Exact: this re-spells, it does not round.
+     * Equality, and there is only one kind here.
+     *
+     * Carrying `N` as text makes two of them: `'1.50'` and `'1.5'` are one number and two
+     * numerals, so a text carrier answers "different" where a caller means "same" and needs a
+     * second comparison beside the first. Normalising at construction is what removes the second
+     * question rather than answering it.
      */
-    normalized(): DynamoNumber | undefined {
-        if (this.isStored) return this
-        const n = Number(this.digits)
-        return Number.isFinite(n) ? DynamoNumber.from(String(n)) : undefined
-    }
-
-    /** Equality on the digits, which is textual: `'1.50'` and `'1.5'` are different. */
     equals(other: DynamoNumber): boolean {
         return this.digits === other.digits
-    }
-
-    /**
-     * Equality as numbers, by comparing the stored spellings: `'1.50'` and `'1.5'` are the same.
-     * `undefined` on either side's normalisation failing.
-     */
-    sameNumber(other: DynamoNumber): boolean | undefined {
-        const a = this.normalized()
-        const b = other.normalized()
-        return a && b ? a.digits === b.digits : undefined
     }
 }
 
