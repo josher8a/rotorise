@@ -60,7 +60,7 @@ theorem scalar_string :
 
 /-- `scalar_decimal` -/
 theorem scalar_decimal :
-    (denote ((Term.held Term.number numeralOfStoredText textOfNumeral))).e
+    (denote ((Term.held (Term.number) numeralOfStoredText textOfNumeral))).e
       (Value.str "1.5")
     = some (Attr.n (WFNumeral.of "1.5")) := by
   vector
@@ -95,7 +95,7 @@ theorem literal_alternatives :
 
 /-- `literal_decimal` -/
 theorem literal_decimal :
-    (denote ((Term.held Term.union [Term.literal GroundKind.number (WFNumeral.of "1"), Term.literal GroundKind.number (WFNumeral.of "2.5")] numeralOfStoredText textOfNumeral))).e
+    (denote ((Term.held (Term.union [Term.literal GroundKind.number (WFNumeral.of "1"), Term.literal GroundKind.number (WFNumeral.of "2.5")]) numeralOfStoredText textOfNumeral))).e
       (Value.str "2.5")
     = some (Attr.n (WFNumeral.of "2.5")) := by
   vector
@@ -277,14 +277,14 @@ theorem product_two_objects :
 
 /-- `product_union_object` -/
 theorem product_union_object :
-    (denote (Term.union [Term.object (Body.mk {"a", "n"} (fun k => if k.1 = "a" then Field.req (Term.string) else Field.req ((Term.held Term.number numeralOfStoredText textOfNumeral))) Rest.refuse), Term.object (Body.mk {"b", "n"} (fun k => if k.1 = "b" then Field.req (Term.boolean) else Field.req ((Term.held Term.number numeralOfStoredText textOfNumeral))) Rest.refuse)])).e
+    (denote (Term.union [Term.object (Body.mk {"a", "n"} (fun k => if k.1 = "a" then Field.req (Term.string) else Field.req ((Term.held (Term.number) numeralOfStoredText textOfNumeral))) Rest.refuse), Term.object (Body.mk {"b", "n"} (fun k => if k.1 = "b" then Field.req (Term.boolean) else Field.req ((Term.held (Term.number) numeralOfStoredText textOfNumeral))) Rest.refuse)])).e
       (Value.map {"a", "n"} (fun k => if k.1 = "a" then Value.str "x" else Value.str "1"))
     = some (Attr.m {"a", "n"} (fun k => if k.1 = "a" then Attr.s "x" else Attr.n (WFNumeral.of "1"))) := by
   vector
 
 /-- `product_three` -/
 theorem product_three :
-    (denote (Term.object (Body.mk {"p", "q", "r"} (fun k => if k.1 = "p" then Field.req (Term.string) else if k.1 = "q" then Field.req (Term.boolean) else Field.req ((Term.held Term.number numeralOfStoredText textOfNumeral))) Rest.refuse))).e
+    (denote (Term.object (Body.mk {"p", "q", "r"} (fun k => if k.1 = "p" then Field.req (Term.string) else if k.1 = "q" then Field.req (Term.boolean) else Field.req ((Term.held (Term.number) numeralOfStoredText textOfNumeral))) Rest.refuse))).e
       (Value.map {"p", "q", "r"} (fun k => if k.1 = "p" then Value.str "x" else if k.1 = "q" then Value.bool true else Value.str "1"))
     = some (Attr.m {"p", "q", "r"} (fun k => if k.1 = "p" then Attr.s "x" else if k.1 = "q" then Attr.bool true else Attr.n (WFNumeral.of "1"))) := by
   vector
@@ -324,7 +324,7 @@ theorem scalar_string__refuses__scalar_boolean :
 
 /-- `scalar_decimal__refuses__scalar_string` — refused on both sides -/
 theorem scalar_decimal__refuses__scalar_string :
-    (denote ((Term.held Term.number numeralOfStoredText textOfNumeral))).e
+    (denote ((Term.held (Term.number) numeralOfStoredText textOfNumeral))).e
       (Value.str "hello") = none := rfl
 
 /-- `scalar_boolean__refuses__scalar_string` — refused on both sides -/
@@ -349,7 +349,7 @@ theorem literal_alternatives__refuses__scalar_string :
 
 /-- `literal_decimal__refuses__scalar_string` — refused on both sides -/
 theorem literal_decimal__refuses__scalar_string :
-    (denote ((Term.held Term.union [Term.literal GroundKind.number (WFNumeral.of "1"), Term.literal GroundKind.number (WFNumeral.of "2.5")] numeralOfStoredText textOfNumeral))).e
+    (denote ((Term.held (Term.union [Term.literal GroundKind.number (WFNumeral.of "1"), Term.literal GroundKind.number (WFNumeral.of "2.5")]) numeralOfStoredText textOfNumeral))).e
       (Value.str "hello") = none := rfl
 
 /-- `literal_non_ascii__refuses__scalar_string` — refused on both sides -/
@@ -479,12 +479,12 @@ theorem product_two_objects__refuses__scalar_string :
 
 /-- `product_union_object__refuses__scalar_string` — refused on both sides -/
 theorem product_union_object__refuses__scalar_string :
-    (denote (Term.union [Term.object (Body.mk {"a", "n"} (fun k => if k.1 = "a" then Field.req (Term.string) else Field.req ((Term.held Term.number numeralOfStoredText textOfNumeral))) Rest.refuse), Term.object (Body.mk {"b", "n"} (fun k => if k.1 = "b" then Field.req (Term.boolean) else Field.req ((Term.held Term.number numeralOfStoredText textOfNumeral))) Rest.refuse)])).e
+    (denote (Term.union [Term.object (Body.mk {"a", "n"} (fun k => if k.1 = "a" then Field.req (Term.string) else Field.req ((Term.held (Term.number) numeralOfStoredText textOfNumeral))) Rest.refuse), Term.object (Body.mk {"b", "n"} (fun k => if k.1 = "b" then Field.req (Term.boolean) else Field.req ((Term.held (Term.number) numeralOfStoredText textOfNumeral))) Rest.refuse)])).e
       (Value.str "hello") = none := rfl
 
 /-- `product_three__refuses__scalar_string` — refused on both sides -/
 theorem product_three__refuses__scalar_string :
-    (denote (Term.object (Body.mk {"p", "q", "r"} (fun k => if k.1 = "p" then Field.req (Term.string) else if k.1 = "q" then Field.req (Term.boolean) else Field.req ((Term.held Term.number numeralOfStoredText textOfNumeral))) Rest.refuse))).e
+    (denote (Term.object (Body.mk {"p", "q", "r"} (fun k => if k.1 = "p" then Field.req (Term.string) else if k.1 = "q" then Field.req (Term.boolean) else Field.req ((Term.held (Term.number) numeralOfStoredText textOfNumeral))) Rest.refuse))).e
       (Value.str "hello") = none := rfl
 
 /-- `dunion_two_keys__refuses__scalar_string` — refused on both sides -/

@@ -1755,9 +1755,6 @@ export const readsBack = (
  * Reached by `union`'s refusal, which is the one message that names an option by its kind. The
  * `opaq` row became reachable when the guard stopped exempting an `opaque` option: the message
  * read "opaq and string both take the same kind of value", naming something no caller had typed.
- */
-/**
- * A term's kind, as a diagnostic names it.
  *
  * **A declared adapter names the value it takes, not the combinator.** `number` and `decimal` are
  * `held` over one carrier, so the kind alone answered "held", which names nothing the caller

@@ -748,7 +748,7 @@ const leanTermOfTerm = (t: Term, at: string, forced: number): string => {
          */
         case 'held':
             return t.via === 'decimalText'
-                ? `(Term.held ${leanTermOfTerm(t.inner, at, forced)} numeralOfStoredText textOfNumeral)`
+                ? `(Term.held (${leanTermOfTerm(t.inner, at, forced)}) numeralOfStoredText textOfNumeral)`
                 : refuse(
                       at,
                       "`Term.held` carries two `Value → Value` functions. The library ships one pair the model names, `numeralOfStoredText`/`textOfNumeral`, and this is not it — a caller's closure has no name in the model, and the adapter carrying a JS float has none either, because writing binary64 rounding down is the host axiom this development deleted",
