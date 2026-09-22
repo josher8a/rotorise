@@ -141,6 +141,53 @@ describe('failure belongs to the inner codec', () => {
     })
 })
 
+describe('a conversion that cannot convert', () => {
+    /**
+     * A half that has nothing to hand over returns a {@link CodecError}, and the signature says so.
+     * A refusal is a value on this surface, so declining a conversion is a refusal like any other:
+     * the caller reads it the way it reads every other one, and nothing has to catch.
+     *
+     * This is what an adapter over a narrower carrier needs. A text-to-number adapter meets text
+     * that is not a number, and it owes the caller a reason rather than an exception.
+     */
+    const digits = held(string, {
+        encode: (value: number) =>
+            Number.isFinite(value)
+                ? String(value)
+                : new CodecError(`${value} has no digits to write`),
+        decode: (raw) => {
+            const read = Number(raw)
+            return Number.isNaN(read)
+                ? new CodecError(`'${raw}' is not a number`)
+                : read
+        },
+    })
+
+    it('refuses on the way in with the reason the half gave', () => {
+        const written = digits.encode(Number.NaN)
+        expect(failed(written)).toBe(true)
+        expect((written as CodecError).message).toBe(
+            'NaN has no digits to write',
+        )
+    })
+
+    it('refuses on the way out with the reason the half gave', () => {
+        const read = digits.decode({ S: 'abc' })
+        expect(failed(read)).toBe(true)
+        expect((read as CodecError).message).toBe("'abc' is not a number")
+    })
+
+    it('does not dress the refusal as a throw, which is what a caller reads', () => {
+        const written = digits.encode(Number.NaN)
+        expect((written as CodecError).message).not.toMatch(/threw/)
+    })
+
+    it('still writes and reads the values it can convert', () => {
+        expect(digits.encode(1.5)).toEqual({ S: '1.5' })
+        expect(digits.decode({ S: '1.5' })).toBe(1.5)
+    })
+})
+
 describe('a conversion that throws', () => {
     /**
      * The two halves are the one place in a codec where code this library did not write runs, so the
