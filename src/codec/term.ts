@@ -663,6 +663,94 @@ export const literalsOf = (
 }
 
 /**
+ * **The form a clause is written at**, which the base alone stopped naming.
+ *
+ * `extract` asks a clause and a member to agree on *which literal codec* pins a key, and until
+ * `8a2eed9` that was the base: `decimal` was a base of its own, so `LiteralBase` had a member per
+ * form. `decimal` is an adapter over `number` now, so `decimal('1')` and `number(1)` share a base
+ * and share an inner value, and the base can no longer tell a clause at one from a member at the
+ * other.
+ *
+ * {@link Held.writes} is what parts them, because it is the slot the caller's value lands in:
+ * `decimal` takes text and `number` takes a float over one carrier. So the form is the base
+ * everywhere but `number`, and there it is the adapter's declared slot.
+ */
+export type LiteralForm = LiteralBase | 'decimal' | 'dynamoNumber'
+
+/** @see {@link LiteralForm} */
+export const literalForm = (
+    base: LiteralBase,
+    writes: readonly SetSlot[] | undefined,
+): LiteralForm =>
+    base !== 'number'
+        ? base
+        : writes === undefined
+          ? 'dynamoNumber'
+          : writes.includes('string')
+            ? 'decimal'
+            : 'number'
+
+/** One declared name as a clause reads it: the literal under any adapter, and the form. */
+export type NameForm = {
+    readonly required: boolean
+    readonly alts: Alternatives
+    readonly form: LiteralForm
+}
+
+/**
+ * The literal each declared name is pinned to, **read through a declared adapter**.
+ *
+ * **Not {@link literalsOf}, and the two must not become one.** That reader answers at the caller's
+ * level, because {@link literalsFit} compares the value a caller hands in: an adapter pins nothing
+ * there, so a field under one is absent and the option is matched on its other names. This reader
+ * descends, because `extract` compares a clause literal against a member literal and both sit
+ * under the same kind of adapter, so the pair below is the pair that decides. Merging them makes
+ * every object union at a numeric name refuse every value, and the failure is a runtime refusal
+ * rather than a type error.
+ *
+ * A caller's adapter declares no `writes`, so it pins nothing here either and a clause cannot
+ * name it. That is the same honest answer {@link identifies} gives.
+ */
+export const clauseLiteralsOf = (
+    t: Term,
+): Readonly<Record<string, NameForm>> | undefined => {
+    if (t.kind !== 'object') return undefined
+    const literals: Record<string, NameForm> = {}
+    for (const [name, field] of Object.entries(t.body.fields)) {
+        const pinned = pinnedForm(field.t)
+        if (pinned)
+            literals[name] = { required: alwaysWritten(field), ...pinned }
+    }
+    return literals
+}
+
+/**
+ * **The form a clause names**, reading through a declared adapter and *not* through a refinement.
+ *
+ * The refinement rule is {@link pinnedLiteral}'s and the reason is the same one stated there: a
+ * member's literal survives a narrowing as an upper bound, and a clause is written by the caller
+ * and states exactly what it means. So the member side reads through both and the clause side
+ * reads through the adapter alone.
+ */
+export const clauseForm = (
+    t: Term,
+    writes?: readonly SetSlot[],
+): { readonly alts: Alternatives; readonly form: LiteralForm } | undefined => {
+    if (t.kind === 'held')
+        return t.writes === undefined
+            ? undefined
+            : clauseForm(t.inner, t.writes)
+    const alts = literalAlternatives(t)
+    return alts && { alts, form: literalForm(alts.base, writes) }
+}
+
+/** …and the member's side, which reads through a refinement too. @see {@link clauseForm} */
+export const pinnedForm = (
+    t: Term,
+): { readonly alts: Alternatives; readonly form: LiteralForm } | undefined =>
+    t.kind === 'refine' ? pinnedForm(t.inner) : clauseForm(t)
+
+/**
  * The literal a term is pinned to, reading through a refinement.
  *
  * A refinement of a literal admits a subset of that literal's alternatives, so the literal is a
