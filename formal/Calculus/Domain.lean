@@ -23,8 +23,8 @@ Mechanization of the specification, `docs/blueprint/src/content.tex`. Modelling 
   `Calculus/LiteralArity1.lean`), and accepts one over a concrete type in the same constructor.
 * **`N` is carried exactly and this calculus assumes nothing about any numeric type.** The
   value side of `N` is `WFNumeral`, the subtype `Numeral.WF` cuts out, so there is no host
-  axiom here at all. `NumericHost` states what a PORT owes if it wants to hand its own
-  numeric type to a caller, and `numericHostWFNumeral` is the trivial inhabitant.
+  axiom here at all. A port that hands its own numeric type to a caller adapts that type to
+  `WFNumeral` in the port.
 -/
 
 namespace Calculus
@@ -286,31 +286,6 @@ theorem stored_lt_wf : ∃ s, WF s = true ∧ Stored s = false := ⟨"1.500", by
 
 end Numeral
 
-/-! ### The numeric host, as a PORT's obligation rather than this calculus's assumption
-
-The calculus carries `N` exactly, as `WFNumeral`, so it assumes nothing about any numeric type
-and the axiom block that used to sit here is gone with its host type.
-
-`NumericHost` survives, and it means something different now. A target language that wants to
-hand its own numeric type to a caller states that the type is a `NumericHost` and adapts to `N`
-through it. A host double, an arbitrary-precision decimal, and a vendor SDK's own numeric wrapper are
-each such a type. That is the port's
-obligation, stated once, and the two inhabitants below are evidence that it is inhabitable at
-both extremes. `numericHostWFNumeral` is the trivial one: `toDec` is `Subtype.val`, the adapter
-is the identity, and it needs no axiom. -/
-
-/-- **What §1 assumes of the numeric host, and all it assumes.** A decimal spelling, a
-    partial reader, the round trip §3's `(number)` needs, and decidable equality. -/
-structure NumericHost (D : Type) where
-  /-- Shortest decimal text reading back as the same element. -/
-  toDec : D → Numeral
-  /-- Read a numeral (rounding), where the magnitude admits one. -/
-  ofDec : Numeral → Option D
-  /-- The §3 `(number)` round trip: shortest text re-reads exactly. -/
-  roundtrip : ∀ d, ofDec (toDec d) = some d
-  /-- Equality is decidable (bit patterns, for binary64; NaN excluded from the model). -/
-  decEq : DecidableEq D
-
 /-- **Kinds.** The eight shapes the value language is partitioned into — and the eight
     the attribute domain collapses onto, since the three wire sets are one kind and the
     ten members are eight. A value and the attribute it is written to have the same
@@ -367,40 +342,6 @@ def WFNumeral.of (x : Numeral) (h : Numeral.WF x = true := by decide) : WFNumera
 
 @[simp] theorem WFNumeral.of_val (x : Numeral) (h : Numeral.WF x = true) :
     (WFNumeral.of x h).1 = x := rfl
-
-/-! ### Two inhabitants, so the interface is checkably an interface
-
-An axiom block with no models is indistinguishable from an assumption. These two are the
-evidence that `NumericHost` is the weaker thing it claims to be — a *signature the calculus
-programs against* — rather than binary64 under another name. -/
-
-/-- **The arbitrary-precision host.** `WFNumeral` is its own decimal spelling, so the
-    adapter is the identity and the round trip is `dif_pos` on the subtype's own proof.
-    Note what is *not* imported here: this model needs no host axiom, so every theorem
-    of §1 that is really about the interface holds of a host with no rounding at all. -/
-def numericHostWFNumeral : NumericHost WFNumeral where
-  toDec := Subtype.val
-  ofDec := fun x => if h : Numeral.WF x = true then some ⟨x, h⟩ else none
-  roundtrip := fun d => by simp [d.2]
-  decEq := inferInstance
-
-/-- **The one-number host**, at the other extreme: a single element, spelled `"0"`. Total
-    on nothing but its own spelling, and still a lawful `NumericHost`. -/
-def numericHostUnit : NumericHost Unit where
-  toDec := fun _ => "0"
-  ofDec := fun x => if x = "0" then some () else none
-  roundtrip := fun _ => rfl
-  decEq := inferInstance
-
-/-- **And their decimal images differ**, which is what makes the pair evidence rather than
-    decoration: `"1.5"` is the spelling of an element of the first host and of no element of
-    the second. A property provable from `NumericHost` alone therefore cannot decide how
-    many numbers the host has, nor which decimals it spells — which is exactly the
-    independence the axiom block asserts and could not previously exhibit. -/
-theorem numericHost_images_differ :
-    (∃ d, numericHostWFNumeral.toDec d = "1.5") ∧
-      (∀ u, numericHostUnit.toDec u ≠ "1.5") :=
-  ⟨⟨WFNumeral.of "1.5", rfl⟩, fun _ => by simp [numericHostUnit]⟩
 
 /-- A literal `℘⁺fin`, written as one element and the rest: `insert` is never empty, so
     the proof is discharged by construction rather than at each use site. -/
@@ -575,9 +516,7 @@ deriving DecidableEq, Repr
 
     **Reducible**, and that is load-bearing: it lets `Carrier .string` elaborate as `String`, so
     equality at `ℓ` resolves through `String.decEq` and the ordinary instances. An indexed
-    `DecidableEq k.Carrier` instance would work too. It was *noncomputable* while a host type's
-    equality was a field of an axiomatized `NumericHost`, and that spread to every `def`
-    that names a literal. -/
+    `DecidableEq k.Carrier` instance would work too. -/
 @[reducible] def GroundKind.Carrier : GroundKind → Type
   | .string  => String
   -- §3's `ℓ ⊆ D` is this base's carrier and not a premise beside it. ~~LiteralD~~ was that

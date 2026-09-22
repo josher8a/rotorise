@@ -1071,9 +1071,8 @@ end Calculus
  * def-reading port would be a second description of what `decode` already computes exactly, and
  * two descriptions of one thing need a guard between them. **The guard is what landed.**
  *
- * `AdmA` is `noncomputable` — it consults `Double.ofDec` and `ownsNull` — so this cannot be
- * `#eval`. The kernel unfolds it anyway, which is the same fact `Vectors.lean` opens with, so the
- * verdict is asserted and elaboration is the test.
+ * `AdmA` is `noncomputable`, so this cannot be `#eval`. The kernel unfolds it anyway, which is
+ * the same fact `Vectors.lean` opens with, so the verdict is asserted and elaboration is the test.
  */
 export type ReadVerdict = {
     /** A Lean identifier; anything else is sanitized, because a bad name loses the whole file. */
@@ -1329,12 +1328,13 @@ const MEET_LEMMAS = [
 ].join(', ')
 
 /**
- * Whether the model's read row is **stuck** on this pair rather than answering.
+ * Whether the pair has the shape that the model's read row was **stuck** on while `N` was a
+ * `Double`.
  *
- * `AdmA .number`'s `.n` row is `match Double.ofDec x.1 with | some d => …`, and `Double.ofDec` is
- * an axiom with **no computation rule** — so the row reduces to neither `true` nor `false` for
- * any concrete numeral. Both assertions fail, which is how it was told apart from a
- * disagreement; `AdmA .decimal` and `AdmA .string` on the same attribute reduce fine.
+ * The shape is a `number` codec against an `N` attribute. The model has no numeric axiom, and
+ * `AdmA .number`'s `.n` row decides a concrete numeral:
+ * `AdmA Term.number (Attr.n (WFNumeral.of "1.5")) = true` closes by `rfl`. So this filter
+ * excludes pairs that the row answers, and the exclusion is a leftover of the `Double` carrier.
  *
  * Recorded rather than skipped: three pairs in today's corpus match, they are named in the
  * generated module's header, and a *new* stuck pair outside this shape does not slip through —
@@ -1377,9 +1377,9 @@ export const leanReadModule = (verdicts: readonly ReadVerdict[]): string => {
 **Generated — do not edit.** One theorem per (codec, attribute) pair: \`AdmA t a\` equals whether
 \`src/\`'s \`decode\` accepted it. ${live.length} of ${verdicts.length} pairs are asserted here.
 
-The other ${stuck.length} are **stuck, not skipped**: \`AdmA .number\`'s \`.n\` row goes through
-\`Double.ofDec\`, an axiom with no computation rule, so it reduces to neither \`true\` nor
-\`false\` and *both* assertions fail. That is how it was told apart from a disagreement.
+The other ${stuck.length} are **excluded, not skipped**: \`readRowIsStuck\` excludes a
+\`number\` codec against an \`N\` attribute. The model has no numeric axiom, and the row
+decides such a pair, so the exclusion is a leftover of the \`Double\` carrier.
 ${stuck.map((one) => `  * \`${one.name}\``).join('\n')}
 -/
 
@@ -1599,12 +1599,11 @@ export type ReadResolution = {
  * unlike those, this one is a gap in the *machinery* and closable: the `veq` that would close it
  * is `aeq`'s construction over `Value.map` instead of `Attr.m`.
  *
- * **The second reason is the `Double` axiom arriving a third way**, and the three are worth
+ * **The second reason is the `Double` axiom arriving a second way**, and the two are worth
  * distinguishing because each closes differently or not at all. A numeric `literal` is
- * *term*-inexpressible: its alternatives are `NEFinset Double`. `AdmA .number`'s `.n` row is
- * *row*-irreducible: `Double.ofDec` has no computation rule. And here it is the **decoded value**
+ * *term*-inexpressible: its alternatives are `NEFinset Double`. And here it is the **decoded value**
  * — `union([string.set(), number.set()])` reads an `NS` back to a `Set<number>`, whose Lean form
- * is `Value.numSet` over a `NEFinset Double`. Same axiom, three places, and only the funext one
+ * is `Value.numSet` over a `NEFinset Double`. Same axiom, two places, and only the funext one
  * has a repair.
  */
 export const readResolutionIsUnstatable = (

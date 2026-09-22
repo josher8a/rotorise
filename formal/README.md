@@ -9,7 +9,7 @@ definition it touches.
 | Module                      | Doc section | Content                                                                                                                                                                                                                                                               |
 | --------------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `Calculus/Lists.lean`       | —           | The list plumbing: `traverse` and its laws off the pivot `traverse_eq_some` (a successful traversal *is* `List.Forall₂ (f · = some ·)`), the keyed clause `traverse_fst`, and the `filter` facts mathlib states in the wrong shape — everything with no codec in it, kept apart so `Prisms.lean` reads as codec vocabulary |
-| `Calculus/Domain.lean`      | §1          | `Member`, `Attr`, the value language, `Kind` with `Value.kind`/`Attr.kind` (the ten members collapsing onto eight), `NumericHost` as the port's obligation, and `Numeral.WF` — §1's numeral grammar, 38 significant digits and magnitude range, as a decidable predicate                                                                                            |
+| `Calculus/Domain.lean`      | §1          | `Member`, `Attr`, the value language, `Kind` with `Value.kind`/`Attr.kind` (the ten members collapsing onto eight), and `Numeral.WF` — §1's numeral grammar, 38 significant digits and magnitude range, as a decidable predicate                                                                                            |
 | `Calculus/Codec.lean`       | §2, §5      | `Codec`, `Agree` (`≼`), `Lawful`/`LawfulCore`, corollaries (Q, read-side W), injectivity lemma — **proved**                                                                                                                                                           |
 | `Calculus/Prisms.lean`      | §3          | The entry point of the certified combinator algebra, opening with `Ctor` — a constructor as a partial iso onto its image, the prism §7 names. The point ground codecs (`string`, `boolean`, `binary`, `null`) are `pointCodec` at four pairs of prisms and share one lawfulness proof; the wire-set payload projections are the same shape again. Then `through`/`restrict` (iso/prism) and `extendRead` (alternate reading) |
 | `Calculus/Products.lean`    | §3          | `carriedCodec` — a payload pair carried between two prisms, the shape underneath every product: `entrywise` is it at a traversal (`array`, `record`), `tupleCodec` it at `align` + a traversal over `slots`, the codec row a shape assigns to a row of *n* positions, which is what makes alignment depend on length alone. `setCodec` is argued on its own |
@@ -115,11 +115,9 @@ and the judgement to it), and `lazy` concludes `⊤` in the model exactly as the
   `opaque`'s eight is pinned in one line, and `onKind_set`/`onKind_array`/`onKind_record`
   hold for *any* element codec — which is why the fixpoint's unique admission needs
   nothing from the recursive call, and why `opaque` is not a special construction.
-- **`N` is carried exactly, and no numeric type is axiomatized.** `NumericHost` states what a
-  target language owes if it wants to hand its own numeric type to a caller: a decimal spelling, a
-  partial reader, the shortest-text round trip §3's `(number)` consumes, and decidable equality.
-  `numericHostWFNumeral` inhabits it with the identity and needs no axiom. IEEE-754 facts are not
-  this calculus's theorems, and nothing here assumes them.
+- **`N` is carried exactly, and no numeric type is axiomatized.** A target language that hands
+  its own numeric type to a caller adapts that type to `WFNumeral` in the port. IEEE-754 facts
+  are not this calculus's theorems, and nothing here assumes them.
 - **Semantic rule premises live beside the carrier**, not in `Typed`: the doc's
   `(held)` and `(custom)` side conditions live in `Obligations`. The alternate-reader
   conditions live in `LegacyReadObligations`. Each definition has its denotation in scope.

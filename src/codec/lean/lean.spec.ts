@@ -1418,8 +1418,8 @@ describe("the read side, against the model's read row", () => {
         }
         const module = leanReadModule(readVerdicts())
         expect(module).toContain('import Calculus.Separation')
-        // the stuck ones are named in the header rather than dropped in silence
-        expect(module).toContain('stuck, not skipped')
+        // the excluded ones are named in the header rather than dropped in silence
+        expect(module).toContain('excluded, not skipped')
         expect(module).toContain('scalar_number__reads__raw_N')
     })
 })

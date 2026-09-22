@@ -87,22 +87,15 @@ def reqPresentT (fields : Finset Name) (fld : {k // k ∈ fields} → ObjectSlot
 
 /-- What the literal codec **reads**, exactly.
 
-    Three rows into one, and the `number` row is the only one that is not simply membership:
-    the read went through the host's decimal reader, and `&& WF` is there because the base's own read is
-    `number`'s restricted, so it refuses a numeral whose double re-spells outside `D` even when
-    that double is in `ℓ`.
-
-    The retired per-aspect row was `⊤` here, on the ground that a *syntactic* set of
-    attributes does not bound a read through the host's decimal reader. True, and it never made the row
-    unwritable: `ofDec` is a function the row may call, exactly as this one does. -/
+    Each row is membership. `N` is carried exactly, so the `number` row compares the payload
+    with the literal, as the `string` row does. -/
 noncomputable def AdmALit : (k : GroundKind) → k.Carrier → Attr → Bool
   | .string,  y, .s s    => decide (s = y)
   | .boolean, y, .bool b => decide (b = y)
   | .binary,  y, .b b    => decide (b = y)
   | .null,    _, .null   => true
-  -- **The `ofDec` lookup used to be spelled out here**, because the answer went through the
-  -- host's numeric type. `N` is carried exactly on both sides now, so the attribute payload
-  -- IS the alternative and this row reads like `string`'s beside it.
+  -- `N` is carried exactly on both sides, so the attribute payload IS the alternative and
+  -- this row reads like `string`'s beside it.
   | .number,  y, .n x    => decide (x = y)
   | _, _, _ => false
 
@@ -128,15 +121,9 @@ noncomputable def AdmASet : SetBase → Attr → Bool
 mutual
 
 /-- **The joint admission predicate, attribute side.** The mirror of `Adm` across §1's
-    asymmetry, and it is not a symmetric mirror — three rows differ in kind, not degree.
+    asymmetry, and it is not a symmetric mirror: one row differs in kind, not degree.
 
-    * `number` and a numeric `literal` went through the host's decimal reader, which is
-      axiomatized. The domain is still *expressible* — `ofDec` is a function and this row
-      may call it — at the cost of being `noncomputable`, which `adm` already was. These rows
-      used to be sharper than §5's `⊤`; they are now equal to it, because the observation in
-      the previous sentence is exactly the one §5's numeric rows were missing.
-    * `refine` **does** narrow here, and the row that said it could not was wrong in the
-      same way the numeric `⊤`s were. "`q` tests the value a read *produces*, and no
+    * `refine` **does** narrow here, and the row that said it could not was wrong. "`q` tests the value a read *produces*, and no
       syntactic set of attributes bounds that" is true of syntax and says nothing about a
       row, which may decode and then ask `q` (`refineReads`). Sound, and exact whenever the
       subterm's row is: `dom((c.restrict q).p)` is precisely `{a | ∃ v, c.p a = some v ∧ q v}`.

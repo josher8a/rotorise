@@ -124,15 +124,12 @@ theorem dincomp_map_literal_num {l : List WFNumeral} (hnd : l.Nodup) :
 
 /-! ## (U) at the numeric base
 
-**`AdmA` does not need to *name* the attributes that read into `ℓ`, only to decide one.** The
-tempting inference is that it does: the stored text went through the host's decimal reader, and no
-syntactic set of attributes names the numerals reading into a given value. That is a fact about
-*values*. `ofDec` is a **function** — a stored numeral reads to at most one double, and one
-double cannot inhabit two disjoint sets — so the answer is unique without being nameable, and
-the row obtains it by calling the codec.
+**`AdmA` does not need to *name* the attributes that read into `ℓ`, only to decide one.** `N` is
+carried exactly on both sides, so the payload of an `N` attribute IS the value, and one value
+cannot inhabit two disjoint sets.
 
-So `AdmALit`'s `.number` row is `((literalCodec .number ls).p ·).isSome`, which separates two
-disjoint numeric literals term by term.
+So `AdmALit`'s `.number` row is `decide (x = y)`, which separates two disjoint numeric literals
+term by term.
 
 The pair reading is not superseded and is the one used below: `uniqueAdmission_of_sharedBase`
 settles an `n`-ary family on both sides in one step where the table settles a pair at a time.
