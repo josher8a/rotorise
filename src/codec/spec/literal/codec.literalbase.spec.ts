@@ -105,23 +105,41 @@ describe('a decimal literal', () => {
     })
 
     /**
-     * The read gate is bare `decimal`'s, and it is not subsumed by membership: `'1.0'` is a numeral
-     * the service accepts and never returns, and membership would have rejected it for the wrong
-     * reason — or accepted it, had `'1.0'` been the alternative named.
+     * **The read side reads a number, and the spelling is the carrier's.**
+     *
+     * `decimal` is an adapter over `dynamoNumber` since `8a2eed9`, and the carrier normalises at
+     * construction. So a denormal spelling of the alternative reaches the literal already
+     * normalised, and membership sees the number rather than the text: `'1.0'`, `'1.00'` and
+     * `'01'` all read back as `'1'`.
+     *
+     * **That is the write side's asymmetry and not a hole in it.** `decimal` refuses to *write* a
+     * denormal numeral, because it hands back text and rewriting it would lose which value was
+     * meant, and `decimal('1.50')` is refused at construction for the same reason. Reading is the
+     * other direction: DynamoDB normalises on store, so `{ N: '1.0' }` is an attribute the service
+     * never returns, and accepting it costs nothing a caller can observe across the database.
+     *
+     * Two refusals survive, and they are the two this test exists for. The **gate** still declines
+     * an attribute that is no numeral at all, which membership could not have caught. **Membership**
+     * still declines a different number.
      */
-    it('reads through the same gate bare `decimal` does', () => {
-        // refused by the *gate* and not by membership, which is the distinction the sentence
-        // carried: `'1'` is the one alternative and is admitted, `'1.0'` names the same number
-        // and is not, so what refuses it is §1's stored form rather than `ℓ`
+    it('reads the number, and the gate and membership still refuse their own', () => {
         expect(readsBack(decimal('1'), { N: '1' })).toBe(true)
-        expect(readsBack(decimal('1'), { N: '1.0' })).toBe(false)
+        // the same number, spelled as the service never spells it
+        expect(readsBack(decimal('1'), { N: '1.0' })).toBe(true)
+        expect(readsBack(decimal('1'), { N: '1.00' })).toBe(true)
+        expect(readsBack(decimal('1'), { N: '01' })).toBe(true)
+        expect(decimal('1').unsafeDecode({ N: '1.0' })).toBe('1')
+        // refused by the *gate*: `'0x1'` is not a numeral, so nothing wrote it
         expect(readsBack(decimal('1'), { N: '0x1' })).toBe(false)
-        expect(() => decimal('1').unsafeDecode({ N: '1.0' })).toThrow(
-            CodecError,
-        )
         expect(() => decimal('1').unsafeDecode({ N: '0x1' })).toThrow(
             CodecError,
         )
+        // refused by *membership*: a numeral, and not the one named
+        expect(readsBack(decimal('1'), { N: '2' })).toBe(false)
+        expect(() => decimal('1').unsafeDecode({ N: '2' })).toThrow(CodecError)
+        // and the write side is unmoved: a denormal numeral is still refused outright
+        expect(() => decimal('1.50')).toThrow(CodecError)
+        expect(() => decimal.unsafeEncode('1.50')).toThrow(CodecError)
     })
 
     /** `ℓ ⊆ D`, at the narrower `D` this base has. */
