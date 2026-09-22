@@ -363,11 +363,10 @@ export const groundCodec = (
  * for building an attribute out of a payload, and this is the codec that word describes.
  * {@link groundCodec} is the degenerate case, where the payload passes through untouched.
  *
- * The transform is the whole of what distinguishes the products from each other. `array` and
- * `record` hand it {@link every}, a traversal — the model's `entrywise` — and differ only in what
- * they traverse. `tuple` aligns first. `object` guards and filters first. `set` is the one product
- * that is not an instance, because its attribute side is a choice among three wire sets rather than
- * one member.
+ * The transform is the whole of what distinguishes the products from each other. `array` hands
+ * it {@link every}, a traversal — the model's `entrywise`. `tuple` aligns first. `object` guards
+ * and filters first. `set` is the one product that is not an instance, because its attribute side
+ * is a choice among three wire sets rather than one member.
  */
 export const carriedCodec = <Payload, Written, Read>(
     holds: (value: unknown) => value is Payload,
@@ -966,32 +965,6 @@ export const denote = (def: Term): Pair => {
         case 'binary':
             return groundCodec('binary', 'B', 'a `Uint8Array`', "a 'B'")
         /**
-         * §3 `(record)`: the same construction as `array` at the other product.
-         * `recordCodec_e_eq` is the lemma, and the two rows differ in exactly three things — the
-         * shape they test, the member they carry, and whether the traversal walks positions or
-         * entries. `every` and `everyEntry` are the two traversals; the model writes `entrywise`
-         * once and instantiates it twice.
-         *
-         * `Object.entries('abc')` is `[['0','a'], …]`, so a string was written as a map keyed by
-         * index until the shape was asked first. `asRecord` is the test the `record` row uses on
-         * both sides, so the two cannot drift about what a plain object is.
-         */
-        case 'record': {
-            const values = codecOfTerm(def.val)
-            return carriedCodec(
-                (value): value is Record<string, never> =>
-                    asRecord(value) !== undefined,
-                'M',
-                (value) =>
-                    new CodecError(
-                        `${describeShape(value)} is not a plain object, and \`record\` writes an 'M' — a codec's input is typed, so this is a value that reached \`encode\` past its type`,
-                    ),
-                (held) => everyEntry(held, values.encode),
-                (carried: Readonly<Record<string, AttributeValue>>) =>
-                    everyEntry(carried, values.decode),
-            )
-        }
-        /**
          * §3 `(list)`: the one positional container, with the arity test before any position.
          *
          * `arrayCodec_eq` and `tupleCodec_eq` are the lemmas for the two builder shapes, and
@@ -1539,7 +1512,7 @@ export const encodeUnknown = (
     if (value instanceof Map) {
         return unrecoverable(
             'a Map',
-            'DynamoDB has one map member, `M`, and it decodes as a plain object. Pass an object, or use `record(...)` to state the value type.',
+            'DynamoDB has one map member, `M`, and it decodes as a plain object. Pass an object, or use `object([string, optional(...)])` to state the value type.',
         )
     }
 
@@ -1935,10 +1908,12 @@ export const optionOfTerm = (def: Term): Option => {
         declares,
         requires,
         literals: literalsOf(def),
-        describe: `{ ${[...declares]
-            .map((name) =>
+        // an open block holds every undeclared name, and `...` names it
+        describe: `{ ${[
+            ...[...declares].map((name) =>
                 alwaysWritten(fields[name] as Field) ? name : `${name}?`,
-            )
-            .join(', ')} }`,
+            ),
+            ...(typeof def.body.rest === 'string' ? [] : ['...']),
+        ].join(', ')} }`,
     }
 }

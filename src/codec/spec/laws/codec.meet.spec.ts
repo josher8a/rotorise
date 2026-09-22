@@ -17,7 +17,6 @@ import {
     object,
     opaque,
     optional,
-    record,
     string,
     union,
     withLegacyRead,
@@ -215,16 +214,16 @@ describe('two object bodies meet over the names both declare', () => {
     })
 
     /**
-     * **A record against a body refuses, in both orders.** The model's `record` is an object whose
-     * open block holds every name, and `objObj` refuses a pair unless both open blocks are absent.
+     * **An open object against a body refuses, in both orders.** `objObj` refuses a pair unless
+     * both open blocks are absent.
      * A row the model does not state is a rule the host would be inventing. The pair below is
      * empty, and the host still answers `undefined`, because no model row certifies the bottom.
      */
-    it('refuses a record against an object or a record, because the model meets no open block', () => {
+    it('refuses an open block against a body, because the model meets no open block', () => {
         const open = termOf(object({ a: string }, [string, optional(string)]))
         const closed = termOf(object({ a: string }))
-        const map = termOf(record(string))
-        const sets = termOf(record(string.set('a', 'b')))
+        const map = termOf(object([string, optional(string)]))
+        const sets = termOf(object([string, optional(string.set('a', 'b'))]))
         for (const [x, y] of [
             [open, map],
             [closed, map],

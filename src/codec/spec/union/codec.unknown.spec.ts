@@ -73,7 +73,11 @@ describe('what it refuses, and what it tells you instead', () => {
         ['a bigint', 1n, /Use `decimal` and pass `value.toString\(\)`/],
         ['NaN', Number.NaN, /no number for NaN/],
         ['Infinity', Number.POSITIVE_INFINITY, /no number for Infinity/],
-        ['a Map', new Map([['a', 'b']]), /use `record\(\.\.\.\)`/],
+        [
+            'a Map',
+            new Map([['a', 'b']]),
+            /use `object\(\[string, optional\(\.\.\.\)\]\)`/,
+        ],
         ['a set of numbers', new Set([1, 2]), /NS decodes as strings/],
         ['a Date', new Date(0), /faithful as an ISO string/],
         [

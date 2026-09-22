@@ -25,7 +25,6 @@ import {
     object,
     opaque,
     optional,
-    record,
     refine,
     string,
     union,
@@ -49,7 +48,7 @@ const codecs: readonly (readonly [string, AnyCodec])[] = [
     ['set', string.set()],
     ['array', array(string)],
     ['list', list(string, number)],
-    ['record', record(decimal)],
+    ['open object', object([string, optional(decimal)])],
     ['map', object({ a: string, b: number })],
     ['nullable', nullable(string)],
     ['withLegacyRead', withLegacyRead({ current: decimal, older: string })],
@@ -134,7 +133,7 @@ describe('a definition generates what the codec generated', () => {
     // one kind under two adapters, and `held` was already counted
     it('covers every kind a codec can be', () => {
         const kinds = new Set(codecs.map(([, c]) => c.def?.kind))
-        expect(kinds.size).toBe(14)
+        expect(kinds.size).toBe(13)
         expect([...kinds].every(Boolean)).toBe(true)
     })
 })

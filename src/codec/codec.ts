@@ -398,12 +398,18 @@ const childrenOf = (
     const def = codec.def
     const one = (child: AnyCodec | undefined) => (child ? [child] : [])
     switch (def.kind) {
+        // a name the body does not declare falls in the open block, where there is one
         case 'object': {
-            const field = def.body.fields[String(segment)]
-            return one(field ? codecOfTerm(field.t) : undefined)
+            const { fields, rest } = def.body
+            const field = fields[String(segment)]
+            return one(
+                field
+                    ? codecOfTerm(field.t)
+                    : typeof rest === 'string'
+                      ? undefined
+                      : codecOfTerm(rest.t),
+            )
         }
-        case 'record':
-            return one(codecOfTerm(def.val))
         // a set is unordered, so no document path addresses a member of one — `set` never offered
         // a child either, and refusing here is what keeps a meaningless path from compiling
         case 'list': {
@@ -1281,7 +1287,7 @@ export const list = <const Cs extends readonly (AnyCodec | AnySpread)[]>(
         )
     }
 
-    // as with `record` and `map`, the cast keeps the shape each position writes, which
+    // as with `map`, the cast keeps the shape each position writes, which
     // `Attribute<'L'>` would flatten to "some list"
     return codecOfTerm({
         kind: 'list',
@@ -1454,24 +1460,6 @@ const isSpread = (element: unknown): element is AnySpread =>
 export type SpreadCodec<T, A extends AttributeValue = AttributeValue> = {
     readonly [spreadMarker]: true
     readonly spread: AttributeCodec<T, A>
-}
-
-/** A homogeneous string-keyed record, as `M`. */
-export const record = <const C extends AnyCodec>(
-    element: C,
-): AttributeCodec<
-    Readonly<Record<string, Decoded<C>>>,
-    M<{ readonly [key: string]: AttributeOf<C> }>
-> => {
-    // the cast keeps the *shape* the values write, which `Attribute<'M'>` would flatten to
-    // "some map" — the same reason `map` casts
-    return codecOfTerm({
-        kind: 'record',
-        val: termOf(element as unknown as AnyCodec),
-    }) as unknown as AttributeCodec<
-        Readonly<Record<string, Decoded<C>>>,
-        M<{ readonly [key: string]: AttributeOf<C> }>
-    >
 }
 
 // ── narrowing ───────────────────────────────────────────────────────
@@ -1976,7 +1964,7 @@ export const lazy = <T, A extends AttributeValue = AttributeValue>(
  * `undefined` is not injective in: `{ a: undefined }` and `{}` both encode without `a`.
  *
  * **A name is the only thing this can be said of**, so the result goes in an object's spec and
- * nowhere else. A list, a set, a tuple, a record and a union option have no name at that position for
+ * nowhere else. A list, a set, a tuple, an open block and a union option have no name at that position for
  * anything to be missing from, and each of those refuses this because a field is not a codec — the
  * member for a value that may be stored as `NULL` in one of them is {@link nullable}. Marking a
  * marked declaration is refused the same way: `withLegacyRead({ current: c, whenMissing: v })` is the attribute that may be absent
@@ -2204,7 +2192,7 @@ export namespace opaque {
                               ? BS
                               : ErrorMessage<'[opaque] `NS` decodes as strings, because its members are decimal strings. Use a set of strings, or `array(number)` if the order does not matter'>
                         : T extends ReadonlyMap<unknown, unknown>
-                          ? ErrorMessage<'[opaque] DynamoDB has one map member, `M`, and it decodes as a plain object. Pass an object, or use `record(...)` to state the value type'>
+                          ? ErrorMessage<'[opaque] DynamoDB has one map member, `M`, and it decodes as a plain object. Pass an object, or use `object([string, optional(...)])` to state the value type'>
                           : T extends Date
                             ? ErrorMessage<'[opaque] only plain objects survive: `M` carries the own enumerable properties and nothing that says how to rebuild the instance. A `Date` is faithful as an ISO string'>
                             : T extends readonly (infer Element)[]
@@ -2513,11 +2501,13 @@ export type ObjectCodec<
     // *comparable* to a hand-written shape. Measured at +14k instantiations across this repo
     readonly encode: (
         value: DerivedItem<Spec, Rest>,
-    ) => Result<M<Encoded<Spec>>>
+    ) => Result<M<EncodedBy<Spec, Rest>>>
     readonly decode: (
         attribute: AttributeValue,
     ) => Result<DerivedItem<Spec, Rest>>
-    readonly unsafeEncode: (value: DerivedItem<Spec, Rest>) => M<Encoded<Spec>>
+    readonly unsafeEncode: (
+        value: DerivedItem<Spec, Rest>,
+    ) => M<EncodedBy<Spec, Rest>>
     readonly unsafeDecode: (
         attribute: AttributeValue,
     ) => DerivedItem<Spec, Rest>
@@ -2981,7 +2971,7 @@ const objectFromMap = <
     // object literal, which is what lets a bundler drop an unused one
     const nested = codecOfTerm(itemDef) as unknown as AttributeCodec<
         DerivedItem<Spec, Rest>,
-        M<Encoded<Spec>>
+        M<EncodedBy<Spec, Rest>>
     >
     return {
         encode: nested.encode,
@@ -3617,11 +3607,17 @@ type Written<Full, K> = Exclude<Full[K & keyof Full], undefined>
  *
  * The two string policies are named rather than the codec matched: an {@link AttributeCodec} is
  * invariant in its value, so `Rest extends AttributeCodec<unknown, infer A>` fails for every codec
- * of a narrower value and quietly takes the wrong branch.
+ * of a narrower value and quietly takes the wrong branch. {@link AttributeOf} infers both
+ * parameters, so the open block's attribute is exact. The index also admits each declared
+ * attribute, because an index signature intersects with every declared key.
  */
 type EncodedBy<Spec, Rest> = [Rest] extends ['drop' | 'refuse']
     ? Encoded<Spec>
-    : Encoded<Spec> & { readonly [name: string]: AttributeValue }
+    : Encoded<Spec> & {
+          readonly [name: string]:
+              | AttributeOf<Rest>
+              | Encoded<Spec>[keyof Encoded<Spec>]
+      }
 
 /**
  * The item a spec writes, as a shape you could have written by hand.
@@ -5101,10 +5097,10 @@ export const union = <const Options extends readonly AnyCodec[]>(
      * pairs that share a value share only that one:
      *
      *     array(string) / array(number)     `[]`
-     *     record(string) / record(number)   `{}`
+     *     open object of string / of number `{}`
      *     set(string) / set(number)         nothing
      *
-     * So `array` and `record` stay refused and `set` does not, because **DynamoDB has no empty
+     * So `array` and an open object stay refused and `set` does not, because **DynamoDB has no empty
      * set**. That is the asymmetry the term's own rows record — `[]` is admitted and an empty `Set`
      * is not — deciding a question about declarations. `codec.laws.spec.ts` pins both halves.
      *

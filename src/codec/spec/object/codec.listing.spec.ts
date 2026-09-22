@@ -22,7 +22,6 @@ import {
     object,
     opaque,
     optional,
-    record,
     string,
 } from '../../codec'
 import {
@@ -201,7 +200,7 @@ const Listing = object({
     ),
 
     // genuinely unknown shapes: the escape hatch, visible and local
-    tenderDetails: optional(record(opaque)),
+    tenderDetails: optional(object([string, optional(opaque)])),
     tenderFilter: optional(opaque),
 
     ...statusLog,

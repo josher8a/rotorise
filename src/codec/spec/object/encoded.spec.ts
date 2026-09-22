@@ -40,7 +40,6 @@ import {
     object,
     opaque,
     optional,
-    record,
     string,
     union,
 } from '../../codec'
@@ -343,12 +342,12 @@ describe('an entry types the row it writes', () => {
 })
 
 /**
- * `record` and `tuple` name what they hold, so a shape containing either can be pinned.
+ * An open object and `tuple` name what they hold, so a shape containing either can be pinned.
  *
  * Both used to write `Attribute<'M'>` and `Attribute<'L'>` — "some map", "some list" — which meant a
  * shape containing one could not be pinned at all, and the pin is the whole point.
  */
-describe('a record and a tuple keep their shape', () => {
+describe('an open object and a tuple keep their shape', () => {
     type Crate = {
         prices: Readonly<Record<string, string>>
         span: readonly [string, number]
@@ -362,9 +361,9 @@ describe('a record and a tuple keep their shape', () => {
     }
 
     const crateSpec = {
-        prices: record(decimal),
+        prices: object([string, optional(decimal)]),
         span: list(string, number),
-        nested: record(object({ at: string })),
+        nested: object([string, optional(object({ at: string }))]),
     }
 
     /** The pin. This does not compile if either constructor starts flattening again. */
@@ -385,8 +384,11 @@ describe('a record and a tuple keep their shape', () => {
         expect(written.nested.M.x?.M.at).toEqual({ S: 'now' })
     })
 
-    it('is refused when a record holds a different member', () => {
-        const drifted = { ...crateSpec, prices: record(string) }
+    it('is refused when an open block holds a different member', () => {
+        const drifted = {
+            ...crateSpec,
+            prices: object([string, optional(string)]),
+        }
         const _wrong = () =>
             // @ts-expect-error `prices` holds strings, and the shape pins N
             object(drifted) satisfies Writes<CrateItem>

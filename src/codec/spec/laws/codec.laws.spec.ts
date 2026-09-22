@@ -33,7 +33,6 @@ import {
     object,
     opaque,
     optional,
-    record,
     refine,
     spread,
     string,
@@ -624,7 +623,7 @@ describe('the laws that do NOT hold', () => {
      *
      * `optional` and `withLegacyRead` are statements about a *name* — the attribute called this may be
      * missing from the item. Everything else here is a statement about an attribute. A list, a set, a
-     * tuple, a record and a union option have no name at that position, so one of those there is a
+     * tuple and a union option have no name at that position, so one of those there is a
      * category error rather than a weaker element.
      *
      * It was silent, and it corrupted: `array(optional(string))` compiled and wrote `{}` into the
@@ -634,8 +633,6 @@ describe('the laws that do NOT hold', () => {
         const _wrong = () => [
             // @ts-expect-error nothing in a list has a name to be absent from
             array(optional(string)),
-            // @ts-expect-error nor in a record
-            record(optional(string)),
             // @ts-expect-error nor in a tuple
             list(string, optional(number)),
             // @ts-expect-error nor is a union option a name
@@ -828,7 +825,7 @@ describe('`accepts`, and the direction of the law that is true', () => {
         ['array', array(string)],
         ['list', list(string, number)],
         ['list(rest)', list(string, spread(number))],
-        ['record', record(decimal)],
+        ['open object', object([string, optional(decimal)])],
         ['attributes', object({ a: string, b: number }).item],
         [
             'attributes(open)',

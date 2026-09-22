@@ -249,7 +249,6 @@ describe("an object option's name spec", () => {
     /** Only an object is chosen by names; everything else is chosen by being attempted. */
     it('nothing but an object has a name spec', () => {
         expect(specOf(str)).toBe(undefined)
-        expect(specOf({ kind: 'record', val: str })).toBe(undefined)
     })
 })
 
