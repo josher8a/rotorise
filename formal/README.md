@@ -9,7 +9,7 @@ definition it touches.
 | Module                      | Doc section | Content                                                                                                                                                                                                                                                               |
 | --------------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `Calculus/Lists.lean`       | —           | The list plumbing: `traverse` and its laws off the pivot `traverse_eq_some` (a successful traversal *is* `List.Forall₂ (f · = some ·)`), the keyed clause `traverse_fst`, and the `filter` facts mathlib states in the wrong shape — everything with no codec in it, kept apart so `Prisms.lean` reads as codec vocabulary |
-| `Calculus/Domain.lean`      | §1          | `Member`, `Attr`, the value language, `Kind` with `Value.kind`/`Attr.kind` (the ten members collapsing onto eight), host axioms, and `Numeral.WF` — §1's numeral grammar, 38 significant digits and magnitude range, as a decidable predicate                                                                                            |
+| `Calculus/Domain.lean`      | §1          | `Member`, `Attr`, the value language, `Kind` with `Value.kind`/`Attr.kind` (the ten members collapsing onto eight), `NumericHost` as the port's obligation, and `Numeral.WF` — §1's numeral grammar, 38 significant digits and magnitude range, as a decidable predicate                                                                                            |
 | `Calculus/Codec.lean`       | §2, §5      | `Codec`, `Agree` (`≼`), `Lawful`/`LawfulCore`, corollaries (Q, read-side W), injectivity lemma — **proved**                                                                                                                                                           |
 | `Calculus/Prisms.lean`      | §3          | The entry point of the certified combinator algebra, opening with `Ctor` — a constructor as a partial iso onto its image, the prism §7 names. The point ground codecs (`string`, `boolean`, `binary`, `null`) are `pointCodec` at four pairs of prisms and share one lawfulness proof; the wire-set payload projections are the same shape again. Then `through`/`restrict` (iso/prism) and `extendRead` (alternate reading) |
 | `Calculus/Products.lean`    | §3          | `carriedCodec` — a payload pair carried between two prisms, the shape underneath every product: `entrywise` is it at a traversal (`array`, `record`), `tupleCodec` it at `align` + a traversal over `slots`, the codec row a shape assigns to a row of *n* positions, which is what makes alignment depend on length alone. `setCodec` is argued on its own |
@@ -28,7 +28,7 @@ definition it touches.
 | `Calculus/Continuity.lean`  | §5, §7      | Why `union` admits no fixpoint semantics: `Codec.Approx` (the information order any ccpo must extend), `altCodec_not_monotone` (unique admission is anti-monotone in the options) and `stage_not_monotone` — the same collapse over a staging defined locally, since `denote` is structural and no longer stages |
 | `Calculus/Nesting.lean`     | §1          | **The one place `𝔸` is bigger in the model than in the store.** `Attr.Storable` (`Domain.lean`) is §1's 32-level bound, counting `L` and `M` only — a different function from `Attr.depth`, which is a termination measure and charges a wire set a layer. The ground fragment writes nesting `0`, containers add exactly one, and `not_storable_of_typed` exhibits a **derivable** term whose encoding the store refuses: the bound is absent from §3's rules rather than a premise someone failed to discharge |
 | `Calculus/Refutations.lean` | §6          | §6's seven "Do not hold" nodes, all settled, over eight declarations: `not_equiv_union_array`, `not_equiv_tupleTail_tuple` and `not_equiv_tupleTail_array`, `not_equiv_refine_held`, `not_equiv_union_extend`, `not_equiv_lazy` (where `≡`'s member index is what fails), `legacy_breaks_MP` for `LegacyRead`, `e_comp_p_ne_id` — plus `optional` nesting and `set(union(…))`, both of which the syntax rules out |
-| `Calculus/Axioms.lean`      | §3          | `#assert_axioms`, and the headline theorems run through it — the advertised axiom base (`propext`, `Classical.choice`, `Quot.sound`, the host axioms; **no `sorryAx`**) as a build error rather than a claim in prose |
+| `Calculus/Axioms.lean`      | §3          | `#assert_axioms`, and the headline theorems run through it — the advertised axiom base (`propext`, `Classical.choice`, `Quot.sound`; **no `sorryAx`**) as a build error rather than a claim in prose |
 | `Calculus/Discharge.lean`   | §5          | The discharges of (U) that no phase of `Orth` reaches — an arbitrary `q` inside a `refine`, a union of numeric literals, `opaque`, and `uAtAct_array_literals` where `UAtCan` is outright false — with the two counterexamples that repaired §5's admission row and the refutation of (D) as a discharger. The four per-aspect tables this file used to carry are retired: §5 states that row on option admission and occupancy, `Calculus/ExactV.lean` and `Calculus/ExactA.lean` prove those rows exact, and `Calculus/Orthogonality.lean` decides the pairs a declaration can decide |
 
 This table has a row of its own for twenty-two of the modules under `Calculus/`.
@@ -115,8 +115,11 @@ and the judgement to it), and `lazy` concludes `⊤` in the model exactly as the
   `opaque`'s eight is pinned in one line, and `onKind_set`/`onKind_array`/`onKind_record`
   hold for *any* element codec — which is why the fixpoint's unique admission needs
   nothing from the recursive call, and why `opaque` is not a special construction.
-- **an axiomatised host type is axiomatized** with exactly the shortest-text round trip §3's `(number)`
-  consumes. IEEE-754 facts are not this calculus's theorems.
+- **`N` is carried exactly, and no numeric type is axiomatized.** `NumericHost` states what a
+  target language owes if it wants to hand its own numeric type to a caller: a decimal spelling, a
+  partial reader, the shortest-text round trip §3's `(number)` consumes, and decidable equality.
+  `numericHostWFNumeral` inhabits it with the identity and needs no axiom. IEEE-754 facts are not
+  this calculus's theorems, and nothing here assumes them.
 - **Semantic rule premises live beside the carrier**, not in `Typed`: the doc's
   `(held)` and `(custom)` side conditions live in `Obligations`. The alternate-reader
   conditions live in `LegacyReadObligations`. Each definition has its denotation in scope.
@@ -198,9 +201,9 @@ convention rather than against it: shared construction, fewer sites.
 The theorem is proved; these tighten the model's fidelity to the doc, none affect
 soundness. `union`'s commutativity is proved for the adjacent transposition, which
 generates every permutation, and lifting it to `List.Perm` is the obvious next step.
-A numeric literal's read side goes through the axiomatized the host's decimal reader, so no *syntactic*
-set bounds it — and the row does not have to name its set, it can ask its codec, `ofDec` being
-a function is enough to make the answer unique. `AdmA`'s `number` row and `AdmALit`'s `.number`
+A decimal literal's read side asks its codec rather than naming a set, and the row does not have
+to name one: the codec's reader is a function, which is enough to make the answer unique. The
+`number` row names its set directly, because `N`'s carrier is the attribute's own. `AdmA`'s `number` row and `AdmALit`'s `.number`
 row are `dom(p)`
 exactly, which is what separates `opaque` from `number` and two disjoint numeric literals from
 each other. The store observation survives on the

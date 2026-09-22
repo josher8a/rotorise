@@ -11,8 +11,8 @@ and the *kernel* — not a tactic, not `#eval` — decides whether the model agr
 Three facts about this development force the shape of what follows, and each of them killed
 an easier design first.
 
-**`denote` is `noncomputable`, but the kernel still evaluates it.** `Value` carries a
-an axiomatised host type and an axiomatised host type is an axiom (§1), so no compiler can run `denote`; `#eval` and
+**`denote` is `noncomputable`, but the kernel still evaluates it.** The map attribute carries
+a function on its key set, so no compiler can run `denote`; `#eval` and
 `native_decide` are both unavailable, and that is not a toolchain gap to be worked around.
 What *is* available is definitional unfolding: `(denote t).e v = some a` is `rfl` for every
 term form, including deeply nested ones, in well under a second. So a vector is checked by
@@ -350,13 +350,12 @@ two closures only at names. Both rules `aeq`'s docstring records carry over and 
 re-derived here — ask the `∀` before the `∃`, and **quantify over the expected side's key set,
 not the codec's**, which is the 10× nobody can see in the statement.
 
-**One row differs, and it is the host axiom again.** `veq` answers `.exhausted` at `.num`
-and `.numSet` rather than deciding them: the host's decidable equality is an axiom, so the comparison would
-neither reduce nor stay choice-free — and `Verdict.exhausted` already means "carries no
-information", which is exactly the honest answer. Soundness is *easier* for it: a row that never
-says `.same` has nothing to prove. What it costs is that a read resolving to a value containing a
-double cannot be certified, which is the one read pair still recorded as unstatable and the third
-place this axiom bites (the numeric literal's term, `AdmA .number`'s row, and here). -/
+**No row differs now, and that is the change.** `veq` answered `.exhausted` at `.num` and
+`.numSet` while the numeric carrier was a host type whose equality was an axiom. `N` is carried
+exactly, so both rows compare the numeral text and decide, as every other leaf row does.
+`Verdict.exhausted` keeps its meaning, "carries no information", and the fuel row is what answers
+it. The read pairs this file once recorded as unstatable for want of a numeric comparison are not
+re-measured here. -/
 
 def zipAllV (r : Value → Value → Verdict) : List Value → List Value → Verdict
   | [], [] => .same
@@ -374,16 +373,16 @@ def mapRowV (r : Value → Value → Verdict)
   | none, none => .same
   | _, _ => .differ
 
-/-- `aeq`'s construction over `Value`. The two an axiomatised host type-carrying rows answer `.exhausted`:
-    the host's decidable equality is an axiom, so deciding them would neither reduce nor stay choice-free. -/
+/-- `aeq`'s construction over `Value`. Every leaf row decides. The two numeric rows compare the
+    numeral text, where they answered `.exhausted` through a host's axiomatised equality. -/
 def veq : Nat → Value → Value → Verdict
   | 0, _, _ => .exhausted
   | _ + 1, .str a,  .str b  => if a = b then .same else .differ
   | _ + 1, .bool a, .bool b => if a = b then .same else .differ
   | _ + 1, .bin a,  .bin b  => if a = b then .same else .differ
   | _ + 1, .null,   .null   => .same
-  -- **`N` DECIDES now.** Its equality is the numeral text's, not an axiomatised host's, so
-  -- these two rows stopped being `.exhausted` when the carrier stopped being a an axiomatised host type.
+  -- **`N` DECIDES now.** Its equality is the numeral text's, so these two rows stopped being
+  -- `.exhausted` when the carrier stopped being a host type.
   | _ + 1, .num a,  .num b  => if a.1 = b.1 then .same else .differ
   | _ + 1, .numSet a, .numSet b => if fsetEq a.1 b.1 then .same else .differ
   | _ + 1, .strSet a, .strSet b => if fsetEq a.1 b.1 then .same else .differ
@@ -420,8 +419,8 @@ theorem zipAllV_sound {r : Value → Value → Verdict}
       exact h.elim (fun h' => hd _ _ h' ha) (fun h' => ihd h' hb)
 
 /-- **The certificate**, `aeq_sound`'s twin: `.same` is equality and `.differ` is disequality.
-    `.exhausted` says nothing, which is what the two an axiomatised host type rows answer and why they need no
-    case here — a row that never says `.same` has nothing to prove. -/
+    `.exhausted` says nothing, which is what the fuel row answers and why it needs no case
+    here: a row that never says `.same` has nothing to prove. -/
 theorem veq_sound : ∀ (n : Nat) (a b : Value),
     (veq n a b = .same → a = b) ∧ (veq n a b = .differ → a ≠ b)
   | 0, _, _ => ⟨fun h => by simp [veq] at h, fun h => by simp [veq] at h⟩
@@ -562,11 +561,12 @@ Linear in the number of vectors — 100 two-field object vectors cost the same p
 where the same 200 written out as separate lines compile in 19 s. Each `rfl` gets its own
 heartbeat budget, and distinct vectors share no structure for a batch to exploit.
 
-`number` has no **positive** vectors and can have none: `Value.num` carries a an axiomatised host type,
-an axiomatised host type is an axiom with no closed terms, so there is no value to write down and propose an
-agreement about. `decimal` is the numeric escape hatch — `WFNumeral` is a `String` subtype and
-reduces like one. The same axiom is why `Attr.n`'s row here compares the underlying text rather
-than reaching for a numeric equality.
+`number` can carry **positive** vectors now. `Value.num` carries a `WFNumeral`, which is a
+`String` subtype carrying its own well-formedness proof, so a closed numeric value is one literal
+and reduces like text. This paragraph recorded the opposite while the carrier was an axiom with no
+closed terms, and `decimal` was named the numeric escape hatch for that reason. Whether the corpus
+holds such a vector is a separate question, and this paragraph does not answer it. `Attr.n`'s row
+compares the underlying text, which is the carrier's own equality.
 
 **It has refusal vectors, and that took the impossibility being put in the right place.** A
 refusal names the term and a value the term *rejects*, so it needs no inhabitant of the codec's

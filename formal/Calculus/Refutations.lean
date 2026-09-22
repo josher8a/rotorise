@@ -519,10 +519,10 @@ would be written to an attribute `𝔸` has no point for, which is the one thing
 never do. The premise sits beside `hne` and `hnd` because it is the same kind of fact: data
 the term owns, decidable at the declaration.
 
-What follows is what it buys and what it refuses. The refutations are conditional on a double
-outside `D` existing: the numeric host was axiomatized with the shortest-text round trip and nothing
-else, and whether IEEE-754 has a value DynamoDB will not store is a fact about IEEE that the
-model deliberately does not assert. It was not a hypothetical — the shipped `literal(NaN)`
+What follows is what it buys and what it refuses. The refutations were conditional on a host
+number outside `D` existing, while the numeric host was axiomatized with the shortest-text round
+trip and nothing else: whether IEEE-754 has a value DynamoDB will not store is a fact about IEEE
+that the model deliberately does not assert. It was not a hypothetical — the shipped `literal(NaN)`
 wrote `⟨N, "NaN"⟩` and `literal(1e400)` wrote `⟨N, "Infinity"⟩`, both reachable with no cast,
 which is what settled the question the conditional leaves open. -/
 
@@ -559,9 +559,11 @@ response to that report is deletion rather than a sanction entry: one became `fu
 and the other became `literalN_sub_number` above, which needs no premise. A theorem whose
 hypothesis has become decoration is a description that has stopped describing.
 
-A third said no numeric literal outside `D` is derivable. `.of d ∅` needs `d : WFDouble`, so
-there is no such term to quantify over — "this cannot be derived" and "this cannot be written"
-are one claim, and only the theorem can go stale. -/
+A third said no numeric literal outside `D` is derivable. It quantified over a carrier that had
+no closed term, because the carrier was a host axiom, so there was nothing to quantify over:
+"this cannot be derived" and "this cannot be written" were one claim, and only the theorem could
+go stale. `N` is carried exactly now and closed numeric literals exist, so the premise that made
+the two claims one is gone with the axiom. -/
 
 /-! ## `decimal` before its held set was narrowed
 
@@ -625,9 +627,7 @@ absorbing in TypeScript.
 The absorption survives the semantic row, and the statements below say so in the form
 the row leaves them. They used to read "for every option that admits anything", on the
 strength of `adm (.opaq true) = ⊤`; that blanket is gone, because `adm` now asks the
-codec and `opaqCodecω` at a lossy policy still refuses `.num d` when
-`Numeral.WF (Double.toDec d)` fails — and the host's decimal spelling is an axiom with no such
-guarantee (`Domain.lean`). What is true, and is all the refutation ever used, is: **an
+codec and `opaqCodecω` at a lossy policy refuses a value the numeral grammar rejects. What is true, and is all the refutation ever used, is: **an
 `opaque` never separates from an option they both admit.** The kind and member disjuncts
 are still structurally unavailable, so a single shared value or attribute is enough.
 

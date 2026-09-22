@@ -90,33 +90,28 @@ attribute that is absent and an attribute holding an undefined value are differe
 
 ---
 
-## Partially mitigated: the numeric host is an axiom, so no numeric value can be written
+## Known: the differential corpus pins no numeric value, and the emitter still writes a decimal as text
 
-**Observation.** the numeric host was axiomatized deliberately, because IEEE-754 facts are not this
-calculus's theorems. the host's decimal spelling is a field of `NumericHost`, so `Numeral.WF d.toDec` has no
-decision procedure for any `d` a proof can name, and this development holds no concrete host number.
+**Observation.** The obstruction this entry used to record is gone. `Value.num` carries a
+`WFNumeral`, the numeric host axiom is deleted, and the advertised base is Lean's own three. A
+closed numeric value is one literal: `Value.num (WFNumeral.of "1.5")`. `Adm .number` on it, and the
+three read-side rows this entry called stuck, all answer by `decide`.
 
-**Effect.** No closed host-number term exists, so `Value.num` is unconstructible. Three consequences
-follow, and all three are structural rather than incidental. `number` and a numeric literal can
-never carry a positive encode vector, so the differential corpus is silent on the one base whose
-host semantics are least obvious. `Term.number` is emittable, so it appears in the refusal cross
-product while its value side is blocked. And in the read-side differential the row for `.n` goes
-through the host's decimal reader, which has no computation rule, so it reduces to neither `true` nor `false`
-and both assertions fail rather than one — which is how a stuck row was told apart from a
-disagreement, `AdmA .decimal` and `AdmA .string` reducing on the same attribute.
+**Effect.** The blind spot survives its cause. The emitted corpus holds 37 `Term.number` rows and
+every one is a refusal; no vector carries a `Value.num` or a `.numSet`, so nothing pins the numeric
+write path. That is now a gap in the emitter rather than a consequence of the calculus.
 
-**What is mitigated.** The axiom block is checkably an interface rather than binary64 under another
-name. `numericHostWFNumeral` and `numericHostUnit` inhabit `NumericHost` at two types with
-provably different decimal images, by `numericHost_images_differ`, and the first is built with no
-host axiom at all. So every theorem that is really about the interface holds of a host with no
-rounding. The gate travels as the element's own second component, so admission at a numeric
-literal is exact rather than over-approximating.
+**And the emitter still carries the conflation the calculus closed.** `src/codec/lean.ts` writes a
+`decimal` scalar as text, so the row pairing `number` against `decimal` feeds `Value.str "1.5"`.
+Its prose says `Value.num` has no closed inhabitant and can never appear in a vector, and its
+refusal message names the deleted host type. So the corpus tests the pre-merge model at every
+decimal row, and the refusals it records pass for a reason the calculus no longer gives.
 
-**What remains.** The corpus blind spot. Three pairs of the read-side differential are stuck, not
-divergent, and no vector pins the numeric write path at all.
+**What remains.** Emitting a numeric value, and re-deciding the decimal rows against the merged
+carrier. Both change the corpus, so both are rulings rather than repairs.
 
-**Pin.** The stuck rows are visible in the read-side differential artifact that the gate elaborates.
-The term-level twin is pinned as permanent in the bridge spec under `src/codec/lean/`.
+**Pin.** The 37 refusal rows are in the vector artifact the gate elaborates. The disproof of the
+old entry is `memory/probe_defect_numeric_stuck-2026-09-22.lean`.
 
 ---
 

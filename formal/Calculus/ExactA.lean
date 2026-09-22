@@ -708,7 +708,7 @@ theorem AdmA_exact : ∀ (t : Term), ExactA t
       case number =>
         cases a
         case n x =>
-          -- `numberCodec.p` is a constructor wrapper now, so the the host's decimal reader bind and the
+          -- `numberCodec.p` is a constructor wrapper now, so the host's decimal reader bind and the
           -- `Numeral.WF` gate this used to walk through are both gone and the row is the
           -- payload comparison on both sides
           rw [show (denote (Term.literal .number ls)).p (.n x)
