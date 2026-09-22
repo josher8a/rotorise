@@ -256,6 +256,9 @@ HOST = {
                 "its subterm already holds the null point and joins the null term with a union, "
                 "which is what §3's sugar paragraph says it always was",
     "EveryOptionTagged": "`src/codec/codec.ts`'s type-level check, cited by the arity-one row",
+    "decimal": "`src/codec/codec.ts`'s adapter: `number` under the text adapter, which the model "
+               "states as `held` over `Term.number`. The model has no decimal base, so the name "
+               "is the host's alone. `decimalCodec` is the model's codec for the stored numerals",
 }
 
 # The specification's own notation, from the blueprint's `content.tex`. §1 names sets and §5 names
@@ -299,7 +302,7 @@ Bool Prop Type Sort Nat Int String Char Unit True False And Or Not Iff Eq Option
 List Array Finset Set Subtype Quot Quotient Decidable DecidableEq Repr BEq Inhabited Nonempty
 Function Equivalence Forall₂ Perm Prod Sum Classical Exists Std Batteries Lean Mathlib
 Multiset WellFounded Expr Environment NameSet ExprSet StateM Meta Core Elab IO
-sizeOf casesOn recOn binductionOn brecOn noConfusion propext sorry rfl decide simp omega
+sizeOf casesOn recOn binductionOn brecOn noConfusion propext sorry rfl decide simp omega by_contra
 deriving instance structure inductive theorem lemma abbrev mutual noncomputable partial unsafe
 def example where match with fun let have show this at using
 dite dif whnf native native_decide with_unfolding_all maxHeartbeats partial_function

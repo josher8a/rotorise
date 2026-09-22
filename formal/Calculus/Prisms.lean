@@ -270,7 +270,6 @@ def nullCodec : Codec :=
 noncomputable def baseCodec : GroundKind → Codec
   | .string  => stringCodec
   | .number  => numberCodec
-  | .decimal => decimalCodec
   | .boolean => booleanCodec
   | .binary  => binaryCodec
   | .null    => nullCodec
@@ -279,12 +278,10 @@ noncomputable def baseCodec : GroundKind → Codec
 
     `denote (.set b)` is `setCodec b.elem`, which is why `setCodec`, `encSet`, `decSet` and
     `setImage` are untouched by the re-indexing: the *constructor* changed, the combinator
-    did not. Four bases, three wire members — `decimal` and `number` are both `NS`, and are
-    different pairs at it. -/
+    did not. Three bases, three wire members. -/
 noncomputable def SetBase.elem : SetBase → Codec
   | .string  => stringCodec
   | .number  => numberCodec
-  | .decimal => decimalCodec
   | .binary  => binaryCodec
 
 /-- `literal(ℓ)`'s predicate: the value is the alternative.
@@ -296,22 +293,16 @@ noncomputable def inL : (k : GroundKind) → k.Carrier → Value → Bool
   -- `number`'s carrier IS the value's, so this row joins the ungated four: the payload is
   -- the alternative and there is no gate left to go through.
   | .number,  x, .num d  => decide (d = x)
-  -- `decimal`'s alternative is the narrower `Stored` subtype over the same value, so this
-  -- row alone still goes through a gate: a numeral the store would rewrite is no alternative.
-  | .decimal, x, .num s  =>
-      if h : Numeral.Stored s.1 = true then decide ((⟨s.1, h⟩ : StoredNumeral) = x) else false
   | .boolean, x, .bool b => decide (b = x)
   | .binary,  x, .bin b  => decide (b = x)
   | .null,    _, .null   => true
   | _, _, _ => false
 
-/-! `inL`'s rows at the four ungated bases, as `@[simp]` equations.
+/-! `inL`'s rows at the five bases, as `@[simp]` equations.
 
 Without these a `simp` that needs `inL` at one base unfolds `inL.match_1` — the matcher Lean
 derives for the whole ten-row table — and pays for all ten rows at every rewrite. That is what
-~~fanOf~~ found behind `AdmA_exact`'s duplication. `number` and `decimal` get no equation here:
-their rows are a `dite` on a gate, so the useful statement is about the gate rather than about
-the row, and `hLit_of_inL`'s two `cases hs :` branches are where that is done. -/
+~~fanOf~~ found behind `AdmA_exact`'s duplication. Each of the five bases gets an equation. -/
 
 /-- `.str` at `string`: the payload *is* the carrier, so this is `rfl`. -/
 @[simp] theorem inL_str (x s : String) :

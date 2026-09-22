@@ -565,7 +565,7 @@ no closed term, because the carrier was a host axiom, so there was nothing to qu
 go stale. `N` is carried exactly now and closed numeric literals exist, so the premise that made
 the two claims one is gone with the axiom. -/
 
-/-! ## `decimal` before its held set was narrowed
+/-! ## `decimalCodec` before its held set was narrowed
 
 `survivesStore_decimalCodec` shows that gating on `Numeral.Stored` discharges `η ⊆ ker p`.
 This is the other half: the codec that gated on `Numeral.WF` instead — §1's *whole* numeral

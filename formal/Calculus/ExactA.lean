@@ -104,17 +104,12 @@ noncomputable def AdmALit : (k : GroundKind) → k.Carrier → Attr → Bool
   -- host's numeric type. `N` is carried exactly on both sides now, so the attribute payload
   -- IS the alternative and this row reads like `string`'s beside it.
   | .number,  y, .n x    => decide (x = y)
-  -- `decimal` asks its codec, which is what the retired per-aspect row did at this base too,
-  -- so the joint row and the table row are the *same function* here rather than two spellings
-  -- that have to be proved equal.
-  | .decimal, y, a       => ((literalCodec .decimal y).p a).isSome
   | _, _, _ => false
 
 /-- **What a set base reads.**
 
-    Three bases answer concretely: `string` reads `SS` and nothing else, `binary` `BS`,
-    `decimal` an `NS` every numeral of which is `Stored`, and `number` every `NS` there is,
-    since the attribute payload is already §1's `Numerals`.
+    Two bases answer concretely: `string` reads `SS` and nothing else, and `binary` `BS`.
+    `number` asks its codec.
 
     The reason is worth stating, because it is the one residue the re-indexing does *not*
     remove and it is not injectivity of `e`. `numberCodec.p` went through the host's decimal reader,
@@ -127,7 +122,6 @@ noncomputable def AdmALit : (k : GroundKind) → k.Carrier → Attr → Bool
 noncomputable def AdmASet : SetBase → Attr → Bool
   | .string,  .ss _ => true
   | .binary,  .bs _ => true
-  | .decimal, .ns S => decide (∀ x ∈ S.1, Numeral.Stored x.1 = true)
   | .number,  .ns S => (decSet numberCodec Attr.n S).isSome
   | _, _ => false
 
@@ -153,7 +147,6 @@ noncomputable def AdmA : Term → Attr → Bool
   | .binary   => fun a => match a with | .b _ => true | _ => false
   | .null     => fun a => match a with | .null => true | _ => false
   | .number   => fun a => match a with | .n _ => true | _ => false
-  | .decimal  => fun a => match a with | .n x => Numeral.Stored x.1 | _ => false
   | .literal k ls => AdmALit k ls
   -- the bottom reads nothing back, and the row is that sentence
   | .never => fun _ => false
@@ -382,33 +375,6 @@ theorem ExactA_set (b : SetBase) : ExactA (.set b) := by
   case ns S =>
     cases b
     case number => exact Iff.rfl
-    case decimal =>
-      show decide (∀ x ∈ S.1, Numeral.Stored x.1 = true) = true
-        ↔ (decSet decimalCodec Attr.n S).isSome = true
-      rw [decide_eq_true_eq]
-      constructor
-      · intro hst
-        -- `decimal` reads a `.num` now, so the read lands on `decSet`'s numeric branch and
-        -- only the string branch before it has to be shown to miss
-        have hp : ∀ x ∈ S.1, (decimalCodec.p (Attr.n x)).bind vNum = some x := by
-          intro x hx
-          show ((if Numeral.Stored x.1 then some (Value.num x) else none).bind vNum) = some x
-          rw [if_pos (hst x hx)]; rfl
-        obtain ⟨x₀, hx₀⟩ := S.2
-        have hms : (decimalCodec.p (Attr.n x₀)).bind vStr = none := by
-          show ((if Numeral.Stored x₀.1 then some (Value.num x₀) else none).bind vStr) = none
-          rw [if_pos (hst x₀ hx₀)]; rfl
-        refine decSet_isSome_num hx₀ hms (fun x hx => by rw [hp x hx]; rfl) ?_
-        intro x₁ h₁ x₂ h₂ y e₁ e₂
-        rw [hp x₁ h₁] at e₁; rw [hp x₂ h₂] at e₂
-        exact (Option.some.inj e₁).trans (Option.some.inj e₂).symm
-      · intro hd x hx
-        by_contra hc
-        have hn : decimalCodec.p (Attr.n x) = none := by
-          show (if Numeral.Stored x.1 then some (Value.num x) else none) = none
-          rw [if_neg hc]
-        rw [decSet_isSome_false hx hn] at hd
-        exact nomatch hd
     all_goals
       obtain ⟨x, hx⟩ := S.2
       simp only [AdmASet, SetBase.elem, setCodec]
@@ -697,14 +663,11 @@ theorem AdmA_exact : ∀ (t : Term), ExactA t
   | .binary => by intro a; cases a <;> simp [AdmA, denote, denote, binaryCodec]
   | .null => by intro a; cases a <;> simp [AdmA, denote, denote, nullCodec]
   | .number => by intro a; cases a <;> simp [AdmA, denote, denote, numberCodec]
-  | .decimal => by intro a; cases a <;> simp [AdmA, denote, denote, decimalCodec]
   -- Three rows into one, and `number`'s no longer needs the host lookup that used to make it
   -- the awkward one: both numeric bases now read the attribute payload directly.
   | .literal k ls => by
       intro a
       cases k
-      -- the row asks the codec, so the biconditional is the row read twice
-      case decimal => simp [AdmA, AdmALit, denote]
       case number =>
         cases a
         case n x =>

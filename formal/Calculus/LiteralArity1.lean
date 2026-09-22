@@ -235,7 +235,6 @@ base's own `inD`. -/
 def groundTerm : GroundKind → Term
   | .string => .string
   | .number => .number
-  | .decimal => .decimal
   | .boolean => .boolean
   | .binary => .binary
   | .null => .null

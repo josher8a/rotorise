@@ -71,7 +71,7 @@ inductive KeyPat where
 mutual
 
 inductive Term where
-  | string | number | decimal | boolean | binary
+  | string | number | boolean | binary
   /-- §3 `(null)`: the `NULL` point. `Value.null` and `⟨NULL, ∗⟩` are in §1 and
       `nullCodec` is one of `opaque`'s options, but until now no *term* denoted it —
       so a schema could not say "this attribute is exactly NULL". -/
@@ -284,7 +284,7 @@ and the `fuel` parameter it replaces. -/
 mutual
 
 def Term.depth : Term → Nat
-  | .string | .number | .decimal | .boolean | .binary | .null
+  | .string | .number | .boolean | .binary | .null
   -- `set` is a **leaf** since its base became an index: there is no element term to
   -- measure, so it sits with the other ground shapes rather than costing a layer.
   | .literal _ _ | .opaq _ | .set _ | .never => 1

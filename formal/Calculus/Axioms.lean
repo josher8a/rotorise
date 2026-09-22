@@ -162,7 +162,7 @@ they are `(literal-N)`'s `ℓ ⊆ D`, added to §3 once the shipped `literal(NaN
 question the conditional refutations leave open. -/
 
 /-! §2's kernel and §1's store. `retract_through_store` is **(R)** with DynamoDB in the
-middle — the law production actually runs — and the two `decimal` rows are what makes
+middle — the law production actually runs — and the two `decimalCodec` rows are what makes
 `Numeral.Stored` the right held set rather than a cautious one: `η ⊆ ker p` holds after the
 narrowing and fails before it. -/
 
