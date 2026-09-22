@@ -13,6 +13,7 @@ import Calculus.Nesting
 import Calculus.Malleability
 import Calculus.Orthogonality
 import Calculus.Vectors
+import Calculus.Universal
 import Lean
 
 /-!
