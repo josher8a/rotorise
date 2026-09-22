@@ -621,6 +621,9 @@ theorem opaq_TSub : ∀ (fuel : Nat) (lossy : Bool) (v : Value),
         | exact .strSet _ fun s hs => ih (Value.str s) (hT s hs)
         | exact .numSet _ fun d hd => ih (Value.num d) (hT d hd)
         | exact .binSet _ fun b hb => ih (Value.bin b) (hT b hb)
+        -- `opaque` holds no exact numeral, so a set of them is empty of witnesses and the
+        -- nonempty carrier makes the hypothesis absurd
+        | (next S => exact absurd (hT _ S.2.choose_spec) (opaqCodec_T_dec lossy fuel _))
         | exact nomatch hT
     · cases v <;> first
         | exact .arr _ fun x hx => ih x (hT x hx)
@@ -705,7 +708,8 @@ theorem typed_TSub : ∀ {t T μ}, Typed t T μ → ∀ v, (denote t).T v → T 
       cases b <;> cases v <;> first
         | exact Or.inl ⟨_, rfl, fun x hx => hv x hx⟩
         | exact Or.inr (Or.inl ⟨_, rfl, fun x hx => hv x hx⟩)
-        | exact Or.inr (Or.inr ⟨_, rfl, fun x hx => hv x hx⟩)
+        | exact Or.inr (Or.inr (Or.inl ⟨_, rfl, fun x hx => hv x hx⟩))
+        | exact Or.inr (Or.inr (Or.inr ⟨_, rfl, fun x hx => hv x hx⟩))
         | exact nomatch hv
     | @list pre Tpre sp Tsp suf Tsuf hp hs hf =>
       rw [denote_list, denoteList_eq, denoteOpt_eq, denoteList_eq] at hv

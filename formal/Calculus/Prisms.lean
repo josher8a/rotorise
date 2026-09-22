@@ -236,13 +236,15 @@ theorem numberCodec_p_n (x : WFNumeral) :
     side has to check as well — an ill-formed numeral admitted by `p` would name a value
     `e` then refuses, and that is **(C)** failing. -/
 def decimalCodec : Codec :=
-  { T := fun v => ∃ s, v = .str s ∧ Numeral.Stored s = true
+  { T := fun v => ∃ x : WFNumeral, v = .dec x ∧ Numeral.Stored x.1 = true
     μ := some .N
     e := fun v => match v with
-      | .str s => if h : Numeral.Stored s then some (.n ⟨s, Numeral.stored_wf h⟩) else none
+      -- the carrier already proves `WF`, so the write produces the attribute directly and
+      -- `Numeral.stored_wf` is no longer needed to manufacture the proof
+      | .dec x => if Numeral.Stored x.1 then some (.n x) else none
       | _ => none
     p := fun a => match a with
-      | .n x => if Numeral.Stored x.1 then some (.str x.1) else none
+      | .n x => if Numeral.Stored x.1 then some (.dec x) else none
       | _ => none }
 
 def booleanCodec : Codec :=
@@ -300,10 +302,11 @@ noncomputable def inL : (k : GroundKind) → k.Carrier → Value → Bool
   -- *through* the gate, and a double whose text §1 refuses is no alternative.
   | .number,  x, .num d  =>
       if h : Numeral.WF d.toDec = true then decide ((⟨d, h⟩ : WFDouble) = x) else false
-  -- `decimal`'s value is a `.str` and its carrier is the `Stored` subtype, so the comparison
-  -- goes through the gate rather than round it: a text that is not stored is no alternative.
-  | .decimal, x, .str s  =>
-      if h : Numeral.Stored s = true then decide ((⟨s, h⟩ : StoredNumeral) = x) else false
+  -- `decimal`'s value is a `.dec`, its own carrier, and its alternative is the `Stored`
+  -- subtype, so the comparison goes through the gate rather than round it: a numeral the
+  -- store would rewrite is no alternative.
+  | .decimal, x, .dec s  =>
+      if h : Numeral.Stored s.1 = true then decide ((⟨s.1, h⟩ : StoredNumeral) = x) else false
   | .boolean, x, .bool b => decide (b = x)
   | .binary,  x, .bin b  => decide (b = x)
   | .null,    _, .null   => true
@@ -419,7 +422,7 @@ noncomputable def inD : Value → Bool :=
 
 /-- §1's `Stored`, likewise. -/
 def isStored : Value → Bool :=
-  fun v => match v with | .str s => Numeral.Stored s | _ => false
+  fun v => match v with | .dec x => Numeral.Stored x.1 | _ => false
 
 /-- **`number` writes exactly on §1's `D`**, and **`decimal` exactly on `Stored`** —
     stated as the `isSome` of the write, without the `dite`.
@@ -444,10 +447,9 @@ def isStored : Value → Bool :=
 @[simp] theorem decimalCodec_e_isSome (v : Value) :
     (decimalCodec.e v).isSome = isStored v := by
   cases v <;> try rfl
-  case str s =>
-    show (if h : Numeral.Stored s then some (Attr.n ⟨s, Numeral.stored_wf h⟩) else none).isSome
-      = isStored (Value.str s)
-    by_cases h : Numeral.Stored s = true <;> simp [isStored, h]
+  case dec x =>
+    show (if Numeral.Stored x.1 then some (Attr.n x) else none).isSome = isStored (Value.dec x)
+    cases h : Numeral.Stored x.1 <;> simp [isStored, h]
 
 /-! ### The base at `N` is §1's own set, not an ungated one
 
@@ -461,30 +463,30 @@ sets. -/
 /-- `decimal` before its *storage* gate: every numeral §1 accepts, held as its own text.
     Gated at `WF` and not at `Stored`, which is exactly the difference `decimal` adds. -/
 def wfDecimalCodec : Codec :=
-  { T := fun v => ∃ s, v = .str s ∧ Numeral.WF s = true
+  { T := fun v => ∃ x : WFNumeral, v = .dec x
     μ := some .N
+    -- the `WF` gate is GONE: the carrier is `WFNumeral`, so the proof arrives with the value
+    -- and an ill-formed decimal is unrepresentable rather than merely unwritten
     e := fun v => match v with
-      | .str s => if h : Numeral.WF s then some (.n ⟨s, h⟩) else none
+      | .dec x => some (.n x)
       | _ => none
-    p := fun a => match a with | .n x => some (.str x.1) | _ => none }
+    p := fun a => match a with | .n x => some (.dec x) | _ => none }
 
 /-- **§3's `(decimal)` gate is `refine`** at `Stored` over §1's `Numerals`, on the writing
     half… The base is `wfDecimalCodec` rather than an ungated one, and `Stored → WF` is
     what makes the composite equal `decimal`. -/
 theorem decimalCodec_e_restrict : decimalCodec.e = (wfDecimalCodec.restrict isStored).e := by
   funext v; cases v with
-  | str s =>
-    by_cases hs : Numeral.Stored s = true
-    · have hw := Numeral.stored_wf hs
-      simp [decimalCodec, wfDecimalCodec, Codec.restrict, isStored, hs, hw]
-    · simp [decimalCodec, wfDecimalCodec, Codec.restrict, isStored, hs]
+  | dec x =>
+    cases hs : Numeral.Stored x.1 <;>
+      simp [decimalCodec, wfDecimalCodec, Codec.restrict, isStored, hs]
   | _ => rfl
 
 /-- …and on the reading half. -/
 theorem decimalCodec_p_restrict : decimalCodec.p = (wfDecimalCodec.restrict isStored).p := by
   funext a; cases a with
   | n x =>
-    by_cases hs : Numeral.Stored x.1 = true <;>
+    cases hs : Numeral.Stored x.1 <;>
       simp [decimalCodec, wfDecimalCodec, Codec.restrict, isStored, hs]
   | _ => rfl
 
@@ -558,12 +560,12 @@ theorem hLit_of_inL (k : GroundKind) (x : k.Carrier) (v : Value) :
       | (simp only [inL, decide_eq_true_eq] at h
          subst h
          rfl)
-      | (rename_i s
-         cases hs : Numeral.Stored s with
-         | true =>
-           simp only [inL, hs, dif_pos, decide_eq_true_eq] at h
-           exact congrArg Value.str (congrArg Subtype.val h)
-         | false => simp [inL, hs] at h)
+      | (simp only [inL] at h
+         split at h
+         · simp only [decide_eq_true_eq] at h
+           subst h
+           rfl
+         · exact Bool.noConfusion h)
       | (rename_i d
          cases hs : Numeral.WF d.toDec with
          | true =>

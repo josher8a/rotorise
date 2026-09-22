@@ -667,8 +667,8 @@ theorem literalCodec_string_e (x : String) : ∀ v : Value,
     (literalCodec .string x).e v
       = (match v with | .str s => if s = x then some (Attr.s s) else none | _ => none)
   | .str _ => by simp [literalCodec, baseCodec, Codec.restrict, inL, stringCodec]
-  | .num _ | .bool _ | .bin _ | .null | .strSet _ | .numSet _ | .binSet _
-  | .arr _ | .map _ _ => rfl
+  | .num _ | .dec _ | .bool _ | .bin _ | .null | .strSet _ | .numSet _ | .decSet _
+  | .binSet _ | .arr _ | .map _ _ => rfl
 
 theorem literalCodec_string_p (x : String) : ∀ a : Attr,
     (literalCodec .string x).p a

@@ -400,19 +400,27 @@ theorem ExactA_set (b : SetBase) : ExactA (.set b) := by
       rw [decide_eq_true_eq]
       constructor
       · intro hst
-        have hp : ∀ x ∈ S.1, (decimalCodec.p (Attr.n x)).bind vStr = some x.1 := by
+        -- the decimal carrier is `.dec` now, so the read lands on `decSet`'s EXACT branch and
+        -- the two before it must be shown to miss
+        have hp : ∀ x ∈ S.1, (decimalCodec.p (Attr.n x)).bind vDec = some x := by
           intro x hx
-          show ((if Numeral.Stored x.1 then some (Value.str x.1) else none).bind vStr)
-            = some x.1
+          show ((if Numeral.Stored x.1 then some (Value.dec x) else none).bind vDec) = some x
           rw [if_pos (hst x hx)]; rfl
-        refine decSet_isSome_str (fun x hx => by rw [hp x hx]; rfl) ?_
+        obtain ⟨x₀, hx₀⟩ := S.2
+        have hms : (decimalCodec.p (Attr.n x₀)).bind vStr = none := by
+          show ((if Numeral.Stored x₀.1 then some (Value.dec x₀) else none).bind vStr) = none
+          rw [if_pos (hst x₀ hx₀)]; rfl
+        have hmn : (decimalCodec.p (Attr.n x₀)).bind vNum = none := by
+          show ((if Numeral.Stored x₀.1 then some (Value.dec x₀) else none).bind vNum) = none
+          rw [if_pos (hst x₀ hx₀)]; rfl
+        refine decSet_isSome_dec hx₀ hms hmn (fun x hx => by rw [hp x hx]; rfl) ?_
         intro x₁ h₁ x₂ h₂ y e₁ e₂
         rw [hp x₁ h₁] at e₁; rw [hp x₂ h₂] at e₂
-        exact Subtype.ext ((Option.some.inj e₁).trans (Option.some.inj e₂).symm)
+        exact (Option.some.inj e₁).trans (Option.some.inj e₂).symm
       · intro hd x hx
         by_contra hc
         have hn : decimalCodec.p (Attr.n x) = none := by
-          show (if Numeral.Stored x.1 then some (Value.str x.1) else none) = none
+          show (if Numeral.Stored x.1 then some (Value.dec x) else none) = none
           rw [if_neg hc]
         rw [decSet_isSome_false hx hn] at hd
         exact nomatch hd
@@ -425,7 +433,7 @@ theorem ExactA_set (b : SetBase) : ExactA (.set b) := by
     case binary =>
       obtain ⟨x₀, hx₀⟩ := S.2
       have h : (decSet binaryCodec Attr.b S).isSome = true :=
-        decSet_isSome_bin hx₀ rfl rfl (fun _ _ => rfl) (fun _ _ _ _ _ h1 h2 => by
+        decSet_isSome_bin hx₀ rfl rfl rfl (fun _ _ => rfl) (fun _ _ _ _ _ h1 h2 => by
           simp only [binaryCodec, Option.bind_some, vBin] at h1 h2
           exact (Option.some.inj h1).trans (Option.some.inj h2).symm)
       exact Iff.intro (fun _ => h) (fun _ => rfl)

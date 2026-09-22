@@ -218,6 +218,7 @@ noncomputable def Adm : Term → Value → Bool
       match v with
       | .strSet S => decide (∀ s ∈ S.1, b.adm (.str s) = true)
       | .numSet S => decide (∀ d ∈ S.1, b.adm (.num d) = true)
+      | .decSet S => decide (∀ y ∈ S.1, b.adm (.dec y) = true)
       | .binSet S => decide (∀ y ∈ S.1, b.adm (.bin y) = true)
       | _ => false
   -- **One row for the one positional container.** `array` and `tuple` were two rows that
@@ -868,6 +869,11 @@ theorem ExactV_set (b : SetBase) : ExactV (.set b) := by
     show decide (∀ y ∈ S.1, b.adm (.bin y) = true) = true
       ↔ (encSet b.elem Value.bin S).isSome = true
     rw [decide_eq_true_eq, encSet_base_iff b (fun _ _ h => by injection h) S]
+  case decSet S =>
+    show decide (∀ y ∈ S.1, b.adm (.dec y) = true) = true
+      ↔ (encSet b.elem Value.dec S).isSome = true
+    rw [decide_eq_true_eq,
+      encSet_base_iff b (fun _ _ h => by injection h) S]
   all_goals exact Iff.intro (fun h => nomatch h) (fun h => nomatch h)
 
 /-- Each option's row *is* the admission `optionSemOf` builds for it — given that option's

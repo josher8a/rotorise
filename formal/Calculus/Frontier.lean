@@ -65,14 +65,24 @@ theorem decSet_numBranch {α : Type} {c : Codec} {inj : α → Attr} {S : NEFins
     decSet c inj S = some (.numSet U) := by
   unfold decSet; rw [h0, h1]
 
-/-- …and the binary branch when both earlier ones have. -/
+/-- …the exact-numeral branch when the two before it have failed. -/
+theorem decSet_decBranch {α : Type} {c : Codec} {inj : α → Attr} {S : NEFinset α}
+    {U : NEFinset WFNumeral}
+    (h0 : neSetImage (fun y => (c.p (inj y)).bind vStr) S = none)
+    (h0' : neSetImage (fun y => (c.p (inj y)).bind vNum) S = none)
+    (h1 : neSetImage (fun y => (c.p (inj y)).bind vDec) S = some U) :
+    decSet c inj S = some (.decSet U) := by
+  unfold decSet; rw [h0, h0', h1]
+
+/-- …and the binary branch when all three earlier ones have. -/
 theorem decSet_binBranch {α : Type} {c : Codec} {inj : α → Attr} {S : NEFinset α}
     {U : NEFinset Bytes}
     (h0 : neSetImage (fun y => (c.p (inj y)).bind vStr) S = none)
     (h0' : neSetImage (fun y => (c.p (inj y)).bind vNum) S = none)
+    (h0'' : neSetImage (fun y => (c.p (inj y)).bind vDec) S = none)
     (h1 : neSetImage (fun y => (c.p (inj y)).bind vBin) S = some U) :
     decSet c inj S = some (.binSet U) := by
-  unfold decSet; rw [h0, h0', h1]; rfl
+  unfold decSet; rw [h0, h0', h0'', h1]; rfl
 
 /-- **(R) for `set`.** The wire image inverts by `setImage_inv`, and the read side lands on
     the branch the element codec's own reads determine — the *value* kind fixes it, whichever
@@ -103,7 +113,7 @@ theorem set_retract {c : Codec} (h : LawfulCore c) :
     obtain ⟨x, -, hpx⟩ := setImage_read h hA (neSetImage_eq_setImage.mp hI) y hy
     exact neSetImage_none (setImage_none_of hy (by rw [hpx]; simpa using hV x))
   intro t a he
-  rcases setCodec_e_eq.mp he with ⟨S, rfl, hE⟩ | ⟨S, rfl, hE⟩ | ⟨S, rfl, hE⟩ <;>
+  rcases setCodec_e_eq.mp he with ⟨S, rfl, hE⟩ | ⟨S, rfl, hE⟩ | ⟨S, rfl, hE⟩ | ⟨S, rfl, hE⟩ <;>
     (unfold encSet at hE
      split at hE
      · next T hT =>
@@ -114,9 +124,14 @@ theorem set_retract {c : Codec} (h : LawfulCore c) :
        | exact decSet_numBranch
            (miss (vinj := Value.num) (vout := vStr) sC_out_inj (fun _ => rfl) hT)
            (key (vinj := Value.num) (vout := vNum) sC_out_inj (fun _ => rfl) hT)
+       | exact decSet_decBranch
+           (miss (vinj := Value.dec) (vout := vStr) sC_out_inj (fun _ => rfl) hT)
+           (miss (vinj := Value.dec) (vout := vNum) sC_out_inj (fun _ => rfl) hT)
+           (key (vinj := Value.dec) (vout := vDec) sC_out_inj (fun _ => rfl) hT)
        | exact decSet_binBranch
            (miss (vinj := Value.bin) (vout := vStr) sC_out_inj (fun _ => rfl) hT)
            (miss (vinj := Value.bin) (vout := vNum) sC_out_inj (fun _ => rfl) hT)
+           (miss (vinj := Value.bin) (vout := vDec) sC_out_inj (fun _ => rfl) hT)
            (key (vinj := Value.bin) (vout := vBin) sC_out_inj (fun _ => rfl) hT)
      · split at hE
        · next T hT =>
@@ -127,9 +142,14 @@ theorem set_retract {c : Codec} (h : LawfulCore c) :
          | exact decSet_numBranch
              (miss (vinj := Value.num) (vout := vStr) nC_out_inj (fun _ => rfl) hT)
              (key (vinj := Value.num) (vout := vNum) nC_out_inj (fun _ => rfl) hT)
+         | exact decSet_decBranch
+             (miss (vinj := Value.dec) (vout := vStr) nC_out_inj (fun _ => rfl) hT)
+             (miss (vinj := Value.dec) (vout := vNum) nC_out_inj (fun _ => rfl) hT)
+             (key (vinj := Value.dec) (vout := vDec) nC_out_inj (fun _ => rfl) hT)
          | exact decSet_binBranch
              (miss (vinj := Value.bin) (vout := vStr) nC_out_inj (fun _ => rfl) hT)
              (miss (vinj := Value.bin) (vout := vNum) nC_out_inj (fun _ => rfl) hT)
+             (miss (vinj := Value.bin) (vout := vDec) nC_out_inj (fun _ => rfl) hT)
              (key (vinj := Value.bin) (vout := vBin) nC_out_inj (fun _ => rfl) hT)
        · next =>
          obtain ⟨T, hT, hA⟩ := Option.map_eq_some_iff.mp hE
@@ -140,9 +160,14 @@ theorem set_retract {c : Codec} (h : LawfulCore c) :
          | exact decSet_numBranch
              (miss (vinj := Value.num) (vout := vStr) bC_out_inj (fun _ => rfl) hT)
              (key (vinj := Value.num) (vout := vNum) bC_out_inj (fun _ => rfl) hT)
+         | exact decSet_decBranch
+             (miss (vinj := Value.dec) (vout := vStr) bC_out_inj (fun _ => rfl) hT)
+             (miss (vinj := Value.dec) (vout := vNum) bC_out_inj (fun _ => rfl) hT)
+             (key (vinj := Value.dec) (vout := vDec) bC_out_inj (fun _ => rfl) hT)
          | exact decSet_binBranch
              (miss (vinj := Value.bin) (vout := vStr) bC_out_inj (fun _ => rfl) hT)
              (miss (vinj := Value.bin) (vout := vNum) bC_out_inj (fun _ => rfl) hT)
+             (miss (vinj := Value.bin) (vout := vDec) bC_out_inj (fun _ => rfl) hT)
              (key (vinj := Value.bin) (vout := vBin) bC_out_inj (fun _ => rfl) hT))
 
 /-- **(W) for `set`.** The wire member is `setMember` of the element's, and which branch
@@ -157,7 +182,7 @@ theorem set_writes {c : Codec} (h : LawfulCore c) :
   | some μ₀ =>
     rw [hc] at hμ
     replace hμ : setMember μ₀ = some μ := hμ
-    rcases setCodec_e_eq.mp he with ⟨S, rfl, hE⟩ | ⟨S, rfl, hE⟩ | ⟨S, rfl, hE⟩ <;>
+    rcases setCodec_e_eq.mp he with ⟨S, rfl, hE⟩ | ⟨S, rfl, hE⟩ | ⟨S, rfl, hE⟩ | ⟨S, rfl, hE⟩ <;>
       · obtain ⟨x₀, hx₀⟩ := S.2
         obtain ⟨a₀, ha₀⟩ := Option.isSome_iff_exists.mp (encSet_elem hE x₀ hx₀)
         have hm₀ : a₀.member = μ₀ := h.writes hc ha₀
@@ -286,7 +311,7 @@ theorem lawfulCore_setCodec {c : Codec} {μ₀ μS : Member} (h : LawfulCore c)
   refine ⟨set_retract h, ?_, set_writes h⟩
   intro a t hp
   rcases setCodec_p_eq.mp hp with ⟨S, rfl, hD⟩ | ⟨S, rfl, hD⟩ | ⟨S, rfl, hD⟩ <;>
-    · rcases decSet_mem hD with ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ <;>
+    · rcases decSet_mem hD with ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ <;>
       · refine encSet_isSome_of h hsm (fun x y hxy => by injection hxy) ?_
           (fun x _ a' ha' => h.writes hμ ha')
         intro y hy
@@ -390,7 +415,7 @@ theorem lawful_setCodec {c : Codec} (h : Lawful c) : Lawful (setCodec c) := by
   refine ⟨set_retract h.core, ?_, set_writes h.core, ?_⟩
   · intro a t hp
     rcases setCodec_p_eq.mp hp with ⟨S, rfl, hD⟩ | ⟨S, rfl, hD⟩ | ⟨S, rfl, hD⟩
-    · rcases decSet_mem hD with ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ <;>
+    · rcases decSet_mem hD with ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ <;>
       · refine encSet_isSome_of (μ₀ := .S) (μS := .SS) h.core rfl
           (fun x y hxy => by injection hxy) ?_ ?_
         · intro y hy
@@ -399,7 +424,7 @@ theorem lawful_setCodec {c : Codec} (h : Lawful c) : Lawful (setCodec c) := by
         · intro y hy a' ha'
           obtain ⟨x, -, hpx⟩ := hm y hy
           exact (h.agree hpx ha').member_eq
-    · rcases decSet_mem hD with ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ <;>
+    · rcases decSet_mem hD with ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ <;>
       · refine encSet_isSome_of (μ₀ := .N) (μS := .NS) h.core rfl
           (fun x y hxy => by injection hxy) ?_ ?_
         · intro y hy
@@ -408,7 +433,7 @@ theorem lawful_setCodec {c : Codec} (h : Lawful c) : Lawful (setCodec c) := by
         · intro y hy a' ha'
           obtain ⟨x, -, hpx⟩ := hm y hy
           exact (h.agree hpx ha').member_eq
-    · rcases decSet_mem hD with ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ <;>
+    · rcases decSet_mem hD with ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ <;>
       · refine encSet_isSome_of (μ₀ := .B) (μS := .BS) h.core rfl
           (fun x y hxy => by injection hxy) ?_ ?_
         · intro y hy
@@ -419,17 +444,17 @@ theorem lawful_setCodec {c : Codec} (h : Lawful c) : Lawful (setCodec c) := by
           exact (h.agree hpx ha').member_eq
   · intro a t a' hp he
     rcases setCodec_p_eq.mp hp with ⟨S, rfl, hD⟩ | ⟨S, rfl, hD⟩ | ⟨S, rfl, hD⟩
-    · rcases decSet_mem hD with ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ <;>
+    · rcases decSet_mem hD with ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ <;>
       · obtain ⟨T, rfl⟩ := encSet_ss_of (fun y hy b hb => by
           obtain ⟨x, -, hpx⟩ := hm y hy
           exact (h.agree hpx hb).member_eq) he
         exact Agree.ss T S
-    · rcases decSet_mem hD with ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ <;>
+    · rcases decSet_mem hD with ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ <;>
       · obtain ⟨T, rfl⟩ := encSet_ns_of (fun y hy b hb => by
           obtain ⟨x, -, hpx⟩ := hm y hy
           exact (h.agree hpx hb).member_eq) he
         exact Agree.ns T S
-    · rcases decSet_mem hD with ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ <;>
+    · rcases decSet_mem hD with ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ | ⟨U, rfl, hm⟩ <;>
       · obtain ⟨T, rfl⟩ := encSet_bs_of (fun y hy b hb => by
           obtain ⟨x, -, hpx⟩ := hm y hy
           exact (h.agree hpx hb).member_eq) he

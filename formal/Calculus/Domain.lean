@@ -556,6 +556,10 @@ def Attr.Storable (a : Attr) : Prop := Attr.nesting a ≤ maxNesting
 inductive Value where
   | str  (v : String)
   | num  (v : Double)
+  /-- §1's `N` carried EXACTLY, as the attribute side already carries it. The store's `N` is a
+      38-digit decimal; `Double` is the host's approximation of it and `str` is the wire's.
+      Neither is the datatype, so the exact numeral is its own carrier here. -/
+  | dec  (v : WFNumeral)
   | bool (v : Bool)
   | bin  (v : Bytes)
   | null
@@ -563,6 +567,8 @@ inductive Value where
       concrete element types, so each is a genuine `Finset`. -/
   | strSet (v : NEFinset String)
   | numSet (v : NEFinset Double)
+  /-- …and the same for `NS`, which is one wire set with two value carriers. -/
+  | decSet (v : NEFinset WFNumeral)
   | binSet (v : NEFinset Bytes)
   | arr  (v : List Value)
   /-- …and the value side of the same, for the same reason. -/
@@ -572,11 +578,14 @@ inductive Value where
 def Value.kind : Value → Kind
   | .str _  => .string
   | .num _  => .number
+  -- the exact carrier is the SAME kind as the host's approximation: both are `N`
+  | .dec _  => .number
   | .bool _ => .boolean
   | .bin _  => .binary
   | .null   => .null
   | .strSet _ => .set
   | .numSet _ => .set
+  | .decSet _ => .set
   | .binSet _ => .set
   | .arr _  => .array
   | .map _ _ => .map
@@ -632,9 +641,9 @@ deriving DecidableEq, Repr
   | .string,  s => .str s
   -- the gate is the element's second component; the value is the double it carries
   | .number,  d => .num d.1
-  -- `decimal` holds its numeral as *text* and stores it as `N`; the value side is a `.str`,
-  -- which is exactly why `GroundKind` indexes value carriers and `SetBase` could not reuse it.
-  | .decimal, x => .str x.1
+  -- `decimal` holds its numeral EXACTLY and stores it as `N`. The value side is a `.dec`,
+  -- its own carrier: the text is the wire's, forced by JSON, and not the datatype's.
+  | .decimal, x => .dec ⟨x.1, Numeral.stored_wf x.2⟩
   | .boolean, b => .bool b
   | .binary,  b => .bin b
   | .null,    _ => .null
