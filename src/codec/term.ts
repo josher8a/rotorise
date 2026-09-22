@@ -1630,12 +1630,6 @@ const mark = (
 const isBottomField = (field: Field): boolean =>
     field.mark !== 'optional' && field.t.kind === 'never'
 
-/** Whether every name one body requires is a name the other declares. */
-const reqShared = (a: Body, b: Body): boolean =>
-    Object.entries(a.fields).every(
-        ([name, field]) => field.mark !== 'req' || name in b.fields,
-    )
-
 /** Whether every `withLegacyRead` name one body declares is a name the other declares too. */
 const fbShared = (a: Body, b: Body): boolean =>
     Object.entries(a.fields).every(
@@ -1643,31 +1637,58 @@ const fbShared = (a: Body, b: Body): boolean =>
     )
 
 /**
- * **Two bodies, over the names both declare.**
+ * **Two bodies, met pointwise**, as `objObj` states it.
  *
- * The open blocks decide first, as `objObj` reads them: an open factor holds a name it does not
- * declare, and a product would hold it through both, so a pair with a block refuses. The
- * declared set is the intersection and the required set is the union, which is what two upper
- * bounds meet to.
+ * A body is a total function from the key space to a field: a declared name holds its field, and
+ * an undeclared name holds `optional` of the open block, which is `never` where the body is closed.
+ * So every name of either body meets at its two fields, a name only the right body declares meets
+ * the left body's block, and the blocks meet as the default. A field at the bottom decides before a
+ * field that refuses, because a product is the bottom when any factor is.
  *
- * A field whose terms meet to the bottom is kept rather than dropped: at `optional` the two read the
- * same, and at `req` it is the body that becomes the bottom.
+ * **The normal form drops a name that states the default**, where the default is `never`: in a
+ * closed body `optional never` is what an undeclared name already holds. An open default has no
+ * equality to test, so there every name is kept as written.
+ *
+ * A `withLegacyRead` name the other body does not declare refuses. The model's field has no such
+ * mark, so the host keeps the refusal it inherits.
  */
 const meetBodies = (a: Body, b: Body): Term | undefined => {
-    if (a.rest !== undefined || b.rest !== undefined) return undefined
     if (!fbShared(a, b) || !fbShared(b, a)) return undefined
-    if (!reqShared(a, b) || !reqShared(b, a)) return never
+    const aBlock = a.rest ?? never
+    const bBlock = b.rest ?? never
+    const met: [string, Field | undefined][] = [
+        ...Object.entries(a.fields).map(
+            ([name, field]): [string, Field | undefined] => [
+                name,
+                meetFields(
+                    field,
+                    b.fields[name] ?? { mark: 'optional', t: bBlock },
+                ),
+            ],
+        ),
+        ...Object.entries(b.fields)
+            .filter(([name]) => !(name in a.fields))
+            .map(([name, field]): [string, Field | undefined] => [
+                name,
+                meetFields({ mark: 'optional', t: aBlock }, field),
+            ]),
+    ]
+    if (met.some(([, field]) => field !== undefined && isBottomField(field)))
+        return never
+    const block = meetTerms(aBlock, bBlock)
+    if (block === undefined) return undefined
+    const closed = block.kind === 'never'
     const fields: Record<string, Field> = {}
-    for (const [name, field] of Object.entries(a.fields)) {
-        const other = b.fields[name]
-        if (!other) continue
-        const met = meetFields(field, other)
-        if (met === undefined) return undefined
-        fields[name] = met
+    for (const [name, field] of met) {
+        if (field === undefined) return undefined
+        if (closed && field.mark === 'optional' && field.t.kind === 'never')
+            continue
+        fields[name] = field
     }
-    return Object.values(fields).some(isBottomField)
-        ? never
-        : { kind: 'object', body: { fields } }
+    return {
+        kind: 'object',
+        body: closed ? { fields } : { fields, rest: block },
+    }
 }
 
 /**

@@ -172,24 +172,6 @@ def Term.ofOptions : List Term → Term
 def Term.ofOptionsGuarded (os ts : List Term) : Option Term :=
   some (Term.ofOptions ts)
 
-/-- The names both bodies declare. `Finset.filter` and not `∩`: the intersection's membership API
-    is not a sanctioned route to `Classical.choice`, and `Finset.mem_filter` is. -/
-def Body.shared (a b : Body) : Finset Name := a.fields.filter (fun k => k ∈ b.fields)
-
-/-- A shared name is one the left body declares. -/
-theorem Body.mem_shared_left {a b : Body} {k : Name} (h : k ∈ Body.shared a b) : k ∈ a.fields :=
-  (Finset.mem_filter.mp h).1
-
-/-- …and one the right body declares. -/
-theorem Body.mem_shared_right {a b : Body} {k : Name} (h : k ∈ Body.shared a b) : k ∈ b.fields :=
-  (Finset.mem_filter.mp h).2
-
-/-- Whether every name one body requires is a name the other declares. **A bottom test only
-    against a factor that refuses the name on both halves**: an open block holds the name, so
-    `objObj` reads the two open blocks first and refuses the pair unless both are absent. -/
-def Body.reqShared (a b : Body) : Bool :=
-  decide (∀ k : {k // k ∈ a.fields}, ObjectSlot.isReq (a.at k) = true → k.1 ∈ b.fields)
-
 /-- A list of answers, as one answer: `none` where any cell refused. Outside the recursion, so
     the rows below reach a list through `List.attach` and a `map` rather than through a mutual
     companion — which is what makes every recursive call strictly shallower in one measure. -/
@@ -1037,39 +1019,98 @@ theorem famList_isList {fpre : List (Term → Option Term)}
       | (simp only [famList, Option.some.injEq] at h; exact Or.inl h.symm)
       | exact absurd h (by simp [famList])
 
-/-- **Two objects.** The guards read the two bodies whole; only the shared names recurse, through
-    `g` at the left body's slot.
+/-- **The term an undeclared name holds**: the open block's, and `never` where the body is
+    closed. `Adm_closed_eq_never_block` is why the two spellings of a closed body are one body. -/
+def Body.block (b : Body) : Term :=
+  match b.wild with
+  | none => .never
+  | some (_, t) => t
 
-    **Two open blocks refuse.** Where this read `Rest.merge`, a nine-cell table over three
-    policies, it now reads the two open blocks: an open factor holds an undeclared name through a
-    codec of its own, and the meet would have to hold it through both. One closed state replaced
-    the three, so the four closed cells are one cell and the five refusing cells are one refusal.
+/-- A closed traversal and a traversal through a block that admits nothing agree. -/
+theorem objAdmV_none_never (fs : MapOf VP) (keys : Finset Name) (g : {k // k ∈ keys} → Value) :
+    objAdmV fs none keys g = objAdmV fs (some (fun _ => false)) keys g := by
+  unfold objAdmV
+  exact decide_eq_decide.mpr (forall_congr' fun k => by unfold entryP; cases fs.at k.1 <;> exact Iff.rfl)
 
-    The record∧object rows went with the record constructor. A record is the object whose only
-    block is the open one, so this row answers that pair, and it answers it by refusing: a record
-    is open, and an open factor is what the first guard turns away. -/
-def objObj (a : Body) (g : {k // k ∈ a.fields} → ObjectSlot → Option ObjectSlot) (b : Body) :
-    Option Term :=
-  match a.wild, b.wild with
-  | none, none =>
-      if Body.reqShared a b && Body.reqShared b a then
-          if decide (∀ k : {k // k ∈ Body.shared a b},
-              (g ⟨k.1, Body.mem_shared_left k.2⟩
-                 (b.at ⟨k.1, Body.mem_shared_right k.2⟩)).isSome = true) then
-            if decide (∀ k : {k // k ∈ Body.shared a b},
-                ObjectSlot.isBottom ((g ⟨k.1, Body.mem_shared_left k.2⟩
-                  (b.at ⟨k.1, Body.mem_shared_right k.2⟩)).getD (.optional .never)) = false) then
-              some (.object (.mk (Body.shared a b)
-                (fun k => (g ⟨k.1, Body.mem_shared_left k.2⟩
-                  (b.at ⟨k.1, Body.mem_shared_right k.2⟩)).getD (.optional .never)) none))
-            else some .never
-        else none
-      else some .never
-  | _, _ => none
+/-- …and the same on the read side. -/
+theorem objAdmA_none_never (fs : MapOf AP) (keys : Finset Name) (g : {k // k ∈ keys} → Attr) :
+    objAdmA fs none keys g = objAdmA fs (some (fun _ => false)) keys g := by
+  unfold objAdmA
+  exact decide_eq_decide.mpr (forall_congr' fun k => by unfold entryPA; cases fs.at k.1 <;> exact Iff.rfl)
 
-def famObj (a : Body) (g : {k // k ∈ a.fields} → ObjectSlot → Option ObjectSlot) :
-    Term → Option Term
-  | .object b => objObj a g b
+/-- **The closed body is the open body whose block is `never`**, on the write side. -/
+theorem Adm_closed_eq_never_block (D : Finset Name) (f : {k // k ∈ D} → ObjectSlot) :
+    Adm (.object (.mk D f none)) = Adm (.object (.mk D f (some (.any, .never)))) := by
+  funext v
+  cases v with
+  | map keys g =>
+      show (valPresentT D f keys && objAdmV _ none keys g) =
+        (valPresentT D f keys && objAdmV _ (some (fun _ => false)) keys g)
+      rw [objAdmV_none_never]
+  | _ => rfl
+
+/-- …and on the read side. -/
+theorem AdmA_closed_eq_never_block (D : Finset Name) (f : {k // k ∈ D} → ObjectSlot) :
+    AdmA (.object (.mk D f none)) = AdmA (.object (.mk D f (some (.any, .never)))) := by
+  funext a
+  cases a with
+  | m keys g =>
+      show (reqPresentT D f keys && objAdmA _ none keys g) =
+        (reqPresentT D f keys && objAdmA _ (some (fun _ => false)) keys g)
+      rw [objAdmA_none_never]
+  | _ => rfl
+
+/-- A slot met through one term's meet, keeping the slot's mark. It is `ObjectSlot.meet
+    (.optional t)` with `Term.meet t` passed applied, which keeps the recursion structural. -/
+def ObjectSlot.through (m : Term → Option Term) : ObjectSlot → Option ObjectSlot
+  | .req y => (m y).map .req
+  | .optional y => (m y).map .optional
+
+/-- **The meet at one name of either body.** A body is a total function from the key space to
+    a slot, presented as the declared slots and a default: an undeclared name holds `optional`
+    of the block. So a name the left body declares meets the right body's slot at that name,
+    and a name only the right body declares meets the left body's block. -/
+def objSlot (a b : Body) (g : {k // k ∈ a.fields} → ObjectSlot → Option ObjectSlot)
+    (mw : Term → Option Term) (k : {k // k ∈ a.fields ∪ b.fields}) : Option ObjectSlot :=
+  if h : k.1 ∈ a.fields then
+    g ⟨k.1, h⟩ (if h' : k.1 ∈ b.fields then b.at ⟨k.1, h'⟩ else .optional b.block)
+  else
+    ObjectSlot.through mw (b.at ⟨k.1, (Finset.mem_union.mp k.2).resolve_left h⟩)
+
+/-- A met slot that says the name is absent: `optional never`. -/
+def ObjectSlot.isAbsentOpt : Option ObjectSlot → Bool
+  | some (.optional t) => t.isNever
+  | _ => false
+
+/-- **Two objects, met pointwise.** Every name of either body meets at its two slots, and the
+    blocks meet as the default. A product is the bottom when any factor is, so a slot at the
+    bottom decides before a slot that refuses.
+
+    **The normal form drops a name that states the default**, where the default is `never`: in a
+    closed body `optional never` is what an undeclared name already holds. An open default has
+    no decidable equality to test, so there every name is kept as written. -/
+def objObj (a : Body) (g : {k // k ∈ a.fields} → ObjectSlot → Option ObjectSlot)
+    (mw : Term → Option Term) (b : Body) : Option Term :=
+  if decide (∃ k : {k // k ∈ a.fields ∪ b.fields},
+      ((objSlot a b g mw k).map ObjectSlot.isBottom) = some true) then some .never
+  else
+    match mw b.block with
+    | none => none
+    | some zb =>
+      if decide (∀ k : {k // k ∈ a.fields ∪ b.fields}, (objSlot a b g mw k).isSome = true) then
+        let keep : Name → Bool := fun k =>
+          if h : k ∈ a.fields ∪ b.fields then
+            !(zb.isNever && ObjectSlot.isAbsentOpt (objSlot a b g mw ⟨k, h⟩))
+          else false
+        some (.object (.mk ((a.fields ∪ b.fields).filter (fun k => keep k = true))
+          (fun k => (objSlot a b g mw ⟨k.1, (Finset.mem_filter.mp k.2).1⟩).getD
+            (.optional .never))
+          (if zb.isNever then none else some (.any, zb))))
+      else none
+
+def famObj (a : Body) (g : {k // k ∈ a.fields} → ObjectSlot → Option ObjectSlot)
+    (mw : Term → Option Term) : Term → Option Term
+  | .object b => objObj a g mw b
   | .opaq _ => none
   | _ => some .never
 
@@ -1100,7 +1141,8 @@ def Term.meet : Term → Term → Option Term
         (match sp with | none => none | some t => some (Term.meet t))
         (Term.meetSTs suf)) y
   | .object (.mk fs f w), y =>
-      meetSRight (famObj (.mk fs f w) (fun k => ObjectSlot.meet (f k))) y
+      meetSRight (famObj (.mk fs f w) (fun k => ObjectSlot.meet (f k))
+        (match w with | none => fun _ => some .never | some (_, t) => Term.meet t)) y
 termination_by structural x _ => x
 def Term.meetSL : List Term → Term → List (Option Term)
   | [], _ => [] | x :: xs, y => Term.meet x y :: Term.meetSL xs y
@@ -1208,15 +1250,18 @@ example : Adm (.set .string) (.strSet ⟨{"1"}, Finset.singleton_nonempty _⟩) 
 example : Adm (.set .decimal) (.strSet ⟨{"1"}, Finset.singleton_nonempty _⟩) = false := by
   simp [Adm, SetBase.adm, isStored]
 
-/-- **An open factor refuses no name, so the required-name test is not a bottom test against
-    one.** The left body requires `x` and the right does not declare it, which the required-name
-    test reads as a refusal; the right body's open block holds `x` instead. The two examples below
-    are the value both admit, so the pair shares a value and the answer is the refusal. -/
+/-- **Two open factors meet pointwise.** The left body requires `x` and the right does not
+    declare it, so `x` meets the right body's open block and stays required. `y` meets the left
+    body's block and stays optional, and the blocks meet to `string`. The two examples below are
+    a value both admit, which the meet admits too. -/
 example :
-    Term.meet
+    (Term.meet
         (.object (.mk {"x"} (fun _ => .req .string) (some (.any, .string))))
-        (.object (.mk {"y"} (fun _ => .optional .string) (some (.any, .string))))
-      = none := by rfl
+        (.object (.mk {"y"} (fun _ => .optional .string) (some (.any, .string))))).map
+      (fun z => match z with
+        | .object b => (decide ("x" ∈ b.fields), decide ("y" ∈ b.fields), b.wild.isSome)
+        | _ => (false, false, false))
+      = some (true, true, true) := by rfl
 
 /-- The left body admits `{x := "1"}` through its declared slot… -/
 example : Adm (.object (.mk {"x"} (fun _ => .req .string) (some (.any, .string))))
@@ -1247,20 +1292,17 @@ example : ObjectSlot.meet (.req .string) (.req .boolean) = some (.req .never) :=
 
 
 
-/-- Two closed factors keep the intersection. A body with no open block reads an undeclared name
-    the way it writes one, so the declared set is an upper bound on both halves and the two
-    agree. -/
-example : Term.meet
-    (.object (.mk {"x"} (fun _ => .optional .string) none))
-    (.object (.mk {"y"} (fun _ => .optional .string) none))
-    = some (.object (.mk (Body.shared (.mk {"x"} (fun _ => .optional .string) none)
-                                      (.mk {"y"} (fun _ => .optional .string) none))
-        (fun k => (ObjectSlot.meet
-            ((Body.mk {"x"} (fun _ => .optional .string) none).at
-              ⟨k.1, Body.mem_shared_left k.2⟩)
-            ((Body.mk {"y"} (fun _ => .optional .string) none).at
-              ⟨k.1, Body.mem_shared_right k.2⟩)).getD (.optional .never))
-        none)) := by rfl
+/-- **Two closed factors with no shared name meet at the closed body with no name.** Each name
+    meets the other body's default `never` at `optional never`, which is the default itself, so
+    the normal form drops the name. -/
+example :
+    (Term.meet
+        (.object (.mk {"x"} (fun _ => .optional .string) none))
+        (.object (.mk {"y"} (fun _ => .optional .string) none))).map
+      (fun z => match z with
+        | .object b => (decide ("x" ∈ b.fields), decide ("y" ∈ b.fields), b.wild.isSome)
+        | _ => (true, true, true))
+      = some (false, false, false) := by rfl
 
 /-- **An uncertified union has no meet, and there are two ways to be uncertified.** These two
     options declare the same name with the same mark and no literal, so nothing tells them
@@ -1701,10 +1743,6 @@ theorem Adm_opaq_and (l l' : Bool) (v : Value) :
     have ht := opaq_e_mono _ v a hf
     cases l <;> cases l' <;> simp [hf, ht]
 
-/-- A name is shared exactly when both bodies declare it. -/
-theorem mem_shared_iff {a b : Body} {k : Name} :
-    k ∈ Body.shared a b ↔ k ∈ a.fields ∧ k ∈ b.fields := Finset.mem_filter
-
 /-- A body admits nothing that is not a map. -/
 theorem AdmBody_of_not_map {c : Body} {v : Value} (h : ∀ keys g, v ≠ .map keys g) :
     AdmBody c v = false := by
@@ -1858,25 +1896,6 @@ theorem Adm_refineOf (z : Term) (p : Pred) (v : Value) :
            show false = ((Adm z' v && Pred.eval q v) && Pred.eval p v)
            rw [Bool.and_assoc, meetM_empty hr v, Bool.and_false]
          · rfl)
-
-/-- **The required-name test is sound once the partner is closed.** If both bodies admit one
-    map, every name the left requires is a name the right declares: the value carries it, and a
-    closed body refuses a name it does not declare. -/
-theorem reqShared_of_adm {a b : Body} (hrb : AdmWild b.wild = none)
-    {keys : Finset Name} {g : {k // k ∈ keys} → Value}
-    (hA : AdmBody a (.map keys g) = true) (hB : AdmBody b (.map keys g) = true) :
-    Body.reqShared a b = true := by
-  rw [AdmBody_map, Bool.and_eq_true] at hA hB
-  have hB2 := hB.2
-  unfold objAdmV at hB2
-  have hrow := of_decide_eq_true hB2
-  refine decide_eq_true (fun k hreq => ?_)
-  refine Decidable.byContradiction (fun hnb => ?_)
-  have hk := mem_keys_of_isReq hA.1 k.2 hreq
-  have := hrow ⟨k.1, hk⟩
-  rw [entryP, MapOf.at, dif_neg hnb, hrb] at this
-  exact absurd this (by simp)
-
 
 /-- A field that admits nothing at a name that must be present is a field that must be present. -/
 theorem isReq_of_isBottom {f : ObjectSlot} (h : ObjectSlot.isBottom f = true) : ObjectSlot.isReq f = true := by
@@ -2744,8 +2763,120 @@ theorem Adm_famList {pre suf : List Term} {sp : Option Term}
   case opaq l => simp [famList] at h
   all_goals fam_never famList
 
-/-! ### The object families. The three body helpers are stated over an abstract field function,
-     so the flipped cell and the object cell share them. -/
+/-! ### The object families. A body is read as its slot at every name, so each factor and the
+     meet are stated through one function. -/
+
+/-- **The slot a body gives one name**: the declared slot, or `optional` of the block. A body
+    is a total function from the key space to a slot, and this is that function. -/
+def Body.slotAt (b : Body) (k : Name) : ObjectSlot :=
+  if h : k ∈ b.fields then b.at ⟨k, h⟩ else .optional b.block
+
+/-- A declared name's slot is the declared one. -/
+theorem Body.slotAt_pos {b : Body} {k : Name} (h : k ∈ b.fields) : b.slotAt k = b.at ⟨k, h⟩ := by
+  unfold Body.slotAt; rw [dif_pos h]
+
+/-- An undeclared name's slot is `optional` of the block. -/
+theorem Body.slotAt_neg {b : Body} {k : Name} (h : k ∉ b.fields) : b.slotAt k = .optional b.block := by
+  unfold Body.slotAt; rw [dif_neg h]
+
+/-- **A term's slot at one name**, where the term is an object. The vector bridge states an
+    object answer through this, because two bodies are one body exactly when their slots agree
+    at every name and their blocks agree. -/
+def Term.slotAt : Term → Name → Option ObjectSlot
+  | .object b, k => some (b.slotAt k)
+  | _, _ => none
+
+/-- **A term's option at one position**: a union's option there, and a term that is not a union
+    as its own single option. The bridge states a union of object answers option by option. -/
+def Term.optionAt : Term → Nat → Option Term
+  | .union os, i => os[i]?
+  | t, 0 => some t
+  | _, _ + 1 => none
+
+/-- A term's open block, where the term is an object: `none` inside for a closed body. -/
+def Term.blockOf : Term → Option (Option Term)
+  | .object b => some (b.wild.map Prod.snd)
+  | _ => none
+
+/-- The required names, read over the whole key space: an undeclared name is `optional`. -/
+theorem reqs_slotAt (c : Body) (keys : Finset Name) :
+    decide (∀ k : {k // k ∈ c.fields}, ObjectSlot.isReq (c.at k) = true → k.1 ∈ keys) = true ↔
+    ∀ k, ObjectSlot.isReq (c.slotAt k) = true → k ∈ keys := by
+  rw [decide_eq_true_iff]
+  constructor
+  · intro h k hr
+    rcases Decidable.em (k ∈ c.fields) with hk | hk
+    · rw [Body.slotAt_pos hk] at hr; exact h ⟨k, hk⟩ hr
+    · rw [Body.slotAt_neg hk] at hr; exact absurd hr (by simp [ObjectSlot.isReq])
+  · intro h k hr; exact h k.1 (by rw [Body.slotAt_pos k.2]; exact hr)
+
+/-- **A body admits a map by its slots**: every name whose slot is required is present, and
+    every present name passes its slot. -/
+theorem AdmBody_map_slots (c : Body) (keys : Finset Name) (g : {k // k ∈ keys} → Value) :
+    AdmBody c (.map keys g) = true ↔
+      (∀ k, ObjectSlot.isReq (c.slotAt k) = true → k ∈ keys) ∧
+      ∀ k : {k // k ∈ keys}, AdmField (c.slotAt k.1) (g k) = true := by
+  rw [AdmBody_map, valPresentT_req, Bool.and_eq_true, reqs_slotAt]
+  apply and_congr Iff.rfl
+  unfold objAdmV; rw [decide_eq_true_iff]
+  refine forall_congr' fun k => ?_
+  unfold entryP; simp only [MapOf.at]
+  rcases Decidable.em (k.1 ∈ c.fields) with hk | hk
+  · rw [dif_pos hk, Body.slotAt_pos hk]
+  · rw [dif_neg hk, Body.slotAt_neg hk]
+    cases hw : c.wild with
+    | none => simp [AdmWild, Body.block, hw, AdmField, Adm]
+    | some p => obtain ⟨_, t⟩ := p; simp [AdmWild, Body.block, hw, AdmField]
+
+/-- **Two bodies conjoined at every name are conjoined as bodies.** -/
+theorem AdmBody_of_slots {a b z : Body}
+    (hS : ∀ k w, AdmField (z.slotAt k) w = (AdmField (a.slotAt k) w && AdmField (b.slotAt k) w))
+    (hR : ∀ k, ObjectSlot.isReq (z.slotAt k)
+      = (ObjectSlot.isReq (a.slotAt k) || ObjectSlot.isReq (b.slotAt k)))
+    (v : Value) : AdmBody z v = (AdmBody a v && AdmBody b v) := by
+  cases v
+  case map keys g =>
+    rw [Bool.eq_iff_iff, Bool.and_eq_true, AdmBody_map_slots, AdmBody_map_slots,
+      AdmBody_map_slots]
+    constructor
+    · rintro ⟨hr, hs⟩
+      refine ⟨⟨fun k h => hr k (by rw [hR, h, Bool.true_or]), fun k => ?_⟩,
+        ⟨fun k h => hr k (by rw [hR, h, Bool.or_true]), fun k => ?_⟩⟩
+      · have h1 := hs k; rw [hS, Bool.and_eq_true] at h1; exact h1.1
+      · have h1 := hs k; rw [hS, Bool.and_eq_true] at h1; exact h1.2
+    · rintro ⟨⟨hra, hsa⟩, ⟨hrb, hsb⟩⟩
+      refine ⟨fun k h => ?_, fun k => by rw [hS, hsa k, hsb k]; rfl⟩
+      rw [hR, Bool.or_eq_true] at h
+      exact h.elim (hra k) (hrb k)
+  all_goals
+    rw [AdmBody_of_not_map (fun _ _ hc => Value.noConfusion hc),
+      AdmBody_of_not_map (fun _ _ hc => Value.noConfusion hc),
+      AdmBody_of_not_map (fun _ _ hc => Value.noConfusion hc)]; rfl
+
+/-- **A slot at the bottom empties the product**, at a name either body requires. -/
+theorem AdmBody_false_of_bottom {a b : Body} {s : ObjectSlot} {k : Name}
+    (hs : ∀ w, AdmField s w = (AdmField (a.slotAt k) w && AdmField (b.slotAt k) w))
+    (hr : ObjectSlot.isReq s = (ObjectSlot.isReq (a.slotAt k) || ObjectSlot.isReq (b.slotAt k)))
+    (hbot : ObjectSlot.isBottom s = true) (v : Value) :
+    (AdmBody a v && AdmBody b v) = false := by
+  refine Bool.eq_false_iff.mpr (fun hab => ?_)
+  rw [Bool.and_eq_true] at hab
+  obtain ⟨hA, hB⟩ := hab
+  cases v
+  case map keys g =>
+    rw [AdmBody_map_slots] at hA hB
+    have hreq := isReq_of_isBottom hbot
+    rw [hr, Bool.or_eq_true] at hreq
+    have hk : k ∈ keys := hreq.elim (hA.1 k) (hB.1 k)
+    have h1 := hs (g ⟨k, hk⟩)
+    rw [hA.2 ⟨k, hk⟩, hB.2 ⟨k, hk⟩] at h1
+    cases s with
+    | req t =>
+      have ht : t = .never := by
+        cases t <;> simp_all [ObjectSlot.isBottom, Term.isNever]
+      subst ht; exact absurd h1 (by simp [AdmField, Adm])
+    | optional t => exact absurd hbot (by simp [ObjectSlot.isBottom])
+  all_goals exact absurd hA (by rw [AdmBody_of_not_map (fun _ _ hc => Value.noConfusion hc)]; simp)
 
 /-- The presence test reads the marks alone, so a field table with the body's marks has the
     body's test. -/
@@ -2790,194 +2921,140 @@ theorem isBottom_false_of_left {b : Body} {x : Term} {F : {k // k ∈ b.fields} 
   rw [AdmField_of_isBottom hbot, hrow, hrec] at hi
   exact absurd hi (by simp)
 
-/-! ### …and the same three over the right operand, and over two bodies. -/
+/-! ### Two bodies, met pointwise -/
 
-/-- Every present name goes through both bodies' fields, a shared name through the meet. -/
-theorem objAdmV_of_bodies {a b : Body} {F : {k // k ∈ Body.shared a b} → ObjectSlot}
-    (ihf : ∀ (k : {k // k ∈ Body.shared a b}) (w : Value),
-      AdmField (F k) w = (AdmField (a.at ⟨k.1, Body.mem_shared_left k.2⟩) w
-        && AdmField (b.at ⟨k.1, Body.mem_shared_right k.2⟩) w))
-    (keys : Finset Name) (g : {k // k ∈ keys} → Value) :
-    objAdmV ⟨Body.shared a b, fun k => AdmField (F k)⟩ none keys g
-      = (objAdmV ⟨a.fields, fun k => AdmField (a.at k)⟩ none keys g
-         && objAdmV ⟨b.fields, fun k => AdmField (b.at k)⟩ none keys g) := by
-  simp only [objAdmV, entryP, MapOf.at]
-  refine decide_forall_and (fun k => ?_)
-  by_cases hk : k.1 ∈ Body.shared a b
-  · have ha := Body.mem_shared_left hk
-    have hb := Body.mem_shared_right hk
-    simp only [dif_pos hk, dif_pos ha, dif_pos hb]
-    exact ihf ⟨k.1, hk⟩ (g k)
-  · have hnab : ¬ (k.1 ∈ a.fields ∧ k.1 ∈ b.fields) := fun hh => hk (mem_shared_iff.mpr hh)
-    simp only [dif_neg hk]
-    by_cases ha : k.1 ∈ a.fields
-    · simp only [dif_pos ha, dif_neg (fun hh => hnab ⟨ha, hh⟩), Bool.and_false]
-    · simp only [dif_neg ha, Bool.false_and]
-
-/-- The declared set is the intersection and the required set the union, which is what the
-    two presence tests conjoin to. -/
-theorem valPresentT_of_bodies {a b : Body} {F : {k // k ∈ Body.shared a b} → ObjectSlot}
-    (hab : Body.reqShared a b = true) (hba : Body.reqShared b a = true)
-    (hisreq : ∀ k, ObjectSlot.isReq (F k)
-      = (ObjectSlot.isReq (a.at ⟨k.1, Body.mem_shared_left k.2⟩)
-         || ObjectSlot.isReq (b.at ⟨k.1, Body.mem_shared_right k.2⟩)))
-    (keys : Finset Name) :
-    valPresentT (Body.shared a b) F keys
-      = (valPresentT a.fields a.at keys && valPresentT b.fields b.at keys) := by
-  rw [valPresentT_req, valPresentT_req, valPresentT_req, Bool.eq_iff_iff]
-  simp only [Bool.and_eq_true, decide_eq_true_eq]
-  unfold Body.reqShared at hab hba
-  have hA := of_decide_eq_true hab
-  have hB := of_decide_eq_true hba
-  constructor
-  · intro hs
-    refine ⟨fun k hreq => ?_, fun k hreq => ?_⟩
-    · have hk : k.1 ∈ Body.shared a b := mem_shared_iff.mpr ⟨k.2, hA k hreq⟩
-      exact hs ⟨k.1, hk⟩ (by rw [hisreq ⟨k.1, hk⟩, hreq, Bool.true_or])
-    · have hk : k.1 ∈ Body.shared a b := mem_shared_iff.mpr ⟨hB k hreq, k.2⟩
-      exact hs ⟨k.1, hk⟩ (by rw [hisreq ⟨k.1, hk⟩, hreq, Bool.or_true])
-  · rintro ⟨hA', hB'⟩ k hreq
-    rw [hisreq k, Bool.or_eq_true] at hreq
-    rcases hreq with hr | hr
-    · exact hA' ⟨k.1, Body.mem_shared_left k.2⟩ hr
-    · exact hB' ⟨k.1, Body.mem_shared_right k.2⟩ hr
-
-/-- No shared field meets to the bottom at a value both bodies admit. -/
-theorem isBottom_false_of_bodies {a b : Body} {F : {k // k ∈ Body.shared a b} → ObjectSlot}
-    (hisreq : ∀ k, ObjectSlot.isReq (F k)
-      = (ObjectSlot.isReq (a.at ⟨k.1, Body.mem_shared_left k.2⟩)
-         || ObjectSlot.isReq (b.at ⟨k.1, Body.mem_shared_right k.2⟩)))
-    (ihf : ∀ (k : {k // k ∈ Body.shared a b}) (w : Value),
-      AdmField (F k) w = (AdmField (a.at ⟨k.1, Body.mem_shared_left k.2⟩) w
-        && AdmField (b.at ⟨k.1, Body.mem_shared_right k.2⟩) w))
-    {keys : Finset Name} {g : {k // k ∈ keys} → Value}
-    (hA : AdmBody a (.map keys g) = true) (hB : AdmBody b (.map keys g) = true) :
-    ∀ k, ObjectSlot.isBottom (F k) = false := by
-  rw [AdmBody_map, Bool.and_eq_true] at hA hB
-  intro k
-  refine Bool.eq_false_iff.mpr (fun hbot => ?_)
-  have ha := Body.mem_shared_left k.2
-  have hb := Body.mem_shared_right k.2
-  have hreq : ObjectSlot.isReq (F k) = true := isReq_of_isBottom hbot
-  rw [hisreq k, Bool.or_eq_true] at hreq
-  have hk : k.1 ∈ keys := by
-    rcases hreq with hr | hr
-    · exact mem_keys_of_isReq hA.1 ha hr
-    · exact mem_keys_of_isReq hB.1 hb hr
-  have hrowA := objAdmV_row hA.2 hk ha
-  have hrowB := objAdmV_row hB.2 hk hb
-  have hi := ihf k (g ⟨k.1, hk⟩)
-  rw [AdmField_of_isBottom hbot, hrowA, hrowB] at hi
-  exact absurd hi (by simp)
-
-/-- What two objects answer: the bottom where the required names do not fit the
-    intersection or a shared field empties, and otherwise the object over the shared names. -/
-theorem objObj_extract {a b : Body} {g : {k // k ∈ a.fields} → ObjectSlot → Option ObjectSlot} {z : Term}
-    (h : objObj a g b = some z) :
-    a.wild = none ∧ b.wild = none ∧
-      ((z = .never ∧ ¬ (Body.reqShared a b = true ∧ Body.reqShared b a = true))
-       ∨ (Body.reqShared a b = true ∧ Body.reqShared b a = true ∧
-          (∀ k : {k // k ∈ Body.shared a b},
-            (g ⟨k.1, Body.mem_shared_left k.2⟩
-              (b.at ⟨k.1, Body.mem_shared_right k.2⟩)).isSome = true) ∧
-          ((z = .never ∧ ¬ (∀ k : {k // k ∈ Body.shared a b}, ObjectSlot.isBottom
-              ((g ⟨k.1, Body.mem_shared_left k.2⟩
-                (b.at ⟨k.1, Body.mem_shared_right k.2⟩)).getD (.optional .never)) = false))
-           ∨ z = .object (.mk (Body.shared a b)
-              (fun k => (g ⟨k.1, Body.mem_shared_left k.2⟩
-                (b.at ⟨k.1, Body.mem_shared_right k.2⟩)).getD (.optional .never)) none)))) := by
-  unfold objObj at h
-  split at h
-  next _ ha hb =>
-    refine ⟨ha, hb, ?_⟩
-    split at h
-    next hreq =>
-      rw [Bool.and_eq_true] at hreq
-      refine Or.inr ⟨hreq.1, hreq.2, ?_⟩
-      split at h
-      next hok =>
-        refine ⟨of_decide_eq_true hok, ?_⟩
-        split at h
-        next _ => exact Or.inr (Option.some.inj h).symm
-        next hnb =>
-          exact Or.inl ⟨(Option.some.inj h).symm, fun hall => hnb (decide_eq_true hall)⟩
-      next => exact absurd h (by simp)
-    next hreq =>
-      refine Or.inl ⟨(Option.some.inj h).symm, ?_⟩
-      rw [Bool.and_eq_true] at hreq
-      exact hreq
-  next => exact absurd h (by simp)
-
-/-- An object meets an object over the shared names. The record rows went with the record
-    constructor: a record is an object, and an open one, which the first guard turns away. -/
-theorem Adm_famObj {a : Body} {g : {k // k ∈ a.fields} → ObjectSlot → Option ObjectSlot}
+/-- **One name of the met body, on the write side**: the slot the meet gives a name admits
+    exactly what both bodies' slots at that name admit, and is required where either is. -/
+theorem objSlot_sound {a b : Body} {g : {k // k ∈ a.fields} → ObjectSlot → Option ObjectSlot}
+    {mw : Term → Option Term}
     (hg : ∀ (k : {k // k ∈ a.fields}) (fl fm : ObjectSlot), g k fl = some fm →
       ∀ w, AdmField fm w = (AdmField (a.at k) w && AdmField fl w))
     (hgreq : ∀ (k : {k // k ∈ a.fields}) (fl fm : ObjectSlot), g k fl = some fm →
-      ObjectSlot.isReq fm = (ObjectSlot.isReq (a.at k) || ObjectSlot.isReq fl)) :
-    AdmFam (.object a) (famObj a g) := by
+      ObjectSlot.isReq fm = (ObjectSlot.isReq (a.at k) || ObjectSlot.isReq fl))
+    (hw : ∀ y z, mw y = some z → ∀ w, Adm z w = (Adm a.block w && Adm y w))
+    {k : {k // k ∈ a.fields ∪ b.fields}} {s : ObjectSlot} (h : objSlot a b g mw k = some s) :
+    (∀ w, AdmField s w = (AdmField (a.slotAt k.1) w && AdmField (b.slotAt k.1) w)) ∧
+    ObjectSlot.isReq s = (ObjectSlot.isReq (a.slotAt k.1) || ObjectSlot.isReq (b.slotAt k.1)) := by
+  unfold objSlot at h
+  split at h
+  next ha =>
+    have hb : (if h' : k.1 ∈ b.fields then b.at ⟨k.1, h'⟩ else .optional b.block)
+        = b.slotAt k.1 := rfl
+    rw [hb] at h
+    rw [Body.slotAt_pos ha]
+    exact ⟨hg _ _ _ h, hgreq _ _ _ h⟩
+  next ha =>
+    have hb := (Finset.mem_union.mp k.2).resolve_left ha
+    rw [Body.slotAt_neg ha, Body.slotAt_pos hb]
+    cases hf : b.at ⟨k.1, hb⟩ with
+    | req y =>
+      rw [hf] at h
+      simp only [ObjectSlot.through, Option.map_eq_some_iff] at h
+      obtain ⟨z, hz, rfl⟩ := h
+      exact ⟨fun w => hw _ _ hz w, rfl⟩
+    | optional y =>
+      rw [hf] at h
+      simp only [ObjectSlot.through, Option.map_eq_some_iff] at h
+      obtain ⟨z, hz, rfl⟩ := h
+      exact ⟨fun w => hw _ _ hz w, rfl⟩
+
+/-- **The met body's slot at every name**, from the slots at the names of either body and
+    the block at the rest. A name the normal form drops states the default `never`. -/
+theorem objObj_slots {a b : Body} {g : {k // k ∈ a.fields} → ObjectSlot → Option ObjectSlot}
+    {mw : Term → Option Term} {zb : Term} {P : Name → ObjectSlot → Prop}
+    (hall : ∀ k : {k // k ∈ a.fields ∪ b.fields}, (objSlot a b g mw k).isSome = true)
+    (hslot : ∀ (k : {k // k ∈ a.fields ∪ b.fields}) s, objSlot a b g mw k = some s → P k.1 s)
+    (hblk : ∀ k, k ∉ a.fields → k ∉ b.fields →
+      P k (.optional (if zb.isNever then .never else zb)))
+    (k : Name) :
+    P k (Body.slotAt (.mk ((a.fields ∪ b.fields).filter (fun k =>
+          (if h : k ∈ a.fields ∪ b.fields then
+            !(zb.isNever && ObjectSlot.isAbsentOpt (objSlot a b g mw ⟨k, h⟩))
+          else false) = true))
+        (fun k => (objSlot a b g mw ⟨k.1, (Finset.mem_filter.mp k.2).1⟩).getD (.optional .never))
+        (if zb.isNever then none else some (.any, zb))) k) := by
+  have hblock : Body.block (.mk ((a.fields ∪ b.fields).filter (fun k =>
+          (if h : k ∈ a.fields ∪ b.fields then
+            !(zb.isNever && ObjectSlot.isAbsentOpt (objSlot a b g mw ⟨k, h⟩))
+          else false) = true))
+        (fun k => (objSlot a b g mw ⟨k.1, (Finset.mem_filter.mp k.2).1⟩).getD (.optional .never))
+        (if zb.isNever then none else some (.any, zb))) = (if zb.isNever then .never else zb) := by
+    cases zb.isNever <;> rfl
+  rcases Decidable.em (k ∈ (a.fields ∪ b.fields).filter (fun k =>
+      (if h : k ∈ a.fields ∪ b.fields then
+        !(zb.isNever && ObjectSlot.isAbsentOpt (objSlot a b g mw ⟨k, h⟩))
+      else false) = true)) with hk | hk
+  · rw [Body.slotAt_pos hk]
+    simp only [Body.at_mk]
+    obtain ⟨s, hs⟩ := Option.isSome_iff_exists.mp (hall ⟨k, (Finset.mem_filter.mp hk).1⟩)
+    rw [hs, Option.getD_some]
+    exact hslot _ s hs
+  · rw [Body.slotAt_neg hk, hblock]
+    rcases Decidable.em (k ∈ a.fields ∪ b.fields) with hU | hU
+    · have hkeep : (!(zb.isNever && ObjectSlot.isAbsentOpt (objSlot a b g mw ⟨k, hU⟩))) = false := by
+        refine Bool.eq_false_iff.mpr (fun ht => hk (Finset.mem_filter.mpr ⟨hU, ?_⟩))
+        rw [dif_pos hU]; exact ht
+      rw [Bool.not_eq_false', Bool.and_eq_true] at hkeep
+      obtain ⟨hnev, habs⟩ := hkeep
+      obtain ⟨s, hs⟩ := Option.isSome_iff_exists.mp (hall ⟨k, hU⟩)
+      rw [hs] at habs
+      cases s with
+      | req t => exact absurd habs (by simp [ObjectSlot.isAbsentOpt])
+      | optional t =>
+        have ht : t = .never := by
+          cases t <;> simp_all [ObjectSlot.isAbsentOpt, Term.isNever]
+        subst ht
+        rw [hnev, if_pos rfl]
+        exact hslot _ _ hs
+    · have ha : k ∉ a.fields := fun h => hU (Finset.mem_union.mpr (Or.inl h))
+      have hb : k ∉ b.fields := fun h => hU (Finset.mem_union.mpr (Or.inr h))
+      exact hblk k ha hb
+
+/-- **Two objects meet pointwise, and the meet is exact on the write side.** -/
+theorem Adm_famObj {a : Body} {g : {k // k ∈ a.fields} → ObjectSlot → Option ObjectSlot}
+    {mw : Term → Option Term}
+    (hg : ∀ (k : {k // k ∈ a.fields}) (fl fm : ObjectSlot), g k fl = some fm →
+      ∀ w, AdmField fm w = (AdmField (a.at k) w && AdmField fl w))
+    (hgreq : ∀ (k : {k // k ∈ a.fields}) (fl fm : ObjectSlot), g k fl = some fm →
+      ObjectSlot.isReq fm = (ObjectSlot.isReq (a.at k) || ObjectSlot.isReq fl))
+    (hw : ∀ y z, mw y = some z → ∀ w, Adm z w = (Adm a.block w && Adm y w)) :
+    AdmFam (.object a) (famObj a g mw) := by
   intro y z hd h v
   cases y <;> first | exact hd.elim | skip
   case object b =>
       simp only [famObj] at h
-      obtain ⟨ha, hb, hcase⟩ := objObj_extract h
-      have hra : AdmWild a.wild = none := by rw [ha]; rfl
-      have hrb : AdmWild b.wild = none := by rw [hb]; rfl
-      have hrr : AdmWild (none : Option (KeyPat × Term)) = none := rfl
-      have hnm : ∀ w : Value, (∀ keys gv, w ≠ .map keys gv) →
-          Adm z w = (Adm (.object a) w && Adm (.object b) w) := by
-        intro w hw
-        rw [show Adm (.object a) w = AdmBody a w from rfl,
-            show Adm (.object b) w = AdmBody b w from rfl,
-            AdmBody_of_not_map hw, AdmBody_of_not_map hw, Bool.and_self]
-        rcases hcase with ⟨rfl, _⟩ | ⟨_, _, _, ⟨rfl, _⟩ | rfl⟩
-        · rfl
-        · rfl
-        · exact AdmBody_of_not_map hw
-      cases v
-      case map keys gv =>
-        rw [show Adm (.object a) (.map keys gv) = AdmBody a (.map keys gv) from rfl,
-            show Adm (.object b) (.map keys gv) = AdmBody b (.map keys gv) from rfl]
-        rcases hcase with ⟨rfl, hne⟩ | ⟨hab, hba, hok, hrest⟩
-        · show (false : Bool) = _
-          cases hA : AdmBody a (.map keys gv) with
-          | false => rfl
-          | true =>
-            cases hB : AdmBody b (.map keys gv) with
-            | false => rfl
-            | true => exact absurd ⟨reqShared_of_adm hrb hA hB, reqShared_of_adm hra hB hA⟩ hne
-        · have hisreq : ∀ k : {k // k ∈ Body.shared a b},
-              ObjectSlot.isReq ((g ⟨k.1, Body.mem_shared_left k.2⟩
-                (b.at ⟨k.1, Body.mem_shared_right k.2⟩)).getD (.optional .never))
-                = (ObjectSlot.isReq (a.at ⟨k.1, Body.mem_shared_left k.2⟩)
-                   || ObjectSlot.isReq (b.at ⟨k.1, Body.mem_shared_right k.2⟩)) := by
-            intro k
-            obtain ⟨fm, hfm⟩ := Option.isSome_iff_exists.mp (hok k)
-            rw [hfm, Option.getD_some]
-            exact hgreq _ _ _ hfm
-          have ihf : ∀ (k : {k // k ∈ Body.shared a b}) (w : Value),
-              AdmField ((g ⟨k.1, Body.mem_shared_left k.2⟩
-                (b.at ⟨k.1, Body.mem_shared_right k.2⟩)).getD (.optional .never)) w
-                = (AdmField (a.at ⟨k.1, Body.mem_shared_left k.2⟩) w
-                   && AdmField (b.at ⟨k.1, Body.mem_shared_right k.2⟩) w) := by
-            intro k w
-            obtain ⟨fm, hfm⟩ := Option.isSome_iff_exists.mp (hok k)
-            rw [hfm, Option.getD_some]
-            exact hg _ _ _ hfm w
-          rcases hrest with ⟨rfl, hnb⟩ | rfl
-          · show (false : Bool) = _
-            cases hA : AdmBody a (.map keys gv) with
-            | false => rfl
-            | true =>
-              cases hB : AdmBody b (.map keys gv) with
-              | false => rfl
-              | true => exact absurd (isBottom_false_of_bodies hisreq ihf hA hB) hnb
-          · show AdmBody (.mk (Body.shared a b) _ none) (.map keys gv) = _
-            rw [AdmBody_map, AdmBody_map, AdmBody_map]
-            simp only [Body.fields_mk, Body.at_mk, Body.wild_mk, hra, hrb, hrr]
-            rw [valPresentT_of_bodies hab hba hisreq, objAdmV_of_bodies ihf]
-            simp [Bool.and_assoc, Bool.and_comm, Bool.and_left_comm]
-      all_goals exact hnm _ (fun _ _ hc => Value.noConfusion hc)
+      unfold objObj at h
+      split at h
+      next hbot =>
+        obtain ⟨k, hk⟩ := of_decide_eq_true hbot
+        obtain ⟨s, hs, hsb⟩ := Option.map_eq_some_iff.mp hk
+        simp only [Option.some.injEq] at h; subst h
+        obtain ⟨hS, hR⟩ := objSlot_sound hg hgreq hw hs
+        exact (AdmBody_false_of_bottom hS hR hsb v).symm
+      next =>
+        split at h
+        next => exact absurd h (by simp)
+        next zb hwz =>
+          split at h
+          next hall =>
+            simp only [Option.some.injEq] at h; subst h
+            have hblkA : ∀ w, Adm (if zb.isNever then .never else zb) w
+                = (Adm a.block w && Adm b.block w) := by
+              intro w
+              cases hn : zb.isNever
+              · exact hw _ _ hwz w
+              · rw [if_pos rfl, ← hw _ _ hwz w, eq_never_of_isNever hn]
+            refine AdmBody_of_slots (fun k w => ?_) (fun k => ?_) v
+            · exact objObj_slots (P := fun k s => AdmField s w
+                  = (AdmField (a.slotAt k) w && AdmField (b.slotAt k) w))
+                (of_decide_eq_true hall) (fun k' s hs => (objSlot_sound hg hgreq hw hs).1 w)
+                (fun k' ha hb => by
+                  rw [Body.slotAt_neg ha, Body.slotAt_neg hb]; exact hblkA w) k
+            · exact objObj_slots (P := fun k s => ObjectSlot.isReq s
+                  = (ObjectSlot.isReq (a.slotAt k) || ObjectSlot.isReq (b.slotAt k)))
+                (of_decide_eq_true hall) (fun k' s hs => (objSlot_sound hg hgreq hw hs).2)
+                (fun k' ha hb => by rw [Body.slotAt_neg ha, Body.slotAt_neg hb]; rfl) k
+          next => exact absurd h (by simp)
   case opaq l => simp [famObj] at h
   all_goals fam_never famObj
 
@@ -3068,10 +3145,16 @@ theorem Adm_meet : ∀ x y z, Term.meet x y = some z → ∀ v, Adm z v = (Adm x
             (Adm_meetSTs pre)
             (Or.inr ⟨t, Term.meet t, rfl, rfl, fun u w hw => Adm_meet t u w hw⟩)
             (Adm_meetSTs suf)) y z h v
-  | .object (.mk fs f w'), y, z, h, v =>
-      Adm_meetSRight (Adm_famObj (a := .mk fs f w')
+  | .object (.mk fs f none), y, z, h, v =>
+      Adm_meetSRight (Adm_famObj (a := .mk fs f none)
         (fun k fl fm hm w => Adm_Field_meet (f k) fl fm hm w)
-        (fun _ _ _ hm => isReq_Field_meet hm)) y z h v
+        (fun _ _ _ hm => isReq_Field_meet hm)
+        (fun _ _ hz _ => by simp only [Option.some.injEq] at hz; subst hz; rfl)) y z h v
+  | .object (.mk fs f (some (p, t))), y, z, h, v =>
+      Adm_meetSRight (Adm_famObj (a := .mk fs f (some (p, t)))
+        (fun k fl fm hm w => Adm_Field_meet (f k) fl fm hm w)
+        (fun _ _ _ hm => isReq_Field_meet hm)
+        (fun u w hw => Adm_meet t u w hw)) y z h v
 termination_by structural x => x
 
 /-- The union row's options, lifted pointwise at the fixed partner. -/
@@ -3440,15 +3523,27 @@ theorem writes_famList {fpre : List (Term → Option Term)}
           | (simp only [μSyn, Option.some.injEq] at hmy; exact hmy.symm)
           | exact absurd h (by simp)
 
+/-- Two objects meet at the bottom or at an object. -/
+theorem objObj_cases {a b : Body} {g : {k // k ∈ a.fields} → ObjectSlot → Option ObjectSlot}
+    {mw : Term → Option Term} {z : Term} (h : objObj a g mw b = some z) :
+    z = .never ∨ ∃ c, z = .object c := by
+  unfold objObj at h
+  split at h
+  · exact Or.inl (Option.some.inj h).symm
+  · split at h
+    · exact absurd h (by simp)
+    · split at h
+      · exact Or.inr ⟨_, (Option.some.inj h).symm⟩
+      · exact absurd h (by simp)
+
 /-- An object names `M`, and the bottom it can answer names none. -/
-theorem writes_famObj {a : Body} {g : {k // k ∈ a.fields} → ObjectSlot → Option ObjectSlot} :
-    WritesFam (.object a) (famObj a g) := by
+theorem writes_famObj {a : Body} {g : {k // k ∈ a.fields} → ObjectSlot → Option ObjectSlot}
+    {mw : Term → Option Term} :
+    WritesFam (.object a) (famObj a g mw) := by
   intro y z hd h m hz
   cases y <;> first | exact hd.elim | skip
   case object b =>
-      obtain ⟨_, _, hc⟩ := objObj_extract (by simpa [famObj] using h)
-      rcases hc with ⟨rfl, _⟩ | ⟨_, _, _, ⟨rfl, _⟩ | rfl⟩
-      · exact absurd hz (by simp [μSyn])
+      rcases objObj_cases (by simpa [famObj] using h) with rfl | ⟨c, rfl⟩
       · exact absurd hz (by simp [μSyn])
       · simpa [μSyn] using hz
   all_goals (try simp_all [famObj, μSyn])
@@ -3528,9 +3623,12 @@ theorem meet_writes : ∀ x y z, Term.meet x y = some z → ∀ m : Member, μSy
           exact writes_meetSRight (writes_famList (pre := pre) (sp := some t) (suf := suf)
             (fpre := Term.meetSTs pre) (fsp := some (Term.meet t))
             (fsuf := Term.meetSTs suf)) y z h m hz
-  | .object (.mk fs f w), y, z, h, m, hz =>
-      writes_meetSRight (writes_famObj (a := .mk fs f w)
-        (g := fun k => ObjectSlot.meet (f k))) y z h m hz
+  | .object (.mk fs f none), y, z, h, m, hz =>
+      writes_meetSRight (writes_famObj (a := .mk fs f none)
+        (g := fun k => ObjectSlot.meet (f k)) (mw := fun _ => some .never)) y z h m hz
+  | .object (.mk fs f (some (p, t))), y, z, h, m, hz =>
+      writes_meetSRight (writes_famObj (a := .mk fs f (some (p, t)))
+        (g := fun k => ObjectSlot.meet (f k)) (mw := Term.meet t)) y z h m hz
 termination_by structural x => x
 
 /-- The union row's options, lifted pointwise at the fixed partner. -/
@@ -3862,69 +3960,6 @@ theorem reqPresentT_req (fields : Finset Name) (fld : {k // k ∈ fields} → Ob
     | req t => exact decide_eq_true (hh k (by rw [hf]; rfl))
     | optional t => rfl
 
-/-- The declared set is the intersection and the required set the union, which is what the two
-    presence tests conjoin to. -/
-theorem reqPresentT_of_bodies {a b : Body} {F : {k // k ∈ Body.shared a b} → ObjectSlot}
-    (hab : Body.reqShared a b = true) (hba : Body.reqShared b a = true)
-    (hisreqA : ∀ k, ObjectSlot.isReq (F k)
-      = (ObjectSlot.isReq (a.at ⟨k.1, Body.mem_shared_left k.2⟩)
-         || ObjectSlot.isReq (b.at ⟨k.1, Body.mem_shared_right k.2⟩)))
-    (keys : Finset Name) :
-    reqPresentT (Body.shared a b) F keys
-      = (reqPresentT a.fields a.at keys && reqPresentT b.fields b.at keys) := by
-  rw [reqPresentT_req, reqPresentT_req, reqPresentT_req, Bool.eq_iff_iff]
-  simp only [Bool.and_eq_true, decide_eq_true_eq]
-  unfold Body.reqShared at hab hba
-  have hA := of_decide_eq_true hab
-  have hB := of_decide_eq_true hba
-  constructor
-  · intro hs
-    refine ⟨fun k hreq => ?_, fun k hreq => ?_⟩
-    · have hr : ObjectSlot.isReq (a.at k) = true := by
-        cases hf : a.at k with
-        | req t => rfl
-        | optional t => rw [hf] at hreq; exact absurd hreq (by simp [ObjectSlot.isReq])
-      have hk : k.1 ∈ Body.shared a b := mem_shared_iff.mpr ⟨k.2, hA k hr⟩
-      refine hs ⟨k.1, hk⟩ ?_
-      rw [hisreqA ⟨k.1, hk⟩, hreq, Bool.true_or]
-    · have hr : ObjectSlot.isReq (b.at k) = true := by
-        cases hf : b.at k with
-        | req t => rfl
-        | optional t => rw [hf] at hreq; exact absurd hreq (by simp [ObjectSlot.isReq])
-      have hk : k.1 ∈ Body.shared a b := mem_shared_iff.mpr ⟨hB k hr, k.2⟩
-      refine hs ⟨k.1, hk⟩ ?_
-      rw [hisreqA ⟨k.1, hk⟩, hreq, Bool.or_true]
-  · rintro ⟨hA', hB'⟩ k hreq
-    rw [hisreqA k, Bool.or_eq_true] at hreq
-    rcases hreq with hr | hr
-    · exact hA' ⟨k.1, Body.mem_shared_left k.2⟩ hr
-    · exact hB' ⟨k.1, Body.mem_shared_right k.2⟩ hr
-
-/-- Every entry goes through both bodies' fields, a shared name through the meet. This carried two
-    keep-filter guards while the old read-side policy existed; both are gone, so it is the value
-    side's twin line for line. -/
-theorem objAdmA_of_bodies {a b : Body} {F : {k // k ∈ Body.shared a b} → ObjectSlot}
-    (ihf : ∀ (k : {k // k ∈ Body.shared a b}) (c : Attr),
-      AdmAField (F k) c
-        = (AdmAField (a.at ⟨k.1, Body.mem_shared_left k.2⟩) c
-            && AdmAField (b.at ⟨k.1, Body.mem_shared_right k.2⟩) c))
-    (keys : Finset Name) (g : {k // k ∈ keys} → Attr) :
-    objAdmA ⟨Body.shared a b, fun k => AdmAField (F k)⟩ none keys g
-      = (objAdmA ⟨a.fields, fun k => AdmAField (a.at k)⟩ none keys g
-         && objAdmA ⟨b.fields, fun k => AdmAField (b.at k)⟩ none keys g) := by
-  simp only [objAdmA, entryPA, MapOf.at]
-  refine decide_forall_and (fun k => ?_)
-  by_cases hk : k.1 ∈ Body.shared a b
-  · have ha := Body.mem_shared_left hk
-    have hb := Body.mem_shared_right hk
-    simp only [dif_pos hk, dif_pos ha, dif_pos hb]
-    exact ihf ⟨k.1, hk⟩ (g k)
-  · have hnab : ¬ (k.1 ∈ a.fields ∧ k.1 ∈ b.fields) := fun hh => hk (mem_shared_iff.mpr hh)
-    simp only [dif_neg hk]
-    by_cases ha : k.1 ∈ a.fields
-    · simp only [dif_pos ha, dif_neg (fun hh => hnab ⟨ha, hh⟩), Bool.and_false]
-    · simp only [dif_neg ha, Bool.false_and]
-
 /-- The two policies meet at their conjunction, which is what makes the `opaque` pair a row
     rather than a refusal. -/
 theorem AdmA_opaq_and (l l2 : Bool) (a : Attr) :
@@ -3944,54 +3979,6 @@ theorem mem_keys_of_req {fields : Finset Name} {fld : {k // k ∈ fields} → Ob
   cases hfd : fld k with
   | req t => rw [hfd] at hh; exact of_decide_eq_true hh
   | optional t => rw [hfd] at hf; exact absurd hf (by simp [ObjectSlot.isReq])
-
-/-- No shared slot meets to the bottom at an attribute both bodies read. -/
-theorem isBottom_false_of_admA_bodies {a b : Body} {F : {k // k ∈ Body.shared a b} → ObjectSlot}
-    (hisreqA : ∀ k, ObjectSlot.isReq (F k)
-      = (ObjectSlot.isReq (a.at ⟨k.1, Body.mem_shared_left k.2⟩)
-         || ObjectSlot.isReq (b.at ⟨k.1, Body.mem_shared_right k.2⟩)))
-    (hreqOf : ∀ k, ObjectSlot.isBottom (F k) = true → ∃ t, F k = .req t)
-    (ihf : ∀ (k : {k // k ∈ Body.shared a b}) (c : Attr),
-      AdmAField (F k) c
-        = (AdmAField (a.at ⟨k.1, Body.mem_shared_left k.2⟩) c
-            && AdmAField (b.at ⟨k.1, Body.mem_shared_right k.2⟩) c))
-    {keys : Finset Name} {g : {k // k ∈ keys} → Attr}
-    (hA : AdmABody a (.m keys g) = true) (hB : AdmABody b (.m keys g) = true) :
-    ∀ k, ObjectSlot.isBottom (F k) = false := by
-  rw [AdmABody_map, Bool.and_eq_true] at hA hB
-  intro k
-  refine Bool.eq_false_iff.mpr (fun hbot => ?_)
-  have ha := Body.mem_shared_left k.2
-  have hb := Body.mem_shared_right k.2
-  obtain ⟨t, hreqf⟩ := hreqOf k hbot
-  have hreq : ObjectSlot.isReq (F k) = true := by rw [hreqf]; rfl
-  rw [hisreqA k, Bool.or_eq_true] at hreq
-  have hk : k.1 ∈ keys := by
-    rcases hreq with hr | hr
-    · exact mem_keys_of_req hA.1 (k := ⟨k.1, ha⟩) hr
-    · exact mem_keys_of_req hB.1 (k := ⟨k.1, hb⟩) hr
-  have hrowA := objAdmA_row hA.2 hk ha
-  have hrowB := objAdmA_row hB.2 hk hb
-  have := ihf k (g ⟨k.1, hk⟩)
-  rw [hreqf] at this
-  simp only [AdmAField, hrowA, hrowB] at this
-  rw [show t = Term.never from
-    eq_never_of_isNever (by simpa [hreqf, ObjectSlot.isBottom] using hbot)] at this
-  simp [AdmA] at this
-
-/-- A required name that one body reads is present and declared by a closed partner. -/
-theorem reqShared_of_admA {a b : Body} (hb0 : b.wild = none)
-    {keys : Finset Name} {g : {k // k ∈ keys} → Attr}
-    (hA : AdmABody a (.m keys g) = true) (hB : AdmABody b (.m keys g) = true) :
-    Body.reqShared a b = true := by
-  refine decide_eq_true (fun k hreq => ?_)
-  cases hf : a.at k with
-  | optional t => rw [hf] at hreq; exact absurd hreq (by simp [ObjectSlot.isReq])
-  | req t =>
-      have hpres : k.1 ∈ keys := by
-        rw [AdmABody_map, Bool.and_eq_true] at hA
-        exact mem_keys_of_req hA.1 (by rw [hf]; rfl)
-      exact mem_fields_of_admA hb0 hB k.1 hpres
 
 /-- A field at the bottom reads nothing either. -/
 theorem AdmAField_of_isBottom {f : ObjectSlot} (h : ObjectSlot.isBottom f = true) (c : Attr) :
@@ -4748,157 +4735,6 @@ theorem ofOptions_p_of_filter {ts : List Term} {t : Term} {a : Attr}
       · simp at hf
   | _ :: _ :: _ => exact union_p_of_filter hf
 
-/-- **Two objects, over an abstract field table.** Everything after the field agreement reads
-    that agreement alone, so the well-founded caller and the structural one share this. -/
-theorem object_row_gen {a b : Body} {z : Term} {Ok : Prop}
-    {F : {k // k ∈ Body.shared a b} → ObjectSlot}
-    (ha0 : a.wild = none) (hb0 : b.wild = none)
-    (hisreq : Ok → ∀ k, ObjectSlot.isReq (F k)
-      = (ObjectSlot.isReq (a.at ⟨k.1, Body.mem_shared_left k.2⟩)
-         || ObjectSlot.isReq (b.at ⟨k.1, Body.mem_shared_right k.2⟩)))
-    (hreqOf : Ok → ∀ k, ObjectSlot.isBottom (F k) = true → ∃ t, F k = .req t)
-    (ihf : Ok → ∀ (k : {k // k ∈ Body.shared a b}),
-      (∀ c, AdmAField (F k) c
-        = (AdmAField (a.at ⟨k.1, Body.mem_shared_left k.2⟩) c
-            && AdmAField (b.at ⟨k.1, Body.mem_shared_right k.2⟩) c))
-      ∧ (∀ c, AdmAField (a.at ⟨k.1, Body.mem_shared_left k.2⟩) c = true →
-          AdmAField (b.at ⟨k.1, Body.mem_shared_right k.2⟩) c = true →
-          (fieldSem (F k)).codec.p c
-              = (fieldSem (a.at ⟨k.1, Body.mem_shared_left k.2⟩)).codec.p c
-            ∧ (fieldSem (F k)).codec.p c
-              = (fieldSem (b.at ⟨k.1, Body.mem_shared_right k.2⟩)).codec.p c))
-    (hcase : (z = .never ∧ ¬ (Body.reqShared a b = true ∧ Body.reqShared b a = true))
-             ∨ (Body.reqShared a b = true ∧ Body.reqShared b a = true ∧ Ok ∧
-                ((z = .never ∧ ¬ (∀ k, ObjectSlot.isBottom (F k) = false))
-                 ∨ z = .object (.mk (Body.shared a b) F none)))) :
-    (∀ c, AdmA z c = (AdmA (.object a) c && AdmA (.object b) c)) ∧
-    (∀ c, AdmA (.object a) c = true → AdmA (.object b) c = true →
-      (denote z).p c = (denote (.object a)).p c ∧ (denote z).p c = (denote (.object b)).p c) := by
-  -- an attribute that is not a map is read by no object
-  have hnm : ∀ c : Attr, (∀ keys g, c ≠ .m keys g) →
-      AdmA z c = (AdmA (.object a) c && AdmA (.object b) c) := by
-    intro c hc
-    rw [AdmA_object a c,
-        AdmA_object b c,
-        AdmABody_of_not_m hc, AdmABody_of_not_m hc, Bool.and_self]
-    rcases hcase with ⟨rfl, _⟩ | ⟨_, _, _, ⟨rfl, _⟩ | rfl⟩
-    · rfl
-    · rfl
-    · exact AdmABody_of_not_m hc
-  -- the first half
-  have half1 : ∀ c, AdmA z c = (AdmA (.object a) c && AdmA (.object b) c) := by
-    intro c
-    cases c
-    case m keys g =>
-      rw [AdmA_object a (.m keys g),
-          AdmA_object b (.m keys g)]
-      rcases hcase with ⟨rfl, hne⟩ | ⟨hab, hba, hok, ⟨rfl, hnb⟩ | rfl⟩
-      · show (false : Bool) = _
-        cases hA : AdmABody a (.m keys g) with
-        | false => rfl
-        | true =>
-          cases hB : AdmABody b (.m keys g) with
-          | false => rfl
-          | true =>
-            exact absurd ⟨reqShared_of_admA hb0 hA hB,
-              reqShared_of_admA ha0 hB hA⟩ hne
-      · show (false : Bool) = _
-        cases hA : AdmABody a (.m keys g) with
-        | false => rfl
-        | true =>
-          cases hB : AdmABody b (.m keys g) with
-          | false => rfl
-          | true =>
-            exact absurd (isBottom_false_of_admA_bodies (hisreq hok) (hreqOf hok) (fun k c => (ihf hok k).1 c) hA hB) hnb
-      · show AdmABody (.mk (Body.shared a b) F none)
-            (.m keys g) = _
-        rw [AdmABody_map, AdmABody_map, AdmABody_map]
-        simp only [Body.fields_mk, Body.at_mk, Body.wild_mk, ha0, hb0, AdmAWild]
-        rw [reqPresentT_of_bodies hab hba (hisreq hok),
-          objAdmA_of_bodies (fun k c => (ihf hok k).1 c)]
-        simp [Bool.and_assoc, Bool.and_left_comm]
-    all_goals exact hnm _ (fun _ _ hc => Attr.noConfusion hc)
-  refine ⟨half1, fun c hA hB => ?_⟩
-  cases c
-  case m keys g =>
-    rw [AdmA_object a (.m keys g)] at hA
-    rw [AdmA_object b (.m keys g)] at hB
-    rcases hcase with ⟨rfl, hne⟩ | ⟨hab, hba, hok, ⟨rfl, hnb⟩ | rfl⟩
-    · exact absurd ⟨reqShared_of_admA hb0 hA hB,
-        reqShared_of_admA ha0 hB hA⟩ hne
-    · exact absurd (isBottom_false_of_admA_bodies (hisreq hok) (hreqOf hok) (fun k c => (ihf hok k).1 c) hA hB) hnb
-    · rw [AdmABody_map, Bool.and_eq_true] at hA hB
-      have hreqA := hA.1
-      have hreqB := hB.1
-      have hAo : AdmA (.object a) (.m keys g) = true := by
-        rw [AdmA_object a (.m keys g), AdmABody_map,
-          Bool.and_eq_true]
-        exact ⟨hA.1, hA.2⟩
-      have hBo : AdmA (.object b) (.m keys g) = true := by
-        rw [AdmA_object b (.m keys g), AdmABody_map,
-          Bool.and_eq_true]
-        exact ⟨hB.1, hB.2⟩
-      -- the entry agreement, against whichever factor the congruence is applied to
-      have hentry : ∀ (k : Name) (hk : k ∈ keys) (hks : k ∈ Body.shared a b),
-            (fieldSem (F ⟨k, hks⟩)).codec.p (g ⟨k, hk⟩)
-                = (fieldSem (a.at ⟨k, Body.mem_shared_left hks⟩)).codec.p (g ⟨k, hk⟩)
-              ∧ (fieldSem (F ⟨k, hks⟩)).codec.p (g ⟨k, hk⟩)
-                = (fieldSem (b.at ⟨k, Body.mem_shared_right hks⟩)).codec.p (g ⟨k, hk⟩) := by
-        intro k hk hks
-        exact (ihf hok ⟨k, hks⟩).2 (g ⟨k, hk⟩)
-          (objAdmA_row hA.2 hk (Body.mem_shared_left hks))
-          (objAdmA_row hB.2 hk (Body.mem_shared_right hks))
-      have hsemA : bodySem a =
-          objectCodec ⟨a.fields, fun k => fieldSem (a.at k)⟩ .refuse := by
-        cases a
-        simp_all [bodySem, wildSem]
-      have hsemB : bodySem b =
-          objectCodec ⟨b.fields, fun k => fieldSem (b.at k)⟩ .refuse := by
-        cases b
-        simp_all [bodySem, wildSem]
-      have hreqF : reqPresentB ⟨Body.shared a b, fun k => fieldSem (F k)⟩ keys = true := by
-        rw [← reqPresentT_eq, reqPresentT_of_bodies hab hba (hisreq hok), hreqA, hreqB]
-        rfl
-      have hreqA' : reqPresentB ⟨a.fields, fun k => fieldSem (a.at k)⟩ keys = true := by
-        rwa [← reqPresentT_eq]
-      have hreqB' : reqPresentB ⟨b.fields, fun k => fieldSem (b.at k)⟩ keys = true := by
-        rwa [← reqPresentT_eq]
-      constructor
-      · change (bodySem (.mk (Body.shared a b) F none)).p (.m keys g)
-            = (bodySem a).p (.m keys g)
-        rw [hsemA]
-        simp only [bodySem, objectCodec, objectCodecCore, carriedCodec, mapV, mA, Option.bind,
-          objRead, rcOf, wildSem, keepB]
-        rw [if_pos hreqF, if_pos hreqA']
-        rw [Option.map_map, Option.map_map]
-        apply funImage_record_congr
-        · rfl
-        · intro k hk _
-          have hk' := (Finset.mem_filter.mp hk).1
-          have hka := mem_fields_of_admA ha0 (show AdmABody a (.m keys g) = true from hAo) k hk'
-          have hkb := mem_fields_of_admA hb0 (show AdmABody b (.m keys g) = true from hBo) k hk'
-          have hks := mem_shared_iff.mpr ⟨hka, hkb⟩
-          rw [entryCodec_mk_pos hks, entryCodec_mk_pos (Body.mem_shared_left hks)]
-          exact (hentry k hk' hks).1
-      · change (bodySem (.mk (Body.shared a b) F none)).p (.m keys g)
-            = (bodySem b).p (.m keys g)
-        rw [hsemB]
-        simp only [bodySem, objectCodec, objectCodecCore, carriedCodec, mapV, mA, Option.bind,
-          objRead, rcOf, wildSem, keepB]
-        rw [if_pos hreqF, if_pos hreqB']
-        rw [Option.map_map, Option.map_map]
-        apply funImage_record_congr
-        · rfl
-        · intro k hk _
-          have hk' := (Finset.mem_filter.mp hk).1
-          have hka := mem_fields_of_admA ha0 (show AdmABody a (.m keys g) = true from hAo) k hk'
-          have hkb := mem_fields_of_admA hb0 (show AdmABody b (.m keys g) = true from hBo) k hk'
-          have hks := mem_shared_iff.mpr ⟨hka, hkb⟩
-          rw [entryCodec_mk_pos hks, entryCodec_mk_pos (Body.mem_shared_right hks)]
-          exact (hentry k hk' hks).2
-  all_goals exact absurd hA (by rw [AdmA_object a _,
-    AdmABody_of_not_m (fun _ _ hc => Attr.noConfusion hc)]; exact Bool.noConfusion)
-
 section StructuralAdmA
 -- the object rows put the whole field table to `decide` under a binder
 set_option maxHeartbeats 1000000
@@ -4906,8 +4742,8 @@ set_option maxHeartbeats 1000000
 /-! ## The read side's homomorphism and its reading agreement, structurally
 
 The same three layers the value side uses. The depth bounds are gone with the measure: the list
-and tail lifts have measure-free twins here, and the object rows go through `object_row_gen`,
-the general field-table form that the well-founded proof now shares. -/
+and tail lifts have measure-free twins here, and the object rows go through
+`AdmA_object_of_slots`, which reads each body as its slot at every name. -/
 
 /-- The conclusion of the read-side homomorphism, at one pair. -/
 abbrev AdmAAt (x y z : Term) : Prop :=
@@ -5675,8 +5511,158 @@ theorem admA_famList {pre suf : List Term} {sp : Option Term}
   case opaq l => simp [famList] at h
   all_goals admA_never famList
 
-/-- An object reads an object over the shared names, and a record through every field. -/
-theorem admA_famObj {a : Body} {g : {k // k ∈ a.fields} → ObjectSlot → Option ObjectSlot}
+/-- **A body reads a map by its slots**, the read side's twin of `AdmBody_map_slots`. -/
+theorem AdmABody_map_slots (c : Body) (keys : Finset Name) (g : {k // k ∈ keys} → Attr) :
+    AdmABody c (.m keys g) = true ↔
+      (∀ k, ObjectSlot.isReq (c.slotAt k) = true → k ∈ keys) ∧
+      ∀ k : {k // k ∈ keys}, AdmAField (c.slotAt k.1) (g k) = true := by
+  rw [AdmABody_map, reqPresentT_req, Bool.and_eq_true, reqs_slotAt]
+  apply and_congr Iff.rfl
+  unfold objAdmA; rw [decide_eq_true_iff]
+  refine forall_congr' fun k => ?_
+  unfold entryPA; simp only [MapOf.at]
+  rcases Decidable.em (k.1 ∈ c.fields) with hk | hk
+  · rw [dif_pos hk, Body.slotAt_pos hk]
+  · rw [dif_neg hk, Body.slotAt_neg hk]
+    cases hw : c.wild with
+    | none => simp [AdmAWild, Body.block, hw, AdmAField, AdmA]
+    | some p => obtain ⟨_, t⟩ := p; simp [AdmAWild, Body.block, hw, AdmAField]
+
+/-- **Two bodies conjoined at every name are conjoined as bodies**, read side. -/
+theorem AdmABody_of_slots {a b z : Body}
+    (hS : ∀ k c, AdmAField (z.slotAt k) c = (AdmAField (a.slotAt k) c && AdmAField (b.slotAt k) c))
+    (hR : ∀ k, ObjectSlot.isReq (z.slotAt k)
+      = (ObjectSlot.isReq (a.slotAt k) || ObjectSlot.isReq (b.slotAt k)))
+    (c : Attr) : AdmABody z c = (AdmABody a c && AdmABody b c) := by
+  cases c
+  case m keys g =>
+    rw [Bool.eq_iff_iff, Bool.and_eq_true, AdmABody_map_slots, AdmABody_map_slots,
+      AdmABody_map_slots]
+    constructor
+    · rintro ⟨hr, hs⟩
+      refine ⟨⟨fun k h => hr k (by rw [hR, h, Bool.true_or]), fun k => ?_⟩,
+        ⟨fun k h => hr k (by rw [hR, h, Bool.or_true]), fun k => ?_⟩⟩
+      · have h1 := hs k; rw [hS, Bool.and_eq_true] at h1; exact h1.1
+      · have h1 := hs k; rw [hS, Bool.and_eq_true] at h1; exact h1.2
+    · rintro ⟨⟨hra, hsa⟩, ⟨hrb, hsb⟩⟩
+      refine ⟨fun k h => ?_, fun k => by rw [hS, hsa k, hsb k]; rfl⟩
+      rw [hR, Bool.or_eq_true] at h
+      exact h.elim (hra k) (hrb k)
+  all_goals
+    rw [AdmABody_of_not_m (fun _ _ hc => Attr.noConfusion hc),
+      AdmABody_of_not_m (fun _ _ hc => Attr.noConfusion hc),
+      AdmABody_of_not_m (fun _ _ hc => Attr.noConfusion hc)]; rfl
+
+/-- A present name reads through its slot's codec, the block `never` standing in for a
+    closed body: `Codec.empty` reads nothing, and neither does a missing rest codec. -/
+theorem entryCodec_slotAt (c : Body) (k : Name) (x : Attr) :
+    (entryCodec ⟨c.fields, fun k => fieldSem (c.at k)⟩ (rcOf (wildSem c.wild)) k).bind
+        (fun cd => cd.p x)
+      = (fieldSem (c.slotAt k)).codec.p x := by
+  unfold entryCodec; simp only [MapOf.at]
+  rcases Decidable.em (k ∈ c.fields) with hk | hk
+  · rw [dif_pos hk, Body.slotAt_pos hk]; rfl
+  · rw [dif_neg hk, Body.slotAt_neg hk]
+    cases hw : c.wild with
+    | none => simp [wildSem, rcOf, Body.block, hw, fieldSem, FieldSem.codec, denote, Codec.empty]
+    | some p => obtain ⟨_, t⟩ := p; simp [wildSem, rcOf, Body.block, hw, fieldSem, FieldSem.codec]
+
+/-- **Two bodies that read every present name alike read the map alike.** -/
+theorem bodySem_p_congr {c d : Body} {keys : Finset Name} {g : {k // k ∈ keys} → Attr}
+    (hc : reqPresentB ⟨c.fields, fun k => fieldSem (c.at k)⟩ keys = true)
+    (hd : reqPresentB ⟨d.fields, fun k => fieldSem (d.at k)⟩ keys = true)
+    (he : ∀ k (hk : k ∈ keys), (fieldSem (c.slotAt k)).codec.p (g ⟨k, hk⟩)
+      = (fieldSem (d.slotAt k)).codec.p (g ⟨k, hk⟩)) :
+    (bodySem c).p (.m keys g) = (bodySem d).p (.m keys g) := by
+  have hkc : ∀ w : Option (KeyPat × Term), ∀ sems : MapOf FieldSem,
+      keepB (wildSem w) sems = fun _ => true := by
+    intro w sems; cases w <;> rfl
+  cases c with
+  | mk fc Fc wc =>
+    cases d with
+    | mk fd Fd wd =>
+      simp only [bodySem, objectCodec, objectCodecCore, carriedCodec, mapV, mA, hkc, Option.bind_some]
+      simp only [objRead]
+      simp only [Body.fields_mk, Body.at_mk] at hc hd
+      rw [if_pos hc, if_pos hd, Option.map_map, Option.map_map]
+      apply funImage_record_congr
+      · rfl
+      · intro k hk _
+        have hk' := (Finset.mem_filter.mp hk).1
+        have h1 := entryCodec_slotAt (.mk fc Fc wc) k (g ⟨k, hk'⟩)
+        have h2 := entryCodec_slotAt (.mk fd Fd wd) k (g ⟨k, hk'⟩)
+        simp only [Body.fields_mk, Body.at_mk, Body.wild_mk] at h1 h2
+        exact (h1.trans (he k hk')).trans h2.symm
+
+/-- A body that reads a map finds every required name present. -/
+theorem reqPresentB_of_AdmABody {c : Body} {keys : Finset Name} {g : {k // k ∈ keys} → Attr}
+    (h : AdmABody c (.m keys g) = true) :
+    reqPresentB ⟨c.fields, fun k => fieldSem (c.at k)⟩ keys = true := by
+  rw [AdmABody_map, Bool.and_eq_true] at h
+  rw [← reqPresentT_eq]; exact h.1
+
+/-- **Two objects conjoined at every name, read side**: the rows conjoin, and where both
+    factors read a map the meet reads it as each of them does. -/
+theorem AdmA_object_of_slots {a b z : Body}
+    (hS : ∀ k c, AdmAField (z.slotAt k) c = (AdmAField (a.slotAt k) c && AdmAField (b.slotAt k) c))
+    (hR : ∀ k, ObjectSlot.isReq (z.slotAt k)
+      = (ObjectSlot.isReq (a.slotAt k) || ObjectSlot.isReq (b.slotAt k)))
+    (hP : ∀ k c, AdmAField (a.slotAt k) c = true → AdmAField (b.slotAt k) c = true →
+      (fieldSem (z.slotAt k)).codec.p c = (fieldSem (a.slotAt k)).codec.p c
+        ∧ (fieldSem (z.slotAt k)).codec.p c = (fieldSem (b.slotAt k)).codec.p c) :
+    (∀ c, AdmA (.object z) c = (AdmA (.object a) c && AdmA (.object b) c)) ∧
+    (∀ c, AdmA (.object a) c = true → AdmA (.object b) c = true →
+      (denote (.object z)).p c = (denote (.object a)).p c
+        ∧ (denote (.object z)).p c = (denote (.object b)).p c) := by
+  have half1 : ∀ c, AdmA (.object z) c = (AdmA (.object a) c && AdmA (.object b) c) :=
+    AdmABody_of_slots hS hR
+  refine ⟨half1, fun c hA hB => ?_⟩
+  have hZ : AdmA (.object z) c = true := by rw [half1, hA, hB]; rfl
+  cases c
+  case m keys g =>
+    have hA' : AdmABody a (.m keys g) = true := hA
+    have hB' : AdmABody b (.m keys g) = true := hB
+    have hZ' : AdmABody z (.m keys g) = true := hZ
+    have hsa := ((AdmABody_map_slots a keys g).mp hA').2
+    have hsb := ((AdmABody_map_slots b keys g).mp hB').2
+    refine ⟨bodySem_p_congr (reqPresentB_of_AdmABody hZ') (reqPresentB_of_AdmABody hA')
+        (fun k hk => (hP k _ (hsa ⟨k, hk⟩) (hsb ⟨k, hk⟩)).1),
+      bodySem_p_congr (reqPresentB_of_AdmABody hZ') (reqPresentB_of_AdmABody hB')
+        (fun k hk => (hP k _ (hsa ⟨k, hk⟩) (hsb ⟨k, hk⟩)).2)⟩
+  all_goals exact absurd hA (by
+    show ¬ AdmABody a _ = true
+    rw [AdmABody_of_not_m (fun _ _ hc => Attr.noConfusion hc)]; simp)
+
+/-- **A slot at the bottom empties the product, read side.** -/
+theorem AdmABody_false_of_bottom {a b : Body} {s : ObjectSlot} {k : Name}
+    (hs : ∀ c, AdmAField s c = (AdmAField (a.slotAt k) c && AdmAField (b.slotAt k) c))
+    (hr : ObjectSlot.isReq s = (ObjectSlot.isReq (a.slotAt k) || ObjectSlot.isReq (b.slotAt k)))
+    (hbot : ObjectSlot.isBottom s = true) (c : Attr) :
+    (AdmABody a c && AdmABody b c) = false := by
+  refine Bool.eq_false_iff.mpr (fun hab => ?_)
+  rw [Bool.and_eq_true] at hab
+  obtain ⟨hA, hB⟩ := hab
+  cases c
+  case m keys g =>
+    rw [AdmABody_map_slots] at hA hB
+    have hreq := isReq_of_isBottom hbot
+    rw [hr, Bool.or_eq_true] at hreq
+    have hk : k ∈ keys := hreq.elim (hA.1 k) (hB.1 k)
+    have h1 := hs (g ⟨k, hk⟩)
+    rw [hA.2 ⟨k, hk⟩, hB.2 ⟨k, hk⟩] at h1
+    cases s with
+    | req t =>
+      have ht : t = .never := by
+        cases t <;> simp_all [ObjectSlot.isBottom, Term.isNever]
+      subst ht; exact absurd h1 (by simp [AdmAField, AdmA])
+    | optional t => exact absurd hbot (by simp [ObjectSlot.isBottom])
+  all_goals exact absurd hA (by rw [AdmABody_of_not_m (fun _ _ hc => Attr.noConfusion hc)]; simp)
+
+/-- **One name of the met body, on the read side**: the slot reads exactly what both bodies'
+    slots at that name read, is required where either is, and reads a stored attribute both
+    admit as each of them does. -/
+theorem objSlot_soundA {a b : Body} {g : {k // k ∈ a.fields} → ObjectSlot → Option ObjectSlot}
+    {mw : Term → Option Term}
     (hg : ∀ (k : {k // k ∈ a.fields}) (fl fm : ObjectSlot), g k fl = some fm →
       (∀ c, AdmAField fm c = (AdmAField (a.at k) c && AdmAField fl c))
       ∧ (∀ c, AdmAField (a.at k) c = true → AdmAField fl c = true →
@@ -5684,41 +5670,110 @@ theorem admA_famObj {a : Body} {g : {k // k ∈ a.fields} → ObjectSlot → Opt
             ∧ (fieldSem fm).codec.p c = (fieldSem fl).codec.p c))
     (hgreq : ∀ (k : {k // k ∈ a.fields}) (fl fm : ObjectSlot), g k fl = some fm →
       ObjectSlot.isReq fm = (ObjectSlot.isReq (a.at k) || ObjectSlot.isReq fl))
-    (hgbot : ∀ (k : {k // k ∈ a.fields}) (fl fm : ObjectSlot), g k fl = some fm →
-      ObjectSlot.isBottom fm = true → ∃ t, fm = .req t) :
-    AdmAFam (.object a) (famObj a g) := by
+    (hw : ∀ y z, mw y = some z → AdmAAt a.block y z)
+    {k : {k // k ∈ a.fields ∪ b.fields}} {s : ObjectSlot} (h : objSlot a b g mw k = some s) :
+    (∀ c, AdmAField s c = (AdmAField (a.slotAt k.1) c && AdmAField (b.slotAt k.1) c)) ∧
+    ObjectSlot.isReq s = (ObjectSlot.isReq (a.slotAt k.1) || ObjectSlot.isReq (b.slotAt k.1)) ∧
+    (∀ c, AdmAField (a.slotAt k.1) c = true → AdmAField (b.slotAt k.1) c = true →
+      (fieldSem s).codec.p c = (fieldSem (a.slotAt k.1)).codec.p c
+        ∧ (fieldSem s).codec.p c = (fieldSem (b.slotAt k.1)).codec.p c) := by
+  unfold objSlot at h
+  split at h
+  next ha =>
+    have hb : (if h' : k.1 ∈ b.fields then b.at ⟨k.1, h'⟩ else .optional b.block)
+        = b.slotAt k.1 := rfl
+    rw [hb] at h
+    rw [Body.slotAt_pos ha]
+    exact ⟨(hg _ _ _ h).1, hgreq _ _ _ h, (hg _ _ _ h).2⟩
+  next ha =>
+    have hb := (Finset.mem_union.mp k.2).resolve_left ha
+    rw [Body.slotAt_neg ha, Body.slotAt_pos hb]
+    cases hf : b.at ⟨k.1, hb⟩ with
+    | req y =>
+      rw [hf] at h
+      simp only [ObjectSlot.through, Option.map_eq_some_iff] at h
+      obtain ⟨z, hz, rfl⟩ := h
+      exact ⟨fun c => (hw _ _ hz).1 c, rfl, fun c h1 h2 => (hw _ _ hz).2 c h1 h2⟩
+    | optional y =>
+      rw [hf] at h
+      simp only [ObjectSlot.through, Option.map_eq_some_iff] at h
+      obtain ⟨z, hz, rfl⟩ := h
+      exact ⟨fun c => (hw _ _ hz).1 c, rfl, fun c h1 h2 => (hw _ _ hz).2 c h1 h2⟩
+
+/-- **Two objects meet pointwise, and the meet is exact on the read side.** -/
+theorem admA_famObj {a : Body} {g : {k // k ∈ a.fields} → ObjectSlot → Option ObjectSlot}
+    {mw : Term → Option Term}
+    (hg : ∀ (k : {k // k ∈ a.fields}) (fl fm : ObjectSlot), g k fl = some fm →
+      (∀ c, AdmAField fm c = (AdmAField (a.at k) c && AdmAField fl c))
+      ∧ (∀ c, AdmAField (a.at k) c = true → AdmAField fl c = true →
+          (fieldSem fm).codec.p c = (fieldSem (a.at k)).codec.p c
+            ∧ (fieldSem fm).codec.p c = (fieldSem fl).codec.p c))
+    (hgreq : ∀ (k : {k // k ∈ a.fields}) (fl fm : ObjectSlot), g k fl = some fm →
+      ObjectSlot.isReq fm = (ObjectSlot.isReq (a.at k) || ObjectSlot.isReq fl))
+    (hw : ∀ y z, mw y = some z → AdmAAt a.block y z) :
+    AdmAFam (.object a) (famObj a g mw) := by
   intro y z hd h
   cases y <;> first | exact hd.elim | skip
   case object b =>
       simp only [famObj] at h
-      obtain ⟨ha0, hb0, hcase⟩ := objObj_extract h
-      refine object_row_gen (Ok := ∀ k : {k // k ∈ Body.shared a b},
-          (g ⟨k.1, Body.mem_shared_left k.2⟩
-            (b.at ⟨k.1, Body.mem_shared_right k.2⟩)).isSome = true)
-        ha0 hb0 (fun hok k => ?_) (fun hok k hbot => ?_) (fun hok k => ?_) hcase
-      · obtain ⟨fm, hfm⟩ := Option.isSome_iff_exists.mp (hok k)
-        rw [hfm, Option.getD_some]; exact hgreq _ _ _ hfm
-      · obtain ⟨fm, hfm⟩ := Option.isSome_iff_exists.mp (hok k)
-        rw [hfm, Option.getD_some] at hbot ⊢; exact hgbot _ _ _ hfm hbot
-      · obtain ⟨fm, hfm⟩ := Option.isSome_iff_exists.mp (hok k)
-        rw [hfm, Option.getD_some]; exact hg _ _ _ hfm
+      unfold objObj at h
+      split at h
+      next hbot =>
+        obtain ⟨k, hk⟩ := of_decide_eq_true hbot
+        obtain ⟨s, hs, hsb⟩ := Option.map_eq_some_iff.mp hk
+        simp only [Option.some.injEq] at h; subst h
+        obtain ⟨hS, hR, -⟩ := objSlot_soundA hg hgreq hw hs
+        have hf := AdmABody_false_of_bottom hS hR hsb
+        refine ⟨fun c => (hf c).symm, fun c hA hB => ?_⟩
+        have hA' : AdmABody a c = true := hA
+        have hB' : AdmABody b c = true := hB
+        have := hf c
+        rw [hA', hB'] at this; exact absurd this (by simp)
+      next =>
+        split at h
+        next => exact absurd h (by simp)
+        next zb hwz =>
+          split at h
+          next hall =>
+            simp only [Option.some.injEq] at h; subst h
+            have hbw := hw _ _ hwz
+            have hblk : ∀ k, k ∉ a.fields → k ∉ b.fields →
+                (∀ c, AdmAField (.optional (if zb.isNever then .never else zb)) c
+                  = (AdmAField (a.slotAt k) c && AdmAField (b.slotAt k) c)) ∧
+                ObjectSlot.isReq (.optional (if zb.isNever then .never else zb))
+                  = (ObjectSlot.isReq (a.slotAt k) || ObjectSlot.isReq (b.slotAt k)) ∧
+                (∀ c, AdmAField (a.slotAt k) c = true → AdmAField (b.slotAt k) c = true →
+                  (fieldSem (.optional (if zb.isNever then .never else zb))).codec.p c
+                    = (fieldSem (a.slotAt k)).codec.p c
+                  ∧ (fieldSem (.optional (if zb.isNever then .never else zb))).codec.p c
+                    = (fieldSem (b.slotAt k)).codec.p c) := by
+              intro k ha hb
+              rw [Body.slotAt_neg ha, Body.slotAt_neg hb]
+              cases hn : zb.isNever
+              · exact ⟨fun c => hbw.1 c, rfl, fun c h1 h2 => hbw.2 c h1 h2⟩
+              · rw [if_pos rfl]
+                have hz := eq_never_of_isNever hn
+                subst hz
+                exact ⟨fun c => hbw.1 c, rfl, fun c h1 h2 => hbw.2 c h1 h2⟩
+            have hall' := of_decide_eq_true hall
+            refine AdmA_object_of_slots (fun k c => ?_) (fun k => ?_) (fun k c => ?_)
+            · exact objObj_slots (P := fun k s => AdmAField s c
+                  = (AdmAField (a.slotAt k) c && AdmAField (b.slotAt k) c)) hall'
+                (fun k' s hs => (objSlot_soundA hg hgreq hw hs).1 c)
+                (fun k' ha hb => (hblk k' ha hb).1 c) k
+            · exact objObj_slots (P := fun k s => ObjectSlot.isReq s
+                  = (ObjectSlot.isReq (a.slotAt k) || ObjectSlot.isReq (b.slotAt k))) hall'
+                (fun k' s hs => (objSlot_soundA hg hgreq hw hs).2.1)
+                (fun k' ha hb => (hblk k' ha hb).2.1) k
+            · exact objObj_slots (P := fun k s => AdmAField (a.slotAt k) c = true →
+                  AdmAField (b.slotAt k) c = true →
+                  (fieldSem s).codec.p c = (fieldSem (a.slotAt k)).codec.p c
+                    ∧ (fieldSem s).codec.p c = (fieldSem (b.slotAt k)).codec.p c) hall'
+                (fun k' s hs => (objSlot_soundA hg hgreq hw hs).2.2 c)
+                (fun k' ha hb => (hblk k' ha hb).2.2 c) k
+          next => exact absurd h (by simp)
   case opaq l => simp [famObj] at h
   all_goals admA_never famObj
-
-/-- Only a `req` slot can meet to the bottom, which is what `isBottom` asks. -/
-theorem reqOf_Field_meet : ∀ {f fl fm : ObjectSlot}, ObjectSlot.meet f fl = some fm →
-    ObjectSlot.isBottom fm = true → ∃ t, fm = .req t := by
-  intro f fl fm h hbot
-  match f, fl, h with
-  | .req _, .req _, h
-  | .req _, .optional _, h
-  | .optional _, .req _, h
-  | .optional _, .optional _, h =>
-      simp only [ObjectSlot.meet, Option.map_eq_some_iff] at h
-      obtain ⟨tz, _, rfl⟩ := h
-      first
-        | exact ⟨tz, rfl⟩
-        | exact absurd hbot (by simp [ObjectSlot.isBottom])
 
 mutual
 /-- **The read side's homomorphism and its reading agreement, together.** Both halves are
@@ -5801,10 +5856,18 @@ theorem AdmA_meet_both : ∀ x y z, Term.meet x y = some z → AdmAAt x y z
             (admA_meetSTs pre)
             (Or.inr ⟨t, Term.meet t, rfl, rfl, fun u w hw => AdmA_meet_both t u w hw⟩)
             (admA_meetSTs suf)) y z h
-  | .object (.mk fs f w), y, z, h =>
-      admA_meetSRight (admA_famObj (a := .mk fs f w)
+  | .object (.mk fs f none), y, z, h =>
+      admA_meetSRight (admA_famObj (a := .mk fs f none)
         (fun k fl fm hm => admA_Field_meet (f k) fl fm hm)
-        (fun _ _ _ hm => isReq_Field_meet hm) (fun _ _ _ hm => reqOf_Field_meet hm)) y z h
+        (fun _ _ _ hm => isReq_Field_meet hm)
+        (fun _ _ hz => by
+          simp only [Option.some.injEq] at hz; subst hz
+          exact ⟨fun _ => rfl, fun _ ha _ => absurd ha (by simp [Body.block, AdmA])⟩)) y z h
+  | .object (.mk fs f (some (p, t))), y, z, h =>
+      admA_meetSRight (admA_famObj (a := .mk fs f (some (p, t)))
+        (fun k fl fm hm => admA_Field_meet (f k) fl fm hm)
+        (fun _ _ _ hm => isReq_Field_meet hm)
+        (fun u w hw => AdmA_meet_both t u w hw)) y z h
 termination_by structural x => x
 
 /-- The union row's options, lifted pointwise at the fixed partner. -/
@@ -6439,28 +6502,78 @@ theorem typed_famList {pre suf : List Term} {sp : Option Term}
   all_goals
     (simp only [famList, Option.some.injEq] at h; subst h; exact ⟨_, _, Typed.never⟩)
 
-/-- An object meets an object over the shared names. -/
+/-- A typed body's block is typed: the open block's term, or the bottom. -/
+theorem typed_block {b : Body} (h : ∃ R, TypedWild b.wild R) : ∃ T μ, Typed b.block T μ := by
+  obtain ⟨R, hR⟩ := h
+  cases b with
+  | mk fs f w =>
+    cases hR with
+    | none => exact ⟨_, _, Typed.never⟩
+    | some ht => exact ⟨_, _, ht⟩
+
+/-- **Two objects meet pointwise, and the meet stays in the typed fragment.** -/
 theorem typed_famObj {a : Body} {g : {k // k ∈ a.fields} → ObjectSlot → Option ObjectSlot}
+    {mw : Term → Option Term}
     (hg : ∀ (k : {k // k ∈ a.fields}) (fl fm : ObjectSlot), g k fl = some fm →
       (∃ T μ, Typed (ObjectSlot.termOf (a.at k)) T μ) → (∃ T μ, Typed (ObjectSlot.termOf fl) T μ) →
-      ∃ T μ, Typed (ObjectSlot.termOf fm) T μ) :
-    TypedFam (.object a) (famObj a g) := by
+      ∃ T μ, Typed (ObjectSlot.termOf fm) T μ)
+    (hw : ∀ y z, mw y = some z → (∃ T μ, Typed a.block T μ) → (∃ T μ, Typed y T μ) →
+      ∃ T μ, Typed z T μ) :
+    TypedFam (.object a) (famObj a g mw) := by
   intro y z hd h hx hy
-  obtain ⟨hfa, Ra, hra⟩ := typed_object_inv hx
+  obtain ⟨hfa, hra⟩ := typed_object_inv hx
   cases y <;> first | exact hd.elim | skip
   case object b =>
+      obtain ⟨hfb, hrb⟩ := typed_object_inv hy
       simp only [famObj] at h
-      obtain ⟨ha0, hb0, hcase⟩ := objObj_extract h
-      obtain ⟨hfb, Rb, hrb⟩ := typed_object_inv hy
-      rcases hcase with ⟨rfl, -⟩ | ⟨-, -, hok, hz⟩
-      · exact ⟨_, _, Typed.never⟩
-      · rcases hz with ⟨rfl, -⟩ | rfl
-        · exact ⟨_, _, Typed.never⟩
-        · refine typed_object_of (R := none) ?_ TypedWild.none
-          intro k
-          obtain ⟨fm, hfm⟩ := Option.isSome_iff_exists.mp (hok k)
-          rw [hfm, Option.getD_some]
-          exact hg _ _ _ hfm (hfa _) (hfb _)
+      unfold objObj at h
+      split at h
+      next => simp only [Option.some.injEq] at h; subst h; exact ⟨_, _, Typed.never⟩
+      next =>
+        split at h
+        next => exact absurd h (by simp)
+        next zb hwz =>
+          split at h
+          next hall =>
+            simp only [Option.some.injEq] at h; subst h
+            have hF : ∀ k : {k // k ∈ (a.fields ∪ b.fields).filter (fun k =>
+                (if h : k ∈ a.fields ∪ b.fields then
+                  !(zb.isNever && ObjectSlot.isAbsentOpt (objSlot a b g mw ⟨k, h⟩))
+                else false) = true)},
+                ∃ T μ, Typed (ObjectSlot.termOf ((objSlot a b g mw
+                  ⟨k.1, (Finset.mem_filter.mp k.2).1⟩).getD (.optional .never))) T μ := by
+              intro k
+              obtain ⟨s, hs⟩ := Option.isSome_iff_exists.mp
+                (of_decide_eq_true hall ⟨k.1, (Finset.mem_filter.mp k.2).1⟩)
+              rw [hs, Option.getD_some]
+              unfold objSlot at hs
+              split at hs
+              next ha =>
+                refine hg _ _ _ hs (hfa _) ?_
+                split
+                · exact hfb _
+                · exact typed_block hrb
+              next ha =>
+                have hb := (Finset.mem_union.mp (Finset.mem_filter.mp k.2).1).resolve_left ha
+                have hty := hfb ⟨k.1, hb⟩
+                cases hf : b.at ⟨k.1, hb⟩ with
+                | req y =>
+                  rw [hf] at hs hty
+                  simp only [ObjectSlot.through, Option.map_eq_some_iff] at hs
+                  obtain ⟨z, hz, rfl⟩ := hs
+                  exact hw _ _ hz (typed_block hra) hty
+                | optional y =>
+                  rw [hf] at hs hty
+                  simp only [ObjectSlot.through, Option.map_eq_some_iff] at hs
+                  obtain ⟨z, hz, rfl⟩ := hs
+                  exact hw _ _ hz (typed_block hra) hty
+            rcases Bool.eq_false_or_eq_true zb.isNever with hn | hn
+            · rw [if_pos hn]
+              exact typed_object_of hF TypedWild.none
+            · obtain ⟨T, μ, ht⟩ := hw _ _ hwz (typed_block hra) (typed_block hrb)
+              rw [if_neg (by rw [hn]; exact Bool.false_ne_true)]
+              exact typed_object_of hF (TypedWild.some ht)
+          next => exact absurd h (by simp)
   case opaq l => simp [famObj] at h
   all_goals
     (simp only [famObj, Option.some.injEq] at h; subst h; exact ⟨_, _, Typed.never⟩)
@@ -6523,9 +6636,15 @@ theorem typed_meet : ∀ x y z, Term.meet x y = some z →
             (typed_meetSTs pre)
             (Or.inr ⟨t, Term.meet t, rfl, rfl, fun u w hw => typed_meet t u w hw⟩)
             (typed_meetSTs suf)) y z h hx hy
-  | .object (.mk fs f w), y, z, h, hx, hy =>
-      typed_meetSRight (typed_famObj (a := .mk fs f w)
-        (fun k fl fm hm => typed_Field_meet (f k) fl fm hm)) y z h hx hy
+  | .object (.mk fs f none), y, z, h, hx, hy =>
+      typed_meetSRight (typed_famObj (a := .mk fs f none)
+        (fun k fl fm hm => typed_Field_meet (f k) fl fm hm)
+        (fun _ _ hz _ _ => by
+          simp only [Option.some.injEq] at hz; subst hz; exact ⟨_, _, Typed.never⟩)) y z h hx hy
+  | .object (.mk fs f (some (p, t))), y, z, h, hx, hy =>
+      typed_meetSRight (typed_famObj (a := .mk fs f (some (p, t)))
+        (fun k fl fm hm => typed_Field_meet (f k) fl fm hm)
+        (fun u w hw => typed_meet t u w hw)) y z h hx hy
 termination_by structural x => x
 
 /-- The union row's options, lifted pointwise at the fixed partner. -/
