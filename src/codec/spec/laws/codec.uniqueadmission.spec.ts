@@ -16,16 +16,15 @@
  * failing on a union that genuinely has two admitters, and on one that has none.
  */
 import { describe, expect, it } from 'vitest'
-import { Attribute } from '../../../Rotorise'
 import { memberOf } from '../../attribute'
 import {
     array,
     boolean,
     CodecError,
-    custom,
     decimal,
     discriminatedUnion,
     held,
+    lazy,
     nullable,
     number,
     object,
@@ -133,11 +132,16 @@ describe('the harness, against planted violations', () => {
      * point. Kept for the opposite reason to the diagnostics elsewhere in this batch.
      */
     it('reports a value two options admit', () => {
-        const loose = custom<number, Attribute<'S'>>({
-            encode: (v) => ({ S: String(v) }),
-            decode: (a) => Number(a.S),
-            arbitrary: () => 1,
-        })
+        // behind a `lazy`, whose read occupancy is `undefined` because answering forces the
+        // thunk. That is what stops the declaration guard refusing the pair before the harness
+        // sees it, and the harness is what this test is about
+        const loose = lazy(() =>
+            held(string, {
+                encode: (v: number) => String(v),
+                decode: (a) => Number(a),
+                arbitrary: () => 1,
+            }),
+        )
         expect(() =>
             checkUniqueAdmission(union([string, loose]), { seed }),
         ).toThrow(/\(U\) fails on the write side/)
@@ -159,11 +163,9 @@ describe('the harness, against planted violations', () => {
      * point. Kept for the opposite reason to the diagnostics elsewhere in this batch.
      */
     it('reports an attribute no option admits', () => {
-        const writeOnly = custom<string, Attribute<'S'>>({
-            encode: (v) => ({ S: v }),
-            decode: () => {
-                throw new Error('this one never reads')
-            },
+        const writeOnly = held(string, {
+            encode: (v: string) => v,
+            decode: () => new CodecError('this one never reads'),
             arbitrary: () => 'x',
         })
         expect(() =>

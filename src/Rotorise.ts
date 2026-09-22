@@ -1787,7 +1787,6 @@ export {
     binary,
     boolean,
     CodecError,
-    custom,
     decimal,
     discriminatedUnion,
     every,

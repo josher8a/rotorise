@@ -204,7 +204,7 @@ export const namedLiteral = (one: unknown): string =>
  *
  * And a value `structuredClone` **refuses**. Ordinarily there is none: a stand-in is a value the
  * inner codec accepts, so it comes from the value language — arrays, plain objects, `Set`,
- * `Uint8Array` — and all of those clone. {@link custom} is the exception, because its admission
+ * `Uint8Array` — and all of those clone. A `custom` term is the exception, because its admission
  * asks the caller's own pair, so a hand-written codec can legitimately admit a class instance with
  * methods or anything else holding a function. Rather than throw a `DataCloneError` out of a
  * `decode` months later, the clone is attempted once at the declaration; where it fails the value

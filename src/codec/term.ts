@@ -20,7 +20,6 @@ import type {
     LiteralBase,
     LiteralValue,
     Refinement,
-    Result,
     Rng,
     SetBase,
     SetSlot,
@@ -223,6 +222,22 @@ export type Term =
               readonly f: (value: never) => unknown
               readonly g: (held: never) => unknown
           }
+          /**
+           * **The generators, where the caller supplies them rather than the inner codec.**
+           *
+           * An adapter derives both from the codec underneath: a value is generated for the inner
+           * term and handed out through `g`, and a value is shrunk on the inner side and handed
+           * back. That is right whenever the pair is total on the inner codec's values.
+           *
+           * It is wrong when the adapter is partial. A conversion that refuses some of what the
+           * inner codec generates makes the derived generator produce values the pair never
+           * makes, and the property then fails on the generator rather than on the codec. So the
+           * caller states them, and states them here because a definition carries everything the
+           * caller said about a codec. Absent is the honest answer for an adapter nobody has
+           * declared, and the derivation stands there.
+           */
+          readonly arbitrary?: (rng: Rng, size: number) => unknown
+          readonly shrink?: (value: never) => readonly unknown[]
       }
     /**
      * §3 `(refine)`. The model carries `q : Value → Bool`; this carries a {@link Predicate}, so a
@@ -251,14 +266,6 @@ export type Term =
      * forces is a guard that throws on the entity it exists to allow.
      */
     | { readonly kind: 'lazy'; readonly get: () => Term }
-    /** §3 `(custom)`: the pair as data. The two generators are the caller's and ride here too. */
-    | {
-          readonly kind: 'custom'
-          readonly ce: (value: never) => Result<AttributeValue>
-          readonly cp: (attribute: AttributeValue) => unknown
-          readonly arbitrary?: (rng: Rng, size: number) => unknown
-          readonly shrink?: (value: never) => readonly unknown[]
-      }
     /** §3 `(opaque)`: `lossy = false` is the `refuse` policy — the absence of the `number` option. */
     | { readonly kind: 'opaq'; readonly lossy: boolean }
     | { readonly kind: 'object'; readonly body: Body }
@@ -380,7 +387,6 @@ export const member = (t: Term): AttributeName | undefined => {
         case 'legacy':
             return member(t.inner)
         case 'lazy':
-        case 'custom':
         case 'opaq':
         // nothing is written, so there is no member stored
         case 'never':
@@ -489,7 +495,6 @@ export const occV = (t: Term): readonly SetSlot[] | undefined => {
         // an adapter answers with what it declared, and the top where it declared nothing
         case 'held':
             return t.writes
-        case 'custom':
         case 'lazy':
             return undefined
         case 'refine':
@@ -564,7 +569,6 @@ export const ownsNullOf = (t: Term): boolean | undefined => {
                 : answers.some((one) => one === true)
         }
         case 'held':
-        case 'custom':
         case 'legacy':
         case 'lazy':
             return undefined
@@ -607,7 +611,6 @@ export const occA = (t: Term): readonly AttributeName[] | undefined => {
         case 'object':
             return ['M']
         case 'legacy':
-        case 'custom':
         case 'lazy':
             return undefined
         case 'refine':
@@ -1325,7 +1328,7 @@ export const meetTerms = (x: Term, y: Term): Term | undefined => {
 const never: Term = { kind: 'never' }
 
 const opaqueToReader = (t: Term): boolean =>
-    t.kind === 'held' || t.kind === 'legacy' || t.kind === 'custom'
+    t.kind === 'held' || t.kind === 'legacy'
 
 const groundBase = (t: Term): boolean =>
     t.kind === 'string' ||

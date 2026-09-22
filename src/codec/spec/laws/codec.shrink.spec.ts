@@ -5,11 +5,12 @@
  * to find the one that matters.
  */
 import { describe, expect, it } from 'vitest'
-import type { Attribute, AttributeValue } from '../../attribute'
+import type { Attribute } from '../../attribute'
 import type { Rng } from '../../codec'
 import {
     type AttributeCodec,
-    custom,
+    CodecError,
+    held,
     object,
     optional,
     string,
@@ -35,30 +36,44 @@ const shrinkTruncatable = (value: string): readonly string[] =>
               value.slice(0, -1),
           ].filter((x) => x !== value)
 
-/** Round-trips only strings of three characters or fewer. */
-const truncating: AttributeCodec<string, Attribute<'S'>> = custom({
-    encode: (value: string) => ({ S: value }) as Attribute<'S'>,
-    decode: (attribute) => ((attribute as { S: string }).S ?? '').slice(0, 3),
+/**
+ * Round-trips only strings of three characters or fewer.
+ *
+ * An adapter over `string` whose read half truncates, so the pair is partial and the derived
+ * generator would offer values it never makes. That is why both generators are stated here.
+ */
+const truncating: AttributeCodec<string, Attribute<'S'>> = held(string, {
+    encode: (value: string) => value,
+    decode: (held) => held.slice(0, 3),
     arbitrary: someTruncatable,
     shrink: shrinkTruncatable,
 })
 
-/** Same, but empty throws — a *different* failure mode that shrinking must not drift into. */
-const truncatingButEmptyThrows: AttributeCodec<string, Attribute<'S'>> = custom<
+/**
+ * Same, but empty throws — a *different* failure mode that shrinking must not drift into.
+ *
+ * Built from the term rather than through a constructor, because no constructor reaches this
+ * shape any more. An adapter contains a throw and reports it as a refusal, which is the whole
+ * point of `held`'s backstop, so an adapter cannot state "a bug that is not a decoding failure".
+ * The `custom` term is the one definition that lets a throw escape, and it stays for
+ * `unresolvedAt`. The rule under test is about the shrinker and not about either constructor.
+ */
+const truncatingButEmptyThrows: AttributeCodec<string, Attribute<'S'>> = held(
     string,
-    Attribute<'S'>
->({
-    encode: truncating.encode,
-    arbitrary: someTruncatable,
-    shrink: shrinkTruncatable,
-    decode: (attribute: AttributeValue) => {
-        const carried = (attribute as { S: string }).S ?? ''
-        // deliberately *thrown*, not returned: a bug in a caller's own codec is not a decoding
-        // failure, and this pins that shrinking does not drift into a different failure mode
-        if (carried === '') throw new Error('a different bug entirely')
-        return carried.slice(0, 3)
+    {
+        encode: (value: string) => value,
+        arbitrary: someTruncatable,
+        shrink: shrinkTruncatable,
+        decode: (carried) => {
+            // a *refusal* at the empty string, which is a different failure from the round-trip
+            // mismatch the run is shrinking. The throwing form went with `custom`; an adapter
+            // contains a throw and reports it as a refusal, so the two failures are still two
+            if (carried === '')
+                return new CodecError('a different bug entirely')
+            return carried.slice(0, 3)
+        },
     },
-})
+)
 
 const messageOf = (run: () => void) => {
     try {
@@ -135,9 +150,9 @@ describe('shrinking', () => {
      */
     it('says nothing about shrinking when the first case is already minimal', () => {
         const Broken = object({
-            c: custom<string, Attribute<'S'>>({
-                encode: truncating.encode,
-                decode: truncating.decode,
+            c: held(string, {
+                encode: (value: string) => value,
+                decode: (held) => held.slice(0, 3),
                 arbitrary: someTruncatable,
             }),
         }).item

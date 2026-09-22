@@ -1405,7 +1405,6 @@ describe('the published surface', () => {
             'array',
             'binary',
             'boolean',
-            'custom',
             'decimal',
             'discriminatedUnion',
             'withLegacyRead',
