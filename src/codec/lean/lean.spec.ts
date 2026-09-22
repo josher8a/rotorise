@@ -92,6 +92,17 @@ import { orThrow } from '../result'
 /** The emitter takes the erased codec; the constructors return precise ones. */
 const erase = (codec: unknown): AnyCodec => codec as AnyCodec
 
+/** Whether the emitter can state this codec's term at all, which is a different axis from
+ * whether its value has a Lean form. */
+const statesTerm = (codec: AnyCodec, name: string): boolean => {
+    try {
+        leanTermOf(codec, name)
+        return true
+    } catch {
+        return false
+    }
+}
+
 /** What the emitter refused, and why — the part of a failure worth asserting on. */
 const refusal = (emit: () => unknown): { at: string; reason: string } => {
     try {
@@ -290,7 +301,7 @@ describe('terms', () => {
      * A codec's definition is a term, so nothing well typed hands the emitter a field and the branch
      * reads as dead. It is not: a brand is not a proof and a cast defeats a brand, which is why the
      * entry takes a declaration and refuses one, and why this is asserted through `erase` rather than
-     * left to the type. `Field.optional` is emitted where a field belongs — in an object's table —
+     * left to the type. `ObjectSlot.optional` is emitted where a field belongs — in an object's table —
      * and the two spellings are what §4's strata mean.
      */
     it('refuses a field where a term belongs, reached past a cast', () => {
@@ -303,7 +314,7 @@ describe('terms', () => {
             ),
         ).toThrow(/`optional`\/`fallback` denote `Field`/)
         expect(leanTermOf(erase(object({ a: optional(string) })))).toContain(
-            'Field.optional',
+            'ObjectSlot.optional',
         )
     })
 
@@ -316,19 +327,31 @@ describe('terms', () => {
         expect(
             leanTermOf(erase(object({ a: string, b: optional(boolean) }))),
         ).toBe(
-            'Term.object (Body.mk {"a", "b"} (fun k => if k.1 = "a" then Field.req (Term.string) else Field.optional (Term.boolean)) Rest.refuse)',
+            'Term.object (Body.mk {"a", "b"} (fun k => if k.1 = "a" then ObjectSlot.req (Term.string) else ObjectSlot.optional (Term.boolean)) none)',
         )
     })
 
     /** The empty key set has no `else` to fall through to, so the function is the absurd one. */
     it('emits an object with no fields as the absurd function', () => {
         expect(leanTermOf(erase(object({})))).toBe(
-            'Term.object (Body.mk ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) Rest.refuse)',
+            'Term.object (Body.mk ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) none)',
         )
     })
 
-    it('emits a missing-value field with its stand-in value', () => {
-        expect(
+    /**
+     * **A field's stand-in value has no slot, and the model put that stratum elsewhere.**
+     *
+     * This emitted `Field.fallback (t) (v)` against a `Field` with three constructors. An
+     * `ObjectSlot` has two, and the older reader lives in `LegacyRead` — a structure *outside*
+     * `Term`, carrying the current term and at most one alternate reader. `ExactA.lean` says so in
+     * as many words: its table has no alternate-reader row because `LegacyRead` is outside `Term`.
+     *
+     * So this is not a slot the model declined to add. It is a stratum the model moved, and a
+     * `Body` has nowhere to print it. The refusal is the honest answer until the emitter states a
+     * `LegacyRead` rather than a `Term` for such a codec.
+     */
+    it('refuses a missing-value field, which is a stratum outside the term', () => {
+        const why = refusal(() =>
             leanTermOf(
                 erase(
                     object({
@@ -339,18 +362,18 @@ describe('terms', () => {
                     }),
                 ),
             ),
-        ).toBe(
-            'Term.object (Body.mk {"a"} (fun k => Field.fallback (Term.string) (Value.str "d")) Rest.refuse)',
-        )
+        ).reason
+        expect(why).toContain('LegacyRead')
+        expect(why).toContain('no alternate-reader slot')
     })
 
-    it('emits an open object as `Rest.codec`', () => {
+    it('emits an open object as the one open block', () => {
         expect(
             leanTermOf(
                 erase(object({ a: string }, [string, optional(boolean)])),
             ),
         ).toBe(
-            'Term.object (Body.mk {"a"} (fun k => Field.req (Term.string)) (Rest.codec (Term.boolean)))',
+            'Term.object (Body.mk {"a"} (fun k => ObjectSlot.req (Term.string)) (some (KeyPat.any, Term.boolean)))',
         )
     })
 
@@ -367,7 +390,7 @@ describe('terms', () => {
      */
     it('emits the strict object policy', () => {
         expect(leanTermOf(erase(object({ a: string })))).toBe(
-            'Term.object (Body.mk {"a"} (fun k => Field.req (Term.string)) Rest.refuse)',
+            'Term.object (Body.mk {"a"} (fun k => ObjectSlot.req (Term.string)) none)',
         )
     })
 
@@ -403,10 +426,10 @@ describe('terms', () => {
         // each member's body
         expect(emitted).toContain('Term.union [Term.object')
         expect(emitted).toContain(
-            'Field.req (Term.literal GroundKind.string "a")',
+            'ObjectSlot.req (Term.literal GroundKind.string "a")',
         )
         expect(emitted).toContain(
-            'Field.req (Term.literal GroundKind.string "b")',
+            'ObjectSlot.req (Term.literal GroundKind.string "b")',
         )
         expect(emitted).not.toContain('Term.dunion')
         expect(emitted.split('Body.mk')).toHaveLength(3)
@@ -978,7 +1001,10 @@ const refusalCodecs: readonly (readonly [string, AnyCodec])[] = [
     ...sampleVectors.map((v) => [v.name, v.codec] as const),
     ['scalar_number', erase(dynamoNumber)] as const,
     ['never', erase(never)] as const,
-]
+    // a refusal vector states the term and no value, so a codec whose *term* the model cannot
+    // spell states nothing here either. `object_fallback_present` is the one, and it is named by
+    // the read-side test rather than dropped in silence
+].filter(([cn, codec]) => statesTerm(codec, cn))
 
 export const allRefusals = (): readonly Refusal[] => {
     const out: Refusal[] = []
@@ -994,6 +1020,11 @@ export const allRefusals = (): readonly Refusal[] => {
     }
     return out
 }
+
+/** Whether the emitter can state this codec's term at all, which is a different axis from its
+ * value. `object_fallback_present` is the one corpus entry that fails it: a field's older reader
+ * lives in `LegacyRead`, outside `Term`, so a `Body` has no slot to print it. */
+const emittable = (one: Vector): boolean => statesTerm(one.codec, one.name)
 
 /**
  * The **read** vectors the committed sample carries: the same "one per kind" rule the refusals use.
@@ -1380,7 +1411,9 @@ describe("the read side, against the model's read row", () => {
      */
     it('offers 1326 pairs, three of them stuck on the `Double` axiom', () => {
         const verdicts = readVerdicts()
-        expect(verdicts.length).toBe(1634)
+        // 1634 until `object_fallback_present` left the emittable corpus: a field's older
+        // reader lives in `LegacyRead`, outside `Term`, so a `Body` has no slot to print it
+        expect(verdicts.length).toBe(1591)
         const stuck = verdicts.filter(readRowIsStuck)
         expect(stuck.map((one) => one.name)).toEqual([
             'scalar_number__reads__scalar_decimal',
@@ -1451,7 +1484,12 @@ describe("the declaration guard, against the model's classifier", () => {
      * `object_open__vs__object_nested`. `Orth` declines every one, so the law is untouched and
      * what moved is that the two levels now answer one rule instead of two.
      *
-     * **It was 111, and the six that arrived came with the `decimal` base being deleted.**
+     * **It was 111, then 117, and it is 112.** Two corpus movements, and neither is the guard
+     * changing its mind. Six pairs arrived with the `decimal` base being deleted, and five left
+     * with `object_fallback_present`, which stopped being emittable: a field's older reader lives
+     * in `LegacyRead`, a structure outside `Term`, so a `Body` has no slot to print it.
+     *
+     * The six that arrived:
      * `dynamoNumber` is the one native at `number` and `decimal` is `held` over it, so two codecs
      * a *base* used to tell apart now collide at `N` and the pairs are refused:
      * `scalar_decimal__vs__scalar_number` and `literal_decimal__vs__scalar_number` are that
@@ -1469,7 +1507,7 @@ describe("the declaration guard, against the model's classifier", () => {
      */
     it('refuses only pairs the classifier also declines', () => {
         const separations = separationPairs()
-        expect(separations.length).toBe(117)
+        expect(separations.length).toBe(112)
         // each one emits, which is where `leanSeparation` re-checks that `src/` really refuses,
         // and it carries one of the two warrants: `Orth` declines, or — for a `never` pair, where
         // the model permits what `src/` lints away — the permits-form states what the model says
@@ -1502,7 +1540,7 @@ describe("the declaration guard, against the model's classifier", () => {
      */
     it('puts every corpus meet to the model', () => {
         const meets = meetPairs()
-        expect(meets.length).toBe(739)
+        expect(meets.length).toBe(701)
         expect(MEET_DEFERRED.length).toBe(2)
         if (process.env.EMIT_LEAN_REFUSALS) {
             writeFileSync(
@@ -1569,18 +1607,27 @@ describe('the full refusal set, for the gate', () => {
  */
 describe("the read side of every corpus codec, against the model's `p`", () => {
     /**
-     * **Nothing is skipped, and that is a fact about this corpus rather than about the emitter.**
-     * A numeric value on the read side is unspellable — `Value.num` is `Double`, an axiom with no
-     * closed terms — and the corpus carries none: `scalar_number` is the twenty-eighth codec,
-     * added by hand at three sites, and is not in `sampleVectors`. So the count is the corpus
-     * size, and a corpus that grows a numeric value is meant to move it and be looked at.
+     * **One is skipped, and it is the term rather than the value.**
+     *
+     * No *value* is unspellable any more. `Value.num` carried a `Double`, an axiom with no closed
+     * terms; it carries a `WFNumeral` now, so a numeral is a closed term and a numeric value on
+     * the read side states like any other.
+     *
+     * What is skipped is `object_fallback_present`, whose **term** the emitter refuses: a field's
+     * older reader lives in `LegacyRead`, a structure outside `Term`, so a `Body` has no slot to
+     * print it. It is named here rather than filtered in silence, because a second exclusion
+     * arriving is the thing worth failing on.
      */
-    it('states a read vector for every codec whose value Lean can spell', () => {
+    it('states a read vector for every codec whose term the model can spell', () => {
+        expect(
+            sampleVectors.filter((one) => !emittable(one)).map((o) => o.name),
+        ).toEqual(['object_fallback_present'])
         const statable = sampleVectors.filter(
-            (one) => readVectorIsUnstatable(one) === undefined,
+            (one) =>
+                readVectorIsUnstatable(one) === undefined && emittable(one),
         )
-        expect(statable.length).toBe(sampleVectors.length)
-        expect(statable.length).toBe(37)
+        expect(statable.length).toBe(sampleVectors.length - 1)
+        expect(statable.length).toBe(36)
         // each asserts the model's `p`, through the comparator that crosses `Value.map`'s binder
         for (const one of statable) {
             const vector = leanReadVector(one)
@@ -1594,10 +1641,10 @@ describe("the read side of every corpus codec, against the model's `p`", () => {
         if (process.env.EMIT_LEAN_REFUSALS) {
             writeFileSync(
                 join(process.cwd(), 'formal', '.readvectors.lean'),
-                leanReadVectorModule(sampleVectors),
+                leanReadVectorModule(sampleVectors.filter(emittable)),
             )
         }
-        const module = leanReadVectorModule(sampleVectors)
+        const module = leanReadVectorModule(sampleVectors.filter(emittable))
         expect(module).toContain('import Calculus.Vectors')
         // the header states what it could not state, which for this corpus is nothing
         expect(module).toContain('every corpus codec round trips')
@@ -1627,7 +1674,9 @@ describe('the committed sample', () => {
         ] as const) {
             const at = join(process.cwd(), 'formal', file)
             const emitted = leanVectorModule(
-                sampleVectors,
+                // `object_fallback_present` is excluded and named by the test above: its term has
+                // no `ObjectSlot`, so the sample states the codecs the model can spell
+                sampleVectors.filter(emittable),
                 protocol,
                 sampleRefusals,
                 allRefusals().length,

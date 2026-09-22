@@ -175,9 +175,10 @@ describe('the types', () => {
 
 /**
  * The mark needs no Lean of its own: `Value` has no `undefined` and `Value.map` is a key set with a
- * total function on it, so `{ k: undefined }` and `{}` are one `Value`. A `Field.undefinable` could
- * only be defined as `optional`'s denotation. That the emitter's `Field.optional` is therefore
- * exact, rather than an approximation, is checkable — both marks emit the same theorem.
+ * total function on it, so `{ k: undefined }` and `{}` are one `Value`. An undefinable
+ * `ObjectSlot` could only be defined as `optional`'s denotation. That the emitter's
+ * `ObjectSlot.optional` is therefore exact, rather than an approximation, is checkable — both
+ * marks emit the same theorem.
  */
 describe('what the model is asked to check', () => {
     it('emits the theorem optional emits, character for character', () => {
@@ -196,7 +197,7 @@ describe('what the model is asked to check', () => {
         })
 
         expect(one).toBe(other)
-        expect(one).toContain('Field.optional')
+        expect(one).toContain('ObjectSlot.optional')
         // the key is not in the emitted `Value`: there is no `Value` for `undefined` to be
         expect(one).toContain('Value.map {"id"}')
     })
