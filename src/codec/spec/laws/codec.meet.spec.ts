@@ -21,7 +21,7 @@ import {
     union,
     withLegacyRead,
 } from '../../codec'
-import type { Body, Field, Term } from '../../term'
+import type { Field, Term } from '../../term'
 import { meetTerms } from '../../term'
 
 const termOf = (codec: { readonly def: Term }): Term => codec.def
@@ -114,7 +114,6 @@ describe('two object bodies meet over the names both declare', () => {
             kind: 'object',
             body: {
                 fields: { a: { mark: 'req', t: termOf(string('A')) } },
-                rest: 'refuse',
             },
         })
     })
@@ -132,11 +131,7 @@ describe('two object bodies meet over the names both declare', () => {
         ).toEqual(bottom)
     })
 
-    /**
-     * Under `drop` the read side skips an undeclared name rather than refusing it, so the declared
-     * set bounds the read from below and the write from above. The two halves agree only where the
-     * `drop` factor's declared set contains the other's.
-     */
+    /** A closed body refuses a name it does not declare, so a name the other requires is empty. */
     it('meets strict objects with incompatible required keys at the bottom', () => {
         expect(
             meetTerms(
@@ -208,7 +203,6 @@ describe('two object bodies meet over the names both declare', () => {
             kind: 'object',
             body: {
                 fields: { a: { mark: 'req', t: termOf(string) } },
-                rest: 'refuse',
             },
         })
     })
@@ -244,13 +238,13 @@ describe('a union distributes and the survivors carry the certificate', () => {
 
     /**
      * The meet is the lattice's meet and an uncertified union is not in the lattice, so the pair
-     * has no meet to state. A `drop` object option is what fails the certificate.
+     * has no meet to state. An open object option is what fails the certificate.
      */
     it('refuses where the option list does not certify', () => {
         const uncertified: Term = {
             kind: 'union',
             options: [
-                { kind: 'object', body: { fields: {}, rest: 'drop' } },
+                { kind: 'object', body: { fields: {}, rest: termOf(string) } },
                 termOf(string),
             ],
         }
@@ -391,12 +385,9 @@ describe('two list shapes meet by their lengths', () => {
 })
 
 describe('the worked pairs the model pins', () => {
-    const body = (
-        fields: Record<string, Field>,
-        rest: Body['rest'] = 'refuse',
-    ): Term => ({
+    const body = (fields: Record<string, Field>): Term => ({
         kind: 'object',
-        body: { fields, rest },
+        body: { fields },
     })
 
     /**
@@ -471,10 +462,7 @@ describe('the worked pairs the model pins', () => {
     it('parts an unshared withLegacyRead name from an unshared required one', () => {
         expect(
             meetTerms(
-                body(
-                    { x: { mark: 'fallback', t: termOf(string), v: 'd' } },
-                    'refuse',
-                ),
+                body({ x: { mark: 'fallback', t: termOf(string), v: 'd' } }),
                 body({}),
             ),
         ).toBeUndefined()
@@ -487,9 +475,8 @@ describe('the worked pairs the model pins', () => {
     })
 
     /**
-     * Two `drop` bodies declaring one name each: on the read side each skips the name it does not
-     * declare, and the intersection, declaring nothing, reads every map. No object states both
-     * halves.
+     * Two closed bodies declaring one optional name each: every map both admit holds neither name,
+     * so the meet is the empty closed body.
      */
     it('keeps the empty strict object where optional keys do not overlap', () => {
         expect(

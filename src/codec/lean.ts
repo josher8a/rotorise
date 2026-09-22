@@ -603,25 +603,17 @@ const leanBodyOf = (body: Body, at: string, forced: number): string => {
         ),
     )
     /**
-     * **The open block, as an `Option` rather than a policy.** `Rest` was three constructors; a
-     * body is a partition of the key space now, so a name is declared, or it falls in the one open
-     * block, or the body refuses it. `refuse` is therefore the *absence* of an open block and not a
-     * policy beside one, and `KeyPat.any` is the only pattern there is — a template or a regular
-     * expression would be a second constructor and no table over bodies would move.
-     *
-     * `drop` has no spelling and is refused. The model states the reason as a property of the
-     * shape: there is no policy that silently drops a name, on the way in or on the way out.
+     * **The open block, as an `Option` on both sides.** A body is a partition of the key space,
+     * so a name is declared, or it falls in the one open block, or the body refuses it. The
+     * closed body is the *absence* of an open block, and `KeyPat.any` is the only pattern there
+     * is — a template or a regular expression would be a second constructor and no table over
+     * bodies would move.
      */
     const rest = body.rest
     const restTerm =
-        rest === 'refuse'
+        rest === undefined
             ? 'none'
-            : rest === 'drop'
-              ? refuse(
-                    `${at}.rest`,
-                    'a body is a partition of the key space, so an undeclared name is declared, open or refused; `drop` would silently discard a name on the way in and on the way out, which the model states no policy for',
-                )
-              : `(some (KeyPat.any, ${leanTermOfTerm(rest.t, `${at}.rest`, forced)}))`
+            : `(some (KeyPat.any, ${leanTermOfTerm(rest, `${at}.rest`, forced)}))`
     return `(Body.mk ${leanFinset(names)} (${fields}) ${restTerm})`
 }
 

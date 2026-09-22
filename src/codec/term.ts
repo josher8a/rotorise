@@ -289,7 +289,7 @@ export type Term =
     | { readonly kind: 'never' }
 
 /**
- * §4's object payload: the declared names with the field at each, and the policy for the rest.
+ * §4's object payload: the declared names with the field at each, and the open block.
  *
  * A record from name to {@link Field} **is** the model's `Finset Name` paired with a function on
  * it: no repeats, no ordering for a statement to have to ignore. The model spends a paragraph
@@ -297,7 +297,12 @@ export type Term =
  */
 export type Body = {
     readonly fields: Readonly<Record<string, Field>>
-    readonly rest: OldRest
+    /**
+     * **The open block**, the model's `Option (KeyPat × Term)`: the term every undeclared name
+     * holds. A body is a partition of the key space, so a name is declared, or it falls in the
+     * block, or the body refuses it. Absent is the one closed state.
+     */
+    readonly rest?: Term
 }
 
 /**
@@ -317,14 +322,6 @@ export type Field =
 /** Whether the row always carries this field's attribute. */
 export const alwaysWritten = (field: Field): boolean =>
     field.mark === 'req' || field.mark === 'fallback'
-
-/**
- * The old §4 rest policy.
- *
- * `drop` remains for terms that the pass-two bridge still reads. Public codecs declare `refuse`
- * or an open entry instead.
- */
-type OldRest = 'drop' | 'refuse' | { readonly kind: 'codec'; readonly t: Term }
 
 /* ── the member index ─────────────────────────────────────────────────────────────────── */
 
@@ -960,7 +957,7 @@ export const identifies = (t: Term): boolean => {
                 Object.values(t.body.fields).every((field) =>
                     identifies(field.t),
                 ) &&
-                (typeof t.body.rest === 'string' || identifies(t.body.rest.t))
+                (t.body.rest === undefined || identifies(t.body.rest))
             )
         case 'union':
             return t.options.every(identifies)
@@ -1030,7 +1027,7 @@ export const restricts = (x: Term, y: Term): boolean => {
  */
 const namesMeet = (x: Body, y: Body): boolean => {
     const holds = (b: Body, name: string) =>
-        name in b.fields || typeof b.rest !== 'string'
+        name in b.fields || b.rest !== undefined
     for (const [name, field] of Object.entries(x.fields)) {
         if (alwaysWritten(field) && !holds(y, name)) return false
     }
@@ -1427,19 +1424,15 @@ const unionOk = (os: readonly Term[]): boolean =>
     ) && os.every((t) => !isOpenObject(t) && objectNamesAgree(t))
 
 const isOpenObject = (t: Term): boolean =>
-    t.kind === 'object' && typeof t.body.rest === 'object'
+    t.kind === 'object' && t.body.rest !== undefined
 
 /**
- * Whether an object option's two halves answer the same question about names. A `drop` rest skips
- * an undeclared name on the read side and refuses it on the write side, and a `withLegacyRead` field is
- * required by the write side and supplied by the read side.
+ * Whether an object option's two halves answer the same question about names. A `withLegacyRead`
+ * field is required by the write side and supplied by the read side.
  */
 const objectNamesAgree = (t: Term): boolean =>
     t.kind !== 'object' ||
-    (t.body.rest === 'refuse' &&
-        Object.values(t.body.fields).every(
-            (field) => field.mark !== 'fallback',
-        ))
+    Object.values(t.body.fields).every((field) => field.mark !== 'fallback')
 
 /**
  * **A literal against a base is the literal at that base, and the bottom at any other.**
@@ -1637,17 +1630,6 @@ const mark = (
 const isBottomField = (field: Field): boolean =>
     field.mark !== 'optional' && field.t.kind === 'never'
 
-const mergeRests = (a: OldRest, b: OldRest): OldRest | undefined =>
-    typeof a === 'object' || typeof b === 'object'
-        ? undefined
-        : a === 'refuse' || b === 'refuse'
-          ? 'refuse'
-          : 'drop'
-
-/** Whether a `drop` factor declares every name the other factor declares. */
-const dropFits = (a: Body, b: Body): boolean =>
-    a.rest !== 'drop' || Object.keys(b.fields).every((k) => k in a.fields)
-
 /** Whether every name one body requires is a name the other declares. */
 const reqShared = (a: Body, b: Body): boolean =>
     Object.entries(a.fields).every(
@@ -1663,22 +1645,17 @@ const fbShared = (a: Body, b: Body): boolean =>
 /**
  * **Two bodies, over the names both declare.**
  *
- * The rests decide first, and an open factor holds a name it does not declare, so the required-name
- * test is a bottom test only once both rests are closed. The declared set is the intersection and
- * the required set is the union, which is what two upper bounds meet to.
- *
- * **The declared set is an upper bound on the write side only.** Under `drop` the read side skips an
- * undeclared name rather than refusing it, so the declared set bounds the read from below and the
- * intersection is the join there. {@link dropFits} refuses the pair where the two halves disagree.
+ * The open blocks decide first, as `objObj` reads them: an open factor holds a name it does not
+ * declare, and a product would hold it through both, so a pair with a block refuses. The
+ * declared set is the intersection and the required set is the union, which is what two upper
+ * bounds meet to.
  *
  * A field whose terms meet to the bottom is kept rather than dropped: at `optional` the two read the
  * same, and at `req` it is the body that becomes the bottom.
  */
 const meetBodies = (a: Body, b: Body): Term | undefined => {
-    const rest = mergeRests(a.rest, b.rest)
-    if (rest === undefined) return undefined
+    if (a.rest !== undefined || b.rest !== undefined) return undefined
     if (!fbShared(a, b) || !fbShared(b, a)) return undefined
-    if (!dropFits(a, b) || !dropFits(b, a)) return undefined
     if (!reqShared(a, b) || !reqShared(b, a)) return never
     const fields: Record<string, Field> = {}
     for (const [name, field] of Object.entries(a.fields)) {
@@ -1690,7 +1667,7 @@ const meetBodies = (a: Body, b: Body): Term | undefined => {
     }
     return Object.values(fields).some(isBottomField)
         ? never
-        : { kind: 'object', body: { fields, rest } }
+        : { kind: 'object', body: { fields } }
 }
 
 /**

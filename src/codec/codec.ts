@@ -402,13 +402,7 @@ const childrenOf = (
         case 'object': {
             const { fields, rest } = def.body
             const field = fields[String(segment)]
-            return one(
-                field
-                    ? codecOfTerm(field.t)
-                    : typeof rest === 'string'
-                      ? undefined
-                      : codecOfTerm(rest.t),
-            )
+            return one(field ? codecOfTerm(field.t) : rest && codecOfTerm(rest))
         }
         // a set is unordered, so no document path addresses a member of one — `set` never offered
         // a child either, and refusing here is what keeps a meaningless path from compiling
@@ -2439,21 +2433,13 @@ declare const pathValue: unique symbol
 // ── items ───────────────────────────────────────────────────────────
 
 /**
- * The same three answers, stated so a spec can be read *first*.
- *
- * `drop` remains for terms that the pass-two bridge still reads. Public codecs declare `refuse`
- * or an open entry instead.
- */
-type OldRestDeclaration = 'drop' | 'refuse' | AnyCodec
-
-/**
  * The entity a spec describes.
  *
- * `drop` and `refuse` both say the row holds nothing else, so the entity is closed. A rest codec
- * says it holds anything that codec can read, which is exactly an index signature — the mirror of
+ * `refuse` says the row holds nothing else, so the entity is closed. A rest codec says it holds
+ * anything that codec can read, which is exactly an index signature — the mirror of
  * what {@link EncodedBy} does to the stored shape.
  */
-type DerivedItem<Spec, Rest> = [Rest] extends ['drop' | 'refuse']
+type DerivedItem<Spec, Rest> = [Rest] extends ['refuse']
     ? show<ObjectOf<Spec>>
     : show<ObjectOf<Spec>> & { readonly [name: string]: Decoded<Rest> }
 
@@ -2861,14 +2847,11 @@ const objectFromMap = <
             )
         }
     }
-    const declaredRest = rest as OldRestDeclaration
-    const declaredBody: Body = {
-        fields,
-        rest:
-            typeof declaredRest === 'string'
-                ? declaredRest
-                : { kind: 'codec', t: termOf(declaredRest) },
-    }
+    const declaredRest: 'refuse' | AnyCodec = rest
+    const declaredBody: Body =
+        declaredRest === 'refuse'
+            ? { fields }
+            : { fields, rest: termOf(declaredRest) }
     const itemDef = { kind: 'object', body: declaredBody } as const
     // the term's item pair, not a second one built beside it — `denote`'s row asks `itemSem` for
     // the same object, so `.item` and the codec run one body rather than two that agree
@@ -3600,18 +3583,18 @@ type Written<Full, K> = Exclude<Full[K & keyof Full], undefined>
 /**
  * What an item writes: the attributes the spec declares, plus whatever a rest policy adds.
  *
- * {@link Encoded} alone is a *lower bound* rather than the answer. Under `'drop'` and `'refuse'`
- * nothing else is written and the two agree; a rest codec emits attributes the spec never named, so
+ * {@link Encoded} alone is a *lower bound* rather than the answer. Under `'refuse'` nothing else
+ * is written and the two agree; a rest codec emits attributes the spec never named, so
  * claiming `Encoded<Spec>` exactly would be a promise the compiler then enforces against the
  * caller — refusing to read an attribute the codec really did write.
  *
- * The two string policies are named rather than the codec matched: an {@link AttributeCodec} is
+ * The closed policy is named rather than the codec matched: an {@link AttributeCodec} is
  * invariant in its value, so `Rest extends AttributeCodec<unknown, infer A>` fails for every codec
  * of a narrower value and quietly takes the wrong branch. {@link AttributeOf} infers both
  * parameters, so the open block's attribute is exact. The index also admits each declared
  * attribute, because an index signature intersects with every declared key.
  */
-type EncodedBy<Spec, Rest> = [Rest] extends ['drop' | 'refuse']
+type EncodedBy<Spec, Rest> = [Rest] extends ['refuse']
     ? Encoded<Spec>
     : Encoded<Spec> & {
           readonly [name: string]:
@@ -3741,30 +3724,6 @@ export type Tagged<T, D extends string = keyof T & string, Spec = unknown> = {
 }
 
 /**
- * The options of a union, as the terms of a union have to state them.
- *
- * `Calculus.unionOk` is the certificate that makes a union's admission the join of its options', and
- * it asks `objectNamesAgree` of every option: `rest` is `refuse`, and no field is `withLegacyRead`. The
- * host already *reads* an object option that way — {@link namesFit} bounds an item's names above by
- * the option's declared names, so an undeclared name reaches no option's own `decode` — and what is
- * missing is the term saying so. The copy belongs to this union alone: the codec the caller passed
- * keeps the `rest` it was built with, and nothing but `def.options` moves.
- *
- * **`drop` is the only policy rewritten.** An option that holds undeclared names through a `rest`
- * codec is left as it is, and its union does not certify: writing `refuse` over it would state a
- * closure the codec does not have. `objectNamesAgree`'s other half, that no field is `withLegacyRead`,
- * is not enforced here either — a union whose option carries one does not certify, and refusing it
- * at construction is a refusal `Orth` does not warrant.
- */
-const unionMembers = (terms: readonly Term[]): readonly Term[] =>
-    terms.map(
-        (term): Term =>
-            term.kind === 'object' && term.body.rest === 'drop'
-                ? { ...term, body: { ...term.body, rest: 'refuse' } }
-                : term,
-    )
-
-/**
  * How an entity that is a union of objects is stored.
  *
  * **Discriminated, not a bare `oneOf`.** Trying each member until one parses is ambiguous, order-
@@ -3820,8 +3779,8 @@ const dissect = <T extends Record<string, unknown>>(
      * is a lookup this builder keeps for `variant`, `encodePartial` and the item path — a host
      * index, carried by no term.
      */
-    const memberTerms = unionMembers(
-        options.map((option) => termOf(option.item as unknown as AnyCodec)),
+    const memberTerms = options.map((option) =>
+        termOf(option.item as unknown as AnyCodec),
     )
     const unionDef = { kind: 'union', options: memberTerms } as const
 
@@ -4421,9 +4380,9 @@ export type Untagged<T, Specs extends readonly unknown[] = UntaggedSpec<T>> = {
  * codec declares nothing a name could match, so the only question that can be asked of it is whether
  * it can carry the value at all, and a failure means "not this one".
  *
- * Which is why an object option is never tried and rejected: `object({ a })` with `rest: 'drop'`
- * would happily encode `{ a, b }` and silently lose `b`, so "it encoded" is not evidence that it is
- * the right option. Its names are.
+ * Which is why an object option is never tried and rejected: an open `object({ a }, [string,
+ * optional(string)])` encodes `{ a, b }` whichever option the caller meant, so "it encoded" is not
+ * evidence that it is the right option. Its names are.
  */
 export type Option = {
     readonly codec: AnyCodec
@@ -5174,7 +5133,7 @@ export const union = <const Options extends readonly AnyCodec[]>(
         naming,
     } = altSem(all)
 
-    const optionTerms = unionMembers(all.map((option) => termOf(option.codec)))
+    const optionTerms = all.map((option) => termOf(option.codec))
 
     /**
      * The item reading's own matcher: the value is always a record, so the shape filter has nothing

@@ -239,7 +239,6 @@ describe("an object option's name spec", () => {
                     note: { mark: 'optional', t: str },
                     kind: { mark: 'fallback', t: str, v: 'x' },
                 },
-                rest: 'drop',
             },
         }
         // `withLegacyRead` concludes `req` (§4): the absence is in the row, never in the value
@@ -269,7 +268,6 @@ describe('the tags a variant answers to', () => {
                             t: { kind: 'literal', base: 'string', v: 'A' },
                         },
                     },
-                    rest: 'drop',
                 },
             }),
         ).toEqual(['A'])
@@ -305,7 +303,6 @@ describe('the tags a variant answers to', () => {
                                   v: 'A',
                               },
                 },
-                rest: 'drop',
             },
         })
         expect(variant(withMark('optional'))).toEqual([])
@@ -319,7 +316,6 @@ describe('the tags a variant answers to', () => {
                 kind: 'object',
                 body: {
                     fields: { kind: { mark: 'req', t: bool } },
-                    rest: 'drop',
                 },
             }),
         ).toEqual([])
@@ -333,7 +329,6 @@ describe('the tags a variant answers to', () => {
                             t: { kind: 'literal', base: 'boolean', v: true },
                         },
                     },
-                    rest: 'drop',
                 },
             }),
         ).toEqual([])

@@ -66,7 +66,6 @@ describe("a member's assignment is read off the member's own body", () => {
                         t: { kind: 'literal', base: 'string', ls: ['pet'] },
                     },
                 },
-                rest: { kind: 'drop' },
             },
         } as unknown as Extract<Term, { readonly kind: 'object' }>
         const refused = assignmentOf(['kind'], optionalTag.body)
