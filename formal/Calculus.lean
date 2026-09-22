@@ -29,4 +29,5 @@ import Calculus.Meet
 import Calculus.LiteralArity1
 import Calculus.Orthogonality
 import Calculus.Vectors
+import Calculus.Universal
 import Calculus.Axioms
