@@ -1008,16 +1008,6 @@ export const arbitraryOf = (
                 : []
             return [...def.pre.map(one), ...middle, ...def.suf.map(one)]
         }
-        case 'record':
-            return Object.fromEntries(
-                Array.from(
-                    { length: size <= 0 ? 0 : Math.floor(rng() * 3) },
-                    (_, i) => [
-                        `k${i}`,
-                        arbitraryOf(codecOfTerm(def.val), rng, size - 1),
-                    ],
-                ),
-            )
         case 'object': {
             const { fields, rest } = def.body
             const out: Record<string, unknown> = {}
@@ -1296,26 +1286,21 @@ export const shrinkOf = (
                     return copy
                 }),
             )
-        case 'record': {
+        case 'object': {
+            const { fields, rest } = def.body
             const held = value as Record<string, unknown>
-            const keys = Object.keys(held)
             const out: Record<string, unknown>[] = []
-            for (const k of keys) {
-                const { [k]: _dropped, ...rest } = held
-                out.push(rest)
-            }
-            for (const k of keys) {
-                for (const smaller of shrinkOf(codecOfTerm(def.val), held[k])) {
-                    out.push({ ...held, [k]: smaller })
+            // a name the open block holds is optional, so it drops and it shrinks through the block
+            const open = Object.keys(held).filter((name) => !(name in fields))
+            const restCodec =
+                typeof rest === 'string' ? undefined : codecOfTerm(rest.t)
+            // dropping a whole attribute is the bigger reduction, so try it first
+            if (restCodec) {
+                for (const name of open) {
+                    const { [name]: _dropped, ...kept } = held
+                    out.push(kept)
                 }
             }
-            return out
-        }
-        case 'object': {
-            const fields = def.body.fields
-            const held = value as Record<string, unknown>
-            const out: Record<string, unknown>[] = []
-            // dropping a whole attribute is the bigger reduction, so try it first
             for (const name in fields) {
                 const mark = fields[name]?.mark
                 if (mark !== 'optional' && mark !== 'undefinable') continue
@@ -1336,6 +1321,13 @@ export const shrinkOf = (
                     held[name],
                 )) {
                     out.push({ ...held, [name]: smaller })
+                }
+            }
+            if (restCodec) {
+                for (const name of open) {
+                    for (const smaller of shrinkOf(restCodec, held[name])) {
+                        out.push({ ...held, [name]: smaller })
+                    }
                 }
             }
             return out
@@ -1980,8 +1972,6 @@ const unionsIn = (subject: AnyCodec): readonly UnionSite[] => {
                 return
             case 'set':
                 return inner(codecOfTerm({ kind: def.base }))
-            case 'record':
-                return inner(codecOfTerm(def.val))
             case 'list':
                 def.pre.forEach((element) => inner(codecOfTerm(element)))
                 def.suf.forEach((element) => inner(codecOfTerm(element)))

@@ -312,7 +312,7 @@ describe('the factors a product refuses until the owner rules', () => {
         ).toThrow(/stand-in must be a value/)
     })
 
-    /** `array` and `record` are not slots: both admit their empty case, and that is a value. */
+    /** `array` and an open object are not slots: both admit their empty case, and that is a value. */
     it('declares an array of never, which holds the empty list', () => {
         const Empty = array(never)
         expect(Empty.unsafeDecode(Empty.unsafeEncode([]))).toEqual([])

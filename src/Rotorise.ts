@@ -1806,7 +1806,6 @@ export {
     orThrow,
     pathBuilder,
     product,
-    record,
     refine,
     spread,
     string,

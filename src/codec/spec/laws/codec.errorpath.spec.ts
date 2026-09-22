@@ -15,7 +15,7 @@ import {
     list,
     number,
     object,
-    record,
+    optional,
     string,
 } from '../../codec'
 
@@ -49,9 +49,9 @@ describe('a failure carries the path it took', () => {
         ).toEqual(['tags', 1])
     })
 
-    it('names the key, inside a record', () => {
+    it('names the key, inside an open block', () => {
         const Prices = object({
-            prices: record(decimal),
+            prices: object([string, optional(decimal)]),
         }).item
         expect(
             pathOf(() =>

@@ -172,7 +172,6 @@ export type Term =
           readonly spread?: Term
           readonly suf: readonly Term[]
       }
-    | { readonly kind: 'record'; readonly val: Term }
     /** §3 `(held)`: the iso, both halves, as the caller supplied them. */
     | {
           readonly kind: 'held'
@@ -389,7 +388,6 @@ export const member = (t: Term): AttributeName | undefined => {
             return setMember[t.base]
         case 'list':
             return 'L'
-        case 'record':
         case 'object':
             return 'M'
         // a wrapper preserves the member (§6), which is what keeps a key's attribute type stable
@@ -500,7 +498,6 @@ export const occV = (t: Term): readonly SetSlot[] | undefined => {
             return [setSlot[t.base]]
         case 'list':
             return ['array']
-        case 'record':
         case 'object':
             return ['map']
         // an adapter answers with what it declared, and the top where it declared nothing
@@ -560,7 +557,6 @@ export const ownsNullOf = (t: Term): boolean | undefined => {
         case 'literal':
         case 'set':
         case 'list':
-        case 'record':
         case 'object':
         case 'never':
             return false
@@ -622,7 +618,6 @@ export const occA = (t: Term): readonly AttributeName[] | undefined => {
             return [setMember[t.base]]
         case 'list':
             return ['L']
-        case 'record':
         case 'object':
             return ['M']
         case 'legacy':
@@ -958,8 +953,15 @@ export const identifies = (t: Term): boolean => {
                 (t.spread === undefined || identifies(t.spread)) &&
                 t.suf.every(identifies)
             )
-        case 'record':
-            return identifies(t.val)
+        // every declared name and the open block, for the reason `list` reads every position: a
+        // name the open block holds is decided by the open block's term
+        case 'object':
+            return (
+                Object.values(t.body.fields).every((field) =>
+                    identifies(field.t),
+                ) &&
+                (typeof t.body.rest === 'string' || identifies(t.body.rest.t))
+            )
         case 'union':
             return t.options.every(identifies)
         // a predicate that is data decides on its own — `refine(set(b), each(members …))` is how
@@ -1019,18 +1021,21 @@ export const restricts = (x: Term, y: Term): boolean => {
 }
 
 /**
- * Whether two bodies' name intervals meet: neither requires a name the other does not declare.
+ * Whether two bodies' name intervals meet: neither requires a name the other refuses.
  *
- * A body admits every name set between its required names and its declared names, so the two
- * intervals intersect exactly on that condition. `Calculus.OrthM` read positively, and the same
- * rule `Collides` states in the type.
+ * A body admits every name set between its required names and the names it holds, so the two
+ * intervals intersect exactly on that condition. A body holds its declared names, and an open
+ * block holds every other name: `presenceAt` answers `(true, true)` for an undeclared name under a
+ * block. `Calculus.OrthM` read positively, and the same rule `Collides` states in the type.
  */
 const namesMeet = (x: Body, y: Body): boolean => {
+    const holds = (b: Body, name: string) =>
+        name in b.fields || typeof b.rest !== 'string'
     for (const [name, field] of Object.entries(x.fields)) {
-        if (alwaysWritten(field) && !(name in y.fields)) return false
+        if (alwaysWritten(field) && !holds(y, name)) return false
     }
     for (const [name, field] of Object.entries(y.fields)) {
-        if (alwaysWritten(field) && !(name in x.fields)) return false
+        if (alwaysWritten(field) && !holds(x, name)) return false
     }
     return true
 }
@@ -1171,8 +1176,8 @@ const sameConversion = (x: Term, y: Term): boolean =>
  * in the type) or some shared required name is pinned to literals with nothing in common (`OrthS`).
  * This answers that, so the runtime and the declaration decide by one rule rather than two.
  *
- * **One object option beside a non-object is separable outright**, and that is not this rule
- * declining. An object writes a map and nothing else does, so the two never meet on either side.
+ * **One object option beside a non-object meets through the occupancies**, as every other pair
+ * does. `opaque` writes and reads a map too, so an object beside it is not separable outright.
  *
  * **An option that is a restriction of another.** {@link restricts}, and it *refuses* where every
  * other row accepts, so it sits ahead of them. `opaque` was the first instance of the rule and had
@@ -1211,16 +1216,14 @@ const sameConversion = (x: Term, y: Term): boolean =>
  * back what it wrote, because `decimal` takes a string and `number` a number while both store `N`.
  */
 export const separable = (x: Term, y: Term): boolean => {
-    // **Containment before the object exemption.** The three {@link restricts} rows name a literal,
-    // a set of a literal and `never`, and an object option is none of them — so the only pair
-    // whose answer this order changes is an object option beside `never`.
+    // **Containment first.** The three {@link restricts} rows name a literal, a set of a literal
+    // and `never`. `never` meets no occupancy, so the rows below would accept it beside anything
     if (restricts(x, y) || restricts(y, x)) return false
     const xs = objectMembers(x)
     const ys = objectMembers(y)
     if (xs && ys) {
         return xs.every((a) => ys.every((b) => !structuralMeet(a, b)))
     }
-    if (x.kind === 'object' || y.kind === 'object') return true
     const writable = meet(occV(x), occV(y))
     const readable = meet(occA(x), occA(y))
     if (writable === undefined && readable === undefined) return true
@@ -1312,16 +1315,6 @@ export const meetTerms = (x: Term, y: Term): Term | undefined => {
     if (x.kind === 'literal') return literalAgainstBase(x, y)
     if (y.kind === 'literal') return literalAgainstBase(y, x)
     if (x.kind === 'list' && y.kind === 'list') return meetLists(x, y)
-    // **A record against a body refuses.** The model's `record` is an object whose open block holds
-    // every name, and `objObj` refuses a pair unless both open blocks are absent: an open factor
-    // holds an undeclared name through its own codec, and a product would hold it through both.
-    // A record against a body that is not an object falls through to the bottom, as `famObj` does
-    if (
-        (x.kind === 'record' || y.kind === 'record') &&
-        (x.kind === 'record' || x.kind === 'object') &&
-        (y.kind === 'record' || y.kind === 'object')
-    )
-        return undefined
     if (x.kind === 'set' && y.kind === 'set') {
         // every set base is disjoint from every other on both halves now, so two unequal ones
         // meet at the bottom and none of them refuses. `set string` against `set decimal` was the
@@ -1402,8 +1395,7 @@ const overRefinement = (
  * **The meet at a union: the survivors, where both lists carry the certificate.**
  *
  * The meet is the lattice's meet and an uncertified union is not in the lattice, so the pair has
- * no meet to state. Both lists are tested and not one, because an object met with a record answers
- * an open object: a certified list of options can meet to an uncertified one.
+ * no meet to state. Both lists are tested and not one.
  */
 const distribute = (
     options: readonly Term[],

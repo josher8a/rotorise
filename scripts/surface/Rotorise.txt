@@ -127,7 +127,6 @@ optional
 orThrow
 pathBuilder
 product
-record
 refine
 shapeOf
 spread

@@ -49,7 +49,6 @@ import {
     opaque,
     optional,
     product,
-    record,
     refine,
     spread,
     string,
@@ -221,8 +220,8 @@ describe('terms', () => {
         expect(leanTermOf(erase(array(string)))).toBe(
             'Term.array (Term.string)',
         )
-        expect(leanTermOf(erase(record(boolean)))).toBe(
-            'Term.record (Term.boolean)',
+        expect(leanTermOf(erase(object([string, optional(boolean)])))).toBe(
+            'Term.object (Body.mk ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) (some (KeyPat.any, Term.boolean)))',
         )
         expect(leanTermOf(erase(list(string, boolean)))).toBe(
             'Term.tuple [Term.string, Term.boolean] none',
@@ -821,11 +820,15 @@ export const sampleVectors: readonly Vector[] = [
         value: ['a', true],
     },
     {
-        name: 'record_of_string',
-        codec: erase(record(string)),
+        name: 'open_of_string',
+        codec: erase(object([string, optional(string)])),
         value: { a: 'x', b: 'y' },
     },
-    { name: 'record_empty', codec: erase(record(string)), value: {} },
+    {
+        name: 'open_empty',
+        codec: erase(object([string, optional(string)])),
+        value: {},
+    },
     {
         name: 'object_two_fields',
         codec: erase(object({ a: string, b: boolean })),
@@ -856,13 +859,12 @@ export const sampleVectors: readonly Vector[] = [
         value: { a: { b: 'x' } },
     },
     /**
-     * **A record and an open object, each with a refinement.** Both meet a record or an object at
-     * `none`, because the model's `objObj` refuses a pair unless both open blocks are absent. The
+     * **Two open objects, each with a refinement.** Both meet an object at `none`, because the model's `objObj` refuses a pair unless both open blocks are absent. The
      * bridge asserts that refusal in both orders.
      */
     {
-        name: 'record_of_restricted_set',
-        codec: erase(record(string.set('a', 'b'))),
+        name: 'open_of_restricted_set',
+        codec: erase(object([string, optional(string.set('a', 'b'))])),
         value: { a: new Set(['a']) },
     },
     {
@@ -877,7 +879,7 @@ export const sampleVectors: readonly Vector[] = [
     },
     {
         name: 'map_inside_a_list',
-        codec: erase(array(record(string))),
+        codec: erase(array(object([string, optional(string)]))),
         value: [{ a: 'x' }],
     },
     {
@@ -1361,7 +1363,7 @@ describe('union resolution, model against library', () => {
             'rr_u_objects_by_name__object_optional_absent',
             'rr_u_objects_by_name__object_fallback_present',
             'rr_u_objects_by_name__opaque_map',
-            'rr_u_optional_inner__record_empty',
+            'rr_u_optional_inner__open_empty',
             'rr_d_two_variants__discriminated_union',
         ]) {
             const one = byName.get(name) as ReadResolution
@@ -1495,7 +1497,7 @@ describe("the declaration guard, against the model's classifier", () => {
      */
     it('refuses only pairs the classifier also declines', () => {
         const separations = separationPairs()
-        expect(separations.length).toBe(118)
+        expect(separations.length).toBe(157)
         // each one emits, which is where `leanSeparation` re-checks that `src/` really refuses,
         // and it carries one of the two warrants: `Orth` declines, or — for a `never` pair, where
         // the model permits what `src/` lints away — the permits-form states what the model says

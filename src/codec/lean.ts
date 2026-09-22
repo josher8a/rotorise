@@ -692,8 +692,6 @@ const leanTermOfTerm = (t: Term, at: string, forced: number): string => {
                 : 'none'
             return `Term.list [${positions(t.pre, (index) => `${at}[${index}]`)}] ${middle} [${positions(t.suf, (index) => `${at}.suffix[${index}]`)}]`
         }
-        case 'record':
-            return `Term.record (${leanTermOfTerm(t.val, `${at}.value`, forced)})`
         case 'object': {
             // **One argument, a `Body`.** `db444e3` made the object payload a stratum, so
             // `Term.object` takes `Body.mk names fields rest` where it used to take the three

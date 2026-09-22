@@ -14,7 +14,6 @@ import {
     number,
     object,
     optional,
-    record,
     string,
     union,
 } from '../../codec'
@@ -40,7 +39,7 @@ const Adoption = object({
     ]),
     items: array(object({ n: number })),
     legs: list(object({ n: number }), object({ n: number })),
-    tags: record(object({ n: number })),
+    tags: object([string, optional(object({ n: number }))]),
     maybe: optional(object({ m: string })),
     untagged: union([object({ a: string }), object({ b: number })]),
 }).item

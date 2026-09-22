@@ -28,7 +28,6 @@ import {
     number,
     object,
     optional,
-    record,
     string,
     union,
     valueKinds,
@@ -101,7 +100,10 @@ describe('the unions this library ships', () => {
 
     it('holds under a set and an array element', () => {
         checkUniqueAdmission(array(union([string, number])), { seed })
-        checkUniqueAdmission(record(union([string, boolean])), { seed })
+        checkUniqueAdmission(
+            object([string, optional(union([string, boolean]))]),
+            { seed },
+        )
     })
 })
 

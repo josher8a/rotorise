@@ -1417,7 +1417,6 @@ describe('the published surface', () => {
             'object',
             'opaque',
             'optional',
-            'record',
             'refine',
             'spread',
             'string',
