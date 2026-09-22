@@ -15,7 +15,7 @@
  * The one place this language is **wider** than the model is `lazy`, and the row says why.
  */
 
-import type { AttributeName, AttributeValue } from './attribute'
+import type { AttributeName, AttributeValue, DynamoNumber } from './attribute'
 import type {
     LiteralBase,
     LiteralValue,
@@ -59,8 +59,11 @@ export type NonEmpty<T> = readonly [T, ...T[]]
  */
 export type Literal =
     | { readonly kind: 'literal'; readonly base: 'string'; readonly v: string }
-    | { readonly kind: 'literal'; readonly base: 'decimal'; readonly v: string }
-    | { readonly kind: 'literal'; readonly base: 'number'; readonly v: number }
+    | {
+          readonly kind: 'literal'
+          readonly base: 'number'
+          readonly v: DynamoNumber
+      }
     | {
           readonly kind: 'literal'
           readonly base: 'boolean'
@@ -89,13 +92,8 @@ export type Alternatives =
       }
     | {
           readonly kind: 'alternatives'
-          readonly base: 'decimal'
-          readonly ls: NonEmpty<string>
-      }
-    | {
-          readonly kind: 'alternatives'
           readonly base: 'number'
-          readonly ls: NonEmpty<number>
+          readonly ls: NonEmpty<DynamoNumber>
       }
     | {
           readonly kind: 'alternatives'
@@ -133,8 +131,13 @@ export type Predicate =
 /** §3's terms. One variant per `Term.lean` constructor, under the model's names. */
 export type Term =
     | { readonly kind: 'string' }
+    /**
+     * §3 `(number)`, and **the one native numeric term**. Its carrier is {@link DynamoNumber},
+     * which is DynamoDB's own `N`. `number` and `decimal` are adapters over it and are no longer
+     * terms of their own: a JS float and a decimal string are two ways a caller may hold this,
+     * not two things the service stores.
+     */
     | { readonly kind: 'number' }
-    | { readonly kind: 'decimal' }
     | { readonly kind: 'boolean' }
     | { readonly kind: 'binary' }
     | { readonly kind: 'null' }
@@ -176,6 +179,31 @@ export type Term =
           readonly inner: Term
           readonly f: (value: never) => unknown
           readonly g: (held: never) => unknown
+          /**
+           * **The value slots the conversion lands in, where the adapter knows them.**
+           *
+           * `occV` answers the top for an adapter, because `f` is a function this library did not
+           * write and cannot read. That is honest for a caller's adapter and wrong for one this
+           * library ships: `number` and `decimal` are adapters over the one numeric base now, and
+           * an unknown write side costs a union its certificate and `nullable` its null point at
+           * every numeric field.
+           *
+           * So the adapter declares it rather than the reader deriving it — the same split the
+           * codebase already uses, where one side owns the fact and the other states an
+           * expectancy. Absent is the honest answer for an adapter nobody has declared.
+           */
+          readonly writes?: readonly SetSlot[]
+          /**
+           * **Which adapter this is, where the library ships it**, so a vector can cite the pair
+           * by name. The emitter prints `held` only for a pair it recognises, the way it already
+           * prints `isNumeral` and `isStoredNumeral` for the predicates: a caller's closure has
+           * no name in the model and is refused.
+           *
+           * Separate from {@link writes} on purpose. That says which slots the conversion lands
+           * in and is read by the certificate; this says which named pair the model carries and
+           * is read by the emitter. One of them can be known without the other.
+           */
+          readonly via?: 'decimalText'
       }
     /**
      * §3 `(refine)`. The model carries `q : Value → Bool`; this carries a {@link Predicate}, so a
@@ -264,20 +292,22 @@ type OldRest = 'drop' | 'refuse' | { readonly kind: 'codec'; readonly t: Term }
 
 /* ── the member index ─────────────────────────────────────────────────────────────────── */
 
-/** Which member each ground base stores. Not injective: `number` and `decimal` both store `N`. */
+/**
+ * Which member each ground base stores, and it is injective again. `decimal` was the second base
+ * at `N`, and it is an adapter over `number` now rather than a base, so no two bases share a
+ * member and nothing downstream has to tell two of them apart by anything but the member.
+ */
 const baseMember: { readonly [B in LiteralBase]: AttributeName } = {
     string: 'S',
     number: 'N',
-    decimal: 'N',
     boolean: 'BOOL',
     binary: 'B',
 }
 
-/** …and which member a set of that base stores. Four bases onto three wire members. */
+/** …and which member a set of that base stores. Three bases onto three wire members. */
 const setMember: { readonly [B in SetBase]: AttributeName } = {
     string: 'SS',
     number: 'NS',
-    decimal: 'NS',
     binary: 'BS',
 }
 
@@ -309,7 +339,6 @@ export const member = (t: Term): AttributeName | undefined => {
         case 'string':
             return 'S'
         case 'number':
-        case 'decimal':
             return 'N'
         case 'boolean':
             return 'BOOL'
@@ -348,7 +377,6 @@ export const member = (t: Term): AttributeName | undefined => {
 const baseSlot: { readonly [B in LiteralBase]: SetSlot } = {
     string: 'string',
     number: 'number',
-    decimal: 'string',
     boolean: 'boolean',
     binary: 'binary',
 }
@@ -361,7 +389,6 @@ const baseSlot: { readonly [B in LiteralBase]: SetSlot } = {
 const setSlot: { readonly [B in SetBase]: SetSlot } = {
     string: 'strSet',
     number: 'numSet',
-    decimal: 'strSet',
     binary: 'binSet',
 }
 
@@ -422,7 +449,6 @@ const joined = <A>(
 export const occV = (t: Term): readonly SetSlot[] | undefined => {
     switch (t.kind) {
         case 'string':
-        case 'decimal':
             return ['string']
         case 'number':
             return ['number']
@@ -441,7 +467,9 @@ export const occV = (t: Term): readonly SetSlot[] | undefined => {
         case 'record':
         case 'object':
             return ['map']
+        // an adapter answers with what it declared, and the top where it declared nothing
         case 'held':
+            return t.writes
         case 'custom':
         case 'lazy':
             return undefined
@@ -489,7 +517,6 @@ export const ownsNullOf = (t: Term): boolean | undefined => {
             return true
         case 'string':
         case 'number':
-        case 'decimal':
         case 'boolean':
         case 'binary':
         case 'literal':
@@ -501,6 +528,16 @@ export const ownsNullOf = (t: Term): boolean | undefined => {
             return false
         case 'refine':
             return ownsNullOf(t.inner) === false ? false : undefined
+        // **An adapter that declared its write slots answers**, and one that did not cannot.
+        // The null point is a question about which slots the conversion lands in, which is
+        // exactly what the declaration states, so `nullable(decimal)` is answerable where
+        // `nullable` over a caller's adapter still is not.
+        case 'held':
+            return t.writes === undefined
+                ? undefined
+                : !t.writes.includes('null')
+                  ? false
+                  : undefined
         case 'union': {
             const answers = t.options.map(ownsNullOf)
             return answers.some((one) => one === undefined)
@@ -534,7 +571,6 @@ export const occA = (t: Term): readonly AttributeName[] | undefined => {
         case 'string':
             return ['S']
         case 'number':
-        case 'decimal':
             return ['N']
         case 'boolean':
             return ['BOOL']
@@ -652,6 +688,21 @@ export const literalAlternatives = (t: Term): Alternatives | undefined =>
         : t.kind === 'union'
           ? unionAlternatives(t.options)
           : undefined
+
+/**
+ * **The alternatives an adapter stores**, which is not what it pins.
+ *
+ * {@link literalAlternatives} answers what a term pins at the *caller's* level, because that is
+ * what admission compares a caller's value against. An adapter pins nothing there: `decimal('1')`
+ * admits the string `'1'` and the literal beneath it holds a numeral, so reading through would
+ * answer with a value no caller ever hands in.
+ *
+ * A tag table wants the other one. `assignmentOf` builds the lookup a *stored* attribute is
+ * matched against, so it wants the alternative under the adapter, and this is that reader. The two
+ * are different questions and the split is why they are two functions.
+ */
+export const storedAlternatives = (t: Term): Alternatives | undefined =>
+    t.kind === 'held' ? storedAlternatives(t.inner) : literalAlternatives(t)
 
 /** One literal, as the one-alternative set it pins. */
 const oneAlternative = (t: Literal): Alternatives =>
@@ -1043,7 +1094,6 @@ export const meetTerms = (x: Term, y: Term): Term | undefined => {
     // **`string` and `decimal` part on the stored side.** Both admit text; `string` writes `S` and
     // `decimal` writes `N`, so a value they share is stored two ways and there is no meet. The
     // literal rows repeat it, because a literal at either base inherits the pair
-    if (crossesStringDecimal(x.kind, y.kind)) return undefined
     if (x.kind === 'literal' && y.kind === 'literal') return meetLiterals(x, y)
     if (x.kind === 'literal') return literalAgainstBase(x, y)
     if (y.kind === 'literal') return literalAgainstBase(y, x)
@@ -1051,14 +1101,9 @@ export const meetTerms = (x: Term, y: Term): Term | undefined => {
     if (x.kind === 'record' && y.kind === 'record')
         return mapped(x.val, y.val, valueOf)
     if (x.kind === 'set' && y.kind === 'set') {
-        // `set string` and `set decimal` are `string ∧ decimal` one container out: both write a
-        // `strSet`, stored at `SS` and at `NS`, so they share every set of stored numerals. The
-        // number family against the decimal family shares `NS` the same way
-        if (
-            crossesStringDecimal(x.base, y.base) ||
-            crossesNumberDecimal(x.base, y.base)
-        )
-            return undefined
+        // every set base is disjoint from every other on both halves now, so two unequal ones
+        // meet at the bottom and none of them refuses. `set string` against `set decimal` was the
+        // refusal, while `decimal` held text and both families wrote a `strSet`
         return x.base === y.base ? x : never
     }
     if (x.kind === 'opaq' && y.kind === 'opaq')
@@ -1079,7 +1124,6 @@ export const meetTerms = (x: Term, y: Term): Term | undefined => {
     // **The `number` family and the `decimal` family never meet.** They write different value kinds,
     // so the bottom is right about the write side, and they read the same member `N`, so the bottom
     // is wrong about the read side: every stored numeral is an attribute both admit
-    if (crossesNumberDecimal(x.kind, y.kind)) return undefined
     // everything left is two constructors that write different value kinds
     return never
 }
@@ -1095,16 +1139,9 @@ const opaqueToReader = (t: Term): boolean =>
 const groundBase = (t: Term): boolean =>
     t.kind === 'string' ||
     t.kind === 'number' ||
-    t.kind === 'decimal' ||
     t.kind === 'boolean' ||
     t.kind === 'binary' ||
     t.kind === 'null'
-
-const crossesStringDecimal = (a: string, b: string): boolean =>
-    (a === 'string' && b === 'decimal') || (a === 'decimal' && b === 'string')
-
-const crossesNumberDecimal = (a: string, b: string): boolean =>
-    (a === 'number' && b === 'decimal') || (a === 'decimal' && b === 'number')
 
 /** A refinement over the bottom is the bottom: `refine` narrows what the inner term holds. */
 const refineOf = (z: Term, q: Predicate): Term =>
@@ -1211,29 +1248,19 @@ const objectNamesAgree = (t: Term): boolean =>
         ))
 
 /**
- * **A literal against a base is the literal at that base, and the bottom at any other** — except
- * the pairs that share values, which refuse rather than answering the bottom.
+ * **A literal against a base is the literal at that base, and the bottom at any other.**
+ *
+ * There is no pair left that shares values and refuses. `string` and `decimal` were that pair
+ * while `decimal` held text, and `number` and `decimal` were the pair that shared a member;
+ * `decimal` is an adapter now, so every base is disjoint from every other on both halves and the
+ * bottom is right at each cross.
  */
 const literalAgainstBase = (lit: Literal, base: Term): Term | undefined => {
     switch (base.kind) {
         case 'string':
-            return lit.base === 'decimal'
-                ? undefined
-                : lit.base === 'string'
-                  ? lit
-                  : never
+            return lit.base === 'string' ? lit : never
         case 'number':
-            return lit.base === 'decimal'
-                ? undefined
-                : lit.base === 'number'
-                  ? lit
-                  : never
-        case 'decimal':
-            return lit.base === 'string' || lit.base === 'number'
-                ? undefined
-                : lit.base === 'decimal'
-                  ? lit
-                  : never
+            return lit.base === 'number' ? lit : never
         case 'boolean':
             return lit.base === 'boolean' ? lit : never
         case 'binary':
@@ -1257,8 +1284,6 @@ const literalAgainstBase = (lit: Literal, base: Term): Term | undefined => {
  * make this library's meet finer than the one the model's theorems are about.
  */
 const meetLiterals = (x: Literal, y: Literal): Term | undefined => {
-    if (crossesStringDecimal(x.base, y.base)) return undefined
-    if (crossesNumberDecimal(x.base, y.base)) return undefined
     if (x.base !== y.base) return never
     if (x.base === 'number') return undefined
     const other = (y as { readonly v: unknown }).v
@@ -1508,9 +1533,9 @@ const meetBodyRecord = (
 /**
  * Which of the four set bases a term's values sit at, or `undefined` where the term is not one.
  *
- * `member` cannot answer this: `decimal.set()` and `number.set()` both write `NS`, so the member
- * cannot tell them apart and the term can — which is why `SetBase` indexes
- * a set by a base rather than by a `Member`. Reads through `refine` and a literal only — both are *restrictions* of a base, so the set
+ * `member` could answer this now that `decimal` is an adapter rather than a second base at `N`,
+ * and this stays a function of the term because the term is where the base is recorded. Reads
+ * through `refine` and a literal only — both are *restrictions* of a base, so the set
  * they build is a restriction of the base's set (`setCodec_restrict`). An adapter (`held`), a read
  * widening (`withLegacyRead`) or a union is not a restriction of anything, and gets `undefined`.
  */
@@ -1518,12 +1543,18 @@ export const setBaseOf = (t: Term): SetBase | undefined => {
     switch (t.kind) {
         case 'string':
         case 'number':
-        case 'decimal':
         case 'binary':
             return t.kind
         case 'literal':
             return t.base === 'boolean' ? undefined : t.base
         case 'refine':
+            return setBaseOf(t.inner)
+        // **An adapter has a set-level spelling after all, so it is read through.** This refused
+        // a `held` element on the ground that a set of one could not be written down. It can:
+        // an adapter is elementwise, so mapping it over the wire set is the spelling, and
+        // {@link elementAdapter} is what `set` builds it from. The base is the *stored* one,
+        // which is the inner term's.
+        case 'held':
             return setBaseOf(t.inner)
         // `string.set('a', 'b')` puts a union of literals at the element, and a union of literals
         // at one base is that base narrowed — the same reading a single literal gets
@@ -1533,6 +1564,32 @@ export const setBaseOf = (t: Term): SetBase | undefined => {
                 ? undefined
                 : alts.base
         }
+        default:
+            return undefined
+    }
+}
+
+/**
+ * **The adapter an element carries, if it carries one.** `number` and `decimal` are adapters over
+ * the one numeric base, so a set of either is a set of that base with the conversion mapped over
+ * it, and this is where `set` reads the pair to map.
+ *
+ * Innermost wins, because the stack alternates and only the one next to the base converts the
+ * value the wire set holds.
+ */
+export const elementAdapter = (
+    elem: Term,
+):
+    | {
+          readonly f: (value: never) => unknown
+          readonly g: (held: never) => unknown
+      }
+    | undefined => {
+    switch (elem.kind) {
+        case 'held':
+            return elementAdapter(elem.inner) ?? { f: elem.f, g: elem.g }
+        case 'refine':
+            return elementAdapter(elem.inner)
         default:
             return undefined
     }

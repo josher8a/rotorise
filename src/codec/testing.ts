@@ -47,7 +47,7 @@
  * PutGet (TOPLAS 2007); there are a dozen variants and a taxonomy of them if the distinctions matter.
  */
 import type { AttributeMap, AttributeValue } from './attribute'
-import { memberOf } from './attribute'
+import { DynamoNumber, memberOf } from './attribute'
 import type {
     AnyCodec,
     AttributeCodec,
@@ -56,7 +56,7 @@ import type {
     Rng,
     SetBase,
 } from './codec'
-import { CodecError, codecOfTerm, failed, opaque } from './codec'
+import { CodecError, codecOfTerm, failed, opaque, orThrow } from './codec'
 import { accepts, holds, readsBack, valueKinds } from './denote'
 import type { Field, Predicate, Term } from './term'
 import { alwaysWritten, member as termMember } from './term'
@@ -950,10 +950,10 @@ export const arbitraryOf = (
         // literals and the union row picks the option
         case 'literal':
             return def.v
-        case 'decimal':
-            return someDecimal(rng)
+        // the base's carrier is a `DynamoNumber`, and `someDecimal` already generates the
+        // stored spellings the constructor normalises to
         case 'number':
-            return pickFrom(rng, [0, 1, -1, 42, 1000, -7])
+            return orThrow(DynamoNumber.from(someDecimal(rng)))
         case 'boolean':
             return rng() < 0.5
         case 'null':
@@ -1146,6 +1146,9 @@ const restrictedSet = (
     t: Term,
 ): { readonly base: SetBase; readonly elements: readonly Predicate[] } => {
     if (t.kind === 'set') return { base: t.base, elements: [] }
+    // `.set()` maps an element's adapter over the wire set, so a set of `decimal` is a set of
+    // the numeric base under one. The base is the stored one, which is beneath the adapter
+    if (t.kind === 'held') return restrictedSet(t.inner)
     if (t.kind === 'refine' && t.q.kind === 'each') {
         const inner = restrictedSet(t.inner)
         return { base: inner.base, elements: [t.q.of, ...inner.elements] }
@@ -1214,10 +1217,10 @@ export const shrinkOf = (
         // the union row shrinks towards its first option
         case 'literal':
             return []
-        case 'decimal':
-            return shrinkDecimal(value as string)
         case 'number':
-            return shrinkNumber(value as number)
+            return shrinkDecimal((value as DynamoNumber).toString()).map(
+                (digits) => orThrow(DynamoNumber.from(digits)),
+            )
         case 'boolean':
             return value ? [false] : []
         // one value, so nothing smaller

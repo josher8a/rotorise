@@ -75,9 +75,16 @@ describe('a set at each base', () => {
      */
     it('records the base itself as its index', () => {
         expect(string.set().def).toEqual({ kind: 'set', base: 'string' })
-        expect(number.set().def).toEqual({ kind: 'set', base: 'number' })
-        expect(decimal.set().def).toEqual({ kind: 'set', base: 'decimal' })
         expect(binary.set().def).toEqual({ kind: 'set', base: 'binary' })
+        // `number` and `decimal` are adapters over the one numeric base, so each is that base's
+        // set with the conversion mapped over it
+        for (const one of [number.set(), decimal.set()]) {
+            expect(one.def.kind).toBe('held')
+            expect((one.def as { inner: unknown }).inner).toEqual({
+                kind: 'set',
+                base: 'number',
+            })
+        }
     })
 
     it('encodes and decodes at the type the base holds', () => {
@@ -257,20 +264,32 @@ describe('what a set cannot be built from', () => {
     })
 
     /**
-     * **The two the type cannot catch.** `held` and `withLegacyRead` both write `S`, so `SetCapable`'s gate
-     * — which sees the attribute and never the base — hands them a `.set()`. That is the gap the
-     * runtime refusal exists to close, and the reason it must stay: closing it in the type needs a
-     * codec type generic in its definition, measured at 481 of 968 signatures and rejected.
+     * **An adapter is taken, and it used to be refused.** The refusal was guarding a real defect:
+     * `held` writes where its inner term does, so the member said `S` and the conversion then ran
+     * per member of an attribute storing no such thing.
+     *
+     * Mapping the conversion over the wire set is what fixes that, and it is the set-level
+     * spelling the refusal said did not exist. It is needed either way now, because `decimal.set()`
+     * is a set of an adapter.
+     *
+     * `withLegacyRead` is still refused and is still one the type cannot catch: it writes `S`, so
+     * `SetCapable`'s gate — which sees the attribute and never the base — hands it a `.set()`.
+     * Closing that in the type needs a codec type generic in its definition, measured at 481 of
+     * 968 signatures and rejected, so the runtime refusal stays for it.
      */
-    it('refuses an adapter, which reads through to a member it does not store', () => {
+    it('takes an adapter, mapping the conversion over the wire set', () => {
         const asArray = held(string, {
             encode: (value: readonly string[]) => value.join(','),
             decode: (stored: string) => stored.split(','),
         })
-        // no `@ts-expect-error`: `held` writes `S`, so this type-checks and throws
         const adapted = refine(asArray, isTexts)
-        expect(() => adapted.set()).toThrow(CodecError)
-        expect(() => adapted.set()).toThrow(CodecError)
+        expect(
+            adapted.set().unsafeEncode(new Set([['a', 'b'], ['c']])),
+        ).toEqual({ SS: ['a,b', 'c'] })
+        expect([...adapted.set().unsafeDecode({ SS: ['a,b', 'c'] })]).toEqual([
+            ['a', 'b'],
+            ['c'],
+        ])
     })
 
     it('refuses a read widening, for the same reason', () => {

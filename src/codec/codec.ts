@@ -15,6 +15,7 @@ import type {
     SS,
     StoredItem,
 } from './attribute'
+import { DynamoNumber, isStoredNumeral } from './attribute'
 import { codec } from './build'
 import {
     accepts,
@@ -40,6 +41,7 @@ import {
 import type { Alternatives, Body, Field, NameLiteral, Term } from './term'
 import {
     alwaysWritten,
+    elementAdapter,
     elementPredicates,
     literalAlternatives,
     literalsOf,
@@ -355,6 +357,15 @@ export const constantOf = (declared: ObjectSlot): unknown => {
     // the value, and `refine` can reject it, `withLegacyRead` can decode an older encoding into something
     // else, and `optional` admits absence, which is not the value. `withLegacyRead` is the one that keeps
     // it, always writing the attribute at a value typed to the same alternative.
+    //
+    // **An adapter is the second that keeps it**, and it has to be: `number` and `decimal` are
+    // adapters over the one numeric base now, so a numeric discriminator is a literal under a
+    // `held` and reading only the bare row would have lost every one of them. The value is the
+    // caller's rather than the carrier's, so it is the inner literal's put back through the
+    // adapter — well defined because `held` owes that the pair cancels.
+    if (t.kind === 'held' && t.inner.kind === 'literal') {
+        return (t.g as (held: unknown) => unknown)(t.inner.v)
+    }
     return t.kind === 'literal' ? t.v : undefined
 }
 
@@ -551,10 +562,10 @@ export const custom = <T, A extends AttributeValue = AttributeValue>(raw: {
  * `nullValue()` is not a literal anyone can write, because the only nonempty subset of `Unit` is
  * `Unit`.
  */
-export type LiteralBase = 'string' | 'number' | 'decimal' | 'boolean' | 'binary'
+export type LiteralBase = 'string' | 'number' | 'boolean' | 'binary'
 
 /** An alternative, at whichever base carries it. */
-export type LiteralValue = string | number | boolean | Uint8Array
+export type LiteralValue = string | DynamoNumber | boolean | Uint8Array
 
 /**
  * The bases a native set can be built from — `SetBase`.
@@ -635,8 +646,10 @@ export type LiteralAttribute<T> = [T] extends [string]
  * reads the value back at runtime.
  */
 export type ConstantCodec<
-    T extends LiteralValue,
-    A extends AttributeValue = LiteralAttribute<T>,
+    T,
+    A extends AttributeValue = T extends LiteralValue
+        ? LiteralAttribute<T>
+        : AttributeValue,
 > = AttributeCodec<T, A> & { readonly constant: T }
 
 /**
@@ -705,31 +718,119 @@ export const string: StringCodec = Object.assign(
 ) as unknown as StringCodec
 
 /**
+ * **`N` itself, and the one native numeric term.** DynamoDB's own number, held as
+ * {@link DynamoNumber}: exact to 38 significant digits, validated once at construction, and
+ * already in the spelling the store returns.
+ *
+ * ```ts
+ * dynamoNumber                       // an exact number
+ * dynamoNumber(DynamoNumber.from('1.5'))   // …and a literal at it
+ * dynamoNumber.set()                 // NS
+ * ```
+ *
+ * **Three carriers write `N`, and the other two are adapters over this one.** They are no longer
+ * terms of their own: a JS float and a decimal string are two ways a caller may hold this, not two
+ * things the service stores.
+ *
+ * | codec | holds | exact | what it costs |
+ * | --- | --- | --- | --- |
+ * | `dynamoNumber` | {@link DynamoNumber} | yes, 38 digits | the caller builds one |
+ * | {@link decimal} | `string` | yes, 38 digits | text the caller re-validates, and refuses a denormal spelling |
+ * | {@link number} | JS `number` | no, about 15 digits | rounding, by construction |
+ */
+export const dynamoNumber: AttributeCodec<DynamoNumber, Attribute<'N'>> & {
+    <const T extends DynamoNumber>(only: T): ConstantCodec<T, Attribute<'N'>>
+    <const T extends DynamoNumber>(
+        ...allowed: readonly T[]
+    ): AttributeCodec<T, Attribute<'N'>>
+    readonly set: {
+        (): AttributeCodec<ReadonlySet<DynamoNumber>, NS>
+        <const T extends DynamoNumber>(
+            ...allowed: readonly T[]
+        ): AttributeCodec<ReadonlySet<T>, NS>
+    }
+} = Object.assign(
+    literalCapability('number'),
+    codecOfTerm({ kind: 'number' }) as AttributeCodec<
+        DynamoNumber,
+        Attribute<'N'>
+    >,
+    { set: setCapability('number', () => dynamoNumber) },
+) as never
+
+/**
+ * An adapter over {@link dynamoNumber}, one conversion wide, on both halves. `held` is defined
+ * further down this file, so the term is built directly; the two are the same construction.
+ */
+const numericAdapter = <T>(
+    inner: Term,
+    writes: SetSlot,
+    into: (value: T) => Result<DynamoNumber>,
+    outOf: (held: DynamoNumber) => T,
+    via?: 'decimalText',
+): AttributeCodec<T, Attribute<'N'>> =>
+    codecOfTerm<T, Attribute<'N'>>({
+        kind: 'held',
+        inner,
+        f: into as (value: never) => unknown,
+        g: outOf as (held: never) => unknown,
+        writes: [writes],
+        ...(via ? { via } : {}),
+    })
+
+/** …and the same over a set of them, element by element. */
+const numericSetAdapter = <T>(
+    inner: Term,
+    writes: SetSlot,
+    into: (value: T) => Result<DynamoNumber>,
+    outOf: (held: DynamoNumber) => T,
+): AttributeCodec<ReadonlySet<T>, NS> =>
+    codecOfTerm<ReadonlySet<T>, NS>({
+        kind: 'held',
+        writes: [writes],
+        inner,
+        f: ((value: ReadonlySet<T>) => {
+            const held = new Set<DynamoNumber>()
+            for (const each of value) {
+                const one = into(each)
+                if (failed(one)) return one
+                held.add(one)
+            }
+            return held
+        }) as (value: never) => unknown,
+        g: ((held: ReadonlySet<DynamoNumber>) =>
+            new Set([...held].map(outOf))) as (held: never) => unknown,
+    })
+
+/** The digits a caller wrote, refused rather than re-spelled. */
+const storedOnly = (value: string): Result<DynamoNumber> =>
+    isStoredNumeral(value)
+        ? DynamoNumber.from(value)
+        : new CodecError(
+              `'${value}' is not a numeral DynamoDB stores unchanged; it accepts at most 38 significant digits, magnitude 1e-130 to 9.9e125, and returns the normalised form (no leading or trailing zeros, no exponent, no '+')`,
+          )
+
+/**
  * A decimal held as a string, stored as `N`. The codec for money — nothing becomes a JS number, so
  * nothing rounds.
  *
+ * **An adapter over {@link dynamoNumber}, not a base of its own.** `decimal` was a second ground
+ * base at `N` and is a change of carrier now: the same number, handed to the caller as text.
+ *
  * **Only the form DynamoDB stores.** It normalises what it accepts — `'1.50'` becomes `'1.5'`,
- * `'007'` becomes `'7'`, `'1e5'` becomes `'100000'` — and this codec's `decode` is the identity on
- * the digits, so anything else would come back as a different string from the one written. That is
- * a round trip failing across the database, where neither the type nor the law suite can see it, so
- * it is refused at the point where it is still local: `encode` rejects a denormal numeral rather
- * than quietly rewriting it, because rewriting is how you lose track of which value was meant.
+ * `'007'` becomes `'7'`, `'1e5'` becomes `'100000'` — and this codec hands back the digits, so
+ * anything else would come back as a different string from the one written. That is a round trip
+ * failing across the database, where neither the type nor the law suite can see it, so it is
+ * refused at the point where it is still local: `encode` rejects a denormal numeral rather than
+ * quietly rewriting it, because rewriting is how you lose track of which value was meant.
+ *
+ * That refusal is this codec's and not the carrier's. {@link DynamoNumber} normalises, because it
+ * holds a number; this hands back text, so it refuses instead.
  *
  * `'1.50'` is not a price this codec will write. `'1.5'` is. Where exact digits matter more than
  * numeric ordering — trailing zeros that mean something — use {@link string}.
- *
- * **`decimal('1')` is the literal the old surface could not spell.** The removed `literal(...)`
- * guessed `S` from the JS type for `literal('1')` and went through the host's `number` for
- * `literal(1)`; neither says "stored as `N`, exactly this text".
- *
- * It is modelled. This docstring said for a while that it was "the one thing on this surface with
- * no counterpart in the calculus", because `GroundKind` was `string | number | boolean | binary |
- * null`. `decimal` is a `GroundKind` now, carrying `StoredNumeral` — the same gate this codec runs
- * — and `GroundKind.toValue` sends it to a `.str`, which is why the *value* side needed no change.
- * `src/codec/lean.ts` emits `Term.literal GroundKind.decimal`, and both `decimal('1')` and
- * `decimal.set()` are covered by kernel-checked vectors.
  */
-export type DecimalCodec = AttributeCodec<string, Attribute<'N'>> & {
+export const decimal: AttributeCodec<string, Attribute<'N'>> & {
     <const T extends string>(only: T): ConstantCodec<T, Attribute<'N'>>
     <const T extends string>(
         ...allowed: readonly T[]
@@ -740,30 +841,57 @@ export type DecimalCodec = AttributeCodec<string, Attribute<'N'>> & {
             ...allowed: readonly T[]
         ): AttributeCodec<ReadonlySet<T>, NS>
     }
-}
+} = Object.assign(
+    (...allowed: readonly string[]) =>
+        numericAdapter<string>(
+            termOf(
+                literalCapability('number')(
+                    ...allowed.map((one) => orThrow(storedOnly(one))),
+                ) as AnyCodec,
+            ),
+            'string',
+            storedOnly,
+            (held) => held.toString(),
+            'decimalText',
+        ),
+    numericAdapter<string>(
+        { kind: 'number' },
+        'string',
+        storedOnly,
+        (held) => held.toString(),
+        'decimalText',
+    ),
+    {
+        set: (...allowed: readonly string[]) =>
+            numericSetAdapter<string>(
+                termOf(
+                    (allowed.length
+                        ? dynamoNumber.set(
+                              ...allowed.map((one) => orThrow(storedOnly(one))),
+                          )
+                        : dynamoNumber.set()) as AnyCodec,
+                ),
+                'strSet',
+                storedOnly,
+                (held) => held.toString(),
+            ),
+    },
+) as never
 
-const decimalCodec: AttributeCodec<string, Attribute<'N'>> = codecOfTerm({
-    kind: 'decimal',
-})
-
-/** @see {@link DecimalCodec} */
-export const decimal: DecimalCodec = Object.assign(
-    literalCapability('decimal'),
-    decimalCodec,
-    { set: setCapability('decimal', () => decimal) },
-) as unknown as DecimalCodec
+/** A JS number, as the carrier refuses it. */
+const asFloat = (value: number): Result<DynamoNumber> =>
+    DynamoNumber.fromNumber(value)
 
 /**
  * A JS number, stored as `N`. Lossy by construction — `N` carries 38 digits, `number` about 15.
  * Right for enums, counts and flags; wrong for money, which is {@link decimal}.
  *
- * `number.set()` and `decimal.set()` are **both first-class**, and neither is the other's withLegacyRead
- * spelling: `number.set()` is what a caller who means their platform's numbers means, and
- * `decimal.set()` is the host-independent one. They write the same member, `NS`, and hold different
- * things — which is why `SetBase` indexes a set by a base rather than by
- * `Member`.
+ * **An adapter over {@link dynamoNumber}, not a base of its own**, and the conversion is where the
+ * loss is: the float has already rounded before this codec sees it. `number.set()` and
+ * `decimal.set()` are two carriers over one wire set rather than two set bases, which is why
+ * `SetBase` no longer has a `decimal`.
  */
-export type NumberCodec = AttributeCodec<number, Attribute<'N'>> & {
+export const number: AttributeCodec<number, Attribute<'N'>> & {
     <const T extends number>(only: T): ConstantCodec<T, Attribute<'N'>>
     <const T extends number>(
         ...allowed: readonly T[]
@@ -774,18 +902,37 @@ export type NumberCodec = AttributeCodec<number, Attribute<'N'>> & {
             ...allowed: readonly T[]
         ): AttributeCodec<ReadonlySet<T>, NS>
     }
-}
-
-const numberCodec: AttributeCodec<number, Attribute<'N'>> = codecOfTerm({
-    kind: 'number',
-})
-
-/** @see {@link NumberCodec} */
-export const number: NumberCodec = Object.assign(
-    literalCapability('number'),
-    numberCodec,
-    { set: setCapability('number', () => number) },
-) as unknown as NumberCodec
+} = Object.assign(
+    (...allowed: readonly number[]) =>
+        numericAdapter<number>(
+            termOf(
+                literalCapability('number')(
+                    ...allowed.map((one) => orThrow(asFloat(one))),
+                ) as AnyCodec,
+            ),
+            'number',
+            asFloat,
+            (held) => held.toNumber(),
+        ),
+    numericAdapter<number>({ kind: 'number' }, 'number', asFloat, (held) =>
+        held.toNumber(),
+    ),
+    {
+        set: (...allowed: readonly number[]) =>
+            numericSetAdapter<number>(
+                termOf(
+                    (allowed.length
+                        ? dynamoNumber.set(
+                              ...allowed.map((one) => orThrow(asFloat(one))),
+                          )
+                        : dynamoNumber.set()) as AnyCodec,
+                ),
+                'numSet',
+                asFloat,
+                (held) => held.toNumber(),
+            ),
+    },
+) as never
 
 /**
  * A boolean, as `BOOL`.
@@ -907,9 +1054,10 @@ const set = <const C extends AnyCodec>(
      * a set of `held(string, f, g)` passed it: `held` writes where its inner term does, so the member
      * was `'S'`, and the adapter's two functions then ran per member of an attribute that stores no
      * such thing. The model closed this by indexing `Term.set` with a `SetBase`
-     * and says outright what that gives up — a set of a `held` and
-     * of a `withLegacyRead`, neither of which has a set-level spelling and neither of which appears in
-     * `src/`. This is the same refusal, at the same place the other one lives.
+     * and says outright what that gives up — a set of a `withLegacyRead`, which has no set-level
+     * spelling. A set of a `held` was given up on the same ground and is not: an adapter is
+     * elementwise, so mapping it over the wire set IS the spelling, and `decimal.set()` needs it
+     * now that `decimal` is an adapter rather than a base.
      *
      * `refine` and a literal are **not** given up: a restriction of the elements is a restriction of
      * the set, and `setCodec_restrict` and `setCodec_restrict_p` prove the two are one pair on both
@@ -934,13 +1082,43 @@ const set = <const C extends AnyCodec>(
      * halves. One `refine` per predicate the element carries, outermost first.
      */
     const bare: Term = { kind: 'set', base }
+    /**
+     * **An adapter on the element is mapped over the set**, which is the set-level spelling this
+     * used to say did not exist. `number` and `decimal` are adapters over the one numeric base
+     * now, so `decimal.set()` and `refine(decimal, q).set()` both arrive here carrying one, and
+     * refusing them would take two published capabilities.
+     *
+     * The order is forced and is the alternating stack's: the wire set is converted first, then
+     * the element predicates run, because a predicate a caller wrote tests the value the caller
+     * holds and not the one the table does.
+     */
+    const adapter = elementAdapter(inner.def)
+    const adapted: Term = adapter
+        ? {
+              kind: 'held',
+              inner: bare,
+              f: ((value: ReadonlySet<unknown>) => {
+                  const held = new Set<unknown>()
+                  for (const each of value) {
+                      const one = (adapter.f as (v: unknown) => unknown)(each)
+                      if (failed(one)) return one
+                      held.add(one)
+                  }
+                  return held
+              }) as (value: never) => unknown,
+              g: ((held: ReadonlySet<unknown>) =>
+                  new Set(
+                      [...held].map(adapter.g as (v: unknown) => unknown),
+                  )) as (held: never) => unknown,
+          }
+        : bare
     const term = elementPredicates(inner.def).reduceRight<Term>(
         (restricted, of) => ({
             kind: 'refine',
             inner: restricted,
             q: { kind: 'each', of },
         }),
-        bare,
+        adapted,
     )
     return codecOfTerm<ReadonlySet<T>, SetOf<C>>(term)
 }

@@ -8,8 +8,10 @@
  */
 
 import { describe, expect, it } from 'vitest'
+import { DynamoNumber } from '../../attribute'
 import type { AnyCodec } from '../../codec'
 import { decimal, refine, string } from '../../codec'
+import { orThrow } from '../../result'
 import type { Term } from '../../term'
 import { identifies, member, occA, occV, specOf, tagsOf } from '../../term'
 
@@ -27,14 +29,14 @@ describe('the member a term stores', () => {
      */
     it('a union stores one member only where every option stores that member', () => {
         expect(
-            member({ kind: 'union', options: [str, { kind: 'decimal' }] }),
+            member({ kind: 'union', options: [str, { kind: 'number' }] }),
         ).toBe(undefined)
         expect(
             member({
                 kind: 'union',
-                options: [{ kind: 'number' }, { kind: 'decimal' }],
+                options: [{ kind: 'number' }, { kind: 'set', base: 'number' }],
             }),
-        ).toBe('N')
+        ).toBe(undefined)
         // one option is the model's `union(c) ≡ c` at the index
         expect(member({ kind: 'union', options: [str] })).toBe('S')
     })
@@ -64,7 +66,7 @@ describe('the member a term stores', () => {
      * index is built on.
      */
     it('a wrapper stores what it wraps, so a key survives being wrapped', () => {
-        const dec: Term = { kind: 'decimal' }
+        const dec: Term = { kind: 'number' }
         expect(
             member({
                 kind: 'refine',
@@ -87,9 +89,6 @@ describe('the member a term stores', () => {
     it('a set stores its base member, and the two numeric bases store the same one', () => {
         expect(member({ kind: 'set', base: 'string' })).toBe('SS')
         expect(member({ kind: 'set', base: 'binary' })).toBe('BS')
-        expect(member({ kind: 'set', base: 'number' })).toBe(
-            member({ kind: 'set', base: 'decimal' }),
-        )
     })
 })
 
@@ -125,7 +124,7 @@ describe('the occupancies a declaration is separated by', () => {
     it('an adapter is opaque on the write side and its inner term on the read side', () => {
         const at: Term = {
             kind: 'held',
-            inner: { kind: 'decimal' },
+            inner: { kind: 'number' },
             f: () => '',
             g: () => 0,
         }
@@ -136,10 +135,10 @@ describe('the occupancies a declaration is separated by', () => {
     it('a read widening is the mirror: its inner term on the write side, opaque on the read', () => {
         const older: Term = {
             kind: 'legacy',
-            inner: { kind: 'decimal' },
+            inner: { kind: 'number' },
             r: () => undefined,
         }
-        expect(occV(older)).toEqual(['string'])
+        expect(occV(older)).toEqual(['number'])
         expect(occA(older)).toBe(undefined)
     })
 
@@ -180,20 +179,50 @@ describe('the occupancies a declaration is separated by', () => {
     })
 
     /**
-     * §5's two pairs that fail independently, which is why the two families are asked separately
-     * and never reconciled. `set(string)` against `set(decimal)` writes one constructor at both and
-     * stores two members. `set(number)` against `set(decimal)` is the mirror.
+     * §5 asks the two families separately and never reconciles them, and it needs a pair that
+     * fails on one side only to be worth doing.
+     *
+     * **The set bases no longer provide one.** `set(string)` against `set(decimal)` wrote one
+     * constructor and stored two members, and `set(number)` against `set(decimal)` was the mirror;
+     * `decimal` is an adapter over `number` now, so every set base is disjoint from every other on
+     * both sides and the two questions agree on all of them.
+     *
+     * **An adapter provides one, and it is the construct the carriers are built from.** `held`
+     * has distinct rows: it reads where its inner term reads, and writes anywhere, because a
+     * caller's conversion is not a function this library can read. So two adapters over disjoint
+     * bases separate on the stored side and not on the written one.
      */
-    it('the two set families separate different pairs, and neither separates both', () => {
-        const s: Term = { kind: 'set', base: 'string' }
-        const d: Term = { kind: 'set', base: 'decimal' }
-        const n: Term = { kind: 'set', base: 'number' }
-        // written the same, stored differently
-        expect(occV(s)).toEqual(occV(d))
-        expect(occA(s)).not.toEqual(occA(d))
-        // stored the same, written differently
-        expect(occA(n)).toEqual(occA(d))
-        expect(occV(n)).not.toEqual(occV(d))
+    it('an adapter separates on one side only, which is why both are asked', () => {
+        const heldString: Term = {
+            kind: 'held',
+            inner: { kind: 'string' },
+            f: () => '',
+            g: () => '',
+        }
+        const heldNumber: Term = {
+            kind: 'held',
+            inner: { kind: 'number' },
+            f: () => '',
+            g: () => '',
+        }
+        // stored apart, because the read side reads through to the base
+        expect(occA(heldString)).toEqual(['S'])
+        expect(occA(heldNumber)).toEqual(['N'])
+        // and not written apart, because the write side cannot read the conversion
+        expect(occV(heldString)).toBe(undefined)
+        expect(occV(heldNumber)).toBe(undefined)
+    })
+
+    it('and the set bases agree on both sides, so none of them is that pair', () => {
+        for (const base of ['string', 'number', 'binary'] as const) {
+            const one: Term = { kind: 'set', base }
+            for (const other of ['string', 'number', 'binary'] as const) {
+                if (base === other) continue
+                const two: Term = { kind: 'set', base: other }
+                expect(occV(one)).not.toEqual(occV(two))
+                expect(occA(one)).not.toEqual(occA(two))
+            }
+        }
     })
 })
 
@@ -335,9 +364,14 @@ describe('the term `.set()` writes', () => {
         )
         const term = erase(positive.set()).def
         expect(term.kind).toBe('refine')
-        expect((term as { inner: Term }).inner).toEqual({
+        // `decimal` is an adapter over the one numeric base, so the set is built at that base and
+        // the conversion is mapped over it. The restriction stays outside, because the predicate
+        // tests the text the caller holds and not the numeral the table does
+        const held = (term as { inner: Term }).inner
+        expect(held.kind).toBe('held')
+        expect((held as { inner: Term }).inner).toEqual({
             kind: 'set',
-            base: 'decimal',
+            base: 'number',
         })
         expect((term as { q: { kind: string } }).q.kind).toBe('each')
         // the member is the set's and reaches no element, which is what `Term.set` being indexed
@@ -390,10 +424,13 @@ describe('the term `.set()` writes', () => {
             base: 'string',
             v: 'A',
         })
-        expect(erase(decimal('1')).def).toEqual({
+        // a decimal literal is that same literal at the numeric base, under the text adapter
+        const dec = erase(decimal('1')).def
+        expect(dec.kind).toBe('held')
+        expect((dec as { inner: Term }).inner).toEqual({
             kind: 'literal',
-            base: 'decimal',
-            v: '1',
+            base: 'number',
+            v: orThrow(DynamoNumber.from('1')),
         })
     })
 
@@ -404,11 +441,21 @@ describe('the term `.set()` writes', () => {
      * costs the type checker linearly in the alternatives where the call is flat.
      */
     it('builds a union of singleton literals where several values are named', () => {
-        expect(erase(decimal('1', '2.5')).def).toEqual({
+        const several = erase(decimal('1', '2.5')).def
+        expect(several.kind).toBe('held')
+        expect((several as { inner: Term }).inner).toEqual({
             kind: 'union',
             options: [
-                { kind: 'literal', base: 'decimal', v: '1' },
-                { kind: 'literal', base: 'decimal', v: '2.5' },
+                {
+                    kind: 'literal',
+                    base: 'number',
+                    v: orThrow(DynamoNumber.from('1')),
+                },
+                {
+                    kind: 'literal',
+                    base: 'number',
+                    v: orThrow(DynamoNumber.from('2.5')),
+                },
             ],
         })
     })
