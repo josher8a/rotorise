@@ -977,6 +977,7 @@ export const arbitraryOf = (
              * construction, so a throw is a bug in the adapter and belongs at the top of a property
              * run rather than folded into a value.
              */
+            if (def.arbitrary) return def.arbitrary(rng, size)
             return def.g(
                 arbitraryOf(codecOfTerm(def.inner), rng, size) as never,
             )
@@ -1110,11 +1111,6 @@ export const arbitraryOf = (
             // one level shallower each time, which is what stops a recursive entity generating
             // forever: the optional attribute that recurses is dropped once the budget runs out
             return arbitraryOf(codecOfTerm(def.get()), rng, size - 1)
-        case 'custom':
-            if (def.arbitrary) return def.arbitrary(rng, size)
-            throw new CodecError(
-                'a codec written by hand generates nothing unless it says how; give it `arbitrary`',
-            )
         // the one term with no inhabitant, so a property quantified over it has no input. A throw
         // and not a value: the switch's return type admits `undefined`, and falling through would
         // hand `undefined` to a round trip as though it were a value of this codec
@@ -1253,7 +1249,10 @@ export const shrinkOf = (
         case 'opaq':
             return shrinkUnknown(value)
         case 'held':
-            // shrunk on the inner side, where the definition knows how, and handed back out
+            // shrunk on the inner side, where the definition knows how, and handed back out.
+            // A caller who stated a shrink owns the answer, because a partial pair cannot be
+            // shrunk through: the inner side would hand back values the conversion refuses
+            if (def.shrink) return def.shrink(value as never)
             return shrinkOf(codecOfTerm(def.inner), def.f(value as never)).map(
                 (shrunk) => def.g(shrunk as never),
             )
@@ -1369,11 +1368,6 @@ export const shrinkOf = (
             return shrinkOf(codecOfTerm(def.inner), value)
         case 'lazy':
             return shrinkOf(codecOfTerm(def.get()), value)
-        // a branch has no one codec to shrink through, which is why `at` refuses it; a hand-written
-        // codec shrinks only where the caller said how, and the caller said it in the term — the
-        // same place its pair and its generator live
-        case 'custom':
-            return def.shrink ? def.shrink(value as never) : []
         default:
             return []
     }

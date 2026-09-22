@@ -189,6 +189,12 @@ EXPECTED = {
     },
     "docs/blueprint/src/content.tex": {
         "e_c": "the specification's own notation for a component codec, not a Lean name",
+        "custom": "the specification's §3 `(custom)` rule, which neither side implements now: "
+                  "the model never carried `Term.custom` and the host deleted the constructor "
+                  "and the term. The rule is still stated here, so the citation is the "
+                  "specification naming its own rule. WHETHER THE RULE LEAVES THE "
+                  "SPECIFICATION IS THE OWNER'S DECISION, and this entry records the gap "
+                  "rather than closing it",
     },
 }
 
@@ -226,10 +232,6 @@ HOST = {
                       "function",
     "literalsOf": "`src/codec/term.ts`'s reader for the literals an object pins, at the caller's "
                   "level. The model reads `altsOfField`, which is not the same question",
-    "custom": "`src/`'s escape-hatch codec. The model deleted `Term.custom`: its two call sites "
-              "were both tests, it never crossed the bridge, and `occV = occA = occTop` made it "
-              "invisible to every analysis. The host still publishes it, so the two sides "
-              "disagree until the host carrier port closes the vector bridge",
     "opaque": "`src/`'s codec, analysed here as the language's one escape hatch, and warranted "
               "by the calculus rather than by its user (§7). `opaqCodec` is the model's, and is "
               "not the same name",

@@ -11,7 +11,7 @@
  * long. Each one names a fact about the model rather than about this library:
  *
  * - `Double` is an axiom, so `Value.num` has no closed term. `number` is out permanently.
- * - `refine`, `held`, `withLegacyRead` and `custom` carry *functions* in the model and *closures* here.
+ * - `refine`, `held` and `withLegacyRead` carry *functions* in the model and *closures* here.
  *   There is no expression in Lean for a closure. Out until somebody writes the Lean side by hand.
  * - `optional` and `withLegacyRead` are §4 `Field`s and `restOf` is a §4 `Rest`. Asking for a `Term` at
  *   one of them is a stratification error, and the emitter reports it as one rather than flattening
@@ -34,7 +34,6 @@ import {
     array,
     binary,
     boolean,
-    custom,
     decimal,
     discriminatedUnion,
     dynamoNumber,
@@ -512,13 +511,6 @@ describe('what cannot be emitted', () => {
         })
         expect(refusal(() => leanTermOf(erase(older))).reason).toContain(
             'Attr → Option Value',
-        )
-        const byHand = custom({
-            encode: (value: string) => ({ S: value }),
-            decode: (attribute: { S?: string }) => attribute.S as string,
-        })
-        expect(refusal(() => leanTermOf(erase(byHand))).reason).toContain(
-            'Term.custom',
         )
     })
 

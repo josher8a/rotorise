@@ -568,10 +568,10 @@ conversion at the construction site is a second conversion written in order to b
 says when it is finished is a table asserting the conversion is the identity, one row per
 constructor — which no checker can answer, and which asserts nothing once it is complete.
 
-**Test machinery drives the generators; it does not hold them.** A hand-written codec states its
-own generator and shrinker, because how a codec generates is a fact about that codec rather than
-about testing, and `custom` takes the pair and the two generators together as data — they go into
-the term, which is the codec's whole definition. What lives in the testing entry point is the
+**Test machinery drives the generators; it does not hold them.** An adapter states its own
+generator and shrinker where its pair is partial, because how a codec generates is a fact about
+that codec rather than about testing, and `held` takes the conversion and the two generators
+together as data — they go into the term, which is the codec's whole definition. What lives in the testing entry point is the
 machinery that *drives* them: the derivers that walk a term to build a generator, the shrinker, and
 the law checkers. **The term is the only source.** Where a generator was a projection of the term
 that the derivers read before the term was consulted, one fact travelled two paths and could

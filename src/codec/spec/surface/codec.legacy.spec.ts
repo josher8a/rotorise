@@ -10,10 +10,11 @@ import { describe, expect, it } from 'vitest'
 import type { AttributeMap, AttributeValue } from '../../attribute'
 import {
     andThen,
+    array,
     binary,
     CodecError,
-    custom,
     decimal,
+    held,
     object,
     string,
     withLegacyRead,
@@ -188,15 +189,15 @@ describe('an attribute the row does not have', () => {
      * **And the one value that cannot be copied is shared, rather than throwing on a read.**
      *
      * `structuredClone` refuses anything holding a function. No declared codec admits such a
-     * value — a stand-in comes from the value language, and all of that clones — but `custom`'s
-     * admission asks the caller's own pair, so a hand-written codec can admit one. The
+     * value — a stand-in comes from the value language, and all of that clones — but an adapter's
+     * read hands back whatever its own function builds, so a codec can admit one. The
      * cloneability is settled at the declaration, so this is a shared stand-in and not a
      * `DataCloneError` arriving out of a `decode` months later.
      */
     it('shares a stand-in structuredClone refuses, rather than failing the read', () => {
         type Holder = { tag: string; run: () => number }
-        const holding = custom<Holder>({
-            encode: (value) => ({ S: value.tag }) as never,
+        const holding = held(string, {
+            encode: (value: Holder) => value.tag,
             decode: () => ({ tag: 'x', run: () => 1 }),
         })
         const stand: Holder = { tag: 'x', run: () => 1 }
@@ -272,9 +273,9 @@ describe('an attribute written in an older encoding', () => {
     })
 })
 
-/** A hand-built codec — `custom` derives the safe pair from the throwing one. */
-const listOfStrings = custom<string[]>({
-    encode: (value) => ({ L: value.map((v) => ({ S: v })) }) as never,
+/** An adapter whose read hands back a value its write never produced. */
+const listOfStrings = held(array(string), {
+    encode: (value: string[]) => value,
     decode: () => [] as string[],
 })
 

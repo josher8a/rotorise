@@ -16,7 +16,6 @@ import type { AttributeCodec } from '../../codec'
 import {
     array,
     CodecError,
-    custom,
     discriminatedUnion,
     lazy,
     list,
@@ -117,13 +116,17 @@ describe('the unsafe pair throws, and is the one composition uses', () => {
 })
 
 describe('anything that is not a decoding failure still throws', () => {
-    it('does not swallow a bug in a caller-supplied codec', () => {
-        const broken = custom<string>({
-            encode: () => {
+    it('does not swallow a bug in a caller-supplied predicate', () => {
+        // a refinement's predicate and a thunk are the two places a caller's code still runs
+        // uncontained. An adapter contains its pair and reports a throw as a refusal, which is
+        // the backstop `held` states, so the bug has to come from somewhere that does not
+        const broken = refine(
+            string,
+            (_value): _value is string => {
                 throw new TypeError('a bug, not a bad row')
             },
-            decode: () => '',
-        })
+            { describe: 'a predicate with a bug in it' },
+        )
         expect(() => broken.encode('x')).toThrow(TypeError)
     })
 })

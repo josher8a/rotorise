@@ -54,17 +54,18 @@ describe('where the variants disagree', () => {
      * a `Def` kind — a definition, in a language of codec definitions, for something that was
      * not a codec — so every reader of a definition had to carry a case for it.
      *
-     * **The rule is that no reader learns anything here, and the assertion on `carries` is that
+     * **The rule is that this codec writes nothing and reads nothing, and the assertions are that
      * rule.** It used to be asserted as `def === undefined`, which was the implementation of the
-     * rule rather than the rule: a definition is now required of every codec, and the one that says
-     * "a pair of functions, nothing beneath" is `custom`. Every reader answers what it answered.
-     * The `kind` is asserted rather than the whole definition, because `custom` carries the two
-     * functions themselves and comparing closures pins the construction rather than the rule.
+     * rule rather than the rule, and then as `custom`, "a pair of functions, nothing beneath".
+     * `custom` is gone with its constructor, and it was the only definition whose `valueKinds`
+     * answered *unknown*. What is left says the truth about this codec rather than declining to:
+     * both halves throw, so it admits no value, which is what `never` means and what `valueKinds`
+     * now reports. `member` still answers nothing, which is the half `at` cares about.
      */
     it('describes nothing readable, because there is no one codec to describe', () => {
         const ambiguous = Entity.at((p) => p.op.amount)
-        expect(valueKinds(ambiguous.def)).toBeUndefined()
-        expect(ambiguous.def.kind).toBe('custom')
+        expect(valueKinds(ambiguous.def)).toEqual([])
+        expect(ambiguous.def.kind).toBe('never')
         // the path half is untouched, which is what `at` is most often for
         expect(ambiguous.path()).toBe('op.amount')
     })

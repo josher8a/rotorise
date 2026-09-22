@@ -1221,13 +1221,6 @@ export const denote = (def: Term): Pair => {
                 decode: (attribute) => codecOfTerm(def.get()).decode(attribute),
             }
         /**
-         * §3 `(custom)`: the pair the term carries, returned. The row does not describe the set
-         * the codec admits — the two functions *are* what decides it, which is the model's own
-         * move at `custom` and the reason admission asks them rather than reading a row.
-         */
-        case 'custom':
-            return { encode: def.ce, decode: def.cp }
-        /**
          * §3 `(union)`: the sum, resolved by unique admission. `lawful_altCodec` is the lemma and
          * `altSem` is the resolution — one rule, serving both the attribute pair here and the item
          * pair an all-object union also offers.

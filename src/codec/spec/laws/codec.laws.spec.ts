@@ -21,7 +21,6 @@ import {
     binary,
     boolean,
     CodecError,
-    custom,
     decimal,
     discriminatedUnion,
     failed,
@@ -763,48 +762,19 @@ describe('(C): what a codec reads, it can write', () => {
     })
 
     /**
-     * The `set` defect, planted: encode refuses the empty set, decode returns it. This is what the
-     * library did until the read side was closed, and no value-driven generator could reach it.
+     * **The two planted (C) defects left with the `custom` term, and nothing replaced them.**
+     *
+     * Both read an attribute this library would not write and then failed to write it back: a
+     * codec refusing the empty set while its read returned one, and one writing only normalised
+     * numerals while its read took any. Neither is expressible now. `held` inherits the carrier
+     * underneath, and every carrier has closed the hole the defect needed — `string.set()` and
+     * `opaque` both refuse an empty `SS`, and `decimal` normalises `1.50` to `1.5` on the way in,
+     * so the mutation never reaches the adapter. `custom` was the only definition that took a
+     * pair from outside, which is what made an outside defect writable at all.
+     *
+     * `checkDecodesAreWritable` is unchanged and still runs over every other codec here. What is
+     * gone is the test that it catches anything, and it found three shipped defects.
      */
-    it('catches a decode that accepts what encode refuses', () => {
-        const leaky = custom<ReadonlySet<string>>({
-            encode: (value) =>
-                value.size === 0
-                    ? new CodecError('no empty SS')
-                    : ({ SS: [...value].sort() } as never),
-            decode: (attribute) =>
-                new Set((attribute as { SS?: readonly string[] }).SS ?? []),
-            arbitrary: () => new Set(['a']),
-        })
-        const Leaky = object({ id: string, tags: leaky }).item
-
-        expect(() =>
-            checkDecodesAreWritable(Leaky, { count: 5, seed: 1 }),
-        ).toThrow(CodecError)
-        expect(() =>
-            checkDecodesAreWritable(Leaky, { count: 5, seed: 1 }),
-        ).toThrow(CodecError)
-    })
-
-    /**
-     * The `decimal` defect, planted: a codec that writes only normalised numerals and reads any of
-     * them. The mutation that finds it is the one DynamoDB itself performs in reverse.
-     */
-    it('catches a decode that accepts a form its encode will not produce', () => {
-        const loose = custom<string>({
-            encode: (value) =>
-                /^-?(0|[1-9]\d*)(\.\d*[1-9])?$/.test(value)
-                    ? ({ N: value } as never)
-                    : new CodecError('not normalised'),
-            decode: (attribute) => (attribute as { N: string }).N,
-            arbitrary: () => '1.5',
-        })
-        const Loose = object({ id: string, amount: loose }).item
-
-        expect(() =>
-            checkDecodesAreWritable(Loose, { count: 5, seed: 1 }),
-        ).toThrow(CodecError)
-    })
 })
 
 /**
@@ -875,13 +845,6 @@ describe('`accepts`, and the direction of the law that is true', () => {
             }),
         ],
         ['lazy', lazy(() => string)],
-        [
-            'custom',
-            custom<string>({
-                encode: (v) => ({ S: v }) as never,
-                decode: (a) => (a as { S: string }).S,
-            }),
-        ],
         [
             'tagged',
             discriminatedUnion('type', [

@@ -771,11 +771,6 @@ const leanTermOfTerm = (t: Term, at: string, forced: number): string => {
                 at,
                 '`Term.legacy` carries `r : Attr → Option Value`; the definition carries the older reading now, and it is a JS closure, which no `Term` prints — the same wall `custom` meets',
             )
-        case 'custom':
-            return refuse(
-                at,
-                '`Term.custom` carries `ce : Value → Option Attr` and `cp : Attr → Option Value`; the definition now carries the pair, and the pair is two JS closures, which no `Term` prints',
-            )
     }
 }
 

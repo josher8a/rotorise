@@ -447,14 +447,16 @@ const acrossVariants = (
  * does not require knowing what writes it, and that is what `at` is most often for. Only the codec
  * half is missing, so only the codec half fails.
  *
- * It says **`custom`**, which is the definition for a pair of functions with no structure beneath
- * them, and that is what this is. It used to be a `Def` kind of its own called `branch`, so a
- * definition language for codecs contained an entry that was not a codec and every reader had to
- * know about it; and it used to carry no definition at all, which stopped being available when
- * `def` became required. `custom` costs no reader a case and changes no answer: `member` and `carries`
- * say nothing at a `custom`, exactly as they said nothing at a missing definition, and
- * `accepts` reaches the same `false` by attempting the pair and catching the throw rather than by
- * declining to claim.
+ * It says **`never`**, the term that admits no value, and that is what this is: both halves throw,
+ * so no value is written and no attribute is read. It used to be a `Def` kind of its own called
+ * `branch`, so a definition language for codecs contained an entry that was not a codec and every
+ * reader had to know about it; and it used to carry no definition at all, which stopped being
+ * available when `def` became required. It then said `custom`, a pair of functions with no
+ * structure beneath them, which is gone: a caller reaches `held` over the codec the values really
+ * sit on, and the term left with the constructor. `never` costs no reader a case and states the
+ * fact rather than hiding it behind a throw — `member` and `carries` say nothing here, exactly as
+ * they said nothing at a missing definition, and `accepts` declines to claim instead of reaching
+ * the same `false` by catching.
  */
 const unresolvedAt = (path: string): AnyCodec => {
     const unresolved = () => {
@@ -463,7 +465,7 @@ const unresolvedAt = (path: string): AnyCodec => {
         )
     }
     return codec<never, AttributeValue>({
-        def: { kind: 'custom', ce: unresolved, cp: unresolved },
+        def: { kind: 'never' },
         encode: unresolved,
         decode: unresolved,
     })
@@ -479,82 +481,6 @@ export type Refinement = {
     readonly arbitrary?: (rng: Rng, size: number) => unknown
     readonly onThinSearch?: (what: string, rate: number) => void
 }
-
-/**
- * A codec built by hand, at the level of the attribute itself.
- *
- * **Try the combinators first, and expect them to win.** Three attempts at a small example for this
- * were each expressible without it, which is not a coincidence — between them they cover the cases
- * that compose:
- *
- * - the same stored attribute held as something else — {@link held}
- * - several encodings read, one written — {@link withLegacyRead}
- * - the member following from the value, where the options can be told apart — {@link union}
- *
- * So there is no illustrative example here on purpose. What is left when those are exhausted is not a
- * small thing: a codec that is *total* over every attribute there is, and configurable in how it
- * treats them. That is a marshaller, and {@link opaque} and `native` are the only two in this library
- * — built through this, deliberately, so that the SDK's marshaller is a codec written the way a
- * consumer would write one. If what you are writing is not one of those, one of the three above is
- * very likely the answer.
- *
- * Three smaller capabilities are also only here:
- *
- * 1. **Its own failure.** Both directions return a {@link Result}, so the error says what was wrong
- *    with the value. {@link held}'s halves return one too, so this is no longer a reason to reach
- *    for `custom`.
- * 2. **Its own generation.** `arbitrary` *and* `shrink`. `held` derives both from the codec
- *    underneath, and `refine` offers only `arbitrary`.
- * 3. **Throws escape.** Unlike `held`, an exception is not caught here: writing a codec is owning it,
- *    where writing a conversion is handing over two functions this library calls, sometimes
- *    speculatively.
- *
- * The two directions are given as the `Result` pair, the same way every codec in this file is built,
- * and the throwing pair is derived — so a hand-written codec cannot end up with the two disagreeing.
- *
- * **What the caller owes, and it is the whole of §2.** Every other constructor here has its laws
- * *proved* from the terms it is built out of; this one takes two foreign functions, so the model
- * discharges it by assumption — `Lawful (denote t)` as a premise, which is `Obligations`'
- * `.lazy` row. No gate is possible and none is attempted: the pair is
- * arbitrary code, and there is no definition to read. The four:
- *
- * 1. **(R)** retraction — `decode(encode(t))` is `t`, exactly, for every `t` you write.
- * 2. **(C)** canonizability — everything `decode` accepts, `encode` can write back.
- * 3. **(W)** member-naming — every `encode` writes the same member, or the codec names none.
- * 4. **(MP)** — reading an attribute and writing it back never changes its member.
- *
- * They are checkable, just not from here. `checkRoundTrip` is (R) over generated values,
- * `checkDecodesAreWritable` is (C) against attributes nobody would write — which is the direction
- * a round trip cannot reach, and where three of this library's shipped defects lived — and
- * `checkMembersStable` is (W) and (MP). All three are in `./testing`, and a `custom` without them
- * is a codec whose laws nobody has asserted.
- *
- * @deprecated Use {@link held} over the codec the values really sit on.
- *
- * **The model has no constructor for this any more.** `Term.custom` carries two closures, so it
- * prints as no term, elaborates to no vector, and everything built through it is outside what the
- * kernel checks — `src/codec/lean.ts` refuses it by name. `held`'s halves return a {@link Result}
- * now, which was the one thing `custom` offered that it did not, so a `custom` is a `held` over a
- * ground codec in every case this library has met.
- */
-export const custom = <T, A extends AttributeValue = AttributeValue>(raw: {
-    readonly encode: (value: T) => Result<A>
-    readonly decode: (attribute: AttributeValue) => Result<T>
-    readonly arbitrary?: (rng: Rng, size: number) => T
-    readonly shrink?: (value: T) => readonly T[]
-}): AttributeCodec<T, A> =>
-    // the pair *and* the generators, as data: a hand-written codec's definition is everything
-    // the caller said about it. `member` and `carries` are still told nothing, because
-    // two foreign functions have no member, no kind of value and no shape beneath to tell them of
-    codecOfTerm<T, A>({
-        kind: 'custom',
-        ce: raw.encode as (value: never) => Result<AttributeValue>,
-        cp: raw.decode,
-        arbitrary: raw.arbitrary,
-        shrink: raw.shrink as
-            | ((value: never) => readonly unknown[])
-            | undefined,
-    })
 
 // ── scalars ─────────────────────────────────────────────────────────
 
@@ -1780,8 +1706,9 @@ const withMissing = <const C extends AnyCodec>(
  *
  * Which makes it the answer to "my values arrive as an array and `.set()` wants a `Set`": nothing
  * about the *table* has to change for that, so nothing about the codec does either. It is also the
- * one to reach for before {@link custom} — the member, the generation and the definition all keep
- * coming from the codec underneath, where a hand-written codec has to restate them.
+ * one to reach for where a caller holds a value the inner codec does not: the member, the
+ * generation and the definition all keep coming from the codec underneath, where a codec written
+ * by hand has to restate every one of them.
  *
  * @example
  * ```ts
@@ -1843,6 +1770,20 @@ export const held = <T, const C extends AnyCodec>(
         readonly encode: (value: T) => Result<NoInfer<Decoded<C>>>
         /** What the inner codec read, as you hold it. Runs on the way back. Refuses the same way. */
         readonly decode: (held: Decoded<C>) => Result<NoInfer<T>>
+        /**
+         * **How to generate one of these, where the pair is partial.**
+         *
+         * Omit both and the adapter derives them from the inner codec: a value is generated
+         * there and handed out through `decode`, and a value is shrunk there and handed back.
+         * That is right while the conversion accepts everything the inner codec produces.
+         *
+         * State them when it does not. A conversion that refuses part of the inner codec's range
+         * makes the derived generator offer values the pair never makes, so a property run fails
+         * on the generator instead of on the codec.
+         */
+        readonly arbitrary?: (rng: Rng, size: number) => T
+        /** How to shrink one, where the pair is partial. Derived from the inner codec otherwise. */
+        readonly shrink?: (value: T) => readonly T[]
     },
 ): AttributeCodec<T, AttributeOf<C>> => {
     /**
@@ -1863,6 +1804,10 @@ export const held = <T, const C extends AnyCodec>(
         inner: termOf(inner as unknown as AnyCodec),
         f: adapt.encode,
         g: adapt.decode,
+        arbitrary: adapt.arbitrary,
+        shrink: adapt.shrink as
+            | ((value: never) => readonly unknown[])
+            | undefined,
     })
 }
 
@@ -2134,10 +2079,10 @@ export const nullable = <T, A extends AttributeValue>(
  * declares `def` as the whole of {@link Term}, so `opaque.def.kind` was the full twenty-one-member
  * union and no clause could match on it.
  *
- * **Matching on the kind and not on the decoded type**, deliberately: `custom<unknown>` also
- * decodes to `unknown`, and it is not `opaque` — it admits exactly what its own `encode` admits,
- * which may be one value. The rule is about a term that admits *everything*, and the term is what
- * says so.
+ * **Matching on the kind and not on the decoded type**, deliberately: an adapter at an `unknown`
+ * outer type also decodes to `unknown`, and it is not `opaque` — it admits exactly what its own
+ * conversion admits, which may be one value. The rule is about a term that admits *everything*,
+ * and the term is what says so.
  */
 type OpaqueCodec = AttributeCodec<unknown> & {
     readonly def: { readonly kind: 'opaq' }
@@ -4282,9 +4227,9 @@ type Overlapping<
  * Whether any option is an `opaque` — the one option that cannot share a union.
  *
  * Matched on the **term's kind**, which is why {@link opaque} narrows its `def`. Not on the decoded
- * type: `custom<unknown>` also reads back as `unknown` and is not `opaque`, because it admits
- * exactly what its own `encode` admits and that may be a single value. What this rule is about is
- * a term that admits *everything*, and only the term says so.
+ * type: an adapter at an `unknown` outer type also reads back as `unknown` and is not `opaque`,
+ * because it admits exactly what its own conversion admits and that may be a single value. What
+ * this rule is about is a term that admits *everything*, and only the term says so.
  */
 type HasOpaque<Options extends readonly unknown[]> = Options extends readonly [
     infer Head,
