@@ -64,7 +64,7 @@ describe('the predicates this library ships', () => {
     it('emits `isStored` for `isStoredNumeral`', () => {
         const stored = refine(decimal, narrowing(isStoredNumeral))
         expect(leanTermOf(erase(stored))).toBe(
-            'Term.refine (Term.decimal) (Pred.closure isStored)',
+            'Term.refine ((Term.held Term.number numeralOfStoredText textOfNumeral)) (Pred.closure isStored)',
         )
     })
 
@@ -108,7 +108,7 @@ describe('the predicates this library ships', () => {
             value: '1.5',
         })
         expect(emitted).toContain(
-            'Term.refine (Term.decimal) (Pred.closure isStored)',
+            'Term.refine ((Term.held Term.number numeralOfStoredText textOfNumeral)) (Pred.closure isStored)',
         )
         expect(emitted).toContain('Attr.n (WFNumeral.of "1.5")')
     })
@@ -149,15 +149,26 @@ describe('what is still refused', () => {
         )
     })
 
-    /** `held` and `withLegacyRead` did not move, and the messages now say why each is stuck. */
-    it('refuses `held`, which this library never builds itself', () => {
+    /**
+     * **A caller's adapter, which is the one `held` the model has no name for.**
+     *
+     * This test used to say the library ships no adapters at all. It ships two now — `number` and
+     * `decimal` are `held` over `dynamoNumber` — and the model names one of their pairs,
+     * `numeralOfStoredText`/`textOfNumeral`, so `decimal` emits. What stays refused is a pair with
+     * no name: a caller's closure has none, and `number`'s has none either, because its content is
+     * binary64 rounding and writing that down is the axiom this development deleted.
+     *
+     * The registry is keyed by reference for the same reason the predicates are. A caller's
+     * function is not the library's however much it looks alike.
+     */
+    it('refuses an adapter whose pair the model does not name', () => {
         const adapted = held(string, {
             encode: (value: string) => value,
             decode: (holding: string) => holding,
         })
-        expect(refusal(() => leanTermOf(erase(adapted))).reason).toContain(
-            'ships no adapters of its own',
-        )
+        const why = refusal(() => leanTermOf(erase(adapted))).reason
+        expect(why).toContain('numeralOfStoredText')
+        expect(why).toContain("a caller's closure has no name in the model")
     })
 
     /**

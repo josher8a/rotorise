@@ -51,7 +51,7 @@
  * numeric escape hatch — it is text on both sides, and it evaluates.
  */
 import type { AttributeValue } from './attribute'
-import { isNumeral, isStoredNumeral, memberOf } from './attribute'
+import { DynamoNumber, isNumeral, isStoredNumeral, memberOf } from './attribute'
 import type { AnyCodec, LiteralValue, ObjectSlot } from './codec'
 import { union } from './codec'
 import { accepts, readsBack } from './denote'
@@ -203,8 +203,13 @@ export const leanValueOf = (value: unknown, at = 'value'): string => {
     if (typeof value === 'number' || typeof value === 'bigint') {
         return refuse(
             at,
-            '`Double` is an axiom with no closed terms, so `Value.num` is unconstructible — use `decimal`',
+            '`Value.num` carries a `WFNumeral`, which is exact, and a JS number is a binary64 float — so writing one down is the rounding this development refused to axiomatize; hand a `DynamoNumber`, which `dynamoNumber` and `decimal` both carry',
         )
+    }
+    // **the carrier `N` actually has**, and it is emitted before the record row below, which would
+    // otherwise read its `digits` field and emit a `Value.map` — a vector that is quietly false
+    if (value instanceof DynamoNumber) {
+        return `Value.num (${leanNumeral(value.toString())})`
     }
     if (value instanceof Uint8Array) return `Value.bin ${leanBytes(value)}`
     if (value instanceof Set) {
@@ -222,10 +227,18 @@ export const leanValueOf = (value: unknown, at = 'value'): string => {
                 at,
             )})`
         }
+        if (first instanceof DynamoNumber) {
+            return `Value.numSet (${leanNonEmptySet(
+                members.map(
+                    (m) => `(${leanNumeral((m as DynamoNumber).toString())})`,
+                ),
+                at,
+            )})`
+        }
         if (typeof first === 'number') {
             return refuse(
                 at,
-                '`Value.numSet` is a `NEFinset Double`, and `Double` has no closed terms',
+                '`Value.numSet` is a set of `WFNumeral`, and a JS number is a binary64 float — hand a set of `DynamoNumber`',
             )
         }
         return refuse(
@@ -1656,6 +1669,7 @@ const fuelFor = (attribute: AttributeValue): number => {
  */
 const preamble = `import Calculus.Denote
 import Calculus.Frontier
+import Calculus.Separation
 import Mathlib.Tactic.FinCases
 
 /-!
@@ -1708,6 +1722,7 @@ macro "vector" : tactic => \`(tactic|
 `
 
 const checkPreamble = `import Calculus.Vectors
+import Calculus.Separation
 
 /-!
 # Differential-testing vectors

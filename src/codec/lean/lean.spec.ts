@@ -28,6 +28,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { AttributeValue } from '../attribute'
+import { DynamoNumber } from '../attribute'
 import type { AnyCodec, AttributeCodec } from '../codec'
 import {
     array,
@@ -36,6 +37,7 @@ import {
     custom,
     decimal,
     discriminatedUnion,
+    dynamoNumber,
     held,
     lazy,
     list,
@@ -85,6 +87,7 @@ import {
     readRowIsStuck,
     readVectorIsUnstatable,
 } from '../lean'
+import { orThrow } from '../result'
 
 /** The emitter takes the erased codec; the constructors return precise ones. */
 const erase = (codec: unknown): AnyCodec => codec as AnyCodec
@@ -105,7 +108,11 @@ const refusal = (emit: () => unknown): { at: string; reason: string } => {
 describe('terms', () => {
     it('emits the ground terms by name', () => {
         expect(leanTermOf(erase(string))).toBe('Term.string')
-        expect(leanTermOf(erase(decimal))).toBe('Term.decimal')
+        expect(leanTermOf(erase(dynamoNumber))).toBe('Term.number')
+        // `decimal` is an adapter over that native, and the model names its pair
+        expect(leanTermOf(erase(decimal))).toBe(
+            '(Term.held Term.number numeralOfStoredText textOfNumeral)',
+        )
         expect(leanTermOf(erase(boolean))).toBe('Term.boolean')
         expect(leanTermOf(erase(binary))).toBe('Term.binary')
         expect(leanTermOf(erase(nullValue))).toBe('Term.null')
@@ -157,20 +164,21 @@ describe('terms', () => {
     })
 
     /**
-     * `GroundKind.decimal`'s carrier is `StoredNumeral`, a subtype gated on `Numeral.Stored`, so an
-     * alternative is a pair and not a string. `by decide` is the gate run at elaboration time — the
-     * same discipline `WFNumeral.of` uses on the attribute side, and the reason a numeral this
-     * library writes and §1 refuses would fail the build rather than prove something false.
+     * **A decimal literal is a literal at the native base, under the named pair.** `decimal` was a
+     * `GroundKind` with a `StoredNumeral` carrier, so an alternative was a pair gated by `by
+     * decide`. The base is gone: `dynamoNumber` is the one native at `number` and `decimal` is
+     * `held` over it, so the alternative is a `WFNumeral` and the gate it used to carry is the
+     * adapter's own.
      *
-     * This was refused outright until `decimal` became a `GroundKind`. The kernel accepts the term
-     * and both directions of its admission; `literal_decimal` in the sample is the vector.
+     * The literal sits *under* the adapter and not beside it, which is what makes the pair
+     * cancel: `numeralOfStoredText` carries the caller's text to the numeral the literal names.
      */
-    it('emits a decimal literal at its own base, with the stored gate discharged', () => {
+    it('emits a decimal literal at the native base, under the named pair', () => {
         expect(leanTermOf(erase(decimal('-1.5')))).toBe(
-            'Term.literal GroundKind.decimal ⟨"-1.5", by decide⟩',
+            '(Term.held Term.literal GroundKind.number (WFNumeral.of "-1.5") numeralOfStoredText textOfNumeral)',
         )
         expect(leanTermOf(erase(decimal('1', '2.5')))).toBe(
-            'Term.union [Term.literal GroundKind.decimal ⟨"1", by decide⟩, Term.literal GroundKind.decimal ⟨"2.5", by decide⟩]',
+            '(Term.held Term.union [Term.literal GroundKind.number (WFNumeral.of "1"), Term.literal GroundKind.number (WFNumeral.of "2.5")] numeralOfStoredText textOfNumeral)',
         )
     })
 
@@ -185,11 +193,18 @@ describe('terms', () => {
         )
     })
 
-    /** `GroundKind.number`'s carrier is the `Double` axiom, and that refusal is permanent. */
+    /**
+     * **`number` is refused because its conversion has no name, and the refusal is permanent.**
+     *
+     * It used to be refused because `GroundKind.number` carried the `Double` axiom. That axiom is
+     * deleted, and `dynamoNumber` above emits. What is refused now is the *adapter*: `number`
+     * carries a JS float over the native, so its pair is binary64 rounding, and writing that down
+     * is the axiom this development removed. The model names one pair and this is not it.
+     */
     it('refuses a numeric literal, permanently', () => {
-        expect(refusal(() => leanTermOf(erase(number(1)))).reason).toContain(
-            '`Double`',
-        )
+        const why = refusal(() => leanTermOf(erase(number(1)))).reason
+        expect(why).toContain('numeralOfStoredText')
+        expect(why).toContain('binary64 rounding')
     })
 
     it('emits the containers structurally', () => {
@@ -209,16 +224,36 @@ describe('terms', () => {
      * emitted `Term.set (<element term>)` until then, and the generated file stopped compiling —
      * which is the defect this test now guards.
      *
-     * Both numeric bases are emitted, and they are different terms writing the same member: `NS`
-     * cannot tell `number` from `decimal`, and the index can.
+     * **There is one numeric set base now, and two adapters over it.** `SetBase.decimal` went with
+     * the `decimal` ground base: `number.set()` and `decimal.set()` are one wire set under two
+     * elementwise conversions, so the base that used to tell them apart no longer exists and the
+     * adapter is what does.
      */
     it('emits a set as its base, not as its element term', () => {
         expect(leanTermOf(erase(string.set()))).toBe('Term.set SetBase.string')
-        expect(leanTermOf(erase(decimal.set()))).toBe(
-            'Term.set SetBase.decimal',
+        expect(leanTermOf(erase(dynamoNumber.set()))).toBe(
+            'Term.set SetBase.number',
         )
-        expect(leanTermOf(erase(number.set()))).toBe('Term.set SetBase.number')
         expect(leanTermOf(erase(binary.set()))).toBe('Term.set SetBase.binary')
+    })
+
+    /**
+     * **A set of an adapter is refused, and this is the model's gap rather than the library's.**
+     *
+     * `decimal` emits as a scalar, because `Separation.lean` names its pair —
+     * `numeralOfStoredText`/`textOfNumeral`. `.set()` maps that conversion over the wire set, and
+     * the model has no name for the set-level pair: writing one wants the element pair carried
+     * over an `NEFinset`, which is a `Finset.image` and a proof that the image is nonempty.
+     *
+     * So the emitter refuses rather than invent a name, and this test is where the gap is
+     * recorded. **It is meant to fail when the model gains the pair**, and the failure is the
+     * signal to emit these two instead.
+     */
+    it('refuses a set of an adapter, which the model cannot name yet', () => {
+        for (const codec of [decimal.set(), number.set()]) {
+            const why = refusal(() => leanTermOf(erase(codec))).reason
+            expect(why).toContain('numeralOfStoredText')
+        }
     })
 
     /**
@@ -391,34 +426,39 @@ describe('terms', () => {
 
 describe('what cannot be emitted', () => {
     /**
-     * The permanent one, **and it is a fact about values, not about the term.** `Double` is
-     * axiomatized with a round trip and a decidable equality and *no constructor* — so no closed
-     * term inhabits it, `#eval` cannot print one,
-     * and there is no text a generator could emit for one. This is not a gap to be filled later:
-     * filling it would mean adding a numeral-to-double literal the model deliberately omits,
-     * because IEEE-754 rounding is not a theorem of the calculus.
+     * **A JS float is refused, and a numeral is not. The line moved and this is where.**
      *
-     * `Term.number` used to be refused here too, which read the impossibility one level too high.
-     * The term is closed and emits; `Value.num` is what cannot be written. Refusal vectors are
-     * what made the difference visible, because they need the term and *not* a value at it.
+     * `Value.num` carried a `Double`, an axiom with no constructor, so *no* numeric value could be
+     * written and the refusal was permanent on both sides. `Value.num` carries a `WFNumeral` now:
+     * the digits are the value, so a numeral is a closed term and `dynamoNumber` emits in both
+     * directions.
+     *
+     * What is refused is the conversion, not the carrier. A JS number is a binary64 float, so
+     * putting one into a `WFNumeral` is IEEE-754 rounding, which is exactly the axiom this
+     * development deleted rather than a gap to be filled later.
      */
-    it('refuses every numeric value, and emits the term', () => {
-        expect(leanTermOf(erase(number))).toBe('Term.number')
-        expect(refusal(() => leanValueOf(1.5)).reason).toContain('decimal')
+    it('refuses a JS float, and emits the numeral the carrier holds', () => {
+        expect(leanTermOf(erase(dynamoNumber))).toBe('Term.number')
+        expect(leanValueOf(orThrow(DynamoNumber.from('1.5')))).toBe(
+            'Value.num (WFNumeral.of "1.5")',
+        )
+        expect(refusal(() => leanValueOf(1.5)).reason).toContain('WFNumeral')
         expect(refusal(() => leanValueOf(new Set([1, 2]))).reason).toContain(
-            'NEFinset Double',
+            'binary64 float',
         )
     })
 
     /**
-     * And the numeric literal, which really *is* term-inexpressible and so did not move with
-     * `Term.number`: its alternatives are `NEFinset Double`, so there is no set to write. No
-     * vector reaches this term in either direction.
+     * And a `number` literal, which is refused as the *adapter* it is rather than for its
+     * alternatives. `dynamoNumber('1.5')` is a literal at `GroundKind.number` and emits; `number(1,
+     * 2)` is that literal under a pair the model does not name.
      */
-    it('refuses a numeric literal, which is the term and not the value', () => {
-        expect(refusal(() => leanTermOf(erase(number(1, 2)))).reason).toContain(
-            'GroundKind.number',
-        )
+    it('refuses a numeric literal, which is the adapter and not the base', () => {
+        const why = refusal(() => leanTermOf(erase(number(1, 2)))).reason
+        expect(why).toContain('binary64 rounding')
+        expect(
+            leanTermOf(erase(dynamoNumber(orThrow(DynamoNumber.from('1.5'))))),
+        ).toBe('Term.literal GroundKind.number (WFNumeral.of "1.5")')
     })
 
     /**
@@ -514,25 +554,23 @@ describe('what cannot be emitted', () => {
      * `decimal` alike — a decimal literal holds its numeral as text — so a decimal discriminator
      * emits on both halves.
      *
-     * **`number` stays refused and the reason changed.** It was a disagreement between two rules;
-     * it is a limit on what the model can say. `Calculus.Double` is an axiom with no closed terms,
-     * so no numeric tag appears in any term the model can state — the same reason the corpus
-     * carries no numeric value. The host builds one and reads it back as text.
+     * **`number` stays refused and the reason changed twice.** It was a disagreement between two
+     * rules; then it was `Calculus.Double`, an axiom with no closed terms. That axiom is deleted
+     * and the refusal is now the adapter's: a `number` tag is a literal at the native base under a
+     * pair whose content is binary64 rounding, and the model names no such pair.
      */
-    it('refuses a tag at the numeric base, which the model cannot spell', () => {
+    it('refuses a tag at the numeric adapter, whose pair has no name', () => {
         const numeric = erase(
             discriminatedUnion('kind', [
                 object({ kind: number(0), a: string }),
                 object({ kind: number(1), b: string }),
             ]),
         )
-        // the refusal is the literal's own now, not a row about tags: a numeric discriminator is a
-        // numeric literal field, and `Calculus.Double` is an axiom with no closed terms wherever
-        // such a literal appears. Deleting the tagged row lost no refusal, only a second statement
-        // of this one
+        // the refusal is the adapter's, not a row about tags: a numeric discriminator is a
+        // `number` literal field, and `number` is `held` over the native wherever it appears.
+        // Deleting the tagged row lost no refusal, only a second statement of this one
         const why = refusal(() => leanTermOf(numeric)).reason
-        expect(why).toContain('Double')
-        expect(why).toContain('GroundKind.number')
+        expect(why).toContain('binary64 rounding')
 
         // **a decimal tag emits now**, which is the half of the disagreement that closed: it is
         // stored in an `N` and carried as text, and both of the model's tag readers answer that
@@ -543,7 +581,7 @@ describe('what cannot be emitted', () => {
             ]),
         )
         expect(leanTermOf(decimals)).toContain('Term.union')
-        expect(leanTermOf(decimals)).toContain('GroundKind.decimal')
+        expect(leanTermOf(decimals)).toContain('numeralOfStoredText')
 
         // and a string tag emits, which it always did
         expect(
@@ -724,10 +762,15 @@ export const sampleVectors: readonly Vector[] = [
         codec: erase(string.set('a', 'b')),
         value: new Set(['b', 'a']),
     },
+    // **at the native, not at `decimal`.** `decimal.set()` is an adapter over this one, and the
+    // model has no name for a set-level pair yet, so the vector states the base the model has
     {
-        name: 'set_of_decimal',
-        codec: erase(decimal.set()),
-        value: new Set(['1.5', '2']),
+        name: 'set_of_number',
+        codec: erase(dynamoNumber.set()),
+        value: new Set([
+            orThrow(DynamoNumber.from('1.5')),
+            orThrow(DynamoNumber.from('2')),
+        ]),
     },
     { name: 'array_of_string', codec: erase(array(string)), value: ['a', 'b'] },
     /**
@@ -933,7 +976,7 @@ export const sampleVectors: readonly Vector[] = [
  */
 const refusalCodecs: readonly (readonly [string, AnyCodec])[] = [
     ...sampleVectors.map((v) => [v.name, v.codec] as const),
-    ['scalar_number', erase(number)] as const,
+    ['scalar_number', erase(dynamoNumber)] as const,
     ['never', erase(never)] as const,
 ]
 
@@ -1039,7 +1082,7 @@ describe('the `check` protocol', () => {
 const separationPairs = (): readonly Separation[] => {
     const codecs: readonly (readonly [string, AnyCodec])[] = [
         ...sampleVectors.map((v) => [v.name, v.codec] as const),
-        ['scalar_number', erase(number)] as const,
+        ['scalar_number', erase(dynamoNumber)] as const,
         ['never', erase(never)] as const,
     ]
     const out: Separation[] = []
@@ -1082,7 +1125,7 @@ const MEET_DEFERRED: readonly string[] = [
 const meetPairs = (): readonly MeetPair[] => {
     const codecs: readonly (readonly [string, AnyCodec])[] = [
         ...sampleVectors.map((v) => [v.name, v.codec] as const),
-        ['scalar_number', erase(number)] as const,
+        ['scalar_number', erase(dynamoNumber)] as const,
         ['never', erase(never)] as const,
     ]
     const out: MeetPair[] = []
@@ -1113,7 +1156,7 @@ const meetPairs = (): readonly MeetPair[] => {
 const readVerdicts = (): readonly ReadVerdict[] => {
     const codecs: readonly (readonly [string, AnyCodec])[] = [
         ...sampleVectors.map((v) => [v.name, v.codec] as const),
-        ['scalar_number', erase(number)] as const,
+        ['scalar_number', erase(dynamoNumber)] as const,
     ]
     const attributes: [string, AttributeValue][] = []
     for (const v of sampleVectors) {
@@ -1164,7 +1207,7 @@ const readVerdicts = (): readonly ReadVerdict[] => {
 const resolutionUnions = (): readonly (readonly [string, AnyCodec])[] => [
     ['u_string_boolean', erase(union([string, boolean]))],
     ['u_string_null', erase(union([string, nullValue]))],
-    ['u_setstring_setnumber', erase(union([string.set(), number.set()]))],
+    ['u_setstring_setnumber', erase(union([string.set(), dynamoNumber.set()]))],
     [
         'u_objects_by_name',
         erase(union([object({ a: string }), object({ b: boolean })])),
@@ -1265,17 +1308,24 @@ describe('union resolution, model against library', () => {
      * `set_of_literal`, and 248 by `literal_non_ascii` and the three products: each new entry
      * adds the resolutions of the unions it takes part in.
      */
-    it('offers 330 write pairs and 359 statable of 360 read pairs', () => {
+    it('offers 370 write pairs and every one of 400 read pairs', () => {
         expect(writeResolutions().length).toBe(370)
         const reads = readResolutions()
         expect(reads.length).toBe(400)
-        // one pair only, and it is the `Double` axiom reaching the decoded value; the five
-        // map-valued reads beside it are stated through `vcheck` now
+        /**
+         * **No pair is unstatable now, and the one that was is the axiom's last appearance here.**
+         *
+         * `rr_u_setstring_setnumber__set_of_decimal` read back to a `Value.numSet` over a
+         * `NEFinset Double`, which had no closed terms. `Value.num` carries a `WFNumeral` since
+         * `ac951ae`, so a numeral set is a closed term and the pair states. This asserts the empty
+         * list rather than dropping the check, because a pair becoming unstatable again is the
+         * thing worth failing on.
+         */
         expect(
             reads
                 .filter((one) => readResolutionIsUnstatable(one) === 'Double')
                 .map((one) => one.name),
-        ).toEqual(['rr_u_setstring_setnumber__set_of_decimal'])
+        ).toEqual([])
     })
 
     /**
@@ -1401,14 +1451,25 @@ describe("the declaration guard, against the model's classifier", () => {
      * `object_open__vs__object_nested`. `Orth` declines every one, so the law is untouched and
      * what moved is that the two levels now answer one rule instead of two.
      *
-     * **The count pins a fact no law has, deliberately.** That it is ninety-two is a property of
-     * this corpus, so widening the corpus is meant to fail here and be looked at; the *law* is
-     * the loop below, that every refusal the model also declines. Both are kept, and the number
-     * stays.
+     * **It was 111, and the six that arrived came with the `decimal` base being deleted.**
+     * `dynamoNumber` is the one native at `number` and `decimal` is `held` over it, so two codecs
+     * a *base* used to tell apart now collide at `N` and the pairs are refused:
+     * `scalar_decimal__vs__scalar_number` and `literal_decimal__vs__scalar_number` are that
+     * collision named, and `set_of_number` replaced `set_of_decimal` because a set of an adapter
+     * cannot be emitted yet. `crossesStringDecimal` and `crossesNumberDecimal` went with the base,
+     * which is the same fact from the other side.
+     *
+     * **Measured, and it is the question this count exists to answer**: the disjointness law
+     * `6536d91` added refuses **none** of these pairs. Every refusal here is an occupancy or a
+     * restriction, and no pair is refused for carrying a value another pair also carries.
+     *
+     * **The count pins a fact no law has, deliberately.** That it is 117 is a property of this
+     * corpus, so widening the corpus is meant to fail here and be looked at; the *law* is the loop
+     * below, that every refusal the model also declines. Both are kept, and the number stays.
      */
     it('refuses only pairs the classifier also declines', () => {
         const separations = separationPairs()
-        expect(separations.length).toBe(111)
+        expect(separations.length).toBe(117)
         // each one emits, which is where `leanSeparation` re-checks that `src/` really refuses,
         // and it carries one of the two warrants: `Orth` declines, or — for a `never` pair, where
         // the model permits what `src/` lints away — the permits-form states what the model says
