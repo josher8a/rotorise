@@ -1270,9 +1270,13 @@ export const meet = <A>(
 export const meetTerms = (x: Term, y: Term): Term | undefined => {
     // the bottom absorbs, on either side
     if (x.kind === 'never' || y.kind === 'never') return never
-    // the four whose admission is a function and not data: a reader cannot say what they admit
+    // a thunk carries a plain term, so the meet reads through it. The model's `.lazy` row sits
+    // second on the left and after `held` on the right, and these two keep that precedence
+    if (x.kind === 'lazy') return meetTerms(x.get(), y)
+    // the three whose admission is a function and not data: a reader cannot say what they admit
     // without running them, so no term states the intersection
     if (opaqueToReader(x) || opaqueToReader(y)) return undefined
+    if (y.kind === 'lazy') return meetTerms(x, y.get())
     // a certified union distributes, on either side
     if (x.kind === 'union') return distribute(x.options, y)
     if (y.kind === 'union') return distribute(y.options, x)
@@ -1321,10 +1325,7 @@ export const meetTerms = (x: Term, y: Term): Term | undefined => {
 const never: Term = { kind: 'never' }
 
 const opaqueToReader = (t: Term): boolean =>
-    t.kind === 'held' ||
-    t.kind === 'legacy' ||
-    t.kind === 'custom' ||
-    t.kind === 'lazy'
+    t.kind === 'held' || t.kind === 'legacy' || t.kind === 'custom'
 
 const groundBase = (t: Term): boolean =>
     t.kind === 'string' ||
