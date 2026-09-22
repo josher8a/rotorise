@@ -1069,8 +1069,19 @@ export const arbitraryOf = (
              * way the `set` row assembles one.
              */
             if (q.kind === 'each') {
-                const { base, elements } = restrictedSet(def)
-                const element = codecOfTerm({ kind: base })
+                const { base, elements, element: pair } = restrictedSet(def)
+                /**
+                 * **At the caller's level, not the stored one.** The predicates below restrict what
+                 * a caller hands in, and a set of an adapter stores something else: `amount.set()`
+                 * restricts strings and stores numerals. Generating at the stored base handed the
+                 * native codec a string. `element` is the adapter at one member, which `.set()`
+                 * recorded because it is what the set-level halves were built from.
+                 */
+                const element = codecOfTerm(
+                    pair
+                        ? { kind: 'held', inner: { kind: base }, ...pair }
+                        : { kind: base },
+                )
                 return someSet(rng, element, () =>
                     someElement(rng, size, element, elements),
                 )
@@ -1144,14 +1155,21 @@ const someSet = (
  */
 const restrictedSet = (
     t: Term,
-): { readonly base: SetBase; readonly elements: readonly Predicate[] } => {
+): {
+    readonly base: SetBase
+    readonly elements: readonly Predicate[]
+    readonly element?: Extract<Term, { kind: 'held' }>['element']
+} => {
     if (t.kind === 'set') return { base: t.base, elements: [] }
     // `.set()` maps an element's adapter over the wire set, so a set of `decimal` is a set of
-    // the numeric base under one. The base is the stored one, which is beneath the adapter
-    if (t.kind === 'held') return restrictedSet(t.inner)
+    // the numeric base under one. The base is the stored one, which is beneath the adapter, and
+    // `element` is that adapter at one member — what the values generated here are, as against
+    // what they are stored as
+    if (t.kind === 'held')
+        return { ...restrictedSet(t.inner), element: t.element }
     if (t.kind === 'refine' && t.q.kind === 'each') {
         const inner = restrictedSet(t.inner)
-        return { base: inner.base, elements: [t.q.of, ...inner.elements] }
+        return { ...inner, elements: [t.q.of, ...inner.elements] }
     }
     throw new CodecError(
         `\`each\` restricts a set, and this \`${t.kind}\` is not one; \`.set()\` builds every \`each\`, so this term was not built by it`,
