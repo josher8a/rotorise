@@ -10,31 +10,45 @@
  * are different questions with different answers.
  */
 import { describe, expect, it } from 'vitest'
-import { DynamoNumber } from '../../attribute'
+import { DynamoNumber, isStoredNumeral } from '../../attribute'
+import { CodecError, failed, orThrow } from '../../result'
+
+/** The carrier, where the text is known good. */
+const num = (digits: string): DynamoNumber => orThrow(DynamoNumber.from(digits))
 
 describe('construction refuses what DynamoDB refuses', () => {
-    it('accepts a numeral the service accepts', () => {
-        expect(DynamoNumber.from('1.5')?.toString()).toBe('1.5')
-        expect(DynamoNumber.from('-0.00001')?.toString()).toBe('-0.00001')
-        expect(DynamoNumber.from('1e5')?.toString()).toBe('1e5')
+    it('accepts a numeral the service accepts, in the form the service returns', () => {
+        expect(num('1.5').toString()).toBe('1.5')
+        expect(num('-0.00001').toString()).toBe('-0.00001')
+        // accepted as written and held as the store would hand it back
+        expect(num('1e5').toString()).toBe('100000')
     })
 
-    it('refuses text that is not a numeral at all', () => {
-        expect(DynamoNumber.from('abc')).toBeUndefined()
-        expect(DynamoNumber.from('')).toBeUndefined()
-        expect(DynamoNumber.from('1.2.3')).toBeUndefined()
+    /**
+     * A refusal is a value here, as it is everywhere else on this surface, and it names the text
+     * that failed. Returning `undefined` would be a default standing in for an error, which is the
+     * one thing a caller cannot act on.
+     */
+    it('refuses text that is not a numeral at all, as a Result', () => {
+        const refused = DynamoNumber.from('abc')
+        expect(failed(refused)).toBe(true)
+        expect((refused as CodecError).message).toMatch(
+            /'abc' is not a number DynamoDB stores/,
+        )
+        expect(failed(DynamoNumber.from(''))).toBe(true)
+        expect(failed(DynamoNumber.from('1.2.3'))).toBe(true)
     })
 
     it('refuses more than 38 significant digits, which the service will not store', () => {
-        expect(DynamoNumber.from('1'.repeat(38))).toBeDefined()
-        expect(DynamoNumber.from('1'.repeat(39))).toBeUndefined()
+        expect(failed(DynamoNumber.from('1'.repeat(38)))).toBe(false)
+        expect(failed(DynamoNumber.from('1'.repeat(39)))).toBe(true)
     })
 
     it('refuses a magnitude outside the range the service stores', () => {
-        expect(DynamoNumber.from('1e125')).toBeDefined()
-        expect(DynamoNumber.from('1e126')).toBeUndefined()
-        expect(DynamoNumber.from('1e-130')).toBeDefined()
-        expect(DynamoNumber.from('1e-131')).toBeUndefined()
+        expect(failed(DynamoNumber.from('1e125'))).toBe(false)
+        expect(failed(DynamoNumber.from('1e126'))).toBe(true)
+        expect(failed(DynamoNumber.from('1e-130'))).toBe(false)
+        expect(failed(DynamoNumber.from('1e-131'))).toBe(true)
     })
 })
 
@@ -46,83 +60,105 @@ describe('the digits are the value, so nothing rounds on the way in', () => {
      */
     it('keeps 38 significant digits, where a JS number keeps about 15', () => {
         const exact = '12345678901234567890123456789012345678'
-        expect(DynamoNumber.from(exact)?.toString()).toBe(exact)
+        expect(num(exact).toString()).toBe(exact)
         expect(String(Number(exact))).not.toBe(exact)
     })
 
     it('converts to a JS number only when asked, and says that it is lossy', () => {
         const exact = '12345678901234567890123456789012345678'
-        const n = DynamoNumber.from(exact)
-        expect(n?.toString()).toBe(exact)
-        expect(String(n?.toNumber())).not.toBe(exact)
+        const n = num(exact)
+        expect(n.toString()).toBe(exact)
+        expect(String(n.toNumber())).not.toBe(exact)
     })
 
     it('refuses a JS number the service will not store', () => {
-        expect(DynamoNumber.fromNumber(Number.NaN)).toBeUndefined()
-        expect(
-            DynamoNumber.fromNumber(Number.POSITIVE_INFINITY),
-        ).toBeUndefined()
-        expect(DynamoNumber.fromNumber(1e309)).toBeUndefined()
+        const refused = DynamoNumber.fromNumber(Number.NaN)
+        expect(failed(refused)).toBe(true)
+        expect((refused as CodecError).message).toMatch(
+            /NaN is not a number DynamoDB stores/,
+        )
+        expect(failed(DynamoNumber.fromNumber(Number.POSITIVE_INFINITY))).toBe(
+            true,
+        )
+        expect(failed(DynamoNumber.fromNumber(1e309))).toBe(true)
     })
 
     it('rounds at fromNumber because the float already has, which is the one lossy door', () => {
-        expect(DynamoNumber.fromNumber(0.1 + 0.2)?.toString()).toBe(
+        expect(orThrow(DynamoNumber.fromNumber(0.1 + 0.2)).toString()).toBe(
             '0.30000000000000004',
         )
-        expect(DynamoNumber.from('0.3')?.toString()).toBe('0.3')
+        expect(num('0.3').toString()).toBe('0.3')
     })
 })
 
-describe('the store normalises, so a written spelling is not always the one returned', () => {
+describe('the store normalises, and so does the constructor', () => {
     /**
-     * DynamoDB hands back a normalised `N`. A codec that writes `'1.50'` reads back `'1.5'`, which
-     * is a round trip failing across the database where no local law can see it. `isStored` is the
-     * question a caller has to be able to ask before writing.
+     * DynamoDB hands back a normalised `N`, so a carrier holding any other spelling holds one the
+     * table will not give back. Normalising on the way in is what stops every comparison and round
+     * trip downstream having to know that, and it is why there is no `isStored` to ask: there is no
+     * `DynamoNumber` that is not stored.
      */
-    it('says whether the store returns this spelling unchanged', () => {
-        expect(DynamoNumber.from('1.5')?.isStored).toBe(true)
-        expect(DynamoNumber.from('1.50')?.isStored).toBe(false)
-        expect(DynamoNumber.from('007')?.isStored).toBe(false)
-        expect(DynamoNumber.from('1e5')?.isStored).toBe(false)
+    it('holds the spelling the store would return, whatever it was given', () => {
+        expect(num('1.50').toString()).toBe('1.5')
+        expect(num('007').toString()).toBe('7')
+        expect(num('1e5').toString()).toBe('100000')
+        expect(num('-0').toString()).toBe('0')
+        expect(num('0.0').toString()).toBe('0')
     })
 
-    it('gives the spelling the store would return', () => {
-        expect(DynamoNumber.from('1.50')?.normalized()?.toString()).toBe('1.5')
-        expect(DynamoNumber.from('007')?.normalized()?.toString()).toBe('7')
-        expect(DynamoNumber.from('1e5')?.normalized()?.toString()).toBe(
-            '100000',
-        )
+    /**
+     * The defect the first version shipped, kept as a test because the shape of it is easy to
+     * write again. It normalised through a JS number, and `String(Number(...))` writes exponent
+     * form at or above `1e21` and below `1e-6`. The store returns neither, and DynamoDB carries
+     * magnitudes to `1e125`, so the answer was a numeral but not the stored one across most of the
+     * range it accepts.
+     */
+    it('expands the digits rather than going through a JS number', () => {
+        expect(num('1e21').toString()).toBe('1000000000000000000000')
+        expect(num('1e-7').toString()).toBe('0.0000001')
+        expect(num('-1.5e-8').toString()).toBe('-0.000000015')
     })
 
-    it('is its own normal form when it is already stored', () => {
-        const n = DynamoNumber.from('1.5')
-        expect(n?.normalized()).toBe(n)
+    it('lands on a spelling the store returns, for everything it accepts', () => {
+        for (const digits of [
+            '1e21',
+            '1e-7',
+            '1e125',
+            '1e-130',
+            '007',
+            '1.50',
+            '-0',
+            '0.0',
+            '-1.5e-8',
+            '+1.5',
+        ]) {
+            expect(isStoredNumeral(num(digits).toString())).toBe(true)
+        }
+    })
+
+    it('leaves a spelling the store already returns alone', () => {
+        expect(num('1.5').toString()).toBe('1.5')
+        expect(num('-0.00001').toString()).toBe('-0.00001')
+        expect(num('0').toString()).toBe('0')
     })
 })
 
-describe('the two equalities are different questions', () => {
+describe('there is one equality, because there is one spelling', () => {
     /**
-     * This is the cost of carrying `N` as text, stated as a test rather than left to a caller to
-     * discover. `'1.50'` and `'1.5'` are one number and two numerals, so a carrier whose equality
-     * is textual answers "different" where a caller means "same". `equals` is the carrier's
-     * question and `sameNumber` is the caller's.
+     * This is what normalising at construction buys, and it is the reason to do it there rather
+     * than at each use. Carrying `N` as text makes two equalities: `'1.50'` and `'1.5'` are one
+     * number and two numerals, so a text carrier answers "different" where a caller means "same"
+     * and needs a second comparison beside the first. There is no second question to ask here.
      */
-    it('equals compares the digits, so the same number can be unequal', () => {
-        const a = DynamoNumber.from('1.50')
-        const b = DynamoNumber.from('1.5')
-        expect(a && b && a.equals(b)).toBe(false)
+    it('the same number is the same value, however it was spelled', () => {
+        expect(num('1.50').equals(num('1.5'))).toBe(true)
+        expect(num('007').equals(num('7'))).toBe(true)
+        expect(num('1e5').equals(num('100000'))).toBe(true)
+        expect(num('-0').equals(num('0'))).toBe(true)
     })
 
-    it('sameNumber compares the numbers, so the same number is the same number', () => {
-        const a = DynamoNumber.from('1.50')
-        const b = DynamoNumber.from('1.5')
-        expect(a && b && a.sameNumber(b)).toBe(true)
-    })
-
-    it('agrees with equals once both sides are in the stored form', () => {
-        const a = DynamoNumber.from('1.50')?.normalized()
-        const b = DynamoNumber.from('1.5')
-        expect(a && b && a.equals(b)).toBe(true)
-        expect(a && b && a.sameNumber(b)).toBe(true)
+    it('and different numbers are still different', () => {
+        expect(num('1.5').equals(num('1.6'))).toBe(false)
+        expect(num('1.5').equals(num('-1.5'))).toBe(false)
     })
 })
