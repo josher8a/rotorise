@@ -38,13 +38,21 @@ import {
     orThrow,
     type Result,
 } from './result'
-import type { Alternatives, Body, Field, NameLiteral, Term } from './term'
+import type {
+    Body,
+    Field,
+    LiteralForm,
+    NameForm,
+    NameLiteral,
+    Term,
+} from './term'
 import {
     alwaysWritten,
+    clauseForm,
+    clauseLiteralsOf,
     elementAdapter,
     elementPredicates,
     literalAlternatives,
-    literalsOf,
     meet,
     member as memberOf,
     occA,
@@ -4855,15 +4863,15 @@ export type ValidateClause<S, C> = [BadClauseKey<S, C>] extends [never]
  * A set of tags is `string('a', 'b')`, which is a union of literals, so the reader is
  * {@link literalAlternatives} and not a test for one constructor.
  */
-const clauseLiteral = (name: string, value: unknown): Alternatives => {
+const clauseLiteral = (name: string, value: unknown): NameForm => {
     const def = (value as { readonly def?: Term } | undefined)?.def
-    const alts = def && literalAlternatives(def)
-    if (!alts) {
+    const pinned = def && clauseForm(def)
+    if (!pinned) {
         throw new CodecError(
             `the clause at '${name}' is not a literal codec — a clause pins each key it names to a literal, written as \`string('a')\`, \`decimal('1')\`, \`number(1)\`, \`boolean(true)\` or \`binary(...)\`, because a bare tag does not say which base it was written at`,
         )
     }
-    return alts
+    return { required: true, ...pinned }
 }
 
 /**
@@ -4878,16 +4886,16 @@ const clauseLiteral = (name: string, value: unknown): Alternatives => {
  * does not share one.
  */
 const clauseKeeps = (
-    clause: ReadonlyMap<string, Alternatives>,
+    clause: ReadonlyMap<string, NameForm>,
     term: Term,
 ): boolean => {
-    const literals = literalsOf(term)
+    const literals = clauseLiteralsOf(term)
     if (!literals) return false
     for (const [name, pinned] of clause) {
         const mine = literals[name]
-        if (!mine?.required || mine.alts.base !== pinned.base) return false
+        if (!mine?.required || mine.form !== pinned.form) return false
         const inside = (mine.alts.ls as readonly LiteralValue[]).every((one) =>
-            (pinned.ls as readonly LiteralValue[]).some((tag) =>
+            (pinned.alts.ls as readonly LiteralValue[]).some((tag) =>
                 sameLiteral(one, tag),
             ),
         )
@@ -4915,15 +4923,17 @@ const sliced = <O>(
     keep: boolean,
 ): readonly O[] => {
     const terms = options.map((option) => termOf(option as unknown as AnyCodec))
-    const pinned = new Map<string, Set<LiteralBase>>()
+    const pinned = new Map<string, Set<LiteralForm>>()
     for (const term of terms) {
-        for (const [name, one] of Object.entries(literalsOf(term) ?? {})) {
-            const bases = pinned.get(name) ?? new Set<LiteralBase>()
-            bases.add(one.alts.base)
+        for (const [name, one] of Object.entries(
+            clauseLiteralsOf(term) ?? {},
+        )) {
+            const bases = pinned.get(name) ?? new Set<LiteralForm>()
+            bases.add(one.form)
             pinned.set(name, bases)
         }
     }
-    const read = new Map<string, Alternatives>()
+    const read = new Map<string, NameForm>()
     for (const [name, value] of Object.entries(clause)) {
         const bases = pinned.get(name)
         if (!bases) {
@@ -4932,9 +4942,9 @@ const sliced = <O>(
             )
         }
         const literal = clauseLiteral(name, value)
-        if (!bases.has(literal.base)) {
+        if (!bases.has(literal.form)) {
             throw new CodecError(
-                `the clause at '${name}' is a \`${literal.base}\` literal and no member pins '${name}' at that base, so it describes no member whatever its alternatives; the bases declared at '${name}' are ${[...bases].map((one) => `\`${one}\``).join(', ')}`,
+                `the clause at '${name}' is a \`${literal.form}\` literal and no member pins '${name}' at that base, so it describes no member whatever its alternatives; the bases declared at '${name}' are ${[...bases].map((one) => `\`${one}\``).join(', ')}`,
             )
         }
         read.set(name, literal)
