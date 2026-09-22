@@ -799,6 +799,12 @@ const numericSetAdapter = <T>(
     codecOfTerm<ReadonlySet<T>, NS>({
         kind: 'held',
         writes: [writes],
+        // what the set-level halves below are built from, kept so a reader that needs one element
+        // does not have to rediscover it from a conversion over a whole set
+        element: {
+            f: into as (value: never) => unknown,
+            g: outOf as (held: never) => unknown,
+        },
         inner,
         f: ((value: ReadonlySet<T>) => {
             const held = new Set<DynamoNumber>()
@@ -1181,6 +1187,9 @@ const set = <const C extends AnyCodec>(
         ? {
               kind: 'held',
               inner: bare,
+              // the pair the two halves below are built from, kept so a reader that needs one
+              // element does not have to rediscover it from a conversion over a whole set
+              element: adapter,
               f: ((value: ReadonlySet<unknown>) => {
                   const held = new Set<unknown>()
                   for (const each of value) {

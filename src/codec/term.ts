@@ -205,6 +205,24 @@ export type Term =
            * is read by the emitter. One of them can be known without the other.
            */
           readonly via?: 'decimalText'
+          /**
+           * **The same conversion at one element, where the adapter maps over a set.**
+           *
+           * `.set()` maps an element's conversion over the wire set, so the set-level `f` and `g`
+           * are built *from* an element pair and then hold only the set form. A reader that needs
+           * the element view cannot recover it: `restrictedSet` descends to the stored base and
+           * the element pair is gone, so a generator handed a set of `decimal` built the native
+           * element codec and offered it a caller's string.
+           *
+           * So the builder records what it already had. This is the same split as {@link writes}:
+           * one side owns the fact rather than a reader deriving what was never written down.
+           * Absent for every adapter that is not a set, and for a caller's, which is the honest
+           * answer there.
+           */
+          readonly element?: {
+              readonly f: (value: never) => unknown
+              readonly g: (held: never) => unknown
+          }
       }
     /**
      * §3 `(refine)`. The model carries `q : Value → Bool`; this carries a {@link Predicate}, so a
