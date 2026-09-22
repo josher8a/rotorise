@@ -100,7 +100,7 @@ theorem fieldSem_ne_opt {fd : ObjectSlot}
     claim on a present name: an open block claims every name, and a closed body claims the
     names it declares. The two that follow are the declared names' own presence bits. -/
 theorem keysOk_of_names {fields : Finset Name} {ff : {k // k ∈ fields} → ObjectSlot}
-    {wild : Option (KeyPat × Term)} {keys : Finset Name}
+    {wild : Option Term} {keys : Finset Name}
     (hclaims : wild.isSome = true ∨ ∀ k ∈ keys, k ∈ fields)
     (hreq : ∀ k : {k // k ∈ fields},
       (ff k).presence.2 = false → k.1 ∈ keys)
@@ -126,7 +126,7 @@ theorem keysOk_of_names {fields : Finset Name} {ff : {k // k ∈ fields} → Obj
     not touch the key set — so the value side's admission *is* the attribute side's, and
     there is nothing to transport. -/
 theorem keysOk_of_encode {fields : Finset Name} {ff : {k // k ∈ fields} → ObjectSlot}
-    {wild : Option (KeyPat × Term)} {keys : Finset Name}
+    {wild : Option Term} {keys : Finset Name}
     {f : {k // k ∈ keys} → Value} {g : {k // k ∈ keys} → Attr}
     (hval : valPresentB ⟨fields, fun k => fieldSem (ff k)⟩ keys = true)
     (hfi : funImage (fun k : {k // k ∈ keys} =>
@@ -220,7 +220,7 @@ theorem altsOkA_of_term_e : ∀ {t : Term} {v a}, Lawful (denote t) → (denote 
     over the *written* key set, which is what makes an `optional` literal field harmless: a
     name the encode did not write is `keysOk`'s business and never reaches here. -/
 theorem literalsOk_of_encode {fields : Finset Name} {ff : {k // k ∈ fields} → ObjectSlot}
-    {wild : Option (KeyPat × Term)}
+    {wild : Option Term}
     {keys : Finset Name} {f : {k // k ∈ keys} → Value} {g : {k // k ∈ keys} → Attr}
     (hfi : funImage (fun k : {k // k ∈ keys} =>
         (entryCodec ⟨fields, fun k => fieldSem (ff k)⟩ (rcOf (wildSem wild)) k.1).bind
@@ -242,7 +242,7 @@ theorem literalsOk_of_encode {fields : Finset Name} {ff : {k // k ∈ fields} �
       | some w =>
         rw [hwild] at hw
         rw [show entryCodec (⟨fields, fun k => fieldSem (ff k)⟩ : MapOf FieldSem)
-              (rcOf (wildSem (some w))) k.1 = some (denote w.2) from by
+              (rcOf (wildSem (some w))) k.1 = some (denote w) from by
               simp only [rcOf, wildSem, entryCodec, MapOf.at, dif_neg hk]] at hw
         exact altsOkV_of_term_e (by simpa using hw)
   | true =>
@@ -257,7 +257,7 @@ theorem literalsOk_of_encode {fields : Finset Name} {ff : {k // k ∈ fields} �
 
 /-- …and the read side, at the attribute the same encode produced. -/
 theorem literalsOkA_of_encode {fields : Finset Name} {ff : {k // k ∈ fields} → ObjectSlot}
-    {wild : Option (KeyPat × Term)} (hlaw : ∀ w : KeyPat × Term, wild = some w → Lawful (denote w.2))
+    {wild : Option Term} (hlaw : ∀ w : Term, wild = some w → Lawful (denote w))
     {keys : Finset Name} {f : {k // k ∈ keys} → Value} {g : {k // k ∈ keys} → Attr}
     (hfi : funImage (fun k : {k // k ∈ keys} =>
         (entryCodec ⟨fields, fun k => fieldSem (ff k)⟩ (rcOf (wildSem wild)) k.1).bind
@@ -278,7 +278,7 @@ theorem literalsOkA_of_encode {fields : Finset Name} {ff : {k // k ∈ fields} �
       | some w =>
         rw [hwild] at hw
         rw [show entryCodec (⟨fields, fun k => fieldSem (ff k)⟩ : MapOf FieldSem)
-              (rcOf (wildSem (some w))) k.1 = some (denote w.2) from by
+              (rcOf (wildSem (some w))) k.1 = some (denote w) from by
               simp only [rcOf, wildSem, entryCodec, MapOf.at, dif_neg hk]] at hw
         exact altsOkA_of_term_e (hlaw w hwild) (by simpa using hw)
   | true =>
@@ -296,7 +296,7 @@ theorem literalsOkA_of_encode {fields : Finset Name} {ff : {k // k ∈ fields} �
     option even where its rest codec would hold it. -/
 theorem optionSem_self_admit (t : Term)
     (hlawBlock : ∀ fields ff wild, t = .object (.mk fields ff wild) →
-      ∀ w : KeyPat × Term, wild = some w → Lawful (denote w.2))
+      ∀ w : Term, wild = some w → Lawful (denote w))
     (hlaw : Lawful (denote t)) {v a}
     (he : (denote t).e v = some a) :
     (optionSemOf (denote t) (specOf t)).admitV v = true ∧

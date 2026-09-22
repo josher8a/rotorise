@@ -170,9 +170,9 @@ noncomputable def AdmAField : ObjectSlot → AP
   | .req t => AdmA t
   | .optional t => AdmA t
 
-noncomputable def AdmAWild : Option (KeyPat × Term) → Option AP
+noncomputable def AdmAWild : Option Term → Option AP
   | none => none
-  | some (_, t) => some (AdmA t)
+  | some t => some (AdmA t)
 
 noncomputable def AdmAList : List Term → List AP
   | [] => []
@@ -517,16 +517,16 @@ theorem reqPresentT_eq (fields : Finset Name) (fld : {k // k ∈ fields} → Obj
 /-- **The read side keeps every stored name.** `drop` was the one policy that dropped one,
     and it is gone, so `objRead`'s filter is the identity on the key set and the row owes it
     nothing. -/
-theorem keepB_wild (wild : Option (KeyPat × Term)) (sems : MapOf FieldSem) (k : Name) :
+theorem keepB_wild (wild : Option Term) (sems : MapOf FieldSem) (k : Name) :
     keepB (wildSem wild) sems k = true := by
   cases wild with
   | none => rfl
   | some pt => rfl
 
 theorem entryA_iff {fields : Finset Name} {fld : {k // k ∈ fields} → ObjectSlot}
-    {wild : Option (KeyPat × Term)}
+    {wild : Option Term}
     (hf : ∀ k : {k // k ∈ fields}, ExactAField (fld k))
-    (hr : ∀ p t, wild = some (p, t) → ExactA t) (k : Name) (a : Attr) :
+    (hr : ∀ t, wild = some t → ExactA t) (k : Name) (a : Attr) :
     (match entryPA ⟨fields, fun k => AdmAField (fld k)⟩ (AdmAWild wild) k with
       | some P => P a | none => false) = true ↔
     ((entryCodec ⟨fields, fun k => fieldSem (fld k)⟩ (rcOf (wildSem wild)) k).bind
@@ -538,12 +538,12 @@ theorem entryA_iff {fields : Finset Name} {fld : {k // k ∈ fields} → ObjectS
   · rw [dif_neg hk, dif_neg hk]
     cases wild with
     | none => simp [AdmAWild, wildSem, rcOf]
-    | some pt => simpa [AdmAWild, wildSem, rcOf] using hr pt.1 pt.2 rfl a
+    | some pt => simpa [AdmAWild, wildSem, rcOf] using hr pt rfl a
 
 theorem ExactA_object {fields : Finset Name} {fld : {k // k ∈ fields} → ObjectSlot}
-    {wild : Option (KeyPat × Term)}
+    {wild : Option Term}
     (hf : ∀ k : {k // k ∈ fields}, ExactAField (fld k))
-    (hr : ∀ p t, wild = some (p, t) → ExactA t) :
+    (hr : ∀ t, wild = some t → ExactA t) :
     ExactA (.object (.mk fields fld wild)) := by
   intro a
   cases a
@@ -590,9 +590,9 @@ def ExactAO : Option Term → Prop
   | none => True
   | some t => ExactA t
 
-def ExactAW : Option (KeyPat × Term) → Prop
+def ExactAW : Option Term → Prop
   | none => True
-  | some (_, t) => ExactA t
+  | some t => ExactA t
 
 theorem exactAL_mem : ∀ (ts : List Term), ExactAL ts → ∀ t ∈ ts, ExactA t
   | [], _, t, ht => absurd ht (by simp)
@@ -607,12 +607,12 @@ theorem exactAO_mem : ∀ (tail : Option Term), ExactAO tail → ∀ t ∈ tail,
       have heq : t0 = t := by simpa using ht
       subst heq; exact h
 
-theorem exactAW_codec : ∀ (wild : Option (KeyPat × Term)), ExactAW wild →
-    ∀ p t, wild = some (p, t) → ExactA t
-  | none, _, _, t, h => nomatch h
-  | some (_, t0), h, _, t, hc => by
-      simp only [Option.some.injEq, Prod.mk.injEq] at hc
-      exact hc.2 ▸ h
+theorem exactAW_codec : ∀ (wild : Option Term), ExactAW wild →
+    ∀ t, wild = some t → ExactA t
+  | none, _, t, h => nomatch h
+  | some t0, h, t, hc => by
+      simp only [Option.some.injEq] at hc
+      exact hc ▸ h
 
 /-- `allPA` transported across the entry's exactness. -/
 theorem AdmAAll_iff {c : Term} (h : ExactA c) : ∀ as : List Attr,
@@ -710,9 +710,9 @@ theorem AdmA_exactF : ∀ (fd : ObjectSlot), ExactAField fd
   | .req t0 => fun a => AdmA_exact t0 a
   | .optional t0 => fun a => AdmA_exact t0 a
 
-theorem AdmA_exactW : ∀ (wild : Option (KeyPat × Term)), ExactAW wild
+theorem AdmA_exactW : ∀ (wild : Option Term), ExactAW wild
   | none => trivial
-  | some (_, t0) => AdmA_exact t0
+  | some t0 => AdmA_exact t0
 end
 
 /-! ### The same equation on the read side
@@ -766,8 +766,8 @@ theorem objAdmA_row {c : Body} {keys : Finset Name} {g : {k // k ∈ keys} → A
     `objAdmV_wild`'s twin. -/
 theorem objAdmA_wild {c : Body} {keys : Finset Name} {g : {k // k ∈ keys} → Attr}
     (hB : objAdmA ⟨c.fields, fun k => AdmAField (c.at k)⟩ (AdmAWild c.wild) keys g = true)
-    {k : Name} (hk : k ∈ keys) (hnc : k ∉ c.fields) {w : KeyPat × Term}
-    (hw : c.wild = some w) : AdmA w.2 (g ⟨k, hk⟩) = true := by
+    {k : Name} (hk : k ∈ keys) (hnc : k ∉ c.fields) {w : Term}
+    (hw : c.wild = some w) : AdmA w (g ⟨k, hk⟩) = true := by
   unfold objAdmA at hB
   have hh := of_decide_eq_true hB ⟨k, hk⟩
   rwa [entryPA, MapOf.at, dif_neg hnc, hw, AdmAWild] at hh
@@ -832,7 +832,7 @@ theorem structural_of_AdmABody {b : Body}
         | none => exact absurd (mem_fields_of_admA (b := .mk fields fld wild) hw h k.1 k.2) hnd
         | some w =>
           have hat : (Body.spec (.mk fields fld (some w))).names.at k.1 = none := dif_neg hnd
-          have hws : (Body.spec (.mk fields fld (some w))).wild = some (altsOfTerm w.2) := by
+          have hws : (Body.spec (.mk fields fld (some w))).wild = some (altsOfTerm w) := by
             simp [Body.spec]
           simp only [litOkA, hat, hws]
           exact altsOkA_of_AdmA (objAdmA_wild h'.2 k.2 hnd hw)

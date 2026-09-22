@@ -72,8 +72,8 @@ def ObligationsField : ObjectSlot → Prop
   | .req t' => Obligations t'
   | .optional t' => Obligations t'
 
-def ObligationsWild : Option (KeyPat × Term) → Prop
-  | some (_, t') => Obligations t'
+def ObligationsWild : Option Term → Prop
+  | some t' => Obligations t'
   | none => True
 
 def ObligationsList : List Term → Prop
@@ -342,7 +342,7 @@ theorem soundness_both : ∀ {t T μ}, Typed t T μ → Obligations t → Sound 
         intro c hcr
         cases hrest with
         | none => exact nomatch hcr
-        | @some pat t' T' μ' hty =>
+        | @some t' T' μ' hty =>
           replace hcr : RestSem.codec (denote t') = RestSem.codec c := hcr
           cases hcr
           exact soundness_both hty hob.2
@@ -753,7 +753,7 @@ theorem typed_TSub : ∀ {t T μ}, Typed t T μ → ∀ v, (denote t).T v → T 
           obtain ⟨rc, hrc, hrcT⟩ := hentry
           cases hrest with
           | none => exact nomatch hrc
-          | @some pat t' T'' μ'' hty' =>
+          | @some t' T'' μ'' hty' =>
             replace hrc : some (denote t') = some rc := hrc
             cases hrc
             exact ⟨T'', rfl, typed_TSub hty' _ hrcT⟩
@@ -828,7 +828,7 @@ theorem carrier_denote : ∀ {t T μ}, Typed t T μ → Obligations t → Carrie
         intro rc hcr
         cases hrest with
         | none => exact nomatch hcr
-        | @some pat t' T' μ' hty =>
+        | @some t' T' μ' hty =>
           replace hcr : some (denote t') = some rc := hcr
           cases hcr
           exact carrier_denote hty hob.2

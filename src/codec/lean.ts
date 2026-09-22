@@ -605,15 +605,14 @@ const leanBodyOf = (body: Body, at: string, forced: number): string => {
     /**
      * **The open block, as an `Option` on both sides.** A body is a partition of the key space,
      * so a name is declared, or it falls in the one open block, or the body refuses it. The
-     * closed body is the *absence* of an open block, and `KeyPat.any` is the only pattern there
-     * is — a template or a regular expression would be a second constructor and no table over
-     * bodies would move.
+     * closed body is the *absence* of an open block, and the open block is the term every
+     * undeclared name holds.
      */
     const rest = body.rest
     const restTerm =
         rest === undefined
             ? 'none'
-            : `(some (KeyPat.any, ${leanTermOfTerm(rest, `${at}.rest`, forced)}))`
+            : `(some (${leanTermOfTerm(rest, `${at}.rest`, forced)}))`
     return `(Body.mk ${leanFinset(names)} (${fields}) ${restTerm})`
 }
 

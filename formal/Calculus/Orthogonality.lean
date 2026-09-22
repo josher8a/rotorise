@@ -1155,7 +1155,7 @@ theorem separates_of_orth {x y : Term} (h : Orth x y = true) : Separates x y := 
 theorem uAtCan_of_separated {opts : List Term}
     (hlaw : ∀ t ∈ opts, Lawful (denote t))
     (hblk : ∀ t ∈ opts, ∀ fields ff wild, t = .object (.mk fields ff wild) →
-      ∀ w : KeyPat × Term, wild = some w → Lawful (denote w.2))
+      ∀ w : Term, wild = some w → Lawful (denote w))
     (h : Separated opts) :
     UAtCan opts := by
   refine uniqueAdmission_of_disjoint
@@ -1226,7 +1226,7 @@ theorem admitsAtMostOne_of_orth {opts : List Term}
 theorem uAtCan_of_orth {opts : List Term}
     (hlaw : ∀ t ∈ opts, Lawful (denote t))
     (hblk : ∀ t ∈ opts, ∀ fields ff wild, t = .object (.mk fields ff wild) →
-      ∀ w : KeyPat × Term, wild = some w → Lawful (denote w.2))
+      ∀ w : Term, wild = some w → Lawful (denote w))
     (h : List.Pairwise (fun x y => Orth x y = true) opts) :
     UAtCan opts :=
   uAtCan_of_separated hlaw hblk (separated_of_orth h)
@@ -1235,7 +1235,7 @@ theorem uAtCan_of_orth {opts : List Term}
 theorem uAtAct_of_orth {opts : List Term}
     (hlaw : ∀ t ∈ opts, Lawful (denote t))
     (hblk : ∀ t ∈ opts, ∀ fields ff wild, t = .object (.mk fields ff wild) →
-      ∀ w : KeyPat × Term, wild = some w → Lawful (denote w.2))
+      ∀ w : Term, wild = some w → Lawful (denote w))
     (h : List.Pairwise (fun x y => Orth x y = true) opts) :
     UAtAct opts :=
   uAtAct_of_uAtCan (uAtCan_of_orth hlaw hblk h)
@@ -1383,7 +1383,7 @@ theorem specOf_object {t : Term} {s : BodySpec} (h : specOf t = some s) :
   exact ⟨_, rfl, (Option.some.inj h).symm⟩
 
 /-- A body with no open block holds nothing there: the open part of the held set is absent. -/
-theorem typedWild_none {w : Option (KeyPat × Term)} {R : Option Held} (h : TypedWild w R)
+theorem typedWild_none {w : Option Term} {R : Option Held} (h : TypedWild w R)
     (ho : w.isSome = false) : R = none := by
   cases h <;> simp_all
 
