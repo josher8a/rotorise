@@ -1032,6 +1032,12 @@ export const leanSeparation = ({ name, left, right }: Separation): string => {
  *
  * `Calculus.Vectors` reaches `Denote` and not `Orthogonality`, and adding the import to the
  * committed vector samples would make them depend on a module they have nothing to say about.
+ *
+ * The header imports `Calculus.Separation` as well, because a `held` term spells
+ * `numeralOfStoredText` and `textOfNumeral`, and `Orthogonality` does not reach them. Lean
+ * auto-binds an unknown lower-case name, so the missing import reports a free variable in the
+ * expected type of every verdict rather than an unknown identifier.
+ *
  * Generated at gate time and elaborated, never committed — the counts are in
  * `docs/architecture.md`, which is where the verdict this checks is written down.
  */
@@ -1039,6 +1045,7 @@ export const leanSeparationModule = (
     separations: readonly Separation[],
 ): string =>
     `import Calculus.Orthogonality
+import Calculus.Separation
 
 /-!
 # Declaration-guard verdicts, proposed to the classifier
@@ -1392,7 +1399,14 @@ export const readVectorIsUnstatable = (
     return undefined
 }
 
-/** The read vectors as a module, with what it could not state named in the header. */
+/**
+ * The read vectors as a module, with what it could not state named in the header.
+ *
+ * The header imports `Calculus.Separation` as well, because a `held` term spells
+ * `numeralOfStoredText` and `textOfNumeral`, and `Vectors` does not reach them. Lean auto-binds
+ * an unknown lower-case name, so the missing import leaves `denote` stuck on a free variable and
+ * each vector reports a failed definitional equality rather than an unknown identifier.
+ */
 export const leanReadVectorModule = (vectors: readonly Vector[]): string => {
     const blocked = vectors
         .map((one) => [one, readVectorIsUnstatable(one)] as const)
@@ -1401,6 +1415,7 @@ export const leanReadVectorModule = (vectors: readonly Vector[]): string => {
         (one) => readVectorIsUnstatable(one) === undefined,
     )
     return `import Calculus.Vectors
+import Calculus.Separation
 
 /-!
 # Read vectors, proposed to the model's \`p\`
