@@ -125,7 +125,7 @@ theorem dincomp_map_literal_num {l : List WFNumeral} (hnd : l.Nodup) :
 /-! ## (U) at the numeric base
 
 **`AdmA` does not need to *name* the attributes that read into `ℓ`, only to decide one.** The
-tempting inference is that it does: the stored text goes through `Double.ofDec`, and no
+tempting inference is that it does: the stored text went through the host's decimal reader, and no
 syntactic set of attributes names the numerals reading into a given value. That is a fact about
 *values*. `ofDec` is a **function** — a stored numeral reads to at most one double, and one
 double cannot inhabit two disjoint sets — so the answer is unique without being nameable, and

@@ -92,23 +92,23 @@ attribute that is absent and an attribute holding an undefined value are differe
 
 ## Partially mitigated: the numeric host is an axiom, so no numeric value can be written
 
-**Observation.** `Double` is axiomatized deliberately, because IEEE-754 facts are not this
-calculus's theorems. `Double.toDec` is a field of `NumericHost`, so `Numeral.WF d.toDec` has no
-decision procedure for any `d` a proof can name, and this development holds no concrete `Double`.
+**Observation.** the numeric host was axiomatized deliberately, because IEEE-754 facts are not this
+calculus's theorems. the host's decimal spelling is a field of `NumericHost`, so `Numeral.WF d.toDec` has no
+decision procedure for any `d` a proof can name, and this development holds no concrete host number.
 
-**Effect.** No closed `Double` term exists, so `Value.num` is unconstructible. Three consequences
+**Effect.** No closed host-number term exists, so `Value.num` is unconstructible. Three consequences
 follow, and all three are structural rather than incidental. `number` and a numeric literal can
 never carry a positive encode vector, so the differential corpus is silent on the one base whose
 host semantics are least obvious. `Term.number` is emittable, so it appears in the refusal cross
 product while its value side is blocked. And in the read-side differential the row for `.n` goes
-through `Double.ofDec`, which has no computation rule, so it reduces to neither `true` nor `false`
+through the host's decimal reader, which has no computation rule, so it reduces to neither `true` nor `false`
 and both assertions fail rather than one — which is how a stuck row was told apart from a
 disagreement, `AdmA .decimal` and `AdmA .string` reducing on the same attribute.
 
 **What is mitigated.** The axiom block is checkably an interface rather than binary64 under another
 name. `numericHostWFNumeral` and `numericHostUnit` inhabit `NumericHost` at two types with
 provably different decimal images, by `numericHost_images_differ`, and the first is built with no
-`Double` axiom at all. So every theorem that is really about the interface holds of a host with no
+host axiom at all. So every theorem that is really about the interface holds of a host with no
 rounding. The gate travels as the element's own second component, so admission at a numeric
 literal is exact rather than over-approximating.
 

@@ -848,7 +848,7 @@ theorem ExactV_opaq (lossy : Bool) : ExactV (.opaq lossy) := fun _ => Iff.rfl
     Both directions run through `encSet_base_iff`, and the direction that used to fail is
     the interesting one: `encSet` refuses a *collision*, and a row over the elements cannot
     see one. At a base there is none to see — every base's element map is injective, by
-    `Double.roundtrip` at `number` and by construction at the other three — so the guard
+    the host's round trip at `number` and by construction at the other three — so the guard
     never fires and the element conjunction is the whole domain.
 
     The three wire families are three cases rather than one because the payload types

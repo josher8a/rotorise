@@ -434,7 +434,7 @@ theorem decSet_isSome_false {α : Type} {c : Codec} {inj : α → Attr} {S : NEF
 /-- Elements reading to strings take `decSet`'s first branch. The mirror of
     `encSet_isSome_of` at the read side, and it takes injectivity as a hypothesis rather
     than deriving it from `LawfulCore`: the read side's injectivity is **not** free —
-    `numberCodec.p` goes through `Double.ofDec`, which rounds. -/
+    `numberCodec.p` went through the host's decimal reader, which rounds. -/
 theorem decSet_isSome_str {α : Type} {c : Codec} {inj : α → Attr} {S : NEFinset α}
     (hall : ∀ x ∈ S.1, ((c.p (inj x)).bind vStr).isSome = true)
     (hinj : ∀ x₁ ∈ S.1, ∀ x₂ ∈ S.1, ∀ y, (c.p (inj x₁)).bind vStr = some y →

@@ -1709,8 +1709,16 @@ theorem orth_set_string_number : Orth (.set .string) (.set .number) = true := by
     sees it because the occupancy is a closed form rather than a `⊤`. -/
 theorem orth_number_opaque : Orth .number (.opaq false) = true := by decide
 
-/-- **Separated on the write side only, hence not separated.** A decimal's value is a `.str`
-    and a number's is a `.num`; both store `N`. -/
+/-- **Not separated, and now for the plainest reason: they are one store type.** This used to
+    read "separated on the write side only", because a decimal's value was a `.str` and a
+    number's a `.num` while both stored `N`. Both write a `.num` now, so the pair overlaps on
+    BOTH projections and neither conjunct of `Orth1` has anything to say.
+
+    **The write-side-only witness left with it, and nothing replaces it.** `Value.slot` and
+    `Member` are in bijection at present, so a different slot forces a different member and no
+    pair can be disjoint on one side alone. That is a fact about the present table, not a law:
+    a host carrier given its own slot would part the two maps again and the witness would
+    return. `Orth1` keeps both conjuncts for that reason. -/
 theorem orth_number_decimal : Orth .number .decimal = false := by decide
 
 /-- **They separate now, and this used to be a refutation.** `set(decimal)` wrote a `.strSet`

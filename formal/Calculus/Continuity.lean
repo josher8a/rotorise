@@ -154,7 +154,7 @@ condition becomes a positive one.
 
 Stating it as first-match plus an obligation is what makes it usable: the *definition* takes the
 first admitter and never compares attributes, so no `DecidableEq Attr` is needed (undecidable
-through `Attr.m`'s function field, and noncomputable through `Double` besides), while the
+through `Attr.m`'s function field, and noncomputable through the host besides), while the
 *obligation* says the choice did not matter. So the order-independence that looks lost is
 recovered as a theorem — which places this exactly between the two designs: first-match with no
 obligation is order-dependent, unique admission needs no obligation and is partial. -/
