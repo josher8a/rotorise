@@ -515,8 +515,8 @@ def Attr.Storable (a : Attr) : Prop := Attr.nesting a ≤ maxNesting
     `str` values — one string kind, as in the doc's κ table. -/
 inductive Value where
   | str  (v : String)
-  /-- §1's `N`, carried EXACTLY and as the attribute side already carries it. A host's
-      an axiomatised host type is an approximation of this and the wire's string is a spelling of it.
+  /-- §1's `N`, carried EXACTLY and as the attribute side already carries it. A host's numeric
+      type is an approximation of this and the wire's string is a spelling of it.
       Neither is the datatype, so neither is the carrier: an adapter reaches them. -/
   | num  (v : WFNumeral)
   | bool (v : Bool)
@@ -575,8 +575,8 @@ deriving DecidableEq, Repr
 
     **Reducible**, and that is load-bearing: it lets `Carrier .string` elaborate as `String`, so
     equality at `ℓ` resolves through `String.decEq` and the ordinary instances. An indexed
-    `DecidableEq k.Carrier` instance would work too, and would be *noncomputable* — an axiomatised host type's
-    equality is a field of §1's axiomatized `NumericHost` — which then spreads to every `def`
+    `DecidableEq k.Carrier` instance would work too. It was *noncomputable* while a host type's
+    equality was a field of an axiomatized `NumericHost`, and that spread to every `def`
     that names a literal. -/
 @[reducible] def GroundKind.Carrier : GroundKind → Type
   | .string  => String

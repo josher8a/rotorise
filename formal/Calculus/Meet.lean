@@ -12,16 +12,25 @@ refusal — the pair is one whose admission is a function rather than data, so n
 intersection. `held` refuses on that ground at every partner, `opaq`
 refuses where its closed form cannot be compared with an exact held set, and `refine` refuses at a
 `closure`. A pair that admits a common value and stores it at two members has no meet either, and
-that is a refusal and not an empty one: `string` and `decimal` both admit text, one writes `S` and
-the other `N`, so `never` would claim they share no value when they share every value.
+that is a refusal and not an empty one.
 
-**The same on the read side, and `never` is the empty intersection of BOTH halves.** `number` and
-`decimal` write different value kinds, so they share no value and the bottom is right about the
-write side. They read the same member `N`, so they share every stored numeral the host re-reads
-and the bottom is wrong about the read side. A pair disjoint on one half only is not disjoint,
-which is why `Orth1` conjoins the two occupancies; `never` is for a pair disjoint on both, and
-everything else refuses. `decimal` is the base that meets `string` on values and `number` on
-members, and both crosses refuse.
+**`string` and `decimal` were that pair, and they are no longer.** `decimal` wrote text while its
+carrier was a string, so the two shared every value and `never` would have been wrong about them.
+`decimal` carries a numeral now and writes `N`, so the two share nothing: `Orth1` answers `true`
+for the pair and for the set bases over it. `famSet` and `famLit` still answer `none` there. That
+refusal is conservative rather than necessary, and turning it into the bottom is a change to
+`Term.meet` and so a ruling rather than a repair.
+
+**The same on the read side, and `never` is the empty intersection of BOTH halves.** A pair
+disjoint on one half only is not disjoint, which is why `Orth1` conjoins the two occupancies;
+`never` is for a pair disjoint on both, and everything else refuses.
+
+`number` and `decimal` are the surviving refusal, and they now share BOTH halves: one carrier
+serves both, `decimal` admitting the stored numerals inside it, so the two occupy `.num` and `N`
+together. The bottom is wrong about them on either half. Among the ground and set terms no pair is
+disjoint on one half alone, so the conjunction has no witness left there. It keeps one elsewhere:
+`occV` of a `held` is the top while `occA` of a `held` is its inner term's, so two adapters over
+disjoint natives separate on the read half and not on the write half.
 
 **The write side agrees only where both factors name a member**, and that is weaker than "all three
 write the same way". `μSyn` answers `none` for two different reasons — a term that writes no value
@@ -208,9 +217,10 @@ def Pred.meetAlt (k : GroundKind) [DecidableEq k.Carrier]
 /-- **Two `members` predicates over one base, met.** `none` is a refusal to combine, `some none`
     says the two share no alternative, and `some (some r)` is the combined predicate. The kinds
     are matched in pairs so that every row has a concrete carrier, which is what `Term.meetLit`
-    does and for the same reason: `number` refuses because `DecidableEq WFDouble` is a field of
-    the axiomatised host, so a row there would not reduce. A `closure` refuses because nothing reads a
-    caller's function. -/
+    does. `number` refuses, and the reason it used to carry is gone: its equality came from an
+    axiomatised host, and `DecidableEq` at that carrier now resolves with no host. The refusal
+    stands with no stated reason, and a row would be a change to the meet. A `closure` refuses
+    because nothing reads a caller's function. -/
 def Pred.meetM : Pred → Pred → Option (Option Pred)
   | .members .string A,  .members .string B  => Pred.meetAlt .string A B
   | .members .decimal A, .members .decimal B => Pred.meetAlt .decimal A B
@@ -332,9 +342,10 @@ mutual
 
 /-- Two literals: the same value at the same base, or nothing.
 
-    `number` used to refuse, because its equality came from an axiomatised host; the exact
-    carrier decides, and a row here
-    would be noncomputable — the reason `OrthL` declines at that base. -/
+    `number` refuses, and the reason it used to carry is gone: its equality came from an
+    axiomatised host, and the exact carrier decides, in the shape `decimal`'s row beside it
+    already uses. The refusal stands with no stated reason, and a row would be a change to the
+    meet rather than a repair. -/
 def Term.meetLit : (k : GroundKind) → k.Carrier → (k' : GroundKind) → k'.Carrier → Option Term
   | .string, v, .string, v' => if v = v' then some (.literal .string v) else some .never
   | .decimal, v, .decimal, v' => if v = v' then some (.literal .decimal v) else some .never
@@ -343,8 +354,10 @@ def Term.meetLit : (k : GroundKind) → k.Carrier → (k' : GroundKind) → k'.C
   -- `Unit` has one inhabitant, so two null literals name the same value
   | .null, v, .null, _ => some (.literal .null v)
   | .number, _, .number, _ => none
-  -- the same shared pairs as the rows above, with both sides pinned: `string` shares values
-  -- with `decimal`, and `number` shares the member `N` with it
+  -- the same shared pairs as the rows above, with both sides pinned. `number` shares `N` AND
+  -- the value carrier with `decimal`, which is the one genuine sharing left. `string` shared
+  -- values with `decimal` while `decimal` was text; the two are orthogonal now and these two
+  -- rows are conservative.
   | .string, _, .decimal, _ => none
   | .decimal, _, .string, _ => none
   | .number, _, .decimal, _ => none

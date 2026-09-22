@@ -18,8 +18,8 @@ import Lean
 /-!
 # The axiom base, as a checked claim
 
-**The whole development stands on `propext`, `Classical.choice`, `Quot.sound`, and §1's
-numeric host — no `sorryAx`.** `sanctionedAxioms` below is that claim, and this file turns
+**The whole development stands on `propext`, `Classical.choice` and `Quot.sound` — no
+`sorryAx`.** `sanctionedAxioms` below is that claim, and this file turns
 it from a sentence a reader had to verify by hand with `#print axioms` into a build error.
 
 Here it is a build error instead. `#assert_axioms` collects the axioms a constant actually
