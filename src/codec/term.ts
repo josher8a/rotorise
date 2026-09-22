@@ -842,6 +842,21 @@ export const identifies = (t: Term): boolean => {
             return decidesOwn(t.q) || identifies(t.inner)
         case 'legacy':
             return identifies(t.inner)
+        /**
+         * **A declared adapter over something that identifies.** The reason `held` sits outside
+         * this rule is stated above: `f` runs before the subterm, so the occupancy is unknown and
+         * the value could land in any constructor. {@link Held.writes} is that occupancy, declared.
+         * Where it is present the conversion is one this library wrote and the slots it lands in
+         * are named, so the pair below the adapter is the pair that decides, and the stored side
+         * matches through {@link storedAlternatives} exactly as a tag table does.
+         *
+         * A caller's adapter declares no `writes`, which is the honest answer there and leaves it
+         * on the `default` row. So this certifies `union([number(0, 1), decimal('2', '3')])`, whose
+         * two literal sets are disjoint under one carrier, and certifies nothing about an `f` the
+         * library cannot read.
+         */
+        case 'held':
+            return t.writes !== undefined && identifies(t.inner)
         default:
             return false
     }
