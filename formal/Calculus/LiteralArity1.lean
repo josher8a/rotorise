@@ -119,10 +119,8 @@ theorem dincomp_map_literal_num {l : List WFNumeral} (hnd : l.Nodup) :
   refine hnd.imp ?_
   intro a b hab
   refine Or.inl ⟨fun h => hab ?_, fun h => hab ?_⟩
-  · have h' : Value.num a.1 = Value.num b.1 := h (.num a.1) rfl
-    exact Subtype.ext (by simpa using h')
-  · have h' : Value.num b.1 = Value.num a.1 := h (.num b.1) rfl
-    exact (Subtype.ext (by simpa using h') : b = a).symm
+  · exact Value.num.inj (h (.num a) rfl)
+  · exact (Value.num.inj (h (.num b) rfl)).symm
 
 /-! ## (U) at the numeric base
 
@@ -181,13 +179,10 @@ theorem uAtCan_map_literal_num {l : List WFNumeral} (hnd : l.Nodup) :
     intro a b hab v hv
     cases v
     case num d =>
-      -- the gate is `inL`'s now, on both the hypothesis and the goal
-      cases hw : Numeral.WF d.toDec with
-      | false => simp [inL, hw] at hv
-      | true =>
-        simp only [inL, hw, dite_true, decide_eq_true_eq] at hv
-        simp only [inL, hw, dite_true, decide_eq_false_iff_not, hv]
-        exact hab
+      -- `inL` at `number` is ungated now, so there is no gate to split on
+      simp only [inL, decide_eq_true_eq] at hv
+      simp only [inL, decide_eq_false_iff_not, hv]
+      exact hab
     all_goals simp_all [inL]
 
 /-! ## The two rules, derived — over a `List`, and that is the finding

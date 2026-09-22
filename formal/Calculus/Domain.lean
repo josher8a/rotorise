@@ -224,7 +224,7 @@ and that is what this predicate is.
 the inclusion, both in `Codec.lean`; `Lawful.retract_through_store` is what they buy, which
 is **(R)** with the store in the middle. The two halves for `decimal` are
 `survivesStore_decimalCodec` — the narrowing discharges the premise, because a normalisation
-fixes its own normal forms — and `not_survivesStore_wfDecimalCodec` in `Refutations.lean`, which
+fixes its own normal forms — and `not_survivesStore_numberCodec` in `Refutations.lean`, which
 is the codec that gated on `WF` instead, failing on `"1.500"`. `ker_decimalCodec` is the fact
 both turn on: `decimal`'s kernel is equality, so nothing weaker than "η fixes it" would
 serve. -/

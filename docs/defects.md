@@ -109,8 +109,8 @@ disagreement, `AdmA .decimal` and `AdmA .string` reducing on the same attribute.
 name. `numericHostWFNumeral` and `numericHostUnit` inhabit `NumericHost` at two types with
 provably different decimal images, by `numericHost_images_differ`, and the first is built with no
 `Double` axiom at all. So every theorem that is really about the interface holds of a host with no
-rounding. The gate travels as the element's own second component through `WFDouble`, so admission at
-a numeric literal is exact rather than over-approximating.
+rounding. The gate travels as the element's own second component, so admission at a numeric
+literal is exact rather than over-approximating.
 
 **What remains.** The corpus blind spot. Three pairs of the read-side differential are stuck, not
 divergent, and no vector pins the numeric write path at all.

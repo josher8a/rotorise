@@ -445,6 +445,20 @@ theorem decSet_isSome_str {α : Type} {c : Codec} {inj : α → Attr} {S : NEFin
   rw [(neSetImage_eq_setImage (T := ⟨T, setImage_nonempty hT S.2⟩)).mpr hT]
   rfl
 
+/-- …elements reading to a numeral take the second, the string branch having failed. -/
+theorem decSet_isSome_num {α : Type} {c : Codec} {inj : α → Attr} {S : NEFinset α}
+    {x₀ : α} (hx₀ : x₀ ∈ S.1)
+    (hs : (c.p (inj x₀)).bind vStr = none)
+    (hall : ∀ x ∈ S.1, ((c.p (inj x)).bind vNum).isSome = true)
+    (hinj : ∀ x₁ ∈ S.1, ∀ x₂ ∈ S.1, ∀ y, (c.p (inj x₁)).bind vNum = some y →
+      (c.p (inj x₂)).bind vNum = some y → x₁ = x₂) :
+    (decSet c inj S).isSome = true := by
+  obtain ⟨T, hT⟩ := Option.isSome_iff_exists.mp (setImage_isSome_of hall hinj)
+  unfold decSet
+  rw [neSetImage_none (setImage_none_of hx₀ hs),
+    (neSetImage_eq_setImage (T := ⟨T, setImage_nonempty hT S.2⟩)).mpr hT]
+  rfl
+
 /-- …and elements reading to bytes take the third, the two before it having failed. -/
 theorem decSet_isSome_bin {α : Type} {c : Codec} {inj : α → Attr} {S : NEFinset α}
     {x₀ : α} (hx₀ : x₀ ∈ S.1)

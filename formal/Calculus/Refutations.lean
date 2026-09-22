@@ -528,58 +528,30 @@ which is what settled the question the conditional leaves open. -/
 
 /-- **`literal-N` is a refinement of `number`, with nothing asked for.** This took
     `hD : ∀ d ∈ ls.1, Numeral.WF d.toDec = true` and its docstring said the premise "is the
-    whole of what the prism needed". It still is; it is now `WFDouble`'s, so the containment
-    holds of every literal there is. -/
-theorem literalN_sub_number (y : WFDouble) :
+    whole of what the prism needed". It still is; it is the VALUE carrier's now, so the
+    containment holds of every literal there is and of every value there is. -/
+theorem literalN_sub_number (y : WFNumeral) :
     ∀ v, (literalCodec .number y).T v → numberCodec.T v := by
   rintro v rfl
-  exact ⟨y.1, rfl, y.2⟩
+  exact ⟨y, rfl⟩
 
-/-! ### §3's `(literal)` at `number`, with `ℓᵢ ∈ T` dropped
+/-! ### §3's `(literal)` at `number`, and why the witnesses are all gone now
 
 §3's premise line is `⊢ g : T ⇝ μ, g ground; ℓ₁ … ℓₙ ∈ T`, and at `g = number` the base's held
-set *is* §1's `D` — so the rule already requires `ℓ ⊆ D`. **The two witnesses below show that
-premise is load-bearing: drop it and (B) fails.** That needs an ungated prism to be stated
-about, not an ungated `Term`, which `GroundKind.number.Carrier = WFDouble` no longer admits.
+set *is* §1's `D`, so the rule already requires `ℓ ⊆ D`. Two witnesses here used to show that
+premise load-bearing, stated about ~~literalNRule~~, an ungated prism that was deliberately not
+a `Term` and existed only to carry them.
 
-`literalNRule` is that prism. It is deliberately not a `Term`, no constructor builds it, and it
-exists only to carry the two theorems below — which is why it is here and not in
-`Prisms.lean` with the codecs the calculus uses. -/
+**They are unstatable now, and by the argument the section below already made about a third.**
+Both needed a value outside `D` to point at: `{d : Double} (hw : Numeral.WF d.toDec = false)`.
+`Value.num` carries `WFNumeral`, so there is no such value to quantify over. The gate did not
+weaken; it moved one level further out, from the alternative's carrier to the VALUE's, and
+`ℓ ⊆ D` is now true of everything that can be written down.
 
-/-- `(literal)`'s prism at base `number`, over an ungated `ℓ` — §3's, not ours. -/
-noncomputable def inLNRule (ls : NEFinset WFNumeral) : Value → Bool
-  | .num d => decide (d ∈ ls.1)
-  | _ => false
-
-/-- §3's `(literal)` at `number`, transcribed with the rule's ungated `ℓ`. Not a `Term`. -/
-noncomputable def literalNRule (ls : NEFinset WFNumeral) : Codec :=
-  { numberCodec.restrict (inLNRule ls) with T := fun v => ∃ d ∈ ls.1, v = .num d }
-
-/-- **Drop `ℓᵢ ∈ T` and `(literal)` stops refining `number`.** An alternative outside `D` is
-    held by the ungated prism and not by `number`, so the two disagree about a value one of them
-    claims to hold. This is what the rule's premise buys, stated where it can be stated. -/
-theorem not_literalNRule_sub_number {d : Double} (hw : Numeral.WF d.toDec = false) :
-    ¬ ∀ v, (literalNRule (.of d ∅)).T v → numberCodec.T v := by
-  intro h
-  obtain ⟨d', hd', hwd⟩ := h (.num d) ⟨d, NEFinset.mem_of d ∅, rfl⟩
-  cases Value.num.inj hd'
-  rw [hw] at hwd
-  exact nomatch hwd
-
-/-- **And the consequence is not confined to the held sets.** With `Attr.n` carrying §1's
-    `Numerals`, §3's `(literal-N)` cannot *write* a numeral `𝔸` has no point for — `e` refuses,
-    there being no such attribute. What it does is **hold** the value, since the rule's `T` is
-    its ungated `ℓ`.
-
-    So the failure is *"`T ⊄ dom(e)`"* — **(B)**, and exactly the sentence `(literal-N)` needs
-    `ℓ ⊆ D` to stop being able to say. -/
-theorem literalNRule_holds_what_it_cannot_write {d : Double}
-    (hw : Numeral.WF d.toDec = false) :
-    (literalNRule (.of d ∅)).T (.num d) ∧ (literalNRule (.of d ∅)).e (.num d) = none := by
-  refine ⟨⟨d, NEFinset.mem_of d ∅, rfl⟩, ?_⟩
-  show (if inLNRule (.of d ∅) (.num d) = true then numberCodec.e (.num d) else none) = none
-  rw [if_pos (by simp [inLNRule]), numberCodec_e_num,
-    dif_neg (by rw [hw]; exact Bool.noConfusion)]
+~~inLNRule~~, ~~literalNRule~~, ~~not_literalNRule_sub_number~~ and
+~~literalNRule_holds_what_it_cannot_write~~ go together. What the section keeps is the reason:
+"this cannot be derived" and "this cannot be written" became one claim, and a refutation needs
+a representable counterexample. -/
 
 /-! Two theorems here quantified over a derivation only to read `hD` back off it. With the gate
 in the carrier the derivation argument is unused, `#lint_calculus` reported it, and the honest
@@ -603,43 +575,42 @@ Without this the narrowing reads as a precaution. With it, it is the only option
 and (R) through the store fails on a value the codec claimed to hold. -/
 
 /-- `decimal`, gated on §1's grammar rather than on what the store hands back — which is
-    now **`wfDecimalCodec`, the base `decimal` actually refines**. Since `Attr.n` carries
+    now **`numberCodec`, the base `decimal` actually refines**. Since `Attr.n` carries
     `WF`, there is no wider text-side numeric codec to invent, so this refutation says
     something about the base itself rather than about a codec built for the purpose.
 
     Note its read is *total*: `WF` is the carrier now, so the gate that used to sit on `p`
     has nothing left to reject. That is the whole asymmetry `decimal` adds — `Stored` is a
     strictly smaller set than `WF`, and only the smaller one survives the store. -/
-theorem wfDecimalCodec_e_dec (x : WFNumeral) :
-    wfDecimalCodec.e (.dec x) = some (.n x) := rfl
+theorem numberCodec_e_num' (x : WFNumeral) : numberCodec.e (.num x) = some (.n x) := rfl
 
-theorem wfDecimalCodec_p_n (x : WFNumeral) : wfDecimalCodec.p (.n x) = some (.dec x) := rfl
+theorem numberCodec_p_n' (x : WFNumeral) : numberCodec.p (.n x) = some (.num x) := rfl
 
 /-- `"1.500"` is one of the forms `stored_rejects_denormal` records the store rewriting, and
     the un-narrowed codec claims to hold it. -/
-theorem can_wfDecimalCodec_denormal : Can wfDecimalCodec (.n (.of "1.500")) :=
-  ⟨.dec (.of "1.500"), by rw [wfDecimalCodec_e_dec]⟩
+theorem can_numberCodec_denormal : Can numberCodec (.n (.of "1.500")) :=
+  ⟨.num (.of "1.500"), by rw [numberCodec_e_num']⟩
 
 /-- **The un-narrowed `decimal` does not survive the store.** Any `η` that normalises
     `"1.500"` — which is what DynamoDB was measured to do — falls outside its `ker p`. -/
-theorem not_survivesStore_wfDecimalCodec {η : Attr → Attr}
-    (hη : η (.n (.of "1.500")) = .n (.of "1.5")) : ¬ SurvivesStore wfDecimalCodec η := by
+theorem not_survivesStore_numberCodec {η : Attr → Attr}
+    (hη : η (.n (.of "1.500")) = .n (.of "1.5")) : ¬ SurvivesStore numberCodec η := by
   intro h
-  have hk : wfDecimalCodec.p (η (.n (.of "1.500"))) = wfDecimalCodec.p (.n (.of "1.500")) :=
-    h _ can_wfDecimalCodec_denormal
-  rw [hη, wfDecimalCodec_p_n, wfDecimalCodec_p_n] at hk
-  exact absurd (congrArg Subtype.val (Value.dec.inj (Option.some.inj hk))) (by decide)
+  have hk : numberCodec.p (η (.n (.of "1.500"))) = numberCodec.p (.n (.of "1.500")) :=
+    h _ can_numberCodec_denormal
+  rw [hη, numberCodec_p_n', numberCodec_p_n'] at hk
+  exact absurd (congrArg Subtype.val (Value.num.inj (Option.some.inj hk))) (by decide)
 
 /-- And (R) through the store fails outright: the value is written, the store rewrites the
     attribute, and the codec reads back something else — the shape of the shipped defect. -/
-theorem not_retract_through_store_wfDecimalCodec {η : Attr → Attr}
+theorem not_retract_through_store_numberCodec {η : Attr → Attr}
     (hη : η (.n (.of "1.500")) = .n (.of "1.5")) :
-    wfDecimalCodec.e (.dec (.of "1.500")) = some (.n (.of "1.500")) ∧
-      wfDecimalCodec.p (η (.n (.of "1.500"))) ≠ some (.dec (.of "1.500")) := by
-  refine ⟨by rw [wfDecimalCodec_e_dec], ?_⟩
-  rw [hη, wfDecimalCodec_p_n]
+    numberCodec.e (.num (.of "1.500")) = some (.n (.of "1.500")) ∧
+      numberCodec.p (η (.n (.of "1.500"))) ≠ some (.num (.of "1.500")) := by
+  refine ⟨by rw [numberCodec_e_num'], ?_⟩
+  rw [hη, numberCodec_p_n']
   intro hk
-  exact absurd (congrArg Subtype.val (Value.dec.inj (Option.some.inj hk))) (by decide)
+  exact absurd (congrArg Subtype.val (Value.num.inj (Option.some.inj hk))) (by decide)
 
 /-! ## `union(opaque, c)` is never separable
 

@@ -100,28 +100,21 @@ noncomputable def AdmALit : (k : GroundKind) → k.Carrier → Attr → Bool
   | .boolean, y, .bool b => decide (b = y)
   | .binary,  y, .b b    => decide (b = y)
   | .null,    _, .null   => true
-  -- **The `&& Numeral.WF d.toDec` conjunct used to be written out here**, and it was the
-  -- reason this row was exact while the table's `adm` row was not. It is now the
-  -- carrier's: `y : WFDouble`, so the gate is what names the alternative.
-  | .number,  y, .n x    => (match Double.ofDec x.1 with
-                              | some d =>
-                                  if h : Numeral.WF d.toDec = true then
-                                    decide ((⟨d, h⟩ : WFDouble) = y)
-                                  else false
-                              | none => false)
-  -- `decimal` asks its codec, which is what the retired per-aspect row did at this base too — so the joint row
-  -- and the table row are the *same function* here rather than two spellings that have to be
-  -- proved equal. `number` cannot do this and spells the `ofDec` lookup out, because its answer
-  -- depends on the host's numeric type; `decimal`'s does not.
+  -- **The `ofDec` lookup used to be spelled out here**, because the answer went through the
+  -- host's numeric type. `N` is carried exactly on both sides now, so the attribute payload
+  -- IS the alternative and this row reads like `string`'s beside it.
+  | .number,  y, .n x    => decide (x = y)
+  -- `decimal` asks its codec, which is what the retired per-aspect row did at this base too,
+  -- so the joint row and the table row are the *same function* here rather than two spellings
+  -- that have to be proved equal.
   | .decimal, y, a       => ((literalCodec .decimal y).p a).isSome
   | _, _, _ => false
 
 /-- **What a set base reads.**
 
     Three bases answer concretely: `string` reads `SS` and nothing else, `binary` `BS`,
-    `decimal` an `NS` every numeral of which is `Stored`. `number` **asks its codec** — the
-    same move `admALit .number` (`Discharge.lean`) makes at the same base, and for a related
-    but different reason.
+    `decimal` an `NS` every numeral of which is `Stored`, and `number` every `NS` there is,
+    since the attribute payload is already §1's `Numerals`.
 
     The reason is worth stating, because it is the one residue the re-indexing does *not*
     remove and it is not injectivity of `e`. `numberCodec.p` goes through `Double.ofDec`,
@@ -159,12 +152,7 @@ noncomputable def AdmA : Term → Attr → Bool
   | .boolean  => fun a => match a with | .bool _ => true | _ => false
   | .binary   => fun a => match a with | .b _ => true | _ => false
   | .null     => fun a => match a with | .null => true | _ => false
-  | .number   => fun a =>
-      match a with
-      | .n x => (match Double.ofDec x.1 with
-                 | some d => Numeral.WF d.toDec
-                 | none => false)
-      | _ => false
+  | .number   => fun a => match a with | .n _ => true | _ => false
   | .decimal  => fun a => match a with | .n x => Numeral.Stored x.1 | _ => false
   | .literal k ls => AdmALit k ls
   -- the bottom reads nothing back, and the row is that sentence
@@ -400,27 +388,24 @@ theorem ExactA_set (b : SetBase) : ExactA (.set b) := by
       rw [decide_eq_true_eq]
       constructor
       · intro hst
-        -- the decimal carrier is `.dec` now, so the read lands on `decSet`'s EXACT branch and
-        -- the two before it must be shown to miss
-        have hp : ∀ x ∈ S.1, (decimalCodec.p (Attr.n x)).bind vDec = some x := by
+        -- `decimal` reads a `.num` now, so the read lands on `decSet`'s numeric branch and
+        -- only the string branch before it has to be shown to miss
+        have hp : ∀ x ∈ S.1, (decimalCodec.p (Attr.n x)).bind vNum = some x := by
           intro x hx
-          show ((if Numeral.Stored x.1 then some (Value.dec x) else none).bind vDec) = some x
+          show ((if Numeral.Stored x.1 then some (Value.num x) else none).bind vNum) = some x
           rw [if_pos (hst x hx)]; rfl
         obtain ⟨x₀, hx₀⟩ := S.2
         have hms : (decimalCodec.p (Attr.n x₀)).bind vStr = none := by
-          show ((if Numeral.Stored x₀.1 then some (Value.dec x₀) else none).bind vStr) = none
+          show ((if Numeral.Stored x₀.1 then some (Value.num x₀) else none).bind vStr) = none
           rw [if_pos (hst x₀ hx₀)]; rfl
-        have hmn : (decimalCodec.p (Attr.n x₀)).bind vNum = none := by
-          show ((if Numeral.Stored x₀.1 then some (Value.dec x₀) else none).bind vNum) = none
-          rw [if_pos (hst x₀ hx₀)]; rfl
-        refine decSet_isSome_dec hx₀ hms hmn (fun x hx => by rw [hp x hx]; rfl) ?_
+        refine decSet_isSome_num hx₀ hms (fun x hx => by rw [hp x hx]; rfl) ?_
         intro x₁ h₁ x₂ h₂ y e₁ e₂
         rw [hp x₁ h₁] at e₁; rw [hp x₂ h₂] at e₂
         exact (Option.some.inj e₁).trans (Option.some.inj e₂).symm
       · intro hd x hx
         by_contra hc
         have hn : decimalCodec.p (Attr.n x) = none := by
-          show (if Numeral.Stored x.1 then some (Value.dec x) else none) = none
+          show (if Numeral.Stored x.1 then some (Value.num x) else none) = none
           rw [if_neg hc]
         rw [decSet_isSome_false hx hn] at hd
         exact nomatch hd
@@ -433,7 +418,7 @@ theorem ExactA_set (b : SetBase) : ExactA (.set b) := by
     case binary =>
       obtain ⟨x₀, hx₀⟩ := S.2
       have h : (decSet binaryCodec Attr.b S).isSome = true :=
-        decSet_isSome_bin hx₀ rfl rfl rfl (fun _ _ => rfl) (fun _ _ _ _ _ h1 h2 => by
+        decSet_isSome_bin hx₀ rfl rfl (fun _ _ => rfl) (fun _ _ _ _ _ h1 h2 => by
           simp only [binaryCodec, Option.bind_some, vBin] at h1 h2
           exact (Option.some.inj h1).trans (Option.some.inj h2).symm)
       exact Iff.intro (fun _ => h) (fun _ => rfl)
@@ -711,17 +696,10 @@ theorem AdmA_exact : ∀ (t : Term), ExactA t
   | .boolean => by intro a; cases a <;> simp [AdmA, denote, denote, booleanCodec]
   | .binary => by intro a; cases a <;> simp [AdmA, denote, denote, binaryCodec]
   | .null => by intro a; cases a <;> simp [AdmA, denote, denote, nullCodec]
-  | .number => by
-      intro a
-      cases a
-      case n x =>
-        simp only [AdmA, denote, denote, denote, numberCodec]
-        cases hx : Double.ofDec x.1 <;> simp []
-      all_goals simp [AdmA, denote, denote, numberCodec]
+  | .number => by intro a; cases a <;> simp [AdmA, denote, denote, numberCodec]
   | .decimal => by intro a; cases a <;> simp [AdmA, denote, denote, decimalCodec]
-  -- Three rows into one. The `number` base is the only one needing `Double.ofDec`, and it is
-  -- also the only one where unfolding `numberCodec` is safe here: the `simp only` fixes the
-  -- shape before `Numeral.WF`'s parser can be reached.
+  -- Three rows into one, and `number`'s no longer needs the host lookup that used to make it
+  -- the awkward one: both numeric bases now read the attribute payload directly.
   | .literal k ls => by
       intro a
       cases k
@@ -730,19 +708,15 @@ theorem AdmA_exact : ∀ (t : Term), ExactA t
       case number =>
         cases a
         case n x =>
-          -- through the named shape lemmas, not by unfolding `numberCodec`: its `p` is a
-          -- `bind` over `Double.ofDec` guarded by `Numeral.WF`, and `simp` inside that gate
-          -- reaches the parser and runs out of heartbeats
+          -- `numberCodec.p` is a constructor wrapper now, so the `Double.ofDec` bind and the
+          -- `Numeral.WF` gate this used to walk through are both gone and the row is the
+          -- payload comparison on both sides
           rw [show (denote (Term.literal .number ls)).p (.n x)
                  = (literalCodec .number ls).p (.n x) from rfl,
              literalNCodec_p_n, numberCodec_p_n]
-          cases hx : Double.ofDec x.1 with
-          | none => simp [hx, AdmALit]
-          | some d =>
-            by_cases hw : Numeral.WF d.toDec = true <;>
-              simp [hx, hw, AdmALit, inL]
+          simp [AdmALit, inL]
         -- for every other attribute the base's own read is `none` by a match, so this is
-        -- `rfl` once `AdmA`'s recursion is unfolded — no `numberCodec` in the simp set
+        -- `rfl` once `AdmA`'s recursion is unfolded
         all_goals (simp only [AdmA_literal, AdmALit]; rfl)
       -- the four bases whose stored attribute *is* the value, one tight simp set each: a
       -- shared set has to mention every base's codec, and one of those is `number`

@@ -141,7 +141,7 @@ theorem ker_decimalCodec {x y : WFNumeral} (h : decimalCodec.Ker (.n x) (.n y))
   · rw [if_neg hy] at h'; exact nomatch h'
 
 /-- §1: `Can(decimal)` is the normal forms and a normalisation fixes its own, so `Stored`
-    discharges `η ⊆ ker p`. Necessity is `not_survivesStore_wfDecimalCodec`. -/
+    discharges `η ⊆ ker p`. Necessity is `not_survivesStore_numberCodec`. -/
 theorem survivesStore_decimalCodec {η : Attr → Attr}
     (hη : ∀ s : WFNumeral, Numeral.Stored s.1 = true → η (.n s) = .n s) :
     SurvivesStore decimalCodec η := by
