@@ -598,17 +598,30 @@ const leanBodyOf = (body: Body, at: string, forced: number): string => {
             ([name, field]) =>
                 [
                     leanString(name),
-                    leanFieldOf(field, `${at}.${name}`, forced),
+                    leanSlotOf(field, `${at}.${name}`, forced),
                 ] as const,
         ),
     )
-    // three policies, three terms — the definition records the policy itself, so nothing
-    // here has to guess which of `drop` and `refuse` an absent codec meant
+    /**
+     * **The open block, as an `Option` rather than a policy.** `Rest` was three constructors; a
+     * body is a partition of the key space now, so a name is declared, or it falls in the one open
+     * block, or the body refuses it. `refuse` is therefore the *absence* of an open block and not a
+     * policy beside one, and `KeyPat.any` is the only pattern there is — a template or a regular
+     * expression would be a second constructor and no table over bodies would move.
+     *
+     * `drop` has no spelling and is refused. The model states the reason as a property of the
+     * shape: there is no policy that silently drops a name, on the way in or on the way out.
+     */
     const rest = body.rest
     const restTerm =
-        typeof rest === 'string'
-            ? `Rest.${rest}`
-            : `(Rest.codec (${leanTermOfTerm(rest.t, `${at}.rest`, forced)}))`
+        rest === 'refuse'
+            ? 'none'
+            : rest === 'drop'
+              ? refuse(
+                    `${at}.rest`,
+                    'a body is a partition of the key space, so an undeclared name is declared, open or refused; `drop` would silently discard a name on the way in and on the way out, which the model states no policy for',
+                )
+              : `(some (KeyPat.any, ${leanTermOfTerm(rest.t, `${at}.rest`, forced)}))`
     return `(Body.mk ${leanFinset(names)} (${fields}) ${restTerm})`
 }
 
@@ -766,28 +779,42 @@ const leanTermOfTerm = (t: Term, at: string, forced: number): string => {
     }
 }
 
-/** A `Field` — §4's stratum, which is a *position* in a map and not a codec. */
-const leanFieldOf = (field: TermField, at: string, forced: number): string => {
+/**
+ * An `ObjectSlot` — §4's stratum, which is a *position* in a map and not a codec.
+ *
+ * **`Field` is gone and the slot has two constructors.** A name is required or it is optional, and
+ * the presence lattice reads the rest. This emitted `Field.req` and `Field.optional` against a
+ * model that stopped having them.
+ */
+const leanSlotOf = (field: TermField, at: string, forced: number): string => {
     switch (field.mark) {
         case 'optional':
-            return `Field.optional (${leanTermOfTerm(field.t, at, forced)})`
-        case 'fallback':
-            return `Field.fallback (${leanTermOfTerm(
-                field.t,
-                at,
-                forced,
-            )}) (${leanValueOf(field.v, `${at}.fallback`)})`
-        case 'req':
-            return `Field.req (${leanTermOfTerm(field.t, at, forced)})`
+            return `ObjectSlot.optional (${leanTermOfTerm(field.t, at, forced)})`
         /**
-         * `Field.optional`, because that is what it denotes rather than an approximation of it.
+         * **A field's alternate reader has no slot, and that is deliberate in the model.**
+         *
+         * `LegacyRead` is a structure outside `Term`, carrying the current term and at most one
+         * older reader, so a `Body` has no alternate-reader row to put this in — `ExactA.lean`
+         * states exactly that. A field-level fallback is not a slot the model declined to add; it
+         * is a stratum the model put somewhere else, and nothing here can name it.
+         */
+        case 'fallback':
+            return refuse(
+                at,
+                '`withLegacyRead` on a field has no `ObjectSlot`: the model carries an older reader in `LegacyRead`, which is a structure outside `Term`, so a body has no alternate-reader slot to print',
+            )
+        case 'req':
+            return `ObjectSlot.req (${leanTermOfTerm(field.t, at, forced)})`
+        /**
+         * `ObjectSlot.optional`, because that is what it denotes rather than an approximation of
+         * it.
          *
          * `Value` has no `undefined` and `Value.map` is a key set with a total function on it, so
          * `{ k: undefined }` and `{}` are one `Value` and there is no second thing to mean. The
          * quotient that rests on is {@link leanValueOf}'s, which was already there for `optional`.
          */
         case 'undefinable':
-            return `Field.optional (${leanTermOfTerm(field.t, at, forced)})`
+            return `ObjectSlot.optional (${leanTermOfTerm(field.t, at, forced)})`
     }
 }
 
