@@ -1116,6 +1116,15 @@ export const leanMeet = ({ name, left, right }: MeetPair): string => {
         )
     }
     const answer = meetTerms(one, other)
+    const pair = `Term.meet (${leanTermOf(left, name)})\n      (${leanTermOf(right, name)})`
+    const objects =
+        answer?.kind === 'object'
+            ? [answer]
+            : answer?.kind === 'union' &&
+                answer.options.every((o) => o.kind === 'object')
+              ? (answer.options as readonly Extract<Term, { kind: 'object' }>[])
+              : undefined
+    if (objects) return leanMeetObjects(name, pair, objects, [one, other])
     const rhs =
         answer === undefined
             ? 'none'
@@ -1123,9 +1132,94 @@ export const leanMeet = ({ name, left, right }: MeetPair): string => {
     return [
         `/-- \`${name}\` — the meet \`src/\` computes, put to the model -/`,
         `theorem ${leanIdent(name)} :`,
-        `    Term.meet (${leanTermOf(left, name)})`,
-        `      (${leanTermOf(right, name)}) = ${rhs} := by meet_pair`,
+        `    ${pair} = ${rhs} := by meet_pair`,
     ].join('\n')
+}
+
+/**
+ * **An object answer, stated pointwise**, and a union of object answers option by option. A body is
+ * a total function from the key space to a slot, presented as its declared slots and its block, so
+ * two bodies are one body exactly when their slots agree at every name either declares and their
+ * blocks agree. The model builds its body through a field function that \`rfl\` cannot compare with
+ * the emitted one under the binder, and the pointwise statement is closed at every name, so each
+ * conjunct reduces.
+ *
+ * The names are every field name either operand mentions, which covers every name either answer
+ * can declare. One more position past the last option states that no option follows.
+ */
+const leanMeetObjects = (
+    name: string,
+    pair: string,
+    options: readonly Extract<Term, { kind: 'object' }>[],
+    operands: readonly Term[],
+): string => {
+    const names = new Set<string>()
+    for (const o of options)
+        for (const k of Object.keys(o.body.fields)) names.add(k)
+    for (const t of operands) fieldNamesOf(t, names, 3)
+    const conjuncts = options.flatMap((answer, i) => {
+        const block = answer.body.rest
+        const at = `${name}.meet[${i}]`
+        const blockTerm = block
+            ? leanTermOfTerm(block, `${at}.rest`, 0)
+            : undefined
+        const option = `(${pair}).bind (·.optionAt ${i})`
+        const slot = (k: string): string => {
+            const field = answer.body.fields[k]
+            return field
+                ? leanSlotOf(field, `${at}.${k}`, 0)
+                : `ObjectSlot.optional (${blockTerm ?? 'Term.never'})`
+        }
+        return [
+            ...[...names]
+                .sort()
+                .map(
+                    (k) =>
+                        `(${option}).bind (·.slotAt ${leanString(k)}) = some (${slot(k)})`,
+                ),
+            `(${option}).bind (·.blockOf) = some (${blockTerm ? `some (${blockTerm})` : 'none'})`,
+        ]
+    })
+    if (options.length > 1)
+        conjuncts.push(`(${pair}).bind (·.optionAt ${options.length}) = none`)
+    return [
+        `/-- \`${name}\` — the meet \`src/\` computes, put to the model, name by name -/`,
+        `theorem ${leanIdent(name)} :`,
+        `    ${conjuncts.join(' ∧\n    ')} :=`,
+        conjuncts.length === 1
+            ? '  rfl'
+            : `  ⟨${conjuncts.map(() => 'rfl').join(', ')}⟩`,
+    ].join('\n')
+}
+
+/** Every field name a term mentions, at any depth. A thunk is forced to a bounded depth. */
+const fieldNamesOf = (t: Term, into: Set<string>, forced: number): void => {
+    switch (t.kind) {
+        case 'object':
+            for (const [k, field] of Object.entries(t.body.fields)) {
+                into.add(k)
+                fieldNamesOf(field.t, into, forced)
+            }
+            if (t.body.rest) fieldNamesOf(t.body.rest, into, forced)
+            return
+        case 'union':
+            for (const o of t.options) fieldNamesOf(o, into, forced)
+            return
+        case 'list':
+            for (const e of [...t.pre, ...t.suf]) fieldNamesOf(e, into, forced)
+            if (t.spread) fieldNamesOf(t.spread, into, forced)
+            return
+        case 'refine':
+        case 'held':
+        case 'legacy':
+            fieldNamesOf(t.inner, into, forced)
+            return
+        case 'lazy':
+            if (forced > 0) fieldNamesOf(t.get(), into, forced - 1)
+            return
+        default:
+            return
+    }
 }
 
 /**
@@ -1156,13 +1250,15 @@ verdicts this runs in both directions, the two being one function written twice.
 \`none\` is not the bottom. It says no term states the intersection, where \`.never\` says the
 intersection is empty, and both are asserted here.
 
-**The pairs this module defers, and why.** \`Term.meet\` is structural and reduces, so what is
-left is the binder and not the recursion: an object body's field function quantifies over
-\`Body.shared\`, a \`Finset.filter\` subtype that \`decide\` does not enumerate, and neither
-reduction nor the unfolding set settles the \`∀ k\` under it. Both pairs left are object-against-object
-ones whose answer carries such a body. They are named here and asserted nowhere, which is the honest
-form: a gap that is counted and read, not one that is skipped in silence. The count is pinned in
-\`lean.spec.ts\`, so a *new* deferral fails the suite.
+**An object answer is stated name by name.** A body is a total function from the key space to a
+slot, so two bodies are one body exactly when their slots agree at every name either declares and
+their blocks agree. The model's field function does not reduce under its binder, and each
+pointwise conjunct is closed, so each one reduces. A union of object answers is stated option by
+option.
+
+**The pairs this module defers.** A deferred pair is named here and asserted nowhere, which is the
+honest form: a gap that is counted and read, not one that is skipped in silence. The count is pinned
+in \`lean.spec.ts\`, so a *new* deferral fails the suite.
 ${deferred.length === 0 ? '\nNone today.\n' : deferred.map((name) => `\n* \`${name}\``).join('')}
 -/
 
@@ -1205,10 +1301,12 @@ const MEET_LEMMAS = [
     'Term.listOf',
     'Term.refineOf',
     'ObjectSlot.meet',
-    'Body.reqShared',
     'ObjectSlot.isReq',
     'ObjectSlot.isBottom',
-    'Body.shared',
+    'objSlot',
+    'ObjectSlot.through',
+    'ObjectSlot.isAbsentOpt',
+    'Body.block',
     'meetSRight',
     'meetSRightL',
     'famString',

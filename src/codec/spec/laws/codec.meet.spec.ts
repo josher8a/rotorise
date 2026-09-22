@@ -208,25 +208,45 @@ describe('two object bodies meet over the names both declare', () => {
     })
 
     /**
-     * **An open object against a body refuses, in both orders.** `objObj` refuses a pair unless
-     * both open blocks are absent.
-     * A row the model does not state is a rule the host would be inventing. The pair below is
-     * empty, and the host still answers `undefined`, because no model row certifies the bottom.
+     * **Two bodies meet pointwise, open blocks included.** A body holds its declared fields and
+     * holds every other name at its open block, or at `never` where it is closed. So a declared
+     * name meets the other body's block, and the blocks meet as the default.
      */
-    it('refuses an open block against a body, because the model meets no open block', () => {
+    it('meets an open block pointwise, and keeps the block where both are open', () => {
         const open = termOf(object({ a: string }, [string, optional(string)]))
         const closed = termOf(object({ a: string }))
         const map = termOf(object([string, optional(string)]))
-        const sets = termOf(object([string, optional(string.set('a', 'b'))]))
+        const a = { a: { mark: 'req', t: termOf(string) } }
         for (const [x, y] of [
             [open, map],
-            [closed, map],
-            [map, sets],
-            [open, sets],
+            [map, open],
         ] as const) {
-            expect(meetTerms(x, y)).toBeUndefined()
-            expect(meetTerms(y, x)).toBeUndefined()
+            expect(meetTerms(x, y)).toEqual({
+                kind: 'object',
+                body: { fields: a, rest: termOf(string) },
+            })
         }
+        for (const [x, y] of [
+            [closed, map],
+            [map, closed],
+        ] as const) {
+            expect(meetTerms(x, y)).toEqual({
+                kind: 'object',
+                body: { fields: a },
+            })
+        }
+    })
+
+    /**
+     * **A required name that meets the other body's block at the bottom empties the product.**
+     * `a` holds a string on one side and a set of strings on the other, and both sides require
+     * a value there.
+     */
+    it('meets at the bottom where a required name meets the other block at the bottom', () => {
+        const open = termOf(object({ a: string }, [string, optional(string)]))
+        const sets = termOf(object([string, optional(string.set('a', 'b'))]))
+        expect(meetTerms(open, sets)).toEqual({ kind: 'never' })
+        expect(meetTerms(sets, open)).toEqual({ kind: 'never' })
     })
 })
 

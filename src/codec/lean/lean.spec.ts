@@ -1138,10 +1138,7 @@ const separationPairs = (): readonly Separation[] => {
  * Every pair is emitted, the refusals included. `none` and `.never` are the distinction the meet
  * exists to keep, so a pair this library refuses is as much of a claim as one it answers.
  */
-const MEET_DEFERRED: readonly string[] = [
-    'object_two_fields__meet__object_optional_absent',
-    'union_by_literal__meet__discriminated_union',
-]
+const MEET_DEFERRED: readonly string[] = []
 
 const meetPairs = (): readonly MeetPair[] => {
     const codecs: readonly (readonly [string, AnyCodec])[] = [
@@ -1533,8 +1530,8 @@ describe("the declaration guard, against the model's classifier", () => {
      */
     it('puts every corpus meet to the model', () => {
         const meets = meetPairs()
-        expect(meets.length).toBe(701)
-        expect(MEET_DEFERRED.length).toBe(2)
+        expect(meets.length).toBe(703)
+        expect(MEET_DEFERRED.length).toBe(0)
         if (process.env.EMIT_LEAN_REFUSALS) {
             writeFileSync(
                 join(process.cwd(), 'formal', '.meets.lean'),
