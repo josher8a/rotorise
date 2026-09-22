@@ -55,10 +55,10 @@ mutual
 /-- Fuel sufficient for `opaqCodec` to see all of `v`: leaves need `1`, each container
     layer one more. -/
 def Value.depth : Value → Nat
-  | .str _ | .num _ | .dec _ | .bool _ | .bin _ | .null => 1
+  | .str _ | .num _ | .bool _ | .bin _ | .null => 1
   -- A value set holds scalars, so it is one layer deep whatever its size — the same
   -- reason `SS`/`NS`/`BS` are `2` on the attribute side.
-  | .strSet _ | .numSet _ | .decSet _ | .binSet _ => 2
+  | .strSet _ | .numSet _ | .binSet _ => 2
   | .arr vs => Value.depthL vs + 1
   -- §1's `M` is a key *set* with a function on it, so a map's layer is the largest
   -- entry budget over the key set — a `Finset.sup`, where the array's is a list fold.
@@ -200,13 +200,12 @@ theorem opaqCodec_e_null (lossy : Bool) (n : Nat) :
     (opaqCodec (n+1) lossy).e .null = nullCodec.e .null := by
   cases lossy <;> simp
 
-/-- §3 `(opaque)`, write side at kind `number`. A double outside `D` is admitted by no
-    option, so both sides are `none` — which is why `Uν` carries `HOpaque.num`. -/
-theorem opaqCodec_e_num (lossy : Bool) (n : Nat) (d : Double) :
+/-- §3 `(opaque)`, write side at kind `number`. The non-lossy projection has no numeric
+    option, so it refuses; the lossy one is `numberCodec`, which is now total at `N`. -/
+theorem opaqCodec_e_num (lossy : Bool) (n : Nat) (d : WFNumeral) :
     (opaqCodec (n+1) lossy).e (.num d)
       = (if lossy then numberCodec else Codec.empty).e (.num d) := by
-  by_cases hw : Numeral.WF d.toDec = true <;> cases lossy <;>
-    simp [hw]
+  cases lossy <;> simp
 
 /-- §3 `(opaque)`, write side at kind `set`: the wire member is computed from the elements (`setCodec`), which is why one option covers `SS`, `NS` and `BS`. -/
 theorem opaqCodec_e_strSet (lossy : Bool) (n : Nat) (S : NEFinset String) :
@@ -215,7 +214,7 @@ theorem opaqCodec_e_strSet (lossy : Bool) (n : Nat) (S : NEFinset String) :
   cases he : (setCodec (opaqCodec n lossy)).e (.strSet S) <;>
     cases lossy <;> simp [-setCodec, he]
 
-theorem opaqCodec_e_numSet (lossy : Bool) (n : Nat) (S : NEFinset Double) :
+theorem opaqCodec_e_numSet (lossy : Bool) (n : Nat) (S : NEFinset WFNumeral) :
     (opaqCodec (n+1) lossy).e (.numSet S)
       = (setCodec (opaqCodec n lossy)).e (.numSet S) := by
   cases he : (setCodec (opaqCodec n lossy)).e (.numSet S) <;>
@@ -226,45 +225,6 @@ theorem opaqCodec_e_binSet (lossy : Bool) (n : Nat) (S : NEFinset Bytes) :
       = (setCodec (opaqCodec n lossy)).e (.binSet S) := by
   cases he : (setCodec (opaqCodec n lossy)).e (.binSet S) <;>
     cases lossy <;> simp [-setCodec, he]
-
-/-- **`opaque` does not carry the exact numeral.** `opaqOptions` has no `decimal` option, so
-    `select` finds nothing to admit a `.dec`, and the write refuses. Adding one is possible and
-    would let the NON-LOSSY projection hold numbers exactly, which the `Double` carrier cannot;
-    it is held back because `opaqOptions` resolves by KIND, and `Value.kind` sends `.dec` and
-    `.num` both to `number`, so the option would need a new kind before `select` could part
-    them. -/
-theorem opaqCodec_e_dec (lossy : Bool) (n : Nat) (x : WFNumeral) :
-    (opaqCodec (n+1) lossy).e (.dec x) = none := by
-  cases lossy <;> simp [opaqCodec, altCodec, select, opaqOptions, setCodec, arrayCodec,
-    recordCodec, stringCodec, booleanCodec, binaryCodec, nullCodec, numberCodec, Codec.empty]
-
-/-- **…and `opaque` does not HOLD one either.** No option's held set reaches a `.dec`, so the
-    union's join over the options cannot. Stated for every fuel, since it is the fact the
-    soundness recursion needs at the `set` option. -/
-theorem opaqCodec_T_dec (lossy : Bool) : ∀ (n : Nat) (x : WFNumeral),
-    ¬ (opaqCodec n lossy).T (.dec x)
-  | 0, _ => fun h => nomatch h
-  | n+1, x => by
-      intro h
-      obtain ⟨o, ho, hT⟩ := h
-      simp only [opaqOptions, List.mem_cons, List.not_mem_nil, or_false] at ho
-      cases lossy <;>
-        rcases ho with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;>
-          simp_all [stringCodec, booleanCodec, binaryCodec, nullCodec, numberCodec,
-            Codec.empty, setCodec, arrayCodec, recordCodec]
-
-/-- …and the same at a set of them, because the element write is the one above. -/
-theorem opaqCodec_e_decSet (lossy : Bool) (n : Nat) (S : NEFinset WFNumeral) :
-    (opaqCodec (n+1) lossy).e (.decSet S) = none := by
-  obtain ⟨x₀, hx₀⟩ := S.2
-  have he0 : (opaqCodec n lossy).e (.dec x₀) = none := by
-    cases n with
-    | zero => rfl
-    | succ m => exact opaqCodec_e_dec lossy m x₀
-  have hset : (setCodec (opaqCodec n lossy)).e (.decSet S) = none := by
-    show encSet (opaqCodec n lossy) Value.dec S = none
-    exact Option.not_isSome_iff_eq_none.mp (by simp [encSet_isSome_false hx₀ he0])
-  cases lossy <;> simp [-setCodec, hset]
 
 /-- §3 `(opaque)`, write side at kind `array`: the `L` option, recursing at one less fuel. -/
 theorem opaqCodec_e_arr (lossy : Bool) (n : Nat) (vs : List Value) :
@@ -310,12 +270,6 @@ theorem opaq_e_agree (lossy : Bool) :
       rw [opaqCodec_e_null, opaqCodec_e_null]
   | .num _, n'+1, m'+1, hn, hm => by
       rw [opaqCodec_e_num, opaqCodec_e_num]
-  -- the exact numeral is not one of `opaque`'s options, so both budgets refuse it and
-  -- agreement is between two `none`s
-  | .dec _, n'+1, m'+1, hn, hm => by
-      rw [opaqCodec_e_dec, opaqCodec_e_dec]
-  | .decSet _, n'+1, m'+1, hn, hm => by
-      rw [opaqCodec_e_decSet, opaqCodec_e_decSet]
   | .strSet S, n'+1, m'+1, hn, hm => by
       have hn' : (1:Nat) <= n' := by simp only [Value.depth] at hn; omega
       have hm' : (1:Nat) <= m' := by simp only [Value.depth] at hm; omega
@@ -329,7 +283,7 @@ theorem opaq_e_agree (lossy : Bool) :
       have hm' : (1:Nat) <= m' := by simp only [Value.depth] at hm; omega
       rw [opaqCodec_e_numSet, opaqCodec_e_numSet]
       simp only [setCodec, encSet,
-        show ∀ x : Double, (opaqCodec n' lossy).e (Value.num x)
+        show ∀ x : WFNumeral, (opaqCodec n' lossy).e (Value.num x)
              = (opaqCodec m' lossy).e (Value.num x) from
           fun x => opaq_e_agree lossy (.num x) n' m' hn' hm']
   | .binSet S, n'+1, m'+1, hn, hm => by
@@ -417,11 +371,7 @@ private theorem recordCodec_p_n {c : Codec} (x : WFNumeral) :
 theorem opaqCodec_p_n (lossy : Bool) (n : Nat) (x : WFNumeral) :
     (opaqCodec (n+1) lossy).p (.n x)
       = (if lossy then numberCodec else Codec.empty).p (.n x) := by
-  cases hd : Double.ofDec x with
-  | none => cases lossy <;> simp [hd]
-  | some d =>
-    by_cases hw : Numeral.WF d.toDec = true <;> cases lossy <;>
-      simp [-recordCodec, recordCodec_p_n, hd, hw]
+  cases lossy <;> simp [-recordCodec, recordCodec_p_n]
 
 /-- §3 `(opaque)`, read side at member `SS` — one of the three members routing to the single `set` option, which is the ten-versus-eight asymmetry in the header. -/
 theorem opaqCodec_p_ss (lossy : Bool) (n : Nat) (vs : NEFinset String) :
@@ -588,10 +538,8 @@ theorem decSet_depth {α : Type} {c : Codec} {inj : α → Attr} {S : NEFinset �
   · cases h; rfl
   · split at h
     · cases h; rfl
-    · split at h
-      · cases h; rfl
-      · obtain ⟨T, -, hT⟩ := Option.map_eq_some_iff.mp h
-        cases hT; rfl
+    · obtain ⟨T, -, hT⟩ := Option.map_eq_some_iff.mp h
+      cases hT; rfl
 
 mutual
 
@@ -611,9 +559,6 @@ theorem opaq_e_depth (lossy : Bool) :
   | .null, n'+1, a, he => by
       rw [opaqCodec_e_null] at he
       simp only [nullCodec] at he; cases he; simp [Attr.depth, Value.depth]
-  -- `opaque` writes no exact numeral, so the hypothesis is absurd at both
-  | .dec _, n'+1, a, he => by rw [opaqCodec_e_dec] at he; exact nomatch he
-  | .decSet _, n'+1, a, he => by rw [opaqCodec_e_decSet] at he; exact nomatch he
   | .num d, n'+1, a, he => by
       rw [opaqCodec_e_num] at he
       cases lossy with
@@ -621,9 +566,7 @@ theorem opaq_e_depth (lossy : Bool) :
       | true =>
         replace he : numberCodec.e (.num d) = some a := he
         rw [numberCodec_e_num] at he
-        by_cases hw : Numeral.WF d.toDec = true
-        · rw [dif_pos hw] at he; cases he; simp [Attr.depth, Value.depth]
-        · rw [dif_neg hw] at he; exact nomatch he
+        cases he; simp [Attr.depth, Value.depth]
   | .strSet S, n'+1, a, he => by
       rw [opaqCodec_e_strSet] at he
       rw [encSet_depth (c := opaqCodec n' lossy) (vinj := Value.str) he]
@@ -693,14 +636,7 @@ theorem opaq_p_n_depth (lossy : Bool) (x : WFNumeral) :
       | true =>
         replace hp : numberCodec.p (.n x) = some v := hp
         rw [numberCodec_p_n] at hp
-        cases hd : Double.ofDec x.1 with
-        | none => rw [hd] at hp; exact nomatch hp
-        | some d =>
-          rw [hd] at hp
-          replace hp : (if Numeral.WF d.toDec then some (Value.num d) else none) = some v := hp
-          by_cases hw : Numeral.WF d.toDec = true
-          · rw [if_pos hw] at hp; cases hp; simp [Value.depth]
-          · rw [if_neg hw] at hp; exact nomatch hp
+        cases hp; simp [Value.depth]
 
 /-- …and the wire set itself is exactly one level above its leaves. `decSet` produces one
     of the three value-set constructors, and those hold scalars. -/

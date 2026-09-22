@@ -41,7 +41,7 @@ theorem carrier_decimalCodec : Carrier decimalCodec := by
   refine ⟨?_, ?_⟩
   · intro v a h
     cases v with
-    | dec x =>
+    | num x =>
       replace h : (if Numeral.Stored x.1 = true then some (Attr.n x) else none) = some a := h
       cases hw : Numeral.Stored x.1
       · rw [hw, if_neg (by simp)] at h; exact nomatch h
@@ -50,7 +50,7 @@ theorem carrier_decimalCodec : Carrier decimalCodec := by
   · intro a v h
     cases a with
     | n x =>
-      replace h : (if Numeral.Stored x.1 = true then some (Value.dec x) else none) = some v := h
+      replace h : (if Numeral.Stored x.1 = true then some (Value.num x) else none) = some v := h
       cases hw : Numeral.Stored x.1
       · rw [hw, if_neg (by simp)] at h; exact nomatch h
       · rw [hw, if_pos (by simp)] at h; cases h; exact ⟨x, rfl, hw⟩
@@ -71,28 +71,17 @@ theorem carrier_nullCodec : Carrier nullCodec :=
     (by funext v; cases v <;> rfl) (by funext a; cases a <;> rfl)
     (fun _ h => h.elim fun _ hh => hh) carrier_pointCodec
 
+/-- **Both halves are total at `N` now**, so neither direction has a gate to split on: the
+    carrier is the held set. -/
 theorem carrier_numberCodec : Carrier numberCodec := by
   refine ⟨?_, ?_⟩
   · intro v a h
     cases v with
-    | num d =>
-      rw [numberCodec_e_num] at h
-      by_cases hw : Numeral.WF d.toDec = true
-      · exact ⟨d, rfl, hw⟩
-      · rw [dif_neg hw] at h; exact nomatch h
+    | num x => exact ⟨x, rfl⟩
     | _ => exact nomatch h
   · intro a v h
     cases a with
-    | n x =>
-      rw [numberCodec_p_n] at h
-      cases hd : Double.ofDec x.1 with
-      | none => rw [hd] at h; exact nomatch h
-      | some d =>
-        rw [hd] at h
-        replace h : (if Numeral.WF d.toDec then some (Value.num d) else none) = some v := h
-        by_cases hw : Numeral.WF d.toDec = true
-        · rw [if_pos hw] at h; cases h; exact ⟨d, rfl, hw⟩
-        · rw [if_neg hw] at h; exact nomatch h
+    | n x => rw [numberCodec_p_n] at h; cases h; exact ⟨x, rfl⟩
     | _ => exact nomatch h
 
 /-! ### Sums -/
@@ -208,13 +197,13 @@ theorem carrier_extendRead {c : Codec} {r : Attr → Option Value} (hc : Carrier
     are no longer conditions at all — the `Finset` carries them. -/
 theorem carrier_setCodec {c : Codec} (hc : Carrier c) : Carrier (setCodec c) where
   domE he := by
-    rcases setCodec_e_eq.mp he with ⟨S, rfl, hE⟩ | ⟨S, rfl, hE⟩ | ⟨S, rfl, hE⟩ | ⟨S, rfl, hE⟩ <;>
+    rcases setCodec_e_eq.mp he with ⟨S, rfl, hE⟩ | ⟨S, rfl, hE⟩ | ⟨S, rfl, hE⟩ <;>
       refine fun x hx => ?_ <;>
       · obtain ⟨b, hb⟩ := Option.isSome_iff_exists.mp (encSet_elem hE x hx)
         exact hc.domE hb
   ranP hp := by
     rcases setCodec_p_eq.mp hp with ⟨S, rfl, hD⟩ | ⟨S, rfl, hD⟩ | ⟨S, rfl, hD⟩ <;>
-      · rcases decSet_mem hD with ⟨T, rfl, hm⟩ | ⟨T, rfl, hm⟩ | ⟨T, rfl, hm⟩ | ⟨T, rfl, hm⟩ <;>
+      · rcases decSet_mem hD with ⟨T, rfl, hm⟩ | ⟨T, rfl, hm⟩ | ⟨T, rfl, hm⟩ <;>
         · refine fun y hy => ?_
           obtain ⟨x, -, hx⟩ := hm y hy
           exact hc.ranP hx

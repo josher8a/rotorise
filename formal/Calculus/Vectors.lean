@@ -382,12 +382,10 @@ def veq : Nat → Value → Value → Verdict
   | _ + 1, .bool a, .bool b => if a = b then .same else .differ
   | _ + 1, .bin a,  .bin b  => if a = b then .same else .differ
   | _ + 1, .null,   .null   => .same
-  | _ + 1, .num _,  .num _  => .exhausted
-  | _ + 1, .numSet _, .numSet _ => .exhausted
-  -- the EXACT numeral decides, where the `Double` carrier above cannot: its equality is the
-  -- text's, not the axiomatised host's
-  | _ + 1, .dec a,  .dec b  => if a.1 = b.1 then .same else .differ
-  | _ + 1, .decSet a, .decSet b => if fsetEq a.1 b.1 then .same else .differ
+  -- **`N` DECIDES now.** Its equality is the numeral text's, not an axiomatised host's, so
+  -- these two rows stopped being `.exhausted` when the carrier stopped being a `Double`.
+  | _ + 1, .num a,  .num b  => if a.1 = b.1 then .same else .differ
+  | _ + 1, .numSet a, .numSet b => if fsetEq a.1 b.1 then .same else .differ
   | _ + 1, .strSet a, .strSet b => if fsetEq a.1 b.1 then .same else .differ
   | _ + 1, .binSet a, .binSet b => if fsetEq a.1 b.1 then .same else .differ
   | n + 1, .arr a,  .arr b  => zipAllV (veq n) a b
@@ -434,16 +432,13 @@ theorem veq_sound : ∀ (n : Nat) (a b : Value),
     | .str _, .str _ | .bin _, .bin _ | .bool _, .bool _ =>
       refine ⟨fun h => ?_, fun h hq => ?_⟩ <;>
         · simp only [veq] at h; split at h <;> simp_all
-    | .dec _, .dec _ =>
+    | .num _, .num _ =>
       refine ⟨fun h => ?_, fun h hq => ?_⟩ <;>
         · simp only [veq] at h; split at h <;> simp_all [Subtype.ext_iff]
-    | .strSet _, .strSet _ | .binSet _, .binSet _ | .decSet _, .decSet _ =>
+    | .strSet _, .strSet _ | .binSet _, .binSet _ | .numSet _, .numSet _ =>
       refine ⟨fun h => ?_, fun h hq => ?_⟩ <;>
         · simp only [veq] at h; split at h <;> simp_all [Subtype.ext_iff]
     | .null, .null => exact ⟨fun _ => rfl, fun h => by simp [veq] at h⟩
-    -- the two `Double` rows answer `.exhausted`, so both obligations are vacuous
-    | .num _, .num _ | .numSet _, .numSet _ =>
-      exact ⟨fun h => by simp [veq] at h, fun h => by simp [veq] at h⟩
     | .arr as, .arr bs =>
       obtain ⟨hs, hd⟩ := zipAllV_sound ihs ihd as bs
       exact ⟨fun h => congrArg Value.arr (hs h), fun h hq => hd h (by cases hq; rfl)⟩
@@ -480,50 +475,36 @@ theorem veq_sound : ∀ (n : Nat) (a b : Value),
     -- CONSTRUCTORS: `simp [veq]` reduces the row only when it knows them, and `cases hq`
     -- discharges `a = b` only when they visibly differ. A `| _, _ =>` catch-all typechecks
     -- as a pattern and then proves neither half.
-    | .str _, .num _ | .str _, .dec _ | .str _, .bool _
-    | .str _, .bin _ | .str _, .null | .str _, .strSet _
-    | .str _, .numSet _ | .str _, .decSet _ | .str _, .binSet _
-    | .str _, .arr _ | .str _, .map _ _ | .num _, .str _
-    | .num _, .dec _ | .num _, .bool _ | .num _, .bin _
+    | .str _, .num _ | .str _, .bool _ | .str _, .bin _
+    | .str _, .null | .str _, .strSet _ | .str _, .numSet _
+    | .str _, .binSet _ | .str _, .arr _ | .str _, .map _ _
+    | .num _, .str _ | .num _, .bool _ | .num _, .bin _
     | .num _, .null | .num _, .strSet _ | .num _, .numSet _
-    | .num _, .decSet _ | .num _, .binSet _ | .num _, .arr _
-    | .num _, .map _ _ | .dec _, .str _ | .dec _, .num _
-    | .dec _, .bool _ | .dec _, .bin _ | .dec _, .null
-    | .dec _, .strSet _ | .dec _, .numSet _ | .dec _, .decSet _
-    | .dec _, .binSet _ | .dec _, .arr _ | .dec _, .map _ _
-    | .bool _, .str _ | .bool _, .num _ | .bool _, .dec _
-    | .bool _, .bin _ | .bool _, .null | .bool _, .strSet _
-    | .bool _, .numSet _ | .bool _, .decSet _ | .bool _, .binSet _
-    | .bool _, .arr _ | .bool _, .map _ _ | .bin _, .str _
-    | .bin _, .num _ | .bin _, .dec _ | .bin _, .bool _
+    | .num _, .binSet _ | .num _, .arr _ | .num _, .map _ _
+    | .bool _, .str _ | .bool _, .num _ | .bool _, .bin _
+    | .bool _, .null | .bool _, .strSet _ | .bool _, .numSet _
+    | .bool _, .binSet _ | .bool _, .arr _ | .bool _, .map _ _
+    | .bin _, .str _ | .bin _, .num _ | .bin _, .bool _
     | .bin _, .null | .bin _, .strSet _ | .bin _, .numSet _
-    | .bin _, .decSet _ | .bin _, .binSet _ | .bin _, .arr _
-    | .bin _, .map _ _ | .null, .str _ | .null, .num _
-    | .null, .dec _ | .null, .bool _ | .null, .bin _
-    | .null, .strSet _ | .null, .numSet _ | .null, .decSet _
+    | .bin _, .binSet _ | .bin _, .arr _ | .bin _, .map _ _
+    | .null, .str _ | .null, .num _ | .null, .bool _
+    | .null, .bin _ | .null, .strSet _ | .null, .numSet _
     | .null, .binSet _ | .null, .arr _ | .null, .map _ _
-    | .strSet _, .str _ | .strSet _, .num _ | .strSet _, .dec _
-    | .strSet _, .bool _ | .strSet _, .bin _ | .strSet _, .null
-    | .strSet _, .numSet _ | .strSet _, .decSet _ | .strSet _, .binSet _
-    | .strSet _, .arr _ | .strSet _, .map _ _ | .numSet _, .str _
-    | .numSet _, .num _ | .numSet _, .dec _ | .numSet _, .bool _
+    | .strSet _, .str _ | .strSet _, .num _ | .strSet _, .bool _
+    | .strSet _, .bin _ | .strSet _, .null | .strSet _, .numSet _
+    | .strSet _, .binSet _ | .strSet _, .arr _ | .strSet _, .map _ _
+    | .numSet _, .str _ | .numSet _, .num _ | .numSet _, .bool _
     | .numSet _, .bin _ | .numSet _, .null | .numSet _, .strSet _
-    | .numSet _, .decSet _ | .numSet _, .binSet _ | .numSet _, .arr _
-    | .numSet _, .map _ _ | .decSet _, .str _ | .decSet _, .num _
-    | .decSet _, .dec _ | .decSet _, .bool _ | .decSet _, .bin _
-    | .decSet _, .null | .decSet _, .strSet _ | .decSet _, .numSet _
-    | .decSet _, .binSet _ | .decSet _, .arr _ | .decSet _, .map _ _
-    | .binSet _, .str _ | .binSet _, .num _ | .binSet _, .dec _
-    | .binSet _, .bool _ | .binSet _, .bin _ | .binSet _, .null
-    | .binSet _, .strSet _ | .binSet _, .numSet _ | .binSet _, .decSet _
-    | .binSet _, .arr _ | .binSet _, .map _ _ | .arr _, .str _
-    | .arr _, .num _ | .arr _, .dec _ | .arr _, .bool _
+    | .numSet _, .binSet _ | .numSet _, .arr _ | .numSet _, .map _ _
+    | .binSet _, .str _ | .binSet _, .num _ | .binSet _, .bool _
+    | .binSet _, .bin _ | .binSet _, .null | .binSet _, .strSet _
+    | .binSet _, .numSet _ | .binSet _, .arr _ | .binSet _, .map _ _
+    | .arr _, .str _ | .arr _, .num _ | .arr _, .bool _
     | .arr _, .bin _ | .arr _, .null | .arr _, .strSet _
-    | .arr _, .numSet _ | .arr _, .decSet _ | .arr _, .binSet _
-    | .arr _, .map _ _ | .map _ _, .str _ | .map _ _, .num _
-    | .map _ _, .dec _ | .map _ _, .bool _ | .map _ _, .bin _
-    | .map _ _, .null | .map _ _, .strSet _ | .map _ _, .numSet _
-    | .map _ _, .decSet _ | .map _ _, .binSet _ | .map _ _, .arr _ =>
+    | .arr _, .numSet _ | .arr _, .binSet _ | .arr _, .map _ _
+    | .map _ _, .str _ | .map _ _, .num _ | .map _ _, .bool _
+    | .map _ _, .bin _ | .map _ _, .null | .map _ _, .strSet _
+    | .map _ _, .numSet _ | .map _ _, .binSet _ | .map _ _, .arr _ =>
       exact ⟨fun h => by simp [veq] at h, fun _ hq => by cases hq⟩
 
 /-- `.same` lifted to the `Option Value` a codec's read actually returns — what a generated
@@ -596,7 +577,7 @@ generator's own value emitter already reported the real impossibility, at `Value
 nothing and *deleting* the term-level refusal was the whole fix.
 
 A numeric `literal` is the case that does not follow, and the contrast is the useful part:
-`Term.literal GroundKind.number ls` needs `ls : NEFinset Double`, so **the term itself** has no
+`Term.literal GroundKind.number ls` needs `ls : NEFinset WFNumeral`, so **the term itself** has no
 closed expression and no vector of either kind reaches it. Term-inexpressible and
 value-inexpressible are two boundaries, and this file's old sentence had them as one.
 -/

@@ -21,11 +21,10 @@ Mechanization of the specification, `docs/blueprint/src/content.tex`. Modelling 
   kernel's restriction is narrower than it looks: it rejects a `Finset` whose element type
   is the datatype being declared, which is why `union`'s payload is still a list (see
   `Calculus/LiteralArity1.lean`), and accepts one over a concrete type in the same constructor.
-* `Double` is axiomatized with exactly the shortest-text round trip the doc's `(number)`
-  case consumes. That is an IEEE-754 fact, not a theorem of this calculus. It is asserted as
-  *one* thing — `numericHost : NumericHost Double` — so what the calculus assumes about
-  numbers is an interface a reader can inspect and inhabit, rather than five axioms that
-  must be collected before the question can even be asked.
+* **`N` is carried exactly and this calculus assumes nothing about any numeric type.** The
+  value side of `N` is `WFNumeral`, the subtype `Numeral.WF` cuts out, so there is no host
+  axiom here at all. `NumericHost` states what a PORT owes if it wants to hand its own
+  numeric type to a caller, and `numericHostWFNumeral` is the trivial inhabitant.
 -/
 
 namespace Calculus
@@ -287,20 +286,18 @@ theorem stored_lt_wf : ∃ s, WF s = true ∧ Stored s = false := ⟨"1.500", by
 
 end Numeral
 
-/-! ### The numeric host, as an interface rather than five assumptions
+/-! ### The numeric host, as a PORT's obligation rather than this calculus's assumption
 
-Five separate axioms cannot be *inspected*: a reader asking "what exactly is assumed about the
-host?" would have to collect them, and nothing in the development could quantify over the
-answer.
+The calculus carries `N` exactly, as `WFNumeral`, so it assumes nothing about any numeric type
+and the axiom block that used to sit here is gone with its `Double`.
 
-`NumericHost` is that answer, as one structure. The axiom block below is then two lines —
-a type, and the claim that it carries the interface — and the `Double.*` names are
-`def`s projecting out of it, so every call site is unchanged. What this buys is not the
-count. It is that the assumption is now a **first-class object**, so the claim the block
-was always making — *the calculus does not depend on binary64, only on a host with a
-decimal spelling that re-reads* — becomes checkable. `numericHostWFNumeral` and
-`numericHostUnit` below are two inhabitants with provably different decimal images, and
-the first needs no `Double` axiom at all. -/
+`NumericHost` survives, and it means something different now. A target language that wants to
+hand its own numeric type to a caller states that the type is a `NumericHost` and adapts to `N`
+through it. A host double, an arbitrary-precision decimal, and a vendor SDK's own numeric wrapper are
+each such a type. That is the port's
+obligation, stated once, and the two inhabitants below are evidence that it is inhabitable at
+both extremes. `numericHostWFNumeral` is the trivial one: `toDec` is `Subtype.val`, the adapter
+is the identity, and it needs no axiom. -/
 
 /-- **What §1 assumes of the numeric host, and all it assumes.** A decimal spelling, a
     partial reader, the round trip §3's `(number)` needs, and decidable equality. -/
@@ -313,27 +310,6 @@ structure NumericHost (D : Type) where
   roundtrip : ∀ d, ofDec (toDec d) = some d
   /-- Equality is decidable (bit patterns, for binary64; NaN excluded from the model). -/
   decEq : DecidableEq D
-
-/-- IEEE-754 binary64, opaque. -/
-axiom Double : Type
-
-/-- …and the whole of what is assumed about it: that it is a `NumericHost`. -/
-axiom numericHost : NumericHost Double
-
-/-- Shortest decimal text reading back as the same double. -/
-noncomputable def Double.toDec : Double → Numeral := numericHost.toDec
-
-/-- Read a numeral as a double (rounding), where the magnitude admits one. -/
-noncomputable def Double.ofDec : Numeral → Option Double := numericHost.ofDec
-
-/-- The §3 `(number)` round trip: shortest text re-reads exactly. -/
-theorem Double.roundtrip : ∀ d : Double, Double.ofDec (Double.toDec d) = some d :=
-  numericHost.roundtrip
-
-/-- Equality of doubles is decidable (bit patterns; NaN excluded from the model). -/
-@[instance_reducible] noncomputable def Double.decEq : DecidableEq Double := numericHost.decEq
-
-attribute [instance] Double.decEq
 
 /-- **Kinds.** The eight shapes the value language is partitioned into — and the eight
     the attribute domain collapses onto, since the three wire sets are one kind and the
@@ -363,7 +339,7 @@ canonical representative, hence a sort, hence an order — and `LinearOrder Stri
 caught it, and `f3bb956` deleted the 247 lines of axiom-free order built to get around it.
 
 None of that is needed any more, and the reason is this abbreviation: both sides of every wire
-set are now a `Finset` of a *concrete element type* — `NEFinset String`, `NEFinset Double`,
+set are now a `Finset` of a *concrete element type* — `NEFinset String`, `NEFinset WFNumeral`,
 `NEFinset Bytes` on `Value`, the same on `Attr` — so there is no list to sort and no
 representative to choose. The file is deleted; this note is the part of it that was load-bearing.
 -/
@@ -379,26 +355,10 @@ abbrev WFNumeral := {x : Numeral // Numeral.WF x = true}
 /-- A numeral in the form the store hands back — §1's `Stored`, carried rather than gated.
 
     This is `decimal`'s literal carrier, and the reason `decimal` is worth a ground base of its
-    own. At `number` the alternatives are `Double`s and `(literal)`'s premise `ℓ ⊆ D` is a *gate*
-    outside the carrier, which is why `adm (.literal .number ls)` over-approximates by exactly
-    that conjunct. Here the gate is the subtype, so `inL` is the whole of admission and the row
-    is exact by construction. -/
+    own. Both this and `WFNumeral` are gates carried as subtypes, so `inL` is the whole of
+    admission at either and the row is exact by construction. `Stored` is the narrower of the
+    two: what the store hands back, against what it accepts. -/
 abbrev StoredNumeral := {s : Numeral // Numeral.Stored s = true}
-
-/-- **A double §1's `D` contains** — `(literal)`'s `ℓ ⊆ D`, carried rather than gated.
-
-    The third of the three gated carriers, with `WFNumeral` and `StoredNumeral` above. What it
-    buys is what `StoredNumeral`'s docstring says of `decimal`: the gate is the subtype, so `inL`
-    is the whole of admission and `adm (.literal .number ls)` is exact rather than
-    over-approximating by the `WF` conjunct.
-
-    **No `.of` helper, and the reason is `Double`.** `WFNumeral.of` can default its proof to
-    `by decide` because a numeral is a `String` and `WF` is a decidable predicate on one. A
-    `Double` is an axiom and `Double.toDec` is a field of `NumericHost`, so `Numeral.WF d.toDec`
-    has no decision procedure for any `d` a proof can name — and there is no concrete `Double`
-    in this development to want one for. Every site quantifies over doubles, so the gate travels
-    as the element's own second component, which is what made this change mechanical. -/
-abbrev WFDouble := {d : Double // Numeral.WF d.toDec = true}
 
 /-- A literal numeral, with §1's check discharged where it is written. `WF` is decidable
     by construction, so a concrete numeral carries its own proof and no witness in this
@@ -555,20 +515,17 @@ def Attr.Storable (a : Attr) : Prop := Attr.nesting a ≤ maxNesting
     `str` values — one string kind, as in the doc's κ table. -/
 inductive Value where
   | str  (v : String)
-  | num  (v : Double)
-  /-- §1's `N` carried EXACTLY, as the attribute side already carries it. The store's `N` is a
-      38-digit decimal; `Double` is the host's approximation of it and `str` is the wire's.
-      Neither is the datatype, so the exact numeral is its own carrier here. -/
-  | dec  (v : WFNumeral)
+  /-- §1's `N`, carried EXACTLY and as the attribute side already carries it. A host's
+      `Double` is an approximation of this and the wire's string is a spelling of it.
+      Neither is the datatype, so neither is the carrier: an adapter reaches them. -/
+  | num  (v : WFNumeral)
   | bool (v : Bool)
   | bin  (v : Bytes)
   | null
   /-- The reference: "The set types are string set, number set, and binary set." Three
       concrete element types, so each is a genuine `Finset`. -/
   | strSet (v : NEFinset String)
-  | numSet (v : NEFinset Double)
-  /-- …and the same for `NS`, which is one wire set with two value carriers. -/
-  | decSet (v : NEFinset WFNumeral)
+  | numSet (v : NEFinset WFNumeral)
   | binSet (v : NEFinset Bytes)
   | arr  (v : List Value)
   /-- …and the value side of the same, for the same reason. -/
@@ -578,14 +535,11 @@ inductive Value where
 def Value.kind : Value → Kind
   | .str _  => .string
   | .num _  => .number
-  -- the exact carrier is the SAME kind as the host's approximation: both are `N`
-  | .dec _  => .number
   | .bool _ => .boolean
   | .bin _  => .binary
   | .null   => .null
   | .strSet _ => .set
   | .numSet _ => .set
-  | .decSet _ => .set
   | .binSet _ => .set
   | .arr _  => .array
   | .map _ _ => .map
@@ -626,9 +580,9 @@ deriving DecidableEq, Repr
     that names a literal. -/
 @[reducible] def GroundKind.Carrier : GroundKind → Type
   | .string  => String
-  -- Gated, for the reason `WFDouble` gives: §3's `ℓ ⊆ D` is this base's carrier, not a premise
-  -- beside it. ~~LiteralD~~ was that premise and is deleted.
-  | .number  => WFDouble
+  -- §3's `ℓ ⊆ D` is this base's carrier and not a premise beside it. ~~LiteralD~~ was that
+  -- premise and is deleted. `D` IS the well-formed numerals now, so the carrier says so.
+  | .number  => WFNumeral
   -- §1's stored numerals, as a subtype. See `StoredNumeral`: the gate `number` carries as a
   -- premise is this base's carrier, which is the whole point of having the base.
   | .decimal => StoredNumeral
@@ -639,11 +593,10 @@ deriving DecidableEq, Repr
 /-- An alternative, as the value it is. Injective at every base. -/
 @[simp] def GroundKind.toValue : (k : GroundKind) → k.Carrier → Value
   | .string,  s => .str s
-  -- the gate is the element's second component; the value is the double it carries
-  | .number,  d => .num d.1
-  -- `decimal` holds its numeral EXACTLY and stores it as `N`. The value side is a `.dec`,
-  -- its own carrier: the text is the wire's, forced by JSON, and not the datatype's.
-  | .decimal, x => .dec ⟨x.1, Numeral.stored_wf x.2⟩
+  -- `number` is now the IDENTITY at its carrier: the alternative is already an `N`
+  | .number,  x => .num x
+  -- and `decimal` is the same value, at the narrower `Stored` alternative
+  | .decimal, x => .num ⟨x.1, Numeral.stored_wf x.2⟩
   | .boolean, b => .bool b
   | .binary,  b => .bin b
   | .null,    _ => .null

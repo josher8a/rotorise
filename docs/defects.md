@@ -61,7 +61,7 @@ check stays green.
 the guard landed, **19 pointed at something that was not a declaration**: a blank line, a tactic
 step, a match arm, or a different concept entirely. In the combinator algebra, line 174 was cited
 as `funImage` and read `· exact nomatch h`; line 409 was cited as `isStored` and read a
-`funext`/`simp only` line; line 2292 was cited as `survivesStore_numberCodec` and was blank. The 23
+`funext`/`simp only` line; line 2292 was cited as a store-survival theorem for number, since retired, and was blank. The 23
 aimed at Lean files are rewritten to declaration names; these six are what the class leaves behind.
 
 **Pin.** The Lean form is pinned by `name_drift.py`, which fails on it. The six above are pinned by

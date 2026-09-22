@@ -76,7 +76,7 @@ The interface the discharger consumes is `Separates`, a `Prop`; `Orth` is the *d
 sufficient condition for it, covering the first four phases. Phases *literals* and
 *alternatives* are folded in per base, and not uniform in the base. The type is the reason.
 `GroundKind.number.Carrier` is `WFDouble`, a subtype of `Double`, whose `DecidableEq` is a
-field of the axiomatized `numericHost`. The gate moved into the carrier and the
+field of an axiomatized host. The gate moved into the carrier and the
 noncomputability did not move with it, because a `Subtype`'s instance is the base type's. So a
 `Bool`-valued test for `ℓ ∩ ℓ' = ∅` uniform in the base is `noncomputable`, and `Orth` stops
 reducing in the kernel, which is the whole of its value. `Domain.lean`'s note on
@@ -351,7 +351,7 @@ theorem disjAlts_sound {α : Type} [DecidableEq α] {ls ls' : NEFinset α}
     The rows are the bases and not one row uniform in the base, and the file header says why:
     `GroundKind.Carrier` is `@[reducible]`, so `.string` elaborates as `String` and the
     ordinary instance applies, while `.number` elaborates as `WFDouble` and its instance is a
-    field of the axiomatized `numericHost`. One uniform row would make this `noncomputable`
+    field of an axiomatized host. One uniform row would make this `noncomputable`
     and would stop `Orth` reducing at every pair, numeric or not.
 
     So `number` declines, and its answer is `false`. `null` no longer needs a row of its own:
@@ -373,7 +373,7 @@ def OrthL : Term → Term → Bool
   | .literal .boolean x, .literal .boolean y => decide (x ≠ y)
   | .literal .binary x,  .literal .binary y  => decide (x ≠ y)
   | .literal .null x,    .literal .null y    => decide (x ≠ y)
-  -- `WFDouble`'s equality is a field of `numericHost`; see the docstring above
+  -- the numeric carrier's equality used to come from an axiomatised host; see above
   | .literal .number _,   .literal .number _    => false
   -- `set(literal k ls)`, in the spelling `set` taking a base forces on it
   | .refine (.set b) (.each (.members .string ls)),
@@ -524,7 +524,7 @@ theorem occV_admitOpt {t : Term} (h : OccSoundV t) (v : Value)
     through ~~Adm_opaq_eq_adm~~ into the retired per-aspect tables — which made the whole
     `Orth` chain a dependent of them, in the proof rather than in any statement. Both rows
     ask `opaqCodecω`, so the fact is stated here now and the chain owes them nothing. -/
-theorem Adm_opaq_false_num (d : Double) : Adm (.opaq false) (.num d) = false := by
+theorem Adm_opaq_false_num (d : WFNumeral) : Adm (.opaq false) (.num d) = false := by
   show ((opaqCodec (0+1) false).e (.num d)).isSome = false
   rw [opaqCodec_e_num]; rfl
 
@@ -1730,7 +1730,7 @@ theorem not_orth_literal_literal_same :
     Orth (.literal .string lsA) (.literal .string lsA) = false := by decide
 
 /-- **The numeric base declines, and the pair is still not ambiguous.** `WFDouble`'s equality
-    is a field of `numericHost`, so `OrthL` has no computable row there and answers `false`.
+    came from an axiomatised host, so `OrthL` had no computable row there and answered `false`.
     `separates_literal_disjoint` takes the premise by hand instead, which is
     `uAtCan_of_literalN_disjoint`'s content. -/
 theorem not_orth_literal_number (x y : GroundKind.number.Carrier) :

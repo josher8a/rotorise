@@ -209,7 +209,7 @@ def Pred.meetAlt (k : GroundKind) [DecidableEq k.Carrier]
     says the two share no alternative, and `some (some r)` is the combined predicate. The kinds
     are matched in pairs so that every row has a concrete carrier, which is what `Term.meetLit`
     does and for the same reason: `number` refuses because `DecidableEq WFDouble` is a field of
-    `numericHost`, so a row there would not reduce. A `closure` refuses because nothing reads a
+    the axiomatised host, so a row there would not reduce. A `closure` refuses because nothing reads a
     caller's function. -/
 def Pred.meetM : Pred → Pred → Option (Option Pred)
   | .members .string A,  .members .string B  => Pred.meetAlt .string A B
@@ -332,7 +332,8 @@ mutual
 
 /-- Two literals: the same value at the same base, or nothing.
 
-    `number` refuses, because `DecidableEq WFDouble` is a field of `numericHost` and a row here
+    `number` used to refuse, because its equality came from an axiomatised host; the exact
+    carrier decides, and a row here
     would be noncomputable — the reason `OrthL` declines at that base. -/
 def Term.meetLit : (k : GroundKind) → k.Carrier → (k' : GroundKind) → k'.Carrier → Option Term
   | .string, v, .string, v' => if v = v' then some (.literal .string v) else some .never

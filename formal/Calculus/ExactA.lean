@@ -127,7 +127,7 @@ noncomputable def AdmALit : (k : GroundKind) → k.Carrier → Attr → Bool
     remove and it is not injectivity of `e`. `numberCodec.p` goes through `Double.ofDec`,
     which **rounds** (`Prisms.lean`), so two distinct stored numerals can read to the
     same double and `decSet`'s `Nodup` gate then refuses an `NS` every element of which
-    reads. That is `e ∘ p ≠ id`, not `e` non-injective, and `numericHost` says nothing about
+    reads. That is `e ∘ p ≠ id`, not `e` non-injective, and the numeric host says nothing about
     whether it ever fires — it is decidable, through `Double.decEq`, and not describable
     syntactically, so the exact row is the codec's own answer. `AdmA` is already
     `noncomputable`, so this costs nothing it had not already spent. -/

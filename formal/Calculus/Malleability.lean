@@ -160,7 +160,8 @@ theorem agree_not_transitive : ∃ x y z : Attr, Agree x y ∧ Agree y z ∧ ¬ 
 /-! ### Where it is free: the numeral
 
 §1's concession is that the store rewrites numerals, so `number`'s `ker p` is deliberately coarse
-— `survivesStore_numberCodec` is that coarseness put to work. Non-malleability survives it
+and a store-survival theorem for number was that coarseness put to work, since retired with
+the host carrier. Non-malleability survives it
 untouched, because `Agree.n` is unconditional: agreement never inspects a numeral's digits. So the
 property costs nothing at the one place §1 gives something up, which is precisely why reading §5.6
 item 4 on its own looks harmless. -/

@@ -237,9 +237,8 @@ theorem neSetImage_congr {α β : Type} [DecidableEq β] {f g : α → Option β
 
 /-- Reading a value's scalar payload, the mirror of `sC`/`nC`/`bC` on the value side. -/
 def vStr : Value → Option String := fun v => match v with | .str s => some s | _ => none
-def vNum : Value → Option Double := fun v => match v with | .num d => some d | _ => none
+def vNum : Value → Option WFNumeral := fun v => match v with | .num d => some d | _ => none
 def vBin : Value → Option Bytes  := fun v => match v with | .bin b => some b | _ => none
-def vDec : Value → Option WFNumeral := fun v => match v with | .dec x => some x | _ => none
 
 /-- A `bind` through a value projection pins the value. -/
 theorem bind_vStr {o : Option Value} {y : String} (h : o.bind vStr = some y) :
@@ -248,18 +247,11 @@ theorem bind_vStr {o : Option Value} {y : String} (h : o.bind vStr = some y) :
   | none => exact nomatch h
   | some w => cases w <;> simp_all [vStr]
 
-theorem bind_vNum {o : Option Value} {y : Double} (h : o.bind vNum = some y) :
+theorem bind_vNum {o : Option Value} {y : WFNumeral} (h : o.bind vNum = some y) :
     o = some (.num y) := by
   cases o with
   | none => exact nomatch h
   | some w => cases w <;> simp_all [vNum]
-
-/-- …and through the exact numeral's, which pins a `.dec` the way the three above pin theirs. -/
-theorem bind_vDec {o : Option Value} {y : WFNumeral} (h : o.bind vDec = some y) :
-    o = some (.dec y) := by
-  cases o with
-  | none => exact nomatch h
-  | some v => cases v <;> simp only [Option.bind_some, vDec] at h <;> cases h <;> rfl
 
 theorem bind_vBin {o : Option Value} {y : Bytes} (h : o.bind vBin = some y) :
     o = some (.bin y) := by
@@ -290,11 +282,7 @@ noncomputable def decSet {α : Type} (c : Codec) (inj : α → Attr) (S : NEFins
   | some T => some (.strSet T)
   | none => match neSetImage (fun x => (c.p (inj x)).bind vNum) S with
     | some T => some (.numSet T)
-    -- the exact numeral carrier is its own branch: `NS` has two value carriers, and which
-    -- one a wire set decodes to is decided by the element codec, not by the member
-    | none => match neSetImage (fun x => (c.p (inj x)).bind vDec) S with
-      | some T => some (.decSet T)
-      | none => (neSetImage (fun x => (c.p (inj x)).bind vBin) S).map Value.binSet
+    | none => (neSetImage (fun x => (c.p (inj x)).bind vBin) S).map Value.binSet
 
 /-! No emptiness guard here: §1 types the wire sets as `℘⁺fin`, which is a type, so there is
 no empty set for a codec to refuse. -/
@@ -323,12 +311,9 @@ theorem decSet_elem {α : Type} {c : Codec} {inj : α → Attr} {S : NEFinset α
   · split at h
     · next T hT =>
         exact fun x hx => Option.isSome_of_isSome_bind (setImage_some (neSetImage_eq_setImage.mp hT) x hx)
-    · split at h
-      · next T hT =>
-          exact fun x hx => Option.isSome_of_isSome_bind (setImage_some (neSetImage_eq_setImage.mp hT) x hx)
-      · next =>
-        obtain ⟨T, hT, -⟩ := Option.map_eq_some_iff.mp h
-        exact fun x hx => Option.isSome_of_isSome_bind (setImage_some (neSetImage_eq_setImage.mp hT) x hx)
+    · next =>
+      obtain ⟨T, hT, -⟩ := Option.map_eq_some_iff.mp h
+      exact fun x hx => Option.isSome_of_isSome_bind (setImage_some (neSetImage_eq_setImage.mp hT) x hx)
 
 /-- What a read produces: one of the three value sets, each element read from an element
     of the wire set. -/
@@ -336,10 +321,8 @@ theorem decSet_mem {α : Type} {c : Codec} {inj : α → Attr} {S : NEFinset α}
     (h : decSet c inj S = some v) :
     (∃ T : NEFinset String, v = .strSet T ∧
         ∀ y ∈ T.1, ∃ x ∈ S.1, c.p (inj x) = some (.str y))
-  ∨ (∃ T : NEFinset Double, v = .numSet T ∧
+  ∨ (∃ T : NEFinset WFNumeral, v = .numSet T ∧
         ∀ y ∈ T.1, ∃ x ∈ S.1, c.p (inj x) = some (.num y))
-  ∨ (∃ T : NEFinset WFNumeral, v = .decSet T ∧
-        ∀ y ∈ T.1, ∃ x ∈ S.1, c.p (inj x) = some (.dec y))
   ∨ (∃ T : NEFinset Bytes, v = .binSet T ∧
         ∀ y ∈ T.1, ∃ x ∈ S.1, c.p (inj x) = some (.bin y)) := by
   unfold decSet at h
@@ -355,17 +338,11 @@ theorem decSet_mem {α : Type} {c : Codec} {inj : α → Attr} {S : NEFinset α}
       refine Or.inr (Or.inl ⟨T, h.symm, fun y hy => ?_⟩)
       obtain ⟨x, hx, hxy⟩ := (mem_setImage (neSetImage_eq_setImage.mp hT) y).mp hy
       exact ⟨x, hx, bind_vNum hxy⟩
-    · split at h
-      · next T hT =>
-        injection h with h
-        refine Or.inr (Or.inr (Or.inl ⟨T, h.symm, fun y hy => ?_⟩))
-        obtain ⟨x, hx, hxy⟩ := (mem_setImage (neSetImage_eq_setImage.mp hT) y).mp hy
-        exact ⟨x, hx, bind_vDec hxy⟩
-      · next =>
-        obtain ⟨T, hT, hv⟩ := Option.map_eq_some_iff.mp h
-        refine Or.inr (Or.inr (Or.inr ⟨T, hv.symm, fun y hy => ?_⟩))
-        obtain ⟨x, hx, hxy⟩ := (mem_setImage (neSetImage_eq_setImage.mp hT) y).mp hy
-        exact ⟨x, hx, bind_vBin hxy⟩
+    · next =>
+      obtain ⟨T, hT, hv⟩ := Option.map_eq_some_iff.mp h
+      refine Or.inr (Or.inr ⟨T, hv.symm, fun y hy => ?_⟩)
+      obtain ⟨x, hx, hxy⟩ := (mem_setImage (neSetImage_eq_setImage.mp hT) y).mp hy
+      exact ⟨x, hx, bind_vBin hxy⟩
 
 /-- §3 `(set)`. Non-emptiness, uniqueness and homogeneity are all carried by the **types**:
     a `Finset` has no repeats and no order, `℘⁺fin` has no empty inhabitant, and the three
@@ -375,14 +352,12 @@ noncomputable def setCodec (c : Codec) : Codec :=
   { T := fun v => match v with
       | .strSet S => ∀ s ∈ S.1, c.T (.str s)
       | .numSet S => ∀ d ∈ S.1, c.T (.num d)
-      | .decSet S => ∀ x ∈ S.1, c.T (.dec x)
       | .binSet S => ∀ b ∈ S.1, c.T (.bin b)
       | _ => False
     μ := c.μ.bind setMember
     e := fun v => match v with
       | .strSet S => encSet c Value.str S
       | .numSet S => encSet c Value.num S
-      | .decSet S => encSet c Value.dec S
       | .binSet S => encSet c Value.bin S
       | _ => none
     p := fun a => match a with
@@ -470,25 +445,10 @@ theorem decSet_isSome_str {α : Type} {c : Codec} {inj : α → Attr} {S : NEFin
   rw [(neSetImage_eq_setImage (T := ⟨T, setImage_nonempty hT S.2⟩)).mpr hT]
   rfl
 
-/-- …elements reading to an exact numeral take the third, the two before it having failed. -/
-theorem decSet_isSome_dec {α : Type} {c : Codec} {inj : α → Attr} {S : NEFinset α}
-    {x₀ : α} (hx₀ : x₀ ∈ S.1)
-    (hs : (c.p (inj x₀)).bind vStr = none) (hn : (c.p (inj x₀)).bind vNum = none)
-    (hall : ∀ x ∈ S.1, ((c.p (inj x)).bind vDec).isSome = true)
-    (hinj : ∀ x₁ ∈ S.1, ∀ x₂ ∈ S.1, ∀ y, (c.p (inj x₁)).bind vDec = some y →
-      (c.p (inj x₂)).bind vDec = some y → x₁ = x₂) :
-    (decSet c inj S).isSome = true := by
-  obtain ⟨T, hT⟩ := Option.isSome_iff_exists.mp (setImage_isSome_of hall hinj)
-  unfold decSet
-  rw [neSetImage_none (setImage_none_of hx₀ hs), neSetImage_none (setImage_none_of hx₀ hn),
-    (neSetImage_eq_setImage (T := ⟨T, setImage_nonempty hT S.2⟩)).mpr hT]
-  rfl
-
-/-- …and elements reading to bytes take the fourth, the three before it having failed. -/
+/-- …and elements reading to bytes take the third, the two before it having failed. -/
 theorem decSet_isSome_bin {α : Type} {c : Codec} {inj : α → Attr} {S : NEFinset α}
     {x₀ : α} (hx₀ : x₀ ∈ S.1)
     (hs : (c.p (inj x₀)).bind vStr = none) (hn : (c.p (inj x₀)).bind vNum = none)
-    (hd : (c.p (inj x₀)).bind vDec = none)
     (hall : ∀ x ∈ S.1, ((c.p (inj x)).bind vBin).isSome = true)
     (hinj : ∀ x₁ ∈ S.1, ∀ x₂ ∈ S.1, ∀ y, (c.p (inj x₁)).bind vBin = some y →
       (c.p (inj x₂)).bind vBin = some y → x₁ = x₂) :
@@ -496,7 +456,6 @@ theorem decSet_isSome_bin {α : Type} {c : Codec} {inj : α → Attr} {S : NEFin
   obtain ⟨T, hT⟩ := Option.isSome_iff_exists.mp (setImage_isSome_of hall hinj)
   unfold decSet
   rw [neSetImage_none (setImage_none_of hx₀ hs), neSetImage_none (setImage_none_of hx₀ hn),
-    neSetImage_none (setImage_none_of hx₀ hd),
     (neSetImage_eq_setImage (T := ⟨T, setImage_nonempty hT S.2⟩)).mpr hT]
   rfl
 
@@ -510,7 +469,6 @@ theorem decSet_isSome_bin {α : Type} {c : Codec} {inj : α → Attr} {S : NEFin
 def liftQ (q : Value → Bool) : Value → Bool
   | .strSet S => decide (∀ s ∈ S.1, q (.str s) = true)
   | .numSet S => decide (∀ d ∈ S.1, q (.num d) = true)
-  | .decSet S => decide (∀ x ∈ S.1, q (.dec x) = true)
   | .binSet S => decide (∀ b ∈ S.1, q (.bin b) = true)
   | _ => false
 
@@ -571,7 +529,6 @@ theorem setCodec_restrict (c : Codec) (q : Value → Bool) :
   cases v with
   | strSet S => exact encSet_restrict c q Value.str S
   | numSet S => exact encSet_restrict c q Value.num S
-  | decSet S => exact encSet_restrict c q Value.dec S
   | binSet S => exact encSet_restrict c q Value.bin S
   | _ => rfl
 
@@ -607,18 +564,7 @@ theorem decSet_liftQ {α : Type} {c : Codec} {q : Value → Bool} {inj : α → 
           (mem_setImage (neSetImage_eq_setImage.mp hT) d).mpr ⟨x, hx, hs⟩
         simp only [liftQ, decide_eq_true_eq] at hl
         rw [hws]; exact hl d hmem
-    · split at h
-      · next T hT =>
-          injection h with h; subst h
-          obtain ⟨e, hs⟩ :=
-            Option.isSome_iff_exists.mp (setImage_some (neSetImage_eq_setImage.mp hT) x hx)
-          have hws : w = .dec e := by
-            have := bind_vDec hs; rw [hw] at this; exact Option.some.inj this
-          have hmem : e ∈ T.1 :=
-            (mem_setImage (neSetImage_eq_setImage.mp hT) e).mpr ⟨x, hx, hs⟩
-          simp only [liftQ, decide_eq_true_eq] at hl
-          rw [hws]; exact hl e hmem
-      · next =>
+    · next =>
         obtain ⟨T, hT, hv⟩ := Option.map_eq_some_iff.mp h
         subst hv
         obtain ⟨b, hs⟩ :=
@@ -659,8 +605,6 @@ theorem decSet_restrict {α : Type} (c : Codec) (q : Value → Bool) (inj : α �
             (g := fun x => (c.p (inj x)).bind vStr) (fun x hx => by simp only [hpe x hx]),
           neSetImage_congr (f := fun x => ((c.restrict q).p (inj x)).bind vNum)
             (g := fun x => (c.p (inj x)).bind vNum) (fun x hx => by simp only [hpe x hx]),
-          neSetImage_congr (f := fun x => ((c.restrict q).p (inj x)).bind vDec)
-            (g := fun x => (c.p (inj x)).bind vDec) (fun x hx => by simp only [hpe x hx]),
           neSetImage_congr (f := fun x => ((c.restrict q).p (inj x)).bind vBin)
             (g := fun x => (c.p (inj x)).bind vBin) (fun x hx => by simp only [hpe x hx])]
     rw [hds]
@@ -668,7 +612,7 @@ theorem decSet_restrict {α : Type} (c : Codec) (q : Value → Bool) (inj : α �
     | none => rfl
     | some v =>
       have hl : liftQ q v = true := by
-        rcases decSet_mem hv with ⟨T, rfl, hT⟩ | ⟨T, rfl, hT⟩ | ⟨T, rfl, hT⟩ | ⟨T, rfl, hT⟩ <;>
+        rcases decSet_mem hv with ⟨T, rfl, hT⟩ | ⟨T, rfl, hT⟩ | ⟨T, rfl, hT⟩ <;>
           · simp only [liftQ, decide_eq_true_eq]
             intro y hy
             obtain ⟨x, hx, hpx⟩ := hT y hy
@@ -697,7 +641,6 @@ theorem decSet_restrict {α : Type} (c : Codec) (q : Value → Bool) (inj : α �
     have hL : decSet (c.restrict q) inj S = none := by
       unfold decSet
       rw [neSetImage_none (setImage_none_of hx₀ (by simp [hnone])),
-          neSetImage_none (setImage_none_of hx₀ (by simp [hnone])),
           neSetImage_none (setImage_none_of hx₀ (by simp [hnone])),
           neSetImage_none (setImage_none_of hx₀ (by simp [hnone]))]
       rfl
@@ -878,8 +821,7 @@ end Entrywise
 theorem setCodec_e_eq {c : Codec} {v : Value} {a : Attr} :
     (setCodec c).e v = some a ↔
       (∃ S : NEFinset String, v = .strSet S ∧ encSet c Value.str S = some a)
-      ∨ (∃ S : NEFinset Double, v = .numSet S ∧ encSet c Value.num S = some a)
-      ∨ (∃ S : NEFinset WFNumeral, v = .decSet S ∧ encSet c Value.dec S = some a)
+      ∨ (∃ S : NEFinset WFNumeral, v = .numSet S ∧ encSet c Value.num S = some a)
       ∨ (∃ S : NEFinset Bytes, v = .binSet S ∧ encSet c Value.bin S = some a) := by
   cases v <;> simp [setCodec]
 

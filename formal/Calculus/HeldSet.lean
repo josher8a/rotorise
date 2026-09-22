@@ -81,10 +81,10 @@ theorem hopaque_T (lossy : Bool) :
   | .num d, n, h, hd => by
       cases n with | zero => exact absurd hd (by simp [Value.depth]) | succ n' =>
       cases h with
-      | num _ hl hw =>
+      | num _ hl =>
         subst hl
         exact ⟨.byAttempt (if true then numberCodec else Codec.empty), by simp [opaqOptions],
-               ⟨d, rfl, hw⟩⟩
+               ⟨d, rfl⟩⟩
   | .strSet S, n, h, hd => by
       cases n with | zero => exact absurd hd (by simp [Value.depth]) | succ n' =>
       cases h with
@@ -189,7 +189,7 @@ theorem typed_T_eq : ∀ {t T μ}, Typed t T μ → ∀ v, T v → (denote t).T 
     | never => exact hv
     | opaq lossy => exact (opaq_T_identity lossy v).mpr hv
     | set b =>
-      rcases hv with ⟨S, rfl, hall⟩ | ⟨S, rfl, hall⟩ | ⟨S, rfl, hall⟩ | ⟨S, rfl, hall⟩ <;>
+      rcases hv with ⟨S, rfl, hall⟩ | ⟨S, rfl, hall⟩ | ⟨S, rfl, hall⟩ <;>
         simp only [denote, setCodec, SetBase.elem_T] <;> exact hall
     | @list pre Tpre sp Tsp suf Tsuf hp hs hf =>
       obtain ⟨vs, rfl, hall⟩ := hv
@@ -312,7 +312,7 @@ partiality is a fact about the port's types, not the model's. -/
 
 /-- `decimal`'s held set is exactly §1's `Numerals`. -/
 theorem decimal_T (v : Value) :
-    (denote .decimal).T v ↔ ∃ x : WFNumeral, v = .dec x ∧ Numeral.Stored x.1 = true := Iff.rfl
+    (denote .decimal).T v ↔ ∃ x : WFNumeral, v = .num x ∧ Numeral.Stored x.1 = true := Iff.rfl
 
 /-- **The report.** A derivable `decimal` writes only well-formed numerals — the tightened
     `: T` index, cashed on the attribute side. -/
@@ -320,9 +320,9 @@ theorem decimal_writes_stored {v : Value} {a : Attr}
     (he : (denote .decimal).e v = some a) :
     ∃ x : WFNumeral, a = .n x ∧ Numeral.Stored x.1 = true := by
   cases v with
-  | dec x =>
-    rw [show (denote .decimal).e (.dec x) = decimalCodec.e (.dec x) from rfl,
-      decimalCodec_e_dec] at he
+  | num x =>
+    rw [show (denote .decimal).e (.num x) = decimalCodec.e (.num x) from rfl,
+      decimalCodec_e_num] at he
     by_cases hw : Numeral.Stored x.1 = true
     · rw [if_pos hw] at he; cases he; exact ⟨_, rfl, hw⟩
     · rw [if_neg hw] at he; exact nomatch he
@@ -337,7 +337,7 @@ theorem decimal_reads_stored {a : Attr} {v : Value}
     ∃ x : WFNumeral, a = .n x ∧ Numeral.Stored x.1 = true := by
   cases a with
   | n x =>
-    replace hp : (if Numeral.Stored x.1 = true then some (Value.dec x) else none) = some v := hp
+    replace hp : (if Numeral.Stored x.1 = true then some (Value.num x) else none) = some v := hp
     by_cases hw : Numeral.Stored x.1 = true
     · exact ⟨x, rfl, hw⟩
     · rw [if_neg hw] at hp; exact nomatch hp
@@ -375,11 +375,11 @@ theorem wf_accepts_exponent : Numeral.WF "1e+21" = true := by decide
 
 /-- `decimal` does not, and the reason is the store rather than the grammar. -/
 theorem decimal_refuses_exponent :
-    (denote .decimal).e (.dec (.of "1e+21")) = none := rfl
+    (denote .decimal).e (.num (.of "1e+21")) = none := rfl
 
 /-- The same number, spelled the way it comes back. -/
 theorem decimal_accepts_expanded :
-    (denote .decimal).e (.dec (.of "1000000000000000000000"))
+    (denote .decimal).e (.num (.of "1000000000000000000000"))
       = some (.n (.of "1000000000000000000000")) := rfl
 
 end Calculus
