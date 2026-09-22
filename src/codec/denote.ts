@@ -1755,8 +1755,22 @@ export const readsBack = (
  * `opaq` row became reachable when the guard stopped exempting an `opaque` option: the message
  * read "opaq and string both take the same kind of value", naming something no caller had typed.
  */
-const namedKind = (kind: Term['kind']): string =>
-    kind === 'opaq' ? 'opaque' : kind
+/**
+ * A term's kind, as a diagnostic names it.
+ *
+ * **A declared adapter names the value it takes, not the combinator.** `number` and `decimal` are
+ * `held` over one carrier, so the kind alone answered "held", which names nothing the caller
+ * wrote. {@link Held.writes} is the slot the caller's value lands in, so it is the kind of value
+ * the option takes, and a refusal that lists the options is asking exactly that. A caller's
+ * adapter declares no `writes` and keeps the combinator's name, which is all this can honestly
+ * say about one.
+ */
+const namedKind = (t: Term): string =>
+    t.kind === 'opaq'
+        ? 'opaque'
+        : t.kind === 'held' && t.writes !== undefined
+          ? t.writes.join(' | ')
+          : t.kind
 
 /**
  * **Content admission on the write side**: every name present whose field is a literal carries one
@@ -1880,7 +1894,7 @@ export const optionOfTerm = (def: Term): Option => {
             // a whole carries. An absent table asks nothing, which is the right answer: the tag
             // table decides among the members one level down.
             literals: undefined,
-            describe: `${namedKind(def.kind)} { ${[...declares]
+            describe: `${namedKind(def)} { ${[...declares]
                 .map((name) => (requires.includes(name) ? name : `${name}?`))
                 .join(', ')} }`,
         }
@@ -1894,7 +1908,7 @@ export const optionOfTerm = (def: Term): Option => {
             declares: undefined,
             requires: [],
             literals: undefined,
-            describe: namedKind(def.kind),
+            describe: namedKind(def),
         }
     }
     const declares = new Set<string>()

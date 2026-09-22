@@ -24,6 +24,7 @@ import {
     codecOfTerm,
     itemSem,
     literalCodec,
+    literalShape,
     literalsRead,
     membersOf,
     optionOfTerm,
@@ -75,6 +76,7 @@ export { codecOfTerm, termOf, valueKinds } from './denote'
 import type { ErrorMessage, show } from '../utils'
 import {
     describeShape,
+    namedLiteral,
     namesFit,
     namesOf,
     readTags,
@@ -909,6 +911,47 @@ const asFloat = (value: number): Result<DynamoNumber> =>
     DynamoNumber.fromNumber(value)
 
 /**
+ * The alternatives a numeric literal names, refused at the caller's level first.
+ *
+ * **Two refusals, and the adapter owes both.** A value that is not a number at all is
+ * `literalTerm`'s sentence one base down, and it is about the caller's type. A number outside what
+ * `N` holds is the carrier's. The conversion runs before the native literal is built, so without
+ * this the carrier would answer for the type and `number(0, 'A')` would report a `NaN` rule.
+ *
+ * **Every value outside the range is named, not the first.** A caller who writes three bad
+ * alternatives fixes three. One bad alternative keeps the carrier's own sentence, which already
+ * says which rule it broke.
+ */
+const numericAlternatives = (
+    allowed: readonly number[],
+): readonly DynamoNumber[] => {
+    const held: DynamoNumber[] = []
+    const outside: number[] = []
+    let firstRefusal: CodecError | undefined
+    for (const one of allowed) {
+        if (typeof one !== 'number') {
+            throw new CodecError(
+                `\`number(...)\` admits ${literalShape.number} values, and ${namedLiteral(one)} is not one`,
+            )
+        }
+        const carried = asFloat(one)
+        if (failed(carried)) {
+            outside.push(one)
+            firstRefusal ??= carried
+        } else {
+            held.push(carried)
+        }
+    }
+    if (outside.length === 1 && firstRefusal) throw firstRefusal
+    if (outside.length > 1) {
+        throw new CodecError(
+            `${outside.map(namedLiteral).join(', ')} are not numbers DynamoDB stores: it takes at most 38 significant digits and magnitude 1e-130 to 9.9e125, and has no NaN and no Infinity`,
+        )
+    }
+    return held
+}
+
+/**
  * …and back, refused where the rounding leaves the range `N` holds.
  *
  * `N` carries 38 significant digits and a JS `number` about 15, so reading rounds. Rounding is this
@@ -951,7 +994,7 @@ export const number: AttributeCodec<number, Attribute<'N'>> & {
         numericAdapter<number>(
             termOf(
                 literalCapability('number')(
-                    ...allowed.map((one) => orThrow(asFloat(one))),
+                    ...numericAlternatives(allowed),
                 ) as AnyCodec,
             ),
             'number',
@@ -964,9 +1007,7 @@ export const number: AttributeCodec<number, Attribute<'N'>> & {
             numericSetAdapter<number>(
                 termOf(
                     (allowed.length
-                        ? dynamoNumber.set(
-                              ...allowed.map((one) => orThrow(asFloat(one))),
-                          )
+                        ? dynamoNumber.set(...numericAlternatives(allowed))
                         : dynamoNumber.set()) as AnyCodec,
                 ),
                 'numSet',
