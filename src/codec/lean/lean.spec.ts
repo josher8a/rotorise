@@ -1530,6 +1530,9 @@ describe("the declaration guard, against the model's classifier", () => {
         expect(leanSeparationModule([])).toContain(
             'import Calculus.Orthogonality',
         )
+        // a `held` term spells `numeralOfStoredText`, which only `Separation` declares, and
+        // without the import Lean auto-binds the name and every verdict fails to elaborate
+        expect(leanSeparationModule([])).toContain('import Calculus.Separation')
     })
 
     /**
@@ -1646,6 +1649,9 @@ describe("the read side of every corpus codec, against the model's `p`", () => {
         }
         const module = leanReadVectorModule(sampleVectors.filter(emittable))
         expect(module).toContain('import Calculus.Vectors')
+        // a `held` term spells `numeralOfStoredText`, which only `Separation` declares, and
+        // without the import `denote` sticks on a free variable and no vector elaborates
+        expect(module).toContain('import Calculus.Separation')
         // the header states what it could not state, which for this corpus is nothing
         expect(module).toContain('every corpus codec round trips')
     })
