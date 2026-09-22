@@ -128,9 +128,13 @@ describe('a definition generates what the codec generated', () => {
     //
     // 15: `array` and `tuple` became one `list`, which carries a prefix, at most one spread and a
     // suffix. Both are builders over it, and `list` says the shape neither could say
+    //
+    // 14: the `decimal` kind went. `dynamoNumber` is the native at the numeric base and `number`
+    // and `decimal` are `held` over it, so the two carriers that used to be two ground kinds are
+    // one kind under two adapters, and `held` was already counted
     it('covers every kind a codec can be', () => {
         const kinds = new Set(codecs.map(([, c]) => c.def?.kind))
-        expect(kinds.size).toBe(15)
+        expect(kinds.size).toBe(14)
         expect([...kinds].every(Boolean)).toBe(true)
     })
 })
