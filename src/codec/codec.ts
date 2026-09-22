@@ -766,7 +766,7 @@ const numericAdapter = <T>(
     inner: Term,
     writes: SetSlot,
     into: (value: T) => Result<DynamoNumber>,
-    outOf: (held: DynamoNumber) => T,
+    outOf: (held: DynamoNumber) => Result<T>,
     via?: 'decimalText',
 ): AttributeCodec<T, Attribute<'N'>> =>
     codecOfTerm<T, Attribute<'N'>>({
@@ -783,7 +783,7 @@ const numericSetAdapter = <T>(
     inner: Term,
     writes: SetSlot,
     into: (value: T) => Result<DynamoNumber>,
-    outOf: (held: DynamoNumber) => T,
+    outOf: (held: DynamoNumber) => Result<T>,
 ): AttributeCodec<ReadonlySet<T>, NS> =>
     codecOfTerm<ReadonlySet<T>, NS>({
         kind: 'held',
@@ -798,17 +798,35 @@ const numericSetAdapter = <T>(
             }
             return held
         }) as (value: never) => unknown,
-        g: ((held: ReadonlySet<DynamoNumber>) =>
-            new Set([...held].map(outOf))) as (held: never) => unknown,
+        g: ((held: ReadonlySet<DynamoNumber>) => {
+            const out = new Set<T>()
+            for (const each of held) {
+                const one = outOf(each)
+                if (failed(one)) return one
+                out.add(one)
+            }
+            return out
+        }) as (held: never) => unknown,
     })
 
-/** The digits a caller wrote, refused rather than re-spelled. */
+/**
+ * The digits a caller wrote, refused rather than re-spelled.
+ *
+ * **The type is checked here and not by `isStoredNumeral`.** That predicate tests a pattern, and a
+ * pattern coerces: `['1']` and any object whose `toString` spells a numeral both match it, so
+ * `decimal` admitted values its own type excludes and wrote them as `N`. The predicate is right to
+ * stay a predicate on `string` — the emitter recognises it by reference — so the boundary is here.
+ */
 const storedOnly = (value: string): Result<DynamoNumber> =>
-    isStoredNumeral(value)
-        ? DynamoNumber.from(value)
-        : new CodecError(
-              `'${value}' is not a numeral DynamoDB stores unchanged; it accepts at most 38 significant digits, magnitude 1e-130 to 9.9e125, and returns the normalised form (no leading or trailing zeros, no exponent, no '+')`,
+    typeof value !== 'string'
+        ? new CodecError(
+              `${describeShape(value)} is not a string, and \`decimal\` holds the digits as text — a codec's input is typed, so this is a value that reached \`encode\` past its type`,
           )
+        : isStoredNumeral(value)
+          ? DynamoNumber.from(value)
+          : new CodecError(
+                `'${value}' is not a numeral DynamoDB stores unchanged; it accepts at most 38 significant digits, magnitude 1e-130 to 9.9e125, and returns the normalised form (no leading or trailing zeros, no exponent, no '+')`,
+            )
 
 /**
  * A decimal held as a string, stored as `N`. The codec for money — nothing becomes a JS number, so
@@ -883,6 +901,24 @@ const asFloat = (value: number): Result<DynamoNumber> =>
     DynamoNumber.fromNumber(value)
 
 /**
+ * …and back, refused where the rounding leaves the range `N` holds.
+ *
+ * `N` carries 38 significant digits and a JS `number` about 15, so reading rounds. Rounding is this
+ * codec's declared cost and not a failure. Rounding *out of the range DynamoDB stores* is a
+ * different fact: the value read back is one this same codec would refuse to write, so the round
+ * trip breaks on a numeral the service genuinely returns. The write half already refuses it, and
+ * this half says the same thing rather than hand back a number that cannot go home.
+ */
+const asJsNumber = (held: DynamoNumber): Result<number> => {
+    const value = held.toNumber()
+    return failed(DynamoNumber.fromNumber(value))
+        ? new CodecError(
+              `'${held.toString()}' rounds to ${String(value)}, which is outside what DynamoDB stores, so \`number\` cannot write it back; read this attribute with \`dynamoNumber\` or \`decimal\`, which do not round`,
+          )
+        : value
+}
+
+/**
  * A JS number, stored as `N`. Lossy by construction — `N` carries 38 digits, `number` about 15.
  * Right for enums, counts and flags; wrong for money, which is {@link decimal}.
  *
@@ -912,11 +948,9 @@ export const number: AttributeCodec<number, Attribute<'N'>> & {
             ),
             'number',
             asFloat,
-            (held) => held.toNumber(),
+            asJsNumber,
         ),
-    numericAdapter<number>({ kind: 'number' }, 'number', asFloat, (held) =>
-        held.toNumber(),
-    ),
+    numericAdapter<number>({ kind: 'number' }, 'number', asFloat, asJsNumber),
     {
         set: (...allowed: readonly number[]) =>
             numericSetAdapter<number>(
@@ -929,7 +963,7 @@ export const number: AttributeCodec<number, Attribute<'N'>> & {
                 ),
                 'numSet',
                 asFloat,
-                (held) => held.toNumber(),
+                asJsNumber,
             ),
     },
 ) as never
