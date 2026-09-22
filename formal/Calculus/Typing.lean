@@ -236,13 +236,13 @@ inductive Typed : Term → Held → Option Member → Prop where
 
       §3 writes it `⊢ g : T ⇝ μ, g ground; ℓ₁ … ℓₙ ∈ T; n ≥ 1; pairwise distinct`. Every clause
       is a type here: `g ground` is the index `k`; `n ≥ 1` and distinctness are `NEFinset`'s;
-      `ℓᵢ ∈ T` is `NEFinset k.Carrier`, which at `number` means `WFDouble` and so carries §1's
-      `ℓ ⊆ D` in the element. The member is `k.member`, a function of the index.
+      `ℓᵢ ∈ T` is `NEFinset k.Carrier`, which at `number` means the well-formed numerals and
+      so carries §1's `ℓ ⊆ D` in the element. The member is `k.member`, a function of the index.
 
-      **The one thing typing the carrier would have cost, and did not.**
-      `literalNRule_holds_what_it_cannot_write` (`Refutations.lean`) exhibits a literal that is
-      *held* and unwritable, which is (B) failing, and the case against gating the carrier was
-      that gating it deletes the witness. It does not: the witness is about §3's rule, which
+      **The one thing typing the carrier would have cost, and did not.** A transcription in
+      `Refutations.lean` used to exhibit a literal that is *held* and unwritable, which is (B)
+      failing, and the case against gating the carrier was that gating it deletes the witness.
+      It did not, at the time: the witness was about §3's rule, which
       admits an ungated `ℓ` only if you drop `ℓᵢ ∈ T`, so it is stated on an ungated prism that
       is deliberately not a `Term`. What the gate does buy is that `inL` is the whole of
       admission, which makes `adm (.literal .number x)` exact.

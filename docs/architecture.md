@@ -507,9 +507,14 @@ type did not already carry.
 
 **The exception that keeps a gate.** Keep it only where the refutation depending on it **cannot be
 restated outside the term language**. If the thing refuted is a rule rather than one of our
-constructors, a standalone transcription carries it and the gate can go — `literalNRule` is such a
-transcription, deliberately not a `Term`. Where the claim is about one of our own rows, no
-transcription recovers it and the gate pays.
+constructors, a standalone transcription carries it and the gate can go: a prism written out
+beside the codecs, deliberately not a `Term`, is such a transcription. Where the claim is about one
+of our own rows, no transcription recovers it and the gate pays.
+
+The numeric instance of this has since retired itself. Its transcription existed to hold a value
+outside the base's held set, and the value carrier is that set now, so there is nothing left to
+point at. A refutation needs a representable counterexample, and a gate that moves into a carrier
+takes its own refutations with it.
 
 **A measure has no host counterpart, so it is pure overhead.** No line of the library has a fuel
 parameter. A measure standing in for a recursion the checker could not see corresponds to nothing

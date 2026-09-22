@@ -408,11 +408,10 @@ theorem restrict_p_adapt {c : Codec} (q : Value → Bool) :
     is exactly the shape `restrict` has and an ad-hoc `if` does not.
 
     So the gates are not bespoke: each of the two codecs is `refine` over a base, and the
-    theorems below say so on the pair. The bases used to be *ungated* — every double, every
-    string — and cannot be, now that `Attr.n` carries §1's `Numerals`. They are §1's own
-    sets instead: `numberCodec` on the double side, `wfDecimalCodec` on the text side.
-    That is a better presentation than the one it replaced, because the ungated bases were
-    standing in for sets the carrier should have been. -/
+    theorems below say so on the pair. The bases used to be *ungated*, every numeral and every
+    string, and cannot be, now that both sides carry §1's `Numerals`. There is one base at `N`
+    instead of the two a host carrier forced, and it is §1's own set: `numberCodec`. The ungated
+    bases were standing in for sets the carrier should have been. -/
 
 /-- §1's `D`, as a predicate on values. **It asks only that the value is an `N`**: `D` is the
     well-formed numerals and the carrier is exactly those, so the grammar check that used to
@@ -481,10 +480,10 @@ theorem decimalCodec_p_restrict : decimalCodec.p = (numberCodec.restrict isStore
     index.
 
     **`T` is deliberately *not* the refinement's**: it stays §3's `ℓ`. That used to mean a
-    numeric literal outside `D` was *held* and unwritable — (B) failing — and it no longer can
-    be, because `GroundKind.number`'s carrier is `WFDouble`, so `HLit` holds only values
-    `numberCodec` writes. What (B) failing looks like is stated on `literalNRule`
-    (`Refutations.lean`), a prism over an ungated `ℓ` that is not a `Term`. -/
+    numeric literal outside `D` was *held* and unwritable, which is (B) failing, and it no
+    longer can be: `GroundKind.number`'s carrier is the well-formed numerals, so `HLit` holds
+    only values `numberCodec` writes. The transcription that used to exhibit (B) failing here
+    is retired, because the value carrier is `D` and there is no outside to point at. -/
 noncomputable def literalCodec (k : GroundKind) (x : k.Carrier) : Codec :=
   { (baseCodec k).restrict (inL k x) with T := HLit k x }
 

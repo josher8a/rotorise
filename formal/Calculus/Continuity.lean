@@ -225,7 +225,7 @@ theorem optBad_not_confluent : ¬ ConfluentAt [optBad, optLit] (.str "A") := by
 
 /-! **The ground-term witness is gone, and it was the decimal conflation.** ~~string_decimal_not_confluent~~
 took `string` and `decimal` both writing `.str "1.5"` and storing it differently. They no longer
-share a value: `decimal` carries `Value.dec`, an exact numeral, and `string` carries `Value.str`.
+share a value: `decimal` carries a `Value.num`, an exact numeral, and `string` a `Value.str`.
 The pair is disjoint, so it is confluent vacuously and the theorem is false rather than unproved.
 
 What the section still records is `optBad_not_confluent` above, which uses a codec built to break

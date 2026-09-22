@@ -75,7 +75,8 @@ The read-side slot is `Member`, which `Attr.member` already computes.
 The interface the discharger consumes is `Separates`, a `Prop`; `Orth` is the *decidable*
 sufficient condition for it, covering the first four phases. Phases *literals* and
 *alternatives* are folded in per base, and not uniform in the base. The type is the reason.
-`GroundKind.number.Carrier` is `WFDouble`, a subtype of `Double`, whose `DecidableEq` is a
+`GroundKind.number.Carrier` is the well-formed numerals, a subtype of a `String`, whose
+`DecidableEq` is a
 field of an axiomatized host. The gate moved into the carrier and the
 noncomputability did not move with it, because a `Subtype`'s instance is the base type's. So a
 `Bool`-valued test for `ℓ ∩ ℓ' = ∅` uniform in the base is `noncomputable`, and `Orth` stops
@@ -115,28 +116,31 @@ namespace Calculus
 `Slot` is the `Value` constructor as data. `Member` is reused unchanged for the read side —
 `Attr.member` is already the constructor tag there.
 
-`Slot` is *not* `Member` with the names changed, and reusing `Member` for both sides would be
-the bug this module exists to avoid. The map from a slot to a member is **not injective**:
-`number` and `decimal` are two value carriers of the one wire member `N`, and `numSet` and
-`decSet` are two carriers of the one `NS`. A host approximation and an exact numeral are
-different values and the same attribute, so the two tags disagree exactly where the separation
-argument needs them to. -/
+**`Slot` and `Member` are in bijection now, and that is new.** This module was written because
+they were not: `decimal` wrote a `.str` and stored an `N`, and `set decimal` wrote a `.strSet`
+and stored an `NS`, so a tag read off the value disagreed with the one read off the attribute.
+Carrying `N` exactly removed both disagreements, and the ten slots now match the ten members
+one for one.
+
+The two types are kept apart anyway, and deliberately, because the bijection is a FACT ABOUT
+THE PRESENT TABLE rather than a property of the design. A slot is what a value is built with
+and a member is what the store files it under; nothing makes them the same kind of thing, and
+an adapter that gives a host carrier its own slot would part them again. Merging them is a
+change to make on purpose, with the reason written down, and not by noticing they line up. -/
 
 inductive Slot where
-  | str | num | dec | bool | bin | null | strSet | numSet | decSet | binSet | arr | map
+  | str | num | bool | bin | null | strSet | numSet | binSet | arr | map
 deriving DecidableEq, Repr
 
-/-- The constructor a value is built with. Twelve of them, where `Value.kind` has eight. -/
+/-- The constructor a value is built with. Ten of them, where `Value.kind` has eight. -/
 def Value.slot : Value → Slot
   | .str _    => .str
   | .num _    => .num
-  | .dec _    => .dec
   | .bool _   => .bool
   | .bin _    => .bin
   | .null     => .null
   | .strSet _ => .strSet
   | .numSet _ => .numSet
-  | .decSet _ => .decSet
   | .binSet _ => .binSet
   | .arr _    => .arr
   | .map _ _  => .map
@@ -144,7 +148,7 @@ def Value.slot : Value → Slot
 /-- Enumerations, so the disjointness test is a `List.all` rather than a `Fintype` instance —
     `decide` over these is the whole of what makes `Orth` checkable by `by decide`. -/
 def Slot.all : List Slot :=
-  [.str, .num, .dec, .bool, .bin, .null, .strSet, .numSet, .decSet, .binSet, .arr, .map]
+  [.str, .num, .bool, .bin, .null, .strSet, .numSet, .binSet, .arr, .map]
 
 theorem Slot.mem_all (s : Slot) : s ∈ Slot.all := by cases s <;> simp [Slot.all]
 
@@ -158,7 +162,7 @@ theorem Member.mem_all (m : Member) : m ∈ Member.all := by cases m <;> simp [M
 def GroundKind.slot : GroundKind → Slot
   | .string  => .str
   | .number  => .num
-  | .decimal => .str
+  | .decimal => .num
   | .boolean => .bool
   | .binary  => .bin
   | .null    => .null
@@ -170,7 +174,7 @@ def GroundKind.slot : GroundKind → Slot
 def SetBase.slot : SetBase → Slot
   | .string  => .strSet
   | .number  => .numSet
-  | .decimal => .decSet
+  | .decimal => .numSet
   | .binary  => .binSet
 
 /-! ## Occupancy
@@ -214,7 +218,7 @@ mutual
 def occV : Term → Slot → Bool
   | .string  => occOnly .str
   | .number  => occOnly .num
-  | .decimal => occOnly .str
+  | .decimal => occOnly .num
   | .boolean => occOnly .bool
   | .binary  => occOnly .bin
   | .null    => occOnly .null
@@ -350,7 +354,8 @@ theorem disjAlts_sound {α : Type} [DecidableEq α] {ls ls' : NEFinset α}
 
     The rows are the bases and not one row uniform in the base, and the file header says why:
     `GroundKind.Carrier` is `@[reducible]`, so `.string` elaborates as `String` and the
-    ordinary instance applies, while `.number` elaborates as `WFDouble` and its instance is a
+    ordinary instance applies, while `.number` used to elaborate as a host subtype whose
+    instance was a
     field of an axiomatized host. One uniform row would make this `noncomputable`
     and would stop `Orth` reducing at every pair, numeric or not.
 
@@ -561,6 +566,7 @@ theorem occV_sound : ∀ (t : Term), OccSoundV t
   -- the row is `false`, so the premise is the one that cannot arrive
   | .never => fun _ h => by simp [Adm] at h
   | .decimal => fun v h => by cases v <;> simp_all [Adm, isStored, occV, occOnly, Value.slot]
+
   | .literal k _ => fun v h => by
       rw [Adm_literal] at h
       cases k <;> cases v <;>
@@ -569,8 +575,20 @@ theorem occV_sound : ∀ (t : Term), OccSoundV t
       cases v with
       | strSet S => obtain ⟨x, hx⟩ := S.2; cases b <;>
           simp_all [Adm, SetBase.adm, inD, isStored, occV, occOnly, Value.slot, SetBase.slot]
-      | numSet S => obtain ⟨x, hx⟩ := S.2; cases b <;>
-          simp_all [Adm, SetBase.adm, inD, isStored, occV, occOnly, Value.slot, SetBase.slot]
+      -- both numeric bases now occupy `numSet`, so the two that do not are refuted from the
+      -- carrier's nonemptiness rather than separated by a gate
+      | numSet S =>
+          obtain ⟨x, hx⟩ := S.2
+          have hnone : ∀ b' : SetBase, b'.adm (.num x) = false →
+              Adm (.set b') (.numSet S) = true → False := by
+            intro b' hb' hA
+            simp only [Adm, decide_eq_true_eq] at hA
+            exact Bool.noConfusion (hb' ▸ hA x hx)
+          cases b
+          case number => rfl
+          case decimal => rfl
+          case string => exact absurd h (fun hA => (hnone .string rfl hA).elim)
+          case binary => exact absurd h (fun hA => (hnone .binary rfl hA).elim)
       | binSet S => obtain ⟨x, hx⟩ := S.2; cases b <;>
           simp_all [Adm, SetBase.adm, inD, isStored, occV, occOnly, Value.slot, SetBase.slot]
       | _ => exact absurd h (by simp [Adm])
@@ -825,13 +843,9 @@ theorem inL_disjoint {k : GroundKind} {x y : k.Carrier}
   | number =>
     cases v with
     | num d =>
-      -- `number` joined `decimal` in splitting on its carrier's gate
-      cases hw : Numeral.WF d.toDec with
-      | false => simp [inL, hw] at h
-      | true =>
-        simp only [inL, hw, dite_true, decide_eq_true_eq] at h
-        simp only [inL, hw, dite_true]
-        exact decide_eq_false (h ▸ hd)
+      -- `number` is ungated again, and this time because the carrier IS the gate
+      replace h : decide (d = x) = true := h
+      exact decide_eq_false (of_decide_eq_true h ▸ hd)
     | _ => rfl
   | boolean =>
     cases v with
@@ -851,11 +865,11 @@ theorem inL_disjoint {k : GroundKind} {x y : k.Carrier}
     | _ => rfl
   | decimal =>
     cases v with
-    | str s =>
-      show (if hst : Numeral.Stored s = true then
-              decide ((⟨s, hst⟩ : StoredNumeral) = y) else false) = false
-      replace h : (if hs : Numeral.Stored s = true then
-              decide ((⟨s, hs⟩ : StoredNumeral) = x) else false) = true := h
+    | num s =>
+      show (if hst : Numeral.Stored s.1 = true then
+              decide ((⟨s.1, hst⟩ : StoredNumeral) = y) else false) = false
+      replace h : (if hs : Numeral.Stored s.1 = true then
+              decide ((⟨s.1, hs⟩ : StoredNumeral) = x) else false) = true := h
       split
       · rename_i hst
         rw [dif_pos hst] at h
@@ -1327,10 +1341,16 @@ theorem typed_occV : ∀ {t T μ}, Typed t T μ → ∀ v, T v → occV t v.slot
     | literal k x => subst hv; cases k <;> rfl
     | never => exact absurd hv (hnever_false v)
     | set b =>
+        -- `simp only` on the GOAL, not `simp_all`: `simp_all` retypes `hall`'s binder from the
+        -- subtype to the raw numeral with a side condition, and the application stops fitting
         rcases hv with ⟨S, rfl, hall⟩ | ⟨S, rfl, hall⟩ | ⟨S, rfl, hall⟩ <;>
           cases b <;>
-          simp_all [occV, occOnly, Value.slot, SetBase.slot, SetBase.held] <;>
-          exact S.2.elim (fun a ha => hall a ha)
+          simp only [occV, occOnly, Value.slot, SetBase.slot] <;>
+          first
+            | rfl
+            | (exfalso
+               obtain ⟨a, ha⟩ := S.2
+               simpa [SetBase.held] using hall a ha)
     | list _ _ _ => obtain ⟨vs, rfl, _⟩ := hv; rfl
     | object _ _ => obtain ⟨keys, f, rfl, _⟩ := hv; rfl
     | held _ => rfl
@@ -1391,7 +1411,30 @@ theorem held_disj_of_OrthL {x y : Term} {Tx Ty : Held} {μx μy : Option Member}
           obtain ⟨p1, hm1⟩ := hq1 s hs
           obtain ⟨p2, hm2⟩ := hq2 s hs
           exact h _ p1 hm1 hm2)
-    case numSet S => exact S.2.elim (fun d hd => by simp_all [liftQ, inLs, inL, disjAlts])
+    -- `numSet` carries the decimal literals now, so it needs `strSet`'s argument and one step
+    -- more: `decimal`'s `inL` keeps a `Stored` gate, so the membership has to come out from
+    -- under the `dite` before the disjointness hypothesis applies
+    case numSet S =>
+      exact S.2.elim (fun d hd => by
+        simp_all [liftQ, inLs, inL, disjAlts, Subtype.ext_iff]
+        all_goals
+          first
+            | (obtain ⟨p1, hm1⟩ := hq1 d hd
+               obtain ⟨p2, hm2⟩ := hq2 d hd
+               exact h _ p1 hm1 hm2)
+            | (obtain ⟨p1, hm1⟩ := of_decide_eq_true (of_decide_eq_true hq1 d hd)
+               obtain ⟨p2, hm2⟩ := of_decide_eq_true (of_decide_eq_true hq2 d hd)
+               exact h _ p1 hm1 hm2)
+            | (obtain ⟨p1, hp1, he1⟩ := of_decide_eq_true (of_decide_eq_true hq1 d hd)
+               obtain ⟨p2, hp2, he2⟩ := of_decide_eq_true (of_decide_eq_true hq2 d hd)
+               first
+                 | exact Bool.noConfusion he1
+                 | (split at he1
+                    · rename_i hst
+                      rw [dif_pos hst] at he2
+                      exact h d.1 hst (of_decide_eq_true he1 ▸ hp1)
+                        (of_decide_eq_true he2 ▸ hp2)
+                    · exact Bool.noConfusion he1)))
     case binSet S => exact S.2.elim (fun w hw => by simp_all [liftQ, inLs, inL, disjAlts])
     all_goals simp_all [liftQ]
   case _ => exact absurd h (by simp)
@@ -1670,9 +1713,10 @@ theorem orth_number_opaque : Orth .number (.opaq false) = true := by decide
     and a number's is a `.num`; both store `N`. -/
 theorem orth_number_decimal : Orth .number .decimal = false := by decide
 
-/-- **Separated on the read side only, hence not separated.** `set(decimal)` writes a
-    `.strSet` exactly as `set(string)` does; they store `NS` and `SS`. -/
-theorem orth_set_string_decimal : Orth (.set .string) (.set .decimal) = false := by decide
+/-- **They separate now, and this used to be a refutation.** `set(decimal)` wrote a `.strSet`
+    exactly as `set(string)` did, so the certificate could not part two different store types.
+    A decimal set is a `.numSet` since `N` is carried exactly, and the slots part it. -/
+theorem orth_set_string_decimal : Orth (.set .string) (.set .decimal) = true := by decide
 
 /-- **Phase *names*.** Two objects with no shared attribute at all — the second most common
     separator in practice, and invisible to every slot-based phase, since both options occupy
@@ -1729,8 +1773,9 @@ theorem orth_literal_literal :
 theorem not_orth_literal_literal_same :
     Orth (.literal .string lsA) (.literal .string lsA) = false := by decide
 
-/-- **The numeric base declines, and the pair is still not ambiguous.** `WFDouble`'s equality
-    came from an axiomatised host, so `OrthL` had no computable row there and answered `false`.
+/-- **The numeric base declines, and the pair is still not ambiguous.** The numeric carrier's
+    equality came from an axiomatised host, so `OrthL` had no computable row there and answered
+    `false`.
     `separates_literal_disjoint` takes the premise by hand instead, which is
     `uAtCan_of_literalN_disjoint`'s content. -/
 theorem not_orth_literal_number (x y : GroundKind.number.Carrier) :
@@ -1760,11 +1805,13 @@ theorem not_orth_set_literals_same :
 
 /-- **Two set bases decline**, and the read side is the reason: `refineReads` has the base
     decode the attribute, so two bases decode one attribute to two values and there is
-    nothing to compare. `set(string)` and `set(decimal)` are the pair that shows it, both
-    writing a `strSet` while storing `SS` and `NS`. -/
-theorem not_orth_set_literals_two_bases :
+    nothing to compare. ~~The witness was `set(string)` against `set(decimal)`, both writing a
+    `strSet`~~; those two part on their slots now, so this pair certifies and the theorem below
+    records the separation rather than the gap. A pair that still shows the general point needs
+    two bases sharing one slot, and after the numeric carriers merged there is no such pair. -/
+theorem orth_set_literals_two_bases :
     Orth (.refine (.set .string) (.each (.members .string setA)))
-         (.refine (.set .decimal) (.each (.members .string setB))) = false := by decide
+         (.refine (.set .decimal) (.each (.members .string setB))) = true := by decide
 
 /-- **A `closure` beside a `members` is not certified**, which is the case `Pred` keeps rather
     than removes. Holds for every `q`, so this is phase *opaque predicate* and not a gap. -/
