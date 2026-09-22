@@ -138,6 +138,101 @@ export const isNumeral = (s: string): boolean => {
 export const isStoredNumeral = (s: string): boolean =>
     s !== '-0' && /^-?(?:0|[1-9]\d*)(?:\.\d*[1-9])?$/.test(s) && isNumeral(s)
 
+// ── the carrier `N` actually has ─────────────────────────────────────
+//
+// The two predicates above are properties of the carrier rather than of any codec, and until now
+// there was no carrier for them to be properties OF: `N` was carried as `string` at every surface,
+// so the predicate had to be re-checked at each boundary and the type never said it had passed.
+// `DynamoNumber` is that carrier. It is what `formal/Calculus/Domain.lean` calls `WFNumeral`.
+
+/**
+ * **An exact DynamoDB number.** The carrier `N` actually has: a numeral the service accepts,
+ * validated once at construction and carried with the proof implicit in the type.
+ *
+ * Nothing here rounds. The digits are the value, so 38 significant digits survive, where a JS
+ * `number` carries about 15. Construct one with {@link DynamoNumber.from} or
+ * {@link DynamoNumber.fromNumber}; there is no public constructor, because an unvalidated
+ * `DynamoNumber` is the thing this type exists to make unrepresentable.
+ *
+ * **Three carriers write `N`, and they are not interchangeable.** `dynamoNumber` holds this type
+ * and is exact. `number` holds a JS float and is lossy by construction. `decimal` holds a string
+ * and is exact but compares as text. A caller picks the carrier and takes its cost, which is why
+ * all three are on the surface rather than one being the others' spelling.
+ */
+export class DynamoNumber {
+    /** The numeral text. Always {@link isNumeral}. */
+    readonly digits: string
+
+    private constructor(digits: string) {
+        this.digits = digits
+    }
+
+    /**
+     * From numeral text. `undefined` when the text is not one DynamoDB accepts — wrong shape,
+     * more than 38 significant digits, or a magnitude outside `1e-130 … 9.9…e125`.
+     */
+    static from(digits: string): DynamoNumber | undefined {
+        return isNumeral(digits) ? new DynamoNumber(digits) : undefined
+    }
+
+    /**
+     * From a JS number. `undefined` for `NaN`, `±Infinity`, and any value whose decimal form
+     * DynamoDB will not accept.
+     *
+     * **This is the lossy boundary and it is the only one.** The float has already rounded before
+     * this is called, so the `DynamoNumber` is exact about a value that may not be the one meant.
+     * Where that matters, carry the digits and use {@link DynamoNumber.from}.
+     */
+    static fromNumber(value: number): DynamoNumber | undefined {
+        return Number.isFinite(value)
+            ? DynamoNumber.from(String(value))
+            : undefined
+    }
+
+    /** The numeral text, unchanged. Exact. */
+    toString(): string {
+        return this.digits
+    }
+
+    /**
+     * As a JS number. **Lossy** above about 15 significant digits, and named so rather than
+     * offered as `valueOf`, so that a rounding conversion never happens implicitly.
+     */
+    toNumber(): number {
+        return Number(this.digits)
+    }
+
+    /** Whether the store hands this spelling back unchanged. See {@link isStoredNumeral}. */
+    get isStored(): boolean {
+        return isStoredNumeral(this.digits)
+    }
+
+    /**
+     * The spelling the store would return, or `undefined` where the digits are not a numeral it
+     * normalises to a representable one. Exact: this re-spells, it does not round.
+     */
+    normalized(): DynamoNumber | undefined {
+        if (this.isStored) return this
+        const n = Number(this.digits)
+        return Number.isFinite(n) ? DynamoNumber.from(String(n)) : undefined
+    }
+
+    /** Equality on the digits, which is textual: `'1.50'` and `'1.5'` are different. */
+    equals(other: DynamoNumber): boolean {
+        return this.digits === other.digits
+    }
+
+    /**
+     * Equality as numbers, by comparing the stored spellings: `'1.50'` and `'1.5'` are the same.
+     * `undefined` on either side's normalisation failing.
+     */
+    sameNumber(other: DynamoNumber): boolean | undefined {
+        const a = this.normalized()
+        const b = other.normalized()
+        return a && b ? a.digits === b.digits : undefined
+    }
+}
+
 // ── the stored shape, as a type you can write down ───────────────────
 //
 // A schema says what an entity is; these say what the *table* holds. Written by hand they pin the
