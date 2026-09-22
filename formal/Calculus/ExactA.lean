@@ -17,7 +17,7 @@ noncomputable section
 renamed onto `Adm`. `AdmA` below is that counterpart's definition and its soundness proof.
 
 The mirror is not symmetric, and the asymmetry that remains is §1's rather than this
-file's: the numeric rows go through `Double.ofDec`, and `refine` narrows a read.
+file's: the numeric rows went through the host's decimal reader, and `refine` narrows a read.
 was listed here as a third — "cannot narrow a read" — and is not one: the row decodes and
 then applies `q`. Each is a row here rather than a remark. -/
 
@@ -88,12 +88,12 @@ def reqPresentT (fields : Finset Name) (fld : {k // k ∈ fields} → ObjectSlot
 /-- What the literal codec **reads**, exactly.
 
     Three rows into one, and the `number` row is the only one that is not simply membership:
-    the read goes through `Double.ofDec`, and `&& WF` is there because the base's own read is
+    the read went through the host's decimal reader, and `&& WF` is there because the base's own read is
     `number`'s restricted, so it refuses a numeral whose double re-spells outside `D` even when
     that double is in `ℓ`.
 
     The retired per-aspect row was `⊤` here, on the ground that a *syntactic* set of
-    attributes does not bound a read through `Double.ofDec`. True, and it never made the row
+    attributes does not bound a read through the host's decimal reader. True, and it never made the row
     unwritable: `ofDec` is a function the row may call, exactly as this one does. -/
 noncomputable def AdmALit : (k : GroundKind) → k.Carrier → Attr → Bool
   | .string,  y, .s s    => decide (s = y)
@@ -117,11 +117,11 @@ noncomputable def AdmALit : (k : GroundKind) → k.Carrier → Attr → Bool
     since the attribute payload is already §1's `Numerals`.
 
     The reason is worth stating, because it is the one residue the re-indexing does *not*
-    remove and it is not injectivity of `e`. `numberCodec.p` goes through `Double.ofDec`,
+    remove and it is not injectivity of `e`. `numberCodec.p` went through the host's decimal reader,
     which **rounds** (`Prisms.lean`), so two distinct stored numerals can read to the
     same double and `decSet`'s `Nodup` gate then refuses an `NS` every element of which
     reads. That is `e ∘ p ≠ id`, not `e` non-injective, and the numeric host says nothing about
-    whether it ever fires — it is decidable, through `Double.decEq`, and not describable
+    whether it ever fires — it is decidable, through the host's decidable equality, and not describable
     syntactically, so the exact row is the codec's own answer. `AdmA` is already
     `noncomputable`, so this costs nothing it had not already spent. -/
 noncomputable def AdmASet : SetBase → Attr → Bool
@@ -136,7 +136,7 @@ mutual
 /-- **The joint admission predicate, attribute side.** The mirror of `Adm` across §1's
     asymmetry, and it is not a symmetric mirror — three rows differ in kind, not degree.
 
-    * `number` and a numeric `literal` go through `Double.ofDec`, which is
+    * `number` and a numeric `literal` went through the host's decimal reader, which is
       axiomatized. The domain is still *expressible* — `ofDec` is a function and this row
       may call it — at the cost of being `noncomputable`, which `adm` already was. These rows
       used to be sharper than §5's `⊤`; they are now equal to it, because the observation in
@@ -622,7 +622,7 @@ theorem ExactA_object {fields : Finset Name} {fld : {k // k ∈ fields} → Obje
 /-- **`opaque` reads exactly what its row says**, definitionally, and for the reason
     `ExactV_opaq` gives at length: `p := (opaqCodecω lossy).p`, so the row and `dom(p)` are
     one function. ~~AdmOpaqA_iff~~ — a second induction, this one carrying an injectivity
-    clause about `Double.ofDec` that `decSet` needs — is deleted rather than moved. The
+    clause about the host's decimal reader that `decSet` needs — is deleted rather than moved. The
     clause was true and is still true; it is now the codec's business, where it was always
     stated (`decSet`, `Products.lean`), instead of being restated here in a form that had
     to be kept in step by hand. -/
@@ -675,7 +675,7 @@ mutual
     which used to be the other half of that asymmetry, is exact here because its row is the
     union of the two channels it reads on.
 
-    The numeric rows are the interesting ones: they reach `dom(p)` through `Double.ofDec`,
+    The numeric rows are the interesting ones: they reach `dom(p)` through the host's decimal reader,
     which is axiomatized, and are exact anyway — a row may *call* an axiomatized function
     even though no finite set of numerals describes its domain. §5 wrote `⊤` there. -/
 theorem AdmA_exact : ∀ (t : Term), ExactA t
@@ -708,7 +708,7 @@ theorem AdmA_exact : ∀ (t : Term), ExactA t
       case number =>
         cases a
         case n x =>
-          -- `numberCodec.p` is a constructor wrapper now, so the `Double.ofDec` bind and the
+          -- `numberCodec.p` is a constructor wrapper now, so the the host's decimal reader bind and the
           -- `Numeral.WF` gate this used to walk through are both gone and the row is the
           -- payload comparison on both sides
           rw [show (denote (Term.literal .number ls)).p (.n x)

@@ -520,7 +520,7 @@ never do. The premise sits beside `hne` and `hnd` because it is the same kind of
 the term owns, decidable at the declaration.
 
 What follows is what it buys and what it refuses. The refutations are conditional on a double
-outside `D` existing: `Double` is axiomatized with the shortest-text round trip and nothing
+outside `D` existing: the numeric host was axiomatized with the shortest-text round trip and nothing
 else, and whether IEEE-754 has a value DynamoDB will not store is a fact about IEEE that the
 model deliberately does not assert. It was not a hypothetical — the shipped `literal(NaN)`
 wrote `⟨N, "NaN"⟩` and `literal(1e400)` wrote `⟨N, "Infinity"⟩`, both reachable with no cast,
@@ -626,7 +626,7 @@ The absorption survives the semantic row, and the statements below say so in the
 the row leaves them. They used to read "for every option that admits anything", on the
 strength of `adm (.opaq true) = ⊤`; that blanket is gone, because `adm` now asks the
 codec and `opaqCodecω` at a lossy policy still refuses `.num d` when
-`Numeral.WF (Double.toDec d)` fails — and `Double.toDec` is an axiom with no such
+`Numeral.WF (Double.toDec d)` fails — and the host's decimal spelling is an axiom with no such
 guarantee (`Domain.lean`). What is true, and is all the refutation ever used, is: **an
 `opaque` never separates from an option they both admit.** The kind and member disjuncts
 are still structurally unavailable, so a single shared value or attribute is enough.

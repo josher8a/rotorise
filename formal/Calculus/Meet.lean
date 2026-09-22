@@ -1128,23 +1128,29 @@ example : Term.meet (.literal .string "a") .string = some (.literal .string "a")
 /-- …and against another value of the same base, nothing. -/
 example : Term.meet (.literal .string "a") (.literal .string "b") = some .never := by rfl
 
-/-- `string` and `decimal` admit the same text and store it at different members, so the pair has
-    no meet rather than an empty one. -/
+/-- `Term.meet` still refuses `string` against `decimal`, and **the reason it was given for is
+    gone**. The refusal was justified by the pair admitting the same text and storing it at
+    different members. They share no value now: a `decimal` admits a `.num` and a `string` a
+    `.str`, and the two `Adm` rows below say so. The refusal is conservative rather than
+    necessary here, and turning it into the bottom is a change to `Term.meet` and so a decision
+    rather than a repair. -/
 example : Term.meet .string .decimal = none := by rfl
 
-/-- **The same refusal reaches a literal at either base**, because a `decimal` literal's values
-    are `.str`. These four rows answered the bottom, which claims the pair shares no value while
-    it shares one, and the two literals below are the same mistake one level further in. -/
+/-- The same refusal reaches a literal at either base, and with the same standing. -/
 example : Term.meet (.literal .decimal ⟨"1", by decide⟩) .string = none := by rfl
 
 example : Term.meet (.literal .string "1") .decimal = none := by rfl
 
 example : Term.meet (.literal .string "1") (.literal .decimal ⟨"1", by decide⟩) = none := by rfl
 
-/-- The value the refusal is about: both terms admit it, and they store it at `S` and at `N`. -/
-example : Adm (.literal .decimal ⟨"1", by decide⟩) (.str "1") = true := by
+/-- **The pair no longer shares a value**, which is what the refusal above was about. The
+    decimal literal admits the numeral and refuses the text; `string` is the other way. -/
+example : Adm (.literal .decimal ⟨"1", by decide⟩) (.num ⟨"1", by decide⟩) = true := by
   simp [Adm, AdmLit, inL]
   decide
+
+example : Adm (.literal .decimal ⟨"1", by decide⟩) (.str "1") = false := by
+  simp [Adm, AdmLit, inL]
 
 example : Adm Term.string (.str "1") = true := by simp [Adm]
 
@@ -1178,16 +1184,16 @@ example : Term.meet (.union [.string, .null]) (.opaq true) = some (.union [.stri
 /-- …and against the null term alone the string cell is the bottom, so one option survives. -/
 example : Term.meet (.union [.string, .null]) .null = some .null := by rfl
 
-/-- …and the same refusal one container out. A set of stored numerals satisfies both bases, so
-    the pair shares values and has no meet. -/
+/-- …and the same refusal one container out, with the same standing: `Term.meet` refuses, and
+    the shared value it refused for is gone. A `set decimal` admits a `.numSet` and a
+    `set string` a `.strSet`. -/
 example : Term.meet (.set .string) (.set .decimal) = none := by rfl
 
 example : Adm (.set .string) (.strSet ⟨{"1"}, Finset.singleton_nonempty _⟩) = true := by
   simp [Adm, SetBase.adm]
 
-example : Adm (.set .decimal) (.strSet ⟨{"1"}, Finset.singleton_nonempty _⟩) = true := by
-  simp [Adm, SetBase.adm, isStored, Numeral.Stored]
-  decide
+example : Adm (.set .decimal) (.strSet ⟨{"1"}, Finset.singleton_nonempty _⟩) = false := by
+  simp [Adm, SetBase.adm, isStored]
 
 /-- **An open factor refuses no name, so the required-name test is not a bottom test against
     one.** The left body requires `x` and the right does not declare it, which the required-name
@@ -1365,12 +1371,11 @@ theorem Adm_opaq_null (l : Bool) : Adm (.opaq l) .null = true := by
 
 /-- A number only under the lossy policy, and then exactly on `D`: the refusing policy carries
     the empty codec at that option. -/
-theorem Adm_opaq_num (l : Bool) (d : Double) :
+theorem Adm_opaq_num (l : Bool) (d : WFNumeral) :
     Adm (.opaq l) (.num d) = (l && inD (.num d)) := by
   show ((opaqCodec (Value.depth (.num d)) l).e (.num d)).isSome = _
   rw [show Value.depth (.num d) = 0 + 1 from rfl, opaqCodec_e_num]
   cases l <;> simp [numberCodec, Codec.empty, inD]
-  split <;> simp_all
 
 
 /-- Two terms whose occupancies are disjoint share no value, so their conjunction is the
@@ -1394,6 +1399,14 @@ theorem Adm_and_false {x y : Term} (h : Orth1 x y = true) (v : Value) :
 /-- …in the form the set rows leave, where the element is what refutes the vacuous reading. -/
 theorem NEFinset.not_forall_notMem {α : Type} (S : NEFinset α) : ¬ ∀ a, a ∉ S.1 :=
   fun hall => S.2.elim (fun a ha => hall a ha)
+
+/-- **A row that admits nothing cannot pass a nonempty carrier.** Stated as a `simp` lemma
+    rather than left to a tactic: the set rows reduce to exactly this shape whenever two bases
+    occupy different wire slots, and since the numeric carriers merged that is most of them. -/
+theorem decide_forall_false {α : Type} (S : NEFinset α) :
+    decide (∀ a ∈ S.1, (false : Bool) = true) = false :=
+  decide_eq_false fun hall =>
+    absurd (fun a ha => Bool.noConfusion (hall a ha)) (NEFinset.not_forall_notMem S)
 
 /-- …and a key set the same way. -/
 theorem decide_forall_and {α : Sort*} {p q r : α → Bool}
@@ -1558,7 +1571,7 @@ theorem opaq_e_bin_agree (n : Nat) (b : Bytes) :
 
 /-- …and the refusing policy writes no number at any budget, which is what makes a set of
     numbers unwritable rather than written differently. -/
-theorem opaq_e_num_false (n : Nat) (d : Double) : (opaqCodec n false).e (.num d) = none := by
+theorem opaq_e_num_false (n : Nat) (d : WFNumeral) : (opaqCodec n false).e (.num d) = none := by
   cases n with
   | zero => rfl
   | succ m => rw [opaqCodec_e_num]; rfl
@@ -4102,11 +4115,7 @@ theorem opaq_p_number (x : WFNumeral) :
 /-- `number`'s read row is its codec's domain, said as an equation so the `opaque` rows can
     conjoin the two. -/
 theorem AdmA_number_eq (x : WFNumeral) :
-    AdmA (.number : Term) (.n x) = (numberCodec.p (.n x)).isSome := by
-  show (match Double.ofDec x.1 with | some d => Numeral.WF d.toDec | none => false) = _
-  cases hd : Double.ofDec x.1 with
-  | none => simp [numberCodec, hd]
-  | some d => cases hw : Numeral.WF d.toDec <;> simp [numberCodec, hd, hw]
+    AdmA (.number : Term) (.n x) = (numberCodec.p (.n x)).isSome := rfl
 
 /-- The refusing `opaque` is below the lossy one, so where the refusing one admits, the two
     read the same value. -/

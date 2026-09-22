@@ -168,7 +168,7 @@ theorem carrier_setBase : ∀ b : SetBase, Carrier b.elem
 
 /-- **One theorem where there were two, and the numeric one was twenty-six lines.**
 
-    ~~literalNCodec~~'s carrier used to be proved by hand — unfolding `Double.ofDec`, splitting on
+    ~~literalNCodec~~'s carrier used to be proved by hand — unfolding the host's decimal reader, splitting on
     `Numeral.WF`, then on membership — because the codec was a hand-written pair that only
     *agreed* with a restriction. It now **is** the restriction, so `carrier_restrict` supplies
     everything and all that remains is the held set being no smaller than the restriction's,

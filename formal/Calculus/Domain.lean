@@ -289,7 +289,7 @@ end Numeral
 /-! ### The numeric host, as a PORT's obligation rather than this calculus's assumption
 
 The calculus carries `N` exactly, as `WFNumeral`, so it assumes nothing about any numeric type
-and the axiom block that used to sit here is gone with its `Double`.
+and the axiom block that used to sit here is gone with its host type.
 
 `NumericHost` survives, and it means something different now. A target language that wants to
 hand its own numeric type to a caller states that the type is a `NumericHost` and adapts to `N`
@@ -376,7 +376,7 @@ programs against* — rather than binary64 under another name. -/
 
 /-- **The arbitrary-precision host.** `WFNumeral` is its own decimal spelling, so the
     adapter is the identity and the round trip is `dif_pos` on the subtype's own proof.
-    Note what is *not* imported here: this model needs no `Double` axiom, so every theorem
+    Note what is *not* imported here: this model needs no host axiom, so every theorem
     of §1 that is really about the interface holds of a host with no rounding at all. -/
 def numericHostWFNumeral : NumericHost WFNumeral where
   toDec := Subtype.val
@@ -516,7 +516,7 @@ def Attr.Storable (a : Attr) : Prop := Attr.nesting a ≤ maxNesting
 inductive Value where
   | str  (v : String)
   /-- §1's `N`, carried EXACTLY and as the attribute side already carries it. A host's
-      `Double` is an approximation of this and the wire's string is a spelling of it.
+      an axiomatised host type is an approximation of this and the wire's string is a spelling of it.
       Neither is the datatype, so neither is the carrier: an adapter reaches them. -/
   | num  (v : WFNumeral)
   | bool (v : Bool)
@@ -575,7 +575,7 @@ deriving DecidableEq, Repr
 
     **Reducible**, and that is load-bearing: it lets `Carrier .string` elaborate as `String`, so
     equality at `ℓ` resolves through `String.decEq` and the ordinary instances. An indexed
-    `DecidableEq k.Carrier` instance would work too, and would be *noncomputable* — `Double`'s
+    `DecidableEq k.Carrier` instance would work too, and would be *noncomputable* — an axiomatised host type's
     equality is a field of §1's axiomatized `NumericHost` — which then spreads to every `def`
     that names a literal. -/
 @[reducible] def GroundKind.Carrier : GroundKind → Type
@@ -670,7 +670,7 @@ function of the index and `set(union(…))` is unstatable rather than merely und
 
 **Four bases onto three wire members.** `number` and `decimal` both store `NS`; they are not
 the same base and neither is redundant. `number` is a caller's platform number — §1's `D`
-reached through `Double.toDec` — and `decimal` is the host-independent spelling, carried as a
+reached through the host's decimal spelling — and `decimal` is the host-independent spelling, carried as a
 `Numerals` string on the value side. Collapsing them would delete the only base whose value
 side is exact, and `Member` cannot tell them apart (both `NS`), which is why the index is
 neither `Member` nor `GroundKind`: `GroundKind` **indexes value carriers**, and `set(decimal)`

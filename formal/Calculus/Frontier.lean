@@ -364,7 +364,7 @@ theorem encSet_bs_of {α : Type} {c : Codec} {vinj : α → Value} {S : NEFinset
     Both directions, and neither needs a hypothesis the term does not already carry: the
     injectivity `encSet` demands comes from the element pair's own **(R)**
     (`encSet_isSome_of`), and every base's element map is injective for a reason —
-    `Double.toDec` from `Double.roundtrip`, the other three by construction. This is why
+    the host's decimal spelling from the host's round trip, the other three by construction. This is why
     indexing `set` makes the value-side row exact where an arbitrary element term could not
     (a `held` adapter may collapse two elements). -/
 theorem encSet_base_iff {α : Type} (b : SetBase) {vinj : α → Value}

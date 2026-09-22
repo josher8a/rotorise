@@ -621,7 +621,7 @@ end
 
 /-! ### Read-side depth preservation
 
-The one case that is not a leaf `simp` is `N`, where reading goes through `Double.ofDec`
+The one case that is not a leaf `simp` is `N`, where reading went through the host's decimal reader
 and the write-back gate. The wire sets need no list lemma of their own: `decSet` fixes
 their depth at 2 outright (`opaq_p_wire_depth`), where the list representation they
 replaced had to be traversed three times. -/

@@ -12,7 +12,7 @@ Three facts about this development force the shape of what follows, and each of 
 an easier design first.
 
 **`denote` is `noncomputable`, but the kernel still evaluates it.** `Value` carries a
-`Double` and `Double` is an axiom (§1), so no compiler can run `denote`; `#eval` and
+an axiomatised host type and an axiomatised host type is an axiom (§1), so no compiler can run `denote`; `#eval` and
 `native_decide` are both unavailable, and that is not a toolchain gap to be worked around.
 What *is* available is definitional unfolding: `(denote t).e v = some a` is `rfl` for every
 term form, including deeply nested ones, in well under a second. So a vector is checked by
@@ -27,7 +27,7 @@ not. That single fact is why this file exists: `aeq` never compares two function
 compares them **at every key of a key set that it has already checked is the same set**, and
 that is a decidable proposition the kernel is happy to settle.
 
-**No `DecidableEq Attr`, and none is coming.** `Double.decEq` is an axiom (so it does not
+**No `DecidableEq Attr`, and none is coming.** the host's decidable equality is an axiom (so it does not
 reduce) and `.m`'s function field is not comparable anyway. `aeq` is therefore not a
 decision procedure that was derived and then used; it is written by hand, and its agreement
 with equality is *proved* (`aeq_same`, `aeq_differ`) rather than assumed. Those two theorems
@@ -350,8 +350,8 @@ two closures only at names. Both rules `aeq`'s docstring records carry over and 
 re-derived here — ask the `∀` before the `∃`, and **quantify over the expected side's key set,
 not the codec's**, which is the 10× nobody can see in the statement.
 
-**One row differs, and it is the `Double` axiom again.** `veq` answers `.exhausted` at `.num`
-and `.numSet` rather than deciding them: `Double.decEq` is an axiom, so the comparison would
+**One row differs, and it is the host axiom again.** `veq` answers `.exhausted` at `.num`
+and `.numSet` rather than deciding them: the host's decidable equality is an axiom, so the comparison would
 neither reduce nor stay choice-free — and `Verdict.exhausted` already means "carries no
 information", which is exactly the honest answer. Soundness is *easier* for it: a row that never
 says `.same` has nothing to prove. What it costs is that a read resolving to a value containing a
@@ -374,8 +374,8 @@ def mapRowV (r : Value → Value → Verdict)
   | none, none => .same
   | _, _ => .differ
 
-/-- `aeq`'s construction over `Value`. The two `Double`-carrying rows answer `.exhausted`:
-    `Double.decEq` is an axiom, so deciding them would neither reduce nor stay choice-free. -/
+/-- `aeq`'s construction over `Value`. The two an axiomatised host type-carrying rows answer `.exhausted`:
+    the host's decidable equality is an axiom, so deciding them would neither reduce nor stay choice-free. -/
 def veq : Nat → Value → Value → Verdict
   | 0, _, _ => .exhausted
   | _ + 1, .str a,  .str b  => if a = b then .same else .differ
@@ -383,7 +383,7 @@ def veq : Nat → Value → Value → Verdict
   | _ + 1, .bin a,  .bin b  => if a = b then .same else .differ
   | _ + 1, .null,   .null   => .same
   -- **`N` DECIDES now.** Its equality is the numeral text's, not an axiomatised host's, so
-  -- these two rows stopped being `.exhausted` when the carrier stopped being a `Double`.
+  -- these two rows stopped being `.exhausted` when the carrier stopped being a an axiomatised host type.
   | _ + 1, .num a,  .num b  => if a.1 = b.1 then .same else .differ
   | _ + 1, .numSet a, .numSet b => if fsetEq a.1 b.1 then .same else .differ
   | _ + 1, .strSet a, .strSet b => if fsetEq a.1 b.1 then .same else .differ
@@ -420,7 +420,7 @@ theorem zipAllV_sound {r : Value → Value → Verdict}
       exact h.elim (fun h' => hd _ _ h' ha) (fun h' => ihd h' hb)
 
 /-- **The certificate**, `aeq_sound`'s twin: `.same` is equality and `.differ` is disequality.
-    `.exhausted` says nothing, which is what the two `Double` rows answer and why they need no
+    `.exhausted` says nothing, which is what the two an axiomatised host type rows answer and why they need no
     case here — a row that never says `.same` has nothing to prove. -/
 theorem veq_sound : ∀ (n : Nat) (a b : Value),
     (veq n a b = .same → a = b) ∧ (veq n a b = .differ → a ≠ b)
@@ -562,8 +562,8 @@ Linear in the number of vectors — 100 two-field object vectors cost the same p
 where the same 200 written out as separate lines compile in 19 s. Each `rfl` gets its own
 heartbeat budget, and distinct vectors share no structure for a batch to exploit.
 
-`number` has no **positive** vectors and can have none: `Value.num` carries a `Double`,
-`Double` is an axiom with no closed terms, so there is no value to write down and propose an
+`number` has no **positive** vectors and can have none: `Value.num` carries a an axiomatised host type,
+an axiomatised host type is an axiom with no closed terms, so there is no value to write down and propose an
 agreement about. `decimal` is the numeric escape hatch — `WFNumeral` is a `String` subtype and
 reduces like one. The same axiom is why `Attr.n`'s row here compares the underlying text rather
 than reaching for a numeric equality.
