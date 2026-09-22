@@ -974,6 +974,35 @@ export const identifies = (t: Term): boolean => {
 }
 
 /**
+ * **`opaque` unfolded one time**: the universal sum over each base and each container, with the
+ * recursion under `lazy`. The number leaf and the number set exist only under the lossy policy.
+ * `Calculus.Adm_opaqUnfold` and `Calculus.AdmA_opaqUnfold` prove that the union admits exactly what
+ * `opaque` admits, on both sides.
+ */
+export const unfoldOpaque = (op: Extract<Term, { kind: 'opaq' }>): Term => {
+    const self: Term = { kind: 'lazy', get: () => op }
+    const numeric: readonly Term[] = op.lossy ? [{ kind: 'number' }] : []
+    const numericSet: readonly Term[] = op.lossy
+        ? [{ kind: 'set', base: 'number' }]
+        : []
+    return {
+        kind: 'union',
+        options: [
+            { kind: 'string' },
+            { kind: 'boolean' },
+            { kind: 'binary' },
+            { kind: 'null' },
+            ...numeric,
+            { kind: 'list', pre: [], spread: self, suf: [] },
+            { kind: 'object', body: { fields: {}, rest: self } },
+            { kind: 'set', base: 'string' },
+            ...numericSet,
+            { kind: 'set', base: 'binary' },
+        ],
+    }
+}
+
+/**
  * **One option's values are all admitted by the other**, so the narrower one can never be chosen.
  *
  * §5's `select` acts only where *exactly one* option admits. If every value `X` admits is also
@@ -985,6 +1014,11 @@ export const identifies = (t: Term): boolean => {
  * the same sentence: a **restriction against the thing it restricts**. A literal against its own
  * base's ground term, and a set of a literal against the plain set at that base — which is spelled
  * `refine(set b, each(members …))`, so this reads the predicate rather than a subterm.
+ *
+ * **A term inside one option of a sum is inside the sum.** `opaque` is the universal sum, so
+ * `union([string('a'), opaque])` refuses through the `string` option of {@link unfoldOpaque}. The
+ * model's `Orth` declines each such pair already. The pair declared here because `identifies`
+ * accepts it, and containment runs first.
  *
  * Two restrictions of one base are a different shape and still declare:
  * `union([string('A'), string('B')])` is two options neither of which contains the other, and
@@ -1002,6 +1036,10 @@ export const identifies = (t: Term): boolean => {
 export const restricts = (x: Term, y: Term): boolean => {
     // the empty set is contained in every set, which is `opaque`'s rule at the opposite width
     if (x.kind === 'never') return true
+    // a term inside one option of a sum is inside the sum, and `opaque` is the universal sum
+    if (y.kind === 'union')
+        return y.options.some((option) => restricts(x, option))
+    if (y.kind === 'opaq') return restricts(x, unfoldOpaque(y))
     // a literal, or a union of literals at one base, is a refinement of that base: every value
     // it admits, the base admits
     const alts = literalAlternatives(x)

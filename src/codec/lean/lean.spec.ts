@@ -1484,6 +1484,14 @@ describe("the declaration guard, against the model's classifier", () => {
      * cannot be emitted yet. `crossesStringDecimal` and `crossesNumberDecimal` went with the base,
      * which is the same fact from the other side.
      *
+     * **It was 157, and the eight that arrived all have a sum on the wider side.** {@link restricts}
+     * reads a term inside one option of a sum as inside the sum, and `opaque` is the universal
+     * sum. Four pairs have `opaque_map` on a side, against `literal_alternatives`,
+     * `literal_binary`, `literal_non_ascii` and `set_of_literal`. Four have a union that holds the
+     * base of the literal: `literal_alternatives` and `literal_non_ascii`, each against
+     * `union_of_two` and `nullable_null`. `identifies` accepted all eight, and `Orth` declines
+     * all eight.
+     *
      * **Measured, and it is the question this count exists to answer**: the disjointness law
      * `6536d91` added refuses **none** of these pairs. Every refusal here is an occupancy or a
      * restriction, and no pair is refused for carrying a value another pair also carries.
@@ -1494,7 +1502,7 @@ describe("the declaration guard, against the model's classifier", () => {
      */
     it('refuses only pairs the classifier also declines', () => {
         const separations = separationPairs()
-        expect(separations.length).toBe(157)
+        expect(separations.length).toBe(165)
         // each one emits, which is where `leanSeparation` re-checks that `src/` really refuses,
         // and it carries one of the two warrants: `Orth` declines, or — for a `never` pair, where
         // the model permits what `src/` lints away — the permits-form states what the model says
