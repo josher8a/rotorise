@@ -202,13 +202,8 @@ def stringCodec : Codec :=
     e := fun v => match v with | .str s => some (.s s) | _ => none
     p := fun a => match a with | .s s => some (.str s) | _ => none }
 
-/-- §3 `(number)`. The held set is `D` — §1's numeral domain — not every double.
-
-    `p` gates on the **round-tripped** value rather than on the stored digits: `ofDec` rounds,
-    and a numeral at the top of the range can round *up* past it, so gating on `x` would admit
-    a double `e` then refuses — **(C)** failing.
-
-    Whether any double is outside `D` is an IEEE-754 fact the model declines to assert. -/
+/-- §3 `(number)`. The held set is `D`, §1's numeral domain, and the carrier is `WFNumeral`,
+    so `e` and `p` are constructor wrappers with no gate. -/
 def numberCodec : Codec :=
   { T := fun v => ∃ x : WFNumeral, v = .num x
     μ := some .N

@@ -1504,8 +1504,8 @@ const literalAgainstBase = (lit: Literal, base: Term): Term | undefined => {
 /**
  * **Two literals: the same value, or nothing.**
  *
- * `number` refuses, mirroring the model, where `DecidableEq WFDouble` is a field of `numericHost`
- * and the row would be noncomputable. TypeScript can compare two numbers, and answering here would
+ * `number` refuses, mirroring the model, whose `Term.meetLit` row at `number` answers `none`,
+ * because `WFNumeral` equality is textual and two spellings can name one number. TypeScript can compare two numbers, and answering here would
  * make this library's meet finer than the one the model's theorems are about.
  */
 const meetLiterals = (x: Literal, y: Literal): Term | undefined => {

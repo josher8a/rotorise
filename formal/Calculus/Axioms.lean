@@ -41,10 +41,8 @@ namespace Calculus
     `WFNumeral`, so nothing is assumed about binary64 or about any other numeric type.
 
     ~~Calculus.Double~~ and ~~Calculus.numericHost~~ were the last two entries and both are
-    gone with the carrier they served. `NumericHost` survives in `Domain.lean` as the PORT's
-    obligation rather than this development's assumption, and `numericHostWFNumeral` inhabits
-    it at the exact carrier with no axiom at all. A target language that hands its own numeric
-    type to a caller adapts through that interface, and the adaptation is the implementor's
+    gone with the carrier they served. A target language that hands its own numeric type to a
+    caller adapts that type to `WFNumeral` in the port, and the adaptation is the implementor's
     tradeoff rather than the calculus's.
 
     `Classical.choice` is here by more than one route. Mathlib resolves `k ∈ (s : Finset α)`

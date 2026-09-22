@@ -120,7 +120,7 @@ rather than as an equality. -/
 
 /-! **~~survivesStore_numberCodec~~ is retired, and what killed it is worth stating.** It said
 `number` survives a normalising store for free, because its `p` factored through the host's
-`ofDec`: the store could rewrite the digits and the double read back the same. That was a
+decimal reader: the store could rewrite the digits and the double read back the same. That was a
 property of the DOUBLE CARRIER, not of `number`. Carrying `N` exactly makes `numberCodec.p` a
 constructor wrapper, so its kernel is equality and a store that rewrites `"1.500"` to `"1.5"`
 moves the value.
